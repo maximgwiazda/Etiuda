@@ -536,6 +536,10 @@ body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,4
 #seg button.on{background:transparent;color:var(--accent)}
 #seg button[data-alt].on{background:transparent;color:var(--pl)}
 .row-main{flex:1 1 auto;min-width:0;display:flex;gap:8px;align-items:flex-end}
+/* The catalog's name on the band, in the band's ink and quieter than the tabs; cut, never wrapped. */
+.cat-now{flex:0 1 auto;min-width:0;max-width:min(30ch,26vw);align-self:center;
+  font:12.5px var(--sans);color:rgba(var(--band-ink-rgb),.78);white-space:nowrap;overflow:hidden}
+.cat-now .cn-name,.cat-now .cn-none{display:block;overflow:hidden}
 
 /* ---- THE DESKTOP HOST. Every rule here is off in a browser: it hangs on body.e-host, which
    host.js sets only where the shell's preload has put E_HOST on the window. */
@@ -1768,15 +1772,6 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 .list-sep.e-catsep .sep-fold,.list-sep.e-favsep .sep-fold{order:9}
 .list-sep i{flex:1;height:1px;border-radius:0;background:var(--line)}
 .list-sep span{white-space:nowrap}
-/* Shown only when an un-accepted catalog sits beside the file. Native .modal chrome,
-   centred with a scrim - an empty Etiuda can do nothing useful until this is answered. */
-/* Only the prose centring is this dialog's own - it is all sentences. The export-name
-   prompt shares the shape but holds an input, and centring an input's contents would be a
-   different thing entirely. */
-#eCatalogModal .modal-card{text-align:center}
-/* The name asked at the first signed reply: room at the sides so no line runs to the card's edge. */
-#eAgentModal .modal-card{padding:0 22px 16px}
-#eCatalogModal .ec-counts{font:12px var(--mono);color:var(--dim);margin-top:4px}
 /* One button slot per row, swapped by state: the hide button appears only on the hovered
    row and only while Ctrl is held - on every row at once it was a wall of icons.
    Monochrome until hovered, like the star: Ctrl changes what the slot does, not how loud. */
@@ -2213,7 +2208,7 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 .modal:not([hidden]) .modal-card{animation:eModalCardIn .18s cubic-bezier(.2,.7,.3,1) both}
 }@layer overrides{
 @media (prefers-reduced-motion:reduce){
-  .modal:not([hidden]) .modal-bg,.modal:not([hidden]) .modal-card{animation:none!important}
+  .modal:not([hidden]) .modal-bg,.modal:not([hidden]) .modal-card,.bub-ask{animation:none!important}
 }
 /* One treatment for everything that hangs below an anchor and toggles with hidden - a
    short drop, keyframed for the display:none reason above. .12s: these are frequent and
@@ -2240,8 +2235,6 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
   display:flex;flex-direction:column;overflow:hidden;
   background:var(--panel-raised);color:var(--ink);border:1px solid var(--line);
   border-radius:16px;box-shadow:0 8px 20px rgba(0,0,0,.12),0 28px 68px rgba(0,0,0,.22);padding:0}
-/* The catalog offer wears the small windows' shadow, not the dialogs'. */
-#eCatalogModal .modal-card{box-shadow:var(--shadow-pop)}
 /* The only thing that scrolls, so the scrollbar sits beside the content and stops short of both
    pinned bars. min-height:0 is load-bearing: a flex item will not shrink below its content
    without it, and the middle would push the actions row off the bottom instead of scrolling. */
@@ -2785,8 +2778,11 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
   padding:9px 0;border-bottom:1px solid var(--line)}
 .set-row:last-child{border-bottom:0}
 .set-label{min-width:0;font:14px var(--sans);color:var(--ink)}
+/* text-wrap:balance across the short descriptions: a last line holding two words reads as
+   unfinished, and evening the halves fixes every translation at once - hand-tuning sentence
+   length would have to be redone in each language and again at every rewording. */
 .set-label small{display:block;margin-top:2px;font:12.5px var(--sans);color:var(--dim);
-  line-height:1.45;text-wrap:balance}   /* see the note at #tourInvite p */
+  line-height:1.45;text-wrap:balance}
 .set-ctl{flex:0 0 auto}
 /* EQUAL COLUMNS the general way: "Light | Dark | System" cannot be halved by width:42px
    like EN/PL, so 1fr columns state the rule whatever the labels are - the thumb's 1/n
@@ -2899,28 +2895,20 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .bub.paper[data-side=left]>.bub-tip{border-left:0;border-bottom:0;right:-7px}
 /*@BUBBLE-END*/
 /* ---------- Guided tour (coach marks) ---------- */
-#tourRoot{position:fixed;inset:0;z-index:240;pointer-events:none;--tour-scrim:rgba(8,12,20,.739)}
+#tourRoot{position:fixed;inset:0;z-index:240;pointer-events:none}
+/* A WINDOW OPENED OVER THE PAGE takes the front, and the bubble waits behind it, under the modals
+   (200); the tour's own dialog steps keep it in front. */
+#tourRoot.behind{z-index:190}
 /* The tour travels on a spring (stiffness 260, damping 20, sampled at 60 Hz into linear()): 7.6
    per cent over, still at 629ms. `.still` is set by tour.js under either quiet switch. */
 #tourRoot{--tour-spring:.629s linear(0,0.0412,0.1311,0.2495,0.3806,0.5124,0.6364,0.7469,0.841,
   0.9174,0.9767,1.02,1.0493,1.0668,1.075,1.076,1.072,1.0645,1.0552,1.0451,1.0351,1.0258,1.0177,
   1.0108,1.0052,1.001,0.9979,0.9959,0.9947,0.9942,0.9942,0.9946,0.9952,0.996,0.9967,0.9975,0.9982,
   0.9988,1)}
-#tourRoot.on{pointer-events:auto}
-/* ONE SCRIM, AND THE SPOTLIGHT IS A HOLE IN IT. The darkening is the hole's 9999px box-shadow,
-   which paints OUTSIDE the hole's own box and so cannot reach what the step showcases. The shade
-   keeps its element - it absorbs clicks, see tour.js - and paints only when there is no hole to
-   cut, which is why both read one token. Two scrims each looking right alone composited to .74
-   over the page and .42 over the showcased element, so a step darkened the one thing it points
-   at; .739 is those two multiplied out, and the page behind is the pixels it always was. */
-.tour-shade{position:fixed;inset:0;background:transparent;opacity:0;
-  transition:opacity .28s ease;pointer-events:auto}
-#tourRoot.on .tour-shade{opacity:1}
-#tourRoot.no-hole .tour-shade{background:var(--tour-scrim)}
-/* The ring keeps its job and loses its voice: the bubble is the attention now and the ring only
-   says where, so no pulse and no halo, and the ring in the bubble's own colour. */
+/* NOTHING IS DARKENED AND NOTHING IS HELD: the page under the tour stays usable, and only the
+   bubble takes a click. The ring says where a step points, in the bubble's own colour. */
 .tour-hole{position:fixed;z-index:1;border-radius:12px;pointer-events:none;
-  box-shadow:0 0 0 9999px var(--tour-scrim),0 0 0 2.5px var(--bub);
+  box-shadow:0 0 0 2.5px var(--bub);
   transition:top var(--tour-spring),left var(--tour-spring),width var(--tour-spring),
     height var(--tour-spring),border-radius .2s ease,opacity .2s ease;opacity:0}
 #tourRoot.on .tour-hole{opacity:1}
@@ -2933,6 +2921,22 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
     transform var(--tour-spring)}
 #tourRoot.on .tour-card{opacity:1;transform:translateY(0)}
 #tourRoot.still .tour-card{transition:opacity .22s ease}
+/* THE QUESTIONS THAT HANG FROM A CONTROL, the catalog offer and the name: the family's bubble with
+   the tour card's type, over the dialogs and under the tour. */
+.bub-ask{z-index:235;width:min(340px,calc(100vw - 24px));animation:eModalCardIn .18s cubic-bezier(.2,.7,.3,1) both}
+.bub-ask h3{margin:0 0 6px;font:700 15.5px var(--sans-display);letter-spacing:-.2px}
+.bub-ask p{margin:0 0 8px;font-size:13.5px;line-height:1.5;color:var(--bub-dim);text-wrap:pretty}
+.bub-ask b{color:var(--bub-ink);font-weight:600}
+.bub-ask code{font:12px var(--mono);color:var(--bub-ink);overflow-wrap:anywhere}
+.e-offer .ec-what{margin:0 0 8px;font-size:13.5px;color:var(--bub-ink)}
+.e-offer .ec-counts{font:12px var(--mono);color:var(--bub-dim);margin-top:2px}
+/* A field on the fill: paper, so what is typed reads as the reader's own. */
+.bub .e-name-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
+  border:1px solid transparent;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans)}
+.bub .e-name-inp:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.bub .e-greet{color:var(--bub-ink);margin:8px 0 10px}
+.tour-field{margin:0 0 4px}
+.bub .e-greet .e-name-ph{color:var(--bub-dim);opacity:.8}
 /* The card note - the family's bubble, ONE kind deliberately: a second louder tier only moves
    the question of which tier a note belongs in onto whoever writes the next one. */
 .note-pane{z-index:120}
@@ -3077,23 +3081,6 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   color:var(--dim);opacity:.13}
 /* Light ink on a light canvas needs less alpha still to sit at the same perceived depth. */
 :root[data-theme=light] #sampleMark b{opacity:.11}
-/* It hangs off the menu button, where Show tour lives, rather than floating in the corner
-   attached to nothing and over the last card. top/left are placeholders: placeTourInvite()
-   writes both before it is shown, and right/bottom would fight them. */
-#tourInvite{top:0;left:0;z-index:230;width:min(300px,calc(100vw - 28px))}
-/* AND IT STEPS ASIDE FOR THE MENU IT POINTS AT. Both hang off the same button and both drop
-   below it, and the invite is at 230 against the menu's 80 inside the header's own stacking
-   context, so the invite covered three of the menu's four rows - measured with
-   elementFromPoint at each row's centre. Presentation only: the invite's own state is
-   untouched and closing the menu brings it straight back. */
-:root:has(#settingsBtn.on) #tourInvite,
-:root:has(#moreBtn.on) #tourInvite{visibility:hidden}
-#tourInvite h3{margin:0 0 6px;font-size:15px;font-family:var(--sans-display)}
-/* text-wrap:balance across the short descriptions: a last line holding two words reads as
-   unfinished, and evening the halves fixes every translation at once - hand-tuning sentence
-   length would have to be redone in each language and again at every rewording. */
-#tourInvite p{margin:0 0 12px;font-size:13px;line-height:1.45;color:var(--bub-dim);text-wrap:balance}
-#tourInvite .tour-actions{border-top:0;padding-top:0;margin-top:0}
 /* ---------- Motion & numerals ---------- */
 /* Colour-only, at .1s - these fire on hover with the pointer already moving. Transform
    and layout are deliberately NOT transitioned: drag, the FLIP reorders and the pill bar
@@ -3230,6 +3217,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
         <button type="button" class="tabs-nav" id="tabsNext" tabindex="-1" aria-label="Scroll tabs right" title="Scroll tabs right"><span class="tabs-nav-mark"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M8.1 4.6L13.5 10l-5.4 5.4"/></svg></span></button>
       </div>
     </div>
+    <!-- THE CATALOG IN USE, by name, or that none is: inert, and no door to the Library. -->
+    <div class="cat-now" id="catNow"><span class="cn-name" data-i18n-skip hidden></span><span class="cn-none">No catalog loaded</span></div>
     <!-- THE WINDOW'S OWN CONTROLS, drawn here because the desktop shell gives the band the top
          bar. Present in every build and shown only under body.e-host, so the browser is the
          browser. app-region:no-drag is what makes them clickable at all inside a drag band. -->
@@ -3326,7 +3315,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
           <button type="button" role="menuitem" data-act="rail" id="menuRail" title="Hide the intent panel; its chips then appear on the first card that uses {INTENT}">Hide intent panel</button>
           <button type="button" role="menuitem" data-act="pills" id="menuPills" title="Hide the category bar; hold Ctrl to peek at it while hidden">Hide categories</button>
           <div class="menu-sep"></div>
-          <button type="button" role="menuitem" data-act="tour" title="How a reply gets from here to your customer, in about a minute.">Show tour…</button>
+          <button type="button" role="menuitem" data-act="tour" title="The tour of Etiuda's controls, one at a time">Show tour…</button>
           <button type="button" role="menuitem" data-act="about" title="What Etiuda is, and every keyboard shortcut">About Etiuda</button>
         </div>
       </div>
@@ -3395,27 +3384,19 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 </div>
 
 <div id="tourRoot" hidden aria-hidden="true">
-  <div class="tour-shade" id="tourShade"></div>
   <div class="tour-hole" id="tourHole" aria-hidden="true"></div>
-  <div class="tour-card bub" id="tourCard" role="dialog" aria-modal="true" aria-labelledby="tourTitle">
+  <div class="tour-card bub" id="tourCard" role="dialog" aria-modal="false" aria-labelledby="tourTitle">
     <div class="tour-meta">
       <span class="tour-step" id="tourStepLabel">Step 1</span>
     </div>
     <h3 id="tourTitle">Welcome</h3>
     <p id="tourBody"></p>
+    <div class="tour-field" id="tourField" hidden></div>
     <div class="tour-actions">
       <button type="button" class="btn tour-skip" id="tourSkip">Skip tour</button>
       <button type="button" class="btn" id="tourPrev" hidden>Back</button>
       <button type="button" class="btn primary" id="tourNext">Next</button>
     </div>
-  </div>
-</div>
-<div id="tourInvite" class="bub" hidden role="dialog" aria-labelledby="tourInviteTitle">
-  <h3 id="tourInviteTitle">New here?</h3>
-  <p id="tourInviteBody">How a reply gets from here to your customer, in about a minute.</p>
-  <div class="tour-actions">
-    <button type="button" class="btn tour-skip" id="tourInviteDismiss">Not now</button>
-    <button type="button" class="btn primary" id="tourInviteStart">Show tour</button>
   </div>
 </div>
 

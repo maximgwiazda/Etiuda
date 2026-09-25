@@ -93,7 +93,7 @@ function render(){
           /* A first run has no menu habits yet, and Import is the route someone who downloaded
              the file is looking for - so it is a button here, not the name of one elsewhere. */
           +esc(t(hooks.sampleReady() ? "Add a card to a category," : "Add a card to a category, or"))
-          +' <button type="button" class="btn" id="emptyImport">'+esc(t("import a catalog"))+'</button>'
+          +' <button type="button" class="btn" id="emptyLoad">'+esc(t("import a catalog"))+'</button>'
           /* Both branches close on words: a sentence ending on a button chip reads as unfinished,
              and a bare full stop after one reads as a stray mark. */
           +(hooks.sampleReady()
@@ -133,7 +133,7 @@ function render(){
           : '<div class="empty">'+esc(t("Nothing here yet."))+'</div>'));
     const es=$("#emptySample");
     if(es) es.onclick=()=>hooks.loadSampleCatalog();
-    const ei=$("#emptyImport");
+    const ei=$("#emptyLoad");
     if(ei) ei.onclick=hooks.importCatalogHere;
     const ef=$("#emptyCatFolder");
     if(ef){

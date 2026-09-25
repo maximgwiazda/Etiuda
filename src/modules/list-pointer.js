@@ -386,7 +386,7 @@ function wireListPointer(){
     withAgentName(ps[vi],()=>{
       bumpUseCount(mid, cl);
       copy(fill(ps[vi],m), copiedToastMsg(m, cl, vi, ps.length));
-    });
+    },txtEl);
   });
 }
 

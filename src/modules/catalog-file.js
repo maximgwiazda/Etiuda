@@ -12,7 +12,7 @@ import { cardToExportPlain } from "./macros-json.js";
 import { FACTS, normWhoList } from "./stock.js";
 import { eWipeLatch, mgReopenAfterReload, ssDel, nsGet, nsSet, nsDel } from "./storage.js";
 import { TAB_KEY, tabSaveTimer } from "./tabs.js";
-import { ask, t, catalogCountsLine, translateTree, toast } from "./ui-lang.js";
+import { t, catalogCountsLine, translateTree, toast } from "./ui-lang.js";
 import { BASE_CATS, catalogCardId, pack, whoOptions, savePack } from "./pack.js";
 import { catIconKey, catSlot } from "./cat-identity.js";
 import { normalizeCardIntents } from "./card-intent.js";
@@ -22,6 +22,7 @@ import { esc } from "./esc.js";
 import { rebuildCards } from "./rebuild.js";
 import { cards } from "./app-state.js";
 import { carryCardLayer } from "./card-carry.js";
+import { hooks } from "./hooks.js";
 
 /* ---- one catalog format, one export, one import -----------------------------------------
    A catalog carries everything Etiuda has no content of its own for: cards, intents,
@@ -504,27 +505,12 @@ function loadSampleCatalog(){
   if((cards||[]).length || !sampleReady()) return false;
   return activateCatalog(catalogFromV2(JSON.parse(JSON.stringify(E_SAMPLE))),{keepPersonal:false});
 }
-/* Asks, and hands back what to activate rather than activating: the picker route has to
-   store its handle BEFORE the reload that activateCatalog() ends in, or it is never kept. */
+/* Reads a picked file's text into a catalog, or names the file and hands back null. */
 function catalogFromFileText(text,fileName){
       try{
-        const c=parseCatalogFile(String(text||""));
-        const active=storedCatalog();
-        // Nothing is said to be replaced where nothing is loaded, as after an Eject.
-        const said=isCatalogUpdate(c,active)
-          ? t("This is a newer copy of the catalog you already have, so your own cards and edits are kept.")
-          : active ? t("It replaces the catalog loaded now.") : "";
-        const msg=t("Import catalog")+"\n\n"+
-          t("Load this catalog on this browser:")+"\n"+fileName+"\n\n"+
-          catalogCountsLine("{MACROS} in {CARDS} · {INTENTS} · {CATEGORIES}",
-            c.cards.length, catalogMacroCount(c), catalogIntentCount(c),
-            Object.keys(c.categories).length)+"\n\n"+
-          (said ? said+"\n\n" : "")+
-          t("Nothing on disk is changed. Etiuda reloads to apply it.")+"\n\n"+t("Continue?");
-        if(!ask(msg)) return null;
-        return {c:c,keepPersonal:true};
+        return parseCatalogFile(String(text||""));
       }catch(e){
-        /* NAMED. Import opens on a folder that may hold several of these, and a refusal that
+        /* NAMED. The dialog opens on a folder that may hold several of these, and a refusal that
            says only that something failed leaves a person guessing which file they picked. */
         toast(t("{FILE} is not a catalog Etiuda can read.")
           .split("{FILE}").join(String(fileName||"")));
@@ -535,9 +521,9 @@ function catalogFromFileText(text,fileName){
    shell's dialog - so that a file the folder scan accepts is a file this accepts. The picker
    route below keeps its own tail, because it has a handle to store before the reload. */
 function importCatalogText(text,fileName){
-  const plan=catalogFromFileText(String(text||""),fileName);
-  if(!plan) return false;
-  eWatchClear().then(()=>activateCatalog(plan.c,{keepPersonal:plan.keepPersonal}));
+  const c=catalogFromFileText(String(text||""),fileName);
+  if(!c) return false;
+  hooks.offerPickedCatalog(c,fileName,()=>{ eWatchClear().then(()=>activateCatalog(c,{keepPersonal:true})); });
   return true;
 }
 /* The host's dialog, and the file comes back already read: the engine calls no OS API. No watch
@@ -587,12 +573,15 @@ function importCatalogPicked(){
   }).then(f=>{
     if(!f) return null;
     return f.text().then(text=>{
-      const plan=catalogFromFileText(text,f.name);
-      if(!plan) return null;
-      nsSet("WatchName",f.name);
-      nsSet("WatchSeen",String(f.lastModified||0));
-      nsDel("WatchNo");
-      return eWatchPut(handle).then(()=>activateCatalog(plan.c,{keepPersonal:plan.keepPersonal}));
+      const c=catalogFromFileText(text,f.name);
+      if(!c) return null;
+      hooks.offerPickedCatalog(c,f.name,()=>{
+        nsSet("WatchName",f.name);
+        nsSet("WatchSeen",String(f.lastModified||0));
+        nsDel("WatchNo");
+        eWatchPut(handle).then(()=>activateCatalog(c,{keepPersonal:true}));
+      });
+      return null;
     });
   }).catch(e=>{
     if(e && e.name==="AbortError") return;

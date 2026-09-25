@@ -6,7 +6,7 @@ import { intentNavName, commentTokensInUse } from "./intent-text.js";
 import { langTabs, langPane, langFieldId, langEndonym, markMissing, edReportMissing, langFocus } from "./lang-tabs.js";
 import { displayIntentRows, drawIntentRail } from "./rail-list.js";
 import { drawPills } from "./tabs.js";
-import { tourActive } from "./tour.js";
+import { tourShowsDialog } from "./tour.js";
 import { ask, t, toast } from "./ui-lang.js";
 import { BASE_CATS, pack, savePack } from "./pack.js";
 import { removeIntent } from "./favourites.js";
@@ -363,7 +363,7 @@ function openIntentEditor(idx, fromManage){
   edWireNav(displayIntentRows().map(r=>r.idx), idx, i=>openIntentEditor(i));
   // Same as the card editor: the tour owns the keyboard while it is running.
   setTimeout(()=>{
-    if(tourActive()) return;
+    if(tourShowsDialog()) return;
     const el=$("#"+langFieldId("ie","clause","en")); if(el) el.focus();
   },30);
 }

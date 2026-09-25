@@ -246,6 +246,7 @@ function boot(){
     sampleReady: catalogFile.sampleReady,
     loadSampleCatalog: catalogFile.loadSampleCatalog,
     importCatalogHere: catalogFile.importCatalogHere,
+    offerPickedCatalog: catalogOffer.eOfferPickedCatalog,
     runShortcut: runShortcut.runShortcut,
   });
   // A 1.16.7 desk's keys, copied under this version's names before the first line reads one
@@ -406,16 +407,17 @@ function boot(){
   // The chrome's saved language, the first entry's focus, and the greeting watch
   onOpen.wireOnOpen();
 
-  // The tour wiring and its first-run invite, and the sample mark
+  // The tour wiring, and the sample mark
   tour.wireTourUi();
   catalogFile.syncSampleMark();
+  // The catalog in use, named on the band, and the catalog found beside it offered
+  catalogOffer.paintCatNow();
   catalogOffer.eOfferCatalogAtBoot();
   // The role wheel, which waits on the sample until a reply names somebody
   agent.syncRoleWheel();
-  /* THE FIRST RUN ASKS ONE THING AT A TIME: which catalog, then the tour. Each stands down while
-     an earlier one is on screen and the one that closes calls the next. The name is asked when the
-     first signed reply is copied (withAgentName). */
-  tour.maybeShowTourInvite();
+  /* A FIRST RUN OPENS ON THE EMPTY DESK and the tour starts by itself once the logo has formed; it
+     asks the name and, while the desk is empty, for a catalog, so the catalog offer waits for it. */
+  tour.maybeStartTour();
   catalogOffer.wireHostCatalogWatch();
   /* The sibling channel is synchronous and free, so it goes first and this only speaks if it
      left the screen clear. */

@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 216 };
+const EXPECTED = { chrome: 219 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -244,22 +244,24 @@ const BOOT_SKIP = /skip|not now|close|pomi/;
 async function bootAndDismiss(pg, url, label) {
   const late = [];
   await pg.goto(url, { waitUntil: "load", timeout: 90000 });
-  /* The page is up when it has drawn something: either the cards, or the offer to load the
-     sibling catalog. Whichever comes first ends the wait. */
+  /* The page is up when it has drawn something: the cards, the offer to load the sibling
+     catalog, or a first run's tour, which the offer waits behind. Whichever comes first ends the
+     wait. */
   await until(pg, () => document.querySelectorAll(".card").length > 0
-    || [...document.querySelectorAll("button")].some(x => x.offsetWidth > 0
-         && /^(load|yes|tak)([^a-z]|$)|load it|load the catalog|sample catalog|update/i.test(x.textContent)),
-    label + ": cards or the catalog offer", late, 30000);
+    || !!document.querySelector("#eCatalogOffer")
+    || [...document.querySelectorAll("#tourRoot button")].some(x => x.offsetWidth > 0),
+    label + ": cards, the catalog offer or the tour", late, 30000);
   /* Returns the text of the button it pressed, so the wait after it can name that button and
-     not its family. */
-  const clickVisible = rx => pg.evaluate(r => {
-    const el = [...document.querySelectorAll("button")].filter(x => x.offsetWidth > 0)
+     not its family. Only inside `scope`: the empty desk's own "load a catalog" would answer the
+     offer's words, and "Not now" is the offer's as well as a skip. */
+  const clickVisible = (rx, scope) => pg.evaluate((r, sc) => {
+    const el = [...document.querySelectorAll(sc + " button")].filter(x => x.offsetWidth > 0)
       .find(x => new RegExp(r, "i").test(x.textContent));
     if (!el) return null;
     const was = el.textContent.replace(/\s+/g, " ").trim();
     el.click();
     return was;
-  }, rx.source);
+  }, rx.source, scope);
   /* THE WAIT IS ON THE BUTTON THAT WAS PRESSED, not on every button that matches, and that
      distinction was measured rather than reasoned on 2026-09-20. The main page raises TWO offers
      at once - `#emptySample` "load a sample catalog" and `#ecYes` "Load catalog" - so a wait for
@@ -276,10 +278,14 @@ async function bootAndDismiss(pg, url, label) {
   /* Each press is followed by the disappearance of the words it pressed, which is the event the
      old 1.9 s was standing in for. The loop bound stays: an offer that reappears for ever is a
      fault and not something to wait on. */
-  for (const step of [{ rx: BOOT_OFFER, n: 4, what: "the catalog offer to close" },
-                      { rx: BOOT_SKIP, n: 3, what: "the tour to close" }]) {
+  for (const step of [{ rx: BOOT_SKIP, n: 1, what: "the first run's tour to close", scope: "#tourRoot" },
+                      { rx: BOOT_OFFER, n: 4, what: "the catalog offer to close", scope: "#eCatalogOffer",
+                        wait: 2500 },
+                      { rx: BOOT_SKIP, n: 3, what: "the tour to close", scope: "#tourRoot" }]) {
+    /* The offer a first run holds back rises as the tour is skipped, a moment after it. */
+    if (step.wait) await pg.waitForSelector(step.scope, { timeout: step.wait }).catch(() => {});
     for (let i = 0; i < step.n; i++) {
-      const was = await clickVisible(step.rx);
+      const was = await clickVisible(step.rx, step.scope);
       if (was === null) break;
       let gone = true;
       await goneText(step.rx, was).catch(() => { gone = false; });
@@ -523,6 +529,46 @@ const t0 = Date.now();
   check(tourAgain.up && !tourEsc.up, "and Escape takes it down again from the menu's own route (step "
     + tourAgain.n + " of " + tourAgain.total + " up, " + tourEsc.w + "px after)");
   await p.keyboard.press("Escape"); await sleep(300);
+  /* THE PAGE STAYS USABLE UNDER THE TOUR (Maxim, 2026-09-26): nothing darkens it or holds its
+     clicks, a click on it never takes the bubble down, and Escape outside the bubble is the page's.
+     The search box is what is clicked, because a click there changes nothing another leg reads.
+     A window opened over the page takes the bubble behind it, and closing the window brings the
+     bubble back: read as the tour's own stacking against the dialogs' 200. */
+  const menuTour = () => p.evaluate(() => {
+    const btn = document.getElementById("settingsBtn"); if (btn) btn.click();
+    const item = document.querySelector('#settingsMenu [data-act="tour"]'); if (item) item.click();
+  });
+  await menuTour(); await sleep(700);
+  const under = await p.evaluate(() => {
+    /* The first step's bubble hangs below the mark and may cover the box's left end, and the clear
+       button and the placeholder sit on it too, so the point is the first one along the box, right to
+       left, that the box itself answers. */
+    const r = document.getElementById("intent").getBoundingClientRect(), y = Math.round(r.top + r.height / 2);
+    for (let x = Math.round(r.right - 12); x > r.left; x -= 20) {
+      const top = document.elementFromPoint(x, y);
+      if (top && top.id === "intent") return { x, y, page: true };
+    }
+    return { x: 0, y: 0, page: false };
+  });
+  await p.mouse.click(under.x, under.y); await sleep(300);
+  const took = await p.evaluate(() => document.activeElement && document.activeElement.id);
+  await p.keyboard.press("Escape"); await sleep(400);
+  const kept = await tourShot();
+  await p.evaluate(() => { const btn = document.getElementById("settingsBtn"); if (btn) btn.click();
+    const item = document.querySelector('#settingsMenu [data-act="manage"]'); if (item) item.click(); });
+  await sleep(900);
+  const behind = await p.evaluate(() => ({ lib: !!document.getElementById("mgCatList") || !document.getElementById("modal").hidden,
+    z: getComputedStyle(document.getElementById("tourRoot")).zIndex }));
+  await p.evaluate(() => closeModal()); await sleep(600);
+  const front = await p.evaluate(() => getComputedStyle(document.getElementById("tourRoot")).zIndex);
+  await p.evaluate(() => { const k = document.getElementById("tourSkip"); if (k) k.click(); });
+  await sleep(500);
+  check(under.page && took === "intent" && kept.up && kept.n === 1,
+    "the page stays usable under the tour: the search box is what a click there lands on and it takes the"
+    + " keyboard, and the click and an Escape there leave the bubble up on its step (" + JSON.stringify({ under: under.page, took, up: kept.up, n: kept.n }) + ")");
+  check(behind.lib && behind.z === "190" && front === "240",
+    "a window opened over the page takes the bubble behind it, and closing it brings the bubble back (z "
+    + behind.z + " with the Library open, " + front + " after)");
   clean(e, "the tour");
 
   /* Interface language both ways, with the dialogs opened in Polish.
@@ -1088,12 +1134,12 @@ const t0 = Date.now();
       await q.evaluate(() => { if (typeof dismissModal === "function") dismissModal(); });
       /* THE THING THAT MOVES, measured rather than guessed on 2026-09-20: #modalCard is on the
          page from the first paint at offsetWidth 0, so waiting for it to go never ends, and the
-         dialog dismissModal closes is #eCatalogModal. The door below is asked for by EXISTENCE
+         question dismissModal was closing is #eCatalogOffer. The door below is asked for by EXISTENCE
          and not by visibility, for the same reason: it sits in a menu that is closed until it is
          opened, so its offsetWidth is 0 on a page where clicking it works perfectly. Both wrong
          conditions were caught by this leg going red with a sentence naming the wait, which is
          what the change is for. */
-      await untilHere(q, () => { const m = document.querySelector("#eCatalogModal");
+      await untilHere(q, () => { const m = document.querySelector("#eCatalogOffer");
                              return !m || m.offsetWidth === 0; },
                   label + ": the catalog dialog to close", 10000);
       const canManage = await untilHere(q, () => !!document.querySelector('[data-act="manage"]'),
@@ -1434,20 +1480,21 @@ const t0 = Date.now();
       { id: "probe-second-catalog", name: "Second catalog", cards: [],
         intents: { en: ["a"] }, categories: { gen: "General" } },
       { foundHtml: '<code>second.ec</code>', force: true, asked: true, accept: () => false });
-    const card = document.querySelector("#eCatalogModal .modal-card");
+    const card = document.querySelector("#eCatalogOffer");
     const out = { shown: shown, lang: document.documentElement.getAttribute("lang") || "",
-                  h2: card ? card.querySelector("h2").textContent : "",
-                  subs: card ? [...card.querySelectorAll("p.modal-sub")].map(x => x.textContent) : [],
-                  acts: card ? [...card.querySelectorAll(".modal-actions .btn")].length : 0,
-                  name: card ? (card.querySelector(".about-body b") || {}).textContent : "" };
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+                  h2: card ? card.querySelector("h3").textContent : "",
+                  subs: card ? [...card.querySelectorAll("p.ec-sub")].map(x => x.textContent) : [],
+                  acts: card ? [...card.querySelectorAll(".tour-actions .btn")].length : 0,
+                  name: card ? (card.querySelector(".ec-what b") || {}).textContent : "",
+                  focus: !!card && card.contains(document.activeElement) };
+    (document.activeElement || document).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     await wait(250);
-    out.gone = !document.getElementById("eCatalogModal");
+    out.gone = !document.getElementById("eCatalogOffer");
     return out;
   });
   check(offer2.shown && offer2.h2 === HEAD_REPLACE[offer2.lang] && offer2.subs.length === 1
         && offer2.subs[0].indexOf("second.ec") > -1 && offer2.acts === 2
-        && offer2.name === "Second catalog" && offer2.gone,
+        && offer2.name === "Second catalog" && offer2.focus && offer2.gone,
     "a different catalog offered over the loaded one asks " + JSON.stringify(offer2.h2)
     + " in " + offer2.lang + " and says nothing else: " + offer2.subs.length
     + " paragraph(s) under it, " + JSON.stringify(offer2.subs) + ", the catalog named "
@@ -2189,7 +2236,7 @@ const t0 = Date.now();
       const c = el && el.closest(".card[data-id]"), m = c && findCard(c.dataset.id);
       return !!m && /{(AGENT|INIT)}/.test(parts(m, cardLang(m))[+el.dataset.v] || ""); });
     await p.mouse.click(firstTxt.x, firstTxt.y); await sleep(900);
-    const asked = await p.evaluate(() => !!document.getElementById("eAgentModal"));
+    const asked = await p.evaluate(() => !!document.getElementById("eAgentAsk"));
     if (asked) {
       await p.type("#eAgentInp", "Invented Agent"); await sleep(200);
       await p.click("#eAgentYes"); await sleep(900);
@@ -2495,7 +2542,7 @@ const t0 = Date.now();
       const native = typeof real === "function";
       let asked = 0;
       if (native) window.showOpenFilePicker = () => { asked++; const x = new Error("cancelled"); x.name = "AbortError"; return Promise.reject(x); };
-      const btn = document.getElementById("emptyImport");
+      const btn = document.getElementById("emptyLoad");
       if (btn) btn.click();
       await wait(800);
       if (native) window.showOpenFilePicker = real;
@@ -2508,10 +2555,33 @@ const t0 = Date.now();
        shape here clicked through an evaluate and then went on driving whatever frame it had,
        which is a race against a navigation the instrument never mentioned. It is now waited for,
        and the wait is a check: the reload is the behaviour board 356 was about. */
+    /* THE TOUR ASKS FOR A CATALOG ON THE EMPTY DESK and carries on past the load: its second step
+       rings the empty desk's own Load button and has no Next, and the reload a load ends in brings
+       the tour back at the step after it. */
+    step("the tour's load step on the empty desk");
+    const loadStep = await q.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      for (let i = 0; i < 40 && document.getElementById("tourRoot").hidden; i++) await wait(100);
+      const next = document.getElementById("tourNext");
+      if (next) next.click();
+      await wait(800);
+      const ring = document.getElementById("tourHole").getBoundingClientRect(), btn = document.getElementById("emptyLoad");
+      const b = btn ? btn.getBoundingClientRect() : null;
+      return { at: sessionStorage.getItem("eTourAt"), nextHidden: !!next && next.hidden,
+               rings: !!b && ring.left <= b.left && ring.right >= b.right && ring.top <= b.top && ring.bottom >= b.bottom };
+    });
     step("clicking the sample and waiting for the reload");
     const navigated = q.waitForNavigation({ waitUntil: "load", timeout: 30000 }).then(() => true, () => false);
     await q.click("#emptySample");
     const reloaded = await navigated;
+    const resumed = await q.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      for (let i = 0; i < 40 && document.getElementById("tourRoot").hidden; i++) await wait(100);
+      return { up: !document.getElementById("tourRoot").hidden, at: sessionStorage.getItem("eTourAt") };
+    });
+    check(loadStep.at === "load" && loadStep.nextHidden && loadStep.rings && resumed.up && resumed.at === "pax",
+      "on the empty desk the tour's second step rings the Load button and waits without a Next, and the reload"
+      + " a load ends in brings the tour back at the step after it: " + JSON.stringify({ loadStep, resumed }));
     check(reloaded, "accepting the sample reloads the document, which is how a catalog arrives on a clean desk");
     step("waiting for the sample's cards after the reload");
     await q.waitForFunction(() => document.querySelectorAll(".card").length > 0, { timeout: 20000 }).catch(() => {});

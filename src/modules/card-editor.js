@@ -9,7 +9,7 @@ import { intentNavName } from "./intent-text.js";
 import { langTabs, langPane, langFieldId, markMissing, edReportMissing, langFocus } from "./lang-tabs.js";
 import { nsSet } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { tourActive } from "./tour.js";
+import { tourShowsDialog } from "./tour.js";
 import { t, counted, toast, tc } from "./ui-lang.js";
 import { BASE_CATS, pack, savePack } from "./pack.js";
 import { removeCard, syncFavouritesMeta } from "./favourites.js";
@@ -592,7 +592,7 @@ function openCardEditor(id, presetCat, fromManage){
      keyboard away from it, and the caret landing in Title also reads as "start typing here",
      which is the opposite of what a showcase step is asking for. */
   setTimeout(()=>{
-    if(tourActive()) return;
+    if(tourShowsDialog()) return;
     const el=$("#"+meFieldId("t",CONTENT_LANGS[0])); if(el) el.focus();
   },30);
 }

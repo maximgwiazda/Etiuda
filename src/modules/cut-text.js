@@ -11,7 +11,7 @@ import { cutInk, cutRange, $ } from "./dom.js";
    render from 17ms to 70ms. A card's own box is laid out either way, so its rect is cheap;
    the rest are measured when the scroll brings them in. */
 const CUT_SEL=".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-count,.acc-note,.mf-sum,"
-  +"#toast,#intentPh,#roleDrum span,.tab-label>span,.fills input,"
+  +"#toast,#intentPh,#roleDrum span,.tab-label>span,.fills input,.cat-now .cn-name,"
   +".mf input:not([type]),.mf input[type=text],.rail-t,footer .nw";
 const CUT_MARGIN=400;
 const CUT_EPS=.01;

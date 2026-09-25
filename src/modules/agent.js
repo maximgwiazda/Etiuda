@@ -6,6 +6,7 @@ import { greetLine } from "./greeting.js";
 import { lang } from "./app-state.js";
 import { scheduleTabSave } from "./tabs.js";
 import { hooks } from "./hooks.js";
+import { placeBubble } from "./bubble.js";
 // The agent's own name: one stored value feeding two tokens, the burst that fills the cards
 // with them, and the question asked once at the first run.
 
@@ -63,15 +64,15 @@ function wantsAgentName(raw){
   return E_SIGN_RE.test(String(raw||"")) && !agentName() && lsGet(E_NAME_ASKED)!=="1";
 }
 /** Runs `go` now, or once the question is answered. Escape answers nothing and copies nothing,
- *  so the click can simply be made again. */
-function withAgentName(raw,go){
+ *  so the click can simply be made again. `anchor` is the reply the question hangs from. */
+function withAgentName(raw,go,anchor){
   if(/\x7bROLE\x7d/.test(String(raw||"")) && document.body.classList.contains("role-waits")){
     document.body.classList.remove("role-waits");
     lsSet("eRoleSeen","1");
     toast(t("Beside the customer's name there is now a wheel: it chooses who in the team this reply names."),TOAST_HAND_MS);
   }
-  if(!wantsAgentName(raw) || document.getElementById("eAgentModal")){ go(); return; }
-  askAgentName(raw,go);
+  if(!wantsAgentName(raw) || document.querySelector(".e-name-inp")){ go(); return; }
+  askAgentName(raw,go,anchor);
 }
 /* THE ROLE WHEEL WAITS FOR ITS FIRST REPLY on the sample: beside the name it is a control nobody has
    been told about, so it is out of sight until a reply naming somebody of the team is copied, and
@@ -90,29 +91,17 @@ function signLines(raw){
     return (i>0 && lines[i-1].trim()) ? [lines[i-1].trim(),line] : [line];
   return [line.split(/(?<=[.?!])\s+/).find(x=>E_SIGN_RE.test(x))||line];
 }
-/** Small modal of its own rather than the shared one, the same trick the catalog offer uses,
- *  so it can stand over whatever is already on screen without destroying it. */
-function askAgentName(raw,then){
-  if(document.getElementById("eAgentModal")) return;
-  const wrap=document.createElement("div");
-  wrap.className="modal";
-  wrap.id="eAgentModal";
-  wrap.innerHTML='<div class="modal-bg"></div><div class="modal-card">'
-    +'<h2>How should your replies be signed?</h2>'
-    +'<p class="modal-sub">Customers see it at the foot of every reply. It can be changed at any time in Settings.</p>'
-    +'<div class="mf"><input id="eAgentInp" autocomplete="off" spellcheck="false" placeholder="for instance, Kate"></div>'
-    +'<p class="e-greet" id="eAgentPrev" data-i18n-skip></p>'
-    +'<div class="modal-actions">'
-    +'<button type="button" class="btn" id="eAgentNo">Later</button>'
-    +'<button type="button" class="btn primary" id="eAgentYes">Sign with this</button>'
-    +'</div></div>';
-  document.body.appendChild(wrap);
-  /* Appended straight to <body>, so the chrome roots never see it - swept here instead, at the
-     one moment it exists, and before the preview is drawn: the preview is a card's words and
-     follows the CARD language, not the interface's. */
-  translateTree(wrap);
-  const inp=wrap.querySelector("#eAgentInp");
-  const prev=wrap.querySelector("#eAgentPrev");
+/* THE NAME FIELD, one piece for the two places that ask: the tour's first step and the bubble at
+   the first signed copy. The preview is the reply's own signing line where there is a reply, and
+   a card's greeting where there is not; it follows the CARD language, not the interface's. */
+function nameFieldHtml(id,prevId){
+  return '<input class="e-name-inp" id="'+id+'" autocomplete="off" spellcheck="false"'
+    +' placeholder="'+esc(t("for instance, Kate"))+'">'
+    +'<p class="e-greet" id="'+prevId+'" data-i18n-skip></p>';
+}
+function wireNameField(root,raw){
+  const inp=root.querySelector(".e-name-inp"), prev=root.querySelector(".e-greet");
+  if(!inp || !prev) return null;
   const shown=signLines(raw);
   const sync=()=>{
     const typed=inp.value.trim();
@@ -125,23 +114,50 @@ function askAgentName(raw,then){
     }
     prev.innerHTML=shown.map(l=>esc(l).split("{AGENT}").join(who).split("{INIT}").join(init)).join("<br>");
   };
-  const close=()=>{ document.removeEventListener("keydown", onKey, true); wrap.remove(); };
-  const save=()=>{ setAgentName(inp.value.trim()); lsSet(E_NAME_ASKED,"1"); close(); if(then) then(); };
-  const later=()=>{ lsSet(E_NAME_ASKED,"1"); close(); if(then) then(); };
-  /* A DIALOG OPENED OVER THIS ONE OWNS THE KEYBOARD. This handler captures, so without the
-     guard an Escape aimed at the Library above would close this instead and leave the Library
-     standing - which is what a stacked modal's Escape always costs if it does not stand down. */
-  function onKey(e){
-    const shared=document.getElementById("modal");
-    if(document.getElementById("eCatalogModal") || (shared && !shared.hidden)) return;
-    if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); close(); }
-    else if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); if(inp.value.trim()) save(); else later(); }
-  }
-  document.addEventListener("keydown", onKey, true);
+  inp.value=agentName();
   inp.oninput=sync;
   sync();
+  return inp;
+}
+// An answer, empty included: an empty name is "later", and the question is not asked again.
+function keepAgentName(v){ setAgentName(String(v||"").trim()); lsSet(E_NAME_ASKED,"1"); }
+/** The question as a bubble hanging from the reply that was clicked, so it stands over whatever is
+ *  on screen without covering it, and a click elsewhere leaves it standing. */
+function askAgentName(raw,then,anchor){
+  if(document.getElementById("eAgentAsk")) return;
+  const wrap=document.createElement("div");
+  wrap.className="bub bub-ask";
+  wrap.id="eAgentAsk";
+  wrap.setAttribute("role","dialog");
+  wrap.setAttribute("aria-labelledby","eAgentTitle");
+  wrap.innerHTML='<h3 id="eAgentTitle">How should your replies be signed?</h3>'
+    +'<p>Customers see it at the foot of every reply. It can be changed at any time in Settings.</p>'
+    +nameFieldHtml("eAgentInp","eAgentPrev")
+    +'<div class="tour-actions">'
+    +'<button type="button" class="btn" id="eAgentNo">Later</button>'
+    +'<button type="button" class="btn primary" id="eAgentYes">Sign with this</button>'
+    +'</div>';
+  document.body.appendChild(wrap);
+  /* Appended straight to <body>, so the chrome roots never see it - swept here instead, at the
+     one moment it exists, and before the preview is drawn. */
+  translateTree(wrap);
+  const inp=wireNameField(wrap,raw);
+  const place=()=>{
+    const r=(anchor && anchor.isConnected) ? anchor.getBoundingClientRect() : null;
+    placeBubble(wrap, (r && r.width) ? {top:r.top, left:r.left, width:r.width, height:r.height}
+      : {top:innerHeight/2, left:innerWidth/2, width:0, height:0}, {width:340});
+  };
+  place();
+  addEventListener("resize",place);
+  const close=()=>{ removeEventListener("resize",place); wrap.remove(); };
+  const save=()=>{ keepAgentName(inp.value); close(); if(then) then(); };
+  // The bubble's own keys, and only while the keyboard is inside it.
+  wrap.addEventListener("keydown",e=>{
+    if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); close(); }
+    else if(e.key==="Enter" && e.target===inp){ e.preventDefault(); e.stopPropagation(); save(); }
+  });
   wrap.querySelector("#eAgentYes").onclick=save;
-  wrap.querySelector("#eAgentNo").onclick=later;
+  wrap.querySelector("#eAgentNo").onclick=()=>{ keepAgentName(""); close(); if(then) then(); };
   try{ inp.focus(); }catch(e){}
 }
 
@@ -152,6 +168,9 @@ export {
   setAgentName,
   renderFillsSoon,
   askAgentName,
+  nameFieldHtml,
+  wireNameField,
+  keepAgentName,
   wantsAgentName,
   withAgentName,
   syncRoleWheel,

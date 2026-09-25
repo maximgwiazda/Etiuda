@@ -617,7 +617,18 @@ const SEEN = () => ({
   cards: document.querySelectorAll("#list .card").length,
   catalogThere: typeof window.E_CATALOG !== "undefined",
   offer: !!document.querySelector("#ecYes"),
+  tour: !!document.querySelector("#tourRoot:not([hidden]) #tourCard"),
 });
+/* A FIRST RUN'S TOUR holds the catalog offer back until it ends; skipping it is what a person who
+   wants the offer does. Waits the tour's own start first. */
+const SKIP_TOUR = async () => {
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  await wait(2200);
+  const k = document.getElementById("tourSkip");
+  if (k && k.offsetWidth) k.click();
+  await wait(800);
+  return !!k;
+};
 
 /* The same route through the interface that shell-smoke's check 3b drives: the menu, the fold
    and the segment, so the key is written by the app rather than by a call from outside it. */
@@ -846,6 +857,7 @@ let newKey = "", lnkSm = "", lnkDt = "";
       + " not inside " + LABDOCS + ", so ETIUDA_TEST_DOCUMENTS was not honoured and the sample"
       + " legs would be reading a folder of this machine's own");
   }
+  await sleep(2200);
   const seeded = await s0.p.evaluate(SEEN);
   /* Windows answers one path in more than one spelling, so the two are compared resolved and
      folded rather than as the strings each side happened to write. */
@@ -866,12 +878,12 @@ let newKey = "", lnkSm = "", lnkDt = "";
     + ", parsing as a format 2 catalog document of " + sampleCards + " cards, and it is the only"
     + " thing in the folder (" + listing(DOCS_ETIUDA).length + " entries). The comparison is"
     + " against the asar rather than the tree, because the asar is what a customer is handed");
-  check(seeded.offer === true && seeded.catalogThere === true && seeded.cards === 0
+  check(seeded.offer === false && seeded.tour === true && seeded.catalogThere === true && seeded.cards === 0
         && samePath(seedRead, sampleFile) && s0.said.some(l => /the sample catalog was put in/.test(l)),
-    "1f and it is OFFERED rather than loaded behind the person: #ecYes is up (" + seeded.offer
-    + "), window.E_CATALOG is there (" + seeded.catalogThere + "), " + seeded.cards + " cards are"
-    + " on screen until it is accepted, and the file the shell named reading it is the sample this"
-    + " run just watched appear: " + JSON.stringify(seedRead));
+    "1f and a first run opens on the empty desk with the tour, the sample neither loaded nor offered:"
+    + " the offer is not up (" + seeded.offer + "), the tour is (" + seeded.tour + "), window.E_CATALOG"
+    + " is there (" + seeded.catalogThere + ") and " + seeded.cards + " cards are on screen, and the"
+    + " file the shell named reading it is the sample this run just watched appear: " + JSON.stringify(seedRead));
   await s0.stop();
   const keys1 = deskKeys();
   /* THE EJECT, made by hand because it is the harsher case: an eject inside the app leaves the
@@ -922,8 +934,9 @@ let newKey = "", lnkSm = "", lnkDt = "";
   const takenRead = namedReadOf(s2.said);
   /* Escape rather than the accept: it closes the offer without recording a refusal and without
      the reload an accept ends in, so the Library below is read on this same document. */
+  await s2.p.evaluate(SKIP_TOUR);
   const takenOffer = await s2.p.evaluate(() => {
-    const b = document.querySelector("#eCatalogModal .about-body b");
+    const b = document.querySelector("#eCatalogOffer .ec-what b");
     return b ? b.textContent : null;
   });
   const takenRows = await s2.p.evaluate(async () => {
@@ -1024,6 +1037,7 @@ let newKey = "", lnkSm = "", lnkDt = "";
       + " anything; it named " + JSON.stringify(namedPath));
   }
 
+  await s.p.evaluate(SKIP_TOUR);
   const up = await s.p.evaluate(() => !!document.querySelector("#ecYes"));
   const clicked = await s.p.evaluate(() => { const y = document.querySelector("#ecYes"); if (!y) return false; y.click(); return true; });
   await sleep(6000);

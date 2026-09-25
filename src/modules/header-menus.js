@@ -77,7 +77,8 @@ function wireHeaderMenus(){
       return;
     }
     if(e.key!=="Escape") return;
-    if(hooks.tourActive()){
+    // The tour's Escape, only while the keyboard is inside its bubble.
+    if(hooks.tourActive() && $("#tourCard") && $("#tourCard").contains(document.activeElement)){
       hooks.endTour(false);
       e.stopPropagation(); e.preventDefault();
       return;

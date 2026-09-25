@@ -8,7 +8,7 @@ import { openSettings } from "./settings.js";
 import { SC_DEFS, chordFromEvent, chordsEqual, cloneChord, emptyChord, eventMatchesAction,
   formatChord, saveShortcuts, scMap2, scTake } from "./shortcuts.js";
 import { scCaptureId, scCaptureSlot, scRepaint, scStopCapture } from "./shortcuts-list.js";
-import { activateTourFocus, endTour, moveTourFocus, tourActive } from "./tour.js";
+import { activateTourFocus, endTour, moveTourFocus, tourActive, tourHasFocus } from "./tour.js";
 import { t, toast } from "./ui-lang.js";
 import { pageKeyScroll } from "./page-scroll.js";
 import { $, intentEl } from "./dom.js";
@@ -85,7 +85,11 @@ function wireGlobalKeydown(){
   addEventListener("keydown",e=>{
     if(scCaptureId) return;
 
-    if(tourActive()){
+    /* THE TOUR'S KEYS ARE ITS OWN only while the keyboard is inside its bubble; everywhere else the
+       page keeps every key, since the page stays usable under the tour. Its name field keeps the
+       arrows and Enter. */
+    if(tourActive() && tourHasFocus()){
+      if(e.target && e.target.id==="tourName" && e.key!=="Escape") return;
       if(e.key==="Escape" || eventMatchesAction(e,"escape")){
         e.preventDefault();
         endTour(false);

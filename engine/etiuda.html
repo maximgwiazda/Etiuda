@@ -536,6 +536,10 @@ body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,4
 #seg button.on{background:transparent;color:var(--accent)}
 #seg button[data-alt].on{background:transparent;color:var(--pl)}
 .row-main{flex:1 1 auto;min-width:0;display:flex;gap:8px;align-items:flex-end}
+/* The catalog's name on the band, in the band's ink and quieter than the tabs; cut, never wrapped. */
+.cat-now{flex:0 1 auto;min-width:0;max-width:min(30ch,26vw);align-self:center;
+  font:12.5px var(--sans);color:rgba(var(--band-ink-rgb),.78);white-space:nowrap;overflow:hidden}
+.cat-now .cn-name,.cat-now .cn-none{display:block;overflow:hidden}
 
 /* ---- THE DESKTOP HOST. Every rule here is off in a browser: it hangs on body.e-host, which
    host.js sets only where the shell's preload has put E_HOST on the window. */
@@ -1768,15 +1772,6 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 .list-sep.e-catsep .sep-fold,.list-sep.e-favsep .sep-fold{order:9}
 .list-sep i{flex:1;height:1px;border-radius:0;background:var(--line)}
 .list-sep span{white-space:nowrap}
-/* Shown only when an un-accepted catalog sits beside the file. Native .modal chrome,
-   centred with a scrim - an empty Etiuda can do nothing useful until this is answered. */
-/* Only the prose centring is this dialog's own - it is all sentences. The export-name
-   prompt shares the shape but holds an input, and centring an input's contents would be a
-   different thing entirely. */
-#eCatalogModal .modal-card{text-align:center}
-/* The name asked at the first signed reply: room at the sides so no line runs to the card's edge. */
-#eAgentModal .modal-card{padding:0 22px 16px}
-#eCatalogModal .ec-counts{font:12px var(--mono);color:var(--dim);margin-top:4px}
 /* One button slot per row, swapped by state: the hide button appears only on the hovered
    row and only while Ctrl is held - on every row at once it was a wall of icons.
    Monochrome until hovered, like the star: Ctrl changes what the slot does, not how loud. */
@@ -2213,7 +2208,7 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 .modal:not([hidden]) .modal-card{animation:eModalCardIn .18s cubic-bezier(.2,.7,.3,1) both}
 }@layer overrides{
 @media (prefers-reduced-motion:reduce){
-  .modal:not([hidden]) .modal-bg,.modal:not([hidden]) .modal-card{animation:none!important}
+  .modal:not([hidden]) .modal-bg,.modal:not([hidden]) .modal-card,.bub-ask{animation:none!important}
 }
 /* One treatment for everything that hangs below an anchor and toggles with hidden - a
    short drop, keyframed for the display:none reason above. .12s: these are frequent and
@@ -2240,8 +2235,6 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
   display:flex;flex-direction:column;overflow:hidden;
   background:var(--panel-raised);color:var(--ink);border:1px solid var(--line);
   border-radius:16px;box-shadow:0 8px 20px rgba(0,0,0,.12),0 28px 68px rgba(0,0,0,.22);padding:0}
-/* The catalog offer wears the small windows' shadow, not the dialogs'. */
-#eCatalogModal .modal-card{box-shadow:var(--shadow-pop)}
 /* The only thing that scrolls, so the scrollbar sits beside the content and stops short of both
    pinned bars. min-height:0 is load-bearing: a flex item will not shrink below its content
    without it, and the middle would push the actions row off the bottom instead of scrolling. */
@@ -2785,8 +2778,11 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
   padding:9px 0;border-bottom:1px solid var(--line)}
 .set-row:last-child{border-bottom:0}
 .set-label{min-width:0;font:14px var(--sans);color:var(--ink)}
+/* text-wrap:balance across the short descriptions: a last line holding two words reads as
+   unfinished, and evening the halves fixes every translation at once - hand-tuning sentence
+   length would have to be redone in each language and again at every rewording. */
 .set-label small{display:block;margin-top:2px;font:12.5px var(--sans);color:var(--dim);
-  line-height:1.45;text-wrap:balance}   /* see the note at #tourInvite p */
+  line-height:1.45;text-wrap:balance}
 .set-ctl{flex:0 0 auto}
 /* EQUAL COLUMNS the general way: "Light | Dark | System" cannot be halved by width:42px
    like EN/PL, so 1fr columns state the rule whatever the labels are - the thumb's 1/n
@@ -2899,28 +2895,20 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .bub.paper[data-side=left]>.bub-tip{border-left:0;border-bottom:0;right:-7px}
 /*@BUBBLE-END*/
 /* ---------- Guided tour (coach marks) ---------- */
-#tourRoot{position:fixed;inset:0;z-index:240;pointer-events:none;--tour-scrim:rgba(8,12,20,.739)}
+#tourRoot{position:fixed;inset:0;z-index:240;pointer-events:none}
+/* A WINDOW OPENED OVER THE PAGE takes the front, and the bubble waits behind it, under the modals
+   (200); the tour's own dialog steps keep it in front. */
+#tourRoot.behind{z-index:190}
 /* The tour travels on a spring (stiffness 260, damping 20, sampled at 60 Hz into linear()): 7.6
    per cent over, still at 629ms. `.still` is set by tour.js under either quiet switch. */
 #tourRoot{--tour-spring:.629s linear(0,0.0412,0.1311,0.2495,0.3806,0.5124,0.6364,0.7469,0.841,
   0.9174,0.9767,1.02,1.0493,1.0668,1.075,1.076,1.072,1.0645,1.0552,1.0451,1.0351,1.0258,1.0177,
   1.0108,1.0052,1.001,0.9979,0.9959,0.9947,0.9942,0.9942,0.9946,0.9952,0.996,0.9967,0.9975,0.9982,
   0.9988,1)}
-#tourRoot.on{pointer-events:auto}
-/* ONE SCRIM, AND THE SPOTLIGHT IS A HOLE IN IT. The darkening is the hole's 9999px box-shadow,
-   which paints OUTSIDE the hole's own box and so cannot reach what the step showcases. The shade
-   keeps its element - it absorbs clicks, see tour.js - and paints only when there is no hole to
-   cut, which is why both read one token. Two scrims each looking right alone composited to .74
-   over the page and .42 over the showcased element, so a step darkened the one thing it points
-   at; .739 is those two multiplied out, and the page behind is the pixels it always was. */
-.tour-shade{position:fixed;inset:0;background:transparent;opacity:0;
-  transition:opacity .28s ease;pointer-events:auto}
-#tourRoot.on .tour-shade{opacity:1}
-#tourRoot.no-hole .tour-shade{background:var(--tour-scrim)}
-/* The ring keeps its job and loses its voice: the bubble is the attention now and the ring only
-   says where, so no pulse and no halo, and the ring in the bubble's own colour. */
+/* NOTHING IS DARKENED AND NOTHING IS HELD: the page under the tour stays usable, and only the
+   bubble takes a click. The ring says where a step points, in the bubble's own colour. */
 .tour-hole{position:fixed;z-index:1;border-radius:12px;pointer-events:none;
-  box-shadow:0 0 0 9999px var(--tour-scrim),0 0 0 2.5px var(--bub);
+  box-shadow:0 0 0 2.5px var(--bub);
   transition:top var(--tour-spring),left var(--tour-spring),width var(--tour-spring),
     height var(--tour-spring),border-radius .2s ease,opacity .2s ease;opacity:0}
 #tourRoot.on .tour-hole{opacity:1}
@@ -2933,6 +2921,22 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
     transform var(--tour-spring)}
 #tourRoot.on .tour-card{opacity:1;transform:translateY(0)}
 #tourRoot.still .tour-card{transition:opacity .22s ease}
+/* THE QUESTIONS THAT HANG FROM A CONTROL, the catalog offer and the name: the family's bubble with
+   the tour card's type, over the dialogs and under the tour. */
+.bub-ask{z-index:235;width:min(340px,calc(100vw - 24px));animation:eModalCardIn .18s cubic-bezier(.2,.7,.3,1) both}
+.bub-ask h3{margin:0 0 6px;font:700 15.5px var(--sans-display);letter-spacing:-.2px}
+.bub-ask p{margin:0 0 8px;font-size:13.5px;line-height:1.5;color:var(--bub-dim);text-wrap:pretty}
+.bub-ask b{color:var(--bub-ink);font-weight:600}
+.bub-ask code{font:12px var(--mono);color:var(--bub-ink);overflow-wrap:anywhere}
+.e-offer .ec-what{margin:0 0 8px;font-size:13.5px;color:var(--bub-ink)}
+.e-offer .ec-counts{font:12px var(--mono);color:var(--bub-dim);margin-top:2px}
+/* A field on the fill: paper, so what is typed reads as the reader's own. */
+.bub .e-name-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
+  border:1px solid transparent;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans)}
+.bub .e-name-inp:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.bub .e-greet{color:var(--bub-ink);margin:8px 0 10px}
+.tour-field{margin:0 0 4px}
+.bub .e-greet .e-name-ph{color:var(--bub-dim);opacity:.8}
 /* The card note - the family's bubble, ONE kind deliberately: a second louder tier only moves
    the question of which tier a note belongs in onto whoever writes the next one. */
 .note-pane{z-index:120}
@@ -3077,23 +3081,6 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   color:var(--dim);opacity:.13}
 /* Light ink on a light canvas needs less alpha still to sit at the same perceived depth. */
 :root[data-theme=light] #sampleMark b{opacity:.11}
-/* It hangs off the menu button, where Show tour lives, rather than floating in the corner
-   attached to nothing and over the last card. top/left are placeholders: placeTourInvite()
-   writes both before it is shown, and right/bottom would fight them. */
-#tourInvite{top:0;left:0;z-index:230;width:min(300px,calc(100vw - 28px))}
-/* AND IT STEPS ASIDE FOR THE MENU IT POINTS AT. Both hang off the same button and both drop
-   below it, and the invite is at 230 against the menu's 80 inside the header's own stacking
-   context, so the invite covered three of the menu's four rows - measured with
-   elementFromPoint at each row's centre. Presentation only: the invite's own state is
-   untouched and closing the menu brings it straight back. */
-:root:has(#settingsBtn.on) #tourInvite,
-:root:has(#moreBtn.on) #tourInvite{visibility:hidden}
-#tourInvite h3{margin:0 0 6px;font-size:15px;font-family:var(--sans-display)}
-/* text-wrap:balance across the short descriptions: a last line holding two words reads as
-   unfinished, and evening the halves fixes every translation at once - hand-tuning sentence
-   length would have to be redone in each language and again at every rewording. */
-#tourInvite p{margin:0 0 12px;font-size:13px;line-height:1.45;color:var(--bub-dim);text-wrap:balance}
-#tourInvite .tour-actions{border-top:0;padding-top:0;margin-top:0}
 /* ---------- Motion & numerals ---------- */
 /* Colour-only, at .1s - these fire on hover with the pointer already moving. Transform
    and layout are deliberately NOT transitioned: drag, the FLIP reorders and the pill bar
@@ -3230,6 +3217,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
         <button type="button" class="tabs-nav" id="tabsNext" tabindex="-1" aria-label="Scroll tabs right" title="Scroll tabs right"><span class="tabs-nav-mark"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M8.1 4.6L13.5 10l-5.4 5.4"/></svg></span></button>
       </div>
     </div>
+    <!-- THE CATALOG IN USE, by name, or that none is: inert, and no door to the Library. -->
+    <div class="cat-now" id="catNow"><span class="cn-name" data-i18n-skip hidden></span><span class="cn-none">No catalog loaded</span></div>
     <!-- THE WINDOW'S OWN CONTROLS, drawn here because the desktop shell gives the band the top
          bar. Present in every build and shown only under body.e-host, so the browser is the
          browser. app-region:no-drag is what makes them clickable at all inside a drag band. -->
@@ -3326,7 +3315,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
           <button type="button" role="menuitem" data-act="rail" id="menuRail" title="Hide the intent panel; its chips then appear on the first card that uses {INTENT}">Hide intent panel</button>
           <button type="button" role="menuitem" data-act="pills" id="menuPills" title="Hide the category bar; hold Ctrl to peek at it while hidden">Hide categories</button>
           <div class="menu-sep"></div>
-          <button type="button" role="menuitem" data-act="tour" title="How a reply gets from here to your customer, in about a minute.">Show tour…</button>
+          <button type="button" role="menuitem" data-act="tour" title="The tour of Etiuda's controls, one at a time">Show tour…</button>
           <button type="button" role="menuitem" data-act="about" title="What Etiuda is, and every keyboard shortcut">About Etiuda</button>
         </div>
       </div>
@@ -3395,27 +3384,19 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 </div>
 
 <div id="tourRoot" hidden aria-hidden="true">
-  <div class="tour-shade" id="tourShade"></div>
   <div class="tour-hole" id="tourHole" aria-hidden="true"></div>
-  <div class="tour-card bub" id="tourCard" role="dialog" aria-modal="true" aria-labelledby="tourTitle">
+  <div class="tour-card bub" id="tourCard" role="dialog" aria-modal="false" aria-labelledby="tourTitle">
     <div class="tour-meta">
       <span class="tour-step" id="tourStepLabel">Step 1</span>
     </div>
     <h3 id="tourTitle">Welcome</h3>
     <p id="tourBody"></p>
+    <div class="tour-field" id="tourField" hidden></div>
     <div class="tour-actions">
       <button type="button" class="btn tour-skip" id="tourSkip">Skip tour</button>
       <button type="button" class="btn" id="tourPrev" hidden>Back</button>
       <button type="button" class="btn primary" id="tourNext">Next</button>
     </div>
-  </div>
-</div>
-<div id="tourInvite" class="bub" hidden role="dialog" aria-labelledby="tourInviteTitle">
-  <h3 id="tourInviteTitle">New here?</h3>
-  <p id="tourInviteBody">How a reply gets from here to your customer, in about a minute.</p>
-  <div class="tour-actions">
-    <button type="button" class="btn tour-skip" id="tourInviteDismiss">Not now</button>
-    <button type="button" class="btn primary" id="tourInviteStart">Show tour</button>
   </div>
 </div>
 
@@ -4447,6 +4428,7 @@ What you type stays in this browser only.`;
     "sampleReady",
     "loadSampleCatalog",
     "importCatalogHere",
+    "offerPickedCatalog",
     "openManage",
     "mgCardsIn",
     "openCategoryEditor",
@@ -4953,7 +4935,7 @@ What you type stays in this browser only.`;
   }
 
   // src/modules/cut-text.js
-  var CUT_SEL = ".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-count,.acc-note,.mf-sum,#toast,#intentPh,#roleDrum span,.tab-label>span,.fills input,.mf input:not([type]),.mf input[type=text],.rail-t,footer .nw";
+  var CUT_SEL = ".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-count,.acc-note,.mf-sum,#toast,#intentPh,#roleDrum span,.tab-label>span,.fills input,.cat-now .cn-name,.mf input:not([type]),.mf input[type=text],.rail-t,footer .nw";
   var CUT_MARGIN = 400;
   var CUT_EPS = 0.01;
   var CUT_SLACK = 1.5;
@@ -5277,26 +5259,7 @@ What you type stays in this browser only.`;
     "English / Polish": "Angielski / polski",
     "Light and dark": "Jasny i ciemny",
     "You are set": "Na koniec",
-    "Etiuda keeps your replies in a window of its own, beside the chat. Type the word nearest what the customer means, click a reply, and paste it into the conversation. It works with every chat tool, because it needs none of them. The tour takes about a minute, and <kbd>Esc</kbd> leaves it at any time.": "Etiuda trzyma gotowe odpowiedzi we własnym oknie, obok czatu. Wystarczy wpisać słowo najbliższe sprawie klienta, kliknąć odpowiedź i wkleić ją do rozmowy. Działa z każdym czatem, bo od żadnego nie zależy. Przewodnik zajmuje około minuty, a <kbd>Esc</kbd> w każdej chwili go zamyka.",
     'Type the name customers should see, exactly as you want it to appear; <span class="fillmiss">AGENT</span> reproduces it verbatim. Internal comments sign with your initials as /<span class="fillmiss">INIT</span>.': 'Wpisz imię, które mają widzieć klienci, dokładnie w takiej formie, w jakiej ma się pojawiać; <span class="fillmiss">AGENT</span> wstawia je bez zmian. Komentarze wewnętrzne są podpisywane inicjałami agenta w postaci /<span class="fillmiss">INIT</span>.',
-    "When several customers are open in your chat at once, give each one a tab here. Every tab keeps its own customer name, intent, language and categories, so a reply never carries the wrong name. {KEY} moves to the next tab from anywhere and {NEW} opens one; your own name and the theme are shared by all of them.": "Gdy w czacie toczy się kilka rozmów naraz, każdej odpowiada tu osobna rozmowa z własnym imieniem klienta, intencją, językiem i kategoriami, więc odpowiedź nigdy nie trafi do klienta z cudzym imieniem. {KEY} przechodzi do następnej z dowolnego miejsca, a {NEW} otwiera nową; nazwa agenta i motyw są wspólne dla wszystkich.",
-    'Copy the customer\'s name from the chat and paste it here as it comes, surname, capitals and all. Etiuda tidies it, and every reply addresses the customer by first name, in Polish in the vocative (ANNA KOWALSKA → <b>Anno</b>); this fills <span class="fillmiss">PAX</span>. The wheel beside it says who you are speaking to, relative to whoever the case is about, and fills <span class="fillmiss">ROLE</span> in internal comments; the empty notch clears it.': 'Imię klienta wystarczy skopiować z czatu i wkleić tutaj w takiej postaci, w jakiej przyszło, z nazwiskiem i wielkimi literami. Etiuda je porządkuje, a każda odpowiedź zwraca się do klienta po imieniu, po polsku w wołaczu (ANNA KOWALSKA → <b>Anno</b>); tak wypełnia się <span class="fillmiss">PAX</span>. Kółko obok określa, kim jest rozmówca wobec osoby, której dotyczy sprawa, i wypełnia <span class="fillmiss">ROLE</span> w komentarzach wewnętrznych; pusta pozycja czyści wybór.',
-    'Filter cards by category; <kbd>Ctrl</kbd>+click keeps several. The rings say why a pill stands out: <b class="t-go">green</b> - it holds a card linked to your intent; <b class="t-acc">blue</b> - a supporting category, useful whatever the customer asked. <kbd>←</kbd> <kbd>→</kbd> step through them, from the search box too. Drag pills to reorder; double-click <span class="t-pill"><span data-icon="all"></span>All</span> to reset the order.': 'Filtruj karty według kategorii; <kbd>Ctrl</kbd>+kliknięcie wybiera kilka naraz. Obwódki mówią, dlaczego kategoria się wyróżnia: <b class="t-go">zielona</b>, gdy zawiera kartę powiązaną z wybraną intencją; <b class="t-acc">niebieska</b>, gdy to kategoria wspierająca, przydatna niezależnie od pytania klienta. <kbd>←</kbd> <kbd>→</kbd> przechodzą między nimi, także z pola wyszukiwania. Kategorie można przeciągać, aby zmienić kolejność; kliknij dwukrotnie <span class="t-pill"><span data-icon="all"></span>Wszystkie</span>, aby ją przywrócić.',
-    'An intent names what the customer has come about. Picking one brings its replies forward, ringed <b class="t-go">green</b>, and its phrase fills <span class="fillmiss">INTENT</span> wherever a reply uses it. <kbd>Ctrl</kbd>+click picks several. The star keeps the intents you use most at the top; hold <kbd>Ctrl</kbd> over a star to edit that intent, or <kbd>Shift</kbd> to hide it. The <span data-icon="pin"></span> lock keeps the panel open on a narrow window.': 'Intencja mówi, z czym klient przychodzi. Po jej wybraniu pasujące odpowiedzi wysuwają się do przodu, obwiedzione na <b class="t-go">zielono</b>, a jej fraza trafia w miejsce <span class="fillmiss">INTENT</span> w każdej odpowiedzi, która go używa. <kbd>Ctrl</kbd>+kliknięcie wybiera kilka. Gwiazdka trzyma na górze intencje używane najczęściej; <kbd>Ctrl</kbd> przytrzymany nad gwiazdką pozwala edytować intencję, a <kbd>Shift</kbd> ją ukryć. Blokada <span data-icon="pin"></span> utrzymuje panel otwarty w wąskim oknie.',
-    "Click a reply and the whole of it is on the clipboard, with the greeting, the name and the signature filled in, ready to paste into the chat. <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> do the same from the keyboard, and <kbd>Shift</kbd>+<kbd>Enter</kbd> copies the other language. A card showing <b>1/2</b> or <b>STEP 1/3</b> holds several replies, each copied on its own. The small tags say why a card stands where it does; resting the pointer on one names the reason.": "Kliknięcie odpowiedzi kopiuje ją w całości, razem z powitaniem, imieniem i podpisem, gotową do wklejenia w rozmowie. Z klawiatury to samo robią <kbd>↑</kbd> <kbd>↓</kbd> i <kbd>Enter</kbd>, a <kbd>Shift</kbd>+<kbd>Enter</kbd> kopiuje wersję w drugim języku. Karta z oznaczeniem <b>1/2</b> albo <b>KROK 1/3</b> mieści kilka odpowiedzi i każdą kopiuje się osobno. Małe znaczniki mówią, dlaczego karta stoi w tym miejscu; po najechaniu na znacznik widać powód.",
-    'The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <span class="t-pill"><span data-icon="all"></span>All</span> to a <b class="t-fav"><span data-icon="star"></span>Favourites</b> block at the top of the list. The gold star and the <span class="cbadge fav">fav</span> tag mark it - separate from the <b class="t-go">green</b> of an intent link and the <b class="t-acc">blue</b> of a supporting category.': 'Gwiazdka podnosi kartę na szczyt tego miejsca, w którym już jest: na początek swojej kategorii, na początek kart o tym samym wyróżnieniu, gdy wybrano intencję, a w widoku <span class="t-pill"><span data-icon="all"></span>Wszystkie</span> do bloku <b class="t-fav"><span data-icon="star"></span>Ulubione</b> na górze listy. Oznacza ją złota gwiazdka i znacznik <span class="cbadge fav">fav</span>, niezależne od <b class="t-go">zieleni</b> powiązania z intencją i <b class="t-acc">błękitu</b> kategorii wspierającej.',
-    'The eye puts a card away: it greys out and sinks to the foot of its own category, and it shows nowhere else - not in All, and not in a search. Open that category with the box empty and the same button brings it back. Putting a starred card away also unstars it. Nothing is deleted; <b class="t-bad">Delete</b> lives only in the editor and in Library.': 'Oko odkłada kartę na bok: karta szarzeje i spada na dół swojej kategorii, a poza tym nie pojawia się nigdzie: ani we Wszystkich, ani w wyszukiwaniu. W tej kategorii, przy pustym polu wyszukiwania, ten sam przycisk ją przywraca. Odłożenie karty z gwiazdką usuwa też gwiazdkę. Nic nie jest usuwane; <b class="t-bad">Usuń</b> istnieje wyłącznie w edytorze i w Bibliotece.',
-    "The pencil opens the card for editing - both languages, the internal note, the search keywords, and everything about how it behaves. Editing a built-in card writes a personal override <b>on this computer</b>; the catalog itself is untouched, and the editor's <b>Reset</b> brings the original wording back whenever you want it.": "Ołówek otwiera kartę do edycji: oba języki, notatkę wewnętrzną, słowa kluczowe i wszystko, co dotyczy jej zachowania. Edycja karty wbudowanej zapisuje własną wersję <b>na tym komputerze</b>; sam katalog pozostaje nienaruszony, a <b>Przywróć</b> w edytorze w każdej chwili odtwarza pierwotną treść.",
-    'The <b>+</b> in the corner starts a new card from wherever you are - the same screen the pencil opens, empty. Inside a category it files into that one; under <span class="t-pill"><span data-icon="all"></span>All</span> the editor asks which, in its <span class="t-sec">Category</span> section.': '<b>+</b> w rogu zaczyna nową kartę z dowolnego miejsca. To ten sam ekran, który otwiera ołówek, tylko pusty. Wewnątrz kategorii trafi właśnie do niej; w widoku <span class="t-pill"><span data-icon="all"></span>Wszystkie</span> edytor zapyta, do której, w sekcji <span class="t-sec">Kategoria</span>.',
-    '<span class="t-sec">Content</span> holds the text in both languages, with the internal note. Folded below: <span class="t-sec">Keywords</span>, <span class="t-sec">Category</span>, <span class="t-sec">Linked intents</span> - which makes a card ring green under an intent, and marks its category relevant to those intents - and <span class="t-sec">Advanced</span>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Library</b> opens the same screen.': '<span class="t-sec">Treść</span> zawiera tekst w obu językach wraz z notatką wewnętrzną. Zwinięte poniżej: <span class="t-sec">Słowa kluczowe</span>, <span class="t-sec">Kategoria</span>, <span class="t-sec">Powiązane intencje</span> (dzięki nim karta świeci na zielono przy intencji, a jej kategoria jest oznaczona jako istotna dla tych intencji) oraz <span class="t-sec">Zaawansowane</span>, gdzie są warianty, ponumerowane kroki i znaczniki obwódek. <b>Anuluj</b> zostawia wszystko bez zmian. Wiersz w <b>Bibliotece</b> otwiera ten sam ekran.',
-    "Switches the replies between English and Polish for this conversation, so each customer is answered in their own language; {KEY} flips it from anywhere. An intent picked from the list follows the switch and typed text does not, and a card with no Polish shows its English rather than a gap.": "Przełącza odpowiedzi między angielskim a polskim w tej rozmowie, żeby każdy klient dostał odpowiedź w swoim języku; {KEY} robi to z dowolnego miejsca. Intencja wybrana z listy zmienia język razem z przełącznikiem, wpisany tekst nie, a karta bez polskiej wersji pokazuje angielską zamiast pustego miejsca.",
-    "Fees, deadlines and links you quote to customers. Clicking a link copies the whole address, ready to paste into the chat. The text is yours to edit, and it stays in this browser.": "Opłaty, terminy i odnośniki, które przydają się w rozmowie z klientem. Kliknięcie odnośnika kopiuje cały adres, gotowy do wklejenia w rozmowie. Ten tekst można dowolnie zmienić; zostaje w tej przeglądarce.",
-    "Fees, deadlines and links you quote to customers. Clicking a link copies the whole address, ready to paste into the chat. The text is yours to edit, and it stays on this computer.": "Opłaty, terminy i odnośniki, które przydają się w rozmowie z klientem. Kliknięcie odnośnika kopiuje cały adres, gotowy do wklejenia w rozmowie. Ten tekst można dowolnie zmienić; zostaje na tym komputerze.",
-    "Etiuda follows your system's setting, and keeps following it. Clicking here is what turns that into a choice, and it is remembered from then on.": "Etiuda stosuje motyw systemu i zmienia się razem z nim. Kliknięcie tutaj ustala własny wybór, zapamiętany na stałe.",
-    "Everything that is not a card. <b>Library</b> is where the content lives, <b>Settings</b> holds the interface language, the appearance and the keyboard shortcuts, and the entries in the middle hide or lock the intent panel and the category bar. Hold <kbd>Ctrl</kbd> to peek at either while it is hidden. This tour is here too, under <b>Show tour…</b>.": "Wszystko, co nie jest kartą. W <b>Bibliotece</b> jest cała treść, <b>Ustawienia</b> zawierają język interfejsu, wygląd i skróty klawiszowe, a pozycje w środku ukrywają lub blokują panel intencji i pasek kategorii. Przytrzymaj <kbd>Ctrl</kbd>, aby podejrzeć jedno lub drugie, gdy jest ukryte. Ten przewodnik też tu jest, pod <b>Pokaż przewodnik…</b>.",
-    '<b><span data-icon="settings"></span> → Library</b> holds everything Etiuda knows: every card, intent and category, to add, edit, hide or move. <span class="t-sec">Catalog &amp; data</span> is where the team\'s catalog comes in, and where your own improvements go out as a file for whoever keeps the wording.': '<b><span data-icon="settings"></span> → Biblioteka</b> mieści wszystko, co Etiuda wie: każdą kartę, intencję i kategorię, do dodania, edycji, ukrycia albo przeniesienia. W sekcji <span class="t-sec">Katalog i dane</span> wczytuje się katalog zespołu i stamtąd wysyła się własne poprawki, jako plik dla osoby, która dba o treść.',
-    '<b><span data-icon="settings"></span> → Settings</b> is the program itself: your name, the language of its buttons, its look and its shortcuts. Nothing here touches a card.': '<b><span data-icon="settings"></span> → Ustawienia</b> dotyczą samego programu: nazwy agenta, języka przycisków, wyglądu i skrótów. Nic tutaj nie zmienia kart.',
-    'That is the whole of it: the customer\'s name, the word for what they want, a click, and a paste into the chat. Every shortcut is listed under <span data-icon="settings"></span> <b>→ About Etiuda</b>, and <b>Show tour…</b> in the same menu brings this back.': 'To wszystko: imię klienta, słowo najbliższe sprawie, kliknięcie i wklejenie do czatu. Wszystkie skróty są pod <span data-icon="settings"></span> <b>→ O Etiudzie</b>, a <b>Pokaż przewodnik…</b> w tym samym menu otwiera go ponownie.',
     "Categories & cards": "Kategorie i karty",
     "Intent": "Intencja",
     "Intents": "Intencje",
@@ -5311,7 +5274,6 @@ What you type stays in this browser only.`;
     "Keys": "Klawisze",
     "No catalog loaded - Etiuda is empty.": "Nie wczytano katalogu, więc Etiuda jest pusta.",
     "About Etiuda · Version {V} · <span class='nw'>Etiuda Source-Available Licence 1.0</span>, free for personal use · © 2026 Maxim Gwiazda": "O Etiudzie · Wersja {V} · <span class='nw'>Etiuda Source-Available Licence 1.0</span>, bezpłatnie do użytku osobistego · © 2026 Maxim Gwiazda",
-    "How a reply gets from here to your customer, in about a minute.": "Jak odpowiedź trafia stąd do klienta. Około minuty.",
     "Toggle language": "Przełącz język",
     "Next tab": "Następna rozmowa",
     "New tab": "Nowa rozmowa",
@@ -5403,7 +5365,6 @@ What you type stays in this browser only.`;
     "- cards badged": "- karty oznaczone",
     "are alternatives and copy one at a time.": "to warianty i kopiują się pojedynczo.",
     "Older catalog found": "Znaleziono starszy katalog",
-    "The file beside Etiuda is an earlier edition than the one you have.": "Plik obok Etiudy to wcześniejsze wydanie niż wczytane.",
     "Load it anyway": "Wczytaj mimo to",
     "Updated catalog found": "Jest nowsza wersja katalogu",
     "Watching": "Obserwowany:",
@@ -5416,11 +5377,9 @@ What you type stays in this browser only.`;
     "That file is not a catalog Etiuda can read.": "Tego pliku Etiuda nie potrafi odczytać jako katalogu.",
     "That file matches the catalog you already have.": "Ten plik jest taki sam jak wczytany katalog.",
     "Could not read the watched file.": "Nie udało się odczytać obserwowanego pliku.",
-    "The catalog beside Etiuda has changed since you loaded it.": "Katalog obok Etiudy zmienił się od czasu wczytania.",
     "Your own cards and edits are kept.": "Własne karty i zmiany zostają.",
     "Load the update": "Wczytaj aktualizację",
     "You have {V}.": "Wczytane: {V}.",
-    "This is a newer copy of the catalog you already have, so your own cards and edits are kept.": "To nowsza kopia wczytanego katalogu, więc własne karty i zmiany zostaną zachowane.",
     "Load catalog?": "Wczytać katalog?",
     "Replace catalog?": "Zastąpić katalog?",
     "Located as {FILE}.": "Znaleziony jako {FILE}.",
@@ -5451,8 +5410,6 @@ What you type stays in this browser only.`;
     "is an ordinary category": "jest zwykłą kategorią",
     "No {LANG} version for this card": "Ta karta nie ma jeszcze wersji {LANG}",
     "switch to {LANG} to use it": "przełącz na {LANG}, aby jej użyć",
-    "Keeping the loaded catalog.": "Zachowano wczytany katalog.",
-    "Starting empty. Load one any time from the Library.": "Start bez katalogu. Katalog można wczytać w każdej chwili z Biblioteki.",
     "Intent: {NAME}": "Intencja: {NAME}",
     "Intents: {NAMES}": "Intencje: {NAMES}",
     "Clear Etiuda's local memory in this browser?": "Wyczyścić pamięć lokalną Etiudy w tej przeglądarce?",
@@ -5461,10 +5418,6 @@ What you type stays in this browser only.`;
     "Catalog files on disk are not touched.": "Pliki katalogu na dysku pozostają nienaruszone.",
     "Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to": "Etiuda uruchomi się pusta. Jeśli obok leży plik katalogu, pojawi się pytanie, czy",
     "Import catalog": "Importuj katalog",
-    "Load this catalog on this browser:": "Wczytać ten katalog w tej przeglądarce:",
-    "It replaces the catalog loaded now.": "Zastąpi wczytany katalog.",
-    "Nothing on disk is changed. Etiuda reloads to apply it.": "Pliki na dysku zostają bez zmian. Etiuda uruchomi się ponownie, aby wczytać katalog.",
-    "Continue?": "Kontynuować?",
     "Changes every label in Etiuda, never the cards themselves": "Zmienia napisy na przyciskach i w menu Etiudy, nigdy treść kart",
     "Theme, blur effects and animations": "Motyw, efekty rozmycia i animacje",
     "What stays docked, and what may hide itself when space is short": "Co pozostaje zadokowane, a co może się schować, gdy brakuje miejsca",
@@ -5489,7 +5442,6 @@ What you type stays in this browser only.`;
     "Delete this custom intent?": "Usunąć tę własną intencję?",
     "Delete this intent?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.": "Usunąć tę intencję?\n\nZniknie z Etiudy i z każdego eksportu. Przycisk Przywróć odtworzy ją z katalogu.",
     "Keep current": "Zachowaj obecny",
-    "Start empty": "Zacznij bez katalogu",
     "Load it": "Wczytaj",
     "Load catalog": "Wczytaj katalog",
     "Show all hidden": "Pokaż wszystkie ukryte",
@@ -5713,7 +5665,6 @@ What you type stays in this browser only.`;
     "search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several": "szukaj intencji i kart · <kbd>Enter</kbd> wybiera zaznaczoną intencję · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> wybiera kilka",
     "Search cleared": "Wyczyszczono wyszukiwanie",
     "Typing in SEARCH ranks intents and filters cards together (both languages).": "Tekst wpisany w SZUKAJ szereguje intencje i jednocześnie filtruje karty, w obu językach.",
-    "Type the word nearest what the customer means, 'refund' or 'address', and the intents in the panel rank themselves while the cards below narrow to match, in both languages. <kbd>Enter</kbd> picks the marked intent: it fills <span class=\"fillmiss\">INTENT</span> and rings its cards <b class=\"t-go\">green</b>, and <kbd>Ctrl</kbd>+<kbd>Enter</kbd> picks one and keeps the box for the next. <kbd>Esc</kbd> clears it.": `Wystarczy wpisać słowo najbliższe temu, o co pyta klient, na przykład 'zwrot' albo 'adres': intencje w panelu ustawiają się według trafności, a karty poniżej zawężają się do pasujących, w obu językach. <kbd>Enter</kbd> wybiera zaznaczoną intencję, wstawia ją w miejsce <span class="fillmiss">INTENT</span> i obwodzi jej karty na <b class="t-go">zielono</b>, a <kbd>Ctrl</kbd>+<kbd>Enter</kbd> wybiera i zostawia pole na następną. <kbd>Esc</kbd> czyści pole.`,
     "ROLE": "ROLA",
     "EN": "EN",
     "PL": "PL",
@@ -5795,10 +5746,7 @@ What you type stays in this browser only.`;
     "Export": "Eksportuj",
     "Not now": "Nie teraz",
     "Welcome": "Witamy",
-    "New here?": "Pierwszy raz tutaj?",
     "Skip tour": "Pomiń przewodnik",
-    "Show tour": "Pokaż przewodnik",
-    "Press Esc to leave the tour.": "Naciśnij Esc, aby wyjść z przewodnika.",
     "Library…": "Biblioteka…",
     "Settings…": "Ustawienia…",
     "Show tour…": "Pokaż przewodnik…",
@@ -5851,7 +5799,36 @@ What you type stays in this browser only.`;
     "for instance, Kate": "na przykład Kasia",
     "Kate": "Kasia",
     "Sign with this": "Podpisz",
-    "Beside the customer's name there is now a wheel: it chooses who in the team this reply names.": "Obok imienia klienta jest teraz kółko: wybiera się nim osobę z zespołu, którą wymienia ta odpowiedź."
+    "Beside the customer's name there is now a wheel: it chooses who in the team this reply names.": "Obok imienia klienta jest teraz kółko: wybiera się nim osobę z zespołu, którą wymienia ta odpowiedź.",
+    "No catalog loaded": "Nie wczytano katalogu",
+    "This catalog has changed since it was loaded.": "Ten katalog zmienił się od czasu wczytania.",
+    "This file is an earlier edition than the one loaded now.": "Ten plik to wcześniejsze wydanie niż wczytane teraz.",
+    "The tour of Etiuda's controls, one at a time": "Przewodnik po Etiudzie, krok po kroku",
+    "The tour waits in the Menu, under Show tour…": "Przewodnik czeka w Menu, pod Pokaż przewodnik…",
+    "To begin, the name your replies are signed with. Customers see it at the foot of each one, and it can be changed at any time in Settings.": "Na początek podpis: imię, które klienci zobaczą pod każdą odpowiedzią. Można je zmienić w każdej chwili w Ustawieniach.",
+    "A catalog of replies": "Katalog odpowiedzi",
+    "Replies come in a catalog. <b>Load a catalog</b>, under the logo, opens {FOLDER}, and the choice is yours: the team's own catalog, if it is there, or the sample, which always waits there for trying things out.": "Gotowe odpowiedzi przynosi katalog. Przycisk <b>wczytaj katalog</b> pod logo otwiera folder {FOLDER}, a w nim do wyboru: katalog zespołu, jeśli już tam jest, albo przykładowy, który czeka tam zawsze i nadaje się do prób.",
+    "Paste the customer's name as the chat gives it, surname and capitals included; every reply then greets them by first name, in Polish in the vocative (ANNA KOWALSKA → <b>Anno</b>). The wheel beside it says who is on the chat, for internal comments. Any name will do to try it.": "Tu wkleja się imię klienta w takiej postaci, w jakiej przyszło z czatu, z nazwiskiem i wielkimi literami; każda odpowiedź zwróci się wtedy do klienta po imieniu, po polsku w wołaczu (ANNA KOWALSKA → <b>Anno</b>). Kółko obok mówi, kto jest po drugiej stronie czatu, na potrzeby komentarzy wewnętrznych. Na próbę wystarczy dowolne imię.",
+    "The customer's name": "Imię klienta",
+    "Paste the customer's name as the chat gives it, surname and capitals included; every reply then greets them by first name, in Polish in the vocative (ANNA KOWALSKA → <b>Anno</b>). Any name will do to try it.": "Tu wkleja się imię klienta w takiej postaci, w jakiej przyszło z czatu, z nazwiskiem i wielkimi literami; każda odpowiedź zwróci się wtedy do klienta po imieniu, po polsku w wołaczu (ANNA KOWALSKA → <b>Anno</b>). Na próbę wystarczy dowolne imię.",
+    "Type the word nearest what the customer means, such as 'return' or 'broken'. The intents on the left rank themselves and the cards narrow to match, in both languages. <kbd>Enter</kbd> picks the marked intent, and <kbd>Esc</kbd> clears the box.": "Wystarczy wpisać słowo najbliższe temu, o co pyta klient, na przykład 'zwrot' albo 'uszkodzona'. Intencje po lewej ustawią się według trafności, a karty zawężą do pasujących, w obu językach. <kbd>Enter</kbd> wybiera zaznaczoną intencję, a <kbd>Esc</kbd> czyści pole.",
+    'An intent names what the customer has come about. Click one and its replies come forward, ringed <b class="t-go">green</b>, with its phrase filling <span class="fillmiss">INTENT</span> wherever a reply uses it. <kbd>Ctrl</kbd>+click picks several, and the star keeps the ones used most at the top.': 'Intencja mówi, z czym klient przychodzi. Po kliknięciu intencji jej odpowiedzi wysuwają się do przodu, obwiedzione na <b class="t-go">zielono</b>, a jej fraza trafia w miejsce <span class="fillmiss">INTENT</span> w każdej odpowiedzi, która go używa. <kbd>Ctrl</kbd>+kliknięcie wybiera kilka, a gwiazdka trzyma na górze te używane najczęściej.',
+    "Click a reply: the whole of it is copied, greeting, name and signature filled in, ready to paste into the chat. A card marked <b>1/2</b> or <b>STEP 1/3</b> holds several, each copied on its own. <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> do the same from the keyboard.": "Wystarczy kliknąć odpowiedź, a skopiuje się w całości, z powitaniem, imieniem i podpisem, gotowa do wklejenia w czacie. Karta z oznaczeniem <b>1/2</b> albo <b>KROK 1/3</b> mieści kilka odpowiedzi i każdą kopiuje się osobno. Z klawiatury to samo robią <kbd>↑</kbd> <kbd>↓</kbd> i <kbd>Enter</kbd>.",
+    'Click a category to see only its cards; <kbd>Ctrl</kbd>+click keeps several. A <b class="t-go">green</b> ring marks one holding a card for the chosen intent, and a <b class="t-acc">blue</b> one a supporting category, useful for any question.': 'Kliknięcie kategorii pokazuje tylko jej karty; <kbd>Ctrl</kbd>+kliknięcie wybiera kilka. <b class="t-go">Zielona</b> obwódka oznacza kategorię z kartą dla wybranej intencji, a <b class="t-acc">niebieska</b> kategorię wspierającą, przydatną przy każdym pytaniu.',
+    "When several customers are on the chat at once, each gets a tab here with their own name, intent and language, so a reply never carries the wrong name. {NEW} opens one and {KEY} moves to the next.": "Gdy na czacie jest kilku klientów naraz, każdy dostaje tu osobną rozmowę, z własnym imieniem, intencją i językiem, więc odpowiedź nigdy nie trafi z cudzym imieniem. {NEW} otwiera nową, a {KEY} przechodzi do następnej.",
+    "Switches this conversation's replies between English and Polish, so each customer is answered in their own language. {KEY} does it from anywhere.": "Przełącza odpowiedzi w tej rozmowie między angielskim a polskim, żeby każdy klient dostał odpowiedź w swoim języku. {KEY} robi to z dowolnego miejsca.",
+    'The star lifts a card to the top of its category, and under <span class="t-pill"><span data-icon="all"></span>All</span> into <b class="t-fav"><span data-icon="star"></span>Favourites</b> at the head of the list.': 'Gwiazdka podnosi kartę na początek jej kategorii, a w widoku <span class="t-pill"><span data-icon="all"></span>Wszystkie</span> do <b class="t-fav"><span data-icon="star"></span>Ulubionych</b> na górze listy.',
+    "The eye puts a card away: it greys out at the foot of its own category and shows nowhere else. The same button there brings it back, and nothing is deleted.": "Oko odkłada kartę na bok: karta szarzeje na dole swojej kategorii i nie pokazuje się nigdzie indziej. Tam ten sam przycisk ją przywraca, a nic nie zostaje usunięte.",
+    "The pencil opens the card: both languages, the internal note, the keywords. Changes stay on this computer, and the editor's <b>Reset</b> brings back the catalog's own words.": "Ołówek otwiera kartę do edycji: oba języki, notatkę wewnętrzną i słowa kluczowe. Zmiany zostają na tym komputerze, a <b>Przywróć</b> w edytorze odtwarza treść z katalogu.",
+    '<span class="t-sec">Content</span> holds the text in both languages and the internal note; the folds below hold the keywords, the category, the linked intents and the finer settings. <b>Cancel</b> leaves everything as it was.': '<span class="t-sec">Treść</span> to tekst w obu językach i notatka wewnętrzna; w zwiniętych sekcjach poniżej są słowa kluczowe, kategoria, powiązane intencje i ustawienia zaawansowane. <b>Anuluj</b> zostawia wszystko bez zmian.',
+    "The <b>+</b> starts a new card of your own, in the category open at the time, or in one the editor asks for.": "<b>+</b> zaczyna nową, własną kartę: w otwartej kategorii albo w tej, którą wskaże się w edytorze.",
+    "Fees, deadlines and links to quote. A click on a link copies it whole, and the text is yours to edit; it stays on this computer.": "Opłaty, terminy i odnośniki przydatne w rozmowie. Kliknięcie odnośnika kopiuje cały adres, a tekst można dowolnie zmieniać; zostaje na tym komputerze.",
+    "Fees, deadlines and links to quote. A click on a link copies it whole, and the text is yours to edit; it stays in this browser.": "Opłaty, terminy i odnośniki przydatne w rozmowie. Kliknięcie odnośnika kopiuje cały adres, a tekst można dowolnie zmieniać; zostaje w tej przeglądarce.",
+    "Etiuda follows the system's light or dark until a click here makes it a choice of your own.": "Etiuda stosuje motyw systemu, dopóki kliknięcie tutaj nie ustali własnego wyboru.",
+    "Everything that is not a card: the Library, Settings, the panels' switches, and this tour again under <b>Show tour…</b>.": "Wszystko, co nie jest kartą: Biblioteka, Ustawienia, przełączniki paneli i ten przewodnik, pod <b>Pokaż przewodnik…</b>.",
+    '<b><span data-icon="settings"></span> → Library</b> holds every card, intent and category, to add, edit, hide or move. Catalogs are loaded here too, and your own improvements go out from here as a file for whoever keeps the wording.': '<b><span data-icon="settings"></span> → Biblioteka</b> mieści każdą kartę, intencję i kategorię, do dodania, edycji, ukrycia albo przeniesienia. Tu wczytuje się też katalogi i stąd wysyła się własne poprawki, jako plik dla osoby, która dba o treść.',
+    '<b><span data-icon="settings"></span> → Settings</b>: your name, the language of the buttons, the look and the shortcuts. Nothing here touches a card.': '<b><span data-icon="settings"></span> → Ustawienia</b>: nazwa agenta, język przycisków, wygląd i skróty. Nic tutaj nie zmienia kart.',
+    'That is the whole tour, and Etiuda is ready for the first customer. <b>Show tour…</b> in the <span data-icon="settings"></span> Menu brings it back, and <b>About Etiuda</b> lists every shortcut.': 'To cały przewodnik, a Etiuda czeka na pierwszego klienta. <b>Pokaż przewodnik…</b> w <span data-icon="settings"></span> Menu otwiera go ponownie, a w <b>O Etiudzie</b> są wszystkie skróty.'
   };
   function uiLangKnown(l) {
     return !!(l && UI_STRINGS[l]);
@@ -5967,7 +5944,6 @@ What you type stays in this browser only.`;
       "footer",
       "#tourRoot",
       "#intentRail",
-      "#tourInvite",
       "#sampleMark"
     ].forEach((sel) => {
       const el = document.querySelector(sel);
@@ -7761,10 +7737,13 @@ What you type stays in this browser only.`;
     agentName: () => agentName,
     agentParts: () => agentParts,
     askAgentName: () => askAgentName,
+    keepAgentName: () => keepAgentName,
+    nameFieldHtml: () => nameFieldHtml,
     renderFillsSoon: () => renderFillsSoon,
     setAgentName: () => setAgentName,
     syncRoleWheel: () => syncRoleWheel,
     wantsAgentName: () => wantsAgentName,
+    wireNameField: () => wireNameField,
     wirePaxFill: () => wirePaxFill,
     withAgentName: () => withAgentName
   });
@@ -9299,17 +9278,17 @@ What you type stays in this browser only.`;
   function wantsAgentName(raw) {
     return E_SIGN_RE.test(String(raw || "")) && !agentName() && lsGet(E_NAME_ASKED) !== "1";
   }
-  function withAgentName(raw, go) {
+  function withAgentName(raw, go, anchor) {
     if (/\x7bROLE\x7d/.test(String(raw || "")) && document.body.classList.contains("role-waits")) {
       document.body.classList.remove("role-waits");
       lsSet("eRoleSeen", "1");
       toast(t("Beside the customer's name there is now a wheel: it chooses who in the team this reply names."), TOAST_HAND_MS);
     }
-    if (!wantsAgentName(raw) || document.getElementById("eAgentModal")) {
+    if (!wantsAgentName(raw) || document.querySelector(".e-name-inp")) {
       go();
       return;
     }
-    askAgentName(raw, go);
+    askAgentName(raw, go, anchor);
   }
   function syncRoleWheel() {
     document.body.classList.toggle("role-waits", nsGet("Sample") === "1" && lsGet("eRoleSeen") !== "1");
@@ -9323,16 +9302,12 @@ What you type stays in this browser only.`;
       return i > 0 && lines[i - 1].trim() ? [lines[i - 1].trim(), line] : [line];
     return [line.split(/(?<=[.?!])\s+/).find((x) => E_SIGN_RE.test(x)) || line];
   }
-  function askAgentName(raw, then) {
-    if (document.getElementById("eAgentModal")) return;
-    const wrap = document.createElement("div");
-    wrap.className = "modal";
-    wrap.id = "eAgentModal";
-    wrap.innerHTML = '<div class="modal-bg"></div><div class="modal-card"><h2>How should your replies be signed?</h2><p class="modal-sub">Customers see it at the foot of every reply. It can be changed at any time in Settings.</p><div class="mf"><input id="eAgentInp" autocomplete="off" spellcheck="false" placeholder="for instance, Kate"></div><p class="e-greet" id="eAgentPrev" data-i18n-skip></p><div class="modal-actions"><button type="button" class="btn" id="eAgentNo">Later</button><button type="button" class="btn primary" id="eAgentYes">Sign with this</button></div></div>';
-    document.body.appendChild(wrap);
-    translateTree(wrap);
-    const inp = wrap.querySelector("#eAgentInp");
-    const prev = wrap.querySelector("#eAgentPrev");
+  function nameFieldHtml(id, prevId) {
+    return '<input class="e-name-inp" id="' + id + '" autocomplete="off" spellcheck="false" placeholder="' + esc(t("for instance, Kate")) + '"><p class="e-greet" id="' + prevId + '" data-i18n-skip></p>';
+  }
+  function wireNameField(root, raw) {
+    const inp = root.querySelector(".e-name-inp"), prev = root.querySelector(".e-greet");
+    if (!inp || !prev) return null;
     const shown2 = signLines(raw);
     const sync = () => {
       const typed = inp.value.trim();
@@ -9345,40 +9320,58 @@ What you type stays in this browser only.`;
       }
       prev.innerHTML = shown2.map((l) => esc(l).split("{AGENT}").join(who).split("{INIT}").join(init)).join("<br>");
     };
+    inp.value = agentName();
+    inp.oninput = sync;
+    sync();
+    return inp;
+  }
+  function keepAgentName(v) {
+    setAgentName(String(v || "").trim());
+    lsSet(E_NAME_ASKED, "1");
+  }
+  function askAgentName(raw, then, anchor) {
+    if (document.getElementById("eAgentAsk")) return;
+    const wrap = document.createElement("div");
+    wrap.className = "bub bub-ask";
+    wrap.id = "eAgentAsk";
+    wrap.setAttribute("role", "dialog");
+    wrap.setAttribute("aria-labelledby", "eAgentTitle");
+    wrap.innerHTML = '<h3 id="eAgentTitle">How should your replies be signed?</h3><p>Customers see it at the foot of every reply. It can be changed at any time in Settings.</p>' + nameFieldHtml("eAgentInp", "eAgentPrev") + '<div class="tour-actions"><button type="button" class="btn" id="eAgentNo">Later</button><button type="button" class="btn primary" id="eAgentYes">Sign with this</button></div>';
+    document.body.appendChild(wrap);
+    translateTree(wrap);
+    const inp = wireNameField(wrap, raw);
+    const place = () => {
+      const r = anchor && anchor.isConnected ? anchor.getBoundingClientRect() : null;
+      placeBubble(wrap, r && r.width ? { top: r.top, left: r.left, width: r.width, height: r.height } : { top: innerHeight / 2, left: innerWidth / 2, width: 0, height: 0 }, { width: 340 });
+    };
+    place();
+    addEventListener("resize", place);
     const close = () => {
-      document.removeEventListener("keydown", onKey, true);
+      removeEventListener("resize", place);
       wrap.remove();
     };
     const save = () => {
-      setAgentName(inp.value.trim());
-      lsSet(E_NAME_ASKED, "1");
+      keepAgentName(inp.value);
       close();
       if (then) then();
     };
-    const later = () => {
-      lsSet(E_NAME_ASKED, "1");
-      close();
-      if (then) then();
-    };
-    function onKey(e) {
-      const shared = document.getElementById("modal");
-      if (document.getElementById("eCatalogModal") || shared && !shared.hidden) return;
+    wrap.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
         close();
-      } else if (e.key === "Enter") {
+      } else if (e.key === "Enter" && e.target === inp) {
         e.preventDefault();
         e.stopPropagation();
-        if (inp.value.trim()) save();
-        else later();
+        save();
       }
-    }
-    document.addEventListener("keydown", onKey, true);
-    inp.oninput = sync;
-    sync();
+    });
     wrap.querySelector("#eAgentYes").onclick = save;
-    wrap.querySelector("#eAgentNo").onclick = later;
+    wrap.querySelector("#eAgentNo").onclick = () => {
+      keepAgentName("");
+      close();
+      if (then) then();
+    };
     try {
       inp.focus();
     } catch (e) {
@@ -12166,27 +12159,18 @@ What you type stays in this browser only.`;
   }
   function catalogFromFileText(text, fileName) {
     try {
-      const c = parseCatalogFile(String(text || ""));
-      const active = storedCatalog();
-      const said = isCatalogUpdate(c, active) ? t("This is a newer copy of the catalog you already have, so your own cards and edits are kept.") : active ? t("It replaces the catalog loaded now.") : "";
-      const msg = t("Import catalog") + "\n\n" + t("Load this catalog on this browser:") + "\n" + fileName + "\n\n" + catalogCountsLine(
-        "{MACROS} in {CARDS} · {INTENTS} · {CATEGORIES}",
-        c.cards.length,
-        catalogMacroCount(c),
-        catalogIntentCount(c),
-        Object.keys(c.categories).length
-      ) + "\n\n" + (said ? said + "\n\n" : "") + t("Nothing on disk is changed. Etiuda reloads to apply it.") + "\n\n" + t("Continue?");
-      if (!ask(msg)) return null;
-      return { c, keepPersonal: true };
+      return parseCatalogFile(String(text || ""));
     } catch (e) {
       toast(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(fileName || "")));
       return null;
     }
   }
   function importCatalogText(text, fileName) {
-    const plan = catalogFromFileText(String(text || ""), fileName);
-    if (!plan) return false;
-    eWatchClear().then(() => activateCatalog(plan.c, { keepPersonal: plan.keepPersonal }));
+    const c = catalogFromFileText(String(text || ""), fileName);
+    if (!c) return false;
+    hooks.offerPickedCatalog(c, fileName, () => {
+      eWatchClear().then(() => activateCatalog(c, { keepPersonal: true }));
+    });
     return true;
   }
   function importCatalogHosted() {
@@ -12231,12 +12215,15 @@ What you type stays in this browser only.`;
     }).then((f) => {
       if (!f) return null;
       return f.text().then((text) => {
-        const plan = catalogFromFileText(text, f.name);
-        if (!plan) return null;
-        nsSet("WatchName", f.name);
-        nsSet("WatchSeen", String(f.lastModified || 0));
-        nsDel("WatchNo");
-        return eWatchPut(handle).then(() => activateCatalog(plan.c, { keepPersonal: plan.keepPersonal }));
+        const c = catalogFromFileText(text, f.name);
+        if (!c) return null;
+        hooks.offerPickedCatalog(c, f.name, () => {
+          nsSet("WatchName", f.name);
+          nsSet("WatchSeen", String(f.lastModified || 0));
+          nsDel("WatchNo");
+          eWatchPut(handle).then(() => activateCatalog(c, { keepPersonal: true }));
+        });
+        return null;
       });
     }).catch((e) => {
       if (e && e.name === "AbortError") return;
@@ -14070,12 +14057,16 @@ What you type stays in this browser only.`;
   var tour_exports = {};
   __export(tour_exports, {
     activateTourFocus: () => activateTourFocus,
+    afterTour: () => afterTour,
     endTour: () => endTour,
-    maybeShowTourInvite: () => maybeShowTourInvite,
+    maybeStartTour: () => maybeStartTour,
     moveTourFocus: () => moveTourFocus,
     scheduleTourPlace: () => scheduleTourPlace,
     startTour: () => startTour,
     tourActive: () => tourActive,
+    tourDueAtBoot: () => tourDueAtBoot,
+    tourHasFocus: () => tourHasFocus,
+    tourShowsDialog: () => tourShowsDialog,
     wireTourUi: () => wireTourUi
   });
 
@@ -15962,7 +15953,7 @@ What you type stays in this browser only.`;
       withAgentName(ps[vi], () => {
         bumpUseCount(mid, cl);
         copy(fill(ps[vi], m), copiedToastMsg(m, cl, vi, ps.length));
-      });
+      }, txtEl);
     });
   }
   function copiedToastMsg(m, lang2, vi, total) {
@@ -16646,10 +16637,10 @@ What you type stays in this browser only.`;
     if (!shown.length) {
       const oneCat = cats.length === 1 ? cats[0] : null;
       const afterBtn = (c) => (/^[,.;:!?]/.test(c) ? "" : " ") + esc(c);
-      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>" : wholeThingEmpty() ? '<div class="empty empty-desk">' + esc(t("Etiuda is ready for its first replies.")) + "<br><br>" + esc(t(hooks.sampleReady() ? "Add a card to a category," : "Add a card to a category, or")) + ' <button type="button" class="btn" id="emptyImport">' + esc(t("import a catalog")) + "</button>" + (hooks.sampleReady() ? " " + esc(t("or")) + ' <button type="button" class="btn" id="emptySample">' + esc(t("load a sample catalog")) + "</button>" + afterBtn(t("to see how it works.")) : afterBtn(t("you already have."))) + '<br><br><span style="font-size:12.5px;opacity:.75">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else comes in through Import above.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with the button above.")) : esc(t("The catalog you import stays in this browser, ready whenever you come back."))) + "</span></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
+      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>" : wholeThingEmpty() ? '<div class="empty empty-desk">' + esc(t("Etiuda is ready for its first replies.")) + "<br><br>" + esc(t(hooks.sampleReady() ? "Add a card to a category," : "Add a card to a category, or")) + ' <button type="button" class="btn" id="emptyLoad">' + esc(t("import a catalog")) + "</button>" + (hooks.sampleReady() ? " " + esc(t("or")) + ' <button type="button" class="btn" id="emptySample">' + esc(t("load a sample catalog")) + "</button>" + afterBtn(t("to see how it works.")) : afterBtn(t("you already have."))) + '<br><br><span style="font-size:12.5px;opacity:.75">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else comes in through Import above.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with the button above.")) : esc(t("The catalog you import stays in this browser, ready whenever you come back."))) + "</span></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
       const es = $("#emptySample");
       if (es) es.onclick = () => hooks.loadSampleCatalog();
-      const ei = $("#emptyImport");
+      const ei = $("#emptyLoad");
       if (ei) ei.onclick = hooks.importCatalogHere;
       const ef = $("#emptyCatFolder");
       if (ef) {
@@ -17074,7 +17065,7 @@ What you type stays in this browser only.`;
         return;
       }
       if (e.key !== "Escape") return;
-      if (hooks.tourActive()) {
+      if (hooks.tourActive() && $("#tourCard") && $("#tourCard").contains(document.activeElement)) {
         hooks.endTour(false);
         e.stopPropagation();
         e.preventDefault();
@@ -17727,40 +17718,63 @@ What you type stays in this browser only.`;
       document.body.classList.remove("tour-cacts");
     };
   }
+  function loadStepBody() {
+    const dir = eCatalogFolderShort();
+    if (!dir) return t("The catalog you import stays in this browser, ready whenever you come back.");
+    return t("Replies come in a catalog. <b>Load a catalog</b>, under the logo, opens {FOLDER}, and the choice is yours: the team's own catalog, if it is there, or the sample, which always waits there for trying things out.").split("{FOLDER}").join(esc(dir));
+  }
+  function wheelShown() {
+    return !document.body.classList.contains("role-waits");
+  }
   var TOUR_STEPS = [
-    /* Ordered as one chat unfolds: the customer, the box, the panel it drives, the cards it
-       narrows, the bar, then the tabs that keep all of it - only then the buttons and the corner.
-       The agent's own name is asked for at the first run and lives in Settings, so it has no
-       control on the screen for a step to point at. */
+    /* THE NAME FIRST, in the bubble itself: it is the one thing on the desk with no control of its
+       own to point at, and every signed reply needs it. */
     {
+      id: "name",
       sel: ".brand",
       title: "Welcome to Etiuda",
-      body: "Etiuda keeps your replies in a window of its own, beside the chat. Type the word nearest what the customer means, click a reply, and paste it into the conversation. It works with every chat tool, because it needs none of them. The tour takes about a minute, and <kbd>Esc</kbd> leaves it at any time.",
+      body: "To begin, the name your replies are signed with. Customers see it at the foot of each one, and it can be changed at any time in Settings.",
+      name: true,
       pad: 10
     },
+    /* ONLY WHILE THE DESK IS EMPTY, and it has no Next: the step is done by loading, which reloads
+       the page, and the tour carries on from the step after it. A card made by hand ends it too. */
     {
-      sel: ".field-wrap.paxrole",
-      title: "Customer name and role",
-      body: `Copy the customer's name from the chat and paste it here as it comes, surname, capitals and all. Etiuda tidies it, and every reply addresses the customer by first name, in Polish in the vocative (ANNA KOWALSKA → <b>Anno</b>); this fills <span class="fillmiss">PAX</span>. The wheel beside it says who you are speaking to, relative to whoever the case is about, and fills <span class="fillmiss">ROLE</span> in internal comments; the empty notch clears it.`,
+      id: "load",
+      sel: "#emptyLoad",
+      title: "A catalog of replies",
+      body: loadStepBody,
+      when: () => wholeThingEmpty(),
+      waits: true,
       pad: 6
     },
     {
+      id: "pax",
+      sel: ".field-wrap.paxrole",
+      title: () => wheelShown() ? "Customer name and role" : "The customer's name",
+      body: () => wheelShown() ? "Paste the customer's name as the chat gives it, surname and capitals included; every reply then greets them by first name, in Polish in the vocative (ANNA KOWALSKA → <b>Anno</b>). The wheel beside it says who is on the chat, for internal comments. Any name will do to try it." : "Paste the customer's name as the chat gives it, surname and capitals included; every reply then greets them by first name, in Polish in the vocative (ANNA KOWALSKA → <b>Anno</b>). Any name will do to try it.",
+      pad: 6
+    },
+    {
+      id: "search",
       sel: "#intentComboWrap",
       title: "Search",
-      body: `Type the word nearest what the customer means, 'refund' or 'address', and the intents in the panel rank themselves while the cards below narrow to match, in both languages. <kbd>Enter</kbd> picks the marked intent: it fills <span class="fillmiss">INTENT</span> and rings its cards <b class="t-go">green</b>, and <kbd>Ctrl</kbd>+<kbd>Enter</kbd> picks one and keeps the box for the next. <kbd>Esc</kbd> clears it.`,
+      body: "Type the word nearest what the customer means, such as 'return' or 'broken'. The intents on the left rank themselves and the cards narrow to match, in both languages. <kbd>Enter</kbd> picks the marked intent, and <kbd>Esc</kbd> clears the box.",
       pad: 6
     },
     {
+      id: "rail",
       sel: "#intentRail",
       title: "Intent panel",
-      body: 'An intent names what the customer has come about. Picking one brings its replies forward, ringed <b class="t-go">green</b>, and its phrase fills <span class="fillmiss">INTENT</span> wherever a reply uses it. <kbd>Ctrl</kbd>+click picks several. The star keeps the intents you use most at the top; hold <kbd>Ctrl</kbd> over a star to edit that intent, or <kbd>Shift</kbd> to hide it. The <span data-icon="pin"></span> lock keeps the panel open on a narrow window.',
+      body: 'An intent names what the customer has come about. Click one and its replies come forward, ringed <b class="t-go">green</b>, with its phrase filling <span class="fillmiss">INTENT</span> wherever a reply uses it. <kbd>Ctrl</kbd>+click picks several, and the star keeps the ones used most at the top.',
       pad: 8,
       prep: tourEnsureRail
     },
     {
+      id: "cards",
       sel: () => tourPickFirstCard() || $("#list"),
       title: "Cards",
-      body: "Click a reply and the whole of it is on the clipboard, with the greeting, the name and the signature filled in, ready to paste into the chat. <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> do the same from the keyboard, and <kbd>Shift</kbd>+<kbd>Enter</kbd> copies the other language. A card showing <b>1/2</b> or <b>STEP 1/3</b> holds several replies, each copied on its own. The small tags say why a card stands where it does; resting the pointer on one names the reason.",
+      body: "Click a reply: the whole of it is copied, greeting, name and signature filled in, ready to paste into the chat. A card marked <b>1/2</b> or <b>STEP 1/3</b> holds several, each copied on its own. <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> do the same from the keyboard.",
       pad: 6,
       prep: () => {
         tourScrollListTop();
@@ -17768,132 +17782,148 @@ What you type stays in this browser only.`;
       }
     },
     {
+      id: "pills",
       sel: "#pills",
       title: "Category pills",
-      body: 'Filter cards by category; <kbd>Ctrl</kbd>+click keeps several. The rings say why a pill stands out: <b class="t-go">green</b> - it holds a card linked to your intent; <b class="t-acc">blue</b> - a supporting category, useful whatever the customer asked. <kbd>←</kbd> <kbd>→</kbd> step through them, from the search box too. Drag pills to reorder; double-click <span class="t-pill"><span data-icon="all"></span>All</span> to reset the order.',
+      body: 'Click a category to see only its cards; <kbd>Ctrl</kbd>+click keeps several. A <b class="t-go">green</b> ring marks one holding a card for the chosen intent, and a <b class="t-acc">blue</b> one a supporting category, useful for any question.',
       pad: 8,
       prep: tourEnsurePills
     },
     {
+      id: "tabs",
       sel: "#tabsWrap",
       title: "Conversations",
-      body: () => t("When several customers are open in your chat at once, give each one a tab here. Every tab keeps its own customer name, intent, language and categories, so a reply never carries the wrong name. {KEY} moves to the next tab from anywhere and {NEW} opens one; your own name and the theme are shared by all of them.").replace("{KEY}", chordChips("tabNext")).replace("{NEW}", chordChips("tabNew")),
+      body: () => t("When several customers are on the chat at once, each gets a tab here with their own name, intent and language, so a reply never carries the wrong name. {NEW} opens one and {KEY} moves to the next.").replace("{KEY}", chordChips("tabNext")).replace("{NEW}", chordChips("tabNew")),
       pad: 6
     },
     {
+      id: "seg",
       sel: "#seg",
       title: "English / Polish",
       // A function, not a string: the key it names is rebindable, so it is read at show time
-      body: () => t("Switches the replies between English and Polish for this conversation, so each customer is answered in their own language; {KEY} flips it from anywhere. An intent picked from the list follows the switch and typed text does not, and a card with no Polish shows its English rather than a gap.").replace("{KEY}", chordChips("langToggle")),
+      body: () => t("Switches this conversation's replies between English and Polish, so each customer is answered in their own language. {KEY} does it from anywhere.").replace("{KEY}", chordChips("langToggle")),
       pad: 6
     },
     /* One step per control on a card header, ordered by how far each one goes rather than by
        where it sits on the row: the star only SORTS a card, the eye puts it away, the pencil
-       rewrites it - and the editor opens straight after the pencil that opens it, rather than
-       several steps later where the connection has to be carried. `cardBtn` is the same
-       resolve/prep pair three times over: pick the first card, then point at one of its buttons. */
+       rewrites it - and the editor opens straight after the pencil that opens it. `cardBtn` is the
+       same resolve/prep pair three times over: pick the first card, then point at one of its
+       buttons. */
     {
+      id: "star",
       sel: () => cardBtn(".star-btn"),
       prep: tourRevealCardActions,
       title: "Favourites",
-      body: 'The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <span class="t-pill"><span data-icon="all"></span>All</span> to a <b class="t-fav"><span data-icon="star"></span>Favourites</b> block at the top of the list. The gold star and the <span class="cbadge fav">fav</span> tag mark it - separate from the <b class="t-go">green</b> of an intent link and the <b class="t-acc">blue</b> of a supporting category.',
+      body: 'The star lifts a card to the top of its category, and under <span class="t-pill"><span data-icon="all"></span>All</span> into <b class="t-fav"><span data-icon="star"></span>Favourites</b> at the head of the list.',
       pad: 8
     },
     {
+      id: "hide",
       sel: () => cardBtn('[data-act="hide"]'),
       prep: tourRevealCardActions,
       title: "Put a card away",
-      body: 'The eye puts a card away: it greys out and sinks to the foot of its own category, and it shows nowhere else - not in All, and not in a search. Open that category with the box empty and the same button brings it back. Putting a starred card away also unstars it. Nothing is deleted; <b class="t-bad">Delete</b> lives only in the editor and in Library.',
+      body: "The eye puts a card away: it greys out at the foot of its own category and shows nowhere else. The same button there brings it back, and nothing is deleted.",
       pad: 8
     },
     {
+      id: "edit",
       sel: () => cardBtn('[data-act="edit"]'),
       prep: tourRevealCardActions,
       title: "Edit a card",
-      body: "The pencil opens the card for editing - both languages, the internal note, the search keywords, and everything about how it behaves. Editing a built-in card writes a personal override <b>on this computer</b>; the catalog itself is untouched, and the editor's <b>Reset</b> brings the original wording back whenever you want it.",
+      body: "The pencil opens the card: both languages, the internal note, the keywords. Changes stay on this computer, and the editor's <b>Reset</b> brings back the catalog's own words.",
       pad: 8
     },
     {
-      /* Opened for real rather than described. The editor is four folds and a row of buttons, and
-         no amount of prose about it lands the way seeing it does. First card if there is one; a
-         New card on an empty Etiuda, which is the state a first-run tour is usually in. */
+      /* Opened for real rather than described: the editor is four folds and a row of buttons, and
+         no amount of prose about it lands the way seeing it does. */
+      id: "editor",
       sel: "#modalCard",
       modal: true,
       pad: 4,
       title: "The card editor",
-      body: '<span class="t-sec">Content</span> holds the text in both languages, with the internal note. Folded below: <span class="t-sec">Keywords</span>, <span class="t-sec">Category</span>, <span class="t-sec">Linked intents</span> - which makes a card ring green under an intent, and marks its category relevant to those intents - and <span class="t-sec">Advanced</span>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Library</b> opens the same screen.',
+      body: '<span class="t-sec">Content</span> holds the text in both languages and the internal note; the folds below hold the keywords, the category, the linked intents and the finer settings. <b>Cancel</b> leaves everything as it was.',
       prep: () => {
         hooks.openCardEditor(typeof cards !== "undefined" && cards && cards.length ? cards[0].id : null);
       }
     },
     /* AFTER the editor, not before it: the four steps above act on a card that already exists,
-       and this is the one that makes the one that does not - into the screen just shown. Between
-       the pencil and the editor it would have cut the pencil from what it opens. */
+       and this is the one that makes the one that does not - into the screen just shown. */
     {
+      id: "add",
       sel: "#addCardFab",
       title: "A card of your own",
-      body: 'The <b>+</b> in the corner starts a new card from wherever you are - the same screen the pencil opens, empty. Inside a category it files into that one; under <span class="t-pill"><span data-icon="all"></span>All</span> the editor asks which, in its <span class="t-sec">Category</span> section.',
+      body: "The <b>+</b> starts a new card of your own, in the category open at the time, or in one the editor asks for.",
       pad: 10
     },
     {
+      id: "facts",
       sel: "#factsBtn",
       title: "Quick facts",
-      body: () => eHost() ? t("Fees, deadlines and links you quote to customers. Clicking a link copies the whole address, ready to paste into the chat. The text is yours to edit, and it stays on this computer.") : t("Fees, deadlines and links you quote to customers. Clicking a link copies the whole address, ready to paste into the chat. The text is yours to edit, and it stays in this browser."),
+      body: () => eHost() ? t("Fees, deadlines and links to quote. A click on a link copies it whole, and the text is yours to edit; it stays on this computer.") : t("Fees, deadlines and links to quote. A click on a link copies it whole, and the text is yours to edit; it stays in this browser."),
       pad: 8
     },
     {
+      id: "theme",
       sel: "#theme",
       title: "Light and dark",
-      body: "Etiuda follows your system's setting, and keeps following it. Clicking here is what turns that into a choice, and it is remembered from then on.",
+      body: "Etiuda follows the system's light or dark until a click here makes it a choice of your own.",
       pad: 8
     },
     {
-      /* The button, with the menu SHUT. The menu hangs below and to the left of a corner
-         button, so a spotlight covering both encloses a wedge of empty header and reads as
-         two things being pointed at. A menu is also the one thing a tour need not
-         demonstrate - it opens on a click and closes on the next. */
+      /* The button, with the menu SHUT: a spotlight covering both encloses a wedge of empty header,
+         and a menu is the one thing a tour need not demonstrate. */
+      id: "menu",
       sel: "#settingsBtn",
       title: "Menu",
-      body: "Everything that is not a card. <b>Library</b> is where the content lives, <b>Settings</b> holds the interface language, the appearance and the keyboard shortcuts, and the entries in the middle hide or lock the intent panel and the category bar. Hold <kbd>Ctrl</kbd> to peek at either while it is hidden. This tour is here too, under <b>Show tour…</b>.",
+      body: "Everything that is not a card: the Library, Settings, the panels' switches, and this tour again under <b>Show tour…</b>.",
       pad: 8
     },
     {
-      /* Opens exactly as the user's own Manage opens - on Catalog & data. Forcing a section
-         open would silently change mgOpen - session state - for the rest of the session: a
-         step showing the real thing must not adjust the real thing to suit itself. The body
-         names all four sections anyway, which is what the step is for. */
+      /* Opens exactly as the user's own Library opens: a step showing the real thing must not
+         adjust the real thing to suit itself. */
+      id: "library",
       sel: "#modalCard",
       modal: true,
       pad: 4,
       title: "Library",
-      body: `<b><span data-icon="settings"></span> → Library</b> holds everything Etiuda knows: every card, intent and category, to add, edit, hide or move. <span class="t-sec">Catalog &amp; data</span> is where the team's catalog comes in, and where your own improvements go out as a file for whoever keeps the wording.`,
+      body: '<b><span data-icon="settings"></span> → Library</b> holds every card, intent and category, to add, edit, hide or move. Catalogs are loaded here too, and your own improvements go out from here as a file for whoever keeps the wording.',
       prep: () => {
         hooks.openManage();
       }
     },
     {
       // Same rule as Library above: opened as the menu opens it, no section forced.
+      id: "settings",
       sel: "#modalCard",
       modal: true,
       pad: 4,
       title: "Settings",
-      body: '<b><span data-icon="settings"></span> → Settings</b> is the program itself: your name, the language of its buttons, its look and its shortcuts. Nothing here touches a card.',
+      body: '<b><span data-icon="settings"></span> → Settings</b>: your name, the language of the buttons, the look and the shortcuts. Nothing here touches a card.',
       prep: () => {
         openSettings();
       }
     },
     {
+      id: "done",
       sel: ".brand",
       title: "You are set",
-      body: `That is the whole of it: the customer's name, the word for what they want, a click, and a paste into the chat. Every shortcut is listed under <span data-icon="settings"></span> <b>→ About Etiuda</b>, and <b>Show tour…</b> in the same menu brings this back.`,
+      body: 'That is the whole tour, and Etiuda is ready for the first customer. <b>Show tour…</b> in the <span data-icon="settings"></span> Menu brings it back, and <b>About Etiuda</b> lists every shortcut.',
       pad: 10
     }
   ];
+  function stepOn(i) {
+    const s = TOUR_STEPS[i];
+    return !!s && (!s.when || s.when());
+  }
+  function onFrom(i, dir) {
+    for (let j = i; j >= 0 && j < TOUR_STEPS.length; j += dir) if (stepOn(j)) return j;
+    return -1;
+  }
   function tourEls() {
     return {
       root: $("#tourRoot"),
-      shade: $("#tourShade"),
       hole: $("#tourHole"),
+      field: $("#tourField"),
       card: $("#tourCard"),
       title: $("#tourTitle"),
       body: $("#tourBody"),
@@ -17937,6 +17967,10 @@ What you type stays in this browser only.`;
     if (!tourRunning) return;
     const step = TOUR_STEPS[tourIdx];
     if (!step) return;
+    if (!stepOn(tourIdx)) {
+      showTourStep(onFrom(tourIdx + 1, 1));
+      return;
+    }
     const els = tourEls();
     if (!els.root || !els.card) return;
     const pad = step.pad != null ? step.pad : 8;
@@ -17966,7 +18000,6 @@ What you type stays in this browser only.`;
     } else if (els.hole) {
       els.hole.style.display = "none";
     }
-    els.root.classList.toggle("no-hole", !holeRect);
     if (holeRect) {
       placeBubble(els.card, holeRect, { width: cardW, gap: 12 });
     } else {
@@ -17989,9 +18022,11 @@ What you type stays in this browser only.`;
       endTour(true);
       return;
     }
+    const keyed = tourHasFocus();
     tourIdx = i;
     const step = TOUR_STEPS[i];
     const els = tourEls();
+    ssSet(TOUR_AT, step.id);
     if (!step.modal && modalOpen()) {
       closeModal();
     }
@@ -18003,14 +18038,33 @@ What you type stays in this browser only.`;
       } catch (_) {
       }
     }
-    if (els.title) els.title.textContent = t(step.title || "");
+    if (els.title) els.title.textContent = t((typeof step.title === "function" ? step.title() : step.title) || "");
     if (els.body) {
       els.body.innerHTML = t((typeof step.body === "function" ? step.body() : step.body) || "");
       fillProseIcons(els.body);
     }
-    if (els.step) els.step.textContent = t("Tour {N} / {TOTAL}").replace("{N}", i + 1).replace("{TOTAL}", TOUR_STEPS.length);
-    if (els.prev) els.prev.hidden = i === 0;
-    if (els.next) els.next.textContent = t(i === TOUR_STEPS.length - 1 ? "Finish" : "Next");
+    const on = TOUR_STEPS.map((_, k) => k).filter(stepOn);
+    if (els.step) els.step.textContent = t("Tour {N} / {TOTAL}").replace("{N}", on.indexOf(i) + 1).replace("{TOTAL}", on.length);
+    if (els.prev) els.prev.hidden = onFrom(i - 1, -1) < 0;
+    if (els.next) {
+      els.next.hidden = !!step.waits;
+      els.next.textContent = t(onFrom(i + 1, 1) < 0 ? "Finish" : "Next");
+    }
+    let nameInp = null;
+    if (els.field) {
+      els.field.hidden = !step.name;
+      els.field.innerHTML = step.name ? nameFieldHtml("tourName", "tourNamePrev") : "";
+      if (step.name) {
+        nameInp = wireNameField(els.field, "");
+        if (nameInp) nameInp.onkeydown = (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.stopPropagation();
+            tourNext();
+          }
+        };
+      }
+    }
     const tgt = resolveTourTarget(step);
     observeTourTarget(tgt);
     if (tgt && tgt.scrollIntoView) {
@@ -18025,25 +18079,61 @@ What you type stays in this browser only.`;
     }
     scheduleTourPlace();
     setTimeout(scheduleTourPlace, 300);
-    selectTourNext();
+    syncTourBehind();
+    if (nameInp) {
+      try {
+        nameInp.focus({ preventScroll: true });
+      } catch (_) {
+      }
+    } else if (keyed) selectTourNext();
+    else clearTourFocus();
   }
-  function startTour() {
-    const invite = $("#tourInvite");
-    if (invite) invite.hidden = true;
-    closeSettingsMenu();
-    closeFactsPanel();
-    if (modalOpen()) closeModal();
+  function startTour(from, auto) {
+    if (!auto) {
+      closeSettingsMenu();
+      closeFactsPanel();
+      if (modalOpen()) closeModal();
+    }
     const els = tourEls();
     if (!els.root) return;
+    let i = onFrom(Math.max(0, from | 0), 1);
+    const L = TOUR_STEPS.findIndex((x) => x.id === "load");
+    if (i > L && stepOn(L)) i = L;
+    if (i < 0) {
+      ssDel(TOUR_AT);
+      return;
+    }
     tourRunning = true;
-    tourIdx = 0;
+    tourIdx = i;
     els.root.hidden = false;
     els.root.setAttribute("aria-hidden", "false");
     els.root.classList.toggle("still", mgReduceMotion());
     void els.root.offsetWidth;
     els.root.classList.add("on");
-    showTourStep(0);
-    toast("Press Esc to leave the tour.");
+    showTourStep(i);
+  }
+  var TOUR_AUTO_MS = 1300;
+  var TOUR_AT = "eTourAt";
+  function tourDueAtBoot() {
+    return !!ssGet(TOUR_AT) || !tourSeen() && !tourInviteDismissed();
+  }
+  function maybeStartTour() {
+    const at = ssGet(TOUR_AT);
+    if (at) {
+      const i = TOUR_STEPS.findIndex((x) => x.id === at);
+      setTimeout(() => {
+        if (!tourRunning) startTour(i < 0 ? 0 : i, true);
+      }, 300);
+      return;
+    }
+    if (tourSeen() || tourInviteDismissed()) return;
+    setTimeout(() => {
+      if (!tourRunning && !tourSeen() && !tourInviteDismissed()) startTour(0, true);
+    }, TOUR_AUTO_MS);
+  }
+  var tourAfter = [];
+  function afterTour(fn) {
+    tourAfter.push(fn);
   }
   function endTour(completed) {
     if (!tourRunning && tourIdx < 0) return;
@@ -18058,6 +18148,10 @@ What you type stays in this browser only.`;
     if (els.hole) {
       els.hole.classList.remove("pulse");
       els.hole.style.display = "none";
+    }
+    if (els.field) {
+      els.field.innerHTML = "";
+      els.field.hidden = true;
     }
     if (els.arrow) {
       els.arrow.classList.remove("show");
@@ -18075,7 +18169,33 @@ What you type stays in this browser only.`;
     }
     if (completed) markTourDone();
     else markTourInviteDismissed();
+    ssDel(TOUR_AT);
+    if (els.root) els.root.classList.remove("behind");
+    if (!completed) toast("The tour waits in the Menu, under Show tour…");
     focusIntentOnOpen();
+    const later = tourAfter;
+    tourAfter = [];
+    later.forEach((fn) => {
+      try {
+        fn();
+      } catch (_) {
+      }
+    });
+  }
+  function syncTourBehind() {
+    const els = tourEls();
+    if (!els.root) return;
+    const step = TOUR_STEPS[tourIdx];
+    const covered = !!document.querySelector("body > .modal:not([hidden])");
+    els.root.classList.toggle("behind", tourRunning && covered && !(step && step.modal));
+  }
+  function tourHasFocus() {
+    const card = $("#tourCard");
+    return !!(tourRunning && card && document.activeElement && card.contains(document.activeElement));
+  }
+  function tourShowsDialog() {
+    const step = TOUR_STEPS[tourIdx];
+    return !!(tourRunning && step && step.modal);
   }
   var tourFocusIdx = 0;
   function tourButtons() {
@@ -18126,30 +18246,40 @@ What you type stays in this browser only.`;
   }
   function tourNext() {
     if (!tourRunning) return;
-    if (tourIdx >= TOUR_STEPS.length - 1) endTour(true);
-    else showTourStep(tourIdx + 1);
+    const step = TOUR_STEPS[tourIdx];
+    if (step && step.name) {
+      const inp = $("#tourName"), v = inp ? inp.value.trim() : "";
+      if (v) keepAgentName(v);
+      else if (agentName()) setAgentName("");
+    }
+    const n = onFrom(tourIdx + 1, 1);
+    if (n < 0) endTour(true);
+    else showTourStep(n);
   }
   function tourPrev() {
     if (!tourRunning) return;
-    if (tourIdx > 0) showTourStep(tourIdx - 1);
+    const n = onFrom(tourIdx - 1, -1);
+    if (n >= 0) showTourStep(n);
   }
   function wireTourUi() {
     const els = tourEls();
     if (els.next) els.next.onclick = () => tourNext();
     if (els.prev) els.prev.onclick = () => tourPrev();
     if (els.skip) els.skip.onclick = () => endTour(false);
-    if (els.shade) els.shade.onclick = () => {
-    };
-    const inv = $("#tourInvite"), startB = $("#tourInviteStart"), disB = $("#tourInviteDismiss");
-    if (startB) startB.onclick = () => {
-      if (inv) inv.hidden = true;
-      startTour();
-    };
-    if (disB) disB.onclick = () => {
-      if (inv) inv.hidden = true;
-      markTourInviteDismissed();
-    };
-    addEventListener("resize", placeTourInvite);
+    if (typeof MutationObserver === "function") {
+      try {
+        const mo = new MutationObserver(() => {
+          if (tourRunning) {
+            syncTourBehind();
+            scheduleTourPlace();
+          }
+        });
+        mo.observe(document.body, { childList: true });
+        const shared = $("#modal");
+        if (shared) mo.observe(shared, { attributes: true, attributeFilter: ["hidden"] });
+      } catch (_) {
+      }
+    }
     if (typeof ResizeObserver === "function") {
       try {
         const ro = new ResizeObserver(() => {
@@ -18161,27 +18291,6 @@ What you type stays in this browser only.`;
       } catch (_) {
       }
     }
-  }
-  function maybeShowTourInvite() {
-    if (tourSeen() || tourInviteDismissed()) return;
-    const inv = $("#tourInvite");
-    if (!inv) return;
-    setTimeout(() => {
-      if (tourRunning || tourSeen() || tourInviteDismissed()) return;
-      if (document.getElementById("eCatalogModal")) return;
-      if (document.getElementById("eAgentModal")) return;
-      const body = $("#tourInviteBody"), start = $("#tourInviteStart");
-      if (body) body.textContent = t("How a reply gets from here to your customer, in about a minute.");
-      if (start) start.textContent = t("Show tour");
-      inv.hidden = false;
-      placeTourInvite();
-    }, 900);
-  }
-  function placeTourInvite() {
-    const inv = $("#tourInvite"), btn = $("#settingsBtn");
-    if (!inv || inv.hidden || !btn) return;
-    const r = btn.getBoundingClientRect();
-    placeBubble(inv, { top: r.top, left: r.left, width: r.width, height: r.height }, { width: 300 });
   }
 
   // src/modules/editors.js
@@ -18454,7 +18563,7 @@ What you type stays in this browser only.`;
     };
     edWireNav(displayIntentRows().map((r) => r.idx), idx, (i2) => openIntentEditor(i2));
     setTimeout(() => {
-      if (tourActive()) return;
+      if (tourShowsDialog()) return;
       const el = $("#" + langFieldId("ie", "clause", "en"));
       if (el) el.focus();
     }, 30);
@@ -19000,7 +19109,7 @@ What you type stays in this browser only.`;
       (nid) => openCardEditor(nid, null, fromManage)
     );
     setTimeout(() => {
-      if (tourActive()) return;
+      if (tourShowsDialog()) return;
       const el = $("#" + meFieldId("t", CONTENT_LANGS[0]));
       if (el) el.focus();
     }, 30);
@@ -19066,7 +19175,9 @@ What you type stays in this browser only.`;
     eOfferCatalog: () => eOfferCatalog,
     eOfferCatalogAtBoot: () => eOfferCatalogAtBoot,
     eOfferCatalogDialog: () => eOfferCatalogDialog,
+    eOfferPickedCatalog: () => eOfferPickedCatalog,
     loadCatalogFromFolder: () => loadCatalogFromFolder,
+    paintCatNow: () => paintCatNow,
     paintCatalogList: () => paintCatalogList,
     wireHostCatalogWatch: () => wireHostCatalogWatch
   });
@@ -19104,6 +19215,10 @@ What you type stays in this browser only.`;
   function eOfferCatalogAtBoot() {
     if (ejectedJustNow()) return;
     const at = +(nsGet("CatalogNoAt") || 0), mt = eCatalogMtime(), asked = eOpenedWith();
+    if (!asked && tourDueAtBoot()) {
+      afterTour(eOfferCatalogAtBoot);
+      return;
+    }
     eOfferCatalog(null, "", "", asked || wholeThingEmpty() || !!(at && mt && mt > at), asked);
   }
   function loadCatalogFromFolder(name, mtime) {
@@ -19256,34 +19371,44 @@ What you type stays in this browser only.`;
       paintCatalogList();
       return false;
     }
-    if (document.getElementById("eCatalogModal")) return false;
+    if (document.getElementById("eCatalogOffer")) return false;
     const replacing = !!active;
     const updating = isCatalogUpdate(c, active);
     const older = updating && catalogEditionOlder(c.version, active.version);
     const n = (c.cards || []).length, i = catalogIntentCount(c), k = Object.keys(c.categories || {}).length;
     const wrap = document.createElement("div");
-    wrap.className = "modal";
-    wrap.id = "eCatalogModal";
-    wrap.innerHTML = '<div class="modal-bg"></div><div class="modal-card"><h2>' + esc(t(older ? "Older catalog found" : updating ? "Updated catalog found" : replacing ? "Replace catalog?" : "Load catalog?")) + "</h2>" + (updating ? '<p class="modal-sub">' + esc(t(older ? "The file beside Etiuda is an earlier edition than the one you have." : "The catalog beside Etiuda has changed since you loaded it.")) + "</p>" : "") + '<div class="about-body"><b>' + esc(String(c.name || "Catalog")) + "</b>" + (c.version != null ? " · " + esc(catalogVersionLabel(c.version)) : "") + (updating && active.version != null && String(active.version) !== String(c.version) ? '<div class="ec-counts">' + esc(t("You have {V}.")).replace("{V}", esc(catalogVersionLabel(active.version))) + "</div>" : "") + '<div class="ec-counts">' + catalogCountsLine(
+    wrap.className = "bub bub-ask e-offer";
+    wrap.id = "eCatalogOffer";
+    wrap.setAttribute("role", "dialog");
+    wrap.setAttribute("aria-labelledby", "ecTitle");
+    wrap.innerHTML = /* REPLACING IS THE MIRROR OF LOADING, ruled 2026-09-17: one catalog is being put down and
+       another taken up, which the question asks and no sentence beneath it can improve on. The
+       two editions of ONE catalog keep their sentence: what is at stake there is what happens to
+       this desk's own work, which the screen cannot show. */
+    '<h3 id="ecTitle">' + esc(t(older ? "Older catalog found" : updating ? "Updated catalog found" : replacing ? "Replace catalog?" : "Load catalog?")) + "</h3>" + (updating ? '<p class="ec-sub">' + esc(t(older ? "This file is an earlier edition than the one loaded now." : "This catalog has changed since it was loaded.")) + "</p>" : "") + '<div class="ec-what"><b>' + esc(String(c.name || "Catalog")) + "</b>" + (c.version != null ? " · " + esc(catalogVersionLabel(c.version)) : "") + (updating && active.version != null && String(active.version) !== String(c.version) ? '<div class="ec-counts">' + esc(t("You have {V}.")).replace("{V}", esc(catalogVersionLabel(active.version))) + "</div>" : "") + '<div class="ec-counts">' + catalogCountsLine(
       "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
       n,
       catalogMacroCount(c),
       i,
       k
-    ) + '</div></div><p class="modal-sub" style="margin:10px 0 0">' + src.foundHtml + (updating ? " " + esc(t("Your own cards and edits are kept.")) : "") + '</p><div class="modal-actions"><button type="button" class="btn" id="ecNo">' + esc(t(replacing ? "Keep current" : "Start empty")) + '</button><button type="button" class="btn primary" id="ecYes">' + esc(t(older ? "Load it anyway" : updating ? "Load the update" : replacing ? "Load it" : "Load catalog")) + "</button></div></div>";
+    ) + '</div></div><p class="ec-sub">' + src.foundHtml + (updating ? " " + esc(t("Your own cards and edits are kept.")) : "") + '</p><div class="tour-actions"><button type="button" class="btn" id="ecNo">' + esc(t(replacing ? "Keep current" : "Not now")) + '</button><button type="button" class="btn primary" id="ecYes">' + esc(t(older ? "Load it anyway" : updating ? "Load the update" : replacing ? "Load it" : "Load catalog")) + "</button></div>";
     document.body.appendChild(wrap);
-    const close = () => {
-      document.removeEventListener("keydown", onKey, true);
-      wrap.remove();
-      maybeShowTourInvite();
+    const place = () => {
+      const at = document.getElementById("catNow"), r = at && at.getBoundingClientRect();
+      placeBubble(wrap, r && r.width ? { top: r.top, left: r.left, width: r.width, height: r.height } : { top: 0, left: innerWidth - 24, width: 0, height: 40 }, { width: 340 });
     };
-    function onKey(e) {
+    place();
+    addEventListener("resize", place);
+    const close = () => {
+      removeEventListener("resize", place);
+      wrap.remove();
+    };
+    wrap.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       e.preventDefault();
       e.stopPropagation();
       close();
-    }
-    document.addEventListener("keydown", onKey, true);
+    });
     wrap.querySelector("#ecYes").onclick = () => {
       if (src.accept(sig) === false) close();
     };
@@ -19293,15 +19418,44 @@ What you type stays in this browser only.`;
         nsSet(src.refusedKey + "At", String(Date.now()));
       }
       close();
-      toast(replacing ? "Keeping the loaded catalog." : "Starting empty. Load one any time from the Library.");
     };
-    const yes = wrap.querySelector("#ecYes");
-    if (yes && typeof yes.focus === "function") yes.focus();
+    if (src.asked) {
+      const yes = wrap.querySelector("#ecYes");
+      if (yes) yes.focus();
+    }
     return true;
+  }
+  function eOfferPickedCatalog(c, name, accept) {
+    const shown2 = eOfferCatalogDialog(c, {
+      foundHtml: eFoundHtml(name, ""),
+      force: true,
+      asked: true,
+      accept: () => accept()
+    });
+    if (!shown2) toast(t("That file matches the catalog you already have."));
+  }
+  function paintCatNow() {
+    const el = document.getElementById("catNow");
+    if (!el) return;
+    const held = storedCatalog();
+    const name = String(typeof E_CATALOG_NAME !== "undefined" && E_CATALOG_NAME || held && held.name || "");
+    const own = el.querySelector(".cn-name"), none = el.querySelector(".cn-none");
+    if (own) {
+      own.textContent = name;
+      own.hidden = !name;
+      if (name) markCut(own);
+    }
+    if (none) {
+      const key = held ? "Unnamed catalog" : "No catalog loaded";
+      none.setAttribute("data-i18n-text", key);
+      none.textContent = t(key);
+      none.hidden = !!name;
+    }
+    el.title = name;
   }
   function eCheckWatchedFile(interactive) {
     if (!eWatchSupported()) return;
-    if (document.getElementById("eCatalogModal")) return;
+    if (document.getElementById("eCatalogOffer")) return;
     eWatchGet().then((h) => {
       if (!h) {
         if (interactive) toast(t("No catalog file is being watched."));
@@ -20126,7 +20280,7 @@ What you type stays in this browser only.`;
       bumpUseCount(id, l);
       copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length));
       eCopyFeedback(id);
-    });
+    }, document.querySelector("#list .txt.sel"));
     return true;
   }
 
@@ -20384,7 +20538,8 @@ What you type stays in this browser only.`;
   function wireGlobalKeydown() {
     addEventListener("keydown", (e) => {
       if (scCaptureId) return;
-      if (tourActive()) {
+      if (tourActive() && tourHasFocus()) {
+        if (e.target && e.target.id === "tourName" && e.key !== "Escape") return;
         if (e.key === "Escape" || eventMatchesAction(e, "escape")) {
           e.preventDefault();
           endTour(false);
@@ -21119,6 +21274,7 @@ What you type stays in this browser only.`;
       sampleReady,
       loadSampleCatalog,
       importCatalogHere,
+      offerPickedCatalog: eOfferPickedCatalog,
       runShortcut
     });
     eCarryOldKeys();
@@ -21219,9 +21375,10 @@ What you type stays in this browser only.`;
     wireOnOpen();
     wireTourUi();
     syncSampleMark();
+    paintCatNow();
     eOfferCatalogAtBoot();
     syncRoleWheel();
-    maybeShowTourInvite();
+    maybeStartTour();
     wireHostCatalogWatch();
     setTimeout(() => {
       try {

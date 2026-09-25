@@ -25,7 +25,7 @@ function copyEntrySel(otherLang){
     bumpUseCount(id, l);
     copy(fill(ps[vi],m,0,l), copiedToastMsg(m, l, vi, ps.length));
     eCopyFeedback(id);   // wash the selected block + recency trace, same as a click
-  });
+  },document.querySelector("#list .txt.sel"));
   return true;
 }
 

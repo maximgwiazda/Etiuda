@@ -84,6 +84,13 @@ const UD = path.join(APP, "userdata");
    E.pinCatalogFolder. The watched file then sits in the folder the setting names, which is the
    first place the shell looks and the one this proves. */
 const CATFOLDER = E.pinCatalogFolder(UD, path.join(APP, "catalogs"));
+/* Past the first run: a first run's tour holds the catalog offer back until it ends, and this file
+   is about the offer. */
+{
+  const deskDoc = JSON.parse(fs.readFileSync(path.join(UD, "desk.json"), "utf8"));
+  Object.assign(deskDoc.keys, { eTourDone_v3: "1", eTourInvite_v3: "1" });
+  fs.writeFileSync(path.join(UD, "desk.json"), JSON.stringify(deskDoc), "utf8");
+}
 const CATALOG = path.join(CATFOLDER, "etiuda-catalog.ec");
 
 async function startShell() {

@@ -5,7 +5,7 @@ import { focusIntentOnOpen } from "./on-open.js";
 import { drawIntentRail } from "./rail-list.js";
 import { chordChips } from "./shortcuts.js";
 import { openSettings } from "./settings.js";
-import { lsGet, lsSet, lsDel } from "./storage.js";
+import { lsGet, lsSet, lsDel, ssGet, ssSet, ssDel } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { t, toast } from "./ui-lang.js";
 import { railActive, railWanted, scheduleRailGeometry, syncRailLayout } from "./rail-panel.js";
@@ -14,14 +14,17 @@ import { list, $ } from "./dom.js";
 import { setEntrySel } from "./mark.js";
 import { syncLayoutPrefs, pillsWanted, schedulePillsCollapse } from "./pills-box.js";
 import { closeSettingsMenu } from "./header-menus.js";
-import { cards } from "./app-state.js";
+import { cards, wholeThingEmpty } from "./app-state.js";
 import { hooks } from "./hooks.js";
 import { placeBubble } from "./bubble.js";
-import { eHost } from "./host.js";
+import { eHost, eCatalogFolderShort } from "./host.js";
+import { agentName, setAgentName, keepAgentName, nameFieldHtml, wireNameField } from "./agent.js";
+import { esc } from "./esc.js";
 import { mgReduceMotion } from "./motion.js";
 
 /* ---------- Guided tour ----------------------------------------------------
-   Coach marks over live UI. No deps. Settings → Show tour… and first-run invite.
+   Bubbles over the live page, which stays usable under them: nothing is darkened, and a click
+   anywhere never takes a step down. It starts by itself on a first run and from Menu, Show tour.
    Bump TOUR_VER to re-offer after a major layout change. */
 const TOUR_VER=3;
 let tourIdx=-1, tourRunning=false, tourRaf=0;
@@ -130,172 +133,209 @@ function tourRevealCardActions(){
   tourStepUndo=()=>{ document.body.classList.remove("tour-cacts"); };
 }
 
+/* The desk's own words for the folder a Load opens, or none in a browser, which has no folder. */
+function loadStepBody(){
+  const dir=eCatalogFolderShort();
+  if(!dir) return t("The catalog you import stays in this browser, ready whenever you come back.");
+  return t("Replies come in a catalog. <b>Load a catalog</b>, under the logo, opens {FOLDER}, and the choice is yours: the team's own catalog, if it is there, or the sample, which always waits there for trying things out.")
+    .split("{FOLDER}").join(esc(dir));
+}
+// The wheel waits on the sample until a reply names somebody (agent.js), and the step says so.
+function wheelShown(){ return !document.body.classList.contains("role-waits"); }
 const TOUR_STEPS=[
-  /* Ordered as one chat unfolds: the customer, the box, the panel it drives, the cards it
-     narrows, the bar, then the tabs that keep all of it - only then the buttons and the corner.
-     The agent's own name is asked for at the first run and lives in Settings, so it has no
-     control on the screen for a step to point at. */
+  /* THE NAME FIRST, in the bubble itself: it is the one thing on the desk with no control of its
+     own to point at, and every signed reply needs it. */
   {
+    id:"name",
     sel:".brand",
     title:"Welcome to Etiuda",
-    body:"Etiuda keeps your replies in a window of its own, beside the chat. Type the word nearest what the customer means, click a reply, and paste it into the conversation. It works with every chat tool, because it needs none of them. The tour takes about a minute, and <kbd>Esc</kbd> leaves it at any time.",
+    body:"To begin, the name your replies are signed with. Customers see it at the foot of each one, and it can be changed at any time in Settings.",
+    name:true,
     pad:10
   },
+  /* ONLY WHILE THE DESK IS EMPTY, and it has no Next: the step is done by loading, which reloads
+     the page, and the tour carries on from the step after it. A card made by hand ends it too. */
   {
-    sel:".field-wrap.paxrole",
-    title:"Customer name and role",
-    body:"Copy the customer's name from the chat and paste it here as it comes, surname, capitals and all. Etiuda tidies it, and every reply addresses the customer by first name, in Polish in the vocative (ANNA KOWALSKA → <b>Anno</b>); this fills <span class=\"fillmiss\">PAX</span>. The wheel beside it says who you are speaking to, relative to whoever the case is about, and fills <span class=\"fillmiss\">ROLE</span> in internal comments; the empty notch clears it.",
+    id:"load",
+    sel:"#emptyLoad",
+    title:"A catalog of replies",
+    body:loadStepBody,
+    when:()=>wholeThingEmpty(),
+    waits:true,
     pad:6
   },
   {
+    id:"pax",
+    sel:".field-wrap.paxrole",
+    title:()=>wheelShown() ? "Customer name and role" : "The customer's name",
+    body:()=>wheelShown()
+      ? "Paste the customer's name as the chat gives it, surname and capitals included; every reply then greets them by first name, in Polish in the vocative (ANNA KOWALSKA → <b>Anno</b>). The wheel beside it says who is on the chat, for internal comments. Any name will do to try it."
+      : "Paste the customer's name as the chat gives it, surname and capitals included; every reply then greets them by first name, in Polish in the vocative (ANNA KOWALSKA → <b>Anno</b>). Any name will do to try it.",
+    pad:6
+  },
+  {
+    id:"search",
     sel:"#intentComboWrap",
     title:"Search",
-    body:"Type the word nearest what the customer means, 'refund' or 'address', and the intents in the panel rank themselves while the cards below narrow to match, in both languages. <kbd>Enter</kbd> picks the marked intent: it fills <span class=\"fillmiss\">INTENT</span> and rings its cards <b class=\"t-go\">green</b>, and <kbd>Ctrl</kbd>+<kbd>Enter</kbd> picks one and keeps the box for the next. <kbd>Esc</kbd> clears it.",
+    body:"Type the word nearest what the customer means, such as 'return' or 'broken'. The intents on the left rank themselves and the cards narrow to match, in both languages. <kbd>Enter</kbd> picks the marked intent, and <kbd>Esc</kbd> clears the box.",
     pad:6
   },
   {
+    id:"rail",
     sel:"#intentRail",
     title:"Intent panel",
-    body:"An intent names what the customer has come about. Picking one brings its replies forward, ringed <b class=\"t-go\">green</b>, and its phrase fills <span class=\"fillmiss\">INTENT</span> wherever a reply uses it. <kbd>Ctrl</kbd>+click picks several. The star keeps the intents you use most at the top; hold <kbd>Ctrl</kbd> over a star to edit that intent, or <kbd>Shift</kbd> to hide it. The <span data-icon=\"pin\"></span> lock keeps the panel open on a narrow window.",
+    body:"An intent names what the customer has come about. Click one and its replies come forward, ringed <b class=\"t-go\">green</b>, with its phrase filling <span class=\"fillmiss\">INTENT</span> wherever a reply uses it. <kbd>Ctrl</kbd>+click picks several, and the star keeps the ones used most at the top.",
     pad:8,
     prep:tourEnsureRail
   },
   {
+    id:"cards",
     sel:()=>tourPickFirstCard()||$("#list"),
     title:"Cards",
-    body:"Click a reply and the whole of it is on the clipboard, with the greeting, the name and the signature filled in, ready to paste into the chat. <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> do the same from the keyboard, and <kbd>Shift</kbd>+<kbd>Enter</kbd> copies the other language. A card showing <b>1/2</b> or <b>STEP 1/3</b> holds several replies, each copied on its own. The small tags say why a card stands where it does; resting the pointer on one names the reason.",
+    body:"Click a reply: the whole of it is copied, greeting, name and signature filled in, ready to paste into the chat. A card marked <b>1/2</b> or <b>STEP 1/3</b> holds several, each copied on its own. <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> do the same from the keyboard.",
     pad:6,
     prep:()=>{ tourScrollListTop(); tourPickFirstCard(); }
   },
   {
+    id:"pills",
     sel:"#pills",
     title:"Category pills",
-    body:"Filter cards by category; <kbd>Ctrl</kbd>+click keeps several. The rings say why a pill stands out: <b class=\"t-go\">green</b> - it holds a card linked to your intent; <b class=\"t-acc\">blue</b> - a supporting category, useful whatever the customer asked. <kbd>←</kbd> <kbd>→</kbd> step through them, from the search box too. Drag pills to reorder; double-click <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> to reset the order.",
+    body:"Click a category to see only its cards; <kbd>Ctrl</kbd>+click keeps several. A <b class=\"t-go\">green</b> ring marks one holding a card for the chosen intent, and a <b class=\"t-acc\">blue</b> one a supporting category, useful for any question.",
     pad:8,
     prep:tourEnsurePills
   },
   {
+    id:"tabs",
     sel:"#tabsWrap",
     title:"Conversations",
-    body:()=>t("When several customers are open in your chat at once, give each one a tab here. Every tab keeps its own customer name, intent, language and categories, so a reply never carries the wrong name. {KEY} moves to the next tab from anywhere and {NEW} opens one; your own name and the theme are shared by all of them.")
+    body:()=>t("When several customers are on the chat at once, each gets a tab here with their own name, intent and language, so a reply never carries the wrong name. {NEW} opens one and {KEY} moves to the next.")
             .replace("{KEY}",chordChips("tabNext")).replace("{NEW}",chordChips("tabNew")),
     pad:6
   },
   {
+    id:"seg",
     sel:"#seg",
     title:"English / Polish",
     // A function, not a string: the key it names is rebindable, so it is read at show time
-    body:()=>t("Switches the replies between English and Polish for this conversation, so each customer is answered in their own language; {KEY} flips it from anywhere. An intent picked from the list follows the switch and typed text does not, and a card with no Polish shows its English rather than a gap.")
+    body:()=>t("Switches this conversation's replies between English and Polish, so each customer is answered in their own language. {KEY} does it from anywhere.")
             .replace("{KEY}",chordChips("langToggle")),
     pad:6
   },
   /* One step per control on a card header, ordered by how far each one goes rather than by
      where it sits on the row: the star only SORTS a card, the eye puts it away, the pencil
-     rewrites it - and the editor opens straight after the pencil that opens it, rather than
-     several steps later where the connection has to be carried. `cardBtn` is the same
-     resolve/prep pair three times over: pick the first card, then point at one of its buttons. */
+     rewrites it - and the editor opens straight after the pencil that opens it. `cardBtn` is the
+     same resolve/prep pair three times over: pick the first card, then point at one of its
+     buttons. */
   {
+    id:"star",
     sel:()=>cardBtn(".star-btn"),
     prep:tourRevealCardActions,
     title:"Favourites",
-    body:"The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> to a <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b> block at the top of the list. The gold star and the <span class=\"cbadge fav\">fav</span> tag mark it - separate from the <b class=\"t-go\">green</b> of an intent link and the <b class=\"t-acc\">blue</b> of a supporting category.",
+    body:"The star lifts a card to the top of its category, and under <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> into <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b> at the head of the list.",
     pad:8
   },
   {
+    id:"hide",
     sel:()=>cardBtn('[data-act="hide"]'),
     prep:tourRevealCardActions,
     title:"Put a card away",
-    body:"The eye puts a card away: it greys out and sinks to the foot of its own category, and it shows nowhere else - not in All, and not in a search. Open that category with the box empty and the same button brings it back. Putting a starred card away also unstars it. Nothing is deleted; <b class=\"t-bad\">Delete</b> lives only in the editor and in Library.",
+    body:"The eye puts a card away: it greys out at the foot of its own category and shows nowhere else. The same button there brings it back, and nothing is deleted.",
     pad:8
   },
   {
+    id:"edit",
     sel:()=>cardBtn('[data-act="edit"]'),
     prep:tourRevealCardActions,
     title:"Edit a card",
-    body:"The pencil opens the card for editing - both languages, the internal note, the search keywords, and everything about how it behaves. Editing a built-in card writes a personal override <b>on this computer</b>; the catalog itself is untouched, and the editor's <b>Reset</b> brings the original wording back whenever you want it.",
+    body:"The pencil opens the card: both languages, the internal note, the keywords. Changes stay on this computer, and the editor's <b>Reset</b> brings back the catalog's own words.",
     pad:8
   },
   {
-    /* Opened for real rather than described. The editor is four folds and a row of buttons, and
-       no amount of prose about it lands the way seeing it does. First card if there is one; a
-       New card on an empty Etiuda, which is the state a first-run tour is usually in. */
+    /* Opened for real rather than described: the editor is four folds and a row of buttons, and
+       no amount of prose about it lands the way seeing it does. */
+    id:"editor",
     sel:"#modalCard",
     modal:true,
     pad:4,
     title:"The card editor",
-    body:"<span class=\"t-sec\">Content</span> holds the text in both languages, with the internal note. Folded below: <span class=\"t-sec\">Keywords</span>, <span class=\"t-sec\">Category</span>, <span class=\"t-sec\">Linked intents</span> - which makes a card ring green under an intent, and marks its category relevant to those intents - and <span class=\"t-sec\">Advanced</span>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Library</b> opens the same screen.",
+    body:"<span class=\"t-sec\">Content</span> holds the text in both languages and the internal note; the folds below hold the keywords, the category, the linked intents and the finer settings. <b>Cancel</b> leaves everything as it was.",
     prep:()=>{
       hooks.openCardEditor((typeof cards!=="undefined" && cards && cards.length) ? cards[0].id : null);
     }
   },
   /* AFTER the editor, not before it: the four steps above act on a card that already exists,
-     and this is the one that makes the one that does not - into the screen just shown. Between
-     the pencil and the editor it would have cut the pencil from what it opens. */
+     and this is the one that makes the one that does not - into the screen just shown. */
   {
+    id:"add",
     sel:"#addCardFab",
     title:"A card of your own",
-    body:"The <b>+</b> in the corner starts a new card from wherever you are - the same screen the pencil opens, empty. Inside a category it files into that one; under <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> the editor asks which, in its <span class=\"t-sec\">Category</span> section.",
+    body:"The <b>+</b> starts a new card of your own, in the category open at the time, or in one the editor asks for.",
     pad:10
   },
   {
+    id:"facts",
     sel:"#factsBtn",
     title:"Quick facts",
     body:()=>eHost()
-      ? t("Fees, deadlines and links you quote to customers. Clicking a link copies the whole address, ready to paste into the chat. The text is yours to edit, and it stays on this computer.")
-      : t("Fees, deadlines and links you quote to customers. Clicking a link copies the whole address, ready to paste into the chat. The text is yours to edit, and it stays in this browser."),
+      ? t("Fees, deadlines and links to quote. A click on a link copies it whole, and the text is yours to edit; it stays on this computer.")
+      : t("Fees, deadlines and links to quote. A click on a link copies it whole, and the text is yours to edit; it stays in this browser."),
     pad:8
   },
   {
+    id:"theme",
     sel:"#theme",
     title:"Light and dark",
-    body:"Etiuda follows your system's setting, and keeps following it. Clicking here is what turns that into a choice, and it is remembered from then on.",
+    body:"Etiuda follows the system's light or dark until a click here makes it a choice of your own.",
     pad:8
   },
   {
-    /* The button, with the menu SHUT. The menu hangs below and to the left of a corner
-       button, so a spotlight covering both encloses a wedge of empty header and reads as
-       two things being pointed at. A menu is also the one thing a tour need not
-       demonstrate - it opens on a click and closes on the next. */
+    /* The button, with the menu SHUT: a spotlight covering both encloses a wedge of empty header,
+       and a menu is the one thing a tour need not demonstrate. */
+    id:"menu",
     sel:"#settingsBtn",
     title:"Menu",
-    body:"Everything that is not a card. <b>Library</b> is where the content lives, <b>Settings</b> holds the interface language, the appearance and the keyboard shortcuts, and the entries in the middle hide or lock the intent panel and the category bar. Hold <kbd>Ctrl</kbd> to peek at either while it is hidden. This tour is here too, under <b>Show tour…</b>.",
+    body:"Everything that is not a card: the Library, Settings, the panels' switches, and this tour again under <b>Show tour…</b>.",
     pad:8
   },
   {
-    /* Opens exactly as the user's own Manage opens - on Catalog & data. Forcing a section
-       open would silently change mgOpen - session state - for the rest of the session: a
-       step showing the real thing must not adjust the real thing to suit itself. The body
-       names all four sections anyway, which is what the step is for. */
+    /* Opens exactly as the user's own Library opens: a step showing the real thing must not
+       adjust the real thing to suit itself. */
+    id:"library",
     sel:"#modalCard",
     modal:true,
     pad:4,
     title:"Library",
-    body:"<b><span data-icon=\"settings\"></span> → Library</b> holds everything Etiuda knows: every card, intent and category, to add, edit, hide or move. <span class=\"t-sec\">Catalog &amp; data</span> is where the team's catalog comes in, and where your own improvements go out as a file for whoever keeps the wording.",
+    body:"<b><span data-icon=\"settings\"></span> → Library</b> holds every card, intent and category, to add, edit, hide or move. Catalogs are loaded here too, and your own improvements go out from here as a file for whoever keeps the wording.",
     prep:()=>{ hooks.openManage(); }
   },
   {
     // Same rule as Library above: opened as the menu opens it, no section forced.
+    id:"settings",
     sel:"#modalCard",
     modal:true,
     pad:4,
     title:"Settings",
-    body:"<b><span data-icon=\"settings\"></span> → Settings</b> is the program itself: your name, the language of its buttons, its look and its shortcuts. Nothing here touches a card.",
+    body:"<b><span data-icon=\"settings\"></span> → Settings</b>: your name, the language of the buttons, the look and the shortcuts. Nothing here touches a card.",
     prep:()=>{ openSettings(); }
   },
   {
+    id:"done",
     sel:".brand",
     title:"You are set",
-    body:"That is the whole of it: the customer's name, the word for what they want, a click, and a paste into the chat. Every shortcut is listed under <span data-icon=\"settings\"></span> <b>→ About Etiuda</b>, and <b>Show tour…</b> in the same menu brings this back.",
+    body:"That is the whole tour, and Etiuda is ready for the first customer. <b>Show tour…</b> in the <span data-icon=\"settings\"></span> Menu brings it back, and <b>About Etiuda</b> lists every shortcut.",
     pad:10
   }
 ];
+// A step is on when it has no condition or its condition holds now.
+function stepOn(i){ const s=TOUR_STEPS[i]; return !!s && (!s.when || s.when()); }
+function onFrom(i,dir){ for(let j=i; j>=0 && j<TOUR_STEPS.length; j+=dir) if(stepOn(j)) return j; return -1; }
 
 
 function tourEls(){
   return {
     root:$("#tourRoot"),
-    shade:$("#tourShade"),
     hole:$("#tourHole"),
+    field:$("#tourField"),
     card:$("#tourCard"),
     title:$("#tourTitle"),
     body:$("#tourBody"),
@@ -343,6 +383,8 @@ function placeTourUI(){
   if(!tourRunning) return;
   const step=TOUR_STEPS[tourIdx];
   if(!step) return;
+  // A step whose condition has lapsed while it stood (the desk is no longer empty) is done.
+  if(!stepOn(tourIdx)){ showTourStep(onFrom(tourIdx+1,1)); return; }
   const els=tourEls();
   if(!els.root||!els.card) return;
   const pad=step.pad!=null?step.pad:8;
@@ -384,8 +426,6 @@ function placeTourUI(){
   } else if(els.hole){
     els.hole.style.display="none";
   }
-  // No hole to cut: the shade takes the scrim over the whole window, at the same darkness.
-  els.root.classList.toggle("no-hole", !holeRect);
 
   /* THE BUBBLE GOES BELOW ITS TARGET WHERE IT CAN, and the routine decides the rest. A notice
      under a control leaves the control readable, which is the point of pointing at it; a dialog
@@ -413,9 +453,13 @@ function scheduleTourPlace(){
 }
 function showTourStep(i){
   if(i<0||i>=TOUR_STEPS.length){ endTour(true); return; }
+  // Whether the keyboard is driving the tour: only then does a new step take the focus.
+  const keyed=tourHasFocus();
   tourIdx=i;
   const step=TOUR_STEPS[i];
   const els=tourEls();
+  // Where the tour stands survives a reload: loading a catalog reloads the page.
+  ssSet(TOUR_AT,step.id);
   /* A step that shows a dialog opens it in its own prep and declares `modal`. Every other step
      shuts whatever is open, so stepping backwards out of one does not leave a dialog standing
      over the rest of the tour - and the class goes on BEFORE prep runs, so the dialog is laid
@@ -434,15 +478,31 @@ function showTourStep(i){
   if(step.prep){
     try{ step.prep(); }catch(_){}
   }
-  if(els.title) els.title.textContent=t(step.title||"");
+  if(els.title) els.title.textContent=t((typeof step.title==="function"?step.title():step.title)||"");
   // A step body may be a function (copy naming a rebindable key is read at show time)
   /* A step body is authored markup, so it is translated whole and injected raw - the same
      rule the shortcut hints follow. A function body has already composed its key. */
   if(els.body){ els.body.innerHTML=t((typeof step.body==="function"?step.body():step.body)||""); fillProseIcons(els.body); }
+  // The counter counts the steps this desk is shown, which leaves the load step out of a full one.
+  const on=TOUR_STEPS.map((_,k)=>k).filter(stepOn);
   if(els.step) els.step.textContent=t("Tour {N} / {TOTAL}")
-    .replace("{N}",i+1).replace("{TOTAL}",TOUR_STEPS.length);
-  if(els.prev) els.prev.hidden=i===0;
-  if(els.next) els.next.textContent=t(i===TOUR_STEPS.length-1 ? "Finish" : "Next");
+    .replace("{N}",on.indexOf(i)+1).replace("{TOTAL}",on.length);
+  if(els.prev) els.prev.hidden=onFrom(i-1,-1)<0;
+  if(els.next){
+    els.next.hidden=!!step.waits;
+    els.next.textContent=t(onFrom(i+1,1)<0 ? "Finish" : "Next");
+  }
+  let nameInp=null;
+  if(els.field){
+    els.field.hidden=!step.name;
+    els.field.innerHTML=step.name ? nameFieldHtml("tourName","tourNamePrev") : "";
+    if(step.name){
+      nameInp=wireNameField(els.field,"");
+      if(nameInp) nameInp.onkeydown=e=>{
+        if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); tourNext(); }
+      };
+    }
+  }
   // Scroll target into view before measuring
   /* Not `t`: that name belongs to the translation function, and a const of the same name
      shadows it across this entire scope - the copy above would throw before it ran. */
@@ -457,27 +517,57 @@ function showTourStep(i){
      a panel unfolding changes the target's box, and the bubble is placed against the box. */
   scheduleTourPlace();
   setTimeout(scheduleTourPlace, 300);
-  selectTourNext();
+  syncTourBehind();
+  /* THE PAGE KEEPS ITS KEYBOARD: a step takes the focus only where it asks for typing, or where
+     the keyboard was already walking the tour's own buttons. */
+  if(nameInp){ try{ nameInp.focus({preventScroll:true}); }catch(_){} }
+  else if(keyed) selectTourNext();
+  else clearTourFocus();
 }
-function startTour(){
-  const invite=$("#tourInvite");
-  if(invite) invite.hidden=true;
-  closeSettingsMenu();
-  closeFactsPanel();
-  if(modalOpen()) closeModal();
+/** From the Menu, or by itself (`auto`): a first run, or a reload in the middle of one, which
+ *  finds whatever the person had open still open, and leaves it so. */
+function startTour(from,auto){
+  if(!auto){
+    closeSettingsMenu();
+    closeFactsPanel();
+    if(modalOpen()) closeModal();
+  }
   const els=tourEls();
   if(!els.root) return;
+  let i=onFrom(Math.max(0,from|0),1);
+  // Back on an empty desk after the load step, the load step is where the tour stands.
+  const L=TOUR_STEPS.findIndex(x=>x.id==="load");
+  if(i>L && stepOn(L)) i=L;
+  if(i<0){ ssDel(TOUR_AT); return; }
   tourRunning=true;
-  tourIdx=0;
+  tourIdx=i;
   els.root.hidden=false;
   els.root.setAttribute("aria-hidden","false");
   els.root.classList.toggle("still", mgReduceMotion());
   // Force reflow then animate in
   void els.root.offsetWidth;
   els.root.classList.add("on");
-  showTourStep(0);
-  toast("Press Esc to leave the tour.");
+  showTourStep(i);
 }
+/* THE FIRST RUN'S TOUR starts once the logo has gathered on the empty desk (empty-mark.js takes
+   1.1 s), so nothing covers it while it forms. */
+const TOUR_AUTO_MS=1300;
+const TOUR_AT="eTourAt";
+/** Whether this launch belongs to the tour: a first run, or a reload in the middle of one. */
+function tourDueAtBoot(){ return !!ssGet(TOUR_AT) || (!tourSeen() && !tourInviteDismissed()); }
+function maybeStartTour(){
+  const at=ssGet(TOUR_AT);
+  if(at){
+    const i=TOUR_STEPS.findIndex(x=>x.id===at);
+    setTimeout(()=>{ if(!tourRunning) startTour(i<0?0:i,true); },300);
+    return;
+  }
+  if(tourSeen()||tourInviteDismissed()) return;
+  setTimeout(()=>{ if(!tourRunning && !tourSeen() && !tourInviteDismissed()) startTour(0,true); },TOUR_AUTO_MS);
+}
+// What waits for the tour to end: the catalog offer a first run holds back (catalog-offer.js).
+let tourAfter=[];
+function afterTour(fn){ tourAfter.push(fn); }
 function endTour(completed){
   if(!tourRunning && tourIdx<0) return;
   tourRunning=false;
@@ -489,6 +579,8 @@ function endTour(completed){
     els.root.setAttribute("aria-hidden","true");
   }
   if(els.hole){ els.hole.classList.remove("pulse"); els.hole.style.display="none"; }
+  // The name field goes with the tour, so the question at the first signed copy is not held back.
+  if(els.field){ els.field.innerHTML=""; els.field.hidden=true; }
   if(els.arrow){ els.arrow.classList.remove("show"); els.arrow.style.display="none"; }
   // Leaving mid-tour must not strand a dialog or a menu the tour opened.
   if(modalOpen()) closeModal();
@@ -499,8 +591,28 @@ function endTour(completed){
   if(tourTargetRO){ try{ tourTargetRO.disconnect(); }catch(_){} }
   if(completed) markTourDone();
   else markTourInviteDismissed();
+  ssDel(TOUR_AT);
+  if(els.root) els.root.classList.remove("behind");
+  if(!completed) toast("The tour waits in the Menu, under Show tour…");
   focusIntentOnOpen();
+  const later=tourAfter; tourAfter=[];
+  later.forEach(fn=>{ try{ fn(); }catch(_){} });
 }
+/* WHEN A WINDOW OPENS OVER THE PAGE, the bubble steps back behind it and waits: it comes forward
+   again when the window closes. A window the step itself opened is the one it points at. */
+function syncTourBehind(){
+  const els=tourEls();
+  if(!els.root) return;
+  const step=TOUR_STEPS[tourIdx];
+  const covered=!!document.querySelector("body > .modal:not([hidden])");
+  els.root.classList.toggle("behind", tourRunning && covered && !(step && step.modal));
+}
+function tourHasFocus(){
+  const card=$("#tourCard");
+  return !!(tourRunning && card && document.activeElement && card.contains(document.activeElement));
+}
+// A dialog the tour opened leaves the keyboard where the tour has it.
+function tourShowsDialog(){ const step=TOUR_STEPS[tourIdx]; return !!(tourRunning && step && step.modal); }
 /* Arrow keys move a selection ring across the tour's own buttons instead of changing step
    (stepping is Enter, or clicking). Order follows the DOM - Skip, Back, Next - and wraps,
    so → from Next lands back on Skip. Back is skipped on step 1 where it is hidden. */
@@ -549,26 +661,36 @@ function observeTourTarget(tb){
 }
 function tourNext(){
   if(!tourRunning) return;
-  if(tourIdx>=TOUR_STEPS.length-1) endTour(true);
-  else showTourStep(tourIdx+1);
+  const step=TOUR_STEPS[tourIdx];
+  /* The name step's field is its answer: a name given is kept and the question is not asked again;
+     left empty, the first signed copy asks, as it would without the tour. */
+  if(step && step.name){
+    const inp=$("#tourName"), v=inp ? inp.value.trim() : "";
+    if(v) keepAgentName(v); else if(agentName()) setAgentName("");
+  }
+  const n=onFrom(tourIdx+1,1);
+  if(n<0) endTour(true);
+  else showTourStep(n);
 }
 function tourPrev(){
   if(!tourRunning) return;
-  if(tourIdx>0) showTourStep(tourIdx-1);
+  const n=onFrom(tourIdx-1,-1);
+  if(n>=0) showTourStep(n);
 }
 function wireTourUi(){
   const els=tourEls();
   if(els.next) els.next.onclick=()=>tourNext();
   if(els.prev) els.prev.onclick=()=>tourPrev();
   if(els.skip) els.skip.onclick=()=>endTour(false);
-  if(els.shade) els.shade.onclick=()=>{}; // absorb clicks; do not dismiss accidentally
-  const inv=$("#tourInvite"), startB=$("#tourInviteStart"), disB=$("#tourInviteDismiss");
-  if(startB) startB.onclick=()=>{
-    if(inv) inv.hidden=true;
-    startTour();
-  };
-  if(disB) disB.onclick=()=>{ if(inv) inv.hidden=true; markTourInviteDismissed(); };
-  addEventListener("resize",placeTourInvite);
+  // A window opening or closing over the page moves the bubble behind it or back.
+  if(typeof MutationObserver==="function"){
+    try{
+      const mo=new MutationObserver(()=>{ if(tourRunning){ syncTourBehind(); scheduleTourPlace(); } });
+      mo.observe(document.body,{childList:true});
+      const shared=$("#modal");
+      if(shared) mo.observe(shared,{attributes:true, attributeFilter:["hidden"]});
+    }catch(_){}
+  }
   // Reposition if sticky header / rail geometry changes
   if(typeof ResizeObserver==="function"){
     try{
@@ -579,36 +701,6 @@ function wireTourUi(){
     }catch(_){}
   }
 }
-/* First run asks at most one question at a time, in order of consequence: 1. the
-     sibling-catalog offer (the bigger decision, and it reloads); 2. the "New here?"
-     invite. Declining the offer calls straight back into here, so nothing is lost by
-     going second. */
-function maybeShowTourInvite(){
-  if(tourSeen()||tourInviteDismissed()) return;
-  const inv=$("#tourInvite");
-  if(!inv) return;
-  // Delay so first paint and intent focus settle
-  setTimeout(()=>{
-    if(tourRunning||tourSeen()||tourInviteDismissed()) return;
-    if(document.getElementById("eCatalogModal")) return;   // catalog question is still open
-    if(document.getElementById("eAgentModal")) return;     // and so is the name, which closes into this
-    const body=$("#tourInviteBody"), start=$("#tourInviteStart");
-    if(body) body.textContent=t("How a reply gets from here to your customer, in about a minute.");
-    if(start) start.textContent=t("Show tour");
-    inv.hidden=false;
-    placeTourInvite();
-  }, 900);
-}
-/* THE INVITE HANGS FROM THE BUTTON IT IS ABOUT. Floating in the corner it was attached to
-   nothing and sat over the last card and the add disc; Show tour lives in the menu, so the
-   menu's button is what it points at. Placed again on a resize, since it may outlive one. */
-function placeTourInvite(){
-  const inv=$("#tourInvite"), btn=$("#settingsBtn");
-  if(!inv||inv.hidden||!btn) return;
-  const r=btn.getBoundingClientRect();
-  placeBubble(inv, {top:r.top, left:r.left, width:r.width, height:r.height}, {width:300});
-}
-
 export {
   tourActive,
   scheduleTourPlace,
@@ -617,5 +709,9 @@ export {
   moveTourFocus,
   activateTourFocus,
   wireTourUi,
-  maybeShowTourInvite
+  tourHasFocus,
+  tourShowsDialog,
+  tourDueAtBoot,
+  maybeStartTour,
+  afterTour
 };

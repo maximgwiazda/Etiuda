@@ -11,7 +11,9 @@ import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalog
   eOpenedRefused, eReadCatalogFile } from "./host.js";
 import { ejectCatalog, ejectedJustNow } from "./local-memory.js";
 import { MG_REOPEN, lsSet, nsGet, nsSet, ssGet } from "./storage.js";
-import { maybeShowTourInvite } from "./tour.js";
+import { tourDueAtBoot, afterTour } from "./tour.js";
+import { placeBubble } from "./bubble.js";
+import { markCut } from "./cut-text.js";
 import { catalogAwaitingLine, catalogCountsLine, t, toast } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { cards, wholeThingEmpty } from "./app-state.js";
@@ -78,6 +80,8 @@ function eOfferCatalogAtBoot(){
   /* Read whatever else this launch decides, so the launch after an eject asks like any other. */
   if(ejectedJustNow()) return;
   const at=+(nsGet("CatalogNoAt")||0), mt=eCatalogMtime(), asked=eOpenedWith();
+  // A first run's tour asks for a catalog in its own step, so a found file waits for it to end.
+  if(!asked && tourDueAtBoot()){ afterTour(eOfferCatalogAtBoot); return; }
   /* AN EMPTY DESK IS ASKED EVERY TIME, board 399's rule and 424's shape for it: a refusal was
      said to one launch, and somebody looking at nothing with a catalog in the folder is the
      fault the whole item answers. A desk with anything on it keeps the remembered no. */
@@ -283,9 +287,11 @@ function paintCatalogList(){
     }
   });
 }
-/* Both channels end here: same guards, same wording, same promise about what is kept.
+/* Every channel ends here: same guards, same wording, same promise about what is kept.
    Returns whether anything was actually put on screen, which is how an explicit check
    knows to say the file matched. */
+/* A BUBBLE HANGING FROM THE TOP BAR'S CATALOG NAME, never a window: the desk stays usable under it,
+   and a click anywhere else leaves it standing until it is answered. */
 function eOfferCatalogDialog(c,src){
   const sig=eCatalogSignature(c);
   /* Silent when the sibling is already what is loaded. Offered when nothing is loaded, and
@@ -297,14 +303,14 @@ function eOfferCatalogDialog(c,src){
      that answered "already have it" about a file you declined would simply be untrue. */
   if(!src.force && src.refusedKey && nsGet(src.refusedKey)===sig) return false;
   /* NOT OVER THE LIBRARY, and only a file somebody pointed at gets past this. That screen lists
-     every catalog in the folder, marks the one loaded and offers Load on each row, so a dialog
+     every catalog in the folder, marks the one loaded and offers Load on each row, so a question
      about the folder argues with a person already looking at the answer. MG_REOPEN as well as
      the list itself: a Load or an Eject made there reloads, and the offer would arrive on the far
      side of the reload, over the screen the act was made in. Ruled 2026-09-17. */
   if(!src.asked && (document.getElementById("mgCatList") || ssGet(MG_REOPEN))){
     paintCatalogList(); return false;
   }
-  if(document.getElementById("eCatalogModal")) return false;
+  if(document.getElementById("eCatalogOffer")) return false;
   const replacing=!!active;
   const updating=isCatalogUpdate(c,active);
   const older=updating && catalogEditionOlder(c.version, active.version);
@@ -312,78 +318,92 @@ function eOfferCatalogDialog(c,src){
         i=catalogIntentCount(c),
         k=Object.keys(c.categories||{}).length;
   const wrap=document.createElement("div");
-  wrap.className="modal";
-  wrap.id="eCatalogModal";
-  wrap.innerHTML='<div class="modal-bg"></div><div class="modal-card">'
+  wrap.className="bub bub-ask e-offer";
+  wrap.id="eCatalogOffer";
+  wrap.setAttribute("role","dialog");
+  wrap.setAttribute("aria-labelledby","ecTitle");
+  wrap.innerHTML=
     /* REPLACING IS THE MIRROR OF LOADING, ruled 2026-09-17: one catalog is being put down and
-       another taken up, which the question asks and no sentence beneath it can improve on. Both
-       channels reach it - a different catalog found in the folder, and one double-clicked - and
-       both said the file beside Etiuda no longer matched, of a build whose catalogs live in a
-       folder of their own. The two editions of ONE catalog keep their sentence: what is at stake
-       there is what happens to this desk's own work, which the screen cannot show. */
-    +'<h2>'+esc(t(older?"Older catalog found":updating?"Updated catalog found"
-        :replacing?"Replace catalog?":"Load catalog?"))+'</h2>'
+       another taken up, which the question asks and no sentence beneath it can improve on. The
+       two editions of ONE catalog keep their sentence: what is at stake there is what happens to
+       this desk's own work, which the screen cannot show. */
+    '<h3 id="ecTitle">'+esc(t(older?"Older catalog found":updating?"Updated catalog found"
+        :replacing?"Replace catalog?":"Load catalog?"))+'</h3>'
     +(updating
-        ? '<p class="modal-sub">'+esc(t(older
-            ? "The file beside Etiuda is an earlier edition than the one you have."
-            : "The catalog beside Etiuda has changed since you loaded it."))+'</p>'
+        ? '<p class="ec-sub">'+esc(t(older
+            ? "This file is an earlier edition than the one loaded now."
+            : "This catalog has changed since it was loaded."))+'</p>'
         : '')
-    /* Name and edition on one line, counts on the next. The date belongs with the name - the
-       two together are WHICH catalog this is, and the counts are how big it is - and moving it
-       up also takes about ninety pixels off a line that was wrapping at 430px and stranding
-       "categories" on its own. */
-    +'<div class="about-body"><b>'+esc(String(c.name||"Catalog"))+'</b>'
+    // Name and edition on one line, counts on the next: WHICH catalog, then how big it is.
+    +'<div class="ec-what"><b>'+esc(String(c.name||"Catalog"))+'</b>'
     +(c.version!=null?' · '+esc(catalogVersionLabel(c.version)):'')
     +(updating && active.version!=null && String(active.version)!==String(c.version)
         ? '<div class="ec-counts">'+esc(t("You have {V}.")).replace("{V}",esc(catalogVersionLabel(active.version)))+'</div>'
         : '')
-    // Non-breaking spaces still hold each number to its noun, so any break lands on a separator.
-    +'<div class="ec-counts">'
     /* A single text node, which the sweep cannot reach inside: the line is built from counted
        noun phrases and the key carries only their order. */
+    +'<div class="ec-counts">'
     +catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
        n, catalogMacroCount(c), i, k)
     +'</div></div>'
     /* The filename is an element, so this paragraph is not a leaf and the sweep would skip
        it - each half is translated where it is written, and the <code> stays between them. */
-    +'<p class="modal-sub" style="margin:10px 0 0">'+src.foundHtml
+    +'<p class="ec-sub">'+src.foundHtml
     +(updating?' '+esc(t("Your own cards and edits are kept.")):'')+'</p>'
-    +'<div class="modal-actions">'
-    +'<button type="button" class="btn" id="ecNo">'+esc(t(replacing?"Keep current":"Start empty"))+'</button>'
+    +'<div class="tour-actions">'
+    +'<button type="button" class="btn" id="ecNo">'+esc(t(replacing?"Keep current":"Not now"))+'</button>'
     +'<button type="button" class="btn primary" id="ecYes">'+esc(t(older?"Load it anyway":updating?"Load the update":replacing?"Load it":"Load catalog"))+'</button>'
-    +'</div></div>';
+    +'</div>';
   document.body.appendChild(wrap);
-  /* Whichever way this closes without loading, the "New here?" invite takes its turn - it was
-     held back while this was open, and it is the only thing left offering a way in. */
-  const close=()=>{
-    document.removeEventListener("keydown", onKey, true);
-    wrap.remove();
-    maybeShowTourInvite();
+  // Placed against the indicator, and again on a resize, since it may outlive one.
+  const place=()=>{
+    const at=document.getElementById("catNow"), r=at && at.getBoundingClientRect();
+    placeBubble(wrap, (r && r.width) ? {top:r.top, left:r.left, width:r.width, height:r.height}
+      : {top:0, left:innerWidth-24, width:0, height:40}, {width:340});
   };
-  /* Esc closes without recording a refusal, so a stray keypress cannot permanently suppress
-     the offer - it simply returns next launch. Only the explicit "Start empty" is remembered.
-     Captured and stopped so the app's own Esc handling does not also fire underneath. */
-  function onKey(e){
+  place();
+  addEventListener("resize",place);
+  const close=()=>{ removeEventListener("resize",place); wrap.remove(); };
+  /* Escape answers nothing and records no refusal, so a stray press only postpones the question
+     to the next launch; it is the bubble's own key, and only while the keyboard is inside it. */
+  wrap.addEventListener("keydown",e=>{
     if(e.key!=="Escape") return;
     e.preventDefault(); e.stopPropagation();
     close();
-  }
-  document.addEventListener("keydown", onKey, true);
-  /* Reloads on success, so nothing after it runs, and the invite appears on the far side by
-     itself, reading the loaded catalog and offering the plain tour rather than the sample.
-     Storage that refuses the catalog returns false instead, and the offer has to come down:
-     left standing over its own failure toast it reads as a button that does nothing. */
+  });
+  /* Reloads on success, so nothing after it runs. Storage that refuses the catalog returns false
+     instead, and the bubble has to come down: left standing over its own failure toast it reads
+     as a button that does nothing. */
   wrap.querySelector("#ecYes").onclick=()=>{ if(src.accept(sig)===false) close(); };
   wrap.querySelector("#ecNo").onclick=()=>{
     /* The date as well as the signature: the signature says WHAT was refused and the date says
        WHEN, which is what lets a later edition of the same file ask again. */
     if(src.refusedKey){ nsSet(src.refusedKey,sig); nsSet(src.refusedKey+"At",String(Date.now())); }
     close();
-    toast(replacing?"Keeping the loaded catalog.":"Starting empty. Load one any time from the Library.");
   };
-  const yes=wrap.querySelector("#ecYes");
-  if(yes && typeof yes.focus==="function") yes.focus();
+  // Only an act of somebody's takes the keyboard; a file found at boot leaves it in the search.
+  if(src.asked){ const yes=wrap.querySelector("#ecYes"); if(yes) yes.focus(); }
   return true;
+}
+/* THE FILE DIALOG'S CATALOG, asked about in the same bubble as every other route. */
+function eOfferPickedCatalog(c,name,accept){
+  const shown=eOfferCatalogDialog(c,{foundHtml:eFoundHtml(name,""), force:true, asked:true,
+    accept:()=>accept()});
+  if(!shown) toast(t("That file matches the catalog you already have."));
+}
+/* THE TOP BAR SAYS WHICH CATALOG IS LOADED, and nothing else: inert, and no replacement for the
+   Library. What is applied decides, as in the Library's list. */
+function paintCatNow(){
+  const el=document.getElementById("catNow");
+  if(!el) return;
+  const held=storedCatalog();
+  const name=String((typeof E_CATALOG_NAME!=="undefined" && E_CATALOG_NAME) || (held && held.name) || "");
+  const own=el.querySelector(".cn-name"), none=el.querySelector(".cn-none");
+  if(own){ own.textContent=name; own.hidden=!name; if(name) markCut(own); }
+  // The sweep translates from the English it finds recorded here, so a language switch follows.
+  if(none){ const key=held?"Unnamed catalog":"No catalog loaded";
+    none.setAttribute("data-i18n-text",key); none.textContent=t(key); none.hidden=!!name; }
+  el.title=name;
 }
 
 /* The watched file. Silent at boot and only while the browser still holds permission:
@@ -391,7 +411,7 @@ function eOfferCatalogDialog(c,src){
    time is a skip, not the answer - the signature decides whether anything really changed. */
 function eCheckWatchedFile(interactive){
   if(!eWatchSupported()) return;
-  if(document.getElementById("eCatalogModal")) return;
+  if(document.getElementById("eCatalogOffer")) return;
   eWatchGet().then(h=>{
     if(!h){ if(interactive) toast(t("No catalog file is being watched.")); return null; }
     const q=h.queryPermission?h.queryPermission({mode:"read"}):"granted";
@@ -455,6 +475,8 @@ export {
   eOfferCatalog,
   eOfferCatalogAtBoot,
   eOfferCatalogDialog,
+  eOfferPickedCatalog,
+  paintCatNow,
   loadCatalogFromFolder,
   wireHostCatalogWatch
 };

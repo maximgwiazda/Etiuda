@@ -11,6 +11,7 @@ const SLOTS = [
   "sampleReady",
   "loadSampleCatalog",
   "importCatalogHere",
+  "offerPickedCatalog",
   "openManage",
   "mgCardsIn",
   "openCategoryEditor",
