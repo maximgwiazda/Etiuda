@@ -28,10 +28,10 @@ function wireHeaderMenus(){
     // What opens a screen takes the keyboard with it, so nothing is handed back underneath.
     if(act==="settings"||act==="manage"||act==="tour"||act==="about") menuReturn=null;
     // Add actions sit with the things they create, so this menu carries none of them.
-    if(act==="settings"){ closeSettingsMenu(); hooks.openSettings(); }
-    else if(act==="manage"){ closeSettingsMenu(); hooks.openManage(); }
-    else if(act==="tour"){ closeSettingsMenu(); hooks.startTour(); }
-    else if(act==="about"){ closeSettingsMenu(); openAbout(); }
+    if(act==="settings"){ hooks.openSettings(); closeSettingsMenu(); }
+    else if(act==="manage"){ hooks.openManage(); closeSettingsMenu(); }
+    else if(act==="tour"){ hooks.startTour(); closeSettingsMenu(); }
+    else if(act==="about"){ openAbout(); closeSettingsMenu(); }
     else if(act==="rail"){ toggleRail(); }
     else if(act==="pills"){ togglePills(); }
   };
