@@ -73,7 +73,7 @@ function buildPanel(){
     +'<p class="e-cust-coach" id="eCustCoach" role="status"></p>'
     +'<div class="e-cust-box" id="eCustBox"><textarea id="eCustInp" rows="3" spellcheck="false"'
     +' aria-label="'+esc(t("Message"))+'"></textarea>'
-    +'<button type="button" class="btn primary" id="eCustSend">'+esc(t("Send"))+'</button></div>';
+    +'<button type="button" class="btn" id="eCustSend">'+esc(t("Send"))+'</button></div>';
   document.body.appendChild(el);
   el.querySelector("#eCustX").onclick=()=>closePractice();
   el.querySelector("#eCustSend").onclick=send;
@@ -189,9 +189,11 @@ function showEnd(){
   end.className="e-cust-end";
   end.innerHTML='<h3>'+esc(t("That is all it is."))+'</h3>'
     +'<p>'+esc(t("One word, one click, one paste. The greeting for the hour, her name and your signature were Etiuda's part."))+'</p>'
-    +'<div class="e-cust-acts"><button type="button" class="btn" id="eCustAgain">'+esc(t("Once more"))+'</button>'
+    +'<div class="modal-actions e-cust-acts"><button type="button" class="btn" id="eCustAgain">'+esc(t("Once more"))+'</button>'
     +(ePractice()?'':'<button type="button" class="btn primary" id="eCustNext">'+esc(t("Next"))+'</button>')+'</div>';
   p.appendChild(end);
+  const log=document.getElementById("eCustLog");
+  if(log) log.scrollTop=log.scrollHeight;
   end.querySelector("#eCustAgain").onclick=()=>startPractice();
   const nx=end.querySelector("#eCustNext");
   if(nx){ nx.onclick=()=>closePractice(); try{ nx.focus(); }catch(e){} }
@@ -219,7 +221,8 @@ function firstAfternoonDue(){
   return !!eHost() && !ePractice() && nsGet("Sample")==="1" && lsGet(E_HELLO_DONE)!=="1";
 }
 function firstAfternoonOpen(){
-  return !!(document.getElementById("eHello") || document.getElementById("eOwnAsk") || panel());
+  return !!(document.getElementById("eHello") || document.getElementById("eOwnAsk") || panel()
+    || document.getElementById("eOwnImport") || document.getElementById("eOwnDone"));
 }
 function smallDialog(id,html,wire){
   const wrap=document.createElement("div");

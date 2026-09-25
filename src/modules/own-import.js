@@ -218,7 +218,8 @@ function showDone(n,aside){
     +'<p class="modal-sub">'+esc(t("Type a word from any of them at the top."))+'</p>'
     +'<p class="modal-sub">'+esc(t("New card adds another, at any time."))+'</p>'
     +'<div class="modal-actions"><button type="button" class="btn primary" id="eOwnOk">'+esc(t("OK"))+'</button></div>');
-  wrap.querySelector("#eOwnOk").onclick=close;
+  // The tour's invite waited while this stood; it may take its turn now.
+  wrap.querySelector("#eOwnOk").onclick=()=>{ close(); try{ hooks.maybeShowTourInvite(); }catch(e){} };
   try{ wrap.querySelector("#eOwnOk").focus(); }catch(e){}
 }
 function wireOwnImport(){

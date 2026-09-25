@@ -2345,7 +2345,7 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 .e-cust-end{padding:10px 12px 12px;border-top:1px solid var(--line)}
 .e-cust-end h3{margin:0 0 4px;font:600 15px var(--sans-display)}
 .e-cust-end p{margin:0 0 10px;font-size:13px;line-height:1.45;color:var(--dim);text-wrap:pretty}
-.e-cust-acts{display:flex;gap:8px;justify-content:flex-end}
+.e-cust-end .e-cust-acts{padding:0}
 /* Bringing in one's own replies: a paste box and a drop line, then what was found. */
 .e-own-text{width:100%;box-sizing:border-box;min-height:150px;resize:vertical;padding:8px 10px;
   border:1px solid var(--line-strong);border-radius:var(--radius-sm,8px);background:var(--panel);color:var(--ink);
@@ -17858,7 +17858,7 @@ What you type stays in this browser only.`;
     el.id = "eCustomer";
     el.setAttribute("role", "complementary");
     el.setAttribute("aria-label", PRACTICE_WHO[P.lang]);
-    el.innerHTML = '<div class="e-cust-head"><b class="e-cust-who" data-i18n-skip>' + esc(PRACTICE_WHO[P.lang]) + '</b><button type="button" class="modal-x" id="eCustX" title="' + esc(t("End the practice")) + '">' + ICON_X + '</button></div><div class="e-cust-log" id="eCustLog" aria-live="polite" data-i18n-skip></div><p class="e-cust-coach" id="eCustCoach" role="status"></p><div class="e-cust-box" id="eCustBox"><textarea id="eCustInp" rows="3" spellcheck="false" aria-label="' + esc(t("Message")) + '"></textarea><button type="button" class="btn primary" id="eCustSend">' + esc(t("Send")) + "</button></div>";
+    el.innerHTML = '<div class="e-cust-head"><b class="e-cust-who" data-i18n-skip>' + esc(PRACTICE_WHO[P.lang]) + '</b><button type="button" class="modal-x" id="eCustX" title="' + esc(t("End the practice")) + '">' + ICON_X + '</button></div><div class="e-cust-log" id="eCustLog" aria-live="polite" data-i18n-skip></div><p class="e-cust-coach" id="eCustCoach" role="status"></p><div class="e-cust-box" id="eCustBox"><textarea id="eCustInp" rows="3" spellcheck="false" aria-label="' + esc(t("Message")) + '"></textarea><button type="button" class="btn" id="eCustSend">' + esc(t("Send")) + "</button></div>";
     document.body.appendChild(el);
     el.querySelector("#eCustX").onclick = () => closePractice();
     el.querySelector("#eCustSend").onclick = send;
@@ -17995,8 +17995,10 @@ What you type stays in this browser only.`;
     if (!p) return;
     const end = document.createElement("div");
     end.className = "e-cust-end";
-    end.innerHTML = "<h3>" + esc(t("That is all it is.")) + "</h3><p>" + esc(t("One word, one click, one paste. The greeting for the hour, her name and your signature were Etiuda's part.")) + '</p><div class="e-cust-acts"><button type="button" class="btn" id="eCustAgain">' + esc(t("Once more")) + "</button>" + (ePractice() ? "" : '<button type="button" class="btn primary" id="eCustNext">' + esc(t("Next")) + "</button>") + "</div>";
+    end.innerHTML = "<h3>" + esc(t("That is all it is.")) + "</h3><p>" + esc(t("One word, one click, one paste. The greeting for the hour, her name and your signature were Etiuda's part.")) + '</p><div class="modal-actions e-cust-acts"><button type="button" class="btn" id="eCustAgain">' + esc(t("Once more")) + "</button>" + (ePractice() ? "" : '<button type="button" class="btn primary" id="eCustNext">' + esc(t("Next")) + "</button>") + "</div>";
     p.appendChild(end);
+    const log = document.getElementById("eCustLog");
+    if (log) log.scrollTop = log.scrollHeight;
     end.querySelector("#eCustAgain").onclick = () => startPractice();
     const nx = end.querySelector("#eCustNext");
     if (nx) {
@@ -18026,7 +18028,7 @@ What you type stays in this browser only.`;
     return !!eHost() && !ePractice() && nsGet("Sample") === "1" && lsGet(E_HELLO_DONE) !== "1";
   }
   function firstAfternoonOpen() {
-    return !!(document.getElementById("eHello") || document.getElementById("eOwnAsk") || panel());
+    return !!(document.getElementById("eHello") || document.getElementById("eOwnAsk") || panel() || document.getElementById("eOwnImport") || document.getElementById("eOwnDone"));
   }
   function smallDialog(id, html, wire) {
     const wrap = document.createElement("div");
@@ -22074,7 +22076,13 @@ What you type stays in this browser only.`;
       "eOwnDone",
       "<h2>" + esc(t("Replies brought in: {N}").split("{N}").join(String(n))) + "</h2>" + (aside ? '<p class="modal-sub">' + esc(t("From now on they are the ones waiting for a word. The sample Mirabelka makes room for them and stays in the Library, should it be wanted again.")) + "</p>" : "") + '<p class="modal-sub">' + esc(t("Type a word from any of them at the top.")) + '</p><p class="modal-sub">' + esc(t("New card adds another, at any time.")) + '</p><div class="modal-actions"><button type="button" class="btn primary" id="eOwnOk">' + esc(t("OK")) + "</button></div>"
     );
-    wrap.querySelector("#eOwnOk").onclick = close;
+    wrap.querySelector("#eOwnOk").onclick = () => {
+      close();
+      try {
+        hooks.maybeShowTourInvite();
+      } catch (e) {
+      }
+    };
     try {
       wrap.querySelector("#eOwnOk").focus();
     } catch (e) {
