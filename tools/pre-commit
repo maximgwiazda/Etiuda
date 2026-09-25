@@ -183,9 +183,70 @@ fi
 #    in. That is measured rather than assumed - the import arrived carrying one such line.
 cats=""
 ncats=0
+# A PUBLIC COPY IS NOT A HELD-BACK CATALOG, board item 767. A file used to count here by its name
+# and its ignore rule alone, so a copy of the public sample saved as toy-catalog.js made this scan
+# print "against 1 held-back catalog(s)", the line the real catalog gives, while it held back
+# nothing (measured 2026-09-25 on a worktree commit). So each file is also read against what this
+# repository has already published, the tree at origin/main: a file with no quote rule 3 below
+# can match, or whose every such quote is already published, is set aside BY NAME and not
+# counted. One quote not yet published and the file counts, which is the safe side of the line:
+# on 2026-09-25 the real catalog had 0 of its 1232 quotes published and the public copies all of
+# theirs (1142 of 1142, 1155 of 1155). A quote here is what rule 3 can match, a quoted string of
+# six words or more; a five-word one makes a probe rule 3 never matches. The definition is rule
+# 3's, copied; change the two together. With no origin/main to read, every file counts, which is
+# how this scan read before. What the files were is printed in the summary line, by name.
+pub_ref="refs/remotes/origin/main"
+have_pub=0
+if git rev-parse -q --verify "$pub_ref^{tree}" >/dev/null 2>&1; then have_pub=1; fi
+[ "$have_pub" = 1 ] || say "no $pub_ref to tell a public copy from a held-back catalog, so every ignored catalog counts."
+quotes_of() {
+  git grep -I -h -e "" "$pub_ref" 2>/dev/null | awk -v CAT="$1" '
+    BEGIN {
+      while ((getline l < CAT) > 0) {
+        n = split(l, q, "\"")
+        for (i = 2; i <= n; i += 2) {
+          s = q[i]
+          if (length(s) < 14) continue
+          s = tolower(s); gsub(/[^a-z0-9]+/, " ", s); gsub(/^ +| +$/, "", s)
+          if (split(s, w, " ") < 6) continue
+          p = w[1] " " w[2] " " w[3] " " w[4] " " w[5] " " w[6]
+          if (length(p) >= 22) probe[p] = 1
+        }
+      }
+      close(CAT)
+    }
+    {
+      t = tolower($0); gsub(/[^a-z0-9]+/, " ", t); gsub(/^ +| +$/, "", t)
+      n = split(t, w, " ")
+      for (i = 1; i + 5 <= n; i++) {
+        p = w[i] " " w[i+1] " " w[i+2] " " w[i+3] " " w[i+4] " " w[i+5]
+        if (p in probe) seen[p] = 1
+      }
+    }
+    END { a = 0; for (p in probe) a++; b = 0; for (p in seen) b++; print a, b }
+  '
+}
+held=""
 for f in *-catalog.js *-catalog.json catalogs/*; do
   [ -f "$f" ] || continue
   git check-ignore -q "$f" || continue
+  if [ "$have_pub" = 1 ]; then
+    r="$(quotes_of "$f")"
+    nq="${r%% *}"; np="${r##* }"
+    case "$nq" in ''|*[!0-9]*) nq=0 ;; esac
+    case "$np" in ''|*[!0-9]*) np=0 ;; esac
+    if [ "$nq" = 0 ]; then
+      say "$f is not counted as a held-back catalog: it holds no quote the scan can match."
+      continue
+    fi
+    if [ "$np" = "$nq" ]; then
+      say "$f is not counted as a held-back catalog: all $nq of its quotes are already published in $pub_ref."
+      continue
+    fi
+    held="$held, $f ($nq quotes, $np published)"
+  else
+    held="$held, $f"
+  fi
   cats="$cats $f"
   ncats=$((ncats + 1))
 done
@@ -283,7 +344,7 @@ npub="$(awk -F'\t' -v PUB="$pub_dir" 'index($1, PUB) == 1' "$tmp" | wc -l | tr -
 if [ "$no_catalog" = 1 ] && [ "$ncats" = 0 ]; then
   against="under a declared no-catalog repository, so the name scan was the whole scan"
 else
-  against="against $ncats held-back catalog(s)"
+  against="against $ncats held-back catalog(s)${held:+: ${held#, }}"
 fi
 say "$(wc -l < "$tmp" | tr -d ' ') line(s) of $what, $against; $npub under $pub_dir judged by name and quote only."
 [ "$fail" = 0 ] || say "nothing was committed."
