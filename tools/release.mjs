@@ -18,8 +18,10 @@
  * cannot run says NOT RUN and fails: a skipped gate that prints nothing reads exactly like one
  * that passed, which is the mistake this harness has made before. */
 import { execSync, spawnSync } from 'node:child_process';
-import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, statSync, mkdtempSync, mkdirSync, linkSync, copyFileSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -28,6 +30,68 @@ const args = process.argv.slice(2);
 const flag = f => args.includes(f);
 const FIXTURES = process.env.ETIUDA_FIXTURES;
 const DIST = process.env.ETIUDA_DIST || join(ROOT, 'dist');
+
+/* A SCRATCH HOME FOR EVERY GATE, the default since 2026-09-25. The reinstall gate installs, runs
+   and uninstalls the desk, and the installer, the uninstaller and the app all find the profile
+   through Windows, which answers from USERPROFILE and ignores APPDATA and LOCALAPPDATA (measured
+   2026-09-24). Until this, a plain run borrowed the real profile and parked the desk in daily use,
+   and a run kept off it only because its caller built a home by hand, as the installers of
+   2026-09-25 were. So the script builds the home itself: a fresh folder shaped as Windows expects
+   one (an unshaped home hangs Electron), USERPROFILE at it with APPDATA and LOCALAPPDATA under it,
+   set in this process's environment before the first gate, so every gate and every child of every
+   gate inherits it. Windows is then asked where the four folders the installer writes are, and a
+   run whose answer is not the home stops before gate 1, having touched nothing.
+   WHAT STAYS REAL: HKCU, which no environment variable moves, and the build caches, which are
+   caches: ELECTRON_BUILDER_CACHE names the real one, and Electron's own download cache, which
+   follows LOCALAPPDATA with no override electron-builder reads, is linked into the home file by
+   file (a hard link, so removing the home removes names and never the real files; a copy where
+   the two are on different volumes). Without that a release downloads Electron again, 151 MB,
+   measured 2026-09-25.
+   DOES GATE 10 STILL MEASURE A CUSTOMER'S UNINSTALL? Yes, and this is the reason. The header of
+   tests/reinstall.js rejects a lab profile because `--user-data-dir` puts the desk where the
+   uninstaller would never look, so every survival check passes for the wrong reason. A scratch
+   USERPROFILE does not split them: the app and the uninstaller ask Windows the same question and
+   get the same answer, which tests/reinstall.js refuses to proceed without (E.placesMismatch). What
+   the scratch home gives up is this desk's own profile as a subject, which the gate never claimed:
+   its survival checks are about the installer's reach, not about Maxim's folders. The bare
+   `npm run reinstall` keeps its park-and-return for anyone who wants the real one. */
+function seedCache(from, to) {
+  if (!existsSync(from)) return 0;
+  let n = 0;
+  mkdirSync(to, { recursive: true });
+  for (const e of readdirSync(from, { withFileTypes: true })) {
+    const a = join(from, e.name), b = join(to, e.name);
+    if (e.isDirectory()) n += seedCache(a, b);
+    else if (e.isFile()) { try { linkSync(a, b); } catch (x) { copyFileSync(a, b); } n++; }
+  }
+  return n;
+}
+const REAL_HOME = process.env.USERPROFILE || homedir();
+const REAL_LOCAL = process.env.LOCALAPPDATA || join(REAL_HOME, 'AppData', 'Local');
+const HOME = mkdtempSync(join(tmpdir(), 'etiuda-release-home-'));
+const PLACES = { ApplicationData: join(HOME, 'AppData', 'Roaming'),
+                 LocalApplicationData: join(HOME, 'AppData', 'Local'),
+                 Desktop: join(HOME, 'Desktop'),
+                 Programs: join(HOME, 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs') };
+for (const d of Object.values(PLACES).concat([join(HOME, 'Documents')])) mkdirSync(d, { recursive: true });
+const seeded = seedCache(join(REAL_LOCAL, 'electron', 'Cache'), join(PLACES.LocalApplicationData, 'electron', 'Cache'));
+const HOME_ENV = { USERPROFILE: HOME, APPDATA: PLACES.ApplicationData, LOCALAPPDATA: PLACES.LocalApplicationData,
+                   ELECTRON_BUILDER_CACHE: process.env.ELECTRON_BUILDER_CACHE || join(REAL_LOCAL, 'electron-builder', 'Cache') };
+const gitGlobal = join(REAL_HOME, '.gitconfig');
+if (!process.env.GIT_CONFIG_GLOBAL && existsSync(gitGlobal)) HOME_ENV.GIT_CONFIG_GLOBAL = gitGlobal;
+if (process.platform === 'win32') {
+  const E = createRequire(import.meta.url)(join(ROOT, 'tests', 'engine.js'));
+  const places = E.placesMismatch(PLACES, { ...process.env, ...HOME_ENV });
+  if (places.said.length) {
+    console.error('  STOP: NOT RUN, the scratch home is not where Windows would put the desk: '
+      + places.said.join('; ') + '. Nothing ran; the home is ' + HOME);
+    process.exit(78);
+  }
+}
+Object.assign(process.env, HOME_ENV);
+console.log('The scratch home, which every gate inherits: ' + HOME + '\n  USERPROFILE, APPDATA and LOCALAPPDATA'
+  + ' point into it and Windows agrees for ' + Object.keys(PLACES).join(', ') + '; HKCU stays real;'
+  + ' Electron\'s download cache seeded with ' + seeded + ' file(s) from ' + join(REAL_LOCAL, 'electron', 'Cache'));
 
 let step = 0;
 const gate = (title, fn) => {
@@ -177,11 +241,11 @@ if (flag('--package')) {
      rather than building a second one: install silently into a scratch folder, write a key and a
      catalog through the running app, uninstall, install again and read both back, with the
      uninstall's four absences checked. About 50 s on top of a build that is already 8 minutes,
-     which is why it is in the sequence rather than beside it. It is the only gate here that
-     writes anywhere outside a temp folder: it borrows this machine's own user-data folder,
-     parks the desk files it finds there and puts them back, because Electron ignores the APPDATA
-     environment variable and a desk in a lab folder could not be said to have survived anything.
-     See the header of tests/reinstall.js. */
+     which is why it is in the sequence rather than beside it. It is the gate the scratch home at
+     the head of this file exists for: it borrows the user-data folder Windows names, which is
+     the scratch home's, parks what it finds there and puts it back, and the only real place it
+     writes is HKCU. See the header of tests/reinstall.js, and the head of this file for why a
+     scratch home, unlike a lab profile, still measures the uninstaller's reach. */
   gate('the reinstall-survival loop: npm run reinstall, against the installer above', () => {
     const exe = readdirSync(DIST).filter(f => /-setup\.exe$/i.test(f));
     if (exe.length !== 1) return DIST + ' holds ' + exe.length + ' installers; expected 1';
@@ -199,5 +263,7 @@ if (flag('--package')) {
   });
 }
 
+/* The home goes on a green run only; a red one leaves it standing, named at the top, as evidence. */
+try { rmSync(HOME, { recursive: true, force: true }); } catch (e) { console.log('  the scratch home stays: ' + HOME + ' (' + e.message + ')'); }
 console.log('\nGates green' + (flag('--package') ? ', and the installer is in ' + DIST : '')
   + '. Nothing was tagged and nothing was pushed: both are Maxim\'s, and this script has no flag for either.');
