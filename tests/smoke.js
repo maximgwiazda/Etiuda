@@ -1182,9 +1182,36 @@ const t0 = Date.now();
   enOnlyData.langs = (sampleData.langs || []).filter(l => l && l.code === "en");
   enOnlyData.commentLang = "en";
   delete enOnlyData.hash;
+  /* WHICH BLOCKS OUGHT TO BE TINTED, per declared language, written from the spec and read from
+     the catalog the lab is given rather than from the page (2026-09-25). Spec 2.6: the primary is
+     untinted and every other language shares the secondary tint; a card pinned to a language
+     shows that language whatever the toggle says; a card with no body in the wanted language
+     shows the primary. So a block is tinted exactly when the language ITS CARD SHOWS is not the
+     first declared one. The leg used to count tinted blocks and want none while the primary
+     showed, which held only for a sample whose pinned cards were pinned to the primary: the
+     letters set pins two cards to English, Mirabelka pins two to Polish. The answer is
+     `{ code: { cardId: tinted } }`. */
+  const tintMaps = data => {
+    const codes = (data.langs || []).map(l => l && l.code).filter(Boolean);
+    const has = (c, l) => !!(c.body && c.body[l] != null && String(c.body[l]) !== "");
+    const out = {};
+    codes.forEach(x => {
+      const m = {};
+      (data.cards || []).forEach(c => {
+        const want = codes.indexOf(c.lockLang) > -1 ? c.lockLang : x;
+        m[c.id] = (has(c, want) ? want : codes[0]) !== codes[0];
+      });
+      out[x] = m;
+    });
+    return out;
+  };
   /** Boot a lab on `body` with `seed` already written into "eLang", read the header's language
-   *  control, press it, and read it again. */
-  const readLangControl = async (body, label, seed) => {
+   *  control, press it, and read it again. Given `data`, the catalog `body` holds, each read also
+   *  counts the blocks whose tint disagrees with tintMaps(data) for the language on screen, and a
+   *  press that switches is WAITED ON: the list re-tints in chunks of 28 cards a frame after a
+   *  200 ms tail, measured at about 760 to 920 ms over Mirabelka's 273 blocks, so the read waits
+   *  for the state the spec names, with a deadline, rather than for a guess at this desk's speed. */
+  const readLangControl = async (body, label, seed, data) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-649-"));
     let ctx = null;
     try {
@@ -1200,10 +1227,31 @@ const t0 = Date.now();
       await q.evaluateOnNewDocument(l => { try { localStorage.setItem("eLang", l); } catch (e) {} }, seed);
       lateFor.push.apply(lateFor, await bootAndDismiss(q,
         "file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/"), label));
-      const read = () => q.evaluate(() => {
+      const maps = data ? tintMaps(data) : null;
+      /* The disagreement with the spec for the language on screen, as counts: blocks tinted
+         wrongly, cards with blocks the catalog does not name, and cards the map could judge. */
+      const judge = (M) => {
+        const m = M && (typeof lang !== "undefined") ? M[lang] : null;
+        if (!m) return null;
+        let wrong = 0, unknown = 0, judged = 0, expect = 0;
+        document.querySelectorAll(".card[data-id]").forEach(card => {
+          const bs = card.querySelectorAll(".txt");
+          if (!bs.length) return;
+          const id = card.getAttribute("data-id");
+          if (!(id in m)) { unknown++; return; }
+          judged++;
+          bs.forEach(x => { if (m[id]) expect++; if (x.classList.contains("plx") !== m[id]) wrong++; });
+        });
+        return { wrong, unknown, judged, expect };
+      };
+      /* Installed through the protocol, which the page's own policy does not govern, so that the
+         read and the wait below count by one function rather than two copies of it. */
+      if (maps) await q.evaluate("window.__smokeTint = " + judge.toString() + ";");
+      const read = () => q.evaluate(M => {
         const bs = [...document.querySelectorAll("#seg button")];
         const box = document.querySelector("#seg");
         return {
+          spec: M ? window.__smokeTint(M) : null,
           codes: bs.map(x => x.dataset.l),
           text: bs.map(x => x.textContent.trim()),
           on: bs.filter(x => x.classList.contains("on")).map(x => x.dataset.l),
@@ -1216,7 +1264,17 @@ const t0 = Date.now();
             .filter(x => x.classList.contains("plx")).length,
           w: box ? Math.round(box.getBoundingClientRect().width) : 0
         };
-      });
+      }, maps);
+      /* THE SPEC'S STATE, WAITED FOR. It cannot be met part way: a card the chunks have not reached
+         yet still carries the other language's tint unless it is pinned, and a pinned card is the
+         same either way, so "no block disagrees" holds only once every card that changes has
+         changed. A timeout is recorded, never thrown, and the read after it says how far off. */
+      const specHolds = (want) => q.waitForFunction((M, w) => {
+        if (w && lang !== w) return false;
+        const s = window.__smokeTint(M);
+        return !!s && s.wrong === 0 && s.unknown === 0 && s.judged > 0;
+      }, { timeout: 15000, polling: 50 }, maps, want).then(() => true, () => false);
+      if (maps && !await specHolds(null)) lateFor.push(label + ": the tint the spec names, at boot");
       const before = await read();
       /* A REAL POINTER AT THE RECT'S CENTRE. el.click() fires no pointerdown and reaches through
          a scrim, so it is not the interaction being asked about. The target is the button that is
@@ -1229,11 +1287,17 @@ const t0 = Date.now();
         return { l: el.dataset.l, x: r.x + r.width / 2, y: r.y + r.height / 2 };
       });
       if (target) await q.mouse.click(target.x, target.y);
-      /* THE ONE PLACE A CONDITION CANNOT BE WRITTEN, and it is said out loud rather than dressed
-         up: half of what this leg asserts is that NOTHING happened, and an absence has no event to
-         wait for. The budget is setLang's own deferred tail - 200 ms after the thumb's glide -
-         with three times that as margin, so a switch that was going to happen has happened. */
-      await sleep(700);
+      if (maps && target && target.l !== before.lang) {
+        /* A press that is meant to switch is waited on by the state it must reach. */
+        if (!await specHolds(target.l))
+          lateFor.push(label + ": the tint the spec names after pressing " + target.l);
+      } else {
+        /* THE ONE PLACE A CONDITION CANNOT BE WRITTEN, and it is said out loud rather than dressed
+           up: half of what this leg asserts is that NOTHING happened, and an absence has no event
+           to wait for. The budget is setLang's own deferred tail - 200 ms after the thumb's glide -
+           with three times that as margin, so a switch that was going to happen has happened. */
+        await sleep(700);
+      }
       const after = await read();
       return { before, after, target };
     } finally {
@@ -1244,7 +1308,7 @@ const t0 = Date.now();
   };
   const one = await readLangControl(asSibling(enOnlyData),
     "649 a catalog declaring one language", "pl");
-  const two = await readLangControl(asSibling(sampleData), "649 the whole sample", "pl");
+  const two = await readLangControl(asSibling(sampleData), "649 the whole sample", "pl", sampleData);
   const same = (a, x) => JSON.stringify(a) === JSON.stringify(x);
   check(same(one.before.declared, ["en"]) && same(one.before.codes, ["en"])
         && same(one.before.on, ["en"]) && one.before.cards > 0,
@@ -1320,7 +1384,7 @@ const t0 = Date.now();
      to - and pressing takes it to uk, which was pl. So the two runs are the same two views under
      different names, and the counts must match ACROSS the swap. */
   const foreign = await readLangControl(asSibling(foreignData),
-    "646 a catalog declaring neither founding code", "en");
+    "646 a catalog declaring neither founding code", "en", foreignData);
   check(same(foreign.before.declared, ["de", "uk"]) && same(foreign.before.codes, ["de", "uk"])
         && same(foreign.before.on, ["de"]) && foreign.before.cards === two.before.cards
         && foreign.before.blocks === two.after.blocks
@@ -1333,14 +1397,29 @@ const t0 = Date.now();
     + ". Before this the reader refused the catalog outright");
   /* THE TINT IS THE EYE'S HALF and it is measured rather than assumed: the spec's rule is that
      the primary is untinted and every other language shares the secondary tint, and it was
-     written as "is it Polish", which tints nothing at all on a desk whose codes are de and uk. */
-  check(foreign.before.tinted === 0 && foreign.after.on[0] === "uk" && foreign.after.tinted > 0
-        && two.before.tinted > 0 && two.after.tinted === 0,
-    "646o pressing the second code switches to it, and the body tint follows the PRIMARY rather"
-    + " than Polish: " + foreign.before.tinted + " tinted of " + foreign.before.blocks
-    + " showing de, " + foreign.after.tinted + " of " + foreign.after.blocks + " showing uk."
-    + " THE CONTROL, the same catalog under its own names: " + two.before.tinted + " tinted"
-    + " showing pl and " + two.after.tinted + " showing en");
+     written as "is it Polish", which tints nothing at all on a desk whose codes are de and uk.
+     WHAT THIS LEG GUARDS, on any sample: every block's tint agrees with the language ITS CARD
+     shows, which is the toggle's unless the card is pinned (tintMaps above), in all four views,
+     each read once the list has reached that state. It asked "none tinted while the primary
+     shows", which is the same rule only for a sample with no card pinned to a secondary, and it
+     read 700 ms after the press, which is the switch's end only for a short list; Mirabelka
+     broke both on 2026-09-25 with the engine right. "Tinted more than none" in the secondary
+     stays, so a sample made all of pinned cards cannot pass it by agreeing with an empty map. */
+  const tintOk = v => !!v.spec && v.spec.wrong === 0 && v.spec.unknown === 0
+    && v.spec.judged === v.cards && v.tinted === v.spec.expect;
+  const tintSays = v => v.tinted + " tinted of " + v.blocks + " (the spec: " + (v.spec ? v.spec.expect
+    + ", " + v.spec.wrong + " disagreeing, " + v.spec.unknown + " unknown, " + v.spec.judged
+    + " of " + v.cards + " cards judged" : "not judged") + ")";
+  check(tintOk(foreign.before) && foreign.before.lang === "de"
+        && tintOk(foreign.after) && foreign.after.on[0] === "uk" && foreign.after.tinted > 0
+        && tintOk(two.before) && two.before.lang === "pl" && two.before.tinted > 0
+        && tintOk(two.after) && two.after.lang === "en",
+    "646o pressing the second code switches to it, and every block's tint follows the PRIMARY"
+    + " rather than Polish, a pinned card's by the language it is pinned to: showing de "
+    + tintSays(foreign.before) + ", showing uk " + tintSays(foreign.after) + "."
+    + " THE CONTROL, the same catalog under its own names: showing pl " + tintSays(two.before)
+    + ", showing en " + tintSays(two.after)
+    + (lateFor.length ? " - WAITED OUT: " + lateFor.join("; ") : ""));
 
   /* THE OFFER THAT REPLACES ONE CATALOG WITH ANOTHER, ruled 2026-09-17: it is the mirror of
      Load catalog? and carries no sentence under its heading, only the location line the other

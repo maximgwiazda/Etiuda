@@ -94,7 +94,6 @@ try {
      a desk would hand it. */
   const body = "window.E_CATALOG = " + JSON.stringify(CATALOG, null, 2) + ";" + "\n";
   fs.writeFileSync(path.join(tmp, E.FIXTURE_FILE.catalogV2), body, "utf8");
-  fs.writeFileSync(path.join(tmp, E.FIXTURE_FILE.sampleV2), body, "utf8");
   fs.writeFileSync(path.join(tmp, E.FIXTURE_FILE.searchEval), "module.exports = [];" + "\n", "utf8");
   ok(!E.inside(E.ROOT, tmp), "the synthetic catalog is written outside the repository");
 

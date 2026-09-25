@@ -28,21 +28,30 @@ const ENGINE_PATH = path.join(ROOT, "engine", "etiuda.html");
 
 /* What each key is called IN THE FIXTURES FOLDER. Changing a key here changes what a caller
    asks for; changing a value changes which file on disk answers it. */
-const FIXTURE_FILE = { catalog: "etiuda-catalog.js", sample: "sample-mirabelka.js",
-                       catalogV2: "etiuda-catalog-v2.js", sampleV2: "sample-mirabelka-v2.js",
+const FIXTURE_FILE = { catalog: "etiuda-catalog.js",
+                       catalogV2: "etiuda-catalog-v2.js",
                        /* The same format 2 catalog as a DOCUMENT rather than a script. The shell
                           reads this shape out of the user-data folder, and a browser cannot load
                           it at all, so it is the shell's fixture and no browser leg asks for it. */
                        catalogEc: "etiuda-catalog.ec",
-                       /* The sample as a document, which the watch test needs beside the one
-                          above: two catalogs differing in how many cards they hold is what lets
-                          a swap be counted rather than asserted. */
-                       sampleEc: "sample-mirabelka.ec",
                        searchEval: "search-eval.js" };
+/* THE SAMPLE IS READ FROM THE TREE, NOT FROM THE FIXTURES FOLDER (2026-09-25). The fixtures
+   folder is for content this public tree may not hold; the sample is not such content, it ships
+   from this tree, and a copy of it kept in one folder shared by every branch goes stale the
+   first time a branch changes the sample. It did: on 2026-09-25 the engine shipped Mirabelka
+   while every gate still read the letters set out of the fixtures folder, green. So each key
+   below names the file that SHIPS, relative to ROOT, and a branch's harness reads that branch's
+   sample. `sampleV2` is the one the browser loads: the same document behind window.E_SAMPLE,
+   wrapped as the run folder is made (runFolder), because no script form of the 2.x sample
+   ships. Case 32 of tests/engine-selftest.js holds all three to the shipped bytes. */
+const TREE_FILE = { sample: "v1/sample-catalog.js",
+                    sampleEc: "shell/sample-catalog.ec",
+                    sampleV2: "shell/sample-catalog.ec" };
+const WRAP_AS = { sampleV2: "E_SAMPLE" };
 /* And what it must be called BESIDE THE ENGINE, which the engine decides and will not
    tolerate being changed. The two differ because the fixtures folder holds the format 1 file
    and the format 2 file it was converted into, and only one of them is the one this engine
-   reads; and because a sample fixture is named for the sample it is. */
+   reads. */
 const SIBLING_AS = { catalogV2: "etiuda-catalog.js", sampleV2: "sample-catalog.js", sample: "sample-catalog.js" };
 
 /* A refusal is printed in the shape the smoke log already uses, so the same grep that counts
@@ -815,10 +824,21 @@ function fixturesDir() { return process.env.ETIUDA_FIXTURES || ""; }
    fixtures folder inside the tree puts a real catalog one `git add -f` from publication, and
    this repository's ignore rules are a blocklist that only a filename convention holds up. */
 function fixtures(...keys) {
+  const out = {};
+  /* A key the tree ships is read from the tree and needs no folder (TREE_FILE, above). */
+  for (const k of keys.filter(k => TREE_FILE[k])) {
+    const p = path.join(ROOT, TREE_FILE[k]);
+    if (!fs.existsSync(p))
+      refuse("the tree has no " + TREE_FILE[k], "looked for " + p,
+             "the harness reads the sample this tree ships, and this tree ships none.");
+    out[k] = p;
+  }
+  const folderKeys = keys.filter(k => !TREE_FILE[k]);
+  if (!folderKeys.length) return out;
   const dir = fixturesDir();
   if (!dir)
-    refuse("ETIUDA_FIXTURES is not set, and this run needs " + keys.join(", "),
-           "point it at a folder OUTSIDE this repository holding: " + keys.map(k => FIXTURE_FILE[k]).join(", "),
+    refuse("ETIUDA_FIXTURES is not set, and this run needs " + folderKeys.join(", "),
+           "point it at a folder OUTSIDE this repository holding: " + folderKeys.map(k => FIXTURE_FILE[k]).join(", "),
            "a catalog is somebody's content and this repository is public.");
   if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory())
     refuse("ETIUDA_FIXTURES is not a folder: " + dir);
@@ -826,8 +846,7 @@ function fixtures(...keys) {
     refuse("ETIUDA_FIXTURES is inside this repository: " + dir,
            "the tree is public and its ignore file is a blocklist, so content kept here is one",
            "forced add from being published. Move the folder out of " + ROOT + ".");
-  const out = {};
-  for (const k of keys) {
+  for (const k of folderKeys) {
     const name = FIXTURE_FILE[k];
     if (!name) refuse("no fixture is registered under the name " + JSON.stringify(k));
     const p = path.join(dir, name);
@@ -849,7 +868,14 @@ function runFolder(...keys) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-run-"));
   const page = path.join(dir, "etiuda.html");
   fs.copyFileSync(src, page);
-  for (const k of keys) fs.copyFileSync(got[k], path.join(dir, SIBLING_AS[k] || FIXTURE_FILE[k]));
+  for (const k of keys) {
+    const to = path.join(dir, SIBLING_AS[k] || FIXTURE_FILE[k]);
+    /* The shipped document behind the global the engine reads a sibling script by. Its text is
+       kept whole, so the evaluated object is the parsed document and nothing else. */
+    if (WRAP_AS[k]) fs.writeFileSync(to, "window." + WRAP_AS[k] + " = "
+                                     + fs.readFileSync(got[k], "utf8").replace(/\s+$/, "") + ";\n");
+    else fs.copyFileSync(got[k], to);
+  }
   return { dir, page, url: "file:///" + page.replace(/\\/g, "/"),
            engineSha: sha256(src), copySha: sha256(page),
            drop: () => fs.rmSync(dir, { recursive: true, force: true }) };
@@ -1263,7 +1289,7 @@ function offscreenCheck(pid, who, check, notRun) {
   return v;
 }
 
-module.exports = { NO_VERDICT, exitOf, ROOT, ENGINE_PATH, FIXTURE_FILE, SIBLING_AS, SRC_DIR, APP_ANCHOR,
+module.exports = { NO_VERDICT, exitOf, ROOT, ENGINE_PATH, FIXTURE_FILE, TREE_FILE, SIBLING_AS, SRC_DIR, APP_ANCHOR,
                    CATALOG_FOLDER_KEY, pinCatalogFolder, OFFSCREEN_KEY, offscreenEnv,
                    REAL_USER_DATA, REAL_DOCUMENTS, underOrEqual, userDataDirOf,
                    catalogConfinement, shellLaunchRefusal, shellLaunch,

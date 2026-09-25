@@ -700,12 +700,18 @@ ever will be. `ETIUDA_FIXTURES` names a folder outside this tree:
 | File | What it is |
 |------|------------|
 | `etiuda-catalog-v2.js` | the catalog the smoke run boots against, format 2 |
-| `sample-mirabelka-v2.js` | the invented sample the engine offers when no catalog is beside it, beside the engine as `sample-catalog.js` |
 | `etiuda-catalog.js` | the same catalog in format 1, which section 4's linter still reads |
-| `sample-mirabelka.js` | the format 1 sample, kept beside it for the same reason, a copy of `v1/sample-catalog.js` |
 | `search-eval.js` | the search evaluation cases for `test.js` section 5 |
 | `etiuda-catalog.ec` | the same format 2 catalog as a DOCUMENT, which is the shape the shell reads out of the user-data folder |
-| `sample-mirabelka.ec` | the sample as a document, a copy of `shell/sample-catalog.ec`: the second catalog `shell-smoke.js` and `catalog-watch.js` need |
+
+**The sample is not in that folder; it is read from this tree** (since 2026-09-25, `TREE_FILE` in
+`engine.js`). It ships from here, so it is not content this repository must not hold, and a copy of
+it in one folder shared by every branch goes stale the first time a branch changes it, which is how
+every gate came to read the letters set on the night the engine shipped Mirabelka. `sampleEc` is
+`shell/sample-catalog.ec`, the second catalog `shell-smoke.js` and `catalog-watch.js` need; `sampleV2`
+is the same document wrapped as `window.E_SAMPLE`, which a run folder holds as `sample-catalog.js`;
+`sample` is `v1/sample-catalog.js`. Case 32 of `engine-selftest.js` holds all three to the shipped
+bytes. The `sample-*` files still in the fixtures folder serve branches older than that change.
 
 **The name in the fixtures folder is not the name beside the engine.** A run folder gets the
 format 2 file under the sibling name the engine looks for, `etiuda-catalog.js`, because that

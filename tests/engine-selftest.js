@@ -47,7 +47,7 @@ const insideRepo = path.join(E.ROOT, "tests", "selftest-tmp-fixtures");
 try {
   fs.mkdirSync(good); fs.mkdirSync(bare); fs.mkdirSync(insideRepo);
   fs.writeFileSync(afile, "not a folder");
-  for (const k of ["catalog", "sample", "searchEval"])
+  for (const k of ["catalog", "searchEval"])
     fs.writeFileSync(path.join(good, E.FIXTURE_FILE[k]), "/* invented, empty, and never read by this file */\n");
 
   /* 1 to 5: every way the fixtures folder can be wrong. */
@@ -1430,6 +1430,37 @@ try {
   ok(JSON.stringify([...pr.files].sort()) === JSON.stringify(want),
      "31b control: a gate whose script nothing calls, and one the release names only in comments,"
      + " are not reached; the one it calls is: " + JSON.stringify([...pr.files].sort()));
+}
+
+/* 32. THE SAMPLE A GATE IS HANDED IS THE SAMPLE THIS TREE SHIPS (2026-09-25). On that day the
+   engine shipped Mirabelka while every gate read the letters set out of the fixtures folder, and
+   nothing noticed, because nothing compared the two. Each of the three sample keys is asked for
+   the way a gate asks, in a child with a fixtures folder that holds no sample at all, and what
+   comes back is compared with the shipped file: the document byte for byte, the 1.x file byte
+   for byte, and the script the browser loads by evaluating it and comparing the object with the
+   parsed document. The expected side is read from shell/ and v1/ directly, never through
+   engine.js. Red on the harness of 1bd1162 (it read the folder), measured. */
+{
+  const shippedEc = fs.readFileSync(path.join(E.ROOT, "shell", "sample-catalog.ec"));
+  const shippedV1 = fs.readFileSync(path.join(E.ROOT, "v1", "sample-catalog.js"));
+  const r = run('const E=require("./engine.js"),fs=require("fs"),p=require("path"),vm=require("vm");'
+    + 'const f=E.fixtures("sampleEc","sample");const R=E.runFolder("catalog","sampleV2");'
+    + 'const w={};try{vm.runInNewContext(fs.readFileSync(p.join(R.dir,"sample-catalog.js"),"utf8"),{window:w});}catch(e){}'
+    + 'console.log("J"+JSON.stringify({ec:fs.readFileSync(f.sampleEc).toString("base64"),'
+    + 'v1:fs.readFileSync(f.sample).toString("base64"),v2:w.E_SAMPLE===undefined?null:JSON.stringify(w.E_SAMPLE)}));'
+    + 'R.drop();', { ETIUDA_FIXTURES: good });
+  let got = null;
+  try { got = JSON.parse((r.out.match(/^J(\{.*\})$/m) || [])[1]); } catch (e) { /* reported below */ }
+  const want = JSON.stringify(JSON.parse(shippedEc.toString("utf8")));
+  ok(!!got && Buffer.from(got.ec, "base64").equals(shippedEc),
+     "32a the sample document a gate is handed is shell/sample-catalog.ec byte for byte"
+     + (got ? "" : " (the child said: " + r.out.trim().split("\n").slice(-2).join(" | ") + ")"));
+  ok(!!got && Buffer.from(got.v1, "base64").equals(shippedV1),
+     "32b the 1.x sample a gate is handed is v1/sample-catalog.js byte for byte");
+  ok(!!got && got.v2 === want,
+     "32c the E_SAMPLE a browser run loads beside the engine is the shipped document ("
+     + (got && got.v2 ? JSON.parse(got.v2).cards.length + " cards against "
+        + JSON.parse(want).cards.length : "no E_SAMPLE") + ")");
 }
 
 } finally {
