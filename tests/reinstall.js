@@ -617,6 +617,7 @@ const SEEN = () => ({
   cards: document.querySelectorAll("#list .card").length,
   catalogThere: typeof window.E_CATALOG !== "undefined",
   offer: !!document.querySelector("#ecYes"),
+  hello: !!document.getElementById("eHello"),
 });
 
 /* The same route through the interface that shell-smoke's check 3b drives: the menu, the fold
@@ -846,6 +847,8 @@ let newKey = "", lnkSm = "", lnkDt = "";
       + " not inside " + LABDOCS + ", so ETIUDA_TEST_DOCUMENTS was not honoured and the sample"
       + " legs would be reading a folder of this machine's own");
   }
+  // The greeting rises a beat after boot, once the catalog offer and the save notices have had theirs.
+  await sleep(1500);
   const seeded = await s0.p.evaluate(SEEN);
   /* Windows answers one path in more than one spelling, so the two are compared resolved and
      folded rather than as the strings each side happened to write. */
@@ -866,12 +869,12 @@ let newKey = "", lnkSm = "", lnkDt = "";
     + ", parsing as a format 2 catalog document of " + sampleCards + " cards, and it is the only"
     + " thing in the folder (" + listing(DOCS_ETIUDA).length + " entries). The comparison is"
     + " against the asar rather than the tree, because the asar is what a customer is handed");
-  check(seeded.offer === true && seeded.catalogThere === true && seeded.cards === 0
+  check(seeded.offer === false && seeded.hello === true && seeded.catalogThere === true && seeded.cards === sampleCards
         && samePath(seedRead, sampleFile) && s0.said.some(l => /the sample catalog was put in/.test(l)),
-    "1f and it is OFFERED rather than loaded behind the person: #ecYes is up (" + seeded.offer
-    + "), window.E_CATALOG is there (" + seeded.catalogThere + "), " + seeded.cards + " cards are"
-    + " on screen until it is accepted, and the file the shell named reading it is the sample this"
-    + " run just watched appear: " + JSON.stringify(seedRead));
+    "1f and a first run takes it up without asking and greets instead: no offer (#ecYes " + seeded.offer
+    + "), the greeting up (" + seeded.hello + "), window.E_CATALOG there (" + seeded.catalogThere + "), "
+    + seeded.cards + " cards on screen against the sample's " + sampleCards + ", and the file the shell"
+    + " named reading it is the sample this run just watched appear: " + JSON.stringify(seedRead));
   await s0.stop();
   const keys1 = deskKeys();
   /* THE EJECT, made by hand because it is the harsher case: an eject inside the app leaves the
