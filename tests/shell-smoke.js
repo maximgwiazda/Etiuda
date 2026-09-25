@@ -143,6 +143,8 @@ const step = async (label, body, opts) => {
  *   - 112 SINCE 2026-09-22, both ways: 1y2 is the site added, the footer name's ink against the
  *     line it sits in, split from 1y so that one mutant answers one clause. The same anchored
  *     grep returns 112 here.
+ *   - 116 SINCE 2026-09-25, both ways: 2n5 is the site added, the Menu's rows driven by the
+ *     keyboard (board 766). The same anchored grep returns 116 here.
  *
  *     THE METHOD FIRST WRITTEN HERE DID NOT SURVIVE THIS PARAGRAPH, corrected 2026-09-20 under
  *     board item 630. It was `grep -n "check(" | grep -v "const check = "`, said to return 111
@@ -161,7 +163,7 @@ const step = async (label, body, opts) => {
  * it is what the count now sees: a mismatch is NO VERDICT, exit 78, not a tally.
  */
 const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7"];
-const EXPECTED = KEEP ? null : 115;
+const EXPECTED = KEEP ? null : 116;
 const phasesSeen = new Set();
 const phase = what => {
   const m = /^\[(\d+)[a-z]*\/\d+\]/.exec(String(what).trim());
@@ -2147,6 +2149,43 @@ const placeEc = (dir, from, as, minutesOld) => {
     "2n a dialog opened with the mouse gives the Menu button its focus back without a ring,"
     + " whichever way it is closed - Escape is a key and used to be enough to paint one: "
     + JSON.stringify(noRing));
+
+  /* THE SAME FAULT BY THE KEYBOARD (board 766). Before 1699689 a row closed the Menu before its
+     dialog opened, and the dialog then had nothing to hand the focus back to: 6 of 6 trips opened
+     from a row by F10, the arrows and Enter left it on BODY at 1bd1162 (the verdict on 2n). 2n
+     drives the rows with the mouse and 2n2 opens its dialog by a chord, not from a row, so this
+     path had no leg. Each trip starts with the caret in the search box, where the Menu key is
+     reached for, and closes by Escape and by the X. What is asserted is where the focus lands and
+     that no outline is drawn; whether it wears the hover look is 2n2's. */
+  const keyTrip = async (act, how) => {
+    await rp.evaluate(() => { const i = document.getElementById("intent"); if (i) i.focus(); });
+    await sleep(200);
+    await rp.keyboard.press("F10"); await sleep(500);
+    let row = null;
+    for (let k = 0; k < 12; k++) {
+      row = await rp.evaluate(() => { const a = document.activeElement;
+        return a && a.closest("#settingsMenu") ? a.getAttribute("data-act") : null; });
+      if (row === act) break;
+      await rp.keyboard.press("ArrowDown"); await sleep(150);
+    }
+    const reached = row === act;
+    if (reached) { await rp.keyboard.press("Enter"); await sleep(1500); }
+    const open = await rp.evaluate(() => !document.getElementById("modal").hidden);
+    if (how === "esc") await rp.keyboard.press("Escape");
+    else await realClick(rp, "#modalX");
+    await sleep(900);
+    const closed = await rp.evaluate(() => document.getElementById("modal").hidden);
+    const on = await rp.evaluate(() => { const a = document.activeElement;
+      return a ? (a.id || a.getAttribute("data-act") || a.tagName) : null; });
+    return { act, how, reached, open, closed, on, btn: await rp.evaluate(RING, "#settingsBtn") };
+  };
+  const byKey = [];
+  for (const act of ["settings", "manage", "about"])
+    for (const how of ["esc", "x"]) byKey.push(await keyTrip(act, how));
+  check(byKey.every(r => r.reached && r.open && r.closed && r.btn.active
+                         && r.btn.outline === "none"),
+    "2n5 a dialog opened from a Menu row by the keyboard gives the Menu button its focus back,"
+    + " without an outline, whichever way it is closed: " + JSON.stringify(byKey));
 
   /* THE OTHER HALF, and the one that makes the leg above a rule rather than a blanket
      suppression: what a dialog opened FROM THE KEYBOARD hands back. Maxim ruled on 2026-09-17
