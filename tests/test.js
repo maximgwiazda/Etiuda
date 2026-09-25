@@ -2813,7 +2813,7 @@ function lintCatalog(c, at) {
        pair means hide/star/edit target whichever card comes first - personal state corrupts. */
     // JSON-encoded pair, so no separator occurring inside a key or title can spoof a match.
     // A raw NUL separator lived here once and made git treat this whole file as binary.
-    const key = JSON.stringify([String(m.c || ""), String(m.t || "")]);
+    const key = JSON.stringify([String(m.c || ""), String(title || "")]);
     if (seen[key]) err(where + ": duplicate category+title - card ids collide with card " + seen[key]);
     seen[key] = place(ix);
     (Array.isArray(m.intents) ? m.intents : []).forEach(x => {
