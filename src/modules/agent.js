@@ -1,5 +1,4 @@
-import { lsSet, lsGet } from "./storage.js";
-import { ePractice } from "./env.js";
+import { lsSet, lsGet, nsGet } from "./storage.js";
 import { pax } from "./dom.js";
 import { t, translateTree, toast, TOAST_HAND_MS } from "./ui-lang.js";
 import { esc } from "./esc.js";
@@ -74,6 +73,12 @@ function withAgentName(raw,go){
   if(!wantsAgentName(raw) || document.getElementById("eAgentModal")){ go(); return; }
   askAgentName(raw,go);
 }
+/* THE ROLE WHEEL WAITS FOR ITS FIRST REPLY on the sample: beside the name it is a control nobody has
+   been told about, so it is out of sight until a reply naming somebody of the team is copied, and
+   withAgentName brings it out then with one line. A team's desk has it from the start. */
+function syncRoleWheel(){
+  document.body.classList.toggle("role-waits", nsGet("Sample")==="1" && lsGet("eRoleSeen")!=="1");
+}
 /* THE PREVIEW IS THE REPLY'S OWN SIGNING LINE, filled as the name is typed: the sentence holding
    the token, or, where the token stands alone on its line, the line above it as well. */
 function signLines(raw){
@@ -97,7 +102,6 @@ function askAgentName(raw,then){
     +'<p class="modal-sub">Customers see it at the foot of every reply. It can be changed at any time in Settings.</p>'
     +'<div class="mf"><input id="eAgentInp" autocomplete="off" spellcheck="false" placeholder="for instance, Kate"></div>'
     +'<p class="e-greet" id="eAgentPrev" data-i18n-skip></p>'
-    +(ePractice()?'<p class="modal-sub" id="eAgentPage">Nothing is kept on this page.</p>':'')
     +'<div class="modal-actions">'
     +'<button type="button" class="btn" id="eAgentNo">Later</button>'
     +'<button type="button" class="btn primary" id="eAgentYes">Sign with this</button>'
@@ -150,4 +154,5 @@ export {
   askAgentName,
   wantsAgentName,
   withAgentName,
+  syncRoleWheel,
 };

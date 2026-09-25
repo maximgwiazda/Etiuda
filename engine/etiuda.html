@@ -1774,9 +1774,7 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
    prompt shares the shape but holds an input, and centring an input's contents would be a
    different thing entirely. */
 #eCatalogModal .modal-card{text-align:center}
-/* The first afternoon's questions and the name asked at the first signed reply: sentences, so they
-   take the offer's centring, and room at the sides so no line runs to the card's edge. */
-#eHello .modal-card,#eOwnAsk .modal-card,#eOwnDone .modal-card{text-align:center;padding:0 22px 16px}
+/* The name asked at the first signed reply: room at the sides so no line runs to the card's edge. */
 #eAgentModal .modal-card{padding:0 22px 16px}
 #eCatalogModal .ec-counts{font:12px var(--mono);color:var(--dim);margin-top:4px}
 /* One button slot per row, swapped by state: the hide button appears only on the hovered
@@ -2216,7 +2214,6 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 }@layer overrides{
 @media (prefers-reduced-motion:reduce){
   .modal:not([hidden]) .modal-bg,.modal:not([hidden]) .modal-card{animation:none!important}
-  #eCustomer,.e-typing i{animation:none!important}
 }
 /* One treatment for everything that hangs below an anchor and toggles with hidden - a
    short drop, keyframed for the display:none reason above. .12s: these are frequent and
@@ -2316,49 +2313,6 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
    sits empty and never reads as a fact about somebody. */
 .e-greet{margin:6px 0 2px;font:13.5px var(--sans);color:var(--ink)}
 .e-greet .e-name-ph{color:var(--dim)}
-/* THE PRACTICE CUSTOMER'S CHAT, a small window at the lower right like the chat a shop runs: glass
-   like the other floating panels, over the cards and under every dialog, so the name question
-   and the Library open above it. */
-#eCustomer{position:fixed;right:16px;bottom:16px;z-index:90;width:min(340px,calc(100vw - 32px));
-  max-height:min(520px,calc(100vh - 120px));display:flex;flex-direction:column;
-  background:var(--glass-mid,var(--panel-raised));border:1px solid var(--line);border-radius:14px;
-  box-shadow:var(--bevel),var(--shadow-pop);color:var(--ink);
-  -webkit-backdrop-filter:var(--glass-mid-filter);backdrop-filter:var(--glass-mid-filter);
-  animation:eModalCardIn .18s cubic-bezier(.2,.7,.3,1) both}
-.e-cust-head{display:flex;align-items:center;gap:8px;padding:10px 12px 8px;border-bottom:1px solid var(--line)}
-.e-cust-who{font:600 14px var(--sans-display);user-select:text}
-.e-cust-log{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;padding:10px 12px;
-  display:flex;flex-direction:column;gap:6px}
-.e-msg{max-width:86%;padding:7px 10px;border-radius:12px 12px 12px 4px;font-size:13px;line-height:1.45;
-  background:var(--accent-soft);color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere;align-self:flex-start;
-  user-select:text}
-.e-msg.mine{align-self:flex-end;border-radius:12px 12px 4px 12px;background:var(--panel);border:1px solid var(--line)}
-.e-typing{display:flex;gap:4px;padding:10px 12px}
-.e-typing i{width:6px;height:6px;border-radius:50%;background:var(--dim);animation:eTyping 1s ease-in-out infinite}
-.e-typing i:nth-child(2){animation-delay:.15s}
-.e-typing i:nth-child(3){animation-delay:.3s}
-@keyframes eTyping{0%,60%,100%{opacity:.3}30%{opacity:1}}
-.e-cust-coach{margin:0;padding:8px 12px;font-size:12.5px;line-height:1.45;color:var(--dim);text-wrap:pretty}
-.e-cust-coach:empty{display:none}
-.e-word{font:600 12px var(--mono);padding:0 5px;border:1px solid var(--line-strong);border-radius:4px;color:var(--ink);white-space:nowrap}
-.e-cust-box{display:flex;gap:8px;align-items:flex-end;padding:8px 12px 12px;border-top:1px solid var(--line)}
-.e-cust-box textarea{flex:1 1 auto;min-width:0;resize:none;padding:7px 9px;border:1px solid var(--line-strong);
-  border-radius:var(--radius-sm,8px);background:var(--panel);color:var(--ink);font:13px var(--sans)}
-.e-cust-end{padding:10px 12px 12px;border-top:1px solid var(--line)}
-.e-cust-end h3{margin:0 0 4px;font:600 15px var(--sans-display)}
-.e-cust-end p{margin:0 0 10px;font-size:13px;line-height:1.45;color:var(--dim);text-wrap:pretty}
-.e-cust-end .e-cust-acts{padding:0}
-/* Bringing in one's own replies: a paste box and a drop line, then what was found. */
-.e-own-text{width:100%;box-sizing:border-box;min-height:150px;resize:vertical;padding:8px 10px;
-  border:1px solid var(--line-strong);border-radius:var(--radius-sm,8px);background:var(--panel);color:var(--ink);
-  font:13px/1.45 var(--sans)}
-.e-own-drop{margin:8px 0 4px;padding:12px;border:1px dashed var(--line-strong);border-radius:var(--radius-sm,8px);
-  text-align:center;font-size:12.5px;color:var(--dim)}
-.e-own-drop.on,.e-own-drop:hover,.e-own-drop:focus-visible{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
-.e-own-seen h3{margin:12px 0 6px;font:600 14px var(--sans-display)}
-.e-own-list{margin:0 0 10px;padding-left:18px;font-size:13px;line-height:1.5}
-.e-own-more{list-style:none;color:var(--dim)}
-.e-own-where{margin:10px 0 0}
 /* The licence name in the About sub-line, held whole. Balanced text breaks it at its own
    hyphen otherwise, and a no-break space cannot reach a hyphen. */
 .nw{white-space:nowrap}
@@ -3372,8 +3326,6 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
           <button type="button" role="menuitem" data-act="rail" id="menuRail" title="Hide the intent panel; its chips then appear on the first card that uses {INTENT}">Hide intent panel</button>
           <button type="button" role="menuitem" data-act="pills" id="menuPills" title="Hide the category bar; hold Ctrl to peek at it while hidden">Hide categories</button>
           <div class="menu-sep"></div>
-          <button type="button" role="menuitem" data-act="own" id="menuOwn">Bring in your replies</button>
-          <button type="button" role="menuitem" data-act="practice">A practice chat</button>
           <button type="button" role="menuitem" data-act="tour" title="How a reply gets from here to your customer, in about a minute.">Show tour…</button>
           <button type="button" role="menuitem" data-act="about" title="What Etiuda is, and every keyboard shortcut">About Etiuda</button>
         </div>
@@ -3481,8 +3433,6 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
      self-contained build that opens with its content already loaded and needs no sibling file.
      type="application/json" so the browser stores it as inert text rather than running it. -->
 <script type="application/json" id="eEmbedded"></script>
-<!-- The practice page's switch, filled by tools/practice.mjs for the site and empty here. -->
-<script type="application/json" id="ePractice"></script>
 <script>
 (() => {
   var __defProp = Object.defineProperty;
@@ -3528,13 +3478,13 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
     const w = el.offsetWidth, h = el.offsetHeight;
     const x = target.left, y = target.top, tw = target.width, th = target.height;
     const cx = x + tw / 2, cy = y + th / 2;
-    const fits2 = {
+    const fits = {
       below: y + th + gap + h < vh - m,
       above: y - gap - h > m,
       right: x + tw + gap + w < vw - m,
       left: x - gap - w > m
     };
-    const side = (BUB_ORDER[opts.prefer] || BUB_ORDER.below).find((s) => fits2[s]) || "none";
+    const side = (BUB_ORDER[opts.prefer] || BUB_ORDER.below).find((s) => fits[s]) || "none";
     let top, left, tx = null, ty = null;
     if (side === "below" || side === "above") {
       top = side === "below" ? y + th + gap : y - gap - h;
@@ -4456,9 +4406,7 @@ What you type stays in this browser only.`;
   __export(env_exports, {
     E_SELF: () => E_SELF,
     E_VERSION: () => E_VERSION,
-    eEmbeddedCatalog: () => eEmbeddedCatalog,
-    ePractice: () => ePractice,
-    ePracticeParam: () => ePracticeParam
+    eEmbeddedCatalog: () => eEmbeddedCatalog
   });
   var E_VERSION = "2.0.0-dev";
   var E_SELF = (function() {
@@ -4485,29 +4433,6 @@ What you type stays in this browser only.`;
       return null;
     }
   }
-  var ePracticeRead = false;
-  var ePracticeOpts = null;
-  function ePractice() {
-    if (ePracticeRead) return ePracticeOpts;
-    ePracticeRead = true;
-    try {
-      const el = typeof document !== "undefined" ? document.getElementById("ePractice") : null;
-      const t2 = el ? (el.textContent || "").trim() : "";
-      const o = t2 ? JSON.parse(t2) : null;
-      ePracticeOpts = o && typeof o === "object" ? o : null;
-    } catch (e) {
-      ePracticeOpts = null;
-    }
-    return ePracticeOpts;
-  }
-  function ePracticeParam(name) {
-    if (!ePractice()) return "";
-    try {
-      return String(new URLSearchParams(location.search).get(name) || "").toLowerCase();
-    } catch (e) {
-      return "";
-    }
-  }
 
   // src/modules/hooks.js
   var hooks_exports = {};
@@ -4522,8 +4447,6 @@ What you type stays in this browser only.`;
     "sampleReady",
     "loadSampleCatalog",
     "importCatalogHere",
-    "openOwnImport",
-    "startPractice",
     "openManage",
     "mgCardsIn",
     "openCategoryEditor",
@@ -4541,7 +4464,6 @@ What you type stays in this browser only.`;
     "syncSettingsMenu",
     "endTour",
     "startTour",
-    "maybeShowTourInvite",
     "tourActive",
     "openSettings",
     "cardOrderTouched",
@@ -4612,7 +4534,6 @@ What you type stays in this browser only.`;
     }
   }
   function eHostDesk() {
-    if (ePractice()) return null;
     try {
       const h = typeof window !== "undefined" ? window.E_HOST : null;
       if (!h || typeof h.deskRead !== "function" || typeof h.deskSave !== "function") return null;
@@ -4705,8 +4626,8 @@ What you type stays in this browser only.`;
     } catch (e) {
     }
   }
-  var E_LS_OK = !!E_DESK || !ePractice() && probeStore(() => window.localStorage);
-  var E_SS_OK = !ePractice() && probeStore(() => window.sessionStorage);
+  var E_LS_OK = !!E_DESK || probeStore(() => window.localStorage);
+  var E_SS_OK = probeStore(() => window.sessionStorage);
   function lsGet(k) {
     if (E_DESK) return k in E_DESK.map ? E_DESK.map[k] : null;
     if (!E_LS_OK) return k in E_MEM ? E_MEM[k] : null;
@@ -5925,64 +5846,17 @@ What you type stays in this browser only.`;
     "Animations on": "Animacje włączone",
     "Blur effects on": "Efekty rozmycia włączone",
     "Blur effects off": "Efekty rozmycia wyłączone",
-    "Send": "Wyślij",
-    "Message": "Wiadomość",
-    "She has said hello. Type {WORD} at the top, press Enter, click the first reply and paste it into the message box.": "Klientka się przywitała. Wystarczy wpisać u góry słowo {WORD}, nacisnąć Enter, kliknąć pierwszą odpowiedź i wkleić ją w polu wiadomości.",
-    "Now a return. This time the word is {WORD}, and the rest as before.": "Teraz pytanie o zwrot. Tym razem słowo {WORD}, a dalej tak samo.",
-    "And to close, a thank-you. The word is {WORD}.": "Na koniec podziękowanie. Słowo {WORD}.",
-    "First, her name. Copy it from the chat into the customer's name box.": 'Najpierw imię klientki. Wystarczy skopiować je z rozmowy do pola "imię klienta".',
-    "The word {WORD} at the top is all it takes.": "Wystarczy słowo {WORD} w polu u góry.",
-    "That reply answers something else. The word {WORD} finds the right one.": "Ta odpowiedź dotyczy innej sprawy. Właściwą wskaże słowo {WORD}.",
-    "That works too, but the reply is already written, greeting and signature included: the word {WORD} and a click bring it.": "Tak też można, ale gotowa odpowiedź już czeka, z powitaniem i podpisem: wystarczy słowo {WORD} i kliknięcie.",
-    "That is all it is.": "I to wszystko.",
-    "One word, one click, one paste. The greeting for the hour, her name and your signature were Etiuda's part.": "Jedno słowo, jedno kliknięcie, jedno wklejenie. Powitanie na tę porę dnia, imię we właściwej formie i podpis Etiuda wstawiła sama.",
-    "Once more": "Jeszcze raz",
     "How should your replies be signed?": "Jak podpisywać odpowiedzi?",
     "Customers see it at the foot of every reply. It can be changed at any time in Settings.": "Tak podpis zobaczą klienci pod każdą odpowiedzią. Zmienić go można w każdej chwili w Ustawieniach.",
     "for instance, Kate": "na przykład Kasia",
     "Kate": "Kasia",
     "Sign with this": "Podpisz",
-    "Nothing is kept on this page.": "Na tej stronie nic nie jest zapisywane.",
-    "{GREET}. Etiuda is ready.": "{GREET}. Etiuda jest gotowa.",
-    "To begin with, it works for a sample shop, Mirabelka, a pottery studio in Warsaw. A customer is about to write, and answering her takes a few seconds.": "Na początek pracuje dla przykładowego sklepu: warszawskiej pracowni ceramiki Mirabelka. Za chwilę napisze do niej klientka, a odpowiedź zajmie kilka sekund.",
-    "Begin": "Pierwsza rozmowa",
-    "Straight to work": "Od razu do pracy",
-    "Do you already keep your replies somewhere?": "Czy gotowe odpowiedzi są już gdzieś zapisane?",
-    "In Word, a spreadsheet, a notes file: they can come in here in a minute, and be in use straight away.": "W Wordzie, w arkuszu, w notatkach: można je tu przenieść w minutę i od razu z nich korzystać.",
-    "Yes, I have them": "Tak, mam je spisane",
-    "It waits in the Menu afterwards: {PLACE}.": "To pytanie czeka potem w Menu: {PLACE}.",
-    "Bring in your replies": "Przenieś własne odpowiedzi",
-    "Your replies": "Własne odpowiedzi",
-    "Paste them here, or drop the file: {FORMATS}.": "Wystarczy je tu wkleić albo upuścić plik: {FORMATS}.",
-    "Word (.docx), a spreadsheet (.xlsx, .csv) or plain text (.txt)": "Word (.docx), arkusz (.xlsx, .csv) albo zwykły tekst (.txt)",
-    "An empty line separates one reply from the next. In a spreadsheet, each row is one reply.": "Pusta linia oddziela jedną odpowiedź od następnej. W arkuszu jedna odpowiedź to jeden wiersz.",
-    "Paste your replies here": "Tu można wkleić odpowiedzi",
-    "or drop the file here": "albo upuścić tu plik",
-    "Replies ready to come in: {N}": "Odpowiedzi gotowe do przeniesienia: {N}",
-    "Each becomes a card, like Mirabelka's. Its first words are its title, which can be changed at any time.": "Każda z nich będzie kartą, taką jak karty Mirabelki. Pierwsze słowa posłużą za tytuł, który można zmienić w każdej chwili.",
-    "Replies come in exactly as they were written. The greeting for the hour and the customer's name can be added to any of them when the card is edited.": "Odpowiedzi trafiają tu dokładnie w takiej postaci, w jakiej zostały napisane. Powitanie według pory dnia i imię klienta można dodać w każdej z nich przy edycji karty.",
-    "The file they came from is left as it was.": "Plik, z którego pochodzą, zostaje bez zmian.",
-    "Bring them in": "Przenieś odpowiedzi",
-    "Etiuda tells replies apart by the empty lines between them. With those added, the text can be pasted again.": "Etiuda rozpoznaje odpowiedzi po pustych liniach między nimi. Po ich dodaniu wystarczy wkleić tekst jeszcze raz.",
-    "This file's contents can come in by pasting: Ctrl+A and Ctrl+C in the file, then Ctrl+V here. The file itself is not in a form Etiuda can read.": "Treść tego pliku da się przenieść przez wklejenie: Ctrl+A i Ctrl+C w pliku, potem Ctrl+V tutaj. Sam plik nie jest w formacie, który Etiuda potrafi odczytać.",
-    "Repeated word for word, brought in once: {N}": "Powtórzone słowo w słowo, przeniesione raz: {N}",
-    "Replies brought in: {N}": "Przeniesione odpowiedzi: {N}",
-    "From now on they are the ones waiting for a word. The sample Mirabelka makes room for them and stays in the Library, should it be wanted again.": "Od teraz to one czekają na słowo. Przykładowa Mirabelka ustępuje im miejsca i zostaje w Bibliotece, gdyby była jeszcze potrzebna.",
-    "Type a word from any of them at the top.": "Wystarczy wpisać u góry słowo z dowolnej z nich.",
-    "New card adds another, at any time.": "Kolejną odpowiedź dodaje przycisk Nowa karta, w dowolnej chwili.",
-    "OK": "OK",
-    "End the practice": "Zakończ próbę",
-    "Beside the customer's name there is now a wheel: it chooses who in the team this reply names.": "Obok imienia klienta jest teraz kółko: wybiera się nim osobę z zespołu, którą wymienia ta odpowiedź.",
-    "A practice chat": "Rozmowa na próbę",
-    "What else Etiuda can do: a few short steps, any time from the Menu.": "Co jeszcze potrafi Etiuda: kilka krótkich kroków, w dowolnej chwili z Menu.",
-    "This is a sample shop. Your own replies belong in the program on your computer.": "Tu działa przykładowy sklep. Własne odpowiedzi czekają w programie na komputerze."
+    "Beside the customer's name there is now a wheel: it chooses who in the team this reply names.": "Obok imienia klienta jest teraz kółko: wybiera się nim osobę z zespołu, którą wymienia ta odpowiedź."
   };
   function uiLangKnown(l) {
     return !!(l && UI_STRINGS[l]);
   }
   function systemUiLang() {
-    const asked = ePracticeParam("lang");
-    if (asked === "en" || uiLangKnown(asked)) return asked;
     let list2 = [];
     try {
       list2 = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language];
@@ -7889,6 +7763,7 @@ What you type stays in this browser only.`;
     askAgentName: () => askAgentName,
     renderFillsSoon: () => renderFillsSoon,
     setAgentName: () => setAgentName,
+    syncRoleWheel: () => syncRoleWheel,
     wantsAgentName: () => wantsAgentName,
     wirePaxFill: () => wirePaxFill,
     withAgentName: () => withAgentName
@@ -9436,6 +9311,9 @@ What you type stays in this browser only.`;
     }
     askAgentName(raw, go);
   }
+  function syncRoleWheel() {
+    document.body.classList.toggle("role-waits", nsGet("Sample") === "1" && lsGet("eRoleSeen") !== "1");
+  }
   function signLines(raw) {
     const lines = String(raw || "").split("\n");
     const i = lines.findIndex((l) => E_SIGN_RE.test(l));
@@ -9450,7 +9328,7 @@ What you type stays in this browser only.`;
     const wrap = document.createElement("div");
     wrap.className = "modal";
     wrap.id = "eAgentModal";
-    wrap.innerHTML = '<div class="modal-bg"></div><div class="modal-card"><h2>How should your replies be signed?</h2><p class="modal-sub">Customers see it at the foot of every reply. It can be changed at any time in Settings.</p><div class="mf"><input id="eAgentInp" autocomplete="off" spellcheck="false" placeholder="for instance, Kate"></div><p class="e-greet" id="eAgentPrev" data-i18n-skip></p>' + (ePractice() ? '<p class="modal-sub" id="eAgentPage">Nothing is kept on this page.</p>' : "") + '<div class="modal-actions"><button type="button" class="btn" id="eAgentNo">Later</button><button type="button" class="btn primary" id="eAgentYes">Sign with this</button></div></div>';
+    wrap.innerHTML = '<div class="modal-bg"></div><div class="modal-card"><h2>How should your replies be signed?</h2><p class="modal-sub">Customers see it at the foot of every reply. It can be changed at any time in Settings.</p><div class="mf"><input id="eAgentInp" autocomplete="off" spellcheck="false" placeholder="for instance, Kate"></div><p class="e-greet" id="eAgentPrev" data-i18n-skip></p><div class="modal-actions"><button type="button" class="btn" id="eAgentNo">Later</button><button type="button" class="btn primary" id="eAgentYes">Sign with this</button></div></div>';
     document.body.appendChild(wrap);
     translateTree(wrap);
     const inp = wrap.querySelector("#eAgentInp");
@@ -10598,7 +10476,6 @@ What you type stays in this browser only.`;
     isCatalogUpdate: () => isCatalogUpdate,
     loadSampleCatalog: () => loadSampleCatalog,
     proposeEdition: () => proposeEdition,
-    refusePractice: () => refusePractice,
     sampleReady: () => sampleReady,
     sampleUntouched: () => sampleUntouched,
     syncSampleMark: () => syncSampleMark
@@ -11070,7 +10947,6 @@ What you type stays in this browser only.`;
     eCatalogFolderShort: () => eCatalogFolderShort,
     eCatalogIn: () => eCatalogIn,
     eCatalogMtime: () => eCatalogMtime,
-    eCatalogSample: () => eCatalogSample,
     eChooseCatalogFolder: () => eChooseCatalogFolder,
     eHasCatalogPicker: () => eHasCatalogPicker,
     eHasCatalogSaver: () => eHasCatalogSaver,
@@ -11278,10 +11154,6 @@ What you type stays in this browser only.`;
     const h = eHost();
     return !!(h && h.openedWith);
   }
-  function eCatalogSample() {
-    const h = eHost();
-    return !!(h && h.catalogSample);
-  }
   function eCatalogFiles() {
     const h = eHost();
     if (!h || typeof h.catalogFiles !== "function") return Promise.resolve([]);
@@ -11481,12 +11353,12 @@ What you type stays in this browser only.`;
     if (!el || el.classList.contains("is-missing")) return;
     const kind = ev || "input";
     el.classList.add("is-missing");
-    const fold2 = el.closest ? el.closest("details.mf-fold") : null;
-    if (fold2) fold2.classList.add("mf-missing");
+    const fold = el.closest ? el.closest("details.mf-fold") : null;
+    if (fold) fold.classList.add("mf-missing");
     const clear = () => {
       el.classList.remove("is-missing");
       el.removeEventListener(kind, clear);
-      if (fold2 && !fold2.querySelector(".is-missing")) fold2.classList.remove("mf-missing");
+      if (fold && !fold.querySelector(".is-missing")) fold.classList.remove("mf-missing");
     };
     el.addEventListener(kind, clear);
   }
@@ -11608,7 +11480,6 @@ What you type stays in this browser only.`;
   // src/modules/card-carry.js
   var card_carry_exports = {};
   __export(card_carry_exports, {
-    OWN_ID: () => OWN_ID,
     carryAtBoot: () => carryAtBoot,
     carryCardLayer: () => carryCardLayer
   });
@@ -11858,33 +11729,12 @@ What you type stays in this browser only.`;
       if (CAT_LABELS_PL[k] && !pack.catLabelsPl[k]) pack.catLabelsPl[k] = CAT_LABELS_PL[k];
     });
   }
-  var OWN_ID = "own-replies";
-  function keepOwnCatalog(held, c, alive) {
-    if (!held || held.id !== OWN_ID || (c && c.id) === OWN_ID) return;
-    const L = CONTENT_LANGS[0] || "en", ov = pack.overrides || {};
-    BASE_M.forEach((base) => {
-      const full = Object.assign({}, base, ov[base.id] || {}), own = {};
-      Object.keys(full).forEach((k2) => {
-        if (k2.charAt(0) !== "_") own[k2] = full[k2];
-      });
-      delete own.intents;
-      own.id = uid("u:");
-      own.lockLang = L;
-      delete ov[base.id];
-      renameCard(base.id, own.id);
-      pack.custom.push(own);
-      alive.add(own.id);
-      const k = own.c;
-      if (k && !pack.customCats[k]) pack.customCats[k] = pack.catLabels[k] || BASE_CATS[k] || k;
-    });
-  }
-  function carryCardLayer(c, held) {
+  function carryCardLayer(c) {
     const list2 = c && c.cards || [];
     const alive = new Set(list2.map(catalogCardId));
     (pack.custom || []).forEach((m) => {
       if (m && m.id) alive.add(m.id);
     });
-    keepOwnCatalog(held, c, alive);
     rekeyOldCards(list2, alive);
     rekeyOldShelves(c && c.categories || {});
     const find = linkFinder(c), lost = {};
@@ -11940,13 +11790,13 @@ What you type stays in this browser only.`;
     } catch (e) {
     }
     if (!kept && !stars) return;
-    const say2 = [];
-    if (kept) say2.push(catalogCountsLine("Edited cards this catalog does not have are kept as your own: {CARDS}.", kept, 0, 0, 0));
-    if (stars) say2.push(catalogCountsLine("Starred cards this catalog does not have are off your list: {CARDS}.", stars, 0, 0, 0));
+    const say = [];
+    if (kept) say.push(catalogCountsLine("Edited cards this catalog does not have are kept as your own: {CARDS}.", kept, 0, 0, 0));
+    if (stars) say.push(catalogCountsLine("Starred cards this catalog does not have are off your list: {CARDS}.", stars, 0, 0, 0));
     const speak = () => {
       const el = document.getElementById("toast");
       if (el && el.classList.contains("show")) return setTimeout(speak, 400);
-      toast(say2.join(" "));
+      toast(say.join(" "));
     };
     setTimeout(speak, 1400);
   }
@@ -12181,13 +12031,7 @@ What you type stays in this browser only.`;
       }
     }, 30);
   }
-  function refusePractice() {
-    if (!ePractice()) return false;
-    toast("This is a sample shop. Your own replies belong in the program on your computer.", TOAST_HAND_MS);
-    return true;
-  }
   function exportCatalog() {
-    if (refusePractice()) return;
     if (!(cards || []).length) {
       toast("Export is ready once the catalog holds a card.");
       return;
@@ -12250,7 +12094,6 @@ What you type stays in this browser only.`;
     return was && was.date >= today ? was.date + nextEditionLetters(was.s) : today;
   }
   function activateCatalog(c, opts) {
-    if (refusePractice()) return false;
     const keep = !!(opts && opts.keepPersonal);
     if (!storeCatalog(c)) return false;
     if (!keep) {
@@ -12265,7 +12108,7 @@ What you type stays in this browser only.`;
       nsDel("IntentOrder");
     }
     let alive = new Set((c.cards || []).map(catalogCardId));
-    if (keep) alive = carryCardLayer(c, storedCatalog());
+    if (keep) alive = carryCardLayer(c);
     else (pack.custom || []).forEach((m) => {
       if (m && m.id) alive.add(m.id);
     });
@@ -12276,10 +12119,6 @@ What you type stays in this browser only.`;
     cardOrderTouched();
     savePack();
     nsDel("CatalogNo");
-    if (opts && opts.refuse) {
-      nsSet("CatalogNo", String(opts.refuse));
-      nsSet("CatalogNoAt", String(Date.now()));
-    }
     try {
       if (c && c.sample) nsSet("Sample", "1");
       else nsDel("Sample");
@@ -12361,7 +12200,6 @@ What you type stays in this browser only.`;
     });
   }
   function importCatalogHere() {
-    if (refusePractice()) return;
     if (eHasCatalogPicker()) importCatalogHosted();
     else if (eWatchSupported()) importCatalogPicked();
     else importCatalogFile();
@@ -12918,7 +12756,6 @@ What you type stays in this browser only.`;
     copy: () => copy,
     fallback: () => fallback,
     kbdNav: () => kbdNav,
-    lastCopy: () => lastCopy,
     markEnd: () => markEnd,
     markSurface: () => markSurface,
     railQuery: () => railQuery,
@@ -12947,12 +12784,7 @@ What you type stays in this browser only.`;
   function railQuery() {
     return typeof intentEl !== "undefined" && intentEl ? String(intentEl.value || "").trim() : "";
   }
-  var eLastCopy = null;
-  function lastCopy() {
-    return eLastCopy;
-  }
-  function copy(text, msg, cardId) {
-    eLastCopy = { text: String(text || ""), id: cardId ? String(cardId) : "" };
+  function copy(text, msg) {
     setRailMarkUsed(true);
     setSemiKind(null);
     hooks.railDecorate(false);
@@ -13081,9 +12913,9 @@ What you type stays in this browser only.`;
     el.innerHTML = html;
   }
   function setFactsEditMode(on) {
-    const panel2 = $("#factsPanel");
+    const panel = $("#factsPanel");
     const editBtn = $("#factsEditBtn"), saveBtn = $("#factsSaveBtn"), cancelBtn = $("#factsCancelBtn"), resetBtn = $("#factsResetBtn");
-    if (panel2) panel2.classList.toggle("editing", !!on);
+    if (panel) panel.classList.toggle("editing", !!on);
     if (editBtn) editBtn.hidden = !!on;
     if (saveBtn) saveBtn.hidden = !on;
     if (cancelBtn) cancelBtn.hidden = !on;
@@ -13091,8 +12923,8 @@ What you type stays in this browser only.`;
   }
   var factsDraft = null;
   function exitFactsEdit(save, discard) {
-    const panel2 = $("#factsPanel");
-    if (!panel2 || !panel2.classList.contains("editing")) return;
+    const panel = $("#factsPanel");
+    if (!panel || !panel.classList.contains("editing")) return;
     const ta = $("#factsEdit");
     if (save) {
       const next = ta ? ta.value : getFactsText();
@@ -13111,8 +12943,8 @@ What you type stays in this browser only.`;
     setFactsEditMode(false);
   }
   function cancelFactsEdit() {
-    const panel2 = $("#factsPanel");
-    if (!panel2 || !panel2.classList.contains("editing")) return false;
+    const panel = $("#factsPanel");
+    if (!panel || !panel.classList.contains("editing")) return false;
     exitFactsEdit(false, true);
     return true;
   }
@@ -13878,7 +13710,7 @@ What you type stays in this browser only.`;
     }
   }
   function themeChoice() {
-    const t2 = lsGet("eTheme") || ePracticeParam("theme");
+    const t2 = lsGet("eTheme");
     return t2 === "light" || t2 === "dark" ? t2 : null;
   }
   function paintTheme(next) {
@@ -15860,11 +15692,11 @@ What you type stays in this browser only.`;
       hooks.render();
     }, { clampTravel: 180 });
     if (!list || mgReduceMotion()) return;
-    const fold2 = list.querySelector('.sep-fold[data-fold-key="' + cssEsc(key) + '"]');
-    if (fold2) {
+    const fold = list.querySelector('.sep-fold[data-fold-key="' + cssEsc(key) + '"]');
+    if (fold) {
       const turn = isCollapsed(key) ? "e-turn-shut" : "e-turn-open";
-      fold2.classList.add(turn);
-      setTimeout(() => fold2.classList.remove(turn), 220);
+      fold.classList.add(turn);
+      setTimeout(() => fold.classList.remove(turn), 220);
     }
     const fresh = [];
     list.querySelectorAll(".card[data-id]").forEach((el) => {
@@ -16077,11 +15909,11 @@ What you type stays in this browser only.`;
     addEventListener("pointerup", endCardDrag);
     addEventListener("pointercancel", endCardDrag);
     list.addEventListener("click", (e) => {
-      const fold2 = e.target.closest(".sep-fold[data-fold-key]");
-      if (fold2) {
+      const fold = e.target.closest(".sep-fold[data-fold-key]");
+      if (fold) {
         e.preventDefault();
         e.stopPropagation();
-        animateFoldToggle(fold2.getAttribute("data-fold-key"));
+        animateFoldToggle(fold.getAttribute("data-fold-key"));
         return;
       }
       if (cardSuppressClick) {
@@ -16129,7 +15961,7 @@ What you type stays in this browser only.`;
       txtEl.addEventListener("pointerleave", () => txtEl.classList.remove("just-picked"), { once: true });
       withAgentName(ps[vi], () => {
         bumpUseCount(mid, cl);
-        copy(fill(ps[vi], m), copiedToastMsg(m, cl, vi, ps.length), mid);
+        copy(fill(ps[vi], m), copiedToastMsg(m, cl, vi, ps.length));
       });
     });
   }
@@ -17180,7 +17012,7 @@ What you type stays in this browser only.`;
       const b = e.target.closest("button[data-act]");
       if (!b) return;
       const act = b.dataset.act;
-      if (act === "settings" || act === "manage" || act === "tour" || act === "about" || act === "own" || act === "practice") menuReturn = null;
+      if (act === "settings" || act === "manage" || act === "tour" || act === "about") menuReturn = null;
       if (act === "settings") {
         hooks.openSettings();
         closeSettingsMenu();
@@ -17193,12 +17025,6 @@ What you type stays in this browser only.`;
       } else if (act === "about") {
         openAbout();
         closeSettingsMenu();
-      } else if (act === "own") {
-        closeSettingsMenu();
-        hooks.openOwnImport();
-      } else if (act === "practice") {
-        closeSettingsMenu();
-        hooks.startPractice();
       } else if (act === "rail") {
         toggleRail();
       } else if (act === "pills") {
@@ -17787,362 +17613,6 @@ What you type stays in this browser only.`;
     });
   }
 
-  // src/modules/practice.js
-  var practice_exports = {};
-  __export(practice_exports, {
-    PRACTICE_STEPS: () => PRACTICE_STEPS,
-    askOwnReplies: () => askOwnReplies,
-    closePractice: () => closePractice,
-    firstAfternoonDue: () => firstAfternoonDue,
-    firstAfternoonOpen: () => firstAfternoonOpen,
-    practiceRunning: () => practiceRunning,
-    startPractice: () => startPractice,
-    syncRoleWheel: () => syncRoleWheel,
-    wirePractice: () => wirePractice
-  });
-  var PRACTICE_WHO = { pl: "Agnieszka W.", en: "Hannah R." };
-  var PRACTICE_STEPS = [
-    {
-      says: [{
-        pl: "Dzień dobry, piszę w sprawie kubka, który przyszedł w piątek.",
-        en: "Hello, I'm writing about a mug that arrived on Friday."
-      }],
-      word: { pl: "powitanie", en: "hello" },
-      shelf: "t-opening",
-      coach: "She has said hello. Type {WORD} at the top, press Enter, click the first reply and paste it into the message box."
-    },
-    {
-      says: [
-        { pl: "Miło mi.", en: "Nice to meet you." },
-        {
-          pl: "Jest śliczny, w kolorze mirabelki, ale przy moich talerzach wygląda jak z innej bajki. Mogę go jeszcze oddać?",
-          en: "It's lovely, that mirabelle yellow, but next to my plates it looks as if it wandered in from another kitchen. Can I still send it back?"
-        }
-      ],
-      word: { pl: "zwrot", en: "return" },
-      request: "t-return-an-item",
-      coach: "Now a return. This time the word is {WORD}, and the rest as before."
-    },
-    {
-      says: [{
-        pl: "Dziękuję, to bardzo miłe. W takim razie czekam na etykietę i to już wszystko.",
-        en: "Thank you, that's kind. I'll look out for the label, and that's everything."
-      }],
-      word: { pl: "pożegnanie", en: "thanks" },
-      shelf: "t-closing",
-      coach: "And to close, a thank-you. The word is {WORD}."
-    }
-  ];
-  var PRACTICE_LAST = { pl: "Wzajemnie, do usłyszenia.", en: "And to you. Goodbye." };
-  var TYPING_MS = 900;
-  var IDLE_MS = 25e3;
-  var P = null;
-  var say = (o) => o[P && P.lang] || o.en;
-  function scriptLang() {
-    return PRACTICE_WHO[lang] ? lang : "en";
-  }
-  function tell(event, extra) {
-    if (!ePractice()) return;
-    try {
-      if (window.parent && window.parent !== window)
-        window.parent.postMessage(Object.assign({ source: "etiuda-practice", event }, extra || {}), "*");
-    } catch (e) {
-    }
-  }
-  var norm = (s) => String(s || "").replace(/\s+/g, " ").trim();
-  var panel = () => document.getElementById("eCustomer");
-  function practiceRunning() {
-    return !!P;
-  }
-  function startPractice() {
-    if (P) endPracticePanel();
-    if (pax && pax.value.trim() || intentEl && intentEl.value.trim() || intentIdxs.length) addTab();
-    P = { step: 0, lang: scriptLang(), busy: false, idle: 0, nudged: false, typed: 0 };
-    buildPanel();
-    tell("ready");
-    nextStep(0, true);
-  }
-  function buildPanel() {
-    const el = document.createElement("div");
-    el.id = "eCustomer";
-    el.setAttribute("role", "complementary");
-    el.setAttribute("aria-label", PRACTICE_WHO[P.lang]);
-    el.innerHTML = '<div class="e-cust-head"><b class="e-cust-who" data-i18n-skip>' + esc(PRACTICE_WHO[P.lang]) + '</b><button type="button" class="modal-x" id="eCustX" title="' + esc(t("End the practice")) + '">' + ICON_X + '</button></div><div class="e-cust-log" id="eCustLog" aria-live="polite" data-i18n-skip></div><p class="e-cust-coach" id="eCustCoach" role="status"></p><div class="e-cust-box" id="eCustBox"><textarea id="eCustInp" rows="3" spellcheck="false" aria-label="' + esc(t("Message")) + '"></textarea><button type="button" class="btn" id="eCustSend">' + esc(t("Send")) + "</button></div>";
-    document.body.appendChild(el);
-    el.querySelector("#eCustX").onclick = () => closePractice();
-    el.querySelector("#eCustSend").onclick = send;
-    const inp = el.querySelector("#eCustInp");
-    inp.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        send();
-      }
-    });
-    inp.addEventListener("keydown", (e) => e.stopPropagation());
-    inp.addEventListener("paste", () => setTimeout(send, 0));
-  }
-  function logLine(text, mine) {
-    const log = document.getElementById("eCustLog");
-    if (!log) return null;
-    const m = document.createElement("div");
-    m.className = "e-msg" + (mine ? " mine" : "");
-    m.textContent = text;
-    log.appendChild(m);
-    log.scrollTop = log.scrollHeight;
-    return m;
-  }
-  function herLines(lines, done) {
-    P.busy = true;
-    const log = document.getElementById("eCustLog");
-    let i = 0;
-    const next = () => {
-      if (!P) return;
-      if (i >= lines.length) {
-        P.busy = false;
-        done();
-        return;
-      }
-      const dots = document.createElement("div");
-      dots.className = "e-msg e-typing";
-      dots.setAttribute("aria-hidden", "true");
-      dots.innerHTML = "<i></i><i></i><i></i>";
-      if (log) {
-        log.appendChild(dots);
-        log.scrollTop = log.scrollHeight;
-      }
-      setTimeout(() => {
-        dots.remove();
-        if (!P) return;
-        logLine(say(lines[i++]), false);
-        next();
-      }, TYPING_MS);
-    };
-    next();
-  }
-  function coach(key) {
-    const el = document.getElementById("eCustCoach");
-    if (!el || !P) return;
-    const w = say(PRACTICE_STEPS[Math.min(P.step, PRACTICE_STEPS.length - 1)].word);
-    el.innerHTML = t(key).split("{WORD}").map(esc).join('<kbd class="e-word">' + esc(w) + "</kbd>");
-  }
-  function wantsName() {
-    const first = foldDiacritics(PRACTICE_WHO[P.lang].split(" ")[0]).toLowerCase();
-    return P.step === 0 && !(pax && foldDiacritics(pax.value).toLowerCase().indexOf(first) > -1);
-  }
-  function stepCoach() {
-    if (!P) return;
-    coach(wantsName() ? "First, her name. Copy it from the chat into the customer's name box." : PRACTICE_STEPS[P.step].coach);
-  }
-  function armIdle() {
-    clearTimeout(P.idle);
-    P.idle = setTimeout(() => {
-      if (P && !P.nudged && !P.busy) {
-        P.nudged = true;
-        coach("The word {WORD} at the top is all it takes.");
-      }
-    }, IDLE_MS);
-  }
-  function nextStep(i, first) {
-    P.step = i;
-    P.nudged = false;
-    const st = PRACTICE_STEPS[i];
-    herLines(st.says, () => {
-      tell("step", { step: i + 1, of: PRACTICE_STEPS.length });
-      stepCoach();
-      armIdle();
-      if (first) {
-        const b = document.getElementById("eCustInp");
-        if (b) b.value = "";
-      }
-    });
-  }
-  function fits(card, st) {
-    if (!card) return false;
-    if (st.shelf) return card.c === st.shelf;
-    const want = "t:" + st.request;
-    return (card.intents || []).some((x) => String(x) === want || /^[0-9]+$/.test(String(x)) && intentIdAt(+x) === want);
-  }
-  function send() {
-    if (!P || P.busy) return;
-    const inp = document.getElementById("eCustInp");
-    const text = inp ? inp.value.trim() : "";
-    if (!text) return;
-    inp.value = "";
-    logLine(text, true);
-    const st = PRACTICE_STEPS[P.step];
-    const got = lastCopy();
-    if (!got || norm(got.text) !== norm(text) || !got.id) {
-      tell("miss", { step: P.step + 1, of: PRACTICE_STEPS.length });
-      coach("That works too, but the reply is already written, greeting and signature included: the word {WORD} and a click bring it.");
-      return;
-    }
-    if (!fits(findCard(got.id), st)) {
-      tell("miss", { step: P.step + 1, of: PRACTICE_STEPS.length });
-      coach("That reply answers something else. The word {WORD} finds the right one.");
-      return;
-    }
-    tell("reply", { step: P.step + 1, of: PRACTICE_STEPS.length });
-    clearTimeout(P.idle);
-    const el = document.getElementById("eCustCoach");
-    if (el) el.textContent = "";
-    try {
-      hooks.clearSearchQuery();
-    } catch (e) {
-    }
-    if (P.step + 1 < PRACTICE_STEPS.length) {
-      nextStep(P.step + 1, false);
-      return;
-    }
-    herLines([PRACTICE_LAST], showEnd);
-  }
-  function showEnd() {
-    const box = document.getElementById("eCustBox"), el = document.getElementById("eCustCoach");
-    if (box) box.hidden = true;
-    if (el) el.textContent = "";
-    const p = panel();
-    if (!p) return;
-    const end = document.createElement("div");
-    end.className = "e-cust-end";
-    end.innerHTML = "<h3>" + esc(t("That is all it is.")) + "</h3><p>" + esc(t("One word, one click, one paste. The greeting for the hour, her name and your signature were Etiuda's part.")) + '</p><div class="modal-actions e-cust-acts"><button type="button" class="btn" id="eCustAgain">' + esc(t("Once more")) + "</button>" + (ePractice() ? "" : '<button type="button" class="btn primary" id="eCustNext">' + esc(t("Next")) + "</button>") + "</div>";
-    p.appendChild(end);
-    const log = document.getElementById("eCustLog");
-    if (log) log.scrollTop = log.scrollHeight;
-    end.querySelector("#eCustAgain").onclick = () => startPractice();
-    const nx = end.querySelector("#eCustNext");
-    if (nx) {
-      nx.onclick = () => closePractice();
-      try {
-        nx.focus();
-      } catch (e) {
-      }
-    }
-    lsSet(E_PRACTICE_DONE, "1");
-    tell("done");
-  }
-  function endPracticePanel() {
-    if (P) clearTimeout(P.idle);
-    P = null;
-    const p = panel();
-    if (p) p.remove();
-  }
-  function closePractice() {
-    endPracticePanel();
-    if (!ePractice()) askOwnReplies();
-  }
-  var E_HELLO_DONE = "eHelloDone";
-  var E_OWN_ASKED = "eOwnAsked";
-  var E_PRACTICE_DONE = "ePracticeDone";
-  function firstAfternoonDue() {
-    return !!eHost() && !ePractice() && nsGet("Sample") === "1" && lsGet(E_HELLO_DONE) !== "1";
-  }
-  function firstAfternoonOpen() {
-    return !!(document.getElementById("eHello") || document.getElementById("eOwnAsk") || panel() || document.getElementById("eOwnImport") || document.getElementById("eOwnDone"));
-  }
-  function smallDialog(id, html, wire) {
-    const wrap = document.createElement("div");
-    wrap.className = "modal";
-    wrap.id = id;
-    wrap.innerHTML = '<div class="modal-bg"></div><div class="modal-card">' + html + "</div>";
-    document.body.appendChild(wrap);
-    const close = () => {
-      document.removeEventListener("keydown", onKey, true);
-      wrap.remove();
-    };
-    function onKey(e) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        close();
-      }
-    }
-    document.addEventListener("keydown", onKey, true);
-    wire(wrap, close);
-    const yes = wrap.querySelector(".btn.primary");
-    if (yes) try {
-      yes.focus();
-    } catch (e) {
-    }
-  }
-  function sayHello() {
-    if (document.getElementById("eHello")) return;
-    const L = uiLang();
-    smallDialog(
-      "eHello",
-      "<h2>" + esc(t("{GREET}. Etiuda is ready.").split("{GREET}").join(greeting(L))) + '</h2><p class="modal-sub">' + esc(t("To begin with, it works for a sample shop, Mirabelka, a pottery studio in Warsaw. A customer is about to write, and answering her takes a few seconds.")) + '</p><div class="modal-actions"><button type="button" class="btn" id="eHelloSkip">' + esc(t("Straight to work")) + '</button><button type="button" class="btn primary" id="eHelloGo">' + esc(t("Begin")) + "</button></div>",
-      (w, close) => {
-        w.querySelector("#eHelloGo").onclick = () => {
-          lsSet(E_HELLO_DONE, "1");
-          close();
-          startPractice();
-        };
-        w.querySelector("#eHelloSkip").onclick = () => {
-          lsSet(E_HELLO_DONE, "1");
-          close();
-          askOwnReplies();
-        };
-      }
-    );
-  }
-  function askOwnReplies() {
-    if (lsGet(E_OWN_ASKED) === "1" || document.getElementById("eOwnAsk")) {
-      try {
-        hooks.maybeShowTourInvite();
-      } catch (e) {
-      }
-      return;
-    }
-    smallDialog(
-      "eOwnAsk",
-      "<h2>" + esc(t("Do you already keep your replies somewhere?")) + '</h2><p class="modal-sub">' + esc(t("In Word, a spreadsheet, a notes file: they can come in here in a minute, and be in use straight away.")) + '</p><div class="modal-actions"><button type="button" class="btn" id="eOwnLater">' + esc(t("Later")) + '</button><button type="button" class="btn primary" id="eOwnYes">' + esc(t("Yes, I have them")) + '</button></div><p class="modal-sub e-own-where">' + esc(t("It waits in the Menu afterwards: {PLACE}.").split("{PLACE}").join(t("Bring in your replies"))) + "</p>",
-      (w, close) => {
-        w.querySelector("#eOwnYes").onclick = () => {
-          lsSet(E_OWN_ASKED, "1");
-          close();
-          hooks.openOwnImport();
-        };
-        w.querySelector("#eOwnLater").onclick = () => {
-          lsSet(E_OWN_ASKED, "1");
-          close();
-          try {
-            hooks.maybeShowTourInvite();
-          } catch (e) {
-          }
-        };
-      }
-    );
-  }
-  function syncRoleWheel() {
-    const held = storedCatalog();
-    const first = ePractice() || nsGet("Sample") === "1" || !!(held && held.id === OWN_ID);
-    document.body.classList.toggle("role-waits", first && lsGet("eRoleSeen") !== "1");
-  }
-  function wirePractice() {
-    syncRoleWheel();
-    addEventListener("input", (e) => {
-      if (!P) return;
-      if (pax && e.target === pax && P.step === 0) stepCoach();
-      else if (intentEl && e.target === intentEl) armIdle();
-    }, true);
-    if (ePractice()) {
-      const own = document.getElementById("menuOwn");
-      if (own) own.hidden = true;
-      window.addEventListener("message", (e) => {
-        if (e.source !== window.parent || !e.data || e.data.source !== "etiuda-site") return;
-        if (e.data.cmd === "restart") startPractice();
-        else if (e.data.cmd === "theme" && (e.data.theme === "light" || e.data.theme === "dark")) {
-          lsSet("eTheme", e.data.theme);
-          applyTheme();
-        }
-      });
-      setTimeout(startPractice, 1500);
-      return;
-    }
-    if (firstAfternoonDue() && !document.getElementById("eCatalogModal")) setTimeout(() => {
-      if (!firstAfternoonOpen() && !document.getElementById("eCatalogModal")) sayHello();
-    }, 600);
-  }
-
   // src/modules/tour.js
   var TOUR_VER = 3;
   var tourIdx = -1;
@@ -18693,16 +18163,15 @@ What you type stays in this browser only.`;
     }
   }
   function maybeShowTourInvite() {
-    if (tourSeen() || tourInviteDismissed() || ePractice()) return;
+    if (tourSeen() || tourInviteDismissed()) return;
     const inv = $("#tourInvite");
     if (!inv) return;
     setTimeout(() => {
       if (tourRunning || tourSeen() || tourInviteDismissed()) return;
       if (document.getElementById("eCatalogModal")) return;
       if (document.getElementById("eAgentModal")) return;
-      if (firstAfternoonDue() || firstAfternoonOpen()) return;
       const body = $("#tourInviteBody"), start = $("#tourInviteStart");
-      if (body) body.textContent = t("What else Etiuda can do: a few short steps, any time from the Menu.");
+      if (body) body.textContent = t("How a reply gets from here to your customer, in about a minute.");
       if (start) start.textContent = t("Show tour");
       inv.hidden = false;
       placeTourInvite();
@@ -19168,8 +18637,8 @@ What you type stays in this browser only.`;
   function meFocusCat() {
     const box = $("#meCatPick");
     if (!box) return;
-    const fold2 = box.closest("details.mf-fold");
-    if (fold2 && !fold2.open) fold2.open = true;
+    const fold = box.closest("details.mf-fold");
+    if (fold && !fold.open) fold.open = true;
     markMissing(box, "click");
   }
   function readMeLockLang() {
@@ -20655,7 +20124,7 @@ What you type stays in this browser only.`;
     const id = entrySel.id;
     withAgentName(ps[vi], () => {
       bumpUseCount(id, l);
-      copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length), id);
+      copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length));
       eCopyFeedback(id);
     });
     return true;
@@ -21111,18 +20580,6 @@ What you type stays in this browser only.`;
   __export(catalog_boot_exports, {
     applyBootCatalog: () => applyBootCatalog
   });
-  var E_SAMPLE_TAKEN = "e~sampleTaken";
-  function takeSampleAtBoot(c) {
-    if (!c || !c.sample || !eCatalogSample()) return false;
-    if (lsGet(E_SAMPLE_TAKEN) === "1" || nsGet("CatalogNo") || ejectedJustNow()) return false;
-    if (!storeCatalog(c)) return false;
-    lsSet(E_CATALOG_KEY, eCatalogSignature(c));
-    lsSet(E_SAMPLE_TAKEN, "1");
-    nsSet("Sample", "1");
-    nsSet("CatalogFile", eCatalogFile());
-    nsSet("CatalogFileAt", String(eCatalogMtime()));
-    return true;
-  }
   function applyBootCatalog() {
     const stored = storedCatalog();
     if (stored) {
@@ -21135,7 +20592,7 @@ What you type stays in this browser only.`;
       return;
     }
     const c = eCatalog();
-    if (c && (eCatalogAccepted(c) || takeSampleAtBoot(c))) eApplyCatalog(c);
+    if (c && eCatalogAccepted(c)) eApplyCatalog(c);
   }
 
   // src/modules/role-turn.js
@@ -21535,602 +20992,8 @@ What you type stays in this browser only.`;
     return false;
   }
 
-  // src/modules/sheet-read.js
-  var sheet_read_exports = {};
-  __export(sheet_read_exports, {
-    csvRows: () => csvRows,
-    docxText: () => docxText,
-    firstWords: () => firstWords,
-    repliesFromRows: () => repliesFromRows,
-    repliesFromText: () => repliesFromText,
-    sheetText: () => sheetText,
-    textLang: () => textLang,
-    unzip: () => unzip,
-    workbookRows: () => workbookRows
-  });
-  var TITLE_MAX = 60;
-  var FIRST_WORDS = 6;
-  var FIRST_WORDS_MAX = 48;
-  var sheetClean = (s) => String(s == null ? "" : s).replace(/\r\n?/g, "\n").replace(/^\uFEFF/, "");
-  function titleLike(line) {
-    const s = String(line || "").trim();
-    return !!s && s.length <= TITLE_MAX && !/[.?!,;]$/.test(s) && s.indexOf("\n") < 0;
-  }
-  function titleText(line) {
-    return String(line || "").trim().replace(/^[0-9]{1,3}[.)]\s+/, "").replace(/:$/, "").trim();
-  }
-  function firstWords(text) {
-    const words = String(text || "").replace(/\s+/g, " ").trim().split(" ");
-    let out = "";
-    for (const w of words.slice(0, FIRST_WORDS)) {
-      if (out && (out + " " + w).length > FIRST_WORDS_MAX) break;
-      out = out ? out + " " + w : w;
-    }
-    return out.replace(/[.,;:?!]+$/, "");
-  }
-  function repliesFromText(text) {
-    const blocks = sheetClean(text).split(/\n[ \t]*\n/).map((b) => b.replace(/^\n+|\s+$/g, "")).filter((b) => b.trim());
-    const out = [];
-    let held = "";
-    blocks.forEach((b, i) => {
-      const lines = b.split("\n");
-      if (lines.length === 1 && titleLike(lines[0]) && i < blocks.length - 1 && !held) {
-        held = titleText(lines[0]);
-        return;
-      }
-      if (!held && lines.length > 1 && titleLike(lines[0])) {
-        out.push({ title: titleText(lines[0]), text: lines.slice(1).join("\n").trim(), named: true });
-        return;
-      }
-      out.push(held ? { title: held, text: b.trim(), named: true } : { title: firstWords(b), text: b.trim(), named: false });
-      held = "";
-    });
-    if (held) out.push({ title: firstWords(held), text: held, named: false });
-    const split = out.length === 1 && out[0].text.split("\n").length > 2;
-    return { replies: out.filter((r) => r.text), split };
-  }
-  function csvDelimiter(text) {
-    const first = [];
-    let q = false;
-    for (const ch of text) {
-      if (ch === '"') q = !q;
-      else if (ch === "\n" && !q) break;
-      else if (!q) first.push(ch);
-    }
-    const n = (c) => first.filter((x) => x === c).length;
-    return [",", ";", "	"].reduce((a, c) => n(c) > n(a) ? c : a, ",");
-  }
-  function csvRows(text) {
-    const s = sheetClean(text), d = csvDelimiter(s), rows = [];
-    let row = [], cell = "", q = false;
-    for (let i = 0; i < s.length; i++) {
-      const ch = s[i];
-      if (q) {
-        if (ch === '"') {
-          if (s[i + 1] === '"') {
-            cell += '"';
-            i++;
-          } else q = false;
-        } else cell += ch;
-      } else if (ch === '"') q = true;
-      else if (ch === d) {
-        row.push(cell);
-        cell = "";
-      } else if (ch === "\n") {
-        row.push(cell);
-        rows.push(row);
-        row = [];
-        cell = "";
-      } else cell += ch;
-    }
-    if (cell || row.length) {
-      row.push(cell);
-      rows.push(row);
-    }
-    return rows.filter((r) => r.some((c) => String(c).trim()));
-  }
-  function sheetText(bytes) {
-    const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-    try {
-      return new TextDecoder("utf-8", { fatal: true }).decode(u8);
-    } catch (e) {
-      try {
-        return new TextDecoder("windows-1250").decode(u8);
-      } catch (_) {
-        return new TextDecoder("utf-8").decode(u8);
-      }
-    }
-  }
-  var u16 = (b, o) => b[o] | b[o + 1] << 8;
-  var u32 = (b, o) => (b[o] | b[o + 1] << 8 | b[o + 2] << 16 | b[o + 3] << 24) >>> 0;
-  function unzip(bytes, want) {
-    const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-    let eocd = -1;
-    for (let i = b.length - 22; i >= Math.max(0, b.length - 65557); i--) {
-      if (u32(b, i) === 101010256) {
-        eocd = i;
-        break;
-      }
-    }
-    if (eocd < 0) return Promise.resolve(null);
-    const count = u16(b, eocd + 10);
-    let p = u32(b, eocd + 16);
-    const jobs = [], out = {};
-    for (let n = 0; n < count && p + 46 <= b.length; n++) {
-      if (u32(b, p) !== 33639248) break;
-      const method = u16(b, p + 10), size = u32(b, p + 20), nameLen = u16(b, p + 28), extra = u16(b, p + 30), note = u16(b, p + 32);
-      const local = u32(b, p + 42);
-      const name = new TextDecoder().decode(b.subarray(p + 46, p + 46 + nameLen));
-      p += 46 + nameLen + extra + note;
-      if (!want(name)) continue;
-      const start = local + 30 + u16(b, local + 26) + u16(b, local + 28);
-      const raw = b.subarray(start, start + size);
-      if (method === 0) {
-        out[name] = raw;
-        continue;
-      }
-      if (method !== 8) continue;
-      jobs.push(new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer().then((ab) => {
-        out[name] = new Uint8Array(ab);
-      }).catch(() => {
-      }));
-    }
-    return Promise.all(jobs).then(() => out);
-  }
-  function xmlText(s) {
-    return String(s).replace(/&(#x[0-9a-f]+|#[0-9]+|amp|lt|gt|quot|apos);/gi, (m, e) => {
-      const k = e.toLowerCase();
-      if (k === "amp") return "&";
-      if (k === "lt") return "<";
-      if (k === "gt") return ">";
-      if (k === "quot") return '"';
-      if (k === "apos") return "'";
-      const n = k.charAt(1) === "x" ? parseInt(k.slice(2), 16) : parseInt(k.slice(1), 10);
-      try {
-        return String.fromCodePoint(n);
-      } catch (_) {
-        return "";
-      }
-    });
-  }
-  var runsOf = (xml, tag) => {
-    const re = new RegExp("<" + tag + "(?:\\s[^>]*)?>([\\s\\S]*?)</" + tag + ">", "g");
-    let m, s = "";
-    while (m = re.exec(xml)) s += xmlText(m[1]);
-    return s;
-  };
-  function colOf(ref) {
-    const letters = String(ref || "").replace(/[0-9]/g, "").toUpperCase();
-    let n = 0;
-    for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64);
-    return n - 1;
-  }
-  function workbookRows(bytes) {
-    return unzip(bytes, (n) => n === "xl/sharedStrings.xml" || /^xl\/worksheets\/sheet[0-9]*\.xml$/.test(n)).then((z) => {
-      if (!z) return null;
-      const sheets = Object.keys(z).filter((n) => n.indexOf("worksheets/") > -1).sort((a, b) => (parseInt(a.replace(/[^0-9]/g, ""), 10) || 0) - (parseInt(b.replace(/[^0-9]/g, ""), 10) || 0));
-      if (!sheets.length) return null;
-      const dec = (u) => new TextDecoder().decode(u);
-      const shared = [];
-      if (z["xl/sharedStrings.xml"]) {
-        const re = /<si>([\s\S]*?)<\/si>/g;
-        let m;
-        const xml2 = dec(z["xl/sharedStrings.xml"]);
-        while (m = re.exec(xml2)) shared.push(runsOf(m[1], "t"));
-      }
-      const xml = dec(z[sheets[0]]), rows = [];
-      const rowRe = /<row\b[^>]*>([\s\S]*?)<\/row>/g;
-      let r;
-      while (r = rowRe.exec(xml)) {
-        const row = [];
-        const cellRe = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g;
-        let c;
-        while (c = cellRe.exec(r[1])) {
-          const attrs = c[1], body = c[2] || "";
-          const ref = (/\br="([A-Z]+[0-9]+)"/.exec(attrs) || [])[1];
-          const type = (/\bt="([a-zA-Z]+)"/.exec(attrs) || [])[1] || "";
-          const v = (/<v>([\s\S]*?)<\/v>/.exec(body) || [])[1];
-          let val = "";
-          if (type === "s") val = shared[+v] || "";
-          else if (type === "inlineStr") val = runsOf(body, "t");
-          else if (v != null) val = xmlText(v);
-          const at = ref ? colOf(ref) : row.length;
-          while (row.length < at) row.push("");
-          row[at] = val;
-        }
-        if (row.some((x) => String(x).trim())) rows.push(row);
-      }
-      return rows;
-    });
-  }
-  function docxText(bytes) {
-    return unzip(bytes, (n) => n === "word/document.xml").then((z) => {
-      if (!z || !z["word/document.xml"]) return null;
-      const xml = new TextDecoder().decode(z["word/document.xml"]);
-      const paras = [];
-      const pRe = /<w:p\b[^>]*?(?:\/>|>([\s\S]*?)<\/w:p>)/g;
-      let p;
-      while (p = pRe.exec(xml)) {
-        const body = (p[1] || "").replace(/<w:tab\/>/g, "<w:t>	</w:t>").replace(/<w:br\/>/g, "<w:t>\n</w:t>");
-        const style = (/<w:pStyle w:val="([^"]*)"/.exec(body) || [])[1] || "";
-        paras.push({ text: runsOf(body, "w:t"), heading: /^(heading|nag|title|tytu)/i.test(style) });
-      }
-      const hasGap = paras.some((x) => !x.text.trim()), hasHead = paras.some((x) => x.heading && x.text.trim());
-      const out = [];
-      paras.forEach((x) => {
-        if (x.heading && x.text.trim()) {
-          out.push("", titleText(x.text).replace(/[.?!,;]+$/, ""));
-          return;
-        }
-        out.push(x.text);
-        if (!hasGap && !hasHead) out.push("");
-      });
-      return out.join("\n");
-    });
-  }
-  var fold = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ł/g, "l").trim();
-  var HEAD_TITLE = /^(tytu[lł]|title|nazwa|name|temat|subject|nag[lł][oó]wek|heading|skr[oó]t|shortcut)\b/;
-  var HEAD_BODY = /(odpowiedz|reply|answer|tre[sś][cć]|text|tekst|body|message|wiadomosc|makro|macro|content|szablon|template|response)/;
-  var HEAD_CAT = /^(kategoria|category|grupa|group|folder|dzial|section|typ\b|type\b|tag\b)/;
-  var HEAD_LANG = (l) => l === "pl" ? /(^|[^a-z])(pl|polski|polish|polsku)([^a-z]|$)/ : /(^|[^a-z])(en|eng|english|angielski|angielsku)([^a-z]|$)/;
-  function repliesFromRows(rows) {
-    const all = (rows || []).filter((r) => r && r.some((c) => String(c).trim()));
-    if (!all.length) return { replies: [], langs: [] };
-    const width = Math.max(...all.map((r) => r.length));
-    const head = all[0].map(fold);
-    let title = head.findIndex((h) => HEAD_TITLE.test(h));
-    let cat = head.findIndex((h) => HEAD_CAT.test(h));
-    const bodyCols = head.map((h, i) => i).filter((i) => i !== title && i !== cat && (HEAD_BODY.test(head[i]) || head[i] === "pl" || head[i] === "en"));
-    const byLang = {};
-    bodyCols.forEach((i) => {
-      ["pl", "en"].forEach((l) => {
-        if (byLang[l] == null && HEAD_LANG(l).test(head[i])) byLang[l] = i;
-      });
-    });
-    let data = all.slice(1), body = -1;
-    if (!Object.keys(byLang).length) body = bodyCols.length ? bodyCols[0] : -1;
-    if (body < 0 && !Object.keys(byLang).length) {
-      data = all;
-      title = -1;
-      cat = -1;
-      const avg = (i) => data.reduce((n, r) => n + String(r[i] || "").length, 0) / data.length;
-      const cols = [...Array(width).keys()].sort((a, b) => avg(b) - avg(a));
-      body = cols[0];
-      const t2 = cols.slice(1).find((i) => avg(i) > 0 && avg(i) <= TITLE_MAX);
-      if (t2 != null) title = t2;
-    }
-    const replies = [];
-    data.forEach((r) => {
-      const text = {};
-      if (body >= 0) {
-        const v = String(r[body] || "").trim();
-        if (v) text[""] = v;
-      }
-      Object.keys(byLang).forEach((l) => {
-        const v = String(r[byLang[l]] || "").trim();
-        if (v) text[l] = v;
-      });
-      const any = Object.keys(text);
-      if (!any.length) return;
-      const t2 = title >= 0 ? String(r[title] || "").trim() : "";
-      replies.push({ title: t2 || firstWords(text[any[0]]), text, cat: cat >= 0 ? String(r[cat] || "").trim() : "", named: !!t2 });
-    });
-    return { replies, langs: Object.keys(byLang) };
-  }
-  var PL_MARK = /[ąćęłńóśźż]|\b(się|nie|jest|dziękuj|dzień dobry|pozdrawiam|proszę|oczywiście|zamówieni)/i;
-  var EN_MARK = /\b(the|and|you|your|is|thank|regards|please|order|hello)\b/i;
-  function textLang(s, fallback2) {
-    const t2 = String(s || "");
-    const pl = PL_MARK.test(t2), en = EN_MARK.test(t2);
-    if (pl && !en) return "pl";
-    if (en && !pl) return "en";
-    if (pl && en) return (t2.match(/[ąćęłńóśźż]/gi) || []).length > 2 ? "pl" : fallback2 || "en";
-    return fallback2 || "en";
-  }
-
-  // src/modules/own-import.js
-  var own_import_exports = {};
-  __export(own_import_exports, {
-    bringIn: () => bringIn,
-    openOwnImport: () => openOwnImport,
-    ownDoc: () => ownDoc,
-    ownTarget: () => ownTarget,
-    wireOwnImport: () => wireOwnImport
-  });
-  var OWN_DONE = "eOwnDone";
-  var norm2 = (s) => String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
-  function ownTarget() {
-    const held = storedCatalog();
-    if (held && held.id === OWN_ID) return "extend";
-    if (!held || nsGet("Sample") === "1") return "catalog";
-    return "cards";
-  }
-  function fromText(text) {
-    const got = repliesFromText(text);
-    return {
-      replies: got.replies.map((r) => ({ title: r.title, text: { "": r.text }, cat: "", named: r.named })),
-      split: got.split,
-      langs: []
-    };
-  }
-  function readFile(f) {
-    const name = String(f && f.name || "").toLowerCase();
-    return f.arrayBuffer().then((buf) => {
-      const bytes = new Uint8Array(buf);
-      if (/\.xlsx$/.test(name)) return workbookRows(bytes).then((rows) => rows ? Object.assign({ split: false }, repliesFromRows(rows)) : null);
-      if (/\.docx$/.test(name)) return docxText(bytes).then((text) => text == null ? null : fromText(text));
-      if (/\.(csv|tsv)$/.test(name)) return Object.assign({ split: false }, repliesFromRows(csvRows(sheetText(bytes))));
-      if (/\.(txt|text|md)$/.test(name)) return fromText(sheetText(bytes));
-      return null;
-    }).catch(() => null);
-  }
-  function dedupe(got, have) {
-    const seen = new Set(have || []), keep = [];
-    let twice = 0;
-    got.replies.forEach((r) => {
-      const k = Object.keys(r.text).map((l) => norm2(r.text[l])).join("|");
-      if (seen.has(k)) {
-        twice++;
-        return;
-      }
-      seen.add(k);
-      keep.push(r);
-    });
-    return { replies: keep, twice };
-  }
-  function haveKeys() {
-    const held = storedCatalog();
-    if (!held || held.id !== OWN_ID) return [];
-    const doc = catalogToV2(held);
-    return (doc.cards || []).map((c) => Object.keys(c.body || {}).map((l) => norm2(c.body[l])).join("|"));
-  }
-  function primaryOf(replies, langs) {
-    const fall = uiLang() === "pl" ? "pl" : "en";
-    const n = { pl: 0, en: 0 };
-    replies.forEach((r) => Object.keys(r.text).forEach((l) => {
-      const c = l || textLang(r.text[l], fall);
-      n[c] = (n[c] || 0) + 1;
-    }));
-    if (langs.length) return n.pl >= n.en ? langs.indexOf("pl") > -1 ? "pl" : langs[0] : langs.indexOf("en") > -1 ? "en" : langs[0];
-    return n.pl === n.en ? fall : n.pl > n.en ? "pl" : "en";
-  }
-  function ownDoc(replies, langs) {
-    const held = storedCatalog();
-    const prev = held && held.id === OWN_ID ? catalogToV2(held) : null;
-    const codes = prev ? prev.langs.map((x) => x.code) : (() => {
-      const p2 = primaryOf(replies, langs);
-      return [p2].concat(langs.filter((l) => l !== p2));
-    })();
-    const L = codes[0];
-    const tags = prev ? prev.tags.slice() : [];
-    const cards2 = prev ? prev.cards.slice() : [];
-    const shelfFor = (name) => {
-      const label = String(name || "").trim() || t("Your replies");
-      const hit = tags.find((x) => x.kind === "shelf" && (x.label || {})[L] === label);
-      if (hit) return hit.id;
-      let id = "t-own", n = 1;
-      while (tags.some((x) => x.id === id)) id = "t-own-" + ++n;
-      tags.push({ id, kind: "shelf", label: { [L]: label } });
-      return id;
-    };
-    let seq = cards2.length;
-    const nextId = () => {
-      let id;
-      do {
-        id = "c-own-" + ++seq;
-      } while (cards2.some((c) => c.id === id));
-      return id;
-    };
-    replies.forEach((r) => {
-      const body = {};
-      Object.keys(r.text).forEach((l) => {
-        if (l && codes.indexOf(l) > -1) body[l] = r.text[l];
-      });
-      if (!body[L]) body[L] = r.text[""] || r.text[Object.keys(r.text).find((l) => l)] || "";
-      if (!body[L]) return;
-      cards2.push({ id: nextId(), shelf: shelfFor(r.cat), title: { [L]: r.title || body[L].slice(0, 40) }, body, bodyShape: "plain" });
-    });
-    const d = /* @__PURE__ */ new Date(), p = (v) => String(v).padStart(2, "0");
-    return {
-      format: V2_FORMAT,
-      kind: V2_KIND,
-      id: OWN_ID,
-      name: prev ? prev.name : t("Your replies"),
-      rev: (prev && +prev.rev || 0) + 1,
-      date: d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()),
-      langs: codes.map((c) => ({ code: c, label: c.toUpperCase() })),
-      tags,
-      cards: cards2
-    };
-  }
-  function asOwnCards(replies) {
-    const L = CONTENT_LANGS[0];
-    const tKey = cardFieldKey("t", L), bKey = cardFieldKey("body", L);
-    let n = 0;
-    replies.forEach((r) => {
-      const text = r.text[L] || r.text[""] || r.text[Object.keys(r.text)[0]];
-      if (!text) return;
-      const c = hooks.ensureCustomCat(String(r.cat || "").trim() || t("Your replies"));
-      pack.custom.push({ id: uid("u:"), c, [tKey]: r.title || text.slice(0, 40), [bKey]: text });
-      n++;
-    });
-    savePack();
-    hooks.rebuildCards();
-    return n;
-  }
-  function bringIn(got) {
-    if (refusePractice()) return false;
-    const aim = ownTarget();
-    if (aim === "cards") {
-      showDone(asOwnCards(got.replies), false);
-      return true;
-    }
-    const doc = ownDoc(got.replies, got.langs || []);
-    let c;
-    try {
-      c = parseCatalogFile(JSON.stringify(doc));
-    } catch (e) {
-      toast(t("This file's contents can come in by pasting: Ctrl+A and Ctrl+C in the file, then Ctrl+V here. The file itself is not in a form Etiuda can read."));
-      return false;
-    }
-    const found = eCatalog();
-    const refuse = found && eCatalogSample() ? eCatalogSignature(found) : "";
-    try {
-      ssSet(OWN_DONE, JSON.stringify({ n: got.replies.length, aside: nsGet("Sample") === "1" }));
-    } catch (e) {
-    }
-    const ok = activateCatalog(c, { keepPersonal: true, refuse });
-    if (ok === false) {
-      try {
-        ssDel(OWN_DONE);
-      } catch (e) {
-      }
-    }
-    return ok !== false;
-  }
-  function modal(id, inner) {
-    const wrap = document.createElement("div");
-    wrap.className = "modal";
-    wrap.id = id;
-    wrap.innerHTML = '<div class="modal-bg"></div><div class="modal-card">' + inner + "</div>";
-    document.body.appendChild(wrap);
-    const close = () => {
-      document.removeEventListener("keydown", onKey, true);
-      wrap.remove();
-    };
-    function onKey(e) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        close();
-      }
-    }
-    document.addEventListener("keydown", onKey, true);
-    return { wrap, close };
-  }
-  var OWN_FILE_RE = /\.(docx|xlsx|csv|tsv|txt)$/i;
-  function openOwnImport(file) {
-    if (refusePractice() || document.getElementById("eOwnImport")) return;
-    const formats = t("Word (.docx), a spreadsheet (.xlsx, .csv) or plain text (.txt)");
-    const { wrap, close } = modal(
-      "eOwnImport",
-      "<h2>" + esc(t("Your replies")) + '</h2><div class="modal-body"><p class="modal-sub">' + esc(t("Paste them here, or drop the file: {FORMATS}.").split("{FORMATS}").join(formats)) + '</p><p class="modal-sub e-own-rule">' + esc(t("An empty line separates one reply from the next. In a spreadsheet, each row is one reply.")) + '</p><textarea id="eOwnText" class="e-own-text" spellcheck="false" placeholder="' + esc(t("Paste your replies here")) + '"></textarea><div class="e-own-drop" id="eOwnDrop" role="button" tabindex="0">' + esc(t("or drop the file here")) + '</div><div class="e-own-seen" id="eOwnSeen" aria-live="polite"></div></div><div class="modal-actions"><button type="button" class="btn" id="eOwnCancel">' + esc(t("Cancel")) + '</button><button type="button" class="btn primary" id="eOwnGo" disabled>' + esc(t("Bring them in")) + "</button></div>"
-    );
-    const text = wrap.querySelector("#eOwnText"), seen = wrap.querySelector("#eOwnSeen"), go = wrap.querySelector("#eOwnGo"), drop = wrap.querySelector("#eOwnDrop");
-    let got = null, fromFile = false, timer = 0;
-    const show = (g, file2, unread) => {
-      fromFile = !!file2;
-      got = g ? Object.assign(dedupe(g, haveKeys()), { langs: g.langs || [], split: !!g.split }) : null;
-      go.disabled = !(got && got.replies.length);
-      if (unread) {
-        seen.innerHTML = '<p class="modal-sub">' + esc(t("This file's contents can come in by pasting: Ctrl+A and Ctrl+C in the file, then Ctrl+V here. The file itself is not in a form Etiuda can read.")) + "</p>";
-        return;
-      }
-      if (!got || !got.replies.length) {
-        seen.innerHTML = "";
-        return;
-      }
-      const n = got.replies.length;
-      let h = "<h3>" + esc(t("Replies ready to come in: {N}").split("{N}").join(String(n))) + '</h3><ul class="e-own-list" data-i18n-skip>' + got.replies.slice(0, 8).map((r) => "<li>" + esc(r.title) + "</li>").join("") + (n > 8 ? '<li class="e-own-more">' + esc(String(n - 8)) + " +</li>" : "") + "</ul>";
-      if (got.twice) h += '<p class="modal-sub">' + esc(t("Repeated word for word, brought in once: {N}").split("{N}").join(String(got.twice))) + "</p>";
-      if (got.split) h += '<p class="modal-sub">' + esc(t("Etiuda tells replies apart by the empty lines between them. With those added, the text can be pasted again.")) + "</p>";
-      if (got.replies.some((r) => !r.named)) h += '<p class="modal-sub">' + esc(t("Each becomes a card, like Mirabelka's. Its first words are its title, which can be changed at any time.")) + "</p>";
-      h += '<p class="modal-sub">' + esc(t("Replies come in exactly as they were written. The greeting for the hour and the customer's name can be added to any of them when the card is edited.")) + "</p>";
-      if (fromFile) h += '<p class="modal-sub">' + esc(t("The file they came from is left as it was.")) + "</p>";
-      seen.innerHTML = h;
-    };
-    text.oninput = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => show(text.value.trim() ? fromText(text.value) : null, false), 250);
-    };
-    const take = (f) => {
-      if (!f) return;
-      readFile(f).then((g) => {
-        text.value = "";
-        show(g, true, !g);
-      });
-    };
-    const pick = () => {
-      const inp = document.createElement("input");
-      inp.type = "file";
-      inp.accept = ".docx,.xlsx,.csv,.tsv,.txt";
-      inp.onchange = () => take(inp.files && inp.files[0]);
-      inp.click();
-    };
-    drop.onclick = pick;
-    drop.onkeydown = (e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        pick();
-      }
-    };
-    wrap.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      drop.classList.add("on");
-    });
-    wrap.addEventListener("dragleave", (e) => {
-      if (e.target === drop) drop.classList.remove("on");
-    });
-    wrap.addEventListener("drop", (e) => {
-      e.preventDefault();
-      drop.classList.remove("on");
-      take(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]);
-    });
-    wrap.querySelector("#eOwnCancel").onclick = close;
-    go.onclick = () => {
-      if (got && got.replies.length && bringIn(got) !== false) close();
-    };
-    try {
-      text.focus();
-    } catch (e) {
-    }
-    if (file) take(file);
-  }
-  function showDone(n, aside) {
-    const { wrap, close } = modal(
-      "eOwnDone",
-      "<h2>" + esc(t("Replies brought in: {N}").split("{N}").join(String(n))) + "</h2>" + (aside ? '<p class="modal-sub">' + esc(t("From now on they are the ones waiting for a word. The sample Mirabelka makes room for them and stays in the Library, should it be wanted again.")) + "</p>" : "") + '<p class="modal-sub">' + esc(t("Type a word from any of them at the top.")) + '</p><p class="modal-sub">' + esc(t("New card adds another, at any time.")) + '</p><div class="modal-actions"><button type="button" class="btn primary" id="eOwnOk">' + esc(t("OK")) + "</button></div>"
-    );
-    wrap.querySelector("#eOwnOk").onclick = () => {
-      close();
-      try {
-        hooks.maybeShowTourInvite();
-      } catch (e) {
-      }
-    };
-    try {
-      wrap.querySelector("#eOwnOk").focus();
-    } catch (e) {
-    }
-  }
-  function wireOwnImport() {
-    if (ePractice()) return;
-    let done = null;
-    try {
-      done = JSON.parse(ssGet(OWN_DONE) || "null");
-    } catch (e) {
-      done = null;
-    }
-    if (done) {
-      try {
-        ssDel(OWN_DONE);
-      } catch (e) {
-      }
-      setTimeout(() => showDone(+done.n || 0, !!done.aside), 400);
-    }
-    addEventListener("dragover", (e) => {
-      if (e.dataTransfer && [...e.dataTransfer.types || []].indexOf("Files") > -1) e.preventDefault();
-    });
-    addEventListener("drop", (e) => {
-      const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-      if (!f || !OWN_FILE_RE.test(f.name) || document.getElementById("eOwnImport")) return;
-      e.preventDefault();
-      openOwnImport(f);
-    });
-  }
-
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, practice_exports, sheet_read_exports, own_import_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
@@ -22235,7 +21098,6 @@ What you type stays in this browser only.`;
       openSettings,
       endTour,
       startTour,
-      maybeShowTourInvite,
       tourActive,
       closeSettingsMenu,
       syncSettingsMenu,
@@ -22257,8 +21119,6 @@ What you type stays in this browser only.`;
       sampleReady,
       loadSampleCatalog,
       importCatalogHere,
-      openOwnImport,
-      startPractice,
       runShortcut
     });
     eCarryOldKeys();
@@ -22360,8 +21220,7 @@ What you type stays in this browser only.`;
     wireTourUi();
     syncSampleMark();
     eOfferCatalogAtBoot();
-    wirePractice();
-    wireOwnImport();
+    syncRoleWheel();
     maybeShowTourInvite();
     wireHostCatalogWatch();
     setTimeout(() => {

@@ -1079,47 +1079,35 @@ const placeEc = (dir, from, as, minutesOld) => {
   const docsA = seedDocs("fresh");
   const udS1 = newUserData("seed-fresh", null, true);
   s = await launch(udS1, [], { ETIUDA_TEST_DOCUMENTS: docsA });
-  await sleep(1500);
   const seedSeen = await s.p.evaluate(SEEN);
-  /* THE FIRST AFTERNOON: the sample is taken up without a question, and the desk greets instead,
-     asking nothing else (no catalog offer, no name, no tour invite). */
-  const seedFirst = await s.p.evaluate(() => ({ offer: !!document.querySelector("#ecYes"),
-    hello: !!document.getElementById("eHello"), name: !!document.getElementById("eAgentModal"),
-    invite: !!(document.getElementById("tourInvite") && !document.getElementById("tourInvite").hidden) }));
+  /* The offer's own line does not name the FILE - measured on 2026-09-17, it names the catalog
+     and the folder - so what is asserted here is that the dialog is up over an unloaded desk. */
+  const seedOffered = await s.p.evaluate(() => ({ up: !!document.querySelector("#ecYes") }));
   await s.stop();
   const seededFiles = listed(docsA);
   const seedMark = deskKeys(udS1)["e~sampled"];
   check(seededFiles.join(",") === "sample-catalog.ec" && seedMark === "1"
-        && !seedFirst.offer && seedFirst.hello && !seedFirst.name && !seedFirst.invite && seedSeen.cards === SEED_CARDS,
-    "2k2 a first run into an empty catalog folder is given the sample and takes it up without asking,"
-    + " greeting instead: the folder holds " + JSON.stringify(seededFiles) + ", the desk carries e~sampled "
-    + JSON.stringify(seedMark) + ", " + seedSeen.cards + " cards on the desk against the sample's "
-    + SEED_CARDS + " counted by this process, and on screen " + JSON.stringify(seedFirst));
+        && seedOffered.up && seedSeen.cards === 0,
+    "2k2 a first run into an empty catalog folder is given the sample and offered it: the folder"
+    + " holds " + JSON.stringify(seededFiles) + ", the desk carries e~sampled "
+    + JSON.stringify(seedMark) + ", the offer is up (" + seedOffered.up + ") with nothing loaded"
+    + " behind it (" + seedSeen.cards + " cards). The"
+    + " sample in the tree holds " + SEED_CARDS + " cards, counted by this process");
 
   /* 2k2b: THE SAME FIRST RUN ON A POLISH SYSTEM, the shell started with Chromium's own --lang, which
      is the locale Windows' display language gives it: the interface and the first chat are Polish,
-     the greeting is Polish, and Begin brings the practice customer, writing in Polish. */
+     and so is what the first run puts on screen. */
   const docsP = seedDocs("polish");
   const udSP = newUserData("seed-polish", null, true);
   s = await launch(udSP, ["--lang=pl"], { ETIUDA_TEST_DOCUMENTS: docsP });
-  await sleep(1500);
-  const plFirst = await s.p.evaluate(async () => {
-    const wait = ms => new Promise(r => setTimeout(r, ms));
-    const h = document.querySelector("#eHello h2");
-    const out = { nav: navigator.language, ui: document.documentElement.lang, reply: lang, hello: h ? h.textContent : null };
-    const go = document.getElementById("eHelloGo");
-    if (go) go.click();
-    await wait(2600);
-    const said = document.querySelector("#eCustomer .e-msg:not(.e-typing)");
-    out.who = (document.querySelector("#eCustomer .e-cust-who") || {}).textContent || null;
-    out.said = said ? /[ąćęłńóśźż]/i.test(said.textContent) : false;
-    return out;
+  const plFirst = await s.p.evaluate(() => {
+    const h = document.querySelector("#eCatalogModal h2");
+    return { nav: navigator.language, ui: document.documentElement.lang, reply: lang, offer: h ? h.textContent : null };
   });
   await s.stop();
-  check(plFirst.ui === "pl" && plFirst.reply === "pl" && /^(Dzień dobry|Dobry wieczór)\. Etiuda jest gotowa\.$/.test(plFirst.hello || "")
-        && plFirst.who === "Agnieszka W." && plFirst.said,
-    "2k2b on a Polish system the first run greets in Polish, opens the first chat in Polish, and Begin brings a"
-    + " customer writing in Polish: " + JSON.stringify(plFirst));
+  check(plFirst.ui === "pl" && plFirst.reply === "pl" && plFirst.offer === "Wczytać katalog?",
+    "2k2b on a Polish system the first run speaks Polish, interface and first chat, and asks its question in"
+    + " Polish: " + JSON.stringify(plFirst));
 
   /* The same first run into a folder that already holds a catalog, board item 497: the sample
      goes in all the same - it is a special catalog rather than a stand-in for a missing one - and

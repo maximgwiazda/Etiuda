@@ -798,9 +798,6 @@ ipcMain.on("etiuda:host", (e) => {
        tell from the folder's own newest: an explicit open is answered even when a refusal was
        remembered for that file or it is already what is loaded. */
     openedWith: !!openedWith && catalogFrom === openedWith,
-    /* Whether that file is the sample this build ships, byte for byte: a first run takes the
-       sample up without asking, and an edited copy is somebody's catalog, which is asked about. */
-    catalogSample: !!catalogFrom && isTheSample(catalogFrom),
     openedRefused: openedRefused,
     deskFile: deskFile(),
     home: os.homedir(),

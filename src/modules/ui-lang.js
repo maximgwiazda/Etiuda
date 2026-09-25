@@ -1,7 +1,6 @@
 import { lsGet, lsSet, lsDel } from "./storage.js";
 import { markCut } from "./cut-text.js";
 import { $ } from "./dom.js";
-import { ePracticeParam } from "./env.js";
 
 /* ---- UI LANGUAGE ------------------------------------------------------------------------
    The CHROME's language, not the CONTENT's: the EN|PL switch decides what is copied to
@@ -842,67 +841,19 @@ UI_STRINGS.pl={
   "Animations on":"Animacje włączone",
   "Blur effects on":"Efekty rozmycia włączone",
   "Blur effects off":"Efekty rozmycia wyłączone",
-  "Send":"Wyślij",
-  "Message":"Wiadomość",
-  "She has said hello. Type {WORD} at the top, press Enter, click the first reply and paste it into the message box.":"Klientka się przywitała. Wystarczy wpisać u góry słowo {WORD}, nacisnąć Enter, kliknąć pierwszą odpowiedź i wkleić ją w polu wiadomości.",
-  "Now a return. This time the word is {WORD}, and the rest as before.":"Teraz pytanie o zwrot. Tym razem słowo {WORD}, a dalej tak samo.",
-  "And to close, a thank-you. The word is {WORD}.":"Na koniec podziękowanie. Słowo {WORD}.",
-  "First, her name. Copy it from the chat into the customer's name box.":"Najpierw imię klientki. Wystarczy skopiować je z rozmowy do pola \"imię klienta\".",
-  "The word {WORD} at the top is all it takes.":"Wystarczy słowo {WORD} w polu u góry.",
-  "That reply answers something else. The word {WORD} finds the right one.":"Ta odpowiedź dotyczy innej sprawy. Właściwą wskaże słowo {WORD}.",
-  "That works too, but the reply is already written, greeting and signature included: the word {WORD} and a click bring it.":"Tak też można, ale gotowa odpowiedź już czeka, z powitaniem i podpisem: wystarczy słowo {WORD} i kliknięcie.",
-  "That is all it is.":"I to wszystko.",
-  "One word, one click, one paste. The greeting for the hour, her name and your signature were Etiuda's part.":"Jedno słowo, jedno kliknięcie, jedno wklejenie. Powitanie na tę porę dnia, imię we właściwej formie i podpis Etiuda wstawiła sama.",
-  "Once more":"Jeszcze raz",
   "How should your replies be signed?":"Jak podpisywać odpowiedzi?",
   "Customers see it at the foot of every reply. It can be changed at any time in Settings.":"Tak podpis zobaczą klienci pod każdą odpowiedzią. Zmienić go można w każdej chwili w Ustawieniach.",
   "for instance, Kate":"na przykład Kasia",
   "Kate":"Kasia",
   "Sign with this":"Podpisz",
-  "Nothing is kept on this page.":"Na tej stronie nic nie jest zapisywane.",
-  "{GREET}. Etiuda is ready.":"{GREET}. Etiuda jest gotowa.",
-  "To begin with, it works for a sample shop, Mirabelka, a pottery studio in Warsaw. A customer is about to write, and answering her takes a few seconds.":"Na początek pracuje dla przykładowego sklepu: warszawskiej pracowni ceramiki Mirabelka. Za chwilę napisze do niej klientka, a odpowiedź zajmie kilka sekund.",
-  "Begin":"Pierwsza rozmowa",
-  "Straight to work":"Od razu do pracy",
-  "Do you already keep your replies somewhere?":"Czy gotowe odpowiedzi są już gdzieś zapisane?",
-  "In Word, a spreadsheet, a notes file: they can come in here in a minute, and be in use straight away.":"W Wordzie, w arkuszu, w notatkach: można je tu przenieść w minutę i od razu z nich korzystać.",
-  "Yes, I have them":"Tak, mam je spisane",
-  "It waits in the Menu afterwards: {PLACE}.":"To pytanie czeka potem w Menu: {PLACE}.",
-  "Bring in your replies":"Przenieś własne odpowiedzi",
-  "Your replies":"Własne odpowiedzi",
-  "Paste them here, or drop the file: {FORMATS}.":"Wystarczy je tu wkleić albo upuścić plik: {FORMATS}.",
-  "Word (.docx), a spreadsheet (.xlsx, .csv) or plain text (.txt)":"Word (.docx), arkusz (.xlsx, .csv) albo zwykły tekst (.txt)",
-  "An empty line separates one reply from the next. In a spreadsheet, each row is one reply.":"Pusta linia oddziela jedną odpowiedź od następnej. W arkuszu jedna odpowiedź to jeden wiersz.",
-  "Paste your replies here":"Tu można wkleić odpowiedzi",
-  "or drop the file here":"albo upuścić tu plik",
-  "Replies ready to come in: {N}":"Odpowiedzi gotowe do przeniesienia: {N}",
-  "Each becomes a card, like Mirabelka's. Its first words are its title, which can be changed at any time.":"Każda z nich będzie kartą, taką jak karty Mirabelki. Pierwsze słowa posłużą za tytuł, który można zmienić w każdej chwili.",
-  "Replies come in exactly as they were written. The greeting for the hour and the customer's name can be added to any of them when the card is edited.":"Odpowiedzi trafiają tu dokładnie w takiej postaci, w jakiej zostały napisane. Powitanie według pory dnia i imię klienta można dodać w każdej z nich przy edycji karty.",
-  "The file they came from is left as it was.":"Plik, z którego pochodzą, zostaje bez zmian.",
-  "Bring them in":"Przenieś odpowiedzi",
-  "Etiuda tells replies apart by the empty lines between them. With those added, the text can be pasted again.":"Etiuda rozpoznaje odpowiedzi po pustych liniach między nimi. Po ich dodaniu wystarczy wkleić tekst jeszcze raz.",
-  "This file's contents can come in by pasting: Ctrl+A and Ctrl+C in the file, then Ctrl+V here. The file itself is not in a form Etiuda can read.":"Treść tego pliku da się przenieść przez wklejenie: Ctrl+A i Ctrl+C w pliku, potem Ctrl+V tutaj. Sam plik nie jest w formacie, który Etiuda potrafi odczytać.",
-  "Repeated word for word, brought in once: {N}":"Powtórzone słowo w słowo, przeniesione raz: {N}",
-  "Replies brought in: {N}":"Przeniesione odpowiedzi: {N}",
-  "From now on they are the ones waiting for a word. The sample Mirabelka makes room for them and stays in the Library, should it be wanted again.":"Od teraz to one czekają na słowo. Przykładowa Mirabelka ustępuje im miejsca i zostaje w Bibliotece, gdyby była jeszcze potrzebna.",
-  "Type a word from any of them at the top.":"Wystarczy wpisać u góry słowo z dowolnej z nich.",
-  "New card adds another, at any time.":"Kolejną odpowiedź dodaje przycisk Nowa karta, w dowolnej chwili.",
-  "OK":"OK",
-  "End the practice":"Zakończ próbę",
-  "Beside the customer's name there is now a wheel: it chooses who in the team this reply names.":"Obok imienia klienta jest teraz kółko: wybiera się nim osobę z zespołu, którą wymienia ta odpowiedź.",
-  "A practice chat":"Rozmowa na próbę",
-  "What else Etiuda can do: a few short steps, any time from the Menu.":"Co jeszcze potrafi Etiuda: kilka krótkich kroków, w dowolnej chwili z Menu.",
-  "This is a sample shop. Your own replies belong in the program on your computer.":"Tu działa przykładowy sklep. Własne odpowiedzi czekają w programie na komputerze."
+  "Beside the customer's name there is now a wheel: it chooses who in the team this reply names.":"Obok imienia klienta jest teraz kółko: wybiera się nim osobę z zespołu, którą wymienia ta odpowiedź."
 };
 // Is this a language this build carries? The table itself stays private to this file.
 function uiLangKnown(l){ return !!(l && UI_STRINGS[l]); }
 /* THE SYSTEM'S LANGUAGE WHERE NOTHING IS STORED: the browser's own list, which a shell takes from
    the Windows display language, first code this build has words for. A stored choice always wins,
-   English included, so choosing English on a Polish Windows is kept. The practice page names its
-   language in its address, and that is the one place an address is read. */
+   English included, so choosing English on a Polish Windows is kept. */
 function systemUiLang(){
-  const asked=ePracticeParam("lang");
-  if(asked==="en" || uiLangKnown(asked)) return asked;
   let list=[];
   try{ list=(navigator.languages&&navigator.languages.length)?navigator.languages:[navigator.language]; }catch(e){}
   for(const tag of list){

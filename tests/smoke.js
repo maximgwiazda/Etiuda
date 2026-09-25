@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 219 };
+const EXPECTED = { chrome: 216 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -2545,64 +2545,12 @@ const t0 = Date.now();
   finally { await hookDrain(ctx, "the public first run"); if (ctx) await ctx.close().catch(() => {}); fs.rmSync(pub, { recursive: true, force: true }); }
   clean(e, "the public first run");
 
-  /* ---- THE PRACTICE PAGE, AND THE SYSTEM'S LANGUAGE (the first afternoon) --------------------
-     The practice page is the engine with the sample and a switch baked in by tools/practice.mjs,
-     for a website to frame, and board 736's rule is a property of that file: it keeps nothing
-     and takes no other catalog. The control is the same page with the switch taken out, the
-     sample still baked in, which must take the same catalog up, or the refusal proves nothing.
-     Then the interface's language where nothing is stored: a browser saying Polish first gets a
-     Polish interface and a first chat in Polish, and one saying English gets English. */
+  /* ---- THE SYSTEM'S LANGUAGE (the first afternoon) ------------------------------------------
+     The interface's language where nothing is stored: a browser saying Polish first gets a Polish
+     interface and a first chat in Polish, and one saying English gets English. */
   e = since();
-  const prDir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-practice-"));
-  let prCtx = null, prAt = "the start";
-  const OTHER = JSON.stringify({ format: 2, kind: "etiuda-catalog", id: "lamp-shop", name: "Invented Lamps", rev: 1,
-    langs: [{ code: "en", label: "EN" }], tags: [{ id: "t-gen", kind: "shelf", label: { en: "General" } }],
-    cards: [{ id: "c-one", shelf: "t-gen", title: { en: "Invented" }, body: { en: "Invented reply." }, bodyShape: "plain" }] });
-  const tryOther = (q, other) => q.evaluate(o => {
-    window.confirm = () => true;
-    let act = null;
-    try { act = activateCatalog(parseCatalogFile(o), { keepPersonal: true }); } catch (x) { act = "threw " + x.message; }
-    return { act, ls: localStorage.length, ss: sessionStorage.length };
-  }, other);
+  let prAt = "the system's language";
   try {
-    prAt = "building the practice page";
-    const page = path.join(prDir, "etiuda.html");
-    require("child_process").execFileSync(process.execPath, [path.join(E.ROOT, "tools", "practice.mjs"), "--out", page], { stdio: "pipe" });
-    const html = fs.readFileSync(page, "utf8");
-    const SWITCH = /<script type="application\/json" id="ePractice">[^<]*<\/script>/;
-    if (!SWITCH.test(html)) throw new Error("the practice page carries no switch to take out");
-    fs.writeFileSync(path.join(prDir, "control.html"), html.replace(SWITCH, '<script type="application/json" id="ePractice"></script>'));
-    const url = f => "file:///" + path.join(prDir, f).replace(/\\/g, "/");
-    prCtx = b.createBrowserContext ? await b.createBrowserContext() : await b.createIncognitoBrowserContext();
-    const q = await prCtx.newPage();
-    await q.setViewport({ width: 1400, height: 900 });
-    q.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
-    prAt = "the practice page";
-    await q.goto(url("etiuda.html") + "?lang=pl", { waitUntil: "load", timeout: 60000 });
-    await q.waitForSelector("#eCustomer .e-msg:not(.e-typing)", { timeout: 15000 }).catch(() => {});
-    const pr = await q.evaluate(() => ({ cards: cards.length, name: E_CATALOG_NAME, ui: document.documentElement.lang,
-      reply: lang, said: document.querySelectorAll("#eCustomer .e-msg:not(.e-typing)").length }));
-    const prTry = await tryOther(q, OTHER);
-    await sleep(1500);
-    const prAfter = await q.evaluate(() => ({ cards: cards.length, name: E_CATALOG_NAME, ls: localStorage.length, ss: sessionStorage.length }));
-    check(pr.ui === "pl" && pr.reply === "pl" && pr.said > 0,
-      "the practice page speaks the language its address names, interface and replies, and the customer writes first ("
-      + JSON.stringify({ ui: pr.ui, reply: pr.reply, said: pr.said }) + ")");
-    check(prTry.act === false && prAfter.cards === pr.cards && prAfter.name === pr.name && prAfter.ls === 0 && prAfter.ss === 0,
-      "the practice page takes no other catalog and keeps nothing: " + JSON.stringify({ act: prTry.act, cards: prAfter.cards, name: prAfter.name, ls: prAfter.ls, ss: prAfter.ss }));
-    prAt = "the control, the same page without its switch";
-    await q.goto(url("control.html"), { waitUntil: "load", timeout: 60000 });
-    await sleep(1500);
-    const nav = q.waitForNavigation({ waitUntil: "load", timeout: 20000 }).then(() => true, () => false);
-    const ctTry = await tryOther(q, OTHER);
-    const moved = await nav;
-    await sleep(1200);
-    const ctAfter = await q.evaluate(() => ({ name: E_CATALOG_NAME, ls: localStorage.length }));
-    check(ctTry.act === true && moved && ctAfter.name === "Invented Lamps" && ctAfter.ls > 0,
-      "CONTROL: the same page with its switch taken out takes that catalog up and stores it, so the refusal is the switch's ("
-      + JSON.stringify({ act: ctTry.act, reloaded: moved, name: ctAfter.name, ls: ctAfter.ls }) + ")");
-    await prCtx.close().catch(() => {}); prCtx = null;
-    prAt = "the system's language";
     const bySystem = async list => {
       const c = b.createBrowserContext ? await b.createBrowserContext() : await b.createIncognitoBrowserContext();
       try {
@@ -2624,10 +2572,9 @@ const t0 = Date.now();
       "with nothing stored the interface and the first chat follow the browser's language, Polish for a Polish one and English for an English one ("
       + JSON.stringify({ pl, en }) + ")");
   } catch (x) {
-    check(false, "the practice page and the system's language could not run, at " + prAt + ": " + (x && x.message || x));
+    check(false, "the system's language could not run, at " + prAt + ": " + (x && x.message || x));
   }
-  finally { if (prCtx) await prCtx.close().catch(() => {}); fs.rmSync(prDir, { recursive: true, force: true }); }
-  clean(e, "the practice page and the system's language");
+  clean(e, "the system's language");
 
   /* ---- THE COMMENT LANGUAGE IS WIRED IN THE RIGHT ORDER, board item 534 ---------------------
    *

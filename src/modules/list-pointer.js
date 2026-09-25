@@ -385,7 +385,7 @@ function wireListPointer(){
     txtEl.addEventListener("pointerleave", ()=>txtEl.classList.remove("just-picked"), {once:true});
     withAgentName(ps[vi],()=>{
       bumpUseCount(mid, cl);
-      copy(fill(ps[vi],m), copiedToastMsg(m, cl, vi, ps.length), mid);
+      copy(fill(ps[vi],m), copiedToastMsg(m, cl, vi, ps.length));
     });
   });
 }

@@ -104,10 +104,7 @@ import * as runShortcut from "./modules/run-shortcut.js";
 import * as appState from "./modules/app-state.js";
 import * as host from "./modules/host.js";
 import * as hookSlots from "./modules/hooks.js";
-import * as practice from "./modules/practice.js";
-import * as sheetRead from "./modules/sheet-read.js";
-import * as ownImport from "./modules/own-import.js";
-Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, cardCarry, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots, practice, sheetRead, ownImport);
+Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, cardCarry, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place
@@ -228,7 +225,6 @@ function boot(){
     openSettings: settings.openSettings,
     endTour: tour.endTour,
     startTour: tour.startTour,
-    maybeShowTourInvite: tour.maybeShowTourInvite,
     tourActive: tour.tourActive,
     closeSettingsMenu: headerMenus.closeSettingsMenu,
     syncSettingsMenu: headerMenus.syncSettingsMenu,
@@ -250,8 +246,6 @@ function boot(){
     sampleReady: catalogFile.sampleReady,
     loadSampleCatalog: catalogFile.loadSampleCatalog,
     importCatalogHere: catalogFile.importCatalogHere,
-    openOwnImport: ownImport.openOwnImport,
-    startPractice: practice.startPractice,
     runShortcut: runShortcut.runShortcut,
   });
   // A 1.16.7 desk's keys, copied under this version's names before the first line reads one
@@ -416,10 +410,8 @@ function boot(){
   tour.wireTourUi();
   catalogFile.syncSampleMark();
   catalogOffer.eOfferCatalogAtBoot();
-  // The practice customer, and a first afternoon's greeting where the sample was just taken up
-  practice.wirePractice();
-  // Replies a person already has, dropped on the desk, and the word after they came in
-  ownImport.wireOwnImport();
+  // The role wheel, which waits on the sample until a reply names somebody
+  agent.syncRoleWheel();
   /* THE FIRST RUN ASKS ONE THING AT A TIME: which catalog, then the tour. Each stands down while
      an earlier one is on screen and the one that closes calls the next. The name is asked when the
      first signed reply is copied (withAgentName). */

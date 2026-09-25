@@ -12,7 +12,7 @@ import { cardToExportPlain } from "./macros-json.js";
 import { FACTS, normWhoList } from "./stock.js";
 import { eWipeLatch, mgReopenAfterReload, ssDel, nsGet, nsSet, nsDel } from "./storage.js";
 import { TAB_KEY, tabSaveTimer } from "./tabs.js";
-import { ask, t, catalogCountsLine, translateTree, toast, TOAST_HAND_MS } from "./ui-lang.js";
+import { ask, t, catalogCountsLine, translateTree, toast } from "./ui-lang.js";
 import { BASE_CATS, catalogCardId, pack, whoOptions, savePack } from "./pack.js";
 import { catIconKey, catSlot } from "./cat-identity.js";
 import { normalizeCardIntents } from "./card-intent.js";
@@ -22,7 +22,6 @@ import { esc } from "./esc.js";
 import { rebuildCards } from "./rebuild.js";
 import { cards } from "./app-state.js";
 import { carryCardLayer } from "./card-carry.js";
-import { ePractice } from "./env.js";
 
 /* ---- one catalog format, one export, one import -----------------------------------------
    A catalog carries everything Etiuda has no content of its own for: cards, intents,
@@ -317,15 +316,7 @@ function askCatalogName(initial, onOk, mode){
   wrap.querySelector("#eNameYes").onclick=ok;
   setTimeout(()=>{ inp.focus(); try{ inp.select(); }catch(_){} },30);
 }
-/* The practice page's one answer to every road out of the sample: it is a sample shop, and a
-   person's own replies belong in the program on their computer (board 736). */
-function refusePractice(){
-  if(!ePractice()) return false;
-  toast("This is a sample shop. Your own replies belong in the program on your computer.",TOAST_HAND_MS);
-  return true;
-}
 function exportCatalog(){
-  if(refusePractice()) return;
   if(!(cards||[]).length){ toast("Export is ready once the catalog holds a card."); return; }
   /* Defaults to the name whose slug IS the auto-load filename - accepting it produces
      etiuda-catalog.js, the file that loads by itself beside Etiuda.html, with no rename
@@ -405,7 +396,6 @@ function proposeEdition(current){
    catalog included: loading a catalog erases nothing a person made. The sample alone drops it,
    and it loads only on an empty desk. */
 function activateCatalog(c,opts){
-  if(refusePractice()) return false;
   const keep=!!(opts&&opts.keepPersonal);
   /* THE CATALOG LANDS BEFORE ANYTHING IS PRUNED FOR IT. The personal layers below are
      filtered down to ids the INCOMING catalog knows, which for a different catalog is
@@ -431,7 +421,7 @@ function activateCatalog(c,opts){
   /* Derived, not read: m.id is absent on a catalog card, so reading it gave a set holding
      one undefined and quietly emptied all three lists on every activation. */
   let alive=new Set((c.cards||[]).map(catalogCardId));
-  if(keep) alive=carryCardLayer(c,storedCatalog());
+  if(keep) alive=carryCardLayer(c);
   else (pack.custom||[]).forEach(m=>{ if(m&&m.id) alive.add(m.id); });
   pack.baseCards=null;
   pack.hidden=(pack.hidden||[]).filter(id=>alive.has(id));
@@ -440,9 +430,6 @@ function activateCatalog(c,opts){
   cardOrderTouched();
   savePack();
   nsDel("CatalogNo");
-  /* A catalog found beside this one that the route has already answered for: bringing in one's
-     own replies puts the sample down, and the sample is not then offered back at the next boot. */
-  if(opts && opts.refuse){ nsSet("CatalogNo",String(opts.refuse)); nsSet("CatalogNoAt",String(Date.now())); }
   /* Set here rather than in loadSampleCatalog(), because EVERY route to a catalog passes
      through this function - the sample button, an import, accepting the sibling file. Loading
      anything without the flag therefore clears the watermark by itself, with no path that can
@@ -568,7 +555,6 @@ function importCatalogHosted(){
 /* THE import route, wherever it is offered from. The picker where there is one: it is the only
    route that yields a handle, so choosing it here is what makes the watch available at all. */
 function importCatalogHere(){
-  if(refusePractice()) return;
   if(eHasCatalogPicker()) importCatalogHosted();
   else if(eWatchSupported()) importCatalogPicked();
   else importCatalogFile();
@@ -628,6 +614,5 @@ export {
   sampleReady,
   loadSampleCatalog,
   importCatalogHere,
-  importCatalogText,
-  refusePractice
+  importCatalogText
 };

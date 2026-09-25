@@ -23,7 +23,7 @@ function copyEntrySel(otherLang){
   const id=entrySel.id;
   withAgentName(ps[vi],()=>{
     bumpUseCount(id, l);
-    copy(fill(ps[vi],m,0,l), copiedToastMsg(m, l, vi, ps.length), id);
+    copy(fill(ps[vi],m,0,l), copiedToastMsg(m, l, vi, ps.length));
     eCopyFeedback(id);   // wash the selected block + recency trace, same as a click
   });
   return true;

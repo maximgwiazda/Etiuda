@@ -212,35 +212,12 @@ function keepOwnShelves(cats){
     if(CAT_LABELS_PL[k] && !pack.catLabelsPl[k]) pack.catLabelsPl[k]=CAT_LABELS_PL[k];
   });
 }
-/* THE REPLIES A PERSON BROUGHT IN ARE THEIR OWN CATALOG until another arrives, and then their own
-   cards: each card, with any edit made to it, becomes a card of this desk on a shelf of its own,
-   in the language it was written in, and its stars and order follow it. */
-const OWN_ID="own-replies";
-function keepOwnCatalog(held,c,alive){
-  if(!held || held.id!==OWN_ID || (c&&c.id)===OWN_ID) return;
-  const L=(CONTENT_LANGS[0]||"en"), ov=pack.overrides||{};
-  BASE_M.forEach(base=>{
-    const full=Object.assign({},base,ov[base.id]||{}), own={};
-    Object.keys(full).forEach(k=>{ if(k.charAt(0)!=="_") own[k]=full[k]; });
-    delete own.intents;
-    own.id=uid("u:");
-    own.lockLang=L;
-    delete ov[base.id];
-    renameCard(base.id,own.id);
-    pack.custom.push(own);
-    alive.add(own.id);
-    const k=own.c;
-    if(k && !pack.customCats[k]) pack.customCats[k]=pack.catLabels[k]||BASE_CATS[k]||k;
-  });
-}
 /** Before a catalog is put down: every personal layer re-read against the one arriving. Returns
- *  the ids that live on, for the prune that follows. The count rides the reload in the session.
- *  `held` is the catalog being put down. */
-function carryCardLayer(c,held){
+ *  the ids that live on, for the prune that follows. The count rides the reload in the session. */
+function carryCardLayer(c){
   const list=(c&&c.cards)||[];
   const alive=new Set(list.map(catalogCardId));
   (pack.custom||[]).forEach(m=>{ if(m&&m.id) alive.add(m.id); });
-  keepOwnCatalog(held,c,alive);
   rekeyOldCards(list,alive);
   rekeyOldShelves((c&&c.categories)||{});
   const find=linkFinder(c), lost={};
@@ -300,7 +277,6 @@ function tellCarried(){
 }
 
 export {
-  OWN_ID,
   carryCardLayer,
   carryAtBoot
 };

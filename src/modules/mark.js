@@ -29,13 +29,8 @@ function railQuery(){
   return (typeof intentEl!=="undefined" && intentEl) ? String(intentEl.value||"").trim() : "";
 }
 
-/* The last reply copied and the card it came from, for the practice customer, which is told what
-   was pasted and asks here whether it came off a card. */
-let eLastCopy=null;
-function lastCopy(){ return eLastCopy; }
-function copy(text,msg,cardId){
+function copy(text,msg){
   // Copying consumes the semi-selection - every copy, click or keyboard, funnels through here.
-  eLastCopy={text:String(text||""), id:cardId?String(cardId):""};
   setRailMarkUsed(true); setSemiKind(null);
   hooks.railDecorate(false);
   const done=()=>toast(msg);
@@ -146,6 +141,5 @@ export {
   markSurface,
   markEnd,
   copy,
-  lastCopy,
   fallback,
 };
