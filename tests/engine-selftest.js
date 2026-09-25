@@ -1491,6 +1491,74 @@ try {
      + ") and with it moved below the first gate (" + !homeFirst(after) + ")");
 }
 
+/* 34. A PUBLIC COPY IS NOT A HELD-BACK CATALOG (board 767, 2026-09-25). tools/pre-commit used to
+   count every git-ignored *-catalog.js as a catalog this repository holds back, so a copy of the
+   public sample made it print "against 1 held-back catalog(s)", the line the real catalog gives,
+   while it held back nothing. Driven here in a throwaway repository with invented words: a
+   published commit at origin/main, a public copy of its quote as toy-catalog.js, an unpublished
+   quote as real-catalog.js, and a dummy name list. 34a: the copy alone is set aside by name and the
+   scan refuses for want of a catalog. 34b: beside the real one, only the real one is counted, by
+   name. 34c: the real one's quote in a message is still refused. 34d is the old reading as a
+   control, the same script with no published tree to read: the copy counts again, and 34a's own
+   predicate says so. The bash is Git's own, found from `git --exec-path`, because on Windows a
+   bare `bash` can be WSL's, which cannot run this script. */
+{
+  const cp = require("child_process");
+  let bash = "bash";
+  if (process.platform === "win32") {
+    const ex = cp.execFileSync("git", ["--exec-path"], { encoding: "utf8" }).trim();
+    bash = path.join(ex, "..", "..", "..", "bin", "bash.exe");
+  }
+  const lab = path.join(tmp, "scan-767");
+  fs.mkdirSync(lab);
+  const git = (...a) => cp.execFileSync("git", ["-c", "user.name=selftest", "-c",
+    "user.email=selftest@invalid", "-c", "core.autocrlf=false", ...a],
+    { cwd: lab, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const hasBash = cp.spawnSync(bash, ["-c", "exit 0"]).status === 0;
+  if (!hasBash) skip("34 needs Git's bash, and none answers at " + bash);
+  else {
+    const PUB = 'var s = "amber falcon drifts over quiet copper meadows every morning";\n';
+    const HELD = 'var s = "violet harbour lanterns guide weary silver tugboats safely home";\n';
+    git("init", "-q");
+    fs.writeFileSync(path.join(lab, ".gitignore"), "*-catalog.js\n");
+    fs.writeFileSync(path.join(lab, "sample.js"), PUB);
+    git("add", ".gitignore", "sample.js");
+    git("commit", "-q", "--no-verify", "-m", "published");
+    git("update-ref", "refs/remotes/origin/main", "HEAD");
+    fs.writeFileSync(path.join(lab, ".git", "etiuda-names"), "zqxwvname\n");
+    const script = fs.readFileSync(path.join(E.ROOT, "tools", "pre-commit"), "utf8");
+    const REF = 'pub_ref="refs/remotes/origin/main"';
+    const scan = (text, msg, body) => {
+      const file = path.join(lab, "scan.sh"), m = path.join(lab, "msg.txt");
+      fs.writeFileSync(file, text);
+      fs.writeFileSync(m, body || "A plain message.\n");
+      const r = cp.spawnSync(bash, ["scan.sh", "msg.txt"], { cwd: lab, encoding: "utf8" });
+      return { code: r.status, say: String(r.stderr || "") };
+    };
+    const put = (name, body) => fs.writeFileSync(path.join(lab, name), body);
+    const setAside = r => r.code === 1 && /toy-catalog\.js is not counted as a held-back catalog/.test(r.say)
+      && /against 0 held-back catalog\(s\);/.test(r.say);
+    put("toy-catalog.js", PUB);
+    const alone = scan(script);
+    ok(setAside(alone), "34a a copy of published content is set aside by name, and the quote scan"
+       + " refuses for want of a held-back catalog: exit " + alone.code);
+    put("real-catalog.js", HELD);
+    const both = scan(script);
+    ok(both.code === 0 && /against 1 held-back catalog\(s\): real-catalog\.js \(1 quotes, 0 published\);/.test(both.say)
+       && /toy-catalog\.js is not counted/.test(both.say),
+       "34b beside a held-back catalog only that one is counted, by name: exit " + both.code);
+    const quoted = scan(script, null, "Subject\nwe said violet harbour lanterns guide weary silver, once\n");
+    ok(quoted.code === 1 && /content held back by this repository is quoted/.test(quoted.say),
+       "34c a quote of the held-back catalog in a message is still refused: exit " + quoted.code);
+    fs.renameSync(path.join(lab, "real-catalog.js"), path.join(tmp, "real-catalog.js"));
+    const old = scan(script.split(REF).join('pub_ref="refs/remotes/origin/none"'));
+    ok(script.split(REF).length === 2 && !setAside(old) && old.code === 0
+       && /against 1 held-back catalog\(s\): toy-catalog\.js;/.test(old.say),
+       "34d control: with no published tree to read the copy counts again (exit " + old.code
+       + "), and 34a's reader refuses that run");
+  }
+}
+
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
   fs.rmSync(insideRepo, { recursive: true, force: true });
