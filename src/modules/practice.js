@@ -18,6 +18,8 @@ import { addTab } from "./tabs.js";
 import { foldDiacritics } from "./words.js";
 import { ICON_X } from "./icons.js";
 import { applyTheme } from "./theme.js";
+import { storedCatalog } from "./catalog.js";
+import { OWN_ID } from "./card-carry.js";
 
 /* THE SCRIPT, written against the shipped sample's own ids, in the languages it speaks. A reply
    fits when the card it was copied from stands on the step's shelf or answers its request. Each
@@ -27,16 +29,16 @@ const PRACTICE_STEPS=[
   { says:[{ pl:"Dzień dobry, piszę w sprawie kubka, który przyszedł w piątek.",
             en:"Hello, I'm writing about a mug that arrived on Friday." }],
     word:{ pl:"powitanie", en:"hello" }, shelf:"t-opening",
-    coach:"She has said hello. Type \"{WORD}\" at the top, press Enter, click the first reply and paste it into the message box." },
+    coach:"She has said hello. Type {WORD} at the top, press Enter, click the first reply and paste it into the message box." },
   { says:[{ pl:"Miło mi.", en:"Nice to meet you." },
           { pl:"Jest śliczny, w kolorze mirabelki, ale przy moich talerzach wygląda jak z innej bajki. Mogę go jeszcze oddać?",
             en:"It's lovely, that mirabelle yellow, but next to my plates it looks as if it wandered in from another kitchen. Can I still send it back?" }],
     word:{ pl:"zwrot", en:"return" }, request:"t-return-an-item",
-    coach:"Now a return. This time the word is \"{WORD}\", and the rest as before." },
+    coach:"Now a return. This time the word is {WORD}, and the rest as before." },
   { says:[{ pl:"Dziękuję, to bardzo miłe. W takim razie czekam na etykietę i to już wszystko.",
             en:"Thank you, that's kind. I'll look out for the label, and that's everything." }],
     word:{ pl:"pożegnanie", en:"thanks" }, shelf:"t-closing",
-    coach:"And to close, a thank-you. The word is \"{WORD}\"." }
+    coach:"And to close, a thank-you. The word is {WORD}." }
 ];
 const PRACTICE_LAST={ pl:"Wzajemnie, do usłyszenia.", en:"And to you. Goodbye." };
 const TYPING_MS=900, IDLE_MS=25000;
@@ -118,7 +120,9 @@ function coach(key){
   const el=document.getElementById("eCustCoach");
   if(!el||!P) return;
   const w=say(PRACTICE_STEPS[Math.min(P.step,PRACTICE_STEPS.length-1)].word);
-  el.textContent=t(key).split("{WORD}").join(w);
+  /* THE WORD IS DRAWN AS A KEY, the way the site shows it, so neither language needs a quotation
+     mark round it and none a keyboard cannot type is ever wanted. */
+  el.innerHTML=t(key).split("{WORD}").map(esc).join('<kbd class="e-word">'+esc(w)+'</kbd>');
 }
 function wantsName(){
   const first=foldDiacritics(PRACTICE_WHO[P.lang].split(" ")[0]).toLowerCase();
@@ -130,7 +134,7 @@ function stepCoach(){
 }
 function armIdle(){
   clearTimeout(P.idle);
-  P.idle=setTimeout(()=>{ if(P && !P.nudged && !P.busy){ P.nudged=true; coach("The word \"{WORD}\" at the top is all it takes."); } },IDLE_MS);
+  P.idle=setTimeout(()=>{ if(P && !P.nudged && !P.busy){ P.nudged=true; coach("The word {WORD} at the top is all it takes."); } },IDLE_MS);
 }
 function nextStep(i,first){
   P.step=i; P.nudged=false;
@@ -161,12 +165,12 @@ function send(){
   const got=lastCopy();
   if(!got || norm(got.text)!==norm(text) || !got.id){
     tell("miss",{ step:P.step+1, of:PRACTICE_STEPS.length });
-    coach("That works too, but the reply is already written, greeting and signature included: the word \"{WORD}\" and a click bring it.");
+    coach("That works too, but the reply is already written, greeting and signature included: the word {WORD} and a click bring it.");
     return;
   }
   if(!fits(findCard(got.id),st)){
     tell("miss",{ step:P.step+1, of:PRACTICE_STEPS.length });
-    coach("That reply answers something else. The word \"{WORD}\" finds the right one.");
+    coach("That reply answers something else. The word {WORD} finds the right one.");
     return;
   }
   tell("reply",{ step:P.step+1, of:PRACTICE_STEPS.length });
@@ -266,7 +270,17 @@ function askOwnReplies(){
 }
 /* Boot's one call. The practice page starts its customer at once; a desk on its first afternoon
    greets first, after the frame the catalog offer and the save notices take. */
+/* THE ROLE WHEEL WAITS FOR ITS FIRST REPLY on the sample and on a person's own replies: beside the
+   name it is a word nobody has been told about, so it is out of sight until a reply naming somebody
+   of the team is copied, and withAgentName brings it out then with one line. A team's desk has it
+   from the start, as it always did. */
+function syncRoleWheel(){
+  const held=storedCatalog();
+  const first=ePractice() || nsGet("Sample")==="1" || !!(held && held.id===OWN_ID);
+  document.body.classList.toggle("role-waits", first && lsGet("eRoleSeen")!=="1");
+}
 function wirePractice(){
+  syncRoleWheel();
   /* The coach follows the fields it talks about: a name in the customer's box moves it on, and a
      word typed at the top puts the idle nudge back. */
   addEventListener("input",e=>{
@@ -294,6 +308,7 @@ function wirePractice(){
 
 export {
   PRACTICE_STEPS,
+  syncRoleWheel,
   practiceRunning,
   startPractice,
   closePractice,

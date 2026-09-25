@@ -1195,6 +1195,7 @@ body.pills-off.pills-peek .pills-slot{display:block}
 /* The base rule kills the ring so a click does not flash one; :focus-visible puts it back
    for the keyboard, which now reaches this box through the tab order. */
 #roleDrum:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+body.role-waits #roleDrum{display:none}
 #roleDrum .rd-track{position:absolute;inset:0}
 #roleDrum span{position:absolute;left:6px;right:6px;text-align:center;white-space:nowrap;
   overflow:hidden;color:var(--ink)}
@@ -2339,6 +2340,7 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 @keyframes eTyping{0%,60%,100%{opacity:.3}30%{opacity:1}}
 .e-cust-coach{margin:0;padding:8px 12px;font-size:12.5px;line-height:1.45;color:var(--dim);text-wrap:pretty}
 .e-cust-coach:empty{display:none}
+.e-word{font:600 12px var(--mono);padding:0 5px;border:1px solid var(--line-strong);border-radius:4px;color:var(--ink);white-space:nowrap}
 .e-cust-box{display:flex;gap:8px;align-items:flex-end;padding:8px 12px 12px;border-top:1px solid var(--line)}
 .e-cust-box textarea{flex:1 1 auto;min-width:0;resize:none;padding:7px 9px;border:1px solid var(--line-strong);
   border-radius:var(--radius-sm,8px);background:var(--panel);color:var(--ink);font:13px var(--sans)}
@@ -5925,13 +5927,13 @@ What you type stays in this browser only.`;
     "Blur effects off": "Efekty rozmycia wyłączone",
     "Send": "Wyślij",
     "Message": "Wiadomość",
-    'She has said hello. Type "{WORD}" at the top, press Enter, click the first reply and paste it into the message box.': 'Klientka się przywitała. Wystarczy wpisać u góry słowo "{WORD}", nacisnąć Enter, kliknąć pierwszą odpowiedź i wkleić ją w polu wiadomości.',
-    'Now a return. This time the word is "{WORD}", and the rest as before.': 'Teraz pytanie o zwrot. Tym razem słowo "{WORD}", a dalej tak samo.',
-    'And to close, a thank-you. The word is "{WORD}".': 'Na koniec podziękowanie. Słowo "{WORD}".',
+    "She has said hello. Type {WORD} at the top, press Enter, click the first reply and paste it into the message box.": "Klientka się przywitała. Wystarczy wpisać u góry słowo {WORD}, nacisnąć Enter, kliknąć pierwszą odpowiedź i wkleić ją w polu wiadomości.",
+    "Now a return. This time the word is {WORD}, and the rest as before.": "Teraz pytanie o zwrot. Tym razem słowo {WORD}, a dalej tak samo.",
+    "And to close, a thank-you. The word is {WORD}.": "Na koniec podziękowanie. Słowo {WORD}.",
     "First, her name. Copy it from the chat into the customer's name box.": 'Najpierw imię klientki. Wystarczy skopiować je z rozmowy do pola "imię klienta".',
-    'The word "{WORD}" at the top is all it takes.': 'Wystarczy słowo "{WORD}" w polu u góry.',
-    'That reply answers something else. The word "{WORD}" finds the right one.': 'Ta odpowiedź dotyczy innej sprawy. Właściwą wskaże słowo "{WORD}".',
-    'That works too, but the reply is already written, greeting and signature included: the word "{WORD}" and a click bring it.': 'Tak też można, ale gotowa odpowiedź już czeka, z powitaniem i podpisem: wystarczy słowo "{WORD}" i kliknięcie.',
+    "The word {WORD} at the top is all it takes.": "Wystarczy słowo {WORD} w polu u góry.",
+    "That reply answers something else. The word {WORD} finds the right one.": "Ta odpowiedź dotyczy innej sprawy. Właściwą wskaże słowo {WORD}.",
+    "That works too, but the reply is already written, greeting and signature included: the word {WORD} and a click bring it.": "Tak też można, ale gotowa odpowiedź już czeka, z powitaniem i podpisem: wystarczy słowo {WORD} i kliknięcie.",
     "That is all it is.": "I to wszystko.",
     "One word, one click, one paste. The greeting for the hour, her name and your signature were Etiuda's part.": "Jedno słowo, jedno kliknięcie, jedno wklejenie. Powitanie na tę porę dnia, imię we właściwej formie i podpis Etiuda wstawiła sama.",
     "Once more": "Jeszcze raz",
@@ -5970,6 +5972,7 @@ What you type stays in this browser only.`;
     "New card adds another, at any time.": "Kolejną odpowiedź dodaje przycisk Nowa karta, w dowolnej chwili.",
     "OK": "OK",
     "End the practice": "Zakończ próbę",
+    "Beside the customer's name there is now a wheel: it chooses who in the team this reply names.": "Obok imienia klienta jest teraz kółko: wybiera się nim osobę z zespołu, którą wymienia ta odpowiedź.",
     "A practice chat": "Rozmowa na próbę",
     "What else Etiuda can do: a few short steps, any time from the Menu.": "Co jeszcze potrafi Etiuda: kilka krótkich kroków, w dowolnej chwili z Menu.",
     "This is a sample shop. Your own replies belong in the program on your computer.": "Tu działa przykładowy sklep. Własne odpowiedzi czekają w programie na komputerze."
@@ -9422,6 +9425,11 @@ What you type stays in this browser only.`;
     return E_SIGN_RE.test(String(raw || "")) && !agentName() && lsGet(E_NAME_ASKED) !== "1";
   }
   function withAgentName(raw, go) {
+    if (/\x7bROLE\x7d/.test(String(raw || "")) && document.body.classList.contains("role-waits")) {
+      document.body.classList.remove("role-waits");
+      lsSet("eRoleSeen", "1");
+      toast(t("Beside the customer's name there is now a wheel: it chooses who in the team this reply names."), TOAST_HAND_MS);
+    }
     if (!wantsAgentName(raw) || document.getElementById("eAgentModal")) {
       go();
       return;
@@ -17789,6 +17797,7 @@ What you type stays in this browser only.`;
     firstAfternoonOpen: () => firstAfternoonOpen,
     practiceRunning: () => practiceRunning,
     startPractice: () => startPractice,
+    syncRoleWheel: () => syncRoleWheel,
     wirePractice: () => wirePractice
   });
   var PRACTICE_WHO = { pl: "Agnieszka W.", en: "Hannah R." };
@@ -17800,7 +17809,7 @@ What you type stays in this browser only.`;
       }],
       word: { pl: "powitanie", en: "hello" },
       shelf: "t-opening",
-      coach: 'She has said hello. Type "{WORD}" at the top, press Enter, click the first reply and paste it into the message box.'
+      coach: "She has said hello. Type {WORD} at the top, press Enter, click the first reply and paste it into the message box."
     },
     {
       says: [
@@ -17812,7 +17821,7 @@ What you type stays in this browser only.`;
       ],
       word: { pl: "zwrot", en: "return" },
       request: "t-return-an-item",
-      coach: 'Now a return. This time the word is "{WORD}", and the rest as before.'
+      coach: "Now a return. This time the word is {WORD}, and the rest as before."
     },
     {
       says: [{
@@ -17821,7 +17830,7 @@ What you type stays in this browser only.`;
       }],
       word: { pl: "pożegnanie", en: "thanks" },
       shelf: "t-closing",
-      coach: 'And to close, a thank-you. The word is "{WORD}".'
+      coach: "And to close, a thank-you. The word is {WORD}."
     }
   ];
   var PRACTICE_LAST = { pl: "Wzajemnie, do usłyszenia.", en: "And to you. Goodbye." };
@@ -17915,7 +17924,7 @@ What you type stays in this browser only.`;
     const el = document.getElementById("eCustCoach");
     if (!el || !P) return;
     const w = say(PRACTICE_STEPS[Math.min(P.step, PRACTICE_STEPS.length - 1)].word);
-    el.textContent = t(key).split("{WORD}").join(w);
+    el.innerHTML = t(key).split("{WORD}").map(esc).join('<kbd class="e-word">' + esc(w) + "</kbd>");
   }
   function wantsName() {
     const first = foldDiacritics(PRACTICE_WHO[P.lang].split(" ")[0]).toLowerCase();
@@ -17930,7 +17939,7 @@ What you type stays in this browser only.`;
     P.idle = setTimeout(() => {
       if (P && !P.nudged && !P.busy) {
         P.nudged = true;
-        coach('The word "{WORD}" at the top is all it takes.');
+        coach("The word {WORD} at the top is all it takes.");
       }
     }, IDLE_MS);
   }
@@ -17965,12 +17974,12 @@ What you type stays in this browser only.`;
     const got = lastCopy();
     if (!got || norm(got.text) !== norm(text) || !got.id) {
       tell("miss", { step: P.step + 1, of: PRACTICE_STEPS.length });
-      coach('That works too, but the reply is already written, greeting and signature included: the word "{WORD}" and a click bring it.');
+      coach("That works too, but the reply is already written, greeting and signature included: the word {WORD} and a click bring it.");
       return;
     }
     if (!fits(findCard(got.id), st)) {
       tell("miss", { step: P.step + 1, of: PRACTICE_STEPS.length });
-      coach('That reply answers something else. The word "{WORD}" finds the right one.');
+      coach("That reply answers something else. The word {WORD} finds the right one.");
       return;
     }
     tell("reply", { step: P.step + 1, of: PRACTICE_STEPS.length });
@@ -18103,7 +18112,13 @@ What you type stays in this browser only.`;
       }
     );
   }
+  function syncRoleWheel() {
+    const held = storedCatalog();
+    const first = ePractice() || nsGet("Sample") === "1" || !!(held && held.id === OWN_ID);
+    document.body.classList.toggle("role-waits", first && lsGet("eRoleSeen") !== "1");
+  }
   function wirePractice() {
+    syncRoleWheel();
     addEventListener("input", (e) => {
       if (!P) return;
       if (pax && e.target === pax && P.step === 0) stepCoach();

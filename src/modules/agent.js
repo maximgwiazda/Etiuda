@@ -1,7 +1,7 @@
 import { lsSet, lsGet } from "./storage.js";
 import { ePractice } from "./env.js";
 import { pax } from "./dom.js";
-import { t, translateTree } from "./ui-lang.js";
+import { t, translateTree, toast, TOAST_HAND_MS } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { greetLine } from "./greeting.js";
 import { lang } from "./app-state.js";
@@ -66,6 +66,11 @@ function wantsAgentName(raw){
 /** Runs `go` now, or once the question is answered. Escape answers nothing and copies nothing,
  *  so the click can simply be made again. */
 function withAgentName(raw,go){
+  if(/\x7bROLE\x7d/.test(String(raw||"")) && document.body.classList.contains("role-waits")){
+    document.body.classList.remove("role-waits");
+    lsSet("eRoleSeen","1");
+    toast(t("Beside the customer's name there is now a wheel: it chooses who in the team this reply names."),TOAST_HAND_MS);
+  }
   if(!wantsAgentName(raw) || document.getElementById("eAgentModal")){ go(); return; }
   askAgentName(raw,go);
 }

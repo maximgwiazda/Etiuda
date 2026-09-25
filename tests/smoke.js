@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 218 };
+const EXPECTED = { chrome: 219 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -2523,6 +2523,19 @@ const t0 = Date.now();
     const got = await q.evaluate(() => ({ cards: document.querySelectorAll(".card").length, rows: document.querySelectorAll("#intentRailList .rail-item").length, pills: document.querySelectorAll("#pills .pill").length }));
     check(!offer.real && offer.cards === 0 && /sample/i.test(offer.btn), "with no deployment catalog the empty screen offers the sample (" + JSON.stringify(offer.btn) + ")");
     check(got.cards > 0 && got.rows > 0 && got.pills > 0, "the sample loads: " + got.cards + " cards, " + got.rows + " intents, " + got.pills + " pills");
+    /* THE ROLE WHEEL WAITS on the sample until a reply naming somebody of the team is copied, and
+       comes out with one line then; the main desk above, a team's, has driven it from the start. */
+    step("the role wheel on the sample");
+    const wheel = await q.evaluate(async () => {
+      const shown = () => { const d = document.getElementById("roleDrum"); return !!d && d.offsetWidth > 0; };
+      const before = shown();
+      withAgentName("Odpowie {ROLE}.", () => {});
+      await new Promise(r => setTimeout(r, 200));
+      return { before, after: shown(), seen: lsGet("eRoleSeen"), said: document.getElementById("toast").classList.contains("show") };
+    });
+    check(!wheel.before && wheel.after && wheel.seen === "1" && wheel.said,
+      "the role wheel is out of sight on the sample until a reply naming somebody is copied, then comes out with one line ("
+      + JSON.stringify(wheel) + ")");
     check(missing.every(m => /^etiuda-catalog\.js/.test(m)), "nothing looked for and missing but the deployment catalog (" + [...new Set(missing)].join(", ") + ")");
   } catch (x) {
     const where = String((x && x.stack || "").split(String.fromCharCode(10))[1] || "").trim();
