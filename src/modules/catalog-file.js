@@ -335,7 +335,7 @@ function exportCatalog(){
       +"   "+num(catalogMacroCount(c),"macro","macros")+" in "+num(c.cards.length,"card","cards")
       +" · "+num(c.intents.en.length,"intent","intents")
       +" · "+num(Object.keys(c.categories).length,"category","categories")+"\n"
-      +"   To load it: Library > Import catalog. Any filename, any folder.\n"
+      +"   To load it: Library > Load catalog. Any filename, any folder.\n"
       +"   A file named etiuda-catalog.js beside Etiuda.html also loads on launch, and the\n"
       +"   installed Etiuda loads any .ec catalog from the folder named in its Settings. */\n";
     const js=head+"window.E_CATALOG = "+JSON.stringify(catalogToV2(c),null,1)+";\n";
@@ -530,7 +530,7 @@ function importCatalogText(text,fileName){
    is put down, unlike the picker - this build's shell watches the catalog folder, and a second
    channel saying the same thing is one more thing to keep in step. */
 function importCatalogHosted(){
-  ePickCatalogFile(t("Import catalog"),t("Catalogs")).then(got=>{
+  ePickCatalogFile(t("Load catalog"),t("Catalogs")).then(got=>{
     if(!got) return;
     if(!got.text){ toast(t("{FILE} could not be read.").split("{FILE}").join(got.name)); return; }
     importCatalogText(got.text,got.name);
@@ -563,7 +563,7 @@ function importCatalogFile(){
    kept and re-read later, which is the whole update channel. Cancelling rejects with
    AbortError rather than resolving empty, so the catch is also the cancel path. */
 function importCatalogPicked(){
-  let handle=null;
+  let handle=null, picked="";
   window.showOpenFilePicker({
     multiple:false,
     types:[{description:"Etiuda catalog",accept:{"application/json":[".ec",".json"],"text/javascript":[".js"]}}]
@@ -572,6 +572,7 @@ function importCatalogPicked(){
     return handle?handle.getFile():null;
   }).then(f=>{
     if(!f) return null;
+    picked=f.name;
     return f.text().then(text=>{
       const c=catalogFromFileText(text,f.name);
       if(!c) return null;
@@ -585,7 +586,9 @@ function importCatalogPicked(){
     });
   }).catch(e=>{
     if(e && e.name==="AbortError") return;
-    toast(t("Import failed -")+" "+((e&&e.message)?e.message:"invalid file"));
+    /* The browser's own sentence is English whatever the interface speaks, so the line names the
+       file instead, or where none was picked the error's own name. */
+    toast(t("The catalog could not be loaded:")+" "+(picked || (e&&e.name) || ""));
   });
 }
 

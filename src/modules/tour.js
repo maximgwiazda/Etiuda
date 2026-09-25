@@ -136,7 +136,7 @@ function tourRevealCardActions(){
 /* The desk's own words for the folder a Load opens, or none in a browser, which has no folder. */
 function loadStepBody(){
   const dir=eCatalogFolderShort();
-  if(!dir) return t("The catalog you import stays in this browser, ready whenever you come back.");
+  if(!dir) return t("The catalog you load stays in this browser, ready whenever you come back.");
   return t("Replies come in a catalog. <b>Load a catalog</b>, under the logo, opens {FOLDER}, and the choice is yours: the team's own catalog, if it is there, or the sample, which always waits there for trying things out.")
     .split("{FOLDER}").join(esc(dir));
 }

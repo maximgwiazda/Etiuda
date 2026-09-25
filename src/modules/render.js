@@ -90,10 +90,10 @@ function render(){
         +esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}","<kbd>Esc</kbd>")+'</div>'
       : (wholeThingEmpty()
         ? '<div class="empty empty-desk">'+esc(t("Etiuda is ready for its first replies."))+'<br><br>'
-          /* A first run has no menu habits yet, and Import is the route someone who downloaded
+          /* A first run has no menu habits yet, and Load is the route someone who downloaded
              the file is looking for - so it is a button here, not the name of one elsewhere. */
           +esc(t(hooks.sampleReady() ? "Add a card to a category," : "Add a card to a category, or"))
-          +' <button type="button" class="btn" id="emptyLoad">'+esc(t("import a catalog"))+'</button>'
+          +' <button type="button" class="btn" id="emptyLoad">'+esc(t("load a catalog"))+'</button>'
           /* Both branches close on words: a sentence ending on a button chip reads as unfinished,
              and a bare full stop after one reads as a stray mark. */
           +(hooks.sampleReady()
@@ -111,7 +111,7 @@ function render(){
              hover or in the folder itself; the short name is what the sentence can carry at the
              narrowest width the band allows. */
           +(eCatalogFolder()
-            ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else comes in through Import above.")
+            ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with the button above.")
                 .split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button"'
                   +' tabindex="0" title="'+esc(eCatalogFolder())+'">'
                   +esc(eCatalogFolderShort())+'</code>')
@@ -119,7 +119,7 @@ function render(){
             ? esc(t("A catalog file next to Etiuda loads by itself when it is called"))+' '
               +'<code>'+esc(E_CATALOG_SCRIPT)+'</code>. '
               +esc(t("Under any other name, bring it in with the button above."))
-            : esc(t("The catalog you import stays in this browser, ready whenever you come back.")))
+            : esc(t("The catalog you load stays in this browser, ready whenever you come back.")))
           +'</span></div>'
         /* A chosen category with nothing in it: the same quiet drawing as the other empty
            states, but the category's own icon, so it says WHICH shelf is bare. Only when the

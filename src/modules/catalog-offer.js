@@ -166,7 +166,7 @@ function ecEmptyHtml(){
   const dir=eCatalogFolder();
   if(!dir) return "";
   return '<div class="ec-row ec-empty">'
-    +t("No catalogs in {FOLDER} yet. Import one, or drop a file into the folder.")
+    +t("Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.")
       .split("{FOLDER}").join('<code class="open-folder" data-ec-open="1" role="button"'
         +' tabindex="0" title="'+esc(dir)+'">'+esc(eCatalogFolderShort())+'</code>')
     +'</div>';
@@ -260,7 +260,7 @@ function paintCatalogList(){
        hundred visible cards is worse than useless. */
     const applied=(typeof E_CATALOG_NAME!=="undefined" && E_CATALOG_NAME) ? E_CATALOG_NAME : "";
     if((held||applied||(cards||[]).length) && onAt<0)
-      rows.unshift(ecRowHtml({ name:String(applied||(held&&held.name)||t("Unnamed catalog")),
+      rows.unshift(ecRowHtml({ name:shownCatalogName(String(applied||(held&&held.name)||"")),
         loaded:true, newer:false, meta:loadedMeta("") }));
     box.innerHTML=rows.length?rows.join(""):ecEmptyHtml();
     box.querySelectorAll("button[data-ec-load]").forEach(b=>{
@@ -391,6 +391,9 @@ function eOfferPickedCatalog(c,name,accept){
     accept:()=>accept()});
   if(!shown) toast(t("That file matches the catalog you already have."));
 }
+/* A catalog file that names itself nothing is stored as "Unnamed catalog" (catalog.js) and shown
+   in the interface's language. */
+function shownCatalogName(n){ return (!n || n==="Unnamed catalog") ? t("Unnamed catalog") : n; }
 /* THE TOP BAR SAYS WHICH CATALOG IS LOADED, and nothing else: inert, and no replacement for the
    Library. What is applied decides, as in the Library's list. */
 function paintCatNow(){
@@ -399,11 +402,10 @@ function paintCatNow(){
   const held=storedCatalog();
   const name=String((typeof E_CATALOG_NAME!=="undefined" && E_CATALOG_NAME) || (held && held.name) || "");
   const own=el.querySelector(".cn-name"), none=el.querySelector(".cn-none");
-  if(own){ own.textContent=name; own.hidden=!name; if(name) markCut(own); }
+  if(own){ own.textContent=shownCatalogName(name); own.hidden=!name; if(name) markCut(own); }
   // The sweep translates from the English it finds recorded here, so a language switch follows.
   if(none){ const key=held?"Unnamed catalog":"No catalog loaded";
     none.setAttribute("data-i18n-text",key); none.textContent=t(key); none.hidden=!!name; }
-  el.title=name;
 }
 
 /* The watched file. Silent at boot and only while the browser still holds permission:

@@ -1306,8 +1306,8 @@ const placeEc = (dir, from, as, minutesOld) => {
      a count and a filename this file chose. */
 
   });
-  await step("[2c/7] Import catalog takes a .ec", async () => {
-  phase("[2c/7] Import catalog takes a .ec");
+  await step("[2c/7] Load catalog takes a .ec", async () => {
+  phase("[2c/7] Load catalog takes a .ec");
   const ecText = fs.readFileSync(FIX, "utf8");
   const udJ = newUserData("import");
   s = await launch(udJ);
@@ -1320,7 +1320,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     if (!item) return { step: "no Library item in the menu" };
     item.click(); await wait(1200);
     const imp = document.getElementById("mgImportCatalog");
-    if (!imp) return { step: "no Import catalog button" };
+    if (!imp) return { step: "no Load catalog button" };
     const r = imp.getBoundingClientRect();
     return { step: "open", box: [Math.round(r.width), Math.round(r.height)],
              wired: typeof imp.onclick === "function",
@@ -1329,7 +1329,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   });
   check(door.step === "open" && door.box[0] > 0 && door.box[1] > 0 && door.wired
         && door.picker === "function" && door.reader === "function",
-    "2l the Import door is whole: the button is on screen and wired, the host answers with a file"
+    "2l the Load door is whole: the button is on screen and wired, the host answers with a file"
     + " picker of its own, and the engine has the reading half behind it: " + JSON.stringify(door));
 
   took = await s.p.evaluate(text => {
@@ -1449,7 +1449,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   check(bareEmpty.step === "read" && !bareEmpty.offerBox && bareEmpty.rows === 0
         && !bareEmpty.load && !bareEmpty.asks && !bareEmpty.dialog
         && bareEmpty.says.indexOf("Etiuda is ready for its first replies.") === 0
-        && bareEmpty.says.indexOf("import a catalog") > -1,
+        && bareEmpty.says.indexOf("load a catalog") > -1,
     "2p2 and the page the decline leaves behind carries none of it: no offer box ("
     + bareEmpty.offerBox + "), no row (" + bareEmpty.rows + "), no Load button (" + bareEmpty.load
     + ") and the words " + JSON.stringify("Load catalog?") + " nowhere in its markup ("
@@ -1597,11 +1597,11 @@ const placeEc = (dir, from, as, minutesOld) => {
     + JSON.stringify(setPath) + "). So 2p and 2q read the folder and not a fixed list, and the"
     + " dialog at 2p is that folder\'s rather than a fixture of the empty screen");
   /* A FOLDER WITH NOTHING IN IT SAYS SO IN THE LIST'S OWN SHAPE, board 452, and carries no
-     button: Import is on the bar below, and the same act twice on one screen is the thing this
+     button: Load catalog is on the bar below, and the same act twice on one screen is the thing this
      design took out. The folder inside the sentence stays clickable, because putting a file
      there is the usual answer. */
   check(noRows.phButtons === 0 && noRows.phFolder === catFolder("emptylist")
-        && noRows.empty.indexOf("Import one") > 0,
+        && noRows.empty.indexOf("load one") > 0,
     "2P2 an empty folder is one row-shaped placeholder with no button in it, naming the folder it"
     + " means: " + JSON.stringify(noRows));
   await s.stop();

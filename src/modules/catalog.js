@@ -141,7 +141,7 @@ function normaliseCatalog(data){
   const cardsOut=parseMacrosData(data);            // validates every card, dedupes ids
   if(!cardsOut.length) throw new Error("no cards in file");
   const cat={ format:1, kind:"playbook-catalog",
-              name:(data&&data.name)?String(data.name):"Imported catalog",
+              name:(data&&data.name)?String(data.name):"Unnamed catalog",
               categories:{}, intents:null, cards:cardsOut,
               facts:(data&&typeof data.facts==="string")?data.facts:"" };
   /* Carried when declared, like roles and who (remember: this object is a WHITELIST - see

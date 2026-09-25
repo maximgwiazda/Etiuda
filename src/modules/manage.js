@@ -678,7 +678,7 @@ function openManage(){
          as one group loosely spaced, and one of these forgets your work while the other brings
          a file in. Plain, not primary: a filled button beside a destructive one is a contest. */
       '<span class="mf-sep" aria-hidden="true"></span>'+
-      '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Import catalog…</button>'+
+      '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog…</button>'+
       '</div>'+
       '<button type="button" class="btn" id="mgClose">'+esc(t("Close"))+'</button>',
     wire: wireManage
