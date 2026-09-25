@@ -1463,6 +1463,34 @@ try {
         + JSON.parse(want).cards.length : "no E_SAMPLE") + ")");
 }
 
+/* 33. THE RELEASE HANDS EVERY GATE A SCRATCH HOME (2026-09-25). tools/release.mjs builds one and
+   sets it in its own environment before the first gate, so every npm child inherits it; that was
+   driven in a lab whose npm scripts were stubs recording what they were handed (10 of 10 calls in
+   the home, and 0 of 10 on the script it replaced). What can quietly undo it is one line, so this
+   holds that line: HOME_ENV, which names USERPROFILE, is assigned into process.env at the top level
+   before the first gate. Read as text with block comments blanked and anchored at the line start,
+   so neither a quotation nor a commented-out copy counts. 33b is the same reader over the same
+   file with the assignment taken out, and with it moved below the first gate. */
+{
+  const homeFirst = text => {
+    const lines = text.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, " ")).split(/\r?\n/);
+    const at = re => lines.findIndex(l => re.test(l));
+    const decl = at(/^const HOME_ENV = \{ USERPROFILE: HOME, /);
+    const assign = at(/^Object\.assign\(process\.env, HOME_ENV\);\s*$/);
+    const first = at(/^gate\(/);
+    return decl > -1 && assign > decl && first > assign;
+  };
+  const rel = fs.readFileSync(path.join(E.ROOT, "tools", "release.mjs"), "utf8");
+  ok(homeFirst(rel), "33a tools/release.mjs sets its scratch home, USERPROFILE included, in its own"
+     + " environment before its first gate, so every gate inherits it");
+  const line = "Object.assign(process.env, HOME_ENV);";
+  const gone = rel.split(line).join("");
+  const after = rel.split(line).join("").replace(/(\ngate\([^\n]*\n)/, "$1" + line + "\n");
+  ok(rel.split(line).length === 2 && !homeFirst(gone) && !homeFirst(after),
+     "33b control: the same reader refuses the file with that line taken out (" + !homeFirst(gone)
+     + ") and with it moved below the first gate (" + !homeFirst(after) + ")");
+}
+
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
   fs.rmSync(insideRepo, { recursive: true, force: true });
