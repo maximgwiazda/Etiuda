@@ -163,7 +163,7 @@ const step = async (label, body, opts) => {
  * it is what the count now sees: a mismatch is NO VERDICT, exit 78, not a tally.
  */
 const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7"];
-const EXPECTED = KEEP ? null : 117;
+const EXPECTED = KEEP ? null : 118;
 const phasesSeen = new Set();
 const phase = what => {
   const m = /^\[(\d+)[a-z]*\/\d+\]/.exec(String(what).trim());
@@ -1510,21 +1510,6 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " cards, macros, intents and categories, counted off the file by the host - "
     + JSON.stringify(edRow.meta) + " and " + JSON.stringify(noEdRow.meta));
 
-  /* Loading one from that list: the same dialog every other route ends in, then the catalog. */
-  const fromList = await s.p.evaluate(async () => {
-    const wait = ms => new Promise(r => setTimeout(r, ms));
-    const row = Array.from(document.querySelectorAll("#mgCatList .ec-row"))
-      .filter(r => (r.querySelector(".ec-name b") || {}).textContent === "another.ec")[0];
-    if (!row) return { step: "no row for another.ec" };
-    row.querySelector("button").click(); await wait(2000);
-    const subs = document.querySelectorAll("#eCatalogOffer .ec-sub");
-    const last = subs[subs.length - 1];
-    return { step: "clicked", offer: !!document.querySelector("#ecYes"),
-             codes: last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null };
-  });
-  check(fromList.offer && !!fromList.codes && fromList.codes[0] === "another.ec",
-    "2q2 and its Load button puts that file\'s offer back on screen past the refusal, named: "
-    + JSON.stringify(fromList));
   await s.stop();
 
   s = await launch(udL);
@@ -1551,6 +1536,29 @@ const placeEc = (dir, from, as, minutesOld) => {
   check(again2.offer && !!againLine && againLine[0] === "one-edition.ec",
     "2r and a file REWRITTEN since that refusal is still the one named, the folder\'s newest rule"
     + " deciding which: offer " + again2.offer + ", " + JSON.stringify(againLine));
+
+  /* LOADING ONE FROM THAT LIST ON AN EMPTY DESK LOADS IT AT ONCE (Maxim, 2026-09-26): somebody chose
+     it, past the refusal, and nothing is put down, so nothing is asked. Last on this desk, because
+     it is the act that stops it being empty. Clicked and left: the load reloads the page, and an
+     evaluate still waiting inside it would lose its context. */
+  await escOffer(s.p);
+  await sleep(600);
+  await s.p.evaluate(OPEN_LIB);
+  const fromList = await s.p.evaluate(() => {
+    const row = Array.from(document.querySelectorAll("#mgCatList .ec-row"))
+      .filter(r => (r.querySelector(".ec-name b") || {}).textContent === "another.ec")[0];
+    if (!row) return { step: "no row for another.ec" };
+    row.querySelector("button").click();
+    return { step: "clicked" };
+  });
+  await sleep(7000);
+  const fromListSeen = await (await s.b.pages())[0].evaluate(SEEN);
+  const fromListKeys = deskKeys(udL);
+  check(fromList.step === "clicked" && !fromListSeen.offer && fromListSeen.cards === SAMPLE_CARDS
+        && fromListKeys.eCatalogFile === "another.ec",
+    "2q2 and past that refusal a row\'s Load on the empty desk loads the file at once, nothing asked:"
+    + " " + fromListSeen.cards + " cards against the sample\'s " + SAMPLE_CARDS + ", offer "
+    + fromListSeen.offer + ", file " + JSON.stringify(fromListKeys.eCatalogFile || ""));
   await s.stop();
 
   const udM = newUserData("emptylist");                    // pinned at a folder holding no .ec
@@ -1661,21 +1669,17 @@ const placeEc = (dir, from, as, minutesOld) => {
   await escOffer(s.p);
   await sleep(800);
   const lib3 = await s.p.evaluate(OPEN_LIB);
-  taken = await s.p.evaluate(async () => {
-    const wait = ms => new Promise(r => setTimeout(r, ms));
+  taken = await s.p.evaluate(() => {
     const row = Array.from(document.querySelectorAll("#mgCatList .ec-row"))
       .filter(r => (r.querySelector(".ec-name b") || {}).textContent === "another.ec")[0];
     if (!row) return { step: "no row for another.ec" };
-    row.querySelector("button").click(); await wait(2200);
-    const y = document.querySelector("#ecYes");
-    if (!y) return { step: "no offer" };
-    y.click();
-    return { step: "accepted" };
+    row.querySelector("button").click();
+    return { step: "clicked" };
   });
-  await sleep(6000);
+  await sleep(7000);
   const listLoaded = await (await s.b.pages())[0].evaluate(SEEN);
   const listKeys = deskKeys(udLL);
-  check(lib3.step === "open" && lib3.rows.length === 2 && taken.step === "accepted"
+  check(lib3.step === "open" && lib3.rows.length === 2 && taken.step === "clicked"
         && listLoaded.cards === SAMPLE_CARDS && listKeys.eCatalogFile === "another.ec"
         && +listKeys.eCatalogFileAt > 0,
     "2q3 loading a file from that list loads THAT file, and the desk on disk records which file"
@@ -1715,6 +1719,25 @@ const placeEc = (dir, from, as, minutesOld) => {
     "2q4 the loaded file is the marked row, and the only one carrying the acts that belong to a"
     + " loaded catalog, while the file written after it is marked newer and offers Load: "
     + JSON.stringify([loadedRow, otherRow]));
+
+  /* THE CONTROL for 2q2 and 2q3: over a loaded catalog a row's Load still asks, since one catalog
+     would be put down. Answered with the bubble's own Escape, which records nothing. */
+  const replaceAsk = await (await s.b.pages())[0].evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const row = Array.from(document.querySelectorAll("#mgCatList .ec-row"))
+      .filter(r => (r.querySelector(".ec-name b") || {}).textContent === "one-edition.ec")[0];
+    if (!row) return { step: "no row for one-edition.ec" };
+    row.querySelector("button").click(); await wait(2200);
+    const h = document.querySelector("#eCatalogOffer h3");
+    return { step: "clicked", offer: !!document.querySelector("#ecYes"), title: h ? h.textContent : null,
+             cards: document.querySelectorAll("#list .card").length };
+  });
+  await escOffer((await s.b.pages())[0]);
+  await sleep(600);
+  check(replaceAsk.step === "clicked" && replaceAsk.offer && replaceAsk.title === "Replace catalog?"
+        && replaceAsk.cards === SAMPLE_CARDS,
+    "2q4b control: over a loaded catalog a row\'s Load still asks before putting it down: "
+    + JSON.stringify(replaceAsk));
 
   /* The watch feeds that list: a catalog dropped into the folder while the Library stands open.
      NOT another copy of the fixture: the shell hands the page a catalog only when the folder's
@@ -1906,15 +1929,13 @@ const placeEc = (dir, from, as, minutesOld) => {
   await sleep(800);
 
   /* Load, from the row: the route every import also takes, so what it proves about the reload
-     it proves about all of them. The offer it raises is answered here, the way a person does. */
+     it proves about all of them. On this empty desk it loads at once (2q2). */
   await s.p.evaluate(OPEN_LIB);
   const beforeLoad = await s.p.evaluate(LIB_STATE);
-  await s.p.evaluate(async () => {
-    const wait = ms => new Promise(r => setTimeout(r, ms));
+  await s.p.evaluate(() => {
     const row = Array.from(document.querySelectorAll("#mgCatList .ec-row"))
       .filter(r => (r.querySelector(".ec-name b") || {}).textContent === "one-edition.ec")[0];
-    row.querySelector("button").click(); await wait(2200);
-    const y = document.querySelector("#ecYes"); if (y) y.click();
+    row.querySelector("button").click();
   });
   await sleep(7000);
   const afterLoad = await (await s.b.pages())[0].evaluate(LIB_STATE);

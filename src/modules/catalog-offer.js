@@ -90,7 +90,7 @@ function eOfferCatalogAtBoot(){
 /* THE WAY BACK FROM A DECLINE: the Load button beside each file in the Library's list, and the
    one on the empty state's own offer, both end here. Forced past the remembered refusal, because
    asking outranks it - the same rule the explicit watch check follows - and through the one
-   dialog, so nothing loads behind anybody. The date arrives from the row that was clicked: the
+   bubble, which loads at once only where nothing is loaded. The date arrives from the row that was clicked: the
    host read it with the listing, and asking again would be asking for a second answer. */
 function loadCatalogFromFolder(name,mtime){
   eReadCatalogFile(name).then(got=>{
@@ -104,7 +104,7 @@ function loadCatalogFromFolder(name,mtime){
     }
     const shown=eOfferCatalogDialog(c,{
       foundHtml:eFoundHtml(got.name,eCatalogFolder()),
-      refusedKey:"CatalogNo", force:true, asked:true,
+      refusedKey:"CatalogNo", force:true, asked:true, direct:true,
       accept:sig=>{ lsSet(E_CATALOG_KEY,sig);
         return activateCatalog(c,{keepPersonal:true, file:got.name, fileAt:+mtime||0}); }
     });
@@ -302,6 +302,9 @@ function eOfferCatalogDialog(c,src){
   /* A refusal is remembered so boot does not nag, but ASKING outranks it: an explicit check
      that answered "already have it" about a file you declined would simply be untrue. */
   if(!src.force && src.refusedKey && nsGet(src.refusedKey)===sig) return false;
+  /* A CATALOG SOMEBODY CHOSE LOADS AT ONCE ON AN EMPTY DESK: nothing is put down, so there is
+     nothing to ask. Over a loaded catalog the question stands. */
+  if(src.direct && !active){ src.accept(sig); return true; }
   /* NOT OVER THE LIBRARY, and only a file somebody pointed at gets past this. That screen lists
      every catalog in the folder, marks the one loaded and offers Load on each row, so a question
      about the folder argues with a person already looking at the answer. MG_REOPEN as well as
@@ -388,7 +391,7 @@ function eOfferCatalogDialog(c,src){
 /* THE FILE DIALOG'S CATALOG, asked about in the same bubble as every other route. */
 function eOfferPickedCatalog(c,name,accept){
   const shown=eOfferCatalogDialog(c,{foundHtml:eFoundHtml(name,""), force:true, asked:true,
-    accept:()=>accept()});
+    direct:true, accept:()=>accept()});
   if(!shown) toast(t("That file matches the catalog you already have."));
 }
 /* A catalog file that names itself nothing is stored as "Unnamed catalog" (catalog.js) and shown

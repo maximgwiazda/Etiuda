@@ -19180,6 +19180,7 @@ What you type stays in this browser only.`;
         refusedKey: "CatalogNo",
         force: true,
         asked: true,
+        direct: true,
         accept: (sig) => {
           lsSet(E_CATALOG_KEY, sig);
           return activateCatalog(c, { keepPersonal: true, file: got.name, fileAt: +mtime || 0 });
@@ -19307,6 +19308,10 @@ What you type stays in this browser only.`;
     const active = storedCatalog();
     if (active && eCatalogSignature(active) === sig) return false;
     if (!src.force && src.refusedKey && nsGet(src.refusedKey) === sig) return false;
+    if (src.direct && !active) {
+      src.accept(sig);
+      return true;
+    }
     if (!src.asked && (document.getElementById("mgCatList") || ssGet(MG_REOPEN))) {
       paintCatalogList();
       return false;
@@ -19370,6 +19375,7 @@ What you type stays in this browser only.`;
       foundHtml: eFoundHtml(name, ""),
       force: true,
       asked: true,
+      direct: true,
       accept: () => accept()
     });
     if (!shown2) toast(t("That file matches the catalog you already have."));
