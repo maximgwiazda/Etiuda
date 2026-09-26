@@ -311,6 +311,9 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      dashed add-affordances). One token doing both reads as a lattice of equally loud lines. */
   --bg:#f7f8fa; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#e4e8ee; --line-strong:#cfd6e0;
   --accent:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8; --mark-ink:#2563eb;
+  /* WHAT CARRIES WHITE: the accent as a fill under white words, cobalt in both themes, since white
+     on the dark theme's own accent is 2.52:1 and on this 5.17:1 (the bubble's --bub, for the same reason). */
+  --accent-fill:#2563eb;
   /* The dot field under the cards. A share of --dim rather than a colour, so the field follows
      the ink of whichever theme is on; the two shares are PICKED BY EYE from a sheet of twelve
      (ruled 2026-09-17) rather than derived, because a pale ground swallows a dot that a dark one
@@ -1013,7 +1016,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   font:600 12px var(--sans);cursor:default;letter-spacing:.4px}
 .seg button+button{border-left:1px solid transparent}
 .seg button:hover,.seg button:focus-visible{color:var(--accent)}
-.seg button.on{background:var(--accent);color:#fff}
+.seg button.on{background:var(--accent-fill);color:#fff}
 .seg button[data-alt].on{background:var(--pl)}
 /* One thumb behind the letters, driven entirely by the .on class - :has() reads it, CSS
    animates it. Generalised: track 1/n, position n-indexed - data-n says how many,
@@ -1378,7 +1381,7 @@ body.pills-lines-expand .pills-slot.pills-overflow .pills,
    worse than any gain in emphasis; the cobalt fill and the white text already say which slice is
    below. The hint rules below keep their weight and so do their .on pairs, so a ringed pill is
    the same width picked or not, and picking is the one thing that never changes a width. */
-.pill.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:none}
+.pill.on{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;box-shadow:none}
 /* normal arrow while reordering pills (no grab/hand cue) */
 /* pan-y: a finger resting on a pill can still scroll the page - see the rail rows */
 .pill{touch-action:pan-y}
@@ -1403,9 +1406,9 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 .pill.hint:hover,.pill.hint:focus-visible{color:var(--dim);border-color:var(--accent)}
 .pill.hint2:hover,.pill.hint2:focus-visible{color:var(--dim);border-color:var(--go-edge)}
 /* selected + intent-relevant: blue fill, keep green border ring */
-.pill.on.hint2{background:var(--accent);border-color:var(--go-edge);color:#fff;
+.pill.on.hint2{background:var(--accent-fill);border-color:var(--go-edge);color:#fff;
   box-shadow:0 0 0 2px var(--go-soft);font-weight:650}
-.pill.on.hint{background:var(--accent);border-color:var(--accent);color:#fff;
+.pill.on.hint{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;
   box-shadow:0 0 0 2px var(--accent-soft);font-weight:650}
 .pill.over{border-color:var(--accent);border-style:dashed}
 /* 8px = the old 4px margin plus the ~4px space glyph the flex pill no longer renders. */
@@ -1793,7 +1796,7 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 .swap code{background:var(--accent-soft);color:var(--accent);padding:1px 6px;border-radius:4px;
   font:12px var(--mono);cursor:default;display:inline-block;margin:2px 3px 2px 0}
 .swap code:hover{outline:1px solid var(--accent)}
-.swap code.on{background:var(--accent);color:#fff}
+.swap code.on{background:var(--accent-fill);color:#fff}
 .swap code.on::after{content:" ✕";opacity:.7}
 /* Soft separator at the macro-search tier boundary: above it the entries are *about* the
    query (title / keywords / category), below they only mention it in the body. A hairline
@@ -2415,7 +2418,7 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 /* PRIMARY IS A BAR'S DRESSING rather than a modifier a button may carry anywhere: only an
    actions bar decides which of its buttons leads, so outside one the class paints nothing and
    is not written. Measured, it had been on four buttons that read as plain. */
-.modal-actions .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.modal-actions .btn.primary{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;font-weight:600}
 /* Two buttons at the same edge read as one loosely spaced group, and one of these forgets your
    work while the other brings a file in. A hairline says they are two things. */
 .modal-actions .mf-left .mf-sep{align-self:stretch;width:1px;margin:3px;background:var(--line-strong);
@@ -2426,8 +2429,11 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    cascade layer above all - turns this button pale under the mouse with white text still on
    it. Named at both primary buttons and at the two hint pills; nowhere else in the sheet does
    a variant meet a state at equal weight. */
-.modal-actions .btn.primary:hover,.modal-actions .btn.primary:focus-visible{filter:brightness(1.08);color:#fff;
-  background:var(--accent);border-color:var(--accent)}
+.modal-actions .btn.primary:hover,.modal-actions .btn.primary:focus-visible{filter:brightness(.92);color:#fff;
+  background:var(--accent-fill);border-color:var(--accent-fill)}
+/* Hover deepens the fill under white in dark, where lightening it would thin the words; light keeps its lift. */
+:root[data-theme=light] .modal-actions .btn.primary:hover,
+:root[data-theme=light] .modal-actions .btn.primary:focus-visible{filter:brightness(1.08)}
 /* THE RING IS MIXED INTO THE GROUND, not stated flat. A fixed pale pink is soft on a white
    page and a bright band on a near-black one - the same declaration reading as a warning in
    one theme and an alarm in the other. Mixing keeps the light look it already had and gives
@@ -3222,20 +3228,22 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 @keyframes eLashesOut{0%{opacity:1}20%,100%{opacity:0}}
 @keyframes eEyeBloom{0%{transform:scale(1);opacity:.95}50%{transform:scale(1.03);opacity:.95}
   62%{transform:scale(1.16);opacity:.95;animation-timing-function:ease-in}100%{transform:scale(1.5);opacity:0}}
-/* NO RING ON A BUTTON, and the hover look in its place: every control below restates its own
-   hover rule for :focus-visible, so one declaration serves both states and they cannot drift.
-   The browser's own ring is named here as well - it returns the moment a rule stops saying so -
-   and a text field keeps whatever it has, which is a different cue for a different thing. */
+/* THE KEYBOARD'S RING ON TOP OF THE HOVER LOOK: every control below restates its own hover rule
+   for :focus-visible, and the ring is what tells the focused control from the one under the
+   mouse when both are lit. In the control's own ink, round with its corners; a text field keeps
+   whatever it has, which is a different cue for a different thing. */
 .btn:focus-visible,.tab:focus-visible,.tab-x:focus-visible,.tab-add:focus-visible,
 .seg button:focus-visible,.field-clear:focus-visible,.combo-clear:focus-visible,
 .rail-item:focus-visible,.rail-add:focus-visible,.rail-lock:focus-visible,
-button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:none}
+button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+/* White words on a fill would ring white, which a light panel swallows: those ring in the fill. */
+.modal-actions .btn.primary:focus-visible,.seg button.on:focus-visible{outline-color:var(--accent-fill)}
 /* HIGH CONTRAST paints every ground and edge in the system's own two colours, so the mark and
    the focus, both tints here, vanish there; the system's highlight colour stands in for them,
    and only there. After the rule above and as heavy, so it wins in any layer order. */
 @media (forced-colors:active){
   .txt.sel,.rail-item.rail-kbd{outline:2px solid Highlight;outline-offset:-2px}
-  :root :focus-visible{outline:2px solid Highlight}
+  html:root :focus-visible{outline:2px solid Highlight}
 }
 /* Confirmation where the eye already is: the toast keeps the WHAT (and the screen-reader
    announcement), this is the WHERE - a success-green wash over the clicked block, a fixed
