@@ -3022,9 +3022,10 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .fab-clear:hover .ic-intent,.fab-clear:hover .fab-n,.fab-clear:focus-visible .ic-intent,.fab-clear:focus-visible .fab-n{display:none}
 /* A ring grows out of the button and fades, on transform and opacity so it costs no repaint
    (rule 1 of the Firefox notes). The button keeps its own look; the ring does the asking,
-   three times and then rests: syncAddFab restarts it only when a category newly asks. */
+   three times and then rests: syncAddFab restarts it only when a category newly asks. `both`
+   holds the last frame, opacity 0; without it the static style below cuts in as a solid ring. */
 .fab.nudge::after{content:"";position:absolute;inset:-1px;border-radius:50%;
-  border:1px solid var(--accent);animation:fabNudge var(--m-nudge) ease-out 3;pointer-events:none}
+  border:1px solid var(--accent);animation:fabNudge var(--m-nudge) ease-out 3 both;pointer-events:none}
 @keyframes fabNudge{ 0%{transform:scale(1);opacity:.6} 70%,100%{transform:scale(1.5);opacity:0} }
 #sampleMark{position:fixed;inset:0;z-index:49;pointer-events:none;overflow:hidden;
   display:flex;align-items:center;justify-content:center}

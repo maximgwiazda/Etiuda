@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 226 };
+const EXPECTED = { chrome: 227 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -1916,6 +1916,17 @@ const t0 = Date.now();
              key: el && [...el.querySelectorAll("kbd")].map(k => k.textContent).join("+"), nudge: fab.classList.contains("nudge"), ring: getComputedStyle(fab, "::after").animationName }; });
   check(es.icon && es.before === "none" && /empty/i.test(es.text) && es.key === "Alt+N" && es.nudge && es.ring === "fabNudge",
     "an empty category shows its own icon, names the key and rings the add button (" + JSON.stringify({ key: es.key, icon: es.icon, nudge: es.nudge }) + ")");
+  /* How the ring rests is read from paint, not from getAnimations(): an animation with no fill
+     mode is gone from that list once it ends, and the ::after then falls back to its static
+     style, a solid full-opacity ring, which is a cut the eye sees. finish() puts the ring where
+     its third ask ends, 6 s in, without waiting for it. */
+  const ringRest = await p.evaluate(() => { const fab = document.getElementById("addCardFab");
+    const a = document.getAnimations().find(x => x.animationName === "fabNudge");
+    if (!a) return { found: false };
+    a.finish();
+    return { found: true, opacity: getComputedStyle(fab, "::after").opacity, fill: getComputedStyle(fab, "::after").animationFillMode }; });
+  check(ringRest.found && ringRest.opacity === "0",
+    "the add button's ring rests unseen after its third ask, with no cut back to a solid ring (" + JSON.stringify(ringRest) + ")");
   const shut = await p.evaluate(() => !document.getElementById("modalCard").offsetParent);
   await p.keyboard.down("Alt"); await p.keyboard.press("KeyN"); await p.keyboard.up("Alt"); await sleep(700);
   const editorUp = await p.evaluate(() => { const m = document.getElementById("modalCard"); return { on: !!(m && m.offsetParent), title: m ? m.textContent.slice(0, 40) : "" }; });
