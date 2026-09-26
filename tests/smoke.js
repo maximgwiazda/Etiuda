@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 231 };
+const EXPECTED = { chrome: 233 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -2245,6 +2245,33 @@ const t0 = Date.now();
   check(undoAct.ready && undoAct.bubble && undoAct.starred && undoAct.back && undoAct.kept,
     "data-1 Undo of a deleted card puts that card back and keeps a star given to another card while the bubble stood: "
     + JSON.stringify(undoAct));
+  /* A CATALOG SOMEBODY PICKED IS ASKED ABOUT EVEN WHILE A FOUND ONE WAITS (shell-2): the bubble a
+     boot or a watch left standing gives way to the question about the file just chosen, and no
+     toast says it matches the loaded catalog. Invented names; answered Keep current, so nothing
+     loads. */
+  const picked = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const held = storedCatalog();
+    if (!held) return { held: false };
+    const mk = (id, name) => Object.assign(JSON.parse(JSON.stringify(held)), { id, name });
+    const tst = document.getElementById("toast"); if (tst) tst.classList.remove("show");
+    eOfferCatalogDialog(mk("hunt-found", "Found Probe"), { foundHtml: "", force: true });
+    await wait(300);
+    const first = document.querySelectorAll("#eCatalogOffer").length;
+    let accepted = 0;
+    eOfferPickedCatalog(mk("hunt-picked", "Picked Probe"), "picked.ec", () => { accepted++; });
+    await wait(300);
+    const offers = [...document.querySelectorAll("#eCatalogOffer")];
+    const names = offers.map(o => (o.querySelector(".ec-what b") || {}).textContent || "");
+    const said = !!tst && tst.classList.contains("show") && /matches/.test(tst.textContent);
+    offers.forEach(o => { const n = o.querySelector("#ecNo"); if (n) n.click(); });
+    await wait(300);
+    return { held: true, first, n: offers.length, names, said, accepted, left: document.querySelectorAll("#eCatalogOffer").length };
+  });
+  check(picked.held && picked.first === 1 && picked.n === 1 && picked.names[0] === "Picked Probe" && !picked.said
+        && picked.accepted === 0 && picked.left === 0,
+    "shell-2 a catalog picked while a found one's bubble stands is asked about in its place, with no word that it"
+    + " matches the loaded one: " + JSON.stringify(picked));
   clean(e, "the undo and the question");
 
   /* BOARD 344. THE ROUTES THE DRIVES ABOVE WALKED AROUND.
@@ -2887,6 +2914,36 @@ const t0 = Date.now();
       "data-2 the empty desk's sample button keeps the edit and the star an Eject kept (saved, ejected, taken up again): "
       + JSON.stringify({ before, ejected, again }));
 
+    /* flow-3: THE SAMPLE NEVER ASKS TO REPLACE A CATALOG THE PERSON CHOSE. A desk holding an invented
+       catalog finds the sample beside it at the next launch, as the shell hands it over when the
+       chosen file lives elsewhere, and no offer rises; the control is another catalog found there
+       instead, which is offered. */
+    huntAt = "flow-3";
+    const f3 = path.join(hunt, "f3");
+    fs.mkdirSync(f3);
+    fs.copyFileSync(RUN.page, path.join(f3, "etiuda.html"));
+    const sib = path.join(f3, E.FIXTURE_FILE.catalog);
+    const chosen = Object.assign(JSON.parse(JSON.stringify(sampleData)), { id: "hunt-chosen", name: "Invented Chosen" });
+    delete chosen.sample; delete chosen.hash;
+    fs.writeFileSync(sib, asSibling(chosen));
+    const q3 = await huntPage(f3, true);
+    await upFor(q3, () => !!document.getElementById("ecYes"));
+    await clickReload(q3, "#ecYes");
+    await upFor(q3, () => document.querySelectorAll("#list .card[data-id]").length > 3);
+    const sampleSib = Object.assign(JSON.parse(JSON.stringify(sampleData)), { sample: true });
+    fs.writeFileSync(sib, asSibling(sampleSib));
+    await q3.reload({ waitUntil: "load" });
+    await upFor(q3, () => document.querySelectorAll("#list .card[data-id]").length > 3);
+    const sampleOffered = await upFor(q3, () => !!document.getElementById("eCatalogOffer"), 4000);
+    const other = Object.assign(JSON.parse(JSON.stringify(sampleData)), { id: "hunt-other", name: "Invented Other" });
+    delete other.sample; delete other.hash;
+    fs.writeFileSync(sib, asSibling(other));
+    await q3.reload({ waitUntil: "load" });
+    await upFor(q3, () => document.querySelectorAll("#list .card[data-id]").length > 3);
+    const otherOffered = await upFor(q3, () => !!document.getElementById("eCatalogOffer"), 8000);
+    check(!sampleOffered && otherOffered,
+      "flow-3 the sample found beside a desk holding a chosen catalog is not offered over it, and another catalog found"
+      + " there is: " + JSON.stringify({ sampleOffered, otherOffered }));
   } catch (x) {
     const where = String((x && x.stack || "").split(String.fromCharCode(10))[1] || "").trim();
     check(false, "the bug hunt's drives could not run, at " + huntAt + ": " + (x && x.message || x) + (where ? " | " + where : ""));

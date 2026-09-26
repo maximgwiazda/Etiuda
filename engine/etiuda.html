@@ -19098,6 +19098,8 @@ What you type stays in this browser only.`;
       afterTour(eOfferCatalogAtBoot);
       return;
     }
+    const found = eCatalog(), held = storedCatalog();
+    if (!asked && found && found.sample && held && !isCatalogUpdate(found, held)) return;
     eOfferCatalog(null, "", "", asked || wholeThingEmpty() || !!(at && mt && mt > at), asked);
   }
   function loadCatalogFromFolder(name, mtime) {
@@ -19247,6 +19249,7 @@ What you type stays in this browser only.`;
       }
     });
   }
+  var offerStanding = null;
   function eOfferCatalogDialog(c, src) {
     const sig = eCatalogSignature(c);
     const active = storedCatalog();
@@ -19260,7 +19263,10 @@ What you type stays in this browser only.`;
       paintCatalogList();
       return false;
     }
-    if (document.getElementById("eCatalogOffer")) return false;
+    if (document.getElementById("eCatalogOffer")) {
+      if (!src.asked || !offerStanding) return false;
+      offerStanding();
+    }
     const replacing = !!active;
     const updating = isCatalogUpdate(c, active);
     const older = updating && catalogEditionOlder(c.version, active.version);
@@ -19291,7 +19297,9 @@ What you type stays in this browser only.`;
     const close = () => {
       removeEventListener("resize", place);
       wrap.remove();
+      if (offerStanding === close) offerStanding = null;
     };
+    offerStanding = close;
     wrap.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       e.preventDefault();
