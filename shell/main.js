@@ -963,30 +963,48 @@ ipcMain.handle("etiuda:pick-catalog-file", async (e, title, label) => {
   }
 });
 
-/* EXPORT'S OWN DIALOG, the shell's for Import's reason. The bytes go to a temp file beside the
-   choice and are renamed over it, so a failed write never leaves half a catalog under that name,
-   and the answer says whether they landed: {name, ok}, or null for a dialog the person closed. */
-ipcMain.handle("etiuda:save-catalog-file", async (e, title, name, text, label) => {
+/* EXPORT'S OWN DIALOG, the shell's for Import's reason, in two calls: the chosen file's name is the
+   catalog's name, so the page writes the catalog only once the choice is made. The path stays
+   here and the page is told the name; the write goes to this window's last choice, once. A name
+   typed without the extension is given it, since the folder lists only that kind of file.
+   ETIUDA_TEST_SAVE_AS is the harness's answer to the dialog: a folder, the offered name inside it. */
+let savePending = null;
+ipcMain.handle("etiuda:choose-catalog-save", async (e, title, name, label) => {
   if (!fromEngine(e)) return null;
-  const base = path.basename(String(name || "")) || "etiuda-catalog.js";
-  const ext = path.extname(base).slice(1) || "js";
+  savePending = null;
+  const base = path.basename(String(name || "")) || "Etiuda catalog.ec";
+  const ext = path.extname(base).slice(1) || "ec";
   const win = BrowserWindow.fromWebContents(e.sender);
   const opts = {
     title: String(title || "Etiuda").slice(0, 120),
     defaultPath: path.join(app.getPath("documents"), base),
     filters: [{ name: String(label || "Etiuda catalog").slice(0, 60), extensions: [ext] }],
   };
-  const r = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
+  const r = process.env.ETIUDA_TEST_SAVE_AS
+    ? { canceled: false, filePath: path.join(process.env.ETIUDA_TEST_SAVE_AS, base) }
+    : win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
   if (r.canceled || !r.filePath) return null;
-  const tmp = r.filePath + ".tmp";
+  let file = r.filePath;
+  if (path.extname(file).toLowerCase() !== "." + ext.toLowerCase()) file += "." + ext;
+  savePending = { id: e.sender.id, file: file };
+  return { name: path.basename(file) };
+});
+/* The bytes go to a temp file beside the choice and are renamed over it, so a failed write never
+   leaves half a catalog under that name, and the answer says whether they landed. */
+ipcMain.handle("etiuda:write-catalog-save", async (e, text) => {
+  if (!fromEngine(e)) return null;
+  const p = savePending;
+  savePending = null;
+  if (!p || p.id !== e.sender.id) return null;
+  const tmp = p.file + ".tmp";
   try {
     fs.writeFileSync(tmp, String(text || ""), "utf8");
-    fs.renameSync(tmp, r.filePath);
-    return { name: path.basename(r.filePath), ok: true };
+    fs.renameSync(tmp, p.file);
+    return { name: path.basename(p.file), ok: true };
   } catch (err) {
-    console.error("etiuda: " + r.filePath + " could not be written - " + err.message);
+    console.error("etiuda: " + p.file + " could not be written - " + err.message);
     try { fs.unlinkSync(tmp); } catch { /* never made */ }
-    return { name: path.basename(r.filePath), ok: false };
+    return { name: path.basename(p.file), ok: false };
   }
 });
 

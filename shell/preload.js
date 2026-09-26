@@ -59,9 +59,11 @@ contextBridge.exposeInMainWorld("E_HOST", {
   deskRefusedSeen: () => ipcRenderer.send("etiuda:desk-refused-seen"),
   /* A refused file somebody double-clicked, {name, why}, answered once. */
   openedRefused: host.openedRefused || null,
-  /* Export's dialog: {name, ok} once written or refused, null for a dialog closed. */
-  saveCatalogFile: (title, name, text, label) => ipcRenderer.invoke("etiuda:save-catalog-file",
-    String(title || ""), String(name || ""), String(text || ""), String(label || "")),
+  /* Export's dialog, then the write to what was chosen: {name} or null for a dialog closed, then
+     {name, ok} once written or refused. */
+  chooseCatalogSave: (title, name, label) => ipcRenderer.invoke("etiuda:choose-catalog-save",
+    String(title || ""), String(name || ""), String(label || "")),
+  writeCatalogSave: (text) => ipcRenderer.invoke("etiuda:write-catalog-save", String(text || "")),
   /* The watched file, spec 11.5. Text, like the desk and for the same reason, and parsed by the
      engine's own reader: the shell has already refused anything that is not a format 2 catalog,
      and two parsers agreeing is what keeps a file the shell accepts a file the engine accepts. */

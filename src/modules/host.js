@@ -144,19 +144,26 @@ function ePickCatalogFile(title,label){
   }catch(e){ return Promise.resolve(null); }
 }
 /* Export's save dialog, the host's for the reason Import's is: the engine calls no OS API, and the
-   host writes the bytes and says whether they landed. {name,ok} for a file chosen, null for a
+   host writes the bytes and says whether they landed. `build` is handed the chosen file's name and
+   returns the text, because the name is the catalog's. {name,ok} for a file chosen, null for a
    dialog closed. */
 function eHasCatalogSaver(){
   const h=eHost();
-  return !!h && typeof h.saveCatalogFile==="function";
+  return !!h && typeof h.chooseCatalogSave==="function" && typeof h.writeCatalogSave==="function";
 }
-function eSaveCatalogFile(title,name,text,label){
+function eSaveCatalogFile(title,name,label,build){
   if(!eHasCatalogSaver()) return Promise.resolve(null);
+  const failed=n=>({name:String(n||name||""),ok:false});
   try{
-    return Promise.resolve(eHost().saveCatalogFile(String(title||""),String(name||""),String(text||""),String(label||"")))
-      .then(v=>(v&&typeof v==="object")?{name:String(v.name||name||""),ok:v.ok===true}:null)
-      .catch(()=>({name:String(name||""),ok:false}));
-  }catch(e){ return Promise.resolve({name:String(name||""),ok:false}); }
+    return Promise.resolve(eHost().chooseCatalogSave(String(title||""),String(name||""),String(label||"")))
+      .then(v=>{
+        if(!(v&&typeof v==="object"&&v.name)) return null;
+        const chosen=String(v.name);
+        return Promise.resolve(eHost().writeCatalogSave(String(build(chosen)||"")))
+          .then(w=>(w&&typeof w==="object")?{name:String(w.name||chosen),ok:w.ok===true}:failed(chosen));
+      })
+      .catch(()=>failed());
+  }catch(e){ return Promise.resolve(failed()); }
 }
 /* A file somebody double-clicked that this launch could not open, {name,why} once and then null:
    the host forgets it as it answers, so a reload does not say it twice. */

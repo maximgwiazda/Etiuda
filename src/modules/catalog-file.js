@@ -12,13 +12,11 @@ import { cardToExportPlain } from "./macros-json.js";
 import { FACTS, normWhoList } from "./stock.js";
 import { eWipeLatch, mgReopenAfterReload, ssDel, nsGet, nsSet, nsDel } from "./storage.js";
 import { TAB_KEY, tabSaveTimer } from "./tabs.js";
-import { t, catalogCountsLine, translateTree, toast } from "./ui-lang.js";
+import { t, catalogCountsLine, toast } from "./ui-lang.js";
 import { BASE_CATS, catalogCardId, pack, whoOptions, savePack } from "./pack.js";
 import { catIconKey, catSlot } from "./cat-identity.js";
 import { normalizeCardIntents } from "./card-intent.js";
 import { intentIdAt, intentIdxFromId } from "./intent-id.js";
-import { markMissing } from "./lang-tabs.js";
-import { esc } from "./esc.js";
 import { rebuildCards } from "./rebuild.js";
 import { cards } from "./app-state.js";
 import { carryCardLayer } from "./card-carry.js";
@@ -97,7 +95,7 @@ function currentCatalog(nameOverride,edition){
   const out={
     format:1,
     kind:"playbook-catalog",
-    // Named at export time, so the name and the filename are decided in one place
+    // The name of the file it is saved as: see exportCatalog
     name:(nameOverride||E_CATALOG_NAME||"Etiuda catalog"),
     exported:new Date().toISOString(),
     categories:cats,
@@ -135,9 +133,9 @@ function currentCatalog(nameOverride,edition){
        the next desk as the built-in paragraph. */
     facts:(pack.facts!=null)?pack.facts:FACTS
   };
-  /* THE EDITION IS THE EXPORT'S OWN, chosen in its dialog: exporting is how a desk without
-     Studio publishes, so what leaves is the next edition of the catalog rather than a second
-     copy of the one that arrived. `rev` moves with it, because a desk watching the folder reads
+  /* THE EDITION IS THE EXPORT'S OWN, the next one proposeEdition gives: exporting is how a desk
+     without Studio publishes, so what leaves is the next edition of the catalog rather than a
+     second copy of the one that arrived. `rev` moves with it, because a desk watching the folder reads
      rev to tell an update from a stranger. No edition means a BUILD, which bakes what is loaded
      and publishes nothing: both fields then round-trip unchanged. */
   const chosen=String(edition||"");
@@ -166,10 +164,6 @@ function currentCatalog(nameOverride,edition){
   Object.keys(catsOther).forEach(key=>{ out[key]=catsOther[key]; });
   return out;
 }
-/* Filename from the catalog's name. Accents are folded rather than dropped (so "Zażółć" gives
-   "zazolc", not "z"), and everything that is not a letter or digit becomes a hyphen - the
-   intersection of what Windows, macOS and Linux all accept, since a catalog gets emailed
-   around. Capped so a rambling name cannot produce a filename a filesystem refuses. */
 /* Macros (copyable segments) in a raw catalog object, for previews of a file that is not loaded
    yet - the live app uses recountMacros() instead. Counts the catalog's OWN primary, which is
    the language every card is required to carry; asking for English answered 0 on a catalog
@@ -188,59 +182,47 @@ function catalogIntentCount(c){
   const key=intentFieldKey("clause",catalogLangs(c)[0]);
   return (((c&&c.intents)||{})[key]||[]).length;
 }
-function catalogFileSlug(name){
-  /* NFD splits a base letter from its accent, but only for letters that HAVE one. Polish ł is
-     its own codepoint with nothing to strip, so it survived NFD and then became a hyphen -
-     "Zażółć" came out "zazo-c". These are the Latin letters that need transliterating rather
-     than decomposing; the rest of the alphabet is handled by NFD above. */
-  const s=String(name||"")
-    .normalize("NFD").replace(/[̀-ͯ]/g,"")
-    /* Apostrophes are ELIDED, not separated: "John's" is one word and must slug to "johns".
-       Letting the catch-all below turn it into a hyphen produced "max-s", which reads as a
-       stray initial. Both the typographic and the typed form, since a name can arrive either
-       way. */
-    .replace(/['’]/g,"")
-    .replace(/[łŁ]/g,"l").replace(/[đĐ]/g,"d").replace(/[øØ]/g,"o")
-    .replace(/[æÆ]/g,"ae").replace(/[œŒ]/g,"oe").replace(/[þÞ]/g,"th").replace(/ß/g,"ss")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g,"-")
-    .replace(/^-+|-+$/g,"")
-    .slice(0,60)
-    .replace(/-+$/,"");
-  return s || "etiuda-catalog";
+/* THE SUGGESTED FILENAME IS THE CATALOG'S OWN NAME, because the saved file's name becomes the
+   catalog's: saving as offered keeps the name. Only what Windows refuses in a filename is replaced. */
+function catalogFileStem(name){
+  const refused='<>:"/\\|?*';
+  const s=Array.from(String(name||""))
+    .map(ch=>(ch.charCodeAt(0)<32 || refused.indexOf(ch)>-1) ? "-" : ch).join("")
+    .trim().replace(/[. ]+$/,"").slice(0,80).trim();
+  return s || "Etiuda catalog";
 }
-/* No export numbering (-2, -3): it defeated the default name - the whole point of
-   defaulting to "Etiuda catalog" is that accepting it yields etiuda-catalog.js, the one
-   filename that loads by itself, and the second export of the day silently produced a file
-   that does nothing when dropped beside the engine. The browsers also handle the collision
-   better than a page can: Chromium's Save dialog warns before overwriting, Firefox appends
-   "(1)" - neither loses a file, and both tell the user, which the silent -2 never did. */
-/** Write the file. Where it lands is the browser's call, not ours: a page cannot choose a
- *  directory. showSaveFilePicker at least hands the user a real Save dialog that opens where
- *  they last saved, so the file can go beside Etiuda.html without a trip through Downloads.
- *  Chromium has it; Firefox does not, and falls back to an ordinary download. */
-function saveCatalogFile(name, text){
-  if(eHasCatalogSaver()) return eSaveCatalogFile(t("Export"),name,text,t("Catalogs")).then(r=>{
+/* The catalog's name from the file it was saved as: the name without its catalog extension. */
+function catalogNameOfFile(file){
+  return String(file||"").replace(/\.(ec|json|js)$/i,"").trim();
+}
+/** Write the file. Where it lands is the person's call in a save dialog: the host's, else the
+ *  browser's showSaveFilePicker (Chromium), else an ordinary download (Firefox). `build` turns the
+ *  chosen file's name into the text, so it runs only once the choice is made. */
+function saveCatalogFile(name, build){
+  if(eHasCatalogSaver()) return eSaveCatalogFile(t("Export"),name,t("Catalogs"),build).then(r=>{
     if(r && !r.ok) toast(t("{FILE} could not be saved.").split("{FILE}").join(r.name));
     return (r && r.ok) ? r.name : null;
   });
   if(typeof window.showSaveFilePicker==="function"){
     return window.showSaveFilePicker({
         suggestedName:name,
-        types:[{description:"Etiuda catalog", accept:{"text/javascript":[".js"]}}]
+        types:[{description:"Etiuda catalog", accept:{"application/json":[".ec"]}}]
       })
-      .then(h=>h.createWritable().then(w=>w.write(text).then(()=>w.close()).then(()=>h.name||name)))
+      .then(h=>{
+        const as=h.name||name, text=build(as);
+        return h.createWritable().then(w=>w.write(text).then(()=>w.close())).then(()=>as);
+      })
       .catch(e=>{
         /* AbortError is the person closing the dialog, and only that is silent. NotAllowedError is
            the browser refusing to open it, so it falls back to the download like any failure. */
         if(e && e.name==="AbortError") return null;
-        return downloadCatalogFile(name, text);
+        return downloadCatalogFile(name, build(name));
       });
   }
-  return Promise.resolve(downloadCatalogFile(name, text));
+  return Promise.resolve(downloadCatalogFile(name, build(name)));
 }
 function downloadCatalogFile(name, text){
-  const blob=new Blob([text],{type:"text/javascript;charset=utf-8"});
+  const blob=new Blob([text],{type:"application/json;charset=utf-8"});
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
   a.download=name;
@@ -248,102 +230,21 @@ function downloadCatalogFile(name, text){
   setTimeout(()=>URL.revokeObjectURL(a.href),2000);
   return name;
 }
-/** Small modal of its own rather than the shared one, so it can sit on top of Manage without
- *  destroying it - the same trick the sibling-catalog offer uses. */
-/** @param mode "catalog" (a .js catalog file) or "html" (a standalone build). It decides the
- *  wording and the previewed filename - the two exports produce different things and the
- *  preview has to say which, or it quietly promises a .js and hands over an .html. */
-function askCatalogName(initial, onOk, mode){
-  const html=mode==="html";
-  /* THE EDITION BELONGS TO THE CATALOG EXPORT ALONE. A build bakes the catalog into a page and
-     is nobody's next edition of the file, so its dialog keeps the one field it had. */
-  const wrap=document.createElement("div");
-  wrap.className="modal";
-  wrap.id="eNameModal";
-  wrap.innerHTML='<div class="modal-bg"></div><div class="modal-card">'
-    +'<h2>'+esc(html?t("Name this build"):t("Name this catalog"))+'</h2>'
-    /* No explanatory paragraph. "Name this catalog" over a live filename preview is the
-       whole instruction: what the name does is demonstrated by the preview under the box,
-       and what to do with the file belongs to the button that opened this dialog. */
-    +'<div class="mf"><label>'+esc(t("Name"))+'</label>'
-    +'<input id="eNameInp" autocomplete="off" spellcheck="false" placeholder="Etiuda catalog"></div>'
-    +(html?'':'<div class="mf"><label>'+esc(t("Edition"))+'</label>'
-      +'<input id="eEdInp" autocomplete="off" spellcheck="false"></div>'
-      +'<p class="modal-sub" id="eEdSay" style="margin:2px 0 8px" hidden>'
-      +esc(t("Editions read 2026-09-15, or 2026-09-15a for a second the same day."))+'</p>')
-    +'<p class="modal-sub" id="eNamePreview" style="margin:2px 0 0"></p>'
-    +'<div class="modal-actions">'
-    +'<button type="button" class="btn" id="eNameNo">Cancel</button>'
-    +'<button type="button" class="btn primary" id="eNameYes">Export</button>'
-    +'</div></div>';
-  document.body.appendChild(wrap);
-  /* Appended straight to <body>, so the chrome roots never see it - swept here instead,
-     at the one moment it exists. */
-  translateTree(wrap);
-  const inp=wrap.querySelector("#eNameInp");
-  const edInp=wrap.querySelector("#eEdInp");
-  const edSay=wrap.querySelector("#eEdSay");
-  const prev=wrap.querySelector("#eNamePreview");
-  const close=()=>{ document.removeEventListener("keydown", onKey, true); wrap.remove(); };
-  const sync=()=>{
-    const slug=catalogFileSlug(inp.value||initial);
-    prev.textContent=t("Saves as")+" "+slug+(html ? ".html" : ".js");
-  };
-  /* REFUSED RATHER THAN CARRIED. An edition outside the form is evidence of age to no reader, so
-     a slip typed here would become an undated catalog at the next desk instead. A value INSIDE
-     the form stands as typed, even where it orders before the loaded one: that is the author's
-     call, and this dialog is where they make it. */
-  const ok=()=>{
-    const v=inp.value.trim()||initial||"Etiuda catalog";
-    if(edInp){
-      const ed=edInp.value.trim();
-      if(!EDITION_DATED.test(ed)){ edSay.hidden=false; markMissing(edInp); edInp.focus(); return; }
-      close(); onOk(v,ed); return;
-    }
-    close(); onOk(v);
-  };
-  function onKey(e){
-    if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); close(); }
-    else if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); ok(); }
-  }
-  document.addEventListener("keydown", onKey, true);
-  inp.value=initial||"";
-  inp.oninput=sync; sync();
-  if(edInp){
-    edInp.value=proposeEdition(E_CATALOG_VERSION);
-    edInp.oninput=()=>{ edSay.hidden=true; };
-  }
-  wrap.querySelector("#eNameNo").onclick=close;
-  wrap.querySelector("#eNameYes").onclick=ok;
-  setTimeout(()=>{ inp.focus(); try{ inp.select(); }catch(_){} },30);
-}
+/* NOTHING STANDS BETWEEN THE BUTTON AND THE SAVE DIALOG: the file's name names the catalog, and
+   the edition is the next one proposeEdition gives. What is written is the .ec document itself,
+   the shape every reader parses as it stands. */
 function exportCatalog(){
   if(!(cards||[]).length){ toast("Export is ready once the catalog holds a card."); return; }
-  /* Defaults to the name whose slug IS the auto-load filename - accepting it produces
-     etiuda-catalog.js, the file that loads by itself beside Etiuda.html, with no rename
-     step to explain. Pre-selected, so typing replaces it. Deliberately NOT the loaded
-     catalog's own name: a file named after the catalog is a fine backup and does exactly
-     nothing when dropped next to the engine. */
-  askCatalogName("Etiuda catalog", (name,edition)=>{
-    const c=currentCatalog(name,edition);
-    const slug=catalogFileSlug(c.name);
-    const file=slug+".js";
-    /* One of a thing says so. The header is read by whoever opens the file, and stays English
-       like the rest of this comment: it describes the format, not the interface. */
-    const num=(v,one,many)=>v+" "+(v===1?one:many);
-    const head="/* Etiuda catalog - "+String(c.name).replace(/\*\//g,"")+"\n"
-      +"   "+num(catalogMacroCount(c),"macro","macros")+" in "+num(c.cards.length,"card","cards")
-      +" · "+num(c.intents.en.length,"intent","intents")
-      +" · "+num(Object.keys(c.categories).length,"category","categories")+"\n"
-      +"   To load it: Library > Load catalog. Any filename, any folder.\n"
-      +"   A file named etiuda-catalog.js beside Etiuda.html also loads on launch, and the\n"
-      +"   installed Etiuda loads any .ec catalog from the folder named in its Settings. */\n";
-    const js=head+"window.E_CATALOG = "+JSON.stringify(catalogToV2(c),null,1)+";\n";
-    saveCatalogFile(file, js).then(saved=>{
-      if(!saved) return;                              // cancelled in the browser's Save dialog
-      toast(catalogCountsLine("Exported {FILE} with {MACROS} in {CARDS}",
-        c.cards.length, catalogMacroCount(c), 0, 0).replace("{FILE}",saved));
-    });
+  const edition=proposeEdition(E_CATALOG_VERSION);
+  let c=null;
+  const build=file=>{
+    c=currentCatalog(catalogNameOfFile(file),edition);
+    return JSON.stringify(catalogToV2(c),null,1)+"\n";
+  };
+  saveCatalogFile(catalogFileStem(E_CATALOG_NAME)+".ec", build).then(saved=>{
+    if(!saved || !c) return;                         // cancelled in the Save dialog
+    toast(catalogCountsLine("Exported {FILE} with {MACROS} in {CARDS}",
+      c.cards.length, catalogMacroCount(c), 0, 0).replace("{FILE}",saved));
   });
 }
 /** Make a catalog the active one. Reloads, because BASE_N is fixed at boot and cannot grow. */

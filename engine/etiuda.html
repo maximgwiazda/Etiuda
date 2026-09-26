@@ -5640,11 +5640,6 @@ What you type stays in this browser only.`;
     "No intents.": "Brak intencji.",
     "No intents available.": "Brak dostępnych intencji.",
     "Uncategorised": "Bez kategorii",
-    "Name this catalog": "Nazwij ten katalog",
-    "Name this build": "Nazwij ten plik",
-    "Edition": "Wydanie",
-    "Editions read 2026-09-15, or 2026-09-15a for a second the same day.": "Wydanie ma postać 2026-09-15, a drugie tego samego dnia: 2026-09-15a.",
-    "Saves as": "Zapisze się jako",
     "Reset shortcuts": "Przywróć skróty",
     "What Etiuda is, and every keyboard shortcut": "Czym jest Etiuda i wszystkie skróty klawiszowe",
     "Interface language, appearance and keyboard shortcuts": "Język interfejsu, wygląd i skróty klawiszowe",
@@ -11220,14 +11215,19 @@ What you type stays in this browser only.`;
   }
   function eHasCatalogSaver() {
     const h = eHost();
-    return !!h && typeof h.saveCatalogFile === "function";
+    return !!h && typeof h.chooseCatalogSave === "function" && typeof h.writeCatalogSave === "function";
   }
-  function eSaveCatalogFile(title, name, text, label) {
+  function eSaveCatalogFile(title, name, label, build) {
     if (!eHasCatalogSaver()) return Promise.resolve(null);
+    const failed = (n) => ({ name: String(n || name || ""), ok: false });
     try {
-      return Promise.resolve(eHost().saveCatalogFile(String(title || ""), String(name || ""), String(text || ""), String(label || ""))).then((v) => v && typeof v === "object" ? { name: String(v.name || name || ""), ok: v.ok === true } : null).catch(() => ({ name: String(name || ""), ok: false }));
+      return Promise.resolve(eHost().chooseCatalogSave(String(title || ""), String(name || ""), String(label || ""))).then((v) => {
+        if (!(v && typeof v === "object" && v.name)) return null;
+        const chosen = String(v.name);
+        return Promise.resolve(eHost().writeCatalogSave(String(build(chosen) || ""))).then((w) => w && typeof w === "object" ? { name: String(w.name || chosen), ok: w.ok === true } : failed(chosen));
+      }).catch(() => failed());
     } catch (e) {
-      return Promise.resolve({ name: String(name || ""), ok: false });
+      return Promise.resolve(failed());
     }
   }
   function eOpenedRefused() {
@@ -11319,82 +11319,6 @@ What you type stays in this browser only.`;
     const label = t(on ? "Restore" : "Maximise");
     max.title = label;
     max.setAttribute("aria-label", label);
-  }
-
-  // src/modules/lang-tabs.js
-  var lang_tabs_exports = {};
-  __export(lang_tabs_exports, {
-    edReportMissing: () => edReportMissing,
-    langEndonym: () => langEndonym,
-    langFieldId: () => langFieldId,
-    langFocus: () => langFocus,
-    langPane: () => langPane,
-    langTabs: () => langTabs,
-    markMissing: () => markMissing,
-    wireLangTabs: () => wireLangTabs
-  });
-  function langTabs() {
-    return '<div class="lang-tabs" role="tablist" title="' + esc(t("Switch the language being edited") + " · " + formatActionChord("edPrevLang") + " / " + formatActionChord("edNextLang")) + '"><span class="lang-tabs-lab">' + esc(t("Editing")) + "</span>" + CONTENT_LANGS.map((l, i) => '<button type="button" role="tab" data-i18n-skip data-l="' + esc(l) + '"' + (i ? ' data-alt="1"' : ' class="on"') + ">" + esc(langEndonym(l)) + "</button>").join("") + "</div>";
-  }
-  function langPane(l, i, body) {
-    return '<div class="lang-pane' + (i ? "" : " on") + '" data-l="' + esc(l) + '">' + body + "</div>";
-  }
-  function langFieldId(prefix, field, l) {
-    return prefix + "_" + field + "_" + l;
-  }
-  function markMissing(el, ev) {
-    if (!el || el.classList.contains("is-missing")) return;
-    const kind = ev || "input";
-    el.classList.add("is-missing");
-    const fold = el.closest ? el.closest("details.mf-fold") : null;
-    if (fold) fold.classList.add("mf-missing");
-    const clear = () => {
-      el.classList.remove("is-missing");
-      el.removeEventListener(kind, clear);
-      if (fold && !fold.querySelector(".is-missing")) fold.classList.remove("mf-missing");
-    };
-    el.addEventListener(kind, clear);
-  }
-  function edReportMissing(items) {
-    if (!items.length) return false;
-    items.forEach((it) => it.mark());
-    items[0].land();
-    toast(items.length === 1 ? items[0].msg : "Some required fields are empty");
-    return true;
-  }
-  function langFocus(id, l) {
-    const el = document.getElementById(id);
-    const pane = el && el.closest ? el.closest(".lang-pane") : null;
-    const strip = pane && pane.parentNode ? pane.parentNode.querySelector(".lang-tabs") : null;
-    const b = strip ? strip.querySelector('button[data-l="' + cssEsc(l) + '"]') : null;
-    if (b) b.click();
-    if (!el) return;
-    el.focus();
-    markMissing(el);
-  }
-  function wireLangTabs() {
-    document.addEventListener("click", (e) => {
-      const b = e.target && e.target.closest && e.target.closest(".lang-tabs button[data-l]");
-      if (!b) return;
-      const strip = b.closest(".lang-tabs"), l = b.getAttribute("data-l");
-      const tabs2 = Array.prototype.slice.call(strip.querySelectorAll("button[data-l]"));
-      const was = tabs2.findIndex((x) => x.classList.contains("on")), now = tabs2.indexOf(b);
-      const still = mgReduceMotion();
-      const dir = still || was < 0 || now === was ? "" : now > was ? "lang-in-next" : "lang-in-prev";
-      tabs2.forEach((x) => x.classList.toggle("on", x === b));
-      const scope = strip.parentNode;
-      if (scope) scope.querySelectorAll(".lang-pane[data-l]").forEach((p) => {
-        if (p.parentNode !== scope) return;
-        const on = p.dataset.l === l;
-        p.classList.remove("lang-in-next", "lang-in-prev");
-        p.classList.toggle("on", on);
-        if (on && dir) p.classList.add(dir);
-      });
-    }, true);
-  }
-  var LANG_ENDONYM = { en: "English", pl: "Polski", uk: "Українська" };
-  function langEndonym(l) {
-    return LANG_ENDONYM[l] || String(l || "").toUpperCase();
   }
 
   // src/modules/rebuild.js
@@ -11843,7 +11767,7 @@ What you type stays in this browser only.`;
     const out = {
       format: 1,
       kind: "playbook-catalog",
-      // Named at export time, so the name and the filename are decided in one place
+      // The name of the file it is saved as: see exportCatalog
       name: nameOverride || E_CATALOG_NAME || "Etiuda catalog",
       exported: (/* @__PURE__ */ new Date()).toISOString(),
       categories: cats2,
@@ -11927,28 +11851,35 @@ What you type stays in this browser only.`;
     const key = intentFieldKey("clause", catalogLangs(c)[0]);
     return ((c && c.intents || {})[key] || []).length;
   }
-  function catalogFileSlug(name) {
-    const s = String(name || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/['’]/g, "").replace(/[łŁ]/g, "l").replace(/[đĐ]/g, "d").replace(/[øØ]/g, "o").replace(/[æÆ]/g, "ae").replace(/[œŒ]/g, "oe").replace(/[þÞ]/g, "th").replace(/ß/g, "ss").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60).replace(/-+$/, "");
-    return s || "etiuda-catalog";
+  function catalogFileStem(name) {
+    const refused = '<>:"/\\|?*';
+    const s = Array.from(String(name || "")).map((ch) => ch.charCodeAt(0) < 32 || refused.indexOf(ch) > -1 ? "-" : ch).join("").trim().replace(/[. ]+$/, "").slice(0, 80).trim();
+    return s || "Etiuda catalog";
   }
-  function saveCatalogFile(name, text) {
-    if (eHasCatalogSaver()) return eSaveCatalogFile(t("Export"), name, text, t("Catalogs")).then((r) => {
+  function catalogNameOfFile(file) {
+    return String(file || "").replace(/\.(ec|json|js)$/i, "").trim();
+  }
+  function saveCatalogFile(name, build) {
+    if (eHasCatalogSaver()) return eSaveCatalogFile(t("Export"), name, t("Catalogs"), build).then((r) => {
       if (r && !r.ok) toast(t("{FILE} could not be saved.").split("{FILE}").join(r.name));
       return r && r.ok ? r.name : null;
     });
     if (typeof window.showSaveFilePicker === "function") {
       return window.showSaveFilePicker({
         suggestedName: name,
-        types: [{ description: "Etiuda catalog", accept: { "text/javascript": [".js"] } }]
-      }).then((h) => h.createWritable().then((w) => w.write(text).then(() => w.close()).then(() => h.name || name))).catch((e) => {
+        types: [{ description: "Etiuda catalog", accept: { "application/json": [".ec"] } }]
+      }).then((h) => {
+        const as = h.name || name, text = build(as);
+        return h.createWritable().then((w) => w.write(text).then(() => w.close())).then(() => as);
+      }).catch((e) => {
         if (e && e.name === "AbortError") return null;
-        return downloadCatalogFile(name, text);
+        return downloadCatalogFile(name, build(name));
       });
     }
-    return Promise.resolve(downloadCatalogFile(name, text));
+    return Promise.resolve(downloadCatalogFile(name, build(name)));
   }
   function downloadCatalogFile(name, text) {
-    const blob = new Blob([text], { type: "text/javascript;charset=utf-8" });
+    const blob = new Blob([text], { type: "application/json;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = name;
@@ -11956,96 +11887,26 @@ What you type stays in this browser only.`;
     setTimeout(() => URL.revokeObjectURL(a.href), 2e3);
     return name;
   }
-  function askCatalogName(initial, onOk, mode) {
-    const html = mode === "html";
-    const wrap = document.createElement("div");
-    wrap.className = "modal";
-    wrap.id = "eNameModal";
-    wrap.innerHTML = '<div class="modal-bg"></div><div class="modal-card"><h2>' + esc(html ? t("Name this build") : t("Name this catalog")) + '</h2><div class="mf"><label>' + esc(t("Name")) + '</label><input id="eNameInp" autocomplete="off" spellcheck="false" placeholder="Etiuda catalog"></div>' + (html ? "" : '<div class="mf"><label>' + esc(t("Edition")) + '</label><input id="eEdInp" autocomplete="off" spellcheck="false"></div><p class="modal-sub" id="eEdSay" style="margin:2px 0 8px" hidden>' + esc(t("Editions read 2026-09-15, or 2026-09-15a for a second the same day.")) + "</p>") + '<p class="modal-sub" id="eNamePreview" style="margin:2px 0 0"></p><div class="modal-actions"><button type="button" class="btn" id="eNameNo">Cancel</button><button type="button" class="btn primary" id="eNameYes">Export</button></div></div>';
-    document.body.appendChild(wrap);
-    translateTree(wrap);
-    const inp = wrap.querySelector("#eNameInp");
-    const edInp = wrap.querySelector("#eEdInp");
-    const edSay = wrap.querySelector("#eEdSay");
-    const prev = wrap.querySelector("#eNamePreview");
-    const close = () => {
-      document.removeEventListener("keydown", onKey, true);
-      wrap.remove();
-    };
-    const sync = () => {
-      const slug = catalogFileSlug(inp.value || initial);
-      prev.textContent = t("Saves as") + " " + slug + (html ? ".html" : ".js");
-    };
-    const ok = () => {
-      const v = inp.value.trim() || initial || "Etiuda catalog";
-      if (edInp) {
-        const ed = edInp.value.trim();
-        if (!EDITION_DATED.test(ed)) {
-          edSay.hidden = false;
-          markMissing(edInp);
-          edInp.focus();
-          return;
-        }
-        close();
-        onOk(v, ed);
-        return;
-      }
-      close();
-      onOk(v);
-    };
-    function onKey(e) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        close();
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        e.stopPropagation();
-        ok();
-      }
-    }
-    document.addEventListener("keydown", onKey, true);
-    inp.value = initial || "";
-    inp.oninput = sync;
-    sync();
-    if (edInp) {
-      edInp.value = proposeEdition(E_CATALOG_VERSION);
-      edInp.oninput = () => {
-        edSay.hidden = true;
-      };
-    }
-    wrap.querySelector("#eNameNo").onclick = close;
-    wrap.querySelector("#eNameYes").onclick = ok;
-    setTimeout(() => {
-      inp.focus();
-      try {
-        inp.select();
-      } catch (_) {
-      }
-    }, 30);
-  }
   function exportCatalog() {
     if (!(cards || []).length) {
       toast("Export is ready once the catalog holds a card.");
       return;
     }
-    askCatalogName("Etiuda catalog", (name, edition) => {
-      const c = currentCatalog(name, edition);
-      const slug = catalogFileSlug(c.name);
-      const file = slug + ".js";
-      const num = (v, one, many) => v + " " + (v === 1 ? one : many);
-      const head = "/* Etiuda catalog - " + String(c.name).replace(/\*\//g, "") + "\n   " + num(catalogMacroCount(c), "macro", "macros") + " in " + num(c.cards.length, "card", "cards") + " · " + num(c.intents.en.length, "intent", "intents") + " · " + num(Object.keys(c.categories).length, "category", "categories") + "\n   To load it: Library > Load catalog. Any filename, any folder.\n   A file named etiuda-catalog.js beside Etiuda.html also loads on launch, and the\n   installed Etiuda loads any .ec catalog from the folder named in its Settings. */\n";
-      const js = head + "window.E_CATALOG = " + JSON.stringify(catalogToV2(c), null, 1) + ";\n";
-      saveCatalogFile(file, js).then((saved) => {
-        if (!saved) return;
-        toast(catalogCountsLine(
-          "Exported {FILE} with {MACROS} in {CARDS}",
-          c.cards.length,
-          catalogMacroCount(c),
-          0,
-          0
-        ).replace("{FILE}", saved));
-      });
+    const edition = proposeEdition(E_CATALOG_VERSION);
+    let c = null;
+    const build = (file) => {
+      c = currentCatalog(catalogNameOfFile(file), edition);
+      return JSON.stringify(catalogToV2(c), null, 1) + "\n";
+    };
+    saveCatalogFile(catalogFileStem(E_CATALOG_NAME) + ".ec", build).then((saved) => {
+      if (!saved || !c) return;
+      toast(catalogCountsLine(
+        "Exported {FILE} with {MACROS} in {CARDS}",
+        c.cards.length,
+        catalogMacroCount(c),
+        0,
+        0
+      ).replace("{FILE}", saved));
     });
   }
   function isCatalogUpdate(incoming, active) {
@@ -18300,6 +18161,84 @@ What you type stays in this browser only.`;
     openCategoryEditor: () => openCategoryEditor,
     openIntentEditor: () => openIntentEditor
   });
+
+  // src/modules/lang-tabs.js
+  var lang_tabs_exports = {};
+  __export(lang_tabs_exports, {
+    edReportMissing: () => edReportMissing,
+    langEndonym: () => langEndonym,
+    langFieldId: () => langFieldId,
+    langFocus: () => langFocus,
+    langPane: () => langPane,
+    langTabs: () => langTabs,
+    markMissing: () => markMissing,
+    wireLangTabs: () => wireLangTabs
+  });
+  function langTabs() {
+    return '<div class="lang-tabs" role="tablist" title="' + esc(t("Switch the language being edited") + " · " + formatActionChord("edPrevLang") + " / " + formatActionChord("edNextLang")) + '"><span class="lang-tabs-lab">' + esc(t("Editing")) + "</span>" + CONTENT_LANGS.map((l, i) => '<button type="button" role="tab" data-i18n-skip data-l="' + esc(l) + '"' + (i ? ' data-alt="1"' : ' class="on"') + ">" + esc(langEndonym(l)) + "</button>").join("") + "</div>";
+  }
+  function langPane(l, i, body) {
+    return '<div class="lang-pane' + (i ? "" : " on") + '" data-l="' + esc(l) + '">' + body + "</div>";
+  }
+  function langFieldId(prefix, field, l) {
+    return prefix + "_" + field + "_" + l;
+  }
+  function markMissing(el, ev) {
+    if (!el || el.classList.contains("is-missing")) return;
+    const kind = ev || "input";
+    el.classList.add("is-missing");
+    const fold = el.closest ? el.closest("details.mf-fold") : null;
+    if (fold) fold.classList.add("mf-missing");
+    const clear = () => {
+      el.classList.remove("is-missing");
+      el.removeEventListener(kind, clear);
+      if (fold && !fold.querySelector(".is-missing")) fold.classList.remove("mf-missing");
+    };
+    el.addEventListener(kind, clear);
+  }
+  function edReportMissing(items) {
+    if (!items.length) return false;
+    items.forEach((it) => it.mark());
+    items[0].land();
+    toast(items.length === 1 ? items[0].msg : "Some required fields are empty");
+    return true;
+  }
+  function langFocus(id, l) {
+    const el = document.getElementById(id);
+    const pane = el && el.closest ? el.closest(".lang-pane") : null;
+    const strip = pane && pane.parentNode ? pane.parentNode.querySelector(".lang-tabs") : null;
+    const b = strip ? strip.querySelector('button[data-l="' + cssEsc(l) + '"]') : null;
+    if (b) b.click();
+    if (!el) return;
+    el.focus();
+    markMissing(el);
+  }
+  function wireLangTabs() {
+    document.addEventListener("click", (e) => {
+      const b = e.target && e.target.closest && e.target.closest(".lang-tabs button[data-l]");
+      if (!b) return;
+      const strip = b.closest(".lang-tabs"), l = b.getAttribute("data-l");
+      const tabs2 = Array.prototype.slice.call(strip.querySelectorAll("button[data-l]"));
+      const was = tabs2.findIndex((x) => x.classList.contains("on")), now = tabs2.indexOf(b);
+      const still = mgReduceMotion();
+      const dir = still || was < 0 || now === was ? "" : now > was ? "lang-in-next" : "lang-in-prev";
+      tabs2.forEach((x) => x.classList.toggle("on", x === b));
+      const scope = strip.parentNode;
+      if (scope) scope.querySelectorAll(".lang-pane[data-l]").forEach((p) => {
+        if (p.parentNode !== scope) return;
+        const on = p.dataset.l === l;
+        p.classList.remove("lang-in-next", "lang-in-prev");
+        p.classList.toggle("on", on);
+        if (on && dir) p.classList.add(dir);
+      });
+    }, true);
+  }
+  var LANG_ENDONYM = { en: "English", pl: "Polski", uk: "Українська" };
+  function langEndonym(l) {
+    return LANG_ENDONYM[l] || String(l || "").toUpperCase();
+  }
+
+  // src/modules/editors.js
   function openCategoryEditor(k, fromPill) {
     if (!k || k === "__orphan") return;
     applyCatsToGlobal();

@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 221 };
+const EXPECTED = { chrome: 220 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -1909,73 +1909,83 @@ const t0 = Date.now();
      exported for this check and for nothing else, which asserted the builder's opinion of what
      it would write. The rule is a property of the FILE, so the file is what this reads, and on
      the way it walks the one path nothing else in the suite touches: Manage, the export button,
-     the name dialog, the header, the save route.
+     the save route.
 
      The two save routes are stubbed at the PLATFORM boundary and neither of them is the
      engine's. Chrome on file:// does have showSaveFilePicker and saveCatalogFile takes that
      branch; measured without the stub, the picker never settles, no blob is ever made and the
      export simply hangs, which is what a save dialog nobody can click looks like. Firefox has
      no picker and falls to the anchor-and-blob path. Both are captured, so whichever route the
-     browser under test takes, the bytes are read; and both are put back afterwards.
+     browser under test takes, the bytes are read; and both are put back afterwards. The picker
+     answers with a name of its own, "Smoke.ec", as a person renaming the file in the dialog
+     would, and records what it was offered.
+
+     NO QUESTION BEFORE THE SAVE DIALOG (Maxim, 2026-09-26): the file's name names the catalog and
+     the edition is automatic, so the button goes straight to the dialog, which offers .ec.
 
      COUNTS AND VERDICTS ONLY. What comes back is the catalog, so what is printed is a byte
      count, a card count, the type and length of one field, and whether it equals the built-in. */
   e = since();
   await p.evaluate(() => {
     window.__pbSaved = [];
+    window.__pbOffered = [];
     window.__pbRealBlobUrl = URL.createObjectURL.bind(URL);
     window.__pbRealPicker = window.showSaveFilePicker;
     URL.createObjectURL = b => { window.__pbSaved.push(b); return window.__pbRealBlobUrl(b); };
-    window.showSaveFilePicker = o => Promise.resolve({ name: (o && o.suggestedName) || "catalog",
+    window.showSaveFilePicker = o => { window.__pbOffered.push({ name: o && o.suggestedName,
+        types: JSON.stringify((o && o.types) || []) });
+      return Promise.resolve({ name: "Smoke.ec",
       createWritable: () => Promise.resolve({
         write: t => { window.__pbSaved.push(new Blob([t])); return Promise.resolve(); },
-        close: () => Promise.resolve() }) });
+        close: () => Promise.resolve() }) }); };
   });
   const saveCatalog = async () => {
     const before = await p.evaluate(() => window.__pbSaved.length);
     await p.evaluate(() => document.querySelector('[data-act="manage"]').click()); await sleep(800);
     const btn = await p.evaluate(() => { const x = document.getElementById("mgExportCatalog");
-      if (!x) return false; x.click(); return true; }); await sleep(700);
-    /* The edition field is READ before the dialog is answered, and answered with whatever it
-       proposed: that value is what the file below must carry, so the proposal and the stamp are
-       the same measurement rather than two. */
-    const named = await p.evaluate(() => { const i = document.getElementById("eNameInp"), y = document.getElementById("eNameYes");
-      if (!i || !y) return false; i.value = "Smoke"; i.dispatchEvent(new Event("input"));
-      const ed = document.getElementById("eEdInp");
-      window.__pbEdition = ed ? ed.value : null;
-      y.click(); return true; });
-    await sleep(1600);
+      if (!x) return false; x.click(); return true; }); await sleep(1600);
+    const asked = await p.evaluate(() => !!document.getElementById("eNameModal"));
     const out = await p.evaluate(async n => {
       /* Named zeroes rather than an absent field: this is the branch a dead export button
          lands on, and a FAIL line reading "undefined bytes" says less than "0 bytes". */
       if (window.__pbSaved.length <= n)
         return { saved: 0, bytes: 0, cards: -1, factsType: "none", factsLen: -1, builtIn: false };
       const text = await window.__pbSaved[window.__pbSaved.length - 1].text();
-      const WRAP = "window.E_CATALOG = ";
-      const at = text.indexOf(WRAP);
-      let facts = null, cards = -1, date = null, rev = null;
-      try { const o = JSON.parse(text.slice(at + WRAP.length, text.lastIndexOf(";")));
-            facts = o.facts; cards = (o.cards || []).length;
+      let facts = null, cards = -1, date = null, rev = null, name = null, kind = null, format = null;
+      /* The whole text parses as JSON: an .ec is the document itself, with no wrapper round it. */
+      try { const o = JSON.parse(text);
+            facts = o.facts; cards = (o.cards || []).length; name = o.name; kind = o.kind; format = o.format;
             date = o.date == null ? null : String(o.date); rev = o.rev == null ? null : +o.rev;
       } catch (err) { facts = null; cards = -2; }
-      return { saved: window.__pbSaved.length - n, bytes: text.length, cards, date, rev,
+      return { saved: window.__pbSaved.length - n, bytes: text.length, cards, date, rev, name, kind, format,
                factsType: typeof facts, factsLen: typeof facts === "string" ? facts.length : -1,
-               builtIn: typeof FACTS === "string" && facts === FACTS };
+               builtIn: typeof FACTS === "string" && facts === FACTS,
+               offered: window.__pbOffered[window.__pbOffered.length - 1] || null,
+               loadedName: (storedCatalog() || {}).name || null };
     }, before);
     await p.keyboard.press("Escape"); await sleep(400);
     await p.keyboard.press("Escape"); await sleep(400);
-    const proposed = await p.evaluate(() => window.__pbEdition);
-    return Object.assign({ btn, named, proposed }, out);
+    return Object.assign({ btn, asked }, out);
   };
+  /* What the edition must be, read before the export from the engine's own rule against the
+     catalog this page has loaded. */
+  const proposed = await p.evaluate(() => proposeEdition((storedCatalog() || {}).version));
   await p.evaluate(() => { window.__pbFactsKeep = pack.facts; pack.facts = ""; });
   const blankFile = await saveCatalog();
   await p.evaluate(() => { pack.facts = null; });
   const unsetFile = await saveCatalog();
   await p.evaluate(() => { pack.facts = window.__pbFactsKeep;
     URL.createObjectURL = window.__pbRealBlobUrl; window.showSaveFilePicker = window.__pbRealPicker; });
-  check(blankFile.btn && blankFile.named && blankFile.saved === 1 && blankFile.cards > 0,
-    "Manage > Export catalog names the file and writes it: " + blankFile.bytes + " bytes, "
-    + blankFile.cards + " cards");
+  const offered = blankFile.offered || {};
+  check(blankFile.btn && !blankFile.asked && blankFile.saved === 1 && blankFile.cards > 0
+        && blankFile.kind === "etiuda-catalog" && blankFile.format === 2 && blankFile.name === "Smoke"
+        && /\.ec$/.test(offered.name || "") && offered.name === blankFile.loadedName + ".ec"
+        && offered.types.indexOf('".ec"') > -1 && offered.types.indexOf('".js"') < 0,
+    "Manage > Export catalog goes straight to the save dialog, which offers the loaded catalog's own name"
+    + " as an .ec (" + (offered.name === blankFile.loadedName + ".ec") + ", accepting " + offered.types
+    + "), and writes the .ec document named after the file chosen: "
+    + blankFile.bytes + " bytes, " + blankFile.cards + " cards, named " + JSON.stringify(blankFile.name)
+    + " for Smoke.ec, a name dialog " + (blankFile.asked ? "shown" : "never shown"));
   check(blankFile.factsType === "string" && blankFile.factsLen === 0,
     "an emptied quick-facts exports empty (" + blankFile.factsType + ", " + blankFile.factsLen + " chars)");
   check(unsetFile.saved === 1 && unsetFile.builtIn && unsetFile.factsLen > 0,
@@ -1989,47 +1999,16 @@ const t0 = Date.now();
     return { date: c.version == null ? null : String(c.version), rev: c.rev == null ? null : +c.rev }; });
   const today = (() => { const d = new Date(), q = v => String(v).padStart(2, "0");
     return d.getFullYear() + "-" + q(d.getMonth() + 1) + "-" + q(d.getDate()); })();
-  check(/^[0-9]{4}-[0-9]{2}-[0-9]{2}[a-z]*$/.test(blankFile.proposed || "")
-        && blankFile.date === blankFile.proposed
-        && blankFile.proposed.indexOf(today) === 0,
-    "the export dialog proposes an edition in the one orderable form and the file carries exactly"
-    + " it: proposed " + JSON.stringify(blankFile.proposed) + ", written "
-    + JSON.stringify(blankFile.date) + ", against this process's today " + JSON.stringify(today)
+  check(/^[0-9]{4}-[0-9]{2}-[0-9]{2}[a-z]*$/.test(proposed || "")
+        && blankFile.date === proposed && proposed.indexOf(today) === 0,
+    "the export sets the edition by itself, in the one orderable form: the file carries "
+    + JSON.stringify(blankFile.date) + ", the engine's own proposal " + JSON.stringify(proposed)
+    + ", against this process's today " + JSON.stringify(today)
     + " and the loaded catalog's " + JSON.stringify(was.date));
   check(was.rev !== null && blankFile.rev === was.rev + 1 && unsetFile.rev === was.rev + 1,
     "and the edition counter moves with it, so a desk watching the folder reads an update rather"
     + " than a stranger: loaded rev " + was.rev + ", exported " + blankFile.rev
     + " (and " + unsetFile.rev + " on the second export, each being one past what is loaded)");
-
-  /* The refusal, driven at the dialog: a value outside the dated form is not evidence of age to
-     any reader, so it is caught here rather than becoming an undated catalog at the next desk. */
-  const refused = await p.evaluate(async () => {
-    const wait = ms => new Promise(r => setTimeout(r, ms));
-    document.querySelector('[data-act="manage"]').click(); await wait(800);
-    document.getElementById("mgExportCatalog").click(); await wait(700);
-    const ed = document.getElementById("eEdInp"), y = document.getElementById("eNameYes");
-    if (!ed || !y) return { step: "no dialog" };
-    ed.value = "spring release"; ed.dispatchEvent(new Event("input"));
-    y.click(); await wait(500);
-    const say = document.getElementById("eEdSay");
-    const open = !!document.getElementById("eNameModal");
-    const shown = !!say && !say.hidden, marked = ed.classList.contains("is-missing");
-    const words = say ? say.textContent : "";
-    /* And the same field put back inside the form is taken, even though it orders BEFORE the
-       catalog loaded here: inside the form the author's value is the author's call. */
-    ed.value = "2020-01-01"; ed.dispatchEvent(new Event("input"));
-    const cleared = !!say && say.hidden;
-    y.click(); await wait(500);
-    return { step: "read", open, shown, marked, words, cleared,
-             closed: !document.getElementById("eNameModal") };
-  });
-  await p.keyboard.press("Escape"); await sleep(400);
-  await p.keyboard.press("Escape"); await sleep(400);
-  check(refused.step === "read" && refused.open && refused.shown && refused.marked
-        && refused.words.indexOf("2026-09-15") > -1 && refused.cleared && refused.closed,
-    "an edition outside the dated form is refused at the dialog, which stays open, marks the box"
-    + " and says the form (" + JSON.stringify(refused.words) + "); a value back inside it is"
-    + " taken even where it orders before the loaded one: " + JSON.stringify(refused));
   clean(e, "the catalog export");
 
   const tip = await p.evaluate(k => {

@@ -183,7 +183,8 @@ function pureFns() {
     "function plVocative(",
     "function agentParts(",
     "function formatPaxName(",
-    "function catalogFileSlug(",
+    "function catalogFileStem(",
+    "function catalogNameOfFile(",
     "function catalogCardId(",
     "function normWhoList(",
     "function esc(",
@@ -213,7 +214,7 @@ function pureFns() {
     const browserFrom=ua=>{ navigator={userAgent:ua}; return mtBrowser(); };
     return {browserFrom,
             foldDiacritics,wordMatchesTerm,splitWords,sharedPrefixLen,zForm,plVocative,
-            agentParts,formatPaxName,catalogFileSlug,catalogCardId,normWhoList,esc,
+            agentParts,formatPaxName,catalogFileStem,catalogNameOfFile,catalogCardId,normWhoList,esc,
             splitPartsRaw,catalogMacroCount,reverseBlockIndex,colPlan,joinTopics};
   `;
   return new Function(decls + "\n" + glue)();
@@ -491,8 +492,17 @@ function runUnitTests() {
   eq("formatPaxName caps+hyphen", F.formatPaxName("MARY-JANE   doe"), "Mary-Jane Doe");
   eq("formatPaxName lower", F.formatPaxName("anna"), "Anna");
 
-  // Filename slugs
-  eq("slug plain", F.catalogFileSlug("Sample Chat"), "sample-chat");
+  /* EXPORT'S FILENAME IS THE CATALOG'S NAME AND BACK: the suggestion keeps the name whole, capitals
+     and diacritics included, and replaces only what Windows refuses in a filename; the saved file's
+     name, less its catalog extension, is the name the file carries. */
+  eq("stem plain", F.catalogFileStem("Sample Chat"), "Sample Chat");
+  eq("stem Polish", F.catalogFileStem("Zażółć"), "Zażółć");
+  eq("stem refused characters", F.catalogFileStem('A/B: "C"?'), "A-B- -C--");
+  eq("stem trailing dots", F.catalogFileStem("Catalog v2..."), "Catalog v2");
+  eq("stem empty", F.catalogFileStem("  "), "Etiuda catalog");
+  eq("name of file", F.catalogNameOfFile("Mirabelka spring.ec"), "Mirabelka spring");
+  eq("name of file, other case", F.catalogNameOfFile("Zażółć.EC"), "Zażółć");
+  eq("name of file keeps a dotted name", F.catalogNameOfFile("Build 3.08.2026.ec"), "Build 3.08.2026");
 
   /* A CARD ID IS AUTHORITATIVE WHEN IT EXISTS. The importer suffixes the second of two cards
      sharing a category and title; re-deriving hands both the first one's id, and activateCatalog
@@ -501,19 +511,6 @@ function runUnitTests() {
   eq("cardId KEEPS an assigned id", F.catalogCardId({id:"b:open:Cold open~2",c:"open",t:"Cold open"}),
      "b:open:Cold open~2");
   eq("cardId falls back safely", F.catalogCardId({}), "b:open:Untitled");
-  eq("slug Polish", F.catalogFileSlug("Zażółć"), "zazolc");
-  eq("slug empty-ish", F.catalogFileSlug("!!!"), "etiuda-catalog");
-  // Apostrophes elide rather than separate, or "Max's" becomes "max-s"
-  eq("slug possessive", F.catalogFileSlug("Max's Playbook Build 3.08.2026"),
-     "maxs-playbook-build-3-08-2026");
-  eq("slug curly apostrophe", F.catalogFileSlug("Max’s"), "maxs");
-  // The default export name must slug to the one filename that auto-loads
-  eq("slug default catalog name", F.catalogFileSlug("Etiuda catalog"), "etiuda-catalog");
-
-  // No "-s-" anywhere: the possessive must not leave a stray separated letter
-  eq("slug has no stray -s-",
-     /-s-/.test(F.catalogFileSlug("Max's Playbook Build 3.08.2026")), false);
-  eq("slug possessive ending in s", F.catalogFileSlug("Lukas's Build"), "lukass-build");
 
   // WHO list normalisation
   eq("normWhoList dedupe", F.normWhoList("booker, Booker , ,pax1"), ["booker", "pax1"]);
@@ -1699,8 +1696,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 807;
-const UI_STRINGS_SHA256 = "ed82e982846c758337f71d43c83f859e83bd4a0e84a25fc01d9d2aa0e40e2708";
+const UI_STRINGS_COUNT = 802;
+const UI_STRINGS_SHA256 = "49082740e267747651ca165ad6f7183afe49fff3837b127e16dd14c419d335ca";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
@@ -1751,8 +1748,8 @@ function checkFrozenContracts() {
   };
   holds("function eCatalog(", "window.E_CATALOG",
         "a catalog file declares window.E_CATALOG and this is where the engine reads it");
-  holds("function exportCatalog(", '"window.E_CATALOG = "',
-        "the wrapper this writes is what every reader of a format 2 catalog file parses");
+  holds("function exportCatalog(", "JSON.stringify(catalogToV2(",
+        "an export is the .ec document itself, which every reader of a format 2 catalog parses as it stands");
   holds("function parseCatalogFile(", '"E_CATALOG"',
         "the importer finds the payload by that wrapper");
   holds("function sampleReady(", "typeof E_SAMPLE",

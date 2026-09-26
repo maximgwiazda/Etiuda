@@ -1897,7 +1897,11 @@ const placeEc = (dir, from, as, minutesOld) => {
   const udSO = newUserData("stayopen");
   placeEc(catFolder("stayopen"), FIX, "one-edition.ec", 5);
   placeEc(catFolder("stayopen"), SAMPLE_NOED, "another.ec", 90);
-  s = await launch(udSO);
+  /* Export's save dialog is answered by the shell's test hook: the offered name, in this folder. */
+  const SAVED = path.join(LAB, "saved-as");
+  fs.rmSync(SAVED, { recursive: true, force: true });
+  fs.mkdirSync(SAVED, { recursive: true });
+  s = await launch(udSO, [], { ETIUDA_TEST_SAVE_AS: SAVED });
   await escOffer(s.p);                 // the boot offer, refused without a record
   await sleep(800);
 
@@ -1944,21 +1948,35 @@ const placeEc = (dir, from, as, minutesOld) => {
     window.pack.who = "Ada"; window.savePack(); window.paintCatalogList();
     await wait(600);
   });
-  /* Export catalog opens a modal of its own on top, and must not take the Library down with it. */
+  /* EXPORT GOES STRAIGHT TO THE SAVE DIALOG (Maxim, 2026-09-26): no question of its own, the file's
+     name names the catalog, and the Library stays open at its fold behind the dialog. What lands is
+     the .ec document named after the loaded catalog, which the engine's own reader takes. */
   const stacked = await (await s.b.pages())[0].evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const b = document.getElementById("mgExportCatalog");
     if (!b) return { there: false };
-    b.click(); await wait(700);
-    const own = !!document.getElementById("eNameModal");
+    const name = (window.storedCatalog() || {}).name || "";
+    b.click(); await wait(1500);
     const fold = document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
-    const out = { there: true, own, lib: !!fold, foldOpen: !!fold && fold.open };
-    const no = document.getElementById("eNameNo"); if (no) no.click(); await wait(500);
-    return out;
+    return { there: true, name, asked: !!document.getElementById("eNameModal"), lib: !!fold,
+             foldOpen: !!fold && fold.open };
   });
-  check(stacked.there && stacked.own && stacked.lib && stacked.foldOpen,
-    "2s3 Export catalog raises a dialog of its own ON TOP of the Library, which is still there"
-    + " and still at its fold: " + JSON.stringify(stacked));
+  const savedAs = fs.readdirSync(SAVED);
+  let savedDoc = null, savedText = "";
+  try { savedText = fs.readFileSync(path.join(SAVED, stacked.name + ".ec"), "utf8"); savedDoc = JSON.parse(savedText); }
+  catch (x) { savedDoc = null; }
+  const readBack = await (await s.b.pages())[0].evaluate(t => {
+    try { return window.parseCatalogFile(t).name; } catch (x) { return "refused: " + x.message; } }, savedText);
+  check(stacked.there && !stacked.asked && stacked.lib && stacked.foldOpen
+        && savedAs.length === 1 && savedAs[0] === stacked.name + ".ec" && !!savedDoc
+        && savedDoc.kind === "etiuda-catalog" && savedDoc.format === 2 && savedDoc.name === stacked.name
+        && readBack === stacked.name,
+    "2s3 Export catalog goes straight to the save dialog with no question of its own and the Library"
+    + " still at its fold, and writes " + savedAs.length + " file, the loaded catalog's name as an .ec ("
+    + (savedAs[0] === stacked.name + ".ec") + "), a format " + (savedDoc && savedDoc.format)
+    + " document carrying that name (" + (!!savedDoc && savedDoc.name === stacked.name)
+    + ") which the engine's reader takes whole (" + (readBack === stacked.name) + "): "
+    + JSON.stringify({ asked: stacked.asked, lib: stacked.lib, foldOpen: stacked.foldOpen }));
 
   /* An editor opened from the Library takes the screen and hands it back, which is a different
      promise from the four above and was already built: it is read here so that it stays built. */
