@@ -1158,8 +1158,8 @@ const SHELL_WORDS = {
         addWord: "Add to dictionary", gone: "Etiuda stopped unexpectedly.", hung: "Etiuda is not responding.",
         restart: "Restart", close: "Close Etiuda", wait: "Wait" },
   pl: { undo: "Cofnij", cut: "Wytnij", copy: "Kopiuj", paste: "Wklej", selectAll: "Zaznacz wszystko",
-        addWord: "Dodaj do słownika", gone: "Działanie Etiudy zostało nieoczekiwanie przerwane.",
-        hung: "Etiuda nie odpowiada.", restart: "Uruchom ponownie", close: "Zamknij Etiudę", wait: "Poczekaj" },
+        addWord: "Dodaj do słownika", gone: "Etiuda niespodziewanie się zatrzymała.",
+        hung: "Etiuda nie odpowiada.", restart: "Uruchom ponownie", close: "Zamknij Etiudę", wait: "Czekaj" },
 };
 function shellWords() {
   if (deskKeys === undefined) deskKeys = readDesk();
