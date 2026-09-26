@@ -1,6 +1,6 @@
 import { findCard } from "./card-model.js";
 import { intentCount } from "./content-model.js";
-import { pack, savePack, packSnapshot, packRestore } from "./pack.js";
+import { pack, savePack, packSnapshot, packUndoFor } from "./pack.js";
 import { drawIntentRail } from "./rail-list.js";
 import { toast, offerUndo } from "./ui-lang.js";
 import { drawPills, saveTabSession, tabs } from "./tabs.js";
@@ -88,8 +88,9 @@ function removeCard(id){
   pack.cardOrder=(pack.cardOrder||[]).filter(x=>x!==id);
   hooks.cardOrderTouched();
   savePack(); rebuildCards();
+  const back=packUndoFor(was);
   offerUndo("Card deleted", ()=>{
-    packRestore(was); hooks.cardOrderTouched(); rebuildCards(); hooks.render(); drawPills();
+    back(); hooks.cardOrderTouched(); rebuildCards(); hooks.render(); drawPills();
     if(document.getElementById("mgCatList")) hooks.openManage();
   });
   return true;
@@ -114,7 +115,8 @@ function removeIntent(id){
   if(!id) return false;
   const idx=intentIdxFromId(id);
   const isCustom=idx>=0 && intentIsCustom(idx);
-  /* Undo puts back what a custom's removal shifts as well: the order, the selection, every tab's. */
+  /* Undo puts back what a custom's removal shifts as well: the order, the selection, every tab's,
+     by undoing the shift, so a choice made in between stands. */
   const was=packSnapshot(), wasOrder=intentOrder.slice(), wasIdxs=intentIdxs.slice(),
         wasTabs=(Array.isArray(tabs)?tabs:[]).map(tb=>tb&&Array.isArray(tb.intentIdxs)?tb.intentIdxs.slice():null);
   if(isCustom){
@@ -130,11 +132,21 @@ function removeIntent(id){
   pack.intentFavourites=(pack.intentFavourites||[]).filter(x=>x!==id);
   savePack();
   refreshAfterIntents();
+  const back=packUndoFor(was);
   offerUndo("Intent deleted", ()=>{
-    packRestore(was);
-    setIntentOrder(wasOrder); setIntentIdxs(wasIdxs);
-    (Array.isArray(tabs)?tabs:[]).forEach((tb,i)=>{ if(tb && wasTabs[i]) tb.intentIdxs=wasTabs[i]; });
-    saveTabSession(); saveIntentOrder();
+    back();
+    if(isCustom){
+      const unshift=(now,then)=>{
+        const out=now.map(i=>i>=idx?i+1:i), at=then.indexOf(idx);
+        if(at>-1 && out.indexOf(idx)<0) out.splice(Math.min(at,out.length),0,idx);
+        return out;
+      };
+      setIntentOrder(unshift(intentOrder,wasOrder)); setIntentIdxs(unshift(intentIdxs,wasIdxs));
+      (Array.isArray(tabs)?tabs:[]).forEach((tb,i)=>{
+        if(tb && Array.isArray(tb.intentIdxs) && wasTabs[i]) tb.intentIdxs=unshift(tb.intentIdxs,wasTabs[i]);
+      });
+      saveTabSession(); saveIntentOrder();
+    }
     refreshAfterIntents();
     if(document.getElementById("mgCatList")) hooks.openManage();
   });

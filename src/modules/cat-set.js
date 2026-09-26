@@ -1,7 +1,7 @@
 import { refreshCatRoles } from "./cat-roles.js";
 import { CATS } from "./content-model.js";
 import { CAT_LABELS_PL } from "./icons.js";
-import { BASE_CATS, pack, savePack, packSnapshot, packRestore } from "./pack.js";
+import { BASE_CATS, pack, savePack, packSnapshot, packUndoFor } from "./pack.js";
 import { nsSet } from "./storage.js";
 import { uiLang, toast, offerUndo } from "./ui-lang.js";
 import { cardCounts, setCatOrder, catOrder, setCats, cats } from "./app-state.js";
@@ -55,9 +55,12 @@ function removeCategory(k){
   setCats(cats.filter(x=>x!==k));
   nsSet("CatOrder",JSON.stringify(catOrder));
   savePack(); hooks.rebuildCards();
+  const back=packUndoFor(was), at=wasOrder.indexOf(k);
   offerUndo("Category deleted", ()=>{
-    packRestore(was);
-    setCatOrder(wasOrder);
+    back();
+    const order=catOrder.slice();
+    if(at>-1 && order.indexOf(k)<0) order.splice(Math.min(at,order.length),0,k);
+    setCatOrder(order);
     nsSet("CatOrder",JSON.stringify(catOrder));
     hooks.rebuildCards(); applyCatsToGlobal(); hooks.drawPillsCore(); hooks.render(); hooks.drawIntentRail();
     // The Library shows the category again where it stands open.

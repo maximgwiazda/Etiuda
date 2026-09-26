@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 229 };
+const EXPECTED = { chrome: 230 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -2221,6 +2221,30 @@ const t0 = Date.now();
   check(undoLeg.asked === 0 && undoLeg.stood && undoLeg.after.gone && undoLeg.after.mark,
     "and Clear local memory stops at Etiuda's own question, which Cancel answers with nothing done: "
     + JSON.stringify({ asked: undoLeg.asked, stood: undoLeg.stood, after: undoLeg.after }));
+  /* UNDO PUTS BACK THE ACT, NOT THE DESK AS IT STOOD (data-1): a star given while the Undo bubble
+     is still up survives the Undo of the deletion before it. Read off the stored pack, and the
+     star taken off again afterwards so the desk is left as found. */
+  const undoAct = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const read = () => JSON.parse(lsGet(nsKey("Pack")) || "{}");
+    const ids = [...document.querySelectorAll("#list .card[data-id]")].map(c => c.getAttribute("data-id"));
+    const gone = ids[4], star = ids.find((x, i) => i > 4 && (read().favourites || []).indexOf(x) < 0);
+    if (!gone || !star) return { ready: false };
+    removeCard(gone); await wait(500);
+    const bubble = !!document.getElementById("eUndoBtn");
+    toggleFavourite(star); await wait(300);
+    const starred = (read().favourites || []).indexOf(star) > -1;
+    const u = document.getElementById("eUndoBtn"); if (u) u.click(); await wait(800);
+    const now = read();
+    const out = { ready: true, bubble, starred, kept: (now.favourites || []).indexOf(star) > -1,
+      back: (now.removed || []).indexOf(gone) < 0 && !!document.querySelector('#list .card[data-id="' + CSS.escape(gone) + '"]') };
+    if (out.kept) toggleFavourite(star);
+    await wait(300);
+    return out;
+  });
+  check(undoAct.ready && undoAct.bubble && undoAct.starred && undoAct.back && undoAct.kept,
+    "data-1 Undo of a deleted card puts that card back and keeps a star given to another card while the bubble stood: "
+    + JSON.stringify(undoAct));
   clean(e, "the undo and the question");
 
   /* BOARD 344. THE ROUTES THE DRIVES ABOVE WALKED AROUND.

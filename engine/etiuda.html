@@ -4350,8 +4350,8 @@ What you type stays in this browser only.`;
     isIntentFavourite: () => isIntentFavourite,
     loadPack: () => loadPack,
     pack: () => pack,
-    packRestore: () => packRestore,
     packSnapshot: () => packSnapshot,
+    packUndoFor: () => packUndoFor,
     rebuildBaseCards: () => rebuildBaseCards,
     savePack: () => savePack,
     showDeskNotices: () => showDeskNotices,
@@ -6543,13 +6543,43 @@ What you type stays in this browser only.`;
   function packSnapshot() {
     return JSON.stringify(pack);
   }
-  function packRestore(was) {
-    const p = JSON.parse(was);
-    Object.keys(pack).forEach((k) => {
-      delete pack[k];
+  function packUndoFor(was) {
+    const a = JSON.parse(was), b = JSON.parse(JSON.stringify(pack)), steps = [];
+    const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+    const key = (v) => v && typeof v === "object" ? v.id != null ? "#" + v.id : null : JSON.stringify(v);
+    const isMap = (v) => !!v && typeof v === "object" && !Array.isArray(v);
+    Object.keys(Object.assign({}, a, b)).forEach((f) => {
+      const x = a[f], y = b[f];
+      if (same(x, y)) return;
+      if (Array.isArray(x) && Array.isArray(y) && x.concat(y).every((v) => key(v) !== null)) {
+        const inY = new Set(y.map(key)), inX = new Set(x.map(key));
+        const lost = x.map((v, i) => ({ v, i })).filter((o) => !inY.has(key(o.v)));
+        const added = new Set(y.filter((v) => !inX.has(key(v))).map(key));
+        steps.push(() => {
+          const l = (Array.isArray(pack[f]) ? pack[f] : []).filter((v) => !added.has(key(v)));
+          lost.forEach((o) => {
+            if (!l.some((w) => key(w) === key(o.v))) l.splice(Math.min(o.i, l.length), 0, o.v);
+          });
+          pack[f] = l;
+        });
+      } else if (isMap(x) && isMap(y)) {
+        const ks = Object.keys(Object.assign({}, x, y)).filter((k) => !same(x[k], y[k]));
+        steps.push(() => {
+          if (!isMap(pack[f])) pack[f] = {};
+          ks.forEach((k) => {
+            if (k in x) pack[f][k] = x[k];
+            else delete pack[f][k];
+          });
+        });
+      } else steps.push(() => {
+        if (f in a) pack[f] = x;
+        else delete pack[f];
+      });
     });
-    Object.assign(pack, p);
-    savePack();
+    return () => {
+      steps.forEach((s) => s());
+      savePack();
+    };
   }
 
   // src/modules/cat-roles.js
@@ -8363,9 +8393,12 @@ What you type stays in this browser only.`;
     nsSet("CatOrder", JSON.stringify(catOrder));
     savePack();
     hooks.rebuildCards();
+    const back = packUndoFor(was), at = wasOrder.indexOf(k);
     offerUndo("Category deleted", () => {
-      packRestore(was);
-      setCatOrder(wasOrder);
+      back();
+      const order = catOrder.slice();
+      if (at > -1 && order.indexOf(k) < 0) order.splice(Math.min(at, order.length), 0, k);
+      setCatOrder(order);
       nsSet("CatOrder", JSON.stringify(catOrder));
       hooks.rebuildCards();
       applyCatsToGlobal();
@@ -15175,8 +15208,9 @@ What you type stays in this browser only.`;
     hooks.cardOrderTouched();
     savePack();
     rebuildCards();
+    const back = packUndoFor(was);
     offerUndo("Card deleted", () => {
-      packRestore(was);
+      back();
       hooks.cardOrderTouched();
       rebuildCards();
       hooks.render();
@@ -15214,15 +15248,23 @@ What you type stays in this browser only.`;
     pack.intentFavourites = (pack.intentFavourites || []).filter((x) => x !== id);
     savePack();
     refreshAfterIntents();
+    const back = packUndoFor(was);
     offerUndo("Intent deleted", () => {
-      packRestore(was);
-      setIntentOrder(wasOrder);
-      setIntentIdxs(wasIdxs);
-      (Array.isArray(tabs) ? tabs : []).forEach((tb, i) => {
-        if (tb && wasTabs[i]) tb.intentIdxs = wasTabs[i];
-      });
-      saveTabSession();
-      saveIntentOrder();
+      back();
+      if (isCustom) {
+        const unshift = (now, then) => {
+          const out = now.map((i) => i >= idx ? i + 1 : i), at = then.indexOf(idx);
+          if (at > -1 && out.indexOf(idx) < 0) out.splice(Math.min(at, out.length), 0, idx);
+          return out;
+        };
+        setIntentOrder(unshift(intentOrder, wasOrder));
+        setIntentIdxs(unshift(intentIdxs, wasIdxs));
+        (Array.isArray(tabs) ? tabs : []).forEach((tb, i) => {
+          if (tb && Array.isArray(tb.intentIdxs) && wasTabs[i]) tb.intentIdxs = unshift(tb.intentIdxs, wasTabs[i]);
+        });
+        saveTabSession();
+        saveIntentOrder();
+      }
       refreshAfterIntents();
       if (document.getElementById("mgCatList")) hooks.openManage();
     });
@@ -18221,8 +18263,9 @@ What you type stays in this browser only.`;
       drawPills();
       render();
       drawIntentRail();
+      const back = packUndoFor(was);
       offerUndo("Category reset", () => {
-        packRestore(was);
+        back();
         applyCatsToGlobal();
         drawPills();
         render();
