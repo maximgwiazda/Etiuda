@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 219 };
+const EXPECTED = { chrome: 221 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -640,6 +640,40 @@ const t0 = Date.now();
   check(th1.bg !== th0.bg, "and the ground repaints (" + th0.bg + " to " + th1.bg + ")");
   check(th2.attr === th0.attr && th2.bg === th0.bg, "and a second press returns both");
   clean(e, "the theme control");
+
+  /* THE DOT FIELD STANDS STILL WHILE THE CARDS SCROLL (Maxim, 2026-09-26). One patch of the page,
+     photographed, the list scrolled by 7 px - not a multiple of the field's 12 px pitch, so a field
+     riding the scroll cannot come back to the same picture - and the same patch photographed again.
+     The cards are hidden for the three pictures and keep their boxes, so the patch is the field
+     alone and a card sliding through it cannot pass for dots that moved; the card's own rectangle is
+     the control that the scroll happened. The third picture, with the field switched off, is the
+     control that the patch holds dots at all. Shots of one still state are byte-identical. */
+  e = since();
+  await p.evaluate(() => { const s = document.createElement("style"); s.id = "__stillHide";
+    s.textContent = "#list > *{visibility:hidden!important}"; document.head.appendChild(s);
+    document.getElementById("pageScroll").scrollTop = 0; });
+  await sleep(300);
+  const stillBox = await p.evaluate(() => { const sc = document.getElementById("pageScroll").getBoundingClientRect(),
+    m = document.querySelector("main").getBoundingClientRect();
+    return { x: Math.round(m.left + 40), y: Math.round(sc.top + sc.height / 2), width: 48, height: 48 }; });
+  const stillShot = () => p.screenshot({ clip: stillBox, captureBeyondViewport: false, encoding: "base64" });
+  const cardTop = () => p.evaluate(() => { const c = document.querySelector("#list .card"); return c ? c.getBoundingClientRect().top : null; });
+  const still0 = await stillShot(), top0 = await cardTop();
+  await p.evaluate(() => { document.getElementById("pageScroll").scrollTop += 7; }); await sleep(300);
+  const still1 = await stillShot(), top1 = await cardTop();
+  const scrolled = await p.evaluate(() => document.getElementById("pageScroll").scrollTop);
+  await p.evaluate(() => { document.getElementById("pageScroll").style.backgroundImage = "none"; }); await sleep(200);
+  const stillOff = await stillShot();
+  await p.evaluate(() => { document.getElementById("pageScroll").style.backgroundImage = "";
+    const s = document.getElementById("__stillHide"); if (s) s.remove();
+    document.getElementById("pageScroll").scrollTop = 0; });
+  await sleep(300);
+  check(scrolled === 7 && top0 !== null && Math.round(top0 - top1) === 7 && still0 === still1 && stillOff !== still1,
+    "the dot field stands still while the cards scroll: the list moved " + (top0 === null ? "no card" : Math.round(top0 - top1)
+    + " px") + " at scrollTop " + scrolled + ", and the patch of field at " + stillBox.x + "," + stillBox.y + " is "
+    + (still0 === still1 ? "byte-identical" : "different") + " before and after (" + still0.length + " and " + still1.length
+    + " base64 chars), against " + stillOff.length + " with the field switched off");
+  clean(e, "the still dot field");
 
   /* THE PALETTE LANDS IN ONE FRAME, board 452. Sampled per frame through a real press with the
      pointer resting on the tile, which is where the hold-over was loudest: every colour
