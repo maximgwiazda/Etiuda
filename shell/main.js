@@ -1100,6 +1100,56 @@ function offscreenAt() {
   return { x: x, y: y };
 }
 
+/* THE WINDOW'S PLACE, kept beside the desk and not in it: desk.json can be carried to another
+   machine, and a rectangle belongs to this one's displays. Read and written only for an ordinary
+   launch, never for the harness's placed-aside window. */
+const OPEN_SIZE = { width: 1280, height: 880 };
+function windowFile() { return path.join(app.getPath("userData"), "window.json"); }
+/* Pure, for tests/test.js. The saved rectangle on the work area it overlaps most, moved and cut
+   to lie wholly inside it; where it overlaps none, the opening size centred on the primary. */
+function windowPlace(saved, areas, primary, size) {
+  const overlap = (a, b) => Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x))
+    * Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
+  const ok = !!saved && ["x", "y", "width", "height"].every(k => Number.isFinite(saved[k]))
+    && saved.width > 0 && saved.height > 0;
+  let area = null, best = 0;
+  if (ok) for (const a of areas) { const n = overlap(saved, a); if (n > best) { best = n; area = a; } }
+  const r = area ? saved : Object.assign({ x: primary.x + (primary.width - size.width) / 2,
+                                           y: primary.y + (primary.height - size.height) / 2 }, size);
+  const on = area || primary;
+  const width = Math.round(Math.min(r.width, on.width)), height = Math.round(Math.min(r.height, on.height));
+  return {
+    x: Math.round(Math.min(Math.max(r.x, on.x), on.x + on.width - width)),
+    y: Math.round(Math.min(Math.max(r.y, on.y), on.y + on.height - height)),
+    width: width, height: height,
+    maximized: !!area && saved.maximized === true,
+  };
+}
+function readWindowPlace() {
+  let saved = null;
+  try { saved = JSON.parse(fs.readFileSync(windowFile(), "utf8")); } catch { /* first launch, or unreadable */ }
+  try {
+    return windowPlace(saved, screen.getAllDisplays().map(d => d.workArea), screen.getPrimaryDisplay().workArea, OPEN_SIZE);
+  } catch (e) {
+    console.error("etiuda: the displays could not be read - " + e.message);
+    return Object.assign({ maximized: false }, OPEN_SIZE);
+  }
+}
+/* The normal rectangle, so a window closed maximised comes back maximised over the place it
+   will restore to; a snapped one is kept as the rectangle it was snapped to. `maximized` is the
+   last state the caller saw, since a minimised window is neither. Temp file then rename. */
+function saveWindowPlace(win, maximized) {
+  if (!win || win.isDestroyed()) return;
+  const snapped = !maximized && !win.isMinimized() && typeof win.isSnapped === "function" && win.isSnapped();
+  const b = snapped ? win.getBounds() : win.getNormalBounds();
+  const file = windowFile();
+  try {
+    fs.writeFileSync(file + ".tmp", JSON.stringify({ x: b.x, y: b.y, width: b.width, height: b.height,
+                                                     maximized: !!maximized }), "utf8");
+    fs.renameSync(file + ".tmp", file);
+  } catch (e) { console.error("etiuda: the window's place could not be written - " + e.message); }
+}
+
 /* The one window, held so a folder change arriving through a desk save can re-arm the watch and
    offer what the new folder holds. There is exactly one; a second would need a list. */
 let theWindow = null;
@@ -1110,9 +1160,9 @@ function createWindow() {
      already a bad moment. The same readPin() the serve path calls, so there is one rule rather
      than two: a window that is going to show the refusal is given the system's frame. */
   const framed = !!readPin().why;
+  const place = PLACED_ASIDE ? null : readWindowPlace();
   const win = new BrowserWindow({
-    width: 1280,
-    height: 880,
+    ...(place ? { x: place.x, y: place.y, width: place.width, height: place.height } : OPEN_SIZE),
     minWidth: 546,
     show: false,
     /* frame:false, not titleBarStyle 'hidden' with titleBarOverlay. The overlay is drawn by the
@@ -1138,25 +1188,54 @@ function createWindow() {
       webSecurity: true,
     },
   });
+  /* THE SAVED SIZE IS THE SIZE REOPENED. At 150 per cent the constructor's came back up to four
+     pixels larger and setBounds' one larger than asked (measured), so a window reopened daily grew:
+     the difference setBounds makes is measured here and taken off. */
+  if (place) {
+    const want = { x: place.x, y: place.y, width: place.width, height: place.height };
+    win.setBounds(want);
+    const got = win.getBounds();
+    if (got.width !== want.width || got.height !== want.height)
+      win.setBounds(Object.assign({}, want, { width: 2 * want.width - got.width, height: 2 * want.height - got.height }));
+  }
 
   /* showInactive, not show: value 2 wants a window with a rectangle and not the focus of
      whoever is at the desk, and show() takes the focus even from a non-focusable window.
      A NAMED FUNCTION AND A ONE-LINE REGISTRATION, because two checks in the harness insert a
      probe after this statement and match it by its text: a handler whose body is inline makes
      that anchor break every time the body changes. */
+  /* A window closed maximised is SHOWN by maximize(), so its first frame is already maximised. */
   const showWhenReady = () => {
     if (OFFSCREEN_SHOWN) win.showInactive();
-    else if (!OFFSCREEN) win.show();
+    else if (OFFSCREEN) return;
+    else if (place && place.maximized) { win.maximize(); win.focus(); }
+    else win.show();
   };
   win.once("ready-to-show", showWhenReady);
 
   /* The maximise glyph is a picture of the window's state, and the window can reach that state
      without the button: a double-click on the drag band, Windows key and an arrow, a snap. */
+  let maximized = !!(place && place.maximized), placeSave = null;
+  const keepPlace = () => {
+    if (PLACED_ASIDE || win.isDestroyed()) return;
+    if (!win.isMinimized()) maximized = win.isMaximized();
+    clearTimeout(placeSave);
+    placeSave = setTimeout(() => saveWindowPlace(win, maximized), 500);
+  };
   const tellMaximized = () => {
     if (!win.isDestroyed()) win.webContents.send("etiuda:maximized", win.isMaximized());
+    keepPlace();
   };
   win.on("maximize", tellMaximized);
   win.on("unmaximize", tellMaximized);
+  win.on("moved", keepPlace);
+  win.on("resized", keepPlace);
+  win.on("close", () => {
+    if (PLACED_ASIDE) return;
+    clearTimeout(placeSave);
+    if (!win.isMinimized()) maximized = win.isMaximized();
+    saveWindowPlace(win, maximized);
+  });
 
   /* The engine carries links to the open internet. Following one inside the window would
      replace the app with a web page and leave no way back to it. */

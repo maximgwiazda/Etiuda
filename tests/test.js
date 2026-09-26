@@ -531,6 +531,7 @@ function runUnitTests() {
 
   shellBridgeTests();
   policyTests();
+  windowPlaceTests();
   v2ValidationTests();
   lintCatalogTests();
   langAgnosticTests();
@@ -1244,6 +1245,41 @@ function shellBridgeTests() {
   try { deepGot = R.parseRequest(deep); } catch (e) { deepGot = "threw " + e.name; }
   eq("parseRequest refuses a request nested 5,000 deep, and says so, without throwing",
      [deepGot, R.said.length === 1 && /nests deeper/.test(R.said[0])], [null, true]);
+}
+/* WHERE THE WINDOW OPENS (feel pass native-2), on the pure half: the rectangle a launch is given
+   from what the last run saved and the displays there are now. The round trip through a real
+   window is driven outside the suite, since a restored window is one on a display. */
+function windowPlaceTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  const place = new Function(extractDecl(src, "function windowPlace(") + "\nreturn windowPlace;")();
+  const SIZE = { width: 1280, height: 880 };
+  const main = { x: 0, y: 0, width: 1920, height: 1032 }, left = { x: -1600, y: 100, width: 1600, height: 860 };
+  const areas = [main, left];
+  const inside = (r, a) => r.x >= a.x && r.y >= a.y && r.x + r.width <= a.x + a.width && r.y + r.height <= a.y + a.height;
+  const J = JSON.stringify;
+  eq("a first launch opens at the opening size, centred on the primary's work area",
+    J(place(null, areas, main, SIZE)), J({ x: 320, y: 76, width: 1280, height: 880, maximized: false }));
+  eq("a saved rectangle inside a work area comes back as it was, maximised included",
+    J(place({ x: 40, y: 30, width: 1000, height: 700, maximized: true }, areas, main, SIZE)),
+    J({ x: 40, y: 30, width: 1000, height: 700, maximized: true }));
+  eq("a rectangle on the display to the left, at negative x, stays on that display",
+    J(place({ x: -1500, y: 200, width: 900, height: 600, maximized: false }, areas, main, SIZE)),
+    J({ x: -1500, y: 200, width: 900, height: 600, maximized: false }));
+  const gone = place({ x: 6000, y: 6000, width: 1000, height: 700, maximized: true }, areas, main, SIZE);
+  eq("a rectangle on a display that has gone opens centred on the primary, not maximised",
+    J(gone), J({ x: 320, y: 76, width: 1280, height: 880, maximized: false }));
+  const hanging = place({ x: 1700, y: 900, width: 1000, height: 700, maximized: false }, areas, main, SIZE);
+  eq("a rectangle hanging off a work area's corner is moved wholly inside it",
+    [inside(hanging, main), hanging.width, hanging.height], [true, 1000, 700]);
+  const big = place({ x: -1700, y: 50, width: 2400, height: 1400, maximized: false }, areas, main, SIZE);
+  eq("a rectangle larger than its work area is cut to it", J(big), J({ x: -1600, y: 100, width: 1600, height: 860, maximized: false }));
+  const small = { x: 0, y: 0, width: 1366, height: 728 };
+  eq("the opening size is cut to a small primary work area as well",
+    J(place(null, [small], small, SIZE)), J({ x: 43, y: 0, width: 1280, height: 728, maximized: false }));
+  eq("a file that is not a rectangle is read as no file",
+    [place({ x: "a", y: 0, width: 10, height: 10 }, areas, main, SIZE).x, place({ x: 0, y: 0, width: -5, height: 10 }, areas, main, SIZE).x,
+     place(["x"], areas, main, SIZE).x, place({ x: 0, y: 0, width: 800, height: 600, maximized: "yes" }, areas, main, SIZE).maximized],
+    [320, 320, 320, false]);
 }
 function requestFns() {
   const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
