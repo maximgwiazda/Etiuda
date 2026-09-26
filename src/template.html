@@ -2931,6 +2931,12 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .bub-ask code{font:12px var(--mono);color:var(--bub-ink);overflow-wrap:anywhere}
 .e-offer .ec-what{margin:0 0 8px;font-size:13.5px;color:var(--bub-ink)}
 .e-offer .ec-counts{font:12px var(--mono);color:var(--bub-dim);margin-top:2px}
+/* THE UNDO, one line and its button at the foot of the window, where a toast speaks. Centred by
+   its margins, since the family's entrance animates transform. */
+.e-undo{left:0;right:0;bottom:24px;margin:0 auto;width:fit-content;max-width:calc(100vw - 24px);
+  display:flex;align-items:center;gap:14px}
+.e-undo p{margin:0;color:var(--bub-ink)}
+.e-undo .tour-actions{margin:0;padding:0;border:0;flex:none}
 /* A field on the fill: paper, so what is typed reads as the reader's own. */
 .bub .e-name-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
   border:1px solid transparent;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans)}

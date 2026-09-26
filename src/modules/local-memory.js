@@ -2,7 +2,7 @@ import { E_CATALOG_KEY, E_CATALOG_STORE, eWatchClear } from "./catalog.js";
 import { pack, savePack } from "./pack.js";
 import { E_NS, eWipeLatch, lsDel, lsKeys, mgReopenAfterReload, nsDel, nsKey, ssDel, ssGet, ssSet } from "./storage.js";
 import { TAB_KEY, tabSaveTimer } from "./tabs.js";
-import { ask, t } from "./ui-lang.js";
+import { askSure, t } from "./ui-lang.js";
 import { eHost } from "./host.js";
 
 /* Both doors (Library and Maintenance) open onto this pair. FORGETTING WHAT YOU MADE AND
@@ -33,12 +33,14 @@ function eKeyIsMine(k){
 function clearLocalMemory(){
   /* One t() per line, and every space kept OUTSIDE the key: a key with a trailing space
      can never be matched against the source, because what the scanner reads it trims. */
-  if(!ask((eHost() ? t("Clear Etiuda's local memory on this computer?")
+  askSure((eHost() ? t("Clear Etiuda's local memory on this computer?")
       : t("Clear Etiuda's local memory in this browser?"))+"\n\n"
     +t("Removes every personal card, intent, edit, hide, category rename and quick-facts edit,")+" "
     +t("and forgets your agent name, theme and layout choices.")+" "
     +t("Catalog files on disk are not touched.")+"\n\n"
-    +t("The loaded catalog stays, and Etiuda restarts with it."))) return;
+    +t("The loaded catalog stays, and Etiuda restarts with it."), "Clear local memory", clearNow, true);
+}
+function clearNow(){
   /* Latch first, delete second - see eWiping: the reload does not stop timers, and a
      pending debounced save would write its key straight back. Cancelling the known timer as
      well is not redundant: the latch stops the write, this stops the work. */
@@ -76,10 +78,12 @@ function ejectedJustNow(){
   return !!v;
 }
 function ejectCatalog(){
-  if(!ask((eHost() ? t("Eject the catalog?") : t("Eject the catalog from this browser?"))+"\n\n"
+  askSure((eHost() ? t("Eject the catalog?") : t("Eject the catalog from this browser?"))+"\n\n"
     +t("Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.")+"\n\n"
     +t("Your agent name, theme and layout choices stay, and catalog files on disk are not touched.")+"\n\n"
-    +t("Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it."))) return;
+    +t("Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it."), "Eject catalog", ejectNow, true);
+}
+function ejectNow(){
   /* The ONE personal field that has to go: an older import route stored the catalog itself
      here, and BASE_M is built from it, so leaving it would hand the cards straight back. */
   pack.baseCards=null;

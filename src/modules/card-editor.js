@@ -470,7 +470,7 @@ function openCardEditor(id, presetCat, fromManage){
     upd();
   })();
   if($("#meDelete")) $("#meDelete").onclick=()=>{
-    // removeCard() owns the confirm and the built-in / custom split, so this cannot drift from
+    // removeCard() owns the Undo and the built-in / custom split, so this cannot drift from
     // what the same action does in Manage.
     // doneCardEditor() already returns to Manage when the editor was opened from it.
     if(removeCard(id)){ render(); drawPills(); doneCardEditor(); }

@@ -6,11 +6,11 @@ import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { dismissModal, openDialog } from "./dialog.js";
 import { eEmbeddedCatalog, E_VERSION } from "./env.js";
 import { eHost } from "./host.js";
-import { lsGet, lsDel, lsKeys, E_NS, E_LS_OK, E_SS_OK, eDeskFileShown, eSaveTrouble, eLastSaved } from "./storage.js";
+import { lsGet, lsSet, lsDel, lsKeys, E_NS, E_LS_OK, E_SS_OK, eDeskFileShown, eSaveTrouble, eLastSaved } from "./storage.js";
 import { clearLocalMemory, ejectCatalog } from "./local-memory.js";
 import { loadShortcuts } from "./shortcuts.js";
 import { tabs } from "./tabs.js";
-import { ask, tc, toast, fileStamp } from "./ui-lang.js";
+import { offerUndo, tc, fileStamp } from "./ui-lang.js";
 import { pack } from "./pack.js";
 import { RAIL_DOCK_MIN, railLocked, railMaxWidth } from "./rail-panel.js";
 import { pageScroller } from "./page-scroll.js";
@@ -326,9 +326,9 @@ function openMaintenance(backFn){
   function wireMaintenance(){
   /* No glass switch here any more: it tunes rather than rescues, and Settings owns it. */
   $("#mtShortcuts").onclick=()=>{
-    if(!ask("Reset all shortcuts to defaults?")) return;
+    const was=lsGet("eShortcuts");
     lsDel("eShortcuts"); loadShortcuts();
-    toast("Shortcuts reset");
+    offerUndo("Shortcuts reset", ()=>{ if(was!=null){ lsSet("eShortcuts",was); loadShortcuts(); } });
   };
   $("#mtClear").onclick=clearLocalMemory;
   $("#mtEject").onclick=ejectCatalog;

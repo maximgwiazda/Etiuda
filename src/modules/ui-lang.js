@@ -1,6 +1,7 @@
 import { lsGet, lsSet, lsDel } from "./storage.js";
 import { markCut } from "./cut-text.js";
 import { $ } from "./dom.js";
+import { esc } from "./esc.js";
 
 /* ---- UI LANGUAGE ------------------------------------------------------------------------
    The CHROME's language, not the CONTENT's: the EN|PL switch decides what is copied to
@@ -444,10 +445,6 @@ UI_STRINGS.pl={
   "Press keys…":"Naciśnij klawisze…",
   "Fixed keys":"Klawisze stałe",
   "The grammar the rest stands on: Esc is how key capture itself cancels, arrows and Enter keep their native meanings, and a held Ctrl is a hold, not a chord.":"Zasady, na których opiera się reszta: Esc anuluje samo przechwytywanie klawiszy, strzałki i Enter zachowują swoje zwykłe znaczenie, a przytrzymany Ctrl to przytrzymanie, nie skrót.",
-  "Delete this custom card?\n\nIt disappears from Etiuda and from anything you export. The catalog has no version to restore.":"Usunąć tę własną kartę?\n\nZniknie z Etiudy i z każdego eksportu. Katalog nie ma jej wersji do przywrócenia.",
-  "Delete this card?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.":"Usunąć tę kartę?\n\nZniknie z Etiudy i z każdego eksportu. Przycisk Przywróć odtworzy ją z katalogu.",
-  "Delete this custom intent?":"Usunąć tę własną intencję?",
-  "Delete this intent?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.":"Usunąć tę intencję?\n\nZniknie z Etiudy i z każdego eksportu. Przycisk Przywróć odtworzy ją z katalogu.",
   "Keep current":"Zachowaj obecny",
   "Load it":"Wczytaj",
   "Load catalog":"Wczytaj katalog",
@@ -491,7 +488,6 @@ UI_STRINGS.pl={
   "In an editor: the language tab before this one":"W edytorze: poprzedni język",
   "In an editor: the language tab after this one":"W edytorze: następny język",
   "Switch the language being edited":"Przełącz edytowany język",
-  "This card has unsaved changes. Leave it without saving?":"Ta karta ma niezapisane zmiany. Opuścić ją bez zapisywania?",
   "Restored your cards and stars from an earlier build.":"Przywrócono własne karty i gwiazdki z wcześniejszej wersji.",
   "Your intent edits and stars are set aside: this catalog cannot say which intent each belongs to.":"Odłożono własne zmiany i gwiazdki przy intencjach: ten katalog nie wskazuje, której intencji dotyczą.",
   "Edited cards this catalog does not have are kept as your own: {CARDS}.":"Zmienione karty, których ten katalog nie ma, zostają jako własne: {CARDS}.",
@@ -524,7 +520,6 @@ UI_STRINGS.pl={
   "Discard your changes and restore the catalog's category.":"Odrzuca zmiany i przywraca kategorię z katalogu.",
   "Nothing to discard - this matches the catalog.":"Wszystko jest zgodne z katalogiem.",
   "This is yours, so the catalog has no version to restore.":"To własna pozycja, więc katalog nie ma jej wersji do przywrócenia.",
-  "Discard your changes to this category?":"Odrzucić zmiany w tej kategorii?",
   "Category reset":"Przywrócono kategorię z katalogu",
   "Delete this empty category":"Usuń tę pustą kategorię",
   "Edit category":"Edytuj kategorię",
@@ -567,9 +562,6 @@ UI_STRINGS.pl={
   "Discard your edits and restore the catalog wording.":"Odrzuca zmiany i przywraca treść z katalogu.",
   "Restore built-in quick facts":"Przywróć wbudowane szybkie fakty",
   "Delete this custom card permanently?":"Usunąć tę własną kartę na stałe?",
-  "Delete this empty category?\n\nA Reset restores it from the catalog.":"Usunąć tę pustą kategorię?\n\nPrzycisk Przywróć odtworzy ją z katalogu.",
-  "Reset all shortcuts to defaults?":"Przywrócić domyślne skróty klawiszowe?",
-  "Restore built-in quick facts? Your edited text will be discarded.":"Przywrócić wbudowane szybkie fakty? Zmieniony tekst zostanie odrzucony.",
   "{KEY} is fixed and keeps its own meaning":"{KEY} to klawisz stały i zachowuje swoje znaczenie",
   "Saved {KEY}":"Zapisano {KEY}",
   "{N} card":"{N} karta",
@@ -598,6 +590,8 @@ UI_STRINGS.pl={
   "Built {FILE} with {MACROS} inside":"Zbudowano {FILE}: {MACROS}",
   "Exported {FILE} with {MACROS} in {CARDS}":"Wyeksportowano {FILE}: {MACROS}, {CARDS}",
   "Card deleted":"Usunięto kartę",
+  "Undo":"Cofnij",
+  "The changes to that entry were not saved.":"Zmiany w tamtym wpisie nie zostały zapisane.",
   "Custom card deleted":"Usunięto własną kartę",
   "Category added":"Dodano kategorię",
   "Category deleted":"Usunięto kategorię",
@@ -871,8 +865,57 @@ function t(en){
   const tab=UI_STRINGS[uiLang()];
   return (tab && tab[en]!=null) ? tab[en] : en;
 }
-// Every question the app asks is asked in the interface language, so it asks through t().
-function ask(m){ return confirm(t(m)); }
+/* AN ACT THAT CANNOT BE UNDONE STOPS HERE until it is answered, in Etiuda's own small dialog over
+   everything, never the system's box; the first paragraph of the question is its title, and `yes`
+   names the act on the button that does it. An act that can be undone asks nothing: see offerUndo. */
+function askSure(question, yes, act, danger){
+  const parts=t(question).split("\n\n");
+  const wrap=document.createElement("div");
+  wrap.className="modal";
+  wrap.id="eSure";
+  wrap.innerHTML='<div class="modal-bg"></div>'
+    +'<div class="modal-card" role="alertdialog" aria-modal="true" aria-labelledby="eSureTitle">'
+    +'<h2 id="eSureTitle">'+esc(parts[0])+'</h2>'
+    +parts.slice(1).map(x=>'<p class="modal-sub">'+esc(x)+'</p>').join("")
+    +'<div class="modal-actions">'
+    +'<button type="button" class="btn" id="eSureNo">'+esc(t("Cancel"))+'</button>'
+    +'<button type="button" class="btn '+(danger?"danger":"primary")+'" id="eSureYes">'+esc(t(yes))+'</button>'
+    +'</div></div>';
+  document.body.appendChild(wrap);
+  const close=go=>{ document.removeEventListener("keydown",onKey,true); wrap.remove(); if(go) act(); };
+  function onKey(e){
+    if(e.key!=="Escape") return;
+    e.preventDefault(); e.stopPropagation(); close(false);
+  }
+  document.addEventListener("keydown",onKey,true);
+  wrap.querySelector(".modal-bg").onclick=()=>close(false);
+  wrap.querySelector("#eSureNo").onclick=()=>close(false);
+  wrap.querySelector("#eSureYes").onclick=()=>close(true);
+  setTimeout(()=>{ const b=wrap.querySelector("#eSureNo"); if(b) b.focus(); },30);
+}
+/* AN ACT THAT CAN BE UNDONE HAPPENS AT ONCE, and this bubble at the foot of the window offers the
+   way back: over any dialog, until another act replaces it or UNDO_MS passes. */
+const UNDO_MS=10000;
+let undoTimer=0;
+function offerUndo(said, undo){
+  const was=$("#eUndo"); if(was) was.remove();
+  clearTimeout(undoTimer);
+  const el=document.createElement("div");
+  el.className="bub bub-ask e-undo";
+  el.id="eUndo";
+  el.setAttribute("role","status");
+  el.setAttribute("data-side","none");
+  el.innerHTML='<p>'+esc(t(said))+'</p>'
+    +'<div class="tour-actions"><button type="button" class="btn primary" id="eUndoBtn">'+esc(t("Undo"))+'</button></div>';
+  document.body.appendChild(el);
+  const close=()=>{ clearTimeout(undoTimer); el.remove(); };
+  el.querySelector("#eUndoBtn").onclick=()=>{ close(); undo(); };
+  el.addEventListener("keydown",e=>{
+    if(e.key!=="Escape") return;
+    e.preventDefault(); e.stopPropagation(); close();
+  });
+  undoTimer=setTimeout(close,UNDO_MS);
+}
 let tt;
 const TOAST_MS=1700;
 // The one toast that asks for an action (mark.js) holds this long; every other, TOAST_MS.
@@ -1003,7 +1046,8 @@ export {
   uiLang,
   systemUiLang,
   t,
-  ask,
+  askSure,
+  offerUndo,
   tc,
   counted,
   catalogCountsLine,

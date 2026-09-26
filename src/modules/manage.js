@@ -16,7 +16,7 @@ import { drawIntentRail } from "./rail-list.js";
 import { normWhoList, WHO_BASE } from "./stock.js";
 import { nsSet } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { ask, t, catalogCountsLine, toast } from "./ui-lang.js";
+import { t, catalogCountsLine, toast } from "./ui-lang.js";
 import { isFavourite, isIntentFavourite, pack, whoOptions, savePack } from "./pack.js";
 import { removeCard, removeIntent, setIntentHidden, syncIntentOrder, toggleFavourite, toggleIntentFavourite } from "./favourites.js";
 import { primaryCatLabel } from "./card-intent.js";
@@ -829,7 +829,6 @@ function openManage(){
       e.preventDefault(); e.stopPropagation();
       const k=btn.getAttribute("data-delcat");
       if(cardCounts[k]){ toast("Move or delete cards in this category first"); return; }
-      if(!ask("Delete this empty category?\n\nA Reset restores it from the catalog.")) return;
       if(removeCategory(k)){ mgOpen.delete("cat:"+k); drawPills(); render(); openManage(); }
     };
   });

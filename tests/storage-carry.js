@@ -312,7 +312,7 @@ const t0 = Date.now();
 
   /* The Clear the user asked for, driven as they drive it: it deletes this namespace's keys,
      leaves the name hash's alone, and reloads. The layer must not walk back in. */
-  await q.evaluate(() => { clearLocalMemory(); }).catch(() => {});
+  await q.evaluate(() => { clearLocalMemory(); const y = document.getElementById("eSureYes"); if (y) y.click(); }).catch(() => {});
   await sleep(3500);
   const after2 = await readStore(q);
   const walkedBack = CARRIED_NAMES.filter(n => after2.store[ID_NS + n] != null);

@@ -1186,9 +1186,9 @@ const placeEc = (dir, from, as, minutesOld) => {
   await sleep(800);
   await s.p.evaluate(() => { const y = document.querySelector("#ecYes"); if (y) y.click(); });
   await sleep(6000);
-  await (await s.b.pages())[0].evaluate(() => { window.confirm = () => true; ejectCatalog(); });
+  await (await s.b.pages())[0].evaluate(() => { ejectCatalog(); const y = document.getElementById("eSureYes"); if (y) y.click(); });
   await sleep(6000);
-  await (await s.b.pages())[0].evaluate(() => { window.confirm = () => true; clearLocalMemory(); });
+  await (await s.b.pages())[0].evaluate(() => { clearLocalMemory(); const y = document.getElementById("eSureYes"); if (y) y.click(); });
   await sleep(6000);
   const markAfterWipes = deskKeys(udS1)["e~sampled"];
   await s.stop();
@@ -1758,7 +1758,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   /* And putting it down empties the desk WITHOUT asking on the way back, board 424\'s one
      exception: the Library is reopened over that restart already listing every file, so the
      dialog would be arguing with somebody who has just answered. */
-  await (await s.b.pages())[0].evaluate(() => { window.confirm = () => true; ejectCatalog(); });
+  await (await s.b.pages())[0].evaluate(() => { ejectCatalog(); const y = document.getElementById("eSureYes"); if (y) y.click(); });
   await sleep(7000);
   let ejPage = (await s.b.pages())[0];
   const afterEject = await ejPage.evaluate(SEEN);
@@ -1841,10 +1841,10 @@ const placeEc = (dir, from, as, minutesOld) => {
      beneath. Driven through importCatalogText, which is the reading half both import routes end
      in, over the bytes of a file that IS in the folder. That catalog is put down first: bringing in
      the very catalog that is loaded is answered in words and loads nothing, so the desk is emptied
-     and the same file comes in again through the import. `confirm` is stubbed for the eject,
-     because a native one blocks the main process and every page's channel. */
+     and the same file comes in again through the import. The eject's question is answered by
+     its own button. */
   await (await s.b.pages())[0].evaluate(() => { if (document.getElementById("mgCatList")) closeModal();
-    window.confirm = () => true; ejectCatalog(); });
+    ejectCatalog(); const y = document.getElementById("eSureYes"); if (y) y.click(); });
   await sleep(6000);
   const impRan = await (await s.b.pages())[0].evaluate(async () => {
     /* The offer over a loaded catalog is answered the way a person answers it. */ const acceptOffer = () => { const y = document.querySelector("#ecYes"); if (y) y.click(); return true; };
@@ -2064,9 +2064,9 @@ const placeEc = (dir, from, as, minutesOld) => {
      folder rather than being replaced by a dialog about one file in it, and the section says in
      words that nothing is loaded. */
   await (await s.b.pages())[0].evaluate(() => {
-    window.confirm = () => true;
     const b = document.querySelector("#mgCatList button[data-ec-eject]");
     if (b) b.click();
+    const y = document.getElementById("eSureYes"); if (y) y.click();
   });
   await sleep(8000);
   const afterEject2 = await (await s.b.pages())[0].evaluate(LIB_STATE);
@@ -2135,11 +2135,10 @@ const placeEc = (dir, from, as, minutesOld) => {
   const beforeWipe = await wp.evaluate(() => ({
     folder: window.lsGet("eCatalogFolder"), theme: window.lsGet("eTheme"),
     hover: window.lsGet("eNoteHover"), cards: document.querySelectorAll(".card").length }));
-  /* A native confirm under the host blocks the main process and every page's CDP channel, so
-     the stub goes in first and is READ BACK: a stub on a document that has since reloaded looks
-     exactly like a dead button. */
-  const stubbed = await wp.evaluate(() => { window.confirm = () => true; return window.confirm() === true; });
-  await wp.evaluate(() => { clearLocalMemory(); });
+  /* Clear stops at Etiuda's own question, answered here as a person answers it; the answer is
+     READ BACK, since a click on a question that never came looks exactly like a dead button. */
+  const stubbed = await wp.evaluate(() => { clearLocalMemory(); const y = document.getElementById("eSureYes");
+    if (!y) return false; y.click(); return true; });
   await sleep(9000);
   wp = (await s.b.pages())[0];
   const afterWipe = await wp.evaluate(() => ({

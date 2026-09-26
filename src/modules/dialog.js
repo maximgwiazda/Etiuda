@@ -6,7 +6,7 @@ import { mgOpen } from "./app-state.js";
 import { animateModalHeightFrom, animatePinnedHeight, mgAccordion, mgPinCard, mgReduceMotion } from "./motion.js";
 import { formatActionChord } from "./shortcuts.js";
 import { scStopCapture } from "./shortcuts-list.js";
-import { ask, t, tc, translateTree } from "./ui-lang.js";
+import { offerUndo, t, tc, translateTree } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { modalEl, modalCard, $ } from "./dom.js";
 
@@ -220,6 +220,25 @@ function edFormState(){
   return out.join("\u0001");
 }
 function edMarkClean(){ edBaseline=edFormState(); }
+/* The typing itself, to be put back: every field's value in document order, and which of the
+   segmented buttons carried .on. The same entry reopens in the same shape, so order is identity. */
+function edTyped(){
+  if(!modalCard) return null;
+  return { fields:Array.from(modalCard.querySelectorAll("input,textarea,select"))
+             .map(el=>(el.type==="checkbox"||el.type==="radio")?el.checked:String(el.value||"")),
+           segs:Array.from(modalCard.querySelectorAll("[data-v]")).map(el=>el.classList.contains("on")) };
+}
+function edRetype(was){
+  if(!was || !modalCard) return;
+  const segs=Array.from(modalCard.querySelectorAll("[data-v]"));
+  segs.forEach((el,i)=>{ if(was.segs[i] && !el.classList.contains("on")) el.click(); });
+  Array.from(modalCard.querySelectorAll("input,textarea,select")).forEach((el,i)=>{
+    if(i>=was.fields.length) return;
+    const v=was.fields[i];
+    if(el.type==="checkbox"||el.type==="radio"){ if(el.checked!==v){ el.checked=v; el.dispatchEvent(new Event("change",{bubbles:true})); } }
+    else if(String(el.value||"")!==v){ el.value=v; el.dispatchEvent(new Event("input",{bubbles:true})); }
+  });
+}
 function edDirty(){ return edFormState()!==edBaseline; }
 /* `list` is what is on screen, `cur` the entry being edited, `go` opens a neighbour. The
    ends disable rather than wrap, so a dead arrow is how you know you are at one. */
@@ -246,8 +265,10 @@ function edWireNav(list,cur,go){
   const step=d=>{
     const j=i+d;
     if(i<0||j<0||j>=list.length) return;
-    if(edDirty() && !ask(t("This card has unsaved changes. Leave it without saving?"))) return;
+    /* Leaving with changes unsaved leaves at once, and Undo goes back to them. */
+    const was=edDirty() ? edTyped() : null;
     edNavTo(()=>go(list[j]));
+    if(was) offerUndo("The changes to that entry were not saved.", ()=>edNavTo(()=>{ go(cur); edRetype(was); }));
   };
   const p=$("#edPrev"), n=$("#edNext");
   if(p){ p.disabled=(i<=0); p.onclick=()=>step(-1); }

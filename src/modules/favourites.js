@@ -1,8 +1,8 @@
 import { findCard } from "./card-model.js";
 import { intentCount } from "./content-model.js";
-import { pack, savePack } from "./pack.js";
+import { pack, savePack, packSnapshot, packRestore } from "./pack.js";
 import { drawIntentRail } from "./rail-list.js";
-import { ask, toast } from "./ui-lang.js";
+import { toast, offerUndo } from "./ui-lang.js";
 import { drawPills, saveTabSession, tabs } from "./tabs.js";
 import { intentIdAt, intentIdxFromId, intentIsCustom, intentOrder, isIntentHiddenIdx, saveIntentOrder, setIntentOrder } from "./intent-id.js";
 import { recountMacros } from "./card-counts.js";
@@ -76,9 +76,7 @@ function removeCard(id){
   if(!id) return false;
   const m=findCard(id);
   const isCustom=!!(m&&m._custom);
-  if(!ask(isCustom
-    ? "Delete this custom card?\n\nIt disappears from Etiuda and from anything you export. The catalog has no version to restore."
-    : "Delete this card?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.")) return false;
+  const was=packSnapshot();
   if(isCustom) pack.custom=(pack.custom||[]).filter(x=>x&&x.id!==id);
   else {
     if(!Array.isArray(pack.removed)) pack.removed=[];
@@ -90,7 +88,10 @@ function removeCard(id){
   pack.cardOrder=(pack.cardOrder||[]).filter(x=>x!==id);
   hooks.cardOrderTouched();
   savePack(); rebuildCards();
-  toast("Card deleted");
+  offerUndo("Card deleted", ()=>{
+    packRestore(was); hooks.cardOrderTouched(); rebuildCards(); hooks.render(); drawPills();
+    if(document.getElementById("mgCatList")) hooks.openManage();
+  });
   return true;
 }
 /* No in-place title rename here - a card has a full editor, so there is one rename
@@ -113,9 +114,9 @@ function removeIntent(id){
   if(!id) return false;
   const idx=intentIdxFromId(id);
   const isCustom=idx>=0 && intentIsCustom(idx);
-  if(!ask(isCustom
-    ? "Delete this custom intent?"
-    : "Delete this intent?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.")) return false;
+  /* Undo puts back what a custom's removal shifts as well: the order, the selection, every tab's. */
+  const was=packSnapshot(), wasOrder=intentOrder.slice(), wasIdxs=intentIdxs.slice(),
+        wasTabs=(Array.isArray(tabs)?tabs:[]).map(tb=>tb&&Array.isArray(tb.intentIdxs)?tb.intentIdxs.slice():null);
   if(isCustom){
     pack.intentCustom=(pack.intentCustom||[]).filter(x=>x&&x.id!==id);
     shiftIntentIdxAfterRemoval(idx);
@@ -129,7 +130,14 @@ function removeIntent(id){
   pack.intentFavourites=(pack.intentFavourites||[]).filter(x=>x!==id);
   savePack();
   refreshAfterIntents();
-  toast("Intent deleted");
+  offerUndo("Intent deleted", ()=>{
+    packRestore(was);
+    setIntentOrder(wasOrder); setIntentIdxs(wasIdxs);
+    (Array.isArray(tabs)?tabs:[]).forEach((tb,i)=>{ if(tb && wasTabs[i]) tb.intentIdxs=wasTabs[i]; });
+    saveTabSession(); saveIntentOrder();
+    refreshAfterIntents();
+    if(document.getElementById("mgCatList")) hooks.openManage();
+  });
   return true;
 }
 /** Hidden intents stay in the panel, greyed and at the bottom, and drop out of every search

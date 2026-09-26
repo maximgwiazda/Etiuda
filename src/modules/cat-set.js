@@ -1,9 +1,9 @@
 import { refreshCatRoles } from "./cat-roles.js";
 import { CATS } from "./content-model.js";
 import { CAT_LABELS_PL } from "./icons.js";
-import { BASE_CATS, pack, savePack } from "./pack.js";
+import { BASE_CATS, pack, savePack, packSnapshot, packRestore } from "./pack.js";
 import { nsSet } from "./storage.js";
-import { uiLang, toast } from "./ui-lang.js";
+import { uiLang, toast, offerUndo } from "./ui-lang.js";
 import { cardCounts, setCatOrder, catOrder, setCats, cats } from "./app-state.js";
 import { hooks } from "./hooks.js";
 
@@ -37,6 +37,7 @@ function applyCatsToGlobal(){
 function removeCategory(k){
   if(!k) return false;
   if(cardCounts[k]){ toast("Move or delete the cards in this category first"); return false; }
+  const was=packSnapshot(), wasOrder=catOrder.slice();
   if(pack.customCats && pack.customCats[k]) delete pack.customCats[k];
   else {
     if(!Array.isArray(pack.removedCats)) pack.removedCats=[];
@@ -54,7 +55,14 @@ function removeCategory(k){
   setCats(cats.filter(x=>x!==k));
   nsSet("CatOrder",JSON.stringify(catOrder));
   savePack(); hooks.rebuildCards();
-  toast("Category deleted");
+  offerUndo("Category deleted", ()=>{
+    packRestore(was);
+    setCatOrder(wasOrder);
+    nsSet("CatOrder",JSON.stringify(catOrder));
+    hooks.rebuildCards(); applyCatsToGlobal(); hooks.drawPillsCore(); hooks.render(); hooks.drawIntentRail();
+    // The Library shows the category again where it stands open.
+    if(document.getElementById("mgCatList")) hooks.openManage();
+  });
   return true;
 }
 

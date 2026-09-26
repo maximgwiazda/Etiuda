@@ -499,9 +499,20 @@ function savePack(){
   hooks.syncSampleMark();
   return ok;
 }
+/* THE PERSONAL LAYER AT A MOMENT, for an Undo: put back IN PLACE, so every module holding `pack`
+   sees the old one, and saved. */
+function packSnapshot(){ return JSON.stringify(pack); }
+function packRestore(was){
+  const p=JSON.parse(was);
+  Object.keys(pack).forEach(k=>{ delete pack[k]; });
+  Object.assign(pack,p);
+  savePack();
+}
 export {
   ePackEpoch,
   savePack,
+  packSnapshot,
+  packRestore,
   BASE_CATS, BASE_M, catalogCardId, rebuildBaseCards, pack, loadPack, adoptNameNsLayer,
   showPackMigrationWarning, syncSaveNotice, showDeskNotices, whoOptions, isFavourite, isIntentFavourite,
 };

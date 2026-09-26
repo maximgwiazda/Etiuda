@@ -2931,6 +2931,12 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .bub-ask code{font:12px var(--mono);color:var(--bub-ink);overflow-wrap:anywhere}
 .e-offer .ec-what{margin:0 0 8px;font-size:13.5px;color:var(--bub-ink)}
 .e-offer .ec-counts{font:12px var(--mono);color:var(--bub-dim);margin-top:2px}
+/* THE UNDO, one line and its button at the foot of the window, where a toast speaks. Centred by
+   its margins, since the family's entrance animates transform. */
+.e-undo{left:0;right:0;bottom:24px;margin:0 auto;width:fit-content;max-width:calc(100vw - 24px);
+  display:flex;align-items:center;gap:14px}
+.e-undo p{margin:0;color:var(--bub-ink)}
+.e-undo .tour-actions{margin:0;padding:0;border:0;flex:none}
 /* A field on the fill: paper, so what is typed reads as the reader's own. */
 .bub .e-name-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
   border:1px solid transparent;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans)}
@@ -4342,6 +4348,8 @@ What you type stays in this browser only.`;
     isIntentFavourite: () => isIntentFavourite,
     loadPack: () => loadPack,
     pack: () => pack,
+    packRestore: () => packRestore,
+    packSnapshot: () => packSnapshot,
     rebuildBaseCards: () => rebuildBaseCards,
     savePack: () => savePack,
     showDeskNotices: () => showDeskNotices,
@@ -4742,11 +4750,12 @@ What you type stays in this browser only.`;
     TOAST_HAND_MS: () => TOAST_HAND_MS,
     TOAST_MS: () => TOAST_MS,
     UI_LANGS: () => UI_LANGS,
-    ask: () => ask,
+    askSure: () => askSure,
     catalogAwaitingLine: () => catalogAwaitingLine,
     catalogCountsLine: () => catalogCountsLine,
     counted: () => counted,
     fileStamp: () => fileStamp,
+    offerUndo: () => offerUndo,
     systemUiLang: () => systemUiLang,
     t: () => t,
     tc: () => tc,
@@ -5004,6 +5013,15 @@ What you type stays in this browser only.`;
       const el = e.target;
       if (el && el.matches && el.matches(".mf input:not([type]),.mf input[type=text]")) markCut(el);
     }, { passive: true, capture: true }));
+  }
+
+  // src/modules/esc.js
+  var esc_exports = {};
+  __export(esc_exports, {
+    esc: () => esc
+  });
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   }
 
   // src/modules/ui-lang.js
@@ -5434,10 +5452,6 @@ What you type stays in this browser only.`;
     "Press keys…": "Naciśnij klawisze…",
     "Fixed keys": "Klawisze stałe",
     "The grammar the rest stands on: Esc is how key capture itself cancels, arrows and Enter keep their native meanings, and a held Ctrl is a hold, not a chord.": "Zasady, na których opiera się reszta: Esc anuluje samo przechwytywanie klawiszy, strzałki i Enter zachowują swoje zwykłe znaczenie, a przytrzymany Ctrl to przytrzymanie, nie skrót.",
-    "Delete this custom card?\n\nIt disappears from Etiuda and from anything you export. The catalog has no version to restore.": "Usunąć tę własną kartę?\n\nZniknie z Etiudy i z każdego eksportu. Katalog nie ma jej wersji do przywrócenia.",
-    "Delete this card?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.": "Usunąć tę kartę?\n\nZniknie z Etiudy i z każdego eksportu. Przycisk Przywróć odtworzy ją z katalogu.",
-    "Delete this custom intent?": "Usunąć tę własną intencję?",
-    "Delete this intent?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.": "Usunąć tę intencję?\n\nZniknie z Etiudy i z każdego eksportu. Przycisk Przywróć odtworzy ją z katalogu.",
     "Keep current": "Zachowaj obecny",
     "Load it": "Wczytaj",
     "Load catalog": "Wczytaj katalog",
@@ -5481,7 +5495,6 @@ What you type stays in this browser only.`;
     "In an editor: the language tab before this one": "W edytorze: poprzedni język",
     "In an editor: the language tab after this one": "W edytorze: następny język",
     "Switch the language being edited": "Przełącz edytowany język",
-    "This card has unsaved changes. Leave it without saving?": "Ta karta ma niezapisane zmiany. Opuścić ją bez zapisywania?",
     "Restored your cards and stars from an earlier build.": "Przywrócono własne karty i gwiazdki z wcześniejszej wersji.",
     "Your intent edits and stars are set aside: this catalog cannot say which intent each belongs to.": "Odłożono własne zmiany i gwiazdki przy intencjach: ten katalog nie wskazuje, której intencji dotyczą.",
     "Edited cards this catalog does not have are kept as your own: {CARDS}.": "Zmienione karty, których ten katalog nie ma, zostają jako własne: {CARDS}.",
@@ -5514,7 +5527,6 @@ What you type stays in this browser only.`;
     "Discard your changes and restore the catalog's category.": "Odrzuca zmiany i przywraca kategorię z katalogu.",
     "Nothing to discard - this matches the catalog.": "Wszystko jest zgodne z katalogiem.",
     "This is yours, so the catalog has no version to restore.": "To własna pozycja, więc katalog nie ma jej wersji do przywrócenia.",
-    "Discard your changes to this category?": "Odrzucić zmiany w tej kategorii?",
     "Category reset": "Przywrócono kategorię z katalogu",
     "Delete this empty category": "Usuń tę pustą kategorię",
     "Edit category": "Edytuj kategorię",
@@ -5557,9 +5569,6 @@ What you type stays in this browser only.`;
     "Discard your edits and restore the catalog wording.": "Odrzuca zmiany i przywraca treść z katalogu.",
     "Restore built-in quick facts": "Przywróć wbudowane szybkie fakty",
     "Delete this custom card permanently?": "Usunąć tę własną kartę na stałe?",
-    "Delete this empty category?\n\nA Reset restores it from the catalog.": "Usunąć tę pustą kategorię?\n\nPrzycisk Przywróć odtworzy ją z katalogu.",
-    "Reset all shortcuts to defaults?": "Przywrócić domyślne skróty klawiszowe?",
-    "Restore built-in quick facts? Your edited text will be discarded.": "Przywrócić wbudowane szybkie fakty? Zmieniony tekst zostanie odrzucony.",
     "{KEY} is fixed and keeps its own meaning": "{KEY} to klawisz stały i zachowuje swoje znaczenie",
     "Saved {KEY}": "Zapisano {KEY}",
     "{N} card": "{N} karta",
@@ -5588,6 +5597,8 @@ What you type stays in this browser only.`;
     "Built {FILE} with {MACROS} inside": "Zbudowano {FILE}: {MACROS}",
     "Exported {FILE} with {MACROS} in {CARDS}": "Wyeksportowano {FILE}: {MACROS}, {CARDS}",
     "Card deleted": "Usunięto kartę",
+    "Undo": "Cofnij",
+    "The changes to that entry were not saved.": "Zmiany w tamtym wpisie nie zostały zapisane.",
     "Custom card deleted": "Usunięto własną kartę",
     "Category added": "Dodano kategorię",
     "Category deleted": "Usunięto kategorię",
@@ -5853,8 +5864,61 @@ What you type stays in this browser only.`;
     const tab = UI_STRINGS[uiLang()];
     return tab && tab[en] != null ? tab[en] : en;
   }
-  function ask(m) {
-    return confirm(t(m));
+  function askSure(question, yes, act, danger) {
+    const parts2 = t(question).split("\n\n");
+    const wrap = document.createElement("div");
+    wrap.className = "modal";
+    wrap.id = "eSure";
+    wrap.innerHTML = '<div class="modal-bg"></div><div class="modal-card" role="alertdialog" aria-modal="true" aria-labelledby="eSureTitle"><h2 id="eSureTitle">' + esc(parts2[0]) + "</h2>" + parts2.slice(1).map((x) => '<p class="modal-sub">' + esc(x) + "</p>").join("") + '<div class="modal-actions"><button type="button" class="btn" id="eSureNo">' + esc(t("Cancel")) + '</button><button type="button" class="btn ' + (danger ? "danger" : "primary") + '" id="eSureYes">' + esc(t(yes)) + "</button></div></div>";
+    document.body.appendChild(wrap);
+    const close = (go) => {
+      document.removeEventListener("keydown", onKey, true);
+      wrap.remove();
+      if (go) act();
+    };
+    function onKey(e) {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      close(false);
+    }
+    document.addEventListener("keydown", onKey, true);
+    wrap.querySelector(".modal-bg").onclick = () => close(false);
+    wrap.querySelector("#eSureNo").onclick = () => close(false);
+    wrap.querySelector("#eSureYes").onclick = () => close(true);
+    setTimeout(() => {
+      const b = wrap.querySelector("#eSureNo");
+      if (b) b.focus();
+    }, 30);
+  }
+  var UNDO_MS = 1e4;
+  var undoTimer = 0;
+  function offerUndo(said, undo) {
+    const was = $("#eUndo");
+    if (was) was.remove();
+    clearTimeout(undoTimer);
+    const el = document.createElement("div");
+    el.className = "bub bub-ask e-undo";
+    el.id = "eUndo";
+    el.setAttribute("role", "status");
+    el.setAttribute("data-side", "none");
+    el.innerHTML = "<p>" + esc(t(said)) + '</p><div class="tour-actions"><button type="button" class="btn primary" id="eUndoBtn">' + esc(t("Undo")) + "</button></div>";
+    document.body.appendChild(el);
+    const close = () => {
+      clearTimeout(undoTimer);
+      el.remove();
+    };
+    el.querySelector("#eUndoBtn").onclick = () => {
+      close();
+      undo();
+    };
+    el.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      close();
+    });
+    undoTimer = setTimeout(close, UNDO_MS);
   }
   var tt;
   var TOAST_MS = 1700;
@@ -6470,6 +6534,17 @@ What you type stays in this browser only.`;
     }
     hooks.syncSampleMark();
     return ok;
+  }
+  function packSnapshot() {
+    return JSON.stringify(pack);
+  }
+  function packRestore(was) {
+    const p = JSON.parse(was);
+    Object.keys(pack).forEach((k) => {
+      delete pack[k];
+    });
+    Object.assign(pack, p);
+    savePack();
   }
 
   // src/modules/cat-roles.js
@@ -7525,15 +7600,6 @@ What you type stays in this browser only.`;
     topicAt: () => topicAt
   });
 
-  // src/modules/esc.js
-  var esc_exports = {};
-  __export(esc_exports, {
-    esc: () => esc
-  });
-  function esc(s) {
-    return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-  }
-
   // src/modules/card-intent.js
   var card_intent_exports = {};
   __export(card_intent_exports, {
@@ -8276,6 +8342,7 @@ What you type stays in this browser only.`;
       toast("Move or delete the cards in this category first");
       return false;
     }
+    const was = packSnapshot(), wasOrder = catOrder.slice();
     if (pack.customCats && pack.customCats[k]) delete pack.customCats[k];
     else {
       if (!Array.isArray(pack.removedCats)) pack.removedCats = [];
@@ -8291,7 +8358,17 @@ What you type stays in this browser only.`;
     nsSet("CatOrder", JSON.stringify(catOrder));
     savePack();
     hooks.rebuildCards();
-    toast("Category deleted");
+    offerUndo("Category deleted", () => {
+      packRestore(was);
+      setCatOrder(wasOrder);
+      nsSet("CatOrder", JSON.stringify(catOrder));
+      hooks.rebuildCards();
+      applyCatsToGlobal();
+      hooks.drawPillsCore();
+      hooks.render();
+      hooks.drawIntentRail();
+      if (document.getElementById("mgCatList")) hooks.openManage();
+    });
     return true;
   }
 
@@ -12315,6 +12392,33 @@ What you type stays in this browser only.`;
   function edMarkClean() {
     edBaseline = edFormState();
   }
+  function edTyped() {
+    if (!modalCard) return null;
+    return {
+      fields: Array.from(modalCard.querySelectorAll("input,textarea,select")).map((el) => el.type === "checkbox" || el.type === "radio" ? el.checked : String(el.value || "")),
+      segs: Array.from(modalCard.querySelectorAll("[data-v]")).map((el) => el.classList.contains("on"))
+    };
+  }
+  function edRetype(was) {
+    if (!was || !modalCard) return;
+    const segs = Array.from(modalCard.querySelectorAll("[data-v]"));
+    segs.forEach((el, i) => {
+      if (was.segs[i] && !el.classList.contains("on")) el.click();
+    });
+    Array.from(modalCard.querySelectorAll("input,textarea,select")).forEach((el, i) => {
+      if (i >= was.fields.length) return;
+      const v = was.fields[i];
+      if (el.type === "checkbox" || el.type === "radio") {
+        if (el.checked !== v) {
+          el.checked = v;
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      } else if (String(el.value || "") !== v) {
+        el.value = v;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+  }
   function edDirty() {
     return edFormState() !== edBaseline;
   }
@@ -12340,8 +12444,12 @@ What you type stays in this browser only.`;
     const step = (d) => {
       const j = i + d;
       if (i < 0 || j < 0 || j >= list2.length) return;
-      if (edDirty() && !ask(t("This card has unsaved changes. Leave it without saving?"))) return;
+      const was = edDirty() ? edTyped() : null;
       edNavTo(() => go(list2[j]));
+      if (was) offerUndo("The changes to that entry were not saved.", () => edNavTo(() => {
+        go(cur);
+        edRetype(was);
+      }));
     };
     const p = $("#edPrev"), n = $("#edNext");
     if (p) {
@@ -12504,7 +12612,9 @@ What you type stays in this browser only.`;
     return E_NS === "e" ? /^e[A-Z]/.test(k) : k.indexOf(E_NS) === 0;
   }
   function clearLocalMemory() {
-    if (!ask((eHost() ? t("Clear Etiuda's local memory on this computer?") : t("Clear Etiuda's local memory in this browser?")) + "\n\n" + t("Removes every personal card, intent, edit, hide, category rename and quick-facts edit,") + " " + t("and forgets your agent name, theme and layout choices.") + " " + t("Catalog files on disk are not touched.") + "\n\n" + t("The loaded catalog stays, and Etiuda restarts with it."))) return;
+    askSure((eHost() ? t("Clear Etiuda's local memory on this computer?") : t("Clear Etiuda's local memory in this browser?")) + "\n\n" + t("Removes every personal card, intent, edit, hide, category rename and quick-facts edit,") + " " + t("and forgets your agent name, theme and layout choices.") + " " + t("Catalog files on disk are not touched.") + "\n\n" + t("The loaded catalog stays, and Etiuda restarts with it."), "Clear local memory", clearNow, true);
+  }
+  function clearNow() {
     mgReopenAfterReload();
     eWipeLatch();
     clearTimeout(tabSaveTimer);
@@ -12537,7 +12647,9 @@ What you type stays in this browser only.`;
     return !!v;
   }
   function ejectCatalog() {
-    if (!ask((eHost() ? t("Eject the catalog?") : t("Eject the catalog from this browser?")) + "\n\n" + t("Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.") + "\n\n" + t("Your agent name, theme and layout choices stay, and catalog files on disk are not touched.") + "\n\n" + t("Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it."))) return;
+    askSure((eHost() ? t("Eject the catalog?") : t("Eject the catalog from this browser?")) + "\n\n" + t("Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.") + "\n\n" + t("Your agent name, theme and layout choices stay, and catalog files on disk are not touched.") + "\n\n" + t("Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it."), "Eject catalog", ejectNow, true);
+  }
+  function ejectNow() {
     pack.baseCards = null;
     savePack();
     mgReopenAfterReload();
@@ -12851,14 +12963,19 @@ What you type stays in this browser only.`;
     };
     if (resetBtn) resetBtn.onclick = (e) => {
       e.stopPropagation();
-      if (!ask("Restore built-in quick facts? Your edited text will be discarded.")) return;
+      const was = pack.facts;
       pack.facts = null;
       savePack();
       factsDraft = null;
       if (ta) ta.value = FACTS;
       renderFacts();
       setFactsEditMode(false);
-      toast("Built-in quick facts restored");
+      offerUndo("Built-in quick facts restored", () => {
+        pack.facts = was;
+        savePack();
+        if (ta) ta.value = was != null ? was : FACTS;
+        renderFacts();
+      });
     };
     if (ta) {
       ta.addEventListener("keydown", (e) => {
@@ -13858,10 +13975,15 @@ What you type stays in this browser only.`;
     });
     function wireMaintenance() {
       $("#mtShortcuts").onclick = () => {
-        if (!ask("Reset all shortcuts to defaults?")) return;
+        const was = lsGet("eShortcuts");
         lsDel("eShortcuts");
         loadShortcuts();
-        toast("Shortcuts reset");
+        offerUndo("Shortcuts reset", () => {
+          if (was != null) {
+            lsSet("eShortcuts", was);
+            loadShortcuts();
+          }
+        });
       };
       $("#mtClear").onclick = clearLocalMemory;
       $("#mtEject").onclick = ejectCatalog;
@@ -15020,7 +15142,7 @@ What you type stays in this browser only.`;
     if (!id) return false;
     const m = findCard(id);
     const isCustom = !!(m && m._custom);
-    if (!ask(isCustom ? "Delete this custom card?\n\nIt disappears from Etiuda and from anything you export. The catalog has no version to restore." : "Delete this card?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.")) return false;
+    const was = packSnapshot();
     if (isCustom) pack.custom = (pack.custom || []).filter((x) => x && x.id !== id);
     else {
       if (!Array.isArray(pack.removed)) pack.removed = [];
@@ -15033,7 +15155,14 @@ What you type stays in this browser only.`;
     hooks.cardOrderTouched();
     savePack();
     rebuildCards();
-    toast("Card deleted");
+    offerUndo("Card deleted", () => {
+      packRestore(was);
+      hooks.cardOrderTouched();
+      rebuildCards();
+      hooks.render();
+      drawPills();
+      if (document.getElementById("mgCatList")) hooks.openManage();
+    });
     return true;
   }
   function shiftIntentIdxAfterRemoval(at) {
@@ -15052,7 +15181,7 @@ What you type stays in this browser only.`;
     if (!id) return false;
     const idx = intentIdxFromId(id);
     const isCustom = idx >= 0 && intentIsCustom(idx);
-    if (!ask(isCustom ? "Delete this custom intent?" : "Delete this intent?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.")) return false;
+    const was = packSnapshot(), wasOrder = intentOrder.slice(), wasIdxs = intentIdxs.slice(), wasTabs = (Array.isArray(tabs) ? tabs : []).map((tb) => tb && Array.isArray(tb.intentIdxs) ? tb.intentIdxs.slice() : null);
     if (isCustom) {
       pack.intentCustom = (pack.intentCustom || []).filter((x) => x && x.id !== id);
       shiftIntentIdxAfterRemoval(idx);
@@ -15065,7 +15194,18 @@ What you type stays in this browser only.`;
     pack.intentFavourites = (pack.intentFavourites || []).filter((x) => x !== id);
     savePack();
     refreshAfterIntents();
-    toast("Intent deleted");
+    offerUndo("Intent deleted", () => {
+      packRestore(was);
+      setIntentOrder(wasOrder);
+      setIntentIdxs(wasIdxs);
+      (Array.isArray(tabs) ? tabs : []).forEach((tb, i) => {
+        if (tb && wasTabs[i]) tb.intentIdxs = wasTabs[i];
+      });
+      saveTabSession();
+      saveIntentOrder();
+      refreshAfterIntents();
+      if (document.getElementById("mgCatList")) hooks.openManage();
+    });
     return true;
   }
   function setIntentHidden(id, hidden) {
@@ -16968,15 +17108,15 @@ What you type stays in this browser only.`;
       syncRowShed();
       syncMoreBtn();
     };
-    const ask2 = () => {
+    const ask = () => {
       if (!raf) raf = requestAnimationFrame(run);
       if (!belt) belt = setTimeout(run, 200);
     };
-    window.scheduleHeaderSync = ask2;
-    addEventListener("resize", ask2);
-    document.addEventListener("visibilitychange", ask2);
+    window.scheduleHeaderSync = ask;
+    addEventListener("resize", ask);
+    document.addEventListener("visibilitychange", ask);
     if (typeof MutationObserver === "function") {
-      new MutationObserver(ask2).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+      new MutationObserver(ask).observe(document.body, { attributes: true, attributeFilter: ["class"] });
     }
     run();
   }
@@ -18052,16 +18192,22 @@ What you type stays in this browser only.`;
     $("#ceCancel").onclick = leave;
     const del = $("#ceDelete");
     if (del && canDelete) del.onclick = () => {
-      if (!ask(t("Delete this empty category?\n\nA Reset restores it from the catalog."))) return;
       if (removeCategory(k)) leave();
     };
     if ($("#ceReset")) $("#ceReset").onclick = () => {
-      if (!ask(t("Discard your changes to this category?"))) return;
+      const was = packSnapshot();
       resetCategory(k);
       drawPills();
       render();
       drawIntentRail();
-      toast("Category reset");
+      offerUndo("Category reset", () => {
+        packRestore(was);
+        applyCatsToGlobal();
+        drawPills();
+        render();
+        drawIntentRail();
+        if (document.getElementById("ceReset")) openCategoryEditor(k, fromPill);
+      });
       openCategoryEditor(k, fromPill);
     };
     $("#ceSave").onclick = () => {
@@ -19780,7 +19926,6 @@ What you type stays in this browser only.`;
             toast("Move or delete cards in this category first");
             return;
           }
-          if (!ask("Delete this empty category?\n\nA Reset restores it from the catalog.")) return;
           if (removeCategory(k)) {
             mgOpen.delete("cat:" + k);
             drawPills();
@@ -20023,74 +20168,75 @@ What you type stays in this browser only.`;
     if (row) row.classList.toggle("set-row-off", !auto);
   }
   function resetAllSettings() {
-    if (!ask("Put every setting back to its default? Your cards, edits, favourites and order are not touched.")) return;
-    [
-      "eTheme",
-      "eGlassOff",
-      "eMotionOff",
-      "eUiLang",
-      "ePillsLock",
-      "eRailLock",
-      "ePills",
-      "eRail",
-      "eShortcuts",
-      "eHdrPills",
-      "eNoteHover",
-      "eRailW",
-      "eFactsW",
-      "eFactsH",
-      "eCollapsed"
-    ].forEach((k) => {
+    askSure("Put every setting back to its default? Your cards, edits, favourites and order are not touched.", "Reset defaults", () => {
+      [
+        "eTheme",
+        "eGlassOff",
+        "eMotionOff",
+        "eUiLang",
+        "ePillsLock",
+        "eRailLock",
+        "ePills",
+        "eRail",
+        "eShortcuts",
+        "eHdrPills",
+        "eNoteHover",
+        "eRailW",
+        "eFactsW",
+        "eFactsH",
+        "eCollapsed"
+      ].forEach((k) => {
+        try {
+          lsDel(k);
+        } catch (e) {
+        }
+      });
       try {
-        lsDel(k);
+        applyDefaultRailWidth();
       } catch (e) {
       }
-    });
-    try {
-      applyDefaultRailWidth();
-    } catch (e) {
-    }
-    try {
-      applyDefaultFactsSize();
-    } catch (e) {
-    }
-    try {
-      expandAllGroups();
-    } catch (e) {
-    }
-    document.body.classList.add("note-hover");
-    try {
-      nsDel("Cols");
-      nsDel("Floor");
-    } catch (e) {
-    }
-    document.body.classList.remove("glass-off");
-    try {
-      loadShortcuts();
-    } catch (e) {
-    }
-    try {
-      applyTheme();
-    } catch (e) {
-    }
-    try {
-      applyUiLang();
-    } catch (e) {
-    }
-    try {
-      syncRailLayout();
-    } catch (e) {
-    }
-    try {
-      drawPills();
-    } catch (e) {
-    }
-    try {
-      render();
-    } catch (e) {
-    }
-    paintSettings();
-    toast("Settings reset");
+      try {
+        applyDefaultFactsSize();
+      } catch (e) {
+      }
+      try {
+        expandAllGroups();
+      } catch (e) {
+      }
+      document.body.classList.add("note-hover");
+      try {
+        nsDel("Cols");
+        nsDel("Floor");
+      } catch (e) {
+      }
+      document.body.classList.remove("glass-off");
+      try {
+        loadShortcuts();
+      } catch (e) {
+      }
+      try {
+        applyTheme();
+      } catch (e) {
+      }
+      try {
+        applyUiLang();
+      } catch (e) {
+      }
+      try {
+        syncRailLayout();
+      } catch (e) {
+      }
+      try {
+        drawPills();
+      } catch (e) {
+      }
+      try {
+        render();
+      } catch (e) {
+      }
+      paintSettings();
+      toast("Settings reset");
+    }, false);
   }
   function openSettings(section) {
     scStopCapture();

@@ -4,7 +4,7 @@ import { loadShortcuts } from "./shortcuts.js";
 import { scStopCapture, wireShortcutsList } from "./shortcuts-list.js";
 import { lsGet, lsSet, lsDel, nsSet, nsDel } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { UI_LANGS, uiLang, ask, t, toast, fileStamp } from "./ui-lang.js";
+import { UI_LANGS, uiLang, askSure, t, toast, fileStamp } from "./ui-lang.js";
 import { setUiLang } from "./repaint.js";
 import { applyDefaultRailWidth, railLocked, rebuildRailMQ, syncRailLayout, toggleRailLock } from "./rail-panel.js";
 import { esc } from "./esc.js";
@@ -245,7 +245,7 @@ function syncColFloorRow(){
    dismiss. Shortcut keys are cleared inline: a reset of its own would ask a second question,
    and two confirms for one decision teaches clicking through both. */
 function resetAllSettings(){
-  if(!ask("Put every setting back to its default? Your cards, edits, favourites and order are not touched.")) return;
+  askSure("Put every setting back to its default? Your cards, edits, favourites and order are not touched.", "Reset defaults", ()=>{
   /* A panel's size and a folded group are settings of the theme's kind. A name typed into a
      field, and the language a tab is being worked in, are not, and stay. Every key this
      clears is named HERE, where both a reader and tests/storage-keys.js look for the list;
@@ -267,6 +267,7 @@ function resetAllSettings(){
   try{ render(); }catch(e){}
   paintSettings();
   toast("Settings reset");
+  }, false);
 }
 function openSettings(section){
   scStopCapture();

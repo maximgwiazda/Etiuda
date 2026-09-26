@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 223 };
+const EXPECTED = { chrome: 226 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -2177,6 +2177,51 @@ const t0 = Date.now();
   check(r0.present && !r1.present && r1.n === r0.n - 1,
     "and off the desk (" + r0.n + " cards to " + r1.n + ")");
   clean(e, "the star, the hide and the removal");
+
+  /* NO NATIVE BOX IS RAISED (Maxim, 2026-09-26): an act that can be undone happens at once and a
+     bubble offers Undo, and one that cannot stops at Etiuda's own question until it is answered.
+     window.confirm is counted rather than answered, so a native box anywhere on the way reads as a
+     number. The card is deleted from its editor, as a person deletes one, and Undo puts back the
+     same card; a card left with its title changed but unsaved is gone from at once, and Undo
+     reopens it with the typing in place; Clear local memory stands at its question, and Cancel
+     leaves this page as it was, the marker on it proving nothing reloaded. */
+  e = since();
+  const undoLeg = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    let asked = 0; const real = window.confirm; window.confirm = () => { asked++; return true; };
+    const list = () => [...document.querySelectorAll("#list .card")];
+    const n0 = list().length, id = list()[3] ? list()[3].getAttribute("data-id") : null;
+    openCardEditor(id); await wait(700);
+    const del = document.getElementById("meDelete"); if (del) del.click(); await wait(700);
+    const n1 = list().length, bubble = !!document.getElementById("eUndo");
+    const u = document.getElementById("eUndoBtn"); if (u) u.click(); await wait(800);
+    const n2 = list().length, back = list().some(c => c.getAttribute("data-id") === id);
+    openCardEditor(id); await wait(700);
+    const title = document.querySelector('#modalCard input[id^="me"]');
+    if (title) { title.value = title.value + " probe"; title.dispatchEvent(new Event("input", { bubbles: true })); }
+    const typed = title ? title.value : null;
+    const nx = document.getElementById("edNext"); if (nx && !nx.disabled) nx.click(); await wait(700);
+    const moved = !!title && !document.body.contains(title);
+    const u2 = document.getElementById("eUndoBtn"); if (u2) u2.click(); await wait(900);
+    const again = document.querySelector('#modalCard input[id^="me"]');
+    const retyped = !!again && again.value === typed;
+    closeModal(); await wait(400);
+    window.__sureMark = 1;
+    clearLocalMemory(); await wait(400);
+    const stood = !!document.getElementById("eSure") && !!document.getElementById("eSureYes");
+    const no = document.getElementById("eSureNo"); if (no) no.click(); await wait(400);
+    const after = { gone: !document.getElementById("eSure"), mark: window.__sureMark === 1 };
+    window.confirm = real;
+    return { asked, n0, n1, n2, bubble, back, moved, retyped, stood, after };
+  });
+  check(undoLeg.asked === 0 && undoLeg.n1 === undoLeg.n0 - 1 && undoLeg.bubble && undoLeg.n2 === undoLeg.n0 && undoLeg.back
+        && undoLeg.moved && undoLeg.retyped,
+    "a card deleted from its editor goes at once with no box and Undo brings the same one back, and an entry left"
+    + " unsaved is left at once and Undo returns to it with the typing in place: " + JSON.stringify(undoLeg));
+  check(undoLeg.asked === 0 && undoLeg.stood && undoLeg.after.gone && undoLeg.after.mark,
+    "and Clear local memory stops at Etiuda's own question, which Cancel answers with nothing done: "
+    + JSON.stringify({ asked: undoLeg.asked, stood: undoLeg.stood, after: undoLeg.after }));
+  clean(e, "the undo and the question");
 
   /* BOARD 344. THE ROUTES THE DRIVES ABOVE WALKED AROUND.
 
