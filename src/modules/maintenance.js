@@ -10,6 +10,7 @@ import { lsGet, lsSet, lsDel, lsKeys, E_NS, E_LS_OK, E_SS_OK, eDeskFileShown, eS
 import { clearLocalMemory, ejectCatalog } from "./local-memory.js";
 import { loadShortcuts } from "./shortcuts.js";
 import { tabs } from "./tabs.js";
+import { mgSystemStill, M_STILL_Q } from "./motion.js";
 import { offerUndo, tc, fileStamp } from "./ui-lang.js";
 import { pack } from "./pack.js";
 import { RAIL_DOCK_MIN, railLocked, railMaxWidth } from "./rail-panel.js";
@@ -191,7 +192,7 @@ function mtReadings(){
      gets answered: the Animations switch can only ADD quiet, never remove it - see
      mgReduceMotion - so a system asking for it wins over a switch left on. */
   row("reduced motion",S(()=>{
-    const os=matchMedia("(prefers-reduced-motion:reduce)").matches;
+    const os=mgSystemStill();
     const off=lsGet("eMotionOff")==="1";
     if(os&&off) return "on (system, and Animations off)";
     if(os) return "on (system)";
@@ -264,7 +265,7 @@ function mtRefreshLive(){
    states that change with no resize at all - and the store, which another tab can write. */
 function wireMaintenanceWatch(){
 try{
-  ["(prefers-color-scheme: light)","(prefers-reduced-motion: reduce)","(forced-colors: active)"]
+  ["(prefers-color-scheme: light)",M_STILL_Q,"(forced-colors: active)"]
     .forEach(q=>{
       const m=matchMedia(q);
       if(m.addEventListener) m.addEventListener("change",mtRefreshLive);

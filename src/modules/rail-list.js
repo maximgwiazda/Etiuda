@@ -3,7 +3,7 @@ import { intentCount } from "./content-model.js";
 import { scheduleCutScan } from "./cut-text.js";
 import { ICON_EYE_OPEN, ICON_EYE_SHUT, ICON_EDIT, ICON_STAR_ON, ICON_STAR_OFF } from "./icons.js";
 import { intentPickedLine, intentRows, fill } from "./intent-text.js";
-import { mgReduceMotion, E_EASE } from "./motion.js";
+import { mgReduceMotion, E_EASE, M_MS } from "./motion.js";
 import { scheduleTabSave } from "./tabs.js";
 import { t, toast } from "./ui-lang.js";
 import { foldDiacritics, splitWords, wordMatchesTerm } from "./words.js";
@@ -49,7 +49,7 @@ function animateRailReorder(mutate){
      without a computed start value Firefox shows the end state. Same-task attach also
      avoids the background-tab rAF pause. */
   void box.offsetHeight;
-  moved.forEach(p=>{ p.style.transition="transform .18s "+E_EASE; p.style.transform=""; });
+  moved.forEach(p=>{ p.style.transition="transform var(--m-move) "+E_EASE; p.style.transform=""; });
   setTimeout(()=>moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; p.style.willChange=""; }),200);
 }
 function moveIntent(from,to){
@@ -587,7 +587,7 @@ function flipRail(before,keep){
   });
   if(!moved.length && !entered.length) return;
   const far=Math.max.apply(null,dys.map(Math.abs));
-  const dur=far>limit ? Math.min(.30, .18+far/6000) : .18;
+  const dur=far>limit ? Math.min(.30, M_MS.move/1000+far/6000) : M_MS.move/1000;
   /* Commit the invert before attaching the transition - see the note at flipPills():
      without a computed start value Firefox shows the end state. Same-task attach also
      avoids the background-tab rAF pause. */

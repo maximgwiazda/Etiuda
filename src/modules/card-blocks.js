@@ -47,7 +47,7 @@ function animateTxtReorder(mid, fromVi, toVi, dragging){
      avoids the background-tab rAF pause. */
   void list.offsetHeight;
   moved.forEach(p=>{
-    p.style.transition="transform .18s "+E_EASE;
+    p.style.transition="transform var(--m-move) "+E_EASE;
     p.style.transform="";
     setTimeout(()=>moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; p.style.willChange=""; }),200);
   });

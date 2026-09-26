@@ -1,5 +1,5 @@
 import { lsGet, lsSet, lsDel } from "./storage.js";
-import { mgReduceMotion, E_EASE } from "./motion.js";
+import { mgReduceMotion, E_EASE, M_MS } from "./motion.js";
 import { toast } from "./ui-lang.js";
 import { $, pills } from "./dom.js";
 import { hooks } from "./hooks.js";
@@ -23,7 +23,7 @@ let pillsBoxTimer=null;
    wrong height. The transition is NOT in the sheet: a standing one would animate every
    step of a resize drag. */
 function animatePillsBox(mutate,ms){
-  ms=ms||180;
+  ms=ms||M_MS.move;
   const slot=pillsSlot();
   if(!slot || mgReduceMotion()){
     // No ride, but the header still changed height and the fixed panel is pinned to it.

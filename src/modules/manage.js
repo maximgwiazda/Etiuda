@@ -244,7 +244,7 @@ function mgRefreshAround(mutate){
      avoids the background-tab rAF pause. */
   void modalCard.offsetHeight;
   const clear=()=>moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; });
-  moved.forEach(el=>{ el.style.transition="transform .18s "+E_EASE; el.style.transform=""; });
+  moved.forEach(el=>{ el.style.transition="transform var(--m-move) "+E_EASE; el.style.transform=""; });
   setTimeout(clear,240);
 }
 function mgFlip(container,mutate){
@@ -267,7 +267,7 @@ function mgFlip(container,mutate){
      without a computed start value Firefox shows the end state. Same-task attach also
      avoids the background-tab rAF pause. */
   void container.offsetHeight;
-  moved.forEach(el=>{ el.style.transition="transform .18s "+E_EASE; el.style.transform=""; });
+  moved.forEach(el=>{ el.style.transition="transform var(--m-move) "+E_EASE; el.style.transform=""; });
   setTimeout(clear,200);
 }
 function mgDomMove(fromEl,toEl){

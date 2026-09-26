@@ -1,5 +1,5 @@
 import { findCard } from "./card-model.js";
-import { mgReduceMotion, E_EASE, E_SPRING, E_SPRING_MS, CARD_MOVE_MAX } from "./motion.js";
+import { mgReduceMotion, E_EASE, E_SPRING, E_SPRING_MS, M_MS, CARD_MOVE_MAX } from "./motion.js";
 import { nsSet } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { intentCats, pillBand } from "./cat-relevance.js";
@@ -98,7 +98,7 @@ function flipPills(before){
     wEls.forEach(p=>{ p.style.width=""; delete p.dataset._eW; });
     wEls.length=0;
   }
-  const T=".18s "+E_EASE;
+  const T="var(--m-move) "+E_EASE;
   moved.forEach(p=>{ p.style.transition="transform "+T+(wEls.indexOf(p)>=0?", width "+T:""); p.style.transform=""; });
   wEls.forEach(p=>{ if(moved.indexOf(p)<0) p.style.transition="width "+T; p.style.width=p.dataset._eW+"px"; });
   setTimeout(()=>{
@@ -184,7 +184,7 @@ function flipCards(before){
   const clear=()=>{ moved.forEach(c=>{ c.style.transition=""; c.style.transform=""; c.style.willChange=""; }); release(); };
   // Commit the invert before attaching the transition - see the note in flipPills().
   void list.offsetHeight;
-  moved.forEach(c=>{ c.style.transition="transform .22s "+E_EASE; c.style.transform=""; });
+  moved.forEach(c=>{ c.style.transition="transform var(--m-move) "+E_EASE; c.style.transform=""; });
   setTimeout(clear,280);
 }
 /* THE SETTLE'S GLIDE: when a search settles, the cards on screen travel to their new places on
@@ -229,7 +229,7 @@ function glideSettle(before){
   plan.forEach(([el,dx,dy])=>{
     eSettleRuns.push(dx==null
       ? el.animate([{opacity:0,transform:"translateY(8px) scale(.985)"},{opacity:1,transform:"none"}],
-          {duration:160,easing:E_EASE})
+          {duration:M_MS.surface,easing:E_EASE})
       : el.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
           {duration:E_SPRING_MS,easing:E_SPRING_OK?E_SPRING:E_EASE}));
   });

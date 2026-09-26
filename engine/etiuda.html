@@ -54,9 +54,12 @@
   }
   /* Layer 0: the header's shape before the app script runs. The tab row is CSS; the category
      bar's height is only known once drawn, so the last measurement is kept per window width and
-     reserved here, ahead of the first paint. syncPillsCollapse and syncLayoutPrefs hand both back. */
+     reserved here, ahead of the first paint. syncPillsCollapse and syncLayoutPrefs hand both back.
+     e-still is set from what this script can read; wireStill answers at boot, desk file and all. */
   try{
     var root=document.documentElement;
+    if(localStorage.getItem("eMotionOff")==="1" || matchMedia("(prefers-reduced-motion: reduce)").matches)
+      root.classList.add("e-still");
     if(localStorage.getItem("ePills")==="0") root.classList.add("e-pills-off");
     else{
       var shape=/^(\d+)x(\d+(?:\.\d+)?)$/.exec(localStorage.getItem("eHdrPills")||"");
@@ -501,11 +504,8 @@ header{position:relative;z-index:50;background:var(--header-bg,var(--panel));
      needs the first, and the second is asserted only once content has scrolled under it - a
      constant shadow claims elevation over an empty page. */
   box-shadow:none;
-  transition:box-shadow .2s ease}
+  transition:box-shadow var(--m-tone) ease}
 body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,42,.09))}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){ header{transition:none!important} }
-}@layer base{
 /* Top toolbar: left flexes/shrinks; right tools never wrap to a second row */
 /* flex-end + shelf line: folder tabs sit on the border and open into the row below */
 /* THE BAND: an underlay pseudo-element bleeds the blue through the header's padding, and
@@ -653,29 +653,19 @@ body.e-backdrop .row::before{
 .ic-x{width:14px;height:14px;display:block;fill:none;stroke:currentColor;stroke-width:1.6;
   stroke-linecap:round;stroke-linejoin:round}
 /* One clockwise turn per click. The class rides the BUTTON; reduced motion stills it. */
-.e-spin-pick .ic-x{animation:e-pick-spin .45s cubic-bezier(.2,.7,.3,1)}
+.e-spin-pick .ic-x{animation:e-pick-spin var(--m-celebrate) var(--m-ease)}
 @keyframes e-pick-spin{to{transform:rotate(360deg)}}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){ .e-spin-pick .ic-x{animation:none} }
-}@layer base{
 /* Switching themes turns the half-light half-dark disc over: each press rolls it 180deg
    further, accumulating, so presses keep rolling rather than snapping back. The click
    handler owns the angle; reduced motion skips the increment there. */
-#theme svg{transition:transform .3s cubic-bezier(.2,.7,.3,1)}
+#theme svg{transition:transform var(--m-roll) var(--m-ease)}
 /* Only the SHACKLE moves - the first path in both lock drawings. Translating the whole svg
    read as the icon shifting in its button. The class rides the button, the animation the
    fresh svg syncRailPinBtn swapped in; boot's first sync is not a toggle and stays still. */
-.rail-lock.e-lock-shut svg path:first-of-type{animation:e-lock-shut .16s cubic-bezier(.2,.7,.3,1)}
-.rail-lock.e-lock-open svg path:first-of-type{animation:e-lock-open .16s cubic-bezier(.2,.7,.3,1)}
+.rail-lock.e-lock-shut svg path:first-of-type{animation:e-lock-shut var(--m-move) var(--m-ease)}
+.rail-lock.e-lock-open svg path:first-of-type{animation:e-lock-open var(--m-move) var(--m-ease)}
 @keyframes e-lock-shut{from{transform:translateY(-1.4px)}60%{transform:translateY(.5px)}to{transform:none}}
 @keyframes e-lock-open{from{transform:translateY(1px)}to{transform:none}}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){
-  #theme svg{transition:none}
-  .rail-lock.e-lock-shut svg path:first-of-type,
-  .rail-lock.e-lock-open svg path:first-of-type{animation:none}
-}
-}@layer base{
 /* One stroke weight across the whole drawn set - sizes vary per surface, the weight is
    what makes them one family. ic-fill is for the star, the one icon with a solid state,
    so its two states are the same path and cannot drift. */
@@ -778,7 +768,7 @@ span[data-icon]{line-height:0}
    selected or dragged tab suppresses its own and its follower's, so a face is never
    flanked by seams. The first tab starts the strip and needs no divider. */
 .tab::before{content:"";position:absolute;left:0;top:50%;height:16px;width:1px;
-  transform:translateY(-50%);background:var(--tab-edge);transition:opacity .1s}
+  transform:translateY(-50%);background:var(--tab-edge);transition:opacity var(--m-tone)}
 .tab:first-child::before,.tab:hover::before,.tab:focus-visible::before,
 .tab.on::before,.tab.dragging::before,
 .tab:hover+.tab::before,.tab:focus-visible+.tab::before,.tab.on+.tab::before,.tab.dragging+.tab::before{opacity:0}
@@ -878,7 +868,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    the scroll arrows stand between the two - so the divider goes entirely rather than
    drifting off to mark the gap after an arrow. */
 .tab-add::before{content:"";position:absolute;left:-3px;top:50%;height:16px;width:1px;
-  transform:translateY(-50%);background:var(--tab-edge);transition:opacity .1s}
+  transform:translateY(-50%);background:var(--tab-edge);transition:opacity var(--m-tone)}
 .tabs-wrap.tabs-over .tab-add::before,
 .tabs-wrap:has(.tab:last-child:hover) .tab-add::before,
 .tabs-wrap:has(.tab:last-child:focus-visible) .tab-add::before,
@@ -936,7 +926,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    halves must BE halves - "EN" renders a couple of pixels wider than "PL" and the thumb would
    land visibly short on one side. Two letters always fit in 38. */
 .seg button{width:38px;padding:4px 0;text-align:center;border:0;background:transparent;color:var(--dim);
-  font:600 12px var(--sans);cursor:default;letter-spacing:.4px;transition:color .18s}
+  font:600 12px var(--sans);cursor:default;letter-spacing:.4px}
 .seg button+button{border-left:1px solid transparent}
 .seg button:hover,.seg button:focus-visible{color:var(--accent)}
 .seg button.on{background:var(--accent);color:#fff}
@@ -947,7 +937,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .seg{position:relative}
 .seg::before{content:"";position:absolute;top:0;bottom:0;left:0;width:50%;
   background:var(--accent);transform:translateX(0);
-  transition:transform .18s cubic-bezier(.2,.7,.3,1), background-color .18s ease}
+  transition:transform var(--m-move) var(--m-ease), background-color var(--m-move) ease}
 .seg[data-n="1"]::before{width:100%}
 .seg[data-n="3"]::before{width:33.3333%}
 .seg[data-n="4"]::before{width:25%}
@@ -973,11 +963,6 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    rather than two swapping backgrounds. z-index keeps the letters above the pill. */
 .seg button{position:relative;z-index:1}
 .seg button.on{background:transparent}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){
-  .seg::before{transition:none}
-}
-}@layer base{
 
 .btn{padding:7px 11px;border:1px solid transparent;border-radius:var(--radius-sm);
   background:color-mix(in srgb,var(--ink) 4%,transparent);
@@ -1208,14 +1193,10 @@ body.role-waits #roleDrum{display:none}
 #roleDrum .rd-cur.rd-empty{color:var(--dim);font:italic 400 12.5px var(--sans)}
 #roleDrum .rd-prev{top:-1px;font:9px var(--sans);opacity:.35}
 #roleDrum .rd-next{bottom:-1px;font:9px var(--sans);opacity:.35}
-#roleDrum .rd-track.rd-up{animation:rd-up .15s ease}
-#roleDrum .rd-track.rd-down{animation:rd-down .15s ease}
+#roleDrum .rd-track.rd-up{animation:rd-up var(--m-move) var(--m-ease)}
+#roleDrum .rd-track.rd-down{animation:rd-down var(--m-move) var(--m-ease)}
 @keyframes rd-up{from{transform:translateY(7px)}to{transform:none}}
 @keyframes rd-down{from{transform:translateY(-7px)}to{transform:none}}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){
-  #roleDrum .rd-track.rd-up,#roleDrum .rd-track.rd-down{animation:none}}
-}@layer base{
 /* The row's select and the Settings screen's are the same control, so they are one rule. The
    selector was `.fill select` alone until Settings needed a language list; widened rather than
    copied, for the reason the rest of this release keeps repeating. A text field on that screen
@@ -1267,14 +1248,14 @@ html.e-pills-off .pills-slot{display:none}
      ALPHA interpolates: the cut and the shadow fade in place rather than growing out of
      nothing under a box that is already moving. */
   box-shadow:var(--bevel-off),var(--shadow-pop-off);
-  /* .12s, the dropdown tier, not the .18s used for the panel and the card column. This bar
+  /* The reveal tier, not the move tier the panel and the card column use. This bar
      opens on HOVER: the pointer is already on its way to a pill, so the reveal has to be over
      before the hand arrives. The slower tier is for things you deliberately toggle. */
-  transition:max-height .12s cubic-bezier(.2,.7,.3,1),
-             padding-bottom .12s cubic-bezier(.2,.7,.3,1),
-             border-color .12s cubic-bezier(.2,.7,.3,1),
-             background-color .12s cubic-bezier(.2,.7,.3,1),
-             box-shadow .12s cubic-bezier(.2,.7,.3,1)}
+  transition:max-height var(--m-reveal) var(--m-ease),
+             padding-bottom var(--m-reveal) var(--m-ease),
+             border-color var(--m-reveal) var(--m-ease),
+             background-color var(--m-reveal) var(--m-ease),
+             box-shadow var(--m-reveal) var(--m-ease)}
 body.pills-lines-expand .pills-slot.pills-overflow .pills,
 .pills-slot.pills-overflow:hover .pills,
 .pills-slot.pills-overflow.pills-navpeek .pills,
@@ -1293,10 +1274,6 @@ body.pills-lines-expand .pills-slot.pills-overflow .pills,
 /* Measured, not animated: --pills-full is read with the open styles applied, and the transition
    must not be running while that happens. */
 .pills-slot.pills-measuring .pills{transition:none!important}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){
-  .pills-slot.pills-overflow .pills{transition:none!important} }
-}@layer base{
 /* Tonal, not outlined: an idle pill is a soft fill with no border of its own, so the coloured
    hint rings below are the only outlines in the row and read from across the desk. */
 /* Flex, not inline: a 21px inline-block dot stretches the line box, and the wrap math
@@ -1347,9 +1324,6 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 .pill.on.hint{background:var(--accent);border-color:var(--accent);color:#fff;
   box-shadow:0 0 0 2px var(--accent-soft);font-weight:650}
 .pill.over{border-color:var(--accent);border-style:dashed}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){ .pill{transition:none!important} }
-}@layer base{
 /* 8px = the old 4px margin plus the ~4px space glyph the flex pill no longer renders. */
 .pill b{font-weight:600;opacity:.65;margin-left:8px;font-size:11px}
 
@@ -1401,8 +1375,8 @@ main{display:flex;flex-direction:column;flex:1 1 auto}
   /* One curve for both directions - the file's standard settle. `ease` decelerates into
      its end, and at low opacity going out the panel appears to linger; this curve is fast
      off the mark. */
-  transition:opacity .18s cubic-bezier(.2,.7,.3,1),transform .18s cubic-bezier(.2,.7,.3,1),
-             visibility 0s linear .18s;
+  transition:opacity var(--m-move) var(--m-ease),transform var(--m-move) var(--m-ease),
+             visibility 0s linear var(--m-move);
   /* EVERY shared box property lives here, not in the state blocks: dropping a state class
      may change only opacity, transform and visibility. A state block carries only what
      genuinely differs - x, width, z-index, shadow. */
@@ -1414,9 +1388,6 @@ main{display:flex;flex-direction:column;flex:1 1 auto}
   -webkit-backdrop-filter:var(--glass-mid-filter);
   backdrop-filter:var(--glass-mid-filter);
   box-shadow:var(--bevel),var(--card-lift)}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){ #intentRail{transition:none!important} }
-}@layer base{
 /* Width handle on the RIGHT EDGE, not a corner - the corner sits under the hand reaching
    for the last intent. It straddles the edge 3px either side, which makes a 1px border
    grabbable. Gone entirely when locked, not disabled: absent reads as locked, inert reads
@@ -1424,13 +1395,10 @@ main{display:flex;flex-direction:column;flex:1 1 auto}
 .rail-resize{position:absolute;top:0;right:-3px;width:7px;height:100%;
   cursor:ew-resize;z-index:2;touch-action:none}
 .rail-resize::after{content:"";position:absolute;top:50%;right:3px;width:1px;height:26px;
-  transform:translateY(-50%);background:var(--line-strong);opacity:0;transition:opacity .12s}
+  transform:translateY(-50%);background:var(--line-strong);opacity:0;transition:opacity var(--m-tone)}
 #intentRail:hover .rail-resize::after{opacity:.75}
 #intentRail.rail-fixed .rail-resize{display:none}
 html.raildrag,html.raildrag *{cursor:ew-resize!important;user-select:none!important}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){ .rail-resize::after{transition:none!important} }
-}@layer base{
 /* Never paint the panel before its geometry exists - see syncRailGeometry(). Additive, so both
    visible states stay exactly as written; this simply outranks them until the flag is set. */
 body:not(.rail-ready) #intentRail{opacity:0!important;visibility:hidden!important;transition:none!important}
@@ -1490,27 +1458,20 @@ main{max-width:none;margin:16px 0 0;padding:0}
 .list-sep .sep-fold:hover,.list-sep .sep-fold:focus-visible{color:var(--accent)}
 /* Right chevron pointing down when open, and back to the right when shut - the same rotation
    the settings folds use, so it reads as one gesture rather than a new one. */
-.list-sep .sep-fold svg{transform:rotate(90deg);transition:transform .16s ease}
+.list-sep .sep-fold svg{transform:rotate(90deg);transition:transform var(--m-move) var(--m-ease)}
 .list-sep .sep-fold.shut svg{transform:rotate(0deg)}
 /* The render after a fold replaces the chevron mid-turn, so a transition never played
    across a toggle. The handler hands the FRESH button an animation starting from the old
    state - each keyframe names only its from; the resting pose is the rules above. */
-.list-sep .sep-fold.e-turn-shut svg{animation:e-fold-turn-shut .16s ease}
-.list-sep .sep-fold.e-turn-open svg{animation:e-fold-turn-open .16s ease}
+.list-sep .sep-fold.e-turn-shut svg{animation:e-fold-turn-shut var(--m-move) var(--m-ease)}
+.list-sep .sep-fold.e-turn-open svg{animation:e-fold-turn-open var(--m-move) var(--m-ease)}
 @keyframes e-fold-turn-shut{from{transform:rotate(90deg)}}
 @keyframes e-fold-turn-open{from{transform:rotate(0deg)}}
 /* Cards an unfold reveals rise in from their heading; the cards below them glide through
    flipCardsAround at the same time. A collapse plays no exit - the gap closing behind the
    group is this list's standing language for departure. */
-.card.e-unfolding{animation:e-unfold .18s cubic-bezier(.2,.7,.3,1)}
+.card.e-unfolding{animation:e-unfold var(--m-move) var(--m-ease)}
 @keyframes e-unfold{from{opacity:0;transform:translateY(-6px)}}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){
-  .list-sep .sep-fold svg{transition:none}
-  .list-sep .sep-fold.e-turn-shut svg,.list-sep .sep-fold.e-turn-open svg,
-  .card.e-unfolding{animation:none}
-}
-}@layer base{
 
 /* ---- Card columns: each column is its own stack, groups DEALT into them - first
    category left, second right, third left. Not a grid of cards and not multi-column - see
@@ -1688,13 +1649,8 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    this starts on the near side of the click - see the note at the eye pop. */
 @keyframes eLangInNext{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
 @keyframes eLangInPrev{from{opacity:0;transform:translateX(-16px)}to{opacity:1;transform:none}}
-.lang-pane.lang-in-next{animation:eLangInNext .19s cubic-bezier(.2,.7,.3,1) both}
-.lang-pane.lang-in-prev{animation:eLangInPrev .19s cubic-bezier(.2,.7,.3,1) both}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){
-  .lang-pane.lang-in-next,.lang-pane.lang-in-prev{animation:none}
-}
-}@layer base{
+.lang-pane.lang-in-next{animation:eLangInNext var(--m-move) var(--m-ease) both}
+.lang-pane.lang-in-prev{animation:eLangInPrev var(--m-move) var(--m-ease) both}
 .mf-shared{margin-top:2px}
 /* A hair of margin, not a header's worth: the scrollport now BEGINS under the header, so
    what scrollIntoView aligns to is already the right line. */
@@ -1930,7 +1886,7 @@ code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-d
 /* A drawn pin inherits currentColor like every other icon - no grayscale filter, which
    existed only to tame the colour-emoji pin this replaced. Quiet until you reach for it:
    dim at rest, full on hover or while actually holding the panel open. */
-.rail-lock{line-height:1;padding:3px 5px;opacity:.55;transition:opacity .12s,color .12s}
+.rail-lock{line-height:1;padding:3px 5px;opacity:.55;transition:opacity var(--m-tone),color var(--m-tone)}
 .rail-lock:hover,.rail-lock:focus-visible{opacity:1}
 /* No chip behind this one: chips exist where the icon cannot change - this icon IS the
    state (open vs closed shackle), and a box would say it twice. Colour and full opacity
@@ -2073,7 +2029,7 @@ html.raildrag #intentRailList{margin-top:0}
    (hover:none) below, because a desk with no pointer has no way to ask for them at all and
    would simply lose the pencil, the eye and the star. */
 @media (hover:hover){
-  .chead .cacts{opacity:0;transition:opacity .1s ease}
+  .chead .cacts{opacity:0;transition:opacity var(--m-tone) ease}
   .card:hover>.chead .cacts,.card:focus-within>.chead .cacts{opacity:1}
 }
 /* A tour has no pointer, so a step showcasing the star, the eye or the pencil was pointing at
@@ -2143,7 +2099,7 @@ html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!importan
   white-space:nowrap}
 #toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);background:var(--ok);
   color:#fff;padding:10px 18px;border-radius:999px;font-size:14px;font-weight:600;
-  opacity:0;pointer-events:none;transition:.18s;z-index:300;max-width:88vw;
+  opacity:0;pointer-events:none;transition:var(--m-surface);z-index:300;max-width:88vw;
   overflow:hidden;white-space:nowrap}
 #toast.show{opacity:1;transform:translate(-50%,0)}
 /* CUT TEXT FADES, IT DOES NOT END IN DOTS. An ellipsis is a character: it arrives in the
@@ -2205,25 +2161,15 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
    hidden never changes and the card element is not replaced. */
 @keyframes eModalBgIn{from{opacity:0}to{opacity:1}}
 @keyframes eModalCardIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
-.modal:not([hidden]) .modal-bg{animation:eModalBgIn .16s ease both}
-.modal:not([hidden]) .modal-card{animation:eModalCardIn .18s cubic-bezier(.2,.7,.3,1) both}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){
-  .modal:not([hidden]) .modal-bg,.modal:not([hidden]) .modal-card,.bub-ask{animation:none!important}
-}
+.modal:not([hidden]) .modal-bg{animation:eModalBgIn var(--m-scrim) ease both}
+.modal:not([hidden]) .modal-card{animation:eModalCardIn var(--m-surface) var(--m-ease) both}
 /* One treatment for everything that hangs below an anchor and toggles with hidden - a
-   short drop, keyframed for the display:none reason above. .12s: these are frequent and
-   lightweight. IN only - a list closing on the item you picked must feel instant.
+   short drop, keyframed for the display:none reason above. The reveal tier: these are
+   frequent and lightweight. IN only - a list closing on the item you picked must feel instant.
    Rebuilding while open does not replay it. */
 @keyframes eDropIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
-}@layer base{
 .menu:not([hidden]),.facts-panel:not([hidden]){
-  animation:eDropIn .12s cubic-bezier(.2,.7,.3,1) both}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){
-  .menu:not([hidden]),.facts-panel:not([hidden]){animation:none!important}
-}
-}@layer base{
+  animation:eDropIn var(--m-reveal) var(--m-ease) both}
 /* The scrim blurs the workspace behind it rather than merely darkening it - the dialog reads
    as a layer above the page, and the cards stay recognisable without competing for the eye. */
 .modal-bg{position:absolute;inset:0;background:rgba(8,12,20,.4);
@@ -2258,18 +2204,13 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
    long name is cut rather than pushing the arrows off the row. */
 .modal-card h2 .modal-name{font-weight:400;color:var(--dim);margin-left:.7ch;
   display:inline-block;min-width:0;overflow:hidden;white-space:nowrap}
-.modal-card h2 .modal-name[data-ed]{animation:edFlip 260ms cubic-bezier(.3,.8,.3,1) both}
+.modal-card h2 .modal-name[data-ed]{animation:edFlip var(--m-move) var(--m-ease) both}
 @keyframes edFlip{
   0%{transform:rotateX(0);opacity:1}
   45%{transform:rotateX(72deg);opacity:.25}
   55%{transform:rotateX(-72deg);opacity:.25}
   100%{transform:rotateX(0);opacity:1}
 }
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){
-  .modal-card h2 .modal-name[data-ed]{animation:none!important}
-}
-}@layer base{
 /* The rules under the heading and over the actions SAY "pinned" - they belong only to a
    dialog with a scrolling middle, which .modal-body is exactly. On a short dialog they
    promised a scroll that never comes and made a five-line question look like a workspace. */
@@ -2643,7 +2584,7 @@ details.manage-sec>summary h3{margin:0}
 .mg-cat-row:hover{background:var(--accent-soft)}
 .mg-tw{flex:0 0 auto;width:16px;height:16px;padding:0;border:0;border-radius:4px;
   background:transparent;color:var(--dim);cursor:default;
-  display:flex;align-items:center;justify-content:center;transition:transform .13s ease,color .12s}
+  display:flex;align-items:center;justify-content:center;transition:transform var(--m-move) var(--m-ease),color var(--m-tone)}
 .mg-cat.is-open .mg-tw{transform:rotate(90deg)}
 .mg-tw:hover,.mg-tw:focus-visible{color:var(--accent)}
 .mg-cat-lab2{margin:0;padding:1px 3px;border:1px solid transparent;border-radius:5px;
@@ -2765,13 +2706,10 @@ details.acc>summary{list-style:none;display:flex;align-items:center;gap:8px;padd
   border-radius:7px;cursor:default;user-select:none}
 details.acc>summary::-webkit-details-marker{display:none}
 details.acc>summary:hover,details.acc>summary:focus-visible{background:var(--accent-soft)}
-.acc-tw{flex:0 0 auto;color:var(--dim);transition:transform .16s cubic-bezier(.2,.7,.3,1)}
+.acc-tw{flex:0 0 auto;color:var(--dim);transition:transform var(--m-move) var(--m-ease)}
 details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 .acc-title{font-family:var(--sans)}
 .acc-body{padding:2px 6px 12px}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){ .acc-tw{transition:none} }
-}@layer base{
 /* Settings rows: label and hint on the left, control on the right, one column that stays
    readable when the dialog is narrow. Deliberately plain, like the Maintenance panel - a
    preferences screen is read once and then left alone, so it earns no ornament. */
@@ -2858,9 +2796,23 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 /* THE BUBBLE, the shape every notice hangs off a control by, and the one thing in this sheet a
    SECOND program renders from: the build copies everything between these two markers into
    engine/bubble.css, and Studio links that file. So nothing keyed on a name this sheet owns
-   belongs in here - only .bub, .bub-tip and .paper - and a host page owes the family the four
+   belongs in here - only .bub, .bub-tip, .paper and the motion below - and a host owes the four
    tokens below, --panel-raised, --ink, --dim and --line for the paper voice, and the data-side
    attribute, which src/modules/bubble.js writes and Studio imports from the same commit. */
+/* THE MOTION VOCABULARY, the family's and not this sheet's: tiers by what moves, one curve and
+   one spring (motion.js M_MS, E_EASE and E_SPRING, held equal by tests/motion-tokens.js). A host
+   sets html.e-still under either quiet switch; it zeroes every tier and halts every keyframe,
+   so a rule written with the tiers needs no guard of its own. */
+:root{--m-tone:100ms; --m-reveal:120ms; --m-move:180ms; --m-surface:180ms; --m-scrim:160ms;
+  --m-resize:200ms; --m-dismiss:80ms; --m-travel:371ms; --m-celebrate:420ms; --m-wash:500ms;
+  --m-roll:300ms; --m-nudge:2s;
+  --m-ease:cubic-bezier(.2,.7,.3,1);
+  --m-spring:linear(0,0.0773,0.2255,0.3951,0.5568,0.6956,0.806,0.8883,0.9458,0.9832,1.0055,1.0169,
+    1.0212,1.0211,1.0186,1.0151,1.0115,1.0082,1.0054,1.0033,1.0018,1.0008,1.0001,1)}
+:root.e-still{--m-tone:0s; --m-reveal:0s; --m-move:0s; --m-surface:0s; --m-scrim:0s;
+  --m-resize:0s; --m-dismiss:0s; --m-travel:0s; --m-celebrate:0s; --m-wash:0s; --m-roll:0s;
+  --m-nudge:0s}
+:root.e-still *,:root.e-still *::before,:root.e-still *::after{animation:none!important}
 /* THE FILL, cobalt in BOTH themes. White on it is 5.17:1 where white on the dark theme's own
    accent would be 2.4:1, so a notice cannot borrow --accent and owns this. A host redeclares
    the shadow per theme, which is the only one of the four a theme has ever moved. */
@@ -2900,31 +2852,28 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 /* A WINDOW OPENED OVER THE PAGE takes the front, and the bubble waits behind it, under the modals
    (200); the tour's own dialog steps keep it in front. */
 #tourRoot.behind{z-index:190}
-/* The tour travels on a spring (stiffness 260, damping 20, sampled at 60 Hz into linear()): 7.6
-   per cent over, still at 629ms. `.still` is set by tour.js under either quiet switch. */
-#tourRoot{--tour-spring:.629s linear(0,0.0412,0.1311,0.2495,0.3806,0.5124,0.6364,0.7469,0.841,
-  0.9174,0.9767,1.02,1.0493,1.0668,1.075,1.076,1.072,1.0645,1.0552,1.0451,1.0351,1.0258,1.0177,
-  1.0108,1.0052,1.001,0.9979,0.9959,0.9947,0.9942,0.9942,0.9946,0.9952,0.996,0.9967,0.9975,0.9982,
-  0.9988,1)}
+/* The tour travels on the family's one spring, --m-travel on --m-spring. `.still` is set by
+   tour.js under either quiet switch. */
 /* NOTHING IS DARKENED AND NOTHING IS HELD: the page under the tour stays usable, and only the
    bubble takes a click. The ring says where a step points, in the bubble's own colour. */
 .tour-hole{position:fixed;z-index:1;border-radius:12px;pointer-events:none;
   box-shadow:0 0 0 2.5px var(--bub);
-  transition:top var(--tour-spring),left var(--tour-spring),width var(--tour-spring),
-    height var(--tour-spring),border-radius .2s ease,opacity .2s ease;opacity:0}
+  transition:top var(--m-travel) var(--m-spring),left var(--m-travel) var(--m-spring),
+    width var(--m-travel) var(--m-spring),height var(--m-travel) var(--m-spring),
+    border-radius var(--m-resize) ease,opacity var(--m-resize) ease;opacity:0}
 #tourRoot.on .tour-hole{opacity:1}
-#tourRoot.still .tour-hole{transition:border-radius .2s ease,opacity .2s ease}
+#tourRoot.still .tour-hole{transition:border-radius var(--m-resize) ease,opacity var(--m-resize) ease}
 /* The long steps scroll in the BODY, never the panel, which also keeps the buttons on screen
    where the old max-height scrolled them away. The shape itself is the family's, above. */
 .tour-card{z-index:3;width:min(360px,calc(100vw - 28px));
   opacity:0;transform:translateY(8px);
-  transition:top var(--tour-spring),left var(--tour-spring),opacity .22s ease,
-    transform var(--tour-spring)}
+  transition:top var(--m-travel) var(--m-spring),left var(--m-travel) var(--m-spring),
+    opacity var(--m-surface) ease,transform var(--m-travel) var(--m-spring)}
 #tourRoot.on .tour-card{opacity:1;transform:translateY(0)}
-#tourRoot.still .tour-card{transition:opacity .22s ease}
+#tourRoot.still .tour-card{transition:opacity var(--m-surface) ease}
 /* THE QUESTIONS THAT HANG FROM A CONTROL, the catalog offer and the name: the family's bubble with
    the tour card's type, over the dialogs and under the tour. */
-.bub-ask{z-index:235;width:min(340px,calc(100vw - 24px));animation:eModalCardIn .18s cubic-bezier(.2,.7,.3,1) both}
+.bub-ask{z-index:235;width:min(340px,calc(100vw - 24px));animation:eModalCardIn var(--m-surface) var(--m-ease) both}
 .bub-ask h3{margin:0 0 6px;font:700 15.5px var(--sans-display);letter-spacing:-.2px}
 .bub-ask p{margin:0 0 8px;font-size:13.5px;line-height:1.5;color:var(--bub-dim);text-wrap:pretty}
 .bub-ask b{color:var(--bub-ink);font-weight:600}
@@ -3051,7 +3000,8 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   backdrop-filter:var(--glass-thin-filter);
   display:flex;align-items:center;justify-content:center;
   box-shadow:var(--shadow-pop-off);
-  transition:color .16s,background-color .16s,border-color .16s,box-shadow .16s}
+  transition:color var(--m-tone),background-color var(--m-tone),border-color var(--m-tone),
+    box-shadow var(--m-tone)}
 .fab:hover,.fab:focus-visible{color:var(--accent);border-color:var(--accent);background:var(--accent-soft);
   box-shadow:var(--shadow-pop)}
 /* The clear-intents door, left of the add button and only there while an intent is picked: the
@@ -3059,8 +3009,9 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
    Faded rather than display-toggled, so it arrives; invisible it takes no focus and no click.
    The glyph says intents, a count says how many, and hover turns it into the red X it is. */
 .fab-clear{right:76px;opacity:0;transform:translateY(6px) scale(.9);visibility:hidden;pointer-events:none;
-  transition:opacity .2s cubic-bezier(.2,.7,.3,1),transform .2s cubic-bezier(.2,.7,.3,1),
-    visibility 0s .2s,color .16s,background-color .16s,border-color .16s,box-shadow .16s}
+  transition:opacity var(--m-resize) var(--m-ease),transform var(--m-resize) var(--m-ease),
+    visibility 0s var(--m-resize),color var(--m-tone),background-color var(--m-tone),
+    border-color var(--m-tone),box-shadow var(--m-tone)}
 .fab-clear.on{opacity:1;transform:none;visibility:visible;pointer-events:auto;transition-delay:0s}
 .fab-clear .ic-x,.fab-clear .fab-n{display:none}
 .fab-clear .fab-n{font:600 14px var(--sans);letter-spacing:.2px}
@@ -3072,11 +3023,8 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 /* A ring grows out of the button and fades, on transform and opacity so it costs no repaint
    (rule 1 of the Firefox notes). The button keeps its own look; the ring does the asking. */
 .fab.nudge::after{content:"";position:absolute;inset:-1px;border-radius:50%;
-  border:1px solid var(--accent);animation:fabNudge 2s ease-out infinite;pointer-events:none}
+  border:1px solid var(--accent);animation:fabNudge var(--m-nudge) ease-out infinite;pointer-events:none}
 @keyframes fabNudge{ 0%{transform:scale(1);opacity:.6} 70%,100%{transform:scale(1.5);opacity:0} }
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){ .fab,.fab-clear{transition:none} .fab.nudge::after{animation:none} }
-}@layer base{
 #sampleMark{position:fixed;inset:0;z-index:49;pointer-events:none;overflow:hidden;
   display:flex;align-items:center;justify-content:center}
 #sampleMark b{transform:rotate(-22deg);white-space:nowrap;text-transform:uppercase;
@@ -3091,12 +3039,12 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 /* Light ink on a light canvas needs less alpha still to sit at the same perceived depth. */
 :root[data-theme=light] #sampleMark b{opacity:.11}
 /* ---------- Motion & numerals ---------- */
-/* Colour-only, at .1s - these fire on hover with the pointer already moving. Transform
+/* Colour-only, at the tone tier - these fire on hover with the pointer already moving. Transform
    and layout are deliberately NOT transitioned: drag, the FLIP reorders and the pill bar
    own their timing, and a transitioned transform under a drag fights the hand. */
 .pill,.btn,.seg button,.tab,.rail-item,.cacts button,.cat-chip,.menu button,
 .txt,.tab-x,.field-clear,.combo-clear{
-  transition:background-color .1s ease,color .1s ease,border-color .1s ease}
+  transition:background-color var(--m-tone) ease,color var(--m-tone) ease,border-color var(--m-tone) ease}
 /* A PRESS CHANGES TONE, IT DOES NOT MOVE. The pill was the exception for what turned out to
    be the general reason: a CSS box snaps to device pixels and the vector inside it does not,
    so half a pixel lands differently in two places. A press RECEDES toward the surface behind
@@ -3120,13 +3068,6 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
    already turned. paintTheme() carries this class through the reflow the new palette lands
    in, and everything is transitional again immediately after it. */
 :root.theme-swap *,:root.theme-swap *::before,:root.theme-swap *::after{transition:none}
-@media (prefers-reduced-motion:reduce){
-  .pill,.btn,.seg button,.tab,.rail-item,.cacts button,.cat-chip,.menu button,
-  .txt,.tab-x,.field-clear,.combo-clear{transition:none!important}
-  /* The press tone STAYS. It is a colour and not a movement, and removing it would leave
-     these controls with no answer to a click at all - which is a loss for exactly the
-     people this query is meant to help. */
-}
 }@layer base{
 /* Tabular figures wherever a number sits beside a label, so a count ticking from 9 to 10
    does not shuffle the text around it. */
@@ -3138,7 +3079,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .e-star-pop{position:fixed;z-index:299;pointer-events:none;width:30px;height:30px;
   margin:-15px 0 0 -15px;color:var(--fav)}
 .e-star-pop svg{display:block;width:100%;height:100%;fill:currentColor;
-  animation:eStarPop .42s cubic-bezier(.2,.7,.3,1) both}
+  animation:eStarPop var(--m-celebrate) var(--m-ease) both}
 @keyframes eStarPop{
   0%{transform:scale(.35);opacity:0}
   30%{transform:scale(1.15);opacity:.95}
@@ -3148,15 +3089,15 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
    the lower one, so the almond shuts into the lid line. The pupil is clipped by that same
    path, so the lid covers it as it comes down rather than the pupil shrinking on its own;
    the lashes arrive once it is shut, and the whole blooms away as the star does - on the
-   star's own .42s, since two celebrations from one row must not read as two lengths. A
+   star's own tier, since two celebrations from one row must not read as two lengths. A
    return runs the lid up. Spawned like the star; reduced motion is guarded in the handler. */
 .e-eye-pop{position:fixed;z-index:299;pointer-events:none;width:28px;height:28px;margin:-14px 0 0 -14px}
 .e-eye-pop svg{display:block;width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.5;
   stroke-linecap:round;stroke-linejoin:round;transform-origin:50% 50%;
-  animation:eEyeBloom .42s cubic-bezier(.2,.7,.3,1) both}
+  animation:eEyeBloom var(--m-celebrate) var(--m-ease) both}
 .e-eye-pop .lid{d:path("M1.9 10C4.5 5.1 15.5 5.1 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z");
-  animation:eLidDown .42s cubic-bezier(.4,0,.2,1) both}
-.e-eye-pop .lashes{opacity:0;animation:eLashesIn .42s both}
+  animation:eLidDown var(--m-celebrate) cubic-bezier(.4,0,.2,1) both}
+.e-eye-pop .lashes{opacity:0;animation:eLashesIn var(--m-celebrate) both}
 .e-eye-pop.open .lid{animation-name:eLidUp}
 .e-eye-pop.open .lashes{animation-name:eLashesOut}
 @keyframes eLidDown{0%{d:path("M1.9 10C4.5 5.1 15.5 5.1 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z")}
@@ -3188,12 +3129,12 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 .e-copy-wash{position:fixed;z-index:299;pointer-events:none;border-radius:var(--radius-sm);
   background:color-mix(in srgb,var(--ok) 16%,transparent);
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ok) 45%,transparent);
-  animation:eCopyWash .5s ease-out both}
+  animation:eCopyWash var(--m-wash) ease-out both}
 @keyframes eCopyWash{from{opacity:1}to{opacity:0}}
 /* The copied words lifting off the block, under the wash (pops.js); the tags stay behind. */
 .e-copy-lift{position:fixed;z-index:298;pointer-events:none;margin:0;overflow:hidden;
   background:transparent;border-style:solid;border-color:transparent;
-  animation:eCopyLift .42s cubic-bezier(.2,.7,.3,1) both}
+  animation:eCopyLift var(--m-celebrate) var(--m-ease) both}
 .e-copy-lift .tag{visibility:hidden}
 @keyframes eCopyLift{from{opacity:.55;transform:none;filter:blur(0)}
   to{opacity:0;transform:translateY(-22px) scale(1.02);filter:blur(1.5px)}}
@@ -4788,12 +4729,17 @@ What you type stays in this browser only.`;
     E_EASE: () => E_EASE,
     E_SPRING: () => E_SPRING,
     E_SPRING_MS: () => E_SPRING_MS,
+    M_MS: () => M_MS,
+    M_STILL_Q: () => M_STILL_Q,
     afterPaint: () => afterPaint,
     animateModalHeightFrom: () => animateModalHeightFrom,
     animatePinnedHeight: () => animatePinnedHeight,
     mgAccordion: () => mgAccordion,
     mgPinCard: () => mgPinCard,
-    mgReduceMotion: () => mgReduceMotion
+    mgReduceMotion: () => mgReduceMotion,
+    mgSystemStill: () => mgSystemStill,
+    syncStill: () => syncStill,
+    wireStill: () => wireStill
   });
 
   // src/modules/dom.js
@@ -4842,16 +4788,54 @@ What you type stays in this browser only.`;
   // src/modules/motion.js
   var E_EASE = "cubic-bezier(.2,.7,.3,1)";
   var E_SPRING = "linear(0,0.0773,0.2255,0.3951,0.5568,0.6956,0.806,0.8883,0.9458,0.9832,1.0055,1.0169,1.0212,1.0211,1.0186,1.0151,1.0115,1.0082,1.0054,1.0033,1.0018,1.0008,1.0001,1)";
-  var E_SPRING_MS = 371;
+  var M_MS = {
+    tone: 100,
+    reveal: 120,
+    move: 180,
+    surface: 180,
+    scrim: 160,
+    resize: 200,
+    dismiss: 80,
+    travel: 371,
+    celebrate: 420,
+    wash: 500,
+    roll: 300,
+    nudge: 2e3,
+    gather: 1100,
+    twinkle: 66
+  };
+  var E_SPRING_MS = M_MS.travel;
   var CARD_MOVE_MAX = 40;
   var mgPendingH = null;
   var mgPinTimer = null;
+  var M_STILL_Q = "(prefers-reduced-motion: reduce)";
+  function mgSystemStill() {
+    try {
+      return matchMedia(M_STILL_Q).matches;
+    } catch (e) {
+      return false;
+    }
+  }
   function mgReduceMotion() {
     try {
       if (lsGet("eMotionOff") === "1") return true;
-      return matchMedia("(prefers-reduced-motion: reduce)").matches;
     } catch (e) {
-      return false;
+    }
+    return mgSystemStill();
+  }
+  function syncStill() {
+    try {
+      document.documentElement.classList.toggle("e-still", mgReduceMotion());
+    } catch (e) {
+    }
+  }
+  function wireStill() {
+    syncStill();
+    try {
+      const m = matchMedia(M_STILL_Q);
+      if (m.addEventListener) m.addEventListener("change", syncStill);
+      else if (m.addListener) m.addListener(syncStill);
+    } catch (e) {
     }
   }
   function mgPinCard() {
@@ -4926,7 +4910,7 @@ What you type stays in this browser only.`;
     const start = () => {
       if (started || run.dead) return;
       started = true;
-      card.style.transition = "height .2s " + E_EASE;
+      card.style.transition = "height var(--m-resize) var(--m-ease)";
       card.style.height = after + "px";
       card.addEventListener("transitionend", run.onEnd);
       run.timer = setTimeout(done, 320);
@@ -7314,7 +7298,7 @@ What you type stays in this browser only.`;
     if (!moved.length) return true;
     void list.offsetHeight;
     moved.forEach((p) => {
-      p.style.transition = "transform .18s " + E_EASE;
+      p.style.transition = "transform var(--m-move) " + E_EASE;
       p.style.transform = "";
       setTimeout(() => moved.forEach((p2) => {
         p2.style.transition = "";
@@ -8466,7 +8450,7 @@ What you type stays in this browser only.`;
   function scrollPageTop() {
     const el = pageScroller();
     try {
-      el.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+      el.scrollTo({ top: 0, left: 0, behavior: mgReduceMotion() ? "auto" : "smooth" });
     } catch (_) {
       try {
         el.scrollTop = 0;
@@ -8695,7 +8679,7 @@ What you type stays in this browser only.`;
   }
   var tabInsertAnimating = false;
   function tabGrow() {
-    return ["width", "max-width", "min-width", "flex-basis"].map((k) => k + " .19s " + E_EASE).join(",") + ",opacity .16s ease";
+    return ["width", "max-width", "min-width", "flex-basis"].map((k) => k + " var(--m-move) " + E_EASE).join(",") + ",opacity var(--m-move) ease";
   }
   function animateTabInsert(mutate) {
     const bar = $("#tabsBar");
@@ -8899,7 +8883,7 @@ What you type stays in this browser only.`;
     if (!moved.length) return;
     void bar.offsetHeight;
     moved.forEach((el) => {
-      el.style.transition = "transform .18s " + E_EASE;
+      el.style.transition = "transform var(--m-move) " + E_EASE;
       el.style.transform = "";
       setTimeout(() => moved.forEach((el2) => {
         el2.style.transition = "";
@@ -12804,7 +12788,7 @@ What you type stays in this browser only.`;
     hooks.markEntrySel();
     if (opts.scroll && list) {
       const el = list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]');
-      if (el) el.scrollIntoView({ block: opts.block || "nearest", behavior: opts.smooth === false ? "auto" : "smooth" });
+      if (el) el.scrollIntoView({ block: opts.block || "nearest", behavior: opts.smooth === false || mgReduceMotion() ? "auto" : "smooth" });
     }
     scheduleTabSave();
   }
@@ -13121,7 +13105,7 @@ What you type stays in this browser only.`;
   }
   var pillsBoxTimer = null;
   function animatePillsBox(mutate, ms) {
-    ms = ms || 180;
+    ms = ms || M_MS.move;
     const slot = pillsSlot();
     if (!slot || mgReduceMotion()) {
       mutate();
@@ -13657,7 +13641,7 @@ What you type stays in this browser only.`;
       document.body.classList.remove("pills-lines-expand");
       if (slot) slot.classList.remove("pills-expand");
       if (held !== document.body.classList.contains("pills-peek")) {
-        animatePillsBox(() => document.body.classList.toggle("pills-peek", held), 120);
+        animatePillsBox(() => document.body.classList.toggle("pills-peek", held), M_MS.reveal);
       }
     } else {
       document.body.classList.remove("pills-peek");
@@ -13888,7 +13872,7 @@ What you type stays in this browser only.`;
     row("device pixel ratio", S(() => window.devicePixelRatio));
     row("backdrop-filter", S(() => CSS.supports("backdrop-filter", "blur(1px)") || CSS.supports("-webkit-backdrop-filter", "blur(1px)") ? "supported" : "NOT SUPPORTED"));
     row("reduced motion", S(() => {
-      const os = matchMedia("(prefers-reduced-motion:reduce)").matches;
+      const os = mgSystemStill();
       const off = lsGet("eMotionOff") === "1";
       if (os && off) return "on (system, and Animations off)";
       if (os) return "on (system)";
@@ -13951,7 +13935,7 @@ What you type stays in this browser only.`;
   }
   function wireMaintenanceWatch() {
     try {
-      ["(prefers-color-scheme: light)", "(prefers-reduced-motion: reduce)", "(forced-colors: active)"].forEach((q) => {
+      ["(prefers-color-scheme: light)", M_STILL_Q, "(forced-colors: active)"].forEach((q) => {
         const m = matchMedia(q);
         if (m.addEventListener) m.addEventListener("change", mtRefreshLive);
         else if (m.addListener) m.addListener(mtRefreshLive);
@@ -14264,7 +14248,7 @@ What you type stays in this browser only.`;
       });
       wEls.length = 0;
     }
-    const T = ".18s " + E_EASE;
+    const T = "var(--m-move) " + E_EASE;
     moved.forEach((p) => {
       p.style.transition = "transform " + T + (wEls.indexOf(p) >= 0 ? ", width " + T : "");
       p.style.transform = "";
@@ -14352,7 +14336,7 @@ What you type stays in this browser only.`;
     };
     void list.offsetHeight;
     moved.forEach((c) => {
-      c.style.transition = "transform .22s " + E_EASE;
+      c.style.transition = "transform var(--m-move) " + E_EASE;
       c.style.transform = "";
     });
     setTimeout(clear, 280);
@@ -14398,7 +14382,7 @@ What you type stays in this browser only.`;
     plan.forEach(([el, dx, dy]) => {
       eSettleRuns.push(dx == null ? el.animate(
         [{ opacity: 0, transform: "translateY(8px) scale(.985)" }, { opacity: 1, transform: "none" }],
-        { duration: 160, easing: E_EASE }
+        { duration: M_MS.surface, easing: E_EASE }
       ) : el.animate(
         [{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "none" }],
         { duration: E_SPRING_MS, easing: E_SPRING_OK ? E_SPRING : E_EASE }
@@ -14537,7 +14521,7 @@ What you type stays in this browser only.`;
     if (!moved.length) return;
     void box.offsetHeight;
     moved.forEach((p) => {
-      p.style.transition = "transform .18s " + E_EASE;
+      p.style.transition = "transform var(--m-move) " + E_EASE;
       p.style.transform = "";
     });
     setTimeout(() => moved.forEach((p) => {
@@ -14960,7 +14944,7 @@ What you type stays in this browser only.`;
     });
     if (!moved.length && !entered.length) return;
     const far = Math.max.apply(null, dys.map(Math.abs));
-    const dur = far > limit ? Math.min(0.3, 0.18 + far / 6e3) : 0.18;
+    const dur = far > limit ? Math.min(0.3, M_MS.move / 1e3 + far / 6e3) : M_MS.move / 1e3;
     void box.offsetHeight;
     moved.forEach((el) => {
       el.style.transition = "transform " + dur + "s " + E_EASE;
@@ -15695,7 +15679,7 @@ What you type stays in this browser only.`;
       release();
     };
     moved.forEach((el) => {
-      el.style.transition = "transform .18s " + E_EASE;
+      el.style.transition = "transform var(--m-move) " + E_EASE;
       el.style.transform = "";
     });
     setTimeout(clear, 240);
@@ -15772,7 +15756,7 @@ What you type stays in this browser only.`;
     });
     void list.offsetHeight;
     moved.forEach((p) => {
-      p.style.transition = "transform .18s " + E_EASE;
+      p.style.transition = "transform var(--m-move) " + E_EASE;
       p.style.transform = "";
     });
     setTimeout(() => moved.forEach((p) => {
@@ -16329,6 +16313,7 @@ What you type stays in this browser only.`;
     tweenPillWidths(els, w0);
   }
   function tweenPillWidths(els, w0) {
+    if (mgReduceMotion()) return;
     const grew = [];
     const hNat = pills.scrollHeight;
     els.forEach((el, i) => {
@@ -16349,7 +16334,7 @@ What you type stays in this browser only.`;
     }
     requestAnimationFrame(() => requestAnimationFrame(() => {
       grew.forEach((g) => {
-        g.el.style.transition = "width .18s " + E_EASE;
+        g.el.style.transition = "width var(--m-move) " + E_EASE;
         g.el.style.width = g.w + "px";
         clearTimeout(g.el._eWT);
         g.el._eWT = setTimeout(() => {
@@ -16770,7 +16755,7 @@ What you type stays in this browser only.`;
           scrollPageTop();
           return;
         }
-        target.scrollIntoView({ block: intentBandOn() ? "start" : "center", behavior: "smooth" });
+        target.scrollIntoView({ block: intentBandOn() ? "start" : "center", behavior: mgReduceMotion() ? "auto" : "smooth" });
       });
     } else {
       markEntrySel();
@@ -16977,7 +16962,7 @@ What you type stays in this browser only.`;
       if (!b || !a || !el) return;
       if (b.vis && !a.vis) {
         const g = el.cloneNode(true);
-        g.style.cssText = "position:fixed;left:" + b.r.left + "px;top:" + b.r.top + "px;width:" + b.r.width + "px;height:" + b.r.height + "px;margin:0;z-index:200;pointer-events:none;opacity:1;transition:opacity .16s ease";
+        g.style.cssText = "position:fixed;left:" + b.r.left + "px;top:" + b.r.top + "px;width:" + b.r.width + "px;height:" + b.r.height + "px;margin:0;z-index:200;pointer-events:none;opacity:1;transition:opacity var(--m-move) ease";
         document.body.appendChild(g);
         go.push(() => {
           g.style.opacity = "0";
@@ -16987,7 +16972,7 @@ What you type stays in this browser only.`;
         el.style.transition = "none";
         el.style.opacity = "0";
         go.push(() => {
-          el.style.transition = "opacity .18s ease";
+          el.style.transition = "opacity var(--m-move) ease";
           el.style.opacity = "";
           setTimeout(() => {
             el.style.transition = "";
@@ -17003,7 +16988,7 @@ What you type stays in this browser only.`;
       el.style.transition = "none";
       el.style.transform = "translateX(" + dx + "px)";
       go.push(() => {
-        el.style.transition = "transform .2s " + EASE;
+        el.style.transition = "transform var(--m-move) " + EASE;
         el.style.transform = "";
         setTimeout(() => {
           el.style.transition = "";
@@ -17798,7 +17783,7 @@ What you type stays in this browser only.`;
     observeTourTarget(tgt);
     if (tgt && tgt.scrollIntoView) {
       try {
-        tgt.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+        tgt.scrollIntoView({ block: "nearest", inline: "nearest", behavior: mgReduceMotion() ? "auto" : "smooth" });
       } catch (_) {
         try {
           tgt.scrollIntoView(true);
@@ -19471,7 +19456,7 @@ What you type stays in this browser only.`;
       el.style.willChange = "";
     });
     moved.forEach((el) => {
-      el.style.transition = "transform .18s " + E_EASE;
+      el.style.transition = "transform var(--m-move) " + E_EASE;
       el.style.transform = "";
     });
     setTimeout(clear, 240);
@@ -19498,7 +19483,7 @@ What you type stays in this browser only.`;
     });
     void container.offsetHeight;
     moved.forEach((el) => {
-      el.style.transition = "transform .18s " + E_EASE;
+      el.style.transition = "transform var(--m-move) " + E_EASE;
       el.style.transform = "";
     });
     setTimeout(clear, 200);
@@ -20157,6 +20142,7 @@ What you type stays in this browser only.`;
           } else if (seg2 === "motion") {
             if (on) lsDel("eMotionOff");
             else lsSet("eMotionOff", "1");
+            syncStill();
             toast(on ? t("Animations on") : t("Animations reduced"));
           } else if (seg2 === "notehover") {
             document.body.classList.toggle("note-hover", on);
@@ -20311,7 +20297,7 @@ What you type stays in this browser only.`;
   var eWashDownX = 0;
   var eWashDownY = 0;
   function eWashOver(el) {
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (mgReduceMotion()) return;
     const r = el.getBoundingClientRect();
     const d = document.createElement("div");
     d.className = "e-copy-wash";
@@ -20356,7 +20342,7 @@ What you type stays in this browser only.`;
   }
   function wirePops() {
     document.addEventListener("click", (e) => {
-      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      if (mgReduceMotion()) return;
       const b = e.target && e.target.closest && e.target.closest(".star-btn,.rail-fav[data-fav-intent]");
       if (!b || b.classList.contains("on")) return;
       const r = b.getBoundingClientRect();
@@ -20372,7 +20358,7 @@ What you type stays in this browser only.`;
       }, 800);
     }, true);
     document.addEventListener("click", (e) => {
-      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      if (mgReduceMotion()) return;
       const b = e.target && e.target.closest && e.target.closest('[data-act="hide"],[data-hide-intent],[data-show-intent],[data-hide-card],[data-show-card]');
       if (!b) return;
       const opening = b.hasAttribute("data-show-intent") || b.hasAttribute("data-show-card") || b.getAttribute("data-act") === "hide" && !b.classList.contains("danger");
@@ -21042,12 +21028,7 @@ What you type stays in this browser only.`;
       scheduleTabSave();
     };
     cancelLangTail();
-    let still = false;
-    try {
-      still = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    } catch (e) {
-    }
-    if (still) {
+    if (mgReduceMotion()) {
       tail();
       return;
     }
@@ -21443,6 +21424,7 @@ What you type stays in this browser only.`;
     }
     applyTheme();
     watchSystemTheme();
+    wireStill();
     try {
       const _v = document.getElementById("eVer");
       if (_v) _v.textContent = E_VERSION;

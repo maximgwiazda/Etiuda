@@ -1,4 +1,5 @@
 import { cancelLangChunks, paintList, settleFreshCards } from "./card-pool.js";
+import { mgReduceMotion } from "./motion.js";
 import { cardSearchTerms, eSpellFix } from "./spell.js";
 import { syncPillCounts } from "./pill-state.js";
 import { ensureCardOrder, cmpCardDisplay, displayBandKey, favBlockOn, inIntentBand, intentBandOn } from "./card-order.js";
@@ -293,7 +294,7 @@ function render(){
       if(firstBlock && (firstBlock===target || firstBlock.contains(target) || target.contains(firstBlock))){
         scrollPageTop(); return;
       }
-      target.scrollIntoView({block:intentBandOn()?"start":"center",behavior:"smooth"});
+      target.scrollIntoView({block:intentBandOn()?"start":"center",behavior:mgReduceMotion()?"auto":"smooth"});
     });
   } else {
     markEntrySel();

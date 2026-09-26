@@ -269,6 +269,8 @@ function boot(){
   try{ document.documentElement.lang=uiLang.uiLang(); }catch(e){}
   theme.applyTheme();
   theme.watchSystemTheme();
+  // The quiet switch on the root, and the watch on the system's own
+  motion.wireStill();
 
   // The footer's version, and the icons the prose slots hold
   try{ const _v=document.getElementById("eVer"); if(_v) _v.textContent=env.E_VERSION; }catch(e){}

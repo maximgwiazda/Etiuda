@@ -15,6 +15,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/pl-diacritics.js                     no fixtures, a dropped Polish diacritic
     node tests/deadcode.js                           no fixtures
     node tests/css-layers.js                         no fixtures, the cascade layers
+    node tests/motion-tokens.js                      no fixtures, the motion tiers and the quiet switch
     node tests/build-fresh.mjs                       no fixtures, builds once
     node tests/catalog-routes.mjs                     no fixtures, the two catalog routes
     node tests/module-calls.mjs                       no fixtures, the modules CALLED
@@ -30,7 +31,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/reinstall.js     install, use, uninstall, install again
 
 `npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `module-calls.mjs`, `token-canary.mjs`, `test.js`, `i18n-scan.js`,
-`pl-diacritics.js` and `css-layers.js`, none of which needs a fixture or a browser. `npm run smoke` needs both.
+`pl-diacritics.js`, `css-layers.js` and `motion-tokens.js`, none of which needs a fixture or a browser. `npm run smoke` needs both.
 
 `css-dead.js`, `ghosts.js` and `storage-keys.js` are reports rather than gates: they print and
 exit 0, and a human reads the list. `i18n-scan.js` is a gate and exits non-zero when a language
@@ -85,6 +86,7 @@ third column is how to check this one.
 | `ghosts.js` | `src/` | comments **are** its subject and esbuild deletes every comment in every module |
 | `storage-keys.js` | `src/` | a call site is JS, and an artefact line number names no file anyone can open |
 | `css-layers.js` | `src/` | it judges the sheet as WRITTEN, layer by layer; the artefact carries the same bytes but no file and line a person can edit |
+| `motion-tokens.js` | `src/` | a duration is judged where it is written, in the sheet and in a module's inline transition; the artefact has neither file nor line |
 | `css-dead.js` | `src/` | the stylesheet half is identical either way, but the evidence half is JS, and a report saying "delete this rule" must name a file that survives the next build |
 | `test.js` sections 1, 3, 4, 5 as text | `src/` | `sourceText()`, `sourceAt()`, `sourceAtLine()` |
 | `test.js` syntax, stacking, dark palettes | artefact | "does the shipped file parse" and "do these CSS rules agree" are questions about the shipped file |
@@ -425,6 +427,24 @@ extraction, the forgotten reference stopped being reported and the run went from
 What the sentinel does not see is a name deleted from `src/` altogether. The names it defines are
 the names the source declares, so such a name takes its own sentinel with it. That class wants a
 free-identifier census against a list of host globals, which is a different instrument.
+
+## The motion tiers, and the switch that stills them
+
+`tests/motion-tokens.js`, well under a second, no browser, no fixtures, in `npm test`.
+
+Every duration the sheet runs is a `--m-*` tier (`--m-tone`, `--m-move` and the rest, on `:root` in
+the bubble span, so Studio receives them through the pin), and `html.e-still` zeroes every tier and
+halts every keyframe. The gate fails on a rule keyed on `prefers-reduced-motion` alone, on a time
+literal in a `transition` or `animation` declaration or in a custom property outside `--m-*`, on a
+module writing a literal into an inline transition or an `animate()` duration, on a module other
+than `motion.js` reading the system's query, on a smooth scroll that does not ask the switch, on a
+tier the switch does not zero, and on the sheet's tiers and `motion.js`'s `M_MS` disagreeing. There
+is no allowlist. Seventeen controls run first, each
+a planted sheet or script the gate must refuse or pass; a control that does not fire exits 3.
+
+What it is blind to: a duration computed at run time (`rail-list.js` scales a far row's travel from
+the move tier), a timer that waits out a transition, and whether a surface actually animates. The
+last is measured in a browser, with `document.getAnimations()`, not here.
 
 ## The cascade layers, which no gate had ever read
 

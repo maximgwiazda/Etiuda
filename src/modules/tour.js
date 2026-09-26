@@ -545,7 +545,7 @@ function showTourStep(i){
   const tgt=resolveTourTarget(step);
   observeTourTarget(tgt);
   if(tgt && tgt.scrollIntoView){
-    try{ tgt.scrollIntoView({block:"nearest", inline:"nearest", behavior:"smooth"}); }catch(_){
+    try{ tgt.scrollIntoView({block:"nearest", inline:"nearest", behavior:mgReduceMotion()?"auto":"smooth"}); }catch(_){
       try{ tgt.scrollIntoView(true); }catch(__){}
     }
   }

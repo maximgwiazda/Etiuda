@@ -1,5 +1,5 @@
 import { pills } from "./dom.js";
-import { E_EASE } from "./motion.js";
+import { E_EASE, mgReduceMotion } from "./motion.js";
 import { displayCatOrder, intentCats } from "./cat-relevance.js";
 import { CATS } from "./content-model.js";
 import { listPillKeys } from "./pill-walk.js";
@@ -61,6 +61,7 @@ function writePillCounts(){
    new order can flip a row break, doubling the bar for the tween's length - so if applying
    them moves the bar's height at all, the whole width tween rolls back and only snaps. */
 function tweenPillWidths(els, w0){
+  if(mgReduceMotion()) return;
   const grew=[];
   /* scrollHeight, never offsetHeight: the auto-hidden bar wears max-height plus
      overflow:hidden, which clamps offsetHeight to two lines on BOTH reads - the guard went
@@ -83,7 +84,7 @@ function tweenPillWidths(els, w0){
      main-thread animation and loses its opening to that paint - see animateTabInsert. */
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
     grew.forEach(g=>{
-      g.el.style.transition="width .18s "+E_EASE;
+      g.el.style.transition="width var(--m-move) "+E_EASE;
       g.el.style.width=g.w+"px";
       clearTimeout(g.el._eWT);
       g.el._eWT=setTimeout(()=>{ g.el.style.transition=""; g.el.style.width=""; },220);

@@ -10,6 +10,7 @@ import { applyDefaultRailWidth, railLocked, rebuildRailMQ, syncRailLayout, toggl
 import { esc } from "./esc.js";
 import { modalCard, $ } from "./dom.js";
 import { themeChoice, applyTheme } from "./theme.js";
+import { syncStill } from "./motion.js";
 import { render } from "./render.js";
 import { closeNotePane } from "./note-pane.js";
 import { applyUiLang } from "./repaint.js";
@@ -189,6 +190,7 @@ function paintSettings(){
         }
         else if(seg==="motion"){
           if(on) lsDel("eMotionOff"); else lsSet("eMotionOff","1");
+          syncStill();
           toast(on?t("Animations on"):t("Animations reduced"));
         }
         /* The locks call the app's own togglers rather than writing their keys, so the Menu

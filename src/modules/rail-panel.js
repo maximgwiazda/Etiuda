@@ -9,6 +9,7 @@ import { schedulePillsCollapse, syncLayoutPrefs, pillsSlot, pillsWanted, animate
 import { ICON_LOCK, ICON_LOCK_OPEN } from "./icons.js";
 import { railQuery, markSurface } from "./mark.js";
 import { hooks } from "./hooks.js";
+import { M_MS } from "./motion.js";
 
 /* Every door to the overlay, in one place because applyRailPeek reads them together and the
    pointer, the keyboard and a touch each hold one. */
@@ -586,7 +587,7 @@ function updateModifierPeek(e){
        the class would restart the glide on each keystroke of a held chord. .12s, the
        dropdown tier - a peek answers a held key; .18s is for deliberate toggles. */
     if(held!==document.body.classList.contains("pills-peek")){
-      animatePillsBox(()=>document.body.classList.toggle("pills-peek", held),120);
+      animatePillsBox(()=>document.body.classList.toggle("pills-peek", held),M_MS.reveal);
     }
   } else {
     document.body.classList.remove("pills-peek");

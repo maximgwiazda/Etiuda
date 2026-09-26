@@ -183,11 +183,9 @@ function stepTab(dir){
    formula for a tab's width and not two that can drift apart. */
 // Set while the strip is mid-animation, so fitTabLabels leaves the labels alone - see there.
 let tabInsertAnimating=false;
-/* Built when a tab is inserted rather than once at the top: E_EASE is the whole app's
-   easing and a module evaluates before the app body that declares it. */
 function tabGrow(){
-  return ["width","max-width","min-width","flex-basis"].map(k=>k+" .19s "+E_EASE).join(",")
-    +",opacity .16s ease";
+  return ["width","max-width","min-width","flex-basis"].map(k=>k+" var(--m-move) "+E_EASE).join(",")
+    +",opacity var(--m-move) ease";
 }
 function animateTabInsert(mutate){
   const bar=$("#tabsBar");
@@ -242,7 +240,7 @@ function animateTabInsert(mutate){
   /* ATTACHED AFTER THE REBUILT FRAME HAS PAINTED, two frames on. Width is a main-thread
      animation: attached in this task it starts at the style flush, and the first paint of the
      new tab's list, a full render, eats its opening third - Firefox drew seven widths of a
-     .19s grow. Transform glides ride the compositor and need no such wait. */
+     grow. Transform glides ride the compositor and need no such wait. */
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
   els.forEach((el,i)=>{
     el.style.transition=tabGrow();
@@ -396,7 +394,7 @@ function animateTabReorder(mutate){
      avoids the background-tab rAF pause. */
   void bar.offsetHeight;
   moved.forEach(el=>{
-    el.style.transition="transform .18s "+E_EASE;
+    el.style.transition="transform var(--m-move) "+E_EASE;
     el.style.transform="";
     setTimeout(()=>moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; }),200);
   });

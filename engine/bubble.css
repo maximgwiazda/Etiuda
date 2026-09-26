@@ -5,9 +5,23 @@
 /* THE BUBBLE, the shape every notice hangs off a control by, and the one thing in this sheet a
    SECOND program renders from: the build copies everything between these two markers into
    engine/bubble.css, and Studio links that file. So nothing keyed on a name this sheet owns
-   belongs in here - only .bub, .bub-tip and .paper - and a host page owes the family the four
+   belongs in here - only .bub, .bub-tip, .paper and the motion below - and a host owes the four
    tokens below, --panel-raised, --ink, --dim and --line for the paper voice, and the data-side
    attribute, which src/modules/bubble.js writes and Studio imports from the same commit. */
+/* THE MOTION VOCABULARY, the family's and not this sheet's: tiers by what moves, one curve and
+   one spring (motion.js M_MS, E_EASE and E_SPRING, held equal by tests/motion-tokens.js). A host
+   sets html.e-still under either quiet switch; it zeroes every tier and halts every keyframe,
+   so a rule written with the tiers needs no guard of its own. */
+:root{--m-tone:100ms; --m-reveal:120ms; --m-move:180ms; --m-surface:180ms; --m-scrim:160ms;
+  --m-resize:200ms; --m-dismiss:80ms; --m-travel:371ms; --m-celebrate:420ms; --m-wash:500ms;
+  --m-roll:300ms; --m-nudge:2s;
+  --m-ease:cubic-bezier(.2,.7,.3,1);
+  --m-spring:linear(0,0.0773,0.2255,0.3951,0.5568,0.6956,0.806,0.8883,0.9458,0.9832,1.0055,1.0169,
+    1.0212,1.0211,1.0186,1.0151,1.0115,1.0082,1.0054,1.0033,1.0018,1.0008,1.0001,1)}
+:root.e-still{--m-tone:0s; --m-reveal:0s; --m-move:0s; --m-surface:0s; --m-scrim:0s;
+  --m-resize:0s; --m-dismiss:0s; --m-travel:0s; --m-celebrate:0s; --m-wash:0s; --m-roll:0s;
+  --m-nudge:0s}
+:root.e-still *,:root.e-still *::before,:root.e-still *::after{animation:none!important}
 /* THE FILL, cobalt in BOTH themes. White on it is 5.17:1 where white on the dark theme's own
    accent would be 2.4:1, so a notice cannot borrow --accent and owns this. A host redeclares
    the shadow per theme, which is the only one of the four a theme has ever moved. */

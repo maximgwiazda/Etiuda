@@ -8,7 +8,7 @@ let eEyePopN=0;
 let eWashDownX=0,eWashDownY=0;
 
 function eWashOver(el){
-  if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if(mgReduceMotion()) return;
   const r=el.getBoundingClientRect();
   const d=document.createElement("div");
   d.className="e-copy-wash";
@@ -54,7 +54,7 @@ function wirePops(){
      the shared geometry, so a blacklist grows a bug every time one is added. data-fav-intent
      is carried by the star alone. */
   document.addEventListener("click",e=>{
-    if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if(mgReduceMotion()) return;
     const b=e.target&&e.target.closest&&e.target.closest(".star-btn,.rail-fav[data-fav-intent]");
     if(!b||b.classList.contains("on")) return;
     const r=b.getBoundingClientRect();
@@ -75,7 +75,7 @@ function wirePops(){
      frames on, once the rebuilt list has painted, because the lid is a path animation on the main
      thread and Firefox drops its first frames under that paint. The star rides the compositor. */
   document.addEventListener("click",e=>{
-    if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if(mgReduceMotion()) return;
     const b=e.target&&e.target.closest&&e.target.closest('[data-act="hide"],[data-hide-intent],[data-show-intent],[data-hide-card],[data-show-card]');
     if(!b) return;
     const opening=b.hasAttribute("data-show-intent")||b.hasAttribute("data-show-card")

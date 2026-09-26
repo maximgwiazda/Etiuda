@@ -3,6 +3,7 @@ import { toast, TOAST_HAND_MS } from "./ui-lang.js";
 import { cssEsc } from "./css-esc.js";
 import { scheduleTabSave } from "./tabs.js";
 import { scrollPageTop } from "./page-scroll.js";
+import { mgReduceMotion } from "./motion.js";
 import { railOrder, intentIdxs, setRailMarkUsed, setSemiKind, putEntrySel, entrySel, semiKind, railMarkUsed, railSel, railMarkIdx, railSettled, setRailSel, setRailMarkIdx } from "./app-state.js";
 import { hooks } from "./hooks.js";
 // THE MARK, which is one thing over two surfaces: the intent the panel offers Enter, or the
@@ -56,7 +57,7 @@ function setEntrySel(id, vi, opts){
   hooks.markEntrySel();
   if(opts.scroll && list){
     const el=list.querySelector('.card[data-id="'+cssEsc(entrySel.id)+'"] .txt[data-v="'+entrySel.vi+'"]');
-    if(el) el.scrollIntoView({block:opts.block||"nearest", behavior:opts.smooth===false?"auto":"smooth"});
+    if(el) el.scrollIntoView({block:opts.block||"nearest", behavior:(opts.smooth===false||mgReduceMotion())?"auto":"smooth"});
   }
   scheduleTabSave();
 }

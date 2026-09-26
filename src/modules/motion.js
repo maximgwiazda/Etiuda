@@ -2,15 +2,20 @@ import { lsGet } from "./storage.js";
 import { modalCard } from "./dom.js";
 
 /* THE ONE CURVE. Every move, fold and fade the script animates settles on it, and the sheet
-   writes the same curve by hand; a second curve anywhere would be a second opinion about how
+   reads the same curve as --m-ease; a second curve anywhere would be a second opinion about how
    the interface moves. Durations vary by what is moving; the curve does not. */
 const E_EASE="cubic-bezier(.2,.7,.3,1)";
-/* THE SPRINGS are the exception to the curve: a settled search's cards ride this one and the
-   tour --tour-spring in the sheet. Damped (stiffness 520, damping 34), sampled at 60 Hz into
+/* THE SPRING is the exception to the curve: a settled search's cards and the tour's travel
+   ride it, the sheet's as --m-spring. Damped (stiffness 520, damping 34), sampled at 60 Hz into
    linear() points: 98 per cent of the way at 148ms, 2 per cent over, still at 371ms. */
 const E_SPRING="linear(0,0.0773,0.2255,0.3951,0.5568,0.6956,0.806,0.8883,0.9458,0.9832,1.0055,"
   +"1.0169,1.0212,1.0211,1.0186,1.0151,1.0115,1.0082,1.0054,1.0033,1.0018,1.0008,1.0001,1)";
-const E_SPRING_MS=371;
+/* THE TIERS, by what moves rather than how far. The sheet's :root carries the same numbers as
+   --m-* for everything CSS runs, and tests/motion-tokens.js holds the two equal; gather and
+   twinkle are the empty mark's, timed here alone because a canvas has no rule to read. */
+const M_MS={tone:100, reveal:120, move:180, surface:180, scrim:160, resize:200, dismiss:80,
+  travel:371, celebrate:420, wash:500, roll:300, nudge:2000, gather:1100, twinkle:66};
+const E_SPRING_MS=M_MS.travel;
 
 /* How many cards a FLIP may transform at once. Here beside the curve because two surfaces
    cap themselves by it and neither owns the other; the reasoning for the number itself is
@@ -31,15 +36,31 @@ const CARD_MOVE_MAX=40;
    as well as transitionend - rAF is paused in a background tab, and a card left with an inline
    height would then never resize again. */
 let mgPendingH=null, mgPinTimer=null;
+const M_STILL_Q="(prefers-reduced-motion: reduce)";
+function mgSystemStill(){
+  try{ return matchMedia(M_STILL_Q).matches; }catch(e){ return false; }
+}
 /* USER FIRST, THEN THE SYSTEM: this gated nine animation sites and asked only the
    OS - no way to calm the app on a machine whose OS says nothing. The preference can
    only ADD quiet, never remove it: a system asking for reduced motion is honoured even
    with the box unticked - an accessibility request is not ours to overrule. */
 function mgReduceMotion(){
+  try{ if(lsGet("eMotionOff")==="1") return true; }catch(e){}
+  return mgSystemStill();
+}
+/* THE ONE SWITCH: html.e-still zeroes every --m-* tier and halts every keyframe (the sheet, by
+   the tiers), so what CSS runs and what a script asks mgReduceMotion() cannot disagree. The
+   boot script sets it before the first paint from what it can read; this is the answer. */
+function syncStill(){
+  try{ document.documentElement.classList.toggle("e-still", mgReduceMotion()); }catch(e){}
+}
+function wireStill(){
+  syncStill();
   try{
-    if(lsGet("eMotionOff")==="1") return true;
-    return matchMedia("(prefers-reduced-motion: reduce)").matches;
-  }catch(e){ return false; }
+    const m=matchMedia(M_STILL_Q);
+    if(m.addEventListener) m.addEventListener("change",syncStill);
+    else if(m.addListener) m.addListener(syncStill);
+  }catch(e){}
 }
 /* PIN BEFORE THE STATE CHANGES: `toggle` fires asynchronously, so between the element
    opening and the handler running the browser has laid out AND PAINTED the full new
@@ -132,7 +153,7 @@ function animateModalHeightFrom(before){
   const start=()=>{
     if(started||run.dead) return;
     started=true;
-    card.style.transition="height .2s "+E_EASE;
+    card.style.transition="height var(--m-resize) var(--m-ease)";
     card.style.height=after+"px";
     card.addEventListener("transitionend",run.onEnd);
     run.timer=setTimeout(done,320);             // counts from the real start, not from the pin
@@ -163,8 +184,13 @@ export {
   E_EASE,
   E_SPRING,
   E_SPRING_MS,
+  M_MS,
+  M_STILL_Q,
   CARD_MOVE_MAX,
+  mgSystemStill,
   mgReduceMotion,
+  syncStill,
+  wireStill,
   mgPinCard,
   mgAccordion,
   animateModalHeightFrom,

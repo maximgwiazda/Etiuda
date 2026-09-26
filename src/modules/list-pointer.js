@@ -95,7 +95,7 @@ function flipCardsAround(mutate,opts){
      the whole list, then attach and release in the same task. */
   void (list||document.body).offsetHeight;
   const clear=()=>{ moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; }); release(); };
-  moved.forEach(el=>{ el.style.transition="transform .18s "+E_EASE; el.style.transform=""; });
+  moved.forEach(el=>{ el.style.transition="transform var(--m-move) "+E_EASE; el.style.transform=""; });
   setTimeout(clear,240);
 }
 /* Fold and unfold move: the survivors glide through flipCardsAround exactly as for a
@@ -175,7 +175,7 @@ function animateCardReorder(fromId,toId){
      without a computed start value Firefox shows the end state. Same-task attach also
      avoids the background-tab rAF pause. */
   void list.offsetHeight;
-  moved.forEach(p=>{ p.style.transition="transform .18s "+E_EASE; p.style.transform=""; });
+  moved.forEach(p=>{ p.style.transition="transform var(--m-move) "+E_EASE; p.style.transform=""; });
   setTimeout(()=>moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; p.style.willChange=""; }),200);
 }
 // ---- alt/seq block drag-reorder (within one card) -----------------------

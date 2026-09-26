@@ -1,4 +1,5 @@
 import { lsSet } from "./storage.js";
+import { mgReduceMotion } from "./motion.js";
 import { seg, list } from "./dom.js";
 import { syncShortcutTitles } from "./shortcuts.js";
 import { drawIntentRail } from "./rail-list.js";
@@ -90,9 +91,7 @@ function setLang(l){
     scheduleTabSave();
   };
   cancelLangTail();
-  let still=false;
-  try{ still=matchMedia("(prefers-reduced-motion: reduce)").matches; }catch(e){}
-  if(still){ tail(); return; }
+  if(mgReduceMotion()){ tail(); return; }
   /* After the seg glide (180ms), plus the pick-tail's own +20 - the tail is quick now,
      but even a quick tail landing mid-glide costs the one animation this delay buys. */
   eLangTailT=setTimeout(()=>{ eLangTailT=0; tail(); },200);
