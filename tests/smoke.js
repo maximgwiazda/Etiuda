@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 227 };
+const EXPECTED = { chrome: 228 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -2683,6 +2683,25 @@ const t0 = Date.now();
     });
     check(imp.btn && imp.cards === 0 && (!imp.native || imp.asked === 1),
       "the empty screen's Import runs its own route and a cancelled picker leaves the desk empty (" + JSON.stringify(imp) + ")");
+    /* quiet-3: the empty rail says one line rather than standing bare beside the drawn empty
+       desk. Lines are counted as the distinct tops of the text's own rects, not guessed from a
+       height, at the rail's width now and at the narrowest the rail allows. */
+    step("the empty rail's one line");
+    const railLine = await q.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const read = () => { const box = document.getElementById("intentRailList"), el = box && box.querySelector(".rail-empty");
+        if (!el) return { kids: box ? box.children.length : -1, lines: 0 };
+        const r = document.createRange(); r.selectNodeContents(el);
+        return { kids: box.children.length, items: box.querySelectorAll(".rail-item").length,
+                 lines: new Set([...r.getClientRects()].map(x => Math.round(x.top))).size, text: el.textContent.length }; };
+      const now = read();
+      document.documentElement.style.setProperty("--rail-max", "200px"); dispatchEvent(new Event("resize")); await wait(300);
+      const narrow = read();
+      document.documentElement.style.removeProperty("--rail-max"); dispatchEvent(new Event("resize")); await wait(300);
+      return { now, narrow };
+    });
+    check([railLine.now, railLine.narrow].every(x => x.kids === 1 && x.items === 0 && x.lines === 1 && x.text > 0),
+      "quiet-3 the empty rail holds exactly one line of its own, at its width and at the narrowest (" + JSON.stringify(railLine) + ")");
     /* ADOPTING THE SAMPLE RELOADS THE DOCUMENT - catalog-file.js ends on location.reload(),
        because a catalog arrives on a clean desk and the per-tab state has to go with it. The old
        shape here clicked through an evaluate and then went on driving whatever frame it had,

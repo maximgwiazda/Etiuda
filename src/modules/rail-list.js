@@ -412,6 +412,16 @@ function drawIntentRailCore(){
   // user's place and makes the reorder animation measure against the wrong geometry.
   const keepScroll=box.scrollTop;
   const rows=displayIntentRows();
+  /* THE EMPTY RAIL SAYS ONE LINE, as the card area beside it does: a bare panel reads as not
+     loaded. Ahead of the reuse path, which answers an empty map for nothing to draw. */
+  if(!intentCount()){
+    // The English recorded beside it, so the language sweep translates from that, not from Polish.
+    if(!box.querySelector(".rail-empty"))
+      box.innerHTML='<p class="rail-empty" data-i18n-text="Intents arrive with a catalog.">'
+        +esc(t("Intents arrive with a catalog."))+'</p>';
+    syncIntentClearBtns();
+    return;
+  }
   const relRows=[];   // one entry per row, {el,sig} for echoed rows, null gaps - bracket pass below
   /* THE PICK PATH. Rebuilding all 72 rows made Firefox repaint every masked bracket, which
      is the stutter the eye catches on a pick. Same rows, moved and repainted instead. */

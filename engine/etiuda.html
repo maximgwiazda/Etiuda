@@ -1901,6 +1901,7 @@ code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-d
 #intentRailList{display:flex;flex-direction:column;gap:2px;
   flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
   margin:var(--rail-shelf,0px) -2px 0;padding:0 2px 2px}
+.rail-empty{margin:0;padding:6px 8px;color:var(--dim);font:12.5px/1.35 var(--sans);text-wrap:balance}
 /* ONE LINE, TAGS AT THE RIGHT. Stacked, a row spent two lines to say one thing and the
    pinned stack had to measure each one; side by side every row is the same height, which is
    what stackPinnedIntents wanted all along, and twice as many intents fit the panel. */
@@ -5647,6 +5648,7 @@ What you type stays in this browser only.`;
     "AGENT": "AGENT",
     "PAX": "PAX",
     "INTENT": "INTENCJA",
+    "Intents arrive with a catalog.": "Intencje przynosi katalog.",
     "search intents and cards": "szukaj intencji i kart",
     "Search": "Szukaj",
     "One search: intents rank in the panel, cards filter below": "Jedno wyszukiwanie: intencje szeregują się w panelu, a karty poniżej są filtrowane",
@@ -14823,6 +14825,12 @@ What you type stays in this browser only.`;
     hooks.syncIntentOrder();
     const keepScroll = box.scrollTop;
     const rows = displayIntentRows();
+    if (!intentCount()) {
+      if (!box.querySelector(".rail-empty"))
+        box.innerHTML = '<p class="rail-empty" data-i18n-text="Intents arrive with a catalog.">' + esc(t("Intents arrive with a catalog.")) + "</p>";
+      syncIntentClearBtns();
+      return;
+    }
     const relRows = [];
     const reuse = railReuseMap(box, rows);
     if (reuse) {

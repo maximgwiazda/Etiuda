@@ -652,6 +652,7 @@ UI_STRINGS.pl={
   "AGENT":"AGENT",
   "PAX":"PAX",
   "INTENT":"INTENCJA",
+  "Intents arrive with a catalog.":"Intencje przynosi katalog.",
   "search intents and cards":"szukaj intencji i kart",
   "Search":"Szukaj",
   "One search: intents rank in the panel, cards filter below":"Jedno wyszukiwanie: intencje szeregują się w panelu, a karty poniżej są filtrowane",
