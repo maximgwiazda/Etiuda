@@ -7838,6 +7838,8 @@ What you type stays in this browser only.`;
     agentParts: () => agentParts,
     askAgentName: () => askAgentName,
     keepAgentName: () => keepAgentName,
+    keepTypedName: () => keepTypedName,
+    nameAnswered: () => nameAnswered,
     nameFieldHtml: () => nameFieldHtml,
     renderFillsSoon: () => renderFillsSoon,
     setAgentName: () => setAgentName,
@@ -9442,6 +9444,18 @@ What you type stays in this browser only.`;
   function keepAgentName(v) {
     setAgentName(String(v || "").trim());
     lsSet(E_NAME_ASKED, "1");
+  }
+  function nameAnswered() {
+    return lsGet(E_NAME_ASKED) === "1";
+  }
+  function keepTypedName(v, answered) {
+    const s = String(v || "").trim();
+    if (s) {
+      keepAgentName(s);
+      return;
+    }
+    setAgentName("");
+    if (!answered) lsDel(E_NAME_ASKED);
   }
   function askAgentName(raw, then, anchor) {
     if (document.getElementById("eAgentAsk")) return;
@@ -17827,13 +17841,16 @@ What you type stays in this browser only.`;
       els.field.innerHTML = step.name ? nameFieldHtml("tourName", "tourNamePrev") : "";
       if (step.name) {
         nameInp = wireNameField(els.field, "");
-        if (nameInp) nameInp.onkeydown = (e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            e.stopPropagation();
-            tourNext();
-          }
-        };
+        if (nameInp) {
+          nameInp.onkeydown = (e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.stopPropagation();
+              tourNext();
+            }
+          };
+          nameInp.addEventListener("input", () => keepTypedName(nameInp.value, tourNameWas));
+        }
       }
     }
     const tgt = resolveTourTarget(step);
@@ -17859,6 +17876,7 @@ What you type stays in this browser only.`;
     } else if (keyed) selectTourNext();
     else clearTourFocus();
   }
+  var tourNameWas = false;
   function startTour(from, auto) {
     if (!auto) {
       closeSettingsMenu();
@@ -17876,6 +17894,7 @@ What you type stays in this browser only.`;
     }
     tourRunning = true;
     tourIdx = i;
+    tourNameWas = nameAnswered();
     els.root.hidden = false;
     els.root.setAttribute("aria-hidden", "false");
     els.root.classList.toggle("still", mgReduceMotion());

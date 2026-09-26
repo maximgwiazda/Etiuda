@@ -1,4 +1,4 @@
-import { lsSet, lsGet, nsGet } from "./storage.js";
+import { lsSet, lsGet, lsDel, nsGet } from "./storage.js";
 import { pax } from "./dom.js";
 import { t, translateTree, toast, TOAST_HAND_MS } from "./ui-lang.js";
 import { esc } from "./esc.js";
@@ -121,6 +121,15 @@ function wireNameField(root,raw){
 }
 // An answer, empty included: an empty name is "later", and the question is not asked again.
 function keepAgentName(v){ setAgentName(String(v||"").trim()); lsSet(E_NAME_ASKED,"1"); }
+function nameAnswered(){ return lsGet(E_NAME_ASKED)==="1"; }
+/* THE TOUR'S FIELD IS KEPT AS IT IS TYPED, so no way out of the step loses it. Emptied, it is no
+   answer, and the first signed copy asks unless an answer stood before the step. */
+function keepTypedName(v,answered){
+  const s=String(v||"").trim();
+  if(s){ keepAgentName(s); return; }
+  setAgentName("");
+  if(!answered) lsDel(E_NAME_ASKED);
+}
 /** The question as a bubble hanging from the reply that was clicked, so it stands over whatever is
  *  on screen without covering it, and a click elsewhere leaves it standing. */
 function askAgentName(raw,then,anchor){
@@ -171,6 +180,8 @@ export {
   nameFieldHtml,
   wireNameField,
   keepAgentName,
+  keepTypedName,
+  nameAnswered,
   wantsAgentName,
   withAgentName,
   syncRoleWheel,

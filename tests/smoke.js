@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 230 };
+const EXPECTED = { chrome: 231 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -2790,6 +2790,26 @@ const t0 = Date.now();
   };
   const upFor = (q, fn, ms) => q.waitForFunction(fn, { timeout: ms || 20000, polling: 100 }).then(() => true, () => false);
   try {
+    /* flow-2: A NAME TYPED IN THE TOUR'S FIRST STEP IS KEPT whichever way the step is left: the
+       empty desk's sample button beside it, Skip, or a reload. */
+    const kept = {};
+    for (const route of ["sample", "skip", "reload"]) {
+      huntAt = "flow-2 by " + route;
+      const q = await huntPage(hunt, false);
+      const up = await upFor(q, () => !!document.querySelector("#tourName") && !!document.getElementById("emptySample"));
+      if (up) {
+        await q.type("#tourName", "Invented Agent"); await sleep(300);
+        if (route === "sample") await clickReload(q, "#emptySample");
+        else if (route === "skip") await q.click("#tourSkip");
+        else await q.reload({ waitUntil: "load" });
+        await sleep(800);
+      }
+      kept[route] = up && await q.evaluate(() => lsGet("eAgent") === "Invented Agent" && lsGet("eNameAsked") === "1");
+    }
+    check(kept.sample && kept.skip && kept.reload,
+      "flow-2 a name typed into the tour's first step is kept when the step is left by the sample button, by Skip"
+      + " and by a reload: " + JSON.stringify(kept));
+
     /* flow-1: THE NAME QUESTION AT THE TOUR'S CARDS STEP stands in front of the tour, which steps
        back behind it and comes forward again once it is answered. The name is left empty so the
        first signed copy asks; the block pressed is the first that signs. */

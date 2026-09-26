@@ -16,7 +16,7 @@ import { closeSettingsMenu } from "./header-menus.js";
 import { wholeThingEmpty } from "./app-state.js";
 import { placeBubble } from "./bubble.js";
 import { eHost, eCatalogFolderShort } from "./host.js";
-import { agentName, setAgentName, keepAgentName, nameFieldHtml, wireNameField } from "./agent.js";
+import { agentName, setAgentName, keepAgentName, keepTypedName, nameAnswered, nameFieldHtml, wireNameField } from "./agent.js";
 import { esc } from "./esc.js";
 import { mgReduceMotion } from "./motion.js";
 import { hooks } from "./hooks.js";
@@ -534,9 +534,12 @@ function showTourStep(i){
     els.field.innerHTML=step.name ? nameFieldHtml("tourName","tourNamePrev") : "";
     if(step.name){
       nameInp=wireNameField(els.field,"");
-      if(nameInp) nameInp.onkeydown=e=>{
-        if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); tourNext(); }
-      };
+      if(nameInp){
+        nameInp.onkeydown=e=>{
+          if(e.key==="Enter"){ e.preventDefault(); e.stopPropagation(); tourNext(); }
+        };
+        nameInp.addEventListener("input",()=>keepTypedName(nameInp.value,tourNameWas));
+      }
     }
   }
   // Scroll target into view before measuring
@@ -560,6 +563,8 @@ function showTourStep(i){
   else if(keyed) selectTourNext();
   else clearTourFocus();
 }
+// Whether the name had an answer when this tour began, which emptying the first step's field keeps.
+let tourNameWas=false;
 /** From the Menu, or by itself (`auto`): a first run, or a reload in the middle of one, which
  *  finds whatever the person had open still open, and leaves it so. */
 function startTour(from,auto){
@@ -577,6 +582,7 @@ function startTour(from,auto){
   if(i<0){ ssDel(TOUR_AT); return; }
   tourRunning=true;
   tourIdx=i;
+  tourNameWas=nameAnswered();
   els.root.hidden=false;
   els.root.setAttribute("aria-hidden","false");
   els.root.classList.toggle("still", mgReduceMotion());
