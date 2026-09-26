@@ -1217,6 +1217,9 @@ function createWindow() {
        unpainted, so an overlay is an opaque rectangle in the band's right corner whatever
        colour it is given. It also owns the three buttons, which board item 290 gives to the
        band. The same construction serves macOS and Linux; only the material is Windows'. */
+    /* So the band's maximise button raises no Snap Layouts flyout: Windows raises it for a point
+       answering WM_NCHITTEST with HTMAXBUTTON, no point of a frameless window does, and
+       hookWindowMessage can watch that message but not answer it. */
     frame: framed,
     backgroundColor: "#00000000",
     ...(PLACED_ASIDE ? Object.assign({ focusable: false }, offscreenAt()) : {}),
