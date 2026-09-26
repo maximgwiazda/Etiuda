@@ -54,16 +54,36 @@ function ensureCatalogFolder() {
    somebody chose stands alone. */
 const SAMPLE_FILE = "sample-catalog.ec";
 const BUILT_IN_DIR = __dirname;
+/* EARLIER BUILDS PUT THE SAMPLE INTO Documents/Etiuda, byte for byte, and these are the editions
+   they put there, by size and SHA-256. Such a copy is Etiuda's file rather than the person's: it
+   is passed over and left where it is, so it neither stands in for the shipped sample nor counts
+   as their catalog. One byte changed and it is theirs. */
+const SEEDED_SAMPLES = {
+  39612: "2fa81658b7ad2b4c8e962e7c70134c2c3b86ac9c802fc08743fd41c32988213a",
+  39650: "aae9453e5c38b1d29ea394c31226e3ded39e9ce716febcc96274c089deb3a317",
+  260051: "60c7a9c39a8778c16f704899f3018e1ea850e0ba5d15ccaa9ab5f4c16f0b98b6"
+};
+function isSeededSample(file) {
+  try {
+    const want = SEEDED_SAMPLES[fs.statSync(file).size];
+    return !!want && crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex") === want;
+  } catch (e) { return false; }
+}
+/* The catalog folder's own .ec files, less a seeded sample where the folder is the default one,
+   the only folder any build seeded. */
+function folderFiles(dir) {
+  const all = ecFilesIn(dir);
+  return dir === defaultCatalogFolder() ? all.filter(f => !isSeededSample(f)) : all;
+}
 function builtInFiles() {
   if (catalogFolder() !== defaultCatalogFolder()) return [];
-  let own = [];
-  try { own = fs.readdirSync(catalogFolder()).map(n => n.toLowerCase()); } catch { /* not made yet */ }
+  const own = folderFiles(catalogFolder()).map(f => path.basename(f).toLowerCase());
   return ecFilesIn(BUILT_IN_DIR).filter(f => own.indexOf(path.basename(f).toLowerCase()) < 0);
 }
 /* Which copy of a name is read: the folder's own, else the shipped one. Null for neither. */
 function catalogFileNamed(base) {
   const own = path.join(catalogFolder(), base);
-  if (fs.existsSync(own)) return own;
+  if (fs.existsSync(own) && !(catalogFolder() === defaultCatalogFolder() && isSeededSample(own))) return own;
   return builtInFiles().filter(f => path.basename(f).toLowerCase() === base.toLowerCase())[0] || null;
 }
 
@@ -116,7 +136,7 @@ function catalogFolders() {
 }
 function catalogPlaces() {
   return (openedWith ? [openedWith] : []).concat(sampleLast(catalogFolders().reduce((out, dir) =>
-    out.concat(ecFilesIn(dir), [path.join(dir, CATALOG_SCRIPT)]), []).concat(builtInFiles())));
+    out.concat(folderFiles(dir), [path.join(dir, CATALOG_SCRIPT)]), []).concat(builtInFiles())));
 }
 
 /* A .ec OPENED FROM THE DESKTOP: the installer registers the extension, so Windows starts Etiuda
@@ -776,7 +796,7 @@ ipcMain.on("etiuda:host", (e) => {
        catalog first, so catalogFrom is already the answer by the time this is read. */
     catalogFolder: catalogFolder(),
     // The shipped sample's name where this desk reads it, so the empty desk can offer it by name.
-    sampleFile: builtInFiles().concat(ecFilesIn(catalogFolder())).some(f => path.basename(f) === SAMPLE_FILE) ? SAMPLE_FILE : "",
+    sampleFile: builtInFiles().concat(folderFiles(catalogFolder())).some(f => path.basename(f) === SAMPLE_FILE) ? SAMPLE_FILE : "",
     catalogFile: catalogFrom ? path.basename(catalogFrom) : "",
     catalogIn: catalogFrom ? path.dirname(catalogFrom) : "",
     catalogMtime: catalogMtime(),
@@ -869,7 +889,7 @@ function ecCounts(data) {
    page reading every file in the folder each time it paints one list. */
 ipcMain.handle("etiuda:catalog-files", (e) => {
   if (!fromEngine(e)) return [];
-  return sampleLast(ecFilesIn(catalogFolder()).concat(builtInFiles())).map(f => {
+  return sampleLast(folderFiles(catalogFolder()).concat(builtInFiles())).map(f => {
     let mt = 0, cards = -1, edition = "", macros = -1, intents = -1, cats = -1, awaiting = [];
     let id = "", catalogName = "";
     try { mt = Math.round(fs.statSync(f).mtimeMs); } catch { /* renamed away under the listing */ }

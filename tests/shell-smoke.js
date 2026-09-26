@@ -163,7 +163,7 @@ const step = async (label, body, opts) => {
  * it is what the count now sees: a mismatch is NO VERDICT, exit 78, not a tally.
  */
 const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7"];
-const EXPECTED = KEEP ? null : 118;
+const EXPECTED = KEEP ? null : 119;
 const phasesSeen = new Set();
 const phase = what => {
   const m = /^\[(\d+)[a-z]*\/\d+\]/.exec(String(what).trim());
@@ -1208,6 +1208,18 @@ const placeEc = (dir, from, as, minutesOld) => {
   fs.unlinkSync(ownCopy);
   await sleep(6000);
   const restored = await COPY_ROWS();
+  /* 2k4b: A SAMPLE AN EARLIER BUILD SEEDED is recognised by its bytes and passed over: the 09-17
+     edition, which the fixtures folder keeps as its sample-catalog.ec, put into Documents/Etiuda
+     under the sample's name leaves the shipped copy in use and is not listed as the person's. The
+     file is hashed first, so a fixture that has moved on refuses rather than passing. */
+  const SEEDED_FIX = path.join(process.env.ETIUDA_FIXTURES || "", "sample-catalog.ec");
+  const seededSha = crypto.createHash("sha256").update(fs.readFileSync(SEEDED_FIX)).digest("hex");
+  if (seededSha.slice(0, 16) !== "2fa81658b7ad2b4c") throw new Error("2k4b wants the 09-17 sample as " + SEEDED_FIX + " and found sha256 " + seededSha.slice(0, 16));
+  fs.copyFileSync(SEEDED_FIX, ownCopy);
+  await sleep(6000);
+  const seeded = await COPY_ROWS();
+  fs.unlinkSync(ownCopy);
+  await sleep(1500);
   await s.stop();
   const one = rows => rows.length === 1 && rows[0].name === "sample-catalog.ec";
   check(one(shipped) && shipped[0].copy === "builtin" && one(replaced) && replaced[0].copy === "own"
@@ -1215,6 +1227,9 @@ const placeEc = (dir, from, as, minutesOld) => {
     "2k4 the Library reads the sample from where Etiuda is installed and says so, a file of the same"
     + " name in Documents/Etiuda is read in its place and the row says so, and removing it brings the"
     + " shipped copy back: " + JSON.stringify({ shipped, replaced, restored }));
+  check(one(seeded) && seeded[0].copy === "builtin",
+    "2k4b a sample an earlier build seeded into Documents/Etiuda, byte for byte the 09-17 edition, is passed over: the"
+    + " Library still reads and names the shipped copy: " + JSON.stringify(seeded));
 
   /* ---- 2k5: the dot field under the cards, board item 419 ---------------------------------
      THE ONE CHECK IN THIS FILE THAT A PICTURE DECIDES, and it is here because no other reading
