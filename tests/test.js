@@ -2294,6 +2294,21 @@ function lintCatalogTests() {
      [lintCatalog(plShelf(["Kot", "Pies", "Dom"])).errors,
       lintCatalog(plShelf(["Kot", "Pies", "Kot"])).errors],
      [[], ['card 3 ("Kot"): same title as card 1 in this category, so at the desk the two are hard to tell apart; one needs a title of its own, or the two can become one card']]);
+
+  /* THE SAME-TITLE KEY IS THE TITLE AS rekeyOldCards BUCKETS IT: trimmed, case kept. Surrounding
+     space is invisible at the desk and defeats rekeying; a case difference is visible and does not. */
+  const enShelf = titles => {
+    const c = toy();
+    c.cards = titles.map((t, i) => ({ id: "c-en-" + i, shelf: "t-open", bodyShape: "plain",
+      title: { en: t }, body: { en: "Text " + i + "." } }));
+    return c;
+  };
+  eq("lint two titles on one shelf that differ only by surrounding space are the same title",
+     [lintCatalog(enShelf(["Kot", "Kot "])).errors, lintCatalog(enShelf([" Kot", "Kot"])).errors],
+     [['card 2 ("Kot "): same title as card 1 in this category, so at the desk the two are hard to tell apart; one needs a title of its own, or the two can become one card'],
+      ['card 2 ("Kot"): same title as card 1 in this category, so at the desk the two are hard to tell apart; one needs a title of its own, or the two can become one card']]);
+  eq("CONTROL: two titles that differ only in case are two titles",
+     lintCatalog(enShelf(["Refund", "refund"])).errors, []);
 }
 
 /* BOARD 646: ANY SET OF DECLARED LANGUAGES, OF ANY SIZE AND ANY CODES.
@@ -2829,10 +2844,10 @@ function lintCatalog(c, at) {
     if (m.c && catKeys.length && !cats[m.c]) err(where + ': unknown category "' + m.c + '"');
     /* Format 2 ids differ, so two cards with one title on one shelf collide in nothing: they look
        alike at the desk, and a star, hide or edit an older desk carries by title reaches neither
-       (rekeyOldCards). */
+       (rekeyOldCards). So the title is keyed as that function buckets it, trimmed and case kept. */
     // JSON-encoded pair, so no separator occurring inside a key or title can spoof a match.
     // A raw NUL separator lived here once and made git treat this whole file as binary.
-    const key = JSON.stringify([String(m.c || ""), String(title || "")]);
+    const key = JSON.stringify([String(m.c || ""), String(title || "").trim()]);
     if (seen[key]) err(where + ": same title as card " + seen[key] + " in this category, so at the desk the two are hard to tell apart; one needs a title of its own, or the two can become one card");
     seen[key] = place(ix);
     (Array.isArray(m.intents) ? m.intents : []).forEach(x => {
