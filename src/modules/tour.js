@@ -135,7 +135,7 @@ function tourRevealCardActions(){
 function loadStepBody(){
   const dir=eCatalogFolderShort();
   if(!dir) return t("The catalog you load stays in this browser, ready whenever you come back.");
-  return t("Replies come in a catalog. <b>Load a catalog</b>, under the logo, opens {FOLDER}, and the choice is yours: the team's own catalog, if it is there, or the sample, which always waits there for trying things out.")
+  return t("Replies come in a catalog. <b>Load a catalog</b>, under the logo, opens {FOLDER}, where the team's own catalog goes, and the sample beside it is there for trying things out.")
     .split("{FOLDER}").join(esc(dir));
 }
 /* THE MENU AS IT STANDS: the button while it is shut, and once the person opens it, the row a step

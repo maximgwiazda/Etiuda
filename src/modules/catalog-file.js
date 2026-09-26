@@ -5,7 +5,7 @@ import { ALWAYS_CATS } from "./cat-roles.js";
 import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, E_CATALOG_NAME, E_CATALOG_VERSION, parseCatalogFile } from "./catalog.js";
 import { catalogToV2, catalogFromV2, isV2 } from "./catalog-v2.js";
 import { CATS, intentArr, intentFieldKey, intentCount, catalogLangs, CONTENT_LANGS } from "./content-model.js";
-import { eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile } from "./host.js";
+import { eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile, eSampleFile, eReadCatalogFile } from "./host.js";
 import { CAT_LABELS_PL, CAT_LABELS_BY_LANG } from "./icons.js";
 import { fill } from "./intent-text.js";
 import { cardToExportPlain } from "./macros-json.js";
@@ -395,8 +395,9 @@ function syncSampleMark(){
   on=nsGet("Sample")==="1";
   el.hidden=!(on && (cards||[]).length>0 && sampleUntouched());
 }
-// The sample is a sibling file, so it can simply not be there - every route offering it asks here.
-function sampleReady(){ return typeof E_SAMPLE!=="undefined" && isV2(E_SAMPLE); }
+// The sample is a sibling file in a browser and a shipped file under a host, so it can simply not
+// be there - every route offering it asks here.
+function sampleReady(){ return (typeof E_SAMPLE!=="undefined" && isV2(E_SAMPLE)) || !!eSampleFile(); }
 /* Routes through activateCatalog() like any import - a real catalog you keep and can edit,
    not a temporary illusion. It NEVER replaces a loaded catalog: activateCatalog() drops every
    override and custom, and wanting the demo on top of real content is not a thing anyone wants
@@ -404,7 +405,14 @@ function sampleReady(){ return typeof E_SAMPLE!=="undefined" && isV2(E_SAMPLE); 
    a route added later cannot get around it. */
 function loadSampleCatalog(){
   if((cards||[]).length || !sampleReady()) return false;
-  return activateCatalog(catalogFromV2(JSON.parse(JSON.stringify(E_SAMPLE))),{keepPersonal:false});
+  if(typeof E_SAMPLE!=="undefined" && isV2(E_SAMPLE))
+    return activateCatalog(catalogFromV2(JSON.parse(JSON.stringify(E_SAMPLE))),{keepPersonal:false});
+  const name=eSampleFile();
+  eReadCatalogFile(name).then(got=>{
+    const c=(got && got.text) ? catalogFromFileText(got.text,name) : null;
+    if(c && !(cards||[]).length) activateCatalog(c,{keepPersonal:false, file:name});
+  });
+  return true;
 }
 /* Reads a picked file's text into a catalog, or names the file and hands back null. */
 function catalogFromFileText(text,fileName){

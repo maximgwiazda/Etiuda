@@ -5807,7 +5807,9 @@ What you type stays in this browser only.`;
     "The tour waits in the Menu, under Show tour…": "Przewodnik czeka w Menu, pod Pokaż przewodnik…",
     "To begin, the name your replies are signed with. Customers see it at the foot of each one, and it can be changed at any time in Settings.": "Na początek podpis: imię, które klienci zobaczą pod każdą odpowiedzią. Można je zmienić w każdej chwili w Ustawieniach.",
     "A catalog of replies": "Katalog odpowiedzi",
-    "Replies come in a catalog. <b>Load a catalog</b>, under the logo, opens {FOLDER}, and the choice is yours: the team's own catalog, if it is there, or the sample, which always waits there for trying things out.": "Gotowe odpowiedzi przynosi katalog. Przycisk <b>wczytaj katalog</b> pod logo otwiera folder {FOLDER}, a w nim do wyboru: katalog zespołu, jeśli już tam jest, albo przykładowy, który czeka tam zawsze i nadaje się do prób.",
+    "Replies come in a catalog. <b>Load a catalog</b>, under the logo, opens {FOLDER}, where the team's own catalog goes, and the sample beside it is there for trying things out.": "Gotowe odpowiedzi przynosi katalog. Przycisk <b>wczytaj katalog</b> pod logo otwiera folder {FOLDER}, do którego trafia katalog zespołu, a przykładowy obok niego nadaje się do prób.",
+    "Etiuda's own copy": "kopia dołączona do Etiudy",
+    "this folder's copy, read instead of Etiuda's own": "kopia z tego folderu, czytana zamiast dołączonej",
     "Paste the customer's name as the chat gives it, surname and capitals included; every reply then greets them by first name, in Polish in the vocative (ANNA KOWALSKA → <b>Anno</b>). The wheel beside it says who is on the chat, for internal comments. Any name will do to try it.": "Tu wkleja się imię klienta w takiej postaci, w jakiej przyszło z czatu, z nazwiskiem i wielkimi literami; każda odpowiedź zwróci się wtedy do klienta po imieniu, po polsku w wołaczu (ANNA KOWALSKA → <b>Anno</b>). Kółko obok mówi, kto jest po drugiej stronie czatu, na potrzeby komentarzy wewnętrznych. Na próbę wystarczy dowolne imię.",
     "The customer's name": "Imię klienta",
     "Paste the customer's name as the chat gives it, surname and capitals included; every reply then greets them by first name, in Polish in the vocative (ANNA KOWALSKA → <b>Anno</b>). Any name will do to try it.": "Tu wkleja się imię klienta w takiej postaci, w jakiej przyszło z czatu, z nazwiskiem i wielkimi literami; każda odpowiedź zwróci się wtedy do klienta po imieniu, po polsku w wołaczu (ANNA KOWALSKA → <b>Anno</b>). Na próbę wystarczy dowolne imię.",
@@ -11027,6 +11029,7 @@ What you type stays in this browser only.`;
     ePickCatalogFile: () => ePickCatalogFile,
     ePickCatalogFolder: () => ePickCatalogFolder,
     eReadCatalogFile: () => eReadCatalogFile,
+    eSampleFile: () => eSampleFile,
     eSaveCatalogFile: () => eSaveCatalogFile,
     eSetAccent: () => eSetAccent,
     eSetMaximized: () => eSetMaximized,
@@ -11243,7 +11246,10 @@ What you type stays in this browser only.`;
         /* The catalog's own identity, for the rule of board
            431; empty where the file did not read. */
         id: String(f && f.id || ""),
-        catalogName: String(f && f.catalogName || "")
+        catalogName: String(f && f.catalogName || ""),
+        // Which copy: the one Etiuda ships, or this folder's in its place.
+        builtIn: !!(f && f.builtIn),
+        replaces: !!(f && f.replaces)
       })).filter((f) => f.name) : []).catch(() => []);
     } catch (e) {
       return Promise.resolve([]);
@@ -11263,6 +11269,10 @@ What you type stays in this browser only.`;
       }
       return dir;
     });
+  }
+  function eSampleFile() {
+    const h = eHost();
+    return h && typeof h.sampleFile === "string" ? h.sampleFile : "";
   }
   function eReadCatalogFile(name) {
     const h = eHost();
@@ -12093,11 +12103,18 @@ What you type stays in this browser only.`;
     el.hidden = !(on && (cards || []).length > 0 && sampleUntouched());
   }
   function sampleReady() {
-    return typeof E_SAMPLE !== "undefined" && isV2(E_SAMPLE);
+    return typeof E_SAMPLE !== "undefined" && isV2(E_SAMPLE) || !!eSampleFile();
   }
   function loadSampleCatalog() {
     if ((cards || []).length || !sampleReady()) return false;
-    return activateCatalog(catalogFromV2(JSON.parse(JSON.stringify(E_SAMPLE))), { keepPersonal: false });
+    if (typeof E_SAMPLE !== "undefined" && isV2(E_SAMPLE))
+      return activateCatalog(catalogFromV2(JSON.parse(JSON.stringify(E_SAMPLE))), { keepPersonal: false });
+    const name = eSampleFile();
+    eReadCatalogFile(name).then((got) => {
+      const c = got && got.text ? catalogFromFileText(got.text, name) : null;
+      if (c && !(cards || []).length) activateCatalog(c, { keepPersonal: false, file: name });
+    });
+    return true;
   }
   function catalogFromFileText(text, fileName) {
     try {
@@ -17402,7 +17419,7 @@ What you type stays in this browser only.`;
   function loadStepBody() {
     const dir = eCatalogFolderShort();
     if (!dir) return t("The catalog you load stays in this browser, ready whenever you come back.");
-    return t("Replies come in a catalog. <b>Load a catalog</b>, under the logo, opens {FOLDER}, and the choice is yours: the team's own catalog, if it is there, or the sample, which always waits there for trying things out.").split("{FOLDER}").join(esc(dir));
+    return t("Replies come in a catalog. <b>Load a catalog</b>, under the logo, opens {FOLDER}, where the team's own catalog goes, and the sample beside it is there for trying things out.").split("{FOLDER}").join(esc(dir));
   }
   function menuOpen() {
     const m = $("#settingsMenu");
@@ -19099,6 +19116,10 @@ What you type stays in this browser only.`;
     ].filter(Boolean).map(esc);
     return parts2.concat(ecAwaitingHtml(liveAwaiting())).join(" · ");
   }
+  function ecCopyHtml(f) {
+    const said = f.builtIn ? t("Etiuda's own copy") : f.replaces ? t("this folder's copy, read instead of Etiuda's own") : "";
+    return said ? '<span class="ec-copy" data-ec-copy="' + (f.builtIn ? "builtin" : "own") + '">' + esc(said) + "</span>" : "";
+  }
   function paintCatalogList() {
     const box = document.getElementById("mgCatList");
     if (!box) return;
@@ -19112,13 +19133,14 @@ What you type stays in this browser only.`;
       const rows = files.map((f, i) => {
         const on = i === onAt;
         const stamp = catalogStamp(f.edition, f.mtime);
+        const copy2 = ecCopyHtml(f), meta = on ? loadedMeta(stamp) : ecMeta(stamp, f);
         return ecRowHtml({
           name: f.name,
           mtime: f.mtime,
           loaded: on,
           newer: at > 0 && f.mtime > at,
           sample: !!f.sample,
-          meta: on ? loadedMeta(stamp) : ecMeta(stamp, f)
+          meta: copy2 && meta ? copy2 + " · " + meta : copy2 || meta
         });
       });
       const applied = typeof E_CATALOG_NAME !== "undefined" && E_CATALOG_NAME ? E_CATALOG_NAME : "";

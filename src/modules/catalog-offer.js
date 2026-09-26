@@ -229,6 +229,12 @@ function loadedMeta(stamp){
     .filter(Boolean).map(esc);
   return parts.concat(ecAwaitingHtml(liveAwaiting())).join(" · ");
 }
+/* WHICH COPY A ROW IS, where two could be: the one Etiuda ships, or this folder's file of the same
+   name, which is read in its place. */
+function ecCopyHtml(f){
+  const said=f.builtIn ? t("Etiuda's own copy") : f.replaces ? t("this folder's copy, read instead of Etiuda's own") : "";
+  return said ? '<span class="ec-copy" data-ec-copy="'+(f.builtIn?"builtin":"own")+'">'+esc(said)+'</span>' : "";
+}
 function paintCatalogList(){
   const box=document.getElementById("mgCatList");
   if(!box) return;
@@ -251,8 +257,9 @@ function paintCatalogList(){
     const rows=files.map((f,i)=>{
       const on=i===onAt;
       const stamp=catalogStamp(f.edition,f.mtime);
+      const copy=ecCopyHtml(f), meta=on?loadedMeta(stamp):ecMeta(stamp,f);
       return ecRowHtml({ name:f.name, mtime:f.mtime, loaded:on, newer:at>0 && f.mtime>at,
-        sample:!!f.sample, meta:on?loadedMeta(stamp):ecMeta(stamp,f) });
+        sample:!!f.sample, meta:copy&&meta ? copy+" · "+meta : copy||meta });
     });
     /* THE CATALOG IN USE ALWAYS HAS A ROW, even where no file in the folder is it: a browser's
        import, a copy loaded from elsewhere, or a desk whose catalog was applied before the store

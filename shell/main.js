@@ -21,11 +21,10 @@ const CATALOG_FOLDER_KEY = "eCatalogFolder";
    newest one wins with no rename step to explain. Documents/Etiuda unless Settings says
    otherwise, and the setting is an ORDINARY ENGINE KEY, so it reaches here inside desk.json
    rather than through a second settings file that could disagree with the first. */
-/* THE HARNESS'S OWN DOCUMENTS FOLDER, the twin of ETIUDA_TEST_OFFSCREEN below. This app writes
-   into a person's Documents exactly once - the sample, on a first run - and app.getPath cannot be
-   redirected from OUTSIDE the process, so without this the only way to drive that once is against
-   the real folder of whoever is at the desk. Made before it is set: setPath refuses a path that
-   is not there. */
+/* THE HARNESS'S OWN DOCUMENTS FOLDER, the twin of ETIUDA_TEST_OFFSCREEN below. A first run makes
+   Documents/Etiuda, and app.getPath cannot be redirected from OUTSIDE the process, so without this
+   the only way to drive a first run is against the real folder of whoever is at the desk. Made
+   before it is set: setPath refuses a path that is not there. */
 if (process.env.ETIUDA_TEST_DOCUMENTS) {
   try {
     fs.mkdirSync(process.env.ETIUDA_TEST_DOCUMENTS, { recursive: true });
@@ -48,39 +47,24 @@ function ensureCatalogFolder() {
   catch (e) { console.error("etiuda: " + dir + " could not be made - " + e.message); }
 }
 
-/* THE SAMPLE CATALOG, put in the folder on the first run that does not already find it there,
-   whatever else the folder holds. Ruled 2026-09-17: it is a special catalog rather than a
-   stand-in for the missing one, so what is inside it is worth reaching on a desk that has a
-   catalog of its own too, and sampleLast() below is what keeps it from ever being opened in
-   that catalog's place.
-   THE DESK DECIDES THE OCCASION, and only the desk can, because the folder forgets: a person who
-   throws the sample away leaves nothing behind that says they were given one. The key's name is
-   what keeps a Clear local memory from reaching it - the engine's wipe sweeps its own keys by
-   shape, /^e[A-Z]/ or a named preference, and `e~sampled` is neither, the same trick the 1.x
-   carry's `e~carried` marker lives by.
-   THE DEFAULT FOLDER ONLY, for ensureCatalogFolder's reason: a folder somebody chose was theirs
-   before Etiuda saw it, and dropping a file into it is not this app's business. */
+/* TWO FOLDERS: the catalogs Etiuda ships (the sample) stay where it was installed, beside this
+   file, and Documents/Etiuda is read as well; a file there with exactly the same name is read
+   INSTEAD of the shipped one, and the Library says which copy is in use. Nothing is written into
+   Documents. Paired with the default folder only, for ensureCatalogFolder's reason: a folder
+   somebody chose stands alone. */
 const SAMPLE_FILE = "sample-catalog.ec";
-const SAMPLE_KEY = "e~sampled";
-function seedSample() {
-  if (deskKeys === undefined) deskKeys = readDesk();
-  if (deskKeys[SAMPLE_KEY]) return;                       // not the first run
-  const dir = defaultCatalogFolder();
-  if (catalogFolder() !== dir) return;
-  const dest = path.join(dir, SAMPLE_FILE);
-  if (!fs.existsSync(dest)) {
-    /* Read and write rather than copyFile: the source is inside the asar, which is a file to
-       read and not a file to copy from, and the read is where a corrupt payload would show. */
-    try {
-      fs.writeFileSync(dest, fs.readFileSync(path.join(__dirname, SAMPLE_FILE)));
-      console.log("etiuda: the sample catalog was put in " + dir);
-    } catch (e) {
-      /* Not marked: an error is not an answer, so the next run asks again. */
-      console.error("etiuda: the sample catalog could not be written - " + e.message);
-      return;
-    }
-  }
-  deskSetOwn(SAMPLE_KEY, "1");
+const BUILT_IN_DIR = __dirname;
+function builtInFiles() {
+  if (catalogFolder() !== defaultCatalogFolder()) return [];
+  let own = [];
+  try { own = fs.readdirSync(catalogFolder()).map(n => n.toLowerCase()); } catch { /* not made yet */ }
+  return ecFilesIn(BUILT_IN_DIR).filter(f => own.indexOf(path.basename(f).toLowerCase()) < 0);
+}
+/* Which copy of a name is read: the folder's own, else the shipped one. Null for neither. */
+function catalogFileNamed(base) {
+  const own = path.join(catalogFolder(), base);
+  if (fs.existsSync(own)) return own;
+  return builtInFiles().filter(f => path.basename(f).toLowerCase() === base.toLowerCase())[0] || null;
 }
 
 /* WHAT THE FILE IS, never what it is called and never the id or the `sample` flag inside it: edit
@@ -132,7 +116,7 @@ function catalogFolders() {
 }
 function catalogPlaces() {
   return (openedWith ? [openedWith] : []).concat(sampleLast(catalogFolders().reduce((out, dir) =>
-    out.concat(ecFilesIn(dir), [path.join(dir, CATALOG_SCRIPT)]), [])));
+    out.concat(ecFilesIn(dir), [path.join(dir, CATALOG_SCRIPT)]), []).concat(builtInFiles())));
 }
 
 /* A .ec OPENED FROM THE DESKTOP: the installer registers the extension, so Windows starts Etiuda
@@ -791,6 +775,8 @@ ipcMain.on("etiuda:host", (e) => {
        them and the offer's line names the folder it accepts from. The preload asks for the
        catalog first, so catalogFrom is already the answer by the time this is read. */
     catalogFolder: catalogFolder(),
+    // The shipped sample's name where this desk reads it, so the empty desk can offer it by name.
+    sampleFile: builtInFiles().concat(ecFilesIn(catalogFolder())).some(f => path.basename(f) === SAMPLE_FILE) ? SAMPLE_FILE : "",
     catalogFile: catalogFrom ? path.basename(catalogFrom) : "",
     catalogIn: catalogFrom ? path.dirname(catalogFrom) : "",
     catalogMtime: catalogMtime(),
@@ -883,7 +869,7 @@ function ecCounts(data) {
    page reading every file in the folder each time it paints one list. */
 ipcMain.handle("etiuda:catalog-files", (e) => {
   if (!fromEngine(e)) return [];
-  return sampleLast(ecFilesIn(catalogFolder())).map(f => {
+  return sampleLast(ecFilesIn(catalogFolder()).concat(builtInFiles())).map(f => {
     let mt = 0, cards = -1, edition = "", macros = -1, intents = -1, cats = -1, awaiting = [];
     let id = "", catalogName = "";
     try { mt = Math.round(fs.statSync(f).mtimeMs); } catch { /* renamed away under the listing */ }
@@ -901,14 +887,18 @@ ipcMain.handle("etiuda:catalog-files", (e) => {
     } catch { /* not a catalog, and the Load button is where that is said out loud */ }
     return { name: path.basename(f), mtime: mt, cards: cards, edition: edition,
              macros: macros, intents: intents, cats: cats, awaiting: awaiting,
-             sample: isTheSample(f), id: id, catalogName: catalogName };
+             sample: isTheSample(f), id: id, catalogName: catalogName,
+             /* Which copy: the one Etiuda ships, or the folder's own in place of a shipped one. */
+             builtIn: path.dirname(f) === BUILT_IN_DIR,
+             replaces: path.dirname(f) !== BUILT_IN_DIR && catalogFolder() === defaultCatalogFolder()
+               && fs.existsSync(path.join(BUILT_IN_DIR, path.basename(f))) };
   });
 });
 ipcMain.handle("etiuda:catalog-read", (e, name) => {
   if (!fromEngine(e)) return null;
   const base = String(name || "");
   if (!base || base !== path.basename(base) || !/\.ec$/i.test(base)) return null;
-  const file = path.join(catalogFolder(), base);
+  const file = catalogFileNamed(base) || path.join(catalogFolder(), base);
   try { return { name: base, text: fs.readFileSync(file, "utf8") }; }
   catch (err) {
     console.error("etiuda: " + file + " could not be read - " + err.message);
@@ -1303,7 +1293,7 @@ if (!theOnlyOne) {
   });
   openedWith = ecFromArgv(process.argv);
   app.whenReady().then(() => {
-    hardenSession(); applyThemeSource(); ensureCatalogFolder(); seedSample(); createWindow();
+    hardenSession(); applyThemeSource(); ensureCatalogFolder(); createWindow();
   });
 }
 

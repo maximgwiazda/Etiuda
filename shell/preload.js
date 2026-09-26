@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld("E_HOST", {
      accepting a catalog reloads the document, so a stale answer cannot outlive the fact. The
      folder Settings is showing comes from the desk key instead, which is live. */
   catalogFolder: host.catalogFolder,
+  sampleFile: host.sampleFile || "",
   catalogFile: host.catalogFile,
   catalogIn: host.catalogIn,
   catalogMtime: host.catalogMtime,
