@@ -2,9 +2,9 @@
    gathers out of scattered light when the empty desk appears and twinkles while it stays. A
    dialog standing over the desk holds the gathering until it closes, so it is seen. Under
    either quiet switch it is drawn once, gathered and still. */
-import { mgReduceMotion } from "./motion.js";
+import { mgReduceMotion, M_MS } from "./motion.js";
 
-const MARK_PX=280, MARK_STEP=3.5, GATHER_MS=1100, FRAME_MS=33, TWINKLE_MS=66, ALPHA_STEPS=16;
+const MARK_PX=280, MARK_STEP=3.5, GATHER_MS=M_MS.gather, TWINKLE_MS=M_MS.twinkle, ALPHA_STEPS=16;
 let eMark=null;
 
 /* The glyph is read off the header's copy, never redrawn: its path and group transform, scaled
@@ -53,8 +53,9 @@ function drawMark(k, now){
   });
   ctx.globalAlpha=1;
 }
-/* Frames are asked for at the pace they are drawn, a timer between them, so a twinkling mark
-   wakes the page fifteen times a second rather than sixty. */
+/* THE GATHER RUNS AT THE DISPLAY'S RATE: it is the first motion a new person sees. The twinkle
+   after it asks for frames at its own pace, a timer between them, so a mark left standing wakes
+   the page fifteen times a second rather than sixty. */
 function markFrame(now){
   const k=eMark;
   if(!k || !k.cv.isConnected){ stopEmptyMark(); return; }
@@ -66,8 +67,8 @@ function markFrame(now){
   }
   drawMark(k, now);
   if(mgReduceMotion()) return;
-  k.hold=setTimeout(()=>{ k.raf=requestAnimationFrame(markFrame); },
-    now-k.born<GATHER_MS ? FRAME_MS : TWINKLE_MS);
+  if(now-k.born<GATHER_MS){ k.raf=requestAnimationFrame(markFrame); return; }
+  k.hold=setTimeout(()=>{ k.raf=requestAnimationFrame(markFrame); }, TWINKLE_MS);
 }
 function dialogStanding(){ return !!document.querySelector(".modal:not([hidden])"); }
 function startMark(k){

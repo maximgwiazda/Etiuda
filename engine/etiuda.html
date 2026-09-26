@@ -16485,9 +16485,8 @@ What you type stays in this browser only.`;
   });
   var MARK_PX = 280;
   var MARK_STEP = 3.5;
-  var GATHER_MS = 1100;
-  var FRAME_MS = 33;
-  var TWINKLE_MS = 66;
+  var GATHER_MS = M_MS.gather;
+  var TWINKLE_MS = M_MS.twinkle;
   var ALPHA_STEPS = 16;
   var eMark = null;
   function markDots() {
@@ -16556,12 +16555,13 @@ What you type stays in this browser only.`;
     }
     drawMark(k, now);
     if (mgReduceMotion()) return;
-    k.hold = setTimeout(
-      () => {
-        k.raf = requestAnimationFrame(markFrame);
-      },
-      now - k.born < GATHER_MS ? FRAME_MS : TWINKLE_MS
-    );
+    if (now - k.born < GATHER_MS) {
+      k.raf = requestAnimationFrame(markFrame);
+      return;
+    }
+    k.hold = setTimeout(() => {
+      k.raf = requestAnimationFrame(markFrame);
+    }, TWINKLE_MS);
   }
   function dialogStanding() {
     return !!document.querySelector(".modal:not([hidden])");
