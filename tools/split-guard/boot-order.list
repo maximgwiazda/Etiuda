@@ -91,6 +91,7 @@ catalogFile.wireCatalogDrop()
 setTimeout()
 pops.wirePops()
 addEventListener:"resize"
+uiLang.translateChrome()
 try:E_BOOT_OK()
 try:personalPack.showPackMigrationWarning()
 try:personalPack.showDeskNotices()

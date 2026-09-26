@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 229 };
+const EXPECTED = { chrome: 230 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -2722,6 +2722,15 @@ const t0 = Date.now();
       return { at: sessionStorage.getItem("eTourAt"), nextHidden: !!next && next.hidden,
                rings: !!b && ring.left <= b.left && ring.right >= b.right && ring.top <= b.top && ring.bottom >= b.bottom };
     });
+    /* quiet-13: the reload a load ends in is covered. Boot's end is timed from inside the next
+       document (a wrapper round E_BOOT_OK, which the boot guard defines and the app calls last),
+       and so is the class the document arrived under. */
+    await q.evaluateOnNewDocument(() => {
+      let f;
+      Object.defineProperty(window, "E_BOOT_OK", { configurable: true, set(v) { f = v; },
+        get() { return function () { window.__bootAt = performance.now(); window.__bootClass = document.documentElement.className;
+          return f && f.apply(this, arguments); }; } });
+    });
     step("clicking the sample and waiting for the reload");
     const navigated = q.waitForNavigation({ waitUntil: "load", timeout: 30000 }).then(() => true, () => false);
     await q.click("#emptySample");
@@ -2735,6 +2744,16 @@ const t0 = Date.now();
       "on the empty desk the tour's second step rings the Load button and waits without a Next, and the reload"
       + " a load ends in brings the tour back at the step after it: " + JSON.stringify({ loadStep, resumed }));
     check(reloaded, "accepting the sample reloads the document, which is how a catalog arrives on a clean desk");
+    const cover = await q.evaluate(async () => {
+      await new Promise(r => setTimeout(r, 900));
+      const paint = performance.getEntriesByType("paint").find(x => x.name === "first-paint");
+      return { bootAt: Math.round(window.__bootAt || -1), firstPaint: paint ? Math.round(paint.startTime) : -1,
+               arrivedUnder: window.__bootClass || "", rest: document.documentElement.className };
+    });
+    check(/e-arriving/.test(cover.arrivedUnder) && cover.bootAt > 0 && cover.firstPaint >= cover.bootAt
+          && !/e-arriv|e-veiled|e-leaving/.test(cover.rest),
+      "quiet-13 the reload a load ends in is covered: the next document arrives marked, paints nothing before its boot"
+      + " is done, and is at rest afterwards (" + JSON.stringify(cover) + ")");
     step("waiting for the sample's cards after the reload");
     await q.waitForFunction(() => document.querySelectorAll(".card").length > 0, { timeout: 20000 }).catch(() => {});
     await sleep(1200);

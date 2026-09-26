@@ -1,6 +1,7 @@
 import { E_CATALOG_KEY, E_CATALOG_STORE, eWatchClear } from "./catalog.js";
 import { pack, savePack } from "./pack.js";
 import { E_NS, eWipeLatch, lsDel, lsKeys, mgReopenAfterReload, nsDel, nsKey, ssDel, ssGet, ssSet } from "./storage.js";
+import { reloadCovered } from "./motion.js";
 import { TAB_KEY, tabSaveTimer } from "./tabs.js";
 import { askSure, t } from "./ui-lang.js";
 import { eHost } from "./host.js";
@@ -60,10 +61,10 @@ function clearNow(){
      mid-transaction - but never for long: a wipe the user asked for must not hang on it. */
   if(watchGone && typeof watchGone.then==="function"){
     let done=false;
-    const go=()=>{ if(!done){ done=true; location.reload(); } };
+    const go=()=>{ if(!done){ done=true; reloadCovered(); } };
     watchGone.then(go,go);
     setTimeout(go,600);
-  } else location.reload();
+  } else reloadCovered();
 }
 /* The other half. The personal layers go WITH the catalog because they only mean anything
    against its cards. Preferences stay: a name, a theme and a layout are yours, not the catalog's. */
@@ -97,7 +98,7 @@ function ejectNow(){
   // The file's name and date go with the catalog: nothing is loaded, so no row is the loaded one.
   nsDel("CatalogFile"); nsDel("CatalogFileAt");
   ssDel(TAB_KEY);
-  location.reload();
+  reloadCovered();
 }
 
 export {

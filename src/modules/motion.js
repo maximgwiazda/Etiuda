@@ -1,4 +1,4 @@
-import { lsGet } from "./storage.js";
+import { lsGet, ssMarkArrival } from "./storage.js";
 import { modalCard } from "./dom.js";
 
 /* THE ONE CURVE. Every move, fold and fade the script animates settles on it, and the sheet
@@ -180,7 +180,19 @@ function afterPaint(fn){
   requestAnimationFrame(()=>requestAnimationFrame(fn));
 }
 
+/* A RELOAD SOMEBODY WATCHES IS COVERED: what sits under the band leaves on the dismiss tier, and
+   the next document holds its first paint until boot is done and brings it back on the surface
+   tier (the boot guard in template.html, which reads the mark). Stilled, it reloads at once. */
+function reloadCovered(){
+  ssMarkArrival();
+  if(mgReduceMotion() || typeof document==="undefined"){ location.reload(); return; }
+  document.documentElement.classList.add("e-leaving");
+  // A frame past the fade, so the frame the next document holds is the one with nothing under the band.
+  setTimeout(()=>location.reload(), M_MS.dismiss+34);
+}
+
 export {
+  reloadCovered,
   E_EASE,
   E_SPRING,
   E_SPRING_MS,

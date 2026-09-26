@@ -458,6 +458,11 @@ function boot(){
     cutText.scheduleCutScan();                                    // what fits changed, so what is cut did
   },{passive:true});
 
+  /* The markup's own English swept into the saved language before the first frame rather than two
+     frames after it (on-open.js repaints the rest there): a covered reload's first frame is the
+     one this boot ends in, and it would show the header's placeholders in English. */
+  uiLang.translateChrome();
+
   /* Last line of the app, on purpose: reaching it is the definition of a successful boot.
      The guard at the top of the file waits for this and offers a way out if it never comes. */
   try{ if(typeof E_BOOT_OK==="function") E_BOOT_OK(); }catch(e){}

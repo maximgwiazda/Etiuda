@@ -11,6 +11,7 @@ import { fill } from "./intent-text.js";
 import { cardToExportPlain } from "./macros-json.js";
 import { FACTS, normWhoList } from "./stock.js";
 import { eWipeLatch, mgReopenAfterReload, ssDel, nsGet, nsSet, nsDel } from "./storage.js";
+import { reloadCovered } from "./motion.js";
 import { TAB_KEY, tabSaveTimer } from "./tabs.js";
 import { t, catalogCountsLine, toast } from "./ui-lang.js";
 import { BASE_CATS, catalogCardId, pack, whoOptions, savePack } from "./pack.js";
@@ -360,7 +361,7 @@ function activateCatalog(c,opts){
      line below, which is what stops every write from here to the reload. */
   mgReopenAfterReload();
   try{ clearTimeout(tabSaveTimer); ssDel(TAB_KEY); eWipeLatch(); }catch(e){}
-  location.reload();
+  reloadCovered();
   return true;
 }
 /** True while the sample is still, word for word, the one that shipped. The test is

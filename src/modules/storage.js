@@ -193,6 +193,13 @@ function mgReopenAfterReload(){
   if(typeof document==="undefined" || !document.getElementById("mgCatList")) return;
   try{ ssSet(MG_REOPEN, Array.from(mgOpen).join(",")||"1"); }catch(e){}
 }
+/* A MARK FOR THE NEXT DOCUMENT, the one session write the latch lets through: it is read and
+   removed by that document's first script and carries nothing of anybody's. */
+const E_ARRIVING="eArriving";
+function ssMarkArrival(){
+  if(!E_SS_OK) return;
+  try{ sessionStorage.setItem(E_ARRIVING,"1"); }catch(e){}
+}
 /** Namespaced key for anything belonging to one catalog. Preferences do not use this. */
 function nsKey(name){ return E_NS+name; }
 function nsGet(name){ return lsGet(nsKey(name)); }
@@ -232,6 +239,7 @@ export {
   ssSet,
   ssDel,
   mgReopenAfterReload,
+  ssMarkArrival,
   nsKey,
   nsGet,
   nsSet,

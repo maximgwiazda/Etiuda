@@ -60,6 +60,18 @@
     var root=document.documentElement;
     if(localStorage.getItem("eMotionOff")==="1" || matchMedia("(prefers-reduced-motion: reduce)").matches)
       root.classList.add("e-still");
+    /* A COVERED RELOAD (motion.js reloadCovered). Rendering is blocked until the parser reaches
+       #eBooted, after boot, so the frame the last document left stays on screen and nothing
+       half-built is ever painted; where blocking is not understood, the body stays unseen. */
+    if(sessionStorage.getItem("eArriving")){
+      sessionStorage.removeItem("eArriving");
+      root.classList.add("e-arriving");
+      var hold=document.createElement("link");
+      if(hold.blocking && hold.blocking.supports && hold.blocking.supports("render")){
+        hold.rel="expect"; hold.href="#eBooted"; hold.setAttribute("blocking","render");
+        document.head.appendChild(hold);
+      } else root.classList.add("e-veiled");
+    }
     if(localStorage.getItem("ePills")==="0") root.classList.add("e-pills-off");
     else{
       var shape=/^(\d+)x(\d+(?:\.\d+)?)$/.exec(localStorage.getItem("eHdrPills")||"");
@@ -69,8 +81,29 @@
   var booted=false, tries=0;
   try{ tries=parseInt(sessionStorage.getItem("eBootTry")||"0",10)||0; }catch(e){}
   // Called by the last line of the app script. Until then, boot is assumed to be in progress.
+  /* The arrival: the first frame the block lets through is the band over nothing, as the frame it
+     replaces was, and the content under it comes in on the surface tier from the frame after. Not
+     sooner: the animation clock stood still while rendering was blocked, and a fade started on it
+     is already over when it is first painted. A frame does not come to a hidden window, hence
+     the timeout. */
+  function arrive(){
+    var root=document.documentElement, done=false;
+    if(!root.classList.contains("e-arriving")) return;
+    root.classList.add("e-arrived");
+    root.classList.remove("e-veiled");
+    void (document.body && document.body.offsetWidth);
+    function go(){
+      if(done) return;
+      done=true;
+      root.classList.remove("e-arriving");
+      setTimeout(function(){ root.classList.remove("e-arrived"); }, 600);
+    }
+    requestAnimationFrame(function(){ requestAnimationFrame(go); });
+    setTimeout(go, 500);
+  }
   window.E_BOOT_OK=function(){
     booted=true;
+    arrive();
     try{ sessionStorage.removeItem("eBootTry"); }catch(e){}
   };
   /* Probed with a real write - the store only reports unusable when touched. The exception
@@ -145,6 +178,7 @@
       +'folder, or in a normal (non-private) window, is usually enough.';
   }
   function banner(msg, broken){
+    document.documentElement.classList.remove("e-arriving","e-veiled");
     if(document.getElementById("eRescue")) return;
     var d=document.createElement("div");
     d.id="eRescue";
@@ -2162,6 +2196,16 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
    hidden never changes and the card element is not replaced. */
 @keyframes eModalBgIn{from{opacity:0}to{opacity:1}}
 @keyframes eModalCardIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
+/* A COVERED RELOAD (motion.js reloadCovered, and the boot guard's arrive): the band stays, and
+   what sits under it leaves and arrives. The dot field is the scroller's own ground and stays. */
+@keyframes eLeave{to{opacity:0}}
+html.e-leaving body>:not(header,#railHit,.scroller,script),html.e-leaving .scroller>.shell,
+html.e-leaving #pillsSlot{animation:eLeave var(--m-dismiss) ease forwards;pointer-events:none}
+html.e-veiled body{visibility:hidden}
+html.e-arriving body>:not(header,#railHit,.scroller,script),html.e-arriving .scroller>.shell,
+html.e-arriving #pillsSlot{opacity:0}
+html.e-arrived body>:not(header,#railHit,.scroller,script),html.e-arrived .scroller>.shell,
+html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
 .modal:not([hidden]) .modal-bg{animation:eModalBgIn var(--m-scrim) ease both}
 .modal:not([hidden]) .modal-card{animation:eModalCardIn var(--m-surface) var(--m-ease) both}
 /* One treatment for everything that hangs below an anchor and toggles with hidden - a
@@ -4334,6 +4378,7 @@ What you type stays in this browser only.`;
     nsSet: () => nsSet,
     ssDel: () => ssDel,
     ssGet: () => ssGet,
+    ssMarkArrival: () => ssMarkArrival,
     ssSet: () => ssSet
   });
 
@@ -4659,6 +4704,14 @@ What you type stays in this browser only.`;
     } catch (e) {
     }
   }
+  var E_ARRIVING = "eArriving";
+  function ssMarkArrival() {
+    if (!E_SS_OK) return;
+    try {
+      sessionStorage.setItem(E_ARRIVING, "1");
+    } catch (e) {
+    }
+  }
   function nsKey(name) {
     return E_NS + name;
   }
@@ -4741,6 +4794,7 @@ What you type stays in this browser only.`;
     mgPinCard: () => mgPinCard,
     mgReduceMotion: () => mgReduceMotion,
     mgSystemStill: () => mgSystemStill,
+    reloadCovered: () => reloadCovered,
     syncStill: () => syncStill,
     wireStill: () => wireStill
   });
@@ -4931,6 +4985,15 @@ What you type stays in this browser only.`;
       return;
     }
     requestAnimationFrame(() => requestAnimationFrame(fn));
+  }
+  function reloadCovered() {
+    ssMarkArrival();
+    if (mgReduceMotion() || typeof document === "undefined") {
+      location.reload();
+      return;
+    }
+    document.documentElement.classList.add("e-leaving");
+    setTimeout(() => location.reload(), M_MS.dismiss + 34);
   }
 
   // src/modules/cut-text.js
@@ -12073,7 +12136,7 @@ What you type stays in this browser only.`;
       eWipeLatch();
     } catch (e) {
     }
-    location.reload();
+    reloadCovered();
     return true;
   }
   function sampleUntouched() {
@@ -12669,12 +12732,12 @@ What you type stays in this browser only.`;
       const go = () => {
         if (!done) {
           done = true;
-          location.reload();
+          reloadCovered();
         }
       };
       watchGone.then(go, go);
       setTimeout(go, 600);
-    } else location.reload();
+    } else reloadCovered();
   }
   var E_EJECTED = "eEjectedNow";
   function ejectedJustNow() {
@@ -12697,7 +12760,7 @@ What you type stays in this browser only.`;
     nsDel("CatalogFile");
     nsDel("CatalogFileAt");
     ssDel(TAB_KEY);
-    location.reload();
+    reloadCovered();
   }
 
   // src/modules/rail-panel.js
@@ -21589,6 +21652,7 @@ What you type stays in this browser only.`;
       mtRefreshLive();
       scheduleCutScan();
     }, { passive: true });
+    translateChrome();
     try {
       if (typeof E_BOOT_OK === "function") E_BOOT_OK();
     } catch (e) {
@@ -21616,3 +21680,5 @@ What you type stays in this browser only.`;
   if (typeof document !== "undefined") boot();
 })();
 </script>
+<!-- Parsed after boot: a covered reload's render block ends here (the boot guard's "expect"). -->
+<div id="eBooted" hidden></div>
