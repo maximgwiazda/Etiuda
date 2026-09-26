@@ -294,9 +294,8 @@ function proposeEdition(current){
   const was=editionParts(current);
   return (was && was.date>=today) ? was.date+nextEditionLetters(was.s) : today;
 }
-/* keepPersonal carries the personal layer across, and every route passes it, Import and another
-   catalog included: loading a catalog erases nothing a person made. The sample alone drops it,
-   and it loads only on an empty desk. */
+/* keepPersonal carries the personal layer across, and every route passes it, Import, another
+   catalog and the sample included: loading a catalog erases nothing a person made. */
 function activateCatalog(c,opts){
   const keep=!!(opts&&opts.keepPersonal);
   /* THE CATALOG LANDS BEFORE ANYTHING IS PRUNED FOR IT. The personal layers below are
@@ -399,18 +398,18 @@ function syncSampleMark(){
 // be there - every route offering it asks here.
 function sampleReady(){ return (typeof E_SAMPLE!=="undefined" && isV2(E_SAMPLE)) || !!eSampleFile(); }
 /* Routes through activateCatalog() like any import - a real catalog you keep and can edit,
-   not a temporary illusion. It NEVER replaces a loaded catalog: activateCatalog() drops every
-   override and custom, and wanting the demo on top of real content is not a thing anyone wants
-   - Reset first. The caller already fires only on an empty Etiuda; the rule is stated here so
-   a route added later cannot get around it. */
+   not a temporary illusion. It NEVER replaces a loaded catalog: wanting the demo on top of real
+   content is not a thing anyone wants. The caller already fires only on an empty Etiuda; the
+   rule is stated here so a route added later cannot get around it. An empty desk may still hold
+   the layer an Eject kept, so the layer is carried as every other route carries it. */
 function loadSampleCatalog(){
   if((cards||[]).length || !sampleReady()) return false;
   if(typeof E_SAMPLE!=="undefined" && isV2(E_SAMPLE))
-    return activateCatalog(catalogFromV2(JSON.parse(JSON.stringify(E_SAMPLE))),{keepPersonal:false});
+    return activateCatalog(catalogFromV2(JSON.parse(JSON.stringify(E_SAMPLE))),{keepPersonal:true});
   const name=eSampleFile();
   eReadCatalogFile(name).then(got=>{
     const c=(got && got.text) ? catalogFromFileText(got.text,name) : null;
-    if(c && !(cards||[]).length) activateCatalog(c,{keepPersonal:false, file:name});
+    if(c && !(cards||[]).length) activateCatalog(c,{keepPersonal:true, file:name});
   });
   return true;
 }

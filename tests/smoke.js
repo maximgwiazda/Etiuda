@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 226 };
+const EXPECTED = { chrome: 228 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -2736,6 +2736,79 @@ const t0 = Date.now();
   }
   finally { await hookDrain(ctx, "the public first run"); if (ctx) await ctx.close().catch(() => {}); fs.rmSync(pub, { recursive: true, force: true }); }
   clean(e, "the public first run");
+
+  /* ---- THE FIRST AFTERNOON'S BUG HUNT, the drives that want a desk of their own --------------
+     Each drive in a fresh context of its own over a folder holding the engine and the sample, the
+     public first run's shape; a context given `done` starts with the tour already seen. */
+  e = since();
+  const hunt = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-hunt-"));
+  const huntCtx = [];
+  let huntAt = "the start";
+  fs.copyFileSync(RUN.page, path.join(hunt, "etiuda.html"));
+  fs.copyFileSync(path.join(RUN.dir, E.SIBLING_AS.sampleV2), path.join(hunt, E.SIBLING_AS.sampleV2));
+  const huntUrl = dir => "file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/");
+  const huntPage = async (dir, done) => {
+    const c = b.createBrowserContext ? await b.createBrowserContext() : await b.createIncognitoBrowserContext();
+    huntCtx.push(c);
+    const q = await c.newPage();
+    await hookInstall(q);
+    await q.setViewport({ width: 1500, height: 950 });
+    q.on("dialog", d => d.accept());
+    q.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
+    if (done) await q.evaluateOnNewDocument(() => { try { localStorage.setItem("eTourDone_v3", "1"); localStorage.setItem("eTourInvite_v3", "1"); } catch (x) {} });
+    await q.goto(huntUrl(dir), { waitUntil: "load", timeout: 90000 });
+    return q;
+  };
+  const clickReload = async (q, sel) => {
+    const nav = q.waitForNavigation({ waitUntil: "load", timeout: 30000 }).then(() => true, () => false);
+    await q.click(sel);
+    return nav;
+  };
+  const upFor = (q, fn, ms) => q.waitForFunction(fn, { timeout: ms || 20000, polling: 100 }).then(() => true, () => false);
+  try {
+    /* data-2: THE EMPTY DESK'S SAMPLE BUTTON KEEPS WHAT AN EJECT KEPT. The sample loaded, one card's
+       title edited and saved, another starred, the catalog ejected, and the sample taken up again
+       from the empty desk: the edit and the star are still in the stored pack. */
+    huntAt = "data-2";
+    const q2 = await huntPage(hunt, true);
+    await upFor(q2, () => !!document.getElementById("emptySample"));
+    await clickReload(q2, "#emptySample");
+    await upFor(q2, () => document.querySelectorAll("#list .card[data-id]").length > 3);
+    const made = await q2.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const ids = [...document.querySelectorAll("#list .card[data-id]")].map(c => c.getAttribute("data-id"));
+      openCardEditor(ids[0]); await wait(700);
+      const title = document.querySelector('#modalCard input[id^="me"]');
+      if (title) { title.value = title.value + " probe"; title.dispatchEvent(new Event("input", { bubbles: true })); }
+      const save = document.getElementById("meSave"); if (save) save.click(); await wait(700);
+      if (typeof closeModal === "function" && !document.getElementById("modal").hidden) closeModal();
+      toggleFavourite(ids[2]); await wait(300);
+      return { edited: ids[0], starred: ids[2] };
+    });
+    const layer = (q, m) => q.evaluate(m => { const k = JSON.parse(lsGet(nsKey("Pack")) || "{}");
+      return { edit: !!(k.overrides || {})[m.edited], star: (k.favourites || []).indexOf(m.starred) > -1 }; }, m);
+    const before = await layer(q2, made);
+    await q2.evaluate(() => ejectCatalog());
+    await upFor(q2, () => !!document.getElementById("eSureYes"), 5000);
+    await clickReload(q2, "#eSureYes");
+    await upFor(q2, () => !!document.getElementById("emptySample"));
+    const ejected = await layer(q2, made);
+    await clickReload(q2, "#emptySample");
+    await upFor(q2, () => document.querySelectorAll("#list .card[data-id]").length > 3);
+    const again = await layer(q2, made);
+    check(before.edit && before.star && ejected.edit && ejected.star && again.edit && again.star,
+      "data-2 the empty desk's sample button keeps the edit and the star an Eject kept (saved, ejected, taken up again): "
+      + JSON.stringify({ before, ejected, again }));
+
+  } catch (x) {
+    const where = String((x && x.stack || "").split(String.fromCharCode(10))[1] || "").trim();
+    check(false, "the bug hunt's drives could not run, at " + huntAt + ": " + (x && x.message || x) + (where ? " | " + where : ""));
+  }
+  finally {
+    for (const c of huntCtx) { await hookDrain(c, "the bug hunt"); await c.close().catch(() => {}); }
+    fs.rmSync(hunt, { recursive: true, force: true });
+  }
+  clean(e, "the bug hunt's drives");
 
   /* ---- THE SYSTEM'S LANGUAGE (the first afternoon) ------------------------------------------
      The interface's language where nothing is stored: a browser saying Polish first gets a Polish

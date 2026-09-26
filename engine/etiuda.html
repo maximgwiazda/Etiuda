@@ -12111,11 +12111,11 @@ What you type stays in this browser only.`;
   function loadSampleCatalog() {
     if ((cards || []).length || !sampleReady()) return false;
     if (typeof E_SAMPLE !== "undefined" && isV2(E_SAMPLE))
-      return activateCatalog(catalogFromV2(JSON.parse(JSON.stringify(E_SAMPLE))), { keepPersonal: false });
+      return activateCatalog(catalogFromV2(JSON.parse(JSON.stringify(E_SAMPLE))), { keepPersonal: true });
     const name = eSampleFile();
     eReadCatalogFile(name).then((got) => {
       const c = got && got.text ? catalogFromFileText(got.text, name) : null;
-      if (c && !(cards || []).length) activateCatalog(c, { keepPersonal: false, file: name });
+      if (c && !(cards || []).length) activateCatalog(c, { keepPersonal: true, file: name });
     });
     return true;
   }
