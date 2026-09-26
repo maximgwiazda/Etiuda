@@ -2937,6 +2937,8 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   display:flex;align-items:center;gap:14px}
 .e-undo p{margin:0;color:var(--bub-ink)}
 .e-undo .tour-actions{margin:0;padding:0;border:0;flex:none}
+/* The question's lines under its title, inset as the title is: a small dialog has no body to do it. */
+#eSure .e-sure-say{padding:0 18px}
 /* A field on the fill: paper, so what is typed reads as the reader's own. */
 .bub .e-name-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
   border:1px solid transparent;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans)}
@@ -5871,7 +5873,7 @@ What you type stays in this browser only.`;
     const wrap = document.createElement("div");
     wrap.className = "modal";
     wrap.id = "eSure";
-    wrap.innerHTML = '<div class="modal-bg"></div><div class="modal-card" role="alertdialog" aria-modal="true" aria-labelledby="eSureTitle"><h2 id="eSureTitle">' + esc(parts2[0]) + "</h2>" + parts2.slice(1).map((x) => '<p class="modal-sub">' + esc(x) + "</p>").join("") + '<div class="modal-actions"><button type="button" class="btn" id="eSureNo">' + esc(t("Cancel")) + '</button><button type="button" class="btn ' + (danger ? "danger" : "primary") + '" id="eSureYes">' + esc(t(yes)) + "</button></div></div>";
+    wrap.innerHTML = '<div class="modal-bg"></div><div class="modal-card" role="alertdialog" aria-modal="true" aria-labelledby="eSureTitle"><h2 id="eSureTitle">' + esc(parts2[0]) + "</h2>" + (parts2.length > 1 ? '<div class="e-sure-say">' + parts2.slice(1).map((x) => '<p class="modal-sub">' + esc(x) + "</p>").join("") + "</div>" : "") + '<div class="modal-actions"><button type="button" class="btn" id="eSureNo">' + esc(t("Cancel")) + '</button><button type="button" class="btn ' + (danger ? "danger" : "primary") + '" id="eSureYes">' + esc(t(yes)) + "</button></div></div>";
     document.body.appendChild(wrap);
     const close = (go) => {
       document.removeEventListener("keydown", onKey, true);

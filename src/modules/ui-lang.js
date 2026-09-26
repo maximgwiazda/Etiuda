@@ -878,7 +878,7 @@ function askSure(question, yes, act, danger){
   wrap.innerHTML='<div class="modal-bg"></div>'
     +'<div class="modal-card" role="alertdialog" aria-modal="true" aria-labelledby="eSureTitle">'
     +'<h2 id="eSureTitle">'+esc(parts[0])+'</h2>'
-    +parts.slice(1).map(x=>'<p class="modal-sub">'+esc(x)+'</p>').join("")
+    +(parts.length>1?'<div class="e-sure-say">'+parts.slice(1).map(x=>'<p class="modal-sub">'+esc(x)+'</p>').join("")+'</div>':"")
     +'<div class="modal-actions">'
     +'<button type="button" class="btn" id="eSureNo">'+esc(t("Cancel"))+'</button>'
     +'<button type="button" class="btn '+(danger?"danger":"primary")+'" id="eSureYes">'+esc(t(yes))+'</button>'
