@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 233 };
+const EXPECTED = { chrome: 232 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -2777,10 +2777,9 @@ const t0 = Date.now();
           && !/e-arriv|e-veiled|e-leaving/.test(cover.rest),
       "quiet-13 the reload a load ends in is covered: the next document arrives marked, paints nothing before its boot"
       + " is done, and is at rest afterwards (" + JSON.stringify(cover) + ")");
-    /* pixels-3 and native-11, in the dark theme: white words on a selected pill and on a primary
-       button stand at 4.5:1 or better (WCAG's luminance ratio from the computed colours), and a
-       button's keyboard focus computes differently from its hover (both forced by the protocol). */
-    step("white on the fill, and the focus ring");
+    /* pixels-3, in the dark theme: white words on a selected pill and on a primary button stand at
+       4.5:1 or better (WCAG's luminance ratio from the computed colours). */
+    step("white on the fill");
     await q.evaluate(() => { document.documentElement.dataset.theme = "dark"; askSure("Invented question?", "Invented yes", () => {}, false); });
     await sleep(500);
     const onAccent = await q.evaluate(() => {
@@ -2790,27 +2789,9 @@ const t0 = Date.now();
         return +((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)).toFixed(2); };
       return { pill: ratio(document.querySelector("#pills .pill.on")), primary: ratio(document.getElementById("eSureYes")) };
     });
-    const ringCdp = await q.target().createCDPSession();
-    const ring = {};
-    try {
-      await ringCdp.send("DOM.enable"); await ringCdp.send("CSS.enable");
-      const root = await ringCdp.send("DOM.getDocument", { depth: -1 });
-      for (const sel of ["#eSureNo", "#eSureYes"]) {
-        const { nodeId } = await ringCdp.send("DOM.querySelector", { nodeId: root.root.nodeId, selector: sel });
-        const got = {};
-        for (const st of [["hover"], ["focus", "focus-visible"]]) {
-          await ringCdp.send("CSS.forcePseudoState", { nodeId, forcedPseudoClasses: st });
-          got[st[st.length - 1]] = await q.evaluate(s => { const cs = getComputedStyle(document.querySelector(s)); return cs.outlineStyle + " " + cs.outlineWidth; }, sel);
-          await ringCdp.send("CSS.forcePseudoState", { nodeId, forcedPseudoClasses: [] });
-        }
-        ring[sel] = got;
-      }
-    } finally { await ringCdp.detach().catch(() => {}); }
     await q.evaluate(() => { const n = document.getElementById("eSureNo"); if (n) n.click(); });
     check(onAccent.pill >= 4.5 && onAccent.primary >= 4.5,
       "pixels-3 white on the selected pill and on a primary button reads at 4.5:1 or better in dark (" + JSON.stringify(onAccent) + ")");
-    check(Object.keys(ring).length === 2 && Object.values(ring).every(x => x.hover !== x["focus-visible"] && /solid/.test(x["focus-visible"])),
-      "native-11 a button's keyboard focus draws a ring its hover does not (" + JSON.stringify(ring) + ")");
     step("waiting for the sample's cards after the reload");
     await q.waitForFunction(() => document.querySelectorAll(".card").length > 0, { timeout: 20000 }).catch(() => {});
     await sleep(1200);

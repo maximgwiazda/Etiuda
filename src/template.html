@@ -3229,22 +3229,20 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 @keyframes eLashesOut{0%{opacity:1}20%,100%{opacity:0}}
 @keyframes eEyeBloom{0%{transform:scale(1);opacity:.95}50%{transform:scale(1.03);opacity:.95}
   62%{transform:scale(1.16);opacity:.95;animation-timing-function:ease-in}100%{transform:scale(1.5);opacity:0}}
-/* THE KEYBOARD'S RING ON TOP OF THE HOVER LOOK: every control below restates its own hover rule
-   for :focus-visible, and the ring is what tells the focused control from the one under the
-   mouse when both are lit. In the control's own ink, round with its corners; a text field keeps
-   whatever it has, which is a different cue for a different thing. */
+/* NO RING ON A BUTTON, and the hover look in its place: every control below restates its own
+   hover rule for :focus-visible, so one declaration serves both states and they cannot drift.
+   The browser's own ring is named here as well - it returns the moment a rule stops saying so -
+   and a text field keeps whatever it has, which is a different cue for a different thing. */
 .btn:focus-visible,.tab:focus-visible,.tab-x:focus-visible,.tab-add:focus-visible,
 .seg button:focus-visible,.field-clear:focus-visible,.combo-clear:focus-visible,
 .rail-item:focus-visible,.rail-add:focus-visible,.rail-lock:focus-visible,
-button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:2px solid currentColor;outline-offset:2px}
-/* White words on a fill would ring white, which a light panel swallows: those ring in the fill. */
-.modal-actions .btn.primary:focus-visible,.seg button.on:focus-visible{outline-color:var(--accent-fill)}
+button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:none}
 /* HIGH CONTRAST paints every ground and edge in the system's own two colours, so the mark and
    the focus, both tints here, vanish there; the system's highlight colour stands in for them,
    and only there. After the rule above and as heavy, so it wins in any layer order. */
 @media (forced-colors:active){
   .txt.sel,.rail-item.rail-kbd{outline:2px solid Highlight;outline-offset:-2px}
-  html:root :focus-visible{outline:2px solid Highlight}
+  :root :focus-visible{outline:2px solid Highlight}
 }
 /* Confirmation where the eye already is: the toast keeps the WHAT (and the screen-reader
    announcement), this is the WHERE - a success-green wash over the clicked block, a fixed
