@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 228 };
+const EXPECTED = { chrome: 229 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -2758,6 +2758,31 @@ const t0 = Date.now();
     check(!wheel.before && wheel.after && wheel.seen === "1" && wheel.said,
       "the role wheel is out of sight on the sample until a reply naming somebody is copied, then comes out with one line ("
       + JSON.stringify(wheel) + ")");
+    /* quiet-12: the offer names the catalog folder as the empty desk does, short, the full path on
+       hover and the link that opens it. A stub host for the one call, taken away after it. */
+    step("the offer's folder");
+    const offerDir = await q.evaluate(async () => {
+      const dir = ["C:", "Users", "Invented Person", "Documents", "Etiuda"].join(String.fromCharCode(92));
+      let opened = 0;
+      window.E_HOST = { catalogFolder: dir, catalogIn: dir, catalogFile: "invented.ec", openCatalogFolder() { opened++; return true; } };
+      try {
+        const c = JSON.parse(JSON.stringify(storedCatalog())); c.name = "Invented other";
+        eOfferCatalog(c, "invented.ec", dir, true, true);
+        await new Promise(r => setTimeout(r, 300));
+        const w = document.getElementById("eCatalogOffer"), codes = w ? [...w.querySelectorAll(".ec-sub code")] : [];
+        const f = codes[codes.length - 1];
+        if (!f) return { found: false };
+        f.click();
+        const r = document.createRange(); r.selectNodeContents(f);
+        const got = { found: true, short: f.textContent === "Documents" + String.fromCharCode(92) + "Etiuda", full: f.title === dir,
+          lines: new Set([...r.getClientRects()].map(x => Math.round(x.top))).size, cursor: getComputedStyle(f).cursor, opened };
+        w.remove();
+        return got;
+      } finally { delete window.E_HOST; }
+    });
+    check(offerDir.found && offerDir.short && offerDir.full && offerDir.lines === 1 && offerDir.cursor === "default" && offerDir.opened === 1,
+      "quiet-12 the catalog offer names its folder short on one line, the full path on hover, and opens it under the arrow ("
+      + JSON.stringify(offerDir) + ")");
     check(missing.every(m => /^etiuda-catalog\.js/.test(m)), "nothing looked for and missing but the deployment catalog (" + [...new Set(missing)].join(", ") + ")");
   } catch (x) {
     const where = String((x && x.stack || "").split(String.fromCharCode(10))[1] || "").trim();

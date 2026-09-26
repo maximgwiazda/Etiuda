@@ -30,9 +30,10 @@ function eCatalogFolder(){
 /* THE FOLDER AS WINDOWS NAMES IT, which is the last two segments: a full path is the answer to
    "where exactly" and belongs on hover, while the sentence in front of a person has to fit one
    line at the narrowest width the band allows. Either separator, since a setting may hold a path
-   typed by hand, and the whole thing where there are not two segments to take. */
-function eCatalogFolderShort(){
-  const full=eCatalogFolder();
+   typed by hand, and the whole thing where there are not two segments to take. Any folder may be
+   named; the catalog folder is the default. */
+function eCatalogFolderShort(dir){
+  const full=dir==null?eCatalogFolder():String(dir);
   const parts=full.split(/[\\/]+/).filter(Boolean);
   if(parts.length<2) return full;
   return parts.slice(-2).join(full.indexOf("\\")>-1?"\\":"/");

@@ -923,7 +923,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   const offerLine = await s.p.evaluate(() => {
     const subs = document.querySelectorAll("#eCatalogOffer .ec-sub");
     const last = subs[subs.length - 1];
-    return last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null;
+    return last ? Array.from(last.querySelectorAll("code")).map(c => c.title || c.textContent) : null;
   });
   check(!!offerLine && offerLine.length === 2 && offerLine[0] === "newer-edition.ec"
         && offerLine[1] === catFolder("folder"),
@@ -1401,7 +1401,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     return { step: "read", title: (m.querySelector("h3") || {}).textContent || "",
              body: (m.querySelector(".ec-what") || {}).textContent || "",
              counts: counts ? counts.textContent : "",
-             codes: last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null,
+             codes: last ? Array.from(last.querySelectorAll("code")).map(c => c.title || c.textContent) : null,
              yes: !!m.querySelector("#ecYes"), no: !!m.querySelector("#ecNo") };
   };
   const askedAt = await s.p.evaluate(DIALOG);
@@ -2430,10 +2430,11 @@ const placeEc = (dir, from, as, minutesOld) => {
   const udN = newUserData("openwith");
   s = await launch(udN, [awayEc]);
   opened = await s.p.evaluate(SEEN);
+  /* The folder is named short, its full path the title, as the empty desk names its own (quiet-12). */
   const openedLine = await s.p.evaluate(() => {
     const subs = document.querySelectorAll("#eCatalogOffer .ec-sub");
     const last = subs[subs.length - 1];
-    return last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null;
+    return last ? Array.from(last.querySelectorAll("code")).map(c => c.title || c.textContent) : null;
   });
   check(opened.offer && opened.catalogCards === FIXTURE_CARDS
         && !!openedLine && openedLine[0] === "opened-by-hand.ec" && openedLine[1] === AWAY,

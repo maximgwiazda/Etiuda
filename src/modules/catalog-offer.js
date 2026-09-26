@@ -39,9 +39,13 @@ function eFoundHtml(name,where){
   /* A PLACEHOLDER KEY, not two halves round a <code>: every other language puts the folder
      somewhere else in the sentence, and a fragment cannot be reordered. split/join rather than
      replace, because a folder may legitimately hold a $ and a replacement string substitutes it. */
+  /* THE FOLDER AS THE EMPTY DESK NAMES IT, short with the full path on hover; the catalog folder
+     is also the link that opens it, as it is there. */
+  const dir=String(where||""), home=!!dir && dir===eCatalogFolder();
   return t(where?"Located as {FILE} in {FOLDER}.":"Located as {FILE}.")
     .split("{FILE}").join('<code>'+esc(shown)+'</code>')
-    .split("{FOLDER}").join('<code>'+esc(String(where))+'</code>');
+    .split("{FOLDER}").join('<code'+(home?' class="open-folder" data-ec-open="1" role="button" tabindex="0"':'')
+      +' title="'+esc(dir)+'">'+esc(eCatalogFolderShort(dir))+'</code>');
 }
 /* `asked` means a person pointed at this file - the double-click channels of board 393 - and it
    buys two things a found file does not get: the offer outranks a remembered refusal, and an
@@ -385,6 +389,10 @@ function eOfferCatalogDialog(c,src){
      instead, and the bubble has to come down: left standing over its own failure toast it reads
      as a button that does nothing. */
   wrap.querySelector("#ecYes").onclick=()=>{ if(src.accept(sig)===false) close(); };
+  wrap.querySelectorAll("[data-ec-open]").forEach(el=>{
+    el.onclick=()=>eOpenCatalogFolder();
+    el.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); eOpenCatalogFolder(); } };
+  });
   wrap.querySelector("#ecNo").onclick=()=>{
     /* The date as well as the signature: the signature says WHAT was refused and the date says
        WHEN, which is what lets a later edition of the same file ask again. */
