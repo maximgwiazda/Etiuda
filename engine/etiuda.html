@@ -10540,7 +10540,8 @@ What you type stays in this browser only.`;
     proposeEdition: () => proposeEdition,
     sampleReady: () => sampleReady,
     sampleUntouched: () => sampleUntouched,
-    syncSampleMark: () => syncSampleMark
+    syncSampleMark: () => syncSampleMark,
+    wireCatalogDrop: () => wireCatalogDrop
   });
 
   // src/modules/card-order.js
@@ -12153,6 +12154,33 @@ What you type stays in this browser only.`;
       reader.readAsText(f);
     };
     inp.click();
+  }
+  function isFileDrag(e) {
+    const dt = e.dataTransfer;
+    return !!dt && Array.prototype.indexOf.call(dt.types || [], "Files") > -1;
+  }
+  function wireCatalogDrop() {
+    addEventListener("dragover", (e) => {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    });
+    addEventListener("drop", (e) => {
+      if (!isFileDrag(e)) return;
+      e.preventDefault();
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!f) return;
+      if (!/[.](ec|json|js)$/i.test(f.name)) {
+        toast(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(f.name));
+        return;
+      }
+      const h = eHost();
+      if (h && typeof h.offerDropped === "function" && /[.]ec$/i.test(f.name) && h.offerDropped(f)) return;
+      f.text().then(
+        (text) => importCatalogText(text, f.name),
+        () => toast(t("{FILE} could not be read.").split("{FILE}").join(f.name))
+      );
+    });
   }
   function importCatalogPicked() {
     let handle = null, picked = "";
@@ -21542,6 +21570,7 @@ What you type stays in this browser only.`;
     syncRoleWheel();
     maybeStartTour();
     wireHostCatalogWatch();
+    wireCatalogDrop();
     setTimeout(() => {
       try {
         eCheckWatchedFile(false);

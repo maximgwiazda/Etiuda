@@ -163,7 +163,7 @@ const step = async (label, body, opts) => {
  * it is what the count now sees: a mismatch is NO VERDICT, exit 78, not a tally.
  */
 const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7"];
-const EXPECTED = KEEP ? null : 118;
+const EXPECTED = KEEP ? null : 120;
 const phasesSeen = new Set();
 const phase = what => {
   const m = /^\[(\d+)[a-z]*\/\d+\]/.exec(String(what).trim());
@@ -2507,6 +2507,40 @@ const placeEc = (dir, from, as, minutesOld) => {
     + "), the copy already running says it was opened with that path and is offered the file,"
     + " named: " + JSON.stringify(handedLine));
   killPid(second.pid);
+
+  /* native-12: a .ec DROPPED on the window is offered as a double-clicked one is. A real drop
+     through the renderer's input, by the protocol's drag events carrying a file from the disk,
+     after the offer above is put away. The control is the same drop of a file that is not a
+     catalog, which the page takes and answers in words, and which must raise no offer. */
+  await escOffer(s.p);
+  await sleep(700);
+  const dropAt = async (file, answer) => {
+    const cdp = await s.p.target().createCDPSession();
+    const data = { items: [], files: [file], dragOperationsMask: 1 };
+    for (const type of ["dragEnter", "dragOver", "drop"]) await cdp.send("Input.dispatchDragEvent", { type, x: 640, y: 420, data });
+    await cdp.detach().catch(() => {});
+    // Read while the answer stands: a toast is gone again 1.7 s after it arrives.
+    await s.p.waitForFunction(a => a === "offer" ? !!document.querySelector("#ecYes") : document.getElementById("toast").classList.contains("show"),
+      { timeout: 3000, polling: 50 }, answer).catch(() => {});
+    return s.p.evaluate(() => {
+      const subs = document.querySelectorAll("#eCatalogOffer .ec-sub"), last = subs[subs.length - 1];
+      return { offer: !!document.querySelector("#ecYes"), url: location.href.split("/").pop(),
+               line: last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null,
+               toast: document.getElementById("toast").classList.contains("show") };
+    });
+  };
+  const notEc = path.join(AWAY, "not-a-catalog.txt");
+  fs.writeFileSync(notEc, "plain words", "utf8");
+  const dropNo = await dropAt(notEc, "toast");
+  check(!dropNo.offer && dropNo.toast && dropNo.url === "etiuda.html",
+    "2V2 control: a dropped file that is not a catalog raises no offer, is answered in words and leaves the"
+    + " document where it was (" + JSON.stringify(dropNo) + ")");
+  const dropEc = placeEc(AWAY, FIX, "dropped.ec", 1);
+  const dropped = await dropAt(dropEc, "offer");
+  check(dropped.offer && !!dropped.line && dropped.line[0] === "dropped.ec"
+        && s.said.some(l => l.indexOf("opened with " + dropEc) > -1),
+    "2v2 a .ec dropped on the window is handed to the shell by its path and offered, named: "
+    + JSON.stringify(dropped));
   await s.stop();
 
   /* ---- 2x to 2z: THE COMMAND LINE THE ASSOCIATION WRITES, board item 393 --------------------

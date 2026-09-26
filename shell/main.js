@@ -998,6 +998,16 @@ ipcMain.handle("etiuda:write-catalog-save", async (e, text) => {
   }
 });
 
+/* A .ec DROPPED ON THE WINDOW: the renderer names a path, and this answers only an existing file
+   with the extension the installer registers, through the double-click's own route. */
+ipcMain.on("etiuda:offer-dropped", (e, file) => {
+  if (!fromEngine(e)) return;
+  const f = String(file || "");
+  if (!/\.ec$/i.test(f)) return;
+  try { if (!fs.statSync(f).isFile()) return; } catch { return; }
+  offerFile(BrowserWindow.fromWebContents(e.sender), path.resolve(f));
+});
+
 /* The folder in force, opened in the file manager. No path from the renderer: what opens is what
    the search order above reads, so the one thing this can do is the thing it is for. */
 ipcMain.handle("etiuda:open-catalog-folder", async (e) => {

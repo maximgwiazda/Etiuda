@@ -5,7 +5,7 @@ import { ALWAYS_CATS } from "./cat-roles.js";
 import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, E_CATALOG_NAME, E_CATALOG_VERSION, parseCatalogFile } from "./catalog.js";
 import { catalogToV2, catalogFromV2, isV2 } from "./catalog-v2.js";
 import { CATS, intentArr, intentFieldKey, intentCount, catalogLangs, CONTENT_LANGS } from "./content-model.js";
-import { eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile, eSampleFile, eReadCatalogFile } from "./host.js";
+import { eHost, eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile, eSampleFile, eReadCatalogFile } from "./host.js";
 import { CAT_LABELS_PL, CAT_LABELS_BY_LANG } from "./icons.js";
 import { fill } from "./intent-text.js";
 import { cardToExportPlain } from "./macros-json.js";
@@ -468,6 +468,35 @@ function importCatalogFile(){
   };
   inp.click();
 }
+/* A FILE DROPPED ON THE WINDOW is a catalog somebody pointed at. Every file drag is taken, since
+   one the page leaves becomes a navigation the shell refuses without a word, and which file it is
+   can only be read on the drop. A host is handed the file's path, so a drop is answered as a
+   double-click is; a browser reads the bytes, as the file input does. */
+function isFileDrag(e){
+  const dt=e.dataTransfer;
+  return !!dt && Array.prototype.indexOf.call(dt.types||[],"Files")>-1;
+}
+function wireCatalogDrop(){
+  addEventListener("dragover",e=>{
+    if(!isFileDrag(e)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect="copy";
+  });
+  addEventListener("drop",e=>{
+    if(!isFileDrag(e)) return;
+    e.preventDefault();
+    const f=e.dataTransfer.files && e.dataTransfer.files[0];
+    if(!f) return;
+    if(!/[.](ec|json|js)$/i.test(f.name)){
+      toast(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(f.name));
+      return;
+    }
+    const h=eHost();
+    if(h && typeof h.offerDropped==="function" && /[.]ec$/i.test(f.name) && h.offerDropped(f)) return;
+    f.text().then(text=>importCatalogText(text,f.name),
+      ()=>toast(t("{FILE} could not be read.").split("{FILE}").join(f.name)));
+  });
+}
 /* The picker returns a HANDLE - the same dialog to the user, but what comes back can be
    kept and re-read later, which is the whole update channel. Cancelling rejects with
    AbortError rather than resolving empty, so the catch is also the cancel path. */
@@ -502,6 +531,7 @@ function importCatalogPicked(){
 }
 
 export {
+  wireCatalogDrop,
   catalogMacroCount,
   catalogIntentCount,
   exportCatalog,

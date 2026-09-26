@@ -1,6 +1,6 @@
 "use strict";
 
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 /* The engine reads window.E_CATALOG while it boots, so the value has to be there before its
    first script runs. A preload is the only code early enough, and a synchronous request the
@@ -70,6 +70,15 @@ contextBridge.exposeInMainWorld("E_HOST", {
      and two parsers agreeing is what keeps a file the shell accepts a file the engine accepts. */
   onCatalogFile: (fn) => ipcRenderer.on("etiuda:catalog-file",
     (_e, text, name, where, asked, why) => fn(String(text), String(name || ""), String(where || ""), !!asked, String(why || ""))),
+  /* A catalog dropped on the window, handed over by the path its File has on disk and offered as
+     a double-clicked file is. False where the File has no path, and the page reads it instead. */
+  offerDropped: (file) => {
+    let at = "";
+    try { at = webUtils.getPathForFile(file); } catch { /* not a file from the disk */ }
+    if (!at) return false;
+    ipcRenderer.send("etiuda:offer-dropped", at);
+    return true;
+  },
   writeStats: (text) => ipcRenderer.invoke("etiuda:stats-write", String(text || "")),
   onStatsAsk: (fn) => ipcRenderer.on("etiuda:stats-ask", (_e, req) => fn(req && typeof req === "object" ? req : {})),
 });

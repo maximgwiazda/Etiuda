@@ -87,6 +87,7 @@ catalogOffer.eOfferCatalogAtBoot()
 agent.syncRoleWheel()
 tour.maybeStartTour()
 catalogOffer.wireHostCatalogWatch()
+catalogFile.wireCatalogDrop()
 setTimeout()
 pops.wirePops()
 addEventListener:"resize"

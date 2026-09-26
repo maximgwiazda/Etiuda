@@ -421,6 +421,7 @@ function boot(){
      asks the name and, while the desk is empty, for a catalog, so the catalog offer waits for it. */
   tour.maybeStartTour();
   catalogOffer.wireHostCatalogWatch();
+  catalogFile.wireCatalogDrop();
   /* The sibling channel is synchronous and free, so it goes first and this only speaks if it
      left the screen clear. */
   setTimeout(()=>{ try{ catalogOffer.eCheckWatchedFile(false); }catch(e){} }, 900);
