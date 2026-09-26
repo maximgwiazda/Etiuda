@@ -2182,11 +2182,19 @@ html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!importan
 /* Heard and never seen: see sayMark. Clipped rather than hidden, which would silence it. */
 #eSay{position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);
   white-space:nowrap}
-#toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);background:var(--ok);
-  color:#fff;padding:10px 18px;border-radius:999px;font-size:14px;font-weight:600;
-  opacity:0;pointer-events:none;transition:var(--m-surface);z-index:300;max-width:88vw;
-  overflow:hidden;white-space:nowrap}
-#toast.show{opacity:1;transform:translate(-50%,0)}
+/* Centred by its margins, so only translateY moves and nothing rests on half a pixel. A long
+   message wraps rather than fading out mid-sentence. */
+#toast{position:fixed;left:0;right:0;margin:0 auto;width:fit-content;bottom:26px;transform:translateY(20px);
+  background:var(--ok);color:#fff;padding:10px 18px;border-radius:999px;font-size:14px;font-weight:600;
+  opacity:0;pointer-events:none;z-index:300;max-width:min(560px,calc(100vw - 24px));
+  text-align:center;text-wrap:balance;
+  transition:opacity var(--m-surface) var(--m-ease),transform var(--m-surface) var(--m-ease)}
+#toast.show{opacity:1;transform:none}
+#toast.show.swap{opacity:0;transition:opacity var(--m-dismiss) ease}
+/* THE REFUSAL: white on the warning's own orange, 5.17:1, the same fill in both themes as the
+   bubble's cobalt is, since the dark theme's --warn is a text colour and too pale to carry white. */
+#toast.refusal{display:flex;align-items:center;gap:8px;text-align:left;background:#c2410c}
+#toast.refusal .ic{width:16px;height:16px;flex:none}
 /* CUT TEXT FADES, IT DOES NOT END IN DOTS. An ellipsis is a character: it arrives in the
    reader's ink, mid-sentence, and says "cut" in the same voice as the words; one TYPED into a
    label is untouched. markCutText() decides, and it decides per SIDE - an unconditional mask

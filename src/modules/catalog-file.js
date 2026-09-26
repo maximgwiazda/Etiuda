@@ -13,7 +13,7 @@ import { FACTS, normWhoList } from "./stock.js";
 import { eWipeLatch, mgReopenAfterReload, ssDel, nsGet, nsSet, nsDel } from "./storage.js";
 import { reloadCovered } from "./motion.js";
 import { TAB_KEY, tabSaveTimer } from "./tabs.js";
-import { t, catalogCountsLine, toast } from "./ui-lang.js";
+import { t, catalogCountsLine, toast, toastRefusal } from "./ui-lang.js";
 import { BASE_CATS, catalogCardId, pack, whoOptions, savePack } from "./pack.js";
 import { catIconKey, catSlot } from "./cat-identity.js";
 import { normalizeCardIntents } from "./card-intent.js";
@@ -201,7 +201,7 @@ function catalogNameOfFile(file){
  *  chosen file's name into the text, so it runs only once the choice is made. */
 function saveCatalogFile(name, build){
   if(eHasCatalogSaver()) return eSaveCatalogFile(t("Export"),name,t("Catalogs"),build).then(r=>{
-    if(r && !r.ok) toast(t("{FILE} could not be saved.").split("{FILE}").join(r.name));
+    if(r && !r.ok) toastRefusal(t("{FILE} could not be saved.").split("{FILE}").join(r.name));
     return (r && r.ok) ? r.name : null;
   });
   if(typeof window.showSaveFilePicker==="function"){
@@ -422,7 +422,7 @@ function catalogFromFileText(text,fileName){
       }catch(e){
         /* NAMED. The dialog opens on a folder that may hold several of these, and a refusal that
            says only that something failed leaves a person guessing which file they picked. */
-        toast(t("{FILE} is not a catalog Etiuda can read.")
+        toastRefusal(t("{FILE} is not a catalog Etiuda can read.")
           .split("{FILE}").join(String(fileName||"")));
         return null;
       }
@@ -442,7 +442,7 @@ function importCatalogText(text,fileName){
 function importCatalogHosted(){
   ePickCatalogFile(t("Load catalog"),t("Catalogs")).then(got=>{
     if(!got) return;
-    if(!got.text){ toast(t("{FILE} could not be read.").split("{FILE}").join(got.name)); return; }
+    if(!got.text){ toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(got.name)); return; }
     importCatalogText(got.text,got.name);
   });
 }
@@ -464,7 +464,7 @@ function importCatalogFile(){
     if(!f) return;
     const reader=new FileReader();
     reader.onload=()=>{ importCatalogText(String(reader.result||""),f.name); };
-    reader.onerror=()=>toast(t("{FILE} could not be read.").split("{FILE}").join(f.name));
+    reader.onerror=()=>toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(f.name));
     reader.readAsText(f);
   };
   inp.click();
@@ -489,13 +489,13 @@ function wireCatalogDrop(){
     const f=e.dataTransfer.files && e.dataTransfer.files[0];
     if(!f) return;
     if(!/[.](ec|json|js)$/i.test(f.name)){
-      toast(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(f.name));
+      toastRefusal(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(f.name));
       return;
     }
     const h=eHost();
     if(h && typeof h.offerDropped==="function" && /[.]ec$/i.test(f.name) && h.offerDropped(f)) return;
     f.text().then(text=>importCatalogText(text,f.name),
-      ()=>toast(t("{FILE} could not be read.").split("{FILE}").join(f.name)));
+      ()=>toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(f.name)));
   });
 }
 /* The picker returns a HANDLE - the same dialog to the user, but what comes back can be
@@ -527,7 +527,7 @@ function importCatalogPicked(){
     if(e && e.name==="AbortError") return;
     /* The browser's own sentence is English whatever the interface speaks, so the line names the
        file instead, or where none was picked the error's own name. */
-    toast(t("The catalog could not be loaded:")+" "+(picked || (e&&e.name) || ""));
+    toastRefusal(t("The catalog could not be loaded:")+" "+(picked || (e&&e.name) || ""));
   });
 }
 

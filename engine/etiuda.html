@@ -2182,11 +2182,19 @@ html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!importan
 /* Heard and never seen: see sayMark. Clipped rather than hidden, which would silence it. */
 #eSay{position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);
   white-space:nowrap}
-#toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);background:var(--ok);
-  color:#fff;padding:10px 18px;border-radius:999px;font-size:14px;font-weight:600;
-  opacity:0;pointer-events:none;transition:var(--m-surface);z-index:300;max-width:88vw;
-  overflow:hidden;white-space:nowrap}
-#toast.show{opacity:1;transform:translate(-50%,0)}
+/* Centred by its margins, so only translateY moves and nothing rests on half a pixel. A long
+   message wraps rather than fading out mid-sentence. */
+#toast{position:fixed;left:0;right:0;margin:0 auto;width:fit-content;bottom:26px;transform:translateY(20px);
+  background:var(--ok);color:#fff;padding:10px 18px;border-radius:999px;font-size:14px;font-weight:600;
+  opacity:0;pointer-events:none;z-index:300;max-width:min(560px,calc(100vw - 24px));
+  text-align:center;text-wrap:balance;
+  transition:opacity var(--m-surface) var(--m-ease),transform var(--m-surface) var(--m-ease)}
+#toast.show{opacity:1;transform:none}
+#toast.show.swap{opacity:0;transition:opacity var(--m-dismiss) ease}
+/* THE REFUSAL: white on the warning's own orange, 5.17:1, the same fill in both themes as the
+   bubble's cobalt is, since the dark theme's --warn is a text colour and too pale to carry white. */
+#toast.refusal{display:flex;align-items:center;gap:8px;text-align:left;background:#c2410c}
+#toast.refusal .ic{width:16px;height:16px;flex:none}
 /* CUT TEXT FADES, IT DOES NOT END IN DOTS. An ellipsis is a character: it arrives in the
    reader's ink, mid-sentence, and says "cut" in the same voice as the words; one TYPED into a
    label is untouched. markCutText() decides, and it decides per SIDE - an unconditional mask
@@ -4818,6 +4826,7 @@ What you type stays in this browser only.`;
     t: () => t,
     tc: () => tc,
     toast: () => toast,
+    toastRefusal: () => toastRefusal,
     toastSerial: () => toastSerial,
     translateChrome: () => translateChrome,
     translateTree: () => translateTree,
@@ -6038,16 +6047,38 @@ What you type stays in this browser only.`;
   var tt;
   var TOAST_MS = 1700;
   var TOAST_HAND_MS = 6e3;
+  var TOAST_REFUSAL_MS = 5e3;
   var toastSerial = 0;
-  function toast(m, ms) {
+  var toastSwap = 0;
+  function placeToast(el) {
+    const f = document.querySelector("footer"), r = f && f.getBoundingClientRect();
+    const lift = r && r.height && r.top < innerHeight ? Math.round(innerHeight - r.top) : 0;
+    el.style.bottom = lift ? lift + 8 + "px" : "";
+  }
+  function toast(m, ms, refusal) {
     toastSerial++;
     m = t(m);
     const el = $("#toast");
-    el.textContent = m;
-    markCut(el);
-    el.classList.add("show");
+    const put = () => {
+      el.classList.remove("swap");
+      el.classList.toggle("refusal", !!refusal);
+      if (refusal) el.innerHTML = ICON_LINT_WARNING + "<span>" + esc(m) + "</span>";
+      else el.textContent = m;
+      placeToast(el);
+      markCut(el);
+      el.classList.add("show");
+    };
+    const dip = el.classList.contains("show") && !mgReduceMotion();
     clearTimeout(tt);
-    tt = setTimeout(() => el.classList.remove("show"), ms || TOAST_MS);
+    clearTimeout(toastSwap);
+    if (dip) {
+      el.classList.add("swap");
+      toastSwap = setTimeout(put, M_MS.dismiss);
+    } else put();
+    tt = setTimeout(() => el.classList.remove("show"), (ms || TOAST_MS) + (dip ? M_MS.dismiss : 0));
+  }
+  function toastRefusal(m) {
+    toast(m, TOAST_REFUSAL_MS, true);
   }
   var T_CTX = "␟";
   function tc(ctx, en) {
@@ -8353,7 +8384,7 @@ What you type stays in this browser only.`;
       if (Object.keys(out).length) lsSet("eShortcuts", JSON.stringify(out));
       else lsDel("eShortcuts");
     } catch (err) {
-      toast("Could not save shortcuts");
+      toastRefusal(t("Could not save shortcuts"));
     }
     syncShortcutTitles();
   }
@@ -10343,7 +10374,7 @@ What you type stays in this browser only.`;
   }
   function storeCatalog(c) {
     if (!E_LS_OK) {
-      toast("This browser is not storing anything, so a catalog cannot be kept here");
+      toastRefusal(t("This browser is not storing anything, so a catalog cannot be kept here"));
       return false;
     }
     let s = null;
@@ -10353,7 +10384,7 @@ What you type stays in this browser only.`;
       s = null;
     }
     if (s === null || !lsSet(E_CATALOG_STORE, s, true) || lsGet(E_CATALOG_STORE) !== s) {
-      toast("Could not save the catalog, perhaps because the browser's storage is full.");
+      toastRefusal(t("Could not save the catalog, perhaps because the browser's storage is full."));
       return false;
     }
     return true;
@@ -11381,7 +11412,7 @@ What you type stays in this browser only.`;
     return ePickCatalogFolder(title).then((dir) => {
       if (!dir || dir === eCatalogFolder()) return "";
       if (lsSet(E_CATALOG_FOLDER_KEY, dir) === false) {
-        toast(t("That setting could not be saved."));
+        toastRefusal(t("That setting could not be saved."));
         return "";
       }
       return dir;
@@ -12069,7 +12100,7 @@ What you type stays in this browser only.`;
   }
   function saveCatalogFile(name, build) {
     if (eHasCatalogSaver()) return eSaveCatalogFile(t("Export"), name, t("Catalogs"), build).then((r) => {
-      if (r && !r.ok) toast(t("{FILE} could not be saved.").split("{FILE}").join(r.name));
+      if (r && !r.ok) toastRefusal(t("{FILE} could not be saved.").split("{FILE}").join(r.name));
       return r && r.ok ? r.name : null;
     });
     if (typeof window.showSaveFilePicker === "function") {
@@ -12237,7 +12268,7 @@ What you type stays in this browser only.`;
     try {
       return parseCatalogFile(String(text || ""));
     } catch (e) {
-      toast(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(fileName || "")));
+      toastRefusal(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(fileName || "")));
       return null;
     }
   }
@@ -12253,7 +12284,7 @@ What you type stays in this browser only.`;
     ePickCatalogFile(t("Load catalog"), t("Catalogs")).then((got) => {
       if (!got) return;
       if (!got.text) {
-        toast(t("{FILE} could not be read.").split("{FILE}").join(got.name));
+        toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(got.name));
         return;
       }
       importCatalogText(got.text, got.name);
@@ -12275,7 +12306,7 @@ What you type stays in this browser only.`;
       reader.onload = () => {
         importCatalogText(String(reader.result || ""), f.name);
       };
-      reader.onerror = () => toast(t("{FILE} could not be read.").split("{FILE}").join(f.name));
+      reader.onerror = () => toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(f.name));
       reader.readAsText(f);
     };
     inp.click();
@@ -12296,14 +12327,14 @@ What you type stays in this browser only.`;
       const f = e.dataTransfer.files && e.dataTransfer.files[0];
       if (!f) return;
       if (!/[.](ec|json|js)$/i.test(f.name)) {
-        toast(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(f.name));
+        toastRefusal(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(f.name));
         return;
       }
       const h = eHost();
       if (h && typeof h.offerDropped === "function" && /[.]ec$/i.test(f.name) && h.offerDropped(f)) return;
       f.text().then(
         (text) => importCatalogText(text, f.name),
-        () => toast(t("{FILE} could not be read.").split("{FILE}").join(f.name))
+        () => toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(f.name))
       );
     });
   }
@@ -12331,7 +12362,7 @@ What you type stays in this browser only.`;
       });
     }).catch((e) => {
       if (e && e.name === "AbortError") return;
-      toast(t("The catalog could not be loaded:") + " " + (picked || e && e.name || ""));
+      toastRefusal(t("The catalog could not be loaded:") + " " + (picked || e && e.name || ""));
     });
   }
 
@@ -19197,14 +19228,14 @@ What you type stays in this browser only.`;
     eReadCatalogFile(name).then((got) => {
       if (!got) return;
       if (!got.text) {
-        toast(t("{FILE} could not be read.").split("{FILE}").join(String(name || "")));
+        toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(String(name || "")));
         return;
       }
       let c = null;
       try {
         c = parseCatalogFile(got.text);
       } catch (e) {
-        toast(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(got.name));
+        toastRefusal(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(got.name));
         return;
       }
       const shown2 = eOfferCatalogDialog(c, {
@@ -19474,7 +19505,7 @@ What you type stays in this browser only.`;
             try {
               c = parseCatalogFile(text);
             } catch (e) {
-              if (interactive) toast(t("That file is not a catalog Etiuda can read."));
+              if (interactive) toastRefusal(t("That file is not a catalog Etiuda can read."));
               return null;
             }
             const shown2 = eOfferCatalogDialog(c, {
@@ -19492,11 +19523,11 @@ What you type stays in this browser only.`;
         });
       });
     }).catch(() => {
-      if (interactive) toast(t("Could not read the watched file."));
+      if (interactive) toastRefusal(t("Could not read the watched file."));
     });
   }
   function refuseAskedFile(name, why) {
-    toast(t(why === "read" ? "{FILE} could not be read." : "{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(name || "")));
+    toastRefusal(t(why === "read" ? "{FILE} could not be read." : "{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(name || "")));
   }
   function wireHostCatalogWatch() {
     const h = typeof window !== "undefined" && window.E_HOST || null;

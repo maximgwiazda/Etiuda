@@ -9,7 +9,7 @@ import { hueIsOffered } from "./cat-identity.js";
 import { catalogFromV2, isV2, v2CatKey } from "./catalog-v2.js";
 import { setCatalogGreet } from "./greeting.js";
 import { setCatalogStop } from "./affinity.js";
-import { fileStamp, toast } from "./ui-lang.js";
+import { fileStamp, toastRefusal, t } from "./ui-lang.js";
 
 /* ---- catalog: Etiuda ships empty - a catalog supplies cards, intents, categories and
    facts, playing the role built-in content used to (pack.baseCards still overrides it,
@@ -50,11 +50,11 @@ function storedCatalog(){
 function storeCatalog(c){
   /* A store that forgets at the tab's edge cannot hold a catalog at all: activateCatalog
      reloads, and the reload is what discards it. Say so instead of reloading into nothing. */
-  if(!E_LS_OK){ toast("This browser is not storing anything, so a catalog cannot be kept here"); return false; }
+  if(!E_LS_OK){ toastRefusal(t("This browser is not storing anything, so a catalog cannot be kept here")); return false; }
   let s=null;
   try{ s=JSON.stringify(c); }catch(e){ s=null; }
   if(s===null || !lsSet(E_CATALOG_STORE,s,true) || lsGet(E_CATALOG_STORE)!==s){
-    toast("Could not save the catalog, perhaps because the browser's storage is full.");
+    toastRefusal(t("Could not save the catalog, perhaps because the browser's storage is full."));
     return false;
   }
   return true;

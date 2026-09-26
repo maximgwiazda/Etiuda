@@ -1,5 +1,5 @@
 import { $ } from "./dom.js";
-import { t, toast } from "./ui-lang.js";
+import { t, toastRefusal } from "./ui-lang.js";
 import { lsGet, lsSet, nsGet } from "./storage.js";
 import { eCatalog, eCatalogAccepted, storedCatalog } from "./catalog.js";
 import { pack } from "./pack.js";
@@ -106,7 +106,7 @@ function eLoadedCatalogFile(){
 function eChooseCatalogFolder(title){
   return ePickCatalogFolder(title).then(dir=>{
     if(!dir || dir===eCatalogFolder()) return "";
-    if(lsSet(E_CATALOG_FOLDER_KEY,dir)===false){ toast(t("That setting could not be saved.")); return ""; }
+    if(lsSet(E_CATALOG_FOLDER_KEY,dir)===false){ toastRefusal(t("That setting could not be saved.")); return ""; }
     return dir;
   });
 }

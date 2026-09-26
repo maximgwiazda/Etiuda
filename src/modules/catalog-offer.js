@@ -14,7 +14,7 @@ import { MG_REOPEN, lsSet, nsGet, nsSet, ssGet } from "./storage.js";
 import { tourDueAtBoot, afterTour } from "./tour.js";
 import { placeBubble } from "./bubble.js";
 import { markCut } from "./cut-text.js";
-import { catalogAwaitingLine, catalogCountsLine, t, toast } from "./ui-lang.js";
+import { catalogAwaitingLine, catalogCountsLine, t, toast, toastRefusal } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { cards, wholeThingEmpty } from "./app-state.js";
 import { totalMacroCount } from "./card-counts.js";
@@ -99,11 +99,11 @@ function eOfferCatalogAtBoot(){
 function loadCatalogFromFolder(name,mtime){
   eReadCatalogFile(name).then(got=>{
     if(!got) return;
-    if(!got.text){ toast(t("{FILE} could not be read.").split("{FILE}").join(String(name||""))); return; }
+    if(!got.text){ toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(String(name||""))); return; }
     let c=null;
     try{ c=parseCatalogFile(got.text); }
     catch(e){
-      toast(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(got.name));
+      toastRefusal(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(got.name));
       return;
     }
     const shown=eOfferCatalogDialog(c,{
@@ -448,7 +448,7 @@ function eCheckWatchedFile(interactive){
         return f.text().then(text=>{
           let c=null;
           try{ c=parseCatalogFile(text); }
-          catch(e){ if(interactive) toast(t("That file is not a catalog Etiuda can read.")); return null; }
+          catch(e){ if(interactive) toastRefusal(t("That file is not a catalog Etiuda can read.")); return null; }
           const shown=eOfferCatalogDialog(c,{
             /* No folder: this file was PICKED, so it may sit anywhere, and naming the catalog
                folder beside it would say it came from there. */
@@ -461,7 +461,7 @@ function eCheckWatchedFile(interactive){
         });
       });
     });
-  }).catch(()=>{ if(interactive) toast(t("Could not read the watched file.")); });
+  }).catch(()=>{ if(interactive) toastRefusal(t("Could not read the watched file.")); });
 }
 /* The third channel into the dialog above, spec 11.5: the desktop host watches the file beside
    Etiuda and hands over its text when it changes. The picker channel cannot serve here - there
@@ -470,7 +470,7 @@ function eCheckWatchedFile(interactive){
 /* A file somebody asked for is answered even when it cannot be offered: `why` is the host's
    refusal, "read" for a file it could not open and anything else for one it would not parse. */
 function refuseAskedFile(name,why){
-  toast(t(why==="read"?"{FILE} could not be read.":"{FILE} is not a catalog Etiuda can read.")
+  toastRefusal(t(why==="read"?"{FILE} could not be read.":"{FILE} is not a catalog Etiuda can read.")
     .split("{FILE}").join(String(name||"")));
 }
 function wireHostCatalogWatch(){

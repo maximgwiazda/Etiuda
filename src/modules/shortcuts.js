@@ -1,5 +1,5 @@
 import { lsGet, lsSet, lsDel } from "./storage.js";
-import { t, toast } from "./ui-lang.js";
+import { t, toastRefusal } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { $, intentEl } from "./dom.js";
 import { hooks } from "./hooks.js";
@@ -226,7 +226,7 @@ function saveShortcuts(){
   try{
     if(Object.keys(out).length) lsSet("eShortcuts",JSON.stringify(out));
     else lsDel("eShortcuts");
-  }catch(err){ toast("Could not save shortcuts"); }
+  }catch(err){ toastRefusal(t("Could not save shortcuts")); }
   syncShortcutTitles();
 }
 function scChord(id){

@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 230 };
+const EXPECTED = { chrome: 231 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -2702,6 +2702,29 @@ const t0 = Date.now();
     });
     check([railLine.now, railLine.narrow].every(x => x.kids === 1 && x.items === 0 && x.lines === 1 && x.text > 0),
       "quiet-3 the empty rail holds exactly one line of its own, at its width and at the narrowest (" + JSON.stringify(railLine) + ")");
+    /* quiet-9, motion-10, pixels-20: on the empty desk, where the footer is on screen. A refusal
+       wears its own ground and glyph, stands clear of the footer and rests with no transform; a
+       second toast over it dips out (the lowest opacity sampled each frame) before its words. */
+    step("the toast on the empty desk");
+    const toasts = await q.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const el = document.getElementById("toast"), f = document.querySelector("footer");
+      toastRefusal("invented.ec could not be read.");
+      await wait(500);
+      const a = el.getBoundingClientRect(), b = f.getBoundingClientRect(), cs = getComputedStyle(el);
+      const first = { refusal: el.classList.contains("refusal"), glyph: !!el.querySelector("svg"), ground: cs.backgroundColor,
+        transform: cs.transform, clear: a.bottom <= b.top || a.top >= b.bottom || a.right <= b.left || a.left >= b.right };
+      const op = [], t0 = performance.now();
+      toast("An invented second message");
+      await new Promise(res => { (function tick() { op.push(+getComputedStyle(el).opacity); if (performance.now() - t0 < 300) requestAnimationFrame(tick); else res(); })(); });
+      const second = { dip: Math.min(...op), words: el.textContent === "An invented second message", refusal: el.classList.contains("refusal") };
+      el.classList.remove("show");
+      return { first, second };
+    });
+    check(toasts.first.refusal && toasts.first.glyph && toasts.first.ground === "rgb(194, 65, 12)" && toasts.first.transform === "none"
+          && toasts.first.clear && toasts.second.dip < 0.2 && toasts.second.words && !toasts.second.refusal,
+      "quiet-9 a refusal toast has its own ground and glyph, clears the footer and rests untransformed, and a toast over it dips before its words ("
+      + JSON.stringify(toasts) + ")");
     /* ADOPTING THE SAMPLE RELOADS THE DOCUMENT - catalog-file.js ends on location.reload(),
        because a catalog arrives on a clean desk and the per-tab state has to go with it. The old
        shape here clicked through an evaluate and then went on driving whatever frame it had,

@@ -2,6 +2,8 @@ import { lsGet, lsSet, lsDel } from "./storage.js";
 import { markCut } from "./cut-text.js";
 import { $ } from "./dom.js";
 import { esc } from "./esc.js";
+import { mgReduceMotion, M_MS } from "./motion.js";
+import { ICON_LINT_WARNING } from "./icons.js";
 
 /* ---- UI LANGUAGE ------------------------------------------------------------------------
    The CHROME's language, not the CONTENT's: the EN|PL switch decides what is copied to
@@ -924,15 +926,39 @@ let tt;
 const TOAST_MS=1700;
 // The one toast that asks for an action (mark.js) holds this long; every other, TOAST_MS.
 const TOAST_HAND_MS=6000;
+// A refusal holds longer: it is read to the end, and it names what to do next.
+const TOAST_REFUSAL_MS=5000;
 var toastSerial=0;
-function toast(m, ms){
+let toastSwap=0;
+/* ABOVE THE FOOTER where the footer is on screen, which on an empty desk it is: never over its words. */
+function placeToast(el){
+  const f=document.querySelector("footer"), r=f && f.getBoundingClientRect();
+  const lift=(r && r.height && r.top<innerHeight) ? Math.round(innerHeight-r.top) : 0;
+  el.style.bottom=lift ? (lift+8)+"px" : "";
+}
+function toast(m, ms, refusal){
   toastSerial++;
   /* Every message the app speaks passes through here, so this is the one place a toast needs
      translating - not fifty call sites. */
   m=t(m);
-  const el=$("#toast"); el.textContent=m; markCut(el); el.classList.add("show");
-  clearTimeout(tt); tt=setTimeout(()=>el.classList.remove("show"),ms||TOAST_MS);
+  const el=$("#toast");
+  const put=()=>{
+    el.classList.remove("swap");
+    el.classList.toggle("refusal",!!refusal);
+    if(refusal) el.innerHTML=ICON_LINT_WARNING+'<span>'+esc(m)+'</span>';
+    else el.textContent=m;
+    placeToast(el); markCut(el); el.classList.add("show");
+  };
+  /* A TOAST ARRIVING OVER ONE THAT SHOWS dips out on the dismiss tier and comes back with its new
+     words, rather than rewriting them in place and snapping the pill to its new width. */
+  const dip=el.classList.contains("show") && !mgReduceMotion();
+  clearTimeout(tt); clearTimeout(toastSwap);
+  if(dip){ el.classList.add("swap"); toastSwap=setTimeout(put,M_MS.dismiss); }
+  else put();
+  tt=setTimeout(()=>el.classList.remove("show"),(ms||TOAST_MS)+(dip?M_MS.dismiss:0));
 }
+/* A REFUSAL IS NOT A CONFIRMATION: its own ground and the warning glyph, and a longer life. */
+function toastRefusal(m){ toast(m, TOAST_REFUSAL_MS, true); }
 /* TRANSLATE AT THE SINKS, not at 200 call sites: an attribute in markup, a chrome
    element's text, or a toast. SCOPED TO CHROME - the card list, the panel's rows and the
    facts panel hold CATALOG content, the customer's, never touched by a UI language; that
@@ -1060,6 +1086,7 @@ export {
   translateTree,
   translateChrome,
   toast,
+  toastRefusal,
   TOAST_MS,
   TOAST_HAND_MS,
   toastSerial
