@@ -4,7 +4,6 @@ import { fillProseIcons } from "./icons.js";
 import { focusIntentOnOpen } from "./on-open.js";
 import { drawIntentRail } from "./rail-list.js";
 import { chordChips } from "./shortcuts.js";
-import { openSettings } from "./settings.js";
 import { lsGet, lsSet, lsDel, ssGet, ssSet, ssDel } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { t, toast } from "./ui-lang.js";
@@ -14,8 +13,7 @@ import { list, $ } from "./dom.js";
 import { setEntrySel } from "./mark.js";
 import { syncLayoutPrefs, pillsWanted, schedulePillsCollapse } from "./pills-box.js";
 import { closeSettingsMenu } from "./header-menus.js";
-import { cards, wholeThingEmpty } from "./app-state.js";
-import { hooks } from "./hooks.js";
+import { wholeThingEmpty } from "./app-state.js";
 import { placeBubble } from "./bubble.js";
 import { eHost, eCatalogFolderShort } from "./host.js";
 import { agentName, setAgentName, keepAgentName, nameFieldHtml, wireNameField } from "./agent.js";
@@ -140,6 +138,19 @@ function loadStepBody(){
   return t("Replies come in a catalog. <b>Load a catalog</b>, under the logo, opens {FOLDER}, and the choice is yours: the team's own catalog, if it is there, or the sample, which always waits there for trying things out.")
     .split("{FOLDER}").join(esc(dir));
 }
+/* THE MENU AS IT STANDS: the button while it is shut, and once the person opens it, the row a step
+   is about (or the whole menu), with the bubble beside it rather than over the rows below. */
+function menuOpen(){ const m=$("#settingsMenu"); return !!m && !m.hidden; }
+function menuTarget(act){
+  const m=$("#settingsMenu");
+  if(!menuOpen()) return $("#settingsBtn");
+  return (act && m.querySelector('[data-act="'+act+'"]')) || m;
+}
+const menuSide=()=>menuOpen() ? "left" : null;
+// A window the person opened: what each inside step waits on.
+const cardEditorOpen=()=>modalOpen() && !!document.getElementById("meCancel");
+const libraryOpen=()=>modalOpen() && !!document.querySelector("#modalCard details.manage-sec");
+const settingsOpen=()=>modalOpen() && !!document.getElementById("setBody");
 // The wheel waits on the sample until a reply names somebody (agent.js), and the step says so.
 function wheelShown(){ return !document.body.classList.contains("role-waits"); }
 const TOUR_STEPS=[
@@ -242,26 +253,30 @@ const TOUR_STEPS=[
     body:"The eye puts a card away: it greys out at the foot of its own category and shows nowhere else. The same button there brings it back, and nothing is deleted.",
     pad:8
   },
+  /* A WINDOW IS OPENED BY THE PERSON, NEVER BY THE TOUR: a step says how (`opens`), and the step
+     inside the window appears only once they open it (`inside`, shown while its window stands).
+     It has no Next and no Back, since closing the window is how it is done, and it counts as its
+     opener's number. */
   {
     id:"edit",
     sel:()=>cardBtn('[data-act="edit"]'),
     prep:tourRevealCardActions,
     title:"Edit a card",
-    body:"The pencil opens the card: both languages, the internal note, the keywords. Changes stay on this computer, and the editor's <b>Reset</b> brings back the catalog's own words.",
+    body:()=>t("The pencil opens the card: both languages, the internal note, the keywords. Changes stay on this computer, and the editor's <b>Reset</b> brings back the catalog's own words.")
+      +" "+t("Once the window is open, the tour goes inside with it."),
+    opens:"editor",
     pad:8
   },
   {
-    /* Opened for real rather than described: the editor is four folds and a row of buttons, and
-       no amount of prose about it lands the way seeing it does. */
     id:"editor",
     sel:"#modalCard",
     modal:true,
+    inside:true,
+    when:cardEditorOpen,
     pad:4,
     title:"The card editor",
-    body:"<span class=\"t-sec\">Content</span> holds the text in both languages and the internal note; the folds below hold the keywords, the category, the linked intents and the finer settings. <b>Cancel</b> leaves everything as it was.",
-    prep:()=>{
-      hooks.openCardEditor((typeof cards!=="undefined" && cards && cards.length) ? cards[0].id : null);
-    }
+    body:()=>t("<span class=\"t-sec\">Content</span> holds the text in both languages and the internal note; the folds below hold the keywords, the category, the linked intents and the finer settings. <b>Cancel</b> leaves everything as it was.")
+      +" "+t("The tour carries on once this window is closed.")
   },
   /* AFTER the editor, not before it: the four steps above act on a card that already exists,
      and this is the one that makes the one that does not - into the screen just shown. */
@@ -289,34 +304,56 @@ const TOUR_STEPS=[
     pad:8
   },
   {
-    /* The button, with the menu SHUT: a spotlight covering both encloses a wedge of empty header,
-       and a menu is the one thing a tour need not demonstrate. */
+    /* The button, and never the menu opened for it: a menu is the one thing a tour need not
+       demonstrate. The next two steps ring the row the person is looking for once they open it. */
     id:"menu",
-    sel:"#settingsBtn",
+    sel:()=>menuTarget(""),
+    side:menuSide,
     title:"Menu",
     body:"Everything that is not a card: the Library, Settings, the panels' switches, and this tour again under <b>Show tour…</b>.",
     pad:8
   },
   {
-    /* Opens exactly as the user's own Library opens: a step showing the real thing must not
-       adjust the real thing to suit itself. */
     id:"library",
-    sel:"#modalCard",
-    modal:true,
-    pad:4,
+    sel:()=>menuTarget("manage"),
+    side:menuSide,
     title:"Library",
-    body:"<b><span data-icon=\"settings\"></span> → Library</b> holds every card, intent and category, to add, edit, hide or move. Catalogs are loaded here too, and your own improvements go out from here as a file for whoever keeps the wording.",
-    prep:()=>{ hooks.openManage(); }
+    body:()=>t("The <b>Library</b> is in the <span data-icon=\"settings\"></span> Menu, and the whole catalog is in the Library.")
+      +" "+t("Once the window is open, the tour goes inside with it."),
+    opens:"libraryIn",
+    pad:8
   },
   {
-    // Same rule as Library above: opened as the menu opens it, no section forced.
-    id:"settings",
+    id:"libraryIn",
     sel:"#modalCard",
     modal:true,
+    inside:true,
+    when:libraryOpen,
+    pad:4,
+    title:"Library",
+    body:()=>t("<b><span data-icon=\"settings\"></span> → Library</b> holds every card, intent and category, to add, edit, hide or move. Catalogs are loaded here too, and your own improvements go out from here as a file for whoever keeps the wording.")
+      +" "+t("The tour carries on once this window is closed.")
+  },
+  {
+    id:"settings",
+    sel:()=>menuTarget("settings"),
+    side:menuSide,
+    title:"Settings",
+    body:()=>t("<b>Settings</b> are in the same Menu: this desk's signature, language and look.")
+      +" "+t("Once the window is open, the tour goes inside with it."),
+    opens:"settingsIn",
+    pad:8
+  },
+  {
+    id:"settingsIn",
+    sel:"#modalCard",
+    modal:true,
+    inside:true,
+    when:settingsOpen,
     pad:4,
     title:"Settings",
-    body:"<b><span data-icon=\"settings\"></span> → Settings</b>: your name, the language of the buttons, the look and the shortcuts. Nothing here touches a card.",
-    prep:()=>{ openSettings(); }
+    body:()=>t("<b><span data-icon=\"settings\"></span> → Settings</b>: your name, the language of the buttons, the look and the shortcuts. Nothing here touches a card.")
+      +" "+t("The tour carries on once this window is closed.")
   },
   {
     id:"done",
@@ -434,7 +471,8 @@ function placeTourUI(){
      family's last fallback is for. The alternating sides the old callout used are gone with the
      arrow: two dialog steps in a row now differ by their words, as every other pair does. */
   if(holeRect){
-    placeBubble(els.card, holeRect, {width:cardW, gap:12});
+    const side=typeof step.side==="function" ? step.side() : step.side;
+    placeBubble(els.card, holeRect, {width:cardW, gap:12, prefer:side||undefined});
   } else {
     els.card.style.width=cardW+"px";
     els.card.style.top=Math.max(24, (vh-(els.card.offsetHeight||220))/2)+"px";
@@ -460,13 +498,6 @@ function showTourStep(i){
   const els=tourEls();
   // Where the tour stands survives a reload: loading a catalog reloads the page.
   ssSet(TOUR_AT,step.id);
-  /* A step that shows a dialog opens it in its own prep and declares `modal`. Every other step
-     shuts whatever is open, so stepping backwards out of one does not leave a dialog standing
-     over the rest of the tour - and the class goes on BEFORE prep runs, so the dialog is laid
-     out in its shifted position before anything measures it. */
-  if(!step.modal && modalOpen()){
-    closeModal();
-  }
   // No step opens the menu, and one left open from before the tour would sit over the spotlight.
   closeSettingsMenu();
   /* A showcase must not outlive its step: whatever the PREVIOUS step's prep borrowed is given
@@ -484,12 +515,13 @@ function showTourStep(i){
      rule the shortcut hints follow. A function body has already composed its key. */
   if(els.body){ els.body.innerHTML=t((typeof step.body==="function"?step.body():step.body)||""); fillProseIcons(els.body); }
   // The counter counts the steps this desk is shown, which leaves the load step out of a full one.
-  const on=TOUR_STEPS.map((_,k)=>k).filter(stepOn);
+  const on=TOUR_STEPS.map((_,k)=>k).filter(k=>stepOn(k) && !TOUR_STEPS[k].inside);
+  const at=step.inside ? TOUR_STEPS.findIndex(x=>x.opens===step.id) : i;
   if(els.step) els.step.textContent=t("Tour {N} / {TOTAL}")
-    .replace("{N}",on.indexOf(i)+1).replace("{TOTAL}",on.length);
-  if(els.prev) els.prev.hidden=onFrom(i-1,-1)<0;
+    .replace("{N}",on.indexOf(at)+1).replace("{TOTAL}",on.length);
+  if(els.prev) els.prev.hidden=!!step.inside || onFrom(i-1,-1)<0;
   if(els.next){
-    els.next.hidden=!!step.waits;
+    els.next.hidden=!!(step.waits || step.inside);
     els.next.textContent=t(onFrom(i+1,1)<0 ? "Finish" : "Next");
   }
   let nameInp=null;
@@ -582,9 +614,7 @@ function endTour(completed){
   // The name field goes with the tour, so the question at the first signed copy is not held back.
   if(els.field){ els.field.innerHTML=""; els.field.hidden=true; }
   if(els.arrow){ els.arrow.classList.remove("show"); els.arrow.style.display="none"; }
-  // Leaving mid-tour must not strand a dialog or a menu the tour opened.
-  if(modalOpen()) closeModal();
-  // Nor keep anything a step's prep borrowed - the rail lock, the pill bar.
+  // Leaving mid-tour keeps nothing a step's prep borrowed - the rail lock, the pill bar.
   runTourStepUndo();
   closeSettingsMenu();
   clearTourFocus();
@@ -598,8 +628,17 @@ function endTour(completed){
   const later=tourAfter; tourAfter=[];
   later.forEach(fn=>{ try{ fn(); }catch(_){} });
 }
+/* The window a step says how to open, once the person opens it: the tour goes in with them. */
+function tourFollowWindow(){
+  const step=TOUR_STEPS[tourIdx];
+  if(!tourRunning || !step || !step.opens) return false;
+  const i=TOUR_STEPS.findIndex(x=>x.id===step.opens);
+  if(i<0 || !stepOn(i)) return false;
+  showTourStep(i);
+  return true;
+}
 /* WHEN A WINDOW OPENS OVER THE PAGE, the bubble steps back behind it and waits: it comes forward
-   again when the window closes. A window the step itself opened is the one it points at. */
+   again when the window closes. An inside step's window is the one it points at. */
 function syncTourBehind(){
   const els=tourEls();
   if(!els.root) return;
@@ -611,8 +650,6 @@ function tourHasFocus(){
   const card=$("#tourCard");
   return !!(tourRunning && card && document.activeElement && card.contains(document.activeElement));
 }
-// A dialog the tour opened leaves the keyboard where the tour has it.
-function tourShowsDialog(){ const step=TOUR_STEPS[tourIdx]; return !!(tourRunning && step && step.modal); }
 /* Arrow keys move a selection ring across the tour's own buttons instead of changing step
    (stepping is Enter, or clicking). Order follows the DOM - Skip, Back, Next - and wraps,
    so → from Next lands back on Skip. Back is skipped on step 1 where it is hidden. */
@@ -685,10 +722,13 @@ function wireTourUi(){
   // A window opening or closing over the page moves the bubble behind it or back.
   if(typeof MutationObserver==="function"){
     try{
-      const mo=new MutationObserver(()=>{ if(tourRunning){ syncTourBehind(); scheduleTourPlace(); } });
+      const mo=new MutationObserver(()=>{ if(tourRunning){ if(!tourFollowWindow()) syncTourBehind(); scheduleTourPlace(); } });
       mo.observe(document.body,{childList:true});
       const shared=$("#modal");
       if(shared) mo.observe(shared,{attributes:true, attributeFilter:["hidden"]});
+      // The menu opening or shutting moves a Menu step's ring between the button and its rows.
+      const menu=$("#settingsMenu");
+      if(menu) mo.observe(menu,{attributes:true, attributeFilter:["hidden"]});
     }catch(_){}
   }
   // Reposition if sticky header / rail geometry changes
@@ -710,7 +750,6 @@ export {
   activateTourFocus,
   wireTourUi,
   tourHasFocus,
-  tourShowsDialog,
   tourDueAtBoot,
   maybeStartTour,
   afterTour

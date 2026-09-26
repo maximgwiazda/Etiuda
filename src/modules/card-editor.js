@@ -9,7 +9,6 @@ import { intentNavName } from "./intent-text.js";
 import { langTabs, langPane, langFieldId, markMissing, edReportMissing, langFocus } from "./lang-tabs.js";
 import { nsSet } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { tourShowsDialog } from "./tour.js";
 import { t, counted, toast, tc } from "./ui-lang.js";
 import { BASE_CATS, pack, savePack } from "./pack.js";
 import { removeCard, syncFavouritesMeta } from "./favourites.js";
@@ -587,12 +586,7 @@ function openCardEditor(id, presetCat, fromManage){
             nid=>openCardEditor(nid,null,fromManage));
   // Guarded: the dialog can be gone by the time this fires, and an unguarded .focus() on the
   // missing field throws an uncaught TypeError. Same for the intent editor below.
-  /* Not during the tour. The tour drives its own buttons from real DOM focus - that is how the
-     arrow keys move between Skip, Back and Next - so a dialog grabbing a text field takes the
-     keyboard away from it, and the caret landing in Title also reads as "start typing here",
-     which is the opposite of what a showcase step is asking for. */
   setTimeout(()=>{
-    if(tourShowsDialog()) return;
     const el=$("#"+meFieldId("t",CONTENT_LANGS[0])); if(el) el.focus();
   },30);
 }

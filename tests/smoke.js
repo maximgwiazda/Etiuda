@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 220 };
+const EXPECTED = { chrome: 223 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -500,11 +500,13 @@ const t0 = Date.now();
   /* Bounded by the tour's own length and three spare, so a tour that will not close costs
      three presses rather than forty. */
   const cap = first.total > 0 ? first.total + 3 : 40;
-  let pressed = 0, advanced = 0, seen = first.n;
+  let pressed = 0, advanced = 0, seen = first.n, windows = 0;
+  const windowUp = () => p.evaluate(() => !document.getElementById("modal").hidden);
   for (let i = 0; i < cap; i++) {
     if (!(await tourShot()).up) break;
     await p.keyboard.press("Enter"); pressed++; await sleep(260);
     const now = await tourShot();
+    if (await windowUp()) windows++;
     if (now.up && now.n === seen + 1) advanced++;
     if (now.n > seen) seen = now.n;
   }
@@ -515,6 +517,10 @@ const t0 = Date.now();
     "and Enter walks it one step at a time to the end (" + advanced + " advances over " + pressed + " presses)");
   check(!tourAfter.up, "and the overlay leaves the screen when it ends, rather than only being flagged done ("
     + tourAfter.w + "px wide)");
+  /* THE TOUR OPENS NO WINDOW (Maxim, 2026-09-26): the card editor, the Library and Settings are the
+     person's to open, so a walk that only presses Enter meets none of them. */
+  check(pressed === first.total && windows === 0,
+    "and a walk that only presses Enter opens no window: one stood after " + windows + " of " + pressed + " presses");
   /* BOARD 344, the second door out. Walking to the end ends the tour from inside tour.js;
      Escape ends it through header-menus.js:65, which is the only caller of hooks.endTour in
      src/. Without this the way out a person actually uses was never driven. */
@@ -569,6 +575,64 @@ const t0 = Date.now();
   check(behind.lib && behind.z === "190" && front === "240",
     "a window opened over the page takes the bubble behind it, and closing it brings the bubble back (z "
     + behind.z + " with the Library open, " + front + " after)");
+  /* A STEP SAYS HOW TO OPEN A WINDOW, AND THE STEP INSIDE IT APPEARS WHEN THE PERSON DOES (Maxim,
+     2026-09-26). The Library's step rings the Menu button; the person's own click opens the menu, and
+     the ring moves to the Library row with the bubble beside the menu, not over its rows; their click
+     on the row opens the Library and the tour is inside it, in front of the window, with no Next and
+     the opener's number; closing the Library carries the tour to the next step. The pencil's step
+     does the same with the card editor. Clicks by the mouse, at the rectangles a person would use. */
+  await menuTour(); await sleep(700);
+  const walkTo = id => p.evaluate(async want => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    for (let i = 0; i < 30 && sessionStorage.getItem("eTourAt") !== want; i++) {
+      const n = document.getElementById("tourNext"); if (!n || n.hidden) break; n.click(); await wait(250);
+    }
+    await wait(500);
+    return sessionStorage.getItem("eTourAt");
+  }, id);
+  const ringOn = sel => p.evaluate(q => {
+    const h = document.getElementById("tourHole").getBoundingClientRect(), el = document.querySelector(q);
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    return h.left <= r.left && h.right >= r.right && h.top <= r.top && h.bottom >= r.bottom;
+  }, sel);
+  const stepNo = () => p.evaluate(() => { const m = /(\d+)\D+(\d+)/.exec(document.getElementById("tourStepLabel").textContent || "");
+    return m ? +m[1] : 0; });
+  const atLib = await walkTo("library");
+  const libBtnRing = await ringOn("#settingsBtn"), libNo = await stepNo();
+  await p.click("#settingsBtn"); await sleep(500);
+  const rowRing = await ringOn('#settingsMenu [data-act="manage"]');
+  const clear = await p.evaluate(() => {
+    const c = document.getElementById("tourCard").getBoundingClientRect(), m = document.getElementById("settingsMenu").getBoundingClientRect();
+    return c.right <= m.left || c.left >= m.right || c.bottom <= m.top || c.top >= m.bottom;
+  });
+  await p.click('#settingsMenu [data-act="manage"]'); await sleep(900);
+  const inLib = await p.evaluate(() => ({ at: sessionStorage.getItem("eTourAt"), lib: !!document.querySelector("#modalCard details.manage-sec"),
+    z: getComputedStyle(document.getElementById("tourRoot")).zIndex, next: document.getElementById("tourNext").hidden,
+    back: document.getElementById("tourPrev").hidden }));
+  const inNo = await stepNo();
+  await p.evaluate(() => closeModal()); await sleep(900);
+  const afterLib = await p.evaluate(() => sessionStorage.getItem("eTourAt"));
+  check(atLib === "library" && libBtnRing && rowRing && clear && inLib.at === "libraryIn" && inLib.lib && inLib.z === "240"
+        && inLib.next && inLib.back && inNo === libNo && afterLib === "settings",
+    "the Library's step rings the Menu button, the open menu's Library row with the bubble clear of the menu, and the"
+    + " Library the person opens: " + JSON.stringify({ atLib, libBtnRing, rowRing, clear, inLib, libNo, inNo, afterLib }));
+  await p.evaluate(() => { const k = document.getElementById("tourSkip"); if (k) k.click(); }); await sleep(500);
+  await menuTour(); await sleep(700);
+  const atEdit = await walkTo("edit");
+  const penTour = await p.evaluate(() => { const b = document.querySelector('#list .card [data-act="edit"]');
+    if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  if (penTour) await p.mouse.click(penTour.x, penTour.y);
+  await sleep(900);
+  const inEd = await p.evaluate(() => ({ at: sessionStorage.getItem("eTourAt"), editor: !!document.getElementById("meCancel"),
+    focus: !!document.activeElement && document.activeElement.tagName }));
+  await p.evaluate(() => { const c = document.getElementById("meCancel"); if (c) c.click(); }); await sleep(900);
+  const afterEd = await p.evaluate(() => sessionStorage.getItem("eTourAt"));
+  await p.evaluate(() => { const k = document.getElementById("tourSkip"); if (k) k.click(); });
+  await sleep(500);
+  check(atEdit === "edit" && !!penTour && inEd.at === "editor" && inEd.editor && afterEd === "add",
+    "and the pencil's step does the same with the card editor the person opens, the tour moving on when it is"
+    + " closed: " + JSON.stringify({ atEdit, penTour: !!penTour, inEd, afterEd }));
   clean(e, "the tour");
 
   /* Interface language both ways, with the dialogs opened in Polish.
