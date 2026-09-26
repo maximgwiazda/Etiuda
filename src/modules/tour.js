@@ -642,13 +642,15 @@ function tourFollowWindow(){
   return true;
 }
 /* WHEN A WINDOW OPENS OVER THE PAGE, the bubble steps back behind it and waits: it comes forward
-   again when the window closes. An inside step's window is the one it points at. */
+   again when the window closes. An inside step's window is the one it points at. A question
+   bubble (the signing name, a catalog offer) is waited for the same way. */
 function syncTourBehind(){
   const els=tourEls();
   if(!els.root) return;
   const step=TOUR_STEPS[tourIdx];
   const covered=!!document.querySelector("body > .modal:not([hidden])");
-  els.root.classList.toggle("behind", tourRunning && covered && !(step && step.modal));
+  const asked=!!document.querySelector("body > .bub-ask");
+  els.root.classList.toggle("behind", tourRunning && (asked || (covered && !(step && step.modal))));
 }
 function tourHasFocus(){
   const card=$("#tourCard");

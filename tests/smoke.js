@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 228 };
+const EXPECTED = { chrome: 229 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -2766,6 +2766,49 @@ const t0 = Date.now();
   };
   const upFor = (q, fn, ms) => q.waitForFunction(fn, { timeout: ms || 20000, polling: 100 }).then(() => true, () => false);
   try {
+    /* flow-1: THE NAME QUESTION AT THE TOUR'S CARDS STEP stands in front of the tour, which steps
+       back behind it and comes forward again once it is answered. The name is left empty so the
+       first signed copy asks; the block pressed is the first that signs. */
+    huntAt = "flow-1";
+    const q1 = await huntPage(hunt, false);
+    await upFor(q1, () => !!document.querySelector("#tourName") && !!document.getElementById("emptySample"));
+    await q1.click("#tourNext"); await sleep(700);
+    await clickReload(q1, "#emptySample");
+    await upFor(q1, () => document.querySelectorAll("#list .card").length > 0 && !document.getElementById("tourRoot").hidden);
+    for (let i = 0; i < 8; i++) {
+      if (await q1.evaluate(() => sessionStorage.getItem("eTourAt")) === "cards") break;
+      await q1.click("#tourNext"); await sleep(700);
+    }
+    await sleep(600);
+    const blk = await q1.evaluate(() => {
+      const el = [...document.querySelectorAll("#list .card[data-id] .txt[data-v]")].find(x => {
+        const c = x.closest(".card[data-id]"), m = c && findCard(c.dataset.id);
+        return !!m && /{(AGENT|INIT)}/.test(parts(m, cardLang(m))[+x.dataset.v] || ""); });
+      if (!el) return null;
+      const r = el.getBoundingClientRect(), x = Math.round(r.left + Math.min(40, r.width / 2)), y = Math.round(r.top + Math.min(12, r.height / 2));
+      const top = document.elementFromPoint(x, y);
+      return { x, y, free: !!top && el.contains(top), at: sessionStorage.getItem("eTourAt") };
+    });
+    let ask = { up: false };
+    if (blk && blk.free) {
+      await q1.mouse.click(blk.x, blk.y); await sleep(900);
+      ask = await q1.evaluate(() => {
+        const box = document.getElementById("eAgentAsk");
+        if (!box) return { up: false };
+        const hit = id => { const el = document.getElementById(id); if (!el) return false; const r = el.getBoundingClientRect();
+          const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!top && box.contains(top); };
+        return { up: true, title: hit("eAgentTitle"), field: hit("eAgentInp"), yes: hit("eAgentYes"), no: hit("eAgentNo"),
+                 behind: document.getElementById("tourRoot").classList.contains("behind") };
+      });
+      if (ask.up) { await q1.click("#eAgentNo"); await sleep(600); }
+    }
+    const back = await q1.evaluate(() => ({ gone: !document.getElementById("eAgentAsk"), tour: !document.getElementById("tourRoot").hidden,
+      forward: !document.getElementById("tourRoot").classList.contains("behind") }));
+    check(!!blk && blk.free && blk.at === "cards" && ask.up && ask.title && ask.field && ask.yes && ask.no && ask.behind
+          && back.gone && back.tour && back.forward,
+      "flow-1 at the tour's Cards step the name question opens in front of the tour, every part of it reachable, and"
+      + " the tour comes forward again once it is answered: " + JSON.stringify({ blk, ask, back }));
+
     /* data-2: THE EMPTY DESK'S SAMPLE BUTTON KEEPS WHAT AN EJECT KEPT. The sample loaded, one card's
        title edited and saved, another starred, the catalog ejected, and the sample taken up again
        from the empty desk: the edit and the star are still in the stored pack. */
