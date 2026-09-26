@@ -97,14 +97,14 @@ function showPackMigrationWarning(){
   const h=document.getElementById("eMigrateHide");
   if(h) h.onclick=()=>d.remove();
 }
-/* THE LASTING NOTICES, in the rescue banner's dress and stacked under one another UNDER THE BAND:
-   the band holds the window's own controls and is its drag handle, and a person with a full disk
-   still has to close and move the window. Re-placed whenever the band changes height. Built from
-   text nodes, so a path is never read as markup. */
+/* THE LASTING NOTICES, in the rescue's dress (the family's bubble) and stacked under one another
+   UNDER THE BAND: the band holds the window's own controls and is its drag handle, and a person
+   with a full disk still has to close and move the window. Re-placed whenever the band changes
+   height. Built from text nodes, so a path is never read as markup. */
 let noticeRO=null;
 function placeNotices(){
   const box=document.getElementById("eNotices"), band=document.querySelector(".row");
-  if(box) box.style.top=(band ? Math.max(0,Math.round(band.getBoundingClientRect().bottom)) : 0)+"px";
+  if(box) box.style.top=((band ? Math.max(0,Math.round(band.getBoundingClientRect().bottom)) : 0)+8)+"px";
 }
 function dropNotice(d){
   const box=document.getElementById("eNotices");
@@ -120,8 +120,6 @@ function eNotice(id,lead,body,onDismiss){
   if(!box){
     box=document.createElement("div");
     box.id="eNotices";
-    box.style.cssText="position:fixed;left:0;right:0;top:0;z-index:2147483646;"
-      +"box-shadow:0 2px 14px rgba(0,0,0,.4)";
     (document.body||document.documentElement).appendChild(box);
     const band=document.querySelector(".row");
     try{ if(band){ noticeRO=new ResizeObserver(placeNotices); noticeRO.observe(band); } }catch(e){}
@@ -130,19 +128,21 @@ function eNotice(id,lead,body,onDismiss){
   }
   const d=document.createElement("div");
   d.id=id;
-  d.style.cssText="background:#78350f;color:#fff;font:14px/1.5 system-ui,Segoe UI,sans-serif;"
-    +"padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.18)";
+  d.className="bub bub-ask e-notice";
+  d.setAttribute("role","status");
+  d.setAttribute("data-side","none");
+  const say=document.createElement("p");
   const b=document.createElement("b");
   b.textContent=lead;
-  d.appendChild(b);
-  d.appendChild(document.createTextNode(" "+body));
+  say.appendChild(b);
+  say.appendChild(document.createTextNode(" "+body));
+  d.appendChild(say);
   const row=document.createElement("div");
-  row.style.cssText="margin-top:10px";
+  row.className="tour-actions";
   const x=document.createElement("button");
   x.type="button";
+  x.className="btn";
   x.textContent=t("Dismiss");
-  x.style.cssText="font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;"
-    +"background:rgba(255,255,255,.18);color:#fff";
   x.onclick=()=>{ dropNotice(d); if(onDismiss) onDismiss(); };
   row.appendChild(x);
   d.appendChild(row);

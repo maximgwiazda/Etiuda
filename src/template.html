@@ -37,18 +37,32 @@
      diagnostic anyone gets when the app is dead. -->
 <script>
 (function(){
-  function clearState(){
+  /* The desk file an installed Etiuda keeps its state in, handed over by the shell's preload before
+     this script runs; null in a browser. */
+  function hostDesk(){
+    var h=window.E_HOST;
+    return (h && typeof h.deskRead==="function" && typeof h.deskSave==="function") ? h : null;
+  }
+  /* The key shape below is E_KEY_RE's in storage.js, repeated because this script imports nothing.
+     withDesk is a person's Reset and nothing else: the silent repair below leaves an installed
+     desk as it is. */
+  function clearState(withDesk){
     try{
-      // The key shape of E_KEY_RE in storage.js, repeated because this script imports nothing
       var keys=[],i;
       for(i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k&&/^e(?:[A-Z]|[0-9a-z]+~)/.test(k)) keys.push(k); }
       for(i=0;i<keys.length;i++) localStorage.removeItem(keys[i]);
     }catch(e){}
     try{ sessionStorage.clear(); }catch(e){}
+    var h=withDesk && hostDesk();
+    if(h) try{
+      var map=JSON.parse(h.deskRead()||"{}"), kept={};
+      for(var key in map) if(!/^e(?:[A-Z]|[0-9a-z]+~)/.test(key)) kept[key]=map[key];
+      h.deskSave(JSON.stringify(kept));
+    }catch(e){}
   }
   // Layer 1: an escape hatch that needs no working app at all
   if(/reset/i.test(location.hash)){
-    clearState();
+    clearState(false);
     location.replace(location.href.split("#")[0]);
     return;
   }
@@ -111,6 +125,8 @@
      indistinguishable from outside, and naming one as certain sends people to a wrong fix. */
   var E_STORE_ERR=null;
   function storeUsable(){
+    // An installed Etiuda stores in its desk file, which the app reports on for itself (pack.js).
+    if(hostDesk()) return true;
     try{
       localStorage.setItem("__eprobe","1"); localStorage.removeItem("__eprobe");
       E_STORE_ERR=null; return true;
@@ -128,94 +144,127 @@
     try{ c.cookies = navigator.cookieEnabled!==false; }catch(e){}
     return c;
   }
+  /* THE WORDS, in the two languages the interface speaks, chosen as the app chooses: the stored
+     choice, else the system's first language. This script cannot reach t(), so it carries its own.
+     Browser advice is said only in a browser: an installed Etiuda has no address bar, no private
+     window and no site data. */
+  var WORDS={
+    en:{ failed:"Etiuda could not start.",
+      damaged:"Its saved settings on this computer look damaged. Resetting clears them and starts Etiuda again; catalog files are not touched.",
+      reset:"Reset Etiuda", orHash:"or add <b>#reset</b> to the address and press Enter", dismiss:"Dismiss",
+      stuck:"Startup did not finish.",
+      unsaved:"Etiuda cannot save its settings here.",
+      forgets:"It is running without remembering anything - everything works, but it forgets when you close it. Your cards are safe; they live in the file, not in the browser.",
+      framed:"Etiuda is being shown inside another page - SharePoint, Teams and Outlook all preview attachments this way, and a previewed document is given no storage of its own. No browser setting can change this. <b>Download the file and open it from your own computer</b>, and it will remember everything normally.",
+      full:"The storage set aside for Etiuda here is full. Clearing this page's site data will free it.",
+      hosted:"This copy is being served from a website, and the site is not letting it store anything. <b>Download the file and open it from your own computer</b> - run that way, Etiuda keeps its settings locally and needs nothing from the network.",
+      clash:"Most often this is a name clash rather than real damage: this browser tells <b>Etiuda.html</b> and <b>etiuda.html</b> apart, but Windows does not. If you have opened this file under a different capitalisation before, rename it back and it will work. Otherwise, open it from a different folder for a clean slate.",
+      cookiesOff:"The browser is blocking site data here. In Firefox: <b>Settings → Privacy &amp; Security → Cookies and Site Data</b>, and make sure cookies are not set to blocked (<b>Custom → All cookies</b> also blocks local files). Private windows block it too.",
+      policy:"The browser is refusing storage to this file even though cookies are switched on, which usually means a private window or a policy applied to local files. Try a normal window, or open the file from a different folder.",
+      refused:"The browser refused to store anything for this file. Opening it from a different folder, or in a normal (non-private) window, is usually enough." },
+    pl:{ failed:"Etiuda nie mogła się uruchomić.",
+      damaged:"Ustawienia zapisane na tym komputerze wyglądają na uszkodzone. Reset je wyczyści i uruchomi Etiudę od nowa, a pliki katalogów pozostaną nietknięte.",
+      reset:"Zresetuj Etiudę", orHash:"albo wystarczy dopisać <b>#reset</b> do adresu i nacisnąć Enter", dismiss:"Zamknij",
+      stuck:"Uruchamianie nie dobiegło końca.",
+      unsaved:"Etiuda nie może tu zapisywać ustawień.",
+      forgets:"Działa i wszystko jest sprawne, ale niczego nie zapamiętuje, więc po zamknięciu zapomni. Karty są bezpieczne: są w pliku, nie w przeglądarce.",
+      framed:"Etiuda jest wyświetlana wewnątrz innej strony, tak jak SharePoint, Teams i Outlook pokazują podgląd załączników, a podglądany dokument nie dostaje własnego miejsca na dane. Żadne ustawienie przeglądarki tego nie zmieni. <b>Wystarczy pobrać plik i otworzyć go z własnego komputera</b>, i wtedy Etiuda zapamięta wszystko jak należy.",
+      full:"Miejsce na dane przeznaczone tu dla Etiudy jest pełne. Zwolni je wyczyszczenie danych tej strony.",
+      hosted:"Ta kopia jest otwarta ze strony internetowej, która nie pozwala jej niczego zapisywać. <b>Wystarczy pobrać plik i otworzyć go z własnego komputera</b>: uruchomiona w ten sposób Etiuda trzyma ustawienia na miejscu i niczego nie potrzebuje z sieci.",
+      clash:"Najczęściej to nie uszkodzenie, lecz zbieżność nazw: ta przeglądarka odróżnia <b>Etiuda.html</b> od <b>etiuda.html</b>, a Windows nie. Jeśli ten plik był już otwierany pod nazwą z inaczej zapisanymi wielkimi literami, wystarczy przywrócić tamtą nazwę. W przeciwnym razie czysty start zapewni otwarcie go z innego folderu.",
+      cookiesOff:"Przeglądarka blokuje tu dane stron. W Firefoksie: <b>Ustawienia → Prywatność i bezpieczeństwo → Ciasteczka i dane stron</b>; ciasteczka nie mogą być ustawione jako blokowane (<b>Własne → Wszystkie ciasteczka</b> blokuje też pliki lokalne). Blokują je również okna prywatne.",
+      policy:"Przeglądarka odmawia temu plikowi miejsca na dane, choć ciasteczka są włączone; najczęściej oznacza to okno prywatne albo zasadę nałożoną na pliki lokalne. Pomoże zwykłe okno albo otwarcie pliku z innego folderu.",
+      refused:"Przeglądarka nie pozwoliła temu plikowi niczego zapisać. Najczęściej wystarcza otwarcie go z innego folderu albo w zwykłym, nieprywatnym oknie." }
+  };
+  function words(){
+    var l="";
+    try{ l=localStorage.getItem("eUiLang")||""; }catch(e){}
+    try{ var h=hostDesk(); if(h) l=String(JSON.parse(h.deskRead()||"{}").eUiLang||l); }catch(e){}
+    if(!WORDS[l]){
+      var list=[];
+      try{ list=(navigator.languages&&navigator.languages.length)?navigator.languages:[navigator.language]; }catch(e){}
+      for(var i=0;i<list.length && !WORDS[l];i++) l=String(list[i]||"").toLowerCase().split("-")[0];
+    }
+    return WORDS[l]||WORDS.en;
+  }
   // The advice has to follow the cause, not the other way round.
-  function storeAdvice(e){
+  function storeAdvice(e, W){
     var n=String((e&&(e.name||e.code))||""), m=String((e&&e.message)||"");
     var c=storeContext();
 
     /* A sandboxed viewer grants no storage and no setting can - the only answer is taking the
        file out of the viewer. !c.local guards it: Firefox reports origin "null" for every
        file:// page. An explicit sandbox message is trusted alone - nothing else produces it. */
-    if(/sandbox/i.test(m) || (!c.local && (c.opaque || c.framed)))
-      return 'Etiuda is being shown inside another page - SharePoint, Teams and Outlook all '
-        +'preview attachments this way, and a previewed document is given no storage of its own. '
-        +'No browser setting can change this. <b>Download the file and open it from your own '
-        +'computer</b>, and it will remember everything normally.';
+    if(/sandbox/i.test(m) || (!c.local && (c.opaque || c.framed))) return W.framed;
 
-    if(/quota|full|exceeded/i.test(n+m))
-      return 'The storage set aside for Etiuda here is full. Clearing this page\'s site data '
-        +'will free it.';
+    if(/quota|full|exceeded/i.test(n+m)) return W.full;
 
     /* Served from a site that will not let it store anything. Everything below this point is
        about local files and would be nonsense here. */
-    if(c.hosted)
-      return 'This copy is being served from a website, and the site is not letting it store '
-        +'anything. <b>Download the file and open it from your own computer</b> - run that way, '
-        +'Etiuda keeps its settings locally and needs nothing from the network.';
+    if(c.hosted) return W.hosted;
 
     /* Usually not damage on Windows: Firefox keys storage by exact URL case, the filesystem
        does not, so etiuda.html against a stored Etiuda.html reads as corruption. Renaming
        back fixes it outright - lead with that, it costs nothing to try. */
-    if(/corrupt/i.test(n+m))
-      return 'Most often this is a name clash rather than real damage: this browser tells '
-        +'<b>Etiuda.html</b> and <b>etiuda.html</b> apart, but Windows does not. If you have '
-        +'opened this file under a different capitalisation before, rename it back and it will '
-        +'work. Otherwise, open it from a different folder for a clean slate.';
+    if(/corrupt/i.test(n+m)) return W.clash;
 
-    if(/security|denied|access/i.test(n+m)){
-      // Never blame cookies when the browser itself reports them enabled - that reads as nonsense
-      // to anyone who checks, and it sends them to a setting that is already correct.
-      if(!c.cookies)
-        return 'The browser is blocking site data here. In Firefox: <b>Settings → Privacy &amp; '
-          +'Security → Cookies and Site Data</b>, and make sure cookies are not set to blocked '
-          +'(<b>Custom → All cookies</b> also blocks local files). Private windows block it too.';
-      return 'The browser is refusing storage to this file even though cookies are switched on, '
-        +'which usually means a private window or a policy applied to local files. Try a normal '
-        +'window, or open the file from a different folder.';
-    }
+    /* Never blame cookies when the browser itself reports them enabled - that reads as nonsense
+       to anyone who checks, and it sends them to a setting that is already correct. */
+    if(/security|denied|access/i.test(n+m)) return c.cookies ? W.policy : W.cookiesOff;
 
-    return 'The browser refused to store anything for this file. Opening it from a different '
-      +'folder, or in a normal (non-private) window, is usually enough.';
+    return W.refused;
   }
+  /* THE RESCUE WEARS THE FAMILY'S BUBBLE (.bub-ask, its type and its entrance) under the band, which
+     holds the window's controls; the fill and the ink are written here as well, so it still
+     reads if the sheet does not. Its text and every error line are text nodes, never markup. */
   function banner(msg, broken){
     document.documentElement.classList.remove("e-arriving","e-veiled");
     if(document.getElementById("eRescue")) return;
+    var W=words(), inHost=!!hostDesk();
+    var band=document.querySelector(".row"), top=band ? Math.max(0,Math.round(band.getBoundingClientRect().bottom)) : 0;
     var d=document.createElement("div");
     d.id="eRescue";
-    d.style.cssText="position:fixed;left:0;right:0;top:0;z-index:2147483647;"
-      +"background:"+(broken?"#78350f":"#7f1d1d")+";color:#fff;font:14px/1.5 system-ui,Segoe UI,sans-serif;"
-      +"padding:14px 18px;box-shadow:0 2px 14px rgba(0,0,0,.4)";
-    var safe=String(msg||"").replace(/[<>&]/g,"");
-    /* Two different problems needing two different answers. If storage itself is broken, a
-       Reset button is a lie - clearing is the very operation that fails - so say what actually
-       fixes it instead of offering a button that cannot work. */
+    d.className="bub bub-ask e-notice";
+    d.setAttribute("role","alert");
+    d.setAttribute("data-side","none");
+    d.style.cssText="position:fixed;z-index:2147483647;top:"+(top+8)+"px;"
+      +"background:var(--bub,#2563eb);color:var(--bub-ink,#fff)";
     var err=E_STORE_ERR
       ? String(E_STORE_ERR.name||"Error")+": "+String(E_STORE_ERR.message||"")
       : "";
-    d.innerHTML=(broken
-        /* Deliberately not "this browser will not save" - in a preview frame the browser is
-           willing and the viewer is the one refusing, and naming the wrong culprit is what sent
-           people to their cookie settings. "Here" is true in every case. */
-        ? '<b>Etiuda cannot save its settings here.</b> It is running without remembering '
-          +'anything - everything works, but it forgets when you close it. Your cards are safe; '
-          +'they live in the file, not in the browser.'
-          +'<div style="margin-top:6px;opacity:.9">'+storeAdvice(E_STORE_ERR)+'</div>'
-        : '<b>Etiuda could not start.</b> Its saved settings on this computer look damaged. '
-          +'Resetting clears them and reloads - your catalog file is not touched.')
-      +(err?'<div style="opacity:.75;font:12px/1.5 ui-monospace,Consolas,monospace;margin-top:6px">'
-        +err.replace(/[<>&]/g,"")+'</div>':'')
-      +(safe?'<div style="opacity:.75;font:12px/1.5 ui-monospace,Consolas,monospace;margin-top:6px">'+safe+'</div>':'')
-      +'<div style="margin-top:10px">'
-      +(broken?'' :'<button id="eRescueGo" style="font:600 13px system-ui;padding:7px 14px;border:0;'
-        +'border-radius:7px;background:#fff;color:#7f1d1d">Reset Etiuda</button>'
-        +'<span style="margin-left:10px;opacity:.8;font-size:12px">or add <b>#reset</b> to the address and press Enter</span>')
-      +'<button id="eRescueHide" style="font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;'
-      +'background:rgba(255,255,255,.18);color:#fff;margin-left:'+(broken?'0':'10px')+'">Dismiss</button></div>';
+    /* Two different problems needing two different answers. If storage itself is broken, a
+       Reset button is a lie - clearing is the very operation that fails - so say what actually
+       fixes it instead of offering a button that cannot work. */
+    var say=document.createElement("p");
+    var lead=document.createElement("b");
+    lead.textContent=broken ? W.unsaved : W.failed;
+    say.appendChild(lead);
+    say.appendChild(document.createTextNode(" "+(broken ? W.forgets : W.damaged)));
+    d.appendChild(say);
+    /* The advice carries its own emphasis, so it is the one piece set as markup; every string in
+       it is this script's own. */
+    if(broken){ var adv=document.createElement("p"); adv.innerHTML=storeAdvice(E_STORE_ERR, W); d.appendChild(adv); }
+    [err, msg===STUCK ? W.stuck : msg].forEach(function(line){
+      if(!line) return;
+      var x=document.createElement("p"); x.className="e-notice-err"; x.textContent=String(line); d.appendChild(x);
+    });
+    var acts=document.createElement("div");
+    acts.className="tour-actions";
+    if(!broken && !inHost){
+      var hint=document.createElement("span"); hint.className="e-notice-hint"; hint.innerHTML=W.orHash; acts.appendChild(hint);
+    }
+    var hide=document.createElement("button");
+    hide.type="button"; hide.className="btn"; hide.id="eRescueHide"; hide.textContent=W.dismiss;
+    hide.onclick=function(){ d.remove(); };
+    acts.appendChild(hide);
+    if(!broken){
+      var go=document.createElement("button");
+      go.type="button"; go.className="btn primary"; go.id="eRescueGo"; go.textContent=W.reset;
+      go.onclick=function(){ clearState(true); location.replace(location.href.split("#")[0]); };
+      acts.appendChild(go);
+    }
+    d.appendChild(acts);
     (document.body||document.documentElement).appendChild(d);
-    var b=document.getElementById("eRescueGo");
-    if(b) b.onclick=function(){ clearState(); location.replace(location.href.split("#")[0]); };
-    var h=document.getElementById("eRescueHide");
-    if(h) h.onclick=function(){ d.remove(); };
   }
   /* Layer 2: one silent repair per boot crash, then stop. Safe only while storage works -
      the "already tried" flag is itself stored, so a corrupt DB reads tries=0 forever and
@@ -224,7 +273,7 @@
     if(booted) return;                       // errors after a good boot are the app's business
     var ok=storeUsable();
     if(ok && tries<1){
-      clearState();
+      clearState(false);
       try{ sessionStorage.setItem("eBootTry","1"); }catch(e){}
       location.reload();
       return;
@@ -232,7 +281,8 @@
     banner(ev&&ev.message, !ok);
   });
   // Layer 3: boot that never finishes and never throws - the filter-stuck case looked like this
-  setTimeout(function(){ if(!booted) banner("Startup did not finish.", !storeUsable()); }, 8000);
+  var STUCK="Startup did not finish.";
+  setTimeout(function(){ if(!booted) banner(STUCK, !storeUsable()); }, 8000);
   /* Layer 4: storage is unusable but the app started anyway, because every read and write now
      falls back to memory. Nothing is broken - but the user is about to lose their settings on
      close without being told why, so say it once, quietly, and let them dismiss it. */
@@ -2931,6 +2981,15 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   display:flex;align-items:center;gap:14px}
 .e-undo p{margin:0;color:var(--bub-ink)}
 .e-undo .tour-actions{margin:0;padding:0;border:0;flex:none}
+/* THE NOTICES THAT OUTLAST A MOMENT: the rescue at a start that failed (the boot guard) and the
+   save and desk notices (pack.js), hung under the band and centred by margins, as the Undo is. */
+.e-notice{left:0;right:0;margin:0 auto;width:min(560px,calc(100vw - 24px))}
+.e-notice p{color:var(--bub-ink)}
+.e-notice p.e-notice-err{font:12px var(--mono);color:var(--bub-dim);overflow-wrap:anywhere}
+.e-notice .e-notice-hint{margin-right:auto;font-size:12.5px;color:var(--bub-dim)}
+#eNotices{position:fixed;left:0;right:0;z-index:2147483646;display:flex;flex-direction:column;gap:8px;
+  pointer-events:none}
+#eNotices .bub{position:relative;pointer-events:auto}
 /* The question's lines under its title, inset as the title is: a small dialog has no body to do it. */
 #eSure .e-sure-say{padding:0 18px}
 /* A field on the fill: paper, so what is typed reads as the reader's own. */
