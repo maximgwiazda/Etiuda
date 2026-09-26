@@ -163,7 +163,7 @@ const step = async (label, body, opts) => {
  * it is what the count now sees: a mismatch is NO VERDICT, exit 78, not a tally.
  */
 const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7"];
-const EXPECTED = KEEP ? null : 120;
+const EXPECTED = KEEP ? null : 123;
 const phasesSeen = new Set();
 const phase = what => {
   const m = /^\[(\d+)[a-z]*\/\d+\]/.exec(String(what).trim());
@@ -854,6 +854,50 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   /* ---- 2c: the catalog on screen, which is a separate launch because accepting reloads ---- */
 
+  });
+  /* ---- 1h: the shell's own context menu and a page that stops (feel pass native-1, quiet-17) ---
+     The menu is read from the shell's stdout under ETIUDA_TEST_CONTEXT_MENU, never popped: a
+     native menu takes the pointer and the keyboard of whoever is at the desk. Page.crash is a
+     real renderer crash; the second one inside a minute is the shell's to ask about, and the
+     placed-aside window logs the question in place of the box. */
+  await step("[1h/7] right-click, and a page that stops", async () => {
+  phase("[1h/7] right-click, and a page that stops");
+  const udM = newUserData("menu", withFixture);
+  const deskM = path.join(udM, "desk.json");
+  const dm = JSON.parse(fs.readFileSync(deskM, "utf8"));
+  dm.keys.eUiLang = "pl";
+  fs.writeFileSync(deskM, JSON.stringify(dm), "utf8");
+  s = await launch(udM, [], { ETIUDA_TEST_CONTEXT_MENU: "1" });
+  const cdp = await s.p.target().createCDPSession();
+  const at = await s.p.evaluate(() => { const r = document.getElementById("intent").getBoundingClientRect();
+    return { x: r.x + 20, y: r.y + r.height / 2 }; });
+  for (const type of ["mousePressed", "mouseReleased"])
+    await cdp.send("Input.dispatchMouseEvent", { type, x: at.x, y: at.y, button: "right", clickCount: 1 });
+  await sleep(800);
+  const menuLine = s.said.join("\n").split("\n").filter(l => /etiuda: context menu /.test(l));
+  let items = null;
+  try { items = JSON.parse(menuLine[0].replace(/^.*etiuda: context menu /, "")).map(i => i[0]); } catch (x) { /* none */ }
+  check(menuLine.length === 1 && JSON.stringify(items) === JSON.stringify(["Cofnij", "Wytnij", "Kopiuj", "Wklej", "Zaznacz wszystko"]),
+    "1h a right-click in the search box of a Polish desk opens the shell's menu with the five edit"
+    + " commands in Polish: " + JSON.stringify(items) + " from " + menuLine.length + " menu line(s)");
+  await cdp.detach().catch(() => {});
+
+  const booted = pg => Promise.race([pg.evaluate(() => typeof window.E_VERSION === "string").catch(() => false), sleep(4000).then(() => false)]);
+  const crash = async pg => { const c = await pg.target().createCDPSession(); c.send("Page.crash").catch(() => {}); };
+  await crash(s.p);
+  await sleep(5000);
+  const back = (await s.b.pages()).find(x => /etiuda\.html/.test(x.url()));
+  const backUp = !!back && await booted(back);
+  const stopped = s.said.join("\n").split("\n").filter(l => /etiuda: the page stopped \(crashed/.test(l)).length;
+  check(backUp && stopped === 1,
+    "1h2 a renderer that crashes is reloaded and boots again within 5 s (" + backUp + "), and the shell"
+    + " says why, once: " + stopped + " line(s)");
+  if (back) await crash(back);
+  await sleep(3000);
+  const asked = s.said.join("\n").split("\n").filter(l => /etiuda: a box would ask here: Dzia/.test(l)).length;
+  check(asked === 1,
+    "1h3 a second crash inside the minute asks, in Polish, rather than reloading again: " + asked + " question(s) logged");
+  await s.stop();
   });
   await step("[2/7] the catalog on screen", async () => {
   phase("[2/7] the catalog on screen");

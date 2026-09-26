@@ -1150,6 +1150,53 @@ function saveWindowPlace(win, maximized) {
   } catch (e) { console.error("etiuda: the window's place could not be written - " + e.message); }
 }
 
+/* THE SHELL'S OWN WORDS, for the two surfaces the page cannot draw: the context menu, and the box
+   shown when the page itself has stopped. The language is uiLang()'s rule in ui-lang.js: the
+   desk's eUiLang where it names one, else the system's. */
+const SHELL_WORDS = {
+  en: { undo: "Undo", cut: "Cut", copy: "Copy", paste: "Paste", selectAll: "Select all",
+        addWord: "Add to dictionary", gone: "Etiuda stopped unexpectedly.", hung: "Etiuda is not responding.",
+        restart: "Restart", close: "Close Etiuda", wait: "Wait" },
+  pl: { undo: "Cofnij", cut: "Wytnij", copy: "Kopiuj", paste: "Wklej", selectAll: "Zaznacz wszystko",
+        addWord: "Dodaj do słownika", gone: "Działanie Etiudy zostało nieoczekiwanie przerwane.",
+        hung: "Etiuda nie odpowiada.", restart: "Uruchom ponownie", close: "Zamknij Etiudę", wait: "Poczekaj" },
+};
+function shellWords() {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  const stored = deskKeys.eUiLang;
+  if (SHELL_WORDS[stored]) return SHELL_WORDS[stored];
+  /* The page's navigator.languages is the locale, then the system's list, measured on Electron 44. */
+  for (const tag of [app.getLocale()].concat(app.getPreferredSystemLanguages())) {
+    const code = String(tag || "").toLowerCase().split("-")[0];
+    if (SHELL_WORDS[code]) return SHELL_WORDS[code];
+  }
+  return SHELL_WORDS.en;
+}
+
+/* THE CONTEXT MENU. A text field gets the edit commands, with spelling suggestions first over a
+   misspelt word; selected text elsewhere gets Copy; anywhere else nothing opens. */
+function contextMenuFor(wc, p) {
+  const w = shellWords(), f = p.editFlags || {}, items = [];
+  if (p.isEditable && p.misspelledWord) {
+    (p.dictionarySuggestions || []).slice(0, 5).forEach(s =>
+      items.push({ label: s, click: () => wc.replaceMisspelling(s) }));
+    items.push({ label: w.addWord, click: () => wc.session.addWordToSpellCheckerDictionary(p.misspelledWord) });
+    items.push({ type: "separator" });
+  }
+  if (p.isEditable) {
+    items.push({ label: w.undo, role: "undo", enabled: !!f.canUndo }, { type: "separator" },
+      { label: w.cut, role: "cut", enabled: !!f.canCut }, { label: w.copy, role: "copy", enabled: !!f.canCopy },
+      { label: w.paste, role: "paste", enabled: !!f.canPaste }, { type: "separator" },
+      { label: w.selectAll, role: "selectAll", enabled: !!f.canSelectAll });
+  } else if (String(p.selectionText || "").trim()) {
+    items.push({ label: w.copy, role: "copy", enabled: !!f.canCopy });
+  }
+  return items;
+}
+/* ETIUDA_TEST_CONTEXT_MENU: the harness reads the menu from stdout instead of a popup, which would
+   take the pointer and the keyboard of whoever is at the desk until dismissed. */
+const MENU_TO_LOG = !!process.env.ETIUDA_TEST_CONTEXT_MENU;
+
 /* The one window, held so a folder change arriving through a desk save can re-arm the watch and
    offer what the new folder holds. There is exactly one; a second would need a list. */
 let theWindow = null;
@@ -1236,6 +1283,55 @@ function createWindow() {
     if (!win.isMinimized()) maximized = win.isMaximized();
     saveWindowPlace(win, maximized);
   });
+
+  win.webContents.on("context-menu", (e, p) => {
+    const items = contextMenuFor(win.webContents, p);
+    if (!items.length) return;
+    if (MENU_TO_LOG) {
+      console.log("etiuda: context menu " + JSON.stringify(items.filter(i => i.label).map(i => [i.label, i.enabled !== false])));
+      return;
+    }
+    Menu.buildFromTemplate(items).popup({ window: win });
+  });
+
+  /* A PAGE THAT STOPS takes the band and its three controls with it, since the window has no frame.
+     The first loss reloads the page; a second within a minute asks, in a box with its own frame,
+     as a page that stops answering does. The harness's placed-aside window logs in place of a box. */
+  let lastGone = 0, killing = false, hangAsk = null;
+  const ask = (message, buttons, signal) => {
+    if (!PLACED_ASIDE) return dialog.showMessageBox(win, { type: "warning", title: "Etiuda", message: message,
+      buttons: buttons, defaultId: 0, cancelId: 0, noLink: true, signal: signal });
+    console.error("etiuda: a box would ask here: " + message);
+    return Promise.resolve({ response: -1 });
+  };
+  win.webContents.on("render-process-gone", (e, d) => {
+    if (win.isDestroyed() || d.reason === "clean-exit") return;
+    console.error("etiuda: the page stopped (" + d.reason + ", exit code " + d.exitCode + ")");
+    if (killing) { killing = false; return; }
+    const again = Date.now() - lastGone < 60000;
+    lastGone = Date.now();
+    if (!again) { win.webContents.reload(); return; }
+    const w = shellWords();
+    ask(w.gone, [w.restart, w.close]).then(r => {
+      if (win.isDestroyed()) return;
+      if (r.response === 0) win.webContents.reload(); else if (r.response === 1) win.close();
+    });
+  });
+  win.on("unresponsive", () => {
+    if (hangAsk || win.isDestroyed()) return;
+    console.error("etiuda: the page is not responding");
+    const w = shellWords();
+    hangAsk = new AbortController();
+    const signal = hangAsk.signal;
+    ask(w.hung, [w.wait, w.restart], signal).then(r => {
+      hangAsk = null;
+      if (signal.aborted || r.response !== 1 || win.isDestroyed()) return;
+      killing = true;
+      win.webContents.forcefullyCrashRenderer();
+      win.webContents.reload();
+    });
+  });
+  win.on("responsive", () => { if (hangAsk) hangAsk.abort(); });
 
   /* The engine carries links to the open internet. Following one inside the window would
      replace the app with a web page and leave no way back to it. */
