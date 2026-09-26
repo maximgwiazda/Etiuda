@@ -2266,7 +2266,7 @@ function lintCatalogTests() {
      + " named by its place in the file",
      [all.errors, all.warnings, all.awaiting],
      [["card c-empty: no body in en, the primary language",
-       'card 4 ("Twin"): duplicate category+title - card ids collide with card 3'],
+       'card 4 ("Twin"): same title as card 3 in this category, so at the desk the two are hard to tell apart; one needs a title of its own, or the two can become one card'],
       ["card 2: {FOO} in the EN body is not a token the desk fills, so it is copied as written"],
       ["pl: 3 card(s) lacking text"]]);
   const badHead = several();
@@ -2290,10 +2290,10 @@ function lintCatalogTests() {
     return c;
   };
   eq("C1 lint a shelf in a catalog whose primary is Polish: three titles are three cards, and a"
-     + " title given twice is the one collision",
+     + " title given twice is the one same-title error",
      [lintCatalog(plShelf(["Kot", "Pies", "Dom"])).errors,
       lintCatalog(plShelf(["Kot", "Pies", "Kot"])).errors],
-     [[], ['card 3 ("Kot"): duplicate category+title - card ids collide with card 1']]);
+     [[], ['card 3 ("Kot"): same title as card 1 in this category, so at the desk the two are hard to tell apart; one needs a title of its own, or the two can become one card']]);
 }
 
 /* BOARD 646: ANY SET OF DECLARED LANGUAGES, OF ANY SIZE AND ANY CODES.
@@ -2827,12 +2827,13 @@ function lintCatalog(c, at) {
       if (!String(m[key] || "").trim()) lacking[code] = (lacking[code] || 0) + 1;
     });
     if (m.c && catKeys.length && !cats[m.c]) err(where + ': unknown category "' + m.c + '"');
-    /* Identity is category+title (the engine derives ids as b:<cat>:<title>), so a duplicate
-       pair means hide/star/edit target whichever card comes first - personal state corrupts. */
+    /* Format 2 ids differ, so two cards with one title on one shelf collide in nothing: they look
+       alike at the desk, and a star, hide or edit an older desk carries by title reaches neither
+       (rekeyOldCards). */
     // JSON-encoded pair, so no separator occurring inside a key or title can spoof a match.
     // A raw NUL separator lived here once and made git treat this whole file as binary.
     const key = JSON.stringify([String(m.c || ""), String(title || "")]);
-    if (seen[key]) err(where + ": duplicate category+title - card ids collide with card " + seen[key]);
+    if (seen[key]) err(where + ": same title as card " + seen[key] + " in this category, so at the desk the two are hard to tell apart; one needs a title of its own, or the two can become one card");
     seen[key] = place(ix);
     (Array.isArray(m.intents) ? m.intents : []).forEach(x => {
       if (typeof x === "number") {
