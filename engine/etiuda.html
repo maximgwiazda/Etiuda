@@ -3021,9 +3021,10 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .fab-clear:hover .ic-x,.fab-clear:focus-visible .ic-x{display:block}
 .fab-clear:hover .ic-intent,.fab-clear:hover .fab-n,.fab-clear:focus-visible .ic-intent,.fab-clear:focus-visible .fab-n{display:none}
 /* A ring grows out of the button and fades, on transform and opacity so it costs no repaint
-   (rule 1 of the Firefox notes). The button keeps its own look; the ring does the asking. */
+   (rule 1 of the Firefox notes). The button keeps its own look; the ring does the asking,
+   three times and then rests: syncAddFab restarts it only when a category newly asks. */
 .fab.nudge::after{content:"";position:absolute;inset:-1px;border-radius:50%;
-  border:1px solid var(--accent);animation:fabNudge var(--m-nudge) ease-out infinite;pointer-events:none}
+  border:1px solid var(--accent);animation:fabNudge var(--m-nudge) ease-out 3;pointer-events:none}
 @keyframes fabNudge{ 0%{transform:scale(1);opacity:.6} 70%,100%{transform:scale(1.5);opacity:0} }
 #sampleMark{position:fixed;inset:0;z-index:49;pointer-events:none;overflow:hidden;
   display:flex;align-items:center;justify-content:center}
@@ -18579,7 +18580,14 @@ What you type stays in this browser only.`;
     if (!b) return;
     const one = cats.length === 1 && CATS[cats[0]] ? cats[0] : null;
     b.hidden = !Object.keys(CATS).length;
-    b.classList.toggle("nudge", !!one && !cardCounts[one]);
+    const ask = !!one && !cardCounts[one];
+    if (ask && b.dataset.nudged !== one) {
+      b.classList.remove("nudge");
+      void b.offsetWidth;
+    }
+    b.classList.toggle("nudge", ask);
+    if (ask) b.dataset.nudged = one;
+    else delete b.dataset.nudged;
     b.title = one ? t("Create a card in {CAT}").replace("{CAT}", CATS[one]) : t("Create a card");
     b.setAttribute("aria-label", b.title);
     b.onclick = () => openCardEditor(null, one);

@@ -276,8 +276,12 @@ function syncAddFab(){
   if(!b) return;
   const one=(cats.length===1 && CATS[cats[0]]) ? cats[0] : null;
   b.hidden=!Object.keys(CATS).length;
-  // The one place a new card is asked for outright: the chosen category holds none.
-  b.classList.toggle("nudge", !!one && !cardCounts[one]);
+  /* The one place a new card is asked for outright: the chosen category holds none. The ring
+     asks three times and rests; only a category newly asking starts it again. */
+  const ask=!!one && !cardCounts[one];
+  if(ask && b.dataset.nudged!==one){ b.classList.remove("nudge"); void b.offsetWidth; }
+  b.classList.toggle("nudge", ask);
+  if(ask) b.dataset.nudged=one; else delete b.dataset.nudged;
   b.title=one ? t("Create a card in {CAT}").replace("{CAT}",CATS[one]) : t("Create a card");
   b.setAttribute("aria-label", b.title);
   b.onclick=()=>openCardEditor(null, one);
