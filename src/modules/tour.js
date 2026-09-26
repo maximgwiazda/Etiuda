@@ -19,6 +19,7 @@ import { eHost, eCatalogFolderShort } from "./host.js";
 import { agentName, setAgentName, keepAgentName, nameFieldHtml, wireNameField } from "./agent.js";
 import { esc } from "./esc.js";
 import { mgReduceMotion } from "./motion.js";
+import { hooks } from "./hooks.js";
 
 /* ---------- Guided tour ----------------------------------------------------
    Bubbles over the live page, which stays usable under them: nothing is darkened, and a click
@@ -135,7 +136,10 @@ function tourRevealCardActions(){
 function loadStepBody(){
   const dir=eCatalogFolderShort();
   if(!dir) return t("The catalog you load stays in this browser, ready whenever you come back.");
-  return t("Replies come in a catalog. <b>Load a catalog</b>, under the logo, opens {FOLDER}, where the team's own catalog goes, and the sample beside it is there for trying things out.")
+  /* The sample's button stands beside Load only while sampleReady() (render.js), so only then is it named. */
+  return t(hooks.sampleReady()
+      ? "Replies come in a catalog. <b>Load a catalog</b>, under the logo, opens {FOLDER}, where the team's own catalog belongs, and the one beside it, <b>load a sample catalog</b>, is for trying everything out straight away."
+      : "Replies come in a catalog. <b>Load a catalog</b>, under the logo, opens {FOLDER}, where the team's own catalog belongs.")
     .split("{FOLDER}").join(esc(dir));
 }
 /* THE MENU AS IT STANDS: the button while it is shut, and once the person opens it, the row a step

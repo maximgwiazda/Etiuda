@@ -232,7 +232,7 @@ function loadedMeta(stamp){
 /* WHICH COPY A ROW IS, where two could be: the one Etiuda ships, or this folder's file of the same
    name, which is read in its place. */
 function ecCopyHtml(f){
-  const said=f.builtIn ? t("Etiuda's own copy") : f.replaces ? t("this folder's copy, read instead of Etiuda's own") : "";
+  const said=f.builtIn ? t("comes with Etiuda") : f.replaces ? t("takes the place of the copy that comes with Etiuda") : "";
   return said ? '<span class="ec-copy" data-ec-copy="'+(f.builtIn?"builtin":"own")+'">'+esc(said)+'</span>' : "";
 }
 function paintCatalogList(){

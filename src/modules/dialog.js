@@ -268,7 +268,7 @@ function edWireNav(list,cur,go){
     /* Leaving with changes unsaved leaves at once, and Undo goes back to them. */
     const was=edDirty() ? edTyped() : null;
     edNavTo(()=>go(list[j]));
-    if(was) offerUndo("The changes to that entry were not saved.", ()=>edNavTo(()=>{ go(cur); edRetype(was); }));
+    if(was) offerUndo("Moved on without saving the changes", ()=>edNavTo(()=>{ go(cur); edRetype(was); }));
   };
   const p=$("#edPrev"), n=$("#edNext");
   if(p){ p.disabled=(i<=0); p.onclick=()=>step(-1); }
