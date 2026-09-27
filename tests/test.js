@@ -1388,29 +1388,51 @@ function pillWrapTests() {
     eq("a count written in place never carries a pill across the row, " + what, got, []);
   }
 }
-/* THE CLIP FOLLOWS A NEW WIDTH IN THE FRAME THAT PAINTS IT (797 F4): the bar is watched after
-   layout, and a new width re-decides the clip there and then; its first width and a height alone
-   do not. The frame itself is the verifier's. */
+/* THE CLIP FOLLOWS A NEW WIDTH IN THE FRAME THAT PAINTS IT (797 F4): the watch clips in the
+   observer only where the bar on screen disagrees with its own wrap, so a drag across widths that
+   keep the clip costs no second pass, and it watches a box the clip cannot resize, since a box the
+   callback resizes fails the observer's loop with a page error. The frame itself is the verifier's. */
 function pillsWidthWatchTests() {
   const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "pills-box.js"), "utf8");
-  let heard = null, calls = 0, wire = null;
-  class RO { constructor(fn) { heard = fn; } observe() {} }
+  let heard = null, observed = null, calls = 0, wire = null, lines = 2, clipped = false, locked = false;
+  class RO { constructor(fn) { heard = fn; } observe(el) { observed = el; } }
+  const probe = { id: "pillsProbe" };
+  const kids = () => Array.from({ length: 3 * lines }, (_, i) => ({ offsetTop: Math.floor(i / 3) * 37.5, offsetHeight: 31.5,
+    getBoundingClientRect: () => ({ height: 31.5 }) }));
+  const bar = { get children() { return kids(); }, querySelector: () => kids()[0] };
+  const slot = { classList: { contains: c => c === "pills-overflow" && clipped } };
+  const doc = { body: { classList: { contains: () => false } } };
   try {
-    wire = new Function("pills", "ResizeObserver", "syncPillsCollapseNow",
-      extractDecl(src, "let pillsWidthSeen=") + "\n" + extractDecl(src, "function wirePillsWidthWatch(")
-      + "\nreturn wirePillsWidthWatch;")({}, RO, () => { calls++; });
+    const decls = ["let pillsWidthSeen=", "function pillsTwoLines(", "function pillsWrapHeight(",
+      "function pillsClipWrong(", "function wirePillsWidthWatch("].map(m => extractDecl(src, m)).join("\n");
+    wire = new Function("pills", "ResizeObserver", "$", "pillsSlot", "pillsWanted", "pillsLocked", "document",
+      "getComputedStyle", "ePillsSettled", "syncPillsCollapse", "syncPillsCollapseNow",
+      decls + "\nreturn wirePillsWidthWatch;")(bar, RO, () => probe, () => slot, () => true, () => locked, doc,
+      () => ({ rowGap: "6px" }), true, () => { calls++; }, () => { calls++; });
   } catch (e) { wire = null; }
+  /* [width, lines the pills wrap to, clipped on screen, locked]: the first width; the same width;
+     a new width on two lines; a third line in flow; a width that keeps the clip; a clip that no
+     longer needs to be; a third line on a locked bar. */
   const got = [];
   if (wire) {
     wire();
-    for (const [w, h] of [[1200, 75], [1200, 112.5], [1150, 112.5], [1150, 75]]) {
+    for (const [w, n, c, l] of [[1200, 2, false, false], [1200, 3, false, false], [1150, 2, false, false],
+      [1100, 3, false, false], [1090, 3, true, false], [1300, 2, true, false], [1000, 3, false, true]]) {
+      lines = n; clipped = c; locked = l;
       const was = calls;
-      heard([{ contentRect: { width: w, height: h } }]);
+      heard([{ contentRect: { width: w, height: 0 } }]);
       got.push(calls - was);
     }
   }
-  eq("a new width re-decides the pill bar's clip in the observer; its first width and a height alone do not",
-    wire ? got : "no wirePillsWidthWatch in pills-box.js", [0, 0, 1, 0]);
+  eq("the width watch clips in the frame only where the bar on screen disagrees with its own wrap",
+    wire ? got : "no pillsClipWrong or wirePillsWidthWatch in pills-box.js", [0, 0, 0, 1, 0, 1, 0]);
+  eq("the width watch observes the probe, a box the clip it sets cannot resize", observed === probe, true);
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const rule = /\.pills-probe\{([^}]*)\}/.exec(tpl), slotRule = /\.pills-slot\{max-width:([^;]*);/.exec(tpl);
+  eq("the probe sits outside the slot at the slot's width and no height",
+    [/id="pills"[^>]*><\/div>\s*<\/div>\s*<div class="pills-probe" id="pillsProbe"/.test(tpl),
+      !!rule && !!slotRule && rule[1].indexOf("max-width:" + slotRule[1]) > -1 && /height:0/.test(rule[1])],
+    [true, true]);
   const boot = fs.readFileSync(path.join(E.ROOT, "src", "main.js"), "utf8");
   eq("boot wires the watch", /pillsBox\.wirePillsWidthWatch\(\);/.test(boot), true);
 }

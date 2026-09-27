@@ -1314,6 +1314,8 @@ body.role-waits #roleDrum{display:none}
 .pills-slot{max-width:var(--app-max);margin:8px auto 0;position:relative;z-index:40;
   min-height:var(--e-pills-h,0px)}
 html.e-pills-off .pills-slot{display:none}
+/* The slot's width in a box no clip resizes, for wirePillsWidthWatch: the slot's own width rule. */
+.pills-probe{max-width:var(--app-max);margin:0 auto;height:0}
 .pills{display:flex;gap:6px;flex-wrap:wrap;width:100%;box-sizing:border-box;position:relative}
 /* Overflow: reserve 2 lines in the slot; pills are absolutely positioned so expand overlays */
 .pills-slot.pills-overflow{height:var(--pills-2line,4.2em)}
@@ -3405,6 +3407,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   <div class="pills-slot" id="pillsSlot">
     <div class="pills" id="pills" title="Filter by category; a green ring marks one that relates to the chosen intent"></div>
   </div>
+  <div class="pills-probe" id="pillsProbe" aria-hidden="true"></div>
 </header>
 
 <div id="railHit" title="Hover here or hold Ctrl to show the intent panel" aria-hidden="true"></div>

@@ -97,6 +97,13 @@ function pillsWrapHeight(el){
   for(const c of el.children) h=Math.max(h,c.offsetTop+c.offsetHeight);
   return h;
 }
+function pillsTwoLines(el){
+  const first=el.querySelector(".pill");
+  if(!first) return 0;
+  const styles=getComputedStyle(el);
+  const gap=parseFloat(styles.rowGap||styles.gap)||6;
+  return first.getBoundingClientRect().height*2+gap;
+}
 // Cap the category bar at two lines of layout space; extra rows overlay when expanded.
 // Skipped when locked (⚙ → Lock categories).
 function syncPillsCollapse(){
@@ -114,14 +121,10 @@ function syncPillsCollapse(){
   if(!pillsWanted()||document.body.classList.contains("pills-off")) return;
   // Locked: always full height in flow (no 2-line clip / overlay expand).
   if(pillsLocked()) return;
-  const first=el.querySelector(".pill");
-  if(!first) return;
+  if(!el.querySelector(".pill")) return;
   // Measure unconstrained height (overflow class removed → pills are in normal flow).
   void el.offsetHeight;
-  const lineH=first.getBoundingClientRect().height;
-  const styles=getComputedStyle(el);
-  const gap=parseFloat(styles.rowGap||styles.gap)||6;
-  const two=lineH*2+gap;
+  const two=pillsTwoLines(el);
   const full=pillsWrapHeight(el);
   /* The open bar is a popover; nothing here needs to know where it sits inside the
      header any more. */
@@ -156,19 +159,27 @@ function schedulePillsCollapse(){
   }));
 }
 /* THE CLIP FOLLOWS A NEW WIDTH IN THE FRAME THAT PAINTS IT: the resize pass waits two frames, and
-   the first frame at a narrower width painted the bar a line taller, the list with it. Observed
-   after layout and before paint, as the column count is; a width only, so no glide calls it. */
+   the first frame at a narrower width painted a third line in flow, the list with it. The observer
+   runs after layout and before paint, and clips only where the bar on screen disagrees with its own
+   wrap, read without moving anything; every other width is the resize pass's. It watches a box of
+   the slot's width that no clip resizes: a box its own callback resizes fails the observer's loop. */
 let pillsWidthSeen=-1;
+function pillsClipWrong(){
+  const el=pills, slot=pillsSlot();
+  if(!el||!slot||!pillsWanted()||pillsLocked()||document.body.classList.contains("pills-off")) return false;
+  const two=pillsTwoLines(el);
+  return !!two && (pillsWrapHeight(el)>two+1)!==slot.classList.contains("pills-overflow");
+}
 function wirePillsWidthWatch(){
-  const el=pills;
-  if(!el || typeof ResizeObserver!=="function") return;
+  const probe=$("#pillsProbe");
+  if(!probe || typeof ResizeObserver!=="function") return;
   new ResizeObserver(es=>{
     const w=Math.round(es[es.length-1].contentRect.width);
     if(w===pillsWidthSeen) return;
     const first=pillsWidthSeen<0;
     pillsWidthSeen=w;
-    if(!first) syncPillsCollapseNow();
-  }).observe(el);
+    if(!first && ePillsSettled && pillsClipWrong()) syncPillsCollapse();
+  }).observe(probe);
 }
 // What the head script reserves on the next load: the slot's height at rest, per window width.
 function rememberPillsShape(){

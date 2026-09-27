@@ -1314,6 +1314,8 @@ body.role-waits #roleDrum{display:none}
 .pills-slot{max-width:var(--app-max);margin:8px auto 0;position:relative;z-index:40;
   min-height:var(--e-pills-h,0px)}
 html.e-pills-off .pills-slot{display:none}
+/* The slot's width in a box no clip resizes, for wirePillsWidthWatch: the slot's own width rule. */
+.pills-probe{max-width:var(--app-max);margin:0 auto;height:0}
 .pills{display:flex;gap:6px;flex-wrap:wrap;width:100%;box-sizing:border-box;position:relative}
 /* Overflow: reserve 2 lines in the slot; pills are absolutely positioned so expand overlays */
 .pills-slot.pills-overflow{height:var(--pills-2line,4.2em)}
@@ -3405,6 +3407,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   <div class="pills-slot" id="pillsSlot">
     <div class="pills" id="pills" title="Filter by category; a green ring marks one that relates to the chosen intent"></div>
   </div>
+  <div class="pills-probe" id="pillsProbe" aria-hidden="true"></div>
 </header>
 
 <div id="railHit" title="Hover here or hold Ctrl to show the intent panel" aria-hidden="true"></div>
@@ -13570,6 +13573,13 @@ What you type stays in this browser only.`;
     for (const c of el.children) h = Math.max(h, c.offsetTop + c.offsetHeight);
     return h;
   }
+  function pillsTwoLines(el) {
+    const first = el.querySelector(".pill");
+    if (!first) return 0;
+    const styles = getComputedStyle(el);
+    const gap = parseFloat(styles.rowGap || styles.gap) || 6;
+    return first.getBoundingClientRect().height * 2 + gap;
+  }
   function syncPillsCollapse() {
     const el = pills;
     const slot = pillsSlot();
@@ -13580,13 +13590,9 @@ What you type stays in this browser only.`;
     slot.style.removeProperty("--pills-2line");
     if (!pillsWanted() || document.body.classList.contains("pills-off")) return;
     if (pillsLocked()) return;
-    const first = el.querySelector(".pill");
-    if (!first) return;
+    if (!el.querySelector(".pill")) return;
     void el.offsetHeight;
-    const lineH = first.getBoundingClientRect().height;
-    const styles = getComputedStyle(el);
-    const gap = parseFloat(styles.rowGap || styles.gap) || 6;
-    const two = lineH * 2 + gap;
+    const two = pillsTwoLines(el);
     const full = pillsWrapHeight(el);
     slot.style.removeProperty("--pills-full");
     if (full > two + 1) {
@@ -13614,16 +13620,22 @@ What you type stays in this browser only.`;
     }));
   }
   var pillsWidthSeen = -1;
+  function pillsClipWrong() {
+    const el = pills, slot = pillsSlot();
+    if (!el || !slot || !pillsWanted() || pillsLocked() || document.body.classList.contains("pills-off")) return false;
+    const two = pillsTwoLines(el);
+    return !!two && pillsWrapHeight(el) > two + 1 !== slot.classList.contains("pills-overflow");
+  }
   function wirePillsWidthWatch() {
-    const el = pills;
-    if (!el || typeof ResizeObserver !== "function") return;
+    const probe = $("#pillsProbe");
+    if (!probe || typeof ResizeObserver !== "function") return;
     new ResizeObserver((es) => {
       const w = Math.round(es[es.length - 1].contentRect.width);
       if (w === pillsWidthSeen) return;
       const first = pillsWidthSeen < 0;
       pillsWidthSeen = w;
-      if (!first) syncPillsCollapseNow();
-    }).observe(el);
+      if (!first && ePillsSettled && pillsClipWrong()) syncPillsCollapse();
+    }).observe(probe);
   }
   function rememberPillsShape() {
     const slot = pillsSlot();
