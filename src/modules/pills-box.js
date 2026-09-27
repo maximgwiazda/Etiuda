@@ -118,6 +118,7 @@ function syncPillsCollapse(){
      no overrides at all. */
   slot.classList.remove("pills-overflow","pills-expand");
   slot.style.removeProperty("--pills-2line");
+  slot.style.removeProperty("--pills-vw");
   if(!pillsWanted()||document.body.classList.contains("pills-off")) return;
   // Locked: always full height in flow (no 2-line clip / overlay expand).
   if(pillsLocked()) return;
@@ -129,9 +130,11 @@ function syncPillsCollapse(){
   /* The open bar is a popover; nothing here needs to know where it sits inside the
      header any more. */
   slot.style.removeProperty("--pills-full");
+  // The slot's cap reads both: see .pills-slot in the sheet.
+  slot.style.setProperty("--pills-2line",two+"px");
+  slot.style.setProperty("--pills-vw",document.documentElement.getBoundingClientRect().width+"px");
   if(full>two+1){
     slot.classList.add("pills-overflow");
-    slot.style.setProperty("--pills-2line",two+"px");
     /* The open height must be a real length for the transition to run, and it can only be
        read with the open styles applied - padding and border are part of it. Measure with
        the transition suppressed, then hand the number to CSS. One forced layout, in a
@@ -160,15 +163,16 @@ function schedulePillsCollapse(){
 }
 /* THE CLIP FOLLOWS A NEW WIDTH IN THE FRAME THAT PAINTS IT: the resize pass waits two frames, and
    the first frame at a narrower width painted a third line in flow, the list with it. The observer
-   runs after layout and before paint, and clips only where the bar on screen disagrees with its own
-   wrap, read without moving anything; every other width is the resize pass's. It watches a box of
-   the slot's width that no clip resizes: a box its own callback resizes fails the observer's loop. */
+   runs after layout and before paint. It clips only a bar wrapped past two lines while the slot's cap
+   holds it at two, so the clip resizes #pills alone, deeper than the probe it watches: a callback
+   that resizes a box at or above that depth fails the observer's loop. The rest is the resize pass's. */
 let pillsWidthSeen=-1;
-function pillsClipWrong(){
+function pillsClipDue(){
   const el=pills, slot=pillsSlot();
   if(!el||!slot||!pillsWanted()||pillsLocked()||document.body.classList.contains("pills-off")) return false;
+  if(slot.classList.contains("pills-overflow")) return false;
   const two=pillsTwoLines(el);
-  return !!two && (pillsWrapHeight(el)>two+1)!==slot.classList.contains("pills-overflow");
+  return !!two && pillsWrapHeight(el)>two+1 && Math.abs(slot.getBoundingClientRect().height-two)<0.5;
 }
 function wirePillsWidthWatch(){
   const probe=$("#pillsProbe");
@@ -178,7 +182,7 @@ function wirePillsWidthWatch(){
     if(w===pillsWidthSeen) return;
     const first=pillsWidthSeen<0;
     pillsWidthSeen=w;
-    if(!first && ePillsSettled && pillsClipWrong()) syncPillsCollapse();
+    if(!first && ePillsSettled && pillsClipDue()) syncPillsCollapse();
   }).observe(probe);
 }
 // What the head script reserves on the next load: the slot's height at rest, per window width.

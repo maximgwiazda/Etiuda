@@ -1413,46 +1413,88 @@ function pillWrapTests() {
   catch (e) { got = "flipPills threw: " + e.message; }
   eq("where the pin cannot hold the row, the widths snap and no pill changes line mid-glide", got, ["All past 0 step 0 start 6"]);
 }
-/* THE CLIP FOLLOWS A NEW WIDTH IN THE FRAME THAT PAINTS IT (797 F4): the watch clips in the
-   observer only where the bar on screen disagrees with its own wrap, so a drag across widths that
-   keep the clip costs no second pass, and it watches a box the clip cannot resize, since a box the
-   callback resizes fails the observer's loop with a page error. The frame itself is the verifier's. */
+/* THE CLIP FOLLOWS A NEW WIDTH IN THE FRAME THAT PAINTS IT (797 F4), AND MOVES NOTHING ABOVE THE BAR.
+   One frame is modelled from the real syncPillsCollapse and width watch and the sheet's own cap on the
+   slot: the slot's height as laid out is what every observer at the probe's depth or above was handed,
+   so a callback that changes it fails the observer's loop with a page error, and a third line in flow
+   is the drop. The frame itself is the verifier's. */
 function pillsWidthWatchTests() {
   const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "pills-box.js"), "utf8");
-  let heard = null, observed = null, calls = 0, wire = null, lines = 2, clipped = false, locked = false;
-  class RO { constructor(fn) { heard = fn; } observe(el) { observed = el; } }
-  const probe = { id: "pillsProbe" };
-  const kids = () => Array.from({ length: 3 * lines }, (_, i) => ({ offsetTop: Math.floor(i / 3) * 37.5, offsetHeight: 31.5,
-    getBoundingClientRect: () => ({ height: 31.5 }) }));
-  const bar = { get children() { return kids(); }, querySelector: () => kids()[0] };
-  const slot = { classList: { contains: c => c === "pills-overflow" && clipped } };
-  const doc = { body: { classList: { contains: () => false } } };
-  try {
-    const decls = ["let pillsWidthSeen=", "function pillsTwoLines(", "function pillsWrapHeight(",
-      "function pillsClipWrong(", "function wirePillsWidthWatch("].map(m => extractDecl(src, m)).join("\n");
-    wire = new Function("pills", "ResizeObserver", "$", "pillsSlot", "pillsWanted", "pillsLocked", "document",
-      "getComputedStyle", "ePillsSettled", "syncPillsCollapse", "syncPillsCollapseNow",
-      decls + "\nreturn wirePillsWidthWatch;")(bar, RO, () => probe, () => slot, () => true, () => locked, doc,
-      () => ({ rowGap: "6px" }), true, () => { calls++; }, () => { calls++; });
-  } catch (e) { wire = null; }
-  /* [width, lines the pills wrap to, clipped on screen, locked]: the first width; the same width;
-     a new width on two lines; a third line in flow; a width that keeps the clip; a clip that no
-     longer needs to be; a third line on a locked bar. */
-  const got = [];
-  if (wire) {
-    wire();
-    for (const [w, n, c, l] of [[1200, 2, false, false], [1200, 3, false, false], [1150, 2, false, false],
-      [1100, 3, false, false], [1090, 3, true, false], [1300, 2, true, false], [1000, 3, false, true]]) {
-      lines = n; clipped = c; locked = l;
-      const was = calls;
-      heard([{ contentRect: { width: w, height: 0 } }]);
-      got.push(calls - was);
-    }
-  }
-  eq("the width watch clips in the frame only where the bar on screen disagrees with its own wrap",
-    wire ? got : "no pillsClipWrong or wirePillsWidthWatch in pills-box.js", [0, 0, 0, 1, 0, 1, 0]);
-  eq("the width watch observes the probe, a box the clip it sets cannot resize", observed === probe, true);
   const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const LINE = 31.5, GAP = 6;
+  /* The slot's max-height from the sheet, evaluated on the slot's own variables. An unset variable
+     makes the declaration invalid at computed-value time, which leaves max-height at none. */
+  const capRule = /\.pills-slot\{max-height:([^}]*)\}/.exec(tpl);
+  const cap = (vars, vw) => {
+    if (!capRule) return Infinity;
+    let unset = false;
+    const js = capRule[1].replace(/var\((--[a-z0-9-]+)\)/g, (m, name) => {
+      if (!(name in vars)) { unset = true; return "0"; }
+      return "(" + parseFloat(vars[name]) + ")";
+    }).replace(/100vw/g, "(" + vw + ")").replace(/([0-9])px/g, "$1")
+      .replace(/\bcalc\(/g, "(").replace(/\bmax\(/g, "Math.max(");
+    return unset ? Infinity : Function("return " + js)();
+  };
+  const st = {}, cls = new Set(), vars = {};
+  const natural = () => st.lines * LINE + (st.lines - 1) * GAP;
+  const slotH = () => cls.has("pills-overflow") ? parseFloat(vars["--pills-2line"]) : Math.min(natural(), cap(vars, st.vw));
+  const kids = () => Array.from({ length: 3 * st.lines }, (_, i) => ({ offsetTop: Math.floor(i / 3) * (LINE + GAP),
+    offsetHeight: LINE, getBoundingClientRect: () => ({ height: LINE }) }));
+  const bar = { get children() { return kids(); }, querySelector: () => kids()[0],
+    get offsetHeight() { return natural(); }, getBoundingClientRect: () => ({ height: natural() }) };
+  const slot = {
+    classList: { add: (...c) => c.forEach(x => cls.add(x)), remove: (...c) => c.forEach(x => cls.delete(x)), contains: c => cls.has(c) },
+    style: { setProperty: (k, v) => { vars[k] = v; }, removeProperty: k => { delete vars[k]; } },
+    getBoundingClientRect: () => ({ height: slotH() }),
+  };
+  const doc = { documentElement: { style: { removeProperty() {} }, getBoundingClientRect: () => ({ width: st.vw }) },
+    body: { classList: { contains: () => false } } };
+  const probe = { id: "pillsProbe" };
+  let heard = null, observed = null, calls = 0;
+  class RO { constructor(fn) { heard = fn; } observe(el) { observed = el; } }
+  // A fresh module per case, so the watch's last width is its own.
+  const build = () => {
+    const decls = ["let pillsWidthSeen=", "function pillsTwoLines(", "function pillsWrapHeight(", "function syncPillsCollapse(",
+      "function pillsClipDue(", "function wirePillsWidthWatch("].map(m => extractDecl(src, m)).join("\n");
+    return new Function("pills", "ResizeObserver", "$", "pillsSlot", "pillsWanted", "pillsLocked", "document",
+      "getComputedStyle", "ePillsSettled", "counted",
+      decls + "\nconst sync=syncPillsCollapse;\nsyncPillsCollapse=function(){ counted(); sync(); };" +
+      "\nreturn { wire: wirePillsWidthWatch, sync };")(bar, RO, () => probe, () => slot, () => true, () => st.locked, doc,
+      () => ({ rowGap: GAP + "px" }), true, () => { calls++; });
+  };
+  /* Boot at `from` with its clip decided, the observer's first delivery, then one frame at `to`:
+     [clips in the observer, loop errors, the slot's height as painted]. */
+  const frame = (from, to) => {
+    cls.clear(); for (const k in vars) delete vars[k];
+    Object.assign(st, { locked: false }, from);
+    const m = build();
+    m.wire(); m.sync();
+    heard([{ contentRect: { width: st.probe, height: 0 } }]);
+    Object.assign(st, to);
+    const laid = slotH(), was = calls;
+    heard([{ contentRect: { width: st.probe, height: 0 } }]);
+    return [calls - was, slotH() !== laid ? 1 : 0, slotH()];
+  };
+  const rest = { vw: 1200, probe: 1172, lines: 2 };
+  const cases = [
+    ["a narrower window wraps the bar to a third line", rest, { vw: 1180, probe: 1152, lines: 3 }, [1, 0, 69]],
+    ["a narrower window keeps two lines", rest, { vw: 1190, probe: 1162, lines: 2 }, [0, 0, 69]],
+    ["one device pixel narrower at 125 per cent wraps a third line", rest, { vw: 1199.2, probe: 1171.2, lines: 3 }, [1, 0, 69]],
+    ["a clipped bar widens to fit in two", { vw: 1180, probe: 1152, lines: 3 }, { vw: 1300, probe: 1272, lines: 2 }, [0, 0, 69]],
+    ["a locked bar wraps a third line and grows", Object.assign({ locked: true }, rest), { vw: 1180, probe: 1152, lines: 3 }, [0, 0, 106.5]],
+    ["at rest, the window a sixty-fourth under its measure, the cap is off", rest, { vw: 1200 - 1 / 64, probe: 1172, lines: 3 }, [0, 0, 106.5]],
+  ];
+  for (const [what, from, to, want] of cases) {
+    let got;
+    try { got = frame(from, to); } catch (e) { got = "threw: " + e.message; }
+    eq("the width watch, " + what, got, want);
+  }
+  /* The slot narrowing under a window that keeps its width (the panel docking) is not capped, so
+     the watch leaves it to the resize pass rather than move the header inside the observer. */
+  let got;
+  try { got = frame(rest, { vw: 1200, probe: 1000, lines: 3 }).slice(0, 2); } catch (e) { got = "threw: " + e.message; }
+  eq("the width watch leaves a slot narrowing at the same window width to the resize pass", got, [0, 0]);
+  eq("the width watch observes the probe, a box the clip it sets cannot resize", observed === probe, true);
   const rule = /\.pills-probe\{([^}]*)\}/.exec(tpl), slotRule = /\.pills-slot\{max-width:([^;]*);/.exec(tpl);
   eq("the probe sits outside the slot at the slot's width and no height",
     [/id="pills"[^>]*><\/div>\s*<\/div>\s*<div class="pills-probe" id="pillsProbe"/.test(tpl),

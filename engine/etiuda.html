@@ -1313,6 +1313,10 @@ body.role-waits #roleDrum{display:none}
 /* Slot keeps a fixed 2-line height in the layout; the pills layer can expand over UI below */
 .pills-slot{max-width:var(--app-max);margin:8px auto 0;position:relative;z-index:40;
   min-height:var(--e-pills-h,0px)}
+/* While the window is narrower than at the last clip decision (--pills-vw), the slot is held at two
+   lines, so the frame that first lays out the new width puts no third line in flow and the width
+   watch's clip moves nothing above #pills. Unset, the variables leave max-height at none. */
+.pills-slot{max-height:calc(var(--pills-2line) + max(0px,(100vw - var(--pills-vw) + .1px)*1000000))}
 html.e-pills-off .pills-slot{display:none}
 /* The slot's width in a box no clip resizes, for wirePillsWidthWatch: the slot's own width rule. */
 .pills-probe{max-width:var(--app-max);margin:0 auto;height:0}
@@ -13588,6 +13592,7 @@ What you type stays in this browser only.`;
     const keepExpand = slot.classList.contains("pills-expand") || document.body.classList.contains("pills-lines-expand");
     slot.classList.remove("pills-overflow", "pills-expand");
     slot.style.removeProperty("--pills-2line");
+    slot.style.removeProperty("--pills-vw");
     if (!pillsWanted() || document.body.classList.contains("pills-off")) return;
     if (pillsLocked()) return;
     if (!el.querySelector(".pill")) return;
@@ -13595,9 +13600,10 @@ What you type stays in this browser only.`;
     const two = pillsTwoLines(el);
     const full = pillsWrapHeight(el);
     slot.style.removeProperty("--pills-full");
+    slot.style.setProperty("--pills-2line", two + "px");
+    slot.style.setProperty("--pills-vw", document.documentElement.getBoundingClientRect().width + "px");
     if (full > two + 1) {
       slot.classList.add("pills-overflow");
-      slot.style.setProperty("--pills-2line", two + "px");
       slot.classList.add("pills-measuring", "pills-expand");
       const openH = el.getBoundingClientRect().height;
       slot.classList.remove("pills-expand");
@@ -13620,11 +13626,12 @@ What you type stays in this browser only.`;
     }));
   }
   var pillsWidthSeen = -1;
-  function pillsClipWrong() {
+  function pillsClipDue() {
     const el = pills, slot = pillsSlot();
     if (!el || !slot || !pillsWanted() || pillsLocked() || document.body.classList.contains("pills-off")) return false;
+    if (slot.classList.contains("pills-overflow")) return false;
     const two = pillsTwoLines(el);
-    return !!two && pillsWrapHeight(el) > two + 1 !== slot.classList.contains("pills-overflow");
+    return !!two && pillsWrapHeight(el) > two + 1 && Math.abs(slot.getBoundingClientRect().height - two) < 0.5;
   }
   function wirePillsWidthWatch() {
     const probe = $("#pillsProbe");
@@ -13634,7 +13641,7 @@ What you type stays in this browser only.`;
       if (w === pillsWidthSeen) return;
       const first = pillsWidthSeen < 0;
       pillsWidthSeen = w;
-      if (!first && ePillsSettled && pillsClipWrong()) syncPillsCollapse();
+      if (!first && ePillsSettled && pillsClipDue()) syncPillsCollapse();
     }).observe(probe);
   }
   function rememberPillsShape() {

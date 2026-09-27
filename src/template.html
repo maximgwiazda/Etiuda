@@ -1313,6 +1313,10 @@ body.role-waits #roleDrum{display:none}
 /* Slot keeps a fixed 2-line height in the layout; the pills layer can expand over UI below */
 .pills-slot{max-width:var(--app-max);margin:8px auto 0;position:relative;z-index:40;
   min-height:var(--e-pills-h,0px)}
+/* While the window is narrower than at the last clip decision (--pills-vw), the slot is held at two
+   lines, so the frame that first lays out the new width puts no third line in flow and the width
+   watch's clip moves nothing above #pills. Unset, the variables leave max-height at none. */
+.pills-slot{max-height:calc(var(--pills-2line) + max(0px,(100vw - var(--pills-vw) + .1px)*1000000))}
 html.e-pills-off .pills-slot{display:none}
 /* The slot's width in a box no clip resizes, for wirePillsWidthWatch: the slot's own width rule. */
 .pills-probe{max-width:var(--app-max);margin:0 auto;height:0}
