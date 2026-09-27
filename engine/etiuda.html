@@ -7531,7 +7531,8 @@ What you type stays in this browser only.`;
   __export(card_search_exports, {
     SEARCH_FIELDS: () => SEARCH_FIELDS,
     cardMatchesSearch: () => cardMatchesSearch,
-    cardSearchIndex: () => cardSearchIndex
+    cardSearchIndex: () => cardSearchIndex,
+    sameTerms: () => sameTerms
   });
 
   // src/modules/intent-text.js
@@ -9628,40 +9629,58 @@ What you type stays in this browser only.`;
     }
     return hay;
   }
-  function cardSearchFields(m) {
+  function cardSearchFields(m, st, live, label) {
     if (!m) return { title: "", keys: "", meta: "", body: "" };
-    const st = cardStaticHay(m);
     return {
       title: st.title,
       keys: st.keys,
-      /* Live, not cached: a category rename changes this without changing the card object. It is
-         one short label, so recomputing it costs nothing worth caching. */
-      meta: normHay([CATS[m.c] || m.c || ""]),
+      /* Live, not cached: a category rename changes this without changing the card object. */
+      meta: normHay([label]),
       /* Each group is already folded, collapsed and trimmed, so joining with single spaces
          reproduces the one-pass normHay byte for byte; filter(Boolean) keeps an empty group
          from introducing a double space. Verified against the pre-cache implementation. */
-      body: [st.bodyA, cardLiveHay(m, st), st.bodyB].filter(Boolean).join(" ")
+      body: [st.bodyA, live, st.bodyB].filter(Boolean).join(" ")
     };
   }
-  var cardWordCache = /* @__PURE__ */ new WeakMap();
   function cardSearchIndex(m) {
-    const fields = cardSearchFields(m);
+    let st = null, live = "", label = "";
+    if (m) {
+      st = cardStaticHay(m);
+      live = cardLiveHay(m, st);
+      label = CATS[m.c] || m.c || "";
+      if (st.idx && st.idxLive === live && st.idxLabel === label) return st.idx;
+    }
+    const fields = cardSearchFields(m, st, live, label);
     const hay = [fields.title, fields.keys, fields.meta, fields.body].filter(Boolean).join(" ");
-    const c = cardWordCache.get(m);
-    if (c && c.hay === hay) return c.idx;
-    const idx = { hay, fields, words: {}, allWords: splitWords(hay) };
+    const idx = { hay, fields, words: {}, allWords: splitWords(hay), uniq: null, mTerms: null, match: false, sq: null };
     SEARCH_FIELDS.forEach((f) => {
       idx.words[f] = splitWords(fields[f]);
     });
-    if (m) cardWordCache.set(m, { hay, idx });
+    if (st) {
+      st.idx = idx;
+      st.idxLive = live;
+      st.idxLabel = label;
+    }
     return idx;
+  }
+  function sameTerms(a, b) {
+    if (!a || !b || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
   }
   function cardMatchesSearch(m, terms) {
     if (!terms || !terms.length) return true;
     const idx = cardSearchIndex(m);
+    if (sameTerms(idx.mTerms, terms)) return idx.match;
     const hay = idx.hay;
-    if (terms.every((t2) => hay.indexOf(t2) !== -1)) return true;
-    return terms.every((t2) => hay.indexOf(t2) !== -1 || idx.allWords.some((w) => wordMatchesTerm(w, t2)));
+    let hit = terms.every((t2) => hay.indexOf(t2) !== -1);
+    if (!hit) {
+      const uniq = idx.uniq || (idx.uniq = [...new Set(idx.allWords)]);
+      hit = terms.every((t2) => hay.indexOf(t2) !== -1 || uniq.some((w) => wordMatchesTerm(w, t2)));
+    }
+    idx.mTerms = terms.slice();
+    idx.match = hit;
+    return hit;
   }
 
   // src/modules/spell.js
@@ -10521,6 +10540,15 @@ What you type stays in this browser only.`;
   });
   function cardSearchScore(m, terms, aterms) {
     const idx = cardSearchIndex(m);
+    let q = idx.sq;
+    if (!q || !sameTerms(q.terms, terms)) q = idx.sq = queryScore(idx, terms);
+    let score = q.score;
+    if (aterms === void 0) aterms = intentAffinityGroups();
+    if (aterms.length) score += cardIntentAffinity(m, aterms) * AFFINITY_W;
+    if (isFavourite(m && m.id)) score *= FAV_BONUS;
+    return { tier: q.tier, score };
+  }
+  function queryScore(idx, terms) {
     const fieldHasAll = { title: true, keys: true, meta: true, body: true };
     let score = 0, strong = true;
     for (let i = 0; i < terms.length; i++) {
@@ -10545,10 +10573,7 @@ What you type stays in this browser only.`;
     const title = idx.fields.title;
     if (terms.length > 1 && title.indexOf(terms.join(" ")) !== -1) score += ADJACENT_BONUS;
     if (title.indexOf(terms[0]) === 0) score += TITLE_START_BONUS;
-    if (aterms === void 0) aterms = intentAffinityGroups();
-    if (aterms.length) score += cardIntentAffinity(m, aterms) * AFFINITY_W;
-    if (isFavourite(m && m.id)) score *= FAV_BONUS;
-    return { tier: strong ? 0 : 1, score };
+    return { terms: terms.slice(), tier: strong ? 0 : 1, score };
   }
 
   // src/modules/card-counts.js

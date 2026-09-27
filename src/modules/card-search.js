@@ -57,9 +57,8 @@ function cardLiveHay(m, st){
   if(key!=null){ st.liveKey=key; st.live=hay; }
   return hay;
 }
-function cardSearchFields(m){
+function cardSearchFields(m, st, live, label){
   if(!m) return {title:"",keys:"",meta:"",body:""};
-  const st=cardStaticHay(m);
   /* THE NOTE IS BODY, NOT META. Notes are operating warnings, largely NEGATIONS, so a
      word's presence there often means the reverse of relevance - in meta it made cards
      tier-0 for the very thing their note forbids. Demoted, not deleted: queries exist
@@ -69,32 +68,44 @@ function cardSearchFields(m){
   return {
     title: st.title,
     keys:  st.keys,
-    /* Live, not cached: a category rename changes this without changing the card object. It is
-       one short label, so recomputing it costs nothing worth caching. */
-    meta:  normHay([CATS[m.c]||m.c||""]),
+    /* Live, not cached: a category rename changes this without changing the card object. */
+    meta:  normHay([label]),
     /* Each group is already folded, collapsed and trimmed, so joining with single spaces
        reproduces the one-pass normHay byte for byte; filter(Boolean) keeps an empty group
        from introducing a double space. Verified against the pre-cache implementation. */
-    body:  [st.bodyA, cardLiveHay(m, st), st.bodyB].filter(Boolean).join(" ")
+    body:  [st.bodyA, live, st.bodyB].filter(Boolean).join(" ")
   };
 }
-/* Card haystacks are big and search re-runs per keystroke across the catalog: memoise
-   the fields and word splits per card, keyed on the joined text so the live {PAX}/{GREET}
-   fills invalidate it - and an edit drops the entry anyway, since rebuildCards hands out
-   fresh objects. WeakMap rather than a field, so nothing leaks into exported JSON. */
-const cardWordCache=new WeakMap();
+/* THE INDEX IS KEPT ON THE STATIC RECORD against the only two inputs the static half does not
+   cover, the live half and the raw category label, so a card asked about five times in one
+   settle (the list, its score, the counts, the category rank and its scores) builds and joins
+   its haystack once. The live half comes back as the same string while cardFillKey holds, so
+   the compare is a pointer, not a scan. */
 function cardSearchIndex(m){
-  const fields=cardSearchFields(m);
+  let st=null, live="", label="";
+  if(m){
+    st=cardStaticHay(m);
+    live=cardLiveHay(m, st);
+    label=CATS[m.c]||m.c||"";
+    if(st.idx && st.idxLive===live && st.idxLabel===label) return st.idx;
+  }
+  const fields=cardSearchFields(m, st, live, label);
   /* Plain join, not normHay: the four fields are already lowercased, collapsed and
      trimmed - re-running the regex over the body is a second full pass for nothing.
      Empties dropped so the join stays single-spaced, identical to the old single blob. */
   const hay=[fields.title,fields.keys,fields.meta,fields.body].filter(Boolean).join(" ");
-  const c=cardWordCache.get(m);
-  if(c && c.hay===hay) return c.idx;
-  const idx={hay, fields, words:{}, allWords:splitWords(hay)};
+  /* uniq, mTerms, match and sq are the per-query memos, one slot each: see cardMatchesSearch. */
+  const idx={hay, fields, words:{}, allWords:splitWords(hay), uniq:null, mTerms:null, match:false, sq:null};
   SEARCH_FIELDS.forEach(f=>{ idx.words[f]=splitWords(fields[f]); });
-  if(m) cardWordCache.set(m,{hay,idx});   // set() throws on a non-object key
+  if(st){ st.idx=idx; st.idxLive=live; st.idxLabel=label; }
   return idx;
+}
+/** The same terms in the same order. Compared by value, never by the array's identity: a
+    caller may build its terms afresh for every pass, or reuse one array and change it. */
+function sameTerms(a, b){
+  if(!a || !b || a.length!==b.length) return false;
+  for(let i=0;i<a.length;i++) if(a[i]!==b[i]) return false;
+  return true;
 }
 /* Terms must arrive already lowercased AND diacritic-folded - cardSearchTerms() is the one
    place that produces them, and the index is folded, so an unfolded term silently matches
@@ -102,14 +113,24 @@ function cardSearchIndex(m){
 function cardMatchesSearch(m, terms){
   if(!terms||!terms.length) return true;
   const idx=cardSearchIndex(m);
+  /* ONE ANSWER PER INDEX AND QUERY: a fresh index is a changed card, fill or label, so the
+     memo cannot outlive what it was computed from. */
+  if(sameTerms(idx.mTerms, terms)) return idx.match;
   const hay=idx.hay;
   // Same rule as the intent box: exact substring, or a word sharing enough of a prefix.
-  if(terms.every(t=>hay.indexOf(t)!==-1)) return true;
-  return terms.every(t => hay.indexOf(t)!==-1 || idx.allWords.some(w=>wordMatchesTerm(w,t)));
+  let hit=terms.every(t=>hay.indexOf(t)!==-1);
+  if(!hit){
+    // Each language appears about three times over in the haystack, so its words are scanned once each.
+    const uniq=idx.uniq||(idx.uniq=[...new Set(idx.allWords)]);
+    hit=terms.every(t => hay.indexOf(t)!==-1 || uniq.some(w=>wordMatchesTerm(w,t)));
+  }
+  idx.mTerms=terms.slice(); idx.match=hit;
+  return hit;
 }
 
 export {
   SEARCH_FIELDS,
   cardSearchIndex,
-  cardMatchesSearch
+  cardMatchesSearch,
+  sameTerms
 };

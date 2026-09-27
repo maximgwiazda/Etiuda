@@ -1,7 +1,7 @@
 /* What one card is worth against a typed query, and the order the evidence is applied in.
    Four modules feed it and nothing imports it back, so it sits outside them all. */
 import { intentAffinityGroups, cardIntentAffinity, AFFINITY_W } from "./affinity.js";
-import { SEARCH_FIELDS, cardSearchIndex } from "./card-search.js";
+import { SEARCH_FIELDS, cardSearchIndex, sameTerms } from "./card-search.js";
 import { isFavourite } from "./pack.js";
 import { termFieldQuality, FIELD_WEIGHT, SAME_FIELD_BONUS, proximityBonus, ADJACENT_BONUS,
          TITLE_START_BONUS, FAV_BONUS } from "./scoring.js";
@@ -10,6 +10,19 @@ import { termFieldQuality, FIELD_WEIGHT, SAME_FIELD_BONUS, proximityBonus, ADJAC
     `aterms` is intentAffinityGroups(); render computes it once and passes it in. */
 function cardSearchScore(m, terms, aterms){
   const idx=cardSearchIndex(m);
+  /* The query's half is a function of the index and the terms alone, so it is kept on the index
+     beside the match; the intent and the star are read fresh on every call. */
+  let q=idx.sq;
+  if(!q || !sameTerms(q.terms, terms)) q=idx.sq=queryScore(idx, terms);
+  let score=q.score;
+  // How central is this entry to the selected intent, on top of how well it matches the query
+  if(aterms===undefined) aterms=intentAffinityGroups();
+  if(aterms.length) score+=cardIntentAffinity(m, aterms)*AFFINITY_W;
+  // Last, so it lifts the finished score rather than one component of it
+  if(isFavourite(m&&m.id)) score*=FAV_BONUS;
+  return {tier: q.tier, score};
+}
+function queryScore(idx, terms){
   const fieldHasAll={title:true, keys:true, meta:true, body:true};
   let score=0, strong=true;
   for(let i=0;i<terms.length;i++){
@@ -34,12 +47,7 @@ function cardSearchScore(m, terms, aterms){
   const title=idx.fields.title;
   if(terms.length>1 && title.indexOf(terms.join(" "))!==-1) score+=ADJACENT_BONUS;
   if(title.indexOf(terms[0])===0) score+=TITLE_START_BONUS;
-  // How central is this entry to the selected intent, on top of how well it matches the query
-  if(aterms===undefined) aterms=intentAffinityGroups();
-  if(aterms.length) score+=cardIntentAffinity(m, aterms)*AFFINITY_W;
-  // Last, so it lifts the finished score rather than one component of it
-  if(isFavourite(m&&m.id)) score*=FAV_BONUS;
-  return {tier: strong?0:1, score};
+  return {terms: terms.slice(), tier: strong?0:1, score};
 }
 
 export {
