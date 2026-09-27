@@ -1236,6 +1236,48 @@ const MENU_TO_LOG = !!process.env.ETIUDA_TEST_CONTEXT_MENU;
 /* The one window, held so a folder change arriving through a desk save can re-arm the watch and
    offer what the new folder holds. There is exactly one; a second would need a list. */
 let theWindow = null;
+/* A PAGE THAT STOPS takes the band and its three controls with it, since the window has no frame.
+   The first loss reloads the page; a second within a minute asks, in a box with its own frame,
+   as a page that stops answering does. The harness's placed-aside window logs in place of a box. */
+function watchPage(win) {
+  let lastGone = 0, restarting = false, hangAsk = null;
+  const recover = () => { recovering.add(win.webContents.id); win.webContents.reload(); };
+  const ask = (message, buttons, signal) => {
+    if (!PLACED_ASIDE) return dialog.showMessageBox(win, { type: "warning", title: "Etiuda", message: message,
+      buttons: buttons, defaultId: 0, cancelId: 0, noLink: true, signal: signal });
+    console.error("etiuda: a box would ask here: " + message);
+    return Promise.resolve({ response: -1 });
+  };
+  win.webContents.on("render-process-gone", (e, d) => {
+    if (win.isDestroyed() || d.reason === "clean-exit") return;
+    console.error("etiuda: the page stopped (" + d.reason + ", exit code " + d.exitCode + ")");
+    // Restart in the hang box reloads here, once the old page has gone: a reload sent straight
+    // after the kill can land in the dying process and leave the window empty.
+    if (restarting) { restarting = false; recover(); return; }
+    const again = Date.now() - lastGone < 60000;
+    lastGone = Date.now();
+    if (!again) { recover(); return; }
+    const w = shellWords();
+    ask(w.gone, [w.restart, w.close]).then(r => {
+      if (win.isDestroyed()) return;
+      if (r.response === 0) recover(); else if (r.response === 1) win.close();
+    });
+  });
+  win.on("unresponsive", () => {
+    if (hangAsk || win.isDestroyed()) return;
+    console.error("etiuda: the page is not responding");
+    const w = shellWords();
+    hangAsk = new AbortController();
+    const signal = hangAsk.signal;
+    ask(w.hung, [w.wait, w.restart], signal).then(r => {
+      hangAsk = null;
+      if (signal.aborted || r.response !== 1 || win.isDestroyed()) return;
+      restarting = true;
+      win.webContents.forcefullyCrashRenderer();
+    });
+  });
+  win.on("responsive", () => { if (hangAsk) hangAsk.abort(); });
+}
 function createWindow() {
   const backdrop = hostBackdrop();
   /* A REFUSAL PAGE CARRIES NO SCRIPT OF ITS OWN, so the engine never draws the band's three
@@ -1333,45 +1375,7 @@ function createWindow() {
     Menu.buildFromTemplate(items).popup({ window: win });
   });
 
-  /* A PAGE THAT STOPS takes the band and its three controls with it, since the window has no frame.
-     The first loss reloads the page; a second within a minute asks, in a box with its own frame,
-     as a page that stops answering does. The harness's placed-aside window logs in place of a box. */
-  let lastGone = 0, killing = false, hangAsk = null;
-  const recover = () => { recovering.add(win.webContents.id); win.webContents.reload(); };
-  const ask = (message, buttons, signal) => {
-    if (!PLACED_ASIDE) return dialog.showMessageBox(win, { type: "warning", title: "Etiuda", message: message,
-      buttons: buttons, defaultId: 0, cancelId: 0, noLink: true, signal: signal });
-    console.error("etiuda: a box would ask here: " + message);
-    return Promise.resolve({ response: -1 });
-  };
-  win.webContents.on("render-process-gone", (e, d) => {
-    if (win.isDestroyed() || d.reason === "clean-exit") return;
-    console.error("etiuda: the page stopped (" + d.reason + ", exit code " + d.exitCode + ")");
-    if (killing) { killing = false; return; }
-    const again = Date.now() - lastGone < 60000;
-    lastGone = Date.now();
-    if (!again) { recover(); return; }
-    const w = shellWords();
-    ask(w.gone, [w.restart, w.close]).then(r => {
-      if (win.isDestroyed()) return;
-      if (r.response === 0) recover(); else if (r.response === 1) win.close();
-    });
-  });
-  win.on("unresponsive", () => {
-    if (hangAsk || win.isDestroyed()) return;
-    console.error("etiuda: the page is not responding");
-    const w = shellWords();
-    hangAsk = new AbortController();
-    const signal = hangAsk.signal;
-    ask(w.hung, [w.wait, w.restart], signal).then(r => {
-      hangAsk = null;
-      if (signal.aborted || r.response !== 1 || win.isDestroyed()) return;
-      killing = true;
-      win.webContents.forcefullyCrashRenderer();
-      recover();
-    });
-  });
-  win.on("responsive", () => { if (hangAsk) hangAsk.abort(); });
+  watchPage(win);
 
   /* The engine carries links to the open internet. Following one inside the window would
      replace the app with a web page and leave no way back to it. */

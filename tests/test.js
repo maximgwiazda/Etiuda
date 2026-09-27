@@ -535,6 +535,7 @@ function runUnitTests() {
   shippedFileTests();
   railPlacementTests();
   recoveryTests();
+  pageWatchTests();
   dismissTierTests();
   v2ValidationTests();
   lintCatalogTests();
@@ -1559,6 +1560,44 @@ function menuScreenTests(H) {
         .map(s => wire.indexOf(s) > -1), [true, true, true, true]);
   }
 }
+/* THE HANG BOX'S RESTART (the "not responding" box): the page is ended first and reloaded once it
+   has gone, marked like every reload after a stop. The shell's page watch is sliced and run on a
+   window model whose boxes answer at once; the recovery itself is the verifier's to drive. */
+function pageWatchTests() {
+  const shell = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  const recovering = new Set(), log = [], answers = [], wcOn = {}, winOn = {};
+  let clock = 1000000;
+  const wc = { id: 7, on: (t, fn) => { wcOn[t] = fn; },
+    reload() { log.push(recovering.delete(7) ? "reload marked" : "reload unmarked"); },
+    forcefullyCrashRenderer() { log.push("kill"); } };
+  const win = { webContents: wc, on: (t, fn) => { winOn[t] = fn; }, isDestroyed: () => false, close() { log.push("close"); } };
+  const dialog = { showMessageBox: (w, o) => { log.push("box " + o.message); const r = answers.shift(); return { then: fn => fn({ response: r }) }; } };
+  const words = { gone: "gone", hung: "hung", restart: "Restart", close: "Close", wait: "Wait" };
+  let watch = null;
+  try {
+    watch = new Function("recovering", "dialog", "PLACED_ASIDE", "shellWords", "console", "Date",
+      extractDecl(shell, "function watchPage(") + "\nreturn watchPage;")(
+      recovering, dialog, false, () => words, { error() {} }, { now: () => clock });
+  } catch (e) { watch = null; }
+  if (!watch) { eq("shell/main.js carries the page watch as watchPage(win)", false, true); return; }
+  watch(win);
+  const step = fn => { log.length = 0; fn(); return log.slice(); };
+  const gone = reason => () => wcOn["render-process-gone"]({}, { reason: reason, exitCode: 1 });
+  eq("the first loss reloads the page at once, marked", step(gone("crashed")), ["reload marked"]);
+  clock += 10000; answers.push(0);
+  eq("a second loss within a minute asks, and its Restart reloads, marked", step(gone("crashed")), ["box gone", "reload marked"]);
+  clock += 10000; answers.push(1);
+  eq("and its Close closes the window", step(gone("crashed")), ["box gone", "close"]);
+  answers.push(0);
+  eq("the hang box's Wait leaves the page alone", step(() => winOn.unresponsive()), ["box hung"]);
+  answers.push(1);
+  eq("the hang box's Restart ends the page and sends no reload while the old page is still going",
+    step(() => winOn.unresponsive()), ["box hung", "kill"]);
+  eq("the reload comes once the old page has gone, marked, and that loss asks nothing", step(gone("killed")), ["reload marked"]);
+  clock += 120000;
+  eq("a loss a minute after the last counts as a first again", step(gone("crashed")), ["reload marked"]);
+}
+
 function requestFns() {
   const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
   const decls = ["const DESK_ID_RE =", "function channelHash(", "function ymdOk(",
