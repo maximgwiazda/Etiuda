@@ -20,7 +20,11 @@
  *   - must be in the page in every frame (else it vanished for a frame);
  *   - that ends elsewhere must be painted, in every frame, near the straight line from where it
  *     was to where it lands (else it left its path: a glide whose layout changed under it).
- * An element new to the screen must arrive animated where a leg asks for it.
+ * An element new to the screen must arrive animated where a leg asks for it, and one that leaves
+ * the screen must leave animated: gliding out, or as the dismiss of a copy left where it was (a
+ * card's copy carries data-leave). A card a leg names in `leaves` is judged that way wherever
+ * it lands: its copy must fade where it was, and the card must arrive animated if it lands on
+ * screen.
  */
 "use strict";
 const VIEW = { width: 1600, height: 900 };
@@ -30,7 +34,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
    so a renamed function reddens the leg that needs it and not the tracker. */
 function instrument() {
   const KINDS = {
-    cards: { sel: "#list .card[data-id]", key: el => "c:" + el.getAttribute("data-id"), page: true },
+    cards: { sel: "#list .card[data-id], #list .card[data-leave]", page: true,
+             key: el => el.hasAttribute("data-id") ? "c:" + el.getAttribute("data-id") : "g:" + el.getAttribute("data-leave") },
     pills: { sel: "#pills .pill",
              key: el => el.dataset.k != null ? "k:" + el.dataset.k : (el.classList.contains("pill-add") ? "add" : null) },
     rail: { sel: "#intentRailList .rail-item[data-si]", key: el => "r" + el.dataset.si }
@@ -96,7 +101,7 @@ function instrument() {
 /* The verdict on one tracked run, in numbers. `top` is where the screen starts, `only` names the
    faults a leg judges, `wantArrivals` asks a box new to the screen to arrive animated. */
 function judge(r, opts) {
-  const o = Object.assign({ wantArrivals: false, top: 0 }, opts || {});
+  const o = Object.assign({ wantArrivals: false, wantLeaves: false, leaves: [], top: 0 }, opts || {});
   const vis = b => b && b.bottom > o.top && b.top < r.vh;
   const last = r.frames[r.frames.length - 1] || {};
   /* A card's id is a slug of its title and a category key is the catalog's own, so neither is
@@ -104,15 +109,23 @@ function judge(r, opts) {
   const names = new Map();
   const name = k => k === "add" ? "add" : k === "k:" ? "All" : (k[0] === "r" ? "row " : k[0] === "k" ? "pill " : "card ")
     + (names.has(k) ? names.get(k) : (names.set(k, names.size), names.size - 1));
-  const bad = { snapped: [], jumped: [], startOff: [], offPath: [], vanished: [], popped: [] };
+  const bad = { snapped: [], jumped: [], startOff: [], offPath: [], vanished: [], popped: [], unled: [] };
   /* A glide's own bend is small: a neighbour's width tween moves a pill by a few px, a spring
      passes its end by 2 per cent. What is judged is a box painted well away from the line. */
   const offBy = (A, B, P) => { const T = [B.x - A.x, B.y - A.y], L2 = T[0] * T[0] + T[1] * T[1] || 1e-9;
     const t = Math.max(0, Math.min(1, ((P.x - A.x) * T[0] + (P.y - A.y) * T[1]) / L2));
     return Math.hypot(P.x - A.x - T[0] * t, P.y - A.y - T[1] * t); };
-  let moved = 0, still = 0, arrived = 0;
+  let moved = 0, still = 0, arrived = 0, left = 0;
+  const ghosted = k => r.frames.some(f => f["g:" + k.slice(2)] && f["g:" + k.slice(2)].anim);
   for (const k of new Set([...Object.keys(r.before), ...Object.keys(last)])) {
     const b = r.before[k], e = last[k];
+    if (k[0] === "g") continue;
+    if (o.leaves.includes(k) && vis(b)) {
+      left++;
+      if (!ghosted(k)) bad.unled.push(name(k));
+      if (vis(e) && !r.frames.some(f => f[k] && f[k].anim)) bad.popped.push(name(k));
+      continue;
+    }
     if (vis(b) && vis(e)) {
       if (r.frames.some(f => !f[k])) { bad.vanished.push(name(k)); continue; }
       const travel = Math.max(Math.abs(e.x - b.x), Math.abs(e.y - b.y), Math.abs(e.w - b.w));
@@ -132,11 +145,15 @@ function judge(r, opts) {
     } else if (!vis(b) && vis(e) && o.wantArrivals) {
       arrived++;
       if (!r.frames.some(f => f[k] && f[k].anim)) bad.popped.push(name(k));
+    } else if (vis(b) && !vis(e) && o.wantLeaves) {
+      left++;
+      if (!ghosted(k) && !r.frames.some(f => f[k] && f[k].anim && vis(f[k]))) bad.unled.push(name(k));
     }
   }
   const faults = Object.entries(bad).filter(([n, v]) => v.length && !(o.only && !o.only.includes(n)));
-  return { ok: faults.length === 0, moved, still, arrived,
+  return { ok: faults.length === 0, moved, still, arrived, left,
            text: moved + " moved, " + still + " still" + (o.wantArrivals ? ", " + arrived + " arrived" : "")
+             + (o.wantLeaves || o.leaves.length ? ", " + left + " left" : "")
              + (faults.length ? "; " + faults.map(([n, v]) => n + " " + v.length + " (" + v.slice(0, 3).join(", ") + ")").join("; ") : "") };
 }
 
@@ -436,6 +453,41 @@ leg("m11", "a clear after a pick and a Ctrl pick glides every pill along its pat
     const j = judge(r, { only: ["jumped", "snapped", "startOff", "offPath", "vanished"] });
     ok = ok && j.ok && j.moved > 0;
     out.push("rows " + a + " and " + c + ": " + j.text);
+  }
+  return { ok, text: out.join(" | ") };
+});
+
+leg("m12", "a star and a hide glide the cards that stay on screen at the top and deep in the list, the hidden card leaves with the dismiss, and the cards they bring rise in", async p => {
+  const out = [];
+  let ok = true;
+  for (const depth of [0, 0.4]) {
+    for (const act of ["fav", "hide"]) {
+      await rest(p);
+      await p.evaluate(d => { const s = document.getElementById("pageScroll") || document.scrollingElement;
+        s.scrollTop = Math.round(d * (s.scrollHeight - s.clientHeight)); }, depth);
+      await sleep(900);
+      /* A card in the middle of the screen, neither starred nor put away. */
+      const id = await p.evaluate(act => {
+        const vh = innerHeight;
+        const c = [...document.querySelectorAll("#list .card[data-id]:not(.is-hidden)")].find(el => {
+          const r = el.getBoundingClientRect(), b = el.querySelector('[data-act="' + act + '"]');
+          return r.top > vh * 0.3 && r.top < vh * 0.6 && b && !el.querySelector(".star-btn.on"); });
+        return c ? c.getAttribute("data-id") : null;
+      }, act);
+      if (!id) { ok = false; out.push(act + " at " + depth + ": no card in the middle of the screen"); continue; }
+      await p.evaluate((id, act) => { window.__mtId = id; window.__mtActName = act; }, id, act);
+      const r = await track(p, "cards", 700, () => { window.__mtAct = () =>
+        document.querySelector('#list .card[data-id="' + CSS.escape(window.__mtId) + '"] [data-act="' + window.__mtActName + '"]').click(); });
+      const j = judge(r, { wantArrivals: true, wantLeaves: true, leaves: act === "hide" ? ["c:" + id] : [] });
+      /* A star moves cards on screen at either depth; a hide always leaves, and what closes its gap
+         may come from below the screen. */
+      ok = ok && j.ok && (act === "fav" ? j.moved > 0 : j.left > 0);
+      out.push((act === "fav" ? "star" : "hide") + " at " + depth + ": " + j.text);
+      /* Undone off the record, so the next act starts from the resting desk. */
+      await sleep(400);
+      await p.evaluate((id, act) => { if (act === "fav") toggleFavourite(id); else hideCard(id); }, id, act);
+      await sleep(400);
+    }
   }
   return { ok, text: out.join(" | ") };
 });

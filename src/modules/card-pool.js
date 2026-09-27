@@ -103,6 +103,17 @@ function runLangChunks(ids){
   cancelLangChunks();
   if(ids.length) eLangChunkR=requestAnimationFrame(step);
 }
+/* After a save that rewrote the markup of the named cards and of no other: every other kept node
+   is re-signed with the new epoch, so the render that follows keeps it, and with it the size
+   content-visibility remembers. window.__verifyPool proves the claim for a caller. */
+function keepPoolAcross(was,ids){
+  const pre=was+"|", now=ePackEpoch+"|";
+  if(pre===now) return;
+  cardPool.forEach((el,id)=>{
+    if(ids.indexOf(id)<0 && typeof el.__sig==="string" && el.__sig.indexOf(pre)===0)
+      el.__sig=now+el.__sig.slice(pre.length);
+  });
+}
 /* Separators are rebuilt every render - there are a handful and they depend on their
    neighbours. Cards are kept unless their signature moved. */
 function paintList(spellNote,items){
@@ -160,5 +171,6 @@ export {
   cancelLangChunks,
   rebuildCardsInPlace,
   runLangChunks,
+  keepPoolAcross,
   paintList
 };

@@ -1559,6 +1559,9 @@ main{max-width:none;margin:16px 0 0;padding:0}
    flipCardsAround at the same time. A collapse plays no exit - the gap closing behind the
    group is this list's standing language for departure. */
 .card.e-unfolding{animation:e-unfold var(--m-move) var(--m-ease)}
+/* A card put away leaves where it stood: a copy of it takes the family's dismiss while the cards
+   around it close the gap (flipCardsAround). */
+#list .card.e-card-leave{position:fixed;margin:0;pointer-events:none;animation:eLeave var(--m-dismiss) ease forwards}
 @keyframes e-unfold{from{opacity:0;transform:translateY(-6px)}}
 
 /* ---- Card columns: each column is its own stack, groups DEALT into them - first
