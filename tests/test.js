@@ -533,6 +533,7 @@ function runUnitTests() {
   policyTests();
   windowPlaceTests();
   shippedFileTests();
+  railPlacementTests();
   v2ValidationTests();
   lintCatalogTests();
   langAgnosticTests();
@@ -1313,6 +1314,34 @@ function shippedFileTests() {
     [/comes with Etiuda/.test(said), said.indexOf("asar") < 0, said.indexOf("sample-catalog.ec") > -1], [true, true, true]);
   eq("a file from the catalog folder is still located in it",
     found ? /Located as .*sample-catalog\.ec.* in .*Documents/.test(found("sample-catalog.ec", own, false)) : "no eFoundHtml", true);
+}
+/* THE RAIL IS IN THE FIRST FRAME (feel pass, the rail arriving about 120 ms after the cards at
+   launch): boot ends by placing the panel in its own task, after the last statement that moves the
+   header, and the panel lands without its fade. The placement is sliced and run on stubs that log
+   the order of what it does; the frame itself is the verifier's composed capture. */
+function railPlacementTests() {
+  const panel = fs.readFileSync(path.join(E.ROOT, "src", "modules", "rail-panel.js"), "utf8");
+  const log = [];
+  const rail = { style: { set transition(v) { log.push("transition=" + (v || "(sheet)")); }, get transition() { return ""; } } };
+  const body = { ready: false };
+  let place = null;
+  try {
+    place = new Function("$", "syncRailGeometry", "getComputedStyle",
+      extractDecl(panel, "function placeRailNow(") + "\nreturn placeRailNow;")(
+      sel => sel === "#intentRail" ? rail : null,
+      () => { body.ready = true; log.push("geometry"); },
+      el => { log.push("style read, ready " + body.ready); return { opacity: "1" }; });
+  } catch (e) { place = null; }
+  if (place) place();
+  eq("the panel is placed in one task: transition off, geometry, a style read with the panel ready, transition back",
+    place ? log : "no placeRailNow in rail-panel.js",
+    ["transition=none", "geometry", "style read, ready true", "transition=(sheet)"]);
+  const main = fs.readFileSync(path.join(E.ROOT, "src", "main.js"), "utf8");
+  const at = s => main.indexOf(s);
+  eq("boot places the panel after the chrome is translated and before it reports a boot",
+    [at("railPanel.placeRailNow()") > at("uiLang.translateChrome()"), at("uiLang.translateChrome()") > -1,
+     at("railPanel.placeRailNow()") > -1 && at("railPanel.placeRailNow()") < at("E_BOOT_OK();")],
+    [true, true, true]);
 }
 function requestFns() {
   const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");

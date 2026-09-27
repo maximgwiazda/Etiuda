@@ -92,6 +92,7 @@ setTimeout()
 pops.wirePops()
 addEventListener:"resize"
 uiLang.translateChrome()
+railPanel.placeRailNow()
 try:E_BOOT_OK()
 try:personalPack.showPackMigrationWarning()
 try:personalPack.showDeskNotices()

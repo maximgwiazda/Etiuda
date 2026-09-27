@@ -233,6 +233,15 @@ function scheduleRailGeometry(){
      intent panel until focus. Running twice is harmless; only derived values are written. */
   setTimeout(syncRailGeometry,60);
 }
+/* BOOT PAINTS THE PANEL WITH THE CARDS: its geometry is taken in the task that ends boot, where the
+   layout is already final, and it lands without its fade, which a panel arriving later earns and
+   the first frame does not. The style is read before the transition goes back, so none starts. */
+function placeRailNow(){
+  const rail=$("#intentRail");
+  if(rail) rail.style.transition="none";
+  syncRailGeometry();
+  if(rail){ void getComputedStyle(rail).opacity; rail.style.transition=""; }
+}
 /* Holds a departing panel still for the frame that undocking spends relaying the list, then
    lets it fade - see body.rail-parting. The timeout is the same insurance scheduleRailGeometry
    carries: rAF does not run in a hidden tab, and a panel pinned for ever would be worse than
@@ -627,7 +636,7 @@ export {
   RAIL_DOCK_MIN, railDockMin, railMaxWidth, applyStoredRailWidth, applyDefaultRailWidth,
   railWanted, railLocked, railDocked, railSuppressed, railActive,
   applyOverlapOrder, wireOverlapPointer, watchPillBarHeight,
-  syncRailGeometry, scheduleRailGeometry, syncRailLayout, rebuildRailMQ,
+  syncRailGeometry, scheduleRailGeometry, placeRailNow, syncRailLayout, rebuildRailMQ,
   syncRailResizeUI, buildRailResizer, syncHeaderElevation, wirePageScroll,
   wireRailObservers, wireRailWheel, bindRailHit,
 };

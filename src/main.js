@@ -463,6 +463,7 @@ function boot(){
      frames after it (on-open.js repaints the rest there): a covered reload's first frame is the
      one this boot ends in, and it would show the header's placeholders in English. */
   uiLang.translateChrome();
+  railPanel.placeRailNow();
 
   /* Last line of the app, on purpose: reaching it is the definition of a successful boot.
      The guard at the top of the file waits for this and offers a way out if it never comes. */

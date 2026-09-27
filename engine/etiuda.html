@@ -13078,6 +13078,7 @@ What you type stays in this browser only.`;
     bindRailHit: () => bindRailHit,
     buildRailResizer: () => buildRailResizer,
     clearModifierPeek: () => clearModifierPeek,
+    placeRailNow: () => placeRailNow,
     railActive: () => railActive,
     railDockMin: () => railDockMin,
     railDocked: () => railDocked,
@@ -13761,6 +13762,15 @@ What you type stays in this browser only.`;
   function scheduleRailGeometry() {
     requestAnimationFrame(() => requestAnimationFrame(syncRailGeometry));
     setTimeout(syncRailGeometry, 60);
+  }
+  function placeRailNow() {
+    const rail = $("#intentRail");
+    if (rail) rail.style.transition = "none";
+    syncRailGeometry();
+    if (rail) {
+      void getComputedStyle(rail).opacity;
+      rail.style.transition = "";
+    }
   }
   var railPartT = 0;
   function railPartHold() {
@@ -22039,6 +22049,7 @@ What you type stays in this browser only.`;
       scheduleCutScan();
     }, { passive: true });
     translateChrome();
+    placeRailNow();
     try {
       if (typeof E_BOOT_OK === "function") E_BOOT_OK();
     } catch (e) {
