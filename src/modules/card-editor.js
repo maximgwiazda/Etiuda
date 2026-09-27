@@ -10,7 +10,7 @@ import { langTabs, langPane, langFieldId, markMissing, edReportMissing, langFocu
 import { nsSet } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { t, counted, toast, tc } from "./ui-lang.js";
-import { BASE_CATS, pack, savePack } from "./pack.js";
+import { BASE_CATS, pack, savePack, ePackEpoch } from "./pack.js";
 import { removeCard, syncFavouritesMeta } from "./favourites.js";
 import { catIconSvg } from "./cat-identity.js";
 import { intentHasPrimaryCat } from "./cat-relevance.js";
@@ -632,7 +632,9 @@ function hideCard(id){
     toast(lostStar ? "Put away - greyed at the foot of its category, unfavourited"
                    : "Put away - greyed at the foot of its category");
   }
+  const was=ePackEpoch;
   savePack();
+  hooks.keepPoolAcross(was,[id]);   // a hide rewrites this card alone
   /* Flip the flag in place: rebuildCards() re-derives everything for a change that
      alters none of it, and its cost lands inside the FLIP's own window - the first third
      of the journey was over before anything painted, which is what made hiding less

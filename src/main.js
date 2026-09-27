@@ -201,6 +201,7 @@ function boot(){
     shedHolding: shed.shedHolding,
     shedWordmarkW: shed.shedWordmarkW,
     cardFillKey: railList.cardFillKey,
+    keepPoolAcross: pool.keepPoolAcross,
     capturePills: pillsBar.capturePills,
     drawPillsCore: pillsBar.drawPillsCore,
     captureRail: railList.captureRail,

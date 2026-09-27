@@ -90,6 +90,13 @@ function pillsSlot(){ return $("#pillsSlot"); }
 // The category bar's SHAPE: whether it is wanted, whether it is locked open, the slot's height
 // as an animation, the two-line cap, and what the head script reserves on the next load.
 
+/* How far the pills wrap, from their layout boxes: scrollHeight also counts a pill a running
+   glide still holds on its old line, and a clip decided from that re-wraps the row mid-glide. */
+function pillsWrapHeight(el){
+  let h=0;
+  for(const c of el.children) h=Math.max(h,c.offsetTop+c.offsetHeight);
+  return h;
+}
 // Cap the category bar at two lines of layout space; extra rows overlay when expanded.
 // Skipped when locked (⚙ → Lock categories).
 function syncPillsCollapse(){
@@ -115,7 +122,7 @@ function syncPillsCollapse(){
   const styles=getComputedStyle(el);
   const gap=parseFloat(styles.rowGap||styles.gap)||6;
   const two=lineH*2+gap;
-  const full=el.scrollHeight;
+  const full=pillsWrapHeight(el);
   /* The open bar is a popover; nothing here needs to know where it sits inside the
      header any more. */
   slot.style.removeProperty("--pills-full");
@@ -135,9 +142,14 @@ function syncPillsCollapse(){
   }
   if(keepExpand) slot.classList.add("pills-expand");
 }
+let ePillsSettled=false;
+/* A redraw clips in its own task once the boot's first measure has run; before it, the widths
+   the measure waits for are not yet known. */
+function syncPillsCollapseNow(){ if(ePillsSettled) syncPillsCollapse(); }
 function schedulePillsCollapse(){
   // Wait for rail-on / max-width layout to settle before measuring wrap height.
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    ePillsSettled=true;
     syncPillsCollapse();
     rememberPillsShape();
     hooks.scheduleRailGeometry();
@@ -158,6 +170,7 @@ export {
   togglePillsLock,
   pillsSlot,
   syncPillsCollapse,
+  syncPillsCollapseNow,
   schedulePillsCollapse,
   rememberPillsShape,
 };

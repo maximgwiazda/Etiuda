@@ -50,23 +50,40 @@ function wirePumpKick(){
   });
 }
 
+/* A pill's key in a capture: its category, "" for All, null for the add button, which has none;
+   undefined for anything else in the row. */
+function pillKey(p){ return p.dataset.k!=null ? p.dataset.k : p.classList.contains("pill-add") ? null : undefined; }
 /** The "invert and play" half. Call after the pills have been redrawn in their new order. */
 /* READ EVERY POSITION FIRST, THEN WRITE EVERY TRANSFORM: a rect read after a style
    write forces a full layout PER PILL - interleaved, this was 25.6ms of a 180ms
    animation budget. Split, each pass is one layout. */
 function flipPills(before){
   if(!before) return;
-  const moved=[], deltas=[], wEls=[], wStarts=[];
+  const els=[], bs=[], moved=[], deltas=[], wEls=[], wStarts=[];
   pills.querySelectorAll(".pill").forEach(p=>{
-    const k=p.dataset.k, b=k&&before[k];
-    if(!b) return;
+    const k=pillKey(p), b=k!==undefined && before.get(k);
+    if(b){ els.push(p); bs.push(b); }
+  });
+  const hNat=pills.scrollHeight;   // through the clip - see the note at tweenPillWidths
+  /* Width changes ride the same flip - a selection bolds the name, a recount changes the
+     digits, and either snapping while neighbours slide reads as a glitch. 1.5px floor:
+     fractional DPRs round every pill differently on every pass. */
+  els.forEach((p,i)=>{
+    const w=p.getBoundingClientRect().width;
+    if(Math.abs(bs[i].width-w)>=1.5){ wEls.push(p); wStarts.push(bs[i].width); p.dataset._eW=w; }
+  });
+  /* The old widths go back BEFORE the positions are read: each one shifts every pill after it
+     in the row, so an offset read at the new widths starts the glide that far from the pill. */
+  wEls.forEach((p,i)=>{ p.style.transition="none"; p.style.width=wStarts[i]+"px"; });
+  /* Height is the invariant - see tweenPillWidths. A rolled-back width still slides. */
+  if(wEls.length && pills.scrollHeight!==hNat){
+    wEls.forEach(p=>{ p.style.width=""; p.style.transition=""; delete p.dataset._eW; });
+    wEls.length=0;
+  }
+  els.forEach((p,i)=>{
     const a=p.getBoundingClientRect();
-    /* Width changes ride the same flip - a selection bolds the name, a recount changes the
-       digits, and either snapping while neighbours slide reads as a glitch. 1.5px floor:
-       fractional DPRs round every pill differently on every pass. */
-    if(Math.abs(b.width-a.width)>=1.5){ wEls.push(p); wStarts.push(b.width); p.dataset._eW=a.width; }
     // whole pixels only - fractional offsets put the text on a half-pixel and it blurs
-    const dx=Math.round(b.left-a.left), dy=Math.round(b.top-a.top);
+    const dx=Math.round(bs[i].left-a.left), dy=Math.round(bs[i].top-a.top);
     if(!dx && !dy) return;
     moved.push(p); deltas.push(dx+"px,"+dy+"px");
   });
@@ -81,10 +98,6 @@ function flipPills(before){
     p.style.willChange="transform";
     p.style.transform="translate("+deltas[i]+")";
   });
-  /* Width rides the SAME transition string as the slide - two tweens fighting over
-     style.transition left whichever wrote last, and the other snapped. */
-  const hNat=pills.scrollHeight;   // through the clip - see the note at tweenPillWidths
-  wEls.forEach((p,i)=>{ if(moved.indexOf(p)<0) p.style.transition="none"; p.style.width=wStarts[i]+"px"; });
   if(!moved.length && !wEls.length) return;
   /* Commit the inverted position before attaching the transition. A frame is not a commitment:
      these elements were often created by the re-render a moment ago, and if the browser never
@@ -93,11 +106,6 @@ function flipPills(before){
      appeared in its new place. One forced reflow, then attach and release in the same task -
      which also removes the rAF that a background tab would otherwise pause indefinitely. */
   void pills.offsetHeight;
-  /* Height is the invariant - see tweenPillWidths. A rolled-back width still slides. */
-  if(wEls.length && pills.scrollHeight!==hNat){
-    wEls.forEach(p=>{ p.style.width=""; delete p.dataset._eW; });
-    wEls.length=0;
-  }
   const T="var(--m-move) "+E_EASE;
   moved.forEach(p=>{ p.style.transition="transform "+T+(wEls.indexOf(p)>=0?", width "+T:""); p.style.transform=""; });
   wEls.forEach(p=>{ if(moved.indexOf(p)<0) p.style.transition="width "+T; p.style.width=p.dataset._eW+"px"; });
@@ -112,84 +120,23 @@ function animateReorder(mutate){
   drawPills();
   flipPills(before);
 }
-/* FLIP for cards when an intent re-sorts them. Same two-half shape as the pills, but
-   cards need guards the pills do not, because a card list is not a pill strip:
-   - MEMBERSHIP must be identical. Macro search removes 175 of 199 entries; that is a filter,
-     not a reorder, and there is nothing to interpolate for a card that no longer exists.
-   - SIZE cap. In the All view an intent re-sort moves 197 cards a median of 1747px and a
-     maximum of 42861px. A card crossing 42861px in a fifth of a second is a blur artifact,
-     and it would mean 199 transform layers.
-   - TRAVEL cap per card, for the same reason at the level of a single card.
-   - VIEWPORT filter. Cards are ~274px tall, so about three are on screen; animating the rest
-     is invisible work.
-   - SCROLL-TOP only. pickIntent sets pendingScrollHit, and render() then smooth-scrolls to
-     the first linked entry, which can be a 12000px journey. Animating card positions under a
-     viewport travelling that far reads as chaos. Near the top that scroll is a no-op, which
-     is exactly when the animation is worth having, so the two never run at once. */
-/* No cap on how many cards are on the PAGE. The old 25-cap meant a real catalog never
-   animated - the measurement was of the wrong thing: an intent pick moves ~200 cards,
-   but only NINE are anywhere near the viewport. What has to be capped is TRANSFORMS,
-   which the viewport filter and CARD_MOVE_MAX below already do - the same shape
-   flipCardsAround() uses for star and hide. */
-/* Travel cap at half a viewport (~1.5 cards): far enough to watch a card change
-   places, not far enough to be mistaken for the page scrolling - long moves read as
-   unwanted auto-scroll, never as swaps. */
-const CARD_FLIP_TRAVEL_VH=0.5;
+/* A PICK AND A CLEAR RE-SORT THE CARDS UNDER THE SETTLE'S PLAN (glideSettle below): a card on
+   screen before and after glides both ways, across a column too, and one new to the screen rises
+   in where it lands. SCROLL-TOP only: pickIntent sets pendingScrollHit, and render() then
+   smooth-scrolls to the first linked entry, which can be a 12000px journey. Animating card
+   positions under a viewport travelling that far reads as chaos. Near the top that scroll is a
+   no-op, which is exactly when the animation is worth having, so the two never run at once. */
 const CARD_FLIP_SCROLL_TOP=80;     // only when the auto-scroll will not move the view
 function captureCards(){
   if(!list || mgReduceMotion() || pageScrollY()>CARD_FLIP_SCROLL_TOP) return null;
-  const els=list.querySelectorAll(".card[data-id]");
-  if(!els.length) return null;
-  /* Positions for the cards near the viewport, plus the total count. The count is what
-     tells a REORDER from a FILTER: a search removes most of the list, and there is
-     nothing to interpolate for a card that no longer exists. The captured subset cannot
-     say that - it is meant to be smaller than the list. */
-  const margin=window.innerHeight;
-  const tops={};
-  let n=0;
-  els.forEach(c=>{
-    n++;
-    const r=c.getBoundingClientRect();
-    if(r.bottom>-margin && r.top<window.innerHeight+margin) tops[c.dataset.id]=r.top;
-  });
-  return {n:n, tops:tops};
+  return captureSettle();
 }
 function flipCards(before){
-  if(!before || !list) return;
-  const els=Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
-  // Identical membership only - a filter is not a reorder.
-  if(!els.length || els.length!==before.n) return;
-  /* Honest rects: the render that preceded this replaced every node, and
-     content-visibility:auto resolves relevancy a frame later - a rect read now sees the
-     220px estimate, not the card. Forcing the property on the watched cards makes their
-     rects real; the scroll-top gate in captureCards() means nothing estimated sits above
-     them, so real is also correct. Released with the transition cleanup, or on any bail. */
-  const watched=[];
-  els.forEach(c=>{ if(before.tops[c.dataset.id]!=null){ watched.push(c); c.style.contentVisibility="visible"; } });
-  const release=()=>watched.forEach(c=>{ c.style.contentVisibility=""; });
-  const limit=window.innerHeight*CARD_FLIP_TRAVEL_VH, margin=window.innerHeight;
-  const moved=[], dys=[];
-  watched.forEach(c=>{
-    const b=before.tops[c.dataset.id];
-    const r=c.getBoundingClientRect();
-    if(r.bottom<-margin || r.top>window.innerHeight+margin) return;
-    // whole pixels only - fractional offsets put the text on a half-pixel and it blurs
-    const dy=Math.round(b-r.top);
-    if(!dy || Math.abs(dy)>limit) return;
-    moved.push(c); dys.push(dy);
-  });
-  if(!moved.length || moved.length>CARD_MOVE_MAX){ release(); return; }
-  moved.forEach((c,i)=>{ c.style.transition="none"; c.style.willChange="transform";
-                         c.style.transform="translateY("+dys[i]+"px)"; });
-  const clear=()=>{ moved.forEach(c=>{ c.style.transition=""; c.style.transform=""; c.style.willChange=""; }); release(); };
-  // Commit the invert before attaching the transition - see the note in flipPills().
-  void list.offsetHeight;
-  moved.forEach(c=>{ c.style.transition="transform var(--m-move) "+E_EASE; c.style.transform=""; });
-  setTimeout(clear,280);
+  glideSettle(before,"move");
 }
 /* THE SETTLE'S GLIDE: when a search settles, the cards on screen travel to their new places on
-   the spring, and a card new to the screen rises in. A filter as well as a reorder, unlike the
-   pick's flip above, so matching is by id and membership may differ. Near the top only, for
+   the spring, and a card new to the screen rises in. A filter as well as a reorder, so matching
+   is by id and membership may differ. Near the top only, for
    flipCardsAround()'s reason: deep in the list the new places ride on estimated cards. */
 let eSettleRuns=[];
 function captureSettle(){
@@ -207,7 +154,8 @@ function captureSettle(){
   return at;
 }
 const E_SPRING_OK=typeof CSS!=="undefined" && CSS.supports && CSS.supports("transition-timing-function","linear(0,1)");
-function glideSettle(before){
+/* `tier` "move" is a press's re-sort, on the 180ms curve; a settled search travels on the spring. */
+function glideSettle(before,tier){
   if(!before || !list) return;
   const vh=window.innerHeight;
   if(list.getBoundingClientRect().top<=-vh*0.5) return;
@@ -226,12 +174,13 @@ function glideSettle(before){
     if((dx||dy) && Math.abs(dy)<=vh*1.2) plan.push([el,dx,dy]);
   }
   if(!plan.length) return;
+  const glide=tier==="move" ? {duration:M_MS.move,easing:E_EASE}
+    : {duration:E_SPRING_MS,easing:E_SPRING_OK?E_SPRING:E_EASE};
   plan.forEach(([el,dx,dy])=>{
     eSettleRuns.push(dx==null
       ? el.animate([{opacity:0,transform:"translateY(8px) scale(.985)"},{opacity:1,transform:"none"}],
           {duration:M_MS.surface,easing:E_EASE})
-      : el.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
-          {duration:E_SPRING_MS,easing:E_SPRING_OK?E_SPRING:E_EASE}));
+      : el.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],glide));
   });
   eKickPump();   // no animationstart for a scripted animation, so the pump is asked by hand
 }
@@ -361,7 +310,7 @@ function cancelPickTail(){
 }
 
 export {
-  wirePumpKick, flipPills, animateReorder, captureCards, flipCards, captureSettle, glideSettle,
+  wirePumpKick, pillKey, flipPills, animateReorder, captureCards, flipCards, captureSettle, glideSettle,
   wirePillDrag,
   paintRailSelection, paintIntentRings,
   schedulePickTail,

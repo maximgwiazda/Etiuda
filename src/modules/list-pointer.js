@@ -3,7 +3,7 @@ import { cardLang, cardTitle, findCard, parts } from "./card-model.js";
 import { moveCardOrder } from "./card-order.js";
 import { isCollapsed, toggleCollapsed } from "./collapse.js";
 import { intentPickedLine, fill } from "./intent-text.js";
-import { mgReduceMotion, E_EASE, CARD_MOVE_MAX } from "./motion.js";
+import { mgReduceMotion, E_EASE, CARD_MOVE_MAX, M_MS } from "./motion.js";
 import { pack, savePack, saveStats } from "./pack.js";
 import { bumpLang, bumpUse } from "./desk-stats.js";
 import { cardSearchTerms } from "./spell.js";
@@ -30,8 +30,8 @@ const CARD_DRAG_REVERSE=8;
    be reused: that one refuses above 25 cards because an intent reshuffles the whole
    list; this moves ONE card plus the neighbours closing its gap. So the cap here is on
    what gets TRANSFORMED: cards within half a screen, moves shorter than one viewport, at
-   most CARD_MOVE_MAX of them. A card leaving for far off-screen is not animated - the
-   gap closing behind it still says where it went. */
+   most CARD_MOVE_MAX of them. Past the cap a card takes the family's dismiss where it stood,
+   and one arriving from past it rises in where it lands. */
 function flipCardsAround(mutate,opts){
   if(!list || mgReduceMotion()){ mutate(); return; }
   const vh=window.innerHeight, margin=vh*0.5;
@@ -48,54 +48,101 @@ function flipCardsAround(mutate,opts){
      so the estimate rects narrow the watch first and only cards that can land near the
      viewport get forced. */
   const clamp=opts&&opts.clampTravel;
-  /* Only while the watched window reaches the columns' first cards. The re-render
-     replaces every node and content-visibility resolves relevancy a frame later - a rect
-     read straight afterwards is the 220px estimate. Forcing the watched cards real is not
-     enough: their positions still ride on every estimated card ABOVE them in the column,
-     and that offset has a hide's exact signature (one uniform card height). Near the top
-     nothing sits above to estimate - and that is where star and hide are used: the
-     favourites block. Scrolled deep, the honest options are a full layout (the exact
-     cost content-visibility avoids) or no animation; the card takes its new place - the
-     standing preference over animating from offsets that never existed. */
-  if(list.getBoundingClientRect().top<=-margin){ mutate(); return; }
-  const before={};
+  /* `leave`: the card being put away leaves where it stands, whatever its new place. */
+  const leave=opts&&opts.leave;
+  /* A fold deep in the list does not glide, as before. Star and hide keep every other card's
+     node (keepPoolAcross), so what sits above the view keeps the size content-visibility
+     remembers, and what the act brings into the browser's band is forced real below. */
+  if(clamp && list.getBoundingClientRect().top<=-margin){ mutate(); return; }
+  const before={}, was={};
+  /* THE BAND THE BROWSER LAYS OUT: a card skipping its contents sits at its estimate, and one the
+     act brings into the band is laid out a frame later, moving every card under it mid-glide. So
+     the band is read here, between the nearest skipped cards each way, and what lands in it after
+     the act is forced real. Forcing a card outside it would move the list for no reason. */
+  const probe=typeof Element!=="undefined" && typeof Element.prototype.checkVisibility==="function";
+  let bandTop=probe?-2*vh:-vh, bandBot=probe?2*vh:2*vh;
   // READ pass, then the mutation, then a READ pass and a WRITE pass - never interleaved.
   list.querySelectorAll(".card[data-id]").forEach(el=>{
     const r=el.getBoundingClientRect();
-    if(clamp || (r.bottom>-margin && r.top<vh+margin)) before[el.dataset.id]=r.top;
+    if(clamp || (r.bottom>-margin && r.top<vh+margin)){ before[el.dataset.id]=r; was[el.dataset.id]=el; }
+    const c=probe && !clamp && (r.bottom<=0 || r.top>=vh) && el.firstElementChild;
+    if(c && !c.checkVisibility({contentVisibilityAuto:true})){
+      if(r.bottom<=0) bandTop=Math.max(bandTop,r.bottom); else bandBot=Math.min(bandBot,r.top);
+    }
   });
   mutate();                                   // the toggles mutate AND re-render
+  const onScreen=r=>r.bottom>0 && r.top<vh;
   const watched=[];
   list.querySelectorAll(".card[data-id]").forEach(el=>{
-    if(before[el.dataset.id]==null) return;
-    if(clamp){
-      const r=el.getBoundingClientRect();     // estimate rect - only good enough to shortlist
-      if(r.bottom<-1.5*vh || r.top>2.5*vh) return;
-    }
-    watched.push(el); el.style.contentVisibility="visible";
+    const r=el.getBoundingClientRect();       // estimate rect - only good enough to shortlist
+    if(clamp){ if(before[el.dataset.id]==null || r.bottom<-1.5*vh || r.top>2.5*vh) return; }
+    else if(r.bottom<=bandTop || r.top>=bandBot) return;
+    watched.push(el);
   });
+  watched.forEach(el=>{ el.style.contentVisibility="visible"; });
   const release=()=>watched.forEach(el=>{ el.style.contentVisibility=""; });
-  const moved=[], dys=[];
+  const moved=[], offs=[], rising=[], gone=[], seen={};
   watched.forEach(el=>{
-    const b=before[el.dataset.id];
+    const id=el.dataset.id, b=before[id];
     const r=el.getBoundingClientRect();
-    if(r.bottom<-margin || r.top>vh+margin) return;
-    // whole pixels only - a fractional offset puts the text on a half-pixel and it blurs
-    let dy=Math.round(b-r.top);
-    if(!dy) return;
-    if(Math.abs(dy)>vh && !clamp) return;
+    seen[id]=1;
+    if(!clamp && (id===leave || !b)){
+      if(onScreen(r)) rising.push(el);
+      if(id===leave && b && onScreen(b)) gone.push(id);
+      return;
+    }
+    if(!b) return;
+    // Off the watch at the far end: gone unless it began on screen and a star or a hide moved it.
+    if((r.bottom<-margin || r.top>vh+margin) && (clamp || !onScreen(b))) return;
+    /* whole pixels only - a fractional offset puts the text on a half-pixel and it blurs. Across
+       as well as down: a star or a hide can deal a card into the other column. */
+    const dx=Math.round(b.left-r.left);
+    let dy=Math.round(b.top-r.top);
+    if(!dx && !dy) return;
+    /* Past the cap a card leaves where it was, and rises in where it lands if that is on screen;
+       one on screen at both ends is exempt, as a rail row is (flipRail). */
+    if(Math.abs(dy)>vh && !clamp && !(onScreen(b) && onScreen(r))){
+      if(onScreen(b)) gone.push(id);
+      if(onScreen(r)) rising.push(el);
+      return;
+    }
     if(clamp && Math.abs(dy)>clamp) dy=(dy>0?clamp:-clamp);
-    moved.push(el); dys.push(dy);
+    moved.push(el); offs.push("translate("+dx+"px,"+dy+"px)");
   });
-  if(!moved.length || moved.length>CARD_MOVE_MAX){ release(); return; }
+  if(!clamp) Object.keys(before).forEach(id=>{
+    if(!seen[id] && onScreen(before[id]) && gone.indexOf(id)<0) gone.push(id);
+  });
+  if(moved.length>CARD_MOVE_MAX || !(moved.length || rising.length || gone.length)){ release(); return; }
+  /* THE LEAVING COPY, a clone of the node as it stood (never the node: the pool may hand it out
+     again). Fixed, then corrected by one read, since an ancestor may hold the frame. */
+  const copies=gone.map(id=>{
+    const g=was[id].cloneNode(true), b=before[id];
+    g.removeAttribute("data-id"); g.setAttribute("data-leave",id); g.setAttribute("aria-hidden","true");
+    g.classList.add("e-card-leave");
+    g.style.cssText="left:"+b.left+"px;top:"+b.top+"px;width:"+b.width+"px;height:"+b.height+"px";
+    list.prepend(g);
+    return g;
+  });
+  const fix=copies.length ? copies[0].getBoundingClientRect() : null;
   moved.forEach((el,i)=>{ el.style.transition="none"; el.style.willChange="transform";
-                          el.style.transform="translateY("+dys[i]+"px)"; });
+                          el.style.transform=offs[i]; });
+  if(fix){
+    const ox=Math.round(fix.left-before[gone[0]].left), oy=Math.round(fix.top-before[gone[0]].top);
+    copies.forEach(g=>{
+      if(ox||oy){ g.style.left=(parseFloat(g.style.left)-ox)+"px"; g.style.top=(parseFloat(g.style.top)-oy)+"px"; }
+      g.addEventListener("animationend",()=>g.remove());
+      setTimeout(()=>{ if(g.parentNode) g.remove(); },M_MS.dismiss+120);
+    });
+  }
   /* Commit the invert before attaching the transition - see the note at flipPills():
      without a computed start value Firefox shows the end state. One forced reflow for
      the whole list, then attach and release in the same task. */
   void (list||document.body).offsetHeight;
   const clear=()=>{ moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; }); release(); };
   moved.forEach(el=>{ el.style.transition="transform var(--m-move) "+E_EASE; el.style.transform=""; });
+  // A card new to the screen rises in where it lands, as a settle's arrival does.
+  rising.forEach(el=>el.animate([{opacity:0,transform:"translateY(8px) scale(.985)"},{opacity:1,transform:"none"}],
+    {duration:M_MS.surface,easing:E_EASE}));
   setTimeout(clear,240);
 }
 /* Fold and unfold move: the survivors glide through flipCardsAround exactly as for a
@@ -351,7 +398,7 @@ function wireListPointer(){
       if(act==="fav"){ if(id) flipCardsAround(()=>toggleFavourite(id)); }
       else if(act==="edit") hooks.openCardEditor(id);
       else if(act==="note") toggleNotePane(actBtn, id);
-      else if(act==="hide") flipCardsAround(()=>hooks.hideCard(id));
+      else if(act==="hide") flipCardsAround(()=>hooks.hideCard(id), card.classList.contains("is-hidden") ? null : {leave:id});
       return;
     }
     const code=e.target.closest(".swap code");

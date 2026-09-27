@@ -22,6 +22,7 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const E = require("./engine.js");
+const MOTION = require("./motion.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const WHICH = (process.argv[2] || "chrome").toLowerCase();
 /* THE DECLARED NUMBER OF CHECKS, and why a tally is not a verdict without one. A section that
@@ -33,7 +34,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 241 };
+const EXPECTED = { chrome: 255 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -3188,6 +3189,35 @@ const t0 = Date.now();
     if (orderCtx) await orderCtx.close().catch(() => {});
   }
   clean(e, "the comment language's wiring");
+
+  /* THE MOTION LEGS, tests/motion.js, which says how a frame is read. A context of their own, so
+     nothing the run above starred, hid or reordered is under them. One line per leg whatever
+     happens, so a boot that fails still counts every leg it did not run. */
+  e = since();
+  let motionCtx = null, motionRan = 0;
+  try {
+    motionCtx = b.createBrowserContext ? await b.createBrowserContext() : await b.createIncognitoBrowserContext();
+    const m = await motionCtx.newPage();
+    await m.setViewport(MOTION.VIEW);
+    m.on("dialog", d => d.accept());
+    m.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
+    const late = await bootAndDismiss(m, RUN.url, "the motion page");
+    await m.evaluate(() => { const x = document.getElementById("eAgentModal"); if (x) x.remove(); });
+    await m.evaluate(MOTION.instrument);
+    if (late.length) console.log("  the motion page WAITED OUT: " + late.join("; "));
+    for (const L of MOTION.LEGS) {
+      await MOTION.rest(m);
+      let r;
+      try { r = await L.fn(m); } catch (x) { r = { ok: false, text: "threw: " + (x && x.message || x) }; }
+      motionRan++;
+      check(r.ok, L.id + " " + L.what + ": " + r.text);
+    }
+  } catch (x) {
+    MOTION.LEGS.slice(motionRan).forEach(L => check(false, L.id + " " + L.what + ": not driven, " + (x && x.message || x)));
+  } finally {
+    if (motionCtx) await motionCtx.close().catch(() => {});
+  }
+  clean(e, "the motion legs");
 
   /* THE VIEWPORT BATCH'S OWN LEG, board item 630. A batch of sleeps moved onto a condition is
      a change that can be wrong in two directions, and this covers the one the legs downstream

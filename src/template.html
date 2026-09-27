@@ -1563,6 +1563,9 @@ main{max-width:none;margin:16px 0 0;padding:0}
    flipCardsAround at the same time. A collapse plays no exit - the gap closing behind the
    group is this list's standing language for departure. */
 .card.e-unfolding{animation:e-unfold var(--m-move) var(--m-ease)}
+/* A card put away leaves where it stood: a copy of it takes the family's dismiss while the cards
+   around it close the gap (flipCardsAround). */
+#list .card.e-card-leave{position:fixed;margin:0;pointer-events:none;animation:eLeave var(--m-dismiss) ease forwards}
 @keyframes e-unfold{from{opacity:0;transform:translateY(-6px)}}
 
 /* ---- Card columns: each column is its own stack, groups DEALT into them - first
@@ -1616,6 +1619,9 @@ main{max-width:none;margin:16px 0 0;padding:0}
    Firefox has supported this since 125, Chrome since 85; where it is unsupported the property
    is ignored and the list behaves exactly as it did. */
 #list .card{content-visibility:auto;contain-intrinsic-size:auto 220px}
+/* A card at rest is contained, so its last slab's bottom margin stays inside it. A card forced
+   visible loses the containment: flow-root keeps the margin in, or the card snaps 10px shorter. */
+#list .card{display:flow-root}
 .card.dragging{opacity:.55;z-index:2}
 html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
 .cbadge.hit{background:var(--go-soft);color:var(--go);border:1px solid var(--go)}

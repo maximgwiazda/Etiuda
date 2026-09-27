@@ -1563,6 +1563,9 @@ main{max-width:none;margin:16px 0 0;padding:0}
    flipCardsAround at the same time. A collapse plays no exit - the gap closing behind the
    group is this list's standing language for departure. */
 .card.e-unfolding{animation:e-unfold var(--m-move) var(--m-ease)}
+/* A card put away leaves where it stood: a copy of it takes the family's dismiss while the cards
+   around it close the gap (flipCardsAround). */
+#list .card.e-card-leave{position:fixed;margin:0;pointer-events:none;animation:eLeave var(--m-dismiss) ease forwards}
 @keyframes e-unfold{from{opacity:0;transform:translateY(-6px)}}
 
 /* ---- Card columns: each column is its own stack, groups DEALT into them - first
@@ -1616,6 +1619,9 @@ main{max-width:none;margin:16px 0 0;padding:0}
    Firefox has supported this since 125, Chrome since 85; where it is unsupported the property
    is ignored and the list behaves exactly as it did. */
 #list .card{content-visibility:auto;contain-intrinsic-size:auto 220px}
+/* A card at rest is contained, so its last slab's bottom margin stays inside it. A card forced
+   visible loses the containment: flow-root keeps the margin in, or the card snaps 10px shorter. */
+#list .card{display:flow-root}
 .card.dragging{opacity:.55;z-index:2}
 html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
 .cbadge.hit{background:var(--go-soft);color:var(--go);border:1px solid var(--go)}
@@ -4556,7 +4562,8 @@ What you type stays in this browser only.`;
     "shedHold",
     "shedHolding",
     "shedWordmarkW",
-    "cardFillKey"
+    "cardFillKey",
+    "keepPoolAcross"
   ];
   var hooks = /* @__PURE__ */ Object.create(null);
   function wireHooks(map) {
@@ -7656,7 +7663,7 @@ What you type stays in this browser only.`;
         const w = list.parentNode.clientWidth || 0;
         if (w === colAvailW) return;
         colSetAvailW(w);
-        if (colCount() !== colLastN) requestAnimationFrame(() => hooks.render());
+        if (colCount() !== colLastN) hooks.render();
       }).observe(list.parentNode);
     }
   }
@@ -13475,6 +13482,7 @@ What you type stays in this browser only.`;
     schedulePillsCollapse: () => schedulePillsCollapse,
     syncLayoutPrefs: () => syncLayoutPrefs,
     syncPillsCollapse: () => syncPillsCollapse,
+    syncPillsCollapseNow: () => syncPillsCollapseNow,
     togglePills: () => togglePills,
     togglePillsLock: () => togglePillsLock
   });
@@ -13556,6 +13564,11 @@ What you type stays in this browser only.`;
   function pillsSlot() {
     return $("#pillsSlot");
   }
+  function pillsWrapHeight(el) {
+    let h = 0;
+    for (const c of el.children) h = Math.max(h, c.offsetTop + c.offsetHeight);
+    return h;
+  }
   function syncPillsCollapse() {
     const el = pills;
     const slot = pillsSlot();
@@ -13573,7 +13586,7 @@ What you type stays in this browser only.`;
     const styles = getComputedStyle(el);
     const gap = parseFloat(styles.rowGap || styles.gap) || 6;
     const two = lineH * 2 + gap;
-    const full = el.scrollHeight;
+    const full = pillsWrapHeight(el);
     slot.style.removeProperty("--pills-full");
     if (full > two + 1) {
       slot.classList.add("pills-overflow");
@@ -13587,8 +13600,13 @@ What you type stays in this browser only.`;
     }
     if (keepExpand) slot.classList.add("pills-expand");
   }
+  var ePillsSettled = false;
+  function syncPillsCollapseNow() {
+    if (ePillsSettled) syncPillsCollapse();
+  }
   function schedulePillsCollapse() {
     requestAnimationFrame(() => requestAnimationFrame(() => {
+      ePillsSettled = true;
       syncPillsCollapse();
       rememberPillsShape();
       hooks.scheduleRailGeometry();
@@ -14512,8 +14530,9 @@ What you type stays in this browser only.`;
   var card_pool_exports = {};
   __export(card_pool_exports, {
     cancelLangChunks: () => cancelLangChunks,
+    keepPoolAcross: () => keepPoolAcross,
     paintList: () => paintList,
-    rebuildCardInPlace: () => rebuildCardInPlace,
+    rebuildCardsInPlace: () => rebuildCardsInPlace,
     runLangChunks: () => runLangChunks,
     settleFreshCards: () => settleFreshCards
   });
@@ -14573,6 +14592,7 @@ What you type stays in this browser only.`;
     glideSettle: () => glideSettle,
     paintIntentRings: () => paintIntentRings,
     paintRailSelection: () => paintRailSelection,
+    pillKey: () => pillKey,
     schedulePickTail: () => schedulePickTail,
     wirePillDrag: () => wirePillDrag,
     wirePumpKick: () => wirePumpKick
@@ -14598,19 +14618,43 @@ What you type stays in this browser only.`;
       document.addEventListener(t2, eKickPump, true);
     });
   }
+  function pillKey(p) {
+    return p.dataset.k != null ? p.dataset.k : p.classList.contains("pill-add") ? null : void 0;
+  }
   function flipPills(before) {
     if (!before) return;
-    const moved = [], deltas = [], wEls = [], wStarts = [];
+    const els = [], bs = [], moved = [], deltas = [], wEls = [], wStarts = [];
     pills.querySelectorAll(".pill").forEach((p) => {
-      const k = p.dataset.k, b = k && before[k];
-      if (!b) return;
-      const a = p.getBoundingClientRect();
-      if (Math.abs(b.width - a.width) >= 1.5) {
-        wEls.push(p);
-        wStarts.push(b.width);
-        p.dataset._eW = a.width;
+      const k = pillKey(p), b = k !== void 0 && before.get(k);
+      if (b) {
+        els.push(p);
+        bs.push(b);
       }
-      const dx = Math.round(b.left - a.left), dy = Math.round(b.top - a.top);
+    });
+    const hNat = pills.scrollHeight;
+    els.forEach((p, i) => {
+      const w = p.getBoundingClientRect().width;
+      if (Math.abs(bs[i].width - w) >= 1.5) {
+        wEls.push(p);
+        wStarts.push(bs[i].width);
+        p.dataset._eW = w;
+      }
+    });
+    wEls.forEach((p, i) => {
+      p.style.transition = "none";
+      p.style.width = wStarts[i] + "px";
+    });
+    if (wEls.length && pills.scrollHeight !== hNat) {
+      wEls.forEach((p) => {
+        p.style.width = "";
+        p.style.transition = "";
+        delete p.dataset._eW;
+      });
+      wEls.length = 0;
+    }
+    els.forEach((p, i) => {
+      const a = p.getBoundingClientRect();
+      const dx = Math.round(bs[i].left - a.left), dy = Math.round(bs[i].top - a.top);
       if (!dx && !dy) return;
       moved.push(p);
       deltas.push(dx + "px," + dy + "px");
@@ -14620,20 +14664,8 @@ What you type stays in this browser only.`;
       p.style.willChange = "transform";
       p.style.transform = "translate(" + deltas[i] + ")";
     });
-    const hNat = pills.scrollHeight;
-    wEls.forEach((p, i) => {
-      if (moved.indexOf(p) < 0) p.style.transition = "none";
-      p.style.width = wStarts[i] + "px";
-    });
     if (!moved.length && !wEls.length) return;
     void pills.offsetHeight;
-    if (wEls.length && pills.scrollHeight !== hNat) {
-      wEls.forEach((p) => {
-        p.style.width = "";
-        delete p.dataset._eW;
-      });
-      wEls.length = 0;
-    }
     const T = "var(--m-move) " + E_EASE;
     moved.forEach((p) => {
       p.style.transition = "transform " + T + (wEls.indexOf(p) >= 0 ? ", width " + T : "");
@@ -14662,70 +14694,13 @@ What you type stays in this browser only.`;
     drawPills();
     flipPills(before);
   }
-  var CARD_FLIP_TRAVEL_VH = 0.5;
   var CARD_FLIP_SCROLL_TOP = 80;
   function captureCards() {
     if (!list || mgReduceMotion() || pageScrollY() > CARD_FLIP_SCROLL_TOP) return null;
-    const els = list.querySelectorAll(".card[data-id]");
-    if (!els.length) return null;
-    const margin = window.innerHeight;
-    const tops = {};
-    let n = 0;
-    els.forEach((c) => {
-      n++;
-      const r = c.getBoundingClientRect();
-      if (r.bottom > -margin && r.top < window.innerHeight + margin) tops[c.dataset.id] = r.top;
-    });
-    return { n, tops };
+    return captureSettle();
   }
   function flipCards(before) {
-    if (!before || !list) return;
-    const els = Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
-    if (!els.length || els.length !== before.n) return;
-    const watched = [];
-    els.forEach((c) => {
-      if (before.tops[c.dataset.id] != null) {
-        watched.push(c);
-        c.style.contentVisibility = "visible";
-      }
-    });
-    const release = () => watched.forEach((c) => {
-      c.style.contentVisibility = "";
-    });
-    const limit = window.innerHeight * CARD_FLIP_TRAVEL_VH, margin = window.innerHeight;
-    const moved = [], dys = [];
-    watched.forEach((c) => {
-      const b = before.tops[c.dataset.id];
-      const r = c.getBoundingClientRect();
-      if (r.bottom < -margin || r.top > window.innerHeight + margin) return;
-      const dy = Math.round(b - r.top);
-      if (!dy || Math.abs(dy) > limit) return;
-      moved.push(c);
-      dys.push(dy);
-    });
-    if (!moved.length || moved.length > CARD_MOVE_MAX) {
-      release();
-      return;
-    }
-    moved.forEach((c, i) => {
-      c.style.transition = "none";
-      c.style.willChange = "transform";
-      c.style.transform = "translateY(" + dys[i] + "px)";
-    });
-    const clear = () => {
-      moved.forEach((c) => {
-        c.style.transition = "";
-        c.style.transform = "";
-        c.style.willChange = "";
-      });
-      release();
-    };
-    void list.offsetHeight;
-    moved.forEach((c) => {
-      c.style.transition = "transform var(--m-move) " + E_EASE;
-      c.style.transform = "";
-    });
-    setTimeout(clear, 280);
+    glideSettle(before, "move");
   }
   var eSettleRuns = [];
   function captureSettle() {
@@ -14747,7 +14722,7 @@ What you type stays in this browser only.`;
     return at;
   }
   var E_SPRING_OK = typeof CSS !== "undefined" && CSS.supports && CSS.supports("transition-timing-function", "linear(0,1)");
-  function glideSettle(before) {
+  function glideSettle(before, tier) {
     if (!before || !list) return;
     const vh = window.innerHeight;
     if (list.getBoundingClientRect().top <= -vh * 0.5) return;
@@ -14765,14 +14740,12 @@ What you type stays in this browser only.`;
       if ((dx || dy) && Math.abs(dy) <= vh * 1.2) plan.push([el, dx, dy]);
     }
     if (!plan.length) return;
+    const glide = tier === "move" ? { duration: M_MS.move, easing: E_EASE } : { duration: E_SPRING_MS, easing: E_SPRING_OK ? E_SPRING : E_EASE };
     plan.forEach(([el, dx, dy]) => {
       eSettleRuns.push(dx == null ? el.animate(
         [{ opacity: 0, transform: "translateY(8px) scale(.985)" }, { opacity: 1, transform: "none" }],
         { duration: M_MS.surface, easing: E_EASE }
-      ) : el.animate(
-        [{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "none" }],
-        { duration: E_SPRING_MS, easing: E_SPRING_OK ? E_SPRING : E_EASE }
-      ));
+      ) : el.animate([{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "none" }], glide));
     });
     eKickPump();
   }
@@ -15109,22 +15082,26 @@ What you type stays in this browser only.`;
         next.el.classList.add("rr-cont");
       }
     }
+    const runs = [];
     for (let s = 0; s < relRows.length; s++) {
       if (!relRows[s]) continue;
       let e = s;
       while (relRows[e + 1] && relRows[e + 1].sig === relRows[s].sig) e++;
       if (e > s) {
-        const top0 = relRows[s].el.offsetTop;
-        const lastEl = relRows[e].el;
-        const runH = lastEl.offsetTop + lastEl.offsetHeight - top0;
-        for (let j = s; j <= e; j++) {
-          const el = relRows[j].el, bridge = j > s ? 2 : 0;
-          el.style.setProperty("--rr-h", runH + "px");
-          el.style.setProperty("--rr-y", -(el.offsetTop - bridge - top0) + "px");
-        }
+        const tops = [];
+        for (let j = s; j <= e; j++) tops.push(relRows[j].el.offsetTop);
+        runs.push({ s, tops, h: relRows[e].el.offsetHeight });
       }
       s = e;
     }
+    runs.forEach((run) => {
+      const top0 = run.tops[0], runH = run.tops[run.tops.length - 1] + run.h - top0;
+      run.tops.forEach((top, i) => {
+        const el = relRows[run.s + i].el, bridge = i ? 2 : 0;
+        el.style.setProperty("--rr-h", runH + "px");
+        el.style.setProperty("--rr-y", -(top - bridge - top0) + "px");
+      });
+    });
   }
   var CARD_TOKEN_RE = /\{(GREET|AGENT|PAX|ROLE|INIT|INTENT|ACTION|TOPIC|Z|DAYPART)/;
   var TOKEN_CANARY = "{GREET}{AGENT}{PAX}{ROLE}{INIT}{INTENT}{ACTION}{TOPIC}{Z}x{DAYPART:a|b|c}";
@@ -15317,7 +15294,7 @@ What you type stays in this browser only.`;
       const seenAfter = seen(a, hgt, el.classList.contains("on"));
       const seenBefore = seen(b.y, hgt, b.on);
       if (!seenAfter && !seenBefore) return;
-      const exempt = seenBefore && keep && keep.has(String(el.dataset.si));
+      const exempt = seenBefore && (seenAfter || keep && keep.has(String(el.dataset.si)));
       if (Math.abs(dy) > limit && !exempt) {
         if (seenAfter && !seenBefore) entered.push(el);
         return;
@@ -15516,7 +15493,9 @@ What you type stays in this browser only.`;
       }
       toast("Added to Favourites");
     }
+    const was = ePackEpoch;
     savePack();
+    hooks.keepPoolAcross(was, [id]);
     syncFavouritesMeta();
     hooks.render();
   }
@@ -15726,8 +15705,10 @@ What you type stays in this browser only.`;
           else cats.push(id);
         } else setCats(cats.length === 1 && cats[0] === id ? [] : [id]);
         setPendingScrollHit(!!intentIdxs.length);
+        const cardsBefore = intentIdxs.length ? null : captureSettle();
         drawPills();
         hooks.render();
+        glideSettle(cardsBefore, "move");
         hooks.railEchoRedraw(railBefore, relBefore);
         scrollRailTop();
         scheduleTabSave();
@@ -15762,6 +15743,7 @@ What you type stays in this browser only.`;
     add.onclick = () => startPillCatAdd(add);
     pills.appendChild(add);
     if (addHadFocus) add.focus();
+    syncPillsCollapseNow();
     schedulePillsCollapse();
   }
   function startPillCatAdd(addEl) {
@@ -15807,9 +15789,10 @@ What you type stays in this browser only.`;
   }
   function capturePills() {
     if (mgReduceMotion()) return null;
-    const before = {};
+    const before = /* @__PURE__ */ new Map();
     pills.querySelectorAll(".pill").forEach((p) => {
-      if (p.dataset.k) before[p.dataset.k] = p.getBoundingClientRect();
+      const k = pillKey(p);
+      if (k !== void 0) before.set(k, p.getBoundingClientRect());
     });
     return before;
   }
@@ -16026,50 +16009,102 @@ What you type stays in this browser only.`;
     }
     const vh = window.innerHeight, margin = vh * 0.5;
     const clamp = opts && opts.clampTravel;
-    if (list.getBoundingClientRect().top <= -margin) {
+    const leave = opts && opts.leave;
+    if (clamp && list.getBoundingClientRect().top <= -margin) {
       mutate();
       return;
     }
-    const before = {};
+    const before = {}, was = {};
+    const probe = typeof Element !== "undefined" && typeof Element.prototype.checkVisibility === "function";
+    let bandTop = probe ? -2 * vh : -vh, bandBot = probe ? 2 * vh : 2 * vh;
     list.querySelectorAll(".card[data-id]").forEach((el) => {
       const r = el.getBoundingClientRect();
-      if (clamp || r.bottom > -margin && r.top < vh + margin) before[el.dataset.id] = r.top;
+      if (clamp || r.bottom > -margin && r.top < vh + margin) {
+        before[el.dataset.id] = r;
+        was[el.dataset.id] = el;
+      }
+      const c = probe && !clamp && (r.bottom <= 0 || r.top >= vh) && el.firstElementChild;
+      if (c && !c.checkVisibility({ contentVisibilityAuto: true })) {
+        if (r.bottom <= 0) bandTop = Math.max(bandTop, r.bottom);
+        else bandBot = Math.min(bandBot, r.top);
+      }
     });
     mutate();
+    const onScreen = (r) => r.bottom > 0 && r.top < vh;
     const watched = [];
     list.querySelectorAll(".card[data-id]").forEach((el) => {
-      if (before[el.dataset.id] == null) return;
+      const r = el.getBoundingClientRect();
       if (clamp) {
-        const r = el.getBoundingClientRect();
-        if (r.bottom < -1.5 * vh || r.top > 2.5 * vh) return;
-      }
+        if (before[el.dataset.id] == null || r.bottom < -1.5 * vh || r.top > 2.5 * vh) return;
+      } else if (r.bottom <= bandTop || r.top >= bandBot) return;
       watched.push(el);
+    });
+    watched.forEach((el) => {
       el.style.contentVisibility = "visible";
     });
     const release = () => watched.forEach((el) => {
       el.style.contentVisibility = "";
     });
-    const moved = [], dys = [];
+    const moved = [], offs = [], rising = [], gone = [], seen = {};
     watched.forEach((el) => {
-      const b = before[el.dataset.id];
+      const id = el.dataset.id, b = before[id];
       const r = el.getBoundingClientRect();
-      if (r.bottom < -margin || r.top > vh + margin) return;
-      let dy = Math.round(b - r.top);
-      if (!dy) return;
-      if (Math.abs(dy) > vh && !clamp) return;
+      seen[id] = 1;
+      if (!clamp && (id === leave || !b)) {
+        if (onScreen(r)) rising.push(el);
+        if (id === leave && b && onScreen(b)) gone.push(id);
+        return;
+      }
+      if (!b) return;
+      if ((r.bottom < -margin || r.top > vh + margin) && (clamp || !onScreen(b))) return;
+      const dx = Math.round(b.left - r.left);
+      let dy = Math.round(b.top - r.top);
+      if (!dx && !dy) return;
+      if (Math.abs(dy) > vh && !clamp && !(onScreen(b) && onScreen(r))) {
+        if (onScreen(b)) gone.push(id);
+        if (onScreen(r)) rising.push(el);
+        return;
+      }
       if (clamp && Math.abs(dy) > clamp) dy = dy > 0 ? clamp : -clamp;
       moved.push(el);
-      dys.push(dy);
+      offs.push("translate(" + dx + "px," + dy + "px)");
     });
-    if (!moved.length || moved.length > CARD_MOVE_MAX) {
+    if (!clamp) Object.keys(before).forEach((id) => {
+      if (!seen[id] && onScreen(before[id]) && gone.indexOf(id) < 0) gone.push(id);
+    });
+    if (moved.length > CARD_MOVE_MAX || !(moved.length || rising.length || gone.length)) {
       release();
       return;
     }
+    const copies = gone.map((id) => {
+      const g = was[id].cloneNode(true), b = before[id];
+      g.removeAttribute("data-id");
+      g.setAttribute("data-leave", id);
+      g.setAttribute("aria-hidden", "true");
+      g.classList.add("e-card-leave");
+      g.style.cssText = "left:" + b.left + "px;top:" + b.top + "px;width:" + b.width + "px;height:" + b.height + "px";
+      list.prepend(g);
+      return g;
+    });
+    const fix = copies.length ? copies[0].getBoundingClientRect() : null;
     moved.forEach((el, i) => {
       el.style.transition = "none";
       el.style.willChange = "transform";
-      el.style.transform = "translateY(" + dys[i] + "px)";
+      el.style.transform = offs[i];
     });
+    if (fix) {
+      const ox = Math.round(fix.left - before[gone[0]].left), oy = Math.round(fix.top - before[gone[0]].top);
+      copies.forEach((g) => {
+        if (ox || oy) {
+          g.style.left = parseFloat(g.style.left) - ox + "px";
+          g.style.top = parseFloat(g.style.top) - oy + "px";
+        }
+        g.addEventListener("animationend", () => g.remove());
+        setTimeout(() => {
+          if (g.parentNode) g.remove();
+        }, M_MS.dismiss + 120);
+      });
+    }
     void (list || document.body).offsetHeight;
     const clear = () => {
       moved.forEach((el) => {
@@ -16083,6 +16118,10 @@ What you type stays in this browser only.`;
       el.style.transition = "transform var(--m-move) " + E_EASE;
       el.style.transform = "";
     });
+    rising.forEach((el) => el.animate(
+      [{ opacity: 0, transform: "translateY(8px) scale(.985)" }, { opacity: 1, transform: "none" }],
+      { duration: M_MS.surface, easing: E_EASE }
+    ));
     setTimeout(clear, 240);
   }
   function animateFoldToggle(key) {
@@ -16336,7 +16375,7 @@ What you type stays in this browser only.`;
           if (id) flipCardsAround(() => toggleFavourite(id));
         } else if (act === "edit") hooks.openCardEditor(id);
         else if (act === "note") toggleNotePane(actBtn, id);
-        else if (act === "hide") flipCardsAround(() => hooks.hideCard(id));
+        else if (act === "hide") flipCardsAround(() => hooks.hideCard(id), card2.classList.contains("is-hidden") ? null : { leave: id });
         return;
       }
       const code = e.target.closest(".swap code");
@@ -16493,7 +16532,7 @@ What you type stays in this browser only.`;
       eLangChunkR = 0;
     }
   }
-  function rebuildCardInPlace(id) {
+  function rebuildCardInPlace(id, near) {
     const m = findCard(id), el = cardPool.get(id);
     if (!m || !el || !el.isConnected) return;
     const renderKey = String(uiLang()) + "|" + lang;
@@ -16514,19 +16553,39 @@ What you type stays in this browser only.`;
     fresh.__sig = ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1);
     const ord = el.getAttribute("data-ord");
     if (ord != null) fresh.setAttribute("data-ord", ord);
-    const was = el.getBoundingClientRect(), vh = window.innerHeight;
     el.replaceWith(fresh);
-    if (was.bottom > -vh && was.top < 2 * vh) holdFresh(fresh);
+    if (near) holdFresh(fresh);
     cardPool.set(id, fresh);
+  }
+  function cardsNear(ids) {
+    const vh = window.innerHeight;
+    return ids.map((id) => {
+      const el = cardPool.get(id);
+      if (!el || !el.isConnected) return false;
+      const r = el.getBoundingClientRect();
+      return r.bottom > -vh && r.top < 2 * vh;
+    });
+  }
+  function rebuildCardsInPlace(ids) {
+    const near = cardsNear(ids);
+    ids.forEach((id, i) => rebuildCardInPlace(id, near[i]));
   }
   function runLangChunks(ids) {
     const step = () => {
       eLangChunkR = 0;
-      ids.splice(0, 28).forEach(rebuildCardInPlace);
+      rebuildCardsInPlace(ids.splice(0, 28));
       if (ids.length) eLangChunkR = requestAnimationFrame(step);
     };
     cancelLangChunks();
     if (ids.length) eLangChunkR = requestAnimationFrame(step);
+  }
+  function keepPoolAcross(was, ids) {
+    const pre = was + "|", now = ePackEpoch + "|";
+    if (pre === now) return;
+    cardPool.forEach((el, id) => {
+      if (ids.indexOf(id) < 0 && typeof el.__sig === "string" && el.__sig.indexOf(pre) === 0)
+        el.__sig = now + el.__sig.slice(pre.length);
+    });
   }
   function paintList(spellNote, items) {
     if (cardPool.size > Math.max(2e3, Math.ceil(cards.length * 1.25))) cardPool = /* @__PURE__ */ new Map();
@@ -19364,7 +19423,9 @@ What you type stays in this browser only.`;
       }
       toast(lostStar ? "Put away - greyed at the foot of its category, unfavourited" : "Put away - greyed at the foot of its category");
     }
+    const was = ePackEpoch;
     savePack();
+    hooks.keepPoolAcross(was, [id]);
     const m = (cards || []).find((x) => x && x.id === id);
     if (m) {
       if (nowHidden) m._hidden = 1;
@@ -21455,7 +21516,7 @@ What you type stays in this browser only.`;
           } else if (r.bottom < -240) laterIds.push(id);
           else nowIds.push(id);
         }
-        nowIds.forEach(rebuildCardInPlace);
+        rebuildCardsInPlace(nowIds);
         runLangChunks(laterIds);
       }
       scheduleTabSave();
@@ -21796,6 +21857,7 @@ What you type stays in this browser only.`;
       shedHolding,
       shedWordmarkW,
       cardFillKey,
+      keepPoolAcross,
       capturePills,
       drawPillsCore,
       captureRail,

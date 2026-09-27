@@ -9,7 +9,7 @@ import { drawPills, scheduleTabSave } from "./tabs.js";
 import { cardSearchTerms } from "./spell.js";
 import { cardDrag } from "./list-pointer.js";
 import { render } from "./render.js";
-import { cancelLangChunks, rebuildCardInPlace, runLangChunks } from "./card-pool.js";
+import { cancelLangChunks, rebuildCardsInPlace, runLangChunks } from "./card-pool.js";
 import { catIconSvg } from "./cat-identity.js";
 import { esc } from "./esc.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
@@ -84,7 +84,7 @@ function setLang(l){
         else if(r.bottom<-240) laterIds.push(id);
         else nowIds.push(id);
       }
-      nowIds.forEach(rebuildCardInPlace);
+      rebuildCardsInPlace(nowIds);
       runLangChunks(laterIds);
     }
     // Language belongs to the active tab, so a switch is a tab edit like PAX or ROLE.

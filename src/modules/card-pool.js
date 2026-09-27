@@ -58,7 +58,9 @@ let eLangChunkR=0;
 function cancelLangChunks(){
   if(eLangChunkR){ cancelAnimationFrame(eLangChunkR); eLangChunkR=0; }
 }
-function rebuildCardInPlace(id){
+/* `near` is read by the caller for the whole batch before any card is swapped: a rect read after
+   the swap before it costs a layout per card. */
+function rebuildCardInPlace(id,near){
   const m=findCard(id), el=cardPool.get(id);
   if(!m || !el || !el.isConnected) return;
   const renderKey=String(uiLang())+"|"+lang;   // render()'s, which says what it leaves out
@@ -74,19 +76,43 @@ function rebuildCardInPlace(id){
     +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1);
   const ord=el.getAttribute("data-ord");
   if(ord!=null) fresh.setAttribute("data-ord",ord);
-  const was=el.getBoundingClientRect(), vh=window.innerHeight;
   el.replaceWith(fresh);
-  if(was.bottom>-vh && was.top<2*vh) holdFresh(fresh);   // see the note at holdFresh()
+  if(near) holdFresh(fresh);   // see the note at holdFresh()
   cardPool.set(id,fresh);
+}
+// Within a viewport of the screen, as rebuildCardInPlace() holds a fresh card real.
+function cardsNear(ids){
+  const vh=window.innerHeight;
+  return ids.map(id=>{
+    const el=cardPool.get(id);
+    if(!el || !el.isConnected) return false;
+    const r=el.getBoundingClientRect();
+    return r.bottom>-vh && r.top<2*vh;
+  });
+}
+function rebuildCardsInPlace(ids){
+  const near=cardsNear(ids);
+  ids.forEach((id,i)=>rebuildCardInPlace(id,near[i]));
 }
 function runLangChunks(ids){
   const step=()=>{
     eLangChunkR=0;
-    ids.splice(0,28).forEach(rebuildCardInPlace);
+    rebuildCardsInPlace(ids.splice(0,28));
     if(ids.length) eLangChunkR=requestAnimationFrame(step);
   };
   cancelLangChunks();
   if(ids.length) eLangChunkR=requestAnimationFrame(step);
+}
+/* After a save that rewrote the markup of the named cards and of no other: every other kept node
+   is re-signed with the new epoch, so the render that follows keeps it, and with it the size
+   content-visibility remembers. window.__verifyPool proves the claim for a caller. */
+function keepPoolAcross(was,ids){
+  const pre=was+"|", now=ePackEpoch+"|";
+  if(pre===now) return;
+  cardPool.forEach((el,id)=>{
+    if(ids.indexOf(id)<0 && typeof el.__sig==="string" && el.__sig.indexOf(pre)===0)
+      el.__sig=now+el.__sig.slice(pre.length);
+  });
 }
 /* Separators are rebuilt every render - there are a handful and they depend on their
    neighbours. Cards are kept unless their signature moved. */
@@ -143,7 +169,8 @@ function verifyPool(items){
 export {
   settleFreshCards,
   cancelLangChunks,
-  rebuildCardInPlace,
+  rebuildCardsInPlace,
   runLangChunks,
+  keepPoolAcross,
   paintList
 };

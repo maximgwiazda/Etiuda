@@ -312,24 +312,28 @@ function railBracketPass(relRows){
   }
   /* One gradient per RUN: per-row pseudos restarted the blend and the arm striped.
      Measured after layout, handed down as --rr-h/--rr-y; a continuation's pseudo starts
-     2px above its row (the gap bridge). One forced layout for the pass, then style-only
-     writes. */
+     2px above its row (the gap bridge). Every row is READ before any is written: a read
+     after a write recalculates the rail's style, once per row. */
+  const runs=[];
   for(let s=0;s<relRows.length;s++){
     if(!relRows[s]) continue;
     let e=s;
     while(relRows[e+1] && relRows[e+1].sig===relRows[s].sig) e++;
     if(e>s){
-      const top0=relRows[s].el.offsetTop;
-      const lastEl=relRows[e].el;
-      const runH=lastEl.offsetTop+lastEl.offsetHeight-top0;
-      for(let j=s;j<=e;j++){
-        const el=relRows[j].el, bridge=(j>s)?2:0;
-        el.style.setProperty("--rr-h",runH+"px");
-        el.style.setProperty("--rr-y",(-(el.offsetTop-bridge-top0))+"px");
-      }
+      const tops=[];
+      for(let j=s;j<=e;j++) tops.push(relRows[j].el.offsetTop);
+      runs.push({s:s, tops:tops, h:relRows[e].el.offsetHeight});
     }
     s=e;
   }
+  runs.forEach(run=>{
+    const top0=run.tops[0], runH=run.tops[run.tops.length-1]+run.h-top0;
+    run.tops.forEach((top,i)=>{
+      const el=relRows[run.s+i].el, bridge=i?2:0;
+      el.style.setProperty("--rr-h",runH+"px");
+      el.style.setProperty("--rr-y",(-(top-bridge-top0))+"px");
+    });
+  });
 }
 /* THE SIGNATURE PROBLEM: to know whether a card's markup changed we must not build it, since
    building it is the cost being avoided. So every input is read instead - and the awkward one
@@ -578,8 +582,9 @@ function flipRail(before,keep){
        one, and it bounds the journey to the panel's height; an exempt row sliding in from
        off-screen read as the interface lurching. Off-screen arrivals ENTER instead - a
        short fade at their final position: banning their travel while giving them no entry
-       made equal-sized relevance swaps produce NO motion at all, which read as failure. */
-    const exempt=seenBefore && keep && keep.has(String(el.dataset.si));
+       made equal-sized relevance swaps produce NO motion at all, which read as failure.
+       A row on screen at both ends is bounded by the panel the same way, so it travels too. */
+    const exempt=seenBefore && (seenAfter || (keep && keep.has(String(el.dataset.si))));
     if(Math.abs(dy)>limit && !exempt){
       if(seenAfter && !seenBefore) entered.push(el);
       return;
