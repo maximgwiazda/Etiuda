@@ -246,6 +246,30 @@ leg("m4", "a pill's glide begins where it was painted, on a settle that changes 
   return { ok, text: out.join(" | ") };
 });
 
+leg("m5", "a category press and All glide every card that stays on screen, and the cards it brings rise in", async p => {
+  /* The category of a card in the lower half of the screen, so that card stays and travels up. */
+  const k = await p.evaluate(() => {
+    const vh = innerHeight;
+    const c = [...document.querySelectorAll("#list .card[data-id]")].find(el => {
+      const r = el.getBoundingClientRect(); return r.top > vh * 0.5 && r.top < vh * 0.85; });
+    const m = c && findCard(c.getAttribute("data-id"));
+    return m ? String(m.c) : null;
+  });
+  if (k == null) return { ok: false, text: "no card in the lower half of the screen to follow" };
+  const out = [];
+  let ok = true;
+  for (const [what, key] of [["the press", k], ["All", ""]]) {
+    await p.evaluate(key => { window.__mtKey = key; }, key);
+    const r = await track(p, "cards", 700, () => { window.__mtAct = () =>
+      document.querySelector('#pills .pill[data-k="' + CSS.escape(window.__mtKey) + '"]').click(); });
+    const j = judge(r, { wantArrivals: true });
+    ok = ok && j.ok && j.moved > 0;
+    out.push(what + ": " + j.text);
+    await sleep(600);
+  }
+  return { ok, text: out.join(" | ") };
+});
+
 module.exports = { LEGS, instrument, rest, boot, VIEW };
 
 if (require.main === module) {

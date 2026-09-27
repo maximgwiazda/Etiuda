@@ -215,7 +215,8 @@ function captureSettle(){
   return at;
 }
 const E_SPRING_OK=typeof CSS!=="undefined" && CSS.supports && CSS.supports("transition-timing-function","linear(0,1)");
-function glideSettle(before){
+/* `tier` "move" is a press's re-sort, on the 180ms curve; a settled search travels on the spring. */
+function glideSettle(before,tier){
   if(!before || !list) return;
   const vh=window.innerHeight;
   if(list.getBoundingClientRect().top<=-vh*0.5) return;
@@ -234,12 +235,13 @@ function glideSettle(before){
     if((dx||dy) && Math.abs(dy)<=vh*1.2) plan.push([el,dx,dy]);
   }
   if(!plan.length) return;
+  const glide=tier==="move" ? {duration:M_MS.move,easing:E_EASE}
+    : {duration:E_SPRING_MS,easing:E_SPRING_OK?E_SPRING:E_EASE};
   plan.forEach(([el,dx,dy])=>{
     eSettleRuns.push(dx==null
       ? el.animate([{opacity:0,transform:"translateY(8px) scale(.985)"},{opacity:1,transform:"none"}],
           {duration:M_MS.surface,easing:E_EASE})
-      : el.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
-          {duration:E_SPRING_MS,easing:E_SPRING_OK?E_SPRING:E_EASE}));
+      : el.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],glide));
   });
   eKickPump();   // no animationstart for a scripted animation, so the pump is asked by hand
 }

@@ -14578,7 +14578,7 @@ What you type stays in this browser only.`;
     return at;
   }
   var E_SPRING_OK = typeof CSS !== "undefined" && CSS.supports && CSS.supports("transition-timing-function", "linear(0,1)");
-  function glideSettle(before) {
+  function glideSettle(before, tier) {
     if (!before || !list) return;
     const vh = window.innerHeight;
     if (list.getBoundingClientRect().top <= -vh * 0.5) return;
@@ -14596,14 +14596,12 @@ What you type stays in this browser only.`;
       if ((dx || dy) && Math.abs(dy) <= vh * 1.2) plan.push([el, dx, dy]);
     }
     if (!plan.length) return;
+    const glide = tier === "move" ? { duration: M_MS.move, easing: E_EASE } : { duration: E_SPRING_MS, easing: E_SPRING_OK ? E_SPRING : E_EASE };
     plan.forEach(([el, dx, dy]) => {
       eSettleRuns.push(dx == null ? el.animate(
         [{ opacity: 0, transform: "translateY(8px) scale(.985)" }, { opacity: 1, transform: "none" }],
         { duration: M_MS.surface, easing: E_EASE }
-      ) : el.animate(
-        [{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "none" }],
-        { duration: E_SPRING_MS, easing: E_SPRING_OK ? E_SPRING : E_EASE }
-      ));
+      ) : el.animate([{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "none" }], glide));
     });
     eKickPump();
   }
@@ -15548,8 +15546,10 @@ What you type stays in this browser only.`;
           else cats.push(id);
         } else setCats(cats.length === 1 && cats[0] === id ? [] : [id]);
         setPendingScrollHit(!!intentIdxs.length);
+        const cardsBefore = intentIdxs.length ? null : captureSettle();
         drawPills();
         hooks.render();
+        glideSettle(cardsBefore, "move");
         hooks.railEchoRedraw(railBefore, relBefore);
         scrollRailTop();
         scheduleTabSave();

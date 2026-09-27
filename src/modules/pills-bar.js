@@ -6,7 +6,7 @@ import { ICON_ALL, ICON_EDIT, ICON_PLUS } from "./icons.js";
 import { esc } from "./esc.js";
 import { t, toast } from "./ui-lang.js";
 import { drawPills, scheduleTabSave } from "./tabs.js";
-import { animateReorder, pillKey } from "./paint.js";
+import { animateReorder, pillKey, captureSettle, glideSettle } from "./paint.js";
 import { CATS } from "./content-model.js";
 import { nsDel } from "./storage.js";
 import { rebuildCards } from "./rebuild.js";
@@ -90,7 +90,10 @@ function drawPillsCore(){
       else setCats((cats.length===1 && cats[0]===id) ? [] : [id]);
       // Opening a category while an intent is selected → jump to its linked entries
       setPendingScrollHit(!!intentIdxs.length);
+      // The cards glide as a settle's do, unless that pending scroll may carry the view away.
+      const cardsBefore=intentIdxs.length ? null : captureSettle();
       drawPills(); hooks.render();
+      glideSettle(cardsBefore,"move");
       hooks.railEchoRedraw(railBefore, relBefore);
       scrollRailTop();
       scheduleTabSave();
