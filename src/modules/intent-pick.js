@@ -11,7 +11,7 @@ import { syncRailLayout } from "./rail-panel.js";
 import { capturePills } from "./pills-bar.js";
 import { setIntentIdxs, setIntentText, setRailSel, setRailMarkUsed, setPickRun, setSemiKind, entrySel, putEntrySel, intentIdxs, setCats, setPendingScrollHit, pickRun, railOrder, setRailMarkIdx } from "./app-state.js";
 import { hooks } from "./hooks.js";
-import { pack, savePack } from "./pack.js";
+import { pack, saveStats } from "./pack.js";
 import { intentIdAt } from "./intent-id.js";
 import { bumpIntent } from "./desk-stats.js";
 // Picking an intent and clearing the set: the two acts that reach the panel, the pills and the
@@ -60,11 +60,11 @@ function pickIntent(idx,multi){
     const at=intentIdxs.indexOf(idx);
     // Preserve pick order for {INTENT} and comment {ACTION}/{TOPIC} (no re-sort)
     if(at>-1) intentIdxs.splice(at,1);
-    else { intentIdxs.push(idx); bumpIntent(pack, intentIdAt(idx)); savePack(); }
+    else { intentIdxs.push(idx); bumpIntent(pack, intentIdAt(idx)); saveStats(); }
   } else {
     setIntentIdxs([idx]);
     bumpIntent(pack, intentIdAt(idx));
-    savePack();
+    saveStats();
   }
   setIntentText("");
   /* CATEGORY FILTER AND QUERY BOTH DROP - an intent's cards span categories, and both

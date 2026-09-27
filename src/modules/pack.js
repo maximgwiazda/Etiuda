@@ -483,6 +483,33 @@ function keepEditBases(){
 function savePack(){
   ePackEpoch++;
   keepEditBases();
+  if(eStatsT){ clearTimeout(eStatsT); eStatsT=0; }
+  const ok=writePack();
+  /* Every pack mutation lands here, so this is the one hook that cannot be forgotten. Wiring
+     the watermark to each individual edit path instead would mean the next new one silently
+     leaves a "sample" mark over content somebody has already started rewriting. */
+  hooks.syncSampleMark();
+  return ok;
+}
+/* A COUNT CHANGES NO CARD'S MARKUP, and ePackEpoch heads every card's pool signature, so a count
+   saved through savePack rebuilt every shown card on the next render. Counts are written here,
+   after the act that counted them; a savePack in between carries them. */
+const STATS_SAVE_MS=1500;
+let eStatsT=0, eStatsWired=false;
+function saveStats(){
+  if(eStatsT) return;
+  eStatsT=setTimeout(flushStats, STATS_SAVE_MS);
+  if(!eStatsWired && typeof addEventListener==="function"){
+    eStatsWired=true;
+    addEventListener("beforeunload", flushStats);
+  }
+}
+function flushStats(){
+  if(!eStatsT) return false;
+  clearTimeout(eStatsT); eStatsT=0;
+  return writePack();
+}
+function writePack(){
   /* Written under BOTH names - see migratePackKeys(): an older build opened against the
      same storage reads macroOrder/baseMacros and finds them. The duplicates are written
      here rather than kept on `pack`, so the live object carries the new vocabulary only. */
@@ -493,26 +520,45 @@ function savePack(){
   /* A refused write raises the lasting notice from the storage layer; see syncSaveNotice. */
   let ok=false;
   try{ ok=nsSet("Pack",JSON.stringify(out)); }catch(e){ ok=false; }
-  /* Every pack mutation lands here, so this is the one hook that cannot be forgotten. Wiring
-     the watermark to each individual edit path instead would mean the next new one silently
-     leaves a "sample" mark over content somebody has already started rewriting. */
-  hooks.syncSampleMark();
   return ok;
 }
-/* THE PERSONAL LAYER AT A MOMENT, for an Undo: put back IN PLACE, so every module holding `pack`
-   sees the old one, and saved. */
+/* THE PERSONAL LAYER BEFORE AN ACT, and the way back from that act alone. packUndoFor is called
+   once the act is done: each field it changed is compared key by key or item by item (an item by
+   its id where it has one), and the Undo puts back only those keys and items into the pack as it
+   stands then, so a star, an edit or a hide given in between survives it. */
 function packSnapshot(){ return JSON.stringify(pack); }
-function packRestore(was){
-  const p=JSON.parse(was);
-  Object.keys(pack).forEach(k=>{ delete pack[k]; });
-  Object.assign(pack,p);
-  savePack();
+function packUndoFor(was){
+  const a=JSON.parse(was), b=JSON.parse(JSON.stringify(pack)), steps=[];
+  const same=(x,y)=>JSON.stringify(x)===JSON.stringify(y);
+  const key=v=>(v && typeof v==="object") ? (v.id!=null ? "#"+v.id : null) : JSON.stringify(v);
+  const isMap=v=>!!v && typeof v==="object" && !Array.isArray(v);
+  Object.keys(Object.assign({},a,b)).forEach(f=>{
+    const x=a[f], y=b[f];
+    if(same(x,y)) return;
+    if(Array.isArray(x) && Array.isArray(y) && x.concat(y).every(v=>key(v)!==null)){
+      const inY=new Set(y.map(key)), inX=new Set(x.map(key));
+      const lost=x.map((v,i)=>({v,i})).filter(o=>!inY.has(key(o.v)));
+      const added=new Set(y.filter(v=>!inX.has(key(v))).map(key));
+      steps.push(()=>{
+        const l=(Array.isArray(pack[f]) ? pack[f] : []).filter(v=>!added.has(key(v)));
+        lost.forEach(o=>{ if(!l.some(w=>key(w)===key(o.v))) l.splice(Math.min(o.i,l.length),0,o.v); });
+        pack[f]=l;
+      });
+    } else if(isMap(x) && isMap(y)){
+      const ks=Object.keys(Object.assign({},x,y)).filter(k=>!same(x[k],y[k]));
+      steps.push(()=>{
+        if(!isMap(pack[f])) pack[f]={};
+        ks.forEach(k=>{ if(k in x) pack[f][k]=x[k]; else delete pack[f][k]; });
+      });
+    } else steps.push(()=>{ if(f in a) pack[f]=x; else delete pack[f]; });
+  });
+  return ()=>{ steps.forEach(s=>s()); savePack(); };
 }
 export {
   ePackEpoch,
-  savePack,
+  savePack, saveStats, flushStats,
   packSnapshot,
-  packRestore,
+  packUndoFor,
   BASE_CATS, BASE_M, catalogCardId, rebuildBaseCards, pack, loadPack, adoptNameNsLayer,
   showPackMigrationWarning, syncSaveNotice, showDeskNotices, whoOptions, isFavourite, isIntentFavourite,
 };

@@ -7,7 +7,7 @@ import { langTabs, langPane, langFieldId, langEndonym, markMissing, edReportMiss
 import { displayIntentRows, drawIntentRail } from "./rail-list.js";
 import { drawPills } from "./tabs.js";
 import { offerUndo, t, toast } from "./ui-lang.js";
-import { BASE_CATS, pack, savePack, packSnapshot, packRestore } from "./pack.js";
+import { BASE_CATS, pack, savePack, packSnapshot, packUndoFor } from "./pack.js";
 import { removeIntent } from "./favourites.js";
 import { catIconKey, catSlot, categoryIsOverridden, resetCategory } from "./cat-identity.js";
 import { intentIdAt, intentIdxOfId, intentIsCustom, intentIsOverridden } from "./intent-id.js";
@@ -182,8 +182,9 @@ function openCategoryEditor(k,fromPill){
     resetCategory(k);
     drawPills(); render();
     drawIntentRail();
+    const back=packUndoFor(was);
     offerUndo("Category reset", ()=>{
-      packRestore(was); applyCatsToGlobal();
+      back(); applyCatsToGlobal();
       drawPills(); render(); drawIntentRail();
       if(document.getElementById("ceReset")) openCategoryEditor(k, fromPill);
     });

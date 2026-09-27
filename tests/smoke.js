@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 232 };
+const EXPECTED = { chrome: 241 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -1007,7 +1007,26 @@ const t0 = Date.now();
 
   /* The intent panel: pick, add a second, pinned above the list, wheel over it, drag a plain row, clear. */
   e = since();
+  /* THE CARD POOL ACROSS A PICK AND A COPY: a card whose markup the act does not change is the
+     same node afterwards. Counted over cards carrying no token (cardFillKey ""), because a token
+     card's fill may follow the intent and is rebuilt by right. A count that bumped ePackEpoch
+     rebuilt every one of them. */
+  const poolMark = () => p.evaluate(() => { window.__poolWas = new Map([...document.querySelectorAll("#list .card[data-id]")].map(el => [el.getAttribute("data-id"), el])); });
+  const poolKept = () => p.evaluate(() => { const was = window.__poolWas || new Map(); let common = 0, kept = 0;
+    document.querySelectorAll("#list .card[data-id]").forEach(el => { const id = el.getAttribute("data-id"), m = findCard(id);
+      if (!m || cardFillKey(m) !== "" || !was.has(id)) return; common++; if (was.get(id) === el) kept++; });
+    return { common, kept }; });
+  const poolOk = r => r.common >= 10 && r.kept >= 0.9 * r.common;
+  await poolMark();
   await p.evaluate(() => [...document.querySelectorAll("#intentRailList .rail-item")][6].click()); await sleep(600);
+  const poolPick = await poolKept();
+  check(poolOk(poolPick), "an intent pick keeps the cards it does not change: " + poolPick.kept + " of "
+    + poolPick.common + " untokened cards on screen before and after are the same nodes");
+  await poolMark();
+  await p.evaluate(() => { const el = document.querySelector("#list .card[data-id]"); bumpUseCount(el.getAttribute("data-id"), "en"); render(); }); await sleep(300);
+  const poolCopy = await poolKept();
+  check(poolOk(poolCopy), "and a copy's count keeps them through the next render: " + poolCopy.kept + " of "
+    + poolCopy.common + " the same nodes");
   await p.evaluate(() => [...document.querySelectorAll("#intentRailList .rail-item:not(.on)")][2].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true }))); await sleep(600);
   const rail = await p.evaluate(() => { const box = document.getElementById("intentRailList"), on = [...box.querySelectorAll(".rail-item.on")];
     const t0 = on[0] && on[0].getBoundingClientRect(), first = box.querySelector(".rail-item:not(.on)"), f = first && first.getBoundingClientRect();
@@ -2232,6 +2251,57 @@ const t0 = Date.now();
   check(undoLeg.asked === 0 && undoLeg.stood && undoLeg.after.gone && undoLeg.after.mark,
     "and Clear local memory stops at Etiuda's own question, which Cancel answers with nothing done: "
     + JSON.stringify({ asked: undoLeg.asked, stood: undoLeg.stood, after: undoLeg.after }));
+  /* UNDO PUTS BACK THE ACT, NOT THE DESK AS IT STOOD (data-1): a star given while the Undo bubble
+     is still up survives the Undo of the deletion before it. Read off the stored pack, and the
+     star taken off again afterwards so the desk is left as found. */
+  const undoAct = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const read = () => JSON.parse(lsGet(nsKey("Pack")) || "{}");
+    const ids = [...document.querySelectorAll("#list .card[data-id]")].map(c => c.getAttribute("data-id"));
+    const gone = ids[4], star = ids.find((x, i) => i > 4 && (read().favourites || []).indexOf(x) < 0);
+    if (!gone || !star) return { ready: false };
+    removeCard(gone); await wait(500);
+    const bubble = !!document.getElementById("eUndoBtn");
+    toggleFavourite(star); await wait(300);
+    const starred = (read().favourites || []).indexOf(star) > -1;
+    const u = document.getElementById("eUndoBtn"); if (u) u.click(); await wait(800);
+    const now = read();
+    const out = { ready: true, bubble, starred, kept: (now.favourites || []).indexOf(star) > -1,
+      back: (now.removed || []).indexOf(gone) < 0 && !!document.querySelector('#list .card[data-id="' + CSS.escape(gone) + '"]') };
+    if (out.kept) toggleFavourite(star);
+    await wait(300);
+    return out;
+  });
+  check(undoAct.ready && undoAct.bubble && undoAct.starred && undoAct.back && undoAct.kept,
+    "data-1 Undo of a deleted card puts that card back and keeps a star given to another card while the bubble stood: "
+    + JSON.stringify(undoAct));
+  /* A CATALOG SOMEBODY PICKED IS ASKED ABOUT EVEN WHILE A FOUND ONE WAITS (shell-2): the bubble a
+     boot or a watch left standing gives way to the question about the file just chosen, and no
+     toast says it matches the loaded catalog. Invented names; answered Keep current, so nothing
+     loads. */
+  const picked = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const held = storedCatalog();
+    if (!held) return { held: false };
+    const mk = (id, name) => Object.assign(JSON.parse(JSON.stringify(held)), { id, name });
+    const tst = document.getElementById("toast"); if (tst) tst.classList.remove("show");
+    eOfferCatalogDialog(mk("hunt-found", "Found Probe"), { foundHtml: "", force: true });
+    await wait(300);
+    const first = document.querySelectorAll("#eCatalogOffer").length;
+    let accepted = 0;
+    eOfferPickedCatalog(mk("hunt-picked", "Picked Probe"), "picked.ec", () => { accepted++; });
+    await wait(300);
+    const offers = [...document.querySelectorAll("#eCatalogOffer")];
+    const names = offers.map(o => (o.querySelector(".ec-what b") || {}).textContent || "");
+    const said = !!tst && tst.classList.contains("show") && /matches/.test(tst.textContent);
+    offers.forEach(o => { const n = o.querySelector("#ecNo"); if (n) n.click(); });
+    await wait(300);
+    return { held: true, first, n: offers.length, names, said, accepted, left: document.querySelectorAll("#eCatalogOffer").length };
+  });
+  check(picked.held && picked.first === 1 && picked.n === 1 && picked.names[0] === "Picked Probe" && !picked.said
+        && picked.accepted === 0 && picked.left === 0,
+    "shell-2 a catalog picked while a found one's bubble stands is asked about in its place, with no word that it"
+    + " matches the loaded one: " + JSON.stringify(picked));
   clean(e, "the undo and the question");
 
   /* BOARD 344. THE ROUTES THE DRIVES ABOVE WALKED AROUND.
@@ -2848,6 +2918,172 @@ const t0 = Date.now();
   }
   finally { await hookDrain(ctx, "the public first run"); if (ctx) await ctx.close().catch(() => {}); fs.rmSync(pub, { recursive: true, force: true }); }
   clean(e, "the public first run");
+
+  /* ---- THE FIRST AFTERNOON'S BUG HUNT, the drives that want a desk of their own --------------
+     Each drive in a fresh context of its own over a folder holding the engine and the sample, the
+     public first run's shape; a context given `done` starts with the tour already seen. */
+  e = since();
+  const hunt = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-hunt-"));
+  const huntCtx = [];
+  let huntAt = "the start";
+  fs.copyFileSync(RUN.page, path.join(hunt, "etiuda.html"));
+  fs.copyFileSync(path.join(RUN.dir, E.SIBLING_AS.sampleV2), path.join(hunt, E.SIBLING_AS.sampleV2));
+  const huntUrl = dir => "file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/");
+  const huntPage = async (dir, done) => {
+    const c = b.createBrowserContext ? await b.createBrowserContext() : await b.createIncognitoBrowserContext();
+    huntCtx.push(c);
+    const q = await c.newPage();
+    await hookInstall(q);
+    await q.setViewport({ width: 1500, height: 950 });
+    q.on("dialog", d => d.accept());
+    q.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
+    if (done) await q.evaluateOnNewDocument(() => { try { localStorage.setItem("eTourDone_v3", "1"); localStorage.setItem("eTourInvite_v3", "1"); } catch (x) {} });
+    await q.goto(huntUrl(dir), { waitUntil: "load", timeout: 90000 });
+    return q;
+  };
+  const clickReload = async (q, sel) => {
+    const nav = q.waitForNavigation({ waitUntil: "load", timeout: 30000 }).then(() => true, () => false);
+    await q.click(sel);
+    return nav;
+  };
+  const upFor = (q, fn, ms) => q.waitForFunction(fn, { timeout: ms || 20000, polling: 100 }).then(() => true, () => false);
+  try {
+    /* flow-2: A NAME TYPED IN THE TOUR'S FIRST STEP IS KEPT whichever way the step is left: the
+       empty desk's sample button beside it, Skip, or a reload. */
+    const kept = {};
+    for (const route of ["sample", "skip", "reload"]) {
+      huntAt = "flow-2 by " + route;
+      const q = await huntPage(hunt, false);
+      const up = await upFor(q, () => !!document.querySelector("#tourName") && !!document.getElementById("emptySample"));
+      if (up) {
+        await q.type("#tourName", "Invented Agent"); await sleep(300);
+        if (route === "sample") await clickReload(q, "#emptySample");
+        else if (route === "skip") await q.click("#tourSkip");
+        else await q.reload({ waitUntil: "load" });
+        await sleep(800);
+      }
+      kept[route] = up && await q.evaluate(() => lsGet("eAgent") === "Invented Agent" && lsGet("eNameAsked") === "1");
+    }
+    check(kept.sample && kept.skip && kept.reload,
+      "flow-2 a name typed into the tour's first step is kept when the step is left by the sample button, by Skip"
+      + " and by a reload: " + JSON.stringify(kept));
+
+    /* flow-1: THE NAME QUESTION AT THE TOUR'S CARDS STEP stands in front of the tour, which steps
+       back behind it and comes forward again once it is answered. The name is left empty so the
+       first signed copy asks; the block pressed is the first that signs. */
+    huntAt = "flow-1";
+    const q1 = await huntPage(hunt, false);
+    await upFor(q1, () => !!document.querySelector("#tourName") && !!document.getElementById("emptySample"));
+    await q1.click("#tourNext"); await sleep(700);
+    await clickReload(q1, "#emptySample");
+    await upFor(q1, () => document.querySelectorAll("#list .card").length > 0 && !document.getElementById("tourRoot").hidden);
+    for (let i = 0; i < 8; i++) {
+      if (await q1.evaluate(() => sessionStorage.getItem("eTourAt")) === "cards") break;
+      await q1.click("#tourNext"); await sleep(700);
+    }
+    await sleep(600);
+    const blk = await q1.evaluate(() => {
+      const el = [...document.querySelectorAll("#list .card[data-id] .txt[data-v]")].find(x => {
+        const c = x.closest(".card[data-id]"), m = c && findCard(c.dataset.id);
+        return !!m && /{(AGENT|INIT)}/.test(parts(m, cardLang(m))[+x.dataset.v] || ""); });
+      if (!el) return null;
+      const r = el.getBoundingClientRect(), x = Math.round(r.left + Math.min(40, r.width / 2)), y = Math.round(r.top + Math.min(12, r.height / 2));
+      const top = document.elementFromPoint(x, y);
+      return { x, y, free: !!top && el.contains(top), at: sessionStorage.getItem("eTourAt") };
+    });
+    let ask = { up: false };
+    if (blk && blk.free) {
+      await q1.mouse.click(blk.x, blk.y); await sleep(900);
+      ask = await q1.evaluate(() => {
+        const box = document.getElementById("eAgentAsk");
+        if (!box) return { up: false };
+        const hit = id => { const el = document.getElementById(id); if (!el) return false; const r = el.getBoundingClientRect();
+          const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!top && box.contains(top); };
+        return { up: true, title: hit("eAgentTitle"), field: hit("eAgentInp"), yes: hit("eAgentYes"), no: hit("eAgentNo"),
+                 behind: document.getElementById("tourRoot").classList.contains("behind") };
+      });
+      if (ask.up) { await q1.click("#eAgentNo"); await sleep(600); }
+    }
+    const back = await q1.evaluate(() => ({ gone: !document.getElementById("eAgentAsk"), tour: !document.getElementById("tourRoot").hidden,
+      forward: !document.getElementById("tourRoot").classList.contains("behind") }));
+    check(!!blk && blk.free && blk.at === "cards" && ask.up && ask.title && ask.field && ask.yes && ask.no && ask.behind
+          && back.gone && back.tour && back.forward,
+      "flow-1 at the tour's Cards step the name question opens in front of the tour, every part of it reachable, and"
+      + " the tour comes forward again once it is answered: " + JSON.stringify({ blk, ask, back }));
+
+    /* data-2: THE EMPTY DESK'S SAMPLE BUTTON KEEPS WHAT AN EJECT KEPT. The sample loaded, one card's
+       title edited and saved, another starred, the catalog ejected, and the sample taken up again
+       from the empty desk: the edit and the star are still in the stored pack. */
+    huntAt = "data-2";
+    const q2 = await huntPage(hunt, true);
+    await upFor(q2, () => !!document.getElementById("emptySample"));
+    await clickReload(q2, "#emptySample");
+    await upFor(q2, () => document.querySelectorAll("#list .card[data-id]").length > 3);
+    const made = await q2.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const ids = [...document.querySelectorAll("#list .card[data-id]")].map(c => c.getAttribute("data-id"));
+      openCardEditor(ids[0]); await wait(700);
+      const title = document.querySelector('#modalCard input[id^="me"]');
+      if (title) { title.value = title.value + " probe"; title.dispatchEvent(new Event("input", { bubbles: true })); }
+      const save = document.getElementById("meSave"); if (save) save.click(); await wait(700);
+      if (typeof closeModal === "function" && !document.getElementById("modal").hidden) closeModal();
+      toggleFavourite(ids[2]); await wait(300);
+      return { edited: ids[0], starred: ids[2] };
+    });
+    const layer = (q, m) => q.evaluate(m => { const k = JSON.parse(lsGet(nsKey("Pack")) || "{}");
+      return { edit: !!(k.overrides || {})[m.edited], star: (k.favourites || []).indexOf(m.starred) > -1 }; }, m);
+    const before = await layer(q2, made);
+    await q2.evaluate(() => ejectCatalog());
+    await upFor(q2, () => !!document.getElementById("eSureYes"), 5000);
+    await clickReload(q2, "#eSureYes");
+    await upFor(q2, () => !!document.getElementById("emptySample"));
+    const ejected = await layer(q2, made);
+    await clickReload(q2, "#emptySample");
+    await upFor(q2, () => document.querySelectorAll("#list .card[data-id]").length > 3);
+    const again = await layer(q2, made);
+    check(before.edit && before.star && ejected.edit && ejected.star && again.edit && again.star,
+      "data-2 the empty desk's sample button keeps the edit and the star an Eject kept (saved, ejected, taken up again): "
+      + JSON.stringify({ before, ejected, again }));
+
+    /* flow-3: THE SAMPLE NEVER ASKS TO REPLACE A CATALOG THE PERSON CHOSE. A desk holding an invented
+       catalog finds the sample beside it at the next launch, as the shell hands it over when the
+       chosen file lives elsewhere, and no offer rises; the control is another catalog found there
+       instead, which is offered. */
+    huntAt = "flow-3";
+    const f3 = path.join(hunt, "f3");
+    fs.mkdirSync(f3);
+    fs.copyFileSync(RUN.page, path.join(f3, "etiuda.html"));
+    const sib = path.join(f3, E.FIXTURE_FILE.catalog);
+    const chosen = Object.assign(JSON.parse(JSON.stringify(sampleData)), { id: "hunt-chosen", name: "Invented Chosen" });
+    delete chosen.sample; delete chosen.hash;
+    fs.writeFileSync(sib, asSibling(chosen));
+    const q3 = await huntPage(f3, true);
+    await upFor(q3, () => !!document.getElementById("ecYes"));
+    await clickReload(q3, "#ecYes");
+    await upFor(q3, () => document.querySelectorAll("#list .card[data-id]").length > 3);
+    const sampleSib = Object.assign(JSON.parse(JSON.stringify(sampleData)), { sample: true });
+    fs.writeFileSync(sib, asSibling(sampleSib));
+    await q3.reload({ waitUntil: "load" });
+    await upFor(q3, () => document.querySelectorAll("#list .card[data-id]").length > 3);
+    const sampleOffered = await upFor(q3, () => !!document.getElementById("eCatalogOffer"), 4000);
+    const other = Object.assign(JSON.parse(JSON.stringify(sampleData)), { id: "hunt-other", name: "Invented Other" });
+    delete other.sample; delete other.hash;
+    fs.writeFileSync(sib, asSibling(other));
+    await q3.reload({ waitUntil: "load" });
+    await upFor(q3, () => document.querySelectorAll("#list .card[data-id]").length > 3);
+    const otherOffered = await upFor(q3, () => !!document.getElementById("eCatalogOffer"), 8000);
+    check(!sampleOffered && otherOffered,
+      "flow-3 the sample found beside a desk holding a chosen catalog is not offered over it, and another catalog found"
+      + " there is: " + JSON.stringify({ sampleOffered, otherOffered }));
+  } catch (x) {
+    const where = String((x && x.stack || "").split(String.fromCharCode(10))[1] || "").trim();
+    check(false, "the bug hunt's drives could not run, at " + huntAt + ": " + (x && x.message || x) + (where ? " | " + where : ""));
+  }
+  finally {
+    for (const c of huntCtx) { await hookDrain(c, "the bug hunt"); await c.close().catch(() => {}); }
+    fs.rmSync(hunt, { recursive: true, force: true });
+  }
+  clean(e, "the bug hunt's drives");
 
   /* ---- THE SYSTEM'S LANGUAGE (the first afternoon) ------------------------------------------
      The interface's language where nothing is stored: a browser saying Polish first gets a Polish

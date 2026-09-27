@@ -2,7 +2,7 @@ import { ALWAYS_CATS } from "./cat-roles.js";
 import { CATS } from "./content-model.js";
 import { mgReduceMotion } from "./motion.js";
 import { t } from "./ui-lang.js";
-import { cardLinksIntent, intentTagCats, normalizeCardIntents } from "./card-intent.js";
+import { cardIntentLinks, cardLinksIntent, intentTagCats, normalizeCardIntents } from "./card-intent.js";
 import { intentIdAt } from "./intent-id.js";
 import { searchCounts, searchCatRank } from "./card-counts.js";
 import { cards, intentIdxs, catOrder } from "./app-state.js";
@@ -32,6 +32,19 @@ function categoriesForIntent(i){
     if(cardLinksIntent(m,want)) add(m.c);
   });
   return out;
+}
+/* categoriesForIntent for every intent in one pass over the cards, answered as has(i,k); the
+   order categoriesForIntent keeps is not kept here. Asked intent by intent, the rail walked the
+   catalog once per row. */
+function intentCatSets(){
+  const per=new Map(), every=new Set();
+  (cards||[]).forEach(m=>{
+    if(!m||!m.c||!CATS[m.c]) return;
+    const l=cardIntentLinks(m);
+    if(l===true) every.add(m.c);
+    else if(l) l.forEach(id=>{ let s=per.get(id); if(!s){ s=new Set(); per.set(id,s); } s.add(m.c); });
+  });
+  return (i,k)=>{ const s=per.get(intentIdAt(i)); return every.has(k) || !!(s && s.has(k)); };
 }
 /* Picking a category RE-RANKS the panel, so a scrolled panel shows the middle of an
    order that has just been rewritten - the top is the only place the new ranking means
@@ -106,6 +119,7 @@ function displayCatOrder(hc){
 export {
   intentHasPrimaryCat,
   categoriesForIntent,
+  intentCatSets,
   scrollRailTop,
   intentCats,
   pillBand,

@@ -4408,14 +4408,16 @@ What you type stays in this browser only.`;
     adoptNameNsLayer: () => adoptNameNsLayer,
     catalogCardId: () => catalogCardId,
     ePackEpoch: () => ePackEpoch,
+    flushStats: () => flushStats,
     isFavourite: () => isFavourite,
     isIntentFavourite: () => isIntentFavourite,
     loadPack: () => loadPack,
     pack: () => pack,
-    packRestore: () => packRestore,
     packSnapshot: () => packSnapshot,
+    packUndoFor: () => packUndoFor,
     rebuildBaseCards: () => rebuildBaseCards,
     savePack: () => savePack,
+    saveStats: () => saveStats,
     showDeskNotices: () => showDeskNotices,
     showPackMigrationWarning: () => showPackMigrationWarning,
     syncSaveNotice: () => syncSaveNotice,
@@ -4601,21 +4603,67 @@ What you type stays in this browser only.`;
           map[k] = String(o[k]);
         });
       }
-      return { map, save: h.deskSave, host: h };
+      return { map, save: h.deskSave, write: typeof h.deskWrite === "function" ? h.deskWrite : null, host: h };
     } catch (e) {
       return null;
     }
   }
   var E_DESK = eHostDesk();
+  var eDeskDue = false;
+  var eDeskSent = 0;
+  var eDeskHeard = 0;
+  var eDeskArmed = false;
   function deskSave() {
+    eDeskDue = false;
+    const n = ++eDeskSent;
     let ok;
     try {
       ok = E_DESK.save(JSON.stringify(E_DESK.map)) !== false;
     } catch (e) {
       ok = false;
     }
-    noteSave(ok, "");
+    deskHeard(n, ok);
     return ok;
+  }
+  function deskHeard(n, ok) {
+    if (n < eDeskHeard) return;
+    eDeskHeard = n;
+    noteSave(ok, "");
+  }
+  function deskSend() {
+    if (!eDeskDue) return;
+    eDeskDue = false;
+    const n = ++eDeskSent;
+    let p;
+    try {
+      p = E_DESK.write(JSON.stringify(E_DESK.map));
+    } catch (e) {
+      p = false;
+    }
+    Promise.resolve(p).then((ok) => deskHeard(n, ok !== false), () => deskHeard(n, false));
+  }
+  function deskSoon() {
+    if (!E_DESK.write) return deskSave();
+    deskArm();
+    if (eDeskDue) return true;
+    eDeskDue = true;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") queueMicrotask(deskSend);
+    else setTimeout(deskSend, 0);
+    return true;
+  }
+  function deskFlush() {
+    if (eDeskDue || eDeskHeard < eDeskSent) deskSave();
+  }
+  function deskArm() {
+    if (eDeskArmed) return;
+    eDeskArmed = true;
+    try {
+      window.addEventListener("pagehide", deskFlush);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") deskFlush();
+      });
+    } catch (e) {
+    }
   }
   var eUnsaved = null;
   var eSavedAt = 0;
@@ -4700,8 +4748,10 @@ What you type stays in this browser only.`;
   function lsSet(k, v, own) {
     if (eWiping) return false;
     if (E_DESK) {
-      E_DESK.map[k] = String(v);
-      return deskSave();
+      const s = String(v);
+      if (!own && E_DESK.map[k] === s && !eUnsaved) return true;
+      E_DESK.map[k] = s;
+      return own ? deskSave() : deskSoon();
     }
     if (!E_LS_OK) {
       E_MEM[k] = String(v);
@@ -4718,8 +4768,10 @@ What you type stays in this browser only.`;
   }
   function lsDel(k) {
     if (E_DESK) {
-      delete E_DESK.map[k];
-      deskSave();
+      if (k in E_DESK.map || eUnsaved) {
+        delete E_DESK.map[k];
+        deskSoon();
+      }
       return;
     }
     if (!E_LS_OK) {
@@ -6676,6 +6728,32 @@ What you type stays in this browser only.`;
   function savePack() {
     ePackEpoch++;
     keepEditBases();
+    if (eStatsT) {
+      clearTimeout(eStatsT);
+      eStatsT = 0;
+    }
+    const ok = writePack();
+    hooks.syncSampleMark();
+    return ok;
+  }
+  var STATS_SAVE_MS = 1500;
+  var eStatsT = 0;
+  var eStatsWired = false;
+  function saveStats() {
+    if (eStatsT) return;
+    eStatsT = setTimeout(flushStats, STATS_SAVE_MS);
+    if (!eStatsWired && typeof addEventListener === "function") {
+      eStatsWired = true;
+      addEventListener("beforeunload", flushStats);
+    }
+  }
+  function flushStats() {
+    if (!eStatsT) return false;
+    clearTimeout(eStatsT);
+    eStatsT = 0;
+    return writePack();
+  }
+  function writePack() {
     let out = pack;
     try {
       out = Object.assign({}, pack, { macroOrder: pack.cardOrder, baseMacros: pack.baseCards });
@@ -6688,19 +6766,48 @@ What you type stays in this browser only.`;
     } catch (e) {
       ok = false;
     }
-    hooks.syncSampleMark();
     return ok;
   }
   function packSnapshot() {
     return JSON.stringify(pack);
   }
-  function packRestore(was) {
-    const p = JSON.parse(was);
-    Object.keys(pack).forEach((k) => {
-      delete pack[k];
+  function packUndoFor(was) {
+    const a = JSON.parse(was), b = JSON.parse(JSON.stringify(pack)), steps = [];
+    const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+    const key = (v) => v && typeof v === "object" ? v.id != null ? "#" + v.id : null : JSON.stringify(v);
+    const isMap = (v) => !!v && typeof v === "object" && !Array.isArray(v);
+    Object.keys(Object.assign({}, a, b)).forEach((f) => {
+      const x = a[f], y = b[f];
+      if (same(x, y)) return;
+      if (Array.isArray(x) && Array.isArray(y) && x.concat(y).every((v) => key(v) !== null)) {
+        const inY = new Set(y.map(key)), inX = new Set(x.map(key));
+        const lost = x.map((v, i) => ({ v, i })).filter((o) => !inY.has(key(o.v)));
+        const added = new Set(y.filter((v) => !inX.has(key(v))).map(key));
+        steps.push(() => {
+          const l = (Array.isArray(pack[f]) ? pack[f] : []).filter((v) => !added.has(key(v)));
+          lost.forEach((o) => {
+            if (!l.some((w) => key(w) === key(o.v))) l.splice(Math.min(o.i, l.length), 0, o.v);
+          });
+          pack[f] = l;
+        });
+      } else if (isMap(x) && isMap(y)) {
+        const ks = Object.keys(Object.assign({}, x, y)).filter((k) => !same(x[k], y[k]));
+        steps.push(() => {
+          if (!isMap(pack[f])) pack[f] = {};
+          ks.forEach((k) => {
+            if (k in x) pack[f][k] = x[k];
+            else delete pack[f][k];
+          });
+        });
+      } else steps.push(() => {
+        if (f in a) pack[f] = x;
+        else delete pack[f];
+      });
     });
-    Object.assign(pack, p);
-    savePack();
+    return () => {
+      steps.forEach((s) => s());
+      savePack();
+    };
   }
 
   // src/modules/cat-roles.js
@@ -7732,7 +7839,8 @@ What you type stays in this browser only.`;
   __export(card_search_exports, {
     SEARCH_FIELDS: () => SEARCH_FIELDS,
     cardMatchesSearch: () => cardMatchesSearch,
-    cardSearchIndex: () => cardSearchIndex
+    cardSearchIndex: () => cardSearchIndex,
+    sameTerms: () => sameTerms
   });
 
   // src/modules/intent-text.js
@@ -7761,6 +7869,7 @@ What you type stays in this browser only.`;
   __export(card_intent_exports, {
     cardHitsAlwaysCat: () => cardHitsAlwaysCat,
     cardHitsSelectedIntent: () => cardHitsSelectedIntent,
+    cardIntentLinks: () => cardIntentLinks,
     cardLinksIntent: () => cardLinksIntent,
     intentTagCats: () => intentTagCats,
     normalizeCardIntents: () => normalizeCardIntents,
@@ -7866,10 +7975,14 @@ What you type stays in this browser only.`;
       return String(x);
     }).filter(Boolean);
   }
-  function cardLinksIntent(m, want) {
-    if (!m || m._hidden) return false;
+  function cardIntentLinks(m) {
+    if (!m || m._hidden) return null;
     if (m.allIntents) return true;
-    return normalizeCardIntents(m).indexOf(want) > -1;
+    return normalizeCardIntents(m);
+  }
+  function cardLinksIntent(m, want) {
+    const l = cardIntentLinks(m);
+    return l === true || !!l && l.indexOf(want) > -1;
   }
   function cardHitsSelectedIntent(m) {
     if (!intentIdxs.length) return false;
@@ -7959,6 +8072,8 @@ What you type stays in this browser only.`;
     agentParts: () => agentParts,
     askAgentName: () => askAgentName,
     keepAgentName: () => keepAgentName,
+    keepTypedName: () => keepTypedName,
+    nameAnswered: () => nameAnswered,
     nameFieldHtml: () => nameFieldHtml,
     renderFillsSoon: () => renderFillsSoon,
     setAgentName: () => setAgentName,
@@ -8514,9 +8629,12 @@ What you type stays in this browser only.`;
     nsSet("CatOrder", JSON.stringify(catOrder));
     savePack();
     hooks.rebuildCards();
+    const back = packUndoFor(was), at = wasOrder.indexOf(k);
     offerUndo("Category deleted", () => {
-      packRestore(was);
-      setCatOrder(wasOrder);
+      back();
+      const order = catOrder.slice();
+      if (at > -1 && order.indexOf(k) < 0) order.splice(Math.min(at, order.length), 0, k);
+      setCatOrder(order);
       nsSet("CatOrder", JSON.stringify(catOrder));
       hooks.rebuildCards();
       applyCatsToGlobal();
@@ -9561,6 +9679,18 @@ What you type stays in this browser only.`;
     setAgentName(String(v || "").trim());
     lsSet(E_NAME_ASKED, "1");
   }
+  function nameAnswered() {
+    return lsGet(E_NAME_ASKED) === "1";
+  }
+  function keepTypedName(v, answered) {
+    const s = String(v || "").trim();
+    if (s) {
+      keepAgentName(s);
+      return;
+    }
+    setAgentName("");
+    if (!answered) lsDel(E_NAME_ASKED);
+  }
   function askAgentName(raw, then, anchor) {
     if (document.getElementById("eAgentAsk")) return;
     const wrap = document.createElement("div");
@@ -9864,40 +9994,58 @@ What you type stays in this browser only.`;
     }
     return hay;
   }
-  function cardSearchFields(m) {
+  function cardSearchFields(m, st, live, label) {
     if (!m) return { title: "", keys: "", meta: "", body: "" };
-    const st = cardStaticHay(m);
     return {
       title: st.title,
       keys: st.keys,
-      /* Live, not cached: a category rename changes this without changing the card object. It is
-         one short label, so recomputing it costs nothing worth caching. */
-      meta: normHay([CATS[m.c] || m.c || ""]),
+      /* Live, not cached: a category rename changes this without changing the card object. */
+      meta: normHay([label]),
       /* Each group is already folded, collapsed and trimmed, so joining with single spaces
          reproduces the one-pass normHay byte for byte; filter(Boolean) keeps an empty group
          from introducing a double space. Verified against the pre-cache implementation. */
-      body: [st.bodyA, cardLiveHay(m, st), st.bodyB].filter(Boolean).join(" ")
+      body: [st.bodyA, live, st.bodyB].filter(Boolean).join(" ")
     };
   }
-  var cardWordCache = /* @__PURE__ */ new WeakMap();
   function cardSearchIndex(m) {
-    const fields = cardSearchFields(m);
+    let st = null, live = "", label = "";
+    if (m) {
+      st = cardStaticHay(m);
+      live = cardLiveHay(m, st);
+      label = CATS[m.c] || m.c || "";
+      if (st.idx && st.idxLive === live && st.idxLabel === label) return st.idx;
+    }
+    const fields = cardSearchFields(m, st, live, label);
     const hay = [fields.title, fields.keys, fields.meta, fields.body].filter(Boolean).join(" ");
-    const c = cardWordCache.get(m);
-    if (c && c.hay === hay) return c.idx;
-    const idx = { hay, fields, words: {}, allWords: splitWords(hay) };
+    const idx = { hay, fields, words: {}, allWords: splitWords(hay), uniq: null, mTerms: null, match: false, sq: null };
     SEARCH_FIELDS.forEach((f) => {
       idx.words[f] = splitWords(fields[f]);
     });
-    if (m) cardWordCache.set(m, { hay, idx });
+    if (st) {
+      st.idx = idx;
+      st.idxLive = live;
+      st.idxLabel = label;
+    }
     return idx;
+  }
+  function sameTerms(a, b) {
+    if (!a || !b || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
   }
   function cardMatchesSearch(m, terms) {
     if (!terms || !terms.length) return true;
     const idx = cardSearchIndex(m);
+    if (sameTerms(idx.mTerms, terms)) return idx.match;
     const hay = idx.hay;
-    if (terms.every((t2) => hay.indexOf(t2) !== -1)) return true;
-    return terms.every((t2) => hay.indexOf(t2) !== -1 || idx.allWords.some((w) => wordMatchesTerm(w, t2)));
+    let hit = terms.every((t2) => hay.indexOf(t2) !== -1);
+    if (!hit) {
+      const uniq = idx.uniq || (idx.uniq = [...new Set(idx.allWords)]);
+      hit = terms.every((t2) => hay.indexOf(t2) !== -1 || uniq.some((w) => wordMatchesTerm(w, t2)));
+    }
+    idx.mTerms = terms.slice();
+    idx.match = hit;
+    return hit;
   }
 
   // src/modules/spell.js
@@ -10732,6 +10880,7 @@ What you type stays in this browser only.`;
   __export(cat_relevance_exports, {
     categoriesForIntent: () => categoriesForIntent,
     displayCatOrder: () => displayCatOrder,
+    intentCatSets: () => intentCatSets,
     intentCats: () => intentCats,
     intentHasPrimaryCat: () => intentHasPrimaryCat,
     pillBand: () => pillBand,
@@ -10757,6 +10906,15 @@ What you type stays in this browser only.`;
   });
   function cardSearchScore(m, terms, aterms) {
     const idx = cardSearchIndex(m);
+    let q = idx.sq;
+    if (!q || !sameTerms(q.terms, terms)) q = idx.sq = queryScore(idx, terms);
+    let score = q.score;
+    if (aterms === void 0) aterms = intentAffinityGroups();
+    if (aterms.length) score += cardIntentAffinity(m, aterms) * AFFINITY_W;
+    if (isFavourite(m && m.id)) score *= FAV_BONUS;
+    return { tier: q.tier, score };
+  }
+  function queryScore(idx, terms) {
     const fieldHasAll = { title: true, keys: true, meta: true, body: true };
     let score = 0, strong = true;
     for (let i = 0; i < terms.length; i++) {
@@ -10781,10 +10939,7 @@ What you type stays in this browser only.`;
     const title = idx.fields.title;
     if (terms.length > 1 && title.indexOf(terms.join(" ")) !== -1) score += ADJACENT_BONUS;
     if (title.indexOf(terms[0]) === 0) score += TITLE_START_BONUS;
-    if (aterms === void 0) aterms = intentAffinityGroups();
-    if (aterms.length) score += cardIntentAffinity(m, aterms) * AFFINITY_W;
-    if (isFavourite(m && m.id)) score *= FAV_BONUS;
-    return { tier: strong ? 0 : 1, score };
+    return { terms: terms.slice(), tier: strong ? 0 : 1, score };
   }
 
   // src/modules/card-counts.js
@@ -10890,6 +11045,26 @@ What you type stays in this browser only.`;
     });
     return out;
   }
+  function intentCatSets() {
+    const per = /* @__PURE__ */ new Map(), every = /* @__PURE__ */ new Set();
+    (cards || []).forEach((m) => {
+      if (!m || !m.c || !CATS[m.c]) return;
+      const l = cardIntentLinks(m);
+      if (l === true) every.add(m.c);
+      else if (l) l.forEach((id) => {
+        let s = per.get(id);
+        if (!s) {
+          s = /* @__PURE__ */ new Set();
+          per.set(id, s);
+        }
+        s.add(m.c);
+      });
+    });
+    return (i, k) => {
+      const s = per.get(intentIdAt(i));
+      return every.has(k) || !!(s && s.has(k));
+    };
+  }
   function scrollRailTop() {
     const el = document.getElementById("intentRailList");
     if (!el || !el.scrollTop) return;
@@ -10962,8 +11137,10 @@ What you type stays in this browser only.`;
   }
   var eOrderPos = null;
   var eOrderCards = null;
+  var eOrderVer = 0;
   function cardOrderTouched() {
     eOrderPos = null;
+    eOrderVer++;
   }
   function ensureCardOrder() {
     if (!Array.isArray(pack.cardOrder)) {
@@ -10984,7 +11161,8 @@ What you type stays in this browser only.`;
     });
     if (changed) pack.cardOrder = kept;
     eOrderCards = cards;
-    cardOrderTouched();
+    eOrderPos = null;
+    cardOrderPos();
   }
   function cardOrderPos() {
     if (!eOrderPos || eOrderPos.size !== pack.cardOrder.length) {
@@ -10997,8 +11175,8 @@ What you type stays in this browser only.`;
   var eMovedKey = null;
   function movedCardIds() {
     ensureCardOrder();
-    const key = (pack.cardOrder || []).length + "|" + (cards || []).length + "|" + (pack.cardOrder || []).join("");
-    if (eMovedKey === key && eMovedSet) return eMovedSet;
+    const o = pack.cardOrder || [], c = cards || [], was = eMovedKey;
+    if (eMovedSet && was && was.o === o && was.c === c && was.on === o.length && was.cn === c.length && was.v === eOrderVer) return eMovedSet;
     const base = /* @__PURE__ */ new Map();
     (cards || []).forEach((m, i) => {
       if (m && m.id) base.set(m.id, i);
@@ -11032,7 +11210,7 @@ What you type stays in this browser only.`;
     ids.forEach((id) => {
       if (!still.has(id)) moved.add(id);
     });
-    eMovedKey = key;
+    eMovedKey = { o, c, on: o.length, cn: c.length, v: eOrderVer };
     eMovedSet = moved;
     return moved;
   }
@@ -11418,7 +11596,7 @@ What you type stays in this browser only.`;
   function eChooseCatalogFolder(title) {
     return ePickCatalogFolder(title).then((dir) => {
       if (!dir || dir === eCatalogFolder()) return "";
-      if (lsSet(E_CATALOG_FOLDER_KEY, dir) === false) {
+      if (lsSet(E_CATALOG_FOLDER_KEY, dir, true) === false) {
         toastRefusal(t("That setting could not be saved."));
         return "";
       }
@@ -12263,11 +12441,11 @@ What you type stays in this browser only.`;
   function loadSampleCatalog() {
     if ((cards || []).length || !sampleReady()) return false;
     if (typeof E_SAMPLE !== "undefined" && isV2(E_SAMPLE))
-      return activateCatalog(catalogFromV2(JSON.parse(JSON.stringify(E_SAMPLE))), { keepPersonal: false });
+      return activateCatalog(catalogFromV2(JSON.parse(JSON.stringify(E_SAMPLE))), { keepPersonal: true });
     const name = eSampleFile();
     eReadCatalogFile(name).then((got) => {
       const c = got && got.text ? catalogFromFileText(got.text, name) : null;
-      if (c && !(cards || []).length) activateCatalog(c, { keepPersonal: false, file: name });
+      if (c && !(cards || []).length) activateCatalog(c, { keepPersonal: true, file: name });
     });
     return true;
   }
@@ -14751,9 +14929,9 @@ What you type stays in this browser only.`;
     railRelGroup = {};
     const sel = (cats || []).filter(Boolean);
     if (!sel.length) return;
+    const has = intentCatSets();
     intentOrder.forEach((i) => {
-      const ks = categoriesForIntent(i);
-      const hit = sel.filter((k) => isAlwaysCat(k) || ks.indexOf(k) > -1);
+      const hit = sel.filter((k) => isAlwaysCat(k) || has(i, k));
       if (hit.length) {
         railRelNow[i] = hit;
         railRelGroup[i] = String(99 - hit.length).padStart(2, "0") + String(sel.indexOf(hit[0])).padStart(2, "0") + "|" + hit.join(",");
@@ -14828,7 +15006,7 @@ What you type stays in this browser only.`;
     glideSettle(cardsBefore);
     if (String(intentEl.value || "").trim() && !(shown && shown.length)) {
       bumpMiss(pack);
-      savePack();
+      saveStats();
     }
     hooks.flushPillState();
     const markedIdx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : -1;
@@ -15360,8 +15538,9 @@ What you type stays in this browser only.`;
     hooks.cardOrderTouched();
     savePack();
     rebuildCards();
+    const back = packUndoFor(was);
     offerUndo("Card deleted", () => {
-      packRestore(was);
+      back();
       hooks.cardOrderTouched();
       rebuildCards();
       hooks.render();
@@ -15399,15 +15578,23 @@ What you type stays in this browser only.`;
     pack.intentFavourites = (pack.intentFavourites || []).filter((x) => x !== id);
     savePack();
     refreshAfterIntents();
+    const back = packUndoFor(was);
     offerUndo("Intent deleted", () => {
-      packRestore(was);
-      setIntentOrder(wasOrder);
-      setIntentIdxs(wasIdxs);
-      (Array.isArray(tabs) ? tabs : []).forEach((tb, i) => {
-        if (tb && wasTabs[i]) tb.intentIdxs = wasTabs[i];
-      });
-      saveTabSession();
-      saveIntentOrder();
+      back();
+      if (isCustom) {
+        const unshift = (now, then) => {
+          const out = now.map((i) => i >= idx ? i + 1 : i), at = then.indexOf(idx);
+          if (at > -1 && out.indexOf(idx) < 0) out.splice(Math.min(at, out.length), 0, idx);
+          return out;
+        };
+        setIntentOrder(unshift(intentOrder, wasOrder));
+        setIntentIdxs(unshift(intentIdxs, wasIdxs));
+        (Array.isArray(tabs) ? tabs : []).forEach((tb, i) => {
+          if (tb && Array.isArray(tb.intentIdxs) && wasTabs[i]) tb.intentIdxs = unshift(tb.intentIdxs, wasTabs[i]);
+        });
+        saveTabSession();
+        saveIntentOrder();
+      }
       refreshAfterIntents();
       if (document.getElementById("mgCatList")) hooks.openManage();
     });
@@ -15662,12 +15849,12 @@ What you type stays in this browser only.`;
       else {
         intentIdxs.push(idx);
         bumpIntent(pack, intentIdAt(idx));
-        savePack();
+        saveStats();
       }
     } else {
       setIntentIdxs([idx]);
       bumpIntent(pack, intentIdAt(idx));
-      savePack();
+      saveStats();
     }
     setIntentText("");
     if (intentIdxs.length) {
@@ -16175,7 +16362,7 @@ What you type stays in this browser only.`;
     if (!id) return;
     bumpUse(pack, id);
     bumpLang(pack, lang2);
-    savePack();
+    saveStats();
   }
 
   // src/modules/card-body.js
@@ -17971,13 +18158,16 @@ What you type stays in this browser only.`;
       els.field.innerHTML = step.name ? nameFieldHtml("tourName", "tourNamePrev") : "";
       if (step.name) {
         nameInp = wireNameField(els.field, "");
-        if (nameInp) nameInp.onkeydown = (e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            e.stopPropagation();
-            tourNext();
-          }
-        };
+        if (nameInp) {
+          nameInp.onkeydown = (e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.stopPropagation();
+              tourNext();
+            }
+          };
+          nameInp.addEventListener("input", () => keepTypedName(nameInp.value, tourNameWas));
+        }
       }
     }
     const tgt = resolveTourTarget(step);
@@ -18003,6 +18193,7 @@ What you type stays in this browser only.`;
     } else if (keyed) selectTourNext();
     else clearTourFocus();
   }
+  var tourNameWas = false;
   function startTour(from, auto) {
     if (!auto) {
       closeSettingsMenu();
@@ -18020,6 +18211,7 @@ What you type stays in this browser only.`;
     }
     tourRunning = true;
     tourIdx = i;
+    tourNameWas = nameAnswered();
     els.root.hidden = false;
     els.root.setAttribute("aria-hidden", "false");
     els.root.classList.toggle("still", mgReduceMotion());
@@ -18109,7 +18301,8 @@ What you type stays in this browser only.`;
     if (!els.root) return;
     const step = TOUR_STEPS[tourIdx];
     const covered = !!document.querySelector("body > .modal:not([hidden])");
-    els.root.classList.toggle("behind", tourRunning && covered && !(step && step.modal));
+    const asked = !!document.querySelector("body > .bub-ask");
+    els.root.classList.toggle("behind", tourRunning && (asked || covered && !(step && step.modal)));
   }
   function tourHasFocus() {
     const card = $("#tourCard");
@@ -18406,8 +18599,9 @@ What you type stays in this browser only.`;
       drawPills();
       render();
       drawIntentRail();
+      const back = packUndoFor(was);
       offerUndo("Category reset", () => {
-        packRestore(was);
+        back();
         applyCatsToGlobal();
         drawPills();
         render();
@@ -19229,6 +19423,8 @@ What you type stays in this browser only.`;
       afterTour(eOfferCatalogAtBoot);
       return;
     }
+    const found = eCatalog(), held = storedCatalog();
+    if (!asked && found && found.sample && held && !isCatalogUpdate(found, held)) return;
     eOfferCatalog(null, "", "", asked || wholeThingEmpty() || !!(at && mt && mt > at), asked);
   }
   function loadCatalogFromFolder(name, mtime) {
@@ -19378,6 +19574,7 @@ What you type stays in this browser only.`;
       }
     });
   }
+  var offerStanding = null;
   function eOfferCatalogDialog(c, src) {
     const sig = eCatalogSignature(c);
     const active = storedCatalog();
@@ -19391,7 +19588,10 @@ What you type stays in this browser only.`;
       paintCatalogList();
       return false;
     }
-    if (document.getElementById("eCatalogOffer")) return false;
+    if (document.getElementById("eCatalogOffer")) {
+      if (!src.asked || !offerStanding) return false;
+      offerStanding();
+    }
     const replacing = !!active;
     const updating = isCatalogUpdate(c, active);
     const older = updating && catalogEditionOlder(c.version, active.version);
@@ -19422,7 +19622,9 @@ What you type stays in this browser only.`;
     const close = () => {
       removeEventListener("resize", place);
       wrap.remove();
+      if (offerStanding === close) offerStanding = null;
     };
+    offerStanding = close;
     wrap.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       e.preventDefault();

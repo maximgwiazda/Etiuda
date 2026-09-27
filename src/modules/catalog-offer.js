@@ -86,6 +86,10 @@ function eOfferCatalogAtBoot(){
   const at=+(nsGet("CatalogNoAt")||0), mt=eCatalogMtime(), asked=eOpenedWith();
   // A first run's tour asks for a catalog in its own step, so a found file waits for it to end.
   if(!asked && tourDueAtBoot()){ afterTour(eOfferCatalogAtBoot); return; }
+  /* THE SAMPLE NEVER ASKS TO REPLACE A CATALOG THE PERSON CHOSE: it is found at every launch where
+     Etiuda is installed and waits in the Library. Only an edition of the sample itself asks. */
+  const found=eCatalog(), held=storedCatalog();
+  if(!asked && found && found.sample && held && !isCatalogUpdate(found,held)) return;
   /* AN EMPTY DESK IS ASKED EVERY TIME, board 399's rule and 424's shape for it: a refusal was
      said to one launch, and somebody looking at nothing with a catalog in the folder is the
      fault the whole item answers. A desk with anything on it keeps the remembered no. */
@@ -301,6 +305,7 @@ function paintCatalogList(){
 /* Every channel ends here: same guards, same wording, same promise about what is kept.
    Returns whether anything was actually put on screen, which is how an explicit check
    knows to say the file matched. */
+let offerStanding=null;
 /* A BUBBLE HANGING FROM THE TOP BAR'S CATALOG NAME, never a window: the desk stays usable under it,
    and a click anywhere else leaves it standing until it is answered. */
 function eOfferCatalogDialog(c,src){
@@ -324,7 +329,12 @@ function eOfferCatalogDialog(c,src){
   if(!src.asked && (document.getElementById("mgCatList") || ssGet(MG_REOPEN))){
     paintCatalogList(); return false;
   }
-  if(document.getElementById("eCatalogOffer")) return false;
+  /* One bubble at a time. A file somebody chose takes the place of one found and left standing,
+     since that is the question they are waiting on; anything found waits behind the one up. */
+  if(document.getElementById("eCatalogOffer")){
+    if(!src.asked || !offerStanding) return false;
+    offerStanding();
+  }
   const replacing=!!active;
   const updating=isCatalogUpdate(c,active);
   const older=updating && catalogEditionOlder(c.version, active.version);
@@ -377,7 +387,8 @@ function eOfferCatalogDialog(c,src){
   };
   place();
   addEventListener("resize",place);
-  const close=()=>{ removeEventListener("resize",place); wrap.remove(); };
+  const close=()=>{ removeEventListener("resize",place); wrap.remove(); if(offerStanding===close) offerStanding=null; };
+  offerStanding=close;
   /* Escape answers nothing and records no refusal, so a stray press only postpones the question
      to the next launch; it is the bubble's own key, and only while the keyboard is inside it. */
   wrap.addEventListener("keydown",e=>{
