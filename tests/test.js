@@ -639,7 +639,7 @@ function tourActTests() {
   });
   let T = null;
   try {
-    T = new Function("scope", "with(scope){\n" + ["const paxNow=", "const searchNow=", "const themeNow=", "const TOUR_STEPS=",
+    T = new Function("scope", "with(scope){\n" + ["const paxNow=", "const searchNow=", "const themeNow=", "function loadStepBody(", "const TOUR_STEPS=",
       "function stepOn(", "function onFrom(", "function tourAsks(", "function syncTourNext(", "const TOUR_ACT_MS=",
       "let tourActWas=", "function armTourAct(", "function tourActSoon(", "function tourActCheck("]
       .map(m => extractDecl(src, m)).join("\n")
@@ -700,6 +700,26 @@ function tourActTests() {
   page.tourIdx = at("facts"); page.moved = [];
   T.armTourAct(T.TOUR_STEPS[at("facts")]); T.tourActSoon(ev([])); fire();
   eq("a step that opens a window follows the person into it", page.moved, ["follow"]);
+
+  /* EVERY WORD THE TOUR SHOWS IS IN THE POLISH TABLE, on every host it can meet: a function that composes its own key
+     must hit on each t() it makes, and a string it returns bare must itself be a key, as showTourStep reads both. */
+  const langSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "ui-lang.js"), "utf8");
+  const plAt = langSrc.indexOf("UI_STRINGS.pl={"), plEnd = langSrc.indexOf("\n};", plAt);
+  const PL = new Function("const UI_STRINGS={};\n" + langSrc.slice(plAt, plEnd + 3) + "\nreturn UI_STRINGS.pl;")();
+  const untranslated = [];
+  [[true, "X", true, true], [true, "X", false, false], [false, "", false, true]].forEach(([host, dir, sample, wheel]) => {
+    Object.assign(own, { eHost: () => host, eCatalogFolderShort: () => dir, hooks: { sampleReady: () => sample },
+      wheelShown: () => wheel, esc: s => s });
+    T.TOUR_STEPS.forEach(s => ["title", "body"].forEach(k => {
+      let calls = 0, missed = 0;
+      own.t = x => { calls++; if (PL[x] == null) { missed++; return x; } return PL[x]; };
+      const out = typeof s[k] === "function" ? s[k]() : s[k];
+      if (calls ? missed : PL[out] == null) untranslated.push(s.id + "." + k + (host ? "" : " (browser)"));
+    }));
+  });
+  own.t = s => s;
+  eq("every title and body of the tour reads Polish, on the desk and in a browser, with and without the sample and the wheel",
+    [...new Set(untranslated)], []);
 }
 
 /* Section 2.5 of the specification and the body rules of 2.6, driven over the reader that
