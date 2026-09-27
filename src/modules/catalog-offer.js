@@ -4,7 +4,7 @@ import { activateCatalog, catalogEdited, catalogEditionOlder, catalogMacroCount,
   catalogIntentCount, exportCatalog, isCatalogUpdate } from "./catalog-file.js";
 import { E_CATALOG_KEY, E_CATALOG_NAME, E_CATALOG_VERSION, catalogStamp, catalogVersionLabel,
   eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
-  eWatchClear, parseCatalogFile, eWatchName } from "./catalog.js";
+  eWatchClear, parseCatalogFile, eWatchName, eCatalogRefusedNames, eRefuseCatalogFile } from "./catalog.js";
 import { eEmbeddedCatalog } from "./env.js";
 import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
   eCatalogIn, eCatalogBuiltIn, eCatalogMtime, eHost, eLoadedCatalogFile, eOpenCatalogFolder, eOpenedWith,
@@ -24,6 +24,8 @@ import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { intentIdAt, intentOrder } from "./intent-id.js";
 import { pack } from "./pack.js";
 import { ICON_AWAITING, ICON_SUCCESS } from "./icons.js";
+import { catalogTrust, whenTrusted, heldCatalogTrust, recheckHeldTrust, trustMetaHtml, trustOfferLine,
+  trustSettled } from "./catalog-trust.js";
 
 /* A catalog sitting beside Etiuda is offered, never forced. Asked once per signature:
    accept it and it loads silently from then on, change it and you are asked again, so what
@@ -146,7 +148,7 @@ function ecRowHtml(o){
   return '<div class="ec-row'+(o.loaded?" is-loaded":"")+'">'
     +'<span class="ec-name"><b>'+esc(o.name)+'</b>'
     +(o.meta?'<small class="ec-meta">'+o.meta+'</small>':'')
-    +(o.loaded?ecWatchHtml():'')+'</span>'
+    +(o.loaded?trustMetaHtml(heldCatalogTrust(), nsGet("Sample")==="1")+ecWatchHtml():'')+'</span>'
     /* A MARK RATHER THAN A WORD on the loaded row, and no tag at all on the sample. The row
        carrying the acts is the one with the least room, and a pill beside them wrapped the line
        of counts underneath. The sample is still never told it is Newer - it arrives after
@@ -251,6 +253,7 @@ function paintCatalogList(){
   if(!box) return;
   const held=storedCatalog();
   const mine=eLoadedCatalogFile();
+  recheckHeldTrust(eCatalog(),held,paintCatalogList);
   eCatalogFiles().then(files=>{
     if(!box.isConnected) return;
     /* WHICH ROW IS THE CATALOG IN USE. The file the load recorded, first: that is the one route
@@ -321,9 +324,10 @@ function eOfferCatalogDialog(c,src){
   /* A refusal is remembered so boot does not nag, but ASKING outranks it: an explicit check
      that answered "already have it" about a file you declined would simply be untrue. */
   if(!src.force && src.refusedKey && nsGet(src.refusedKey)===sig) return false;
+  catalogTrust(c);
   /* A CATALOG SOMEBODY CHOSE LOADS AT ONCE ON AN EMPTY DESK: nothing is put down, so there is
      nothing to ask. Over a loaded catalog the question stands. */
-  if(src.direct && !active){ src.accept(sig); return true; }
+  if(src.direct && !active){ whenTrusted(c).then(()=>src.accept(sig)); return true; }
   /* NOT OVER THE LIBRARY, and only a file somebody pointed at gets past this. That screen lists
      every catalog in the folder, marks the one loaded and offers Load on each row, so a question
      about the folder argues with a person already looking at the answer. MG_REOPEN as well as
@@ -344,6 +348,7 @@ function eOfferCatalogDialog(c,src){
   const n=(c.cards||[]).length,
         i=catalogIntentCount(c),
         k=Object.keys(c.categories||{}).length;
+  const trustHtml=line=>line?'<p class="ec-trust">'+esc(line)+'</p>':'';
   const wrap=document.createElement("div");
   wrap.className="bub bub-ask e-offer";
   wrap.id="eCatalogOffer";
@@ -377,6 +382,7 @@ function eOfferCatalogDialog(c,src){
        it - each half is translated where it is written, and the <code> stays between them. */
     +'<p class="ec-sub">'+src.foundHtml
     +(updating?' '+esc(t("Your own cards and edits are kept.")):'')+'</p>'
+    +trustHtml(trustOfferLine(trustSettled(c),updating))
     +'<div class="tour-actions">'
     +'<button type="button" class="btn" id="ecNo">'+esc(t(replacing?"Keep current":"Not now"))+'</button>'
     +'<button type="button" class="btn primary" id="ecYes">'+esc(t(older?"Load it anyway":updating?"Load the update":replacing?"Load it":"Load catalog"))+'</button>'
@@ -391,6 +397,13 @@ function eOfferCatalogDialog(c,src){
   };
   place();
   addEventListener("resize",place);
+  // A verification still running when the bubble opened adds its line once it has an answer.
+  if(!wrap.querySelector(".ec-trust")) catalogTrust(c).then(state=>{
+    const line=trustOfferLine(state,updating);
+    if(!line || !wrap.isConnected || wrap.querySelector(".ec-trust")) return;
+    wrap.querySelector(".tour-actions").insertAdjacentHTML("beforebegin",trustHtml(line));
+    place();
+  });
   const close=()=>{ removeEventListener("resize",place); dismissNode(wrap); if(offerStanding===close) offerStanding=null; };
   offerStanding=close;
   /* Escape answers nothing and records no refusal, so a stray press only postpones the question
@@ -403,7 +416,13 @@ function eOfferCatalogDialog(c,src){
   /* Reloads on success, so nothing after it runs. Storage that refuses the catalog returns false
      instead, and the bubble has to come down: left standing over its own failure toast it reads
      as a button that does nothing. */
-  wrap.querySelector("#ecYes").onclick=()=>{ if(src.accept(sig)===false) close(); };
+  /* After the signature has been read, or its wait is over, so the state stored is this file's. */
+  let taking=false;
+  wrap.querySelector("#ecYes").onclick=()=>{
+    if(taking) return;
+    taking=true;
+    whenTrusted(c).then(()=>{ taking=false; if(src.accept(sig)===false) close(); });
+  };
   wrap.querySelectorAll("[data-ec-open]").forEach(el=>{
     el.onclick=()=>eOpenCatalogFolder();
     el.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); eOpenCatalogFolder(); } };
@@ -491,7 +510,11 @@ function refuseAskedFile(name,why){
 function wireHostCatalogWatch(){
   const h=(typeof window!=="undefined" && window.E_HOST)||null;
   if(!h || typeof h.onCatalogFile!=="function") return;
-  const cold=eOpenedRefused();
+  /* A FILE THE HOST HANDED AND THIS ENGINE REFUSED is said as a double-clicked one is, found or
+     asked for: the host passed it over for the next, and a desk that never names it looks empty
+     or stale for no reason anybody can see. The newest refused is the one named. */
+  eCatalog();
+  const cold=eOpenedRefused()||(eCatalogRefusedNames().length?{name:eCatalogRefusedNames()[0],why:"parse"}:null);
   // Deferred with the same hand as the boot's other toasts: no toast host exists this early.
   if(cold) setTimeout(()=>{ try{ refuseAskedFile(cold.name,cold.why); }catch(e){} },1400);
   h.onCatalogFile((text,name,where,asked,why,builtIn)=>{
@@ -500,6 +523,14 @@ function wireHostCatalogWatch(){
     paintCatalogList();
     let c=null;
     try{ if(!why) c=parseCatalogFile(text); }catch(e){ c=null; }
+    if(!c && !why){
+      refuseAskedFile(name,"parse");
+      const next=eRefuseCatalogFile(name);
+      let n=null;
+      try{ n=next?parseCatalogFile(String(next.json)):null; }catch(e){ n=null; }
+      if(n && !asked) eOfferCatalog(n,String(next.file||""),String(next.in||""),false,false,!!next.builtIn);
+      return;
+    }
     if(!c){ if(asked) refuseAskedFile(name,why||"parse"); return; }
     eOfferCatalog(c,name,where,!!asked,!!asked,builtIn);
   });

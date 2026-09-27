@@ -2551,7 +2551,7 @@ details.mf-fold>summary:focus-visible .acc-tw{color:var(--accent)}
 .ec-row.is-loaded{border-color:var(--go-edge,var(--go))}
 .ec-name{flex:1 1 auto;min-width:0}
 .ec-name b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ec-meta{display:block;color:var(--dim);font-size:11.5px}
+.ec-meta,.ec-name .ec-trust{display:block;color:var(--dim);font-size:11.5px}
 .ec-tag{flex:0 0 auto;font:600 10.5px var(--mono);color:var(--dim);
   border:1px solid var(--line);border-radius:999px;padding:1px 7px}
 /* THE LOADED ROW SAYS SO WITH A MARK, not with a word: it is the one row whose right-hand end
@@ -4684,7 +4684,7 @@ What you type stays in this browser only.`;
     return true;
   }
   function deskFlush() {
-    if (eDeskDue || eDeskHeard < eDeskSent) deskSave();
+    if (eDeskDue || eDeskHeard < eDeskSent || eUnsaved) deskSave();
   }
   function deskArm() {
     if (eDeskArmed) return;
@@ -6080,6 +6080,12 @@ What you type stays in this browser only.`;
     "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the catalog file. The page reloads with it and the tour carries on from there; the catalog stays in this browser, ready whenever you come back.": "Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać plik katalogu. Strona załaduje się wtedy od nowa, a przewodnik poprowadzi dalej; katalog zostanie w tej przeglądarce i poczeka na każdy powrót.",
     "comes with Etiuda": "dołączony do Etiudy",
     "takes the place of the copy that comes with Etiuda": "zastępuje kopię dołączoną do Etiudy",
+    "unsigned": "bez podpisu",
+    "changed since it was signed": "zmieniony od czasu podpisania",
+    "signed with a key this computer does not know": "podpisany kluczem, którego ten komputer nie zna",
+    "This file has changed since it was signed.": "Ten plik zmienił się od czasu podpisania.",
+    "This file is signed with a key this computer does not know.": "Ten plik podpisano kluczem, którego nie zna ten komputer.",
+    "The catalog loaded now is signed, and this edition is not.": "Wczytany teraz katalog jest podpisany, a to wydanie nie.",
     "Paste the customer's name as the chat gives it, surname and capitals included; every reply then greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>). The wheel beside it says who is on the chat, for internal comments. Any name will do to try it.": "Proszę wkleić tu imię klienta tak, jak przyszło z czatu, z nazwiskiem i wielkimi literami. Każda odpowiedź zwróci się wtedy do klienta po imieniu, po polsku w wołaczu (ANNA KOWALSKA zamienia się w <b>Anno</b>). Kółko obok określa, kto jest po drugiej stronie czatu, na użytek komentarzy wewnętrznych. Na próbę wystarczy dowolne imię.",
     "The customer's name": "Imię klienta",
     "Paste the customer's name as the chat gives it, surname and capitals included; every reply then greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>). Any name will do to try it.": "Proszę wkleić tu imię klienta tak, jak przyszło z czatu, z nazwiskiem i wielkimi literami. Każda odpowiedź zwróci się wtedy do klienta po imieniu, po polsku w wołaczu (ANNA KOWALSKA zamienia się w <b>Anno</b>). Na próbę wystarczy dowolne imię.",
@@ -7025,19 +7031,23 @@ What you type stays in this browser only.`;
   }
   function v2Unmark(text) {
     const out = [];
-    let cur = [], started = false;
+    let cur = [], label = "", started = false;
+    const close = () => {
+      const body = cur.join("\n").trim();
+      out.push(label ? body ? label + "\n" + body : label : body);
+    };
     v2Str(text).split("\n").forEach((line) => {
       const mark = V2_MARKER_RE.exec(line.trim());
       if (mark) {
-        if (started) out.push(cur.join("\n").trim());
+        if (started) close();
         cur = [];
         started = true;
-        if (mark[1] === "alt" && mark[2]) cur.push(line.trim());
+        label = mark[1] === "alt" && mark[2] ? line.trim() : "";
         return;
       }
       cur.push(line);
     });
-    if (started) out.push(cur.join("\n").trim());
+    if (started) close();
     return out.filter(Boolean).join("\n\n");
   }
   function v2Mark(text, marker) {
@@ -10475,12 +10485,16 @@ What you type stays in this browser only.`;
     E_CATALOG_NAME: () => E_CATALOG_NAME,
     E_CATALOG_STORE: () => E_CATALOG_STORE,
     E_CATALOG_VERSION: () => E_CATALOG_VERSION,
+    catalogDocOf: () => catalogDocOf,
     catalogStamp: () => catalogStamp,
     catalogVersionLabel: () => catalogVersionLabel,
     eApplyCatalog: () => eApplyCatalog,
     eCatalog: () => eCatalog,
     eCatalogAccepted: () => eCatalogAccepted,
+    eCatalogHanded: () => eCatalogHanded,
+    eCatalogRefusedNames: () => eCatalogRefusedNames,
     eCatalogSignature: () => eCatalogSignature,
+    eRefuseCatalogFile: () => eRefuseCatalogFile,
     eWatchClear: () => eWatchClear,
     eWatchGet: () => eWatchGet,
     eWatchName: () => eWatchName,
@@ -10604,16 +10618,61 @@ What you type stays in this browser only.`;
   var E_CATALOG_STORE = nsKey("Catalog");
   var E_SIBLING = null;
   var E_SIBLING_READ = false;
+  var E_HANDED = null;
+  var E_REFUSED = [];
+  function eRefuseCatalogFile(name) {
+    const h = typeof window !== "undefined" && window.E_HOST || null;
+    if (!h || typeof h.catalogRefused !== "function") return null;
+    try {
+      const r = h.catalogRefused(String(name || ""));
+      return r && typeof r === "object" && r.json ? r : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  function eCatalogHanded() {
+    return E_HANDED;
+  }
+  function eCatalogRefusedNames() {
+    return E_REFUSED.slice();
+  }
   function eCatalog() {
     if (E_SIBLING_READ) return E_SIBLING;
     E_SIBLING_READ = true;
-    const c = typeof window !== "undefined" ? window.E_CATALOG : null;
-    try {
-      E_SIBLING = isV2(c) ? normaliseCatalog(catalogFromV2(c)) : null;
-    } catch (e) {
-      E_SIBLING = null;
+    let c = typeof window !== "undefined" ? window.E_CATALOG : null;
+    let file = typeof window !== "undefined" && window.E_HOST ? String(window.E_HOST.catalogFile || "") : "";
+    for (let tries = 0; tries < 32; tries++) {
+      try {
+        E_SIBLING = isV2(c) ? normaliseCatalog(catalogFromV2(c)) : null;
+        catalogDocKeep(E_SIBLING, c);
+        return E_SIBLING;
+      } catch (e) {
+        E_SIBLING = null;
+      }
+      if (file) E_REFUSED.push(file);
+      const next = file ? eRefuseCatalogFile(file) : null;
+      if (!next) return null;
+      try {
+        c = JSON.parse(String(next.json));
+      } catch (e) {
+        return null;
+      }
+      file = String(next.file || "");
+      E_HANDED = { file, in: String(next.in || ""), builtIn: !!next.builtIn, mtime: +next.mtime || 0 };
     }
-    return E_SIBLING;
+    return null;
+  }
+  var E_CATALOG_DOCS = typeof WeakMap === "function" ? /* @__PURE__ */ new WeakMap() : null;
+  function catalogDocKeep(c, doc) {
+    if (E_CATALOG_DOCS && c && typeof c === "object" && doc && typeof doc === "object") {
+      try {
+        E_CATALOG_DOCS.set(c, doc);
+      } catch (e) {
+      }
+    }
+  }
+  function catalogDocOf(c) {
+    return E_CATALOG_DOCS && c && typeof c === "object" && E_CATALOG_DOCS.get(c) || null;
   }
   function storedCatalog() {
     try {
@@ -10719,7 +10778,9 @@ What you type stays in this browser only.`;
         throw new Error("not a catalog - " + (e && e.message ? e.message : "could not parse"));
       }
     }
-    return normaliseCatalog(catalogFromV2(data));
+    const c = normaliseCatalog(catalogFromV2(data));
+    catalogDocKeep(c, data);
+    return c;
   }
   function normaliseCatalog(data) {
     const cardsOut = parseMacrosData(data);
@@ -11450,6 +11511,7 @@ What you type stays in this browser only.`;
     eCatalogFolderShort: () => eCatalogFolderShort,
     eCatalogIn: () => eCatalogIn,
     eCatalogMtime: () => eCatalogMtime,
+    eCatalogRing: () => eCatalogRing,
     eChooseCatalogFolder: () => eChooseCatalogFolder,
     eHasCatalogPicker: () => eHasCatalogPicker,
     eHasCatalogSaver: () => eHasCatalogSaver,
@@ -11642,25 +11704,39 @@ What you type stays in this browser only.`;
       return Promise.resolve(false);
     }
   }
-  function eCatalogFile() {
+  function eCatalogRing() {
     const h = eHost();
-    return h ? String(h.catalogFile || "") : "";
+    if (!h || typeof h.catalogRing !== "function") return Promise.resolve("");
+    try {
+      return Promise.resolve(h.catalogRing()).then((v) => typeof v === "string" ? v : "").catch(() => "");
+    } catch (e) {
+      return Promise.resolve("");
+    }
+  }
+  function eHanded() {
+    if (!eHost()) return null;
+    eCatalog();
+    return eCatalogHanded();
+  }
+  function eCatalogFile() {
+    const h = eHost(), o = eHanded();
+    return o ? o.file : h ? String(h.catalogFile || "") : "";
   }
   function eCatalogIn() {
-    const h = eHost();
-    return h ? String(h.catalogIn || "") : "";
+    const h = eHost(), o = eHanded();
+    return o ? o.in : h ? String(h.catalogIn || "") : "";
   }
   function eCatalogBuiltIn() {
-    const h = eHost();
-    return !!(h && h.catalogBuiltIn);
+    const h = eHost(), o = eHanded();
+    return o ? o.builtIn : !!(h && h.catalogBuiltIn);
   }
   function eCatalogMtime() {
-    const h = eHost();
-    return h ? +h.catalogMtime || 0 : 0;
+    const h = eHost(), o = eHanded();
+    return o ? o.mtime : h ? +h.catalogMtime || 0 : 0;
   }
   function eOpenedWith() {
     const h = eHost();
-    return !!(h && h.openedWith);
+    return !eHanded() && !!(h && h.openedWith);
   }
   function eCatalogFiles() {
     const h = eHost();
@@ -12245,6 +12321,85 @@ What you type stays in this browser only.`;
     setTimeout(speak, 1400);
   }
 
+  // src/modules/catalog-trust.js
+  var catalog_trust_exports = {};
+  __export(catalog_trust_exports, {
+    catalogTrust: () => catalogTrust,
+    heldCatalogTrust: () => heldCatalogTrust,
+    recheckHeldTrust: () => recheckHeldTrust,
+    recordCatalogTrust: () => recordCatalogTrust,
+    trustMetaHtml: () => trustMetaHtml,
+    trustOfferLine: () => trustOfferLine,
+    trustSettled: () => trustSettled,
+    whenTrusted: () => whenTrusted
+  });
+  var TRUST_KEY = "CatalogTrust";
+  var TRUST_WAIT_MS = 2e3;
+  var TRUST_OF = typeof WeakMap === "function" ? /* @__PURE__ */ new WeakMap() : null;
+  function catalogTrust(c) {
+    const doc = catalogDocOf(c);
+    if (!doc || !TRUST_OF) return Promise.resolve("");
+    const had = TRUST_OF.get(c);
+    if (had) return had.wait;
+    let snap = null;
+    try {
+      snap = JSON.parse(JSON.stringify(doc));
+    } catch (e) {
+      snap = null;
+    }
+    const entry = { done: false, state: "" };
+    entry.wait = (snap ? eCatalogRing().then((text) => v2SigState(snap, v2RingRead(text).ring)) : Promise.resolve("")).catch(() => "").then((s) => {
+      entry.done = true;
+      entry.state = String(s || "");
+      return entry.state;
+    });
+    TRUST_OF.set(c, entry);
+    return entry.wait;
+  }
+  function trustSettled(c) {
+    const e = TRUST_OF && c && typeof c === "object" ? TRUST_OF.get(c) : null;
+    return e && e.done ? e.state : "";
+  }
+  function whenTrusted(c) {
+    return new Promise((done) => {
+      const late = setTimeout(() => done(trustSettled(c)), TRUST_WAIT_MS);
+      catalogTrust(c).then((s) => {
+        clearTimeout(late);
+        done(s);
+      });
+    });
+  }
+  function recordCatalogTrust(c) {
+    const s = trustSettled(c);
+    if (s) nsSet(TRUST_KEY, s);
+    else nsDel(TRUST_KEY);
+  }
+  function heldCatalogTrust() {
+    return nsGet(TRUST_KEY) || "";
+  }
+  var trustRechecked = false;
+  function recheckHeldTrust(found, held, then) {
+    if (trustRechecked || !found || !held) return;
+    trustRechecked = true;
+    if (eCatalogSignature(found) !== eCatalogSignature(held)) return;
+    catalogTrust(found).then((s) => {
+      if (!s || s === heldCatalogTrust()) return;
+      nsSet(TRUST_KEY, s);
+      if (typeof then === "function") then();
+    });
+  }
+  function trustMetaHtml(state, sample) {
+    const said = state === V2_SIG_INVALID ? t("changed since it was signed") : state === V2_SIG_UNKNOWN ? t("signed with a key this computer does not know") : state === V2_SIG_NONE && !sample ? t("unsigned") : "";
+    return said ? '<small class="ec-trust" data-trust="' + esc(state) + '">' + esc(said) + "</small>" : "";
+  }
+  function trustOfferLine(state, updating) {
+    if (state === V2_SIG_INVALID) return t("This file has changed since it was signed.");
+    if (state === V2_SIG_UNKNOWN) return t("This file is signed with a key this computer does not know.");
+    if (state === V2_SIG_NONE && updating && heldCatalogTrust() === V2_SIG_VALID)
+      return t("The catalog loaded now is signed, and this edition is not.");
+    return "";
+  }
+
   // src/modules/catalog-file.js
   function intentsExport(keep) {
     const out = {}, col = (f, l) => intentArr(f, l) || [];
@@ -12508,6 +12663,7 @@ What you type stays in this browser only.`;
     try {
       nsSet("CatalogFile", String(opts && opts.file || ""));
       nsSet("CatalogFileAt", String(+(opts && opts.fileAt) || 0));
+      recordCatalogTrust(c);
     } catch (e) {
     }
     mgReopenAfterReload();
@@ -13087,7 +13243,7 @@ What you type stays in this browser only.`;
     offerEjectUndo: () => offerEjectUndo
   });
   function catalogKeep() {
-    return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample")];
+    return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample"), nsKey("CatalogTrust")];
   }
   var E_WIPE_KEEP = ["eCatalogFolder"];
   var E_PREF_KEYS = [
@@ -19996,7 +20152,7 @@ What you type stays in this browser only.`;
     return '<small class="ec-watch">' + esc(t("Watching")) + " <code>" + esc(eWatchName()) + '</code> · <span class="acts"><button type="button" class="act" data-ec-check="1" title="' + esc(t("Read that file again and offer it if it has changed")) + '">' + esc(t("Check for updates")) + '</button><span class="sep" aria-hidden="true">·</span><button type="button" class="act" data-ec-unwatch="1">' + esc(t("Stop watching")) + "</button></span></small>";
   }
   function ecRowHtml(o) {
-    return '<div class="ec-row' + (o.loaded ? " is-loaded" : "") + '"><span class="ec-name"><b>' + esc(o.name) + "</b>" + (o.meta ? '<small class="ec-meta">' + o.meta + "</small>" : "") + (o.loaded ? ecWatchHtml() : "") + "</span>" + (o.loaded ? loadedTickHtml() : "") + (o.newer && !o.sample ? '<span class="ec-tag" title="' + esc(t("Written after the catalog you have")) + '">' + esc(t("Newer")) + "</span>" : "") + (o.loaded ? (catalogEdited() ? '<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="' + esc(t("Save everything loaded now as a catalog file, your edits merged in")) + '">' + esc(t("Export…")) + "</button>" : "") + '<button type="button" class="btn" data-ec-eject="1" title="' + esc(t("Put this catalog down and start empty")) + '">' + esc(t("Eject")) + "</button>" : '<button type="button" class="btn" data-ec-load="' + esc(o.name) + '" data-ec-at="' + (+o.mtime || 0) + '">' + esc(t("Load")) + "</button>") + "</div>";
+    return '<div class="ec-row' + (o.loaded ? " is-loaded" : "") + '"><span class="ec-name"><b>' + esc(o.name) + "</b>" + (o.meta ? '<small class="ec-meta">' + o.meta + "</small>" : "") + (o.loaded ? trustMetaHtml(heldCatalogTrust(), nsGet("Sample") === "1") + ecWatchHtml() : "") + "</span>" + (o.loaded ? loadedTickHtml() : "") + (o.newer && !o.sample ? '<span class="ec-tag" title="' + esc(t("Written after the catalog you have")) + '">' + esc(t("Newer")) + "</span>" : "") + (o.loaded ? (catalogEdited() ? '<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="' + esc(t("Save everything loaded now as a catalog file, your edits merged in")) + '">' + esc(t("Export…")) + "</button>" : "") + '<button type="button" class="btn" data-ec-eject="1" title="' + esc(t("Put this catalog down and start empty")) + '">' + esc(t("Eject")) + "</button>" : '<button type="button" class="btn" data-ec-load="' + esc(o.name) + '" data-ec-at="' + (+o.mtime || 0) + '">' + esc(t("Load")) + "</button>") + "</div>";
   }
   function ecEmptyHtml() {
     const dir = eCatalogFolder();
@@ -20054,6 +20210,7 @@ What you type stays in this browser only.`;
     if (!box) return;
     const held = storedCatalog();
     const mine = eLoadedCatalogFile();
+    recheckHeldTrust(eCatalog(), held, paintCatalogList);
     eCatalogFiles().then((files) => {
       if (!box.isConnected) return;
       let onAt = mine ? files.findIndex((f) => f.name === mine) : -1;
@@ -20116,8 +20273,9 @@ What you type stays in this browser only.`;
     const active = storedCatalog();
     if (active && eCatalogSignature(active) === sig) return false;
     if (!src.force && src.refusedKey && nsGet(src.refusedKey) === sig) return false;
+    catalogTrust(c);
     if (src.direct && !active) {
-      src.accept(sig);
+      whenTrusted(c).then(() => src.accept(sig));
       return true;
     }
     if (!src.asked && (document.getElementById("mgCatList") || ssGet(MG_REOPEN))) {
@@ -20132,6 +20290,7 @@ What you type stays in this browser only.`;
     const updating = isCatalogUpdate(c, active);
     const older = updating && catalogEditionOlder(c.version, active.version);
     const n = (c.cards || []).length, i = catalogIntentCount(c), k = Object.keys(c.categories || {}).length;
+    const trustHtml = (line) => line ? '<p class="ec-trust">' + esc(line) + "</p>" : "";
     const wrap = document.createElement("div");
     wrap.className = "bub bub-ask e-offer";
     wrap.id = "eCatalogOffer";
@@ -20147,7 +20306,7 @@ What you type stays in this browser only.`;
       catalogMacroCount(c),
       i,
       k
-    ) + '</div></div><p class="ec-sub">' + src.foundHtml + (updating ? " " + esc(t("Your own cards and edits are kept.")) : "") + '</p><div class="tour-actions"><button type="button" class="btn" id="ecNo">' + esc(t(replacing ? "Keep current" : "Not now")) + '</button><button type="button" class="btn primary" id="ecYes">' + esc(t(older ? "Load it anyway" : updating ? "Load the update" : replacing ? "Load it" : "Load catalog")) + "</button></div>";
+    ) + '</div></div><p class="ec-sub">' + src.foundHtml + (updating ? " " + esc(t("Your own cards and edits are kept.")) : "") + "</p>" + trustHtml(trustOfferLine(trustSettled(c), updating)) + '<div class="tour-actions"><button type="button" class="btn" id="ecNo">' + esc(t(replacing ? "Keep current" : "Not now")) + '</button><button type="button" class="btn primary" id="ecYes">' + esc(t(older ? "Load it anyway" : updating ? "Load the update" : replacing ? "Load it" : "Load catalog")) + "</button></div>";
     cutLeaves();
     document.body.appendChild(wrap);
     const place = () => {
@@ -20156,6 +20315,12 @@ What you type stays in this browser only.`;
     };
     place();
     addEventListener("resize", place);
+    if (!wrap.querySelector(".ec-trust")) catalogTrust(c).then((state) => {
+      const line = trustOfferLine(state, updating);
+      if (!line || !wrap.isConnected || wrap.querySelector(".ec-trust")) return;
+      wrap.querySelector(".tour-actions").insertAdjacentHTML("beforebegin", trustHtml(line));
+      place();
+    });
     const close = () => {
       removeEventListener("resize", place);
       dismissNode(wrap);
@@ -20168,8 +20333,14 @@ What you type stays in this browser only.`;
       e.stopPropagation();
       close();
     });
+    let taking = false;
     wrap.querySelector("#ecYes").onclick = () => {
-      if (src.accept(sig) === false) close();
+      if (taking) return;
+      taking = true;
+      whenTrusted(c).then(() => {
+        taking = false;
+        if (src.accept(sig) === false) close();
+      });
     };
     wrap.querySelectorAll("[data-ec-open]").forEach((el) => {
       el.onclick = () => eOpenCatalogFolder();
@@ -20278,7 +20449,8 @@ What you type stays in this browser only.`;
   function wireHostCatalogWatch() {
     const h = typeof window !== "undefined" && window.E_HOST || null;
     if (!h || typeof h.onCatalogFile !== "function") return;
-    const cold = eOpenedRefused();
+    eCatalog();
+    const cold = eOpenedRefused() || (eCatalogRefusedNames().length ? { name: eCatalogRefusedNames()[0], why: "parse" } : null);
     if (cold) setTimeout(() => {
       try {
         refuseAskedFile(cold.name, cold.why);
@@ -20292,6 +20464,18 @@ What you type stays in this browser only.`;
         if (!why) c = parseCatalogFile(text);
       } catch (e) {
         c = null;
+      }
+      if (!c && !why) {
+        refuseAskedFile(name, "parse");
+        const next = eRefuseCatalogFile(name);
+        let n = null;
+        try {
+          n = next ? parseCatalogFile(String(next.json)) : null;
+        } catch (e) {
+          n = null;
+        }
+        if (n && !asked) eOfferCatalog(n, String(next.file || ""), String(next.in || ""), false, false, !!next.builtIn);
+        return;
       }
       if (!c) {
         if (asked) refuseAskedFile(name, why || "parse");
@@ -22239,7 +22423,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });

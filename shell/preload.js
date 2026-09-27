@@ -37,10 +37,15 @@ contextBridge.exposeInMainWorld("E_HOST", {
   openedWith: host.openedWith,
   /* True once, on the load the shell made after the page stopped. */
   recovering: !!host.recovering,
+  /* The engine refused the file named: {json, file, in, builtIn, mtime} for the next one the
+     shell would read, or null. Synchronous, because the engine asks while it boots. */
+  catalogRefused: (name) => ipcRenderer.sendSync("etiuda:catalog-refused", String(name || "")),
   /* The folder's own listing and one file out of it, both asked for after boot: Settings shows
      what is there now, and the folder may have moved since this load began. */
   catalogFiles: () => ipcRenderer.invoke("etiuda:catalog-files"),
   openCatalogFolder: () => ipcRenderer.invoke("etiuda:open-catalog-folder"),
+  /* The ring beside the catalogs as text, read afresh each time the page verifies a signature. */
+  catalogRing: () => ipcRenderer.invoke("etiuda:catalog-ring"),
   readCatalogFile: (name) => ipcRenderer.invoke("etiuda:catalog-read", String(name || "")),
   /* The caption is the page's, because the shell has no t(). Async, unlike the desk: a modal
      the person is standing in front of must not hold the renderer's thread. */

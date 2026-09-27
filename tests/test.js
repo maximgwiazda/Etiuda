@@ -907,6 +907,26 @@ function v2ValidationTests() {
   eq("a bare alternative still drops the marker line", loadedBare.cards[0].en, "One.\n\nTwo.");
   eq("and writes a bare marker back",
      V.catalogToV2(loadedBare).cards[0].body.en, "[alt]\nOne.\n\n[alt]\nTwo.");
+  /* A BLANK LINE TYPED AFTER A LABELLED MARKER. The desk splits a body on blank lines (parts() in
+     card-model.js), so a label left on a block of its own became an alternative with no text. */
+  const gapped = base();
+  gapped.cards[0].bodyShape = "alts";
+  gapped.cards[0].body.en = "[alt: by post]\n\nOne.\n\n[alt: by phone]\n  \n\nTwo.";
+  eq("v2 a blank line after a labelled alternative has nothing to report", V.v2Problems(gapped), []);
+  const loadedGap = V.catalogFromV2(gapped).cards[0].en;
+  const deskParts = loadedGap.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+  eq("and the desk reads two labelled alternatives, each with its text",
+     [deskParts.map(V.v2PartText), deskParts.map(V.v2AltLabel)], [["One.", "Two."], ["by post", "by phone"]]);
+  {
+    const shellSrc = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+    const markerLine = shellSrc.split("\n").filter(l => l.indexOf("const EC_MARKER =") === 0);
+    const ecBlocks = markerLine.length === 1
+      ? new Function(markerLine[0] + "\n" + extractDecl(shellSrc, "function ecBlocks(") + "\nreturn ecBlocks;")()
+      : null;
+    eq("and the Library's count off the file agrees with the desk's",
+       ecBlocks ? [ecBlocks(gapped.cards[0].body.en, "alts"), deskParts.length] : "no one EC_MARKER line in shell/main.js",
+       [2, 2]);
+  }
   const fmtSrc = fs.readFileSync(path.join(__dirname, "..", "tools", "catalog-v2", "format.mjs"), "utf8");
   const isMarkerLine = new Function(fmtSrc.replace(/\nexport \{[\s\S]*$/, "\nreturn isMarkerLine;"))();
   eq("isMarkerLine and v2Problems agree on [alt: by post]",
@@ -3026,8 +3046,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 820;
-const UI_STRINGS_SHA256 = "9255f5c3116b43bfb194cee31b1ac0977f95820d56568d66496959ec0db67efd";
+const UI_STRINGS_COUNT = 826;
+const UI_STRINGS_SHA256 = "4229276e63b847d2ed061d3cfa447525c48a65b7a5c742a472d8a57238609da1";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
@@ -4544,6 +4564,28 @@ if (require.main === module) {
         + " time, under ${UAC_IsInnerInstance} and nothing else, so the elevated inner copy skips"
         + " the licence" : "; licence is not before install-mode")
       + (debugPages ? "; " + debugPages + " agrees" : ""));
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
+
+  section("[2f/5] the fuses the executable is built with");
+  try {
+    /* ELECTRON-BUILDER COPIES ONLY THE FUSE NAMES IT KNOWS, so a misspelt key leaves that fuse at
+       Electron's default with no error anywhere. Each wanted key is read as electron-builder
+       reads it, in its own generateFuseConfig, and the value the config gives it is checked. */
+    const root = path.join(__dirname, "..");
+    const want = { runAsNode: false, enableNodeOptionsEnvironmentVariable: false,
+                   enableNodeCliInspectArguments: false, onlyLoadAppFromAsar: true };
+    const cfg = require(path.join(root, "electron-builder.js")).electronFuses || {};
+    const packager = fs.readFileSync(path.join(root, "node_modules", "app-builder-lib", "out",
+      "platformPackager.js"), "utf8");
+    const bad = [];
+    Object.keys(cfg).forEach(k => { if (packager.indexOf("fuses." + k + " != null") < 0)
+      bad.push(k + " is not a fuse electron-builder reads"); });
+    Object.keys(want).forEach(k => { if (cfg[k] !== want[k])
+      bad.push(k + " is " + JSON.stringify(cfg[k]) + ", wanted " + want[k]); });
+    bad.forEach(x => console.error("  ERROR: " + x));
+    if (bad.length) hardFail++;
+    else console.log("  " + Object.keys(cfg).length + " fuses set, each one electron-builder reads: "
+      + Object.keys(cfg).map(k => k + " " + cfg[k]).join(", "));
   } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
   section("[3/5] stacking invariants");

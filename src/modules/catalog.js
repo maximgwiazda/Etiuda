@@ -21,17 +21,51 @@ const E_CATALOG_STORE=nsKey("Catalog");      // the active catalog itself
 /* Read once and remembered, because boot asks more than once and the answer cannot change:
    a sibling script has run or it has not by the time anything here is called. */
 let E_SIBLING=null, E_SIBLING_READ=false;
+/* A HOST'S FILE THIS READER REFUSED: the host checks only the format's pair, so a file can pass
+   there and fail v2Problems here. The host is told, passes it over and hands the next file it
+   would read, and E_HANDED is where that one came from, which host.js answers in place of what
+   the host said at boot. E_REFUSED names the refused files, for the boot to say so. */
+let E_HANDED=null;
+const E_REFUSED=[];
+function eRefuseCatalogFile(name){
+  const h=(typeof window!=="undefined" && window.E_HOST)||null;
+  if(!h || typeof h.catalogRefused!=="function") return null;
+  try{
+    const r=h.catalogRefused(String(name||""));
+    return (r && typeof r==="object" && r.json) ? r : null;
+  }catch(e){ return null; }
+}
+function eCatalogHanded(){ return E_HANDED; }
+function eCatalogRefusedNames(){ return E_REFUSED.slice(); }
 function eCatalog(){
   if(E_SIBLING_READ) return E_SIBLING;
   E_SIBLING_READ=true;
-  const c=(typeof window!=="undefined") ? window.E_CATALOG : null;
+  let c=(typeof window!=="undefined") ? window.E_CATALOG : null;
+  let file=(typeof window!=="undefined" && window.E_HOST) ? String(window.E_HOST.catalogFile||"") : "";
   /* THROUGH THE WHITELIST, exactly as a picked file goes. normaliseCatalog is what refuses the
      reserved category key and a hue no build offers, and this route skipped it, so one file
      kept more by sitting beside Etiuda than by being imported. tests/catalog-routes.mjs holds
      the two routes to the same answer. */
-  try{ E_SIBLING=isV2(c) ? normaliseCatalog(catalogFromV2(c)) : null; }catch(e){ E_SIBLING=null; }
-  return E_SIBLING;
+  for(let tries=0; tries<32; tries++){
+    try{ E_SIBLING=isV2(c) ? normaliseCatalog(catalogFromV2(c)) : null; catalogDocKeep(E_SIBLING,c); return E_SIBLING; }
+    catch(e){ E_SIBLING=null; }
+    if(file) E_REFUSED.push(file);
+    const next=file ? eRefuseCatalogFile(file) : null;
+    if(!next) return null;
+    try{ c=JSON.parse(String(next.json)); }catch(e){ return null; }
+    file=String(next.file||"");
+    E_HANDED={file:file, in:String(next.in||""), builtIn:!!next.builtIn, mtime:+next.mtime||0};
+  }
+  return null;
 }
+/* THE DOCUMENT A CATALOG WAS PARSED FROM, kept beside it because the runtime's shape drops the
+   signature and the signed bytes are the document's. Only the two parsers here register one, so
+   a catalog built any other way has none and its signature is not read. */
+const E_CATALOG_DOCS=(typeof WeakMap==="function")?new WeakMap():null;
+function catalogDocKeep(c,doc){
+  if(E_CATALOG_DOCS && c && typeof c==="object" && doc && typeof doc==="object"){ try{ E_CATALOG_DOCS.set(c,doc); }catch(e){} }
+}
+function catalogDocOf(c){ return (E_CATALOG_DOCS && c && typeof c==="object" && E_CATALOG_DOCS.get(c)) || null; }
 /* The active catalog, whether it arrived by import or by accepting the sibling file. Keeping a
    copy rather than re-reading the sibling every boot is what lets an imported catalog and a
    sibling catalog be the same thing: one stored catalog, one code path, and Reset clears it. */
@@ -133,7 +167,9 @@ function parseCatalogFile(text){
     try{ data=JSON.parse(raw); }
     catch(e){ throw new Error("not a catalog - "+(e&&e.message?e.message:"could not parse")); }
   }
-  return normaliseCatalog(catalogFromV2(data));
+  const c=normaliseCatalog(catalogFromV2(data));
+  catalogDocKeep(c,data);
+  return c;
 }
 /** The whitelist, over a catalog the runtime can already read. Every route to a catalog ends
  *  here, so two catalogs are the same exactly when this returns the same thing. */
@@ -383,6 +419,9 @@ let E_CATALOG_NAME="", E_CATALOG_VERSION=null;
 
 export {
   eCatalog,
+  eCatalogHanded,
+  eCatalogRefusedNames,
+  eRefuseCatalogFile,
   storedCatalog,
   storeCatalog,
   eWatchSupported,
@@ -391,6 +430,7 @@ export {
   eWatchClear,
   eWatchName,
   parseCatalogFile,
+  catalogDocOf,
   normaliseCatalog,
   eCatalogSignature,
   catalogVersionLabel,
