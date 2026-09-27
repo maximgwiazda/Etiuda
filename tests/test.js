@@ -532,6 +532,7 @@ function runUnitTests() {
   shellBridgeTests();
   policyTests();
   windowPlaceTests();
+  pillWrapTests();
   v2ValidationTests();
   lintCatalogTests();
   langAgnosticTests();
@@ -1280,6 +1281,108 @@ function windowPlaceTests() {
     [place({ x: "a", y: 0, width: 10, height: 10 }, areas, main, SIZE).x, place({ x: 0, y: 0, width: -5, height: 10 }, areas, main, SIZE).x,
      place(["x"], areas, main, SIZE).x, place({ x: 0, y: 0, width: 800, height: 600, maximized: "yes" }, areas, main, SIZE).maximized],
     [320, 320, 320, false]);
+}
+/* A PILL GLIDES FROM WHERE IT WAS PAINTED TO WHERE IT LANDS (797 N1 and N3): a width tween that
+   moves a row break carries a pill across the row mid-glide. flipPills and tweenPillWidths are
+   sliced out and run on a wrapping row modelled here, and the glide is replayed on the one curve
+   its widths and offsets share. The painted frames are the verifier's. */
+function pillRow(W, spec) {
+  const GAP = 6, LINE = 37.5, kids = [];
+  const lay = ws => {
+    let x = 0, line = 0;
+    const at = new Map();
+    kids.forEach((k, i) => {
+      const w = ws ? ws[i] : k.w();
+      if (x > 0 && x + w > W) { line++; x = 0; }
+      at.set(k, { x, y: line * LINE, w });
+      x += w + GAP;
+    });
+    return { at, h: (line + 1) * LINE - GAP };
+  };
+  const px = v => v ? parseFloat(v) : null;
+  const shift = t => { const m = /translate\((-?[0-9.]+)px,\s*(-?[0-9.]+)px\)/.exec(t || ""); return m ? [+m[1], +m[2]] : [0, 0]; };
+  spec.forEach(([k, nat]) => {
+    const p = { dataset: { k }, nat, anim: {}, classList: { contains: c => c === "pill-add" && k === null } };
+    if (k === null) delete p.dataset.k;
+    let tf = "", wd = "", tr = "";
+    p.style = { willChange: "" };
+    Object.defineProperty(p.style, "transition", { get: () => tr, set: v => { tr = v; } });
+    Object.defineProperty(p.style, "transform", { get: () => tf,
+      set: v => { if (/transform/.test(tr) && v !== tf) p.anim.transform = [tf, v]; tf = v; } });
+    Object.defineProperty(p.style, "width", { get: () => wd,
+      set: v => { if (/width/.test(tr) && v !== wd) p.anim.width = [px(wd) || p.nat, px(v) || p.nat]; wd = v; } });
+    p.w = () => px(wd) || p.nat;
+    Object.defineProperty(p, "offsetTop", { get: () => lay().at.get(p).y });
+    p.getBoundingClientRect = () => { const a = lay().at.get(p), s = shift(tf);
+      return { left: a.x + s[0], top: a.y + s[1], width: a.w, height: 31.5 }; };
+    kids.push(p);
+  });
+  const row = { children: kids, querySelectorAll: () => kids.slice(),
+    get offsetHeight() { return lay().h; }, get scrollHeight() { return lay().h; } };
+  /* Where each pill is painted at progress s of the one curve: widths and offsets both from their
+     start to their end, the layout taken again at those widths. */
+  row.at = s => {
+    const ws = kids.map(k => k.anim.width ? k.anim.width[0] + (k.anim.width[1] - k.anim.width[0]) * s : k.w());
+    const L = lay(ws);
+    return kids.map(k => { const a = L.at.get(k), d = k.anim.transform ? shift(k.anim.transform[0]) : shift(k.style.transform);
+      return { k: k.dataset.k === undefined ? null : k.dataset.k, x: a.x + d[0] * (1 - s), y: a.y + d[1] * (1 - s) }; });
+  };
+  return row;
+}
+/* The worst a glide does, over 200 steps: how far a pill is painted past either end of the line from
+   where it was to where it lands, and the longest single step against a smooth one's. */
+function pillGlideFaults(before, row) {
+  const N = 200, frames = [];
+  for (let i = 0; i <= N; i++) frames.push(row.at(i / N));
+  const out = [];
+  frames[0].forEach((p0, j) => {
+    const b = before.get(p0.k), e = frames[N][j];
+    if (!b) return;
+    const T = [e.x - b.left, e.y - b.top], L = Math.hypot(T[0], T[1]);
+    let past = 0, step = 0;
+    frames.forEach((f, i) => {
+      const P = f[j];
+      if (L > 0) {
+        const t = ((P.x - b.left) * T[0] + (P.y - b.top) * T[1]) / (L * L);
+        past = Math.max(past, t < 0 ? -t * L : t > 1 ? (t - 1) * L : 0);
+      }
+      if (i) step = Math.max(step, Math.hypot(P.x - frames[i - 1][j].x, P.y - frames[i - 1][j].y));
+    });
+    const start = Math.hypot(frames[0][j].x - b.left, frames[0][j].y - b.top);
+    if (past > 12 || step > Math.max(2, 4 * L / N) || start > 1) out.push((p0.k === null ? "add" : p0.k || "All")
+      + " past " + Math.round(past) + " step " + Math.round(step) + " start " + Math.round(start));
+  });
+  return out;
+}
+function pillWrapTests() {
+  const paint = fs.readFileSync(path.join(E.ROOT, "src", "modules", "paint.js"), "utf8");
+  const state = fs.readFileSync(path.join(E.ROOT, "src", "modules", "pill-state.js"), "utf8");
+  const lines = paint.indexOf("function pillLines(") > -1 ? extractDecl(paint, "function pillLines(") : "";
+  const flip = row => new Function("pills", "E_EASE", "setTimeout",
+    extractDecl(paint, "function pillKey(") + "\n" + lines + "\n" + extractDecl(paint, "function flipPills(")
+    + "\nreturn flipPills;")(row, "ease", () => 0);
+  const tween = row => new Function("pills", "E_EASE", "mgReduceMotion", "requestAnimationFrame", "setTimeout", "clearTimeout",
+    extractDecl(paint, "function pillKey(") + "\n" + lines + "\n" + extractDecl(paint, "function flipPills(") + "\n"
+    + extractDecl(state, "function tweenPillWidths(") + "\nreturn tweenPillWidths;")(
+    row, "ease", () => false, f => f(), () => 0, () => {});
+  /* All's count gains a digit, 77px to 83px, and the pill that closed the first line at 296px no
+     longer fits: the row keeps its two lines and trades a pill between them. At 280px it still fits. */
+  const rest = [["a", 200], ["b", 200], ["c", 200]];
+  for (const [what, last, trades] of [["a pill at the break", 296, true], ["a pill clear of it", 280, false]]) {
+    const old = pillRow(1000, [["", 77], ...rest, ["x", last], ["d", 200], ["e", 200], [null, 31]]);
+    const before = new Map(old.children.map(p => [p.dataset.k === undefined ? null : p.dataset.k, p.getBoundingClientRect()]));
+    const now = pillRow(1000, [["", 83], ...rest, ["x", last], ["d", 200], ["e", 200], [null, 31]]);
+    eq("the model trades a pill between lines only where it is meant to: " + what,
+      old.children[4].offsetTop !== now.children[4].offsetTop, trades);
+    let got;
+    try { flip(now)(before); got = pillGlideFaults(before, now); } catch (e) { got = "flipPills threw: " + e.message; }
+    eq("a settle that widens All glides every pill on its own path, " + what, got, []);
+    eq("All's width still tweens where the row wraps alike, " + what, !!now.children[0].anim.width, !trades);
+    const counts = pillRow(1000, [["", 83], ...rest, ["x", last], ["d", 200], ["e", 200], [null, 31]]);
+    try { tween(counts)([counts.children[0]], [77], before); got = pillGlideFaults(before, counts); }
+    catch (e) { got = "tweenPillWidths threw: " + e.message; }
+    eq("a count written in place never carries a pill across the row, " + what, got, []);
+  }
 }
 function requestFns() {
   const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");

@@ -14593,6 +14593,7 @@ What you type stays in this browser only.`;
     paintIntentRings: () => paintIntentRings,
     paintRailSelection: () => paintRailSelection,
     pillKey: () => pillKey,
+    pillLines: () => pillLines,
     schedulePickTail: () => schedulePickTail,
     wirePillDrag: () => wirePillDrag,
     wirePumpKick: () => wirePumpKick
@@ -14621,6 +14622,11 @@ What you type stays in this browser only.`;
   function pillKey(p) {
     return p.dataset.k != null ? p.dataset.k : p.classList.contains("pill-add") ? null : void 0;
   }
+  function pillLines() {
+    let s = "";
+    for (const c of pills.children) s += c.offsetTop + ",";
+    return s;
+  }
   function flipPills(before) {
     if (!before) return;
     const els = [], bs = [], moved = [], deltas = [], wEls = [], wStarts = [];
@@ -14631,7 +14637,7 @@ What you type stays in this browser only.`;
         bs.push(b);
       }
     });
-    const hNat = pills.scrollHeight;
+    const lines = pillLines();
     els.forEach((p, i) => {
       const w = p.getBoundingClientRect().width;
       if (Math.abs(bs[i].width - w) >= 1.5) {
@@ -14644,7 +14650,7 @@ What you type stays in this browser only.`;
       p.style.transition = "none";
       p.style.width = wStarts[i] + "px";
     });
-    if (wEls.length && pills.scrollHeight !== hNat) {
+    if (wEls.length && pillLines() !== lines) {
       wEls.forEach((p) => {
         p.style.width = "";
         p.style.transition = "";
@@ -16762,6 +16768,7 @@ What you type stays in this browser only.`;
     if (!pills) return;
     const sc = searchCounts();
     const els = Array.prototype.slice.call(pills.querySelectorAll(".pill[data-k]"));
+    const before = capturePills();
     const w0 = els.map((el) => el.getBoundingClientRect().width);
     els.forEach((el) => {
       const k = el.dataset.k, b = el.querySelector("b");
@@ -16770,12 +16777,12 @@ What you type stays in this browser only.`;
       b.textContent = String(n);
       el.classList.toggle("pill-nohit", !!sc && !n && k !== "");
     });
-    tweenPillWidths(els, w0);
+    tweenPillWidths(els, w0, before);
   }
-  function tweenPillWidths(els, w0) {
+  function tweenPillWidths(els, w0, before) {
     if (mgReduceMotion()) return;
     const grew = [];
-    const hNat = pills.scrollHeight;
+    const lines = pillLines();
     els.forEach((el, i) => {
       const w1 = el.getBoundingClientRect().width;
       if (Math.abs(w1 - w0[i]) < 1.5) return;
@@ -16784,12 +16791,12 @@ What you type stays in this browser only.`;
       grew.push({ el, w: w1 });
     });
     if (!grew.length) return;
-    void pills.offsetHeight;
-    if (pills.scrollHeight !== hNat) {
+    if (pillLines() !== lines) {
       grew.forEach((g) => {
         g.el.style.transition = "";
         g.el.style.width = "";
       });
+      flipPills(before);
       return;
     }
     requestAnimationFrame(() => requestAnimationFrame(() => {

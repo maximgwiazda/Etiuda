@@ -53,6 +53,10 @@ function wirePumpKick(){
 /* A pill's key in a capture: its category, "" for All, null for the add button, which has none;
    undefined for anything else in the row. */
 function pillKey(p){ return p.dataset.k!=null ? p.dataset.k : p.classList.contains("pill-add") ? null : undefined; }
+/* Which line every child of the row sits on. A width tween may run only where the old widths wrap
+   the row as the new ones do: every width rides one curve from one start, so a row that wraps alike
+   at both ends wraps alike throughout, and an equal height does not say so. */
+function pillLines(){ let s=""; for(const c of pills.children) s+=c.offsetTop+","; return s; }
 /** The "invert and play" half. Call after the pills have been redrawn in their new order. */
 /* READ EVERY POSITION FIRST, THEN WRITE EVERY TRANSFORM: a rect read after a style
    write forces a full layout PER PILL - interleaved, this was 25.6ms of a 180ms
@@ -64,7 +68,7 @@ function flipPills(before){
     const k=pillKey(p), b=k!==undefined && before.get(k);
     if(b){ els.push(p); bs.push(b); }
   });
-  const hNat=pills.scrollHeight;   // through the clip - see the note at tweenPillWidths
+  const lines=pillLines();
   /* Width changes ride the same flip - a selection bolds the name, a recount changes the
      digits, and either snapping while neighbours slide reads as a glitch. 1.5px floor:
      fractional DPRs round every pill differently on every pass. */
@@ -75,8 +79,8 @@ function flipPills(before){
   /* The old widths go back BEFORE the positions are read: each one shifts every pill after it
      in the row, so an offset read at the new widths starts the glide that far from the pill. */
   wEls.forEach((p,i)=>{ p.style.transition="none"; p.style.width=wStarts[i]+"px"; });
-  /* Height is the invariant - see tweenPillWidths. A rolled-back width still slides. */
-  if(wEls.length && pills.scrollHeight!==hNat){
+  /* The wrap is the invariant - see pillLines. A rolled-back width still slides. */
+  if(wEls.length && pillLines()!==lines){
     wEls.forEach(p=>{ p.style.width=""; p.style.transition=""; delete p.dataset._eW; });
     wEls.length=0;
   }
@@ -310,7 +314,7 @@ function cancelPickTail(){
 }
 
 export {
-  wirePumpKick, pillKey, flipPills, animateReorder, captureCards, flipCards, captureSettle, glideSettle,
+  wirePumpKick, pillKey, pillLines, flipPills, animateReorder, captureCards, flipCards, captureSettle, glideSettle,
   wirePillDrag,
   paintRailSelection, paintIntentRings,
   schedulePickTail,
