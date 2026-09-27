@@ -42,7 +42,7 @@ function catalogFolder() {
 function ensureCatalogFolder() {
   const dir = defaultCatalogFolder();
   console.log("etiuda: catalog folder " + catalogFolder());
-  if (catalogFolder() !== dir) return;
+  if (catalogFolder() !== dir || !folderAnswers(dir)) return;
   try { fs.mkdirSync(dir, { recursive: true }); }
   catch (e) { console.error("etiuda: " + dir + " could not be made - " + e.message); }
 }
@@ -88,7 +88,8 @@ function folderShown(file) { return (!file || isBuiltIn(file)) ? "" : path.dirna
 /* Which copy of a name is read: the folder's own, else the shipped one. Null for neither. */
 function catalogFileNamed(base) {
   const own = path.join(catalogFolder(), base);
-  if (fs.existsSync(own) && !(catalogFolder() === defaultCatalogFolder() && isSeededSample(own))) return own;
+  if (folderAnswers(catalogFolder()) && fs.existsSync(own)
+      && !(catalogFolder() === defaultCatalogFolder() && isSeededSample(own))) return own;
   return builtInFiles().filter(f => path.basename(f).toLowerCase() === base.toLowerCase())[0] || null;
 }
 
@@ -124,6 +125,7 @@ function sampleLast(files) {
    swap places between launches. A file that cannot be stat'd is one that has just been renamed
    away underneath the listing, and is simply not a candidate. */
 function ecFilesIn(dir) {
+  if (!folderAnswers(dir)) return [];
   let names = [];
   try { names = fs.readdirSync(dir); } catch { return []; }
   return names.filter(n => /\.ec$/i.test(n))
@@ -140,7 +142,7 @@ function catalogFolders() {
   return [catalogFolder(), app.getPath("userData"), path.join(__dirname, "..")];
 }
 function catalogPlaces() {
-  return (openedWith ? [openedWith] : []).concat(sampleLast(catalogFolders().reduce((out, dir) =>
+  return (openedWith ? [openedWith] : []).concat(sampleLast(catalogFolders().filter(folderAnswers).reduce((out, dir) =>
     out.concat(folderFiles(dir), [path.join(dir, CATALOG_SCRIPT)]), []).concat(builtInFiles())));
 }
 
@@ -191,7 +193,7 @@ let catalogFrom = "";                          // the file the payload below was
    still about the file in front of it from one said to an earlier edition. 0 where there is no
    file or it has gone since. */
 function catalogMtime() {
-  if (!catalogFrom) return 0;
+  if (!catalogFrom || !fileAnswers(catalogFrom)) return 0;
   try { return Math.round(fs.statSync(catalogFrom).mtimeMs); } catch { return 0; }
 }
 // The pages (webContents ids) this shell reloaded after they stopped, until each has asked once.
@@ -240,26 +242,85 @@ function readCatalog() {
    one, and a watch on the file that was there follows the replaced one into the bin. An event is
    only a prompt to read, and the payload is what decides, so a save that arrives as four events
    and a file rewritten with its own bytes are both free. */
+/* A watch that stops, or never started, is armed again: a share dropped by the VPN or a sleep
+   comes back without a word to this process, so the folder is asked again on a timer until it
+   answers, and at once after a resume, and then read, which also answers a statistics request. */
 let catalogSettle = null, catalogWatchers = [], watchedFolder = "";
+const watchSaid = new Map();                   // folder -> the refusal last logged for it
 function watchCatalog(win) {
   catalogWatchers.forEach(w => { try { w.close(); } catch { /* already gone */ } });
   catalogWatchers = [];
   watchedFolder = catalogFolder();
+  clearTimeout(folderRetry);
   const dirs = [];
   catalogFolders().forEach(d => { if (dirs.indexOf(d) < 0) dirs.push(d); });
   for (const dir of dirs) {
+    if (!folderAnswers(dir)) { retryFolder(FOLDER_RETRY_MS); continue; }
     try {
       const w = fs.watch(dir, (ev, name) => {
         if (name && !isCatalogName(path.basename(String(name)))) return;
         clearTimeout(catalogSettle);
         catalogSettle = setTimeout(() => catalogChanged(win), 300);
       });
-      w.on("error", e => console.error("etiuda: the watch on " + dir + " stopped - " + e.message));
+      w.on("error", e => {
+        console.error("etiuda: the watch on " + dir + " stopped - " + e.message);
+        if (dir === watchedFolder) folderDown = dir;
+        retryFolder(FOLDER_SOON_MS);
+      });
       catalogWatchers.push(w);
+      watchSaid.delete(dir);
     } catch (e) {
-      console.error("etiuda: no watch on " + dir + " - " + e.message);
+      if (watchSaid.get(dir) !== e.message) console.error("etiuda: no watch on " + dir + " - " + e.message);
+      watchSaid.set(dir, e.message);
+      if (dir === watchedFolder) retryFolder(FOLDER_RETRY_MS);
     }
   }
+}
+
+/* THE CATALOG FOLDER MAY BE A SHARE THAT DOES NOT ANSWER, and every read of it here is
+   synchronous: one call into an unreachable share waits out the network's own timeout with the
+   window and the page frozen behind it. So it is asked first by an asynchronous stat with a time
+   limit, and read as empty and left unwatched until one comes back. One ask in flight at a time.
+   A watch that stops and a resume from sleep both leave it unread until it has answered again. */
+const FOLDER_ASK_MS = 3000, FOLDER_RETRY_MS = 30000, FOLDER_SOON_MS = 1000;
+let folderDown = "", folderAsking = null, folderRetry = null, folderSaidDown = "";
+function folderAnswers(dir) { return !folderDown || dir !== folderDown; }
+function fileAnswers(file) { return folderAnswers(path.dirname(file)); }
+function askFolder(dir) {
+  if (folderAsking && folderAsking.dir === dir) return folderAsking.answer;
+  let timer = null;
+  const settled = fs.promises.stat(dir).then(() => true, () => true);
+  const answer = Promise.race([settled, new Promise(r => { timer = setTimeout(() => r(false), FOLDER_ASK_MS); })])
+    .then(ok => { clearTimeout(timer); return ok; });
+  const asking = { dir: dir, answer: answer };
+  folderAsking = asking;
+  settled.then(() => { if (folderAsking === asking) folderAsking = null; });
+  return answer;
+}
+/* Records what an ask found, said in the log once per change, and whether it answered. */
+function settleFolder(dir, ok) {
+  if (dir !== catalogFolder()) return false;
+  if (!ok && folderSaidDown !== dir)
+    console.error("etiuda: the catalog folder " + dir + " did not answer within " + FOLDER_ASK_MS / 1000
+      + " s, so it is read as empty until it does");
+  if (ok && folderSaidDown === dir) console.log("etiuda: the catalog folder " + dir + " answers again");
+  folderDown = ok ? "" : dir;
+  folderSaidDown = folderDown;
+  return ok;
+}
+function armFolder(win) {
+  clearTimeout(folderRetry);
+  const dir = catalogFolder();
+  return askFolder(dir).then(ok => {
+    if (!settleFolder(dir, ok)) { if (dir === catalogFolder()) retryFolder(FOLDER_RETRY_MS); return; }
+    if (!win || win.isDestroyed()) return;
+    watchCatalog(win);
+    catalogChanged(win);
+  });
+}
+function retryFolder(ms) {
+  clearTimeout(folderRetry);
+  folderRetry = setTimeout(() => armFolder(theWindow), ms);
 }
 
 /* THE WATCH FOLLOWS THE SETTING, and the desk's own write is where this hears of a change: the
@@ -272,8 +333,10 @@ function catalogFolderChanged() {
   if (catalogFolder() === watchedFolder) return;
   const win = theWindow;
   console.log("etiuda: catalog folder " + catalogFolder());
-  watchCatalog(win);
-  setTimeout(() => catalogChanged(win), 0);
+  // Somebody has just picked this folder, so it is read as answering while it is asked.
+  folderDown = "";
+  watchedFolder = catalogFolder();
+  armFolder(win);
 }
 
 /* The engine is OFFERED the new file and never given it: replacing a catalog under somebody
@@ -516,8 +579,10 @@ function writeStatsAnswer(text) {
   const dir = path.join(catalogFolder(), "stats");
   const dest = path.join(dir, id + ".estat");
   if (path.dirname(dest) !== dir || path.basename(dest) !== id + ".estat") return { ok: false };
-  try { fs.writeFileSync(dest, JSON.stringify(out), "utf8"); }
-  catch {
+  try {
+    if (!folderAnswers(catalogFolder())) throw new Error("the catalog folder is not answering");
+    fs.writeFileSync(dest, JSON.stringify(out), "utf8");
+  } catch {
     heldStats = { id: req.id, text: String(text || "") };
     persistDeskEnvelope();
     return { ok: false };
@@ -529,6 +594,7 @@ function writeStatsAnswer(text) {
   return { ok: true, sync: out.sync, syncMs: now.getTime() };
 }
 function tryAnswerRequest(win) {
+  if (!folderAnswers(catalogFolder())) return;
   let text;
   try { text = fs.readFileSync(path.join(catalogFolder(), REQUEST_NAME), "utf8"); } catch { return; }
   let req = null;
@@ -982,7 +1048,10 @@ ipcMain.handle("etiuda:catalog-read", (e, name) => {
   const base = String(name || "");
   if (!base || base !== path.basename(base) || !/\.ec$/i.test(base)) return null;
   const file = catalogFileNamed(base) || path.join(catalogFolder(), base);
-  try { return { name: base, text: fs.readFileSync(file, "utf8") }; }
+  try {
+    if (!fileAnswers(file)) throw new Error("the catalog folder is not answering");
+    return { name: base, text: fs.readFileSync(file, "utf8") };
+  }
   catch (err) {
     console.error("etiuda: " + file + " could not be read - " + err.message);
     return { name: base, text: "" };
@@ -1093,7 +1162,9 @@ ipcMain.on("etiuda:offer-dropped", (e, file) => {
 ipcMain.handle("etiuda:open-catalog-folder", async (e) => {
   if (!fromEngine(e)) return false;
   const dir = catalogFolder();
-  try { fs.mkdirSync(dir, { recursive: true }); } catch { /* it may be a share that is down */ }
+  if (folderAnswers(dir)) {
+    try { fs.mkdirSync(dir, { recursive: true }); } catch { /* it may be a share that is down */ }
+  }
   const why = await shell.openPath(dir);
   if (why) console.error("etiuda: " + dir + " could not be opened - " + why);
   return !why;
@@ -1564,8 +1635,17 @@ if (!theOnlyOne) {
     offerFile(win, file);
   });
   openedWith = ecFromArgv(process.argv);
+  /* The window waits on the folder's first answer, FOLDER_ASK_MS at most, rather than on a
+     synchronous read of a share that is not there. */
   app.whenReady().then(() => {
-    hardenSession(); applyThemeSource(); ensureCatalogFolder(); createWindow();
+    hardenSession(); applyThemeSource();
+    const dir = catalogFolder();
+    return askFolder(dir).then(ok => {
+      settleFolder(dir, ok);
+      ensureCatalogFolder(); createWindow();
+      // Asked for here: powerMonitor is not to be used before the app is ready.
+      require("electron").powerMonitor.on("resume", () => { folderDown = catalogFolder(); armFolder(theWindow); });
+    });
   });
 }
 

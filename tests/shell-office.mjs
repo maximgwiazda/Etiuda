@@ -10,6 +10,7 @@ process.removeAllListeners("warning");
 process.on("warning", () => {});
 
 import realFs from "node:fs";
+import { EventEmitter } from "node:events";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
@@ -18,7 +19,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 16;
+const EXPECTED = 25;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -31,47 +32,91 @@ const LAB = realFs.mkdtempSync(path.join(os.tmpdir(), "etiuda-shell-office-"));
 const SRC = realFs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 /* The shell's own names, handed back by a line added after its source: nothing is exported from
    main.js, and a slice would test a copy of one function rather than the file as it runs. */
-const EXPOSE = ["renamePatiently", "writeReplacing", "saveWindowPlace", "windowFile", "readCatalog"];
+const EXPOSE = ["renamePatiently", "writeReplacing", "saveWindowPlace", "windowFile", "readCatalog", "channelHash"];
 
 /* node:fs with a hook per call: `ctl.renameSync = (real, ...args) => ...` decides that call,
-   and a call without a hook goes to the real one. */
-const HOOKED = ["renameSync"];
+   and a call without a hook goes to the real one. `ctl.any` sees every synchronous call first,
+   with its name, which is how a folder that does not answer is planted: a call into it throws
+   and is counted, where on a desk it would have waited out the network's timeout. */
+const HOOKED = ["renameSync", "readdirSync", "statSync", "readFileSync", "existsSync", "mkdirSync", "writeFileSync", "watch"];
 function wrapFs(ctl) {
   const f = Object.create(realFs);
-  HOOKED.forEach(n => { f[n] = (...a) => (ctl[n] ? ctl[n](realFs[n].bind(realFs), ...a) : realFs[n](...a)); });
+  HOOKED.forEach(n => { f[n] = (...a) => {
+    if (ctl.any) ctl.any(n, a[0]);
+    return ctl[n] ? ctl[n](realFs[n].bind(realFs), ...a) : realFs[n](...a);
+  }; });
+  const promises = Object.create(realFs.promises);
+  promises.stat = (...a) => (ctl.pstat ? ctl.pstat(...a) : realFs.promises.stat(...a));
+  Object.defineProperty(f, "promises", { value: promises });
   return f;
 }
 function busy(code) { const e = new Error(code + ": the file is held by another program"); e.code = code; return e; }
 
+/* Timers the checks fire by hand, handed to main.js in place of the globals, so a 30-second
+   retry is a line of the test rather than half a minute of it. */
+function fakeClock() {
+  let n = 0;
+  const pending = new Map();
+  return {
+    setTimeout: (fn, ms) => { const id = { n: ++n, ms: ms, fn: fn }; pending.set(id.n, id); return id; },
+    clearTimeout: id => { if (id && id.n) pending.delete(id.n); },
+    due: ms => [...pending.values()].filter(t => t.ms === ms),
+    fire: ms => { const ts = [...pending.values()].filter(t => t.ms === ms); ts.forEach(t => { pending.delete(t.n); t.fn(); }); return ts.length; },
+  };
+}
+/* A stand-in for anything Electron returns, answering every property with itself, except what
+   `over` names. isDestroyed is named wherever the shell asks it, since a stand-in is truthy. */
+function anything(over) {
+  const p = new Proxy(function () {}, {
+    get: (t, k) => (over && k in over) ? over[k] : (k === "then" || k === Symbol.iterator || k === Symbol.toPrimitive) ? undefined : p,
+    set: () => true, apply: () => p, construct: () => p,
+  });
+  return p;
+}
+
 let loads = 0;
-function loadShell() {
+/* opts.ready: app.whenReady resolves, so the shell boots as far as its window; opts.clock: the
+   fake timers above; opts.desk: keys written into desk.json before the shell reads it. */
+function loadShell(opts) {
+  const o = opts || {};
   const dir = path.join(LAB, "load" + (++loads));
   const UD = path.join(dir, "user-data"), DOCS = path.join(dir, "documents");
   realFs.mkdirSync(UD, { recursive: true });
   realFs.mkdirSync(DOCS, { recursive: true });
+  if (o.desk) realFs.writeFileSync(path.join(UD, "desk.json"),
+    JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: o.desk }), "utf8");
   const said = [];
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: () => {} };
   const noop = () => {};
   const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
-  const on = {}, invoke = {};
+  const on = {}, invoke = {}, power = {}, sent = [];
+  const wc = anything({ send: (...a) => { sent.push(a); }, id: 7 });
+  const win = anything({ isDestroyed: () => false, webContents: wc });
   const electron = {
-    app: { getPath: n => (n === "documents" ? DOCS : UD), setPath: noop, requestSingleInstanceLock: () => false,
-           quit: noop, on: noop, getVersion: () => "0.0.0", whenReady: () => new Promise(noop) },
+    app: { getPath: n => (n === "documents" ? DOCS : UD), setPath: noop, requestSingleInstanceLock: () => !!o.ready,
+           quit: noop, on: noop, getVersion: () => "0.0.0",
+           whenReady: () => (o.ready ? Promise.resolve() : new Promise(noop)) },
     ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
-    BrowserWindow: inert, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert,
+    BrowserWindow: o.ready ? new Proxy(function () {}, { construct: () => win,
+      get: (t, k) => (k === "fromWebContents" ? () => win : k === "getAllWindows" ? () => [win] : undefined) }) : inert,
+    Menu: inert, dialog: inert, net: inert, protocol: o.ready ? anything() : inert,
+    session: o.ready ? anything() : inert,
     screen: inert, shell: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },
+    powerMonitor: { on: (ev, fn) => { power[ev] = fn; } },
   };
   const ctl = {};
   const fs = wrapFs(ctl);
+  const clock = o.clock || { setTimeout: setTimeout, clearTimeout: clearTimeout };
   const fakeRequire = n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? fs : nodeRequire(n));
-  const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
+  const api = new Function("require", "__dirname", "__filename", "module", "exports", "console", "setTimeout", "clearTimeout",
     SRC + "\nreturn { " + EXPOSE.map(n => n + ": typeof " + n + " === 'undefined' ? undefined : " + n).join(", ") + " };")(
-    fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet);
+    fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet,
+    clock.setTimeout, clock.clearTimeout);
   const ENGINE = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
   const ipc = (ch, ...args) => { const e = { sender: { id: 1, once: noop }, senderFrame: ENGINE, returnValue: undefined };
     if (on[ch]) on[ch](e, ...args); return e.returnValue; };
   const ask = (ch, ...args) => invoke[ch]({ sender: { id: 1 }, senderFrame: ENGINE }, ...args);
-  return { api, ctl, said, ipc, ask, UD, DOCS, deskFile: path.join(UD, "desk.json") };
+  return { api, ctl, said, ipc, ask, UD, DOCS, deskFile: path.join(UD, "desk.json"), power, sent, win };
 }
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 /* Invented from nothing, as every fixture here is. The refused one names a shelf that is not
@@ -207,6 +252,126 @@ try {
     const C3 = await import(MOD("catalog.js") + "?sound");
     check(!!C3.eCatalog() && C3.eCatalogRefusedNames().length === 0 && calls.length === 1,
       "3d THE CONTROL: a sound catalog is read as it stands, and the host is told nothing");
+  }
+
+  /* ---- 4. a catalog folder that does not answer: a share off the VPN, or across a sleep -------
+     The shell boots as far as its window. The share is a real folder; "down" is planted by making
+     the asynchronous stat never settle and every synchronous call into the folder throw, counted,
+     where on a desk each would have waited out the network's timeout. */
+  {
+    /* A real stat settles on the thread pool, so the wait is time as well as turns of the loop. */
+    const settle = async () => {
+      for (let i = 0; i < 4; i++) await new Promise(r => setImmediate(r));
+      await new Promise(r => setTimeout(r, 40));
+      for (let i = 0; i < 4; i++) await new Promise(r => setImmediate(r));
+    };
+    let shares = 0;
+    const boot = (down) => {
+      const share = path.join(LAB, "share" + (++shares));
+      realFs.mkdirSync(share, { recursive: true });
+      realFs.writeFileSync(path.join(share, "lamps.ec"), JSON.stringify(goodCatalog()), "utf8");
+      const clock = fakeClock();
+      const S = loadShell({ ready: true, clock: clock, desk: { eCatalogFolder: share } });
+      const st = { down: down, touched: [], watchers: [], hung: [] };
+      const inShare = p => typeof p === "string" && path.resolve(p).toLowerCase().indexOf(share.toLowerCase()) === 0;
+      S.ctl.any = (n, p) => {
+        if (n === "existsSync" || !(st.down && inShare(p))) return;
+        st.touched.push(n);
+        throw Object.assign(new Error("the share did not answer"), { code: "ETIMEDOUT" });
+      };
+      // existsSync answers rather than throws, as it does on a desk once the timeout has passed.
+      S.ctl.existsSync = (real, p) => ((st.down && inShare(p)) ? (st.touched.push("existsSync"), false) : real(p));
+      /* A stat into the share waits until the share's state changes, and then fails as the
+         network's own timeout would. */
+      S.ctl.pstat = (p, ...rest) => (st.down && inShare(p)
+        ? new Promise((res, rej) => st.hung.push(() => rej(Object.assign(new Error("timed out"), { code: "ETIMEDOUT" }))))
+        : realFs.promises.stat(p, ...rest));
+      st.back = () => { st.down = false; st.hung.splice(0).forEach(f => f()); };
+      S.ctl.watch = (real, dir) => { const w = new EventEmitter(); w.close = () => {}; w.dir = dir; st.watchers.push(w); return w; };
+      return { S, st, clock, share, onShare: () => st.watchers.filter(w => w.dir === share) };
+    };
+    const named = json => { try { return JSON.parse(json).name; } catch { return null; } };
+
+    const up = boot(false);
+    await settle();
+    check(up.onShare().length === 1 && named(up.S.ipc("etiuda:catalog")) === goodCatalog().name,
+      "4a THE CONTROL: a folder that answers boots the window, is watched, and its catalog is handed");
+
+    const d = boot(true);
+    await settle();
+    // The window's first act is to watch its folders, so a watch on any of them is the window.
+    const beforeLimit = d.st.watchers.length > 0;
+    const fired = d.clock.fire(3000);
+    await settle();
+    const handed = d.S.ipc("etiuda:catalog");
+    const host = d.S.ipc("etiuda:host");
+    const rows = await d.S.ask("etiuda:catalog-files");
+    const read = await d.S.ask("etiuda:catalog-read", "lamps.ec");
+    check(!beforeLimit && fired === 1 && d.st.watchers.length > 0,
+      "4b a folder that does not answer holds the window for the ask's limit and no longer: window before the limit "
+      + beforeLimit + ", after it " + (d.st.watchers.length > 0));
+    check(d.st.touched.length === 0 && handed === null && !!host && rows.length === 0 && read && read.text === ""
+      && d.onShare().length === 0,
+      "4c and while it does not answer, nothing touches it synchronously: " + d.st.touched.length + " call(s)"
+      + (d.st.touched.length ? " (" + d.st.touched.slice(0, 4).join(", ") + ")" : "")
+      + ", the boot's catalog, host answer, Library listing and Load all answered empty");
+    const warned = d.S.said.filter(l => /catalog folder .* did not answer/.test(l)).length;
+    check(warned === 1 && d.clock.due(30000).length === 1,
+      "4d it is said once in the log, and asked again on a timer: " + warned + " line(s), "
+      + d.clock.due(30000).length + " retry pending");
+
+    d.st.back();
+    await settle();
+    const req = { format: 1, kind: "etiuda-request", id: "req-office", issued: "2026-09-01",
+      from: "2026-09-01", to: "2026-09-27", expires: "2099-01-01" };
+    req.hash = d.S.api.channelHash(req);
+    realFs.writeFileSync(path.join(d.share, "etiuda-request.ereq"), JSON.stringify(req), "utf8");
+    d.clock.fire(30000);
+    await settle();
+    const offered = d.S.sent.filter(a => a[0] === "etiuda:catalog-file").map(a => named(a[1]));
+    const asked = d.S.sent.filter(a => a[0] === "etiuda:stats-ask").map(a => a[1] && a[1].id);
+    check(d.onShare().length === 1 && offered.join() === goodCatalog().name && asked.join() === "req-office",
+      "4e when it answers again it is watched, what it holds is offered, and the statistics request is answered: watch "
+      + d.onShare().length + ", offered " + offered.length + ", asked " + asked.join());
+
+    const armed = d.onShare().length;
+    const first = d.onShare()[0];
+    if (first) first.emit("error", Object.assign(new Error("the network name is no longer available"), { code: "EPERM" }));
+    const soon = d.clock.fire(1000);
+    await settle();
+    check(soon === 1 && d.onShare().length === armed + 1,
+      "4f a watch that stops is armed again: " + soon + " retry fired, " + (d.onShare().length - armed) + " new watch");
+
+    const beforeResume = d.onShare().length;
+    if (typeof d.S.power.resume === "function") d.S.power.resume();
+    await settle();
+    check(d.onShare().length === beforeResume + 1,
+      "4g a resume from sleep arms the watch again at once: " + (d.onShare().length - beforeResume) + " new watch");
+
+    d.S.ctl.watch = () => { throw Object.assign(new Error("access is denied"), { code: "EPERM" }); };
+    if (typeof d.S.power.resume === "function") d.S.power.resume();
+    await settle();
+    d.clock.fire(30000);
+    await settle();
+    const noWatch = d.S.said.filter(l => l.indexOf("no watch on " + d.share) > -1).length;
+    check(noWatch === 1 && d.clock.due(30000).length === 1,
+      "4h a folder that answers but refuses a watch is asked again on the timer, said once: "
+      + noWatch + " line(s), " + d.clock.due(30000).length + " retry pending");
+
+    d.S.ctl.watch = (real, dir) => { const w = new EventEmitter(); w.close = () => {}; w.dir = dir; d.st.watchers.push(w); return w; };
+    d.st.down = true;
+    const touchedBefore = d.st.touched.length;
+    if (typeof d.S.power.resume === "function") d.S.power.resume();
+    const rowsAtWake = await d.S.ask("etiuda:catalog-files");
+    d.clock.fire(3000);
+    await settle();
+    const rowsAfter = await d.S.ask("etiuda:catalog-files");
+    const downLines = d.S.said.filter(l => /catalog folder .* did not answer/.test(l)).length;
+    check(d.st.touched.length === touchedBefore && rowsAtWake.length === 0 && rowsAfter.length === 0
+      && d.clock.due(30000).length === 1 && downLines === 2,
+      "4i a resume with the share gone reads nothing from it, waking or after the ask's limit, says so and asks again: "
+      + (d.st.touched.length - touchedBefore) + " call(s), " + downLines + " line(s) in all, "
+      + d.clock.due(30000).length + " retry pending");
   }
 } catch (e) {
   failed++;
