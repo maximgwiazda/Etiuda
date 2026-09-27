@@ -5599,6 +5599,7 @@ What you type stays in this browser only.`;
     "Replace catalog?": "Zastąpić katalog?",
     "Located as {FILE}.": "Znaleziony jako {FILE}.",
     "Located as {FILE} in {FOLDER}.": "Znaleziony jako {FILE} w {FOLDER}.",
+    "{FILE} comes with Etiuda.": "{FILE} jest dołączony do Etiudy.",
     "{FILE} in {FOLDER}": "{FILE} w {FOLDER}",
     "Catalog file": "Plik katalogu",
     "Card added": "Dodano kartę",
@@ -11365,6 +11366,7 @@ What you type stays in this browser only.`;
   __export(host_exports, {
     E_CATALOG_FOLDER_KEY: () => E_CATALOG_FOLDER_KEY,
     E_CATALOG_SCRIPT: () => E_CATALOG_SCRIPT,
+    eCatalogBuiltIn: () => eCatalogBuiltIn,
     eCatalogFile: () => eCatalogFile,
     eCatalogFiles: () => eCatalogFiles,
     eCatalogFolder: () => eCatalogFolder,
@@ -11570,6 +11572,10 @@ What you type stays in this browser only.`;
   function eCatalogIn() {
     const h = eHost();
     return h ? String(h.catalogIn || "") : "";
+  }
+  function eCatalogBuiltIn() {
+    const h = eHost();
+    return !!(h && h.catalogBuiltIn);
   }
   function eCatalogMtime() {
     const h = eHost();
@@ -17257,7 +17263,8 @@ What you type stays in this browser only.`;
     const keys = "<b>" + esc(t("Keys")) + "</b> - " + keysLegendHtml() + " · " + esc(t("customise in")) + ' <b><span data-icon="settings"></span> ' + esc(t("→ Settings → Keyboard shortcuts")) + "</b>.<br><br>";
     const file = eCatalogFile(), inDir = eCatalogIn();
     const where = inDir ? t("{FILE} in {FOLDER}").split("{FILE}").join("<code>" + esc(file) + "</code>").split("{FOLDER}").join("<code>" + esc(inDir) + "</code>") : "<code>" + esc(file) + "</code>";
-    const fileLine = file ? "<b>" + esc(t("Catalog file")) + "</b> - " + where + ".<br><br>" : "";
+    const said = eCatalogBuiltIn() ? t("{FILE} comes with Etiuda.").split("{FILE}").join("<code>" + esc(file) + "</code>") : where + ".";
+    const fileLine = file ? "<b>" + esc(t("Catalog file")) + "</b> - " + said + "<br><br>" : "";
     openDialog({
       cls: "about-modal",
       title: "Etiuda",
@@ -19458,21 +19465,23 @@ What you type stays in this browser only.`;
     paintCatalogList: () => paintCatalogList,
     wireHostCatalogWatch: () => wireHostCatalogWatch
   });
-  function eFoundHtml(name, where) {
+  function eFoundHtml(name, where, builtIn) {
     const shown2 = String(name || "") || E_CATALOG_SCRIPT;
+    if (builtIn) return t("{FILE} comes with Etiuda.").split("{FILE}").join("<code>" + esc(shown2) + "</code>");
     const dir = String(where || ""), home = !!dir && dir === eCatalogFolder();
     return t(where ? "Located as {FILE} in {FOLDER}." : "Located as {FILE}.").split("{FILE}").join("<code>" + esc(shown2) + "</code>").split("{FOLDER}").join("<code" + (home ? ' class="open-folder" data-ec-open="1" role="button" tabindex="0"' : "") + ' title="' + esc(dir) + '">' + esc(eCatalogFolderShort(dir)) + "</code>");
   }
-  function eOfferCatalog(given, name, where, force, asked) {
+  function eOfferCatalog(given, name, where, force, asked, builtIn) {
     if (eEmbeddedCatalog()) return false;
     const c = given || eCatalog();
     if (!c) return false;
     if (!force && !storedCatalog() && eCatalogAccepted(c)) return false;
     const file = name || eCatalogFile();
-    const dir = where || (eHost() ? eCatalogIn() || eCatalogFolder() : "");
+    const shipped = given ? !!builtIn : eCatalogBuiltIn();
+    const dir = shipped ? "" : where || (eHost() ? eCatalogIn() || eCatalogFolder() : "");
     const mine = !!file && !!dir && dir === eCatalogFolder();
     const shown2 = eOfferCatalogDialog(c, {
-      foundHtml: eFoundHtml(file, dir),
+      foundHtml: eFoundHtml(file, dir, shipped),
       refusedKey: "CatalogNo",
       force: !!force,
       asked: !!asked,
@@ -19822,7 +19831,7 @@ What you type stays in this browser only.`;
       } catch (e) {
       }
     }, 1400);
-    h.onCatalogFile((text, name, where, asked, why) => {
+    h.onCatalogFile((text, name, where, asked, why, builtIn) => {
       paintCatalogList();
       let c = null;
       try {
@@ -19834,7 +19843,7 @@ What you type stays in this browser only.`;
         if (asked) refuseAskedFile(name, why || "parse");
         return;
       }
-      eOfferCatalog(c, name, where, !!asked, !!asked);
+      eOfferCatalog(c, name, where, !!asked, !!asked, builtIn);
     });
   }
 

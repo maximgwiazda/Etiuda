@@ -80,6 +80,11 @@ function builtInFiles() {
   const own = folderFiles(catalogFolder()).map(f => path.basename(f).toLowerCase());
   return ecFilesIn(BUILT_IN_DIR).filter(f => own.indexOf(path.basename(f).toLowerCase()) < 0);
 }
+/* THE FOLDER THE PAGE MAY NAME for a file it was handed, and "" for a shipped one: that folder is
+   inside the installation's archive, which nobody can open, so the page says in words where the
+   file came from instead. */
+function isBuiltIn(file) { return !!file && path.dirname(file) === BUILT_IN_DIR; }
+function folderShown(file) { return (!file || isBuiltIn(file)) ? "" : path.dirname(file); }
 /* Which copy of a name is read: the folder's own, else the shipped one. Null for neither. */
 function catalogFileNamed(base) {
   const own = path.join(catalogFolder(), base);
@@ -276,7 +281,8 @@ function catalogChanged(win) {
   catalogJson = now;
   if (!now || !win || win.isDestroyed()) return;
   console.log("etiuda: the catalog file changed, and the window has been offered it");
-  win.webContents.send("etiuda:catalog-file", now, path.basename(catalogFrom), path.dirname(catalogFrom));
+  win.webContents.send("etiuda:catalog-file", now, path.basename(catalogFrom), folderShown(catalogFrom),
+    false, "", isBuiltIn(catalogFrom));
 }
 
 /* OFFERED, never loaded, like every other route to a catalog: opening one while somebody is
@@ -787,7 +793,7 @@ ipcMain.on("etiuda:window", (e, act) => {
 ipcMain.on("etiuda:host", (e) => {
   if (!fromEngine(e)) {
     e.returnValue = { platform: process.platform, backdrop: null, maximized: false,
-                      catalogFolder: "", catalogFile: "", catalogIn: "" };
+                      catalogFolder: "", catalogFile: "", catalogIn: "", catalogBuiltIn: false };
     return;
   }
   const win = BrowserWindow.fromWebContents(e.sender);
@@ -802,7 +808,8 @@ ipcMain.on("etiuda:host", (e) => {
     // The shipped sample's name where this desk reads it, so the empty desk can offer it by name.
     sampleFile: builtInFiles().concat(folderFiles(catalogFolder())).some(f => path.basename(f) === SAMPLE_FILE) ? SAMPLE_FILE : "",
     catalogFile: catalogFrom ? path.basename(catalogFrom) : "",
-    catalogIn: catalogFrom ? path.dirname(catalogFrom) : "",
+    catalogIn: folderShown(catalogFrom),
+    catalogBuiltIn: isBuiltIn(catalogFrom),
     catalogMtime: catalogMtime(),
     /* WHETHER THIS LOAD'S CATALOG IS THE FILE SOMEBODY DOUBLE-CLICKED, which the page cannot
        tell from the folder's own newest: an explicit open is answered even when a refusal was

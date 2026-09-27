@@ -7,7 +7,7 @@ import { E_CATALOG_KEY, E_CATALOG_NAME, E_CATALOG_VERSION, catalogStamp, catalog
   eWatchClear, parseCatalogFile, eWatchName } from "./catalog.js";
 import { eEmbeddedCatalog } from "./env.js";
 import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
-  eCatalogIn, eCatalogMtime, eHost, eLoadedCatalogFile, eOpenCatalogFolder, eOpenedWith,
+  eCatalogIn, eCatalogBuiltIn, eCatalogMtime, eHost, eLoadedCatalogFile, eOpenCatalogFolder, eOpenedWith,
   eOpenedRefused, eReadCatalogFile } from "./host.js";
 import { ejectCatalog, ejectedJustNow } from "./local-memory.js";
 import { MG_REOPEN, lsSet, nsGet, nsSet, ssGet } from "./storage.js";
@@ -33,9 +33,10 @@ import { ICON_AWAITING, ICON_SUCCESS } from "./icons.js";
    a bare filename leaves a person hunting for it; a browser takes the one sibling script its own
    tag names. The folder is the one the file came out of, which is not always the setting - a
    catalog beside the installation still loads. */
-function eFoundHtml(name,where){
+function eFoundHtml(name,where,builtIn){
   // Empty in a browser, where the fixed sibling name is the whole answer.
   const shown=String(name||"")||E_CATALOG_SCRIPT;
+  if(builtIn) return t("{FILE} comes with Etiuda.").split("{FILE}").join('<code>'+esc(shown)+'</code>');
   /* A PLACEHOLDER KEY, not two halves round a <code>: every other language puts the folder
      somewhere else in the sentence, and a fragment cannot be reordered. split/join rather than
      replace, because a folder may legitimately hold a $ and a replacement string substitutes it. */
@@ -50,14 +51,15 @@ function eFoundHtml(name,where){
 /* `asked` means a person pointed at this file - the double-click channels of board 393 - and it
    buys two things a found file does not get: the offer outranks a remembered refusal, and an
    explicit act is answered even when there is nothing to offer. Silence was the whole bug. */
-function eOfferCatalog(given,name,where,force,asked){
+function eOfferCatalog(given,name,where,force,asked,builtIn){
   // An integrated build carries its own content; a sibling file is not its business
   if(eEmbeddedCatalog()) return false;
   const c=given||eCatalog();
   if(!c) return false;
   if(!force && !storedCatalog() && eCatalogAccepted(c)) return false;
   const file=name||eCatalogFile();
-  const dir=where||(eHost()?(eCatalogIn()||eCatalogFolder()):"");
+  const shipped=given?!!builtIn:eCatalogBuiltIn();
+  const dir=shipped?"":(where||(eHost()?(eCatalogIn()||eCatalogFolder()):""));
   /* ONLY A FILE IN THE CATALOG FOLDER CAN MARK A ROW in the Library's list, so one opened from
      anywhere else names none. `given` is the watch handing over a file it has just read, and
      only the boot channel knows that file's date: the watch's is the date this load started
@@ -65,7 +67,7 @@ function eOfferCatalog(given,name,where,force,asked){
      stands in. */
   const mine=!!file && !!dir && dir===eCatalogFolder();
   const shown=eOfferCatalogDialog(c,{
-    foundHtml:eFoundHtml(file,dir),
+    foundHtml:eFoundHtml(file,dir,shipped),
     refusedKey:"CatalogNo", force:!!force, asked:!!asked,
     accept:sig=>{ lsSet(E_CATALOG_KEY,sig);
       return activateCatalog(c,{keepPersonal:true, file:mine?file:"",
@@ -490,14 +492,14 @@ function wireHostCatalogWatch(){
   const cold=eOpenedRefused();
   // Deferred with the same hand as the boot's other toasts: no toast host exists this early.
   if(cold) setTimeout(()=>{ try{ refuseAskedFile(cold.name,cold.why); }catch(e){} },1400);
-  h.onCatalogFile((text,name,where,asked,why)=>{
+  h.onCatalogFile((text,name,where,asked,why,builtIn)=>{
     /* The list first, and whatever this text turns out to be: the folder has changed, so a
        Library standing open is out of date whether or not the file is one it can offer. */
     paintCatalogList();
     let c=null;
     try{ if(!why) c=parseCatalogFile(text); }catch(e){ c=null; }
     if(!c){ if(asked) refuseAskedFile(name,why||"parse"); return; }
-    eOfferCatalog(c,name,where,!!asked,!!asked);
+    eOfferCatalog(c,name,where,!!asked,!!asked,builtIn);
   });
 }
 export {

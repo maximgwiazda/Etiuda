@@ -395,6 +395,7 @@ UI_STRINGS.pl={
   "Replace catalog?":"Zastąpić katalog?",
   "Located as {FILE}.":"Znaleziony jako {FILE}.",
   "Located as {FILE} in {FOLDER}.":"Znaleziony jako {FILE} w {FOLDER}.",
+  "{FILE} comes with Etiuda.":"{FILE} jest dołączony do Etiudy.",
   "{FILE} in {FOLDER}":"{FILE} w {FOLDER}",
   "Catalog file":"Plik katalogu",
   "Card added":"Dodano kartę",

@@ -532,6 +532,7 @@ function runUnitTests() {
   shellBridgeTests();
   policyTests();
   windowPlaceTests();
+  shippedFileTests();
   v2ValidationTests();
   lintCatalogTests();
   langAgnosticTests();
@@ -1281,6 +1282,38 @@ function windowPlaceTests() {
      place(["x"], areas, main, SIZE).x, place({ x: 0, y: 0, width: 800, height: 600, maximized: "yes" }, areas, main, SIZE).maximized],
     [320, 320, 320, false]);
 }
+/* THE SHIPPED SAMPLE'S FOLDER IS NEVER NAMED (feel pass, the offer's "app.asar\shell"): the shell
+   hands the page no folder for a file it ships, and the page says in words where the file came
+   from, in the offer and in About alike. */
+function shippedFileTests() {
+  const shell = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  const inAsar = "C:\\Users\\someone\\AppData\\Local\\Programs\\Etiuda\\resources\\app.asar\\shell";
+  const own = "C:\\Users\\someone\\Documents\\Etiuda";
+  let S = null;
+  try {
+    S = new Function("path", "BUILT_IN_DIR", ["function isBuiltIn(", "function folderShown("]
+      .map(m => extractDecl(shell, m)).join("\n") + "\nreturn {isBuiltIn,folderShown};")(path.win32, inAsar);
+  } catch (e) { S = null; }
+  eq("the shell tells a shipped file from one in the catalog folder",
+    S ? [S.isBuiltIn(inAsar + "\\sample-catalog.ec"), S.isBuiltIn(own + "\\sample-catalog.ec"), S.isBuiltIn("")] : "no isBuiltIn in shell/main.js",
+    [true, false, false]);
+  eq("the folder the page is handed is empty for a shipped file and the file's own folder otherwise",
+    S ? [S.folderShown(inAsar + "\\sample-catalog.ec"), S.folderShown(own + "\\team.ec"), S.folderShown("")] : "no folderShown in shell/main.js",
+    ["", own, ""]);
+  eq("no send to the page names the loaded file's folder except through folderShown",
+    (shell.match(/path\.dirname\(catalogFrom\)/g) || []).length, 0);
+  const offer = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-offer.js"), "utf8");
+  let found = null;
+  try {
+    found = new Function("t", "esc", "E_CATALOG_SCRIPT", "eCatalogFolder", "eCatalogFolderShort",
+      extractDecl(offer, "function eFoundHtml(") + "\nreturn eFoundHtml;")(s => s, s => s, "etiuda-catalog.js", () => own, s => s);
+  } catch (e) { found = null; }
+  const said = found ? found("sample-catalog.ec", inAsar, true) : "";
+  eq("the offer says a shipped file comes with Etiuda and names no folder, even one it is handed",
+    [/comes with Etiuda/.test(said), said.indexOf("asar") < 0, said.indexOf("sample-catalog.ec") > -1], [true, true, true]);
+  eq("a file from the catalog folder is still located in it",
+    found ? /Located as .*sample-catalog\.ec.* in .*Documents/.test(found("sample-catalog.ec", own, false)) : "no eFoundHtml", true);
+}
 function requestFns() {
   const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
   const decls = ["const DESK_ID_RE =", "function channelHash(", "function ymdOk(",
@@ -1732,8 +1765,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 802;
-const UI_STRINGS_SHA256 = "4eeadcad9203d3f209c489eba0e68bd4ee183550702b3f877ff039bf7d58f0f3";
+const UI_STRINGS_COUNT = 803;
+const UI_STRINGS_SHA256 = "6fee9f3adf5cdd1bc51677ad7d32d7e9f58d78aacfab53d5e1c328e278b5ea83";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

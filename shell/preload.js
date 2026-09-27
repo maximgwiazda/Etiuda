@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld("E_HOST", {
   sampleFile: host.sampleFile || "",
   catalogFile: host.catalogFile,
   catalogIn: host.catalogIn,
+  /* True where that file is one Etiuda ships, whose folder is never named. */
+  catalogBuiltIn: !!host.catalogBuiltIn,
   catalogMtime: host.catalogMtime,
   /* True when that file is the one this copy was opened with rather than the folder's newest. */
   openedWith: host.openedWith,
@@ -70,7 +72,8 @@ contextBridge.exposeInMainWorld("E_HOST", {
      engine's own reader: the shell has already refused anything that is not a format 2 catalog,
      and two parsers agreeing is what keeps a file the shell accepts a file the engine accepts. */
   onCatalogFile: (fn) => ipcRenderer.on("etiuda:catalog-file",
-    (_e, text, name, where, asked, why) => fn(String(text), String(name || ""), String(where || ""), !!asked, String(why || ""))),
+    (_e, text, name, where, asked, why, builtIn) =>
+      fn(String(text), String(name || ""), String(where || ""), !!asked, String(why || ""), !!builtIn)),
   /* A catalog dropped on the window, handed over by the path its File has on disk and offered as
      a double-clicked file is. False where the File has no path, and the page reads it instead. */
   offerDropped: (file) => {

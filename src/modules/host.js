@@ -50,6 +50,8 @@ function eOpenCatalogFolder(){
    above: a catalog beside the installation still loads when the folder holds none. */
 function eCatalogFile(){ const h=eHost(); return h?String(h.catalogFile||""):""; }
 function eCatalogIn(){ const h=eHost(); return h?String(h.catalogIn||""):""; }
+// True where that file is one Etiuda ships, whose folder the host never names.
+function eCatalogBuiltIn(){ const h=eHost(); return !!(h && h.catalogBuiltIn); }
 /* When that file was last written, as the host read it at boot. 0 in a browser and 0 where the
    host has no file, which is what every caller tests. */
 function eCatalogMtime(){ const h=eHost(); return h?(+h.catalogMtime||0):0; }
@@ -269,6 +271,7 @@ export {
   eChooseCatalogFolder,
   eLoadedCatalogFile,
   eCatalogIn,
+  eCatalogBuiltIn,
   eCatalogMtime,
   eHasCatalogPicker,
   eHasCatalogSaver,

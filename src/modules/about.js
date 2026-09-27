@@ -5,7 +5,7 @@ import { keysLegendHtml } from "./shortcuts.js";
 import { t } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { modalCard, $ } from "./dom.js";
-import { eCatalogFile, eCatalogIn } from "./host.js";
+import { eCatalogBuiltIn, eCatalogFile, eCatalogIn } from "./host.js";
 
 /* The brand mark for anywhere that is not the header's own markup - the header keeps
    its copy inline so the tile paints on first parse. If the mark is ever redrawn, both
@@ -30,7 +30,8 @@ function openAbout(){
       .split("{FILE}").join('<code>'+esc(file)+'</code>')
       .split("{FOLDER}").join('<code>'+esc(inDir)+'</code>')
     : '<code>'+esc(file)+'</code>';
-  const fileLine=file ? '<b>'+esc(t("Catalog file"))+'</b> - '+where+'.<br><br>' : "";
+  const said=eCatalogBuiltIn() ? t("{FILE} comes with Etiuda.").split("{FILE}").join('<code>'+esc(file)+'</code>') : where+'.';
+  const fileLine=file ? '<b>'+esc(t("Catalog file"))+'</b> - '+said+'<br><br>' : "";
   openDialog({
     cls: "about-modal",
     title: "Etiuda",
