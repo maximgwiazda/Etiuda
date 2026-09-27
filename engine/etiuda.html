@@ -10486,7 +10486,10 @@ What you type stays in this browser only.`;
     eApplyCatalog: () => eApplyCatalog,
     eCatalog: () => eCatalog,
     eCatalogAccepted: () => eCatalogAccepted,
+    eCatalogHanded: () => eCatalogHanded,
+    eCatalogRefusedNames: () => eCatalogRefusedNames,
     eCatalogSignature: () => eCatalogSignature,
+    eRefuseCatalogFile: () => eRefuseCatalogFile,
     eWatchClear: () => eWatchClear,
     eWatchGet: () => eWatchGet,
     eWatchName: () => eWatchName,
@@ -10610,16 +10613,48 @@ What you type stays in this browser only.`;
   var E_CATALOG_STORE = nsKey("Catalog");
   var E_SIBLING = null;
   var E_SIBLING_READ = false;
+  var E_HANDED = null;
+  var E_REFUSED = [];
+  function eRefuseCatalogFile(name) {
+    const h = typeof window !== "undefined" && window.E_HOST || null;
+    if (!h || typeof h.catalogRefused !== "function") return null;
+    try {
+      const r = h.catalogRefused(String(name || ""));
+      return r && typeof r === "object" && r.json ? r : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  function eCatalogHanded() {
+    return E_HANDED;
+  }
+  function eCatalogRefusedNames() {
+    return E_REFUSED.slice();
+  }
   function eCatalog() {
     if (E_SIBLING_READ) return E_SIBLING;
     E_SIBLING_READ = true;
-    const c = typeof window !== "undefined" ? window.E_CATALOG : null;
-    try {
-      E_SIBLING = isV2(c) ? normaliseCatalog(catalogFromV2(c)) : null;
-    } catch (e) {
-      E_SIBLING = null;
+    let c = typeof window !== "undefined" ? window.E_CATALOG : null;
+    let file = typeof window !== "undefined" && window.E_HOST ? String(window.E_HOST.catalogFile || "") : "";
+    for (let tries = 0; tries < 32; tries++) {
+      try {
+        E_SIBLING = isV2(c) ? normaliseCatalog(catalogFromV2(c)) : null;
+        return E_SIBLING;
+      } catch (e) {
+        E_SIBLING = null;
+      }
+      if (file) E_REFUSED.push(file);
+      const next = file ? eRefuseCatalogFile(file) : null;
+      if (!next) return null;
+      try {
+        c = JSON.parse(String(next.json));
+      } catch (e) {
+        return null;
+      }
+      file = String(next.file || "");
+      E_HANDED = { file, in: String(next.in || ""), builtIn: !!next.builtIn, mtime: +next.mtime || 0 };
     }
-    return E_SIBLING;
+    return null;
   }
   function storedCatalog() {
     try {
@@ -11648,25 +11683,30 @@ What you type stays in this browser only.`;
       return Promise.resolve(false);
     }
   }
+  function eHanded() {
+    if (!eHost()) return null;
+    eCatalog();
+    return eCatalogHanded();
+  }
   function eCatalogFile() {
-    const h = eHost();
-    return h ? String(h.catalogFile || "") : "";
+    const h = eHost(), o = eHanded();
+    return o ? o.file : h ? String(h.catalogFile || "") : "";
   }
   function eCatalogIn() {
-    const h = eHost();
-    return h ? String(h.catalogIn || "") : "";
+    const h = eHost(), o = eHanded();
+    return o ? o.in : h ? String(h.catalogIn || "") : "";
   }
   function eCatalogBuiltIn() {
-    const h = eHost();
-    return !!(h && h.catalogBuiltIn);
+    const h = eHost(), o = eHanded();
+    return o ? o.builtIn : !!(h && h.catalogBuiltIn);
   }
   function eCatalogMtime() {
-    const h = eHost();
-    return h ? +h.catalogMtime || 0 : 0;
+    const h = eHost(), o = eHanded();
+    return o ? o.mtime : h ? +h.catalogMtime || 0 : 0;
   }
   function eOpenedWith() {
     const h = eHost();
-    return !!(h && h.openedWith);
+    return !eHanded() && !!(h && h.openedWith);
   }
   function eCatalogFiles() {
     const h = eHost();
@@ -20060,7 +20100,8 @@ What you type stays in this browser only.`;
   function wireHostCatalogWatch() {
     const h = typeof window !== "undefined" && window.E_HOST || null;
     if (!h || typeof h.onCatalogFile !== "function") return;
-    const cold = eOpenedRefused();
+    eCatalog();
+    const cold = eOpenedRefused() || (eCatalogRefusedNames().length ? { name: eCatalogRefusedNames()[0], why: "parse" } : null);
     if (cold) setTimeout(() => {
       try {
         refuseAskedFile(cold.name, cold.why);
@@ -20074,6 +20115,18 @@ What you type stays in this browser only.`;
         if (!why) c = parseCatalogFile(text);
       } catch (e) {
         c = null;
+      }
+      if (!c && !why) {
+        refuseAskedFile(name, "parse");
+        const next = eRefuseCatalogFile(name);
+        let n = null;
+        try {
+          n = next ? parseCatalogFile(String(next.json)) : null;
+        } catch (e) {
+          n = null;
+        }
+        if (n && !asked) eOfferCatalog(n, String(next.file || ""), String(next.in || ""), false, false, !!next.builtIn);
+        return;
       }
       if (!c) {
         if (asked) refuseAskedFile(name, why || "parse");

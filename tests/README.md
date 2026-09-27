@@ -20,7 +20,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/catalog-routes.mjs                     no fixtures, the two catalog routes
     node tests/module-calls.mjs                       no fixtures, the modules CALLED
     node tests/desk-ipc.mjs                           no fixtures, the desk's write path, shell stubbed
-    node tests/shell-office.mjs                       no fixtures, the shell against a busy file, shell stubbed
+    node tests/shell-office.mjs                       no fixtures, the shell against a busy file and a refused catalog
     node tests/token-canary.mjs                       no fixtures, TOKEN_CANARY held to fill()
     node tests/test.js                               sections 1 to 3 without fixtures
     ETIUDA_FIXTURES=<folder> node tests/test.js      all five sections

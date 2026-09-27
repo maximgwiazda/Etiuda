@@ -1,7 +1,8 @@
 /* The shell under what an office desk meets, driven in bare node: the real shell/main.js with
  * electron stubbed and node:fs wrapped, so that a file another program is holding can be planted
- * where the shell writes. No window and no browser: each load is a fresh evaluation of the file,
- * and what the checks call is the file's own functions and IPC handlers.
+ * where the shell writes, and a catalog the engine refuses where it reads. No window and no
+ * browser: each load is a fresh evaluation of the file, and what the checks call is the file's
+ * own functions and IPC handlers; the engine's half of a refusal is its own modules, imported.
  *
  *   node tests/shell-office.mjs        exit code is the number of failed checks, capped at 63
  */
@@ -12,12 +13,12 @@ import realFs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 6;
+const EXPECTED = 16;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -30,7 +31,7 @@ const LAB = realFs.mkdtempSync(path.join(os.tmpdir(), "etiuda-shell-office-"));
 const SRC = realFs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 /* The shell's own names, handed back by a line added after its source: nothing is exported from
    main.js, and a slice would test a copy of one function rather than the file as it runs. */
-const EXPOSE = ["renamePatiently", "writeReplacing", "saveWindowPlace", "windowFile"];
+const EXPOSE = ["renamePatiently", "writeReplacing", "saveWindowPlace", "windowFile", "readCatalog"];
 
 /* node:fs with a hook per call: `ctl.renameSync = (real, ...args) => ...` decides that call,
    and a call without a hook goes to the real one. */
@@ -68,8 +69,24 @@ function loadShell() {
     fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet);
   const ENGINE = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
   const ipc = (ch, ...args) => { const e = { sender: { id: 1, once: noop }, senderFrame: ENGINE, returnValue: undefined };
-    on[ch](e, ...args); return e.returnValue; };
-  return { api, ctl, said, ipc, UD, DOCS, deskFile: path.join(UD, "desk.json") };
+    if (on[ch]) on[ch](e, ...args); return e.returnValue; };
+  const ask = (ch, ...args) => invoke[ch]({ sender: { id: 1 }, senderFrame: ENGINE }, ...args);
+  return { api, ctl, said, ipc, ask, UD, DOCS, deskFile: path.join(UD, "desk.json") };
+}
+const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
+/* Invented from nothing, as every fixture here is. The refused one names a shelf that is not
+   there, which v2Problems refuses and the shell's format check cannot see. */
+function goodCatalog() {
+  return { format: 2, kind: "etiuda-catalog", id: "lamp-shop", rev: 1, name: "Lamp Shop", date: "2026-01-09",
+    langs: [{ code: "en", label: "EN" }],
+    tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
+    cards: [{ id: "c-warm", shelf: "t-op", bodyShape: "plain", title: { en: "Warm opening" }, body: { en: "Good day." } }] };
+}
+function refusedCatalog() {
+  const c = goodCatalog();
+  c.name = "Lamp Shop, edited by hand";
+  c.cards[0].shelf = "t-nowhere";
+  return c;
 }
 const keysOn = f => { try { return JSON.parse(realFs.readFileSync(f, "utf8")).keys || {}; } catch { return null; } };
 
@@ -122,6 +139,74 @@ try {
     const direct = SRC.split("\n").filter(l => /\bfs\.renameSync\(/.test(l) && !/^\s*(\/\/|\*)/.test(l)).length;
     check(direct === 2,
       "1f fs.renameSync is called at two lines of shell/main.js, renamePatiently's and rotateDesk's: " + direct);
+  }
+
+  /* ---- 2. a catalog the shell's check passes and the engine's refuses ------------------------
+     The shell tests the format's pair; the engine runs v2Problems. A shelf naming nothing is one
+     difference: the newer file below passes the first and fails the second. */
+  {
+    const S = loadShell();
+    const folder = path.join(S.DOCS, "Etiuda");
+    realFs.mkdirSync(folder, { recursive: true });
+    const OLD = path.join(folder, "lamps-old.ec"), NEW = path.join(folder, "lamps-new.ec");
+    realFs.writeFileSync(OLD, JSON.stringify(goodCatalog()), "utf8");
+    realFs.writeFileSync(NEW, JSON.stringify(refusedCatalog()), "utf8");
+    realFs.utimesSync(OLD, new Date(2026, 0, 1), new Date(2026, 0, 1));
+    realFs.utimesSync(NEW, new Date(2026, 0, 2), new Date(2026, 0, 2));
+    const nameOf = json => { try { return JSON.parse(json).name; } catch { return null; } };
+    const first = S.ipc("etiuda:catalog");
+    check(nameOf(first) === refusedCatalog().name,
+      "2a THE CONTROL: the shell hands the newest file, which its own check passes: " + (nameOf(first) === refusedCatalog().name));
+    const stranger = S.ipc("etiuda:catalog-refused", "lamps-old.ec");
+    check(stranger === null && nameOf(S.api.readCatalog()) === refusedCatalog().name,
+      "2b a refusal naming a file other than the one handed passes nothing over");
+    const next = S.ipc("etiuda:catalog-refused", "lamps-new.ec");
+    check(!!next && nameOf(next.json) === goodCatalog().name && next.file === "lamps-old.ec" && next.in === folder
+      && next.builtIn === false && next.mtime === Math.round(realFs.statSync(OLD).mtimeMs),
+      "2c the engine's refusal of it is answered with the older sound edition, and where it came from: "
+      + (next ? next.file + ", in the catalog folder " + (next.in === folder) + ", dated " + (next.mtime > 0) : "null"));
+    const rows = await S.ask("etiuda:catalog-files");
+    const row = n => rows.filter(r => r.name === n)[0] || {};
+    check(row("lamps-new.ec").cards === -1 && row("lamps-new.ec").macros === -1 && row("lamps-old.ec").cards === 1,
+      "2d the Library's row for the refused file says it would not read (cards " + row("lamps-new.ec").cards
+      + "), the sound one keeps its counts (" + row("lamps-old.ec").cards + ")");
+    check(nameOf(S.api.readCatalog()) === goodCatalog().name,
+      "2e a later read, the watch's, still passes the refused file over");
+    realFs.utimesSync(NEW, new Date(2026, 0, 3), new Date(2026, 0, 3));
+    check(nameOf(S.api.readCatalog()) === refusedCatalog().name,
+      "2f saved again, it is read again: a fixed file is not held against its next edition");
+  }
+
+  /* ---- 3. the engine's half: src/modules/catalog.js and host.js over a stub host ------------ */
+  {
+    const calls = [];
+    globalThis.window = {
+      E_CATALOG: refusedCatalog(),
+      E_HOST: { catalogFile: "lamps-new.ec", catalogIn: "C:/lab/Etiuda", catalogMtime: 2, catalogBuiltIn: false, openedWith: true,
+                catalogRefused: n => { calls.push(n); return { json: JSON.stringify(goodCatalog()), file: "lamps-old.ec",
+                                                               in: "C:/lab/Etiuda", builtIn: false, mtime: 1 }; } },
+    };
+    const C = await import(MOD("catalog.js"));
+    const H = await import(MOD("host.js"));
+    const got = C.eCatalog();
+    check(!!got && got.name === goodCatalog().name && calls.join() === "lamps-new.ec"
+      && C.eCatalogRefusedNames().join() === "lamps-new.ec",
+      "3a a handed catalog the engine refuses is named to the host once, and the next one it hands is the catalog read: "
+      + (got ? got.name : "null") + ", host told " + calls.length + " time(s)");
+    check(H.eCatalogFile() === "lamps-old.ec" && H.eCatalogMtime() === 1 && H.eCatalogIn() === "C:/lab/Etiuda"
+      && H.eOpenedWith() === false,
+      "3b and the host's facts follow the file handed in its place: " + H.eCatalogFile() + ", dated " + H.eCatalogMtime()
+      + ", opened-with " + H.eOpenedWith());
+
+    globalThis.window = { E_CATALOG: refusedCatalog(), E_HOST: { catalogFile: "lamps-new.ec" } };
+    const C2 = await import(MOD("catalog.js") + "?no-refusal-channel");
+    check(C2.eCatalog() === null && C2.eCatalogRefusedNames().join() === "lamps-new.ec",
+      "3c a host with no refusal channel still has the refusal recorded, for the boot to say");
+    globalThis.window = { E_CATALOG: goodCatalog(), E_HOST: { catalogFile: "lamps-old.ec",
+      catalogRefused: n => { calls.push("again " + n); return null; } } };
+    const C3 = await import(MOD("catalog.js") + "?sound");
+    check(!!C3.eCatalog() && C3.eCatalogRefusedNames().length === 0 && calls.length === 1,
+      "3d THE CONTROL: a sound catalog is read as it stands, and the host is told nothing");
   }
 } catch (e) {
   failed++;

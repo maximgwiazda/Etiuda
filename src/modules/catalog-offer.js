@@ -4,7 +4,7 @@ import { activateCatalog, catalogEdited, catalogEditionOlder, catalogMacroCount,
   catalogIntentCount, exportCatalog, isCatalogUpdate } from "./catalog-file.js";
 import { E_CATALOG_KEY, E_CATALOG_NAME, E_CATALOG_VERSION, catalogStamp, catalogVersionLabel,
   eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
-  eWatchClear, parseCatalogFile, eWatchName } from "./catalog.js";
+  eWatchClear, parseCatalogFile, eWatchName, eCatalogRefusedNames, eRefuseCatalogFile } from "./catalog.js";
 import { eEmbeddedCatalog } from "./env.js";
 import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
   eCatalogIn, eCatalogBuiltIn, eCatalogMtime, eHost, eLoadedCatalogFile, eOpenCatalogFolder, eOpenedWith,
@@ -491,7 +491,11 @@ function refuseAskedFile(name,why){
 function wireHostCatalogWatch(){
   const h=(typeof window!=="undefined" && window.E_HOST)||null;
   if(!h || typeof h.onCatalogFile!=="function") return;
-  const cold=eOpenedRefused();
+  /* A FILE THE HOST HANDED AND THIS ENGINE REFUSED is said as a double-clicked one is, found or
+     asked for: the host passed it over for the next, and a desk that never names it looks empty
+     or stale for no reason anybody can see. The newest refused is the one named. */
+  eCatalog();
+  const cold=eOpenedRefused()||(eCatalogRefusedNames().length?{name:eCatalogRefusedNames()[0],why:"parse"}:null);
   // Deferred with the same hand as the boot's other toasts: no toast host exists this early.
   if(cold) setTimeout(()=>{ try{ refuseAskedFile(cold.name,cold.why); }catch(e){} },1400);
   h.onCatalogFile((text,name,where,asked,why,builtIn)=>{
@@ -500,6 +504,14 @@ function wireHostCatalogWatch(){
     paintCatalogList();
     let c=null;
     try{ if(!why) c=parseCatalogFile(text); }catch(e){ c=null; }
+    if(!c && !why){
+      refuseAskedFile(name,"parse");
+      const next=eRefuseCatalogFile(name);
+      let n=null;
+      try{ n=next?parseCatalogFile(String(next.json)):null; }catch(e){ n=null; }
+      if(n && !asked) eOfferCatalog(n,String(next.file||""),String(next.in||""),false,false,!!next.builtIn);
+      return;
+    }
     if(!c){ if(asked) refuseAskedFile(name,why||"parse"); return; }
     eOfferCatalog(c,name,where,!!asked,!!asked,builtIn);
   });

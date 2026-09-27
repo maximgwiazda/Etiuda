@@ -205,8 +205,17 @@ function refuseOpened(file, why) {
   openedRefused = { name: path.basename(file), why: why };
   openedWith = "";
 }
+/* FILES THE ENGINE REFUSED, by path and the edit time it refused: isV2 above is the format's
+   pair and the engine's reader is the whole of v2Problems, so a file can pass here and fail
+   there. Passed over until it is saved again, so an older sound edition opens in its place. */
+const engineRefused = new Map();
+function refusedByEngine(file) {
+  if (!engineRefused.has(file)) return false;
+  try { return Math.round(fs.statSync(file).mtimeMs) === engineRefused.get(file); } catch { return false; }
+}
 function readCatalog() {
   for (const file of catalogPlaces()) {
+    if (refusedByEngine(file)) continue;
     let text;
     try { text = fs.readFileSync(file, "utf8"); } catch { refuseOpened(file, "read"); continue; }
     try {
@@ -326,6 +335,20 @@ ipcMain.on("etiuda:catalog", (e) => {
   if (!fromEngine(e)) { e.returnValue = null; return; }
   if (catalogJson === undefined) catalogJson = readCatalog();
   e.returnValue = catalogJson;
+});
+/* THE ENGINE REFUSED THE FILE IT WAS HANDED, and names it. Answered with the next file this
+   would read, in the shape the host answer gives the first, or null where there is none. */
+ipcMain.on("etiuda:catalog-refused", (e, name) => {
+  if (!fromEngine(e) || !catalogFrom || path.basename(catalogFrom) !== String(name || "")) {
+    e.returnValue = null;
+    return;
+  }
+  console.error("etiuda: the engine refused " + catalogFrom + ", so it is passed over until it is saved again");
+  engineRefused.set(catalogFrom, catalogMtime());
+  if (openedWith === catalogFrom) openedWith = "";
+  catalogJson = readCatalog();
+  e.returnValue = catalogJson ? { json: catalogJson, file: path.basename(catalogFrom), in: folderShown(catalogFrom),
+                                  builtIn: isBuiltIn(catalogFrom), mtime: catalogMtime() } : null;
 });
 
 /* ---- the desk, kept in a file rather than in the renderer's localStorage -------------------
@@ -933,6 +956,7 @@ ipcMain.handle("etiuda:catalog-files", (e) => {
     let id = "", catalogName = "";
     try { mt = Math.round(fs.statSync(f).mtimeMs); } catch { /* renamed away under the listing */ }
     try {
+      if (refusedByEngine(f)) throw new Error("refused by the engine");
       const { data } = catalogPayload(fs.readFileSync(f, "utf8"));
       if (isV2(data) && Array.isArray(data.cards)) {
         cards = data.cards.length;

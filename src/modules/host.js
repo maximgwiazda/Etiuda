@@ -1,7 +1,7 @@
 import { $ } from "./dom.js";
 import { t, toastRefusal } from "./ui-lang.js";
 import { lsGet, lsSet, nsGet } from "./storage.js";
-import { eCatalog, eCatalogAccepted, storedCatalog } from "./catalog.js";
+import { eCatalog, eCatalogAccepted, eCatalogHanded, storedCatalog } from "./catalog.js";
 import { pack } from "./pack.js";
 import { statsDoc } from "./desk-stats.js";
 import { E_VERSION } from "./env.js";
@@ -47,17 +47,21 @@ function eOpenCatalogFolder(){
   catch(e){ return Promise.resolve(false); }
 }
 /* The file this load is running, and the folder it was found in - which is not always the folder
-   above: a catalog beside the installation still loads when the folder holds none. */
-function eCatalogFile(){ const h=eHost(); return h?String(h.catalogFile||""):""; }
-function eCatalogIn(){ const h=eHost(); return h?String(h.catalogIn||""):""; }
+   above: a catalog beside the installation still loads when the folder holds none. Where the
+   engine refused the file the host named at boot, the file handed in its place answers, and the
+   host's catalog is read first so that no caller is answered about a file about to be refused. */
+function eHanded(){ if(!eHost()) return null; eCatalog(); return eCatalogHanded(); }
+function eCatalogFile(){ const h=eHost(), o=eHanded(); return o?o.file:h?String(h.catalogFile||""):""; }
+function eCatalogIn(){ const h=eHost(), o=eHanded(); return o?o.in:h?String(h.catalogIn||""):""; }
 // True where that file is one Etiuda ships, whose folder the host never names.
-function eCatalogBuiltIn(){ const h=eHost(); return !!(h && h.catalogBuiltIn); }
+function eCatalogBuiltIn(){ const h=eHost(), o=eHanded(); return o?o.builtIn:!!(h && h.catalogBuiltIn); }
 /* When that file was last written, as the host read it at boot. 0 in a browser and 0 where the
    host has no file, which is what every caller tests. */
-function eCatalogMtime(){ const h=eHost(); return h?(+h.catalogMtime||0):0; }
+function eCatalogMtime(){ const h=eHost(), o=eHanded(); return o?o.mtime:h?(+h.catalogMtime||0):0; }
 /* Whether that file arrived because somebody double-clicked it, rather than because it is the
-   newest in the folder. False in a browser, where no file is ever handed to a launch. */
-function eOpenedWith(){ const h=eHost(); return !!(h && h.openedWith); }
+   newest in the folder. False in a browser, where no file is ever handed to a launch, and false
+   once the engine has refused it. */
+function eOpenedWith(){ const h=eHost(); return !eHanded() && !!(h && h.openedWith); }
 /* The catalog folder's own listing,
    [{name,mtime,cards,edition,macros,intents,cats,awaiting,sample,id,catalogName}],
    in the host's own order: newest first, the sample last whatever its date - the rule and the
