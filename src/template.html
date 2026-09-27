@@ -3102,12 +3102,6 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 #tourBody .t-fav{color:#fef3c7}
 #tourBody .t-fav .ic-inline{fill:currentColor;stroke:none;margin-right:2px}
 #tourBody .t-bad{color:#ffecec}
-.tour-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
-.tour-step{font:11px var(--mono);color:var(--dim);letter-spacing:.3px;text-transform:uppercase}
-/* ON A FILLED PANEL A QUIET INK IS AN ILLEGIBLE ONE. White at 72% over the cobalt measures
-   3.45:1; the quiet of a step counter has to come from 11px mono caps instead, which it does,
-   so it takes the body's own ink at 4.63:1. Measured on this build, both themes. */
-.bub .tour-step{color:var(--bub-dim)}
 .tour-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center;
   margin-top:2px;padding-top:10px;border-top:1px solid rgba(255,255,255,.24)}
 /* The buttons are cut OUT of the fill rather than laid on it: a white ghost for the two that
@@ -3228,7 +3222,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 }@layer base{
 /* Tabular figures wherever a number sits beside a label, so a count ticking from 9 to 10
    does not shuffle the text around it. */
-.pill b,.mg-uses,.mg-count,.mg-cat-n,.tour-step,.cbadge,.rail-badge,.tag{
+.pill b,.mg-uses,.mg-count,.mg-cat-n,.cbadge,.rail-badge,.tag{
   font-variant-numeric:tabular-nums}
 /* The star's own path (_STAR), spawned by the click handler as a fixed overlay so it
    survives the re-render that follows the click. 299: under the toast, above everything
@@ -3496,9 +3490,6 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 <div id="tourRoot" hidden aria-hidden="true">
   <div class="tour-hole" id="tourHole" aria-hidden="true"></div>
   <div class="tour-card bub" id="tourCard" role="dialog" aria-modal="false" aria-labelledby="tourTitle">
-    <div class="tour-meta">
-      <span class="tour-step" id="tourStepLabel">Step 1</span>
-    </div>
     <h3 id="tourTitle">Welcome</h3>
     <p id="tourBody"></p>
     <div class="tour-field" id="tourField" hidden></div>

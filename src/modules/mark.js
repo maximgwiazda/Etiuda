@@ -30,8 +30,12 @@ function railQuery(){
   return (typeof intentEl!=="undefined" && intentEl) ? String(intentEl.value||"").trim() : "";
 }
 
+// How many copies this page has made, which the tour's copying step reads.
+let copyCount=0;
+function copiesMade(){ return copyCount; }
 function copy(text,msg){
   // Copying consumes the semi-selection - every copy, click or keyboard, funnels through here.
+  copyCount++;
   setRailMarkUsed(true); setSemiKind(null);
   hooks.railDecorate(false);
   const done=()=>toast(msg);
@@ -142,5 +146,6 @@ export {
   markSurface,
   markEnd,
   copy,
+  copiesMade,
   fallback,
 };

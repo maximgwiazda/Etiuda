@@ -557,6 +557,7 @@ function runUnitTests() {
   nameNsAdoptionTests();
   deskStatsTests();
   ejectUndoTests();
+  tourActTests();
 }
 
 /* EJECT HAPPENS AT ONCE AND UNDO LOADS THE SAME CATALOG BACK (Maxim, 2026-09-27): the eject, the
@@ -608,6 +609,97 @@ function ejectUndoTests() {
   [off, deaf].forEach(x => x.F && x.F.ejectCatalog());
   eq("a session that cannot hold the park asks first rather than ejecting without an Undo, and leaves nothing parked",
     [off.asked, off.reloads, "eCatalog" in off.ls, deaf.asked, deaf.reloads, "eEjectPark" in deaf.ss], [1, 0, true, 1, 0, false]);
+}
+
+/* THE TOUR TEACHES BY DOING (Maxim, 2026-09-27): a step that teaches an act asks for it and moves on
+   when it is done, and Next stands only where nothing is asked. The step table and the act watcher
+   run in bare node inside one scope whose every free name is the page model below. */
+function tourActTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "tour.js"), "utf8");
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const timers = [];
+  const page = { tourRunning: true, tourIdx: 0, copies: 0, menuIsOpen: false, target: {},
+    pax: { value: "" }, intentEl: { value: "" }, intentIdxs: [], cats: [], lang: "en", tabs: [{}],
+    pack: { favourites: [], hidden: [] }, moved: [],
+    document: { documentElement: { dataset: { theme: "dark" } }, body: { classList: { contains: () => false } } } };
+  const next = { hidden: false, textContent: "" };
+  const own = {
+    t: s => s, chordChips: () => "K", copiesMade: () => page.copies, menuOpen: () => page.menuIsOpen,
+    tourEls: () => ({ next }), resolveTourTarget: () => page.target,
+    setTimeout: (fn, ms) => { timers.push({ fn, ms, live: true }); return timers.length; },
+    clearTimeout: id => { if (id && timers[id - 1]) timers[id - 1].live = false; },
+    tourNext: () => page.moved.push("next"), showTourStep: i => page.moved.push("show " + i),
+    tourFollowWindow: () => { page.moved.push("follow"); return true; }
+  };
+  const scope = new Proxy({}, {
+    has: (o, k) => typeof k === "string",
+    get: (o, k) => k === Symbol.unscopables ? undefined : k in own ? own[k] : k in page ? page[k]
+      : k in globalThis ? globalThis[k] : () => undefined,
+    set: (o, k, v) => { page[k] = v; return true; }
+  });
+  let T = null;
+  try {
+    T = new Function("scope", "with(scope){\n" + ["const paxNow=", "const searchNow=", "const themeNow=", "const TOUR_STEPS=",
+      "function stepOn(", "function onFrom(", "function tourAsks(", "function syncTourNext(", "const TOUR_ACT_MS=",
+      "let tourActWas=", "function armTourAct(", "function tourActSoon(", "function tourActCheck("]
+      .map(m => extractDecl(src, m)).join("\n")
+      + "\nreturn {TOUR_STEPS, tourAsks, syncTourNext, armTourAct, tourActSoon};\n}")(scope);
+  } catch (e) { T = null; eq("tour.js carries the step table and the act watcher", e.message, "sliced"); }
+  eq("the step counter is gone from the bubble and from the code that wrote it",
+    [/tourStepLabel/.test(tpl), /tourStepLabel|Tour \{N\}/.test(src)], [false, false]);
+  if (!T) return;
+  const ids = T.TOUR_STEPS.map(s => s.id);
+  const nextOn = () => ids.filter((id, i) => { page.tourIdx = i; T.syncTourNext(); return !next.hidden; });
+  eq("Next stands only on the steps that ask nothing: the name, which may be left for later, and the last",
+    nextOn(), ["name", "done"]);
+  page.target = null;
+  eq("and on a step whose control is not on screen, which cannot be done and so asks nothing, but never inside a window",
+    nextOn(), ids.filter((id, i) => !T.TOUR_STEPS[i].inside));
+  page.target = {};
+
+  /* Each act, done the way a person does it: the step is not done when it begins, and it is once the act has landed.
+     The list must name every step that `does` something, so a new one cannot arrive untested. The desk has been
+     used before the step begins, so a step that forgot where it began is caught. */
+  Object.assign(page, { copies: 5, tabs: [{}, {}], lang: "en", pack: { favourites: ["z"], hidden: ["z"] } });
+  page.pax.value = "OLGA"; page.intentEl.value = "old";
+  const acts = { pax: () => { page.pax.value = "ANNA NOWAK"; }, search: () => { page.intentEl.value = "return"; },
+    rail: () => { page.intentIdxs = [3]; }, cards: () => { page.copies++; }, pills: () => { page.cats = ["c"]; },
+    tabs: () => { page.tabs = page.tabs.concat([{}]); }, seg: () => { page.lang = "pl"; },
+    star: () => { page.pack.favourites = ["a"]; }, hide: () => { page.pack.hidden = ["a"]; },
+    theme: () => { page.document.documentElement.dataset.theme = "light"; }, menu: () => { page.menuIsOpen = true; } };
+  const doing = T.TOUR_STEPS.filter(s => s.does).map(s => s.id);
+  eq("every step that does something has an act in this leg, and none else", doing.slice().sort(), Object.keys(acts).sort());
+  const verdicts = doing.map(id => {
+    const s = T.TOUR_STEPS.find(x => x.id === id);
+    const was = s.does.snap ? s.does.snap() : undefined, before = !!s.does.done(was);
+    acts[id]();
+    return id + ":" + before + ">" + !!s.does.done(was);
+  });
+  eq("each act step is undone when it begins and done after its act", verdicts, doing.map(id => id + ":false>true"));
+
+  // The watcher: only an event inside `on` counts, never one in the bubble, and the step is read once it settles.
+  const at = id => ids.indexOf(id);
+  const ev = inside => ({ target: { closest: sel => (inside.indexOf(sel) > -1 ? {} : null) } });
+  const fire = () => { const live = timers.filter(x => x.live); timers.forEach(x => { x.live = false; }); live.forEach(x => x.fn()); return live.map(x => x.ms); };
+  page.intentIdxs = []; page.tourIdx = at("rail"); page.moved = [];
+  T.armTourAct(T.TOUR_STEPS[at("rail")]);
+  page.intentIdxs = [2];
+  T.tourActSoon(ev(["#pills"])); fire();
+  T.tourActSoon(ev(["#tourCard", "#intentRail"])); fire();
+  const outside = page.moved.slice();
+  T.tourActSoon(ev(["#intentRail"])); const waited = fire();
+  eq("an act counts only where the step asks for it, never through the bubble, and moves the tour on once settled",
+    [outside, page.moved, waited], [[], ["next"], [350]]);
+  page.pax.value = "ANNA"; page.tourIdx = at("pax"); page.moved = [];
+  T.armTourAct(T.TOUR_STEPS[at("pax")]);
+  page.pax.value = "ANNA N"; T.tourActSoon(ev(["#pax"]));
+  page.pax.value = "ANNA NOWAK"; T.tourActSoon(ev(["#pax"]));
+  const typed = fire();
+  eq("typing is read once, after it pauses, against the name that stood when the step began",
+    [typed, page.moved], [[1200], ["next"]]);
+  page.tourIdx = at("facts"); page.moved = [];
+  T.armTourAct(T.TOUR_STEPS[at("facts")]); T.tourActSoon(ev([])); fire();
+  eq("a step that opens a window follows the person into it", page.moved, ["follow"]);
 }
 
 /* Section 2.5 of the specification and the body rules of 2.6, driven over the reader that
@@ -900,7 +992,7 @@ function copyControlTests() {
    once, which keeps the promise route synchronous here. */
 function copyNoticeTests() {
   const src = sourceText();
-  const decls = ["function copy(", "function fallback("].map(m => extractDecl(src, m)).join("\n");
+  const decls = ["let copyCount=", "function copy(", "function fallback("].map(m => extractDecl(src, m)).join("\n");
   const SAID = "Ready to paste: A card, EN";
   const HAND = "Selecting the text on the card and pressing Ctrl+C copies this one; the browser kept the clipboard closed.";
   const run = (secure, write, exec) => {
@@ -2746,8 +2838,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 804;
-const UI_STRINGS_SHA256 = "6d7ff393cb63ae1e0f894caa6e9047635e7d1bbae4dd378de2961768d39241ca";
+const UI_STRINGS_COUNT = 809;
+const UI_STRINGS_SHA256 = "0c5fb6e45de4221646adaf7f5b922d60e6d2309a2776c49912f51f359d924f37";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
