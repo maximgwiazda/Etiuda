@@ -4788,10 +4788,14 @@ What you type stays in this browser only.`;
   function lsSet(k, v, own) {
     if (eWiping) return false;
     if (E_DESK) {
-      const s = String(v);
-      if (!own && E_DESK.map[k] === s && !eUnsaved) return true;
+      const s = String(v), had = k in E_DESK.map, was = E_DESK.map[k];
+      if (!own && was === s && !eUnsaved) return true;
       E_DESK.map[k] = s;
-      return own ? deskSave() : deskSoon();
+      if (!own) return deskSoon();
+      if (deskSave()) return true;
+      if (had) E_DESK.map[k] = was;
+      else delete E_DESK.map[k];
+      return false;
     }
     if (!E_LS_OK) {
       E_MEM[k] = String(v);

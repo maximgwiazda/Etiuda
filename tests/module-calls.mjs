@@ -311,6 +311,23 @@ const eq = (got, want) => got === want ? true
             const map = JSON.parse(saved[saved.length - 1]);
             return D.eSaveTrouble() === null && map.eGateLost === "1" ? true
               : JSON.stringify([D.eSaveTrouble(), Object.keys(map)]); });
+  /* AN OWN WRITE IS THE EXCEPTION: its caller speaks for its failure ("Could not save the catalog"),
+     so a refused one must not ride the next write that lands, as the refused key above does. */
+  refuse = true;
+  check("storage.js", "2a an own write the desk refuses is taken back, and the next write that lands does not store it",
+    () => { const own = D.lsSet("eGateOwn", "new", true), read = D.lsGet("eGateOwn");
+            refuse = false; D.lsSet("eGateAfter", "1");
+            const map = JSON.parse(saved[saved.length - 1]);
+            return own === false && read === null && !("eGateOwn" in map) ? true
+              : JSON.stringify([own, read, Object.keys(map)]); });
+  check("storage.js", "2a a refused own write over a value leaves that value, and the same write lands once the desk takes it",
+    () => { refuse = false; D.lsSet("eGateOwn2", "old", true);
+            refuse = true; const r1 = D.lsSet("eGateOwn2", "new", true), kept = D.lsGet("eGateOwn2");
+            refuse = false; const r2 = D.lsSet("eGateOwn2", "new", true);
+            const map = JSON.parse(saved[saved.length - 1]);
+            return r1 === false && kept === "old" && r2 === true && map.eGateOwn2 === "new" ? true
+              : JSON.stringify([r1, kept, r2, map.eGateOwn2]); });
+  refuse = false;
 
   const held = {};
   let full = false;
