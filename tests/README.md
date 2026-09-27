@@ -586,6 +586,29 @@ it, twice, because nothing in the sequence had ever started the built applicatio
 is about 115 s longer for it. The gate's own control is `ETIUDA_SHELL_APP=<anything> node
 tools/release.mjs`, which makes shell-smoke refuse and must stop the run at gate 7 with exit 7.
 
+## Whether a build can be sold, which no other gate asks
+
+    node tests/sellable.mjs
+    node tools/release.mjs --customer        the customer's questions asked of a preview tree
+
+Every other gate proves that a build is what the tree says. `tools/sellable.mjs` asks whether it
+can be put in front of a customer, and `tools/release.mjs` asks it twice: at gate 2, before any
+test or build, and at the signature gate after the build. **A customer build is told from a
+preview by its version**, which is what the customer sees: a bare x.y.z with a major of 1 or more
+is a customer's; a prerelease part (`2.0.0-dev`) or a major of 0 is a preview. A customer build is
+refused while the version is a preview's, while any licence page in `shell/` carries a bracketed
+placeholder, while no certificate is configured, and after the build unless the installer and
+`win-unpacked/Etiuda.exe` both read Authenticode Valid with a timestamp. A preview packages as it
+always did, is told what would stop it, and is refused only when a certificate WAS configured and
+the result is not Valid. `--customer` asks the questions of any version; nothing skips them.
+
+`tests/sellable.mjs` holds it without packaging: planted licence pages both ways, the real
+`electron-builder.js` with and without `ETIUDA_CERT`, Windows' own reading of a signed tool, of a
+copy with one byte changed (HashMismatch) and of an unsigned one, the signature gate whole on
+those files, and the release itself driven in a throwaway repository to its second gate, where
+exit 2 is a stop and exit 3 (gate 3 finding no name list in the lab) is a pass. The uninstaller
+is not read, since it is sealed inside the installer. 25 checks, about 4 s.
+
 ## The reinstall-survival loop, which is the only thing here that installs anything
 
     ETIUDA_FIXTURES=<folder> npm run reinstall
