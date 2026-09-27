@@ -35,6 +35,7 @@ function instrument() {
              key: el => el.dataset.k != null ? "k:" + el.dataset.k : (el.classList.contains("pill-add") ? "add" : null) },
     rail: { sel: "#intentRailList .rail-item[data-si]", key: el => "r" + el.dataset.si }
   };
+  const GEO = /^(transform|translate|scale|width|minWidth|height|maxHeight|opacity|top|left)$/;
   const scroller = () => document.getElementById("pageScroll") || document.scrollingElement;
   const read = (kind, seen, first) => {
     const K = KINDS[kind], out = {}, dy = K.page ? scroller().scrollTop : 0;
@@ -45,7 +46,9 @@ function instrument() {
       if (!r.width && !r.height) return;
       const o = { x: r.left, y: r.top + dy, w: r.width, top: r.top, bottom: r.bottom };
       const an = el.getAnimations ? el.getAnimations() : [];
-      const running = an.filter(a => a.playState === "running" || a.playState === "paused");
+      /* Only what moves or shows a box: a colour's .1s state change is not motion. */
+      const running = an.filter(a => (a.playState === "running" || a.playState === "paused") && a.effect
+        && a.effect.getKeyframes().some(f => Object.keys(f).some(n => GEO.test(n))));
       if (running.length) {
         o.anim = 1;
         if (first && !seen.has(k)) {
@@ -90,7 +93,8 @@ function instrument() {
   };
 }
 
-/* The verdict on one tracked run, in numbers. `area` says which boxes count as on screen. */
+/* The verdict on one tracked run, in numbers. `top` is where the screen starts, `only` names the
+   faults a leg judges, `wantArrivals` asks a box new to the screen to arrive animated. */
 function judge(r, opts) {
   const o = Object.assign({ wantArrivals: false, top: 0 }, opts || {});
   const vis = b => b && b.bottom > o.top && b.top < r.vh;
@@ -123,7 +127,7 @@ function judge(r, opts) {
       if (!r.frames.some(f => f[k] && f[k].anim)) bad.popped.push(name(k));
     }
   }
-  const faults = Object.entries(bad).filter(([, v]) => v.length);
+  const faults = Object.entries(bad).filter(([n, v]) => v.length && !(o.only && !o.only.includes(n)));
   return { ok: faults.length === 0, moved, still, arrived,
            text: moved + " moved, " + still + " still" + (o.wantArrivals ? ", " + arrived + " arrived" : "")
              + (faults.length ? "; " + faults.map(([n, v]) => n + " " + v.length + " (" + v.slice(0, 3).join(", ") + ")").join("; ") : "") };
@@ -196,6 +200,31 @@ leg("m2", "an intent pick holds the pill bar's height: no frame taller or shorte
       + (bad.length ? ", " + bad.length + " frame(s) at " + [...new Set(bad)].join("/") + "px" : ""));
   }
   return { ok, text: out.join("; ") };
+});
+
+/* A query settles the pills: the counts and the order change, All's count and width with them. */
+async function settleQuery(p, text) {
+  await p.focus("#intent");
+  await p.keyboard.type(text);
+  await sleep(150);
+  return track(p, "pills", 700, () => { window.__mtAct = () => railSettle(); });
+}
+
+leg("m3", "a search settle glides every pill that moves or changes width, All and the add button included", async p => {
+  /* Two queries, each reordering the row: one letter moves the add button to another line, and
+     a rare pair takes All's count from three digits to two. */
+  const out = [];
+  let ok = true;
+  for (const q of ["e", "zz"]) {
+    await rest(p);
+    const r = await settleQuery(p, q);
+    const j = judge(r, { only: ["jumped", "snapped", "vanished"] }), last = r.frames[r.frames.length - 1];
+    const d = (k, f) => r.before[k] && last[k] ? Math.round(f(last[k]) - f(r.before[k])) : "none";
+    ok = ok && j.ok && j.moved > 0;
+    out.push(JSON.stringify(q) + ": " + j.text + "; All's width " + d("k:", x => x.w) + "px, the add button "
+      + d("add", x => x.x) + "px across and " + d("add", x => x.y) + "px down");
+  }
+  return { ok, text: out.join(" | ") };
 });
 
 module.exports = { LEGS, instrument, rest, boot, VIEW };

@@ -14391,6 +14391,7 @@ What you type stays in this browser only.`;
     glideSettle: () => glideSettle,
     paintIntentRings: () => paintIntentRings,
     paintRailSelection: () => paintRailSelection,
+    pillKey: () => pillKey,
     schedulePickTail: () => schedulePickTail,
     wirePillDrag: () => wirePillDrag,
     wirePumpKick: () => wirePumpKick
@@ -14416,11 +14417,14 @@ What you type stays in this browser only.`;
       document.addEventListener(t2, eKickPump, true);
     });
   }
+  function pillKey(p) {
+    return p.dataset.k != null ? p.dataset.k : p.classList.contains("pill-add") ? null : void 0;
+  }
   function flipPills(before) {
     if (!before) return;
     const moved = [], deltas = [], wEls = [], wStarts = [];
     pills.querySelectorAll(".pill").forEach((p) => {
-      const k = p.dataset.k, b = k && before[k];
+      const k = pillKey(p), b = k !== void 0 && before.get(k);
       if (!b) return;
       const a = p.getBoundingClientRect();
       if (Math.abs(b.width - a.width) >= 1.5) {
@@ -15617,9 +15621,10 @@ What you type stays in this browser only.`;
   }
   function capturePills() {
     if (mgReduceMotion()) return null;
-    const before = {};
+    const before = /* @__PURE__ */ new Map();
     pills.querySelectorAll(".pill").forEach((p) => {
-      if (p.dataset.k) before[p.dataset.k] = p.getBoundingClientRect();
+      const k = pillKey(p);
+      if (k !== void 0) before.set(k, p.getBoundingClientRect());
     });
     return before;
   }

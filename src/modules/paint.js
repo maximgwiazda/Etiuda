@@ -50,6 +50,9 @@ function wirePumpKick(){
   });
 }
 
+/* A pill's key in a capture: its category, "" for All, null for the add button, which has none;
+   undefined for anything else in the row. */
+function pillKey(p){ return p.dataset.k!=null ? p.dataset.k : p.classList.contains("pill-add") ? null : undefined; }
 /** The "invert and play" half. Call after the pills have been redrawn in their new order. */
 /* READ EVERY POSITION FIRST, THEN WRITE EVERY TRANSFORM: a rect read after a style
    write forces a full layout PER PILL - interleaved, this was 25.6ms of a 180ms
@@ -58,7 +61,7 @@ function flipPills(before){
   if(!before) return;
   const moved=[], deltas=[], wEls=[], wStarts=[];
   pills.querySelectorAll(".pill").forEach(p=>{
-    const k=p.dataset.k, b=k&&before[k];
+    const k=pillKey(p), b=k!==undefined && before.get(k);
     if(!b) return;
     const a=p.getBoundingClientRect();
     /* Width changes ride the same flip - a selection bolds the name, a recount changes the
@@ -361,7 +364,7 @@ function cancelPickTail(){
 }
 
 export {
-  wirePumpKick, flipPills, animateReorder, captureCards, flipCards, captureSettle, glideSettle,
+  wirePumpKick, pillKey, flipPills, animateReorder, captureCards, flipCards, captureSettle, glideSettle,
   wirePillDrag,
   paintRailSelection, paintIntentRings,
   schedulePickTail,

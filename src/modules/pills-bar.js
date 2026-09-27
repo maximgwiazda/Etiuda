@@ -6,7 +6,7 @@ import { ICON_ALL, ICON_EDIT, ICON_PLUS } from "./icons.js";
 import { esc } from "./esc.js";
 import { t, toast } from "./ui-lang.js";
 import { drawPills, scheduleTabSave } from "./tabs.js";
-import { animateReorder } from "./paint.js";
+import { animateReorder, pillKey } from "./paint.js";
 import { CATS } from "./content-model.js";
 import { nsDel } from "./storage.js";
 import { rebuildCards } from "./rebuild.js";
@@ -183,13 +183,13 @@ function startPillCatAdd(addEl){
    sites, and those sites capture, change, redraw, then flip. Opt-in per call site rather
    than folded into drawPills(): most callers (tab restore, rename, wipe) should redraw
    instantly with no motion. */
-/** Rects of every pill, keyed by category key. The "first" half of a FLIP. */
+/** Rects of every pill, keyed by pillKey(). The "first" half of a FLIP. */
 /* THE FLIPS ANSWER THE SWITCH AT THEIR CAPTURE: one handed nothing plays nothing, and every
    caller already treats an empty capture as "redraw, do not animate". Same in the two below. */
 function capturePills(){
   if(mgReduceMotion()) return null;
-  const before={};
-  pills.querySelectorAll(".pill").forEach(p=>{ if(p.dataset.k) before[p.dataset.k]=p.getBoundingClientRect(); });
+  const before=new Map();
+  pills.querySelectorAll(".pill").forEach(p=>{ const k=pillKey(p); if(k!==undefined) before.set(k,p.getBoundingClientRect()); });
   return before;
 }
 export {
