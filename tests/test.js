@@ -1379,7 +1379,9 @@ function recoveryTests() {
     const sb = {
       document: { documentElement: { classList: { add: (...c) => c.forEach(x => cls.add(x)), remove: (...c) => c.forEach(x => cls.delete(x)),
         contains: c => cls.has(c) }, style: { setProperty() {} } },
-        head: { appendChild: n => head.push(n) }, createElement: el, getElementById: () => null, querySelector: () => null },
+        head: { appendChild: n => { n.parentNode = sb.document.head; head.push(n); },
+          removeChild: n => { head.splice(head.indexOf(n), 1); n.parentNode = null; } },
+        createElement: el, getElementById: () => null, querySelector: () => null },
       sessionStorage: { getItem: k => store[k] || null, removeItem: k => { delete store[k]; }, setItem: (k, v) => { store[k] = v; }, clear() {} },
       localStorage: { getItem: () => null, setItem() {}, removeItem() {}, key: () => null, length: 0 },
       matchMedia: () => ({ matches: false }), location: { hash: "", href: "file:///x/etiuda.html", protocol: "file:", origin: "null" },
@@ -1388,20 +1390,17 @@ function recoveryTests() {
     };
     sb.window = sb; sb.E_HOST = host; sb.self = sb; sb.top = sb;
     require("vm").runInNewContext(guard, sb);
-    const hold = head.filter(n => n.rel === "expect" && n.blocking === "render");
-    return [cls.has("e-arriving"), hold.length];
+    const held = () => head.filter(n => n.rel === "expect" && n.blocking === "render").length;
+    const before = [cls.has("e-arriving"), held()];
+    sb.E_BOOT_OK();
+    return before.concat(held());
   };
   let got;
   try {
     got = [run({ recovering: true }, false), run({ recovering: false }, false), run(null, true), run(null, false)];
   } catch (e) { got = "the boot guard threw: " + e.message; }
-  eq("the guard holds the first frame for the shell's recovery and for the page's own covered reload, and for nothing else",
-    got, [[true, 1], [false, 0], [true, 1], [false, 0]]);
-  const at = s => tpl.indexOf(s), mark = at('<div id="eBooted" hidden></div>');
-  const sibA = at('<script src="etiuda-catalog.js"></script>'), sibB = at('<script src="sample-catalog.js"></script>');
-  eq("the hold names the one element the parser meets after both sibling catalogs and before the app's script, so no covered boot ends its parse with it unfound",
-    [/hold\.href="#eBooted"/.test(guard), (tpl.match(/id="eBooted"/g) || []).length, sibA > -1 && sibB > sibA && mark > sibB && mark < at("/*@APP*/")],
-    [true, 1, true]);
+  eq("the guard holds the first frame for the shell's recovery and for the page's own covered reload, and for nothing else; the end of boot lets it go, so parsing never ends on an expected element it did not find",
+    got, [[true, 1, 0], [false, 0, 0], [true, 1, 0], [false, 0, 0]]);
 }
 /* A COVERED ARRIVAL FADES FROM A FRAME ITS CONTENT WAS DRAWN IN (feel pass, the catalog load): the boot
    guard runs in a VM, E_BOOT_OK is called, and the frames and paint timing it waits on are handed to
