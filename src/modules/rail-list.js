@@ -578,8 +578,9 @@ function flipRail(before,keep){
        one, and it bounds the journey to the panel's height; an exempt row sliding in from
        off-screen read as the interface lurching. Off-screen arrivals ENTER instead - a
        short fade at their final position: banning their travel while giving them no entry
-       made equal-sized relevance swaps produce NO motion at all, which read as failure. */
-    const exempt=seenBefore && keep && keep.has(String(el.dataset.si));
+       made equal-sized relevance swaps produce NO motion at all, which read as failure.
+       A row on screen at both ends is bounded by the panel the same way, so it travels too. */
+    const exempt=seenBefore && (seenAfter || (keep && keep.has(String(el.dataset.si))));
     if(Math.abs(dy)>limit && !exempt){
       if(seenAfter && !seenBefore) entered.push(el);
       return;

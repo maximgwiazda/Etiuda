@@ -312,6 +312,42 @@ leg("m7", "a star and its removal glide every card that stays on screen, across 
   return { ok, text: out.join(" | ") };
 });
 
+leg("m8", "a settle, a pick and a clear glide every rail row that stays in the panel, however far it travels", async p => {
+  const out = [];
+  let ok = true;
+  for (const q of ["e", "zz", "a"]) {
+    await rest(p);
+    await p.focus("#intent");
+    await p.keyboard.type(q);
+    await sleep(150);
+    const r = await track(p, "rail", 700, () => { window.__mtAct = () => railSettle(); });
+    const top = await p.evaluate(() => document.getElementById("intentRailList").getBoundingClientRect().top);
+    const bottom = await p.evaluate(() => document.getElementById("intentRailList").getBoundingClientRect().bottom);
+    r.vh = bottom;
+    const j = judge(r, { top, wantArrivals: true });
+    ok = ok && j.ok;
+    out.push(JSON.stringify(q) + ": " + j.text);
+  }
+  /* A pick sends its row to the top and a clear sends it home: on screen at both ends. */
+  const panel = () => p.evaluate(() => { const b = document.getElementById("intentRailList").getBoundingClientRect(); return [b.top, b.bottom]; });
+  for (const nth of [10, 14]) {
+    await rest(p);
+    const [top, bottom] = await panel();
+    await p.evaluate(n => { window.__mtN = n; }, nth);
+    const r = await track(p, "rail", 900, () => { window.__mtAct = () =>
+      [...document.querySelectorAll("#intentRailList .rail-item[data-si]:not(.on)")][window.__mtN].click(); });
+    r.vh = bottom;
+    const j = judge(r, { top, wantArrivals: true });
+    await sleep(900);
+    const c = await track(p, "rail", 900, () => { window.__mtAct = () => clearIntents(); });
+    c.vh = bottom;
+    const k = judge(c, { top, wantArrivals: true });
+    ok = ok && j.ok && k.ok;
+    out.push("pick " + nth + ": " + j.text + "; clear: " + k.text);
+  }
+  return { ok, text: out.join(" | ") };
+});
+
 module.exports = { LEGS, instrument, rest, boot, VIEW };
 
 if (require.main === module) {

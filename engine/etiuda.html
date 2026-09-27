@@ -15089,7 +15089,7 @@ What you type stays in this browser only.`;
       const seenAfter = seen(a, hgt, el.classList.contains("on"));
       const seenBefore = seen(b.y, hgt, b.on);
       if (!seenAfter && !seenBefore) return;
-      const exempt = seenBefore && keep && keep.has(String(el.dataset.si));
+      const exempt = seenBefore && (seenAfter || keep && keep.has(String(el.dataset.si)));
       if (Math.abs(dy) > limit && !exempt) {
         if (seenAfter && !seenBefore) entered.push(el);
         return;
