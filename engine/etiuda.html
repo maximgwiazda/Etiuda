@@ -7539,7 +7539,7 @@ What you type stays in this browser only.`;
         const w = list.parentNode.clientWidth || 0;
         if (w === colAvailW) return;
         colSetAvailW(w);
-        if (colCount() !== colLastN) requestAnimationFrame(() => hooks.render());
+        if (colCount() !== colLastN) hooks.render();
       }).observe(list.parentNode);
     }
   }

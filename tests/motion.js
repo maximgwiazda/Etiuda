@@ -348,6 +348,33 @@ leg("m8", "a settle, a pick and a clear glide every rail row that stays in the p
   return { ok, text: out.join(" | ") };
 });
 
+leg("m9", "a resize that changes the column count paints the new count in the frame that paints the new width", async p => {
+  /* Read where the frame is decided: an observer made after the engine's is called after it, in
+     the same frame, after layout and before paint, so what it reads is what that frame shows. */
+  await p.evaluate(() => {
+    window.__mtCols = [];
+    window.__mtErr = [];
+    addEventListener("error", e => window.__mtErr.push(String(e.message)));
+    const L = document.getElementById("list");
+    new ResizeObserver(() => {
+      window.__mtCols.push({ dom: L.querySelectorAll(":scope>.col").length || 1, want: colCount() });
+    }).observe(L.parentNode);
+  });
+  const out = [];
+  for (const w of [1150, 1600, 900, 1600]) {
+    await p.setViewport({ width: w, height: VIEW.height });
+    await sleep(700);
+  }
+  const got = await p.evaluate(() => ({ cols: window.__mtCols, err: window.__mtErr }));
+  const changed = got.cols.filter((c, i) => i && c.want !== got.cols[i - 1].want).length;
+  const stale = got.cols.filter(c => c.dom !== c.want);
+  out.push(got.cols.length + " observed frames, " + changed + " count changes, " + stale.length + " stale frame(s)"
+    + (stale.length ? " (" + stale.map(c => c.dom + " columns where " + c.want + " fit").join(", ") + ")" : "")
+    + ", " + got.err.length + " page error(s)" + (got.err.length ? ": " + got.err[0] : ""));
+  await p.setViewport(VIEW);
+  return { ok: stale.length === 0 && changed >= 2 && got.err.length === 0, text: out.join("") };
+});
+
 module.exports = { LEGS, instrument, rest, boot, VIEW };
 
 if (require.main === module) {

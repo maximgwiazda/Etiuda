@@ -59,13 +59,14 @@ function wireColWidthWatch(){
   /* Where colAvailW comes from. Reading inside the callback is free - the observer fires
      after layout - and it also catches the widths a resize never reports: the panel docking,
      its drag, the shell's own animation. Re-deals only when the COUNT changes, so a render
-     here cannot feed itself: dealing changes the list's height, never the box's width. */
+     here cannot feed itself: dealing changes the list's height, never the box's width. Dealt in
+     the callback, after layout and before paint, so the new count paints with the new width. */
   if(typeof ResizeObserver==="function" && list && list.parentNode){
     new ResizeObserver(()=>{
       const w=list.parentNode.clientWidth||0;
       if(w===colAvailW) return;
       colSetAvailW(w);
-      if(colCount()!==colLastN) requestAnimationFrame(()=>hooks.render());
+      if(colCount()!==colLastN) hooks.render();
     }).observe(list.parentNode);
   }
 }
