@@ -182,7 +182,10 @@ function afterPaint(fn){
 
 /* A RELOAD SOMEBODY WATCHES IS COVERED: what sits under the band leaves on the dismiss tier, and
    the next document holds its first paint until boot is done and brings it back on the surface
-   tier (the boot guard in template.html, which reads the mark). Stilled, it reloads at once. */
+   tier (the boot guard in template.html, which reads the mark). Stilled, it reloads at once.
+   MEASURE IT ON A COMPOSED WINDOW: a PrintWindow burst of an off-screen window can read a buffer
+   mid-draw and show a torn or band-less frame here, as in any fade under load, which a
+   Windows.Graphics.Capture of the same window, composed as a screen composes it, does not show. */
 function reloadCovered(){
   ssMarkArrival();
   if(mgReduceMotion() || typeof document==="undefined"){ location.reload(); return; }
