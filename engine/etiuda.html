@@ -4353,12 +4353,14 @@ What you type stays in this browser only.`;
     adoptNameNsLayer: () => adoptNameNsLayer,
     catalogCardId: () => catalogCardId,
     ePackEpoch: () => ePackEpoch,
+    flushStats: () => flushStats,
     isFavourite: () => isFavourite,
     isIntentFavourite: () => isIntentFavourite,
     loadPack: () => loadPack,
     pack: () => pack,
     rebuildBaseCards: () => rebuildBaseCards,
     savePack: () => savePack,
+    saveStats: () => saveStats,
     showDeskNotices: () => showDeskNotices,
     showPackMigrationWarning: () => showPackMigrationWarning,
     syncSaveNotice: () => syncSaveNotice,
@@ -6459,6 +6461,32 @@ What you type stays in this browser only.`;
   function savePack() {
     ePackEpoch++;
     keepEditBases();
+    if (eStatsT) {
+      clearTimeout(eStatsT);
+      eStatsT = 0;
+    }
+    const ok = writePack();
+    hooks.syncSampleMark();
+    return ok;
+  }
+  var STATS_SAVE_MS = 1500;
+  var eStatsT = 0;
+  var eStatsWired = false;
+  function saveStats() {
+    if (eStatsT) return;
+    eStatsT = setTimeout(flushStats, STATS_SAVE_MS);
+    if (!eStatsWired && typeof addEventListener === "function") {
+      eStatsWired = true;
+      addEventListener("beforeunload", flushStats);
+    }
+  }
+  function flushStats() {
+    if (!eStatsT) return false;
+    clearTimeout(eStatsT);
+    eStatsT = 0;
+    return writePack();
+  }
+  function writePack() {
     let out = pack;
     try {
       out = Object.assign({}, pack, { macroOrder: pack.cardOrder, baseMacros: pack.baseCards });
@@ -6471,7 +6499,6 @@ What you type stays in this browser only.`;
     } catch (e) {
       ok = false;
     }
-    hooks.syncSampleMark();
     return ok;
   }
 
@@ -7542,6 +7569,7 @@ What you type stays in this browser only.`;
   __export(card_intent_exports, {
     cardHitsAlwaysCat: () => cardHitsAlwaysCat,
     cardHitsSelectedIntent: () => cardHitsSelectedIntent,
+    cardIntentLinks: () => cardIntentLinks,
     cardLinksIntent: () => cardLinksIntent,
     intentTagCats: () => intentTagCats,
     normalizeCardIntents: () => normalizeCardIntents,
@@ -7647,10 +7675,14 @@ What you type stays in this browser only.`;
       return String(x);
     }).filter(Boolean);
   }
-  function cardLinksIntent(m, want) {
-    if (!m || m._hidden) return false;
+  function cardIntentLinks(m) {
+    if (!m || m._hidden) return null;
     if (m.allIntents) return true;
-    return normalizeCardIntents(m).indexOf(want) > -1;
+    return normalizeCardIntents(m);
+  }
+  function cardLinksIntent(m, want) {
+    const l = cardIntentLinks(m);
+    return l === true || !!l && l.indexOf(want) > -1;
   }
   function cardHitsSelectedIntent(m) {
     if (!intentIdxs.length) return false;
@@ -10463,6 +10495,7 @@ What you type stays in this browser only.`;
   __export(cat_relevance_exports, {
     categoriesForIntent: () => categoriesForIntent,
     displayCatOrder: () => displayCatOrder,
+    intentCatSets: () => intentCatSets,
     intentCats: () => intentCats,
     intentHasPrimaryCat: () => intentHasPrimaryCat,
     pillBand: () => pillBand,
@@ -10621,6 +10654,26 @@ What you type stays in this browser only.`;
     });
     return out;
   }
+  function intentCatSets() {
+    const per = /* @__PURE__ */ new Map(), every = /* @__PURE__ */ new Set();
+    (cards || []).forEach((m) => {
+      if (!m || !m.c || !CATS[m.c]) return;
+      const l = cardIntentLinks(m);
+      if (l === true) every.add(m.c);
+      else if (l) l.forEach((id) => {
+        let s = per.get(id);
+        if (!s) {
+          s = /* @__PURE__ */ new Set();
+          per.set(id, s);
+        }
+        s.add(m.c);
+      });
+    });
+    return (i, k) => {
+      const s = per.get(intentIdAt(i));
+      return every.has(k) || !!(s && s.has(k));
+    };
+  }
   function scrollRailTop() {
     const el = document.getElementById("intentRailList");
     if (!el || !el.scrollTop) return;
@@ -10693,8 +10746,10 @@ What you type stays in this browser only.`;
   }
   var eOrderPos = null;
   var eOrderCards = null;
+  var eOrderVer = 0;
   function cardOrderTouched() {
     eOrderPos = null;
+    eOrderVer++;
   }
   function ensureCardOrder() {
     if (!Array.isArray(pack.cardOrder)) {
@@ -10715,7 +10770,8 @@ What you type stays in this browser only.`;
     });
     if (changed) pack.cardOrder = kept;
     eOrderCards = cards;
-    cardOrderTouched();
+    eOrderPos = null;
+    cardOrderPos();
   }
   function cardOrderPos() {
     if (!eOrderPos || eOrderPos.size !== pack.cardOrder.length) {
@@ -10728,8 +10784,8 @@ What you type stays in this browser only.`;
   var eMovedKey = null;
   function movedCardIds() {
     ensureCardOrder();
-    const key = (pack.cardOrder || []).length + "|" + (cards || []).length + "|" + (pack.cardOrder || []).join("");
-    if (eMovedKey === key && eMovedSet) return eMovedSet;
+    const o = pack.cardOrder || [], c = cards || [], was = eMovedKey;
+    if (eMovedSet && was && was.o === o && was.c === c && was.on === o.length && was.cn === c.length && was.v === eOrderVer) return eMovedSet;
     const base = /* @__PURE__ */ new Map();
     (cards || []).forEach((m, i) => {
       if (m && m.id) base.set(m.id, i);
@@ -10763,7 +10819,7 @@ What you type stays in this browser only.`;
     ids.forEach((id) => {
       if (!still.has(id)) moved.add(id);
     });
-    eMovedKey = key;
+    eMovedKey = { o, c, on: o.length, cn: c.length, v: eOrderVer };
     eMovedSet = moved;
     return moved;
   }
@@ -14531,9 +14587,9 @@ What you type stays in this browser only.`;
     railRelGroup = {};
     const sel = (cats || []).filter(Boolean);
     if (!sel.length) return;
+    const has = intentCatSets();
     intentOrder.forEach((i) => {
-      const ks = categoriesForIntent(i);
-      const hit = sel.filter((k) => isAlwaysCat(k) || ks.indexOf(k) > -1);
+      const hit = sel.filter((k) => isAlwaysCat(k) || has(i, k));
       if (hit.length) {
         railRelNow[i] = hit;
         railRelGroup[i] = String(99 - hit.length).padStart(2, "0") + String(sel.indexOf(hit[0])).padStart(2, "0") + "|" + hit.join(",");
@@ -14608,7 +14664,7 @@ What you type stays in this browser only.`;
     glideSettle(cardsBefore);
     if (String(intentEl.value || "").trim() && !(shown && shown.length)) {
       bumpMiss(pack);
-      savePack();
+      saveStats();
     }
     hooks.flushPillState();
     const markedIdx = railSel >= 0 && railSel < railOrder.length ? railOrder[railSel] : -1;
@@ -15418,12 +15474,12 @@ What you type stays in this browser only.`;
       else {
         intentIdxs.push(idx);
         bumpIntent(pack, intentIdAt(idx));
-        savePack();
+        saveStats();
       }
     } else {
       setIntentIdxs([idx]);
       bumpIntent(pack, intentIdAt(idx));
-      savePack();
+      saveStats();
     }
     setIntentText("");
     if (intentIdxs.length) {
@@ -15929,7 +15985,7 @@ What you type stays in this browser only.`;
     if (!id) return;
     bumpUse(pack, id);
     bumpLang(pack, lang2);
-    savePack();
+    saveStats();
   }
 
   // src/modules/card-body.js
