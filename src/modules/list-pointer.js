@@ -62,7 +62,7 @@ function flipCardsAround(mutate,opts){
   // READ pass, then the mutation, then a READ pass and a WRITE pass - never interleaved.
   list.querySelectorAll(".card[data-id]").forEach(el=>{
     const r=el.getBoundingClientRect();
-    if(clamp || (r.bottom>-margin && r.top<vh+margin)) before[el.dataset.id]=r.top;
+    if(clamp || (r.bottom>-margin && r.top<vh+margin)) before[el.dataset.id]=r;
   });
   mutate();                                   // the toggles mutate AND re-render
   const watched=[];
@@ -75,21 +75,23 @@ function flipCardsAround(mutate,opts){
     watched.push(el); el.style.contentVisibility="visible";
   });
   const release=()=>watched.forEach(el=>{ el.style.contentVisibility=""; });
-  const moved=[], dys=[];
+  const moved=[], offs=[];
   watched.forEach(el=>{
     const b=before[el.dataset.id];
     const r=el.getBoundingClientRect();
     if(r.bottom<-margin || r.top>vh+margin) return;
-    // whole pixels only - a fractional offset puts the text on a half-pixel and it blurs
-    let dy=Math.round(b-r.top);
-    if(!dy) return;
+    /* whole pixels only - a fractional offset puts the text on a half-pixel and it blurs. Across
+       as well as down: a star or a hide can deal a card into the other column. */
+    const dx=Math.round(b.left-r.left);
+    let dy=Math.round(b.top-r.top);
+    if(!dx && !dy) return;
     if(Math.abs(dy)>vh && !clamp) return;
     if(clamp && Math.abs(dy)>clamp) dy=(dy>0?clamp:-clamp);
-    moved.push(el); dys.push(dy);
+    moved.push(el); offs.push("translate("+dx+"px,"+dy+"px)");
   });
   if(!moved.length || moved.length>CARD_MOVE_MAX){ release(); return; }
   moved.forEach((el,i)=>{ el.style.transition="none"; el.style.willChange="transform";
-                          el.style.transform="translateY("+dys[i]+"px)"; });
+                          el.style.transform=offs[i]; });
   /* Commit the invert before attaching the transition - see the note at flipPills():
      without a computed start value Firefox shows the end state. One forced reflow for
      the whole list, then attach and release in the same task. */

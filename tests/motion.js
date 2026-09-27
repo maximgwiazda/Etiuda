@@ -290,6 +290,28 @@ leg("m6", "an intent pick and its clear glide every card that stays on screen, a
   return { ok, text: out.join(" | ") };
 });
 
+leg("m7", "a star and its removal glide every card that stays on screen, across columns too", async p => {
+  const id = await p.evaluate(() => {
+    const vh = innerHeight;
+    const c = [...document.querySelectorAll("#list .card[data-id]")].find(el => {
+      const r = el.getBoundingClientRect(); return r.top > vh * 0.3 && r.top < vh * 0.6 && el.querySelector('[data-act="fav"]'); });
+    return c ? c.getAttribute("data-id") : null;
+  });
+  if (!id) return { ok: false, text: "no card in the middle of the screen to star" };
+  await p.evaluate(id => { window.__mtId = id; }, id);
+  const out = [];
+  let ok = true;
+  for (const what of ["star", "unstar"]) {
+    const r = await track(p, "cards", 700, () => { window.__mtAct = () =>
+      document.querySelector('#list .card[data-id="' + CSS.escape(window.__mtId) + '"] [data-act="fav"]').click(); });
+    const j = judge(r, { wantArrivals: true });
+    ok = ok && j.ok && j.moved > 0;
+    out.push(what + ": " + j.text);
+    await sleep(500);
+  }
+  return { ok, text: out.join(" | ") };
+});
+
 module.exports = { LEGS, instrument, rest, boot, VIEW };
 
 if (require.main === module) {
