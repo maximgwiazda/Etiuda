@@ -104,8 +104,9 @@ function deskSoon(){
   else setTimeout(deskSend,0);
   return true;
 }
-/* A send main has not answered counts as pending: it is sent again rather than trusted to the pipe. */
-function deskFlush(){ if(eDeskDue || eDeskHeard<eDeskSent) deskSave(); }
+/* A send main has not answered counts as pending: it is sent again rather than trusted to the pipe.
+   So does one it answered false, since the desk is still not on the disk. */
+function deskFlush(){ if(eDeskDue || eDeskHeard<eDeskSent || eUnsaved) deskSave(); }
 function deskArm(){
   if(eDeskArmed) return;
   eDeskArmed=true;

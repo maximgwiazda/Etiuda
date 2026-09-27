@@ -4693,7 +4693,7 @@ What you type stays in this browser only.`;
     return true;
   }
   function deskFlush() {
-    if (eDeskDue || eDeskHeard < eDeskSent) deskSave();
+    if (eDeskDue || eDeskHeard < eDeskSent || eUnsaved) deskSave();
   }
   function deskArm() {
     if (eDeskArmed) return;

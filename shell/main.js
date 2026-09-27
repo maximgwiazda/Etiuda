@@ -424,13 +424,37 @@ function deskEnvelopeBody(keysText) {
     + (deskRefused.length ? ',"refused":' + JSON.stringify(deskRefused) : "")
     + ',"keys":' + keysText + "}";
 }
+/* A RENAME OVER A FILE ANOTHER PROGRAM HAS OPEN IS REFUSED ON WINDOWS for as long as it holds
+   it, and a virus scanner or a sync client opening a file just written is the ordinary case, so
+   the rename is asked again for half a second before the refusal stands. */
+const RENAME_BUSY = ["EPERM", "EACCES", "EBUSY"];
+function renamePatiently(from, to) {
+  for (let i = 1; ; i++) {
+    try { fs.renameSync(from, to); return; }
+    catch (e) {
+      if (i >= 10 || RENAME_BUSY.indexOf(e.code) < 0) throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+    }
+  }
+}
+/* Temp file then rename, so a failed write never leaves half a file under the name, and a
+   refused one leaves no temp file behind it. Throws what stopped it. */
+function writeReplacing(file, text) {
+  const tmp = file + ".tmp";
+  try {
+    fs.writeFileSync(tmp, text, "utf8");
+    renamePatiently(tmp, file);
+  } catch (e) {
+    try { fs.unlinkSync(tmp); } catch { /* never made */ }
+    throw e;
+  }
+}
 function persistDeskEnvelope() {
   if (deskKeys === undefined) deskKeys = readDesk();
   const file = deskFile();
   try {
     keepUnkept();
-    fs.writeFileSync(file + ".tmp", deskEnvelopeBody(JSON.stringify(deskKeys)), "utf8");
-    fs.renameSync(file + ".tmp", file);
+    writeReplacing(file, deskEnvelopeBody(JSON.stringify(deskKeys)));
   } catch (e) {
     console.error("etiuda: the desk could not be written - " + e.message);
   }
@@ -645,8 +669,7 @@ function saveDeskFile(keysText) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   keepUnkept();
   rotateDesk();
-  fs.writeFileSync(file + ".tmp", deskEnvelopeBody(keysText), "utf8");
-  fs.renameSync(file + ".tmp", file);
+  writeReplacing(file, deskEnvelopeBody(keysText));
 }
 /* A key the MAIN PROCESS owns, written before any window exists. Not writeDesk: that one applies
    a delta against the map a particular load was handed, and re-arms the watch and the theme
@@ -1022,14 +1045,11 @@ ipcMain.handle("etiuda:write-catalog-save", async (e, text) => {
   const p = savePending;
   savePending = null;
   if (!p || p.id !== e.sender.id) return null;
-  const tmp = p.file + ".tmp";
   try {
-    fs.writeFileSync(tmp, String(text || ""), "utf8");
-    fs.renameSync(tmp, p.file);
+    writeReplacing(p.file, String(text || ""));
     return { name: path.basename(p.file), ok: true };
   } catch (err) {
     console.error("etiuda: " + p.file + " could not be written - " + err.message);
-    try { fs.unlinkSync(tmp); } catch { /* never made */ }
     return { name: path.basename(p.file), ok: false };
   }
 });
@@ -1180,9 +1200,8 @@ function saveWindowPlace(win, maximized) {
   const b = snapped ? win.getBounds() : win.getNormalBounds();
   const file = windowFile();
   try {
-    fs.writeFileSync(file + ".tmp", JSON.stringify({ x: b.x, y: b.y, width: b.width, height: b.height,
-                                                     maximized: !!maximized }), "utf8");
-    fs.renameSync(file + ".tmp", file);
+    writeReplacing(file, JSON.stringify({ x: b.x, y: b.y, width: b.width, height: b.height,
+                                          maximized: !!maximized }));
   } catch (e) { console.error("etiuda: the window's place could not be written - " + e.message); }
 }
 

@@ -19,7 +19,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 21;
+const EXPECTED = 22;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -161,6 +161,21 @@ try {
     "2b and for the engine it has written the file by the time it answers");
   const errs = said.filter(l => /^ERR /.test(l));
   check(!errs.length, "2c main logged no error through any of it" + (errs.length ? ": " + errs.length + ", first " + errs[0] : ""));
+
+  /* A read-only desk.json is a rename Windows refuses however long it is asked, which is main
+     answering false, the way a file held by a scanner past the shell's patience is. */
+  fs.chmodSync(DESK, 0o444);
+  S.lsSet("eIpcRefused", "1");
+  await tick(5); await tick(5);
+  const troubleAfterRefusal = S.eSaveTrouble();
+  fs.chmodSync(DESK, 0o666);
+  const syncBeforeLeave = syncSaves();
+  fire("window", "pagehide");
+  check(troubleAfterRefusal !== null && syncSaves() === syncBeforeLeave + 1
+    && onDisk().eIpcRefused === "1" && S.eSaveTrouble() === null,
+    "2d a write main answered false is sent again when the page leaves, and lands: trouble "
+    + (troubleAfterRefusal ? "raised" : "not raised") + ", " + (syncSaves() - syncBeforeLeave)
+    + " sync send(s) at pagehide, on the disk " + onDisk().eIpcRefused);
 
   /* ---- the notice, against a host whose answers this file holds ----------------------------- */
   let release = [], heldSaves = 0;
