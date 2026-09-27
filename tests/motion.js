@@ -63,6 +63,17 @@ function instrument() {
     return out;
   };
   window.__mt = {
+    /* One value per frame from window.__mtRead, the act run between the first read and the rest. */
+    series: ms => new Promise(res => {
+      const out = [window.__mtRead()];
+      const t0 = performance.now();
+      window.__mtAct();
+      const f = () => {
+        out.push(window.__mtRead());
+        if (performance.now() - t0 < ms) requestAnimationFrame(f); else res(out);
+      };
+      requestAnimationFrame(f);
+    }),
     /* Snapshot, act, then one read per frame for `ms`. */
     run: (kind, ms) => new Promise(res => {
       const seen = new Set();
@@ -166,6 +177,25 @@ async function boot(p, url) {
 leg("m1", "a render that changes nothing moves no card on screen", async p => {
   const r = await track(p, "cards", 400, () => { window.__mtAct = () => render(); });
   return judge(r);
+});
+
+leg("m2", "an intent pick holds the pill bar's height: no frame taller or shorter than before and after", async p => {
+  const out = [];
+  let ok = true;
+  for (const nth of [3, 8]) {
+    await rest(p);
+    await p.evaluate(n => {
+      window.__mtRead = () => Math.round(document.getElementById("pillsSlot").getBoundingClientRect().height * 10) / 10;
+      window.__mtAct = () => [...document.querySelectorAll("#intentRailList .rail-item[data-si]:not(.on)")][n].click();
+    }, nth);
+    const h = await p.evaluate(() => window.__mt.series(700));
+    const lo = Math.min(h[0], h[h.length - 1]), hi = Math.max(h[0], h[h.length - 1]);
+    const bad = h.filter(x => x > hi + 1 || x < lo - 1);
+    if (bad.length) ok = false;
+    out.push("row " + nth + ": " + h[0] + " to " + h[h.length - 1] + "px"
+      + (bad.length ? ", " + bad.length + " frame(s) at " + [...new Set(bad)].join("/") + "px" : ""));
+  }
+  return { ok, text: out.join("; ") };
 });
 
 module.exports = { LEGS, instrument, rest, boot, VIEW };

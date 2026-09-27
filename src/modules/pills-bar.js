@@ -11,7 +11,7 @@ import { CATS } from "./content-model.js";
 import { nsDel } from "./storage.js";
 import { rebuildCards } from "./rebuild.js";
 import { mgReduceMotion } from "./motion.js";
-import { schedulePillsCollapse } from "./pills-box.js";
+import { schedulePillsCollapse, syncPillsCollapseNow } from "./pills-box.js";
 import { cats, setCatsDropArmed, setCats, setPendingScrollHit, intentIdxs, setCatOrder, dragState, suppressClick, setDragState, setSuppressClick } from "./app-state.js";
 import { hooks } from "./hooks.js";
 
@@ -137,6 +137,9 @@ function drawPillsCore(){
   add.onclick=()=>startPillCatAdd(add);
   pills.appendChild(add);
   if(addHadFocus) add.focus();
+  /* Clipped in the task that drew it: a pick bolds its linked pills, the row can wrap to a
+     third line, and a clip left to the two frames below painted that line first. */
+  syncPillsCollapseNow();
   // Two rAFs: wait for layout after DOM rebuild, then measure overflow.
   schedulePillsCollapse();
 }

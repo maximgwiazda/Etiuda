@@ -13287,6 +13287,7 @@ What you type stays in this browser only.`;
     schedulePillsCollapse: () => schedulePillsCollapse,
     syncLayoutPrefs: () => syncLayoutPrefs,
     syncPillsCollapse: () => syncPillsCollapse,
+    syncPillsCollapseNow: () => syncPillsCollapseNow,
     togglePills: () => togglePills,
     togglePillsLock: () => togglePillsLock
   });
@@ -13399,8 +13400,13 @@ What you type stays in this browser only.`;
     }
     if (keepExpand) slot.classList.add("pills-expand");
   }
+  var ePillsSettled = false;
+  function syncPillsCollapseNow() {
+    if (ePillsSettled) syncPillsCollapse();
+  }
   function schedulePillsCollapse() {
     requestAnimationFrame(() => requestAnimationFrame(() => {
+      ePillsSettled = true;
       syncPillsCollapse();
       rememberPillsShape();
       hooks.scheduleRailGeometry();
@@ -15565,6 +15571,7 @@ What you type stays in this browser only.`;
     add.onclick = () => startPillCatAdd(add);
     pills.appendChild(add);
     if (addHadFocus) add.focus();
+    syncPillsCollapseNow();
     schedulePillsCollapse();
   }
   function startPillCatAdd(addEl) {

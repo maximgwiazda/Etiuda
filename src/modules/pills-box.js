@@ -135,9 +135,14 @@ function syncPillsCollapse(){
   }
   if(keepExpand) slot.classList.add("pills-expand");
 }
+let ePillsSettled=false;
+/* A redraw clips in its own task once the boot's first measure has run; before it, the widths
+   the measure waits for are not yet known. */
+function syncPillsCollapseNow(){ if(ePillsSettled) syncPillsCollapse(); }
 function schedulePillsCollapse(){
   // Wait for rail-on / max-width layout to settle before measuring wrap height.
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    ePillsSettled=true;
     syncPillsCollapse();
     rememberPillsShape();
     hooks.scheduleRailGeometry();
@@ -158,6 +163,7 @@ export {
   togglePillsLock,
   pillsSlot,
   syncPillsCollapse,
+  syncPillsCollapseNow,
   schedulePillsCollapse,
   rememberPillsShape,
 };
