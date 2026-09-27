@@ -621,8 +621,8 @@ function sameDesk(a, b) {
 /* Takes the engine's map as text and splices it into the envelope wherever the merge left that
    map alone, so the ordinary write still parses what may be a large catalog once and does not
    serialise it again. Temp file then rename: a rename is the one filesystem operation that
-   cannot leave half a desk behind. Returns whether the bytes reached the disk, because lsSet
-   promises its caller that and storeCatalog acts on it. */
+   cannot leave half a desk behind. Returns whether the bytes reached the disk, because
+   storeCatalog acts on that and the engine's save notice reads it. */
 let deskKeys;                                  // the desk as the last read or write left the file
 let deskWritten = false;                       // whether the live desk.json is this run's write
 const deskGiven = new Map();                   // webContents id -> the map that load was handed
@@ -688,6 +688,10 @@ ipcMain.on("etiuda:desk", (e) => {
 ipcMain.on("etiuda:desk-save", (e, text) => {
   e.returnValue = fromEngine(e) && typeof text === "string" && writeDesk(text, e.sender.id);
 });
+/* The same write, answered without holding the renderer. It writes before it answers, so a quit
+   finds nothing waiting here: whatever the page has not sent yet it sends on pagehide. */
+ipcMain.handle("etiuda:desk-write", (e, text) =>
+  fromEngine(e) && typeof text === "string" && writeDesk(text, e.sender.id));
 ipcMain.on("etiuda:desk-refused", (e) => {
   e.returnValue = fromEngine(e) ? JSON.stringify(deskRefused) : "[]";
 });

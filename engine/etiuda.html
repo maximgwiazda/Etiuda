@@ -4545,21 +4545,67 @@ What you type stays in this browser only.`;
           map[k] = String(o[k]);
         });
       }
-      return { map, save: h.deskSave, host: h };
+      return { map, save: h.deskSave, write: typeof h.deskWrite === "function" ? h.deskWrite : null, host: h };
     } catch (e) {
       return null;
     }
   }
   var E_DESK = eHostDesk();
+  var eDeskDue = false;
+  var eDeskSent = 0;
+  var eDeskHeard = 0;
+  var eDeskArmed = false;
   function deskSave() {
+    eDeskDue = false;
+    const n = ++eDeskSent;
     let ok;
     try {
       ok = E_DESK.save(JSON.stringify(E_DESK.map)) !== false;
     } catch (e) {
       ok = false;
     }
-    noteSave(ok, "");
+    deskHeard(n, ok);
     return ok;
+  }
+  function deskHeard(n, ok) {
+    if (n < eDeskHeard) return;
+    eDeskHeard = n;
+    noteSave(ok, "");
+  }
+  function deskSend() {
+    if (!eDeskDue) return;
+    eDeskDue = false;
+    const n = ++eDeskSent;
+    let p;
+    try {
+      p = E_DESK.write(JSON.stringify(E_DESK.map));
+    } catch (e) {
+      p = false;
+    }
+    Promise.resolve(p).then((ok) => deskHeard(n, ok !== false), () => deskHeard(n, false));
+  }
+  function deskSoon() {
+    if (!E_DESK.write) return deskSave();
+    deskArm();
+    if (eDeskDue) return true;
+    eDeskDue = true;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") queueMicrotask(deskSend);
+    else setTimeout(deskSend, 0);
+    return true;
+  }
+  function deskFlush() {
+    if (eDeskDue || eDeskHeard < eDeskSent) deskSave();
+  }
+  function deskArm() {
+    if (eDeskArmed) return;
+    eDeskArmed = true;
+    try {
+      window.addEventListener("pagehide", deskFlush);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") deskFlush();
+      });
+    } catch (e) {
+    }
   }
   var eUnsaved = null;
   var eSavedAt = 0;
@@ -4644,8 +4690,10 @@ What you type stays in this browser only.`;
   function lsSet(k, v, own) {
     if (eWiping) return false;
     if (E_DESK) {
-      E_DESK.map[k] = String(v);
-      return deskSave();
+      const s = String(v);
+      if (!own && E_DESK.map[k] === s && !eUnsaved) return true;
+      E_DESK.map[k] = s;
+      return own ? deskSave() : deskSoon();
     }
     if (!E_LS_OK) {
       E_MEM[k] = String(v);
@@ -4662,8 +4710,10 @@ What you type stays in this browser only.`;
   }
   function lsDel(k) {
     if (E_DESK) {
-      delete E_DESK.map[k];
-      deskSave();
+      if (k in E_DESK.map || eUnsaved) {
+        delete E_DESK.map[k];
+        deskSoon();
+      }
       return;
     }
     if (!E_LS_OK) {
@@ -11226,7 +11276,7 @@ What you type stays in this browser only.`;
   function eChooseCatalogFolder(title) {
     return ePickCatalogFolder(title).then((dir) => {
       if (!dir || dir === eCatalogFolder()) return "";
-      if (lsSet(E_CATALOG_FOLDER_KEY, dir) === false) {
+      if (lsSet(E_CATALOG_FOLDER_KEY, dir, true) === false) {
         toast(t("That setting could not be saved."));
         return "";
       }
