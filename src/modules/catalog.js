@@ -30,8 +30,17 @@ function eCatalog(){
      kept more by sitting beside Etiuda than by being imported. tests/catalog-routes.mjs holds
      the two routes to the same answer. */
   try{ E_SIBLING=isV2(c) ? normaliseCatalog(catalogFromV2(c)) : null; }catch(e){ E_SIBLING=null; }
+  catalogDocKeep(E_SIBLING,c);
   return E_SIBLING;
 }
+/* THE DOCUMENT A CATALOG WAS PARSED FROM, kept beside it because the runtime's shape drops the
+   signature and the signed bytes are the document's. Only the two parsers here register one, so
+   a catalog built any other way has none and its signature is not read. */
+const E_CATALOG_DOCS=(typeof WeakMap==="function")?new WeakMap():null;
+function catalogDocKeep(c,doc){
+  if(E_CATALOG_DOCS && c && typeof c==="object" && doc && typeof doc==="object"){ try{ E_CATALOG_DOCS.set(c,doc); }catch(e){} }
+}
+function catalogDocOf(c){ return (E_CATALOG_DOCS && c && typeof c==="object" && E_CATALOG_DOCS.get(c)) || null; }
 /* The active catalog, whether it arrived by import or by accepting the sibling file. Keeping a
    copy rather than re-reading the sibling every boot is what lets an imported catalog and a
    sibling catalog be the same thing: one stored catalog, one code path, and Reset clears it. */
@@ -133,7 +142,9 @@ function parseCatalogFile(text){
     try{ data=JSON.parse(raw); }
     catch(e){ throw new Error("not a catalog - "+(e&&e.message?e.message:"could not parse")); }
   }
-  return normaliseCatalog(catalogFromV2(data));
+  const c=normaliseCatalog(catalogFromV2(data));
+  catalogDocKeep(c,data);
+  return c;
 }
 /** The whitelist, over a catalog the runtime can already read. Every route to a catalog ends
  *  here, so two catalogs are the same exactly when this returns the same thing. */
@@ -391,6 +402,7 @@ export {
   eWatchClear,
   eWatchName,
   parseCatalogFile,
+  catalogDocOf,
   normaliseCatalog,
   eCatalogSignature,
   catalogVersionLabel,

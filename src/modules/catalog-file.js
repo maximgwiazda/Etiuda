@@ -22,6 +22,7 @@ import { rebuildCards } from "./rebuild.js";
 import { cards } from "./app-state.js";
 import { carryCardLayer } from "./card-carry.js";
 import { hooks } from "./hooks.js";
+import { recordCatalogTrust } from "./catalog-trust.js";
 
 /* ---- one catalog format, one export, one import -----------------------------------------
    A catalog carries everything Etiuda has no content of its own for: cards, intents,
@@ -348,6 +349,7 @@ function activateCatalog(c,opts){
   try{
     nsSet("CatalogFile",String((opts&&opts.file)||""));
     nsSet("CatalogFileAt",String(+(opts&&opts.fileAt)||0));
+    recordCatalogTrust(c);
   }catch(e){}
   /* A CATALOG ARRIVES ON A CLEAN DESK. Selected intents are stored by INDEX, so an index
      points at whatever intent now sits there: all per-tab state goes, updates included.

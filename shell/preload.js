@@ -41,6 +41,8 @@ contextBridge.exposeInMainWorld("E_HOST", {
      what is there now, and the folder may have moved since this load began. */
   catalogFiles: () => ipcRenderer.invoke("etiuda:catalog-files"),
   openCatalogFolder: () => ipcRenderer.invoke("etiuda:open-catalog-folder"),
+  /* The ring beside the catalogs as text, read afresh each time the page verifies a signature. */
+  catalogRing: () => ipcRenderer.invoke("etiuda:catalog-ring"),
   readCatalogFile: (name) => ipcRenderer.invoke("etiuda:catalog-read", String(name || "")),
   /* The caption is the page's, because the shell has no t(). Async, unlike the desk: a modal
      the person is standing in front of must not hold the renderer's thread. */

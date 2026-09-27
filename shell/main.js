@@ -941,6 +941,20 @@ ipcMain.handle("etiuda:catalog-read", (e, name) => {
     return { name: base, text: "" };
   }
 });
+/* THE RING, the text of V2_RING_FILE in the catalog folder or "" where there is none: the page
+   reads it with the engine's own v2RingRead, and a ring only adds trust, so absent is not a
+   fault. Bounded like a request, since the share is anybody's to write. */
+const RING_NAME = "etiuda-ring.json";
+ipcMain.handle("etiuda:catalog-ring", (e) => {
+  if (!fromEngine(e)) return "";
+  let text = "";
+  try {
+    const file = path.join(catalogFolder(), RING_NAME);
+    if (fs.statSync(file).size > 65536) { console.error("etiuda: " + file + " is larger than any ring, so it is not read"); return ""; }
+    text = fs.readFileSync(file, "utf8");
+  } catch { /* no ring, which is the ordinary case */ }
+  return text;
+});
 ipcMain.handle("etiuda:stats-write", (e, text) => {
   if (!fromEngine(e)) return { ok: false };
   return writeStatsAnswer(String(text || ""));
