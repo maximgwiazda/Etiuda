@@ -10720,8 +10720,10 @@ What you type stays in this browser only.`;
   }
   var eOrderPos = null;
   var eOrderCards = null;
+  var eOrderVer = 0;
   function cardOrderTouched() {
     eOrderPos = null;
+    eOrderVer++;
   }
   function ensureCardOrder() {
     if (!Array.isArray(pack.cardOrder)) {
@@ -10742,7 +10744,8 @@ What you type stays in this browser only.`;
     });
     if (changed) pack.cardOrder = kept;
     eOrderCards = cards;
-    cardOrderTouched();
+    eOrderPos = null;
+    cardOrderPos();
   }
   function cardOrderPos() {
     if (!eOrderPos || eOrderPos.size !== pack.cardOrder.length) {
@@ -10755,8 +10758,8 @@ What you type stays in this browser only.`;
   var eMovedKey = null;
   function movedCardIds() {
     ensureCardOrder();
-    const key = (pack.cardOrder || []).length + "|" + (cards || []).length + "|" + (pack.cardOrder || []).join("");
-    if (eMovedKey === key && eMovedSet) return eMovedSet;
+    const o = pack.cardOrder || [], c = cards || [], was = eMovedKey;
+    if (eMovedSet && was && was.o === o && was.c === c && was.on === o.length && was.cn === c.length && was.v === eOrderVer) return eMovedSet;
     const base = /* @__PURE__ */ new Map();
     (cards || []).forEach((m, i) => {
       if (m && m.id) base.set(m.id, i);
@@ -10790,7 +10793,7 @@ What you type stays in this browser only.`;
     ids.forEach((id) => {
       if (!still.has(id)) moved.add(id);
     });
-    eMovedKey = key;
+    eMovedKey = { o, c, on: o.length, cn: c.length, v: eOrderVer };
     eMovedSet = moved;
     return moved;
   }

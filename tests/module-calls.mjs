@@ -668,6 +668,43 @@ const CARD_B = {
     () => eq(String(O.displayBandKey(CARD_A)).indexOf("gen"), 0));
   check("card-order.js", "the comparator is a number, so a sort using it is defined",
     () => eq(typeof O.cmpCardDisplay(CARD_A, CARD_B), "number"));
+  /* movedCardIds is asked once per built card, so a call over an order that did not move must
+     not read it through, or a whole rebuild is quadratic. Counted by a proxy over pack.cardOrder
+     tallying index reads; the two CONTROLS are that a move is still seen, both ways it happens. */
+  const PK = await import(MOD("pack.js"));
+  const AS = await import(MOD("app-state.js"));
+  const ORD = Array.from({ length: 200 }, (_, i) => "c-ord-" + i);
+  const withOrder = fn => {
+    const hadCards = AS.cards, hadOrder = PK.pack.cardOrder;
+    let reads = 0;
+    const order = new Proxy(ORD.slice(), { get(t, k, r) {
+      if (typeof k === "string" && /^[0-9]+$/.test(k)) reads++;
+      return Reflect.get(t, k, r); } });
+    try {
+      AS.setCards(ORD.map(id => ({ id, c: "gen" })));
+      PK.pack.cardOrder = order; O.cardOrderTouched();
+      return fn(order, () => reads, () => { reads = 0; });
+    } finally { AS.setCards(hadCards); PK.pack.cardOrder = hadOrder; O.cardOrderTouched(); }
+  };
+  check("card-order.js", "a repeated movedCardIds reads no id of an order that did not move",
+    () => withOrder((order, reads, zero) => {
+      O.movedCardIds(); zero();
+      for (let i = 0; i < 50; i++) O.movedCardIds();
+      return eq(reads(), 0);
+    }));
+  check("card-order.js", "CONTROL: a move in place, announced by cardOrderTouched, is seen",
+    () => withOrder(order => {
+      const was = O.movedCardIds().size;
+      order.splice(150, 0, order.splice(3, 1)[0]); O.cardOrderTouched();
+      return eq(was + "|" + [...O.movedCardIds()].join(","), "0|c-ord-3");
+    }));
+  check("card-order.js", "CONTROL: a new order array is seen without the call",
+    () => withOrder(() => {
+      O.movedCardIds();
+      const next = ORD.slice(); next.push(next.shift());
+      PK.pack.cardOrder = next;
+      return eq([...O.movedCardIds()].join(","), "c-ord-0");
+    }));
 }
 
 /* ------------------------------------------------------------------ affinity.js */

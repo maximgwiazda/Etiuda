@@ -34,7 +34,8 @@ function displayBandKey(m){
    catches adds and removes but NOT reorders - the explicit call is not optional. */
 let eOrderPos=null;        // id -> position in pack.cardOrder
 let eOrderCards=null;      // the `cards` array the sync last ran against
-function cardOrderTouched(){ eOrderPos=null; }
+let eOrderVer=0;           // moves with every drop, so a memo over the order can key on it
+function cardOrderTouched(){ eOrderPos=null; eOrderVer++; }
 function ensureCardOrder(){
   if(!Array.isArray(pack.cardOrder)){ pack.cardOrder=[]; cardOrderTouched(); }
   // Only a rebuilt `cards` can change which ids are alive; hiding and starring mutate in place.
@@ -48,7 +49,8 @@ function ensureCardOrder(){
   });
   if(changed) pack.cardOrder=kept;
   eOrderCards=cards;
-  cardOrderTouched();
+  eOrderPos=null;   // not cardOrderTouched: a changed order is a new array, which movedCardIds sees
+  cardOrderPos();   // or the return above waits for a sort, and every call until then syncs again
 }
 /** Positions, built once and reused until something moves. */
 function cardOrderPos(){
@@ -62,10 +64,13 @@ function cardOrderPos(){
    catalog's order - "index differs" would brand the whole list edited to explain one
    drag. O(n log n), memoised until the order or the card list changes. */
 let eMovedSet=null, eMovedKey=null;
+/* Keyed on the two arrays, their lengths and eOrderVer, never on the ids joined: cardBodyHtml asks
+   once per card, and a key spelling every id made a whole rebuild quadratic. */
 function movedCardIds(){
   ensureCardOrder();
-  const key=(pack.cardOrder||[]).length+"|"+((cards||[]).length)+"|"+(pack.cardOrder||[]).join("");
-  if(eMovedKey===key && eMovedSet) return eMovedSet;
+  const o=pack.cardOrder||[], c=cards||[], was=eMovedKey;
+  if(eMovedSet && was && was.o===o && was.c===c && was.on===o.length && was.cn===c.length
+     && was.v===eOrderVer) return eMovedSet;
   const base=new Map();
   (cards||[]).forEach((m,i)=>{ if(m&&m.id) base.set(m.id,i); });
   const seq=[], ids=[];
@@ -82,7 +87,7 @@ function movedCardIds(){
   while(k>=0){ still.add(ids[k]); k=prev[k]; }
   const moved=new Set();
   ids.forEach(id=>{ if(!still.has(id)) moved.add(id); });
-  eMovedKey=key; eMovedSet=moved;
+  eMovedKey={o:o, c:c, on:o.length, cn:c.length, v:eOrderVer}; eMovedSet=moved;
   return moved;
 }
 /** True while the drag order still matches the order the catalog was built in. */
