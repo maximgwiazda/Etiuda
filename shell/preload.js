@@ -46,11 +46,12 @@ contextBridge.exposeInMainWorld("E_HOST", {
   pickCatalogFile: (title, label) =>
     ipcRenderer.invoke("etiuda:pick-catalog-file", String(title || ""), String(label || "")),
   /* The desk, as text in both directions. An object across the bridge would arrive as a proxy,
-     the same reason the catalog is parsed in the page's own world below. Both are synchronous:
-     the engine reads its whole desk before its first key and storage.js's lsSet promises that
-     a write is on the disk before it says so. */
+     the same reason the catalog is parsed in the page's own world below. The read and deskSave
+     are synchronous: the engine reads its whole desk before its first key, and deskSave is for
+     the write that must be on the disk before it returns. deskWrite is every other one. */
   deskRead: () => ipcRenderer.sendSync("etiuda:desk"),
   deskSave: (text) => ipcRenderer.sendSync("etiuda:desk-save", text),
+  deskWrite: (text) => ipcRenderer.invoke("etiuda:desk-write", text),
   /* Where the desk is, and the files it refused and kept aside, as text like the desk itself. */
   deskFile: host.deskFile,
   /* The home folder, so a path the page shows can be written %USERPROFILE% rather than by name. */

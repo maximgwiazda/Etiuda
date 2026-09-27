@@ -52,7 +52,7 @@ function probeStore(get){
   catch(e){ return false; }
 }
 /* ---- the desk in a file, where the host offers one -----------------------------------------
-   A shell hands the whole desk over at load and takes it back on every write, so only the four
+   A shell hands the whole desk over at load and takes it back after the writes, so only the four
    functions below change: a JSON file with a schema and its own backups, which a person can
    copy, read and keep, instead of a leveldb inside a browser profile that only Chromium opens.
    window.E_HOST is absent in a browser, E_DESK is null there, and every line below then behaves
@@ -64,15 +64,55 @@ function eHostDesk(){
     const text=h.deskRead();
     const map=Object.create(null);
     if(text){ const o=JSON.parse(text); Object.keys(o).forEach(k=>{ map[k]=String(o[k]); }); }
-    return {map:map,save:h.deskSave,host:h};
+    return {map:map,save:h.deskSave,write:(typeof h.deskWrite==="function")?h.deskWrite:null,host:h};
   }catch(e){ return null; }              // a host that answers badly is a host that is not there
 }
 const E_DESK=eHostDesk();
+/* ONE SEND PER TASK, AND NONE THAT WAITS ON THE DISK: every send is the whole map, so the last of
+   a burst carries the rest. Synchronous only for a caller that must know (`own`) and for a page
+   leaving or hiding, where a pending send may never run; a host with no deskWrite is always so. */
+let eDeskDue=false, eDeskSent=0, eDeskHeard=0, eDeskArmed=false;
 function deskSave(){
+  eDeskDue=false;
+  const n=++eDeskSent;
   let ok;
   try{ ok=E_DESK.save(JSON.stringify(E_DESK.map))!==false; }catch(e){ ok=false; }
-  noteSave(ok,"");
+  deskHeard(n,ok);
   return ok;
+}
+/* Main can answer an earlier send after a later one; only the latest answer speaks. */
+function deskHeard(n,ok){
+  if(n<eDeskHeard) return;
+  eDeskHeard=n;
+  noteSave(ok,"");
+}
+function deskSend(){
+  if(!eDeskDue) return;
+  eDeskDue=false;
+  const n=++eDeskSent;
+  let p;
+  try{ p=E_DESK.write(JSON.stringify(E_DESK.map)); }catch(e){ p=false; }
+  Promise.resolve(p).then(ok=>deskHeard(n,ok!==false),()=>deskHeard(n,false));
+}
+function deskSoon(){
+  if(!E_DESK.write) return deskSave();
+  deskArm();
+  if(eDeskDue) return true;
+  eDeskDue=true;
+  /* A hidden page's timers wait for its next wake-up; there the send waits only for the task. */
+  if(typeof document!=="undefined" && document.visibilityState==="hidden") queueMicrotask(deskSend);
+  else setTimeout(deskSend,0);
+  return true;
+}
+/* A send main has not answered counts as pending: it is sent again rather than trusted to the pipe. */
+function deskFlush(){ if(eDeskDue || eDeskHeard<eDeskSent) deskSave(); }
+function deskArm(){
+  if(eDeskArmed) return;
+  eDeskArmed=true;
+  try{
+    window.addEventListener("pagehide",deskFlush);
+    document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden") deskFlush(); });
+  }catch(e){}
 }
 /* WHETHER WHAT THE PERSON DID IS ON THE DISK. A desk writes its whole map every time, so one
    good write settles every earlier failure; a browser writes key by key, so each failed key is
@@ -146,13 +186,18 @@ let eWiping=false;
 function eWipeLatch(){ eWiping=true; }
 /* Returns whether the value actually landed. Swallowing the quota throw is right for the
    hundred small writes that would rather forget than interrupt, but a caller holding
-   something it cannot rebuild needs to be told - see storeCatalog. THE DESK'S SAVE IS
-   SYNCHRONOUS FOR THAT REASON: a write reported before the bytes are on the disk would turn
-   storeCatalog's read-back into a formality, since it reads the map this just wrote.
-   `own` is a caller that speaks about its own failure, so a browser does not count it as lost. */
+   something it cannot rebuild needs to be told - see storeCatalog. `own` is a caller that
+   speaks about its own failure: a browser does not count it as lost, and A DESK ANSWERS IT
+   FROM THE DISK, synchronously, since a write reported before the bytes land would turn
+   storeCatalog's read-back into a formality. Any other desk write answers true once queued. */
 function lsSet(k,v,own){
   if(eWiping) return false;
-  if(E_DESK){ E_DESK.map[k]=String(v); return deskSave(); }
+  if(E_DESK){
+    const s=String(v);
+    if(!own && E_DESK.map[k]===s && !eUnsaved) return true;
+    E_DESK.map[k]=s;
+    return own ? deskSave() : deskSoon();
+  }
   if(!E_LS_OK){ E_MEM[k]=String(v); return true; }
   let ok=true;
   try{ localStorage.setItem(k,String(v)); }catch(e){ ok=false; }
@@ -160,7 +205,7 @@ function lsSet(k,v,own){
   return ok;
 }
 function lsDel(k){
-  if(E_DESK){ delete E_DESK.map[k]; deskSave(); return; }
+  if(E_DESK){ if((k in E_DESK.map) || eUnsaved){ delete E_DESK.map[k]; deskSoon(); } return; }
   if(!E_LS_OK){ delete E_MEM[k]; return; }
   try{ localStorage.removeItem(k); noteSave(true,k); }catch(e){}
 }

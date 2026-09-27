@@ -103,7 +103,7 @@ function eLoadedCatalogFile(){
 function eChooseCatalogFolder(title){
   return ePickCatalogFolder(title).then(dir=>{
     if(!dir || dir===eCatalogFolder()) return "";
-    if(lsSet(E_CATALOG_FOLDER_KEY,dir)===false){ toast(t("That setting could not be saved.")); return ""; }
+    if(lsSet(E_CATALOG_FOLDER_KEY,dir,true)===false){ toast(t("That setting could not be saved.")); return ""; }
     return dir;
   });
 }
