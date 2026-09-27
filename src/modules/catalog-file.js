@@ -208,7 +208,7 @@ function saveCatalogFile(name, build){
   if(typeof window.showSaveFilePicker==="function"){
     return window.showSaveFilePicker({
         suggestedName:name,
-        types:[{description:"Etiuda catalog", accept:{"application/json":[".ec"]}}]
+        types:[{description:t("Etiuda catalog"), accept:{"application/json":[".ec"]}}]
       })
       .then(h=>{
         const as=h.name||name, text=build(as);
@@ -506,7 +506,7 @@ function importCatalogPicked(){
   let handle=null, picked="";
   window.showOpenFilePicker({
     multiple:false,
-    types:[{description:"Etiuda catalog",accept:{"application/json":[".ec",".json"],"text/javascript":[".js"]}}]
+    types:[{description:t("Etiuda catalog"),accept:{"application/json":[".ec",".json"],"text/javascript":[".js"]}}]
   }).then(picked=>{
     handle=picked&&picked[0];
     return handle?handle.getFile():null;

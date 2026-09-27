@@ -5858,6 +5858,14 @@ What you type stays in this browser only.`;
     "{N} cards awaiting {LANG}": "{N} kart czeka na {LANG}",
     "few␟{N} cards awaiting {LANG}": "{N} karty czekają na {LANG}",
     "many␟{N} cards awaiting {LANG}": "{N} kart czeka na {LANG}",
+    "Copied {N} time on this computer": "Skopiowano {N} raz na tym komputerze",
+    "Copied {N} times on this computer": "Skopiowano {N} razy na tym komputerze",
+    "few␟Copied {N} times on this computer": "Skopiowano {N} razy na tym komputerze",
+    "many␟Copied {N} times on this computer": "Skopiowano {N} razy na tym komputerze",
+    "Copied {N} time in this browser": "Skopiowano {N} raz w tej przeglądarce",
+    "Copied {N} times in this browser": "Skopiowano {N} razy w tej przeglądarce",
+    "few␟Copied {N} times in this browser": "Skopiowano {N} razy w tej przeglądarce",
+    "many␟Copied {N} times in this browser": "Skopiowano {N} razy w tej przeglądarce",
     "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}": "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
     "{MACROS} in {CARDS}, {CATEGORIES}": "{MACROS}, {CARDS}, {CATEGORIES}",
     "{MACROS} in {CARDS} · {INTENTS} · {CATEGORIES}": "{MACROS} · {CARDS} · {INTENTS} · {CATEGORIES}",
@@ -5969,6 +5977,7 @@ What you type stays in this browser only.`;
     "Notches for the ROLE wheel, comma-separated; blanks and repeats are dropped": "Pozycje pokrętła ROLE po przecinku; puste i powtórzone są pomijane",
     "Intent list": "Lista intencji",
     "Click to pick, again to clear, and hold Ctrl for several": "Kliknij, aby wybrać, i ponownie, aby odznaczyć; z Ctrl można wybrać kilka",
+    "Set {INTENT}": "Ustaw {INTENT}",
     "Clear": "Wyczyść",
     "Clear PAX": "Wyczyść PAX",
     "Clear agent": "Wyczyść nazwę agenta",
@@ -12549,7 +12558,7 @@ What you type stays in this browser only.`;
     if (typeof window.showSaveFilePicker === "function") {
       return window.showSaveFilePicker({
         suggestedName: name,
-        types: [{ description: "Etiuda catalog", accept: { "application/json": [".ec"] } }]
+        types: [{ description: t("Etiuda catalog"), accept: { "application/json": [".ec"] } }]
       }).then((h) => {
         const as = h.name || name, text = build(as);
         return h.createWritable().then((w) => w.write(text).then(() => w.close())).then(() => as);
@@ -12786,7 +12795,7 @@ What you type stays in this browser only.`;
     let handle = null, picked = "";
     window.showOpenFilePicker({
       multiple: false,
-      types: [{ description: "Etiuda catalog", accept: { "application/json": [".ec", ".json"], "text/javascript": [".js"] } }]
+      types: [{ description: t("Etiuda catalog"), accept: { "application/json": [".ec", ".json"], "text/javascript": [".js"] } }]
     }).then((picked2) => {
       handle = picked2 && picked2[0];
       return handle ? handle.getFile() : null;
@@ -14910,7 +14919,8 @@ What you type stays in this browser only.`;
   // src/modules/card-body.js
   var card_body_exports = {};
   __export(card_body_exports, {
-    cardBodyHtml: () => cardBodyHtml
+    cardBodyHtml: () => cardBodyHtml,
+    swapStripHtml: () => swapStripHtml
   });
 
   // src/modules/list-pointer.js
@@ -16902,15 +16912,16 @@ What you type stays in this browser only.`;
       cardH += '<div class="miss">' + esc(t("No {LANG} version for this card").replace("{LANG}", _L.toUpperCase())) + " - " + esc(t("switch to {LANG} to use it").replace("{LANG}", other.toUpperCase())) + ".</div>";
     }
     const sws = lang === "pl" ? m.swpl || m.sw : m.sw || m.swpl;
-    if (sws && !railActive()) {
-      cardH += '<div class="swap" title="Click to pick, again to clear, and hold Ctrl for several"><b>Set {INTENT}</b> ' + intentOrder.filter((si) => !isIntentHiddenIdx(si)).map((si) => {
-        const s = sws[si];
-        if (s == null) return "";
-        return "<code" + (intentIdxs.indexOf(si) > -1 ? ' class="on"' : "") + ' data-si="' + si + '">' + esc(s) + "</code>";
-      }).join("") + "</div>";
-    }
+    if (sws && !railActive()) cardH += swapStripHtml(sws);
     cardH += "</div>";
     return { cardH, hitBadge, catBadge };
+  }
+  function swapStripHtml(sws) {
+    return '<div class="swap" title="' + esc(t("Click to pick, again to clear, and hold Ctrl for several")) + '"><b>' + esc(t("Set {INTENT}")) + "</b> " + intentOrder.filter((si) => !isIntentHiddenIdx(si)).map((si) => {
+      const s = sws[si];
+      if (s == null) return "";
+      return "<code" + (intentIdxs.indexOf(si) > -1 ? ' class="on"' : "") + ' data-si="' + si + '">' + esc(s) + "</code>";
+    }).join("") + "</div>";
   }
 
   // src/modules/card-node.js
@@ -20054,6 +20065,7 @@ What you type stays in this browser only.`;
   var manage_exports = {};
   __export(manage_exports, {
     mgCardsIn: () => mgCardsIn,
+    mgUsesTip: () => mgUsesTip,
     openManage: () => openManage,
     wireManageDrag: () => wireManageDrag
   });
@@ -20492,11 +20504,14 @@ What you type stays in this browser only.`;
   function mgCardBand(m) {
     return String(m && m.c || "") + "|" + (isFavourite(m && m.id) ? "1" : "0") + "|" + (m && m._hidden ? "1" : "0");
   }
+  function mgUsesTip(n) {
+    return eHost() ? counted(n, "Copied {N} time on this computer", "Copied {N} times on this computer") : counted(n, "Copied {N} time in this browser", "Copied {N} times in this browser");
+  }
   function mgCardRow(m) {
     const hid = !!m._hidden, fav = isFavourite(m.id);
     const badge = m._custom || m._overridden || movedCardIds().has(m.id) ? '<span class="cbadge ed mg-badge" title="' + esc(t("Changed or added by you, not what the catalog shipped")) + '">' + esc(t("mod")) + "</span>" : "";
     const uses = (pack.useCounts && pack.useCounts[m.id]) | 0;
-    const useBadge = uses ? '<span class="mg-uses" title="Copied ' + uses + " time" + (uses === 1 ? "" : "s") + (eHost() ? " on this computer" : " in this browser") + '">' + uses + "×</span>" : "";
+    const useBadge = uses ? '<span class="mg-uses" title="' + esc(mgUsesTip(uses)) + '">' + uses + "×</span>" : "";
     const favTip = fav ? "Remove from Favourites" : "Add to Favourites";
     const hideShow = hid ? '<button type="button" data-show-card="' + esc(m.id) + '" title="Show this card again" aria-label="Show this card again">' + ICON_EYE_SHUT + "</button>" : '<button type="button" data-hide-card="' + esc(m.id) + '" title="Put this card away: it greys out at the foot of this category" aria-label="Put this card away">' + ICON_EYE_OPEN + "</button>";
     return '<div class="manage-row mg-card' + (hid ? " is-hidden" : "") + '" data-cardrow="' + esc(m.id) + '" data-band="' + esc(mgCardBand(m)) + '" title="Drag to reorder, or onto a category to move it there"><span class="mg-card-lab">' + esc(cardTitle(m) || "") + "</span>" + badge + useBadge + '<span class="cacts"><button type="button" data-edit-card="' + esc(m.id) + '" title="Open the full editor" aria-label="Edit card">' + ICON_EDIT + "</button>" + hideShow + '<button type="button" class="danger mg-trash" data-remove-card="' + esc(m.id) + '" title="Delete this card" aria-label="Delete card">' + ICON_TRASH + '</button><button type="button" class="star-btn' + (fav ? " on" : "") + '" data-fav-card="' + esc(m.id) + '" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";

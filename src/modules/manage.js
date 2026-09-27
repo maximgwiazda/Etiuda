@@ -16,7 +16,7 @@ import { drawIntentRail } from "./rail-list.js";
 import { normWhoList, WHO_BASE } from "./stock.js";
 import { nsSet } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { t, catalogCountsLine, toast } from "./ui-lang.js";
+import { t, catalogCountsLine, counted, toast } from "./ui-lang.js";
 import { isFavourite, isIntentFavourite, pack, whoOptions, savePack } from "./pack.js";
 import { removeCard, removeIntent, setIntentHidden, syncIntentOrder, toggleFavourite, toggleIntentFavourite } from "./favourites.js";
 import { primaryCatLabel } from "./card-intent.js";
@@ -51,6 +51,11 @@ function mgCardBand(m){
   return String(m&&m.c||"")+"|"+(isFavourite(m&&m.id)?"1":"0")+"|"+((m&&m._hidden)?"1":"0");
 }
 
+/* A sentence with a number in it is out of the dialog sweep's reach, so it is put together here. */
+function mgUsesTip(n){
+  return eHost() ? counted(n,"Copied {N} time on this computer","Copied {N} times on this computer")
+    : counted(n,"Copied {N} time in this browser","Copied {N} times in this browser");
+}
 /** A card inside the category tree. Hidden rows are greyed; the star is inert on them, so
  *  the only way back is the closed eye - the rule the intent rows already follow. */
 function mgCardRow(m){
@@ -60,8 +65,7 @@ function mgCardRow(m){
   // Local copy count - absent until the first copy, so unused rows stay quiet rather than
   // wearing a "0" that reads as an accusation before anyone has worked a shift with it.
   const uses=(pack.useCounts&&pack.useCounts[m.id])|0;
-  const useBadge=uses?'<span class="mg-uses" title="Copied '+uses+' time'+(uses===1?'':'s')
-    +(eHost()?' on this computer':' in this browser')+'">'+uses+'×</span>':"";
+  const useBadge=uses?'<span class="mg-uses" title="'+esc(mgUsesTip(uses))+'">'+uses+'×</span>':"";
   const favTip=fav?"Remove from Favourites":"Add to Favourites";
   const hideShow=hid
     ?'<button type="button" data-show-card="'+esc(m.id)+'" title="Show this card again" aria-label="Show this card again">'+ICON_EYE_SHUT+'</button>'
@@ -837,6 +841,7 @@ function openManage(){
 
 export {
   mgCardsIn,
+  mgUsesTip,
   openManage,
   wireManageDrag
 };
