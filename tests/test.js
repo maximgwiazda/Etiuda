@@ -534,6 +534,7 @@ function runUnitTests() {
   windowPlaceTests();
   shippedFileTests();
   railPlacementTests();
+  recoveryTests();
   v2ValidationTests();
   lintCatalogTests();
   langAgnosticTests();
@@ -1342,6 +1343,49 @@ function railPlacementTests() {
     [at("railPanel.placeRailNow()") > at("uiLang.translateChrome()"), at("uiLang.translateChrome()") > -1,
      at("railPanel.placeRailNow()") > -1 && at("railPanel.placeRailNow()") < at("E_BOOT_OK();")],
     [true, true, true]);
+}
+/* A PAGE THAT STOPPED COMES BACK WHOLE (feel pass, the crash reload): every reload the shell makes
+   after the page stopped is marked for the host answer, which says so once, and the boot guard then
+   holds the first frame until boot has ended, as for a reload the page asks for itself. The guard is
+   run here as it stands in the template, on stubs; the frames are the verifier's capture. */
+function recoveryTests() {
+  const shell = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  const reloads = shell.match(/\.reload\(\)/g) || [];
+  eq("every reload the shell makes of the page goes through recover(), which marks it first",
+    [reloads.length, /const recover = \(\) => \{ recovering\.add\(win\.webContents\.id\); win\.webContents\.reload\(\); \};/.test(shell)],
+    [1, true]);
+  eq("the host answer says so once, by taking the mark", /recovering: recovering\.delete\(e\.sender\.id\),/.test(shell), true);
+  const preload = fs.readFileSync(path.join(E.ROOT, "shell", "preload.js"), "utf8");
+  eq("the preload hands the page that answer", /recovering: !!host\.recovering,/.test(preload), true);
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const m = /<script>([\s\S]*?)<\/script>/.exec(tpl);
+  const guard = m ? m[1] : "";
+  const run = (host, arriving) => {
+    const cls = new Set(), head = [];
+    const store = arriving ? { eArriving: "1" } : {};
+    const el = () => ({ style: { setProperty() {} }, setAttribute(k, v) { this[k] = v; },
+      blocking: { supports: w => w === "render" }, appendChild() {} });
+    const sb = {
+      document: { documentElement: { classList: { add: (...c) => c.forEach(x => cls.add(x)), remove: (...c) => c.forEach(x => cls.delete(x)),
+        contains: c => cls.has(c) }, style: { setProperty() {} } },
+        head: { appendChild: n => head.push(n) }, createElement: el, getElementById: () => null, querySelector: () => null },
+      sessionStorage: { getItem: k => store[k] || null, removeItem: k => { delete store[k]; }, setItem: (k, v) => { store[k] = v; }, clear() {} },
+      localStorage: { getItem: () => null, setItem() {}, removeItem() {}, key: () => null, length: 0 },
+      matchMedia: () => ({ matches: false }), location: { hash: "", href: "file:///x/etiuda.html", protocol: "file:", origin: "null" },
+      navigator: { languages: ["en-US"], language: "en-US", cookieEnabled: true },
+      setTimeout: () => 0, requestAnimationFrame: () => 0, addEventListener() {}
+    };
+    sb.window = sb; sb.E_HOST = host; sb.self = sb; sb.top = sb;
+    require("vm").runInNewContext(guard, sb);
+    const hold = head.filter(n => n.rel === "expect" && n.blocking === "render");
+    return [cls.has("e-arriving"), hold.length];
+  };
+  let got;
+  try {
+    got = [run({ recovering: true }, false), run({ recovering: false }, false), run(null, true), run(null, false)];
+  } catch (e) { got = "the boot guard threw: " + e.message; }
+  eq("the guard holds the first frame for the shell's recovery and for the page's own covered reload, and for nothing else",
+    got, [[true, 1], [false, 0], [true, 1], [false, 0]]);
 }
 function requestFns() {
   const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");

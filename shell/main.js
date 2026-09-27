@@ -194,6 +194,8 @@ function catalogMtime() {
   if (!catalogFrom) return 0;
   try { return Math.round(fs.statSync(catalogFrom).mtimeMs); } catch { return 0; }
 }
+// The pages (webContents ids) this shell reloaded after they stopped, until each has asked once.
+const recovering = new Set();
 /* A FILE SOMEBODY DOUBLE-CLICKED AND THIS LAUNCH COULD NOT OPEN, handed to the page once through
    the host answer and then forgotten. openedWith is dropped with it, so the folder's own catalog
    is what opens and a later re-read does not refuse the same file again. */
@@ -816,6 +818,9 @@ ipcMain.on("etiuda:host", (e) => {
        remembered for that file or it is already what is loaded. */
     openedWith: !!openedWith && catalogFrom === openedWith,
     openedRefused: openedRefused,
+    /* THIS LOAD IS THE SHELL'S OWN RELOAD after the page stopped, answered once: the page then
+       holds its first frame until boot has ended, as it does for a reload it asks for itself. */
+    recovering: recovering.delete(e.sender.id),
     deskFile: deskFile(),
     home: os.homedir(),
     accent: hostAccent(),
@@ -1332,6 +1337,7 @@ function createWindow() {
      The first loss reloads the page; a second within a minute asks, in a box with its own frame,
      as a page that stops answering does. The harness's placed-aside window logs in place of a box. */
   let lastGone = 0, killing = false, hangAsk = null;
+  const recover = () => { recovering.add(win.webContents.id); win.webContents.reload(); };
   const ask = (message, buttons, signal) => {
     if (!PLACED_ASIDE) return dialog.showMessageBox(win, { type: "warning", title: "Etiuda", message: message,
       buttons: buttons, defaultId: 0, cancelId: 0, noLink: true, signal: signal });
@@ -1344,11 +1350,11 @@ function createWindow() {
     if (killing) { killing = false; return; }
     const again = Date.now() - lastGone < 60000;
     lastGone = Date.now();
-    if (!again) { win.webContents.reload(); return; }
+    if (!again) { recover(); return; }
     const w = shellWords();
     ask(w.gone, [w.restart, w.close]).then(r => {
       if (win.isDestroyed()) return;
-      if (r.response === 0) win.webContents.reload(); else if (r.response === 1) win.close();
+      if (r.response === 0) recover(); else if (r.response === 1) win.close();
     });
   });
   win.on("unresponsive", () => {
@@ -1362,7 +1368,7 @@ function createWindow() {
       if (signal.aborted || r.response !== 1 || win.isDestroyed()) return;
       killing = true;
       win.webContents.forcefullyCrashRenderer();
-      win.webContents.reload();
+      recover();
     });
   });
   win.on("responsive", () => { if (hangAsk) hangAsk.abort(); });

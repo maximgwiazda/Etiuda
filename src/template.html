@@ -81,8 +81,10 @@
     /* A COVERED RELOAD (motion.js reloadCovered). Rendering is blocked until parsing ends, which
        is after the app's script and so after boot (#eBooted names nothing, and the block lifts
        at the end of the document): the frame the last document left stays on screen and nothing
-       half-built is painted. Where blocking is not understood, the body stays unseen. */
-    if(sessionStorage.getItem("eArriving")){
+       half-built is painted. Where blocking is not understood, the body stays unseen. The shell's
+       own reload after the page stopped arrives the same way: a dead page could not ask. */
+    var host=window.E_HOST;
+    if(sessionStorage.getItem("eArriving") || (host && host.recovering)){
       sessionStorage.removeItem("eArriving");
       root.classList.add("e-arriving");
       var hold=document.createElement("link");
