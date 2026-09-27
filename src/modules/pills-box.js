@@ -155,6 +155,21 @@ function schedulePillsCollapse(){
     hooks.scheduleRailGeometry();
   }));
 }
+/* THE CLIP FOLLOWS A NEW WIDTH IN THE FRAME THAT PAINTS IT: the resize pass waits two frames, and
+   the first frame at a narrower width painted the bar a line taller, the list with it. Observed
+   after layout and before paint, as the column count is; a width only, so no glide calls it. */
+let pillsWidthSeen=-1;
+function wirePillsWidthWatch(){
+  const el=pills;
+  if(!el || typeof ResizeObserver!=="function") return;
+  new ResizeObserver(es=>{
+    const w=Math.round(es[es.length-1].contentRect.width);
+    if(w===pillsWidthSeen) return;
+    const first=pillsWidthSeen<0;
+    pillsWidthSeen=w;
+    if(!first) syncPillsCollapseNow();
+  }).observe(el);
+}
 // What the head script reserves on the next load: the slot's height at rest, per window width.
 function rememberPillsShape(){
   const slot=pillsSlot();
@@ -172,5 +187,6 @@ export {
   syncPillsCollapse,
   syncPillsCollapseNow,
   schedulePillsCollapse,
+  wirePillsWidthWatch,
   rememberPillsShape,
 };

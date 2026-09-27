@@ -350,6 +350,7 @@ function boot(){
 
   columns.wireColResize();
   columns.wireColWidthWatch();
+  pillsBox.wirePillsWidthWatch();
 
   // The note pane, which closes on anything that moves the ground under it
   notePane.wireNotePane();

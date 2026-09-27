@@ -13484,7 +13484,8 @@ What you type stays in this browser only.`;
     syncPillsCollapse: () => syncPillsCollapse,
     syncPillsCollapseNow: () => syncPillsCollapseNow,
     togglePills: () => togglePills,
-    togglePillsLock: () => togglePillsLock
+    togglePillsLock: () => togglePillsLock,
+    wirePillsWidthWatch: () => wirePillsWidthWatch
   });
   function pillsWanted() {
     return lsGet("ePills") !== "0";
@@ -13611,6 +13612,18 @@ What you type stays in this browser only.`;
       rememberPillsShape();
       hooks.scheduleRailGeometry();
     }));
+  }
+  var pillsWidthSeen = -1;
+  function wirePillsWidthWatch() {
+    const el = pills;
+    if (!el || typeof ResizeObserver !== "function") return;
+    new ResizeObserver((es) => {
+      const w = Math.round(es[es.length - 1].contentRect.width);
+      if (w === pillsWidthSeen) return;
+      const first = pillsWidthSeen < 0;
+      pillsWidthSeen = w;
+      if (!first) syncPillsCollapseNow();
+    }).observe(el);
   }
   function rememberPillsShape() {
     const slot = pillsSlot();
@@ -21979,6 +21992,7 @@ What you type stays in this browser only.`;
     wireRoleDrum();
     wireColResize();
     wireColWidthWatch();
+    wirePillsWidthWatch();
     wireNotePane();
     wireListPointer();
     renderFacts();

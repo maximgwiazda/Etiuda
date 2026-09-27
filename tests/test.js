@@ -533,6 +533,7 @@ function runUnitTests() {
   policyTests();
   windowPlaceTests();
   pillWrapTests();
+  pillsWidthWatchTests();
   v2ValidationTests();
   lintCatalogTests();
   langAgnosticTests();
@@ -1383,6 +1384,32 @@ function pillWrapTests() {
     catch (e) { got = "tweenPillWidths threw: " + e.message; }
     eq("a count written in place never carries a pill across the row, " + what, got, []);
   }
+}
+/* THE CLIP FOLLOWS A NEW WIDTH IN THE FRAME THAT PAINTS IT (797 F4): the bar is watched after
+   layout, and a new width re-decides the clip there and then; its first width and a height alone
+   do not. The frame itself is the verifier's. */
+function pillsWidthWatchTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "pills-box.js"), "utf8");
+  let heard = null, calls = 0, wire = null;
+  class RO { constructor(fn) { heard = fn; } observe() {} }
+  try {
+    wire = new Function("pills", "ResizeObserver", "syncPillsCollapseNow",
+      extractDecl(src, "let pillsWidthSeen=") + "\n" + extractDecl(src, "function wirePillsWidthWatch(")
+      + "\nreturn wirePillsWidthWatch;")({}, RO, () => { calls++; });
+  } catch (e) { wire = null; }
+  const got = [];
+  if (wire) {
+    wire();
+    for (const [w, h] of [[1200, 75], [1200, 112.5], [1150, 112.5], [1150, 75]]) {
+      const was = calls;
+      heard([{ contentRect: { width: w, height: h } }]);
+      got.push(calls - was);
+    }
+  }
+  eq("a new width re-decides the pill bar's clip in the observer; its first width and a height alone do not",
+    wire ? got : "no wirePillsWidthWatch in pills-box.js", [0, 0, 1, 0]);
+  const boot = fs.readFileSync(path.join(E.ROOT, "src", "main.js"), "utf8");
+  eq("boot wires the watch", /pillsBox\.wirePillsWidthWatch\(\);/.test(boot), true);
 }
 function requestFns() {
   const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
