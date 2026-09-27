@@ -405,8 +405,8 @@ const TOUR_STEPS=[
   {
     id:"done",
     sel:".brand",
-    title:"You are set",
-    body:"That is the whole tour, and Etiuda is ready for the first customer. <b>Show tour…</b> in the <span data-icon=\"settings\"></span> Menu brings it back, and <b>About Etiuda</b> lists every shortcut.",
+    title:"Ready for the first customer",
+    body:"That is the whole tour. <b>Show tour…</b> in the <span data-icon=\"settings\"></span> Menu brings it back, and <b>About Etiuda</b> lists every shortcut.",
     pad:10
   }
 ];
