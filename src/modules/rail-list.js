@@ -7,7 +7,7 @@ import { mgReduceMotion, E_EASE } from "./motion.js";
 import { scheduleTabSave } from "./tabs.js";
 import { t, toast } from "./ui-lang.js";
 import { foldDiacritics, splitWords, wordMatchesTerm } from "./words.js";
-import { isIntentFavourite, ePackEpoch, pack, savePack } from "./pack.js";
+import { isIntentFavourite, ePackEpoch, pack, saveStats } from "./pack.js";
 import { bumpMiss } from "./desk-stats.js";
 import { railLocked, applyRailPeek, updateModifierPeek, toggleRailLock } from "./rail-panel.js";
 import { catMarkHtml, catSlot } from "./cat-identity.js";
@@ -200,7 +200,7 @@ function railSettle(){
   glideSettle(cardsBefore);
   if(String(intentEl.value||"").trim() && !(shown&&shown.length)){
     bumpMiss(pack);
-    savePack();
+    saveStats();
   }
   hooks.flushPillState();
   const markedIdx=(railSel>=0 && railSel<railOrder.length)?railOrder[railSel]:-1;

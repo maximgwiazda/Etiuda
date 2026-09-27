@@ -1305,6 +1305,22 @@ const CARD_B = {
   check("list-pointer.js", "a card whose blocks are steps says step",
     () => eq(LP.copiedToastMsg(Object.assign({}, CARD_A, { seq: true }), "en", 1, 3),
       "Ready to paste: Damaged bag, EN step 2/3"));
+  /* A COPY'S COUNT IS NOT A MARKUP CHANGE. ePackEpoch heads every card's pool signature, so a
+     count that moved it rebuilt every shown card on the next render; the browser half, cards
+     kept across a pick and a copy, is tests/smoke.js's. The CONTROL is that the count still
+     lands in the stored pack; flushStats is looked up rather than called, so the leg runs
+     against a tree that saves counts through savePack. */
+  const P = await import(MOD("pack.js"));
+  const ST = await import(MOD("storage.js"));
+  check("list-pointer.js", "a copy's count leaves every card's pool signature standing",
+    () => { const at = P.ePackEpoch; LP.bumpUseCount("c-counted-copy", "en"); return eq(P.ePackEpoch, at); });
+  check("list-pointer.js", "CONTROL: and the count still reaches the stored pack",
+    () => {
+      if (typeof P.flushStats === "function") P.flushStats();
+      let got = null;
+      try { got = JSON.parse(ST.nsGet("Pack") || "null"); } catch (e) { got = null; }
+      return eq(((got && got.useCounts) || {})["c-counted-copy"], 1);
+    });
 }
 
 /* ------------------------------------------------------------------ manage.js
