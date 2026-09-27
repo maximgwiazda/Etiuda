@@ -180,10 +180,19 @@ function lsGet(k){
    stray event from the same trick, and a future feature cannot silently escape this
    version of the fix. */
 let eWiping=false;
-/* The one way up. A module's binding cannot be assigned from outside it, so the three sites
+/* The one way up. A module's binding cannot be assigned from outside it, so the sites
    that raise the latch call this rather than writing the flag. It never comes down: the page
    is on its way to a reload by the time it is called. */
 function eWipeLatch(){ eWiping=true; }
+/* THE RESCUE'S RESET, from the boot guard, which finds this on window when the app loaded before it
+   failed: a write this map still owes is sent whole on pagehide, so the map is emptied and written
+   here, where that send reads it. True when the desk was written. */
+function eResetClear(){
+  eWipeLatch();
+  if(!E_DESK) return false;
+  Object.keys(E_DESK.map).forEach(k=>{ if(E_KEY_RE.test(k)) delete E_DESK.map[k]; });
+  return deskSave();
+}
 /* Returns whether the value actually landed. Swallowing the quota throw is right for the
    hundred small writes that would rather forget than interrupt, but a caller holding
    something it cannot rebuild needs to be told - see storeCatalog. `own` is a caller that
@@ -277,6 +286,7 @@ function eCarryOldKeys(){
 export {
   lsGet,
   eWipeLatch,
+  eResetClear,
   lsSet,
   lsDel,
   lsKeys,

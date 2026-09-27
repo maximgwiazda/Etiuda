@@ -47,13 +47,17 @@
      withDesk is a person's Reset and nothing else: the silent repair below leaves an installed
      desk as it is. */
   function clearState(withDesk){
+    /* A Reset hands the desk to the app's storage where it loaded (eResetClear), before anything is
+       cleared; a page leaving would otherwise send the app's copy back over this. */
+    var done=false;
+    if(withDesk) try{ done=typeof window.eResetClear==="function" && window.eResetClear()===true; }catch(e){}
     try{
       var keys=[],i;
       for(i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k&&/^e(?:[A-Z]|[0-9a-z]+~)/.test(k)) keys.push(k); }
       for(i=0;i<keys.length;i++) localStorage.removeItem(keys[i]);
     }catch(e){}
     try{ sessionStorage.clear(); }catch(e){}
-    var h=withDesk && hostDesk();
+    var h=withDesk && !done && hostDesk();
     if(h) try{
       var map=JSON.parse(h.deskRead()||"{}"), kept={};
       for(var key in map) if(!/^e(?:[A-Z]|[0-9a-z]+~)/.test(key)) kept[key]=map[key];
