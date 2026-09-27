@@ -1384,6 +1384,7 @@ try {
     "css-dead.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
     "ghosts.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
     "storage-keys.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
+    "motion.js": "legs tests/smoke.js requires and runs; alone it is the quick run of one leg",
   };
   const CHAIN_SCRIPTS = ["test", "split-guard"];
   function reachOf(scripts, releaseSrc) {

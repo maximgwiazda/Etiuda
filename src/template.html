@@ -1612,6 +1612,9 @@ main{max-width:none;margin:16px 0 0;padding:0}
    Firefox has supported this since 125, Chrome since 85; where it is unsupported the property
    is ignored and the list behaves exactly as it did. */
 #list .card{content-visibility:auto;contain-intrinsic-size:auto 220px}
+/* A card at rest is contained, so its last slab's bottom margin stays inside it. A card forced
+   visible loses the containment: flow-root keeps the margin in, or the card snaps 10px shorter. */
+#list .card{display:flow-root}
 .card.dragging{opacity:.55;z-index:2}
 html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
 .cbadge.hit{background:var(--go-soft);color:var(--go);border:1px solid var(--go)}
