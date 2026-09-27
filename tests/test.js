@@ -3008,22 +3008,28 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 810;
-const UI_STRINGS_SHA256 = "c8b3c3011f3713f480febe649c9414be1b3adeb7c6effc0b797df503b5a553b2";
+const UI_STRINGS_COUNT = 820;
+const UI_STRINGS_SHA256 = "9255f5c3116b43bfb194cee31b1ac0977f95820d56568d66496959ec0db67efd";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
-   so a Polish value cannot move unremarked either. */
+   so a Polish value cannot move unremarked either.
+
+   THE ENGLISH ENDS AT ITS FIRST UNESCAPED QUOTE. Until 2026-09-28 it ended at the first `":"`
+   and a line whose English held a quote was skipped whole: 10 of the table's lines, the tour's
+   rail, pills, star and settings bodies among them, so a Polish value changed on one of them
+   moved nothing here. Read escape by escape instead, the ten are in and every line the old rule
+   took is taken byte for byte as before (measured over the source document: 810 kept, 0 lost,
+   10 added). */
 function uiStrings(src) {
   const out = [];
   src.split(/\r?\n/).forEach(line => {
     const t = line.trim();
     if (!t.startsWith('"') || !t.endsWith('",')) return;
-    const body = t.slice(1, -2), at = body.indexOf('":"');
-    if (at < 1) return;
-    const en = body.slice(0, at);
-    if (en.indexOf('"') >= 0) return;
-    out.push(en + "\u0000" + body.slice(at + 3));
+    let i = 1;
+    while (i < t.length && t[i] !== '"') i += t[i] === "\\" ? 2 : 1;
+    if (i < 2 || t.slice(i, i + 3) !== '":"') return;
+    out.push(t.slice(1, i) + "\u0000" + t.slice(i + 3, -2));
   });
   out.sort();
   return { count: out.length, sha256: crypto.createHash("sha256").update(out.join("\n"), "utf8").digest("hex") };
