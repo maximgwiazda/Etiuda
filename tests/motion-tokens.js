@@ -1,7 +1,8 @@
 /* THE MOTION VOCABULARY, HELD. `node tests/motion-tokens.js`, no fixture, no browser. It fails on
  * a rule keyed on prefers-reduced-motion alone, on a duration written as a number where a --m-*
  * tier belongs (the sheet, and the scripts' inline transitions and animate() calls), on a smooth
- * scroll or a tier the e-still switch does not reach, and on the sheet's tiers and M_MS disagreeing.
+ * scroll or a tier the e-still switch does not reach, on a halt that leaves ::before or ::after
+ * running, on a keyframe or animate() that never rests, and on the sheet's tiers and M_MS disagreeing.
  * Exit 0 clean, 1 a finding, 3 the sources could not be read or a control did not fire. */
 const fs = require("fs");
 const path = require("path");
@@ -13,6 +14,8 @@ const MODULES = "src/modules";
 const MOTION = "src/modules/motion.js";
 /* Timed by a script and drawn on a canvas, so no rule in the sheet can run them. */
 const SCRIPT_ONLY = new Set(["gather", "twinkle"]);
+/* Selectors allowed a keyframe that runs forever, each with its reason. None today. */
+const ENDLESS_OK = new Set([]);
 const TIMED = new Set(["transition", "transition-duration", "transition-delay",
                        "animation", "animation-duration", "animation-delay"]);
 
@@ -51,8 +54,21 @@ function sheetFindings(css, lineAt) {
   for (const [k, v] of tiers)
     if (toMs(v) !== null && toMs(still.get(k)) !== 0)
       bad.push("--m-" + k + " is not zeroed under :root.e-still, so the switch leaves it running");
-  const halts = parsed.decls.some(d => /^:root\.e-still \*$/.test(d.sel) && d.prop === "animation" && d.val === "none" && d.imp);
-  if (!halts) bad.push("no `:root.e-still *{animation:none!important}`, so a keyframe outlives the switch");
+  /* The halt must reach the pseudo-elements by name: `*` matches elements only, and the add
+     button's ring is a keyframe on ::after. parseSheet splits a selector list into one declaration
+     per selector, so each of the three is looked for on its own; a legacy one-colon form counts. */
+  for (const pe of ["", "::before", "::after"]) {
+    const want = new RegExp("^:root\\.e-still \\*" + (pe ? ":?" + pe.slice(1) : "") + "$");
+    if (!parsed.decls.some(d => want.test(d.sel) && d.prop === "animation" && d.val === "none" && d.imp))
+      bad.push("no `:root.e-still *" + pe + "{animation:none!important}`, so a keyframe" + (pe ? " on " + pe : "") + " outlives the switch");
+  }
+  /* A keyframe that never rests: the switch halts it, but with the switch off it runs for as long
+     as the page is open (the add button's ring asks three times, board motion-15). A deliberate
+     endless one is named in ENDLESS_OK with its reason. */
+  for (const d of parsed.decls)
+    if ((d.prop === "animation" || d.prop === "animation-iteration-count") && /(^|[\s,])infinite([\s,]|$)/.test(d.val)
+        && !ENDLESS_OK.has(d.sel))
+      bad.push("line " + d.line + ": {" + d.sel + "} " + d.prop + " runs `infinite`, a keyframe that never rests");
   return { bad, tiers, decls: parsed.decls.length };
 }
 
@@ -96,6 +112,7 @@ function scriptFindings(file, src) {
   }
   lines.forEach((l, k) => {
     if (/\bduration\s*:\s*\.?\d/.test(l)) bad.push(file + ":" + (k + 1) + ": animate() takes a number where M_MS belongs");
+    if (/\biterations\s*:\s*Infinity\b/.test(l)) bad.push(file + ":" + (k + 1) + ": animate() runs forever, a motion that never rests");
   });
   for (const s of strings)
     if (s.text === "smooth" && !/\bmgReduceMotion\(\)/.test(lines[s.line - 1] || ""))
@@ -133,21 +150,30 @@ function parityFindings(tiers, mt) {
 const OK = [], BAD = [];
 const control = (name, got, want) => (got === want ? OK : BAD).push(name + ": " + (got === want ? got : "read " + JSON.stringify(got) + ", wanted " + JSON.stringify(want)));
 function controls() {
-  const clean = ":root{--m-move:180ms;--m-ease:x}:root.e-still{--m-move:0s}:root.e-still *{animation:none!important}";
+  const HALT = ":root.e-still *,:root.e-still *::before,:root.e-still *::after{animation:none!important}";
+  const clean = ":root{--m-move:180ms;--m-ease:x}:root.e-still{--m-move:0s}" + HALT;
   const sf = css => sheetFindings(clean + css, () => 1).bad.length;
   control("control A, a clean sheet", sf(".a{transition:transform var(--m-move) var(--m-ease),visibility 0s var(--m-move)}"), 0);
   control("control B, a rule keyed on the system query alone", sf("@media (prefers-reduced-motion:reduce){.a{animation:none}}"), 1);
   control("control C, a literal in a transition", sf(".a{transition:opacity .2s ease}"), 1);
   control("control D, a literal in an animation, in ms", sf(".a{animation:k 260ms ease both}"), 1);
   control("control E, a duration in a custom property outside --m-*", sf(":root{--tour-spring:.629s linear(0,1)}"), 1);
-  control("control F, a tier the switch leaves running", sheetFindings(":root{--m-move:180ms;--m-tone:100ms}:root.e-still{--m-move:0s}:root.e-still *{animation:none!important}", () => 1).bad.length, 1);
+  control("control F, a tier the switch leaves running", sheetFindings(":root{--m-move:180ms;--m-tone:100ms}:root.e-still{--m-move:0s}" + HALT, () => 1).bad.length, 1);
   control("control G, a comment mentioning a duration", sf("/* .18s transition */.a{color:red}"), 0);
+  const halt = h => sheetFindings(":root{--m-move:180ms;--m-ease:x}:root.e-still{--m-move:0s}" + h, () => 1).bad.length;
+  control("control R, the halt narrowed to elements, its pseudo-elements left running", halt(":root.e-still *{animation:none!important}"), 2);
+  control("control S, the halt in three rules, ::after in the one-colon form", halt(":root.e-still *{animation:none!important}:root.e-still *::before{animation:none!important}:root.e-still *:after{animation:none!important}"), 0);
+  control("control T, the halt on ::after without !important", halt(":root.e-still *,:root.e-still *::before{animation:none!important}:root.e-still *::after{animation:none}"), 1);
+  control("control U, a keyframe that never rests", sf(".a::after{animation:k var(--m-nudge) ease-out infinite both}"), 1);
+  control("control V, an endless count on its own", sf(".a{animation-iteration-count:infinite}"), 1);
+  control("control W, a keyframe named like the word", sf(".a{animation:infinite-roll var(--m-roll) 3}"), 0);
   const js = src => scriptFindings("src/modules/x.js", src).length;
   control("control H, an inline transition with a literal", js('el.style.transition="transform .18s "+E_EASE;'), 1);
   control("control I, a literal built into a string beside the curve", js('const T=".18s "+E_EASE;'), 1);
   control("control J, animate() with a number", js("el.animate(k,{duration:160,easing:E_EASE});"), 1);
   control("control K, the system query read outside motion.js", js('matchMedia("(prefers-reduced-motion: reduce)")'), 1);
   control("control L, the tiers by name", js('el.style.transition="transform var(--m-move) var(--m-ease)"; el.animate(k,{duration:M_MS.move});'), 0);
+  control("control X, animate() that never rests", js("el.animate(k,{duration:M_MS.move,iterations:Infinity});"), 1);
   control("control P, a smooth scroll deaf to the switch", js('el.scrollTo({top:0,behavior:"smooth"});'), 1);
   control("control Q, a smooth scroll that asks", js('el.scrollTo({top:0,behavior:mgReduceMotion()?"auto":"smooth"});'), 0);
   control("control M, a comment and a regex", js('// transition .18s ease\nconst r=/"\\.5s"/; /* animation 2s */'), 0);
