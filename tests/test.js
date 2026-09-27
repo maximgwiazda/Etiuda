@@ -1511,9 +1511,11 @@ function grownCardTests() {
 }
 /* THE MOTION LEGS' JUDGE SEES A LEAP ALONG THE LINE OF TRAVEL (797 N4): N3's pill ran 47px the wrong
    way, was painted 35px past its end and glided back, all within the off-path margin. judge() from
-   tests/motion.js is run on that track, rebuilt in numbers, and on a clean glide as the control. */
+   tests/motion.js is run on that track, rebuilt in numbers, and on a clean glide as the control. A
+   motion.js without the export fails these legs rather than stopping the run. */
 function motionJudgeTests() {
-  const M = require("./motion.js");
+  let M = {};
+  try { M = require("./motion.js"); } catch (e) { M = {}; }
   const box = (x, y) => ({ x, y, w: 110, top: y, bottom: y + 31.5 });
   const track = pts => ({ vh: 816, before: { "k:a": box(1233, 94) },
     frames: pts.map(([x, y], i) => ({ "k:a": Object.assign(box(x, y), { anim: 1 }, i ? {} : { start: box(1233, 94) }) }))
@@ -1521,11 +1523,29 @@ function motionJudgeTests() {
   const leap = track([[1280, 94], [-20, 132], [-6, 132], [8, 132], [15, 132]]);
   const clean = track([[900, 104], [500, 116], [200, 126], [40, 131], [15, 132]]);
   const only = ["jumped", "snapped", "startOff", "offPath", "pastEnd", "vanished"];
-  const a = M.judge(leap, { only }), b = M.judge(clean, { only });
+  let got = "no judge exported by tests/motion.js";
+  if (typeof M.judge === "function") {
+    const a = M.judge(leap, { only }), b = M.judge(clean, { only });
+    got = [a.ok, /pastEnd 1/.test(a.text), /offPath/.test(a.text), b.ok];
+  }
   eq("the motion judge fails a pill painted past either end of its glide, and passes a clean glide",
-    [a.ok, /pastEnd 1/.test(a.text), /offPath/.test(a.text), b.ok], [false, true, false, true]);
+    got, [false, true, false, true]);
   eq("the motion legs run at 125 and 150 per cent as well as 100",
     (M.SCALES || []).map(s => s.deviceScaleFactor), [1, 1.25, 1.5]);
+  /* THE CARD A LEG ACTS ON IS FOUND AT EVERY SCALE: at 1536x816 the first row's tops sit above the
+     middle band and the second row's below it, so the band alone found nothing and m7 and m12 were
+     never driven at 125. The band still decides where it has a card; the head of the list is never
+     the pick, nor a card under the header, and nothing is picked from an empty screen. */
+  const card = (id, top, left) => ({ id, top, left });
+  const row125 = [card("h", 240, 300), card("p", 240, 700), card("q", 240, 1100), card("s", 560, 300), card("t", 600, 700), card("u", 580, 1100)];
+  const at100 = [card("h", 220, 300), card("p", 220, 700), card("m", 300, 300), card("n", 520, 700)];
+  const under = [card("h", 150, 300), card("p", 160, 700)];
+  got = typeof M.middleCard === "function"
+    ? [M.middleCard(row125, 816, 230), M.middleCard(at100, 900, 200), M.middleCard(under, 680, 230), M.middleCard([], 816, 230),
+      M.middleCard([card("h", 240, 300)], 816, 230)]
+    : "no middleCard exported by tests/motion.js";
+  eq("the card a leg acts on is the band's first where the band has one, else the nearest to the screen's middle, never the head",
+    got, ["s", "m", null, null, null]);
 }
 function requestFns() {
   const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");

@@ -175,6 +175,31 @@ function judge(r, opts) {
              + (faults.length ? "; " + faults.map(([n, v]) => n + " " + v.length + " (" + v.slice(0, 3).join(", ") + ")").join("; ") : "") };
 }
 
+/* The card a leg acts on, from the cards on offer in list order as {id, top, left}: the first whose
+   top lies in the middle band of the screen, and where a scale leaves that band empty, the one whose
+   top is nearest the middle of the screen below the header, never the list's head, which a star
+   leaves where it is. `top` is where the screen starts under the header. */
+function middleCard(cards, vh, top) {
+  const band = cards.find(c => c.top > vh * 0.3 && c.top < vh * 0.6);
+  if (band) return band.id;
+  const head = cards.reduce((h, c) => !h || c.top < h.top - 1 || (Math.abs(c.top - h.top) <= 1 && c.left < h.left) ? c : h, null);
+  const mid = (top + vh) / 2;
+  const pool = cards.filter(c => c !== head && c.top >= top && c.top < vh - 80)
+    .sort((a, b) => Math.abs(a.top - mid) - Math.abs(b.top - mid) || a.left - b.left);
+  return pool.length ? pool[0].id : null;
+}
+/* The cards a leg may act on, read in the page: `sel` picks them, `need` names a control each must
+   carry, `unstarred` leaves out a card already starred. */
+async function offerCards(p, sel, need, unstarred) {
+  return p.evaluate((sel, need, unstarred) => {
+    const sc = document.getElementById("pageScroll") || document.scrollingElement;
+    const top = sc === document.scrollingElement ? 0 : sc.getBoundingClientRect().top;
+    const cards = [...document.querySelectorAll(sel)].filter(el => el.querySelector(need) && !(unstarred && el.querySelector(".star-btn.on")))
+      .map(el => { const r = el.getBoundingClientRect(); return { id: el.getAttribute("data-id"), top: r.top, left: r.left }; });
+    return { cards, vh: innerHeight, top };
+  }, sel, need, !!unstarred);
+}
+
 /* Back to the resting desk between legs: no query, no intent, no category, the top of the page. */
 async function rest(p) {
   await p.evaluate(() => {
@@ -333,12 +358,8 @@ leg("m6", "an intent pick and its clear glide every card that stays on screen, a
 });
 
 leg("m7", "a star and its removal glide every card that stays on screen, across columns too", async p => {
-  const id = await p.evaluate(() => {
-    const vh = innerHeight;
-    const c = [...document.querySelectorAll("#list .card[data-id]")].find(el => {
-      const r = el.getBoundingClientRect(); return r.top > vh * 0.3 && r.top < vh * 0.6 && el.querySelector('[data-act="fav"]'); });
-    return c ? c.getAttribute("data-id") : null;
-  });
+  const o = await offerCards(p, "#list .card[data-id]", '[data-act="fav"]');
+  const id = middleCard(o.cards, o.vh, o.top);
   if (!id) return { ok: false, text: "no card in the middle of the screen to star" };
   await p.evaluate(id => { window.__mtId = id; }, id);
   const out = [];
@@ -485,13 +506,8 @@ leg("m12", "a star and a hide glide the cards that stay on screen at the top and
         s.scrollTop = Math.round(d * (s.scrollHeight - s.clientHeight)); }, depth);
       await sleep(900);
       /* A card in the middle of the screen, neither starred nor put away. */
-      const id = await p.evaluate(act => {
-        const vh = innerHeight;
-        const c = [...document.querySelectorAll("#list .card[data-id]:not(.is-hidden)")].find(el => {
-          const r = el.getBoundingClientRect(), b = el.querySelector('[data-act="' + act + '"]');
-          return r.top > vh * 0.3 && r.top < vh * 0.6 && b && !el.querySelector(".star-btn.on"); });
-        return c ? c.getAttribute("data-id") : null;
-      }, act);
+      const o = await offerCards(p, "#list .card[data-id]:not(.is-hidden)", '[data-act="' + act + '"]', true);
+      const id = middleCard(o.cards, o.vh, o.top);
       if (!id) { ok = false; out.push(act + " at " + depth + ": no card in the middle of the screen"); continue; }
       await p.evaluate((id, act) => { window.__mtId = id; window.__mtActName = act; }, id, act);
       const r = await track(p, "cards", 700, () => { window.__mtAct = () =>
@@ -554,7 +570,7 @@ async function viewFor(p, run, now) {
   return run.view;
 }
 
-module.exports = { LEGS, RUNS, SCALES, viewFor, judge, instrument, rest, boot, VIEW };
+module.exports = { LEGS, RUNS, SCALES, viewFor, judge, middleCard, instrument, rest, boot, VIEW };
 
 if (require.main === module) {
   const os = require("os");
