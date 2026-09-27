@@ -280,7 +280,9 @@ const TOUR_STEPS=[
     sel:()=>cardBtn('[data-act="edit"]'),
     prep:tourRevealCardActions,
     title:"Edit a card",
-    body:()=>t("Click the pencil to open this card in the editor: both languages, the internal note, the keywords. Changes are kept beside the catalog, and the editor's <b>Reset</b> brings back the catalog's own words.")
+    body:()=>(eHost()
+      ? t("Click the pencil to open this card in the editor: both languages, the internal note, the keywords. Changes stay on this computer, and the editor's <b>Reset</b> brings back the catalog's own words.")
+      : t("Click the pencil to open this card in the editor: both languages, the internal note, the keywords. Changes stay in this browser, and the editor's <b>Reset</b> brings back the catalog's own words."))
       +" "+t("Once the window is open, the tour goes inside with it."),
     opens:"editor",
     pad:8

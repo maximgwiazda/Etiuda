@@ -721,6 +721,25 @@ function tourActTests() {
   own.t = s => s;
   eq("every title and body of the tour reads Polish, on the desk and in a browser, with and without the sample and the wheel",
     [...new Set(untranslated)], []);
+  /* WHERE THE TOUR SAYS A PERSON'S THINGS STAY is where they stay on that host, in both languages: the desk keeps
+     them on this computer and a browser in itself, so no step names the other host's place. */
+  const misplaced = [], editSays = [];
+  [[true, "X", true, true], [true, "X", false, false], [false, "", false, true]].forEach(([host, dir, sample, wheel]) => {
+    Object.assign(own, { eHost: () => host, eCatalogFolderShort: () => dir, hooks: { sampleReady: () => sample },
+      wheelShown: () => wheel, esc: s => s });
+    const other = host ? /this browser|przegl/i : /this computer|komputer/i, mine = host ? /this computer|komputer/i : /this browser|przegl/i;
+    [x => x, x => PL[x] == null ? x : PL[x]].forEach((tr, pl) => {
+      own.t = tr;
+      T.TOUR_STEPS.forEach(s => {
+        const out = typeof s.body === "function" ? s.body() : tr(s.body);
+        if (other.test(out)) misplaced.push(s.id + (pl ? " pl" : " en") + (host ? "" : " (browser)"));
+        if (s.id === "edit") editSays.push(mine.test(out));
+      });
+    });
+  });
+  own.t = s => s;
+  eq("the tour names where a person's things stay as the host keeps them: the edit step on each host and language, and no step the other host's place",
+    [misplaced, editSays], [[], [true, true, true, true, true, true]]);
 }
 
 /* Section 2.5 of the specification and the body rules of 2.6, driven over the reader that
@@ -2989,8 +3008,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 809;
-const UI_STRINGS_SHA256 = "bb1251e95e105209b69654e8f38dbd9fb3857588f10f56eea81ada9e0e771314";
+const UI_STRINGS_COUNT = 810;
+const UI_STRINGS_SHA256 = "c8b3c3011f3713f480febe649c9414be1b3adeb7c6effc0b797df503b5a553b2";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
