@@ -586,7 +586,7 @@ function ejectUndoTests() {
         (said, fn) => { w.said = said; w.undo = fn; }, () => {});
     } catch (e) { w.F = null; w.err = e.message; }
     w.ls = { eCatalog: "{\"cards\":[1]}", eCatalogOk: "sig", eSample: "1", eCatalogNo: "no", eCatalogFile: "shop.ec",
-             eCatalogFileAt: "1700", ePack: "[\"old\"]", eTheme: "dark" };
+             eCatalogFileAt: "1700", eCatalogTrust: "valid", ePack: "[\"old\"]", eTheme: "dark" };
     w.ss = { eSessionTabs: "tabs-a" };
     return w;
   };
@@ -596,8 +596,8 @@ function ejectUndoTests() {
   const sorted = m => JSON.stringify(Object.keys(m).sort().map(k => [k, m[k]]));
   const before = sorted(w.ls) + sorted(w.ss);
   w.F.ejectCatalog();
-  eq("an eject asks nothing and restarts once, with the catalog and what names it gone and the park in the session",
-    [w.asked, w.reloads, ["eCatalog", "eCatalogOk", "eSample", "eCatalogNo", "eCatalogFile", "eCatalogFileAt"].filter(k => k in w.ls),
+  eq("an eject asks nothing and restarts once, with the catalog, what names it and its signature's state gone and the park in the session",
+    [w.asked, w.reloads, ["eCatalog", "eCatalogOk", "eSample", "eCatalogNo", "eCatalogFile", "eCatalogFileAt", "eCatalogTrust"].filter(k => k in w.ls),
      "eEjectPark" in w.ss, w.ss.eEjectedNow, w.ls.eTheme], [0, 1, [], true, "1", "dark"]);
   w.latched = false;
   const first = w.F.ejectedJustNow() && w.F.offerEjectUndo(), again = w.F.offerEjectUndo();
