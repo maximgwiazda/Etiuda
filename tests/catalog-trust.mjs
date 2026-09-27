@@ -1,4 +1,4 @@
-/* What the desk says about a catalog's signature, and the shell door the ring comes through,
+/* What the desk says about a catalog's signature, and the two shell doors a page may knock on,
  * driven in bare node: src/modules/catalog-trust.js over the real shell/preload.js over the real
  * handlers of shell/main.js, electron stubbed, the catalog folder and its ring in a temp folder.
  * Board 605 specified a failed signature as a warning; tests/catalog-sig.js proves the verifier,
@@ -20,7 +20,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 15;
+const EXPECTED = 18;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -188,7 +188,23 @@ try {
     "2e a ring placed after the catalog was loaded is read at the Library's next paint: "
     + TR.heldCatalogTrust() + ", repainted " + repainted + " time(s)");
 
-  const errs = said.filter(l => /^ERR /.test(l) && !/larger than any ring/.test(l));
+  /* ---- the folder the Library opens --------------------------------------------------------- */
+  const open = invokeHandlers["etiuda:open-catalog-folder"];
+  const plant = path.join(LAB, "not-a-folder.cmd");
+  fs.writeFileSync(plant, "rem planted\r\n", "utf8");
+  onHandlers["etiuda:desk-save"](eventFor(ENGINE_FRAME), JSON.stringify({ eCatalogFolder: plant }));
+  const onFile = await open(eventFor(ENGINE_FRAME));
+  check(onFile === false && opened.length === 0,
+    "3a a catalog folder setting that names a file is not handed to openPath, which would launch it: answered "
+    + onFile + ", " + opened.length + " path(s) opened");
+  onHandlers["etiuda:desk-save"](eventFor(ENGINE_FRAME), JSON.stringify({ eCatalogFolder: CF }));
+  const onDir = await open(eventFor(ENGINE_FRAME));
+  check(onDir === true && opened.length === 1 && opened[0] === CF,
+    "3A THE CONTROL: the same door with a folder opens that folder, so 3a is the file and not a door that opens nothing");
+  const fromPage = await open(eventFor({ parent: null, url: "https://example.com/etiuda.html" }));
+  check(fromPage === false && opened.length === 1, "3b and it opens nothing for a document that is not the engine");
+
+  const errs = said.filter(l => /^ERR /.test(l) && !/is not a folder|larger than any ring/.test(l));
   check(!errs.length, "5a main logged no error beyond the refusals it was asked for"
     + (errs.length ? ": " + errs.length + ", first " + errs[0] : ""));
 } catch (e) {

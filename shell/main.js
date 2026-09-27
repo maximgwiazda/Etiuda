@@ -1058,12 +1058,16 @@ ipcMain.on("etiuda:offer-dropped", (e, file) => {
   offerFile(BrowserWindow.fromWebContents(e.sender), path.resolve(f));
 });
 
-/* The folder in force, opened in the file manager. No path from the renderer: what opens is what
-   the search order above reads, so the one thing this can do is the thing it is for. */
+/* The folder in force, opened in the file manager. No path from the renderer, but the setting
+   is a desk key the page writes, so it may name a file, and openPath LAUNCHES a file: only a
+   folder is opened. */
 ipcMain.handle("etiuda:open-catalog-folder", async (e) => {
   if (!fromEngine(e)) return false;
   const dir = catalogFolder();
   try { fs.mkdirSync(dir, { recursive: true }); } catch { /* it may be a share that is down */ }
+  let isDir = false;
+  try { isDir = fs.statSync(dir).isDirectory(); } catch { /* gone, or a share that is down */ }
+  if (!isDir) { console.error("etiuda: " + dir + " is not a folder, so it is not opened"); return false; }
   const why = await shell.openPath(dir);
   if (why) console.error("etiuda: " + dir + " could not be opened - " + why);
   return !why;
