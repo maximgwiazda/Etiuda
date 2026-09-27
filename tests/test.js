@@ -536,6 +536,7 @@ function runUnitTests() {
   pillsWidthWatchTests();
   railLeaveTests();
   grownCardTests();
+  motionJudgeTests();
   v2ValidationTests();
   lintCatalogTests();
   langAgnosticTests();
@@ -1465,6 +1466,24 @@ function grownCardTests() {
   eq("a grown card opens from its old height on the glide's curve; a card that only moved only glides",
     glide ? [cards[0].runs, cards[1].runs] : "no glideSettle",
     [[["clipPath", "inset(-24px -24px 63px -24px)", 180]], [["transform", "translate(0px,-40px)", 180]]]);
+}
+/* THE MOTION LEGS' JUDGE SEES A LEAP ALONG THE LINE OF TRAVEL (797 N4): N3's pill ran 47px the wrong
+   way, was painted 35px past its end and glided back, all within the off-path margin. judge() from
+   tests/motion.js is run on that track, rebuilt in numbers, and on a clean glide as the control. */
+function motionJudgeTests() {
+  const M = require("./motion.js");
+  const box = (x, y) => ({ x, y, w: 110, top: y, bottom: y + 31.5 });
+  const track = pts => ({ vh: 816, before: { "k:a": box(1233, 94) },
+    frames: pts.map(([x, y], i) => ({ "k:a": Object.assign(box(x, y), { anim: 1 }, i ? {} : { start: box(1233, 94) }) }))
+      .concat([{ "k:a": box(15, 132) }]) });
+  const leap = track([[1280, 94], [-20, 132], [-6, 132], [8, 132], [15, 132]]);
+  const clean = track([[900, 104], [500, 116], [200, 126], [40, 131], [15, 132]]);
+  const only = ["jumped", "snapped", "startOff", "offPath", "pastEnd", "vanished"];
+  const a = M.judge(leap, { only }), b = M.judge(clean, { only });
+  eq("the motion judge fails a pill painted past either end of its glide, and passes a clean glide",
+    [a.ok, /pastEnd 1/.test(a.text), /offPath/.test(a.text), b.ok], [false, true, false, true]);
+  eq("the motion legs run at 125 and 150 per cent as well as 100",
+    (M.SCALES || []).map(s => s.deviceScaleFactor), [1, 1.25, 1.5]);
 }
 function requestFns() {
   const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");

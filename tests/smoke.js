@@ -34,7 +34,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 255 };
+const EXPECTED = { chrome: 275 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -3205,7 +3205,9 @@ const t0 = Date.now();
     await m.evaluate(() => { const x = document.getElementById("eAgentModal"); if (x) x.remove(); });
     await m.evaluate(MOTION.instrument);
     if (late.length) console.log("  the motion page WAITED OUT: " + late.join("; "));
-    for (const L of MOTION.LEGS) {
+    let view = MOTION.SCALES[0];
+    for (const L of MOTION.RUNS) {
+      view = await MOTION.viewFor(m, L, view);
       await MOTION.rest(m);
       let r;
       try { r = await L.fn(m); } catch (x) { r = { ok: false, text: "threw: " + (x && x.message || x) }; }
@@ -3213,7 +3215,7 @@ const t0 = Date.now();
       check(r.ok, L.id + " " + L.what + ": " + r.text);
     }
   } catch (x) {
-    MOTION.LEGS.slice(motionRan).forEach(L => check(false, L.id + " " + L.what + ": not driven, " + (x && x.message || x)));
+    MOTION.RUNS.slice(motionRan).forEach(L => check(false, L.id + " " + L.what + ": not driven, " + (x && x.message || x)));
   } finally {
     if (motionCtx) await motionCtx.close().catch(() => {});
   }
