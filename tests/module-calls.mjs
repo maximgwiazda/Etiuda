@@ -689,6 +689,43 @@ const CARD_B = {
     () => eq(String(O.displayBandKey(CARD_A)).indexOf("gen"), 0));
   check("card-order.js", "the comparator is a number, so a sort using it is defined",
     () => eq(typeof O.cmpCardDisplay(CARD_A, CARD_B), "number"));
+  /* movedCardIds is asked once per built card, so a call over an order that did not move must
+     not read it through, or a whole rebuild is quadratic. Counted by a proxy over pack.cardOrder
+     tallying index reads; the two CONTROLS are that a move is still seen, both ways it happens. */
+  const PK = await import(MOD("pack.js"));
+  const AS = await import(MOD("app-state.js"));
+  const ORD = Array.from({ length: 200 }, (_, i) => "c-ord-" + i);
+  const withOrder = fn => {
+    const hadCards = AS.cards, hadOrder = PK.pack.cardOrder;
+    let reads = 0;
+    const order = new Proxy(ORD.slice(), { get(t, k, r) {
+      if (typeof k === "string" && /^[0-9]+$/.test(k)) reads++;
+      return Reflect.get(t, k, r); } });
+    try {
+      AS.setCards(ORD.map(id => ({ id, c: "gen" })));
+      PK.pack.cardOrder = order; O.cardOrderTouched();
+      return fn(order, () => reads, () => { reads = 0; });
+    } finally { AS.setCards(hadCards); PK.pack.cardOrder = hadOrder; O.cardOrderTouched(); }
+  };
+  check("card-order.js", "a repeated movedCardIds reads no id of an order that did not move",
+    () => withOrder((order, reads, zero) => {
+      O.movedCardIds(); zero();
+      for (let i = 0; i < 50; i++) O.movedCardIds();
+      return eq(reads(), 0);
+    }));
+  check("card-order.js", "CONTROL: a move in place, announced by cardOrderTouched, is seen",
+    () => withOrder(order => {
+      const was = O.movedCardIds().size;
+      order.splice(150, 0, order.splice(3, 1)[0]); O.cardOrderTouched();
+      return eq(was + "|" + [...O.movedCardIds()].join(","), "0|c-ord-3");
+    }));
+  check("card-order.js", "CONTROL: a new order array is seen without the call",
+    () => withOrder(() => {
+      O.movedCardIds();
+      const next = ORD.slice(); next.push(next.shift());
+      PK.pack.cardOrder = next;
+      return eq([...O.movedCardIds()].join(","), "c-ord-0");
+    }));
 }
 
 /* ------------------------------------------------------------------ affinity.js */
@@ -1326,6 +1363,22 @@ const CARD_B = {
   check("list-pointer.js", "a card whose blocks are steps says step",
     () => eq(LP.copiedToastMsg(Object.assign({}, CARD_A, { seq: true }), "en", 1, 3),
       "Ready to paste: Damaged bag, EN step 2/3"));
+  /* A COPY'S COUNT IS NOT A MARKUP CHANGE. ePackEpoch heads every card's pool signature, so a
+     count that moved it rebuilt every shown card on the next render; the browser half, cards
+     kept across a pick and a copy, is tests/smoke.js's. The CONTROL is that the count still
+     lands in the stored pack; flushStats is looked up rather than called, so the leg runs
+     against a tree that saves counts through savePack. */
+  const P = await import(MOD("pack.js"));
+  const ST = await import(MOD("storage.js"));
+  check("list-pointer.js", "a copy's count leaves every card's pool signature standing",
+    () => { const at = P.ePackEpoch; LP.bumpUseCount("c-counted-copy", "en"); return eq(P.ePackEpoch, at); });
+  check("list-pointer.js", "CONTROL: and the count still reaches the stored pack",
+    () => {
+      if (typeof P.flushStats === "function") P.flushStats();
+      let got = null;
+      try { got = JSON.parse(ST.nsGet("Pack") || "null"); } catch (e) { got = null; }
+      return eq(((got && got.useCounts) || {})["c-counted-copy"], 1);
+    });
 }
 
 /* ------------------------------------------------------------------ manage.js
@@ -1387,6 +1440,71 @@ const CARD_B = {
     () => RL.cardFillKey({ en: "Hello {AGENT}.", pl: "" }) === "" ? "took the constant" : true);
   check("rail-list.js", "a token in the other language counts too",
     () => RL.cardFillKey({ en: "Plain.", pl: "Witaj {AGENT}." }) === "" ? "took the constant" : true);
+}
+
+/* ------------------------------------------------------------------ rail-list.js, the echo.
+   While a category is selected, every rail draw asks which intents it holds cards for. Asked
+   intent by intent, that walked every card once per intent; the draw is to read each card's
+   links a number of times that does not grow with the rail. Counted by a getter on each
+   invented card's `intents`, over a rail of 5 intents and of 20. The CONTROL is the echo itself:
+   the one intent a selected category's card links rises to the top. */
+{
+  const RL = await import(MOD("rail-list.js"));
+  const CAT_REL = await import(MOD("cat-relevance.js"));
+  const CM = await import(MOD("content-model.js"));
+  const II = await import(MOD("intent-id.js"));
+  const AS = await import(MOD("app-state.js"));
+  const had = { en: CM.SW_STORE.en.slice(), pl: CM.SW_STORE.pl.slice(), ids: CM.SW_IDS.slice(),
+    order: II.intentOrder, cards: AS.cards, cats: AS.cats };
+  let reads = 0;
+  const card = (id, c, links) => {
+    const m = { id, c, t: id, en: "x" };
+    Object.defineProperty(m, "intents", { get() { reads++; return links; }, enumerable: true });
+    return m;
+  };
+  const drawn = n => {
+    II.setIntentOrder(Array.from({ length: n }, (_, i) => i));
+    reads = 0;
+    const rows = RL.displayIntentRows();
+    return { reads, first: rows[0] && rows[0].idx };
+  };
+  try {
+    CM.SW_STORE.en.length = 0; CM.SW_STORE.pl.length = 0;
+    for (let i = 0; i < 20; i++) { CM.SW_STORE.en.push("an invented request " + i); CM.SW_STORE.pl.push("pl " + i); }
+    CM.setIntentIds(Array.from({ length: 20 }, (_, i) => "q" + i)); II.snapshotBaseIntents();
+    CM.CATS["e-alpha"] = "Alpha"; CM.CATS["e-beta"] = "Beta";
+    AS.setCards([card("k1", "e-alpha", ["t:q3"]), card("k2", "e-beta", [5]), card("k3", "e-alpha", []),
+      card("k4", "e-beta", ["t:q3"])]);
+    AS.setCats(["e-alpha"]);
+    check("rail-list.js", "a rail draw reads each card's links as often for 20 intents as for 5",
+      () => { const few = drawn(5), many = drawn(20); return eq(many.reads, few.reads); });
+    check("rail-list.js", "CONTROL: the intent a selected category's card links rises to the top",
+      () => {
+        const byId = drawn(20).first;                         // k1 links "t:q3" by id
+        AS.setCards([card("k2", "e-beta", [5])]); AS.setCats(["e-beta"]);
+        const byPlace = drawn(20).first;                      // k2 links slot 5 by number
+        return eq(byId + "|" + byPlace, "3|5");
+      });
+    check("cat-relevance.js", "CONTROL: the one-pass sets answer what categoriesForIntent answers, intent by intent",
+      () => {
+        const CR = CAT_REL;
+        AS.setCards([card("k1", "e-alpha", ["t:q3"]), card("k2", "e-beta", [5]), card("k3", "e-alpha", []),
+          Object.assign(card("k5", "e-alpha", ["t:q7"]), { _hidden: 1 }), Object.assign(card("k6", "e-beta", []), { allIntents: 1 }),
+          card("k7", "e-none", ["t:q9"]), card("k8", "", ["t:q9"])]);
+        const has = CR.intentCatSets(), bad = [];
+        for (let i = 0; i < 20; i++) {
+          const want = CR.categoriesForIntent(i);
+          ["e-alpha", "e-beta", "e-none", ""].forEach(k => { if (has(i, k) !== (want.indexOf(k) > -1)) bad.push(i + ":" + k); });
+        }
+        return bad.length ? "disagree at " + bad.join(",") : true;
+      });
+  } finally {
+    CM.SW_STORE.en.length = 0; had.en.forEach(v => CM.SW_STORE.en.push(v));
+    CM.SW_STORE.pl.length = 0; had.pl.forEach(v => CM.SW_STORE.pl.push(v));
+    CM.setIntentIds(had.ids); II.snapshotBaseIntents(); II.setIntentOrder(had.order);
+    delete CM.CATS["e-alpha"]; delete CM.CATS["e-beta"];
+    AS.setCards(had.cards); AS.setCats(had.cats);
+  }
 }
 
 /* ------------------------------------------------------------------ entry-walk.js and

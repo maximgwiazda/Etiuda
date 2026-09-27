@@ -33,7 +33,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 233 };
+const EXPECTED = { chrome: 235 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -1007,7 +1007,26 @@ const t0 = Date.now();
 
   /* The intent panel: pick, add a second, pinned above the list, wheel over it, drag a plain row, clear. */
   e = since();
+  /* THE CARD POOL ACROSS A PICK AND A COPY: a card whose markup the act does not change is the
+     same node afterwards. Counted over cards carrying no token (cardFillKey ""), because a token
+     card's fill may follow the intent and is rebuilt by right. A count that bumped ePackEpoch
+     rebuilt every one of them. */
+  const poolMark = () => p.evaluate(() => { window.__poolWas = new Map([...document.querySelectorAll("#list .card[data-id]")].map(el => [el.getAttribute("data-id"), el])); });
+  const poolKept = () => p.evaluate(() => { const was = window.__poolWas || new Map(); let common = 0, kept = 0;
+    document.querySelectorAll("#list .card[data-id]").forEach(el => { const id = el.getAttribute("data-id"), m = findCard(id);
+      if (!m || cardFillKey(m) !== "" || !was.has(id)) return; common++; if (was.get(id) === el) kept++; });
+    return { common, kept }; });
+  const poolOk = r => r.common >= 10 && r.kept >= 0.9 * r.common;
+  await poolMark();
   await p.evaluate(() => [...document.querySelectorAll("#intentRailList .rail-item")][6].click()); await sleep(600);
+  const poolPick = await poolKept();
+  check(poolOk(poolPick), "an intent pick keeps the cards it does not change: " + poolPick.kept + " of "
+    + poolPick.common + " untokened cards on screen before and after are the same nodes");
+  await poolMark();
+  await p.evaluate(() => { const el = document.querySelector("#list .card[data-id]"); bumpUseCount(el.getAttribute("data-id"), "en"); render(); }); await sleep(300);
+  const poolCopy = await poolKept();
+  check(poolOk(poolCopy), "and a copy's count keeps them through the next render: " + poolCopy.kept + " of "
+    + poolCopy.common + " the same nodes");
   await p.evaluate(() => [...document.querySelectorAll("#intentRailList .rail-item:not(.on)")][2].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true }))); await sleep(600);
   const rail = await p.evaluate(() => { const box = document.getElementById("intentRailList"), on = [...box.querySelectorAll(".rail-item.on")];
     const t0 = on[0] && on[0].getBoundingClientRect(), first = box.querySelector(".rail-item:not(.on)"), f = first && first.getBoundingClientRect();

@@ -4,7 +4,7 @@ import { moveCardOrder } from "./card-order.js";
 import { isCollapsed, toggleCollapsed } from "./collapse.js";
 import { intentPickedLine, fill } from "./intent-text.js";
 import { mgReduceMotion, E_EASE, CARD_MOVE_MAX } from "./motion.js";
-import { pack, savePack } from "./pack.js";
+import { pack, savePack, saveStats } from "./pack.js";
 import { bumpLang, bumpUse } from "./desk-stats.js";
 import { cardSearchTerms } from "./spell.js";
 import { t, toast } from "./ui-lang.js";
@@ -409,7 +409,7 @@ function bumpUseCount(id, lang){
   if(!id) return;
   bumpUse(pack, id);
   bumpLang(pack, lang);
-  savePack();
+  saveStats();
 }
 
 export {

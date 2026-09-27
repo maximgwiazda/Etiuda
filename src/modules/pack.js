@@ -483,6 +483,33 @@ function keepEditBases(){
 function savePack(){
   ePackEpoch++;
   keepEditBases();
+  if(eStatsT){ clearTimeout(eStatsT); eStatsT=0; }
+  const ok=writePack();
+  /* Every pack mutation lands here, so this is the one hook that cannot be forgotten. Wiring
+     the watermark to each individual edit path instead would mean the next new one silently
+     leaves a "sample" mark over content somebody has already started rewriting. */
+  hooks.syncSampleMark();
+  return ok;
+}
+/* A COUNT CHANGES NO CARD'S MARKUP, and ePackEpoch heads every card's pool signature, so a count
+   saved through savePack rebuilt every shown card on the next render. Counts are written here,
+   after the act that counted them; a savePack in between carries them. */
+const STATS_SAVE_MS=1500;
+let eStatsT=0, eStatsWired=false;
+function saveStats(){
+  if(eStatsT) return;
+  eStatsT=setTimeout(flushStats, STATS_SAVE_MS);
+  if(!eStatsWired && typeof addEventListener==="function"){
+    eStatsWired=true;
+    addEventListener("beforeunload", flushStats);
+  }
+}
+function flushStats(){
+  if(!eStatsT) return false;
+  clearTimeout(eStatsT); eStatsT=0;
+  return writePack();
+}
+function writePack(){
   /* Written under BOTH names - see migratePackKeys(): an older build opened against the
      same storage reads macroOrder/baseMacros and finds them. The duplicates are written
      here rather than kept on `pack`, so the live object carries the new vocabulary only. */
@@ -493,10 +520,6 @@ function savePack(){
   /* A refused write raises the lasting notice from the storage layer; see syncSaveNotice. */
   let ok=false;
   try{ ok=nsSet("Pack",JSON.stringify(out)); }catch(e){ ok=false; }
-  /* Every pack mutation lands here, so this is the one hook that cannot be forgotten. Wiring
-     the watermark to each individual edit path instead would mean the next new one silently
-     leaves a "sample" mark over content somebody has already started rewriting. */
-  hooks.syncSampleMark();
   return ok;
 }
 /* THE PERSONAL LAYER BEFORE AN ACT, and the way back from that act alone. packUndoFor is called
@@ -533,7 +556,7 @@ function packUndoFor(was){
 }
 export {
   ePackEpoch,
-  savePack,
+  savePack, saveStats, flushStats,
   packSnapshot,
   packUndoFor,
   BASE_CATS, BASE_M, catalogCardId, rebuildBaseCards, pack, loadPack, adoptNameNsLayer,
