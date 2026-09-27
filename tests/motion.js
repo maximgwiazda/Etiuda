@@ -18,11 +18,9 @@
  *   - that ends elsewhere must be animated in at least one frame (else it jumped), and its glide
  *     must begin within 1px of where it was painted (else it jumped to the glide's start);
  *   - must be in the page in every frame (else it vanished for a frame).
- * An element new to the screen must arrive animated. Width is read for the pills only.
+ * An element new to the screen must arrive animated where a leg asks for it.
  */
 "use strict";
-const path = require("path");
-
 const VIEW = { width: 1600, height: 900 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -30,8 +28,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
    so a renamed function reddens the leg that needs it and not the tracker. */
 function instrument() {
   const KINDS = {
-    cards: { sel: "#list .card[data-id]", key: el => el.getAttribute("data-id"), page: true },
-    pills: { sel: "#pills .pill", width: true,
+    cards: { sel: "#list .card[data-id]", key: el => "c:" + el.getAttribute("data-id"), page: true },
+    pills: { sel: "#pills .pill",
              key: el => el.dataset.k != null ? "k:" + el.dataset.k : (el.classList.contains("pill-add") ? "add" : null) },
     rail: { sel: "#intentRailList .rail-item[data-si]", key: el => "r" + el.dataset.si }
   };
@@ -102,7 +100,7 @@ function judge(r, opts) {
   /* A card's id is a slug of its title and a category key is the catalog's own, so neither is
      printed: an element is named by its place in the order it was first met. */
   const names = new Map();
-  const name = k => k === "add" ? "add" : k === "k:" ? "All" : (k[0] === "r" ? "row " : "#")
+  const name = k => k === "add" ? "add" : k === "k:" ? "All" : (k[0] === "r" ? "row " : k[0] === "k" ? "pill " : "card ")
     + (names.has(k) ? names.get(k) : (names.set(k, names.size), names.size - 1));
   const bad = { snapped: [], jumped: [], startOff: [], vanished: [], popped: [] };
   let moved = 0, still = 0, arrived = 0;
@@ -373,6 +371,40 @@ leg("m9", "a resize that changes the column count paints the new count in the fr
     + ", " + got.err.length + " page error(s)" + (got.err.length ? ": " + got.err[0] : ""));
   await p.setViewport(VIEW);
   return { ok: stale.length === 0 && changed >= 2 && got.err.length === 0, text: out.join("") };
+});
+
+/* Layouts the page ran, from the browser's own counter. A card read after the card before it was
+   swapped costs a layout of its own, and the eye sees that as frames that do not come. */
+async function layouts(p) {
+  const cdp = await p.target().createCDPSession();
+  await cdp.send("Performance.enable");
+  const read = async () => (await cdp.send("Performance.getMetrics")).metrics.find(m => m.name === "LayoutCount").value;
+  return { read, done: () => cdp.detach().catch(() => {}) };
+}
+
+leg("m10", "a language switch rebuilds the cards without a layout per card", async p => {
+  const L = await layouts(p);
+  const out = [];
+  let ok = true;
+  try {
+    for (let i = 0; i < 2; i++) {
+      await p.evaluate(() => {
+        window.__mtGaps = [];
+        let last = performance.now();
+        const t0 = last;
+        (function f(now) { window.__mtGaps.push(now - last); last = now; if (now - t0 < 1500) requestAnimationFrame(f); })(last);
+      });
+      const n0 = await L.read();
+      await p.evaluate(() => [...document.querySelectorAll("#seg button")].find(b => !b.classList.contains("on")).click());
+      await sleep(1700);
+      const n = (await L.read()) - n0;
+      const gap = await p.evaluate(() => Math.round(Math.max(...window.__mtGaps.slice(1))));
+      const cards = await p.evaluate(() => document.querySelectorAll("#list .card[data-id]").length);
+      ok = ok && n < 60;
+      out.push("switch " + (i + 1) + ": " + n + " layouts for " + cards + " cards, longest frame " + gap + "ms");
+    }
+  } finally { await L.done(); }
+  return { ok, text: out.join(" | ") };
 });
 
 module.exports = { LEGS, instrument, rest, boot, VIEW };

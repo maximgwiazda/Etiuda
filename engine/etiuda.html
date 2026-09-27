@@ -14331,7 +14331,7 @@ What you type stays in this browser only.`;
   __export(card_pool_exports, {
     cancelLangChunks: () => cancelLangChunks,
     paintList: () => paintList,
-    rebuildCardInPlace: () => rebuildCardInPlace,
+    rebuildCardsInPlace: () => rebuildCardsInPlace,
     runLangChunks: () => runLangChunks,
     settleFreshCards: () => settleFreshCards
   });
@@ -16261,7 +16261,7 @@ What you type stays in this browser only.`;
       eLangChunkR = 0;
     }
   }
-  function rebuildCardInPlace(id) {
+  function rebuildCardInPlace(id, near) {
     const m = findCard(id), el = cardPool.get(id);
     if (!m || !el || !el.isConnected) return;
     const renderKey = String(uiLang()) + "|" + lang;
@@ -16282,15 +16282,27 @@ What you type stays in this browser only.`;
     fresh.__sig = ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1);
     const ord = el.getAttribute("data-ord");
     if (ord != null) fresh.setAttribute("data-ord", ord);
-    const was = el.getBoundingClientRect(), vh = window.innerHeight;
     el.replaceWith(fresh);
-    if (was.bottom > -vh && was.top < 2 * vh) holdFresh(fresh);
+    if (near) holdFresh(fresh);
     cardPool.set(id, fresh);
+  }
+  function cardsNear(ids) {
+    const vh = window.innerHeight;
+    return ids.map((id) => {
+      const el = cardPool.get(id);
+      if (!el || !el.isConnected) return false;
+      const r = el.getBoundingClientRect();
+      return r.bottom > -vh && r.top < 2 * vh;
+    });
+  }
+  function rebuildCardsInPlace(ids) {
+    const near = cardsNear(ids);
+    ids.forEach((id, i) => rebuildCardInPlace(id, near[i]));
   }
   function runLangChunks(ids) {
     const step = () => {
       eLangChunkR = 0;
-      ids.splice(0, 28).forEach(rebuildCardInPlace);
+      rebuildCardsInPlace(ids.splice(0, 28));
       if (ids.length) eLangChunkR = requestAnimationFrame(step);
     };
     cancelLangChunks();
@@ -21208,7 +21220,7 @@ What you type stays in this browser only.`;
           } else if (r.bottom < -240) laterIds.push(id);
           else nowIds.push(id);
         }
-        nowIds.forEach(rebuildCardInPlace);
+        rebuildCardsInPlace(nowIds);
         runLangChunks(laterIds);
       }
       scheduleTabSave();
