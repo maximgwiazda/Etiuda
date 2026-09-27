@@ -5,6 +5,7 @@ import { listEntryEls } from "./entry-walk.js";
 import { render } from "./render.js";
 import { setEntrySel } from "./mark.js";
 import { applyUiLang } from "./repaint.js";
+import { whenMarkFormed } from "./empty-mark.js";
 
 let eReadyDone=false;
 let lastGreet;
@@ -40,9 +41,9 @@ function wireOnOpen(){
      first paint and the frame that settles after it are both behind us. With a timeout behind
      THAT, because rAF DOES NOT RUN IN A HIDDEN TAB: restored into a background tab the class
      would never arrive - the same trap that kept schedulePillsCollapse's two-frame wait from
-     ever firing there. First one wins. */
-  requestAnimationFrame(()=>requestAnimationFrame(markEReady));
-  setTimeout(markEReady,300);
+     ever firing there. First one wins, and neither lands inside the empty mark's gather. */
+  requestAnimationFrame(()=>requestAnimationFrame(()=>whenMarkFormed(markEReady)));
+  setTimeout(()=>whenMarkFormed(markEReady),300);
   focusFirstEntryOnOpen();
   // Re-assert after layout (paint / sticky chrome can steal focus)
   requestAnimationFrame(()=>requestAnimationFrame(focusFirstEntryOnOpen));
