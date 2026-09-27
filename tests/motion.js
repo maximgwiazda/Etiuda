@@ -178,11 +178,12 @@ function judge(r, opts) {
 /* The card a leg acts on, from the cards on offer in list order as {id, top, left}: the first whose
    top lies in the middle band of the screen, and where a scale leaves that band empty, the one whose
    top is nearest the middle of the screen below the header, never the list's head, which a star
-   leaves where it is. `top` is where the screen starts under the header. */
+   leaves where it is, in the band or out of it (at 1280x680 the head's top lies inside the band).
+   `top` is where the screen starts under the header. */
 function middleCard(cards, vh, top) {
-  const band = cards.find(c => c.top > vh * 0.3 && c.top < vh * 0.6);
-  if (band) return band.id;
   const head = cards.reduce((h, c) => !h || c.top < h.top - 1 || (Math.abs(c.top - h.top) <= 1 && c.left < h.left) ? c : h, null);
+  const band = cards.find(c => c !== head && c.top > vh * 0.3 && c.top < vh * 0.6);
+  if (band) return band.id;
   const mid = (top + vh) / 2;
   const pool = cards.filter(c => c !== head && c.top >= top && c.top < vh - 80)
     .sort((a, b) => Math.abs(a.top - mid) - Math.abs(b.top - mid) || a.left - b.left);
