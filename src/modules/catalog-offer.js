@@ -14,6 +14,7 @@ import { MG_REOPEN, lsSet, nsGet, nsSet, ssGet } from "./storage.js";
 import { tourDueAtBoot, afterTour } from "./tour.js";
 import { placeBubble } from "./bubble.js";
 import { markCut } from "./cut-text.js";
+import { cutLeaves, dismissNode } from "./motion.js";
 import { catalogAwaitingLine, catalogCountsLine, t, toast, toastRefusal } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { cards, wholeThingEmpty } from "./app-state.js";
@@ -380,6 +381,7 @@ function eOfferCatalogDialog(c,src){
     +'<button type="button" class="btn" id="ecNo">'+esc(t(replacing?"Keep current":"Not now"))+'</button>'
     +'<button type="button" class="btn primary" id="ecYes">'+esc(t(older?"Load it anyway":updating?"Load the update":replacing?"Load it":"Load catalog"))+'</button>'
     +'</div>';
+  cutLeaves();
   document.body.appendChild(wrap);
   // Placed against the indicator, and again on a resize, since it may outlive one.
   const place=()=>{
@@ -389,7 +391,7 @@ function eOfferCatalogDialog(c,src){
   };
   place();
   addEventListener("resize",place);
-  const close=()=>{ removeEventListener("resize",place); wrap.remove(); if(offerStanding===close) offerStanding=null; };
+  const close=()=>{ removeEventListener("resize",place); dismissNode(wrap); if(offerStanding===close) offerStanding=null; };
   offerStanding=close;
   /* Escape answers nothing and records no refusal, so a stray press only postpones the question
      to the next launch; it is the bubble's own key, and only while the keyboard is inside it. */

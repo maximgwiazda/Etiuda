@@ -344,7 +344,7 @@ function openCardEditor(id, presetCat, fromManage){
       sum:(m.c&&CATS[m.c]) ? catIconSvg(m.c,"cat-ic")+esc(CATS[m.c]) : esc(t("none")),
       sumId:"meCatSum", sumSkip:true,
       body:
-      '<div class="cat-pick" id="meCatPick">'+cardCatPickHtml(m.c)+'</div>'})+
+      '<div class="cat-pick pick-one" id="meCatPick">'+cardCatPickHtml(m.c)+'</div>'})+
     mfSec({key:"intents", label:"Linked intents",
       sum:"", sumId:"meIntentSum",
       body:'<div class="intent-pick" id="meIntents">'+intentPickHtml(linked, m.c)+'</div>'})+

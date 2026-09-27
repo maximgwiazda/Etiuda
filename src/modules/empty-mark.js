@@ -70,7 +70,7 @@ function markFrame(now){
   if(now-k.born<GATHER_MS){ k.raf=requestAnimationFrame(markFrame); return; }
   k.hold=setTimeout(()=>{ k.raf=requestAnimationFrame(markFrame); }, TWINKLE_MS);
 }
-function dialogStanding(){ return !!document.querySelector(".modal:not([hidden])"); }
+function dialogStanding(){ return !!document.querySelector(".modal:not([hidden]):not(.e-gone)"); }
 function startMark(k){
   if(mgReduceMotion()){ drawMark(k, performance.now()); return; }
   if(dialogStanding()){ k.hold=setTimeout(()=>startMark(k),150); return; }

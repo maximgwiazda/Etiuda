@@ -1108,8 +1108,8 @@ body.shed-segfold #seg::before{width:100%;transform:none}
 /* Menu rows carry icons and lay out as rows; the icons inherit the row's ink - one object, not a
    picture beside a word. The language badge fills the same slot the drawings do, so the three
    rows share one left edge. */
-#moreMenu button{display:flex;align-items:center;gap:9px}
-#moreMenu button .ic{flex:0 0 auto;color:inherit}
+.menu.menu-ic button{display:flex;align-items:center;gap:9px}
+.menu.menu-ic button .ic{flex:0 0 auto;color:inherit}
 .more-lang-badge{flex:0 0 auto;width:15px;text-align:center;
   font:700 10.5px var(--sans);letter-spacing:.4px;color:inherit}
 /* SOLID, not glass: a short list of words has no shape of its own, and blur behind text
@@ -2265,9 +2265,10 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 .cbadge.ed{background:var(--ed-soft);color:var(--ed);border:1px solid color-mix(in srgb,var(--ed) 42%,transparent)}
 .modal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
 /* A keyframe, not a transition - the element returns from display:none with no previous
-   value. IN only: several flows close one dialog and open another in the same breath, and
-   a fade-out would cross-fade the two. Re-rendering an open dialog does not replay it -
-   hidden never changes and the card element is not replaced. */
+   value. The way out is a copy on the dismiss tier (.e-gone), which the next surface to open
+   ends, so a flow that closes one dialog and opens another never cross-fades the two.
+   Re-rendering an open dialog does not replay it - hidden never changes and the card element
+   is not replaced. */
 @keyframes eModalBgIn{from{opacity:0}to{opacity:1}}
 @keyframes eModalCardIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
 /* A COVERED RELOAD (motion.js reloadCovered, and the boot guard's arrive): the band stays, and
@@ -2275,6 +2276,9 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 @keyframes eLeave{to{opacity:0}}
 html.e-leaving body>:not(header,#railHit,.scroller,script),html.e-leaving .scroller>.shell,
 html.e-leaving #pillsSlot{animation:eLeave var(--m-dismiss) ease forwards;pointer-events:none}
+/* A SURFACE CLOSING (motion.js dismissNode): it leaves on the dismiss tier, and what it holds stands still. */
+.e-gone{animation:eLeave var(--m-dismiss) ease forwards!important;pointer-events:none!important}
+.e-gone *{animation:none!important;transition:none!important}
 html.e-veiled body{visibility:hidden}
 html.e-arriving body>:not(header,#railHit,.scroller,script),html.e-arriving .scroller>.shell,
 html.e-arriving #pillsSlot{opacity:0}
@@ -2284,8 +2288,8 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
 .modal:not([hidden]) .modal-card{animation:eModalCardIn var(--m-surface) var(--m-ease) both}
 /* One treatment for everything that hangs below an anchor and toggles with hidden - a
    short drop, keyframed for the display:none reason above. The reveal tier: these are
-   frequent and lightweight. IN only - a list closing on the item you picked must feel instant.
-   Rebuilding while open does not replay it. */
+   frequent and lightweight. Closing leaves a copy on the dismiss tier (.e-gone). Rebuilding
+   while open does not replay it. */
 @keyframes eDropIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 .menu:not([hidden]),.facts-panel:not([hidden]){
   animation:eDropIn var(--m-reveal) var(--m-ease) both}
@@ -2589,7 +2593,7 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
 /* The card editor's picker is blue, the intent editor's green. They look alike and sit one
    dialog apart, so the colour is what tells you which one you are in - and it matches the
    difference in behaviour: blue picks exactly one category, green picks any number. */
-#meCatPick .cat-chip.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);
+.cat-pick.pick-one .cat-chip.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);
   box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent)}
 /* Dashed like every add affordance, drawn from the strip's own icon. No data-k, which
    keeps bindCatPick's radio logic from mistaking it for a category. EQUAL padding round a
@@ -3018,7 +3022,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   pointer-events:none}
 #eNotices .bub{position:relative;pointer-events:auto}
 /* The question's lines under its title, inset as the title is: a small dialog has no body to do it. */
-#eSure .e-sure-say{padding:0 18px}
+.e-sure .e-sure-say{padding:0 18px}
 /* A field on the fill: paper, so what is typed reads as the reader's own. */
 .bub .e-name-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
   border:1px solid transparent;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans)}
@@ -3373,7 +3377,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
            automatically. Rows delegate with .click(), which works at display:none. -->
       <div class="menu-wrap" id="moreWrap" hidden>
         <button class="btn icbtn" id="moreBtn" type="button" title="The tools this window is too narrow to show" aria-haspopup="true" aria-expanded="false" aria-label="More tools"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4.8 5.4 9.4 10l-4.6 4.6"/><path d="M10.6 5.4 15.2 10l-4.6 4.6"/></svg></button>
-        <div class="menu" id="moreMenu" hidden role="menu">
+        <div class="menu menu-ic" id="moreMenu" hidden role="menu">
           <!-- Each row wears the icon of the button it stands in for - a control that lost its
                place must not lose its face. The language row's slot holds the language in force,
                which doubles as the state readout; where it would take you is in the title. -->
@@ -4939,6 +4943,9 @@ What you type stays in this browser only.`;
     afterPaint: () => afterPaint,
     animateModalHeightFrom: () => animateModalHeightFrom,
     animatePinnedHeight: () => animatePinnedHeight,
+    cutLeaves: () => cutLeaves,
+    dismissCopy: () => dismissCopy,
+    dismissNode: () => dismissNode,
     mgAccordion: () => mgAccordion,
     mgPinCard: () => mgPinCard,
     mgReduceMotion: () => mgReduceMotion,
@@ -5134,6 +5141,50 @@ What you type stays in this browser only.`;
       return;
     }
     requestAnimationFrame(() => requestAnimationFrame(fn));
+  }
+  var dismissing = /* @__PURE__ */ new Set();
+  function leaveNode(el) {
+    el.inert = true;
+    el.setAttribute("aria-hidden", "true");
+    el.classList.add("e-gone");
+    dismissing.add(el);
+    const done = () => {
+      dismissing.delete(el);
+      el.remove();
+    };
+    el.addEventListener("animationend", (e) => {
+      if (e.target === el) done();
+    });
+    setTimeout(done, M_MS.dismiss + 120);
+  }
+  function dismissNode(el) {
+    if (!el) return;
+    if (mgReduceMotion() || !el.isConnected) {
+      el.remove();
+      return;
+    }
+    el.removeAttribute("id");
+    el.querySelectorAll("[id]").forEach((x) => x.removeAttribute("id"));
+    leaveNode(el);
+  }
+  function dismissCopy(el, style, into) {
+    if (!el || el.hidden || !el.isConnected || mgReduceMotion()) return;
+    const c = el.cloneNode(true);
+    const fa = el.querySelectorAll("input,textarea,select"), fb = c.querySelectorAll("input,textarea,select");
+    for (let i = 0; i < fa.length; i++) {
+      fb[i].value = fa[i].value;
+      fb[i].checked = fa[i].checked;
+    }
+    if (style) c.style.cssText += ";" + style;
+    if (into) into.appendChild(c);
+    else el.after(c);
+    const sa = [el].concat(Array.prototype.slice.call(el.querySelectorAll("*"))), sb = [c].concat(Array.prototype.slice.call(c.querySelectorAll("*")));
+    for (let i = 0; i < sa.length; i++) if (sa[i].scrollTop) sb[i].scrollTop = sa[i].scrollTop;
+    leaveNode(c);
+  }
+  function cutLeaves() {
+    dismissing.forEach((el) => el.remove());
+    dismissing.clear();
   }
   function reloadCovered() {
     ssMarkArrival();
@@ -6073,13 +6124,14 @@ What you type stays in this browser only.`;
   function askSure(question, yes, act, danger) {
     const parts2 = t(question).split("\n\n");
     const wrap = document.createElement("div");
-    wrap.className = "modal";
+    wrap.className = "modal e-sure";
     wrap.id = "eSure";
     wrap.innerHTML = '<div class="modal-bg"></div><div class="modal-card" role="alertdialog" aria-modal="true" aria-labelledby="eSureTitle"><h2 id="eSureTitle">' + esc(parts2[0]) + "</h2>" + (parts2.length > 1 ? '<div class="e-sure-say">' + parts2.slice(1).map((x) => '<p class="modal-sub">' + esc(x) + "</p>").join("") + "</div>" : "") + '<div class="modal-actions"><button type="button" class="btn" id="eSureNo">' + esc(t("Cancel")) + '</button><button type="button" class="btn ' + (danger ? "danger" : "primary") + '" id="eSureYes">' + esc(t(yes)) + "</button></div></div>";
+    cutLeaves();
     document.body.appendChild(wrap);
     const close = (go) => {
       document.removeEventListener("keydown", onKey, true);
-      wrap.remove();
+      dismissNode(wrap);
       if (go) act();
     };
     function onKey(e) {
@@ -6109,10 +6161,11 @@ What you type stays in this browser only.`;
     el.setAttribute("role", "status");
     el.setAttribute("data-side", "none");
     el.innerHTML = "<p>" + esc(t(said)) + '</p><div class="tour-actions"><button type="button" class="btn primary" id="eUndoBtn">' + esc(t("Undo")) + "</button></div>";
+    cutLeaves();
     document.body.appendChild(el);
     const close = () => {
       clearTimeout(undoTimer);
-      el.remove();
+      dismissNode(el);
     };
     el.querySelector("#eUndoBtn").onclick = () => {
       close();
@@ -9722,6 +9775,7 @@ What you type stays in this browser only.`;
     wrap.setAttribute("role", "dialog");
     wrap.setAttribute("aria-labelledby", "eAgentTitle");
     wrap.innerHTML = '<h3 id="eAgentTitle">How should your replies be signed?</h3><p>Customers see it at the foot of every reply. It can be changed at any time in Settings.</p>' + nameFieldHtml("eAgentInp", "eAgentPrev") + '<div class="tour-actions"><button type="button" class="btn" id="eAgentNo">Later</button><button type="button" class="btn primary" id="eAgentYes">Sign with this</button></div>';
+    cutLeaves();
     document.body.appendChild(wrap);
     translateTree(wrap);
     const inp = wireNameField(wrap, raw);
@@ -9733,7 +9787,7 @@ What you type stays in this browser only.`;
     addEventListener("resize", place);
     const close = () => {
       removeEventListener("resize", place);
-      wrap.remove();
+      dismissNode(wrap);
     };
     const save = () => {
       keepAgentName(inp.value);
@@ -12740,6 +12794,7 @@ What you type stays in this browser only.`;
   }
   function openDialog(cfg) {
     if (!modalEl || !modalCard) return;
+    cutLeaves();
     if (modalEl.hidden) {
       let from = document.activeElement;
       const wrap = from && from.closest ? from.closest(".menu-wrap") : null;
@@ -12935,9 +12990,27 @@ What you type stays in this browser only.`;
   }
   var modalOpener = null;
   var modalOpenerKbd = false;
+  function leaveModal() {
+    if (modalEl.hidden || !modalCard.firstChild || mgReduceMotion()) return;
+    const g = document.createElement("div"), bg = document.createElement("div"), c = document.createElement("div");
+    g.className = "modal";
+    bg.className = "modal-bg";
+    c.className = modalCard.className;
+    c.style.cssText = modalCard.style.cssText;
+    const kept = Array.prototype.filter.call(modalCard.querySelectorAll("*"), (x) => x.scrollTop > 0).map((x) => [x, x.scrollTop]);
+    while (modalCard.firstChild) c.appendChild(modalCard.firstChild);
+    g.appendChild(bg);
+    g.appendChild(c);
+    document.body.appendChild(g);
+    kept.forEach((k) => {
+      k[0].scrollTop = k[1];
+    });
+    dismissNode(g);
+  }
   function closeModal() {
     scStopCapture();
     modalBack = null;
+    leaveModal();
     modalEl.hidden = true;
     modalCard.classList.remove("about-modal", "mt-modal");
     modalCard.innerHTML = "";
@@ -12974,7 +13047,7 @@ What you type stays in this browser only.`;
     return null;
   }
   function openCover() {
-    const all = document.querySelectorAll("body > .modal:not(#modal)");
+    const all = document.querySelectorAll("body > .modal:not(#modal):not(.e-gone)");
     return all.length ? all[all.length - 1] : null;
   }
 
@@ -13441,6 +13514,7 @@ What you type stays in this browser only.`;
   }
   function closeFactsPanel() {
     const p = $("#factsPanel"), b = $("#factsBtn");
+    dismissCopy(p);
     exitFactsEdit(false);
     if (p) p.hidden = true;
     if (b) {
@@ -13452,6 +13526,7 @@ What you type stays in this browser only.`;
     const p = $("#factsPanel"), b = $("#factsBtn");
     if (!p || !b) return;
     hooks.closeSettingsMenu();
+    cutLeaves();
     exitFactsEdit(false);
     renderFacts();
     restoreFactsSize(p);
@@ -15928,7 +16003,7 @@ What you type stays in this browser only.`;
   }
   function closeNotePane() {
     if (notePaneEl) {
-      notePaneEl.remove();
+      dismissNode(notePaneEl);
       notePaneEl = null;
     }
     if (notePaneBtn) {
@@ -15952,6 +16027,7 @@ What you type stays in this browser only.`;
     pane.className = "tour-card bub note-pane" + (voice === "blue" ? "" : " paper");
     pane.id = "notePane";
     pane.setAttribute("role", "note");
+    cutLeaves();
     pane.innerHTML = "<h3>" + esc(cardTitle(m)) + "</h3><p>" + esc(note).replace(/\{([A-Z_]+)\}/g, '<span class="fillmiss">$1</span>') + "</p>";
     document.body.appendChild(pane);
     const pad = 4, cr = card.getBoundingClientRect();
@@ -17042,7 +17118,7 @@ What you type stays in this browser only.`;
     }, TWINKLE_MS);
   }
   function dialogStanding() {
-    return !!document.querySelector(".modal:not([hidden])");
+    return !!document.querySelector(".modal:not([hidden]):not(.e-gone)");
   }
   function startMark(k) {
     if (mgReduceMotion()) {
@@ -17668,6 +17744,7 @@ What you type stays in this browser only.`;
   function closeMoreMenu() {
     const m = $("#moreMenu"), b = $("#moreBtn");
     const had = heldMenu() === m;
+    dismissCopy(m);
     if (m) m.hidden = true;
     if (b) {
       b.classList.remove("on");
@@ -17680,6 +17757,7 @@ What you type stays in this browser only.`;
     if (!m || !b) return;
     closeSettingsMenu();
     closeFactsPanel();
+    cutLeaves();
     syncMoreBtn();
     m.hidden = false;
     b.classList.add("on");
@@ -17689,6 +17767,7 @@ What you type stays in this browser only.`;
   function closeSettingsMenu() {
     const menu = $("#settingsMenu"), btn = $("#settingsBtn");
     const had = heldMenu() === menu;
+    dismissCopy(menu);
     if (menu) menu.hidden = true;
     if (btn) {
       btn.classList.remove("on");
@@ -17700,6 +17779,7 @@ What you type stays in this browser only.`;
     const menu = $("#settingsMenu"), btn = $("#settingsBtn");
     if (!menu || !btn) return;
     closeFactsPanel();
+    cutLeaves();
     syncSettingsMenu();
     menu.hidden = false;
     btn.classList.add("on");
@@ -18303,6 +18383,7 @@ What you type stays in this browser only.`;
     tourRunning = true;
     tourIdx = i;
     tourNameWas = nameAnswered();
+    cutLeaves();
     els.root.hidden = false;
     els.root.setAttribute("aria-hidden", "false");
     els.root.classList.toggle("still", mgReduceMotion());
@@ -18338,6 +18419,11 @@ What you type stays in this browser only.`;
     tourRunning = false;
     tourIdx = -1;
     const els = tourEls();
+    if (els.root && !els.root.hidden) {
+      const z = "z-index:" + getComputedStyle(els.root).zIndex;
+      dismissCopy(els.card, z + ";opacity:1;transform:none;transition:none", document.body);
+      if (els.hole && els.hole.style.display !== "none") dismissCopy(els.hole, z + ";opacity:1;transition:none", document.body);
+    }
     if (els.root) {
       els.root.classList.remove("on");
       els.root.hidden = true;
@@ -18391,8 +18477,8 @@ What you type stays in this browser only.`;
     const els = tourEls();
     if (!els.root) return;
     const step = TOUR_STEPS[tourIdx];
-    const covered = !!document.querySelector("body > .modal:not([hidden])");
-    const asked = !!document.querySelector("body > .bub-ask");
+    const covered = !!document.querySelector("body > .modal:not([hidden]):not(.e-gone)");
+    const asked = !!document.querySelector("body > .bub-ask:not(.e-gone)");
     els.root.classList.toggle("behind", tourRunning && (asked || covered && !(step && step.modal)));
   }
   function tourHasFocus() {
@@ -19141,7 +19227,7 @@ What you type stays in this browser only.`;
           sum: m.c && CATS[m.c] ? catIconSvg(m.c, "cat-ic") + esc(CATS[m.c]) : esc(t("none")),
           sumId: "meCatSum",
           sumSkip: true,
-          body: '<div class="cat-pick" id="meCatPick">' + cardCatPickHtml(m.c) + "</div>"
+          body: '<div class="cat-pick pick-one" id="meCatPick">' + cardCatPickHtml(m.c) + "</div>"
         }) + mfSec({
           key: "intents",
           label: "Linked intents",
@@ -19707,6 +19793,7 @@ What you type stays in this browser only.`;
       i,
       k
     ) + '</div></div><p class="ec-sub">' + src.foundHtml + (updating ? " " + esc(t("Your own cards and edits are kept.")) : "") + '</p><div class="tour-actions"><button type="button" class="btn" id="ecNo">' + esc(t(replacing ? "Keep current" : "Not now")) + '</button><button type="button" class="btn primary" id="ecYes">' + esc(t(older ? "Load it anyway" : updating ? "Load the update" : replacing ? "Load it" : "Load catalog")) + "</button></div>";
+    cutLeaves();
     document.body.appendChild(wrap);
     const place = () => {
       const at = document.getElementById("catNow"), r = at && at.getBoundingClientRect();
@@ -19716,7 +19803,7 @@ What you type stays in this browser only.`;
     addEventListener("resize", place);
     const close = () => {
       removeEventListener("resize", place);
-      wrap.remove();
+      dismissNode(wrap);
       if (offerStanding === close) offerStanding = null;
     };
     offerStanding = close;

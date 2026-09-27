@@ -4,6 +4,7 @@ import { offerUndo, t, toast } from "./ui-lang.js";
 import { pack, savePack } from "./pack.js";
 import { esc } from "./esc.js";
 import { $ } from "./dom.js";
+import { cutLeaves, dismissCopy } from "./motion.js";
 import { copy } from "./mark.js";
 import { hooks } from "./hooks.js";
 
@@ -197,6 +198,7 @@ function factsPanelOpen(){
 }
 function closeFactsPanel(){
   const p=$("#factsPanel"), b=$("#factsBtn");
+  dismissCopy(p);
   exitFactsEdit(false);
   if(p) p.hidden=true;
   if(b){ b.classList.remove("on"); b.setAttribute("aria-expanded","false"); }
@@ -204,7 +206,7 @@ function closeFactsPanel(){
 function openFactsPanel(){
   const p=$("#factsPanel"), b=$("#factsBtn");
   if(!p||!b) return;
-  hooks.closeSettingsMenu();
+  hooks.closeSettingsMenu(); cutLeaves();
   exitFactsEdit(false);
   renderFacts();
   restoreFactsSize(p);

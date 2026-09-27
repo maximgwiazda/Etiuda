@@ -2,7 +2,7 @@ import { lsGet, lsSet, lsDel } from "./storage.js";
 import { markCut } from "./cut-text.js";
 import { $ } from "./dom.js";
 import { esc } from "./esc.js";
-import { mgReduceMotion, M_MS } from "./motion.js";
+import { cutLeaves, dismissNode, mgReduceMotion, M_MS } from "./motion.js";
 import { ICON_LINT_WARNING } from "./icons.js";
 
 /* ---- UI LANGUAGE ------------------------------------------------------------------------
@@ -878,7 +878,7 @@ function t(en){
 function askSure(question, yes, act, danger){
   const parts=t(question).split("\n\n");
   const wrap=document.createElement("div");
-  wrap.className="modal";
+  wrap.className="modal e-sure";
   wrap.id="eSure";
   wrap.innerHTML='<div class="modal-bg"></div>'
     +'<div class="modal-card" role="alertdialog" aria-modal="true" aria-labelledby="eSureTitle">'
@@ -888,8 +888,9 @@ function askSure(question, yes, act, danger){
     +'<button type="button" class="btn" id="eSureNo">'+esc(t("Cancel"))+'</button>'
     +'<button type="button" class="btn '+(danger?"danger":"primary")+'" id="eSureYes">'+esc(t(yes))+'</button>'
     +'</div></div>';
+  cutLeaves();
   document.body.appendChild(wrap);
-  const close=go=>{ document.removeEventListener("keydown",onKey,true); wrap.remove(); if(go) act(); };
+  const close=go=>{ document.removeEventListener("keydown",onKey,true); dismissNode(wrap); if(go) act(); };
   function onKey(e){
     if(e.key!=="Escape") return;
     e.preventDefault(); e.stopPropagation(); close(false);
@@ -914,8 +915,9 @@ function offerUndo(said, undo){
   el.setAttribute("data-side","none");
   el.innerHTML='<p>'+esc(t(said))+'</p>'
     +'<div class="tour-actions"><button type="button" class="btn primary" id="eUndoBtn">'+esc(t("Undo"))+'</button></div>';
+  cutLeaves();
   document.body.appendChild(el);
-  const close=()=>{ clearTimeout(undoTimer); el.remove(); };
+  const close=()=>{ clearTimeout(undoTimer); dismissNode(el); };
   el.querySelector("#eUndoBtn").onclick=()=>{ close(); undo(); };
   el.addEventListener("keydown",e=>{
     if(e.key!=="Escape") return;

@@ -5,6 +5,7 @@ import { cancelFactsEdit, closeFactsPanel, factsPanelOpen } from "./facts.js";
 import { endPillNavPeek } from "./pill-nav-peek.js";
 import { measureShedNaturals, syncRowShed } from "./shed.js";
 import { $ } from "./dom.js";
+import { cutLeaves, dismissCopy } from "./motion.js";
 import { togglePills, pillsWanted, pillsLocked } from "./pills-box.js";
 import { toggleRail, railWanted, railLocked, syncRailPinBtn } from "./rail-panel.js";
 import { tabInsertAnimating } from "./tabs.js";
@@ -220,6 +221,7 @@ function giveFocusBack(held){
 function closeMoreMenu(){
   const m=$("#moreMenu"), b=$("#moreBtn");
   const had=heldMenu()===m;
+  dismissCopy(m);
   if(m) m.hidden=true;
   if(b){ b.classList.remove("on"); b.setAttribute("aria-expanded","false"); }
   if(had) giveFocusBack(m);
@@ -227,7 +229,7 @@ function closeMoreMenu(){
 function openMoreMenu(byKey){
   const m=$("#moreMenu"), b=$("#moreBtn");
   if(!m||!b) return;
-  closeSettingsMenu(); closeFactsPanel();
+  closeSettingsMenu(); closeFactsPanel(); cutLeaves();
   syncMoreBtn();   // the rows reflect this instant's measurement, not the last resize's
   m.hidden=false;
   b.classList.add("on");
@@ -237,6 +239,7 @@ function openMoreMenu(byKey){
 function closeSettingsMenu(){
   const menu=$("#settingsMenu"), btn=$("#settingsBtn");
   const had=heldMenu()===menu;
+  dismissCopy(menu);
   if(menu) menu.hidden=true;
   if(btn){ btn.classList.remove("on"); btn.setAttribute("aria-expanded","false"); }
   if(had) giveFocusBack(menu);
@@ -244,7 +247,7 @@ function closeSettingsMenu(){
 function openSettingsMenu(byKey){
   const menu=$("#settingsMenu"), btn=$("#settingsBtn");
   if(!menu||!btn) return;
-  closeFactsPanel();
+  closeFactsPanel(); cutLeaves();
   syncSettingsMenu();
   menu.hidden=false;
   btn.classList.add("on");

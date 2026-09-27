@@ -7,6 +7,7 @@ import { lang } from "./app-state.js";
 import { scheduleTabSave } from "./tabs.js";
 import { hooks } from "./hooks.js";
 import { placeBubble } from "./bubble.js";
+import { cutLeaves, dismissNode } from "./motion.js";
 // The agent's own name: one stored value feeding two tokens, the burst that fills the cards
 // with them, and the question asked once at the first run.
 
@@ -146,6 +147,7 @@ function askAgentName(raw,then,anchor){
     +'<button type="button" class="btn" id="eAgentNo">Later</button>'
     +'<button type="button" class="btn primary" id="eAgentYes">Sign with this</button>'
     +'</div>';
+  cutLeaves();
   document.body.appendChild(wrap);
   /* Appended straight to <body>, so the chrome roots never see it - swept here instead, at the
      one moment it exists, and before the preview is drawn. */
@@ -158,7 +160,7 @@ function askAgentName(raw,then,anchor){
   };
   place();
   addEventListener("resize",place);
-  const close=()=>{ removeEventListener("resize",place); wrap.remove(); };
+  const close=()=>{ removeEventListener("resize",place); dismissNode(wrap); };
   const save=()=>{ keepAgentName(inp.value); close(); if(then) then(); };
   // The bubble's own keys, and only while the keyboard is inside it.
   wrap.addEventListener("keydown",e=>{

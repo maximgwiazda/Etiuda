@@ -18,7 +18,7 @@ import { placeBubble } from "./bubble.js";
 import { eHost, eCatalogFolderShort } from "./host.js";
 import { agentName, setAgentName, keepAgentName, keepTypedName, nameAnswered, nameFieldHtml, wireNameField } from "./agent.js";
 import { esc } from "./esc.js";
-import { mgReduceMotion } from "./motion.js";
+import { cutLeaves, dismissCopy, mgReduceMotion } from "./motion.js";
 import { hooks } from "./hooks.js";
 
 /* ---------- Guided tour ----------------------------------------------------
@@ -583,6 +583,7 @@ function startTour(from,auto){
   tourRunning=true;
   tourIdx=i;
   tourNameWas=nameAnswered();
+  cutLeaves();
   els.root.hidden=false;
   els.root.setAttribute("aria-hidden","false");
   els.root.classList.toggle("still", mgReduceMotion());
@@ -615,6 +616,13 @@ function endTour(completed){
   tourRunning=false;
   tourIdx=-1;
   const els=tourEls();
+  /* The bubble and its ring leave on the dismiss tier as copies, lifted out of the root that hides
+     now, at the root's own height and wearing what its `.on` gave them. */
+  if(els.root && !els.root.hidden){
+    const z="z-index:"+getComputedStyle(els.root).zIndex;
+    dismissCopy(els.card, z+";opacity:1;transform:none;transition:none", document.body);
+    if(els.hole && els.hole.style.display!=="none") dismissCopy(els.hole, z+";opacity:1;transition:none", document.body);
+  }
   if(els.root){
     els.root.classList.remove("on");
     els.root.hidden=true;
@@ -654,8 +662,8 @@ function syncTourBehind(){
   const els=tourEls();
   if(!els.root) return;
   const step=TOUR_STEPS[tourIdx];
-  const covered=!!document.querySelector("body > .modal:not([hidden])");
-  const asked=!!document.querySelector("body > .bub-ask");
+  const covered=!!document.querySelector("body > .modal:not([hidden]):not(.e-gone)");
+  const asked=!!document.querySelector("body > .bub-ask:not(.e-gone)");
   els.root.classList.toggle("behind", tourRunning && (asked || (covered && !(step && step.modal))));
 }
 function tourHasFocus(){

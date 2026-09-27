@@ -535,6 +535,7 @@ function runUnitTests() {
   shippedFileTests();
   railPlacementTests();
   recoveryTests();
+  dismissTierTests();
   v2ValidationTests();
   lintCatalogTests();
   langAgnosticTests();
@@ -1386,6 +1387,142 @@ function recoveryTests() {
   } catch (e) { got = "the boot guard threw: " + e.message; }
   eq("the guard holds the first frame for the shell's recovery and for the page's own covered reload, and for nothing else",
     got, [[true, 1], [false, 0], [true, 1], [false, 0]]);
+}
+/* EVERY CLOSE FADES OUT ON THE DISMISS TIER (feel pass motion-9, ruled 2026-09-26 13:14): the three
+   helpers are sliced out of motion.js and run on a small element model written here, and each
+   surface's closer and opener is asked for its call. The fade itself is the verifier's frames. */
+function dismissFakeDom() {
+  class El {
+    constructor(tag, attrs) {
+      this.tag = tag; this.attrs = Object.assign({}, attrs || {}); this.kids = []; this.parent = null;
+      this.cls = new Set((this.attrs.class || "").split(" ").filter(Boolean)); delete this.attrs.class;
+      this.value = this.attrs.value || ""; this.checked = false; this.scrollTop = 0; this.hidden = false; this.inert = false;
+      this.style = { cssText: "" }; this.heard = {};
+      const self = this;
+      this.classList = { add: c => self.cls.add(c), contains: c => self.cls.has(c) };
+    }
+    add(...k) { k.forEach(x => { x.parent = this; this.kids.push(x); }); return this; }
+    get isConnected() { let n = this; while (n.parent) n = n.parent; return n.root === true; }
+    all() { return this.kids.reduce((a, k) => a.concat([k], k.all()), []); }
+    querySelectorAll(sel) {
+      const all = this.all();
+      if (sel === "*") return all;
+      if (sel === "[id]") return all.filter(n => n.attrs.id != null);
+      return all.filter(n => ["input", "textarea", "select"].indexOf(n.tag) > -1);
+    }
+    getAttribute(k) { return this.attrs[k] == null ? null : this.attrs[k]; }
+    setAttribute(k, v) { this.attrs[k] = String(v); }
+    removeAttribute(k) { delete this.attrs[k]; }
+    addEventListener(t, fn) { (this.heard[t] = this.heard[t] || []).push(fn); }
+    fire(t, target) { (this.heard[t] || []).forEach(fn => fn({ target: target || this })); }
+    remove() { if (!this.parent) return; this.parent.kids.splice(this.parent.kids.indexOf(this), 1); this.parent = null; }
+    appendChild(n) { n.remove(); n.parent = this; this.kids.push(n); return n; }
+    after(n) { n.remove(); const p = this.parent; p.kids.splice(p.kids.indexOf(this) + 1, 0, n); n.parent = p; }
+    cloneNode() {
+      const c = new El(this.tag, Object.assign({}, this.attrs, { class: [...this.cls].join(" ") }));
+      c.style.cssText = this.style.cssText;
+      this.kids.forEach(k => c.add(k.cloneNode(true)));
+      return c;
+    }
+  }
+  const doc = new El("body"); doc.root = true;
+  return { El, doc };
+}
+function dismissTierTests() {
+  const motion = fs.readFileSync(path.join(E.ROOT, "src", "modules", "motion.js"), "utf8");
+  const timers = [];
+  let still = false, H = null;
+  try {
+    H = new Function("mgReduceMotion", "M_MS", "setTimeout",
+      ["const dismissing=", "function leaveNode(", "function dismissNode(", "function dismissCopy(", "function cutLeaves("]
+        .map(m => extractDecl(motion, m)).join("\n") + "\nreturn {dismissNode,dismissCopy,cutLeaves};")(
+      () => still, { dismiss: 80 }, (fn, ms) => { timers.push([fn, ms]); return timers.length; });
+  } catch (e) { H = null; }
+  eq("motion.js carries dismissNode, dismissCopy and cutLeaves", !!H, true);
+  if (H) dismissHelperTests(H, timers, v => { still = v; });
+  dismissWiringTests();
+}
+function dismissHelperTests(H, timers, setStill) {
+  const { El, doc } = dismissFakeDom();
+
+  // A node on its way out: ids gone with its state, inert, fading, and gone when its own fade ends.
+  const btn = new El("button", { id: "ecYes" });
+  const offer = new El("div", { id: "eCatalogOffer", class: "bub bub-ask" }).add(new El("p").add(btn));
+  doc.add(offer);
+  H.dismissNode(offer);
+  eq("a closing surface stays in the page for its fade, inert, hidden from assistive technology, wearing e-gone",
+    [offer.isConnected, offer.inert, offer.getAttribute("aria-hidden"), offer.classList.contains("e-gone")], [true, true, "true", true]);
+  eq("and it answers to none of its ids, so a lookup asking whether it is open is told no",
+    [offer.getAttribute("id"), btn.getAttribute("id")], [null, null]);
+  offer.fire("animationend", btn);
+  eq("a fade inside it that ends does not take it away", offer.isConnected, true);
+  offer.fire("animationend");
+  eq("its own fade ending does", offer.isConnected, false);
+  eq("and a timer on the tier stands behind the fade, for a window that paints no frames",
+    timers.length && timers[timers.length - 1][1], 200);
+
+  // A surface that stays: a copy after it, with what was typed and scrolled, ids kept for the sheet.
+  const inp = new El("input", { id: "factsEdit" }), list = new El("div", { class: "list" });
+  const panel = new El("div", { id: "factsPanel", class: "facts-panel" }).add(inp, list);
+  const wrap = new El("div", { class: "menu-wrap" }).add(panel, new El("span"));
+  doc.add(wrap);
+  inp.value = "typed"; list.scrollTop = 140;
+  H.dismissCopy(panel);
+  const copy = wrap.kids[1];
+  eq("a surface that stays leaves as a copy placed straight after it, so a lookup by id finds the original first",
+    [wrap.kids[0] === panel, copy !== panel && copy.classList.contains("e-gone"), copy.getAttribute("id")], [true, true, "factsPanel"]);
+  eq("the copy carries what was typed and how far it was scrolled",
+    [copy.kids[0].value, copy.kids[1].scrollTop], ["typed", 140]);
+  const into = new El("div"); doc.add(into);
+  const card = new El("div", { id: "tourCard", class: "tour-card bub" }); card.style.cssText = "top:10px";
+  doc.add(new El("div", { id: "tourRoot" }).add(card));
+  H.dismissCopy(card, "opacity:1", into);
+  eq("a copy lifted out of a root that hides keeps its own place and takes what the root gave it",
+    into.kids.length === 1 && into.kids[0].style.cssText, "top:10px;opacity:1");
+  panel.hidden = true;
+  const before = wrap.kids.length;
+  H.dismissCopy(panel);
+  eq("a surface already hidden leaves nothing behind", wrap.kids.length, before);
+
+  // A surface opening ends every leave at once; stilled, nothing leaves at all.
+  const sure = new El("div", { id: "eSure", class: "modal" }); doc.add(sure);
+  H.dismissNode(sure);
+  H.cutLeaves();
+  eq("a surface that opens ends every leave in the same task", [sure.isConnected, copy.isConnected], [false, false]);
+  setStill(true);
+  const quiet = new El("div", { id: "notePane" }); doc.add(quiet);
+  const menu = new El("div", { id: "moreMenu", class: "menu" }), mw = new El("div").add(menu); doc.add(mw);
+  H.dismissNode(quiet); H.dismissCopy(menu);
+  eq("stilled, a closing node goes at once and a staying one leaves no copy", [quiet.isConnected, mw.kids.length], [false, 1]);
+
+}
+function dismissWiringTests() {
+  // Every surface's closer leaves on the tier and every opener cuts the leaves.
+  const src = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
+  const has = (f, marker, needle) => { try { return extractDecl(src(f), marker).indexOf(needle) > -1; } catch (e) { return false; } };
+  eq("each closer leaves on the dismiss tier: the dialog, the question, the undo, the name, the offer, the note, the menus, quick facts, the tour", [
+    has("dialog.js", "function closeModal(", "leaveModal();"), has("dialog.js", "function leaveModal(", "dismissNode(g)"),
+    has("ui-lang.js", "function askSure(", "dismissNode(wrap)"), has("ui-lang.js", "function offerUndo(", "dismissNode(el)"),
+    has("agent.js", "function askAgentName(", "dismissNode(wrap)"), has("catalog-offer.js", "function eOfferCatalogDialog(", "dismissNode(wrap)"),
+    has("note-pane.js", "function closeNotePane(", "dismissNode(notePaneEl)"),
+    has("header-menus.js", "function closeMoreMenu(", "dismissCopy(m)"), has("header-menus.js", "function closeSettingsMenu(", "dismissCopy(menu)"),
+    has("facts.js", "function closeFactsPanel(", "dismissCopy(p)"), has("tour.js", "function endTour(", "dismissCopy(els.card")],
+    [true, true, true, true, true, true, true, true, true, true, true]);
+  eq("each opener ends the leaves first", [
+    has("dialog.js", "function openDialog(", "cutLeaves()"), has("ui-lang.js", "function askSure(", "cutLeaves()"),
+    has("ui-lang.js", "function offerUndo(", "cutLeaves()"), has("agent.js", "function askAgentName(", "cutLeaves()"),
+    has("catalog-offer.js", "function eOfferCatalogDialog(", "cutLeaves()"), has("note-pane.js", "function openNotePane(", "cutLeaves()"),
+    has("header-menus.js", "function openMoreMenu(", "cutLeaves()"), has("header-menus.js", "function openSettingsMenu(", "cutLeaves()"),
+    has("facts.js", "function openFactsPanel(", "cutLeaves()"), has("tour.js", "function startTour(", "cutLeaves()")],
+    [true, true, true, true, true, true, true, true, true, true]);
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  eq("the sheet fades e-gone on the dismiss tier, opacity only, and holds what is inside it still",
+    [/\.e-gone\{animation:eLeave var\(--m-dismiss\) ease forwards!important;pointer-events:none!important\}/.test(tpl),
+     /\.e-gone \*\{animation:none!important;transition:none!important\}/.test(tpl), /@keyframes eLeave\{to\{opacity:0\}\}/.test(tpl)],
+    [true, true, true]);
+  const q = [["dialog.js", "function openCover(", ":not(.e-gone)"], ["empty-mark.js", "function dialogStanding(", ":not(.e-gone)"],
+             ["tour.js", "function syncTourBehind(", ".modal:not([hidden]):not(.e-gone)"], ["tour.js", "function syncTourBehind(", ".bub-ask:not(.e-gone)"]];
+  eq("nothing that asks whether a window or a question is up counts one that is leaving", q.map(x => has(x[0], x[1], x[2])), [true, true, true, true]);
 }
 function requestFns() {
   const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");

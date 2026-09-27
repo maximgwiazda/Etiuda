@@ -180,6 +180,50 @@ function afterPaint(fn){
   requestAnimationFrame(()=>requestAnimationFrame(fn));
 }
 
+/* THE DISMISS TIER: a surface that closes fades out on it, opacity only, while the state it showed
+   is already gone. What fades is the removed node itself, or for a surface that stays in the page a
+   copy of it placed after it, so a lookup by id still finds the original first; either way it is
+   inert and nothing reaches it. A surface that opens ends every leave at once (cutLeaves), so two
+   never cross-fade. Stilled, nothing leaves: a removed node goes at once and no copy is made. */
+const dismissing=new Set();
+function leaveNode(el){
+  el.inert=true;
+  el.setAttribute("aria-hidden","true");
+  el.classList.add("e-gone");
+  dismissing.add(el);
+  const done=()=>{ dismissing.delete(el); el.remove(); };
+  el.addEventListener("animationend",e=>{ if(e.target===el) done(); });
+  setTimeout(done,M_MS.dismiss+120);
+}
+/* A node on its way out of the page. Its ids go with the state it showed: what asks the document
+   for it afterwards is asking whether it is still open. */
+function dismissNode(el){
+  if(!el) return;
+  if(mgReduceMotion() || !el.isConnected){ el.remove(); return; }
+  el.removeAttribute("id");
+  el.querySelectorAll("[id]").forEach(x=>x.removeAttribute("id"));
+  leaveNode(el);
+}
+/* A surface that stays, closing: the copy carries what was typed and how far it was scrolled,
+   which cloneNode does not. `into` takes it out of an ancestor that is about to hide, and `style`
+   then says what that ancestor gave it. Called before the surface hides. */
+function dismissCopy(el, style, into){
+  if(!el || el.hidden || !el.isConnected || mgReduceMotion()) return;
+  const c=el.cloneNode(true);
+  const fa=el.querySelectorAll("input,textarea,select"), fb=c.querySelectorAll("input,textarea,select");
+  for(let i=0;i<fa.length;i++){ fb[i].value=fa[i].value; fb[i].checked=fa[i].checked; }
+  if(style) c.style.cssText+=";"+style;
+  if(into) into.appendChild(c); else el.after(c);
+  const sa=[el].concat(Array.prototype.slice.call(el.querySelectorAll("*"))),
+        sb=[c].concat(Array.prototype.slice.call(c.querySelectorAll("*")));
+  for(let i=0;i<sa.length;i++) if(sa[i].scrollTop) sb[i].scrollTop=sa[i].scrollTop;
+  leaveNode(c);
+}
+function cutLeaves(){
+  dismissing.forEach(el=>el.remove());
+  dismissing.clear();
+}
+
 /* A RELOAD SOMEBODY WATCHES IS COVERED: what sits under the band leaves on the dismiss tier, and
    the next document holds its first paint until boot is done and brings it back on the surface
    tier (the boot guard in template.html, which reads the mark). Stilled, it reloads at once.
@@ -196,6 +240,9 @@ function reloadCovered(){
 
 export {
   reloadCovered,
+  dismissNode,
+  dismissCopy,
+  cutLeaves,
   E_EASE,
   E_SPRING,
   E_SPRING_MS,

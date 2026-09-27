@@ -3,7 +3,7 @@
 import { markCutText } from "./cut-text.js";
 import { ICON_CHEVRON_R, ICON_X } from "./icons.js";
 import { mgOpen } from "./app-state.js";
-import { animateModalHeightFrom, animatePinnedHeight, mgAccordion, mgPinCard, mgReduceMotion } from "./motion.js";
+import { animateModalHeightFrom, animatePinnedHeight, cutLeaves, dismissNode, mgAccordion, mgPinCard, mgReduceMotion } from "./motion.js";
 import { formatActionChord } from "./shortcuts.js";
 import { scStopCapture } from "./shortcuts-list.js";
 import { offerUndo, t, tc, translateTree } from "./ui-lang.js";
@@ -140,6 +140,7 @@ function refreshDialogReset(){
 function refreshDialogChrome(){ refreshDialogName(); refreshDialogReset(); }
 function openDialog(cfg){
   if(!modalEl||!modalCard) return;
+  cutLeaves();
   /* WHERE THE KEYBOARD CAME FROM. Closing wipes the card, so whatever had focus goes with it
      and the next Tab starts from the top of the document. A dialog opened over another keeps
      the first opener: the screen underneath is about to be rebuilt. */
@@ -379,9 +380,25 @@ function wireModalBody(){
   new MutationObserver(mountModalBody).observe(modalCard,{childList:true});
 }
 var modalOpener=null, modalOpenerKbd=false;
+/* THE DIALOG'S LEAVE: what it holds moves into a copy of its frame, which fades on the dismiss tier,
+   and the dialog itself closes at once as it always has. Moved rather than cloned, so what was
+   typed, drawn and scrolled leaves as it stood. */
+function leaveModal(){
+  if(modalEl.hidden || !modalCard.firstChild || mgReduceMotion()) return;
+  const g=document.createElement("div"), bg=document.createElement("div"), c=document.createElement("div");
+  g.className="modal"; bg.className="modal-bg";
+  c.className=modalCard.className; c.style.cssText=modalCard.style.cssText;
+  const kept=Array.prototype.filter.call(modalCard.querySelectorAll("*"),x=>x.scrollTop>0).map(x=>[x,x.scrollTop]);
+  while(modalCard.firstChild) c.appendChild(modalCard.firstChild);
+  g.appendChild(bg); g.appendChild(c);
+  document.body.appendChild(g);
+  kept.forEach(k=>{ k[0].scrollTop=k[1]; });
+  dismissNode(g);
+}
 function closeModal(){
   scStopCapture();
   modalBack=null;
+  leaveModal();
   modalEl.hidden=true;
   modalCard.classList.remove("about-modal","mt-modal");
   modalCard.innerHTML="";
@@ -418,7 +435,7 @@ function tabTargetIn(card, back){
    and the export's name, which stands over everything, the shared dialog included. The last one
    appended is the one on top. */
 function openCover(){
-  const all=document.querySelectorAll("body > .modal:not(#modal)");
+  const all=document.querySelectorAll("body > .modal:not(#modal):not(.e-gone)");
   return all.length ? all[all.length-1] : null;
 }
 

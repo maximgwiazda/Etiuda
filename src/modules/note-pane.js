@@ -1,6 +1,7 @@
 import { placeBubble } from "./bubble.js";
 import { findCard, noteFor, cardTitle } from "./card-model.js";
 import { esc } from "./esc.js";
+import { cutLeaves, dismissNode } from "./motion.js";
 // The note beside a card: the family's bubble, and the hover that opens it.
 
 /* THE NOTE IS A CALLOUT, NOT A BOX ON THE CARD: the family's bubble, placed by the family's
@@ -16,7 +17,7 @@ import { esc } from "./esc.js";
 let notePaneEl=null, notePaneBtn=null;
 function notePaneOpen(){ return !!notePaneEl; }
 function closeNotePane(){
-  if(notePaneEl){ notePaneEl.remove(); notePaneEl=null; }
+  if(notePaneEl){ dismissNode(notePaneEl); notePaneEl=null; }
   if(notePaneBtn){ notePaneBtn.setAttribute("aria-expanded","false"); notePaneBtn=null; }
 }
 function toggleNotePane(btn, id){
@@ -32,6 +33,7 @@ function openNotePane(card, id, btn){
   pane.className="tour-card bub note-pane"+(voice==="blue"?"":" paper");
   pane.id="notePane"; pane.setAttribute("role","note");
   // A token named in a note wears the chip the macro gives it, not its braces.
+  cutLeaves();
   pane.innerHTML='<h3>'+esc(cardTitle(m))+'</h3><p>'+esc(note).replace(/\{([A-Z_]+)\}/g,'<span class="fillmiss">$1</span>')+'</p>';
   document.body.appendChild(pane);
   // A few pixels of air around the card, so the pointer lands off its edge rather than on it.

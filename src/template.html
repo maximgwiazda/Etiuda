@@ -1108,8 +1108,8 @@ body.shed-segfold #seg::before{width:100%;transform:none}
 /* Menu rows carry icons and lay out as rows; the icons inherit the row's ink - one object, not a
    picture beside a word. The language badge fills the same slot the drawings do, so the three
    rows share one left edge. */
-#moreMenu button{display:flex;align-items:center;gap:9px}
-#moreMenu button .ic{flex:0 0 auto;color:inherit}
+.menu.menu-ic button{display:flex;align-items:center;gap:9px}
+.menu.menu-ic button .ic{flex:0 0 auto;color:inherit}
 .more-lang-badge{flex:0 0 auto;width:15px;text-align:center;
   font:700 10.5px var(--sans);letter-spacing:.4px;color:inherit}
 /* SOLID, not glass: a short list of words has no shape of its own, and blur behind text
@@ -2265,9 +2265,10 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 .cbadge.ed{background:var(--ed-soft);color:var(--ed);border:1px solid color-mix(in srgb,var(--ed) 42%,transparent)}
 .modal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
 /* A keyframe, not a transition - the element returns from display:none with no previous
-   value. IN only: several flows close one dialog and open another in the same breath, and
-   a fade-out would cross-fade the two. Re-rendering an open dialog does not replay it -
-   hidden never changes and the card element is not replaced. */
+   value. The way out is a copy on the dismiss tier (.e-gone), which the next surface to open
+   ends, so a flow that closes one dialog and opens another never cross-fades the two.
+   Re-rendering an open dialog does not replay it - hidden never changes and the card element
+   is not replaced. */
 @keyframes eModalBgIn{from{opacity:0}to{opacity:1}}
 @keyframes eModalCardIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
 /* A COVERED RELOAD (motion.js reloadCovered, and the boot guard's arrive): the band stays, and
@@ -2275,6 +2276,9 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 @keyframes eLeave{to{opacity:0}}
 html.e-leaving body>:not(header,#railHit,.scroller,script),html.e-leaving .scroller>.shell,
 html.e-leaving #pillsSlot{animation:eLeave var(--m-dismiss) ease forwards;pointer-events:none}
+/* A SURFACE CLOSING (motion.js dismissNode): it leaves on the dismiss tier, and what it holds stands still. */
+.e-gone{animation:eLeave var(--m-dismiss) ease forwards!important;pointer-events:none!important}
+.e-gone *{animation:none!important;transition:none!important}
 html.e-veiled body{visibility:hidden}
 html.e-arriving body>:not(header,#railHit,.scroller,script),html.e-arriving .scroller>.shell,
 html.e-arriving #pillsSlot{opacity:0}
@@ -2284,8 +2288,8 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
 .modal:not([hidden]) .modal-card{animation:eModalCardIn var(--m-surface) var(--m-ease) both}
 /* One treatment for everything that hangs below an anchor and toggles with hidden - a
    short drop, keyframed for the display:none reason above. The reveal tier: these are
-   frequent and lightweight. IN only - a list closing on the item you picked must feel instant.
-   Rebuilding while open does not replay it. */
+   frequent and lightweight. Closing leaves a copy on the dismiss tier (.e-gone). Rebuilding
+   while open does not replay it. */
 @keyframes eDropIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 .menu:not([hidden]),.facts-panel:not([hidden]){
   animation:eDropIn var(--m-reveal) var(--m-ease) both}
@@ -2589,7 +2593,7 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
 /* The card editor's picker is blue, the intent editor's green. They look alike and sit one
    dialog apart, so the colour is what tells you which one you are in - and it matches the
    difference in behaviour: blue picks exactly one category, green picks any number. */
-#meCatPick .cat-chip.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);
+.cat-pick.pick-one .cat-chip.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);
   box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent)}
 /* Dashed like every add affordance, drawn from the strip's own icon. No data-k, which
    keeps bindCatPick's radio logic from mistaking it for a category. EQUAL padding round a
@@ -3018,7 +3022,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   pointer-events:none}
 #eNotices .bub{position:relative;pointer-events:auto}
 /* The question's lines under its title, inset as the title is: a small dialog has no body to do it. */
-#eSure .e-sure-say{padding:0 18px}
+.e-sure .e-sure-say{padding:0 18px}
 /* A field on the fill: paper, so what is typed reads as the reader's own. */
 .bub .e-name-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
   border:1px solid transparent;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans)}
@@ -3373,7 +3377,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
            automatically. Rows delegate with .click(), which works at display:none. -->
       <div class="menu-wrap" id="moreWrap" hidden>
         <button class="btn icbtn" id="moreBtn" type="button" title="The tools this window is too narrow to show" aria-haspopup="true" aria-expanded="false" aria-label="More tools"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4.8 5.4 9.4 10l-4.6 4.6"/><path d="M10.6 5.4 15.2 10l-4.6 4.6"/></svg></button>
-        <div class="menu" id="moreMenu" hidden role="menu">
+        <div class="menu menu-ic" id="moreMenu" hidden role="menu">
           <!-- Each row wears the icon of the button it stands in for - a control that lost its
                place must not lose its face. The language row's slot holds the language in force,
                which doubles as the state readout; where it would take you is in the title. -->
