@@ -17,7 +17,9 @@
  *   - that ends where it began must not move in any frame by more than 1px (a snap);
  *   - that ends elsewhere must be animated in at least one frame (else it jumped), and its glide
  *     must begin within 1px of where it was painted (else it jumped to the glide's start);
- *   - must be in the page in every frame (else it vanished for a frame).
+ *   - must be in the page in every frame (else it vanished for a frame);
+ *   - that ends elsewhere must be painted, in every frame, near the straight line from where it
+ *     was to where it lands (else it left its path: a glide whose layout changed under it).
  * An element new to the screen must arrive animated where a leg asks for it.
  */
 "use strict";
@@ -102,7 +104,12 @@ function judge(r, opts) {
   const names = new Map();
   const name = k => k === "add" ? "add" : k === "k:" ? "All" : (k[0] === "r" ? "row " : k[0] === "k" ? "pill " : "card ")
     + (names.has(k) ? names.get(k) : (names.set(k, names.size), names.size - 1));
-  const bad = { snapped: [], jumped: [], startOff: [], vanished: [], popped: [] };
+  const bad = { snapped: [], jumped: [], startOff: [], offPath: [], vanished: [], popped: [] };
+  /* A glide's own bend is small: a neighbour's width tween moves a pill by a few px, a spring
+     passes its end by 2 per cent. What is judged is a box painted well away from the line. */
+  const offBy = (A, B, P) => { const T = [B.x - A.x, B.y - A.y], L2 = T[0] * T[0] + T[1] * T[1] || 1e-9;
+    const t = Math.max(0, Math.min(1, ((P.x - A.x) * T[0] + (P.y - A.y) * T[1]) / L2));
+    return Math.hypot(P.x - A.x - T[0] * t, P.y - A.y - T[1] * t); };
   let moved = 0, still = 0, arrived = 0;
   for (const k of new Set([...Object.keys(r.before), ...Object.keys(last)])) {
     const b = r.before[k], e = last[k];
@@ -120,6 +127,8 @@ function judge(r, opts) {
       const s = (r.frames.find(f => f[k].start) || {})[k];
       const off = s && s.start ? Math.max(Math.abs(s.start.x - b.x), Math.abs(s.start.y - b.y), Math.abs(s.start.w - b.w)) : 0;
       if (off > 1) bad.startOff.push(name(k) + " " + Math.round(off) + "px");
+      const far = Math.max(...r.frames.map(f => offBy(b, e, f[k])));
+      if (far > 12 + 0.03 * travel) bad.offPath.push(name(k) + " " + Math.round(far) + "px");
     } else if (!vis(b) && vis(e) && o.wantArrivals) {
       arrived++;
       if (!r.frames.some(f => f[k] && f[k].anim)) bad.popped.push(name(k));
@@ -404,6 +413,30 @@ leg("m10", "a language switch rebuilds the cards without a layout per card", asy
       out.push("switch " + (i + 1) + ": " + n + " layouts for " + cards + " cards, longest frame " + gap + "ms");
     }
   } finally { await L.done(); }
+  return { ok, text: out.join(" | ") };
+});
+
+leg("m11", "a clear after a pick and a Ctrl pick glides every pill along its path, the row never wrapped another way", async p => {
+  /* Rows counted among those wholly on screen, so the pick lands where a hand would put it. */
+  const row = n => p.evaluate(n => {
+    const rs = [...document.querySelectorAll("#intentRailList .rail-item[data-si]")].filter(e => {
+      const r = e.getBoundingClientRect(); return r.width && r.top > 0 && r.bottom < innerHeight; });
+    window.__mtEl = rs[n]; return !!rs[n]; }, n);
+  const out = [];
+  let ok = true;
+  for (const [a, c] of [[1, 4], [2, 5], [3, 6]]) {
+    await rest(p);
+    if (!(await row(a))) return { ok: false, text: "no rail row " + a + " on screen" };
+    await p.evaluate(() => window.__mtEl.click());
+    await sleep(1400);
+    if (!(await row(c))) return { ok: false, text: "no rail row " + c + " on screen" };
+    await p.evaluate(() => window.__mtEl.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true })));
+    await sleep(1400);
+    const r = await track(p, "pills", 900, () => { window.__mtAct = () => document.getElementById("intentRailClear").click(); });
+    const j = judge(r, { only: ["jumped", "snapped", "startOff", "offPath", "vanished"] });
+    ok = ok && j.ok && j.moved > 0;
+    out.push("rows " + a + " and " + c + ": " + j.text);
+  }
   return { ok, text: out.join(" | ") };
 });
 

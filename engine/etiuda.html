@@ -13369,6 +13369,11 @@ What you type stays in this browser only.`;
   function pillsSlot() {
     return $("#pillsSlot");
   }
+  function pillsWrapHeight(el) {
+    let h = 0;
+    for (const c of el.children) h = Math.max(h, c.offsetTop + c.offsetHeight);
+    return h;
+  }
   function syncPillsCollapse() {
     const el = pills;
     const slot = pillsSlot();
@@ -13386,7 +13391,7 @@ What you type stays in this browser only.`;
     const styles = getComputedStyle(el);
     const gap = parseFloat(styles.rowGap || styles.gap) || 6;
     const two = lineH * 2 + gap;
-    const full = el.scrollHeight;
+    const full = pillsWrapHeight(el);
     slot.style.removeProperty("--pills-full");
     if (full > two + 1) {
       slot.classList.add("pills-overflow");
