@@ -566,7 +566,7 @@ function flipRail(before,keep){
      window starts at the list's own offset, and a pinned row is on screen by construction. */
   const top=box.offsetTop+st;
   const seen=(y,hgt,pinned)=> pinned || ((y+hgt)>top && y<top+h);
-  const moved=[], dys=[], entered=[];
+  const moved=[], dys=[], entered=[], left=[];
   box.querySelectorAll(".rail-item[data-si]").forEach(el=>{
     const b=before[el.dataset.si];
     if(b==null) return;
@@ -587,6 +587,9 @@ function flipRail(before,keep){
     const exempt=seenBefore && (seenAfter || (keep && keep.has(String(el.dataset.si))));
     if(Math.abs(dy)>limit && !exempt){
       if(seenAfter && !seenBefore) entered.push(el);
+      /* A row leaving the window travels only to its edge, which bounds the journey by the panel
+         as an exempt row's is; the rest of the way is out of sight. */
+      else if(seenBefore) left.push([el, dy, a>=top+h ? top+h-a : top-hgt-a]);
       return;
     }
     moved.push(el); dys.push(dy);
@@ -600,8 +603,13 @@ function flipRail(before,keep){
     el.style.transition="none";
     el.style.opacity="0";
   });
-  if(!moved.length && !entered.length) return;
-  const far=Math.max.apply(null,dys.map(Math.abs));
+  left.forEach(([el,dy])=>{
+    el.style.transition="none";
+    el.style.willChange="transform";
+    el.style.transform="translateY("+dy+"px)";
+  });
+  if(!moved.length && !entered.length && !left.length) return;
+  const far=Math.max.apply(null,dys.map(Math.abs).concat(left.map(([,dy,e])=>Math.abs(dy-e))));
   const dur=far>limit ? Math.min(.30, M_MS.move/1000+far/6000) : M_MS.move/1000;
   /* Commit the invert before attaching the transition - see the note at flipPills():
      without a computed start value Firefox shows the end state. Same-task attach also
@@ -609,9 +617,10 @@ function flipRail(before,keep){
   void box.offsetHeight;
   moved.forEach(el=>{ el.style.transition="transform "+dur+"s "+E_EASE; el.style.transform=""; });
   entered.forEach(el=>{ el.style.transition="opacity "+dur+"s "+E_EASE; el.style.opacity=""; });
+  left.forEach(([el,,e])=>{ el.style.transition="transform "+dur+"s "+E_EASE; el.style.transform="translateY("+e+"px)"; });
   // clear the inline styles once done so nothing stays on a composited layer
   setTimeout(()=>{
-    moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; });
+    moved.concat(left.map(x=>x[0])).forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; });
     entered.forEach(el=>{ el.style.transition=""; el.style.opacity=""; });
   },dur*1000+20);
   return dur*1000;   // the caller waits this out before touching the main thread again

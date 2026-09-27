@@ -534,6 +534,7 @@ function runUnitTests() {
   windowPlaceTests();
   pillWrapTests();
   pillsWidthWatchTests();
+  railLeaveTests();
   v2ValidationTests();
   lintCatalogTests();
   langAgnosticTests();
@@ -1410,6 +1411,36 @@ function pillsWidthWatchTests() {
     wire ? got : "no wirePillsWidthWatch in pills-box.js", [0, 0, 1, 0]);
   const boot = fs.readFileSync(path.join(E.ROOT, "src", "main.js"), "utf8");
   eq("boot wires the watch", /pillsBox\.wirePillsWidthWatch\(\);/.test(boot), true);
+}
+/* A RAIL ROW ON SCREEN THAT LEAVES THE WINDOW GLIDES TO ITS EDGE (797 F6): past the travel cap it
+   used to be left where it landed, out of sight, which is a vanish. flipRail is sliced and run on a
+   panel of stub rows; a row that stays on screen and one that arrives are the controls. */
+function railLeaveTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "rail-list.js"), "utf8");
+  const row = (si, y) => {
+    const r = { dataset: { si }, offsetTop: y, offsetHeight: 34, classList: { contains: () => false }, log: [] };
+    r.style = {};
+    ["transform", "opacity", "transition", "willChange"].forEach(k => {
+      let v = "";
+      Object.defineProperty(r.style, k, { get: () => v, set: x => { v = x; if (k !== "transition" && k !== "willChange") r.log.push(k + " " + (x || "none")); } });
+    });
+    return r;
+  };
+  /* A 600px window at the top of the list: the leaver goes from 150 to 700, the stayer from 450 to
+     100, the arrival from 800 to 200. The cap is half the window. */
+  const rows = [row("7", 700), row("8", 100), row("9", 200)];
+  const box = { clientHeight: 600, scrollTop: 0, offsetTop: 0, get offsetHeight() { return 600; }, querySelectorAll: () => rows };
+  let flip = null;
+  try {
+    flip = new Function("$", "M_MS", "E_EASE", "setTimeout", "RAIL_FLIP_TRAVEL",
+      extractDecl(src, "function flipRail(") + "\nreturn flipRail;")(() => box, { move: 180 }, "ease", () => 0, 0.5);
+  } catch (e) { flip = null; }
+  if (flip) flip({ 7: { y: 150, on: false }, 8: { y: 450, on: false }, 9: { y: 800, on: false } }, null);
+  eq("a row that leaves the window past the cap glides from where it was to the window's edge",
+    flip ? rows[0].log : "no flipRail", ["transform translateY(-550px)", "transform translateY(-100px)"]);
+  eq("a row on screen at both ends still glides home, and one arriving from off screen still fades in",
+    flip ? [rows[1].log, rows[2].log] : "no flipRail",
+    [["transform translateY(350px)", "transform none"], ["opacity 0", "opacity none"]]);
 }
 function requestFns() {
   const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");

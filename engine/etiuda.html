@@ -15302,7 +15302,7 @@ What you type stays in this browser only.`;
     const limit = h * RAIL_FLIP_TRAVEL;
     const top = box.offsetTop + st;
     const seen = (y, hgt, pinned) => pinned || y + hgt > top && y < top + h;
-    const moved = [], dys = [], entered = [];
+    const moved = [], dys = [], entered = [], left = [];
     box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
       const b = before[el.dataset.si];
       if (b == null) return;
@@ -15316,6 +15316,7 @@ What you type stays in this browser only.`;
       const exempt = seenBefore && (seenAfter || keep && keep.has(String(el.dataset.si)));
       if (Math.abs(dy) > limit && !exempt) {
         if (seenAfter && !seenBefore) entered.push(el);
+        else if (seenBefore) left.push([el, dy, a >= top + h ? top + h - a : top - hgt - a]);
         return;
       }
       moved.push(el);
@@ -15330,8 +15331,13 @@ What you type stays in this browser only.`;
       el.style.transition = "none";
       el.style.opacity = "0";
     });
-    if (!moved.length && !entered.length) return;
-    const far = Math.max.apply(null, dys.map(Math.abs));
+    left.forEach(([el, dy]) => {
+      el.style.transition = "none";
+      el.style.willChange = "transform";
+      el.style.transform = "translateY(" + dy + "px)";
+    });
+    if (!moved.length && !entered.length && !left.length) return;
+    const far = Math.max.apply(null, dys.map(Math.abs).concat(left.map(([, dy, e]) => Math.abs(dy - e))));
     const dur = far > limit ? Math.min(0.3, M_MS.move / 1e3 + far / 6e3) : M_MS.move / 1e3;
     void box.offsetHeight;
     moved.forEach((el) => {
@@ -15342,8 +15348,12 @@ What you type stays in this browser only.`;
       el.style.transition = "opacity " + dur + "s " + E_EASE;
       el.style.opacity = "";
     });
+    left.forEach(([el, , e]) => {
+      el.style.transition = "transform " + dur + "s " + E_EASE;
+      el.style.transform = "translateY(" + e + "px)";
+    });
     setTimeout(() => {
-      moved.forEach((el) => {
+      moved.concat(left.map((x) => x[0])).forEach((el) => {
         el.style.transition = "";
         el.style.transform = "";
         el.style.willChange = "";
