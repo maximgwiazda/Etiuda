@@ -14782,7 +14782,7 @@ What you type stays in this browser only.`;
         return;
       }
       if (dx || dy) eSettleRuns.push(el.animate([{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "none" }], glide));
-      if (grew) eSettleRuns.push(el.animate([{ clipPath: "inset(-24px -24px " + grew + "px -24px)" }, { clipPath: "inset(-24px)" }], glide));
+      if (grew) eSettleRuns.push(el.animate([{ clipPath: "inset(-24px -24px " + grew + "px -24px)" }, { clipPath: "inset(-24px -24px 0px -24px)" }], glide));
     });
     eKickPump();
   }

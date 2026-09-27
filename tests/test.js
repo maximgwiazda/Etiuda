@@ -1468,13 +1468,15 @@ function railLeaveTests() {
 }
 /* A CARD WHOSE TEXT GREW OPENS TO ITS NEW HEIGHT (797 N5): a Ctrl pick fills the top card with the
    second intent and it grew 63px in one frame. glideSettle is sliced and run on stub cards: the
-   grown card's clip runs from its old height on the curve its neighbours glide on. */
+   grown card's clip runs from its old height to its own edge on the curve the card below glides on,
+   so the gap between them, read at every step of that curve, stays what it was. */
 function grownCardTests() {
   const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "paint.js"), "utf8");
   const card = (id, now) => ({ dataset: { id }, runs: [], getBoundingClientRect: () => now,
-    animate(kf, o) { this.runs.push([Object.keys(kf[0]).join("+"), kf[0].clipPath || kf[0].transform || "", o.duration]); return { finish() {} }; } });
+    animate(kf, o) { this.runs.push([Object.keys(kf[0]).join("+"), kf[0].clipPath || kf[0].transform || "",
+      kf[1].clipPath || kf[1].transform || "", o.duration]); return { finish() {} }; } });
   const R = (top, h) => ({ left: 300, top, width: 400, height: h, bottom: top + h, right: 700 });
-  const cards = [card("a", R(220, 344)), card("b", R(600, 200)), card("c", R(700, 300))];
+  const cards = [card("a", R(220, 344)), card("b", R(584, 200)), card("c", R(700, 300))];
   const list = { getBoundingClientRect: () => ({ top: 200 }), querySelectorAll: () => cards };
   let glide = null;
   try {
@@ -1482,12 +1484,30 @@ function grownCardTests() {
       "let eSettleRuns=[];\n" + extractDecl(src, "function glideSettle(") + "\nreturn glideSettle;")(
       list, { innerHeight: 900 }, 40, { move: 180, surface: 180 }, "ease", 371, false, "", () => {});
   } catch (e) { glide = null; }
-  /* "a" stays put and grows 63px; "b" moves 40px down at its own height; "c" was below the screen
-     and is shorter than its estimate, which is not a growth anyone saw. */
-  if (glide) glide({ a: R(220, 281), b: R(560, 200), c: R(1400, 220) }, "move");
-  eq("a grown card opens from its old height on the glide's curve; a card that only moved only glides",
+  /* "a" stays put and grows 63px; "b" sits 20px below it and is pushed down by the growth; "c" was
+     below the screen and is shorter than its estimate, which is not a growth anyone saw. */
+  if (glide) glide({ a: R(220, 281), b: R(521, 200), c: R(1400, 220) }, "move");
+  eq("a grown card opens from its old height to its own edge on the glide's curve; a card that only moved only glides",
     glide ? [cards[0].runs, cards[1].runs] : "no glideSettle",
-    [[["clipPath", "inset(-24px -24px 63px -24px)", 180]], [["transform", "translate(0px,-40px)", 180]]]);
+    [[["clipPath", "inset(-24px -24px 63px -24px)", "inset(-24px -24px 0px -24px)", 180]],
+      [["transform", "translate(0px,-63px)", "none", 180]]]);
+  /* The grown card's edge is its box or its clip, whichever is higher; both runs share one curve, so
+     one progress reads both. A clip that ends past the edge runs ahead of the card below. */
+  let gap = "no clip on the grown card";
+  const clip = cards[0].runs.find(r => r[0] === "clipPath"), move = cards[1].runs.find(r => r[0] === "transform");
+  const bottomInset = v => { const m = /inset\(([^)]*)\)/.exec(v); if (!m) return null;
+    const s = m[1].trim().split(/\s+/).map(parseFloat), b = s.length > 2 ? s[2] : s[0];
+    return isNaN(b) ? null : b; };
+  if (clip && move && bottomInset(clip[1]) != null && bottomInset(clip[2]) != null) {
+    const b0 = bottomInset(clip[1]), b1 = bottomInset(clip[2]), dy = +/,(-?[0-9.]+)px/.exec(move[1])[1];
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i <= 100; i++) {
+      const p = i / 100, edge = Math.min(564, 564 - (b0 + (b1 - b0) * p)), next = 584 + dy * (1 - p);
+      lo = Math.min(lo, next - edge); hi = Math.max(hi, next - edge);
+    }
+    gap = [Math.round(lo * 10) / 10, Math.round(hi * 10) / 10];
+  }
+  eq("the grown card's edge keeps its 20px gap to the card below at every step of the glide", gap, [20, 20]);
 }
 /* THE MOTION LEGS' JUDGE SEES A LEAP ALONG THE LINE OF TRAVEL (797 N4): N3's pill ran 47px the wrong
    way, was painted 35px past its end and glided back, all within the off-path margin. judge() from

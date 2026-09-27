@@ -189,9 +189,10 @@ function glideSettle(before,tier){
       return;
     }
     if(dx||dy) eSettleRuns.push(el.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],glide));
-    /* The clip stands clear of the panels' rings and shadows on three sides; the fourth is the
-       old height, on the curve the cards below travel on, so the two edges keep their gap. */
-    if(grew) eSettleRuns.push(el.animate([{clipPath:"inset(-24px -24px "+grew+"px -24px)"},{clipPath:"inset(-24px)"}],glide));
+    /* The clip stands clear of the panels' rings and shadows on three sides; the fourth runs from
+       the old height to the card's own edge, the growth alone, on the curve the cards below travel
+       on, so the two edges keep their gap. Past the edge it would run ahead of the card below. */
+    if(grew) eSettleRuns.push(el.animate([{clipPath:"inset(-24px -24px "+grew+"px -24px)"},{clipPath:"inset(-24px -24px 0px -24px)"}],glide));
   });
   eKickPump();   // no animationstart for a scripted animation, so the pump is asked by hand
 }
