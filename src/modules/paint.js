@@ -59,17 +59,31 @@ function pillKey(p){ return p.dataset.k!=null ? p.dataset.k : p.classList.contai
    animation budget. Split, each pass is one layout. */
 function flipPills(before){
   if(!before) return;
-  const moved=[], deltas=[], wEls=[], wStarts=[];
+  const els=[], bs=[], moved=[], deltas=[], wEls=[], wStarts=[];
   pills.querySelectorAll(".pill").forEach(p=>{
     const k=pillKey(p), b=k!==undefined && before.get(k);
-    if(!b) return;
+    if(b){ els.push(p); bs.push(b); }
+  });
+  const hNat=pills.scrollHeight;   // through the clip - see the note at tweenPillWidths
+  /* Width changes ride the same flip - a selection bolds the name, a recount changes the
+     digits, and either snapping while neighbours slide reads as a glitch. 1.5px floor:
+     fractional DPRs round every pill differently on every pass. */
+  els.forEach((p,i)=>{
+    const w=p.getBoundingClientRect().width;
+    if(Math.abs(bs[i].width-w)>=1.5){ wEls.push(p); wStarts.push(bs[i].width); p.dataset._eW=w; }
+  });
+  /* The old widths go back BEFORE the positions are read: each one shifts every pill after it
+     in the row, so an offset read at the new widths starts the glide that far from the pill. */
+  wEls.forEach((p,i)=>{ p.style.transition="none"; p.style.width=wStarts[i]+"px"; });
+  /* Height is the invariant - see tweenPillWidths. A rolled-back width still slides. */
+  if(wEls.length && pills.scrollHeight!==hNat){
+    wEls.forEach(p=>{ p.style.width=""; p.style.transition=""; delete p.dataset._eW; });
+    wEls.length=0;
+  }
+  els.forEach((p,i)=>{
     const a=p.getBoundingClientRect();
-    /* Width changes ride the same flip - a selection bolds the name, a recount changes the
-       digits, and either snapping while neighbours slide reads as a glitch. 1.5px floor:
-       fractional DPRs round every pill differently on every pass. */
-    if(Math.abs(b.width-a.width)>=1.5){ wEls.push(p); wStarts.push(b.width); p.dataset._eW=a.width; }
     // whole pixels only - fractional offsets put the text on a half-pixel and it blurs
-    const dx=Math.round(b.left-a.left), dy=Math.round(b.top-a.top);
+    const dx=Math.round(bs[i].left-a.left), dy=Math.round(bs[i].top-a.top);
     if(!dx && !dy) return;
     moved.push(p); deltas.push(dx+"px,"+dy+"px");
   });
@@ -84,10 +98,6 @@ function flipPills(before){
     p.style.willChange="transform";
     p.style.transform="translate("+deltas[i]+")";
   });
-  /* Width rides the SAME transition string as the slide - two tweens fighting over
-     style.transition left whichever wrote last, and the other snapped. */
-  const hNat=pills.scrollHeight;   // through the clip - see the note at tweenPillWidths
-  wEls.forEach((p,i)=>{ if(moved.indexOf(p)<0) p.style.transition="none"; p.style.width=wStarts[i]+"px"; });
   if(!moved.length && !wEls.length) return;
   /* Commit the inverted position before attaching the transition. A frame is not a commitment:
      these elements were often created by the re-render a moment ago, and if the browser never
@@ -96,11 +106,6 @@ function flipPills(before){
      appeared in its new place. One forced reflow, then attach and release in the same task -
      which also removes the rAF that a background tab would otherwise pause indefinitely. */
   void pills.offsetHeight;
-  /* Height is the invariant - see tweenPillWidths. A rolled-back width still slides. */
-  if(wEls.length && pills.scrollHeight!==hNat){
-    wEls.forEach(p=>{ p.style.width=""; delete p.dataset._eW; });
-    wEls.length=0;
-  }
   const T="var(--m-move) "+E_EASE;
   moved.forEach(p=>{ p.style.transition="transform "+T+(wEls.indexOf(p)>=0?", width "+T:""); p.style.transform=""; });
   wEls.forEach(p=>{ if(moved.indexOf(p)<0) p.style.transition="width "+T; p.style.width=p.dataset._eW+"px"; });

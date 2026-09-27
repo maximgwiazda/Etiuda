@@ -14422,17 +14422,38 @@ What you type stays in this browser only.`;
   }
   function flipPills(before) {
     if (!before) return;
-    const moved = [], deltas = [], wEls = [], wStarts = [];
+    const els = [], bs = [], moved = [], deltas = [], wEls = [], wStarts = [];
     pills.querySelectorAll(".pill").forEach((p) => {
       const k = pillKey(p), b = k !== void 0 && before.get(k);
-      if (!b) return;
-      const a = p.getBoundingClientRect();
-      if (Math.abs(b.width - a.width) >= 1.5) {
-        wEls.push(p);
-        wStarts.push(b.width);
-        p.dataset._eW = a.width;
+      if (b) {
+        els.push(p);
+        bs.push(b);
       }
-      const dx = Math.round(b.left - a.left), dy = Math.round(b.top - a.top);
+    });
+    const hNat = pills.scrollHeight;
+    els.forEach((p, i) => {
+      const w = p.getBoundingClientRect().width;
+      if (Math.abs(bs[i].width - w) >= 1.5) {
+        wEls.push(p);
+        wStarts.push(bs[i].width);
+        p.dataset._eW = w;
+      }
+    });
+    wEls.forEach((p, i) => {
+      p.style.transition = "none";
+      p.style.width = wStarts[i] + "px";
+    });
+    if (wEls.length && pills.scrollHeight !== hNat) {
+      wEls.forEach((p) => {
+        p.style.width = "";
+        p.style.transition = "";
+        delete p.dataset._eW;
+      });
+      wEls.length = 0;
+    }
+    els.forEach((p, i) => {
+      const a = p.getBoundingClientRect();
+      const dx = Math.round(bs[i].left - a.left), dy = Math.round(bs[i].top - a.top);
       if (!dx && !dy) return;
       moved.push(p);
       deltas.push(dx + "px," + dy + "px");
@@ -14442,20 +14463,8 @@ What you type stays in this browser only.`;
       p.style.willChange = "transform";
       p.style.transform = "translate(" + deltas[i] + ")";
     });
-    const hNat = pills.scrollHeight;
-    wEls.forEach((p, i) => {
-      if (moved.indexOf(p) < 0) p.style.transition = "none";
-      p.style.width = wStarts[i] + "px";
-    });
     if (!moved.length && !wEls.length) return;
     void pills.offsetHeight;
-    if (wEls.length && pills.scrollHeight !== hNat) {
-      wEls.forEach((p) => {
-        p.style.width = "";
-        delete p.dataset._eW;
-      });
-      wEls.length = 0;
-    }
     const T = "var(--m-move) " + E_EASE;
     moved.forEach((p) => {
       p.style.transition = "transform " + T + (wEls.indexOf(p) >= 0 ? ", width " + T : "");

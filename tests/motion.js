@@ -227,6 +227,25 @@ leg("m3", "a search settle glides every pill that moves or changes width, All an
   return { ok, text: out.join(" | ") };
 });
 
+leg("m4", "a pill's glide begins where it was painted, on a settle that changes widths and on a second pick", async p => {
+  const out = [];
+  let ok = true;
+  const r1 = await settleQuery(p, "zz");
+  const j1 = judge(r1, { only: ["startOff"] });
+  ok = ok && j1.ok && j1.moved > 0;
+  out.push("settle: " + j1.text);
+  await rest(p);
+  await p.evaluate(() => [...document.querySelectorAll("#intentRailList .rail-item[data-si]:not(.on)")][3].click());
+  await sleep(1500);
+  const r2 = await track(p, "pills", 900, () => { window.__mtAct = () =>
+    [...document.querySelectorAll("#intentRailList .rail-item[data-si]:not(.on)")][5]
+      .dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true })); });
+  const j2 = judge(r2, { only: ["startOff"] });
+  ok = ok && j2.ok && j2.moved > 0;
+  out.push("Ctrl pick: " + j2.text);
+  return { ok, text: out.join(" | ") };
+});
+
 module.exports = { LEGS, instrument, rest, boot, VIEW };
 
 if (require.main === module) {
