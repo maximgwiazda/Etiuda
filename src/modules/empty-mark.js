@@ -5,7 +5,9 @@
 import { mgReduceMotion, M_MS } from "./motion.js";
 
 const MARK_PX=280, MARK_STEP=3.5, GATHER_MS=M_MS.gather, TWINKLE_MS=M_MS.twinkle, ALPHA_STEPS=16;
-let eMark=null;
+// A wait on the gather is let go once no frame has come for this long.
+const MARK_QUIET_MS=1000;
+let eMark=null, markWaiters=[];
 
 /* The glyph is read off the header's copy, never redrawn: its path and group transform, scaled
    from the viewBox to the canvas, sampled on a grid by isPointInPath. */
@@ -28,10 +30,11 @@ function markDots(){
   }
   return dots;
 }
-// Dots are batched by alpha into a few fills a frame rather than one fill a dot.
-function drawMark(k, now){
+// Dots are batched by alpha into a few fills a frame rather than one fill a dot. `ms` is the
+// mark's own clock (markFrame), never the wall's.
+function drawMark(k, ms){
   const still=mgReduceMotion(), ctx=k.ctx;
-  const t=(now-k.born)/1000, gather=still ? 1 : Math.min(1,(now-k.born)/GATHER_MS);
+  const t=ms/1000, gather=still ? 1 : Math.min(1,ms/GATHER_MS);
   const e=1-Math.pow(1-gather,3);
   const bins=[];
   k.dots.forEach(p=>{
@@ -53,28 +56,65 @@ function drawMark(k, now){
   });
   ctx.globalAlpha=1;
 }
-/* THE GATHER RUNS AT THE DISPLAY'S RATE: it is the first motion a new person sees. The twinkle
-   after it asks for frames at its own pace, a timer between them, so a mark left standing wakes
-   the page fifteen times a second rather than sixty. */
+/* THE GATHER RUNS AT THE DISPLAY'S RATE: it is the first motion a new person sees. Its clock starts
+   at its first frame and a frame moves it on by at most two of the shortest intervals seen (60 Hz's
+   until one is), so a late frame holds the dots rather than jumping them. The twinkle after it asks
+   for frames at its own pace, on the wall's clock, so a mark left standing wakes the page fifteen
+   times a second rather than sixty. */
 function markFrame(now){
   const k=eMark;
   if(!k || !k.cv.isConnected){ stopEmptyMark(); return; }
   // A dialog arriving mid-gathering puts it back to the start, to play once the dialog is gone.
-  if(now-k.born<GATHER_MS && dialogStanding()){
+  if(k.ms<GATHER_MS && dialogStanding()){
     k.ctx.clearRect(0,0,MARK_PX,MARK_PX);
     startMark(k);
     return;
   }
-  drawMark(k, now);
-  if(mgReduceMotion()) return;
-  if(now-k.born<GATHER_MS){ k.raf=requestAnimationFrame(markFrame); return; }
+  if(k.last){
+    const dt=Math.max(0, now-k.last);
+    if(dt>0) k.gap=Math.max(2, Math.min(k.gap, dt));
+    k.ms+=k.ms<GATHER_MS ? Math.min(dt, 2*k.gap) : dt;
+  }
+  k.last=now;
+  drawMark(k, k.ms);
+  if(k.ms>=GATHER_MS) markFormed(k);
+  if(mgReduceMotion()){ markFormed(k); return; }
+  if(k.ms<GATHER_MS){ k.raf=requestAnimationFrame(markFrame); return; }
   k.hold=setTimeout(()=>{ k.raf=requestAnimationFrame(markFrame); }, TWINKLE_MS);
+}
+function markFormed(k){
+  if(k.formed) return;
+  k.formed=true;
+  releaseMarkWaiters();
+}
+// Each on a task of its own, so none of them is spent inside the frame that ends the gather.
+function releaseMarkWaiters(){
+  const w=markWaiters;
+  markWaiters=[];
+  w.forEach(fn=>setTimeout(fn,0));
+}
+/* WHAT WAITS FOR THE GATHER: run once the mark has formed or gone, at once where none is gathering,
+   and let go after MARK_QUIET_MS without a frame, since rAF does not run in a hidden page. */
+function whenMarkFormed(fn){
+  const k=eMark;
+  if(!k || k.formed){ fn(); return; }
+  let done=false;
+  const once=()=>{ if(!done){ done=true; fn(); } };
+  markWaiters.push(once);
+  const since=performance.now();
+  const watch=()=>{
+    if(done) return;
+    const quiet=performance.now()-Math.max(k.last, since);
+    if(quiet>=MARK_QUIET_MS || eMark!==k) once();
+    else setTimeout(watch, MARK_QUIET_MS-quiet);
+  };
+  setTimeout(watch, MARK_QUIET_MS);
 }
 function dialogStanding(){ return !!document.querySelector(".modal:not([hidden]):not(.e-gone)"); }
 function startMark(k){
-  if(mgReduceMotion()){ drawMark(k, performance.now()); return; }
+  if(mgReduceMotion()){ drawMark(k, k.ms); markFormed(k); return; }
   if(dialogStanding()){ k.hold=setTimeout(()=>startMark(k),150); return; }
-  k.born=performance.now();
+  k.ms=0; k.last=0;
   k.raf=requestAnimationFrame(markFrame);
 }
 function stopEmptyMark(){
@@ -84,6 +124,7 @@ function stopEmptyMark(){
   cancelAnimationFrame(k.raf); clearTimeout(k.hold);
   if(k.theme) k.theme.disconnect();
   if(k.cv.parentNode) k.cv.remove();
+  releaseMarkWaiters();
 }
 /* render() hands over the empty desk's block, or null for any other list. A re-render of the
    empty desk moves the same drawing into the new block: one gathering per appearance. */
@@ -91,7 +132,7 @@ function syncEmptyMark(host){
   if(!host){ stopEmptyMark(); return; }
   if(eMark){
     host.insertBefore(eMark.cv, host.firstChild);
-    if(mgReduceMotion()) drawMark(eMark, performance.now());
+    if(mgReduceMotion()) drawMark(eMark, eMark.ms);
     return;
   }
   const dots=markDots();
@@ -103,13 +144,14 @@ function syncEmptyMark(host){
   host.insertBefore(cv, host.firstChild);
   const ctx=cv.getContext("2d");
   ctx.setTransform(dpr,0,0,dpr,0,0);
-  const k=eMark={cv:cv, ctx:ctx, dots:dots, born:0, raf:0, hold:0, theme:null};
+  const k=eMark={cv:cv, ctx:ctx, dots:dots, ms:0, last:0, gap:1000/60, formed:false, raf:0, hold:0, theme:null};
   // A still mark has no frame to pick up a new theme's accent, so it is redrawn on the flip.
-  k.theme=new MutationObserver(()=>{ if(mgReduceMotion()) drawMark(k, performance.now()); });
+  k.theme=new MutationObserver(()=>{ if(mgReduceMotion()) drawMark(k, k.ms); });
   k.theme.observe(document.documentElement,{attributes:true, attributeFilter:["data-theme"]});
   startMark(k);
 }
 
 export {
-  syncEmptyMark
+  syncEmptyMark,
+  whenMarkFormed
 };

@@ -536,6 +536,7 @@ function runUnitTests() {
   railPlacementTests();
   recoveryTests();
   arrivalTests();
+  markClockTests();
   pageWatchTests();
   shippedFlagTests();
   dismissTierTests();
@@ -1438,6 +1439,136 @@ function arrivalTests() {
   const rule = /html\.e-arriving #pillsSlot\{opacity:([.0-9]+)\}/.exec(tpl);
   eq("held, the content is drawn at a trace rather than not at all, so it is rasterised before its fade",
     rule ? +rule[1] > 0 && +rule[1] < 0.01 : "no e-arriving rule", true);
+}
+/* THE EMPTY MARK'S CLOCK, as smooth on a first launch as on any later one: empty-mark.js runs in a
+   VM on a clock and a frame queue written here, with one dot flying from x 0 to x 100, so the x it
+   is drawn at is the gather's progress. The tour's start and the boot repaint are sliced into the
+   same VM and asked when they run. What the eye sees on a first launch is the verifier's frames. */
+function markLab() {
+  const read = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
+  const mark = read("empty-mark.js").replace(/^import[^\n]*\n/m, "").replace(/export\s*\{[^}]*\};?\s*$/, "");
+  const tour = read("tour.js"), open = read("on-open.js");
+  const slices = [extractDecl(tour, "const TOUR_AUTO_MS="), extractDecl(tour, "function maybeStartTour("),
+    extractDecl(open, "let eReadyDone="), extractDecl(open, "let lastGreet;"), extractDecl(open, "function markEReady("),
+    extractDecl(open, "function wireOnOpen(")];
+  let clock = 0, seq = 0, frames = [], timers = [], drawnX = null;
+  const log = [];
+  const ctx = { setTransform() {}, clearRect() {}, beginPath() {}, fill() {}, moveTo() {}, arc(x) { drawnX = x; } };
+  const sb = {
+    M_MS: { gather: 1100, twinkle: 66 }, mgReduceMotion: () => false,
+    performance: { now: () => clock },
+    requestAnimationFrame: fn => { frames.push({ id: ++seq, fn }); return seq; },
+    cancelAnimationFrame: id => { frames = frames.filter(f => f.id !== id); },
+    setTimeout: (fn, ms) => { timers.push({ id: ++seq, at: clock + (ms || 0), fn }); return seq; },
+    clearTimeout: id => { timers = timers.filter(x => x.id !== id); },
+    setInterval: () => 0, getComputedStyle: () => ({ color: "#fff" }), devicePixelRatio: 1,
+    MutationObserver: class { observe() {} disconnect() {} },
+    document: { querySelector: () => null, documentElement: {},
+      createElement: () => ({ setAttribute() {}, getContext: () => ctx, isConnected: true, parentNode: null, remove() { this.parentNode = null; } }) },
+    ssGet: () => null, TOUR_AT: "eTourAt", TOUR_STEPS: [], tourRunning: false, tourSeen: () => false, tourInviteDismissed: () => false,
+    startTour: () => log.push(["tour", Math.round(clock)]),
+    applyUiLang: () => log.push(["repaint", Math.round(clock)]),
+    focusFirstEntryOnOpen: () => {}, greeting: () => "", render: () => {}
+  };
+  sb.window = sb;
+  require("vm").runInNewContext(mark + "\n" + slices.join("\n") + "\nfunction __mark(){ return eMark; }\n", sb);
+  sb.markDots = () => [{ x: 100, y: 0, sx: 0, sy: 0, ph: 0, sp: 1 }];
+  const timersTo = t => {
+    for (;;) {
+      const due = timers.filter(x => x.at <= t).sort((a, b) => a.at - b.at || a.id - b.id)[0];
+      if (!due) break;
+      timers = timers.filter(x => x !== due);
+      clock = Math.max(clock, due.at);
+      due.fn();
+    }
+    clock = t;
+  };
+  const frame = t => { timersTo(t); const run = frames; frames = []; run.forEach(f => f.fn(t)); return drawnX; };
+  const host = { firstChild: null, insertBefore(cv) { cv.parentNode = host; } };
+  return { sb, log, frame, timersTo, make: () => sb.syncEmptyMark(host), state: () => sb.__mark(), x: () => drawnX };
+}
+function markClockTests() {
+  const hz = n => 1000 / n;
+  let got;
+  try {
+    // Made 100 ms into the page, its first frame 500 ms later draws the dots where they start.
+    const a = markLab(); a.timersTo(100); a.make();
+    got = +a.frame(600).toFixed(2);
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the gather's clock starts at its first frame, not when boot makes the mark", got, 0);
+
+  try {
+    // Two frames at 250 Hz, then one 200 ms late, against the same two and two more on time.
+    const late = markLab(), even = markLab(); late.make(); even.make();
+    [500, 500 + hz(250), 500 + 2 * hz(250), 700 + 2 * hz(250)].forEach(t => late.frame(t));
+    [0, 1, 2, 3, 4].forEach(i => even.frame(500 + i * hz(250)));
+    got = [+late.x().toFixed(4) === +even.x().toFixed(4), late.x() > 0];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a frame 200 ms late moves the dots as far as two frames of the display, never the wall's 200 ms", got, [true, true]);
+
+  try {
+    got = [240, 60, 30].map(n => {
+      const r = markLab(); r.make();
+      let i = 0;
+      while (r.frame(500 + i * hz(n)) < 100 && i < 2000) i++;
+      const took = i * hz(n);
+      return took >= 1100 - 0.01 && took < 1100 + hz(n) + 0.01;
+    });
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("frames on time still gather in 1100 ms at 240, 60 and 30 Hz", got, [true, true, true]);
+
+  try {
+    // Formed at 250 Hz, then the twinkle's timer-paced frames: each moves the clock by the wall's step.
+    const r = markLab(); r.make();
+    let t = 500, i = 0;
+    while (r.frame(t) < 100) t = 500 + ++i * hz(250);
+    const at = r.state().ms;
+    r.timersTo(t + 66); r.frame(t + 70);
+    got = +(r.state().ms - at).toFixed(3);
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the twinkle after the gather keeps the wall's time", got, 70);
+
+  try {
+    const r = markLab(), seen = [];
+    r.sb.whenMarkFormed(() => seen.push("no mark, at once"));
+    r.make();
+    r.sb.whenMarkFormed(() => seen.push("formed " + Math.round(r.sb.performance.now())));
+    let t = 400, i = 0;
+    while (r.frame(t) < 100) { if (seen.length > 1) seen.push("early"); t = 400 + ++i * hz(250); }
+    r.timersTo(t);
+    const q = markLab(); q.make();
+    q.sb.whenMarkFormed(() => seen.push("no frames, let go at " + Math.round(q.sb.performance.now())));
+    q.timersTo(3000);
+    got = seen;
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a wait on the gather runs once it has formed, at once with no mark, and after 1 s without a frame",
+    got, ["no mark, at once", "formed 1500", "no frames, let go at 1000"]);
+
+  try {
+    got = [];
+    // A cold first frame 600 ms after boot, then 250 Hz; the same with no mark; no frames at all.
+    const c = markLab(); c.make(); c.sb.maybeStartTour();
+    let t = 600, i = 0;
+    while (c.frame(t) < 100) t = 600 + ++i * hz(250);
+    c.timersTo(4000);
+    const n = markLab(); n.sb.maybeStartTour(); n.timersTo(4000);
+    const q = markLab(); q.make(); q.sb.maybeStartTour(); q.timersTo(4000);
+    got = [c.log, n.log, q.log];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the first run's tour starts 200 ms after the mark has formed, never before 1300 ms, and a mark that draws nothing holds it no longer",
+    got, [[["tour", 1900]], [["tour", 1300]], [["tour", 1300]]]);
+
+  try {
+    // The same cold launch; then no mark, where the second frame comes 20 ms after boot.
+    const c = markLab(); c.make(); c.sb.wireOnOpen();
+    let t = 600, i = 0;
+    while (c.frame(t) < 100) t = 600 + ++i * hz(250);
+    c.timersTo(4000);
+    const n = markLab(); n.sb.wireOnOpen(); n.frame(10); n.frame(20); n.timersTo(4000);
+    got = [c.log, n.log];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the boot repaint waits for the mark to form, and without one comes on the second frame as before",
+    got, [[["repaint", 1700]], [["repaint", 20]]]);
 }
 /* EVERY CLOSE FADES OUT ON THE DISMISS TIER (feel pass motion-9, ruled 2026-09-26 13:14): the three
    helpers are sliced out of motion.js and run on a small element model written here, and each

@@ -10,6 +10,7 @@ import { t, toast } from "./ui-lang.js";
 import { railActive, railWanted, scheduleRailGeometry, syncRailLayout } from "./rail-panel.js";
 import { pageScroller } from "./page-scroll.js";
 import { list, $ } from "./dom.js";
+import { whenMarkFormed } from "./empty-mark.js";
 import { setEntrySel } from "./mark.js";
 import { syncLayoutPrefs, pillsWanted, schedulePillsCollapse } from "./pills-box.js";
 import { closeSettingsMenu } from "./header-menus.js";
@@ -592,9 +593,9 @@ function startTour(from,auto){
   els.root.classList.add("on");
   showTourStep(i);
 }
-/* THE FIRST RUN'S TOUR starts once the logo has gathered on the empty desk (empty-mark.js takes
-   1.1 s), so nothing covers it while it forms. */
-const TOUR_AUTO_MS=1300;
+/* THE FIRST RUN'S TOUR starts once the logo has gathered on the empty desk and TOUR_BREATH_MS after
+   it, and never sooner than TOUR_AUTO_MS, so nothing covers the mark while it forms. */
+const TOUR_AUTO_MS=1300, TOUR_BREATH_MS=200;
 const TOUR_AT="eTourAt";
 /** Whether this launch belongs to the tour: a first run, or a reload in the middle of one. */
 function tourDueAtBoot(){ return !!ssGet(TOUR_AT) || (!tourSeen() && !tourInviteDismissed()); }
@@ -606,7 +607,10 @@ function maybeStartTour(){
     return;
   }
   if(tourSeen()||tourInviteDismissed()) return;
-  setTimeout(()=>{ if(!tourRunning && !tourSeen() && !tourInviteDismissed()) startTour(0,true); },TOUR_AUTO_MS);
+  let floor=false, formed=false;
+  const go=()=>{ if(floor && formed && !tourRunning && !tourSeen() && !tourInviteDismissed()) startTour(0,true); };
+  setTimeout(()=>{ floor=true; go(); },TOUR_AUTO_MS);
+  whenMarkFormed(()=>setTimeout(()=>{ formed=true; go(); },TOUR_BREATH_MS));
 }
 // What waits for the tour to end: the catalog offer a first run holds back (catalog-offer.js).
 let tourAfter=[];

@@ -17172,14 +17172,17 @@ What you type stays in this browser only.`;
   // src/modules/empty-mark.js
   var empty_mark_exports = {};
   __export(empty_mark_exports, {
-    syncEmptyMark: () => syncEmptyMark
+    syncEmptyMark: () => syncEmptyMark,
+    whenMarkFormed: () => whenMarkFormed
   });
   var MARK_PX = 280;
   var MARK_STEP = 3.5;
   var GATHER_MS = M_MS.gather;
   var TWINKLE_MS = M_MS.twinkle;
   var ALPHA_STEPS = 16;
+  var MARK_QUIET_MS = 1e3;
   var eMark = null;
+  var markWaiters = [];
   function markDots() {
     const svg = document.querySelector(".brand svg"), path = svg && svg.querySelector("path");
     if (!path) return [];
@@ -17208,9 +17211,9 @@ What you type stays in this browser only.`;
     }
     return dots;
   }
-  function drawMark(k, now) {
+  function drawMark(k, ms) {
     const still = mgReduceMotion(), ctx = k.ctx;
-    const t2 = (now - k.born) / 1e3, gather = still ? 1 : Math.min(1, (now - k.born) / GATHER_MS);
+    const t2 = ms / 1e3, gather = still ? 1 : Math.min(1, ms / GATHER_MS);
     const e = 1 - Math.pow(1 - gather, 3);
     const bins = [];
     k.dots.forEach((p) => {
@@ -17239,14 +17242,24 @@ What you type stays in this browser only.`;
       stopEmptyMark();
       return;
     }
-    if (now - k.born < GATHER_MS && dialogStanding()) {
+    if (k.ms < GATHER_MS && dialogStanding()) {
       k.ctx.clearRect(0, 0, MARK_PX, MARK_PX);
       startMark(k);
       return;
     }
-    drawMark(k, now);
-    if (mgReduceMotion()) return;
-    if (now - k.born < GATHER_MS) {
+    if (k.last) {
+      const dt = Math.max(0, now - k.last);
+      if (dt > 0) k.gap = Math.max(2, Math.min(k.gap, dt));
+      k.ms += k.ms < GATHER_MS ? Math.min(dt, 2 * k.gap) : dt;
+    }
+    k.last = now;
+    drawMark(k, k.ms);
+    if (k.ms >= GATHER_MS) markFormed(k);
+    if (mgReduceMotion()) {
+      markFormed(k);
+      return;
+    }
+    if (k.ms < GATHER_MS) {
       k.raf = requestAnimationFrame(markFrame);
       return;
     }
@@ -17254,19 +17267,54 @@ What you type stays in this browser only.`;
       k.raf = requestAnimationFrame(markFrame);
     }, TWINKLE_MS);
   }
+  function markFormed(k) {
+    if (k.formed) return;
+    k.formed = true;
+    releaseMarkWaiters();
+  }
+  function releaseMarkWaiters() {
+    const w = markWaiters;
+    markWaiters = [];
+    w.forEach((fn) => setTimeout(fn, 0));
+  }
+  function whenMarkFormed(fn) {
+    const k = eMark;
+    if (!k || k.formed) {
+      fn();
+      return;
+    }
+    let done = false;
+    const once = () => {
+      if (!done) {
+        done = true;
+        fn();
+      }
+    };
+    markWaiters.push(once);
+    const since = performance.now();
+    const watch = () => {
+      if (done) return;
+      const quiet = performance.now() - Math.max(k.last, since);
+      if (quiet >= MARK_QUIET_MS || eMark !== k) once();
+      else setTimeout(watch, MARK_QUIET_MS - quiet);
+    };
+    setTimeout(watch, MARK_QUIET_MS);
+  }
   function dialogStanding() {
     return !!document.querySelector(".modal:not([hidden]):not(.e-gone)");
   }
   function startMark(k) {
     if (mgReduceMotion()) {
-      drawMark(k, performance.now());
+      drawMark(k, k.ms);
+      markFormed(k);
       return;
     }
     if (dialogStanding()) {
       k.hold = setTimeout(() => startMark(k), 150);
       return;
     }
-    k.born = performance.now();
+    k.ms = 0;
+    k.last = 0;
     k.raf = requestAnimationFrame(markFrame);
   }
   function stopEmptyMark() {
@@ -17277,6 +17325,7 @@ What you type stays in this browser only.`;
     clearTimeout(k.hold);
     if (k.theme) k.theme.disconnect();
     if (k.cv.parentNode) k.cv.remove();
+    releaseMarkWaiters();
   }
   function syncEmptyMark(host) {
     if (!host) {
@@ -17285,7 +17334,7 @@ What you type stays in this browser only.`;
     }
     if (eMark) {
       host.insertBefore(eMark.cv, host.firstChild);
-      if (mgReduceMotion()) drawMark(eMark, performance.now());
+      if (mgReduceMotion()) drawMark(eMark, eMark.ms);
       return;
     }
     const dots = markDots();
@@ -17297,9 +17346,9 @@ What you type stays in this browser only.`;
     host.insertBefore(cv, host.firstChild);
     const ctx = cv.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const k = eMark = { cv, ctx, dots, born: 0, raf: 0, hold: 0, theme: null };
+    const k = eMark = { cv, ctx, dots, ms: 0, last: 0, gap: 1e3 / 60, formed: false, raf: 0, hold: 0, theme: null };
     k.theme = new MutationObserver(() => {
-      if (mgReduceMotion()) drawMark(k, performance.now());
+      if (mgReduceMotion()) drawMark(k, k.ms);
     });
     k.theme.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     startMark(k);
@@ -17968,8 +18017,8 @@ What you type stays in this browser only.`;
     focusFirstEntryOnOpen();
   }
   function wireOnOpen() {
-    requestAnimationFrame(() => requestAnimationFrame(markEReady));
-    setTimeout(markEReady, 300);
+    requestAnimationFrame(() => requestAnimationFrame(() => whenMarkFormed(markEReady)));
+    setTimeout(() => whenMarkFormed(markEReady), 300);
     focusFirstEntryOnOpen();
     requestAnimationFrame(() => requestAnimationFrame(focusFirstEntryOnOpen));
     lastGreet = greeting();
@@ -18525,6 +18574,7 @@ What you type stays in this browser only.`;
     showTourStep(i);
   }
   var TOUR_AUTO_MS = 1300;
+  var TOUR_BREATH_MS = 200;
   var TOUR_AT = "eTourAt";
   function tourDueAtBoot() {
     return !!ssGet(TOUR_AT) || !tourSeen() && !tourInviteDismissed();
@@ -18539,9 +18589,18 @@ What you type stays in this browser only.`;
       return;
     }
     if (tourSeen() || tourInviteDismissed()) return;
+    let floor = false, formed = false;
+    const go = () => {
+      if (floor && formed && !tourRunning && !tourSeen() && !tourInviteDismissed()) startTour(0, true);
+    };
     setTimeout(() => {
-      if (!tourRunning && !tourSeen() && !tourInviteDismissed()) startTour(0, true);
+      floor = true;
+      go();
     }, TOUR_AUTO_MS);
+    whenMarkFormed(() => setTimeout(() => {
+      formed = true;
+      go();
+    }, TOUR_BREATH_MS));
   }
   var tourAfter = [];
   function afterTour(fn) {
