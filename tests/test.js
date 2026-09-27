@@ -536,6 +536,7 @@ function runUnitTests() {
   railPlacementTests();
   recoveryTests();
   pageWatchTests();
+  shippedFlagTests();
   dismissTierTests();
   v2ValidationTests();
   lintCatalogTests();
@@ -1400,9 +1401,12 @@ function dismissFakeDom() {
       this.value = this.attrs.value || ""; this.checked = false; this.scrollTop = 0; this.hidden = false; this.inert = false;
       this.style = { cssText: "" }; this.heard = {};
       const self = this;
-      this.classList = { add: c => self.cls.add(c), contains: c => self.cls.has(c) };
+      this.classList = { add: c => self.cls.add(c), remove: c => self.cls.delete(c), contains: c => self.cls.has(c) };
     }
     add(...k) { k.forEach(x => { x.parent = this; this.kids.push(x); }); return this; }
+    get className() { return [...this.cls].join(" "); }
+    set className(v) { this.cls = new Set(String(v).split(" ").filter(Boolean)); }
+    get firstChild() { return this.kids[0] || null; }
     get isConnected() { let n = this; while (n.parent) n = n.parent; return n.root === true; }
     all() { return this.kids.reduce((a, k) => a.concat([k], k.all()), []); }
     querySelectorAll(sel) {
@@ -1443,6 +1447,7 @@ function dismissTierTests() {
   if (H) dismissHelperTests(H, timers, v => { still = v; });
   still = false;
   if (H) menuScreenTests(H);
+  if (H) leavingCopyTests(H);
   dismissWiringTests();
 }
 function dismissHelperTests(H, timers, setStill) {
@@ -1598,6 +1603,145 @@ function pageWatchTests() {
   eq("a loss a minute after the last counts as a first again", step(gone("crashed")), ["reload marked"]);
 }
 
+/* THE LEAVING COPIES KEEP THEIR LOOK AND PLACE: a dialog's copy wears the card's own classes and
+   style, and the tour's copies leave the root that hides, on the element model above. */
+function leavingCopyTests(H) {
+  const src = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
+  {
+    const { El, doc } = dismissFakeDom();
+    const card = new El("div", { class: "modal-card about-modal" }), inside = new El("div", { class: "about-body" });
+    card.style.cssText = "width:640px";
+    card.add(inside);
+    const modal = new El("div", { id: "modal", class: "modal" }).add(new El("div", { class: "modal-bg" }), card);
+    doc.add(modal);
+    let leave = null;
+    try {
+      leave = new Function("modalEl", "modalCard", "mgReduceMotion", "document", "dismissNode",
+        extractDecl(src("dialog.js"), "function leaveModal(") + "\nreturn leaveModal;")(
+        modal, card, () => false, { createElement: t => new El(t), body: doc }, H.dismissNode);
+    } catch (e) { leave = null; }
+    if (leave) leave();
+    const g = doc.kids[doc.kids.length - 1], c = g && g.kids[1];
+    eq("a closing dialog leaves as a copy wearing the card's own classes and style, holding what it showed",
+      leave ? [g !== modal && g.classList.contains("e-gone"), c && c.className, c && c.style.cssText, !!c && c.kids[0] === inside, card.kids.length]
+        : "no leaveModal in dialog.js",
+      [true, "modal-card about-modal", "width:640px", true, 0]);
+  }
+  {
+    const { El, doc } = dismissFakeDom();
+    const card = new El("div", { id: "tourCard", class: "tour-card bub" }), hole = new El("div", { id: "tourHole" });
+    card.style.cssText = "left:40px"; hole.style.cssText = "top:5px"; hole.style.display = "block";
+    const root = new El("div", { id: "tourRoot", class: "on" }).add(card, hole);
+    doc.add(root);
+    let end = null;
+    try {
+      end = new Function("tourRunning", "tourIdx", "tourEls", "getComputedStyle", "dismissCopy", "document",
+        "runTourStepUndo", "closeSettingsMenu", "clearTourFocus", "tourTargetRO", "markTourDone", "markTourInviteDismissed",
+        "ssDel", "TOUR_AT", "toast", "focusIntentOnOpen", "tourAfter",
+        extractDecl(src("tour.js"), "function endTour(") + "\nreturn endTour;")(
+        true, 2, () => ({ root, card, hole, field: null, arrow: null }), () => ({ zIndex: "30" }), H.dismissCopy, { body: doc },
+        () => {}, () => {}, () => {}, null, () => {}, () => {}, () => {}, "t", () => {}, () => {}, []);
+    } catch (e) { end = null; }
+    if (end) end(true);
+    const lifted = doc.kids.filter(k => k.classList.contains("e-gone"));
+    eq("the tour's bubble and ring leave as copies lifted out of the root that hides, at its height and fully shown",
+      end ? [lifted.length, root.kids.filter(k => k.classList.contains("e-gone")).length,
+             lifted.map(k => k.style.cssText.indexOf("z-index:30;opacity:1") > -1)] : "no endTour in tour.js",
+      [2, 0, [true, true]]);
+  }
+}
+
+/* THE SHIPPED FILE'S FLAG, end to end in node: the host answer computes it, the preload hands it to
+   the page, and About and the offer read it. Each half is run, not read. */
+function shippedFlagTests() {
+  const shell = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  const B = String.fromCharCode(92);
+  const inAsar = ["C:", "Users", "someone", "AppData", "Local", "Programs", "Etiuda", "resources", "app.asar", "shell"].join(B);
+  const own = ["C:", "Users", "someone", "Documents", "Etiuda"].join(B);
+  let S = null;
+  try {
+    S = new Function("path", "BUILT_IN_DIR", ["function isBuiltIn(", "function folderShown("]
+      .map(m => extractDecl(shell, m)).join("\n") + "\nreturn {isBuiltIn,folderShown};")(path.win32, inAsar);
+  } catch (e) { S = null; }
+  const answer = (from) => {
+    let handler = null;
+    try {
+      new Function("ipcMain", "fromEngine", "BrowserWindow", "process", "hostBackdrop", "catalogFolder", "builtInFiles",
+        "folderFiles", "SAMPLE_FILE", "path", "catalogFrom", "folderShown", "isBuiltIn", "catalogMtime", "openedWith",
+        "openedRefused", "recovering", "deskFile", "os", "hostAccent",
+        extractDecl(shell, 'ipcMain.on("etiuda:host",'))(
+        { on: (ch, fn) => { handler = fn; } }, () => true, { fromWebContents: () => null }, { platform: "win32" }, () => null,
+        () => own, () => [], () => [], "sample-catalog.ec", path.win32, from, S.folderShown, S.isBuiltIn, () => 0, "",
+        null, new Set(), () => "", { homedir: () => "" }, () => "");
+    } catch (e) { return "the host answer did not run: " + e.message; }
+    const ev = { sender: { id: 1 } };
+    handler(ev);
+    return [ev.returnValue.catalogBuiltIn, ev.returnValue.catalogIn];
+  };
+  eq("the host answer flags the shipped sample and hands no folder for it, and a folder file is unflagged with its folder",
+    S ? [answer(inAsar + B + "sample-catalog.ec"), answer(own + B + "team.ec")] : "no isBuiltIn in shell/main.js",
+    [[true, ""], [false, own]]);
+
+  const preload = fs.readFileSync(path.join(E.ROOT, "shell", "preload.js"), "utf8");
+  const bridge = (host) => {
+    let exposed = null;
+    const heard = {};
+    const electron = {
+      contextBridge: { exposeInMainWorld: (k, v) => { if (k === "E_HOST") exposed = v; }, executeInMainWorld() {} },
+      ipcRenderer: { sendSync: ch => ch === "etiuda:host" ? host : null, send() {}, invoke() {}, on: (ch, fn) => { heard[ch] = fn; } },
+      webUtils: {} };
+    require("vm").runInNewContext(preload, { require: m => { if (m !== "electron") throw new Error(m); return electron; } });
+    let handed = null;
+    exposed.onCatalogFile((...a) => { handed = a[5]; });
+    heard["etiuda:catalog-file"]({}, "{}", "sample-catalog.ec", "", false, "", true);
+    return [exposed.catalogBuiltIn, exposed.recovering, handed];
+  };
+  let got;
+  try { got = [bridge({ catalogBuiltIn: true, recovering: true }), bridge({})]; }
+  catch (e) { got = "the preload did not run: " + e.message; }
+  eq("the preload hands the page the shipped flag and the recovery mark as the shell answered them, and the watch's flag too",
+    got, [[true, true, true], [false, false, true]]);
+
+  const about = fs.readFileSync(path.join(E.ROOT, "src", "modules", "about.js"), "utf8");
+  const aboutSays = (file, inDir, builtIn) => {
+    let body = null;
+    try {
+      new Function("t", "esc", "keysLegendHtml", "TILE_MARK", "E_VERSION", "eCatalogFile", "eCatalogIn", "eCatalogBuiltIn",
+        "openDialog", "document", "fillProseIcons", "modalCard", "$", "dismissModal",
+        extractDecl(about, "function openAbout(") + "\nreturn openAbout;")(
+        s => s, s => s, () => "", "", "2", () => file, () => inDir, () => builtIn,
+        o => { body = o.body; }, { getElementById: () => null }, () => {}, null, () => null, () => {})();
+    } catch (e) { return "openAbout did not run: " + e.message; }
+    const m = /<b>Catalog file<\/b> - (.*?)<br>/.exec(body || "");
+    return m ? m[1] : "";
+  };
+  eq("About says the shipped file comes with Etiuda and names no folder, even one it is handed; a folder file keeps its folder", [
+    aboutSays("sample-catalog.ec", "", true), aboutSays("sample-catalog.ec", inAsar, true), aboutSays("team.ec", own, false)], [
+    "<code>sample-catalog.ec</code> comes with Etiuda.", "<code>sample-catalog.ec</code> comes with Etiuda.",
+    "<code>team.ec</code> in <code>" + own + "</code>."]);
+
+  const offer = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-offer.js"), "utf8");
+  const offers = (given, builtInHost, inHost, file, where, builtIn) => {
+    const seen = {};
+    try {
+      const found = new Function("t", "esc", "E_CATALOG_SCRIPT", "eCatalogFolder", "eCatalogFolderShort",
+        extractDecl(offer, "function eFoundHtml(") + "\nreturn eFoundHtml;")(s => s, s => s, "etiuda-catalog.js", () => own, s => s);
+      new Function("eEmbeddedCatalog", "eCatalog", "storedCatalog", "eCatalogAccepted", "eCatalogFile", "eCatalogBuiltIn", "eHost",
+        "eCatalogIn", "eCatalogFolder", "eOfferCatalogDialog", "eFoundHtml", "lsSet", "E_CATALOG_KEY", "activateCatalog",
+        "eCatalogMtime", "eCatalogSignature", "toast",
+        extractDecl(offer, "function eOfferCatalog(") + "\nreturn eOfferCatalog;")(
+        () => false, () => ({ cards: [] }), () => null, () => false, () => "sample-catalog.ec", () => builtInHost, () => ({}),
+        () => inHost, () => own, (c, o) => { seen.said = o.foundHtml; o.accept("sig"); return true; }, found, () => {}, "k",
+        (c, o) => { seen.file = o.file; }, () => 5, () => "sig", () => {})(given, file, where, true, false, builtIn);
+    } catch (e) { return "eOfferCatalog did not run: " + e.message; }
+    return [/comes with Etiuda/.test(seen.said), seen.said.indexOf("Documents") > -1, seen.file];
+  };
+  eq("the offer of the shipped sample, at boot or from the watch, names no folder and marks no row of the catalog folder as loaded", [
+    offers(null, true, "", "", "", false), offers({ cards: [] }, false, "", "sample-catalog.ec", inAsar, true)],
+    [[true, false, ""], [true, false, ""]]);
+  eq("a file found in the catalog folder is located in it and marks its row", offers(null, false, own, "team.ec", "", false),
+    [false, true, "team.ec"]);
+}
 function requestFns() {
   const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
   const decls = ["const DESK_ID_RE =", "function channelHash(", "function ymdOk(",
