@@ -401,10 +401,10 @@ leg("m9", "a resize that changes the column count paints the new count in the fr
 
 /* Layouts the page ran, from the browser's own counter. A card read after the card before it was
    swapped costs a layout of its own, and the eye sees that as frames that do not come. */
-async function layouts(p) {
+async function layouts(p, metric) {
   const cdp = await p.target().createCDPSession();
   await cdp.send("Performance.enable");
-  const read = async () => (await cdp.send("Performance.getMetrics")).metrics.find(m => m.name === "LayoutCount").value;
+  const read = async () => (await cdp.send("Performance.getMetrics")).metrics.find(m => m.name === (metric || "LayoutCount")).value;
   return { read, done: () => cdp.detach().catch(() => {}) };
 }
 
@@ -489,6 +489,38 @@ leg("m12", "a star and a hide glide the cards that stay on screen at the top and
       await sleep(400);
     }
   }
+  return { ok, text: out.join(" | ") };
+});
+
+leg("m13", "a category press recalculates style a handful of times, not once per rail row it echoes", async p => {
+  /* The press's own task: every style pass there comes before the first frame of the glide, so
+     the eye sees them as a late start. Counted by the browser. */
+  const k = await p.evaluate(() => {
+    const vh = innerHeight;
+    const c = [...document.querySelectorAll("#list .card[data-id]")].find(el => {
+      const r = el.getBoundingClientRect(); return r.top > vh * 0.5 && r.top < vh * 0.85; });
+    const m = c && findCard(c.getAttribute("data-id"));
+    return m ? String(m.c) : null;
+  });
+  if (k == null) return { ok: false, text: "no card in the lower half of the screen to follow" };
+  const L = await layouts(p, "RecalcStyleCount");
+  const out = [];
+  let ok = true;
+  try {
+    for (const [what, key] of [["the press", k], ["All", ""]]) {
+      await p.evaluate(key => { window.__mtKey = key; }, key);
+      const n0 = await L.read();
+      const ms = await p.evaluate(() => { const t = performance.now();
+        document.querySelector('#pills .pill[data-k="' + CSS.escape(window.__mtKey) + '"]').click();
+        return Math.round(performance.now() - t); });
+      const n = (await L.read()) - n0;
+      const rows = await p.evaluate(() => document.querySelectorAll("#intentRailList .rr-open, #intentRailList .rr-cont").length);
+      /* Once per echoed row was 84 for 75 rows; the press must echo enough rows to have teeth. */
+      ok = ok && n <= 30 && (key === "" || rows >= 20);
+      out.push(what + ": " + n + " style recalculations in its task, " + rows + " rail rows in echo runs, task " + ms + "ms");
+      await sleep(700);
+    }
+  } finally { await L.done(); }
   return { ok, text: out.join(" | ") };
 });
 

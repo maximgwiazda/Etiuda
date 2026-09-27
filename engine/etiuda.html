@@ -14891,22 +14891,26 @@ What you type stays in this browser only.`;
         next.el.classList.add("rr-cont");
       }
     }
+    const runs = [];
     for (let s = 0; s < relRows.length; s++) {
       if (!relRows[s]) continue;
       let e = s;
       while (relRows[e + 1] && relRows[e + 1].sig === relRows[s].sig) e++;
       if (e > s) {
-        const top0 = relRows[s].el.offsetTop;
-        const lastEl = relRows[e].el;
-        const runH = lastEl.offsetTop + lastEl.offsetHeight - top0;
-        for (let j = s; j <= e; j++) {
-          const el = relRows[j].el, bridge = j > s ? 2 : 0;
-          el.style.setProperty("--rr-h", runH + "px");
-          el.style.setProperty("--rr-y", -(el.offsetTop - bridge - top0) + "px");
-        }
+        const tops = [];
+        for (let j = s; j <= e; j++) tops.push(relRows[j].el.offsetTop);
+        runs.push({ s, tops, h: relRows[e].el.offsetHeight });
       }
       s = e;
     }
+    runs.forEach((run) => {
+      const top0 = run.tops[0], runH = run.tops[run.tops.length - 1] + run.h - top0;
+      run.tops.forEach((top, i) => {
+        const el = relRows[run.s + i].el, bridge = i ? 2 : 0;
+        el.style.setProperty("--rr-h", runH + "px");
+        el.style.setProperty("--rr-y", -(top - bridge - top0) + "px");
+      });
+    });
   }
   var CARD_TOKEN_RE = /\{(GREET|AGENT|PAX|ROLE|INIT|INTENT|ACTION|TOPIC|Z|DAYPART)/;
   var TOKEN_CANARY = "{GREET}{AGENT}{PAX}{ROLE}{INIT}{INTENT}{ACTION}{TOPIC}{Z}x{DAYPART:a|b|c}";
