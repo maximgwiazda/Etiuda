@@ -2714,8 +2714,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 803;
-const UI_STRINGS_SHA256 = "6fee9f3adf5cdd1bc51677ad7d32d7e9f58d78aacfab53d5e1c328e278b5ea83";
+const UI_STRINGS_COUNT = 809;
+const UI_STRINGS_SHA256 = "8b593d1e2117167455ae480e4c325b907fd63bfa00b3f9bfd764b525ffb0b702";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
@@ -4226,6 +4226,28 @@ if (require.main === module) {
         + " time, under ${UAC_IsInnerInstance} and nothing else, so the elevated inner copy skips"
         + " the licence" : "; licence is not before install-mode")
       + (debugPages ? "; " + debugPages + " agrees" : ""));
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
+
+  section("[2f/5] the fuses the executable is built with");
+  try {
+    /* ELECTRON-BUILDER COPIES ONLY THE FUSE NAMES IT KNOWS, so a misspelt key leaves that fuse at
+       Electron's default with no error anywhere. Each wanted key is read as electron-builder
+       reads it, in its own generateFuseConfig, and the value the config gives it is checked. */
+    const root = path.join(__dirname, "..");
+    const want = { runAsNode: false, enableNodeOptionsEnvironmentVariable: false,
+                   enableNodeCliInspectArguments: false, onlyLoadAppFromAsar: true };
+    const cfg = require(path.join(root, "electron-builder.js")).electronFuses || {};
+    const packager = fs.readFileSync(path.join(root, "node_modules", "app-builder-lib", "out",
+      "platformPackager.js"), "utf8");
+    const bad = [];
+    Object.keys(cfg).forEach(k => { if (packager.indexOf("fuses." + k + " != null") < 0)
+      bad.push(k + " is not a fuse electron-builder reads"); });
+    Object.keys(want).forEach(k => { if (cfg[k] !== want[k])
+      bad.push(k + " is " + JSON.stringify(cfg[k]) + ", wanted " + want[k]); });
+    bad.forEach(x => console.error("  ERROR: " + x));
+    if (bad.length) hardFail++;
+    else console.log("  " + Object.keys(cfg).length + " fuses set, each one electron-builder reads: "
+      + Object.keys(cfg).map(k => k + " " + cfg[k]).join(", "));
   } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
   section("[3/5] stacking invariants");

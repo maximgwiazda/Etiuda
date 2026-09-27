@@ -19,7 +19,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 25;
+const EXPECTED = 26;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -315,6 +315,13 @@ try {
       "4c and while it does not answer, nothing touches it synchronously: " + d.st.touched.length + " call(s)"
       + (d.st.touched.length ? " (" + d.st.touched.slice(0, 4).join(", ") + ")" : "")
       + ", the boot's catalog, host answer, Library listing and Load all answered empty");
+    const atDoors = d.st.touched.length;
+    const ring = await d.S.ask("etiuda:catalog-ring");
+    const door = await d.S.ask("etiuda:open-catalog-folder");
+    check(d.st.touched.length === atDoors && ring === "" && door === false,
+      "4j nor do the ring's door and the folder's: " + (d.st.touched.length - atDoors) + " call(s)"
+      + (d.st.touched.length > atDoors ? " (" + d.st.touched.slice(atDoors).join(", ") + ")" : "")
+      + ", ring " + JSON.stringify(ring) + ", folder opened " + door);
     const warned = d.S.said.filter(l => /catalog folder .* did not answer/.test(l)).length;
     check(warned === 1 && d.clock.due(30000).length === 1,
       "4d it is said once in the log, and asked again on a timer: " + warned + " line(s), "

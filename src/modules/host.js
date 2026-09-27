@@ -46,6 +46,13 @@ function eOpenCatalogFolder(){
   try{ return Promise.resolve(h.openCatalogFolder()).then(v=>!!v).catch(()=>false); }
   catch(e){ return Promise.resolve(false); }
 }
+/* The ring beside the catalogs as text, "" in a browser and "" wherever the host has none. */
+function eCatalogRing(){
+  const h=eHost();
+  if(!h || typeof h.catalogRing!=="function") return Promise.resolve("");
+  try{ return Promise.resolve(h.catalogRing()).then(v=>typeof v==="string"?v:"").catch(()=>""); }
+  catch(e){ return Promise.resolve(""); }
+}
 /* The file this load is running, and the folder it was found in - which is not always the folder
    above: a catalog beside the installation still loads when the folder holds none. Where the
    engine refused the file the host named at boot, the file handed in its place answers, and the
@@ -272,6 +279,7 @@ export {
   eCatalogFolder,
   eCatalogFolderShort,
   eCatalogFiles,
+  eCatalogRing,
   eChooseCatalogFolder,
   eLoadedCatalogFile,
   eCatalogIn,
