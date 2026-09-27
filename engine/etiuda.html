@@ -14493,70 +14493,13 @@ What you type stays in this browser only.`;
     drawPills();
     flipPills(before);
   }
-  var CARD_FLIP_TRAVEL_VH = 0.5;
   var CARD_FLIP_SCROLL_TOP = 80;
   function captureCards() {
     if (!list || mgReduceMotion() || pageScrollY() > CARD_FLIP_SCROLL_TOP) return null;
-    const els = list.querySelectorAll(".card[data-id]");
-    if (!els.length) return null;
-    const margin = window.innerHeight;
-    const tops = {};
-    let n = 0;
-    els.forEach((c) => {
-      n++;
-      const r = c.getBoundingClientRect();
-      if (r.bottom > -margin && r.top < window.innerHeight + margin) tops[c.dataset.id] = r.top;
-    });
-    return { n, tops };
+    return captureSettle();
   }
   function flipCards(before) {
-    if (!before || !list) return;
-    const els = Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
-    if (!els.length || els.length !== before.n) return;
-    const watched = [];
-    els.forEach((c) => {
-      if (before.tops[c.dataset.id] != null) {
-        watched.push(c);
-        c.style.contentVisibility = "visible";
-      }
-    });
-    const release = () => watched.forEach((c) => {
-      c.style.contentVisibility = "";
-    });
-    const limit = window.innerHeight * CARD_FLIP_TRAVEL_VH, margin = window.innerHeight;
-    const moved = [], dys = [];
-    watched.forEach((c) => {
-      const b = before.tops[c.dataset.id];
-      const r = c.getBoundingClientRect();
-      if (r.bottom < -margin || r.top > window.innerHeight + margin) return;
-      const dy = Math.round(b - r.top);
-      if (!dy || Math.abs(dy) > limit) return;
-      moved.push(c);
-      dys.push(dy);
-    });
-    if (!moved.length || moved.length > CARD_MOVE_MAX) {
-      release();
-      return;
-    }
-    moved.forEach((c, i) => {
-      c.style.transition = "none";
-      c.style.willChange = "transform";
-      c.style.transform = "translateY(" + dys[i] + "px)";
-    });
-    const clear = () => {
-      moved.forEach((c) => {
-        c.style.transition = "";
-        c.style.transform = "";
-        c.style.willChange = "";
-      });
-      release();
-    };
-    void list.offsetHeight;
-    moved.forEach((c) => {
-      c.style.transition = "transform var(--m-move) " + E_EASE;
-      c.style.transform = "";
-    });
-    setTimeout(clear, 280);
+    glideSettle(before, "move");
   }
   var eSettleRuns = [];
   function captureSettle() {

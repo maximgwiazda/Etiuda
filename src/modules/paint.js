@@ -120,84 +120,23 @@ function animateReorder(mutate){
   drawPills();
   flipPills(before);
 }
-/* FLIP for cards when an intent re-sorts them. Same two-half shape as the pills, but
-   cards need guards the pills do not, because a card list is not a pill strip:
-   - MEMBERSHIP must be identical. Macro search removes 175 of 199 entries; that is a filter,
-     not a reorder, and there is nothing to interpolate for a card that no longer exists.
-   - SIZE cap. In the All view an intent re-sort moves 197 cards a median of 1747px and a
-     maximum of 42861px. A card crossing 42861px in a fifth of a second is a blur artifact,
-     and it would mean 199 transform layers.
-   - TRAVEL cap per card, for the same reason at the level of a single card.
-   - VIEWPORT filter. Cards are ~274px tall, so about three are on screen; animating the rest
-     is invisible work.
-   - SCROLL-TOP only. pickIntent sets pendingScrollHit, and render() then smooth-scrolls to
-     the first linked entry, which can be a 12000px journey. Animating card positions under a
-     viewport travelling that far reads as chaos. Near the top that scroll is a no-op, which
-     is exactly when the animation is worth having, so the two never run at once. */
-/* No cap on how many cards are on the PAGE. The old 25-cap meant a real catalog never
-   animated - the measurement was of the wrong thing: an intent pick moves ~200 cards,
-   but only NINE are anywhere near the viewport. What has to be capped is TRANSFORMS,
-   which the viewport filter and CARD_MOVE_MAX below already do - the same shape
-   flipCardsAround() uses for star and hide. */
-/* Travel cap at half a viewport (~1.5 cards): far enough to watch a card change
-   places, not far enough to be mistaken for the page scrolling - long moves read as
-   unwanted auto-scroll, never as swaps. */
-const CARD_FLIP_TRAVEL_VH=0.5;
+/* A PICK AND A CLEAR RE-SORT THE CARDS UNDER THE SETTLE'S PLAN (glideSettle below): a card on
+   screen before and after glides both ways, across a column too, and one new to the screen rises
+   in where it lands. SCROLL-TOP only: pickIntent sets pendingScrollHit, and render() then
+   smooth-scrolls to the first linked entry, which can be a 12000px journey. Animating card
+   positions under a viewport travelling that far reads as chaos. Near the top that scroll is a
+   no-op, which is exactly when the animation is worth having, so the two never run at once. */
 const CARD_FLIP_SCROLL_TOP=80;     // only when the auto-scroll will not move the view
 function captureCards(){
   if(!list || mgReduceMotion() || pageScrollY()>CARD_FLIP_SCROLL_TOP) return null;
-  const els=list.querySelectorAll(".card[data-id]");
-  if(!els.length) return null;
-  /* Positions for the cards near the viewport, plus the total count. The count is what
-     tells a REORDER from a FILTER: a search removes most of the list, and there is
-     nothing to interpolate for a card that no longer exists. The captured subset cannot
-     say that - it is meant to be smaller than the list. */
-  const margin=window.innerHeight;
-  const tops={};
-  let n=0;
-  els.forEach(c=>{
-    n++;
-    const r=c.getBoundingClientRect();
-    if(r.bottom>-margin && r.top<window.innerHeight+margin) tops[c.dataset.id]=r.top;
-  });
-  return {n:n, tops:tops};
+  return captureSettle();
 }
 function flipCards(before){
-  if(!before || !list) return;
-  const els=Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
-  // Identical membership only - a filter is not a reorder.
-  if(!els.length || els.length!==before.n) return;
-  /* Honest rects: the render that preceded this replaced every node, and
-     content-visibility:auto resolves relevancy a frame later - a rect read now sees the
-     220px estimate, not the card. Forcing the property on the watched cards makes their
-     rects real; the scroll-top gate in captureCards() means nothing estimated sits above
-     them, so real is also correct. Released with the transition cleanup, or on any bail. */
-  const watched=[];
-  els.forEach(c=>{ if(before.tops[c.dataset.id]!=null){ watched.push(c); c.style.contentVisibility="visible"; } });
-  const release=()=>watched.forEach(c=>{ c.style.contentVisibility=""; });
-  const limit=window.innerHeight*CARD_FLIP_TRAVEL_VH, margin=window.innerHeight;
-  const moved=[], dys=[];
-  watched.forEach(c=>{
-    const b=before.tops[c.dataset.id];
-    const r=c.getBoundingClientRect();
-    if(r.bottom<-margin || r.top>window.innerHeight+margin) return;
-    // whole pixels only - fractional offsets put the text on a half-pixel and it blurs
-    const dy=Math.round(b-r.top);
-    if(!dy || Math.abs(dy)>limit) return;
-    moved.push(c); dys.push(dy);
-  });
-  if(!moved.length || moved.length>CARD_MOVE_MAX){ release(); return; }
-  moved.forEach((c,i)=>{ c.style.transition="none"; c.style.willChange="transform";
-                         c.style.transform="translateY("+dys[i]+"px)"; });
-  const clear=()=>{ moved.forEach(c=>{ c.style.transition=""; c.style.transform=""; c.style.willChange=""; }); release(); };
-  // Commit the invert before attaching the transition - see the note in flipPills().
-  void list.offsetHeight;
-  moved.forEach(c=>{ c.style.transition="transform var(--m-move) "+E_EASE; c.style.transform=""; });
-  setTimeout(clear,280);
+  glideSettle(before,"move");
 }
 /* THE SETTLE'S GLIDE: when a search settles, the cards on screen travel to their new places on
-   the spring, and a card new to the screen rises in. A filter as well as a reorder, unlike the
-   pick's flip above, so matching is by id and membership may differ. Near the top only, for
+   the spring, and a card new to the screen rises in. A filter as well as a reorder, so matching
+   is by id and membership may differ. Near the top only, for
    flipCardsAround()'s reason: deep in the list the new places ride on estimated cards. */
 let eSettleRuns=[];
 function captureSettle(){

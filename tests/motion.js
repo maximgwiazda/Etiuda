@@ -270,6 +270,26 @@ leg("m5", "a category press and All glide every card that stays on screen, and t
   return { ok, text: out.join(" | ") };
 });
 
+leg("m6", "an intent pick and its clear glide every card that stays on screen, across columns too", async p => {
+  const out = [];
+  let ok = true;
+  for (const nth of [2, 6]) {
+    await rest(p);
+    await p.evaluate(n => { window.__mtN = n; }, nth);
+    const r = await track(p, "cards", 1300, () => { window.__mtAct = () =>
+      [...document.querySelectorAll("#intentRailList .rail-item[data-si]:not(.on)")][window.__mtN].click(); });
+    const j = judge(r, { wantArrivals: true });
+    ok = ok && j.ok && j.moved > 0;
+    out.push("pick " + nth + ": " + j.text);
+    await sleep(400);
+    const c = await track(p, "cards", 900, () => { window.__mtAct = () => clearIntents(); });
+    const k = judge(c, { wantArrivals: true });
+    ok = ok && k.ok;
+    out.push("clear: " + k.text);
+  }
+  return { ok, text: out.join(" | ") };
+});
+
 module.exports = { LEGS, instrument, rest, boot, VIEW };
 
 if (require.main === module) {
