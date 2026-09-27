@@ -1073,15 +1073,16 @@ function copyNoticeTests() {
   const decls = ["let copyCount=", "function copy(", "function fallback("].map(m => extractDecl(src, m)).join("\n");
   const SAID = "Ready to paste: A card, EN";
   const HAND = "Selecting the text on the card and pressing Ctrl+C copies this one; the browser kept the clipboard closed.";
-  const run = (secure, write, exec) => {
+  const DESK = "Selecting the text on the card and pressing Ctrl+C copies this one; the clipboard would not take it just now.";
+  const run = (secure, write, exec, host) => {
     const said = [];
     const ta = { style: {}, select() {}, remove() {} };
     const doc = { createElement: () => ta, body: { appendChild() {} }, execCommand: exec };
     const nav = write ? { clipboard: { writeText: () => ({ then: (ok, no) => (write === "ok" ? ok() : no()) }) } } : {};
     const copy = new Function("navigator", "window", "document", "toast", "TOAST_HAND_MS",
-      "setRailMarkUsed", "setSemiKind", "hooks", decls + "\nreturn copy;")(
+      "setRailMarkUsed", "setSemiKind", "hooks", "eHost", "t", decls + "\nreturn copy;")(
       nav, { isSecureContext: secure }, doc, m => said.push(m), 5000,
-      () => {}, () => {}, { railDecorate() {} });
+      () => {}, () => {}, { railDecorate() {} }, () => !!host, s => s);
     copy("text", SAID);
     return said;
   };
@@ -1090,6 +1091,8 @@ function copyNoticeTests() {
   eq("and with no clipboard API at all, a refused copy command says the same",
      run(false, null, () => false), [HAND]);
   eq("and a copy command that throws says the same", run(false, null, () => { throw new Error("x"); }), [HAND]);
+  eq("on the desk, which has no browser, the same refusal blames none",
+     run(true, "no", () => false, true), [DESK]);
   eq("CONTROL: a clipboard that takes the text still says ready to paste", run(true, "ok", () => false), [SAID]);
   eq("CONTROL: and so does a copy command the browser carries out", run(false, null, () => true), [SAID]);
 }
@@ -3046,8 +3049,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 835;
-const UI_STRINGS_SHA256 = "d76f08505b7006a23340fc6bec4d3512f0322228301979d0d2219b1cb3c0197f";
+const UI_STRINGS_COUNT = 837;
+const UI_STRINGS_SHA256 = "00c0b8d344efbd7ea8ed8b07fc85783d2b0ccda899b0c4909a11b386fa4f1c9c";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

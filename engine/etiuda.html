@@ -5898,6 +5898,7 @@ What you type stays in this browser only.`;
     "Press the new shortcut (Esc to cancel, Backspace for the default)": "Naciśnij nowy skrót (Esc anuluje, Backspace przywraca domyślny)",
     "Built-in quick facts restored": "Przywrócono wbudowane szybkie fakty",
     "Selecting the text on the card and pressing Ctrl+C copies this one; the browser kept the clipboard closed.": "Tę odpowiedź można skopiować, zaznaczając jej tekst na karcie i naciskając Ctrl+C; przeglądarka nie dała dostępu do schowka.",
+    "Selecting the text on the card and pressing Ctrl+C copies this one; the clipboard would not take it just now.": "Tę odpowiedź można skopiować, zaznaczając jej tekst na karcie i naciskając Ctrl+C; schowek tym razem jej nie przyjął.",
     "Some required fields are empty": "Uzupełnij wymagane pola",
     "Title is required": "Wpisz tytuł",
     "Macro text is required": "Wpisz tekst makra",
@@ -5914,6 +5915,7 @@ What you type stays in this browser only.`;
     "The file is kept unchanged at {FILE}, and Etiuda has started afresh.": "Plik został odłożony bez zmian jako {FILE}, a Etiuda zaczęła od nowa.",
     "Could not save shortcuts": "Nie udało się zapisać skrótów",
     "Could not save the catalog, perhaps because the browser's storage is full.": "Nie udało się zapisać katalogu; możliwe, że pamięć przeglądarki jest pełna.",
+    "Could not save the catalog, because Etiuda cannot write {FILE}.": "Nie udało się zachować katalogu: Etiuda nie może zapisać pliku {FILE}.",
     "This browser is not storing anything, so a catalog cannot be kept here": "Ta przeglądarka niczego nie zapisuje, więc nie można tu zachować katalogu",
     "Could not find the embedded-catalog slot": "Nie znaleziono miejsca na wbudowany katalog",
     "load a sample catalog": "wczytaj przykładowy katalog",
@@ -10496,6 +10498,7 @@ What you type stays in this browser only.`;
     E_CATALOG_VERSION: () => E_CATALOG_VERSION,
     catalogDocOf: () => catalogDocOf,
     catalogStamp: () => catalogStamp,
+    catalogStoreRefusal: () => catalogStoreRefusal,
     catalogVersionLabel: () => catalogVersionLabel,
     eApplyCatalog: () => eApplyCatalog,
     eCatalog: () => eCatalog,
@@ -10693,6 +10696,9 @@ What you type stays in this browser only.`;
       return null;
     }
   }
+  function catalogStoreRefusal(file) {
+    return file ? t("Could not save the catalog, because Etiuda cannot write {FILE}.").split("{FILE}").join(file) : t("Could not save the catalog, perhaps because the browser's storage is full.");
+  }
   function storeCatalog(c) {
     if (!E_LS_OK) {
       toastRefusal(t("This browser is not storing anything, so a catalog cannot be kept here"));
@@ -10705,7 +10711,7 @@ What you type stays in this browser only.`;
       s = null;
     }
     if (s === null || !lsSet(E_CATALOG_STORE, s, true) || lsGet(E_CATALOG_STORE) !== s) {
-      toastRefusal(t("Could not save the catalog, perhaps because the browser's storage is full."));
+      toastRefusal(catalogStoreRefusal(eDeskFileShown()));
       return false;
     }
     return true;
@@ -13376,7 +13382,7 @@ What you type stays in this browser only.`;
   function undoEject(park) {
     const put = park.keys[E_CATALOG_STORE];
     if (put != null && (!lsSet(E_CATALOG_STORE, put, true) || lsGet(E_CATALOG_STORE) !== put)) {
-      toastRefusal(t("Could not save the catalog, perhaps because the browser's storage is full."));
+      toastRefusal(catalogStoreRefusal(eDeskFileShown()));
       return false;
     }
     Object.keys(park.keys).forEach((k) => {
@@ -13511,7 +13517,7 @@ What you type stays in this browser only.`;
     }
     ta.remove();
     if (ok) cb();
-    else toast("Selecting the text on the card and pressing Ctrl+C copies this one; the browser kept the clipboard closed.", TOAST_HAND_MS);
+    else toast(eHost() ? t("Selecting the text on the card and pressing Ctrl+C copies this one; the clipboard would not take it just now.") : t("Selecting the text on the card and pressing Ctrl+C copies this one; the browser kept the clipboard closed."), TOAST_HAND_MS);
   }
   function setEntrySel(id, vi, opts) {
     opts = opts || {};

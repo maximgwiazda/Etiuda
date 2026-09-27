@@ -1,6 +1,6 @@
-import { E_CATALOG_KEY, E_CATALOG_STORE, eWatchClear } from "./catalog.js";
+import { E_CATALOG_KEY, E_CATALOG_STORE, eWatchClear, catalogStoreRefusal } from "./catalog.js";
 import { pack, savePack } from "./pack.js";
-import { E_NS, E_SS_OK, eWipeLatch, lsDel, lsGet, lsKeys, lsSet, mgReopenAfterReload, nsDel, nsKey, ssDel, ssGet, ssSet } from "./storage.js";
+import { E_NS, E_SS_OK, eDeskFileShown, eWipeLatch, lsDel, lsGet, lsKeys, lsSet, mgReopenAfterReload, nsDel, nsKey, ssDel, ssGet, ssSet } from "./storage.js";
 import { reloadCovered } from "./motion.js";
 import { TAB_KEY, saveTabSession, tabSaveTimer } from "./tabs.js";
 import { askSure, offerUndo, t, toastRefusal } from "./ui-lang.js";
@@ -129,7 +129,7 @@ function offerEjectUndo(){
 function undoEject(park){
   const put=park.keys[E_CATALOG_STORE];
   if(put!=null && (!lsSet(E_CATALOG_STORE,put,true) || lsGet(E_CATALOG_STORE)!==put)){
-    toastRefusal(t("Could not save the catalog, perhaps because the browser's storage is full."));
+    toastRefusal(catalogStoreRefusal(eDeskFileShown()));
     return false;
   }
   Object.keys(park.keys).forEach(k=>{

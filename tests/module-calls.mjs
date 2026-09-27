@@ -1434,6 +1434,23 @@ const CARD_B = {
       const h = CB.swapStripHtml([]);
       return h.indexOf("Click to pick") < 0 && h.indexOf("Set {INTENT}") < 0 && h.indexOf("{INTENT}") > -1 ? true : h;
     }));
+
+  /* THE REFUSAL'S CAUSE. A desk stores in one file, so a catalog it could not keep is refused by
+     naming that file; blaming a browser's storage there points nowhere. Both languages, since the
+     wrong cause was in both. */
+  const C = await import(MOD("catalog.js"));
+  const DESK = "%USERPROFILE%\\AppData\\Roaming\\etiuda\\desk.json";
+  check("catalog.js", "THE CONTROL: with no desk file the catalog refusal is the browser's, in English and in Polish",
+    () => {
+      const en = inLang("en", () => C.catalogStoreRefusal("")), pl = inLang("pl", () => C.catalogStoreRefusal(""));
+      return /browser/.test(en) && /przeglądar/.test(pl) ? true : JSON.stringify([en, pl]);
+    });
+  check("catalog.js", "a desk's catalog refusal names the file it could not write and no browser, in English and in Polish",
+    () => {
+      const en = inLang("en", () => C.catalogStoreRefusal(DESK)), pl = inLang("pl", () => C.catalogStoreRefusal(DESK));
+      return en.indexOf(DESK) > -1 && pl.indexOf(DESK) > -1 && !/browser/i.test(en) && !/przeglądar/i.test(pl)
+        && pl !== en ? true : JSON.stringify([en, pl]);
+    });
 }
 
 /* ------------------------------------------------------------------ favourites.js
