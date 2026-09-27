@@ -102,11 +102,11 @@
   var booted=false, tries=0;
   try{ tries=parseInt(sessionStorage.getItem("eBootTry")||"0",10)||0; }catch(e){}
   // Called by the last line of the app script. Until then, boot is assumed to be in progress.
-  /* The arrival: the first frame the block lets through is the band over nothing, as the frame it
-     replaces was, and the content under it comes in on the surface tier from the frame after. Not
-     sooner: the animation clock stood still while rendering was blocked, and a fade started on it
-     is already over when it is first painted. A frame does not come to a hidden window, hence
-     the timeout. */
+  /* The arrival: the first frame the block lets through is the band over what reads as nothing, the
+     content drawn under it at a trace (the sheet's e-arriving), and the fade starts in the frame after
+     that one is presented. Not sooner: a fade started before its content was ever drawn spends itself
+     while the content is first rasterised, and arrives in one step. Where paint timing is not known,
+     two frames. A frame does not come to a hidden window, hence the timeout. */
   function arrive(){
     var root=document.documentElement, done=false;
     if(!root.classList.contains("e-arriving")) return;
@@ -119,7 +119,14 @@
       root.classList.remove("e-arriving");
       setTimeout(function(){ root.classList.remove("e-arrived"); }, 600);
     }
-    requestAnimationFrame(function(){ requestAnimationFrame(go); });
+    var painted=null;
+    try{
+      if(!performance.getEntriesByType("paint").length){
+        painted=new PerformanceObserver(function(){ painted.disconnect(); requestAnimationFrame(go); });
+        painted.observe({type:"paint"});
+      }
+    }catch(e){ painted=null; }
+    if(!painted) requestAnimationFrame(function(){ requestAnimationFrame(go); });
     setTimeout(go, 500);
   }
   window.E_BOOT_OK=function(){
@@ -2283,7 +2290,9 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 @keyframes eModalBgIn{from{opacity:0}to{opacity:1}}
 @keyframes eModalCardIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
 /* A COVERED RELOAD (motion.js reloadCovered, and the boot guard's arrive): the band stays, and
-   what sits under it leaves and arrives. The dot field is the scroller's own ground and stays. */
+   what sits under it leaves and arrives. The dot field is the scroller's own ground and stays. Held,
+   the content is drawn at a trace no eye resolves rather than not drawn, so it is rasterised before
+   its fade begins. */
 @keyframes eLeave{to{opacity:0}}
 html.e-leaving body>:not(header,#railHit,.scroller,script),html.e-leaving .scroller>.shell,
 html.e-leaving #pillsSlot{animation:eLeave var(--m-dismiss) ease forwards;pointer-events:none}
@@ -2292,7 +2301,7 @@ html.e-leaving #pillsSlot{animation:eLeave var(--m-dismiss) ease forwards;pointe
 .e-gone *{animation:none!important;transition:none!important}
 html.e-veiled body{visibility:hidden}
 html.e-arriving body>:not(header,#railHit,.scroller,script),html.e-arriving .scroller>.shell,
-html.e-arriving #pillsSlot{opacity:0}
+html.e-arriving #pillsSlot{opacity:.004}
 html.e-arrived body>:not(header,#railHit,.scroller,script),html.e-arrived .scroller>.shell,
 html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
 .modal:not([hidden]) .modal-bg{animation:eModalBgIn var(--m-scrim) ease both}

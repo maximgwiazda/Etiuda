@@ -535,6 +535,7 @@ function runUnitTests() {
   shippedFileTests();
   railPlacementTests();
   recoveryTests();
+  arrivalTests();
   pageWatchTests();
   shippedFlagTests();
   dismissTierTests();
@@ -1401,6 +1402,47 @@ function recoveryTests() {
   eq("the hold names the one element the parser meets after both sibling catalogs and before the app's script, so no covered boot ends its parse with it unfound",
     [/hold\.href="#eBooted"/.test(guard), (tpl.match(/id="eBooted"/g) || []).length, sibA > -1 && sibB > sibA && mark > sibB && mark < at("/*@APP*/")],
     [true, 1, true]);
+}
+/* A COVERED ARRIVAL FADES FROM A FRAME ITS CONTENT WAS DRAWN IN (feel pass, the catalog load): the boot
+   guard runs in a VM, E_BOOT_OK is called, and the frames and paint timing it waits on are handed to
+   it by hand. What the eye sees is the verifier's composed frames. */
+function arrivalTests() {
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const m = /<script>([\s\S]*?)<\/script>/.exec(tpl);
+  const guard = m ? m[1] : "";
+  const run = paintTiming => {
+    const cls = new Set(), frames = [], seen = [], obs = [];
+    const sb = {
+      document: { documentElement: { classList: { add: (...c) => c.forEach(x => cls.add(x)), remove: (...c) => c.forEach(x => cls.delete(x)),
+        contains: c => cls.has(c) }, style: { setProperty() {} } }, body: { offsetWidth: 1 },
+        head: { appendChild() {} }, createElement: () => ({ setAttribute() {}, blocking: { supports: () => true } }),
+        getElementById: () => null, querySelector: () => null },
+      sessionStorage: { getItem: k => (k === "eArriving" ? "1" : null), removeItem() {}, setItem() {}, clear() {} },
+      localStorage: { getItem: () => null, setItem() {}, removeItem() {}, key: () => null, length: 0 },
+      matchMedia: () => ({ matches: false }), location: { hash: "", href: "file:///x/etiuda.html", protocol: "file:", origin: "null" },
+      navigator: { languages: ["en-US"], language: "en-US", cookieEnabled: true },
+      setTimeout: () => 0, requestAnimationFrame: fn => { frames.push(fn); return frames.length; }, addEventListener() {}
+    };
+    if (paintTiming) {
+      sb.performance = { getEntriesByType: () => [] };
+      sb.PerformanceObserver = class { constructor(cb) { this.cb = cb; obs.push(this); } observe() {} disconnect() {} };
+    }
+    sb.window = sb; sb.self = sb; sb.top = sb;
+    require("vm").runInNewContext(guard, sb);
+    const step = what => { seen.push([what, frames.length, cls.has("e-arriving")]); };
+    sb.E_BOOT_OK(); step("boot");
+    if (paintTiming) { obs.forEach(o => o.cb({ getEntries: () => [] }, o)); step("painted"); }
+    while (frames.length) { frames.shift()(); step("frame"); }
+    return seen;
+  };
+  let got;
+  try { got = [run(true), run(false)]; } catch (e) { got = "the boot guard threw: " + e.message; }
+  eq("the arrival waits for its first frame to be presented, then fades from the next; without paint timing, two frames",
+    got, [[["boot", 0, true], ["painted", 1, true], ["frame", 0, false]],
+          [["boot", 1, true], ["frame", 1, true], ["frame", 0, false]]]);
+  const rule = /html\.e-arriving #pillsSlot\{opacity:([.0-9]+)\}/.exec(tpl);
+  eq("held, the content is drawn at a trace rather than not at all, so it is rasterised before its fade",
+    rule ? +rule[1] > 0 && +rule[1] < 0.01 : "no e-arriving rule", true);
 }
 /* EVERY CLOSE FADES OUT ON THE DISMISS TIER (feel pass motion-9, ruled 2026-09-26 13:14): the three
    helpers are sliced out of motion.js and run on a small element model written here, and each
