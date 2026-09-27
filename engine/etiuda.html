@@ -7027,19 +7027,23 @@ What you type stays in this browser only.`;
   }
   function v2Unmark(text) {
     const out = [];
-    let cur = [], started = false;
+    let cur = [], label = "", started = false;
+    const close = () => {
+      const body = cur.join("\n").trim();
+      out.push(label ? body ? label + "\n" + body : label : body);
+    };
     v2Str(text).split("\n").forEach((line) => {
       const mark = V2_MARKER_RE.exec(line.trim());
       if (mark) {
-        if (started) out.push(cur.join("\n").trim());
+        if (started) close();
         cur = [];
         started = true;
-        if (mark[1] === "alt" && mark[2]) cur.push(line.trim());
+        label = mark[1] === "alt" && mark[2] ? line.trim() : "";
         return;
       }
       cur.push(line);
     });
-    if (started) out.push(cur.join("\n").trim());
+    if (started) close();
     return out.filter(Boolean).join("\n\n");
   }
   function v2Mark(text, marker) {

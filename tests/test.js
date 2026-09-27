@@ -705,6 +705,26 @@ function v2ValidationTests() {
   eq("a bare alternative still drops the marker line", loadedBare.cards[0].en, "One.\n\nTwo.");
   eq("and writes a bare marker back",
      V.catalogToV2(loadedBare).cards[0].body.en, "[alt]\nOne.\n\n[alt]\nTwo.");
+  /* A BLANK LINE TYPED AFTER A LABELLED MARKER. The desk splits a body on blank lines (parts() in
+     card-model.js), so a label left on a block of its own became an alternative with no text. */
+  const gapped = base();
+  gapped.cards[0].bodyShape = "alts";
+  gapped.cards[0].body.en = "[alt: by post]\n\nOne.\n\n[alt: by phone]\n  \n\nTwo.";
+  eq("v2 a blank line after a labelled alternative has nothing to report", V.v2Problems(gapped), []);
+  const loadedGap = V.catalogFromV2(gapped).cards[0].en;
+  const deskParts = loadedGap.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+  eq("and the desk reads two labelled alternatives, each with its text",
+     [deskParts.map(V.v2PartText), deskParts.map(V.v2AltLabel)], [["One.", "Two."], ["by post", "by phone"]]);
+  {
+    const shellSrc = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+    const markerLine = shellSrc.split("\n").filter(l => l.indexOf("const EC_MARKER =") === 0);
+    const ecBlocks = markerLine.length === 1
+      ? new Function(markerLine[0] + "\n" + extractDecl(shellSrc, "function ecBlocks(") + "\nreturn ecBlocks;")()
+      : null;
+    eq("and the Library's count off the file agrees with the desk's",
+       ecBlocks ? [ecBlocks(gapped.cards[0].body.en, "alts"), deskParts.length] : "no one EC_MARKER line in shell/main.js",
+       [2, 2]);
+  }
   const fmtSrc = fs.readFileSync(path.join(__dirname, "..", "tools", "catalog-v2", "format.mjs"), "utf8");
   const isMarkerLine = new Function(fmtSrc.replace(/\nexport \{[\s\S]*$/, "\nreturn isMarkerLine;"))();
   eq("isMarkerLine and v2Problems agree on [alt: by post]",

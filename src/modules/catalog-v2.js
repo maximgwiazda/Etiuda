@@ -53,21 +53,23 @@ function v2Codes(c){
 }
 /* A marker line opens a block and the next one closes it, so the way back is to drop the
    divider and rejoin on blank lines. A labelled [alt] is the name the copy control shows, so
-   that line stays as the first line of its block; a bare marker is only a divider and drops. */
+   that line stays as the first line of its block, joined to the text with no blank line between
+   whatever was typed there; a bare marker is only a divider and drops. */
 function v2Unmark(text){
-  const out=[]; let cur=[], started=false;
+  const out=[]; let cur=[], label="", started=false;
+  const close=()=>{ const body=cur.join("\n").trim(); out.push(label?(body?label+"\n"+body:label):body); };
   v2Str(text).split("\n").forEach(line=>{
     // Trimmed and matched against the one shape above, never a second copy of it.
     const mark=V2_MARKER_RE.exec(line.trim());
     if(mark){
-      if(started) out.push(cur.join("\n").trim());
+      if(started) close();
       cur=[]; started=true;
-      if(mark[1]==="alt" && mark[2]) cur.push(line.trim());
+      label=(mark[1]==="alt" && mark[2]) ? line.trim() : "";
       return;
     }
     cur.push(line);
   });
-  if(started) out.push(cur.join("\n").trim());
+  if(started) close();
   return out.filter(Boolean).join("\n\n");
 }
 function v2Mark(text,marker){
