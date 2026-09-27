@@ -4,7 +4,7 @@ import { displayCatOrder, intentCats } from "./cat-relevance.js";
 import { CATS } from "./content-model.js";
 import { listPillKeys } from "./pill-walk.js";
 import { drawPills } from "./tabs.js";
-import { flipPills } from "./paint.js";
+import { flipPills, pillLines } from "./paint.js";
 import { searchCounts, totalMacroCount, counts } from "./card-counts.js";
 import { capturePills } from "./pills-bar.js";
 import { dragState } from "./app-state.js";
@@ -43,6 +43,7 @@ function writePillCounts(){
   if(!pills) return;
   const sc=searchCounts();
   const els=Array.prototype.slice.call(pills.querySelectorAll(".pill[data-k]"));
+  const before=capturePills();
   const w0=els.map(el=>el.getBoundingClientRect().width);
   els.forEach(el=>{
     const k=el.dataset.k, b=el.querySelector("b");
@@ -52,21 +53,18 @@ function writePillCounts(){
     b.textContent=String(n);
     el.classList.toggle("pill-nohit", !!sc && !n && k!=="");
   });
-  tweenPillWidths(els, w0);
+  tweenPillWidths(els, w0, before);
 }
 /* FLIP for the horizontal axis: start at the old width, force one layout, release to the
    new. Inline width is the animation and must leave when it ends, or the pill stops
    following its own content. The 1.5px floor is for fractional DPRs, where rounding makes
-   every pill "change" on every pass. HEIGHT IS THE INVARIANT: frozen start widths in the
-   new order can flip a row break, doubling the bar for the tween's length - so if applying
-   them moves the bar's height at all, the whole width tween rolls back and only snaps. */
-function tweenPillWidths(els, w0){
+   every pill "change" on every pass. THE WRAP IS THE INVARIANT: frozen start widths can move
+   a row break, and a pill then leaps between lines mid-tween - so if applying them moves any
+   pill to another line, the row goes to flipPills from `before`, which holds it on its new lines. */
+function tweenPillWidths(els, w0, before){
   if(mgReduceMotion()) return;
   const grew=[];
-  /* scrollHeight, never offsetHeight: the auto-hidden bar wears max-height plus
-     overflow:hidden, which clamps offsetHeight to two lines on BOTH reads - the guard went
-     blind exactly where the clip put the rewrap out of sight, and the tween played it. */
-  const hNat=pills.scrollHeight;
+  const lines=pillLines();
   els.forEach((el,i)=>{
     const w1=el.getBoundingClientRect().width;
     if(Math.abs(w1-w0[i])<1.5) return;
@@ -75,9 +73,9 @@ function tweenPillWidths(els, w0){
     grew.push({el, w:w1});
   });
   if(!grew.length) return;
-  void pills.offsetHeight;
-  if(pills.scrollHeight!==hNat){
+  if(pillLines()!==lines){
     grew.forEach(g=>{ g.el.style.transition=""; g.el.style.width=""; });
+    flipPills(before);
     return;
   }
   /* Attached two frames on, once the render this rides on has painted: width is a

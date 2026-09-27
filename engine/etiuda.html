@@ -1315,7 +1315,18 @@ body.role-waits #roleDrum{display:none}
 /* Slot keeps a fixed 2-line height in the layout; the pills layer can expand over UI below */
 .pills-slot{max-width:var(--app-max);margin:8px auto 0;position:relative;z-index:40;
   min-height:var(--e-pills-h,0px)}
+/* While the window is narrower than at the last clip decision (--pills-vw), the slot is held at two
+   lines, so the frame that first lays out the new width puts no third line in flow and the width
+   watch's clip moves nothing above #pills. Unset, the variables leave max-height at none. */
+.pills-slot{max-height:calc(var(--pills-2line) + max(0px,(100vw - var(--pills-vw) + .1px)*1000000))}
+/* --pills-vw-now is 100vw as a computed length, which script reads without a layout. Neither is
+   inherited: a pill that inherits a variable is restyled whenever it changes. */
+@property --pills-vw{syntax:"*";inherits:false}
+@property --pills-vw-now{syntax:"<length>";inherits:false;initial-value:0px}
+.pills-slot{--pills-vw-now:100vw}
 html.e-pills-off .pills-slot{display:none}
+/* The slot's width in a box no clip resizes, for wirePillsWidthWatch: the slot's own width rule. */
+.pills-probe{max-width:var(--app-max);margin:0 auto;height:0}
 .pills{display:flex;gap:6px;flex-wrap:wrap;width:100%;box-sizing:border-box;position:relative}
 /* Overflow: reserve 2 lines in the slot; pills are absolutely positioned so expand overlays */
 .pills-slot.pills-overflow{height:var(--pills-2line,4.2em)}
@@ -3411,6 +3422,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   <div class="pills-slot" id="pillsSlot">
     <div class="pills" id="pills" title="Filter by category; a green ring marks one that relates to the chosen intent"></div>
   </div>
+  <div class="pills-probe" id="pillsProbe" aria-hidden="true"></div>
 </header>
 
 <div id="railHit" title="Hover here or hold Ctrl to show the intent panel" aria-hidden="true"></div>
@@ -13568,7 +13580,8 @@ What you type stays in this browser only.`;
     syncPillsCollapse: () => syncPillsCollapse,
     syncPillsCollapseNow: () => syncPillsCollapseNow,
     togglePills: () => togglePills,
-    togglePillsLock: () => togglePillsLock
+    togglePillsLock: () => togglePillsLock,
+    wirePillsWidthWatch: () => wirePillsWidthWatch
   });
   function pillsWanted() {
     return lsGet("ePills") !== "0";
@@ -13653,6 +13666,13 @@ What you type stays in this browser only.`;
     for (const c of el.children) h = Math.max(h, c.offsetTop + c.offsetHeight);
     return h;
   }
+  function pillsTwoLines(el) {
+    const first = el.querySelector(".pill");
+    if (!first) return 0;
+    const styles = getComputedStyle(el);
+    const gap = parseFloat(styles.rowGap || styles.gap) || 6;
+    return first.getBoundingClientRect().height * 2 + gap;
+  }
   function syncPillsCollapse() {
     const el = pills;
     const slot = pillsSlot();
@@ -13660,21 +13680,19 @@ What you type stays in this browser only.`;
     document.documentElement.style.removeProperty("--e-pills-h");
     const keepExpand = slot.classList.contains("pills-expand") || document.body.classList.contains("pills-lines-expand");
     slot.classList.remove("pills-overflow", "pills-expand");
-    slot.style.removeProperty("--pills-2line");
-    if (!pillsWanted() || document.body.classList.contains("pills-off")) return;
-    if (pillsLocked()) return;
-    const first = el.querySelector(".pill");
-    if (!first) return;
+    if (!pillsWanted() || document.body.classList.contains("pills-off") || pillsLocked() || !el.querySelector(".pill")) {
+      slot.style.removeProperty("--pills-2line");
+      slot.style.removeProperty("--pills-vw");
+      return;
+    }
+    slot.style.setProperty("--pills-vw", getComputedStyle(slot).getPropertyValue("--pills-vw-now"));
     void el.offsetHeight;
-    const lineH = first.getBoundingClientRect().height;
-    const styles = getComputedStyle(el);
-    const gap = parseFloat(styles.rowGap || styles.gap) || 6;
-    const two = lineH * 2 + gap;
+    const two = pillsTwoLines(el);
     const full = pillsWrapHeight(el);
     slot.style.removeProperty("--pills-full");
+    if (slot.style.getPropertyValue("--pills-2line") !== two + "px") slot.style.setProperty("--pills-2line", two + "px");
     if (full > two + 1) {
       slot.classList.add("pills-overflow");
-      slot.style.setProperty("--pills-2line", two + "px");
       slot.classList.add("pills-measuring", "pills-expand");
       const openH = el.getBoundingClientRect().height;
       slot.classList.remove("pills-expand");
@@ -13695,6 +13713,25 @@ What you type stays in this browser only.`;
       rememberPillsShape();
       hooks.scheduleRailGeometry();
     }));
+  }
+  var pillsWidthSeen = -1;
+  function pillsClipDue() {
+    const el = pills, slot = pillsSlot();
+    if (!el || !slot || !pillsWanted() || pillsLocked() || document.body.classList.contains("pills-off")) return false;
+    if (slot.classList.contains("pills-overflow")) return false;
+    const two = pillsTwoLines(el);
+    return !!two && pillsWrapHeight(el) > two + 1 && Math.abs(slot.getBoundingClientRect().height - two) < 0.5;
+  }
+  function wirePillsWidthWatch() {
+    const probe = $("#pillsProbe");
+    if (!probe || typeof ResizeObserver !== "function") return;
+    new ResizeObserver((es) => {
+      const w = Math.round(es[es.length - 1].contentRect.width);
+      if (w === pillsWidthSeen) return;
+      const first = pillsWidthSeen < 0;
+      pillsWidthSeen = w;
+      if (!first && ePillsSettled && pillsClipDue()) syncPillsCollapse();
+    }).observe(probe);
   }
   function rememberPillsShape() {
     const slot = pillsSlot();
@@ -14686,6 +14723,7 @@ What you type stays in this browser only.`;
     paintIntentRings: () => paintIntentRings,
     paintRailSelection: () => paintRailSelection,
     pillKey: () => pillKey,
+    pillLines: () => pillLines,
     schedulePickTail: () => schedulePickTail,
     wirePillDrag: () => wirePillDrag,
     wirePumpKick: () => wirePumpKick
@@ -14714,6 +14752,46 @@ What you type stays in this browser only.`;
   function pillKey(p) {
     return p.dataset.k != null ? p.dataset.k : p.classList.contains("pill-add") ? null : void 0;
   }
+  function pillLines() {
+    let s = "";
+    for (const c of pills.children) s += c.offsetTop + ",";
+    return s;
+  }
+  function pinPillLines(kids, tops) {
+    const cs = getComputedStyle(pills), gap = parseFloat(cs.columnGap || cs.gap) || 0;
+    const room = pills.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+    const box = kids.map((c) => {
+      const s = getComputedStyle(c);
+      return { w: c.getBoundingClientRect().width, l: parseFloat(s.marginLeft) || 0, r: parseFloat(s.marginRight) || 0 };
+    });
+    const pin = /* @__PURE__ */ new Map();
+    let lead = 0;
+    for (let i = 0; i < kids.length; ) {
+      let j = i, sum = lead + box[i].l + box[i].w + box[i].r;
+      while (j + 1 < kids.length && tops[j + 1] === tops[i]) {
+        j++;
+        sum += gap + box[j].l + box[j].w + box[j].r;
+      }
+      const tail = Math.min(0, room - 1 - sum);
+      if (tail) pin.set(j, [pin.has(j) ? pin.get(j)[0] : 0, tail]);
+      lead = 0;
+      if (j + 1 < kids.length) {
+        const n = box[j + 1];
+        lead = Math.max(0, room + 1 - (sum + tail) - gap - n.l - n.w - n.r);
+        if (lead) pin.set(j + 1, [lead, 0]);
+      }
+      i = j + 1;
+    }
+    const pinned = [];
+    pin.forEach(([l, r], i) => {
+      const p = kids[i];
+      p.style.transition = "none";
+      if (l) p.style.marginLeft = box[i].l + l + "px";
+      if (r) p.style.marginRight = box[i].r + r + "px";
+      pinned.push(p);
+    });
+    return pinned;
+  }
   function flipPills(before) {
     if (!before) return;
     const els = [], bs = [], moved = [], deltas = [], wEls = [], wStarts = [];
@@ -14724,7 +14802,8 @@ What you type stays in this browser only.`;
         bs.push(b);
       }
     });
-    const hNat = pills.scrollHeight;
+    const kids = Array.prototype.slice.call(pills.children), tops = kids.map((c) => c.offsetTop);
+    const lines = pillLines();
     els.forEach((p, i) => {
       const w = p.getBoundingClientRect().width;
       if (Math.abs(bs[i].width - w) >= 1.5) {
@@ -14737,13 +14816,23 @@ What you type stays in this browser only.`;
       p.style.transition = "none";
       p.style.width = wStarts[i] + "px";
     });
-    if (wEls.length && pills.scrollHeight !== hNat) {
-      wEls.forEach((p) => {
-        p.style.width = "";
-        p.style.transition = "";
-        delete p.dataset._eW;
-      });
-      wEls.length = 0;
+    let pinned = [];
+    if (wEls.length && pillLines() !== lines) {
+      pinned = pinPillLines(kids, tops);
+      if (pillLines() !== lines) {
+        pinned.forEach((p) => {
+          p.style.marginLeft = "";
+          p.style.marginRight = "";
+          p.style.transition = "";
+        });
+        pinned = [];
+        wEls.forEach((p) => {
+          p.style.width = "";
+          p.style.transition = "";
+          delete p.dataset._eW;
+        });
+        wEls.length = 0;
+      }
     }
     els.forEach((p, i) => {
       const a = p.getBoundingClientRect();
@@ -14760,13 +14849,22 @@ What you type stays in this browser only.`;
     if (!moved.length && !wEls.length) return;
     void pills.offsetHeight;
     const T = "var(--m-move) " + E_EASE;
+    new Set(moved.concat(wEls, pinned)).forEach((p) => {
+      const t2 = [];
+      if (moved.indexOf(p) >= 0) t2.push("transform " + T);
+      if (wEls.indexOf(p) >= 0) t2.push("width " + T);
+      if (pinned.indexOf(p) >= 0) t2.push("margin-left " + T, "margin-right " + T);
+      p.style.transition = t2.join(", ");
+    });
     moved.forEach((p) => {
-      p.style.transition = "transform " + T + (wEls.indexOf(p) >= 0 ? ", width " + T : "");
       p.style.transform = "";
     });
     wEls.forEach((p) => {
-      if (moved.indexOf(p) < 0) p.style.transition = "width " + T;
       p.style.width = p.dataset._eW + "px";
+    });
+    pinned.forEach((p) => {
+      p.style.marginLeft = "";
+      p.style.marginRight = "";
     });
     setTimeout(() => {
       moved.forEach((p) => {
@@ -14778,6 +14876,11 @@ What you type stays in this browser only.`;
         p.style.transition = "";
         p.style.width = "";
         delete p.dataset._eW;
+      });
+      pinned.forEach((p) => {
+        p.style.transition = "";
+        p.style.marginLeft = "";
+        p.style.marginRight = "";
       });
     }, 200);
   }
@@ -14830,15 +14933,21 @@ What you type stays in this browser only.`;
         plan.push([el]);
         continue;
       }
-      if ((dx || dy) && Math.abs(dy) <= vh * 1.2) plan.push([el, dx, dy]);
+      const grew = o.bottom > 0 && o.top < vh ? Math.round(r.height - o.height) : 0;
+      if ((dx || dy || grew > 1) && Math.abs(dy) <= vh * 1.2) plan.push([el, dx, dy, grew > 1 ? grew : 0]);
     }
     if (!plan.length) return;
     const glide = tier === "move" ? { duration: M_MS.move, easing: E_EASE } : { duration: E_SPRING_MS, easing: E_SPRING_OK ? E_SPRING : E_EASE };
-    plan.forEach(([el, dx, dy]) => {
-      eSettleRuns.push(dx == null ? el.animate(
-        [{ opacity: 0, transform: "translateY(8px) scale(.985)" }, { opacity: 1, transform: "none" }],
-        { duration: M_MS.surface, easing: E_EASE }
-      ) : el.animate([{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "none" }], glide));
+    plan.forEach(([el, dx, dy, grew]) => {
+      if (dx == null) {
+        eSettleRuns.push(el.animate(
+          [{ opacity: 0, transform: "translateY(8px) scale(.985)" }, { opacity: 1, transform: "none" }],
+          { duration: M_MS.surface, easing: E_EASE }
+        ));
+        return;
+      }
+      if (dx || dy) eSettleRuns.push(el.animate([{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "none" }], glide));
+      if (grew) eSettleRuns.push(el.animate([{ clipPath: "inset(-24px -24px " + grew + "px -24px)" }, { clipPath: "inset(-24px -24px 0px -24px)" }], glide));
     });
     eKickPump();
   }
@@ -15376,7 +15485,7 @@ What you type stays in this browser only.`;
     const limit = h * RAIL_FLIP_TRAVEL;
     const top = box.offsetTop + st;
     const seen = (y, hgt, pinned) => pinned || y + hgt > top && y < top + h;
-    const moved = [], dys = [], entered = [];
+    const moved = [], dys = [], entered = [], left = [];
     box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
       const b = before[el.dataset.si];
       if (b == null) return;
@@ -15390,6 +15499,7 @@ What you type stays in this browser only.`;
       const exempt = seenBefore && (seenAfter || keep && keep.has(String(el.dataset.si)));
       if (Math.abs(dy) > limit && !exempt) {
         if (seenAfter && !seenBefore) entered.push(el);
+        else if (seenBefore) left.push([el, dy, a >= top + h ? top + h - a : top - hgt - a]);
         return;
       }
       moved.push(el);
@@ -15404,8 +15514,13 @@ What you type stays in this browser only.`;
       el.style.transition = "none";
       el.style.opacity = "0";
     });
-    if (!moved.length && !entered.length) return;
-    const far = Math.max.apply(null, dys.map(Math.abs));
+    left.forEach(([el, dy]) => {
+      el.style.transition = "none";
+      el.style.willChange = "transform";
+      el.style.transform = "translateY(" + dy + "px)";
+    });
+    if (!moved.length && !entered.length && !left.length) return;
+    const far = Math.max.apply(null, dys.map(Math.abs).concat(left.map(([, dy, e]) => Math.abs(dy - e))));
     const dur = far > limit ? Math.min(0.3, M_MS.move / 1e3 + far / 6e3) : M_MS.move / 1e3;
     void box.offsetHeight;
     moved.forEach((el) => {
@@ -15416,8 +15531,12 @@ What you type stays in this browser only.`;
       el.style.transition = "opacity " + dur + "s " + E_EASE;
       el.style.opacity = "";
     });
+    left.forEach(([el, , e]) => {
+      el.style.transition = "transform " + dur + "s " + E_EASE;
+      el.style.transform = "translateY(" + e + "px)";
+    });
     setTimeout(() => {
-      moved.forEach((el) => {
+      moved.concat(left.map((x) => x[0])).forEach((el) => {
         el.style.transition = "";
         el.style.transform = "";
         el.style.willChange = "";
@@ -16856,6 +16975,7 @@ What you type stays in this browser only.`;
     if (!pills) return;
     const sc = searchCounts();
     const els = Array.prototype.slice.call(pills.querySelectorAll(".pill[data-k]"));
+    const before = capturePills();
     const w0 = els.map((el) => el.getBoundingClientRect().width);
     els.forEach((el) => {
       const k = el.dataset.k, b = el.querySelector("b");
@@ -16864,12 +16984,12 @@ What you type stays in this browser only.`;
       b.textContent = String(n);
       el.classList.toggle("pill-nohit", !!sc && !n && k !== "");
     });
-    tweenPillWidths(els, w0);
+    tweenPillWidths(els, w0, before);
   }
-  function tweenPillWidths(els, w0) {
+  function tweenPillWidths(els, w0, before) {
     if (mgReduceMotion()) return;
     const grew = [];
-    const hNat = pills.scrollHeight;
+    const lines = pillLines();
     els.forEach((el, i) => {
       const w1 = el.getBoundingClientRect().width;
       if (Math.abs(w1 - w0[i]) < 1.5) return;
@@ -16878,12 +16998,12 @@ What you type stays in this browser only.`;
       grew.push({ el, w: w1 });
     });
     if (!grew.length) return;
-    void pills.offsetHeight;
-    if (pills.scrollHeight !== hNat) {
+    if (pillLines() !== lines) {
       grew.forEach((g) => {
         g.el.style.transition = "";
         g.el.style.width = "";
       });
+      flipPills(before);
       return;
     }
     requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -22076,6 +22196,7 @@ What you type stays in this browser only.`;
     wireRoleDrum();
     wireColResize();
     wireColWidthWatch();
+    wirePillsWidthWatch();
     wireNotePane();
     wireListPointer();
     renderFacts();

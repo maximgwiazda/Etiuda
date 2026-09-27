@@ -1,8 +1,9 @@
 /* THE MOTION LEGS: what the eye sees while the list, the pills and the rail move, read frame by
  * frame from a real catalog.
  *
- *   ETIUDA_FIXTURES=<folder> node tests/motion.js            every leg, Chrome, 1600x900
- *   ETIUDA_FIXTURES=<folder> node tests/motion.js m1 m3      those legs only
+ *   ETIUDA_FIXTURES=<folder> node tests/motion.js            every leg, Chrome, at every scale
+ *   ETIUDA_FIXTURES=<folder> node tests/motion.js m1 m3      those legs only, at every scale
+ *   ETIUDA_FIXTURES=<folder> node tests/motion.js m11@150    one leg at one scale
  *
  * tests/smoke.js runs every leg in a context of its own at the end of its run; this file alone
  * is the quick way to watch one leg go red and green.
@@ -19,15 +20,24 @@
  *     must begin within 1px of where it was painted (else it jumped to the glide's start);
  *   - must be in the page in every frame (else it vanished for a frame);
  *   - that ends elsewhere must be painted, in every frame, near the straight line from where it
- *     was to where it lands (else it left its path: a glide whose layout changed under it).
+ *     was to where it lands (else it left its path: a glide whose layout changed under it), and
+ *     never more than 12px past either end of that line (else it leapt along it, or overshot).
  * An element new to the screen must arrive animated where a leg asks for it, and one that leaves
  * the screen must leave animated: gliding out, or as the dismiss of a copy left where it was (a
  * card's copy carries data-leave). A card a leg names in `leaves` is judged that way wherever
  * it lands: its copy must fade where it was, and the card must arrive animated if it lands on
  * screen.
+ *
+ * SCALES. A leg that reads motion runs at 100, 125 and 150 per cent, each at the window a
+ * 1920x1080 screen gives at that scale less its chrome, so the row of pills wraps as a desk's does:
+ * at 100 per cent it rests on two lines, at 125 and 150 on three or more. Its id carries the scale,
+ * m11@150. A leg about cost or a resize runs at 100 alone.
  */
 "use strict";
 const VIEW = { width: 1600, height: 900 };
+const SCALES = [{ at: "", width: 1600, height: 900, deviceScaleFactor: 1 },
+                { at: "@125", width: 1536, height: 816, deviceScaleFactor: 1.25 },
+                { at: "@150", width: 1280, height: 680, deviceScaleFactor: 1.5 }];
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /* Installed in the page once. Kept free of the engine's names except where a leg asks for them,
@@ -109,12 +119,18 @@ function judge(r, opts) {
   const names = new Map();
   const name = k => k === "add" ? "add" : k === "k:" ? "All" : (k[0] === "r" ? "row " : k[0] === "k" ? "pill " : "card ")
     + (names.has(k) ? names.get(k) : (names.set(k, names.size), names.size - 1));
-  const bad = { snapped: [], jumped: [], startOff: [], offPath: [], vanished: [], popped: [], unled: [] };
+  const bad = { snapped: [], jumped: [], startOff: [], offPath: [], pastEnd: [], vanished: [], popped: [], unled: [] };
   /* A glide's own bend is small: a neighbour's width tween moves a pill by a few px, a spring
      passes its end by 2 per cent. What is judged is a box painted well away from the line. */
   const offBy = (A, B, P) => { const T = [B.x - A.x, B.y - A.y], L2 = T[0] * T[0] + T[1] * T[1] || 1e-9;
     const t = Math.max(0, Math.min(1, ((P.x - A.x) * T[0] + (P.y - A.y) * T[1]) / L2));
     return Math.hypot(P.x - A.x - T[0] * t, P.y - A.y - T[1] * t); };
+  /* Along the line, unclamped: how far past its start or its end a box is painted. The spring passes
+     its end by 2.1 per cent by design; no leg here tracks what rides it, a settled search's cards. */
+  const pastBy = (A, B, P) => { const T = [B.x - A.x, B.y - A.y], L = Math.hypot(T[0], T[1]);
+    if (!L) return 0;
+    const t = ((P.x - A.x) * T[0] + (P.y - A.y) * T[1]) / (L * L);
+    return t < 0 ? -t * L : t > 1 ? (t - 1) * L : 0; };
   let moved = 0, still = 0, arrived = 0, left = 0;
   const ghosted = k => r.frames.some(f => f["g:" + k.slice(2)] && f["g:" + k.slice(2)].anim);
   for (const k of new Set([...Object.keys(r.before), ...Object.keys(last)])) {
@@ -142,6 +158,8 @@ function judge(r, opts) {
       if (off > 1) bad.startOff.push(name(k) + " " + Math.round(off) + "px");
       const far = Math.max(...r.frames.map(f => offBy(b, e, f[k])));
       if (far > 12 + 0.03 * travel) bad.offPath.push(name(k) + " " + Math.round(far) + "px");
+      const past = Math.max(...r.frames.map(f => pastBy(b, e, f[k])));
+      if (past > 12) bad.pastEnd.push(name(k) + " " + Math.round(past) + "px");
     } else if (!vis(b) && vis(e) && o.wantArrivals) {
       arrived++;
       if (!r.frames.some(f => f[k] && f[k].anim)) bad.popped.push(name(k));
@@ -155,6 +173,31 @@ function judge(r, opts) {
            text: moved + " moved, " + still + " still" + (o.wantArrivals ? ", " + arrived + " arrived" : "")
              + (o.wantLeaves || o.leaves.length ? ", " + left + " left" : "")
              + (faults.length ? "; " + faults.map(([n, v]) => n + " " + v.length + " (" + v.slice(0, 3).join(", ") + ")").join("; ") : "") };
+}
+
+/* The card a leg acts on, from the cards on offer in list order as {id, top, left}: the first whose
+   top lies in the middle band of the screen, and where a scale leaves that band empty, the one whose
+   top is nearest the middle of the screen below the header, never the list's head, which a star
+   leaves where it is. `top` is where the screen starts under the header. */
+function middleCard(cards, vh, top) {
+  const band = cards.find(c => c.top > vh * 0.3 && c.top < vh * 0.6);
+  if (band) return band.id;
+  const head = cards.reduce((h, c) => !h || c.top < h.top - 1 || (Math.abs(c.top - h.top) <= 1 && c.left < h.left) ? c : h, null);
+  const mid = (top + vh) / 2;
+  const pool = cards.filter(c => c !== head && c.top >= top && c.top < vh - 80)
+    .sort((a, b) => Math.abs(a.top - mid) - Math.abs(b.top - mid) || a.left - b.left);
+  return pool.length ? pool[0].id : null;
+}
+/* The cards a leg may act on, read in the page: `sel` picks them, `need` names a control each must
+   carry, `unstarred` leaves out a card already starred. */
+async function offerCards(p, sel, need, unstarred) {
+  return p.evaluate((sel, need, unstarred) => {
+    const sc = document.getElementById("pageScroll") || document.scrollingElement;
+    const top = sc === document.scrollingElement ? 0 : sc.getBoundingClientRect().top;
+    const cards = [...document.querySelectorAll(sel)].filter(el => el.querySelector(need) && !(unstarred && el.querySelector(".star-btn.on")))
+      .map(el => { const r = el.getBoundingClientRect(); return { id: el.getAttribute("data-id"), top: r.top, left: r.left }; });
+    return { cards, vh: innerHeight, top };
+  }, sel, need, !!unstarred);
 }
 
 /* Back to the resting desk between legs: no query, no intent, no category, the top of the page. */
@@ -173,7 +216,7 @@ async function rest(p) {
 }
 
 const LEGS = [];
-const leg = (id, what, fn) => LEGS.push({ id, what, fn });
+const leg = (id, what, fn, one) => LEGS.push({ id, what, fn, scales: one ? SCALES.slice(0, 1) : SCALES });
 
 async function track(p, kind, ms, act) {
   await p.evaluate(act);
@@ -242,7 +285,7 @@ leg("m3", "a search settle glides every pill that moves or changes width, All an
   for (const q of ["e", "zz"]) {
     await rest(p);
     const r = await settleQuery(p, q);
-    const j = judge(r, { only: ["jumped", "snapped", "vanished"] }), last = r.frames[r.frames.length - 1];
+    const j = judge(r, { only: ["jumped", "snapped", "vanished", "pastEnd"] }), last = r.frames[r.frames.length - 1];
     const d = (k, f) => r.before[k] && last[k] ? Math.round(f(last[k]) - f(r.before[k])) : "none";
     ok = ok && j.ok && j.moved > 0;
     out.push(JSON.stringify(q) + ": " + j.text + "; All's width " + d("k:", x => x.w) + "px, the add button "
@@ -315,12 +358,8 @@ leg("m6", "an intent pick and its clear glide every card that stays on screen, a
 });
 
 leg("m7", "a star and its removal glide every card that stays on screen, across columns too", async p => {
-  const id = await p.evaluate(() => {
-    const vh = innerHeight;
-    const c = [...document.querySelectorAll("#list .card[data-id]")].find(el => {
-      const r = el.getBoundingClientRect(); return r.top > vh * 0.3 && r.top < vh * 0.6 && el.querySelector('[data-act="fav"]'); });
-    return c ? c.getAttribute("data-id") : null;
-  });
+  const o = await offerCards(p, "#list .card[data-id]", '[data-act="fav"]');
+  const id = middleCard(o.cards, o.vh, o.top);
   if (!id) return { ok: false, text: "no card in the middle of the screen to star" };
   await p.evaluate(id => { window.__mtId = id; }, id);
   const out = [];
@@ -397,7 +436,7 @@ leg("m9", "a resize that changes the column count paints the new count in the fr
     + ", " + got.err.length + " page error(s)" + (got.err.length ? ": " + got.err[0] : ""));
   await p.setViewport(VIEW);
   return { ok: stale.length === 0 && changed >= 2 && got.err.length === 0, text: out.join("") };
-});
+}, true);
 
 /* Layouts the page ran, from the browser's own counter. A card read after the card before it was
    swapped costs a layout of its own, and the eye sees that as frames that do not come. */
@@ -431,7 +470,7 @@ leg("m10", "a language switch rebuilds the cards without a layout per card", asy
     }
   } finally { await L.done(); }
   return { ok, text: out.join(" | ") };
-});
+}, true);
 
 leg("m11", "a clear after a pick and a Ctrl pick glides every pill along its path, the row never wrapped another way", async p => {
   /* Rows counted among those wholly on screen, so the pick lands where a hand would put it. */
@@ -450,7 +489,7 @@ leg("m11", "a clear after a pick and a Ctrl pick glides every pill along its pat
     await p.evaluate(() => window.__mtEl.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true })));
     await sleep(1400);
     const r = await track(p, "pills", 900, () => { window.__mtAct = () => document.getElementById("intentRailClear").click(); });
-    const j = judge(r, { only: ["jumped", "snapped", "startOff", "offPath", "vanished"] });
+    const j = judge(r, { only: ["jumped", "snapped", "startOff", "offPath", "pastEnd", "vanished"] });
     ok = ok && j.ok && j.moved > 0;
     out.push("rows " + a + " and " + c + ": " + j.text);
   }
@@ -467,13 +506,8 @@ leg("m12", "a star and a hide glide the cards that stay on screen at the top and
         s.scrollTop = Math.round(d * (s.scrollHeight - s.clientHeight)); }, depth);
       await sleep(900);
       /* A card in the middle of the screen, neither starred nor put away. */
-      const id = await p.evaluate(act => {
-        const vh = innerHeight;
-        const c = [...document.querySelectorAll("#list .card[data-id]:not(.is-hidden)")].find(el => {
-          const r = el.getBoundingClientRect(), b = el.querySelector('[data-act="' + act + '"]');
-          return r.top > vh * 0.3 && r.top < vh * 0.6 && b && !el.querySelector(".star-btn.on"); });
-        return c ? c.getAttribute("data-id") : null;
-      }, act);
+      const o = await offerCards(p, "#list .card[data-id]:not(.is-hidden)", '[data-act="' + act + '"]', true);
+      const id = middleCard(o.cards, o.vh, o.top);
       if (!id) { ok = false; out.push(act + " at " + depth + ": no card in the middle of the screen"); continue; }
       await p.evaluate((id, act) => { window.__mtId = id; window.__mtActName = act; }, id, act);
       const r = await track(p, "cards", 700, () => { window.__mtAct = () =>
@@ -522,9 +556,21 @@ leg("m13", "a category press recalculates style a handful of times, not once per
     }
   } finally { await L.done(); }
   return { ok, text: out.join(" | ") };
-});
+}, true);
 
-module.exports = { LEGS, instrument, rest, boot, VIEW };
+/* Every leg at every scale it runs at, grouped by scale so the window changes twice. */
+const RUNS = SCALES.flatMap(s => LEGS.filter(L => L.scales.includes(s))
+  .map(L => ({ id: L.id + s.at, what: L.what, fn: L.fn, view: s })));
+/* The window a run wants, settled: a new scale re-lays the page, and the next leg's rest must not
+   meet it half done. */
+async function viewFor(p, run, now) {
+  if (now === run.view) return now;
+  await p.setViewport(run.view);
+  await sleep(1200);
+  return run.view;
+}
+
+module.exports = { LEGS, RUNS, SCALES, viewFor, judge, middleCard, instrument, rest, boot, VIEW };
 
 if (require.main === module) {
   const os = require("os");
@@ -540,13 +586,15 @@ if (require.main === module) {
     try {
       const p = await b.newPage();
       await p.setViewport(VIEW);
+      let view = SCALES[0];
       const errs = [];
       p.on("pageerror", e => errs.push(String(e.message || e)));
       await boot(p, RUN.url);
       console.log("engine sha256 " + RUN.engineSha.slice(0, 12) + ", " + await p.evaluate(() => document.querySelectorAll(".card").length) + " cards");
       await p.evaluate(instrument);
-      for (const L of LEGS) {
-        if (want.length && !want.includes(L.id)) continue;
+      for (const L of RUNS) {
+        if (want.length && !want.includes(L.id) && !want.includes(L.id.replace(/@.*/, ""))) continue;
+        view = await viewFor(p, L, view);
         await rest(p);
         let r;
         try { r = await L.fn(p); } catch (x) { r = { ok: false, text: "threw: " + (x && x.message || x) }; }

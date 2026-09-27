@@ -538,6 +538,12 @@ function runUnitTests() {
   pageWatchTests();
   shippedFlagTests();
   dismissTierTests();
+  pillWrapTests();
+  pillsWidthWatchTests();
+  pillsResizeCostTests();
+  railLeaveTests();
+  grownCardTests();
+  motionJudgeTests();
   v2ValidationTests();
   lintCatalogTests();
   langAgnosticTests();
@@ -1741,6 +1747,400 @@ function shippedFlagTests() {
     [[true, false, ""], [true, false, ""]]);
   eq("a file found in the catalog folder is located in it and marks its row", offers(null, false, own, "team.ec", "", false),
     [false, true, "team.ec"]);
+}
+/* A PILL GLIDES FROM WHERE IT WAS PAINTED TO WHERE IT LANDS (797 N1 and N3): a width tween that
+   moves a row break carries a pill across the row mid-glide, and a width that snaps instead starts
+   the pill at a size it was never painted at. flipPills and tweenPillWidths are sliced out and run
+   on a wrapping row modelled here, flex's line breaking with margins included, and the glide is
+   replayed on the one curve its widths, margins and offsets share. The painted frames are the verifier's. */
+function pillRow(W, spec) {
+  const GAP = 6, LINE = 37.5, kids = [];
+  const lay = (ws, ms) => {
+    let x = 0, line = 0;
+    const at = new Map();
+    kids.forEach((k, i) => {
+      const w = ws ? ws[i] : k.w(), [l, r] = ms ? ms[i] : k.m();
+      if (x > 0 && x + l + w + r > W) { line++; x = 0; }
+      at.set(k, { x: x + l, y: line * LINE, w });
+      x += l + w + r + GAP;
+    });
+    return { at, h: (line + 1) * LINE - GAP };
+  };
+  const px = v => v ? parseFloat(v) : null;
+  const shift = t => { const m = /translate\((-?[0-9.]+)px,\s*(-?[0-9.]+)px\)/.exec(t || ""); return m ? [+m[1], +m[2]] : [0, 0]; };
+  spec.forEach(([k, nat]) => {
+    const p = { dataset: { k }, nat, anim: {}, classList: { contains: c => c === "pill-add" && k === null } };
+    if (k === null) delete p.dataset.k;
+    let tf = "", wd = "", tr = "", ml = "", mr = "";
+    p.style = { willChange: "" };
+    Object.defineProperty(p.style, "transition", { get: () => tr, set: v => { tr = v; } });
+    Object.defineProperty(p.style, "transform", { get: () => tf,
+      set: v => { if (/transform/.test(tr) && v !== tf) p.anim.transform = [tf, v]; tf = v; } });
+    Object.defineProperty(p.style, "width", { get: () => wd,
+      set: v => { if (/width/.test(tr) && v !== wd) p.anim.width = [px(wd) || p.nat, px(v) || p.nat]; wd = v; } });
+    Object.defineProperty(p.style, "marginLeft", { get: () => ml,
+      set: v => { if (/margin-left/.test(tr) && v !== ml) p.anim.ml = [px(ml) || 0, px(v) || 0]; ml = v; } });
+    Object.defineProperty(p.style, "marginRight", { get: () => mr,
+      set: v => { if (/margin-right/.test(tr) && v !== mr) p.anim.mr = [px(mr) || 0, px(v) || 0]; mr = v; } });
+    p.w = () => px(wd) || p.nat;
+    p.m = () => [px(ml) || 0, px(mr) || 0];
+    Object.defineProperty(p, "offsetTop", { get: () => lay().at.get(p).y });
+    p.getBoundingClientRect = () => { const a = lay().at.get(p), s = shift(tf);
+      return { left: a.x + s[0], top: a.y + s[1], width: a.w, height: 31.5 }; };
+    kids.push(p);
+  });
+  const row = { children: kids, clientWidth: W, querySelectorAll: () => kids.slice(),
+    get offsetHeight() { return lay().h; }, get scrollHeight() { return lay().h; } };
+  /* What getComputedStyle reads: the row's gap and padding, a pill's margins as its style holds them. */
+  row.style = el => el === row ? { columnGap: GAP + "px", paddingLeft: "0px", paddingRight: "0px" }
+    : { marginLeft: el.style.marginLeft || "0px", marginRight: el.style.marginRight || "0px" };
+  /* Where each pill is painted at progress s of the one curve: widths, margins and offsets all from
+     their start to their end, the layout taken again at those values. */
+  const lerp = (a, s) => a[0] + (a[1] - a[0]) * s;
+  row.at = s => {
+    const ws = kids.map(k => k.anim.width ? lerp(k.anim.width, s) : k.w());
+    const ms = kids.map(k => [k.anim.ml ? lerp(k.anim.ml, s) : k.m()[0], k.anim.mr ? lerp(k.anim.mr, s) : k.m()[1]]);
+    const L = lay(ws, ms);
+    return kids.map(k => { const a = L.at.get(k), d = k.anim.transform ? shift(k.anim.transform[0]) : shift(k.style.transform);
+      return { k: k.dataset.k === undefined ? null : k.dataset.k, x: a.x + d[0] * (1 - s), y: a.y + d[1] * (1 - s), w: a.w,
+        line: a.y }; });
+  };
+  return row;
+}
+/* The worst a glide does, over 200 steps: how far a pill is painted past either end of the line from
+   where it was to where it lands, the longest single step against a smooth one's, how far from where
+   it was painted, size included, it starts, and whether its layout changed line mid-glide. */
+function pillGlideFaults(before, row) {
+  const N = 200, frames = [];
+  for (let i = 0; i <= N; i++) frames.push(row.at(i / N));
+  const out = [];
+  frames[0].forEach((p0, j) => {
+    const b = before.get(p0.k), e = frames[N][j];
+    if (!b) return;
+    const T = [e.x - b.left, e.y - b.top], L = Math.hypot(T[0], T[1]);
+    let past = 0, step = 0, lines = 0;
+    frames.forEach((f, i) => {
+      const P = f[j];
+      if (L > 0) {
+        const t = ((P.x - b.left) * T[0] + (P.y - b.top) * T[1]) / (L * L);
+        past = Math.max(past, t < 0 ? -t * L : t > 1 ? (t - 1) * L : 0);
+      }
+      if (i) { step = Math.max(step, Math.hypot(P.x - frames[i - 1][j].x, P.y - frames[i - 1][j].y)); if (P.line !== frames[i - 1][j].line) lines++; }
+    });
+    const start = Math.max(Math.hypot(frames[0][j].x - b.left, frames[0][j].y - b.top), Math.abs(frames[0][j].w - b.width));
+    if (past > 12 || step > Math.max(2, 4 * L / N) || start > 1 || lines) out.push((p0.k === null ? "add" : p0.k || "All")
+      + " past " + Math.round(past) + " step " + Math.round(step) + " start " + Math.round(start) + (lines ? " relined" : ""));
+  });
+  return out;
+}
+function pillWrapTests() {
+  const paint = fs.readFileSync(path.join(E.ROOT, "src", "modules", "paint.js"), "utf8");
+  const state = fs.readFileSync(path.join(E.ROOT, "src", "modules", "pill-state.js"), "utf8");
+  const opt = m => paint.indexOf(m) > -1 ? extractDecl(paint, m) : "";
+  const lines = opt("function pillLines("), pin = opt("function pinPillLines(");
+  const flip = (row, style) => new Function("pills", "E_EASE", "setTimeout", "getComputedStyle",
+    extractDecl(paint, "function pillKey(") + "\n" + lines + "\n" + pin + "\n" + extractDecl(paint, "function flipPills(")
+    + "\nreturn flipPills;")(row, "ease", () => 0, style || row.style);
+  const tween = row => new Function("pills", "E_EASE", "mgReduceMotion", "requestAnimationFrame", "setTimeout", "clearTimeout", "getComputedStyle",
+    extractDecl(paint, "function pillKey(") + "\n" + lines + "\n" + pin + "\n" + extractDecl(paint, "function flipPills(") + "\n"
+    + extractDecl(state, "function tweenPillWidths(") + "\nreturn tweenPillWidths;")(
+    row, "ease", () => false, f => f(), () => 0, () => {}, row.style);
+  /* All's count gains a digit, 77px to 83px, and the pill that closed the first line at 296px no
+     longer fits: the row keeps its two lines and trades a pill between them. At 280px it still fits.
+     Then the other way: All loses the digit and the pill at 296px climbs back onto the first line. */
+  const rest = [["a", 200], ["b", 200], ["c", 200]];
+  for (const [what, last, from, to, trades] of [["a pill at the break", 296, 77, 83, true], ["a pill clear of it", 280, 77, 83, false],
+    ["a pill climbing back over the break", 296, 83, 77, true]]) {
+    const old = pillRow(1000, [["", from], ...rest, ["x", last], ["d", 200], ["e", 200], [null, 31]]);
+    const before = new Map(old.children.map(p => [p.dataset.k === undefined ? null : p.dataset.k, p.getBoundingClientRect()]));
+    const now = pillRow(1000, [["", to], ...rest, ["x", last], ["d", 200], ["e", 200], [null, 31]]);
+    eq("the model trades a pill between lines only where it is meant to: " + what,
+      old.children[4].offsetTop !== now.children[4].offsetTop, trades);
+    let got;
+    try { flip(now)(before); got = pillGlideFaults(before, now); } catch (e) { got = "flipPills threw: " + e.message; }
+    eq("a settle that changes All's width glides every pill on its own path at its own size, " + what, got, []);
+    eq("All's width tweens, " + what, !!now.children[0].anim.width, true);
+    const counts = pillRow(1000, [["", to], ...rest, ["x", last], ["d", 200], ["e", 200], [null, 31]]);
+    try { tween(counts)([counts.children[0]], [from], before); got = pillGlideFaults(before, counts); }
+    catch (e) { got = "tweenPillWidths threw: " + e.message; }
+    eq("a count written in place never carries a pill across the row nor snaps its width, " + what, got, []);
+  }
+  /* Where the pin cannot hold the row, here because the gap reads wider than it is, as a browser's
+     rounding might, the widths snap as before and no pill changes line mid-glide. */
+  const old = pillRow(1000, [["", 77], ...rest, ["x", 296], ["d", 200], ["e", 200], [null, 31]]);
+  const before = new Map(old.children.map(p => [p.dataset.k === undefined ? null : p.dataset.k, p.getBoundingClientRect()]));
+  const now = pillRow(1000, [["", 83], ...rest, ["x", 296], ["d", 200], ["e", 200], [null, 31]]);
+  let got;
+  try { flip(now, el => el === now ? Object.assign(now.style(el), { columnGap: "30px" }) : now.style(el))(before); got = pillGlideFaults(before, now); }
+  catch (e) { got = "flipPills threw: " + e.message; }
+  eq("where the pin cannot hold the row, the widths snap and no pill changes line mid-glide", got, ["All past 0 step 0 start 6"]);
+}
+/* THE CLIP FOLLOWS A NEW WIDTH IN THE FRAME THAT PAINTS IT (797 F4), AND MOVES NOTHING ABOVE THE BAR.
+   One frame is modelled from the real syncPillsCollapse and width watch and the sheet's own cap on the
+   slot: the slot's height as laid out is what every observer at the probe's depth or above was handed,
+   so a callback that changes it fails the observer's loop with a page error, and a third line in flow
+   is the drop. The frame itself is the verifier's. */
+function pillsWidthWatchTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "pills-box.js"), "utf8");
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const LINE = 31.5, GAP = 6;
+  /* The slot's max-height from the sheet, evaluated on the slot's own variables. An unset variable
+     makes the declaration invalid at computed-value time, which leaves max-height at none. */
+  const capRule = /\.pills-slot\{max-height:([^}]*)\}/.exec(tpl);
+  const cap = (vars, vw) => {
+    if (!capRule) return Infinity;
+    let unset = false;
+    const js = capRule[1].replace(/var\((--[a-z0-9-]+)\)/g, (m, name) => {
+      if (!(name in vars)) { unset = true; return "0"; }
+      return "(" + parseFloat(vars[name]) + ")";
+    }).replace(/100vw/g, "(" + vw + ")").replace(/([0-9])px/g, "$1")
+      .replace(/\bcalc\(/g, "(").replace(/\bmax\(/g, "Math.max(");
+    return unset ? Infinity : Function("return " + js)();
+  };
+  const st = {}, cls = new Set(), vars = {};
+  const natural = () => st.lines * LINE + (st.lines - 1) * GAP;
+  const slotH = () => cls.has("pills-overflow") ? parseFloat(vars["--pills-2line"]) : Math.min(natural(), cap(vars, st.vw));
+  const kids = () => Array.from({ length: 3 * st.lines }, (_, i) => ({ offsetTop: Math.floor(i / 3) * (LINE + GAP),
+    offsetHeight: LINE, getBoundingClientRect: () => ({ height: LINE }) }));
+  const bar = { get children() { return kids(); }, querySelector: () => kids()[0],
+    get offsetHeight() { return natural(); }, getBoundingClientRect: () => ({ height: natural() }) };
+  const slot = {
+    classList: { add: (...c) => c.forEach(x => cls.add(x)), remove: (...c) => c.forEach(x => cls.delete(x)), contains: c => cls.has(c) },
+    style: { setProperty: (k, v) => { vars[k] = v; }, removeProperty: k => { delete vars[k]; }, getPropertyValue: k => k in vars ? vars[k] : "" },
+    getBoundingClientRect: () => ({ height: slotH() }),
+  };
+  const doc = { documentElement: { style: { removeProperty() {} }, getBoundingClientRect: () => ({ width: st.vw }) },
+    body: { classList: { contains: () => false } } };
+  const probe = { id: "pillsProbe" };
+  let heard = null, observed = null, calls = 0;
+  class RO { constructor(fn) { heard = fn; } observe(el) { observed = el; } }
+  // A fresh module per case, so the watch's last width is its own.
+  const build = () => {
+    const decls = ["let pillsWidthSeen=", "function pillsTwoLines(", "function pillsWrapHeight(", "function syncPillsCollapse(",
+      "function pillsClipDue(", "function wirePillsWidthWatch("].map(m => extractDecl(src, m)).join("\n");
+    return new Function("pills", "ResizeObserver", "$", "pillsSlot", "pillsWanted", "pillsLocked", "document",
+      "getComputedStyle", "ePillsSettled", "counted",
+      decls + "\nconst sync=syncPillsCollapse;\nsyncPillsCollapse=function(){ counted(); sync(); };" +
+      "\nreturn { wire: wirePillsWidthWatch, sync };")(bar, RO, () => probe, () => slot, () => true, () => st.locked, doc,
+      x => x === slot ? { getPropertyValue: k => pillsSlotComputed(tpl, k, st.vw) } : { rowGap: GAP + "px" }, true, () => { calls++; });
+  };
+  /* Boot at `from` with its clip decided, the observer's first delivery, then one frame at `to`:
+     [clips in the observer, loop errors, the slot's height as painted]. */
+  const frame = (from, to) => {
+    cls.clear(); for (const k in vars) delete vars[k];
+    Object.assign(st, { locked: false }, from);
+    const m = build();
+    m.wire(); m.sync();
+    heard([{ contentRect: { width: st.probe, height: 0 } }]);
+    Object.assign(st, to);
+    const laid = slotH(), was = calls;
+    heard([{ contentRect: { width: st.probe, height: 0 } }]);
+    return [calls - was, slotH() !== laid ? 1 : 0, slotH()];
+  };
+  const rest = { vw: 1200, probe: 1172, lines: 2 };
+  const cases = [
+    ["a narrower window wraps the bar to a third line", rest, { vw: 1180, probe: 1152, lines: 3 }, [1, 0, 69]],
+    ["a narrower window keeps two lines", rest, { vw: 1190, probe: 1162, lines: 2 }, [0, 0, 69]],
+    ["one device pixel narrower at 125 per cent wraps a third line", rest, { vw: 1199.2, probe: 1171.2, lines: 3 }, [1, 0, 69]],
+    ["a clipped bar widens to fit in two", { vw: 1180, probe: 1152, lines: 3 }, { vw: 1300, probe: 1272, lines: 2 }, [0, 0, 69]],
+    ["a locked bar wraps a third line and grows", Object.assign({ locked: true }, rest), { vw: 1180, probe: 1152, lines: 3 }, [0, 0, 106.5]],
+    ["at rest, the window a sixty-fourth under its measure, the cap is off", rest, { vw: 1200 - 1 / 64, probe: 1172, lines: 3 }, [0, 0, 106.5]],
+  ];
+  for (const [what, from, to, want] of cases) {
+    let got;
+    try { got = frame(from, to); } catch (e) { got = "threw: " + e.message; }
+    eq("the width watch, " + what, got, want);
+  }
+  /* The slot narrowing under a window that keeps its width (the panel docking) is not capped, so
+     the watch leaves it to the resize pass rather than move the header inside the observer. */
+  let got;
+  try { got = frame(rest, { vw: 1200, probe: 1000, lines: 3 }).slice(0, 2); } catch (e) { got = "threw: " + e.message; }
+  eq("the width watch leaves a slot narrowing at the same window width to the resize pass", got, [0, 0]);
+  eq("the width watch observes the probe, a box the clip it sets cannot resize", observed === probe, true);
+  const rule = /\.pills-probe\{([^}]*)\}/.exec(tpl), slotRule = /\.pills-slot\{max-width:([^;]*);/.exec(tpl);
+  eq("the probe sits outside the slot at the slot's width and no height",
+    [/id="pills"[^>]*><\/div>\s*<\/div>\s*<div class="pills-probe" id="pillsProbe"/.test(tpl),
+      !!rule && !!slotRule && rule[1].indexOf("max-width:" + slotRule[1]) > -1 && /height:0/.test(rule[1])],
+    [true, true]);
+  const boot = fs.readFileSync(path.join(E.ROOT, "src", "main.js"), "utf8");
+  eq("boot wires the watch", /pillsBox\.wirePillsWidthWatch\(\);/.test(boot), true);
+}
+/* A custom property's computed value on the pill slot, read from the sheet: a length registered by
+   @property and declared on .pills-slot in vw computes to px, rounded here to six significant figures
+   as a browser may serialise it; an unregistered one keeps its tokens. */
+function pillsSlotComputed(tpl, name, vw) {
+  const decl = new RegExp("[.]pills-slot[{]" + name + ":([^;}]*)").exec(tpl);
+  if (!decl) return "";
+  const reg = new RegExp("@property " + name + "[{]([^}]*)[}]").exec(tpl);
+  const n = /^([0-9.]+)vw$/.exec(decl[1].trim());
+  if (!reg || !/syntax:"<length>"/.test(reg[1]) || !n) return decl[1].trim();
+  return String(Number((parseFloat(n[1]) * vw / 100).toPrecision(6))) + "px";
+}
+/* WHAT ONE STEP OF A WINDOW DRAG COSTS THE PILL BAR (797 F4). The resize pass, schedulePillsCollapse
+   with its frames run at once, is traced on stubs one step after the last decision, in each state: a
+   layout read with anything written since the last layout is a layout, and a style or layout read
+   after a write to a variable the pills inherit (any the sheet does not register inherits:false)
+   restyles the whole bar, as does the frame if one is still pending. The drag is the verifier's. */
+function pillsResizeCostTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "pills-box.js"), "utf8");
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const own = new Set();
+  for (const m of tpl.matchAll(/@property (--[a-z0-9-]+)[{]([^}]*)[}]/g)) if (/inherits:false/.test(m[2])) own.add(m[1]);
+  const LINE = 31.5, GAP = 6;
+  const st = { vw: 1200, lines: 2 }, vars = {}, cls = new Set();
+  let pend = {}, layouts = 0, restyles = 0;
+  const dirty = () => !!(pend.inh || pend.own || pend.cls || pend.lay);
+  const styleRead = () => { if (pend.inh) restyles++; pend = { lay: dirty() }; };
+  const layoutRead = () => { if (pend.inh) restyles++; if (dirty()) layouts++; pend = {}; };
+  const touch = k => { pend[k.startsWith("--") ? (own.has(k) ? "own" : "inh") : "cls"] = true; };
+  const natural = () => st.lines * LINE + (st.lines - 1) * GAP;
+  const kids = () => Array.from({ length: 3 * st.lines }, (_, i) => ({
+    get offsetTop() { layoutRead(); return Math.floor(i / 3) * (LINE + GAP); },
+    get offsetHeight() { layoutRead(); return LINE; },
+    getBoundingClientRect() { layoutRead(); return { height: LINE }; } }));
+  const bar = { get children() { return kids(); }, querySelector: () => kids()[0],
+    get offsetHeight() { layoutRead(); return natural(); }, getBoundingClientRect() { layoutRead(); return { height: natural() }; } };
+  const slot = {
+    classList: { add: (...c) => c.forEach(x => { if (!cls.has(x)) { cls.add(x); touch(x); } }),
+      remove: (...c) => c.forEach(x => { if (cls.has(x)) { cls.delete(x); touch(x); } }), contains: c => cls.has(c) },
+    style: { setProperty: (k, v) => { if (vars[k] !== v) { vars[k] = v; touch(k); } },
+      removeProperty: k => { if (k in vars) { delete vars[k]; touch(k); } }, getPropertyValue: k => k in vars ? vars[k] : "" },
+    getBoundingClientRect() { layoutRead(); return { height: 2 * LINE + GAP }; } };
+  const doc = { documentElement: { style: { removeProperty() {} }, getBoundingClientRect() { layoutRead(); return { width: st.vw }; } },
+    body: { classList: { contains: () => false } } };
+  const computed = x => x === slot ? { getPropertyValue: k => { styleRead(); return pillsSlotComputed(tpl, k, st.vw); } }
+    : { get rowGap() { styleRead(); return GAP + "px"; } };
+  let got;
+  try {
+    const decls = ["let ePillsSettled=", "function pillsTwoLines(", "function pillsWrapHeight(", "function syncPillsCollapse(",
+      "function schedulePillsCollapse(", "function rememberPillsShape("].map(m => extractDecl(src, m)).join("\n");
+    const pass = new Function("pills", "pillsSlot", "pillsWanted", "pillsLocked", "document", "getComputedStyle",
+      "requestAnimationFrame", "hooks", "lsSet", "lsDel", "window", decls + "\nreturn schedulePillsCollapse;")(
+      bar, () => slot, () => true, () => false, doc, computed, fn => fn(), { scheduleRailGeometry() {} }, () => {}, () => {},
+      { innerWidth: 1200 });
+    const step = lines => {
+      cls.clear(); for (const k in vars) delete vars[k];
+      Object.assign(st, { vw: 1202, lines });
+      pass();
+      st.vw = 1200; pend = { lay: true }; layouts = 0; restyles = 0;   // the next width, not yet laid out
+      pass();
+      if (pend.inh) restyles++;
+      return [layouts, restyles];
+    };
+    got = [step(2), step(3)];
+  } catch (e) { got = "threw: " + e.message; }
+  eq("one step of a drag costs the pill bar, as [layouts, bar restyles], two lines then clipped", got, [[1, 0], [4, 2]]);
+}
+/* A RAIL ROW ON SCREEN THAT LEAVES THE WINDOW GLIDES TO ITS EDGE (797 F6): past the travel cap it
+   used to be left where it landed, out of sight, which is a vanish. flipRail is sliced and run on a
+   panel of stub rows; a row that stays on screen and one that arrives are the controls. */
+function railLeaveTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "rail-list.js"), "utf8");
+  const row = (si, y) => {
+    const r = { dataset: { si }, offsetTop: y, offsetHeight: 34, classList: { contains: () => false }, log: [] };
+    r.style = {};
+    ["transform", "opacity", "transition", "willChange"].forEach(k => {
+      let v = "";
+      Object.defineProperty(r.style, k, { get: () => v, set: x => { v = x; if (k !== "transition" && k !== "willChange") r.log.push(k + " " + (x || "none")); } });
+    });
+    return r;
+  };
+  /* A 600px window at the top of the list: the leaver goes from 150 to 700, the stayer from 450 to
+     100, the arrival from 800 to 200. The cap is half the window. */
+  const rows = [row("7", 700), row("8", 100), row("9", 200)];
+  const box = { clientHeight: 600, scrollTop: 0, offsetTop: 0, get offsetHeight() { return 600; }, querySelectorAll: () => rows };
+  let flip = null;
+  try {
+    flip = new Function("$", "M_MS", "E_EASE", "setTimeout", "RAIL_FLIP_TRAVEL",
+      extractDecl(src, "function flipRail(") + "\nreturn flipRail;")(() => box, { move: 180 }, "ease", () => 0, 0.5);
+  } catch (e) { flip = null; }
+  if (flip) flip({ 7: { y: 150, on: false }, 8: { y: 450, on: false }, 9: { y: 800, on: false } }, null);
+  eq("a row that leaves the window past the cap glides from where it was to the window's edge",
+    flip ? rows[0].log : "no flipRail", ["transform translateY(-550px)", "transform translateY(-100px)"]);
+  eq("a row on screen at both ends still glides home, and one arriving from off screen still fades in",
+    flip ? [rows[1].log, rows[2].log] : "no flipRail",
+    [["transform translateY(350px)", "transform none"], ["opacity 0", "opacity none"]]);
+}
+/* A CARD WHOSE TEXT GREW OPENS TO ITS NEW HEIGHT (797 N5): a Ctrl pick fills the top card with the
+   second intent and it grew 63px in one frame. glideSettle is sliced and run on stub cards: the
+   grown card's clip runs from its old height to its own edge on the curve the card below glides on,
+   so the gap between them, read at every step of that curve, stays what it was. */
+function grownCardTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "paint.js"), "utf8");
+  const card = (id, now) => ({ dataset: { id }, runs: [], getBoundingClientRect: () => now,
+    animate(kf, o) { this.runs.push([Object.keys(kf[0]).join("+"), kf[0].clipPath || kf[0].transform || "",
+      kf[1].clipPath || kf[1].transform || "", o.duration]); return { finish() {} }; } });
+  const R = (top, h) => ({ left: 300, top, width: 400, height: h, bottom: top + h, right: 700 });
+  const cards = [card("a", R(220, 344)), card("b", R(584, 200)), card("c", R(700, 300))];
+  const list = { getBoundingClientRect: () => ({ top: 200 }), querySelectorAll: () => cards };
+  let glide = null;
+  try {
+    glide = new Function("list", "window", "CARD_MOVE_MAX", "M_MS", "E_EASE", "E_SPRING_MS", "E_SPRING_OK", "E_SPRING", "eKickPump",
+      "let eSettleRuns=[];\n" + extractDecl(src, "function glideSettle(") + "\nreturn glideSettle;")(
+      list, { innerHeight: 900 }, 40, { move: 180, surface: 180 }, "ease", 371, false, "", () => {});
+  } catch (e) { glide = null; }
+  /* "a" stays put and grows 63px; "b" sits 20px below it and is pushed down by the growth; "c" was
+     below the screen and is shorter than its estimate, which is not a growth anyone saw. */
+  if (glide) glide({ a: R(220, 281), b: R(521, 200), c: R(1400, 220) }, "move");
+  eq("a grown card opens from its old height to its own edge on the glide's curve; a card that only moved only glides",
+    glide ? [cards[0].runs, cards[1].runs] : "no glideSettle",
+    [[["clipPath", "inset(-24px -24px 63px -24px)", "inset(-24px -24px 0px -24px)", 180]],
+      [["transform", "translate(0px,-63px)", "none", 180]]]);
+  /* The grown card's edge is its box or its clip, whichever is higher; both runs share one curve, so
+     one progress reads both. A clip that ends past the edge runs ahead of the card below. */
+  let gap = "no clip on the grown card";
+  const clip = cards[0].runs.find(r => r[0] === "clipPath"), move = cards[1].runs.find(r => r[0] === "transform");
+  const bottomInset = v => { const m = /inset\(([^)]*)\)/.exec(v); if (!m) return null;
+    const s = m[1].trim().split(/\s+/).map(parseFloat), b = s.length > 2 ? s[2] : s[0];
+    return isNaN(b) ? null : b; };
+  if (clip && move && bottomInset(clip[1]) != null && bottomInset(clip[2]) != null) {
+    const b0 = bottomInset(clip[1]), b1 = bottomInset(clip[2]), dy = +/,(-?[0-9.]+)px/.exec(move[1])[1];
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i <= 100; i++) {
+      const p = i / 100, edge = Math.min(564, 564 - (b0 + (b1 - b0) * p)), next = 584 + dy * (1 - p);
+      lo = Math.min(lo, next - edge); hi = Math.max(hi, next - edge);
+    }
+    gap = [Math.round(lo * 10) / 10, Math.round(hi * 10) / 10];
+  }
+  eq("the grown card's edge keeps its 20px gap to the card below at every step of the glide", gap, [20, 20]);
+}
+/* THE MOTION LEGS' JUDGE SEES A LEAP ALONG THE LINE OF TRAVEL (797 N4): N3's pill ran 47px the wrong
+   way, was painted 35px past its end and glided back, all within the off-path margin. judge() from
+   tests/motion.js is run on that track, rebuilt in numbers, and on a clean glide as the control. A
+   motion.js without the export fails these legs rather than stopping the run. */
+function motionJudgeTests() {
+  let M = {};
+  try { M = require("./motion.js"); } catch (e) { M = {}; }
+  const box = (x, y) => ({ x, y, w: 110, top: y, bottom: y + 31.5 });
+  const track = pts => ({ vh: 816, before: { "k:a": box(1233, 94) },
+    frames: pts.map(([x, y], i) => ({ "k:a": Object.assign(box(x, y), { anim: 1 }, i ? {} : { start: box(1233, 94) }) }))
+      .concat([{ "k:a": box(15, 132) }]) });
+  const leap = track([[1280, 94], [-20, 132], [-6, 132], [8, 132], [15, 132]]);
+  const clean = track([[900, 104], [500, 116], [200, 126], [40, 131], [15, 132]]);
+  const only = ["jumped", "snapped", "startOff", "offPath", "pastEnd", "vanished"];
+  let got = "no judge exported by tests/motion.js";
+  if (typeof M.judge === "function") {
+    const a = M.judge(leap, { only }), b = M.judge(clean, { only });
+    got = [a.ok, /pastEnd 1/.test(a.text), /offPath/.test(a.text), b.ok];
+  }
+  eq("the motion judge fails a pill painted past either end of its glide, and passes a clean glide",
+    got, [false, true, false, true]);
+  eq("the motion legs run at 125 and 150 per cent as well as 100",
+    (M.SCALES || []).map(s => s.deviceScaleFactor), [1, 1.25, 1.5]);
+  /* THE CARD A LEG ACTS ON IS FOUND AT EVERY SCALE: at 1536x816 the first row's tops sit above the
+     middle band and the second row's below it, so the band alone found nothing and m7 and m12 were
+     never driven at 125. The band still decides where it has a card; the head of the list is never
+     the pick, nor a card under the header, and nothing is picked from an empty screen. */
+  const card = (id, top, left) => ({ id, top, left });
+  const row125 = [card("h", 240, 300), card("p", 240, 700), card("q", 240, 1100), card("s", 560, 300), card("t", 600, 700), card("u", 580, 1100)];
+  const at100 = [card("h", 220, 300), card("p", 220, 700), card("m", 300, 300), card("n", 520, 700)];
+  const under = [card("h", 150, 300), card("p", 160, 700)];
+  got = typeof M.middleCard === "function"
+    ? [M.middleCard(row125, 816, 230), M.middleCard(at100, 900, 200), M.middleCard(under, 680, 230), M.middleCard([], 816, 230),
+      M.middleCard([card("h", 240, 300)], 816, 230)]
+    : "no middleCard exported by tests/motion.js";
+  eq("the card a leg acts on is the band's first where the band has one, else the nearest to the screen's middle, never the head",
+    got, ["s", "m", null, null, null]);
 }
 function requestFns() {
   const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");

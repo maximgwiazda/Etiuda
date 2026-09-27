@@ -25,7 +25,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/test.js      all five sections
     ETIUDA_FIXTURES=<folder> node tests/smoke.js     the acceptance run, Chrome
     ETIUDA_FIXTURES=<folder> node tests/smoke.js firefox
-    ETIUDA_FIXTURES=<folder> node tests/motion.js    the motion legs alone, which smoke also runs
+    ETIUDA_FIXTURES=<folder> node tests/motion.js    the motion legs alone, at 100, 125 and 150 per cent, which smoke also runs
     node tests/csp.js                                the policy, two unpackaged Electrons
     node tests/desk.js                               the desk in a file, an unpackaged Electron
     ETIUDA_FIXTURES=<folder> node tests/catalog-watch.js  the watched catalog, one app run
