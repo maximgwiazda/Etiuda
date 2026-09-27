@@ -60,7 +60,7 @@ function writePillCounts(){
    following its own content. The 1.5px floor is for fractional DPRs, where rounding makes
    every pill "change" on every pass. THE WRAP IS THE INVARIANT: frozen start widths can move
    a row break, and a pill then leaps between lines mid-tween - so if applying them moves any
-   pill to another line, the widths snap and the row glides from `before` as a reorder does. */
+   pill to another line, the row goes to flipPills from `before`, which holds it on its new lines. */
 function tweenPillWidths(els, w0, before){
   if(mgReduceMotion()) return;
   const grew=[];

@@ -57,6 +57,41 @@ function pillKey(p){ return p.dataset.k!=null ? p.dataset.k : p.classList.contai
    the row as the new ones do: every width rides one curve from one start, so a row that wraps alike
    at both ends wraps alike throughout, and an equal height does not say so. */
 function pillLines(){ let s=""; for(const c of pills.children) s+=c.offsetTop+","; return s; }
+/* HOLDS THE ROW ON ITS NEW LINES AT THE OLD WIDTHS, where those widths wrap it another way: the first
+   pill of each line takes the left margin that keeps it off the line before, and the last the
+   negative right margin that keeps it on its own. Every width and margin then rides one curve from
+   one start to its end, so each line is a straight sum of them and wraps alike throughout. `tops`
+   are the children's lines at the new widths. Returns the pills it pinned. */
+function pinPillLines(kids,tops){
+  const cs=getComputedStyle(pills), gap=parseFloat(cs.columnGap||cs.gap)||0;
+  const room=pills.clientWidth-(parseFloat(cs.paddingLeft)||0)-(parseFloat(cs.paddingRight)||0);
+  const box=kids.map(c=>{ const s=getComputedStyle(c);
+    return {w:c.getBoundingClientRect().width, l:parseFloat(s.marginLeft)||0, r:parseFloat(s.marginRight)||0}; });
+  const pin=new Map();
+  let lead=0;
+  for(let i=0;i<kids.length;){
+    let j=i, sum=lead+box[i].l+box[i].w+box[i].r;
+    while(j+1<kids.length && tops[j+1]===tops[i]){ j++; sum+=gap+box[j].l+box[j].w+box[j].r; }
+    const tail=Math.min(0,room-1-sum);
+    if(tail) pin.set(j,[pin.has(j)?pin.get(j)[0]:0,tail]);
+    lead=0;
+    if(j+1<kids.length){
+      const n=box[j+1];
+      lead=Math.max(0,room+1-(sum+tail)-gap-n.l-n.w-n.r);
+      if(lead) pin.set(j+1,[lead,0]);
+    }
+    i=j+1;
+  }
+  const pinned=[];
+  pin.forEach(([l,r],i)=>{
+    const p=kids[i];
+    p.style.transition="none";
+    if(l) p.style.marginLeft=(box[i].l+l)+"px";
+    if(r) p.style.marginRight=(box[i].r+r)+"px";
+    pinned.push(p);
+  });
+  return pinned;
+}
 /** The "invert and play" half. Call after the pills have been redrawn in their new order. */
 /* READ EVERY POSITION FIRST, THEN WRITE EVERY TRANSFORM: a rect read after a style
    write forces a full layout PER PILL - interleaved, this was 25.6ms of a 180ms
@@ -68,6 +103,7 @@ function flipPills(before){
     const k=pillKey(p), b=k!==undefined && before.get(k);
     if(b){ els.push(p); bs.push(b); }
   });
+  const kids=Array.prototype.slice.call(pills.children), tops=kids.map(c=>c.offsetTop);
   const lines=pillLines();
   /* Width changes ride the same flip - a selection bolds the name, a recount changes the
      digits, and either snapping while neighbours slide reads as a glitch. 1.5px floor:
@@ -79,10 +115,17 @@ function flipPills(before){
   /* The old widths go back BEFORE the positions are read: each one shifts every pill after it
      in the row, so an offset read at the new widths starts the glide that far from the pill. */
   wEls.forEach((p,i)=>{ p.style.transition="none"; p.style.width=wStarts[i]+"px"; });
-  /* The wrap is the invariant - see pillLines. A rolled-back width still slides. */
+  /* The wrap is the invariant - see pillLines. Where the old widths move a line break, the row is
+     pinned to its new lines; where even that fails, the widths snap and the row still slides. */
+  let pinned=[];
   if(wEls.length && pillLines()!==lines){
-    wEls.forEach(p=>{ p.style.width=""; p.style.transition=""; delete p.dataset._eW; });
-    wEls.length=0;
+    pinned=pinPillLines(kids,tops);
+    if(pillLines()!==lines){
+      pinned.forEach(p=>{ p.style.marginLeft=""; p.style.marginRight=""; p.style.transition=""; });
+      pinned=[];
+      wEls.forEach(p=>{ p.style.width=""; p.style.transition=""; delete p.dataset._eW; });
+      wEls.length=0;
+    }
   }
   els.forEach((p,i)=>{
     const a=p.getBoundingClientRect();
@@ -111,11 +154,20 @@ function flipPills(before){
      which also removes the rAF that a background tab would otherwise pause indefinitely. */
   void pills.offsetHeight;
   const T="var(--m-move) "+E_EASE;
-  moved.forEach(p=>{ p.style.transition="transform "+T+(wEls.indexOf(p)>=0?", width "+T:""); p.style.transform=""; });
-  wEls.forEach(p=>{ if(moved.indexOf(p)<0) p.style.transition="width "+T; p.style.width=p.dataset._eW+"px"; });
+  new Set(moved.concat(wEls,pinned)).forEach(p=>{
+    const t=[];
+    if(moved.indexOf(p)>=0) t.push("transform "+T);
+    if(wEls.indexOf(p)>=0) t.push("width "+T);
+    if(pinned.indexOf(p)>=0) t.push("margin-left "+T,"margin-right "+T);
+    p.style.transition=t.join(", ");
+  });
+  moved.forEach(p=>{ p.style.transform=""; });
+  wEls.forEach(p=>{ p.style.width=p.dataset._eW+"px"; });
+  pinned.forEach(p=>{ p.style.marginLeft=""; p.style.marginRight=""; });
   setTimeout(()=>{
     moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; p.style.willChange=""; });
     wEls.forEach(p=>{ p.style.transition=""; p.style.width=""; delete p.dataset._eW; });
+    pinned.forEach(p=>{ p.style.transition=""; p.style.marginLeft=""; p.style.marginRight=""; });
   },200);
 }
 function animateReorder(mutate){
