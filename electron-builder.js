@@ -52,6 +52,17 @@ module.exports = {
   files: ["package.json", "shell/main.js", "shell/preload.js", "engine/etiuda.html", "engine/etiuda.csp.json",
           "shell/sample-catalog.ec"],
   asar: true,
+  // THE FUSES, flipped in the binary before signing. Off: running the executable as plain Node,
+  // NODE_OPTIONS, and --inspect, none of which the shell or the harness uses. On: the app is read
+  // from app.asar alone. Asar integrity stays off while tests/shell-smoke.js rewrites the asar in
+  // place for its variants; the file protocol keeps its extra privileges, since the engine is
+  // served from file:// and nothing has been measured without them.
+  electronFuses: {
+    runAsNode: false,
+    enableNodeOptionsEnvironmentVariable: false,
+    enableNodeCliInspectArguments: false,
+    onlyLoadAppFromAsar: true,
+  },
   // THE .ec ASSOCIATION, so a catalog is a document a person can double-click. The app's own icon
   // rather than a second drawing: a catalog is Etiuda's document, and two pictures are two things
   // to keep in step. perMachine is false below, so NSIS writes this under HKCU and the uninstaller
