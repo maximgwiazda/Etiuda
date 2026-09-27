@@ -1929,8 +1929,8 @@ function searchFns() {
     "function cardStaticHay(",
     "function cardLiveHay(",
     "function cardSearchFields(",
-    "const cardWordCache=",
     "function cardSearchIndex(",
+    "function sameTerms(",
     "function cardMatchesSearch(",
     "const FIELD_WEIGHT=",
     "const Q_EXACT=",
@@ -1970,6 +1970,7 @@ function searchFns() {
     "function termReachesSomething(",
     "function correctTerm(",
     "function cardSearchScore(",
+    "function queryScore(",
   ].map(m => extractDecl(src, m)).join("\n");
   /* CATS first: cardSearchFields reads it for the meta field (the category NAME is searchable,
      which is deliberate - it is what makes a query naming a category surface that category).
