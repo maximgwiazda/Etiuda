@@ -2233,12 +2233,15 @@ function motionJudgeTests() {
   const row125 = [card("h", 240, 300), card("p", 240, 700), card("q", 240, 1100), card("s", 560, 300), card("t", 600, 700), card("u", 580, 1100)];
   const at100 = [card("h", 220, 300), card("p", 220, 700), card("m", 300, 300), card("n", 520, 700)];
   const under = [card("h", 150, 300), card("p", 160, 700)];
+  /* At 1280x680 (150 per cent) the head's top, 218, lies inside the band (204 to 408): measured
+     2026-09-27, m7@150 and m12@150 acted on the head. The band's first card that is not the head. */
+  const head150 = [card("h", 218, 20), card("p", 218, 430), card("q", 218, 840), card("s", 520, 20)];
   got = typeof M.middleCard === "function"
     ? [M.middleCard(row125, 816, 230), M.middleCard(at100, 900, 200), M.middleCard(under, 680, 230), M.middleCard([], 816, 230),
-      M.middleCard([card("h", 240, 300)], 816, 230)]
+      M.middleCard([card("h", 240, 300)], 816, 230), M.middleCard(head150, 680, 150)]
     : "no middleCard exported by tests/motion.js";
   eq("the card a leg acts on is the band's first where the band has one, else the nearest to the screen's middle, never the head",
-    got, ["s", "m", null, null, null]);
+    got, ["s", "m", null, null, null, "p"]);
 }
 function requestFns() {
   const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");

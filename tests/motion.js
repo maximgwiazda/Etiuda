@@ -31,7 +31,8 @@
  * SCALES. A leg that reads motion runs at 100, 125 and 150 per cent, each at the window a
  * 1920x1080 screen gives at that scale less its chrome, so the row of pills wraps as a desk's does:
  * at 100 per cent it rests on two lines, at 125 and 150 on three or more. Its id carries the scale,
- * m11@150. A leg about cost or a resize runs at 100 alone.
+ * m11@150. A leg about cost or a resize runs at 100 alone, and so does m14, the switch that stills
+ * all of it: a scale changes no class and no stored key, and its reload costs a boot.
  */
 "use strict";
 const VIEW = { width: 1600, height: 900 };
@@ -178,11 +179,12 @@ function judge(r, opts) {
 /* The card a leg acts on, from the cards on offer in list order as {id, top, left}: the first whose
    top lies in the middle band of the screen, and where a scale leaves that band empty, the one whose
    top is nearest the middle of the screen below the header, never the list's head, which a star
-   leaves where it is. `top` is where the screen starts under the header. */
+   leaves where it is, in the band or out of it (at 1280x680 the head's top lies inside the band).
+   `top` is where the screen starts under the header. */
 function middleCard(cards, vh, top) {
-  const band = cards.find(c => c.top > vh * 0.3 && c.top < vh * 0.6);
-  if (band) return band.id;
   const head = cards.reduce((h, c) => !h || c.top < h.top - 1 || (Math.abs(c.top - h.top) <= 1 && c.left < h.left) ? c : h, null);
+  const band = cards.find(c => c !== head && c.top > vh * 0.3 && c.top < vh * 0.6);
+  if (band) return band.id;
   const mid = (top + vh) / 2;
   const pool = cards.filter(c => c !== head && c.top >= top && c.top < vh - 80)
     .sort((a, b) => Math.abs(a.top - mid) - Math.abs(b.top - mid) || a.left - b.left);
@@ -556,6 +558,102 @@ leg("m13", "a category press recalculates style a handful of times, not once per
     }
   } finally { await L.done(); }
   return { ok, text: out.join(" | ") };
+}, true);
+
+/* THE ONE SWITCH, html.e-still (motion.js syncStill and wireStill, the head script, Settings'
+   Animations row). Read from the browser's own list: every animation running in any frame of the
+   half second after a surface opens, pseudo-elements included. With the switch off a surface must
+   run none; with it on the same opens must run some, or the still reading is about nothing. The
+   class must follow the Settings row both ways, the system's request both ways without a reload,
+   and a reload with the switch stored. The page is left as it was found: switch on, instrumented. */
+/* Each surface's own proof that it opened, read in the page (a function handed to evaluate carries
+   no closure, so the selector travels as an argument). */
+const shownBy = sel => p => p.evaluate(sel => { const el = document.querySelector(sel); return !!(el && el.offsetParent && !el.hidden); }, sel);
+const STILL_SURFACES = [
+  ["the Menu", async p => { await p.click("#settingsBtn"); }, shownBy("#settingsMenu")],
+  ["Settings", async p => { await p.click("#settingsBtn"); await sleep(150);
+    await p.evaluate(() => document.querySelector('#settingsMenu [data-act="settings"]').click()); }, shownBy("#setBody")],
+  ["the card editor", async p => { await p.keyboard.down("Alt"); await p.keyboard.press("KeyN"); await p.keyboard.up("Alt"); },
+    p => p.evaluate(() => { const m = document.getElementById("modalCard"), b = document.getElementById("setBody");
+      return !!(m && m.offsetParent) && !(b && b.offsetParent); })]];
+async function stillSweep(p) {
+  const out = [];
+  for (const [name, open, shown] of STILL_SURFACES) {
+    await p.evaluate(() => {
+      const live = () => document.getAnimations().filter(a => a.playState === "running");
+      const s = window.__mtStill = { rest: live().length, max: 0, names: [] };
+      const t0 = performance.now();
+      (function f() {
+        const a = live();
+        if (a.length > s.max) s.max = a.length;
+        a.forEach(x => { const n = x.animationName || x.transitionProperty || "script";
+          if (s.names.indexOf(n) < 0) s.names.push(n); });
+        if (performance.now() - t0 < 500) requestAnimationFrame(f);
+      })();
+    });
+    await open(p);
+    await sleep(550);
+    const s = Object.assign({ shown: await shown(p) }, await p.evaluate(() => window.__mtStill));
+    out.push(Object.assign({ name }, s));
+    for (let i = 0; i < 3; i++) { await p.keyboard.press("Escape"); await sleep(150); }
+    await sleep(300);
+  }
+  return out;
+}
+const isStill = p => p.evaluate(() => document.documentElement.classList.contains("e-still"));
+/* One press on Settings' Animations row, "on" or "off"; says the class and the stored key after. */
+async function motionRow(p, v) {
+  return p.evaluate(v => {
+    const b = document.querySelector('#setBody .set-seg[data-seg="motion"] button[data-val="' + v + '"]');
+    if (!b) return null;
+    b.click();
+    return { still: document.documentElement.classList.contains("e-still"), stored: localStorage.getItem("eMotionOff") };
+  }, v);
+}
+async function openSettingsPage(p) {
+  await p.click("#settingsBtn"); await sleep(150);
+  await p.evaluate(() => document.querySelector('#settingsMenu [data-act="settings"]').click());
+  await sleep(400);
+}
+
+leg("m14", "with the Animations switch off, opening the Menu, Settings and the card editor runs no animation, and the switch follows Settings, the system and a reload", async p => {
+  const out = [];
+  let ok = true;
+  const say = (good, text) => { if (!good) ok = false; out.push((good ? "" : "WRONG ") + text); };
+  const brief = s => s.name + " " + s.max + (s.names.length ? " (" + s.names.slice(0, 4).join(",") + ")" : "") + (s.shown ? "" : " NOT OPENED");
+  try {
+    say(!(await isStill(p)), "at the start the switch is on");
+    /* The control: the same opens with the switch on must run something. */
+    const on = await stillSweep(p);
+    say(on.every(s => s.shown && s.max > s.rest), "switch on: " + on.map(brief).join(", "));
+    /* The system's request, heard without a reload (wireStill's matchMedia listener). */
+    await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
+    await sleep(100);
+    const sysOn = await isStill(p);
+    await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "no-preference" }]);
+    await sleep(100);
+    const sysOff = await isStill(p);
+    say(sysOn && !sysOff, "the system asks and the page stills (" + sysOn + "), asks no more and it moves (" + !sysOff + ")");
+    /* A reload with the switch stored: the head script and wireStill at boot. */
+    await p.evaluate(() => localStorage.setItem("eMotionOff", "1"));
+    await boot(p, p.url());
+    say(await isStill(p), "a reload with the switch stored off boots still");
+    const off = await stillSweep(p);
+    say(off.every(s => s.shown && s.max === 0), "switch off: " + off.map(brief).join(", "));
+    /* Settings' row, both ways, ending on. */
+    await openSettingsPage(p);
+    const r1 = await motionRow(p, "on"), r2 = await motionRow(p, "off"), r3 = await motionRow(p, "on");
+    say(!!r1 && !r1.still && r1.stored === null && r2.still && r2.stored === "1" && !r3.still && r3.stored === null,
+      "the Settings row: on " + JSON.stringify(r1) + ", off " + JSON.stringify(r2) + ", on " + JSON.stringify(r3));
+    for (let i = 0; i < 3; i++) { await p.keyboard.press("Escape"); await sleep(150); }
+  } finally {
+    await p.emulateMediaFeatures().catch(() => {});
+    /* A leg that stopped half way must not leave the legs after it running still. */
+    await p.evaluate(() => localStorage.removeItem("eMotionOff")).catch(() => {});
+    if (await isStill(p).catch(() => true)) await boot(p, p.url()).catch(() => {});
+    await p.evaluate(instrument).catch(() => {});
+  }
+  return { ok, text: out.join("; ") };
 }, true);
 
 /* Every leg at every scale it runs at, grouped by scale so the window changes twice. */
