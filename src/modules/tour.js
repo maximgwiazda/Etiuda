@@ -136,11 +136,11 @@ function tourRevealCardActions(){
 /* The desk's own words for the folder a Load opens, or none in a browser, which has no folder. */
 function loadStepBody(){
   const dir=eCatalogFolderShort();
-  if(!dir) return t("Replies come in a catalog. Click <b>Load a catalog</b>, under the logo, and choose the catalog file; it stays in this browser, ready whenever you come back.");
+  if(!dir) return t("Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the catalog file. The page reloads with it and the tour carries on from there; the catalog stays in this browser, ready whenever you come back.");
   /* The sample's button stands beside Load only while sampleReady() (render.js), so only then is it named. */
   return t(hooks.sampleReady()
-      ? "Replies come in a catalog. Click <b>Load a catalog</b>, under the logo, and choose the team's catalog in {FOLDER}, or <b>load a sample catalog</b> beside it to try everything out straight away. The tour carries on once one is loaded."
-      : "Replies come in a catalog. Click <b>Load a catalog</b>, under the logo, and choose the team's catalog in {FOLDER}. The tour carries on once it is loaded.")
+      ? "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}, or <b>load a sample catalog</b> beside it to try everything straight away. Etiuda restarts with the catalog in place, and the tour carries on from there."
+      : "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}. Etiuda restarts with the catalog in place, and the tour carries on from there.")
     .split("{FOLDER}").join(esc(dir));
 }
 /* THE MENU AS IT STANDS: the button while it is shut, and once the person opens it, the row a step
@@ -189,8 +189,8 @@ const TOUR_STEPS=[
     sel:".field-wrap.paxrole",
     title:()=>wheelShown() ? "Customer name and role" : "The customer's name",
     body:()=>wheelShown()
-      ? "Paste the customer's name as the chat gives it, surname and capitals included; every reply then greets them by first name, in Polish in the vocative (ANNA KOWALSKA → <b>Anno</b>). The wheel beside it says who is on the chat, for internal comments. Any name will do to try it."
-      : "Paste the customer's name as the chat gives it, surname and capitals included; every reply then greets them by first name, in Polish in the vocative (ANNA KOWALSKA → <b>Anno</b>). Any name will do to try it.",
+      ? "Paste the customer's name as the chat gives it, surname and capitals included; every reply then greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>). The wheel beside it says who is on the chat, for internal comments. Any name will do to try it."
+      : "Paste the customer's name as the chat gives it, surname and capitals included; every reply then greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>). Any name will do to try it.",
     does:{snap:paxNow, done:was=>!!paxNow() && paxNow()!==was, on:"#pax", settle:1200},
     pad:6
   },
@@ -233,7 +233,7 @@ const TOUR_STEPS=[
     id:"tabs",
     sel:"#tabsWrap",
     title:"Conversations",
-    body:()=>t("When several customers are on the chat at once, each gets a tab here with their own name, intent and language, so a reply never carries the wrong name. Open a second one with <b>+</b> or {NEW}; {KEY} moves between them.")
+    body:()=>t("Each customer on the chat gets a tab of their own here, with their name, intent and language, so a reply never carries the wrong name. Open a second conversation with <b>+</b> or {NEW}; {KEY} moves between them.")
             .replace("{KEY}",chordChips("tabNext")).replace("{NEW}",chordChips("tabNew")),
     does:{snap:()=>tabs.length, done:was=>tabs.length>was},
     pad:6
@@ -279,7 +279,7 @@ const TOUR_STEPS=[
     sel:()=>cardBtn('[data-act="edit"]'),
     prep:tourRevealCardActions,
     title:"Edit a card",
-    body:()=>t("Click the pencil to open this card: both languages, the internal note, the keywords. Changes stay on this computer, and the editor's <b>Reset</b> brings back the catalog's own words.")
+    body:()=>t("Click the pencil to open this card in the editor: both languages, the internal note, the keywords. Changes are kept beside the catalog, and the editor's <b>Reset</b> brings back the catalog's own words.")
       +" "+t("Once the window is open, the tour goes inside with it."),
     opens:"editor",
     pad:8
@@ -301,7 +301,7 @@ const TOUR_STEPS=[
     id:"add",
     sel:"#addCardFab",
     title:"A card of your own",
-    body:()=>t("Click <b>+</b> to start a card of your own, in the category open at the time or in one the editor asks for.")
+    body:()=>t("Click <b>+</b> to write a card of your own, in the category open now or in any other chosen in the editor.")
       +" "+t("Once the window is open, the tour goes inside with it."),
     opens:"addIn",
     pad:10
@@ -333,15 +333,15 @@ const TOUR_STEPS=[
     pad:4,
     title:"Quick facts",
     body:()=>(eHost()
-      ? t("Fees, deadlines and links to quote. A click on a link copies it whole, and the text is yours to edit; it stays on this computer.")
-      : t("Fees, deadlines and links to quote. A click on a link copies it whole, and the text is yours to edit; it stays in this browser."))
-      +" "+t("The same button closes them, and the tour carries on.")
+      ? t("A click on a link copies it whole, and the text is yours to edit; it stays on this computer.")
+      : t("A click on a link copies it whole, and the text is yours to edit; it stays in this browser."))
+      +" "+t("Close them when ready, with the same button or a click outside, and the tour carries on.")
   },
   {
     id:"theme",
     sel:"#theme",
     title:"Light and dark",
-    body:"Click here to switch between light and dark. Etiuda follows the system until a click here makes it a choice of your own.",
+    body:"Click here to switch between light and dark. Etiuda follows the system until the first click, and keeps your choice from then on.",
     does:{snap:themeNow, done:was=>themeNow()!==was},
     pad:8
   },
@@ -352,7 +352,7 @@ const TOUR_STEPS=[
     sel:()=>menuTarget(""),
     side:menuSide,
     title:"Menu",
-    body:"Click <b>Menu</b>: everything that is not a card is kept there.",
+    body:"Click <b>Menu</b>: the rest of Etiuda opens from there.",
     does:{done:()=>menuOpen()},
     pad:8
   },
@@ -362,7 +362,7 @@ const TOUR_STEPS=[
     side:menuSide,
     title:"Library",
     body:()=>t("Everything that is not a card: the Library, Settings, the panels' switches, and this tour again under <b>Show tour…</b>.")
-      +" "+t("Click <b>Library</b>, where the whole catalog is.")
+      +" "+t("Click <b>Library</b> in the Menu: the whole catalog is there.")
       +" "+t("Once the window is open, the tour goes inside with it."),
     opens:"libraryIn",
     menu:true,
@@ -384,7 +384,7 @@ const TOUR_STEPS=[
     sel:()=>menuTarget("settings"),
     side:menuSide,
     title:"Settings",
-    body:()=>t("Open the <span data-icon=\"settings\"></span> Menu again and click <b>Settings</b>: this desk's signature, language and look.")
+    body:()=>t("One more window: open the <span data-icon=\"settings\"></span> Menu again and click <b>Settings</b>.")
       +" "+t("Once the window is open, the tour goes inside with it."),
     opens:"settingsIn",
     menu:true,
