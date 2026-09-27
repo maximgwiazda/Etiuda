@@ -78,11 +78,12 @@
     var root=document.documentElement;
     if(localStorage.getItem("eMotionOff")==="1" || matchMedia("(prefers-reduced-motion: reduce)").matches)
       root.classList.add("e-still");
-    /* A COVERED RELOAD (motion.js reloadCovered). Rendering is blocked until parsing ends, which
-       is after the app's script and so after boot (#eBooted names nothing, and the block lifts
-       at the end of the document): the frame the last document left stays on screen and nothing
-       half-built is painted. Where blocking is not understood, the body stays unseen. The shell's
-       own reload after the page stopped arrives the same way: a dead page could not ask. */
+    /* A COVERED RELOAD (motion.js reloadCovered). Rendering is blocked until arrive() takes the
+       link away at the end of boot (#eBooted names nothing; a boot that never ends is released at
+       the end of the document, which Chromium logs as a warning): the frame the last document left
+       stays on screen and nothing half-built is painted. Where blocking is not understood, the body
+       stays unseen. The shell's own reload after the page stopped arrives the same way: a dead page
+       could not ask. */
     var host=window.E_HOST;
     if(sessionStorage.getItem("eArriving") || (host && host.recovering)){
       sessionStorage.removeItem("eArriving");
@@ -110,6 +111,7 @@
   function arrive(){
     var root=document.documentElement, done=false;
     if(!root.classList.contains("e-arriving")) return;
+    if(hold && hold.parentNode) hold.parentNode.removeChild(hold);
     root.classList.add("e-arrived");
     root.classList.remove("e-veiled");
     void (document.body && document.body.offsetWidth);

@@ -1377,7 +1377,9 @@ function recoveryTests() {
     const sb = {
       document: { documentElement: { classList: { add: (...c) => c.forEach(x => cls.add(x)), remove: (...c) => c.forEach(x => cls.delete(x)),
         contains: c => cls.has(c) }, style: { setProperty() {} } },
-        head: { appendChild: n => head.push(n) }, createElement: el, getElementById: () => null, querySelector: () => null },
+        head: { appendChild: n => { n.parentNode = sb.document.head; head.push(n); },
+          removeChild: n => { head.splice(head.indexOf(n), 1); n.parentNode = null; } },
+        createElement: el, getElementById: () => null, querySelector: () => null },
       sessionStorage: { getItem: k => store[k] || null, removeItem: k => { delete store[k]; }, setItem: (k, v) => { store[k] = v; }, clear() {} },
       localStorage: { getItem: () => null, setItem() {}, removeItem() {}, key: () => null, length: 0 },
       matchMedia: () => ({ matches: false }), location: { hash: "", href: "file:///x/etiuda.html", protocol: "file:", origin: "null" },
@@ -1386,15 +1388,17 @@ function recoveryTests() {
     };
     sb.window = sb; sb.E_HOST = host; sb.self = sb; sb.top = sb;
     require("vm").runInNewContext(guard, sb);
-    const hold = head.filter(n => n.rel === "expect" && n.blocking === "render");
-    return [cls.has("e-arriving"), hold.length];
+    const held = () => head.filter(n => n.rel === "expect" && n.blocking === "render").length;
+    const before = [cls.has("e-arriving"), held()];
+    sb.E_BOOT_OK();
+    return before.concat(held());
   };
   let got;
   try {
     got = [run({ recovering: true }, false), run({ recovering: false }, false), run(null, true), run(null, false)];
   } catch (e) { got = "the boot guard threw: " + e.message; }
-  eq("the guard holds the first frame for the shell's recovery and for the page's own covered reload, and for nothing else",
-    got, [[true, 1], [false, 0], [true, 1], [false, 0]]);
+  eq("the guard holds the first frame for the shell's recovery and for the page's own covered reload, and for nothing else; the end of boot lets it go, so parsing never ends on an expected element it did not find",
+    got, [[true, 1, 0], [false, 0, 0], [true, 1, 0], [false, 0, 0]]);
 }
 /* EVERY CLOSE FADES OUT ON THE DISMISS TIER (feel pass motion-9, ruled 2026-09-26 13:14): the three
    helpers are sliced out of motion.js and run on a small element model written here, and each
