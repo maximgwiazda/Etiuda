@@ -17569,19 +17569,11 @@ What you type stays in this browser only.`;
       if (!b) return;
       const act = b.dataset.act;
       if (act === "settings" || act === "manage" || act === "tour" || act === "about") menuReturn = null;
-      if (act === "settings") {
-        hooks.openSettings();
-        closeSettingsMenu();
-      } else if (act === "manage") {
-        hooks.openManage();
-        closeSettingsMenu();
-      } else if (act === "tour") {
-        hooks.startTour();
-        closeSettingsMenu();
-      } else if (act === "about") {
-        openAbout();
-        closeSettingsMenu();
-      } else if (act === "rail") {
+      if (act === "settings") menuScreen(hooks.openSettings);
+      else if (act === "manage") menuScreen(hooks.openManage);
+      else if (act === "tour") menuScreen(hooks.startTour);
+      else if (act === "about") menuScreen(openAbout);
+      else if (act === "rail") {
         toggleRail();
       } else if (act === "pills") {
         togglePills();
@@ -17764,16 +17756,20 @@ What you type stays in this browser only.`;
     b.setAttribute("aria-expanded", "true");
     if (byKey) takeKeyboard(m);
   }
-  function closeSettingsMenu() {
+  function closeSettingsMenu(forScreen) {
     const menu = $("#settingsMenu"), btn = $("#settingsBtn");
     const had = heldMenu() === menu;
-    dismissCopy(menu);
+    if (!forScreen) dismissCopy(menu);
     if (menu) menu.hidden = true;
     if (btn) {
       btn.classList.remove("on");
       btn.setAttribute("aria-expanded", "false");
     }
     if (had) giveFocusBack(menu);
+  }
+  function menuScreen(open) {
+    open();
+    closeSettingsMenu(true);
   }
   function openSettingsMenu(byKey) {
     const menu = $("#settingsMenu"), btn = $("#settingsBtn");

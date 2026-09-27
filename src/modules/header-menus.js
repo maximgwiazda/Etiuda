@@ -29,10 +29,10 @@ function wireHeaderMenus(){
     // What opens a screen takes the keyboard with it, so nothing is handed back underneath.
     if(act==="settings"||act==="manage"||act==="tour"||act==="about") menuReturn=null;
     // Add actions sit with the things they create, so this menu carries none of them.
-    if(act==="settings"){ hooks.openSettings(); closeSettingsMenu(); }
-    else if(act==="manage"){ hooks.openManage(); closeSettingsMenu(); }
-    else if(act==="tour"){ hooks.startTour(); closeSettingsMenu(); }
-    else if(act==="about"){ openAbout(); closeSettingsMenu(); }
+    if(act==="settings") menuScreen(hooks.openSettings);
+    else if(act==="manage") menuScreen(hooks.openManage);
+    else if(act==="tour") menuScreen(hooks.startTour);
+    else if(act==="about") menuScreen(openAbout);
     else if(act==="rail"){ toggleRail(); }
     else if(act==="pills"){ togglePills(); }
   };
@@ -236,14 +236,18 @@ function openMoreMenu(byKey){
   b.setAttribute("aria-expanded","true");
   if(byKey) takeKeyboard(m);
 }
-function closeSettingsMenu(){
+function closeSettingsMenu(forScreen){
   const menu=$("#settingsMenu"), btn=$("#settingsBtn");
   const had=heldMenu()===menu;
-  dismissCopy(menu);
+  if(!forScreen) dismissCopy(menu);
   if(menu) menu.hidden=true;
   if(btn){ btn.classList.remove("on"); btn.setAttribute("aria-expanded","false"); }
   if(had) giveFocusBack(menu);
 }
+/* A SCREEN OPENED FROM A MENU ROW OPENS FIRST, so it takes the Menu button as where focus returns
+   before the menu's close blurs the row; the menu then leaves no fading copy, because a leave
+   ends when another surface opens and this one has already opened. */
+function menuScreen(open){ open(); closeSettingsMenu(true); }
 function openSettingsMenu(byKey){
   const menu=$("#settingsMenu"), btn=$("#settingsBtn");
   if(!menu||!btn) return;

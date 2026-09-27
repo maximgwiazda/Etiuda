@@ -1440,6 +1440,8 @@ function dismissTierTests() {
   } catch (e) { H = null; }
   eq("motion.js carries dismissNode, dismissCopy and cutLeaves", !!H, true);
   if (H) dismissHelperTests(H, timers, v => { still = v; });
+  still = false;
+  if (H) menuScreenTests(H);
   dismissWiringTests();
 }
 function dismissHelperTests(H, timers, setStill) {
@@ -1523,6 +1525,39 @@ function dismissWiringTests() {
   const q = [["dialog.js", "function openCover(", ":not(.e-gone)"], ["empty-mark.js", "function dialogStanding(", ":not(.e-gone)"],
              ["tour.js", "function syncTourBehind(", ".modal:not([hidden]):not(.e-gone)"], ["tour.js", "function syncTourBehind(", ".bub-ask:not(.e-gone)"]];
   eq("nothing that asks whether a window or a question is up counts one that is leaving", q.map(x => has(x[0], x[1], x[2])), [true, true, true, true]);
+}
+/* A SCREEN OPENED FROM A MENU ROW (feel pass motion-9, the one chain that cross-faded): it opens
+   while the menu is up, so it keeps the Menu button as its opener, and the menu leaves no copy. */
+function menuScreenTests(H) {
+  const src = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
+  {
+    const { El, doc } = dismissFakeDom();
+    const hm = src("header-menus.js");
+    const menu = new El("div", { id: "settingsMenu", class: "menu" }), wrap = new El("div").add(menu);
+    doc.add(wrap);
+    const btn = { classList: { remove() {} }, setAttribute() {} };
+    let C = null, M = null;
+    try {
+      C = new Function("$", "heldMenu", "giveFocusBack", "dismissCopy",
+        extractDecl(hm, "function closeSettingsMenu(") + "\nreturn closeSettingsMenu;")(
+        s => s === "#settingsMenu" ? menu : s === "#settingsBtn" ? btn : null, () => null, () => {}, H.dismissCopy);
+      M = new Function("closeSettingsMenu", extractDecl(hm, "function menuScreen(") + "\nreturn menuScreen;")(C);
+    } catch (e) { M = null; }
+    if (C) C();
+    eq("closed on its own, the menu fades as a copy after it",
+      C ? [menu.hidden, wrap.kids.length, !!wrap.kids[1] && wrap.kids[1].classList.contains("e-gone")] : "no closeSettingsMenu", [true, 2, true]);
+    H.cutLeaves();
+    menu.hidden = false;
+    const saw = [];
+    if (M) M(() => { saw.push(menu.hidden); H.cutLeaves(); });
+    eq("a screen opened from a menu row opens while the menu is up, and the menu then goes with no fading copy",
+      M ? [saw, menu.hidden, wrap.kids.length] : "no menuScreen in header-menus.js", [[false], true, 1]);
+    let wire = "";
+    try { wire = extractDecl(hm, "function wireHeaderMenus("); } catch (e) { wire = ""; }
+    eq("each menu row that opens a screen goes through menuScreen",
+      ["menuScreen(hooks.openSettings)", "menuScreen(hooks.openManage)", "menuScreen(hooks.startTour)", "menuScreen(openAbout)"]
+        .map(s => wire.indexOf(s) > -1), [true, true, true, true]);
+  }
 }
 function requestFns() {
   const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
