@@ -286,10 +286,18 @@ const FOLDER_ASK_MS = 3000, FOLDER_RETRY_MS = 30000, FOLDER_SOON_MS = 1000;
 let folderDown = "", folderAsking = null, folderRetry = null, folderSaidDown = "";
 function folderAnswers(dir) { return !folderDown || dir !== folderDown; }
 function fileAnswers(file) { return folderAnswers(path.dirname(file)); }
+/* ONLY A STAT THAT SUCCEEDS ANSWERS. A share that has just timed out fails every call at once for
+   a while and then waits out the timeout again, so a failure is no proof that a read will return.
+   A folder that is not there answers through its parent, which is the disk answering. */
+function statAnswers(dir) {
+  const up = path.dirname(dir);
+  return fs.promises.stat(dir).then(() => true, e => ((e && (e.code === "ENOENT" || e.code === "ENOTDIR") && up !== dir)
+    ? fs.promises.stat(up).then(() => true, () => false) : false));
+}
 function askFolder(dir) {
   if (folderAsking && folderAsking.dir === dir) return folderAsking.answer;
   let timer = null;
-  const settled = fs.promises.stat(dir).then(() => true, () => true);
+  const settled = statAnswers(dir);
   const answer = Promise.race([settled, new Promise(r => { timer = setTimeout(() => r(false), FOLDER_ASK_MS); })])
     .then(ok => { clearTimeout(timer); return ok; });
   const asking = { dir: dir, answer: answer };
@@ -301,8 +309,7 @@ function askFolder(dir) {
 function settleFolder(dir, ok) {
   if (dir !== catalogFolder()) return false;
   if (!ok && folderSaidDown !== dir)
-    console.error("etiuda: the catalog folder " + dir + " did not answer within " + FOLDER_ASK_MS / 1000
-      + " s, so it is read as empty until it does");
+    console.error("etiuda: the catalog folder " + dir + " did not answer, so it is read as empty until it does");
   if (ok && folderSaidDown === dir) console.log("etiuda: the catalog folder " + dir + " answers again");
   folderDown = ok ? "" : dir;
   folderSaidDown = folderDown;

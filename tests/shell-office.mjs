@@ -19,7 +19,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 26;
+const EXPECTED = 29;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -379,6 +379,52 @@ try {
       "4i a resume with the share gone reads nothing from it, waking or after the ask's limit, says so and asks again: "
       + (d.st.touched.length - touchedBefore) + " call(s), " + downLines + " line(s) in all, "
       + d.clock.due(30000).length + " retry pending");
+
+    /* A share that has just timed out fails every call at once for a while, then waits out the
+       timeout again: the first ask is failed as that timeout, and the retry lands in the window. */
+    const r = boot(true);
+    await settle();
+    r.clock.fire(3000);
+    await settle();
+    r.S.ctl.pstat = (p, ...rest) => (r.st.down && typeof p === "string" && p.toLowerCase().indexOf(r.share.toLowerCase()) === 0
+      ? Promise.reject(Object.assign(new Error("unknown error"), { code: "UNKNOWN" })) : realFs.promises.stat(p, ...rest));
+    r.st.hung.splice(0).forEach(f => f());
+    await settle();
+    r.clock.fire(30000);
+    await settle();
+    const back = r.S.said.filter(l => /answers again/.test(l)).length;
+    check(r.st.touched.length === 0 && back === 0 && r.clock.due(30000).length === 1,
+      "4p a share still down whose next ask fails at once is not read as answering: " + r.st.touched.length
+      + " sync call(s)" + (r.st.touched.length ? " (" + r.st.touched.slice(0, 5).join(", ") + ")" : "") + ", "
+      + back + " 'answers again' line(s), " + r.clock.due(30000).length + " retry pending");
+
+    /* A folder that is not there, on a disk that answers, has answered: a first run's own folder. */
+    const firstClock = fakeClock();
+    const fresh = loadShell({ ready: true, clock: firstClock });
+    fresh.ctl.watch = (real, dir) => { const w = new EventEmitter(); w.close = () => {}; w.dir = dir; return w; };
+    const own = path.join(fresh.DOCS, "Etiuda");
+    const ownBefore = realFs.existsSync(own);
+    await settle();
+    const ownDown = fresh.said.filter(l => /catalog folder .* did not answer/.test(l)).length;
+    check(!ownBefore && realFs.existsSync(own) && ownDown === 0 && firstClock.due(30000).length === 0,
+      "4q a folder that is not there on a disk that answers is an answer, so a first run makes its own folder: made "
+      + realFs.existsSync(own) + ", " + ownDown + " 'did not answer' line(s)");
+
+    /* Not there, and nor is the place it sits in: the whole server is down, whatever the code says. */
+    const gone = boot(true);
+    const above = path.dirname(gone.share).toLowerCase();
+    gone.S.ctl.pstat = (p, ...rest) => {
+      const at = typeof p === "string" ? path.resolve(p).toLowerCase() : "";
+      return (gone.st.down && (at.indexOf(gone.share.toLowerCase()) === 0 || at === above))
+        ? Promise.reject(Object.assign(new Error("no such file or directory"), { code: "ENOENT" }))
+        : realFs.promises.stat(p, ...rest);
+    };
+    await settle();
+    const goneDown = gone.S.said.filter(l => /catalog folder .* did not answer/.test(l)).length;
+    check(gone.st.touched.length === 0 && goneDown === 1 && gone.clock.due(30000).length === 1,
+      "4r a folder that is not there where its parent does not answer either is not an answer: " + gone.st.touched.length
+      + " sync call(s)" + (gone.st.touched.length ? " (" + gone.st.touched.slice(0, 5).join(", ") + ")" : "") + ", "
+      + goneDown + " 'did not answer' line(s), " + gone.clock.due(30000).length + " retry pending");
   }
 } catch (e) {
   failed++;
