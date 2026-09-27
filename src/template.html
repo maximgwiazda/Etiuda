@@ -1317,6 +1317,11 @@ body.role-waits #roleDrum{display:none}
    lines, so the frame that first lays out the new width puts no third line in flow and the width
    watch's clip moves nothing above #pills. Unset, the variables leave max-height at none. */
 .pills-slot{max-height:calc(var(--pills-2line) + max(0px,(100vw - var(--pills-vw) + .1px)*1000000))}
+/* --pills-vw-now is 100vw as a computed length, which script reads without a layout. Neither is
+   inherited: a pill that inherits a variable is restyled whenever it changes. */
+@property --pills-vw{syntax:"*";inherits:false}
+@property --pills-vw-now{syntax:"<length>";inherits:false;initial-value:0px}
+.pills-slot{--pills-vw-now:100vw}
 html.e-pills-off .pills-slot{display:none}
 /* The slot's width in a box no clip resizes, for wirePillsWidthWatch: the slot's own width rule. */
 .pills-probe{max-width:var(--app-max);margin:0 auto;height:0}

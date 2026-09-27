@@ -534,6 +534,7 @@ function runUnitTests() {
   windowPlaceTests();
   pillWrapTests();
   pillsWidthWatchTests();
+  pillsResizeCostTests();
   railLeaveTests();
   grownCardTests();
   motionJudgeTests();
@@ -1444,7 +1445,7 @@ function pillsWidthWatchTests() {
     get offsetHeight() { return natural(); }, getBoundingClientRect: () => ({ height: natural() }) };
   const slot = {
     classList: { add: (...c) => c.forEach(x => cls.add(x)), remove: (...c) => c.forEach(x => cls.delete(x)), contains: c => cls.has(c) },
-    style: { setProperty: (k, v) => { vars[k] = v; }, removeProperty: k => { delete vars[k]; } },
+    style: { setProperty: (k, v) => { vars[k] = v; }, removeProperty: k => { delete vars[k]; }, getPropertyValue: k => k in vars ? vars[k] : "" },
     getBoundingClientRect: () => ({ height: slotH() }),
   };
   const doc = { documentElement: { style: { removeProperty() {} }, getBoundingClientRect: () => ({ width: st.vw }) },
@@ -1460,7 +1461,7 @@ function pillsWidthWatchTests() {
       "getComputedStyle", "ePillsSettled", "counted",
       decls + "\nconst sync=syncPillsCollapse;\nsyncPillsCollapse=function(){ counted(); sync(); };" +
       "\nreturn { wire: wirePillsWidthWatch, sync };")(bar, RO, () => probe, () => slot, () => true, () => st.locked, doc,
-      () => ({ rowGap: GAP + "px" }), true, () => { calls++; });
+      x => x === slot ? { getPropertyValue: k => pillsSlotComputed(tpl, k, st.vw) } : { rowGap: GAP + "px" }, true, () => { calls++; });
   };
   /* Boot at `from` with its clip decided, the observer's first delivery, then one frame at `to`:
      [clips in the observer, loop errors, the slot's height as painted]. */
@@ -1502,6 +1503,72 @@ function pillsWidthWatchTests() {
     [true, true]);
   const boot = fs.readFileSync(path.join(E.ROOT, "src", "main.js"), "utf8");
   eq("boot wires the watch", /pillsBox\.wirePillsWidthWatch\(\);/.test(boot), true);
+}
+/* A custom property's computed value on the pill slot, read from the sheet: a length registered by
+   @property and declared on .pills-slot in vw computes to px, rounded here to six significant figures
+   as a browser may serialise it; an unregistered one keeps its tokens. */
+function pillsSlotComputed(tpl, name, vw) {
+  const decl = new RegExp("[.]pills-slot[{]" + name + ":([^;}]*)").exec(tpl);
+  if (!decl) return "";
+  const reg = new RegExp("@property " + name + "[{]([^}]*)[}]").exec(tpl);
+  const n = /^([0-9.]+)vw$/.exec(decl[1].trim());
+  if (!reg || !/syntax:"<length>"/.test(reg[1]) || !n) return decl[1].trim();
+  return String(Number((parseFloat(n[1]) * vw / 100).toPrecision(6))) + "px";
+}
+/* WHAT ONE STEP OF A WINDOW DRAG COSTS THE PILL BAR (797 F4). The resize pass, schedulePillsCollapse
+   with its frames run at once, is traced on stubs one step after the last decision, in each state: a
+   layout read with anything written since the last layout is a layout, and a style or layout read
+   after a write to a variable the pills inherit (any the sheet does not register inherits:false)
+   restyles the whole bar, as does the frame if one is still pending. The drag is the verifier's. */
+function pillsResizeCostTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "pills-box.js"), "utf8");
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const own = new Set();
+  for (const m of tpl.matchAll(/@property (--[a-z0-9-]+)[{]([^}]*)[}]/g)) if (/inherits:false/.test(m[2])) own.add(m[1]);
+  const LINE = 31.5, GAP = 6;
+  const st = { vw: 1200, lines: 2 }, vars = {}, cls = new Set();
+  let pend = {}, layouts = 0, restyles = 0;
+  const dirty = () => !!(pend.inh || pend.own || pend.cls || pend.lay);
+  const styleRead = () => { if (pend.inh) restyles++; pend = { lay: dirty() }; };
+  const layoutRead = () => { if (pend.inh) restyles++; if (dirty()) layouts++; pend = {}; };
+  const touch = k => { pend[k.startsWith("--") ? (own.has(k) ? "own" : "inh") : "cls"] = true; };
+  const natural = () => st.lines * LINE + (st.lines - 1) * GAP;
+  const kids = () => Array.from({ length: 3 * st.lines }, (_, i) => ({
+    get offsetTop() { layoutRead(); return Math.floor(i / 3) * (LINE + GAP); },
+    get offsetHeight() { layoutRead(); return LINE; },
+    getBoundingClientRect() { layoutRead(); return { height: LINE }; } }));
+  const bar = { get children() { return kids(); }, querySelector: () => kids()[0],
+    get offsetHeight() { layoutRead(); return natural(); }, getBoundingClientRect() { layoutRead(); return { height: natural() }; } };
+  const slot = {
+    classList: { add: (...c) => c.forEach(x => { if (!cls.has(x)) { cls.add(x); touch(x); } }),
+      remove: (...c) => c.forEach(x => { if (cls.has(x)) { cls.delete(x); touch(x); } }), contains: c => cls.has(c) },
+    style: { setProperty: (k, v) => { if (vars[k] !== v) { vars[k] = v; touch(k); } },
+      removeProperty: k => { if (k in vars) { delete vars[k]; touch(k); } }, getPropertyValue: k => k in vars ? vars[k] : "" },
+    getBoundingClientRect() { layoutRead(); return { height: 2 * LINE + GAP }; } };
+  const doc = { documentElement: { style: { removeProperty() {} }, getBoundingClientRect() { layoutRead(); return { width: st.vw }; } },
+    body: { classList: { contains: () => false } } };
+  const computed = x => x === slot ? { getPropertyValue: k => { styleRead(); return pillsSlotComputed(tpl, k, st.vw); } }
+    : { get rowGap() { styleRead(); return GAP + "px"; } };
+  let got;
+  try {
+    const decls = ["let ePillsSettled=", "function pillsTwoLines(", "function pillsWrapHeight(", "function syncPillsCollapse(",
+      "function schedulePillsCollapse(", "function rememberPillsShape("].map(m => extractDecl(src, m)).join("\n");
+    const pass = new Function("pills", "pillsSlot", "pillsWanted", "pillsLocked", "document", "getComputedStyle",
+      "requestAnimationFrame", "hooks", "lsSet", "lsDel", "window", decls + "\nreturn schedulePillsCollapse;")(
+      bar, () => slot, () => true, () => false, doc, computed, fn => fn(), { scheduleRailGeometry() {} }, () => {}, () => {},
+      { innerWidth: 1200 });
+    const step = lines => {
+      cls.clear(); for (const k in vars) delete vars[k];
+      Object.assign(st, { vw: 1202, lines });
+      pass();
+      st.vw = 1200; pend = { lay: true }; layouts = 0; restyles = 0;   // the next width, not yet laid out
+      pass();
+      if (pend.inh) restyles++;
+      return [layouts, restyles];
+    };
+    got = [step(2), step(3)];
+  } catch (e) { got = "threw: " + e.message; }
+  eq("one step of a drag costs the pill bar, as [layouts, bar restyles], two lines then clipped", got, [[1, 0], [4, 2]]);
 }
 /* A RAIL ROW ON SCREEN THAT LEAVES THE WINDOW GLIDES TO ITS EDGE (797 F6): past the travel cap it
    used to be left where it landed, out of sight, which is a vanish. flipRail is sliced and run on a

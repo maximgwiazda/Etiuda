@@ -117,12 +117,17 @@ function syncPillsCollapse(){
      flowed three. A bar that is not on screen clips nothing; say so, and the peek needs
      no overrides at all. */
   slot.classList.remove("pills-overflow","pills-expand");
-  slot.style.removeProperty("--pills-2line");
-  slot.style.removeProperty("--pills-vw");
-  if(!pillsWanted()||document.body.classList.contains("pills-off")) return;
-  // Locked: always full height in flow (no 2-line clip / overlay expand).
-  if(pillsLocked()) return;
-  if(!el.querySelector(".pill")) return;
+  if(!pillsWanted()||document.body.classList.contains("pills-off")
+    ||pillsLocked()                  // locked: always full height in flow (no 2-line clip / overlay expand)
+    ||!el.querySelector(".pill")){
+    slot.style.removeProperty("--pills-2line");
+    slot.style.removeProperty("--pills-vw");
+    return;
+  }
+  /* The slot's cap reads both variables: see .pills-slot in the sheet. --pills-2line is inherited by
+     every pill, so it is written only when it changes; --pills-vw changes at every width, so it is
+     not inherited, and it is set before the measure so that the measure's layout is the only one. */
+  slot.style.setProperty("--pills-vw",getComputedStyle(slot).getPropertyValue("--pills-vw-now"));
   // Measure unconstrained height (overflow class removed → pills are in normal flow).
   void el.offsetHeight;
   const two=pillsTwoLines(el);
@@ -130,9 +135,7 @@ function syncPillsCollapse(){
   /* The open bar is a popover; nothing here needs to know where it sits inside the
      header any more. */
   slot.style.removeProperty("--pills-full");
-  // The slot's cap reads both: see .pills-slot in the sheet.
-  slot.style.setProperty("--pills-2line",two+"px");
-  slot.style.setProperty("--pills-vw",document.documentElement.getBoundingClientRect().width+"px");
+  if(slot.style.getPropertyValue("--pills-2line")!==two+"px") slot.style.setProperty("--pills-2line",two+"px");
   if(full>two+1){
     slot.classList.add("pills-overflow");
     /* The open height must be a real length for the transition to run, and it can only be
