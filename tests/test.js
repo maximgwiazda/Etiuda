@@ -644,7 +644,7 @@ function tourActTests() {
       "function stepOn(", "function onFrom(", "function tourAsks(", "function syncTourNext(", "const TOUR_ACT_MS=",
       "let tourActWas=", "function armTourAct(", "function tourActSoon(", "function tourActCheck("]
       .map(m => extractDecl(src, m)).join("\n")
-      + "\nreturn {TOUR_STEPS, tourAsks, syncTourNext, armTourAct, tourActSoon};\n}")(scope);
+      + "\nreturn {TOUR_STEPS, tourAsks, syncTourNext, armTourAct, tourActSoon, TOUR_ACT_MS};\n}")(scope);
   } catch (e) { T = null; eq("tour.js carries the step table and the act watcher", e.message, "sliced"); }
   eq("the step counter is gone from the bubble and from the code that wrote it",
     [/tourStepLabel/.test(tpl), /tourStepLabel|Tour \{N\}/.test(src)], [false, false]);
@@ -701,6 +701,24 @@ function tourActTests() {
   page.tourIdx = at("facts"); page.moved = [];
   T.armTourAct(T.TOUR_STEPS[at("facts")]); T.tourActSoon(ev([])); fire();
   eq("a step that opens a window follows the person into it", page.moved, ["follow"]);
+
+  /* THE SMOKE WALKS THIS TOUR, not a remembered one. tests/tour-walk.js says what a person does on each step, and
+     the smoke does it; this holds its rows to the table above: the same ids in order, Next exactly where tourAsks
+     says nothing is asked, the same window opened by the same step, an act for every step that asks one, and a
+     wait at least as long as the step settles. Its teeth are four doctored tables, each of which must be named. */
+  const TW = require("./tour-walk.js");
+  const clone = () => T.TOUR_STEPS.map(x => Object.assign({}, x));
+  const doctor = fn => { const st = clone(); fn(st); return TW.planProblems(st, T.tourAsks, T.TOUR_ACT_MS); };
+  const named = (probs, id) => probs.some(x => x.indexOf(id) === 0 || x.indexOf("order") === 0 && x.indexOf(id) > -1);
+  const teeth = [
+    named(doctor(st => { delete st.find(x => x.id === "theme").does; }), "theme"),
+    named(doctor(st => { st.splice(st.findIndex(x => x.id === "done"), 0, { id: "extra", sel: "#x", title: "", body: "", does: { done: () => false } }); }), "extra"),
+    named(doctor(st => { st.find(x => x.id === "facts").opens = "libraryIn"; }), "facts"),
+    named(doctor(st => { const a = st.findIndex(x => x.id === "menu"), b = st[a - 1]; st[a - 1] = st[a]; st[a] = b; }), "menu"),
+    named(doctor(st => { st.find(x => x.id === "pax").does = Object.assign({}, st.find(x => x.id === "pax").does, { settle: 5000 }); }), "pax")
+  ];
+  eq("the smoke's walk of the tour has one row per step of the table, in its order, and does what each step asks",
+    [TW.planProblems(T.TOUR_STEPS, T.tourAsks, T.TOUR_ACT_MS), teeth], [[], [true, true, true, true, true]]);
 
   /* EVERY WORD THE TOUR SHOWS IS IN THE POLISH TABLE, on every host it can meet: a function that composes its own key
      must hit on each t() it makes, and a string it returns bare must itself be a key, as showTourStep reads both. */

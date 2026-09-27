@@ -23,6 +23,7 @@ const fs = require("fs");
 const os = require("os");
 const E = require("./engine.js");
 const MOTION = require("./motion.js");
+const TW = require("./tour-walk.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const WHICH = (process.argv[2] || "chrome").toLowerCase();
 /* THE DECLARED NUMBER OF CHECKS, and why a tally is not a verdict without one. A section that
@@ -34,7 +35,9 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 276 };
+/* 278 since the tour's walk by its acts (2026-09-28): the tour section went from ten checks to eleven,
+   and the first run's wait for the logo is one more in the bug hunt. */
+const EXPECTED = { chrome: 278 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -456,39 +459,41 @@ const t0 = Date.now();
   await p.keyboard.press("Escape"); await sleep(500);
   clean(e, "the maintenance panel");
 
-  /* The tour, end to end on Enter, watched through the overlay a person sees rather than
-     through the module's own bookkeeping.
+  /* THE TOUR, WALKED AS A PERSON WALKS IT, and watched through what a person sees.
 
-     Until 2026-09-13 these lines read TOUR_STEPS and tourRunning off the page, two names
-     tour.js exported for this check and for nothing else, and the check was
-     `startTour existed && tourRunning went true && tourRunning went false`. That is the tour's
-     own opinion that the tour ended. Measured against an engine whose endTour clears the flag
-     and skips hiding the root - one `if(els.root)` turned to `if(false)`, everything else
-     untouched: the old lines printed `ok tour of 20 steps walked on Enter (20 presses) and
-     ended` with the coach-mark overlay still covering the whole viewport, 1500x950,
-     display block, aria-hidden="false", and not one page or console error in the run.
+     It teaches by doing (Maxim, 2026-09-27 23:28): a step that teaches an act asks for it and moves
+     on when the act is done, "Next" stands only on a step that asks nothing, the numbering is gone,
+     and the tour stays restartable from the Menu. So this walk does each step's act, with the mouse
+     and the keyboard, at the place the step's ring is drawn; tests/tour-walk.js holds one row per
+     step, and tests/test.js holds those rows to the step table in tour.js, so the walk cannot drift
+     from the tour it walks.
 
-     So: the overlay's own geometry, and the step counter it draws. #tourRoot is position:fixed,
-     so offsetParent is null whether it is up or down, measured - display and width are what
-     say. The counter is read as two numbers, `(\d+)\D+(\d+)`, never as words: its text goes
-     through t("Tour {N} / {TOTAL}") and comparing the wording would be a translation contract
-     this check has no business holding. The counter alone cannot say the tour ended either -
-     it still reads 20 / 20 afterwards - which is why the last assertion is the overlay. */
+     IN A CONTEXT OF ITS OWN. The walk types a customer's name, searches, picks an intent, copies a
+     reply, filters a category, opens a conversation, switches its language, stars a card, puts one
+     away and flips the theme, because those are the acts the tour teaches. Every later leg of this
+     file reads the main page, so the walk runs on a desk of its own over the same run folder and
+     catalog, and nothing it did survives it.
+
+     The history this replaces, kept because it is why the overlay is what is read. Until
+     2026-09-13 these lines read TOUR_STEPS and tourRunning off the page and checked the tour's own
+     opinion that it had ended; against an engine whose endTour cleared the flag and skipped hiding
+     the root, that check printed ok with the overlay still covering the viewport. So the end is
+     read as the overlay's own geometry: #tourRoot is position:fixed, so display and width are what
+     say. Where the tour stands is read from sessionStorage.eTourAt, which the tour writes so that a
+     load's reload can resume it: a person-visible fact, since it is where the tour comes back.
+     The counter, which this file read as two numbers until 2026-09-27, is asserted gone.
+
+     BOARD 344. Opened from the Menu's item, not by calling the global startTour(): that item is
+     the only thing in src/ that reaches hooks.startTour. Finish ends the tour from inside tour.js,
+     and Escape inside the bubble ends it through header-menus.js, the only caller of
+     hooks.endTour; both doors are driven below. */
   e = since();
   const tourShot = () => p.evaluate(() => {
     const r = document.getElementById("tourRoot");
-    const lab = document.getElementById("tourStepLabel");
-    const m = /(\d+)\D+(\d+)/.exec((lab && lab.textContent) || "");
     const w = r ? Math.round(r.getBoundingClientRect().width) : 0;
-    return { up: !!(r && getComputedStyle(r).display !== "none" && w > 0), w,
-             n: m ? +m[1] : 0, total: m ? +m[2] : 0 };
+    return { up: !!(r && getComputedStyle(r).display !== "none" && w > 0), w, at: sessionStorage.getItem("eTourAt") };
   });
-  /* BOARD 344. Opened from the menu item, not by calling the global startTour(). The item at
-     header-menus.js:29 is the only thing in src/ that reaches hooks.startTour, so the global
-     call left that route dead while all three checks below passed - measured 2026-09-14,
-     hooks-coverage read 38 of 54 slots with startTour and endTour among the 16 that were not.
-     The menu loop above skips this act on purpose; here is where it is pressed. */
-  const started = await p.evaluate(() => {
+  const menuTour = pg => pg.evaluate(() => {
     const btn = document.getElementById("settingsBtn");
     if (btn) btn.click();
     const item = document.querySelector('#settingsMenu [data-act="tour"]');
@@ -496,56 +501,90 @@ const t0 = Date.now();
     item.click();
     return true;
   });
-  await sleep(700);
-  const first = await tourShot();
-  /* Bounded by the tour's own length and three spare, so a tour that will not close costs
-     three presses rather than forty. */
-  const cap = first.total > 0 ? first.total + 3 : 40;
-  let pressed = 0, advanced = 0, seen = first.n, windows = 0;
-  const windowUp = () => p.evaluate(() => !document.getElementById("modal").hidden);
-  for (let i = 0; i < cap; i++) {
-    if (!(await tourShot()).up) break;
-    await p.keyboard.press("Enter"); pressed++; await sleep(260);
-    const now = await tourShot();
-    if (await windowUp()) windows++;
-    if (now.up && now.n === seen + 1) advanced++;
-    if (now.n > seen) seen = now.n;
+  let walkCtx = null, walk = [], walkStart = null, walkEnd = null, walkLate = [];
+  try {
+    walkCtx = b.createBrowserContext ? await b.createBrowserContext() : await b.createIncognitoBrowserContext();
+    const w = await walkCtx.newPage();
+    await hookInstall(w);
+    await w.setViewport({ width: 1500, height: 950 });
+    w.on("dialog", d => d.accept());
+    w.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
+    w.on("console", m => { if (m.type() === "error" && !/ERR_FILE_NOT_FOUND/.test(m.text())) errs.push("console: " + m.text().slice(0, 160)); });
+    walkLate = await bootAndDismiss(w, ENGINE, "the tour's own desk");
+    const opened = await menuTour(w);
+    await w.waitForFunction(() => sessionStorage.getItem("eTourAt") === "name", { timeout: 5000, polling: 100 }).catch(() => {});
+    walkStart = { opened, at: await TW.at(w) };
+    walk = await TW.walkTour(w, { loaded: true });
+    await sleep(400);
+    walkEnd = await w.evaluate(TW.LOOK);
+  } catch (x) {
+    walkLate.push("the walk threw: " + String(x && x.message || x).slice(0, 160));
+  } finally {
+    await hookDrain(walkCtx, "the tour walk");
+    if (walkCtx) await walkCtx.close().catch(() => {});
   }
-  const tourAfter = await tourShot();
-  check(started && first.up && first.n === 1 && first.total >= 10,
-    "the tour opens its overlay on step " + first.n + " of " + first.total + " (" + first.w + "px wide)");
-  check(advanced === first.total - 1 && pressed === first.total,
-    "and Enter walks it one step at a time to the end (" + advanced + " advances over " + pressed + " presses)");
-  check(!tourAfter.up, "and the overlay leaves the screen when it ends, rather than only being flagged done ("
-    + tourAfter.w + "px wide)");
-  /* THE TOUR OPENS NO WINDOW (Maxim, 2026-09-26): the card editor, the Library and Settings are the
-     person's to open, so a walk that only presses Enter meets none of them. */
-  check(pressed === first.total && windows === 0,
-    "and a walk that only presses Enter opens no window: one stood after " + windows + " of " + pressed + " presses");
-  /* BOARD 344, the second door out. Walking to the end ends the tour from inside tour.js;
-     Escape ends it through header-menus.js:65, which is the only caller of hooks.endTour in
-     src/. Without this the way out a person actually uses was never driven. */
-  await p.evaluate(() => {
-    const btn = document.getElementById("settingsBtn"); if (btn) btn.click();
-    const item = document.querySelector('#settingsMenu [data-act="tour"]'); if (item) item.click();
-  });
-  await sleep(700);
+  /* What the walk should meet: every row of the plan but the load, which only an empty desk shows. */
+  const planned = TW.PLAN.filter(r => !r.reload).map(r => r.id);
+  const asksNothing = TW.PLAN.filter(r => r.next).map(r => r.id);
+  const windowed = TW.PLAN.filter(r => r.inside).map(r => r.id);
+  const walkedIds = walk.map(r => r.id);
+  check(!!walkStart && walkStart.opened && walkStart.at === "name" && walk.length > 0 && walk[0].look.up
+        && walk.every(r => !r.look.counter),
+    "the tour opens from the Menu on its first step, and no step of it shows a counter: " + JSON.stringify({ start: walkStart,
+      late: walkLate, counted: walk.filter(r => r.look.counter).map(r => r.id) }));
+  /* "Next" only appears on the step that does not require the user to do anything (Maxim, 23:25). */
+  const nextOn = walk.filter(r => r.look.next).map(r => r.id);
+  check(walkedIds.join(",") === planned.join(",") && nextOn.join(",") === asksNothing.join(","),
+    "Next stands only where nothing is asked, " + JSON.stringify(nextOn) + ", over " + walk.length + " of " + planned.length + " steps");
+  /* A step says what to do and points at it: the control the act uses answers a point inside the ring. */
+  const missed = walk.filter(r => r.aims.some(a => !a.ok))
+    .map(r => r.id + " " + r.aims.filter(a => !a.ok).map(a => a.sel + " (" + a.found + " matched)").join("; "));
+  check(walk.length === planned.length && missed.length === 0,
+    "every act was done at the step's ring, on a point the page answers with the control the step asks for"
+    + (missed.length ? ": " + JSON.stringify(missed) : " (" + walk.reduce((n, r) => n + r.aims.length, 0) + " presses)"));
+  /* Each step advancing when its act is done, and by one step: the table's order, to the end. */
+  const wrong = walk.filter(r => r.to !== r.want)
+    .map(r => r.id + " went to " + r.to + ", wanted " + r.want + (r.asked ? ", with a question standing" : ""));
+  check(walkedIds.join(",") === planned.join(",") && wrong.length === 0,
+    "each act moves the tour on by one step, in the table's order, to the end"
+    + (wrong.length ? ": " + JSON.stringify(wrong) : " (" + walk.length + " steps, " + Math.round(walk.reduce((n, r) => n + r.ms, 0) / 1000) + " s)"));
+  /* THE TOUR OPENS NO WINDOW (Maxim, 2026-09-26): the person opens it, the step inside it appears
+     when they do, stands in front of it with neither Next nor Back, and closing it moves the tour on.
+     No step outside a window is ever met with a window or Quick facts standing. */
+  const inside = walk.filter(r => windowed.indexOf(r.id) > -1);
+  const badIn = inside.filter(r => r.look.next || r.look.back || r.look.z !== "240" || r.look.behind || !(r.look.window || r.look.facts))
+    .map(r => r.id + " " + JSON.stringify({ next: r.look.next, back: r.look.back, z: r.look.z, open: r.look.window || r.look.facts }));
+  const stood = walk.filter(r => windowed.indexOf(r.id) < 0 && (r.look.window || r.look.facts)).map(r => r.id);
+  check(inside.map(r => r.id).join(",") === windowed.join(",") && badIn.length === 0 && stood.length === 0,
+    "no window opens but by the person's click, and the tour goes into each one they open, in front of it with"
+    + " neither Next nor Back: " + JSON.stringify({ inside: inside.map(r => r.id), badIn, stood }));
+  /* The Menu, as Maxim put it at 23:25: the Menu step asks for the click on Menu, which brings the
+     step explaining the Menu and asking for Library, whose window brings the Library's step, "then
+     the same with Settings". The bubble stands beside the open menu, never over its rows. */
+  const lib = walk.find(r => r.id === "library");
+  const chain = ["menu", "library", "libraryIn", "settings", "settingsIn"].map(id => walk.find(r => r.id === id))
+    .every(r => !!r && r.to === r.want);
+  check(!!lib && lib.look.menu && lib.look.clear && chain,
+    "the Menu step's click brings the Library step with the menu still open and the bubble clear of its rows,"
+    + " and Library and Settings each take the tour inside: " + JSON.stringify(lib ? { menu: lib.look.menu, clear: lib.look.clear, chain } : null));
+  const last = walk[walk.length - 1];
+  check(!!walkEnd && !walkEnd.up && !!last && last.id === "done" && last.to === null,
+    "and Finish on the last step takes the overlay off the screen, rather than only flagging the tour done");
+  /* The second door out: Escape while the keyboard is in the bubble, from the Menu's route. The first
+     step takes the keyboard for its name field, so that is where it is. */
+  await menuTour(p); await sleep(700);
   const tourAgain = await tourShot();
   await p.keyboard.press("Escape"); await sleep(500);
   const tourEsc = await tourShot();
-  check(tourAgain.up && !tourEsc.up, "and Escape takes it down again from the menu's own route (step "
-    + tourAgain.n + " of " + tourAgain.total + " up, " + tourEsc.w + "px after)");
+  check(tourAgain.up && tourAgain.at === "name" && !tourEsc.up, "Escape in the bubble takes the tour down again, opened from the"
+    + " menu's own route (" + tourAgain.at + " up, " + tourEsc.w + "px after)");
   await p.keyboard.press("Escape"); await sleep(300);
   /* THE PAGE STAYS USABLE UNDER THE TOUR (Maxim, 2026-09-26): nothing darkens it or holds its
      clicks, a click on it never takes the bubble down, and Escape outside the bubble is the page's.
      The search box is what is clicked, because a click there changes nothing another leg reads.
      A window opened over the page takes the bubble behind it, and closing the window brings the
      bubble back: read as the tour's own stacking against the dialogs' 200. */
-  const menuTour = () => p.evaluate(() => {
-    const btn = document.getElementById("settingsBtn"); if (btn) btn.click();
-    const item = document.querySelector('#settingsMenu [data-act="tour"]'); if (item) item.click();
-  });
-  await menuTour(); await sleep(700);
+  await menuTour(p); await sleep(700);
   const under = await p.evaluate(() => {
     /* The first step's bubble hangs below the mark and may cover the box's left end, and the clear
        button and the placeholder sit on it too, so the point is the first one along the box, right to
@@ -570,70 +609,12 @@ const t0 = Date.now();
   const front = await p.evaluate(() => getComputedStyle(document.getElementById("tourRoot")).zIndex);
   await p.evaluate(() => { const k = document.getElementById("tourSkip"); if (k) k.click(); });
   await sleep(500);
-  check(under.page && took === "intent" && kept.up && kept.n === 1,
+  check(under.page && took === "intent" && kept.up && kept.at === "name",
     "the page stays usable under the tour: the search box is what a click there lands on and it takes the"
-    + " keyboard, and the click and an Escape there leave the bubble up on its step (" + JSON.stringify({ under: under.page, took, up: kept.up, n: kept.n }) + ")");
+    + " keyboard, and the click and an Escape there leave the bubble up on its step (" + JSON.stringify({ under: under.page, took, up: kept.up, at: kept.at }) + ")");
   check(behind.lib && behind.z === "190" && front === "240",
     "a window opened over the page takes the bubble behind it, and closing it brings the bubble back (z "
     + behind.z + " with the Library open, " + front + " after)");
-  /* A STEP SAYS HOW TO OPEN A WINDOW, AND THE STEP INSIDE IT APPEARS WHEN THE PERSON DOES (Maxim,
-     2026-09-26). The Library's step rings the Menu button; the person's own click opens the menu, and
-     the ring moves to the Library row with the bubble beside the menu, not over its rows; their click
-     on the row opens the Library and the tour is inside it, in front of the window, with no Next and
-     the opener's number; closing the Library carries the tour to the next step. The pencil's step
-     does the same with the card editor. Clicks by the mouse, at the rectangles a person would use. */
-  await menuTour(); await sleep(700);
-  const walkTo = id => p.evaluate(async want => {
-    const wait = ms => new Promise(r => setTimeout(r, ms));
-    for (let i = 0; i < 30 && sessionStorage.getItem("eTourAt") !== want; i++) {
-      const n = document.getElementById("tourNext"); if (!n || n.hidden) break; n.click(); await wait(250);
-    }
-    await wait(500);
-    return sessionStorage.getItem("eTourAt");
-  }, id);
-  const ringOn = sel => p.evaluate(q => {
-    const h = document.getElementById("tourHole").getBoundingClientRect(), el = document.querySelector(q);
-    if (!el) return false;
-    const r = el.getBoundingClientRect();
-    return h.left <= r.left && h.right >= r.right && h.top <= r.top && h.bottom >= r.bottom;
-  }, sel);
-  const stepNo = () => p.evaluate(() => { const m = /(\d+)\D+(\d+)/.exec(document.getElementById("tourStepLabel").textContent || "");
-    return m ? +m[1] : 0; });
-  const atLib = await walkTo("library");
-  const libBtnRing = await ringOn("#settingsBtn"), libNo = await stepNo();
-  await p.click("#settingsBtn"); await sleep(500);
-  const rowRing = await ringOn('#settingsMenu [data-act="manage"]');
-  const clear = await p.evaluate(() => {
-    const c = document.getElementById("tourCard").getBoundingClientRect(), m = document.getElementById("settingsMenu").getBoundingClientRect();
-    return c.right <= m.left || c.left >= m.right || c.bottom <= m.top || c.top >= m.bottom;
-  });
-  await p.click('#settingsMenu [data-act="manage"]'); await sleep(900);
-  const inLib = await p.evaluate(() => ({ at: sessionStorage.getItem("eTourAt"), lib: !!document.querySelector("#modalCard details.manage-sec"),
-    z: getComputedStyle(document.getElementById("tourRoot")).zIndex, next: document.getElementById("tourNext").hidden,
-    back: document.getElementById("tourPrev").hidden }));
-  const inNo = await stepNo();
-  await p.evaluate(() => closeModal()); await sleep(900);
-  const afterLib = await p.evaluate(() => sessionStorage.getItem("eTourAt"));
-  check(atLib === "library" && libBtnRing && rowRing && clear && inLib.at === "libraryIn" && inLib.lib && inLib.z === "240"
-        && inLib.next && inLib.back && inNo === libNo && afterLib === "settings",
-    "the Library's step rings the Menu button, the open menu's Library row with the bubble clear of the menu, and the"
-    + " Library the person opens: " + JSON.stringify({ atLib, libBtnRing, rowRing, clear, inLib, libNo, inNo, afterLib }));
-  await p.evaluate(() => { const k = document.getElementById("tourSkip"); if (k) k.click(); }); await sleep(500);
-  await menuTour(); await sleep(700);
-  const atEdit = await walkTo("edit");
-  const penTour = await p.evaluate(() => { const b = document.querySelector('#list .card [data-act="edit"]');
-    if (!b) return null; const r = b.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
-  if (penTour) await p.mouse.click(penTour.x, penTour.y);
-  await sleep(900);
-  const inEd = await p.evaluate(() => ({ at: sessionStorage.getItem("eTourAt"), editor: !!document.getElementById("meCancel"),
-    focus: !!document.activeElement && document.activeElement.tagName }));
-  await p.evaluate(() => { const c = document.getElementById("meCancel"); if (c) c.click(); }); await sleep(900);
-  const afterEd = await p.evaluate(() => sessionStorage.getItem("eTourAt"));
-  await p.evaluate(() => { const k = document.getElementById("tourSkip"); if (k) k.click(); });
-  await sleep(500);
-  check(atEdit === "edit" && !!penTour && inEd.at === "editor" && inEd.editor && afterEd === "add",
-    "and the pencil's step does the same with the card editor the person opens, the tour moving on when it is"
-    + " closed: " + JSON.stringify({ atEdit, penTour: !!penTour, inEd, afterEd }));
   clean(e, "the tour");
 
   /* Interface language both ways, with the dialogs opened in Polish.
@@ -2930,7 +2911,7 @@ const t0 = Date.now();
   fs.copyFileSync(RUN.page, path.join(hunt, "etiuda.html"));
   fs.copyFileSync(path.join(RUN.dir, E.SIBLING_AS.sampleV2), path.join(hunt, E.SIBLING_AS.sampleV2));
   const huntUrl = dir => "file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/");
-  const huntPage = async (dir, done) => {
+  const huntPage = async (dir, done, pre) => {
     const c = b.createBrowserContext ? await b.createBrowserContext() : await b.createIncognitoBrowserContext();
     huntCtx.push(c);
     const q = await c.newPage();
@@ -2939,6 +2920,7 @@ const t0 = Date.now();
     q.on("dialog", d => d.accept());
     q.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
     if (done) await q.evaluateOnNewDocument(() => { try { localStorage.setItem("eTourDone_v3", "1"); localStorage.setItem("eTourInvite_v3", "1"); } catch (x) {} });
+    if (pre) await pre(q);
     await q.goto(huntUrl(dir), { waitUntil: "load", timeout: 90000 });
     return q;
   };
@@ -2949,6 +2931,40 @@ const t0 = Date.now();
   };
   const upFor = (q, fn, ms) => q.waitForFunction(fn, { timeout: ms || 20000, polling: 100 }).then(() => true, () => false);
   try {
+    /* first-light: THE FIRST RUN'S TOUR WAITS FOR THE LOGO TO FORM. Maxim, 2026-09-27 23:28: the logo forms
+       as smoothly on the very first launch as later, "the first impression is the most important one";
+       and the tour's first bubble comes once it has formed (tour.js, maybeStartTour: 200 ms after the
+       formation and never before 1300 ms). At ordinary speed the formation and the floor end together,
+       so waiting on the clock cannot tell a tour that waits for the mark from one that only waits
+       1300 ms. The mark's own rule makes the difference visible: a window standing over it while it
+       gathers puts the gathering back to the start, to play once the window goes. So a window is held
+       over it from 300 ms to 700 ms after the canvas arrives, shorter than the mark's 1000 ms quiet
+       release, and the tour must come up at least the gather's 1100 and the breath's 200 after the
+       window has gone. A tour on the floor alone comes up about 600 ms after it. Timed inside the page,
+       by a MutationObserver installed before the document exists. */
+    huntAt = "first-light";
+    const qf = await huntPage(hunt, false, q => q.evaluateOnNewDocument(() => {
+      const c = window.__firstLight = { mark: -1, held: -1, gone: -1, tour: -1, err: "" };
+      new MutationObserver(() => {
+        const now = performance.now();
+        if (c.mark < 0 && document.querySelector("canvas.e-empty-mark")) {
+          c.mark = now;
+          setTimeout(() => { try { askSure("Invented question?", "Invented yes", () => {}, false); c.held = performance.now(); }
+            catch (x) { c.err = String(x && x.message || x); } }, 300);
+          setTimeout(() => { const n = document.getElementById("eSureNo"); if (n) { n.click(); c.gone = performance.now(); } }, 700);
+        }
+        const r = document.getElementById("tourRoot");
+        if (c.tour < 0 && r && !r.hidden) c.tour = now;
+      }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
+    }));
+    const lit = await upFor(qf, () => !!window.__firstLight && window.__firstLight.tour >= 0, 12000);
+    const fl = await qf.evaluate(() => Object.assign({}, window.__firstLight));
+    const litAfter = fl.gone >= 0 && fl.tour >= 0 ? Math.round(fl.tour - fl.gone) : -1;
+    check(lit && fl.held >= 0 && fl.gone > fl.held && litAfter >= 1290,
+      "first-light the first run's tour waits for the logo to form: a window held " + Math.round(fl.gone - fl.held)
+      + " ms over the gathering mark starts it again, and the tour comes up " + litAfter + " ms after the window goes"
+      + " (the gather and the breath make 1300)" + (fl.err ? " - " + fl.err : ""));
+
     /* flow-2: A NAME TYPED IN THE TOUR'S FIRST STEP IS KEPT whichever way the step is left: the
        empty desk's sample button beside it, Skip, or a reload. */
     const kept = {};
@@ -2978,9 +2994,15 @@ const t0 = Date.now();
     await q1.click("#tourNext"); await sleep(700);
     await clickReload(q1, "#emptySample");
     await upFor(q1, () => document.querySelectorAll("#list .card").length > 0 && !document.getElementById("tourRoot").hidden);
-    for (let i = 0; i < 8; i++) {
-      if (await q1.evaluate(() => sessionStorage.getItem("eTourAt")) === "cards") break;
-      await q1.click("#tourNext"); await sleep(700);
+    /* The steps before Cards ask for acts and have no Next (2026-09-27 23:28), so they are done as a
+       person does them, by the rows of tests/tour-walk.js. */
+    const walked1 = [];
+    for (let i = 0; i < 4; i++) {
+      const id = await TW.at(q1);
+      if (!id || id === "cards") break;
+      const r = await TW.walkStep(q1, id, { loaded: true });
+      walked1.push(r.id + ">" + r.to);
+      if (r.to !== r.want) break;
     }
     await sleep(600);
     const blk = await q1.evaluate(() => {
@@ -3010,7 +3032,7 @@ const t0 = Date.now();
     check(!!blk && blk.free && blk.at === "cards" && ask.up && ask.title && ask.field && ask.yes && ask.no && ask.behind
           && back.gone && back.tour && back.forward,
       "flow-1 at the tour's Cards step the name question opens in front of the tour, every part of it reachable, and"
-      + " the tour comes forward again once it is answered: " + JSON.stringify({ blk, ask, back }));
+      + " the tour comes forward again once it is answered: " + JSON.stringify({ walked1, blk, ask, back }));
 
     /* data-2: THE EMPTY DESK'S SAMPLE BUTTON KEEPS WHAT AN EJECT KEPT. The sample loaded, one card's
        title edited and saved, another starred, the catalog ejected, and the sample taken up again
