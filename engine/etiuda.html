@@ -3273,6 +3273,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   .txt.sel,.rail-item.rail-kbd{outline:2px solid Highlight;outline-offset:-2px}
   :root :focus-visible{outline:2px solid Highlight}
 }
+/* The card holds the keyboard where nothing inside it does (openDialog), and wears no ring for it. */
+#modalCard:focus{outline:none}
 /* Confirmation where the eye already is: the toast keeps the WHAT (and the screen-reader
    announcement), this is the WHERE - a success-green wash over the clicked block, a fixed
    overlay so it cannot disturb the block or its ring. Same family as the star bloom. */
@@ -3481,7 +3483,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 
 <div id="modal" class="modal" hidden>
   <div class="modal-bg" id="modalBg"></div>
-  <div class="modal-card" id="modalCard" role="dialog" aria-modal="true" aria-labelledby="modalTitle"></div>
+  <div class="modal-card" id="modalCard" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1"></div>
 </div>
 
 <div id="tourRoot" hidden aria-hidden="true">
@@ -12829,6 +12831,12 @@ What you type stays in this browser only.`;
     translateTree(modalCard);
     dressDialogInputs(modalCard);
     markCutText(modalCard);
+    const at = document.activeElement;
+    if (!modalCard.contains(at) && !openCover() && !(at && at.closest && at.closest("#tourCard")))
+      try {
+        modalCard.focus({ preventScroll: true });
+      } catch (e) {
+      }
   }
   function dressDialogInputs(root) {
     (root || document).querySelectorAll(".mf input:not([type]),.mf input[type=text]").forEach((i) => {
@@ -12951,7 +12959,7 @@ What you type stays in this browser only.`;
   function edLangCaret(scope, was, from, to) {
     if (!scope) return;
     const inPane = was && was.closest && was.closest(".lang-pane");
-    if (was && was !== document.body && !(inPane && inPane.parentNode === scope)) return;
+    if (was && was !== document.body && was !== modalCard && !(inPane && inPane.parentNode === scope)) return;
     const pane = Array.prototype.slice.call(scope.querySelectorAll(".lang-pane[data-l]")).filter((p) => p.parentNode === scope && p.dataset.l === to)[0];
     if (!pane) return;
     const suffix = "_" + from, id = inPane && was.id && was.id.slice(-suffix.length) === suffix ? was.id.slice(0, -suffix.length) + "_" + to : "";
@@ -13055,7 +13063,7 @@ What you type stays in this browser only.`;
     );
     if (!els.length) return null;
     const at = document.activeElement;
-    if (!card.contains(at)) return back ? els[els.length - 1] : els[0];
+    if (!card.contains(at) || at === card) return back ? els[els.length - 1] : els[0];
     if (back && at === els[0]) return els[els.length - 1];
     if (!back && at === els[els.length - 1]) return els[0];
     return null;

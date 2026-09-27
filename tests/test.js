@@ -538,6 +538,7 @@ function runUnitTests() {
   pageWatchTests();
   shippedFlagTests();
   dismissTierTests();
+  dialogFocusTests();
   pillWrapTests();
   pillsWidthWatchTests();
   pillsResizeCostTests();
@@ -1751,6 +1752,61 @@ function shippedFlagTests() {
     [[true, false, ""], [true, false, ""]]);
   eq("a file found in the catalog folder is located in it and marks its row", offers(null, false, own, "team.ec", "", false),
     [false, true, "team.ec"]);
+}
+/* A DIALOG TAKES THE KEYBOARD (feel pass, focus on open): openDialog and tabTargetIn are sliced out of
+   dialog.js and run on a small tree written here. What a real key does there is the verifier's. */
+function dialogFocusTests() {
+  const dlg = fs.readFileSync(path.join(E.ROOT, "src", "modules", "dialog.js"), "utf8");
+  const world = () => {
+    const doc = { activeElement: null };
+    class N {
+      constructor(id, parent, wide) {
+        this.id = id; this.parentNode = parent || null; this.hidden = false; this.className = ""; this.innerHTML = "";
+        this.offsetWidth = wide ? 20 : 0; this.offsetHeight = 0; this.kids = [];
+        if (parent) parent.kids.push(this);
+      }
+      contains(n) { for (let x = n; x; x = x.parentNode) if (x === this) return true; return false; }
+      closest(sel) { for (let x = this; x; x = x.parentNode) if ("#" + x.id === sel) return x; return null; }
+      focus() { doc.activeElement = this; }
+      querySelectorAll() { const out = []; const walk = n => n.kids.forEach(k => { if (k.offsetWidth) out.push(k); walk(k); }); walk(this); return out; }
+    }
+    const body = new N("body"); doc.body = body; doc.documentElement = new N("html"); doc.activeElement = body;
+    const modalEl = new N("modal", body); modalEl.hidden = true;
+    const modalCard = new N("modalCard", modalEl);
+    const x = new N("modalX", modalCard, true), field = new N("field", modalCard, true), save = new N("save", modalCard, true);
+    const tour = new N("tourCard", body), tourBtn = new N("tourNext", tour, true);
+    const cover = new N("cover", body), coverBtn = new N("ecYes", cover, true), search = new N("intent", body, true);
+    return { doc, N, modalEl, modalCard, x, field, save, tourBtn, cover, coverBtn, search, body };
+  };
+  const sliced = w => new Function("document", "modalEl", "modalCard", "cutLeaves", "setModalBack", "modalHead", "t",
+    "refreshDialogReset", "translateTree", "dressDialogInputs", "markCutText", "openCover",
+    "let modalOpener=null, modalOpenerKbd=false, modalNameFn=null, modalResetFn=null, modalResetOn=\"\", modalResetOff=\"\", lastInputWasKey=false;\n"
+    + [extractDecl(dlg, "function openDialog("), extractDecl(dlg, "const MODAL_TABBABLE="), extractDecl(dlg, "function tabTargetIn(")].join("\n")
+    + "\nreturn {openDialog, tabTargetIn};")(
+    w.doc, w.modalEl, w.modalCard, () => {}, () => {}, () => "", s => s, () => {}, () => {}, () => {}, () => {},
+    () => (w.coverOn ? w.cover : null));
+  const open = (from, opts) => {
+    const w = world(); Object.assign(w, opts || {});
+    w.doc.activeElement = typeof from === "function" ? from(w) : w.body;
+    let H;
+    try { H = sliced(w); } catch (e) { return "openDialog did not slice: " + e.message; }
+    try { H.openDialog({ title: "T", wire: w.wire ? () => w.wire(w) : null }); } catch (e) { return "openDialog threw: " + e.message; }
+    return w.doc.activeElement.id;
+  };
+  eq("a dialog opened from the search field, from nothing, and one whose wiring focuses a field: the card, the card, the field",
+    [open(w => w.search), open(), open(null, { wire: w => w.field.focus() })], ["modalCard", "modalCard", "field"]);
+  eq("the tour's bubble and a cover standing over the dialog keep the keyboard they hold",
+    [open(w => w.tourBtn), open(w => w.coverBtn, { coverOn: true })], ["tourNext", "ecYes"]);
+  let tabs;
+  try {
+    const w = world(), H = sliced(w);
+    w.doc.activeElement = w.modalCard;
+    const fwd = H.tabTargetIn(w.modalCard, false), back = H.tabTargetIn(w.modalCard, true);
+    w.doc.activeElement = w.field;
+    tabs = [fwd && fwd.id, back && back.id, H.tabTargetIn(w.modalCard, false)];
+  } catch (e) { tabs = "tabTargetIn did not run: " + e.message; }
+  eq("from the card, Tab reaches its first control and Shift+Tab its last; from a control inside, the browser's own Tab stands",
+    tabs, ["modalX", "save", null]);
 }
 /* A PILL GLIDES FROM WHERE IT WAS PAINTED TO WHERE IT LANDS (797 N1 and N3): a width tween that
    moves a row break carries a pill across the row mid-glide, and a width that snaps instead starts

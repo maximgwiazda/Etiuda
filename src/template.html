@@ -3273,6 +3273,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   .txt.sel,.rail-item.rail-kbd{outline:2px solid Highlight;outline-offset:-2px}
   :root :focus-visible{outline:2px solid Highlight}
 }
+/* The card holds the keyboard where nothing inside it does (openDialog), and wears no ring for it. */
+#modalCard:focus{outline:none}
 /* Confirmation where the eye already is: the toast keeps the WHAT (and the screen-reader
    announcement), this is the WHERE - a success-green wash over the clicked block, a fixed
    overlay so it cannot disturb the block or its ring. Same family as the star bloom. */
@@ -3481,7 +3483,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 
 <div id="modal" class="modal" hidden>
   <div class="modal-bg" id="modalBg"></div>
-  <div class="modal-card" id="modalCard" role="dialog" aria-modal="true" aria-labelledby="modalTitle"></div>
+  <div class="modal-card" id="modalCard" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1"></div>
 </div>
 
 <div id="tourRoot" hidden aria-hidden="true">

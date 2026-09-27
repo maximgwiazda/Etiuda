@@ -175,6 +175,12 @@ function openDialog(cfg){
   translateTree(modalCard);
   dressDialogInputs(modalCard);
   markCutText(modalCard);
+  /* THE SCREEN TAKES THE KEYBOARD: where its wiring focused nothing inside it, the card itself
+     holds it, so a key reaches the dialog rather than the page it covers. A cover over it and a
+     tour bubble keep theirs. */
+  const at=document.activeElement;
+  if(!modalCard.contains(at) && !openCover() && !(at && at.closest && at.closest("#tourCard")))
+    try{ modalCard.focus({preventScroll:true}); }catch(e){}
 }
 /* Wraps each of a dialog's text inputs once - see .mf .field-wrap. Before anything focuses a
    field: moving a focused element drops its focus. */
@@ -299,7 +305,7 @@ function edStepLang(dir){
 function edLangCaret(scope, was, from, to){
   if(!scope) return;
   const inPane=was && was.closest && was.closest(".lang-pane");
-  if(was && was!==document.body && !(inPane && inPane.parentNode===scope)) return;
+  if(was && was!==document.body && was!==modalCard && !(inPane && inPane.parentNode===scope)) return;
   const pane=Array.prototype.slice.call(scope.querySelectorAll(".lang-pane[data-l]"))
     .filter(p=>p.parentNode===scope && p.dataset.l===to)[0];
   if(!pane) return;
@@ -426,7 +432,7 @@ function tabTargetIn(card, back){
     el=>el.offsetWidth>0 || el.offsetHeight>0 || el===document.activeElement);
   if(!els.length) return null;
   const at=document.activeElement;
-  if(!card.contains(at)) return back?els[els.length-1]:els[0];
+  if(!card.contains(at) || at===card) return back?els[els.length-1]:els[0];
   if(back && at===els[0]) return els[els.length-1];
   if(!back && at===els[els.length-1]) return els[0];
   return null;
