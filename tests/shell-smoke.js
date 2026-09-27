@@ -894,9 +894,11 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " says why, once: " + stopped + " line(s)");
   if (back) await crash(back);
   await sleep(3000);
-  const asked = s.said.join("\n").split("\n").filter(l => /etiuda: a box would ask here: Dzia/.test(l)).length;
-  check(asked === 1,
-    "1h3 a second crash inside the minute asks, in Polish, rather than reloading again: " + asked + " question(s) logged");
+  const boxes = s.said.join("\n").split("\n").map(l => l.trim()).filter(l => l.indexOf("etiuda: a box would ask here: ") > -1);
+  const asked = boxes.filter(l => l.endsWith("etiuda: a box would ask here: Etiuda niespodziewanie się zatrzymała.")).length;
+  check(asked === 1 && boxes.length === 1,
+    "1h3 a second crash inside the minute asks, in Polish, rather than reloading again: " + asked
+    + " question(s) logged in the whole sentence, of " + JSON.stringify(boxes));
   await s.stop();
   });
   await step("[2/7] the catalog on screen", async () => {
