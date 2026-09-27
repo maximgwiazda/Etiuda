@@ -95,7 +95,11 @@ function strings(){
   const push=v=>{ v=unent((v||"").trim());
     if(v.length>1 && !/^[\s\d.,:;·|/-]+$/.test(v) && !CODEY.test(v)) out.add(v); };
   /* Rule 7 reads a container that is prose BY CONSTRUCTION, so the code heuristic must not
-     filter it: a semicolon followed by a word is ordinary English and CODEY calls it code. */
+     filter it: a semicolon followed by a word is ordinary English and CODEY calls it code.
+     So are the sinks (a literal handed straight to t(), ask() or toast() is what the person
+     reads) and rule 5b. Until 2026-09-28 the sinks went through CODEY, and 17 of the table's
+     keys, each a sentence with "; " and a word in it, were orphans the scan could not see,
+     two of the tour's among them; read as prose, all 17 are found and none is missing. */
   const pushProse=v=>{ v=unent((v||"").trim());
     if(v.length>1 && !/^[\s\d.,:;·|/-]+$/.test(v)) out.add(v); };
   // 1. static attributes in markup (no template concatenation)
@@ -141,7 +145,7 @@ function strings(){
       const cmpL = k>=1 && SRC[k]==="=" && (SRC[k-1]==="=" || SRC[k-1]==="!");
       let n=j+1; while(n<SRC.length && /\s/.test(SRC[n])) n++;
       const cmpR = (SRC[n]==="=" || SRC[n]==="!") && SRC[n+1]==="=";
-      if(ok && inSink && !cmpL && !cmpR) push(unesc(lit));
+      if(ok && inSink && !cmpL && !cmpR) pushProse(unesc(lit));
       i=ok?j:i;
       continue;
     }
@@ -168,6 +172,71 @@ function strings(){
   while((m=prop.exec(SRC_NT))){
     const v=m[1]!=null?m[1]:m[2];
     if(!/'\+|\+'|esc\(|^</.test(v)) push(unesc(v));
+  }
+  /* 5b. UI COPY RETURNED BY A FUNCTION. The same properties, when the value is a function the
+        renderer calls: an arrow, `function(){...}`, or the name of a function declared in the
+        source. Rule 5 reads only a literal written straight after the colon, so until 2026-09-28
+        the tour's customer step, whose title and body are a ternary on the role wheel, was read by
+        nothing: its English drifted by one space in a copy and this scan still said complete.
+        A literal counts when it is the WHOLE of a value the function returns: led by `=>`,
+        `return`, `?`, `:` or a grouping paren, followed by `:`, `,`, `;`, `)` or `}`, and inside
+        no call, array or object of its own. So `c ? "One" : "Two"` gives both, while a fragment
+        (`"a"+x`), a comparison, an argument (`closest("#x")`) or an object key does not, and a
+        literal inside t() is the sinks' already. Template literals are left alone. */
+  const PROPFN=/\b(?:label|hint|hintHtml|sub|tip|title|body):\s*(?:(\(\s*\)\s*=>)|function\s*\(\s*\)\s*\{|([A-Za-z_$][\w$]*)\s*(?=[,}]|$))/gm;
+  const returned=(src, i, block)=>{
+    const got=[], stack=[];
+    let prev=block ? "{" : "=>", word="";
+    for(; i<src.length; i++){
+      const c=src[i];
+      if(/\s/.test(c)) continue;
+      if(c==="/" && src[i+1]==="/"){ while(i<src.length && src[i]!==NL) i++; continue; }
+      if(c==="/" && src[i+1]==="*"){ const e=src.indexOf("*/", i+2); i=e<0 ? src.length : e+1; continue; }
+      if(c===String.fromCharCode(34) || c===String.fromCharCode(39) || c==="`"){
+        let j=i+1, lit="", ok=false;
+        while(j<src.length){
+          if(src[j]===BS){ lit+=src[j]+src[j+1]; j+=2; continue; }
+          if(src[j]===c){ ok=true; break; }
+          if(src[j]===NL && c!=="`") break;
+          lit+=src[j]; j++;
+        }
+        if(!ok) return got;
+        let k=j+1; while(k<src.length && /\s/.test(src[k])) k++;
+        const lead=prev==="=>"||prev==="?"||prev===":"||prev==="("||(prev==="w" && word==="return");
+        const trail=[":", ",", ";", ")", "}"].indexOf(src[k])>-1 || k>=src.length;
+        if(c!=="`" && lead && trail && stack.every(x=>x==="group")) got.push(lit);
+        prev="lit"; i=j; continue;
+      }
+      if(/[\w$]/.test(c)){
+        let j=i; while(j<src.length && /[\w$]/.test(src[j])) j++;
+        word=src.slice(i, j); prev="w"; i=j-1; continue;
+      }
+      if(c==="=" && src[i+1]===">"){ prev="=>"; i++; continue; }
+      if(c==="("){ stack.push(prev==="w" && word!=="return" || prev===")" || prev==="]" ? "call" : "group"); prev="("; continue; }
+      if(c==="["){ stack.push("["); prev="["; continue; }
+      if(c==="{"){ stack.push("{"); prev="{"; continue; }
+      if(c===")" || c==="]" || c==="}"){
+        if(!stack.length) return got;           // the function's own end
+        stack.pop(); prev=c; continue;
+      }
+      if(!block && !stack.length && (c==="," || c===";")) return got;
+      prev=c;
+    }
+    return got;
+  };
+  while((m=PROPFN.exec(SRC_NT))){
+    let at=m.index+m[0].length, block=true;
+    if(m[1]){
+      let k=at; while(k<SRC_NT.length && /\s/.test(SRC_NT[k])) k++;
+      if(SRC_NT[k]==="{") at=k+1; else block=false;
+    } else if(m[2]){
+      const decl=SRC_NT.indexOf("function "+m[2]+"(");
+      if(decl<0) continue;
+      const open=SRC_NT.indexOf("{", SRC_NT.indexOf(")", decl));
+      if(open<0) continue;
+      at=open+1;
+    }
+    returned(SRC_NT, at, block).forEach(v=>{ if(!/'\+|\+'|esc\(|^</.test(v)) pushProse(unesc(v)); });
   }
   /* 6. prose in static markup: the sentences around the controls rule 4 already reads. */
   const prose=/<(p|b|small|li)\b[^>]*>([^<>{}]{4,})</g;
