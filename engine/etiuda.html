@@ -7569,6 +7569,7 @@ What you type stays in this browser only.`;
   __export(card_intent_exports, {
     cardHitsAlwaysCat: () => cardHitsAlwaysCat,
     cardHitsSelectedIntent: () => cardHitsSelectedIntent,
+    cardIntentLinks: () => cardIntentLinks,
     cardLinksIntent: () => cardLinksIntent,
     intentTagCats: () => intentTagCats,
     normalizeCardIntents: () => normalizeCardIntents,
@@ -7674,10 +7675,14 @@ What you type stays in this browser only.`;
       return String(x);
     }).filter(Boolean);
   }
-  function cardLinksIntent(m, want) {
-    if (!m || m._hidden) return false;
+  function cardIntentLinks(m) {
+    if (!m || m._hidden) return null;
     if (m.allIntents) return true;
-    return normalizeCardIntents(m).indexOf(want) > -1;
+    return normalizeCardIntents(m);
+  }
+  function cardLinksIntent(m, want) {
+    const l = cardIntentLinks(m);
+    return l === true || !!l && l.indexOf(want) > -1;
   }
   function cardHitsSelectedIntent(m) {
     if (!intentIdxs.length) return false;
@@ -10490,6 +10495,7 @@ What you type stays in this browser only.`;
   __export(cat_relevance_exports, {
     categoriesForIntent: () => categoriesForIntent,
     displayCatOrder: () => displayCatOrder,
+    intentCatSets: () => intentCatSets,
     intentCats: () => intentCats,
     intentHasPrimaryCat: () => intentHasPrimaryCat,
     pillBand: () => pillBand,
@@ -10647,6 +10653,26 @@ What you type stays in this browser only.`;
       if (cardLinksIntent(m, want)) add(m.c);
     });
     return out;
+  }
+  function intentCatSets() {
+    const per = /* @__PURE__ */ new Map(), every = /* @__PURE__ */ new Set();
+    (cards || []).forEach((m) => {
+      if (!m || !m.c || !CATS[m.c]) return;
+      const l = cardIntentLinks(m);
+      if (l === true) every.add(m.c);
+      else if (l) l.forEach((id) => {
+        let s = per.get(id);
+        if (!s) {
+          s = /* @__PURE__ */ new Set();
+          per.set(id, s);
+        }
+        s.add(m.c);
+      });
+    });
+    return (i, k) => {
+      const s = per.get(intentIdAt(i));
+      return every.has(k) || !!(s && s.has(k));
+    };
   }
   function scrollRailTop() {
     const el = document.getElementById("intentRailList");
@@ -14561,9 +14587,9 @@ What you type stays in this browser only.`;
     railRelGroup = {};
     const sel = (cats || []).filter(Boolean);
     if (!sel.length) return;
+    const has = intentCatSets();
     intentOrder.forEach((i) => {
-      const ks = categoriesForIntent(i);
-      const hit = sel.filter((k) => isAlwaysCat(k) || ks.indexOf(k) > -1);
+      const hit = sel.filter((k) => isAlwaysCat(k) || has(i, k));
       if (hit.length) {
         railRelNow[i] = hit;
         railRelGroup[i] = String(99 - hit.length).padStart(2, "0") + String(sel.indexOf(hit[0])).padStart(2, "0") + "|" + hit.join(",");

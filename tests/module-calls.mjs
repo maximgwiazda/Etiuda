@@ -1421,6 +1421,71 @@ const CARD_B = {
     () => RL.cardFillKey({ en: "Plain.", pl: "Witaj {AGENT}." }) === "" ? "took the constant" : true);
 }
 
+/* ------------------------------------------------------------------ rail-list.js, the echo.
+   While a category is selected, every rail draw asks which intents it holds cards for. Asked
+   intent by intent, that walked every card once per intent; the draw is to read each card's
+   links a number of times that does not grow with the rail. Counted by a getter on each
+   invented card's `intents`, over a rail of 5 intents and of 20. The CONTROL is the echo itself:
+   the one intent a selected category's card links rises to the top. */
+{
+  const RL = await import(MOD("rail-list.js"));
+  const CAT_REL = await import(MOD("cat-relevance.js"));
+  const CM = await import(MOD("content-model.js"));
+  const II = await import(MOD("intent-id.js"));
+  const AS = await import(MOD("app-state.js"));
+  const had = { en: CM.SW_STORE.en.slice(), pl: CM.SW_STORE.pl.slice(), ids: CM.SW_IDS.slice(),
+    order: II.intentOrder, cards: AS.cards, cats: AS.cats };
+  let reads = 0;
+  const card = (id, c, links) => {
+    const m = { id, c, t: id, en: "x" };
+    Object.defineProperty(m, "intents", { get() { reads++; return links; }, enumerable: true });
+    return m;
+  };
+  const drawn = n => {
+    II.setIntentOrder(Array.from({ length: n }, (_, i) => i));
+    reads = 0;
+    const rows = RL.displayIntentRows();
+    return { reads, first: rows[0] && rows[0].idx };
+  };
+  try {
+    CM.SW_STORE.en.length = 0; CM.SW_STORE.pl.length = 0;
+    for (let i = 0; i < 20; i++) { CM.SW_STORE.en.push("an invented request " + i); CM.SW_STORE.pl.push("pl " + i); }
+    CM.setIntentIds(Array.from({ length: 20 }, (_, i) => "q" + i)); II.snapshotBaseIntents();
+    CM.CATS["e-alpha"] = "Alpha"; CM.CATS["e-beta"] = "Beta";
+    AS.setCards([card("k1", "e-alpha", ["t:q3"]), card("k2", "e-beta", [5]), card("k3", "e-alpha", []),
+      card("k4", "e-beta", ["t:q3"])]);
+    AS.setCats(["e-alpha"]);
+    check("rail-list.js", "a rail draw reads each card's links as often for 20 intents as for 5",
+      () => { const few = drawn(5), many = drawn(20); return eq(many.reads, few.reads); });
+    check("rail-list.js", "CONTROL: the intent a selected category's card links rises to the top",
+      () => {
+        const byId = drawn(20).first;                         // k1 links "t:q3" by id
+        AS.setCards([card("k2", "e-beta", [5])]); AS.setCats(["e-beta"]);
+        const byPlace = drawn(20).first;                      // k2 links slot 5 by number
+        return eq(byId + "|" + byPlace, "3|5");
+      });
+    check("cat-relevance.js", "CONTROL: the one-pass sets answer what categoriesForIntent answers, intent by intent",
+      () => {
+        const CR = CAT_REL;
+        AS.setCards([card("k1", "e-alpha", ["t:q3"]), card("k2", "e-beta", [5]), card("k3", "e-alpha", []),
+          Object.assign(card("k5", "e-alpha", ["t:q7"]), { _hidden: 1 }), Object.assign(card("k6", "e-beta", []), { allIntents: 1 }),
+          card("k7", "e-none", ["t:q9"]), card("k8", "", ["t:q9"])]);
+        const has = CR.intentCatSets(), bad = [];
+        for (let i = 0; i < 20; i++) {
+          const want = CR.categoriesForIntent(i);
+          ["e-alpha", "e-beta", "e-none", ""].forEach(k => { if (has(i, k) !== (want.indexOf(k) > -1)) bad.push(i + ":" + k); });
+        }
+        return bad.length ? "disagree at " + bad.join(",") : true;
+      });
+  } finally {
+    CM.SW_STORE.en.length = 0; had.en.forEach(v => CM.SW_STORE.en.push(v));
+    CM.SW_STORE.pl.length = 0; had.pl.forEach(v => CM.SW_STORE.pl.push(v));
+    CM.setIntentIds(had.ids); II.snapshotBaseIntents(); II.setIntentOrder(had.order);
+    delete CM.CATS["e-alpha"]; delete CM.CATS["e-beta"];
+    AS.setCards(had.cards); AS.setCats(had.cats);
+  }
+}
+
 /* ------------------------------------------------------------------ entry-walk.js and
    pill-walk.js. These two are covered by their EMPTY CASE only, which is weaker coverage than
    everything above and is written down as such: before the list is grabbed there is nothing to

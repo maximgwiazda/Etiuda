@@ -11,7 +11,7 @@ import { isIntentFavourite, ePackEpoch, pack, saveStats } from "./pack.js";
 import { bumpMiss } from "./desk-stats.js";
 import { railLocked, applyRailPeek, updateModifierPeek, toggleRailLock } from "./rail-panel.js";
 import { catMarkHtml, catSlot } from "./cat-identity.js";
-import { categoriesForIntent } from "./cat-relevance.js";
+import { intentCatSets } from "./cat-relevance.js";
 import { markEntrySel } from "./entry-walk.js";
 import { intentIdAt, intentIdxFromId, intentOrder, isIntentHiddenIdx, saveIntentOrder, setIntentOrder, setIntentOrderLoaded } from "./intent-id.js";
 import { esc } from "./esc.js";
@@ -83,21 +83,21 @@ function railEchoRedraw(railBefore, relBefore){
 }
 /* Which SELECTED categories hold a card linked to this intent - the exact inverse of
    categoriesForIntent(), so the rail's echo and the pills' rings can never disagree.
-   Recomputed once per draw into railRelNow: the banding and the row loop both need it,
-   and categoriesForIntent walks every card. */
+   Recomputed once per draw into railRelNow, from one pass over the cards (intentCatSets):
+   the banding and the row loop both need it. */
 var railRelNow={}, railRelGroup={};
 function railRelRefresh(){
   railRelNow={};
   railRelGroup={};
   const sel=(cats||[]).filter(Boolean);
   if(!sel.length) return;
+  const has=intentCatSets();
   intentOrder.forEach(i=>{
-    const ks=categoriesForIntent(i);
     /* A SUPPORTING category is useful whatever the intent - its definition - so the echo
        lets it claim every intent, exactly as a blanket-linked category already does
        through its cards. Without this, Security lit only its card-linked slice while
        Openers lit the whole rail, and those two are the same kind of thing. */
-    const hit=sel.filter(k=>isAlwaysCat(k)||ks.indexOf(k)>-1);
+    const hit=sel.filter(k=>isAlwaysCat(k)||has(i,k));
     if(hit.length){
       railRelNow[i]=hit;
       /* Sort key: DEPTH FIRST - the more selected categories claim an intent, the higher

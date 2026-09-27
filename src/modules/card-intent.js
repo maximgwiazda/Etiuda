@@ -18,11 +18,16 @@ function normalizeCardIntents(m){
 }
 /* THE definition of "this card belongs to this intent" - everything green derives from
    it. One function on purpose: two copies drifted the moment a third way of linking was
-   added, and the pill and the cards inside it disagreed about the same intent. */
-function cardLinksIntent(m,want){
-  if(!m||m._hidden) return false;
+   added, and the pill and the cards inside it disagreed about the same intent. The links
+   are read in cardIntentLinks, which a one-pass reader shares: null for none, true for all. */
+function cardIntentLinks(m){
+  if(!m||m._hidden) return null;
   if(m.allIntents) return true;               // linked to every intent, card by card
-  return normalizeCardIntents(m).indexOf(want)>-1;
+  return normalizeCardIntents(m);
+}
+function cardLinksIntent(m,want){
+  const l=cardIntentLinks(m);
+  return l===true || (!!l && l.indexOf(want)>-1);
 }
 function cardHitsSelectedIntent(m){
   if(!intentIdxs.length) return false;
@@ -126,6 +131,7 @@ export {
   primaryCatKey,
   primaryCatKeys,
   normalizeCardIntents,
+  cardIntentLinks,
   cardLinksIntent,
   cardHitsSelectedIntent,
   cardHitsAlwaysCat,
