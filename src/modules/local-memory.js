@@ -1,9 +1,9 @@
 import { E_CATALOG_KEY, E_CATALOG_STORE, eWatchClear } from "./catalog.js";
 import { pack, savePack } from "./pack.js";
-import { E_NS, eWipeLatch, lsDel, lsKeys, mgReopenAfterReload, nsDel, nsKey, ssDel, ssGet, ssSet } from "./storage.js";
+import { E_NS, E_SS_OK, eWipeLatch, lsDel, lsGet, lsKeys, lsSet, mgReopenAfterReload, nsDel, nsKey, ssDel, ssGet, ssSet } from "./storage.js";
 import { reloadCovered } from "./motion.js";
-import { TAB_KEY, tabSaveTimer } from "./tabs.js";
-import { askSure, t } from "./ui-lang.js";
+import { TAB_KEY, saveTabSession, tabSaveTimer } from "./tabs.js";
+import { askSure, offerUndo, t, toastRefusal } from "./ui-lang.js";
 import { eHost } from "./host.js";
 
 /* Both doors (Library and Maintenance) open onto this pair. FORGETTING WHAT YOU MADE AND
@@ -78,7 +78,22 @@ function ejectedJustNow(){
   if(v) ssDel(E_EJECTED);
   return !!v;
 }
+/* EJECT HAPPENS AT ONCE, and its Undo loads the same catalog straight back: what the eject takes
+   is parked in the session for the restart and read once by the next boot (offerEjectUndo). Only a
+   session that cannot hold the park still asks first, since nothing would carry the Undo across. */
+const E_EJECT_PARK="eEjectPark";
+function ejectParkKeys(){ return catalogKeep().concat([nsKey("CatalogNo"),nsKey("CatalogFile"),nsKey("CatalogFileAt")]); }
 function ejectCatalog(){
+  try{ saveTabSession(); }catch(e){}
+  const park={keys:{}, tabs:ssGet(TAB_KEY), base:pack.baseCards||null};
+  ejectParkKeys().forEach(k=>{ park.keys[k]=lsGet(k); });
+  let s=null;
+  try{ s=JSON.stringify(park); }catch(e){ s=null; }
+  if(E_SS_OK && s!==null){
+    ssSet(E_EJECT_PARK,s);
+    if(ssGet(E_EJECT_PARK)===s){ ejectNow(); return; }
+    ssDel(E_EJECT_PARK);
+  }
   askSure((eHost() ? t("Eject the catalog?") : t("Eject the catalog from this browser?"))+"\n\n"
     +t("Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.")+"\n\n"
     +t("Your agent name, theme and layout choices stay, and catalog files on disk are not touched.")+"\n\n"
@@ -100,9 +115,40 @@ function ejectNow(){
   ssDel(TAB_KEY);
   reloadCovered();
 }
+/** The boot after an eject: the park is taken whatever happens, so a later reload finds nothing. */
+function offerEjectUndo(){
+  const s=ssGet(E_EJECT_PARK);
+  ssDel(E_EJECT_PARK);
+  let park=null;
+  try{ park=s ? JSON.parse(s) : null; }catch(e){ park=null; }
+  if(!park || !park.keys || typeof park.keys!=="object") return false;
+  offerUndo("Catalog ejected", ()=>undoEject(park));
+  return true;
+}
+/* The eject run backwards, on the same latch-then-reload terms as every catalog route. */
+function undoEject(park){
+  const put=park.keys[E_CATALOG_STORE];
+  if(put!=null && (!lsSet(E_CATALOG_STORE,put,true) || lsGet(E_CATALOG_STORE)!==put)){
+    toastRefusal(t("Could not save the catalog, perhaps because the browser's storage is full."));
+    return false;
+  }
+  Object.keys(park.keys).forEach(k=>{
+    if(k===E_CATALOG_STORE) return;
+    const v=park.keys[k];
+    if(v==null) lsDel(k); else lsSet(k,v);
+  });
+  if(park.base){ pack.baseCards=park.base; savePack(); }
+  if(park.tabs!=null) ssSet(TAB_KEY,park.tabs);
+  mgReopenAfterReload();
+  eWipeLatch();
+  clearTimeout(tabSaveTimer);
+  reloadCovered();
+  return true;
+}
 
 export {
   clearLocalMemory,
   ejectCatalog,
-  ejectedJustNow
+  ejectedJustNow,
+  offerEjectUndo
 };

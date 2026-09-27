@@ -5758,6 +5758,7 @@ What you type stays in this browser only.`;
     "Export…": "Eksportuj…",
     "Clear local memory": "Wyczyść pamięć lokalną",
     "Eject catalog": "Odłącz katalog",
+    "Catalog ejected": "Katalog odłączony",
     "Previous": "Poprzedni",
     /* Qualified because the tour already owns a plain "Next" and calls it Dalej; Previous has
        no such clash, so it stays plain rather than being qualified for symmetry alone. */
@@ -13085,7 +13086,8 @@ What you type stays in this browser only.`;
   __export(local_memory_exports, {
     clearLocalMemory: () => clearLocalMemory,
     ejectCatalog: () => ejectCatalog,
-    ejectedJustNow: () => ejectedJustNow
+    ejectedJustNow: () => ejectedJustNow,
+    offerEjectUndo: () => offerEjectUndo
   });
   function catalogKeep() {
     return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample")];
@@ -13153,7 +13155,33 @@ What you type stays in this browser only.`;
     if (v) ssDel(E_EJECTED);
     return !!v;
   }
+  var E_EJECT_PARK = "eEjectPark";
+  function ejectParkKeys() {
+    return catalogKeep().concat([nsKey("CatalogNo"), nsKey("CatalogFile"), nsKey("CatalogFileAt")]);
+  }
   function ejectCatalog() {
+    try {
+      saveTabSession();
+    } catch (e) {
+    }
+    const park = { keys: {}, tabs: ssGet(TAB_KEY), base: pack.baseCards || null };
+    ejectParkKeys().forEach((k) => {
+      park.keys[k] = lsGet(k);
+    });
+    let s = null;
+    try {
+      s = JSON.stringify(park);
+    } catch (e) {
+      s = null;
+    }
+    if (E_SS_OK && s !== null) {
+      ssSet(E_EJECT_PARK, s);
+      if (ssGet(E_EJECT_PARK) === s) {
+        ejectNow();
+        return;
+      }
+      ssDel(E_EJECT_PARK);
+    }
     askSure((eHost() ? t("Eject the catalog?") : t("Eject the catalog from this browser?")) + "\n\n" + t("Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.") + "\n\n" + t("Your agent name, theme and layout choices stay, and catalog files on disk are not touched.") + "\n\n" + t("Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it."), "Eject catalog", ejectNow, true);
   }
   function ejectNow() {
@@ -13169,6 +13197,42 @@ What you type stays in this browser only.`;
     nsDel("CatalogFileAt");
     ssDel(TAB_KEY);
     reloadCovered();
+  }
+  function offerEjectUndo() {
+    const s = ssGet(E_EJECT_PARK);
+    ssDel(E_EJECT_PARK);
+    let park = null;
+    try {
+      park = s ? JSON.parse(s) : null;
+    } catch (e) {
+      park = null;
+    }
+    if (!park || !park.keys || typeof park.keys !== "object") return false;
+    offerUndo("Catalog ejected", () => undoEject(park));
+    return true;
+  }
+  function undoEject(park) {
+    const put = park.keys[E_CATALOG_STORE];
+    if (put != null && (!lsSet(E_CATALOG_STORE, put, true) || lsGet(E_CATALOG_STORE) !== put)) {
+      toastRefusal(t("Could not save the catalog, perhaps because the browser's storage is full."));
+      return false;
+    }
+    Object.keys(park.keys).forEach((k) => {
+      if (k === E_CATALOG_STORE) return;
+      const v = park.keys[k];
+      if (v == null) lsDel(k);
+      else lsSet(k, v);
+    });
+    if (park.base) {
+      pack.baseCards = park.base;
+      savePack();
+    }
+    if (park.tabs != null) ssSet(TAB_KEY, park.tabs);
+    mgReopenAfterReload();
+    eWipeLatch();
+    clearTimeout(tabSaveTimer);
+    reloadCovered();
+    return true;
   }
 
   // src/modules/rail-panel.js
@@ -19731,7 +19795,10 @@ What you type stays in this browser only.`;
     return shown2;
   }
   function eOfferCatalogAtBoot() {
-    if (ejectedJustNow()) return;
+    if (ejectedJustNow()) {
+      offerEjectUndo();
+      return;
+    }
     const at = +(nsGet("CatalogNoAt") || 0), mt = eCatalogMtime(), asked = eOpenedWith();
     if (!asked && tourDueAtBoot()) {
       afterTour(eOfferCatalogAtBoot);

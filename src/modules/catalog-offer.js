@@ -9,7 +9,7 @@ import { eEmbeddedCatalog } from "./env.js";
 import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
   eCatalogIn, eCatalogBuiltIn, eCatalogMtime, eHost, eLoadedCatalogFile, eOpenCatalogFolder, eOpenedWith,
   eOpenedRefused, eReadCatalogFile } from "./host.js";
-import { ejectCatalog, ejectedJustNow } from "./local-memory.js";
+import { ejectCatalog, ejectedJustNow, offerEjectUndo } from "./local-memory.js";
 import { MG_REOPEN, lsSet, nsGet, nsSet, ssGet } from "./storage.js";
 import { tourDueAtBoot, afterTour } from "./tour.js";
 import { placeBubble } from "./bubble.js";
@@ -85,7 +85,7 @@ function eOfferCatalog(given,name,where,force,asked,builtIn){
    rather than a find. Only a host can date a file or hand one over, so a browser never forces. */
 function eOfferCatalogAtBoot(){
   /* Read whatever else this launch decides, so the launch after an eject asks like any other. */
-  if(ejectedJustNow()) return;
+  if(ejectedJustNow()){ offerEjectUndo(); return; }
   const at=+(nsGet("CatalogNoAt")||0), mt=eCatalogMtime(), asked=eOpenedWith();
   // A first run's tour asks for a catalog in its own step, so a found file waits for it to end.
   if(!asked && tourDueAtBoot()){ afterTour(eOfferCatalogAtBoot); return; }

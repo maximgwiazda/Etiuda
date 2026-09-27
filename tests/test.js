@@ -556,6 +556,58 @@ function runUnitTests() {
   catalogIdentityTests();
   nameNsAdoptionTests();
   deskStatsTests();
+  ejectUndoTests();
+}
+
+/* EJECT HAPPENS AT ONCE AND UNDO LOADS THE SAME CATALOG BACK (Maxim, 2026-09-27): the eject, the
+   boot after it and the Undo, run in bare node over one storage model whose writes stop at the
+   latch, as storage.js's do. The round trip must put back every key the eject took, byte for byte. */
+function ejectUndoTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "local-memory.js"), "utf8");
+  const markers = ["function catalogKeep(", "const E_EJECTED=", "function ejectedJustNow(", "const E_EJECT_PARK=",
+    "function ejectParkKeys(", "function ejectCatalog(", "function ejectNow(", "function offerEjectUndo(", "function undoEject("];
+  const world = (ssOk, ssRefuses) => {
+    const w = { ls: {}, ss: {}, latched: false, asked: 0, reloads: 0, undo: null, said: null, pack: { baseCards: ["old"] } };
+    const ns = k => "e" + k;
+    const put = (m, k, v) => { if (!w.latched) m[k] = String(v); return !w.latched; };
+    try {
+      w.F = new Function("E_CATALOG_STORE", "E_CATALOG_KEY", "nsKey", "nsDel", "saveTabSession", "ssGet", "ssSet", "ssDel",
+        "TAB_KEY", "pack", "savePack", "lsGet", "lsSet", "lsDel", "E_SS_OK", "askSure", "eHost", "t",
+        "mgReopenAfterReload", "eWipeLatch", "clearTimeout", "tabSaveTimer", "reloadCovered", "offerUndo", "toastRefusal",
+        markers.map(m => extractDecl(src, m)).join("\n") + "\nreturn {ejectCatalog, ejectedJustNow, offerEjectUndo};")(
+        ns("Catalog"), ns("CatalogOk"), ns, k => { delete w.ls[ns(k)]; }, () => {},
+        k => (k in w.ss ? w.ss[k] : null), (k, v) => { if (!ssRefuses) put(w.ss, k, v); }, k => { delete w.ss[k]; },
+        "eSessionTabs", w.pack, () => put(w.ls, "ePack", JSON.stringify(w.pack.baseCards)),
+        k => (k in w.ls ? w.ls[k] : null), (k, v) => put(w.ls, k, v), k => { delete w.ls[k]; },
+        ssOk, () => { w.asked++; }, () => true, s => s,
+        () => {}, () => { w.latched = true; }, () => {}, null, () => { w.reloads++; },
+        (said, fn) => { w.said = said; w.undo = fn; }, () => {});
+    } catch (e) { w.F = null; w.err = e.message; }
+    w.ls = { eCatalog: "{\"cards\":[1]}", eCatalogOk: "sig", eSample: "1", eCatalogNo: "no", eCatalogFile: "shop.ec",
+             eCatalogFileAt: "1700", ePack: "[\"old\"]", eTheme: "dark" };
+    w.ss = { eSessionTabs: "tabs-a" };
+    return w;
+  };
+  const w = world(true, false);
+  eq("local-memory.js carries the eject, its park and its Undo", w.F ? true : w.err, true);
+  if (!w.F) return;
+  const sorted = m => JSON.stringify(Object.keys(m).sort().map(k => [k, m[k]]));
+  const before = sorted(w.ls) + sorted(w.ss);
+  w.F.ejectCatalog();
+  eq("an eject asks nothing and restarts once, with the catalog and what names it gone and the park in the session",
+    [w.asked, w.reloads, ["eCatalog", "eCatalogOk", "eSample", "eCatalogNo", "eCatalogFile", "eCatalogFileAt"].filter(k => k in w.ls),
+     "eEjectPark" in w.ss, w.ss.eEjectedNow, w.ls.eTheme], [0, 1, [], true, "1", "dark"]);
+  w.latched = false;
+  const first = w.F.ejectedJustNow() && w.F.offerEjectUndo(), again = w.F.offerEjectUndo();
+  eq("the boot after it offers Undo once, and the park is taken whatever happens",
+    [first, w.said, again, "eEjectPark" in w.ss], [true, "Catalog ejected", false, false]);
+  if (w.undo) w.undo();
+  eq("Undo puts back every key the eject took and the conversations, byte for byte, and restarts behind the latch",
+    [sorted(w.ls) + sorted(w.ss) === before, w.reloads, w.latched], [true, 2, true]);
+  const off = world(false, false), deaf = world(true, true);
+  [off, deaf].forEach(x => x.F && x.F.ejectCatalog());
+  eq("a session that cannot hold the park asks first rather than ejecting without an Undo, and leaves nothing parked",
+    [off.asked, off.reloads, "eCatalog" in off.ls, deaf.asked, deaf.reloads, "eEjectPark" in deaf.ss], [1, 0, true, 1, 0, false]);
 }
 
 /* Section 2.5 of the specification and the body rules of 2.6, driven over the reader that
@@ -2694,8 +2746,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 803;
-const UI_STRINGS_SHA256 = "6fee9f3adf5cdd1bc51677ad7d32d7e9f58d78aacfab53d5e1c328e278b5ea83";
+const UI_STRINGS_COUNT = 804;
+const UI_STRINGS_SHA256 = "6d7ff393cb63ae1e0f894caa6e9047635e7d1bbae4dd378de2961768d39241ca";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

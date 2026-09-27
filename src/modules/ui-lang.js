@@ -478,6 +478,7 @@ UI_STRINGS.pl={
   "Export…":"Eksportuj…",
   "Clear local memory":"Wyczyść pamięć lokalną",
   "Eject catalog":"Odłącz katalog",
+  "Catalog ejected":"Katalog odłączony",
   "Previous":"Poprzedni",
   /* Qualified because the tour already owns a plain "Next" and calls it Dalej; Previous has
      no such clash, so it stays plain rather than being qualified for symmetry alone. */
