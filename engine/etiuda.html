@@ -14756,15 +14756,21 @@ What you type stays in this browser only.`;
         plan.push([el]);
         continue;
       }
-      if ((dx || dy) && Math.abs(dy) <= vh * 1.2) plan.push([el, dx, dy]);
+      const grew = o.bottom > 0 && o.top < vh ? Math.round(r.height - o.height) : 0;
+      if ((dx || dy || grew > 1) && Math.abs(dy) <= vh * 1.2) plan.push([el, dx, dy, grew > 1 ? grew : 0]);
     }
     if (!plan.length) return;
     const glide = tier === "move" ? { duration: M_MS.move, easing: E_EASE } : { duration: E_SPRING_MS, easing: E_SPRING_OK ? E_SPRING : E_EASE };
-    plan.forEach(([el, dx, dy]) => {
-      eSettleRuns.push(dx == null ? el.animate(
-        [{ opacity: 0, transform: "translateY(8px) scale(.985)" }, { opacity: 1, transform: "none" }],
-        { duration: M_MS.surface, easing: E_EASE }
-      ) : el.animate([{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "none" }], glide));
+    plan.forEach(([el, dx, dy, grew]) => {
+      if (dx == null) {
+        eSettleRuns.push(el.animate(
+          [{ opacity: 0, transform: "translateY(8px) scale(.985)" }, { opacity: 1, transform: "none" }],
+          { duration: M_MS.surface, easing: E_EASE }
+        ));
+        return;
+      }
+      if (dx || dy) eSettleRuns.push(el.animate([{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "none" }], glide));
+      if (grew) eSettleRuns.push(el.animate([{ clipPath: "inset(-24px -24px " + grew + "px -24px)" }, { clipPath: "inset(-24px)" }], glide));
     });
     eKickPump();
   }

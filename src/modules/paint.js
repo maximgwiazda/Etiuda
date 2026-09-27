@@ -175,16 +175,23 @@ function glideSettle(before,tier){
     // Past half a screen only a card that began on screen travels; one from beyond the edge
     // rises in where it lands, like a card new to the screen.
     if(!o || (Math.abs(dy)>vh*0.5 && !(o.bottom>0 && o.top<vh))){ plan.push([el]); continue; }
-    if((dx||dy) && Math.abs(dy)<=vh*1.2) plan.push([el,dx,dy]);
+    // A card whose text grew opens to its new height as the cards below it make room.
+    const grew=o.bottom>0 && o.top<vh ? Math.round(r.height-o.height) : 0;
+    if((dx||dy||grew>1) && Math.abs(dy)<=vh*1.2) plan.push([el,dx,dy,grew>1?grew:0]);
   }
   if(!plan.length) return;
   const glide=tier==="move" ? {duration:M_MS.move,easing:E_EASE}
     : {duration:E_SPRING_MS,easing:E_SPRING_OK?E_SPRING:E_EASE};
-  plan.forEach(([el,dx,dy])=>{
-    eSettleRuns.push(dx==null
-      ? el.animate([{opacity:0,transform:"translateY(8px) scale(.985)"},{opacity:1,transform:"none"}],
-          {duration:M_MS.surface,easing:E_EASE})
-      : el.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],glide));
+  plan.forEach(([el,dx,dy,grew])=>{
+    if(dx==null){
+      eSettleRuns.push(el.animate([{opacity:0,transform:"translateY(8px) scale(.985)"},{opacity:1,transform:"none"}],
+        {duration:M_MS.surface,easing:E_EASE}));
+      return;
+    }
+    if(dx||dy) eSettleRuns.push(el.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],glide));
+    /* The clip stands clear of the panels' rings and shadows on three sides; the fourth is the
+       old height, on the curve the cards below travel on, so the two edges keep their gap. */
+    if(grew) eSettleRuns.push(el.animate([{clipPath:"inset(-24px -24px "+grew+"px -24px)"},{clipPath:"inset(-24px)"}],glide));
   });
   eKickPump();   // no animationstart for a scripted animation, so the pump is asked by hand
 }

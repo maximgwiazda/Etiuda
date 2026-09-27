@@ -535,6 +535,7 @@ function runUnitTests() {
   pillWrapTests();
   pillsWidthWatchTests();
   railLeaveTests();
+  grownCardTests();
   v2ValidationTests();
   lintCatalogTests();
   langAgnosticTests();
@@ -1441,6 +1442,29 @@ function railLeaveTests() {
   eq("a row on screen at both ends still glides home, and one arriving from off screen still fades in",
     flip ? [rows[1].log, rows[2].log] : "no flipRail",
     [["transform translateY(350px)", "transform none"], ["opacity 0", "opacity none"]]);
+}
+/* A CARD WHOSE TEXT GREW OPENS TO ITS NEW HEIGHT (797 N5): a Ctrl pick fills the top card with the
+   second intent and it grew 63px in one frame. glideSettle is sliced and run on stub cards: the
+   grown card's clip runs from its old height on the curve its neighbours glide on. */
+function grownCardTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "paint.js"), "utf8");
+  const card = (id, now) => ({ dataset: { id }, runs: [], getBoundingClientRect: () => now,
+    animate(kf, o) { this.runs.push([Object.keys(kf[0]).join("+"), kf[0].clipPath || kf[0].transform || "", o.duration]); return { finish() {} }; } });
+  const R = (top, h) => ({ left: 300, top, width: 400, height: h, bottom: top + h, right: 700 });
+  const cards = [card("a", R(220, 344)), card("b", R(600, 200)), card("c", R(700, 300))];
+  const list = { getBoundingClientRect: () => ({ top: 200 }), querySelectorAll: () => cards };
+  let glide = null;
+  try {
+    glide = new Function("list", "window", "CARD_MOVE_MAX", "M_MS", "E_EASE", "E_SPRING_MS", "E_SPRING_OK", "E_SPRING", "eKickPump",
+      "let eSettleRuns=[];\n" + extractDecl(src, "function glideSettle(") + "\nreturn glideSettle;")(
+      list, { innerHeight: 900 }, 40, { move: 180, surface: 180 }, "ease", 371, false, "", () => {});
+  } catch (e) { glide = null; }
+  /* "a" stays put and grows 63px; "b" moves 40px down at its own height; "c" was below the screen
+     and is shorter than its estimate, which is not a growth anyone saw. */
+  if (glide) glide({ a: R(220, 281), b: R(560, 200), c: R(1400, 220) }, "move");
+  eq("a grown card opens from its old height on the glide's curve; a card that only moved only glides",
+    glide ? [cards[0].runs, cards[1].runs] : "no glideSettle",
+    [[["clipPath", "inset(-24px -24px 63px -24px)", 180]], [["transform", "translate(0px,-40px)", 180]]]);
 }
 function requestFns() {
   const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
