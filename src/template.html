@@ -394,8 +394,11 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* The combined box: the drum's fixed lane plus a name's worth of typing room. The cap
      sits a fifth below its first draft - the search box is the one that deserves width. */
   --paxrole-field:clamp(172px, 10vw + 112px, 240px);
-  /* Thin scrollbars app-wide */
-  --scroll-thumb:rgba(71,85,105,.4); --scroll-thumb-hover:rgba(71,85,105,.65);
+  /* Thin scrollbars app-wide. The thumb is OPAQUE, so the dot field stops at it, and reads as the
+     see-through grey did: the same grey at the same share, mixed over the canvas. The track stays
+     transparent. All four token blocks. */
+  --scroll-thumb:color-mix(in srgb,rgb(71,85,105) 40%,var(--bg));
+  --scroll-thumb-hover:color-mix(in srgb,rgb(71,85,105) 65%,var(--bg));
   --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
   /* Light cards ARE the panel surface; dark lifts them one step above the header chrome,
      so the card ground gets its own token - see the dark blocks. --txt-mix is the share of
@@ -453,7 +456,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
   --bub-shadow:rgba(0,0,0,.55);
-  --scroll-thumb:rgba(152,162,179,.4); --scroll-thumb-hover:rgba(152,162,179,.75);
+  --scroll-thumb:color-mix(in srgb,rgb(152,162,179) 40%,var(--bg));
+  --scroll-thumb-hover:color-mix(in srgb,rgb(152,162,179) 75%,var(--bg));
   --bevel:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.38),inset 1px 0 0 rgba(255,255,255,.05);
   /* A zero lift, never `none`: it is concatenated into the intent panel's shadow list, as the
      card shadow is into the intent-hit and cat-hit rings, and one `none` inside a shadow list
@@ -494,7 +498,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
   --bub-shadow:rgba(0,0,0,.55);
-  --scroll-thumb:rgba(152,162,179,.4); --scroll-thumb-hover:rgba(152,162,179,.75);
+  --scroll-thumb:color-mix(in srgb,rgb(152,162,179) 40%,var(--bg));
+  --scroll-thumb-hover:color-mix(in srgb,rgb(152,162,179) 75%,var(--bg));
   --bevel:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.38),inset 1px 0 0 rgba(255,255,255,.05);
   /* Zero, not `none` - the twin value in the block above says why. */
   --card-lift:0 0 #0000;
@@ -535,7 +540,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --ed:#1d4ed8; --ed-soft:rgba(29,78,216,.14);
   --pl:#6b3fa0;; --go:#047857; --go-soft:#d1fae5;
   --bub-shadow:rgba(37,99,235,.32);
-  --scroll-thumb:rgba(71,85,105,.4); --scroll-thumb-hover:rgba(71,85,105,.65);
+  --scroll-thumb:color-mix(in srgb,rgb(71,85,105) 40%,var(--bg));
+  --scroll-thumb-hover:color-mix(in srgb,rgb(71,85,105) 65%,var(--bg));
   --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
   --card-bg:var(--panel);      /* the card ground token - see the base block */
   --txt-mix:72%;

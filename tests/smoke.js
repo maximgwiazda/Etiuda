@@ -35,9 +35,10 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-/* 281 since a copy lays only the wash over its block and greens only that block's spine, and a
-   card's title has the row while its controls wait (2026-09-28); 278 was the tour's walk by its acts. */
-const EXPECTED = { chrome: 281 };
+/* 282 since a copy lays only the wash over its block and greens only that block's spine, a card's
+   title has the row while its controls wait, and the scrollbar's thumb is opaque (2026-09-28);
+   278 was the tour's walk by its acts. */
+const EXPECTED = { chrome: 282 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -805,6 +806,43 @@ const t0 = Date.now();
   check(aboutMark.dark.fill === "rgb(255, 255, 255)" && aboutMark.light.fill === "rgb(37, 99, 235)",
     "and takes the theme's own mark colour (dark " + aboutMark.dark.fill + ", light " + aboutMark.light.fill + ")");
   clean(e, "the About mark");
+
+  /* THE THEMES' COLOURS, read resolved on the page in each theme: the unset attribute (the dark
+     default before boot writes one), dark and light. Every value is a computed colour, so a
+     colour-mix or a variable is judged by what it paints. */
+  const themeColours = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const was = document.documentElement.dataset.theme;
+    /* Painted into one canvas pixel and read back, so any serialisation (rgb, color(srgb ...))
+       comes out as 0 to 255 and an alpha of 0 to 1. */
+    const cx = Object.assign(document.createElement("canvas"), { width: 1, height: 1 }).getContext("2d", { willReadFrequently: true });
+    const px = c => { cx.clearRect(0, 0, 1, 1); cx.fillStyle = "#000"; cx.fillStyle = c; cx.fillRect(0, 0, 1, 1);
+      const d = cx.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], Math.round(d[3] / 255 * 100) / 100]; };
+    const res = v => { const i = document.createElement("i"); i.style.color = v; document.body.appendChild(i);
+      const c = px(getComputedStyle(i).color); i.remove(); return c; };
+    const out = {};
+    for (const th of ["unset", "dark", "light"]) {
+      if (th === "unset") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = th;
+      await wait(300);
+      const sc = getComputedStyle(document.querySelector(".scroller")).scrollbarColor, cut = sc.indexOf(")") + 1;
+      out[th] = { bg: res("var(--bg)"), thumb: res("var(--scroll-thumb)"), hover: res("var(--scroll-thumb-hover)"),
+        bar: px(sc.slice(0, cut)), track: px(sc.slice(cut).trim()) };
+    }
+    if (was) document.documentElement.dataset.theme = was; else delete document.documentElement.dataset.theme;
+    await wait(300);
+    return out;
+  });
+  /* The thumb reads as the see-through grey did over the canvas: the grey at its share, laid over
+     --bg, to a unit per channel. The shares are the ones the sheet mixes; the grey is light's
+     slate on a light canvas and dark's on a dark one. */
+  const over = (g, a, bg) => g.map((c, i) => c * a + bg[i] * (1 - a));
+  const near = (x, y) => x.slice(0, 3).every((c, i) => Math.abs(c - y[i]) <= 1);
+  const thumbOk = s => { const dark = s.bg[0] < 128, g = dark ? [152, 162, 179] : [71, 85, 105];
+    return s.thumb[3] === 1 && s.hover[3] === 1 && near(s.thumb, over(g, .4, s.bg)) && near(s.hover, over(g, dark ? .75 : .65, s.bg))
+      && s.track[3] === 0 && near(s.bar, s.thumb) && s.bar[3] === 1; };
+  check(["unset", "dark", "light"].every(th => thumbOk(themeColours[th])),
+    "the scrollbar's thumb is opaque in every theme, hover included, and reads as the see-through grey over the canvas; the track stays clear ("
+    + JSON.stringify(["unset", "dark", "light"].map(th => [themeColours[th].thumb, themeColours[th].hover, themeColours[th].track[3]])) + ")");
 
   /* Breakpoints: no horizontal overflow, and the cut-text rule at every width. */
   for (const w of [1600, 1400, 1200, 1000, 900, 800, 700, 600, 500, 430, 390]) {
