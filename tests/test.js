@@ -1786,6 +1786,20 @@ function markClockTests() {
     got, [[["tour", 1900]], [["tour", 1300]], [["tour", 1300]]]);
 
   try {
+    // A reload in the middle of the tour, parked on a step: the same cold launch, then no mark.
+    const park = r => { r.sb.ssGet = () => "name"; r.sb.TOUR_STEPS = [{ id: "load" }, { id: "name" }];
+      r.sb.startTour = at => r.log.push(["tour", Math.round(r.sb.performance.now()), at]); };
+    const c = markLab(); park(c); c.make(); c.sb.maybeStartTour();
+    let t = 600, i = 0;
+    while (c.frame(t) < 100) t = 600 + ++i * hz(250);
+    c.timersTo(4000);
+    const n = markLab(); park(n); n.sb.maybeStartTour(); n.timersTo(4000);
+    got = [c.log, n.log];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a tour resumed after a reload waits for the mark to form as a first run does, and without one comes at 300 ms as before",
+    got, [[["tour", 1900, 1]], [["tour", 300, 1]]]);
+
+  try {
     // The same cold launch; then no mark, where the second frame comes 20 ms after boot.
     const c = markLab(); c.make(); c.sb.wireOnOpen();
     let t = 600, i = 0;

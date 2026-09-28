@@ -19120,28 +19120,24 @@ What you type stays in this browser only.`;
   }
   var TOUR_AUTO_MS = 1300;
   var TOUR_BREATH_MS = 200;
+  var TOUR_RESUME_MS = 300;
   var TOUR_AT = "eTourAt";
   function tourDueAtBoot() {
     return !!ssGet(TOUR_AT) || !tourSeen() && !tourInviteDismissed();
   }
   function maybeStartTour() {
     const at = ssGet(TOUR_AT);
-    if (at) {
-      const i = TOUR_STEPS.findIndex((x) => x.id === at);
-      setTimeout(() => {
-        if (!tourRunning) startTour(i < 0 ? 0 : i, true);
-      }, 300);
-      return;
-    }
-    if (tourSeen() || tourInviteDismissed()) return;
+    if (!at && (tourSeen() || tourInviteDismissed())) return;
+    const i = at ? Math.max(0, TOUR_STEPS.findIndex((x) => x.id === at)) : 0;
+    const due = () => !tourRunning && (!!at || !tourSeen() && !tourInviteDismissed());
     let floor = false, formed = false;
     const go = () => {
-      if (floor && formed && !tourRunning && !tourSeen() && !tourInviteDismissed()) startTour(0, true);
+      if (floor && formed && due()) startTour(i, true);
     };
     setTimeout(() => {
       floor = true;
       go();
-    }, TOUR_AUTO_MS);
+    }, at ? TOUR_RESUME_MS : TOUR_AUTO_MS);
     whenMarkFormed(() => setTimeout(() => {
       formed = true;
       go();
