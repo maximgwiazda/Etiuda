@@ -1,5 +1,6 @@
 import { intentEl, list } from "./dom.js";
-import { toast, TOAST_HAND_MS } from "./ui-lang.js";
+import { t, toast, TOAST_HAND_MS } from "./ui-lang.js";
+import { eHost } from "./host.js";
 import { cssEsc } from "./css-esc.js";
 import { scheduleTabSave } from "./tabs.js";
 import { scrollPageTop } from "./page-scroll.js";
@@ -52,7 +53,8 @@ function fallback(text,cb){
   try{ ok=document.execCommand("copy")===true; }catch(e){}
   ta.remove();
   if(ok) cb();
-  else toast("Selecting the text on the card and pressing Ctrl+C copies this one; the browser kept the clipboard closed.",TOAST_HAND_MS);
+  else toast(eHost() ? t("Selecting the text on the card and pressing Ctrl+C copies this one; the clipboard would not take it just now.")
+    : t("Selecting the text on the card and pressing Ctrl+C copies this one; the browser kept the clipboard closed."),TOAST_HAND_MS);
 }
 function setEntrySel(id, vi, opts){
   opts=opts||{};

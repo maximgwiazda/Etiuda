@@ -311,6 +311,23 @@ const eq = (got, want) => got === want ? true
             const map = JSON.parse(saved[saved.length - 1]);
             return D.eSaveTrouble() === null && map.eGateLost === "1" ? true
               : JSON.stringify([D.eSaveTrouble(), Object.keys(map)]); });
+  /* AN OWN WRITE IS THE EXCEPTION: its caller speaks for its failure ("Could not save the catalog"),
+     so a refused one must not ride the next write that lands, as the refused key above does. */
+  refuse = true;
+  check("storage.js", "2a an own write the desk refuses is taken back, and the next write that lands does not store it",
+    () => { const own = D.lsSet("eGateOwn", "new", true), read = D.lsGet("eGateOwn");
+            refuse = false; D.lsSet("eGateAfter", "1");
+            const map = JSON.parse(saved[saved.length - 1]);
+            return own === false && read === null && !("eGateOwn" in map) ? true
+              : JSON.stringify([own, read, Object.keys(map)]); });
+  check("storage.js", "2a a refused own write over a value leaves that value, and the same write lands once the desk takes it",
+    () => { refuse = false; D.lsSet("eGateOwn2", "old", true);
+            refuse = true; const r1 = D.lsSet("eGateOwn2", "new", true), kept = D.lsGet("eGateOwn2");
+            refuse = false; const r2 = D.lsSet("eGateOwn2", "new", true);
+            const map = JSON.parse(saved[saved.length - 1]);
+            return r1 === false && kept === "old" && r2 === true && map.eGateOwn2 === "new" ? true
+              : JSON.stringify([r1, kept, r2, map.eGateOwn2]); });
+  refuse = false;
 
   const held = {};
   let full = false;
@@ -1401,6 +1418,58 @@ const CARD_B = {
     () => withCards(CARDS, () => eq(MG.mgCardsIn("empty").length, 0)));
 }
 
+/* ------------------------------------------------------------------ manage.js, card-body.js
+   WORDS THE LANGUAGE SWEEP CANNOT REACH: a sentence with a number in it, and anything in the card
+   list, which no sweep covers. Under a stored Polish interface neither may carry the English it
+   is built from; the English controls say the check reads the words it means to. */
+{
+  const MG = await import(MOD("manage.js"));
+  const CB = await import(MOD("card-body.js"));
+  const inLang = (l, fn) => {
+    const S = UILANG_STORE, had = S.lsGet("eUiLang");
+    S.lsSet("eUiLang", l);
+    try { return fn(); } finally { if (had == null) S.lsDel("eUiLang"); else S.lsSet("eUiLang", had); }
+  };
+  check("manage.js", "THE CONTROL: on an English interface the copy count reads English, one and several",
+    () => inLang("en", () => eq(MG.mgUsesTip(1) + "|" + MG.mgUsesTip(3),
+      "Copied 1 time in this browser|Copied 3 times in this browser")));
+  check("manage.js", "on a Polish interface the copy count keeps its number, drops the English, and one reads unlike five",
+    () => inLang("pl", () => {
+      const one = MG.mgUsesTip(1), few = MG.mgUsesTip(3), many = MG.mgUsesTip(5);
+      const ok = [one, few, many].every(s => !/Copied|time/.test(s))
+        && one.indexOf("1") > -1 && few.indexOf("3") > -1 && many.indexOf("5") > -1
+        && one.replace("1", "") !== many.replace("5", "");
+      return ok ? true : JSON.stringify([one, few, many]);
+    }));
+  check("card-body.js", "THE CONTROL: the in-card intent strip reads English on an English interface",
+    () => inLang("en", () => {
+      const h = CB.swapStripHtml([]);
+      return h.indexOf('title="Click to pick') > -1 && h.indexOf("<b>Set {INTENT}</b>") > -1 ? true : h;
+    }));
+  check("card-body.js", "on a Polish interface neither the strip's tooltip nor its label is the English",
+    () => inLang("pl", () => {
+      const h = CB.swapStripHtml([]);
+      return h.indexOf("Click to pick") < 0 && h.indexOf("Set {INTENT}") < 0 && h.indexOf("{INTENT}") > -1 ? true : h;
+    }));
+
+  /* THE REFUSAL'S CAUSE. A desk stores in one file, so a catalog it could not keep is refused by
+     naming that file; blaming a browser's storage there points nowhere. Both languages, since the
+     wrong cause was in both. */
+  const C = await import(MOD("catalog.js"));
+  const DESK = "%USERPROFILE%\\AppData\\Roaming\\etiuda\\desk.json";
+  check("catalog.js", "THE CONTROL: with no desk file the catalog refusal is the browser's, in English and in Polish",
+    () => {
+      const en = inLang("en", () => C.catalogStoreRefusal("")), pl = inLang("pl", () => C.catalogStoreRefusal(""));
+      return /browser/.test(en) && /przeglądar/.test(pl) ? true : JSON.stringify([en, pl]);
+    });
+  check("catalog.js", "a desk's catalog refusal names the file it could not write and no browser, in English and in Polish",
+    () => {
+      const en = inLang("en", () => C.catalogStoreRefusal(DESK)), pl = inLang("pl", () => C.catalogStoreRefusal(DESK));
+      return en.indexOf(DESK) > -1 && pl.indexOf(DESK) > -1 && !/browser/i.test(en) && !/przeglądar/i.test(pl)
+        && pl !== en ? true : JSON.stringify([en, pl]);
+    });
+}
+
 /* ------------------------------------------------------------------ favourites.js
    THE DATA-LOSS INVARIANT, in the module's own words: departed ids take their stars "but ONLY
    while a CATALOG is loaded. Pruning without one treats every card as deleted, so a single boot
@@ -1747,9 +1816,9 @@ const CARD_B = {
   }
 }
 
-/* NOT card-body.js. cardBodyHtml() reads the PAX box off the document through fill(), so it
-   cannot be called without one: it is the browser oracle's, and tests/smoke.js has it. Recorded
-   here rather than left unsaid, because a module missing from this file should say why. */
+/* NOT cardBodyHtml(). It reads the PAX box off the document through fill(), so it cannot be
+   called without one: it is the browser oracle's, and tests/smoke.js has it. card-body.js is
+   called above only for its intent strip, which reads no document. */
 
 /* ------------------------------------------------------------------ the count, and this
    gate's own liveness. A gate whose covered set silently fell to a handful would still print

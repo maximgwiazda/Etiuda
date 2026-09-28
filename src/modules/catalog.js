@@ -3,7 +3,7 @@ import { intentStoreKeys, intentFieldKey, intentCount, catalogLangs, setContentL
 import { CAT_ICONS, setCatalogCatLooks, setCatalogCatLabels } from "./icons.js";
 import { parseMacrosData } from "./macros-json.js";
 import { M, FACTS, normWhoList, setCatalogFacts, setCatalogWho } from "./stock.js";
-import { lsGet, lsSet, nsKey, nsGet, nsDel, E_LS_OK } from "./storage.js";
+import { lsGet, lsSet, nsKey, nsGet, nsDel, E_LS_OK, eDeskFileShown } from "./storage.js";
 import { BASE_CATS, pack } from "./pack.js";
 import { hueIsOffered } from "./cat-identity.js";
 import { catalogFromV2, isV2, v2CatKey } from "./catalog-v2.js";
@@ -77,6 +77,11 @@ function storedCatalog(){
     return (c && typeof c==="object" && Array.isArray(c.cards)) ? c : null;
   }catch(e){ return null; }
 }
+/* The cause, as far as it is known: a desk writes one file, and names it; a browser keeps its own store. */
+function catalogStoreRefusal(file){
+  return file ? t("Could not save the catalog, because Etiuda cannot write {FILE}.").split("{FILE}").join(file)
+    : t("Could not save the catalog, perhaps because the browser's storage is full.");
+}
 /* CHECKED, NOT ATTEMPTED. lsSet swallows the quota throw by design, so a try/catch here can
    never fire: a full disk reports success and the reload comes back on the PREVIOUS catalog
    with the personal layers already pruned against the new one. The value is read back,
@@ -88,7 +93,7 @@ function storeCatalog(c){
   let s=null;
   try{ s=JSON.stringify(c); }catch(e){ s=null; }
   if(s===null || !lsSet(E_CATALOG_STORE,s,true) || lsGet(E_CATALOG_STORE)!==s){
-    toastRefusal(t("Could not save the catalog, perhaps because the browser's storage is full."));
+    toastRefusal(catalogStoreRefusal(eDeskFileShown()));
     return false;
   }
   return true;
@@ -424,6 +429,7 @@ export {
   eRefuseCatalogFile,
   storedCatalog,
   storeCatalog,
+  catalogStoreRefusal,
   eWatchSupported,
   eWatchGet,
   eWatchPut,
