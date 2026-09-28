@@ -2617,9 +2617,10 @@ const t0 = Date.now();
   }
 
   /* THE TITLE HAS THE ROW WHILE THE CONTROLS WAIT. On the card with the widest title on screen:
-     with the pointer away the controls take no width and the title's room runs to the row's end;
-     under a real pointer, and again with the keyboard's focus on the pencil, they show and the
-     title ends before them, fading where it is cut; the row's height never moves. */
+     with the pointer away the controls take no width and the title's room runs to the row's end,
+     unfaded where the title fits it; under a real pointer, and again with the keyboard's focus on
+     the pencil, they show and the title ends before them, fading where it is cut; the row's height
+     never moves. */
   const tAt = await p.evaluate(() => {
     const rng = document.createRange(), wOf = t => { rng.selectNodeContents(t); return rng.getBoundingClientRect().width; };
     const ts = [...document.querySelectorAll("#list .card:not(.is-hidden) .ctitle")].filter(t => {
@@ -2651,7 +2652,7 @@ const t0 = Date.now();
     await sleep(500);
     const foc = await tRead();
     await p.evaluate(() => document.activeElement && document.activeElement.blur());
-    const atRest = s => s.aw === 0 && !s.shown && s.box >= Math.min(s.ink, s.end) - 0.5;
+    const atRest = s => s.aw === 0 && !s.shown && s.box >= Math.min(s.ink, s.end) - 0.5 && !(s.fades && s.ink <= s.end + 0.5);
     const receded = s => s.shown && s.aw > 0 && s.box <= s.al - s.gap + 0.5 && (s.ink <= s.box + 0.5 || s.fades);
     const r1 = n => Math.round(n * 10) / 10;
     check(atRest(rest) && receded(hov) && receded(foc) && rest.h === hov.h && rest.h === foc.h,
