@@ -35,9 +35,9 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-/* 279 since a copy lays only the wash over its block (2026-09-28), one check after the clipboard's;
-   278 was the tour's walk by its acts and the first run's wait for the logo. */
-const EXPECTED = { chrome: 279 };
+/* 280 since a copy lays only the wash over its block and greens only that block's spine
+   (2026-09-28), two checks after the clipboard's; 278 was the tour's walk by its acts. */
+const EXPECTED = { chrome: 280 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -2479,10 +2479,12 @@ const t0 = Date.now();
   /* WHAT A COPY LEAVES OVER THE BLOCK. The press answers with the green wash and nothing else
      over the block: no ghost of the words rising off it. Every node the press adds to <body> is
      recorded as it arrives with the box it covers, and those covering the pressed block are
-     named. Pressed on the second block of a card holding two or more, none of them in the trace. */
+     named. Pressed on the second block of a card of alternatives holding two or more, none of
+     them in the trace, so the trace's legs below can move it. */
   const cpAt = await p.evaluate(() => {
     const card = [...document.querySelectorAll("#list .card[data-id]")].find(c =>
-      c.querySelectorAll(".txt[data-v]").length >= 2 && !c.matches("[data-erec]") && !c.querySelector("[data-erec]"));
+      c.querySelectorAll(".txt[data-v]").length >= 2 && !c.matches("[data-erec]") && !c.querySelector("[data-erec]")
+      && (findCard(c.dataset.id) || {}).alt);
     if (!card) return null;
     const el = card.querySelectorAll(".txt[data-v]")[1];
     el.scrollIntoView({ block: "center" });
@@ -2502,6 +2504,24 @@ const t0 = Date.now();
     const cpOver = await p.evaluate(() => { window.__cpObs.disconnect(); return window.__cpOver; });
     check(cpOver.length === 1 && cpOver[0] === "e-copy-wash",
       "a copy washes the block green and lays nothing else over it (" + JSON.stringify(cpOver) + ")");
+    /* THE GREEN SPINE IS THE COPIED MACRO'S ALONE. Read as the eye reads it, the painted colour of
+       each block's spine against --ok resolved on the page; and a drag of the copied block within
+       its card carries the green with it, put back after. */
+    const spines = id => p.evaluate(i => {
+      const probe = document.createElement("i"); probe.style.color = "var(--ok)"; document.body.appendChild(probe);
+      const ok = getComputedStyle(probe).color; probe.remove();
+      const card = document.querySelector('#list .card[data-id="' + CSS.escape(i) + '"]');
+      return card ? [...card.querySelectorAll(".txt[data-v]")].map(b => getComputedStyle(b, "::before").backgroundColor === ok) : null;
+    }, id);
+    const only = (g, at) => !!g && g.every((x, i) => x === (i === at));
+    const g0 = await spines(cpAt.id);
+    await p.evaluate(i => reorderMacroBlocks(i, 1, 0), cpAt.id); await sleep(600);
+    const g1 = await spines(cpAt.id);
+    await p.evaluate(i => reorderMacroBlocks(i, 0, 1), cpAt.id); await sleep(600);
+    const g2 = await spines(cpAt.id);
+    check(only(g0, 1) && only(g1, 0) && only(g2, 1),
+      "the copied block's spine alone turns green, and follows the block when it is dragged within its card ("
+      + JSON.stringify([g0, g1, g2]) + ")");
   }
 
   /* The full editor opened from the Library, card-editor.js:584. From the main screen the

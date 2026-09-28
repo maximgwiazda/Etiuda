@@ -21,10 +21,10 @@ function eWashOver(el){
 
 /* Keyboard copies answer the same way - copyEntrySel calls this after a successful copy, so
    Enter (or any rebound copy key) washes the selected block exactly like a click. */
-function eCopyFeedback(id){
+function eCopyFeedback(id,vi){
   const sel=document.querySelector(".txt.sel");
   if(sel) eWashOver(sel);
-  eNoteRecent(id);
+  eNoteRecent(id,vi);
 }
 
 function wirePops(){
@@ -99,7 +99,7 @@ function wirePops(){
     if(!t) return;
     eWashOver(t);
     const card=t.closest(".card[data-id]");
-    if(card) eNoteRecent(card.dataset.id);
+    if(card) eNoteRecent(card.dataset.id,+t.dataset.v);
   });
 }
 

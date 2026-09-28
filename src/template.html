@@ -1705,15 +1705,12 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    of thing rather than the first section of one list. */
 .e-favsep .e-favstar{width:13px;height:13px;display:inline-block;fill:currentColor;stroke:none;
   margin-right:6px;vertical-align:-2px}
-/* ONE SPINE, TWO MEANINGS, AND IT IS THE CATEGORY UNTIL IT IS NOT. The card used to carry
-   two marks - a green tick on its left for the recency trace, a hued bar on its top for the
-   identity - because both had to fit round one box's corners. The slab has a whole edge to
-   give, so identity takes it and the trace, which is the transient one and the rarer one,
-   BORROWS it for the three cards it names, fading back into the hue as it ages out. Nothing
-   is lost: a card in the trace is green, every other card is its category's colour. */
-.card[data-erec] .txt{--spine:var(--ok)}
-.card[data-erec="2"] .txt{--spine:color-mix(in srgb,var(--ok) 60%,var(--ecat,var(--line-strong)))}
-.card[data-erec="3"] .txt{--spine:color-mix(in srgb,var(--ok) 35%,var(--ecat,var(--line-strong)))}
+/* ONE SPINE, TWO MEANINGS: a block's spine is its category's colour until the recency trace
+   borrows it for the three blocks last copied, fading back into the hue as it ages out. The
+   trace marks the block copied and not its card, so the card's other blocks keep their hue. */
+.txt[data-erec]{--spine:var(--ok)}
+.txt[data-erec="2"]{--spine:color-mix(in srgb,var(--ok) 60%,var(--ecat,var(--line-strong)))}
+.txt[data-erec="3"]{--spine:color-mix(in srgb,var(--ok) 35%,var(--ecat,var(--line-strong)))}
 /* A CAPTION, NOT A HEAD. It names the slab beneath it and gets out of the way: no ground of its
    own and no rule under it. Its three controls appear on hover - see .chead .cacts - so the
    resting screen is words, and the category is a mark at the head rather than a word beside it. */

@@ -1705,15 +1705,12 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    of thing rather than the first section of one list. */
 .e-favsep .e-favstar{width:13px;height:13px;display:inline-block;fill:currentColor;stroke:none;
   margin-right:6px;vertical-align:-2px}
-/* ONE SPINE, TWO MEANINGS, AND IT IS THE CATEGORY UNTIL IT IS NOT. The card used to carry
-   two marks - a green tick on its left for the recency trace, a hued bar on its top for the
-   identity - because both had to fit round one box's corners. The slab has a whole edge to
-   give, so identity takes it and the trace, which is the transient one and the rarer one,
-   BORROWS it for the three cards it names, fading back into the hue as it ages out. Nothing
-   is lost: a card in the trace is green, every other card is its category's colour. */
-.card[data-erec] .txt{--spine:var(--ok)}
-.card[data-erec="2"] .txt{--spine:color-mix(in srgb,var(--ok) 60%,var(--ecat,var(--line-strong)))}
-.card[data-erec="3"] .txt{--spine:color-mix(in srgb,var(--ok) 35%,var(--ecat,var(--line-strong)))}
+/* ONE SPINE, TWO MEANINGS: a block's spine is its category's colour until the recency trace
+   borrows it for the three blocks last copied, fading back into the hue as it ages out. The
+   trace marks the block copied and not its card, so the card's other blocks keep their hue. */
+.txt[data-erec]{--spine:var(--ok)}
+.txt[data-erec="2"]{--spine:color-mix(in srgb,var(--ok) 60%,var(--ecat,var(--line-strong)))}
+.txt[data-erec="3"]{--spine:color-mix(in srgb,var(--ok) 35%,var(--ecat,var(--line-strong)))}
 /* A CAPTION, NOT A HEAD. It names the slab beneath it and gets out of the way: no ground of its
    own and no rule under it. Its three controls appear on hover - see .chead .cacts - so the
    resting screen is words, and the category is a mark at the head rather than a word beside it. */
@@ -7816,6 +7813,51 @@ What you type stays in this browser only.`;
     return out;
   }
 
+  // src/modules/recency.js
+  var recency_exports = {};
+  __export(recency_exports, {
+    eApplyRecency: () => eApplyRecency,
+    eMoveRecent: () => eMoveRecent,
+    eNoteRecent: () => eNoteRecent
+  });
+
+  // src/modules/css-esc.js
+  var css_esc_exports = {};
+  __export(css_esc_exports, {
+    cssEsc: () => cssEsc
+  });
+  function cssEsc(s) {
+    if (window.CSS && typeof CSS.escape === "function") return CSS.escape(s);
+    return String(s).replace(/[^a-zA-Z0-9_-]/g, (ch) => "\\" + ch);
+  }
+
+  // src/modules/recency.js
+  var eRecent = [];
+  function eApplyRecency() {
+    if (!list) return;
+    list.querySelectorAll(".txt[data-erec]").forEach((b) => b.removeAttribute("data-erec"));
+    eRecent.forEach((r, i) => {
+      const b = list.querySelector('.card[data-id="' + cssEsc(r.id) + '"] .txt[data-v="' + r.vi + '"]');
+      if (b) b.setAttribute("data-erec", String(i + 1));
+    });
+  }
+  function eNoteRecent(id, vi) {
+    if (!id) return;
+    vi = vi | 0;
+    eRecent = eRecent.filter((r) => r.id !== id || r.vi !== vi);
+    eRecent.unshift({ id, vi });
+    eRecent = eRecent.slice(0, 3);
+    eApplyRecency();
+  }
+  function eMoveRecent(id, from, to) {
+    eRecent.forEach((r) => {
+      if (r.id !== id) return;
+      if (r.vi === from) r.vi = to;
+      else if (from < to && r.vi > from && r.vi <= to) r.vi--;
+      else if (from > to && r.vi >= to && r.vi < from) r.vi++;
+    });
+  }
+
   // src/modules/card-model.js
   function findCard(id) {
     return cards.find((m) => m.id === id) || BASE_M.find((m) => m.id === id) || (pack.custom || []).find((m) => m.id === id) || null;
@@ -7905,6 +7947,7 @@ What you type stays in this browser only.`;
       else delete pack.overrides[id];
     }
     savePack();
+    eMoveRecent(id, fromVi, toVi);
     hooks.rebuildCards();
     return true;
   }
@@ -7923,18 +7966,6 @@ What you type stays in this browser only.`;
   __export(card_blocks_exports, {
     animateTxtReorder: () => animateTxtReorder
   });
-
-  // src/modules/css-esc.js
-  var css_esc_exports = {};
-  __export(css_esc_exports, {
-    cssEsc: () => cssEsc
-  });
-  function cssEsc(s) {
-    if (window.CSS && typeof CSS.escape === "function") return CSS.escape(s);
-    return String(s).replace(/[^a-zA-Z0-9_-]/g, (ch) => "\\" + ch);
-  }
-
-  // src/modules/card-blocks.js
   function animateTxtReorder(mid, fromVi, toVi, dragging) {
     if (!list || mgReduceMotion()) {
       return reorderMacroBlocks(mid, fromVi, toVi);
@@ -17478,29 +17509,6 @@ What you type stays in this browser only.`;
     syncPillOrder();
   }
 
-  // src/modules/recency.js
-  var recency_exports = {};
-  __export(recency_exports, {
-    eApplyRecency: () => eApplyRecency,
-    eNoteRecent: () => eNoteRecent
-  });
-  var eRecentIds = [];
-  function eApplyRecency() {
-    if (!eRecentIds) return;
-    document.querySelectorAll("#list .card[data-erec]").forEach((c) => c.removeAttribute("data-erec"));
-    eRecentIds.forEach((id, i) => {
-      const c = list.querySelector('.card[data-id="' + cssEsc(id) + '"]');
-      if (c) c.setAttribute("data-erec", String(i + 1));
-    });
-  }
-  function eNoteRecent(id) {
-    if (!id) return;
-    eRecentIds = eRecentIds.filter((x) => x !== id);
-    eRecentIds.unshift(id);
-    eRecentIds = eRecentIds.slice(0, 3);
-    eApplyRecency();
-  }
-
   // src/modules/search-marks.js
   var search_marks_exports = {};
   __export(search_marks_exports, {
@@ -21696,10 +21704,10 @@ What you type stays in this browser only.`;
       if (d.parentNode) d.remove();
     }, 900);
   }
-  function eCopyFeedback(id) {
+  function eCopyFeedback(id, vi) {
     const sel = document.querySelector(".txt.sel");
     if (sel) eWashOver(sel);
-    eNoteRecent(id);
+    eNoteRecent(id, vi);
   }
   function wirePops() {
     document.addEventListener("click", (e) => {
@@ -21758,7 +21766,7 @@ What you type stays in this browser only.`;
       if (!t2) return;
       eWashOver(t2);
       const card = t2.closest(".card[data-id]");
-      if (card) eNoteRecent(card.dataset.id);
+      if (card) eNoteRecent(card.dataset.id, +t2.dataset.v);
     });
   }
 
@@ -21779,7 +21787,7 @@ What you type stays in this browser only.`;
     withAgentName(ps[vi], () => {
       bumpUseCount(id, l);
       copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length));
-      eCopyFeedback(id);
+      eCopyFeedback(id, vi);
     }, document.querySelector("#list .txt.sel"));
     return true;
   }
