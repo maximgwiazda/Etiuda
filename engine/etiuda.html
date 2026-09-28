@@ -6874,6 +6874,7 @@ What you type stays in this browser only.`;
   var NS_ADOPTED = "e~nsAdopted:";
   function adoptNameNsLayer() {
     try {
+      if (eLayer() !== E_NS) return false;
       const c = eEmbeddedCatalog();
       const id = String(c && c.id || "").trim(), name = String(c && c.name || "").trim();
       if (!id || !name) return false;
@@ -6891,9 +6892,9 @@ What you type stays in this browser only.`;
   }
   function adoptStrandedPack() {
     try {
-      if (E_NS === "e") return false;
-      const mine = eLayer() + "Pack";
-      const found = lsKeys().filter((k) => k !== mine && /^e[0-9a-z]+~Pack$/.test(k));
+      if (E_NS === "e" || eLayer() !== E_NS) return false;
+      const mine = eLayer() + "Pack", known = eLayers();
+      const found = lsKeys().filter((k) => k !== mine && /^e[0-9a-z]+~Pack$/.test(k) && known.indexOf(k.slice(0, -"Pack".length)) < 0);
       if (found.length !== 1) return false;
       const from = found[0].slice(0, -"Pack".length);
       const mark = NS_ADOPTED + from;

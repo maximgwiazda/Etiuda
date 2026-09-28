@@ -561,6 +561,7 @@ function runUnitTests() {
   catalogLangTests();
   catalogIdentityTests();
   nameNsAdoptionTests();
+  strandedAdoptionTests();
   langSegWiringTests();
   deskStatsTests();
   ejectUndoTests();
@@ -1541,6 +1542,49 @@ function nameNsAdoptionTests() {
   adopt({ name: "Lamp Shop" }, noName);
   eq("a build whose catalog carries no id is already in the name namespace and adopts nothing",
      Object.keys(noName).sort().join("|"), noNameSnap);
+}
+
+/* THE ADOPTIONS NEVER CARRY ONE CATALOG'S LAYER INTO ANOTHER'S. A build with a catalog inside it
+   adopts a lone layer an earlier build of that catalog stranded; since each catalog keeps a layer of
+   its own, a lone layer can be another catalog's. Both movers and the order loadPack runs them in,
+   sliced out of pack.js over a store this supplies, with the layer in view and the desk's list of
+   written layers supplied as storage.js keeps them. */
+function strandedAdoptionTests() {
+  const src = sourceText();
+  const decl = m => extractDecl(src, m);
+  const nsFor = new Function(decl("function eNsFor(") + "\nreturn eNsFor;")();
+  const body = ["const NS_CARRY=", "const NS_DROP_POSITIONAL=", "function packWithoutPositional(",
+                "function carryNsLayer(", "const NS_ADOPTED=", "function adoptNameNsLayer(", "function adoptStrandedPack("]
+                 .map(decl).join("\n") + "\nadoptNameNsLayer(); adoptStrandedPack();";
+  const EMBEDDED = { id: "lamp-shop", name: "Lamp Shop" };
+  const own = nsFor(EMBEDDED.id), other = nsFor("fern-shop"), byName = nsFor(EMBEDDED.name), stranger = nsFor("an older seed");
+  const boot = (store, inView, written) => {
+    const lsGet = k => (k in store) ? store[k] : null;
+    new Function("eEmbeddedCatalog", "eNsFor", "E_NS", "lsGet", "lsSet", "lsKeys", "LAYER_KEYS", "eLayer", "eLayers",
+                 "lyGet", "t", "toast", "setTimeout", body)(
+      () => EMBEDDED, nsFor, own, lsGet, (k, v) => { store[k] = String(v); return true; }, () => Object.keys(store),
+      ["Pack", "Stats", "Days", "CatOrder", "IntentOrder", "IntentsAside", "LinksAside", "RequestsAside", "Exported"],
+      () => inView, () => written.slice(), n => lsGet(inView + n), s => s, () => {}, fn => fn());
+    return store;
+  };
+  const PACK = tag => JSON.stringify({ favourites: [tag] });
+  const under = (store, ns) => Object.keys(store).filter(k => k.indexOf(ns) === 0).sort();
+  const marks = store => Object.keys(store).filter(k => k.indexOf("e~nsAdopted:") === 0).length;
+
+  const s1 = boot({ [own + "Pack"]: PACK("an edit over the build's own catalog") }, other, [other]);
+  eq("a catalog loaded over the build's own finds none of that catalog's layer in its own, and nothing is marked",
+     [under(s1, other), marks(s1)], [[], 0]);
+  const s2 = boot({ [other + "Pack"]: PACK("an edit over another catalog") }, own, [other]);
+  eq("the build's own catalog back in view takes nothing from a layer this desk wrote for another catalog",
+     [under(s2, own), marks(s2)], [[], 0]);
+  const s3 = boot({ [byName + "Pack"]: PACK("an edit under the old name hash") }, other, [other]);
+  const s3Other = under(s3, other), s3Marks = marks(s3);
+  boot(s3, own, [other]);
+  eq("the name-hash layer waits while another catalog is in view, and reaches the build's own catalog when it is",
+     [s3Other, s3Marks, JSON.parse(s3[own + "Pack"] || "{}").favourites], [[], 0, ["an edit under the old name hash"]]);
+  const s4 = boot({ [stranger + "Pack"]: PACK("an edit an earlier build stranded") }, own, [other]);
+  eq("a lone stranded layer no catalog of this desk wrote is still adopted by the build's own catalog",
+     JSON.parse(s4[own + "Pack"] || "{}").favourites, ["an edit an earlier build stranded"]);
 }
 
 /* EVERY LANGUAGE BUTTON THE HEADER HOLDS ANSWERS A PRESS, however it got there. The desk starts

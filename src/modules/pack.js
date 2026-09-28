@@ -1,6 +1,6 @@
 import { CATS, intentCount, SW_IDS } from "./content-model.js";
 import { M, WHO_BASE, normWhoList } from "./stock.js";
-import { E_KEY_RE, E_NS, eNsFor, lsDel, lsGet, lsKeys, lsSet, ssDel, LAYER_KEYS, eLayer, lyGet, lySet, lyDel,
+import { E_KEY_RE, E_NS, eNsFor, lsDel, lsGet, lsKeys, lsSet, ssDel, LAYER_KEYS, eLayer, eLayers, lyGet, lySet, lyDel,
   eSaveTrouble, eDeskRefused, eDeskRefusedSeen, eHomeless, eDeskHome } from "./storage.js";
 import { eEmbeddedCatalog } from "./env.js";
 import { t, toast, fileStamp } from "./ui-lang.js";
@@ -227,9 +227,11 @@ const NS_ADOPTED="e~nsAdopted:";
    catalog's id from 2026-09-15; a desk that loaded this same catalog on an earlier build holds
    its cards, stars and columns under a hash of the NAME. The source is known exactly here,
    which the stranded rule below can never say - and the layer still travels stripped, because
-   its intent keys are positions and this namespace reads them as tag ids. */
+   its intent keys are positions and this namespace reads them as tag ids. Only into this
+   build's own catalog's layer, as below. */
 function adoptNameNsLayer(){
   try{
+    if(eLayer()!==E_NS) return false;
     const c=eEmbeddedCatalog();
     const id=String((c&&c.id)||"").trim(), name=String((c&&c.name)||"").trim();
     if(!id || !name) return false;
@@ -247,12 +249,13 @@ function adoptNameNsLayer(){
    stranded in the storage area file:// pages share. Two would mean a machine with two catalogs
    on it, and guessing between them is worse than leaving both alone. Runs only for a build that
    HAS an embedded catalog - the bare engine's pack belongs to whatever catalog was imported
-   into it, which is not this one. */
+   into it, which is not this one - and only into that catalog's layer, from none this desk
+   wrote for another: personal content never crosses from one catalog to another. */
 function adoptStrandedPack(){
   try{
-    if(E_NS==="e") return false;
-    const mine=eLayer()+"Pack";
-    const found=lsKeys().filter(k=>k!==mine && /^e[0-9a-z]+~Pack$/.test(k));
+    if(E_NS==="e" || eLayer()!==E_NS) return false;
+    const mine=eLayer()+"Pack", known=eLayers();
+    const found=lsKeys().filter(k=>k!==mine && /^e[0-9a-z]+~Pack$/.test(k) && known.indexOf(k.slice(0,-"Pack".length))<0);
     if(found.length!==1) return false;
     const from=found[0].slice(0,-"Pack".length);
     const mark=NS_ADOPTED+from;
