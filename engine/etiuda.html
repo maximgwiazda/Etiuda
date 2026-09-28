@@ -20729,7 +20729,8 @@ What you type stays in this browser only.`;
       taking = true;
       whenTrusted(c).then(() => {
         taking = false;
-        if (src.accept(sig) === false) close();
+        close();
+        src.accept(sig);
       });
     };
     wrap.querySelectorAll("[data-ec-open]").forEach((el) => {

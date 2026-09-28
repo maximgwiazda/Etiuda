@@ -409,15 +409,14 @@ function eOfferCatalogDialog(c,src){
     e.preventDefault(); e.stopPropagation();
     close();
   });
-  /* Reloads on success, so nothing after it runs. Storage that refuses the catalog returns false
-     instead, and the bubble has to come down: left standing over its own failure toast it reads
-     as a button that does nothing. */
-  /* After the signature has been read, or its wait is over, so the state stored is this file's. */
+  /* ANSWERED, SO DOWN BEFORE THE DESK STARTS AGAIN, whatever the load then does: the start in place
+     keeps the page, and the tour steps behind any question it finds standing (tour.js).
+     After the signature has been read, or its wait is over, so the state stored is this file's. */
   let taking=false;
   wrap.querySelector("#ecYes").onclick=()=>{
     if(taking) return;
     taking=true;
-    whenTrusted(c).then(()=>{ taking=false; if(src.accept(sig)===false) close(); });
+    whenTrusted(c).then(()=>{ taking=false; close(); src.accept(sig); });
   };
   wrap.querySelectorAll("[data-ec-open]").forEach(el=>{
     el.onclick=()=>eOpenCatalogFolder();

@@ -273,9 +273,12 @@ async function launch(plan) {
   Object.defineProperty(globalThis, "navigator", { configurable: true, value: { language: "en-US", languages: ["en-US"], platform: "Win32", userAgent: "node" } });
   /* THE DESK STARTED AGAIN, or a reload: the launch ends at the next act, its unload events fired,
      which is where a pending desk write is sent whole, as the page leaving at the end of a session. */
+  /* A QUESTION STANDING OVER THE DESK: a bubble that asks, not on its way out, and not the Undo. */
+  const standing = () => doc.body.children.filter(n => n.classList.contains("bub-ask") && !n.classList.contains("e-gone") && n.id !== "eUndo").length;
   const restarted = () => {
     if (obs.reloaded) return;
     obs.reloaded = true;
+    obs.askedAtRestart = standing();
     ["beforeunload", "pagehide", "unload"].forEach(t => (winListeners[t] || []).slice().forEach(fn => { try { fn({ type: t }); } catch (e) { obs.errors.push(t + " " + e.message); } }));
   };
   Object.defineProperty(globalThis, "location", { configurable: true, value: {
@@ -285,6 +288,7 @@ async function launch(plan) {
   new Function("require", shellSrc("preload.js"))(n => (n === "electron" ? { contextBridge, ipcRenderer, webUtils: {} } : nodeRequire(n)));
 
   const OFFER = await import(MOD("catalog-offer.js"));
+  const CF = await import(MOD("catalog-file.js"));
   const TR = await import(MOD("catalog-trust.js"));
   const TOUR = await import(MOD("tour.js"));
   /* THE APP-LEVEL ACTIONS the page's boot registers in hooks.js, none of them on the trust path:
@@ -293,6 +297,7 @@ async function launch(plan) {
   const HOOKS = (await import(MOD("hooks.js"))).hooks;
   ["syncSampleMark", "syncSaveNotice", "flushPillState"].forEach(k => { HOOKS[k] = noop; });
   HOOKS.restartDesk = restarted;
+  HOOKS.offerPickedCatalog = OFFER.eOfferPickedCatalog;
   obs.heldAtStart = TR.heldCatalogTrust();
   obs.tourDue = TOUR.tourDueAtBoot();
 
@@ -315,7 +320,7 @@ async function launch(plan) {
     boot: () => { OFFER.eOfferCatalogAtBoot(); OFFER.wireHostCatalogWatch(); },
     settle: () => settle(),
     offer: () => { obs.offers.push(readOffer()); },
-    yes: () => { const y = doc.getElementById("ecYes"); if (!y) throw new Error("no Yes on screen"); y.onclick(); },
+    yes: () => { const y = doc.getElementById("ecYes"); if (!y) throw new Error("no Yes on screen"); obs.askedAtPress = standing(); y.onclick(); },
     /* YES THE MOMENT THE BUBBLE IS UP, one turn of the event loop at a time: the ring is asked in
        the turn that puts the bubble up and answers a turn later, so this press precedes the answer,
        and whether the bubble already carried its line when pressed is written down to show it. */
@@ -324,6 +329,7 @@ async function launch(plan) {
       const y = doc.getElementById("ecYes");
       if (!y) throw new Error("no Yes on screen");
       obs.lineAtPress = texts(doc.getElementById("eCatalogOffer"), ".ec-trust");
+      obs.askedAtPress = standing();
       y.onclick();
     },
     escape: () => { const b = doc.getElementById("eCatalogOffer"); if (!b) throw new Error("no bubble to escape");
@@ -334,6 +340,8 @@ async function launch(plan) {
       await settle();
       obs.library.push(readLibrary());
     },
+    // The file picker's reading half, over a file anywhere: importCatalogText is where both import routes end.
+    import: file => { CF.importCatalogText(fs.readFileSync(path.join(LAB, file), "utf8"), path.basename(file)); },
     load: name => { const b = doc.querySelector("button[data-ec-load=\"" + name + "\"]"); if (!b) throw new Error("no Load for " + name); b.onclick(); },
     watch: file => { const text = fs.readFileSync(path.join(LAB, file), "utf8");
       (rendererOn["etiuda:catalog-file"] || []).forEach(fn => fn({}, text, path.basename(file), path.join(LAB, "catalogs"), false, "", false)); },
@@ -344,6 +352,7 @@ async function launch(plan) {
     try { await act[name](arg); } catch (e) { obs.errors.push(name + ": " + String(e && e.message || e).slice(0, 160)); }
   }
   if (obs.reloaded) await settle(50);
+  obs.askedAtEnd = standing();
   obs.heldAtEnd = TR.heldCatalogTrust();
   obs.session = Object.fromEntries(session);
   process.stdout.write("#launch " + JSON.stringify(obs) + "\n", () => process.exit(0));
@@ -359,7 +368,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 13;
+  const EXPECTED = 16;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -450,6 +459,17 @@ async function parent() {
       "2c an edition loaded from the Library, Yes pressed before its check answered, is the state its row says: " + said(r2)
       + ", the bubble's line at the press " + JSON.stringify(c2b.lineAtPress === undefined ? null : c2b.lineAtPress));
 
+    /* 6: AN OFFER'S YES TAKES ITS QUESTION DOWN BEFORE THE DESK STARTS AGAIN, on each route that ends
+       in that one Yes: the boot's find (1), a Library row over a loaded catalog (2), and a file picked
+       over a loaded catalog, here. One standing at the press is what shows the count can see one. */
+    const p6 = run(lab2, ["import:lamp-3.ec", "settle", "offer", "yes", "settle"], true);
+    const down = o => o.askedAtPress === 1 && o.reloaded && o.askedAtRestart === 0 && o.askedAtEnd === 0;
+    const asked = o => JSON.stringify({ press: o.askedAtPress, start: o.askedAtRestart, end: o.askedAtEnd, started: o.reloaded });
+    check(down(b1), "6a the boot's offer, answered Yes, is down before the desk starts again: " + asked(b1));
+    check(down(c2b), "6b a Library row loaded over a catalog, answered Yes, is down before the desk starts again: " + asked(c2b));
+    check(!!(p6.offers[0] || {}).shown && down(p6),
+      "6c a file picked over a loaded catalog, answered Yes, is down before the desk starts again: " + asked(p6));
+
     /* 3: THE LIBRARY ON AN EMPTY DESK loads a file at once, without a question. An unsigned file that
        is not the folder's newest, so the Library's recheck of the newest cannot stand in for it. */
     const lab3 = scenario([["catalogs/lamp-u.ec", payload("2026-08-01")], ["catalogs/lamp-a.ec", sign(payload("2026-09-01"))],
@@ -491,7 +511,7 @@ async function parent() {
       + JSON.stringify(o5.files || null) + " " + JSON.stringify(o5.trust || null));
 
     /* 0: WHAT EVERY LAUNCH ABOVE RESTS ON. */
-    check(launches.length === 11 && launches.every(o => o.tourDue === false),
+    check(launches.length === 12 && launches.every(o => o.tourDue === false),
       "0a no launch had the tour due, so no offer waited behind it: " + launches.map(o => o.tourDue).join(","));
     const errs = launches.flatMap(o => o.errors || []);
     check(!errs.length,
