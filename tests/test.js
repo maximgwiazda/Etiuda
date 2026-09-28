@@ -2463,6 +2463,12 @@ function shippedFlagTests() {
         tr, s => s, (s, id) => "<key " + s + "|" + id + ">", () => "", () => "", () => false, "<svg>load</svg>", "<svg>eject</svg>")(o);
     } catch (e) { return "ecRowHtml did not run: " + e.message; }
   };
+  const sheet = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const glyph = (/\.ec-list\{--ec-glyph:(\d+)px\}/.exec(sheet) || [])[1];
+  const sized = [/\.ec-tick\{[^}]*width:var\(--ec-glyph\);height:var\(--ec-glyph\)/, /\.ec-key\{[^}]*width:var\(--ec-glyph\);height:var\(--ec-glyph\)/,
+    /\.ec-row \.ec-act \.ic\{width:var\(--ec-glyph\);height:var\(--ec-glyph\)\}/].map(re => re.test(sheet));
+  eq("a Library row's glyphs, the loaded mark, the key and Load or Eject, share one size above a toolbar icon's 15px",
+    [+glyph > 15, sized], [true, [true, true, true]]);
   const keyThenAct = html => ((/<key ([^>]*)><button[^>]*data-ec-(load|eject)/.exec(String(html)) || []).slice(1).join(" ")) || String(html).slice(0, 120);
   eq("a Library row's signature is a key beside its Load or Eject, carrying the state and the key's name the list hands it", [
     keyThenAct(rowOf({ name: "team.ec", mtime: 5, trust: "valid", keyId: "k1" }, s => s)),
