@@ -76,7 +76,14 @@
      e-still is set from what this script can read; wireStill answers at boot, desk file and all. */
   try{
     var root=document.documentElement;
-    if(localStorage.getItem("eMotionOff")==="1" || matchMedia("(prefers-reduced-motion: reduce)").matches)
+    /* An installed Etiuda keeps these in its desk file, read once here and handed to storage.js
+       (eHostDesk), so the file is read once per page. */
+    var desk=null, dh=hostDesk();
+    if(dh) try{ var dt=dh.deskRead(); desk=dt ? JSON.parse(dt) : {}; window.eDeskAtBoot=desk; }catch(e){ desk=null; }
+    var pref=function(k){
+      return desk ? (Object.prototype.hasOwnProperty.call(desk,k) ? String(desk[k]) : null) : localStorage.getItem(k);
+    };
+    if(pref("eMotionOff")==="1" || matchMedia("(prefers-reduced-motion: reduce)").matches)
       root.classList.add("e-still");
     /* A COVERED RELOAD (motion.js reloadCovered). Rendering is blocked until parsing ends, which
        is after the app's script and so after boot (#eBooted names nothing, and the block lifts
@@ -93,9 +100,9 @@
         document.head.appendChild(hold);
       } else root.classList.add("e-veiled");
     }
-    if(localStorage.getItem("ePills")==="0") root.classList.add("e-pills-off");
+    if(pref("ePills")==="0") root.classList.add("e-pills-off");
     else{
-      var shape=/^(\d+)x(\d+(?:\.\d+)?)$/.exec(localStorage.getItem("eHdrPills")||"");
+      var shape=/^(\d+)x(\d+(?:\.\d+)?)$/.exec(pref("eHdrPills")||"");
       if(shape && +shape[1]===window.innerWidth) root.style.setProperty("--e-pills-h",shape[2]+"px");
     }
   }catch(e){}
@@ -2313,6 +2320,9 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
 @keyframes eDropIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 .menu:not([hidden]),.facts-panel:not([hidden]){
   animation:eDropIn var(--m-reveal) var(--m-ease) both}
+/* The menu's warm copy (header-menus.js, warmMenu): drawn, never seen, never pressed. */
+.menu.e-warm:not([hidden]){opacity:.004;animation:none;pointer-events:none}
+.menu.e-warm *{pointer-events:none!important}
 /* The scrim blurs the workspace behind it rather than merely darkening it - the dialog reads
    as a layer above the page, and the cards stay recognisable without competing for the eye. */
 .modal-bg{position:absolute;inset:0;background:rgba(8,12,20,.4);

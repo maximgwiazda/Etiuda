@@ -248,9 +248,32 @@ function closeSettingsMenu(forScreen){
    before the menu's close blurs the row; the menu then leaves no fading copy, because a leave
    ends when another surface opens and this one has already opened. */
 function menuScreen(open){ open(); closeSettingsMenu(true); }
+/* THE MENU'S FIRST OPEN PAYS A DRAWING COST ITS LATER OPENS DO NOT. A copy is drawn once here, where
+   the menu opens, at an opacity the eye cannot see, and taken away three frames on; it holds no id,
+   role or title, and takes no focus or pointer. Skipped once the menu itself has been drawn. */
+let menuDrawn=false;
+function warmMenu(){
+  const menu=$("#settingsMenu");
+  if(menuDrawn || !menu || !menu.hidden) return;
+  menuDrawn=true;
+  const copy=menu.cloneNode(true);
+  [copy].concat(Array.prototype.slice.call(copy.querySelectorAll("*"))).forEach(n=>{
+    n.removeAttribute("id"); n.removeAttribute("role"); n.removeAttribute("title");
+  });
+  copy.classList.add("e-warm");
+  copy.setAttribute("aria-hidden","true");
+  copy.inert=true;
+  copy.hidden=false;
+  menu.after(copy);
+  let gone=false;
+  const drop=()=>{ if(!gone){ gone=true; copy.remove(); } };
+  requestAnimationFrame(()=>requestAnimationFrame(()=>requestAnimationFrame(drop)));
+  setTimeout(drop,1000);
+}
 function openSettingsMenu(byKey){
   const menu=$("#settingsMenu"), btn=$("#settingsBtn");
   if(!menu||!btn) return;
+  menuDrawn=true;
   closeFactsPanel(); cutLeaves();
   syncSettingsMenu();
   menu.hidden=false;
@@ -265,6 +288,7 @@ export {
   syncSettingsMenu,
   closeSettingsMenu,
   openSettingsMenu,
+  warmMenu,
   wireHeaderShedSync,
   wireHeaderMenus
 };

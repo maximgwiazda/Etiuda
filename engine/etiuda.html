@@ -76,7 +76,14 @@
      e-still is set from what this script can read; wireStill answers at boot, desk file and all. */
   try{
     var root=document.documentElement;
-    if(localStorage.getItem("eMotionOff")==="1" || matchMedia("(prefers-reduced-motion: reduce)").matches)
+    /* An installed Etiuda keeps these in its desk file, read once here and handed to storage.js
+       (eHostDesk), so the file is read once per page. */
+    var desk=null, dh=hostDesk();
+    if(dh) try{ var dt=dh.deskRead(); desk=dt ? JSON.parse(dt) : {}; window.eDeskAtBoot=desk; }catch(e){ desk=null; }
+    var pref=function(k){
+      return desk ? (Object.prototype.hasOwnProperty.call(desk,k) ? String(desk[k]) : null) : localStorage.getItem(k);
+    };
+    if(pref("eMotionOff")==="1" || matchMedia("(prefers-reduced-motion: reduce)").matches)
       root.classList.add("e-still");
     /* A COVERED RELOAD (motion.js reloadCovered). Rendering is blocked until parsing ends, which
        is after the app's script and so after boot (#eBooted names nothing, and the block lifts
@@ -93,9 +100,9 @@
         document.head.appendChild(hold);
       } else root.classList.add("e-veiled");
     }
-    if(localStorage.getItem("ePills")==="0") root.classList.add("e-pills-off");
+    if(pref("ePills")==="0") root.classList.add("e-pills-off");
     else{
-      var shape=/^(\d+)x(\d+(?:\.\d+)?)$/.exec(localStorage.getItem("eHdrPills")||"");
+      var shape=/^(\d+)x(\d+(?:\.\d+)?)$/.exec(pref("eHdrPills")||"");
       if(shape && +shape[1]===window.innerWidth) root.style.setProperty("--e-pills-h",shape[2]+"px");
     }
   }catch(e){}
@@ -2313,6 +2320,9 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
 @keyframes eDropIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 .menu:not([hidden]),.facts-panel:not([hidden]){
   animation:eDropIn var(--m-reveal) var(--m-ease) both}
+/* The menu's warm copy (header-menus.js, warmMenu): drawn, never seen, never pressed. */
+.menu.e-warm:not([hidden]){opacity:.004;animation:none;pointer-events:none}
+.menu.e-warm *{pointer-events:none!important}
 /* The scrim blurs the workspace behind it rather than merely darkening it - the dialog reads
    as a layer above the page, and the cards stay recognisable without competing for the eye. */
 .modal-bg{position:absolute;inset:0;background:rgba(8,12,20,.4);
@@ -4630,13 +4640,20 @@ What you type stays in this browser only.`;
     try {
       const h = typeof window !== "undefined" ? window.E_HOST : null;
       if (!h || typeof h.deskRead !== "function" || typeof h.deskSave !== "function") return null;
-      const text = h.deskRead();
+      const first = window.eDeskAtBoot;
+      delete window.eDeskAtBoot;
       const map = /* @__PURE__ */ Object.create(null);
-      if (text) {
-        const o = JSON.parse(text);
-        Object.keys(o).forEach((k) => {
-          map[k] = String(o[k]);
-        });
+      if (first && typeof first === "object") Object.keys(first).forEach((k) => {
+        map[k] = String(first[k]);
+      });
+      else {
+        const text = h.deskRead();
+        if (text) {
+          const o = JSON.parse(text);
+          Object.keys(o).forEach((k) => {
+            map[k] = String(o[k]);
+          });
+        }
       }
       return {
         map,
@@ -17974,6 +17991,7 @@ What you type stays in this browser only.`;
     openSettingsMenu: () => openSettingsMenu,
     syncMoreBtn: () => syncMoreBtn,
     syncSettingsMenu: () => syncSettingsMenu,
+    warmMenu: () => warmMenu,
     wireHeaderMenus: () => wireHeaderMenus,
     wireHeaderShedSync: () => wireHeaderShedSync
   });
@@ -18410,9 +18428,36 @@ What you type stays in this browser only.`;
     open();
     closeSettingsMenu(true);
   }
+  var menuDrawn = false;
+  function warmMenu() {
+    const menu = $("#settingsMenu");
+    if (menuDrawn || !menu || !menu.hidden) return;
+    menuDrawn = true;
+    const copy2 = menu.cloneNode(true);
+    [copy2].concat(Array.prototype.slice.call(copy2.querySelectorAll("*"))).forEach((n) => {
+      n.removeAttribute("id");
+      n.removeAttribute("role");
+      n.removeAttribute("title");
+    });
+    copy2.classList.add("e-warm");
+    copy2.setAttribute("aria-hidden", "true");
+    copy2.inert = true;
+    copy2.hidden = false;
+    menu.after(copy2);
+    let gone = false;
+    const drop = () => {
+      if (!gone) {
+        gone = true;
+        copy2.remove();
+      }
+    };
+    requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(drop)));
+    setTimeout(drop, 1e3);
+  }
   function openSettingsMenu(byKey) {
     const menu = $("#settingsMenu"), btn = $("#settingsBtn");
     if (!menu || !btn) return;
+    menuDrawn = true;
     closeFactsPanel();
     cutLeaves();
     syncSettingsMenu();
@@ -18472,6 +18517,11 @@ What you type stays in this browser only.`;
   function wireOnOpen() {
     requestAnimationFrame(() => requestAnimationFrame(() => whenMarkFormed(markEReady)));
     setTimeout(() => whenMarkFormed(markEReady), 300);
+    const MENU_WARM_MS = 900;
+    whenMarkFormed(() => setTimeout(() => {
+      if (typeof requestIdleCallback === "function") requestIdleCallback(warmMenu, { timeout: 2e3 });
+      else warmMenu();
+    }, MENU_WARM_MS));
     focusFirstEntryOnOpen();
     requestAnimationFrame(() => requestAnimationFrame(focusFirstEntryOnOpen));
     lastGreet = greeting();
@@ -19120,28 +19170,24 @@ What you type stays in this browser only.`;
   }
   var TOUR_AUTO_MS = 1300;
   var TOUR_BREATH_MS = 200;
+  var TOUR_RESUME_MS = 300;
   var TOUR_AT = "eTourAt";
   function tourDueAtBoot() {
     return !!ssGet(TOUR_AT) || !tourSeen() && !tourInviteDismissed();
   }
   function maybeStartTour() {
     const at = ssGet(TOUR_AT);
-    if (at) {
-      const i = TOUR_STEPS.findIndex((x) => x.id === at);
-      setTimeout(() => {
-        if (!tourRunning) startTour(i < 0 ? 0 : i, true);
-      }, 300);
-      return;
-    }
-    if (tourSeen() || tourInviteDismissed()) return;
+    if (!at && (tourSeen() || tourInviteDismissed())) return;
+    const i = at ? Math.max(0, TOUR_STEPS.findIndex((x) => x.id === at)) : 0;
+    const due = () => !tourRunning && (!!at || !tourSeen() && !tourInviteDismissed());
     let floor = false, formed = false;
     const go = () => {
-      if (floor && formed && !tourRunning && !tourSeen() && !tourInviteDismissed()) startTour(0, true);
+      if (floor && formed && due()) startTour(i, true);
     };
     setTimeout(() => {
       floor = true;
       go();
-    }, TOUR_AUTO_MS);
+    }, at ? TOUR_RESUME_MS : TOUR_AUTO_MS);
     whenMarkFormed(() => setTimeout(() => {
       formed = true;
       go();

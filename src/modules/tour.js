@@ -670,23 +670,21 @@ function startTour(from,auto){
   els.root.classList.add("on");
   showTourStep(i);
 }
-/* THE FIRST RUN'S TOUR starts once the logo has gathered on the empty desk and TOUR_BREATH_MS after
-   it, and never sooner than TOUR_AUTO_MS, so nothing covers the mark while it forms. */
-const TOUR_AUTO_MS=1300, TOUR_BREATH_MS=200;
+/* THE TOUR starts once the logo has gathered on the empty desk and TOUR_BREATH_MS after it, so
+   nothing covers the mark while it forms: a first run never sooner than TOUR_AUTO_MS, a reload in
+   the middle of one never sooner than TOUR_RESUME_MS. */
+const TOUR_AUTO_MS=1300, TOUR_BREATH_MS=200, TOUR_RESUME_MS=300;
 const TOUR_AT="eTourAt";
 /** Whether this launch belongs to the tour: a first run, or a reload in the middle of one. */
 function tourDueAtBoot(){ return !!ssGet(TOUR_AT) || (!tourSeen() && !tourInviteDismissed()); }
 function maybeStartTour(){
   const at=ssGet(TOUR_AT);
-  if(at){
-    const i=TOUR_STEPS.findIndex(x=>x.id===at);
-    setTimeout(()=>{ if(!tourRunning) startTour(i<0?0:i,true); },300);
-    return;
-  }
-  if(tourSeen()||tourInviteDismissed()) return;
+  if(!at && (tourSeen()||tourInviteDismissed())) return;
+  const i=at ? Math.max(0,TOUR_STEPS.findIndex(x=>x.id===at)) : 0;
+  const due=()=>!tourRunning && (!!at || (!tourSeen() && !tourInviteDismissed()));
   let floor=false, formed=false;
-  const go=()=>{ if(floor && formed && !tourRunning && !tourSeen() && !tourInviteDismissed()) startTour(0,true); };
-  setTimeout(()=>{ floor=true; go(); },TOUR_AUTO_MS);
+  const go=()=>{ if(floor && formed && due()) startTour(i,true); };
+  setTimeout(()=>{ floor=true; go(); },at ? TOUR_RESUME_MS : TOUR_AUTO_MS);
   whenMarkFormed(()=>setTimeout(()=>{ formed=true; go(); },TOUR_BREATH_MS));
 }
 // What waits for the tour to end: the catalog offer a first run holds back (catalog-offer.js).

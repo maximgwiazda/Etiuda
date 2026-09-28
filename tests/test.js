@@ -535,8 +535,11 @@ function runUnitTests() {
   shippedFileTests();
   railPlacementTests();
   recoveryTests();
+  headPrefsTests();
   arrivalTests();
   markClockTests();
+  menuWarmTests();
+  ecTypeNameTests();
   pageWatchTests();
   shippedFlagTests();
   dismissTierTests();
@@ -1626,6 +1629,63 @@ function recoveryTests() {
   eq("the guard holds the first frame for the shell's recovery and for the page's own covered reload, and for nothing else",
     got, [[true, 1], [false, 0], [true, 1], [false, 0]]);
 }
+/* THE FIRST PAINT READS THE SETTINGS WHERE THEY ARE KEPT: an installed Etiuda keeps them in its desk
+   file and never in localStorage, so the head script reads the desk the shell hands it, once, and
+   storage.js takes that copy rather than reading the file again. The head script runs in a VM on
+   stubs, as recoveryTests runs it; what the first frame looks like is the verifier's. */
+function headPrefsTests() {
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const m = /<script>([\s\S]*?)<\/script>/.exec(tpl);
+  const guard = m ? m[1] : "";
+  const run = (deskKeys, lsKeys, width) => {
+    const cls = new Set(), props = {};
+    let reads = 0;
+    const host = deskKeys ? { deskRead: () => { reads++; return JSON.stringify(deskKeys); }, deskSave: () => true } : null;
+    const sb = {
+      document: { documentElement: { classList: { add: (...c) => c.forEach(x => cls.add(x)), remove: (...c) => c.forEach(x => cls.delete(x)),
+        contains: c => cls.has(c) }, style: { setProperty: (k, v) => { props[k] = v; } } },
+        head: { appendChild() {} }, createElement: () => ({ setAttribute() {}, blocking: { supports: () => true } }),
+        getElementById: () => null, querySelector: () => null },
+      sessionStorage: { getItem: () => null, removeItem() {}, setItem() {}, clear() {} },
+      localStorage: { getItem: k => (k in lsKeys ? lsKeys[k] : null), setItem() {}, removeItem() {}, key: () => null, length: 0 },
+      matchMedia: () => ({ matches: false }), location: { hash: "", href: "file:///x/etiuda.html", protocol: "file:", origin: "null" },
+      navigator: { languages: ["en-US"], language: "en-US", cookieEnabled: true }, innerWidth: width,
+      setTimeout: () => 0, requestAnimationFrame: () => 0, addEventListener() {}
+    };
+    sb.window = sb; sb.self = sb; sb.top = sb; sb.E_HOST = host;
+    require("vm").runInNewContext(guard, sb);
+    return { still: cls.has("e-still"), off: cls.has("e-pills-off"), h: props["--e-pills-h"] || null, reads,
+      handed: sb.eDeskAtBoot ? Object.keys(sb.eDeskAtBoot).length : null };
+  };
+  const kept = { eMotionOff: "1", ePills: "0", eHdrPills: "1500x37" };
+  let got;
+  try {
+    got = [run(kept, {}, 1500), run(kept, kept, 1500), run(null, kept, 1500)]
+      .map(r => [r.still, r.off, r.reads, r.handed]);
+  } catch (e) { got = "the head script threw: " + e.message; }
+  eq("on a desk the first paint is still and without the category bar as its desk file says, whatever localStorage holds; a browser reads localStorage as before",
+    got, [[true, true, 1, 3], [true, true, 1, 3], [true, true, 0, null]]);
+  try {
+    const shown = { ePills: "1", eHdrPills: "1500x37" };
+    got = [run(shown, {}, 1500).h, run(shown, {}, 1280).h, run({}, shown, 1500).h, run(null, shown, 1500).h];
+  } catch (e) { got = "the head script threw: " + e.message; }
+  eq("on a desk the category bar's last height is reserved from the desk file at the width it was measured at, and not from localStorage",
+    got, ["37px", null, null, "37px"]);
+
+  const store = fs.readFileSync(path.join(E.ROOT, "src", "modules", "storage.js"), "utf8");
+  const take = handed => {
+    let reads = 0;
+    const win = { E_HOST: { deskRead: () => { reads++; return JSON.stringify({ eTheme: "dark", eRail: "1" }); }, deskSave: () => true } };
+    if (handed !== undefined) win.eDeskAtBoot = handed;
+    const desk = new Function("window", extractDecl(store, "function eHostDesk(") + "\nreturn eHostDesk();")(win);
+    return [desk ? Object.keys(desk.map).sort().join(",") : null, reads, "eDeskAtBoot" in win];
+  };
+  try {
+    got = [take({ eTheme: "light", eGlassOff: 1 }), take(undefined), take(null)];
+  } catch (e) { got = "eHostDesk threw: " + e.message; }
+  eq("storage.js takes the desk the head script read, once and without reading the file again, and reads it itself when none was handed",
+    got, [["eGlassOff,eTheme", 0, false], ["eRail,eTheme", 1, false], ["eRail,eTheme", 1, false]]);
+}
 /* A COVERED ARRIVAL FADES FROM A FRAME ITS CONTENT WAS DRAWN IN (feel pass, the catalog load): the boot
    guard runs in a VM, E_BOOT_OK is called, and the frames and paint timing it waits on are handed to
    it by hand. What the eye sees is the verifier's composed frames. */
@@ -1679,7 +1739,7 @@ function markLab() {
     extractDecl(open, "let eReadyDone="), extractDecl(open, "let lastGreet;"), extractDecl(open, "function markEReady("),
     extractDecl(open, "function wireOnOpen(")];
   let clock = 0, seq = 0, frames = [], timers = [], drawnX = null;
-  const log = [];
+  const log = [], warms = [];
   const ctx = { setTransform() {}, clearRect() {}, beginPath() {}, fill() {}, moveTo() {}, arc(x) { drawnX = x; } };
   const sb = {
     M_MS: { gather: 1100, twinkle: 66 }, mgReduceMotion: () => false,
@@ -1688,6 +1748,7 @@ function markLab() {
     cancelAnimationFrame: id => { frames = frames.filter(f => f.id !== id); },
     setTimeout: (fn, ms) => { timers.push({ id: ++seq, at: clock + (ms || 0), fn }); return seq; },
     clearTimeout: id => { timers = timers.filter(x => x.id !== id); },
+    requestIdleCallback: fn => { timers.push({ id: ++seq, at: clock, fn }); return seq; },
     setInterval: () => 0, getComputedStyle: () => ({ color: "#fff" }), devicePixelRatio: 1,
     MutationObserver: class { observe() {} disconnect() {} },
     document: { querySelector: () => null, documentElement: {},
@@ -1695,7 +1756,8 @@ function markLab() {
     ssGet: () => null, TOUR_AT: "eTourAt", TOUR_STEPS: [], tourRunning: false, tourSeen: () => false, tourInviteDismissed: () => false,
     startTour: () => log.push(["tour", Math.round(clock)]),
     applyUiLang: () => log.push(["repaint", Math.round(clock)]),
-    focusFirstEntryOnOpen: () => {}, greeting: () => "", render: () => {}
+    focusFirstEntryOnOpen: () => {}, greeting: () => "", render: () => {},
+    warmMenu: () => warms.push(Math.round(clock))
   };
   sb.window = sb;
   require("vm").runInNewContext(mark + "\n" + slices.join("\n") + "\nfunction __mark(){ return eMark; }\n", sb);
@@ -1712,7 +1774,7 @@ function markLab() {
   };
   const frame = t => { timersTo(t); const run = frames; frames = []; run.forEach(f => f.fn(t)); return drawnX; };
   const host = { firstChild: null, insertBefore(cv) { cv.parentNode = host; } };
-  return { sb, log, frame, timersTo, make: () => sb.syncEmptyMark(host), state: () => sb.__mark(), x: () => drawnX };
+  return { sb, log, warms, frame, timersTo, make: () => sb.syncEmptyMark(host), state: () => sb.__mark(), x: () => drawnX };
 }
 function markClockTests() {
   const hz = n => 1000 / n;
@@ -1786,6 +1848,20 @@ function markClockTests() {
     got, [[["tour", 1900]], [["tour", 1300]], [["tour", 1300]]]);
 
   try {
+    // A reload in the middle of the tour, parked on a step: the same cold launch, then no mark.
+    const park = r => { r.sb.ssGet = () => "name"; r.sb.tourSeen = () => true; r.sb.TOUR_STEPS = [{ id: "load" }, { id: "name" }];
+      r.sb.startTour = at => r.log.push(["tour", Math.round(r.sb.performance.now()), at]); };
+    const c = markLab(); park(c); c.make(); c.sb.maybeStartTour();
+    let t = 600, i = 0;
+    while (c.frame(t) < 100) t = 600 + ++i * hz(250);
+    c.timersTo(4000);
+    const n = markLab(); park(n); n.sb.maybeStartTour(); n.timersTo(4000);
+    got = [c.log, n.log];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a tour resumed after a reload waits for the mark to form as a first run does, and without one comes at 300 ms as before",
+    got, [[["tour", 1900, 1]], [["tour", 300, 1]]]);
+
+  try {
     // The same cold launch; then no mark, where the second frame comes 20 ms after boot.
     const c = markLab(); c.make(); c.sb.wireOnOpen();
     let t = 600, i = 0;
@@ -1796,6 +1872,132 @@ function markClockTests() {
   } catch (e) { got = "the lab threw: " + e.message; }
   eq("the boot repaint waits for the mark to form, and without one comes on the second frame as before",
     got, [[["repaint", 1700]], [["repaint", 20]]]);
+
+  try {
+    // The same cold launch, then no mark: when boot draws the menu's warm copy.
+    const c = markLab(); c.make(); c.sb.wireOnOpen();
+    let t = 600, i = 0;
+    while (c.frame(t) < 100) t = 600 + ++i * hz(250);
+    c.timersTo(4000);
+    const n = markLab(); n.sb.wireOnOpen(); n.frame(10); n.frame(20); n.timersTo(4000);
+    got = [c.warms, n.warms];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the menu's warm copy is drawn once, 900 ms after the mark has formed, and 900 ms after boot without one",
+    got, [[2600], [900]]);
+}
+/* THE .ec FILE TYPE IS NAMED IN THE INSTALLER'S LANGUAGE: electron-builder writes the English from
+   fileAssociations, and shell/installer.nsh's customInstall writes the Polish over it when the
+   installer runs in Polish. Read here against electron-builder's own templates and language table;
+   what Explorer shows on a Polish Windows is Maxim's to see. */
+function ecTypeNameTests() {
+  const root = E.ROOT, lib = path.join(root, "node_modules", "app-builder-lib");
+  let got;
+  let assoc = [];
+  try {
+    assoc = (require(path.join(root, "electron-builder.js")).fileAssociations || [])
+      .filter(a => [].concat(a.ext).indexOf("ec") > -1);
+    got = assoc.map(a => [a.name, a.description]);
+  } catch (e) { got = "electron-builder.js threw: " + e.message; }
+  eq("one .ec association, whose class and name are the English \"Etiuda catalog\"", got, [["Etiuda catalog", "Etiuda catalog"]]);
+  try {
+    const nsh = fs.readFileSync(path.join(root, "shell", "installer.nsh"), "utf8");
+    const body = (/!macro customInstall\r?\n([\s\S]*?)!macroend/.exec(nsh) || [])[1] || "";
+    const w = /\$\{If\} \$LANGUAGE == (\d+)\r?\n\s*WriteRegStr SHELL_CONTEXT "Software\\Classes\\([^"]+)" "" "([^"]+)"/.exec(body);
+    const langs = require(path.join(lib, "out", "util", "langs.js"));
+    const cfg = require(path.join(root, "electron-builder.js"));
+    const asked = (cfg.nsis || {}).installerLanguages;
+    const inInstaller = asked == null ? langs.bundledLanguages.indexOf("pl_PL") > -1
+      : [].concat(asked).some(l => /^pl([_-]PL)?$/.test(l));
+    const ui = fs.readFileSync(path.join(root, "src", "modules", "ui-lang.js"), "utf8");
+    const pl = (/\n\s*"Etiuda catalog":"([^"]+)",/.exec(ui) || [])[1];
+    got = w ? [+w[1] === langs.lcid.pl_PL, inInstaller, w[2] === (assoc[0] || {}).name, !!pl && w[3] === pl,
+      /System::Call 'shell32::SHChangeNotify\(i 0x08000000, i 0, i 0, i 0\)'/.test(body.slice(w.index))]
+      : "customInstall writes no name under $LANGUAGE";
+  } catch (e) { got = "the installer's include could not be read: " + e.message; }
+  eq("in Polish the installer writes the interface's own Polish for \"Etiuda catalog\" over the same class, under electron-builder's LCID for Polish, which the installer carries, and tells the shell",
+    got, [true, true, true, true, true]);
+  try {
+    const sect = fs.readFileSync(path.join(lib, "templates", "nsis", "installSection.nsh"), "utf8");
+    const fa = fs.readFileSync(path.join(lib, "templates", "nsis", "include", "FileAssociation.nsh"), "utf8");
+    const reg = sect.indexOf("!insertmacro registerFileAssociations"), mine = sect.indexOf("!insertmacro customInstall");
+    const un = /!macro APP_UNASSOCIATE [^\n]*\n([\s\S]*?)!macroend/.exec(fa);
+    got = [reg > -1 && mine > reg, !!un && /DeleteRegKey SHELL_CONTEXT `Software\\Classes\\\$\{FILECLASS\}`/.test(un[1])];
+  } catch (e) { got = "electron-builder's templates could not be read: " + e.message; }
+  eq("electron-builder writes its English before customInstall runs, and its uninstaller takes the whole class back, Polish and all",
+    got, [true, true]);
+}
+/* THE MENU'S FIRST OPEN IS PAID FOR BEFORE IT (E9): warmMenu is sliced out of header-menus.js with the
+   one openSettingsMenu that marks the menu drawn, and run on a small element model written here; when
+   boot asks for it is the mark lab's. Whether the first open now runs as smoothly as the second is a
+   per-frame measurement in a window, the verifier's. */
+function menuWarmTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "header-menus.js"), "utf8");
+  class El {
+    constructor(attrs, kids) {
+      this.attrs = Object.assign({}, attrs); this.kids = kids || []; this.parent = null; this.inert = false;
+      this.kids.forEach(k => { k.parent = this; });
+      this.cls = new Set((this.attrs.class || "").split(" ").filter(Boolean)); delete this.attrs.class;
+      const self = this;
+      this.classList = { add: c => self.cls.add(c), remove: c => self.cls.delete(c), contains: c => self.cls.has(c) };
+    }
+    get hidden() { return "hidden" in this.attrs; }
+    set hidden(v) { if (v) this.attrs.hidden = ""; else delete this.attrs.hidden; }
+    setAttribute(k, v) { this.attrs[k] = String(v); }
+    removeAttribute(k) { delete this.attrs[k]; }
+    getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
+    cloneNode() { const c = new El(Object.assign({ class: [...this.cls].join(" ") }, this.attrs), this.kids.map(k => k.cloneNode())); return c; }
+    querySelectorAll() { const out = []; const walk = n => n.kids.forEach(k => { out.push(k); walk(k); }); walk(this); return out; }
+    after(n) { const p = this.parent, i = p.kids.indexOf(this); p.kids.splice(i + 1, 0, n); n.parent = p; }
+    remove() { const p = this.parent; if (p) { p.kids.splice(p.kids.indexOf(this), 1); this.parent = null; } }
+  }
+  const lab = () => {
+    const item = t => new El({ type: "button", role: "menuitem", title: t, id: "m" + t });
+    const menu = new El({ class: "menu", id: "settingsMenu", hidden: "", role: "menu" }, [item("a"), new El({ class: "menu-sep" }), item("b")]);
+    const btn = new El({ id: "settingsBtn" });
+    const wrap = new El({ id: "settingsWrap" }, [btn, menu]);
+    let clock = 0, frames = [], timers = [];
+    const sb = {
+      $: sel => (sel === "#settingsMenu" ? menu : sel === "#settingsBtn" ? btn : null),
+      requestAnimationFrame: fn => { frames.push(fn); return frames.length; },
+      setTimeout: (fn, ms) => { timers.push({ at: clock + ms, fn }); return timers.length; },
+      closeFactsPanel() {}, cutLeaves() {}, syncSettingsMenu() {}, takeKeyboard() {}
+    };
+    require("vm").runInNewContext([extractDecl(src, "let menuDrawn="), extractDecl(src, "function warmMenu("),
+      extractDecl(src, "function openSettingsMenu(")].join("\n"), sb);
+    const frame = () => { const run = frames; frames = []; run.forEach(f => f()); };
+    const to = t => { clock = t; timers.filter(x => x.at <= t).forEach(x => { timers.splice(timers.indexOf(x), 1); x.fn(); }); };
+    const copies = () => wrap.kids.filter(k => k.cls.has("e-warm"));
+    return { sb, menu, wrap, frame, to, copies };
+  };
+  let got;
+  try {
+    const r = lab();
+    r.sb.warmMenu();
+    const c = r.copies()[0], all = c ? [c].concat(c.querySelectorAll()) : [];
+    const seen = [r.copies().length, r.wrap.kids.indexOf(c) === r.wrap.kids.indexOf(r.menu) + 1, c && !c.hidden,
+      c && c.getAttribute("aria-hidden"), c && c.inert, c && c.cls.has("menu"),
+      all.filter(n => ["id", "role", "title"].some(a => n.getAttribute(a) != null)).length,
+      r.menu.hidden, r.menu.getAttribute("id"), r.menu.kids[0].getAttribute("id")];
+    r.frame(); r.frame(); const after2 = r.copies().length; r.frame();
+    got = [seen, after2, r.copies().length];
+  } catch (e) { got = "the menu lab threw: " + e.message; }
+  eq("warmMenu draws one copy of the menu beside it, shown, aria-hidden and inert, with no id, role or title, the menu itself untouched, and takes it away on the third frame",
+    got, [[1, true, true, "true", true, true, 0, true, "settingsMenu", "ma"], 1, 0]);
+  try {
+    const q = lab(); q.sb.warmMenu(); q.to(999); const held = q.copies().length; q.to(1000);
+    const twice = lab(); twice.sb.warmMenu(); twice.frame(); twice.frame(); twice.frame(); twice.sb.warmMenu();
+    const opened = lab(); opened.sb.openSettingsMenu(false); opened.menu.hidden = true; opened.sb.warmMenu();
+    const open = lab(); open.menu.hidden = false; open.sb.warmMenu();
+    got = [held, q.copies().length, twice.copies().length, opened.copies().length, open.copies().length];
+  } catch (e) { got = "the menu lab threw: " + e.message; }
+  eq("without frames the copy goes at 1000 ms, and none is drawn a second time, after the menu has opened, or while it is open",
+    got, [1, 0, 0, 0, 0]);
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const rule = /\n\.menu\.e-warm:not\(\[hidden\]\)\{([^}]*)\}/.exec(tpl);
+  const op = rule && /opacity:([.0-9]+)/.exec(rule[1]);
+  eq("the copy is drawn at a trace, never animated, never pressed, by a rule that outranks the menu's own entrance",
+    rule ? [+op[1] > 0 && +op[1] < 0.01, /animation:none/.test(rule[1]), /pointer-events:none/.test(rule[1]),
+      /\n\.menu\.e-warm \*\{pointer-events:none!important\}/.test(tpl)] : "no .menu.e-warm rule", [true, true, true, true]);
 }
 /* EVERY CLOSE FADES OUT ON THE DISMISS TIER (feel pass motion-9, ruled 2026-09-26 13:14): the three
    helpers are sliced out of motion.js and run on a small element model written here, and each
