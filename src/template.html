@@ -2656,9 +2656,10 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
   padding:6px 11px!important;width:130px!important;max-width:40vw}
 /* ---- Category editor: the icon grid and the colour swatches. Both are plain buttons in a
    bordered well, the same construction as .cat-pick above, so the dialog has one language. */
+/* THE GRID SHOWS WHOLE and never scrolls on its own: the editor grows to hold it, and a window too
+   short for the editor scrolls the editor's body instead. */
 .ic-pick{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px;padding:8px;
-  border:1px solid var(--line);border-radius:10px;background:var(--bg);
-  max-height:min(34vh,210px);overflow:auto}
+  border:1px solid var(--line);border-radius:10px;background:var(--bg)}
 .ic-opt{display:flex;align-items:center;justify-content:center;padding:7px;margin:0;
   border:0;border-radius:var(--radius-sm);background:transparent;color:var(--dim);cursor:default}
 .ic-opt:hover,.ic-opt:focus-visible{color:var(--accent);background:var(--accent-soft)}

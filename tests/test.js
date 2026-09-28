@@ -4349,6 +4349,9 @@ function libraryRowsTests() {
     ["<mark billing> Refund 7 false", "<mark > Refund 0 false", "<mark billing> Refund 3 true"]);
   const cut = fs.readFileSync(path.join(E.ROOT, "src", "modules", "cut-text.js"), "utf8");
   eq("the Library intent's name is one of the lines the cut pass fades", /\.mg-int-t,/.test(extractDecl(cut, "const CUT_SEL=")), true);
+  const pick = (/\n\.ic-pick\{[^}]*\}/.exec(fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8")) || [""])[0];
+  eq("the category editor's icon grid shows whole, with no height cap and no scroll of its own",
+    [!!pick, /max-height|overflow/.test(pick)], [true, false]);
 }
 function libraryAwaitingTests() {
   const src = sourceText();
