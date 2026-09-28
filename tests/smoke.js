@@ -3071,17 +3071,28 @@ const t0 = Date.now();
     const layer = (q, m) => q.evaluate(m => { const k = JSON.parse(lsGet(nsKey("Pack")) || "{}");
       return { edit: !!(k.overrides || {})[m.edited], star: (k.favourites || []).indexOf(m.starred) > -1 }; }, m);
     const before = await layer(q2, made);
-    await q2.evaluate(() => ejectCatalog());
-    await upFor(q2, () => !!document.getElementById("eSureYes"), 5000);
-    await clickReload(q2, "#eSureYes");
-    await upFor(q2, () => !!document.getElementById("emptyLoad"));
+    /* Eject happens at once and the next boot offers Undo (Maxim, 2026-09-27 23:28): no confirm
+       stands after the call, the page restarts on its own, and the empty desk carries the Undo
+       bubble. A context lost to the restart inside the call is itself no confirm. The bubble is
+       then put away by its own Escape, not answered, so the Load below is the only way back. */
+    const ejNav = q2.waitForNavigation({ waitUntil: "load", timeout: 30000 }).then(() => true, () => false);
+    const ejAsked = await q2.evaluate(() => { ejectCatalog(); return !!document.getElementById("eSure"); }).catch(() => false);
+    const ejReload = await ejNav;
+    const [ejEmpty, ejUndo] = await Promise.all([upFor(q2, () => !!document.getElementById("emptyLoad")),
+      upFor(q2, () => !!document.getElementById("eUndoBtn"), 8000)]);
+    const eject = { asked: ejAsked, reload: ejReload, empty: ejEmpty, undo: ejUndo,
+      stood: await q2.evaluate(() => { const u = document.getElementById("eUndo");
+        if (u) u.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        return !!document.getElementById("eSure"); }) };
+    await sleep(600);
     const ejected = await layer(q2, made);
     await loadSample(q2);
     await upFor(q2, () => document.querySelectorAll("#list .card[data-id]").length > 3);
     const again = await layer(q2, made);
-    check(before.edit && before.star && ejected.edit && ejected.star && again.edit && again.star,
-      "data-2 the sample loaded again through Load keeps the edit and the star an Eject kept (saved, ejected, taken up again): "
-      + JSON.stringify({ before, ejected, again }));
+    check(before.edit && before.star && ejected.edit && ejected.star && again.edit && again.star
+          && !eject.asked && eject.reload && eject.empty && eject.undo && !eject.stood,
+      "data-2 the sample loaded again through Load keeps the edit and the star an Eject kept (saved, ejected at once with"
+      + " no confirm and an Undo offered, taken up again): " + JSON.stringify({ before, eject, ejected, again }));
 
     /* flow-3: THE SAMPLE NEVER ASKS TO REPLACE A CATALOG THE PERSON CHOSE. A desk holding an invented
        catalog finds the sample beside it at the next launch, as the shell hands it over when the
