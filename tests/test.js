@@ -1748,6 +1748,7 @@ function markLab() {
     cancelAnimationFrame: id => { frames = frames.filter(f => f.id !== id); },
     setTimeout: (fn, ms) => { timers.push({ id: ++seq, at: clock + (ms || 0), fn }); return seq; },
     clearTimeout: id => { timers = timers.filter(x => x.id !== id); },
+    requestIdleCallback: fn => { timers.push({ id: ++seq, at: clock, fn }); return seq; },
     setInterval: () => 0, getComputedStyle: () => ({ color: "#fff" }), devicePixelRatio: 1,
     MutationObserver: class { observe() {} disconnect() {} },
     document: { querySelector: () => null, documentElement: {},
@@ -1848,7 +1849,7 @@ function markClockTests() {
 
   try {
     // A reload in the middle of the tour, parked on a step: the same cold launch, then no mark.
-    const park = r => { r.sb.ssGet = () => "name"; r.sb.TOUR_STEPS = [{ id: "load" }, { id: "name" }];
+    const park = r => { r.sb.ssGet = () => "name"; r.sb.tourSeen = () => true; r.sb.TOUR_STEPS = [{ id: "load" }, { id: "name" }];
       r.sb.startTour = at => r.log.push(["tour", Math.round(r.sb.performance.now()), at]); };
     const c = markLab(); park(c); c.make(); c.sb.maybeStartTour();
     let t = 600, i = 0;
