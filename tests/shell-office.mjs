@@ -19,7 +19,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 34;
+const EXPECTED = 35;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -474,9 +474,14 @@ try {
       + (!!read && read.text === edited.toString("utf8")));
 
     const rows = (await first.S.ask("etiuda:catalog-files")).filter(f => f.name === SHIPPED[0]);
-    check(rows.length === 1 && rows[0].builtIn === false && rows[0].replaces === true && rows[0].sample === true,
-      "5d the copy a first run gave is the one the Library lists, once, as the folder's own in place of the shipped"
-      + " copy and still known as the sample: " + JSON.stringify(rows.map(r => ({ builtIn: r.builtIn, replaces: r.replaces, sample: r.sample }))));
+    check(rows.length === 1 && rows[0].builtIn === false && rows[0].replaces === false && rows[0].sample === true,
+      "5d the copy a first run gave is the one the Library lists, once, as a plain row: byte for byte the shipped copy,"
+      + " it neither is the shipped one nor takes its place, and it is still known as the sample: "
+      + JSON.stringify(rows.map(r => ({ builtIn: r.builtIn, replaces: r.replaces, sample: r.sample }))));
+    const theirRows = (await theirs.S.ask("etiuda:catalog-files")).filter(f => f.name === SHIPPED[0]);
+    check(theirRows.length === 1 && theirRows[0].builtIn === false && theirRows[0].replaces === true,
+      "5f and a file of that name which differs from the shipped copy by one byte is listed once as taking its place: "
+      + JSON.stringify(theirRows.map(r => ({ builtIn: r.builtIn, replaces: r.replaces }))));
 
     const crypto = nodeRequire("node:crypto");
     const editions = first.S.api.SAMPLE_EDITIONS || [];

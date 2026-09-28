@@ -1219,9 +1219,10 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " with the tour up, " + takenSeen.offer + " after)");
 
   /* 2k4: TWO FOLDERS AND WHICH COPY IS IN USE (Maxim, 2026-09-26 and 2026-09-28). The copy 2k2's first
-     run gave Documents/Etiuda is the one listed, once, as the folder's copy; another file of exactly
-     that name put in its place (the sample less its edition, so the two differ in bytes) is the same
-     one row; taken away, the shipped copy is listed as Etiuda's own and the copy is not given again,
+     run gave Documents/Etiuda is the one listed, once, as a plain row, being byte for byte the shipped
+     copy; another file of exactly that name put in its place (the sample less its edition, so the two
+     differ in bytes) is the same one row, now saying it takes the shipped copy's place; taken away,
+     the shipped copy is listed as Etiuda's own and the copy is not given again,
      since this desk has given it once. The Library is opened afresh for each reading, since what is
      read is the host's listing. */
   const COPY_ROWS = async () => {
@@ -1269,10 +1270,10 @@ const placeEc = (dir, from, as, minutesOld) => {
   await sleep(1500);
   await s.stop();
   const one = rows => rows.length === 1 && rows[0].name === "sample-catalog.ec";
-  check(one(shipped) && shipped[0].copy === "own" && one(replaced) && replaced[0].copy === "own"
+  check(one(shipped) && shipped[0].copy === "" && one(replaced) && replaced[0].copy === "own"
         && one(restored) && restored[0].copy === "builtin" && listed(docsA).join(",") === "",
-    "2k4 the Library lists the sample once, as the copy the first run gave Documents/Etiuda, the same with"
-    + " another file of that name in its place, and removing it brings the shipped copy back rather than"
+    "2k4 the Library lists the sample once, as the copy the first run gave Documents/Etiuda with nothing said of"
+    + " it, as taking the shipped copy's place once another file of that name differs, and removing it brings the shipped copy back rather than"
     + " giving it again: " + JSON.stringify({ shipped, replaced, restored }));
   check(one(seeded) && seeded[0].copy === "own",
     "2k4b a sample an earlier build seeded into Documents/Etiuda, byte for byte the 09-17 edition, is the copy read:"

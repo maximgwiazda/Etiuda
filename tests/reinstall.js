@@ -941,9 +941,9 @@ let newKey = "", lnkSm = "", lnkDt = "";
     + JSON.stringify(takenOffer) + ", which is the folder's own " + deskDoc.cards.length
     + "-card file dated six hours back - the shipped sample is newer and is still not the one that loads");
   check(takenRows.length === 2 && takenRows[0].name === "desk-notes.ec"
-        && takenRows[1].name === "sample-catalog.ec" && takenRows[1].copy === "own"
+        && takenRows[1].name === "sample-catalog.ec" && takenRows[1].copy === ""
         && takenRows[1].tags.indexOf("Newer") < 0 && takenRows[1].load === true,
-    "1h2 and the Library lists the copy it gave, once and last, as the folder's own: " + JSON.stringify(takenRows)
+    "1h2 and the Library lists the copy it gave, once and last, as a plain row, since it is byte for byte the shipped copy: " + JSON.stringify(takenRows)
     + " - the sample is at the foot of the list however new its file is, it is not called an"
     + " update to what is loaded, and its Load button is the ordinary one every other row has."
     + " The list's ORDER is what says it is recognised: 1i below moves it to the head by"

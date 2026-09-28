@@ -77,6 +77,16 @@ function builtInFiles() {
   const own = ecFilesIn(catalogFolder()).map(f => path.basename(f).toLowerCase());
   return ecFilesIn(BUILT_IN_DIR).filter(f => own.indexOf(path.basename(f).toLowerCase()) < 0);
 }
+/* True where a shipped file of the same name exists and this one is not byte for byte it. The size
+   settles most files without reading either. */
+function differsFromShipped(file) {
+  const own = path.join(BUILT_IN_DIR, path.basename(file));
+  try {
+    if (!fs.existsSync(own)) return false;
+    if (fs.statSync(own).size !== fs.statSync(file).size) return true;
+    return !fs.readFileSync(own).equals(fs.readFileSync(file));
+  } catch (e) { return false; }
+}
 /* THE FOLDER THE PAGE MAY NAME for a file it was handed, and "" for a shipped one: that folder is
    inside the installation's archive, which nobody can open, so the page says in words where the
    file came from instead. */
@@ -1091,10 +1101,11 @@ ipcMain.handle("etiuda:catalog-files", (e) => {
     return { name: path.basename(f), mtime: mt, cards: cards, edition: edition,
              macros: macros, intents: intents, cats: cats, awaiting: awaiting,
              sample: isTheSample(f), id: id, catalogName: catalogName,
-             /* Which copy: the one Etiuda ships, or the folder's own in place of a shipped one. */
+             /* Which copy: the one Etiuda ships, or the folder's own in place of a shipped one. A copy
+                byte for byte the shipped one, as a first run gives it, is neither, and says nothing. */
              builtIn: path.dirname(f) === BUILT_IN_DIR,
              replaces: path.dirname(f) !== BUILT_IN_DIR && catalogFolder() === defaultCatalogFolder()
-               && fs.existsSync(path.join(BUILT_IN_DIR, path.basename(f))) };
+               && differsFromShipped(f) };
   });
 });
 ipcMain.handle("etiuda:catalog-read", (e, name) => {
