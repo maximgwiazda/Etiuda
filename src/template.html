@@ -2561,7 +2561,7 @@ details.mf-fold>summary:focus-visible .acc-tw{color:var(--accent)}
 .ec-row.is-loaded{border-color:var(--go-edge,var(--go))}
 .ec-name{flex:1 1 auto;min-width:0}
 .ec-name b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ec-meta,.ec-name .ec-trust{display:block;color:var(--dim);font-size:11.5px}
+.ec-meta{display:block;color:var(--dim);font-size:11.5px}
 .ec-tag{flex:0 0 auto;font:600 10.5px var(--mono);color:var(--dim);
   border:1px solid var(--line);border-radius:999px;padding:1px 7px}
 /* THE LOADED ROW SAYS SO WITH A MARK, not with a word: it is the one row whose right-hand end
@@ -2591,6 +2591,15 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
 .ec-list{--ec-glyph:18px}
 .ec-row .btn.ec-act{padding:5px}
 .ec-row .ec-act .ic{width:var(--ec-glyph);height:var(--ec-glyph)}
+/* The signature's key: gold is the favourite's gold, grey is no vocabulary at all. */
+.ec-key{flex:0 0 auto;display:flex;width:var(--ec-glyph);height:var(--ec-glyph);color:var(--dim);
+  border-radius:var(--radius-xs);outline:none}
+.ec-key .ic{width:100%;height:100%}
+.ec-key.on{color:var(--fav)}
+.ec-key[data-tip]:focus-visible{background:var(--accent-soft)}
+.ec-key-bub{z-index:236;max-width:min(300px,calc(100vw - 24px));padding:8px 12px;
+  font-size:12.5px;line-height:1.45;pointer-events:none;
+  animation:eModalCardIn var(--m-reveal) var(--m-ease) both}
 /* Three lines change what the row centres on: the name is the subject, so the badge and the
    buttons align to the NAME's line rather than to the middle of a column that grew. */
 .ec-row:has(.ec-watch){align-items:flex-start}

@@ -11,7 +11,7 @@
  * WHAT IS DRIVEN. The same functions the page's boot and the Library call, in the order they call
  * them, over the real shell/main.js and shell/preload.js with electron stubbed, as
  * tests/catalog-trust.mjs does. The page is a small DOM written below, so that what is read is the
- * markup the desk rendered at run time: the offer bubble's `.ec-trust` line, and the Library row's.
+ * markup the desk rendered at run time: the offer bubble's `.ec-trust` line, and the Library row's `.ec-key`.
  * Buttons are pressed by their own handlers, the catalog folder and the desk file are real files
  * in a temp folder, and nothing asserts on the engine's source text.
  *
@@ -302,10 +302,11 @@ async function launch(plan) {
   const readLibrary = () => {
     const box = doc.getElementById("mgCatList");
     return box ? box.querySelectorAll(".ec-row").map(r => {
-      const t = r.querySelector(".ec-trust");
+      const k = r.querySelector(".ec-key");
       return { name: (r.querySelector(".ec-name b") || { textContent: "" }).textContent,
                loaded: r.classList.contains("is-loaded"),
-               trust: t ? { state: t.getAttribute("data-trust"), text: t.textContent.trim() } : null };
+               key: (k && k.getAttribute("data-trust")) ? { state: k.getAttribute("data-trust"), word: k.getAttribute("aria-label"),
+                 gold: k.classList.contains("on"), tip: k.getAttribute("data-tip") || "" } : null };
     }) : [];
   };
   const act = {
@@ -356,7 +357,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 13;
+  const EXPECTED = 14;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -412,8 +413,8 @@ async function parent() {
     return obs;
   };
   const row = (obs, file, i) => ((obs.library[i || 0]) || []).find(r => r.name === file) || null;
-  const said = r => (r && r.trust) ? r.trust.state + " \"" + r.trust.text + "\"" : "no line";
-  const CHANGED = /changed since it was signed/, UNKNOWN_KEY = /does not know/, UNSIGNED = /^unsigned$/;
+  const said = r => (r && r.key) ? r.key.state + (r.key.gold ? " gold " : " grey ") + r.key.word + " \"" + r.key.tip + "\"" : "no key";
+  const CHANGED = /changed since it was signed/, UNKNOWN_KEY = /does not know/;
 
   try {
     /* 1: THE BOOT'S OFFER. A file changed since it was signed, found in the folder on an empty desk. */
@@ -424,8 +425,8 @@ async function parent() {
       "1a the boot's offer of a file changed since it was signed says so in its bubble: " + JSON.stringify(o1.trust || null));
     const b1b = run(lab1, ["library"], true);
     const r1 = row(b1b, "lamp.ec");
-    check(b1.reloaded && !!r1 && r1.loaded && r1.trust && r1.trust.state === V2.V2_SIG_INVALID && CHANGED.test(r1.trust.text),
-      "1b accepted, the page reloads and the Library's loaded row says it was changed: " + said(r1));
+    check(b1.reloaded && !!r1 && r1.loaded && r1.key && r1.key.state === V2.V2_SIG_INVALID && !r1.key.gold && CHANGED.test(r1.key.tip),
+      "1b accepted, the page reloads and the Library's loaded row wears a grey key whose bubble says it was changed: " + said(r1));
 
     /* 2: A SIGNED CATALOG HELD, then an unsigned edition handed by the watch, then an older edition
        loaded from the Library's list with Yes pressed before its check has answered. */
@@ -443,7 +444,7 @@ async function parent() {
     const c2c = run(lab2, ["library"], true);
     const r2 = row(c2c, "lamp-1.ec");
     check(c2b.reloaded && Array.isArray(c2b.lineAtPress) && c2b.lineAtPress.length === 0
-      && !!r2 && r2.loaded && r2.trust && r2.trust.state === V2.V2_SIG_INVALID,
+      && !!r2 && r2.loaded && r2.key && r2.key.state === V2.V2_SIG_INVALID,
       "2c an edition loaded from the Library, Yes pressed before its check answered, is the state its row says: " + said(r2)
       + ", the bubble's line at the press " + JSON.stringify(c2b.lineAtPress === undefined ? null : c2b.lineAtPress));
 
@@ -454,8 +455,14 @@ async function parent() {
     const d3 = run(lab3, ["boot", "library", "load:lamp-u.ec", "settle"]);
     const d3b = run(lab3, ["library"], true);
     const r3 = row(d3b, "lamp-u.ec");
-    check(d3.reloaded && !!r3 && r3.loaded && r3.trust && r3.trust.state === V2.V2_SIG_NONE && UNSIGNED.test(r3.trust.text),
-      "3a a file loaded at once from the Library on an empty desk is said unsigned on its row: " + said(r3));
+    check(d3.reloaded && !!r3 && r3.loaded && r3.key && r3.key.state === V2.V2_SIG_NONE && !r3.key.gold
+      && r3.key.word === "Unsigned" && r3.key.tip === "",
+      "3a a file loaded at once from the Library on an empty desk wears a grey key named Unsigned on its row: " + said(r3));
+    const r3a = row(d3b, "lamp-a.ec");
+    check(!!r3a && !r3a.loaded && r3a.key && r3a.key.state === V2.V2_SIG_VALID && r3a.key.gold && r3a.key.word === "Signed"
+      && r3a.key.tip.indexOf(KEY_ID) > -1,
+      "3b a folder file nobody has loaded is checked as a load would check it: its row wears a gold key named Signed,"
+      + " whose bubble names the key that signed it: " + said(r3a));
 
     /* 4: A RING PLACED AFTER LOADING. The key is unknown until the ring is there, and the next
        launch's Library reads it again. */
@@ -466,13 +473,14 @@ async function parent() {
       "4a with no ring, the boot's offer says the key is one this computer does not know: " + JSON.stringify(o4.trust || null));
     const e4b = run(lab4, ["library"], true);
     const r4 = row(e4b, "lamp.ec");
-    check(e4.reloaded && !!r4 && r4.loaded && r4.trust && r4.trust.state === V2.V2_SIG_UNKNOWN,
+    check(e4.reloaded && !!r4 && r4.loaded && r4.key && r4.key.state === V2.V2_SIG_UNKNOWN && UNKNOWN_KEY.test(r4.key.tip),
       "4b and the loaded row says the same, which is what 4c must see go: " + said(r4));
     fs.writeFileSync(path.join(lab4, "catalogs", "etiuda-ring.json"), ring, "utf8");
     const e4c = run(lab4, ["library"]);
     const r4c = row(e4c, "lamp.ec");
-    check(!!r4c && r4c.loaded && !r4c.trust && e4c.heldAtStart === V2.V2_SIG_UNKNOWN && e4c.heldAtEnd === V2.V2_SIG_VALID,
-      "4c the ring placed, a relaunched Library reads the loaded catalog again and its line goes: "
+    check(!!r4c && r4c.loaded && r4c.key && r4c.key.state === V2.V2_SIG_VALID && r4c.key.gold
+      && e4c.heldAtStart === V2.V2_SIG_UNKNOWN && e4c.heldAtEnd === V2.V2_SIG_VALID,
+      "4c the ring placed, a relaunched Library reads the loaded catalog again and its key turns gold: "
       + (r4c ? said(r4c) : "no row") + ", held " + e4c.heldAtStart + " then " + e4c.heldAtEnd);
 
     /* 5: THE BOOT'S READER REFUSES THE NEWEST FILE and the shell hands the next; the offer is about

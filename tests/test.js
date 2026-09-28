@@ -2457,12 +2457,16 @@ function shippedFlagTests() {
   const PLS = new Function("const UI_STRINGS={};\n" + langSrc.slice(plAt, plEnd + 3) + "\nreturn UI_STRINGS.pl;")();
   const rowOf = (o, tr) => {
     try {
-      return new Function("t", "esc", "trustMetaHtml", "heldCatalogTrust", "nsGet", "ecWatchHtml", "loadedTickHtml",
+      return new Function("t", "esc", "trustKeyHtml", "ecWatchHtml", "loadedTickHtml",
         "catalogEdited", "ICON_LOAD", "ICON_EJECT",
         extractDecl(offer, "function ecRowHtml(") + "\n" + extractDecl(offer, "function ecActHtml(") + "\nreturn ecRowHtml;")(
-        tr, s => s, () => "", () => "", () => "", () => "", () => "", () => false, "<svg>load</svg>", "<svg>eject</svg>")(o);
+        tr, s => s, (s, id) => "<key " + s + "|" + id + ">", () => "", () => "", () => false, "<svg>load</svg>", "<svg>eject</svg>")(o);
     } catch (e) { return "ecRowHtml did not run: " + e.message; }
   };
+  const keyThenAct = html => ((/<key ([^>]*)><button[^>]*data-ec-(load|eject)/.exec(String(html)) || []).slice(1).join(" ")) || String(html).slice(0, 120);
+  eq("a Library row's signature is a key beside its Load or Eject, carrying the state and the key's name the list hands it", [
+    keyThenAct(rowOf({ name: "team.ec", mtime: 5, trust: "valid", keyId: "k1" }, s => s)),
+    keyThenAct(rowOf({ name: "team.ec", loaded: true, trust: "none" }, s => s))], ["valid|k1 load", "none| eject"]);
   const acts = html => (String(html).match(/<button[^>]*>[\s\S]*?<\/button>/g) || []).map(b => {
     const at = n => ((new RegExp(" " + n + "=\"([^\"]*)\"")).exec(b) || [])[1] || "";
     return [at("aria-label"), at("title"), b.replace(/^<button[^>]*>|<\/button>$/g, "")];
@@ -3498,7 +3502,7 @@ function checkCatalogRoundTrip() {
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
 const UI_STRINGS_COUNT = 833;
-const UI_STRINGS_SHA256 = "91296898533bd255d9d6550de6c26f13e9c5a7c9daecf75838db5ae4ebfd2155";
+const UI_STRINGS_SHA256 = "9a5fb82bda87b07d957a72c20ff8611086f1764ad66b52cb6270675102dab9fe";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

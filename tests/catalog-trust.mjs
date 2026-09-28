@@ -163,11 +163,19 @@ try {
     "2a an activation records the state of the catalog it stores, and a catalog with no file behind it clears it: "
     + JSON.stringify(heldValid) + " then " + JSON.stringify(heldNone));
 
-  const meta = s => TR.trustMetaHtml(s, false);
-  check(meta(V2.V2_SIG_VALID) === "" && TR.trustMetaHtml(V2.V2_SIG_NONE, true) === ""
-    && /unsigned/.test(meta(V2.V2_SIG_NONE)) && /changed since it was signed/.test(meta(V2.V2_SIG_INVALID))
-    && /does not know/.test(meta(V2.V2_SIG_UNKNOWN)) && meta("") === "",
-    "2b the Library's row says nothing of a valid signature or of the sample's absent one, and names the other three");
+  const keyAt = (s, id) => {
+    const h = TR.trustKeyHtml(s, id), at = n => { const m = new RegExp(" " + n + "=\"([^\"]*)\"").exec(h); return m ? m[1] : null; };
+    return [/class="ec-key on"/.test(h), at("aria-label"), at("title"), at("data-tip")];
+  };
+  const keys = [keyAt(V2.V2_SIG_VALID), keyAt(V2.V2_SIG_VALID, "harness-key"), keyAt(V2.V2_SIG_NONE),
+    keyAt(V2.V2_SIG_INVALID), keyAt(V2.V2_SIG_UNKNOWN)];
+  check(JSON.stringify(keys) === JSON.stringify([[true, "Signed", "Signed", null],
+      [true, "Signed", null, "This file is signed with the key harness-key."], [false, "Unsigned", "Unsigned", null],
+      [false, "Signed", null, "This file has changed since it was signed."],
+      [false, "Signed", null, "This file is signed with a key this computer does not know."]])
+    && TR.trustKeyHtml("") === '<span class="ec-key" aria-hidden="true"></span>',
+    "2b the Library's row wears its signature as a key, gold only where it holds and named Signed or Unsigned,"
+    + " with anything more in its bubble rather than its tooltip, and an empty slot while nothing is known: " + JSON.stringify(keys));
 
   ST.nsSet("CatalogTrust", V2.V2_SIG_VALID);
   const downgrade = TR.trustOfferLine(V2.V2_SIG_NONE, true), fresh = TR.trustOfferLine(V2.V2_SIG_NONE, false);
@@ -179,9 +187,10 @@ try {
     "2c the offer says unsigned only where an edition would undo the signature the desk holds, and always says invalid");
 
   ST.lsSet("eUiLang", "pl");
-  const pl = [TR.trustMetaHtml(V2.V2_SIG_INVALID, false), TR.trustOfferLine(V2.V2_SIG_UNKNOWN, false)];
+  const pl = [TR.trustKeyHtml(V2.V2_SIG_INVALID), TR.trustOfferLine(V2.V2_SIG_UNKNOWN, false), TR.trustKeyHtml(V2.V2_SIG_NONE)];
   ST.lsSet("eUiLang", "en");
-  check(/zmieniony od czasu podpisania/.test(pl[0]) && /^Ten plik podpisano kluczem/.test(pl[1]),
+  check(/aria-label="Podpisany" tabindex="0" data-tip="Ten plik zmienił się od czasu podpisania\."/.test(pl[0])
+    && /^Ten plik podpisano kluczem/.test(pl[1]) && /aria-label="Niepodpisany" title="Niepodpisany"/.test(pl[2]),
     "2f a desk that reads Polish is told in Polish, on both surfaces");
 
   /* A host that never answers must not hold a load: the wait ends and the catalog loads unrecorded. */

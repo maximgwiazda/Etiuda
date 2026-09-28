@@ -2561,7 +2561,7 @@ details.mf-fold>summary:focus-visible .acc-tw{color:var(--accent)}
 .ec-row.is-loaded{border-color:var(--go-edge,var(--go))}
 .ec-name{flex:1 1 auto;min-width:0}
 .ec-name b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ec-meta,.ec-name .ec-trust{display:block;color:var(--dim);font-size:11.5px}
+.ec-meta{display:block;color:var(--dim);font-size:11.5px}
 .ec-tag{flex:0 0 auto;font:600 10.5px var(--mono);color:var(--dim);
   border:1px solid var(--line);border-radius:999px;padding:1px 7px}
 /* THE LOADED ROW SAYS SO WITH A MARK, not with a word: it is the one row whose right-hand end
@@ -2591,6 +2591,15 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
 .ec-list{--ec-glyph:18px}
 .ec-row .btn.ec-act{padding:5px}
 .ec-row .ec-act .ic{width:var(--ec-glyph);height:var(--ec-glyph)}
+/* The signature's key: gold is the favourite's gold, grey is no vocabulary at all. */
+.ec-key{flex:0 0 auto;display:flex;width:var(--ec-glyph);height:var(--ec-glyph);color:var(--dim);
+  border-radius:var(--radius-xs);outline:none}
+.ec-key .ic{width:100%;height:100%}
+.ec-key.on{color:var(--fav)}
+.ec-key[data-tip]:focus-visible{background:var(--accent-soft)}
+.ec-key-bub{z-index:236;max-width:min(300px,calc(100vw - 24px));padding:8px 12px;
+  font-size:12.5px;line-height:1.45;pointer-events:none;
+  animation:eModalCardIn var(--m-reveal) var(--m-ease) both}
 /* Three lines change what the row centres on: the name is the subject, so the badge and the
    buttons align to the NAME's line rather than to the middle of a column that grew. */
 .ec-row:has(.ec-watch){align-items:flex-start}
@@ -3625,6 +3634,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
     ICON_EYE_OPEN: () => ICON_EYE_OPEN,
     ICON_EYE_SHUT: () => ICON_EYE_SHUT,
     ICON_INTENT_LINK: () => ICON_INTENT_LINK,
+    ICON_KEY: () => ICON_KEY,
     ICON_LINT_ERROR: () => ICON_LINT_ERROR,
     ICON_LINT_WARNING: () => ICON_LINT_WARNING,
     ICON_LOAD: () => ICON_LOAD,
@@ -3844,6 +3854,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   var ICON_SUCCESS = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4.5 13.5l5 5 11-11"/></svg>';
   var ICON_LOAD = _svg("ic", '<path d="M10 3.6v8.6"/><path d="M6.5 8.9l3.5 3.5 3.5-3.5"/><path d="M3.6 12.6v2.1a1.7 1.7 0 0 0 1.7 1.7h9.4a1.7 1.7 0 0 0 1.7-1.7v-2.1"/>');
   var ICON_EJECT = _svg("ic", '<path d="M10 4.2l5.6 6.6H4.4z"/><path d="M4.6 15.4h10.8"/>');
+  var ICON_KEY = _svg("ic", catIconInner("key"));
 
   // src/modules/stock.js
   var stock_exports = {};
@@ -6160,9 +6171,9 @@ What you type stays in this browser only.`;
     "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}. Etiuda restarts with the catalog in place, and the tour carries on from there.": "Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać katalog zespołu z folderu {FOLDER}. Etiuda uruchomi się wtedy od nowa, już z katalogiem, a przewodnik poprowadzi dalej.",
     "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the catalog file. The page reloads with it and the tour carries on from there; the catalog stays in this browser, ready whenever you come back.": "Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać plik katalogu. Strona załaduje się wtedy od nowa, a przewodnik poprowadzi dalej; katalog zostanie w tej przeglądarce i poczeka na każdy powrót.",
     "comes with Etiuda": "dołączony do Etiudy",
-    "unsigned": "bez podpisu",
-    "changed since it was signed": "zmieniony od czasu podpisania",
-    "signed with a key this computer does not know": "podpisany kluczem, którego ten komputer nie zna",
+    "Signed": "Podpisany",
+    "Unsigned": "Niepodpisany",
+    "This file is signed with the key {KEY}.": "Ten plik podpisano kluczem {KEY}.",
     "This file has changed since it was signed.": "Ten plik zmienił się od czasu podpisania.",
     "This file is signed with a key this computer does not know.": "Ten plik podpisano kluczem, którego nie zna ten komputer.",
     "The catalog loaded now is signed, and this edition is not.": "Wczytany teraz katalog jest podpisany, a to wydanie nie.",
@@ -12548,7 +12559,7 @@ What you type stays in this browser only.`;
     heldCatalogTrust: () => heldCatalogTrust,
     recheckHeldTrust: () => recheckHeldTrust,
     recordCatalogTrust: () => recordCatalogTrust,
-    trustMetaHtml: () => trustMetaHtml,
+    trustKeyHtml: () => trustKeyHtml,
     trustOfferLine: () => trustOfferLine,
     trustSettled: () => trustSettled,
     whenTrusted: () => whenTrusted
@@ -12608,9 +12619,11 @@ What you type stays in this browser only.`;
       if (typeof then === "function") then();
     });
   }
-  function trustMetaHtml(state, sample) {
-    const said = state === V2_SIG_INVALID ? t("changed since it was signed") : state === V2_SIG_UNKNOWN ? t("signed with a key this computer does not know") : state === V2_SIG_NONE && !sample ? t("unsigned") : "";
-    return said ? '<small class="ec-trust" data-trust="' + esc(state) + '">' + esc(said) + "</small>" : "";
+  function trustKeyHtml(state, keyId) {
+    if (!state) return '<span class="ec-key" aria-hidden="true"></span>';
+    const word = esc(t(state === V2_SIG_NONE ? "Unsigned" : "Signed"));
+    const tip = state === V2_SIG_INVALID ? t("This file has changed since it was signed.") : state === V2_SIG_UNKNOWN ? t("This file is signed with a key this computer does not know.") : state === V2_SIG_VALID && keyId ? t("This file is signed with the key {KEY}.").split("{KEY}").join(keyId) : "";
+    return '<span class="ec-key' + (state === V2_SIG_VALID ? " on" : "") + '" role="img" data-trust="' + esc(state) + '" aria-label="' + word + '"' + (tip ? ' tabindex="0" data-tip="' + esc(tip) + '"' : ' title="' + word + '"') + ">" + ICON_KEY + "</span>";
   }
   function trustOfferLine(state, updating) {
     if (state === V2_SIG_INVALID) return t("This file has changed since it was signed.");
@@ -20403,7 +20416,43 @@ What you type stays in this browser only.`;
     return '<small class="ec-watch">' + esc(t("Watching")) + " <code>" + esc(eWatchName()) + '</code> · <span class="acts"><button type="button" class="act" data-ec-check="1" title="' + esc(t("Read that file again and offer it if it has changed")) + '">' + esc(t("Check for updates")) + '</button><span class="sep" aria-hidden="true">·</span><button type="button" class="act" data-ec-unwatch="1">' + esc(t("Stop watching")) + "</button></span></small>";
   }
   function ecRowHtml(o) {
-    return '<div class="ec-row' + (o.loaded ? " is-loaded" : "") + '"><span class="ec-name"><b>' + esc(o.name) + "</b>" + (o.meta ? '<small class="ec-meta">' + o.meta + "</small>" : "") + (o.loaded ? trustMetaHtml(heldCatalogTrust(), nsGet("Sample") === "1") + ecWatchHtml() : "") + "</span>" + (o.loaded ? loadedTickHtml() : "") + (o.newer && !o.sample ? '<span class="ec-tag" title="' + esc(t("Written after the catalog you have")) + '">' + esc(t("Newer")) + "</span>" : "") + (o.loaded ? (catalogEdited() ? '<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="' + esc(t("Save everything loaded now as a catalog file, your edits merged in")) + '">' + esc(t("Export…")) + "</button>" : "") + ecActHtml("Eject", ICON_EJECT, ' data-ec-eject="1"') : ecActHtml("Load", ICON_LOAD, ' data-ec-load="' + esc(o.name) + '" data-ec-at="' + (+o.mtime || 0) + '"')) + "</div>";
+    return '<div class="ec-row' + (o.loaded ? " is-loaded" : "") + '"' + (o.file ? ' data-ec-file="' + esc(o.file) + '"' : "") + '><span class="ec-name"><b>' + esc(o.name) + "</b>" + (o.meta ? '<small class="ec-meta">' + o.meta + "</small>" : "") + (o.loaded ? ecWatchHtml() : "") + "</span>" + (o.loaded ? loadedTickHtml() : "") + (o.newer && !o.sample ? '<span class="ec-tag" title="' + esc(t("Written after the catalog you have")) + '">' + esc(t("Newer")) + "</span>" : "") + (o.loaded && catalogEdited() ? '<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="' + esc(t("Save everything loaded now as a catalog file, your edits merged in")) + '">' + esc(t("Export…")) + "</button>" : "") + trustKeyHtml(o.trust || "", o.keyId || "") + (o.loaded ? ecActHtml("Eject", ICON_EJECT, ' data-ec-eject="1"') : ecActHtml("Load", ICON_LOAD, ' data-ec-load="' + esc(o.name) + '" data-ec-at="' + (+o.mtime || 0) + '"')) + "</div>";
+  }
+  var ecTrustOf = /* @__PURE__ */ new Map();
+  function ecFileTrust(f) {
+    const at = f.name + "|" + f.mtime;
+    if (!ecTrustOf.has(at)) ecTrustOf.set(at, eReadCatalogFile(f.name).then((got) => {
+      if (!got) return { state: "", keyId: "" };
+      const c = parseCatalogFile(got.text), sig = (catalogDocOf(c) || {}).sig;
+      return whenTrusted(c).then((s) => ({ state: s, keyId: String(sig && sig.keyId || "") }));
+    }).catch(() => ({ state: "", keyId: "" })));
+    return ecTrustOf.get(at);
+  }
+  var ecKeyBub = null;
+  function ecKeyBubClose() {
+    if (ecKeyBub) {
+      dismissNode(ecKeyBub);
+      ecKeyBub = null;
+    }
+  }
+  function ecKeyBubOpen(key) {
+    ecKeyBubClose();
+    if (!key.isConnected) return;
+    const b = document.createElement("div");
+    b.className = "bub ec-key-bub";
+    b.setAttribute("role", "tooltip");
+    b.textContent = key.getAttribute("data-tip") || "";
+    document.body.appendChild(b);
+    const r = key.getBoundingClientRect();
+    placeBubble(b, { top: r.top, left: r.left, width: r.width, height: r.height }, { prefer: "above" });
+    ecKeyBub = b;
+    ["keydown", "pointerdown", "scroll"].forEach((k) => addEventListener(k, ecKeyBubClose, { capture: true, once: true }));
+  }
+  function wireEcKeys(box) {
+    box.querySelectorAll(".ec-key[data-tip]").forEach((k) => {
+      k.onmouseenter = k.onfocus = () => ecKeyBubOpen(k);
+      k.onmouseleave = k.onblur = ecKeyBubClose;
+    });
   }
   function ecActHtml(word, icon, attrs) {
     const w = esc(t(word));
@@ -20476,11 +20525,13 @@ What you type stays in this browser only.`;
         const copy2 = ecCopyHtml(f), meta = on ? loadedMeta(stamp) : ecMeta(stamp, f);
         return ecRowHtml({
           name: f.name,
+          file: f.name,
           mtime: f.mtime,
           loaded: on,
           newer: at > 0 && f.mtime > at,
           sample: !!f.sample,
-          meta: copy2 && meta ? copy2 + " · " + meta : copy2 || meta
+          meta: copy2 && meta ? copy2 + " · " + meta : copy2 || meta,
+          trust: on ? heldCatalogTrust() : ""
         });
       });
       const applied = typeof E_CATALOG_NAME !== "undefined" && E_CATALOG_NAME ? E_CATALOG_NAME : "";
@@ -20489,9 +20540,20 @@ What you type stays in this browser only.`;
           name: shownCatalogName(String(applied || held && held.name || "")),
           loaded: true,
           newer: false,
-          meta: loadedMeta("")
+          meta: loadedMeta(""),
+          trust: heldCatalogTrust()
         }));
+      ecKeyBubClose();
       box.innerHTML = rows.length ? rows.join("") : ecEmptyHtml();
+      wireEcKeys(box);
+      files.forEach((f, i) => ecFileTrust(f).then((r) => {
+        const row = Array.from(box.querySelectorAll(".ec-row")).find((x) => x.getAttribute("data-ec-file") === f.name);
+        const key = row && row.querySelector(".ec-key");
+        if (!key) return;
+        key.insertAdjacentHTML("beforebegin", trustKeyHtml(i === onAt ? heldCatalogTrust() : r.state, r.keyId));
+        key.remove();
+        wireEcKeys(row);
+      }));
       box.querySelectorAll("button[data-ec-load]").forEach((b) => {
         b.onclick = () => loadCatalogFromFolder(
           b.getAttribute("data-ec-load"),

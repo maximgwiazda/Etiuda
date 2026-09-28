@@ -1,12 +1,13 @@
 /* THE SIGNATURE A CATALOG ARRIVED WITH, read by the engine's own verifier against the ring the
    host finds beside the catalogs (board 605). A warning and never a refusal: every state still
-   loads, and a valid signature says nothing. */
+   loads. */
 import { v2SigState, v2RingRead, V2_SIG_VALID, V2_SIG_NONE, V2_SIG_INVALID, V2_SIG_UNKNOWN } from "./catalog-v2.js";
 import { catalogDocOf, eCatalogSignature } from "./catalog.js";
 import { eCatalogRing } from "./host.js";
 import { nsGet, nsSet, nsDel } from "./storage.js";
 import { t } from "./ui-lang.js";
 import { esc } from "./esc.js";
+import { ICON_KEY } from "./icons.js";
 
 const TRUST_KEY="CatalogTrust";
 const TRUST_WAIT_MS=2000;
@@ -58,13 +59,18 @@ function recheckHeldTrust(found,held,then){
     if(typeof then==="function") then();
   });
 }
-/* The loaded row's line of its own, below the counts every row shares: nothing for a valid
-   signature, nor for the sample's absent one. */
-function trustMetaHtml(state,sample){
-  const said=state===V2_SIG_INVALID ? t("changed since it was signed")
-    : state===V2_SIG_UNKNOWN ? t("signed with a key this computer does not know")
-    : (state===V2_SIG_NONE && !sample) ? t("unsigned") : "";
-  return said ? '<small class="ec-trust" data-trust="'+esc(state)+'">'+esc(said)+'</small>' : "";
+/* A ROW'S SIGNATURE IS A KEY beside its act, never a line: gold where the signature holds, grey
+   otherwise, its word the name. What more can be said rides data-tip, for a bubble on hover or
+   focus, and a key with a bubble carries no title so the two never show at once. An unknown
+   state keeps the slot and draws nothing, so the acts stay in one column. */
+function trustKeyHtml(state,keyId){
+  if(!state) return '<span class="ec-key" aria-hidden="true"></span>';
+  const word=esc(t(state===V2_SIG_NONE?"Unsigned":"Signed"));
+  const tip=state===V2_SIG_INVALID ? t("This file has changed since it was signed.")
+    : state===V2_SIG_UNKNOWN ? t("This file is signed with a key this computer does not know.")
+    : (state===V2_SIG_VALID && keyId) ? t("This file is signed with the key {KEY}.").split("{KEY}").join(keyId) : "";
+  return '<span class="ec-key'+(state===V2_SIG_VALID?" on":"")+'" role="img" data-trust="'+esc(state)+'" aria-label="'+word+'"'
+    +(tip?' tabindex="0" data-tip="'+esc(tip)+'"':' title="'+word+'"')+'>'+ICON_KEY+'</span>';
 }
 /* The offer's line. Unsigned is said there only where it undoes a signature the desk now has. */
 function trustOfferLine(state,updating){
@@ -82,6 +88,6 @@ export {
   recordCatalogTrust,
   heldCatalogTrust,
   recheckHeldTrust,
-  trustMetaHtml,
+  trustKeyHtml,
   trustOfferLine
 };
