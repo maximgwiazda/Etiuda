@@ -619,25 +619,37 @@ function ejectUndoTests() {
     [off.asked, off.reloads, "eCatalog" in off.ls, deaf.asked, deaf.reloads, "eEjectPark" in deaf.ss], [1, 0, true, 1, 0, false]);
 }
 
-/* THE TOUR TEACHES BY DOING (Maxim, 2026-09-27): a step that teaches an act asks for it and moves on
-   when it is done, and Next stands only where nothing is asked. The step table and the act watcher
-   run in bare node inside one scope whose every free name is the page model below. */
+/* THE TOUR'S WAYS ON (Maxim, 2026-09-28 22:20 and 22:22): Next on every step, held back only on the load
+   step; only the name step asks for writing, and the steps that describe wait for no act; a step that opens
+   a window moves on when the person opens it or when Next opens it for them; inside a window, Next closes it
+   and moves on, and Back closes it and returns to the step that opens it. The step table and the functions
+   that move the tour run in bare node inside one scope whose every free name is the page model below. */
 function tourActTests() {
   const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "tour.js"), "utf8");
   const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
   const timers = [];
-  const page = { tourRunning: true, tourIdx: 0, copies: 0, menuIsOpen: false, target: {},
-    pax: { value: "" }, intentEl: { value: "" }, intentIdxs: [], cats: [], lang: "en", tabs: [{}],
-    pack: { favourites: [], hidden: [] }, moved: [],
-    document: { documentElement: { dataset: { theme: "dark" } }, body: { classList: { contains: () => false } } } };
-  const next = { hidden: false, textContent: "" };
+  /* The page: which window stands (`win`: the card editor, the Library or Settings), Quick facts, the Menu,
+     and whether the controls a step presses are on screen. Each control opens what a person's click opens. */
+  const page = { tourRunning: true, tourIdx: 0, target: {}, win: null, facts: false, menu: false, shown: true, moved: [], ends: [] };
+  const control = (sel, open) => ({ matches: s => s === sel, getClientRects: () => (page.shown ? [{}] : []), click: open });
+  const pencil = control('[data-act="edit"]', () => { page.win = "editor"; });
+  const fab = control("#addCardFab", () => { page.win = "editor"; });
+  const factsBtn = control("#factsBtn", () => { page.facts = true; });
+  const rows = { manage: control('[data-act="manage"]', () => { page.menu = false; page.win = "library"; }),
+    settings: control('[data-act="settings"]', () => { page.menu = false; page.win = "settings"; }) };
+  const next = { hidden: false, disabled: false, textContent: "" };
   const own = {
-    t: s => s, chordChips: () => "K", copiesMade: () => page.copies, menuOpen: () => page.menuIsOpen,
-    tourEls: () => ({ next }), resolveTourTarget: () => page.target,
+    t: s => s, chordChips: () => "K", tourEls: () => ({ next }), resolveTourTarget: () => page.target,
     setTimeout: (fn, ms) => { timers.push({ fn, ms, live: true }); return timers.length; },
     clearTimeout: id => { if (id && timers[id - 1]) timers[id - 1].live = false; },
-    tourNext: () => page.moved.push("next"), showTourStep: i => page.moved.push("show " + i),
-    tourFollowWindow: () => { page.moved.push("follow"); return true; }
+    showTourStep: i => { page.tourIdx = i; page.moved.push(T.TOUR_STEPS[i].id); }, endTour: done => { page.ends.push(done); },
+    cardBtn: sel => (sel === '[data-act="edit"]' ? pencil : {}), $: sel => ({ "#addCardFab": fab, "#factsBtn": factsBtn, "#tourName": { value: "" } })[sel],
+    menuOpen: () => page.menu, openSettingsMenu: () => { page.menu = true; },
+    menuTarget: act => (page.menu ? rows[act] || {} : {}),
+    modalOpen: () => !!page.win, closeModal: () => { page.win = null; },
+    factsPanelOpen: () => page.facts, closeFactsPanel: () => { page.facts = false; },
+    cardEditorOpen: () => page.win === "editor", libraryOpen: () => page.win === "library", settingsOpen: () => page.win === "settings",
+    agentName: () => "", wholeThingEmpty: () => page.empty
   };
   const scope = new Proxy({}, {
     has: (o, k) => typeof k === "string",
@@ -647,85 +659,91 @@ function tourActTests() {
   });
   let T = null;
   try {
-    T = new Function("scope", "with(scope){\n" + ["const paxNow=", "const searchNow=", "const themeNow=", "function loadStepBody(", "const TOUR_STEPS=",
-      "function stepOn(", "function onFrom(", "function tourAsks(", "function syncTourNext(", "const TOUR_ACT_MS=",
-      "let tourActWas=", "function armTourAct(", "function tourActSoon(", "function tourActCheck("]
+    T = new Function("scope", "with(scope){\n" + ["function tourPress(", "function tourPressRow(", "function shutTourWindow(",
+      "function loadStepBody(", "const TOUR_STEPS=", "function stepOn(", "function onFrom(", "function nextHeld(", "function syncTourNext(",
+      "const TOUR_ACT_MS=", "let tourActT=", "function tourActSoon(", "function tourActCheck(", "function tourFollowWindow(",
+      "function tourNext(", "function tourOn(", "function tourPrev("]
       .map(m => extractDecl(src, m)).join("\n")
-      + "\nreturn {TOUR_STEPS, tourAsks, syncTourNext, armTourAct, tourActSoon, TOUR_ACT_MS};\n}")(scope);
-  } catch (e) { T = null; eq("tour.js carries the step table and the act watcher", e.message, "sliced"); }
+      + "\nreturn {TOUR_STEPS, nextHeld, syncTourNext, tourActSoon, TOUR_ACT_MS, tourNext, tourPrev};\n}")(scope);
+  } catch (e) { T = null; eq("tour.js carries the step table and the functions that move the tour", e.message, "sliced"); }
   eq("the step counter is gone from the bubble and from the code that wrote it",
     [/tourStepLabel/.test(tpl), /tourStepLabel|Tour \{N\}/.test(src)], [false, false]);
   if (!T) return;
-  const ids = T.TOUR_STEPS.map(s => s.id);
-  const nextOn = () => ids.filter((id, i) => { page.tourIdx = i; T.syncTourNext(); return !next.hidden; });
-  eq("Next stands only on the steps that ask nothing: the name, which may be left for later, and the last",
-    nextOn(), ["name", "done"]);
-  page.target = null;
-  eq("and on a step whose control is not on screen, which cannot be done and so asks nothing, but never inside a window",
-    nextOn(), ids.filter((id, i) => !T.TOUR_STEPS[i].inside));
-  page.target = {};
-
-  /* Each act, done the way a person does it: the step is not done when it begins, and it is once the act has landed.
-     The list must name every step that `does` something, so a new one cannot arrive untested. The desk has been
-     used before the step begins, so a step that forgot where it began is caught. */
-  Object.assign(page, { copies: 5, tabs: [{}, {}], lang: "en", pack: { favourites: ["z"], hidden: ["z"] } });
-  page.pax.value = "OLGA"; page.intentEl.value = "old";
-  const acts = { pax: () => { page.pax.value = "ANNA NOWAK"; }, search: () => { page.intentEl.value = "return"; },
-    rail: () => { page.intentIdxs = [3]; }, cards: () => { page.copies++; }, pills: () => { page.cats = ["c"]; },
-    tabs: () => { page.tabs = page.tabs.concat([{}]); }, seg: () => { page.lang = "pl"; },
-    star: () => { page.pack.favourites = ["a"]; }, hide: () => { page.pack.hidden = ["a"]; },
-    theme: () => { page.document.documentElement.dataset.theme = "light"; }, menu: () => { page.menuIsOpen = true; } };
-  const doing = T.TOUR_STEPS.filter(s => s.does).map(s => s.id);
-  eq("every step that does something has an act in this leg, and none else", doing.slice().sort(), Object.keys(acts).sort());
-  const verdicts = doing.map(id => {
-    const s = T.TOUR_STEPS.find(x => x.id === id);
-    const was = s.does.snap ? s.does.snap() : undefined, before = !!s.does.done(was);
-    acts[id]();
-    return id + ":" + before + ">" + !!s.does.done(was);
-  });
-  eq("each act step is undone when it begins and done after its act", verdicts, doing.map(id => id + ":false>true"));
-
-  // The watcher: only an event inside `on` counts, never one in the bubble, and the step is read once it settles.
-  const at = id => ids.indexOf(id);
-  const ev = inside => ({ target: { closest: sel => (inside.indexOf(sel) > -1 ? {} : null) } });
+  const ids = T.TOUR_STEPS.map(s => s.id), at = id => ids.indexOf(id);
   const fire = () => { const live = timers.filter(x => x.live); timers.forEach(x => { x.live = false; }); live.forEach(x => x.fn()); return live.map(x => x.ms); };
-  page.intentIdxs = []; page.tourIdx = at("rail"); page.moved = [];
-  T.armTourAct(T.TOUR_STEPS[at("rail")]);
-  page.intentIdxs = [2];
-  T.tourActSoon(ev(["#pills"])); fire();
-  T.tourActSoon(ev(["#tourCard", "#intentRail"])); fire();
-  const outside = page.moved.slice();
-  T.tourActSoon(ev(["#intentRail"])); const waited = fire();
-  eq("an act counts only where the step asks for it, never through the bubble, and moves the tour on once settled",
-    [outside, page.moved, waited], [[], ["next"], [350]]);
-  page.pax.value = "ANNA"; page.tourIdx = at("pax"); page.moved = [];
-  T.armTourAct(T.TOUR_STEPS[at("pax")]);
-  page.pax.value = "ANNA N"; T.tourActSoon(ev(["#pax"]));
-  page.pax.value = "ANNA NOWAK"; T.tourActSoon(ev(["#pax"]));
-  const typed = fire();
-  eq("typing is read once, after it pauses, against the name that stood when the step began",
-    [typed, page.moved], [[1200], ["next"]]);
-  page.tourIdx = at("facts"); page.moved = [];
-  T.armTourAct(T.TOUR_STEPS[at("facts")]); T.tourActSoon(ev([])); fire();
-  eq("a step that opens a window follows the person into it", page.moved, ["follow"]);
+  const reset = (id, state) => { Object.assign(page, { win: null, facts: false, menu: false, shown: true, empty: false, moved: [], ends: [] }, state || {}); page.tourIdx = at(id); };
+  const where = () => ids[page.tourIdx] + (page.win ? " [" + page.win + "]" : "") + (page.facts ? " [facts]" : "") + (page.menu ? " [menu]" : "");
 
-  /* THE SMOKE WALKS THIS TOUR, not a remembered one. tests/tour-walk.js says what a person does on each step, and
-     the smoke does it; this holds its rows to the table above: the same ids in order, Next exactly where tourAsks
-     says nothing is asked, the same window opened by the same step, an act for every step that asks one, and a
-     wait at least as long as the step settles. Its teeth are four doctored tables, each of which must be named. */
+  const held = () => ids.filter((id, i) => { page.tourIdx = i; next.disabled = false; T.syncTourNext(); return next.disabled || next.hidden; });
+  page.target = {};
+  const heldOn = held();
+  page.target = null;
+  const heldOff = held();
+  page.target = {};
+  eq("Next stands on every step and is held back only on the load step, while its control is on screen",
+    [heldOn, heldOff], [["load"], []]);
+
+  /* The table's shape: the favourite, put-away and edit steps are one step that opens the editor, and the only
+     steps that wait on the person are the load, the Menu (`done`) and the ones that open or stand in a window. */
+  const waitsOn = s => !!(s.waits || s.done || s.opens || s.inside);
+  eq("the steps are the table's, one card step for the star, the eye and the pencil, and every step between the name and the"
+     + " window steps only describes, waiting for no act",
+    [ids.join(","), T.TOUR_STEPS.filter(s => s.name).map(s => s.id), T.TOUR_STEPS.filter(s => !waitsOn(s) && !s.name).map(s => s.id),
+     T.TOUR_STEPS.filter(s => "does" in s).map(s => s.id)],
+    ["name,load,pax,search,rail,cards,pills,tabs,seg,buttons,editor,add,addIn,facts,factsIn,theme,menu,library,libraryIn,settings,settingsIn,done",
+     ["name"], ["pax", "search", "rail", "cards", "pills", "tabs", "seg", "theme", "done"], []]);
+
+  /* The person's act: on a step that describes, nothing they do moves the tour; the Menu step moves on once the
+     Menu is open; a step that opens a window follows the window in. Each read once the act settles. */
+  reset("rail"); T.tourActSoon(); const settled = fire();
+  const stayed = where();
+  reset("menu", { menu: true }); T.tourActSoon(); fire();
+  const menuTo = where();
+  reset("facts", { facts: true }); T.tourActSoon(); fire();
+  const factsTo = where();
+  eq("an act moves on only the steps that wait for one, read once it settles: the Menu opened, a window opened",
+    [settled, stayed, menuTo, factsTo], [[350], "rail", "library [menu]", "factsIn [facts]"]);
+
+  /* Next on each step that opens something: it opens it for the person and the tour goes in with it. */
+  const opened = ["buttons", "add", "facts", "menu", "library", "settings"].map(id => { reset(id); T.tourNext(); return id + ">" + where(); });
+  eq("Next on a step that opens a window opens it and goes inside, and on the Menu step opens the Menu for the Library step",
+    opened, ["buttons>editor [editor]", "add>addIn [editor]", "facts>factsIn [facts]", "menu>library [menu]", "library>libraryIn [library]", "settings>settingsIn [settings]"]);
+  const hidden = ["buttons", "add", "facts"].map(id => { reset(id, { shown: false }); T.tourNext(); return id + ">" + where(); });
+  eq("and where its control is not on screen Next opens nothing and moves on past the window's own step",
+    hidden, ["buttons>add", "add>facts", "facts>theme"]);
+
+  /* Inside a window: Next closes it and moves on; Back closes it and returns to the step that opens it. */
+  const inWin = { editor: { win: "editor" }, addIn: { win: "editor" }, factsIn: { facts: true }, libraryIn: { win: "library" }, settingsIn: { win: "settings" } };
+  const nexts = Object.keys(inWin).map(id => { reset(id, inWin[id]); T.tourNext(); return id + ">" + where(); });
+  const backs = Object.keys(inWin).map(id => { reset(id, inWin[id]); T.tourPrev(); return id + "<" + where(); });
+  eq("inside a window Next closes it and moves on, and Back closes it and returns to the step that opens it",
+    [nexts, backs], [["editor>add", "addIn>facts", "factsIn>theme", "libraryIn>settings", "settingsIn>done"],
+      ["editor<buttons", "addIn<add", "factsIn<facts", "libraryIn<library", "settingsIn<settings"]]);
+
+  /* The load step: Next does nothing while the desk is empty and its control stands, and Finish ends the tour done. */
+  reset("load", { empty: true }); T.tourNext();
+  const loadNext = where();
+  reset("done"); T.tourNext();
+  eq("Next on the load step does nothing while it is held back, and on the last step it ends the tour as done",
+    [loadNext, page.ends], ["load", [true]]);
+
+  /* THE SMOKE WALKS THIS TOUR, not a remembered one. tests/tour-walk.js says which way the walk takes on each step,
+     and the smoke takes it; this holds its rows to the table above: the same ids in order, Next pressed only where
+     the table does not hold it back, the same window opened by the same step, an act only where a step waits for
+     one, and a way out of every window. Its teeth are five doctored tables, each of which must be named. */
   const TW = require("./tour-walk.js");
   const clone = () => T.TOUR_STEPS.map(x => Object.assign({}, x));
-  const doctor = fn => { const st = clone(); fn(st); return TW.planProblems(st, T.tourAsks, T.TOUR_ACT_MS); };
+  const doctor = fn => { const st = clone(); fn(st); return TW.planProblems(st, s => !!s.waits, T.TOUR_ACT_MS); };
   const named = (probs, id) => probs.some(x => x.indexOf(id) === 0 || x.indexOf("order") === 0 && x.indexOf(id) > -1);
   const teeth = [
-    named(doctor(st => { delete st.find(x => x.id === "theme").does; }), "theme"),
-    named(doctor(st => { st.splice(st.findIndex(x => x.id === "done"), 0, { id: "extra", sel: "#x", title: "", body: "", does: { done: () => false } }); }), "extra"),
-    named(doctor(st => { st.find(x => x.id === "facts").opens = "libraryIn"; }), "facts"),
+    named(doctor(st => { delete st.find(x => x.id === "facts").opens; }), "facts"),
+    named(doctor(st => { st.splice(st.findIndex(x => x.id === "done"), 0, { id: "extra", sel: "#x", title: "", body: "" }); }), "extra"),
+    named(doctor(st => { st.find(x => x.id === "menu").waits = true; }), "menu"),
     named(doctor(st => { const a = st.findIndex(x => x.id === "menu"), b = st[a - 1]; st[a - 1] = st[a]; st[a] = b; }), "menu"),
-    named(doctor(st => { st.find(x => x.id === "pax").does = Object.assign({}, st.find(x => x.id === "pax").does, { settle: 5000 }); }), "pax")
+    named(doctor(st => { delete st.find(x => x.id === "libraryIn").inside; }), "libraryIn")
   ];
-  eq("the smoke's walk of the tour has one row per step of the table, in its order, and does what each step asks",
-    [TW.planProblems(T.TOUR_STEPS, T.tourAsks, T.TOUR_ACT_MS), teeth], [[], [true, true, true, true, true]]);
+  eq("the smoke's walk of the tour has one row per step of the table, in its order, and takes a way each step offers",
+    [TW.planProblems(T.TOUR_STEPS, T.nextHeld, T.TOUR_ACT_MS), teeth], [[], [true, true, true, true, true]]);
 
   /* EVERY WORD THE TOUR SHOWS IS IN THE POLISH TABLE, on every host it can meet: a function that composes its own key
      must hit on each t() it makes, and a string it returns bare must itself be a key, as showTourStep reads both. */
@@ -747,7 +765,7 @@ function tourActTests() {
     [...new Set(untranslated)], []);
   /* WHERE THE TOUR SAYS A PERSON'S THINGS STAY is where they stay on that host, in both languages: the desk keeps
      them on this computer and a browser in itself, so no step names the other host's place. */
-  const misplaced = [], editSays = [];
+  const misplaced = [], factsSays = [];
   [[true, "X", true], [true, "X", false], [false, "", true]].forEach(([host, dir, wheel]) => {
     Object.assign(own, { eHost: () => host, eCatalogFolderShort: () => dir, wheelShown: () => wheel, esc: s => s });
     const other = host ? /this browser|przegl/i : /this computer|komputer/i, mine = host ? /this computer|komputer/i : /this browser|przegl/i;
@@ -756,13 +774,13 @@ function tourActTests() {
       T.TOUR_STEPS.forEach(s => {
         const out = typeof s.body === "function" ? s.body() : tr(s.body);
         if (other.test(out)) misplaced.push(s.id + (pl ? " pl" : " en") + (host ? "" : " (browser)"));
-        if (s.id === "edit") editSays.push(mine.test(out));
+        if (s.id === "factsIn") factsSays.push(mine.test(out));
       });
     });
   });
   own.t = s => s;
-  eq("the tour names where a person's things stay as the host keeps them: the edit step on each host and language, and no step the other host's place",
-    [misplaced, editSays], [[], [true, true, true, true, true, true]]);
+  eq("the tour names where a person's things stay as the host keeps them: the Quick facts step on each host and language, and no step the other host's place",
+    [misplaced, factsSays], [[], [true, true, true, true, true, true]]);
   /* THE LOAD STEP NAMES NO SAMPLE BUTTON, because the empty desk draws none: asked on a desk, where the step once
      named one, in both languages. */
   Object.assign(own, { eHost: () => true, eCatalogFolderShort: () => "X", esc: s => s });
@@ -3467,8 +3485,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 835;
-const UI_STRINGS_SHA256 = "5b9a0c3b3e8afb0b11a5441cb63a188de332704883ed3f85c6427427df7c063e";
+const UI_STRINGS_COUNT = 831;
+const UI_STRINGS_SHA256 = "65911f86f252bdc4bdea832d1b86d6ecc43e3aac6654c5ca4505a38209fcedc1";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

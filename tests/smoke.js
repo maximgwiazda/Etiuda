@@ -461,18 +461,19 @@ const t0 = Date.now();
 
   /* THE TOUR, WALKED AS A PERSON WALKS IT, and watched through what a person sees.
 
-     It teaches by doing (Maxim, 2026-09-27 23:28): a step that teaches an act asks for it and moves
-     on when the act is done, "Next" stands only on a step that asks nothing, the numbering is gone,
-     and the tour stays restartable from the Menu. So this walk does each step's act, with the mouse
-     and the keyboard, at the place the step's ring is drawn; tests/tour-walk.js holds one row per
-     step, and tests/test.js holds those rows to the step table in tour.js, so the walk cannot drift
-     from the tour it walks.
+     Next stands on every step but the load step, where it is held back (Maxim, 2026-09-28 22:20);
+     a step that opens a window is left by the person's click or by Next, which opens the window for
+     them (22:22); inside a window, Next closes it and Back closes it and returns to the step that
+     opens it. The numbering is gone, and the tour stays restartable from the Menu. So this walk
+     takes one of those ways on each step, with the mouse and the keyboard, at the place the step's
+     ring is drawn, and takes each way at least once; tests/tour-walk.js holds one row per step, and
+     tests/test.js holds those rows to the step table in tour.js, so the walk cannot drift from the
+     tour it walks.
 
-     IN A CONTEXT OF ITS OWN. The walk types a customer's name, searches, picks an intent, copies a
-     reply, filters a category, opens a conversation, switches its language, stars a card, puts one
-     away and flips the theme, because those are the acts the tour teaches. Every later leg of this
-     file reads the main page, so the walk runs on a desk of its own over the same run folder and
-     catalog, and nothing it did survives it.
+     IN A CONTEXT OF ITS OWN. The walk types the agent's name and opens and closes the card editor,
+     Quick facts, the Library and Settings. Every later leg of this file reads the main page, so the
+     walk runs on a desk of its own over the same run folder and catalog, and nothing it did
+     survives it.
 
      The history this replaces, kept because it is why the overlay is what is read. Until
      2026-09-13 these lines read TOUR_STEPS and tourRunning off the page and checked the tour's own
@@ -523,50 +524,52 @@ const t0 = Date.now();
     await hookDrain(walkCtx, "the tour walk");
     if (walkCtx) await walkCtx.close().catch(() => {});
   }
-  /* What the walk should meet: every row of the plan but the load, which only an empty desk shows. */
-  const planned = TW.PLAN.filter(r => !r.reload).map(r => r.id);
-  const asksNothing = TW.PLAN.filter(r => r.next).map(r => r.id);
+  /* What the walk should meet: every row of the plan but the load, which only an empty desk shows, a
+     step visited again where the walk went back from its window. */
+  const planned = TW.route(true);
   const windowed = TW.PLAN.filter(r => r.inside).map(r => r.id);
   const walkedIds = walk.map(r => r.id);
   check(!!walkStart && walkStart.opened && walkStart.at === "name" && walk.length > 0 && walk[0].look.up
         && walk.every(r => !r.look.counter),
     "the tour opens from the Menu on its first step, and no step of it shows a counter: " + JSON.stringify({ start: walkStart,
       late: walkLate, counted: walk.filter(r => r.look.counter).map(r => r.id) }));
-  /* "Next" only appears on the step that does not require the user to do anything (Maxim, 23:25). */
-  const nextOn = walk.filter(r => r.look.next).map(r => r.id);
-  check(walkedIds.join(",") === planned.join(",") && nextOn.join(",") === asksNothing.join(","),
-    "Next stands only where nothing is asked, " + JSON.stringify(nextOn) + ", over " + walk.length + " of " + planned.length + " steps");
+  /* "Next" should be present on all tour steps, greyed out only for "load catalog" (Maxim, 22:20),
+     which a desk holding a catalog passes over. */
+  const noNext = walk.filter(r => !r.look.next || r.look.held).map(r => r.id);
+  check(walkedIds.join(",") === planned.join(",") && noNext.length === 0,
+    "Next stands on every step and is held back on none of them: " + JSON.stringify(noNext) + ", over " + walk.length + " of " + planned.length + " steps");
   /* A step says what to do and points at it: the control the act uses answers a point inside the ring. */
   const missed = walk.filter(r => r.aims.some(a => !a.ok))
     .map(r => r.id + " " + r.aims.filter(a => !a.ok).map(a => a.sel + " (" + a.found + " matched)").join("; "));
   check(walk.length === planned.length && missed.length === 0,
     "every act was done at the step's ring, on a point the page answers with the control the step asks for"
     + (missed.length ? ": " + JSON.stringify(missed) : " (" + walk.reduce((n, r) => n + r.aims.length, 0) + " presses)"));
-  /* Each step advancing when its act is done, and by one step: the table's order, to the end. */
+  /* Each step moving on the way its row takes, and by one step: the table's order, to the end. */
   const wrong = walk.filter(r => r.to !== r.want)
     .map(r => r.id + " went to " + r.to + ", wanted " + r.want + (r.asked ? ", with a question standing" : ""));
   check(walkedIds.join(",") === planned.join(",") && wrong.length === 0,
-    "each act moves the tour on by one step, in the table's order, to the end"
+    "each click, Next and Back moves the tour on by one step, in the table's order, to the end"
     + (wrong.length ? ": " + JSON.stringify(wrong) : " (" + walk.length + " steps, " + Math.round(walk.reduce((n, r) => n + r.ms, 0) / 1000) + " s)"));
-  /* THE TOUR OPENS NO WINDOW (Maxim, 2026-09-26): the person opens it, the step inside it appears
-     when they do, stands in front of it with neither Next nor Back, and closing it moves the tour on.
-     No step outside a window is ever met with a window or Quick facts standing. */
+  /* A WINDOW OPENS BY THE PERSON'S CLICK OR BY NEXT (Maxim, 22:22), and the step inside it stands in
+     front of it with Next and Back. No step outside a window is ever met with a window or Quick facts
+     standing, so Next and Back closed every window they left. */
   const inside = walk.filter(r => windowed.indexOf(r.id) > -1);
-  const badIn = inside.filter(r => r.look.next || r.look.back || r.look.z !== "240" || r.look.behind || !(r.look.window || r.look.facts))
+  const badIn = inside.filter(r => !r.look.next || r.look.held || !r.look.back || r.look.z !== "240" || r.look.behind || !(r.look.window || r.look.facts))
     .map(r => r.id + " " + JSON.stringify({ next: r.look.next, back: r.look.back, z: r.look.z, open: r.look.window || r.look.facts }));
   const stood = walk.filter(r => windowed.indexOf(r.id) < 0 && (r.look.window || r.look.facts)).map(r => r.id);
-  check(inside.map(r => r.id).join(",") === windowed.join(",") && badIn.length === 0 && stood.length === 0,
-    "no window opens but by the person's click, and the tour goes into each one they open, in front of it with"
-    + " neither Next nor Back: " + JSON.stringify({ inside: inside.map(r => r.id), badIn, stood }));
-  /* The Menu, as Maxim put it at 23:25: the Menu step asks for the click on Menu, which brings the
-     step explaining the Menu and asking for Library, whose window brings the Library's step, "then
-     the same with Settings". The bubble stands beside the open menu, never over its rows. */
-  const lib = walk.find(r => r.id === "library");
-  const chain = ["menu", "library", "libraryIn", "settings", "settingsIn"].map(id => walk.find(r => r.id === id))
-    .every(r => !!r && r.to === r.want);
-  check(!!lib && lib.look.menu && lib.look.clear && chain,
-    "the Menu step's click brings the Library step with the menu still open and the bubble clear of its rows,"
-    + " and Library and Settings each take the tour inside: " + JSON.stringify(lib ? { menu: lib.look.menu, clear: lib.look.clear, chain } : null));
+  check(inside.map(r => r.id).join(",") === planned.filter(id => windowed.indexOf(id) > -1).join(",") && badIn.length === 0 && stood.length === 0,
+    "each window opens by the click or by Next, and the tour goes into it, in front of it with Next and Back,"
+    + " and leaves no window standing behind it: " + JSON.stringify({ inside: inside.map(r => r.id), badIn, stood }));
+  /* The Menu: Next on the Menu step opens it and brings the Library step with the menu open and the
+     bubble beside it, never over its rows; Back inside the Library closes it and stands on the Library
+     step again; Next there opens the Library for the person; "then the same with Settings". */
+  const lib = walk.find(r => r.id === "library"), libAgain = walk.find(r => r.id === "library" && r.visit === 2);
+  const chain = ["menu", "library", "libraryIn", "settings", "settingsIn"].map(id => walk.filter(r => r.id === id))
+    .every(rs => rs.length > 0 && rs.every(r => r.to === r.want));
+  check(!!lib && lib.look.menu && lib.look.clear && !!libAgain && !libAgain.look.window && chain,
+    "the Menu step's Next brings the Library step with the menu open and the bubble clear of its rows, Back inside"
+    + " the Library closes it onto that step, and Library and Settings each take the tour inside: "
+    + JSON.stringify(lib ? { menu: lib.look.menu, clear: lib.look.clear, backClosed: !!libAgain && !libAgain.look.window, chain } : null));
   const last = walk[walk.length - 1];
   check(!!walkEnd && !walkEnd.up && !!last && last.id === "done" && last.to === null,
     "and Finish on the last step takes the overlay off the screen, rather than only flagging the tour done");
@@ -2796,7 +2799,7 @@ const t0 = Date.now();
        which is a race against a navigation the instrument never mentioned. It is now waited for,
        and the wait is a check: the reload is the behaviour board 356 was about. */
     /* THE TOUR ASKS FOR A CATALOG ON THE EMPTY DESK and carries on past the load: its second step
-       rings the empty desk's own Load button and has no Next, and the reload a load ends in brings
+       rings the empty desk's own Load button with its Next held back, and the reload a load ends in brings
        the tour back at the step after it. */
     step("the tour's load step on the empty desk");
     const loadStep = await q.evaluate(async () => {
@@ -2807,7 +2810,7 @@ const t0 = Date.now();
       await wait(800);
       const ring = document.getElementById("tourHole").getBoundingClientRect(), btn = document.getElementById("emptyLoad");
       const b = btn ? btn.getBoundingClientRect() : null;
-      return { at: sessionStorage.getItem("eTourAt"), nextHidden: !!next && next.hidden,
+      return { at: sessionStorage.getItem("eTourAt"), nextHeld: !!next && !next.hidden && next.disabled,
                rings: !!b && ring.left <= b.left && ring.right >= b.right && ring.top <= b.top && ring.bottom >= b.bottom };
     });
     /* quiet-13: the reload a load ends in is covered. Boot's end is timed from inside the next
@@ -2826,8 +2829,8 @@ const t0 = Date.now();
       for (let i = 0; i < 40 && document.getElementById("tourRoot").hidden; i++) await wait(100);
       return { up: !document.getElementById("tourRoot").hidden, at: sessionStorage.getItem("eTourAt") };
     });
-    check(loadStep.at === "load" && loadStep.nextHidden && loadStep.rings && resumed.up && resumed.at === "pax",
-      "on the empty desk the tour's second step rings the Load button and waits without a Next, and the reload"
+    check(loadStep.at === "load" && loadStep.nextHeld && loadStep.rings && resumed.up && resumed.at === "pax",
+      "on the empty desk the tour's second step rings the Load button and waits with its Next greyed out, and the reload"
       + " a load ends in brings the tour back at the step after it: " + JSON.stringify({ loadStep, resumed }));
     check(reloaded, "accepting the sample reloads the document, which is how a catalog arrives on a clean desk");
     const cover = await q.evaluate(async () => {
@@ -3009,8 +3012,7 @@ const t0 = Date.now();
     await q1.click("#tourNext"); await sleep(700);
     await loadSample(q1);
     await upFor(q1, () => document.querySelectorAll("#list .card").length > 0 && !document.getElementById("tourRoot").hidden);
-    /* The steps before Cards ask for acts and have no Next (2026-09-27 23:28), so they are done as a
-       person does them, by the rows of tests/tour-walk.js. */
+    /* The steps before Cards are walked by the rows of tests/tour-walk.js, which press their Next. */
     const walked1 = [];
     for (let i = 0; i < 4; i++) {
       const id = await TW.at(q1);
