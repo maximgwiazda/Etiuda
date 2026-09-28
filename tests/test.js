@@ -2463,7 +2463,7 @@ function pillsResizeCostTests() {
   let got;
   try {
     const decls = ["let ePillsSettled=", "function pillsTwoLines(", "function pillsWrapHeight(", "function syncPillsCollapse(",
-      "function schedulePillsCollapse(", "function rememberPillsShape("].map(m => extractDecl(src, m)).join("\n");
+      "function schedulePillsCollapse(", "let pillsShapeT=", "function rememberPillsShape("].map(m => extractDecl(src, m)).join("\n");
     const pass = new Function("pills", "pillsSlot", "pillsWanted", "pillsLocked", "document", "getComputedStyle",
       "requestAnimationFrame", "hooks", "lsSet", "lsDel", "window", decls + "\nreturn schedulePillsCollapse;")(
       bar, () => slot, () => true, () => false, doc, computed, fn => fn(), { scheduleRailGeometry() {} }, () => {}, () => {},
