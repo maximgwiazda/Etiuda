@@ -213,9 +213,10 @@ function syncFavouritesMeta(){
   const alive=new Set((cards||[]).map(m=>m&&m.id).filter(Boolean));
   const hasCatalog=(cards||[]).some(m=>m&&!m._custom);
   if(hasCatalog) pack.favourites=(pack.favourites||[]).filter(id=>alive.has(id));
-  if(hasCatalog && pack.useCounts && typeof pack.useCounts==="object"){
-    Object.keys(pack.useCounts).forEach(id=>{ if(!alive.has(id)) delete pack.useCounts[id]; });
-  }
+  if(hasCatalog) ["useCounts","useAt"].forEach(n=>{
+    const o=pack[n];
+    if(o && typeof o==="object") Object.keys(o).forEach(id=>{ if(!alive.has(id)) delete o[id]; });
+  });
   if(hasCatalog) statsForgetCards(pack, id=>alive.has(id));
   /* No virtual "fav" category: it bought one pill and cost an "...except fav" in thirty
      places - it was never a category. A star is a mark ON a card: it lifts the card where

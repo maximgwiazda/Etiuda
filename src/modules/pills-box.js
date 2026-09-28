@@ -188,11 +188,16 @@ function wirePillsWidthWatch(){
     if(!first && ePillsSettled && pillsClipDue()) syncPillsCollapse();
   }).observe(probe);
 }
-// What the head script reserves on the next load: the slot's height at rest, per window width.
+/* What the head script reserves on the next load: the slot's height at rest, per window width.
+   Written once the width has held for a moment, as the facts panel's size is: a drag is a new
+   width every frame, and only the last is ever read. */
+let pillsShapeT=0;
 function rememberPillsShape(){
   const slot=pillsSlot();
-  if(!slot||!pillsWanted()||document.body.classList.contains("pills-off")){ lsDel("eHdrPills"); return; }
-  lsSet("eHdrPills", window.innerWidth+"x"+(Math.round(slot.getBoundingClientRect().height*10)/10));
+  const shape=(!slot||!pillsWanted()||document.body.classList.contains("pills-off")) ? null
+    : window.innerWidth+"x"+(Math.round(slot.getBoundingClientRect().height*10)/10);
+  clearTimeout(pillsShapeT);
+  pillsShapeT=setTimeout(()=>{ if(shape==null) lsDel("eHdrPills"); else lsSet("eHdrPills",shape); },180);
 }
 export {
   pillsWanted,

@@ -64,16 +64,39 @@ function eHostDesk(){
     const text=h.deskRead();
     const map=Object.create(null);
     if(text){ const o=JSON.parse(text); Object.keys(o).forEach(k=>{ map[k]=String(o[k]); }); }
-    return {map:map,save:h.deskSave,write:(typeof h.deskWrite==="function")?h.deskWrite:null,host:h};
+    return {map:map,save:h.deskSave,write:(typeof h.deskWrite==="function")?h.deskWrite:null,
+            patch:(typeof h.deskPatch==="function")?h.deskPatch:null,host:h};
   }catch(e){ return null; }              // a host that answers badly is a host that is not there
 }
 const E_DESK=eHostDesk();
-/* ONE SEND PER TASK, AND NONE THAT WAITS ON THE DISK: every send is the whole map, so the last of
-   a burst carries the rest. Synchronous only for a caller that must know (`own`) and for a page
-   leaving or hiding, where a pending send may never run; a host with no deskWrite is always so. */
+/* ONE SEND PER TASK, AND NONE THAT WAITS ON THE DISK: the last send of a burst carries the rest.
+   Synchronous only for a caller that must know (`own`) and for a page leaving or hiding, where a
+   pending send may never run; a host with neither deskWrite nor deskPatch is always so. */
 let eDeskDue=false, eDeskSent=0, eDeskHeard=0, eDeskArmed=false;
+/* A HOST THAT TAKES A PATCH IS SENT ONLY THE KEYS THAT CHANGED, null for one deleted, so a count or
+   a width does not carry the catalog with it. A key is owed from its change until a send carrying
+   it is answered true: a refusal is carried by the next send, never settled by another key's. */
+const eDeskOwed=new Set(), eDeskCarried=new Map();   // key -> the latest send carrying it, unanswered
+function deskPatchSend(all){
+  const n=++eDeskSent, keys=new Set(eDeskOwed), out={};
+  if(all) eDeskCarried.forEach((m,k)=>keys.add(k));
+  eDeskOwed.clear();
+  keys.forEach(k=>{ eDeskCarried.set(k,n); out[k]=(k in E_DESK.map)?E_DESK.map[k]:null; });
+  let p;
+  try{ p=keys.size ? E_DESK.patch(JSON.stringify(out),all) : true; }catch(e){ p=false; }
+  const heard=ok=>keys.forEach(k=>{
+    if(eDeskCarried.get(k)!==n) return;           // a later send carries it
+    eDeskCarried.delete(k);
+    if(!ok) eDeskOwed.add(k);
+    noteSave(ok,k);
+  });
+  if(all){ heard(p!==false); return p!==false; }
+  Promise.resolve(p).then(ok=>heard(ok!==false),()=>heard(false));
+  return true;
+}
 function deskSave(){
   eDeskDue=false;
+  if(E_DESK.patch) return deskPatchSend(true);
   const n=++eDeskSent;
   let ok;
   try{ ok=E_DESK.save(JSON.stringify(E_DESK.map))!==false; }catch(e){ ok=false; }
@@ -89,13 +112,14 @@ function deskHeard(n,ok){
 function deskSend(){
   if(!eDeskDue) return;
   eDeskDue=false;
+  if(E_DESK.patch){ deskPatchSend(false); return; }
   const n=++eDeskSent;
   let p;
   try{ p=E_DESK.write(JSON.stringify(E_DESK.map)); }catch(e){ p=false; }
   Promise.resolve(p).then(ok=>deskHeard(n,ok!==false),()=>deskHeard(n,false));
 }
 function deskSoon(){
-  if(!E_DESK.write) return deskSave();
+  if(!E_DESK.write && !E_DESK.patch) return deskSave();
   deskArm();
   if(eDeskDue) return true;
   eDeskDue=true;
@@ -106,7 +130,10 @@ function deskSoon(){
 }
 /* A send main has not answered counts as pending: it is sent again rather than trusted to the pipe.
    So does one it answered false, since the desk is still not on the disk. */
-function deskFlush(){ if(eDeskDue || eDeskHeard<eDeskSent || eUnsaved) deskSave(); }
+function deskFlush(){
+  const pending=E_DESK.patch ? (eDeskOwed.size>0 || eDeskCarried.size>0) : eDeskHeard<eDeskSent;
+  if(eDeskDue || pending || eUnsaved) deskSave();
+}
 function deskArm(){
   if(eDeskArmed) return;
   eDeskArmed=true;
@@ -115,15 +142,16 @@ function deskArm(){
     document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden") deskFlush(); });
   }catch(e){}
 }
-/* WHETHER WHAT THE PERSON DID IS ON THE DISK. A desk writes its whole map every time, so one
-   good write settles every earlier failure; a browser writes key by key, so each failed key is
-   settled only by its own next write. The notice that reads this is syncSaveNotice in pack.js. */
+/* WHETHER WHAT THE PERSON DID IS ON THE DISK. A desk sending its whole map settles every earlier
+   failure with one good write; a browser, and a desk sending patches, write key by key, so each
+   failed key is settled only by its own next write. The notice that reads this is syncSaveNotice
+   in pack.js. */
 let eUnsaved=null, eSavedAt=0;
 function noteSave(ok,k){
   const was=!!eUnsaved;
   if(ok){
     eSavedAt=Date.now();
-    if(eUnsaved && (E_DESK || (eUnsaved.delete(k) && !eUnsaved.size))) eUnsaved=null;
+    if(eUnsaved && ((E_DESK && !E_DESK.patch) || (eUnsaved.delete(k) && !eUnsaved.size))) eUnsaved=null;
   } else {
     if(!eUnsaved) eUnsaved=new Map();
     if(!eUnsaved.has(k)) eUnsaved.set(k,Date.now());
@@ -186,12 +214,12 @@ let eWiping=false;
    is on its way to a reload by the time it is called. */
 function eWipeLatch(){ eWiping=true; }
 /* THE RESCUE'S RESET, from the boot guard, which finds this on window when the app loaded before it
-   failed: a write this map still owes is sent whole on pagehide, so the map is emptied and written
+   failed: a write this map still owes is sent from it on pagehide, so the map is emptied and written
    here, where that send reads it. True when the desk was written. */
 function eResetClear(){
   eWipeLatch();
   if(!E_DESK) return false;
-  Object.keys(E_DESK.map).forEach(k=>{ if(E_KEY_RE.test(k)) delete E_DESK.map[k]; });
+  Object.keys(E_DESK.map).forEach(k=>{ if(E_KEY_RE.test(k)){ delete E_DESK.map[k]; eDeskOwed.add(k); } });
   return deskSave();
 }
 /* Returns whether the value actually landed. Swallowing the quota throw is right for the
@@ -206,6 +234,7 @@ function lsSet(k,v,own){
     const s=String(v), had=(k in E_DESK.map), was=E_DESK.map[k];
     if(!own && was===s && !eUnsaved) return true;
     E_DESK.map[k]=s;
+    eDeskOwed.add(k);
     if(!own) return deskSoon();
     // Taken back when refused, or the next write that lands stores what its caller was told had failed.
     if(deskSave()) return true;
@@ -219,7 +248,7 @@ function lsSet(k,v,own){
   return ok;
 }
 function lsDel(k){
-  if(E_DESK){ if((k in E_DESK.map) || eUnsaved){ delete E_DESK.map[k]; deskSoon(); } return; }
+  if(E_DESK){ if((k in E_DESK.map) || eUnsaved){ delete E_DESK.map[k]; eDeskOwed.add(k); deskSoon(); } return; }
   if(!E_LS_OK){ delete E_MEM[k]; return; }
   try{ localStorage.removeItem(k); noteSave(true,k); }catch(e){}
 }

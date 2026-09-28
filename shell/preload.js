@@ -62,6 +62,9 @@ contextBridge.exposeInMainWorld("E_HOST", {
   deskRead: () => ipcRenderer.sendSync("etiuda:desk"),
   deskSave: (text) => ipcRenderer.sendSync("etiuda:desk-save", text),
   deskWrite: (text) => ipcRenderer.invoke("etiuda:desk-write", text),
+  /* Only the keys this load changed, null for one it deleted; `now` waits for the disk as deskSave does. */
+  deskPatch: (text, now) => (now ? ipcRenderer.sendSync("etiuda:desk-patch-save", text)
+    : ipcRenderer.invoke("etiuda:desk-patch", text)),
   /* Where the desk is, and the files it refused and kept aside, as text like the desk itself. */
   deskFile: host.deskFile,
   /* The home folder, so a path the page shows can be written %USERPROFILE% rather than by name. */

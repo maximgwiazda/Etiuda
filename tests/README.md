@@ -20,6 +20,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/catalog-routes.mjs                     no fixtures, the two catalog routes
     node tests/module-calls.mjs                       no fixtures, the modules CALLED
     node tests/desk-ipc.mjs                           no fixtures, the desk's write path, shell stubbed
+    node tests/desk-growth.mjs                        no fixtures, a desk of 300 days: a count or a resize sends only what changed
     node tests/shell-office.mjs                       no fixtures, the shell against a busy file, a refused catalog, a folder that does not answer
     node tests/catalog-trust.mjs                      no fixtures, a catalog's signature as the desk reads it, shell stubbed
     node tests/catalog-trust-desk.mjs                 no fixtures, the desk's own load path saying that signature, one process per launch
@@ -35,7 +36,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
     ETIUDA_FIXTURES=<folder> node tests/reinstall.js     install, use, uninstall, install again
 
-`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `module-calls.mjs`, `desk-ipc.mjs`, `shell-office.mjs`, `catalog-trust.mjs`, `catalog-trust-desk.mjs`, `token-canary.mjs`, `test.js`, `i18n-scan.js`,
+`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `module-calls.mjs`, `desk-ipc.mjs`, `desk-growth.mjs`, `shell-office.mjs`, `catalog-trust.mjs`, `catalog-trust-desk.mjs`, `token-canary.mjs`, `test.js`, `i18n-scan.js`,
 `pl-diacritics.js`, `css-layers.js` and `motion-tokens.js`, none of which needs a fixture or a browser. `npm run smoke` needs both.
 
 `css-dead.js`, `ghosts.js` and `storage-keys.js` are reports rather than gates: they print and

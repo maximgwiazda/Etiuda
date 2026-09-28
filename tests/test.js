@@ -1224,7 +1224,8 @@ function catalogLangTests() {
 function deskStatsFns() {
   const src = sourceText();
   const decls = ["const STATS_DAYS_KEPT=", "const STATS_YMD=", "function statsYmd(",
-                 "function statsDayBefore(", "function statsDay(", "function statsIdAt(",
+                 "function statsDayBefore(", "function statsDay(", "const STATS_TOUCHED=", "function statsTouch(",
+                 "function statsCompact(", "function statsIdAt(", "const STATS_FORGOT=",
                  "function bumpUse(", "function bumpIntent(", "function bumpMiss(",
                  "function bumpLang(", "function statsForgetCards(", "function statsDoc("]
     .map(m => extractDecl(src, m)).join("\n");
@@ -2466,7 +2467,7 @@ function pillsResizeCostTests() {
   let got;
   try {
     const decls = ["let ePillsSettled=", "function pillsTwoLines(", "function pillsWrapHeight(", "function syncPillsCollapse(",
-      "function schedulePillsCollapse(", "function rememberPillsShape("].map(m => extractDecl(src, m)).join("\n");
+      "function schedulePillsCollapse(", "let pillsShapeT=", "function rememberPillsShape("].map(m => extractDecl(src, m)).join("\n");
     const pass = new Function("pills", "pillsSlot", "pillsWanted", "pillsLocked", "document", "getComputedStyle",
       "requestAnimationFrame", "hooks", "lsSet", "lsDel", "window", decls + "\nreturn schedulePillsCollapse;")(
       bar, () => slot, () => true, () => false, doc, computed, fn => fn(), { scheduleRailGeometry() {} }, () => {}, () => {},

@@ -84,8 +84,9 @@ const REAL_HOST = window.E_HOST;
 
 try {
   const S = await import(MOD("storage.js", "ipc"));
-  const syncSaves = () => sent.sync["etiuda:desk-save"] || 0;
-  const asyncSaves = () => sent.invoke["etiuda:desk-write"] || 0;
+  /* The engine sends a patch where the host takes one, and the whole map where it does not. */
+  const syncSaves = () => (sent.sync["etiuda:desk-save"] || 0) + (sent.sync["etiuda:desk-patch-save"] || 0);
+  const asyncSaves = () => (sent.invoke["etiuda:desk-write"] || 0) + (sent.invoke["etiuda:desk-patch"] || 0);
 
   check(sent.sync["etiuda:desk"] === 1 && S.lsGet("eIpcNone") === null,
     "1a THE CONTROL: the load was handed its desk once, synchronously, through main's own handler");

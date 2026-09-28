@@ -802,6 +802,46 @@ function writeDesk(text, from) {
     return false;
   }
 }
+/* JSON.stringify of the map, byte for byte, with each key's text kept from the write before: a
+   patch re-encodes only what it names, and a catalog is escaped once rather than on every count. */
+const deskKeyText = new Map();                 // key -> [the value, its "key":value text]
+function deskText(keys) {
+  const names = Object.keys(keys);
+  const parts = names.map(k => {
+    const v = keys[k], was = deskKeyText.get(k);
+    if (was && was[0] === v) return was[1];
+    const t = JSON.stringify(k) + ":" + JSON.stringify(v);
+    deskKeyText.set(k, [v, t]);
+    return t;
+  });
+  if (deskKeyText.size > names.length) for (const k of deskKeyText.keys()) if (!(k in keys)) deskKeyText.delete(k);
+  return "{" + parts.join(",") + "}";
+}
+/* A PATCH NAMES ONLY THE KEYS ONE LOAD CHANGED, a string for a value and null for a key deleted,
+   so it is applied as it stands: no other load's key is in it to be undone. */
+function patchDesk(text) {
+  let patch;
+  try { patch = JSON.parse(text); } catch { return false; }
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) return false;
+  const keys = Object.keys(patch);
+  if (keys.some(k => patch[k] !== null && typeof patch[k] !== "string")) return false;
+  if (deskKeys === undefined) deskKeys = readDesk();
+  const has = (k) => Object.prototype.hasOwnProperty.call(deskKeys, k);
+  if (deskWritten && keys.every(k => (patch[k] === null ? !has(k) : deskKeys[k] === patch[k]))) return true;
+  const merged = Object.assign({}, deskKeys);
+  keys.forEach(k => { if (patch[k] === null) delete merged[k]; else merged[k] = patch[k]; });
+  try {
+    saveDeskFile(deskText(merged));
+    deskKeys = merged;
+    deskWritten = true;
+    catalogFolderChanged();
+    applyThemeSource();
+    return true;
+  } catch (e) {
+    console.error("etiuda: the desk could not be written - " + e.message);
+    return false;
+  }
+}
 
 /* PER LOAD, NOT ONCE A RUN. The document reloads inside one app run - accepting a catalog is
    exactly that - and the load after it must be handed the desk the disk holds at that moment.
@@ -823,6 +863,11 @@ ipcMain.on("etiuda:desk-save", (e, text) => {
    finds nothing waiting here: whatever the page has not sent yet it sends on pagehide. */
 ipcMain.handle("etiuda:desk-write", (e, text) =>
   fromEngine(e) && typeof text === "string" && writeDesk(text, e.sender.id));
+ipcMain.on("etiuda:desk-patch-save", (e, text) => {
+  e.returnValue = fromEngine(e) && typeof text === "string" && patchDesk(text);
+});
+ipcMain.handle("etiuda:desk-patch", (e, text) =>
+  fromEngine(e) && typeof text === "string" && patchDesk(text));
 ipcMain.on("etiuda:desk-refused", (e) => {
   e.returnValue = fromEngine(e) ? JSON.stringify(deskRefused) : "[]";
 });
