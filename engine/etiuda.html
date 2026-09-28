@@ -6474,8 +6474,14 @@ What you type stays in this browser only.`;
     const b = statsDay(pack2, at);
     b.l[code] = (b.l[code] | 0) + 1;
   }
+  var STATS_FORGOT = /* @__PURE__ */ new WeakMap();
   function statsForgetCards(pack2, keep) {
-    const ids = Array.isArray(pack2.dayIds) ? pack2.dayIds : [];
+    const ids = Array.isArray(pack2.dayIds) ? pack2.dayIds : [], gone = [];
+    ids.forEach((id, k) => {
+      if (!keep(id)) gone.push(k);
+    });
+    const asked = ids.length + ":" + gone.join(",");
+    if (STATS_FORGOT.get(pack2) === asked) return;
     let n = 0;
     Object.keys(pack2.days || {}).forEach((d) => {
       const c = pack2.days[d] && pack2.days[d].c;
@@ -6489,7 +6495,8 @@ What you type stays in this browser only.`;
     if (n) {
       statsTouch(pack2, "*");
       statsCompact(pack2);
-    }
+      STATS_FORGOT.delete(pack2);
+    } else STATS_FORGOT.set(pack2, asked);
   }
   function statsDoc(pack2, info) {
     const from = String(info && info.period && info.period.from || "");

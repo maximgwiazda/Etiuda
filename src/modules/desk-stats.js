@@ -108,15 +108,21 @@ function bumpLang(pack, lang, at){
   const b=statsDay(pack, at);
   b.l[code]=(b.l[code]|0)+1;
 }
-// A departed card's day counts go with its lifetime tally; keep(id) says which ids stay.
+/* A departed card's day counts go with its lifetime tally; keep(id) says which ids stay. Every
+   rebuild asks, so the days are walked only when the ids that would go differ from the last walk. */
+const STATS_FORGOT=new WeakMap();
 function statsForgetCards(pack, keep){
-  const ids=Array.isArray(pack.dayIds)?pack.dayIds:[];
+  const ids=Array.isArray(pack.dayIds)?pack.dayIds:[], gone=[];
+  ids.forEach((id,k)=>{ if(!keep(id)) gone.push(k); });
+  const asked=ids.length+":"+gone.join(",");
+  if(STATS_FORGOT.get(pack)===asked) return;
   let n=0;
   Object.keys(pack.days||{}).forEach(d=>{
     const c=pack.days[d]&&pack.days[d].c;
     if(c) Object.keys(c).forEach(k=>{ if(!keep(ids[k])){ delete c[k]; n++; } });
   });
-  if(n){ statsTouch(pack, "*"); statsCompact(pack); }
+  if(n){ statsTouch(pack, "*"); statsCompact(pack); STATS_FORGOT.delete(pack); }
+  else STATS_FORGOT.set(pack, asked);
 }
 /* A REQUEST NAMES A SPAN AND THE ANSWER IS THAT SPAN, from and to inclusive, summed over the
    day buckets, with `since` beside it; a card's `at` is its last use inside the span. Without
