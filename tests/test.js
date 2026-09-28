@@ -844,6 +844,24 @@ function catNowTests() {
     ["sample-catalog.ec", "Spring team.ec", "team.ec", "Invented shop", "none: No catalog loaded"]);
   importText("{}", "Spring team.ec");
   eq("a catalog loaded through the file dialog records the file's name for the bar", (world.opts || {}).from, "Spring team.ec");
+
+  /* AND activateCatalog, which every route ends in, writes what the route named: run whole in a scope whose every
+     other free name is a no-op, over a store that takes the catalog. */
+  const ns = {};
+  const own = { storeCatalog: () => true, pack: {}, carryCardLayer: () => new Set(), catalogCardId: m => m.id,
+    nsSet: (k, v) => { ns[k] = v; }, nsDel: k => { delete ns[k]; }, nsGet: k => (k in ns ? ns[k] : null) };
+  const scope = new Proxy({}, {
+    has: (o, k) => typeof k === "string",
+    get: (o, k) => k === Symbol.unscopables ? undefined : k in own ? own[k] : k in globalThis ? globalThis[k] : () => undefined,
+    set: (o, k, v) => { own[k] = v; return true; }
+  });
+  let activate = null;
+  try { activate = new Function("scope", "with(scope){\n" + extractDecl(fileSrc, "function activateCatalog(") + "\nreturn activateCatalog;\n}")(scope); }
+  catch (e) { eq("catalog-file.js carries activateCatalog", e.message, "sliced"); return; }
+  const wrote = opts => { ns.CatalogFrom = "stale.ec"; activate({ cards: [] }, opts); return ns.CatalogFrom; };
+  eq("activateCatalog records the file a route names, its folder file where that is all it names, and blanks it for a route that names none",
+    [wrote({ keepPersonal: true, from: "Spring team.ec" }), wrote({ keepPersonal: true, file: "team.ec" }), wrote({ keepPersonal: true })],
+    ["Spring team.ec", "team.ec", ""]);
 }
 
 /* Section 2.5 of the specification and the body rules of 2.6, driven over the reader that
