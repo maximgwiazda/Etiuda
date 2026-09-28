@@ -35,10 +35,10 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-/* 282 since a copy lays only the wash over its block and greens only that block's spine, a card's
-   title has the row while its controls wait, and the scrollbar's thumb is opaque (2026-09-28);
-   278 was the tour's walk by its acts. */
-const EXPECTED = { chrome: 282 };
+/* 283 since a copy lays only the wash over its block and greens only that block's spine, a card's
+   title has the row while its controls wait, the scrollbar's thumb is opaque and every theme has one
+   blue (2026-09-28); 278 was the tour's walk by its acts. */
+const EXPECTED = { chrome: 283 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -826,7 +826,13 @@ const t0 = Date.now();
       await wait(300);
       const sc = getComputedStyle(document.querySelector(".scroller")).scrollbarColor, cut = sc.indexOf(")") + 1;
       out[th] = { bg: res("var(--bg)"), thumb: res("var(--scroll-thumb)"), hover: res("var(--scroll-thumb-hover)"),
-        bar: px(sc.slice(0, cut)), track: px(sc.slice(cut).trim()) };
+        bar: px(sc.slice(0, cut)), track: px(sc.slice(cut).trim()), accent: res("var(--accent)"), bub: res("var(--bub)") };
+      /* Settings holds the segmented switches and the Close button the blue was judged by. */
+      hooks.openSettings(); await wait(700);
+      const card = document.getElementById("modalCard");
+      out[th].segs = [...card.querySelectorAll(".seg")].map(s => px(getComputedStyle(s, "::before").backgroundColor));
+      out[th].close = px(getComputedStyle([...card.querySelectorAll(".modal-actions .btn.primary")].pop()).backgroundColor);
+      dismissModal(); await wait(400);
     }
     if (was) document.documentElement.dataset.theme = was; else delete document.documentElement.dataset.theme;
     await wait(300);
@@ -843,6 +849,17 @@ const t0 = Date.now();
   check(["unset", "dark", "light"].every(th => thumbOk(themeColours[th])),
     "the scrollbar's thumb is opaque in every theme, hover included, and reads as the see-through grey over the canvas; the track stays clear ("
     + JSON.stringify(["unset", "dark", "light"].map(th => [themeColours[th].thumb, themeColours[th].hover, themeColours[th].track[3]])) + ")");
+  /* ONE BLUE: the accent, every segmented switch's thumb in Settings and its Close button paint the
+     bubbles' blue in every theme, and white on it reads 4.5:1 or better (WCAG's relative luminance). */
+  const lum = c => c.slice(0, 3).map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); })
+    .reduce((s, v, i) => s + v * [.2126, .7152, .0722][i], 0);
+  const whiteOn = c => 1.05 / (lum(c) + .05);
+  const oneBlue = s => [s.accent, s.close].concat(s.segs).every(c => near(c, s.bub) && c[3] === 1) && s.segs.length > 0
+    && whiteOn(s.bub) >= 4.5;
+  check(["unset", "dark", "light"].every(th => oneBlue(themeColours[th])),
+    "the accent, Settings' switches and its Close button are the bubbles' blue in every theme, white on it at "
+    + whiteOn(themeColours.dark.bub).toFixed(2) + ":1 (" + JSON.stringify(["unset", "dark", "light"].map(th =>
+      [themeColours[th].accent, themeColours[th].segs.length, themeColours[th].segs.filter(c => !near(c, themeColours[th].bub)).length])) + ")");
 
   /* Breakpoints: no horizontal overflow, and the cut-text rule at every width. */
   for (const w of [1600, 1400, 1200, 1000, 900, 800, 700, 600, 500, 430, 390]) {
