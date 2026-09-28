@@ -541,6 +541,7 @@ function runUnitTests() {
   menuWarmTests();
   ecTypeNameTests();
   pageWatchTests();
+  recoveryWindowTests();
   shippedFlagTests();
   dismissTierTests();
   dialogFocusTests();
@@ -2267,9 +2268,9 @@ function menuScreenTests(H) {
         .map(s => wire.indexOf(s) > -1), [true, true, true, true]);
   }
 }
-/* THE HANG BOX'S RESTART (the "not responding" box): the page is ended first and reloaded once it
-   has gone, marked like every reload after a stop. The shell's page watch is sliced and run on a
-   window model whose boxes answer at once; the recovery itself is the verifier's to drive. */
+/* THE HANG WINDOW'S RESTART (the "not responding" question): the page is ended first and reloaded
+   once it has gone, marked like every reload after a stop. The shell's page watch is sliced and run
+   on a window model whose recovery window answers at once; the recovery itself is the verifier's. */
 function pageWatchTests() {
   const shell = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
   const recovering = new Set(), log = [], answers = [], wcOn = {}, winOn = {};
@@ -2278,13 +2279,15 @@ function pageWatchTests() {
     reload() { log.push(recovering.delete(7) ? "reload marked" : "reload unmarked"); },
     forcefullyCrashRenderer() { log.push("kill"); } };
   const win = { webContents: wc, on: (t, fn) => { winOn[t] = fn; }, isDestroyed: () => false, close() { log.push("close"); } };
-  const dialog = { showMessageBox: (w, o) => { log.push("box " + o.message); const r = answers.shift(); return { then: fn => fn({ response: r }) }; } };
+  const askInWindow = (w, message) => { log.push("asks " + message); const r = answers.shift(); return { then: fn => fn({ response: r }) }; };
   const words = { gone: "gone", hung: "hung", restart: "Restart", close: "Close", wait: "Wait" };
+  // A system box, which the watch must not reach for, is logged as one so a regression reads plainly.
+  const dialog = { showMessageBox: (w, o) => { log.push("system box " + o.message); const r = answers.shift(); return { then: fn => fn({ response: r }) }; } };
   let watch = null;
   try {
-    watch = new Function("recovering", "dialog", "PLACED_ASIDE", "shellWords", "console", "Date",
+    watch = new Function("recovering", "askInWindow", "dialog", "PLACED_ASIDE", "shellWords", "console", "Date",
       extractDecl(shell, "function watchPage(") + "\nreturn watchPage;")(
-      recovering, dialog, false, () => words, { error() {} }, { now: () => clock });
+      recovering, askInWindow, dialog, false, () => words, { error() {} }, { now: () => clock });
   } catch (e) { watch = null; }
   if (!watch) { eq("shell/main.js carries the page watch as watchPage(win)", false, true); return; }
   watch(win);
@@ -2292,17 +2295,109 @@ function pageWatchTests() {
   const gone = reason => () => wcOn["render-process-gone"]({}, { reason: reason, exitCode: 1 });
   eq("the first loss reloads the page at once, marked", step(gone("crashed")), ["reload marked"]);
   clock += 10000; answers.push(0);
-  eq("a second loss within a minute asks, and its Restart reloads, marked", step(gone("crashed")), ["box gone", "reload marked"]);
+  eq("a second loss within a minute asks in the recovery window, and its Restart reloads, marked",
+    step(gone("crashed")), ["asks gone", "reload marked"]);
   clock += 10000; answers.push(1);
-  eq("and its Close closes the window", step(gone("crashed")), ["box gone", "close"]);
+  eq("and its Close closes the window", step(gone("crashed")), ["asks gone", "close"]);
   answers.push(0);
-  eq("the hang box's Wait leaves the page alone", step(() => winOn.unresponsive()), ["box hung"]);
+  eq("the hang window's Wait leaves the page alone", step(() => winOn.unresponsive()), ["asks hung"]);
   answers.push(1);
-  eq("the hang box's Restart ends the page and sends no reload while the old page is still going",
-    step(() => winOn.unresponsive()), ["box hung", "kill"]);
+  eq("the hang window's Restart ends the page and sends no reload while the old page is still going",
+    step(() => winOn.unresponsive()), ["asks hung", "kill"]);
   eq("the reload comes once the old page has gone, marked, and that loss asks nothing", step(gone("killed")), ["reload marked"]);
   clock += 120000;
   eq("a loss a minute after the last counts as a first again", step(gone("crashed")), ["reload marked"]);
+  eq("the shell asks nothing in a system message box any more", /showMessageBox/.test(shell), false);
+}
+
+/* THE RECOVERY WINDOW IS ETIUDA'S OWN: a small window with a renderer of its own, carrying a page
+   with no script, in the desk's language and theme, whose links answer at will-navigate. Sliced out
+   of the shell and run on a window model over a scratch folder; how it looks is Maxim's to see. */
+function recoveryWindowTests() {
+  const shell = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  const made = [], tmp = fs.mkdtempSync(path.join(require("os").tmpdir(), "etiuda-recovery-legs-"));
+  class FakeWin {
+    constructor(o) {
+      const self = this;
+      this.o = o; this.wcOn = {}; this.winOn = {}; this.file = ""; this.closed = false; this.shown = "";
+      this.webContents = { on: (t, fn) => { self.wcOn[t] = fn; }, setWindowOpenHandler: fn => { self.opener = fn; } };
+      made.push(this);
+    }
+    on(t, fn) { this.winOn[t] = fn; }
+    once(t, fn) { this.winOn[t] = fn; }
+    isDestroyed() { return this.closed; }
+    close() { if (this.closed) return; this.closed = true; if (this.winOn.closed) this.winOn.closed(); }
+    loadFile(f) { this.file = f; }
+    show() { this.shown = "show"; }
+    showInactive() { this.shown = "inactive"; }
+  }
+  class NowPromise { constructor(ex) { this.settled = false; ex(v => { if (!this.settled) { this.settled = true; this.value = v; } }); } }
+  const EN = { lang: "en", gone: "Etiuda stopped unexpectedly.", restart: "Restart", close: "Close Etiuda" };
+  const PL = { lang: "pl", gone: "Etiuda niespodziewanie się zatrzymała.", restart: "Uruchom ponownie", close: "Zamknij Etiudę" };
+  const load = (words, dark, aside, fsUsed) => {
+    try {
+      return new Function("BrowserWindow", "nativeTheme", "shellWords", "PLACED_ASIDE", "OFFSCREEN", "OFFSCREEN_SHOWN",
+        "offscreenAt", "console", "Promise", "fs", "path", "os", "process",
+        ["function policyFor(", "function recoveryDoc(", "const RECOVERY_SIZE", "function askInWindow("]
+          .map(m => extractDecl(shell, m)).join("\n") + "\nreturn { recoveryDoc, askInWindow };")(
+        FakeWin, { shouldUseDarkColors: dark }, () => words, aside, aside, false, () => ({ x: 9000, y: 9000 }),
+        { error() {} }, NowPromise, fsUsed || fs, path, { tmpdir: () => tmp }, { pid: 4242 });
+    } catch (e) { return null; }
+  };
+  const R = load(PL, false, false);
+  if (!R) { eq("shell/main.js carries recoveryDoc and askInWindow", false, true); return; }
+  const parent = { getBounds: () => ({ x: 100, y: 100, width: 1200, height: 800 }) };
+  const ask = (Rr, message, buttons, signal) => { made.length = 0; const p = Rr.askInWindow(parent, message, buttons, signal); return { p, w: made[0] }; };
+  const doc = w => { try { return fs.readFileSync(w.file, "utf8"); } catch (e) { return ""; } };
+
+  const a = ask(R, PL.gone, [PL.restart, PL.close]);
+  const o = (a.w && a.w.o) || {}, wp = o.webPreferences || {};
+  eq("a second stop opens a window of its own over the desk: modal to it, centred on it, frameless and fixed in size, with no script and a sandbox",
+    [made.length, o.parent === parent, o.modal, o.frame, o.resizable, o.x, o.y, o.width, o.height, wp.javascript, wp.sandbox, wp.nodeIntegration],
+    [1, true, true, false, false, 500, 444, 400, 112, false, true, false]);
+  const d = doc(a.w);
+  const links = [...d.matchAll(/<a href="\?answer-(\d)"( class="go" autofocus)?>([^<]*)<\/a>/g)].map(m => [+m[1], !!m[2], m[3]]);
+  eq("its page is a file of the desk's language, carries no script under a policy refusing any, and asks in one line with the two choices as links, the leading one filled, focused and last",
+    [a.w && a.w.file === path.join(tmp, "etiuda-recovery-4242.html"), /^<!DOCTYPE html>\n<html lang="pl">\n<meta charset="utf-8">/.test(d),
+     /script-src 'none'/.test(d), /<script/i.test(d), (/<h1>([^<]*)<\/h1>/.exec(d) || [])[1], links],
+    [true, true, true, false, PL.gone, [[1, false, PL.close], [0, true, PL.restart]]]);
+  eq("the page keeps the arrow, cannot be selected, drags by its ground, and has a dark face and a high-contrast ring",
+    [/body\{[^}]*cursor:default/.test(d), /a\{[^}]*cursor:default/.test(d), /user-select:none/.test(d), /-webkit-app-region:drag/.test(d),
+     /@media \(prefers-color-scheme:dark\)/.test(d), /@media \(forced-colors:active\)/.test(d)],
+    [true, true, true, true, true, true]);
+  a.w.winOn["ready-to-show"]();
+  const base = "file:///" + a.w.file.split(path.sep).join("/");
+  const nav = url => { let prevented = false; a.w.wcOn["will-navigate"]({ preventDefault() { prevented = true; } }, url); return prevented; };
+  const stopped = [nav("https://example.com/"), nav(base + "?answer-7")];
+  const unsettled = !a.p.settled;
+  const chose = nav(base + "?answer-1");
+  eq("it shows when drawn, refuses every navigation and new window, passes over a query that is no choice, answers the chosen link's index, closes and takes its file away",
+    [a.w.shown, stopped, a.w.opener && a.w.opener().action, unsettled, chose, a.p.value, a.w.closed, fs.existsSync(a.w.file)],
+    ["show", [true, true], "deny", true, true, { response: 1 }, true, false]);
+
+  const b = ask(R, PL.gone, [PL.restart, PL.close]);
+  b.w.wcOn["before-input-event"]({ preventDefault() {} }, { type: "keyDown", key: "Escape" });
+  const c = ask(R, PL.gone, [PL.restart, PL.close]);
+  c.w.close();
+  const ac = new AbortController(), h = ask(R, "hung", ["Wait", "Restart"], ac.signal);
+  ac.abort();
+  eq("Escape and a close both answer the first choice, and an abort closes the window unanswered",
+    [b.p.value, b.w.closed, c.p.value, h.p.value, h.w.closed], [{ response: 0 }, true, { response: 0 }, { response: -1 }, true]);
+
+  const D = load(EN, true, true), s = ask(D, 'a <b> & "c"', ["x", "y"]);
+  s.w.winOn["ready-to-show"]();
+  const sd = doc(s.w);
+  eq("an English desk in dark gets an English page on the dark panel; the harness's placed-aside window gets a placed-aside one, never shown; words are escaped",
+    [/<html lang="en">/.test(sd), s.w.o.backgroundColor, a.w.o.backgroundColor, s.w.o.focusable, s.w.o.x, s.w.shown,
+     (/<h1>([^<]*)<\/h1>/.exec(sd) || [])[1]],
+    [true, "#1d1f24", "#ffffff", false, 9000, "", "a &lt;b&gt; &amp; &quot;c&quot;"]);
+  s.w.close();
+
+  const N = load(EN, false, false, Object.assign({}, fs, { writeFileSync() { throw new Error("refused"); } }));
+  const n = N ? ask(N, EN.gone, [EN.restart, EN.close]) : { p: {} };
+  eq("where its page cannot be written no window opens and the first choice is taken at once",
+    [made.length, n.p.value], [0, { response: 0 }]);
+  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) { /* the system cleans its own */ }
 }
 
 /* THE LEAVING COPIES KEEP THEIR LOOK AND PLACE: a dialog's copy wears the card's own classes and

@@ -163,7 +163,7 @@ const step = async (label, body, opts) => {
  * it is what the count now sees: a mismatch is NO VERDICT, exit 78, not a tally.
  */
 const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7"];
-const EXPECTED = KEEP ? null : 124;
+const EXPECTED = KEEP ? null : 125;
 const phasesSeen = new Set();
 const phase = what => {
   const m = /^\[(\d+)[a-z]*\/\d+\]/.exec(String(what).trim());
@@ -894,11 +894,40 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " says why, once: " + stopped + " line(s)");
   if (back) await crash(back);
   await sleep(3000);
-  const boxes = s.said.join("\n").split("\n").map(l => l.trim()).filter(l => l.indexOf("etiuda: a box would ask here: ") > -1);
-  const asked = boxes.filter(l => l.endsWith("etiuda: a box would ask here: Etiuda niespodziewanie się zatrzymała.")).length;
-  check(asked === 1 && boxes.length === 1,
-    "1h3 a second crash inside the minute asks, in Polish, rather than reloading again: " + asked
-    + " question(s) logged in the whole sentence, of " + JSON.stringify(boxes));
+  /* The recovery window's page has no script, so it is read and clicked through the DOM and input
+     domains rather than by evaluating anything in it. */
+  const asks = s.said.join("\n").split("\n").map(l => l.trim()).filter(l => l.indexOf("etiuda: the recovery window asks: ") > -1);
+  const box = (await s.b.pages()).find(x => /etiuda-recovery-\d+\.html$/.test(x.url()));
+  const boxFile = box ? decodeURIComponent(new URL(box.url()).pathname).replace(/^\/([A-Za-z]:)/, "$1") : "";
+  let seen = null, clickedRestart = false;
+  if (box) {
+    const c = await box.target().createCDPSession();
+    try {
+      const { root } = await c.send("DOM.getDocument", { depth: -1 });
+      const html = (await c.send("DOM.getOuterHTML", { nodeId: root.nodeId })).outerHTML;
+      seen = { lang: (/<html lang="([a-z]+)"/.exec(html) || [])[1], h1: (/<h1>([^<]*)<\/h1>/.exec(html) || [])[1],
+        links: [...html.matchAll(/<a href="([^"]*)"[^>]*>([^<]*)<\/a>/g)].map(m => [m[1], m[2]]), scripts: (html.match(/<script/gi) || []).length };
+      const { nodeId } = await c.send("DOM.querySelector", { nodeId: root.nodeId, selector: 'a[href="?answer-0"]' });
+      const q = (await c.send("DOM.getBoxModel", { nodeId })).model.content;
+      const at = { x: (q[0] + q[4]) / 2, y: (q[1] + q[5]) / 2 };
+      for (const type of ["mousePressed", "mouseReleased"])
+        await c.send("Input.dispatchMouseEvent", { type, x: at.x, y: at.y, button: "left", clickCount: 1 });
+      clickedRestart = true;
+    } catch (x) { seen = Object.assign(seen || {}, { err: x.message }); }
+    await c.detach().catch(() => {});
+  }
+  check(asks.length === 1 && asks[0].endsWith("Etiuda niespodziewanie się zatrzymała.") && !!seen && seen.lang === "pl"
+        && seen.h1 === "Etiuda niespodziewanie się zatrzymała." && seen.scripts === 0
+        && JSON.stringify(seen.links) === JSON.stringify([["?answer-1", "Zamknij Etiudę"], ["?answer-0", "Uruchom ponownie"]]),
+    "1h3 a second crash inside the minute asks, in Polish, in a recovery window of Etiuda's own rather than reloading"
+    + " again: " + asks.length + " question(s) logged, and the window's page reads " + JSON.stringify(seen));
+  await sleep(5000);
+  const after = await s.b.pages();
+  const again = after.find(x => /etiuda\.html/.test(x.url()));
+  const againUp = !!again && await booted(again);
+  check(clickedRestart && againUp && !after.some(x => /etiuda-recovery-/.test(x.url())) && !!boxFile && !fs.existsSync(boxFile),
+    "1h4 and its Restart, clicked, reloads the desk, which boots again (" + againUp + "), closes the recovery window and"
+    + " takes its page's file away: clicked " + clickedRestart + ", file " + boxFile + " still there: " + (!!boxFile && fs.existsSync(boxFile)));
   await s.stop();
   });
   await step("[2/7] the catalog on screen", async () => {
