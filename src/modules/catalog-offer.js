@@ -23,7 +23,7 @@ import { cardFieldKey } from "./card-fields.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { intentIdAt, intentOrder } from "./intent-id.js";
 import { pack } from "./pack.js";
-import { ICON_AWAITING, ICON_SUCCESS } from "./icons.js";
+import { ICON_AWAITING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT } from "./icons.js";
 import { catalogTrust, whenTrusted, heldCatalogTrust, recheckHeldTrust, trustMetaHtml, trustOfferLine,
   trustSettled } from "./catalog-trust.js";
 
@@ -165,11 +165,14 @@ function ecRowHtml(o){
         ?'<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="'
           +esc(t("Save everything loaded now as a catalog file, your edits merged in"))+'">'
           +esc(t("Export…"))+'</button>':'')
-        +'<button type="button" class="btn" data-ec-eject="1" title="'
-        +esc(t("Put this catalog down and start empty"))+'">'+esc(t("Eject"))+'</button>'
-      :'<button type="button" class="btn" data-ec-load="'+esc(o.name)+'" data-ec-at="'
-        +(+o.mtime||0)+'">'+esc(t("Load"))+'</button>')
+        +ecActHtml("Eject",ICON_EJECT,' data-ec-eject="1"')
+      :ecActHtml("Load",ICON_LOAD,' data-ec-load="'+esc(o.name)+'" data-ec-at="'+(+o.mtime||0)+'"'))
     +'</div>';
+}
+/* A GLYPH BUTTON KEEPS ITS WORD, as its tooltip and as its accessible name. */
+function ecActHtml(word,icon,attrs){
+  const w=esc(t(word));
+  return '<button type="button" class="btn icbtn ec-act"'+attrs+' title="'+w+'" aria-label="'+w+'">'+icon+'</button>';
 }
 /* AN EMPTY FOLDER IS A ROW-SHAPED PLACEHOLDER and carries no button: what to do about it is
    already on the bar below, and a second Import here would be the same act twice on one

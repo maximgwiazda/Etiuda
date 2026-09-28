@@ -104,7 +104,6 @@ UI_STRINGS.pl={
   "Open this folder":"Otwórz ten folder",
   "Change folder…":"Zmień folder…",
   "Eject":"Odłącz",
-  "Put this catalog down and start empty":"Odłącz ten katalog; Etiuda uruchomi się bez niego",
   "Load":"Wczytaj",
   "Choose the folder Etiuda reads catalogs from":"Wybierz folder, z którego Etiuda czyta katalogi",
   "That setting could not be saved.":"Nie udało się zapisać tego ustawienia.",

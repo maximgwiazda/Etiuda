@@ -1559,7 +1559,7 @@ const placeEc = (dir, from, as, minutesOld) => {
                   glyph and the name it carries rather than a word in a pill. */
                tick: (r.querySelector(".ec-tick") || {}).getAttribute
                  ? r.querySelector(".ec-tick").getAttribute("aria-label") : "",
-               act: Array.from(r.querySelectorAll("button.btn")).map(b => b.textContent).join("|"),
+               act: Array.from(r.querySelectorAll("button.btn")).map(b => b.getAttribute("aria-label") || b.textContent).join("|"),
                box: (() => { const b = r.querySelector("button").getBoundingClientRect();
                              return [Math.round(b.width), Math.round(b.height)]; })(),
              })),

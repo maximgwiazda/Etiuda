@@ -1152,7 +1152,7 @@ const t0 = Date.now();
                   change: !!document.getElementById("mgCatFolder"),
                   name: rows[0] ? (rows[0].querySelector(".ec-name b") || {}).textContent : null,
                   loaded: !!rows[0] && rows[0].classList.contains("is-loaded"),
-                  act: rows[0] ? [...rows[0].querySelectorAll("button.btn")].map(x => x.textContent).join("|") : null,
+                  act: rows[0] ? [...rows[0].querySelectorAll("button.btn")].map(x => x.getAttribute("aria-label") || x.textContent).join("|") : null,
                   meta: rows[0] ? (rows[0].querySelector(".ec-meta") || {}).textContent : null,
                   held: (typeof E_CATALOG_NAME === "string" && E_CATALOG_NAME) || "" };
     /* EXPORT COMES WHEN THERE IS SOMETHING TO EXPORT, ruled 2026-09-17: nothing has been edited
@@ -1161,7 +1161,7 @@ const t0 = Date.now();
     window.pack.who = "Ada"; window.savePack(); window.paintCatalogList();
     await wait(600);
     const after = [...document.querySelectorAll("#mgCatList .ec-row")][0];
-    out.actEdited = after ? [...after.querySelectorAll("button.btn")].map(x => x.textContent).join("|") : null;
+    out.actEdited = after ? [...after.querySelectorAll("button.btn")].map(x => x.getAttribute("aria-label") || x.textContent).join("|") : null;
     delete window.pack.who; window.savePack(); window.paintCatalogList();
     await wait(400);
     dismissModal(); await wait(300);

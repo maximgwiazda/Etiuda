@@ -2451,6 +2451,28 @@ function shippedFlagTests() {
   eq("a Library row names the copy Etiuda ships and says nothing of a folder's file of the same name, changed or not",
     [copyOf({ builtIn: true }), copyOf({ builtIn: false, replaces: true }), copyOf({})],
     ['<span class="ec-copy" data-ec-copy="builtin">comes with Etiuda</span>', "", ""]);
+
+  const langSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "ui-lang.js"), "utf8");
+  const plAt = langSrc.indexOf("UI_STRINGS.pl={"), plEnd = langSrc.indexOf("\n};", plAt);
+  const PLS = new Function("const UI_STRINGS={};\n" + langSrc.slice(plAt, plEnd + 3) + "\nreturn UI_STRINGS.pl;")();
+  const rowOf = (o, tr) => {
+    try {
+      return new Function("t", "esc", "trustMetaHtml", "heldCatalogTrust", "nsGet", "ecWatchHtml", "loadedTickHtml",
+        "catalogEdited", "ICON_LOAD", "ICON_EJECT",
+        extractDecl(offer, "function ecRowHtml(") + "\n" + extractDecl(offer, "function ecActHtml(") + "\nreturn ecRowHtml;")(
+        tr, s => s, () => "", () => "", () => "", () => "", () => "", () => false, "<svg>load</svg>", "<svg>eject</svg>")(o);
+    } catch (e) { return "ecRowHtml did not run: " + e.message; }
+  };
+  const acts = html => (String(html).match(/<button[^>]*>[\s\S]*?<\/button>/g) || []).map(b => {
+    const at = n => ((new RegExp(" " + n + "=\"([^\"]*)\"")).exec(b) || [])[1] || "";
+    return [at("aria-label"), at("title"), b.replace(/^<button[^>]*>|<\/button>$/g, "")];
+  });
+  const en = s => s, pl = s => PLS[s] || s;
+  eq("a Library row's Load and Eject are glyph buttons keeping their word as tooltip and accessible name, in English and Polish", [
+    acts(rowOf({ name: "team.ec", mtime: 5 }, en)), acts(rowOf({ name: "team.ec", loaded: true }, en)),
+    acts(rowOf({ name: "team.ec", mtime: 5 }, pl)), acts(rowOf({ name: "team.ec", loaded: true }, pl))], [
+    [["Load", "Load", "<svg>load</svg>"]], [["Eject", "Eject", "<svg>eject</svg>"]],
+    [["Wczytaj", "Wczytaj", "<svg>load</svg>"]], [["Odłącz", "Odłącz", "<svg>eject</svg>"]]]);
 }
 /* A DIALOG TAKES THE KEYBOARD (feel pass, focus on open): openDialog and tabTargetIn are sliced out of
    dialog.js and run on a small tree written here. What a real key does there is the verifier's. */
@@ -3475,8 +3497,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 834;
-const UI_STRINGS_SHA256 = "0a57a08816b9ec945bd87ba9500efc90056405b73f825edda66a286bab897918";
+const UI_STRINGS_COUNT = 833;
+const UI_STRINGS_SHA256 = "91296898533bd255d9d6550de6c26f13e9c5a7c9daecf75838db5ae4ebfd2155";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

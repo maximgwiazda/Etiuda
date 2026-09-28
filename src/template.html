@@ -2587,6 +2587,10 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
 .ec-where .ec-where-edit .ic{width:15px;height:15px}
 /* A catalog's own acts ride in its row, at the size the facts panel gives a small action. */
 .ec-row .btn{padding:4px 8px;font-size:12px}
+/* The row's glyphs share one size, --ec-glyph, set on the list. */
+.ec-list{--ec-glyph:18px}
+.ec-row .btn.ec-act{padding:5px}
+.ec-row .ec-act .ic{width:var(--ec-glyph);height:var(--ec-glyph)}
 /* Three lines change what the row centres on: the name is the subject, so the badge and the
    buttons align to the NAME's line rather than to the middle of a column that grew. */
 .ec-row:has(.ec-watch){align-items:flex-start}
