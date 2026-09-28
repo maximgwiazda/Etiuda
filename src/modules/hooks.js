@@ -22,6 +22,7 @@ const SLOTS = [
   "updateIntentPlaceholder",
   "clearIntents",
   "pickIntent",
+  "intentPickedLine",
   "onRailMQChange",
   "rebuildCards",
   "render",

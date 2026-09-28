@@ -61,6 +61,10 @@ function drawPillsCore(){
           +'</span>'
         : ((n||n===0)?" <b>"+n+"</b>":""));
     b.dataset.k=id;
+    /* A toggle to a screen reader, pressed while it filters; the pencil inside is hidden until
+       Ctrl is held, so the name stays the category and its count. */
+    b.setAttribute("role","button");
+    b.setAttribute("aria-pressed",on?"true":"false");
     const _cs=catSlot(id);
     if(_cs>=0) b.dataset.ec=_cs;
     if(id){

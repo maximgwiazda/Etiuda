@@ -18,6 +18,7 @@ import { toggleNotePane } from "./note-pane.js";
 import { entrySel, putEntrySel, intentIdxs, shown } from "./app-state.js";
 import { hooks } from "./hooks.js";
 import { withAgentName } from "./agent.js";
+import { activeHeard } from "./tabs.js";
 
 // ---- card drag-reorder (within same relevance band only) ----------------
 let cardDrag=null, cardSwapLock=0, cardSuppressClick=false;
@@ -409,6 +410,7 @@ function wireListPointer(){
       if(e.ctrlKey||e.metaKey || intentIdxs.indexOf(si)>-1) pickIntent(si,true);
       else pickIntent(si,false);
       toast(intentIdxs.length ? intentPickedLine() : t("{INTENT} cleared"));
+      activeHeard("intents");
       return;
     }
     /* `txtEl`, not `t`: t() is the translation function, and a const of that name puts the

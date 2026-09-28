@@ -234,6 +234,7 @@ function boot(){
     rebuildCards: rebuild.rebuildCards,
     clearIntents: intentPick.clearIntents,
     pickIntent: intentPick.pickIntent,
+    intentPickedLine: intentText.intentPickedLine,
     onRailMQChange: intentPick.onRailMQChange,
     clearSearchQuery: searchBox.clearSearchQuery,
     updateIntentPlaceholder: searchBox.updateIntentPlaceholder,

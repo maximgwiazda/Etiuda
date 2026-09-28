@@ -316,6 +316,7 @@ function paintRailSelection(){
   const sel=new Set(intentIdxs.map(String));
   box.querySelectorAll(".rail-item[data-si]").forEach(el=>{
     el.classList.toggle("on", sel.has(el.dataset.si));
+    el.setAttribute("aria-pressed", sel.has(el.dataset.si)?"true":"false");
   });
 }
 /* A RING ARRIVES WITH THE CLICK AND LEAVES WITH THE CARD. Additions only: the cards that

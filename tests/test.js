@@ -541,6 +541,8 @@ function runUnitTests() {
   shippedFlagTests();
   dismissTierTests();
   dialogFocusTests();
+  activeStateTests();
+  highContrastStateTests();
   pillWrapTests();
   pillsWidthWatchTests();
   pillsResizeCostTests();
@@ -2287,6 +2289,127 @@ function pillGlideFaults(before, row) {
   });
   return out;
 }
+/* WHICH TAB, LANGUAGE, CATEGORY AND INTENT IS ACTIVE, as a screen reader is told it: the drawing
+   functions sliced out of their modules and run over a toy element that keeps its attributes. */
+function activeStateTests() {
+  const mod = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
+  class El {
+    constructor(tag) { this.tagName = tag; this.attrs = {}; this.dataset = {}; this.kids = []; this.cls = new Set();
+      this.style = { setProperty() {}, removeProperty() {} };
+      const me = this;
+      this.classList = { toggle(c, on) { if (on === undefined) on = !me.cls.has(c); if (on) me.cls.add(c); else me.cls.delete(c); return on; },
+        add(...c) { c.forEach(x => me.cls.add(x)); }, remove(...c) { c.forEach(x => me.cls.delete(x)); }, contains(c) { return me.cls.has(c); } }; }
+    set className(v) { this.cls = new Set(String(v).split(/\s+/).filter(Boolean)); }
+    get className() { return [...this.cls].join(" "); }
+    setAttribute(k, v) { this.attrs[k] = String(v); }
+    getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
+    removeAttribute(k) { delete this.attrs[k]; }
+    appendChild(c) { this.kids.push(c); c.parentElement = this; return c; }
+    get firstChild() { return this.kids[0] || null; }
+    set innerHTML(v) { this.html = v; if (v === "") this.kids = []; }
+    get innerHTML() { return this.html || ""; }
+    querySelectorAll() { return []; }
+    focus() {}
+  }
+  const doc = { createElement: tag => new El(tag) };
+  const slice = (f, marker) => extractDecl(mod(f), marker);
+
+  let got;
+  try {
+    const bar = new El("div"); bar.parentElement = new El("div");
+    const H = new Function("document", "$", "tabs", "activeTabId", "t", "tabLabel", "drawTabs", "bindTabScroll", "fitTabLabels",
+      "requestAnimationFrame", "tabAddTitle", "ICON_TAB_X", "ICON_TAB_ADD", "tabDrag",
+      slice("tabs.js", "function drawTabsCore(") + "\nreturn drawTabsCore;")(
+      doc, s => (s === "#tabsBar" ? bar : null), [{ id: "a", pax: "Anna" }, { id: "b", pax: "" }], "b", s => s, tb => tb.pax || "Tab",
+      {}, () => {}, () => {}, () => {}, () => "", "", "", null);
+    H();
+    got = bar.kids.map(k => [k.cls.has("on"), k.kids[0].getAttribute("role"), k.kids[0].getAttribute("aria-selected")]);
+  } catch (e) { got = "drawTabsCore did not run: " + e.message; }
+  eq("each tab's name is a tab to a screen reader, selected exactly where the tab is on",
+    got, [[false, "tab", "false"], [true, "tab", "true"]]);
+
+  const pillsAt = sel => {
+    const pills = new El("div");
+    const H = new Function("document", "pills", "cats", "CATS", "intentCats", "searchCounts", "catIconSvg", "esc", "t", "ICON_EDIT",
+      "ICON_ALL", "ICON_PLUS", "catSlot", "dragState", "totalMacroCount", "counts", "displayCatOrder", "syncPillsCollapseNow",
+      "schedulePillsCollapse",
+      slice("pills-bar.js", "function drawPillsCore(") + "\nreturn drawPillsCore;")(
+      doc, pills, sel, { a: "Alpha", b: "Beta" }, () => ({ specific: [], always: [] }), () => null, () => "", s => s, s => s, "",
+      "", "", () => -1, null, () => 3, { a: 1, b: 2 }, () => ["a", "b"], () => {}, () => {});
+    H();
+    return pills.kids.map(k => [k.dataset.k === undefined ? "+" : k.dataset.k, k.getAttribute("role"), k.getAttribute("aria-pressed")]);
+  };
+  try { got = [pillsAt(["b"]), pillsAt([])]; } catch (e) { got = "drawPillsCore did not run: " + e.message; }
+  eq("each category pill is a toggle pressed exactly while it filters, All while nothing does, and the + is neither",
+    got, [[["", "button", "false"], ["a", "button", "false"], ["b", "button", "true"], ["+", null, null]],
+          [["", "button", "true"], ["a", "button", "false"], ["b", "button", "false"], ["+", null, null]]]);
+
+  try {
+    const paint = new Function("catSlot", "railDrag", "railRelNow", "railRelGroup",
+      slice("rail-list.js", "function railPaintRow(") + "\nreturn railPaintRow;")(() => -1, null, {}, {});
+    const row = new El("button");
+    paint(row, { idx: 1, picked: true }, []);
+    const on = [row.cls.has("on"), row.getAttribute("aria-pressed")];
+    paint(row, { idx: 1, picked: false }, []);
+    got = [on, [row.cls.has("on"), row.getAttribute("aria-pressed")]];
+  } catch (e) { got = "railPaintRow did not run: " + e.message; }
+  eq("an intent row is pressed while its intent is chosen and let go when it is not",
+    got, [[true, "true"], [false, "false"]]);
+
+  try {
+    const en = new El("button"), pl = new El("button"); en.dataset.l = "en"; pl.dataset.l = "pl";
+    const seg = new El("div"); seg.querySelectorAll = () => [en, pl];
+    const apply = new Function("seg", "CONTENT_LANGS", "lsSet", "noteActive",
+      "let lang=\"en\"; function putLang(v){ lang=v; }\n" + slice("lang-seg.js", "function applyLangState(") + "\nreturn applyLangState;")(
+      seg, ["en", "pl"], () => {}, () => {});
+    apply("pl");
+    got = [en.getAttribute("aria-pressed"), pl.getAttribute("aria-pressed"), pl.cls.has("on")];
+  } catch (e) { got = "applyLangState did not run: " + e.message; }
+  eq("the language on screen is the pressed one of its pair", got, ["false", "true", true]);
+}
+/* THE SAME FOUR IN HIGH CONTRAST, where a tint says nothing: each outline is weighed, by layer then
+   specificity, against every rule in the sheet that sets outline to none on the same element, which
+   is how the tour's ring was lost. A rule is matched by its subject compound against every class, id
+   and attribute the element can wear, and every pseudo-class counts as reachable. */
+function highContrastStateTests() {
+  const L = require("./css-layers.js");
+  const raw = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const sheet = L.sheetOf(raw);
+  const lineAt = i => raw.slice(0, sheet.from + i).split("\n").length;
+  const fcAt = raw.indexOf("@media (forced-colors:active){");
+  const fcFrom = raw.slice(0, fcAt).split("\n").length, fcTo = raw.slice(0, raw.indexOf("\n}", fcAt)).split("\n").length + 1;
+  const parsed = L.parseSheet(sheet.css, lineAt);
+  const rank = l => parsed.order.indexOf(l);
+  const feats = sel => {
+    const s = L.subject(sel).replace(/:[-\w]+\((?:[^()]|\([^()]*\))*\)/g, "");
+    if (/::|:(before|after|placeholder|marker|selection)\b/.test(s)) return null;
+    const tag = (/^[a-zA-Z][-\w]*/.exec(s) || [""])[0].toLowerCase();
+    return { tag: tag, cls: [...s.matchAll(/\.([-\w]+)/g)].map(m => m[1]), ids: [...s.matchAll(/#([-\w]+)/g)].map(m => m[1]),
+      attrs: [...s.matchAll(/\[([^\]]+)\]/g)].map(m => m[1].replace(/["']/g, "").replace(/\s/g, "")) };
+  };
+  const fits = (f, el) => f && (!f.tag || f.tag === el.tag) && f.cls.every(c => el.cls.includes(c)) && f.ids.every(i => el.ids.includes(i))
+    && f.attrs.every(a => el.attrs.includes(a) || el.attrs.some(x => x.split("=")[0] === a.split(/[~|^$*]?=/)[0] && !/=/.test(a)));
+  let got;
+  const ELS = [
+    { name: "the chosen tab", state: "on", tag: "div", cls: ["tab", "on", "dragging"], ids: [], attrs: [] },
+    { name: "the chosen category", state: "on", tag: "div", cls: ["pill", "on", "hint", "hint2", "pill-nohit"], ids: [], attrs: ["role=button", "data-k", "data-ec"] },
+    { name: "the language on screen", state: "on", tag: "button", cls: ["on"], ids: [], attrs: ["type=button", "data-l", "data-alt"] },
+    { name: "the tour's selected button", state: "tour-sel", tag: "button", cls: ["btn", "tour-sel", "tour-skip", "primary"], ids: ["tourSkip", "tourPrev", "tourNext"], attrs: ["type=button"] },
+  ];
+  const outlineOff = d => /^outline(-style|-width)?$/.test(d.prop) && /^(none|0)\b/.test(d.val);
+  got = ELS.map(el => {
+    const hc = parsed.decls.filter(d => d.line >= fcFrom && d.line <= fcTo && d.prop === "outline" && /Highlight/.test(d.val)
+      && fits(feats(d.sel), el) && feats(d.sel).cls.includes(el.state));
+    if (!hc.length) return el.name + ": no High Contrast outline";
+    const best = hc[hc.length - 1];
+    const lost = parsed.decls.filter(d => !(d.line >= fcFrom && d.line <= fcTo) && outlineOff(d) && fits(feats(d.sel), el))
+      .filter(d => (d.imp && !best.imp) || rank(d.layer) > rank(best.layer)
+        || (rank(d.layer) === rank(best.layer) && L.cmpSpec(best.spec, d.spec) <= 0));
+    return lost.length ? el.name + ": loses to " + lost.map(d => d.sel + " (line " + d.line + ")").join(", ") : el.name + ": shown";
+  });
+  eq("in High Contrast the chosen tab, category and language and the tour's selected button wear the system highlight, and no rule takes it away",
+    got, ELS.map(el => el.name + ": shown"));
+}
 function pillWrapTests() {
   const paint = fs.readFileSync(path.join(E.ROOT, "src", "modules", "paint.js"), "utf8");
   const state = fs.readFileSync(path.join(E.ROOT, "src", "modules", "pill-state.js"), "utf8");
@@ -3050,8 +3173,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 837;
-const UI_STRINGS_SHA256 = "00c0b8d344efbd7ea8ed8b07fc85783d2b0ccda899b0c4909a11b386fa4f1c9c";
+const UI_STRINGS_COUNT = 840;
+const UI_STRINGS_SHA256 = "2eb4bfefb1383a16a0b93ec2cf73af543a40c62e525eeeb6f44894eedf215e8f";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
