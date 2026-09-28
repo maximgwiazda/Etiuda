@@ -13,7 +13,7 @@ import { eHost } from "./host.js";
    actually empties the engine: the catalog is applied once at boot. */
 /* Asked for, not held: read at the top level this would take the two catalog keys while
    catalog.js is still being evaluated, which bundled reads undefined in silence. */
-function catalogKeep(){ return [E_CATALOG_STORE,E_CATALOG_KEY,nsKey("Sample"),nsKey("CatalogTrust")]; }
+function catalogKeep(){ return [E_CATALOG_STORE,E_CATALOG_KEY,nsKey("Sample"),nsKey("CatalogTrust"),nsKey("CatalogFrom")]; }
 /* WHERE THE CATALOGS ARE IS NOT HOW THE DESK LOOKS. This one names a folder on the machine, so
    forgetting it does not return anything to a default: it sends the app looking somewhere else
    for files it was pointed at once, and the person has to find them again. Kept by the wipe and

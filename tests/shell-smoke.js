@@ -1090,9 +1090,8 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   const DOCS = path.join(os.homedir(), "Documents", "Etiuda");
   const docsExisted = fs.existsSync(DOCS);
-  /* THE SAMPLE STAYS WHERE ETIUDA IS INSTALLED (two folders, 2026-09-26), so a first run writes
-     nothing into this folder but the folder itself; a sample file here after the run that was not
-     here before it is the fault this leg now reads for. */
+  /* A FIRST RUN GIVES THIS FOLDER THE SAMPLE (Maxim, 2026-09-28), where no file of its name is there
+     already; the sample is on disk after the run, and one this run wrote is taken away again below. */
   const docsSample = path.join(DOCS, "sample-catalog.ec");
   const sampleExisted = fs.existsSync(docsSample);
   const udI = newUserData("firstrun", null, true);         // NOT pinned: the real default
@@ -1104,12 +1103,12 @@ const placeEc = (dir, from, as, minutesOld) => {
   const saidFolder = s.said.some(l => l.indexOf("catalog folder " + DOCS) > -1);
   await s.stop();
   const wroteSample = !sampleExisted && fs.existsSync(docsSample);
-  check(saidFolder && fs.existsSync(DOCS) && !wroteSample,
+  check(saidFolder && fs.existsSync(DOCS) && (sampleExisted || wroteSample),
     "2k a first run with no folder set makes Documents/Etiuda and reads from it: the shell named "
-    + DOCS + " (" + saidFolder + ") and it is on disk (" + fs.existsSync(DOCS) + "), and no sample was"
-    + " written into it (" + !wroteSample + ")"
+    + DOCS + " (" + saidFolder + ") and it is on disk (" + fs.existsSync(DOCS) + "), and the sample is in it ("
+    + (sampleExisted ? "it was there before" : "written by this run") + ")"
     + (docsExisted ? "; it was there before this run, so only the naming is this run's" : ""));
-  /* Put back what this run made, and only that: a sample it should not have written, then the
+  /* Put back what this run made, and only that: the sample it wrote, then the
      folder, where this run made it - rmdirSync refuses a folder holding anything, so a desk that
      has since put a catalog in it keeps both. */
   if (!sampleExisted) {
@@ -1151,7 +1150,7 @@ const placeEc = (dir, from, as, minutesOld) => {
         window: !!document.querySelector("body > .modal:not([hidden])"), mark: !!mark, tour: !!bub, apart,
         title: (document.getElementById("tourTitle") || {}).textContent || "",
         field: !!document.querySelector("#tourField:not([hidden]) .e-name-inp"),
-        sample: !!document.getElementById("emptySample"),
+        sample: !!document.getElementById("emptySample"), load: !!document.getElementById("emptyLoad"),
         now: ((document.querySelector("#catNow .cn-none:not([hidden])") || {}).textContent || "") };
     });
   };
@@ -1161,12 +1160,14 @@ const placeEc = (dir, from, as, minutesOld) => {
   const seedFirst = await FIRST_SCREEN(s.p);
   await s.stop();
   const seededFiles = listed(docsA);
-  check(seededFiles.join(",") === "" && seedFirst.sample && seedFirst.cards === 0
+  const givenSame = seededFiles.join(",") === "sample-catalog.ec"
+    && fs.readFileSync(path.join(seededDir(docsA), "sample-catalog.ec")).equals(fs.readFileSync(SAMPLE_IN_TREE));
+  check(givenSame && !seedFirst.sample && seedFirst.load && seedFirst.cards === 0
         && !seedFirst.offer && !seedFirst.window && seedFirst.mark && seedFirst.tour && seedFirst.apart
         && seedFirst.title === "Welcome to Etiuda" && seedFirst.field && seedFirst.now === "No catalog loaded",
-    "2k2 a first run writes nothing into its catalog folder, and the empty desk offers the sample"
-    + " Etiuda ships without loading it: the folder holds " + JSON.stringify(seededFiles) + ", the sample"
-    + " offered " + seedFirst.sample
+    "2k2 a first run gives its catalog folder the sample, byte for byte, and loads nothing, and the empty desk offers Load"
+    + " and no button of its own for the sample Etiuda ships: the folder holds " + JSON.stringify(seededFiles)
+    + ", a sample button " + seedFirst.sample + ", Load " + seedFirst.load
     + ", and the screen is the empty desk with its mark, no offer and no window, the tour's first bubble"
     + " asking the name clear of the mark and the band saying no catalog is loaded: " + JSON.stringify(seedFirst)
     + ". The sample in the tree holds " + SEED_CARDS + " cards, counted by this process");
@@ -1187,10 +1188,10 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " first bubble and the band: " + JSON.stringify(plFirst));
 
   /* The same first run into a folder that already holds a catalog, board item 497: the sample is
-     read all the same, from where Etiuda is installed - it is a special catalog rather than a
-     stand-in for a missing one - and it is still not what opens. The folder's own file is dated six hours back, so newest-wins
-     would take the sample if it were counted with the others. Which file the shell read is taken
-     off its own stdout by path: no name and no card of this fixture is read here. */
+     given all the same - it is a special catalog rather than a stand-in for a missing one - and it
+     is still not what opens. The folder's own file is dated six hours back, so newest-wins would take
+     the sample if it were counted with the others. Which file the shell read is taken off its own
+     stdout by path: no name and no card of this fixture is read here. */
   const docsB = seedDocs("taken");
   fs.mkdirSync(seededDir(docsB), { recursive: true });
   const mineEc = path.join(seededDir(docsB), "mine.ec");
@@ -1208,21 +1209,22 @@ const placeEc = (dir, from, as, minutesOld) => {
   const takenRead = (s.said.join(" | ").match(/catalog read from ([^,]+),/) || [])[1] || "";
   await s.stop();
   const takenFiles = listed(docsB);
-  check(takenFiles.join(",") === "mine.ec" && path.basename(takenRead) === "mine.ec"
+  check(takenFiles.join(",") === "mine.ec,sample-catalog.ec" && path.basename(takenRead) === "mine.ec"
         && !takenFirst.offer && takenFirst.tour && takenSeen.offer,
-    "2k3 a first run into a folder that ALREADY holds a catalog writes nothing beside it and still"
-    + " opens the folder's own over the sample Etiuda ships: " + JSON.stringify(takenFiles)
+    "2k3 a first run into a folder that ALREADY holds a catalog puts the sample beside it and still"
+    + " opens the folder's own over the sample: " + JSON.stringify(takenFiles)
     + ", the file the shell read " + JSON.stringify(path.basename(takenRead))
     + " though it is six hours older than the build's sample"
     + ", and that catalog is offered once the tour is skipped and not before (" + takenFirst.offer
     + " with the tour up, " + takenSeen.offer + " after)");
 
-  /* 2k4: TWO FOLDERS AND WHICH COPY IS IN USE (Maxim, 2026-09-26). With Documents/Etiuda empty the
-     Library lists the sample from where Etiuda is installed and says it is Etiuda's own copy; a file
-     of exactly that name put into Documents/Etiuda is read INSTEAD, one row still, and the row says
-     it is the folder's copy and counts that file (the sample less its edition, so the two differ
-     in bytes); taken away again, the shipped copy is back. The Library is
-     opened afresh for each reading, since what is read is the host's listing. */
+  /* 2k4: TWO FOLDERS AND WHICH COPY IS IN USE (Maxim, 2026-09-26 and 2026-09-28). The copy 2k2's first
+     run gave Documents/Etiuda is the one listed, once, as a plain row, being byte for byte the shipped
+     copy; another file of exactly that name put in its place (the sample less its edition, so the two
+     differ in bytes) is the same one row, now saying it takes the shipped copy's place; taken away,
+     the shipped copy is listed as Etiuda's own and the copy is not given again,
+     since this desk has given it once. The Library is opened afresh for each reading, since what is
+     read is the host's listing. */
   const COPY_ROWS = async () => {
     const pg = (await s.b.pages())[0];
     return pg.evaluate(async () => {
@@ -1254,10 +1256,10 @@ const placeEc = (dir, from, as, minutesOld) => {
   fs.unlinkSync(ownCopy);
   await sleep(6000);
   const restored = await COPY_ROWS();
-  /* 2k4b: A SAMPLE AN EARLIER BUILD SEEDED is recognised by its bytes and passed over: the 09-17
-     edition, which the fixtures folder keeps as its sample-catalog.ec, put into Documents/Etiuda
-     under the sample's name leaves the shipped copy in use and is not listed as the person's. The
-     file is hashed first, so a fixture that has moved on refuses rather than passing. */
+  /* 2k4b: A SAMPLE AN EARLIER BUILD SEEDED is read like any file of the name: the 09-17 edition,
+     which the fixtures folder keeps as its sample-catalog.ec, put into Documents/Etiuda under the
+     sample's name is the copy in use, listed once as the folder's. The file is hashed first, so a
+     fixture that has moved on refuses rather than passing. */
   const SEEDED_FIX = path.join(process.env.ETIUDA_FIXTURES || "", "sample-catalog.ec");
   const seededSha = crypto.createHash("sha256").update(fs.readFileSync(SEEDED_FIX)).digest("hex");
   if (seededSha.slice(0, 16) !== "2fa81658b7ad2b4c") throw new Error("2k4b wants the 09-17 sample as " + SEEDED_FIX + " and found sha256 " + seededSha.slice(0, 16));
@@ -1268,14 +1270,14 @@ const placeEc = (dir, from, as, minutesOld) => {
   await sleep(1500);
   await s.stop();
   const one = rows => rows.length === 1 && rows[0].name === "sample-catalog.ec";
-  check(one(shipped) && shipped[0].copy === "builtin" && one(replaced) && replaced[0].copy === "own"
+  check(one(shipped) && shipped[0].copy === "" && one(replaced) && replaced[0].copy === "own"
         && one(restored) && restored[0].copy === "builtin" && listed(docsA).join(",") === "",
-    "2k4 the Library reads the sample from where Etiuda is installed and says so, a file of the same"
-    + " name in Documents/Etiuda is read in its place and the row says so, and removing it brings the"
-    + " shipped copy back: " + JSON.stringify({ shipped, replaced, restored }));
-  check(one(seeded) && seeded[0].copy === "builtin",
-    "2k4b a sample an earlier build seeded into Documents/Etiuda, byte for byte the 09-17 edition, is passed over: the"
-    + " Library still reads and names the shipped copy: " + JSON.stringify(seeded));
+    "2k4 the Library lists the sample once, as the copy the first run gave Documents/Etiuda with nothing said of"
+    + " it, as taking the shipped copy's place once another file of that name differs, and removing it brings the shipped copy back rather than"
+    + " giving it again: " + JSON.stringify({ shipped, replaced, restored }));
+  check(one(seeded) && seeded[0].copy === "own",
+    "2k4b a sample an earlier build seeded into Documents/Etiuda, byte for byte the 09-17 edition, is the copy read:"
+    + " the Library lists it once, as the folder's own: " + JSON.stringify(seeded));
 
   /* ---- 2k5: the dot field under the cards, board item 419 ---------------------------------
      THE ONE CHECK IN THIS FILE THAT A PICTURE DECIDES, and it is here because no other reading

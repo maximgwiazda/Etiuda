@@ -21,7 +21,6 @@ import { eHost, eCatalogFolderShort } from "./host.js";
 import { agentName, setAgentName, keepAgentName, keepTypedName, nameAnswered, nameFieldHtml, wireNameField } from "./agent.js";
 import { esc } from "./esc.js";
 import { cutLeaves, dismissCopy, mgReduceMotion } from "./motion.js";
-import { hooks } from "./hooks.js";
 
 /* ---------- Guided tour ----------------------------------------------------
    Bubbles over the live page, which stays usable under them: nothing is darkened, and a click
@@ -138,10 +137,7 @@ function tourRevealCardActions(){
 function loadStepBody(){
   const dir=eCatalogFolderShort();
   if(!dir) return t("Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the catalog file. The page reloads with it and the tour carries on from there; the catalog stays in this browser, ready whenever you come back.");
-  /* The sample's button stands beside Load only while sampleReady() (render.js), so only then is it named. */
-  return t(hooks.sampleReady()
-      ? "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}, or <b>load a sample catalog</b> beside it to try everything straight away. Etiuda restarts with the catalog in place, and the tour carries on from there."
-      : "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}. Etiuda restarts with the catalog in place, and the tour carries on from there.")
+  return t("Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}. Etiuda restarts with the catalog in place, and the tour carries on from there.")
     .split("{FOLDER}").join(esc(dir));
 }
 /* THE MENU AS IT STANDS: the button while it is shut, and once the person opens it, the row a step

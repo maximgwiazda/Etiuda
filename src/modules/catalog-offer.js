@@ -73,7 +73,7 @@ function eOfferCatalog(given,name,where,force,asked,builtIn){
     foundHtml:eFoundHtml(file,dir,shipped),
     refusedKey:"CatalogNo", force:!!force, asked:!!asked,
     accept:sig=>{ lsSet(E_CATALOG_KEY,sig);
-      return activateCatalog(c,{keepPersonal:true, file:mine?file:"",
+      return activateCatalog(c,{keepPersonal:true, file:mine?file:"", from:file||(eHost()?"":E_CATALOG_SCRIPT),
                                 fileAt:(mine&&!given)?eCatalogMtime():0}); }
   });
   const active=asked&&!shown?storedCatalog():null;
@@ -453,11 +453,15 @@ function paintCatNow(){
   if(!el) return;
   const held=storedCatalog();
   const name=String((typeof E_CATALOG_NAME!=="undefined" && E_CATALOG_NAME) || (held && held.name) || "");
+  /* The file's name, extension and all, so the file is known again among the person's own; the
+     name inside the catalog only where no route named a file (catalog-file.js, CatalogFrom). */
+  const file=(name||held) ? String(nsGet("CatalogFrom")||eLoadedCatalogFile()||"") : "";
+  const shown=file||(name ? shownCatalogName(name) : "");
   const own=el.querySelector(".cn-name"), none=el.querySelector(".cn-none");
-  if(own){ own.textContent=shownCatalogName(name); own.hidden=!name; if(name) markCut(own); }
+  if(own){ own.textContent=shown; own.hidden=!shown; if(shown) markCut(own); }
   // The sweep translates from the English it finds recorded here, so a language switch follows.
   if(none){ const key=held?"Unnamed catalog":"No catalog loaded";
-    none.setAttribute("data-i18n-text",key); none.textContent=t(key); none.hidden=!!name; }
+    none.setAttribute("data-i18n-text",key); none.textContent=t(key); none.hidden=!!shown; }
 }
 
 /* The watched file. Silent at boot and only while the browser still holds permission:
@@ -488,7 +492,7 @@ function eCheckWatchedFile(interactive){
                folder beside it would say it came from there. */
             foundHtml:eFoundHtml(eWatchName()||f.name,""),
             refusedKey:"WatchNo", force:!!interactive, asked:!!interactive,
-            accept:()=>activateCatalog(c,{keepPersonal:true})
+            accept:()=>activateCatalog(c,{keepPersonal:true, from:eWatchName()||f.name})
           });
           if(!shown && interactive) toast(t("That file matches the catalog you already have."));
           return null;

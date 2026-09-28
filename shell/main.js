@@ -45,40 +45,47 @@ function ensureCatalogFolder() {
   if (catalogFolder() !== dir || !folderAnswers(dir)) return;
   try { fs.mkdirSync(dir, { recursive: true }); }
   catch (e) { console.error("etiuda: " + dir + " could not be made - " + e.message); }
+  giveSamples();
 }
 
 /* TWO FOLDERS: the catalogs Etiuda ships (the sample) stay where it was installed, beside this
-   file, and Documents/Etiuda is read as well; a file there with exactly the same name is read
-   INSTEAD of the shipped one, and the Library says which copy is in use. Nothing is written into
-   Documents. Paired with the default folder only, for ensureCatalogFolder's reason: a folder
-   somebody chose stands alone. */
-const SAMPLE_FILE = "sample-catalog.ec";
+   file, and Documents/Etiuda is read as well; a file there with exactly the same name is ALWAYS
+   read instead of the shipped one, edited or not, and the Library lists that name once and says
+   which copy is in use. Paired with the default folder only, for ensureCatalogFolder's reason: a
+   folder somebody chose stands alone. */
 const BUILT_IN_DIR = __dirname;
-/* EARLIER BUILDS PUT THE SAMPLE INTO Documents/Etiuda, byte for byte, and these are the editions
-   they put there, by size and SHA-256. Such a copy is Etiuda's file rather than the person's: it
-   is passed over and left where it is, so it neither stands in for the shipped sample nor counts
-   as their catalog. One byte changed and it is theirs. */
-const SEEDED_SAMPLES = {
-  39612: "2fa81658b7ad2b4c8e962e7c70134c2c3b86ac9c802fc08743fd41c32988213a",
-  39650: "aae9453e5c38b1d29ea394c31226e3ded39e9ce716febcc96274c089deb3a317",
-  260051: "60c7a9c39a8778c16f704899f3018e1ea850e0ba5d15ccaa9ab5f4c16f0b98b6"
-};
-function isSeededSample(file) {
-  try {
-    const want = SEEDED_SAMPLES[fs.statSync(file).size];
-    return !!want && crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex") === want;
-  } catch (e) { return false; }
-}
-/* The catalog folder's own .ec files, less a seeded sample where the folder is the default one,
-   the only folder any build seeded. */
-function folderFiles(dir) {
-  const all = ecFilesIn(dir);
-  return dir === defaultCatalogFolder() ? all.filter(f => !isSeededSample(f)) : all;
+/* THE FIRST RUN GIVES THE DEFAULT FOLDER A COPY OF EACH SHIPPED CATALOG, so Load shows the sample
+   among the person's own files. A first run is a desk with no file at all, so an update gives
+   nothing and a copy the person deletes is not put back; a file already there under the name is
+   left alone. The key is written so that the desk exists from this run on. Read and written
+   rather than copied, since the source sits inside the asar. */
+const GIVEN_KEY = "e~sampled";
+function giveSamples() {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  const dir = defaultCatalogFolder();
+  if (!deskIsNew || catalogFolder() !== dir || !folderAnswers(dir)) return;
+  for (const f of ecFilesIn(BUILT_IN_DIR)) {
+    try { fs.writeFileSync(path.join(dir, path.basename(f)), fs.readFileSync(f), { flag: "wx" }); }
+    catch (e) {
+      if (e.code !== "EEXIST") console.error("etiuda: " + path.basename(f) + " could not be put in " + dir + " - " + e.message);
+    }
+  }
+  deskSetOwn(GIVEN_KEY, "1");
 }
 function builtInFiles() {
   if (catalogFolder() !== defaultCatalogFolder()) return [];
-  const own = folderFiles(catalogFolder()).map(f => path.basename(f).toLowerCase());
+  const own = ecFilesIn(catalogFolder()).map(f => path.basename(f).toLowerCase());
   return ecFilesIn(BUILT_IN_DIR).filter(f => own.indexOf(path.basename(f).toLowerCase()) < 0);
+}
+/* True where a shipped file of the same name exists and this one is not byte for byte it. The size
+   settles most files without reading either. */
+function differsFromShipped(file) {
+  const own = path.join(BUILT_IN_DIR, path.basename(file));
+  try {
+    if (!fs.existsSync(own)) return false;
+    if (fs.statSync(own).size !== fs.statSync(file).size) return true;
+    return !fs.readFileSync(own).equals(fs.readFileSync(file));
+  } catch (e) { return false; }
 }
 /* THE FOLDER THE PAGE MAY NAME for a file it was handed, and "" for a shipped one: that folder is
    inside the installation's archive, which nobody can open, so the page says in words where the
@@ -88,8 +95,7 @@ function folderShown(file) { return (!file || isBuiltIn(file)) ? "" : path.dirna
 /* Which copy of a name is read: the folder's own, else the shipped one. Null for neither. */
 function catalogFileNamed(base) {
   const own = path.join(catalogFolder(), base);
-  if (folderAnswers(catalogFolder()) && fs.existsSync(own)
-      && !(catalogFolder() === defaultCatalogFolder() && isSeededSample(own))) return own;
+  if (folderAnswers(catalogFolder()) && fs.existsSync(own)) return own;
   return builtInFiles().filter(f => path.basename(f).toLowerCase() === base.toLowerCase())[0] || null;
 }
 
@@ -98,18 +104,22 @@ function catalogFileNamed(base) {
    other file, whatever it is still named. Bytes rather than a hash of the parsed document,
    because bytes are what was copied in - a document reformatted is a document edited. The size
    settles every other file in the folder without reading it. */
-let sampleBytes = null;                     // what this build ships, read once
 function isTheSample(file) {
-  if (sampleBytes === null) {
-    try { sampleBytes = fs.readFileSync(path.join(__dirname, SAMPLE_FILE)); }
-    catch (e) { sampleBytes = Buffer.alloc(0); }
-  }
-  if (!sampleBytes.length) return false;
   try {
-    if (fs.statSync(file).size !== sampleBytes.length) return false;
-    return fs.readFileSync(file).equals(sampleBytes);
+    const size = fs.statSync(file).size;
+    if (!SAMPLE_EDITIONS.some(x => x[0] === size)) return false;
+    const got = crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+    return SAMPLE_EDITIONS.some(x => x[0] === size && x[1] === got);
   } catch (e) { return false; }
 }
+/* EVERY EDITION OF THE SAMPLE A BUILD HAS SHIPPED OR GIVEN, by size and SHA-256, this build's own
+   included (tests/shell-office.mjs holds that, so an edition is added here as it ships). A copy
+   of an older one keeps its place at the foot of the list after the sample moves on. */
+const SAMPLE_EDITIONS = [
+  [39612, "2fa81658b7ad2b4c8e962e7c70134c2c3b86ac9c802fc08743fd41c32988213a"],
+  [39650, "aae9453e5c38b1d29ea394c31226e3ded39e9ce716febcc96274c089deb3a317"],
+  [260051, "60c7a9c39a8778c16f704899f3018e1ea850e0ba5d15ccaa9ab5f4c16f0b98b6"]
+];
 /* NEVER COUNTED AHEAD OF ANOTHER CATALOG, the second half of the ruling above: the sample goes to
    the end of every list of candidates, so a folder holding one real catalog opens that one and a
    folder holding nothing else opens the sample. The Library's list is ordered through here too,
@@ -143,7 +153,7 @@ function catalogFolders() {
 }
 function catalogPlaces() {
   return (openedWith ? [openedWith] : []).concat(sampleLast(catalogFolders().filter(folderAnswers).reduce((out, dir) =>
-    out.concat(folderFiles(dir), [path.join(dir, CATALOG_SCRIPT)]), []).concat(builtInFiles())));
+    out.concat(ecFilesIn(dir), [path.join(dir, CATALOG_SCRIPT)]), []).concat(builtInFiles())));
 }
 
 /* A .ec OPENED FROM THE DESKTOP: the installer registers the extension, so Windows starts Etiuda
@@ -653,6 +663,7 @@ let deskRefused = [];                          // [{kept, restored}]: the copy, 
 const deskRefusedSeen = new Set();
 let deskUnkept = "";                           // a live desk.json that could not even be read
 let deskRestored = "";                         // when the backup this run opened was saved
+let deskIsNew = false;                         // no desk file at all, nor a backup: a first run
 function keepAside(buf) {
   const to = path.join(path.dirname(deskFile()),
     "desk.unread-" + crypto.createHash("sha256").update(buf).digest("hex").slice(0, 12) + ".json");
@@ -714,7 +725,10 @@ function readDesk() {
   }
   deskRestored = "";
   settleRefused(refused, unread, tried[0], null);
-  if (!refused.length && !unread) console.log("etiuda: no desk file yet, so this run starts one");
+  if (!refused.length && !unread) {
+    deskIsNew = true;
+    console.log("etiuda: no desk file yet, so this run starts one");
+  }
   ensureDeskId();
   return {};
 }
@@ -971,8 +985,6 @@ ipcMain.on("etiuda:host", (e) => {
        them and the offer's line names the folder it accepts from. The preload asks for the
        catalog first, so catalogFrom is already the answer by the time this is read. */
     catalogFolder: catalogFolder(),
-    // The shipped sample's name where this desk reads it, so the empty desk can offer it by name.
-    sampleFile: builtInFiles().concat(folderFiles(catalogFolder())).some(f => path.basename(f) === SAMPLE_FILE) ? SAMPLE_FILE : "",
     catalogFile: catalogFrom ? path.basename(catalogFrom) : "",
     catalogIn: folderShown(catalogFrom),
     catalogBuiltIn: isBuiltIn(catalogFrom),
@@ -1069,7 +1081,7 @@ function ecCounts(data) {
    page reading every file in the folder each time it paints one list. */
 ipcMain.handle("etiuda:catalog-files", (e) => {
   if (!fromEngine(e)) return [];
-  return sampleLast(folderFiles(catalogFolder()).concat(builtInFiles())).map(f => {
+  return sampleLast(ecFilesIn(catalogFolder()).concat(builtInFiles())).map(f => {
     let mt = 0, cards = -1, edition = "", macros = -1, intents = -1, cats = -1, awaiting = [];
     let id = "", catalogName = "";
     try { mt = Math.round(fs.statSync(f).mtimeMs); } catch { /* renamed away under the listing */ }
@@ -1089,10 +1101,11 @@ ipcMain.handle("etiuda:catalog-files", (e) => {
     return { name: path.basename(f), mtime: mt, cards: cards, edition: edition,
              macros: macros, intents: intents, cats: cats, awaiting: awaiting,
              sample: isTheSample(f), id: id, catalogName: catalogName,
-             /* Which copy: the one Etiuda ships, or the folder's own in place of a shipped one. */
+             /* Which copy: the one Etiuda ships, or the folder's own in place of a shipped one. A copy
+                byte for byte the shipped one, as a first run gives it, is neither, and says nothing. */
              builtIn: path.dirname(f) === BUILT_IN_DIR,
              replaces: path.dirname(f) !== BUILT_IN_DIR && catalogFolder() === defaultCatalogFolder()
-               && fs.existsSync(path.join(BUILT_IN_DIR, path.basename(f))) };
+               && differsFromShipped(f) };
   });
 });
 ipcMain.handle("etiuda:catalog-read", (e, name) => {
@@ -1644,15 +1657,14 @@ function refusalDoc(why) {
     + '</div></div>\n';
 }
 
-/* THE TWO SIBLING TAGS ARE NOT SERVED HERE. In a browser they are how a catalog or the demo
-   beside the engine arrives; under this shell the policy refuses both by design, since a catalog
-   comes through the host, and each refusal was a console error on every boot, so a healthy desk
-   never had a clean console (bug hunt 3, item 21). Cut from the served copy only, as the policy is
-   put into it: engine/etiuda.html keeps them for the browser. Each must match exactly once, like
-   the anchor: none means the template moved and the strip is stale, two means the literal has
-   turned up somewhere it must not be cut. tests/csp.js proves the policy still refuses a sibling
-   with one of its own planting, and that a clean boot logs nothing. */
-const SIBLING_TAGS = ['<script src="etiuda-catalog.js"></script>', '<script src="sample-catalog.js"></script>'];
+/* THE SIBLING TAG IS NOT SERVED HERE. In a browser it is how a catalog beside the engine arrives;
+   under this shell the policy refuses it by design, since a catalog comes through the host, and the
+   refusal was a console error on every boot, so a healthy desk never had a clean console (bug hunt
+   3, item 21). Cut from the served copy only, as the policy is put into it: engine/etiuda.html
+   keeps it for the browser. It must match exactly once, like the anchor: none means the template
+   moved and the strip is stale, two means the literal has turned up somewhere it must not be cut.
+   tests/csp.js proves the policy still refuses a sibling with one of its own planting. */
+const SIBLING_TAGS = ['<script src="etiuda-catalog.js"></script>'];
 
 function withPolicy(html) {
   const pin = readPin();

@@ -3,9 +3,9 @@ import { cardFieldKey } from "./card-fields.js";
 import { cardOrderTouched, cardOrderIsBase, cardOrderIdx } from "./card-order.js";
 import { ALWAYS_CATS } from "./cat-roles.js";
 import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, E_CATALOG_NAME, E_CATALOG_VERSION, parseCatalogFile } from "./catalog.js";
-import { catalogToV2, catalogFromV2, isV2 } from "./catalog-v2.js";
+import { catalogToV2 } from "./catalog-v2.js";
 import { CATS, intentArr, intentFieldKey, intentCount, catalogLangs, CONTENT_LANGS } from "./content-model.js";
-import { eHost, eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile, eSampleFile, eReadCatalogFile } from "./host.js";
+import { eHost, eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile } from "./host.js";
 import { CAT_LABELS_PL, CAT_LABELS_BY_LANG } from "./icons.js";
 import { fill } from "./intent-text.js";
 import { cardToExportPlain } from "./macros-json.js";
@@ -333,8 +333,8 @@ function activateCatalog(c,opts){
   cardOrderTouched();
   savePack();
   nsDel("CatalogNo");
-  /* Set here rather than in loadSampleCatalog(), because EVERY route to a catalog passes
-     through this function - the sample button, an import, accepting the sibling file. Loading
+  /* Set here, because EVERY route to a catalog passes
+     through this function - an import, a Library row, accepting the sibling file. Loading
      anything without the flag therefore clears the watermark by itself, with no path that can
      leave it stranded over real content. */
   try{
@@ -349,6 +349,9 @@ function activateCatalog(c,opts){
   try{
     nsSet("CatalogFile",String((opts&&opts.file)||""));
     nsSet("CatalogFileAt",String(+(opts&&opts.fileAt)||0));
+    /* The file's own name wherever it lay, which the top bar shows; `file` above is only ever one
+       in the catalog folder. Blanked by a route that names none, for the same reason. */
+    nsSet("CatalogFrom",String((opts&&(opts.from||opts.file))||""));
     recordCatalogTrust(c);
   }catch(e){}
   /* A CATALOG ARRIVES ON A CLEAN DESK. Selected intents are stored by INDEX, so an index
@@ -397,25 +400,6 @@ function syncSampleMark(){
   on=nsGet("Sample")==="1";
   el.hidden=!(on && (cards||[]).length>0 && sampleUntouched());
 }
-// The sample is a sibling file in a browser and a shipped file under a host, so it can simply not
-// be there - every route offering it asks here.
-function sampleReady(){ return (typeof E_SAMPLE!=="undefined" && isV2(E_SAMPLE)) || !!eSampleFile(); }
-/* Routes through activateCatalog() like any import - a real catalog you keep and can edit,
-   not a temporary illusion. It NEVER replaces a loaded catalog: wanting the demo on top of real
-   content is not a thing anyone wants. The caller already fires only on an empty Etiuda; the
-   rule is stated here so a route added later cannot get around it. An empty desk may still hold
-   the layer an Eject kept, so the layer is carried as every other route carries it. */
-function loadSampleCatalog(){
-  if((cards||[]).length || !sampleReady()) return false;
-  if(typeof E_SAMPLE!=="undefined" && isV2(E_SAMPLE))
-    return activateCatalog(catalogFromV2(JSON.parse(JSON.stringify(E_SAMPLE))),{keepPersonal:true});
-  const name=eSampleFile();
-  eReadCatalogFile(name).then(got=>{
-    const c=(got && got.text) ? catalogFromFileText(got.text,name) : null;
-    if(c && !(cards||[]).length) activateCatalog(c,{keepPersonal:true, file:name});
-  });
-  return true;
-}
 /* Reads a picked file's text into a catalog, or names the file and hands back null. */
 function catalogFromFileText(text,fileName){
       try{
@@ -434,7 +418,7 @@ function catalogFromFileText(text,fileName){
 function importCatalogText(text,fileName){
   const c=catalogFromFileText(String(text||""),fileName);
   if(!c) return false;
-  hooks.offerPickedCatalog(c,fileName,()=>{ eWatchClear().then(()=>activateCatalog(c,{keepPersonal:true})); });
+  hooks.offerPickedCatalog(c,fileName,()=>{ eWatchClear().then(()=>activateCatalog(c,{keepPersonal:true, from:fileName})); });
   return true;
 }
 /* The host's dialog, and the file comes back already read: the engine calls no OS API. No watch
@@ -520,7 +504,7 @@ function importCatalogPicked(){
         nsSet("WatchName",f.name);
         nsSet("WatchSeen",String(f.lastModified||0));
         nsDel("WatchNo");
-        eWatchPut(handle).then(()=>activateCatalog(c,{keepPersonal:true}));
+        eWatchPut(handle).then(()=>activateCatalog(c,{keepPersonal:true, from:f.name}));
       });
       return null;
     });
@@ -544,8 +528,6 @@ export {
   catalogEdited,
   sampleUntouched,
   syncSampleMark,
-  sampleReady,
-  loadSampleCatalog,
   importCatalogHere,
   importCatalogText
 };

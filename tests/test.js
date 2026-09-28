@@ -564,6 +564,8 @@ function runUnitTests() {
   deskStatsTests();
   ejectUndoTests();
   tourActTests();
+  emptyDeskTests();
+  catNowTests();
 }
 
 /* EJECT HAPPENS AT ONCE AND UNDO LOADS THE SAME CATALOG BACK (Maxim, 2026-09-27): the eject, the
@@ -591,7 +593,7 @@ function ejectUndoTests() {
         (said, fn) => { w.said = said; w.undo = fn; }, () => {});
     } catch (e) { w.F = null; w.err = e.message; }
     w.ls = { eCatalog: "{\"cards\":[1]}", eCatalogOk: "sig", eSample: "1", eCatalogNo: "no", eCatalogFile: "shop.ec",
-             eCatalogFileAt: "1700", eCatalogTrust: "valid", ePack: "[\"old\"]", eTheme: "dark" };
+             eCatalogFileAt: "1700", eCatalogTrust: "valid", eCatalogFrom: "shop.ec", ePack: "[\"old\"]", eTheme: "dark" };
     w.ss = { eSessionTabs: "tabs-a" };
     return w;
   };
@@ -602,7 +604,7 @@ function ejectUndoTests() {
   const before = sorted(w.ls) + sorted(w.ss);
   w.F.ejectCatalog();
   eq("an eject asks nothing and restarts once, with the catalog, what names it and its signature's state gone and the park in the session",
-    [w.asked, w.reloads, ["eCatalog", "eCatalogOk", "eSample", "eCatalogNo", "eCatalogFile", "eCatalogFileAt", "eCatalogTrust"].filter(k => k in w.ls),
+    [w.asked, w.reloads, ["eCatalog", "eCatalogOk", "eSample", "eCatalogNo", "eCatalogFile", "eCatalogFileAt", "eCatalogTrust", "eCatalogFrom"].filter(k => k in w.ls),
      "eEjectPark" in w.ss, w.ss.eEjectedNow, w.ls.eTheme], [0, 1, [], true, "1", "dark"]);
   w.latched = false;
   const first = w.F.ejectedJustNow() && w.F.offerEjectUndo(), again = w.F.offerEjectUndo();
@@ -731,9 +733,8 @@ function tourActTests() {
   const plAt = langSrc.indexOf("UI_STRINGS.pl={"), plEnd = langSrc.indexOf("\n};", plAt);
   const PL = new Function("const UI_STRINGS={};\n" + langSrc.slice(plAt, plEnd + 3) + "\nreturn UI_STRINGS.pl;")();
   const untranslated = [];
-  [[true, "X", true, true], [true, "X", false, false], [false, "", false, true]].forEach(([host, dir, sample, wheel]) => {
-    Object.assign(own, { eHost: () => host, eCatalogFolderShort: () => dir, hooks: { sampleReady: () => sample },
-      wheelShown: () => wheel, esc: s => s });
+  [[true, "X", true], [true, "X", false], [false, "", true]].forEach(([host, dir, wheel]) => {
+    Object.assign(own, { eHost: () => host, eCatalogFolderShort: () => dir, wheelShown: () => wheel, esc: s => s });
     T.TOUR_STEPS.forEach(s => ["title", "body"].forEach(k => {
       let calls = 0, missed = 0;
       own.t = x => { calls++; if (PL[x] == null) { missed++; return x; } return PL[x]; };
@@ -742,14 +743,13 @@ function tourActTests() {
     }));
   });
   own.t = s => s;
-  eq("every title and body of the tour reads Polish, on the desk and in a browser, with and without the sample and the wheel",
+  eq("every title and body of the tour reads Polish, on the desk and in a browser, with and without the wheel",
     [...new Set(untranslated)], []);
   /* WHERE THE TOUR SAYS A PERSON'S THINGS STAY is where they stay on that host, in both languages: the desk keeps
      them on this computer and a browser in itself, so no step names the other host's place. */
   const misplaced = [], editSays = [];
-  [[true, "X", true, true], [true, "X", false, false], [false, "", false, true]].forEach(([host, dir, sample, wheel]) => {
-    Object.assign(own, { eHost: () => host, eCatalogFolderShort: () => dir, hooks: { sampleReady: () => sample },
-      wheelShown: () => wheel, esc: s => s });
+  [[true, "X", true], [true, "X", false], [false, "", true]].forEach(([host, dir, wheel]) => {
+    Object.assign(own, { eHost: () => host, eCatalogFolderShort: () => dir, wheelShown: () => wheel, esc: s => s });
     const other = host ? /this browser|przegl/i : /this computer|komputer/i, mine = host ? /this computer|komputer/i : /this browser|przegl/i;
     [x => x, x => PL[x] == null ? x : PL[x]].forEach((tr, pl) => {
       own.t = tr;
@@ -763,6 +763,99 @@ function tourActTests() {
   own.t = s => s;
   eq("the tour names where a person's things stay as the host keeps them: the edit step on each host and language, and no step the other host's place",
     [misplaced, editSays], [[], [true, true, true, true, true, true]]);
+  /* THE LOAD STEP NAMES NO SAMPLE BUTTON, because the empty desk draws none: asked on a desk, where the step once
+     named one, in both languages. */
+  Object.assign(own, { eHost: () => true, eCatalogFolderShort: () => "X", esc: s => s });
+  const loadStep = T.TOUR_STEPS.find(s => s.id === "load");
+  const loadSays = [x => x, x => PL[x] == null ? x : PL[x]].map(tr => { own.t = tr; return typeof loadStep.body === "function" ? loadStep.body() : ""; });
+  own.t = s => s;
+  eq("the tour's load step names Load and no sample button, on the desk, in English and in Polish",
+    loadSays.map(b => /Load a catalog|wczytaj katalog/.test(b) && !/sample|przyk/i.test(b)), [true, true]);
+}
+
+/* THE EMPTY DESK OFFERS LOAD AND NO SAMPLE BUTTON: the sample is a file, and Load reaches it (Maxim,
+   2026-09-28). The empty-desk markup is sliced out of render.js and drawn over a model of each host, in
+   both languages. */
+function emptyDeskTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "render.js"), "utf8");
+  const langSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "ui-lang.js"), "utf8");
+  const plAt = langSrc.indexOf("UI_STRINGS.pl={"), plEnd = langSrc.indexOf("\n};", plAt);
+  const PL = new Function("const UI_STRINGS={};\n" + langSrc.slice(plAt, plEnd + 3) + "\nreturn UI_STRINGS.pl;")();
+  const own = { terms: [], list: { innerHTML: "" }, wholeThingEmpty: () => true, esc: s => String(s), E_CATALOG_SCRIPT: "etiuda-catalog.js" };
+  const scope = new Proxy({}, {
+    has: (o, k) => typeof k === "string",
+    get: (o, k) => k === Symbol.unscopables ? undefined : k in own ? own[k] : k in globalThis ? globalThis[k] : () => undefined,
+    set: (o, k, v) => { own[k] = v; return true; }
+  });
+  let draw = null;
+  try {
+    draw = new Function("scope", "with(scope){\n" + extractDecl(src, "const afterBtn=") + "\n"
+      + extractDecl(src, "list.innerHTML=terms.length") + "\nreturn list.innerHTML;\n}");
+  } catch (e) { eq("render.js carries the empty desk's markup", e.message, "sliced"); return; }
+  const hosts = { desk: ["C:/X", "https:"], disk: ["", "file:"], link: ["", "https:"] };
+  const wrong = [];
+  Object.keys(hosts).forEach(h => ["en", "pl"].forEach(lang => {
+    Object.assign(own, { eCatalogFolder: () => hosts[h][0], eCatalogFolderShort: () => "X", location: { protocol: hosts[h][1] },
+      t: lang === "pl" ? x => (PL[x] == null ? x : PL[x]) : x => x });
+    let p;
+    try { p = draw(scope); } catch (e) { p = "threw " + e.message; }
+    if (!/id="emptyLoad"/.test(p) || /emptySample|sample|przyk/i.test(p)) wrong.push(h + " " + lang);
+  }));
+  eq("the empty desk offers Load and no sample button on the desk, from a disk and over a link, in English and in Polish",
+    wrong, []);
+}
+
+/* THE TOP BAR NAMES THE LOADED CATALOG'S FILE, extension and all. Maxim, 2026-09-28 17:06: "It's additional
+   information for the user, so they recognize the file later on when they see it among their files." paintCatNow
+   runs over a model of the bar and of what each load route recorded. */
+function catNowTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-offer.js"), "utf8");
+  const fileSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-file.js"), "utf8");
+  const el = cls => ({ cls, hidden: true, textContent: "", attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } });
+  let paint = null, importText = null;
+  const world = { ns: {}, held: null, applied: "", opts: null };
+  try {
+    paint = new Function("document", "storedCatalog", "nsGet", "eLoadedCatalogFile", "markCut", "t", "E_CATALOG_NAME",
+      extractDecl(src, "function shownCatalogName(") + "\n" + extractDecl(src, "function paintCatNow(") + "\nreturn paintCatNow;");
+    importText = new Function("catalogFromFileText", "hooks", "eWatchClear", "activateCatalog",
+      extractDecl(fileSrc, "function importCatalogText(") + "\nreturn importCatalogText;")(
+      () => ({ name: "Invented shop" }), { offerPickedCatalog: (c, name, accept) => accept() },
+      () => ({ then: fn => fn() }), (c, opts) => { world.opts = opts; return true; });
+  } catch (e) { eq("catalog-offer.js carries the top bar's painter", e.message, "sliced"); return; }
+  const bar = (ns, held, applied, file) => {
+    const own = el("cn-name"), none = el("cn-none");
+    const doc = { getElementById: id => (id === "catNow" ? { querySelector: s => (s === ".cn-name" ? own : none) } : null) };
+    paint(doc, () => held, k => (k in ns ? ns[k] : null), () => file, () => {}, s => s, applied)();
+    return own.hidden ? (none.hidden ? "" : "none: " + none.textContent) : own.textContent;
+  };
+  const held = { name: "Invented shop", cards: [1] };
+  eq("the top bar shows the file the catalog was loaded from, wherever it lay, and the name inside it only where no route named a file",
+    [bar({ CatalogFrom: "sample-catalog.ec", CatalogFile: "sample-catalog.ec" }, held, "Invented shop", "sample-catalog.ec"),
+     bar({ CatalogFrom: "Spring team.ec", CatalogFile: "" }, held, "Invented shop", ""),
+     bar({ CatalogFile: "team.ec" }, held, "Invented shop", "team.ec"),
+     bar({ CatalogFrom: "", CatalogFile: "" }, held, "Invented shop", ""),
+     bar({}, null, "", "")],
+    ["sample-catalog.ec", "Spring team.ec", "team.ec", "Invented shop", "none: No catalog loaded"]);
+  importText("{}", "Spring team.ec");
+  eq("a catalog loaded through the file dialog records the file's name for the bar", (world.opts || {}).from, "Spring team.ec");
+
+  /* AND activateCatalog, which every route ends in, writes what the route named: run whole in a scope whose every
+     other free name is a no-op, over a store that takes the catalog. */
+  const ns = {};
+  const own = { storeCatalog: () => true, pack: {}, carryCardLayer: () => new Set(), catalogCardId: m => m.id,
+    nsSet: (k, v) => { ns[k] = v; }, nsDel: k => { delete ns[k]; }, nsGet: k => (k in ns ? ns[k] : null) };
+  const scope = new Proxy({}, {
+    has: (o, k) => typeof k === "string",
+    get: (o, k) => k === Symbol.unscopables ? undefined : k in own ? own[k] : k in globalThis ? globalThis[k] : () => undefined,
+    set: (o, k, v) => { own[k] = v; return true; }
+  });
+  let activate = null;
+  try { activate = new Function("scope", "with(scope){\n" + extractDecl(fileSrc, "function activateCatalog(") + "\nreturn activateCatalog;\n}")(scope); }
+  catch (e) { eq("catalog-file.js carries activateCatalog", e.message, "sliced"); return; }
+  const wrote = opts => { ns.CatalogFrom = "stale.ec"; activate({ cards: [] }, opts); return ns.CatalogFrom; };
+  eq("activateCatalog records the file a route names, its folder file where that is all it names, and blanks it for a route that names none",
+    [wrote({ keepPersonal: true, from: "Spring team.ec" }), wrote({ keepPersonal: true, file: "team.ec" }), wrote({ keepPersonal: true })],
+    ["Spring team.ec", "team.ec", ""]);
 }
 
 /* Section 2.5 of the specification and the body rules of 2.6, driven over the reader that
@@ -2275,12 +2368,12 @@ function shippedFlagTests() {
   const answer = (from) => {
     let handler = null;
     try {
-      new Function("ipcMain", "fromEngine", "BrowserWindow", "process", "hostBackdrop", "catalogFolder", "builtInFiles",
-        "folderFiles", "SAMPLE_FILE", "path", "catalogFrom", "folderShown", "isBuiltIn", "catalogMtime", "openedWith",
+      new Function("ipcMain", "fromEngine", "BrowserWindow", "process", "hostBackdrop", "catalogFolder",
+        "path", "catalogFrom", "folderShown", "isBuiltIn", "catalogMtime", "openedWith",
         "openedRefused", "recovering", "deskFile", "os", "hostAccent",
         extractDecl(shell, 'ipcMain.on("etiuda:host",'))(
         { on: (ch, fn) => { handler = fn; } }, () => true, { fromWebContents: () => null }, { platform: "win32" }, () => null,
-        () => own, () => [], () => [], "sample-catalog.ec", path.win32, from, S.folderShown, S.isBuiltIn, () => 0, "",
+        () => own, path.win32, from, S.folderShown, S.isBuiltIn, () => 0, "",
         null, new Set(), () => "", { homedir: () => "" }, () => "");
     } catch (e) { return "the host answer did not run: " + e.message; }
     const ev = { sender: { id: 1 } };
@@ -3353,10 +3446,9 @@ function checkCatalogRoundTrip() {
    The PB_ to E_ pass of 2026-09-13 moved 158 names and deliberately did not move three, each
    for a different reason and each invisible to every other instrument here:
 
-   THE TWO GLOBALS THAT ARRIVE FROM OUTSIDE. A catalog file on disk declares
-   window.E_CATALOG and the sample declares window.E_SAMPLE. Both are written by files this
-   engine does not own - by the converter in tools/catalog-v2, or by a desk - so renaming
-   either end silently stops a catalog loading. The export wrapper and the importer's search
+   THE GLOBAL THAT ARRIVES FROM OUTSIDE. A catalog file on disk declares window.E_CATALOG,
+   written by files this engine does not own - by the converter in tools/catalog-v2, or by a
+   desk - so renaming either end silently stops a catalog loading. The export wrapper and the importer's search
    for it are the same contract read the other way. They were PB_ until 2026-09-14; the clean
    break on the format took the old names with it, since nothing here reads format 1 at all.
 
@@ -3375,8 +3467,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 840;
-const UI_STRINGS_SHA256 = "2eb4bfefb1383a16a0b93ec2cf73af543a40c62e525eeeb6f44894eedf215e8f";
+const UI_STRINGS_COUNT = 835;
+const UI_STRINGS_SHA256 = "5b9a0c3b3e8afb0b11a5441cb63a188de332704883ed3f85c6427427df7c063e";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
@@ -3437,10 +3529,6 @@ function checkFrozenContracts() {
         "an export is the .ec document itself, which every reader of a format 2 catalog parses as it stands");
   holds("function parseCatalogFile(", '"E_CATALOG"',
         "the importer finds the payload by that wrapper");
-  holds("function sampleReady(", "typeof E_SAMPLE",
-        "sample-catalog.js is published beside the engine and declares window.E_SAMPLE");
-  holds("function loadSampleCatalog(", "E_SAMPLE",
-        "the sample is read through the name its own file declares");
 
   /* The prefix is evaluated rather than matched, because what must agree is what the two
      sides COMPUTE: nsKey carries an identity ternary that a text search reads straight past. */
@@ -4994,7 +5082,7 @@ if (require.main === module) {
     const f = checkFrozenContracts();
     f.problems.forEach(x => console.error("  ERROR: " + x));
     if (f.problems.length) hardFail++;
-    else console.log("  window.E_CATALOG and window.E_SAMPLE still read, storage namespaced "
+    else console.log("  window.E_CATALOG still read, storage namespaced "
       + JSON.stringify(f.prefix) + " and swept by " + f.shape + " in both copies, no key of the "
       + "old regime left in src/, " + f.ui.count + " interface strings at " + f.ui.sha256.slice(0, 16));
   } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
