@@ -539,6 +539,7 @@ function runUnitTests() {
   arrivalTests();
   markClockTests();
   menuWarmTests();
+  ecTypeNameTests();
   pageWatchTests();
   shippedFlagTests();
   dismissTierTests();
@@ -1882,6 +1883,47 @@ function markClockTests() {
   } catch (e) { got = "the lab threw: " + e.message; }
   eq("the menu's warm copy is drawn once, 900 ms after the mark has formed, and 900 ms after boot without one",
     got, [[2600], [900]]);
+}
+/* THE .ec FILE TYPE IS NAMED IN THE INSTALLER'S LANGUAGE: electron-builder writes the English from
+   fileAssociations, and shell/installer.nsh's customInstall writes the Polish over it when the
+   installer runs in Polish. Read here against electron-builder's own templates and language table;
+   what Explorer shows on a Polish Windows is Maxim's to see. */
+function ecTypeNameTests() {
+  const root = E.ROOT, lib = path.join(root, "node_modules", "app-builder-lib");
+  let got;
+  let assoc = [];
+  try {
+    assoc = (require(path.join(root, "electron-builder.js")).fileAssociations || [])
+      .filter(a => [].concat(a.ext).indexOf("ec") > -1);
+    got = assoc.map(a => [a.name, a.description]);
+  } catch (e) { got = "electron-builder.js threw: " + e.message; }
+  eq("one .ec association, whose class and name are the English \"Etiuda catalog\"", got, [["Etiuda catalog", "Etiuda catalog"]]);
+  try {
+    const nsh = fs.readFileSync(path.join(root, "shell", "installer.nsh"), "utf8");
+    const body = (/!macro customInstall\r?\n([\s\S]*?)!macroend/.exec(nsh) || [])[1] || "";
+    const w = /\$\{If\} \$LANGUAGE == (\d+)\r?\n\s*WriteRegStr SHELL_CONTEXT "Software\\Classes\\([^"]+)" "" "([^"]+)"/.exec(body);
+    const langs = require(path.join(lib, "out", "util", "langs.js"));
+    const cfg = require(path.join(root, "electron-builder.js"));
+    const asked = (cfg.nsis || {}).installerLanguages;
+    const inInstaller = asked == null ? langs.bundledLanguages.indexOf("pl_PL") > -1
+      : [].concat(asked).some(l => /^pl([_-]PL)?$/.test(l));
+    const ui = fs.readFileSync(path.join(root, "src", "modules", "ui-lang.js"), "utf8");
+    const pl = (/\n\s*"Etiuda catalog":"([^"]+)",/.exec(ui) || [])[1];
+    got = w ? [+w[1] === langs.lcid.pl_PL, inInstaller, w[2] === (assoc[0] || {}).name, !!pl && w[3] === pl,
+      /System::Call 'shell32::SHChangeNotify\(i 0x08000000, i 0, i 0, i 0\)'/.test(body.slice(w.index))]
+      : "customInstall writes no name under $LANGUAGE";
+  } catch (e) { got = "the installer's include could not be read: " + e.message; }
+  eq("in Polish the installer writes the interface's own Polish for \"Etiuda catalog\" over the same class, under electron-builder's LCID for Polish, which the installer carries, and tells the shell",
+    got, [true, true, true, true, true]);
+  try {
+    const sect = fs.readFileSync(path.join(lib, "templates", "nsis", "installSection.nsh"), "utf8");
+    const fa = fs.readFileSync(path.join(lib, "templates", "nsis", "include", "FileAssociation.nsh"), "utf8");
+    const reg = sect.indexOf("!insertmacro registerFileAssociations"), mine = sect.indexOf("!insertmacro customInstall");
+    const un = /!macro APP_UNASSOCIATE [^\n]*\n([\s\S]*?)!macroend/.exec(fa);
+    got = [reg > -1 && mine > reg, !!un && /DeleteRegKey SHELL_CONTEXT `Software\\Classes\\\$\{FILECLASS\}`/.test(un[1])];
+  } catch (e) { got = "electron-builder's templates could not be read: " + e.message; }
+  eq("electron-builder writes its English before customInstall runs, and its uninstaller takes the whole class back, Polish and all",
+    got, [true, true]);
 }
 /* THE MENU'S FIRST OPEN IS PAID FOR BEFORE IT (E9): warmMenu is sliced out of header-menus.js with the
    one openSettingsMenu that marks the menu drawn, and run on a small element model written here; when
