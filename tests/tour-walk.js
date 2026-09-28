@@ -18,6 +18,8 @@
  * WHAT A ROW SAYS:
  *   next     Next is pressed (`type` first, where the step holds a field).
  *   type     click the field inside the ring and type into it.
+ *   aim      before Next, a point inside the ring that the page answers with this control, found
+ *            as `click` finds one and recorded among the presses, but not clicked.
  *   click    click these, in order, each at a point inside the ring that the page itself answers
  *            (elementFromPoint), so a bubble drawn over the thing asked for is a failure, not a
  *            click that lands anyway. More than one: the Menu first, then the row it opens.
@@ -37,21 +39,21 @@ const LATE_MS = 3000; // on top of a step's own settling, before a step that did
 const PLAN = [
   { id: "name", next: true, type: { sel: "#tourName", text: "Invented Agent" } },
   { id: "load", reload: true },
-  { id: "pax", next: true },
-  { id: "search", next: true },
-  { id: "rail", next: true },
-  { id: "cards", next: true },
-  { id: "pills", next: true },
-  { id: "tabs", next: true },
-  { id: "seg", next: true },
+  { id: "pax", next: true, aim: "#pax" },
+  { id: "search", next: true, aim: "#intent" },
+  { id: "rail", next: true, aim: "#intentRailList .rail-item[data-si] .rail-t" },
+  { id: "cards", next: true, aim: "#list .card[data-id] .txt[data-v]" },
+  { id: "pills", next: true, aim: "#pills .pill .pill-lab" },
+  { id: "tabs", next: true, aim: "#tabsWrap .tab-add" },
+  { id: "seg", next: true, aim: "#seg button" },
   { id: "buttons", click: ['#list .card [data-act="edit"]'], into: "editor" },
   { id: "editor", inside: true, next: true },
-  { id: "add", next: true, into: "addIn" },
+  { id: "add", next: true, aim: "#addCardFab", into: "addIn" },
   { id: "addIn", inside: true, close: "#meCancel" },
   { id: "facts", click: ["#factsBtn"], into: "factsIn" },
-  { id: "factsIn", inside: true, close: "#factsBtn" },
-  { id: "theme", next: true },
-  { id: "menu", next: true },
+  { id: "factsIn", inside: true, next: true },
+  { id: "theme", next: true, aim: "#theme" },
+  { id: "menu", next: true, aim: "#settingsBtn" },
   { id: "library", click: ['#settingsMenu [data-act="manage"]'], into: "libraryIn", again: { next: true } },
   { id: "libraryIn", inside: true, back: true, again: { close: "#modalX" } },
   { id: "settings", click: ["#settingsBtn", '#settingsMenu [data-act="settings"]'], into: "settingsIn" },
@@ -189,7 +191,7 @@ async function press(pg, sel, ringed) {
 }
 
 /** Does one step as a person does it and reads where the tour went. The record is what the smoke
- *  asserts on: `look` as the step first stood, `aims` for each click (inside its ring or not),
+ *  asserts on: `look` as the step first stood, `aims` for each click and aim (inside its ring or not),
  *  `want` where the tour should go and `to` where it went, `asked` a question bubble left
  *  standing after the act. `loaded` passes over the load step; `visit` counts the walk's visits
  *  to this step, 1 the first. */
@@ -201,6 +203,11 @@ async function walkStep(pg, id, opts) {
   const t0 = Date.now();
   await pause(450); // the step places its bubble on the next frame and again at 300 ms
   rec.look = await pg.evaluate(LOOK);
+  if (r.aim) {
+    await pg.evaluate(RING_STILL);
+    const a = await pg.evaluate(AIM, r.aim, true);
+    rec.aims.push({ sel: r.aim, ok: a.x >= 0, found: a.found, aimed: true });
+  }
   if (r.type) {
     const a = await press(pg, r.type.sel, !r.next);
     rec.aims.push(a);
