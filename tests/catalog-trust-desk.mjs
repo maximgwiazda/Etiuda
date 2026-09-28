@@ -474,7 +474,7 @@ async function parent() {
     const e4b = run(lab4, ["library"], true);
     const r4 = row(e4b, "lamp.ec");
     check(e4.reloaded && !!r4 && r4.loaded && r4.key && r4.key.state === V2.V2_SIG_UNKNOWN && UNKNOWN_KEY.test(r4.key.tip),
-      "4b and the loaded row says the same, which is what 4c must see go: " + said(r4));
+      "4b and the loaded row wears the grey key whose bubble says the same, which is what 4c must see turn gold: " + said(r4));
     fs.writeFileSync(path.join(lab4, "catalogs", "etiuda-ring.json"), ring, "utf8");
     const e4c = run(lab4, ["library"]);
     const r4c = row(e4c, "lamp.ec");
