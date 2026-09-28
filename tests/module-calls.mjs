@@ -517,7 +517,7 @@ const CARD_B = {
     () => eq(C.COLLAPSE_BAND[0] + C.COLLAPSE_FAV[0], "::"));
   check("collapse.js", "a group folds and unfolds",
     () => {
-      C.expandAllGroups();
+      UILANG_STORE.lsDel("eCollapsed"); C.rereadCollapsed();
       const before = C.isCollapsed("gen");
       C.toggleCollapsed("gen");
       const after = C.isCollapsed("gen");
@@ -525,8 +525,13 @@ const CARD_B = {
       return before === false && after === true && C.isCollapsed("gen") === false
         ? true : before + "/" + after;
     });
-  check("collapse.js", "expandAllGroups clears the set held in memory",
-    () => { C.toggleCollapsed("gen"); C.expandAllGroups(); return eq(C.isCollapsed("gen"), false); });
+  check("collapse.js", "rereadCollapsed reads the folds from storage again: a stored fold stays, one taken out of storage goes",
+    () => {
+      C.toggleCollapsed("gen"); C.rereadCollapsed();
+      const kept = C.isCollapsed("gen");
+      UILANG_STORE.lsDel("eCollapsed"); C.rereadCollapsed();
+      return eq(kept + "|" + C.isCollapsed("gen"), "true|false");
+    });
   check("collapse.js", "an empty key is never collapsed",
     () => eq(C.isCollapsed(""), false));
   check("collapse.js", "groupKeyOf falls through to the card's own category",

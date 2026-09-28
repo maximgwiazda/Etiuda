@@ -31,7 +31,6 @@ UI_STRINGS.pl={
   "Fold this group away":"Zwiń tę grupę",
   "Show these cards":"Pokaż te karty",
   "Matching your intent":"Pasujące do intencji",
-  "Put every setting back to its default? Your cards, edits, favourites and order are not touched.":"Przywrócić wszystkie ustawienia domyślne? Karty, zmiany, ulubione i kolejność zostaną bez zmian.",
   "Settings reset":"Przywrócono ustawienia domyślne",
   "Put every setting on this screen back to what it ships with. Cards and edits are not affected.":"Przywraca domyślne wartości wszystkich ustawień na tym ekranie. Karty i zmiany w nich zostają nienaruszone.",
   "maintenance␟hidden":"ukryte",

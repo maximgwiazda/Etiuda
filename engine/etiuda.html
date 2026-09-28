@@ -5367,7 +5367,6 @@ What you type stays in this browser only.`;
     "Fold this group away": "Zwiń tę grupę",
     "Show these cards": "Pokaż te karty",
     "Matching your intent": "Pasujące do intencji",
-    "Put every setting back to its default? Your cards, edits, favourites and order are not touched.": "Przywrócić wszystkie ustawienia domyślne? Karty, zmiany, ulubione i kolejność zostaną bez zmian.",
     "Settings reset": "Przywrócono ustawienia domyślne",
     "Put every setting on this screen back to what it ships with. Cards and edits are not affected.": "Przywraca domyślne wartości wszystkich ustawień na tym ekranie. Karty i zmiany w nich zostają nienaruszone.",
     "maintenance␟hidden": "ukryte",
@@ -13626,7 +13625,7 @@ What you type stays in this browser only.`;
   // src/modules/facts.js
   var facts_exports = {};
   __export(facts_exports, {
-    applyDefaultFactsSize: () => applyDefaultFactsSize,
+    applyStoredFactsSize: () => applyStoredFactsSize,
     cancelFactsEdit: () => cancelFactsEdit,
     closeFactsPanel: () => closeFactsPanel,
     factsPanelOpen: () => factsPanelOpen,
@@ -13942,11 +13941,12 @@ What you type stays in this browser only.`;
     if (w) p.style.width = w;
     if (h) p.style.height = h;
   }
-  function applyDefaultFactsSize() {
+  function applyStoredFactsSize() {
     const p = $("#factsPanel");
     if (p) {
       p.style.removeProperty("width");
       p.style.removeProperty("height");
+      restoreFactsSize(p);
     }
   }
   var factsSizeTimer = 0;
@@ -14976,9 +14976,9 @@ What you type stays in this browser only.`;
     COLLAPSE_BAND: () => COLLAPSE_BAND,
     COLLAPSE_FAV: () => COLLAPSE_FAV,
     collapseCtrlHtml: () => collapseCtrlHtml,
-    expandAllGroups: () => expandAllGroups,
     groupKeyOf: () => groupKeyOf,
     isCollapsed: () => isCollapsed,
+    rereadCollapsed: () => rereadCollapsed,
     toggleCollapsed: () => toggleCollapsed
   });
   var COLLAPSE_BAND = ":band";
@@ -15006,8 +15006,8 @@ What you type stays in this browser only.`;
     } catch (e) {
     }
   }
-  function expandAllGroups() {
-    eCollapsed = /* @__PURE__ */ new Set();
+  function rereadCollapsed() {
+    eCollapsed = null;
   }
   function groupKeyOf(m) {
     if (inIntentBand(m)) return COLLAPSE_BAND;
@@ -21338,6 +21338,7 @@ What you type stays in this browser only.`;
   // src/modules/settings.js
   var settings_exports = {};
   __export(settings_exports, {
+    applyPrefs: () => applyPrefs,
     openSettings: () => openSettings
   });
   function curLangLabel() {
@@ -21567,75 +21568,91 @@ What you type stays in this browser only.`;
     if (row) row.classList.toggle("set-row-off", !auto);
   }
   function resetAllSettings() {
-    askSure("Put every setting back to its default? Your cards, edits, favourites and order are not touched.", "Reset defaults", () => {
-      [
-        "eTheme",
-        "eGlassOff",
-        "eMotionOff",
-        "eUiLang",
-        "ePillsLock",
-        "eRailLock",
-        "ePills",
-        "eRail",
-        "eShortcuts",
-        "eHdrPills",
-        "eNoteHover",
-        "eRailW",
-        "eFactsW",
-        "eFactsH",
-        "eCollapsed"
-      ].forEach((k) => {
-        try {
-          lsDel(k);
-        } catch (e) {
-        }
+    const was = {};
+    [
+      "eTheme",
+      "eGlassOff",
+      "eMotionOff",
+      "eUiLang",
+      "ePillsLock",
+      "eRailLock",
+      "ePills",
+      "eRail",
+      "eShortcuts",
+      "eHdrPills",
+      "eNoteHover",
+      "eRailW",
+      "eFactsW",
+      "eFactsH",
+      "eCollapsed"
+    ].forEach((k) => {
+      was[k] = lsGet(k);
+      try {
+        lsDel(k);
+      } catch (e) {
+      }
+    });
+    was[nsKey("Cols")] = nsGet("Cols");
+    was[nsKey("Floor")] = nsGet("Floor");
+    nsDel("Cols");
+    nsDel("Floor");
+    applyPrefs();
+    paintSettings();
+    offerUndo("Settings reset", () => {
+      Object.keys(was).forEach((k) => {
+        const v = was[k];
+        if (v == null) lsDel(k);
+        else lsSet(k, v);
       });
-      try {
-        applyDefaultRailWidth();
-      } catch (e) {
-      }
-      try {
-        applyDefaultFactsSize();
-      } catch (e) {
-      }
-      try {
-        expandAllGroups();
-      } catch (e) {
-      }
-      document.body.classList.add("note-hover");
-      try {
-        nsDel("Cols");
-        nsDel("Floor");
-      } catch (e) {
-      }
-      document.body.classList.remove("glass-off");
-      try {
-        loadShortcuts();
-      } catch (e) {
-      }
-      try {
-        applyTheme();
-      } catch (e) {
-      }
-      try {
-        applyUiLang();
-      } catch (e) {
-      }
-      try {
-        syncRailLayout();
-      } catch (e) {
-      }
-      try {
-        drawPills();
-      } catch (e) {
-      }
-      try {
-        render();
-      } catch (e) {
-      }
-      paintSettings();
-      toast("Settings reset");
-    }, false);
+      applyPrefs();
+      if (document.getElementById("setBody")) paintSettings();
+    });
+  }
+  function applyPrefs() {
+    try {
+      applyDefaultRailWidth();
+      applyStoredRailWidth();
+    } catch (e) {
+    }
+    try {
+      applyStoredFactsSize();
+    } catch (e) {
+    }
+    try {
+      rereadCollapsed();
+    } catch (e) {
+    }
+    document.body.classList.toggle("note-hover", lsGet("eNoteHover") !== "0");
+    document.body.classList.toggle("glass-off", lsGet("eGlassOff") === "1");
+    syncStill();
+    try {
+      loadShortcuts();
+    } catch (e) {
+    }
+    try {
+      applyTheme();
+    } catch (e) {
+    }
+    try {
+      applyUiLang();
+    } catch (e) {
+    }
+    try {
+      syncLayoutPrefs();
+    } catch (e) {
+    }
+    try {
+      syncRailLayout();
+    } catch (e) {
+    }
+    try {
+      drawPills();
+    } catch (e) {
+    }
+    try {
+      render();
+    } catch (e) {
+    }
   }
   function openSettings(section) {
     scStopCapture();

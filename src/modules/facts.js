@@ -176,11 +176,11 @@ function restoreFactsSize(p){
   if(w) p.style.width=w;
   if(h) p.style.height=h;
 }
-/** The size the stylesheet gives the panel. The caller clears the keys; a drag leaves an
- *  inline width and height on the element, which a delete alone would not undo. */
-function applyDefaultFactsSize(){
+/** The size stored, else the stylesheet's: a drag leaves an inline width and height on the
+ *  element, which a change to the keys alone would not undo. */
+function applyStoredFactsSize(){
   const p=$("#factsPanel");
-  if(p){ p.style.removeProperty("width"); p.style.removeProperty("height"); }
+  if(p){ p.style.removeProperty("width"); p.style.removeProperty("height"); restoreFactsSize(p); }
 }
 let factsSizeTimer=0;
 function rememberFactsSize(p){
@@ -240,7 +240,7 @@ function wireFactsPanel(){
 
 export {
   syncFactsGeometry,
-  applyDefaultFactsSize,
+  applyStoredFactsSize,
   factsPanelOpen,
   cancelFactsEdit,
   closeFactsPanel,
