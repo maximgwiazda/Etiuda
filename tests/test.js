@@ -541,6 +541,7 @@ function runUnitTests() {
   shippedFlagTests();
   dismissTierTests();
   dialogFocusTests();
+  activeStateTests();
   pillWrapTests();
   pillsWidthWatchTests();
   pillsResizeCostTests();
@@ -2282,6 +2283,84 @@ function pillGlideFaults(before, row) {
       + " past " + Math.round(past) + " step " + Math.round(step) + " start " + Math.round(start) + (lines ? " relined" : ""));
   });
   return out;
+}
+/* WHICH TAB, LANGUAGE, CATEGORY AND INTENT IS ACTIVE, as a screen reader is told it: the drawing
+   functions sliced out of their modules and run over a toy element that keeps its attributes. */
+function activeStateTests() {
+  const mod = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
+  class El {
+    constructor(tag) { this.tagName = tag; this.attrs = {}; this.dataset = {}; this.kids = []; this.cls = new Set();
+      this.style = { setProperty() {}, removeProperty() {} };
+      const me = this;
+      this.classList = { toggle(c, on) { if (on === undefined) on = !me.cls.has(c); if (on) me.cls.add(c); else me.cls.delete(c); return on; },
+        add(...c) { c.forEach(x => me.cls.add(x)); }, remove(...c) { c.forEach(x => me.cls.delete(x)); }, contains(c) { return me.cls.has(c); } }; }
+    set className(v) { this.cls = new Set(String(v).split(/\s+/).filter(Boolean)); }
+    get className() { return [...this.cls].join(" "); }
+    setAttribute(k, v) { this.attrs[k] = String(v); }
+    getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
+    removeAttribute(k) { delete this.attrs[k]; }
+    appendChild(c) { this.kids.push(c); c.parentElement = this; return c; }
+    get firstChild() { return this.kids[0] || null; }
+    set innerHTML(v) { this.html = v; if (v === "") this.kids = []; }
+    get innerHTML() { return this.html || ""; }
+    querySelectorAll() { return []; }
+    focus() {}
+  }
+  const doc = { createElement: tag => new El(tag) };
+  const slice = (f, marker) => extractDecl(mod(f), marker);
+
+  let got;
+  try {
+    const bar = new El("div"); bar.parentElement = new El("div");
+    const H = new Function("document", "$", "tabs", "activeTabId", "t", "tabLabel", "drawTabs", "bindTabScroll", "fitTabLabels",
+      "requestAnimationFrame", "tabAddTitle", "ICON_TAB_X", "ICON_TAB_ADD", "tabDrag",
+      slice("tabs.js", "function drawTabsCore(") + "\nreturn drawTabsCore;")(
+      doc, s => (s === "#tabsBar" ? bar : null), [{ id: "a", pax: "Anna" }, { id: "b", pax: "" }], "b", s => s, tb => tb.pax || "Tab",
+      {}, () => {}, () => {}, () => {}, () => "", "", "", null);
+    H();
+    got = bar.kids.map(k => [k.cls.has("on"), k.kids[0].getAttribute("role"), k.kids[0].getAttribute("aria-selected")]);
+  } catch (e) { got = "drawTabsCore did not run: " + e.message; }
+  eq("each tab's name is a tab to a screen reader, selected exactly where the tab is on",
+    got, [[false, "tab", "false"], [true, "tab", "true"]]);
+
+  const pillsAt = sel => {
+    const pills = new El("div");
+    const H = new Function("document", "pills", "cats", "CATS", "intentCats", "searchCounts", "catIconSvg", "esc", "t", "ICON_EDIT",
+      "ICON_ALL", "ICON_PLUS", "catSlot", "dragState", "totalMacroCount", "counts", "displayCatOrder", "syncPillsCollapseNow",
+      "schedulePillsCollapse",
+      slice("pills-bar.js", "function drawPillsCore(") + "\nreturn drawPillsCore;")(
+      doc, pills, sel, { a: "Alpha", b: "Beta" }, () => ({ specific: [], always: [] }), () => null, () => "", s => s, s => s, "",
+      "", "", () => -1, null, () => 3, { a: 1, b: 2 }, () => ["a", "b"], () => {}, () => {});
+    H();
+    return pills.kids.map(k => [k.dataset.k === undefined ? "+" : k.dataset.k, k.getAttribute("role"), k.getAttribute("aria-pressed")]);
+  };
+  try { got = [pillsAt(["b"]), pillsAt([])]; } catch (e) { got = "drawPillsCore did not run: " + e.message; }
+  eq("each category pill is a toggle pressed exactly while it filters, All while nothing does, and the + is neither",
+    got, [[["", "button", "false"], ["a", "button", "false"], ["b", "button", "true"], ["+", null, null]],
+          [["", "button", "true"], ["a", "button", "false"], ["b", "button", "false"], ["+", null, null]]]);
+
+  try {
+    const paint = new Function("catSlot", "railDrag", "railRelNow", "railRelGroup",
+      slice("rail-list.js", "function railPaintRow(") + "\nreturn railPaintRow;")(() => -1, null, {}, {});
+    const row = new El("button");
+    paint(row, { idx: 1, picked: true }, []);
+    const on = [row.cls.has("on"), row.getAttribute("aria-pressed")];
+    paint(row, { idx: 1, picked: false }, []);
+    got = [on, [row.cls.has("on"), row.getAttribute("aria-pressed")]];
+  } catch (e) { got = "railPaintRow did not run: " + e.message; }
+  eq("an intent row is pressed while its intent is chosen and let go when it is not",
+    got, [[true, "true"], [false, "false"]]);
+
+  try {
+    const en = new El("button"), pl = new El("button"); en.dataset.l = "en"; pl.dataset.l = "pl";
+    const seg = new El("div"); seg.querySelectorAll = () => [en, pl];
+    const apply = new Function("seg", "CONTENT_LANGS", "lsSet", "noteActive",
+      "let lang=\"en\"; function putLang(v){ lang=v; }\n" + slice("lang-seg.js", "function applyLangState(") + "\nreturn applyLangState;")(
+      seg, ["en", "pl"], () => {}, () => {});
+    apply("pl");
+    got = [en.getAttribute("aria-pressed"), pl.getAttribute("aria-pressed"), pl.cls.has("on")];
+  } catch (e) { got = "applyLangState did not run: " + e.message; }
+  eq("the language on screen is the pressed one of its pair", got, ["false", "true", true]);
 }
 function pillWrapTests() {
   const paint = fs.readFileSync(path.join(E.ROOT, "src", "modules", "paint.js"), "utf8");

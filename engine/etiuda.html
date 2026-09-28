@@ -3316,7 +3316,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
         <!-- Chevrons drawn, not typed: a text guillemet rides its font's baseline and reads
              smaller beside the drawn +. Same viewBox, same .ic sizing, mirrored around x=10. -->
         <button type="button" class="tabs-nav" id="tabsPrev" tabindex="-1" aria-label="Scroll tabs left" title="Scroll tabs left"><span class="tabs-nav-mark"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M11.9 4.6L6.5 10l5.4 5.4"/></svg></span></button>
-        <div class="tabs-bar" id="tabsBar"></div>
+        <div class="tabs-bar" id="tabsBar" role="tablist"></div>
         <button type="button" class="tabs-nav" id="tabsNext" tabindex="-1" aria-label="Scroll tabs right" title="Scroll tabs right"><span class="tabs-nav-mark"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M8.1 4.6L13.5 10l-5.4 5.4"/></svg></span></button>
       </div>
     </div>
@@ -9638,12 +9638,14 @@ What you type stays in this browser only.`;
     drawTabs._keepAtEnd = bar.scrollWidth - bar.clientWidth > 1 && bar.scrollLeft >= bar.scrollWidth - bar.clientWidth - 1;
     bar.innerHTML = "";
     tabs.forEach((tb, i) => {
-      const b = document.createElement("div");
-      b.className = "tab" + (tb.id === activeTabId ? " on" : "") + (tabDrag && tabDrag.moved && tabDrag.key === tb.id ? " dragging" : "");
+      const b = document.createElement("div"), on = tb.id === activeTabId;
+      b.className = "tab" + (on ? " on" : "") + (tabDrag && tabDrag.moved && tabDrag.key === tb.id ? " dragging" : "");
       b.dataset.tid = tb.id;
       b.title = t("Click to switch, or drag to reorder");
       const lab = document.createElement("span");
       lab.className = "tab-label";
+      lab.setAttribute("role", "tab");
+      lab.setAttribute("aria-selected", on ? "true" : "false");
       const name = tabLabel(tb, i);
       const labViz = document.createElement("span");
       labViz.textContent = name;
@@ -15307,6 +15309,7 @@ What you type stays in this browser only.`;
     const sel = new Set(intentIdxs.map(String));
     box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
       el.classList.toggle("on", sel.has(el.dataset.si));
+      el.setAttribute("aria-pressed", sel.has(el.dataset.si) ? "true" : "false");
     });
   }
   function paintIntentRings() {
@@ -15490,7 +15493,10 @@ What you type stays in this browser only.`;
       setCatsDropArmed(false);
       if (String(intentEl.value || "").trim()) {
         setCats([]);
-        if (pills) pills.querySelectorAll(".pill").forEach((b) => b.classList.toggle("on", !b.dataset.k));
+        if (pills) pills.querySelectorAll(".pill").forEach((b) => {
+          b.classList.toggle("on", !b.dataset.k);
+          if (b.dataset.k != null) b.setAttribute("aria-pressed", b.dataset.k ? "false" : "true");
+        });
         scheduleTabSave();
       }
     }
@@ -15550,6 +15556,7 @@ What you type stays in this browser only.`;
   }
   function railPaintRow(b, r, relRows) {
     b.classList.toggle("on", !!r.picked);
+    b.setAttribute("aria-pressed", r.picked ? "true" : "false");
     b.classList.toggle("dragging", !!(railDrag && railDrag.moved && railDrag.key === String(r.idx)));
     b.classList.remove("rail-rel", "rr-open", "rr-cont");
     b.style.removeProperty("--rail-rel-img");
@@ -15722,7 +15729,7 @@ What you type stays in this browser only.`;
       railPaintRow(b, r, relRows);
       const badge = r.custom ? '<span class="rail-badge" title="' + esc(t("Changed or added by you, not what the catalog shipped")) + '">' + esc(t("mod")) + "</span>" : "";
       const favTip = t(r.fav ? "Remove from Favourites" : "Add to Favourites");
-      const btn = r.hidden ? '<span class="rail-fav rail-unhide" data-show-intent="' + esc(r.id) + '" title="' + esc(t("Show this intent again")) + '" aria-label="' + esc(t("Show this intent again")) + '">' + ICON_EYE_SHUT + "</span>" : '<span class="rail-fav' + (r.fav ? " on" : "") + '" data-fav-intent="' + esc(r.id) + '" title="' + esc(favTip) + " · " + esc(t("hold Ctrl to edit, Shift to hide")) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (r.fav ? "true" : "false") + '">' + (r.fav ? ICON_STAR_ON : ICON_STAR_OFF) + '</span><span class="rail-fav rail-edit" data-edit-intent="' + esc(r.id) + '" title="' + esc(t("Edit this intent")) + '" aria-label="' + esc(t("Edit this intent")) + '">' + ICON_EDIT + '</span><span class="rail-fav rail-hide" data-hide-intent="' + esc(r.id) + '" title="' + esc(t("Hide this intent: it greys out and drops to the bottom")) + '" aria-label="' + esc(t("Hide this intent")) + '">' + ICON_EYE_OPEN + "</span>";
+      const btn = r.hidden ? '<span class="rail-fav rail-unhide" aria-hidden="true" data-show-intent="' + esc(r.id) + '" title="' + esc(t("Show this intent again")) + '" aria-label="' + esc(t("Show this intent again")) + '">' + ICON_EYE_SHUT + "</span>" : '<span class="rail-fav' + (r.fav ? " on" : "") + '" aria-hidden="true" data-fav-intent="' + esc(r.id) + '" title="' + esc(favTip) + " · " + esc(t("hold Ctrl to edit, Shift to hide")) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (r.fav ? "true" : "false") + '">' + (r.fav ? ICON_STAR_ON : ICON_STAR_OFF) + '</span><span class="rail-fav rail-edit" aria-hidden="true" data-edit-intent="' + esc(r.id) + '" title="' + esc(t("Edit this intent")) + '" aria-label="' + esc(t("Edit this intent")) + '">' + ICON_EDIT + '</span><span class="rail-fav rail-hide" aria-hidden="true" data-hide-intent="' + esc(r.id) + '" title="' + esc(t("Hide this intent: it greys out and drops to the bottom")) + '" aria-label="' + esc(t("Hide this intent")) + '">' + ICON_EYE_OPEN + "</span>";
       b.innerHTML = catMarkHtml(r.cat) + '<span class="rail-t cut-peek" data-i18n-skip>' + esc(r.t) + badge + "</span>" + btn;
       b.onpointerdown = (e) => {
         if (e.pointerType === "touch") return;
@@ -16190,6 +16197,8 @@ What you type stays in this browser only.`;
       b.className = "pill" + (on ? " on" : "") + extra + (searchCounts() && id && !n ? " pill-nohit" : "");
       b.innerHTML = (id ? catIconSvg(id) : '<svg class="e-pillall" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + ICON_ALL + "</svg>") + '<span class="pill-lab" data-i18n-skip>' + esc(label) + "</span>" + (id ? '<span class="pill-r">' + (n || n === 0 ? "<b>" + n + "</b>" : "") + '<span class="pill-e" data-editcat="' + esc(id) + '" title="' + esc(t("Edit this category's names, icon and colour")) + '" aria-label="' + esc(t("Edit this category")) + '">' + ICON_EDIT + "</span></span>" : n || n === 0 ? " <b>" + n + "</b>" : "");
       b.dataset.k = id;
+      b.setAttribute("role", "button");
+      b.setAttribute("aria-pressed", on ? "true" : "false");
       const _cs = catSlot(id);
       if (_cs >= 0) b.dataset.ec = _cs;
       if (id) {
@@ -22180,7 +22189,10 @@ What you type stays in this browser only.`;
   function applyLangState(l) {
     putLang(CONTENT_LANGS.indexOf(l) > -1 ? l : CONTENT_LANGS[0]);
     lsSet("eLang", lang);
-    seg.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.l === lang));
+    seg.querySelectorAll("button").forEach((b) => {
+      b.classList.toggle("on", b.dataset.l === lang);
+      b.setAttribute("aria-pressed", b.dataset.l === lang ? "true" : "false");
+    });
     noteActive();
   }
   function applyLangHeavy() {

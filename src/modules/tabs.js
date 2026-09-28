@@ -922,14 +922,18 @@ function drawTabsCore(){
   drawTabs._keepAtEnd=(bar.scrollWidth-bar.clientWidth>1)&&(bar.scrollLeft>=bar.scrollWidth-bar.clientWidth-1);
   bar.innerHTML="";
   tabs.forEach((tb,i)=>{
-    const b=document.createElement("div");
+    const b=document.createElement("div"), on=tb.id===activeTabId;
     b.className="tab"
-      +(tb.id===activeTabId?" on":"")
+      +(on?" on":"")
       +(tabDrag&&tabDrag.moved&&tabDrag.key===tb.id?" dragging":"");
     b.dataset.tid=tb.id;
     b.title=t("Click to switch, or drag to reorder");
     const lab=document.createElement("span");
     lab.className="tab-label";
+    /* The name is the tab to a screen reader, not the box: a tab role hides its children, and the
+       box holds the close button. */
+    lab.setAttribute("role","tab");
+    lab.setAttribute("aria-selected",on?"true":"false");
     const name=tabLabel(tb,i);
     const labViz=document.createElement("span");
     labViz.textContent=name;

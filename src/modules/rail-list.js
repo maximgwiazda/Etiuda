@@ -189,7 +189,10 @@ function railSettle(){
     setCatsDropArmed(false);
     if(String(intentEl.value||"").trim()){
       setCats([]);
-      if(pills) pills.querySelectorAll(".pill").forEach(b=>b.classList.toggle("on", !b.dataset.k));
+      if(pills) pills.querySelectorAll(".pill").forEach(b=>{
+        b.classList.toggle("on", !b.dataset.k);
+        if(b.dataset.k!=null) b.setAttribute("aria-pressed", b.dataset.k?"false":"true");
+      });
       scheduleTabSave();
     }
   }
@@ -259,6 +262,7 @@ function railReuseMap(box,rows){
    and the bracket classes are only ever added by the pass below. */
 function railPaintRow(b,r,relRows){
   b.classList.toggle("on",!!r.picked);
+  b.setAttribute("aria-pressed",r.picked?"true":"false");
   b.classList.toggle("dragging",!!(railDrag&&railDrag.moved&&railDrag.key===String(r.idx)));
   b.classList.remove("rail-rel","rr-open","rr-cont");
   b.style.removeProperty("--rail-rel-img");
@@ -456,12 +460,14 @@ function drawIntentRailCore(){
     const favTip=t(r.fav?"Remove from Favourites":"Add to Favourites");
     /* One button slot, three jobs: hidden rows offer only "show again" (a hidden intent
        cannot be a favourite), visible rows show the star and swap it for hide while Ctrl
-       is held (CSS, .ctrl-held) - how you hide an intent without opening Manage. */
+       is held (CSS, .ctrl-held) - how you hide an intent without opening Manage.
+       aria-hidden: inside the row button they cannot be controls to a screen reader, and their
+       labels would be read into the row's name. Library holds the same acts as real buttons. */
     const btn = r.hidden
-      ? '<span class="rail-fav rail-unhide" data-show-intent="'+esc(r.id)+'" title="'+esc(t("Show this intent again"))+'" aria-label="'+esc(t("Show this intent again"))+'">'+ICON_EYE_SHUT+'</span>'
-      : '<span class="rail-fav'+(r.fav?" on":"")+'" data-fav-intent="'+esc(r.id)+'" title="'+esc(favTip)+' · '+esc(t("hold Ctrl to edit, Shift to hide"))+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(r.fav?"true":"false")+'">'+(r.fav?ICON_STAR_ON:ICON_STAR_OFF)+'</span>'
-        +'<span class="rail-fav rail-edit" data-edit-intent="'+esc(r.id)+'" title="'+esc(t("Edit this intent"))+'" aria-label="'+esc(t("Edit this intent"))+'">'+ICON_EDIT+'</span>'
-        +'<span class="rail-fav rail-hide" data-hide-intent="'+esc(r.id)+'" title="'+esc(t("Hide this intent: it greys out and drops to the bottom"))+'" aria-label="'+esc(t("Hide this intent"))+'">'+ICON_EYE_OPEN+'</span>';
+      ? '<span class="rail-fav rail-unhide" aria-hidden="true" data-show-intent="'+esc(r.id)+'" title="'+esc(t("Show this intent again"))+'" aria-label="'+esc(t("Show this intent again"))+'">'+ICON_EYE_SHUT+'</span>'
+      : '<span class="rail-fav'+(r.fav?" on":"")+'" aria-hidden="true" data-fav-intent="'+esc(r.id)+'" title="'+esc(favTip)+' · '+esc(t("hold Ctrl to edit, Shift to hide"))+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(r.fav?"true":"false")+'">'+(r.fav?ICON_STAR_ON:ICON_STAR_OFF)+'</span>'
+        +'<span class="rail-fav rail-edit" aria-hidden="true" data-edit-intent="'+esc(r.id)+'" title="'+esc(t("Edit this intent"))+'" aria-label="'+esc(t("Edit this intent"))+'">'+ICON_EDIT+'</span>'
+        +'<span class="rail-fav rail-hide" aria-hidden="true" data-hide-intent="'+esc(r.id)+'" title="'+esc(t("Hide this intent: it greys out and drops to the bottom"))+'" aria-label="'+esc(t("Hide this intent"))+'">'+ICON_EYE_OPEN+'</span>';
     /* data-i18n-skip: the clause is the catalog's words. The badge inside is the engine's, so it
        is translated here rather than left for a sweep that will not enter. */
     b.innerHTML=catMarkHtml(r.cat)
