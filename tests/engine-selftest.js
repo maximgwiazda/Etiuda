@@ -1386,6 +1386,8 @@ try {
     "storage-keys.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
     "motion.js": "legs tests/smoke.js requires and runs; alone it is the quick run of one leg",
     "tour-walk.js": "the tour's walk tests/smoke.js requires and runs; its plan is held to the step table by tests/test.js",
+    "install-plan.js": "the library tests/update-install.js judges with; every clause is held by tests/install-plan-selftest.js in npm test",
+    "update-install.js": "a machine-window gate: it needs an older installer, and for --all-users an elevated shell, so no chain can run it; its plan and verdicts are held by tests/install-plan-selftest.js",
   };
   const CHAIN_SCRIPTS = ["test", "split-guard"];
   function reachOf(scripts, releaseSrc) {
