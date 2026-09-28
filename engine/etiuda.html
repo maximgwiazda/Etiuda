@@ -6153,7 +6153,6 @@ What you type stays in this browser only.`;
     "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}. Etiuda restarts with the catalog in place, and the tour carries on from there.": "Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać katalog zespołu z folderu {FOLDER}. Etiuda uruchomi się wtedy od nowa, już z katalogiem, a przewodnik poprowadzi dalej.",
     "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the catalog file. The page reloads with it and the tour carries on from there; the catalog stays in this browser, ready whenever you come back.": "Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać plik katalogu. Strona załaduje się wtedy od nowa, a przewodnik poprowadzi dalej; katalog zostanie w tej przeglądarce i poczeka na każdy powrót.",
     "comes with Etiuda": "dołączony do Etiudy",
-    "takes the place of the copy that comes with Etiuda": "zastępuje kopię dołączoną do Etiudy",
     "unsigned": "bez podpisu",
     "changed since it was signed": "zmieniony od czasu podpisania",
     "signed with a key this computer does not know": "podpisany kluczem, którego ten komputer nie zna",
@@ -11978,9 +11977,8 @@ What you type stays in this browser only.`;
            431; empty where the file did not read. */
         id: String(f && f.id || ""),
         catalogName: String(f && f.catalogName || ""),
-        // Which copy: the one Etiuda ships, or this folder's in its place.
-        builtIn: !!(f && f.builtIn),
-        replaces: !!(f && f.replaces)
+        // The copy Etiuda ships, rather than a folder's own file.
+        builtIn: !!(f && f.builtIn)
       })).filter((f) => f.name) : []).catch(() => []);
     } catch (e) {
       return Promise.resolve([]);
@@ -20448,8 +20446,7 @@ What you type stays in this browser only.`;
     return parts2.concat(ecAwaitingHtml(liveAwaiting())).join(" · ");
   }
   function ecCopyHtml(f) {
-    const said = f.builtIn ? t("comes with Etiuda") : f.replaces ? t("takes the place of the copy that comes with Etiuda") : "";
-    return said ? '<span class="ec-copy" data-ec-copy="' + (f.builtIn ? "builtin" : "own") + '">' + esc(said) + "</span>" : "";
+    return f.builtIn ? '<span class="ec-copy" data-ec-copy="builtin">' + esc(t("comes with Etiuda")) + "</span>" : "";
   }
   function paintCatalogList() {
     const box = document.getElementById("mgCatList");

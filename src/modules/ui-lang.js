@@ -819,7 +819,6 @@ UI_STRINGS.pl={
   "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}. Etiuda restarts with the catalog in place, and the tour carries on from there.":"Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać katalog zespołu z folderu {FOLDER}. Etiuda uruchomi się wtedy od nowa, już z katalogiem, a przewodnik poprowadzi dalej.",
   "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the catalog file. The page reloads with it and the tour carries on from there; the catalog stays in this browser, ready whenever you come back.":"Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać plik katalogu. Strona załaduje się wtedy od nowa, a przewodnik poprowadzi dalej; katalog zostanie w tej przeglądarce i poczeka na każdy powrót.",
   "comes with Etiuda":"dołączony do Etiudy",
-  "takes the place of the copy that comes with Etiuda":"zastępuje kopię dołączoną do Etiudy",
   "unsigned":"bez podpisu",
   "changed since it was signed":"zmieniony od czasu podpisania",
   "signed with a key this computer does not know":"podpisany kluczem, którego ten komputer nie zna",

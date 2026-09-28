@@ -1270,14 +1270,14 @@ const placeEc = (dir, from, as, minutesOld) => {
   await sleep(1500);
   await s.stop();
   const one = rows => rows.length === 1 && rows[0].name === "sample-catalog.ec";
-  check(one(shipped) && shipped[0].copy === "" && one(replaced) && replaced[0].copy === "own"
+  check(one(shipped) && shipped[0].copy === "" && one(replaced) && replaced[0].copy === ""
         && one(restored) && restored[0].copy === "builtin" && listed(docsA).join(",") === "",
     "2k4 the Library lists the sample once, as the copy the first run gave Documents/Etiuda with nothing said of"
-    + " it, as taking the shipped copy's place once another file of that name differs, and removing it brings the shipped copy back rather than"
+    + " it, with nothing said of it either once another file of that name differs, and removing it brings the shipped copy back rather than"
     + " giving it again: " + JSON.stringify({ shipped, replaced, restored }));
-  check(one(seeded) && seeded[0].copy === "own",
+  check(one(seeded) && seeded[0].copy === "",
     "2k4b a sample an earlier build seeded into Documents/Etiuda, byte for byte the 09-17 edition, is the copy read:"
-    + " the Library lists it once, as the folder's own: " + JSON.stringify(seeded));
+    + " the Library lists it once, as a plain row: " + JSON.stringify(seeded));
 
   /* ---- 2k5: the dot field under the cards, board item 419 ---------------------------------
      THE ONE CHECK IN THIS FILE THAT A PICTURE DECIDES, and it is here because no other reading

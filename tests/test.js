@@ -2443,6 +2443,14 @@ function shippedFlagTests() {
     [[true, false, ""], [true, false, ""]]);
   eq("a file found in the catalog folder is located in it and marks its row", offers(null, false, own, "team.ec", "", false),
     [false, true, "team.ec"]);
+
+  const copyOf = f => {
+    try { return new Function("t", "esc", extractDecl(offer, "function ecCopyHtml(") + "\nreturn ecCopyHtml;")(s => s, s => s)(f); }
+    catch (e) { return "ecCopyHtml did not run: " + e.message; }
+  };
+  eq("a Library row names the copy Etiuda ships and says nothing of a folder's file of the same name, changed or not",
+    [copyOf({ builtIn: true }), copyOf({ builtIn: false, replaces: true }), copyOf({})],
+    ['<span class="ec-copy" data-ec-copy="builtin">comes with Etiuda</span>', "", ""]);
 }
 /* A DIALOG TAKES THE KEYBOARD (feel pass, focus on open): openDialog and tabTargetIn are sliced out of
    dialog.js and run on a small tree written here. What a real key does there is the verifier's. */
@@ -3467,8 +3475,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 835;
-const UI_STRINGS_SHA256 = "5b9a0c3b3e8afb0b11a5441cb63a188de332704883ed3f85c6427427df7c063e";
+const UI_STRINGS_COUNT = 834;
+const UI_STRINGS_SHA256 = "0a57a08816b9ec945bd87ba9500efc90056405b73f825edda66a286bab897918";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

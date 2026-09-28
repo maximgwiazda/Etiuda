@@ -474,14 +474,16 @@ try {
       + (!!read && read.text === edited.toString("utf8")));
 
     const rows = (await first.S.ask("etiuda:catalog-files")).filter(f => f.name === SHIPPED[0]);
-    check(rows.length === 1 && rows[0].builtIn === false && rows[0].replaces === false && rows[0].sample === true,
+    const plain = r => r.builtIn === false && !("replaces" in r);
+    check(rows.length === 1 && plain(rows[0]) && rows[0].sample === true,
       "5d the copy a first run gave is the one the Library lists, once, as a plain row: byte for byte the shipped copy,"
-      + " it neither is the shipped one nor takes its place, and it is still known as the sample: "
+      + " it is not the shipped one, the listing names no copy it stands in for, and it is still known as the sample: "
       + JSON.stringify(rows.map(r => ({ builtIn: r.builtIn, replaces: r.replaces, sample: r.sample }))));
     const theirRows = (await theirs.S.ask("etiuda:catalog-files")).filter(f => f.name === SHIPPED[0]);
-    check(theirRows.length === 1 && theirRows[0].builtIn === false && theirRows[0].replaces === true,
-      "5f and a file of that name which differs from the shipped copy by one byte is listed once as taking its place: "
-      + JSON.stringify(theirRows.map(r => ({ builtIn: r.builtIn, replaces: r.replaces }))));
+    check(theirRows.length === 1 && plain(theirRows[0]) && theirRows[0].sample === false,
+      "5f and a file of that name which differs from the shipped copy by one byte is listed once as a plain row too,"
+      + " no longer the sample and naming no copy it stands in for: "
+      + JSON.stringify(theirRows.map(r => ({ builtIn: r.builtIn, replaces: r.replaces, sample: r.sample }))));
 
     const crypto = nodeRequire("node:crypto");
     const editions = first.S.api.SAMPLE_EDITIONS || [];

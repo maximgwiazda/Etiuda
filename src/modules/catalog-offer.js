@@ -242,11 +242,9 @@ function loadedMeta(stamp){
     .filter(Boolean).map(esc);
   return parts.concat(ecAwaitingHtml(liveAwaiting())).join(" · ");
 }
-/* WHICH COPY A ROW IS, where two could be: the one Etiuda ships, or this folder's file of the same
-   name, which is read in its place. */
+/* The one copy a row names is the one Etiuda ships; a folder's file of the same name is a plain row. */
 function ecCopyHtml(f){
-  const said=f.builtIn ? t("comes with Etiuda") : f.replaces ? t("takes the place of the copy that comes with Etiuda") : "";
-  return said ? '<span class="ec-copy" data-ec-copy="'+(f.builtIn?"builtin":"own")+'">'+esc(said)+'</span>' : "";
+  return f.builtIn ? '<span class="ec-copy" data-ec-copy="builtin">'+esc(t("comes with Etiuda"))+'</span>' : "";
 }
 function paintCatalogList(){
   const box=document.getElementById("mgCatList");
