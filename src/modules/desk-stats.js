@@ -34,6 +34,7 @@ function statsDay(pack, at){
     if(!STATS_YMD.test(String(pack.daysSince||""))||day<pack.daysSince) pack.daysSince=day;
     if(pack.daysSince<cut) pack.daysSince=cut;
     statsTouch(pack, "*");
+    statsCompact(pack);
   } else statsTouch(pack, day);
   return b;
 }
@@ -50,6 +51,23 @@ function statsOlderTouched(pack, newest){
   const s=STATS_TOUCHED.get(pack);
   STATS_TOUCHED.delete(pack);
   return !!s && [...s].some(d=>d!==newest);
+}
+/* AN ID NO KEPT DAY NAMES IS DROPPED and the places after it renumbered, so dayIds holds the ids
+   the kept days use rather than every id the desk has ever counted. Run when a day is made, which
+   is also when the oldest go. */
+function statsCompact(pack){
+  const ids=Array.isArray(pack.dayIds)?pack.dayIds:[], days=pack.days||{}, used=new Set();
+  const each=fn=>Object.keys(days).forEach(d=>{ const b=days[d]; if(b) ["c","i"].forEach(n=>{ if(b[n]) fn(b,n); }); });
+  each((b,n)=>Object.keys(b[n]).forEach(k=>used.add(k)));
+  const to=Object.create(null), keep=[];
+  ids.forEach((id,at)=>{ if(id!=null && used.has(String(at))){ to[at]=keep.length; keep.push(id); } });
+  if(keep.length===ids.length && used.size===keep.length) return;
+  each((b,n)=>{
+    const out={};
+    Object.keys(b[n]).forEach(k=>{ if(k in to) out[to[k]]=b[n][k]; });
+    b[n]=out;
+  });
+  pack.dayIds=keep;
 }
 function statsIdAt(pack, id){
   if(!Array.isArray(pack.dayIds)) pack.dayIds=[];
@@ -98,7 +116,7 @@ function statsForgetCards(pack, keep){
     const c=pack.days[d]&&pack.days[d].c;
     if(c) Object.keys(c).forEach(k=>{ if(!keep(ids[k])){ delete c[k]; n++; } });
   });
-  if(n) statsTouch(pack, "*");
+  if(n){ statsTouch(pack, "*"); statsCompact(pack); }
 }
 /* A REQUEST NAMES A SPAN AND THE ANSWER IS THAT SPAN, from and to inclusive, summed over the
    day buckets, with `since` beside it; a card's `at` is its last use inside the span. Without

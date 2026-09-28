@@ -6395,6 +6395,7 @@ What you type stays in this browser only.`;
       if (!STATS_YMD.test(String(pack2.daysSince || "")) || day < pack2.daysSince) pack2.daysSince = day;
       if (pack2.daysSince < cut) pack2.daysSince = cut;
       statsTouch(pack2, "*");
+      statsCompact(pack2);
     } else statsTouch(pack2, day);
     return b;
   }
@@ -6408,6 +6409,32 @@ What you type stays in this browser only.`;
     const s = STATS_TOUCHED.get(pack2);
     STATS_TOUCHED.delete(pack2);
     return !!s && [...s].some((d) => d !== newest);
+  }
+  function statsCompact(pack2) {
+    const ids = Array.isArray(pack2.dayIds) ? pack2.dayIds : [], days = pack2.days || {}, used = /* @__PURE__ */ new Set();
+    const each = (fn) => Object.keys(days).forEach((d) => {
+      const b = days[d];
+      if (b) ["c", "i"].forEach((n) => {
+        if (b[n]) fn(b, n);
+      });
+    });
+    each((b, n) => Object.keys(b[n]).forEach((k) => used.add(k)));
+    const to = /* @__PURE__ */ Object.create(null), keep = [];
+    ids.forEach((id, at) => {
+      if (id != null && used.has(String(at))) {
+        to[at] = keep.length;
+        keep.push(id);
+      }
+    });
+    if (keep.length === ids.length && used.size === keep.length) return;
+    each((b, n) => {
+      const out = {};
+      Object.keys(b[n]).forEach((k) => {
+        if (k in to) out[to[k]] = b[n][k];
+      });
+      b[n] = out;
+    });
+    pack2.dayIds = keep;
   }
   function statsIdAt(pack2, id) {
     if (!Array.isArray(pack2.dayIds)) pack2.dayIds = [];
@@ -6459,7 +6486,10 @@ What you type stays in this browser only.`;
         }
       });
     });
-    if (n) statsTouch(pack2, "*");
+    if (n) {
+      statsTouch(pack2, "*");
+      statsCompact(pack2);
+    }
   }
   function statsDoc(pack2, info) {
     const from = String(info && info.period && info.period.from || "");
@@ -16179,11 +16209,12 @@ What you type stays in this browser only.`;
     const alive = new Set((cards || []).map((m) => m && m.id).filter(Boolean));
     const hasCatalog = (cards || []).some((m) => m && !m._custom);
     if (hasCatalog) pack.favourites = (pack.favourites || []).filter((id) => alive.has(id));
-    if (hasCatalog && pack.useCounts && typeof pack.useCounts === "object") {
-      Object.keys(pack.useCounts).forEach((id) => {
-        if (!alive.has(id)) delete pack.useCounts[id];
+    if (hasCatalog) ["useCounts", "useAt"].forEach((n) => {
+      const o = pack[n];
+      if (o && typeof o === "object") Object.keys(o).forEach((id) => {
+        if (!alive.has(id)) delete o[id];
       });
-    }
+    });
     if (hasCatalog) statsForgetCards(pack, (id) => alive.has(id));
     recountMacros();
   }
