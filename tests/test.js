@@ -542,6 +542,7 @@ function runUnitTests() {
   dismissTierTests();
   dialogFocusTests();
   activeStateTests();
+  highContrastStateTests();
   pillWrapTests();
   pillsWidthWatchTests();
   pillsResizeCostTests();
@@ -2361,6 +2362,49 @@ function activeStateTests() {
     got = [en.getAttribute("aria-pressed"), pl.getAttribute("aria-pressed"), pl.cls.has("on")];
   } catch (e) { got = "applyLangState did not run: " + e.message; }
   eq("the language on screen is the pressed one of its pair", got, ["false", "true", true]);
+}
+/* THE SAME FOUR IN HIGH CONTRAST, where a tint says nothing: each outline is weighed, by layer then
+   specificity, against every rule in the sheet that sets outline to none on the same element, which
+   is how the tour's ring was lost. A rule is matched by its subject compound against every class, id
+   and attribute the element can wear, and every pseudo-class counts as reachable. */
+function highContrastStateTests() {
+  const L = require("./css-layers.js");
+  const raw = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const sheet = L.sheetOf(raw);
+  const lineAt = i => raw.slice(0, sheet.from + i).split("\n").length;
+  const fcAt = raw.indexOf("@media (forced-colors:active){");
+  const fcFrom = raw.slice(0, fcAt).split("\n").length, fcTo = raw.slice(0, raw.indexOf("\n}", fcAt)).split("\n").length + 1;
+  const parsed = L.parseSheet(sheet.css, lineAt);
+  const rank = l => parsed.order.indexOf(l);
+  const feats = sel => {
+    const s = L.subject(sel).replace(/:[-\w]+\((?:[^()]|\([^()]*\))*\)/g, "");
+    if (/::|:(before|after|placeholder|marker|selection)\b/.test(s)) return null;
+    const tag = (/^[a-zA-Z][-\w]*/.exec(s) || [""])[0].toLowerCase();
+    return { tag: tag, cls: [...s.matchAll(/\.([-\w]+)/g)].map(m => m[1]), ids: [...s.matchAll(/#([-\w]+)/g)].map(m => m[1]),
+      attrs: [...s.matchAll(/\[([^\]]+)\]/g)].map(m => m[1].replace(/["']/g, "").replace(/\s/g, "")) };
+  };
+  const fits = (f, el) => f && (!f.tag || f.tag === el.tag) && f.cls.every(c => el.cls.includes(c)) && f.ids.every(i => el.ids.includes(i))
+    && f.attrs.every(a => el.attrs.includes(a) || el.attrs.some(x => x.split("=")[0] === a.split(/[~|^$*]?=/)[0] && !/=/.test(a)));
+  let got;
+  const ELS = [
+    { name: "the chosen tab", state: "on", tag: "div", cls: ["tab", "on", "dragging"], ids: [], attrs: [] },
+    { name: "the chosen category", state: "on", tag: "div", cls: ["pill", "on", "hint", "hint2", "pill-nohit"], ids: [], attrs: ["role=button", "data-k", "data-ec"] },
+    { name: "the language on screen", state: "on", tag: "button", cls: ["on"], ids: [], attrs: ["type=button", "data-l", "data-alt"] },
+    { name: "the tour's selected button", state: "tour-sel", tag: "button", cls: ["btn", "tour-sel", "tour-skip", "primary"], ids: ["tourSkip", "tourPrev", "tourNext"], attrs: ["type=button"] },
+  ];
+  const outlineOff = d => /^outline(-style|-width)?$/.test(d.prop) && /^(none|0)\b/.test(d.val);
+  got = ELS.map(el => {
+    const hc = parsed.decls.filter(d => d.line >= fcFrom && d.line <= fcTo && d.prop === "outline" && /Highlight/.test(d.val)
+      && fits(feats(d.sel), el) && feats(d.sel).cls.includes(el.state));
+    if (!hc.length) return el.name + ": no High Contrast outline";
+    const best = hc[hc.length - 1];
+    const lost = parsed.decls.filter(d => !(d.line >= fcFrom && d.line <= fcTo) && outlineOff(d) && fits(feats(d.sel), el))
+      .filter(d => (d.imp && !best.imp) || rank(d.layer) > rank(best.layer)
+        || (rank(d.layer) === rank(best.layer) && L.cmpSpec(best.spec, d.spec) <= 0));
+    return lost.length ? el.name + ": loses to " + lost.map(d => d.sel + " (line " + d.line + ")").join(", ") : el.name + ": shown";
+  });
+  eq("in High Contrast the chosen tab, category and language and the tour's selected button wear the system highlight, and no rule takes it away",
+    got, ELS.map(el => el.name + ": shown"));
 }
 function pillWrapTests() {
   const paint = fs.readFileSync(path.join(E.ROOT, "src", "modules", "paint.js"), "utf8");

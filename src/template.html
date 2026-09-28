@@ -3267,12 +3267,14 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .seg button:focus-visible,.field-clear:focus-visible,.combo-clear:focus-visible,
 .rail-item:focus-visible,.rail-add:focus-visible,.rail-lock:focus-visible,
 button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:none}
-/* HIGH CONTRAST paints every ground and edge in the system's own two colours, so the mark and
-   the focus, both tints here, vanish there; the system's highlight colour stands in for them,
-   and only there. After the rule above and as heavy, so it wins in any layer order. */
+/* HIGH CONTRAST paints every ground and edge in the system's own two colours, so what a tint says
+   here vanishes there: the mark, the focus, the chosen tab, language and category, and the tour's
+   selected button. The system's highlight colour stands in for them, and only there. After the
+   rule above and as heavy, so it wins in any layer order; the tour's outweighs its own ring rule. */
 @media (forced-colors:active){
-  .txt.sel,.rail-item.rail-kbd{outline:2px solid Highlight;outline-offset:-2px}
+  .txt.sel,.rail-item.rail-kbd,:root .tab.on,:root .pill.on,#seg button.on{outline:2px solid Highlight;outline-offset:-2px}
   :root :focus-visible{outline:2px solid Highlight}
+  :root .tour-actions .btn.tour-sel{outline:2px solid Highlight}
 }
 /* The card holds the keyboard where nothing inside it does (openDialog), and wears no ring for it. */
 #modalCard:focus{outline:none}
