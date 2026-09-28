@@ -538,6 +538,7 @@ function runUnitTests() {
   headPrefsTests();
   arrivalTests();
   markClockTests();
+  menuWarmTests();
   pageWatchTests();
   shippedFlagTests();
   dismissTierTests();
@@ -1737,7 +1738,7 @@ function markLab() {
     extractDecl(open, "let eReadyDone="), extractDecl(open, "let lastGreet;"), extractDecl(open, "function markEReady("),
     extractDecl(open, "function wireOnOpen(")];
   let clock = 0, seq = 0, frames = [], timers = [], drawnX = null;
-  const log = [];
+  const log = [], warms = [];
   const ctx = { setTransform() {}, clearRect() {}, beginPath() {}, fill() {}, moveTo() {}, arc(x) { drawnX = x; } };
   const sb = {
     M_MS: { gather: 1100, twinkle: 66 }, mgReduceMotion: () => false,
@@ -1753,7 +1754,8 @@ function markLab() {
     ssGet: () => null, TOUR_AT: "eTourAt", TOUR_STEPS: [], tourRunning: false, tourSeen: () => false, tourInviteDismissed: () => false,
     startTour: () => log.push(["tour", Math.round(clock)]),
     applyUiLang: () => log.push(["repaint", Math.round(clock)]),
-    focusFirstEntryOnOpen: () => {}, greeting: () => "", render: () => {}
+    focusFirstEntryOnOpen: () => {}, greeting: () => "", render: () => {},
+    warmMenu: () => warms.push(Math.round(clock))
   };
   sb.window = sb;
   require("vm").runInNewContext(mark + "\n" + slices.join("\n") + "\nfunction __mark(){ return eMark; }\n", sb);
@@ -1770,7 +1772,7 @@ function markLab() {
   };
   const frame = t => { timersTo(t); const run = frames; frames = []; run.forEach(f => f.fn(t)); return drawnX; };
   const host = { firstChild: null, insertBefore(cv) { cv.parentNode = host; } };
-  return { sb, log, frame, timersTo, make: () => sb.syncEmptyMark(host), state: () => sb.__mark(), x: () => drawnX };
+  return { sb, log, warms, frame, timersTo, make: () => sb.syncEmptyMark(host), state: () => sb.__mark(), x: () => drawnX };
 }
 function markClockTests() {
   const hz = n => 1000 / n;
@@ -1868,6 +1870,91 @@ function markClockTests() {
   } catch (e) { got = "the lab threw: " + e.message; }
   eq("the boot repaint waits for the mark to form, and without one comes on the second frame as before",
     got, [[["repaint", 1700]], [["repaint", 20]]]);
+
+  try {
+    // The same cold launch, then no mark: when boot draws the menu's warm copy.
+    const c = markLab(); c.make(); c.sb.wireOnOpen();
+    let t = 600, i = 0;
+    while (c.frame(t) < 100) t = 600 + ++i * hz(250);
+    c.timersTo(4000);
+    const n = markLab(); n.sb.wireOnOpen(); n.frame(10); n.frame(20); n.timersTo(4000);
+    got = [c.warms, n.warms];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the menu's warm copy is drawn once, 900 ms after the mark has formed, and 900 ms after boot without one",
+    got, [[2600], [900]]);
+}
+/* THE MENU'S FIRST OPEN IS PAID FOR BEFORE IT (E9): warmMenu is sliced out of header-menus.js with the
+   one openSettingsMenu that marks the menu drawn, and run on a small element model written here; when
+   boot asks for it is the mark lab's. Whether the first open now runs as smoothly as the second is a
+   per-frame measurement in a window, the verifier's. */
+function menuWarmTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "header-menus.js"), "utf8");
+  class El {
+    constructor(attrs, kids) {
+      this.attrs = Object.assign({}, attrs); this.kids = kids || []; this.parent = null; this.inert = false;
+      this.kids.forEach(k => { k.parent = this; });
+      this.cls = new Set((this.attrs.class || "").split(" ").filter(Boolean)); delete this.attrs.class;
+      const self = this;
+      this.classList = { add: c => self.cls.add(c), remove: c => self.cls.delete(c), contains: c => self.cls.has(c) };
+    }
+    get hidden() { return "hidden" in this.attrs; }
+    set hidden(v) { if (v) this.attrs.hidden = ""; else delete this.attrs.hidden; }
+    setAttribute(k, v) { this.attrs[k] = String(v); }
+    removeAttribute(k) { delete this.attrs[k]; }
+    getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
+    cloneNode() { const c = new El(Object.assign({ class: [...this.cls].join(" ") }, this.attrs), this.kids.map(k => k.cloneNode())); return c; }
+    querySelectorAll() { const out = []; const walk = n => n.kids.forEach(k => { out.push(k); walk(k); }); walk(this); return out; }
+    after(n) { const p = this.parent, i = p.kids.indexOf(this); p.kids.splice(i + 1, 0, n); n.parent = p; }
+    remove() { const p = this.parent; if (p) { p.kids.splice(p.kids.indexOf(this), 1); this.parent = null; } }
+  }
+  const lab = () => {
+    const item = t => new El({ type: "button", role: "menuitem", title: t, id: "m" + t });
+    const menu = new El({ class: "menu", id: "settingsMenu", hidden: "", role: "menu" }, [item("a"), new El({ class: "menu-sep" }), item("b")]);
+    const btn = new El({ id: "settingsBtn" });
+    const wrap = new El({ id: "settingsWrap" }, [btn, menu]);
+    let clock = 0, frames = [], timers = [];
+    const sb = {
+      $: sel => (sel === "#settingsMenu" ? menu : sel === "#settingsBtn" ? btn : null),
+      requestAnimationFrame: fn => { frames.push(fn); return frames.length; },
+      setTimeout: (fn, ms) => { timers.push({ at: clock + ms, fn }); return timers.length; },
+      closeFactsPanel() {}, cutLeaves() {}, syncSettingsMenu() {}, takeKeyboard() {}
+    };
+    require("vm").runInNewContext([extractDecl(src, "let menuDrawn="), extractDecl(src, "function warmMenu("),
+      extractDecl(src, "function openSettingsMenu(")].join("\n"), sb);
+    const frame = () => { const run = frames; frames = []; run.forEach(f => f()); };
+    const to = t => { clock = t; timers.filter(x => x.at <= t).forEach(x => { timers.splice(timers.indexOf(x), 1); x.fn(); }); };
+    const copies = () => wrap.kids.filter(k => k.cls.has("e-warm"));
+    return { sb, menu, wrap, frame, to, copies };
+  };
+  let got;
+  try {
+    const r = lab();
+    r.sb.warmMenu();
+    const c = r.copies()[0], all = c ? [c].concat(c.querySelectorAll()) : [];
+    const seen = [r.copies().length, r.wrap.kids.indexOf(c) === r.wrap.kids.indexOf(r.menu) + 1, c && !c.hidden,
+      c && c.getAttribute("aria-hidden"), c && c.inert, c && c.cls.has("menu"),
+      all.filter(n => ["id", "role", "title"].some(a => n.getAttribute(a) != null)).length,
+      r.menu.hidden, r.menu.getAttribute("id"), r.menu.kids[0].getAttribute("id")];
+    r.frame(); r.frame(); const after2 = r.copies().length; r.frame();
+    got = [seen, after2, r.copies().length];
+  } catch (e) { got = "the menu lab threw: " + e.message; }
+  eq("warmMenu draws one copy of the menu beside it, shown, aria-hidden and inert, with no id, role or title, the menu itself untouched, and takes it away on the third frame",
+    got, [[1, true, true, "true", true, true, 0, true, "settingsMenu", "ma"], 1, 0]);
+  try {
+    const q = lab(); q.sb.warmMenu(); q.to(999); const held = q.copies().length; q.to(1000);
+    const twice = lab(); twice.sb.warmMenu(); twice.frame(); twice.frame(); twice.frame(); twice.sb.warmMenu();
+    const opened = lab(); opened.sb.openSettingsMenu(false); opened.menu.hidden = true; opened.sb.warmMenu();
+    const open = lab(); open.menu.hidden = false; open.sb.warmMenu();
+    got = [held, q.copies().length, twice.copies().length, opened.copies().length, open.copies().length];
+  } catch (e) { got = "the menu lab threw: " + e.message; }
+  eq("without frames the copy goes at 1000 ms, and none is drawn a second time, after the menu has opened, or while it is open",
+    got, [1, 0, 0, 0, 0]);
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const rule = /\n\.menu\.e-warm:not\(\[hidden\]\)\{([^}]*)\}/.exec(tpl);
+  const op = rule && /opacity:([.0-9]+)/.exec(rule[1]);
+  eq("the copy is drawn at a trace, never animated, never pressed, by a rule that outranks the menu's own entrance",
+    rule ? [+op[1] > 0 && +op[1] < 0.01, /animation:none/.test(rule[1]), /pointer-events:none/.test(rule[1]),
+      /\n\.menu\.e-warm \*\{pointer-events:none!important\}/.test(tpl)] : "no .menu.e-warm rule", [true, true, true, true]);
 }
 /* EVERY CLOSE FADES OUT ON THE DISMISS TIER (feel pass motion-9, ruled 2026-09-26 13:14): the three
    helpers are sliced out of motion.js and run on a small element model written here, and each

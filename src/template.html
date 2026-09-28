@@ -2320,6 +2320,9 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
 @keyframes eDropIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 .menu:not([hidden]),.facts-panel:not([hidden]){
   animation:eDropIn var(--m-reveal) var(--m-ease) both}
+/* The menu's warm copy (header-menus.js, warmMenu): drawn, never seen, never pressed. */
+.menu.e-warm:not([hidden]){opacity:.004;animation:none;pointer-events:none}
+.menu.e-warm *{pointer-events:none!important}
 /* The scrim blurs the workspace behind it rather than merely darkening it - the dialog reads
    as a layer above the page, and the cards stay recognisable without competing for the eye. */
 .modal-bg{position:absolute;inset:0;background:rgba(8,12,20,.4);
