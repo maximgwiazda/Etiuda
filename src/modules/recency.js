@@ -14,6 +14,7 @@ function eApplyRecency(){
     if(c) c.setAttribute("data-erec",String(i+1));
   });
 }
+function eForgetRecency(){ eRecentIds=[]; }
 function eNoteRecent(id){
   if(!id) return;
   eRecentIds=eRecentIds.filter(x=>x!==id);
@@ -24,5 +25,6 @@ function eNoteRecent(id){
 
 export {
   eApplyRecency,
-  eNoteRecent
+  eNoteRecent,
+  eForgetRecency
 };

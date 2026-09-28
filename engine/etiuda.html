@@ -85,14 +85,13 @@
     };
     if(pref("eMotionOff")==="1" || matchMedia("(prefers-reduced-motion: reduce)").matches)
       root.classList.add("e-still");
-    /* A COVERED RELOAD (motion.js reloadCovered). Rendering is blocked until parsing ends, which
-       is after the app's script and so after boot (#eBooted names nothing, and the block lifts
-       at the end of the document): the frame the last document left stays on screen and nothing
-       half-built is painted. Where blocking is not understood, the body stays unseen. The shell's
-       own reload after the page stopped arrives the same way: a dead page could not ask. */
+    /* A COVERED ARRIVAL, the shell's own reload after the page stopped: a dead page could not ask.
+       Rendering is blocked until parsing ends, which is after the app's script and so after boot
+       (#eBooted names nothing, and the block lifts at the end of the document): the frame the last
+       document left stays on screen and nothing half-built is painted. Where blocking is not
+       understood, the body stays unseen. */
     var host=window.E_HOST;
-    if(sessionStorage.getItem("eArriving") || (host && host.recovering)){
-      sessionStorage.removeItem("eArriving");
+    if(host && host.recovering){
       root.classList.add("e-arriving");
       var hold=document.createElement("link");
       if(hold.blocking && hold.blocking.supports && hold.blocking.supports("render")){
@@ -2296,13 +2295,10 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
    is not replaced. */
 @keyframes eModalBgIn{from{opacity:0}to{opacity:1}}
 @keyframes eModalCardIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
-/* A COVERED RELOAD (motion.js reloadCovered, and the boot guard's arrive): the band stays, and
-   what sits under it leaves and arrives. The dot field is the scroller's own ground and stays. Held,
-   the content is drawn at a trace no eye resolves rather than not drawn, so it is rasterised before
-   its fade begins. */
+/* A COVERED ARRIVAL (the boot guard's arrive): the band stays, and what sits under it arrives.
+   The dot field is the scroller's own ground and stays. Held, the content is drawn at a trace no
+   eye resolves rather than not drawn, so it is rasterised before its fade begins. */
 @keyframes eLeave{to{opacity:0}}
-html.e-leaving body>:not(header,#railHit,.scroller,script),html.e-leaving .scroller>.shell,
-html.e-leaving #pillsSlot{animation:eLeave var(--m-dismiss) ease forwards;pointer-events:none}
 /* A SURFACE CLOSING (motion.js dismissNode): it leaves on the dismiss tier, and what it holds stands still. */
 .e-gone{animation:eLeave var(--m-dismiss) ease forwards!important;pointer-events:none!important}
 .e-gone *{animation:none!important;transition:none!important}
@@ -3051,8 +3047,6 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 #eNotices{position:fixed;left:0;right:0;z-index:2147483646;display:flex;flex-direction:column;gap:8px;
   pointer-events:none}
 #eNotices .bub{position:relative;pointer-events:auto}
-/* The question's lines under its title, inset as the title is: a small dialog has no body to do it. */
-.e-sure .e-sure-say{padding:0 18px}
 /* A field on the fill: paper, so what is typed reads as the reader's own. */
 .bub .e-name-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
   border:1px solid transparent;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans)}
@@ -3844,17 +3838,19 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
     M: () => M,
     WHO_BASE: () => WHO_BASE,
     normWhoList: () => normWhoList,
+    resetStock: () => resetStock,
     setCatalogFacts: () => setCatalogFacts,
     setCatalogWho: () => setCatalogWho
   });
   var M = [];
-  var FACTS = `Quick facts are yours to write.
+  var FACTS_BUILT_IN = `Quick facts are yours to write.
 
 Use the pencil above to edit it - fees, deadlines, links, anything you use often.
 
 A catalog can ship its own, and loading it replaces what is here.
 
 What you type stays in this browser only.`;
+  var FACTS = FACTS_BUILT_IN;
   var WHO_BASE = [];
   function normWhoList(v) {
     const src = Array.isArray(v) ? v : String(v == null ? "" : v).split(",");
@@ -3874,6 +3870,11 @@ What you type stays in this browser only.`;
   }
   function setCatalogWho(list2) {
     WHO_BASE = list2;
+  }
+  function resetStock() {
+    M.length = 0;
+    FACTS = FACTS_BUILT_IN;
+    WHO_BASE = [];
   }
 
   // src/modules/polish.js
@@ -3969,11 +3970,13 @@ What you type stays in this browser only.`;
     intentStoreKeys: () => intentStoreKeys,
     langColumn: () => langColumn,
     nextContentLang: () => nextContentLang,
+    resetContent: () => resetContent,
     setCommentLang: () => setCommentLang,
     setContentLangs: () => setContentLangs,
     setIntentIds: () => setIntentIds
   });
-  var CATS = { gen: "General" };
+  var STARTER_CATS = Object.freeze({ gen: "General" });
+  var CATS = Object.assign({}, STARTER_CATS);
   var SW_EN = [];
   var SW_IDS = [];
   function setIntentIds(ids) {
@@ -4004,6 +4007,7 @@ What you type stays in this browser only.`;
   }
   var INTENT_BLANK_CLEARS = { clause: false, cmt: true, topic: true };
   var SW_STORE = { en: SW_EN, pl: SW_PL, cmt: SW_CMT, cmtPl: SW_CMT_PL, topic: SW_TOPIC, topicPl: SW_TOPIC_PL };
+  var BUILT_IN_KEYS = Object.keys(SW_STORE);
   function intentArr(field, l) {
     const k = intentFieldKey(field, l);
     return k ? SW_STORE[k] || null : null;
@@ -4038,6 +4042,19 @@ What you type stays in this browser only.`;
   }
   function commentLang() {
     return COMMENT_LANG || CONTENT_LANGS[0];
+  }
+  function resetContent() {
+    Object.keys(CATS).forEach((k) => {
+      delete CATS[k];
+    });
+    Object.assign(CATS, STARTER_CATS);
+    setContentLangs([]);
+    Object.keys(SW_STORE).forEach((k) => {
+      if (BUILT_IN_KEYS.indexOf(k) < 0) delete SW_STORE[k];
+      else SW_STORE[k].length = 0;
+    });
+    SW_IDS.length = 0;
+    COMMENT_LANG = "";
   }
   function intentStoreKeys() {
     const out = [];
@@ -4207,6 +4224,7 @@ What you type stays in this browser only.`;
     railSel: () => railSel,
     railSettled: () => railSettled,
     railSortT: () => railSortT,
+    resetAppState: () => resetAppState,
     semiKind: () => semiKind,
     setCardCounts: () => setCardCounts,
     setCards: () => setCards,
@@ -4258,6 +4276,30 @@ What you type stays in this browser only.`;
   var dragState = null;
   var suppressClick = false;
   var swapLock = 0;
+  function resetAppState() {
+    cards = [];
+    railSel = -1;
+    railOrder = [];
+    railMarkIdx = -1;
+    railMatch = null;
+    railSortT = 0;
+    railSettled = true;
+    railMarkUsed = false;
+    catsDropArmed = false;
+    pickRun = false;
+    semiKind = null;
+    catOrder = [];
+    cats = [];
+    shown = [];
+    entrySel = null;
+    pendingScrollHit = false;
+    intentIdxs = [];
+    intentText = "";
+    cardCounts = {};
+    dragState = null;
+    suppressClick = false;
+    swapLock = 0;
+  }
   function setRailSel(v) {
     railSel = v;
   }
@@ -4455,6 +4497,7 @@ What you type stays in this browser only.`;
     packSnapshot: () => packSnapshot,
     packUndoFor: () => packUndoFor,
     rebuildBaseCards: () => rebuildBaseCards,
+    resetPack: () => resetPack,
     savePack: () => savePack,
     saveStats: () => saveStats,
     showDeskNotices: () => showDeskNotices,
@@ -4470,7 +4513,7 @@ What you type stays in this browser only.`;
     E_LS_OK: () => E_LS_OK,
     E_NS: () => E_NS,
     E_SS_OK: () => E_SS_OK,
-    MG_REOPEN: () => MG_REOPEN,
+    LAYER_KEYS: () => LAYER_KEYS,
     eCarryOldKeys: () => eCarryOldKeys,
     eDeskFile: () => eDeskFile,
     eDeskFileShown: () => eDeskFileShown,
@@ -4479,22 +4522,27 @@ What you type stays in this browser only.`;
     eDeskRefusedSeen: () => eDeskRefusedSeen,
     eHomeless: () => eHomeless,
     eLastSaved: () => eLastSaved,
+    eLayer: () => eLayer,
+    eLayers: () => eLayers,
     eNsFor: () => eNsFor,
     eResetClear: () => eResetClear,
     eSaveTrouble: () => eSaveTrouble,
-    eWipeLatch: () => eWipeLatch,
+    layerNsOf: () => layerNsOf,
     lsDel: () => lsDel,
     lsGet: () => lsGet,
     lsKeys: () => lsKeys,
     lsSet: () => lsSet,
-    mgReopenAfterReload: () => mgReopenAfterReload,
+    lyDel: () => lyDel,
+    lyGet: () => lyGet,
+    lySet: () => lySet,
     nsDel: () => nsDel,
     nsGet: () => nsGet,
     nsKey: () => nsKey,
     nsSet: () => nsSet,
+    orbitOldLayer: () => orbitOldLayer,
+    setLayer: () => setLayer,
     ssDel: () => ssDel,
     ssGet: () => ssGet,
-    ssMarkArrival: () => ssMarkArrival,
     ssSet: () => ssSet
   });
 
@@ -4591,7 +4639,8 @@ What you type stays in this browser only.`;
     "shedHolding",
     "shedWordmarkW",
     "cardFillKey",
-    "keepPoolAcross"
+    "keepPoolAcross",
+    "restartDesk"
   ];
   var hooks = /* @__PURE__ */ Object.create(null);
   function wireHooks(map) {
@@ -4830,11 +4879,8 @@ What you type stays in this browser only.`;
     }
   }
   var eWiping = false;
-  function eWipeLatch() {
-    eWiping = true;
-  }
   function eResetClear() {
-    eWipeLatch();
+    eWiping = true;
     if (!E_DESK) return false;
     Object.keys(E_DESK.map).forEach((k) => {
       if (E_KEY_RE.test(k)) {
@@ -4927,22 +4973,6 @@ What you type stays in this browser only.`;
     } catch (e) {
     }
   }
-  var MG_REOPEN = "eReopenLibrary";
-  function mgReopenAfterReload() {
-    if (typeof document === "undefined" || !document.getElementById("mgCatList")) return;
-    try {
-      ssSet(MG_REOPEN, Array.from(mgOpen).join(",") || "1");
-    } catch (e) {
-    }
-  }
-  var E_ARRIVING = "eArriving";
-  function ssMarkArrival() {
-    if (!E_SS_OK) return;
-    try {
-      sessionStorage.setItem(E_ARRIVING, "1");
-    } catch (e) {
-    }
-  }
   function nsKey(name) {
     return E_NS + name;
   }
@@ -4954,6 +4984,60 @@ What you type stays in this browser only.`;
   }
   function nsDel(name) {
     lsDel(nsKey(name));
+  }
+  var LAYER_KEYS = ["Pack", "Stats", "Days", "CatOrder", "IntentOrder", "IntentsAside", "LinksAside", "RequestsAside", "Exported"];
+  function layerNsOf(c) {
+    const seed = c ? String(c.id || "").trim() || String(c.name || "").trim() : "";
+    return seed ? eNsFor(seed) : E_NS;
+  }
+  var E_LAYER = E_NS;
+  function eLayer() {
+    return E_LAYER;
+  }
+  function setLayer(ns) {
+    E_LAYER = ns;
+    if (ns !== E_NS) noteLayer(ns);
+  }
+  function lyGet(name) {
+    return lsGet(E_LAYER + name);
+  }
+  function lySet(name, v) {
+    return lsSet(E_LAYER + name, v);
+  }
+  function lyDel(name) {
+    lsDel(E_LAYER + name);
+  }
+  var E_LAYERS = "eLayers";
+  function eLayers() {
+    try {
+      const v = JSON.parse(lsGet(E_LAYERS) || "[]");
+      return Array.isArray(v) ? v.filter((x) => typeof x === "string" && E_KEY_RE.test(x)) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+  function noteLayer(ns) {
+    const l = eLayers();
+    if (l.indexOf(ns) < 0) {
+      l.push(ns);
+      lsSet(E_LAYERS, JSON.stringify(l));
+    }
+  }
+  var E_ORBITED = "e~orbited";
+  function orbitOldLayer() {
+    if (lsGet(E_ORBITED) != null) return 0;
+    let moved = 0;
+    if (E_LAYER !== E_NS && lyGet("Pack") == null) {
+      LAYER_KEYS.forEach((n) => {
+        const v = lsGet(E_NS + n);
+        if (v != null && lsSet(E_LAYER + n, v)) {
+          lsDel(E_NS + n);
+          moved++;
+        }
+      });
+    }
+    lsSet(E_ORBITED, "1");
+    return moved;
   }
   var E_CARRIED = "e~carried";
   var E_OLD_KEY_RE = /^pb(?:[A-Z]|[0-9a-z]+~)/;
@@ -4980,7 +5064,6 @@ What you type stays in this browser only.`;
     TOAST_HAND_MS: () => TOAST_HAND_MS,
     TOAST_MS: () => TOAST_MS,
     UI_LANGS: () => UI_LANGS,
-    askSure: () => askSure,
     catalogAwaitingLine: () => catalogAwaitingLine,
     catalogCountsLine: () => catalogCountsLine,
     counted: () => counted,
@@ -5029,7 +5112,6 @@ What you type stays in this browser only.`;
     mgPinCard: () => mgPinCard,
     mgReduceMotion: () => mgReduceMotion,
     mgSystemStill: () => mgSystemStill,
-    reloadCovered: () => reloadCovered,
     syncStill: () => syncStill,
     wireStill: () => wireStill
   });
@@ -5264,15 +5346,6 @@ What you type stays in this browser only.`;
   function cutLeaves() {
     dismissing.forEach((el) => el.remove());
     dismissing.clear();
-  }
-  function reloadCovered() {
-    ssMarkArrival();
-    if (mgReduceMotion() || typeof document === "undefined") {
-      location.reload();
-      return;
-    }
-    document.documentElement.classList.add("e-leaving");
-    setTimeout(() => location.reload(), M_MS.dismiss + 34);
   }
 
   // src/modules/cut-text.js
@@ -5755,11 +5828,6 @@ What you type stays in this browser only.`;
     "switch to {LANG} to use it": "przełącz na {LANG}, aby jej użyć",
     "Intent: {NAME}": "Intencja: {NAME}",
     "Intents: {NAMES}": "Intencje: {NAMES}",
-    "Clear Etiuda's local memory in this browser?": "Wyczyścić pamięć lokalną Etiudy w tej przeglądarce?",
-    "Clear Etiuda's local memory on this computer?": "Wyczyścić pamięć lokalną Etiudy na tym komputerze?",
-    "Removes every personal card, intent, edit, hide, category rename and quick-facts edit,": "Usuwa wszystkie własne karty, intencje, zmiany, ukrycia, zmienione nazwy kategorii i zmiany w szybkich faktach,",
-    "Catalog files on disk are not touched.": "Pliki katalogu na dysku pozostają nienaruszone.",
-    "Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to": "Etiuda uruchomi się pusta. Jeśli obok leży plik katalogu, pojawi się pytanie, czy",
     "Changes every label in Etiuda, never the cards themselves": "Zmienia napisy na przyciskach i w menu Etiudy, nigdy treść kart",
     "Theme, blur effects and animations": "Motyw, efekty rozmycia i animacje",
     "What stays docked, and what may hide itself when space is short": "Co pozostaje zadokowane, a co może się schować, gdy brakuje miejsca",
@@ -5810,6 +5878,9 @@ What you type stays in this browser only.`;
     "Clear local memory": "Wyczyść pamięć lokalną",
     "Eject catalog": "Odłącz katalog",
     "Catalog ejected": "Odłączono katalog",
+    "Local memory cleared": "Wyczyszczono pamięć lokalną",
+    "Loading a catalog erases the cards you made without one. Export them as a catalog of their own first?": "Wczytanie katalogu usunie karty utworzone bez katalogu. Najpierw wyeksportować je jako osobny katalog?",
+    "Load anyway": "Wczytaj mimo to",
     "Previous": "Poprzedni",
     /* Qualified because the tour already owns a plain "Next" and calls it Dalej; Previous has
        no such clash, so it stays plain rather than being qualified for symmetry alone. */
@@ -5830,14 +5901,7 @@ What you type stays in this browser only.`;
     "Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted.": "Zapomina wszystkie własne karty, zmiany, ukrycia, zmiany nazw i ustawienia układu w tej przeglądarce; wczytany katalog zostaje. W ten sposób wraca też wszystko, co usunięto.",
     "Forget every personal card, edit, hide, rename and layout choice on this computer; the loaded catalog stays. It is also how you bring back anything you deleted.": "Zapomina wszystkie własne karty, zmiany, ukrycia, zmiany nazw i ustawienia układu na tym komputerze; wczytany katalog zostaje. W ten sposób wraca też wszystko, co usunięto.",
     "Put the catalog down and restart empty. Your cards, edits, name, theme and layout all stay.": "Odłącza katalog i uruchamia Etiudę bez niego. Własne karty, zmiany, nazwa, motyw i układ zostają.",
-    "Eject the catalog from this browser?": "Odłączyć katalog od tej przeglądarki?",
-    "Eject the catalog?": "Odłączyć katalog?",
     "Your own cards, edits, stars and card order are KEPT - load this catalog again": "Twoje własne karty, zmiany, gwiazdki i kolejność kart ZOSTAJĄ - wczytaj ten katalog ponownie,",
-    "Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.": "Własne karty, zmiany, gwiazdki i kolejność kart ZOSTAJĄ i wracają na swoje miejsca po ponownym wczytaniu tego katalogu.",
-    "Your agent name, theme and layout choices stay, and catalog files on disk are not touched.": "Nazwa agenta, motyw i ustawienia układu zostają, a pliki katalogu na dysku pozostają nietknięte.",
-    "Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it.": "Etiuda uruchomi się pusta. Jeśli obok leży plik katalogu, pojawi się pytanie o jego wczytanie.",
-    "and forgets your agent name, theme and layout choices.": "i zapomina nazwę agenta, motyw oraz ustawienia układu.",
-    "The loaded catalog stays, and Etiuda restarts with it.": "Wczytany katalog pozostaje, a Etiuda uruchomi się z nim.",
     "Save everything loaded now as a catalog file, your edits merged in": "Zapisuje wszystko, co wczytane, jako plik katalogu, razem z własnymi zmianami",
     "Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.": "Wczytuje plik katalogu z dysku jako same dane, bez uruchamiania czegokolwiek. Zastępuje obecny katalog, a pliki na dysku zostają bez zmian.",
     "Bake the catalog into one HTML file that needs nothing beside it": "Zapisuje katalog w jednym samodzielnym pliku HTML",
@@ -6149,8 +6213,8 @@ What you type stays in this browser only.`;
     "The tour waits in the Menu, under Show tour…": "Przewodnik czeka w Menu, pod Pokaż przewodnik…",
     "To begin, the name your replies are signed with. Customers see it at the foot of each one, and it can be changed at any time in Settings.": "Na początek podpis: imię, które klienci zobaczą pod każdą odpowiedzią. Można je zmienić w każdej chwili w Ustawieniach.",
     "A catalog of replies": "Katalog odpowiedzi",
-    "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}. Etiuda restarts with the catalog in place, and the tour carries on from there.": "Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać katalog zespołu z folderu {FOLDER}. Etiuda uruchomi się wtedy od nowa, już z katalogiem, a przewodnik poprowadzi dalej.",
-    "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the catalog file. The page reloads with it and the tour carries on from there; the catalog stays in this browser, ready whenever you come back.": "Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać plik katalogu. Strona załaduje się wtedy od nowa, a przewodnik poprowadzi dalej; katalog zostanie w tej przeglądarce i poczeka na każdy powrót.",
+    "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}. The tour carries on as soon as it is in place.": "Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać katalog zespołu z folderu {FOLDER}. Przewodnik poprowadzi dalej, gdy tylko katalog będzie na miejscu.",
+    "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the catalog file. The tour carries on as soon as it is in place, and the catalog stays in this browser, ready whenever you come back.": "Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać plik katalogu. Przewodnik poprowadzi dalej, gdy tylko katalog będzie na miejscu, a sam katalog zostanie w tej przeglądarce i poczeka na każdy powrót.",
     "comes with Etiuda": "dołączony do Etiudy",
     "takes the place of the copy that comes with Etiuda": "zastępuje kopię dołączoną do Etiudy",
     "unsigned": "bez podpisu",
@@ -6220,34 +6284,6 @@ What you type stays in this browser only.`;
   function t(en) {
     const tab = UI_STRINGS[uiLang()];
     return tab && tab[en] != null ? tab[en] : en;
-  }
-  function askSure(question, yes, act, danger) {
-    const parts2 = t(question).split("\n\n");
-    const wrap = document.createElement("div");
-    wrap.className = "modal e-sure";
-    wrap.id = "eSure";
-    wrap.innerHTML = '<div class="modal-bg"></div><div class="modal-card" role="alertdialog" aria-modal="true" aria-labelledby="eSureTitle"><h2 id="eSureTitle">' + esc(parts2[0]) + "</h2>" + (parts2.length > 1 ? '<div class="e-sure-say">' + parts2.slice(1).map((x) => '<p class="modal-sub">' + esc(x) + "</p>").join("") + "</div>" : "") + '<div class="modal-actions"><button type="button" class="btn" id="eSureNo">' + esc(t("Cancel")) + '</button><button type="button" class="btn ' + (danger ? "danger" : "primary") + '" id="eSureYes">' + esc(t(yes)) + "</button></div></div>";
-    cutLeaves();
-    document.body.appendChild(wrap);
-    const close = (go) => {
-      document.removeEventListener("keydown", onKey, true);
-      dismissNode(wrap);
-      if (go) act();
-    };
-    function onKey(e) {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      e.stopPropagation();
-      close(false);
-    }
-    document.addEventListener("keydown", onKey, true);
-    wrap.querySelector(".modal-bg").onclick = () => close(false);
-    wrap.querySelector("#eSureNo").onclick = () => close(false);
-    wrap.querySelector("#eSureYes").onclick = () => close(true);
-    setTimeout(() => {
-      const b = wrap.querySelector("#eSureNo");
-      if (b) b.focus();
-    }, 30);
   }
   var UNDO_MS = 1e4;
   var undoTimer = 0;
@@ -6673,6 +6709,11 @@ What you type stays in this browser only.`;
     return did;
   }
   var packMigrationFailed = false;
+  function resetPack() {
+    pack = emptyPack();
+    BASE_M = [];
+    packMigrationFailed = false;
+  }
   function showPackMigrationWarning() {
     if (!packMigrationFailed || document.getElementById("eMigrateWarn")) return;
     const d = document.createElement("div");
@@ -6814,12 +6855,13 @@ What you type stays in this browser only.`;
     let moved = 0;
     NS_CARRY.forEach((n) => {
       let v = lsGet(from + n);
-      if (v == null || lsGet(nsKey(n)) != null) return;
+      const to = (LAYER_KEYS.indexOf(n) > -1 ? eLayer() : E_NS) + n;
+      if (v == null || lsGet(to) != null) return;
       if (n === "Pack") {
         v = packWithoutPositional(v);
         if (v == null) return;
       }
-      if (lsSet(nsKey(n), v)) moved++;
+      if (lsSet(to, v)) moved++;
     });
     if (moved) setTimeout(() => {
       try {
@@ -6840,7 +6882,7 @@ What you type stays in this browser only.`;
       const mark = NS_ADOPTED + from;
       if (lsGet(mark) != null) return false;
       if (!lsKeys().some((k) => k.indexOf(from) === 0)) return false;
-      const moved = nsGet("Pack") ? 0 : carryNsLayer(from);
+      const moved = lyGet("Pack") ? 0 : carryNsLayer(from);
       lsSet(mark, "1");
       return moved > 0;
     } catch (e) {
@@ -6850,13 +6892,13 @@ What you type stays in this browser only.`;
   function adoptStrandedPack() {
     try {
       if (E_NS === "e") return false;
-      const mine = nsKey("Pack");
+      const mine = eLayer() + "Pack";
       const found = lsKeys().filter((k) => k !== mine && /^e[0-9a-z]+~Pack$/.test(k));
       if (found.length !== 1) return false;
       const from = found[0].slice(0, -"Pack".length);
       const mark = NS_ADOPTED + from;
       if (lsGet(mark) != null) return false;
-      const moved = nsGet("Pack") ? 0 : carryNsLayer(from);
+      const moved = lyGet("Pack") ? 0 : carryNsLayer(from);
       lsSet(mark, "1");
       return moved > 0;
     } catch (e) {
@@ -6868,7 +6910,7 @@ What you type stays in this browser only.`;
   var INTENT_LISTS = ["intentHidden", "intentFavourites", "intentRemoved"];
   function storedIntentOrder() {
     try {
-      const v = JSON.parse(nsGet("IntentOrder") || "null");
+      const v = JSON.parse(lyGet("IntentOrder") || "null");
       return Array.isArray(v) ? v : null;
     } catch (e) {
       return null;
@@ -6919,7 +6961,7 @@ What you type stays in this browser only.`;
       if (l) m.intents = l.map((x) => typeof x === "number" ? at(x) : String(x)).filter(Boolean);
     });
     if (Array.isArray(order))
-      nsSet("IntentOrder", JSON.stringify(order.map((x) => typeof x === "number" ? at(x) : String(x)).filter(Boolean)));
+      lySet("IntentOrder", JSON.stringify(order.map((x) => typeof x === "number" ? at(x) : String(x)).filter(Boolean)));
   }
   function setAsideIntentLayer(order) {
     const aside = {
@@ -6938,7 +6980,7 @@ What you type stays in this browser only.`;
       m.intents = l.filter((x) => typeof x !== "number");
     });
     try {
-      nsSet(ASIDE, JSON.stringify(aside));
+      lySet(ASIDE, JSON.stringify(aside));
     } catch (e) {
     }
     pack.intentOverrides = {};
@@ -6946,7 +6988,7 @@ What you type stays in this browser only.`;
     INTENT_LISTS.forEach((name) => {
       pack[name] = [];
     });
-    nsDel("IntentOrder");
+    lyDel("IntentOrder");
     setTimeout(() => {
       try {
         toast(t("Your intent edits and stars are set aside: this catalog cannot say which intent each belongs to."));
@@ -6974,8 +7016,8 @@ What you type stays in this browser only.`;
     const map = (v) => !!v && typeof v === "object" && !Array.isArray(v);
     let st = null, older = null;
     try {
-      st = JSON.parse(nsGet("Stats") || "null");
-      older = JSON.parse(nsGet("Days") || "null");
+      st = JSON.parse(lyGet("Stats") || "null");
+      older = JSON.parse(lyGet("Days") || "null");
     } catch (e) {
     }
     if (!map(st)) return p;
@@ -6992,7 +7034,7 @@ What you type stays in this browser only.`;
     adoptNameNsLayer();
     adoptStrandedPack();
     try {
-      const raw = nsGet("Pack");
+      const raw = lyGet("Pack");
       if (raw) p = JSON.parse(raw);
     } catch (e) {
     }
@@ -7005,6 +7047,10 @@ What you type stays in this browser only.`;
         console.error("pack migration failed", e);
       } catch (_) {
       }
+    }
+    if (p) {
+      delete p.macroOrder;
+      delete p.baseMacros;
     }
     pack = Object.assign(emptyPack(), p || {});
     if (!Array.isArray(pack.hidden)) pack.hidden = [];
@@ -7163,9 +7209,9 @@ What you type stays in this browser only.`;
     layer.baseMacros = pack.baseCards;
     let ok = true;
     try {
-      if (!countsOnly) ok = nsSet("Pack", JSON.stringify(layer)) && ok;
-      ok = nsSet("Stats", JSON.stringify(stats)) && ok;
-      if (!countsOnly || older || nsGet("Days") == null) ok = nsSet("Days", JSON.stringify(closed)) && ok;
+      if (!countsOnly) ok = lySet("Pack", JSON.stringify(layer)) && ok;
+      ok = lySet("Stats", JSON.stringify(stats)) && ok;
+      if (!countsOnly || older || lyGet("Days") == null) ok = lySet("Days", JSON.stringify(closed)) && ok;
     } catch (e) {
       ok = false;
     }
@@ -8300,6 +8346,7 @@ What you type stays in this browser only.`;
     intentOrderLoaded: () => intentOrderLoaded,
     isIntentHiddenIdx: () => isIntentHiddenIdx,
     loadIntentOrder: () => loadIntentOrder,
+    resetIntentIds: () => resetIntentIds,
     saveIntentOrder: () => saveIntentOrder,
     setIntentOrder: () => setIntentOrder,
     setIntentOrderLoaded: () => setIntentOrderLoaded,
@@ -8315,6 +8362,14 @@ What you type stays in this browser only.`;
   }
   var intentOrder = [];
   var intentOrderLoaded = false;
+  function resetIntentIds() {
+    Object.keys(BASE_STORE).forEach((k) => {
+      delete BASE_STORE[k];
+    });
+    BASE_N = 0;
+    intentOrder = [];
+    intentOrderLoaded = false;
+  }
   function setIntentOrder(v) {
     intentOrder = v;
   }
@@ -8362,7 +8417,7 @@ What you type stays in this browser only.`;
   function loadIntentOrder() {
     let raw = null;
     try {
-      raw = JSON.parse(nsGet("IntentOrder") || "null");
+      raw = JSON.parse(lyGet("IntentOrder") || "null");
     } catch (e) {
     }
     if (!Array.isArray(raw)) return [];
@@ -8370,7 +8425,7 @@ What you type stays in this browser only.`;
   }
   function saveIntentOrder() {
     try {
-      nsSet("IntentOrder", JSON.stringify(intentOrder.map((i) => intentIdAt(i))));
+      lySet("IntentOrder", JSON.stringify(intentOrder.map((i) => intentIdAt(i))));
     } catch (e) {
     }
   }
@@ -8999,8 +9054,19 @@ What you type stays in this browser only.`;
   var cat_set_exports = {};
   __export(cat_set_exports, {
     applyCatsToGlobal: () => applyCatsToGlobal,
+    loadCatOrder: () => loadCatOrder,
     removeCategory: () => removeCategory
   });
+  function loadCatOrder() {
+    try {
+      setCatOrder(JSON.parse(lyGet("CatOrder") || "null") || []);
+    } catch (e) {
+      setCatOrder([]);
+    }
+    setCatOrder(catOrder.map((k) => k === "bp" ? "cin" : k).filter((k, i, a) => a.indexOf(k) === i));
+    applyCatsToGlobal();
+    setCatOrder(catOrder.filter((k) => CATS[k]));
+  }
   function applyCatsToGlobal() {
     const gone = new Set(pack.removedCats || []);
     Object.keys(CATS).forEach((k) => {
@@ -9036,7 +9102,7 @@ What you type stays in this browser only.`;
     if (pack.catColors) delete pack.catColors[k];
     setCatOrder(catOrder.filter((x) => x !== k));
     setCats(cats.filter((x) => x !== k));
-    nsSet("CatOrder", JSON.stringify(catOrder));
+    lySet("CatOrder", JSON.stringify(catOrder));
     savePack();
     hooks.rebuildCards();
     const back = packUndoFor(was), at = wasOrder.indexOf(k);
@@ -9045,7 +9111,7 @@ What you type stays in this browser only.`;
       const order = catOrder.slice();
       if (at > -1 && order.indexOf(k) < 0) order.splice(Math.min(at, order.length), 0, k);
       setCatOrder(order);
-      nsSet("CatOrder", JSON.stringify(catOrder));
+      lySet("CatOrder", JSON.stringify(catOrder));
       hooks.rebuildCards();
       applyCatsToGlobal();
       hooks.drawPillsCore();
@@ -10054,8 +10120,12 @@ What you type stays in this browser only.`;
     applyTab(cur);
     saveTabSession();
     activeHeard();
-    addEventListener("beforeunload", saveTabSession);
+    if (!tabSaveWired) {
+      tabSaveWired = true;
+      addEventListener("beforeunload", saveTabSession);
+    }
   }
+  var tabSaveWired = false;
 
   // src/modules/agent.js
   function agentParts(raw) {
@@ -10858,6 +10928,7 @@ What you type stays in this browser only.`;
     eCatalogRefusedNames: () => eCatalogRefusedNames,
     eCatalogSignature: () => eCatalogSignature,
     eRefuseCatalogFile: () => eRefuseCatalogFile,
+    eResetCatalog: () => eResetCatalog,
     eWatchClear: () => eWatchClear,
     eWatchGet: () => eWatchGet,
     eWatchName: () => eWatchName,
@@ -11240,7 +11311,6 @@ What you type stays in this browser only.`;
         cat.intents[key] = (SW_STORE[key] || []).slice();
       });
     }
-    if (!cat.facts) cat.facts = pack.facts != null && pack.facts !== "" ? pack.facts : FACTS;
     return cat;
   }
   var E_SIG_CACHE = typeof WeakMap === "function" ? /* @__PURE__ */ new WeakMap() : null;
@@ -11359,6 +11429,21 @@ What you type stays in this browser only.`;
   }
   var E_CATALOG_NAME = "";
   var E_CATALOG_VERSION = null;
+  function eResetCatalog() {
+    resetContent();
+    Object.keys(BASE_CATS).forEach((k) => {
+      delete BASE_CATS[k];
+    });
+    Object.assign(BASE_CATS, CATS);
+    setCatalogCatLabels({});
+    setCatalogCatLooks({}, {});
+    setCatalogGreet(null);
+    setCatalogStop(null);
+    eApplyRoles(null);
+    resetStock();
+    E_CATALOG_NAME = "";
+    E_CATALOG_VERSION = null;
+  }
 
   // src/modules/catalog-file.js
   var catalog_file_exports = {};
@@ -11863,6 +11948,32 @@ What you type stays in this browser only.`;
     return i === void 0 ? CAT_UNKNOWN : i;
   }
 
+  // src/modules/catalog-boot.js
+  var catalog_boot_exports = {};
+  __export(catalog_boot_exports, {
+    applyBootCatalog: () => applyBootCatalog,
+    catalogLoaded: () => catalogLoaded
+  });
+  function bootCatalog() {
+    const stored = storedCatalog();
+    if (stored) return stored;
+    const emb = eEmbeddedCatalog();
+    if (emb) return emb;
+    const c = eCatalog();
+    return c && eCatalogAccepted(c) ? c : null;
+  }
+  var E_APPLIED = null;
+  function catalogLoaded() {
+    return !!E_APPLIED;
+  }
+  function applyBootCatalog() {
+    eResetCatalog();
+    E_APPLIED = bootCatalog();
+    if (E_APPLIED) eApplyCatalog(E_APPLIED);
+    setLayer(layerNsOf(E_APPLIED));
+    orbitOldLayer();
+  }
+
   // src/modules/host.js
   var host_exports = {};
   __export(host_exports, {
@@ -12138,6 +12249,33 @@ What you type stays in this browser only.`;
     max.setAttribute("aria-label", label);
   }
 
+  // src/modules/ids.js
+  var ids_exports = {};
+  __export(ids_exports, {
+    newCatalogId: () => newCatalogId,
+    slugCat: () => slugCat,
+    uid: () => uid
+  });
+  function uid(prefix) {
+    return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+  function newCatalogId() {
+    const a = "abcdefghijklmnopqrstuvwxyz0123456789", n = 16;
+    let r = null;
+    try {
+      r = crypto.getRandomValues(new Uint8Array(n));
+    } catch (e) {
+      r = null;
+    }
+    let out = "c-";
+    for (let i = 0; i < n; i++) out += a[(r ? r[i] : Math.floor(Math.random() * 256)) % a.length];
+    return out;
+  }
+  function slugCat(name) {
+    const s = String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 28);
+    return "uc_" + (s || "custom");
+  }
+
   // src/modules/rebuild.js
   var rebuild_exports = {};
   __export(rebuild_exports, {
@@ -12217,35 +12355,6 @@ What you type stays in this browser only.`;
     carryAtBoot: () => carryAtBoot,
     carryCardLayer: () => carryCardLayer
   });
-
-  // src/modules/ids.js
-  var ids_exports = {};
-  __export(ids_exports, {
-    newCatalogId: () => newCatalogId,
-    slugCat: () => slugCat,
-    uid: () => uid
-  });
-  function uid(prefix) {
-    return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-  }
-  function newCatalogId() {
-    const a = "abcdefghijklmnopqrstuvwxyz0123456789", n = 16;
-    let r = null;
-    try {
-      r = crypto.getRandomValues(new Uint8Array(n));
-    } catch (e) {
-      r = null;
-    }
-    let out = "c-";
-    for (let i = 0; i < n; i++) out += a[(r ? r[i] : Math.floor(Math.random() * 256)) % a.length];
-    return out;
-  }
-  function slugCat(name) {
-    const s = String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 28);
-    return "uc_" + (s || "custom");
-  }
-
-  // src/modules/card-carry.js
   var ID_LISTS = ["favourites", "hidden", "cardOrder", "removed"];
   var CARRIED = "eCarriedNow";
   var bootStars = 0;
@@ -12313,8 +12422,8 @@ What you type stays in this browser only.`;
     });
     if (Array.isArray(pack.removedCats)) pack.removedCats = pack.removedCats.map(to);
     try {
-      const order = JSON.parse(nsGet("CatOrder") || "null");
-      if (Array.isArray(order) && order.some((k) => to(k) !== k)) nsSet("CatOrder", JSON.stringify(order.map(to)));
+      const order = JSON.parse(lyGet("CatOrder") || "null");
+      if (Array.isArray(order) && order.some((k) => to(k) !== k)) lySet("CatOrder", JSON.stringify(order.map(to)));
     } catch (e) {
     }
     return n;
@@ -12356,7 +12465,7 @@ What you type stays in this browser only.`;
     if (!ids.length) return;
     let rec = null;
     try {
-      rec = JSON.parse(nsGet(LINKS_ASIDE) || "null");
+      rec = JSON.parse(lyGet(LINKS_ASIDE) || "null");
     } catch (e) {
     }
     if (!rec || typeof rec !== "object" || Array.isArray(rec)) rec = {};
@@ -12364,7 +12473,7 @@ What you type stays in this browser only.`;
       rec[id] = (Array.isArray(rec[id]) ? rec[id] : []).concat(lost[id].map((at) => ({ at, clause: clauseAt(at) })));
     });
     try {
-      nsSet(LINKS_ASIDE, JSON.stringify(rec));
+      lySet(LINKS_ASIDE, JSON.stringify(rec));
     } catch (e) {
     }
   }
@@ -12404,12 +12513,12 @@ What you type stays in this browser only.`;
     });
     let order = null;
     try {
-      order = JSON.parse(nsGet("IntentOrder") || "null");
+      order = JSON.parse(lyGet("IntentOrder") || "null");
     } catch (e) {
     }
     if (Array.isArray(order) && order.some((k) => posOf(k) > -1)) {
       try {
-        nsSet("IntentOrder", JSON.stringify(follow(order, (n, i) => put(n, "order", i))));
+        lySet("IntentOrder", JSON.stringify(follow(order, (n, i) => put(n, "order", i))));
       } catch (e) {
       }
     }
@@ -12434,11 +12543,11 @@ What you type stays in this browser only.`;
     if (!add.length) return;
     let rec = null;
     try {
-      rec = JSON.parse(nsGet(REQUESTS_ASIDE) || "null");
+      rec = JSON.parse(lyGet(REQUESTS_ASIDE) || "null");
     } catch (e) {
     }
     try {
-      nsSet(REQUESTS_ASIDE, JSON.stringify((Array.isArray(rec) ? rec : []).concat(add)));
+      lySet(REQUESTS_ASIDE, JSON.stringify((Array.isArray(rec) ? rec : []).concat(add)));
     } catch (e) {
     }
   }
@@ -12553,6 +12662,7 @@ What you type stays in this browser only.`;
   __export(catalog_trust_exports, {
     catalogTrust: () => catalogTrust,
     heldCatalogTrust: () => heldCatalogTrust,
+    rearmTrustRecheck: () => rearmTrustRecheck,
     recheckHeldTrust: () => recheckHeldTrust,
     recordCatalogTrust: () => recordCatalogTrust,
     trustMetaHtml: () => trustMetaHtml,
@@ -12605,6 +12715,9 @@ What you type stays in this browser only.`;
     return nsGet(TRUST_KEY) || "";
   }
   var trustRechecked = false;
+  function rearmTrustRecheck() {
+    trustRechecked = false;
+  }
   function recheckHeldTrust(found, held, then) {
     if (trustRechecked || !found || !held) return;
     trustRechecked = true;
@@ -12796,15 +12909,16 @@ What you type stays in this browser only.`;
   function exportCatalog() {
     if (!(cards || []).length) {
       toast("Export is ready once the catalog holds a card.");
-      return;
+      return Promise.resolve(null);
     }
     let c = null;
     const build = (file) => {
       c = currentCatalog(catalogNameOfFile(file));
       return JSON.stringify(catalogToV2(c), null, 1) + "\n";
     };
-    saveCatalogFile(catalogFileStem(E_CATALOG_NAME) + ".ec", build).then((saved) => {
-      if (!saved || !c) return;
+    return saveCatalogFile(catalogFileStem(E_CATALOG_NAME) + ".ec", build).then((saved) => {
+      if (!saved || !c) return null;
+      if (!catalogLoaded()) lySet("Exported", looseMark());
       toast(catalogCountsLine(
         "Exported {FILE} with {MACROS} in {CARDS}",
         c.cards.length,
@@ -12812,6 +12926,7 @@ What you type stays in this browser only.`;
         0,
         0
       ).replace("{FILE}", saved));
+      return saved;
     });
   }
   function isCatalogUpdate(incoming, active) {
@@ -12839,31 +12954,95 @@ What you type stays in this browser only.`;
     const d = /* @__PURE__ */ new Date(), p = (v) => String(v).padStart(2, "0");
     return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate());
   }
-  function activateCatalog(c, opts) {
-    const keep = !!(opts && opts.keepPersonal);
-    if (!storeCatalog(c)) return false;
-    if (!keep) {
-      pack.overrides = {};
-      pack.custom = [];
-      pack.who = null;
-      pack.intentOverrides = {};
-      pack.intentCustom = [];
-      pack.intentHidden = [];
-      pack.intentFavourites = [];
-      pack.intentRemoved = [];
-      nsDel("IntentOrder");
-    }
-    let alive = new Set((c.cards || []).map(catalogCardId));
-    if (keep) alive = carryCardLayer(c);
-    else (pack.custom || []).forEach((m) => {
-      if (m && m.id) alive.add(m.id);
+  var LOOSE_FIELDS = [
+    "overrides",
+    "custom",
+    "removed",
+    "removedCats",
+    "intentRemoved",
+    "catLabels",
+    "catLabelsPl",
+    "customCats",
+    "catRoles",
+    "catIcons",
+    "catColors",
+    "intentOverrides",
+    "intentCustom",
+    "facts",
+    "who",
+    "cardOrder"
+  ];
+  function looseMark() {
+    const o = {};
+    LOOSE_FIELDS.forEach((k) => {
+      o[k] = (pack || {})[k];
     });
-    pack.baseCards = null;
-    pack.hidden = (pack.hidden || []).filter((id) => alive.has(id));
-    pack.favourites = (pack.favourites || []).filter((id) => alive.has(id));
-    pack.cardOrder = (pack.cardOrder || []).filter((id) => alive.has(id));
-    cardOrderTouched();
-    savePack();
+    const s = JSON.stringify(o);
+    let h = 5381;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) + h ^ s.charCodeAt(i)) >>> 0;
+    return s.length + "|" + h.toString(36);
+  }
+  function looseUnexported() {
+    return !catalogLoaded() && catalogEdited() && lyGet("Exported") !== looseMark();
+  }
+  function askLoose(go) {
+    const was = document.getElementById("eLoose");
+    if (was) was.remove();
+    const el = document.createElement("div");
+    el.className = "bub bub-ask e-undo";
+    el.id = "eLoose";
+    el.setAttribute("role", "alertdialog");
+    el.setAttribute("data-side", "none");
+    el.innerHTML = "<p>" + esc(t("Loading a catalog erases the cards you made without one. Export them as a catalog of their own first?")) + '</p><div class="tour-actions"><button type="button" class="btn" id="eLooseLoad">' + esc(t("Load anyway")) + '</button><button type="button" class="btn primary" id="eLooseExport">' + esc(t("Export…")) + "</button></div>";
+    cutLeaves();
+    document.body.appendChild(el);
+    const close = () => dismissNode(el);
+    el.querySelector("#eLooseLoad").onclick = () => {
+      close();
+      go();
+    };
+    el.querySelector("#eLooseExport").onclick = () => {
+      close();
+      exportCatalog().then((saved) => {
+        if (saved) go();
+      });
+    };
+    el.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      close();
+    });
+    el.querySelector("#eLooseExport").focus();
+  }
+  function flushLayer() {
+    try {
+      hooks.flushPillState();
+    } catch (e) {
+    }
+    flushStats();
+  }
+  function activateCatalog(c, opts) {
+    if (looseUnexported()) {
+      askLoose(() => takeCatalog(c, opts));
+      return true;
+    }
+    return takeCatalog(c, opts);
+  }
+  function takeCatalog(c, opts) {
+    const same = catalogLoaded() && layerNsOf(c) === eLayer();
+    const loose = !catalogLoaded();
+    flushLayer();
+    if (!storeCatalog(c)) return false;
+    if (same) {
+      const alive = carryCardLayer(c);
+      pack.baseCards = null;
+      pack.hidden = (pack.hidden || []).filter((id) => alive.has(id));
+      pack.favourites = (pack.favourites || []).filter((id) => alive.has(id));
+      pack.cardOrder = (pack.cardOrder || []).filter((id) => alive.has(id));
+      cardOrderTouched();
+      savePack();
+    } else if (loose) LAYER_KEYS.forEach((n) => lyDel(n));
     nsDel("CatalogNo");
     try {
       if (c && c.sample) nsSet("Sample", "1");
@@ -12877,14 +13056,9 @@ What you type stays in this browser only.`;
       recordCatalogTrust(c);
     } catch (e) {
     }
-    mgReopenAfterReload();
-    try {
-      clearTimeout(tabSaveTimer);
-      ssDel(TAB_KEY);
-      eWipeLatch();
-    } catch (e) {
-    }
-    reloadCovered();
+    clearTimeout(tabSaveTimer);
+    ssDel(TAB_KEY);
+    hooks.restartDesk();
     return true;
   }
   function sampleUntouched() {
@@ -12917,7 +13091,7 @@ What you type stays in this browser only.`;
     const c = catalogFromFileText(String(text || ""), fileName);
     if (!c) return false;
     hooks.offerPickedCatalog(c, fileName, () => {
-      eWatchClear().then(() => activateCatalog(c, { keepPersonal: true, from: fileName }));
+      eWatchClear().then(() => activateCatalog(c, { from: fileName }));
     });
     return true;
   }
@@ -12997,7 +13171,7 @@ What you type stays in this browser only.`;
           nsSet("WatchName", f.name);
           nsSet("WatchSeen", String(f.lastModified || 0));
           nsDel("WatchNo");
-          eWatchPut(handle).then(() => activateCatalog(c, { keepPersonal: true, from: f.name }));
+          eWatchPut(handle).then(() => activateCatalog(c, { from: f.name }));
         });
         return null;
       });
@@ -13435,9 +13609,7 @@ What you type stays in this browser only.`;
   var local_memory_exports = {};
   __export(local_memory_exports, {
     clearLocalMemory: () => clearLocalMemory,
-    ejectCatalog: () => ejectCatalog,
-    ejectedJustNow: () => ejectedJustNow,
-    offerEjectUndo: () => offerEjectUndo
+    ejectCatalog: () => ejectCatalog
   });
   function catalogKeep() {
     return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample"), nsKey("CatalogTrust"), nsKey("CatalogFrom")];
@@ -13467,121 +13639,76 @@ What you type stays in this browser only.`;
   function eKeyIsPref(k) {
     return E_PREF_KEYS.indexOf(k) > -1 || k.indexOf("eTour") === 0;
   }
-  function eKeyIsMine(k) {
-    return E_NS === "e" ? /^e[A-Z]/.test(k) : k.indexOf(E_NS) === 0;
+  function eKeyIsMine(k, layers) {
+    if (E_NS === "e" ? /^e[A-Z]/.test(k) : k.indexOf(E_NS) === 0) return true;
+    return layers.some((ns) => k.indexOf(ns) === 0);
   }
-  function clearLocalMemory() {
-    askSure((eHost() ? t("Clear Etiuda's local memory on this computer?") : t("Clear Etiuda's local memory in this browser?")) + "\n\n" + t("Removes every personal card, intent, edit, hide, category rename and quick-facts edit,") + " " + t("and forgets your agent name, theme and layout choices.") + " " + t("Catalog files on disk are not touched.") + "\n\n" + t("The loaded catalog stays, and Etiuda restarts with it."), "Clear local memory", clearNow, true);
-  }
-  function clearNow() {
-    mgReopenAfterReload();
-    eWipeLatch();
+  function keepKeys(keys) {
+    try {
+      hooks.flushPillState();
+    } catch (e) {
+    }
+    flushStats();
     clearTimeout(tabSaveTimer);
-    let watchGone = null;
-    try {
-      watchGone = eWatchClear();
-    } catch (e) {
-    }
-    try {
-      lsKeys().filter((k) => (eKeyIsMine(k) || eKeyIsPref(k)) && catalogKeep().indexOf(k) < 0 && E_WIPE_KEEP.indexOf(k) < 0).forEach((k) => lsDel(k));
-    } catch (e) {
-    }
-    ssDel(TAB_KEY);
-    if (watchGone && typeof watchGone.then === "function") {
-      let done = false;
-      const go = () => {
-        if (!done) {
-          done = true;
-          reloadCovered();
-        }
-      };
-      watchGone.then(go, go);
-      setTimeout(go, 600);
-    } else reloadCovered();
-  }
-  var E_EJECTED = "eEjectedNow";
-  function ejectedJustNow() {
-    const v = ssGet(E_EJECTED);
-    if (v) ssDel(E_EJECTED);
-    return !!v;
-  }
-  var E_EJECT_PARK = "eEjectPark";
-  function ejectParkKeys() {
-    return catalogKeep().concat([nsKey("CatalogNo"), nsKey("CatalogFile"), nsKey("CatalogFileAt")]);
-  }
-  function ejectCatalog() {
     try {
       saveTabSession();
     } catch (e) {
     }
-    const park = { keys: {}, tabs: ssGet(TAB_KEY), base: pack.baseCards || null };
-    ejectParkKeys().forEach((k) => {
-      park.keys[k] = lsGet(k);
+    const was = { keys: {}, tabs: ssGet(TAB_KEY) };
+    keys.forEach((k) => {
+      was.keys[k] = lsGet(k);
     });
-    let s = null;
-    try {
-      s = JSON.stringify(park);
-    } catch (e) {
-      s = null;
-    }
-    if (E_SS_OK && s !== null) {
-      ssSet(E_EJECT_PARK, s);
-      if (ssGet(E_EJECT_PARK) === s) {
-        ejectNow();
-        return;
-      }
-      ssDel(E_EJECT_PARK);
-    }
-    askSure((eHost() ? t("Eject the catalog?") : t("Eject the catalog from this browser?")) + "\n\n" + t("Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.") + "\n\n" + t("Your agent name, theme and layout choices stay, and catalog files on disk are not touched.") + "\n\n" + t("Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it."), "Eject catalog", ejectNow, true);
+    return was;
   }
-  function ejectNow() {
-    pack.baseCards = null;
-    savePack();
-    mgReopenAfterReload();
-    ssSet(E_EJECTED, "1");
-    eWipeLatch();
-    clearTimeout(tabSaveTimer);
-    catalogKeep().forEach((k) => lsDel(k));
-    nsDel("CatalogNo");
-    nsDel("CatalogFile");
-    nsDel("CatalogFileAt");
+  function putBack(was) {
+    Object.keys(was.keys).forEach((k) => {
+      const v = was.keys[k];
+      if (v == null) lsDel(k);
+      else lsSet(k, v);
+    });
+    if (was.tabs != null) ssSet(TAB_KEY, was.tabs);
+    else ssDel(TAB_KEY);
+    hooks.restartDesk();
+  }
+  function clearLocalMemory() {
+    const layers = eLayers();
+    const keys = lsKeys().filter((k) => (eKeyIsMine(k, layers) || eKeyIsPref(k)) && catalogKeep().indexOf(k) < 0 && E_WIPE_KEEP.indexOf(k) < 0);
+    const was = keepKeys(keys);
+    let handle = null;
+    eWatchGet().then((h) => {
+      handle = h || null;
+    });
+    eWatchClear();
+    keys.forEach((k) => lsDel(k));
     ssDel(TAB_KEY);
-    reloadCovered();
+    hooks.restartDesk();
+    offerUndo("Local memory cleared", () => {
+      try {
+        if (hooks.tourActive()) hooks.endTour(false);
+      } catch (e) {
+      }
+      if (handle) eWatchPut(handle);
+      putBack(was);
+    });
   }
-  function offerEjectUndo() {
-    const s = ssGet(E_EJECT_PARK);
-    ssDel(E_EJECT_PARK);
-    let park = null;
-    try {
-      park = s ? JSON.parse(s) : null;
-    } catch (e) {
-      park = null;
-    }
-    if (!park || !park.keys || typeof park.keys !== "object") return false;
-    offerUndo("Catalog ejected", () => undoEject(park));
-    return true;
+  function ejectKeys() {
+    return catalogKeep().concat([nsKey("CatalogNo"), nsKey("CatalogFile"), nsKey("CatalogFileAt")]);
   }
-  function undoEject(park) {
-    const put = park.keys[E_CATALOG_STORE];
+  function ejectCatalog() {
+    const keys = ejectKeys();
+    const was = keepKeys(keys);
+    keys.forEach((k) => lsDel(k));
+    ssDel(TAB_KEY);
+    hooks.restartDesk();
+    offerUndo("Catalog ejected", () => undoEject(was));
+  }
+  function undoEject(was) {
+    const put = was.keys[E_CATALOG_STORE];
     if (put != null && (!lsSet(E_CATALOG_STORE, put, true) || lsGet(E_CATALOG_STORE) !== put)) {
       toastRefusal(catalogStoreRefusal(eDeskFileShown()));
       return false;
     }
-    Object.keys(park.keys).forEach((k) => {
-      if (k === E_CATALOG_STORE) return;
-      const v = park.keys[k];
-      if (v == null) lsDel(k);
-      else lsSet(k, v);
-    });
-    if (park.base) {
-      pack.baseCards = park.base;
-      savePack();
-    }
-    if (park.tabs != null) ssSet(TAB_KEY, park.tabs);
-    mgReopenAfterReload();
-    eWipeLatch();
-    clearTimeout(tabSaveTimer);
-    reloadCovered();
+    putBack(was);
     return true;
   }
 
@@ -13643,6 +13770,7 @@ What you type stays in this browser only.`;
     copiesMade: () => copiesMade,
     copy: () => copy,
     fallback: () => fallback,
+    forgetCopies: () => forgetCopies,
     kbdNav: () => kbdNav,
     markEnd: () => markEnd,
     markSurface: () => markSurface,
@@ -13675,6 +13803,9 @@ What you type stays in this browser only.`;
   var copyCount = 0;
   function copiesMade() {
     return copyCount;
+  }
+  function forgetCopies() {
+    copyCount = 0;
   }
   function copy(text, msg) {
     copyCount++;
@@ -15030,6 +15161,7 @@ What you type stays in this browser only.`;
     scheduleTourPlace: () => scheduleTourPlace,
     startTour: () => startTour,
     tourActive: () => tourActive,
+    tourAfterRestart: () => tourAfterRestart,
     tourDueAtBoot: () => tourDueAtBoot,
     tourHasFocus: () => tourHasFocus,
     wireTourUi: () => wireTourUi
@@ -15100,6 +15232,7 @@ What you type stays in this browser only.`;
   var card_pool_exports = {};
   __export(card_pool_exports, {
     cancelLangChunks: () => cancelLangChunks,
+    dropCardPool: () => dropCardPool,
     keepPoolAcross: () => keepPoolAcross,
     paintList: () => paintList,
     rebuildCardsInPlace: () => rebuildCardsInPlace,
@@ -15423,7 +15556,7 @@ What you type stays in this browser only.`;
     addEventListener("pointerup", () => {
       if (!dragState) return;
       if (dragState.moved) {
-        nsSet("CatOrder", JSON.stringify(catOrder));
+        lySet("CatOrder", JSON.stringify(catOrder));
         setSuppressClick(true);
         document.documentElement.classList.remove("pilldrag");
         pills.querySelectorAll(".pill").forEach((p) => p.classList.remove("dragging"));
@@ -15835,6 +15968,9 @@ What you type stays in this browser only.`;
     if (!intentCount()) {
       if (!box.querySelector(".rail-empty"))
         box.innerHTML = '<p class="rail-empty" data-i18n-text="Intents arrive with a catalog.">' + esc(t("Intents arrive with a catalog.")) + "</p>";
+      box.style.removeProperty("--rail-sb");
+      box.style.removeProperty("--rail-shelf");
+      if (!box.getAttribute("style")) box.removeAttribute("style");
       syncIntentClearBtns();
       return;
     }
@@ -16390,7 +16526,7 @@ What you type stays in this browser only.`;
     pills.firstChild.title = t("Show all categories; double-click to reset their order");
     pills.firstChild.ondblclick = () => animateReorder(() => {
       setCatOrder(Object.keys(CATS));
-      nsDel("CatOrder");
+      lyDel("CatOrder");
     });
     displayCatOrder(hc).forEach((k) => {
       if (!CATS[k]) return;
@@ -17155,6 +17291,9 @@ What you type stays in this browser only.`;
 
   // src/modules/card-pool.js
   var cardPool = /* @__PURE__ */ new Map();
+  function dropCardPool() {
+    cardPool = /* @__PURE__ */ new Map();
+  }
   function patchCard(el, it) {
     el.className = "card" + (it.hidden ? " is-hidden" : "") + (it.hit ? " intent-hit" : "") + (it.catHit ? " cat-hit" : "") + (it.dragging ? " dragging" : "");
     el.setAttribute("title", it.dragTip);
@@ -17485,6 +17624,7 @@ What you type stays in this browser only.`;
   var recency_exports = {};
   __export(recency_exports, {
     eApplyRecency: () => eApplyRecency,
+    eForgetRecency: () => eForgetRecency,
     eNoteRecent: () => eNoteRecent
   });
   var eRecentIds = [];
@@ -17495,6 +17635,9 @@ What you type stays in this browser only.`;
       const c = list.querySelector('.card[data-id="' + cssEsc(id) + '"]');
       if (c) c.setAttribute("data-erec", String(i + 1));
     });
+  }
+  function eForgetRecency() {
+    eRecentIds = [];
   }
   function eNoteRecent(id) {
     if (!id) return;
@@ -18000,6 +18143,7 @@ What you type stays in this browser only.`;
   __export(shed_exports, {
     eRowNat: () => eRowNat,
     eShedNat: () => eShedNat,
+    forgetRowNaturals: () => forgetRowNaturals,
     measureRowNaturals: () => measureRowNaturals,
     measureShedNaturals: () => measureShedNaturals,
     shedAnimate: () => shedAnimate,
@@ -18026,6 +18170,9 @@ What you type stays in this browser only.`;
   }
   var ROW_SHED_ORDER = ["shed-theme", "shed-facts", "shed-segfold", "shed-seg"];
   var eRowNat = null;
+  function forgetRowNaturals() {
+    eRowNat = null;
+  }
   function measureRowNaturals() {
     const w = (el) => el ? Math.ceil(el.getBoundingClientRect().width) : 0;
     const seg2 = $("#seg"), segOn = $("#seg button.on") || $("#seg button"), other = $("#seg button:not(.on)");
@@ -18614,8 +18761,8 @@ What you type stays in this browser only.`;
   }
   function loadStepBody() {
     const dir = eCatalogFolderShort();
-    if (!dir) return t("Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the catalog file. The page reloads with it and the tour carries on from there; the catalog stays in this browser, ready whenever you come back.");
-    return t("Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}. Etiuda restarts with the catalog in place, and the tour carries on from there.").split("{FOLDER}").join(esc(dir));
+    if (!dir) return t("Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the catalog file. The tour carries on as soon as it is in place, and the catalog stays in this browser, ready whenever you come back.");
+    return t("Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}. The tour carries on as soon as it is in place.").split("{FOLDER}").join(esc(dir));
   }
   function menuOpen() {
     const m = $("#settingsMenu");
@@ -18647,8 +18794,8 @@ What you type stays in this browser only.`;
       name: true,
       pad: 10
     },
-    /* ONLY WHILE THE DESK IS EMPTY: the step is done by loading, which reloads the page, and the tour
-       carries on from the step after it. A card made by hand ends it too. */
+    /* ONLY WHILE THE DESK IS EMPTY: the step is done by loading, and the tour carries on from the
+       step after it (tourAfterRestart). A card made by hand ends it too. */
     {
       id: "load",
       sel: "#emptyLoad",
@@ -19156,6 +19303,12 @@ What you type stays in this browser only.`;
       formed = true;
       go();
     }, TOUR_BREATH_MS));
+  }
+  function tourAfterRestart() {
+    if (!tourRunning || tourIdx < 0) return;
+    const i = onFrom(tourIdx, 1);
+    if (i < 0) endTour(true);
+    else showTourStep(i);
   }
   var tourAfter = [];
   function afterTour(fn) {
@@ -20253,7 +20406,7 @@ What you type stays in this browser only.`;
     savePack();
     applyCatsToGlobal();
     if (catOrder.indexOf(key) < 0) catOrder.push(key);
-    nsSet("CatOrder", JSON.stringify(catOrder));
+    lySet("CatOrder", JSON.stringify(catOrder));
     return key;
   }
   function hideCard(id) {
@@ -20335,7 +20488,6 @@ What you type stays in this browser only.`;
       accept: (sig) => {
         lsSet(E_CATALOG_KEY, sig);
         return activateCatalog(c, {
-          keepPersonal: true,
           file: mine ? file : "",
           from: file || (eHost() ? "" : E_CATALOG_SCRIPT),
           fileAt: mine && !given ? eCatalogMtime() : 0
@@ -20348,10 +20500,6 @@ What you type stays in this browser only.`;
     return shown2;
   }
   function eOfferCatalogAtBoot() {
-    if (ejectedJustNow()) {
-      offerEjectUndo();
-      return;
-    }
     const at = +(nsGet("CatalogNoAt") || 0), mt = eCatalogMtime(), asked = eOpenedWith();
     if (!asked && tourDueAtBoot()) {
       afterTour(eOfferCatalogAtBoot);
@@ -20383,7 +20531,7 @@ What you type stays in this browser only.`;
         direct: true,
         accept: (sig) => {
           lsSet(E_CATALOG_KEY, sig);
-          return activateCatalog(c, { keepPersonal: true, file: got.name, fileAt: +mtime || 0 });
+          return activateCatalog(c, { file: got.name, fileAt: +mtime || 0 });
         }
       });
       if (!shown2) toast(t("That file matches the catalog you already have."));
@@ -20520,7 +20668,7 @@ What you type stays in this browser only.`;
       whenTrusted(c).then(() => src.accept(sig));
       return true;
     }
-    if (!src.asked && (document.getElementById("mgCatList") || ssGet(MG_REOPEN))) {
+    if (!src.asked && document.getElementById("mgCatList")) {
       paintCatalogList();
       return false;
     }
@@ -20676,7 +20824,7 @@ What you type stays in this browser only.`;
               refusedKey: "WatchNo",
               force: !!interactive,
               asked: !!interactive,
-              accept: () => activateCatalog(c, { keepPersonal: true, from: eWatchName() || f.name })
+              accept: () => activateCatalog(c, { from: eWatchName() || f.name })
             });
             if (!shown2 && interactive) toast(t("That file matches the catalog you already have."));
             return null;
@@ -21056,7 +21204,7 @@ What you type stays in this browser only.`;
       return;
     }
     if (kind === "cat") {
-      nsSet("CatOrder", JSON.stringify(catOrder));
+      lySet("CatOrder", JSON.stringify(catOrder));
       drawPills();
     } else if (kind === "intent") {
       syncIntentOrder();
@@ -22274,26 +22422,6 @@ What you type stays in this browser only.`;
     });
   }
 
-  // src/modules/catalog-boot.js
-  var catalog_boot_exports = {};
-  __export(catalog_boot_exports, {
-    applyBootCatalog: () => applyBootCatalog
-  });
-  function applyBootCatalog() {
-    const stored = storedCatalog();
-    if (stored) {
-      eApplyCatalog(stored);
-      return;
-    }
-    const emb = eEmbeddedCatalog();
-    if (emb) {
-      eApplyCatalog(emb);
-      return;
-    }
-    const c = eCatalog();
-    if (c && eCatalogAccepted(c)) eApplyCatalog(c);
-  }
-
   // src/modules/role-turn.js
   var role_turn_exports = {};
   __export(role_turn_exports, {
@@ -22691,8 +22819,55 @@ What you type stays in this browser only.`;
     return false;
   }
 
+  // src/modules/restart.js
+  var restart_exports = {};
+  __export(restart_exports, {
+    restartDesk: () => restartDesk
+  });
+  function restartDesk() {
+    const u = document.getElementById("eUndo");
+    if (u) u.remove();
+    closeNotePane();
+    resetPack();
+    resetAppState();
+    resetIntentIds();
+    dropCardPool();
+    forgetRowNaturals();
+    eForgetRecency();
+    forgetCopies();
+    rearmTrustRecheck();
+    putLang(lsGet("eLang") || uiLang());
+    applyBootCatalog();
+    syncLangSeg();
+    snapshotBaseIntents();
+    loadPack();
+    carryAtBoot();
+    roleSel.value = "";
+    loadCatOrder();
+    renderFacts();
+    updateIntentPlaceholder();
+    rebuildCards();
+    applyLangUI(lang);
+    rebuildRailMQ();
+    syncRailLayout();
+    syncPillsCollapse();
+    drawIntentRail();
+    initTabs();
+    syncSampleMark();
+    paintCatNow();
+    syncRoleWheel();
+    applyPrefs();
+    translateChrome();
+    placeRailNow();
+    focusIntentOnOpen();
+    if (document.getElementById("mgCatList")) openManage();
+    mtRefreshLive();
+    tourAfterRestart();
+    maybeStartTour();
+  }
+
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
@@ -22819,6 +22994,7 @@ What you type stays in this browser only.`;
       syncSaveNotice,
       importCatalogHere,
       offerPickedCatalog: eOfferPickedCatalog,
+      restartDesk,
       runShortcut
     });
     eCarryOldKeys();
@@ -22864,14 +23040,7 @@ What you type stays in this browser only.`;
       scheduleTabSave();
     });
     wireLangSeg();
-    try {
-      setCatOrder(JSON.parse(nsGet("CatOrder") || "null") || []);
-    } catch (e) {
-      setCatOrder([]);
-    }
-    setCatOrder(catOrder.map((k) => k === "bp" ? "cin" : k).filter((k, i, a) => a.indexOf(k) === i));
-    applyCatsToGlobal();
-    setCatOrder(catOrder.filter((k) => CATS[k]));
+    loadCatOrder();
     wirePumpKick();
     wirePillDrag();
     applyStoredRailWidth();
@@ -22957,17 +23126,6 @@ What you type stays in this browser only.`;
     }
     try {
       showDeskNotices();
-    } catch (e) {
-    }
-    try {
-      const back = ssGet(MG_REOPEN);
-      if (back) {
-        ssDel(MG_REOPEN);
-        String(back).split(",").forEach((k) => {
-          if (k && k !== "1") mgOpen.add(k);
-        });
-        openManage();
-      }
     } catch (e) {
     }
   }

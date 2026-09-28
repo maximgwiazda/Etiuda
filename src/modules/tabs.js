@@ -1066,8 +1066,10 @@ function initTabs(){
   applyTab(cur);
   saveTabSession();
   activeHeard();
-  addEventListener("beforeunload", saveTabSession);
+  // Once per page: the desk may start again in place, and a second listener would save twice.
+  if(!tabSaveWired){ tabSaveWired=true; addEventListener("beforeunload", saveTabSession); }
 }
+let tabSaveWired=false;
 
 export {
   saveTabSession,

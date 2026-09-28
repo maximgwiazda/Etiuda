@@ -568,55 +568,66 @@ function runUnitTests() {
   catNowTests();
 }
 
-/* EJECT HAPPENS AT ONCE AND UNDO LOADS THE SAME CATALOG BACK (Maxim, 2026-09-27): the eject, the
-   boot after it and the Undo, run in bare node over one storage model whose writes stop at the
-   latch, as storage.js's do. The round trip must put back every key the eject took, byte for byte. */
+/* EJECT AND CLEAR HAPPEN AT ONCE AND IN PLACE, AND EACH UNDO PUTS BACK WHAT IT TOOK (Maxim, 2026-09-27
+   and 2026-09-28): both acts, and both Undos, run in bare node over one storage model. Nothing
+   reloads and nothing asks; the desk starts again in place once per act, and the round trip must
+   put back every key the act took, byte for byte. With no session storage at all the Undo still
+   stands, because what it gives back is held in memory. */
 function ejectUndoTests() {
   const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "local-memory.js"), "utf8");
-  const markers = ["function catalogKeep(", "const E_EJECTED=", "function ejectedJustNow(", "const E_EJECT_PARK=",
-    "function ejectParkKeys(", "function ejectCatalog(", "function ejectNow(", "function offerEjectUndo(", "function undoEject("];
-  const world = (ssOk, ssRefuses) => {
-    const w = { ls: {}, ss: {}, latched: false, asked: 0, reloads: 0, undo: null, said: null, pack: { baseCards: ["old"] } };
+  const markers = ["function catalogKeep(", "const E_WIPE_KEEP=", "const E_PREF_KEYS=", "function eKeyIsPref(",
+    "function eKeyIsMine(", "function keepKeys(", "function putBack(", "function clearLocalMemory(",
+    "function ejectKeys(", "function ejectCatalog(", "function undoEject("];
+  const world = ssOk => {
+    const w = { ls: {}, ss: {}, restarts: 0, undo: null, said: null, reloads: 0 };
     const ns = k => "e" + k;
-    const put = (m, k, v) => { if (!w.latched) m[k] = String(v); return !w.latched; };
+    const hooks = { flushPillState: () => {}, restartDesk: () => { w.restarts++; }, tourActive: () => false, endTour: () => {} };
+    const ssGet = k => (ssOk && k in w.ss ? w.ss[k] : null);
     try {
-      w.F = new Function("E_CATALOG_STORE", "E_CATALOG_KEY", "nsKey", "nsDel", "saveTabSession", "ssGet", "ssSet", "ssDel",
-        "TAB_KEY", "pack", "savePack", "lsGet", "lsSet", "lsDel", "E_SS_OK", "askSure", "eHost", "t",
-        "mgReopenAfterReload", "eWipeLatch", "clearTimeout", "tabSaveTimer", "reloadCovered", "offerUndo", "toastRefusal",
-        markers.map(m => extractDecl(src, m)).join("\n") + "\nreturn {ejectCatalog, ejectedJustNow, offerEjectUndo};")(
-        ns("Catalog"), ns("CatalogOk"), ns, k => { delete w.ls[ns(k)]; }, () => {},
-        k => (k in w.ss ? w.ss[k] : null), (k, v) => { if (!ssRefuses) put(w.ss, k, v); }, k => { delete w.ss[k]; },
-        "eSessionTabs", w.pack, () => put(w.ls, "ePack", JSON.stringify(w.pack.baseCards)),
-        k => (k in w.ls ? w.ls[k] : null), (k, v) => put(w.ls, k, v), k => { delete w.ls[k]; },
-        ssOk, () => { w.asked++; }, () => true, s => s,
-        () => {}, () => { w.latched = true; }, () => {}, null, () => { w.reloads++; },
-        (said, fn) => { w.said = said; w.undo = fn; }, () => {});
+      w.F = new Function("E_CATALOG_STORE", "E_CATALOG_KEY", "E_NS", "nsKey", "hooks", "flushStats", "clearTimeout", "tabSaveTimer",
+        "saveTabSession", "ssGet", "ssSet", "ssDel", "TAB_KEY", "lsGet", "lsSet", "lsDel", "lsKeys", "eLayers",
+        "eWatchGet", "eWatchClear", "eWatchPut", "offerUndo", "toastRefusal", "catalogStoreRefusal", "eDeskFileShown", "location",
+        markers.map(m => extractDecl(src, m)).join("\n") + "\nreturn {ejectCatalog, clearLocalMemory};")(
+        ns("Catalog"), ns("CatalogOk"), "e", ns, hooks, () => {}, () => {}, null, () => {},
+        ssGet, (k, v) => { if (ssOk) w.ss[k] = String(v); }, k => { delete w.ss[k]; }, "eSessionTabs",
+        k => (k in w.ls ? w.ls[k] : null), (k, v) => { w.ls[k] = String(v); return true; }, k => { delete w.ls[k]; },
+        () => Object.keys(w.ls), () => ["eab12~"],
+        () => Promise.resolve(null), () => Promise.resolve(), () => {},
+        (said, fn) => { w.said = said; w.undo = fn; }, () => {}, () => "", () => "",
+        { reload: () => { w.reloads++; } });
     } catch (e) { w.F = null; w.err = e.message; }
     w.ls = { eCatalog: "{\"cards\":[1]}", eCatalogOk: "sig", eSample: "1", eCatalogNo: "no", eCatalogFile: "shop.ec",
-             eCatalogFileAt: "1700", eCatalogTrust: "valid", eCatalogFrom: "shop.ec", ePack: "[\"old\"]", eTheme: "dark" };
+             eCatalogFileAt: "1700", eCatalogTrust: "valid", eCatalogFrom: "shop.ec", "eab12~Pack": "[\"own\"]", ePack: "[\"loose\"]",
+             eTheme: "dark", eAgent: "Ann", eCatalogFolder: "C:/cat", "e1zz~Pack": "a neighbour's", eTourDone_v3: "1" };
     w.ss = { eSessionTabs: "tabs-a" };
     return w;
   };
-  const w = world(true, false);
-  eq("local-memory.js carries the eject, its park and its Undo", w.F ? true : w.err, true);
+  const w = world(true);
+  eq("local-memory.js carries the eject, the clear and their Undos", w.F ? true : w.err, true);
   if (!w.F) return;
   const sorted = m => JSON.stringify(Object.keys(m).sort().map(k => [k, m[k]]));
   const before = sorted(w.ls) + sorted(w.ss);
   w.F.ejectCatalog();
-  eq("an eject asks nothing and restarts once, with the catalog, what names it and its signature's state gone and the park in the session",
-    [w.asked, w.reloads, ["eCatalog", "eCatalogOk", "eSample", "eCatalogNo", "eCatalogFile", "eCatalogFileAt", "eCatalogTrust", "eCatalogFrom"].filter(k => k in w.ls),
-     "eEjectPark" in w.ss, w.ss.eEjectedNow, w.ls.eTheme], [0, 1, [], true, "1", "dark"]);
-  w.latched = false;
-  const first = w.F.ejectedJustNow() && w.F.offerEjectUndo(), again = w.F.offerEjectUndo();
-  eq("the boot after it offers Undo once, and the park is taken whatever happens",
-    [first, w.said, again, "eEjectPark" in w.ss], [true, "Catalog ejected", false, false]);
+  eq("an eject asks nothing, reloads nothing and starts the desk again once, with the catalog and what names it gone"
+    + " and every personal layer where it was",
+    [w.reloads, w.restarts, ["eCatalog", "eCatalogOk", "eSample", "eCatalogNo", "eCatalogFile", "eCatalogFileAt", "eCatalogTrust", "eCatalogFrom"].filter(k => k in w.ls),
+     w.ls["eab12~Pack"], w.ls.ePack, w.ls.eTheme, w.said], [0, 1, [], "[\"own\"]", "[\"loose\"]", "dark", "Catalog ejected"]);
   if (w.undo) w.undo();
-  eq("Undo puts back every key the eject took and the conversations, byte for byte, and restarts behind the latch",
-    [sorted(w.ls) + sorted(w.ss) === before, w.reloads, w.latched], [true, 2, true]);
-  const off = world(false, false), deaf = world(true, true);
-  [off, deaf].forEach(x => x.F && x.F.ejectCatalog());
-  eq("a session that cannot hold the park asks first rather than ejecting without an Undo, and leaves nothing parked",
-    [off.asked, off.reloads, "eCatalog" in off.ls, deaf.asked, deaf.reloads, "eEjectPark" in deaf.ss], [1, 0, true, 1, 0, false]);
+  eq("its Undo puts back every key the eject took and the conversations, byte for byte, and starts the desk again",
+    [sorted(w.ls) + sorted(w.ss) === before, w.reloads, w.restarts], [true, 0, 2]);
+  w.F.clearLocalMemory();
+  eq("a clear forgets this desk's own keys, its catalogs' layers and the preferences, keeps the catalog, the folder and a"
+    + " neighbour's keys, and starts the desk again once",
+    [Object.keys(w.ls).sort(), w.reloads, w.restarts, w.said],
+    [["e1zz~Pack", "eCatalog", "eCatalogFolder", "eCatalogFrom", "eCatalogOk", "eCatalogTrust", "eSample"], 0, 3, "Local memory cleared"]);
+  if (w.undo) w.undo();
+  eq("its Undo puts back every key the clear took, byte for byte", [sorted(w.ls) + sorted(w.ss) === before, w.restarts], [true, 4]);
+  const deaf = world(false);
+  deaf.F.ejectCatalog();
+  const took = !("eCatalog" in deaf.ls);
+  if (deaf.undo) deaf.undo();
+  eq("with no session storage the eject still happens at once and its Undo still loads the catalog back",
+    [took, deaf.said, deaf.ls.eCatalog, deaf.reloads], [true, "Catalog ejected", "{\"cards\":[1]}", 0]);
 }
 
 /* THE TOUR TEACHES BY DOING (Maxim, 2026-09-27): a step that teaches an act asks for it and moves on
@@ -842,7 +853,8 @@ function catNowTests() {
   /* AND activateCatalog, which every route ends in, writes what the route named: run whole in a scope whose every
      other free name is a no-op, over a store that takes the catalog. */
   const ns = {};
-  const own = { storeCatalog: () => true, pack: {}, carryCardLayer: () => new Set(), catalogCardId: m => m.id,
+  const own = { storeCatalog: () => true, pack: {}, carryCardLayer: () => new Set(), catalogCardId: m => m.id, LAYER_KEYS: [],
+    hooks: { restartDesk() {}, flushPillState() {} },
     nsSet: (k, v) => { ns[k] = v; }, nsDel: k => { delete ns[k]; }, nsGet: k => (k in ns ? ns[k] : null) };
   const scope = new Proxy({}, {
     has: (o, k) => typeof k === "string",
@@ -850,11 +862,12 @@ function catNowTests() {
     set: (o, k, v) => { own[k] = v; return true; }
   });
   let activate = null;
-  try { activate = new Function("scope", "with(scope){\n" + extractDecl(fileSrc, "function activateCatalog(") + "\nreturn activateCatalog;\n}")(scope); }
+  try { activate = new Function("scope", "with(scope){\n" + extractDecl(fileSrc, "function activateCatalog(") + "\n"
+      + extractDecl(fileSrc, "function takeCatalog(") + "\nreturn activateCatalog;\n}")(scope); }
   catch (e) { eq("catalog-file.js carries activateCatalog", e.message, "sliced"); return; }
   const wrote = opts => { ns.CatalogFrom = "stale.ec"; activate({ cards: [] }, opts); return ns.CatalogFrom; };
   eq("activateCatalog records the file a route names, its folder file where that is all it names, and blanks it for a route that names none",
-    [wrote({ keepPersonal: true, from: "Spring team.ec" }), wrote({ keepPersonal: true, file: "team.ec" }), wrote({ keepPersonal: true })],
+    [wrote({ from: "Spring team.ec" }), wrote({ file: "team.ec" }), wrote({})],
     ["Spring team.ec", "team.ec", ""]);
 }
 
@@ -1447,10 +1460,12 @@ function nameNsAdoptionTests() {
     const lsKeys = () => Object.keys(store);
     const nsKey = n => E_NS + n;
     const said = [];
+    /* A build's own catalog is the one loaded, so its layer is its namespace (storage.js, layerNsOf). */
     const took = new Function("eEmbeddedCatalog", "eNsFor", "E_NS", "lsGet", "lsSet", "lsKeys",
-                              "nsGet", "nsKey", "t", "toast", "setTimeout", body)(
+                              "nsGet", "nsKey", "LAYER_KEYS", "eLayer", "lyGet", "t", "toast", "setTimeout", body)(
       () => catalog, nsFor, E_NS, lsGet, lsSet, lsKeys, n => lsGet(nsKey(n)), nsKey,
-      s => s, s => said.push(s), fn => fn());
+      ["Pack", "Stats", "Days", "CatOrder", "IntentOrder", "IntentsAside", "LinksAside", "RequestsAside", "Exported"],
+      () => E_NS, n => lsGet(nsKey(n)), s => s, s => said.push(s), fn => fn());
     return { took, said, ns: E_NS };
   };
 
@@ -1719,8 +1734,10 @@ function recoveryTests() {
   try {
     got = [run({ recovering: true }, false), run({ recovering: false }, false), run(null, true), run(null, false)];
   } catch (e) { got = "the boot guard threw: " + e.message; }
-  eq("the guard holds the first frame for the shell's recovery and for the page's own covered reload, and for nothing else",
-    got, [[true, 1], [false, 0], [true, 1], [false, 0]]);
+  /* The page no longer reloads itself to change catalogs, so a session mark alone, which only that
+     reload wrote, holds nothing: the third case is the one that changed. */
+  eq("the guard holds the first frame for the shell's recovery, and for nothing else, a stray session mark included",
+    got, [[true, 1], [false, 0], [false, 0], [false, 0]]);
 }
 /* THE FIRST PAINT READS THE SETTINGS WHERE THEY ARE KEPT: an installed Etiuda keeps them in its desk
    file and never in localStorage, so the head script reads the desk the shell hands it, once, and
@@ -1779,9 +1796,9 @@ function headPrefsTests() {
   eq("storage.js takes the desk the head script read, once and without reading the file again, and reads it itself when none was handed",
     got, [["eGlassOff,eTheme", 0, false], ["eRail,eTheme", 1, false], ["eRail,eTheme", 1, false]]);
 }
-/* A COVERED ARRIVAL FADES FROM A FRAME ITS CONTENT WAS DRAWN IN (feel pass, the catalog load): the boot
-   guard runs in a VM, E_BOOT_OK is called, and the frames and paint timing it waits on are handed to
-   it by hand. What the eye sees is the verifier's composed frames. */
+/* A COVERED ARRIVAL FADES FROM A FRAME ITS CONTENT WAS DRAWN IN (feel pass; the shell's recovery is
+   what arrives covered now): the boot guard runs in a VM, E_BOOT_OK is called, and the frames and
+   paint timing it waits on are handed to it by hand. What the eye sees is the verifier's composed frames. */
 function arrivalTests() {
   const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
   const m = /<script>([\s\S]*?)<\/script>/.exec(tpl);
@@ -1793,7 +1810,7 @@ function arrivalTests() {
         contains: c => cls.has(c) }, style: { setProperty() {} } }, body: { offsetWidth: 1 },
         head: { appendChild() {} }, createElement: () => ({ setAttribute() {}, blocking: { supports: () => true } }),
         getElementById: () => null, querySelector: () => null },
-      sessionStorage: { getItem: k => (k === "eArriving" ? "1" : null), removeItem() {}, setItem() {}, clear() {} },
+      sessionStorage: { getItem: () => null, removeItem() {}, setItem() {}, clear() {} },
       localStorage: { getItem: () => null, setItem() {}, removeItem() {}, key: () => null, length: 0 },
       matchMedia: () => ({ matches: false }), location: { hash: "", href: "file:///x/etiuda.html", protocol: "file:", origin: "null" },
       navigator: { languages: ["en-US"], language: "en-US", cookieEnabled: true },
@@ -1803,7 +1820,7 @@ function arrivalTests() {
       sb.performance = { getEntriesByType: () => [] };
       sb.PerformanceObserver = class { constructor(cb) { this.cb = cb; obs.push(this); } observe() {} disconnect() {} };
     }
-    sb.window = sb; sb.self = sb; sb.top = sb;
+    sb.window = sb; sb.E_HOST = { recovering: true }; sb.self = sb; sb.top = sb;
     require("vm").runInNewContext(guard, sb);
     const step = what => { seen.push([what, frames.length, cls.has("e-arriving")]); };
     sb.E_BOOT_OK(); step("boot");
@@ -2210,16 +2227,16 @@ function dismissWiringTests() {
   // Every surface's closer leaves on the tier and every opener cuts the leaves.
   const src = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
   const has = (f, marker, needle) => { try { return extractDecl(src(f), marker).indexOf(needle) > -1; } catch (e) { return false; } };
-  eq("each closer leaves on the dismiss tier: the dialog, the question, the undo, the name, the offer, the note, the menus, quick facts, the tour", [
+  eq("each closer leaves on the dismiss tier: the dialog, the loose content's question, the undo, the name, the offer, the note, the menus, quick facts, the tour", [
     has("dialog.js", "function closeModal(", "leaveModal();"), has("dialog.js", "function leaveModal(", "dismissNode(g)"),
-    has("ui-lang.js", "function askSure(", "dismissNode(wrap)"), has("ui-lang.js", "function offerUndo(", "dismissNode(el)"),
+    has("catalog-file.js", "function askLoose(", "dismissNode(el)"), has("ui-lang.js", "function offerUndo(", "dismissNode(el)"),
     has("agent.js", "function askAgentName(", "dismissNode(wrap)"), has("catalog-offer.js", "function eOfferCatalogDialog(", "dismissNode(wrap)"),
     has("note-pane.js", "function closeNotePane(", "dismissNode(notePaneEl)"),
     has("header-menus.js", "function closeMoreMenu(", "dismissCopy(m)"), has("header-menus.js", "function closeSettingsMenu(", "dismissCopy(menu)"),
     has("facts.js", "function closeFactsPanel(", "dismissCopy(p)"), has("tour.js", "function endTour(", "dismissCopy(els.card")],
     [true, true, true, true, true, true, true, true, true, true, true]);
   eq("each opener ends the leaves first", [
-    has("dialog.js", "function openDialog(", "cutLeaves()"), has("ui-lang.js", "function askSure(", "cutLeaves()"),
+    has("dialog.js", "function openDialog(", "cutLeaves()"), has("catalog-file.js", "function askLoose(", "cutLeaves()"),
     has("ui-lang.js", "function offerUndo(", "cutLeaves()"), has("agent.js", "function askAgentName(", "cutLeaves()"),
     has("catalog-offer.js", "function eOfferCatalogDialog(", "cutLeaves()"), has("note-pane.js", "function openNotePane(", "cutLeaves()"),
     has("header-menus.js", "function openMoreMenu(", "cutLeaves()"), has("header-menus.js", "function openSettingsMenu(", "cutLeaves()"),
@@ -3467,8 +3484,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 834;
-const UI_STRINGS_SHA256 = "d3c58101549c6d1359105950c74465a38af217fca00b08653633fccd755a81ae";
+const UI_STRINGS_COUNT = 825;
+const UI_STRINGS_SHA256 = "0000d01ad135f2fb8b0cb8e1e1e75d436483e072f83ae7e80c2a36093759aff8";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
@@ -4243,7 +4260,7 @@ function langAgnosticTests() {
      setContentLangs, so it demanded `t` and `en` by name and refused every set without them -
      the defect the 649 commit found and left standing. Driven here on the runtime shape. */
   const WL = [
-    "const CATS=", "const SW_EN=", "const SW_PL=", "const SW_CMT=", "const SW_CMT_PL=",
+    "const STARTER_CATS=", "const CATS=", "const SW_EN=", "const SW_PL=", "const SW_CMT=", "const SW_CMT_PL=",
     "const SW_TOPIC=", "const SW_TOPIC_PL=", "const CONTENT_LANGS=", "const BUILT_IN_LANGS=",
     "function langColumn(", "function catalogLangs(", "const INTENT_TEXT_FIELDS=",
     "const INTENT_FIELD_KEY=", "function intentFieldKey(", "const SW_STORE=",

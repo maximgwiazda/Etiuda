@@ -427,6 +427,9 @@ function drawIntentRailCore(){
     if(!box.querySelector(".rail-empty"))
       box.innerHTML='<p class="rail-empty" data-i18n-text="Intents arrive with a catalog.">'
         +esc(t("Intents arrive with a catalog."))+'</p>';
+    // No stack, so no lane or shelf: what a catalog put down in place measured goes with it.
+    box.style.removeProperty("--rail-sb"); box.style.removeProperty("--rail-shelf");
+    if(!box.getAttribute("style")) box.removeAttribute("style");
     syncIntentClearBtns();
     return;
   }

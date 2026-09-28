@@ -33,6 +33,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/csp.js                                the policy, two unpackaged Electrons
     node tests/desk.js                               the desk in a file, an unpackaged Electron
     ETIUDA_FIXTURES=<folder> node tests/catalog-watch.js  the watched catalog, one app run
+    node tests/swap.mjs                              the desk changed in place held to a fresh start, Chrome, no fixtures
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
     ETIUDA_FIXTURES=<folder> node tests/reinstall.js     install, use, uninstall, install again
 

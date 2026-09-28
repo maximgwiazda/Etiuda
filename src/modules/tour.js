@@ -136,8 +136,8 @@ function tourRevealCardActions(){
 /* The desk's own words for the folder a Load opens, or none in a browser, which has no folder. */
 function loadStepBody(){
   const dir=eCatalogFolderShort();
-  if(!dir) return t("Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the catalog file. The page reloads with it and the tour carries on from there; the catalog stays in this browser, ready whenever you come back.");
-  return t("Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}. Etiuda restarts with the catalog in place, and the tour carries on from there.")
+  if(!dir) return t("Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the catalog file. The tour carries on as soon as it is in place, and the catalog stays in this browser, ready whenever you come back.");
+  return t("Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}. The tour carries on as soon as it is in place.")
     .split("{FOLDER}").join(esc(dir));
 }
 /* THE MENU AS IT STANDS: the button while it is shut, and once the person opens it, the row a step
@@ -170,8 +170,8 @@ const TOUR_STEPS=[
     name:true,
     pad:10
   },
-  /* ONLY WHILE THE DESK IS EMPTY: the step is done by loading, which reloads the page, and the tour
-     carries on from the step after it. A card made by hand ends it too. */
+  /* ONLY WHILE THE DESK IS EMPTY: the step is done by loading, and the tour carries on from the
+     step after it (tourAfterRestart). A card made by hand ends it too. */
   {
     id:"load",
     sel:"#emptyLoad",
@@ -581,7 +581,7 @@ function showTourStep(i){
   tourIdx=i;
   const step=TOUR_STEPS[i];
   const els=tourEls();
-  // Where the tour stands survives a reload: loading a catalog reloads the page.
+  // Where the tour stands survives a reload, the shell's recovery of a stopped page included.
   ssSet(TOUR_AT,step.id);
   // No step opens the menu: the person does, and only a step about its rows (`menu`) leaves it open.
   if(!step.menu) closeSettingsMenu();
@@ -682,6 +682,13 @@ function maybeStartTour(){
   const go=()=>{ if(floor && formed && due()) startTour(i,true); };
   setTimeout(()=>{ floor=true; go(); },at ? TOUR_RESUME_MS : TOUR_AUTO_MS);
   whenMarkFormed(()=>setTimeout(()=>{ formed=true; go(); },TOUR_BREATH_MS));
+}
+/* THE DESK STARTED AGAIN UNDER A RUNNING TOUR: a step the new desk no longer offers, the load step
+   once a catalog is in, gives way to the next one that it does. */
+function tourAfterRestart(){
+  if(!tourRunning || tourIdx<0) return;
+  const i=onFrom(tourIdx,1);
+  if(i<0) endTour(true); else showTourStep(i);
 }
 // What waits for the tour to end: the catalog offer a first run holds back (catalog-offer.js).
 let tourAfter=[];
@@ -839,6 +846,7 @@ function wireTourUi(){
   }
 }
 export {
+  tourAfterRestart,
   tourActive,
   scheduleTourPlace,
   startTour,

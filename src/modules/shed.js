@@ -38,6 +38,8 @@ function shedWordmarkW(){ return (eShedNat && eShedNat.wordmark>0) ? eShedNat.wo
    pass, where nothing is painted. */
 const ROW_SHED_ORDER=["shed-theme","shed-facts","shed-segfold","shed-seg"];
 let eRowNat=null;   // the tools' natural widths, frozen while they are on screen
+// Measured again at their next use: a catalog's languages decide the seg's natural width.
+function forgetRowNaturals(){ eRowNat=null; }
 function measureRowNaturals(){
   const w=el=>el?Math.ceil(el.getBoundingClientRect().width):0;
   const seg=$("#seg"), segOn=$("#seg button.on")||$("#seg button"), other=$("#seg button:not(.on)");
@@ -202,6 +204,7 @@ function shedStage(before){
 }
 
 export {
+  forgetRowNaturals,
   eShedNat, measureShedNaturals, eRowNat, measureRowNaturals, syncRowShed,
   shedSnap, shedStage, shedAnimate, shedHeld, shedHold, shedHolding, shedWordmarkW,
 };

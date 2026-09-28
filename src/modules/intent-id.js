@@ -1,6 +1,6 @@
 import { intentStoreKeys, intentFieldKey, intentCount, SW_IDS, SW_STORE, CONTENT_LANGS } from "./content-model.js";
 import { pack } from "./pack.js";
-import { nsGet, nsSet } from "./storage.js";
+import { lyGet, lySet } from "./storage.js";
 
 // Which intent is which: the stable id behind every slot, and the user's display order.
 // Snapshot built-in intents; runtime SW_* arrays are mutated in place so cards that
@@ -19,6 +19,8 @@ let intentOrder=[], intentOrderLoaded=false;
 /* Both are replaced wholesale from outside this module, so both need a setter: an imported
    binding cannot be assigned to, and the accessor src/main.js installs for the monolith is a
    getter, so a bare write from either side is a silent no-op rather than an error. */
+// The empty desk's, before a catalog put down in place is replaced.
+function resetIntentIds(){ Object.keys(BASE_STORE).forEach(k=>{ delete BASE_STORE[k]; }); BASE_N=0; intentOrder=[]; intentOrderLoaded=false; }
 function setIntentOrder(v){ intentOrder=v; }
 function setIntentOrderLoaded(v){ intentOrderLoaded=v; }
 /* THE STABLE NAME OF ONE INTENT, and the join between a catalog keyed by tag id and a runtime
@@ -62,17 +64,18 @@ function intentIdxFromId(id){
    the end was. */
 function loadIntentOrder(){
   let raw=null;
-  try{ raw=JSON.parse(nsGet("IntentOrder")||"null"); }catch(e){}
+  try{ raw=JSON.parse(lyGet("IntentOrder")||"null"); }catch(e){}
   if(!Array.isArray(raw)) return [];
   return raw.map(v=>intentIdxFromId(v)).filter(i=>i>=0);
 }
 function saveIntentOrder(){
-  try{ nsSet("IntentOrder",JSON.stringify(intentOrder.map(i=>intentIdAt(i)))); }catch(e){}
+  try{ lySet("IntentOrder",JSON.stringify(intentOrder.map(i=>intentIdAt(i)))); }catch(e){}
 }
 export {
   BASE_STORE,
   BASE_N,
   snapshotBaseIntents,
+  resetIntentIds,
   intentOrder,
   intentOrderLoaded,
   setIntentOrder,

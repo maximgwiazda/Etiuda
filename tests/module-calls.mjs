@@ -289,6 +289,27 @@ const eq = (got, want) => got === want ? true
     () => { S.nsSet("GateN", "v"); return eq(S.nsGet("GateN"), "v"); });
   check("storage.js", "a namespaced key still wears the shape every sweep matches",
     () => eq(S.E_KEY_RE.test(S.nsKey("Pack")), true));
+  /* THE ORBIT. The empty desk's layer is the build's namespace; a catalog's is a hash of its own id,
+     the name standing in only where a stored copy carries none. */
+  check("storage.js", "the empty desk's layer is the build's own namespace, a catalog's is its id's",
+    () => eq([S.layerNsOf(null) === S.E_NS, S.layerNsOf({ id: "lamp-shop", name: "Lamp" }) === S.eNsFor("lamp-shop"),
+      S.layerNsOf({ name: "Lamp" }) === S.eNsFor("Lamp"), S.layerNsOf({ id: "a1" }) !== S.layerNsOf({ id: "a2" })].join(","),
+      "true,true,true,true"));
+  check("storage.js", "a desk from before the orbit has its one layer moved to the catalog loaded, once, and nothing after",
+    () => {
+      ["Pack", "CatOrder"].forEach(n => S.lsSet(S.E_NS + n, "old " + n));
+      S.setLayer(S.eNsFor("orbit-probe"));
+      const moved = S.orbitOldLayer();
+      const there = [S.lyGet("Pack"), S.lyGet("CatOrder"), S.lsGet(S.E_NS + "Pack")];
+      /* Once only, by its marker: the catalog's layer emptied (as a Clear would) and loose work made
+         since, and a second start moves nothing. */
+      S.lyDel("Pack"); S.lsSet(S.E_NS + "Pack", "made later");
+      const again = S.orbitOldLayer();
+      const listed = S.eLayers().indexOf(S.eNsFor("orbit-probe")) > -1;
+      const out = [moved, there.join("|"), again, S.lsGet(S.E_NS + "Pack"), listed];
+      S.lsDel(S.E_NS + "Pack"); S.lyDel("Pack"); S.lyDel("CatOrder"); S.setLayer(S.E_NS);
+      return eq(JSON.stringify(out), JSON.stringify([2, "old Pack|old CatOrder|", 0, "made later", true]));
+    });
   S.lsDel("eGateA"); S.ssDel("eGateS"); S.nsDel("eGateN");
 }
 
@@ -1086,11 +1107,12 @@ const CARD_B = {
 }
 
 /* ------------------------------------------------------------------ local-memory.js
-   The eject flag is a session value read once and cleared, so the notice cannot appear twice. */
+   The two acts are the module's whole surface: nothing parks across a reload any more, so nothing
+   else is exported. What they do is driven in tests/test.js and, in a browser, tests/swap.mjs. */
 {
   const L = await import(MOD("local-memory.js"));
-  check("local-memory.js", "nothing was ejected, so nothing is claimed",
-    () => eq(L.ejectedJustNow(), false));
+  check("local-memory.js", "the module exports the eject and the clear, and nothing else",
+    () => eq(Object.keys(L).sort().join(","), "clearLocalMemory,ejectCatalog"));
 }
 
 /* ==================================================================================

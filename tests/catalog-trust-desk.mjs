@@ -19,8 +19,9 @@
  * once-a-load recheck) lives exactly one page long, and the stored state that outlives a page is
  * the desk file on disk. So each launch is this file run again as a child with `--launch`, and a
  * reload is a new child that keeps the session store, as a reload keeps sessionStorage. A relaunch
- * starts the session empty. Accepting a catalog reloads; what the next page reads is only what
- * reached desk.json.
+ * starts the session empty. Accepting a catalog starts the desk again in place (hooks.restartDesk),
+ * and a launch ends there as it ended at the reload that did this before: what the next page reads
+ * is only what reached desk.json.
  *
  * THE MAIN PROCESS SEES A SHELL FOLDER OF ITS OWN inside the temp folder, so the places it reads
  * a catalog from are the temp folder's and never the tree's root, where a desk may keep a real one.
@@ -270,15 +271,16 @@ async function launch(plan) {
   });
   globalThis.window = globalThis;
   Object.defineProperty(globalThis, "navigator", { configurable: true, value: { language: "en-US", languages: ["en-US"], platform: "Win32", userAgent: "node" } });
-  /* THE RELOAD, as a page leaving: its unload events fire, which is where a pending desk write is
-     sent whole, and the launch ends at the next act. */
+  /* THE DESK STARTED AGAIN, or a reload: the launch ends at the next act, its unload events fired,
+     which is where a pending desk write is sent whole, as the page leaving at the end of a session. */
+  const restarted = () => {
+    if (obs.reloaded) return;
+    obs.reloaded = true;
+    ["beforeunload", "pagehide", "unload"].forEach(t => (winListeners[t] || []).slice().forEach(fn => { try { fn({ type: t }); } catch (e) { obs.errors.push(t + " " + e.message); } }));
+  };
   Object.defineProperty(globalThis, "location", { configurable: true, value: {
     href: FRAME.url, protocol: "file:", search: "", hash: "", pathname: "/C:/lab/engine/etiuda.html",
-    reload: () => {
-      if (obs.reloaded) return;
-      obs.reloaded = true;
-      ["beforeunload", "pagehide", "unload"].forEach(t => (winListeners[t] || []).slice().forEach(fn => { try { fn({ type: t }); } catch (e) { obs.errors.push(t + " " + e.message); } }));
-    } } });
+    reload: restarted } });
   const contextBridge = { exposeInMainWorld: (k, v) => { globalThis[k] = v; }, executeInMainWorld: o => o.func(...(o.args || [])) };
   new Function("require", shellSrc("preload.js"))(n => (n === "electron" ? { contextBridge, ipcRenderer, webUtils: {} } : nodeRequire(n)));
 
@@ -289,7 +291,8 @@ async function launch(plan) {
      the sample's watermark and the unsaved notice repaint the rest of the page. Named one by one,
      so a slot this path starts calling is a TypeError in 0b rather than a silent stub. */
   const HOOKS = (await import(MOD("hooks.js"))).hooks;
-  ["syncSampleMark", "syncSaveNotice"].forEach(k => { HOOKS[k] = noop; });
+  ["syncSampleMark", "syncSaveNotice", "flushPillState"].forEach(k => { HOOKS[k] = noop; });
+  HOOKS.restartDesk = restarted;
   obs.heldAtStart = TR.heldCatalogTrust();
   obs.tourDue = TOUR.tourDueAtBoot();
 
@@ -425,7 +428,7 @@ async function parent() {
     const b1b = run(lab1, ["library"], true);
     const r1 = row(b1b, "lamp.ec");
     check(b1.reloaded && !!r1 && r1.loaded && r1.trust && r1.trust.state === V2.V2_SIG_INVALID && CHANGED.test(r1.trust.text),
-      "1b accepted, the page reloads and the Library's loaded row says it was changed: " + said(r1));
+      "1b accepted, the desk starts again with it and the Library's loaded row says it was changed: " + said(r1));
 
     /* 2: A SIGNED CATALOG HELD, then an unsigned edition handed by the watch, then an older edition
        loaded from the Library's list with Yes pressed before its check has answered. */
@@ -435,7 +438,7 @@ async function parent() {
     const c2b = run(lab2, ["boot", "watch:lamp-3.ec", "settle", "offer", "escape", "library", "load:lamp-1.ec", "yesAtOnce", "settle"], true);
     const o2 = c2.offers[0] || {};
     check(o2.shown && o2.trust.length === 0 && c2.reloaded && c2b.heldAtStart === V2.V2_SIG_VALID,
-      "2a a valid signature is said nowhere in the offer and is what the desk holds after the reload: "
+      "2a a valid signature is said nowhere in the offer and is what the desk holds once it has started again: "
       + JSON.stringify(o2.trust || null) + ", held " + JSON.stringify(c2b.heldAtStart));
     const o2b = c2b.offers[0] || {};
     check(o2b.shown && o2b.trust.length === 1 && /is signed, and this edition is not/.test(o2b.trust[0]),

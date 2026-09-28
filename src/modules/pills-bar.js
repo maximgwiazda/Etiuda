@@ -8,7 +8,7 @@ import { t, toast } from "./ui-lang.js";
 import { drawPills, scheduleTabSave } from "./tabs.js";
 import { animateReorder, pillKey, captureSettle, glideSettle } from "./paint.js";
 import { CATS } from "./content-model.js";
-import { nsDel } from "./storage.js";
+import { lyDel } from "./storage.js";
 import { rebuildCards } from "./rebuild.js";
 import { mgReduceMotion } from "./motion.js";
 import { schedulePillsCollapse, syncPillsCollapseNow } from "./pills-box.js";
@@ -123,7 +123,7 @@ function drawPillsCore(){
   pills.firstChild.title=t("Show all categories; double-click to reset their order");
   pills.firstChild.ondblclick=()=>animateReorder(()=>{
     setCatOrder(Object.keys(CATS));
-    nsDel("CatOrder");
+    lyDel("CatOrder");
   });
   displayCatOrder(hc).forEach(k=>{
     if(!CATS[k]) return;

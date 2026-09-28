@@ -311,12 +311,12 @@ const t0 = Date.now();
     + twice.took + ", key set unchanged " + twice.same + ")");
 
   /* The Clear the user asked for, driven as they drive it: it deletes this namespace's keys,
-     leaves the name hash's alone, and reloads. The layer must not walk back in. */
-  await q.evaluate(() => { clearLocalMemory(); const y = document.getElementById("eSureYes"); if (y) y.click(); }).catch(() => {});
+     leaves the name hash's alone, and starts the desk again in place. The layer must not walk back in. */
+  await q.evaluate(() => { clearLocalMemory(); }).catch(() => {});
   await sleep(3500);
   const after2 = await readStore(q);
   const walkedBack = CARRIED_NAMES.filter(n => after2.store[ID_NS + n] != null);
-  check(walkedBack.length === 0, "after a Clear and the reload it performs, none of the "
+  check(walkedBack.length === 0, "after a Clear and the start in place it performs, none of the "
     + CARRIED_NAMES.length + " keys came back" + (walkedBack.length ? " - back: " + walkedBack.join(", ") : ""));
   check(after2.store[NS_MARK + NAME_NS] === "1" && after2.store[NAME_NS + "Pack"] === NAME_LAYER[NAME_NS + "Pack"],
     "because the marker outlived the Clear, and so did the layer it points at");

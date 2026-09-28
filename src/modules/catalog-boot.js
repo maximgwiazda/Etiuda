@@ -1,21 +1,34 @@
-import { eApplyCatalog, eCatalog, eCatalogAccepted, storedCatalog } from "./catalog.js";
+import { eApplyCatalog, eResetCatalog, eCatalog, eCatalogAccepted, storedCatalog } from "./catalog.js";
 import { eEmbeddedCatalog } from "./env.js";
+import { layerNsOf, orbitOldLayer, setLayer } from "./storage.js";
 
-function applyBootCatalog(){
+/* The catalog this start applies, or null for the empty desk. */
+function bootCatalog(){
   /* One stored catalog is the source of truth, whether it came from Import or from accepting
      the sibling file. Falling back to the sibling covers the boot where it was just accepted
      but the copy could not be written (storage full), so the user still gets what they chose. */
   const stored=storedCatalog();
-  if(stored){ eApplyCatalog(stored); return; }
+  if(stored) return stored;
   /* An embedded catalog outranks the sibling and loads without being asked - it is part
      of this file, already consented to. It sits BELOW a stored catalog, which is what
      makes "import something else" work and lets Reset fall back to the built-in content. */
   const emb=eEmbeddedCatalog();
-  if(emb){ eApplyCatalog(emb); return; }
+  if(emb) return emb;
   const c=eCatalog();
-  if(c && eCatalogAccepted(c)) eApplyCatalog(c);
+  return (c && eCatalogAccepted(c)) ? c : null;
+}
+let E_APPLIED=null;
+/** Whether a catalog is loaded, which the empty desk's loose layer is the absence of. */
+function catalogLoaded(){ return !!E_APPLIED; }
+function applyBootCatalog(){
+  eResetCatalog();
+  E_APPLIED=bootCatalog();
+  if(E_APPLIED) eApplyCatalog(E_APPLIED);
+  setLayer(layerNsOf(E_APPLIED));
+  orbitOldLayer();
 }
 
 export {
-  applyBootCatalog
+  applyBootCatalog,
+  catalogLoaded
 };

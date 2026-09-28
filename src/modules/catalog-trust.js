@@ -48,6 +48,7 @@ function heldCatalogTrust(){ return nsGet(TRUST_KEY)||""; }
 /* THE RING MAY ARRIVE AFTER THE CATALOG. Where the file this load was handed is the catalog in
    use, it is read again once a load, and a changed answer replaces the held one. */
 let trustRechecked=false;
+function rearmTrustRecheck(){ trustRechecked=false; }
 function recheckHeldTrust(found,held,then){
   if(trustRechecked || !found || !held) return;
   trustRechecked=true;
@@ -82,6 +83,7 @@ export {
   recordCatalogTrust,
   heldCatalogTrust,
   recheckHeldTrust,
+  rearmTrustRecheck,
   trustMetaHtml,
   trustOfferLine
 };
