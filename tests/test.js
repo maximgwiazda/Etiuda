@@ -561,6 +561,7 @@ function runUnitTests() {
   catalogLangTests();
   catalogIdentityTests();
   nameNsAdoptionTests();
+  langSegWiringTests();
   deskStatsTests();
   ejectUndoTests();
   tourActTests();
@@ -1540,6 +1541,35 @@ function nameNsAdoptionTests() {
   adopt({ name: "Lamp Shop" }, noName);
   eq("a build whose catalog carries no id is already in the name namespace and adopts nothing",
      Object.keys(noName).sort().join("|"), noNameSnap);
+}
+
+/* EVERY LANGUAGE BUTTON THE HEADER HOLDS ANSWERS A PRESS, however it got there. The desk starts
+   again in place (restart.js), which rebuilds the buttons for the new catalog's languages and does
+   not run the boot's wiring again. The sync and the boot's wiring sliced out of lang-seg.js over a
+   toy control; a press is the element's own handler called on it, as a click calls it. */
+function langSegWiringTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "lang-seg.js"), "utf8");
+  const names = ["function syncLangSeg(", "function wireLangSeg("].concat(src.indexOf("function segPress(") > -1 ? ["function segPress("] : []);
+  const button = l => ({ dataset: { l: l }, removeAttribute() {}, onclick: null, disabled: false });
+  const desk = (bootLangs, laterLangs) => {
+    const LANGS = bootLangs.slice(), picked = [];
+    let kids = [button("en"), button("pl")];
+    const seg = { setAttribute() {}, querySelectorAll: () => kids.slice(), replaceChildren: (...k) => { kids = k; } };
+    const doc = { createElement: () => button("") };
+    const F = new Function("seg", "CONTENT_LANGS", "lang", "applyLangState", "setLang", "segFolded", "document",
+      names.map(m => extractDecl(src, m)).join("\n") + "\nreturn {syncLangSeg, wireLangSeg};")(
+      seg, LANGS, "en", () => {}, l => picked.push(l), () => false, doc);
+    F.syncLangSeg(); F.wireLangSeg();
+    LANGS.length = 0; laterLangs.forEach(l => LANGS.push(l));
+    F.syncLangSeg();
+    kids.forEach(b => { if (typeof b.onclick === "function") b.onclick.call(b, { currentTarget: b }); });
+    return picked;
+  };
+  const run = (a, b) => { try { return desk(a, b); } catch (e) { return "lang-seg did not run: " + e.message; } };
+  eq("a language a start in place brings to the header answers a press, as the ones boot saw do",
+     run(["en", "pl"], ["en", "de"]), ["en", "de"]);
+  eq("and a desk that booted speaking one language answers both presses once a second language arrives",
+     run(["en"], ["en", "pl"]), ["en", "pl"]);
 }
 
 /* The Electron shell reads the catalog file itself and hands the payload to the page, so it is

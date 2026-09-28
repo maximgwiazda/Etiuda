@@ -22597,16 +22597,19 @@ What you type stays in this browser only.`;
       else delete b.dataset.alt;
       b.disabled = declared < 2;
       if (declared < 2) b.removeAttribute("title");
+      b.onclick = segPress;
       return b;
     }));
     applyLangState(lang);
   }
+  function segPress() {
+    const b = this;
+    const other = [...seg.querySelectorAll("button")].find((x) => x !== b);
+    setLang(segFolded() && other ? other.dataset.l : b.dataset.l);
+  }
   function wireLangSeg() {
     if (CONTENT_LANGS.length < 2) return;
-    seg.querySelectorAll("button").forEach((b) => b.onclick = () => {
-      const other = [...seg.querySelectorAll("button")].find((x) => x !== b);
-      setLang(segFolded() && other ? other.dataset.l : b.dataset.l);
-    });
+    seg.querySelectorAll("button").forEach((b) => b.onclick = segPress);
   }
 
   // src/modules/browser-suggest.js
