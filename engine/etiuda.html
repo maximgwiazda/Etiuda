@@ -2745,6 +2745,13 @@ details.manage-sec>summary h3{margin:0}
 .mg-intents .manage-row:hover{background:var(--accent-soft)}
 .mg-intents .manage-row.dragging{background:var(--accent-soft);
   box-shadow:0 0 0 1px var(--accent) inset;border-radius:7px}
+/* AN INTENT ROW IS ONE LINE, as in the rail: the name fades rather than wrapping. Each span is
+   scoped to the row, because `.manage-row span` gives every span a basis of 120px and leave to grow. */
+.mg-intents .manage-row.mg-int{flex-wrap:nowrap;gap:6px}
+.manage-row.mg-int .cat-slot{flex:0 0 16px}
+.manage-row .mg-int-t{flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden}
+.manage-row .mg-int-n{flex:0 0 auto;font:600 11px var(--mono);opacity:.65}
+.manage-row.mg-int.is-hidden .mg-int-t,.manage-row.mg-int.is-hidden .mg-int-n{color:var(--dim);opacity:.72}
 .mg-cat{border-radius:var(--radius-sm)}
 /* cursor:default explicitly - over a text node auto resolves to the I-beam, and the NAME
    kept promising a caret after inline renaming left this row. The row is a drag handle end
@@ -5295,7 +5302,7 @@ What you type stays in this browser only.`;
   }
 
   // src/modules/cut-text.js
-  var CUT_SEL = ".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-count,.acc-note,.mf-sum,#toast,#intentPh,#roleDrum span,.tab-label>span,.fills input,.cat-now .cn-name,.mf input:not([type]),.mf input[type=text],.rail-t,footer .nw";
+  var CUT_SEL = ".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-int-t,.mg-count,.acc-note,.mf-sum,#toast,#intentPh,#roleDrum span,.tab-label>span,.fills input,.cat-now .cn-name,.mf input:not([type]),.mf input[type=text],.rail-t,footer .nw";
   var CUT_MARGIN = 400;
   var CUT_EPS = 0.01;
   var CUT_SLACK = 1.5;
@@ -8296,6 +8303,7 @@ What you type stays in this browser only.`;
     cardHitsSelectedIntent: () => cardHitsSelectedIntent,
     cardIntentLinks: () => cardIntentLinks,
     cardLinksIntent: () => cardLinksIntent,
+    intentCardCounts: () => intentCardCounts,
     intentTagCats: () => intentTagCats,
     normalizeCardIntents: () => normalizeCardIntents,
     primaryCatKey: () => primaryCatKey,
@@ -8472,6 +8480,13 @@ What you type stays in this browser only.`;
       out.set(id, best);
     });
     return out;
+  }
+  function intentCardCounts() {
+    const n = /* @__PURE__ */ new Map();
+    (cards || []).forEach((m) => {
+      if (m) new Set(normalizeCardIntents(m)).forEach((id) => n.set(id, (n.get(id) || 0) + 1));
+    });
+    return n;
   }
   function primaryCatKey(i) {
     const want = intentIdAt(i), n = {};
@@ -21185,6 +21200,16 @@ What you type stays in this browser only.`;
   function mgShowHiddenBtn(kind, n) {
     return '<button type="button" class="btn" data-show-hidden="' + esc(kind) + '"' + (n ? "" : " disabled") + ' title="' + esc(tipShowHidden(kind, n)) + '">' + esc(t("Show all hidden")) + " (" + n + ")</button>";
   }
+  function mgIntentRow(i, catOf, linked) {
+    const iid = intentIdAt(i);
+    const hid = isIntentHiddenIdx(i);
+    const fav = isIntentFavourite(iid);
+    const badge = intentIsCustom(i) || intentIsOverridden(i) ? ' <span class="cbadge ed" title="' + esc(t("Changed or added by you, not what the catalog shipped")) + '">' + esc(t("mod")) + "</span>" : "";
+    const favTip = fav ? "Remove from Favourites" : "Add to Favourites";
+    const hideShow = hid ? '<button type="button" data-show-intent="' + esc(iid) + '" title="Show this intent again" aria-label="Show this intent again">' + ICON_EYE_SHUT + "</button>" : '<button type="button" data-hide-intent="' + esc(iid) + '" title="Hide this intent: it greys out and drops to the bottom" aria-label="Hide this intent">' + ICON_EYE_OPEN + "</button>";
+    const trash = '<button type="button" class="danger mg-trash" data-remove-intent="' + esc(iid) + '" title="Delete this intent" aria-label="Delete this intent">' + ICON_TRASH + "</button>";
+    return '<div class="manage-row mg-int' + (hid ? " is-hidden" : "") + '" data-introw="' + esc(iid) + '" data-band="' + (hid ? "h" : fav ? "f" : "r") + '">' + catMarkHtml(catOf.get(iid) || "") + '<span class="mg-int-t cut-peek" data-i18n-skip>' + esc(intentNavName(i) || "") + badge + '</span><span class="mg-int-n">' + (linked.get(iid) || 0) + '</span><span class="cacts"><button type="button" data-edit-intent-mg="' + i + '" title="Edit intent" aria-label="Edit intent">' + ICON_EDIT + "</button>" + hideShow + trash + '<button type="button" class="star-btn' + (fav ? " on" : "") + '" data-fav-intent-mg="' + esc(iid) + '" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
+  }
   function openManage() {
     applyCatsToGlobal();
     const mgGoneIntents = new Set(pack.intentRemoved || []);
@@ -21195,17 +21220,8 @@ What you type stays in this browser only.`;
       if (fa !== fb) return fa - fb;
       return a.n - b.n;
     }).map((x) => x.i);
-    const intentListRows = mgIntentIdxs.map((i) => {
-      const iid = intentIdAt(i);
-      const hid = isIntentHiddenIdx(i);
-      const fav = isIntentFavourite(iid);
-      const badge = intentIsCustom(i) || intentIsOverridden(i) ? ' <span class="cbadge ed" title="' + esc(t("Changed or added by you, not what the catalog shipped")) + '">' + esc(t("mod")) + "</span>" : "";
-      const catLab = primaryCatLabel(i) || "";
-      const favTip = fav ? "Remove from Favourites" : "Add to Favourites";
-      const hideShow = hid ? '<button type="button" data-show-intent="' + esc(iid) + '" title="Show this intent again" aria-label="Show this intent again">' + ICON_EYE_SHUT + "</button>" : '<button type="button" data-hide-intent="' + esc(iid) + '" title="Hide this intent: it greys out and drops to the bottom" aria-label="Hide this intent">' + ICON_EYE_OPEN + "</button>";
-      const trash = '<button type="button" class="danger mg-trash" data-remove-intent="' + esc(iid) + '" title="Delete this intent" aria-label="Delete this intent">' + ICON_TRASH + "</button>";
-      return '<div class="manage-row' + (hid ? " is-hidden" : "") + '" data-introw="' + esc(iid) + '" data-band="' + (hid ? "h" : fav ? "f" : "r") + '"><span>' + esc(intentNavName(i) || "") + badge + (catLab ? ' <span style="color:var(--dim);font:11px var(--mono)">' + esc(catLab) + "</span>" : "") + '</span><span class="cacts"><button type="button" data-edit-intent-mg="' + i + '" title="Edit intent" aria-label="Edit intent">' + ICON_EDIT + "</button>" + hideShow + trash + '<button type="button" class="star-btn' + (fav ? " on" : "") + '" data-fav-intent-mg="' + esc(iid) + '" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
-    }).join("") || '<div class="manage-empty">' + esc(t("No intents.")) + "</div>";
+    const catOf = primaryCatKeys(), linked = intentCardCounts();
+    const intentListRows = mgIntentIdxs.map((i) => mgIntentRow(i, catOf, linked)).join("") || '<div class="manage-empty">' + esc(t("No intents.")) + "</div>";
     const catCount = Object.keys(CATS).length;
     const hiddenCardCount = (cards || []).filter((m) => m && m._hidden).length;
     const hiddenIntentCount = mgIntentIdxs.filter((i) => isIntentHiddenIdx(i)).length;

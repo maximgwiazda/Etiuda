@@ -2745,6 +2745,13 @@ details.manage-sec>summary h3{margin:0}
 .mg-intents .manage-row:hover{background:var(--accent-soft)}
 .mg-intents .manage-row.dragging{background:var(--accent-soft);
   box-shadow:0 0 0 1px var(--accent) inset;border-radius:7px}
+/* AN INTENT ROW IS ONE LINE, as in the rail: the name fades rather than wrapping. Each span is
+   scoped to the row, because `.manage-row span` gives every span a basis of 120px and leave to grow. */
+.mg-intents .manage-row.mg-int{flex-wrap:nowrap;gap:6px}
+.manage-row.mg-int .cat-slot{flex:0 0 16px}
+.manage-row .mg-int-t{flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden}
+.manage-row .mg-int-n{flex:0 0 auto;font:600 11px var(--mono);opacity:.65}
+.manage-row.mg-int.is-hidden .mg-int-t,.manage-row.mg-int.is-hidden .mg-int-n{color:var(--dim);opacity:.72}
 .mg-cat{border-radius:var(--radius-sm)}
 /* cursor:default explicitly - over a text node auto resolves to the I-beam, and the NAME
    kept promising a caret after inline renaming left this row. The row is a drag handle end

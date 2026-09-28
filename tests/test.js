@@ -556,6 +556,7 @@ function runUnitTests() {
   lintCatalogTests();
   langAgnosticTests();
   libraryAwaitingTests();
+  libraryRowsTests();
   copyControlTests();
   copyNoticeTests();
   catalogLangTests();
@@ -4325,6 +4326,30 @@ function langAgnosticTests() {
    on: counting only the cards on screen (the put-away card below carries whitespace and is the
    third of three), and taking the declared languages as the built-in pair (the second leg
    declares one). */
+/* THE LIBRARY'S OWN ROWS AND PANELS, sliced out of their modules and run on stubs: what each row is
+   made of, in which order. How it looks is the smoke's and Maxim's. */
+function libraryRowsTests() {
+  const manageSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "manage.js"), "utf8");
+  const introw = (cat, n, hidden) => {
+    try {
+      return new Function("intentIdAt", "isIntentHiddenIdx", "isIntentFavourite", "esc", "t", "intentIsCustom",
+        "intentIsOverridden", "ICON_EYE_SHUT", "ICON_EYE_OPEN", "ICON_TRASH", "catMarkHtml", "intentNavName", "ICON_EDIT",
+        "ICON_STAR_ON", "ICON_STAR_OFF",
+        extractDecl(manageSrc, "function mgIntentRow(") + "\nreturn mgIntentRow;")(
+        () => "t:one", () => !!hidden, () => false, s => s, s => s, () => false, () => false, "", "", "",
+        k => "<mark " + k + ">", () => "Refund", "", "", "")(0, new Map(cat ? [["t:one", cat]] : []), new Map(n ? [["t:one", n]] : []));
+    } catch (e) { return "mgIntentRow did not run: " + e.message; }
+  };
+  const shape = h => {
+    const m = /^<div class="manage-row mg-int( is-hidden)?"[^>]*>(<mark [^>]*>)<span class="mg-int-t cut-peek" data-i18n-skip>([^<]*)<\/span><span class="mg-int-n">(\d+)<\/span><span class="cacts">/.exec(String(h));
+    return m ? [m[2], m[3], m[4], !!m[1]].join(" ") : String(h).slice(0, 200);
+  };
+  eq("a Library intent row is the rail's: one dominant category's mark at its head, the name that fades, and the count of cards linked to it",
+    [shape(introw("billing", 7)), shape(introw("", 0)), shape(introw("billing", 3, true))],
+    ["<mark billing> Refund 7 false", "<mark > Refund 0 false", "<mark billing> Refund 3 true"]);
+  const cut = fs.readFileSync(path.join(E.ROOT, "src", "modules", "cut-text.js"), "utf8");
+  eq("the Library intent's name is one of the lines the cut pass fades", /\.mg-int-t,/.test(extractDecl(cut, "const CUT_SEL=")), true);
+}
 function libraryAwaitingTests() {
   const src = sourceText();
   const live = new Function("CONTENT_LANGS", "cardFieldKey", "cards",

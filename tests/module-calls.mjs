@@ -897,6 +897,16 @@ const CARD_B = {
     () => eq(C.cardLinksIntent({ _hidden: 1, allIntents: 1 }, "t:anything"), false));
   check("card-intent.js", "with no intent chosen a favourite outranks a plain card",
     () => eq(C.relevanceRank(CARD_A) >= 0, true));
+  const AS = await import(MOD("app-state.js"));
+  check("card-intent.js", "the Library's count of cards linked to an intent counts each card naming it once, whatever its category",
+    () => {
+      const had = AS.cards;
+      AS.setCards([{ id: "a", c: "x", intents: ["t:one", "t:one", "t:two"] }, { id: "b", intents: ["t:one"] },
+        { id: "c", allIntents: 1, intents: [] }]);
+      let n;
+      try { n = C.intentCardCounts(); } finally { AS.setCards(had); }
+      return eq([n.get("t:one"), n.get("t:two"), n.size].join("|"), "2|1|2");
+    });
 }
 
 /* ------------------------------------------------------------------ cat-relevance.js */
