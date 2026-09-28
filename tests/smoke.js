@@ -2218,8 +2218,12 @@ const t0 = Date.now();
     const retyped = !!again && again.value === typed;
     closeModal(); await wait(400);
     const had = { agent: lsGet("eAgent"), cards: list().length };
+    /* A window or question standing, by what can put one up: a window not hidden, a bubble that
+       asks, an alert; the Undo bubble is the act's receipt and a leaving copy is on its way out. */
+    const standing = () => [...document.querySelectorAll(".modal:not([hidden]), .bub-ask, [role=alertdialog]")].filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
+    const was = standing();
     clearLocalMemory(); await wait(700);
-    const cleared = { window: !!document.querySelector(".modal:not([hidden]) .modal-card[role=alertdialog]"),
+    const cleared = { window: standing() !== was, standing: standing(),
       undo: !!document.getElementById("eUndoBtn"), agent: lsGet("eAgent"), cards: list().length };
     const u3 = document.getElementById("eUndoBtn"); if (u3) u3.click(); await wait(900);
     const after = { agent: lsGet("eAgent") === had.agent, cards: list().length === had.cards };
@@ -3061,7 +3065,9 @@ const t0 = Date.now();
        2026-09-28 23:41): no confirm, no reload, the empty desk under the Undo bubble. The bubble is
        then put away by its own Escape, not answered, so the Load below is the only way back. */
     const ejNav = q2.waitForNavigation({ waitUntil: "load", timeout: 4000 }).then(() => true, () => false);
-    const ejAsked = await q2.evaluate(() => { ejectCatalog(); return !!document.querySelector(".modal:not([hidden]) .modal-card[role=alertdialog]"); }).catch(() => true);
+    // What stands is read as the Clear local memory leg reads it.
+    const ejAsked = await q2.evaluate(() => { const standing = () => [...document.querySelectorAll(".modal:not([hidden]), .bub-ask, [role=alertdialog]")].filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
+      const was = standing(); ejectCatalog(); return standing() !== was; }).catch(() => true);
     const ejReload = await ejNav;
     const [ejEmpty, ejUndo] = await Promise.all([upFor(q2, () => !!document.getElementById("emptyLoad")),
       upFor(q2, () => !!document.getElementById("eUndoBtn"), 8000)]);

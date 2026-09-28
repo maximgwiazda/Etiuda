@@ -14,7 +14,8 @@
  * THE FINGERPRINT has three parts, each compared whole:
  *   storage  every localStorage key and value, and every sessionStorage key and value
  *   state    every value the page exports on window (the bundle spreads every module export there),
- *            serialised to depth 6; a DOM node is written as its tag and id
+ *            serialised to depth 6; a DOM node is written as its tag and id; and the copy count,
+ *            which only a getter exports
  *   dom      document.body's markup, scripts and the passing surfaces removed (the toast, the Undo
  *            bubble, a leaving copy), style attributes kept
  * Tab ids are minted from the clock, so each part has them replaced by their place in the tab
@@ -65,6 +66,23 @@ B.cards = B.cards.slice(0, 40);
   B.tags = B.tags.filter(t => t.kind !== "shelf" || used.has(t.id));
 }
 const ALPHA_NS_SEED = A.id;
+/* C speaks English and German, a language no build carries a word of, so its second button on the
+   header is one no boot of this page made. It is loaded through the offer, over A. */
+const renamed = (o, from, to) => {
+  if (!o || typeof o !== "object") return;
+  if (from in o) { o[to] = o[from]; delete o[from]; }
+  Object.keys(o).forEach(k => renamed(o[k], from, to));
+};
+const C = marked(Object.assign(clone(sample), { id: "swap-gamma", name: "Gamma" }), "Qgamma", true);
+delete C.sample; delete C.facts; delete C.greet; delete C.role; delete C.commentLang;
+C.langs = [{ code: "en", label: "EN" }, { code: "de", label: "DE" }];
+renamed(C.tags, "pl", "de"); renamed(C.cards, "pl", "de");
+C.cards.forEach(c => { if (c.lockLang === "pl") c.lockLang = "de"; });
+C.cards = C.cards.slice(0, 40);
+{
+  const used = new Set(C.cards.map(c => c.shelf));
+  C.tags = C.tags.filter(t => t.kind !== "shelf" || used.has(t.id));
+}
 
 /* ---- the page ---------------------------------------------------------------------------- */
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-swap-"));
@@ -79,6 +97,12 @@ const VOLATILE = {
   E_SELF: "the document as this page parsed it, the head script's classes of that load included",
   tabSaveTimer: "a timer's handle, a number the browser picks",
 };
+
+/* EVERY WINDOW OR QUESTION STANDING OVER THE DESK, read by what can put one up rather than by the
+   name of one that once did: a window not hidden, a bubble that asks, an alert. The Undo bubble is
+   the act's own receipt, and a copy on its way out is leaving. */
+const STANDING = () => [...document.querySelectorAll(".modal:not([hidden]), .bub-ask, [role=alertdialog]")]
+  .filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
 
 async function fingerprint(q) {
   return q.evaluate(vol => {
@@ -114,6 +138,8 @@ async function fingerprint(q) {
       if (typeof v === "function") return;
       state[n] = mask(ser(v, 0));
     });
+    // A module's own count that nothing exports as a value, read through the getter it does export.
+    if (typeof copiesMade === "function") state["copiesMade()"] = String(copiesMade());
     /* The markup written canonically: attributes in name order and an empty style or class
        attribute as none, since neither the order a script sets them in nor an emptied attribute is
        a difference anybody sees. */
@@ -220,8 +246,13 @@ try {
       toggleFavourite(ids[3]);
     });
     await fresh(q, false);
+    // A copy made and a card marked recent: what this page alone holds, which no storage carries.
+    await q.evaluate(() => { eNoteRecent(cards[5].id); copy("swap copy", "Copied"); });
+    await sleep(400);
     const stayed = await inPlace(q, load, JSON.stringify(B));
     const got = await fingerprint(q);
+    const inB = await q.evaluate(() => ({ id: (storedCatalog() || {}).id || null, cards: cards.length,
+      words: /Qbeta/.test(document.getElementById("list").innerHTML) }));
     const leak = await q.evaluate(seed => {
       const alphaNs = eNsFor(seed);
       const bad = [];
@@ -241,6 +272,8 @@ try {
       + (d.length ? ": " + d.length + " difference(s): " + d.slice(0, 8).join(" ; ") : ""));
     check(leak.length === 0 && stateLeak.length === 0, "1c nothing of A is left in view after the swap, and A's words stay only in A's own layer"
       + (leak.length || stateLeak.length ? ": " + leak.concat(stateLeak.map(k => "state " + k)).slice(0, 8).join(", ") : ""));
+    check(inB.id === "swap-beta" && inB.cards === B.cards.length && inB.words,
+      "1d B is the catalog stored and its words are in view (" + JSON.stringify(inB) + ")");
     await q.close();
   } catch (x) { check(false, "the scenario stopped: " + String(x && x.message || x).split(String.fromCharCode(10))[0]); }
 
@@ -297,10 +330,13 @@ try {
     const dUndo = diff(notLoose(afterUndo), notLoose(withLayer));
     check(undone && dUndo.length === 0, "3a Eject and its Undo, in place, leave the desk a fresh start with A and its layer"
       + (dUndo.length ? ": " + dUndo.slice(0, 8).join(" ; ") : ""));
+    const standingBefore = await q.evaluate(STANDING);
     const cleared = await inPlace(q, () => clearLocalMemory());
     const clearedShows = await q.evaluate(() => ({ cards: cards.length, own: cards.some(c => c.id === "u:swapown"),
-      agent: localStorage.getItem("eAgent"), undo: !!document.getElementById("eUndoBtn"), sure: !!document.querySelector(".modal:not([hidden]) #eSureYes") }));
-    check(cleared && clearedShows.cards > 0 && !clearedShows.own && clearedShows.agent === null && clearedShows.undo && !clearedShows.sure,
+      agent: localStorage.getItem("eAgent"), undo: !!document.getElementById("eUndoBtn") }));
+    clearedShows.standing = await q.evaluate(STANDING);
+    check(cleared && clearedShows.cards > 0 && !clearedShows.own && clearedShows.agent === null && clearedShows.undo
+          && clearedShows.standing === standingBefore,
       "3b clearing local memory happens at once, asks nothing, keeps the catalog and offers Undo (" + JSON.stringify(clearedShows) + ")");
     const unCleared = await inPlace(q, () => { const b = document.getElementById("eUndoBtn"); if (b) b.click(); });
     const afterClearUndo = await fingerprint(q);
@@ -367,15 +403,54 @@ try {
     await sleep(400);
     const had = await q.evaluate(() => document.documentElement.dataset.theme || "");
     await q.evaluate(() => openSettings()); await sleep(600);
+    // Settings itself stands before the press, which is what shows the reading can see a window.
+    const settingsUp = await q.evaluate(STANDING);
     await q.evaluate(() => document.getElementById("setReset").click()); await sleep(600);
     const reset = await q.evaluate(() => ({ theme: lsGet("eTheme"), hover: document.body.classList.contains("note-hover"),
-      undo: !!document.getElementById("eUndoBtn"), asked: !!document.querySelector(".modal-card[role=alertdialog]") }));
+      undo: !!document.getElementById("eUndoBtn") }));
+    reset.asked = !/modal/.test(settingsUp) || (await q.evaluate(STANDING)) !== settingsUp;
     await q.evaluate(() => { const b = document.getElementById("eUndoBtn"); if (b) b.click(); }); await sleep(600);
     const back = await q.evaluate(() => ({ theme: lsGet("eTheme"), hover: document.body.classList.contains("note-hover"),
       shown: document.documentElement.dataset.theme || "" }));
     check(reset.theme === null && reset.hover && reset.undo && !reset.asked && back.theme === "light" && !back.hover && back.shown === had,
       "5 resetting the settings happens at once with no window and offers Undo, which gives both preferences back on screen ("
-      + JSON.stringify({ had, reset, back }) + ")");
+      + JSON.stringify({ had, reset, back, settingsUp }) + ")");
+    await q.close();
+  } catch (x) { check(false, "the scenario stopped: " + String(x && x.message || x).split(String.fromCharCode(10))[0]); }
+
+  /* 6. THE OFFER'S YES, as a person loads a file: C read through the picker's reading half over A, and
+     the Yes pressed. The question is down once answered, the desk equals a fresh start with C, and
+     every language button on the header answers a press, the one C brought as well as boot's. */
+  try {
+    const q = await page();
+    await inPlace(q, load, JSON.stringify(A));
+    await fresh(q, false);
+    await q.evaluate(text => { importCatalogText(text, "gamma.ec"); }, JSON.stringify(C));
+    await sleep(600);
+    const offered = await q.evaluate(STANDING);
+    const answered = await inPlace(q, () => { const y = document.getElementById("ecYes"); if (y) y.click(); });
+    const standing = await q.evaluate(STANDING);
+    const loaded = await q.evaluate(() => (storedCatalog() || {}).id || null);
+    const got = await fingerprint(q);
+    const langs = await q.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const start = lang, folded = segFolded(), pressed = [];
+      for (const b of [...document.querySelectorAll("#seg button")]) { b.click(); await wait(700); pressed.push(b.dataset.l + ">" + lang); }
+      const home = document.querySelector('#seg button[data-l="' + start + '"]');
+      if (home) home.click();
+      await wait(700);
+      return { declared: CONTENT_LANGS.join(" "), folded, pressed, end: lang === start };
+    });
+    await fresh(q, false);
+    const ref = await fingerprint(q);
+    const d = diff(got, ref);
+    check(answered && /eCatalogOffer/.test(offered) && standing === "" && loaded === "swap-gamma",
+      "6a a catalog offered over another and answered Yes loads in place, and the question is down ("
+      + JSON.stringify({ offered, standing, loaded }) + ")");
+    check(d.length === 0, "6b the desk it leaves equals a fresh start with that catalog"
+      + (d.length ? ": " + d.length + " difference(s): " + d.slice(0, 8).join(" ; ") : ""));
+    check(langs.declared === "en de" && !langs.folded && langs.pressed.join(" ") === "en>en de>de" && langs.end,
+      "6c every language button on the header answers a press, the one the catalog brought included (" + JSON.stringify(langs) + ")");
     await q.close();
   } catch (x) { check(false, "the scenario stopped: " + String(x && x.message || x).split(String.fromCharCode(10))[0]); }
   check(errs.length === 0, "no page errors" + (errs.length ? ": " + errs.slice(0, 4).join(" | ") : ""));

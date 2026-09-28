@@ -1838,8 +1838,11 @@ const placeEc = (dir, from, as, minutesOld) => {
      would be arguing with somebody who has just answered. */
   /* Eject happens at once and in place with Undo (Maxim, 2026-09-27 23:28 and 2026-09-28 23:41),
      so no confirm may stand after the call. */
-  const ejAsk1 = await (await s.b.pages())[0].evaluate(() => { ejectCatalog(); return !!document.getElementById("eSure"); })
-    .catch(() => false);
+  /* A question standing is read by what can put one up (a window not hidden, a bubble that asks, an
+     alert), the Undo bubble and a leaving copy aside; a page that reloaded instead counts as asked. */
+  const ejAsk1 = await (await s.b.pages())[0].evaluate(() => { const standing = () => [...document.querySelectorAll(".modal:not([hidden]), .bub-ask, [role=alertdialog]")].filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
+    const was = standing(); ejectCatalog(); return standing() !== was; })
+    .catch(() => true);
   await sleep(7000);
   let ejPage = (await s.b.pages())[0];
   const afterEject = await ejPage.evaluate(SEEN);
@@ -1924,8 +1927,10 @@ const placeEc = (dir, from, as, minutesOld) => {
      the very catalog that is loaded is answered in words and loads nothing, so the desk is emptied
      and the same file comes in again through the import. The eject asks nothing (2026-09-27 23:28),
      and a confirm standing after the call fails 2q11's premise. */
+  // Read as ejAsk1 reads it.
   const ejAsk2 = await (await s.b.pages())[0].evaluate(() => { if (document.getElementById("mgCatList")) closeModal();
-    ejectCatalog(); return !!document.getElementById("eSure"); }).catch(() => false);
+    const standing = () => [...document.querySelectorAll(".modal:not([hidden]), .bub-ask, [role=alertdialog]")].filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
+    const was = standing(); ejectCatalog(); return standing() !== was; }).catch(() => true);
   await sleep(6000);
   const impRan = await (await s.b.pages())[0].evaluate(async () => {
     /* The offer over a loaded catalog is answered the way a person answers it. */ const acceptOffer = () => { const y = document.querySelector("#ecYes"); if (y) y.click(); return true; };
@@ -2145,11 +2150,14 @@ const placeEc = (dir, from, as, minutesOld) => {
   /* Eject from that row: the Library is still there over the desk started again in place, showing
      the folder rather than being replaced by a dialog about one file in it, and the section says in
      words that nothing is loaded. */
+  // Read as ejAsk1 reads it.
   const ejAsk3 = await (await s.b.pages())[0].evaluate(() => {
+    const standing = () => [...document.querySelectorAll(".modal:not([hidden]), .bub-ask, [role=alertdialog]")].filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
+    const was = standing();
     const b = document.querySelector("#mgCatList button[data-ec-eject]");
     if (b) b.click();
-    return { button: !!b, asked: !!document.getElementById("eSure") };
-  }).catch(() => ({ button: true, asked: false }));
+    return { button: !!b, asked: standing() !== was };
+  }).catch(() => ({ button: true, asked: true }));
   await sleep(8000);
   const afterEject2 = await (await s.b.pages())[0].evaluate(LIB_STATE);
   check(afterEject2.open && afterEject2.foldOpen && !afterEject2.over
