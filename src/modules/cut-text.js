@@ -47,12 +47,31 @@ function cutSides(el){
      alignment without asking: centred ink overruns both ends and right-aligned ink the start. */
   cutRange.selectNodeContents(el);
   const ink=cutRange.getBoundingClientRect();
+  const acts=el.classList.contains("ctitle")&&el.parentNode.querySelector(":scope>.cacts");
+  if(acts) return titleSides(el,acts,ink,cs);
   return {l:boxL-ink.left>CUT_EPS, r:ink.right-boxR>CUT_EPS};
+}
+/* A CARD'S TITLE IS ANSWERED FOR BOTH ITS STATES, whichever it is in while measured: at rest,
+   where its controls fold to no width, and receded while the pointer or the focus is on the
+   card (cut-rh). Both are read off the row, not the title's own box, which is the state it
+   happens to be in. FOLDS mirrors the sheet's rule for when the controls fold (template.html,
+   .chead .cacts under hover:hover); a change to one is a change to both. */
+function titleSides(el,acts,ink,cs){
+  const row=el.parentNode, rs=getComputedStyle(row), gap=parseFloat(rs.columnGap)||0;
+  let end=row.getBoundingClientRect().right-parseFloat(rs.borderRightWidth)-parseFloat(rs.paddingRight);
+  for(let n=el.nextElementSibling;n&&n!==acts;n=n.nextElementSibling) end-=n.getBoundingClientRect().width+gap;
+  const card=el.closest(".card");
+  const folds=matchMedia("(hover:hover)").matches&&!document.body.classList.contains("tour-cacts")
+    &&!(card&&card.classList.contains("is-hidden"));
+  const receded=end-acts.scrollWidth-gap;
+  const b=el.getBoundingClientRect(), boxL=b.left+parseFloat(cs.borderLeftWidth)+parseFloat(cs.paddingLeft);
+  return {l:boxL-ink.left>CUT_EPS, r:ink.right-(folds?end:receded)>CUT_EPS, rh:ink.right-receded>CUT_EPS};
 }
 function applyCut(el,c){
   el.classList.toggle("is-cut", c.l||c.r);
   el.classList.toggle("cut-l", c.l);
   el.classList.toggle("cut-r", c.r);
+  if("rh" in c) el.classList.toggle("cut-rh", c.rh);
   /* A line the reader cannot finish can be read on hover, and only then: a tooltip repeating a
      line that is whole on screen is noise. Empty rather than absent, or it would fly its
      ancestor's - see the note at the card's note. */

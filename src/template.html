@@ -1714,7 +1714,7 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 /* A CAPTION, NOT A HEAD. It names the slab beneath it and gets out of the way: no ground of its
    own and no rule under it. Its three controls appear on hover - see .chead .cacts - so the
    resting screen is words, and the category is a mark at the head rather than a word beside it. */
-.chead{display:flex;gap:7px;align-items:center;padding:0 3px 5px;flex-wrap:nowrap;
+.chead{--chead-gap:7px;display:flex;gap:var(--chead-gap);align-items:center;padding:0 3px 5px;flex-wrap:nowrap;
   background:var(--chead-bg,transparent);
   border-bottom:var(--chead-border,0 none transparent)}
 /* 600, not 650 - the quieter face that came out of an abandoned usage-titles experiment. The
@@ -2154,6 +2154,10 @@ html.raildrag #intentRailList{margin-top:0}
 @media (hover:hover){
   .chead .cacts{opacity:0;transition:opacity var(--m-tone) ease}
   .card:hover>.chead .cacts,.card:focus-within>.chead .cacts{opacity:1}
+  /* While they wait they take no width, so the title runs the whole row and recedes when they
+     come. The cut pass reads their width from here (cut-text.js, cut-rh). */
+  body:not(.tour-cacts) .card:not(:hover,:focus-within,.is-hidden)>.chead .cacts{
+    width:0;overflow:hidden;margin-left:calc(-1*var(--chead-gap))}
 }
 /* A tour has no pointer, so a step showcasing the star, the eye or the pencil was pointing at
    something the rule above had faded out. On the BODY and not on the one card being shown:
@@ -2239,13 +2243,13 @@ html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!importan
    eats the last word of a line that fits, centred text gives way at both ends, and a field
    that has scrolled gives way behind the caret, never over it. NO LINE KEEPS AN ELLIPSIS AS A
    FALLBACK: an id rule outranks this class, and native dots paint before the scan can run. */
-.is-cut{
+.is-cut,.card:is(:hover,:focus-within)>.chead .cut-rh{
   -webkit-mask-image:linear-gradient(to right,transparent,#000 var(--cut-l,0px),
                      #000 calc(100% - var(--cut-r,0px)),transparent);
   mask-image:linear-gradient(to right,transparent,#000 var(--cut-l,0px),
              #000 calc(100% - var(--cut-r,0px)),transparent)}
 .is-cut.cut-l{--cut-l:1.5em}
-.is-cut.cut-r{--cut-r:1.5em}
+.is-cut.cut-r,.card:is(:hover,:focus-within)>.chead .cut-rh{--cut-r:1.5em}
 /* An input paints its words in the CONTENT box and nothing outside it, so the fade is measured
    there too - against the border box it lands in the padding that clears the button and fades
    nothing at all. Safe only because these inputs go naked: see .fill input. */

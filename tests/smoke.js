@@ -35,9 +35,9 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-/* 280 since a copy lays only the wash over its block and greens only that block's spine
-   (2026-09-28), two checks after the clipboard's; 278 was the tour's walk by its acts. */
-const EXPECTED = { chrome: 280 };
+/* 281 since a copy lays only the wash over its block and greens only that block's spine, and a
+   card's title has the row while its controls wait (2026-09-28); 278 was the tour's walk by its acts. */
+const EXPECTED = { chrome: 281 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -2522,6 +2522,49 @@ const t0 = Date.now();
     check(only(g0, 1) && only(g1, 0) && only(g2, 1),
       "the copied block's spine alone turns green, and follows the block when it is dragged within its card ("
       + JSON.stringify([g0, g1, g2]) + ")");
+  }
+
+  /* THE TITLE HAS THE ROW WHILE THE CONTROLS WAIT. On the card with the widest title on screen:
+     with the pointer away the controls take no width and the title's room runs to the row's end;
+     under a real pointer, and again with the keyboard's focus on the pencil, they show and the
+     title ends before them, fading where it is cut; the row's height never moves. */
+  const tAt = await p.evaluate(() => {
+    const rng = document.createRange(), wOf = t => { rng.selectNodeContents(t); return rng.getBoundingClientRect().width; };
+    const ts = [...document.querySelectorAll("#list .card:not(.is-hidden) .ctitle")].filter(t => {
+      const r = t.closest(".card").getBoundingClientRect(); return r.top > 60 && r.bottom < innerHeight - 20; })
+      .sort((a, b) => wOf(b) - wOf(a));
+    if (!ts.length) return null;
+    const card = ts[0].closest(".card"), r = card.getBoundingClientRect();
+    return { id: card.dataset.id, x: Math.round(r.left + r.width / 2), y: Math.round(r.bottom - 10), ay: innerHeight - 5 };
+  });
+  if (!tAt) check(false, "a card title on screen to measure");
+  else {
+    const tRead = () => p.evaluate(i => {
+      const t = document.querySelector('#list .card[data-id="' + CSS.escape(i) + '"] .ctitle'), row = t.parentNode, a = row.querySelector(".cacts");
+      const rs = getComputedStyle(row), rr = row.getBoundingClientRect(), gap = parseFloat(rs.columnGap) || 0;
+      let end = rr.right - parseFloat(rs.paddingRight);
+      for (let n = t.nextElementSibling; n && n !== a; n = n.nextElementSibling) end -= n.getBoundingClientRect().width + gap;
+      const rng = document.createRange(); rng.selectNodeContents(t);
+      const ink = rng.getBoundingClientRect().right, box = t.getBoundingClientRect().right, ar = a.getBoundingClientRect();
+      const cs = getComputedStyle(t);
+      return { end, ink, box, gap, aw: ar.width, al: ar.left, shown: getComputedStyle(a).opacity === "1",
+        fades: cs.maskImage !== "none" || cs.webkitMaskImage !== "none", h: rr.height };
+    }, tAt.id);
+    await p.mouse.move(5, tAt.ay); await sleep(500);
+    const rest = await tRead();
+    await p.mouse.move(tAt.x, tAt.y); await sleep(500);
+    const hov = await tRead();
+    await p.mouse.move(5, tAt.ay); await sleep(300);
+    await p.evaluate(i => document.querySelector('#list .card[data-id="' + CSS.escape(i) + '"] .cacts [data-act=edit]').focus(), tAt.id);
+    await sleep(500);
+    const foc = await tRead();
+    await p.evaluate(() => document.activeElement && document.activeElement.blur());
+    const atRest = s => s.aw === 0 && !s.shown && s.box >= Math.min(s.ink, s.end) - 0.5;
+    const receded = s => s.shown && s.aw > 0 && s.box <= s.al - s.gap + 0.5 && (s.ink <= s.box + 0.5 || s.fades);
+    const r1 = n => Math.round(n * 10) / 10;
+    check(atRest(rest) && receded(hov) && receded(foc) && rest.h === hov.h && rest.h === foc.h,
+      "a card's title runs the row while its controls wait, and recedes before them under the pointer and the keyboard ("
+      + JSON.stringify([rest, hov, foc].map(s => [r1(s.box), r1(s.ink), r1(s.end), r1(s.al), r1(s.aw), s.shown, s.fades, s.h])) + ")");
   }
 
   /* The full editor opened from the Library, card-editor.js:584. From the main screen the
