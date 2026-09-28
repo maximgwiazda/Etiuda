@@ -939,16 +939,16 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   max-width:100%;min-width:0}
 /* THE CATEGORY DOT - which chat is on which subject, at a glance: a 7px swatch coloured
    through the same [data-ec] -> --ecat plumbing the pills use (see syncTabAccent), blended
-   when several categories are filtered, white when none is - an accent would sink into the
-   band. FULL STRENGTH ON EVERY TAB: it is the one vivid thing in a deliberately quiet strip
-   and dimming it costs the glance it exists for; the selected tab is marked by its face.
+   when several categories are filtered, the band's ink when none is (dark on a pale band, white
+   on a deep one). FULL STRENGTH ON EVERY TAB: dimming the one vivid thing in a quiet strip costs
+   the glance it exists for; the selected tab is marked by its face.
    INSIDE the label's box - the label clips at its line box and eats anything hung outside. */
 .tab-label::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);
   width:7px;height:7px;border-radius:50%;
-  background-color:var(--ecat,#fff);background-image:var(--tab-accent-img,none);
+  background-color:var(--ecat,var(--band-ink));background-image:var(--tab-accent-img,none);
   pointer-events:none}
-/* The no-category dot changes ground on the selected tab and must change with it: white is
-   right on the band and invisible on the chrome face, which in light is very nearly white.
+/* The no-category dot changes ground on the selected tab and must change with it: the band's
+   ink is right on the band, not on the chrome face, which in light is very nearly white.
    Accent, because that is what "no filter" already wears on the All pill. */
 .tab.on .tab-label::before{background-color:var(--ecat,var(--accent))}
 /* A 20px square holding a 16px drawing - see ICON_TAB_X for why the marks stopped being

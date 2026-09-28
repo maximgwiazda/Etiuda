@@ -35,10 +35,10 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-/* 283 since a copy lays only the wash over its block and greens only that block's spine, a card's
-   title has the row while its controls wait, the scrollbar's thumb is opaque and every theme has one
-   blue (2026-09-28); 278 was the tour's walk by its acts. */
-const EXPECTED = { chrome: 283 };
+/* 284 since a copy lays only the wash over its block and greens only that block's spine, a card's
+   title has the row while its controls wait, the scrollbar's thumb is opaque, every theme has one
+   blue and an idle tab's dot is the band's ink (2026-09-28); 278 was the tour's walk by its acts. */
+const EXPECTED = { chrome: 284 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -860,6 +860,43 @@ const t0 = Date.now();
     "the accent, Settings' switches and its Close button are the bubbles' blue in every theme, white on it at "
     + whiteOn(themeColours.dark.bub).toFixed(2) + ":1 (" + JSON.stringify(["unset", "dark", "light"].map(th =>
       [themeColours[th].accent, themeColours[th].segs.length, themeColours[th].segs.filter(c => !near(c, themeColours[th].bub)).length])) + ")");
+
+  /* AN INACTIVE TAB'S DOT, with no category on it, is the band's ink: the theme's text colour on
+     the pale band a light desk draws (the host's backdrop, body.e-backdrop, set here as the host
+     sets it) and white on every deep band. Read off a copy of the selected tab without its
+     selection or category, put on the page for the reading and taken out again. */
+  const tabDots = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const cx = Object.assign(document.createElement("canvas"), { width: 1, height: 1 }).getContext("2d", { willReadFrequently: true });
+    const px = c => { cx.clearRect(0, 0, 1, 1); cx.fillStyle = "#000"; cx.fillStyle = c; cx.fillRect(0, 0, 1, 1);
+      const d = cx.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], Math.round(d[3] / 255 * 100) / 100]; };
+    const res = v => { const i = document.createElement("i"); i.style.color = v; document.body.appendChild(i);
+      const c = px(getComputedStyle(i).color); i.remove(); return c; };
+    const on = document.querySelector(".tab.on");
+    if (!on) return null;
+    const was = document.documentElement.dataset.theme, bd = document.body.classList.contains("e-backdrop");
+    const off = on.cloneNode(true);
+    off.classList.remove("on"); off.removeAttribute("data-ec"); off.removeAttribute("style"); off.removeAttribute("id");
+    off.setAttribute("aria-hidden", "true");
+    document.body.appendChild(off);
+    const out = [];
+    for (const [th, back] of [["light", true], ["dark", true], ["light", false], ["dark", false]]) {
+      document.documentElement.dataset.theme = th; document.body.classList.toggle("e-backdrop", back);
+      await wait(200);
+      out.push({ th, back, dot: px(getComputedStyle(off.querySelector(".tab-label"), "::before").backgroundColor),
+        ink: res("var(--ink)"), band: res("var(--band-ink)") });
+    }
+    off.remove();
+    document.body.classList.toggle("e-backdrop", bd);
+    if (was) document.documentElement.dataset.theme = was; else delete document.documentElement.dataset.theme;
+    await wait(200);
+    return out;
+  });
+  const white = c => c[0] === 255 && c[1] === 255 && c[2] === 255;
+  check(!!tabDots && tabDots.every(r => near(r.dot, r.band) && r.dot[3] === 1)
+    && near(tabDots[0].dot, tabDots[0].ink) && !white(tabDots[0].dot) && white(tabDots[1].dot),
+    "an inactive tab's dot is the theme's text colour on a light desk's pale band and white on dark and on any deep band ("
+    + JSON.stringify(tabDots && tabDots.map(r => [r.th, r.back, r.dot])) + ")");
 
   /* Breakpoints: no horizontal overflow, and the cut-text rule at every width. */
   for (const w of [1600, 1400, 1200, 1000, 900, 800, 700, 600, 500, 430, 390]) {
