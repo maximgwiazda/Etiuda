@@ -19,7 +19,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 29;
+const EXPECTED = 34;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -32,7 +32,8 @@ const LAB = realFs.mkdtempSync(path.join(os.tmpdir(), "etiuda-shell-office-"));
 const SRC = realFs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 /* The shell's own names, handed back by a line added after its source: nothing is exported from
    main.js, and a slice would test a copy of one function rather than the file as it runs. */
-const EXPOSE = ["renamePatiently", "writeReplacing", "saveWindowPlace", "windowFile", "readCatalog", "channelHash"];
+const EXPOSE = ["renamePatiently", "writeReplacing", "saveWindowPlace", "windowFile", "readCatalog", "channelHash",
+  "SAMPLE_EDITIONS"];
 
 /* node:fs with a hook per call: `ctl.renameSync = (real, ...args) => ...` decides that call,
    and a call without a hook goes to the real one. `ctl.any` sees every synchronous call first,
@@ -425,6 +426,64 @@ try {
       "4r a folder that is not there where its parent does not answer either is not an answer: " + gone.st.touched.length
       + " sync call(s)" + (gone.st.touched.length ? " (" + gone.st.touched.slice(0, 5).join(", ") + ")" : "") + ", "
       + goneDown + " 'did not answer' line(s), " + gone.clock.due(30000).length + " retry pending");
+  }
+
+  /* ---- 5. the samples a first run gives, and which copy of a name is read ----------------------
+     A first run copies every catalog the shell ships into the default Documents/Etiuda, once per
+     desk; a file of the same name there is the one read and listed, whatever its bytes. Booted as far
+     as the window over a Documents folder of the lab's own. */
+  {
+    const settle = async () => {
+      for (let i = 0; i < 4; i++) await new Promise(r => setImmediate(r));
+      await new Promise(r => setTimeout(r, 40));
+      for (let i = 0; i < 4; i++) await new Promise(r => setImmediate(r));
+    };
+    const SHIPPED = realFs.readdirSync(path.join(ROOT, "shell")).filter(n => /\.ec$/i.test(n)).sort();
+    const shippedBytes = n => realFs.readFileSync(path.join(ROOT, "shell", n));
+    const start = async (desk, before) => {
+      const S = loadShell({ ready: true, clock: fakeClock(), desk: desk });
+      S.ctl.watch = () => { const w = new EventEmitter(); w.close = () => {}; return w; };
+      const own = path.join(S.DOCS, "Etiuda");
+      if (before) { realFs.mkdirSync(own, { recursive: true }); before(own); }
+      await settle();
+      let keys = {};
+      try { keys = JSON.parse(realFs.readFileSync(S.deskFile, "utf8")).keys || {}; } catch { /* no desk written */ }
+      const files = realFs.existsSync(own) ? realFs.readdirSync(own).sort() : ["<no folder>"];
+      return { S, own, keys, files };
+    };
+
+    const first = await start();
+    const same = first.files.join(",") === SHIPPED.join(",")
+      && SHIPPED.every(n => realFs.readFileSync(path.join(first.own, n)).equals(shippedBytes(n)));
+    check(SHIPPED.length > 0 && same && first.keys["e~sampled"] === "1",
+      "5a a first run puts a copy of every catalog the shell ships into Documents/Etiuda, byte for byte, and writes"
+      + " the desk, so the next run is not a first one: " + JSON.stringify({ shipped: SHIPPED, folder: first.files, given: first.keys["e~sampled"] }));
+
+    const later = await start({ eTheme: "dark" });
+    check(later.files.length === 0,
+      "5b a desk that already has a file gives nothing, so an update gives no sample and a copy the person deleted stays deleted: "
+      + JSON.stringify(later.files));
+
+    const edited = Buffer.concat([shippedBytes(SHIPPED[0]), Buffer.from(" ")]);
+    const theirs = await start(undefined, own => realFs.writeFileSync(path.join(own, SHIPPED[0]), edited));
+    const read = await theirs.S.ask("etiuda:catalog-read", SHIPPED[0]);
+    check(realFs.readFileSync(path.join(theirs.own, SHIPPED[0])).equals(edited) && theirs.keys["e~sampled"] === "1"
+          && !!read && read.text === edited.toString("utf8"),
+      "5c a file already there under a shipped name is left as it is, and it is the copy read: kept "
+      + realFs.readFileSync(path.join(theirs.own, SHIPPED[0])).equals(edited) + ", read "
+      + (!!read && read.text === edited.toString("utf8")));
+
+    const rows = (await first.S.ask("etiuda:catalog-files")).filter(f => f.name === SHIPPED[0]);
+    check(rows.length === 1 && rows[0].builtIn === false && rows[0].replaces === true && rows[0].sample === true,
+      "5d the copy a first run gave is the one the Library lists, once, as the folder's own in place of the shipped"
+      + " copy and still known as the sample: " + JSON.stringify(rows.map(r => ({ builtIn: r.builtIn, replaces: r.replaces, sample: r.sample }))));
+
+    const crypto = nodeRequire("node:crypto");
+    const editions = first.S.api.SAMPLE_EDITIONS || [];
+    const known = SHIPPED.every(n => { const b = shippedBytes(n), h = crypto.createHash("sha256").update(b).digest("hex");
+      return editions.some(x => x[0] === b.length && x[1] === h); });
+    check(known, "5e every catalog the shell ships is an edition SAMPLE_EDITIONS names, so a copy of it keeps its place"
+      + " at the foot of the list once the sample moves on: " + editions.length + " edition(s) listed");
   }
 } catch (e) {
   failed++;

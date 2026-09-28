@@ -2375,7 +2375,7 @@ function shippedFlagTests() {
     let handler = null;
     try {
       new Function("ipcMain", "fromEngine", "BrowserWindow", "process", "hostBackdrop", "catalogFolder", "builtInFiles",
-        "folderFiles", "SAMPLE_FILE", "path", "catalogFrom", "folderShown", "isBuiltIn", "catalogMtime", "openedWith",
+        "ecFilesIn", "SAMPLE_FILE", "path", "catalogFrom", "folderShown", "isBuiltIn", "catalogMtime", "openedWith",
         "openedRefused", "recovering", "deskFile", "os", "hostAccent",
         extractDecl(shell, 'ipcMain.on("etiuda:host",'))(
         { on: (ch, fn) => { handler = fn; } }, () => true, { fromWebContents: () => null }, { platform: "win32" }, () => null,
