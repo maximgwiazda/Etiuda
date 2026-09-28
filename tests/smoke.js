@@ -35,9 +35,9 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-/* 278 since the tour's walk by its acts (2026-09-28): the tour section went from ten checks to eleven,
-   and the first run's wait for the logo is one more in the bug hunt. */
-const EXPECTED = { chrome: 278 };
+/* 279 since a copy lays only the wash over its block (2026-09-28), one check after the clipboard's;
+   278 was the tour's walk by its acts and the first run's wait for the logo. */
+const EXPECTED = { chrome: 279 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -2474,6 +2474,34 @@ const t0 = Date.now();
     check(mk1.idx === mk1.cards - 1 && mk2.idx === 0 && mk1.n === 1 && mk2.n === 1,
       "and Shift+Down carries the mark to the foot of the list and Shift+Up to its head ("
       + mk1.idx + " then " + mk2.idx + " of " + mk1.cards + ")");
+  }
+
+  /* WHAT A COPY LEAVES OVER THE BLOCK. The press answers with the green wash and nothing else
+     over the block: no ghost of the words rising off it. Every node the press adds to <body> is
+     recorded as it arrives with the box it covers, and those covering the pressed block are
+     named. Pressed on the second block of a card holding two or more, none of them in the trace. */
+  const cpAt = await p.evaluate(() => {
+    const card = [...document.querySelectorAll("#list .card[data-id]")].find(c =>
+      c.querySelectorAll(".txt[data-v]").length >= 2 && !c.matches("[data-erec]") && !c.querySelector("[data-erec]"));
+    if (!card) return null;
+    const el = card.querySelectorAll(".txt[data-v]")[1];
+    el.scrollIntoView({ block: "center" });
+    const r = el.getBoundingClientRect();
+    window.__cpOver = [];
+    window.__cpObs = new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => {
+      if (n.nodeType !== 1) return;
+      const q = n.getBoundingClientRect();
+      if (q.right > r.left && q.left < r.right && q.bottom > r.top && q.top < r.bottom) window.__cpOver.push(String(n.className));
+    })));
+    window.__cpObs.observe(document.body, { childList: true });
+    return { id: card.dataset.id, x: Math.round(r.left + Math.min(40, r.width / 2)), y: Math.round(r.top + r.height / 2) };
+  });
+  if (!cpAt) check(false, "a card with two copyable blocks and no trace, to press");
+  else {
+    await p.mouse.click(cpAt.x, cpAt.y); await sleep(900);
+    const cpOver = await p.evaluate(() => { window.__cpObs.disconnect(); return window.__cpOver; });
+    check(cpOver.length === 1 && cpOver[0] === "e-copy-wash",
+      "a copy washes the block green and lays nothing else over it (" + JSON.stringify(cpOver) + ")");
   }
 
   /* The full editor opened from the Library, card-editor.js:584. From the main screen the
