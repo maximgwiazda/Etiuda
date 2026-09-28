@@ -2019,6 +2019,23 @@ function ecTypeNameTests() {
   } catch (e) { got = "electron-builder's templates could not be read: " + e.message; }
   eq("electron-builder writes its English before customInstall runs, and its uninstaller takes the whole class back, Polish and all",
     got, [true, true]);
+  /* The right-click entry: electron-builder's own verb, the English "Open with Etiuda", and in Polish
+     the copywriter's words over it, in the same branch and before the shell is told. */
+  try {
+    const nsh = fs.readFileSync(path.join(root, "shell", "installer.nsh"), "utf8");
+    const body = (/!macro customInstall\r?\n([\s\S]*?)!macroend/.exec(nsh) || [])[1] || "";
+    const branch = (/\$\{If\} \$LANGUAGE == 1045\r?\n([\s\S]*?)\$\{EndIf\}/.exec(body) || [])[1] || "";
+    const verb = /WriteRegStr SHELL_CONTEXT "Software\\Classes\\([^"\\]+)\\shell\\open" "" "([^"]+)"/.exec(branch);
+    const fa = fs.readFileSync(path.join(lib, "templates", "nsis", "include", "FileAssociation.nsh"), "utf8");
+    const assoc = /!macro APP_ASSOCIATE EXT [^\n]*\n([\s\S]*?)!macroend/.exec(fa);
+    const target = fs.readFileSync(path.join(lib, "out", "targets", "nsis", "NsisTarget.js"), "utf8");
+    const product = (require(path.join(root, "electron-builder.js")).productName) || require(path.join(root, "package.json")).productName;
+    got = [!!assoc && /WriteRegStr SHELL_CONTEXT "Software\\Classes\\\$\{FILECLASS\}\\shell\\open" "" `\$\{COMMANDTEXT\}`/.test(assoc[1]),
+      /const commandText = `"Open with \$\{[^`]*productName\)\}"`/.test(target), product,
+      verb && verb[1], verb && verb[2], !!verb && branch.indexOf("SHChangeNotify") > branch.indexOf(verb[0])];
+  } catch (e) { got = "the installer's include could not be read: " + e.message; }
+  eq("the right-click entry for a .ec file is electron-builder's \"Open with Etiuda\" under the class's open verb, and a Polish installer writes \"Otwórz w Etiudzie\" there before telling the shell",
+    got, [true, true, "Etiuda", "Etiuda catalog", "Otwórz w Etiudzie", true]);
 }
 /* THE MENU'S FIRST OPEN IS PAID FOR BEFORE IT (E9): warmMenu is sliced out of header-menus.js with the
    one openSettingsMenu that marks the menu drawn, and run on a small element model written here; when
