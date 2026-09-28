@@ -246,8 +246,6 @@ function boot(){
     mgCardsIn: manage.mgCardsIn,
     syncSampleMark: catalogFile.syncSampleMark,
     syncSaveNotice: personalPack.syncSaveNotice,
-    sampleReady: catalogFile.sampleReady,
-    loadSampleCatalog: catalogFile.loadSampleCatalog,
     importCatalogHere: catalogFile.importCatalogHere,
     offerPickedCatalog: catalogOffer.eOfferPickedCatalog,
     runShortcut: runShortcut.runShortcut,

@@ -1151,7 +1151,7 @@ const placeEc = (dir, from, as, minutesOld) => {
         window: !!document.querySelector("body > .modal:not([hidden])"), mark: !!mark, tour: !!bub, apart,
         title: (document.getElementById("tourTitle") || {}).textContent || "",
         field: !!document.querySelector("#tourField:not([hidden]) .e-name-inp"),
-        sample: !!document.getElementById("emptySample"),
+        sample: !!document.getElementById("emptySample"), load: !!document.getElementById("emptyLoad"),
         now: ((document.querySelector("#catNow .cn-none:not([hidden])") || {}).textContent || "") };
     });
   };
@@ -1161,12 +1161,12 @@ const placeEc = (dir, from, as, minutesOld) => {
   const seedFirst = await FIRST_SCREEN(s.p);
   await s.stop();
   const seededFiles = listed(docsA);
-  check(seededFiles.join(",") === "" && seedFirst.sample && seedFirst.cards === 0
+  check(seededFiles.join(",") === "" && !seedFirst.sample && seedFirst.load && seedFirst.cards === 0
         && !seedFirst.offer && !seedFirst.window && seedFirst.mark && seedFirst.tour && seedFirst.apart
         && seedFirst.title === "Welcome to Etiuda" && seedFirst.field && seedFirst.now === "No catalog loaded",
-    "2k2 a first run writes nothing into its catalog folder, and the empty desk offers the sample"
-    + " Etiuda ships without loading it: the folder holds " + JSON.stringify(seededFiles) + ", the sample"
-    + " offered " + seedFirst.sample
+    "2k2 a first run writes nothing into its catalog folder and loads nothing, and the empty desk offers Load"
+    + " and no button of its own for the sample Etiuda ships: the folder holds " + JSON.stringify(seededFiles)
+    + ", a sample button " + seedFirst.sample + ", Load " + seedFirst.load
     + ", and the screen is the empty desk with its mark, no offer and no window, the tour's first bubble"
     + " asking the name clear of the mark and the band saying no catalog is loaded: " + JSON.stringify(seedFirst)
     + ". The sample in the tree holds " + SEED_CARDS + " cards, counted by this process");

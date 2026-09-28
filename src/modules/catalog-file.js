@@ -334,7 +334,7 @@ function activateCatalog(c,opts){
   savePack();
   nsDel("CatalogNo");
   /* Set here rather than in loadSampleCatalog(), because EVERY route to a catalog passes
-     through this function - the sample button, an import, accepting the sibling file. Loading
+     through this function - an import, a Library row, accepting the sibling file. Loading
      anything without the flag therefore clears the watermark by itself, with no path that can
      leave it stranded over real content. */
   try{

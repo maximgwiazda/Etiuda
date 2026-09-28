@@ -564,6 +564,7 @@ function runUnitTests() {
   deskStatsTests();
   ejectUndoTests();
   tourActTests();
+  emptyDeskTests();
 }
 
 /* EJECT HAPPENS AT ONCE AND UNDO LOADS THE SAME CATALOG BACK (Maxim, 2026-09-27): the eject, the
@@ -763,6 +764,50 @@ function tourActTests() {
   own.t = s => s;
   eq("the tour names where a person's things stay as the host keeps them: the edit step on each host and language, and no step the other host's place",
     [misplaced, editSays], [[], [true, true, true, true, true, true]]);
+  /* THE LOAD STEP NAMES NO SAMPLE BUTTON, because the empty desk draws none: asked on a desk whose sample is ready,
+     where the old step named one, in both languages. */
+  Object.assign(own, { eHost: () => true, eCatalogFolderShort: () => "X", hooks: { sampleReady: () => true }, esc: s => s });
+  const loadStep = T.TOUR_STEPS.find(s => s.id === "load");
+  const loadSays = [x => x, x => PL[x] == null ? x : PL[x]].map(tr => { own.t = tr; return typeof loadStep.body === "function" ? loadStep.body() : ""; });
+  own.t = s => s;
+  eq("the tour's load step names Load and no sample button, with the sample on the desk, in English and in Polish",
+    loadSays.map(b => /Load a catalog|wczytaj katalog/.test(b) && !/sample|przyk/i.test(b)), [true, true]);
+}
+
+/* THE EMPTY DESK OFFERS LOAD AND NO SAMPLE BUTTON, whether or not the sample is there: the sample is a file,
+   and Load reaches it (Maxim, 2026-09-28). The empty-desk markup is sliced out of render.js and drawn over a
+   model of each host, with the sample ready and without, in both languages; the two must be the same page. */
+function emptyDeskTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "render.js"), "utf8");
+  const langSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "ui-lang.js"), "utf8");
+  const plAt = langSrc.indexOf("UI_STRINGS.pl={"), plEnd = langSrc.indexOf("\n};", plAt);
+  const PL = new Function("const UI_STRINGS={};\n" + langSrc.slice(plAt, plEnd + 3) + "\nreturn UI_STRINGS.pl;")();
+  const own = { terms: [], list: { innerHTML: "" }, wholeThingEmpty: () => true, esc: s => String(s), E_CATALOG_SCRIPT: "etiuda-catalog.js" };
+  const scope = new Proxy({}, {
+    has: (o, k) => typeof k === "string",
+    get: (o, k) => k === Symbol.unscopables ? undefined : k in own ? own[k] : k in globalThis ? globalThis[k] : () => undefined,
+    set: (o, k, v) => { own[k] = v; return true; }
+  });
+  let draw = null;
+  try {
+    draw = new Function("scope", "with(scope){\n" + extractDecl(src, "const afterBtn=") + "\n"
+      + extractDecl(src, "list.innerHTML=terms.length") + "\nreturn list.innerHTML;\n}");
+  } catch (e) { eq("render.js carries the empty desk's markup", e.message, "sliced"); return; }
+  const hosts = { desk: ["C:/X", "https:"], disk: ["", "file:"], link: ["", "https:"] };
+  const pages = [], wrong = [];
+  Object.keys(hosts).forEach(h => ["en", "pl"].forEach(lang => {
+    const drawn = [true, false].map(sample => {
+      Object.assign(own, { hooks: { sampleReady: () => sample, loadSampleCatalog: () => true },
+        eCatalogFolder: () => hosts[h][0], eCatalogFolderShort: () => "X", location: { protocol: hosts[h][1] },
+        t: lang === "pl" ? x => (PL[x] == null ? x : PL[x]) : x => x });
+      try { return draw(scope); } catch (e) { return "threw " + e.message; }
+    });
+    pages.push(h + " " + lang + ": " + (drawn[0] === drawn[1]));
+    drawn.forEach(p => { if (!/id="emptyLoad"/.test(p) || /emptySample|sample|przyk/i.test(p)) wrong.push(h + " " + lang); });
+  }));
+  eq("the empty desk offers Load and no sample button on the desk, from a disk and over a link, in English and in Polish",
+    [...new Set(wrong)], []);
+  eq("and it is the same page whether or not the sample is there", pages.filter(p => !/true$/.test(p)), []);
 }
 
 /* Section 2.5 of the specification and the body rules of 2.6, driven over the reader that
@@ -3375,8 +3420,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 840;
-const UI_STRINGS_SHA256 = "2eb4bfefb1383a16a0b93ec2cf73af543a40c62e525eeeb6f44894eedf215e8f";
+const UI_STRINGS_COUNT = 835;
+const UI_STRINGS_SHA256 = "5b9a0c3b3e8afb0b11a5441cb63a188de332704883ed3f85c6427427df7c063e";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

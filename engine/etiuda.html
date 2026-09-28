@@ -4544,8 +4544,6 @@ What you type stays in this browser only.`;
     "runShortcut",
     "syncSampleMark",
     "syncSaveNotice",
-    "sampleReady",
-    "loadSampleCatalog",
     "importCatalogHere",
     "offerPickedCatalog",
     "openManage",
@@ -5434,11 +5432,8 @@ What you type stays in this browser only.`;
     "Press": "Naciśnij",
     "{KEY} clears the search and the intents and shows every card.": "{KEY} czyści wyszukiwanie i intencje i pokazuje wszystkie karty.",
     "Etiuda is ready for its first replies.": "Etiuda czeka na pierwsze odpowiedzi.",
-    "Add a card to a category,": "Dodaj kartę do kategorii,",
     "Add a card to a category, or": "Dodaj kartę do kategorii albo",
     "you already have.": ", który już istnieje.",
-    "or": "albo",
-    "to see how it works.": ", aby zobaczyć, jak to działa.",
     "A catalog file next to Etiuda loads by itself when it is called": "Plik katalogu leżący obok Etiudy wczytuje się sam, gdy nazywa się",
     "Under any other name, bring it in with the button above.": "Plik o innej nazwie można wczytać przyciskiem powyżej.",
     "Catalogs": "Katalogi",
@@ -5988,7 +5983,6 @@ What you type stays in this browser only.`;
     "Could not save the catalog, because Etiuda cannot write {FILE}.": "Nie udało się zachować katalogu: Etiuda nie może zapisać pliku {FILE}.",
     "This browser is not storing anything, so a catalog cannot be kept here": "Ta przeglądarka niczego nie zapisuje, więc nie można tu zachować katalogu",
     "Could not find the embedded-catalog slot": "Nie znaleziono miejsca na wbudowany katalog",
-    "load a sample catalog": "wczytaj przykładowy katalog",
     "Copy report": "Kopiuj raport",
     "Link copied": "Skopiowano link",
     "Report copied": "Skopiowano raport",
@@ -6159,7 +6153,6 @@ What you type stays in this browser only.`;
     "The tour waits in the Menu, under Show tour…": "Przewodnik czeka w Menu, pod Pokaż przewodnik…",
     "To begin, the name your replies are signed with. Customers see it at the foot of each one, and it can be changed at any time in Settings.": "Na początek podpis: imię, które klienci zobaczą pod każdą odpowiedzią. Można je zmienić w każdej chwili w Ustawieniach.",
     "A catalog of replies": "Katalog odpowiedzi",
-    "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}, or <b>load a sample catalog</b> beside it to try everything straight away. Etiuda restarts with the catalog in place, and the tour carries on from there.": "Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać katalog zespołu z folderu {FOLDER}, a żeby od razu wszystkiego spróbować, obok czeka <b>wczytaj przykładowy katalog</b>. Etiuda uruchomi się wtedy od nowa, już z katalogiem, a przewodnik poprowadzi dalej.",
     "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}. Etiuda restarts with the catalog in place, and the tour carries on from there.": "Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać katalog zespołu z folderu {FOLDER}. Etiuda uruchomi się wtedy od nowa, już z katalogiem, a przewodnik poprowadzi dalej.",
     "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the catalog file. The page reloads with it and the tour carries on from there; the catalog stays in this browser, ready whenever you come back.": "Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać plik katalogu. Strona załaduje się wtedy od nowa, a przewodnik poprowadzi dalej; katalog zostanie w tej przeglądarce i poczeka na każdy powrót.",
     "comes with Etiuda": "dołączony do Etiudy",
@@ -17857,9 +17850,7 @@ What you type stays in this browser only.`;
     if (!shown.length) {
       const oneCat = cats.length === 1 ? cats[0] : null;
       const afterBtn = (c) => (/^[,.;:!?]/.test(c) ? "" : " ") + esc(c);
-      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>" : wholeThingEmpty() ? '<div class="empty empty-desk">' + esc(t("Etiuda is ready for its first replies.")) + "<br><br>" + esc(t(hooks.sampleReady() ? "Add a card to a category," : "Add a card to a category, or")) + ' <button type="button" class="btn" id="emptyLoad">' + esc(t("load a catalog")) + "</button>" + (hooks.sampleReady() ? " " + esc(t("or")) + ' <button type="button" class="btn" id="emptySample">' + esc(t("load a sample catalog")) + "</button>" + afterBtn(t("to see how it works.")) : afterBtn(t("you already have."))) + '<br><br><span style="font-size:12.5px;opacity:.75">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with the button above.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with the button above.")) : esc(t("The catalog you load stays in this browser, ready whenever you come back."))) + "</span></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
-      const es = $("#emptySample");
-      if (es) es.onclick = () => hooks.loadSampleCatalog();
+      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>" : wholeThingEmpty() ? '<div class="empty empty-desk">' + esc(t("Etiuda is ready for its first replies.")) + "<br><br>" + esc(t("Add a card to a category, or")) + ' <button type="button" class="btn" id="emptyLoad">' + esc(t("load a catalog")) + "</button>" + afterBtn(t("you already have.")) + '<br><br><span style="font-size:12.5px;opacity:.75">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with the button above.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with the button above.")) : esc(t("The catalog you load stays in this browser, ready whenever you come back."))) + "</span></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
       const ei = $("#emptyLoad");
       if (ei) ei.onclick = hooks.importCatalogHere;
       const ef = $("#emptyCatFolder");
@@ -18651,7 +18642,7 @@ What you type stays in this browser only.`;
   function loadStepBody() {
     const dir = eCatalogFolderShort();
     if (!dir) return t("Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the catalog file. The page reloads with it and the tour carries on from there; the catalog stays in this browser, ready whenever you come back.");
-    return t(hooks.sampleReady() ? "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}, or <b>load a sample catalog</b> beside it to try everything straight away. Etiuda restarts with the catalog in place, and the tour carries on from there." : "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}. Etiuda restarts with the catalog in place, and the tour carries on from there.").split("{FOLDER}").join(esc(dir));
+    return t("Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}. Etiuda restarts with the catalog in place, and the tour carries on from there.").split("{FOLDER}").join(esc(dir));
   }
   function menuOpen() {
     const m = $("#settingsMenu");
@@ -22833,8 +22824,6 @@ What you type stays in this browser only.`;
       mgCardsIn,
       syncSampleMark,
       syncSaveNotice,
-      sampleReady,
-      loadSampleCatalog,
       importCatalogHere,
       offerPickedCatalog: eOfferPickedCatalog,
       runShortcut

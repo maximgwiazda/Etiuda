@@ -93,15 +93,12 @@ function render(){
         ? '<div class="empty empty-desk">'+esc(t("Etiuda is ready for its first replies."))+'<br><br>'
           /* A first run has no menu habits yet, and Load is the route someone who downloaded
              the file is looking for - so it is a button here, not the name of one elsewhere. */
-          +esc(t(hooks.sampleReady() ? "Add a card to a category," : "Add a card to a category, or"))
+          /* No sample button, whether or not the sample is there: it is a file, and Load reaches it. */
+          +esc(t("Add a card to a category, or"))
           +' <button type="button" class="btn" id="emptyLoad">'+esc(t("load a catalog"))+'</button>'
-          /* Both branches close on words: a sentence ending on a button chip reads as unfinished,
-             and a bare full stop after one reads as a stray mark. */
-          +(hooks.sampleReady()
-            ? ' '+esc(t("or"))
-              +' <button type="button" class="btn" id="emptySample">'+esc(t("load a sample catalog"))+'</button>'
-              +afterBtn(t("to see how it works."))
-            : afterBtn(t("you already have.")))
+          /* The sentence closes on words: one ending on a button chip reads as unfinished, and a
+             bare full stop after one reads as a stray mark. */
+          +afterBtn(t("you already have."))
           /* Said here because here is where it goes wrong - and WHICH answer is right depends on
              where the copy runs. An installed desk has a catalog folder of its own, so the answer
              is its path; on a disk the usual fault is a catalog beside Etiuda under the wrong
@@ -132,8 +129,6 @@ function render(){
               +esc(t("Press"))+' '+chordChips("newCard")+' '
               +esc(t("to create a card here."))+'</div>')
           : '<div class="empty">'+esc(t("Nothing here yet."))+'</div>'));
-    const es=$("#emptySample");
-    if(es) es.onclick=()=>hooks.loadSampleCatalog();
     const ei=$("#emptyLoad");
     if(ei) ei.onclick=hooks.importCatalogHere;
     const ef=$("#emptyCatFolder");

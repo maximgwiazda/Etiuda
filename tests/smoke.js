@@ -2682,6 +2682,18 @@ const t0 = Date.now();
     + " of a scrollable " + (sc3 && sc3.max));
   clean(e, "the escape ladder's last rung");
 
+  /* THE SAMPLE COMES IN THROUGH LOAD, as any file does: the empty desk draws no button of its own for
+     it. The page's plain file input is the route, the picker undefined for the one press so that
+     Chrome takes it, and the shipped document is the file chosen; an empty desk loads it at once. */
+  const SAMPLE_EC = path.join(E.ROOT, E.TREE_FILE.sampleEc);
+  const loadSample = async q => {
+    await q.evaluate(() => { window.showOpenFilePicker = undefined; });
+    const nav = q.waitForNavigation({ waitUntil: "load", timeout: 30000 }).then(() => true, () => false);
+    const [chooser] = await Promise.all([q.waitForFileChooser({ timeout: 10000 }), q.click("#emptyLoad")]);
+    await chooser.accept([SAMPLE_EC]);
+    return nav;
+  };
+
   /* The public first run: a folder holding only the engine and the sample, as the README has a
      stranger start. The boot above never takes that path while the real catalog is beside this
      file, and a fresh context is what keeps the adopted catalog's storage out of it. */
@@ -2711,6 +2723,7 @@ const t0 = Date.now();
     await q.goto("file:///" + path.join(pub, "etiuda.html").replace(/\\/g, "/"), { waitUntil: "load", timeout: 90000 });
     await sleep(2400);
     const offer = await q.evaluate(() => ({ cards: document.querySelectorAll(".card").length, real: typeof E_CATALOG !== "undefined",
+      ready: sampleReady(), load: !!document.getElementById("emptyLoad"),
       btn: ((document.querySelector("#emptySample") || {}).textContent || "").trim() }));
     /* BOARD 344: the Import button beside the sample one, render.js:128, the only route in src/
        to hooks.importCatalogHere - and it is pressed HERE, on the empty screen, because that is
@@ -2806,10 +2819,8 @@ const t0 = Date.now();
         get() { return function () { window.__bootAt = performance.now(); window.__bootClass = document.documentElement.className;
           return f && f.apply(this, arguments); }; } });
     });
-    step("clicking the sample and waiting for the reload");
-    const navigated = q.waitForNavigation({ waitUntil: "load", timeout: 30000 }).then(() => true, () => false);
-    await q.click("#emptySample");
-    const reloaded = await navigated;
+    step("loading the sample through Load and waiting for the reload");
+    const reloaded = await loadSample(q);
     const resumed = await q.evaluate(async () => {
       const wait = ms => new Promise(r => setTimeout(r, ms));
       for (let i = 0; i < 40 && document.getElementById("tourRoot").hidden; i++) await wait(100);
@@ -2852,7 +2863,8 @@ const t0 = Date.now();
       if (el) { el.click(); return true; } return false; }); if (!hit) break; await sleep(500); }
     step("reading the loaded sample back");
     const got = await q.evaluate(() => ({ cards: document.querySelectorAll(".card").length, rows: document.querySelectorAll("#intentRailList .rail-item").length, pills: document.querySelectorAll("#pills .pill").length }));
-    check(!offer.real && offer.cards === 0 && /sample/i.test(offer.btn), "with no deployment catalog the empty screen offers the sample (" + JSON.stringify(offer.btn) + ")");
+    check(!offer.real && offer.cards === 0 && offer.ready && offer.load && offer.btn === "",
+      "with no deployment catalog and the sample beside the engine, the empty screen offers Load and no sample button (" + JSON.stringify(offer) + ")");
     check(got.cards > 0 && got.rows > 0 && got.pills > 0, "the sample loads: " + got.cards + " cards, " + got.rows + " intents, " + got.pills + " pills");
     /* THE ROLE WHEEL WAITS on the sample until a reply naming somebody of the team is copied, and
        comes out with one line then; the main desk above, a team's, has driven it from the start. */
@@ -2965,24 +2977,24 @@ const t0 = Date.now();
       + " ms over the gathering mark starts it again, and the tour comes up " + litAfter + " ms after the window goes"
       + " (the gather and the breath make 1300)" + (fl.err ? " - " + fl.err : ""));
 
-    /* flow-2: A NAME TYPED IN THE TOUR'S FIRST STEP IS KEPT whichever way the step is left: the
-       empty desk's sample button beside it, Skip, or a reload. */
+    /* flow-2: A NAME TYPED IN THE TOUR'S FIRST STEP IS KEPT whichever way the step is left: a
+       catalog loaded through the empty desk's Load beside it, Skip, or a reload. */
     const kept = {};
-    for (const route of ["sample", "skip", "reload"]) {
+    for (const route of ["load", "skip", "reload"]) {
       huntAt = "flow-2 by " + route;
       const q = await huntPage(hunt, false);
-      const up = await upFor(q, () => !!document.querySelector("#tourName") && !!document.getElementById("emptySample"));
+      const up = await upFor(q, () => !!document.querySelector("#tourName") && !!document.getElementById("emptyLoad"));
       if (up) {
         await q.type("#tourName", "Invented Agent"); await sleep(300);
-        if (route === "sample") await clickReload(q, "#emptySample");
+        if (route === "load") await loadSample(q);
         else if (route === "skip") await q.click("#tourSkip");
         else await q.reload({ waitUntil: "load" });
         await sleep(800);
       }
       kept[route] = up && await q.evaluate(() => lsGet("eAgent") === "Invented Agent" && lsGet("eNameAsked") === "1");
     }
-    check(kept.sample && kept.skip && kept.reload,
-      "flow-2 a name typed into the tour's first step is kept when the step is left by the sample button, by Skip"
+    check(kept.load && kept.skip && kept.reload,
+      "flow-2 a name typed into the tour's first step is kept when the step is left by loading a catalog through Load, by Skip"
       + " and by a reload: " + JSON.stringify(kept));
 
     /* flow-1: THE NAME QUESTION AT THE TOUR'S CARDS STEP stands in front of the tour, which steps
@@ -2990,9 +3002,9 @@ const t0 = Date.now();
        first signed copy asks; the block pressed is the first that signs. */
     huntAt = "flow-1";
     const q1 = await huntPage(hunt, false);
-    await upFor(q1, () => !!document.querySelector("#tourName") && !!document.getElementById("emptySample"));
+    await upFor(q1, () => !!document.querySelector("#tourName") && !!document.getElementById("emptyLoad"));
     await q1.click("#tourNext"); await sleep(700);
-    await clickReload(q1, "#emptySample");
+    await loadSample(q1);
     await upFor(q1, () => document.querySelectorAll("#list .card").length > 0 && !document.getElementById("tourRoot").hidden);
     /* The steps before Cards ask for acts and have no Next (2026-09-27 23:28), so they are done as a
        person does them, by the rows of tests/tour-walk.js. */
@@ -3034,13 +3046,13 @@ const t0 = Date.now();
       "flow-1 at the tour's Cards step the name question opens in front of the tour, every part of it reachable, and"
       + " the tour comes forward again once it is answered: " + JSON.stringify({ walked1, blk, ask, back }));
 
-    /* data-2: THE EMPTY DESK'S SAMPLE BUTTON KEEPS WHAT AN EJECT KEPT. The sample loaded, one card's
-       title edited and saved, another starred, the catalog ejected, and the sample taken up again
-       from the empty desk: the edit and the star are still in the stored pack. */
+    /* data-2: THE SAMPLE LOADED AGAIN KEEPS WHAT AN EJECT KEPT. The sample loaded, one card's title
+       edited and saved, another starred, the catalog ejected, and the sample taken up again through
+       the empty desk's Load: the edit and the star are still in the stored pack. */
     huntAt = "data-2";
     const q2 = await huntPage(hunt, true);
-    await upFor(q2, () => !!document.getElementById("emptySample"));
-    await clickReload(q2, "#emptySample");
+    await upFor(q2, () => !!document.getElementById("emptyLoad"));
+    await loadSample(q2);
     await upFor(q2, () => document.querySelectorAll("#list .card[data-id]").length > 3);
     const made = await q2.evaluate(async () => {
       const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -3059,13 +3071,13 @@ const t0 = Date.now();
     await q2.evaluate(() => ejectCatalog());
     await upFor(q2, () => !!document.getElementById("eSureYes"), 5000);
     await clickReload(q2, "#eSureYes");
-    await upFor(q2, () => !!document.getElementById("emptySample"));
+    await upFor(q2, () => !!document.getElementById("emptyLoad"));
     const ejected = await layer(q2, made);
-    await clickReload(q2, "#emptySample");
+    await loadSample(q2);
     await upFor(q2, () => document.querySelectorAll("#list .card[data-id]").length > 3);
     const again = await layer(q2, made);
     check(before.edit && before.star && ejected.edit && ejected.star && again.edit && again.star,
-      "data-2 the empty desk's sample button keeps the edit and the star an Eject kept (saved, ejected, taken up again): "
+      "data-2 the sample loaded again through Load keeps the edit and the star an Eject kept (saved, ejected, taken up again): "
       + JSON.stringify({ before, ejected, again }));
 
     /* flow-3: THE SAMPLE NEVER ASKS TO REPLACE A CATALOG THE PERSON CHOSE. A desk holding an invented

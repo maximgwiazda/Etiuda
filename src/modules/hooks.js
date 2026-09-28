@@ -8,8 +8,6 @@ const SLOTS = [
   "runShortcut",
   "syncSampleMark",
   "syncSaveNotice",
-  "sampleReady",
-  "loadSampleCatalog",
   "importCatalogHere",
   "offerPickedCatalog",
   "openManage",
