@@ -1747,6 +1747,62 @@ const CARD_B = {
   }
 }
 
+/* ------------------------------------------------------------------ tabs.js, what is active, said
+   "Every tab save compares them with what was last said and, once the keys rest, speaks the
+   difference": so a change reaches #eSay through scheduleTabSave, a change undone before the keys
+   rest says nothing, a field a toast has said is not said again, and the same words twice are
+   emptied first. The region is the one element faked here, recording every write; the timers are
+   real, so each case waits out the rest. Category "gen" is content-model's own built-in. */
+{
+  const T = await import(MOD("tabs.js"));
+  const A = await import(MOD("app-state.js"));
+  const CM = await import(MOD("content-model.js"));
+  const writes = [];
+  const say = { _t: "", get textContent() { return this._t; }, set textContent(v) { this._t = v; writes.push(v); } };
+  const hadDoc = globalThis.document;
+  globalThis.document = { getElementById: id => (id === "eSay" ? say : null), querySelector: () => null, querySelectorAll: () => [] };
+  const wasLangs = CM.CONTENT_LANGS.slice(), wasLang = A.lang, wasCats = A.cats.slice(), wasIdxs = A.intentIdxs.slice();
+  const rest = () => new Promise(r => setTimeout(r, 320));
+  const run = async (from, change) => {
+    A.putLang(from.lang || "en"); A.setCats(from.cats || []); A.setIntentIdxs([]);
+    say._t = from.said || ""; writes.length = 0;
+    T.activeHeard();
+    await change();
+    await rest();
+    return writes.join("|");
+  };
+  try {
+    CM.setContentLangs(["en", "pl"]);
+    const r1 = await run({}, () => { A.setCats(["gen"]); T.scheduleTabSave(); });
+    check("tabs.js", "a category chosen after the last thing said is said by its name once the keys rest",
+      () => eq(r1, "General"));
+    const r2 = await run({}, () => { A.putLang("pl"); T.scheduleTabSave(); });
+    check("tabs.js", "a language changed is said in the pair's own words",
+      () => eq(r2, "Polish cards"));
+    const r3 = await run({}, () => { A.setCats(["gen"]); T.scheduleTabSave(); A.setCats([]); T.scheduleTabSave(); });
+    check("tabs.js", "a change undone before the keys rest says nothing",
+      () => eq(r3, ""));
+    const r4 = await run({}, () => { A.setCats(["gen"]); T.scheduleTabSave(); T.activeHeard("cats"); });
+    check("tabs.js", "a change a toast has already said is not said again",
+      () => eq(r4, ""));
+    const r5 = await run({ cats: [], said: "General" }, () => { A.setCats(["gen"]); T.scheduleTabSave(); });
+    check("tabs.js", "the same words as the region holds are emptied first, so they are spoken again",
+      () => eq(r5, "|General"));
+    A.putLang("pl"); A.setCats([]); A.setIntentIdxs([]);
+    T.tabs.push({ id: "mc-b", pax: "Anna Nowak" });
+    const was = { tab: "mc-a", lang: "en", intents: "", cats: "" }, now = { tab: "mc-b", lang: "pl", intents: "", cats: "" };
+    check("tabs.js", "a tab switched to is said whole: the first name, then the language",
+      () => eq(T.activeWords(was, now), "Anna. Polish cards"));
+    check("tabs.js", "intents gone on the same tab are said as cleared",
+      () => eq(T.activeWords({ tab: "x", lang: "pl", intents: "t:1", cats: "" }, { tab: "x", lang: "pl", intents: "", cats: "" }), "{INTENT} cleared"));
+  } finally {
+    T.tabs.splice(0, T.tabs.length);
+    CM.setContentLangs(wasLangs); A.putLang(wasLang); A.setCats(wasCats); A.setIntentIdxs(wasIdxs);
+    await rest();
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+  }
+}
+
 /* NOT card-body.js. cardBodyHtml() reads the PAX box off the document through fill(), so it
    cannot be called without one: it is the browser oracle's, and tests/smoke.js has it. Recorded
    here rather than left unsaid, because a module missing from this file should say why. */

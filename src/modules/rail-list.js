@@ -4,7 +4,7 @@ import { scheduleCutScan } from "./cut-text.js";
 import { ICON_EYE_OPEN, ICON_EYE_SHUT, ICON_EDIT, ICON_STAR_ON, ICON_STAR_OFF } from "./icons.js";
 import { intentPickedLine, intentRows, fill } from "./intent-text.js";
 import { mgReduceMotion, E_EASE, M_MS } from "./motion.js";
-import { scheduleTabSave } from "./tabs.js";
+import { scheduleTabSave, activeHeard } from "./tabs.js";
 import { t, toast } from "./ui-lang.js";
 import { foldDiacritics, splitWords, wordMatchesTerm } from "./words.js";
 import { isIntentFavourite, ePackEpoch, pack, saveStats } from "./pack.js";
@@ -698,6 +698,7 @@ function wireRailPointer(){
       if(e.ctrlKey||e.metaKey || intentIdxs.indexOf(si)>-1) hooks.pickIntent(si,true);
       else hooks.pickIntent(si,false);
       toast(intentIdxs.length ? intentPickedLine() : t("{INTENT} cleared"));
+      activeHeard("intents");
     });
     // double-click the title to restore original intent order (favs still pin on top)
     const railTitle=intentRailEl.querySelector(".rail-head b");

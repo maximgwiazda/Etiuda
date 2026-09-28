@@ -5,7 +5,7 @@ import { syncShortcutTitles } from "./shortcuts.js";
 import { drawIntentRail } from "./rail-list.js";
 import { recountMacros } from "./card-counts.js";
 import { syncIntentInput } from "./intent-clear.js";
-import { drawPills, scheduleTabSave } from "./tabs.js";
+import { drawPills, scheduleTabSave, noteActive } from "./tabs.js";
 import { cardSearchTerms } from "./spell.js";
 import { cardDrag } from "./list-pointer.js";
 import { render } from "./render.js";
@@ -35,6 +35,7 @@ function applyLangState(l){
      browser - reopening should resume in EN, the language actually being worked in. */
   lsSet("eLang",lang);
   seg.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.l===lang));
+  noteActive();
 }
 function applyLangHeavy(){
   syncShortcutTitles();
