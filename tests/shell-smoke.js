@@ -1836,7 +1836,10 @@ const placeEc = (dir, from, as, minutesOld) => {
   /* And putting it down empties the desk WITHOUT asking on the way back, board 424\'s one
      exception: the Library is reopened over that restart already listing every file, so the
      dialog would be arguing with somebody who has just answered. */
-  await (await s.b.pages())[0].evaluate(() => { ejectCatalog(); const y = document.getElementById("eSureYes"); if (y) y.click(); });
+  /* Eject happens at once with Undo (Maxim, 2026-09-27 23:28), so no confirm may stand after the call;
+     a context lost to the restart inside it is itself no confirm. */
+  const ejAsk1 = await (await s.b.pages())[0].evaluate(() => { ejectCatalog(); return !!document.getElementById("eSure"); })
+    .catch(() => false);
   await sleep(7000);
   let ejPage = (await s.b.pages())[0];
   const afterEject = await ejPage.evaluate(SEEN);
@@ -1845,11 +1848,11 @@ const placeEc = (dir, from, as, minutesOld) => {
     rows: document.querySelectorAll("#mgCatList .ec-row").length }));
   const ejKeys = deskKeys(udLL);
   check(afterEject.cards === 0 && !afterEject.offer && !ejKeys.eCatalogFile
-        && ejLib.lib && ejLib.rows === 3,
+        && ejLib.lib && ejLib.rows === 3 && !ejAsk1,
     "2q6 ejecting empties the desk and forgets which file was loaded, and the restart it causes"
     + " is the one launch NOT asked: " + afterEject.cards + " cards, dialog " + afterEject.offer
     + ", file key " + JSON.stringify(ejKeys.eCatalogFile || "") + ", and the Library back with its "
-    + ejLib.rows + " rows, which is everything the dialog would have had to say");
+    + ejLib.rows + " rows, which is everything the dialog would have had to say; eject confirm " + ejAsk1);
   await s.stop();
 
   /* The one-shot is spent on that read, so the next ordinary launch of the same desk asks. */
@@ -1919,10 +1922,10 @@ const placeEc = (dir, from, as, minutesOld) => {
      beneath. Driven through importCatalogText, which is the reading half both import routes end
      in, over the bytes of a file that IS in the folder. That catalog is put down first: bringing in
      the very catalog that is loaded is answered in words and loads nothing, so the desk is emptied
-     and the same file comes in again through the import. The eject's question is answered by
-     its own button. */
-  await (await s.b.pages())[0].evaluate(() => { if (document.getElementById("mgCatList")) closeModal();
-    ejectCatalog(); const y = document.getElementById("eSureYes"); if (y) y.click(); });
+     and the same file comes in again through the import. The eject asks nothing (2026-09-27 23:28),
+     and a confirm standing after the call fails 2q11's premise. */
+  const ejAsk2 = await (await s.b.pages())[0].evaluate(() => { if (document.getElementById("mgCatList")) closeModal();
+    ejectCatalog(); return !!document.getElementById("eSure"); }).catch(() => false);
   await sleep(6000);
   const impRan = await (await s.b.pages())[0].evaluate(async () => {
     /* The offer over a loaded catalog is answered the way a person answers it. */ const acceptOffer = () => { const y = document.querySelector("#ecYes"); if (y) y.click(); return true; };
@@ -1937,13 +1940,14 @@ const placeEc = (dir, from, as, minutesOld) => {
   const libImp = await impPage.evaluate(OPEN_LIB);
   const impKeys = deskKeys(udLE);
   const impOn = (libImp.rows || []).filter(r => r.loaded);
-  check(impRan.step === "imported" && libImp.step === "open" && !impKeys.eCatalogFile
+  check(!ejAsk2 && impRan.step === "imported" && libImp.step === "open" && !impKeys.eCatalogFile
         && libImp.rows.length === 2 && impOn.length === 1
         && impOn[0].name === "one-edition.ec" && impOn[0].act === "Eject",
     "2q11 a catalog imported rather than loaded from the folder takes the row of the file it IS,"
     + " matched by the identity of board 431 with no file name recorded (eCatalogFile "
     + JSON.stringify(impKeys.eCatalogFile || "") + "): " + libImp.rows.length + " row(s), "
-    + impOn.length + " of them marked loaded, " + JSON.stringify((libImp.rows || []).map(r => r.name)));
+    + impOn.length + " of them marked loaded, " + JSON.stringify((libImp.rows || []).map(r => r.name))
+    + ", eject confirm " + ejAsk2);
 
   /* THE CONTROL, and it is the whole reason the match is by identity rather than by "something is
      loaded": a catalog the folder does not hold keeps a row of its own at the head and marks none
@@ -2141,18 +2145,20 @@ const placeEc = (dir, from, as, minutesOld) => {
   /* Eject from that row: the Library is still there on the far side of the restart, showing the
      folder rather than being replaced by a dialog about one file in it, and the section says in
      words that nothing is loaded. */
-  await (await s.b.pages())[0].evaluate(() => {
+  const ejAsk3 = await (await s.b.pages())[0].evaluate(() => {
     const b = document.querySelector("#mgCatList button[data-ec-eject]");
     if (b) b.click();
-    const y = document.getElementById("eSureYes"); if (y) y.click();
-  });
+    return { button: !!b, asked: !!document.getElementById("eSure") };
+  }).catch(() => ({ button: true, asked: false }));
   await sleep(8000);
   const afterEject2 = await (await s.b.pages())[0].evaluate(LIB_STATE);
   check(afterEject2.open && afterEject2.foldOpen && !afterEject2.over
-        && afterEject2.loaded.length === 0 && afterEject2.rows === 2 && afterEject2.empty === "",
+        && afterEject2.loaded.length === 0 && afterEject2.rows === 2 && afterEject2.empty === ""
+        && ejAsk3.button && !ejAsk3.asked,
     "2s5 the row's Eject leaves the Library open on the folder with no row marked and NOTHING over"
     + " it, that restart being the one launch board 424 does not ask; since 452 the fold says it"
-    + " with the list rather than with a sentence: " + JSON.stringify(afterEject2));
+    + " with the list rather than with a sentence, and the eject asked nothing (2026-09-27 23:28): "
+    + JSON.stringify(afterEject2) + " " + JSON.stringify(ejAsk3));
 
   /* Clear local memory is driven at 2w below, in a launch of its own: it restarts the app, and
      the legs here are about a dialog that has to still be standing afterwards. */
