@@ -37,7 +37,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    no number, so that run says out loud that it has none. */
 /* 278 since the tour's walk by its acts (2026-09-28): the tour section went from ten checks to eleven,
    and the first run's wait for the logo is one more in the bug hunt. */
-const EXPECTED = { chrome: 278 };
+const EXPECTED = { chrome: 279 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -456,6 +456,21 @@ const t0 = Date.now();
   check(mt.open && mt.unavailable === 0,
     "every maintenance reading answered: " + mt.unavailable + " unavailable, " + mt.blank + " blank");
   check(mt.controls === 5, "the panel's rescues and copy are wired: " + mt.controls + " of 5 controls");
+  /* ONE SCREEN, NO SCROLLING, at the two windows the panel was sized for: 1280 x 880, and 959 x 586,
+     which is a 1438 x 879 window at 150 per cent. The panel rebuilds itself on a resize. */
+  const mtFit = [];
+  for (const [w, h] of [[1280, 880], [959, 586]]) {
+    await sized(p, w, h, "maintenance " + w + "x" + h);
+    await sleep(300);
+    mtFit.push(await p.evaluate(() => {
+      const body = document.querySelector("#modalCard.mt-modal .modal-body");
+      return body ? [innerWidth, innerHeight, body.scrollHeight, body.clientHeight] : null;
+    }));
+  }
+  await sized(p, 1500, 950, "maintenance back");
+  check(mtFit.every(f => f && f[2] <= f[3] + 1),
+    "the maintenance panel stands on one screen without scrolling at 1280 x 880 and 959 x 586 (body scroll height against its height): "
+    + JSON.stringify(mtFit));
   await p.keyboard.press("Escape"); await sleep(500);
   clean(e, "the maintenance panel");
 

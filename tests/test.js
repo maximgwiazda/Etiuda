@@ -3508,8 +3508,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 833;
-const UI_STRINGS_SHA256 = "9a5fb82bda87b07d957a72c20ff8611086f1764ad66b52cb6270675102dab9fe";
+const UI_STRINGS_COUNT = 863;
+const UI_STRINGS_SHA256 = "3cfa576a230ced6a86df933f58af96e455a8fd7a2a45df76ce7efc11bb6b12ac";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
@@ -4352,6 +4352,44 @@ function libraryRowsTests() {
   const pick = (/\n\.ic-pick\{[^}]*\}/.exec(fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8")) || [""])[0];
   eq("the category editor's icon grid shows whole, with no height cap and no scroll of its own",
     [!!pick, /max-height|overflow/.test(pick)], [true, false]);
+
+  const mt = fs.readFileSync(path.join(E.ROOT, "src", "modules", "maintenance.js"), "utf8");
+  const store = fs.readFileSync(path.join(E.ROOT, "src", "modules", "storage.js"), "utf8");
+  const B = String.fromCharCode(92), HOME = "C:" + B + "Users" + B + "ann", DOCS = HOME + B + "Documents" + B + "Etiuda";
+  const place = w => {
+    try {
+      return new Function("E_CATALOG_NAME", "storedCatalog", "eDeskHome", "nsGet", "eHost", "eCatalogAccepted", "eCatalog",
+        "E_CATALOG_SCRIPT", "lsGet", "E_CATALOG_FOLDER_KEY", "eCatalogFolder", "eCatalogFile", "eCatalogBuiltIn", "eCatalogIn",
+        [extractDecl(mt, "function mtSafe("), extractDecl(store, "function eHomeless("), extractDecl(mt, "function mtCatalogPlace(")].join("\n")
+        + "\nreturn mtCatalogPlace;")(
+        w.name || "", () => (w.held ? {} : null), () => HOME, k => (w.ns || {})[k], () => (w.host ? {} : null), () => !!w.accepted, () => ({}),
+        "etiuda-catalog.js", k => (k === "eCatalogFolder" ? w.chosen || null : null), "eCatalogFolder", () => w.folder || DOCS,
+        () => w.file || "", () => !!w.builtIn, () => w.in || "")();
+    } catch (e) { return "mtCatalogPlace did not run: " + e.message; }
+  };
+  const P = o => (typeof o === "string" ? o : [o.file, o.copy, o.folder].join(" | "));
+  eq("the Maintenance panel names where the catalog in use lies, which copy it is and its folder, on a desk and in a browser", [
+    P(place({ host: true, name: "Team", ns: { CatalogFile: "team.ec" } })),
+    P(place({ host: true, name: "Team", ns: { CatalogFile: "team.ec" }, chosen: "D:" + B + "shared", folder: "D:" + B + "shared" })),
+    P(place({ host: true, name: "Sample", ns: { CatalogFile: "" }, accepted: true, builtIn: true, file: "sample-catalog.ec" })),
+    P(place({ host: true, name: "Team", ns: { CatalogFile: "" }, accepted: true, file: "team.ec", in: HOME + B + "Desktop" })),
+    P(place({ host: true, name: "Mine", ns: { CatalogFile: "", CatalogFrom: "mine.ec" } })),
+    P(place({ name: "Sample", accepted: true })), P(place({ name: "Mine", held: true, ns: { CatalogFrom: "mine.ec" } })),
+    P(place({ host: true }))], [
+    "team.ec | Documents" + B + "Etiuda | %USERPROFILE%" + B + "Documents" + B + "Etiuda",
+    "team.ec | the chosen catalog folder's | D:" + B + "shared",
+    "sample-catalog.ec | the program's own | inside the program",
+    "team.ec | found beside the program | %USERPROFILE%" + B + "Desktop",
+    "mine.ec | a file opened by hand | -",
+    "etiuda-catalog.js | beside this page | -", "mine.ec | imported into this browser | -",
+    "- | (none loaded) | -"]);
+  let report;
+  try {
+    report = new Function("mtReadings", "navigator", extractDecl(mt, "function mtReportText(") + "\nreturn mtReportText;")(
+      () => [{ sec: "Catalog file" }, { k: "file", v: "team.ec", panelOnly: true }, { k: "copy", v: "Documents" }], { userAgent: "UA" })();
+  } catch (e) { report = "mtReportText did not run: " + e.message; }
+  eq("the copied report carries where the catalog lies and never its file's own name, which the panel alone shows",
+    [/\nfile: /.test(report), /\ncopy: Documents\n/.test(report)], [false, true]);
 }
 function libraryAwaitingTests() {
   const src = sourceText();

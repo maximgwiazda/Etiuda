@@ -2488,10 +2488,9 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 .btn.danger{color:#c44;border-color:color-mix(in srgb,#c44 47%,var(--bg))}
 /* About Etiuda dialog */
 .modal-card.about-modal{max-width:520px}
-/* Two columns of readings was the floor this was set for; the pinned rescue row is the wider
-   claim, and in Polish it missed one row by three pixels. Columns collapse back to one on
-   a phone and the row wraps, so this stays a ceiling rather than a demand. */
-.modal-card.mt-modal{max-width:680px}
+/* THE PANEL TAKES THE WINDOW'S WIDTH, and the readings as many columns as it holds, so the whole of
+   it stands on one screen without scrolling in any reasonably big window. */
+.modal-card.mt-modal{max-width:min(1240px,calc(100vw - 40px))}
 /* Light and OPEN, not bold: the one place the product says its own name was the heaviest
    text in the app. 350 + tracking gives the presence the bold was for. 350 needs Segoe UI
    Variable (Win11); older systems snap to 400 - degrades to plainer, never to broken. */
@@ -2941,24 +2940,30 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 /* COLUMNS THAT PACK, not a grid that aligns: a grid row costs the height of its taller cell
    on both sides, so a short section beside a long one bought empty space and the panel
    outgrew its window. Whole sections only: half of one at a column foot reads as two. */
-.mt-grid{columns:250px 2;column-gap:26px}
+.mt-grid{columns:228px;column-gap:22px}
 .mt-sec{margin:0 0 12px;break-inside:avoid}
 .mt-sec h3{margin:0 0 4px;font:600 10.5px var(--mono);text-transform:uppercase;
   letter-spacing:.6px;color:var(--dim)}
 .mt-row{display:flex;gap:12px;justify-content:space-between;align-items:baseline;
-  padding:2px 0;font:12.5px var(--mono)}
+  padding:1px 0;font:12px var(--mono)}
 .mt-row .k{color:var(--dim);flex:0 0 auto}
 .mt-row .v{color:var(--ink);text-align:right;overflow-wrap:anywhere;min-width:0}
 /* A COUNT PER COLUMN, when one reading answers the same four questions about two subjects: as
    key and value the label took the whole column and left the numbers wrapping one digit to a
    line. The two subjects share the header because they share the questions. */
 .mt-tab{display:grid;grid-template-columns:1fr repeat(4,auto);gap:1px 10px;
-  padding:2px 0;font:12.5px var(--mono)}
+  padding:1px 0;font:12px var(--mono)}
 .mt-tab span{text-align:right;color:var(--ink);white-space:nowrap}
 .mt-tab span:nth-child(5n+1){text-align:left;color:var(--dim)}
 /* Smaller than the numbers they head: the words are longer in some languages than in others,
    and the column has to hold the longest of them without the name losing its own room. */
 .mt-tab .h{color:var(--dim);opacity:.75;font-size:11px}
+/* A short window takes the readings a size down, which is what keeps the panel on one screen at
+   586 pixels, a 1438 x 879 window at 150 per cent. */
+@media (max-height:700px){
+  .mt-row,.mt-tab{font-size:11px;padding:0}
+  .mt-sec{margin-bottom:8px}
+}
 /* --warn earns its keep again: the one row that explains vanishing personal state. */
 .mt-row .v.mt-warn{color:var(--warn)}
 /* Glass off - a rescue, not a preference. The token lines the no-blur @supports block already
