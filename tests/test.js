@@ -1221,7 +1221,8 @@ function catalogLangTests() {
 function deskStatsFns() {
   const src = sourceText();
   const decls = ["const STATS_DAYS_KEPT=", "const STATS_YMD=", "function statsYmd(",
-                 "function statsDayBefore(", "function statsDay(", "function statsIdAt(",
+                 "function statsDayBefore(", "function statsDay(", "const STATS_TOUCHED=", "function statsTouch(",
+                 "function statsIdAt(",
                  "function bumpUse(", "function bumpIntent(", "function bumpMiss(",
                  "function bumpLang(", "function statsForgetCards(", "function statsDoc("]
     .map(m => extractDecl(src, m)).join("\n");

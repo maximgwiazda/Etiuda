@@ -5,6 +5,7 @@ import { E_KEY_RE, E_NS, eNsFor, lsDel, lsGet, lsKeys, lsSet, nsDel, nsGet, nsKe
 import { eEmbeddedCatalog } from "./env.js";
 import { t, toast, fileStamp } from "./ui-lang.js";
 import { hooks } from "./hooks.js";
+import { statsOlderTouched } from "./desk-stats.js";
 
 // Personal cards: stock built-ins in M; optional pack.baseCards (imported catalog)
 // replaces M; edits/hides/customs in pack.overrides / .custom / .hidden. PAX and ROLE are
@@ -190,7 +191,7 @@ function showDeskNotices(){
    layer written before the tag model addressed an intent by its INDEX, and these carry that
    index into a namespace that reads it as a tag id. IntentOrder is out of NS_CARRY for the
    same reason, and baseCards would replace the card set wholesale. */
-const NS_CARRY=["Pack","CatOrder","Cols","Floor"];
+const NS_CARRY=["Pack","Stats","Days","CatOrder","Cols","Floor"];
 const NS_DROP_POSITIONAL=["intentOverrides","intentHidden","intentFavourites","intentRemoved","baseCards"];
 function packWithoutPositional(raw){
   try{
@@ -346,11 +347,25 @@ function migrateIntentKeys(){
   savePack();
   return "done";
 }
+const STATS_FIELDS=["useCounts","useAt","intentCounts","searchMisses","langs","dayIds","daysSince"];
+/* The counts from their own keys where the desk has them (see writePack); a desk written before them
+   keeps its counts inside the pack, and they are read from there until the first save moves them. */
+function withCounts(p){
+  const map=v=>!!v && typeof v==="object" && !Array.isArray(v);
+  let st=null, older=null;
+  try{ st=JSON.parse(nsGet("Stats")||"null"); older=JSON.parse(nsGet("Days")||"null"); }catch(e){}
+  if(!map(st)) return p;
+  const out=map(p) ? p : {};
+  STATS_FIELDS.forEach(k=>{ if(k in st) out[k]=st[k]; else delete out[k]; });
+  out.days=Object.assign({}, map(older) ? older : map(out.days) ? out.days : {}, map(st.days) ? st.days : {});
+  return out;
+}
 function loadPack(){
   let p=null;
   adoptNameNsLayer();                    // the known source before the inferred one
   adoptStrandedPack();
   try{ const raw=nsGet("Pack"); if(raw) p=JSON.parse(raw); }catch(e){}
+  p=withCounts(p);
   /* If the rename cannot be applied to what is stored, say so rather than starting quietly with
      an empty ordering - the user would see their arrangement gone with no explanation. The boot
      banner offers Reset, which is the honest remedy. */
@@ -507,19 +522,31 @@ function saveStats(){
 function flushStats(){
   if(!eStatsT) return false;
   clearTimeout(eStatsT); eStatsT=0;
-  return writePack();
+  return writePack(true);
 }
-function writePack(){
+/* THE COUNTS ARE KEPT BESIDE THE PACK, NOT IN IT: Stats holds the tallies and the newest day,
+   Days every day before it. A count rewrites Stats alone, and Days only once a day has closed, so
+   what a copy costs does not grow with the days a desk has kept. loadPack puts the three together. */
+function writePack(countsOnly){
+  const layer={}, stats={}, days=pack.days||{}, open={}, closed={};
+  let newest="";
+  Object.keys(days).forEach(d=>{ if(d>newest) newest=d; });
+  Object.keys(days).forEach(d=>{ (d===newest ? open : closed)[d]=days[d]; });
+  Object.keys(pack).forEach(k=>{ if(k!=="days") (STATS_FIELDS.indexOf(k)>-1 ? stats : layer)[k]=pack[k]; });
+  stats.days=open;
+  const older=statsOlderTouched(pack,newest);
   /* Written under BOTH names - see migratePackKeys(): an older build opened against the
      same storage reads macroOrder/baseMacros and finds them. The duplicates are written
      here rather than kept on `pack`, so the live object carries the new vocabulary only. */
-  let out=pack;
-  try{
-    out=Object.assign({},pack,{macroOrder:pack.cardOrder,baseMacros:pack.baseCards});
-  }catch(e){ out=pack; }
+  layer.macroOrder=pack.cardOrder;
+  layer.baseMacros=pack.baseCards;
   /* A refused write raises the lasting notice from the storage layer; see syncSaveNotice. */
-  let ok=false;
-  try{ ok=nsSet("Pack",JSON.stringify(out)); }catch(e){ ok=false; }
+  let ok=true;
+  try{
+    if(!countsOnly) ok=nsSet("Pack",JSON.stringify(layer)) && ok;
+    ok=nsSet("Stats",JSON.stringify(stats)) && ok;
+    if(!countsOnly || older || nsGet("Days")==null) ok=nsSet("Days",JSON.stringify(closed)) && ok;
+  }catch(e){ ok=false; }
   return ok;
 }
 /* THE PERSONAL LAYER BEFORE AN ACT, and the way back from that act alone. packUndoFor is called

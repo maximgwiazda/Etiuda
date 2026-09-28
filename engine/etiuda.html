@@ -6368,6 +6368,166 @@ What you type stays in this browser only.`;
     });
   }
 
+  // src/modules/desk-stats.js
+  var STATS_DAYS_KEPT = 400;
+  var STATS_YMD = /^\d{4}-\d{2}-\d{2}$/;
+  function statsYmd(d) {
+    const x = d || /* @__PURE__ */ new Date();
+    const p = (v) => String(v).padStart(2, "0");
+    return x.getFullYear() + "-" + p(x.getMonth() + 1) + "-" + p(x.getDate());
+  }
+  function statsDayBefore(ymd, n) {
+    const [y, m, d] = ymd.split("-").map(Number);
+    const x = new Date(Date.UTC(y, m - 1, d) - n * 864e5);
+    const p = (v) => String(v).padStart(2, "0");
+    return x.getUTCFullYear() + "-" + p(x.getUTCMonth() + 1) + "-" + p(x.getUTCDate());
+  }
+  function statsDay(pack2, at) {
+    const day = STATS_YMD.test(String(at || "")) ? String(at) : statsYmd();
+    if (!pack2.days || typeof pack2.days !== "object" || Array.isArray(pack2.days)) pack2.days = {};
+    let b = pack2.days[day];
+    if (!b || typeof b !== "object") {
+      b = pack2.days[day] = { c: {}, i: {}, m: 0, l: {} };
+      const cut = statsDayBefore(day, STATS_DAYS_KEPT);
+      Object.keys(pack2.days).forEach((k) => {
+        if (k < cut) delete pack2.days[k];
+      });
+      if (!STATS_YMD.test(String(pack2.daysSince || "")) || day < pack2.daysSince) pack2.daysSince = day;
+      if (pack2.daysSince < cut) pack2.daysSince = cut;
+      statsTouch(pack2, "*");
+    } else statsTouch(pack2, day);
+    return b;
+  }
+  var STATS_TOUCHED = /* @__PURE__ */ new WeakMap();
+  function statsTouch(pack2, day) {
+    let s = STATS_TOUCHED.get(pack2);
+    if (!s) STATS_TOUCHED.set(pack2, s = /* @__PURE__ */ new Set());
+    s.add(day);
+  }
+  function statsOlderTouched(pack2, newest) {
+    const s = STATS_TOUCHED.get(pack2);
+    STATS_TOUCHED.delete(pack2);
+    return !!s && [...s].some((d) => d !== newest);
+  }
+  function statsIdAt(pack2, id) {
+    if (!Array.isArray(pack2.dayIds)) pack2.dayIds = [];
+    let at = pack2.dayIds.indexOf(id);
+    if (at < 0) {
+      at = pack2.dayIds.length;
+      pack2.dayIds.push(id);
+    }
+    return at;
+  }
+  function bumpUse(pack2, id, at) {
+    if (!id) return;
+    if (!pack2.useCounts || typeof pack2.useCounts !== "object") pack2.useCounts = {};
+    pack2.useCounts[id] = (pack2.useCounts[id] | 0) + 1;
+    if (!pack2.useAt || typeof pack2.useAt !== "object") pack2.useAt = {};
+    pack2.useAt[id] = at || statsYmd();
+    const b = statsDay(pack2, at), k = statsIdAt(pack2, String(id));
+    b.c[k] = (b.c[k] | 0) + 1;
+  }
+  function bumpIntent(pack2, id, at) {
+    if (!id) return;
+    if (!pack2.intentCounts || typeof pack2.intentCounts !== "object") pack2.intentCounts = {};
+    pack2.intentCounts[id] = (pack2.intentCounts[id] | 0) + 1;
+    const b = statsDay(pack2, at), k = statsIdAt(pack2, String(id));
+    b.i[k] = (b.i[k] | 0) + 1;
+  }
+  function bumpMiss(pack2, at) {
+    pack2.searchMisses = (pack2.searchMisses | 0) + 1;
+    const b = statsDay(pack2, at);
+    b.m = (b.m | 0) + 1;
+  }
+  function bumpLang(pack2, lang2, at) {
+    const code = String(lang2 == null ? "" : lang2);
+    if (!code || /[\s:]/.test(code)) return;
+    if (!pack2.langs || typeof pack2.langs !== "object" || Array.isArray(pack2.langs)) pack2.langs = {};
+    pack2.langs[code] = (pack2.langs[code] | 0) + 1;
+    const b = statsDay(pack2, at);
+    b.l[code] = (b.l[code] | 0) + 1;
+  }
+  function statsForgetCards(pack2, keep) {
+    const ids = Array.isArray(pack2.dayIds) ? pack2.dayIds : [];
+    let n = 0;
+    Object.keys(pack2.days || {}).forEach((d) => {
+      const c = pack2.days[d] && pack2.days[d].c;
+      if (c) Object.keys(c).forEach((k) => {
+        if (!keep(ids[k])) {
+          delete c[k];
+          n++;
+        }
+      });
+    });
+    if (n) statsTouch(pack2, "*");
+  }
+  function statsDoc(pack2, info) {
+    const from = String(info && info.period && info.period.from || "");
+    const to = String(info && info.period && info.period.to || "");
+    const spanned = STATS_YMD.test(from) && STATS_YMD.test(to);
+    let uc = pack2 && pack2.useCounts || {}, at = pack2 && pack2.useAt || {}, ic = pack2 && pack2.intentCounts || {};
+    let misses = (pack2 && pack2.searchMisses) | 0;
+    let lc = pack2 && pack2.langs && typeof pack2.langs === "object" && !Array.isArray(pack2.langs) ? pack2.langs : {};
+    let since = "";
+    if (spanned) {
+      const days = pack2 && pack2.days && typeof pack2.days === "object" && !Array.isArray(pack2.days) ? pack2.days : {};
+      const ids = pack2 && Array.isArray(pack2.dayIds) ? pack2.dayIds : [];
+      uc = {};
+      at = {};
+      ic = {};
+      lc = {};
+      misses = 0;
+      Object.keys(days).filter((d) => STATS_YMD.test(d) && d >= from && d <= to).sort().forEach((d) => {
+        const b = days[d] || {};
+        Object.keys(b.c || {}).forEach((k) => {
+          const id = ids[k], n = b.c[k] | 0;
+          if (id != null && n) {
+            uc[id] = (uc[id] | 0) + n;
+            at[id] = d;
+          }
+        });
+        Object.keys(b.i || {}).forEach((k) => {
+          const id = ids[k];
+          if (id != null) ic[id] = (ic[id] | 0) + (b.i[k] | 0);
+        });
+        Object.keys(b.l || {}).forEach((c) => {
+          lc[c] = (lc[c] | 0) + (b.l[c] | 0);
+        });
+        misses += b.m | 0;
+      });
+      since = STATS_YMD.test(String(pack2 && pack2.daysSince || "")) ? String(pack2.daysSince) : statsYmd();
+    }
+    const cards2 = [];
+    Object.keys(uc).forEach((id) => {
+      const n = uc[id] | 0;
+      if (!n) return;
+      const row = { id: String(id), n };
+      if (at[id]) row.at = String(at[id]);
+      cards2.push(row);
+    });
+    const intents = [];
+    Object.keys(ic).forEach((id) => {
+      const n = ic[id] | 0;
+      if (n) intents.push({ id: String(id), n });
+    });
+    const langs = {};
+    Object.keys(lc).forEach((code) => {
+      if (lc[code] | 0) langs[code] = lc[code] | 0;
+    });
+    const doc = {
+      format: 1,
+      kind: "etiuda-statistics",
+      engine: String(info && info.engine || ""),
+      period: { from, to }
+    };
+    if (spanned) doc.since = since;
+    Object.assign(doc, { cards: cards2, intents, misses, langs });
+    if (info && info.catalog && info.catalog.id) {
+      doc.catalog = { id: String(info.catalog.id), rev: +info.catalog.rev || 0 };
+    }
+    return doc;
+  }
+
   // src/modules/pack.js
   var BASE_CATS = Object.assign({}, CATS);
   var BASE_M = [];
@@ -6572,7 +6732,7 @@ What you type stays in this browser only.`;
     showDeskRefused();
     syncSaveNotice();
   }
-  var NS_CARRY = ["Pack", "CatOrder", "Cols", "Floor"];
+  var NS_CARRY = ["Pack", "Stats", "Days", "CatOrder", "Cols", "Floor"];
   var NS_DROP_POSITIONAL = ["intentOverrides", "intentHidden", "intentFavourites", "intentRemoved", "baseCards"];
   function packWithoutPositional(raw) {
     try {
@@ -6745,6 +6905,24 @@ What you type stays in this browser only.`;
     savePack();
     return "done";
   }
+  var STATS_FIELDS = ["useCounts", "useAt", "intentCounts", "searchMisses", "langs", "dayIds", "daysSince"];
+  function withCounts(p) {
+    const map = (v) => !!v && typeof v === "object" && !Array.isArray(v);
+    let st = null, older = null;
+    try {
+      st = JSON.parse(nsGet("Stats") || "null");
+      older = JSON.parse(nsGet("Days") || "null");
+    } catch (e) {
+    }
+    if (!map(st)) return p;
+    const out = map(p) ? p : {};
+    STATS_FIELDS.forEach((k) => {
+      if (k in st) out[k] = st[k];
+      else delete out[k];
+    });
+    out.days = Object.assign({}, map(older) ? older : map(out.days) ? out.days : {}, map(st.days) ? st.days : {});
+    return out;
+  }
   function loadPack() {
     let p = null;
     adoptNameNsLayer();
@@ -6754,6 +6932,7 @@ What you type stays in this browser only.`;
       if (raw) p = JSON.parse(raw);
     } catch (e) {
     }
+    p = withCounts(p);
     try {
       migratePackKeys(p);
     } catch (e) {
@@ -6900,18 +7079,29 @@ What you type stays in this browser only.`;
     if (!eStatsT) return false;
     clearTimeout(eStatsT);
     eStatsT = 0;
-    return writePack();
+    return writePack(true);
   }
-  function writePack() {
-    let out = pack;
+  function writePack(countsOnly) {
+    const layer = {}, stats = {}, days = pack.days || {}, open = {}, closed = {};
+    let newest = "";
+    Object.keys(days).forEach((d) => {
+      if (d > newest) newest = d;
+    });
+    Object.keys(days).forEach((d) => {
+      (d === newest ? open : closed)[d] = days[d];
+    });
+    Object.keys(pack).forEach((k) => {
+      if (k !== "days") (STATS_FIELDS.indexOf(k) > -1 ? stats : layer)[k] = pack[k];
+    });
+    stats.days = open;
+    const older = statsOlderTouched(pack, newest);
+    layer.macroOrder = pack.cardOrder;
+    layer.baseMacros = pack.baseCards;
+    let ok = true;
     try {
-      out = Object.assign({}, pack, { macroOrder: pack.cardOrder, baseMacros: pack.baseCards });
-    } catch (e) {
-      out = pack;
-    }
-    let ok = false;
-    try {
-      ok = nsSet("Pack", JSON.stringify(out));
+      if (!countsOnly) ok = nsSet("Pack", JSON.stringify(layer)) && ok;
+      ok = nsSet("Stats", JSON.stringify(stats)) && ok;
+      if (!countsOnly || older || nsGet("Days") == null) ok = nsSet("Days", JSON.stringify(closed)) && ok;
     } catch (e) {
       ok = false;
     }
@@ -11576,151 +11766,6 @@ What you type stays in this browser only.`;
     syncBandHeight: () => syncBandHeight,
     wireHost: () => wireHost
   });
-
-  // src/modules/desk-stats.js
-  var STATS_DAYS_KEPT = 400;
-  var STATS_YMD = /^\d{4}-\d{2}-\d{2}$/;
-  function statsYmd(d) {
-    const x = d || /* @__PURE__ */ new Date();
-    const p = (v) => String(v).padStart(2, "0");
-    return x.getFullYear() + "-" + p(x.getMonth() + 1) + "-" + p(x.getDate());
-  }
-  function statsDayBefore(ymd, n) {
-    const [y, m, d] = ymd.split("-").map(Number);
-    const x = new Date(Date.UTC(y, m - 1, d) - n * 864e5);
-    const p = (v) => String(v).padStart(2, "0");
-    return x.getUTCFullYear() + "-" + p(x.getUTCMonth() + 1) + "-" + p(x.getUTCDate());
-  }
-  function statsDay(pack2, at) {
-    const day = STATS_YMD.test(String(at || "")) ? String(at) : statsYmd();
-    if (!pack2.days || typeof pack2.days !== "object" || Array.isArray(pack2.days)) pack2.days = {};
-    let b = pack2.days[day];
-    if (!b || typeof b !== "object") {
-      b = pack2.days[day] = { c: {}, i: {}, m: 0, l: {} };
-      const cut = statsDayBefore(day, STATS_DAYS_KEPT);
-      Object.keys(pack2.days).forEach((k) => {
-        if (k < cut) delete pack2.days[k];
-      });
-      if (!STATS_YMD.test(String(pack2.daysSince || "")) || day < pack2.daysSince) pack2.daysSince = day;
-      if (pack2.daysSince < cut) pack2.daysSince = cut;
-    }
-    return b;
-  }
-  function statsIdAt(pack2, id) {
-    if (!Array.isArray(pack2.dayIds)) pack2.dayIds = [];
-    let at = pack2.dayIds.indexOf(id);
-    if (at < 0) {
-      at = pack2.dayIds.length;
-      pack2.dayIds.push(id);
-    }
-    return at;
-  }
-  function bumpUse(pack2, id, at) {
-    if (!id) return;
-    if (!pack2.useCounts || typeof pack2.useCounts !== "object") pack2.useCounts = {};
-    pack2.useCounts[id] = (pack2.useCounts[id] | 0) + 1;
-    if (!pack2.useAt || typeof pack2.useAt !== "object") pack2.useAt = {};
-    pack2.useAt[id] = at || statsYmd();
-    const b = statsDay(pack2, at), k = statsIdAt(pack2, String(id));
-    b.c[k] = (b.c[k] | 0) + 1;
-  }
-  function bumpIntent(pack2, id, at) {
-    if (!id) return;
-    if (!pack2.intentCounts || typeof pack2.intentCounts !== "object") pack2.intentCounts = {};
-    pack2.intentCounts[id] = (pack2.intentCounts[id] | 0) + 1;
-    const b = statsDay(pack2, at), k = statsIdAt(pack2, String(id));
-    b.i[k] = (b.i[k] | 0) + 1;
-  }
-  function bumpMiss(pack2, at) {
-    pack2.searchMisses = (pack2.searchMisses | 0) + 1;
-    const b = statsDay(pack2, at);
-    b.m = (b.m | 0) + 1;
-  }
-  function bumpLang(pack2, lang2, at) {
-    const code = String(lang2 == null ? "" : lang2);
-    if (!code || /[\s:]/.test(code)) return;
-    if (!pack2.langs || typeof pack2.langs !== "object" || Array.isArray(pack2.langs)) pack2.langs = {};
-    pack2.langs[code] = (pack2.langs[code] | 0) + 1;
-    const b = statsDay(pack2, at);
-    b.l[code] = (b.l[code] | 0) + 1;
-  }
-  function statsForgetCards(pack2, keep) {
-    const ids = Array.isArray(pack2.dayIds) ? pack2.dayIds : [];
-    Object.keys(pack2.days || {}).forEach((d) => {
-      const c = pack2.days[d] && pack2.days[d].c;
-      if (c) Object.keys(c).forEach((k) => {
-        if (!keep(ids[k])) delete c[k];
-      });
-    });
-  }
-  function statsDoc(pack2, info) {
-    const from = String(info && info.period && info.period.from || "");
-    const to = String(info && info.period && info.period.to || "");
-    const spanned = STATS_YMD.test(from) && STATS_YMD.test(to);
-    let uc = pack2 && pack2.useCounts || {}, at = pack2 && pack2.useAt || {}, ic = pack2 && pack2.intentCounts || {};
-    let misses = (pack2 && pack2.searchMisses) | 0;
-    let lc = pack2 && pack2.langs && typeof pack2.langs === "object" && !Array.isArray(pack2.langs) ? pack2.langs : {};
-    let since = "";
-    if (spanned) {
-      const days = pack2 && pack2.days && typeof pack2.days === "object" && !Array.isArray(pack2.days) ? pack2.days : {};
-      const ids = pack2 && Array.isArray(pack2.dayIds) ? pack2.dayIds : [];
-      uc = {};
-      at = {};
-      ic = {};
-      lc = {};
-      misses = 0;
-      Object.keys(days).filter((d) => STATS_YMD.test(d) && d >= from && d <= to).sort().forEach((d) => {
-        const b = days[d] || {};
-        Object.keys(b.c || {}).forEach((k) => {
-          const id = ids[k], n = b.c[k] | 0;
-          if (id != null && n) {
-            uc[id] = (uc[id] | 0) + n;
-            at[id] = d;
-          }
-        });
-        Object.keys(b.i || {}).forEach((k) => {
-          const id = ids[k];
-          if (id != null) ic[id] = (ic[id] | 0) + (b.i[k] | 0);
-        });
-        Object.keys(b.l || {}).forEach((c) => {
-          lc[c] = (lc[c] | 0) + (b.l[c] | 0);
-        });
-        misses += b.m | 0;
-      });
-      since = STATS_YMD.test(String(pack2 && pack2.daysSince || "")) ? String(pack2.daysSince) : statsYmd();
-    }
-    const cards2 = [];
-    Object.keys(uc).forEach((id) => {
-      const n = uc[id] | 0;
-      if (!n) return;
-      const row = { id: String(id), n };
-      if (at[id]) row.at = String(at[id]);
-      cards2.push(row);
-    });
-    const intents = [];
-    Object.keys(ic).forEach((id) => {
-      const n = ic[id] | 0;
-      if (n) intents.push({ id: String(id), n });
-    });
-    const langs = {};
-    Object.keys(lc).forEach((code) => {
-      if (lc[code] | 0) langs[code] = lc[code] | 0;
-    });
-    const doc = {
-      format: 1,
-      kind: "etiuda-statistics",
-      engine: String(info && info.engine || ""),
-      period: { from, to }
-    };
-    if (spanned) doc.since = since;
-    Object.assign(doc, { cards: cards2, intents, misses, langs });
-    if (info && info.catalog && info.catalog.id) {
-      doc.catalog = { id: String(info.catalog.id), rev: +info.catalog.rev || 0 };
-    }
-    return doc;
-  }
-
-  // src/modules/host.js
   function eHost() {
     try {
       return typeof window !== "undefined" && window.E_HOST || null;

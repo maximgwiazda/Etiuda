@@ -1376,7 +1376,8 @@ const CARD_B = {
     () => {
       if (typeof P.flushStats === "function") P.flushStats();
       let got = null;
-      try { got = JSON.parse(ST.nsGet("Pack") || "null"); } catch (e) { got = null; }
+      // The counts' own key where the tree keeps them beside the pack, the pack itself where not.
+      try { got = JSON.parse(ST.nsGet("Stats") || ST.nsGet("Pack") || "null"); } catch (e) { got = null; }
       return eq(((got && got.useCounts) || {})["c-counted-copy"], 1);
     });
 }
