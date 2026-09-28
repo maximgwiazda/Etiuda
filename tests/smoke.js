@@ -2723,7 +2723,7 @@ const t0 = Date.now();
     await q.goto("file:///" + path.join(pub, "etiuda.html").replace(/\\/g, "/"), { waitUntil: "load", timeout: 90000 });
     await sleep(2400);
     const offer = await q.evaluate(() => ({ cards: document.querySelectorAll(".card").length, real: typeof E_CATALOG !== "undefined",
-      ready: sampleReady(), load: !!document.getElementById("emptyLoad"),
+      sampleRead: typeof window.E_SAMPLE !== "undefined", load: !!document.getElementById("emptyLoad"),
       btn: ((document.querySelector("#emptySample") || {}).textContent || "").trim() }));
     /* BOARD 344: the Import button beside the sample one, render.js:128, the only route in src/
        to hooks.importCatalogHere - and it is pressed HERE, on the empty screen, because that is
@@ -2864,8 +2864,8 @@ const t0 = Date.now();
     step("reading the loaded sample back");
     const got = await q.evaluate(() => ({ cards: document.querySelectorAll(".card").length, rows: document.querySelectorAll("#intentRailList .rail-item").length, pills: document.querySelectorAll("#pills .pill").length,
       bar: ((document.querySelector("#catNow .cn-name:not([hidden])") || {}).textContent || "") }));
-    check(!offer.real && offer.cards === 0 && offer.ready && offer.load && offer.btn === "",
-      "with no deployment catalog and the sample beside the engine, the empty screen offers Load and no sample button (" + JSON.stringify(offer) + ")");
+    check(!offer.real && offer.cards === 0 && !offer.sampleRead && offer.load && offer.btn === "",
+      "with no deployment catalog and the old sample script beside the engine, the page reads no sample and the empty screen offers Load and no sample button (" + JSON.stringify(offer) + ")");
     check(got.cards > 0 && got.rows > 0 && got.pills > 0 && got.bar === path.basename(SAMPLE_EC),
       "the sample loads: " + got.cards + " cards, " + got.rows + " intents, " + got.pills + " pills, and the top bar names its file "
       + JSON.stringify(got.bar));

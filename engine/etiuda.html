@@ -3520,9 +3520,6 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
      customer's name - any other file comes in via Import. A configurable name must be
      discovered first; one fixed name is what makes the sibling work with no configuration. -->
 <script src="etiuda-catalog.js"></script>
-<!-- The demo, on the same terms and for the same reason as the line above. Absent on a
-     copy downloaded on its own, which is why every route that offers it asks first. -->
-<script src="sample-catalog.js"></script>
 <!-- Embedded catalog slot. Empty in the plain engine; Export HTML fills it to produce a
      self-contained build that opens with its content already loaded and needs no sibling file.
      type="application/json" so the browser stores it as inert text rather than running it. -->
@@ -11376,9 +11373,7 @@ What you type stays in this browser only.`;
     importCatalogHere: () => importCatalogHere,
     importCatalogText: () => importCatalogText,
     isCatalogUpdate: () => isCatalogUpdate,
-    loadSampleCatalog: () => loadSampleCatalog,
     proposeEdition: () => proposeEdition,
-    sampleReady: () => sampleReady,
     sampleUntouched: () => sampleUntouched,
     syncSampleMark: () => syncSampleMark,
     wireCatalogDrop: () => wireCatalogDrop
@@ -11893,7 +11888,6 @@ What you type stays in this browser only.`;
     ePickCatalogFile: () => ePickCatalogFile,
     ePickCatalogFolder: () => ePickCatalogFolder,
     eReadCatalogFile: () => eReadCatalogFile,
-    eSampleFile: () => eSampleFile,
     eSaveCatalogFile: () => eSaveCatalogFile,
     eSetAccent: () => eSetAccent,
     eSetMaximized: () => eSetMaximized,
@@ -12006,10 +12000,6 @@ What you type stays in this browser only.`;
       }
       return dir;
     });
-  }
-  function eSampleFile() {
-    const h = eHost();
-    return h && typeof h.sampleFile === "string" ? h.sampleFile : "";
   }
   function eReadCatalogFile(name) {
     const h = eHost();
@@ -12919,20 +12909,6 @@ What you type stays in this browser only.`;
     let on = false;
     on = nsGet("Sample") === "1";
     el.hidden = !(on && (cards || []).length > 0 && sampleUntouched());
-  }
-  function sampleReady() {
-    return typeof E_SAMPLE !== "undefined" && isV2(E_SAMPLE) || !!eSampleFile();
-  }
-  function loadSampleCatalog() {
-    if ((cards || []).length || !sampleReady()) return false;
-    if (typeof E_SAMPLE !== "undefined" && isV2(E_SAMPLE))
-      return activateCatalog(catalogFromV2(JSON.parse(JSON.stringify(E_SAMPLE))), { keepPersonal: true });
-    const name = eSampleFile();
-    eReadCatalogFile(name).then((got) => {
-      const c = got && got.text ? catalogFromFileText(got.text, name) : null;
-      if (c && !(cards || []).length) activateCatalog(c, { keepPersonal: true, file: name });
-    });
-    return true;
   }
   function catalogFromFileText(text, fileName) {
     try {

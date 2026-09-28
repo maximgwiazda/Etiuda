@@ -53,7 +53,6 @@ function ensureCatalogFolder() {
    read instead of the shipped one, edited or not, and the Library lists that name once and says
    which copy is in use. Paired with the default folder only, for ensureCatalogFolder's reason: a
    folder somebody chose stands alone. */
-const SAMPLE_FILE = "sample-catalog.ec";
 const BUILT_IN_DIR = __dirname;
 /* THE FIRST RUN GIVES THE DEFAULT FOLDER A COPY OF EACH SHIPPED CATALOG, so Load shows the sample
    among the person's own files. A first run is a desk with no file at all, so an update gives
@@ -976,8 +975,6 @@ ipcMain.on("etiuda:host", (e) => {
        them and the offer's line names the folder it accepts from. The preload asks for the
        catalog first, so catalogFrom is already the answer by the time this is read. */
     catalogFolder: catalogFolder(),
-    // The shipped sample's name where this desk reads it, so the empty desk can offer it by name.
-    sampleFile: builtInFiles().concat(ecFilesIn(catalogFolder())).some(f => path.basename(f) === SAMPLE_FILE) ? SAMPLE_FILE : "",
     catalogFile: catalogFrom ? path.basename(catalogFrom) : "",
     catalogIn: folderShown(catalogFrom),
     catalogBuiltIn: isBuiltIn(catalogFrom),
@@ -1649,15 +1646,14 @@ function refusalDoc(why) {
     + '</div></div>\n';
 }
 
-/* THE TWO SIBLING TAGS ARE NOT SERVED HERE. In a browser they are how a catalog or the demo
-   beside the engine arrives; under this shell the policy refuses both by design, since a catalog
-   comes through the host, and each refusal was a console error on every boot, so a healthy desk
-   never had a clean console (bug hunt 3, item 21). Cut from the served copy only, as the policy is
-   put into it: engine/etiuda.html keeps them for the browser. Each must match exactly once, like
-   the anchor: none means the template moved and the strip is stale, two means the literal has
-   turned up somewhere it must not be cut. tests/csp.js proves the policy still refuses a sibling
-   with one of its own planting, and that a clean boot logs nothing. */
-const SIBLING_TAGS = ['<script src="etiuda-catalog.js"></script>', '<script src="sample-catalog.js"></script>'];
+/* THE SIBLING TAG IS NOT SERVED HERE. In a browser it is how a catalog beside the engine arrives;
+   under this shell the policy refuses it by design, since a catalog comes through the host, and the
+   refusal was a console error on every boot, so a healthy desk never had a clean console (bug hunt
+   3, item 21). Cut from the served copy only, as the policy is put into it: engine/etiuda.html
+   keeps it for the browser. It must match exactly once, like the anchor: none means the template
+   moved and the strip is stale, two means the literal has turned up somewhere it must not be cut.
+   tests/csp.js proves the policy still refuses a sibling with one of its own planting. */
+const SIBLING_TAGS = ['<script src="etiuda-catalog.js"></script>'];
 
 function withPolicy(html) {
   const pin = readPin();

@@ -125,11 +125,6 @@ function eChooseCatalogFolder(title){
 }
 /* One file out of that folder, by name. {name,text} or null; an empty text is a file that would
    not read, which is the caller's to speak about. */
-/* The shipped sample's file name where this desk reads it, or "": the empty desk offers it by name. */
-function eSampleFile(){
-  const h=eHost();
-  return (h && typeof h.sampleFile==="string") ? h.sampleFile : "";
-}
 function eReadCatalogFile(name){
   const h=eHost();
   if(!h || typeof h.readCatalogFile!=="function") return Promise.resolve(null);
@@ -294,7 +289,6 @@ export {
   ePickCatalogFile,
   ePickCatalogFolder,
   eReadCatalogFile,
-  eSampleFile,
   eSaveCatalogFile,
   wireHost,
   eSetAccent,
