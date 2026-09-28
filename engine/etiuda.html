@@ -10297,7 +10297,7 @@ What you type stays in this browser only.`;
   var FILL_M_A = "";
   var FILL_M_B = "";
   var FILL_STRIP = /[\u0001\u0002\u0003\u0004]/g;
-  var Z_TOKEN = /\{Z\}[ \t]*/g;
+  var Z_TOKEN = /\{Z\}([ \t]*)/g;
   function fill(s, m, mark, inL) {
     if (!s) return s;
     const L = CONTENT_LANGS.indexOf(inL) > -1 ? inL : cardLang(m);
@@ -10345,10 +10345,10 @@ What you type stays in this browser only.`;
     s = s.replace(/\{TOPIC\}/g, () => M2(commentPartTopic(L), t("TOPIC")));
     const it = intentFor(L);
     if (it) {
-      s = s.replace(Z_TOKEN, () => L === "pl" ? zForm(intentFirst(L)) : "");
+      s = s.replace(Z_TOKEN, (_, sp) => L === "pl" ? zForm(intentFirst(L)) + sp : "");
       s = s.replace(/\{INTENT\}/g, () => M2(it, t("INTENT")));
     } else {
-      s = s.replace(Z_TOKEN, L === "pl" ? "z" : "");
+      s = s.replace(Z_TOKEN, (_, sp) => L === "pl" ? "z" + sp : "");
       s = s.replace(/\{INTENT\}/g, mark ? MISS(t("INTENT")) : "");
     }
     return s;

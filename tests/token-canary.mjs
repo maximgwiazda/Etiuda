@@ -248,6 +248,45 @@ for (const [span, r] of filledIn) {
 check("2b", "cardFillKey sees a token in every card carrying a form fill() fills", missed.length === 0,
   "short-circuited to no token: " + missed.join(", "));
 
+/* ---------------------------------------------------------------- {Z} keeps its word apart.
+   {Z} takes the space after it only where it resolves to nothing (English); in Polish the
+   preposition is a word and the space stays, or "z" runs into the next one. Both readers: the
+   clipboard's plain fill(), exactly what a copy writes, and the card's marked fill() through
+   escFilled with the tags taken out, which is the text the card shows. */
+{
+  const tagless = s => I.escFilled(s).replace(/<[^>]*>/g, "");
+  const shows = (s, lang) => tagless(I.fill(s, card, true, lang));
+  const copies = (s, lang) => I.fill(s, card, false, lang);
+  const intent = v => { setWorld(false); A.setIntentText(v); };
+  const PL = "Dziękujemy {Z} {INTENT} i czekamy.";
+  const EN = "Thank you for {Z} {INTENT} and we wait.";
+  for (const [clause, prep] of [["zmianą godziny", "ze"], ["przesunięciem terminu", "z"]]) {
+    intent(clause);
+    const want = "Dziękujemy " + prep + " " + clause + " i czekamy.";
+    check("3a", "{Z} copies as \"" + prep + "\" and a space before its intent in Polish",
+      copies(PL, "pl") === want, "copied " + JSON.stringify(copies(PL, "pl")));
+    check("3b", "{Z} shows as \"" + prep + "\" and a space before its intent on a Polish card",
+      shows(PL, "pl") === want, "shown " + JSON.stringify(shows(PL, "pl")));
+  }
+  intent("");
+  const hole = shows(PL, "pl"), plain = copies(PL, "pl");
+  check("3c", "with no intent the Polish card shows \"z\" apart from the intent's hole",
+    /Dziękujemy z [^ ]/.test(hole), "shown " + JSON.stringify(hole));
+  check("3d", "with no intent the Polish copy keeps \"z\" apart from the next word",
+    /Dziękujemy z\s+i czekamy\.$/.test(plain), "copied " + JSON.stringify(plain));
+  /* In English {Z} and its space leave exactly what the text would read without them; the
+     clipboard's empty {INTENT} keeps its own gap, which is not {Z}'s. */
+  const EN_BARE = EN.replace("{Z} ", "");
+  for (const v of ["a new time", ""]) {
+    intent(v);
+    const outs = [copies(EN, "en"), shows(EN, "en")], bare = [copies(EN_BARE, "en"), shows(EN_BARE, "en")];
+    check("3e", "{Z} leaves nothing and no space in English, " + (v ? "with" : "without") + " an intent",
+      outs[0] === bare[0] && outs[1] === bare[1] && (!v || outs.every(o => o.indexOf("  ") < 0)),
+      "gave " + JSON.stringify(outs) + " against " + JSON.stringify(bare));
+  }
+  setWorld(false);
+}
+
 /* ---------------------------------------------------------------- counts and verdict. */
 const filledForms = [...filledIn.values()].filter(r => r.where.length).length;
 console.log("#counts checks=" + (pass + fail) + " passed=" + pass + " failed=" + fail
