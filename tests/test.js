@@ -565,6 +565,7 @@ function runUnitTests() {
   ejectUndoTests();
   tourActTests();
   emptyDeskTests();
+  catNowTests();
 }
 
 /* EJECT HAPPENS AT ONCE AND UNDO LOADS THE SAME CATALOG BACK (Maxim, 2026-09-27): the eject, the
@@ -592,7 +593,7 @@ function ejectUndoTests() {
         (said, fn) => { w.said = said; w.undo = fn; }, () => {});
     } catch (e) { w.F = null; w.err = e.message; }
     w.ls = { eCatalog: "{\"cards\":[1]}", eCatalogOk: "sig", eSample: "1", eCatalogNo: "no", eCatalogFile: "shop.ec",
-             eCatalogFileAt: "1700", eCatalogTrust: "valid", ePack: "[\"old\"]", eTheme: "dark" };
+             eCatalogFileAt: "1700", eCatalogTrust: "valid", eCatalogFrom: "shop.ec", ePack: "[\"old\"]", eTheme: "dark" };
     w.ss = { eSessionTabs: "tabs-a" };
     return w;
   };
@@ -603,7 +604,7 @@ function ejectUndoTests() {
   const before = sorted(w.ls) + sorted(w.ss);
   w.F.ejectCatalog();
   eq("an eject asks nothing and restarts once, with the catalog, what names it and its signature's state gone and the park in the session",
-    [w.asked, w.reloads, ["eCatalog", "eCatalogOk", "eSample", "eCatalogNo", "eCatalogFile", "eCatalogFileAt", "eCatalogTrust"].filter(k => k in w.ls),
+    [w.asked, w.reloads, ["eCatalog", "eCatalogOk", "eSample", "eCatalogNo", "eCatalogFile", "eCatalogFileAt", "eCatalogTrust", "eCatalogFrom"].filter(k => k in w.ls),
      "eEjectPark" in w.ss, w.ss.eEjectedNow, w.ls.eTheme], [0, 1, [], true, "1", "dark"]);
   w.latched = false;
   const first = w.F.ejectedJustNow() && w.F.offerEjectUndo(), again = w.F.offerEjectUndo();
@@ -808,6 +809,41 @@ function emptyDeskTests() {
   eq("the empty desk offers Load and no sample button on the desk, from a disk and over a link, in English and in Polish",
     [...new Set(wrong)], []);
   eq("and it is the same page whether or not the sample is there", pages.filter(p => !/true$/.test(p)), []);
+}
+
+/* THE TOP BAR NAMES THE LOADED CATALOG'S FILE, extension and all. Maxim, 2026-09-28 17:06: "It's additional
+   information for the user, so they recognize the file later on when they see it among their files." paintCatNow
+   runs over a model of the bar and of what each load route recorded. */
+function catNowTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-offer.js"), "utf8");
+  const fileSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-file.js"), "utf8");
+  const el = cls => ({ cls, hidden: true, textContent: "", attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } });
+  let paint = null, importText = null;
+  const world = { ns: {}, held: null, applied: "", opts: null };
+  try {
+    paint = new Function("document", "storedCatalog", "nsGet", "eLoadedCatalogFile", "markCut", "t", "E_CATALOG_NAME",
+      extractDecl(src, "function shownCatalogName(") + "\n" + extractDecl(src, "function paintCatNow(") + "\nreturn paintCatNow;");
+    importText = new Function("catalogFromFileText", "hooks", "eWatchClear", "activateCatalog",
+      extractDecl(fileSrc, "function importCatalogText(") + "\nreturn importCatalogText;")(
+      () => ({ name: "Invented shop" }), { offerPickedCatalog: (c, name, accept) => accept() },
+      () => ({ then: fn => fn() }), (c, opts) => { world.opts = opts; return true; });
+  } catch (e) { eq("catalog-offer.js carries the top bar's painter", e.message, "sliced"); return; }
+  const bar = (ns, held, applied, file) => {
+    const own = el("cn-name"), none = el("cn-none");
+    const doc = { getElementById: id => (id === "catNow" ? { querySelector: s => (s === ".cn-name" ? own : none) } : null) };
+    paint(doc, () => held, k => (k in ns ? ns[k] : null), () => file, () => {}, s => s, applied)();
+    return own.hidden ? (none.hidden ? "" : "none: " + none.textContent) : own.textContent;
+  };
+  const held = { name: "Invented shop", cards: [1] };
+  eq("the top bar shows the file the catalog was loaded from, wherever it lay, and the name inside it only where no route named a file",
+    [bar({ CatalogFrom: "sample-catalog.ec", CatalogFile: "sample-catalog.ec" }, held, "Invented shop", "sample-catalog.ec"),
+     bar({ CatalogFrom: "Spring team.ec", CatalogFile: "" }, held, "Invented shop", ""),
+     bar({ CatalogFile: "team.ec" }, held, "Invented shop", "team.ec"),
+     bar({ CatalogFrom: "", CatalogFile: "" }, held, "Invented shop", ""),
+     bar({}, null, "", "")],
+    ["sample-catalog.ec", "Spring team.ec", "team.ec", "Invented shop", "none: No catalog loaded"]);
+  importText("{}", "Spring team.ec");
+  eq("a catalog loaded through the file dialog records the file's name for the bar", (world.opts || {}).from, "Spring team.ec");
 }
 
 /* Section 2.5 of the specification and the body rules of 2.6, driven over the reader that

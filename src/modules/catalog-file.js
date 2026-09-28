@@ -349,6 +349,9 @@ function activateCatalog(c,opts){
   try{
     nsSet("CatalogFile",String((opts&&opts.file)||""));
     nsSet("CatalogFileAt",String(+(opts&&opts.fileAt)||0));
+    /* The file's own name wherever it lay, which the top bar shows; `file` above is only ever one
+       in the catalog folder. Blanked by a route that names none, for the same reason. */
+    nsSet("CatalogFrom",String((opts&&(opts.from||opts.file))||""));
     recordCatalogTrust(c);
   }catch(e){}
   /* A CATALOG ARRIVES ON A CLEAN DESK. Selected intents are stored by INDEX, so an index
@@ -434,7 +437,7 @@ function catalogFromFileText(text,fileName){
 function importCatalogText(text,fileName){
   const c=catalogFromFileText(String(text||""),fileName);
   if(!c) return false;
-  hooks.offerPickedCatalog(c,fileName,()=>{ eWatchClear().then(()=>activateCatalog(c,{keepPersonal:true})); });
+  hooks.offerPickedCatalog(c,fileName,()=>{ eWatchClear().then(()=>activateCatalog(c,{keepPersonal:true, from:fileName})); });
   return true;
 }
 /* The host's dialog, and the file comes back already read: the engine calls no OS API. No watch
@@ -520,7 +523,7 @@ function importCatalogPicked(){
         nsSet("WatchName",f.name);
         nsSet("WatchSeen",String(f.lastModified||0));
         nsDel("WatchNo");
-        eWatchPut(handle).then(()=>activateCatalog(c,{keepPersonal:true}));
+        eWatchPut(handle).then(()=>activateCatalog(c,{keepPersonal:true, from:f.name}));
       });
       return null;
     });

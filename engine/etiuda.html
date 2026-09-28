@@ -12888,6 +12888,7 @@ What you type stays in this browser only.`;
     try {
       nsSet("CatalogFile", String(opts && opts.file || ""));
       nsSet("CatalogFileAt", String(+(opts && opts.fileAt) || 0));
+      nsSet("CatalogFrom", String(opts && (opts.from || opts.file) || ""));
       recordCatalogTrust(c);
     } catch (e) {
     }
@@ -12945,7 +12946,7 @@ What you type stays in this browser only.`;
     const c = catalogFromFileText(String(text || ""), fileName);
     if (!c) return false;
     hooks.offerPickedCatalog(c, fileName, () => {
-      eWatchClear().then(() => activateCatalog(c, { keepPersonal: true }));
+      eWatchClear().then(() => activateCatalog(c, { keepPersonal: true, from: fileName }));
     });
     return true;
   }
@@ -13025,7 +13026,7 @@ What you type stays in this browser only.`;
           nsSet("WatchName", f.name);
           nsSet("WatchSeen", String(f.lastModified || 0));
           nsDel("WatchNo");
-          eWatchPut(handle).then(() => activateCatalog(c, { keepPersonal: true }));
+          eWatchPut(handle).then(() => activateCatalog(c, { keepPersonal: true, from: f.name }));
         });
         return null;
       });
@@ -13468,7 +13469,7 @@ What you type stays in this browser only.`;
     offerEjectUndo: () => offerEjectUndo
   });
   function catalogKeep() {
-    return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample"), nsKey("CatalogTrust")];
+    return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample"), nsKey("CatalogTrust"), nsKey("CatalogFrom")];
   }
   var E_WIPE_KEEP = ["eCatalogFolder"];
   var E_PREF_KEYS = [
@@ -20364,6 +20365,7 @@ What you type stays in this browser only.`;
         return activateCatalog(c, {
           keepPersonal: true,
           file: mine ? file : "",
+          from: file || (eHost() ? "" : E_CATALOG_SCRIPT),
           fileAt: mine && !given ? eCatalogMtime() : 0
         });
       }
@@ -20650,17 +20652,19 @@ What you type stays in this browser only.`;
     if (!el) return;
     const held = storedCatalog();
     const name = String(typeof E_CATALOG_NAME !== "undefined" && E_CATALOG_NAME || held && held.name || "");
+    const file = name || held ? String(nsGet("CatalogFrom") || eLoadedCatalogFile() || "") : "";
+    const shown2 = file || (name ? shownCatalogName(name) : "");
     const own = el.querySelector(".cn-name"), none = el.querySelector(".cn-none");
     if (own) {
-      own.textContent = shownCatalogName(name);
-      own.hidden = !name;
-      if (name) markCut(own);
+      own.textContent = shown2;
+      own.hidden = !shown2;
+      if (shown2) markCut(own);
     }
     if (none) {
       const key = held ? "Unnamed catalog" : "No catalog loaded";
       none.setAttribute("data-i18n-text", key);
       none.textContent = t(key);
-      none.hidden = !!name;
+      none.hidden = !!shown2;
     }
   }
   function eCheckWatchedFile(interactive) {
@@ -20700,7 +20704,7 @@ What you type stays in this browser only.`;
               refusedKey: "WatchNo",
               force: !!interactive,
               asked: !!interactive,
-              accept: () => activateCatalog(c, { keepPersonal: true })
+              accept: () => activateCatalog(c, { keepPersonal: true, from: eWatchName() || f.name })
             });
             if (!shown2 && interactive) toast(t("That file matches the catalog you already have."));
             return null;
