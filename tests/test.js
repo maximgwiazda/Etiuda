@@ -4388,8 +4388,19 @@ function libraryRowsTests() {
     report = new Function("mtReadings", "navigator", extractDecl(mt, "function mtReportText(") + "\nreturn mtReportText;")(
       () => [{ sec: "Catalog file" }, { k: "file", v: "team.ec", panelOnly: true }, { k: "copy", v: "Documents" }], { userAgent: "UA" })();
   } catch (e) { report = "mtReportText did not run: " + e.message; }
+  // The stub above proves the filter only; the real mtReadings and the real list builder prove the wiring.
+  let wired;
+  try {
+    const readings = new Function("mtCatalogPlace", "eSaveTrouble", "pack", "eDeskRefused", extractDecl(mt, "function mtSafe(") + "\n"
+      + extractDecl(mt, "function mtReadings(") + "\nreturn mtReadings;")(
+      () => ({ file: "team.ec", copy: "Documents", folder: "-" }), () => null, {}, () => []);
+    wired = new Function("mtReadings", "navigator", extractDecl(mt, "function mtReportText(") + "\nreturn mtReportText;")(readings, { userAgent: "UA" })();
+  } catch (e) { wired = "mtReadings did not run: " + e.message; }
+  const lists = extractDecl(manageSrc, "function openManage(");
   eq("the copied report carries where the catalog lies and never its file's own name, which the panel alone shows",
-    [/\nfile: /.test(report), /\ncopy: Documents\n/.test(report)], [false, true]);
+    [/\nfile: /.test(report), /\ncopy: Documents\n/.test(report), /team\.ec/.test(wired), /\ncopy: Documents\n/.test(wired),
+     /[\s,]linked=intentCardCounts\(\)[,;]/.test(lists) && /mgIntentRow\(i,catOf,linked\)/.test(lists)],
+    [false, true, false, true, true]);
 }
 function libraryAwaitingTests() {
   const src = sourceText();
