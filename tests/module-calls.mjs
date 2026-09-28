@@ -130,6 +130,14 @@ const eq = (got, want) => got === want ? true
 /* ------------------------------------------------------------------ ids.js */
 {
   const I = await import(MOD("ids.js"));
+  /* THE FORMAT'S RULE, written here rather than read from catalog-v2.js: 3 to 64 of a-z, 0-9 and the
+     hyphen, the first not a hyphen. A thousand draws hold the shape and never repeat. */
+  check("ids.js", "a new catalog id has the format's shape, and a thousand of them are all different",
+    () => {
+      const got = new Set(); let bad = "";
+      for (let i = 0; i < 1000; i++) { const v = I.newCatalogId(); if (!/^[a-z0-9][a-z0-9-]{2,63}$/.test(v)) bad = v; got.add(v); }
+      return bad ? "malformed: " + bad : eq(got.size, 1000);
+    });
   check("ids.js", "slugCat lowercases, underscores and prefixes",
     () => eq(I.slugCat("Lost & Found"), "uc_lost_found"));
   check("ids.js", "slugCat of an unslugifiable name falls back to custom",
@@ -981,14 +989,11 @@ const CARD_B = {
     () => eq(F.catalogEditionOlder("2026-01-09z", "2026-01-09aa"), true));
   check("catalog-file.js", "and alphabetically inside one length",
     () => eq(F.catalogEditionOlder("2026-01-09ab", "2026-01-09aa"), false));
-  check("catalog-file.js", "a proposed edition is a date, or a date with letters after it",
-    () => eq(/^\d{4}-\d{2}-\d{2}[a-z]*$/.test(String(F.proposeEdition(null))), true));
-  check("catalog-file.js", "proposing twice on today's edition steps the letters, not the date",
-    () => {
-      const a = F.proposeEdition(null);
-      const b = F.proposeEdition(a);
-      return b === a + "a" ? true : "a=" + a + " b=" + b;
-    });
+  /* A new catalog's first edition is today, written here from the clock by hand: a second route to
+     the same answer. */
+  check("catalog-file.js", "a new catalog's first edition is today's date in the one orderable form",
+    () => { const d = new Date(), p = v => String(v).padStart(2, "0");
+      return eq(F.todayEdition(), d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate())); });
 }
 
 /* ------------------------------------------------------------------ columns.js

@@ -2027,13 +2027,13 @@ const t0 = Date.now();
       if (window.__pbSaved.length <= n)
         return { saved: 0, bytes: 0, cards: -1, factsType: "none", factsLen: -1, builtIn: false };
       const text = await window.__pbSaved[window.__pbSaved.length - 1].text();
-      let facts = null, cards = -1, date = null, rev = null, name = null, kind = null, format = null;
+      let facts = null, cards = -1, date = null, rev = null, name = null, kind = null, format = null, id = null;
       /* The whole text parses as JSON: an .ec is the document itself, with no wrapper round it. */
       try { const o = JSON.parse(text);
-            facts = o.facts; cards = (o.cards || []).length; name = o.name; kind = o.kind; format = o.format;
+            facts = o.facts; cards = (o.cards || []).length; name = o.name; kind = o.kind; format = o.format; id = o.id;
             date = o.date == null ? null : String(o.date); rev = o.rev == null ? null : +o.rev;
       } catch (err) { facts = null; cards = -2; }
-      return { saved: window.__pbSaved.length - n, bytes: text.length, cards, date, rev, name, kind, format,
+      return { saved: window.__pbSaved.length - n, bytes: text.length, cards, date, rev, name, kind, format, id,
                factsType: typeof facts, factsLen: typeof facts === "string" ? facts.length : -1,
                builtIn: typeof FACTS === "string" && facts === FACTS,
                offered: window.__pbOffered[window.__pbOffered.length - 1] || null,
@@ -2043,9 +2043,8 @@ const t0 = Date.now();
     await p.keyboard.press("Escape"); await sleep(400);
     return Object.assign({ btn, asked }, out);
   };
-  /* What the edition must be, read before the export from the engine's own rule against the
-     catalog this page has loaded. */
-  const proposed = await p.evaluate(() => proposeEdition((storedCatalog() || {}).version));
+  // What the edition must be: a new catalog's first, from the engine's own rule.
+  const proposed = await p.evaluate(() => todayEdition());
   await p.evaluate(() => { window.__pbFactsKeep = pack.facts; pack.facts = ""; });
   const blankFile = await saveCatalog();
   await p.evaluate(() => { pack.facts = null; });
@@ -2068,11 +2067,10 @@ const t0 = Date.now();
     "and an unwritten one exports the built-in (" + unsetFile.factsLen + " chars, equal to FACTS: "
     + unsetFile.builtIn + ")");
 
-  /* BOARD 406. Exporting is how a desk without Studio publishes, so the file that leaves carries
-     a new edition and the next counter rather than a second copy of what arrived. Read against
-     the catalog THIS page has loaded, so the arithmetic is checked rather than a constant. */
+  /* EXPORT MAKES A NEW CATALOG (Maxim, 2026-09-28 23:00): a new random id every time, the first of
+     its own editions dated today, never the loaded catalog's id or its next counter. */
   const was = await p.evaluate(() => { const c = storedCatalog() || {};
-    return { date: c.version == null ? null : String(c.version), rev: c.rev == null ? null : +c.rev }; });
+    return { date: c.version == null ? null : String(c.version), rev: c.rev == null ? null : +c.rev, id: c.id || null }; });
   const today = (() => { const d = new Date(), q = v => String(v).padStart(2, "0");
     return d.getFullYear() + "-" + q(d.getMonth() + 1) + "-" + q(d.getDate()); })();
   check(/^[0-9]{4}-[0-9]{2}-[0-9]{2}[a-z]*$/.test(proposed || "")
@@ -2081,10 +2079,12 @@ const t0 = Date.now();
     + JSON.stringify(blankFile.date) + ", the engine's own proposal " + JSON.stringify(proposed)
     + ", against this process's today " + JSON.stringify(today)
     + " and the loaded catalog's " + JSON.stringify(was.date));
-  check(was.rev !== null && blankFile.rev === was.rev + 1 && unsetFile.rev === was.rev + 1,
-    "and the edition counter moves with it, so a desk watching the folder reads an update rather"
-    + " than a stranger: loaded rev " + was.rev + ", exported " + blankFile.rev
-    + " (and " + unsetFile.rev + " on the second export, each being one past what is loaded)");
+  check(blankFile.rev === 1 && unsetFile.rev === 1 && /^[a-z0-9][a-z0-9-]{2,63}$/.test(blankFile.id || "")
+        && /^[a-z0-9][a-z0-9-]{2,63}$/.test(unsetFile.id || "") && blankFile.id !== was.id && unsetFile.id !== was.id
+        && blankFile.id !== unsetFile.id,
+    "and each export is a new catalog: its own random id of the format's shape, never the loaded one's, and its first"
+    + " edition, rev 1 (loaded id kept out: " + (blankFile.id !== was.id) + ", the two exports differ: "
+    + (blankFile.id !== unsetFile.id) + ", revs " + blankFile.rev + " and " + unsetFile.rev + ")");
   clean(e, "the catalog export");
 
   const tip = await p.evaluate(k => {

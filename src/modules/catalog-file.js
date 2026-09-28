@@ -2,7 +2,7 @@ import { splitPartsRaw } from "./card-model.js";
 import { cardFieldKey } from "./card-fields.js";
 import { cardOrderTouched, cardOrderIsBase, cardOrderIdx } from "./card-order.js";
 import { ALWAYS_CATS } from "./cat-roles.js";
-import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, E_CATALOG_NAME, E_CATALOG_VERSION, parseCatalogFile } from "./catalog.js";
+import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, E_CATALOG_NAME, parseCatalogFile } from "./catalog.js";
 import { catalogToV2 } from "./catalog-v2.js";
 import { CATS, intentArr, intentFieldKey, intentCount, catalogLangs, CONTENT_LANGS } from "./content-model.js";
 import { eHost, eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile } from "./host.js";
@@ -23,6 +23,7 @@ import { cards } from "./app-state.js";
 import { carryCardLayer } from "./card-carry.js";
 import { hooks } from "./hooks.js";
 import { recordCatalogTrust } from "./catalog-trust.js";
+import { newCatalogId } from "./ids.js";
 
 /* ---- one catalog format, one export, one import -----------------------------------------
    A catalog carries everything Etiuda has no content of its own for: cards, intents,
@@ -48,7 +49,7 @@ function intentsExport(keep){
   }));
   return out;
 }
-function currentCatalog(nameOverride,edition){
+function currentCatalog(nameOverride){
   rebuildCards();
   const cats={}, catsPl={}, catsOther={};
   /* Every declared language past the primary and past Polish, carried out exactly as it came
@@ -135,21 +136,12 @@ function currentCatalog(nameOverride,edition){
        the next desk as the built-in paragraph. */
     facts:(pack.facts!=null)?pack.facts:FACTS
   };
-  /* THE EDITION IS THE EXPORT'S OWN, the next one proposeEdition gives: exporting is how a desk
-     without Studio publishes, so what leaves is the next edition of the catalog rather than a
-     second copy of the one that arrived. `rev` moves with it, because a desk watching the folder reads
-     rev to tell an update from a stranger. No edition means a BUILD, which bakes what is loaded
-     and publishes nothing: both fields then round-trip unchanged. */
-  const chosen=String(edition||"");
-  if(chosen) out.version=chosen;
-  else if(E_CATALOG_VERSION!=null) out.version=E_CATALOG_VERSION;
-  /* The namespace key and the edition counter, from the applied catalog because nothing in the
-     live arrays knows either. Losing the id renames every personal layer the next load looks for,
-     and it is also what tells an export that this catalog has an origin and is not ours. */
+  /* EXPORT MAKES A NEW CATALOG, whatever is loaded: a new id, and the first of its own editions,
+     dated today. Keeping the loaded catalog's id would make two catalogs claim one identity. */
+  out.id=newCatalogId();
+  out.rev=1;
+  out.version=todayEdition();
   const origin=storedCatalog();
-  if(origin&&origin.id!=null) out.id=String(origin.id);
-  if(chosen) out.rev=(+(origin&&origin.rev)||0)+1;
-  else if(origin&&origin.rev!=null) out.rev=+origin.rev;
   /* The languages and the two tables that follow them, from the origin for the same reason as
      the id: the live arrays hold content, not the declaration. Taken from the file rather than
      from the modules honouring it, because those hold the tables in the shape they use them in
@@ -232,15 +224,13 @@ function downloadCatalogFile(name, text){
   setTimeout(()=>URL.revokeObjectURL(a.href),2000);
   return name;
 }
-/* NOTHING STANDS BETWEEN THE BUTTON AND THE SAVE DIALOG: the file's name names the catalog, and
-   the edition is the next one proposeEdition gives. What is written is the .ec document itself,
-   the shape every reader parses as it stands. */
+/* NOTHING STANDS BETWEEN THE BUTTON AND THE SAVE DIALOG: the file's name names the new catalog. What
+   is written is the .ec document itself, the shape every reader parses as it stands. */
 function exportCatalog(){
   if(!(cards||[]).length){ toast("Export is ready once the catalog holds a card."); return; }
-  const edition=proposeEdition(E_CATALOG_VERSION);
   let c=null;
   const build=file=>{
-    c=currentCatalog(catalogNameOfFile(file),edition);
+    c=currentCatalog(catalogNameOfFile(file));
     return JSON.stringify(catalogToV2(c),null,1)+"\n";
   };
   saveCatalogFile(catalogFileStem(E_CATALOG_NAME)+".ec", build).then(saved=>{
@@ -278,23 +268,10 @@ function catalogEditionOlder(incoming,active){
   if(a.n!==b.n) return a.n<b.n;
   return a.s<b.s;
 }
-function nextEditionLetters(s){
-  const a=String(s||"").split("");
-  for(let i=a.length-1;i>=0;i--){
-    if(a[i]!=="z"){ a[i]=String.fromCharCode(a[i].charCodeAt(0)+1); return a.join(""); }
-    a[i]="a";
-  }
-  return "a"+a.join("");
-}
-/* WHAT THE EXPORT DIALOG PROPOSES: today, in the one form that can be ordered, and the loaded
-   edition's next letter where that edition already claims today. A stamp dated AHEAD of today
-   takes its own next letter too, so an export is never proposed older than the catalog it came
-   from. Anything else, including an edition in no form at all, simply proposes today. */
-function proposeEdition(current){
+/* A new catalog's first edition: today, in the one form that can be ordered. */
+function todayEdition(){
   const d=new Date(), p=v=>String(v).padStart(2,"0");
-  const today=d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate());
-  const was=editionParts(current);
-  return (was && was.date>=today) ? was.date+nextEditionLetters(was.s) : today;
+  return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate());
 }
 /* keepPersonal carries the personal layer across, and every route passes it, Import, another
    catalog and the sample included: loading a catalog erases nothing a person made. */
@@ -523,7 +500,7 @@ export {
   exportCatalog,
   isCatalogUpdate,
   catalogEditionOlder,
-  proposeEdition,
+  todayEdition,
   activateCatalog,
   catalogEdited,
   sampleUntouched,
