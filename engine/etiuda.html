@@ -4635,7 +4635,13 @@ What you type stays in this browser only.`;
           map[k] = String(o[k]);
         });
       }
-      return { map, save: h.deskSave, write: typeof h.deskWrite === "function" ? h.deskWrite : null, host: h };
+      return {
+        map,
+        save: h.deskSave,
+        write: typeof h.deskWrite === "function" ? h.deskWrite : null,
+        patch: typeof h.deskPatch === "function" ? h.deskPatch : null,
+        host: h
+      };
     } catch (e) {
       return null;
     }
@@ -4645,8 +4651,38 @@ What you type stays in this browser only.`;
   var eDeskSent = 0;
   var eDeskHeard = 0;
   var eDeskArmed = false;
+  var eDeskOwed = /* @__PURE__ */ new Set();
+  var eDeskCarried = /* @__PURE__ */ new Map();
+  function deskPatchSend(all) {
+    const n = ++eDeskSent, keys = new Set(eDeskOwed), out = {};
+    if (all) eDeskCarried.forEach((m, k) => keys.add(k));
+    eDeskOwed.clear();
+    keys.forEach((k) => {
+      eDeskCarried.set(k, n);
+      out[k] = k in E_DESK.map ? E_DESK.map[k] : null;
+    });
+    let p;
+    try {
+      p = keys.size ? E_DESK.patch(JSON.stringify(out), all) : true;
+    } catch (e) {
+      p = false;
+    }
+    const heard = (ok) => keys.forEach((k) => {
+      if (eDeskCarried.get(k) !== n) return;
+      eDeskCarried.delete(k);
+      if (!ok) eDeskOwed.add(k);
+      noteSave(ok, k);
+    });
+    if (all) {
+      heard(p !== false);
+      return p !== false;
+    }
+    Promise.resolve(p).then((ok) => heard(ok !== false), () => heard(false));
+    return true;
+  }
   function deskSave() {
     eDeskDue = false;
+    if (E_DESK.patch) return deskPatchSend(true);
     const n = ++eDeskSent;
     let ok;
     try {
@@ -4665,6 +4701,10 @@ What you type stays in this browser only.`;
   function deskSend() {
     if (!eDeskDue) return;
     eDeskDue = false;
+    if (E_DESK.patch) {
+      deskPatchSend(false);
+      return;
+    }
     const n = ++eDeskSent;
     let p;
     try {
@@ -4675,7 +4715,7 @@ What you type stays in this browser only.`;
     Promise.resolve(p).then((ok) => deskHeard(n, ok !== false), () => deskHeard(n, false));
   }
   function deskSoon() {
-    if (!E_DESK.write) return deskSave();
+    if (!E_DESK.write && !E_DESK.patch) return deskSave();
     deskArm();
     if (eDeskDue) return true;
     eDeskDue = true;
@@ -4684,7 +4724,8 @@ What you type stays in this browser only.`;
     return true;
   }
   function deskFlush() {
-    if (eDeskDue || eDeskHeard < eDeskSent || eUnsaved) deskSave();
+    const pending = E_DESK.patch ? eDeskOwed.size > 0 || eDeskCarried.size > 0 : eDeskHeard < eDeskSent;
+    if (eDeskDue || pending || eUnsaved) deskSave();
   }
   function deskArm() {
     if (eDeskArmed) return;
@@ -4703,7 +4744,7 @@ What you type stays in this browser only.`;
     const was = !!eUnsaved;
     if (ok) {
       eSavedAt = Date.now();
-      if (eUnsaved && (E_DESK || eUnsaved.delete(k) && !eUnsaved.size)) eUnsaved = null;
+      if (eUnsaved && (E_DESK && !E_DESK.patch || eUnsaved.delete(k) && !eUnsaved.size)) eUnsaved = null;
     } else {
       if (!eUnsaved) eUnsaved = /* @__PURE__ */ new Map();
       if (!eUnsaved.has(k)) eUnsaved.set(k, Date.now());
@@ -4781,7 +4822,10 @@ What you type stays in this browser only.`;
     eWipeLatch();
     if (!E_DESK) return false;
     Object.keys(E_DESK.map).forEach((k) => {
-      if (E_KEY_RE.test(k)) delete E_DESK.map[k];
+      if (E_KEY_RE.test(k)) {
+        delete E_DESK.map[k];
+        eDeskOwed.add(k);
+      }
     });
     return deskSave();
   }
@@ -4791,6 +4835,7 @@ What you type stays in this browser only.`;
       const s = String(v);
       if (!own && E_DESK.map[k] === s && !eUnsaved) return true;
       E_DESK.map[k] = s;
+      eDeskOwed.add(k);
       return own ? deskSave() : deskSoon();
     }
     if (!E_LS_OK) {
@@ -4810,6 +4855,7 @@ What you type stays in this browser only.`;
     if (E_DESK) {
       if (k in E_DESK.map || eUnsaved) {
         delete E_DESK.map[k];
+        eDeskOwed.add(k);
         deskSoon();
       }
       return;
