@@ -76,7 +76,14 @@
      e-still is set from what this script can read; wireStill answers at boot, desk file and all. */
   try{
     var root=document.documentElement;
-    if(localStorage.getItem("eMotionOff")==="1" || matchMedia("(prefers-reduced-motion: reduce)").matches)
+    /* An installed Etiuda keeps these in its desk file, read once here and handed to storage.js
+       (eHostDesk), so the file is read once per page. */
+    var desk=null, dh=hostDesk();
+    if(dh) try{ var dt=dh.deskRead(); desk=dt ? JSON.parse(dt) : {}; window.eDeskAtBoot=desk; }catch(e){ desk=null; }
+    var pref=function(k){
+      return desk ? (Object.prototype.hasOwnProperty.call(desk,k) ? String(desk[k]) : null) : localStorage.getItem(k);
+    };
+    if(pref("eMotionOff")==="1" || matchMedia("(prefers-reduced-motion: reduce)").matches)
       root.classList.add("e-still");
     /* A COVERED RELOAD (motion.js reloadCovered). Rendering is blocked until parsing ends, which
        is after the app's script and so after boot (#eBooted names nothing, and the block lifts
@@ -93,9 +100,9 @@
         document.head.appendChild(hold);
       } else root.classList.add("e-veiled");
     }
-    if(localStorage.getItem("ePills")==="0") root.classList.add("e-pills-off");
+    if(pref("ePills")==="0") root.classList.add("e-pills-off");
     else{
-      var shape=/^(\d+)x(\d+(?:\.\d+)?)$/.exec(localStorage.getItem("eHdrPills")||"");
+      var shape=/^(\d+)x(\d+(?:\.\d+)?)$/.exec(pref("eHdrPills")||"");
       if(shape && +shape[1]===window.innerWidth) root.style.setProperty("--e-pills-h",shape[2]+"px");
     }
   }catch(e){}

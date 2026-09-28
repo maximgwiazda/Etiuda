@@ -535,6 +535,7 @@ function runUnitTests() {
   shippedFileTests();
   railPlacementTests();
   recoveryTests();
+  headPrefsTests();
   arrivalTests();
   markClockTests();
   pageWatchTests();
@@ -1625,6 +1626,63 @@ function recoveryTests() {
   } catch (e) { got = "the boot guard threw: " + e.message; }
   eq("the guard holds the first frame for the shell's recovery and for the page's own covered reload, and for nothing else",
     got, [[true, 1], [false, 0], [true, 1], [false, 0]]);
+}
+/* THE FIRST PAINT READS THE SETTINGS WHERE THEY ARE KEPT: an installed Etiuda keeps them in its desk
+   file and never in localStorage, so the head script reads the desk the shell hands it, once, and
+   storage.js takes that copy rather than reading the file again. The head script runs in a VM on
+   stubs, as recoveryTests runs it; what the first frame looks like is the verifier's. */
+function headPrefsTests() {
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const m = /<script>([\s\S]*?)<\/script>/.exec(tpl);
+  const guard = m ? m[1] : "";
+  const run = (deskKeys, lsKeys, width) => {
+    const cls = new Set(), props = {};
+    let reads = 0;
+    const host = deskKeys ? { deskRead: () => { reads++; return JSON.stringify(deskKeys); }, deskSave: () => true } : null;
+    const sb = {
+      document: { documentElement: { classList: { add: (...c) => c.forEach(x => cls.add(x)), remove: (...c) => c.forEach(x => cls.delete(x)),
+        contains: c => cls.has(c) }, style: { setProperty: (k, v) => { props[k] = v; } } },
+        head: { appendChild() {} }, createElement: () => ({ setAttribute() {}, blocking: { supports: () => true } }),
+        getElementById: () => null, querySelector: () => null },
+      sessionStorage: { getItem: () => null, removeItem() {}, setItem() {}, clear() {} },
+      localStorage: { getItem: k => (k in lsKeys ? lsKeys[k] : null), setItem() {}, removeItem() {}, key: () => null, length: 0 },
+      matchMedia: () => ({ matches: false }), location: { hash: "", href: "file:///x/etiuda.html", protocol: "file:", origin: "null" },
+      navigator: { languages: ["en-US"], language: "en-US", cookieEnabled: true }, innerWidth: width,
+      setTimeout: () => 0, requestAnimationFrame: () => 0, addEventListener() {}
+    };
+    sb.window = sb; sb.self = sb; sb.top = sb; sb.E_HOST = host;
+    require("vm").runInNewContext(guard, sb);
+    return { still: cls.has("e-still"), off: cls.has("e-pills-off"), h: props["--e-pills-h"] || null, reads,
+      handed: sb.eDeskAtBoot ? Object.keys(sb.eDeskAtBoot).length : null };
+  };
+  const kept = { eMotionOff: "1", ePills: "0", eHdrPills: "1500x37" };
+  let got;
+  try {
+    got = [run(kept, {}, 1500), run(kept, kept, 1500), run(null, kept, 1500)]
+      .map(r => [r.still, r.off, r.reads, r.handed]);
+  } catch (e) { got = "the head script threw: " + e.message; }
+  eq("on a desk the first paint is still and without the category bar as its desk file says, whatever localStorage holds; a browser reads localStorage as before",
+    got, [[true, true, 1, 3], [true, true, 1, 3], [true, true, 0, null]]);
+  try {
+    const shown = { ePills: "1", eHdrPills: "1500x37" };
+    got = [run(shown, {}, 1500).h, run(shown, {}, 1280).h, run({}, shown, 1500).h, run(null, shown, 1500).h];
+  } catch (e) { got = "the head script threw: " + e.message; }
+  eq("on a desk the category bar's last height is reserved from the desk file at the width it was measured at, and not from localStorage",
+    got, ["37px", null, null, "37px"]);
+
+  const store = fs.readFileSync(path.join(E.ROOT, "src", "modules", "storage.js"), "utf8");
+  const take = handed => {
+    let reads = 0;
+    const win = { E_HOST: { deskRead: () => { reads++; return JSON.stringify({ eTheme: "dark", eRail: "1" }); }, deskSave: () => true } };
+    if (handed !== undefined) win.eDeskAtBoot = handed;
+    const desk = new Function("window", extractDecl(store, "function eHostDesk(") + "\nreturn eHostDesk();")(win);
+    return [desk ? Object.keys(desk.map).sort().join(",") : null, reads, "eDeskAtBoot" in win];
+  };
+  try {
+    got = [take({ eTheme: "light", eGlassOff: 1 }), take(undefined), take(null)];
+  } catch (e) { got = "eHostDesk threw: " + e.message; }
+  eq("storage.js takes the desk the head script read, once and without reading the file again, and reads it itself when none was handed",
+    got, [["eGlassOff,eTheme", 0, false], ["eRail,eTheme", 1, false], ["eRail,eTheme", 1, false]]);
 }
 /* A COVERED ARRIVAL FADES FROM A FRAME ITS CONTENT WAS DRAWN IN (feel pass, the catalog load): the boot
    guard runs in a VM, E_BOOT_OK is called, and the frames and paint timing it waits on are handed to

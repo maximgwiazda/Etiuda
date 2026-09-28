@@ -61,9 +61,15 @@ function eHostDesk(){
   try{
     const h=(typeof window!=="undefined") ? window.E_HOST : null;
     if(!h || typeof h.deskRead!=="function" || typeof h.deskSave!=="function") return null;
-    const text=h.deskRead();
+    // The template's head script has read the file for the first paint; its copy is taken once.
+    const first=window.eDeskAtBoot;
+    delete window.eDeskAtBoot;
     const map=Object.create(null);
-    if(text){ const o=JSON.parse(text); Object.keys(o).forEach(k=>{ map[k]=String(o[k]); }); }
+    if(first && typeof first==="object") Object.keys(first).forEach(k=>{ map[k]=String(first[k]); });
+    else{
+      const text=h.deskRead();
+      if(text){ const o=JSON.parse(text); Object.keys(o).forEach(k=>{ map[k]=String(o[k]); }); }
+    }
     return {map:map,save:h.deskSave,write:(typeof h.deskWrite==="function")?h.deskWrite:null,
             patch:(typeof h.deskPatch==="function")?h.deskPatch:null,host:h};
   }catch(e){ return null; }              // a host that answers badly is a host that is not there
