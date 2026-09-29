@@ -35,7 +35,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 56;
+const EXPECTED = 58;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -476,6 +476,14 @@ try {
   check(pcalls.length === 0, "4j a digit without Control is typed, and copies nothing");
   reopen(); press("ArrowUp", "ArrowUp"); press("Enter", "Enter");
   check(lastCall() === 'copy {"id":"c","vi":0}', "4k a step up from the first row wraps to the last: " + lastCall());
+  /* The other end of the same ring (board 818): as many steps down as there are rows comes back to the first, the reply
+     copied last. A list that stopped at its last row would copy that row instead. */
+  reopen();
+  const shownRows = (boxHtml.match(/<li\b/g) || []).length;
+  for (let i = 0; i < shownRows; i++) press("ArrowDown", "ArrowDown");
+  press("Enter", "Enter");
+  check(shownRows === 3 && lastCall() === 'copy {"last":true}',
+    "4n a step down from the last row wraps to the first: " + shownRows + " row(s), " + shownRows + " step(s) down, then " + lastCall());
   reopen();
   pageL["box:click"]({ target: { closest: () => ({ dataset: { i: "1" } }) } });
   check(lastCall() === 'copy {"id":"a","vi":0}', "4l a click on a row copies that row: " + lastCall());
@@ -486,20 +494,49 @@ try {
     "4m with a query the first row found is marked, and the reply copied last steps aside: " + lastCall());
 
   /* ---- 5. what the shell may not do -------------------------------------------------------- */
-  console.log("\n[5/5] what the shell may not do, read from its text with the comments blanked");
-  const blank = s => s.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, " "))
-    .replace(/(^|[^:"'\\])\/\/[^\n]*/g, (m, p) => p + " ".repeat(m.length - p.length));
+  console.log("\n[5/5] what the shell may not do, read from its text with the comments taken out");
+  /* THE COMMENTS ARE TAKEN OUT BY A PARSER, esbuild's own, which reprints the program without them and with its
+     whitespace squeezed (a plain reprint keeps some comments it attaches to a property). The pattern used before took
+     "/*" inside a string for a comment's start, so a read written between a "/*" string and a "*\/" string was blanked
+     with them and stayed green (board 818). Strings and template expressions survive, so a name in a command line
+     still counts. Where a name must be read as CODE only, split-guard's masker, proved by its own self-test, blanks
+     the strings as well; it keeps every offset, so a place found in the one is read in the other. */
+  const ESB = nodeRequire("esbuild");
+  const { mask } = await import(pathToFileURL(path.join(ROOT, "tools", "split-guard", "bridge.mjs")).href);
+  const blank = s => ESB.transformSync(s, { loader: "js", legalComments: "none", charset: "utf8", minifyWhitespace: true }).code;
   const PRE = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
   const shellCode = blank(SRC) + "\n" + blank(PRE);
+  const shellBare = mask(shellCode);
   const modDir = path.join(ROOT, "src", "modules");
   const engineCode = fs.readdirSync(modDir).filter(f => f.endsWith(".js")).map(f => blank(fs.readFileSync(path.join(modDir, f), "utf8")))
     .concat(blank(fs.readFileSync(path.join(ROOT, "src", "main.js"), "utf8"))).join("\n");
-  const FORBID = /desktopCapturer|capturePage|getSources|getDisplayMedia|getUserMedia|clipboard\s*\.\s*read|readText|readHTML|readImage|readRTF|readBookmark|sendInputEvent|SendKeys|SendInput|keybd_event|mouse_event|SetWindowsHookEx|GetForegroundWindow|GetWindowText|WindowFromPoint|AttachThreadInput|uiohook|iohook|robotjs|nut-js|UIAutomation/g;
+  const engineBare = mask(engineCode);
+  const FORBID = /desktopCapturer|capturePage|getSources|getDisplayMedia|getUserMedia|clipboard\s*\.\s*read|clipboard-read|readText|readHTML|readImage|readRTF|readBookmark|readBuffer|readFindText|availableFormats|sendInputEvent|SendKeys|SendInput|keybd_event|mouse_event|SetWindowsHookEx|GetForegroundWindow|GetWindowText|WindowFromPoint|AttachThreadInput|uiohook|iohook|robotjs|nut-js|UIAutomation/g;
   const reach = (shellCode + "\n" + engineCode).match(FORBID) || [];
-  check(reach.length === 0 && /clipboard/.test(shellCode) && /writeText/.test(shellCode),
-    "5a no API in the shell or the engine reads another window, the screen or the clipboard, or presses a key: " + (reach.join(", ") || "none"));
+  /* EVERY HANDLE ON THE CLIPBOARD IS ONE OF THE KNOWN ONES (board 818): a read through another name, as
+     `const { clipboard: cb } = require("electron")` then `cb.read(...)`, names no API the list above knows. In the
+     shell the name stands only as a member of a `require("electron")` destructure, taken whole, and before its one
+     write; the electron module is never held whole or indexed. In the engine it is `navigator.clipboard`, tested or
+     written. Each place is found in the text with its strings blanked, so prose that says "clipboard" is not one. */
+  const at = (bare, re) => { const out = []; let m; re.lastIndex = 0; while ((m = re.exec(bare))) out.push(m.index); return out; };
+  const spans = [];
+  { const re = /(?:const|let|var)\s*\{([^}]*)\}\s*=\s*require\(\s*"electron"\s*\)/g; let m;
+    while ((m = re.exec(shellCode))) spans.push([m.index, m.index + m[0].length]); }
+  const inSpan = i => spans.some(s => i >= s[0] && i < s[1]);
+  const oddHandles = at(shellBare, /\bclipboard\b(?!-)/g).filter(i => {
+    if (shellCode.startsWith("clipboard.writeText(", i)) return false;
+    return !(inSpan(i) && /[{,]\s*$/.test(shellCode.slice(i - 2, i)) && /^clipboard\s*[,}]/.test(shellCode.slice(i, i + 11)));
+  }).map(i => shellCode.slice(i, i + 24))
+    .concat(at(shellBare, /\brequire\s*\(/g).filter(i => /^require\(\s*"electron"\s*\)/.test(shellCode.slice(i, i + 22)) && !inSpan(i)
+      && !/^require\(\s*"electron"\s*\)\s*\.\s*(?!clipboard\b)[A-Za-z_$]/.test(shellCode.slice(i, i + 40))).map(i => shellCode.slice(i, i + 30)))
+    .concat(at(engineBare, /\bclipboard\b(?!-)/g).filter(i => !(/navigator\.$/.test(engineCode.slice(i - 10, i))
+      && /^clipboard(&&|\.writeText\()/.test(engineCode.slice(i, i + 21)))).map(i => engineCode.slice(Math.max(0, i - 10), i + 24)));
+  check(reach.length === 0 && oddHandles.length === 0 && /clipboard/.test(shellCode) && /writeText/.test(shellCode),
+    "5a no API in the shell or the engine reads another window, the screen or the clipboard, or presses a key, and the clipboard is"
+    + " reached through no other name: " + (reach.concat(oddHandles).join(", ") || "none"));
   const writes = shellCode.match(/clipboard\s*\.\s*write\w*\s*\(/g) || [];
-  check(writes.length === 1 && /clipboard\.writeText\(pickClipText\(v\.text, process\.platform\)\)/.test(shellCode),
+  check(writes.length === 1 && /clipboard\.writeText\(pickClipText\(v\.text,\s*process\.platform\)\)/.test(shellCode)
+    && (shellBare.match(/clipboard\.writeText\(/g) || []).length === 1,
     "5b the shell writes the clipboard at one place, the desk's own text: " + writes.length + " write site(s)");
   const MODS = ["electron", "node:child_process", "node:path", "node:fs", "node:os", "node:crypto"];
   const reqs = (shellCode.match(/\brequire\s*\(\s*[^)]*\)/g) || []).map(r => r.replace(/^require\s*\(\s*|\s*\)$/g, "").replace(/^["']|["']$/g, ""));
@@ -507,10 +544,33 @@ try {
   const cp = /\{([^}]*)\}\s*=\s*require\(\s*"node:child_process"\s*\)/.exec(shellCode);
   const runs = shellCode.match(/(?<![.\w])(execFileSync|execFile|execSync|exec|spawnSync|spawn|fork)\s*\(\s*("[^"]*"|[^,)]*)/g) || [];
   const programs = runs.map(r => r.replace(/^[^(]*\(\s*/, ""));
+  /* ONE HANDLE ON child_process, and the one name it gives is only ever called (board 818): a second
+     `require("node:child_process")` held whole and called as `.spawn(...)` passed the call pattern above, which reads
+     a bare name only. So the module is required once, its one name is mentioned once more per call and nowhere else,
+     and no other loader (a dynamic import, createRequire, a binding) is in the shell at all. */
+  const cpRequires = (shellCode.match(/\brequire\s*\(\s*"(?:node:)?child_process"\s*\)/g) || []).length;
+  const runMentions = (shellBare.match(/\bexecFileSync\b/g) || []).length, runCalls = (shellBare.match(/\bexecFileSync\s*\(/g) || []).length;
+  const loaders = shellBare.match(/\bimport\s*\(|\bprocess\s*\.\s*(?:binding|_linkedBinding|dlopen)\b|\bcreateRequire\b|\bmodule\s*\.\s*require\b|\brequire\s*\.\s*(?:cache|main)\b/g) || [];
   check(reqs.length > 0 && strange.length === 0 && !!cp && cp[1].trim() === "execFileSync"
-    && programs.length > 0 && programs.every(p => p === '"reg"'),
+    && programs.length > 0 && programs.every(p => p === '"reg"')
+    && cpRequires === 1 && runMentions === runCalls + 1 && loaders.length === 0,
     "5c the shell loads no module and runs no program it did not have (every one is read against the must-hold before it joins): "
-    + (strange.join(", ") || reqs.length + " requires known") + "; " + (cp ? cp[1].trim() : "no child_process") + " runs " + (programs.join(", ") || "nothing"));
+    + (strange.join(", ") || reqs.length + " requires known") + "; " + (cp ? cp[1].trim() : "no child_process") + " runs " + (programs.join(", ") || "nothing")
+    + "; child_process required " + cpRequires + " time(s), its name mentioned " + runMentions + " time(s) for " + runCalls + " call(s)"
+    + (loaders.length ? "; other loaders " + loaders.join(", ") : ""));
+  /* THE PAGE IS GRANTED ONE PERMISSION, the clipboard's write, and every handler that could grant another answers
+     from that list alone (board 818): "clipboard-read" added to the list stayed green, since no API name is in it. */
+  const allowDecl = shellCode.match(/\bALLOWED\s*=\s*\[([^\]]*)\]/g) || [];
+  const allowList = allowDecl.length === 1 ? /\[([^\]]*)\]/.exec(allowDecl[0])[1].split(",").map(s => s.trim().replace(/^["'`]|["'`]$/g, "")).filter(Boolean) : [];
+  const allowMoved = shellBare.match(/\bALLOWED\s*(?:\.\s*(?:push|unshift|splice|concat|fill|length)\b|\[)/g) || [];
+  const permHandlers = shellCode.match(/\bset(?:Permission\w*|Device\w*|DisplayMedia\w*|Bluetooth\w*|USBProtected\w*)Handler\b/g) || [];
+  const reqFrom = /\bsetPermissionRequestHandler\(\((\w+),(\w+),(\w+)\)=>\3\(ALLOWED\.indexOf\(\2\)>-1\)\)/.test(shellCode);
+  const chkFrom = /\bsetPermissionCheckHandler\(\((\w+),(\w+)\)=>ALLOWED\.indexOf\(\2\)>-1\)/.test(shellCode);
+  check(allowList.join(",") === "clipboard-sanitized-write" && allowMoved.length === 0 && reqFrom && chkFrom
+    && permHandlers.sort().join(",") === "setPermissionCheckHandler,setPermissionRequestHandler",
+    "5d the page is granted the clipboard's write and nothing else, and both permission handlers answer from that list: "
+    + JSON.stringify(allowList) + (allowMoved.length ? ", the list changed at run time" : "") + ", handlers " + (permHandlers.join(", ") || "none")
+    + (reqFrom && chkFrom ? ", both from the list" : ", NOT both from the list"));
 } catch (e) {
   failed++;
   console.log("  FAIL the run threw: " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

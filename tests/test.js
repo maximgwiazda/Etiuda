@@ -908,6 +908,10 @@ function libraryHeadTests() {
   const ns = {}, world = { file: "", opts: null };
   const own = { storedCatalog: () => held, catalogLoaded: () => true, nsGet: k => (k in ns ? ns[k] : null),
     eLoadedCatalogFile: () => world.file, openDialog: o => { world.opts = o; } };
+  /* A read through the global object is a read of the same scope, the way a page's window is its globals: without
+     this, `globalThis` resolved to Node's own and `window` to a bare function, so a guarded read such as
+     `(window.storedCatalog && window.storedCatalog()).name` found nothing and fell back to the file, green (board 817). */
+  own.window = own.globalThis = own.self = new Proxy({}, { get: (o, k) => scope[k], has: () => true });
   const scope = new Proxy({}, {
     has: (o, k) => typeof k === "string",
     get: (o, k) => k === Symbol.unscopables ? undefined : k in own ? own[k] : k in globalThis ? globalThis[k] : anyHeld,

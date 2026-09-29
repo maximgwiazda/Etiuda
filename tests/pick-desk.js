@@ -174,14 +174,37 @@ const pickerPage = async () => (await b.pages()).find(p => /^data:text\/html/.te
   check(pasted.replace(/\r\n/g, "\n") === first.text && clip1 === pasted,
     "f and Ctrl+V there pastes the reply the desk's own route makes (" + pasted.length + " characters pasted)");
 
+  /* g: THE DESK'S OWN PAGE WRITES THE SAME TEXT, and the bytes must be the picker's (board 818). Until 2026-09-29 the
+     write was asked of the picker's page, a data: document with no secure context and so no navigator.clipboard: g
+     could never run, and a NOT RUN was counted towards the declared total. The desk's page is a file: document and
+     secure; it is off screen and unfocused, and Chromium writes only from a focused document, so focus is emulated
+     over CDP for the one write and put back. A sentinel goes on first, so a write that did nothing cannot read as
+     clip1 left over from e. The line ends are counted: a write that kept bare line feeds would differ from the
+     picker's CRLF even where the text reads the same. */
+  const SENT_G = "pick-desk g sentinel " + process.pid;
+  await ask("setclip " + Buffer.from(SENT_G, "utf8").toString("base64"));
+  const gArmed = b64(await ask("clip")) === SENT_G;
+  let deskClip = "not asked";
+  const cdp = await desk.createCDPSession();
+  try {
+    await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+    deskClip = await desk.evaluate(t => (navigator.clipboard && window.isSecureContext)
+      ? navigator.clipboard.writeText(t).then(() => "ok", e => "refused " + e.name) : "none", first.text);
+  } finally {
+    await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: false }).catch(() => {});
+    await cdp.detach().catch(() => {});
+  }
+  const viaDesk = b64(await ask("clip"));
+  const ends = s => ({ n: s.length, crlf: (s.match(/\r\n/g) || []).length, lf: (s.match(/(^|[^\r])\n/g) || []).length });
+  const eD = ends(viaDesk), eP = ends(clip1), feeds = (first.text.match(/\n/g) || []).length;
+  check(gArmed && deskClip === "ok" && viaDesk !== SENT_G && viaDesk === clip1 && feeds > 0 && eD.crlf === feeds && eD.lf === 0,
+    "g the desk's own page writing the same text leaves the same bytes as the picker's, Windows' pair at every line end ("
+    + (gArmed ? "sentinel read back" : "SENTINEL NOT PLACED") + ", the desk's write " + deskClip
+    + (viaDesk === SENT_G ? ", the sentinel still there" : "") + "; desk " + eD.n + " chars, CRLF " + eD.crlf + ", bare LF " + eD.lf
+    + "; picker " + eP.n + " chars, CRLF " + eP.crlf + ", bare LF " + eP.lf + "; " + feeds + " line feed(s) in the source; identical " + (viaDesk === clip1) + ")");
+
   await ask("keys ctrl+shift+space");
   await until(async () => { pp = await pickerPage(); return !!pp && await pp.evaluate(() => document.hasFocus()); });
-  const pageClip = await pp.evaluate(t => (navigator.clipboard && window.isSecureContext)
-    ? navigator.clipboard.writeText(t).then(() => "ok", e => "refused " + e.name) : "none", first.text);
-  const viaPage = b64(await ask("clip"));
-  if (pageClip === "ok") check(viaPage === clip1, "g the page's own clipboard write of the same text leaves the same bytes as the picker's ("
-    + (viaPage.indexOf("\r\n") > -1 ? "CRLF" : "LF") + " both)");
-  else { checks++; console.log("  NOT RUN g the picker's page could not write the clipboard itself (" + pageClip + "), so the line ends were not compared"); }
   await ask("keys escape");
   check(await until(async () => (await ask("fg")) === "True"), "h Escape closes the picker and the chat has the focus again");
 

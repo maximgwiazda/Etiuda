@@ -35,7 +35,8 @@ if (!args.includes("--child")) {
   const self = fileURLToPath(import.meta.url);
   const run = dir => {
     const r = spawnSync(process.execPath, [self, "--child", "--modules", dir, "--catalog", CATALOG,
-      "--time", String(TIME), "--scale", String(SCALE)], { encoding: "utf8", maxBuffer: 1 << 28 });
+      "--time", String(TIME), "--scale", String(SCALE)].concat(dir === join(ROOT, "src", "modules") ? ["--own"] : []),
+      { encoding: "utf8", maxBuffer: 1 << 28 });
     if (r.status !== 0) { console.log("NO VERDICT: the run over " + dir + " failed" + NL + (r.stderr || "").split(NL).slice(0, 6).join(NL)); process.exit(NO_VERDICT); }
     const cut = r.stdout.indexOf(NL + "----" + NL);
     const head = r.stdout.slice(0, cut).split(NL);
@@ -97,11 +98,21 @@ const SP = await import(MOD("spell.js"));
 const CO = await import(MOD("card-order.js"));
 const CI = await import(MOD("card-intent.js"));
 const CM = await import(MOD("content-model.js"));
-/* A tree from before the shared order has no rankedCards; its render() is still held where it runs. */
-let RENDER = null, RAS = null;
-try { RENDER = await import(MOD("render.js")); } catch { RENDER = null; }
-if (RENDER && typeof RENDER.render !== "function") RENDER = null;
+/* A tree from before the shared order has no rankedCards; its render() is still held where it runs.
+   THIS TREE'S OWN ORDER IS NEVER EXCUSED (board 818): a render.js that threw while importing was read as "no render()
+   in this tree" and the digest went green, exit 0, with the desk's order compared nowhere. So for the tree under test
+   (`--own`, which the parent passes for src/modules here) render.js must import and carry both render() and
+   rankedCards, or there is no verdict; only a tree given with --against keeps the old leniency. */
+const OWN = args.includes("--own");
+let RENDER = null, RAS = null, renderWhy = "";
+try { RENDER = await import(MOD("render.js")); } catch (e) { RENDER = null; renderWhy = "render.js would not import: " + String(e && e.message || e).split(NL)[0]; }
+if (RENDER && typeof RENDER.render !== "function") { RENDER = null; renderWhy = "render.js carries no render()"; }
 const RANKED = !!RENDER && typeof RENDER.rankedCards === "function";
+if (OWN && !RANKED) {
+  console.error("NO VERDICT: the desk's own order cannot be run in this tree, so nothing would be held against it: "
+    + (renderWhy || "render.js carries no rankedCards"));
+  process.exit(NO_VERDICT);
+}
 if (RENDER) {
   /* render() reads the root's font size first and draws into the list after handing it over;
      the drawing is not this file's question, so a throw past setShown is expected and read past. */
@@ -139,7 +150,10 @@ for (let i = 0; i + 1 < tp.length; i += 2) Q.push(tp[i] + " " + tp[i + 1]);
 pick(tw, 4).forEach((w, i) => Q.push(w + " " + (pick(bw, 4)[i] || "")));
 Q.push("zqxjv", "a", "renamed shelf", "anna");        // nothing; one letter; what two phases bring in
 { const k = Object.keys(CM.CATS)[0]; const w = k ? CS.cardSearchIndex({ c: k }).words.meta[0] : ""; if (w) Q.push(w); }
-const QUERIES = [...new Set(Q.map(q => q.trim()).filter(Boolean))];
+/* THE EMPTY BOX IS A QUERY TOO (board 818): the list with nothing typed is the one a desk shows most, and filtering
+   the blanks out meant its order was never compared; a reversed no-query sort stayed green. It leads, and the timed
+   loop below leaves it out, since there it is the reset between settles already. */
+const QUERIES = ["", ...new Set(Q.map(q => q.trim()).filter(Boolean))];
 
 /* One settle's search, in render's order: its filter, its score and sort, then the pill row's two. */
 function settle(q) {
@@ -237,7 +251,7 @@ if (TIME) {
   AS.setCats([]); AS.setIntentIdxs([]); PK.pack.favourites = [];
   QUERIES.forEach(q => settle(q));                       // a desk has built its caches already
   const per = [];
-  for (let r = 0; r < TIME; r++) for (const q of QUERIES) {
+  for (let r = 0; r < TIME; r++) for (const q of QUERIES.filter(Boolean)) {
     settle("");                                          // the box emptied: every memo moves on
     const t0 = process.hrtime.bigint();
     settle(q);

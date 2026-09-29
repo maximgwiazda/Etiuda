@@ -145,6 +145,8 @@ const step = async (label, body, opts) => {
  *     grep returns 112 here.
  *   - 116 SINCE 2026-09-25, both ways: 2n5 is the site added, the Menu's rows driven by the
  *     keyboard (board 766). The same anchored grep returns 116 here.
+ *   - 126 SINCE 2026-09-29, both ways: 2q12s is the site added, a name put into the stored copy and
+ *     read for everywhere it could show (board 817). The same anchored grep returns 126 here.
  *
  *     THE METHOD FIRST WRITTEN HERE DID NOT SURVIVE THIS PARAGRAPH, corrected 2026-09-20 under
  *     board item 630. It was `grep -n "check(" | grep -v "const check = "`, said to return 111
@@ -163,7 +165,7 @@ const step = async (label, body, opts) => {
  * it is what the count now sees: a mismatch is NO VERDICT, exit 78, not a tally.
  */
 const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7"];
-const EXPECTED = KEEP ? null : 125;
+const EXPECTED = KEEP ? null : 126;
 const phasesSeen = new Set();
 const phase = what => {
   const m = /^\[(\d+)[a-z]*\/\d+\]/.exec(String(what).trim());
@@ -1230,22 +1232,33 @@ const placeEc = (dir, from, as, minutesOld) => {
   const udS2 = newUserData("seed-taken", null, true);
   s = await launch(udS2, [], { ETIUDA_TEST_DOCUMENTS: docsB });
   /* On a first run the tour's own step asks for a catalog, so the offer waits for the tour and
-     rises when it is skipped. */
+     rises when it is skipped.
+     WAITED FOR, NOT SLEPT ON (board 817): the leg used to sleep, click Skip blind and read the offer once 800 ms
+     later, and its message said "with the tour up" whether or not the tour was up. One red on 2026-09-29, under four
+     suites at once, could not say whether the tour was late, the offer slow, or the product wrong. So Skip is waited
+     for (up to 20 s), the screen with the tour standing is read as 2k2 reads it, and after the click the offer is
+     polled for (up to 5 s); both times are printed, and so is what stood when Skip was clicked. */
+  const pollPage = async (fn, ms) => { const t0 = Date.now();
+    while (Date.now() - t0 < ms) { if (await s.p.evaluate(fn).catch(() => false)) return Date.now() - t0; await sleep(100); }
+    return -1; };
+  const skipAfter = await pollPage(() => !!document.getElementById("tourSkip"), 20000);
   const takenFirst = await FIRST_SCREEN(s.p);
-  await s.p.evaluate(() => { const k = document.getElementById("tourSkip"); if (k) k.click(); });
-  await sleep(800);
+  const skipped = await s.p.evaluate(() => { const k = document.getElementById("tourSkip"); if (k) k.click(); return !!k; });
+  const offerAfter = skipped ? await pollPage(() => !!document.querySelector("#ecYes"), 5000) : -1;
   const takenSeen = await s.p.evaluate(SEEN);
   const takenRead = (s.said.join(" | ").match(/catalog read from ([^,]+),/) || [])[1] || "";
   await s.stop();
   const takenFiles = listed(docsB);
   check(takenFiles.join(",") === "mine.ec,sample-catalog.ec" && path.basename(takenRead) === "mine.ec"
-        && !takenFirst.offer && takenFirst.tour && takenSeen.offer,
+        && skipAfter > -1 && !takenFirst.offer && takenFirst.tour && skipped && offerAfter > -1 && takenSeen.offer,
     "2k3 a first run into a folder that ALREADY holds a catalog puts the sample beside it and still"
     + " opens the folder's own over the sample: " + JSON.stringify(takenFiles)
     + ", the file the shell read " + JSON.stringify(path.basename(takenRead))
     + " though it is six hours older than the build's sample"
-    + ", and that catalog is offered once the tour is skipped and not before (" + takenFirst.offer
-    + " with the tour up, " + takenSeen.offer + " after)");
+    + ", and that catalog is offered once the tour is skipped and not before: Skip "
+    + (skipAfter > -1 ? "stood after " + skipAfter + " ms" : "never stood in 20000 ms")
+    + ", then the tour up " + takenFirst.tour + " and the offer " + takenFirst.offer + ", Skip clicked " + skipped
+    + ", the offer " + (offerAfter > -1 ? "up " + offerAfter + " ms after" : "not up within 5000 ms") + " (" + takenSeen.offer + " at the last read)");
 
   /* 2k4: TWO FOLDERS AND WHICH COPY IS IN USE (Maxim, 2026-09-26 and 2026-09-28). The copy 2k2's first
      run gave Documents/Etiuda is the one listed, once, as a plain row, being byte for byte the shipped
@@ -2009,6 +2022,53 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " neither file, so 2q11 is an identity matching and not a mark on whatever sits first: "
     + libCtrl.rows.length + " row(s), " + JSON.stringify((libCtrl.rows || []).map(r => r.name))
     + ", loaded " + JSON.stringify(ctrlOn.map(r => r.name)));
+
+  /* 2q12s: A NAME THE STORED COPY STILL CARRIES IS SHOWN NOWHERE (board 817). An import stores a whitelisted copy with
+     no name at all, so 2q12's planted name never reaches the store and no leg could see a reader of it; a desk whose
+     store was written before the name left the format does carry one, Maxim's among them. So the name is put into
+     the stored copy here, the way that older store holds it, and the Library is opened again: its head row and its
+     heading are the file's, and the name is nowhere in its text. Then another catalog is offered over this one, and
+     neither the offer nor the band says it either. Read as booleans and file names; the fixture prints nothing. */
+  const STALE = "Probe catalog";
+  await ctrlPage.evaluate(() => { if (document.getElementById("mgCatList")) closeModal(); });
+  await sleep(600);
+  const seeding = await ctrlPage.evaluate(name => {
+    const c = storedCatalog();
+    if (!c) return { had: "no stored copy", seeded: false };
+    const had = "name" in c;
+    c.name = name;
+    return { had, seeded: !!lsSet(E_CATALOG_STORE, JSON.stringify(c), true) && (storedCatalog() || {}).name === name };
+  }, STALE);
+  const libSeed = await ctrlPage.evaluate(OPEN_LIB);
+  const seedLib = await ctrlPage.evaluate(name => ({
+    head: (document.querySelector("#modalCard h2 .modal-name") || {}).textContent || "",
+    says: (document.body.innerText || "").indexOf(name) > -1 }), STALE);
+  const seedOn = (libSeed.rows || []).filter(r => r.loaded);
+  await ctrlPage.evaluate(() => { if (document.getElementById("mgCatList")) closeModal(); });
+  await sleep(600);
+  const seedOffer = await ctrlPage.evaluate(async name => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const got = await eReadCatalogFile("one-edition.ec");
+    if (!got || !got.text) return { step: "the file did not read" };
+    if (!importCatalogText(got.text, got.name)) return { step: "refused" };
+    const t0 = Date.now();
+    while (!document.getElementById("eCatalogOffer") && Date.now() - t0 < 5000) await wait(100);
+    const box = document.getElementById("eCatalogOffer");
+    const out = { step: box ? "offered" : "no offer within 5000 ms", says: !!box && (box.innerText || "").indexOf(name) > -1,
+      band: ((document.getElementById("catNow") || {}).innerText || "").indexOf(name) > -1,
+      bold: box ? ((box.querySelector(".ec-what b") || {}).textContent || "") : "" };
+    const no = document.getElementById("ecNo"); if (no) no.click();
+    return out;
+  }, STALE);
+  check(seeding.seeded && libSeed.step === "open" && seedOn.length === 1 && seedOn[0].name === "probe.ec"
+        && libSeed.rows[0].name === "probe.ec" && seedLib.head === "probe.ec" && !seedLib.says
+        && seedOffer.step === "offered" && seedOffer.bold === "one-edition" && !seedOffer.says && !seedOffer.band,
+    "2q12s a name the stored copy still carries, as a store from before the name left the format does, is shown nowhere:"
+    + " the copy carried one after the import " + seeding.had + ", one put in " + seeding.seeded
+    + "; the Library's head row " + JSON.stringify(((libSeed.rows || [])[0] || {}).name || "") + ", loaded "
+    + JSON.stringify(seedOn.map(r => r.name)) + ", its heading " + JSON.stringify(seedLib.head)
+    + ", the name in its text " + seedLib.says + "; another catalog " + seedOffer.step + " as " + JSON.stringify(seedOffer.bold || "")
+    + ", the name in the offer " + !!seedOffer.says + " and in the band " + !!seedOffer.band);
   await s.stop();
 
   /* ---- 2s to 2s9: THE LIBRARY CLOSES WHEN SOMEBODY CLOSES IT, board item 407 ---------------
