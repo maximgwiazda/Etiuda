@@ -290,10 +290,10 @@ const eq = (got, want) => got === want ? true
   check("storage.js", "a namespaced key still wears the shape every sweep matches",
     () => eq(S.E_KEY_RE.test(S.nsKey("Pack")), true));
   /* THE ORBIT. The empty desk's layer is the build's namespace; a catalog's is a hash of its own id,
-     the name standing in only where a stored copy carries none. */
+     and a name planted in it seeds nothing. */
   check("storage.js", "the empty desk's layer is the build's own namespace, a catalog's is its id's",
     () => eq([S.layerNsOf(null) === S.E_NS, S.layerNsOf({ id: "lamp-shop", name: "Lamp" }) === S.eNsFor("lamp-shop"),
-      S.layerNsOf({ name: "Lamp" }) === S.eNsFor("Lamp"), S.layerNsOf({ id: "a1" }) !== S.layerNsOf({ id: "a2" })].join(","),
+      S.layerNsOf({ name: "Lamp" }) === S.E_NS, S.layerNsOf({ id: "a1" }) !== S.layerNsOf({ id: "a2" })].join(","),
       "true,true,true,true"));
   check("storage.js", "a desk from before the orbit has its one layer moved to the catalog loaded, once, and nothing after",
     () => {
@@ -983,11 +983,13 @@ const CARD_B = {
     () => eq(C.catalogVersionLabel(null), ""));
   check("catalog.js", "the signature of nothing is nothing",
     () => eq(C.eCatalogSignature(null), ""));
-  check("catalog.js", "two identical catalogs sign the same and a changed one does not",
+  check("catalog.js", "two identical catalogs sign the same, a changed one does not, and a name inside one changes nothing",
     () => {
       const mk = () => ({ kind: "playbook-cards", name: "Shop",
         cards: [{ t: "A title", c: "gen", en: "Text.", pl: "Tekst." }] });
-      const b = mk(); b.name = "Other shop";
+      const b = mk(); b.cards[0].en = "Other text.";
+      const named = mk(); named.name = "Other shop";
+      if (C.eCatalogSignature(mk()) !== C.eCatalogSignature(named)) return "a name moved the signature";
       return C.eCatalogSignature(mk()) === C.eCatalogSignature(mk())
         && C.eCatalogSignature(mk()) !== C.eCatalogSignature(b) ? true : "signatures collide";
     });
@@ -1009,12 +1011,12 @@ const CARD_B = {
       { en: "one" + NL2 + "two", alt: 1 }, { en: "single" }] }), 3));
   check("catalog-file.js", "a card with no English macro is not counted",
     () => eq(F.catalogMacroCount({ cards: [{ pl: "tylko po polsku" }] }), 0));
-  check("catalog-file.js", "two files sharing an id are the same catalog, whatever they are named",
-    () => eq(F.isCatalogUpdate({ id: "x", name: "A" }, { id: "x", name: "B" }), true));
-  check("catalog-file.js", "two different ids are two catalogs, however alike the names",
-    () => eq(F.isCatalogUpdate({ id: "x", name: "A" }, { id: "y", name: "A" }), false));
-  check("catalog-file.js", "with no ids the name decides, case aside",
-    () => eq(F.isCatalogUpdate({ name: "Lamp Shop" }, { name: "lamp shop" }), true));
+  check("catalog-file.js", "two files sharing an id are the same catalog",
+    () => eq(F.isCatalogUpdate({ id: "x" }, { id: "x" }), true));
+  check("catalog-file.js", "two different ids are two catalogs",
+    () => eq(F.isCatalogUpdate({ id: "x" }, { id: "y" }), false));
+  check("catalog-file.js", "with no ids no name decides: two files are never one catalog",
+    () => eq(F.isCatalogUpdate({ name: "Lamp Shop" }, { name: "Lamp Shop" }), false));
   check("catalog-file.js", "an earlier edition date is older",
     () => eq(F.catalogEditionOlder("2026-01-08", "2026-01-09"), true));
   check("catalog-file.js", "a later one is not",

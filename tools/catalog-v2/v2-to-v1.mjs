@@ -85,7 +85,6 @@ function toV1(v2) {
   const out = {
     format: 1,
     kind: "playbook-catalog",
-    name: str(v2.name),
     categories,
     icons,
     colors,

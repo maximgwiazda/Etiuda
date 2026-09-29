@@ -5,19 +5,18 @@ import { hooks } from "./hooks.js";
    and a plain engine share an origin - without this a standalone quietly shows another
    copy's stored catalog. Content is namespaced per build; PREFERENCES stay shared (a
    machine-wide theme is wanted, a machine-wide catalog is not). Plain engine keeps the bare
-   prefix; a build appends a hash of the catalog id, or of the name when the file carries none. */
+   prefix; a build appends a hash of the catalog id. */
 /* THE SHAPE IS THE FILTER, NEVER THE LETTER. Every key is "e" plus a capitalised name, or
    "e<hash>~" plus one for a build, and every sweep matches THAT: on file:// a bare "e" would
    take a neighbouring page's keys with it. The boot script in the template carries the same
    shape as a literal, because it shares nothing with this file. */
 const E_KEY_RE=/^e(?:[A-Z]|[0-9a-z]+~)/;
-/* THE CATALOG'S ID, THE NAME WHEN THERE IS NONE, NEVER ITS SHAPE. Seeding this on the
+/* THE CATALOG'S ID, NEVER ITS SHAPE. Seeding this on the
    card/intent/category counts meant every edition that added a single card moved every agent
    to a fresh namespace, and their own cards, stars and ordering went with it - invisibly,
    because preferences are NOT namespaced and so looked untouched. Two different catalogs
    still separate; successive editions of one stop looking like strangers to each other. */
-/* A function rather than a line inside E_NS: pack.js has to address the namespace an EARLIER
-   seed produced, and a second copy of this arithmetic is a second hash the day one is touched. */
+/* One function for the build's namespace and a catalog's layer, so the two cannot hash apart. */
 function eNsFor(seed){
   const s=String(seed);
   let h=5381;
@@ -27,9 +26,7 @@ function eNsFor(seed){
 const E_NS=(function(){
   const c=eEmbeddedCatalog();
   const id=String((c&&c.id)||"").trim();
-  const name=String((c&&c.name)||"").trim();
-  const seed=id||name;
-  return seed ? eNsFor(seed) : "e";
+  return id ? eNsFor(id) : "e";
 })();
 /* ---- storage that cannot brick the app -----------------------------------------------------
    Firefox can leave a file:// origin's localStorage database corrupt, and then EVERY access
@@ -276,12 +273,11 @@ function nsSet(name,v){ return lsSet(nsKey(name),v); }
 function nsDel(name){ lsDel(nsKey(name)); }
 /* THE PERSONAL LAYER ORBITS ITS CATALOG: what a person makes over a catalog is kept under that
    catalog's own id and shows only while it is loaded, and what is made on the empty desk is loose,
-   under this build's namespace. LAYER_KEYS is the whole layer; the rest of a namespace is the desk's.
-   The name stands in for the id only for a stored copy older than the format's id rule. */
+   under this build's namespace. LAYER_KEYS is the whole layer; the rest of a namespace is the desk's. */
 const LAYER_KEYS=["Pack","Stats","Days","CatOrder","IntentOrder","IntentsAside","LinksAside","RequestsAside","Exported"];
 function layerNsOf(c){
-  const seed=c ? (String(c.id||"").trim()||String(c.name||"").trim()) : "";
-  return seed ? eNsFor(seed) : E_NS;
+  const id=c ? String(c.id||"").trim() : "";
+  return id ? eNsFor(id) : E_NS;
 }
 let E_LAYER=E_NS;
 function eLayer(){ return E_LAYER; }

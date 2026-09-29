@@ -1482,8 +1482,8 @@ const placeEc = (dir, from, as, minutesOld) => {
   placeEc(catFolder("back"), SAMPLE_NOED, "another.ec", 90);
   s = await launch(udL);
   /* WHAT THE DIALOG SAYS, read before it is answered: the file it is about is named in the last
-     sub-line, which is the only place a FILENAME appears, while the heading, the catalog\'s own
-     name, its edition and its counts are the body above. */
+     sub-line, which is the only place a FILENAME appears whole, while the heading, the catalog\'s
+     name from that file, its edition and its counts are the body above. */
   const DIALOG = () => {
     const m = document.getElementById("eCatalogOffer");
     if (!m) return { step: "no dialog" };
@@ -2003,8 +2003,8 @@ const placeEc = (dir, from, as, minutesOld) => {
   const libCtrl = await ctrlPage.evaluate(OPEN_LIB);
   const ctrlOn = (libCtrl.rows || []).filter(r => r.loaded);
   check(ctrlIn === "imported" && libCtrl.step === "open" && libCtrl.rows.length === 3
-        && ctrlOn.length === 1 && ctrlOn[0].name === "Probe catalog"
-        && libCtrl.rows[0].name === "Probe catalog",
+        && ctrlOn.length === 1 && ctrlOn[0].name === "probe.ec"
+        && libCtrl.rows[0].name === "probe.ec",
     "2q12 control: a catalog no file in the folder is keeps its own row at the head and marks"
     + " neither file, so 2q11 is an identity matching and not a mark on whatever sits first: "
     + libCtrl.rows.length + " row(s), " + JSON.stringify((libCtrl.rows || []).map(r => r.name))
@@ -2085,14 +2085,14 @@ const placeEc = (dir, from, as, minutesOld) => {
     window.pack.who = "Ada"; window.savePack(); window.paintCatalogList();
     await wait(600);
   });
-  /* EXPORT GOES STRAIGHT TO THE SAVE DIALOG (Maxim, 2026-09-26): no question of its own, the file's
-     name names the catalog, and the Library stays open at its fold behind the dialog. What lands is
-     the .ec document named after the loaded catalog, which the engine's own reader takes. */
+  /* EXPORT GOES STRAIGHT TO THE SAVE DIALOG (Maxim, 2026-09-26): no question of its own, and the
+     Library stays open at its fold behind the dialog. What lands is the .ec document named after the
+     loaded catalog's file, with no name inside it, which the engine's own reader takes. */
   const stacked = await (await s.b.pages())[0].evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const b = document.getElementById("mgExportCatalog");
     if (!b) return { there: false };
-    const name = (window.storedCatalog() || {}).name || "";
+    const name = String(window.nsGet("CatalogFrom") || "").replace(/\.(ec|json|js)$/i, "");
     b.click(); await wait(1500);
     const fold = document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
     return { there: true, name, asked: !!document.getElementById("eNameModal"), lib: !!fold,
@@ -2103,16 +2103,16 @@ const placeEc = (dir, from, as, minutesOld) => {
   try { savedText = fs.readFileSync(path.join(SAVED, stacked.name + ".ec"), "utf8"); savedDoc = JSON.parse(savedText); }
   catch (x) { savedDoc = null; }
   const readBack = await (await s.b.pages())[0].evaluate(t => {
-    try { return window.parseCatalogFile(t).name; } catch (x) { return "refused: " + x.message; } }, savedText);
-  check(stacked.there && !stacked.asked && stacked.lib && stacked.foldOpen
+    try { return (window.parseCatalogFile(t).cards || []).length; } catch (x) { return "refused: " + x.message; } }, savedText);
+  check(stacked.there && !stacked.asked && stacked.lib && stacked.foldOpen && !!stacked.name
         && savedAs.length === 1 && savedAs[0] === stacked.name + ".ec" && !!savedDoc
-        && savedDoc.kind === "etiuda-catalog" && savedDoc.format === 2 && savedDoc.name === stacked.name
-        && readBack === stacked.name,
+        && savedDoc.kind === "etiuda-catalog" && savedDoc.format === 2 && !("name" in savedDoc)
+        && readBack === (savedDoc.cards || []).length && readBack > 0,
     "2s3 Export catalog goes straight to the save dialog with no question of its own and the Library"
-    + " still at its fold, and writes " + savedAs.length + " file, the loaded catalog's name as an .ec ("
-    + (savedAs[0] === stacked.name + ".ec") + "), a format " + (savedDoc && savedDoc.format)
-    + " document carrying that name (" + (!!savedDoc && savedDoc.name === stacked.name)
-    + ") which the engine's reader takes whole (" + (readBack === stacked.name) + "): "
+    + " still at its fold, and writes " + savedAs.length + " file, the loaded catalog's file as an .ec ("
+    + JSON.stringify(savedAs[0]) + " for " + JSON.stringify(stacked.name) + "), a format " + (savedDoc && savedDoc.format)
+    + " document with no name inside it (" + (!!savedDoc && !("name" in savedDoc))
+    + ") which the engine's reader takes whole (" + JSON.stringify(readBack) + " cards): "
     + JSON.stringify({ asked: stacked.asked, lib: stacked.lib, foldOpen: stacked.foldOpen }));
 
   /* An editor opened from the Library takes the screen and hands it back, which is a different

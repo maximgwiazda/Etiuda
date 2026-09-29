@@ -3,7 +3,7 @@
    thing left that understands a format 1 file.
    Usage:
      node tools/catalog-v2/convert.mjs <in.js|in.json> --out <name.ec> [--js <name.js>]
-                                       [--id x] [--name "X"] [--rev 1] [--date 2026-09-14]
+                                       [--id x] [--rev 1] [--date 2026-09-14]
    It refuses to write over an existing file, and it refuses to write anywhere inside this
    repository, which is public and holds no catalog. */
 
@@ -68,7 +68,7 @@ const src = args._[0];
 evaluate = args.eval === true || args.eval === "true";
 const v1 = readV1(src);
 const opts = {};
-for (const k of ["id", "name", "rev", "date"]) { if (typeof args[k] === "string") opts[k] = args[k]; }
+for (const k of ["id", "rev", "date"]) { if (typeof args[k] === "string") opts[k] = args[k]; }
 
 const r = roundTrip(v1, opts);
 const counts = {

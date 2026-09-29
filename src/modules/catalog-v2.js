@@ -461,7 +461,7 @@ function catalogFromV2(data){
     if(links.length) m.intents=links;
     return m;
   });
-  const out={ format:1, kind:"playbook-catalog", name:v2Str(data.name)||"Etiuda catalog",
+  const out={ format:1, kind:"playbook-catalog",
               categories:catLabels.categories||{}, icons, colors, intents, cards };
   if(intentIds.length) out.intentIds=intentIds;
   if(always.length) out.roles={ always };
@@ -561,7 +561,6 @@ function catalogToV2(c,opts){
   });
   const out={ format:V2_FORMAT, kind:V2_KIND,
               id:v2Str(o.id||c.id)||"etiuda-catalog",
-              name:v2Str(o.name||c.name)||"Etiuda catalog",
               rev:(o.rev!=null)?+o.rev:((c.rev!=null)?+c.rev:1),
               langs:(Array.isArray(c.langs)&&c.langs.length)?c.langs:DEFAULT_LANGS,
               commentLang:v2Str(c.commentLang)||codes[0]||"en",

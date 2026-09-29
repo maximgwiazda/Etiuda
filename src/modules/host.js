@@ -70,7 +70,7 @@ function eCatalogMtime(){ const h=eHost(), o=eHanded(); return o?o.mtime:h?(+h.c
    once the engine has refused it. */
 function eOpenedWith(){ const h=eHost(); return !eHanded() && !!(h && h.openedWith); }
 /* The catalog folder's own listing,
-   [{name,mtime,cards,edition,macros,intents,cats,awaiting,sample,id,catalogName}],
+   [{name,mtime,cards,edition,macros,intents,cats,awaiting,sample,id}],
    in the host's own order: newest first, the sample last whatever its date - the rule and the
    reason are at sampleLast in shell/main.js. Empty in a browser. Asked for when a screen paints,
    never cached: the folder is a setting. Every count is -1 and `edition` "" where the host could
@@ -96,7 +96,6 @@ function eCatalogFiles(){
                                            /* The catalog's own identity, for the rule of board
                                               431; empty where the file did not read. */
                                            id:String(f&&f.id||""),
-                                           catalogName:String(f&&f.catalogName||""),
                                            // The copy Etiuda ships, rather than a folder's own file.
                                            builtIn:!!(f&&f.builtIn)}))
                                  .filter(f=>f.name):[])
@@ -160,9 +159,8 @@ function ePickCatalogFile(title,label){
   }catch(e){ return Promise.resolve(null); }
 }
 /* Export's save dialog, the host's for the reason Import's is: the engine calls no OS API, and the
-   host writes the bytes and says whether they landed. `build` is handed the chosen file's name and
-   returns the text, because the name is the catalog's. {name,ok} for a file chosen, null for a
-   dialog closed. */
+   host writes the bytes and says whether they landed. `build` returns the text, once a file is
+   chosen. {name,ok} for a file chosen, null for a dialog closed. */
 function eHasCatalogSaver(){
   const h=eHost();
   return !!h && typeof h.chooseCatalogSave==="function" && typeof h.writeCatalogSave==="function";
@@ -175,7 +173,7 @@ function eSaveCatalogFile(title,name,label,build){
       .then(v=>{
         if(!(v&&typeof v==="object"&&v.name)) return null;
         const chosen=String(v.name);
-        return Promise.resolve(eHost().writeCatalogSave(String(build(chosen)||"")))
+        return Promise.resolve(eHost().writeCatalogSave(String(build()||"")))
           .then(w=>(w&&typeof w==="object")?{name:String(w.name||chosen),ok:w.ok===true}:failed(chosen));
       })
       .catch(()=>failed());

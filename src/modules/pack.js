@@ -1,8 +1,7 @@
 import { CATS, intentCount, SW_IDS } from "./content-model.js";
 import { M, WHO_BASE, normWhoList } from "./stock.js";
-import { E_KEY_RE, E_NS, eNsFor, lsDel, lsGet, lsKeys, lsSet, ssDel, LAYER_KEYS, eLayer, eLayers, lyGet, lySet, lyDel,
+import { E_KEY_RE, E_NS, lsDel, lsGet, lsKeys, lsSet, ssDel, LAYER_KEYS, eLayer, eLayers, lyGet, lySet, lyDel,
   eSaveTrouble, eDeskRefused, eDeskRefusedSeen, eHomeless, eDeskHome } from "./storage.js";
-import { eEmbeddedCatalog } from "./env.js";
 import { t, toast, fileStamp } from "./ui-lang.js";
 import { hooks } from "./hooks.js";
 import { statsOlderTouched } from "./desk-stats.js";
@@ -203,7 +202,7 @@ function packWithoutPositional(raw){
     return JSON.stringify(p);
   }catch(e){ return null; }   // unparseable: loadPack could not have used it either
 }
-/* The one mover both adoptions below use. A key this namespace already holds is never
+/* The mover the adoption below uses. A key this namespace already holds is never
    overwritten: what is here is later than what is anywhere else, whatever brought it. */
 function carryNsLayer(from){
   let moved=0;
@@ -223,29 +222,7 @@ function carryNsLayer(from){
    Clear. Written wherever the question was actually answered - "this namespace already has a
    layer" is an answer - and never where there is nothing yet to answer. */
 const NS_ADOPTED="e~nsAdopted:";
-/* THE LAYER THIS CATALOG'S OWN DESK WROTE BEFORE THE ID KEYED THE NAMESPACE. The seed is the
-   catalog's id from 2026-09-15; a desk that loaded this same catalog on an earlier build holds
-   its cards, stars and columns under a hash of the NAME. The source is known exactly here,
-   which the stranded rule below can never say - and the layer still travels stripped, because
-   its intent keys are positions and this namespace reads them as tag ids. Only into this
-   build's own catalog's layer, as below. */
-function adoptNameNsLayer(){
-  try{
-    if(eLayer()!==E_NS) return false;
-    const c=eEmbeddedCatalog();
-    const id=String((c&&c.id)||"").trim(), name=String((c&&c.name)||"").trim();
-    if(!id || !name) return false;
-    const from=eNsFor(name);
-    if(from===E_NS) return false;
-    const mark=NS_ADOPTED+from;
-    if(lsGet(mark)!=null) return false;                    // a second id sharing the name finds this
-    if(!lsKeys().some(k=>k.indexOf(from)===0)) return false;
-    const moved=lyGet("Pack") ? 0 : carryNsLayer(from);
-    lsSet(mark,"1");
-    return moved>0;
-  }catch(e){ return false; }
-}
-/* The general case, where the source is inferred rather than known: exactly ONE other pack is
+/* THE SOURCE IS INFERRED: exactly ONE other pack is
    stranded in the storage area file:// pages share. Two would mean a machine with two catalogs
    on it, and guessing between them is worse than leaving both alone. Runs only for a build that
    HAS an embedded catalog - the bare engine's pack belongs to whatever catalog was imported
@@ -368,7 +345,6 @@ function withCounts(p){
 }
 function loadPack(){
   let p=null;
-  adoptNameNsLayer();                    // the known source before the inferred one
   adoptStrandedPack();
   try{ const raw=lyGet("Pack"); if(raw) p=JSON.parse(raw); }catch(e){}
   p=withCounts(p);
@@ -594,6 +570,6 @@ export {
   savePack, saveStats, flushStats,
   packSnapshot,
   packUndoFor,
-  BASE_CATS, BASE_M, catalogCardId, rebuildBaseCards, pack, loadPack, resetPack, adoptNameNsLayer,
+  BASE_CATS, BASE_M, catalogCardId, rebuildBaseCards, pack, loadPack, resetPack,
   showPackMigrationWarning, syncSaveNotice, showDeskNotices, whoOptions, isFavourite, isIntentFavourite,
 };

@@ -2,8 +2,7 @@ import { ensureCustomCat, openCardEditor, hideCard } from "./card-editor.js";
 import { baseCard, cardTitle, findCard } from "./card-model.js";
 import { movedCardIds, cardOrderIdx, catSortIdx, ensureCardOrder, cardOrderTouched } from "./card-order.js";
 import { isAlwaysCat, setCatAlways } from "./cat-roles.js";
-import { importCatalogHere } from "./catalog-file.js";
-import { E_CATALOG_NAME } from "./catalog.js";
+import { importCatalogHere, catalogFileName } from "./catalog-file.js";
 import { CATS } from "./content-model.js";
 import { catToggle, closeModal, dressDialogInputs, modalOpen, mountModalBody, openDialog, wireFolds } from "./dialog.js";
 import { markCutText } from "./cut-text.js";
@@ -676,7 +675,7 @@ function openManage(){
        "Catalog & data" - the last fold, shut unless you opened it. So the heading carries the
        name for the same reason the editors carry theirs: it scopes the screen you are on.
        Nothing when there is no catalog; the empty state inside says that better. */
-    name: ()=>(typeof E_CATALOG_NAME!=="undefined" && E_CATALOG_NAME) ? E_CATALOG_NAME : "",
+    name: ()=>catalogFileName(),
     body: mgBody,
     /* Wipe sits at the bar's LEFT EDGE, with Close at the far right: same as Settings' Reset,
        and .mf-left is the group that carries it there. Danger kept, because this one forgets

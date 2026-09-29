@@ -53,8 +53,7 @@ function bodyToMarkers(text, marker) {
 function toV2(v1, opts) {
   const o = opts || {};
   const problems = [];
-  const name = str(o.name || v1.name || "Etiuda catalog");
-  const id = str(o.id || slug(name));
+  const id = str(o.id || slug(str(v1.name || "Etiuda catalog")));
   if (!idOk(id)) problems.push("catalog id " + JSON.stringify(id) + " is not 3 to 64 of [a-z0-9-]");
 
   const langs = declaredLangs(v1);
@@ -191,7 +190,6 @@ function toV2(v1, opts) {
     format: FORMAT,
     kind: KIND,
     id,
-    name,
     rev: (o.rev != null) ? +o.rev : 1,
     langs,
     commentLang: str(v1.commentLang).trim() || "en",

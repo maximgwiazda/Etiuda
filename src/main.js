@@ -142,7 +142,6 @@ Object.defineProperty(globalThis, "scMap2", { get: () => shortcuts.scMap2 });
 Object.defineProperty(globalThis, "scCaptureId", { get: () => shortcutsList.scCaptureId });
 Object.defineProperty(globalThis, "scCaptureSlot", { get: () => shortcutsList.scCaptureSlot });
 Object.defineProperty(globalThis, "scRepaint", { get: () => shortcutsList.scRepaint });
-Object.defineProperty(globalThis, "E_CATALOG_NAME", { get: () => catalog.E_CATALOG_NAME });
 Object.defineProperty(globalThis, "E_CATALOG_VERSION", { get: () => catalog.E_CATALOG_VERSION });
 Object.defineProperty(globalThis, "tabs", { get: () => tabs.tabs });
 Object.defineProperty(globalThis, "tabSaveTimer", { get: () => tabs.tabSaveTimer });
