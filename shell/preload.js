@@ -15,6 +15,20 @@ if (PICKER) {
   });
 }
 
+/* THE CLICK THAT LETS A WEB ADDRESS OUT: see linkClicked in main.js. Registered here, before any
+   page script, so it hears every click first; the page can neither forge isTrusted nor reach this
+   world. A link opened by a script, even from inside a click, is not a link clicked. */
+if (!PICKER && typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  const clicked = (e) => {
+    if (!e.isTrusted || (e.type === "auxclick" && e.button !== 1)) return;
+    const at = e.composedPath().find(n => n && (n.localName === "a" || n.localName === "area"));
+    const href = at && typeof at.href === "string" ? at.href : "";
+    if (/^https?:/i.test(href)) ipcRenderer.sendSync("etiuda:link-click", href);
+  };
+  window.addEventListener("click", clicked, true);
+  window.addEventListener("auxclick", clicked, true);
+}
+
 /* The engine reads window.E_CATALOG while it boots, so the value has to be there before its
    first script runs. A preload is the only code early enough, and a synchronous request the
    only one that answers in time. */

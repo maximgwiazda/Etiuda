@@ -591,6 +591,23 @@ it, twice, because nothing in the sequence had ever started the built applicatio
 is about 115 s longer for it. The gate's own control is `ETIUDA_SHELL_APP=<anything> node
 tools/release.mjs`, which makes shell-smoke refuse and must stop the run at gate 7 with exit 7.
 
+## Web addresses leave only for a click
+
+    node tests/links.js                    npm run links, in npm run gates and the release's shell gate
+
+An http(s) address reaches the default browser only when the agent clicked the link that names it.
+The preload tells the shell, synchronously and during the click, which link a trusted click landed
+on; the shell hands out only that address, once, within `LINK_CLICK_MS`. One launch on a throwaway
+app whose copy of `shell/main.js` has its one `shell.openExternal` call replaced by a line on
+stdout, so no leg can open a browser, and the run refuses unless the two shell files hold exactly
+one such call. Ten legs: window.open, a location change and a synthetic click by script hand
+nothing; a real click, a target=_blank click, Enter and a middle click hand their address; the same
+address by script straight after, a click the page diverts elsewhere, and the clicked address after
+the window hand nothing. About 10 s. Each leg has gone red: legs a, b, c, e, i and j on the shell
+before this gate existed, and each leg under a fault planted in the shell (the trusted check cut,
+the listener cut, the middle click unheard, the click not spent, the address not matched, the click
+never stale).
+
 ## Whether a build can be sold, which no other gate asks
 
     node tests/sellable.mjs
