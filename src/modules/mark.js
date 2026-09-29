@@ -35,11 +35,15 @@ function railQuery(){
 let copyCount=0;
 function copiesMade(){ return copyCount; }
 function forgetCopies(){ copyCount=0; }
-function copy(text,msg){
-  // Copying consumes the semi-selection - every copy, click or keyboard, funnels through here.
+/* Copying consumes the semi-selection - every copy, click, keyboard or the picker, funnels through
+   here. The picker's text reaches the clipboard through the host, so it takes this half alone. */
+function noteCopy(){
   copyCount++;
   setRailMarkUsed(true); setSemiKind(null);
   hooks.railDecorate(false);
+}
+function copy(text,msg){
+  noteCopy();
   const done=()=>toast(msg);
   if(navigator.clipboard && window.isSecureContext){
     navigator.clipboard.writeText(text).then(done,()=>fallback(text,done));
@@ -149,6 +153,7 @@ export {
   markSurface,
   markEnd,
   copy,
+  noteCopy,
   copiesMade,
   forgetCopies,
   fallback,

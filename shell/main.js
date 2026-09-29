@@ -1,7 +1,7 @@
 "use strict";
 
-const { app, BrowserWindow, Menu, dialog, ipcMain, nativeTheme, net, protocol, session, screen,
-  shell, systemPreferences } = require("electron");
+const { app, BrowserWindow, Menu, clipboard, dialog, globalShortcut, ipcMain, nativeTheme, net, protocol, session,
+  screen, shell, systemPreferences } = require("electron");
 const { execFileSync } = require("node:child_process");
 const path = require("node:path");
 const fs = require("node:fs");
@@ -801,6 +801,7 @@ function writeDesk(text, from) {
     deskGiven.set(from, map);
     catalogFolderChanged();
     applyThemeSource();
+    syncHotkey();
     return true;
   } catch (e) {
     console.error("etiuda: the desk could not be written - " + e.message);
@@ -841,6 +842,7 @@ function patchDesk(text) {
     deskWritten = true;
     catalogFolderChanged();
     applyThemeSource();
+    syncHotkey();
     return true;
   } catch (e) {
     console.error("etiuda: the desk could not be written - " + e.message);
@@ -1545,6 +1547,355 @@ function watchPage(win) {
   });
   win.on("responsive", () => { if (hangAsk) hangAsk.abort(); });
 }
+/* ---- THE PICKER: the desk's replies over the window in use, by a hotkey -------------------------
+   The hotkey is REGISTERED with Windows (globalShortcut, which is RegisterHotKey there), never a
+   keyboard hook: nothing here sees a key but its own combination. Nothing here reads another
+   window either, its text, its caret or its pixels, and nothing types into one: the reply goes to
+   the clipboard and the agent pastes. The picker is placed by the pointer, the one position that
+   belongs to nobody else's window. */
+const HOTKEY_KEY = "eHotkey";
+const HOTKEY_DEFAULT = "Control+Shift+Space";
+/* WHY A COMBINATION IS REFUSED, or "" for one that may be registered: "shape" for anything but
+   Control, Alt and Shift over a letter, a digit, Space or F1 to F24; "altgr" where Control and Alt
+   meet, which is AltGr on Windows and types letters on many layouts; "bare" for no Control and no
+   Alt; "system" for what Windows answers itself; "used" for the families browsers and chat tools
+   answer. F13 to F24 type nothing and no program in either family answers them. Pure. */
+function hotkeyRefusal(accel) {
+  const parts = String(accel || "").split("+"), key = parts.pop() || "";
+  if (parts.some((m, i) => ["Control", "Alt", "Shift"].indexOf(m) < 0 || parts.indexOf(m) !== i)
+      || !/^([A-Z0-9]|Space|F([1-9]|1[0-9]|2[0-4]))$/.test(key)) return "shape";
+  const has = m => parts.indexOf(m) > -1, ctrl = has("Control"), alt = has("Alt"), shift = has("Shift");
+  if (ctrl && alt) return "altgr";
+  if (/^F(1[3-9]|2[0-4])$/.test(key)) return "";
+  if (!ctrl && !alt) return "bare";
+  if (alt && (shift || key === "Space" || key === "F4")) return "system";
+  if (/^[A-Z0-9]$/.test(key) && !(ctrl && shift && /^[0-9]$/.test(key))) return "used";
+  if (ctrl && !shift && (key === "Space" || /^F/.test(key))) return "used";
+  return "";
+}
+/* What the desk asks for: the default until somebody chooses, "" for off. A value the rule refuses
+   is off, since a desk file can be written by hand. */
+function hotkeyWanted() {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  const v = deskKeys[HOTKEY_KEY];
+  if (typeof v !== "string") return HOTKEY_DEFAULT;
+  return (v && !hotkeyRefusal(v)) ? v : "";
+}
+let hotkeyHeld = "";                             // the combination registered now, or ""
+let hotkeyTaken = "";                            // the last one Windows refused, or ""
+/* Registers `accel` in place of what is held; true where it is now held. On a refusal what was held
+   before is put back, so a combination another program owns never leaves the desk with none. */
+function holdHotkey(accel) {
+  if (accel === hotkeyHeld) return true;
+  const was = hotkeyHeld;
+  try {
+    if (was) globalShortcut.unregister(was);
+    hotkeyHeld = "";
+    if (!accel) return true;
+    if (globalShortcut.register(accel, pickToggle)) {
+      hotkeyHeld = accel;
+      hotkeyTaken = "";
+      console.log("etiuda: the hotkey " + accel + " is registered");
+      return true;
+    }
+    hotkeyTaken = accel;
+    console.error("etiuda: Windows refused the hotkey " + accel + ", which another program holds");
+    if (was && globalShortcut.register(was, pickToggle)) hotkeyHeld = was;
+  } catch (e) { console.error("etiuda: the hotkey could not be registered - " + e.message); }
+  return false;
+}
+/* THE HOTKEY FOLLOWS THE DESK, as the theme and the catalog folder do, so a desk written by
+   Settings, by a reset or by hand is the one answer to which combination is held. Not before the
+   app is ready, when globalShortcut cannot be used. */
+let hotkeyReady = false;
+function syncHotkey() { if (hotkeyReady) holdHotkey(hotkeyWanted()); }
+
+/* Where the picker opens: below and a little left of the pointer, above it where the work area
+   has no room below, and wholly inside that work area. Pure. */
+const PICK_SIZE = { width: 600, height: 424 };
+function pickerPlace(pt, area, size) {
+  const w = Math.min(size.width, area.width), h = Math.min(size.height, area.height);
+  let x = pt.x - 40, y = pt.y + 18;
+  if (y + h > area.y + area.height) y = pt.y - 18 - h;
+  x = Math.min(Math.max(x, area.x), area.x + area.width - w);
+  y = Math.min(Math.max(y, area.y), area.y + area.height - h);
+  return { x: Math.round(x), y: Math.round(y), width: Math.round(w), height: Math.round(h) };
+}
+/* On Windows the page's own copy puts CRLF on the clipboard (Chromium turns each line feed into
+   the platform's pair as it writes), so the picker's copy does the same and the two paste alike. */
+function pickClipText(text, platform) {
+  const s = String(text == null ? "" : text);
+  return platform === "win32" ? s.replace(/\r?\n/g, "\r\n") : s;
+}
+
+/* THE PICKER'S PAGE RUNS THIS, NOT THIS PROCESS: it is serialised whole into the document and
+   hashed for its policy, so it may close over nothing in this file. Its words, its colours and its
+   rows all arrive from the desk's own page through E_PICK. */
+function pickPage() {
+  const P = window.E_PICK, q = document.getElementById("q"), box = document.getElementById("rows");
+  if (!P || !q || !box) return;
+  let rows = [], last = null, words = {}, at = 0, asked = 0;
+  const esc = s => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const ICON_AGAIN = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.6-3.7"/><path d="M13 2.5v3h-3"/></svg>';
+  const list = () => (!q.value.trim() && last)
+    ? [Object.assign({ again: true }, last)].concat(rows.filter(r => r.id !== last.id || r.vi !== last.vi)) : rows;
+  const paint = () => {
+    const all = list();
+    if (at >= all.length) at = all.length ? all.length - 1 : 0;
+    let n = 0;
+    box.innerHTML = all.length ? all.map((r, i) => '<li role="option" id="r' + i + '" data-i="' + i + '"'
+        + (i === at ? ' class="on" aria-selected="true"' : ' aria-selected="false"')
+        + (r.again ? ' title="' + esc(words.again) + '"' : '') + '>'
+        + '<span class="n">' + (r.again ? ICON_AGAIN : (++n <= 9 ? String(n) : "")) + '</span>'
+        + '<span class="t">' + esc(r.t) + '</span><span class="x">' + esc(r.x) + '</span>'
+        + (r.tag ? '<span class="g">' + esc(r.tag) + '</span>' : '') + '</li>').join("")
+      : '<li class="none" role="presentation">' + esc(q.value.trim() ? words.none : words.empty) + '</li>';
+    q.setAttribute("aria-activedescendant", all.length ? "r" + at : "");
+    box.querySelectorAll(".t,.x").forEach(el => el.classList.toggle("cut", el.scrollWidth > el.clientWidth + 1));
+  };
+  const take = r => { if (r) P.copy(JSON.stringify(r.again ? { last: true } : { id: r.id, vi: r.vi })); };
+  P.onOpen(text => {
+    let o = {};
+    try { o = JSON.parse(text) || {}; } catch (e) { o = {}; }
+    const look = o.look || {}, root = document.documentElement;
+    Object.keys(look.vars || {}).forEach(k => root.style.setProperty(k, look.vars[k]));
+    root.dataset.theme = look.theme || "";
+    root.classList.toggle("glass", !!look.glass);
+    root.classList.toggle("still", !!look.still);
+    words = o.words || {};
+    root.lang = words.lang || "en";
+    q.placeholder = words.search || "";
+    box.setAttribute("aria-label", words.list || "");
+    rows = Array.isArray(o.rows) ? o.rows : [];
+    last = o.last || null;
+    q.value = ""; at = 0; asked++;
+    paint();
+    q.focus();
+    P.ready();
+  });
+  q.addEventListener("input", () => {
+    const mine = ++asked;
+    P.find(q.value).then(text => {
+      if (mine !== asked) return;
+      let o = {};
+      try { o = JSON.parse(text) || {}; } catch (e) { o = {}; }
+      rows = Array.isArray(o.rows) ? o.rows : [];
+      at = 0;
+      paint();
+    });
+  });
+  q.addEventListener("keydown", e => {
+    const all = list();
+    if (e.key === "Escape") { e.preventDefault(); P.close(); return; }
+    if (e.key === "Tab") { e.preventDefault(); return; }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (!all.length) return;
+      at = (at + (e.key === "ArrowDown" ? 1 : -1) + all.length) % all.length;
+      paint();
+      return;
+    }
+    if (e.key === "Enter") { e.preventDefault(); take(all[at]); return; }
+    const d = /^(Digit|Numpad)([0-9])$/.exec(e.code || "");
+    if (d && e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault();
+      if (d[2] === "0") { P.copy(JSON.stringify({ last: true })); return; }
+      take(all.filter(r => !r.again)[+d[2] - 1]);
+    }
+  });
+  box.addEventListener("mousemove", e => {
+    const li = e.target.closest && e.target.closest("li[data-i]");
+    if (li && +li.dataset.i !== at) { at = +li.dataset.i; paint(); }
+  });
+  box.addEventListener("mousedown", e => e.preventDefault());
+  box.addEventListener("click", e => {
+    const li = e.target.closest && e.target.closest("li[data-i]");
+    if (li) take(list()[+li.dataset.i]);
+  });
+}
+const PICK_SCRIPT = "(" + pickPage.toString() + ")();";
+const PICK_HASH = "'sha256-" + crypto.createHash("sha256").update(PICK_SCRIPT, "utf8").digest("base64") + "'";
+/* The picker's document. Its colours are the desk's own, sent at every opening as the values the
+   desk's sheet computed, so the fallbacks here are only what a first frame could show. */
+function pickerDoc() {
+  return '<!DOCTYPE html>\n<html lang="en">\n<meta charset="utf-8">\n'
+    + '<meta http-equiv="Content-Security-Policy" content="' + policyFor([PICK_HASH]) + '">\n'
+    + '<title>Etiuda</title>\n<style>\n'
+    + ':root{color-scheme:light;--panel:#fff;--panel-raised:#fff;--ink:#0f172a;--dim:#475569;--line:#e4e8ee;'
+    + '--accent:#2563eb;--field:#fdfdfd;--field-line:#e0e4ea;--field-edge:#aab3c0;--radius-sm:8px;'
+    + '--intent-type:16.5px;--mono:ui-monospace,Consolas,monospace;'
+    + '--sans:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}\n'
+    + ':root[data-theme=dark]{color-scheme:dark}\n'
+    + 'html,body{margin:0;height:100%;overflow:hidden;background:var(--panel-raised)}\n'
+    + ':root.glass,:root.glass body{background:transparent}\n'
+    + ':root.glass body{background:color-mix(in srgb,var(--panel-raised) 78%,transparent)}\n'
+    + 'body{box-sizing:border-box;padding:8px;display:flex;flex-direction:column;gap:6px;color:var(--ink);'
+    + 'font:14px/1.35 var(--sans);cursor:default;user-select:none}\n'
+    + '#q{box-sizing:border-box;flex:0 0 40px;width:100%;padding:0 12px;border:1px solid var(--field-line);'
+    + 'border-bottom-color:var(--field-edge);border-radius:var(--radius-sm);background:var(--field);color:var(--ink);'
+    + 'font:var(--intent-type) var(--sans);outline:none}\n'
+    + '#q:focus{border-bottom-color:var(--accent);box-shadow:inset 0 -1px 0 var(--accent)}\n'
+    + '#rows{flex:1 1 auto;min-height:0;margin:0;padding:0;list-style:none;overflow:hidden}\n'
+    + '#rows li{display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:var(--radius-sm);'
+    + 'white-space:nowrap;transition:background-color .1s}\n'
+    + '#rows li.on{background:color-mix(in srgb,var(--accent) 20%,transparent)}\n'
+    + '#rows li.on .t,#rows li.on .n{color:var(--accent)}\n'
+    + '.n{flex:0 0 18px;display:flex;justify-content:center;font:11px var(--mono);color:var(--dim)}\n'
+    + '.t{flex:0 1 auto;max-width:45%;overflow:hidden;font-weight:600}\n'
+    + '.x{flex:1 1 0;min-width:0;overflow:hidden;color:var(--dim);font-size:13px}\n'
+    + '.cut{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent);'
+    + 'mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent)}\n'
+    + '.g{flex:0 0 auto;font:10px var(--mono);color:var(--dim)}\n'
+    + '#rows li.none{height:auto;padding:14px 12px;color:var(--dim);white-space:normal}\n'
+    + ':root.still #rows li{transition:none}\n'
+    + '@media (prefers-reduced-motion:reduce){#rows li{transition:none}}\n'
+    + '@media (forced-colors:active){#rows li.on{outline:2px solid Highlight;outline-offset:-2px}'
+    + '#q:focus{outline:2px solid Highlight}}\n'
+    + '</style>\n'
+    + '<input id="q" type="text" role="combobox" aria-expanded="true" aria-controls="rows" aria-autocomplete="list"'
+    + ' autocomplete="off" spellcheck="false">\n'
+    + '<ul id="rows" role="listbox"></ul>\n'
+    + '<script>' + PICK_SCRIPT + '</script>\n';
+}
+
+let pickWin = null, pickLoaded = null, pickOpening = false, pickShown = null;
+const PICK_ASK_MS = 1500;
+const pickAsks = new Map();
+let pickAskN = 0;
+/* A QUESTION TO THE DESK'S PAGE, answered as JSON text on etiuda:pick-answer and parsed here; null
+   where the page did not answer in time, which a desk mid-reload or hung is. */
+function askDesk(op, arg) {
+  const win = theWindow;
+  if (!win || win.isDestroyed()) return Promise.resolve(null);
+  const n = ++pickAskN;
+  return new Promise(done => {
+    const timer = setTimeout(() => { pickAsks.delete(n); done(null); }, PICK_ASK_MS);
+    pickAsks.set(n, text => { clearTimeout(timer); pickAsks.delete(n); let v = null; try { v = JSON.parse(text); } catch { v = null; } done(v); });
+    win.webContents.send("etiuda:pick-ask", n, String(op), JSON.stringify(arg || {}));
+  });
+}
+function fromPicker(e) {
+  return !!pickWin && !pickWin.isDestroyed() && !!e.sender && e.sender.id === pickWin.webContents.id
+    && !!e.senderFrame && e.senderFrame.parent === null;
+}
+/* Made at the first press rather than at launch, and kept hidden between presses. */
+function ensurePicker() {
+  if (pickWin && !pickWin.isDestroyed()) return pickLoaded;
+  const backdrop = hostBackdrop();
+  pickWin = new BrowserWindow(Object.assign({
+    width: PICK_SIZE.width, height: PICK_SIZE.height, show: false, frame: false, resizable: false,
+    minimizable: false, maximizable: false, fullscreenable: false, skipTaskbar: true, title: "Etiuda",
+    backgroundColor: "#00000000",
+    webPreferences: { preload: path.join(__dirname, "preload.js"), additionalArguments: ["--etiuda-picker"],
+      sandbox: true, contextIsolation: true, nodeIntegration: false, webviewTag: false, webSecurity: true,
+      spellcheck: false },
+  }, backdrop === "acrylic" ? { backgroundMaterial: "acrylic" } : {}));
+  const win = pickWin;
+  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  win.webContents.on("will-navigate", e => e.preventDefault());
+  win.on("blur", () => hidePicker(false));
+  win.on("closed", () => { if (pickWin === win) { pickWin = null; pickLoaded = null; } });
+  pickLoaded = new Promise(done => win.webContents.once("did-finish-load", () => done(true)));
+  win.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(pickerDoc()));
+  return pickLoaded;
+}
+/* handBack: the agent closed it, so the window under it is given the focus first. A blur is the
+   agent going somewhere else already, and that is left alone. */
+function hidePicker(handBack) {
+  if (!pickWin || pickWin.isDestroyed() || !pickWin.isVisible()) return;
+  if (handBack) pickWin.blur();
+  pickWin.hide();
+}
+/* The desk's own window, forward and focused: where a reply needs the agent's name first, and where
+   the hotkey lands while the page cannot answer. */
+function focusDesk() {
+  const win = theWindow;
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+/* THE HOTKEY. A second press while the picker stands closes it; otherwise the desk's page is asked
+   for what to show, the picker is filled while hidden and shown only once its page says it has
+   drawn, so no opening shows the last one's rows. */
+function pickToggle() {
+  if (pickWin && !pickWin.isDestroyed() && pickWin.isVisible()) { hidePicker(true); return; }
+  if (pickOpening || !theWindow || theWindow.isDestroyed()) return;
+  pickOpening = true;
+  askDesk("open").then(open => {
+    if (!open) { focusDesk(); return null; }
+    if (open.look) open.look.glass = !!open.look.glass && hostBackdrop() === "acrylic";
+    return ensurePicker().then(() => {
+      if (!pickWin || pickWin.isDestroyed()) return null;
+      let at = null;
+      try {
+        const pt = screen.getCursorScreenPoint();
+        at = pickerPlace(pt, screen.getDisplayNearestPoint(pt).workArea, PICK_SIZE);
+      } catch (e) { console.error("etiuda: the pointer could not be read, so the picker is centred - " + e.message); }
+      if (at) pickWin.setBounds(at);
+      else pickWin.center();
+      const win = pickWin;
+      const drawn = new Promise(done => { pickShown = done; setTimeout(done, 300); });
+      win.webContents.send("etiuda:pick-open", JSON.stringify(open));
+      return drawn.then(() => { pickShown = null; if (!win.isDestroyed()) { win.show(); win.focus(); } });
+    });
+  }).catch(e => console.error("etiuda: the picker could not open - " + e.message))
+    .then(() => { pickOpening = false; });
+}
+
+ipcMain.on("etiuda:pick-answer", (e, n, text) => {
+  if (!fromEngine(e)) return;
+  const done = pickAsks.get(n);
+  if (done) done(String(text == null ? "null" : text));
+});
+ipcMain.on("etiuda:pick-ready", (e) => { if (fromPicker(e) && pickShown) pickShown(); });
+ipcMain.on("etiuda:pick-close", (e) => { if (fromPicker(e)) hidePicker(true); });
+ipcMain.handle("etiuda:pick-find", (e, q) => {
+  if (!fromPicker(e)) return "null";
+  return askDesk("find", { q: String(q || "").slice(0, 200) }).then(v => JSON.stringify(v));
+});
+/* THE COPY. The desk's page makes the text by its own route and counts it; this writes it to the
+   clipboard and steps aside, and Windows gives the focus back to the window the agent came from.
+   A reply that signs with a name nobody has given yet is asked in the desk's own window instead. */
+ipcMain.handle("etiuda:pick-copy", (e, what) => {
+  if (!fromPicker(e)) return false;
+  let pick = {};
+  try { pick = JSON.parse(String(what || "")) || {}; } catch { pick = {}; }
+  const arg = pick.last ? { last: true } : { id: String(pick.id || ""), vi: pick.vi | 0 };
+  return askDesk("copy", arg).then(v => {
+    if (v && typeof v.text === "string") {
+      clipboard.writeText(pickClipText(v.text, process.platform));
+      hidePicker(true);
+      return true;
+    }
+    if (v && v.ask) { hidePicker(false); focusDesk(); askDesk("ask", v.ask); }
+    return false;
+  });
+});
+/* Settings' row: which combination the desk asks for, and whether Windows let the desk hold it. */
+ipcMain.on("etiuda:hotkey-state", (e) => {
+  if (!fromEngine(e)) { e.returnValue = null; return; }
+  const want = hotkeyWanted();
+  e.returnValue = { accel: want, held: !!want && want === hotkeyHeld, taken: !!want && want === hotkeyTaken,
+                   def: HOTKEY_DEFAULT };
+});
+/* A combination tried before the desk stores it: refused by the rule or by Windows, and then the
+   one held before stays held; held, and the page stores it, which syncHotkey then finds in place. */
+ipcMain.handle("etiuda:hotkey-set", (e, accel) => {
+  if (!fromEngine(e)) return { ok: false, why: "shape" };
+  const want = String(accel || "");
+  const why = want ? hotkeyRefusal(want) : "";
+  if (why) return { ok: false, why: why };
+  try { globalShortcut.setSuspended(false); } catch { /* not suspended */ }
+  return holdHotkey(want) ? { ok: true, why: "" } : { ok: false, why: "taken" };
+});
+/* While Settings listens for a new combination, the one held must not open the picker instead. */
+ipcMain.on("etiuda:hotkey-hold", (e, on) => {
+  if (!fromEngine(e)) return;
+  try { globalShortcut.setSuspended(!!on); } catch (x) { console.error("etiuda: the hotkey could not be paused - " + x.message); }
+});
+
 function createWindow() {
   const backdrop = hostBackdrop();
   /* A REFUSAL PAGE CARRIES NO SCRIPT OF ITS OWN, so the engine never draws the band's three
@@ -1668,7 +2019,11 @@ function createWindow() {
   });
 
   theWindow = win;
-  win.on("closed", () => { if (theWindow === win) theWindow = null; });
+  /* The picker is a second window, so it goes with the desk's or the app would outlive it. */
+  win.on("closed", () => {
+    if (theWindow === win) theWindow = null;
+    if (pickWin && !pickWin.isDestroyed()) pickWin.destroy();
+  });
   win.loadFile(ENGINE);
   watchCatalog(win);
   win.webContents.on("did-finish-load", () => { setTimeout(() => tryAnswerRequest(win), 0); });
@@ -1795,6 +2150,7 @@ if (!theOnlyOne) {
     return askFolder(dir).then(ok => {
       settleFolder(dir, ok);
       ensureCatalogFolder(); createWindow();
+      hotkeyReady = true; syncHotkey();
       // Asked for here: powerMonitor is not to be used before the app is ready.
       require("electron").powerMonitor.on("resume", () => { folderDown = catalogFolder(); armFolder(theWindow); });
     });
@@ -1808,3 +2164,5 @@ app.on("activate", () => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
+
+app.on("will-quit", () => { try { globalShortcut.unregisterAll(); } catch { /* none held */ } });

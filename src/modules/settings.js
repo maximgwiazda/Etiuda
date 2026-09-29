@@ -18,6 +18,7 @@ import { pillsLocked, togglePillsLock, syncLayoutPrefs } from "./pills-box.js";
 import { rereadCollapsed } from "./collapse.js";
 import { applyStoredFactsSize } from "./facts.js";
 import { agentName, setAgentName } from "./agent.js";
+import { eHost } from "./host.js";
 
 /* THE SETTINGS SCREEN. One test decides what belongs: would you set it once and
    forget it? Anything touched weekly is a Menu item or a header control; Data stays in
@@ -33,6 +34,102 @@ function curLangLabel(){ return (UI_LANGS.filter(l=>l.code===uiLang())[0]||UI_LA
 function personalNote(){
   const n=agentName().trim();
   return n ? n+", "+curLangLabel() : curLangLabel();
+}
+/* THE HOTKEY THAT BRINGS THE REPLIES OVER ANY WINDOW, where the host has one. The shell holds it,
+   so the row asks the shell what is held, and a new combination is tried there before the desk
+   stores it: absent is the shell's default, empty is off. */
+const E_HOTKEY_KEY="eHotkey";
+let hkListening=false;
+function hotkeyHost(){
+  const h=eHost();
+  return (h && typeof h.hotkeyState==="function" && typeof h.setHotkey==="function") ? h : null;
+}
+function hotkeyState(){
+  const h=hotkeyHost();
+  let st=null;
+  try{ st=h && h.hotkeyState(); }catch(e){ st=null; }
+  return {accel:String(st&&st.accel||""), taken:!!(st&&st.taken), def:String(st&&st.def||"")};
+}
+function hotkeyLabel(accel){ return accel ? String(accel).split("+").map(k=>k==="Control"?"Ctrl":k).join("+") : t("none"); }
+/* The combination a keydown names, in the host's own spelling, or null for a modifier alone or a key
+   the host does not take. The Windows key is named so that the host can refuse it by name. */
+function hotkeyFromEvent(e){
+  const c=String(e.code||"");
+  const key=/^Key[A-Z]$/.test(c) ? c.slice(3) : /^Digit[0-9]$/.test(c) ? c.slice(5)
+    : /^F([1-9]|1[0-9]|2[0-4])$/.test(c) ? c : c==="Space" ? "Space" : "";
+  if(!key) return null;
+  return [e.metaKey&&"Super", e.ctrlKey&&"Control", e.altKey&&"Alt", e.shiftKey&&"Shift", key].filter(Boolean).join("+");
+}
+function hotkeyWhy(why,accel){
+  const k=hotkeyLabel(accel);
+  const says=why==="taken" ? t("{KEYS} already belongs to another program; a different combination will do.")
+    : why==="used" ? t("Browsers and chat tools already answer most combinations like {KEYS}; Ctrl+Shift with Space or a function key stays free.")
+    : why==="altgr" ? t("{KEYS} types accented letters on many keyboards; Ctrl+Shift with Space or a function key stays free.")
+    : why==="bare" ? t("{KEYS} alone would stop that key typing; with Ctrl or Alt it will do.")
+    : why==="system" ? t("Windows keeps {KEYS} for itself; Ctrl+Shift with Space or a function key stays free.")
+    : t("Etiuda takes a letter, a digit, Space or a function key, with Ctrl, Alt or Shift.");
+  return says.split("{KEYS}").join(k);
+}
+function hotkeyRowHtml(){
+  if(!hotkeyHost()) return "";
+  const st=hotkeyState();
+  return '<div class="sc-list"><div class="sc-row" id="setHotkeyRow"><div class="sc-label">'
+    +esc(t("Bring the replies over any window"))
+    +'<small id="setHotkeyNote">'+esc(st.taken
+      ? t("Another program uses this combination just now; a different one will do.")
+      : t("Works from any program; Enter copies a reply and goes back to the window you were in."))+'</small>'
+    +'</div><div class="sc-binds"><button type="button" class="sc-bind sc-long'+(st.accel?"":" sc-empty")+'" id="setHotkey"'
+    +' style="flex-basis:100%" title="'+esc(t("Click, then press the new key combo"))+'">'
+    +esc(hotkeyLabel(st.accel))+'</button></div></div></div>';
+}
+/* `now` is a combination just held, which the desk may not have finished storing yet. */
+function syncHotkeyRow(box,now){
+  const b=box.querySelector("#setHotkey"), note=box.querySelector("#setHotkeyNote");
+  if(!b) return;
+  const st=typeof now==="string" ? {accel:now, taken:false} : hotkeyState();
+  b.classList.toggle("listening",hkListening);
+  b.classList.toggle("sc-empty",!hkListening && !st.accel);
+  b.textContent=hkListening ? t("Press keys…") : hotkeyLabel(st.accel);
+  if(note) note.textContent=st.taken
+    ? t("Another program uses this combination just now; a different one will do.")
+    : t("Works from any program; Enter copies a reply and goes back to the window you were in.");
+}
+function hotkeyListen(box,on,now){
+  hkListening=!!on;
+  const h=hotkeyHost();
+  try{ if(h && typeof h.pauseHotkey==="function") h.pauseHotkey(hkListening); }catch(e){}
+  syncHotkeyRow(box,now);
+}
+/* Tried in the host first, stored only once it is held: `accel` absent is the default, "" is off. */
+function hotkeyTry(box,accel,said){
+  const h=hotkeyHost();
+  const want=accel==null ? hotkeyState().def : accel;
+  Promise.resolve(h.setHotkey(want)).then(r=>{
+    if(!(r && r.ok)){ toast(hotkeyWhy(r&&r.why,want)); return undefined; }
+    if(accel==null) lsDel(E_HOTKEY_KEY); else lsSet(E_HOTKEY_KEY,accel,true);
+    toast(said);
+    return want;
+  }).catch(()=>undefined).then(now=>hotkeyListen(box,false,now));
+}
+function wireHotkeyRow(box){
+  const b=box.querySelector("#setHotkey");
+  if(!b || !hotkeyHost()) return;
+  b.onclick=()=>{
+    hotkeyListen(box,true);
+    toast(t("Press the new combination (Esc to cancel, Backspace for the default, Delete for none)"));
+  };
+  b.onblur=()=>{ if(hkListening) hotkeyListen(box,false); };
+  /* The row's own keys, stopped here so the dialog's Escape and every shortcut stay out of it. */
+  b.addEventListener("keydown",e=>{
+    if(!hkListening) return;
+    e.preventDefault(); e.stopPropagation();
+    if(e.key==="Escape"){ hotkeyListen(box,false); return; }
+    if(e.key==="Backspace"){ hotkeyTry(box,null,t("Back to the default")); return; }
+    if(e.key==="Delete"){ hotkeyTry(box,"",t("The hotkey is off")); return; }
+    const accel=hotkeyFromEvent(e);
+    if(!accel) return;
+    hotkeyTry(box,accel,t("Saved {KEY}").replace("{KEY}",hotkeyLabel(accel)));
+  });
 }
 function settingsBodyHtml(){
   /* The row hint says what the setting IS; the option tip says what THIS choice DOES, which
@@ -121,7 +218,7 @@ function settingsBodyHtml(){
       null,
       t("What stays docked, and what may hide itself when space is short"))+
     accHtml("keys", t("Keyboard shortcuts"),
-      '<div class="sc-list" id="scListInline"></div>',
+      hotkeyRowHtml()+'<div class="sc-list" id="scListInline"></div>',
       /* ",null" is the next ARGUMENT - "+null" concatenates and prints the characters "null"
          on the page. The neighbouring call has the same null in the same position. */
       null,
@@ -133,6 +230,7 @@ function paintSettings(){
   box.innerHTML=settingsBodyHtml();
   wireAcc(box, id=>{ if(id==="keys") paintKeysInline(); });
   paintKeysInline();
+  wireHotkeyRow(box);
   /* Live while dragging: the whole point is watching the columns re-form, and a value that
      only lands on release makes the slider feel like a form field rather than a control. */
   syncColFloorRow();
@@ -248,7 +346,7 @@ function syncColFloorRow(){
 function resetAllSettings(){
   const was={};
   ["eTheme","eGlassOff","eMotionOff","eUiLang","ePillsLock","eRailLock","ePills","eRail",
-   "eShortcuts","eHdrPills","eNoteHover","eRailW","eFactsW","eFactsH","eCollapsed"]
+   "eShortcuts","eHdrPills","eNoteHover","eRailW","eFactsW","eFactsH","eCollapsed",E_HOTKEY_KEY]
     .forEach(k=>{ was[k]=lsGet(k); try{ lsDel(k); }catch(e){} });
   was[nsKey("Cols")]=nsGet("Cols"); was[nsKey("Floor")]=nsGet("Floor");
   nsDel("Cols"); nsDel("Floor");
@@ -305,5 +403,6 @@ function openSettings(section){
 
 export {
   openSettings,
-  applyPrefs
+  applyPrefs,
+  hotkeyFromEvent
 };

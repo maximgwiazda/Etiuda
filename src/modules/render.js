@@ -35,16 +35,14 @@ import { hooks } from "./hooks.js";
 // The render pass: filter, order, group, and hand the list the items it should hold. Every
 // surface that changes what is shown ends here, and this is the only writer of `shown`.
 
-function render(){
-  remPx();   // while the style is still clean: see remPx
-  closeNotePane();
-  cancelLangChunks();
-  const terms=cardSearchTerms();
-  syncPillCounts();
+/* THE DESK'S ORDER FOR A QUERY, shared by the list and the picker: `keep` is which cards may
+   appear at all, and the answer is the matches in the order the list shows them, with `sc` the
+   scores the list's separator reads. */
+function rankedCards(terms,keep){
   ensureCardOrder();
   // Filter first, order second, so scoring only ever touches entries that already matched.
   const hits=cards.filter(m=>{
-    if(!cardInActiveCats(m,terms)) return false;
+    if(!keep(m)) return false;
     // Macro search: title + keywords + notes + full EN/PL text (not titles only)
     return cardMatchesSearch(m, terms);
   });
@@ -66,17 +64,29 @@ function render(){
       s.band=(intentIdxs.length && cardHitsSelectedIntent(m)) ? 0 : 1;
       sc.set(m, s);
     });
-    setShown(hits.sort((a,b)=>{
+    hits.sort((a,b)=>{
       const A=sc.get(a), B=sc.get(b);
       if(A.band!==B.band) return A.band-B.band;
       if(A.tier!==B.tier) return A.tier-B.tier;
       if(A.score!==B.score) return B.score-A.score;
       return cmpCardDisplay(a,b);
-    }));
+    });
   }else{
     // Intent bands / category+fav groups, then manual order within each band.
-    setShown(hits.sort(cmpCardDisplay));
+    hits.sort(cmpCardDisplay);
   }
+  return {hits,sc};
+}
+
+function render(){
+  remPx();   // while the style is still clean: see remPx
+  closeNotePane();
+  cancelLangChunks();
+  const terms=cardSearchTerms();
+  syncPillCounts();
+  const ranked=rankedCards(terms,m=>cardInActiveCats(m,terms));
+  const sc=ranked.sc;
+  setShown(ranked.hits);
 
   if(!shown.length){
     /* An empty category needs no prose: the add-card is the whole answer and already
@@ -301,5 +311,6 @@ function render(){
   syncEmptyMark(null);
 }
 export {
+  rankedCards,
   render,
 };

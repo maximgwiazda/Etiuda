@@ -1242,7 +1242,7 @@ function copyControlTests() {
    once, which keeps the promise route synchronous here. */
 function copyNoticeTests() {
   const src = sourceText();
-  const decls = ["let copyCount=", "function copy(", "function fallback("].map(m => extractDecl(src, m)).join("\n");
+  const decls = ["let copyCount=", "function noteCopy(", "function copy(", "function fallback("].map(m => extractDecl(src, m)).join("\n");
   const SAID = "Ready to paste: A card, EN";
   const HAND = "Selecting the text on the card and pressing Ctrl+C copies this one; the browser kept the clipboard closed.";
   const DESK = "Selecting the text on the card and pressing Ctrl+C copies this one; the clipboard would not take it just now.";
@@ -3736,8 +3736,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 847;
-const UI_STRINGS_SHA256 = "c1df8d56b7f05b9992b9c725a7049f7ca45a4a39b83486f9111d1131cc8485e8";
+const UI_STRINGS_COUNT = 861;
+const UI_STRINGS_SHA256 = "d4d80064a45b5ddbb935fe596f7c077f03f0f3779466423543e551c83b6c78bb";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

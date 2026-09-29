@@ -2,16 +2,29 @@
 
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
+/* THE PICKER'S WINDOW is told so by the shell on its command line, and gets its own five verbs and
+   nothing of the desk's; main answers them only from that window, and the desk's only from the desk. */
+const PICKER = typeof process !== "undefined" && Array.isArray(process.argv) && process.argv.indexOf("--etiuda-picker") > -1;
+if (PICKER) {
+  contextBridge.exposeInMainWorld("E_PICK", {
+    find: (q) => ipcRenderer.invoke("etiuda:pick-find", String(q || "")).then(v => String(v || "null")),
+    copy: (what) => ipcRenderer.invoke("etiuda:pick-copy", String(what || "")),
+    close: () => ipcRenderer.send("etiuda:pick-close"),
+    ready: () => ipcRenderer.send("etiuda:pick-ready"),
+    onOpen: (fn) => ipcRenderer.on("etiuda:pick-open", (_e, text) => fn(String(text || ""))),
+  });
+}
+
 /* The engine reads window.E_CATALOG while it boots, so the value has to be there before its
    first script runs. A preload is the only code early enough, and a synchronous request the
    only one that answers in time. */
-const json = ipcRenderer.sendSync("etiuda:catalog");
+const json = PICKER ? null : ipcRenderer.sendSync("etiuda:catalog");
 
 /* The engine reads window.E_HOST at boot to decide whether it is drawing its own window
    controls and whether to leave the band's pixels to a backdrop. Absent in a browser, which is
    the whole test: nothing in the engine asks what platform it is on. */
-const host = ipcRenderer.sendSync("etiuda:host");
-contextBridge.exposeInMainWorld("E_HOST", {
+const host = PICKER ? {} : ipcRenderer.sendSync("etiuda:host");
+if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   platform: host.platform,
   backdrop: host.backdrop,
   maximized: host.maximized,
@@ -94,6 +107,18 @@ contextBridge.exposeInMainWorld("E_HOST", {
   },
   writeStats: (text) => ipcRenderer.invoke("etiuda:stats-write", String(text || "")),
   onStatsAsk: (fn) => ipcRenderer.on("etiuda:stats-ask", (_e, req) => fn(req && typeof req === "object" ? req : {})),
+  /* The picker's questions, answered by the page as JSON text: what to show, what a query finds, and
+     the text a copy puts on the clipboard, which the shell writes. */
+  onPickAsk: (fn) => ipcRenderer.on("etiuda:pick-ask", (_e, n, op, arg) => {
+    let out = "null";
+    try { out = String(fn(String(op || ""), String(arg || ""))); } catch { out = "null"; }
+    ipcRenderer.send("etiuda:pick-answer", n, out);
+  }),
+  /* The hotkey Settings shows: {accel, held, taken} now, a combination tried as {ok, why}, and the
+     one held paused while Settings listens for keys. */
+  hotkeyState: () => ipcRenderer.sendSync("etiuda:hotkey-state"),
+  setHotkey: (accel) => ipcRenderer.invoke("etiuda:hotkey-set", String(accel || "")),
+  pauseHotkey: (on) => ipcRenderer.send("etiuda:hotkey-hold", !!on),
 });
 
 if (json) {
