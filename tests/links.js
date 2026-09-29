@@ -62,9 +62,12 @@ function buildApp() {
   for (const d of ["shell", "engine", "userdata", "documents"]) fs.mkdirSync(path.join(APP, d), { recursive: true });
   const main = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
   const pre = fs.readFileSync(path.join(E.ROOT, "shell", "preload.js"), "utf8");
-  outCalls = (main.match(OUT) || []).length + (pre.match(OUT) || []).length;
-  fs.writeFileSync(path.join(APP, "shell", "main.js"), main.split("shell.openExternal(")
-    .join("((u) => console.log(" + JSON.stringify(HANDED) + " + JSON.stringify(String(u))))("), "utf8");
+  const lab = main.split("shell.openExternal(")
+    .join("((u) => console.log(" + JSON.stringify(HANDED) + " + JSON.stringify(String(u))))(");
+  /* The lab is counted too: a call spelt any other way survives the stub, and must stop the run
+     before a click reaches the real browser. */
+  outCalls = (main.match(OUT) || []).length + (pre.match(OUT) || []).length + (lab.match(OUT) || []).length;
+  fs.writeFileSync(path.join(APP, "shell", "main.js"), lab, "utf8");
   fs.writeFileSync(path.join(APP, "shell", "preload.js"), pre, "utf8");
   fs.writeFileSync(path.join(APP, "package.json"),
     JSON.stringify({ name: "etiuda-links-probe", version: "0.0.0", main: "shell/main.js" }), "utf8");
