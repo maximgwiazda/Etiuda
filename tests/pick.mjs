@@ -87,6 +87,7 @@ function deskCopy(id, vi) {
   navigator.clipboard = null;
   return got;
 }
+let LAB = null;
 const pickAnswer = (op, arg) => PICK.answerPick(op, JSON.stringify(arg || {}));
 
 try {
@@ -154,7 +155,7 @@ try {
 
   /* ---- 2. the shell --------------------------------------------------------------------- */
   console.log("\n[2/3] the shell: the hotkey, the relay and the clipboard");
-  const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-pick-"));
+  LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-pick-"));
   const UD = path.join(LAB, "user-data"), DOCS = path.join(LAB, "documents");
   fs.mkdirSync(UD, { recursive: true }); fs.mkdirSync(DOCS, { recursive: true });
   fs.writeFileSync(path.join(UD, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
@@ -373,6 +374,7 @@ try {
   console.log("  FAIL the run threw: " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));
 }
 
+try { if (LAB) fs.rmSync(LAB, { recursive: true, force: true }); } catch { /* a leftover in the temp folder */ }
 const complete = asserted >= EXPECTED;
 console.log("\n#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
 console.log(complete && !failed ? "RESULT: ok " + asserted + " check(s)"
