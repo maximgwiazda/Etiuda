@@ -307,7 +307,7 @@ function runStep(step) {
   });
 }
 
-let worst = 0, written = 0;
+let worst = 0, written = 0, treeMoved = false;
 /* The tree as it stood before the first gate. Every step is judged against the step before it,
    so the record says WHICH gate the tree moved under and not merely that it moved. */
 let before = fingerprint();
@@ -362,6 +362,7 @@ for (const step of steps) {
                 + " in a file before any mutation begins");
     console.log("  SUITE DID NOT COMPLETE");
     worst = NO_VERDICT;
+    treeMoved = true;
     break;
   }
   before = after;
@@ -371,8 +372,14 @@ for (const step of steps) {
 console.log("\ngate-run: " + written + " of " + steps.length + " gate(s) run from "
             + asked.length + " npm script(s), " + written + " line(s) in " + RUNS
             + ", tree " + before.hash
-            + (worst === NO_VERDICT ? ", NO VERDICT: the tree moved under a gate"
+            + (treeMoved ? ", NO VERDICT: the tree moved under a gate"
+               : worst === NO_VERDICT ? ", stopped at a gate exiting " + worst + ", its own NO VERDICT: it"
+                 + " refused, did not finish, or left a leg not run"
                : worst ? ", stopped at a gate exiting " + worst : ", all green"));
+/* THE TWO NO VERDICTS ARE TOLD APART (board 820). Until 2026-09-29 any gate exiting 78 was summed up
+   as "the tree moved under a gate", which is this file's own reason; a gate saying 78 of itself
+   (tests/desk.js refusing beside another Electron run, or with its proxy leg not run) was then
+   blamed on a tree that had not moved. Held by tests/result-line.mjs leg 9h. */
 /* A GATE'S CODE IS PASSED ON ONLY WHERE A SHELL CAN READ IT, ballot 4 of the fourth meeting
    (2026-09-23). Windows hands this process a child's full 32 bits, so a gate exiting 256 stopped
    the chain here and then left as 256, which bash and Linux read as 0: the chain said green in

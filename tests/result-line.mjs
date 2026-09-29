@@ -37,7 +37,7 @@ const TOOL = path.join(ROOT, "tools", "gate-run.mjs");
 const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. */
-const EXPECTED = 35;
+const EXPECTED = 36;
 
 let asserted = 0, failed = 0;
 function check(cond, line) {
@@ -436,6 +436,21 @@ function main() {
     + (trMovedGate && trMovedGate.exit) + ", counts.exitCode "
     + (trMovedGate && trMovedGate.counts.exitCode) + ", and the gate after it did not run ("
     + trMovedRun.files.length + " line(s) written)");
+
+  /* 9h A GATE'S OWN NO VERDICT IS NOT BLAMED ON THE TREE (board 820). The same exit, 78, with a
+     tree that did not move: the summary must name the gate's exit and must not say the tree moved,
+     while 9b's run, where it did move, must say so. Both halves, so a summary that says one thing
+     for every 78 fails one of them. */
+  const trOwn = makeLab("tree-own-78", { refuses: 'console.log("  FAIL refused");' + NL + "process.exit(78);" + NL, after: trStub(1) },
+    { files: TR_FILES, git: true });
+  const trOwnRun = run(trOwn, ["refuses", "after"]);
+  const trOwnGate = trOwnRun.byGate["tests-refuses"];
+  const summaryOf = r => (r.out.split(/\r?\n/).filter(l => /^gate-run: \d+ of \d+ gate/.test(l)).pop() || "");
+  check(trOwnRun.exit === 78 && trOwnGate && trOwnGate.treeChanged === 0 && !trOwnRun.byGate["tests-after"]
+    && /stopped at a gate exiting 78/.test(summaryOf(trOwnRun)) && !/tree moved/.test(summaryOf(trOwnRun))
+    && /NO VERDICT: the tree moved under a gate/.test(summaryOf(trMovedRun)),
+    "9h a gate exiting 78 over a tree that did not move is summed up as its own exit, not as a moved tree: "
+    + JSON.stringify(summaryOf(trOwnRun)) + ", against 9b's " + JSON.stringify(summaryOf(trMovedRun)));
 
   /* 9c THE CONTROL: the same write, the same bytes. A guard that fired on the act of writing
      rather than on the change would redden this, and a guard that reddens work nobody objects to

@@ -34,7 +34,8 @@
  * Nothing here reads a card's text: the planted keys are settings, and the only catalog in the
  * throwaway app is the one this test writes, which holds a single card whose text it chose.
  *
- * Exit code is the number of failed checks, capped at 63 (E.exitOf), 78 where the run produced no verdict at all. The
+ * Exit code is the number of failed checks, capped at 63 (E.exitOf), 78 where the run produced no verdict: it did not
+ * finish, a leg was NOT RUN with nothing failed, or another Electron run was live and it refused to start. The
  * app is killed in a finally, by pid and with /T so the helpers go, and the last check is that
  * the throwaway lab is really gone: a cleanup that is not a check is not a cleanup.
  */
@@ -45,6 +46,15 @@ const os = require("node:os");
 const path = require("node:path");
 const E = require("./engine.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* IN THE MERGE GATES SINCE BOARD 820 (2026-09-29), so it keeps the house's two rules for a run that
+   starts windows: never beside another Electron run, and below normal. Until then it ran only in
+   tools/release.mjs's shell gate, and a failure sat on main from the desk-next merge until a read
+   found it. The priority is this process's, which the Electron browser process inherits; the
+   renderer and GPU processes are lowered by pid after each launch (E.lowerTree). */
+const PRIO = E.belowNormal();
+console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
+E.refuseWhileElectronLive("tests/desk.js");
 
 /* THE PORT BLOCK AND THE LEASE, board item 628. A fixed debugging port is not a failed
    connect: two concurrent runs of tests/csp.js at 9422 were measured on 2026-09-20 reading ONE
@@ -208,6 +218,7 @@ async function startShell() {
   }
   if (!b) throw new Error("Electron did not answer on the debugging port within 20 s");
   const p = (await b.pages())[0];
+  lowered("the window", child.pid);
   await sleep(3000);
   /* Asked once, of this file's own first launch, and asked of the machine rather than of the
      variable: what the environment carried is not evidence that a window stayed off the screen.
@@ -220,6 +231,14 @@ async function startShell() {
     E.offscreenCheck(child.pid, "tests/desk.js", check, notRun);
   }
   return { b, p, said };
+}
+
+/* Said on one line per launch, and not a check: it is how this run treats the machine, not a claim
+   about the product. A process that would not go below normal is named. */
+function lowered(what, pid) {
+  const t = E.lowerTree(pid);
+  console.log("       " + what + ": " + (t.asked ? t.below + " of " + t.n + " Electron process(es) at below-normal priority"
+    + (t.other.length ? ", not: " + t.other.join(", ") : "") : "priority not lowered, " + (t.why || "not Windows")));
 }
 
 /* By pid and with /T, so the helpers go and nothing outside this run is touched: /IM would
@@ -270,6 +289,7 @@ async function netLogArm(appDir, ud, logAt) {
     try { b = await puppeteer.connect({ browserURL: "http://127.0.0.1:" + PORT, defaultViewport: null }); } catch (x) {}
   }
   if (!b) throw new Error("Electron did not answer on the debugging port within 20 s");
+  lowered("a net-log arm", child.pid);
   await sleep(4500);
   const gone = new Promise(r => { if (child.exitCode !== null) r(true); else child.once("exit", () => r(true)); });
   try { await b.close(); } catch (x) { /* judged by the exit below */ }
@@ -328,6 +348,32 @@ async function netLogArm(appDir, ud, logAt) {
   check(seen.lsKeys === 0 && seen.lsEKeys === 0,
     "the renderer's own localStorage is empty, " + seen.lsKeys + " keys, so the file is the whole desk");
 
+  /* THE THEME IS STORED BEFORE THE FADE ENDS, BY ORDER AND NOT BY A CLOCK (board 820). theme.js
+     promises "stored as the fade begins", because under the shell the write turns the window's
+     material and the material cannot fade. A window nobody sees paints about once a second, so no
+     time bound here could tell a slow product from a slow paint; the order can. The page's own
+     startViewTransition is wrapped before the press, and when the fade's `finished` settles the
+     desk FILE is read at that moment: through the host's synchronous deskRead, which main answers
+     with a fresh read of desk.json, and which is ordered after every message the page sent before
+     it, so a write sent before the fade ended is on the disk by the time the read is answered.
+     The reload leg below reads through the same call. A write moved to `finished`, or delayed past
+     the frame on which this window ends the fade, about a second here, reads the old theme here while the leg after this one, which
+     waits for the file, still goes green. */
+  await s.p.evaluate(() => {
+    const o = window.__deskThemeOrder = { fades: 0, atFinished: [], err: "" };
+    const start = document.startViewTransition;
+    if (typeof start !== "function") { o.err = "this page has no startViewTransition"; return; }
+    document.startViewTransition = function (cb) {
+      const vt = start.call(document, cb);
+      o.fades++;
+      vt.finished.then(() => {
+        try { o.atFinished.push(JSON.parse(window.E_HOST.deskRead() || "{}").eTheme || null); }
+        catch (e) { o.err = "the desk could not be read at finished: " + String(e && e.message || e); }
+      }, e => { o.err = "finished rejected: " + String(e && e.message || e); });
+      return vt;
+    };
+  });
+
   /* A write driven through the engine's own button rather than through storage.js, so what is
      proved is the path a person takes. The theme button is the shortest one there is. */
   const timing = await s.p.evaluate(() => {
@@ -351,6 +397,19 @@ async function netLogArm(appDir, ud, logAt) {
   const shown = await s.p.evaluate(() => document.documentElement.dataset.theme);
   check(timing.clicked && themed.eTheme === shown && shown !== "dark",
     "the theme button's own write reached the file too (" + themed.eTheme + " on disk, " + shown + " on screen)");
+  /* The fade's end is waited for, not timed: 15 s is only how long a run waits before saying the
+     fade never ended, and the verdict is the value read at that end. */
+  let order = null;
+  for (let i = 0; i < 60; i++) {
+    order = await s.p.evaluate(() => JSON.parse(JSON.stringify(window.__deskThemeOrder || null)));
+    if (!order || order.err || order.atFinished.length) break;
+    await sleep(250);
+  }
+  check(!!order && !order.err && order.fades === 1 && order.atFinished.length === 1
+    && order.atFinished[0] === shown && shown !== "dark",
+    "and it was on the disk BEFORE the fade finished: the file read when `finished` settled held eTheme "
+    + JSON.stringify(order && order.atFinished[0]) + " against " + JSON.stringify(shown) + " on screen, over "
+    + (order ? order.fades : 0) + " fade(s)" + (order && order.err ? "; " + order.err : ""));
   console.log("       a synchronous desk save costs " + timing.ms.toFixed(2)
     + " ms per key, mean of 20 writes over a " + Buffer.byteLength(JSON.stringify(afterWrite), "utf8") + " byte desk");
 
@@ -484,8 +543,17 @@ async function netLogArm(appDir, ud, logAt) {
   /* Board item 628: the not-run travels with the counts, so a run that could not look at
      the screen is not read as a run that looked and was happy. */
   if (notRun.length) console.log("       NOT RUN: " + notRun.join(", "));
+  /* NOT RUN IS NOT A PASS (boards 819 and 803). Until 2026-09-29 a run whose proxy control was
+     quiet, which is any machine with Windows' "Automatically detect settings" off, exited 0, and the
+     release's shell gate went green having proved nothing about the proxy. A run with a leg not run
+     and nothing failed now exits NO_VERDICT: no verdict, because it did not look. Failures still
+     exit as their count, since a red is a verdict whatever else did not run. */
+  if (reachedEnd && !fails && notRun.length)
+    console.log("  SUITE DID NOT COMPLETE: " + notRun.length + " leg(s) not run, and a leg not run is not a pass"
+      + (notRun.some(x => /proxy discovery/.test(x)) ? "; for the proxy leg, turn on Windows' \"Automatically detect"
+        + " settings\" (Settings, Network, Proxy) so the control without the switch discovers, and run again" : ""));
   console.log("#counts checks=" + checks + " failed=" + fails + " notRun=" + notRun.length);
   console.log((reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails
-    + " failed, " + Math.round((Date.now() - t0) / 1000) + "s");
-  process.exit(reachedEnd ? E.exitOf(fails) : (fails ? E.exitOf(fails) : E.NO_VERDICT));
+    + " failed, " + notRun.length + " not run, " + Math.round((Date.now() - t0) / 1000) + "s");
+  process.exit(fails ? E.exitOf(fails) : (reachedEnd && !notRun.length ? 0 : E.NO_VERDICT));
 });
