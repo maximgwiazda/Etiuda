@@ -14,7 +14,7 @@ import { clearLocalMemory } from "./local-memory.js";
 import { mgReduceMotion, mgPinCard, E_EASE } from "./motion.js";
 import { drawIntentRail } from "./rail-list.js";
 import { normWhoList, WHO_BASE } from "./stock.js";
-import { nsSet } from "./storage.js";
+import { lySet } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { t, catalogCountsLine, counted, toast } from "./ui-lang.js";
 import { isFavourite, isIntentFavourite, pack, whoOptions, savePack } from "./pack.js";
@@ -479,7 +479,7 @@ function endMgDrag(){
   }
   /* Persist once, at the end - the order arrays are mutated live so the rows follow the
      cursor, but a write per swap would be a write per 170ms of dragging. */
-  if(kind==="cat"){ nsSet("CatOrder",JSON.stringify(catOrder)); drawPills(); }
+  if(kind==="cat"){ lySet("CatOrder",JSON.stringify(catOrder)); drawPills(); }
   /* intentOrder is its own stored key, not part of the pack, and the PANEL has to be redrawn -
      it renders from the same array, so leaving it alone would show two different orders for the
      same list depending on which one you happened to be looking at. */

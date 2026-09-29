@@ -130,6 +130,14 @@ const eq = (got, want) => got === want ? true
 /* ------------------------------------------------------------------ ids.js */
 {
   const I = await import(MOD("ids.js"));
+  /* THE FORMAT'S RULE, written here rather than read from catalog-v2.js: 3 to 64 of a-z, 0-9 and the
+     hyphen, the first not a hyphen. A thousand draws hold the shape and never repeat. */
+  check("ids.js", "a new catalog id has the format's shape, and a thousand of them are all different",
+    () => {
+      const got = new Set(); let bad = "";
+      for (let i = 0; i < 1000; i++) { const v = I.newCatalogId(); if (!/^[a-z0-9][a-z0-9-]{2,63}$/.test(v)) bad = v; got.add(v); }
+      return bad ? "malformed: " + bad : eq(got.size, 1000);
+    });
   check("ids.js", "slugCat lowercases, underscores and prefixes",
     () => eq(I.slugCat("Lost & Found"), "uc_lost_found"));
   check("ids.js", "slugCat of an unslugifiable name falls back to custom",
@@ -281,6 +289,27 @@ const eq = (got, want) => got === want ? true
     () => { S.nsSet("GateN", "v"); return eq(S.nsGet("GateN"), "v"); });
   check("storage.js", "a namespaced key still wears the shape every sweep matches",
     () => eq(S.E_KEY_RE.test(S.nsKey("Pack")), true));
+  /* THE ORBIT. The empty desk's layer is the build's namespace; a catalog's is a hash of its own id,
+     the name standing in only where a stored copy carries none. */
+  check("storage.js", "the empty desk's layer is the build's own namespace, a catalog's is its id's",
+    () => eq([S.layerNsOf(null) === S.E_NS, S.layerNsOf({ id: "lamp-shop", name: "Lamp" }) === S.eNsFor("lamp-shop"),
+      S.layerNsOf({ name: "Lamp" }) === S.eNsFor("Lamp"), S.layerNsOf({ id: "a1" }) !== S.layerNsOf({ id: "a2" })].join(","),
+      "true,true,true,true"));
+  check("storage.js", "a desk from before the orbit has its one layer moved to the catalog loaded, once, and nothing after",
+    () => {
+      ["Pack", "CatOrder"].forEach(n => S.lsSet(S.E_NS + n, "old " + n));
+      S.setLayer(S.eNsFor("orbit-probe"));
+      const moved = S.orbitOldLayer();
+      const there = [S.lyGet("Pack"), S.lyGet("CatOrder"), S.lsGet(S.E_NS + "Pack")];
+      /* Once only, by its marker: the catalog's layer emptied (as a Clear would) and loose work made
+         since, and a second start moves nothing. */
+      S.lyDel("Pack"); S.lsSet(S.E_NS + "Pack", "made later");
+      const again = S.orbitOldLayer();
+      const listed = S.eLayers().indexOf(S.eNsFor("orbit-probe")) > -1;
+      const out = [moved, there.join("|"), again, S.lsGet(S.E_NS + "Pack"), listed];
+      S.lsDel(S.E_NS + "Pack"); S.lyDel("Pack"); S.lyDel("CatOrder"); S.setLayer(S.E_NS);
+      return eq(JSON.stringify(out), JSON.stringify([2, "old Pack|old CatOrder|", 0, "made later", true]));
+    });
   S.lsDel("eGateA"); S.ssDel("eGateS"); S.nsDel("eGateN");
 }
 
@@ -509,7 +538,7 @@ const CARD_B = {
     () => eq(C.COLLAPSE_BAND[0] + C.COLLAPSE_FAV[0], "::"));
   check("collapse.js", "a group folds and unfolds",
     () => {
-      C.expandAllGroups();
+      UILANG_STORE.lsDel("eCollapsed"); C.rereadCollapsed();
       const before = C.isCollapsed("gen");
       C.toggleCollapsed("gen");
       const after = C.isCollapsed("gen");
@@ -517,8 +546,13 @@ const CARD_B = {
       return before === false && after === true && C.isCollapsed("gen") === false
         ? true : before + "/" + after;
     });
-  check("collapse.js", "expandAllGroups clears the set held in memory",
-    () => { C.toggleCollapsed("gen"); C.expandAllGroups(); return eq(C.isCollapsed("gen"), false); });
+  check("collapse.js", "rereadCollapsed reads the folds from storage again: a stored fold stays, one taken out of storage goes",
+    () => {
+      C.toggleCollapsed("gen"); C.rereadCollapsed();
+      const kept = C.isCollapsed("gen");
+      UILANG_STORE.lsDel("eCollapsed"); C.rereadCollapsed();
+      return eq(kept + "|" + C.isCollapsed("gen"), "true|false");
+    });
   check("collapse.js", "an empty key is never collapsed",
     () => eq(C.isCollapsed(""), false));
   check("collapse.js", "groupKeyOf falls through to the card's own category",
@@ -991,14 +1025,11 @@ const CARD_B = {
     () => eq(F.catalogEditionOlder("2026-01-09z", "2026-01-09aa"), true));
   check("catalog-file.js", "and alphabetically inside one length",
     () => eq(F.catalogEditionOlder("2026-01-09ab", "2026-01-09aa"), false));
-  check("catalog-file.js", "a proposed edition is a date, or a date with letters after it",
-    () => eq(/^\d{4}-\d{2}-\d{2}[a-z]*$/.test(String(F.proposeEdition(null))), true));
-  check("catalog-file.js", "proposing twice on today's edition steps the letters, not the date",
-    () => {
-      const a = F.proposeEdition(null);
-      const b = F.proposeEdition(a);
-      return b === a + "a" ? true : "a=" + a + " b=" + b;
-    });
+  /* A new catalog's first edition is today, written here from the clock by hand: a second route to
+     the same answer. */
+  check("catalog-file.js", "a new catalog's first edition is today's date in the one orderable form",
+    () => { const d = new Date(), p = v => String(v).padStart(2, "0");
+      return eq(F.todayEdition(), d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate())); });
 }
 
 /* ------------------------------------------------------------------ columns.js
@@ -1086,11 +1117,12 @@ const CARD_B = {
 }
 
 /* ------------------------------------------------------------------ local-memory.js
-   The eject flag is a session value read once and cleared, so the notice cannot appear twice. */
+   The two acts are the module's whole surface: nothing parks across a reload any more, so nothing
+   else is exported. What they do is driven in tests/test.js and, in a browser, tests/swap.mjs. */
 {
   const L = await import(MOD("local-memory.js"));
-  check("local-memory.js", "nothing was ejected, so nothing is claimed",
-    () => eq(L.ejectedJustNow(), false));
+  check("local-memory.js", "the module exports the eject and the clear, and nothing else",
+    () => eq(Object.keys(L).sort().join(","), "clearLocalMemory,ejectCatalog"));
 }
 
 /* ==================================================================================

@@ -85,14 +85,13 @@
     };
     if(pref("eMotionOff")==="1" || matchMedia("(prefers-reduced-motion: reduce)").matches)
       root.classList.add("e-still");
-    /* A COVERED RELOAD (motion.js reloadCovered). Rendering is blocked until parsing ends, which
-       is after the app's script and so after boot (#eBooted names nothing, and the block lifts
-       at the end of the document): the frame the last document left stays on screen and nothing
-       half-built is painted. Where blocking is not understood, the body stays unseen. The shell's
-       own reload after the page stopped arrives the same way: a dead page could not ask. */
+    /* A COVERED ARRIVAL, the shell's own reload after the page stopped: a dead page could not ask.
+       Rendering is blocked until parsing ends, which is after the app's script and so after boot
+       (#eBooted names nothing, and the block lifts at the end of the document): the frame the last
+       document left stays on screen and nothing half-built is painted. Where blocking is not
+       understood, the body stays unseen. */
     var host=window.E_HOST;
-    if(sessionStorage.getItem("eArriving") || (host && host.recovering)){
-      sessionStorage.removeItem("eArriving");
+    if(host && host.recovering){
       root.classList.add("e-arriving");
       var hold=document.createElement("link");
       if(hold.blocking && hold.blocking.supports && hold.blocking.supports("render")){
@@ -2301,13 +2300,10 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
    is not replaced. */
 @keyframes eModalBgIn{from{opacity:0}to{opacity:1}}
 @keyframes eModalCardIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
-/* A COVERED RELOAD (motion.js reloadCovered, and the boot guard's arrive): the band stays, and
-   what sits under it leaves and arrives. The dot field is the scroller's own ground and stays. Held,
-   the content is drawn at a trace no eye resolves rather than not drawn, so it is rasterised before
-   its fade begins. */
+/* A COVERED ARRIVAL (the boot guard's arrive): the band stays, and what sits under it arrives.
+   The dot field is the scroller's own ground and stays. Held, the content is drawn at a trace no
+   eye resolves rather than not drawn, so it is rasterised before its fade begins. */
 @keyframes eLeave{to{opacity:0}}
-html.e-leaving body>:not(header,#railHit,.scroller,script),html.e-leaving .scroller>.shell,
-html.e-leaving #pillsSlot{animation:eLeave var(--m-dismiss) ease forwards;pointer-events:none}
 /* A SURFACE CLOSING (motion.js dismissNode): it leaves on the dismiss tier, and what it holds stands still. */
 .e-gone{animation:eLeave var(--m-dismiss) ease forwards!important;pointer-events:none!important}
 .e-gone *{animation:none!important;transition:none!important}
@@ -3082,8 +3078,6 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 #eNotices{position:fixed;left:0;right:0;z-index:2147483646;display:flex;flex-direction:column;gap:8px;
   pointer-events:none}
 #eNotices .bub{position:relative;pointer-events:auto}
-/* The question's lines under its title, inset as the title is: a small dialog has no body to do it. */
-.e-sure .e-sure-say{padding:0 18px}
 /* A field on the fill: paper, so what is typed reads as the reader's own. */
 .bub .e-name-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
   border:1px solid transparent;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans)}

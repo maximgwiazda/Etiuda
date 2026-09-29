@@ -33,6 +33,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/csp.js                                the policy, two unpackaged Electrons
     node tests/desk.js                               the desk in a file, an unpackaged Electron
     ETIUDA_FIXTURES=<folder> node tests/catalog-watch.js  the watched catalog, one app run
+    node tests/swap.mjs                              the desk changed in place held to a fresh start, Chrome, no fixtures
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
     ETIUDA_FIXTURES=<folder> node tests/reinstall.js     install, use, uninstall, install again
 
@@ -101,7 +102,7 @@ third column is how to check this one.
 | `build-fresh.mjs` | both | it runs the real build and compares, which is the only thing that can speak for the bundle |
 | `catalog-routes.mjs` | `src/` modules, RUN | the only two catalogs worth comparing are the ones the modules themselves build, so it loads them through node and calls both readers |
 | `module-calls.mjs` | `src/` modules, RUN | a text reading cannot say the code is reached; this one imports each module through node's own loader and compares an answer, which is the only reading that dies when the module does |
-| `catalog-trust-desk.mjs` | `src/` modules and `shell/`, RUN | the claim is that the desk still calls the verifier and still says its answer, which only running the boot's and the Library's own calls can show; what it reads is the markup they rendered |
+| `catalog-trust-desk.mjs` | `src/` modules and `shell/`, RUN | the claim is that the desk still calls the verifier and still says its answer, which only running the boot's and the Library's own calls can show; what it reads is the markup they rendered, which is also where an offer answered Yes is seen to be down before the desk starts again |
 | `token-canary.mjs` | `src/` modules, RUN, and `sourceDoc()` | it calls `fill()` and compares what it takes with the canary as its two readers read it; the source is read only as a list of candidate names |
 | `smoke.js` | artefact | a browser opens the file that ships |
 | `text-scan-selftest.js` | a toy tree | it proves the five rows above that say `src/` |

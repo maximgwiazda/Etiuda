@@ -31,7 +31,6 @@ UI_STRINGS.pl={
   "Fold this group away":"Zwiń tę grupę",
   "Show these cards":"Pokaż te karty",
   "Matching your intent":"Pasujące do intencji",
-  "Put every setting back to its default? Your cards, edits, favourites and order are not touched.":"Przywrócić wszystkie ustawienia domyślne? Karty, zmiany, ulubione i kolejność zostaną bez zmian.",
   "Settings reset":"Przywrócono ustawienia domyślne",
   "Put every setting on this screen back to what it ships with. Cards and edits are not affected.":"Przywraca domyślne wartości wszystkich ustawień na tym ekranie. Karty i zmiany w nich zostają nienaruszone.",
   "maintenance␟hidden":"ukryte",
@@ -448,11 +447,6 @@ UI_STRINGS.pl={
   "switch to {LANG} to use it":"przełącz na {LANG}, aby jej użyć",
   "Intent: {NAME}":"Intencja: {NAME}",
   "Intents: {NAMES}":"Intencje: {NAMES}",
-  "Clear Etiuda's local memory in this browser?":"Wyczyścić pamięć lokalną Etiudy w tej przeglądarce?",
-  "Clear Etiuda's local memory on this computer?":"Wyczyścić pamięć lokalną Etiudy na tym komputerze?",
-  "Removes every personal card, intent, edit, hide, category rename and quick-facts edit,":"Usuwa wszystkie własne karty, intencje, zmiany, ukrycia, zmienione nazwy kategorii i zmiany w szybkich faktach,",
-  "Catalog files on disk are not touched.":"Pliki katalogu na dysku pozostają nienaruszone.",
-  "Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to":"Etiuda uruchomi się pusta. Jeśli obok leży plik katalogu, pojawi się pytanie, czy",
   "Changes every label in Etiuda, never the cards themselves":"Zmienia napisy na przyciskach i w menu Etiudy, nigdy treść kart",
   "Theme, blur effects and animations":"Motyw, efekty rozmycia i animacje",
   "What stays docked, and what may hide itself when space is short":"Co pozostaje zadokowane, a co może się schować, gdy brakuje miejsca",
@@ -503,6 +497,9 @@ UI_STRINGS.pl={
   "Clear local memory":"Wyczyść pamięć lokalną",
   "Eject catalog":"Odłącz katalog",
   "Catalog ejected":"Odłączono katalog",
+  "Local memory cleared":"Wyczyszczono pamięć lokalną",
+  "Loading a catalog erases the cards you made without one. Export them as a catalog of their own first?":"Wczytanie katalogu usunie karty utworzone bez katalogu. Najpierw wyeksportować je jako osobny katalog?",
+  "Load anyway":"Wczytaj mimo to",
   "Previous":"Poprzedni",
   /* Qualified because the tour already owns a plain "Next" and calls it Dalej; Previous has
      no such clash, so it stays plain rather than being qualified for symmetry alone. */
@@ -523,14 +520,7 @@ UI_STRINGS.pl={
   "Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted.":"Zapomina wszystkie własne karty, zmiany, ukrycia, zmiany nazw i ustawienia układu w tej przeglądarce; wczytany katalog zostaje. W ten sposób wraca też wszystko, co usunięto.",
   "Forget every personal card, edit, hide, rename and layout choice on this computer; the loaded catalog stays. It is also how you bring back anything you deleted.":"Zapomina wszystkie własne karty, zmiany, ukrycia, zmiany nazw i ustawienia układu na tym komputerze; wczytany katalog zostaje. W ten sposób wraca też wszystko, co usunięto.",
   "Put the catalog down and restart empty. Your cards, edits, name, theme and layout all stay.":"Odłącza katalog i uruchamia Etiudę bez niego. Własne karty, zmiany, nazwa, motyw i układ zostają.",
-  "Eject the catalog from this browser?":"Odłączyć katalog od tej przeglądarki?",
-  "Eject the catalog?":"Odłączyć katalog?",
   "Your own cards, edits, stars and card order are KEPT - load this catalog again":"Twoje własne karty, zmiany, gwiazdki i kolejność kart ZOSTAJĄ - wczytaj ten katalog ponownie,",
-  "Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.":"Własne karty, zmiany, gwiazdki i kolejność kart ZOSTAJĄ i wracają na swoje miejsca po ponownym wczytaniu tego katalogu.",
-  "Your agent name, theme and layout choices stay, and catalog files on disk are not touched.":"Nazwa agenta, motyw i ustawienia układu zostają, a pliki katalogu na dysku pozostają nietknięte.",
-  "Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it.":"Etiuda uruchomi się pusta. Jeśli obok leży plik katalogu, pojawi się pytanie o jego wczytanie.",
-  "and forgets your agent name, theme and layout choices.":"i zapomina nazwę agenta, motyw oraz ustawienia układu.",
-  "The loaded catalog stays, and Etiuda restarts with it.":"Wczytany katalog pozostaje, a Etiuda uruchomi się z nim.",
   "Save everything loaded now as a catalog file, your edits merged in":"Zapisuje wszystko, co wczytane, jako plik katalogu, razem z własnymi zmianami",
   "Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.":"Wczytuje plik katalogu z dysku jako same dane, bez uruchamiania czegokolwiek. Zastępuje obecny katalog, a pliki na dysku zostają bez zmian.",
   "Bake the catalog into one HTML file that needs nothing beside it":"Zapisuje katalog w jednym samodzielnym pliku HTML",
@@ -844,8 +834,8 @@ UI_STRINGS.pl={
   "The tour waits in the Menu, under Show tour…":"Przewodnik czeka w Menu, pod Pokaż przewodnik…",
   "To begin, the name your replies are signed with. Customers see it at the foot of each one, and it can be changed at any time in Settings.":"Na początek podpis: imię, które klienci zobaczą pod każdą odpowiedzią. Można je zmienić w każdej chwili w Ustawieniach.",
   "A catalog of replies":"Katalog odpowiedzi",
-  "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}. Etiuda restarts with the catalog in place, and the tour carries on from there.":"Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać katalog zespołu z folderu {FOLDER}. Etiuda uruchomi się wtedy od nowa, już z katalogiem, a przewodnik poprowadzi dalej.",
-  "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the catalog file. The page reloads with it and the tour carries on from there; the catalog stays in this browser, ready whenever you come back.":"Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać plik katalogu. Strona załaduje się wtedy od nowa, a przewodnik poprowadzi dalej; katalog zostanie w tej przeglądarce i poczeka na każdy powrót.",
+  "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}. The tour carries on as soon as it is in place.":"Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać katalog zespołu z folderu {FOLDER}. Przewodnik poprowadzi dalej, gdy tylko katalog będzie na miejscu.",
+  "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the catalog file. The tour carries on as soon as it is in place, and the catalog stays in this browser, ready whenever you come back.":"Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać plik katalogu. Przewodnik poprowadzi dalej, gdy tylko katalog będzie na miejscu, a sam katalog zostanie w tej przeglądarce i poczeka na każdy powrót.",
   "comes with Etiuda":"dołączony do Etiudy",
   "Signed":"Podpisany",
   "Unsigned":"Niepodpisany",
@@ -917,35 +907,6 @@ function uiLang(){
 function t(en){
   const tab=UI_STRINGS[uiLang()];
   return (tab && tab[en]!=null) ? tab[en] : en;
-}
-/* AN ACT THAT CANNOT BE UNDONE STOPS HERE until it is answered, in Etiuda's own small dialog over
-   everything, never the system's box; the first paragraph of the question is its title, and `yes`
-   names the act on the button that does it. An act that can be undone asks nothing: see offerUndo. */
-function askSure(question, yes, act, danger){
-  const parts=t(question).split("\n\n");
-  const wrap=document.createElement("div");
-  wrap.className="modal e-sure";
-  wrap.id="eSure";
-  wrap.innerHTML='<div class="modal-bg"></div>'
-    +'<div class="modal-card" role="alertdialog" aria-modal="true" aria-labelledby="eSureTitle">'
-    +'<h2 id="eSureTitle">'+esc(parts[0])+'</h2>'
-    +(parts.length>1?'<div class="e-sure-say">'+parts.slice(1).map(x=>'<p class="modal-sub">'+esc(x)+'</p>').join("")+'</div>':"")
-    +'<div class="modal-actions">'
-    +'<button type="button" class="btn" id="eSureNo">'+esc(t("Cancel"))+'</button>'
-    +'<button type="button" class="btn '+(danger?"danger":"primary")+'" id="eSureYes">'+esc(t(yes))+'</button>'
-    +'</div></div>';
-  cutLeaves();
-  document.body.appendChild(wrap);
-  const close=go=>{ document.removeEventListener("keydown",onKey,true); dismissNode(wrap); if(go) act(); };
-  function onKey(e){
-    if(e.key!=="Escape") return;
-    e.preventDefault(); e.stopPropagation(); close(false);
-  }
-  document.addEventListener("keydown",onKey,true);
-  wrap.querySelector(".modal-bg").onclick=()=>close(false);
-  wrap.querySelector("#eSureNo").onclick=()=>close(false);
-  wrap.querySelector("#eSureYes").onclick=()=>close(true);
-  setTimeout(()=>{ const b=wrap.querySelector("#eSureNo"); if(b) b.focus(); },30);
 }
 /* AN ACT THAT CAN BE UNDONE HAPPENS AT ONCE, and this bubble at the foot of the window offers the
    way back: over any dialog, until another act replaces it or UNDO_MS passes. */
@@ -1125,7 +1086,6 @@ export {
   uiLang,
   systemUiLang,
   t,
-  askSure,
   offerUndo,
   tc,
   counted,

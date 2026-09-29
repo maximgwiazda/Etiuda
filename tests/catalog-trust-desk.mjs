@@ -19,8 +19,9 @@
  * once-a-load recheck) lives exactly one page long, and the stored state that outlives a page is
  * the desk file on disk. So each launch is this file run again as a child with `--launch`, and a
  * reload is a new child that keeps the session store, as a reload keeps sessionStorage. A relaunch
- * starts the session empty. Accepting a catalog reloads; what the next page reads is only what
- * reached desk.json.
+ * starts the session empty. Accepting a catalog starts the desk again in place (hooks.restartDesk),
+ * and a launch ends there as it ended at the reload that did this before: what the next page reads
+ * is only what reached desk.json.
  *
  * THE MAIN PROCESS SEES A SHELL FOLDER OF ITS OWN inside the temp folder, so the places it reads
  * a catalog from are the temp folder's and never the tree's root, where a desk may keep a real one.
@@ -270,26 +271,33 @@ async function launch(plan) {
   });
   globalThis.window = globalThis;
   Object.defineProperty(globalThis, "navigator", { configurable: true, value: { language: "en-US", languages: ["en-US"], platform: "Win32", userAgent: "node" } });
-  /* THE RELOAD, as a page leaving: its unload events fire, which is where a pending desk write is
-     sent whole, and the launch ends at the next act. */
+  /* THE DESK STARTED AGAIN, or a reload: the launch ends at the next act, its unload events fired,
+     which is where a pending desk write is sent whole, as the page leaving at the end of a session. */
+  /* A QUESTION STANDING OVER THE DESK: a bubble that asks, not on its way out, and not the Undo. */
+  const standing = () => doc.body.children.filter(n => n.classList.contains("bub-ask") && !n.classList.contains("e-gone") && n.id !== "eUndo").length;
+  const restarted = () => {
+    if (obs.reloaded) return;
+    obs.reloaded = true;
+    obs.askedAtRestart = standing();
+    ["beforeunload", "pagehide", "unload"].forEach(t => (winListeners[t] || []).slice().forEach(fn => { try { fn({ type: t }); } catch (e) { obs.errors.push(t + " " + e.message); } }));
+  };
   Object.defineProperty(globalThis, "location", { configurable: true, value: {
     href: FRAME.url, protocol: "file:", search: "", hash: "", pathname: "/C:/lab/engine/etiuda.html",
-    reload: () => {
-      if (obs.reloaded) return;
-      obs.reloaded = true;
-      ["beforeunload", "pagehide", "unload"].forEach(t => (winListeners[t] || []).slice().forEach(fn => { try { fn({ type: t }); } catch (e) { obs.errors.push(t + " " + e.message); } }));
-    } } });
+    reload: restarted } });
   const contextBridge = { exposeInMainWorld: (k, v) => { globalThis[k] = v; }, executeInMainWorld: o => o.func(...(o.args || [])) };
   new Function("require", shellSrc("preload.js"))(n => (n === "electron" ? { contextBridge, ipcRenderer, webUtils: {} } : nodeRequire(n)));
 
   const OFFER = await import(MOD("catalog-offer.js"));
+  const CF = await import(MOD("catalog-file.js"));
   const TR = await import(MOD("catalog-trust.js"));
   const TOUR = await import(MOD("tour.js"));
   /* THE APP-LEVEL ACTIONS the page's boot registers in hooks.js, none of them on the trust path:
      the sample's watermark and the unsaved notice repaint the rest of the page. Named one by one,
      so a slot this path starts calling is a TypeError in 0b rather than a silent stub. */
   const HOOKS = (await import(MOD("hooks.js"))).hooks;
-  ["syncSampleMark", "syncSaveNotice"].forEach(k => { HOOKS[k] = noop; });
+  ["syncSampleMark", "syncSaveNotice", "flushPillState"].forEach(k => { HOOKS[k] = noop; });
+  HOOKS.restartDesk = restarted;
+  HOOKS.offerPickedCatalog = OFFER.eOfferPickedCatalog;
   obs.heldAtStart = TR.heldCatalogTrust();
   obs.tourDue = TOUR.tourDueAtBoot();
 
@@ -313,7 +321,7 @@ async function launch(plan) {
     boot: () => { OFFER.eOfferCatalogAtBoot(); OFFER.wireHostCatalogWatch(); },
     settle: () => settle(),
     offer: () => { obs.offers.push(readOffer()); },
-    yes: () => { const y = doc.getElementById("ecYes"); if (!y) throw new Error("no Yes on screen"); y.onclick(); },
+    yes: () => { const y = doc.getElementById("ecYes"); if (!y) throw new Error("no Yes on screen"); obs.askedAtPress = standing(); y.onclick(); },
     /* YES THE MOMENT THE BUBBLE IS UP, one turn of the event loop at a time: the ring is asked in
        the turn that puts the bubble up and answers a turn later, so this press precedes the answer,
        and whether the bubble already carried its line when pressed is written down to show it. */
@@ -322,6 +330,7 @@ async function launch(plan) {
       const y = doc.getElementById("ecYes");
       if (!y) throw new Error("no Yes on screen");
       obs.lineAtPress = texts(doc.getElementById("eCatalogOffer"), ".ec-trust");
+      obs.askedAtPress = standing();
       y.onclick();
     },
     escape: () => { const b = doc.getElementById("eCatalogOffer"); if (!b) throw new Error("no bubble to escape");
@@ -332,6 +341,8 @@ async function launch(plan) {
       await settle();
       obs.library.push(readLibrary());
     },
+    // The file picker's reading half, over a file anywhere: importCatalogText is where both import routes end.
+    import: file => { CF.importCatalogText(fs.readFileSync(path.join(LAB, file), "utf8"), path.basename(file)); },
     load: name => { const b = doc.querySelector("button[data-ec-load=\"" + name + "\"]"); if (!b) throw new Error("no Load for " + name); b.onclick(); },
     watch: file => { const text = fs.readFileSync(path.join(LAB, file), "utf8");
       (rendererOn["etiuda:catalog-file"] || []).forEach(fn => fn({}, text, path.basename(file), path.join(LAB, "catalogs"), false, "", false)); },
@@ -342,6 +353,7 @@ async function launch(plan) {
     try { await act[name](arg); } catch (e) { obs.errors.push(name + ": " + String(e && e.message || e).slice(0, 160)); }
   }
   if (obs.reloaded) await settle(50);
+  obs.askedAtEnd = standing();
   obs.heldAtEnd = TR.heldCatalogTrust();
   obs.session = Object.fromEntries(session);
   process.stdout.write("#launch " + JSON.stringify(obs) + "\n", () => process.exit(0));
@@ -357,7 +369,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 14;
+  const EXPECTED = 17;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -426,7 +438,7 @@ async function parent() {
     const b1b = run(lab1, ["library"], true);
     const r1 = row(b1b, "lamp.ec");
     check(b1.reloaded && !!r1 && r1.loaded && r1.key && r1.key.state === V2.V2_SIG_INVALID && !r1.key.gold && CHANGED.test(r1.key.tip),
-      "1b accepted, the page reloads and the Library's loaded row wears a grey key whose bubble says it was changed: " + said(r1));
+      "1b accepted, the desk starts again with it and the Library's loaded row wears a grey key whose bubble says it was changed: " + said(r1));
 
     /* 2: A SIGNED CATALOG HELD, then an unsigned edition handed by the watch, then an older edition
        loaded from the Library's list with Yes pressed before its check has answered. */
@@ -436,7 +448,7 @@ async function parent() {
     const c2b = run(lab2, ["boot", "watch:lamp-3.ec", "settle", "offer", "escape", "library", "load:lamp-1.ec", "yesAtOnce", "settle"], true);
     const o2 = c2.offers[0] || {};
     check(o2.shown && o2.trust.length === 0 && c2.reloaded && c2b.heldAtStart === V2.V2_SIG_VALID,
-      "2a a valid signature is said nowhere in the offer and is what the desk holds after the reload: "
+      "2a a valid signature is said nowhere in the offer and is what the desk holds once it has started again: "
       + JSON.stringify(o2.trust || null) + ", held " + JSON.stringify(c2b.heldAtStart));
     const o2b = c2b.offers[0] || {};
     check(o2b.shown && o2b.trust.length === 1 && /is signed, and this edition is not/.test(o2b.trust[0]),
@@ -447,6 +459,17 @@ async function parent() {
       && !!r2 && r2.loaded && r2.key && r2.key.state === V2.V2_SIG_INVALID,
       "2c an edition loaded from the Library, Yes pressed before its check answered, is the state its row says: " + said(r2)
       + ", the bubble's line at the press " + JSON.stringify(c2b.lineAtPress === undefined ? null : c2b.lineAtPress));
+
+    /* 6: AN OFFER'S YES TAKES ITS QUESTION DOWN BEFORE THE DESK STARTS AGAIN, on each route that ends
+       in that one Yes: the boot's find (1), a Library row over a loaded catalog (2), and a file picked
+       over a loaded catalog, here. One standing at the press is what shows the count can see one. */
+    const p6 = run(lab2, ["import:lamp-3.ec", "settle", "offer", "yes", "settle"], true);
+    const down = o => o.askedAtPress === 1 && o.reloaded && o.askedAtRestart === 0 && o.askedAtEnd === 0;
+    const asked = o => JSON.stringify({ press: o.askedAtPress, start: o.askedAtRestart, end: o.askedAtEnd, started: o.reloaded });
+    check(down(b1), "6a the boot's offer, answered Yes, is down before the desk starts again: " + asked(b1));
+    check(down(c2b), "6b a Library row loaded over a catalog, answered Yes, is down before the desk starts again: " + asked(c2b));
+    check(!!(p6.offers[0] || {}).shown && down(p6),
+      "6c a file picked over a loaded catalog, answered Yes, is down before the desk starts again: " + asked(p6));
 
     /* 3: THE LIBRARY ON AN EMPTY DESK loads a file at once, without a question. An unsigned file that
        is not the folder's newest, so the Library's recheck of the newest cannot stand in for it. */
@@ -496,7 +519,7 @@ async function parent() {
       + JSON.stringify(o5.files || null) + " " + JSON.stringify(o5.trust || null));
 
     /* 0: WHAT EVERY LAUNCH ABOVE RESTS ON. */
-    check(launches.length === 11 && launches.every(o => o.tourDue === false),
+    check(launches.length === 12 && launches.every(o => o.tourDue === false),
       "0a no launch had the tour due, so no offer waited behind it: " + launches.map(o => o.tourDue).join(","));
     const errs = launches.flatMap(o => o.errors || []);
     check(!errs.length,

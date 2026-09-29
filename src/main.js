@@ -105,7 +105,8 @@ import * as runShortcut from "./modules/run-shortcut.js";
 import * as appState from "./modules/app-state.js";
 import * as host from "./modules/host.js";
 import * as hookSlots from "./modules/hooks.js";
-Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, cardCarry, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, catalogTrustMod, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots);
+import * as restart from "./modules/restart.js";
+Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, cardCarry, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, catalogTrustMod, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots, restart);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place
@@ -248,6 +249,7 @@ function boot(){
     syncSaveNotice: personalPack.syncSaveNotice,
     importCatalogHere: catalogFile.importCatalogHere,
     offerPickedCatalog: catalogOffer.eOfferPickedCatalog,
+    restartDesk: restart.restartDesk,
     runShortcut: runShortcut.runShortcut,
   });
   // A 1.16.7 desk's keys, copied under this version's names before the first line reads one
@@ -319,12 +321,7 @@ function boot(){
      the drum's class), constant at every width, translated by the sweep. */
 
   // category pills - order is user-arrangeable by dragging, and persists
-  try{ appState.setCatOrder(JSON.parse(storage.nsGet("CatOrder")||"null")||[]); }catch(e){ appState.setCatOrder([]); }
-  // Legacy: Boarding pass (bp) → Check-in (cin)
-  appState.setCatOrder(appState.catOrder.map(k=>k==="bp"?"cin":k).filter((k,i,a)=>a.indexOf(k)===i));
-  catSet.applyCatsToGlobal();
-  // counts + cards filled after rebuildCards(); seed order from base cats first
-  appState.setCatOrder(appState.catOrder.filter(k=>contentModel.CATS[k]));
+  catSet.loadCatOrder();
 
   // The frame pump's own kick, and the pill drag's document listeners
   paint.wirePumpKick();
@@ -472,19 +469,6 @@ function boot(){
   // After boot, so the warning sits over a working Etiuda rather than an empty frame.
   try{ personalPack.showPackMigrationWarning(); }catch(e){}
   try{ personalPack.showDeskNotices(); }catch(e){}
-  /* Back where you were, folds and all: the Library closes when somebody closes it, never
-     because an act inside it restarted the app. Consumed on read so a later refresh does not
-     keep reopening it, and UNDER any catalog offer rather than instead of it - being asked
-     whether to load a file is the more urgent question, answered before you are put back where
-     you were. The restart an eject causes raises none: see ejectedJustNow. */
-  try{
-    const back=storage.ssGet(storage.MG_REOPEN);
-    if(back){
-      storage.ssDel(storage.MG_REOPEN);
-      String(back).split(",").forEach(k=>{ if(k && k!=="1") appState.mgOpen.add(k); });
-      manage.openManage();
-    }
-  }catch(e){}
 }
 /* The cycle gate loads this file in bare node to see whether anything reads across an import
    cycle while it loads, and there is no document there. In a browser this is the last line of

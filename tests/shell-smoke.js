@@ -1862,13 +1862,16 @@ const placeEc = (dir, from, as, minutesOld) => {
     "2q5 a file arriving in the folder reaches the open Library through the host\'s watch: "
     + JSON.stringify(grown));
 
-  /* And putting it down empties the desk WITHOUT asking on the way back, board 424\'s one
-     exception: the Library is reopened over that restart already listing every file, so the
-     dialog would be arguing with somebody who has just answered. */
-  /* Eject happens at once with Undo (Maxim, 2026-09-27 23:28), so no confirm may stand after the call;
-     a context lost to the restart inside it is itself no confirm. */
-  const ejAsk1 = await (await s.b.pages())[0].evaluate(() => { ejectCatalog(); return !!document.getElementById("eSure"); })
-    .catch(() => false);
+  /* And putting it down empties the desk WITHOUT asking, board 424\'s one exception: the Library
+     stands open over the desk started again in place, already listing every file, so the dialog
+     would be arguing with somebody who has just answered. */
+  /* Eject happens at once and in place with Undo (Maxim, 2026-09-27 23:28 and 2026-09-28 23:41),
+     so no confirm may stand after the call. */
+  /* A question standing is read by what can put one up (a window not hidden, a bubble that asks, an
+     alert), the Undo bubble and a leaving copy aside; a page that reloaded instead counts as asked. */
+  const ejAsk1 = await (await s.b.pages())[0].evaluate(() => { const standing = () => [...document.querySelectorAll(".modal:not([hidden]), .bub-ask, [role=alertdialog]")].filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
+    const was = standing(); ejectCatalog(); return standing() !== was; })
+    .catch(() => true);
   await sleep(7000);
   let ejPage = (await s.b.pages())[0];
   const afterEject = await ejPage.evaluate(SEEN);
@@ -1878,13 +1881,13 @@ const placeEc = (dir, from, as, minutesOld) => {
   const ejKeys = deskKeys(udLL);
   check(afterEject.cards === 0 && !afterEject.offer && !ejKeys.eCatalogFile
         && ejLib.lib && ejLib.rows === 3 && !ejAsk1,
-    "2q6 ejecting empties the desk and forgets which file was loaded, and the restart it causes"
-    + " is the one launch NOT asked: " + afterEject.cards + " cards, dialog " + afterEject.offer
+    "2q6 ejecting empties the desk and forgets which file was loaded, and the desk it starts again"
+    + " in place is NOT asked: " + afterEject.cards + " cards, dialog " + afterEject.offer
     + ", file key " + JSON.stringify(ejKeys.eCatalogFile || "") + ", and the Library back with its "
     + ejLib.rows + " rows, which is everything the dialog would have had to say; eject confirm " + ejAsk1);
   await s.stop();
 
-  /* The one-shot is spent on that read, so the next ordinary launch of the same desk asks. */
+  /* Nothing of the eject carries past it, so the next ordinary launch of the same desk asks. */
   s = await launch(udLL);
   const nextUp = await s.p.evaluate(DIALOG);
   check(nextUp.step === "read" && !!nextUp.codes && nextUp.codes[0] === "arrived-later.ec"
@@ -1953,8 +1956,10 @@ const placeEc = (dir, from, as, minutesOld) => {
      the very catalog that is loaded is answered in words and loads nothing, so the desk is emptied
      and the same file comes in again through the import. The eject asks nothing (2026-09-27 23:28),
      and a confirm standing after the call fails 2q11's premise. */
+  // Read as ejAsk1 reads it.
   const ejAsk2 = await (await s.b.pages())[0].evaluate(() => { if (document.getElementById("mgCatList")) closeModal();
-    ejectCatalog(); return !!document.getElementById("eSure"); }).catch(() => false);
+    const standing = () => [...document.querySelectorAll(".modal:not([hidden]), .bub-ask, [role=alertdialog]")].filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
+    const was = standing(); ejectCatalog(); return standing() !== was; }).catch(() => true);
   await sleep(6000);
   const impRan = await (await s.b.pages())[0].evaluate(async () => {
     /* The offer over a loaded catalog is answered the way a person answers it. */ const acceptOffer = () => { const y = document.querySelector("#ecYes"); if (y) y.click(); return true; };
@@ -2171,21 +2176,24 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " Close at the right, still danger, and not in the Catalog & data fold: "
     + JSON.stringify(wipeBar) + " " + JSON.stringify(wipeEnds));
 
-  /* Eject from that row: the Library is still there on the far side of the restart, showing the
-     folder rather than being replaced by a dialog about one file in it, and the section says in
+  /* Eject from that row: the Library is still there over the desk started again in place, showing
+     the folder rather than being replaced by a dialog about one file in it, and the section says in
      words that nothing is loaded. */
+  // Read as ejAsk1 reads it.
   const ejAsk3 = await (await s.b.pages())[0].evaluate(() => {
+    const standing = () => [...document.querySelectorAll(".modal:not([hidden]), .bub-ask, [role=alertdialog]")].filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
+    const was = standing();
     const b = document.querySelector("#mgCatList button[data-ec-eject]");
     if (b) b.click();
-    return { button: !!b, asked: !!document.getElementById("eSure") };
-  }).catch(() => ({ button: true, asked: false }));
+    return { button: !!b, asked: standing() !== was };
+  }).catch(() => ({ button: true, asked: true }));
   await sleep(8000);
   const afterEject2 = await (await s.b.pages())[0].evaluate(LIB_STATE);
   check(afterEject2.open && afterEject2.foldOpen && !afterEject2.over
         && afterEject2.loaded.length === 0 && afterEject2.rows === 2 && afterEject2.empty === ""
         && ejAsk3.button && !ejAsk3.asked,
     "2s5 the row's Eject leaves the Library open on the folder with no row marked and NOTHING over"
-    + " it, that restart being the one launch board 424 does not ask; since 452 the fold says it"
+    + " it, that start in place being the one board 424 does not ask; since 452 the fold says it"
     + " with the list rather than with a sentence, and the eject asked nothing (2026-09-27 23:28): "
     + JSON.stringify(afterEject2) + " " + JSON.stringify(ejAsk3));
 
@@ -2248,10 +2256,9 @@ const placeEc = (dir, from, as, minutesOld) => {
   const beforeWipe = await wp.evaluate(() => ({
     folder: window.lsGet("eCatalogFolder"), theme: window.lsGet("eTheme"),
     hover: window.lsGet("eNoteHover"), cards: document.querySelectorAll(".card").length }));
-  /* Clear stops at Etiuda's own question, answered here as a person answers it; the answer is
-     READ BACK, since a click on a question that never came looks exactly like a dead button. */
-  const stubbed = await wp.evaluate(() => { clearLocalMemory(); const y = document.getElementById("eSureYes");
-    if (!y) return false; y.click(); return true; });
+  /* Clear happens at once with its Undo standing (2026-09-28 20:06); the Undo is READ BACK, since a
+     press that did nothing looks exactly like a dead button. It is left unanswered. */
+  const stubbed = await wp.evaluate(() => { clearLocalMemory(); return !!document.getElementById("eUndoBtn"); });
   await sleep(9000);
   wp = (await s.b.pages())[0];
   const afterWipe = await wp.evaluate(() => ({

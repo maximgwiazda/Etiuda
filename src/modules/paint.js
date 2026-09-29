@@ -1,6 +1,6 @@
 import { findCard } from "./card-model.js";
 import { mgReduceMotion, E_EASE, E_SPRING, E_SPRING_MS, M_MS, CARD_MOVE_MAX } from "./motion.js";
-import { nsSet } from "./storage.js";
+import { lySet } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { intentCats, pillBand } from "./cat-relevance.js";
 import { cardHitsAlwaysCat, cardHitsSelectedIntent } from "./card-intent.js";
@@ -286,7 +286,7 @@ function wirePillDrag(){
   addEventListener("pointerup",()=>{
     if(!dragState) return;
     if(dragState.moved){
-      nsSet("CatOrder",JSON.stringify(catOrder));
+      lySet("CatOrder",JSON.stringify(catOrder));
       setSuppressClick(true);                    // don't let the release toggle the filter
       document.documentElement.classList.remove("pilldrag");
       pills.querySelectorAll(".pill").forEach(p=>p.classList.remove("dragging"));

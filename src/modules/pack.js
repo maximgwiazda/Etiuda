@@ -1,6 +1,6 @@
 import { CATS, intentCount, SW_IDS } from "./content-model.js";
 import { M, WHO_BASE, normWhoList } from "./stock.js";
-import { E_KEY_RE, E_NS, eNsFor, lsDel, lsGet, lsKeys, lsSet, nsDel, nsGet, nsKey, ssDel, nsSet,
+import { E_KEY_RE, E_NS, eNsFor, lsDel, lsGet, lsKeys, lsSet, ssDel, LAYER_KEYS, eLayer, eLayers, lyGet, lySet, lyDel,
   eSaveTrouble, eDeskRefused, eDeskRefusedSeen, eHomeless, eDeskHome } from "./storage.js";
 import { eEmbeddedCatalog } from "./env.js";
 import { t, toast, fileStamp } from "./ui-lang.js";
@@ -67,6 +67,8 @@ function migratePackKeys(p){
   return did;
 }
 let packMigrationFailed=false;
+// Nothing of the layer put down stays in memory before the next is read.
+function resetPack(){ pack=emptyPack(); BASE_M=[]; packMigrationFailed=false; }
 /* Shown only if the key rename could not be applied to what was stored. Etiuda still
    runs on defaults, but the user would find their arrangement gone and blame the update -
    so say what happened and offer the one real fix. Dismissible: the arrangement is what
@@ -207,9 +209,10 @@ function carryNsLayer(from){
   let moved=0;
   NS_CARRY.forEach(n=>{
     let v=lsGet(from+n);
-    if(v==null || lsGet(nsKey(n))!=null) return;
+    const to=(LAYER_KEYS.indexOf(n)>-1 ? eLayer() : E_NS)+n;
+    if(v==null || lsGet(to)!=null) return;
     if(n==="Pack"){ v=packWithoutPositional(v); if(v==null) return; }
-    if(lsSet(nsKey(n),v)) moved++;
+    if(lsSet(to,v)) moved++;
   });
   // Deferred: the toast host does not exist this early in the boot.
   if(moved) setTimeout(()=>{ try{ toast(t("Restored your cards and stars from an earlier build.")); }catch(e){} },1400);
@@ -224,9 +227,11 @@ const NS_ADOPTED="e~nsAdopted:";
    catalog's id from 2026-09-15; a desk that loaded this same catalog on an earlier build holds
    its cards, stars and columns under a hash of the NAME. The source is known exactly here,
    which the stranded rule below can never say - and the layer still travels stripped, because
-   its intent keys are positions and this namespace reads them as tag ids. */
+   its intent keys are positions and this namespace reads them as tag ids. Only into this
+   build's own catalog's layer, as below. */
 function adoptNameNsLayer(){
   try{
+    if(eLayer()!==E_NS) return false;
     const c=eEmbeddedCatalog();
     const id=String((c&&c.id)||"").trim(), name=String((c&&c.name)||"").trim();
     if(!id || !name) return false;
@@ -235,7 +240,7 @@ function adoptNameNsLayer(){
     const mark=NS_ADOPTED+from;
     if(lsGet(mark)!=null) return false;                    // a second id sharing the name finds this
     if(!lsKeys().some(k=>k.indexOf(from)===0)) return false;
-    const moved=nsGet("Pack") ? 0 : carryNsLayer(from);
+    const moved=lyGet("Pack") ? 0 : carryNsLayer(from);
     lsSet(mark,"1");
     return moved>0;
   }catch(e){ return false; }
@@ -244,17 +249,18 @@ function adoptNameNsLayer(){
    stranded in the storage area file:// pages share. Two would mean a machine with two catalogs
    on it, and guessing between them is worse than leaving both alone. Runs only for a build that
    HAS an embedded catalog - the bare engine's pack belongs to whatever catalog was imported
-   into it, which is not this one. */
+   into it, which is not this one - and only into that catalog's layer, from none this desk
+   wrote for another: personal content never crosses from one catalog to another. */
 function adoptStrandedPack(){
   try{
-    if(E_NS==="e") return false;
-    const mine=nsKey("Pack");
-    const found=lsKeys().filter(k=>k!==mine && /^e[0-9a-z]+~Pack$/.test(k));
+    if(E_NS==="e" || eLayer()!==E_NS) return false;
+    const mine=eLayer()+"Pack", known=eLayers();
+    const found=lsKeys().filter(k=>k!==mine && /^e[0-9a-z]+~Pack$/.test(k) && known.indexOf(k.slice(0,-"Pack".length))<0);
     if(found.length!==1) return false;
     const from=found[0].slice(0,-"Pack".length);
     const mark=NS_ADOPTED+from;
     if(lsGet(mark)!=null) return false;
-    const moved=nsGet("Pack") ? 0 : carryNsLayer(from);
+    const moved=lyGet("Pack") ? 0 : carryNsLayer(from);
     lsSet(mark,"1");
     return moved>0;
   }catch(e){ return false; }
@@ -267,7 +273,7 @@ const TAG_KEYED="tag";
 const ASIDE="IntentsAside";
 const INTENT_LISTS=["intentHidden","intentFavourites","intentRemoved"];
 function storedIntentOrder(){
-  try{ const v=JSON.parse(nsGet("IntentOrder")||"null"); return Array.isArray(v)?v:null; }catch(e){ return null; }
+  try{ const v=JSON.parse(lyGet("IntentOrder")||"null"); return Array.isArray(v)?v:null; }catch(e){ return null; }
 }
 function cardIntentsOf(m){ return (m&&Array.isArray(m.intents))?m.intents:null; }
 function eachPersonalCard(fn){
@@ -309,7 +315,7 @@ function rekeyIntentLayer(order){
     if(l) m.intents=l.map(x=>(typeof x==="number")?at(x):String(x)).filter(Boolean);
   });
   if(Array.isArray(order))
-    nsSet("IntentOrder",JSON.stringify(order.map(x=>(typeof x==="number")?at(x):String(x)).filter(Boolean)));
+    lySet("IntentOrder",JSON.stringify(order.map(x=>(typeof x==="number")?at(x):String(x)).filter(Boolean)));
 }
 /* NOTHING IS GUESSED. Where the catalog carries no id for an intent, no rule can say which
    request a stored index meant, and the wrong answer points somebody's own wording at another
@@ -325,11 +331,11 @@ function setAsideIntentLayer(order){
     if(m.id) aside.cards[m.id]=l;
     m.intents=l.filter(x=>typeof x!=="number");
   });
-  try{ nsSet(ASIDE,JSON.stringify(aside)); }catch(e){}
+  try{ lySet(ASIDE,JSON.stringify(aside)); }catch(e){}
   pack.intentOverrides={};
   pack.intentCounts={};
   INTENT_LISTS.forEach(name=>{ pack[name]=[]; });
-  nsDel("IntentOrder");
+  lyDel("IntentOrder");
   // Deferred with the same hand as the adoption above: no toast host exists this early.
   setTimeout(()=>{ try{ toast(t("Your intent edits and stars are set aside: this catalog cannot say which intent each belongs to.")); }catch(e){} },1400);
 }
@@ -353,7 +359,7 @@ const STATS_FIELDS=["useCounts","useAt","intentCounts","searchMisses","langs","d
 function withCounts(p){
   const map=v=>!!v && typeof v==="object" && !Array.isArray(v);
   let st=null, older=null;
-  try{ st=JSON.parse(nsGet("Stats")||"null"); older=JSON.parse(nsGet("Days")||"null"); }catch(e){}
+  try{ st=JSON.parse(lyGet("Stats")||"null"); older=JSON.parse(lyGet("Days")||"null"); }catch(e){}
   if(!map(st)) return p;
   const out=map(p) ? p : {};
   STATS_FIELDS.forEach(k=>{ if(k in st) out[k]=st[k]; else delete out[k]; });
@@ -364,13 +370,15 @@ function loadPack(){
   let p=null;
   adoptNameNsLayer();                    // the known source before the inferred one
   adoptStrandedPack();
-  try{ const raw=nsGet("Pack"); if(raw) p=JSON.parse(raw); }catch(e){}
+  try{ const raw=lyGet("Pack"); if(raw) p=JSON.parse(raw); }catch(e){}
   p=withCounts(p);
   /* If the rename cannot be applied to what is stored, say so rather than starting quietly with
      an empty ordering - the user would see their arrangement gone with no explanation. The boot
      banner offers Reset, which is the honest remedy. */
   try{ migratePackKeys(p); }
   catch(e){ packMigrationFailed=true; try{ console.error("pack migration failed",e); }catch(_){} }
+  // The old names are written by writePack and never held: the live pack speaks the new vocabulary.
+  if(p){ delete p.macroOrder; delete p.baseMacros; }
   pack=Object.assign(emptyPack(), p||{});
   if(!Array.isArray(pack.hidden)) pack.hidden=[];
   if(!pack.overrides||typeof pack.overrides!=="object") pack.overrides={};
@@ -543,9 +551,9 @@ function writePack(countsOnly){
   /* A refused write raises the lasting notice from the storage layer; see syncSaveNotice. */
   let ok=true;
   try{
-    if(!countsOnly) ok=nsSet("Pack",JSON.stringify(layer)) && ok;
-    ok=nsSet("Stats",JSON.stringify(stats)) && ok;
-    if(!countsOnly || older || nsGet("Days")==null) ok=nsSet("Days",JSON.stringify(closed)) && ok;
+    if(!countsOnly) ok=lySet("Pack",JSON.stringify(layer)) && ok;
+    ok=lySet("Stats",JSON.stringify(stats)) && ok;
+    if(!countsOnly || older || lyGet("Days")==null) ok=lySet("Days",JSON.stringify(closed)) && ok;
   }catch(e){ ok=false; }
   return ok;
 }
@@ -586,6 +594,6 @@ export {
   savePack, saveStats, flushStats,
   packSnapshot,
   packUndoFor,
-  BASE_CATS, BASE_M, catalogCardId, rebuildBaseCards, pack, loadPack, adoptNameNsLayer,
+  BASE_CATS, BASE_M, catalogCardId, rebuildBaseCards, pack, loadPack, resetPack, adoptNameNsLayer,
   showPackMigrationWarning, syncSaveNotice, showDeskNotices, whoOptions, isFavourite, isIntentFavourite,
 };

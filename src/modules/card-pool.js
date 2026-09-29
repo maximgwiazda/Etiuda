@@ -14,6 +14,7 @@ import { cards, lang, intentIdxs, entrySel } from "./app-state.js";
    ids that are gone cannot pile up; the ceiling follows the catalog, or a big one is rebuilt
    whole on every render. */
 let cardPool=new Map();
+function dropCardPool(){ cardPool=new Map(); }
 /* Everything a PICK changes, and nothing else - the rest lives in the signature and forces a
    rebuild instead. It writes the bytes cardBodyHtml writes, which verifyPool checks. */
 function patchCard(el,it){
@@ -167,6 +168,7 @@ function verifyPool(items){
 }
 
 export {
+  dropCardPool,
   settleFreshCards,
   cancelLangChunks,
   rebuildCardsInPlace,

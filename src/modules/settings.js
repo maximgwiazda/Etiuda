@@ -2,11 +2,11 @@ import { colMode, colFloor, remPx, COL_FLOOR_MIN, COL_FLOOR_MAX, COL_FLOOR_STEP 
 import { accHtml, accOpen, dismissModal, modalResize, openDialog, wireAcc } from "./dialog.js";
 import { loadShortcuts } from "./shortcuts.js";
 import { scStopCapture, wireShortcutsList } from "./shortcuts-list.js";
-import { lsGet, lsSet, lsDel, nsSet, nsDel } from "./storage.js";
+import { lsGet, lsSet, lsDel, nsGet, nsSet, nsDel, nsKey } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { UI_LANGS, uiLang, askSure, t, toast, fileStamp } from "./ui-lang.js";
+import { UI_LANGS, uiLang, offerUndo, t, toast, fileStamp } from "./ui-lang.js";
 import { setUiLang } from "./repaint.js";
-import { applyDefaultRailWidth, railLocked, rebuildRailMQ, syncRailLayout, toggleRailLock } from "./rail-panel.js";
+import { applyDefaultRailWidth, applyStoredRailWidth, railLocked, rebuildRailMQ, syncRailLayout, toggleRailLock } from "./rail-panel.js";
 import { esc } from "./esc.js";
 import { modalCard, $ } from "./dom.js";
 import { themeChoice, applyTheme } from "./theme.js";
@@ -14,9 +14,9 @@ import { syncStill } from "./motion.js";
 import { render } from "./render.js";
 import { closeNotePane } from "./note-pane.js";
 import { applyUiLang } from "./repaint.js";
-import { pillsLocked, togglePillsLock } from "./pills-box.js";
-import { expandAllGroups } from "./collapse.js";
-import { applyDefaultFactsSize } from "./facts.js";
+import { pillsLocked, togglePillsLock, syncLayoutPrefs } from "./pills-box.js";
+import { rereadCollapsed } from "./collapse.js";
+import { applyStoredFactsSize } from "./facts.js";
 import { agentName, setAgentName } from "./agent.js";
 
 /* THE SETTINGS SCREEN. One test decides what belongs: would you set it once and
@@ -240,36 +240,42 @@ function syncColFloorRow(){
   if(row) row.classList.toggle("set-row-off",!auto);
 }
 
-/* EVERY SETTING, and nothing that is not one: preferences are a handful of cheap
-   keys; a card edit, a favourite, a hidden entry or a hand-sorted order is WORK, and
-   none of it is touched here - the distinction that lets this be one button. The confirm
-   says so out loud, because a reset beside Close is what a person clicks meaning to
-   dismiss. Shortcut keys are cleared inline: a reset of its own would ask a second question,
-   and two confirms for one decision teaches clicking through both. */
+/* EVERY SETTING, and nothing that is not one: a card edit, a favourite, a hidden entry or a
+   hand-sorted order is WORK and none of it is touched here, which is what lets this be one button
+   that acts at once with an Undo. A panel's size and a folded group are settings; a name typed into
+   a field and the language a tab is worked in are not. Every key this clears is named HERE, where
+   both a reader and tests/storage-keys.js look for the list. */
 function resetAllSettings(){
-  askSure("Put every setting back to its default? Your cards, edits, favourites and order are not touched.", "Reset defaults", ()=>{
-  /* A panel's size and a folded group are settings of the theme's kind. A name typed into a
-     field, and the language a tab is being worked in, are not, and stay. Every key this
-     clears is named HERE, where both a reader and tests/storage-keys.js look for the list;
-     the three calls below only put back the live state each one holds. */
+  const was={};
   ["eTheme","eGlassOff","eMotionOff","eUiLang","ePillsLock","eRailLock","ePills","eRail",
    "eShortcuts","eHdrPills","eNoteHover","eRailW","eFactsW","eFactsH","eCollapsed"]
-    .forEach(k=>{ try{ lsDel(k); }catch(e){} });
-  try{ applyDefaultRailWidth(); }catch(e){}
-  try{ applyDefaultFactsSize(); }catch(e){}
-  try{ expandAllGroups(); }catch(e){}
-  document.body.classList.add("note-hover");
-  try{ nsDel("Cols"); nsDel("Floor"); }catch(e){}
-  document.body.classList.remove("glass-off");
+    .forEach(k=>{ was[k]=lsGet(k); try{ lsDel(k); }catch(e){} });
+  was[nsKey("Cols")]=nsGet("Cols"); was[nsKey("Floor")]=nsGet("Floor");
+  nsDel("Cols"); nsDel("Floor");
+  applyPrefs();
+  paintSettings();
+  offerUndo("Settings reset", ()=>{
+    Object.keys(was).forEach(k=>{ const v=was[k]; if(v==null) lsDel(k); else lsSet(k,v); });
+    applyPrefs();
+    if(document.getElementById("setBody")) paintSettings();
+  });
+}
+/* EVERY PREFERENCE PUT ON SCREEN FROM WHAT IS STORED, whatever changed the keys: Reset, its Undo,
+   and a desk started again in place. */
+function applyPrefs(){
+  try{ applyDefaultRailWidth(); applyStoredRailWidth(); }catch(e){}
+  try{ applyStoredFactsSize(); }catch(e){}
+  try{ rereadCollapsed(); }catch(e){}
+  document.body.classList.toggle("note-hover", lsGet("eNoteHover")!=="0");
+  document.body.classList.toggle("glass-off", lsGet("eGlassOff")==="1");
+  syncStill();
   try{ loadShortcuts(); }catch(e){}
   try{ applyTheme(); }catch(e){}
   try{ applyUiLang(); }catch(e){}
+  try{ syncLayoutPrefs(); }catch(e){}
   try{ syncRailLayout(); }catch(e){}
   try{ drawPills(); }catch(e){}
   try{ render(); }catch(e){}
-  paintSettings();
-  toast("Settings reset");
-  }, false);
 }
 function openSettings(section){
   scStopCapture();
@@ -298,5 +304,6 @@ function openSettings(section){
 }
 
 export {
-  openSettings
+  openSettings,
+  applyPrefs
 };

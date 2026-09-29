@@ -2,7 +2,8 @@ import { splitPartsRaw } from "./card-model.js";
 import { cardFieldKey } from "./card-fields.js";
 import { cardOrderTouched, cardOrderIsBase, cardOrderIdx } from "./card-order.js";
 import { ALWAYS_CATS } from "./cat-roles.js";
-import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, E_CATALOG_NAME, E_CATALOG_VERSION, parseCatalogFile } from "./catalog.js";
+import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, E_CATALOG_NAME, parseCatalogFile } from "./catalog.js";
+import { catalogLoaded } from "./catalog-boot.js";
 import { catalogToV2 } from "./catalog-v2.js";
 import { CATS, intentArr, intentFieldKey, intentCount, catalogLangs, CONTENT_LANGS } from "./content-model.js";
 import { eHost, eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile } from "./host.js";
@@ -10,11 +11,13 @@ import { CAT_LABELS_PL, CAT_LABELS_BY_LANG } from "./icons.js";
 import { fill } from "./intent-text.js";
 import { cardToExportPlain } from "./macros-json.js";
 import { FACTS, normWhoList } from "./stock.js";
-import { eWipeLatch, mgReopenAfterReload, ssDel, nsGet, nsSet, nsDel } from "./storage.js";
-import { reloadCovered } from "./motion.js";
+import { ssDel, nsGet, nsSet, nsDel, LAYER_KEYS, layerNsOf, eLayer, lyGet, lySet, lyDel } from "./storage.js";
+import { cutLeaves, dismissNode } from "./motion.js";
+import { esc } from "./esc.js";
+import { newCatalogId } from "./ids.js";
 import { TAB_KEY, tabSaveTimer } from "./tabs.js";
 import { t, catalogCountsLine, toast, toastRefusal } from "./ui-lang.js";
-import { BASE_CATS, catalogCardId, pack, whoOptions, savePack } from "./pack.js";
+import { BASE_CATS, pack, whoOptions, savePack, flushStats } from "./pack.js";
 import { catIconKey, catSlot } from "./cat-identity.js";
 import { normalizeCardIntents } from "./card-intent.js";
 import { intentIdAt, intentIdxFromId } from "./intent-id.js";
@@ -48,7 +51,7 @@ function intentsExport(keep){
   }));
   return out;
 }
-function currentCatalog(nameOverride,edition){
+function currentCatalog(nameOverride){
   rebuildCards();
   const cats={}, catsPl={}, catsOther={};
   /* Every declared language past the primary and past Polish, carried out exactly as it came
@@ -135,21 +138,12 @@ function currentCatalog(nameOverride,edition){
        the next desk as the built-in paragraph. */
     facts:(pack.facts!=null)?pack.facts:FACTS
   };
-  /* THE EDITION IS THE EXPORT'S OWN, the next one proposeEdition gives: exporting is how a desk
-     without Studio publishes, so what leaves is the next edition of the catalog rather than a
-     second copy of the one that arrived. `rev` moves with it, because a desk watching the folder reads
-     rev to tell an update from a stranger. No edition means a BUILD, which bakes what is loaded
-     and publishes nothing: both fields then round-trip unchanged. */
-  const chosen=String(edition||"");
-  if(chosen) out.version=chosen;
-  else if(E_CATALOG_VERSION!=null) out.version=E_CATALOG_VERSION;
-  /* The namespace key and the edition counter, from the applied catalog because nothing in the
-     live arrays knows either. Losing the id renames every personal layer the next load looks for,
-     and it is also what tells an export that this catalog has an origin and is not ours. */
+  /* EXPORT MAKES A NEW CATALOG, whatever is loaded: a new id, and the first of its own editions,
+     dated today. Keeping the loaded catalog's id would make two catalogs claim one identity. */
+  out.id=newCatalogId();
+  out.rev=1;
+  out.version=todayEdition();
   const origin=storedCatalog();
-  if(origin&&origin.id!=null) out.id=String(origin.id);
-  if(chosen) out.rev=(+(origin&&origin.rev)||0)+1;
-  else if(origin&&origin.rev!=null) out.rev=+origin.rev;
   /* The languages and the two tables that follow them, from the origin for the same reason as
      the id: the live arrays hold content, not the declaration. Taken from the file rather than
      from the modules honouring it, because those hold the tables in the shape they use them in
@@ -232,24 +226,24 @@ function downloadCatalogFile(name, text){
   setTimeout(()=>URL.revokeObjectURL(a.href),2000);
   return name;
 }
-/* NOTHING STANDS BETWEEN THE BUTTON AND THE SAVE DIALOG: the file's name names the catalog, and
-   the edition is the next one proposeEdition gives. What is written is the .ec document itself,
-   the shape every reader parses as it stands. */
+/* NOTHING STANDS BETWEEN THE BUTTON AND THE SAVE DIALOG: the file's name names the new catalog. What
+   is written is the .ec document itself, the shape every reader parses as it stands. Resolves to the
+   saved file's name, or null where nothing was saved. */
 function exportCatalog(){
-  if(!(cards||[]).length){ toast("Export is ready once the catalog holds a card."); return; }
-  const edition=proposeEdition(E_CATALOG_VERSION);
+  if(!(cards||[]).length){ toast("Export is ready once the catalog holds a card."); return Promise.resolve(null); }
   let c=null;
   const build=file=>{
-    c=currentCatalog(catalogNameOfFile(file),edition);
+    c=currentCatalog(catalogNameOfFile(file));
     return JSON.stringify(catalogToV2(c),null,1)+"\n";
   };
-  saveCatalogFile(catalogFileStem(E_CATALOG_NAME)+".ec", build).then(saved=>{
-    if(!saved || !c) return;                         // cancelled in the Save dialog
+  return saveCatalogFile(catalogFileStem(E_CATALOG_NAME)+".ec", build).then(saved=>{
+    if(!saved || !c) return null;                    // cancelled in the Save dialog
+    if(!catalogLoaded()) lySet("Exported",looseMark());
     toast(catalogCountsLine("Exported {FILE} with {MACROS} in {CARDS}",
       c.cards.length, catalogMacroCount(c), 0, 0).replace("{FILE}",saved));
+    return saved;
   });
 }
-/** Make a catalog the active one. Reloads, because BASE_N is fixed at boot and cannot grow. */
 /* The same catalog moving forward is not a different catalog arriving. The file's own id
    decides when both sides carry one; the name is the fallback when either does not. */
 function isCatalogUpdate(incoming,active){
@@ -278,60 +272,79 @@ function catalogEditionOlder(incoming,active){
   if(a.n!==b.n) return a.n<b.n;
   return a.s<b.s;
 }
-function nextEditionLetters(s){
-  const a=String(s||"").split("");
-  for(let i=a.length-1;i>=0;i--){
-    if(a[i]!=="z"){ a[i]=String.fromCharCode(a[i].charCodeAt(0)+1); return a.join(""); }
-    a[i]="a";
-  }
-  return "a"+a.join("");
-}
-/* WHAT THE EXPORT DIALOG PROPOSES: today, in the one form that can be ordered, and the loaded
-   edition's next letter where that edition already claims today. A stamp dated AHEAD of today
-   takes its own next letter too, so an export is never proposed older than the catalog it came
-   from. Anything else, including an edition in no form at all, simply proposes today. */
-function proposeEdition(current){
+/* A new catalog's first edition: today, in the one form that can be ordered. */
+function todayEdition(){
   const d=new Date(), p=v=>String(v).padStart(2,"0");
-  const today=d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate());
-  const was=editionParts(current);
-  return (was && was.date>=today) ? was.date+nextEditionLetters(was.s) : today;
+  return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate());
 }
-/* keepPersonal carries the personal layer across, and every route passes it, Import, another
-   catalog and the sample included: loading a catalog erases nothing a person made. */
+/* WHAT AN EXPORT OF THE LOOSE LAYER CARRIED, so a later load can tell loose content saved as a
+   catalog from content that exists nowhere else. The fields are the ones sampleUntouched reads. */
+const LOOSE_FIELDS=["overrides","custom","removed","removedCats","intentRemoved","catLabels","catLabelsPl",
+  "customCats","catRoles","catIcons","catColors","intentOverrides","intentCustom","facts","who","cardOrder"];
+function looseMark(){
+  const o={};
+  LOOSE_FIELDS.forEach(k=>{ o[k]=(pack||{})[k]; });
+  const s=JSON.stringify(o);
+  let h=5381;
+  for(let i=0;i<s.length;i++) h=(((h<<5)+h)^s.charCodeAt(i))>>>0;
+  return s.length+"|"+h.toString(36);
+}
+function looseUnexported(){
+  return !catalogLoaded() && catalogEdited() && lyGet("Exported")!==looseMark();
+}
+/* LOADING A CATALOG ERASES THE EMPTY DESK'S OWN CONTENT, so content never exported is offered its
+   own catalog first: Export saves it and then loads, Load anyway loads without it, Escape does
+   neither. */
+function askLoose(go){
+  const was=document.getElementById("eLoose");
+  if(was) was.remove();
+  const el=document.createElement("div");
+  el.className="bub bub-ask e-undo";
+  el.id="eLoose";
+  el.setAttribute("role","alertdialog");
+  el.setAttribute("data-side","none");
+  el.innerHTML='<p>'+esc(t("Loading a catalog erases the cards you made without one. Export them as a catalog of their own first?"))+'</p>'
+    +'<div class="tour-actions">'
+    +'<button type="button" class="btn" id="eLooseLoad">'+esc(t("Load anyway"))+'</button>'
+    +'<button type="button" class="btn primary" id="eLooseExport">'+esc(t("Export…"))+'</button></div>';
+  cutLeaves();
+  document.body.appendChild(el);
+  const close=()=>dismissNode(el);
+  el.querySelector("#eLooseLoad").onclick=()=>{ close(); go(); };
+  el.querySelector("#eLooseExport").onclick=()=>{ close(); exportCatalog().then(saved=>{ if(saved) go(); }); };
+  el.addEventListener("keydown",e=>{
+    if(e.key!=="Escape") return;
+    e.preventDefault(); e.stopPropagation(); close();
+  });
+  el.querySelector("#eLooseExport").focus();
+}
+/* Whatever the layer in view still owes its keys, written before another layer takes its place. */
+function flushLayer(){
+  try{ hooks.flushPillState(); }catch(e){}
+  flushStats();
+}
+/** Make a catalog the active one, and the desk starts again with it in place. The personal layer
+ *  in view goes with the catalog it orbits; a new edition of the same catalog carries it forward. */
 function activateCatalog(c,opts){
-  const keep=!!(opts&&opts.keepPersonal);
-  /* THE CATALOG LANDS BEFORE ANYTHING IS PRUNED FOR IT. The personal layers below are
-     filtered down to ids the INCOMING catalog knows, which for a different catalog is
-     nearly nothing - so doing that first and discovering afterwards that the catalog could
-     not be written left the old catalog standing over emptied stars, hides and order. */
+  if(looseUnexported()){ askLoose(()=>takeCatalog(c,opts)); return true; }
+  return takeCatalog(c,opts);
+}
+function takeCatalog(c,opts){
+  const same=catalogLoaded() && layerNsOf(c)===eLayer();
+  const loose=!catalogLoaded();
+  flushLayer();
+  /* THE CATALOG LANDS BEFORE ANYTHING IS PRUNED FOR IT: a catalog that could not be written must
+     leave the one loaded standing over its own stars, hides and order. */
   if(!storeCatalog(c)) return false;
-  if(!keep){
-    pack.overrides={};
-    pack.custom=[];
-    /* The ROLE list is the same kind of thing: an edit made against the previous catalog's
-       vocabulary. Left in place it silently shadowed the incoming catalog's own `who`, so
-       importing a catalog appeared to ignore its suggestions entirely. */
-    pack.who=null;
-    /* Addressed by INDEX, so against another catalog they mean whatever now sits at those
-       numbers - see the note at NS_DROP_POSITIONAL. The order is a list of indices too. */
-    pack.intentOverrides={};
-    pack.intentCustom=[];
-    pack.intentHidden=[];
-    pack.intentFavourites=[];
-    pack.intentRemoved=[];
-    nsDel("IntentOrder");
-  }
-  /* Derived, not read: m.id is absent on a catalog card, so reading it gave a set holding
-     one undefined and quietly emptied all three lists on every activation. */
-  let alive=new Set((c.cards||[]).map(catalogCardId));
-  if(keep) alive=carryCardLayer(c);
-  else (pack.custom||[]).forEach(m=>{ if(m&&m.id) alive.add(m.id); });
-  pack.baseCards=null;
-  pack.hidden=(pack.hidden||[]).filter(id=>alive.has(id));
-  pack.favourites=(pack.favourites||[]).filter(id=>alive.has(id));
-  pack.cardOrder=(pack.cardOrder||[]).filter(id=>alive.has(id));
-  cardOrderTouched();
-  savePack();
+  if(same){
+    const alive=carryCardLayer(c);
+    pack.baseCards=null;
+    pack.hidden=(pack.hidden||[]).filter(id=>alive.has(id));
+    pack.favourites=(pack.favourites||[]).filter(id=>alive.has(id));
+    pack.cardOrder=(pack.cardOrder||[]).filter(id=>alive.has(id));
+    cardOrderTouched();
+    savePack();
+  } else if(loose) LAYER_KEYS.forEach(n=>lyDel(n));
   nsDel("CatalogNo");
   /* Set here, because EVERY route to a catalog passes
      through this function - an import, a Library row, accepting the sibling file. Loading
@@ -356,16 +369,10 @@ function activateCatalog(c,opts){
   }catch(e){}
   /* A CATALOG ARRIVES ON A CLEAN DESK. Selected intents are stored by INDEX, so an index
      points at whatever intent now sits there: all per-tab state goes, updates included.
-     What the agent owns is not per-tab and is untouched.
-     DELETING IS NOT ENOUGH: reload fires beforeunload, which saves the session back over the
-     delete. The latch stops it - ssSet honours eWiping, ssDel does not - so it goes up AFTER
-     the catalog is written, and nothing may persist between here and the reload. */
-  /* A LIBRARY STANDING OPEN COMES BACK OPEN. Import and the list's own Load both end here, and
-     both are acts inside that dialog rather than reasons to shut it. Before the latch on the
-     line below, which is what stops every write from here to the reload. */
-  mgReopenAfterReload();
-  try{ clearTimeout(tabSaveTimer); ssDel(TAB_KEY); eWipeLatch(); }catch(e){}
-  reloadCovered();
+     What the agent owns is not per-tab and is untouched. */
+  clearTimeout(tabSaveTimer);
+  ssDel(TAB_KEY);
+  hooks.restartDesk();
   return true;
 }
 /** True while the sample is still, word for word, the one that shipped. The test is
@@ -418,7 +425,7 @@ function catalogFromFileText(text,fileName){
 function importCatalogText(text,fileName){
   const c=catalogFromFileText(String(text||""),fileName);
   if(!c) return false;
-  hooks.offerPickedCatalog(c,fileName,()=>{ eWatchClear().then(()=>activateCatalog(c,{keepPersonal:true, from:fileName})); });
+  hooks.offerPickedCatalog(c,fileName,()=>{ eWatchClear().then(()=>activateCatalog(c,{from:fileName})); });
   return true;
 }
 /* The host's dialog, and the file comes back already read: the engine calls no OS API. No watch
@@ -504,7 +511,7 @@ function importCatalogPicked(){
         nsSet("WatchName",f.name);
         nsSet("WatchSeen",String(f.lastModified||0));
         nsDel("WatchNo");
-        eWatchPut(handle).then(()=>activateCatalog(c,{keepPersonal:true, from:f.name}));
+        eWatchPut(handle).then(()=>activateCatalog(c,{from:f.name}));
       });
       return null;
     });
@@ -523,7 +530,7 @@ export {
   exportCatalog,
   isCatalogUpdate,
   catalogEditionOlder,
-  proposeEdition,
+  todayEdition,
   activateCatalog,
   catalogEdited,
   sampleUntouched,

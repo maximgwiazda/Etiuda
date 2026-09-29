@@ -7,7 +7,7 @@ import { afterPaint } from "./motion.js";
 import { ICON_PLUS } from "./icons.js";
 import { intentNavName } from "./intent-text.js";
 import { langTabs, langPane, langFieldId, markMissing, edReportMissing, langFocus } from "./lang-tabs.js";
-import { nsSet } from "./storage.js";
+import { lySet } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { t, counted, toast, tc } from "./ui-lang.js";
 import { BASE_CATS, pack, savePack, ePackEpoch } from "./pack.js";
@@ -607,7 +607,7 @@ function ensureCustomCat(name){
   savePack();
   applyCatsToGlobal();
   if(catOrder.indexOf(key)<0) catOrder.push(key);
-  nsSet("CatOrder",JSON.stringify(catOrder));
+  lySet("CatOrder",JSON.stringify(catOrder));
   return key;
 }
 

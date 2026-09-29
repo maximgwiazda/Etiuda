@@ -2,11 +2,19 @@ import { refreshCatRoles } from "./cat-roles.js";
 import { CATS } from "./content-model.js";
 import { CAT_LABELS_PL } from "./icons.js";
 import { BASE_CATS, pack, savePack, packSnapshot, packUndoFor } from "./pack.js";
-import { nsSet } from "./storage.js";
+import { lyGet, lySet } from "./storage.js";
 import { uiLang, toast, offerUndo } from "./ui-lang.js";
 import { cardCounts, setCatOrder, catOrder, setCats, cats } from "./app-state.js";
 import { hooks } from "./hooks.js";
 
+/* The pills' stored order, read at every start: the retired Boarding pass key becomes Check-in's,
+   and a key naming no category is dropped. */
+function loadCatOrder(){
+  try{ setCatOrder(JSON.parse(lyGet("CatOrder")||"null")||[]); }catch(e){ setCatOrder([]); }
+  setCatOrder(catOrder.map(k=>k==="bp"?"cin":k).filter((k,i,a)=>a.indexOf(k)===i));
+  applyCatsToGlobal();
+  setCatOrder(catOrder.filter(k=>CATS[k]));
+}
 function applyCatsToGlobal(){
   // Removed categories are skipped rather than deleted from BASE_CATS, so Reset brings the
   // catalog's own back. Custom ones are gone from pack.customCats outright - nothing to restore.
@@ -53,7 +61,7 @@ function removeCategory(k){
   if(pack.catColors) delete pack.catColors[k];
   setCatOrder(catOrder.filter(x=>x!==k));
   setCats(cats.filter(x=>x!==k));
-  nsSet("CatOrder",JSON.stringify(catOrder));
+  lySet("CatOrder",JSON.stringify(catOrder));
   savePack(); hooks.rebuildCards();
   const back=packUndoFor(was), at=wasOrder.indexOf(k);
   offerUndo("Category deleted", ()=>{
@@ -61,7 +69,7 @@ function removeCategory(k){
     const order=catOrder.slice();
     if(at>-1 && order.indexOf(k)<0) order.splice(Math.min(at,order.length),0,k);
     setCatOrder(order);
-    nsSet("CatOrder",JSON.stringify(catOrder));
+    lySet("CatOrder",JSON.stringify(catOrder));
     hooks.rebuildCards(); applyCatsToGlobal(); hooks.drawPillsCore(); hooks.render(); hooks.drawIntentRail();
     // The Library shows the category again where it stands open.
     if(document.getElementById("mgCatList")) hooks.openManage();
@@ -70,6 +78,7 @@ function removeCategory(k){
 }
 
 export {
+  loadCatOrder,
   applyCatsToGlobal,
   removeCategory
 };

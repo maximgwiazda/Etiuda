@@ -1,10 +1,10 @@
 import { eApplyRoles } from "./cat-roles.js";
-import { intentStoreKeys, intentFieldKey, intentCount, catalogLangs, setContentLangs, setCommentLang, setIntentIds, CATS, SW_STORE } from "./content-model.js";
+import { intentStoreKeys, intentFieldKey, intentCount, catalogLangs, setContentLangs, setCommentLang, setIntentIds, resetContent, CATS, SW_STORE } from "./content-model.js";
 import { CAT_ICONS, setCatalogCatLooks, setCatalogCatLabels } from "./icons.js";
 import { parseMacrosData } from "./macros-json.js";
-import { M, FACTS, normWhoList, setCatalogFacts, setCatalogWho } from "./stock.js";
+import { M, normWhoList, setCatalogFacts, setCatalogWho, resetStock } from "./stock.js";
 import { lsGet, lsSet, nsKey, nsGet, nsDel, E_LS_OK, eDeskFileShown } from "./storage.js";
-import { BASE_CATS, pack } from "./pack.js";
+import { BASE_CATS } from "./pack.js";
 import { hueIsOffered } from "./cat-identity.js";
 import { catalogFromV2, isV2, v2CatKey } from "./catalog-v2.js";
 import { setCatalogGreet } from "./greeting.js";
@@ -288,7 +288,6 @@ function normaliseCatalog(data){
     cat.intents={};
     intentStoreKeys().forEach(key=>{ cat.intents[key]=(SW_STORE[key]||[]).slice(); });
   }
-  if(!cat.facts) cat.facts=(pack.facts!=null&&pack.facts!=="")?pack.facts:FACTS;
   return cat;
 }
 /* Full-content hash, not a count fingerprint: rewording a card must change the
@@ -421,6 +420,20 @@ function eApplyCatalog(c){
   return true;
 }
 let E_CATALOG_NAME="", E_CATALOG_VERSION=null;
+/* THE EMPTY DESK, which every restart applies before its catalog: a catalog that leaves a field
+   out then leaves the default, never the field of the catalog before it. */
+function eResetCatalog(){
+  resetContent();
+  Object.keys(BASE_CATS).forEach(k=>{ delete BASE_CATS[k]; });
+  Object.assign(BASE_CATS,CATS);
+  setCatalogCatLabels({});
+  setCatalogCatLooks({},{});
+  setCatalogGreet(null);
+  setCatalogStop(null);
+  eApplyRoles(null);
+  resetStock();
+  E_CATALOG_NAME=""; E_CATALOG_VERSION=null;
+}
 
 export {
   eCatalog,
@@ -443,6 +456,7 @@ export {
   catalogStamp,
   eCatalogAccepted,
   eApplyCatalog,
+  eResetCatalog,
   E_CATALOG_KEY,
   E_CATALOG_STORE,
   E_CATALOG_NAME,

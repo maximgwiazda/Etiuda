@@ -2138,13 +2138,13 @@ const t0 = Date.now();
       if (window.__pbSaved.length <= n)
         return { saved: 0, bytes: 0, cards: -1, factsType: "none", factsLen: -1, builtIn: false };
       const text = await window.__pbSaved[window.__pbSaved.length - 1].text();
-      let facts = null, cards = -1, date = null, rev = null, name = null, kind = null, format = null;
+      let facts = null, cards = -1, date = null, rev = null, name = null, kind = null, format = null, id = null;
       /* The whole text parses as JSON: an .ec is the document itself, with no wrapper round it. */
       try { const o = JSON.parse(text);
-            facts = o.facts; cards = (o.cards || []).length; name = o.name; kind = o.kind; format = o.format;
+            facts = o.facts; cards = (o.cards || []).length; name = o.name; kind = o.kind; format = o.format; id = o.id;
             date = o.date == null ? null : String(o.date); rev = o.rev == null ? null : +o.rev;
       } catch (err) { facts = null; cards = -2; }
-      return { saved: window.__pbSaved.length - n, bytes: text.length, cards, date, rev, name, kind, format,
+      return { saved: window.__pbSaved.length - n, bytes: text.length, cards, date, rev, name, kind, format, id,
                factsType: typeof facts, factsLen: typeof facts === "string" ? facts.length : -1,
                builtIn: typeof FACTS === "string" && facts === FACTS,
                offered: window.__pbOffered[window.__pbOffered.length - 1] || null,
@@ -2154,9 +2154,8 @@ const t0 = Date.now();
     await p.keyboard.press("Escape"); await sleep(400);
     return Object.assign({ btn, asked }, out);
   };
-  /* What the edition must be, read before the export from the engine's own rule against the
-     catalog this page has loaded. */
-  const proposed = await p.evaluate(() => proposeEdition((storedCatalog() || {}).version));
+  // What the edition must be: a new catalog's first, from the engine's own rule.
+  const proposed = await p.evaluate(() => todayEdition());
   await p.evaluate(() => { window.__pbFactsKeep = pack.facts; pack.facts = ""; });
   const blankFile = await saveCatalog();
   await p.evaluate(() => { pack.facts = null; });
@@ -2179,11 +2178,10 @@ const t0 = Date.now();
     "and an unwritten one exports the built-in (" + unsetFile.factsLen + " chars, equal to FACTS: "
     + unsetFile.builtIn + ")");
 
-  /* BOARD 406. Exporting is how a desk without Studio publishes, so the file that leaves carries
-     a new edition and the next counter rather than a second copy of what arrived. Read against
-     the catalog THIS page has loaded, so the arithmetic is checked rather than a constant. */
+  /* EXPORT MAKES A NEW CATALOG (Maxim, 2026-09-28 23:00): a new random id every time, the first of
+     its own editions dated today, never the loaded catalog's id or its next counter. */
   const was = await p.evaluate(() => { const c = storedCatalog() || {};
-    return { date: c.version == null ? null : String(c.version), rev: c.rev == null ? null : +c.rev }; });
+    return { date: c.version == null ? null : String(c.version), rev: c.rev == null ? null : +c.rev, id: c.id || null }; });
   const today = (() => { const d = new Date(), q = v => String(v).padStart(2, "0");
     return d.getFullYear() + "-" + q(d.getMonth() + 1) + "-" + q(d.getDate()); })();
   check(/^[0-9]{4}-[0-9]{2}-[0-9]{2}[a-z]*$/.test(proposed || "")
@@ -2192,10 +2190,12 @@ const t0 = Date.now();
     + JSON.stringify(blankFile.date) + ", the engine's own proposal " + JSON.stringify(proposed)
     + ", against this process's today " + JSON.stringify(today)
     + " and the loaded catalog's " + JSON.stringify(was.date));
-  check(was.rev !== null && blankFile.rev === was.rev + 1 && unsetFile.rev === was.rev + 1,
-    "and the edition counter moves with it, so a desk watching the folder reads an update rather"
-    + " than a stranger: loaded rev " + was.rev + ", exported " + blankFile.rev
-    + " (and " + unsetFile.rev + " on the second export, each being one past what is loaded)");
+  check(blankFile.rev === 1 && unsetFile.rev === 1 && /^[a-z0-9][a-z0-9-]{2,63}$/.test(blankFile.id || "")
+        && /^[a-z0-9][a-z0-9-]{2,63}$/.test(unsetFile.id || "") && blankFile.id !== was.id && unsetFile.id !== was.id
+        && blankFile.id !== unsetFile.id,
+    "and each export is a new catalog: its own random id of the format's shape, never the loaded one's, and its first"
+    + " edition, rev 1 (loaded id kept out: " + (blankFile.id !== was.id) + ", the two exports differ: "
+    + (blankFile.id !== unsetFile.id) + ", revs " + blankFile.rev + " and " + unsetFile.rev + ")");
   clean(e, "the catalog export");
 
   const tip = await p.evaluate(k => {
@@ -2301,13 +2301,12 @@ const t0 = Date.now();
     "and off the desk (" + r0.n + " cards to " + r1.n + ")");
   clean(e, "the star, the hide and the removal");
 
-  /* NO NATIVE BOX IS RAISED (Maxim, 2026-09-26): an act that can be undone happens at once and a
-     bubble offers Undo, and one that cannot stops at Etiuda's own question until it is answered.
-     window.confirm is counted rather than answered, so a native box anywhere on the way reads as a
-     number. The card is deleted from its editor, as a person deletes one, and Undo puts back the
-     same card; a card left with its title changed but unsaved is gone from at once, and Undo
-     reopens it with the typing in place; Clear local memory stands at its question, and Cancel
-     leaves this page as it was, the marker on it proving nothing reloaded. */
+  /* NO NATIVE BOX IS RAISED (Maxim, 2026-09-26) AND NO WINDOW ASKS (2026-09-28 20:06): an act
+     happens at once and a bubble offers Undo. window.confirm is counted rather than answered, so a
+     native box anywhere on the way reads as a number. The card is deleted from its editor, as a
+     person deletes one, and Undo puts back the same card; a card left with its title changed but
+     unsaved is gone from at once, and Undo reopens it with the typing in place; Clear local memory
+     clears at once, keeping the catalog, and its Undo gives back the name and the cards. */
   e = since();
   const undoLeg = await p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -2329,27 +2328,33 @@ const t0 = Date.now();
     const again = document.querySelector('#modalCard input[id^="me"]');
     const retyped = !!again && again.value === typed;
     closeModal(); await wait(400);
-    window.__sureMark = 1;
-    clearLocalMemory(); await wait(400);
-    const stood = !!document.getElementById("eSure") && !!document.getElementById("eSureYes");
-    const no = document.getElementById("eSureNo"); if (no) no.click(); await wait(400);
-    const after = { gone: !document.getElementById("eSure"), mark: window.__sureMark === 1 };
+    const had = { agent: lsGet("eAgent"), cards: list().length };
+    /* A window or question standing, by what can put one up: a window not hidden, a bubble that
+       asks, an alert; the Undo bubble is the act's receipt and a leaving copy is on its way out. */
+    const standing = () => [...document.querySelectorAll(".modal:not([hidden]), .bub-ask, [role=alertdialog]")].filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
+    const was = standing();
+    clearLocalMemory(); await wait(700);
+    const cleared = { window: standing() !== was, standing: standing(),
+      undo: !!document.getElementById("eUndoBtn"), agent: lsGet("eAgent"), cards: list().length };
+    const u3 = document.getElementById("eUndoBtn"); if (u3) u3.click(); await wait(900);
+    const after = { agent: lsGet("eAgent") === had.agent, cards: list().length === had.cards };
     window.confirm = real;
-    return { asked, n0, n1, n2, bubble, back, moved, retyped, stood, after };
+    return { asked, n0, n1, n2, bubble, back, moved, retyped, cleared, after };
   });
   check(undoLeg.asked === 0 && undoLeg.n1 === undoLeg.n0 - 1 && undoLeg.bubble && undoLeg.n2 === undoLeg.n0 && undoLeg.back
         && undoLeg.moved && undoLeg.retyped,
     "a card deleted from its editor goes at once with no box and Undo brings the same one back, and an entry left"
     + " unsaved is left at once and Undo returns to it with the typing in place: " + JSON.stringify(undoLeg));
-  check(undoLeg.asked === 0 && undoLeg.stood && undoLeg.after.gone && undoLeg.after.mark,
-    "and Clear local memory stops at Etiuda's own question, which Cancel answers with nothing done: "
-    + JSON.stringify({ asked: undoLeg.asked, stood: undoLeg.stood, after: undoLeg.after }));
+  check(undoLeg.asked === 0 && !undoLeg.cleared.window && undoLeg.cleared.undo && undoLeg.cleared.agent === null
+        && undoLeg.cleared.cards > 0 && undoLeg.after.agent && undoLeg.after.cards,
+    "and Clear local memory happens at once with no window, keeps the catalog, and its Undo gives back what it cleared: "
+    + JSON.stringify({ asked: undoLeg.asked, cleared: undoLeg.cleared, after: undoLeg.after }));
   /* UNDO PUTS BACK THE ACT, NOT THE DESK AS IT STOOD (data-1): a star given while the Undo bubble
      is still up survives the Undo of the deletion before it. Read off the stored pack, and the
      star taken off again afterwards so the desk is left as found. */
   const undoAct = await p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
-    const read = () => JSON.parse(lsGet(nsKey("Pack")) || "{}");
+    const read = () => JSON.parse(lyGet("Pack") || "{}");
     const ids = [...document.querySelectorAll("#list .card[data-id]")].map(c => c.getAttribute("data-id"));
     const gone = ids[4], star = ids.find((x, i) => i > 4 && (read().favourites || []).indexOf(x) < 0);
     if (!gone || !star) return { ready: false };
@@ -2891,10 +2896,12 @@ const t0 = Date.now();
   const SAMPLE_EC = path.join(E.ROOT, E.TREE_FILE.sampleEc);
   const loadSample = async q => {
     await q.evaluate(() => { window.showOpenFilePicker = undefined; });
-    const nav = q.waitForNavigation({ waitUntil: "load", timeout: 30000 }).then(() => true, () => false);
+    const nav = q.waitForNavigation({ waitUntil: "load", timeout: 4000 }).then(() => true, () => false);
     const [chooser] = await Promise.all([q.waitForFileChooser({ timeout: 10000 }), q.click("#emptyLoad")]);
     await chooser.accept([SAMPLE_EC]);
-    return nav;
+    const moved = await nav;
+    await q.waitForFunction(() => document.querySelectorAll("#list .card[data-id]").length > 0, { timeout: 20000 }).catch(() => {});
+    return !moved;
   };
 
   /* The public first run: a folder holding only the engine and the sample, as the README has a
@@ -3013,52 +3020,37 @@ const t0 = Date.now();
       return { at: sessionStorage.getItem("eTourAt"), nextHeld: !!next && !next.hidden && next.disabled,
                rings: !!b && ring.left <= b.left && ring.right >= b.right && ring.top <= b.top && ring.bottom >= b.bottom };
     });
-    /* quiet-13: the reload a load ends in is covered. Boot's end is timed from inside the next
-       document (a wrapper round E_BOOT_OK, which the boot guard defines and the app calls last),
-       and so is the class the document arrived under. */
-    await q.evaluateOnNewDocument(() => {
-      let f;
-      Object.defineProperty(window, "E_BOOT_OK", { configurable: true, set(v) { f = v; },
-        get() { return function () { window.__bootAt = performance.now(); window.__bootClass = document.documentElement.className;
-          return f && f.apply(this, arguments); }; } });
-    });
-    step("loading the sample through Load and waiting for the reload");
-    const reloaded = await loadSample(q);
+    step("loading the sample through Load, in place");
+    const inPlace = await loadSample(q);
     const resumed = await q.evaluate(async () => {
       const wait = ms => new Promise(r => setTimeout(r, ms));
       for (let i = 0; i < 40 && document.getElementById("tourRoot").hidden; i++) await wait(100);
       return { up: !document.getElementById("tourRoot").hidden, at: sessionStorage.getItem("eTourAt") };
     });
     check(loadStep.at === "load" && loadStep.nextHeld && loadStep.rings && resumed.up && resumed.at === "pax",
-      "on the empty desk the tour's second step rings the Load button and waits with its Next greyed out, and the reload"
-      + " a load ends in brings the tour back at the step after it: " + JSON.stringify({ loadStep, resumed }));
-    check(reloaded, "accepting the sample reloads the document, which is how a catalog arrives on a clean desk");
-    const cover = await q.evaluate(async () => {
-      await new Promise(r => setTimeout(r, 900));
-      const paint = performance.getEntriesByType("paint").find(x => x.name === "first-paint");
-      return { bootAt: Math.round(window.__bootAt || -1), firstPaint: paint ? Math.round(paint.startTime) : -1,
-               arrivedUnder: window.__bootClass || "", rest: document.documentElement.className };
-    });
-    check(/e-arriving/.test(cover.arrivedUnder) && cover.bootAt > 0 && cover.firstPaint >= cover.bootAt
-          && !/e-arriv|e-veiled|e-leaving/.test(cover.rest),
-      "quiet-13 the reload a load ends in is covered: the next document arrives marked, paints nothing before its boot"
-      + " is done, and is at rest afterwards (" + JSON.stringify(cover) + ")");
+      "on the empty desk the tour's second step rings the Load button and waits with its Next greyed out, and the load"
+      + " takes the tour on to the step after it: " + JSON.stringify({ loadStep, resumed }));
+    check(inPlace, "accepting the sample loads it in place, with no document loaded to do it");
+    const rest = await q.evaluate(() => document.documentElement.className);
+    check(!/e-arriv|e-veiled|e-leaving/.test(rest),
+      "quiet-13 a load in place arrives under no cover: nothing is marked as arriving or veiled (" + JSON.stringify(rest) + ")");
     /* pixels-3, in the dark theme: white words on a selected pill and on a primary button stand at
        4.5:1 or better (WCAG's luminance ratio from the computed colours). */
     step("white on the fill");
-    await q.evaluate(() => { document.documentElement.dataset.theme = "dark"; askSure("Invented question?", "Invented yes", () => {}, false); });
+    await q.evaluate(() => { document.documentElement.dataset.theme = "dark"; offerUndo("Invented act", () => {}); });
     await sleep(500);
     const onAccent = await q.evaluate(() => {
       const lum = c => { const m = c.match(/[0-9.]+/g).slice(0, 3).map(v => +v / 255).map(v => v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
         return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]; };
       const ratio = el => { if (!el) return 0; const cs = getComputedStyle(el), a = lum(cs.backgroundColor), b = lum(cs.color);
         return +((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)).toFixed(2); };
-      return { pill: ratio(document.querySelector("#pills .pill.on")), primary: ratio(document.getElementById("eSureYes")) };
+      return { pill: ratio(document.querySelector("#pills .pill.on")), primary: ratio(document.getElementById("eUndoBtn")) };
     });
-    await q.evaluate(() => { const n = document.getElementById("eSureNo"); if (n) n.click(); });
+    await q.evaluate(() => { const u = document.getElementById("eUndo");
+      if (u) u.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
     check(onAccent.pill >= 4.5 && onAccent.primary >= 4.5,
       "pixels-3 white on the selected pill and on a primary button reads at 4.5:1 or better in dark (" + JSON.stringify(onAccent) + ")");
-    step("waiting for the sample's cards after the reload");
+    step("waiting for the sample's cards");
     await q.waitForFunction(() => document.querySelectorAll(".card").length > 0, { timeout: 20000 }).catch(() => {});
     await sleep(1200);
     step("dismissing the tour");
@@ -3142,11 +3134,6 @@ const t0 = Date.now();
     await q.goto(huntUrl(dir), { waitUntil: "load", timeout: 90000 });
     return q;
   };
-  const clickReload = async (q, sel) => {
-    const nav = q.waitForNavigation({ waitUntil: "load", timeout: 30000 }).then(() => true, () => false);
-    await q.click(sel);
-    return nav;
-  };
   const upFor = (q, fn, ms) => q.waitForFunction(fn, { timeout: ms || 20000, polling: 100 }).then(() => true, () => false);
   try {
     /* first-light: THE FIRST RUN'S TOUR WAITS FOR THE LOGO TO FORM. Maxim, 2026-09-27 23:28: the logo forms
@@ -3167,9 +3154,9 @@ const t0 = Date.now();
         const now = performance.now();
         if (c.mark < 0 && document.querySelector("canvas.e-empty-mark")) {
           c.mark = now;
-          setTimeout(() => { try { askSure("Invented question?", "Invented yes", () => {}, false); c.held = performance.now(); }
+          setTimeout(() => { try { openSettings(); c.held = performance.now(); }
             catch (x) { c.err = String(x && x.message || x); } }, 300);
-          setTimeout(() => { const n = document.getElementById("eSureNo"); if (n) { n.click(); c.gone = performance.now(); } }, 700);
+          setTimeout(() => { try { closeModal(); c.gone = performance.now(); } catch (x) { c.err = String(x && x.message || x); } }, 700);
         }
         const r = document.getElementById("tourRoot");
         if (c.tour < 0 && r && !r.hidden) c.tour = now;
@@ -3253,7 +3240,8 @@ const t0 = Date.now();
 
     /* data-2: THE SAMPLE LOADED AGAIN KEEPS WHAT AN EJECT KEPT. The sample loaded, one card's title
        edited and saved, another starred, the catalog ejected, and the sample taken up again through
-       the empty desk's Load: the edit and the star are still in the stored pack. */
+       the empty desk's Load: the edit and the star stay in the sample's own layer while it is out,
+       out of view on the empty desk, and are back in view with it. */
     huntAt = "data-2";
     const q2 = await huntPage(hunt, true);
     await upFor(q2, () => !!document.getElementById("emptyLoad"));
@@ -3270,31 +3258,34 @@ const t0 = Date.now();
       toggleFavourite(ids[2]); await wait(300);
       return { edited: ids[0], starred: ids[2] };
     });
-    const layer = (q, m) => q.evaluate(m => { const k = JSON.parse(lsGet(nsKey("Pack")) || "{}");
-      return { edit: !!(k.overrides || {})[m.edited], star: (k.favourites || []).indexOf(m.starred) > -1 }; }, m);
+    const orbit = await q2.evaluate(() => eLayer());
+    const layer = (q, m) => q.evaluate((m, ns) => { const k = JSON.parse(lsGet(ns + "Pack") || "{}");
+      return { edit: !!(k.overrides || {})[m.edited], star: (k.favourites || []).indexOf(m.starred) > -1,
+               inView: !!document.querySelector('#list .card[data-id="' + CSS.escape(m.edited) + '"]') }; }, m, orbit);
     const before = await layer(q2, made);
-    /* Eject happens at once and the next boot offers Undo (Maxim, 2026-09-27 23:28): no confirm
-       stands after the call, the page restarts on its own, and the empty desk carries the Undo
-       bubble. A context lost to the restart inside the call is itself no confirm. The bubble is
+    /* Eject happens at once and in place with its Undo standing (Maxim, 2026-09-27 23:28 and
+       2026-09-28 23:41): no confirm, no reload, the empty desk under the Undo bubble. The bubble is
        then put away by its own Escape, not answered, so the Load below is the only way back. */
-    const ejNav = q2.waitForNavigation({ waitUntil: "load", timeout: 30000 }).then(() => true, () => false);
-    const ejAsked = await q2.evaluate(() => { ejectCatalog(); return !!document.getElementById("eSure"); }).catch(() => false);
+    const ejNav = q2.waitForNavigation({ waitUntil: "load", timeout: 4000 }).then(() => true, () => false);
+    // What stands is read as the Clear local memory leg reads it.
+    const ejAsked = await q2.evaluate(() => { const standing = () => [...document.querySelectorAll(".modal:not([hidden]), .bub-ask, [role=alertdialog]")].filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
+      const was = standing(); ejectCatalog(); return standing() !== was; }).catch(() => true);
     const ejReload = await ejNav;
     const [ejEmpty, ejUndo] = await Promise.all([upFor(q2, () => !!document.getElementById("emptyLoad")),
       upFor(q2, () => !!document.getElementById("eUndoBtn"), 8000)]);
-    const eject = { asked: ejAsked, reload: ejReload, empty: ejEmpty, undo: ejUndo,
-      stood: await q2.evaluate(() => { const u = document.getElementById("eUndo");
-        if (u) u.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-        return !!document.getElementById("eSure"); }) };
+    const eject = { asked: ejAsked, reload: ejReload, empty: ejEmpty, undo: ejUndo };
+    await q2.evaluate(() => { const u = document.getElementById("eUndo");
+      if (u) u.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
     await sleep(600);
     const ejected = await layer(q2, made);
     await loadSample(q2);
     await upFor(q2, () => document.querySelectorAll("#list .card[data-id]").length > 3);
     const again = await layer(q2, made);
-    check(before.edit && before.star && ejected.edit && ejected.star && again.edit && again.star
-          && !eject.asked && eject.reload && eject.empty && eject.undo && !eject.stood,
-      "data-2 the sample loaded again through Load keeps the edit and the star an Eject kept (saved, ejected at once with"
-      + " no confirm and an Undo offered, taken up again): " + JSON.stringify({ before, eject, ejected, again }));
+    check(before.edit && before.star && before.inView && ejected.edit && ejected.star && !ejected.inView
+          && again.edit && again.star && again.inView && !eject.asked && !eject.reload && eject.empty && eject.undo,
+      "data-2 the sample loaded again through Load brings back the edit and the star, kept in its own layer while it was out"
+      + " and out of view on the empty desk (ejected at once, in place, with no confirm and an Undo offered): "
+      + JSON.stringify({ before, eject, ejected, again }));
 
     /* flow-3: THE SAMPLE NEVER ASKS TO REPLACE A CATALOG THE PERSON CHOSE. A desk holding an invented
        catalog finds the sample beside it at the next launch, as the shell hands it over when the
@@ -3310,7 +3301,7 @@ const t0 = Date.now();
     fs.writeFileSync(sib, asSibling(chosen));
     const q3 = await huntPage(f3, true);
     await upFor(q3, () => !!document.getElementById("ecYes"));
-    await clickReload(q3, "#ecYes");
+    await q3.click("#ecYes");
     await upFor(q3, () => document.querySelectorAll("#list .card[data-id]").length > 3);
     const sampleSib = Object.assign(JSON.parse(JSON.stringify(sampleData)), { sample: true });
     fs.writeFileSync(sib, asSibling(sampleSib));

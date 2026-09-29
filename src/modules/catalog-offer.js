@@ -9,8 +9,8 @@ import { eEmbeddedCatalog } from "./env.js";
 import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
   eCatalogIn, eCatalogBuiltIn, eCatalogMtime, eHost, eLoadedCatalogFile, eOpenCatalogFolder, eOpenedWith,
   eOpenedRefused, eReadCatalogFile } from "./host.js";
-import { ejectCatalog, ejectedJustNow, offerEjectUndo } from "./local-memory.js";
-import { MG_REOPEN, lsSet, nsGet, nsSet, ssGet } from "./storage.js";
+import { ejectCatalog } from "./local-memory.js";
+import { lsSet, nsGet, nsSet } from "./storage.js";
 import { tourDueAtBoot, afterTour } from "./tour.js";
 import { placeBubble } from "./bubble.js";
 import { markCut } from "./cut-text.js";
@@ -73,7 +73,7 @@ function eOfferCatalog(given,name,where,force,asked,builtIn){
     foundHtml:eFoundHtml(file,dir,shipped),
     refusedKey:"CatalogNo", force:!!force, asked:!!asked,
     accept:sig=>{ lsSet(E_CATALOG_KEY,sig);
-      return activateCatalog(c,{keepPersonal:true, file:mine?file:"", from:file||(eHost()?"":E_CATALOG_SCRIPT),
+      return activateCatalog(c,{file:mine?file:"", from:file||(eHost()?"":E_CATALOG_SCRIPT),
                                 fileAt:(mine&&!given)?eCatalogMtime():0}); }
   });
   const active=asked&&!shown?storedCatalog():null;
@@ -86,8 +86,6 @@ function eOfferCatalog(given,name,where,force,asked,builtIn){
    by a "no" said to the last one, and a file this copy was OPENED with is an act of somebody's
    rather than a find. Only a host can date a file or hand one over, so a browser never forces. */
 function eOfferCatalogAtBoot(){
-  /* Read whatever else this launch decides, so the launch after an eject asks like any other. */
-  if(ejectedJustNow()){ offerEjectUndo(); return; }
   const at=+(nsGet("CatalogNoAt")||0), mt=eCatalogMtime(), asked=eOpenedWith();
   // A first run's tour asks for a catalog in its own step, so a found file waits for it to end.
   if(!asked && tourDueAtBoot()){ afterTour(eOfferCatalogAtBoot); return; }
@@ -119,7 +117,7 @@ function loadCatalogFromFolder(name,mtime){
       foundHtml:eFoundHtml(got.name,eCatalogFolder()),
       refusedKey:"CatalogNo", force:true, asked:true, direct:true,
       accept:sig=>{ lsSet(E_CATALOG_KEY,sig);
-        return activateCatalog(c,{keepPersonal:true, file:got.name, fileAt:+mtime||0}); }
+        return activateCatalog(c,{file:got.name, fileAt:+mtime||0}); }
     });
     if(!shown) toast(t("That file matches the catalog you already have."));
   });
@@ -378,10 +376,8 @@ function eOfferCatalogDialog(c,src){
   if(src.direct && !active){ whenTrusted(c).then(()=>src.accept(sig)); return true; }
   /* NOT OVER THE LIBRARY, and only a file somebody pointed at gets past this. That screen lists
      every catalog in the folder, marks the one loaded and offers Load on each row, so a question
-     about the folder argues with a person already looking at the answer. MG_REOPEN as well as
-     the list itself: a Load or an Eject made there reloads, and the offer would arrive on the far
-     side of the reload, over the screen the act was made in. Ruled 2026-09-17. */
-  if(!src.asked && (document.getElementById("mgCatList") || ssGet(MG_REOPEN))){
+     about the folder argues with a person already looking at the answer. Ruled 2026-09-17. */
+  if(!src.asked && document.getElementById("mgCatList")){
     paintCatalogList(); return false;
   }
   /* One bubble at a time. A file somebody chose takes the place of one found and left standing,
@@ -461,15 +457,14 @@ function eOfferCatalogDialog(c,src){
     e.preventDefault(); e.stopPropagation();
     close();
   });
-  /* Reloads on success, so nothing after it runs. Storage that refuses the catalog returns false
-     instead, and the bubble has to come down: left standing over its own failure toast it reads
-     as a button that does nothing. */
-  /* After the signature has been read, or its wait is over, so the state stored is this file's. */
+  /* ANSWERED, SO DOWN BEFORE THE DESK STARTS AGAIN, whatever the load then does: the start in place
+     keeps the page, and the tour steps behind any question it finds standing (tour.js).
+     After the signature has been read, or its wait is over, so the state stored is this file's. */
   let taking=false;
   wrap.querySelector("#ecYes").onclick=()=>{
     if(taking) return;
     taking=true;
-    whenTrusted(c).then(()=>{ taking=false; if(src.accept(sig)===false) close(); });
+    whenTrusted(c).then(()=>{ taking=false; close(); src.accept(sig); });
   };
   wrap.querySelectorAll("[data-ec-open]").forEach(el=>{
     el.onclick=()=>eOpenCatalogFolder();
@@ -540,7 +535,7 @@ function eCheckWatchedFile(interactive){
                folder beside it would say it came from there. */
             foundHtml:eFoundHtml(eWatchName()||f.name,""),
             refusedKey:"WatchNo", force:!!interactive, asked:!!interactive,
-            accept:()=>activateCatalog(c,{keepPersonal:true, from:eWatchName()||f.name})
+            accept:()=>activateCatalog(c,{from:eWatchName()||f.name})
           });
           if(!shown && interactive) toast(t("That file matches the catalog you already have."));
           return null;

@@ -4,13 +4,14 @@ const M=[];
 /* BROKEN INTO LINES BY HAND, necessarily: rendered under white-space:pre - never wraps,
    a long line widens the panel. One line per thought. Name only entries that exist: the
    pencil at the top of this panel is the only way in. */
-let FACTS=`Quick facts are yours to write.
+const FACTS_BUILT_IN=`Quick facts are yours to write.
 
 Use the pencil above to edit it - fees, deadlines, links, anything you use often.
 
 A catalog can ship its own, and loading it replaces what is here.
 
 What you type stays in this browser only.`;
+let FACTS=FACTS_BUILT_IN;
 
 /* Empty by default: who is on a chat is the business's property - shipping "booker" or
    "pax1" describes someone else's desk. The catalog supplies the list, the user edits it;
@@ -34,7 +35,9 @@ function normWhoList(v){
 /* Written from the catalog and nowhere else; see setCatalogCatLooks for why through a call. */
 function setCatalogFacts(text){ FACTS=text; }
 function setCatalogWho(list){ WHO_BASE=list; }
+// The empty desk's: no cards, the built-in paragraph, no list of who.
+function resetStock(){ M.length=0; FACTS=FACTS_BUILT_IN; WHO_BASE=[]; }
 
 export {
-  M, FACTS, WHO_BASE, normWhoList, setCatalogFacts, setCatalogWho,
+  M, FACTS, WHO_BASE, normWhoList, setCatalogFacts, setCatalogWho, resetStock,
 };

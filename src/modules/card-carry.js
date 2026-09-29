@@ -2,7 +2,7 @@ import { BASE_M, BASE_CATS, catalogCardId, pack, rebuildBaseCards, savePack } fr
 import { intentIdAt, BASE_STORE } from "./intent-id.js";
 import { CONTENT_LANGS, intentFieldKey } from "./content-model.js";
 import { uid } from "./ids.js";
-import { nsGet, nsSet, ssGet, ssSet, ssDel } from "./storage.js";
+import { lyGet, lySet, ssGet, ssSet, ssDel } from "./storage.js";
 import { catalogCountsLine, toast } from "./ui-lang.js";
 import { CAT_LABELS_PL } from "./icons.js";
 
@@ -66,8 +66,8 @@ function rekeyOldShelves(cats){
   });
   if(Array.isArray(pack.removedCats)) pack.removedCats=pack.removedCats.map(to);
   try{
-    const order=JSON.parse(nsGet("CatOrder")||"null");
-    if(Array.isArray(order) && order.some(k=>to(k)!==k)) nsSet("CatOrder",JSON.stringify(order.map(to)));
+    const order=JSON.parse(lyGet("CatOrder")||"null");
+    if(Array.isArray(order) && order.some(k=>to(k)!==k)) lySet("CatOrder",JSON.stringify(order.map(to)));
   }catch(e){}
   return n;
 }
@@ -111,12 +111,12 @@ function setLinksAside(lost){
   const ids=Object.keys(lost);
   if(!ids.length) return;
   let rec=null;
-  try{ rec=JSON.parse(nsGet(LINKS_ASIDE)||"null"); }catch(e){}
+  try{ rec=JSON.parse(lyGet(LINKS_ASIDE)||"null"); }catch(e){}
   if(!rec || typeof rec!=="object" || Array.isArray(rec)) rec={};
   ids.forEach(id=>{
     rec[id]=(Array.isArray(rec[id])?rec[id]:[]).concat(lost[id].map(at=>({at,clause:clauseAt(at)})));
   });
-  try{ nsSet(LINKS_ASIDE,JSON.stringify(rec)); }catch(e){}
+  try{ lySet(LINKS_ASIDE,JSON.stringify(rec)); }catch(e){}
 }
 /* THE REQUESTS' OWN LAYER, keyed "i:" + position wherever the catalog put down gave a request no
    id, follows by the finder above. What finds no request is kept aside, one entry per request,
@@ -152,9 +152,9 @@ function carryIntentLayer(find){
     if(Array.isArray(pack[name])) pack[name]=follow(pack[name],n=>put(n,name,true));
   });
   let order=null;
-  try{ order=JSON.parse(nsGet("IntentOrder")||"null"); }catch(e){}
+  try{ order=JSON.parse(lyGet("IntentOrder")||"null"); }catch(e){}
   if(Array.isArray(order) && order.some(k=>posOf(k)>-1)){
-    try{ nsSet("IntentOrder",JSON.stringify(follow(order,(n,i)=>put(n,"order",i)))); }catch(e){}
+    try{ lySet("IntentOrder",JSON.stringify(follow(order,(n,i)=>put(n,"order",i)))); }catch(e){}
   }
   // A day bucket names an id by its place in dayIds (desk-stats.js), so the place is renamed.
   const ids=pack.dayIds, days=pack.days||{};
@@ -176,8 +176,8 @@ function carryIntentLayer(find){
   const add=Object.keys(aside).map(n=>aside[n]);
   if(!add.length) return;
   let rec=null;
-  try{ rec=JSON.parse(nsGet(REQUESTS_ASIDE)||"null"); }catch(e){}
-  try{ nsSet(REQUESTS_ASIDE,JSON.stringify((Array.isArray(rec)?rec:[]).concat(add))); }catch(e){}
+  try{ rec=JSON.parse(lyGet(REQUESTS_ASIDE)||"null"); }catch(e){}
+  try{ lySet(REQUESTS_ASIDE,JSON.stringify((Array.isArray(rec)?rec:[]).concat(add))); }catch(e){}
 }
 /* The card an edit was written against: BASE_M while the catalog being put down is still in it,
    else the copy the desk's own save kept (pack.js keepEditBases). One with neither stays dormant. */

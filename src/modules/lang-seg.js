@@ -111,8 +111,8 @@ function segFolded(){
    markup and nothing rebuilt them, so one declared language got a button selecting a language
    with no text in it (649) and a catalog naming neither of the two got an empty box (646). One
    button per declared code, in order, keeping the markup's own where there is one so the pair's
-   wording does not move. At one the control does not act, the code inert in the same box. Called
-   once from boot: every route that redeclares the languages reloads. */
+   wording does not move. At one the control does not act, the code inert in the same box. Every
+   button it returns is wired, since a start in place can bring a language boot never saw. */
 function syncLangSeg(){
   if(!seg) return;
   const declared=CONTENT_LANGS.length;
@@ -137,16 +137,19 @@ function syncLangSeg(){
        colour, and the title goes so a hover finds the box's own. */
     b.disabled=declared<2;
     if(declared<2) b.removeAttribute("title");
+    b.onclick=segPress;
     return b;
   }));
   applyLangState(lang);
 }
+function segPress(){
+  const b=this;
+  const other=[...seg.querySelectorAll("button")].find(x=>x!==b);
+  setLang(segFolded()&&other?other.dataset.l:b.dataset.l);
+}
 function wireLangSeg(){
   if(CONTENT_LANGS.length<2) return;
-  seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{
-    const other=[...seg.querySelectorAll("button")].find(x=>x!==b);
-    setLang(segFolded()&&other?other.dataset.l:b.dataset.l);
-  });
+  seg.querySelectorAll("button").forEach(b=>b.onclick=segPress);
 }
 /* Retitle on resize: the tooltip has to describe what a click will DO, and that differs between
    the two layouts. Only the wording depends on the media query - the behaviour above does not. */
