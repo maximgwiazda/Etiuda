@@ -1,8 +1,9 @@
 /* The catalog sitting beside Etiuda, offered rather than loaded, the watched file that
    offers the same way, and the dialog all three channels end in. */
 import { activateCatalog, catalogEdited, catalogEditionOlder, catalogMacroCount,
-  catalogIntentCount, exportCatalog, isCatalogUpdate } from "./catalog-file.js";
-import { E_CATALOG_KEY, E_CATALOG_NAME, E_CATALOG_VERSION, catalogStamp, catalogVersionLabel,
+  catalogIntentCount, exportCatalog, isCatalogUpdate, catalogFileName, catalogNameOfFile } from "./catalog-file.js";
+import { catalogLoaded } from "./catalog-boot.js";
+import { E_CATALOG_KEY, E_CATALOG_VERSION, catalogStamp, catalogVersionLabel,
   eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
   eWatchClear, parseCatalogFile, catalogDocOf, eWatchName, eCatalogRefusedNames, eRefuseCatalogFile } from "./catalog.js";
 import { eEmbeddedCatalog } from "./env.js";
@@ -70,7 +71,7 @@ function eOfferCatalog(given,name,where,force,asked,builtIn){
      stands in. */
   const mine=!!file && !!dir && dir===eCatalogFolder();
   const shown=eOfferCatalogDialog(c,{
-    foundHtml:eFoundHtml(file,dir,shipped),
+    file:file, foundHtml:eFoundHtml(file,dir,shipped),
     refusedKey:"CatalogNo", force:!!force, asked:!!asked,
     accept:sig=>{ lsSet(E_CATALOG_KEY,sig);
       return activateCatalog(c,{file:mine?file:"", from:file||(eHost()?"":E_CATALOG_SCRIPT),
@@ -114,7 +115,7 @@ function loadCatalogFromFolder(name,mtime){
       return;
     }
     const shown=eOfferCatalogDialog(c,{
-      foundHtml:eFoundHtml(got.name,eCatalogFolder()),
+      file:got.name, foundHtml:eFoundHtml(got.name,eCatalogFolder()),
       refusedKey:"CatalogNo", force:true, asked:true, direct:true,
       accept:sig=>{ lsSet(E_CATALOG_KEY,sig);
         return activateCatalog(c,{file:got.name, fileAt:+mtime||0}); }
@@ -297,7 +298,7 @@ function paintCatalogList(){
        one row whichever way it was loaded; before this, the imported copy took a row of its own
        at the head and the folder listed the very same file again beneath it. */
     let onAt=mine?files.findIndex(f=>f.name===mine):-1;
-    if(onAt<0 && held) onAt=files.findIndex(f=>isCatalogUpdate({id:f.id,name:f.catalogName},held));
+    if(onAt<0 && held) onAt=files.findIndex(f=>isCatalogUpdate(f,held));
     /* WHAT "NEWER" IS MEASURED AGAINST: the file's own date at the moment it was loaded, so the
        loaded file rewritten since is marked too. A desk older than that key falls back to the
        loaded row's date, which can only under-mark - the safe direction. */
@@ -313,9 +314,8 @@ function paintCatalogList(){
        import, a copy loaded from elsewhere, or a desk whose catalog was applied before the store
        existed. What is APPLIED decides rather than what is stored, because "no catalog" over two
        hundred visible cards is worse than useless. */
-    const applied=(typeof E_CATALOG_NAME!=="undefined" && E_CATALOG_NAME) ? E_CATALOG_NAME : "";
-    if((held||applied||(cards||[]).length) && onAt<0)
-      rows.unshift(ecRowHtml({ name:shownCatalogName(String(applied||(held&&held.name)||"")),
+    if((held||catalogLoaded()||(cards||[]).length) && onAt<0)
+      rows.unshift(ecRowHtml({ name:shownCatalogName(catalogFileName()),
         loaded:true, newer:false, meta:loadedMeta(""), trust:heldCatalogTrust() }));
     ecKeyBubClose();
     box.innerHTML=rows.length?rows.join(""):ecEmptyHtml();
@@ -411,7 +411,7 @@ function eOfferCatalogDialog(c,src){
             : "This catalog has changed since it was loaded."))+'</p>'
         : '')
     // Name and edition on one line, counts on the next: WHICH catalog, then how big it is.
-    +'<div class="ec-what"><b>'+esc(String(c.name||"Catalog"))+'</b>'
+    +'<div class="ec-what"><b>'+esc(catalogNameOfFile(String(src.file||"")||E_CATALOG_SCRIPT))+'</b>'
     +(c.version!=null?' · '+esc(catalogVersionLabel(c.version)):'')
     +(updating && active.version!=null && String(active.version)!==String(c.version)
         ? '<div class="ec-counts">'+esc(t("You have {V}.")).replace("{V}",esc(catalogVersionLabel(active.version)))+'</div>'
@@ -482,28 +482,23 @@ function eOfferCatalogDialog(c,src){
 }
 /* THE FILE DIALOG'S CATALOG, asked about in the same bubble as every other route. */
 function eOfferPickedCatalog(c,name,accept){
-  const shown=eOfferCatalogDialog(c,{foundHtml:eFoundHtml(name,""), force:true, asked:true,
+  const shown=eOfferCatalogDialog(c,{file:name, foundHtml:eFoundHtml(name,""), force:true, asked:true,
     direct:true, accept:()=>accept()});
   if(!shown) toast(t("That file matches the catalog you already have."));
 }
-/* A catalog file that names itself nothing is stored as "Unnamed catalog" (catalog.js) and shown
-   in the interface's language. */
-function shownCatalogName(n){ return (!n || n==="Unnamed catalog") ? t("Unnamed catalog") : n; }
+/* A catalog no route named a file for is unnamed, in the interface's language. */
+function shownCatalogName(n){ return n || t("Unnamed catalog"); }
 /* THE TOP BAR SAYS WHICH CATALOG IS LOADED, and nothing else: inert, and no replacement for the
    Library. What is applied decides, as in the Library's list. */
 function paintCatNow(){
   const el=document.getElementById("catNow");
   if(!el) return;
-  const held=storedCatalog();
-  const name=String((typeof E_CATALOG_NAME!=="undefined" && E_CATALOG_NAME) || (held && held.name) || "");
-  /* The file's name, extension and all, so the file is known again among the person's own; the
-     name inside the catalog only where no route named a file (catalog-file.js, CatalogFrom). */
-  const file=(name||held) ? String(nsGet("CatalogFrom")||eLoadedCatalogFile()||"") : "";
-  const shown=file||(name ? shownCatalogName(name) : "");
+  // The file's name, extension and all, so the file is known again among the person's own.
+  const shown=catalogFileName();
   const own=el.querySelector(".cn-name"), none=el.querySelector(".cn-none");
   if(own){ own.textContent=shown; own.hidden=!shown; if(shown) markCut(own); }
   // The sweep translates from the English it finds recorded here, so a language switch follows.
-  if(none){ const key=held?"Unnamed catalog":"No catalog loaded";
+  if(none){ const key=(storedCatalog()||catalogLoaded())?"Unnamed catalog":"No catalog loaded";
     none.setAttribute("data-i18n-text",key); none.textContent=t(key); none.hidden=!!shown; }
 }
 
@@ -533,7 +528,7 @@ function eCheckWatchedFile(interactive){
           const shown=eOfferCatalogDialog(c,{
             /* No folder: this file was PICKED, so it may sit anywhere, and naming the catalog
                folder beside it would say it came from there. */
-            foundHtml:eFoundHtml(eWatchName()||f.name,""),
+            file:eWatchName()||f.name, foundHtml:eFoundHtml(eWatchName()||f.name,""),
             refusedKey:"WatchNo", force:!!interactive, asked:!!interactive,
             accept:()=>activateCatalog(c,{from:eWatchName()||f.name})
           });

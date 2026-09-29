@@ -112,7 +112,6 @@ UI_STRINGS.pl={
   "Keep all category rows visible (no 2-line auto-collapse).":"Wszystkie rzędy kategorii zostają widoczne, bez zwijania do dwóch.",
   "Allow the intent panel to auto-hide on narrow windows (hover left edge or hold Ctrl to peek).":"W wąskich oknach panel intencji chowa się sam i pokazuje po najechaniu na lewą krawędź albo przytrzymaniu Ctrl.",
   "Keep the intent panel docked even when the window is narrow. Same as the lock at the top of the panel.":"Panel intencji zostaje zadokowany także w wąskim oknie, tak samo jak przy blokadzie na górze panelu.",
-  "maintenance␟name":"nazwa",
   "customer's name":"imię klienta",
   "agent's name":"imię agenta",
   "Role class":"Klasa roli",
@@ -165,8 +164,7 @@ UI_STRINGS.pl={
   "{L} only":"tylko {L}",
   "nothing set":"nic nie ustawiono",
   "none (shared)":"brak (wspólna)",
-  "unnamed (shared)":"bez nazwy (wspólna)",
-  "catalog name only":"tylko nazwa katalogu",
+  "catalog id":"identyfikator katalogu",
   "Unnamed catalog":"Katalog bez nazwy",
   "Collapse":"Zwiń",
   "Expand":"Rozwiń",
@@ -987,8 +985,8 @@ function toastRefusal(m){ toast(m, TOAST_REFUSAL_MS, true); }
    element's text, or a toast. SCOPED TO CHROME - the card list, the panel's rows and the
    facts panel hold CATALOG content, the customer's, never touched by a UI language; that
    is also why nothing here walks `document`. */
-/* ONE ENGLISH WORD, TWO MEANINGS ("name": a person's in the header, a catalog's in
-   maintenance). tc() tries a context-qualified key first, falls back to the plain one - a
+/* ONE ENGLISH WORD, TWO MEANINGS ("first name": the agent's own, and a card's customer token cut
+   down to one). tc() tries a context-qualified key first, falls back to the plain one - a
    language pays nothing until it needs it. The separator is U+241F, which cannot occur in
    UI text, so a context key can never collide with a real one. */
 const T_CTX="\u241f";

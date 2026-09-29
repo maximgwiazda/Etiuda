@@ -1350,7 +1350,7 @@ const t0 = Date.now();
                   loaded: !!rows[0] && rows[0].classList.contains("is-loaded"),
                   act: rows[0] ? [...rows[0].querySelectorAll("button.btn")].map(x => x.getAttribute("aria-label") || x.textContent).join("|") : null,
                   meta: rows[0] ? (rows[0].querySelector(".ec-meta") || {}).textContent : null,
-                  held: (typeof E_CATALOG_NAME === "string" && E_CATALOG_NAME) || "" };
+                  held: (typeof E_CATALOG_SCRIPT === "string" && E_CATALOG_SCRIPT) || "" };
     /* EXPORT COMES WHEN THERE IS SOMETHING TO EXPORT, ruled 2026-09-17: nothing has been edited
        on top of this catalog, so the file it came from holds every word an export would write.
        One edit through the product's own save, and the row is asked again. */
@@ -1771,10 +1771,11 @@ const t0 = Date.now();
   const HEAD_REPLACE = { en: "Replace catalog?", pl: "Zastąpić katalog?" };
   const offer2 = await p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
+    /* A name planted inside the catalog, which the offer must not show: it names the file. */
     const shown = eOfferCatalogDialog(
       { id: "probe-second-catalog", name: "Second catalog", cards: [],
         intents: { en: ["a"] }, categories: { gen: "General" } },
-      { foundHtml: '<code>second.ec</code>', force: true, asked: true, accept: () => false });
+      { file: "second.ec", foundHtml: '<code>second.ec</code>', force: true, asked: true, accept: () => false });
     const card = document.querySelector("#eCatalogOffer");
     const out = { shown: shown, lang: document.documentElement.getAttribute("lang") || "",
                   h2: card ? card.querySelector("h3").textContent : "",
@@ -1789,7 +1790,7 @@ const t0 = Date.now();
   });
   check(offer2.shown && offer2.h2 === HEAD_REPLACE[offer2.lang] && offer2.subs.length === 1
         && offer2.subs[0].indexOf("second.ec") > -1 && offer2.acts === 2
-        && offer2.name === "Second catalog" && offer2.focus && offer2.gone,
+        && offer2.name === "second" && offer2.focus && offer2.gone,
     "a different catalog offered over the loaded one asks " + JSON.stringify(offer2.h2)
     + " in " + offer2.lang + " and says nothing else: " + offer2.subs.length
     + " paragraph(s) under it, " + JSON.stringify(offer2.subs) + ", the catalog named "
@@ -2233,7 +2234,7 @@ const t0 = Date.now();
                factsType: typeof facts, factsLen: typeof facts === "string" ? facts.length : -1,
                builtIn: typeof FACTS === "string" && facts === FACTS,
                offered: window.__pbOffered[window.__pbOffered.length - 1] || null,
-               loadedName: (storedCatalog() || {}).name || null };
+               loadedFile: nsGet("CatalogFrom") || null };
     }, before);
     await p.keyboard.press("Escape"); await sleep(400);
     await p.keyboard.press("Escape"); await sleep(400);
@@ -2249,14 +2250,14 @@ const t0 = Date.now();
     URL.createObjectURL = window.__pbRealBlobUrl; window.showSaveFilePicker = window.__pbRealPicker; });
   const offered = blankFile.offered || {};
   check(blankFile.btn && !blankFile.asked && blankFile.saved === 1 && blankFile.cards > 0
-        && blankFile.kind === "etiuda-catalog" && blankFile.format === 2 && blankFile.name === "Smoke"
-        && /\.ec$/.test(offered.name || "") && offered.name === blankFile.loadedName + ".ec"
+        && blankFile.kind === "etiuda-catalog" && blankFile.format === 2 && blankFile.name == null
+        && !!blankFile.loadedFile && offered.name === blankFile.loadedFile.replace(/\.(ec|json|js)$/i, "") + ".ec"
         && offered.types.indexOf('".ec"') > -1 && offered.types.indexOf('".js"') < 0,
-    "Manage > Export catalog goes straight to the save dialog, which offers the loaded catalog's own name"
-    + " as an .ec (" + (offered.name === blankFile.loadedName + ".ec") + ", accepting " + offered.types
-    + "), and writes the .ec document named after the file chosen: "
-    + blankFile.bytes + " bytes, " + blankFile.cards + " cards, named " + JSON.stringify(blankFile.name)
-    + " for Smoke.ec, a name dialog " + (blankFile.asked ? "shown" : "never shown"));
+    "Manage > Export catalog goes straight to the save dialog, which offers the loaded catalog's own file"
+    + " as an .ec (" + JSON.stringify(offered.name) + " for " + JSON.stringify(blankFile.loadedFile) + ", accepting " + offered.types
+    + "), and writes the .ec document with no name inside it: "
+    + blankFile.bytes + " bytes, " + blankFile.cards + " cards, name " + JSON.stringify(blankFile.name)
+    + ", a name dialog " + (blankFile.asked ? "shown" : "never shown"));
   check(blankFile.factsType === "string" && blankFile.factsLen === 0,
     "an emptied quick-facts exports empty (" + blankFile.factsType + ", " + blankFile.factsLen + " chars)");
   check(unsetFile.saved === 1 && unsetFile.builtIn && unsetFile.factsLen > 0,
@@ -2481,7 +2482,7 @@ const t0 = Date.now();
     await wait(300);
     return { held: true, first, n: offers.length, names, said, accepted, left: document.querySelectorAll("#eCatalogOffer").length };
   });
-  check(picked.held && picked.first === 1 && picked.n === 1 && picked.names[0] === "Picked Probe" && !picked.said
+  check(picked.held && picked.first === 1 && picked.n === 1 && picked.names[0] === "picked" && !picked.said
         && picked.accepted === 0 && picked.left === 0,
     "shell-2 a catalog picked while a found one's bubble stands is asked about in its place, with no word that it"
     + " matches the loaded one: " + JSON.stringify(picked));
@@ -3170,7 +3171,7 @@ const t0 = Date.now();
       let opened = 0;
       window.E_HOST = { catalogFolder: dir, catalogIn: dir, catalogFile: "invented.ec", openCatalogFolder() { opened++; return true; } };
       try {
-        const c = JSON.parse(JSON.stringify(storedCatalog())); c.name = "Invented other";
+        const c = JSON.parse(JSON.stringify(storedCatalog())); c.id = "invented-other";
         eOfferCatalog(c, "invented.ec", dir, true, true);
         await new Promise(r => setTimeout(r, 300));
         const w = document.getElementById("eCatalogOffer"), codes = w ? [...w.querySelectorAll(".ec-sub code")] : [];

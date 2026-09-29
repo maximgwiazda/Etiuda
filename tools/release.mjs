@@ -216,7 +216,7 @@ gate('the shell: npm run csp, npm run desk, npm run catalog-watch and npm run sh
 });
 
 /* storage-carry beside smoke since 2026-09-24: the carries a desk arrives with (a 1.16.7 desk's
-   keys, a layer under the catalog's name, positions re-keyed by tag id) are driven there in a
+   keys, a layer an older build stranded, positions re-keyed by tag id) are driven there in a
    browser against a real boot, and until then no chain called it. About 16 s. tests/engine-selftest.js
    31 holds every gate in tests/ to a chain. swap beside them: load, eject and clear change the desk in
    place, and it holds each against a fresh start, in Chrome, in about a minute. */
@@ -247,7 +247,8 @@ function asarEntries(file) {
 
 if (flag('--package')) {
   gate('the installer, built from this tree into ' + DIST, () => {
-    if (!run('npm', ['run', 'package'], { ETIUDA_DIST: DIST })) return 'electron-builder failed';
+    if (!run('npm', ['run', 'package'], { ETIUDA_DIST: DIST }))
+      return 'npm run package failed: electron-builder, no fresh installer, or the fuses read back from Etiuda.exe (its lines above)';
     const exe = readdirSync(DIST).filter(f => /-setup\.exe$/i.test(f));
     if (exe.length !== 1) return DIST + ' holds ' + exe.length + ' installers; expected 1';
     const file = join(DIST, exe[0]);

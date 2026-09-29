@@ -1,9 +1,10 @@
 import { cardText } from "./card-model.js";
-import { eWatchSupported, eWatchName, catalogVersionLabel, E_CATALOG_NAME, E_CATALOG_VERSION, storedCatalog, eCatalog,
+import { eWatchSupported, eWatchName, catalogVersionLabel, E_CATALOG_VERSION, storedCatalog, eCatalog,
   eCatalogAccepted, catalogDocOf, eCatalogSignature } from "./catalog.js";
 import { heldCatalogTrust } from "./catalog-trust.js";
 import { tourActive, tourDueAtBoot } from "./tour.js";
 import { catalogMacroCount, sampleUntouched } from "./catalog-file.js";
+import { catalogLoaded } from "./catalog-boot.js";
 import { remPx, colMode, colFloor, colCount, COL_GAP } from "./columns.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { dismissModal, openDialog } from "./dialog.js";
@@ -69,7 +70,7 @@ function mtBrowser(){
 function mtCatalogPlace(){
   const S=mtSafe, none={file:"-",copy:"(none loaded)",folder:"-"};
   try{
-    if(!E_CATALOG_NAME && !storedCatalog()) return none;
+    if(!catalogLoaded() && !storedCatalog()) return none;
     const home=eDeskHome(), inFolder=String(nsGet("CatalogFile")||"");
     if(!eHost()) return {file:S(()=>nsGet("CatalogFrom")||(eCatalogAccepted(eCatalog())?E_CATALOG_SCRIPT:"")),
       copy:eCatalogAccepted(eCatalog())?"beside this page":"imported into this browser", folder:"-"};
@@ -106,7 +107,6 @@ function mtReadings(){
   row("theme",S(()=>(document.documentElement.getAttribute("data-theme")||systemTheme())
     +(themeChoice()?" (chosen)":" (system)")));
   sec("Catalog");
-  row("name",S(()=>E_CATALOG_NAME||"(none loaded)"));
   row("edition",S(()=>E_CATALOG_VERSION!=null?catalogVersionLabel(E_CATALOG_VERSION):"-"));
   row("cards / macros",S(()=>cards.length+" / "+catalogMacroCount({cards:cards})));
   row("intents / categories",S(()=>intentOrder.length+" / "+Object.keys(CATS).length));
@@ -218,13 +218,10 @@ function mtReadings(){
   }));
   row("namespace",S(()=>E_NS));
   /* The counts used to be in this seed and are deliberately gone: an edition that added a card
-     moved everyone to a new namespace and took their work with it. What the seed is made OF,
-     never the name itself: Catalog prints that already, and one line has to hold whatever a
-     catalog is called. */
+     moved everyone to a new namespace and took their work with it. What the seed is made OF. */
   row("namespace seed",S(()=>{
     const c=eEmbeddedCatalog();
-    if(!c) return "none (shared)";
-    return String(c.name||"").trim() ? "catalog name only" : "unnamed (shared)";
+    return (c && String(c.id||"").trim()) ? "catalog id" : "none (shared)";
   }));
   sec("Desk");
   row("catalog folder",S(()=>eHost()?eHomeless(eCatalogFolder(),eDeskHome()):""));

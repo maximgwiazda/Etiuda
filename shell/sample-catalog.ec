@@ -2,7 +2,6 @@
  "format": 2,
  "kind": "etiuda-catalog",
  "id": "mirabelka",
- "name": "Mirabelka",
  "rev": 1,
  "date": "2026-09-24",
  "langs": [

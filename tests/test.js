@@ -63,7 +63,7 @@ function sourceAtLine(n) { return E.sourceDoc().atLine(n); }
    catalogue of the file's prose in the test and make every reflow a diff.
    IT SCANS BLOCKS, NOT LINE STARTS: this file writes continuations without a leading star, so
    matching on the first character counted a ten-line comment as one and waved essays through. */
-const COMMENT_ESSAY_BUDGET = 53;
+const COMMENT_ESSAY_BUDGET = 51;
 function checkCommentCeiling(src) {
   const lines = src.split(/\r?\n/), found = [];
   let i = 0;
@@ -492,9 +492,8 @@ function runUnitTests() {
   eq("formatPaxName caps+hyphen", F.formatPaxName("MARY-JANE   doe"), "Mary-Jane Doe");
   eq("formatPaxName lower", F.formatPaxName("anna"), "Anna");
 
-  /* EXPORT'S FILENAME IS THE CATALOG'S NAME AND BACK: the suggestion keeps the name whole, capitals
-     and diacritics included, and replaces only what Windows refuses in a filename; the saved file's
-     name, less its catalog extension, is the name the file carries. */
+  /* EXPORT'S FILENAME IS THE LOADED FILE'S: the suggestion keeps its stem whole, capitals and
+     diacritics included, and replaces only what Windows refuses in a filename. */
   eq("stem plain", F.catalogFileStem("Sample Chat"), "Sample Chat");
   eq("stem Polish", F.catalogFileStem("Zażółć"), "Zażółć");
   eq("stem refused characters", F.catalogFileStem('A/B: "C"?'), "A-B- -C--");
@@ -562,7 +561,7 @@ function runUnitTests() {
   copyNoticeTests();
   catalogLangTests();
   catalogIdentityTests();
-  nameNsAdoptionTests();
+  catalogNsTests();
   strandedAdoptionTests();
   langSegWiringTests();
   deskStatsTests();
@@ -570,6 +569,7 @@ function runUnitTests() {
   tourActTests();
   emptyDeskTests();
   catNowTests();
+  libraryHeadTests();
 }
 
 /* EJECT AND CLEAR HAPPEN AT ONCE AND IN PLACE, AND EACH UNDO PUTS BACK WHAT IT TOOK (Maxim, 2026-09-27
@@ -846,10 +846,10 @@ function catNowTests() {
   const fileSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-file.js"), "utf8");
   const el = cls => ({ cls, hidden: true, textContent: "", attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } });
   let paint = null, importText = null;
-  const world = { ns: {}, held: null, applied: "", opts: null };
+  const world = { ns: {}, held: null, applied: false, opts: null };
   try {
-    paint = new Function("document", "storedCatalog", "nsGet", "eLoadedCatalogFile", "markCut", "t", "E_CATALOG_NAME",
-      extractDecl(src, "function shownCatalogName(") + "\n" + extractDecl(src, "function paintCatNow(") + "\nreturn paintCatNow;");
+    paint = new Function("document", "storedCatalog", "nsGet", "eLoadedCatalogFile", "markCut", "t", "catalogLoaded",
+      extractDecl(fileSrc, "function catalogFileName(") + "\n" + extractDecl(src, "function paintCatNow(") + "\nreturn paintCatNow;");
     importText = new Function("catalogFromFileText", "hooks", "eWatchClear", "activateCatalog",
       extractDecl(fileSrc, "function importCatalogText(") + "\nreturn importCatalogText;")(
       () => ({ name: "Invented shop" }), { offerPickedCatalog: (c, name, accept) => accept() },
@@ -858,17 +858,19 @@ function catNowTests() {
   const bar = (ns, held, applied, file) => {
     const own = el("cn-name"), none = el("cn-none");
     const doc = { getElementById: id => (id === "catNow" ? { querySelector: s => (s === ".cn-name" ? own : none) } : null) };
-    paint(doc, () => held, k => (k in ns ? ns[k] : null), () => file, () => {}, s => s, applied)();
+    paint(doc, () => held, k => (k in ns ? ns[k] : null), () => file, () => {}, s => s, () => applied)();
     return own.hidden ? (none.hidden ? "" : "none: " + none.textContent) : own.textContent;
   };
   const held = { name: "Invented shop", cards: [1] };
-  eq("the top bar shows the file the catalog was loaded from, wherever it lay, and the name inside it only where no route named a file",
-    [bar({ CatalogFrom: "sample-catalog.ec", CatalogFile: "sample-catalog.ec" }, held, "Invented shop", "sample-catalog.ec"),
-     bar({ CatalogFrom: "Spring team.ec", CatalogFile: "" }, held, "Invented shop", ""),
-     bar({ CatalogFile: "team.ec" }, held, "Invented shop", "team.ec"),
-     bar({ CatalogFrom: "", CatalogFile: "" }, held, "Invented shop", ""),
-     bar({}, null, "", "")],
-    ["sample-catalog.ec", "Spring team.ec", "team.ec", "Invented shop", "none: No catalog loaded"]);
+  /* The held catalog carries a name, the one field the bar must never show. */
+  eq("the top bar shows the file the catalog was loaded from, wherever it lay, and never a name inside it: with no file named it is unnamed",
+    [bar({ CatalogFrom: "sample-catalog.ec", CatalogFile: "sample-catalog.ec" }, held, true, "sample-catalog.ec"),
+     bar({ CatalogFrom: "Spring team.ec", CatalogFile: "" }, held, true, ""),
+     bar({ CatalogFile: "team.ec" }, held, true, "team.ec"),
+     bar({ CatalogFrom: "", CatalogFile: "" }, held, true, ""),
+     bar({ CatalogFrom: "", CatalogFile: "" }, null, true, ""),
+     bar({}, null, false, "")],
+    ["sample-catalog.ec", "Spring team.ec", "team.ec", "none: Unnamed catalog", "none: Unnamed catalog", "none: No catalog loaded"]);
   importText("{}", "Spring team.ec");
   eq("a catalog loaded through the file dialog records the file's name for the bar", (world.opts || {}).from, "Spring team.ec");
 
@@ -891,6 +893,43 @@ function catNowTests() {
   eq("activateCatalog records the file a route names, its folder file where that is all it names, and blanks it for a route that names none",
     [wrote({ from: "Spring team.ec" }), wrote({ file: "team.ec" }), wrote({})],
     ["Spring team.ec", "team.ec", ""]);
+}
+
+/* THE LIBRARY'S HEADING NAMES THE FILE THE TOP BAR NAMES, never the name a stored copy still carries inside it, as
+   a desk's store written before the name left the format does. The dialog's call is sliced out of manage.js and run
+   in a scope where every free name it might read answers with that stored copy, name and all. */
+function libraryHeadTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "manage.js"), "utf8");
+  const fileSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-file.js"), "utf8");
+  const held = { name: "Invented shop", id: "invented-shop", cards: [1] };
+  const anyHeld = () => held;
+  Object.defineProperty(anyHeld, "name", { value: held.name });
+  const marker = 'openDialog({\n    title: "Library",';
+  const ns = {}, world = { file: "", opts: null };
+  const own = { storedCatalog: () => held, catalogLoaded: () => true, nsGet: k => (k in ns ? ns[k] : null),
+    eLoadedCatalogFile: () => world.file, openDialog: o => { world.opts = o; } };
+  const scope = new Proxy({}, {
+    has: (o, k) => typeof k === "string",
+    get: (o, k) => k === Symbol.unscopables ? undefined : k in own ? own[k] : k in globalThis ? globalThis[k] : anyHeld,
+    set: (o, k, v) => { own[k] = v; return true; }
+  });
+  let open = null;
+  try {
+    if (src.split(marker).length !== 2) throw new Error("the Library's openDialog call is not there exactly once");
+    open = new Function("scope", "with(scope){\n" + extractDecl(fileSrc, "function catalogFileName(") + "\n"
+      + "return () => { " + extractDecl(src, marker) + " };\n}")(scope);
+  } catch (e) { eq("manage.js carries the Library's dialog call", e.message, "sliced"); return; }
+  const head = (from, file) => {
+    Object.keys(ns).forEach(k => { delete ns[k]; });
+    if (from != null) ns.CatalogFrom = from;
+    world.file = file; world.opts = null;
+    try { open(); } catch (e) { return "threw " + e.message; }
+    const n = world.opts && world.opts.name;
+    return typeof n === "function" ? n() : n;
+  };
+  eq("the Library's heading names the file the catalog was loaded from, as the top bar does, and never the name a stored copy carries inside it",
+    [head("team.ec", "team.ec"), head("Spring team.ec", ""), head(null, "team.ec"), head("", "")],
+    ["team.ec", "Spring team.ec", "team.ec", ""]);
 }
 
 /* Section 2.5 of the specification and the body rules of 2.6, driven over the reader that
@@ -1445,123 +1484,28 @@ function catalogIdentityTests() {
   const src = sourceText();
   const I = new Function(extractDecl(src, "function isCatalogUpdate(")
     + "\nreturn {isCatalogUpdate};")();
-  const same = { id: "lamp-shop", name: "Lamp Shop" };
-  const renamed = { id: "lamp-shop", name: "Lamp Shop renamed" };
-  const other = { id: "other-shop", name: "Lamp Shop" };
-  eq("isCatalogUpdate same id different name is the same catalog",
-     I.isCatalogUpdate(renamed, same), true);
-  eq("isCatalogUpdate different ids same name are two catalogs",
-     I.isCatalogUpdate(other, same), false);
-  eq("isCatalogUpdate no id falls back to matching names",
-     I.isCatalogUpdate({ name: "Lamp Shop" }, { name: "Lamp Shop" }), true);
-  eq("isCatalogUpdate no id different names are different",
-     I.isCatalogUpdate({ name: "Lamp Shop renamed" }, { name: "Lamp Shop" }), false);
-  eq("isCatalogUpdate mixed case names without an id still match",
-     I.isCatalogUpdate({ name: "Lamp Shop" }, { name: "lamp shop" }), true);
+  eq("isCatalogUpdate same id is the same catalog",
+     I.isCatalogUpdate({ id: "lamp-shop" }, { id: "lamp-shop" }), true);
+  eq("isCatalogUpdate different ids are two catalogs",
+     I.isCatalogUpdate({ id: "other-shop" }, { id: "lamp-shop" }), false);
+  /* A name planted in both, the one field a reader of the old rule would have matched on. */
+  eq("isCatalogUpdate reads no name: without an id on both sides two files are never one catalog",
+     [I.isCatalogUpdate({ name: "Lamp Shop" }, { name: "Lamp Shop" }),
+      I.isCatalogUpdate({ id: "lamp-shop", name: "Lamp Shop" }, { name: "Lamp Shop" })], [false, false]);
 }
 
-/* A desk that stored its layer under a hash of the catalog's NAME, opening a build that hashes
-   its ID. The engine's own arithmetic, its own mover and its own strip are extracted and run
-   over a store this supplies; what a real boot does with them is tests/storage-carry.js, which
-   is where the Clear and the reload are. */
-function nameNsAdoptionTests() {
+/* THE NAMESPACE IS THE CATALOG'S ID ALONE. A name planted in the catalog, the seed an earlier rule
+   fell back to, must seed nothing: the build's namespace stays the shared one and so does the layer. */
+function catalogNsTests() {
   const src = sourceText();
   const decl = m => extractDecl(src, m);
   const nsFor = new Function(decl("function eNsFor(") + "\nreturn eNsFor;")();
-  const keyRe = new Function(decl("const E_KEY_RE=") + "\nreturn E_KEY_RE;")();
-  const mark = new Function(decl("const NS_ADOPTED=") + "\nreturn NS_ADOPTED;")();
-  const dropped = new Function(decl("const NS_DROP_POSITIONAL=") + "\nreturn NS_DROP_POSITIONAL;")();
-  const nsOf = new Function("eEmbeddedCatalog", "eNsFor", decl("const E_NS=") + "\nreturn E_NS;");
-  const body = ["const NS_CARRY=", "const NS_DROP_POSITIONAL=", "function packWithoutPositional(",
-                "function carryNsLayer(", "const NS_ADOPTED=", "function adoptNameNsLayer("]
-                 .map(decl).join("\n") + "\nreturn adoptNameNsLayer();";
-  const adopt = (catalog, store) => {
-    const E_NS = nsOf(() => catalog, nsFor);
-    const lsGet = k => (k in store) ? store[k] : null;
-    const lsSet = (k, v) => { store[k] = String(v); return true; };
-    const lsKeys = () => Object.keys(store);
-    const nsKey = n => E_NS + n;
-    const said = [];
-    /* A build's own catalog is the one loaded, so its layer is its namespace (storage.js, layerNsOf). */
-    const took = new Function("eEmbeddedCatalog", "eNsFor", "E_NS", "lsGet", "lsSet", "lsKeys",
-                              "nsGet", "nsKey", "LAYER_KEYS", "eLayer", "lyGet", "t", "toast", "setTimeout", body)(
-      () => catalog, nsFor, E_NS, lsGet, lsSet, lsKeys, n => lsGet(nsKey(n)), nsKey,
-      ["Pack", "Stats", "Days", "CatOrder", "IntentOrder", "IntentsAside", "LinksAside", "RequestsAside", "Exported"],
-      () => E_NS, n => lsGet(nsKey(n)), s => s, s => said.push(s), fn => fn());
-    return { took, said, ns: E_NS };
-  };
-
-  const NAMED = { name: "Lamp Shop" };
-  const WITH_ID = { id: "lamp-shop", name: "Lamp Shop" };
-  const SHARES_NAME = { id: "other-shop", name: "Lamp Shop" };
-  const nameNs = nsOf(() => NAMED, nsFor), idNs = nsOf(() => WITH_ID, nsFor);
-  const otherNs = nsOf(() => SHARES_NAME, nsFor);
-  const FOUR = ["Pack", "CatOrder", "Cols", "Floor"];
-  /* Both halves of a real pack: what is addressed by content travels, what is addressed by an
-     intent's position is what the tag model now reads as a tag id, so it must not. */
-  const OLD_PACK = JSON.stringify({ favourites: ["b:gen:One"], cardOrder: ["b:gen:One"],
-    intentOverrides: { "i:2": { en: "theirs" } }, intentHidden: ["i:4"],
-    intentFavourites: ["i:1"], intentRemoved: ["i:7"], baseCards: [{ id: "b:gen:One" }] });
-  const seed = (store, ns, tag) => {
-    store[ns + "Pack"] = OLD_PACK;
-    store[ns + "CatOrder"] = '["' + tag + '"]';
-    store[ns + "Cols"] = "3";
-    store[ns + "Floor"] = "240";
-    return store;
-  };
-  const layer = (store, ns) => FOUR.filter(n => store[ns + n] != null);
-
-  const desk = seed({}, nameNs, "old");
-  const first = adopt(WITH_ID, desk);
-  eq("an id-bearing build finds the name-hash layer under its own namespace", layer(desk, idNs), FOUR);
-  eq("and the columns and the floor arrive as they were", [desk[idNs + "Cols"], desk[idNs + "Floor"]], ["3", "240"]);
-  eq("and the pack arrives with what is addressed by content",
-     JSON.parse(desk[idNs + "Pack"]).favourites, ["b:gen:One"]);
-  eq("and without one field addressed by an intent's position",
-     dropped.filter(k => k in JSON.parse(desk[idNs + "Pack"])), []);
-  eq("and the name-hash keys are still in place, for a build that still reads them",
-     layer(desk, nameNs), FOUR);
-  eq("and the desk is told once", first.said, ["Restored your cards and stars from an earlier build."]);
-  eq("the marker is outside the shape every sweep of this engine's keys matches",
-     keyRe.test(mark + nameNs), false);
-  eq("and it is up", desk[mark + nameNs], "1");
-  const snap = Object.keys(desk).sort().join("|");
-  const again = adopt(WITH_ID, desk);
-  eq("a second open adopts nothing", [again.took, again.said.length], [false, 0]);
-  eq("and writes no key", Object.keys(desk).sort().join("|"), snap);
-
-  /* A Clear deletes this namespace's own keys and nothing else - local-memory.js matches the
-     CURRENT namespace by prefix - so the name-hash layer is still sitting there afterwards. */
-  Object.keys(desk).filter(k => k.indexOf(idNs) === 0).forEach(k => { delete desk[k]; });
-  const cleared = adopt(WITH_ID, desk);
-  eq("after a Clear the layer the user cleared does not come back",
-     [cleared.took, layer(desk, idNs).length], [false, 0]);
-
-  const pair = seed({}, nameNs, "shared");
-  adopt(WITH_ID, pair);
-  adopt(SHARES_NAME, pair);
-  eq("two ids one name: the first to open took the layer", layer(pair, idNs), FOUR);
-  eq("two ids one name: the second finds the marker and stays empty", layer(pair, otherNs), []);
-
-  const both = seed(seed({}, nameNs, "old"), idNs, "new");
-  const kept = adopt(WITH_ID, both);
-  eq("a namespace that already holds a layer keeps it", both[idNs + "CatOrder"], '["new"]');
-  eq("and the name-hash layer is left where it is", both[nameNs + "CatOrder"], '["old"]');
-  eq("and the marker goes up all the same, so a Clear cannot undo itself",
-     [both[mark + nameNs], kept.took], ["1", false]);
-  Object.keys(both).filter(k => k.indexOf(idNs) === 0).forEach(k => { delete both[k]; });
-  eq("driven by that marker: after the Clear, nothing is adopted",
-     [adopt(WITH_ID, both).took, layer(both, idNs).length], [false, 0]);
-
-  const none = { editorDraft: "not ours" };
-  adopt(WITH_ID, none);
-  eq("with no name-hash layer to decide about, not even a marker is written",
-     Object.keys(none), ["editorDraft"]);
-  const noName = seed({}, nsFor("Lamp Shop"), "old");
-  const noNameSnap = Object.keys(noName).sort().join("|");
-  adopt({ name: "Lamp Shop" }, noName);
-  eq("a build whose catalog carries no id is already in the name namespace and adopts nothing",
-     Object.keys(noName).sort().join("|"), noNameSnap);
+  const nsOf = c => new Function("eEmbeddedCatalog", "eNsFor", decl("const E_NS=") + "\nreturn E_NS;")(() => c, nsFor);
+  const layerOf = c => new Function("eNsFor", "E_NS", decl("function layerNsOf(") + "\nreturn layerNsOf;")(nsFor, "e")(c);
+  eq("a build's namespace is its catalog's id's, and a catalog with a name and no id seeds none",
+     [nsOf({ id: "lamp-shop", name: "Lamp Shop" }) === nsFor("lamp-shop"), nsOf({ name: "Lamp Shop" })], [true, "e"]);
+  eq("a catalog's layer is its id's, and one with a name and no id is the empty desk's",
+     [layerOf({ id: "lamp-shop", name: "Lamp Shop" }) === nsFor("lamp-shop"), layerOf({ name: "Lamp Shop" })], [true, "e"]);
 }
 
 /* THE ADOPTIONS NEVER CARRY ONE CATALOG'S LAYER INTO ANOTHER'S. A build with a catalog inside it
@@ -1574,10 +1518,10 @@ function strandedAdoptionTests() {
   const decl = m => extractDecl(src, m);
   const nsFor = new Function(decl("function eNsFor(") + "\nreturn eNsFor;")();
   const body = ["const NS_CARRY=", "const NS_DROP_POSITIONAL=", "function packWithoutPositional(",
-                "function carryNsLayer(", "const NS_ADOPTED=", "function adoptNameNsLayer(", "function adoptStrandedPack("]
-                 .map(decl).join("\n") + "\nadoptNameNsLayer(); adoptStrandedPack();";
-  const EMBEDDED = { id: "lamp-shop", name: "Lamp Shop" };
-  const own = nsFor(EMBEDDED.id), other = nsFor("fern-shop"), byName = nsFor(EMBEDDED.name), stranger = nsFor("an older seed");
+                "function carryNsLayer(", "const NS_ADOPTED=", "function adoptStrandedPack("]
+                 .map(decl).join("\n") + "\nadoptStrandedPack();";
+  const EMBEDDED = { id: "lamp-shop" };
+  const own = nsFor(EMBEDDED.id), other = nsFor("fern-shop"), stranger = nsFor("an older seed");
   const boot = (store, inView, written) => {
     const lsGet = k => (k in store) ? store[k] : null;
     new Function("eEmbeddedCatalog", "eNsFor", "E_NS", "lsGet", "lsSet", "lsKeys", "LAYER_KEYS", "eLayer", "eLayers",
@@ -1597,11 +1541,11 @@ function strandedAdoptionTests() {
   const s2 = boot({ [other + "Pack"]: PACK("an edit over another catalog") }, own, [other]);
   eq("the build's own catalog back in view takes nothing from a layer this desk wrote for another catalog",
      [under(s2, own), marks(s2)], [[], 0]);
-  const s3 = boot({ [byName + "Pack"]: PACK("an edit under the old name hash") }, other, [other]);
+  const s3 = boot({ [stranger + "Pack"]: PACK("an edit under an older seed") }, other, [other]);
   const s3Other = under(s3, other), s3Marks = marks(s3);
   boot(s3, own, [other]);
-  eq("the name-hash layer waits while another catalog is in view, and reaches the build's own catalog when it is",
-     [s3Other, s3Marks, JSON.parse(s3[own + "Pack"] || "{}").favourites], [[], 0, ["an edit under the old name hash"]]);
+  eq("a stranded layer waits while another catalog is in view, and reaches the build's own catalog when it is",
+     [s3Other, s3Marks, JSON.parse(s3[own + "Pack"] || "{}").favourites], [[], 0, ["an edit under an older seed"]]);
   const s4 = boot({ [stranger + "Pack"]: PACK("an edit an earlier build stranded") }, own, [other]);
   eq("a lone stranded layer no catalog of this desk wrote is still adopted by the build's own catalog",
      JSON.parse(s4[own + "Pack"] || "{}").favourites, ["an edit an earlier build stranded"]);
@@ -2093,6 +2037,52 @@ function markClockTests() {
    fileAssociations, and shell/installer.nsh's customInstall writes the Polish over it when the
    installer runs in Polish. Read here against electron-builder's own templates and language table;
    what Explorer shows on a Polish Windows is Maxim's to see. */
+/* WHAT A BUILD'S INSTALLER WRITES AROUND customInstall, as electron-builder's own makensis
+   preprocesses it: the include, then registerFileAssociations only if the build declares a type,
+   then installSection.nsh's own lines that insert both. Registry writes come back with the
+   LogicLib conditions open around them; a string is a refusal, and so is a registry line the
+   reader cannot parse, since a skipped write reads exactly like no write. */
+function nsisInstallWrites(root, cfg) {
+  const cp = require("child_process");
+  const lib = path.join(root, "node_modules", "app-builder-lib");
+  const assoc = [].concat(cfg.fileAssociations || [], (cfg.win || {}).fileAssociations || []);
+  const include = path.resolve(root, (cfg.directories || {}).buildResources || "build", (cfg.nsis || {}).include || "installer.nsh");
+  const sect = fs.readFileSync(path.join(lib, "templates", "nsis", "installSection.nsh"), "utf8");
+  const from = sect.indexOf("!ifmacrodef registerFileAssociations"), ins = sect.indexOf("!insertmacro customInstall", from);
+  const to = sect.indexOf("!endif", ins);
+  if (from < 0 || ins < 0 || to < 0) return "installSection.nsh no longer inserts registerFileAssociations, then customInstall";
+  const q = s => String(s).replace(/"/g, "$\\\"");
+  const product = cfg.productName || require(path.join(root, "package.json")).productName;
+  /* A preprocess-only run reads an include without a BOM in the system code page and refuses its
+     Polish; the real compile reads it as UTF-8 under -INPUTCHARSET UTF8, so /CHARSET says so here. */
+  const script = ["Unicode true", "!include LogicLib.nsh",
+    "!define APP_INSTALLER_STORE_FILE \"etiuda-updater\\installer.exe\"",
+    "!define UNINSTALL_REGISTRY_KEY \"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\app\"",
+    "!include /CHARSET=UTF8 \"" + include + "\""]
+    .concat(assoc.length ? ["!include \"" + path.join(lib, "templates", "nsis", "include", "FileAssociation.nsh") + "\"",
+      "!macro registerFileAssociations"].concat([].concat(...assoc.map(a => [].concat(a.ext).map(x =>
+        "!insertmacro APP_ASSOCIATE \"" + q(x) + "\" \"" + q(a.name || x) + "\" \"" + q(a.description || "") + "\" \"$appExe,0\" \"Open with "
+        + q(product) + "\" \"$appExe $\\\"%1$\\\"\"")))).concat(["!macroend"]) : [])
+    .concat(["Section", sect.slice(from, to + 6), "SectionEnd", ""]).join("\n");
+  const where = cp.spawnSync(process.execPath, ["-e", "require(process.argv[1]).getMakeNsisPath(process.argv[2] || undefined)"
+    + ".then(r => process.stdout.write(JSON.stringify(r)), e => { process.stderr.write(String(e)); process.exit(1); })",
+    path.join(lib, "out", "toolsets", "windows.js"), (cfg.toolsets || {}).nsis || ""], { encoding: "utf8" });
+  let mk;
+  try { mk = JSON.parse(where.stdout); } catch (e) { return "electron-builder named no makensis: " + String(where.stderr).trim(); }
+  const r = cp.spawnSync(mk.path, ["-INPUTCHARSET", "UTF8", "-OUTPUTCHARSET", "UTF8", "-SAFEPPO", "-"],
+    { input: script, encoding: "utf8", env: Object.assign({}, process.env, mk.env || {}) });
+  if (r.status !== 0) return "makensis refused the script: " + String(r.stdout + r.stderr).trim().split(/\r?\n/).slice(-2).join(" / ");
+  const open = [], writes = [];
+  for (const line of r.stdout.split(/\r?\n/).map(l => l.trim())) {
+    const c = /^StrCmp `([^`]*)` `([^`]*)` `` `([^`]+)`$/.exec(line);
+    if (c) { open.push({ when: c[1] + "==" + c[2], label: c[3] }); continue; }
+    if (open.length && line === open[open.length - 1].label + ":") { open.pop(); continue; }
+    const w = /^((?:Write|Delete)Reg\w+) (\S+) (["'`])(.*?)\3(?: (["'`])(.*?)\5)?(?: (["'`])(.*?)\7)?$/.exec(line);
+    if (w) writes.push({ op: w[1], root: w[2], key: w[4], name: w[6], value: w[8], when: open.map(o => o.when).join(" && ") });
+    else if (/^(Write|Delete)Reg/i.test(line)) return "a registry line the reader cannot parse: " + line;
+  }
+  return { include, assoc: assoc.length, writes };
+}
 function ecTypeNameTests() {
   const root = E.ROOT, lib = path.join(root, "node_modules", "app-builder-lib");
   let got;
@@ -2146,6 +2136,23 @@ function ecTypeNameTests() {
   } catch (e) { got = "the installer's include could not be read: " + e.message; }
   eq("the right-click entry for a .ec file is electron-builder's \"Open with Etiuda\" under the class's open verb, and a Polish installer writes \"Otwórz w Etiudzie\" there before telling the shell",
     got, [true, true, "Etiuda", "Etiuda catalog", "Otwórz w Etiudzie", true]);
+  /* Read as makensis reads it: the desk's installer writes the Polish over its own type only when
+     Polish, and a build that declares no type, which is how Studio includes this file, writes
+     nothing under Classes in any language while customInstall's other work still runs. */
+  const cfgNow = require(path.join(root, "electron-builder.js"));
+  const own = new Set([].concat(...(cfgNow.fileAssociations || []).map(a => [].concat(a.ext).map(x => "." + x).concat([a.name]))));
+  const classes = r => r.writes.filter(w => /^Software\\Classes(\\|$)/i.test(w.key) || /^(HKCR|HKEY_CLASSES_ROOT)(32|64)?$/i.test(w.root));
+  const desk = nsisInstallWrites(root, cfgNow);
+  got = typeof desk === "string" ? desk : [classes(desk).filter(w => w.when).map(w => [w.key, w.value, w.when]),
+    classes(desk).every(w => own.has(w.key.split("\\")[2]))];
+  eq("makensis reads the desk's installer writing only its own type's keys, and in Polish the name and the open verb",
+    got, [[["Software\\Classes\\Etiuda catalog", "Katalog Etiudy", "$LANGUAGE==1045"],
+      ["Software\\Classes\\Etiuda catalog\\shell\\open", "Otwórz w Etiudzie", "$LANGUAGE==1045"]], true]);
+  const bare = nsisInstallWrites(root, Object.assign({}, cfgNow, { fileAssociations: [] }));
+  got = typeof bare === "string" ? bare : [bare.assoc, classes(bare).map(w => [w.key, w.value, w.when]),
+    bare.writes.some(w => w.name === "InstallLocation" && w.value === "$INSTDIR")];
+  eq("the same include in a build that declares no file type writes nothing under Classes in any language, and still writes InstallLocation",
+    got, [0, [], true]);
 }
 /* THE MENU'S FIRST OPEN IS PAID FOR BEFORE IT (E9): warmMenu is sliced out of header-menus.js with the
    one openSettingsMenu that marks the menu drawn, and run on a small element model written here; when
@@ -3729,8 +3736,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 863;
-const UI_STRINGS_SHA256 = "68a5a9d03eae42b3e1c62f113af46869e6c542f563332056a7fbaeabcc595d06";
+const UI_STRINGS_COUNT = 861;
+const UI_STRINGS_SHA256 = "d4d80064a45b5ddbb935fe596f7c077f03f0f3779466423543e551c83b6c78bb";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
@@ -3814,11 +3821,14 @@ function checkFrozenContracts() {
         + "D4 moved every stored key to that prefix and the boot migration copies the old ones under it");
     if (bare.nsKey("Cards") !== "e" + "Cards")
       problems.push("nsKey gives " + JSON.stringify(bare.nsKey("Cards")) + " with no catalog, wanted \"eCards\"");
-    if (!/^e[0-9a-z]+~$/.test(named.E_NS))
-      problems.push("E_NS answers " + JSON.stringify(named.E_NS) + " for a named catalog, which is not "
+    if (!/^e[0-9a-z]+~$/.test(withId.E_NS))
+      problems.push("E_NS answers " + JSON.stringify(withId.E_NS) + " for a catalog with an id, which is not "
         + "\"e\" plus a base36 hash and a tilde, so no sweep built on the key shape would find its keys");
-    /* Identity is the file's own id when present: a rename keeps the namespace, two ids
-       under one name do not share one. A file with no id still hashes the name, above. */
+    if (named.E_NS !== "e")
+      problems.push("E_NS answers " + JSON.stringify(named.E_NS) + " for a catalog with a name and no id, wanted \"e\": "
+        + "the id is the namespace and a name seeds none");
+    /* Identity is the file's own id: a rename keeps the namespace, two ids under one name do not
+       share one. */
     if (withId.E_NS !== renamed.E_NS)
       problems.push("E_NS for a renamed catalog carrying an id is " + JSON.stringify(renamed.E_NS)
         + " against the original " + JSON.stringify(withId.E_NS)
@@ -4521,6 +4531,12 @@ function langAgnosticTests() {
     WL + "\nreturn normaliseCatalog;")({ facts: null }, "facts", () => false, x => x);
   const runtimeOf = codes => V.catalogFromV2(invent(codes));
   const through = codes => whitelist(runtimeOf(codes));
+  /* A name planted in a format 2 document, which the format no longer has: gone from the runtime
+     catalog, from the whitelist's, and from the export made of either. */
+  const namedIn = V.catalogFromV2(Object.assign(invent(["en"]), { name: "Invented shop" }));
+  eq("a catalog's name is read by no reader and written by no writer",
+     ["name" in namedIn, "name" in whitelist(namedIn), "name" in V.catalogToV2(namedIn),
+      "name" in V.catalogToV2(whitelist(namedIn))], [false, false, false, false]);
   eq("646g the whitelist takes a catalog declaring no English at all, which it refused before"
      + " this - it asked the live language list before the catalog had set it",
      [through(["de"]).cards[0]["t:de"], through(["pl"]).cards[0].tPl,
@@ -4579,23 +4595,23 @@ function libraryRowsTests() {
   const B = String.fromCharCode(92), HOME = "C:" + B + "Users" + B + "ann", DOCS = HOME + B + "Documents" + B + "Etiuda";
   const place = w => {
     try {
-      return new Function("E_CATALOG_NAME", "storedCatalog", "eDeskHome", "nsGet", "eHost", "eCatalogAccepted", "eCatalog",
+      return new Function("catalogLoaded", "storedCatalog", "eDeskHome", "nsGet", "eHost", "eCatalogAccepted", "eCatalog",
         "E_CATALOG_SCRIPT", "lsGet", "E_CATALOG_FOLDER_KEY", "eCatalogFolder", "eCatalogFile", "eCatalogBuiltIn", "eCatalogIn",
         [extractDecl(mt, "function mtSafe("), extractDecl(store, "function eHomeless("), extractDecl(mt, "function mtCatalogPlace(")].join("\n")
         + "\nreturn mtCatalogPlace;")(
-        w.name || "", () => (w.held ? {} : null), () => HOME, k => (w.ns || {})[k], () => (w.host ? {} : null), () => !!w.accepted, () => ({}),
+        () => !!w.loaded, () => (w.held ? {} : null), () => HOME, k => (w.ns || {})[k], () => (w.host ? {} : null), () => !!w.accepted, () => ({}),
         "etiuda-catalog.js", k => (k === "eCatalogFolder" ? w.chosen || null : null), "eCatalogFolder", () => w.folder || DOCS,
         () => w.file || "", () => !!w.builtIn, () => w.in || "")();
     } catch (e) { return "mtCatalogPlace did not run: " + e.message; }
   };
   const P = o => (typeof o === "string" ? o : [o.file, o.copy, o.folder].join(" | "));
   eq("the Maintenance panel names where the catalog in use lies, which copy it is and its folder, on a desk and in a browser", [
-    P(place({ host: true, name: "Team", ns: { CatalogFile: "team.ec" } })),
-    P(place({ host: true, name: "Team", ns: { CatalogFile: "team.ec" }, chosen: "D:" + B + "shared", folder: "D:" + B + "shared" })),
-    P(place({ host: true, name: "Sample", ns: { CatalogFile: "" }, accepted: true, builtIn: true, file: "sample-catalog.ec" })),
-    P(place({ host: true, name: "Team", ns: { CatalogFile: "" }, accepted: true, file: "team.ec", in: HOME + B + "Desktop" })),
-    P(place({ host: true, name: "Mine", ns: { CatalogFile: "", CatalogFrom: "mine.ec" } })),
-    P(place({ name: "Sample", accepted: true })), P(place({ name: "Mine", held: true, ns: { CatalogFrom: "mine.ec" } })),
+    P(place({ host: true, loaded: true, ns: { CatalogFile: "team.ec" } })),
+    P(place({ host: true, loaded: true, ns: { CatalogFile: "team.ec" }, chosen: "D:" + B + "shared", folder: "D:" + B + "shared" })),
+    P(place({ host: true, loaded: true, ns: { CatalogFile: "" }, accepted: true, builtIn: true, file: "sample-catalog.ec" })),
+    P(place({ host: true, loaded: true, ns: { CatalogFile: "" }, accepted: true, file: "team.ec", in: HOME + B + "Desktop" })),
+    P(place({ host: true, loaded: true, ns: { CatalogFile: "", CatalogFrom: "mine.ec" } })),
+    P(place({ loaded: true, accepted: true })), P(place({ loaded: true, held: true, ns: { CatalogFrom: "mine.ec" } })),
     P(place({ host: true }))], [
     "team.ec | Documents" + B + "Etiuda | %USERPROFILE%" + B + "Documents" + B + "Etiuda",
     "team.ec | the chosen catalog folder's | D:" + B + "shared",
@@ -4745,13 +4761,13 @@ function catalogLintLine(c, r) {
      twelve hundred lines below: no separator occurring inside either half can spoof a match,
      and unlike the raw NUL that lived there once it does not make git call the file binary. */
   const id = crypto.createHash("sha256")
-    .update(JSON.stringify([String((c && c.name) == null ? "" : c.name), String((c && c.version) == null ? "" : c.version)]))
+    .update(JSON.stringify([String((c && c.id) == null ? "" : c.id), String((c && c.version) == null ? "" : c.version)]))
     .digest("hex").slice(0, 16);
   /* awaiting: one finding per declared non-primary language any card lacks; this count is
      of those findings, not of the cards named inside them. */
   const awaitingN = (r && Array.isArray(r.awaiting)) ? r.awaiting.length : 0;
-  return "catalog " + id + " (sha256 of name+version, first 16 hex; the name itself is a"
-    + " customer's and does not go in a log): " + cards + " cards, " + cats + " categories, "
+  return "catalog " + id + " (sha256 of id+version, first 16 hex; an id can be made of a customer's"
+    + " name and does not go in a log): " + cards + " cards, " + cats + " categories, "
     + intents + " intent(s) - " + r.errors.length + " error(s), " + r.warnings.length + " warning(s)"
     + ", " + awaitingN + " awaiting (one finding per absent language)";
 }
@@ -5336,7 +5352,8 @@ if (require.main === module) {
   try {
     /* ELECTRON-BUILDER COPIES ONLY THE FUSE NAMES IT KNOWS, so a misspelt key leaves that fuse at
        Electron's default with no error anywhere. Each wanted key is read as electron-builder
-       reads it, in its own generateFuseConfig, and the value the config gives it is checked. */
+       reads it, in its own generateFuseConfig, and the value the config gives it is checked.
+       This is the ask only; the built program is read by tools/package.mjs, held by tests/fuses.mjs. */
     const root = path.join(__dirname, "..");
     const want = { runAsNode: false, enableNodeOptionsEnvironmentVariable: false,
                    enableNodeCliInspectArguments: false, onlyLoadAppFromAsar: true };

@@ -111,13 +111,13 @@ try {
      "catalogLintLine prints the counts: " + line.replace(/^.*?\): /, ""));
 
   /* 5 and 6. A digest that cannot tell two catalogs apart has replaced the name with silence.
-     Name and version each move it, and the same input twice does not. */
+     Id and version each move it, and the same input twice does not. */
   const id = s => (s.match(/catalog ([0-9a-f]{16})/) || [])[1];
   const base = id(T.catalogLintLine(CATALOG, lintClean));
-  const other = id(T.catalogLintLine(Object.assign({}, CATALOG, { name: NAME + "x" }), lintClean));
+  const other = id(T.catalogLintLine(Object.assign({}, CATALOG, { id: CATALOG.id + "x" }), lintClean));
   const newer = id(T.catalogLintLine(Object.assign({}, CATALOG, { date: VERSION + "x" }), lintClean));
   ok(!!base && base !== other && base !== newer && other !== newer,
-     "the digest moves when the name moves and when the version moves: " + base + " " + other + " " + newer);
+     "the digest moves when the id moves and when the version moves: " + base + " " + other + " " + newer);
   ok(base === id(T.catalogLintLine(JSON.parse(JSON.stringify(CATALOG)), lintClean)),
      "and does not move when nothing does");
 

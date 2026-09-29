@@ -54,10 +54,10 @@ function marked(doc, word, keepLangs) {
   walk(doc.tags, false); walk(doc.cards, false);
   return doc;
 }
-const A = marked(Object.assign(clone(sample), { id: "swap-alpha", name: "Alpha" }), "Qalpha", true);
+const A = marked(Object.assign(clone(sample), { id: "swap-alpha" }), "Qalpha", true);
 A.facts = "Qalpha facts\nfor the swap";
 delete A.sample;
-const B = marked(Object.assign(clone(sample), { id: "swap-beta", name: "Beta" }), "Qbeta", false);
+const B = marked(Object.assign(clone(sample), { id: "swap-beta" }), "Qbeta", false);
 B.langs = [{ code: "en", label: "EN" }];
 delete B.sample; delete B.facts; delete B.greet; delete B.role; delete B.commentLang;
 B.cards = B.cards.slice(0, 40);
@@ -73,7 +73,7 @@ const renamed = (o, from, to) => {
   if (from in o) { o[to] = o[from]; delete o[from]; }
   Object.keys(o).forEach(k => renamed(o[k], from, to));
 };
-const C = marked(Object.assign(clone(sample), { id: "swap-gamma", name: "Gamma" }), "Qgamma", true);
+const C = marked(Object.assign(clone(sample), { id: "swap-gamma" }), "Qgamma", true);
 delete C.sample; delete C.facts; delete C.greet; delete C.role; delete C.commentLang;
 C.langs = [{ code: "en", label: "EN" }, { code: "de", label: "DE" }];
 renamed(C.tags, "pl", "de"); renamed(C.cards, "pl", "de");
@@ -227,7 +227,10 @@ async function inPlace(q, fn, arg) {
   await settle(q);
   return q.navs() === before;
 }
-const load = doc => { const c = parseCatalogFile(doc); activateCatalog(c, { from: c.name.toLowerCase() + ".ec" }); };
+// A catalog is named by its file: each load hands the file it came from beside the document.
+const load = ([doc, file]) => { activateCatalog(parseCatalogFile(doc), { from: file }); };
+const FILE_OF = new Map([[A, "alpha.ec"], [B, "beta.ec"]]);
+const fileArg = doc => [JSON.stringify(doc), FILE_OF.get(doc)];
 const errs = [];
 
 try {
@@ -238,7 +241,7 @@ try {
      afresh; then B is loaded in place. */
   try {
     const q = await page();
-    const stayed0 = await inPlace(q, load, JSON.stringify(A));
+    const stayed0 = await inPlace(q, load, fileArg(A));
     await fresh(q, false);
     await q.evaluate(() => {
       const ids = cards.map(c => c.id);
@@ -249,7 +252,7 @@ try {
     // A copy made and a card marked recent: what this page alone holds, which no storage carries.
     await q.evaluate(() => { eNoteRecent(cards[5].id); copy("swap copy", "Copied"); });
     await sleep(400);
-    const stayed = await inPlace(q, load, JSON.stringify(B));
+    const stayed = await inPlace(q, load, fileArg(B));
     const got = await fingerprint(q);
     const inB = await q.evaluate(() => ({ id: (storedCatalog() || {}).id || null, cards: cards.length,
       words: /Qbeta/.test(document.getElementById("list").innerHTML) }));
@@ -280,7 +283,7 @@ try {
   /* 2. A TO THE EMPTY DESK AND BACK TO A, with a personal layer: an edit, a star, an own card. */
   try {
     const q = await page();
-    await inPlace(q, load, JSON.stringify(A));
+    await inPlace(q, load, fileArg(A));
     await fresh(q, false);
     const made = await q.evaluate(() => {
       const ids = cards.map(c => c.id);
@@ -303,7 +306,7 @@ try {
     check(dEmpty.length === 0 && emptyShows.cards === 0 && emptyShows.desk && !emptyShows.own,
       "2b the ejected desk equals a fresh empty desk and shows nothing of A's layer ("
       + JSON.stringify(emptyShows) + ")" + (dEmpty.length ? ": " + dEmpty.slice(0, 8).join(" ; ") : ""));
-    const back = await inPlace(q, load, JSON.stringify(A));
+    const back = await inPlace(q, load, fileArg(A));
     const again = await fingerprint(q);
     const shows = await q.evaluate(m => ({
       edit: !!document.querySelector('#list .card[data-id="' + m.edited + '"]') && /Qalpha edited title/.test(document.getElementById("list").innerHTML),
@@ -363,7 +366,7 @@ try {
       pack.custom.push({ id: "u:loose", c: "gen", t: "Qown loose", en: "Qown loose body", pl: "" });
       savePack(); rebuildCards();
     });
-    await q.evaluate(load, JSON.stringify(A)); await sleep(600);
+    await q.evaluate(load, fileArg(A)); await sleep(600);
     const asked = await q.evaluate(() => ({ bubble: !!document.getElementById("eLoose"), loaded: !!storedCatalog(),
       loose: /Qown loose/.test(localStorage.getItem(eLayer() + "Pack") || "") }));
     const anyway = await inPlace(q, () => document.getElementById("eLooseLoad").click());
@@ -382,7 +385,7 @@ try {
         createWritable: () => Promise.resolve({ write: t => { window.__saved.push(String(t)); return Promise.resolve(); },
           close: () => Promise.resolve() }) });
     });
-    await q.evaluate(load, JSON.stringify(A)); await sleep(600);
+    await q.evaluate(load, fileArg(A)); await sleep(600);
     const exported = await inPlace(q, () => document.getElementById("eLooseExport").click());
     const out = await q.evaluate(() => {
       const t = window.__saved[0]; let d = null; try { d = JSON.parse(t); } catch (e) {}
@@ -423,7 +426,7 @@ try {
      every language button on the header answers a press, the one C brought as well as boot's. */
   try {
     const q = await page();
-    await inPlace(q, load, JSON.stringify(A));
+    await inPlace(q, load, fileArg(A));
     await fresh(q, false);
     await q.evaluate(text => { importCatalogText(text, "gamma.ec"); }, JSON.stringify(C));
     await sleep(600);
