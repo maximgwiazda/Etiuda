@@ -57,6 +57,7 @@
       for(i=0;i<keys.length;i++) localStorage.removeItem(keys[i]);
     }catch(e){}
     try{ sessionStorage.clear(); }catch(e){}
+    try{ if(window.E_HOST && typeof window.E_HOST.session==="function") window.E_HOST.session("clear"); }catch(e){}
     var h=withDesk && !done && hostDesk();
     if(h) try{
       var map=JSON.parse(h.deskRead()||"{}"), kept={};
@@ -4909,7 +4910,8 @@ What you type stays in this browser only.`;
     }
   }
   var E_LS_OK = !!E_DESK || probeStore(() => window.localStorage);
-  var E_SS_OK = probeStore(() => window.sessionStorage);
+  var E_SS_HOST = E_DESK && typeof E_DESK.host.session === "function" ? E_DESK.host.session : null;
+  var E_SS_OK = !!E_SS_HOST || probeStore(() => window.sessionStorage);
   function lsGet(k) {
     if (E_DESK) return k in E_DESK.map ? E_DESK.map[k] : null;
     if (!E_LS_OK) return k in E_MEM ? E_MEM[k] : null;
@@ -4986,6 +4988,14 @@ What you type stays in this browser only.`;
     }
   }
   function ssGet(k) {
+    if (E_SS_HOST) {
+      try {
+        const v = E_SS_HOST("get", k);
+        return typeof v === "string" ? v : null;
+      } catch (e) {
+        return null;
+      }
+    }
     if (!E_SS_OK) return k in E_MEM_S ? E_MEM_S[k] : null;
     try {
       return sessionStorage.getItem(k);
@@ -4995,6 +5005,13 @@ What you type stays in this browser only.`;
   }
   function ssSet(k, v) {
     if (eWiping) return;
+    if (E_SS_HOST) {
+      try {
+        E_SS_HOST("set", k, String(v));
+      } catch (e) {
+      }
+      return;
+    }
     if (!E_SS_OK) {
       E_MEM_S[k] = String(v);
       return;
@@ -5005,6 +5022,13 @@ What you type stays in this browser only.`;
     }
   }
   function ssDel(k) {
+    if (E_SS_HOST) {
+      try {
+        E_SS_HOST("del", k);
+      } catch (e) {
+      }
+      return;
+    }
     if (!E_SS_OK) {
       delete E_MEM_S[k];
       return;

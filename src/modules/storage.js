@@ -198,7 +198,9 @@ function eDeskRefusedSeen(){
 /* A desk IS working storage, so the question storeCatalog asks - can anything be kept here -
    is answered yes without probing a localStorage the desk is not using. */
 const E_LS_OK=!!E_DESK||probeStore(()=>window.localStorage);
-const E_SS_OK=probeStore(()=>window.sessionStorage);
+/* Under the shell the tabs are kept by the app in memory, so nothing a tab held reaches the profile. */
+const E_SS_HOST=(E_DESK && typeof E_DESK.host.session==="function") ? E_DESK.host.session : null;
+const E_SS_OK=!!E_SS_HOST||probeStore(()=>window.sessionStorage);
 function lsGet(k){
   if(E_DESK) return (k in E_DESK.map)?E_DESK.map[k]:null;
   if(!E_LS_OK) return (k in E_MEM)?E_MEM[k]:null;
@@ -254,15 +256,18 @@ function lsKeys(){
   try{ return Object.keys(localStorage); }catch(e){ return []; }
 }
 function ssGet(k){
+  if(E_SS_HOST){ try{ const v=E_SS_HOST("get",k); return (typeof v==="string")?v:null; }catch(e){ return null; } }
   if(!E_SS_OK) return (k in E_MEM_S)?E_MEM_S[k]:null;
   try{ return sessionStorage.getItem(k); }catch(e){ return null; }
 }
 function ssSet(k,v){
   if(eWiping) return;                      // see the latch above lsSet
+  if(E_SS_HOST){ try{ E_SS_HOST("set",k,String(v)); }catch(e){} return; }
   if(!E_SS_OK){ E_MEM_S[k]=String(v); return; }
   try{ sessionStorage.setItem(k,String(v)); }catch(e){}
 }
 function ssDel(k){
+  if(E_SS_HOST){ try{ E_SS_HOST("del",k); }catch(e){} return; }
   if(!E_SS_OK){ delete E_MEM_S[k]; return; }
   try{ sessionStorage.removeItem(k); }catch(e){}
 }
