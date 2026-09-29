@@ -8,7 +8,8 @@
  *   1  this tree: CycloneDX 1.5, the desk at E_VERSION, Electron at the version npm installed and
  *      the lockfile records, no devDependency, and the npm set the lockfile's own closure
  *   2  a dependency added to package.json appears with everything it pulls in, and not before
- *   3  a synthetic tree with frozen expected versions: nested, scoped, dev and optional cases
+ *   3  a synthetic tree with frozen expected versions: nested, scoped, dev and optional cases, an optional
+ *      dependency both absent and installed
  *   4  a declared dependency that is not installed refuses and writes no file
  *   5  given the packaged app, the archive is held against the list both ways, on the desk's own
  *      shape (six files, no node_modules) as well; no folder of the build machine is in the file
@@ -32,7 +33,7 @@ const TOOL = path.join(ROOT, 'tools', 'sbom.mjs');
 const KEEP = process.argv.indexOf('--keep') > -1;
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 27;
+const EXPECTED = 28;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -208,6 +209,24 @@ async function main() {
     && !!alpha && JSON.stringify(alpha.licenses) === JSON.stringify([{ license: { id: 'MIT' } }]),
     '3d licences carried from each package.json: alpha ' + JSON.stringify(alpha && alpha.licenses) + ', @sc/beta '
     + JSON.stringify(beta && beta.licenses));
+
+  /* 3e AN OPTIONAL DEPENDENCY THAT IS INSTALLED IS LISTED, with its own dependency (board 819). Every
+     arm above has gamma declared and absent, so a tool that never walked optionalDependencies at all
+     passed all 27 checks (the test architect's plant of 2026-09-29). The same tree with gamma on the
+     disk, and the expected list written here before the tool ran. */
+  const synOpt = lab('synthetic-optional');
+  synTree(synOpt);
+  put(path.join(synOpt, 'node_modules', 'gamma', 'package.json'), { name: 'gamma', version: '0.4.0', license: 'MIT', dependencies: { theta: '1' } });
+  put(path.join(synOpt, 'node_modules', 'theta', 'package.json'), { name: 'theta', version: '1.0.0', license: 'ISC' });
+  const r3e = run(['--root', synOpt, '--out', path.join(synOpt, 'bom.json')]);
+  const b3e = bomAt(path.join(synOpt, 'bom.json'));
+  const WANT3E = ['@sc/beta@2.0.1', 'alpha@1.2.3', 'gamma@0.4.0', 'shared@1.5.0', 'shared@2.0.0', 'theta@1.0.0'];
+  const top3e = b3e && (b3e.dependencies || []).find(d => d.ref === (b3e.metadata.component || {})['bom-ref']);
+  check(r3e.status === 0 && JSON.stringify(npmSet(b3e)) === JSON.stringify(WANT3E)
+    && !!top3e && top3e.dependsOn.indexOf('pkg:npm/gamma@0.4.0') > -1,
+    '3e with the optional gamma installed it is listed, and theta with it: ' + JSON.stringify(npmSet(b3e))
+    + ' against the frozen ' + JSON.stringify(WANT3E) + ', the desk depending on gamma ' + !!(top3e && top3e.dependsOn.indexOf('pkg:npm/gamma@0.4.0') > -1)
+    + '; exit ' + r3e.status);
 
   /* ---- 4. DECLARED AND NOT INSTALLED REFUSES ----------------------------------------------- */
   const miss = lab('missing');

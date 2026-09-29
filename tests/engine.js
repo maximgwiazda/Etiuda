@@ -523,6 +523,119 @@ function killTree(pid) {
   catch (e) { return { killed: false, how: "no such process: it had already gone" }; }
 }
 
+/* ---- ONE ELECTRON RUN AT A TIME, AND BELOW NORMAL, board 820 -------------------------------
+ *
+ * A gate that starts Electron on a laptop somebody else is also driving shares the machine with
+ * whatever else is launching windows, and the rule of the house is one window-driving run at a
+ * time, at below-normal priority. Written here so every gate that joins the merge chain says it
+ * the same way: tests/desk.js was the first, 2026-09-29.
+ *
+ * WHAT COUNTS AS ANOTHER RUN: a live `electron.exe` from any folder (every loose-file launch of
+ * either tree is one), or a process whose image name begins with "etiuda" (a packaged app out of
+ * win-unpacked, a scratch install, an installer), unless its executable lives under Program Files
+ * or the per-user Programs folder, which is where the installed desk and Studio in daily use
+ * live. A process whose path cannot be read counts, because unknown is not the same as installed.
+ * A run is counted by its root: a process whose parent is not itself one of the matches.
+ *
+ * WHAT IT CANNOT SEE: a headless Chrome or any other Chromium, which is not Electron and is not
+ * refused, and an Electron app that renamed its executable to something else entirely. */
+const INSTALLED_UNDER = [process.env.ProgramFiles, process.env.ProgramW6432, process.env["ProgramFiles(x86)"],
+  process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Programs")]
+  .filter(Boolean).map(p => path.resolve(p).toLowerCase() + path.sep);
+
+function powershellJson(script) {
+  const r = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script],
+    { encoding: "utf8", timeout: 60000, windowsHide: true });
+  if (r.error || r.status !== 0) return { ok: false, why: String(r.error ? r.error.message : (r.stderr || "exit " + r.status)).trim() };
+  try { return { ok: true, value: JSON.parse(String(r.stdout || "").trim() || "[]") }; }
+  catch (e) { return { ok: false, why: "unreadable answer: " + String(r.stdout).slice(0, 200) }; }
+}
+
+/** The Electron runs live on this machine that are not the installed apps. `asked` is false where
+ *  the machine could not be asked, which a caller must treat as a refusal and never as none. */
+function electronRunsLive() {
+  if (process.platform !== "win32") return { asked: false, runs: [], why: "not Windows" };
+  const r = powershellJson("$p = @(Get-CimInstance Win32_Process -Filter \"Name='electron.exe' OR Name LIKE 'etiuda%.exe'\""
+    + " | ForEach-Object { [pscustomobject]@{ pid=[int]$_.ProcessId; parent=[int]$_.ParentProcessId;"
+    + " name=[string]$_.Name; path=[string]$_.ExecutablePath } }); ConvertTo-Json -InputObject $p -Compress");
+  if (!r.ok) return { asked: false, runs: [], why: r.why };
+  const all = (Array.isArray(r.value) ? r.value : [r.value]).filter(x => x && x.pid && x.pid !== process.pid);
+  const live = all.filter(x => {
+    const p = String(x.path || "").toLowerCase();
+    return !p || !INSTALLED_UNDER.some(root => p.indexOf(root) === 0);
+  });
+  const pids = new Set(live.map(x => x.pid));
+  const roots = live.filter(x => !pids.has(x.parent));
+  return { asked: true, processes: live.length, runs: roots.map(x => ({ pid: x.pid, name: x.name, path: x.path || "(path unreadable)",
+    family: live.filter(y => y.parent === x.pid).length })) };
+}
+
+const sleepSync = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+/** Refuse, NO_VERDICT, while another Electron run is live, after a grace for one that is closing
+ *  (the gate before this one in a chain kills its window a moment before this one starts). */
+function refuseWhileElectronLive(who, graceMs) {
+  const until = Date.now() + (graceMs === undefined ? 15000 : graceMs);
+  let seen;
+  for (;;) {
+    seen = electronRunsLive();
+    if (!seen.asked) refuse(who + " could not ask this machine whether another Electron run is live: " + seen.why,
+      "a guard that cannot look says so rather than letting a window-driving run start beside another one");
+    if (!seen.runs.length) {
+      console.log("       no other Electron run is live (" + (seen.processes || 0) + " matching process(es) outside Program Files), so "
+        + who + " starts");
+      return seen;
+    }
+    if (Date.now() >= until) break;
+    sleepSync(1500);
+  }
+  refuse(who + " did not start: another Electron run is live, " + seen.runs.length + " run(s) over "
+    + seen.processes + " process(es)",
+    ...seen.runs.map(x => "pid " + x.pid + " " + x.name + " at " + x.path + (x.family ? ", with " + x.family + " child process(es)" : "")),
+    "one window-driving run at a time: wait for it to end, or end it if it is a leftover of yours",
+    "this is a refusal and not a failure: nothing about the product was measured");
+}
+
+/** This process at below-normal priority, and what the machine says it is now. */
+function belowNormal() {
+  try { os.setPriority(0, os.constants.priority.PRIORITY_BELOW_NORMAL); } catch (e) { /* read back below */ }
+  let now = null;
+  try { now = os.getPriority(0); } catch (e) { now = null; }
+  return { priority: now, below: now === os.constants.priority.PRIORITY_BELOW_NORMAL };
+}
+
+/** A launched Electron and every process under it, lowered to below normal. Only the browser
+ *  process inherits it from this one: Chromium starts its renderer at normal and its GPU process
+ *  above normal (measured 2026-09-27), so each is set here, by pid, after the window is up.
+ *  Returns what the machine reports afterwards, read back per process. */
+function lowerTree(rootPid) {
+  if (!rootPid || process.platform !== "win32") return { asked: false, n: 0, below: 0, other: [] };
+  const r = powershellJson("$p = @(Get-CimInstance Win32_Process | ForEach-Object { [pscustomobject]@{ pid=[int]$_.ProcessId;"
+    + " parent=[int]$_.ParentProcessId; name=[string]$_.Name } }); ConvertTo-Json -InputObject $p -Compress");
+  if (!r.ok) return { asked: false, n: 0, below: 0, other: [], why: r.why };
+  const kids = new Map();
+  for (const x of r.value) { if (!kids.has(x.parent)) kids.set(x.parent, []); kids.get(x.parent).push(x); }
+  const tree = [], todo = [rootPid], seen = new Set();
+  while (todo.length) {
+    const pid = todo.pop();
+    if (seen.has(pid)) continue;
+    seen.add(pid);
+    const me = r.value.find(x => x.pid === pid);
+    if (me) tree.push(me);
+    for (const k of kids.get(pid) || []) todo.push(k.pid);
+  }
+  const BELOW = os.constants.priority.PRIORITY_BELOW_NORMAL;
+  const other = [];
+  let below = 0;
+  for (const x of tree) {
+    try { os.setPriority(x.pid, BELOW); } catch (e) { /* read back below */ }
+    let now = null;
+    try { now = os.getPriority(x.pid); } catch (e) { now = null; }
+    if (now === BELOW) below++; else other.push(x.name + " " + x.pid + " at " + now);
+  }
+  return { asked: true, n: tree.length, below, other };
+}
+
 /* ---- the shortcuts a desk already has, parked like a desk ----------------------------------- */
 
 /* BOARD ITEM 514, AND WHAT IT COST. The reinstall loop is the one instrument that runs the real
@@ -1301,6 +1414,7 @@ module.exports = { NO_VERDICT, exitOf, ROOT, ENGINE_PATH, FIXTURE_FILE, TREE_FIL
                    parkNamedShortcuts, restoreNamedShortcuts,
                    SHELL_FOLDERS, shellFolders, placesMismatch, deskEnvelope, envelopeLine, keepAside,
                    windowFacts, pickWindow, offscreenVerdict, offscreenCheck, killTree,
+                   electronRunsLive, refuseWhileElectronLive, belowNormal, lowerTree,
                    NOT_PROVED_OFF_WINDOWS, offWindowsNotice,
                    suiteVerdict,
                    refuse, sha256, enginePath, engineSource, fixturesDir, fixtures, runFolder, browserPath, inside,
