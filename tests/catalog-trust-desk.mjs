@@ -232,7 +232,8 @@ async function launch(plan) {
   const onHandlers = {}, invokeHandlers = {};
   const electron = {
     app: { getPath: () => UD, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
-           getVersion: () => "0.0.0", whenReady: () => new Promise(noop), isPackaged: false },
+           getVersion: () => "0.0.0", whenReady: () => new Promise(noop), isPackaged: false,
+           commandLine: { appendSwitch: noop } },
     ipcMain: { on: (ch, fn) => { onHandlers[ch] = fn; }, handle: (ch, fn) => { invokeHandlers[ch] = fn; } },
     shell: { openPath: async () => "" },
     BrowserWindow: inert, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert,

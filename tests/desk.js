@@ -26,6 +26,10 @@
  *          must be handed the desk as the disk holds it then rather than as it stood at start.
  *   run B  corrupts desk.json and starts again: the backup that run A rotated is read instead,
  *          and the corrupt file is still on disk rather than quietly replaced.
+ *   runs C and D  each start on a profile of their own, idle, close cleanly and are read from the
+ *          Chromium net log they wrote. C is the shell with its proxy switch cut out and must show
+ *          proxy discovery, or D's silence means nothing and is NOT RUN; D is the shipped shell and
+ *          must show none.
  *
  * Nothing here reads a card's text: the planted keys are settings, and the only catalog in the
  * throwaway app is the one this test writes, which holds a single card whose text it chose.
@@ -144,10 +148,10 @@ function migrationTests() {
 
 const PLANTED = { pbTheme: "dark", pbUiLang: "pl", pbGlassOff: "1" };
 
-function buildApp() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-"));
-  fs.mkdirSync(path.join(dir, "shell"));
-  fs.mkdirSync(path.join(dir, "engine"));
+function buildApp(into) {
+  const dir = into || fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-"));
+  fs.mkdirSync(path.join(dir, "shell"), { recursive: true });
+  fs.mkdirSync(path.join(dir, "engine"), { recursive: true });
   fs.mkdirSync(path.join(dir, "userdata"), { recursive: true });
   for (const f of ["main.js", "preload.js"])
     fs.copyFileSync(path.join(E.ROOT, "shell", f), path.join(dir, "shell", f));
@@ -225,6 +229,54 @@ function stopShell(b) {
   E.killTree(child && child.pid);
   try { if (child) child.kill(); } catch (x) {}
   child = null;
+}
+
+/* A NET LOG IS WRITTEN OUT AT A CLEAN EXIT, NOT BEFORE: a window that is killed leaves a header over
+   an empty list, and an empty list reads like a quiet start. So the log must parse whole, and the
+   window is closed by Browser.close, which lets Chromium finish it. */
+function readNetLog(file) {
+  let raw = "";
+  try { raw = fs.readFileSync(file, "utf8"); } catch { return null; }
+  let doc = null, closed = false;
+  try { doc = JSON.parse(raw); closed = true; }
+  catch { try { doc = JSON.parse(raw.replace(/,\s*$/, "") + "]}"); } catch { doc = null; } }
+  if (!doc || !doc.constants || !doc.constants.logEventTypes || !Array.isArray(doc.events)) return null;
+  const T = {};
+  for (const k of Object.keys(doc.constants.logEventTypes)) T[doc.constants.logEventTypes[k]] = k;
+  const hosts = new Set();
+  let pac = 0, ipv6 = 0;
+  for (const ev of doc.events) {
+    const name = T[ev.type] || "";
+    if (name.indexOf("PAC_FILE_DECIDER") >= 0) pac++;
+    if (name === "HOST_RESOLVER_MANAGER_IPV6_REACHABILITY_CHECK") ipv6++;
+    if (ev.params && ev.params.host) hosts.add(String(ev.params.host));
+  }
+  return { closed, events: doc.events.length, hosts: [...hosts], pac, ipv6,
+           wpad: [...hosts].some(h => /wpad/i.test(h)) };
+}
+
+/* One window of a net-log arm: launch the app on a profile of its own, idle, close the way a person
+   does, wait for the process to end by itself, and only then read the file. */
+async function netLogArm(appDir, ud, logAt) {
+  E.pinCatalogFolder(ud, path.join(APP, "catalogs"));
+  child = E.shellLaunch("tests/desk.js net log", electronExe(),
+    [appDir, "--remote-debugging-port=" + PORT, "--user-data-dir=" + ud, "--log-net-log=" + logAt],
+    { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: LABDOCS }) });
+  child.stdout.on("data", () => {});
+  child.stderr.on("data", () => {});
+  let b;
+  for (let i = 0; i < 40 && !b; i++) {
+    await sleep(500);
+    try { b = await puppeteer.connect({ browserURL: "http://127.0.0.1:" + PORT, defaultViewport: null }); } catch (x) {}
+  }
+  if (!b) throw new Error("Electron did not answer on the debugging port within 20 s");
+  await sleep(4500);
+  const gone = new Promise(r => { if (child.exitCode !== null) r(true); else child.once("exit", () => r(true)); });
+  try { await b.close(); } catch (x) { /* judged by the exit below */ }
+  const exitedAlone = await Promise.race([gone, sleep(15000).then(() => false)]);
+  stopShell(b);
+  await sleep(1500);
+  return { log: readNetLog(logAt), exitedAlone };
 }
 
 (async () => {
@@ -380,6 +432,35 @@ function stopShell(b) {
     && JSON.parse(fs.readFileSync(path.join(UD, "desk.bak2.json"), "utf8")).kind === "etiuda-desk",
     "the corrupt file was rotated into desk.bak1.json rather than deleted, and the readable backup moved down to desk.bak2.json");
   stopShell(s.b);
+  await sleep(1500);
+
+  /* ---- runs C and D: proxy discovery, with and without the shell's switch ---- */
+  const SWITCH = 'app.commandLine.appendSwitch("no-proxy-server");';
+  const CONTROL_APP = buildApp(path.join(APP, "control"));
+  const controlMain = path.join(CONTROL_APP, "shell", "main.js");
+  const controlSrc = fs.readFileSync(controlMain, "utf8");
+  const cuts = controlSrc.split(SWITCH).length - 1;
+  check(cuts === 1, "the shell holds its proxy switch line exactly once, so the control copy can cut it: " + cuts);
+  fs.writeFileSync(controlMain, controlSrc.split(SWITCH).join(""), "utf8");
+  const control = await netLogArm(CONTROL_APP, path.join(CONTROL_APP, "userdata"), path.join(APP, "netlog-control.json"));
+  const shipped = await netLogArm(APP, path.join(APP, "ud-netlog"), path.join(APP, "netlog.json"));
+  const mainLog = shipped.log, controlLog = control.log;
+  const written = !!mainLog && mainLog.closed && mainLog.events > 0;
+  const quiet = !!mainLog && !mainLog.wpad && mainLog.pac === 0 && mainLog.ipv6 === 0;
+  const controlShows = !!controlLog && (controlLog.wpad || controlLog.pac > 0);
+  const said = JSON.stringify({
+    main: mainLog ? { closed: mainLog.closed, events: mainLog.events, hosts: mainLog.hosts, pac: mainLog.pac,
+      ipv6: mainLog.ipv6, exitedAlone: shipped.exitedAlone } : null,
+    control: controlLog ? { closed: controlLog.closed, events: controlLog.events, hosts: controlLog.hosts,
+      pac: controlLog.pac } : null });
+  /* A quiet control is NOT RUN, never ok: where the shell without its switch does no discovery either,
+     this machine cannot tell the switch's absence from its presence. */
+  if (controlLog && !controlShows && written && quiet)
+    notRun.push("C/D proxy discovery: the control shows no wpad lookup and no PAC decider on this machine: " + said);
+  else
+    check(written && quiet && controlShows,
+      "at start the shell does no proxy discovery, so no wpad lookup and no IPv6 probe at idle, read from a log"
+      + " Chromium wrote out at a clean close, against a control without the switch that does discover: " + said);
 
   reachedEnd = true;
 })().catch(e => {

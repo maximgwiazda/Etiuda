@@ -79,7 +79,7 @@ const inert = new Proxy(function () {}, { get: () => inert, set: () => true, app
 const onH = {}, invH = {};
 const electron = {
   app: { getPath: () => UD, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop, getVersion: () => "0.0.0",
-         whenReady: () => new Promise(noop) },
+         whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
   ipcMain: { on: (ch, fn) => { onH[ch] = fn; }, handle: (ch, fn) => { invH[ch] = fn; } },
   BrowserWindow: inert, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert,
   screen: inert, shell: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },

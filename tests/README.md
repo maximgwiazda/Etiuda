@@ -613,6 +613,18 @@ those files, and the release itself driven in a throwaway repository to its seco
 exit 2 is a stop and exit 3 (gate 3 finding no name list in the lab) is a pass. The uninstaller
 is not read, since it is sealed inside the installer. 25 checks, about 4 s.
 
+## The shell's proxy switch, and how it is proved in two places
+
+The shell turns proxying off with `no-proxy-server`, so at start there is no proxy discovery (no
+wpad lookup) and no IPv6 reachability probe at idle. The probe still fires on the first hostname
+lookup. `tests/shell-office.mjs` leg 6 reads the switches the real `shell/main.js` sets, with
+electron stubbed: exactly the one, and none once its line is cut out of a copy. That leg proves
+the switch is set; only Electron can prove what Chromium then does. `tests/desk.js` runs C and D
+do that, each on a profile of its own with `--log-net-log`: C is the shell with the line cut out
+and must show discovery, D is the shipped shell and must show none. A net log is complete only at
+a clean close, so the window is closed through the debugging port and the log must parse whole
+and hold events. A control that shows no discovery on the machine is NOT RUN, never ok.
+
 ## The fuses, read out of the program rather than the config
 
     node tests/fuses.mjs
