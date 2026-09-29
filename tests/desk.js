@@ -335,14 +335,22 @@ async function netLogArm(appDir, ud, logAt) {
     if (b) b.click();
     const t = performance.now();
     for (let i = 0; i < 20; i++) window.lsSet("eDeskProbe", "v" + i);
-    return { ms: (performance.now() - t) / 20, clicked: !!b, theme: document.documentElement.dataset.theme };
+    return { ms: (performance.now() - t) / 20, clicked: !!b };
   });
   await sleep(600);
   const afterWrite = deskOnDisk().keys || {};
   check(afterWrite.eDeskProbe === "v19",
     "a value written through lsSet is on the disk by the time lsSet returns (eDeskProbe " + afterWrite.eDeskProbe + ")");
-  check(timing.clicked && afterWrite.eTheme === timing.theme && timing.theme !== "dark",
-    "the theme button's own write reached the file too (" + afterWrite.eTheme + " on disk, " + timing.theme + " on screen)");
+  /* The flip is a view transition and a window nobody sees paints about once a second, so the
+     palette lands and eTheme is stored one to two seconds after the press: wait on the file. */
+  let themed = afterWrite;
+  for (let i = 0; i < 40 && themed.eTheme === "dark"; i++) {
+    await sleep(250);
+    try { themed = deskOnDisk().keys || {}; } catch (x) {}
+  }
+  const shown = await s.p.evaluate(() => document.documentElement.dataset.theme);
+  check(timing.clicked && themed.eTheme === shown && shown !== "dark",
+    "the theme button's own write reached the file too (" + themed.eTheme + " on disk, " + shown + " on screen)");
   console.log("       a synchronous desk save costs " + timing.ms.toFixed(2)
     + " ms per key, mean of 20 writes over a " + Buffer.byteLength(JSON.stringify(afterWrite), "utf8") + " byte desk");
 
