@@ -1169,10 +1169,23 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   /* WHAT A FIRST RUN PUTS ON SCREEN, read once the tour has had its moment: the empty desk with
      its mark, nothing loaded, no catalog offer and no window, and the tour's first bubble, which
-     stands clear of the mark. The mark and the bubble are read as rectangles. */
+     stands clear of the mark. The mark and the bubble are read as rectangles.
+     THE TOUR IS WAITED FOR, then given its moment (board 817): its bubble and Skip must both stand on screen, polled
+     for up to 20 s, and the 2200 ms run from there, not from the launch. Measured on 2026-09-29 over six first runs
+     of one lab: the bubble stood after 2 ms, 1629, 1632, 2613 and 15653 ms, and once was not up at the 2.2 s read at
+     all, so a fixed sleep from the launch read a tour still to come as no tour. `tourAt` is that wait, -1 where the
+     tour never stood; 2k2 and 2k3 assert the bubble stands, 2k2b reads its title. */
   const FIRST_SCREEN = async p => {
+    const t0 = Date.now();
+    let tourAt = -1;
+    while (Date.now() - t0 < 20000) {
+      const up = await p.evaluate(() => ["tourCard", "tourSkip"].every(id => {
+        const el = document.getElementById(id); return !!el && el.getBoundingClientRect().width > 0; })).catch(() => false);
+      if (up) { tourAt = Date.now() - t0; break; }
+      await new Promise(r => setTimeout(r, 100));
+    }
     await new Promise(r => setTimeout(r, 2200));
-    return p.evaluate(() => {
+    return Object.assign({ tourAt }, await p.evaluate(() => {
       const box = el => { if (!el) return null; const r = el.getBoundingClientRect();
         return r.width ? [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)] : null; };
       const mark = box(document.querySelector(".e-empty-mark")), bub = box(document.getElementById("tourCard"));
@@ -1183,7 +1196,7 @@ const placeEc = (dir, from, as, minutesOld) => {
         field: !!document.querySelector("#tourField:not([hidden]) .e-name-inp"),
         sample: !!document.getElementById("emptySample"), load: !!document.getElementById("emptyLoad"),
         now: ((document.querySelector("#catNow .cn-none:not([hidden])") || {}).textContent || "") };
-    });
+    }));
   };
   const docsA = seedDocs("fresh");
   const udS1 = newUserData("seed-fresh", null, true);
@@ -1235,17 +1248,16 @@ const placeEc = (dir, from, as, minutesOld) => {
      rises when it is skipped.
      WAITED FOR, NOT SLEPT ON (board 817): the leg used to sleep, click Skip blind and read the offer once 800 ms
      later, and its message said "with the tour up" whether or not the tour was up. One red on 2026-09-29, under four
-     suites at once, could not say whether the tour was late, the offer slow, or the product wrong. So the tour is
-     waited for (up to 20 s) until its bubble and its Skip both stand on screen - Skip is in the page from the start,
-     so being there says nothing, and one run on 2026-09-29 found it there at 1 ms with no tour up at 2.2 s - then the
-     screen with the tour standing is read as 2k2 reads it, Skip is clicked only where it stands, and after the click
-     the offer is polled for (up to 5 s); both times are printed, and so is what stood when Skip was clicked. */
+     suites at once, could not say whether the tour was late, the offer slow, or the product wrong. So FIRST_SCREEN
+     waits for the tour's bubble and Skip to stand on screen (Skip is in the page from the start, so being there says
+     nothing; one run found it at 1 ms with no tour up at 2.2 s), the screen with the tour standing is read as 2k2
+     reads it, Skip is clicked only where it stands, and after the click the offer is polled for (up to 5 s); both
+     times are printed, and so is what stood when Skip was clicked. */
   const pollPage = async (fn, ms) => { const t0 = Date.now();
     while (Date.now() - t0 < ms) { if (await s.p.evaluate(fn).catch(() => false)) return Date.now() - t0; await sleep(100); }
     return -1; };
-  const skipAfter = await pollPage(() => ["tourCard", "tourSkip"].every(id => {
-    const el = document.getElementById(id); return !!el && el.getBoundingClientRect().width > 0; }), 20000);
   const takenFirst = await FIRST_SCREEN(s.p);
+  const skipAfter = takenFirst.tourAt;
   const skipped = await s.p.evaluate(() => { const k = document.getElementById("tourSkip");
     if (!k || !k.getBoundingClientRect().width) return false; k.click(); return true; });
   const offerAfter = skipped ? await pollPage(() => !!document.querySelector("#ecYes"), 5000) : -1;
