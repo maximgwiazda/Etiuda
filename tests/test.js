@@ -2631,10 +2631,10 @@ function shippedFlagTests() {
     let body = null;
     try {
       new Function("t", "esc", "keysLegendHtml", "TILE_MARK", "E_VERSION", "eCatalogFile", "eCatalogIn", "eCatalogBuiltIn",
-        "openDialog", "document", "fillProseIcons", "modalCard", "$", "dismissModal",
+        "openDialog", "document", "fillProseIcons", "modalCard", "$", "dismissModal", "TRADEMARK", "uiLang",
         extractDecl(about, "function openAbout(") + "\nreturn openAbout;")(
         s => s, s => s, () => "", "", "2", () => file, () => inDir, () => builtIn,
-        o => { body = o.body; }, { getElementById: () => null }, () => {}, null, () => null, () => {})();
+        o => { body = o.body; }, { getElementById: () => null }, () => {}, null, () => null, () => {}, { en: "" }, () => "en")();
     } catch (e) { return "openAbout did not run: " + e.message; }
     const m = /<b>Catalog file<\/b> - (.*?)<br>/.exec(body || "");
     return m ? m[1] : "";
@@ -5216,10 +5216,21 @@ if (require.main === module) {
       });
       const cfg = fs.readFileSync(path.join(__dirname, "..", "electron-builder.js"), "utf8");
       if (!/buildResources:\s*"shell"/.test(cfg)) bad.push("buildResources is no longer shell/");
+      /* EACH TEXT CLOSES ON THE TRADEMARK NOTICE About shows, read from its one line in about.js,
+         so a registration that edits that line reddens here until both texts follow it. */
+      const decl = extractDecl(sourceText(), "const TRADEMARK=");
+      const mark = new Function("return " + decl.slice(decl.indexOf("=") + 1, -1))();
+      want.forEach(f => {
+        const line = mark[f.slice(8, 10)] || "";
+        const paras = fs.readFileSync(path.join(shell, f), "utf8").replace(/^﻿/, "").trim()
+          .split(/\n\s*\n/);
+        if (!line || paras[paras.length - 1] !== line || paras.filter(p => p === line).length !== 1)
+          bad.push(f + " does not close, once, on the notice " + JSON.stringify(line));
+      });
       bad.forEach(x => console.error("  ERROR: " + x));
       if (bad.length) hardFail++;
       else console.log("  the installer's licence page: " + sizes.join(", ")
-        + ", both UTF-8 with a BOM, under buildResources");
+        + ", both UTF-8 with a BOM, under buildResources, each closing on its trademark notice");
     }
   } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 

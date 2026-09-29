@@ -23,3 +23,5 @@ Liability. Our liability is limited to what was paid for the licence in the twel
 Termination. The licence ends whenever you remove the software. We may end it if its terms are broken and not put right within thirty days of our asking, and the software is then removed from every device.
 
 Governing law. Polish law governs this licence. A consumer may bring a claim before the courts of their own country; other claims go to the courts of the seller's registered seat.
+
+Etiuda is a trademark of Maxim Gwiazda.
