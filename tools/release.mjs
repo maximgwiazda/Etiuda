@@ -31,6 +31,7 @@ import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeBuild, signatureVerdict } from './sellable.mjs';
+import { writeSbom } from './sbom.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -245,6 +246,7 @@ function asarEntries(file) {
   return out.sort();
 }
 
+let SBOM = null;
 if (flag('--package')) {
   gate('the installer, built from this tree into ' + DIST, () => {
     if (!run('npm', ['run', 'package'], { ETIUDA_DIST: DIST }))
@@ -263,6 +265,14 @@ if (flag('--package')) {
                       'shell/main.js', 'shell/preload.js', 'shell/sample-catalog.ec'];
     console.log('  the asar holds ' + inside.length + ': ' + inside.join(', '));
     if (JSON.stringify(inside) !== JSON.stringify(expected)) return 'the asar is not the allowlist';
+    /* The software bill of materials goes beside the installer, named for it. One an earlier run
+       left goes first, so a refusal leaves none beside this installer. */
+    const sbomAt = join(DIST, exe[0].replace(/-setup\.exe$/i, '-sbom.cdx.json'));
+    rmSync(sbomAt, { force: true });
+    try { SBOM = writeSbom({ root: ROOT, app: join(DIST, 'win-unpacked'), installer: file, out: sbomAt }); }
+    catch (e) { return 'the software bill of materials was not written: ' + e.message; }
+    console.log('  ' + sbomAt.replace(/\\/g, '/').split('/').pop() + '  ' + SBOM.bytes + ' bytes, sha256 ' + SBOM.sha256
+      + ': Electron ' + SBOM.electron + ', ' + SBOM.npm + ' npm package(s)');
     return true;
   });
 
@@ -294,5 +304,5 @@ if (flag('--package')) {
 
 /* The home goes on a green run only; a red one leaves it standing, named at the top, as evidence. */
 try { rmSync(HOME, { recursive: true, force: true }); } catch (e) { console.log('  the scratch home stays: ' + HOME + ' (' + e.message + ')'); }
-console.log('\nGates green' + (flag('--package') ? ', and the installer is in ' + DIST : '')
+console.log('\nGates green' + (flag('--package') ? ', and the installer is in ' + DIST + ', its bill of materials beside it, sha256 ' + SBOM.sha256 : '')
   + '. Nothing was tagged and nothing was pushed: both are Maxim\'s, and this script has no flag for either.');

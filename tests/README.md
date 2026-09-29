@@ -22,6 +22,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/desk-ipc.mjs                           no fixtures, the desk's write path, shell stubbed
     node tests/desk-growth.mjs                        no fixtures, a desk of 300 days: a count or a resize sends only what changed
     node tests/shell-office.mjs                       no fixtures, the shell against a busy file, a refused catalog, a folder that does not answer
+    node tests/sbom.mjs                               no fixtures, the software bill of materials: the tool, and the release leaving one beside the installer
     node tests/pick.mjs                               no fixtures, the picker over the chat: the desk's answers, the preload and the shell, electron stubbed
     node tests/catalog-trust.mjs                      no fixtures, a catalog's signature as the desk reads it, shell stubbed
     node tests/catalog-trust-desk.mjs                 no fixtures, the desk's own load path saying that signature, one process per launch
@@ -624,6 +625,27 @@ do that, each on a profile of its own with `--log-net-log`: C is the shell with 
 and must show discovery, D is the shipped shell and must show none. A net log is complete only at
 a clean close, so the window is closed through the debugging port and the log must parse whole
 and hold events. A control that shows no discovery on the machine is NOT RUN, never ok.
+
+## The software bill of materials, per release
+
+    node tests/sbom.mjs
+    node tools/sbom.mjs --out <file> [--root <dir>] [--app <win-unpacked>] [--installer <exe>]
+
+`tools/sbom.mjs` writes a CycloneDX 1.5 JSON document: the desk at `E_VERSION`, Electron as a
+framework component, and the production npm packages with their licences and the edges node would
+load. Given `--app` it reads `resources/app.asar` and refuses, writing nothing, unless the list and
+the archive hold the same packages both ways. Given `--installer` it carries that file's SHA-256.
+The document names no folder of the machine that built it. `tools/release.mjs --package` writes it
+beside the installer as `<installer>-sbom.cdx.json` at the installer gate, removing an earlier
+run's first, and a refusal stops the run at gate 9.
+
+`tests/sbom.mjs` holds it without packaging: this tree, a dependency added and everything it pulls
+in, a synthetic tree of frozen expected versions (nested, scoped, dev and optional), a declared
+package that is not installed, the archive held both ways on the desk's own six-file shape, the
+installer's hash against a frozen literal, and the release driven in a throwaway repository with a
+stub package step, once whole and once with a contradiction. 27 checks by the run's own `#counts`
+line, about 15 s. The desk declares no production dependency today, so the list holds Electron
+alone until one is added.
 
 ## The fuses, read out of the program rather than the config
 
