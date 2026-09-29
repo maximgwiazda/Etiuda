@@ -156,12 +156,15 @@ function layerSeed(ns) {
 /* The stored layer as this leg reads it: the four id-bearing fields, the personal card's links
    and the display order, each as a plain list of keys. */
 function layerOf(store, ns) {
-  let pk = null, order = null;
+  let pk = null, order = null, st = null;
   try { pk = JSON.parse(store[ns + "Pack"] || "null"); } catch (x) {}
   try { order = JSON.parse(store[ns + "IntentOrder"] || "null"); } catch (x) {}
+  // The counts from their own key where the desk has one, the pack where not, as loadPack reads them.
+  try { st = JSON.parse(store[ns + "Stats"] || "null"); } catch (x) {}
   if (!pk) return null;
   return { overrides: Object.keys(pk.intentOverrides || {}), hidden: (pk.intentHidden || []).slice(),
-           favourites: (pk.intentFavourites || []).slice(), counts: Object.keys(pk.intentCounts || {}),
+           favourites: (pk.intentFavourites || []).slice(), counts: Object.keys((st || pk).intentCounts || {}),
+           countsIn: st ? "Stats" : "Pack",
            cardLinks: ((pk.custom || [])[0] || {}).intents || [], order: Array.isArray(order) ? order : null,
            keys: pk.intentKeys || "" };
 }
@@ -353,7 +356,8 @@ const t0 = Date.now();
     + ", from " + JSON.stringify(Object.keys(LAYER.intentOverrides)));
   check(!!now && JSON.stringify([now.hidden, now.favourites, now.counts])
      === JSON.stringify([REKEYED.hidden, REKEYED.favourites, REKEYED.counts]),
-    "and so are the hide, the star and the count " + (now ? JSON.stringify([now.hidden, now.favourites, now.counts]) : "-"));
+    "and so are the hide, the star and the count " + (now ? JSON.stringify([now.hidden, now.favourites, now.counts])
+    + ", the count read from " + now.countsIn : "-"));
   check(!!now && JSON.stringify(now.cardLinks) === JSON.stringify(REKEYED.cardLinks),
     "a personal card's link to a built-in intent is a tag id too " + (now ? JSON.stringify(now.cardLinks) : "-")
     + ", from " + JSON.stringify(LAYER.custom[0].intents));
