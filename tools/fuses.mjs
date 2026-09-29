@@ -8,6 +8,7 @@
  * every fuse asked for is as asked, 1 with one line per difference, 2 when the file cannot be
  * read or carries no wire. */
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,9 +21,15 @@ export function wantedFuses() {
 }
 
 /** One line per fuse in `want` that the binary at `exe` does not carry as asked; [] when all do.
- *  Throws where the file carries no fuse wire at all. */
+ *  Throws where the file carries no fuse wire at all. A binary holding more than one wire is refused
+ *  with one line, since the library reads the first and the program may run on another. */
 export async function fuseProblems(exe, want) {
   const { getCurrentFuseWire, FuseV1Options } = require("@electron/fuses");
+  const { SENTINEL } = require("@electron/fuses/dist/constants");   // not exported by the package's index
+  const bytes = await readFile(exe);
+  let blocks = 0;
+  for (let at = bytes.indexOf(SENTINEL); at > -1; at = bytes.indexOf(SENTINEL, at + 1)) blocks++;
+  if (blocks > 1) return ["the program holds " + blocks + " fuse blocks where one is expected, so which one it runs on is not known"];
   const wire = await getCurrentFuseWire(exe);
   const out = [];
   for (const [name, on] of Object.entries(want)) {

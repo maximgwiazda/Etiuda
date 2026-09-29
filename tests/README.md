@@ -628,9 +628,10 @@ installer packs `win-unpacked` after the flip.
 
 `fuses.mjs` holds it without packaging: the stock Electron binary as the control, which reads
 wrong on all four; its wire lifted into a small file and flipped as electron-builder flips it,
-with each fuse turned back alone; the packaging step's question of planted dist folders; and, on
-Windows, `tools/package.mjs` itself in a lab whose `electron-builder` plants the program. 13
-checks, about 3 s; off Windows the three lab checks say NOT RUN.
+with each fuse turned back alone; a program holding two fuse blocks,
+which is refused rather than read at the first; the packaging step's question of planted dist
+folders; and, on Windows, `tools/package.mjs` itself in a lab whose `electron-builder` plants the
+program. 14 checks, about 3 s; off Windows the three lab checks say NOT RUN.
 
 ## The reinstall-survival loop, which is the only thing here that installs anything
 

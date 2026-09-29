@@ -9,7 +9,8 @@
  *   1  the reader asks for the same four fuses [2f/5] holds
  *   2  CONTROL: the stock Electron binary, which ships all four the other way, reads wrong on each
  *   3  a wire lifted from that binary and flipped as electron-builder flips it reads as asked, and
- *      each fuse turned back alone is named, and only that one
+ *      each fuse turned back alone is named, and only that one; a program holding a second wire is
+ *      refused, whichever of the two is the wrong one
  *   4  the packaging step's question of a dist folder: a good program passes, a flipped one, a
  *      missing one, one with no wire, and an empty ask are each refused
  *   5  tools/package.mjs itself, with electron-builder stubbed to plant a program, exits 0 on a
@@ -27,7 +28,7 @@ import { wantedFuses, fuseProblems, packagedFuseProblems } from '../tools/fuses.
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 13;
+const EXPECTED = 14;
 
 let asserted = 0, failed = 0;
 const notRun = [];
@@ -82,6 +83,22 @@ try {
   check(oneEach.every(x => x === 'named'),
     '3b each fuse turned back alone is named, and only that one: '
     + Object.keys(WANT).map((k, i) => k + ' ' + oneEach[i]).join(', '));
+
+  /* Where the wire's sentinel occurs twice the reader would otherwise answer for the first. The twin is what
+     electron-builder's flipper makes of two blocks (it flips the first and the last); the decoy is a good first
+     wire ahead of a last one with node turned back on. */
+  const twinBytes = Buffer.concat([lifted, Buffer.from('MZ second '), lifted.subarray(11)]);
+  const twin = path.join(TMP, 'twin.exe');
+  fs.writeFileSync(twin, twinBytes);
+  await flipFuses(twin, byIndex(WANT));
+  const decoy = path.join(TMP, 'decoy.exe');
+  const decoyBytes = fs.readFileSync(twin);
+  decoyBytes[decoyBytes.lastIndexOf(SENTINEL) + SENTINEL.length + 2 + FuseV1Options.RunAsNode] = 49;
+  fs.writeFileSync(decoy, decoyBytes);
+  const onTwin = await fuseProblems(twin, want), onDecoy = await fuseProblems(decoy, want);
+  check(onTwin.length === 1 && onDecoy.length === 1 && /2 fuse blocks/.test(onTwin[0]) && /2 fuse blocks/.test(onDecoy[0]),
+    '3c a program holding two fuse blocks is refused, the two good and the second one wrong alike: '
+    + JSON.stringify(onTwin) + ' ' + JSON.stringify(onDecoy));
 
   /* ---- 4. the packaging step's question, of dist folders planted the way electron-builder lays one out */
   const dist = async (name, file) => {
