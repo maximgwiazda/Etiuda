@@ -1235,15 +1235,19 @@ const placeEc = (dir, from, as, minutesOld) => {
      rises when it is skipped.
      WAITED FOR, NOT SLEPT ON (board 817): the leg used to sleep, click Skip blind and read the offer once 800 ms
      later, and its message said "with the tour up" whether or not the tour was up. One red on 2026-09-29, under four
-     suites at once, could not say whether the tour was late, the offer slow, or the product wrong. So Skip is waited
-     for (up to 20 s), the screen with the tour standing is read as 2k2 reads it, and after the click the offer is
-     polled for (up to 5 s); both times are printed, and so is what stood when Skip was clicked. */
+     suites at once, could not say whether the tour was late, the offer slow, or the product wrong. So the tour is
+     waited for (up to 20 s) until its bubble and its Skip both stand on screen - Skip is in the page from the start,
+     so being there says nothing, and one run on 2026-09-29 found it there at 1 ms with no tour up at 2.2 s - then the
+     screen with the tour standing is read as 2k2 reads it, Skip is clicked only where it stands, and after the click
+     the offer is polled for (up to 5 s); both times are printed, and so is what stood when Skip was clicked. */
   const pollPage = async (fn, ms) => { const t0 = Date.now();
     while (Date.now() - t0 < ms) { if (await s.p.evaluate(fn).catch(() => false)) return Date.now() - t0; await sleep(100); }
     return -1; };
-  const skipAfter = await pollPage(() => !!document.getElementById("tourSkip"), 20000);
+  const skipAfter = await pollPage(() => ["tourCard", "tourSkip"].every(id => {
+    const el = document.getElementById(id); return !!el && el.getBoundingClientRect().width > 0; }), 20000);
   const takenFirst = await FIRST_SCREEN(s.p);
-  const skipped = await s.p.evaluate(() => { const k = document.getElementById("tourSkip"); if (k) k.click(); return !!k; });
+  const skipped = await s.p.evaluate(() => { const k = document.getElementById("tourSkip");
+    if (!k || !k.getBoundingClientRect().width) return false; k.click(); return true; });
   const offerAfter = skipped ? await pollPage(() => !!document.querySelector("#ecYes"), 5000) : -1;
   const takenSeen = await s.p.evaluate(SEEN);
   const takenRead = (s.said.join(" | ").match(/catalog read from ([^,]+),/) || [])[1] || "";
@@ -1256,7 +1260,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     + ", the file the shell read " + JSON.stringify(path.basename(takenRead))
     + " though it is six hours older than the build's sample"
     + ", and that catalog is offered once the tour is skipped and not before: Skip "
-    + (skipAfter > -1 ? "stood after " + skipAfter + " ms" : "never stood in 20000 ms")
+    + (skipAfter > -1 ? "and the tour's bubble stood after " + skipAfter + " ms" : "and the tour's bubble never stood in 20000 ms")
     + ", then the tour up " + takenFirst.tour + " and the offer " + takenFirst.offer + ", Skip clicked " + skipped
     + ", the offer " + (offerAfter > -1 ? "up " + offerAfter + " ms after" : "not up within 5000 ms") + " (" + takenSeen.offer + " at the last read)");
 
