@@ -424,10 +424,13 @@ const SHOP = () => ({
   const page = { window: {} };
   runInNewContext(readFileSync(join(HERE, '..', '..', 'v1', 'sample-catalog.js'), 'utf8'), page);
   const want = toV1(shipped);
+  // Format 2 carries no name and the 1.x page's is frozen with it, so the name alone is not compared.
   const d = [];
   walk(want.catalog, page.window.PB_SAMPLE || {}, '', d);
+  const named = d.filter(x => x.path === 'name').length;
+  d.splice(0, d.length, ...d.filter(x => x.path !== 'name'));
   check('48 the 1.x sample is the shipped sample in format 1, and it carries the watermark flag',
-    shipped.sample === true && want.problems.length === 0 && d.length === 0,
+    shipped.sample === true && want.problems.length === 0 && d.length === 0 && named === 1,
     d.length + ' difference(s)' + (d.length ? ': ' + d.slice(0, 4).map(x => x.path + ' ' + x.kind).join(', ') : ''));
 }
 

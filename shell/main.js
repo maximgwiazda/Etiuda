@@ -108,7 +108,8 @@ function isTheSample(file) {
 const SAMPLE_EDITIONS = [
   [39612, "2fa81658b7ad2b4c8e962e7c70134c2c3b86ac9c802fc08743fd41c32988213a"],
   [39650, "aae9453e5c38b1d29ea394c31226e3ded39e9ce716febcc96274c089deb3a317"],
-  [260051, "60c7a9c39a8778c16f704899f3018e1ea850e0ba5d15ccaa9ab5f4c16f0b98b6"]
+  [260051, "60c7a9c39a8778c16f704899f3018e1ea850e0ba5d15ccaa9ab5f4c16f0b98b6"],
+  [260029, "e6dd8911afaf1957ef652c55e5694cbc4767b4397bfd6121e5ac55ededefec9d"]
 ];
 /* NEVER COUNTED AHEAD OF ANOTHER CATALOG, the second half of the ruling above: the sample goes to
    the end of every list of candidates, so a folder holding one real catalog opens that one and a
@@ -1065,15 +1066,14 @@ function ecCounts(data) {
    then shows what it does know rather than a nought that would be a lie. `sample` is the page's
    only way to know which row is the one Etiuda came with, and it is ordered here as it is read,
    so the list and the next launch cannot disagree about which file is first. */
-/* `id` and `catalogName` are the two fields the page needs to tell whether a file IS the catalog
-   in use, by the identity rule of board 431: the envelope id where both carry one, the catalog's
-   own name where either does not. They travel with the listing because the alternative is the
-   page reading every file in the folder each time it paints one list. */
+/* `id` is what the page needs to tell whether a file IS the catalog in use, by the identity rule
+   of board 431. It travels with the listing because the alternative is the page reading every
+   file in the folder each time it paints one list. */
 ipcMain.handle("etiuda:catalog-files", (e) => {
   if (!fromEngine(e)) return [];
   return sampleLast(ecFilesIn(catalogFolder()).concat(builtInFiles())).map(f => {
     let mt = 0, cards = -1, edition = "", macros = -1, intents = -1, cats = -1, awaiting = [];
-    let id = "", catalogName = "";
+    let id = "";
     try { mt = Math.round(fs.statSync(f).mtimeMs); } catch { /* renamed away under the listing */ }
     try {
       if (refusedByEngine(f)) throw new Error("refused by the engine");
@@ -1083,14 +1083,13 @@ ipcMain.handle("etiuda:catalog-files", (e) => {
         const n = ecCounts(data);
         macros = n.macros; intents = n.intents; cats = n.cats; awaiting = n.awaiting;
         if (data.id != null) id = String(data.id);
-        if (data.name != null) catalogName = String(data.name);
       }
       // `date` is the field the engine reads as the edition - catalogFromV2 renames it there
       if (isV2(data) && data.date != null) edition = String(data.date);
     } catch { /* not a catalog, and the Load button is where that is said out loud */ }
     return { name: path.basename(f), mtime: mt, cards: cards, edition: edition,
              macros: macros, intents: intents, cats: cats, awaiting: awaiting,
-             sample: isTheSample(f), id: id, catalogName: catalogName,
+             sample: isTheSample(f), id: id,
              // The copy Etiuda ships, rather than a folder's own file of any name.
              builtIn: path.dirname(f) === BUILT_IN_DIR };
   });
@@ -1171,10 +1170,10 @@ ipcMain.handle("etiuda:pick-catalog-file", async (e, title, label) => {
   }
 });
 
-/* EXPORT'S OWN DIALOG, the shell's for Import's reason, in two calls: the chosen file's name is the
-   catalog's name, so the page writes the catalog only once the choice is made. The path stays
-   here and the page is told the name; the write goes to this window's last choice, once. A name
-   typed without the extension is given it, since the folder lists only that kind of file.
+/* EXPORT'S OWN DIALOG, the shell's for Import's reason, in two calls: the page writes the catalog
+   only once the choice is made. The path stays here and the page is told the name; the write goes
+   to this window's last choice, once. A name typed without the extension is given it, since the
+   folder lists only that kind of file.
    ETIUDA_TEST_SAVE_AS is the harness's answer to the dialog: a folder, the offered name inside it. */
 let savePending = null;
 ipcMain.handle("etiuda:choose-catalog-save", async (e, title, name, label) => {

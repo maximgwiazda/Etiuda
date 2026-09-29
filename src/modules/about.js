@@ -23,10 +23,8 @@ function openAbout(){
   const info=src ? src.innerHTML : "";
   const keys='<b>'+esc(t("Keys"))+'</b> - '+keysLegendHtml()+' · '+esc(t("customise in"))
     +' <b><span data-icon="settings"></span> '+esc(t("→ Settings → Keyboard shortcuts"))+'</b>.<br><br>';
-  /* WHICH FILE IS LOADED, which is the one thing about a running Etiuda that the screen cannot
-     show by itself: the catalog's own name and edition are on the Library's screen, and the file
-     they came out of is nowhere. Only where a host found one - a browser's catalog came through
-     Import and lives in this browser, and there is no file to name. */
+  /* WHICH FILE IS LOADED, and the folder it lies in. Only where a host found one - a browser's
+     catalog came through Import and lives in this browser, and there is no file to name. */
   const file=eCatalogFile(), inDir=eCatalogIn();
   // A placeholder key, never two halves round a <code>: see the note at eFoundHtml.
   const where=inDir ? t("{FILE} in {FOLDER}")

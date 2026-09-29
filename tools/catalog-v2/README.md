@@ -7,7 +7,7 @@ exists is a boundary somebody maintains, and the files that need crossing are co
 
     node tools/catalog-v2/convert.mjs <in.js|in.json> --out <name.ec>
           [--js <name.js> [--global E_SAMPLE]] [--eval]
-          [--id x] [--name "X"] [--rev 2] [--date 2026-09-14]
+          [--id x] [--rev 2] [--date 2026-09-14]
     node tools/catalog-v2/selftest.mjs
 
 `--eval` is for a file a person wrote rather than a file an engine wrote: a hand-kept

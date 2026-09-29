@@ -182,7 +182,6 @@ function normaliseCatalog(data){
   const cardsOut=parseMacrosData(data);            // validates every card, dedupes ids
   if(!cardsOut.length) throw new Error("no cards in file");
   const cat={ format:1, kind:"playbook-catalog",
-              name:(data&&data.name)?String(data.name):"Unnamed catalog",
               categories:{}, intents:null, cards:cardsOut,
               facts:(data&&typeof data.facts==="string")?data.facts:"" };
   /* Carried when declared, like roles and who (remember: this object is a WHITELIST - see
@@ -307,11 +306,11 @@ function eCatalogSignature(c){
   let s;
   try{ s=JSON.stringify(normaliseCatalog(c)); }
   catch(e){
-    try{ s=JSON.stringify(c); }catch(e2){ s=String(c.name||"catalog"); }
+    try{ s=JSON.stringify(c); }catch(e2){ s=""; }
   }
   let h=5381;
   for(let i=0;i<s.length;i++) h=(((h<<5)+h)^s.charCodeAt(i))>>>0;
-  const out=String(c.name||"catalog")+"|"+s.length+"|"+h.toString(36);
+  const out=s.length+"|"+h.toString(36);
   if(E_SIG_CACHE && typeof c==="object"){ try{ E_SIG_CACHE.set(c,out); }catch(e){} }
   return out;
 }
@@ -412,14 +411,13 @@ function eApplyCatalog(c){
 
   if(typeof c.facts==="string" && c.facts) setCatalogFacts(c.facts);
   if(Array.isArray(c.who)) setCatalogWho(normWhoList(c.who));
-  E_CATALOG_NAME=String(c.name||"");
   /* Captured from whichever catalog actually APPLIED - stored, embedded or sibling.
      Reading storedCatalog() looked equivalent and was not: an integrated build has no
      stored catalog, so an export from a build silently dropped its edition number. */
   E_CATALOG_VERSION=(c.version!=null)?String(c.version):null;
   return true;
 }
-let E_CATALOG_NAME="", E_CATALOG_VERSION=null;
+let E_CATALOG_VERSION=null;
 /* THE EMPTY DESK, which every restart applies before its catalog: a catalog that leaves a field
    out then leaves the default, never the field of the catalog before it. */
 function eResetCatalog(){
@@ -432,7 +430,7 @@ function eResetCatalog(){
   setCatalogStop(null);
   eApplyRoles(null);
   resetStock();
-  E_CATALOG_NAME=""; E_CATALOG_VERSION=null;
+  E_CATALOG_VERSION=null;
 }
 
 export {
@@ -459,6 +457,5 @@ export {
   eResetCatalog,
   E_CATALOG_KEY,
   E_CATALOG_STORE,
-  E_CATALOG_NAME,
   E_CATALOG_VERSION
 };

@@ -58,7 +58,8 @@ function classify(diffs, before, after) {
                      "commentLang defaulted to en, which the file did not name": 0,
                      "block whitespace inside a body with alternatives": 0,
                      "roles.always came back in the shelf order, same members": 0,
-                     "roles.opener dropped, that role no longer exists": 0 };
+                     "roles.opener dropped, that role no longer exists": 0,
+                     "name dropped, a format 2 catalog is named by its file": 0 };
   const unexpected = [];
   /* `always` is a set the engine resolves against the categories that exist, so the order it
      is written in decides nothing. Declared only where the MEMBERS are the same: a lost role
@@ -66,6 +67,10 @@ function classify(diffs, before, after) {
   const setSame = (x, y) => JSON.stringify((x || []).map(String).sort()) === JSON.stringify((y || []).map(String).sort());
   const rolesSetSame = setSame((before.roles || {}).always, (after.roles || {}).always);
   for (const d of diffs) {
+    if (d.path === "name" && d.kind === "only-before") {
+      declared["name dropped, a format 2 catalog is named by its file"]++;
+      continue;
+    }
     if (/^roles\.opener(\[|\.|$)/.test(d.path)) {
       declared["roles.opener dropped, that role no longer exists"]++;
       continue;

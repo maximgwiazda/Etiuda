@@ -22,8 +22,8 @@
  *   6  the control: with no old key present the pass writes nothing but its own marker
  *
  * Then, over a BUILD (the engine with a catalog in #eEmbedded, so the namespace is a hash of the
- * catalog's id) whose desk holds a layer under a hash of its NAME:
- *   7  the layer arrives under the id namespace, stripped of every field addressed by an
+ * catalog's id) whose desk holds one layer under a hash of its NAME, a seed this desk never wrote:
+ *   7  the lone stranded layer arrives under the id namespace, stripped of every field addressed by an
  *      intent's position, which this build's own keys are no longer read as
  *   8  the desk is told, in the words the sibling adoption uses
  *   9  a Clear the user asked for is not undone by the next boot re-adopting the same layer
@@ -72,7 +72,7 @@ const MARKER = "e~carried";
 
 /* ---- part two's fixtures ---------------------------------------------------------------- */
 /* A build is the engine with a catalog in #eEmbedded. Invented content, as every fixture here
-   is: what the run turns on is that the file carries both an id and a name. */
+   is: the name only seeds the older layer's namespace, which the engine no longer reads. */
 const CATALOG = { format: 1, kind: "playbook-catalog", id: "lamp-shop", name: "Lamp Shop",
                   categories: { gen: "General" },
                   cards: [{ c: "gen", t: "A lamp arrived broken", en: "Sorry about the lamp." }] };
@@ -307,11 +307,10 @@ const t0 = Date.now();
     + JSON.stringify(built.toast) + ")");
   const twice = await q.evaluate(() => {
     const before = Object.keys(localStorage).sort().join("|");
-    const took = adoptNameNsLayer();
-    return { took, same: before === Object.keys(localStorage).sort().join("|") };
+    loadPack();
+    return { same: before === Object.keys(localStorage).sort().join("|") };
   });
-  check(twice.took === false && twice.same, "a second pass adopts nothing and writes no key (took "
-    + twice.took + ", key set unchanged " + twice.same + ")");
+  check(twice.same, "a second pass adopts nothing and writes no key (key set unchanged " + twice.same + ")");
 
   /* The Clear the user asked for, driven as they drive it: it deletes this namespace's keys,
      leaves the name hash's alone, and starts the desk again in place. The layer must not walk back in. */

@@ -2,11 +2,11 @@ import { splitPartsRaw } from "./card-model.js";
 import { cardFieldKey } from "./card-fields.js";
 import { cardOrderTouched, cardOrderIsBase, cardOrderIdx } from "./card-order.js";
 import { ALWAYS_CATS } from "./cat-roles.js";
-import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, E_CATALOG_NAME, parseCatalogFile } from "./catalog.js";
+import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, parseCatalogFile } from "./catalog.js";
 import { catalogLoaded } from "./catalog-boot.js";
 import { catalogToV2 } from "./catalog-v2.js";
 import { CATS, intentArr, intentFieldKey, intentCount, catalogLangs, CONTENT_LANGS } from "./content-model.js";
-import { eHost, eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile } from "./host.js";
+import { eHost, eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile, eLoadedCatalogFile } from "./host.js";
 import { CAT_LABELS_PL, CAT_LABELS_BY_LANG } from "./icons.js";
 import { fill } from "./intent-text.js";
 import { cardToExportPlain } from "./macros-json.js";
@@ -51,7 +51,7 @@ function intentsExport(keep){
   }));
   return out;
 }
-function currentCatalog(nameOverride){
+function currentCatalog(){
   rebuildCards();
   const cats={}, catsPl={}, catsOther={};
   /* Every declared language past the primary and past Polish, carried out exactly as it came
@@ -100,8 +100,6 @@ function currentCatalog(nameOverride){
   const out={
     format:1,
     kind:"playbook-catalog",
-    // The name of the file it is saved as: see exportCatalog
-    name:(nameOverride||E_CATALOG_NAME||"Etiuda catalog"),
     exported:new Date().toISOString(),
     categories:cats,
     /* Absent, not empty, when the catalog has no Polish names - for the same reason topicPl is
@@ -178,8 +176,8 @@ function catalogIntentCount(c){
   const key=intentFieldKey("clause",catalogLangs(c)[0]);
   return (((c&&c.intents)||{})[key]||[]).length;
 }
-/* THE SUGGESTED FILENAME IS THE CATALOG'S OWN NAME, because the saved file's name becomes the
-   catalog's: saving as offered keeps the name. Only what Windows refuses in a filename is replaced. */
+/* THE SUGGESTED FILENAME IS THE LOADED CATALOG'S OWN FILE'S, so saving as offered keeps its name. Only
+   what Windows refuses in a filename is replaced, since the file may have been named on another system. */
 function catalogFileStem(name){
   const refused='<>:"/\\|?*';
   const s=Array.from(String(name||""))
@@ -191,9 +189,15 @@ function catalogFileStem(name){
 function catalogNameOfFile(file){
   return String(file||"").replace(/\.(ec|json|js)$/i,"").trim();
 }
+/* THE LOADED CATALOG'S NAME IS ITS FILE'S, extension and all: the file a route recorded wherever it lay,
+   else the folder's file this load read. "" where nothing is loaded or no route named a file. */
+function catalogFileName(){
+  if(!catalogLoaded() && !storedCatalog()) return "";
+  return String(nsGet("CatalogFrom")||eLoadedCatalogFile()||"");
+}
 /** Write the file. Where it lands is the person's call in a save dialog: the host's, else the
- *  browser's showSaveFilePicker (Chromium), else an ordinary download (Firefox). `build` turns the
- *  chosen file's name into the text, so it runs only once the choice is made. */
+ *  browser's showSaveFilePicker (Chromium), else an ordinary download (Firefox). `build` makes the
+ *  text, and runs only once the choice is made. */
 function saveCatalogFile(name, build){
   if(eHasCatalogSaver()) return eSaveCatalogFile(t("Export"),name,t("Catalogs"),build).then(r=>{
     if(r && !r.ok) toastRefusal(t("{FILE} could not be saved.").split("{FILE}").join(r.name));
@@ -205,17 +209,17 @@ function saveCatalogFile(name, build){
         types:[{description:t("Etiuda catalog"), accept:{"application/json":[".ec"]}}]
       })
       .then(h=>{
-        const as=h.name||name, text=build(as);
+        const as=h.name||name, text=build();
         return h.createWritable().then(w=>w.write(text).then(()=>w.close())).then(()=>as);
       })
       .catch(e=>{
         /* AbortError is the person closing the dialog, and only that is silent. NotAllowedError is
            the browser refusing to open it, so it falls back to the download like any failure. */
         if(e && e.name==="AbortError") return null;
-        return downloadCatalogFile(name, build(name));
+        return downloadCatalogFile(name, build());
       });
   }
-  return Promise.resolve(downloadCatalogFile(name, build(name)));
+  return Promise.resolve(downloadCatalogFile(name, build()));
 }
 function downloadCatalogFile(name, text){
   const blob=new Blob([text],{type:"application/json;charset=utf-8"});
@@ -226,17 +230,17 @@ function downloadCatalogFile(name, text){
   setTimeout(()=>URL.revokeObjectURL(a.href),2000);
   return name;
 }
-/* NOTHING STANDS BETWEEN THE BUTTON AND THE SAVE DIALOG: the file's name names the new catalog. What
-   is written is the .ec document itself, the shape every reader parses as it stands. Resolves to the
-   saved file's name, or null where nothing was saved. */
+/* NOTHING STANDS BETWEEN THE BUTTON AND THE SAVE DIALOG. What is written is the .ec document itself,
+   the shape every reader parses as it stands. Resolves to the saved file's name, or null where
+   nothing was saved. */
 function exportCatalog(){
   if(!(cards||[]).length){ toast("Export is ready once the catalog holds a card."); return Promise.resolve(null); }
   let c=null;
-  const build=file=>{
-    c=currentCatalog(catalogNameOfFile(file));
+  const build=()=>{
+    c=currentCatalog();
     return JSON.stringify(catalogToV2(c),null,1)+"\n";
   };
-  return saveCatalogFile(catalogFileStem(E_CATALOG_NAME)+".ec", build).then(saved=>{
+  return saveCatalogFile(catalogFileStem(catalogNameOfFile(catalogFileName()))+".ec", build).then(saved=>{
     if(!saved || !c) return null;                    // cancelled in the Save dialog
     if(!catalogLoaded()) lySet("Exported",looseMark());
     toast(catalogCountsLine("Exported {FILE} with {MACROS} in {CARDS}",
@@ -244,16 +248,12 @@ function exportCatalog(){
     return saved;
   });
 }
-/* The same catalog moving forward is not a different catalog arriving. The file's own id
-   decides when both sides carry one; the name is the fallback when either does not. */
+/* The same catalog moving forward is not a different catalog arriving. The file's own id decides,
+   and a side without one is never the same catalog as anything. */
 function isCatalogUpdate(incoming,active){
   if(!incoming||!active) return false;
   const incomingId=String(incoming.id||"").trim();
-  const activeId=String(active.id||"").trim();
-  if(incomingId && activeId) return incomingId===activeId;
-  const a=String(incoming.name||"").trim().toLowerCase();
-  const b=String(active.name||"").trim().toLowerCase();
-  return !!a && a===b;
+  return !!incomingId && incomingId===String(active.id||"").trim();
 }
 /* AGE IS CLAIMED ONLY WHERE IT CAN BE READ. The edition is the catalog's own string, so only
    the form this app writes - a date and a run of letters - can be ordered. Anything else is not
@@ -528,6 +528,8 @@ export {
   catalogMacroCount,
   catalogIntentCount,
   exportCatalog,
+  catalogFileName,
+  catalogNameOfFile,
   isCatalogUpdate,
   catalogEditionOlder,
   todayEdition,

@@ -131,6 +131,7 @@ function goodCatalog() {
 function refusedCatalog() {
   const c = goodCatalog();
   c.name = "Lamp Shop, edited by hand";
+  c.date = "2026-01-10";
   c.cards[0].shelf = "t-nowhere";
   return c;
 }
@@ -235,10 +236,10 @@ try {
     const C = await import(MOD("catalog.js"));
     const H = await import(MOD("host.js"));
     const got = C.eCatalog();
-    check(!!got && got.name === goodCatalog().name && calls.join() === "lamps-new.ec"
+    check(!!got && got.version === goodCatalog().date && calls.join() === "lamps-new.ec"
       && C.eCatalogRefusedNames().join() === "lamps-new.ec",
       "3a a handed catalog the engine refuses is named to the host once, and the next one it hands is the catalog read: "
-      + (got ? got.name : "null") + ", host told " + calls.length + " time(s)");
+      + (got ? "edition " + got.version : "null") + ", host told " + calls.length + " time(s)");
     check(H.eCatalogFile() === "lamps-old.ec" && H.eCatalogMtime() === 1 && H.eCatalogIn() === "C:/lab/Etiuda"
       && H.eOpenedWith() === false,
       "3b and the host's facts follow the file handed in its place: " + H.eCatalogFile() + ", dated " + H.eCatalogMtime()

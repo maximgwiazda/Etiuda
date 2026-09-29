@@ -4530,7 +4530,6 @@ What you type stays in this browser only.`;
   __export(pack_exports, {
     BASE_CATS: () => BASE_CATS,
     BASE_M: () => BASE_M,
-    adoptNameNsLayer: () => adoptNameNsLayer,
     catalogCardId: () => catalogCardId,
     ePackEpoch: () => ePackEpoch,
     flushStats: () => flushStats,
@@ -4708,9 +4707,7 @@ What you type stays in this browser only.`;
   var E_NS = (function() {
     const c = eEmbeddedCatalog();
     const id = String(c && c.id || "").trim();
-    const name = String(c && c.name || "").trim();
-    const seed = id || name;
-    return seed ? eNsFor(seed) : "e";
+    return id ? eNsFor(id) : "e";
   })();
   var E_MEM = /* @__PURE__ */ Object.create(null);
   var E_MEM_S = /* @__PURE__ */ Object.create(null);
@@ -5031,8 +5028,8 @@ What you type stays in this browser only.`;
   }
   var LAYER_KEYS = ["Pack", "Stats", "Days", "CatOrder", "IntentOrder", "IntentsAside", "LinksAside", "RequestsAside", "Exported"];
   function layerNsOf(c) {
-    const seed = c ? String(c.id || "").trim() || String(c.name || "").trim() : "";
-    return seed ? eNsFor(seed) : E_NS;
+    const id = c ? String(c.id || "").trim() : "";
+    return id ? eNsFor(id) : E_NS;
   }
   var E_LAYER = E_NS;
   function eLayer() {
@@ -5578,7 +5575,6 @@ What you type stays in this browser only.`;
     "Keep all category rows visible (no 2-line auto-collapse).": "Wszystkie rzędy kategorii zostają widoczne, bez zwijania do dwóch.",
     "Allow the intent panel to auto-hide on narrow windows (hover left edge or hold Ctrl to peek).": "W wąskich oknach panel intencji chowa się sam i pokazuje po najechaniu na lewą krawędź albo przytrzymaniu Ctrl.",
     "Keep the intent panel docked even when the window is narrow. Same as the lock at the top of the panel.": "Panel intencji zostaje zadokowany także w wąskim oknie, tak samo jak przy blokadzie na górze panelu.",
-    "maintenance␟name": "nazwa",
     "customer's name": "imię klienta",
     "agent's name": "imię agenta",
     "Role class": "Klasa roli",
@@ -5631,8 +5627,7 @@ What you type stays in this browser only.`;
     "{L} only": "tylko {L}",
     "nothing set": "nic nie ustawiono",
     "none (shared)": "brak (wspólna)",
-    "unnamed (shared)": "bez nazwy (wspólna)",
-    "catalog name only": "tylko nazwa katalogu",
+    "catalog id": "identyfikator katalogu",
     "Unnamed catalog": "Katalog bez nazwy",
     "Collapse": "Zwiń",
     "Expand": "Rozwiń",
@@ -6953,24 +6948,6 @@ What you type stays in this browser only.`;
     return moved;
   }
   var NS_ADOPTED = "e~nsAdopted:";
-  function adoptNameNsLayer() {
-    try {
-      if (eLayer() !== E_NS) return false;
-      const c = eEmbeddedCatalog();
-      const id = String(c && c.id || "").trim(), name = String(c && c.name || "").trim();
-      if (!id || !name) return false;
-      const from = eNsFor(name);
-      if (from === E_NS) return false;
-      const mark = NS_ADOPTED + from;
-      if (lsGet(mark) != null) return false;
-      if (!lsKeys().some((k) => k.indexOf(from) === 0)) return false;
-      const moved = lyGet("Pack") ? 0 : carryNsLayer(from);
-      lsSet(mark, "1");
-      return moved > 0;
-    } catch (e) {
-      return false;
-    }
-  }
   function adoptStrandedPack() {
     try {
       if (E_NS === "e" || eLayer() !== E_NS) return false;
@@ -7113,7 +7090,6 @@ What you type stays in this browser only.`;
   }
   function loadPack() {
     let p = null;
-    adoptNameNsLayer();
     adoptStrandedPack();
     try {
       const raw = lyGet("Pack");
@@ -7830,7 +7806,6 @@ What you type stays in this browser only.`;
     const out = {
       format: 1,
       kind: "playbook-catalog",
-      name: v2Str(data.name) || "Etiuda catalog",
       categories: catLabels.categories || {},
       icons,
       colors,
@@ -7932,7 +7907,6 @@ What you type stays in this browser only.`;
       format: V2_FORMAT,
       kind: V2_KIND,
       id: v2Str(o.id || c.id) || "etiuda-catalog",
-      name: v2Str(o.name || c.name) || "Etiuda catalog",
       rev: o.rev != null ? +o.rev : c.rev != null ? +c.rev : 1,
       langs: Array.isArray(c.langs) && c.langs.length ? c.langs : DEFAULT_LANGS,
       commentLang: v2Str(c.commentLang) || codes[0] || "en",
@@ -11042,7 +11016,6 @@ What you type stays in this browser only.`;
   var catalog_exports = {};
   __export(catalog_exports, {
     E_CATALOG_KEY: () => E_CATALOG_KEY,
-    E_CATALOG_NAME: () => E_CATALOG_NAME,
     E_CATALOG_STORE: () => E_CATALOG_STORE,
     E_CATALOG_VERSION: () => E_CATALOG_VERSION,
     catalogDocOf: () => catalogDocOf,
@@ -11353,7 +11326,6 @@ What you type stays in this browser only.`;
     const cat = {
       format: 1,
       kind: "playbook-catalog",
-      name: data && data.name ? String(data.name) : "Unnamed catalog",
       categories: {},
       intents: null,
       cards: cardsOut,
@@ -11455,12 +11427,12 @@ What you type stays in this browser only.`;
       try {
         s = JSON.stringify(c);
       } catch (e2) {
-        s = String(c.name || "catalog");
+        s = "";
       }
     }
     let h = 5381;
     for (let i = 0; i < s.length; i++) h = ((h << 5) + h ^ s.charCodeAt(i)) >>> 0;
-    const out = String(c.name || "catalog") + "|" + s.length + "|" + h.toString(36);
+    const out = s.length + "|" + h.toString(36);
     if (E_SIG_CACHE && typeof c === "object") {
       try {
         E_SIG_CACHE.set(c, out);
@@ -11551,11 +11523,9 @@ What you type stays in this browser only.`;
     (c.cards || []).forEach((m) => M.push(m));
     if (typeof c.facts === "string" && c.facts) setCatalogFacts(c.facts);
     if (Array.isArray(c.who)) setCatalogWho(normWhoList(c.who));
-    E_CATALOG_NAME = String(c.name || "");
     E_CATALOG_VERSION = c.version != null ? String(c.version) : null;
     return true;
   }
-  var E_CATALOG_NAME = "";
   var E_CATALOG_VERSION = null;
   function eResetCatalog() {
     resetContent();
@@ -11569,7 +11539,6 @@ What you type stays in this browser only.`;
     setCatalogStop(null);
     eApplyRoles(null);
     resetStock();
-    E_CATALOG_NAME = "";
     E_CATALOG_VERSION = null;
   }
 
@@ -11700,7 +11669,6 @@ What you type stays in this browser only.`;
         /* The catalog's own identity, for the rule of board
            431; empty where the file did not read. */
         id: String(f && f.id || ""),
-        catalogName: String(f && f.catalogName || ""),
         // The copy Etiuda ships, rather than a folder's own file.
         builtIn: !!(f && f.builtIn)
       })).filter((f) => f.name) : []).catch(() => []);
@@ -11764,7 +11732,7 @@ What you type stays in this browser only.`;
       return Promise.resolve(eHost().chooseCatalogSave(String(title || ""), String(name || ""), String(label || ""))).then((v) => {
         if (!(v && typeof v === "object" && v.name)) return null;
         const chosen = String(v.name);
-        return Promise.resolve(eHost().writeCatalogSave(String(build(chosen) || ""))).then((w) => w && typeof w === "object" ? { name: String(w.name || chosen), ok: w.ok === true } : failed(chosen));
+        return Promise.resolve(eHost().writeCatalogSave(String(build() || ""))).then((w) => w && typeof w === "object" ? { name: String(w.name || chosen), ok: w.ok === true } : failed(chosen));
       }).catch(() => failed());
     } catch (e) {
       return Promise.resolve(failed());
@@ -18310,8 +18278,10 @@ What you type stays in this browser only.`;
     activateCatalog: () => activateCatalog,
     catalogEdited: () => catalogEdited,
     catalogEditionOlder: () => catalogEditionOlder,
+    catalogFileName: () => catalogFileName,
     catalogIntentCount: () => catalogIntentCount,
     catalogMacroCount: () => catalogMacroCount,
+    catalogNameOfFile: () => catalogNameOfFile,
     exportCatalog: () => exportCatalog,
     importCatalogHere: () => importCatalogHere,
     importCatalogText: () => importCatalogText,
@@ -18700,7 +18670,7 @@ What you type stays in this browser only.`;
     }));
     return out;
   }
-  function currentCatalog(nameOverride) {
+  function currentCatalog() {
     rebuildCards();
     const cats2 = {}, catsPl = {}, catsOther = {};
     CONTENT_LANGS.slice(1).forEach((code) => {
@@ -18732,8 +18702,6 @@ What you type stays in this browser only.`;
     const out = {
       format: 1,
       kind: "playbook-catalog",
-      // The name of the file it is saved as: see exportCatalog
-      name: nameOverride || E_CATALOG_NAME || "Etiuda catalog",
       exported: (/* @__PURE__ */ new Date()).toISOString(),
       categories: cats2,
       /* Absent, not empty, when the catalog has no Polish names - for the same reason topicPl is
@@ -18821,6 +18789,10 @@ What you type stays in this browser only.`;
   function catalogNameOfFile(file) {
     return String(file || "").replace(/\.(ec|json|js)$/i, "").trim();
   }
+  function catalogFileName() {
+    if (!catalogLoaded() && !storedCatalog()) return "";
+    return String(nsGet("CatalogFrom") || eLoadedCatalogFile() || "");
+  }
   function saveCatalogFile(name, build) {
     if (eHasCatalogSaver()) return eSaveCatalogFile(t("Export"), name, t("Catalogs"), build).then((r) => {
       if (r && !r.ok) toastRefusal(t("{FILE} could not be saved.").split("{FILE}").join(r.name));
@@ -18831,14 +18803,14 @@ What you type stays in this browser only.`;
         suggestedName: name,
         types: [{ description: t("Etiuda catalog"), accept: { "application/json": [".ec"] } }]
       }).then((h) => {
-        const as = h.name || name, text = build(as);
+        const as = h.name || name, text = build();
         return h.createWritable().then((w) => w.write(text).then(() => w.close())).then(() => as);
       }).catch((e) => {
         if (e && e.name === "AbortError") return null;
-        return downloadCatalogFile(name, build(name));
+        return downloadCatalogFile(name, build());
       });
     }
-    return Promise.resolve(downloadCatalogFile(name, build(name)));
+    return Promise.resolve(downloadCatalogFile(name, build()));
   }
   function downloadCatalogFile(name, text) {
     const blob = new Blob([text], { type: "application/json;charset=utf-8" });
@@ -18855,11 +18827,11 @@ What you type stays in this browser only.`;
       return Promise.resolve(null);
     }
     let c = null;
-    const build = (file) => {
-      c = currentCatalog(catalogNameOfFile(file));
+    const build = () => {
+      c = currentCatalog();
       return JSON.stringify(catalogToV2(c), null, 1) + "\n";
     };
-    return saveCatalogFile(catalogFileStem(E_CATALOG_NAME) + ".ec", build).then((saved) => {
+    return saveCatalogFile(catalogFileStem(catalogNameOfFile(catalogFileName())) + ".ec", build).then((saved) => {
       if (!saved || !c) return null;
       if (!catalogLoaded()) lySet("Exported", looseMark());
       toast(catalogCountsLine(
@@ -18875,11 +18847,7 @@ What you type stays in this browser only.`;
   function isCatalogUpdate(incoming, active) {
     if (!incoming || !active) return false;
     const incomingId = String(incoming.id || "").trim();
-    const activeId = String(active.id || "").trim();
-    if (incomingId && activeId) return incomingId === activeId;
-    const a = String(incoming.name || "").trim().toLowerCase();
-    const b = String(active.name || "").trim().toLowerCase();
-    return !!a && a === b;
+    return !!incomingId && incomingId === String(active.id || "").trim();
   }
   var EDITION_DATED = /^([0-9]{4}-[0-9]{2}-[0-9]{2})([a-z]*)$/;
   function editionParts(v) {
@@ -19363,7 +19331,7 @@ What you type stays in this browser only.`;
   function mtCatalogPlace() {
     const S = mtSafe, none = { file: "-", copy: "(none loaded)", folder: "-" };
     try {
-      if (!E_CATALOG_NAME && !storedCatalog()) return none;
+      if (!catalogLoaded() && !storedCatalog()) return none;
       const home = eDeskHome(), inFolder = String(nsGet("CatalogFile") || "");
       if (!eHost()) return {
         file: S(() => nsGet("CatalogFrom") || (eCatalogAccepted(eCatalog()) ? E_CATALOG_SCRIPT : "")),
@@ -19404,7 +19372,6 @@ What you type stays in this browser only.`;
     row("host", S(() => eHost() ? "desktop app" : "browser"));
     row("theme", S(() => (document.documentElement.getAttribute("data-theme") || systemTheme()) + (themeChoice() ? " (chosen)" : " (system)")));
     sec("Catalog");
-    row("name", S(() => E_CATALOG_NAME || "(none loaded)"));
     row("edition", S(() => E_CATALOG_VERSION != null ? catalogVersionLabel(E_CATALOG_VERSION) : "-"));
     row("cards / macros", S(() => cards.length + " / " + catalogMacroCount({ cards })));
     row("intents / categories", S(() => intentOrder.length + " / " + Object.keys(CATS).length));
@@ -19506,8 +19473,7 @@ What you type stays in this browser only.`;
     row("namespace", S(() => E_NS));
     row("namespace seed", S(() => {
       const c = eEmbeddedCatalog();
-      if (!c) return "none (shared)";
-      return String(c.name || "").trim() ? "catalog name only" : "unnamed (shared)";
+      return c && String(c.id || "").trim() ? "catalog id" : "none (shared)";
     }));
     sec("Desk");
     row("catalog folder", S(() => eHost() ? eHomeless(eCatalogFolder(), eDeskHome()) : ""));
@@ -20650,6 +20616,7 @@ What you type stays in this browser only.`;
     const dir = shipped ? "" : where || (eHost() ? eCatalogIn() || eCatalogFolder() : "");
     const mine = !!file && !!dir && dir === eCatalogFolder();
     const shown2 = eOfferCatalogDialog(c, {
+      file,
       foundHtml: eFoundHtml(file, dir, shipped),
       refusedKey: "CatalogNo",
       force: !!force,
@@ -20693,6 +20660,7 @@ What you type stays in this browser only.`;
         return;
       }
       const shown2 = eOfferCatalogDialog(c, {
+        file: got.name,
         foundHtml: eFoundHtml(got.name, eCatalogFolder()),
         refusedKey: "CatalogNo",
         force: true,
@@ -20812,7 +20780,7 @@ What you type stays in this browser only.`;
     eCatalogFiles().then((files) => {
       if (!box.isConnected) return;
       let onAt = mine ? files.findIndex((f) => f.name === mine) : -1;
-      if (onAt < 0 && held) onAt = files.findIndex((f) => isCatalogUpdate({ id: f.id, name: f.catalogName }, held));
+      if (onAt < 0 && held) onAt = files.findIndex((f) => isCatalogUpdate(f, held));
       const at = +(nsGet("CatalogFileAt") || 0) || ((files[onAt] || {}).mtime || 0);
       const rows = files.map((f, i) => {
         const on = i === onAt;
@@ -20829,10 +20797,9 @@ What you type stays in this browser only.`;
           trust: on ? heldCatalogTrust() : ""
         });
       });
-      const applied = typeof E_CATALOG_NAME !== "undefined" && E_CATALOG_NAME ? E_CATALOG_NAME : "";
-      if ((held || applied || (cards || []).length) && onAt < 0)
+      if ((held || catalogLoaded() || (cards || []).length) && onAt < 0)
         rows.unshift(ecRowHtml({
-          name: shownCatalogName(String(applied || held && held.name || "")),
+          name: shownCatalogName(catalogFileName()),
           loaded: true,
           newer: false,
           meta: loadedMeta(""),
@@ -20911,7 +20878,7 @@ What you type stays in this browser only.`;
        another taken up, which the question asks and no sentence beneath it can improve on. The
        two editions of ONE catalog keep their sentence: what is at stake there is what happens to
        this desk's own work, which the screen cannot show. */
-    '<h3 id="ecTitle">' + esc(t(older ? "Older catalog found" : updating ? "Updated catalog found" : replacing ? "Replace catalog?" : "Load catalog?")) + "</h3>" + (updating ? '<p class="ec-sub">' + esc(t(older ? "This file is an earlier edition than the one loaded now." : "This catalog has changed since it was loaded.")) + "</p>" : "") + '<div class="ec-what"><b>' + esc(String(c.name || "Catalog")) + "</b>" + (c.version != null ? " · " + esc(catalogVersionLabel(c.version)) : "") + (updating && active.version != null && String(active.version) !== String(c.version) ? '<div class="ec-counts">' + esc(t("You have {V}.")).replace("{V}", esc(catalogVersionLabel(active.version))) + "</div>" : "") + '<div class="ec-counts">' + catalogCountsLine(
+    '<h3 id="ecTitle">' + esc(t(older ? "Older catalog found" : updating ? "Updated catalog found" : replacing ? "Replace catalog?" : "Load catalog?")) + "</h3>" + (updating ? '<p class="ec-sub">' + esc(t(older ? "This file is an earlier edition than the one loaded now." : "This catalog has changed since it was loaded.")) + "</p>" : "") + '<div class="ec-what"><b>' + esc(catalogNameOfFile(String(src.file || "") || E_CATALOG_SCRIPT)) + "</b>" + (c.version != null ? " · " + esc(catalogVersionLabel(c.version)) : "") + (updating && active.version != null && String(active.version) !== String(c.version) ? '<div class="ec-counts">' + esc(t("You have {V}.")).replace("{V}", esc(catalogVersionLabel(active.version))) + "</div>" : "") + '<div class="ec-counts">' + catalogCountsLine(
       "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
       n,
       catalogMacroCount(c),
@@ -20978,6 +20945,7 @@ What you type stays in this browser only.`;
   }
   function eOfferPickedCatalog(c, name, accept) {
     const shown2 = eOfferCatalogDialog(c, {
+      file: name,
       foundHtml: eFoundHtml(name, ""),
       force: true,
       asked: true,
@@ -20987,15 +20955,12 @@ What you type stays in this browser only.`;
     if (!shown2) toast(t("That file matches the catalog you already have."));
   }
   function shownCatalogName(n) {
-    return !n || n === "Unnamed catalog" ? t("Unnamed catalog") : n;
+    return n || t("Unnamed catalog");
   }
   function paintCatNow() {
     const el = document.getElementById("catNow");
     if (!el) return;
-    const held = storedCatalog();
-    const name = String(typeof E_CATALOG_NAME !== "undefined" && E_CATALOG_NAME || held && held.name || "");
-    const file = name || held ? String(nsGet("CatalogFrom") || eLoadedCatalogFile() || "") : "";
-    const shown2 = file || (name ? shownCatalogName(name) : "");
+    const shown2 = catalogFileName();
     const own = el.querySelector(".cn-name"), none = el.querySelector(".cn-none");
     if (own) {
       own.textContent = shown2;
@@ -21003,7 +20968,7 @@ What you type stays in this browser only.`;
       if (shown2) markCut(own);
     }
     if (none) {
-      const key = held ? "Unnamed catalog" : "No catalog loaded";
+      const key = storedCatalog() || catalogLoaded() ? "Unnamed catalog" : "No catalog loaded";
       none.setAttribute("data-i18n-text", key);
       none.textContent = t(key);
       none.hidden = !!shown2;
@@ -21042,6 +21007,7 @@ What you type stays in this browser only.`;
             const shown2 = eOfferCatalogDialog(c, {
               /* No folder: this file was PICKED, so it may sit anywhere, and naming the catalog
                  folder beside it would say it came from there. */
+              file: eWatchName() || f.name,
               foundHtml: eFoundHtml(eWatchName() || f.name, ""),
               refusedKey: "WatchNo",
               force: !!interactive,
@@ -21555,7 +21521,7 @@ What you type stays in this browser only.`;
          "Catalog & data" - the last fold, shut unless you opened it. So the heading carries the
          name for the same reason the editors carry theirs: it scopes the screen you are on.
          Nothing when there is no catalog; the empty state inside says that better. */
-      name: () => typeof E_CATALOG_NAME !== "undefined" && E_CATALOG_NAME ? E_CATALOG_NAME : "",
+      name: () => catalogFileName(),
       body: mgBody,
       /* Wipe sits at the bar's LEFT EDGE, with Close at the far right: same as Settings' Reset,
          and .mf-left is the group that carries it there. Danger kept, because this one forgets
@@ -23100,7 +23066,6 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "scCaptureId", { get: () => scCaptureId });
   Object.defineProperty(globalThis, "scCaptureSlot", { get: () => scCaptureSlot });
   Object.defineProperty(globalThis, "scRepaint", { get: () => scRepaint });
-  Object.defineProperty(globalThis, "E_CATALOG_NAME", { get: () => E_CATALOG_NAME });
   Object.defineProperty(globalThis, "E_CATALOG_VERSION", { get: () => E_CATALOG_VERSION });
   Object.defineProperty(globalThis, "tabs", { get: () => tabs });
   Object.defineProperty(globalThis, "tabSaveTimer", { get: () => tabSaveTimer });
