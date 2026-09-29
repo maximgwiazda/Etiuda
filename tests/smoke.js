@@ -35,11 +35,11 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-/* 285 since a copy lays only the wash over its block and greens only that block's spine, a card's
-   title has the row while its controls wait, the scrollbar's thumb is opaque, every theme has one
-   blue, an idle tab's dot is the band's ink, and Maintenance fits its window unscrolled
-   (2026-09-28); 278 was the tour's walk by its acts. */
-const EXPECTED = { chrome: 285 };
+/* 288 since the theme crossfades (two checks and its clean); 285 since a copy lays only the wash
+   over its block and greens only that block's spine, a card's title has the row while its
+   controls wait, the scrollbar's thumb is opaque, every theme has one blue, an idle tab's dot is
+   the band's ink, and Maintenance fits its window unscrolled; 278 was the tour's walk by its acts. */
+const EXPECTED = { chrome: 288 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -777,6 +777,60 @@ const t0 = Date.now();
   await p.evaluate(() => document.getElementById("theme").click()); await sleep(500);
   await p.evaluate(k => { if (k === null) localStorage.removeItem("eTheme"); else localStorage.setItem("eTheme", k); }, th0.key);
   clean(e, "the theme flip");
+
+  /* THE CROSSFADE, read in pixels: the window outside the theme button, whose icon turns only
+     with motion. Reduced motion is the reference, instant, so the pair are each other's control.
+     The fade (--m-celebrate, 420 ms) is held at 200 ms for one shot. captureBeyondViewport stays
+     false: the default resizes the page to capture it, and in the shell that once shed the wordmark. */
+  if (WHICH === "chrome") {
+    e = since();
+    const isVt = a => a.effect && /^::view-transition/.test(a.effect.pseudoElement || "");
+    const vtNow = () => p.evaluate(f => document.getAnimations().filter(new Function("return " + f)()).length, isVt.toString());
+    const shot = async () => {
+      const r = await p.evaluate(() => { if (document.activeElement) document.activeElement.blur();
+        const b = document.getElementById("theme").getBoundingClientRect();
+        return { W: innerWidth, H: innerHeight, t: Math.floor(b.top), bo: Math.ceil(b.bottom), l: Math.floor(b.left), r: Math.ceil(b.right) }; });
+      const clips = [{ x: 0, y: 0, width: r.W, height: r.t }, { x: 0, y: r.bo, width: r.W, height: r.H - r.bo },
+                     { x: 0, y: r.t, width: r.l, height: r.bo - r.t }, { x: r.r, y: r.t, width: r.W - r.r, height: r.bo - r.t }];
+      const out = [];
+      for (const clip of clips.filter(c => c.width > 0 && c.height > 0))
+        out.push(await p.screenshot({ clip, encoding: "base64", captureBeyondViewport: false }));
+      return out.join("|");
+    };
+    const pressTheme = () => p.evaluate(() => { document.getElementById("theme").click(); return document.documentElement.dataset.theme; });
+    await p.mouse.move(4, 900);
+    await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
+    await sleep(300);
+    const from = await shot();
+    await pressTheme();
+    const instant = { anims: await vtNow(), first: await shot() };
+    await sleep(300);
+    const to = await shot();
+    await pressTheme(); await sleep(300);
+    await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "no-preference" }]);
+    await pressTheme();
+    await p.waitForFunction(f => document.getAnimations().some(new Function("return " + f)()),
+      { timeout: 3000, polling: "raf" }, isVt.toString()).catch(() => {});
+    const held = await p.evaluate(f => { const a = document.getAnimations().filter(new Function("return " + f)());
+      a.forEach(x => { x.pause(); x.currentTime = 200; });
+      return a.filter(x => /-(old|new)\(root\)$/.test(x.effect.pseudoElement)).map(x => x.effect.getComputedTiming().duration); }, isVt.toString());
+    const mid = held.length ? await shot() : from;
+    await p.evaluate(f => document.getAnimations().filter(new Function("return " + f)()).forEach(x => x.finish()), isVt.toString());
+    await sleep(300);
+    const settled = await shot(), left = await vtNow();
+    await pressTheme(); await sleep(700);
+    await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "no-preference" }]);
+    await p.evaluate(k => { if (k === null) localStorage.removeItem("eTheme"); else localStorage.setItem("eTheme", k); }, th0.key);
+    check(held.length > 0 && held.every(d => d === 420) && mid !== from && mid !== to && settled === to && left === 0 && from !== to,
+      "the theme crossfades the whole window and settles in its final colours: " + held.length
+      + " old and new layer animation(s) of " + held.join("/") + " ms, the frame held at 200 ms is "
+      + (mid !== from && mid !== to ? "neither end" : "one of the ends") + ", and at rest the window is "
+      + (settled === to ? "pixel-identical to" : "NOT identical to") + " the same theme reached instantly");
+    check(instant.anims === 0 && instant.first === to,
+      "and under reduced motion it switches instantly: " + instant.anims + " transition animation(s), the first"
+      + " shot after the press " + (instant.first === to ? "already identical to" : "NOT yet") + " the settled theme");
+    clean(e, "the theme crossfade");
+  }
 
   /* Themes and glass. */
   e = since();
