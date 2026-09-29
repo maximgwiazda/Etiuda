@@ -19,7 +19,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 35;
+const EXPECTED = 36;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -30,6 +30,11 @@ function check(ok, line) {
 
 const LAB = realFs.mkdtempSync(path.join(os.tmpdir(), "etiuda-shell-office-"));
 const SRC = realFs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+/* The shell reads a catalog from the folder above itself, so it is loaded beside copies of the two
+   folders it needs and never above the checkout: an ignored file at a checkout's root is then not
+   in this world. */
+const APP = path.join(LAB, "app");
+["shell", "engine"].forEach(d => realFs.cpSync(path.join(ROOT, d), path.join(APP, d), { recursive: true }));
 /* The shell's own names, handed back by a line added after its source: nothing is exported from
    main.js, and a slice would test a copy of one function rather than the file as it runs. */
 const EXPOSE = ["renamePatiently", "writeReplacing", "saveWindowPlace", "windowFile", "readCatalog", "channelHash",
@@ -111,7 +116,7 @@ function loadShell(opts) {
   const fakeRequire = n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? fs : nodeRequire(n));
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console", "setTimeout", "clearTimeout",
     SRC + "\nreturn { " + EXPOSE.map(n => n + ": typeof " + n + " === 'undefined' ? undefined : " + n).join(", ") + " };")(
-    fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet,
+    fakeRequire, path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet,
     clock.setTimeout, clock.clearTimeout);
   const ENGINE = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
   const ipc = (ch, ...args) => { const e = { sender: { id: 1, once: noop }, senderFrame: ENGINE, returnValue: undefined };
@@ -427,6 +432,18 @@ try {
       "4r a folder that is not there where its parent does not answer either is not an answer: " + gone.st.touched.length
       + " sync call(s)" + (gone.st.touched.length ? " (" + gone.st.touched.slice(0, 5).join(", ") + ")" : "") + ", "
       + goneDown + " 'did not answer' line(s), " + gone.clock.due(30000).length + " retry pending");
+
+    /* The folder the shell takes for its app root is the lab's copy, and the checkout's own root is
+       never listed, so no file a checkout happens to hold there can change a leg above. */
+    const listed = [];
+    const K = loadShell({ ready: true, clock: fakeClock() });
+    K.ctl.readdirSync = (real, p, ...rest) => (listed.push(path.resolve(String(p)).toLowerCase()), real(p, ...rest));
+    K.ctl.watch = () => { const w = new EventEmitter(); w.close = () => {}; return w; };
+    await settle();
+    K.ipc("etiuda:catalog");
+    check(listed.includes(path.resolve(APP).toLowerCase()) && !listed.includes(path.resolve(ROOT).toLowerCase()),
+      "4s the app root the shell lists is the lab's own, and the checkout's root is never listed: app root listed "
+      + listed.includes(path.resolve(APP).toLowerCase()) + ", checkout root listed " + listed.includes(path.resolve(ROOT).toLowerCase()));
   }
 
   /* ---- 5. the samples a first run gives, and which copy of a name is read ----------------------
