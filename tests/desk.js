@@ -356,8 +356,8 @@ async function netLogArm(appDir, ud, logAt) {
      desk FILE is read at that moment: through the host's synchronous deskRead, which main answers
      with a fresh read of desk.json, and which is ordered after every message the page sent before
      it, so a write sent before the fade ended is on the disk by the time the read is answered.
-     The reload leg below reads through the same call. A write moved to `finished`, or behind a
-     debounce longer than the fade, reads the old theme here while the leg after this one, which
+     The reload leg below reads through the same call. A write moved to `finished`, or delayed past
+     the frame on which this window ends the fade, about a second here, reads the old theme here while the leg after this one, which
      waits for the file, still goes green. */
   await s.p.evaluate(() => {
     const o = window.__deskThemeOrder = { fades: 0, atFinished: [], err: "" };
