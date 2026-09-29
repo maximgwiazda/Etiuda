@@ -2093,6 +2093,50 @@ function markClockTests() {
    fileAssociations, and shell/installer.nsh's customInstall writes the Polish over it when the
    installer runs in Polish. Read here against electron-builder's own templates and language table;
    what Explorer shows on a Polish Windows is Maxim's to see. */
+/* WHAT A BUILD'S INSTALLER WRITES AROUND customInstall, as electron-builder's own makensis
+   preprocesses it: the include, then registerFileAssociations only if the build declares a type,
+   then installSection.nsh's own lines that insert both. Registry writes come back with the
+   LogicLib conditions open around them; a string is a refusal. */
+function nsisInstallWrites(root, cfg) {
+  const cp = require("child_process");
+  const lib = path.join(root, "node_modules", "app-builder-lib");
+  const assoc = [].concat(cfg.fileAssociations || [], (cfg.win || {}).fileAssociations || []);
+  const include = path.resolve(root, (cfg.directories || {}).buildResources || "build", (cfg.nsis || {}).include || "installer.nsh");
+  const sect = fs.readFileSync(path.join(lib, "templates", "nsis", "installSection.nsh"), "utf8");
+  const from = sect.indexOf("!ifmacrodef registerFileAssociations"), ins = sect.indexOf("!insertmacro customInstall", from);
+  const to = sect.indexOf("!endif", ins);
+  if (from < 0 || ins < 0 || to < 0) return "installSection.nsh no longer inserts registerFileAssociations, then customInstall";
+  const q = s => String(s).replace(/"/g, "$\\\"");
+  const product = cfg.productName || require(path.join(root, "package.json")).productName;
+  /* A preprocess-only run reads an include without a BOM in the system code page and refuses its
+     Polish; the real compile reads it as UTF-8 under -INPUTCHARSET UTF8, so /CHARSET says so here. */
+  const script = ["Unicode true", "!include LogicLib.nsh",
+    "!define APP_INSTALLER_STORE_FILE \"etiuda-updater\\installer.exe\"",
+    "!define UNINSTALL_REGISTRY_KEY \"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\app\"",
+    "!include /CHARSET=UTF8 \"" + include + "\""]
+    .concat(assoc.length ? ["!include \"" + path.join(lib, "templates", "nsis", "include", "FileAssociation.nsh") + "\"",
+      "!macro registerFileAssociations"].concat([].concat(...assoc.map(a => [].concat(a.ext).map(x =>
+        "!insertmacro APP_ASSOCIATE \"" + q(x) + "\" \"" + q(a.name || x) + "\" \"" + q(a.description || "") + "\" \"$appExe,0\" \"Open with "
+        + q(product) + "\" \"$appExe $\\\"%1$\\\"\"")))).concat(["!macroend"]) : [])
+    .concat(["Section", sect.slice(from, to + 6), "SectionEnd", ""]).join("\n");
+  const where = cp.spawnSync(process.execPath, ["-e", "require(process.argv[1]).getMakeNsisPath(process.argv[2] || undefined)"
+    + ".then(r => process.stdout.write(JSON.stringify(r)), e => { process.stderr.write(String(e)); process.exit(1); })",
+    path.join(lib, "out", "toolsets", "windows.js"), (cfg.toolsets || {}).nsis || ""], { encoding: "utf8" });
+  let mk;
+  try { mk = JSON.parse(where.stdout); } catch (e) { return "electron-builder named no makensis: " + String(where.stderr).trim(); }
+  const r = cp.spawnSync(mk.path, ["-INPUTCHARSET", "UTF8", "-OUTPUTCHARSET", "UTF8", "-SAFEPPO", "-"],
+    { input: script, encoding: "utf8", env: Object.assign({}, process.env, mk.env || {}) });
+  if (r.status !== 0) return "makensis refused the script: " + String(r.stdout + r.stderr).trim().split(/\r?\n/).slice(-2).join(" / ");
+  const open = [], writes = [];
+  for (const line of r.stdout.split(/\r?\n/).map(l => l.trim())) {
+    const c = /^StrCmp `([^`]*)` `([^`]*)` `` `([^`]+)`$/.exec(line);
+    if (c) { open.push({ when: c[1] + "==" + c[2], label: c[3] }); continue; }
+    if (open.length && line === open[open.length - 1].label + ":") { open.pop(); continue; }
+    const w = /^((?:Write|Delete)Reg\w+) (\S+) (["`])(.*?)\3(?: (["`])(.*?)\5)?(?: (["`])(.*?)\7)?$/.exec(line);
+    if (w) writes.push({ op: w[1], key: w[4], name: w[6], value: w[8], when: open.map(o => o.when).join(" && ") });
+  }
+  return { include, assoc: assoc.length, writes };
+}
 function ecTypeNameTests() {
   const root = E.ROOT, lib = path.join(root, "node_modules", "app-builder-lib");
   let got;
@@ -2146,6 +2190,23 @@ function ecTypeNameTests() {
   } catch (e) { got = "the installer's include could not be read: " + e.message; }
   eq("the right-click entry for a .ec file is electron-builder's \"Open with Etiuda\" under the class's open verb, and a Polish installer writes \"Otwórz w Etiudzie\" there before telling the shell",
     got, [true, true, "Etiuda", "Etiuda catalog", "Otwórz w Etiudzie", true]);
+  /* Read as makensis reads it: the desk's installer writes the Polish over its own type only when
+     Polish, and a build that declares no type, which is how Studio includes this file, writes
+     nothing under Classes in any language while customInstall's other work still runs. */
+  const cfgNow = require(path.join(root, "electron-builder.js"));
+  const own = new Set([].concat(...(cfgNow.fileAssociations || []).map(a => [].concat(a.ext).map(x => "." + x).concat([a.name]))));
+  const classes = r => r.writes.filter(w => /^Software\\Classes\\/i.test(w.key));
+  const desk = nsisInstallWrites(root, cfgNow);
+  got = typeof desk === "string" ? desk : [classes(desk).filter(w => w.when).map(w => [w.key, w.value, w.when]),
+    classes(desk).every(w => own.has(w.key.split("\\")[2]))];
+  eq("makensis reads the desk's installer writing only its own type's keys, and in Polish the name and the open verb",
+    got, [[["Software\\Classes\\Etiuda catalog", "Katalog Etiudy", "$LANGUAGE==1045"],
+      ["Software\\Classes\\Etiuda catalog\\shell\\open", "Otwórz w Etiudzie", "$LANGUAGE==1045"]], true]);
+  const bare = nsisInstallWrites(root, Object.assign({}, cfgNow, { fileAssociations: [] }));
+  got = typeof bare === "string" ? bare : [bare.assoc, classes(bare).map(w => [w.key, w.value, w.when]),
+    bare.writes.some(w => w.name === "InstallLocation" && w.value === "$INSTDIR")];
+  eq("the same include in a build that declares no file type writes nothing under Classes in any language, and still writes InstallLocation",
+    got, [0, [], true]);
 }
 /* THE MENU'S FIRST OPEN IS PAID FOR BEFORE IT (E9): warmMenu is sliced out of header-menus.js with the
    one openSettingsMenu that marks the menu drawn, and run on a small element model written here; when
