@@ -3158,7 +3158,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .tour-actions .btn.primary,.tour-actions .btn.primary:hover,
 .tour-actions .btn.primary:focus-visible,.tour-actions .btn.primary.tour-sel{
   background:#fff;border-color:#fff;color:var(--bub);font-weight:600}
-.tour-actions .btn.primary:hover,.tour-actions .btn.primary:focus-visible,
+.tour-actions .btn.primary:not([disabled]):hover,.tour-actions .btn.primary:not([disabled]):focus-visible,
 .tour-actions .btn.primary.tour-sel{filter:brightness(.94)}
 .tour-actions .tour-skip{margin-right:auto}
 /* ←/→ move real focus so Enter and screen readers work, but .tour-sel already draws the

@@ -5,17 +5,16 @@ import { focusIntentOnOpen } from "./on-open.js";
 import { drawIntentRail } from "./rail-list.js";
 import { chordChips } from "./shortcuts.js";
 import { lsGet, lsSet, lsDel, ssGet, ssSet, ssDel } from "./storage.js";
-import { drawPills, tabs } from "./tabs.js";
+import { drawPills } from "./tabs.js";
 import { t, toast } from "./ui-lang.js";
 import { railActive, railWanted, scheduleRailGeometry, syncRailLayout } from "./rail-panel.js";
 import { pageScroller } from "./page-scroll.js";
-import { list, pax, intentEl, $ } from "./dom.js";
+import { list, $ } from "./dom.js";
 import { whenMarkFormed } from "./empty-mark.js";
-import { copiesMade, setEntrySel } from "./mark.js";
+import { setEntrySel } from "./mark.js";
 import { syncLayoutPrefs, pillsWanted, schedulePillsCollapse } from "./pills-box.js";
-import { closeSettingsMenu } from "./header-menus.js";
-import { wholeThingEmpty, intentIdxs, cats, lang } from "./app-state.js";
-import { pack } from "./pack.js";
+import { closeSettingsMenu, openSettingsMenu } from "./header-menus.js";
+import { wholeThingEmpty } from "./app-state.js";
 import { placeBubble } from "./bubble.js";
 import { eHost, eCatalogFolderShort } from "./host.js";
 import { agentName, setAgentName, keepAgentName, keepTypedName, nameAnswered, nameFieldHtml, wireNameField } from "./agent.js";
@@ -121,11 +120,11 @@ function cardBtn(sel){
   const c=tourPickFirstCard();
   return (c&&c.querySelector&&c.querySelector(sel))||c||$("#list");
 }
-/* The prep the star, the eye and the pencil share. The caption hides its controls until the card
-   is hovered and a tour never hovers, so the three steps were spotlighting a button at opacity 0.
-   Borrowed on the same loan-and-return contract as the rail and the pills above, and put on the
-   BODY: a class on the card itself lasted about a second, because patchCard() rewrites a card's
-   className whole and erases anything the render did not put there. */
+/* The caption hides its controls until the card is hovered and a tour never hovers, so the step
+   about them would ring buttons at opacity 0. Borrowed on the same loan-and-return contract as the
+   rail and the pills above, and put on the BODY: a class on the card itself lasted about a second,
+   because patchCard() rewrites a card's className whole and erases anything the render did not put
+   there. */
 function tourRevealCardActions(){
   tourScrollListTop();
   tourPickFirstCard();
@@ -149,14 +148,17 @@ function menuTarget(act){
   return (act && m.querySelector('[data-act="'+act+'"]')) || m;
 }
 const menuSide=()=>menuOpen() ? "left" : null;
-// A window the person opened: what each inside step waits on.
+// The window each inside step stands in.
 const cardEditorOpen=()=>modalOpen() && !!document.getElementById("meCancel");
 const libraryOpen=()=>modalOpen() && !!document.querySelector("#modalCard details.manage-sec");
 const settingsOpen=()=>modalOpen() && !!document.getElementById("setBody");
-// What the typing steps read: a step that `does` something tests the page, never its own record.
-const paxNow=()=>pax ? String(pax.value||"").trim() : "";
-const searchNow=()=>(intentEl ? String(intentEl.value||"").trim() : "")+"|"+intentIdxs.join(",");
-const themeNow=()=>document.documentElement.dataset.theme||"";
+/* NEXT PRESSES THE STEP'S OWN CONTROL for the person, and only where it stands on screen: never the
+   card or the list a step falls back to ringing. */
+function tourPress(el, sel){ if(el && el.matches && el.matches(sel) && el.getClientRects().length) el.click(); }
+// A Menu row, with the Menu opened first where it is shut.
+function tourPressRow(act){ if(!menuOpen()) openSettingsMenu(); tourPress(menuTarget(act), '[data-act="'+act+'"]'); }
+// The window an inside step stands in, closed as the person would close it.
+function shutTourWindow(){ if(modalOpen()) closeModal(); if(factsPanelOpen()) closeFactsPanel(); }
 // The wheel waits on the sample until a reply names somebody (agent.js), and the step says so.
 function wheelShown(){ return !document.body.classList.contains("role-waits"); }
 const TOUR_STEPS=[
@@ -186,25 +188,22 @@ const TOUR_STEPS=[
     sel:".field-wrap.paxrole",
     title:()=>wheelShown() ? "Customer name and role" : "The customer's name",
     body:()=>wheelShown()
-      ? "Paste the customer's name as the chat gives it, surname and capitals included; every reply then greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>). The wheel beside it says who is on the chat, for internal comments. Any name will do to try it."
-      : "Paste the customer's name as the chat gives it, surname and capitals included; every reply then greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>). Any name will do to try it.",
-    does:{snap:paxNow, done:was=>!!paxNow() && paxNow()!==was, on:"#pax", settle:1200},
+      ? "The customer's name goes here as the chat gives it, surname and capitals included, and every reply greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>). The wheel beside it says who is on the chat, for internal comments."
+      : "The customer's name goes here as the chat gives it, surname and capitals included, and every reply greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>).",
     pad:6
   },
   {
     id:"search",
     sel:"#intentComboWrap",
     title:"Search",
-    body:"Type the word nearest what the customer means, such as 'return' or 'broken'. The intents on the left rank themselves and the cards narrow to match, in both languages. <kbd>Enter</kbd> picks the marked intent, and <kbd>Esc</kbd> clears the box.",
-    does:{snap:searchNow, done:was=>searchNow()!==was && searchNow()!=="|", on:"#intentComboWrap", settle:1200},
+    body:"A word near what the customer means, such as 'refund', is enough: the intents on the left rank themselves and the cards narrow to match, in both languages. <kbd>Enter</kbd> picks the marked intent, and <kbd>Esc</kbd> clears the box.",
     pad:6
   },
   {
     id:"rail",
     sel:"#intentRail",
     title:"Intent panel",
-    body:"An intent names what the customer has come about. Click one and its replies come forward, ringed <b class=\"t-go\">green</b>, with its phrase filling <span class=\"fillmiss\">INTENT</span> wherever a reply uses it. <kbd>Ctrl</kbd>+click picks several, and the star keeps the ones used most at the top.",
-    does:{done:()=>intentIdxs.length>0, on:"#intentRail"},
+    body:"An intent names what the customer has come about. A click on one brings its replies forward, ringed <b class=\"t-go\">green</b>, with its phrase filling <span class=\"fillmiss\">INTENT</span> wherever a reply uses it. <kbd>Ctrl</kbd>+click picks several, and the star keeps the ones used most at the top.",
     pad:8,
     prep:tourEnsureRail
   },
@@ -212,8 +211,7 @@ const TOUR_STEPS=[
     id:"cards",
     sel:()=>tourPickFirstCard()||$("#list"),
     title:"Cards",
-    body:"Click a reply: the whole of it is copied, greeting, name and signature filled in, ready to paste into the chat. A card marked <b>1/2</b> or <b>STEP 1/3</b> holds several, each copied on its own. <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> do the same from the keyboard.",
-    does:{snap:copiesMade, done:was=>copiesMade()>was},
+    body:"A click on a reply copies the whole of it, greeting, name and signature filled in, ready to paste into the chat. A card marked <b>1/2</b> or <b>STEP 1/3</b> holds several, each copied on its own. <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> do the same from the keyboard.",
     pad:6,
     prep:()=>{ tourScrollListTop(); tourPickFirstCard(); }
   },
@@ -221,8 +219,7 @@ const TOUR_STEPS=[
     id:"pills",
     sel:"#pills",
     title:"Category pills",
-    body:"Click a category to see only its cards; <kbd>Ctrl</kbd>+click keeps several. A <b class=\"t-go\">green</b> ring marks one holding a card for the chosen intent, and a <b class=\"t-acc\">blue</b> one a supporting category, useful for any question.",
-    does:{done:()=>cats.length>0, on:"#pills"},
+    body:"A click on a category shows only its cards, and <kbd>Ctrl</kbd>+click keeps several. A <b class=\"t-go\">green</b> ring marks one holding a card for the chosen intent, and a <b class=\"t-acc\">blue</b> one a supporting category, useful for any question.",
     pad:8,
     prep:tourEnsurePills
   },
@@ -230,9 +227,8 @@ const TOUR_STEPS=[
     id:"tabs",
     sel:"#tabsWrap",
     title:"Conversations",
-    body:()=>t("Each customer on the chat gets a tab of their own here, with their name, intent and language, so a reply never carries the wrong name. Open a second conversation with <b>+</b> or {NEW}; {KEY} moves between them.")
+    body:()=>t("Each customer on the chat gets a tab of their own here, with their name, intent and language, so a reply never carries the wrong name. <b>+</b> or {NEW} opens another conversation, and {KEY} moves between them.")
             .replace("{KEY}",chordChips("tabNext")).replace("{NEW}",chordChips("tabNew")),
-    does:{snap:()=>tabs.length, done:was=>tabs.length>was},
     pad:6
   },
   {
@@ -240,47 +236,21 @@ const TOUR_STEPS=[
     sel:"#seg",
     title:"English / Polish",
     // A function, not a string: the key it names is rebindable, so it is read at show time
-    body:()=>t("Click the other language: this conversation's replies switch to it, so each customer is answered in their own language. {KEY} does it from anywhere.")
+    body:()=>t("Replies in this conversation follow the language chosen here, so each customer is answered in their own. {KEY} switches it from anywhere.")
             .replace("{KEY}",chordChips("langToggle")),
-    does:{snap:()=>lang, done:was=>lang!==was},
     pad:6
   },
-  /* One step per control on a card header, ordered by how far each one goes rather than by
-     where it sits on the row: the star only SORTS a card, the eye puts it away, the pencil
-     rewrites it - and the editor opens straight after the pencil that opens it. `cardBtn` is the
-     same resolve/prep pair three times over: pick the first card, then point at one of its
-     buttons. */
+  /* A STEP THAT OPENS A WINDOW (`opens`) moves on when the person opens it or when Next opens it for
+     them (`open`); the step inside (`inside`) stands while its window does, and its Next or Back
+     closes the window before moving. */
   {
-    id:"star",
-    sel:()=>cardBtn(".star-btn"),
+    id:"buttons",
+    sel:()=>cardBtn(".cacts"),
     prep:tourRevealCardActions,
-    title:"Favourites",
-    body:"Click the star on this card: it lifts the card to the top of its category, and under <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> into <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b> at the head of the list.",
-    does:{snap:()=>String(pack.favourites||""), done:was=>String(pack.favourites||"")!==was},
-    pad:8
-  },
-  {
-    id:"hide",
-    sel:()=>cardBtn('[data-act="hide"]'),
-    prep:tourRevealCardActions,
-    title:"Put a card away",
-    body:"Click the eye to put this card away: it greys out at the foot of its own category and shows nowhere else. The same button there brings it back, and nothing is deleted.",
-    does:{snap:()=>String(pack.hidden||""), done:was=>String(pack.hidden||"")!==was},
-    pad:8
-  },
-  /* A WINDOW IS OPENED BY THE PERSON, NEVER BY THE TOUR: a step says how (`opens`), and the step
-     inside the window appears only once they open it (`inside`, shown while its window stands).
-     It has no Next and no Back, since closing the window is how it is done. */
-  {
-    id:"edit",
-    sel:()=>cardBtn('[data-act="edit"]'),
-    prep:tourRevealCardActions,
-    title:"Edit a card",
-    body:()=>(eHost()
-      ? t("Click the pencil to open this card in the editor: both languages, the internal note, the keywords. Changes stay on this computer, and the editor's <b>Reset</b> brings back the catalog's own words.")
-      : t("Click the pencil to open this card in the editor: both languages, the internal note, the keywords. Changes stay in this browser, and the editor's <b>Reset</b> brings back the catalog's own words."))
-      +" "+t("Once the window is open, the tour goes inside with it."),
+    title:"A card's buttons",
+    body:"The star lifts a card to the top of its category, and under <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> into <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b>.<br>The eye puts it away, greyed at the foot of its category, and brings it back from there.<br>The pencil opens it for editing, and <b>Reset</b> in the editor brings back the catalog's own words.<br>Click the pencil on this card.",
     opens:"editor",
+    open:()=>tourPress(cardBtn('[data-act="edit"]'), '[data-act="edit"]'),
     pad:8
   },
   {
@@ -294,8 +264,8 @@ const TOUR_STEPS=[
     body:()=>t("<span class=\"t-sec\">Content</span> holds the text in both languages and the internal note; the folds below hold the keywords, the category, the linked intents and the finer settings. <b>Cancel</b> leaves everything as it was.")
       +" "+t("The tour carries on once this window is closed.")
   },
-  /* AFTER the editor, not before it: the four steps above act on a card that already exists,
-     and this is the one that makes the one that does not - into the screen just shown. */
+  /* AFTER the editor, not before it: the step above acts on a card that already exists, and this
+     is the one that makes the one that does not - into the screen just shown. */
   {
     id:"add",
     sel:"#addCardFab",
@@ -303,6 +273,7 @@ const TOUR_STEPS=[
     body:()=>t("Click <b>+</b> to write a card of your own, in the category open now or in any other chosen in the editor.")
       +" "+t("Once the window is open, the tour goes inside with it."),
     opens:"addIn",
+    open:()=>tourPress($("#addCardFab"), "#addCardFab"),
     pad:10
   },
   {
@@ -313,15 +284,16 @@ const TOUR_STEPS=[
     when:cardEditorOpen,
     pad:4,
     title:"A new card",
-    body:()=>t("Write the reply in both languages and give it a title and a category. <b>Save</b> keeps it, and <b>Cancel</b> leaves nothing behind.")
+    body:()=>t("A blank card: the reply in both languages, a title and a category. <b>Save</b> keeps it, and <b>Cancel</b> leaves nothing behind.")
       +" "+t("The tour carries on once this window is closed.")
   },
   {
     id:"facts",
     sel:"#factsBtn",
     title:"Quick facts",
-    body:"Click <b>Quick facts</b> to open the fees, deadlines and links worth quoting.",
+    body:"Click <b>Quick facts</b> to open the links and figures worth having to hand.",
     opens:"factsIn",
+    open:()=>tourPress($("#factsBtn"), "#factsBtn"),
     pad:8
   },
   {
@@ -340,19 +312,19 @@ const TOUR_STEPS=[
     id:"theme",
     sel:"#theme",
     title:"Light and dark",
-    body:"Click here to switch between light and dark. Etiuda follows the system until the first click, and keeps your choice from then on.",
-    does:{snap:themeNow, done:was=>themeNow()!==was},
+    body:"This switches between light and dark. Etiuda follows the system until the first click, and keeps the choice from then on.",
     pad:8
   },
   {
-    /* The button, and never the menu opened for it: the person opens it, and the steps after this
-       one (`menu`, kept open) ring the row they are asked for. */
+    /* Done once the Menu is open (`done`), by the person or by Next; the steps after this one
+       (`menu`, kept open) ring the row they are about. */
     id:"menu",
     sel:()=>menuTarget(""),
     side:menuSide,
     title:"Menu",
     body:"Click <b>Menu</b>: the rest of Etiuda opens from there.",
-    does:{done:()=>menuOpen()},
+    done:()=>menuOpen(),
+    open:()=>openSettingsMenu(),
     pad:8
   },
   {
@@ -364,6 +336,7 @@ const TOUR_STEPS=[
       +" "+t("Click <b>Library</b> in the Menu: the whole catalog is there.")
       +" "+t("Once the window is open, the tour goes inside with it."),
     opens:"libraryIn",
+    open:()=>tourPressRow("manage"),
     menu:true,
     pad:8
   },
@@ -386,6 +359,7 @@ const TOUR_STEPS=[
     body:()=>t("One more window: open the <span data-icon=\"settings\"></span> Menu again and click <b>Settings</b>.")
       +" "+t("Once the window is open, the tour goes inside with it."),
     opens:"settingsIn",
+    open:()=>tourPressRow("settings"),
     menu:true,
     pad:8
   },
@@ -411,45 +385,31 @@ const TOUR_STEPS=[
 // A step is on when it has no condition or its condition holds now.
 function stepOn(i){ const s=TOUR_STEPS[i]; return !!s && (!s.when || s.when()); }
 function onFrom(i,dir){ for(let j=i; j>=0 && j<TOUR_STEPS.length; j+=dir) if(stepOn(j)) return j; return -1; }
-// A step that asks the person to do something moves on when they have done it, and has no Next.
-function tourAsks(s){ return !!(s && (s.waits || s.inside || s.opens || s.does)); }
-/* NEXT ONLY WHERE NOTHING IS ASKED, or where what is asked has nothing on screen to be done with. */
+/* NEXT ON EVERY STEP, held back only where the steps after need the person's own act (`waits`) and
+   its control is on screen. */
+function nextHeld(s){ return !!(s && s.waits) && !!resolveTourTarget(s); }
 function syncTourNext(){
   const els=tourEls(), step=TOUR_STEPS[tourIdx];
   if(!els.next || !step) return;
-  els.next.hidden=!!step.inside || (tourAsks(step) && !!resolveTourTarget(step));
+  els.next.disabled=nextHeld(step);
   els.next.textContent=t(onFrom(tourIdx+1,1)<0 ? "Finish" : "Next");
 }
-/* THE PERSON'S ACT MOVES A STEP ON. Anything done on the page is read once it has settled: a step
-   whose window or condition has gone is done, one that `opens` a window follows it in, and one that
-   `does` something asks its own test, against what stood when the step began (`snap`), and counts
-   only what landed inside `on` where it names one. */
+/* THE PERSON'S ACT MOVES A STEP ON, read once it has settled: a step whose window or condition has
+   gone is done, one that `opens` a window follows the person into it, and one with `done` asks it. */
 const TOUR_ACT_MS=350;
-let tourActWas=null, tourActHit=false, tourActT=0;
-function armTourAct(step){
-  clearTimeout(tourActT); tourActT=0; tourActHit=false; tourActWas=null;
-  const act=step && step.does;
-  if(act && act.snap){ try{ tourActWas=act.snap(); }catch(_){ tourActWas=null; } }
-}
-function tourActSoon(e){
+let tourActT=0;
+function tourActSoon(){
   if(!tourRunning) return;
-  const step=TOUR_STEPS[tourIdx], act=step && step.does, el=e && e.target;
-  if(!step) return;
-  // The bubble's own buttons move the tour themselves, so nothing done there is the act.
-  const inBubble=!!(el && el.closest && el.closest("#tourCard"));
-  if(act && !inBubble && (!act.on || (el && el.closest && el.closest(act.on)))) tourActHit=true;
   clearTimeout(tourActT);
   const at=tourIdx;
-  tourActT=setTimeout(()=>{ tourActT=0; if(tourRunning && tourIdx===at) tourActCheck(); }, (act && act.settle) || TOUR_ACT_MS);
+  tourActT=setTimeout(()=>{ tourActT=0; if(tourRunning && tourIdx===at) tourActCheck(); }, TOUR_ACT_MS);
 }
 function tourActCheck(){
   const step=TOUR_STEPS[tourIdx];
   if(!step) return;
   if(!stepOn(tourIdx)){ showTourStep(onFrom(tourIdx+1,1)); return; }
   if(step.opens){ tourFollowWindow(); return; }
-  let done=false;
-  if(step.does && tourActHit){ try{ done=!!step.does.done(tourActWas); }catch(_){ done=false; } }
-  if(done) tourNext();
+  if(step.done && step.done()) tourOn();
 }
 
 
@@ -583,7 +543,7 @@ function showTourStep(i){
   const els=tourEls();
   // Where the tour stands survives a reload: loading a catalog reloads the page.
   ssSet(TOUR_AT,step.id);
-  // No step opens the menu: the person does, and only a step about its rows (`menu`) leaves it open.
+  // Only a step about the Menu's rows (`menu`) leaves it open.
   if(!step.menu) closeSettingsMenu();
   /* A showcase must not outlive its step: whatever the PREVIOUS step's prep borrowed is given
      back before this step's prep takes anything - in either direction, and endTour gives it
@@ -599,9 +559,8 @@ function showTourStep(i){
   /* A step body is authored markup, so it is translated whole and injected raw - the same
      rule the shortcut hints follow. A function body has already composed its key. */
   if(els.body){ els.body.innerHTML=t((typeof step.body==="function"?step.body():step.body)||""); fillProseIcons(els.body); }
-  if(els.prev) els.prev.hidden=!!step.inside || onFrom(i-1,-1)<0;
+  if(els.prev) els.prev.hidden=onFrom(i-1,-1)<0;
   syncTourNext();
-  armTourAct(step);
   let nameInp=null;
   if(els.field){
     els.field.hidden=!step.name;
@@ -634,7 +593,7 @@ function showTourStep(i){
   /* THE PAGE KEEPS ITS KEYBOARD: a step takes the focus only where it asks for typing, or where
      the keyboard was already walking the tour's own buttons and there is a Next to land on. */
   if(nameInp){ try{ nameInp.focus({preventScroll:true}); }catch(_){} }
-  else if(keyed && els.next && !els.next.hidden) selectTourNext();
+  else if(keyed && els.next && !els.next.disabled) selectTourNext();
   else clearTourFocus();
 }
 // Whether the name had an answer when this tour began, which emptying the first step's field keeps.
@@ -721,7 +680,7 @@ function endTour(completed){
   const later=tourAfter; tourAfter=[];
   later.forEach(fn=>{ try{ fn(); }catch(_){} });
 }
-/* The window a step says how to open, once the person opens it: the tour goes in with them. */
+/* The window a step says how to open, once it is open: the tour goes in with it. */
 function tourFollowWindow(){
   const step=TOUR_STEPS[tourIdx];
   if(!tourRunning || !step || !step.opens) return false;
@@ -751,7 +710,7 @@ function tourHasFocus(){
 let tourFocusIdx=0;
 function tourButtons(){
   const els=tourEls();
-  return [els.skip, els.prev, els.next].filter(b=>b && !b.hidden);
+  return [els.skip, els.prev, els.next].filter(b=>b && !b.hidden && !b.disabled);
 }
 function markTourFocus(){
   const btns=tourButtons();
@@ -791,21 +750,36 @@ function observeTourTarget(tb){
     if(tb && tb.nodeType===1) tourTargetRO.observe(tb);
   }catch(_){}
 }
+/* NEXT DOES FOR THE PERSON WHAT THE STEP ASKS: it closes the window a step stands inside, opens the
+   one a step invites them to open and follows it in, and moves on. */
 function tourNext(){
   if(!tourRunning) return;
   const step=TOUR_STEPS[tourIdx];
+  if(!step || nextHeld(step)) return;
   /* The name step's field is its answer: a name given is kept and the question is not asked again;
      left empty, the first signed copy asks, as it would without the tour. */
-  if(step && step.name){
+  if(step.name){
     const inp=$("#tourName"), v=inp ? inp.value.trim() : "";
     if(v) keepAgentName(v); else if(agentName()) setAgentName("");
   }
+  if(step.inside) shutTourWindow();
+  if(step.open){
+    try{ step.open(); }catch(_){}
+    if(tourFollowWindow()) return;
+  }
+  tourOn();
+}
+// On to the next step that is on, or the end.
+function tourOn(){
   const n=onFrom(tourIdx+1,1);
   if(n<0) endTour(true);
   else showTourStep(n);
 }
+// Back from inside a window closes it, which lands on the step that opens it.
 function tourPrev(){
   if(!tourRunning) return;
+  const step=TOUR_STEPS[tourIdx];
+  if(step && step.inside) shutTourWindow();
   const n=onFrom(tourIdx-1,-1);
   if(n>=0) showTourStep(n);
 }
@@ -814,6 +788,9 @@ function wireTourUi(){
   if(els.next) els.next.onclick=()=>tourNext();
   if(els.prev) els.prev.onclick=()=>tourPrev();
   if(els.skip) els.skip.onclick=()=>endTour(false);
+  /* Next and Back close or open a window themselves, so their press is not also a click outside the
+     Menu or Quick facts, which would close it and move the tour on before the button lands. */
+  [els.next, els.prev].forEach(b=>{ if(b) b.addEventListener("pointerdown",e=>e.stopPropagation()); });
   // What the person does on the page, read for the step's act (tourActSoon).
   ["click","input","change","keyup"].forEach(ev=>document.addEventListener(ev,tourActSoon,true));
   // A window opening or closing over the page moves the bubble behind it or back.
