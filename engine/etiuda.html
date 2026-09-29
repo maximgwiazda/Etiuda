@@ -332,9 +332,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      dashed add-affordances). One token doing both reads as a lattice of equally loud lines. */
   --bg:#f7f8fa; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#e4e8ee; --line-strong:#cfd6e0;
   --accent:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8; --mark-ink:#2563eb;
-  /* WHAT CARRIES WHITE: the accent as a fill under white words, cobalt in both themes, since white
-     on the dark theme's own accent is 2.52:1 and on this 5.17:1 (the bubble's --bub, for the same reason). */
-  --accent-fill:#2563eb;
+  /* ONE ACCENT, the bubbles' cobalt, in every theme: white words on it read 5.17:1. */
   /* The dot field under the cards. A share of --dim rather than a colour, so the field follows
      the ink of whichever theme is on; the two shares are PICKED BY EYE from a sheet of twelve
      (ruled 2026-09-17) rather than derived, because a pale ground swallows a dot that a dark one
@@ -394,8 +392,11 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* The combined box: the drum's fixed lane plus a name's worth of typing room. The cap
      sits a fifth below its first draft - the search box is the one that deserves width. */
   --paxrole-field:clamp(172px, 10vw + 112px, 240px);
-  /* Thin scrollbars app-wide */
-  --scroll-thumb:rgba(71,85,105,.4); --scroll-thumb-hover:rgba(71,85,105,.65);
+  /* Thin scrollbars app-wide. The thumb is OPAQUE, so the dot field stops at it, and reads as the
+     see-through grey did: the same grey at the same share, mixed over the canvas. The track stays
+     transparent. All four token blocks. */
+  --scroll-thumb:color-mix(in srgb,rgb(71,85,105) 40%,var(--bg));
+  --scroll-thumb-hover:color-mix(in srgb,rgb(71,85,105) 65%,var(--bg));
   --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
   /* Light cards ARE the panel surface; dark lifts them one step above the header chrome,
      so the card ground gets its own token - see the dark blocks. --txt-mix is the share of
@@ -448,12 +449,13 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
   --band:#0a0d13; --header-bg:#191b20;
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
-  --accent:#7aa2f7; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
+  --accent:#2563eb; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
   --bub-shadow:rgba(0,0,0,.55);
-  --scroll-thumb:rgba(152,162,179,.4); --scroll-thumb-hover:rgba(152,162,179,.75);
+  --scroll-thumb:color-mix(in srgb,rgb(152,162,179) 40%,var(--bg));
+  --scroll-thumb-hover:color-mix(in srgb,rgb(152,162,179) 75%,var(--bg));
   --bevel:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.38),inset 1px 0 0 rgba(255,255,255,.05);
   /* A zero lift, never `none`: it is concatenated into the intent panel's shadow list, as the
      card shadow is into the intent-hit and cat-hit rings, and one `none` inside a shadow list
@@ -489,12 +491,13 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
   --band:#0a0d13; --header-bg:#191b20;
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
-  --accent:#7aa2f7; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
+  --accent:#2563eb; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
   --bub-shadow:rgba(0,0,0,.55);
-  --scroll-thumb:rgba(152,162,179,.4); --scroll-thumb-hover:rgba(152,162,179,.75);
+  --scroll-thumb:color-mix(in srgb,rgb(152,162,179) 40%,var(--bg));
+  --scroll-thumb-hover:color-mix(in srgb,rgb(152,162,179) 75%,var(--bg));
   --bevel:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.38),inset 1px 0 0 rgba(255,255,255,.05);
   /* Zero, not `none` - the twin value in the block above says why. */
   --card-lift:0 0 #0000;
@@ -535,7 +538,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --ed:#1d4ed8; --ed-soft:rgba(29,78,216,.14);
   --pl:#6b3fa0;; --go:#047857; --go-soft:#d1fae5;
   --bub-shadow:rgba(37,99,235,.32);
-  --scroll-thumb:rgba(71,85,105,.4); --scroll-thumb-hover:rgba(71,85,105,.65);
+  --scroll-thumb:color-mix(in srgb,rgb(71,85,105) 40%,var(--bg));
+  --scroll-thumb-hover:color-mix(in srgb,rgb(71,85,105) 65%,var(--bg));
   --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
   --card-bg:var(--panel);      /* the card ground token - see the base block */
   --txt-mix:72%;
@@ -935,16 +939,16 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   max-width:100%;min-width:0}
 /* THE CATEGORY DOT - which chat is on which subject, at a glance: a 7px swatch coloured
    through the same [data-ec] -> --ecat plumbing the pills use (see syncTabAccent), blended
-   when several categories are filtered, white when none is - an accent would sink into the
-   band. FULL STRENGTH ON EVERY TAB: it is the one vivid thing in a deliberately quiet strip
-   and dimming it costs the glance it exists for; the selected tab is marked by its face.
+   when several categories are filtered, the band's ink when none is (dark on a pale band, white
+   on a deep one). FULL STRENGTH ON EVERY TAB: dimming the one vivid thing in a quiet strip costs
+   the glance it exists for; the selected tab is marked by its face.
    INSIDE the label's box - the label clips at its line box and eats anything hung outside. */
 .tab-label::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);
   width:7px;height:7px;border-radius:50%;
-  background-color:var(--ecat,#fff);background-image:var(--tab-accent-img,none);
+  background-color:var(--ecat,var(--band-ink));background-image:var(--tab-accent-img,none);
   pointer-events:none}
-/* The no-category dot changes ground on the selected tab and must change with it: white is
-   right on the band and invisible on the chrome face, which in light is very nearly white.
+/* The no-category dot changes ground on the selected tab and must change with it: the band's
+   ink is right on the band, not on the chrome face, which in light is very nearly white.
    Accent, because that is what "no filter" already wears on the All pill. */
 .tab.on .tab-label::before{background-color:var(--ecat,var(--accent))}
 /* A 20px square holding a 16px drawing - see ICON_TAB_X for why the marks stopped being
@@ -1037,7 +1041,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   font:600 12px var(--sans);cursor:default;letter-spacing:.4px}
 .seg button+button{border-left:1px solid transparent}
 .seg button:hover,.seg button:focus-visible{color:var(--accent)}
-.seg button.on{background:var(--accent-fill);color:#fff}
+.seg button.on{background:var(--accent);color:#fff}
 .seg button[data-alt].on{background:var(--pl)}
 /* One thumb behind the letters, driven entirely by the .on class - :has() reads it, CSS
    animates it. Generalised: track 1/n, position n-indexed - data-n says how many,
@@ -1413,7 +1417,7 @@ body.pills-lines-expand .pills-slot.pills-overflow .pills,
    worse than any gain in emphasis; the cobalt fill and the white text already say which slice is
    below. The hint rules below keep their weight and so do their .on pairs, so a ringed pill is
    the same width picked or not, and picking is the one thing that never changes a width. */
-.pill.on{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;box-shadow:none}
+.pill.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:none}
 /* normal arrow while reordering pills (no grab/hand cue) */
 /* pan-y: a finger resting on a pill can still scroll the page - see the rail rows */
 .pill{touch-action:pan-y}
@@ -1438,9 +1442,9 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 .pill.hint:hover,.pill.hint:focus-visible{color:var(--dim);border-color:var(--accent)}
 .pill.hint2:hover,.pill.hint2:focus-visible{color:var(--dim);border-color:var(--go-edge)}
 /* selected + intent-relevant: blue fill, keep green border ring */
-.pill.on.hint2{background:var(--accent-fill);border-color:var(--go-edge);color:#fff;
+.pill.on.hint2{background:var(--accent);border-color:var(--go-edge);color:#fff;
   box-shadow:0 0 0 2px var(--go-soft);font-weight:650}
-.pill.on.hint{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;
+.pill.on.hint{background:var(--accent);border-color:var(--accent);color:#fff;
   box-shadow:0 0 0 2px var(--accent-soft);font-weight:650}
 .pill.over{border-color:var(--accent);border-style:dashed}
 /* 8px = the old 4px margin plus the ~4px space glyph the flex pill no longer renders. */
@@ -1705,19 +1709,16 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    of thing rather than the first section of one list. */
 .e-favsep .e-favstar{width:13px;height:13px;display:inline-block;fill:currentColor;stroke:none;
   margin-right:6px;vertical-align:-2px}
-/* ONE SPINE, TWO MEANINGS, AND IT IS THE CATEGORY UNTIL IT IS NOT. The card used to carry
-   two marks - a green tick on its left for the recency trace, a hued bar on its top for the
-   identity - because both had to fit round one box's corners. The slab has a whole edge to
-   give, so identity takes it and the trace, which is the transient one and the rarer one,
-   BORROWS it for the three cards it names, fading back into the hue as it ages out. Nothing
-   is lost: a card in the trace is green, every other card is its category's colour. */
-.card[data-erec] .txt{--spine:var(--ok)}
-.card[data-erec="2"] .txt{--spine:color-mix(in srgb,var(--ok) 60%,var(--ecat,var(--line-strong)))}
-.card[data-erec="3"] .txt{--spine:color-mix(in srgb,var(--ok) 35%,var(--ecat,var(--line-strong)))}
+/* ONE SPINE, TWO MEANINGS: a block's spine is its category's colour until the recency trace
+   borrows it for the three blocks last copied, fading back into the hue as it ages out. The
+   trace marks the block copied and not its card, so the card's other blocks keep their hue. */
+.txt[data-erec]{--spine:var(--ok)}
+.txt[data-erec="2"]{--spine:color-mix(in srgb,var(--ok) 60%,var(--ecat,var(--line-strong)))}
+.txt[data-erec="3"]{--spine:color-mix(in srgb,var(--ok) 35%,var(--ecat,var(--line-strong)))}
 /* A CAPTION, NOT A HEAD. It names the slab beneath it and gets out of the way: no ground of its
    own and no rule under it. Its three controls appear on hover - see .chead .cacts - so the
    resting screen is words, and the category is a mark at the head rather than a word beside it. */
-.chead{display:flex;gap:7px;align-items:center;padding:0 3px 5px;flex-wrap:nowrap;
+.chead{--chead-gap:7px;display:flex;gap:var(--chead-gap);align-items:center;padding:0 3px 5px;flex-wrap:nowrap;
   background:var(--chead-bg,transparent);
   border-bottom:var(--chead-border,0 none transparent)}
 /* 600, not 650 - the quieter face that came out of an abandoned usage-titles experiment. The
@@ -1834,7 +1835,7 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 .swap code{background:var(--accent-soft);color:var(--accent);padding:1px 6px;border-radius:4px;
   font:12px var(--mono);cursor:default;display:inline-block;margin:2px 3px 2px 0}
 .swap code:hover{outline:1px solid var(--accent)}
-.swap code.on{background:var(--accent-fill);color:#fff}
+.swap code.on{background:var(--accent);color:#fff}
 .swap code.on::after{content:" ✕";opacity:.7}
 /* Soft separator at the macro-search tier boundary: above it the entries are *about* the
    query (title / keywords / category), below they only mention it in the body. A hairline
@@ -2157,6 +2158,10 @@ html.raildrag #intentRailList{margin-top:0}
 @media (hover:hover){
   .chead .cacts{opacity:0;transition:opacity var(--m-tone) ease}
   .card:hover>.chead .cacts,.card:focus-within>.chead .cacts{opacity:1}
+  /* While they wait they take no width, so the title runs the whole row and recedes when they
+     come. The cut pass reads their width from here (cut-text.js, cut-rh). */
+  body:not(.tour-cacts) .card:not(:hover,:focus-within,.is-hidden)>.chead .cacts{
+    width:0;overflow:hidden;margin-left:calc(-1*var(--chead-gap))}
 }
 /* A tour has no pointer, so a step showcasing the star, the eye or the pencil was pointing at
    something the rule above had faded out. On the BODY and not on the one card being shown:
@@ -2242,13 +2247,13 @@ html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!importan
    eats the last word of a line that fits, centred text gives way at both ends, and a field
    that has scrolled gives way behind the caret, never over it. NO LINE KEEPS AN ELLIPSIS AS A
    FALLBACK: an id rule outranks this class, and native dots paint before the scan can run. */
-.is-cut{
+.is-cut,.card:is(:hover,:focus-within)>.chead .cut-rh{
   -webkit-mask-image:linear-gradient(to right,transparent,#000 var(--cut-l,0px),
                      #000 calc(100% - var(--cut-r,0px)),transparent);
   mask-image:linear-gradient(to right,transparent,#000 var(--cut-l,0px),
              #000 calc(100% - var(--cut-r,0px)),transparent)}
 .is-cut.cut-l{--cut-l:1.5em}
-.is-cut.cut-r{--cut-r:1.5em}
+.is-cut.cut-r,.card:is(:hover,:focus-within)>.chead .cut-rh{--cut-r:1.5em}
 /* An input paints its words in the CONTENT box and nothing outside it, so the fade is measured
    there too - against the border box it lands in the padding that clears the button and fades
    nothing at all. Safe only because these inputs go naked: see .fill input. */
@@ -2465,7 +2470,7 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 /* PRIMARY IS A BAR'S DRESSING rather than a modifier a button may carry anywhere: only an
    actions bar decides which of its buttons leads, so outside one the class paints nothing and
    is not written. Measured, it had been on four buttons that read as plain. */
-.modal-actions .btn.primary{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;font-weight:600}
+.modal-actions .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
 /* Two buttons at the same edge read as one loosely spaced group, and one of these forgets your
    work while the other brings a file in. A hairline says they are two things. */
 .modal-actions .mf-left .mf-sep{align-self:stretch;width:1px;margin:3px;background:var(--line-strong);
@@ -2477,7 +2482,7 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    it. Named at both primary buttons and at the two hint pills; nowhere else in the sheet does
    a variant meet a state at equal weight. */
 .modal-actions .btn.primary:hover,.modal-actions .btn.primary:focus-visible{filter:brightness(.92);color:#fff;
-  background:var(--accent-fill);border-color:var(--accent-fill)}
+  background:var(--accent);border-color:var(--accent)}
 /* Hover deepens the fill under white in dark, where lightening it would thin the words; light keeps its lift. */
 :root[data-theme=light] .modal-actions .btn.primary:hover,
 :root[data-theme=light] .modal-actions .btn.primary:focus-visible{filter:brightness(1.08)}
@@ -2969,9 +2974,9 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   --m-resize:0s; --m-dismiss:0s; --m-travel:0s; --m-celebrate:0s; --m-wash:0s; --m-roll:0s;
   --m-nudge:0s}
 :root.e-still *,:root.e-still *::before,:root.e-still *::after{animation:none!important}
-/* THE FILL, cobalt in BOTH themes. White on it is 5.17:1 where white on the dark theme's own
-   accent would be 2.4:1, so a notice cannot borrow --accent and owns this. A host redeclares
-   the shadow per theme, which is the only one of the four a theme has ever moved. */
+/* THE FILL, cobalt in BOTH themes and the same blue as --accent, written out because this span
+   is published to host pages that carry none of the engine's tokens. A host redeclares the
+   shadow per theme, which is the only one of the four a theme has ever moved. */
 :root{--bub:#2563eb; --bub-ink:#fff; --bub-dim:rgba(255,255,255,.92); --bub-shadow:rgba(37,99,235,.32)}
 /* position:fixed because placeBubble() writes viewport coordinates; overflow stays VISIBLE or
    the panel clips its own pointer; drop-shadow and not box-shadow, so the pointer carries the
@@ -3296,13 +3301,6 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ok) 45%,transparent);
   animation:eCopyWash var(--m-wash) ease-out both}
 @keyframes eCopyWash{from{opacity:1}to{opacity:0}}
-/* The copied words lifting off the block, under the wash (pops.js); the tags stay behind. */
-.e-copy-lift{position:fixed;z-index:298;pointer-events:none;margin:0;overflow:hidden;
-  background:transparent;border-style:solid;border-color:transparent;
-  animation:eCopyLift var(--m-celebrate) var(--m-ease) both}
-.e-copy-lift .tag{visibility:hidden}
-@keyframes eCopyLift{from{opacity:.55;transform:none;filter:blur(0)}
-  to{opacity:0;transform:translateY(-22px) scale(1.02);filter:blur(1.5px)}}
 /* A settled search's words, marked where they stand (search-marks.js): the tint first, the
    underline with it 70ms on. 4px under the baseline clears the Polish ogonek at this size. */
 ::highlight(e-hit-in){background-color:color-mix(in srgb,var(--accent) 8%,transparent)}
@@ -5297,12 +5295,25 @@ What you type stays in this browser only.`;
     }
     cutRange.selectNodeContents(el);
     const ink = cutRange.getBoundingClientRect();
+    const acts = el.classList.contains("ctitle") && el.parentNode.querySelector(":scope>.cacts");
+    if (acts) return titleSides(el, acts, ink, cs);
     return { l: boxL - ink.left > CUT_EPS, r: ink.right - boxR > CUT_EPS };
+  }
+  function titleSides(el, acts, ink, cs) {
+    const row = el.parentNode, rs = getComputedStyle(row), gap = parseFloat(rs.columnGap) || 0;
+    let end = row.getBoundingClientRect().right - parseFloat(rs.borderRightWidth) - parseFloat(rs.paddingRight);
+    for (let n = el.nextElementSibling; n && n !== acts; n = n.nextElementSibling) end -= n.getBoundingClientRect().width + gap;
+    const card = el.closest(".card");
+    const folds = matchMedia("(hover:hover)").matches && !document.body.classList.contains("tour-cacts") && !(card && card.classList.contains("is-hidden"));
+    const receded = end - acts.scrollWidth - gap;
+    const b = el.getBoundingClientRect(), boxL = b.left + parseFloat(cs.borderLeftWidth) + parseFloat(cs.paddingLeft);
+    return { l: boxL - ink.left > CUT_EPS, r: ink.right - (folds ? end : receded) > CUT_EPS, rh: ink.right - receded > CUT_EPS };
   }
   function applyCut(el, c) {
     el.classList.toggle("is-cut", c.l || c.r);
     el.classList.toggle("cut-l", c.l);
     el.classList.toggle("cut-r", c.r);
+    if ("rh" in c) el.classList.toggle("cut-rh", c.rh);
     if (el.classList.contains("cut-peek")) el.title = c.l || c.r ? el.textContent.trim() : "";
   }
   function markCut(el) {
@@ -7823,6 +7834,51 @@ What you type stays in this browser only.`;
     return out;
   }
 
+  // src/modules/recency.js
+  var recency_exports = {};
+  __export(recency_exports, {
+    eApplyRecency: () => eApplyRecency,
+    eMoveRecent: () => eMoveRecent,
+    eNoteRecent: () => eNoteRecent
+  });
+
+  // src/modules/css-esc.js
+  var css_esc_exports = {};
+  __export(css_esc_exports, {
+    cssEsc: () => cssEsc
+  });
+  function cssEsc(s) {
+    if (window.CSS && typeof CSS.escape === "function") return CSS.escape(s);
+    return String(s).replace(/[^a-zA-Z0-9_-]/g, (ch) => "\\" + ch);
+  }
+
+  // src/modules/recency.js
+  var eRecent = [];
+  function eApplyRecency() {
+    if (!list) return;
+    list.querySelectorAll(".txt[data-erec]").forEach((b) => b.removeAttribute("data-erec"));
+    eRecent.forEach((r, i) => {
+      const b = list.querySelector('.card[data-id="' + cssEsc(r.id) + '"] .txt[data-v="' + r.vi + '"]');
+      if (b) b.setAttribute("data-erec", String(i + 1));
+    });
+  }
+  function eNoteRecent(id, vi) {
+    if (!id) return;
+    vi = vi | 0;
+    eRecent = eRecent.filter((r) => r.id !== id || r.vi !== vi);
+    eRecent.unshift({ id, vi });
+    eRecent = eRecent.slice(0, 3);
+    eApplyRecency();
+  }
+  function eMoveRecent(id, from, to) {
+    eRecent.forEach((r) => {
+      if (r.id !== id) return;
+      if (r.vi === from) r.vi = to;
+      else if (from < to && r.vi > from && r.vi <= to) r.vi--;
+      else if (from > to && r.vi >= to && r.vi < from) r.vi++;
+    });
+  }
+
   // src/modules/card-model.js
   function findCard(id) {
     return cards.find((m) => m.id === id) || BASE_M.find((m) => m.id === id) || (pack.custom || []).find((m) => m.id === id) || null;
@@ -7912,6 +7968,7 @@ What you type stays in this browser only.`;
       else delete pack.overrides[id];
     }
     savePack();
+    eMoveRecent(id, fromVi, toVi);
     hooks.rebuildCards();
     return true;
   }
@@ -7930,18 +7987,6 @@ What you type stays in this browser only.`;
   __export(card_blocks_exports, {
     animateTxtReorder: () => animateTxtReorder
   });
-
-  // src/modules/css-esc.js
-  var css_esc_exports = {};
-  __export(css_esc_exports, {
-    cssEsc: () => cssEsc
-  });
-  function cssEsc(s) {
-    if (window.CSS && typeof CSS.escape === "function") return CSS.escape(s);
-    return String(s).replace(/[^a-zA-Z0-9_-]/g, (ch) => "\\" + ch);
-  }
-
-  // src/modules/card-blocks.js
   function animateTxtReorder(mid, fromVi, toVi, dragging) {
     if (!list || mgReduceMotion()) {
       return reorderMacroBlocks(mid, fromVi, toVi);
@@ -10297,7 +10342,7 @@ What you type stays in this browser only.`;
   var FILL_M_A = "";
   var FILL_M_B = "";
   var FILL_STRIP = /[\u0001\u0002\u0003\u0004]/g;
-  var Z_TOKEN = /\{Z\}[ \t]*/g;
+  var Z_TOKEN = /\{Z\}([ \t]*)/g;
   function fill(s, m, mark, inL) {
     if (!s) return s;
     const L = CONTENT_LANGS.indexOf(inL) > -1 ? inL : cardLang(m);
@@ -10345,10 +10390,10 @@ What you type stays in this browser only.`;
     s = s.replace(/\{TOPIC\}/g, () => M2(commentPartTopic(L), t("TOPIC")));
     const it = intentFor(L);
     if (it) {
-      s = s.replace(Z_TOKEN, () => L === "pl" ? zForm(intentFirst(L)) : "");
+      s = s.replace(Z_TOKEN, (_, sp) => L === "pl" ? zForm(intentFirst(L)) + sp : "");
       s = s.replace(/\{INTENT\}/g, () => M2(it, t("INTENT")));
     } else {
-      s = s.replace(Z_TOKEN, L === "pl" ? "z" : "");
+      s = s.replace(Z_TOKEN, (_, sp) => L === "pl" ? "z" + sp : "");
       s = s.replace(/\{INTENT\}/g, mark ? MISS(t("INTENT")) : "");
     }
     return s;
@@ -17485,29 +17530,6 @@ What you type stays in this browser only.`;
     syncPillOrder();
   }
 
-  // src/modules/recency.js
-  var recency_exports = {};
-  __export(recency_exports, {
-    eApplyRecency: () => eApplyRecency,
-    eNoteRecent: () => eNoteRecent
-  });
-  var eRecentIds = [];
-  function eApplyRecency() {
-    if (!eRecentIds) return;
-    document.querySelectorAll("#list .card[data-erec]").forEach((c) => c.removeAttribute("data-erec"));
-    eRecentIds.forEach((id, i) => {
-      const c = list.querySelector('.card[data-id="' + cssEsc(id) + '"]');
-      if (c) c.setAttribute("data-erec", String(i + 1));
-    });
-  }
-  function eNoteRecent(id) {
-    if (!id) return;
-    eRecentIds = eRecentIds.filter((x) => x !== id);
-    eRecentIds.unshift(id);
-    eRecentIds = eRecentIds.slice(0, 3);
-    eApplyRecency();
-  }
-
   // src/modules/search-marks.js
   var search_marks_exports = {};
   __export(search_marks_exports, {
@@ -21702,35 +21724,11 @@ What you type stays in this browser only.`;
     setTimeout(() => {
       if (d.parentNode) d.remove();
     }, 900);
-    eLiftOff(el, r);
   }
-  function eLiftOff(el, r) {
-    if (mgReduceMotion()) return;
-    const cs = getComputedStyle(el), g = el.cloneNode(true);
-    [...g.attributes].forEach((a) => g.removeAttribute(a.name));
-    g.className = "e-copy-lift";
-    g.setAttribute("aria-hidden", "true");
-    Object.assign(g.style, {
-      left: r.left + "px",
-      top: r.top + "px",
-      width: r.width + "px",
-      height: r.height + "px",
-      padding: cs.padding,
-      borderWidth: cs.borderWidth,
-      font: cs.font,
-      color: cs.color,
-      whiteSpace: cs.whiteSpace
-    });
-    document.body.appendChild(g);
-    g.addEventListener("animationend", () => g.remove());
-    setTimeout(() => {
-      if (g.parentNode) g.remove();
-    }, 800);
-  }
-  function eCopyFeedback(id) {
+  function eCopyFeedback(id, vi) {
     const sel = document.querySelector(".txt.sel");
     if (sel) eWashOver(sel);
-    eNoteRecent(id);
+    eNoteRecent(id, vi);
   }
   function wirePops() {
     document.addEventListener("click", (e) => {
@@ -21789,7 +21787,7 @@ What you type stays in this browser only.`;
       if (!t2) return;
       eWashOver(t2);
       const card = t2.closest(".card[data-id]");
-      if (card) eNoteRecent(card.dataset.id);
+      if (card) eNoteRecent(card.dataset.id, +t2.dataset.v);
     });
   }
 
@@ -21810,7 +21808,7 @@ What you type stays in this browser only.`;
     withAgentName(ps[vi], () => {
       bumpUseCount(id, l);
       copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length));
-      eCopyFeedback(id);
+      eCopyFeedback(id, vi);
     }, document.querySelector("#list .txt.sel"));
     return true;
   }

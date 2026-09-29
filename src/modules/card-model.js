@@ -5,6 +5,7 @@ import { BASE_M, pack, savePack } from "./pack.js";
 import { cards, lang } from "./app-state.js";
 import { hooks } from "./hooks.js";
 import { v2AltLabel, v2PartText } from "./catalog-v2.js";
+import { eMoveRecent } from "./recency.js";
 
 /* CONTRACT: the search order is the answer. The list as it stands outranks the catalog it was
    built from, and both outrank the pack's customs. */
@@ -120,6 +121,7 @@ function reorderMacroBlocks(id, fromVi, toVi){
     if(Object.keys(o).length) pack.overrides[id]=o; else delete pack.overrides[id];
   }
   savePack();
+  eMoveRecent(id, fromVi, toVi);
   hooks.rebuildCards();
   return true;
 }

@@ -35,9 +35,10 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-/* 278 since the tour's walk by its acts (2026-09-28): the tour section went from ten checks to eleven,
-   and the first run's wait for the logo is one more in the bug hunt. */
-const EXPECTED = { chrome: 278 };
+/* 284 since a copy lays only the wash over its block and greens only that block's spine, a card's
+   title has the row while its controls wait, the scrollbar's thumb is opaque, every theme has one
+   blue and an idle tab's dot is the band's ink (2026-09-28); 278 was the tour's walk by its acts. */
+const EXPECTED = { chrome: 284 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -805,6 +806,97 @@ const t0 = Date.now();
   check(aboutMark.dark.fill === "rgb(255, 255, 255)" && aboutMark.light.fill === "rgb(37, 99, 235)",
     "and takes the theme's own mark colour (dark " + aboutMark.dark.fill + ", light " + aboutMark.light.fill + ")");
   clean(e, "the About mark");
+
+  /* THE THEMES' COLOURS, read resolved on the page in each theme: the unset attribute (the dark
+     default before boot writes one), dark and light. Every value is a computed colour, so a
+     colour-mix or a variable is judged by what it paints. */
+  const themeColours = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const was = document.documentElement.dataset.theme;
+    /* Painted into one canvas pixel and read back, so any serialisation (rgb, color(srgb ...))
+       comes out as 0 to 255 and an alpha of 0 to 1. */
+    const cx = Object.assign(document.createElement("canvas"), { width: 1, height: 1 }).getContext("2d", { willReadFrequently: true });
+    const px = c => { cx.clearRect(0, 0, 1, 1); cx.fillStyle = "#000"; cx.fillStyle = c; cx.fillRect(0, 0, 1, 1);
+      const d = cx.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], Math.round(d[3] / 255 * 100) / 100]; };
+    const res = v => { const i = document.createElement("i"); i.style.color = v; document.body.appendChild(i);
+      const c = px(getComputedStyle(i).color); i.remove(); return c; };
+    const out = {};
+    for (const th of ["unset", "dark", "light"]) {
+      if (th === "unset") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = th;
+      await wait(300);
+      const sc = getComputedStyle(document.querySelector(".scroller")).scrollbarColor, cut = sc.indexOf(")") + 1;
+      out[th] = { bg: res("var(--bg)"), thumb: res("var(--scroll-thumb)"), hover: res("var(--scroll-thumb-hover)"),
+        bar: px(sc.slice(0, cut)), track: px(sc.slice(cut).trim()), accent: res("var(--accent)"), bub: res("var(--bub)") };
+      /* Settings holds the segmented switches and the Close button the blue was judged by. */
+      hooks.openSettings(); await wait(700);
+      const card = document.getElementById("modalCard");
+      out[th].segs = [...card.querySelectorAll(".seg")].map(s => px(getComputedStyle(s, "::before").backgroundColor));
+      out[th].close = px(getComputedStyle([...card.querySelectorAll(".modal-actions .btn.primary")].pop()).backgroundColor);
+      dismissModal(); await wait(400);
+    }
+    if (was) document.documentElement.dataset.theme = was; else delete document.documentElement.dataset.theme;
+    await wait(300);
+    return out;
+  });
+  /* The thumb reads as the see-through grey did over the canvas: the grey at its share, laid over
+     --bg, to a unit per channel. The shares are the ones the sheet mixes; the grey is light's
+     slate on a light canvas and dark's on a dark one. */
+  const over = (g, a, bg) => g.map((c, i) => c * a + bg[i] * (1 - a));
+  const near = (x, y) => x.slice(0, 3).every((c, i) => Math.abs(c - y[i]) <= 1);
+  const thumbOk = s => { const dark = s.bg[0] < 128, g = dark ? [152, 162, 179] : [71, 85, 105];
+    return s.thumb[3] === 1 && s.hover[3] === 1 && near(s.thumb, over(g, .4, s.bg)) && near(s.hover, over(g, dark ? .75 : .65, s.bg))
+      && s.track[3] === 0 && near(s.bar, s.thumb) && s.bar[3] === 1; };
+  check(["unset", "dark", "light"].every(th => thumbOk(themeColours[th])),
+    "the scrollbar's thumb is opaque in every theme, hover included, and reads as the see-through grey over the canvas; the track stays clear ("
+    + JSON.stringify(["unset", "dark", "light"].map(th => [themeColours[th].thumb, themeColours[th].hover, themeColours[th].track[3]])) + ")");
+  /* ONE BLUE: the accent, every segmented switch's thumb in Settings and its Close button paint the
+     bubbles' blue in every theme, and white on it reads 4.5:1 or better (WCAG's relative luminance). */
+  const lum = c => c.slice(0, 3).map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); })
+    .reduce((s, v, i) => s + v * [.2126, .7152, .0722][i], 0);
+  const whiteOn = c => 1.05 / (lum(c) + .05);
+  const oneBlue = s => [s.accent, s.close].concat(s.segs).every(c => near(c, s.bub) && c[3] === 1) && s.segs.length > 0
+    && whiteOn(s.bub) >= 4.5;
+  check(["unset", "dark", "light"].every(th => oneBlue(themeColours[th])),
+    "the accent, Settings' switches and its Close button are the bubbles' blue in every theme, white on it at "
+    + whiteOn(themeColours.dark.bub).toFixed(2) + ":1 (" + JSON.stringify(["unset", "dark", "light"].map(th =>
+      [themeColours[th].accent, themeColours[th].segs.length, themeColours[th].segs.filter(c => !near(c, themeColours[th].bub)).length])) + ")");
+
+  /* AN INACTIVE TAB'S DOT, with no category on it, is the band's ink: the theme's text colour on
+     the pale band a light desk draws (the host's backdrop, body.e-backdrop, set here as the host
+     sets it) and white on every deep band. Read off a copy of the selected tab without its
+     selection or category, put on the page for the reading and taken out again. */
+  const tabDots = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const cx = Object.assign(document.createElement("canvas"), { width: 1, height: 1 }).getContext("2d", { willReadFrequently: true });
+    const px = c => { cx.clearRect(0, 0, 1, 1); cx.fillStyle = "#000"; cx.fillStyle = c; cx.fillRect(0, 0, 1, 1);
+      const d = cx.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], Math.round(d[3] / 255 * 100) / 100]; };
+    const res = v => { const i = document.createElement("i"); i.style.color = v; document.body.appendChild(i);
+      const c = px(getComputedStyle(i).color); i.remove(); return c; };
+    const on = document.querySelector(".tab.on");
+    if (!on) return null;
+    const was = document.documentElement.dataset.theme, bd = document.body.classList.contains("e-backdrop");
+    const off = on.cloneNode(true);
+    off.classList.remove("on"); off.removeAttribute("data-ec"); off.removeAttribute("style"); off.removeAttribute("id");
+    off.setAttribute("aria-hidden", "true");
+    document.body.appendChild(off);
+    const out = [];
+    for (const [th, back] of [["light", true], ["dark", true], ["light", false], ["dark", false]]) {
+      document.documentElement.dataset.theme = th; document.body.classList.toggle("e-backdrop", back);
+      await wait(200);
+      out.push({ th, back, dot: px(getComputedStyle(off.querySelector(".tab-label"), "::before").backgroundColor),
+        ink: res("var(--ink)"), band: res("var(--band-ink)") });
+    }
+    off.remove();
+    document.body.classList.toggle("e-backdrop", bd);
+    if (was) document.documentElement.dataset.theme = was; else delete document.documentElement.dataset.theme;
+    await wait(200);
+    return out;
+  });
+  const white = c => c[0] === 255 && c[1] === 255 && c[2] === 255;
+  check(!!tabDots && tabDots.every(r => near(r.dot, r.band) && r.dot[3] === 1)
+    && near(tabDots[0].dot, tabDots[0].ink) && !white(tabDots[0].dot) && white(tabDots[1].dot),
+    "an inactive tab's dot is the theme's text colour on a light desk's pale band and white on dark and on any deep band ("
+    + JSON.stringify(tabDots && tabDots.map(r => [r.th, r.back, r.dot])) + ")");
 
   /* Breakpoints: no horizontal overflow, and the cut-text rule at every width. */
   for (const w of [1600, 1400, 1200, 1000, 900, 800, 700, 600, 500, 430, 390]) {
@@ -2474,6 +2566,98 @@ const t0 = Date.now();
     check(mk1.idx === mk1.cards - 1 && mk2.idx === 0 && mk1.n === 1 && mk2.n === 1,
       "and Shift+Down carries the mark to the foot of the list and Shift+Up to its head ("
       + mk1.idx + " then " + mk2.idx + " of " + mk1.cards + ")");
+  }
+
+  /* WHAT A COPY LEAVES OVER THE BLOCK. The press answers with the green wash and nothing else
+     over the block: no ghost of the words rising off it. Every node the press adds to <body> is
+     recorded as it arrives with the box it covers, and those covering the pressed block are
+     named. Pressed on the second block of a card of alternatives holding two or more, none of
+     them in the trace, so the trace's legs below can move it. */
+  const cpAt = await p.evaluate(() => {
+    const card = [...document.querySelectorAll("#list .card[data-id]")].find(c =>
+      c.querySelectorAll(".txt[data-v]").length >= 2 && !c.matches("[data-erec]") && !c.querySelector("[data-erec]")
+      && (findCard(c.dataset.id) || {}).alt);
+    if (!card) return null;
+    const el = card.querySelectorAll(".txt[data-v]")[1];
+    el.scrollIntoView({ block: "center" });
+    const r = el.getBoundingClientRect();
+    window.__cpOver = [];
+    window.__cpObs = new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => {
+      if (n.nodeType !== 1) return;
+      const q = n.getBoundingClientRect();
+      if (q.right > r.left && q.left < r.right && q.bottom > r.top && q.top < r.bottom) window.__cpOver.push(String(n.className));
+    })));
+    window.__cpObs.observe(document.body, { childList: true });
+    return { id: card.dataset.id, x: Math.round(r.left + Math.min(40, r.width / 2)), y: Math.round(r.top + r.height / 2) };
+  });
+  if (!cpAt) check(false, "a card with two copyable blocks and no trace, to press");
+  else {
+    await p.mouse.click(cpAt.x, cpAt.y); await sleep(900);
+    const cpOver = await p.evaluate(() => { window.__cpObs.disconnect(); return window.__cpOver; });
+    check(cpOver.length === 1 && cpOver[0] === "e-copy-wash",
+      "a copy washes the block green and lays nothing else over it (" + JSON.stringify(cpOver) + ")");
+    /* THE GREEN SPINE IS THE COPIED MACRO'S ALONE. Read as the eye reads it, the painted colour of
+       each block's spine against --ok resolved on the page; and a drag of the copied block within
+       its card carries the green with it, put back after. */
+    const spines = id => p.evaluate(i => {
+      const probe = document.createElement("i"); probe.style.color = "var(--ok)"; document.body.appendChild(probe);
+      const ok = getComputedStyle(probe).color; probe.remove();
+      const card = document.querySelector('#list .card[data-id="' + CSS.escape(i) + '"]');
+      return card ? [...card.querySelectorAll(".txt[data-v]")].map(b => getComputedStyle(b, "::before").backgroundColor === ok) : null;
+    }, id);
+    const only = (g, at) => !!g && g.every((x, i) => x === (i === at));
+    const g0 = await spines(cpAt.id);
+    await p.evaluate(i => reorderMacroBlocks(i, 1, 0), cpAt.id); await sleep(600);
+    const g1 = await spines(cpAt.id);
+    await p.evaluate(i => reorderMacroBlocks(i, 0, 1), cpAt.id); await sleep(600);
+    const g2 = await spines(cpAt.id);
+    check(only(g0, 1) && only(g1, 0) && only(g2, 1),
+      "the copied block's spine alone turns green, and follows the block when it is dragged within its card ("
+      + JSON.stringify([g0, g1, g2]) + ")");
+  }
+
+  /* THE TITLE HAS THE ROW WHILE THE CONTROLS WAIT. On the card with the widest title on screen:
+     with the pointer away the controls take no width and the title's room runs to the row's end,
+     unfaded where the title fits it; under a real pointer, and again with the keyboard's focus on
+     the pencil, they show and the title ends before them, fading where it is cut; the row's height
+     never moves. */
+  const tAt = await p.evaluate(() => {
+    const rng = document.createRange(), wOf = t => { rng.selectNodeContents(t); return rng.getBoundingClientRect().width; };
+    const ts = [...document.querySelectorAll("#list .card:not(.is-hidden) .ctitle")].filter(t => {
+      const r = t.closest(".card").getBoundingClientRect(); return r.top > 60 && r.bottom < innerHeight - 20; })
+      .sort((a, b) => wOf(b) - wOf(a));
+    if (!ts.length) return null;
+    const card = ts[0].closest(".card"), r = card.getBoundingClientRect();
+    return { id: card.dataset.id, x: Math.round(r.left + r.width / 2), y: Math.round(r.bottom - 10), ay: innerHeight - 5 };
+  });
+  if (!tAt) check(false, "a card title on screen to measure");
+  else {
+    const tRead = () => p.evaluate(i => {
+      const t = document.querySelector('#list .card[data-id="' + CSS.escape(i) + '"] .ctitle'), row = t.parentNode, a = row.querySelector(".cacts");
+      const rs = getComputedStyle(row), rr = row.getBoundingClientRect(), gap = parseFloat(rs.columnGap) || 0;
+      let end = rr.right - parseFloat(rs.paddingRight);
+      for (let n = t.nextElementSibling; n && n !== a; n = n.nextElementSibling) end -= n.getBoundingClientRect().width + gap;
+      const rng = document.createRange(); rng.selectNodeContents(t);
+      const ink = rng.getBoundingClientRect().right, box = t.getBoundingClientRect().right, ar = a.getBoundingClientRect();
+      const cs = getComputedStyle(t);
+      return { end, ink, box, gap, aw: ar.width, al: ar.left, shown: getComputedStyle(a).opacity === "1",
+        fades: cs.maskImage !== "none" || cs.webkitMaskImage !== "none", h: rr.height };
+    }, tAt.id);
+    await p.mouse.move(5, tAt.ay); await sleep(500);
+    const rest = await tRead();
+    await p.mouse.move(tAt.x, tAt.y); await sleep(500);
+    const hov = await tRead();
+    await p.mouse.move(5, tAt.ay); await sleep(300);
+    await p.evaluate(i => document.querySelector('#list .card[data-id="' + CSS.escape(i) + '"] .cacts [data-act=edit]').focus(), tAt.id);
+    await sleep(500);
+    const foc = await tRead();
+    await p.evaluate(() => document.activeElement && document.activeElement.blur());
+    const atRest = s => s.aw === 0 && !s.shown && s.box >= Math.min(s.ink, s.end) - 0.5 && !(s.fades && s.ink <= s.end + 0.5);
+    const receded = s => s.shown && s.aw > 0 && s.box <= s.al - s.gap + 0.5 && (s.ink <= s.box + 0.5 || s.fades);
+    const r1 = n => Math.round(n * 10) / 10;
+    check(atRest(rest) && receded(hov) && receded(foc) && rest.h === hov.h && rest.h === foc.h,
+      "a card's title runs the row while its controls wait, and recedes before them under the pointer and the keyboard ("
+      + JSON.stringify([rest, hov, foc].map(s => [r1(s.box), r1(s.ink), r1(s.end), r1(s.al), r1(s.aw), s.shown, s.fades, s.h])) + ")");
   }
 
   /* The full editor opened from the Library, card-editor.js:584. From the main screen the

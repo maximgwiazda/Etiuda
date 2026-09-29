@@ -17,30 +17,14 @@ function eWashOver(el){
   document.body.appendChild(d);
   d.addEventListener("animationend",()=>d.remove());
   setTimeout(()=>{ if(d.parentNode) d.remove(); },900);
-  eLiftOff(el,r);
-}
-/* The copied words lift off the block under the wash: a clone of the block wearing none of its
-   classes, so it takes the block's type, padding and wrapping from the computed style. */
-function eLiftOff(el,r){
-  if(mgReduceMotion()) return;
-  const cs=getComputedStyle(el), g=el.cloneNode(true);
-  [...g.attributes].forEach(a=>g.removeAttribute(a.name));
-  g.className="e-copy-lift";
-  g.setAttribute("aria-hidden","true");
-  Object.assign(g.style,{left:r.left+"px", top:r.top+"px", width:r.width+"px", height:r.height+"px",
-    padding:cs.padding, borderWidth:cs.borderWidth, font:cs.font, color:cs.color,
-    whiteSpace:cs.whiteSpace});
-  document.body.appendChild(g);
-  g.addEventListener("animationend",()=>g.remove());
-  setTimeout(()=>{ if(g.parentNode) g.remove(); },800);
 }
 
 /* Keyboard copies answer the same way - copyEntrySel calls this after a successful copy, so
    Enter (or any rebound copy key) washes the selected block exactly like a click. */
-function eCopyFeedback(id){
+function eCopyFeedback(id,vi){
   const sel=document.querySelector(".txt.sel");
   if(sel) eWashOver(sel);
-  eNoteRecent(id);
+  eNoteRecent(id,vi);
 }
 
 function wirePops(){
@@ -115,7 +99,7 @@ function wirePops(){
     if(!t) return;
     eWashOver(t);
     const card=t.closest(".card[data-id]");
-    if(card) eNoteRecent(card.dataset.id);
+    if(card) eNoteRecent(card.dataset.id,+t.dataset.v);
   });
 }
 
