@@ -569,6 +569,7 @@ function runUnitTests() {
   tourActTests();
   emptyDeskTests();
   catNowTests();
+  libraryHeadTests();
 }
 
 /* EJECT AND CLEAR HAPPEN AT ONCE AND IN PLACE, AND EACH UNDO PUTS BACK WHAT IT TOOK (Maxim, 2026-09-27
@@ -892,6 +893,43 @@ function catNowTests() {
   eq("activateCatalog records the file a route names, its folder file where that is all it names, and blanks it for a route that names none",
     [wrote({ from: "Spring team.ec" }), wrote({ file: "team.ec" }), wrote({})],
     ["Spring team.ec", "team.ec", ""]);
+}
+
+/* THE LIBRARY'S HEADING NAMES THE FILE THE TOP BAR NAMES, never the name a stored copy still carries inside it, as
+   a desk's store written before the name left the format does. The dialog's call is sliced out of manage.js and run
+   in a scope where every free name it might read answers with that stored copy, name and all. */
+function libraryHeadTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "manage.js"), "utf8");
+  const fileSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-file.js"), "utf8");
+  const held = { name: "Invented shop", id: "invented-shop", cards: [1] };
+  const anyHeld = () => held;
+  Object.defineProperty(anyHeld, "name", { value: held.name });
+  const marker = 'openDialog({\n    title: "Library",';
+  const ns = {}, world = { file: "", opts: null };
+  const own = { storedCatalog: () => held, catalogLoaded: () => true, nsGet: k => (k in ns ? ns[k] : null),
+    eLoadedCatalogFile: () => world.file, openDialog: o => { world.opts = o; } };
+  const scope = new Proxy({}, {
+    has: (o, k) => typeof k === "string",
+    get: (o, k) => k === Symbol.unscopables ? undefined : k in own ? own[k] : k in globalThis ? globalThis[k] : anyHeld,
+    set: (o, k, v) => { own[k] = v; return true; }
+  });
+  let open = null;
+  try {
+    if (src.split(marker).length !== 2) throw new Error("the Library's openDialog call is not there exactly once");
+    open = new Function("scope", "with(scope){\n" + extractDecl(fileSrc, "function catalogFileName(") + "\n"
+      + "return () => { " + extractDecl(src, marker) + " };\n}")(scope);
+  } catch (e) { eq("manage.js carries the Library's dialog call", e.message, "sliced"); return; }
+  const head = (from, file) => {
+    Object.keys(ns).forEach(k => { delete ns[k]; });
+    if (from != null) ns.CatalogFrom = from;
+    world.file = file; world.opts = null;
+    try { open(); } catch (e) { return "threw " + e.message; }
+    const n = world.opts && world.opts.name;
+    return typeof n === "function" ? n() : n;
+  };
+  eq("the Library's heading names the file the catalog was loaded from, as the top bar does, and never the name a stored copy carries inside it",
+    [head("team.ec", "team.ec"), head("Spring team.ec", ""), head(null, "team.ec"), head("", "")],
+    ["team.ec", "Spring team.ec", "team.ec", ""]);
 }
 
 /* Section 2.5 of the specification and the body rules of 2.6, driven over the reader that
