@@ -6267,6 +6267,20 @@ What you type stays in this browser only.`;
     "Press the alternative (Esc to cancel, Backspace to clear)": "Naciśnij skrót alternatywny (Esc anuluje, Backspace usuwa)",
     "Alternative cleared": "Usunięto skrót alternatywny",
     "Back to the default": "Przywrócono domyślny skrót",
+    "search replies": "szukaj odpowiedzi",
+    "Replies": "Odpowiedzi",
+    "The reply copied last": "Ostatnio skopiowana odpowiedź",
+    "Bring the replies over any window": "Przywołaj odpowiedzi nad dowolne okno",
+    "Works from any program; Enter copies a reply and goes back to the window you were in.": "Działa w każdym programie; Enter kopiuje odpowiedź i wraca do poprzedniego okna.",
+    "Another program uses this combination just now; a different one will do.": "Tej kombinacji używa teraz inny program; wybór innej to rozwiąże.",
+    "{KEYS} already belongs to another program; a different combination will do.": "{KEYS} należy już do innego programu; wybór innej kombinacji to rozwiąże.",
+    "Browsers and chat tools already answer most combinations like {KEYS}; Ctrl+Shift with Space or a function key stays free.": "Przeglądarki i czaty same reagują na większość kombinacji takich jak {KEYS}; Ctrl+Shift ze spacją lub klawiszem funkcyjnym pozostaje wolne.",
+    "{KEYS} types accented letters on many keyboards; Ctrl+Shift with Space or a function key stays free.": "{KEYS} wpisuje na wielu klawiaturach litery z ogonkami; Ctrl+Shift ze spacją lub klawiszem funkcyjnym pozostaje wolne.",
+    "{KEYS} alone would stop that key typing; with Ctrl or Alt it will do.": "Samo {KEYS} przestałoby wtedy pisać; z Ctrl lub Alt się sprawdzi.",
+    "Windows keeps {KEYS} for itself; Ctrl+Shift with Space or a function key stays free.": "Windows zachowuje {KEYS} dla siebie; Ctrl+Shift ze spacją lub klawiszem funkcyjnym pozostaje wolne.",
+    "Etiuda takes a letter, a digit, Space or a function key, with Ctrl, Alt or Shift.": "Etiuda przyjmuje literę, cyfrę, spację lub klawisz funkcyjny, z Ctrl, Alt lub Shift.",
+    "Press the new combination (Esc to cancel, Backspace for the default, Delete for none)": "Naciśnij nową kombinację (Esc anuluje, Backspace przywraca domyślną, Delete wyłącza)",
+    "The hotkey is off": "Skrót jest wyłączony",
     "Reset defaults": "Przywróć domyślne",
     "Layout": "Układ",
     "Lock the intent panel": "Zablokuj panel intencji",
@@ -7955,6 +7969,7 @@ What you type stays in this browser only.`;
   __export(recency_exports, {
     eApplyRecency: () => eApplyRecency,
     eForgetRecency: () => eForgetRecency,
+    eLastRecent: () => eLastRecent,
     eMoveRecent: () => eMoveRecent,
     eNoteRecent: () => eNoteRecent
   });
@@ -7981,6 +7996,9 @@ What you type stays in this browser only.`;
   }
   function eForgetRecency() {
     eRecent = [];
+  }
+  function eLastRecent() {
+    return eRecent[0] || null;
   }
   function eNoteRecent(id, vi) {
     if (!id) return;
@@ -21722,6 +21740,7 @@ What you type stays in this browser only.`;
   var settings_exports = {};
   __export(settings_exports, {
     applyPrefs: () => applyPrefs,
+    hotkeyFromEvent: () => hotkeyFromEvent,
     openSettings: () => openSettings
   });
   function curLangLabel() {
@@ -21730,6 +21749,104 @@ What you type stays in this browser only.`;
   function personalNote() {
     const n = agentName().trim();
     return n ? n + ", " + curLangLabel() : curLangLabel();
+  }
+  var E_HOTKEY_KEY = "eHotkey";
+  var hkListening = false;
+  function hotkeyHost() {
+    const h = eHost();
+    return h && typeof h.hotkeyState === "function" && typeof h.setHotkey === "function" ? h : null;
+  }
+  function hotkeyState() {
+    const h = hotkeyHost();
+    let st = null;
+    try {
+      st = h && h.hotkeyState();
+    } catch (e) {
+      st = null;
+    }
+    return { accel: String(st && st.accel || ""), taken: !!(st && st.taken), def: String(st && st.def || "") };
+  }
+  function hotkeyLabel(accel) {
+    return accel ? String(accel).split("+").map((k) => k === "Control" ? "Ctrl" : k).join("+") : t("none");
+  }
+  function hotkeyFromEvent(e) {
+    const c = String(e.code || "");
+    const key = /^Key[A-Z]$/.test(c) ? c.slice(3) : /^Digit[0-9]$/.test(c) ? c.slice(5) : /^F([1-9]|1[0-9]|2[0-4])$/.test(c) ? c : c === "Space" ? "Space" : "";
+    if (!key) return null;
+    return [e.metaKey && "Super", e.ctrlKey && "Control", e.altKey && "Alt", e.shiftKey && "Shift", key].filter(Boolean).join("+");
+  }
+  function hotkeyWhy(why, accel) {
+    const k = hotkeyLabel(accel);
+    const says = why === "taken" ? t("{KEYS} already belongs to another program; a different combination will do.") : why === "used" ? t("Browsers and chat tools already answer most combinations like {KEYS}; Ctrl+Shift with Space or a function key stays free.") : why === "altgr" ? t("{KEYS} types accented letters on many keyboards; Ctrl+Shift with Space or a function key stays free.") : why === "bare" ? t("{KEYS} alone would stop that key typing; with Ctrl or Alt it will do.") : why === "system" ? t("Windows keeps {KEYS} for itself; Ctrl+Shift with Space or a function key stays free.") : t("Etiuda takes a letter, a digit, Space or a function key, with Ctrl, Alt or Shift.");
+    return says.split("{KEYS}").join(k);
+  }
+  function hotkeyRowHtml() {
+    if (!hotkeyHost()) return "";
+    const st = hotkeyState();
+    return '<div class="sc-list"><div class="sc-row" id="setHotkeyRow"><div class="sc-label">' + esc(t("Bring the replies over any window")) + '<small id="setHotkeyNote">' + esc(st.taken ? t("Another program uses this combination just now; a different one will do.") : t("Works from any program; Enter copies a reply and goes back to the window you were in.")) + '</small></div><div class="sc-binds"><button type="button" class="sc-bind sc-long' + (st.accel ? "" : " sc-empty") + '" id="setHotkey" style="flex-basis:100%" title="' + esc(t("Click, then press the new key combo")) + '">' + esc(hotkeyLabel(st.accel)) + "</button></div></div></div>";
+  }
+  function syncHotkeyRow(box, now) {
+    const b = box.querySelector("#setHotkey"), note = box.querySelector("#setHotkeyNote");
+    if (!b) return;
+    const st = typeof now === "string" ? { accel: now, taken: false } : hotkeyState();
+    b.classList.toggle("listening", hkListening);
+    b.classList.toggle("sc-empty", !hkListening && !st.accel);
+    b.textContent = hkListening ? t("Press keys…") : hotkeyLabel(st.accel);
+    if (note) note.textContent = st.taken ? t("Another program uses this combination just now; a different one will do.") : t("Works from any program; Enter copies a reply and goes back to the window you were in.");
+  }
+  function hotkeyListen(box, on, now) {
+    hkListening = !!on;
+    const h = hotkeyHost();
+    try {
+      if (h && typeof h.pauseHotkey === "function") h.pauseHotkey(hkListening);
+    } catch (e) {
+    }
+    syncHotkeyRow(box, now);
+  }
+  function hotkeyTry(box, accel, said) {
+    const h = hotkeyHost();
+    const want = accel == null ? hotkeyState().def : accel;
+    Promise.resolve(h.setHotkey(want)).then((r) => {
+      if (!(r && r.ok)) {
+        toast(hotkeyWhy(r && r.why, want));
+        return void 0;
+      }
+      if (accel == null) lsDel(E_HOTKEY_KEY);
+      else lsSet(E_HOTKEY_KEY, accel, true);
+      toast(said);
+      return want;
+    }).catch(() => void 0).then((now) => hotkeyListen(box, false, now));
+  }
+  function wireHotkeyRow(box) {
+    const b = box.querySelector("#setHotkey");
+    if (!b || !hotkeyHost()) return;
+    b.onclick = () => {
+      hotkeyListen(box, true);
+      toast(t("Press the new combination (Esc to cancel, Backspace for the default, Delete for none)"));
+    };
+    b.onblur = () => {
+      if (hkListening) hotkeyListen(box, false);
+    };
+    b.addEventListener("keydown", (e) => {
+      if (!hkListening) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        hotkeyListen(box, false);
+        return;
+      }
+      if (e.key === "Backspace") {
+        hotkeyTry(box, null, t("Back to the default"));
+        return;
+      }
+      if (e.key === "Delete") {
+        hotkeyTry(box, "", t("The hotkey is off"));
+        return;
+      }
+      const accel = hotkeyFromEvent(e);
+      if (!accel) return;
+      hotkeyTry(box, accel, t("Saved {KEY}").replace("{KEY}", hotkeyLabel(accel)));
+    });
   }
   function settingsBodyHtml() {
     const seg2 = (name, opts, cur) => '<div class="seg set-seg" data-seg="' + name + '" data-n="' + opts.length + '">' + opts.map((o) => '<button type="button" data-val="' + esc(o.v) + '"' + (o.tip ? ' title="' + esc(o.tip) + '"' : "") + (o.v === cur ? ' class="on"' : "") + ">" + esc(o.t) + "</button>").join("") + "</div>";
@@ -21854,7 +21971,7 @@ What you type stays in this browser only.`;
     ) + accHtml(
       "keys",
       t("Keyboard shortcuts"),
-      '<div class="sc-list" id="scListInline"></div>',
+      hotkeyRowHtml() + '<div class="sc-list" id="scListInline"></div>',
       /* ",null" is the next ARGUMENT - "+null" concatenates and prints the characters "null"
          on the page. The neighbouring call has the same null in the same position. */
       null,
@@ -21869,6 +21986,7 @@ What you type stays in this browser only.`;
       if (id === "keys") paintKeysInline();
     });
     paintKeysInline();
+    wireHotkeyRow(box);
     syncColFloorRow();
     const cf = box.querySelector("#setColFloor"), cfo = box.querySelector("#setColFloorOut");
     if (cf) {
@@ -21967,7 +22085,8 @@ What you type stays in this browser only.`;
       "eRailW",
       "eFactsW",
       "eFactsH",
-      "eCollapsed"
+      "eCollapsed",
+      E_HOTKEY_KEY
     ].forEach((k) => {
       was[k] = lsGet(k);
       try {
@@ -23080,8 +23199,144 @@ What you type stays in this browser only.`;
     maybeStartTour();
   }
 
+  // src/modules/pick.js
+  var pick_exports = {};
+  __export(pick_exports, {
+    answerPick: () => answerPick,
+    pickExcerpt: () => pickExcerpt,
+    pickRows: () => pickRows,
+    wirePick: () => wirePick
+  });
+  var PICK_ROWS = 9;
+  var PICK_LOOK = [
+    "--panel",
+    "--panel-raised",
+    "--ink",
+    "--dim",
+    "--line",
+    "--line-strong",
+    "--accent",
+    "--accent-soft",
+    "--field",
+    "--field-line",
+    "--field-edge",
+    "--sans",
+    "--mono",
+    "--radius-sm",
+    "--intent-type"
+  ];
+  function pickKeep(terms) {
+    return (m) => !(m && m._hidden) && (terms.length > 0 || cardInActiveCats(m, terms));
+  }
+  function pickExcerpt(raw, filled) {
+    const rl = String(raw || "").split("\n"), fl = String(filled || "").split("\n");
+    let from = 0;
+    if (rl.length === fl.length)
+      while (from < rl.length - 1 && !/\p{L}/u.test(rl[from].replace(/\x7b[^\x7d]*\x7d/g, ""))) from++;
+    return fl.slice(from).join(" ").replace(/\s+/g, " ").trim().slice(0, 240);
+  }
+  function pickRow(m, l, ps, vi) {
+    const n = ps.length;
+    const tag = n < 2 ? "" : m.seq ? t("step") + " " + (vi + 1) + "/" + n : altLabelAt(m, l, vi) || vi + 1 + "/" + n;
+    return { id: String(m.id), vi, t: cardTitle(m), x: pickExcerpt(ps[vi], fill(ps[vi], m, 0, l)), tag };
+  }
+  function pickRows(q) {
+    const terms = cardSearchTerms(String(q == null ? "" : q));
+    const rows = [];
+    for (const m of rankedCards(terms, pickKeep(terms)).hits) {
+      const l = cardLang(m), ps = parts(m, l);
+      for (let vi = 0; vi < ps.length; vi++) {
+        rows.push(pickRow(m, l, ps, vi));
+        if (rows.length >= PICK_ROWS) return rows;
+      }
+    }
+    return rows;
+  }
+  function pickLastRow() {
+    const r = eLastRecent(), m = r && findCard(r.id);
+    if (!m) return null;
+    const l = cardLang(m), ps = parts(m, l);
+    return r.vi >= 0 && r.vi < ps.length ? pickRow(m, l, ps, r.vi) : null;
+  }
+  function pickLook() {
+    const out = { theme: "", glass: true, still: false, vars: {} };
+    try {
+      const root = document.documentElement, cs = getComputedStyle(root);
+      out.theme = root.dataset.theme || "";
+      out.glass = !document.body.classList.contains("glass-off");
+      out.still = root.classList.contains("e-still");
+      PICK_LOOK.forEach((k) => {
+        const v = cs.getPropertyValue(k).trim();
+        if (v) out.vars[k] = v;
+      });
+    } catch (e) {
+    }
+    return out;
+  }
+  function pickWords() {
+    return {
+      lang: uiLang(),
+      search: t("search replies"),
+      list: t("Replies"),
+      again: t("The reply copied last"),
+      none: t("A different word may do better."),
+      empty: wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet.")
+    };
+  }
+  function pickCopy(id, vi) {
+    const m = findCard(String(id || ""));
+    if (!m) return null;
+    const l = cardLang(m), ps = parts(m, l);
+    vi = vi | 0;
+    if (vi < 0 || vi >= ps.length) return null;
+    if (wantsAgentName(ps[vi])) return { ask: { id: String(m.id), vi } };
+    let text = null;
+    withAgentName(ps[vi], () => {
+      bumpUseCount(m.id, l);
+      eNoteRecent(m.id, vi);
+      noteCopy();
+      text = fill(ps[vi], m, 0, l);
+    }, null);
+    return text == null ? null : { text };
+  }
+  function pickAsk(id, vi) {
+    const m = findCard(String(id || ""));
+    if (!m) return null;
+    const l = cardLang(m), ps = parts(m, l);
+    vi = vi | 0;
+    if (vi < 0 || vi >= ps.length) return null;
+    withAgentName(ps[vi], () => {
+      bumpUseCount(m.id, l);
+      eNoteRecent(m.id, vi);
+      copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length));
+    }, null);
+    return { asked: true };
+  }
+  function answerPick(op, argText) {
+    let a = {};
+    try {
+      a = JSON.parse(String(argText || "{}")) || {};
+    } catch (e) {
+      a = {};
+    }
+    if (op === "open") return { look: pickLook(), words: pickWords(), rows: pickRows(""), last: pickLastRow() };
+    if (op === "find") return { rows: pickRows(a.q) };
+    if (op === "copy") {
+      if (!a.last) return pickCopy(a.id, a.vi);
+      const r = eLastRecent();
+      return r ? pickCopy(r.id, r.vi) : null;
+    }
+    if (op === "ask") return pickAsk(a.id, a.vi);
+    return null;
+  }
+  function wirePick() {
+    const h = eHost();
+    if (!h || typeof h.onPickAsk !== "function") return;
+    h.onPickAsk((op, arg) => JSON.stringify(answerPick(String(op || ""), arg)));
+  }
+
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
@@ -23309,6 +23564,7 @@ What you type stays in this browser only.`;
     syncRoleWheel();
     maybeStartTour();
     wireHostCatalogWatch();
+    wirePick();
     wireCatalogDrop();
     setTimeout(() => {
       try {

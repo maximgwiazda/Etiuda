@@ -15,6 +15,8 @@ function eApplyRecency(){
   });
 }
 function eForgetRecency(){ eRecent=[]; }
+/* The block copied last by any route, {id,vi}, or null: what the picker's repeat copies again. */
+function eLastRecent(){ return eRecent[0]||null; }
 function eNoteRecent(id,vi){
   if(!id) return;
   vi=vi|0;
@@ -38,5 +40,6 @@ export {
   eApplyRecency,
   eMoveRecent,
   eNoteRecent,
-  eForgetRecency
+  eForgetRecency,
+  eLastRecent
 };
