@@ -7,11 +7,10 @@ import { afterPaint } from "./motion.js";
 import { ICON_PLUS } from "./icons.js";
 import { intentNavName } from "./intent-text.js";
 import { langTabs, langPane, langFieldId, markMissing, edReportMissing, langFocus } from "./lang-tabs.js";
-import { nsSet } from "./storage.js";
+import { lySet } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { tourActive } from "./tour.js";
 import { t, counted, toast, tc } from "./ui-lang.js";
-import { BASE_CATS, pack, savePack } from "./pack.js";
+import { BASE_CATS, pack, savePack, ePackEpoch } from "./pack.js";
 import { removeCard, syncFavouritesMeta } from "./favourites.js";
 import { catIconSvg } from "./cat-identity.js";
 import { intentHasPrimaryCat } from "./cat-relevance.js";
@@ -277,8 +276,12 @@ function syncAddFab(){
   if(!b) return;
   const one=(cats.length===1 && CATS[cats[0]]) ? cats[0] : null;
   b.hidden=!Object.keys(CATS).length;
-  // The one place a new card is asked for outright: the chosen category holds none.
-  b.classList.toggle("nudge", !!one && !cardCounts[one]);
+  /* The one place a new card is asked for outright: the chosen category holds none. The ring
+     asks three times and rests; only a category newly asking starts it again. */
+  const ask=!!one && !cardCounts[one];
+  if(ask && b.dataset.nudged!==one){ b.classList.remove("nudge"); void b.offsetWidth; }
+  b.classList.toggle("nudge", ask);
+  if(ask) b.dataset.nudged=one; else delete b.dataset.nudged;
   b.title=one ? t("Create a card in {CAT}").replace("{CAT}",CATS[one]) : t("Create a card");
   b.setAttribute("aria-label", b.title);
   b.onclick=()=>openCardEditor(null, one);
@@ -341,7 +344,7 @@ function openCardEditor(id, presetCat, fromManage){
       sum:(m.c&&CATS[m.c]) ? catIconSvg(m.c,"cat-ic")+esc(CATS[m.c]) : esc(t("none")),
       sumId:"meCatSum", sumSkip:true,
       body:
-      '<div class="cat-pick" id="meCatPick">'+cardCatPickHtml(m.c)+'</div>'})+
+      '<div class="cat-pick pick-one" id="meCatPick">'+cardCatPickHtml(m.c)+'</div>'})+
     mfSec({key:"intents", label:"Linked intents",
       sum:"", sumId:"meIntentSum",
       body:'<div class="intent-pick" id="meIntents">'+intentPickHtml(linked, m.c)+'</div>'})+
@@ -471,7 +474,7 @@ function openCardEditor(id, presetCat, fromManage){
     upd();
   })();
   if($("#meDelete")) $("#meDelete").onclick=()=>{
-    // removeCard() owns the confirm and the built-in / custom split, so this cannot drift from
+    // removeCard() owns the Undo and the built-in / custom split, so this cannot drift from
     // what the same action does in Manage.
     // doneCardEditor() already returns to Manage when the editor was opened from it.
     if(removeCard(id)){ render(); drawPills(); doneCardEditor(); }
@@ -587,12 +590,7 @@ function openCardEditor(id, presetCat, fromManage){
             nid=>openCardEditor(nid,null,fromManage));
   // Guarded: the dialog can be gone by the time this fires, and an unguarded .focus() on the
   // missing field throws an uncaught TypeError. Same for the intent editor below.
-  /* Not during the tour. The tour drives its own buttons from real DOM focus - that is how the
-     arrow keys move between Skip, Back and Next - so a dialog grabbing a text field takes the
-     keyboard away from it, and the caret landing in Title also reads as "start typing here",
-     which is the opposite of what a showcase step is asking for. */
   setTimeout(()=>{
-    if(tourActive()) return;
     const el=$("#"+meFieldId("t",CONTENT_LANGS[0])); if(el) el.focus();
   },30);
 }
@@ -609,7 +607,7 @@ function ensureCustomCat(name){
   savePack();
   applyCatsToGlobal();
   if(catOrder.indexOf(key)<0) catOrder.push(key);
-  nsSet("CatOrder",JSON.stringify(catOrder));
+  lySet("CatOrder",JSON.stringify(catOrder));
   return key;
 }
 
@@ -634,7 +632,9 @@ function hideCard(id){
     toast(lostStar ? "Put away - greyed at the foot of its category, unfavourited"
                    : "Put away - greyed at the foot of its category");
   }
+  const was=ePackEpoch;
   savePack();
+  hooks.keepPoolAcross(was,[id]);   // a hide rewrites this card alone
   /* Flip the flag in place: rebuildCards() re-derives everything for a change that
      alters none of it, and its cost lands inside the FLIP's own window - the first third
      of the journey was over before anything painted, which is what made hiding less

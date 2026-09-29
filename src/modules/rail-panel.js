@@ -9,6 +9,7 @@ import { schedulePillsCollapse, syncLayoutPrefs, pillsSlot, pillsWanted, animate
 import { ICON_LOCK, ICON_LOCK_OPEN } from "./icons.js";
 import { railQuery, markSurface } from "./mark.js";
 import { hooks } from "./hooks.js";
+import { M_MS } from "./motion.js";
 
 /* Every door to the overlay, in one place because applyRailPeek reads them together and the
    pointer, the keyboard and a touch each hold one. */
@@ -231,6 +232,15 @@ function scheduleRailGeometry(){
      the panel is held invisible until this has run once - a background boot would have no
      intent panel until focus. Running twice is harmless; only derived values are written. */
   setTimeout(syncRailGeometry,60);
+}
+/* BOOT PAINTS THE PANEL WITH THE CARDS: its geometry is taken in the task that ends boot, where the
+   layout is already final, and it lands without its fade, which a panel arriving later earns and
+   the first frame does not. The style is read before the transition goes back, so none starts. */
+function placeRailNow(){
+  const rail=$("#intentRail");
+  if(rail) rail.style.transition="none";
+  syncRailGeometry();
+  if(rail){ void getComputedStyle(rail).opacity; rail.style.transition=""; }
 }
 /* Holds a departing panel still for the frame that undocking spends relaying the list, then
    lets it fade - see body.rail-parting. The timeout is the same insurance scheduleRailGeometry
@@ -586,7 +596,7 @@ function updateModifierPeek(e){
        the class would restart the glide on each keystroke of a held chord. .12s, the
        dropdown tier - a peek answers a held key; .18s is for deliberate toggles. */
     if(held!==document.body.classList.contains("pills-peek")){
-      animatePillsBox(()=>document.body.classList.toggle("pills-peek", held),120);
+      animatePillsBox(()=>document.body.classList.toggle("pills-peek", held),M_MS.reveal);
     }
   } else {
     document.body.classList.remove("pills-peek");
@@ -626,7 +636,7 @@ export {
   RAIL_DOCK_MIN, railDockMin, railMaxWidth, applyStoredRailWidth, applyDefaultRailWidth,
   railWanted, railLocked, railDocked, railSuppressed, railActive,
   applyOverlapOrder, wireOverlapPointer, watchPillBarHeight,
-  syncRailGeometry, scheduleRailGeometry, syncRailLayout, rebuildRailMQ,
+  syncRailGeometry, scheduleRailGeometry, placeRailNow, syncRailLayout, rebuildRailMQ,
   syncRailResizeUI, buildRailResizer, syncHeaderElevation, wirePageScroll,
   wireRailObservers, wireRailWheel, bindRailHit,
 };

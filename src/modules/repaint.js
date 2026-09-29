@@ -42,7 +42,7 @@ function applyUiLang(){
 /* The string table does not import this back: setting the language IS the repaint, and
    holding the strings is not, so ui-lang.js stays out of the load cycle it would fail. */
 function setUiLang(l){
-  if(l && l!=="en" && uiLangKnown(l)) lsSet("eUiLang",l); else lsDel("eUiLang");
+  if(l==="en" || uiLangKnown(l)) lsSet("eUiLang",l); else lsDel("eUiLang");
   applyUiLang();
 }
 

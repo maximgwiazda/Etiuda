@@ -1,6 +1,6 @@
 /* THE BUBBLE, one shape for every notice the program hangs off a control: a filled panel with a
-   pointer on the edge that faces its target. Three wear it - the tour's card, a card's note, the
-   first-run invite - and they were one idiom already, by construction rather than by resemblance,
+   pointer on the edge that faces its target. The tour's card, a card's note, the catalog offer and
+   the name question wear it - one idiom by construction rather than by resemblance,
    so the placement lives here instead of once in the tour and again in a copy of it.
    Imports nothing, so it can never join a cycle - and A SECOND PROGRAM IMPORTS THIS FILE from a
    pinned commit, so that has become a contract rather than a convenience: an import added here

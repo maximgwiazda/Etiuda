@@ -8,9 +8,8 @@ const SLOTS = [
   "runShortcut",
   "syncSampleMark",
   "syncSaveNotice",
-  "sampleReady",
-  "loadSampleCatalog",
   "importCatalogHere",
+  "offerPickedCatalog",
   "openManage",
   "mgCardsIn",
   "openCategoryEditor",
@@ -21,6 +20,7 @@ const SLOTS = [
   "updateIntentPlaceholder",
   "clearIntents",
   "pickIntent",
+  "intentPickedLine",
   "onRailMQChange",
   "rebuildCards",
   "render",
@@ -28,7 +28,6 @@ const SLOTS = [
   "syncSettingsMenu",
   "endTour",
   "startTour",
-  "maybeShowTourInvite",
   "tourActive",
   "openSettings",
   "cardOrderTouched",
@@ -59,6 +58,8 @@ const SLOTS = [
   "shedHolding",
   "shedWordmarkW",
   "cardFillKey",
+  "keepPoolAcross",
+  "restartDesk",
 ];
 
 const hooks = Object.create(null);

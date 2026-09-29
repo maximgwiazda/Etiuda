@@ -1,4 +1,5 @@
-import { CATS, intentCount } from "./content-model.js";
+import { CATS, CONTENT_LANGS, intentCount } from "./content-model.js";
+import { intentIdAt } from "./intent-id.js";
 import { applyCut, cutSides } from "./cut-text.js";
 import { ICON_TAB_X, ICON_TAB_ADD } from "./icons.js";
 import { mgReduceMotion, E_EASE } from "./motion.js";
@@ -70,6 +71,61 @@ function saveTabSession(){
   try{
     ssSet(TAB_KEY, JSON.stringify({v:1, tabs:tabs, activeTabId:activeTabId}));
   }catch(e){}
+  noteActive();
+}
+/* WHAT IS ACTIVE, SAID WHEN IT CHANGES. The tab, the language, the intents and the filter change
+   by a class a screen reader cannot see, so every tab save compares them with what was last said
+   and, once the keys rest, speaks the difference into the mark's live region (sayMark). A tab
+   switched to is said whole: its name, its language, and its intents and filter where it has any. */
+let activeSaid=null, activeSayT=0;
+function activeNow(){
+  return {tab:activeTabId||"", lang:lang||"", intents:intentIdxs.map(intentIdAt).join("\n"), cats:cats.join("\n")};
+}
+// The pair keeps its words and any other set is named by its codes, as syncShortcutTitles does.
+function activeLangWords(l){
+  if(CONTENT_LANGS.length===2 && CONTENT_LANGS.indexOf("en")>-1 && CONTENT_LANGS.indexOf("pl")>-1)
+    return l==="pl" ? t("Polish cards") : t("English cards");
+  return t("{LANG} cards").replace("{LANG}",String(l||"").toUpperCase());
+}
+function activeWords(was,now){
+  const newTab=now.tab!==was.tab, out=[];
+  const intentsSaid=()=>intentIdxs.length ? hooks.intentPickedLine() : t("{INTENT} cleared");
+  const catsSaid=()=>cats.length ? cats.map(k=>CATS[k]||k).join(", ") : t("All categories");
+  if(newTab){
+    const tb=tabs.find(x=>x.id===now.tab);
+    if(tb) out.push(tabLabel(tb));
+    out.push(activeLangWords(now.lang));
+    if(intentIdxs.length) out.push(intentsSaid());
+    if(cats.length) out.push(catsSaid());
+  }else{
+    if(now.lang!==was.lang) out.push(activeLangWords(now.lang));
+    if(now.intents!==was.intents) out.push(intentsSaid());
+    if(now.cats!==was.cats) out.push(catsSaid());
+  }
+  return out.join(". ");
+}
+function sayActive(){
+  activeSayT=0;
+  if(!activeSaid) return;
+  const now=activeNow(), words=activeWords(activeSaid,now);
+  activeSaid=now;
+  const out=document.getElementById("eSay");
+  if(!words||!out) return;
+  // A region speaks only a change, and the same words again are still news: two customers of one name.
+  if(out.textContent===words){ out.textContent=""; setTimeout(()=>{ out.textContent=words; },60); }
+  else out.textContent=words;
+}
+function noteActive(){
+  if(!activeSaid) return;
+  clearTimeout(activeSayT);
+  activeSayT=setTimeout(sayActive,200);
+}
+/* Where a toast has already said a change, the field is marked said; with no field, everything
+   as it stands, which is how boot begins. */
+function activeHeard(field){
+  const now=activeNow();
+  if(!field) activeSaid=now;
+  else if(activeSaid) activeSaid[field]=now[field];
 }
 /* Called on every keystroke and every arrow, so it forces no layout: the strip draws only a
    tab's name and its filter's accent, and the rest of the snapshot, the scroll read included,
@@ -83,6 +139,7 @@ function scheduleTabSave(){
   }
   clearTimeout(tabSaveTimer);
   tabSaveTimer=setTimeout(saveTabSession, 250);
+  noteActive();
 }
 function loadTabSession(){
   try{
@@ -183,11 +240,9 @@ function stepTab(dir){
    formula for a tab's width and not two that can drift apart. */
 // Set while the strip is mid-animation, so fitTabLabels leaves the labels alone - see there.
 let tabInsertAnimating=false;
-/* Built when a tab is inserted rather than once at the top: E_EASE is the whole app's
-   easing and a module evaluates before the app body that declares it. */
 function tabGrow(){
-  return ["width","max-width","min-width","flex-basis"].map(k=>k+" .19s "+E_EASE).join(",")
-    +",opacity .16s ease";
+  return ["width","max-width","min-width","flex-basis"].map(k=>k+" var(--m-move) "+E_EASE).join(",")
+    +",opacity var(--m-move) ease";
 }
 function animateTabInsert(mutate){
   const bar=$("#tabsBar");
@@ -242,7 +297,7 @@ function animateTabInsert(mutate){
   /* ATTACHED AFTER THE REBUILT FRAME HAS PAINTED, two frames on. Width is a main-thread
      animation: attached in this task it starts at the style flush, and the first paint of the
      new tab's list, a full render, eats its opening third - Firefox drew seven widths of a
-     .19s grow. Transform glides ride the compositor and need no such wait. */
+     grow. Transform glides ride the compositor and need no such wait. */
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
   els.forEach((el,i)=>{
     el.style.transition=tabGrow();
@@ -288,6 +343,7 @@ function addTab(){
   saveTabSession();
   try{ intentEl&&intentEl.focus({preventScroll:true}); }catch(_){}
   toast("The new tab starts with cleared fields and your settings kept.");
+  activeHeard();
 }
 function closeTab(id, ev){
   if(ev){ ev.preventDefault(); ev.stopPropagation(); }
@@ -299,6 +355,7 @@ function closeTab(id, ev){
     applyTab(tabs[0]);
     saveTabSession();
     toast("Tab cleared");
+    activeHeard();
     return;
   }
   const wasActive=id===activeTabId;
@@ -335,6 +392,7 @@ function closeAllTabs(){
   applyTab(tabs[0]);
   saveTabSession();
   toast("All tabs closed");
+  activeHeard();
 }
 function escCloseAllTabsStep(){
   snapshotActiveTab();
@@ -396,7 +454,7 @@ function animateTabReorder(mutate){
      avoids the background-tab rAF pause. */
   void bar.offsetHeight;
   moved.forEach(el=>{
-    el.style.transition="transform .18s "+E_EASE;
+    el.style.transition="transform var(--m-move) "+E_EASE;
     el.style.transform="";
     setTimeout(()=>moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; }),200);
   });
@@ -864,14 +922,18 @@ function drawTabsCore(){
   drawTabs._keepAtEnd=(bar.scrollWidth-bar.clientWidth>1)&&(bar.scrollLeft>=bar.scrollWidth-bar.clientWidth-1);
   bar.innerHTML="";
   tabs.forEach((tb,i)=>{
-    const b=document.createElement("div");
+    const b=document.createElement("div"), on=tb.id===activeTabId;
     b.className="tab"
-      +(tb.id===activeTabId?" on":"")
+      +(on?" on":"")
       +(tabDrag&&tabDrag.moved&&tabDrag.key===tb.id?" dragging":"");
     b.dataset.tid=tb.id;
     b.title=t("Click to switch, or drag to reorder");
     const lab=document.createElement("span");
     lab.className="tab-label";
+    /* The name is the tab to a screen reader, not the box: a tab role hides its children, and the
+       box holds the close button. */
+    lab.setAttribute("role","tab");
+    lab.setAttribute("aria-selected",on?"true":"false");
     const name=tabLabel(tb,i);
     const labViz=document.createElement("span");
     labViz.textContent=name;
@@ -1003,12 +1065,18 @@ function initTabs(){
   const cur=tabs.find(x=>x.id===activeTabId)||tabs[0];
   applyTab(cur);
   saveTabSession();
-  addEventListener("beforeunload", saveTabSession);
+  activeHeard();
+  // Once per page: the desk may start again in place, and a second listener would save twice.
+  if(!tabSaveWired){ tabSaveWired=true; addEventListener("beforeunload", saveTabSession); }
 }
+let tabSaveWired=false;
 
 export {
   saveTabSession,
   scheduleTabSave,
+  noteActive,
+  activeHeard,
+  activeWords,
   stepTab,
   addTab,
   closeActiveTab,

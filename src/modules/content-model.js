@@ -1,7 +1,8 @@
 /* ONE starter category, so a first card has somewhere to go - nothing else belongs here.
    "always" and "opener" are roles assigned from Manage, so the old built-in categories are
    ordinary catalog content. A catalog replaces this wholesale; do not add content here. */
-const CATS={gen:"General"};
+const STARTER_CATS=Object.freeze({gen:"General"});
+const CATS=Object.assign({},STARTER_CATS);
 
 // The one canonical intent list. Index-aligned: picking a clause also points at its
 // category, and both "Intent confirmed" cards share these exact arrays.
@@ -65,6 +66,7 @@ function intentFieldKey(field,l){
    Spelled out per field in rebuildIntents before; the rule belongs beside the table. */
 const INTENT_BLANK_CLEARS={clause:false, cmt:true, topic:true};
 const SW_STORE={en:SW_EN, pl:SW_PL, cmt:SW_CMT, cmtPl:SW_CMT_PL, topic:SW_TOPIC, topicPl:SW_TOPIC_PL};
+const BUILT_IN_KEYS=Object.keys(SW_STORE);
 function intentArr(field,l){
   const k=intentFieldKey(field,l);
   return k ? (SW_STORE[k]||null) : null;
@@ -116,6 +118,16 @@ function setCommentLang(code){
 function commentLang(){
   return COMMENT_LANG || CONTENT_LANGS[0];
 }
+/* THE EMPTY DESK'S CONTENT, as this module is evaluated: the starter category, the built-in pair
+   and no intent. Every array stays the same object, since every reader holds it. */
+function resetContent(){
+  Object.keys(CATS).forEach(k=>{ delete CATS[k]; });
+  Object.assign(CATS,STARTER_CATS);
+  setContentLangs([]);
+  Object.keys(SW_STORE).forEach(k=>{ if(BUILT_IN_KEYS.indexOf(k)<0) delete SW_STORE[k]; else SW_STORE[k].length=0; });
+  SW_IDS.length=0;
+  COMMENT_LANG="";
+}
 /* Every storage key the table names, in field then language order. */
 function intentStoreKeys(){
   const out=[];
@@ -138,6 +150,7 @@ export {
   setCommentLang,
   commentLang,
   setIntentIds,
+  resetContent,
   CATS,
   SW_IDS,
   SW_EN,

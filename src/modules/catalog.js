@@ -1,15 +1,15 @@
 import { eApplyRoles } from "./cat-roles.js";
-import { intentStoreKeys, intentFieldKey, intentCount, catalogLangs, setContentLangs, setCommentLang, setIntentIds, CATS, SW_STORE } from "./content-model.js";
+import { intentStoreKeys, intentFieldKey, intentCount, catalogLangs, setContentLangs, setCommentLang, setIntentIds, resetContent, CATS, SW_STORE } from "./content-model.js";
 import { CAT_ICONS, setCatalogCatLooks, setCatalogCatLabels } from "./icons.js";
 import { parseMacrosData } from "./macros-json.js";
-import { M, FACTS, normWhoList, setCatalogFacts, setCatalogWho } from "./stock.js";
-import { lsGet, lsSet, nsKey, nsGet, nsDel, E_LS_OK } from "./storage.js";
-import { BASE_CATS, pack } from "./pack.js";
+import { M, normWhoList, setCatalogFacts, setCatalogWho, resetStock } from "./stock.js";
+import { lsGet, lsSet, nsKey, nsGet, nsDel, E_LS_OK, eDeskFileShown } from "./storage.js";
+import { BASE_CATS } from "./pack.js";
 import { hueIsOffered } from "./cat-identity.js";
 import { catalogFromV2, isV2, v2CatKey } from "./catalog-v2.js";
 import { setCatalogGreet } from "./greeting.js";
 import { setCatalogStop } from "./affinity.js";
-import { fileStamp, toast } from "./ui-lang.js";
+import { fileStamp, toastRefusal, t } from "./ui-lang.js";
 
 /* ---- catalog: Etiuda ships empty - a catalog supplies cards, intents, categories and
    facts, playing the role built-in content used to (pack.baseCards still overrides it,
@@ -21,17 +21,51 @@ const E_CATALOG_STORE=nsKey("Catalog");      // the active catalog itself
 /* Read once and remembered, because boot asks more than once and the answer cannot change:
    a sibling script has run or it has not by the time anything here is called. */
 let E_SIBLING=null, E_SIBLING_READ=false;
+/* A HOST'S FILE THIS READER REFUSED: the host checks only the format's pair, so a file can pass
+   there and fail v2Problems here. The host is told, passes it over and hands the next file it
+   would read, and E_HANDED is where that one came from, which host.js answers in place of what
+   the host said at boot. E_REFUSED names the refused files, for the boot to say so. */
+let E_HANDED=null;
+const E_REFUSED=[];
+function eRefuseCatalogFile(name){
+  const h=(typeof window!=="undefined" && window.E_HOST)||null;
+  if(!h || typeof h.catalogRefused!=="function") return null;
+  try{
+    const r=h.catalogRefused(String(name||""));
+    return (r && typeof r==="object" && r.json) ? r : null;
+  }catch(e){ return null; }
+}
+function eCatalogHanded(){ return E_HANDED; }
+function eCatalogRefusedNames(){ return E_REFUSED.slice(); }
 function eCatalog(){
   if(E_SIBLING_READ) return E_SIBLING;
   E_SIBLING_READ=true;
-  const c=(typeof window!=="undefined") ? window.E_CATALOG : null;
+  let c=(typeof window!=="undefined") ? window.E_CATALOG : null;
+  let file=(typeof window!=="undefined" && window.E_HOST) ? String(window.E_HOST.catalogFile||"") : "";
   /* THROUGH THE WHITELIST, exactly as a picked file goes. normaliseCatalog is what refuses the
      reserved category key and a hue no build offers, and this route skipped it, so one file
      kept more by sitting beside Etiuda than by being imported. tests/catalog-routes.mjs holds
      the two routes to the same answer. */
-  try{ E_SIBLING=isV2(c) ? normaliseCatalog(catalogFromV2(c)) : null; }catch(e){ E_SIBLING=null; }
-  return E_SIBLING;
+  for(let tries=0; tries<32; tries++){
+    try{ E_SIBLING=isV2(c) ? normaliseCatalog(catalogFromV2(c)) : null; catalogDocKeep(E_SIBLING,c); return E_SIBLING; }
+    catch(e){ E_SIBLING=null; }
+    if(file) E_REFUSED.push(file);
+    const next=file ? eRefuseCatalogFile(file) : null;
+    if(!next) return null;
+    try{ c=JSON.parse(String(next.json)); }catch(e){ return null; }
+    file=String(next.file||"");
+    E_HANDED={file:file, in:String(next.in||""), builtIn:!!next.builtIn, mtime:+next.mtime||0};
+  }
+  return null;
 }
+/* THE DOCUMENT A CATALOG WAS PARSED FROM, kept beside it because the runtime's shape drops the
+   signature and the signed bytes are the document's. Only the two parsers here register one, so
+   a catalog built any other way has none and its signature is not read. */
+const E_CATALOG_DOCS=(typeof WeakMap==="function")?new WeakMap():null;
+function catalogDocKeep(c,doc){
+  if(E_CATALOG_DOCS && c && typeof c==="object" && doc && typeof doc==="object"){ try{ E_CATALOG_DOCS.set(c,doc); }catch(e){} }
+}
+function catalogDocOf(c){ return (E_CATALOG_DOCS && c && typeof c==="object" && E_CATALOG_DOCS.get(c)) || null; }
 /* The active catalog, whether it arrived by import or by accepting the sibling file. Keeping a
    copy rather than re-reading the sibling every boot is what lets an imported catalog and a
    sibling catalog be the same thing: one stored catalog, one code path, and Reset clears it. */
@@ -43,6 +77,11 @@ function storedCatalog(){
     return (c && typeof c==="object" && Array.isArray(c.cards)) ? c : null;
   }catch(e){ return null; }
 }
+/* The cause, as far as it is known: a desk writes one file, and names it; a browser keeps its own store. */
+function catalogStoreRefusal(file){
+  return file ? t("Could not save the catalog, because Etiuda cannot write {FILE}.").split("{FILE}").join(file)
+    : t("Could not save the catalog, perhaps because the browser's storage is full.");
+}
 /* CHECKED, NOT ATTEMPTED. lsSet swallows the quota throw by design, so a try/catch here can
    never fire: a full disk reports success and the reload comes back on the PREVIOUS catalog
    with the personal layers already pruned against the new one. The value is read back,
@@ -50,11 +89,11 @@ function storedCatalog(){
 function storeCatalog(c){
   /* A store that forgets at the tab's edge cannot hold a catalog at all: activateCatalog
      reloads, and the reload is what discards it. Say so instead of reloading into nothing. */
-  if(!E_LS_OK){ toast("This browser is not storing anything, so a catalog cannot be kept here"); return false; }
+  if(!E_LS_OK){ toastRefusal(t("This browser is not storing anything, so a catalog cannot be kept here")); return false; }
   let s=null;
   try{ s=JSON.stringify(c); }catch(e){ s=null; }
   if(s===null || !lsSet(E_CATALOG_STORE,s,true) || lsGet(E_CATALOG_STORE)!==s){
-    toast("Could not save the catalog, perhaps because the browser's storage is full.");
+    toastRefusal(catalogStoreRefusal(eDeskFileShown()));
     return false;
   }
   return true;
@@ -133,7 +172,9 @@ function parseCatalogFile(text){
     try{ data=JSON.parse(raw); }
     catch(e){ throw new Error("not a catalog - "+(e&&e.message?e.message:"could not parse")); }
   }
-  return normaliseCatalog(catalogFromV2(data));
+  const c=normaliseCatalog(catalogFromV2(data));
+  catalogDocKeep(c,data);
+  return c;
 }
 /** The whitelist, over a catalog the runtime can already read. Every route to a catalog ends
  *  here, so two catalogs are the same exactly when this returns the same thing. */
@@ -141,7 +182,7 @@ function normaliseCatalog(data){
   const cardsOut=parseMacrosData(data);            // validates every card, dedupes ids
   if(!cardsOut.length) throw new Error("no cards in file");
   const cat={ format:1, kind:"playbook-catalog",
-              name:(data&&data.name)?String(data.name):"Imported catalog",
+              name:(data&&data.name)?String(data.name):"Unnamed catalog",
               categories:{}, intents:null, cards:cardsOut,
               facts:(data&&typeof data.facts==="string")?data.facts:"" };
   /* Carried when declared, like roles and who (remember: this object is a WHITELIST - see
@@ -247,7 +288,6 @@ function normaliseCatalog(data){
     cat.intents={};
     intentStoreKeys().forEach(key=>{ cat.intents[key]=(SW_STORE[key]||[]).slice(); });
   }
-  if(!cat.facts) cat.facts=(pack.facts!=null&&pack.facts!=="")?pack.facts:FACTS;
   return cat;
 }
 /* Full-content hash, not a count fingerprint: rewording a card must change the
@@ -380,23 +420,43 @@ function eApplyCatalog(c){
   return true;
 }
 let E_CATALOG_NAME="", E_CATALOG_VERSION=null;
+/* THE EMPTY DESK, which every restart applies before its catalog: a catalog that leaves a field
+   out then leaves the default, never the field of the catalog before it. */
+function eResetCatalog(){
+  resetContent();
+  Object.keys(BASE_CATS).forEach(k=>{ delete BASE_CATS[k]; });
+  Object.assign(BASE_CATS,CATS);
+  setCatalogCatLabels({});
+  setCatalogCatLooks({},{});
+  setCatalogGreet(null);
+  setCatalogStop(null);
+  eApplyRoles(null);
+  resetStock();
+  E_CATALOG_NAME=""; E_CATALOG_VERSION=null;
+}
 
 export {
   eCatalog,
+  eCatalogHanded,
+  eCatalogRefusedNames,
+  eRefuseCatalogFile,
   storedCatalog,
   storeCatalog,
+  catalogStoreRefusal,
   eWatchSupported,
   eWatchGet,
   eWatchPut,
   eWatchClear,
   eWatchName,
   parseCatalogFile,
+  catalogDocOf,
   normaliseCatalog,
   eCatalogSignature,
   catalogVersionLabel,
   catalogStamp,
   eCatalogAccepted,
   eApplyCatalog,
+  eResetCatalog,
   E_CATALOG_KEY,
   E_CATALOG_STORE,
   E_CATALOG_NAME,

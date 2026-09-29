@@ -3,7 +3,7 @@ import { captureCards, flipPills, flipCards, paintIntentRings, paintRailSelectio
 import { $, intentEl } from "./dom.js";
 import { captureRail, drawIntentRail, flipRail, railDecorate } from "./rail-list.js";
 import { syncIntentInput } from "./intent-clear.js";
-import { drawPills, scheduleTabSave } from "./tabs.js";
+import { drawPills, scheduleTabSave, activeHeard } from "./tabs.js";
 import { scrollPageTop } from "./page-scroll.js";
 import { toast } from "./ui-lang.js";
 import { markEntrySel } from "./entry-walk.js";
@@ -40,6 +40,7 @@ function clearIntents(){
   scrollPageTop();
   scheduleTabSave();
   toast("{INTENT} cleared");
+  activeHeard("intents");
   return true;
 }
 

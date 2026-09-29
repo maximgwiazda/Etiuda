@@ -157,6 +157,21 @@ const PATCH = {
   ].join("\n")
 };
 
+/* A third reading, for i18n-scan's rule 5b alone: a synthetic document holding a two-line Polish
+   table and copy returned by functions, an arrow with an expression body, an arrow with a block
+   body, and a function named as the value. Invented words throughout. */
+const ARROW_DOC = [
+  "UI_STRINGS.pl={",
+  '  "Kept one":"Jeden",',
+  '  "Kept two; with a word":"Dwa",',
+  "};",
+  'const S=[{title:()=>c ? "Kept one" : "Drifted  one", body:()=>{ if(x==="no") return "Kept two; with a word"; return t("Kept one"); }, label:named}];',
+  'function named(){ return c ? "Named one" : "Kept one"; }',
+  ""
+].join("\n");
+PATCH.arrowbody = "const txt = " + JSON.stringify(ARROW_DOC) + ";\n"
+  + "E.sourceDoc = () => ({ text: txt, files: ['synthetic'], at: () => 'synthetic:1', atLine: k => 'synthetic:' + k });";
+
 function scan(root, tool, reading, args) {
   const code = [
     "const E = require(" + req(path.join(root, "tests", "engine.js")) + ");",
@@ -283,6 +298,16 @@ try {
   const nk = scan(roots.mod, "storage-keys.js", "nomodules", []);
   ok(nk.code !== 0 && /settings reset: NOT READ/.test(nk.out),
      "storage-keys.js    refuses, exit " + nk.code + ", when resetAllSettings() is not in the reading");
+
+  /* 26. COPY A FUNCTION RETURNS, 2026-09-28. The tour's customer step returns its title and body
+     from a ternary, and until then no rule read them: a one-space drift in one of them left this
+     scan complete and exit 0. Every returned whole value is read, as prose ("; with" included),
+     and nothing merely compared ("no") or handed to a call other than a sink. */
+  const ab = scan(roots.mod, "i18n-scan.js", "arrowbody", ["pl"]);
+  const abMissing = ab.out.split("MISSING")[1] || "";
+  ok(ab.code === 1 && /PL: 2\/4 /.test(ab.out) && /"Drifted  one":""/.test(abMissing) && /"Named one":""/.test(abMissing)
+     && !/"no"/.test(abMissing) && !/Kept/.test(abMissing),
+     "i18n-scan.js       reads copy a function returns, arrow or named, and nothing it only compares");
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
 }

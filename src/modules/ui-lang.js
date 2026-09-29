@@ -1,6 +1,9 @@
 import { lsGet, lsSet, lsDel } from "./storage.js";
 import { markCut } from "./cut-text.js";
 import { $ } from "./dom.js";
+import { esc } from "./esc.js";
+import { cutLeaves, dismissNode, mgReduceMotion, M_MS } from "./motion.js";
+import { ICON_LINT_WARNING } from "./icons.js";
 
 /* ---- UI LANGUAGE ------------------------------------------------------------------------
    The CHROME's language, not the CONTENT's: the EN|PL switch decides what is copied to
@@ -28,7 +31,6 @@ UI_STRINGS.pl={
   "Fold this group away":"Zwiń tę grupę",
   "Show these cards":"Pokaż te karty",
   "Matching your intent":"Pasujące do intencji",
-  "Put every setting back to its default? Your cards, edits, favourites and order are not touched.":"Przywrócić wszystkie ustawienia domyślne? Karty, zmiany, ulubione i kolejność zostaną bez zmian.",
   "Settings reset":"Przywrócono ustawienia domyślne",
   "Put every setting on this screen back to what it ships with. Cards and edits are not affected.":"Przywraca domyślne wartości wszystkich ustawień na tym ekranie. Karty i zmiany w nich zostają nienaruszone.",
   "maintenance␟hidden":"ukryte",
@@ -44,6 +46,36 @@ UI_STRINGS.pl={
   "maintenance␟nothing":"nic",
   "maintenance␟categories renamed":"zmienione nazwy kategorii",
   "maintenance␟list width":"szerokość listy",
+  "maintenance␟Catalog file":"Plik katalogu",
+  "maintenance␟file":"plik",
+  "maintenance␟copy":"kopia",
+  "maintenance␟folder":"folder",
+  "maintenance␟id":"identyfikator",
+  "maintenance␟signature":"podpis",
+  "maintenance␟beside this page":"obok tej strony",
+  "maintenance␟imported into this browser":"wczytany do tej przeglądarki",
+  "maintenance␟the chosen catalog folder's":"z folderu katalogów wybranego w Ustawieniach",
+  "maintenance␟the program's own":"dołączona do programu",
+  "maintenance␟found beside the program":"znaleziona obok programu",
+  "maintenance␟inside the program":"wewnątrz programu",
+  "maintenance␟a file opened by hand":"plik otwarty ręcznie",
+  "maintenance␟(none loaded)":"(nie wczytano)",
+  "maintenance␟signed":"podpisany",
+  "maintenance␟unsigned":"niepodpisany",
+  "maintenance␟changed since signed":"zmieniony po podpisaniu",
+  "maintenance␟key not known here":"klucz nieznany temu komputerowi",
+  "maintenance␟Desk":"Stanowisko",
+  "maintenance␟catalog folder":"folder katalogów",
+  "maintenance␟tour":"przewodnik",
+  "maintenance␟under way":"w toku",
+  "maintenance␟offered at the next start":"zaproponowany przy następnym uruchomieniu",
+  "maintenance␟seen or declined":"obejrzany lub odrzucony",
+  "maintenance␟this start":"to uruchomienie",
+  "maintenance␟after a crash":"po awarii",
+  "maintenance␟ordinary":"zwykłe",
+  "maintenance␟desk backup":"kopia zapasowa danych",
+  "maintenance␟not needed":"niepotrzebna",
+  "maintenance␟statistics":"statystyki",
   "Columns":"Kolumny",
   "Auto":"Auto",
   "How many columns of cards to show. Auto fits as many as the window has room for.":"Liczba kolumn z kartami. Auto pokazuje tyle, ile zmieści okno.",
@@ -90,15 +122,10 @@ UI_STRINGS.pl={
   "Press":"Naciśnij",
   "{KEY} clears the search and the intents and shows every card.":"{KEY} czyści wyszukiwanie i intencje i pokazuje wszystkie karty.",
   "Etiuda is ready for its first replies.":"Etiuda czeka na pierwsze odpowiedzi.",
-  "Add a card to a category,":"Dodaj kartę do kategorii,",
   "Add a card to a category, or":"Dodaj kartę do kategorii albo",
   "you already have.":", który już istnieje.",
-  "import a catalog":"zaimportuj katalog",
-  "or":"albo",
-  "to see how it works.":", aby zobaczyć, jak to działa.",
   "A catalog file next to Etiuda loads by itself when it is called":"Plik katalogu leżący obok Etiudy wczytuje się sam, gdy nazywa się",
   "Under any other name, bring it in with the button above.":"Plik o innej nazwie można wczytać przyciskiem powyżej.",
-  "Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else comes in through Import above.":"Etiuda proponuje najnowszy katalog z {FOLDER}; katalog z innego miejsca można wczytać przyciskiem Importuj powyżej.",
   "Catalogs":"Katalogi",
   "Loaded":"Wczytany",
   "Newer":"Nowszy",
@@ -106,14 +133,12 @@ UI_STRINGS.pl={
   "Open this folder":"Otwórz ten folder",
   "Change folder…":"Zmień folder…",
   "Eject":"Odłącz",
-  "Put this catalog down and start empty":"Odłącz ten katalog; Etiuda uruchomi się bez niego",
   "Load":"Wczytaj",
   "Choose the folder Etiuda reads catalogs from":"Wybierz folder, z którego Etiuda czyta katalogi",
   "That setting could not be saved.":"Nie udało się zapisać tego ustawienia.",
   "{FILE} is not a catalog Etiuda can read.":"{FILE} nie jest katalogiem, który Etiuda potrafi odczytać.",
   "{FILE} could not be read.":"Nie udało się odczytać pliku {FILE}.",
   "{FILE} could not be saved.":"Nie udało się zapisać pliku {FILE}.",
-  "The catalog you import stays in this browser, ready whenever you come back.":"Wczytany katalog zostaje w tej przeglądarce i czeka na powrót.",
   "Add a card to {CAT}":"Dodaj kartę do kategorii {CAT}",
   "Clear search text":"Wyczyść tekst wyszukiwania",
   "not linked to your intent":"niepowiązane z wybraną intencją",
@@ -253,7 +278,6 @@ UI_STRINGS.pl={
   "Etiuda Source-Available Licence 1.0":"Etiuda Source-Available Licence 1.0",
   "Created by":"Autor:",
   "· free for personal use":"· bezpłatnie do użytku osobistego",
-  "Tour {N} / {TOTAL}":"Przewodnik {N} / {TOTAL}",
   "Finish":"Zakończ",
   "Welcome to Etiuda":"Witamy w Etiudzie",
   "Your agent name":"Nazwa agenta",
@@ -263,33 +287,13 @@ UI_STRINGS.pl={
   "Category pills":"Pasek kategorii",
   "Intent panel":"Panel intencji",
   "Cards":"Karty",
-  "Put a card away":"Odkładanie karty na bok",
-  "Edit a card":"Edycja karty",
+  "A card's buttons":"Przyciski karty",
   "A card of your own":"Własna karta",
   "The card editor":"Edytor karty",
   "English / Polish":"Angielski / polski",
   "Light and dark":"Jasny i ciemny",
-  "You are set":"Na koniec",
-  "Etiuda keeps your replies in a window of its own, beside the chat. Type the word nearest what the customer means, click a reply, and paste it into the conversation. It works with every chat tool, because it needs none of them. The tour takes about a minute, and <kbd>Esc</kbd> leaves it at any time.":"Etiuda trzyma gotowe odpowiedzi we własnym oknie, obok czatu. Wystarczy wpisać słowo najbliższe sprawie klienta, kliknąć odpowiedź i wkleić ją do rozmowy. Działa z każdym czatem, bo od żadnego nie zależy. Przewodnik zajmuje około minuty, a <kbd>Esc</kbd> w każdej chwili go zamyka.",
+  "Ready for the first customer":"Gotowe na pierwszego klienta",
   "Type the name customers should see, exactly as you want it to appear; <span class=\"fillmiss\">AGENT</span> reproduces it verbatim. Internal comments sign with your initials as /<span class=\"fillmiss\">INIT</span>.":"Wpisz imię, które mają widzieć klienci, dokładnie w takiej formie, w jakiej ma się pojawiać; <span class=\"fillmiss\">AGENT</span> wstawia je bez zmian. Komentarze wewnętrzne są podpisywane inicjałami agenta w postaci /<span class=\"fillmiss\">INIT</span>.",
-  "When several customers are open in your chat at once, give each one a tab here. Every tab keeps its own customer name, intent, language and categories, so a reply never carries the wrong name. {KEY} moves to the next tab from anywhere and {NEW} opens one; your own name and the theme are shared by all of them.":"Gdy w czacie toczy się kilka rozmów naraz, każdej odpowiada tu osobna rozmowa z własnym imieniem klienta, intencją, językiem i kategoriami, więc odpowiedź nigdy nie trafi do klienta z cudzym imieniem. {KEY} przechodzi do następnej z dowolnego miejsca, a {NEW} otwiera nową; nazwa agenta i motyw są wspólne dla wszystkich.",
-  "Copy the customer's name from the chat and paste it here as it comes, surname, capitals and all. Etiuda tidies it, and every reply addresses the customer by first name, in Polish in the vocative (ANNA KOWALSKA → <b>Anno</b>); this fills <span class=\"fillmiss\">PAX</span>. The wheel beside it says who you are speaking to, relative to whoever the case is about, and fills <span class=\"fillmiss\">ROLE</span> in internal comments; the empty notch clears it.":"Imię klienta wystarczy skopiować z czatu i wkleić tutaj w takiej postaci, w jakiej przyszło, z nazwiskiem i wielkimi literami. Etiuda je porządkuje, a każda odpowiedź zwraca się do klienta po imieniu, po polsku w wołaczu (ANNA KOWALSKA → <b>Anno</b>); tak wypełnia się <span class=\"fillmiss\">PAX</span>. Kółko obok określa, kim jest rozmówca wobec osoby, której dotyczy sprawa, i wypełnia <span class=\"fillmiss\">ROLE</span> w komentarzach wewnętrznych; pusta pozycja czyści wybór.",
-  "Filter cards by category; <kbd>Ctrl</kbd>+click keeps several. The rings say why a pill stands out: <b class=\"t-go\">green</b> - it holds a card linked to your intent; <b class=\"t-acc\">blue</b> - a supporting category, useful whatever the customer asked. <kbd>←</kbd> <kbd>→</kbd> step through them, from the search box too. Drag pills to reorder; double-click <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> to reset the order.":"Filtruj karty według kategorii; <kbd>Ctrl</kbd>+kliknięcie wybiera kilka naraz. Obwódki mówią, dlaczego kategoria się wyróżnia: <b class=\"t-go\">zielona</b>, gdy zawiera kartę powiązaną z wybraną intencją; <b class=\"t-acc\">niebieska</b>, gdy to kategoria wspierająca, przydatna niezależnie od pytania klienta. <kbd>←</kbd> <kbd>→</kbd> przechodzą między nimi, także z pola wyszukiwania. Kategorie można przeciągać, aby zmienić kolejność; kliknij dwukrotnie <span class=\"t-pill\"><span data-icon=\"all\"></span>Wszystkie</span>, aby ją przywrócić.",
-  "An intent names what the customer has come about. Picking one brings its replies forward, ringed <b class=\"t-go\">green</b>, and its phrase fills <span class=\"fillmiss\">INTENT</span> wherever a reply uses it. <kbd>Ctrl</kbd>+click picks several. The star keeps the intents you use most at the top; hold <kbd>Ctrl</kbd> over a star to edit that intent, or <kbd>Shift</kbd> to hide it. The <span data-icon=\"pin\"></span> lock keeps the panel open on a narrow window.":"Intencja mówi, z czym klient przychodzi. Po jej wybraniu pasujące odpowiedzi wysuwają się do przodu, obwiedzione na <b class=\"t-go\">zielono</b>, a jej fraza trafia w miejsce <span class=\"fillmiss\">INTENT</span> w każdej odpowiedzi, która go używa. <kbd>Ctrl</kbd>+kliknięcie wybiera kilka. Gwiazdka trzyma na górze intencje używane najczęściej; <kbd>Ctrl</kbd> przytrzymany nad gwiazdką pozwala edytować intencję, a <kbd>Shift</kbd> ją ukryć. Blokada <span data-icon=\"pin\"></span> utrzymuje panel otwarty w wąskim oknie.",
-  "Click a reply and the whole of it is on the clipboard, with the greeting, the name and the signature filled in, ready to paste into the chat. <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> do the same from the keyboard, and <kbd>Shift</kbd>+<kbd>Enter</kbd> copies the other language. A card showing <b>1/2</b> or <b>STEP 1/3</b> holds several replies, each copied on its own. The small tags say why a card stands where it does; resting the pointer on one names the reason.":"Kliknięcie odpowiedzi kopiuje ją w całości, razem z powitaniem, imieniem i podpisem, gotową do wklejenia w rozmowie. Z klawiatury to samo robią <kbd>↑</kbd> <kbd>↓</kbd> i <kbd>Enter</kbd>, a <kbd>Shift</kbd>+<kbd>Enter</kbd> kopiuje wersję w drugim języku. Karta z oznaczeniem <b>1/2</b> albo <b>KROK 1/3</b> mieści kilka odpowiedzi i każdą kopiuje się osobno. Małe znaczniki mówią, dlaczego karta stoi w tym miejscu; po najechaniu na znacznik widać powód.",
-  "The star lifts a card to the top of wherever it already is: to the head of its category, to the head of its highlight group when an intent is selected, and on <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> to a <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b> block at the top of the list. The gold star and the <span class=\"cbadge fav\">fav</span> tag mark it - separate from the <b class=\"t-go\">green</b> of an intent link and the <b class=\"t-acc\">blue</b> of a supporting category.":"Gwiazdka podnosi kartę na szczyt tego miejsca, w którym już jest: na początek swojej kategorii, na początek kart o tym samym wyróżnieniu, gdy wybrano intencję, a w widoku <span class=\"t-pill\"><span data-icon=\"all\"></span>Wszystkie</span> do bloku <b class=\"t-fav\"><span data-icon=\"star\"></span>Ulubione</b> na górze listy. Oznacza ją złota gwiazdka i znacznik <span class=\"cbadge fav\">fav</span>, niezależne od <b class=\"t-go\">zieleni</b> powiązania z intencją i <b class=\"t-acc\">błękitu</b> kategorii wspierającej.",
-  "The eye puts a card away: it greys out and sinks to the foot of its own category, and it shows nowhere else - not in All, and not in a search. Open that category with the box empty and the same button brings it back. Putting a starred card away also unstars it. Nothing is deleted; <b class=\"t-bad\">Delete</b> lives only in the editor and in Library.":"Oko odkłada kartę na bok: karta szarzeje i spada na dół swojej kategorii, a poza tym nie pojawia się nigdzie: ani we Wszystkich, ani w wyszukiwaniu. W tej kategorii, przy pustym polu wyszukiwania, ten sam przycisk ją przywraca. Odłożenie karty z gwiazdką usuwa też gwiazdkę. Nic nie jest usuwane; <b class=\"t-bad\">Usuń</b> istnieje wyłącznie w edytorze i w Bibliotece.",
-  "The pencil opens the card for editing - both languages, the internal note, the search keywords, and everything about how it behaves. Editing a built-in card writes a personal override <b>on this computer</b>; the catalog itself is untouched, and the editor's <b>Reset</b> brings the original wording back whenever you want it.":"Ołówek otwiera kartę do edycji: oba języki, notatkę wewnętrzną, słowa kluczowe i wszystko, co dotyczy jej zachowania. Edycja karty wbudowanej zapisuje własną wersję <b>na tym komputerze</b>; sam katalog pozostaje nienaruszony, a <b>Przywróć</b> w edytorze w każdej chwili odtwarza pierwotną treść.",
-  "The <b>+</b> in the corner starts a new card from wherever you are - the same screen the pencil opens, empty. Inside a category it files into that one; under <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> the editor asks which, in its <span class=\"t-sec\">Category</span> section.":"<b>+</b> w rogu zaczyna nową kartę z dowolnego miejsca. To ten sam ekran, który otwiera ołówek, tylko pusty. Wewnątrz kategorii trafi właśnie do niej; w widoku <span class=\"t-pill\"><span data-icon=\"all\"></span>Wszystkie</span> edytor zapyta, do której, w sekcji <span class=\"t-sec\">Kategoria</span>.",
-  "<span class=\"t-sec\">Content</span> holds the text in both languages, with the internal note. Folded below: <span class=\"t-sec\">Keywords</span>, <span class=\"t-sec\">Category</span>, <span class=\"t-sec\">Linked intents</span> - which makes a card ring green under an intent, and marks its category relevant to those intents - and <span class=\"t-sec\">Advanced</span>, holding alternatives, ordered steps and the ring flags. <b>Cancel</b> leaves everything as it was. A row in <b>Library</b> opens the same screen.":"<span class=\"t-sec\">Treść</span> zawiera tekst w obu językach wraz z notatką wewnętrzną. Zwinięte poniżej: <span class=\"t-sec\">Słowa kluczowe</span>, <span class=\"t-sec\">Kategoria</span>, <span class=\"t-sec\">Powiązane intencje</span> (dzięki nim karta świeci na zielono przy intencji, a jej kategoria jest oznaczona jako istotna dla tych intencji) oraz <span class=\"t-sec\">Zaawansowane</span>, gdzie są warianty, ponumerowane kroki i znaczniki obwódek. <b>Anuluj</b> zostawia wszystko bez zmian. Wiersz w <b>Bibliotece</b> otwiera ten sam ekran.",
-  "Switches the replies between English and Polish for this conversation, so each customer is answered in their own language; {KEY} flips it from anywhere. An intent picked from the list follows the switch and typed text does not, and a card with no Polish shows its English rather than a gap.":"Przełącza odpowiedzi między angielskim a polskim w tej rozmowie, żeby każdy klient dostał odpowiedź w swoim języku; {KEY} robi to z dowolnego miejsca. Intencja wybrana z listy zmienia język razem z przełącznikiem, wpisany tekst nie, a karta bez polskiej wersji pokazuje angielską zamiast pustego miejsca.",
-  "Fees, deadlines and links you quote to customers. Clicking a link copies the whole address, ready to paste into the chat. The text is yours to edit, and it stays in this browser.":"Opłaty, terminy i odnośniki, które przydają się w rozmowie z klientem. Kliknięcie odnośnika kopiuje cały adres, gotowy do wklejenia w rozmowie. Ten tekst można dowolnie zmienić; zostaje w tej przeglądarce.",
-  "Fees, deadlines and links you quote to customers. Clicking a link copies the whole address, ready to paste into the chat. The text is yours to edit, and it stays on this computer.":"Opłaty, terminy i odnośniki, które przydają się w rozmowie z klientem. Kliknięcie odnośnika kopiuje cały adres, gotowy do wklejenia w rozmowie. Ten tekst można dowolnie zmienić; zostaje na tym komputerze.",
-  "Etiuda follows your system's setting, and keeps following it. Clicking here is what turns that into a choice, and it is remembered from then on.":"Etiuda stosuje motyw systemu i zmienia się razem z nim. Kliknięcie tutaj ustala własny wybór, zapamiętany na stałe.",
-  "Everything that is not a card. <b>Library</b> is where the content lives, <b>Settings</b> holds the interface language, the appearance and the keyboard shortcuts, and the entries in the middle hide or lock the intent panel and the category bar. Hold <kbd>Ctrl</kbd> to peek at either while it is hidden. This tour is here too, under <b>Show tour…</b>.":"Wszystko, co nie jest kartą. W <b>Bibliotece</b> jest cała treść, <b>Ustawienia</b> zawierają język interfejsu, wygląd i skróty klawiszowe, a pozycje w środku ukrywają lub blokują panel intencji i pasek kategorii. Przytrzymaj <kbd>Ctrl</kbd>, aby podejrzeć jedno lub drugie, gdy jest ukryte. Ten przewodnik też tu jest, pod <b>Pokaż przewodnik…</b>.",
-  "<b><span data-icon=\"settings\"></span> → Library</b> holds everything Etiuda knows: every card, intent and category, to add, edit, hide or move. <span class=\"t-sec\">Catalog &amp; data</span> is where the team's catalog comes in, and where your own improvements go out as a file for whoever keeps the wording.":"<b><span data-icon=\"settings\"></span> → Biblioteka</b> mieści wszystko, co Etiuda wie: każdą kartę, intencję i kategorię, do dodania, edycji, ukrycia albo przeniesienia. W sekcji <span class=\"t-sec\">Katalog i dane</span> wczytuje się katalog zespołu i stamtąd wysyła się własne poprawki, jako plik dla osoby, która dba o treść.",
-  "<b><span data-icon=\"settings\"></span> → Settings</b> is the program itself: your name, the language of its buttons, its look and its shortcuts. Nothing here touches a card.":"<b><span data-icon=\"settings\"></span> → Ustawienia</b> dotyczą samego programu: nazwy agenta, języka przycisków, wyglądu i skrótów. Nic tutaj nie zmienia kart.",
-  "That is the whole of it: the customer's name, the word for what they want, a click, and a paste into the chat. Every shortcut is listed under <span data-icon=\"settings\"></span> <b>→ About Etiuda</b>, and <b>Show tour…</b> in the same menu brings this back.":"To wszystko: imię klienta, słowo najbliższe sprawie, kliknięcie i wklejenie do czatu. Wszystkie skróty są pod <span data-icon=\"settings\"></span> <b>→ O Etiudzie</b>, a <b>Pokaż przewodnik…</b> w tym samym menu otwiera go ponownie.",
   "Categories & cards":"Kategorie i karty",
   "Intent":"Intencja",
   "Intents":"Intencje",
@@ -304,7 +308,6 @@ UI_STRINGS.pl={
   "Keys":"Klawisze",
   "No catalog loaded - Etiuda is empty.":"Nie wczytano katalogu, więc Etiuda jest pusta.",
   "About Etiuda · Version {V} · <span class='nw'>Etiuda Source-Available Licence 1.0</span>, free for personal use · © 2026 Maxim Gwiazda":"O Etiudzie · Wersja {V} · <span class='nw'>Etiuda Source-Available Licence 1.0</span>, bezpłatnie do użytku osobistego · © 2026 Maxim Gwiazda",
-  "How a reply gets from here to your customer, in about a minute.":"Jak odpowiedź trafia stąd do klienta. Około minuty.",
   "Toggle language":"Przełącz język",
   "Next tab":"Następna rozmowa",
   "New tab":"Nowa rozmowa",
@@ -396,7 +399,6 @@ UI_STRINGS.pl={
   "- cards badged":"- karty oznaczone",
   "are alternatives and copy one at a time.":"to warianty i kopiują się pojedynczo.",
   "Older catalog found":"Znaleziono starszy katalog",
-  "The file beside Etiuda is an earlier edition than the one you have.":"Plik obok Etiudy to wcześniejsze wydanie niż wczytane.",
   "Load it anyway":"Wczytaj mimo to",
   "Updated catalog found":"Jest nowsza wersja katalogu",
   "Watching":"Obserwowany:",
@@ -409,15 +411,14 @@ UI_STRINGS.pl={
   "That file is not a catalog Etiuda can read.":"Tego pliku Etiuda nie potrafi odczytać jako katalogu.",
   "That file matches the catalog you already have.":"Ten plik jest taki sam jak wczytany katalog.",
   "Could not read the watched file.":"Nie udało się odczytać obserwowanego pliku.",
-  "The catalog beside Etiuda has changed since you loaded it.":"Katalog obok Etiudy zmienił się od czasu wczytania.",
   "Your own cards and edits are kept.":"Własne karty i zmiany zostają.",
   "Load the update":"Wczytaj aktualizację",
   "You have {V}.":"Wczytane: {V}.",
-  "This is a newer copy of the catalog you already have, so your own cards and edits are kept.":"To nowsza kopia wczytanego katalogu, więc własne karty i zmiany zostaną zachowane.",
   "Load catalog?":"Wczytać katalog?",
   "Replace catalog?":"Zastąpić katalog?",
   "Located as {FILE}.":"Znaleziony jako {FILE}.",
   "Located as {FILE} in {FOLDER}.":"Znaleziony jako {FILE} w {FOLDER}.",
+  "{FILE} comes with Etiuda.":"{FILE} jest dołączony do Etiudy.",
   "{FILE} in {FOLDER}":"{FILE} w {FOLDER}",
   "Catalog file":"Plik katalogu",
   "Card added":"Dodano kartę",
@@ -444,20 +445,8 @@ UI_STRINGS.pl={
   "is an ordinary category":"jest zwykłą kategorią",
   "No {LANG} version for this card":"Ta karta nie ma jeszcze wersji {LANG}",
   "switch to {LANG} to use it":"przełącz na {LANG}, aby jej użyć",
-  "Keeping the loaded catalog.":"Zachowano wczytany katalog.",
-  "Starting empty. Load one any time from the Library.":"Start bez katalogu. Katalog można wczytać w każdej chwili z Biblioteki.",
   "Intent: {NAME}":"Intencja: {NAME}",
   "Intents: {NAMES}":"Intencje: {NAMES}",
-  "Clear Etiuda's local memory in this browser?":"Wyczyścić pamięć lokalną Etiudy w tej przeglądarce?",
-  "Clear Etiuda's local memory on this computer?":"Wyczyścić pamięć lokalną Etiudy na tym komputerze?",
-  "Removes every personal card, intent, edit, hide, category rename and quick-facts edit,":"Usuwa wszystkie własne karty, intencje, zmiany, ukrycia, zmienione nazwy kategorii i zmiany w szybkich faktach,",
-  "Catalog files on disk are not touched.":"Pliki katalogu na dysku pozostają nienaruszone.",
-  "Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to":"Etiuda uruchomi się pusta. Jeśli obok leży plik katalogu, pojawi się pytanie, czy",
-  "Import catalog":"Importuj katalog",
-  "Load this catalog on this browser:":"Wczytać ten katalog w tej przeglądarce:",
-  "It replaces the catalog loaded now.":"Zastąpi wczytany katalog.",
-  "Nothing on disk is changed. Etiuda reloads to apply it.":"Pliki na dysku zostają bez zmian. Etiuda uruchomi się ponownie, aby wczytać katalog.",
-  "Continue?":"Kontynuować?",
   "Changes every label in Etiuda, never the cards themselves":"Zmienia napisy na przyciskach i w menu Etiudy, nigdy treść kart",
   "Theme, blur effects and animations":"Motyw, efekty rozmycia i animacje",
   "What stays docked, and what may hide itself when space is short":"Co pozostaje zadokowane, a co może się schować, gdy brakuje miejsca",
@@ -477,12 +466,7 @@ UI_STRINGS.pl={
   "Press keys…":"Naciśnij klawisze…",
   "Fixed keys":"Klawisze stałe",
   "The grammar the rest stands on: Esc is how key capture itself cancels, arrows and Enter keep their native meanings, and a held Ctrl is a hold, not a chord.":"Zasady, na których opiera się reszta: Esc anuluje samo przechwytywanie klawiszy, strzałki i Enter zachowują swoje zwykłe znaczenie, a przytrzymany Ctrl to przytrzymanie, nie skrót.",
-  "Delete this custom card?\n\nIt disappears from Etiuda and from anything you export. The catalog has no version to restore.":"Usunąć tę własną kartę?\n\nZniknie z Etiudy i z każdego eksportu. Katalog nie ma jej wersji do przywrócenia.",
-  "Delete this card?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.":"Usunąć tę kartę?\n\nZniknie z Etiudy i z każdego eksportu. Przycisk Przywróć odtworzy ją z katalogu.",
-  "Delete this custom intent?":"Usunąć tę własną intencję?",
-  "Delete this intent?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.":"Usunąć tę intencję?\n\nZniknie z Etiudy i z każdego eksportu. Przycisk Przywróć odtworzy ją z katalogu.",
   "Keep current":"Zachowaj obecny",
-  "Start empty":"Zacznij bez katalogu",
   "Load it":"Wczytaj",
   "Load catalog":"Wczytaj katalog",
   "Show all hidden":"Pokaż wszystkie ukryte",
@@ -491,7 +475,6 @@ UI_STRINGS.pl={
   "toggles":"przełącza",
   "Library":"Biblioteka",
   "Maintenance":"Konserwacja",
-  "Import failed -":"Import nie powiódł się -",
   "Moved to":"Przeniesiono do",
   "Restored original -":"Przywrócono oryginał -",
   "Edit, hide or restore every card, intent and category":"Edycja, ukrywanie i przywracanie kart, intencji i kategorii",
@@ -511,10 +494,12 @@ UI_STRINGS.pl={
   "Write a new clause for {INTENT}":"Napisz nową frazę dla {INTENT}",
   "Delete this intent":"Usuń tę intencję",
   "Export…":"Eksportuj…",
-  "No catalogs in {FOLDER} yet. Import one, or drop a file into the folder.":"Tu pojawią się katalogi z {FOLDER}: wystarczy zaimportować katalog albo umieścić plik w tym folderze.",
-  "Import catalog…":"Importuj katalog…",
   "Clear local memory":"Wyczyść pamięć lokalną",
   "Eject catalog":"Odłącz katalog",
+  "Catalog ejected":"Odłączono katalog",
+  "Local memory cleared":"Wyczyszczono pamięć lokalną",
+  "Loading a catalog erases the cards you made without one. Export them as a catalog of their own first?":"Wczytanie katalogu usunie karty utworzone bez katalogu. Najpierw wyeksportować je jako osobny katalog?",
+  "Load anyway":"Wczytaj mimo to",
   "Previous":"Poprzedni",
   /* Qualified because the tour already owns a plain "Next" and calls it Dalej; Previous has
      no such clash, so it stays plain rather than being qualified for symmetry alone. */
@@ -528,7 +513,6 @@ UI_STRINGS.pl={
   "In an editor: the language tab before this one":"W edytorze: poprzedni język",
   "In an editor: the language tab after this one":"W edytorze: następny język",
   "Switch the language being edited":"Przełącz edytowany język",
-  "This card has unsaved changes. Leave it without saving?":"Ta karta ma niezapisane zmiany. Opuścić ją bez zapisywania?",
   "Restored your cards and stars from an earlier build.":"Przywrócono własne karty i gwiazdki z wcześniejszej wersji.",
   "Your intent edits and stars are set aside: this catalog cannot say which intent each belongs to.":"Odłożono własne zmiany i gwiazdki przy intencjach: ten katalog nie wskazuje, której intencji dotyczą.",
   "Edited cards this catalog does not have are kept as your own: {CARDS}.":"Zmienione karty, których ten katalog nie ma, zostają jako własne: {CARDS}.",
@@ -536,14 +520,7 @@ UI_STRINGS.pl={
   "Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted.":"Zapomina wszystkie własne karty, zmiany, ukrycia, zmiany nazw i ustawienia układu w tej przeglądarce; wczytany katalog zostaje. W ten sposób wraca też wszystko, co usunięto.",
   "Forget every personal card, edit, hide, rename and layout choice on this computer; the loaded catalog stays. It is also how you bring back anything you deleted.":"Zapomina wszystkie własne karty, zmiany, ukrycia, zmiany nazw i ustawienia układu na tym komputerze; wczytany katalog zostaje. W ten sposób wraca też wszystko, co usunięto.",
   "Put the catalog down and restart empty. Your cards, edits, name, theme and layout all stay.":"Odłącza katalog i uruchamia Etiudę bez niego. Własne karty, zmiany, nazwa, motyw i układ zostają.",
-  "Eject the catalog from this browser?":"Odłączyć katalog od tej przeglądarki?",
-  "Eject the catalog?":"Odłączyć katalog?",
   "Your own cards, edits, stars and card order are KEPT - load this catalog again":"Twoje własne karty, zmiany, gwiazdki i kolejność kart ZOSTAJĄ - wczytaj ten katalog ponownie,",
-  "Your own cards, edits, stars and card order are KEPT, and come back where they were when you load this catalog again.":"Własne karty, zmiany, gwiazdki i kolejność kart ZOSTAJĄ i wracają na swoje miejsca po ponownym wczytaniu tego katalogu.",
-  "Your agent name, theme and layout choices stay, and catalog files on disk are not touched.":"Nazwa agenta, motyw i ustawienia układu zostają, a pliki katalogu na dysku pozostają nietknięte.",
-  "Etiuda restarts empty. If a catalog file sits beside it you will be asked whether to load it.":"Etiuda uruchomi się pusta. Jeśli obok leży plik katalogu, pojawi się pytanie o jego wczytanie.",
-  "and forgets your agent name, theme and layout choices.":"i zapomina nazwę agenta, motyw oraz ustawienia układu.",
-  "The loaded catalog stays, and Etiuda restarts with it.":"Wczytany katalog pozostaje, a Etiuda uruchomi się z nim.",
   "Save everything loaded now as a catalog file, your edits merged in":"Zapisuje wszystko, co wczytane, jako plik katalogu, razem z własnymi zmianami",
   "Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.":"Wczytuje plik katalogu z dysku jako same dane, bez uruchamiania czegokolwiek. Zastępuje obecny katalog, a pliki na dysku zostają bez zmian.",
   "Bake the catalog into one HTML file that needs nothing beside it":"Zapisuje katalog w jednym samodzielnym pliku HTML",
@@ -561,7 +538,6 @@ UI_STRINGS.pl={
   "Discard your changes and restore the catalog's category.":"Odrzuca zmiany i przywraca kategorię z katalogu.",
   "Nothing to discard - this matches the catalog.":"Wszystko jest zgodne z katalogiem.",
   "This is yours, so the catalog has no version to restore.":"To własna pozycja, więc katalog nie ma jej wersji do przywrócenia.",
-  "Discard your changes to this category?":"Odrzucić zmiany w tej kategorii?",
   "Category reset":"Przywrócono kategorię z katalogu",
   "Delete this empty category":"Usuń tę pustą kategorię",
   "Edit category":"Edytuj kategorię",
@@ -604,9 +580,6 @@ UI_STRINGS.pl={
   "Discard your edits and restore the catalog wording.":"Odrzuca zmiany i przywraca treść z katalogu.",
   "Restore built-in quick facts":"Przywróć wbudowane szybkie fakty",
   "Delete this custom card permanently?":"Usunąć tę własną kartę na stałe?",
-  "Delete this empty category?\n\nA Reset restores it from the catalog.":"Usunąć tę pustą kategorię?\n\nPrzycisk Przywróć odtworzy ją z katalogu.",
-  "Reset all shortcuts to defaults?":"Przywrócić domyślne skróty klawiszowe?",
-  "Restore built-in quick facts? Your edited text will be discarded.":"Przywrócić wbudowane szybkie fakty? Zmieniony tekst zostanie odrzucony.",
   "{KEY} is fixed and keeps its own meaning":"{KEY} to klawisz stały i zachowuje swoje znaczenie",
   "Saved {KEY}":"Zapisano {KEY}",
   "{N} card":"{N} karta",
@@ -629,12 +602,22 @@ UI_STRINGS.pl={
   "{N} cards awaiting {LANG}":"{N} kart czeka na {LANG}",
   "few␟{N} cards awaiting {LANG}":"{N} karty czekają na {LANG}",
   "many␟{N} cards awaiting {LANG}":"{N} kart czeka na {LANG}",
+  "Copied {N} time on this computer":"Skopiowano {N} raz na tym komputerze",
+  "Copied {N} times on this computer":"Skopiowano {N} razy na tym komputerze",
+  "few␟Copied {N} times on this computer":"Skopiowano {N} razy na tym komputerze",
+  "many␟Copied {N} times on this computer":"Skopiowano {N} razy na tym komputerze",
+  "Copied {N} time in this browser":"Skopiowano {N} raz w tej przeglądarce",
+  "Copied {N} times in this browser":"Skopiowano {N} razy w tej przeglądarce",
+  "few␟Copied {N} times in this browser":"Skopiowano {N} razy w tej przeglądarce",
+  "many␟Copied {N} times in this browser":"Skopiowano {N} razy w tej przeglądarce",
   "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}":"{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
   "{MACROS} in {CARDS}, {CATEGORIES}":"{MACROS}, {CARDS}, {CATEGORIES}",
   "{MACROS} in {CARDS} · {INTENTS} · {CATEGORIES}":"{MACROS} · {CARDS} · {INTENTS} · {CATEGORIES}",
   "Built {FILE} with {MACROS} inside":"Zbudowano {FILE}: {MACROS}",
   "Exported {FILE} with {MACROS} in {CARDS}":"Wyeksportowano {FILE}: {MACROS}, {CARDS}",
   "Card deleted":"Usunięto kartę",
+  "Undo":"Cofnij",
+  "Moved on without saving the changes":"Opuszczono wpis bez zapisania zmian",
   "Custom card deleted":"Usunięto własną kartę",
   "Category added":"Dodano kategorię",
   "Category deleted":"Usunięto kategorię",
@@ -659,6 +642,7 @@ UI_STRINGS.pl={
   "Press the new shortcut (Esc to cancel, Backspace for the default)":"Naciśnij nowy skrót (Esc anuluje, Backspace przywraca domyślny)",
   "Built-in quick facts restored":"Przywrócono wbudowane szybkie fakty",
   "Selecting the text on the card and pressing Ctrl+C copies this one; the browser kept the clipboard closed.":"Tę odpowiedź można skopiować, zaznaczając jej tekst na karcie i naciskając Ctrl+C; przeglądarka nie dała dostępu do schowka.",
+  "Selecting the text on the card and pressing Ctrl+C copies this one; the clipboard would not take it just now.":"Tę odpowiedź można skopiować, zaznaczając jej tekst na karcie i naciskając Ctrl+C; schowek tym razem jej nie przyjął.",
   "Some required fields are empty":"Uzupełnij wymagane pola",
   "Title is required":"Wpisz tytuł",
   "Macro text is required":"Wpisz tekst makra",
@@ -675,9 +659,9 @@ UI_STRINGS.pl={
   "The file is kept unchanged at {FILE}, and Etiuda has started afresh.":"Plik został odłożony bez zmian jako {FILE}, a Etiuda zaczęła od nowa.",
   "Could not save shortcuts":"Nie udało się zapisać skrótów",
   "Could not save the catalog, perhaps because the browser's storage is full.":"Nie udało się zapisać katalogu; możliwe, że pamięć przeglądarki jest pełna.",
+  "Could not save the catalog, because Etiuda cannot write {FILE}.":"Nie udało się zachować katalogu: Etiuda nie może zapisać pliku {FILE}.",
   "This browser is not storing anything, so a catalog cannot be kept here":"Ta przeglądarka niczego nie zapisuje, więc nie można tu zachować katalogu",
   "Could not find the embedded-catalog slot":"Nie znaleziono miejsca na wbudowany katalog",
-  "load a sample catalog":"wczytaj przykładowy katalog",
   "Copy report":"Kopiuj raport",
   "Link copied":"Skopiowano link",
   "Report copied":"Skopiowano raport",
@@ -687,11 +671,6 @@ UI_STRINGS.pl={
   "No intents.":"Brak intencji.",
   "No intents available.":"Brak dostępnych intencji.",
   "Uncategorised":"Bez kategorii",
-  "Name this catalog":"Nazwij ten katalog",
-  "Name this build":"Nazwij ten plik",
-  "Edition":"Wydanie",
-  "Editions read 2026-09-15, or 2026-09-15a for a second the same day.":"Wydanie ma postać 2026-09-15, a drugie tego samego dnia: 2026-09-15a.",
-  "Saves as":"Zapisze się jako",
   "Reset shortcuts":"Przywróć skróty",
   "What Etiuda is, and every keyboard shortcut":"Czym jest Etiuda i wszystkie skróty klawiszowe",
   "Interface language, appearance and keyboard shortcuts":"Język interfejsu, wygląd i skróty klawiszowe",
@@ -700,13 +679,13 @@ UI_STRINGS.pl={
   "AGENT":"AGENT",
   "PAX":"PAX",
   "INTENT":"INTENCJA",
+  "Intents arrive with a catalog.":"Intencje przynosi katalog.",
   "search intents and cards":"szukaj intencji i kart",
   "Search":"Szukaj",
   "One search: intents rank in the panel, cards filter below":"Jedno wyszukiwanie: intencje szeregują się w panelu, a karty poniżej są filtrowane",
   "search intents and cards · <kbd>Enter</kbd> selects the marked intent · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> for several":"szukaj intencji i kart · <kbd>Enter</kbd> wybiera zaznaczoną intencję · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> wybiera kilka",
   "Search cleared":"Wyczyszczono wyszukiwanie",
   "Typing in SEARCH ranks intents and filters cards together (both languages).":"Tekst wpisany w SZUKAJ szereguje intencje i jednocześnie filtruje karty, w obu językach.",
-  "Type the word nearest what the customer means, 'refund' or 'address', and the intents in the panel rank themselves while the cards below narrow to match, in both languages. <kbd>Enter</kbd> picks the marked intent: it fills <span class=\"fillmiss\">INTENT</span> and rings its cards <b class=\"t-go\">green</b>, and <kbd>Ctrl</kbd>+<kbd>Enter</kbd> picks one and keeps the box for the next. <kbd>Esc</kbd> clears it.":"Wystarczy wpisać słowo najbliższe temu, o co pyta klient, na przykład 'zwrot' albo 'adres': intencje w panelu ustawiają się według trafności, a karty poniżej zawężają się do pasujących, w obu językach. <kbd>Enter</kbd> wybiera zaznaczoną intencję, wstawia ją w miejsce <span class=\"fillmiss\">INTENT</span> i obwodzi jej karty na <b class=\"t-go\">zielono</b>, a <kbd>Ctrl</kbd>+<kbd>Enter</kbd> wybiera i zostawia pole na następną. <kbd>Esc</kbd> czyści pole.",
 
   "ROLE":"ROLA",
   "EN":"EN",
@@ -726,6 +705,9 @@ UI_STRINGS.pl={
   "Show English cards":"Pokaż karty po angielsku",
   "Show Polish cards":"Pokaż karty po polsku",
   "Show {LANG} cards":"Pokaż karty: {LANG}",
+  "English cards":"Karty po angielsku",
+  "Polish cards":"Karty po polsku",
+  "{LANG} cards":"Karty: {LANG}",
   "Showing {LANG} cards; click or press {KEY} for {NEXT}":"Widoczne karty: {LANG}; kliknij albo naciśnij {KEY}, aby przejść na {NEXT}",
   "Showing English cards; click or press {KEY} for Polish":"Widoczne karty po angielsku; kliknij albo naciśnij {KEY}, aby przejść na polski",
   "Showing Polish cards; click or press {KEY} for English":"Widoczne karty po polsku; kliknij albo naciśnij {KEY}, aby przejść na angielski",
@@ -744,6 +726,7 @@ UI_STRINGS.pl={
   "Notches for the ROLE wheel, comma-separated; blanks and repeats are dropped":"Pozycje pokrętła ROLE po przecinku; puste i powtórzone są pomijane",
   "Intent list":"Lista intencji",
   "Click to pick, again to clear, and hold Ctrl for several":"Kliknij, aby wybrać, i ponownie, aby odznaczyć; z Ctrl można wybrać kilka",
+  "Set {INTENT}":"Ustaw {INTENT}",
   "Clear":"Wyczyść",
   "Clear PAX":"Wyczyść PAX",
   "Clear agent":"Wyczyść nazwę agenta",
@@ -790,10 +773,7 @@ UI_STRINGS.pl={
   "Export":"Eksportuj",
   "Not now":"Nie teraz",
   "Welcome":"Witamy",
-  "New here?":"Pierwszy raz tutaj?",
   "Skip tour":"Pomiń przewodnik",
-  "Show tour":"Pokaż przewodnik",
-  "Press Esc to leave the tour.":"Naciśnij Esc, aby wyjść z przewodnika.",
   "Library…":"Biblioteka…",
   "Settings…":"Ustawienia…",
   "Show tour…":"Pokaż przewodnik…",
@@ -840,13 +820,82 @@ UI_STRINGS.pl={
   "Animations reduced":"Animacje ograniczone",
   "Animations on":"Animacje włączone",
   "Blur effects on":"Efekty rozmycia włączone",
-  "Blur effects off":"Efekty rozmycia wyłączone"
+  "Blur effects off":"Efekty rozmycia wyłączone",
+  "How should your replies be signed?":"Jak podpisywać odpowiedzi?",
+  "Customers see it at the foot of every reply. It can be changed at any time in Settings.":"Tak podpis zobaczą klienci pod każdą odpowiedzią. Zmienić go można w każdej chwili w Ustawieniach.",
+  "for instance, Kate":"na przykład Kasia",
+  "Kate":"Kasia",
+  "Sign with this":"Podpisz",
+  "Beside the customer's name there is now a wheel: it chooses who in the team this reply names.":"Obok imienia klienta jest teraz kółko: wybiera się nim osobę z zespołu, którą wymienia ta odpowiedź.",
+  "No catalog loaded":"Nie wczytano katalogu",
+  "This catalog has changed since it was loaded.":"Ten katalog zmienił się od czasu wczytania.",
+  "This file is an earlier edition than the one loaded now.":"Ten plik to wcześniejsze wydanie niż wczytane teraz.",
+  "The tour of Etiuda's controls, one at a time":"Przewodnik po Etiudzie, krok po kroku",
+  "The tour waits in the Menu, under Show tour…":"Przewodnik czeka w Menu, pod Pokaż przewodnik…",
+  "To begin, the name your replies are signed with. Customers see it at the foot of each one, and it can be changed at any time in Settings.":"Na początek podpis: imię, które klienci zobaczą pod każdą odpowiedzią. Można je zmienić w każdej chwili w Ustawieniach.",
+  "A catalog of replies":"Katalog odpowiedzi",
+  "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the team's catalog in {FOLDER}. The tour carries on as soon as it is in place.":"Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać katalog zespołu z folderu {FOLDER}. Przewodnik poprowadzi dalej, gdy tylko katalog będzie na miejscu.",
+  "Replies come in a catalog. Click <b>Load a catalog</b> under the logo and choose the catalog file. The tour carries on as soon as it is in place, and the catalog stays in this browser, ready whenever you come back.":"Gotowe odpowiedzi przynosi katalog. Proszę kliknąć <b>wczytaj katalog</b> pod logo i wybrać plik katalogu. Przewodnik poprowadzi dalej, gdy tylko katalog będzie na miejscu, a sam katalog zostanie w tej przeglądarce i poczeka na każdy powrót.",
+  "comes with Etiuda":"dołączony do Etiudy",
+  "Signed":"Podpisany",
+  "Unsigned":"Niepodpisany",
+  "This file is signed with the key {KEY}.":"Ten plik podpisano kluczem {KEY}.",
+  "This file has changed since it was signed.":"Ten plik zmienił się od czasu podpisania.",
+  "This file is signed with a key this computer does not know.":"Ten plik podpisano kluczem, którego nie zna ten komputer.",
+  "The catalog loaded now is signed, and this edition is not.":"Wczytany teraz katalog jest podpisany, a to wydanie nie.",
+  "The customer's name goes here as the chat gives it, surname and capitals included, and every reply greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>). The wheel beside it says who is on the chat, for internal comments.":"Tu wkleja się imię klienta prosto z czatu, z nazwiskiem i wielkimi literami, a każda odpowiedź zwraca się do niego po imieniu, po polsku w wołaczu (z ANNY KOWALSKIEJ robi się <b>Anno</b>). Kółko obok określa, kto jest po drugiej stronie czatu, na użytek komentarzy wewnętrznych.",
+  "The customer's name":"Imię klienta",
+  "The customer's name goes here as the chat gives it, surname and capitals included, and every reply greets them by first name, in Polish in the vocative (ANNA KOWALSKA becomes <b>Anno</b>).":"Tu wkleja się imię klienta prosto z czatu, z nazwiskiem i wielkimi literami, a każda odpowiedź zwraca się do niego po imieniu, po polsku w wołaczu (z ANNY KOWALSKIEJ robi się <b>Anno</b>).",
+  "A word near what the customer means, such as 'refund', is enough: the intents on the left rank themselves and the cards narrow to match, in both languages. <kbd>Enter</kbd> picks the marked intent, and <kbd>Esc</kbd> clears the box.":"Wystarczy słowo bliskie temu, o co pyta klient, na przykład 'zwrot': intencje po lewej ułożą się według trafności, a karty zawężą do pasujących, w obu językach. <kbd>Enter</kbd> wybiera zaznaczoną intencję, a <kbd>Esc</kbd> czyści pole.",
+  "An intent names what the customer has come about. A click on one brings its replies forward, ringed <b class=\"t-go\">green</b>, with its phrase filling <span class=\"fillmiss\">INTENT</span> wherever a reply uses it. <kbd>Ctrl</kbd>+click picks several, and the star keeps the ones used most at the top.":"Intencja mówi, z czym klient przychodzi. Kliknięcie którejś wysuwa jej odpowiedzi do przodu, obwiedzione na <b class=\"t-go\">zielono</b>, a jej fraza trafia wszędzie tam, gdzie w odpowiedzi stoi <span class=\"fillmiss\">INTENT</span>. <kbd>Ctrl</kbd>+kliknięcie wybiera kilka, a gwiazdka trzyma na górze te używane najczęściej.",
+  "A click on a reply copies the whole of it, greeting, name and signature filled in, ready to paste into the chat. A card marked <b>1/2</b> or <b>STEP 1/3</b> holds several, each copied on its own. <kbd>↑</kbd> <kbd>↓</kbd> and <kbd>Enter</kbd> do the same from the keyboard.":"Kliknięcie odpowiedzi kopiuje ją w całości, z powitaniem, imieniem i podpisem, gotową do wklejenia w czacie. Karta z oznaczeniem <b>1/2</b> albo <b>KROK 1/3</b> mieści kilka odpowiedzi, a każdą kopiuje się osobno. Z klawiatury to samo robią <kbd>↑</kbd> <kbd>↓</kbd> i <kbd>Enter</kbd>.",
+  "A click on a category shows only its cards, and <kbd>Ctrl</kbd>+click keeps several. A <b class=\"t-go\">green</b> ring marks one holding a card for the chosen intent, and a <b class=\"t-acc\">blue</b> one a supporting category, useful for any question.":"Kliknięcie kategorii zostawia tylko jej karty, a <kbd>Ctrl</kbd>+kliknięcie pozwala wybrać kilka. <b class=\"t-go\">Zielona</b> obwódka oznacza kategorię z kartą dla wybranej intencji, a <b class=\"t-acc\">niebieska</b> kategorię wspierającą, przydatną przy każdym pytaniu.",
+  "Each customer on the chat gets a tab of their own here, with their name, intent and language, so a reply never carries the wrong name. <b>+</b> or {NEW} opens another conversation, and {KEY} moves between them.":"Każdy klient na czacie ma tu osobną rozmowę, z własnym imieniem, intencją i językiem, więc żadna odpowiedź nie pójdzie z cudzym imieniem. Kolejną rozmowę otwiera <b>+</b> albo skrót {NEW}, a {KEY} przełącza między nimi.",
+  "Replies in this conversation follow the language chosen here, so each customer is answered in their own. {KEY} switches it from anywhere.":"Odpowiedzi w tej rozmowie idą w języku wybranym tutaj, więc każdy klient dostaje odpowiedź w swoim. {KEY} przełącza język z dowolnego miejsca.",
+  "The star lifts a card to the top of its category, and under <span class=\"t-pill\"><span data-icon=\"all\"></span>All</span> into <b class=\"t-fav\"><span data-icon=\"star\"></span>Favourites</b>.<br>The eye puts it away, greyed at the foot of its category, and brings it back from there.<br>The pencil opens it for editing, and <b>Reset</b> in the editor brings back the catalog's own words.<br>Click the pencil on this card.":"Gwiazdka przenosi kartę na początek jej kategorii, a w widoku <span class=\"t-pill\"><span data-icon=\"all\"></span>Wszystkie</span> do <b class=\"t-fav\"><span data-icon=\"star\"></span>Ulubionych</b>.<br>Oko odkłada ją na bok, szarą, na dół kategorii, i stamtąd też ją przywraca.<br>Ołówek otwiera ją do poprawek, a <b>Przywróć</b> w edytorze wraca do treści z katalogu.<br>Proszę kliknąć ołówek na tej karcie.",
+  "<span class=\"t-sec\">Content</span> holds the text in both languages and the internal note; the folds below hold the keywords, the category, the linked intents and the finer settings. <b>Cancel</b> leaves everything as it was.":"<span class=\"t-sec\">Treść</span> to tekst w obu językach i notatka wewnętrzna; w zwiniętych sekcjach poniżej są słowa kluczowe, kategoria, powiązane intencje i ustawienia zaawansowane. <b>Anuluj</b> zostawia wszystko bez zmian.",
+  "Click <b>+</b> to write a card of your own, in the category open now or in any other chosen in the editor.":"Proszę kliknąć <b>+</b>, żeby napisać własną kartę: trafi do otwartej teraz kategorii albo do innej, wybranej w edytorze.",
+  "A new card":"Nowa karta",
+  "A blank card: the reply in both languages, a title and a category. <b>Save</b> keeps it, and <b>Cancel</b> leaves nothing behind.":"Pusta karta: odpowiedź w obu językach, tytuł i kategoria. <b>Zapisz</b> zachowuje kartę, a <b>Anuluj</b> nie zostawia po niej śladu.",
+  "A click on a link copies it whole, and the text is yours to edit; it stays on this computer.":"Kliknięcie odnośnika kopiuje cały adres, a treść można zmieniać po swojemu; zostaje na tym komputerze.",
+  "A click on a link copies it whole, and the text is yours to edit; it stays in this browser.":"Kliknięcie odnośnika kopiuje cały adres, a treść można zmieniać po swojemu; zostaje w tej przeglądarce.",
+  "Click <b>Quick facts</b> to open the links and figures worth having to hand.":"Proszę otworzyć <b>Szybkie fakty</b>: odnośniki i liczby, które warto mieć pod ręką w rozmowie.",
+  "Close them when ready, with the same button or a click outside, and the tour carries on.":"Kiedy wszystko jasne, proszę je zamknąć tym samym przyciskiem albo kliknięciem obok, a przewodnik poprowadzi dalej.",
+  "This switches between light and dark. Etiuda follows the system until the first click, and keeps the choice from then on.":"Ten przycisk zmienia motyw z jasnego na ciemny i z powrotem. Do pierwszego kliknięcia Etiuda idzie za ustawieniem systemu, a potem pamięta wybór.",
+  "Everything that is not a card: the Library, Settings, the panels' switches, and this tour again under <b>Show tour…</b>.":"Wszystko, co nie jest kartą: Biblioteka, Ustawienia, przełączniki paneli i ten przewodnik, pod <b>Pokaż przewodnik…</b>.",
+  "Click <b>Menu</b>: the rest of Etiuda opens from there.":"Proszę kliknąć <b>Menu</b>: stamtąd otwiera się cała reszta Etiudy.",
+  "Click <b>Library</b> in the Menu: the whole catalog is there.":"Cały katalog jest w <b>Bibliotece</b>; proszę ją otworzyć z Menu.",
+  "<b><span data-icon=\"settings\"></span> → Library</b> holds every card, intent and category, to add, edit, hide or move. Catalogs are loaded here too, and your own improvements go out from here as a file for whoever keeps the wording.":"<b><span data-icon=\"settings\"></span> → Biblioteka</b> mieści każdą kartę, intencję i kategorię, do dodania, edycji, ukrycia albo przeniesienia. Tu wczytuje się też katalogi i stąd wysyła się własne poprawki, jako plik dla osoby, która dba o treść.",
+  "<b><span data-icon=\"settings\"></span> → Settings</b>: your name, the language of the buttons, the look and the shortcuts. Nothing here touches a card.":"<b><span data-icon=\"settings\"></span> → Ustawienia</b>: nazwa agenta, język przycisków, wygląd i skróty. Nic tutaj nie zmienia kart.",
+  "One more window: open the <span data-icon=\"settings\"></span> Menu again and click <b>Settings</b>.":"Jeszcze jedno okno: proszę znów otworzyć <span data-icon=\"settings\"></span> Menu i wybrać <b>Ustawienia</b>.",
+  "Once the window is open, the tour goes inside with it.":"Po otwarciu okna przewodnik zajrzy do środka.",
+  "The tour carries on once this window is closed.":"Przewodnik ruszy dalej, gdy to okno się zamknie.",
+  "That is the whole tour. <b>Show tour…</b> in the <span data-icon=\"settings\"></span> Menu brings it back, and <b>About Etiuda</b> lists every shortcut.":"To cały przewodnik. <b>Pokaż przewodnik…</b> w <span data-icon=\"settings\"></span> Menu otwiera go ponownie, a w <b>O Etiudzie</b> są wszystkie skróty.",
+  "load a catalog":"wczytaj katalog",
+  "Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with the button above.":"Etiuda proponuje najnowszy katalog z {FOLDER}; katalog z innego miejsca można wczytać przyciskiem powyżej.",
+  "The catalog you load stays in this browser, ready whenever you come back.":"Wczytany katalog zostaje w tej przeglądarce i czeka na powrót.",
+  "Load catalog…":"Wczytaj katalog…",
+  "The catalog could not be loaded:":"Nie udało się wczytać katalogu:",
+  "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.":"Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze."
 };
 // Is this a language this build carries? The table itself stays private to this file.
 function uiLangKnown(l){ return !!(l && UI_STRINGS[l]); }
+/* THE SYSTEM'S LANGUAGE WHERE NOTHING IS STORED: the browser's own list, which a shell takes from
+   the Windows display language, first code this build has words for. A stored choice always wins,
+   English included, so choosing English on a Polish Windows is kept. */
+function systemUiLang(){
+  let list=[];
+  try{ list=(navigator.languages&&navigator.languages.length)?navigator.languages:[navigator.language]; }catch(e){}
+  for(const tag of list){
+    const code=String(tag||"").toLowerCase().split("-")[0];
+    if(code==="en" || uiLangKnown(code)) return code;
+  }
+  return "en";
+}
 function uiLang(){
   const l=lsGet("eUiLang");
-  return (l && UI_STRINGS[l]) ? l : "en";       // an unknown or retired code reads English
+  if(l==="en" || uiLangKnown(l)) return l;
+  return systemUiLang();                        // nothing stored, or a retired code
 }
 /** English is the source text, so it IS the fallback - a missing key reads English, never
  *  blank and never the key name. That rule is what lets a language ship half-translated: the
@@ -859,21 +908,67 @@ function t(en){
   const tab=UI_STRINGS[uiLang()];
   return (tab && tab[en]!=null) ? tab[en] : en;
 }
-// Every question the app asks is asked in the interface language, so it asks through t().
-function ask(m){ return confirm(t(m)); }
+/* AN ACT THAT CAN BE UNDONE HAPPENS AT ONCE, and this bubble at the foot of the window offers the
+   way back: over any dialog, until another act replaces it or UNDO_MS passes. */
+const UNDO_MS=10000;
+let undoTimer=0;
+function offerUndo(said, undo){
+  const was=$("#eUndo"); if(was) was.remove();
+  clearTimeout(undoTimer);
+  const el=document.createElement("div");
+  el.className="bub bub-ask e-undo";
+  el.id="eUndo";
+  el.setAttribute("role","status");
+  el.setAttribute("data-side","none");
+  el.innerHTML='<p>'+esc(t(said))+'</p>'
+    +'<div class="tour-actions"><button type="button" class="btn primary" id="eUndoBtn">'+esc(t("Undo"))+'</button></div>';
+  cutLeaves();
+  document.body.appendChild(el);
+  const close=()=>{ clearTimeout(undoTimer); dismissNode(el); };
+  el.querySelector("#eUndoBtn").onclick=()=>{ close(); undo(); };
+  el.addEventListener("keydown",e=>{
+    if(e.key!=="Escape") return;
+    e.preventDefault(); e.stopPropagation(); close();
+  });
+  undoTimer=setTimeout(close,UNDO_MS);
+}
 let tt;
 const TOAST_MS=1700;
 // The one toast that asks for an action (mark.js) holds this long; every other, TOAST_MS.
 const TOAST_HAND_MS=6000;
+// A refusal holds longer: it is read to the end, and it names what to do next.
+const TOAST_REFUSAL_MS=5000;
 var toastSerial=0;
-function toast(m, ms){
+let toastSwap=0;
+/* ABOVE THE FOOTER where the footer is on screen, which on an empty desk it is: never over its words. */
+function placeToast(el){
+  const f=document.querySelector("footer"), r=f && f.getBoundingClientRect();
+  const lift=(r && r.height && r.top<innerHeight) ? Math.round(innerHeight-r.top) : 0;
+  el.style.bottom=lift ? (lift+8)+"px" : "";
+}
+function toast(m, ms, refusal){
   toastSerial++;
   /* Every message the app speaks passes through here, so this is the one place a toast needs
      translating - not fifty call sites. */
   m=t(m);
-  const el=$("#toast"); el.textContent=m; markCut(el); el.classList.add("show");
-  clearTimeout(tt); tt=setTimeout(()=>el.classList.remove("show"),ms||TOAST_MS);
+  const el=$("#toast");
+  const put=()=>{
+    el.classList.remove("swap");
+    el.classList.toggle("refusal",!!refusal);
+    if(refusal) el.innerHTML=ICON_LINT_WARNING+'<span>'+esc(m)+'</span>';
+    else el.textContent=m;
+    placeToast(el); markCut(el); el.classList.add("show");
+  };
+  /* A TOAST ARRIVING OVER ONE THAT SHOWS dips out on the dismiss tier and comes back with its new
+     words, rather than rewriting them in place and snapping the pill to its new width. */
+  const dip=el.classList.contains("show") && !mgReduceMotion();
+  clearTimeout(tt); clearTimeout(toastSwap);
+  if(dip){ el.classList.add("swap"); toastSwap=setTimeout(put,M_MS.dismiss); }
+  else put();
+  tt=setTimeout(()=>el.classList.remove("show"),(ms||TOAST_MS)+(dip?M_MS.dismiss:0));
 }
+/* A REFUSAL IS NOT A CONFIRMATION: its own ground and the warning glyph, and a longer life. */
+function toastRefusal(m){ toast(m, TOAST_REFUSAL_MS, true); }
 /* TRANSLATE AT THE SINKS, not at 200 call sites: an attribute in markup, a chrome
    element's text, or a toast. SCOPED TO CHROME - the card list, the panel's rows and the
    facts panel hold CATALOG content, the customer's, never touched by a UI language; that
@@ -979,7 +1074,7 @@ function translateChrome(){
   /* #intentRail carries the engine's own labels AND the catalog's intent clauses; the
      clauses are marked data-i18n-skip where they are written, so the sweep is safe here. */
   ["header","#settingsMenu","#modalCard","footer","#tourRoot",
-   "#intentRail","#tourInvite","#sampleMark"].forEach(sel=>{
+   "#intentRail","#sampleMark"].forEach(sel=>{
     const el=document.querySelector(sel);
     if(el) translateTree(el);
   });
@@ -989,8 +1084,9 @@ export {
   UI_LANGS,
   uiLangKnown,
   uiLang,
+  systemUiLang,
   t,
-  ask,
+  offerUndo,
   tc,
   counted,
   catalogCountsLine,
@@ -999,6 +1095,7 @@ export {
   translateTree,
   translateChrome,
   toast,
+  toastRefusal,
   TOAST_MS,
   TOAST_HAND_MS,
   toastSerial

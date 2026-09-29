@@ -1,9 +1,10 @@
 import { FACTS } from "./stock.js";
 import { lsGet, lsSet } from "./storage.js";
-import { ask, t, toast } from "./ui-lang.js";
+import { offerUndo, t, toast } from "./ui-lang.js";
 import { pack, savePack } from "./pack.js";
 import { esc } from "./esc.js";
 import { $ } from "./dom.js";
+import { cutLeaves, dismissCopy } from "./motion.js";
 import { copy } from "./mark.js";
 import { hooks } from "./hooks.js";
 
@@ -117,14 +118,18 @@ function wireFactsEditor(){
   if(cancelBtn) cancelBtn.onclick=e=>{ e.stopPropagation(); exitFactsEdit(false,true); };
   if(resetBtn) resetBtn.onclick=e=>{
     e.stopPropagation();
-    if(!ask("Restore built-in quick facts? Your edited text will be discarded.")) return;
+    const was=pack.facts;
     pack.facts=null;
     savePack();
-    factsDraft=null;                 // the confirm said discarded; mean it
+    factsDraft=null;
     if(ta) ta.value=FACTS;
     renderFacts();
     setFactsEditMode(false);
-    toast("Built-in quick facts restored");
+    offerUndo("Built-in quick facts restored", ()=>{
+      pack.facts=was; savePack();
+      if(ta) ta.value=(was!=null)?was:FACTS;
+      renderFacts();
+    });
   };
   if(ta){
     ta.addEventListener("keydown",e=>{
@@ -171,11 +176,11 @@ function restoreFactsSize(p){
   if(w) p.style.width=w;
   if(h) p.style.height=h;
 }
-/** The size the stylesheet gives the panel. The caller clears the keys; a drag leaves an
- *  inline width and height on the element, which a delete alone would not undo. */
-function applyDefaultFactsSize(){
+/** The size stored, else the stylesheet's: a drag leaves an inline width and height on the
+ *  element, which a change to the keys alone would not undo. */
+function applyStoredFactsSize(){
   const p=$("#factsPanel");
-  if(p){ p.style.removeProperty("width"); p.style.removeProperty("height"); }
+  if(p){ p.style.removeProperty("width"); p.style.removeProperty("height"); restoreFactsSize(p); }
 }
 let factsSizeTimer=0;
 function rememberFactsSize(p){
@@ -193,6 +198,7 @@ function factsPanelOpen(){
 }
 function closeFactsPanel(){
   const p=$("#factsPanel"), b=$("#factsBtn");
+  dismissCopy(p);
   exitFactsEdit(false);
   if(p) p.hidden=true;
   if(b){ b.classList.remove("on"); b.setAttribute("aria-expanded","false"); }
@@ -200,7 +206,7 @@ function closeFactsPanel(){
 function openFactsPanel(){
   const p=$("#factsPanel"), b=$("#factsBtn");
   if(!p||!b) return;
-  hooks.closeSettingsMenu();
+  hooks.closeSettingsMenu(); cutLeaves();
   exitFactsEdit(false);
   renderFacts();
   restoreFactsSize(p);
@@ -234,7 +240,7 @@ function wireFactsPanel(){
 
 export {
   syncFactsGeometry,
-  applyDefaultFactsSize,
+  applyStoredFactsSize,
   factsPanelOpen,
   cancelFactsEdit,
   closeFactsPanel,

@@ -80,19 +80,23 @@ function cardBodyHtml(m,i,ctx){
     }
     // In-card chips only when the side rail is off - otherwise the left panel is the list.
     const sws=(lang==="pl"?(m.swpl||m.sw):(m.sw||m.swpl));
-    if(sws && !railActive()){
-      // How-to on the tooltip: this strip sits inside a card the agent is reading at speed
-      cardH+='<div class="swap" title="Click to pick, again to clear, and hold Ctrl for several"><b>Set {INTENT}</b> '+
-        intentOrder.filter(si=>!isIntentHiddenIdx(si)).map(si=>{
-          const s=sws[si]; if(s==null) return "";
-          return '<code'+(intentIdxs.indexOf(si)>-1?' class="on"':'')+' data-si="'+si+'">'+
-            esc(s)+'</code>';
-        }).join("")+'</div>';
-    }
+    if(sws && !railActive()) cardH+=swapStripHtml(sws);
     cardH+='</div>';
   return {cardH:cardH, hitBadge:hitBadge, catBadge:catBadge};
 }
+/* The card list is outside the language sweep, so every word here goes through t() as it is drawn. */
+function swapStripHtml(sws){
+  // How-to on the tooltip: this strip sits inside a card the agent is reading at speed
+  return '<div class="swap" title="'+esc(t("Click to pick, again to clear, and hold Ctrl for several"))+'"><b>'
+    +esc(t("Set {INTENT}"))+'</b> '+
+    intentOrder.filter(si=>!isIntentHiddenIdx(si)).map(si=>{
+      const s=sws[si]; if(s==null) return "";
+      return '<code'+(intentIdxs.indexOf(si)>-1?' class="on"':'')+' data-si="'+si+'">'+
+        esc(s)+'</code>';
+    }).join("")+'</div>';
+}
 
 export {
-  cardBodyHtml
+  cardBodyHtml,
+  swapStripHtml
 };

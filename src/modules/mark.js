@@ -1,8 +1,10 @@
 import { intentEl, list } from "./dom.js";
-import { toast, TOAST_HAND_MS } from "./ui-lang.js";
+import { t, toast, TOAST_HAND_MS } from "./ui-lang.js";
+import { eHost } from "./host.js";
 import { cssEsc } from "./css-esc.js";
 import { scheduleTabSave } from "./tabs.js";
 import { scrollPageTop } from "./page-scroll.js";
+import { mgReduceMotion } from "./motion.js";
 import { railOrder, intentIdxs, setRailMarkUsed, setSemiKind, putEntrySel, entrySel, semiKind, railMarkUsed, railSel, railMarkIdx, railSettled, setRailSel, setRailMarkIdx } from "./app-state.js";
 import { hooks } from "./hooks.js";
 // THE MARK, which is one thing over two surfaces: the intent the panel offers Enter, or the
@@ -29,8 +31,13 @@ function railQuery(){
   return (typeof intentEl!=="undefined" && intentEl) ? String(intentEl.value||"").trim() : "";
 }
 
+// How many copies this page has made, which the tour's copying step reads.
+let copyCount=0;
+function copiesMade(){ return copyCount; }
+function forgetCopies(){ copyCount=0; }
 function copy(text,msg){
   // Copying consumes the semi-selection - every copy, click or keyboard, funnels through here.
+  copyCount++;
   setRailMarkUsed(true); setSemiKind(null);
   hooks.railDecorate(false);
   const done=()=>toast(msg);
@@ -47,7 +54,8 @@ function fallback(text,cb){
   try{ ok=document.execCommand("copy")===true; }catch(e){}
   ta.remove();
   if(ok) cb();
-  else toast("Selecting the text on the card and pressing Ctrl+C copies this one; the browser kept the clipboard closed.",TOAST_HAND_MS);
+  else toast(eHost() ? t("Selecting the text on the card and pressing Ctrl+C copies this one; the clipboard would not take it just now.")
+    : t("Selecting the text on the card and pressing Ctrl+C copies this one; the browser kept the clipboard closed."),TOAST_HAND_MS);
 }
 function setEntrySel(id, vi, opts){
   opts=opts||{};
@@ -56,7 +64,7 @@ function setEntrySel(id, vi, opts){
   hooks.markEntrySel();
   if(opts.scroll && list){
     const el=list.querySelector('.card[data-id="'+cssEsc(entrySel.id)+'"] .txt[data-v="'+entrySel.vi+'"]');
-    if(el) el.scrollIntoView({block:opts.block||"nearest", behavior:opts.smooth===false?"auto":"smooth"});
+    if(el) el.scrollIntoView({block:opts.block||"nearest", behavior:(opts.smooth===false||mgReduceMotion())?"auto":"smooth"});
   }
   scheduleTabSave();
 }
@@ -141,5 +149,7 @@ export {
   markSurface,
   markEnd,
   copy,
+  copiesMade,
+  forgetCopies,
   fallback,
 };

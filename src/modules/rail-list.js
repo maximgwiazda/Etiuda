@@ -3,8 +3,8 @@ import { intentCount } from "./content-model.js";
 import { scheduleCutScan } from "./cut-text.js";
 import { ICON_EYE_OPEN, ICON_EYE_SHUT, ICON_EDIT, ICON_STAR_ON, ICON_STAR_OFF } from "./icons.js";
 import { intentPickedLine, intentRows, fill } from "./intent-text.js";
-import { mgReduceMotion, E_EASE } from "./motion.js";
-import { scheduleTabSave } from "./tabs.js";
+import { mgReduceMotion, E_EASE, M_MS } from "./motion.js";
+import { scheduleTabSave, activeHeard } from "./tabs.js";
 import { t, toast } from "./ui-lang.js";
 import { foldDiacritics, splitWords, wordMatchesTerm } from "./words.js";
 import { isIntentFavourite, ePackEpoch, pack, saveStats } from "./pack.js";
@@ -49,7 +49,7 @@ function animateRailReorder(mutate){
      without a computed start value Firefox shows the end state. Same-task attach also
      avoids the background-tab rAF pause. */
   void box.offsetHeight;
-  moved.forEach(p=>{ p.style.transition="transform .18s "+E_EASE; p.style.transform=""; });
+  moved.forEach(p=>{ p.style.transition="transform var(--m-move) "+E_EASE; p.style.transform=""; });
   setTimeout(()=>moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; p.style.willChange=""; }),200);
 }
 function moveIntent(from,to){
@@ -189,7 +189,10 @@ function railSettle(){
     setCatsDropArmed(false);
     if(String(intentEl.value||"").trim()){
       setCats([]);
-      if(pills) pills.querySelectorAll(".pill").forEach(b=>b.classList.toggle("on", !b.dataset.k));
+      if(pills) pills.querySelectorAll(".pill").forEach(b=>{
+        b.classList.toggle("on", !b.dataset.k);
+        if(b.dataset.k!=null) b.setAttribute("aria-pressed", b.dataset.k?"false":"true");
+      });
       scheduleTabSave();
     }
   }
@@ -259,6 +262,7 @@ function railReuseMap(box,rows){
    and the bracket classes are only ever added by the pass below. */
 function railPaintRow(b,r,relRows){
   b.classList.toggle("on",!!r.picked);
+  b.setAttribute("aria-pressed",r.picked?"true":"false");
   b.classList.toggle("dragging",!!(railDrag&&railDrag.moved&&railDrag.key===String(r.idx)));
   b.classList.remove("rail-rel","rr-open","rr-cont");
   b.style.removeProperty("--rail-rel-img");
@@ -312,24 +316,28 @@ function railBracketPass(relRows){
   }
   /* One gradient per RUN: per-row pseudos restarted the blend and the arm striped.
      Measured after layout, handed down as --rr-h/--rr-y; a continuation's pseudo starts
-     2px above its row (the gap bridge). One forced layout for the pass, then style-only
-     writes. */
+     2px above its row (the gap bridge). Every row is READ before any is written: a read
+     after a write recalculates the rail's style, once per row. */
+  const runs=[];
   for(let s=0;s<relRows.length;s++){
     if(!relRows[s]) continue;
     let e=s;
     while(relRows[e+1] && relRows[e+1].sig===relRows[s].sig) e++;
     if(e>s){
-      const top0=relRows[s].el.offsetTop;
-      const lastEl=relRows[e].el;
-      const runH=lastEl.offsetTop+lastEl.offsetHeight-top0;
-      for(let j=s;j<=e;j++){
-        const el=relRows[j].el, bridge=(j>s)?2:0;
-        el.style.setProperty("--rr-h",runH+"px");
-        el.style.setProperty("--rr-y",(-(el.offsetTop-bridge-top0))+"px");
-      }
+      const tops=[];
+      for(let j=s;j<=e;j++) tops.push(relRows[j].el.offsetTop);
+      runs.push({s:s, tops:tops, h:relRows[e].el.offsetHeight});
     }
     s=e;
   }
+  runs.forEach(run=>{
+    const top0=run.tops[0], runH=run.tops[run.tops.length-1]+run.h-top0;
+    run.tops.forEach((top,i)=>{
+      const el=relRows[run.s+i].el, bridge=i?2:0;
+      el.style.setProperty("--rr-h",runH+"px");
+      el.style.setProperty("--rr-y",(-(top-bridge-top0))+"px");
+    });
+  });
 }
 /* THE SIGNATURE PROBLEM: to know whether a card's markup changed we must not build it, since
    building it is the cost being avoided. So every input is read instead - and the awkward one
@@ -412,6 +420,19 @@ function drawIntentRailCore(){
   // user's place and makes the reorder animation measure against the wrong geometry.
   const keepScroll=box.scrollTop;
   const rows=displayIntentRows();
+  /* THE EMPTY RAIL SAYS ONE LINE, as the card area beside it does: a bare panel reads as not
+     loaded. Ahead of the reuse path, which answers an empty map for nothing to draw. */
+  if(!intentCount()){
+    // The English recorded beside it, so the language sweep translates from that, not from Polish.
+    if(!box.querySelector(".rail-empty"))
+      box.innerHTML='<p class="rail-empty" data-i18n-text="Intents arrive with a catalog.">'
+        +esc(t("Intents arrive with a catalog."))+'</p>';
+    // No stack, so no lane or shelf: what a catalog put down in place measured goes with it.
+    box.style.removeProperty("--rail-sb"); box.style.removeProperty("--rail-shelf");
+    if(!box.getAttribute("style")) box.removeAttribute("style");
+    syncIntentClearBtns();
+    return;
+  }
   const relRows=[];   // one entry per row, {el,sig} for echoed rows, null gaps - bracket pass below
   /* THE PICK PATH. Rebuilding all 72 rows made Firefox repaint every masked bracket, which
      is the stutter the eye catches on a pick. Same rows, moved and repainted instead. */
@@ -442,12 +463,14 @@ function drawIntentRailCore(){
     const favTip=t(r.fav?"Remove from Favourites":"Add to Favourites");
     /* One button slot, three jobs: hidden rows offer only "show again" (a hidden intent
        cannot be a favourite), visible rows show the star and swap it for hide while Ctrl
-       is held (CSS, .ctrl-held) - how you hide an intent without opening Manage. */
+       is held (CSS, .ctrl-held) - how you hide an intent without opening Manage.
+       aria-hidden: inside the row button they cannot be controls to a screen reader, and their
+       labels would be read into the row's name. Library holds the same acts as real buttons. */
     const btn = r.hidden
-      ? '<span class="rail-fav rail-unhide" data-show-intent="'+esc(r.id)+'" title="'+esc(t("Show this intent again"))+'" aria-label="'+esc(t("Show this intent again"))+'">'+ICON_EYE_SHUT+'</span>'
-      : '<span class="rail-fav'+(r.fav?" on":"")+'" data-fav-intent="'+esc(r.id)+'" title="'+esc(favTip)+' · '+esc(t("hold Ctrl to edit, Shift to hide"))+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(r.fav?"true":"false")+'">'+(r.fav?ICON_STAR_ON:ICON_STAR_OFF)+'</span>'
-        +'<span class="rail-fav rail-edit" data-edit-intent="'+esc(r.id)+'" title="'+esc(t("Edit this intent"))+'" aria-label="'+esc(t("Edit this intent"))+'">'+ICON_EDIT+'</span>'
-        +'<span class="rail-fav rail-hide" data-hide-intent="'+esc(r.id)+'" title="'+esc(t("Hide this intent: it greys out and drops to the bottom"))+'" aria-label="'+esc(t("Hide this intent"))+'">'+ICON_EYE_OPEN+'</span>';
+      ? '<span class="rail-fav rail-unhide" aria-hidden="true" data-show-intent="'+esc(r.id)+'" title="'+esc(t("Show this intent again"))+'" aria-label="'+esc(t("Show this intent again"))+'">'+ICON_EYE_SHUT+'</span>'
+      : '<span class="rail-fav'+(r.fav?" on":"")+'" aria-hidden="true" data-fav-intent="'+esc(r.id)+'" title="'+esc(favTip)+' · '+esc(t("hold Ctrl to edit, Shift to hide"))+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(r.fav?"true":"false")+'">'+(r.fav?ICON_STAR_ON:ICON_STAR_OFF)+'</span>'
+        +'<span class="rail-fav rail-edit" aria-hidden="true" data-edit-intent="'+esc(r.id)+'" title="'+esc(t("Edit this intent"))+'" aria-label="'+esc(t("Edit this intent"))+'">'+ICON_EDIT+'</span>'
+        +'<span class="rail-fav rail-hide" aria-hidden="true" data-hide-intent="'+esc(r.id)+'" title="'+esc(t("Hide this intent: it greys out and drops to the bottom"))+'" aria-label="'+esc(t("Hide this intent"))+'">'+ICON_EYE_OPEN+'</span>';
     /* data-i18n-skip: the clause is the catalog's words. The badge inside is the engine's, so it
        is translated here rather than left for a sweep that will not enter. */
     b.innerHTML=catMarkHtml(r.cat)
@@ -552,7 +575,7 @@ function flipRail(before,keep){
      window starts at the list's own offset, and a pinned row is on screen by construction. */
   const top=box.offsetTop+st;
   const seen=(y,hgt,pinned)=> pinned || ((y+hgt)>top && y<top+h);
-  const moved=[], dys=[], entered=[];
+  const moved=[], dys=[], entered=[], left=[];
   box.querySelectorAll(".rail-item[data-si]").forEach(el=>{
     const b=before[el.dataset.si];
     if(b==null) return;
@@ -568,10 +591,14 @@ function flipRail(before,keep){
        one, and it bounds the journey to the panel's height; an exempt row sliding in from
        off-screen read as the interface lurching. Off-screen arrivals ENTER instead - a
        short fade at their final position: banning their travel while giving them no entry
-       made equal-sized relevance swaps produce NO motion at all, which read as failure. */
-    const exempt=seenBefore && keep && keep.has(String(el.dataset.si));
+       made equal-sized relevance swaps produce NO motion at all, which read as failure.
+       A row on screen at both ends is bounded by the panel the same way, so it travels too. */
+    const exempt=seenBefore && (seenAfter || (keep && keep.has(String(el.dataset.si))));
     if(Math.abs(dy)>limit && !exempt){
       if(seenAfter && !seenBefore) entered.push(el);
+      /* A row leaving the window travels only to its edge, which bounds the journey by the panel
+         as an exempt row's is; the rest of the way is out of sight. */
+      else if(seenBefore) left.push([el, dy, a>=top+h ? top+h-a : top-hgt-a]);
       return;
     }
     moved.push(el); dys.push(dy);
@@ -585,18 +612,24 @@ function flipRail(before,keep){
     el.style.transition="none";
     el.style.opacity="0";
   });
-  if(!moved.length && !entered.length) return;
-  const far=Math.max.apply(null,dys.map(Math.abs));
-  const dur=far>limit ? Math.min(.30, .18+far/6000) : .18;
+  left.forEach(([el,dy])=>{
+    el.style.transition="none";
+    el.style.willChange="transform";
+    el.style.transform="translateY("+dy+"px)";
+  });
+  if(!moved.length && !entered.length && !left.length) return;
+  const far=Math.max.apply(null,dys.map(Math.abs).concat(left.map(([,dy,e])=>Math.abs(dy-e))));
+  const dur=far>limit ? Math.min(.30, M_MS.move/1000+far/6000) : M_MS.move/1000;
   /* Commit the invert before attaching the transition - see the note at flipPills():
      without a computed start value Firefox shows the end state. Same-task attach also
      avoids the background-tab rAF pause. */
   void box.offsetHeight;
   moved.forEach(el=>{ el.style.transition="transform "+dur+"s "+E_EASE; el.style.transform=""; });
   entered.forEach(el=>{ el.style.transition="opacity "+dur+"s "+E_EASE; el.style.opacity=""; });
+  left.forEach(([el,,e])=>{ el.style.transition="transform "+dur+"s "+E_EASE; el.style.transform="translateY("+e+"px)"; });
   // clear the inline styles once done so nothing stays on a composited layer
   setTimeout(()=>{
-    moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; });
+    moved.concat(left.map(x=>x[0])).forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; });
     entered.forEach(el=>{ el.style.transition=""; el.style.opacity=""; });
   },dur*1000+20);
   return dur*1000;   // the caller waits this out before touching the main thread again
@@ -674,6 +707,7 @@ function wireRailPointer(){
       if(e.ctrlKey||e.metaKey || intentIdxs.indexOf(si)>-1) hooks.pickIntent(si,true);
       else hooks.pickIntent(si,false);
       toast(intentIdxs.length ? intentPickedLine() : t("{INTENT} cleared"));
+      activeHeard("intents");
     });
     // double-click the title to restore original intent order (favs still pin on top)
     const railTitle=intentRailEl.querySelector(".rail-head b");

@@ -56,6 +56,7 @@ import * as cardScore from "./modules/card-score.js";
 import * as searchBox from "./modules/search-box.js";
 import * as keydown from "./modules/keydown.js";
 import * as catalogOffer from "./modules/catalog-offer.js";
+import * as catalogTrustMod from "./modules/catalog-trust.js";
 import * as pops from "./modules/pops.js";
 import * as recency from "./modules/recency.js";
 import * as onOpen from "./modules/on-open.js";
@@ -104,7 +105,8 @@ import * as runShortcut from "./modules/run-shortcut.js";
 import * as appState from "./modules/app-state.js";
 import * as host from "./modules/host.js";
 import * as hookSlots from "./modules/hooks.js";
-Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, cardCarry, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots);
+import * as restart from "./modules/restart.js";
+Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, cardCarry, langTabs, cardEditor, macrosJson, tabs, motion, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, catalogTrustMod, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots, restart);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place
@@ -201,6 +203,7 @@ function boot(){
     shedHolding: shed.shedHolding,
     shedWordmarkW: shed.shedWordmarkW,
     cardFillKey: railList.cardFillKey,
+    keepPoolAcross: pool.keepPoolAcross,
     capturePills: pillsBar.capturePills,
     drawPillsCore: pillsBar.drawPillsCore,
     captureRail: railList.captureRail,
@@ -225,7 +228,6 @@ function boot(){
     openSettings: settings.openSettings,
     endTour: tour.endTour,
     startTour: tour.startTour,
-    maybeShowTourInvite: tour.maybeShowTourInvite,
     tourActive: tour.tourActive,
     closeSettingsMenu: headerMenus.closeSettingsMenu,
     syncSettingsMenu: headerMenus.syncSettingsMenu,
@@ -233,6 +235,7 @@ function boot(){
     rebuildCards: rebuild.rebuildCards,
     clearIntents: intentPick.clearIntents,
     pickIntent: intentPick.pickIntent,
+    intentPickedLine: intentText.intentPickedLine,
     onRailMQChange: intentPick.onRailMQChange,
     clearSearchQuery: searchBox.clearSearchQuery,
     updateIntentPlaceholder: searchBox.updateIntentPlaceholder,
@@ -244,15 +247,16 @@ function boot(){
     mgCardsIn: manage.mgCardsIn,
     syncSampleMark: catalogFile.syncSampleMark,
     syncSaveNotice: personalPack.syncSaveNotice,
-    sampleReady: catalogFile.sampleReady,
-    loadSampleCatalog: catalogFile.loadSampleCatalog,
     importCatalogHere: catalogFile.importCatalogHere,
+    offerPickedCatalog: catalogOffer.eOfferPickedCatalog,
+    restartDesk: restart.restartDesk,
     runShortcut: runShortcut.runShortcut,
   });
   // A 1.16.7 desk's keys, copied under this version's names before the first line reads one
   storage.eCarryOldKeys();
-  // The language this window last showed, which seeds the first tab
-  appState.putLang(storage.lsGet("eLang")==="pl" ? "pl" : "en");
+  /* The language this window last showed, which seeds the first tab; a first run starts in the
+     interface's own, which follows the system. syncLangSeg clamps it to what the catalog speaks. */
+  appState.putLang(storage.lsGet("eLang") || uiLang.uiLang());
   // Every handle on the document, before a line of this file reads one
   dom.grabDom();
   /* The desktop host, if there is one, before anything reads a body class it sets. */
@@ -265,9 +269,11 @@ function boot(){
   // The pointer dismisses a keyboard mark
   mark.wireKbdNav();
   // The stored chrome language, the theme, and the watch on the system's own
-  try{ if(storage.lsGet("eUiLang")==="pl") document.documentElement.lang="pl"; }catch(e){}
+  try{ document.documentElement.lang=uiLang.uiLang(); }catch(e){}
   theme.applyTheme();
   theme.watchSystemTheme();
+  // The quiet switch on the root, and the watch on the system's own
+  motion.wireStill();
 
   // The footer's version, and the icons the prose slots hold
   try{ const _v=document.getElementById("eVer"); if(_v) _v.textContent=env.E_VERSION; }catch(e){}
@@ -315,12 +321,7 @@ function boot(){
      the drum's class), constant at every width, translated by the sweep. */
 
   // category pills - order is user-arrangeable by dragging, and persists
-  try{ appState.setCatOrder(JSON.parse(storage.nsGet("CatOrder")||"null")||[]); }catch(e){ appState.setCatOrder([]); }
-  // Legacy: Boarding pass (bp) → Check-in (cin)
-  appState.setCatOrder(appState.catOrder.map(k=>k==="bp"?"cin":k).filter((k,i,a)=>a.indexOf(k)===i));
-  catSet.applyCatsToGlobal();
-  // counts + cards filled after rebuildCards(); seed order from base cats first
-  appState.setCatOrder(appState.catOrder.filter(k=>contentModel.CATS[k]));
+  catSet.loadCatOrder();
 
   // The frame pump's own kick, and the pill drag's document listeners
   paint.wirePumpKick();
@@ -346,6 +347,7 @@ function boot(){
 
   columns.wireColResize();
   columns.wireColWidthWatch();
+  pillsBox.wirePillsWidthWatch();
 
   // The note pane, which closes on anything that moves the ground under it
   notePane.wireNotePane();
@@ -406,16 +408,19 @@ function boot(){
   // The chrome's saved language, the first entry's focus, and the greeting watch
   onOpen.wireOnOpen();
 
-  // The tour wiring and its first-run invite, and the sample mark
+  // The tour wiring, and the sample mark
   tour.wireTourUi();
   catalogFile.syncSampleMark();
+  // The catalog in use, named on the band, and the catalog found beside it offered
+  catalogOffer.paintCatNow();
   catalogOffer.eOfferCatalogAtBoot();
-  /* THE FIRST RUN ASKS ONE THING AT A TIME, in the order of what it costs to answer: which
-     catalog, then the name, then the tour. Each stands down while an earlier one is on screen
-     and the one that closes calls the next. */
-  agent.maybeAskAgentName();
-  tour.maybeShowTourInvite();
+  // The role wheel, which waits on the sample until a reply names somebody
+  agent.syncRoleWheel();
+  /* A FIRST RUN OPENS ON THE EMPTY DESK and the tour starts by itself once the logo has formed; it
+     asks the name and, while the desk is empty, for a catalog, so the catalog offer waits for it. */
+  tour.maybeStartTour();
   catalogOffer.wireHostCatalogWatch();
+  catalogFile.wireCatalogDrop();
   /* The sibling channel is synchronous and free, so it goes first and this only speaks if it
      left the screen clear. */
   setTimeout(()=>{ try{ catalogOffer.eCheckWatchedFile(false); }catch(e){} }, 900);
@@ -452,25 +457,18 @@ function boot(){
     cutText.scheduleCutScan();                                    // what fits changed, so what is cut did
   },{passive:true});
 
+  /* The markup's own English swept into the saved language before the first frame rather than two
+     frames after it (on-open.js repaints the rest there): a covered reload's first frame is the
+     one this boot ends in, and it would show the header's placeholders in English. */
+  uiLang.translateChrome();
+  railPanel.placeRailNow();
+
   /* Last line of the app, on purpose: reaching it is the definition of a successful boot.
      The guard at the top of the file waits for this and offers a way out if it never comes. */
   try{ if(typeof E_BOOT_OK==="function") E_BOOT_OK(); }catch(e){}
   // After boot, so the warning sits over a working Etiuda rather than an empty frame.
   try{ personalPack.showPackMigrationWarning(); }catch(e){}
   try{ personalPack.showDeskNotices(); }catch(e){}
-  /* Back where you were, folds and all: the Library closes when somebody closes it, never
-     because an act inside it restarted the app. Consumed on read so a later refresh does not
-     keep reopening it, and UNDER any catalog offer rather than instead of it - being asked
-     whether to load a file is the more urgent question, answered before you are put back where
-     you were. The restart an eject causes raises none: see ejectedJustNow. */
-  try{
-    const back=storage.ssGet(storage.MG_REOPEN);
-    if(back){
-      storage.ssDel(storage.MG_REOPEN);
-      String(back).split(",").forEach(k=>{ if(k && k!=="1") appState.mgOpen.add(k); });
-      manage.openManage();
-    }
-  }catch(e){}
 }
 /* The cycle gate loads this file in bare node to see whether anything reads across an import
    cycle while it loads, and there is no document there. In a browser this is the last line of

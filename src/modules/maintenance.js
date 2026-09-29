@@ -1,16 +1,21 @@
 import { cardText } from "./card-model.js";
-import { eWatchSupported, eWatchName, catalogVersionLabel, E_CATALOG_NAME, E_CATALOG_VERSION } from "./catalog.js";
+import { eWatchSupported, eWatchName, catalogVersionLabel, E_CATALOG_NAME, E_CATALOG_VERSION, storedCatalog, eCatalog,
+  eCatalogAccepted, catalogDocOf, eCatalogSignature } from "./catalog.js";
+import { heldCatalogTrust } from "./catalog-trust.js";
+import { tourActive, tourDueAtBoot } from "./tour.js";
 import { catalogMacroCount, sampleUntouched } from "./catalog-file.js";
 import { remPx, colMode, colFloor, colCount, COL_GAP } from "./columns.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { dismissModal, openDialog } from "./dialog.js";
 import { eEmbeddedCatalog, E_VERSION } from "./env.js";
-import { eHost } from "./host.js";
-import { lsGet, lsDel, lsKeys, E_NS, E_LS_OK, E_SS_OK, eDeskFileShown, eSaveTrouble, eLastSaved } from "./storage.js";
+import { eHost, eCatalogFile, eCatalogIn, eCatalogBuiltIn, eCatalogFolder, E_CATALOG_FOLDER_KEY, E_CATALOG_SCRIPT } from "./host.js";
+import { lsGet, lsSet, lsDel, lsKeys, nsGet, E_NS, E_LS_OK, E_SS_OK, eDeskFileShown, eSaveTrouble, eLastSaved, eHomeless, eDeskHome,
+  eDeskRefused } from "./storage.js";
 import { clearLocalMemory, ejectCatalog } from "./local-memory.js";
 import { loadShortcuts } from "./shortcuts.js";
 import { tabs } from "./tabs.js";
-import { ask, tc, toast, fileStamp } from "./ui-lang.js";
+import { mgSystemStill, M_STILL_Q } from "./motion.js";
+import { offerUndo, tc, fileStamp } from "./ui-lang.js";
 import { pack } from "./pack.js";
 import { RAIL_DOCK_MIN, railLocked, railMaxWidth } from "./rail-panel.js";
 import { pageScroller } from "./page-scroll.js";
@@ -58,11 +63,38 @@ function mtBrowser(){
                     ["Safari","Version/"]],true);
   return (name||"unknown")+(os?" ("+os+")":"");
 }
+/* WHERE THE CATALOG IN USE CAME FROM: its file, which copy that is, and the folder, as far as the
+   desk recorded it. A folder load records its file; a boot that accepted the file the host found
+   names that file and whether it is the one shipped inside the program. */
+function mtCatalogPlace(){
+  const S=mtSafe, none={file:"-",copy:"(none loaded)",folder:"-"};
+  try{
+    if(!E_CATALOG_NAME && !storedCatalog()) return none;
+    const home=eDeskHome(), inFolder=String(nsGet("CatalogFile")||"");
+    if(!eHost()) return {file:S(()=>nsGet("CatalogFrom")||(eCatalogAccepted(eCatalog())?E_CATALOG_SCRIPT:"")),
+      copy:eCatalogAccepted(eCatalog())?"beside this page":"imported into this browser", folder:"-"};
+    if(inFolder) return {file:inFolder, copy:lsGet(E_CATALOG_FOLDER_KEY)?"the chosen catalog folder's":"Documents\\Etiuda",
+      folder:S(()=>eHomeless(eCatalogFolder(),home))};
+    if(eCatalogAccepted(eCatalog())) return {file:S(()=>eCatalogFile()),
+      copy:eCatalogBuiltIn()?"the program's own":"found beside the program", folder:eCatalogBuiltIn()?"inside the program":S(()=>eHomeless(eCatalogIn(),home))};
+    return {file:S(()=>nsGet("CatalogFrom")), copy:"a file opened by hand", folder:"-"};
+  }catch(e){ return {file:"unavailable",copy:"unavailable",folder:"unavailable"}; }
+}
+/* The state the desk holds for the catalog in use, and the key that signed it where that key is
+   known from the file this load read. */
+function mtSignature(){
+  const s=heldCatalogTrust();
+  if(!s) return "-";
+  const c=eCatalog(), d=catalogDocOf(c), held=storedCatalog();
+  const key=(d && d.sig && d.sig.keyId && held && eCatalogSignature(c)===eCatalogSignature(held)) ? String(d.sig.keyId) : "";
+  const word={valid:"signed",none:"unsigned",invalid:"changed since signed",unknown:"key not known here"}[s]||s;
+  return word+(key?" ("+key+")":"");
+}
 function mtReadings(){
   const S=mtSafe, r=[];
   /* `title`, not `t`: t() is the translation function and the rows below now use it. */
   const sec=title=>r.push({sec:title});
-  const row=(k,v,warn)=>r.push({k:k,v:v,warn:!!warn});
+  const row=(k,v,warn,panelOnly)=>r.push({k:k,v:v,warn:!!warn,panelOnly:!!panelOnly});
   sec("Engine");
   row("version",S(()=>E_VERSION));
   row("running from",S(()=>location.protocol==="file:"?"file://":location.origin));
@@ -88,6 +120,17 @@ function mtReadings(){
     (cards||[]).forEach(m=>{ if(others.every(l=>!cardText(m,"body",l))) n++; });
     return n+" / "+(cards||[]).length;
   }));
+  sec("Catalog file");
+  {
+    const at=mtCatalogPlace();
+    /* The file's own name is the panel's alone: a name may carry the catalog's, and the report stays
+       content-free. Where it lies and which copy it is are the environment, and travel. */
+    row("file",at.file,false,true);
+    row("copy",at.copy);
+    row("folder",at.folder);
+  }
+  row("id",S(()=>{ const c=storedCatalog()||eEmbeddedCatalog(); return (c&&c.id)?c.id:"none"; }));
+  row("signature",S(()=>mtSignature()));
   /* The silent update channel: when a desk stops being offered new editions, this says whether
      it was ever watching a file and whether this browser can watch one at all. The NAME is not
      a reading - the Library shows it on screen, and the report must stay content-free. */
@@ -183,6 +226,19 @@ function mtReadings(){
     if(!c) return "none (shared)";
     return String(c.name||"").trim() ? "catalog name only" : "unnamed (shared)";
   }));
+  sec("Desk");
+  row("catalog folder",S(()=>eHost()?eHomeless(eCatalogFolder(),eDeskHome()):""));
+  row("tour",S(()=>tourActive()?"under way":tourDueAtBoot()?"offered at the next start":"seen or declined"));
+  row("this start",S(()=>(eHost()&&eHost().recovering)?"after a crash":"ordinary"));
+  row("desk backup",S(()=>{
+    const r=eDeskRefused()[0];
+    return r ? "restored"+(r.restored?" from "+fileStamp(r.restored):"") : "not needed";
+  }),eDeskRefused().length>0);
+  row("statistics",S(()=>{
+    const days=Object.keys(pack.days||{}).length;
+    let n=0; Object.values(pack.useCounts||{}).forEach(v=>{ n+=(+v||0); });
+    return n+" copies, "+days+" days"+(pack.daysSince?" since "+pack.daysSince:"");
+  }));
   sec("Display");
   row("device pixel ratio",S(()=>window.devicePixelRatio));
   row("backdrop-filter",S(()=>(CSS.supports("backdrop-filter","blur(1px)")
@@ -191,7 +247,7 @@ function mtReadings(){
      gets answered: the Animations switch can only ADD quiet, never remove it - see
      mgReduceMotion - so a system asking for it wins over a switch left on. */
   row("reduced motion",S(()=>{
-    const os=matchMedia("(prefers-reduced-motion:reduce)").matches;
+    const os=mgSystemStill();
     const off=lsGet("eMotionOff")==="1";
     if(os&&off) return "on (system, and Animations off)";
     if(os) return "on (system)";
@@ -236,7 +292,7 @@ function mtReportText(){
     if(x.sec) lines.push("","["+x.sec+"]");
     else if(x.tab) x.tab.rows.forEach(rw=>
       lines.push(rw[0]+" "+x.tab.head.join(" / ")+": "+rw[1].join(" / ")));
-    else lines.push(x.k+": "+x.v);
+    else if(!x.panelOnly) lines.push(x.k+": "+x.v);
   });
   /* The exact string, and only in the report: the panel names the browser because that is what
      a person needs, and a ticket needs the build. Nobody reads this one on screen. */
@@ -264,7 +320,7 @@ function mtRefreshLive(){
    states that change with no resize at all - and the store, which another tab can write. */
 function wireMaintenanceWatch(){
 try{
-  ["(prefers-color-scheme: light)","(prefers-reduced-motion: reduce)","(forced-colors: active)"]
+  ["(prefers-color-scheme: light)",M_STILL_Q,"(forced-colors: active)"]
     .forEach(q=>{
       const m=matchMedia(q);
       if(m.addEventListener) m.addEventListener("change",mtRefreshLive);
@@ -326,9 +382,9 @@ function openMaintenance(backFn){
   function wireMaintenance(){
   /* No glass switch here any more: it tunes rather than rescues, and Settings owns it. */
   $("#mtShortcuts").onclick=()=>{
-    if(!ask("Reset all shortcuts to defaults?")) return;
+    const was=lsGet("eShortcuts");
     lsDel("eShortcuts"); loadShortcuts();
-    toast("Shortcuts reset");
+    offerUndo("Shortcuts reset", ()=>{ if(was!=null){ lsSet("eShortcuts",was); loadShortcuts(); } });
   };
   $("#mtClear").onclick=clearLocalMemory;
   $("#mtEject").onclick=ejectCatalog;

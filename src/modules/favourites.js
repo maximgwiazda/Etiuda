@@ -1,8 +1,8 @@
 import { findCard } from "./card-model.js";
 import { intentCount } from "./content-model.js";
-import { pack, savePack } from "./pack.js";
+import { pack, savePack, packSnapshot, packUndoFor, ePackEpoch } from "./pack.js";
 import { drawIntentRail } from "./rail-list.js";
-import { ask, toast } from "./ui-lang.js";
+import { toast, offerUndo } from "./ui-lang.js";
 import { drawPills, saveTabSession, tabs } from "./tabs.js";
 import { intentIdAt, intentIdxFromId, intentIsCustom, intentOrder, isIntentHiddenIdx, saveIntentOrder, setIntentOrder } from "./intent-id.js";
 import { recountMacros } from "./card-counts.js";
@@ -43,7 +43,9 @@ function toggleFavourite(id){
        and unstarring puts the card back exactly where it was. */
     toast("Added to Favourites");
   }
+  const was=ePackEpoch;
   savePack();
+  hooks.keepPoolAcross(was,[id]);   // a star rewrites this card alone
   /* Prune and recount without a full rebuild: a star changes no pill - not a count, not a
      ring - so redrawing the bar could only cost (a pill mid-drag, a FLIP mid-flight). */
   syncFavouritesMeta();
@@ -76,9 +78,7 @@ function removeCard(id){
   if(!id) return false;
   const m=findCard(id);
   const isCustom=!!(m&&m._custom);
-  if(!ask(isCustom
-    ? "Delete this custom card?\n\nIt disappears from Etiuda and from anything you export. The catalog has no version to restore."
-    : "Delete this card?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.")) return false;
+  const was=packSnapshot();
   if(isCustom) pack.custom=(pack.custom||[]).filter(x=>x&&x.id!==id);
   else {
     if(!Array.isArray(pack.removed)) pack.removed=[];
@@ -90,7 +90,11 @@ function removeCard(id){
   pack.cardOrder=(pack.cardOrder||[]).filter(x=>x!==id);
   hooks.cardOrderTouched();
   savePack(); rebuildCards();
-  toast("Card deleted");
+  const back=packUndoFor(was);
+  offerUndo("Card deleted", ()=>{
+    back(); hooks.cardOrderTouched(); rebuildCards(); hooks.render(); drawPills();
+    if(document.getElementById("mgCatList")) hooks.openManage();
+  });
   return true;
 }
 /* No in-place title rename here - a card has a full editor, so there is one rename
@@ -113,9 +117,10 @@ function removeIntent(id){
   if(!id) return false;
   const idx=intentIdxFromId(id);
   const isCustom=idx>=0 && intentIsCustom(idx);
-  if(!ask(isCustom
-    ? "Delete this custom intent?"
-    : "Delete this intent?\n\nIt disappears from Etiuda and from anything you export. Reset restores it from the catalog.")) return false;
+  /* Undo puts back what a custom's removal shifts as well: the order, the selection, every tab's,
+     by undoing the shift, so a choice made in between stands. */
+  const was=packSnapshot(), wasOrder=intentOrder.slice(), wasIdxs=intentIdxs.slice(),
+        wasTabs=(Array.isArray(tabs)?tabs:[]).map(tb=>tb&&Array.isArray(tb.intentIdxs)?tb.intentIdxs.slice():null);
   if(isCustom){
     pack.intentCustom=(pack.intentCustom||[]).filter(x=>x&&x.id!==id);
     shiftIntentIdxAfterRemoval(idx);
@@ -129,7 +134,24 @@ function removeIntent(id){
   pack.intentFavourites=(pack.intentFavourites||[]).filter(x=>x!==id);
   savePack();
   refreshAfterIntents();
-  toast("Intent deleted");
+  const back=packUndoFor(was);
+  offerUndo("Intent deleted", ()=>{
+    back();
+    if(isCustom){
+      const unshift=(now,then)=>{
+        const out=now.map(i=>i>=idx?i+1:i), at=then.indexOf(idx);
+        if(at>-1 && out.indexOf(idx)<0) out.splice(Math.min(at,out.length),0,idx);
+        return out;
+      };
+      setIntentOrder(unshift(intentOrder,wasOrder)); setIntentIdxs(unshift(intentIdxs,wasIdxs));
+      (Array.isArray(tabs)?tabs:[]).forEach((tb,i)=>{
+        if(tb && Array.isArray(tb.intentIdxs) && wasTabs[i]) tb.intentIdxs=unshift(tb.intentIdxs,wasTabs[i]);
+      });
+      saveTabSession(); saveIntentOrder();
+    }
+    refreshAfterIntents();
+    if(document.getElementById("mgCatList")) hooks.openManage();
+  });
   return true;
 }
 /** Hidden intents stay in the panel, greyed and at the bottom, and drop out of every search
@@ -191,9 +213,10 @@ function syncFavouritesMeta(){
   const alive=new Set((cards||[]).map(m=>m&&m.id).filter(Boolean));
   const hasCatalog=(cards||[]).some(m=>m&&!m._custom);
   if(hasCatalog) pack.favourites=(pack.favourites||[]).filter(id=>alive.has(id));
-  if(hasCatalog && pack.useCounts && typeof pack.useCounts==="object"){
-    Object.keys(pack.useCounts).forEach(id=>{ if(!alive.has(id)) delete pack.useCounts[id]; });
-  }
+  if(hasCatalog) ["useCounts","useAt"].forEach(n=>{
+    const o=pack[n];
+    if(o && typeof o==="object") Object.keys(o).forEach(id=>{ if(!alive.has(id)) delete o[id]; });
+  });
   if(hasCatalog) statsForgetCards(pack, id=>alive.has(id));
   /* No virtual "fav" category: it bought one pill and cost an "...except fav" in thirty
      places - it was never a category. A star is a mark ON a card: it lifts the card where

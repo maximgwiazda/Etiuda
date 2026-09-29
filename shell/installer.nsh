@@ -29,6 +29,16 @@
   # Written before the context dance below, because SHELL_CONTEXT follows SetShellVarContext.
   WriteRegStr SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}" "InstallLocation" "$INSTDIR"
 
+  # THE .ec FILE TYPE IN THE INSTALLER'S LANGUAGE: electron-builder names it once, from
+  # fileAssociations in electron-builder.js, which is the English. registerFileAssociations has run
+  # by now, into the same key; 1045 is Polish, and the name is ui-lang.js's for "Etiuda catalog".
+  # Its open verb's label is electron-builder's "Open with <productName>", English too.
+  ${If} $LANGUAGE == 1045
+    WriteRegStr SHELL_CONTEXT "Software\Classes\Etiuda catalog" "" "Katalog Etiudy"
+    WriteRegStr SHELL_CONTEXT "Software\Classes\Etiuda catalog\shell\open" "" "Otwórz w Etiudzie"
+    System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
+  ${EndIf}
+
   # THE UPDATER'S CACHE, which nothing here will ever spend: installApplicationFiles copies the
   # whole setup.exe into LOCALAPPDATA for electron-updater, this product has no auto-update, and
   # electron-builder offers no switch to stop the copy. So it is taken back at install rather than

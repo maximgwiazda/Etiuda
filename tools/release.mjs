@@ -3,6 +3,12 @@
  *   node tools/release.mjs              every gate, and nothing that writes outside a temp folder
  *   node tools/release.mjs --package    the gates, then builds the Windows installer from the tree
  *   ETIUDA_DIST=<folder> ...            where --package puts it; dist/ when unset
+ *   --customer                          ask a customer build's questions of any version
+ *
+ * A CUSTOMER BUILD IS TOLD APART FROM A PREVIEW BY ITS VERSION (tools/sellable.mjs): a bare x.y.z
+ * with a major of 1 or more is a customer's, and gate 2 refuses it unless it can be sold, before
+ * anything is tested or built; the signature gate then refuses one not Valid and timestamped. A
+ * preview (2.0.0-dev) runs as it always has and is told what would stop it.
  *
  * WHY THIS IS NOT THE release.js AT THE ROOT. That one is 1.x's, gitignored with the rest of the
  * 1.x tooling, and it speaks of five published files, PB_VERSION and a Pages build, none of which
@@ -24,6 +30,7 @@ import { createRequire } from 'node:module';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { beforeBuild, signatureVerdict } from './sellable.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -116,10 +123,28 @@ gate('the tree is clean, and this is the commit a release would be of', () => {
   return true;
 });
 
-gate('the version, read where the rulebook keeps it', () => {
+/* THE VERSION, AND WITH IT WHETHER THIS IS A BUILD FOR A CUSTOMER (the code-pass survey of
+   2026-09-27, findings 29 and 30). Asked here, before an hour of gates and a build, because every
+   answer it needs is in the tree already: the licence page's text and the builder's signing block,
+   read out of electron-builder.js itself so that the block the build will use is the one judged.
+   A preview is told what would stop it and goes on; a customer build with any reason stops. */
+let SELL = { customer: false, win: null };
+gate('the version, read where the rulebook keeps it, and whether the build is a customer\'s', () => {
   const m = readFileSync(join(ROOT, 'src', 'modules', 'env.js'), 'utf8').match(/E_VERSION\s*=\s*["']([^"']+)["']/);
   if (!m) return 'E_VERSION is not in src/modules/env.js';
   console.log('  E_VERSION ' + m[1] + ', and package.json stays at ' + JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version);
+  const win = createRequire(import.meta.url)(join(ROOT, 'electron-builder.js')).win;
+  const judged = beforeBuild({ version: m[1], customer: flag('--customer'), licenceDir: join(ROOT, 'shell'), win });
+  SELL = { customer: judged.customer, win };
+  if (!judged.customer) {
+    console.log('  PREVIEW, not for a customer' + (judged.problems.length
+      ? '; as a customer build it would stop on ' + judged.problems.length + ': ' + judged.problems.join('; ')
+      : ', though nothing would stop it as a customer build'));
+    return true;
+  }
+  if (judged.problems.length)
+    return 'a CUSTOMER build that cannot be sold, ' + judged.problems.length + ' reason(s): ' + judged.problems.join('; ');
+  console.log('  a CUSTOMER build, and nothing in the tree stops it being sold');
   return true;
 });
 
@@ -193,10 +218,12 @@ gate('the shell: npm run csp, npm run desk, npm run catalog-watch and npm run sh
 /* storage-carry beside smoke since 2026-09-24: the carries a desk arrives with (a 1.16.7 desk's
    keys, a layer under the catalog's name, positions re-keyed by tag id) are driven there in a
    browser against a real boot, and until then no chain called it. About 16 s. tests/engine-selftest.js
-   31 holds every gate in tests/ to a chain. */
-gate('the acceptance run: npm run smoke and npm run storage-carry', () => {
+   31 holds every gate in tests/ to a chain. swap beside them: load, eject and clear change the desk in
+   place, and it holds each against a fresh start, in Chrome, in about a minute. */
+gate('the acceptance run: npm run smoke, npm run storage-carry and npm run swap', () => {
   if (!npm('smoke')) return 'npm run smoke failed';
-  return npm('storage-carry') ? true : 'npm run storage-carry failed: a desk arriving from an earlier version is carried by that code';
+  if (!npm('storage-carry')) return 'npm run storage-carry failed: a desk arriving from an earlier version is carried by that code';
+  return npm('swap') ? true : 'npm run swap failed: a desk changed in place no longer equals a fresh start';
 });
 
 /* The asar is where the allowlist is either kept or quietly widened, so it is read rather than
@@ -254,14 +281,14 @@ if (flag('--package')) {
       ? true : 'npm run reinstall failed: what a customer installs is what this gate drives';
   });
 
-  gate('the signature, which says NotSigned until there is a certificate', () => {
-    const file = join(DIST, readdirSync(DIST).filter(f => /-setup\.exe$/i.test(f))[0]);
-    if (process.platform !== 'win32') { console.log('  not Windows, so there is nothing to ask'); return true; }
-    const status = sh('powershell -NoProfile -Command "(Get-AuthenticodeSignature \'' + file + '\').Status"');
-    console.log('  Authenticode: ' + status
-      + (status === 'NotSigned' ? '  (a log line reading "signing with signtool.exe" is the asar integrity edit, not a signature)' : ''));
-    return true;
-  });
+  /* THE SIGNATURE of the installer and of the program inside it, required of a customer build
+     and of any build with a certificate configured, Valid and timestamped; a preview with no
+     certificate is only told. Until 2026-09-27 this gate printed the installer's status and
+     passed whatever it was. The body is tools/sellable.mjs signatureVerdict, which
+     tests/sellable.mjs drives on planted files. */
+  gate('the signature of the installer and of Etiuda.exe, required of a customer build or a configured certificate', () =>
+    signatureVerdict({ setup: join(DIST, readdirSync(DIST).filter(f => /-setup\.exe$/i.test(f))[0]),
+                       program: join(DIST, 'win-unpacked', 'Etiuda.exe'), customer: SELL.customer, win: SELL.win }));
 }
 
 /* The home goes on a green run only; a red one leaves it standing, named at the top, as evidence. */

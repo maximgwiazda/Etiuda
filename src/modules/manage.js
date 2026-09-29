@@ -14,12 +14,13 @@ import { clearLocalMemory } from "./local-memory.js";
 import { mgReduceMotion, mgPinCard, E_EASE } from "./motion.js";
 import { drawIntentRail } from "./rail-list.js";
 import { normWhoList, WHO_BASE } from "./stock.js";
-import { nsSet } from "./storage.js";
+import { lySet } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { ask, t, catalogCountsLine, toast } from "./ui-lang.js";
+import { t, catalogCountsLine, counted, toast } from "./ui-lang.js";
 import { isFavourite, isIntentFavourite, pack, whoOptions, savePack } from "./pack.js";
 import { removeCard, removeIntent, setIntentHidden, syncIntentOrder, toggleFavourite, toggleIntentFavourite } from "./favourites.js";
-import { primaryCatLabel } from "./card-intent.js";
+import { primaryCatKeys, intentCardCounts } from "./card-intent.js";
+import { catMarkHtml } from "./cat-identity.js";
 import { intentIdAt, intentIdxFromId, intentIsCustom, intentIsOverridden, intentOrder, isIntentHiddenIdx } from "./intent-id.js";
 import { applyCatsToGlobal, removeCategory } from "./cat-set.js";
 import { esc } from "./esc.js";
@@ -51,6 +52,11 @@ function mgCardBand(m){
   return String(m&&m.c||"")+"|"+(isFavourite(m&&m.id)?"1":"0")+"|"+((m&&m._hidden)?"1":"0");
 }
 
+/* A sentence with a number in it is out of the dialog sweep's reach, so it is put together here. */
+function mgUsesTip(n){
+  return eHost() ? counted(n,"Copied {N} time on this computer","Copied {N} times on this computer")
+    : counted(n,"Copied {N} time in this browser","Copied {N} times in this browser");
+}
 /** A card inside the category tree. Hidden rows are greyed; the star is inert on them, so
  *  the only way back is the closed eye - the rule the intent rows already follow. */
 function mgCardRow(m){
@@ -60,8 +66,7 @@ function mgCardRow(m){
   // Local copy count - absent until the first copy, so unused rows stay quiet rather than
   // wearing a "0" that reads as an accusation before anyone has worked a shift with it.
   const uses=(pack.useCounts&&pack.useCounts[m.id])|0;
-  const useBadge=uses?'<span class="mg-uses" title="Copied '+uses+' time'+(uses===1?'':'s')
-    +(eHost()?' on this computer':' in this browser')+'">'+uses+'×</span>':"";
+  const useBadge=uses?'<span class="mg-uses" title="'+esc(mgUsesTip(uses))+'">'+uses+'×</span>':"";
   const favTip=fav?"Remove from Favourites":"Add to Favourites";
   const hideShow=hid
     ?'<button type="button" data-show-card="'+esc(m.id)+'" title="Show this card again" aria-label="Show this card again">'+ICON_EYE_SHUT+'</button>'
@@ -244,7 +249,7 @@ function mgRefreshAround(mutate){
      avoids the background-tab rAF pause. */
   void modalCard.offsetHeight;
   const clear=()=>moved.forEach(el=>{ el.style.transition=""; el.style.transform=""; el.style.willChange=""; });
-  moved.forEach(el=>{ el.style.transition="transform .18s "+E_EASE; el.style.transform=""; });
+  moved.forEach(el=>{ el.style.transition="transform var(--m-move) "+E_EASE; el.style.transform=""; });
   setTimeout(clear,240);
 }
 function mgFlip(container,mutate){
@@ -267,7 +272,7 @@ function mgFlip(container,mutate){
      without a computed start value Firefox shows the end state. Same-task attach also
      avoids the background-tab rAF pause. */
   void container.offsetHeight;
-  moved.forEach(el=>{ el.style.transition="transform .18s "+E_EASE; el.style.transform=""; });
+  moved.forEach(el=>{ el.style.transition="transform var(--m-move) "+E_EASE; el.style.transform=""; });
   setTimeout(clear,200);
 }
 function mgDomMove(fromEl,toEl){
@@ -474,7 +479,7 @@ function endMgDrag(){
   }
   /* Persist once, at the end - the order arrays are mutated live so the rows follow the
      cursor, but a write per swap would be a write per 170ms of dragging. */
-  if(kind==="cat"){ nsSet("CatOrder",JSON.stringify(catOrder)); drawPills(); }
+  if(kind==="cat"){ lySet("CatOrder",JSON.stringify(catOrder)); drawPills(); }
   /* intentOrder is its own stored key, not part of the pack, and the PANEL has to be redrawn -
      it renders from the same array, so leaving it alone would show two different orders for the
      same list depending on which one you happened to be looking at. */
@@ -539,6 +544,40 @@ function mgShowHiddenBtn(kind,n){
     ' title="'+esc(tipShowHidden(kind,n))+'">'+
     esc(t('Show all hidden'))+' ('+n+')</button>';
 }
+/* AN INTENT IN THE RAIL'S FORM: its one dominant category's mark at the head, the name on one line
+   fading where it runs out, and beside it the number of cards linked to it, which the rail does
+   not carry. `catOf` and `linked` are primaryCatKeys() and intentCardCounts(), taken once a list. */
+function mgIntentRow(i,catOf,linked){
+  const iid=intentIdAt(i);
+  const hid=isIntentHiddenIdx(i);
+  const fav=isIntentFavourite(iid);
+  const badge=(intentIsCustom(i)||intentIsOverridden(i))?' <span class="cbadge ed" title="'+esc(t("Changed or added by you, not what the catalog shipped"))+'">'+esc(t("mod"))+'</span>':"";
+  const favTip=fav?"Remove from Favourites":"Add to Favourites";
+  /* Hide toggles; delete is separate and lives only here. Both built-in and custom intents
+     can be deleted now - a built-in goes to pack.intentRemoved and comes back on Reset. */
+  const hideShow=hid
+    ?'<button type="button" data-show-intent="'+esc(iid)+'" title="Show this intent again" aria-label="Show this intent again">'+ICON_EYE_SHUT+'</button>'
+    :'<button type="button" data-hide-intent="'+esc(iid)+'" title="Hide this intent: it greys out and drops to the bottom" aria-label="Hide this intent">'+ICON_EYE_OPEN+'</button>';
+  const trash='<button type="button" class="danger mg-trash" data-remove-intent="'+esc(iid)+'" title="Delete this intent" aria-label="Delete this intent">'+ICON_TRASH+'</button>';
+  /* data-introw so mgRefreshAround() can find this row again after openManage() has replaced
+     every element - the same job data-cardrow does in the tree. */
+  /* data-band mirrors the card rows: a drag may only swap inside its own band, so hidden
+     entries cannot be dragged up among the live ones and a favourite cannot be dragged out of
+     the favourites - the same rule moveIntent() enforces for the panel, so the two surfaces
+     cannot disagree about what order means. Checked again against live state in
+     mgMoveIntentOrder, so a stale attribute cannot smuggle a row past its band. */
+  return '<div class="manage-row mg-int'+(hid?" is-hidden":"")+'" data-introw="'+esc(iid)+'"'+
+    ' data-band="'+(hid?"h":(fav?"f":"r"))+'">'+
+    catMarkHtml(catOf.get(iid)||"")+
+    '<span class="mg-int-t cut-peek" data-i18n-skip>'+esc(intentNavName(i)||"")+badge+'</span>'+
+    '<span class="mg-int-n">'+(linked.get(iid)||0)+'</span>'+
+    '<span class="cacts">'+
+      '<button type="button" data-edit-intent-mg="'+i+'" title="Edit intent" aria-label="Edit intent">'+ICON_EDIT+'</button>'+
+      hideShow+
+      trash+
+      '<button type="button" class="star-btn'+(fav?" on":"")+'" data-fav-intent-mg="'+esc(iid)+'" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'+
+    '</span></div>';
+}
 function openManage(){
   applyCatsToGlobal();
 
@@ -562,36 +601,9 @@ function openManage(){
       return a.n-b.n;
     })
     .map(x=>x.i);
-  const intentListRows=mgIntentIdxs.map(i=>{
-    const iid=intentIdAt(i);
-    const hid=isIntentHiddenIdx(i);
-    const fav=isIntentFavourite(iid);
-    const badge=(intentIsCustom(i)||intentIsOverridden(i))?' <span class="cbadge ed" title="'+esc(t("Changed or added by you, not what the catalog shipped"))+'">'+esc(t("mod"))+'</span>':"";
-    const catLab=primaryCatLabel(i)||"";
-    const favTip=fav?"Remove from Favourites":"Add to Favourites";
-    /* Hide toggles; delete is separate and lives only here. Both built-in and custom intents
-       can be deleted now - a built-in goes to pack.intentRemoved and comes back on Reset. */
-    const hideShow=hid
-      ?'<button type="button" data-show-intent="'+esc(iid)+'" title="Show this intent again" aria-label="Show this intent again">'+ICON_EYE_SHUT+'</button>'
-      :'<button type="button" data-hide-intent="'+esc(iid)+'" title="Hide this intent: it greys out and drops to the bottom" aria-label="Hide this intent">'+ICON_EYE_OPEN+'</button>';
-    const trash='<button type="button" class="danger mg-trash" data-remove-intent="'+esc(iid)+'" title="Delete this intent" aria-label="Delete this intent">'+ICON_TRASH+'</button>';
-    /* data-introw so mgRefreshAround() can find this row again after openManage() has replaced
-       every element - the same job data-cardrow does in the tree. */
-    /* data-band mirrors the card rows: a drag may only swap inside its own band, so hidden
-       entries cannot be dragged up among the live ones and a favourite cannot be dragged out of
-       the favourites - the same rule moveIntent() enforces for the panel, so the two surfaces
-       cannot disagree about what order means. Checked again against live state in
-       mgMoveIntentOrder, so a stale attribute cannot smuggle a row past its band. */
-    return '<div class="manage-row'+(hid?" is-hidden":"")+'" data-introw="'+esc(iid)+'"'+
-      ' data-band="'+(hid?"h":(fav?"f":"r"))+'"><span>'+esc(intentNavName(i)||"")+badge+
-      (catLab?' <span style="color:var(--dim);font:11px var(--mono)">'+esc(catLab)+'</span>':'')+'</span>'+
-      '<span class="cacts">'+
-        '<button type="button" data-edit-intent-mg="'+i+'" title="Edit intent" aria-label="Edit intent">'+ICON_EDIT+'</button>'+
-        hideShow+
-        trash+
-        '<button type="button" class="star-btn'+(fav?" on":"")+'" data-fav-intent-mg="'+esc(iid)+'" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'+
-      '</span></div>';
-  }).join("")||'<div class="manage-empty">'+esc(t("No intents."))+'</div>';
+  const catOf=primaryCatKeys(), linked=intentCardCounts();
+  const intentListRows=mgIntentIdxs.map(i=>mgIntentRow(i,catOf,linked)).join("")
+    ||'<div class="manage-empty">'+esc(t("No intents."))+'</div>';
 
   const catCount=Object.keys(CATS).length;
   /* Hiding is the one personal act with no way back at scale: hidden things are
@@ -678,7 +690,7 @@ function openManage(){
          as one group loosely spaced, and one of these forgets your work while the other brings
          a file in. Plain, not primary: a filled button beside a destructive one is a contest. */
       '<span class="mf-sep" aria-hidden="true"></span>'+
-      '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Import catalog…</button>'+
+      '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog…</button>'+
       '</div>'+
       '<button type="button" class="btn" id="mgClose">'+esc(t("Close"))+'</button>',
     wire: wireManage
@@ -829,7 +841,6 @@ function openManage(){
       e.preventDefault(); e.stopPropagation();
       const k=btn.getAttribute("data-delcat");
       if(cardCounts[k]){ toast("Move or delete cards in this category first"); return; }
-      if(!ask("Delete this empty category?\n\nA Reset restores it from the catalog.")) return;
       if(removeCategory(k)){ mgOpen.delete("cat:"+k); drawPills(); render(); openManage(); }
     };
   });
@@ -838,6 +849,7 @@ function openManage(){
 
 export {
   mgCardsIn,
+  mgUsesTip,
   openManage,
   wireManageDrag
 };

@@ -8,7 +8,7 @@ let eEyePopN=0;
 let eWashDownX=0,eWashDownY=0;
 
 function eWashOver(el){
-  if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if(mgReduceMotion()) return;
   const r=el.getBoundingClientRect();
   const d=document.createElement("div");
   d.className="e-copy-wash";
@@ -17,30 +17,14 @@ function eWashOver(el){
   document.body.appendChild(d);
   d.addEventListener("animationend",()=>d.remove());
   setTimeout(()=>{ if(d.parentNode) d.remove(); },900);
-  eLiftOff(el,r);
-}
-/* The copied words lift off the block under the wash: a clone of the block wearing none of its
-   classes, so it takes the block's type, padding and wrapping from the computed style. */
-function eLiftOff(el,r){
-  if(mgReduceMotion()) return;
-  const cs=getComputedStyle(el), g=el.cloneNode(true);
-  [...g.attributes].forEach(a=>g.removeAttribute(a.name));
-  g.className="e-copy-lift";
-  g.setAttribute("aria-hidden","true");
-  Object.assign(g.style,{left:r.left+"px", top:r.top+"px", width:r.width+"px", height:r.height+"px",
-    padding:cs.padding, borderWidth:cs.borderWidth, font:cs.font, color:cs.color,
-    whiteSpace:cs.whiteSpace});
-  document.body.appendChild(g);
-  g.addEventListener("animationend",()=>g.remove());
-  setTimeout(()=>{ if(g.parentNode) g.remove(); },800);
 }
 
 /* Keyboard copies answer the same way - copyEntrySel calls this after a successful copy, so
    Enter (or any rebound copy key) washes the selected block exactly like a click. */
-function eCopyFeedback(id){
+function eCopyFeedback(id,vi){
   const sel=document.querySelector(".txt.sel");
   if(sel) eWashOver(sel);
-  eNoteRecent(id);
+  eNoteRecent(id,vi);
 }
 
 function wirePops(){
@@ -54,7 +38,7 @@ function wirePops(){
      the shared geometry, so a blacklist grows a bug every time one is added. data-fav-intent
      is carried by the star alone. */
   document.addEventListener("click",e=>{
-    if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if(mgReduceMotion()) return;
     const b=e.target&&e.target.closest&&e.target.closest(".star-btn,.rail-fav[data-fav-intent]");
     if(!b||b.classList.contains("on")) return;
     const r=b.getBoundingClientRect();
@@ -75,7 +59,7 @@ function wirePops(){
      frames on, once the rebuilt list has painted, because the lid is a path animation on the main
      thread and Firefox drops its first frames under that paint. The star rides the compositor. */
   document.addEventListener("click",e=>{
-    if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if(mgReduceMotion()) return;
     const b=e.target&&e.target.closest&&e.target.closest('[data-act="hide"],[data-hide-intent],[data-show-intent],[data-hide-card],[data-show-card]');
     if(!b) return;
     const opening=b.hasAttribute("data-show-intent")||b.hasAttribute("data-show-card")
@@ -115,7 +99,7 @@ function wirePops(){
     if(!t) return;
     eWashOver(t);
     const card=t.closest(".card[data-id]");
-    if(card) eNoteRecent(card.dataset.id);
+    if(card) eNoteRecent(card.dataset.id,+t.dataset.v);
   });
 }
 

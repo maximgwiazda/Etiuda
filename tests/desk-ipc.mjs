@@ -1,7 +1,8 @@
 /* The desk's write path, all three hops, in bare node: src/modules/storage.js over the real
  * shell/preload.js over the real handlers of shell/main.js, electron stubbed, desk.json in a temp
  * folder. What it holds: a write never waits on the disk, a burst is one send, and a document
- * leaving or hiding right after a write has put it on the disk before the event returns.
+ * leaving or hiding right after a write has put it on the disk before the event returns, and none
+ * puts back a desk the rescue's Reset has cleared.
  *
  *   node tests/desk-ipc.mjs            exit code is the number of failed checks, capped at 63
  */
@@ -18,7 +19,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 19;
+const EXPECTED = 22;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -79,11 +80,13 @@ globalThis.window = { addEventListener: listen("window"), removeEventListener: n
 globalThis.document = { visibilityState: "visible", addEventListener: listen("document"), removeEventListener: noop };
 const contextBridge = { exposeInMainWorld: (k, v) => { window[k] = v; }, executeInMainWorld: noop };
 new Function("require", shellSrc("preload.js"))(n => (n === "electron" ? { contextBridge, ipcRenderer } : nodeRequire(n)));
+const REAL_HOST = window.E_HOST;
 
 try {
   const S = await import(MOD("storage.js", "ipc"));
-  const syncSaves = () => sent.sync["etiuda:desk-save"] || 0;
-  const asyncSaves = () => sent.invoke["etiuda:desk-write"] || 0;
+  /* The engine sends a patch where the host takes one, and the whole map where it does not. */
+  const syncSaves = () => (sent.sync["etiuda:desk-save"] || 0) + (sent.sync["etiuda:desk-patch-save"] || 0);
+  const asyncSaves = () => (sent.invoke["etiuda:desk-write"] || 0) + (sent.invoke["etiuda:desk-patch"] || 0);
 
   check(sent.sync["etiuda:desk"] === 1 && S.lsGet("eIpcNone") === null,
     "1a THE CONTROL: the load was handed its desk once, synchronously, through main's own handler");
@@ -160,6 +163,21 @@ try {
   const errs = said.filter(l => /^ERR /.test(l));
   check(!errs.length, "2c main logged no error through any of it" + (errs.length ? ": " + errs.length + ", first " + errs[0] : ""));
 
+  /* A read-only desk.json is a rename Windows refuses however long it is asked, which is main
+     answering false, the way a file held by a scanner past the shell's patience is. */
+  fs.chmodSync(DESK, 0o444);
+  S.lsSet("eIpcRefused", "1");
+  await tick(5); await tick(5);
+  const troubleAfterRefusal = S.eSaveTrouble();
+  fs.chmodSync(DESK, 0o666);
+  const syncBeforeLeave = syncSaves();
+  fire("window", "pagehide");
+  check(troubleAfterRefusal !== null && syncSaves() === syncBeforeLeave + 1
+    && onDisk().eIpcRefused === "1" && S.eSaveTrouble() === null,
+    "2d a write main answered false is sent again when the page leaves, and lands: trouble "
+    + (troubleAfterRefusal ? "raised" : "not raised") + ", " + (syncSaves() - syncBeforeLeave)
+    + " sync send(s) at pagehide, on the disk " + onDisk().eIpcRefused);
+
   /* ---- the notice, against a host whose answers this file holds ----------------------------- */
   let release = [], heldSaves = 0;
   window.E_HOST = { deskFile: "C:/lab/desk.json", deskRead: () => "{}", deskSave: () => { heldSaves++; return true; },
@@ -183,6 +201,40 @@ try {
   fire("window", "pagehide");
   check(unanswered === 1 && heldSaves === savesBefore + 1,
     "3b a send main has not answered yet is sent again, synchronously, when the page leaves");
+
+  /* ---- the rescue's Reset, the boot guard's own clearState sliced from the template, over the
+     real host, with the app's storage and pack loaded as a boot that failed late leaves them --- */
+  window.E_HOST = REAL_HOST;
+  listeners.window = {}; listeners.document = {};
+  globalThis.addEventListener = window.addEventListener;
+  invokeHandlers["etiuda:desk-write"](eventFor(ENGINE_FRAME), JSON.stringify(Object.assign({}, onDisk(), { "e~carried": "1" })));
+  const P = await import(pathToFileURL(path.join(ROOT, "src", "modules", "pack.js")).href);
+  const R = await import(pathToFileURL(path.join(ROOT, "src", "modules", "storage.js")).href);
+  Object.assign(window, R);                        // as main.js puts every export on the page
+  R.lsSet("eResetPlanted", "x");
+  P.saveStats();
+  check(R.lsGet("eResetPlanted") === "x" && onDisk().eResetPlanted === undefined && onDisk().eIpcA === "1"
+    && (listeners.window.beforeunload || []).length === 1,
+    "5a THE CONTROL: a desk write is pending, a stats flush is armed on beforeunload, and the old desk is on the disk");
+  const tpl = fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8");
+  const slice = name => {
+    const at = tpl.indexOf("function " + name + "(");
+    let i = tpl.indexOf("\x7b", at), depth = 0;
+    for (; i < tpl.length; i++) { const c = tpl[i]; if (c === "\x7b") depth++; else if (c === "\x7d" && !--depth) break; }
+    if (at < 0 || i >= tpl.length) throw new Error("the template carries no function " + name);
+    return tpl.slice(at, i + 1);
+  };
+  const lsStub = { length: 0, key: () => null, removeItem: noop }, ssStub = { clear: noop };
+  const clearState = new Function("window", "localStorage", "sessionStorage",
+    slice("hostDesk") + "\n" + slice("clearState") + "\nreturn clearState;")(window, lsStub, ssStub);
+  clearState(true);
+  fire("window", "beforeunload");
+  fire("window", "pagehide");
+  await tick(5); await tick(5);
+  const left = onDisk(), stayed = Object.keys(left).filter(k => /^e(?:[A-Z]|[0-9a-z]+~)/.test(k));
+  check(!stayed.length && left["e~carried"] === "1",
+    "5b the Reset's cleared desk is what remains after the page leaves: " + stayed.length + " app key(s) back on the disk"
+    + (stayed.length ? " (" + stayed.slice(0, 4).join(", ") + ")" : "") + ", the carried mark " + left["e~carried"]);
 } catch (e) {
   failed++;
   console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

@@ -1,10 +1,11 @@
 import { CATS, intentCount, SW_IDS } from "./content-model.js";
 import { M, WHO_BASE, normWhoList } from "./stock.js";
-import { E_KEY_RE, E_NS, eNsFor, lsDel, lsGet, lsKeys, lsSet, nsDel, nsGet, nsKey, ssDel, nsSet,
+import { E_KEY_RE, E_NS, eNsFor, lsDel, lsGet, lsKeys, lsSet, ssDel, LAYER_KEYS, eLayer, eLayers, lyGet, lySet, lyDel,
   eSaveTrouble, eDeskRefused, eDeskRefusedSeen, eHomeless, eDeskHome } from "./storage.js";
 import { eEmbeddedCatalog } from "./env.js";
 import { t, toast, fileStamp } from "./ui-lang.js";
 import { hooks } from "./hooks.js";
+import { statsOlderTouched } from "./desk-stats.js";
 
 // Personal cards: stock built-ins in M; optional pack.baseCards (imported catalog)
 // replaces M; edits/hides/customs in pack.overrides / .custom / .hidden. PAX and ROLE are
@@ -66,6 +67,8 @@ function migratePackKeys(p){
   return did;
 }
 let packMigrationFailed=false;
+// Nothing of the layer put down stays in memory before the next is read.
+function resetPack(){ pack=emptyPack(); BASE_M=[]; packMigrationFailed=false; }
 /* Shown only if the key rename could not be applied to what was stored. Etiuda still
    runs on defaults, but the user would find their arrangement gone and blame the update -
    so say what happened and offer the one real fix. Dismissible: the arrangement is what
@@ -97,14 +100,14 @@ function showPackMigrationWarning(){
   const h=document.getElementById("eMigrateHide");
   if(h) h.onclick=()=>d.remove();
 }
-/* THE LASTING NOTICES, in the rescue banner's dress and stacked under one another UNDER THE BAND:
-   the band holds the window's own controls and is its drag handle, and a person with a full disk
-   still has to close and move the window. Re-placed whenever the band changes height. Built from
-   text nodes, so a path is never read as markup. */
+/* THE LASTING NOTICES, in the rescue's dress (the family's bubble) and stacked under one another
+   UNDER THE BAND: the band holds the window's own controls and is its drag handle, and a person
+   with a full disk still has to close and move the window. Re-placed whenever the band changes
+   height. Built from text nodes, so a path is never read as markup. */
 let noticeRO=null;
 function placeNotices(){
   const box=document.getElementById("eNotices"), band=document.querySelector(".row");
-  if(box) box.style.top=(band ? Math.max(0,Math.round(band.getBoundingClientRect().bottom)) : 0)+"px";
+  if(box) box.style.top=((band ? Math.max(0,Math.round(band.getBoundingClientRect().bottom)) : 0)+8)+"px";
 }
 function dropNotice(d){
   const box=document.getElementById("eNotices");
@@ -120,8 +123,6 @@ function eNotice(id,lead,body,onDismiss){
   if(!box){
     box=document.createElement("div");
     box.id="eNotices";
-    box.style.cssText="position:fixed;left:0;right:0;top:0;z-index:2147483646;"
-      +"box-shadow:0 2px 14px rgba(0,0,0,.4)";
     (document.body||document.documentElement).appendChild(box);
     const band=document.querySelector(".row");
     try{ if(band){ noticeRO=new ResizeObserver(placeNotices); noticeRO.observe(band); } }catch(e){}
@@ -130,19 +131,21 @@ function eNotice(id,lead,body,onDismiss){
   }
   const d=document.createElement("div");
   d.id=id;
-  d.style.cssText="background:#78350f;color:#fff;font:14px/1.5 system-ui,Segoe UI,sans-serif;"
-    +"padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.18)";
+  d.className="bub bub-ask e-notice";
+  d.setAttribute("role","status");
+  d.setAttribute("data-side","none");
+  const say=document.createElement("p");
   const b=document.createElement("b");
   b.textContent=lead;
-  d.appendChild(b);
-  d.appendChild(document.createTextNode(" "+body));
+  say.appendChild(b);
+  say.appendChild(document.createTextNode(" "+body));
+  d.appendChild(say);
   const row=document.createElement("div");
-  row.style.cssText="margin-top:10px";
+  row.className="tour-actions";
   const x=document.createElement("button");
   x.type="button";
+  x.className="btn";
   x.textContent=t("Dismiss");
-  x.style.cssText="font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;"
-    +"background:rgba(255,255,255,.18);color:#fff";
   x.onclick=()=>{ dropNotice(d); if(onDismiss) onDismiss(); };
   row.appendChild(x);
   d.appendChild(row);
@@ -190,7 +193,7 @@ function showDeskNotices(){
    layer written before the tag model addressed an intent by its INDEX, and these carry that
    index into a namespace that reads it as a tag id. IntentOrder is out of NS_CARRY for the
    same reason, and baseCards would replace the card set wholesale. */
-const NS_CARRY=["Pack","CatOrder","Cols","Floor"];
+const NS_CARRY=["Pack","Stats","Days","CatOrder","Cols","Floor"];
 const NS_DROP_POSITIONAL=["intentOverrides","intentHidden","intentFavourites","intentRemoved","baseCards"];
 function packWithoutPositional(raw){
   try{
@@ -206,9 +209,10 @@ function carryNsLayer(from){
   let moved=0;
   NS_CARRY.forEach(n=>{
     let v=lsGet(from+n);
-    if(v==null || lsGet(nsKey(n))!=null) return;
+    const to=(LAYER_KEYS.indexOf(n)>-1 ? eLayer() : E_NS)+n;
+    if(v==null || lsGet(to)!=null) return;
     if(n==="Pack"){ v=packWithoutPositional(v); if(v==null) return; }
-    if(lsSet(nsKey(n),v)) moved++;
+    if(lsSet(to,v)) moved++;
   });
   // Deferred: the toast host does not exist this early in the boot.
   if(moved) setTimeout(()=>{ try{ toast(t("Restored your cards and stars from an earlier build.")); }catch(e){} },1400);
@@ -223,9 +227,11 @@ const NS_ADOPTED="e~nsAdopted:";
    catalog's id from 2026-09-15; a desk that loaded this same catalog on an earlier build holds
    its cards, stars and columns under a hash of the NAME. The source is known exactly here,
    which the stranded rule below can never say - and the layer still travels stripped, because
-   its intent keys are positions and this namespace reads them as tag ids. */
+   its intent keys are positions and this namespace reads them as tag ids. Only into this
+   build's own catalog's layer, as below. */
 function adoptNameNsLayer(){
   try{
+    if(eLayer()!==E_NS) return false;
     const c=eEmbeddedCatalog();
     const id=String((c&&c.id)||"").trim(), name=String((c&&c.name)||"").trim();
     if(!id || !name) return false;
@@ -234,7 +240,7 @@ function adoptNameNsLayer(){
     const mark=NS_ADOPTED+from;
     if(lsGet(mark)!=null) return false;                    // a second id sharing the name finds this
     if(!lsKeys().some(k=>k.indexOf(from)===0)) return false;
-    const moved=nsGet("Pack") ? 0 : carryNsLayer(from);
+    const moved=lyGet("Pack") ? 0 : carryNsLayer(from);
     lsSet(mark,"1");
     return moved>0;
   }catch(e){ return false; }
@@ -243,17 +249,18 @@ function adoptNameNsLayer(){
    stranded in the storage area file:// pages share. Two would mean a machine with two catalogs
    on it, and guessing between them is worse than leaving both alone. Runs only for a build that
    HAS an embedded catalog - the bare engine's pack belongs to whatever catalog was imported
-   into it, which is not this one. */
+   into it, which is not this one - and only into that catalog's layer, from none this desk
+   wrote for another: personal content never crosses from one catalog to another. */
 function adoptStrandedPack(){
   try{
-    if(E_NS==="e") return false;
-    const mine=nsKey("Pack");
-    const found=lsKeys().filter(k=>k!==mine && /^e[0-9a-z]+~Pack$/.test(k));
+    if(E_NS==="e" || eLayer()!==E_NS) return false;
+    const mine=eLayer()+"Pack", known=eLayers();
+    const found=lsKeys().filter(k=>k!==mine && /^e[0-9a-z]+~Pack$/.test(k) && known.indexOf(k.slice(0,-"Pack".length))<0);
     if(found.length!==1) return false;
     const from=found[0].slice(0,-"Pack".length);
     const mark=NS_ADOPTED+from;
     if(lsGet(mark)!=null) return false;
-    const moved=nsGet("Pack") ? 0 : carryNsLayer(from);
+    const moved=lyGet("Pack") ? 0 : carryNsLayer(from);
     lsSet(mark,"1");
     return moved>0;
   }catch(e){ return false; }
@@ -266,7 +273,7 @@ const TAG_KEYED="tag";
 const ASIDE="IntentsAside";
 const INTENT_LISTS=["intentHidden","intentFavourites","intentRemoved"];
 function storedIntentOrder(){
-  try{ const v=JSON.parse(nsGet("IntentOrder")||"null"); return Array.isArray(v)?v:null; }catch(e){ return null; }
+  try{ const v=JSON.parse(lyGet("IntentOrder")||"null"); return Array.isArray(v)?v:null; }catch(e){ return null; }
 }
 function cardIntentsOf(m){ return (m&&Array.isArray(m.intents))?m.intents:null; }
 function eachPersonalCard(fn){
@@ -308,7 +315,7 @@ function rekeyIntentLayer(order){
     if(l) m.intents=l.map(x=>(typeof x==="number")?at(x):String(x)).filter(Boolean);
   });
   if(Array.isArray(order))
-    nsSet("IntentOrder",JSON.stringify(order.map(x=>(typeof x==="number")?at(x):String(x)).filter(Boolean)));
+    lySet("IntentOrder",JSON.stringify(order.map(x=>(typeof x==="number")?at(x):String(x)).filter(Boolean)));
 }
 /* NOTHING IS GUESSED. Where the catalog carries no id for an intent, no rule can say which
    request a stored index meant, and the wrong answer points somebody's own wording at another
@@ -324,11 +331,11 @@ function setAsideIntentLayer(order){
     if(m.id) aside.cards[m.id]=l;
     m.intents=l.filter(x=>typeof x!=="number");
   });
-  try{ nsSet(ASIDE,JSON.stringify(aside)); }catch(e){}
+  try{ lySet(ASIDE,JSON.stringify(aside)); }catch(e){}
   pack.intentOverrides={};
   pack.intentCounts={};
   INTENT_LISTS.forEach(name=>{ pack[name]=[]; });
-  nsDel("IntentOrder");
+  lyDel("IntentOrder");
   // Deferred with the same hand as the adoption above: no toast host exists this early.
   setTimeout(()=>{ try{ toast(t("Your intent edits and stars are set aside: this catalog cannot say which intent each belongs to.")); }catch(e){} },1400);
 }
@@ -346,16 +353,32 @@ function migrateIntentKeys(){
   savePack();
   return "done";
 }
+const STATS_FIELDS=["useCounts","useAt","intentCounts","searchMisses","langs","dayIds","daysSince"];
+/* The counts from their own keys where the desk has them (see writePack); a desk written before them
+   keeps its counts inside the pack, and they are read from there until the first save moves them. */
+function withCounts(p){
+  const map=v=>!!v && typeof v==="object" && !Array.isArray(v);
+  let st=null, older=null;
+  try{ st=JSON.parse(lyGet("Stats")||"null"); older=JSON.parse(lyGet("Days")||"null"); }catch(e){}
+  if(!map(st)) return p;
+  const out=map(p) ? p : {};
+  STATS_FIELDS.forEach(k=>{ if(k in st) out[k]=st[k]; else delete out[k]; });
+  out.days=Object.assign({}, map(older) ? older : map(out.days) ? out.days : {}, map(st.days) ? st.days : {});
+  return out;
+}
 function loadPack(){
   let p=null;
   adoptNameNsLayer();                    // the known source before the inferred one
   adoptStrandedPack();
-  try{ const raw=nsGet("Pack"); if(raw) p=JSON.parse(raw); }catch(e){}
+  try{ const raw=lyGet("Pack"); if(raw) p=JSON.parse(raw); }catch(e){}
+  p=withCounts(p);
   /* If the rename cannot be applied to what is stored, say so rather than starting quietly with
      an empty ordering - the user would see their arrangement gone with no explanation. The boot
      banner offers Reset, which is the honest remedy. */
   try{ migratePackKeys(p); }
   catch(e){ packMigrationFailed=true; try{ console.error("pack migration failed",e); }catch(_){} }
+  // The old names are written by writePack and never held: the live pack speaks the new vocabulary.
+  if(p){ delete p.macroOrder; delete p.baseMacros; }
   pack=Object.assign(emptyPack(), p||{});
   if(!Array.isArray(pack.hidden)) pack.hidden=[];
   if(!pack.overrides||typeof pack.overrides!=="object") pack.overrides={};
@@ -507,24 +530,70 @@ function saveStats(){
 function flushStats(){
   if(!eStatsT) return false;
   clearTimeout(eStatsT); eStatsT=0;
-  return writePack();
+  return writePack(true);
 }
-function writePack(){
+/* THE COUNTS ARE KEPT BESIDE THE PACK, NOT IN IT: Stats holds the tallies and the newest day,
+   Days every day before it. A count rewrites Stats alone, and Days only once a day has closed, so
+   what a copy costs does not grow with the days a desk has kept. loadPack puts the three together. */
+function writePack(countsOnly){
+  const layer={}, stats={}, days=pack.days||{}, open={}, closed={};
+  let newest="";
+  Object.keys(days).forEach(d=>{ if(d>newest) newest=d; });
+  Object.keys(days).forEach(d=>{ (d===newest ? open : closed)[d]=days[d]; });
+  Object.keys(pack).forEach(k=>{ if(k!=="days") (STATS_FIELDS.indexOf(k)>-1 ? stats : layer)[k]=pack[k]; });
+  stats.days=open;
+  const older=statsOlderTouched(pack,newest);
   /* Written under BOTH names - see migratePackKeys(): an older build opened against the
      same storage reads macroOrder/baseMacros and finds them. The duplicates are written
      here rather than kept on `pack`, so the live object carries the new vocabulary only. */
-  let out=pack;
-  try{
-    out=Object.assign({},pack,{macroOrder:pack.cardOrder,baseMacros:pack.baseCards});
-  }catch(e){ out=pack; }
+  layer.macroOrder=pack.cardOrder;
+  layer.baseMacros=pack.baseCards;
   /* A refused write raises the lasting notice from the storage layer; see syncSaveNotice. */
-  let ok=false;
-  try{ ok=nsSet("Pack",JSON.stringify(out)); }catch(e){ ok=false; }
+  let ok=true;
+  try{
+    if(!countsOnly) ok=lySet("Pack",JSON.stringify(layer)) && ok;
+    ok=lySet("Stats",JSON.stringify(stats)) && ok;
+    if(!countsOnly || older || lyGet("Days")==null) ok=lySet("Days",JSON.stringify(closed)) && ok;
+  }catch(e){ ok=false; }
   return ok;
+}
+/* THE PERSONAL LAYER BEFORE AN ACT, and the way back from that act alone. packUndoFor is called
+   once the act is done: each field it changed is compared key by key or item by item (an item by
+   its id where it has one), and the Undo puts back only those keys and items into the pack as it
+   stands then, so a star, an edit or a hide given in between survives it. */
+function packSnapshot(){ return JSON.stringify(pack); }
+function packUndoFor(was){
+  const a=JSON.parse(was), b=JSON.parse(JSON.stringify(pack)), steps=[];
+  const same=(x,y)=>JSON.stringify(x)===JSON.stringify(y);
+  const key=v=>(v && typeof v==="object") ? (v.id!=null ? "#"+v.id : null) : JSON.stringify(v);
+  const isMap=v=>!!v && typeof v==="object" && !Array.isArray(v);
+  Object.keys(Object.assign({},a,b)).forEach(f=>{
+    const x=a[f], y=b[f];
+    if(same(x,y)) return;
+    if(Array.isArray(x) && Array.isArray(y) && x.concat(y).every(v=>key(v)!==null)){
+      const inY=new Set(y.map(key)), inX=new Set(x.map(key));
+      const lost=x.map((v,i)=>({v,i})).filter(o=>!inY.has(key(o.v)));
+      const added=new Set(y.filter(v=>!inX.has(key(v))).map(key));
+      steps.push(()=>{
+        const l=(Array.isArray(pack[f]) ? pack[f] : []).filter(v=>!added.has(key(v)));
+        lost.forEach(o=>{ if(!l.some(w=>key(w)===key(o.v))) l.splice(Math.min(o.i,l.length),0,o.v); });
+        pack[f]=l;
+      });
+    } else if(isMap(x) && isMap(y)){
+      const ks=Object.keys(Object.assign({},x,y)).filter(k=>!same(x[k],y[k]));
+      steps.push(()=>{
+        if(!isMap(pack[f])) pack[f]={};
+        ks.forEach(k=>{ if(k in x) pack[f][k]=x[k]; else delete pack[f][k]; });
+      });
+    } else steps.push(()=>{ if(f in a) pack[f]=x; else delete pack[f]; });
+  });
+  return ()=>{ steps.forEach(s=>s()); savePack(); };
 }
 export {
   ePackEpoch,
   savePack, saveStats, flushStats,
-  BASE_CATS, BASE_M, catalogCardId, rebuildBaseCards, pack, loadPack, adoptNameNsLayer,
+  packSnapshot,
+  packUndoFor,
+  BASE_CATS, BASE_M, catalogCardId, rebuildBaseCards, pack, loadPack, resetPack, adoptNameNsLayer,
   showPackMigrationWarning, syncSaveNotice, showDeskNotices, whoOptions, isFavourite, isIntentFavourite,
 };

@@ -69,6 +69,13 @@ let dragState=null, suppressClick=false, swapLock=0;
 /* Two of these are raw writes under a second name, because the plain name is already an ACT
    elsewhere: setEntrySel in mark.js paints the mark and saves the tab, and setLang in
    lang-seg.js writes the preference and moves the thumb. Most writes here want neither. */
+/* What a fresh page holds, for a desk started again in place; mgOpen is the Library's, not the tab's. */
+function resetAppState(){
+  cards=[]; railSel=-1; railOrder=[]; railMarkIdx=-1; railMatch=null;
+  railSortT=0; railSettled=true; railMarkUsed=false; catsDropArmed=false; pickRun=false; semiKind=null;
+  catOrder=[]; cats=[]; shown=[]; entrySel=null; pendingScrollHit=false; intentIdxs=[]; intentText="";
+  cardCounts={}; dragState=null; suppressClick=false; swapLock=0;
+}
 function setRailSel(v){ railSel=v; }
 function setRailOrder(v){ railOrder=v; }
 function setRailMarkIdx(v){ railMarkIdx=v; }
@@ -98,6 +105,7 @@ function setSuppressClick(v){ suppressClick=v; }
 function setSwapLock(v){ swapLock=v; }
 
 export {
+  resetAppState,
   mgOpen,
   railSel,
   railOrder,

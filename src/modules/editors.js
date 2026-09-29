@@ -6,9 +6,8 @@ import { intentNavName, commentTokensInUse } from "./intent-text.js";
 import { langTabs, langPane, langFieldId, langEndonym, markMissing, edReportMissing, langFocus } from "./lang-tabs.js";
 import { displayIntentRows, drawIntentRail } from "./rail-list.js";
 import { drawPills } from "./tabs.js";
-import { tourActive } from "./tour.js";
-import { ask, t, toast } from "./ui-lang.js";
-import { BASE_CATS, pack, savePack } from "./pack.js";
+import { offerUndo, t, toast } from "./ui-lang.js";
+import { BASE_CATS, pack, savePack, packSnapshot, packUndoFor } from "./pack.js";
 import { removeIntent } from "./favourites.js";
 import { catIconKey, catSlot, categoryIsOverridden, resetCategory } from "./cat-identity.js";
 import { intentIdAt, intentIdxOfId, intentIsCustom, intentIsOverridden } from "./intent-id.js";
@@ -173,19 +172,22 @@ function openCategoryEditor(k,fromPill){
   $("#ceCancel").onclick=leave;
   const del=$("#ceDelete");
   if(del && canDelete) del.onclick=()=>{
-    /* The same question the Library asks for the same act, word for word, so the two delete paths
-       cannot drift into behaving differently. removeCategory keeps its own guard and its own
-       toast - this button is the affordance, not the safety. Leaving rather than reopening
-       afterwards: the screen you were editing no longer exists. */
-    if(!ask(t("Delete this empty category?\n\nA Reset restores it from the catalog."))) return;
+    /* removeCategory keeps its own guard and its own Undo - this button is the affordance, not
+       the safety. Leaving rather than reopening afterwards: the screen you were editing no longer
+       exists. */
     if(removeCategory(k)) leave();
   };
   if($("#ceReset")) $("#ceReset").onclick=()=>{
-    if(!ask(t("Discard your changes to this category?"))) return;
+    const was=packSnapshot();
     resetCategory(k);
     drawPills(); render();
     drawIntentRail();
-    toast("Category reset");
+    const back=packUndoFor(was);
+    offerUndo("Category reset", ()=>{
+      back(); applyCatsToGlobal();
+      drawPills(); render(); drawIntentRail();
+      if(document.getElementById("ceReset")) openCategoryEditor(k, fromPill);
+    });
     openCategoryEditor(k, fromPill);   // redraws the fields, and the button goes with them
   };
   $("#ceSave").onclick=()=>{
@@ -314,7 +316,7 @@ function openIntentEditor(idx, fromManage){
     toast("Intent restored to original");
   };
   if($("#ieDelete")) $("#ieDelete").onclick=()=>{
-    /* removeIntent() owns the confirm, the built-in / custom split and the clean-up of every
+    /* removeIntent() owns the Undo, the built-in / custom split and the clean-up of every
        list an id can appear in; do not reimplement any of that here - a second copy has
        drifted before. */
     if(removeIntent(id)) doneIntentEditor();
@@ -361,9 +363,7 @@ function openIntentEditor(idx, fromManage){
     } else { edMarkClean(); refreshDialogChrome(); }   // renamed, and now resettable
   };
   edWireNav(displayIntentRows().map(r=>r.idx), idx, i=>openIntentEditor(i));
-  // Same as the card editor: the tour owns the keyboard while it is running.
   setTimeout(()=>{
-    if(tourActive()) return;
     const el=$("#"+langFieldId("ie","clause","en")); if(el) el.focus();
   },30);
 }

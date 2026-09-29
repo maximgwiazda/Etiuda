@@ -1,14 +1,15 @@
 import { lsSet } from "./storage.js";
+import { mgReduceMotion } from "./motion.js";
 import { seg, list } from "./dom.js";
 import { syncShortcutTitles } from "./shortcuts.js";
 import { drawIntentRail } from "./rail-list.js";
 import { recountMacros } from "./card-counts.js";
 import { syncIntentInput } from "./intent-clear.js";
-import { drawPills, scheduleTabSave } from "./tabs.js";
+import { drawPills, scheduleTabSave, noteActive } from "./tabs.js";
 import { cardSearchTerms } from "./spell.js";
 import { cardDrag } from "./list-pointer.js";
 import { render } from "./render.js";
-import { cancelLangChunks, rebuildCardInPlace, runLangChunks } from "./card-pool.js";
+import { cancelLangChunks, rebuildCardsInPlace, runLangChunks } from "./card-pool.js";
 import { catIconSvg } from "./cat-identity.js";
 import { esc } from "./esc.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
@@ -33,7 +34,11 @@ function applyLangState(l){
      tab switch as well as a click: pick PL in tab 1, switch to an English tab, close the
      browser - reopening should resume in EN, the language actually being worked in. */
   lsSet("eLang",lang);
-  seg.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.l===lang));
+  seg.querySelectorAll("button").forEach(b=>{
+    b.classList.toggle("on",b.dataset.l===lang);
+    b.setAttribute("aria-pressed",b.dataset.l===lang?"true":"false");
+  });
+  noteActive();
 }
 function applyLangHeavy(){
   syncShortcutTitles();
@@ -83,16 +88,14 @@ function setLang(l){
         else if(r.bottom<-240) laterIds.push(id);
         else nowIds.push(id);
       }
-      nowIds.forEach(rebuildCardInPlace);
+      rebuildCardsInPlace(nowIds);
       runLangChunks(laterIds);
     }
     // Language belongs to the active tab, so a switch is a tab edit like PAX or ROLE.
     scheduleTabSave();
   };
   cancelLangTail();
-  let still=false;
-  try{ still=matchMedia("(prefers-reduced-motion: reduce)").matches; }catch(e){}
-  if(still){ tail(); return; }
+  if(mgReduceMotion()){ tail(); return; }
   /* After the seg glide (180ms), plus the pick-tail's own +20 - the tail is quick now,
      but even a quick tail landing mid-glide costs the one animation this delay buys. */
   eLangTailT=setTimeout(()=>{ eLangTailT=0; tail(); },200);
@@ -108,8 +111,8 @@ function segFolded(){
    markup and nothing rebuilt them, so one declared language got a button selecting a language
    with no text in it (649) and a catalog naming neither of the two got an empty box (646). One
    button per declared code, in order, keeping the markup's own where there is one so the pair's
-   wording does not move. At one the control does not act, the code inert in the same box. Called
-   once from boot: every route that redeclares the languages reloads. */
+   wording does not move. At one the control does not act, the code inert in the same box. Every
+   button it returns is wired, since a start in place can bring a language boot never saw. */
 function syncLangSeg(){
   if(!seg) return;
   const declared=CONTENT_LANGS.length;
@@ -134,16 +137,19 @@ function syncLangSeg(){
        colour, and the title goes so a hover finds the box's own. */
     b.disabled=declared<2;
     if(declared<2) b.removeAttribute("title");
+    b.onclick=segPress;
     return b;
   }));
   applyLangState(lang);
 }
+function segPress(){
+  const b=this;
+  const other=[...seg.querySelectorAll("button")].find(x=>x!==b);
+  setLang(segFolded()&&other?other.dataset.l:b.dataset.l);
+}
 function wireLangSeg(){
   if(CONTENT_LANGS.length<2) return;
-  seg.querySelectorAll("button").forEach(b=>b.onclick=()=>{
-    const other=[...seg.querySelectorAll("button")].find(x=>x!==b);
-    setLang(segFolded()&&other?other.dataset.l:b.dataset.l);
-  });
+  seg.querySelectorAll("button").forEach(b=>b.onclick=segPress);
 }
 /* Retitle on resize: the tooltip has to describe what a click will DO, and that differs between
    the two layouts. Only the wording depends on the media query - the behaviour above does not. */

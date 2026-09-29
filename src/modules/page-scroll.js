@@ -1,3 +1,5 @@
+import { mgReduceMotion } from "./motion.js";
+
 /* THE PAGE'S SCROLLER IS AN ELEMENT, not the window: the frame is fixed and one region under
    the header scrolls. Asked for rather than cached, because a stale node scrolls nothing.
    The fallbacks are for a document that never got the shell. */
@@ -22,7 +24,7 @@ function pageKeyScroll(key){
    the beginning. Every way of arriving there uses this. */
 function scrollPageTop(){
   const el=pageScroller();
-  try{ el.scrollTo({top:0, left:0, behavior:"smooth"}); }
+  try{ el.scrollTo({top:0, left:0, behavior:mgReduceMotion()?"auto":"smooth"}); }
   catch(_){ try{ el.scrollTop=0; }catch(__){} }
 }
 

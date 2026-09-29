@@ -63,7 +63,7 @@ function sourceAtLine(n) { return E.sourceDoc().atLine(n); }
    catalogue of the file's prose in the test and make every reflow a diff.
    IT SCANS BLOCKS, NOT LINE STARTS: this file writes continuations without a leading star, so
    matching on the first character counted a ten-line comment as one and waved essays through. */
-const COMMENT_ESSAY_BUDGET = 56;
+const COMMENT_ESSAY_BUDGET = 53;
 function checkCommentCeiling(src) {
   const lines = src.split(/\r?\n/), found = [];
   let i = 0;
@@ -183,7 +183,8 @@ function pureFns() {
     "function plVocative(",
     "function agentParts(",
     "function formatPaxName(",
-    "function catalogFileSlug(",
+    "function catalogFileStem(",
+    "function catalogNameOfFile(",
     "function catalogCardId(",
     "function normWhoList(",
     "function esc(",
@@ -213,7 +214,7 @@ function pureFns() {
     const browserFrom=ua=>{ navigator={userAgent:ua}; return mtBrowser(); };
     return {browserFrom,
             foldDiacritics,wordMatchesTerm,splitWords,sharedPrefixLen,zForm,plVocative,
-            agentParts,formatPaxName,catalogFileSlug,catalogCardId,normWhoList,esc,
+            agentParts,formatPaxName,catalogFileStem,catalogNameOfFile,catalogCardId,normWhoList,esc,
             splitPartsRaw,catalogMacroCount,reverseBlockIndex,colPlan,joinTopics};
   `;
   return new Function(decls + "\n" + glue)();
@@ -491,8 +492,17 @@ function runUnitTests() {
   eq("formatPaxName caps+hyphen", F.formatPaxName("MARY-JANE   doe"), "Mary-Jane Doe");
   eq("formatPaxName lower", F.formatPaxName("anna"), "Anna");
 
-  // Filename slugs
-  eq("slug plain", F.catalogFileSlug("Sample Chat"), "sample-chat");
+  /* EXPORT'S FILENAME IS THE CATALOG'S NAME AND BACK: the suggestion keeps the name whole, capitals
+     and diacritics included, and replaces only what Windows refuses in a filename; the saved file's
+     name, less its catalog extension, is the name the file carries. */
+  eq("stem plain", F.catalogFileStem("Sample Chat"), "Sample Chat");
+  eq("stem Polish", F.catalogFileStem("Zażółć"), "Zażółć");
+  eq("stem refused characters", F.catalogFileStem('A/B: "C"?'), "A-B- -C--");
+  eq("stem trailing dots", F.catalogFileStem("Catalog v2..."), "Catalog v2");
+  eq("stem empty", F.catalogFileStem("  "), "Etiuda catalog");
+  eq("name of file", F.catalogNameOfFile("Mirabelka spring.ec"), "Mirabelka spring");
+  eq("name of file, other case", F.catalogNameOfFile("Zażółć.EC"), "Zażółć");
+  eq("name of file keeps a dotted name", F.catalogNameOfFile("Build 3.08.2026.ec"), "Build 3.08.2026");
 
   /* A CARD ID IS AUTHORITATIVE WHEN IT EXISTS. The importer suffixes the second of two cards
      sharing a category and title; re-deriving hands both the first one's id, and activateCatalog
@@ -501,19 +511,6 @@ function runUnitTests() {
   eq("cardId KEEPS an assigned id", F.catalogCardId({id:"b:open:Cold open~2",c:"open",t:"Cold open"}),
      "b:open:Cold open~2");
   eq("cardId falls back safely", F.catalogCardId({}), "b:open:Untitled");
-  eq("slug Polish", F.catalogFileSlug("Zażółć"), "zazolc");
-  eq("slug empty-ish", F.catalogFileSlug("!!!"), "etiuda-catalog");
-  // Apostrophes elide rather than separate, or "Max's" becomes "max-s"
-  eq("slug possessive", F.catalogFileSlug("Max's Playbook Build 3.08.2026"),
-     "maxs-playbook-build-3-08-2026");
-  eq("slug curly apostrophe", F.catalogFileSlug("Max’s"), "maxs");
-  // The default export name must slug to the one filename that auto-loads
-  eq("slug default catalog name", F.catalogFileSlug("Etiuda catalog"), "etiuda-catalog");
-
-  // No "-s-" anywhere: the possessive must not leave a stray separated letter
-  eq("slug has no stray -s-",
-     /-s-/.test(F.catalogFileSlug("Max's Playbook Build 3.08.2026")), false);
-  eq("slug possessive ending in s", F.catalogFileSlug("Lukas's Build"), "lukass-build");
 
   // WHO list normalisation
   eq("normWhoList dedupe", F.normWhoList("booker, Booker , ,pax1"), ["booker", "pax1"]);
@@ -534,16 +531,366 @@ function runUnitTests() {
 
   shellBridgeTests();
   policyTests();
+  windowPlaceTests();
+  shippedFileTests();
+  railPlacementTests();
+  recoveryTests();
+  headPrefsTests();
+  arrivalTests();
+  markClockTests();
+  menuWarmTests();
+  ecTypeNameTests();
+  pageWatchTests();
+  recoveryWindowTests();
+  shippedFlagTests();
+  dismissTierTests();
+  dialogFocusTests();
+  activeStateTests();
+  highContrastStateTests();
+  pillWrapTests();
+  pillsWidthWatchTests();
+  pillsResizeCostTests();
+  railLeaveTests();
+  grownCardTests();
+  motionJudgeTests();
   v2ValidationTests();
   lintCatalogTests();
   langAgnosticTests();
   libraryAwaitingTests();
+  libraryRowsTests();
   copyControlTests();
   copyNoticeTests();
   catalogLangTests();
   catalogIdentityTests();
   nameNsAdoptionTests();
+  strandedAdoptionTests();
+  langSegWiringTests();
   deskStatsTests();
+  ejectUndoTests();
+  tourActTests();
+  emptyDeskTests();
+  catNowTests();
+}
+
+/* EJECT AND CLEAR HAPPEN AT ONCE AND IN PLACE, AND EACH UNDO PUTS BACK WHAT IT TOOK (Maxim, 2026-09-27
+   and 2026-09-28): both acts, and both Undos, run in bare node over one storage model. Nothing
+   reloads and nothing asks; the desk starts again in place once per act, and the round trip must
+   put back every key the act took, byte for byte. With no session storage at all the Undo still
+   stands, because what it gives back is held in memory. */
+function ejectUndoTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "local-memory.js"), "utf8");
+  const markers = ["function catalogKeep(", "const E_WIPE_KEEP=", "const E_PREF_KEYS=", "function eKeyIsPref(",
+    "function eKeyIsMine(", "function keepKeys(", "function putBack(", "function clearLocalMemory(",
+    "function ejectKeys(", "function ejectCatalog(", "function undoEject("];
+  const world = ssOk => {
+    const w = { ls: {}, ss: {}, restarts: 0, undo: null, said: null, reloads: 0 };
+    const ns = k => "e" + k;
+    const hooks = { flushPillState: () => {}, restartDesk: () => { w.restarts++; }, tourActive: () => false, endTour: () => {} };
+    const ssGet = k => (ssOk && k in w.ss ? w.ss[k] : null);
+    try {
+      w.F = new Function("E_CATALOG_STORE", "E_CATALOG_KEY", "E_NS", "nsKey", "hooks", "flushStats", "clearTimeout", "tabSaveTimer",
+        "saveTabSession", "ssGet", "ssSet", "ssDel", "TAB_KEY", "lsGet", "lsSet", "lsDel", "lsKeys", "eLayers",
+        "eWatchGet", "eWatchClear", "eWatchPut", "offerUndo", "toastRefusal", "catalogStoreRefusal", "eDeskFileShown", "location",
+        markers.map(m => extractDecl(src, m)).join("\n") + "\nreturn {ejectCatalog, clearLocalMemory};")(
+        ns("Catalog"), ns("CatalogOk"), "e", ns, hooks, () => {}, () => {}, null, () => {},
+        ssGet, (k, v) => { if (ssOk) w.ss[k] = String(v); }, k => { delete w.ss[k]; }, "eSessionTabs",
+        k => (k in w.ls ? w.ls[k] : null), (k, v) => { w.ls[k] = String(v); return true; }, k => { delete w.ls[k]; },
+        () => Object.keys(w.ls), () => ["eab12~"],
+        () => Promise.resolve(null), () => Promise.resolve(), () => {},
+        (said, fn) => { w.said = said; w.undo = fn; }, () => {}, () => "", () => "",
+        { reload: () => { w.reloads++; } });
+    } catch (e) { w.F = null; w.err = e.message; }
+    w.ls = { eCatalog: "{\"cards\":[1]}", eCatalogOk: "sig", eSample: "1", eCatalogNo: "no", eCatalogFile: "shop.ec",
+             eCatalogFileAt: "1700", eCatalogTrust: "valid", eCatalogFrom: "shop.ec", "eab12~Pack": "[\"own\"]", ePack: "[\"loose\"]",
+             eTheme: "dark", eAgent: "Ann", eCatalogFolder: "C:/cat", "e1zz~Pack": "a neighbour's", eTourDone_v3: "1" };
+    w.ss = { eSessionTabs: "tabs-a" };
+    return w;
+  };
+  const w = world(true);
+  eq("local-memory.js carries the eject, the clear and their Undos", w.F ? true : w.err, true);
+  if (!w.F) return;
+  const sorted = m => JSON.stringify(Object.keys(m).sort().map(k => [k, m[k]]));
+  const before = sorted(w.ls) + sorted(w.ss);
+  w.F.ejectCatalog();
+  eq("an eject asks nothing, reloads nothing and starts the desk again once, with the catalog and what names it gone"
+    + " and every personal layer where it was",
+    [w.reloads, w.restarts, ["eCatalog", "eCatalogOk", "eSample", "eCatalogNo", "eCatalogFile", "eCatalogFileAt", "eCatalogTrust", "eCatalogFrom"].filter(k => k in w.ls),
+     w.ls["eab12~Pack"], w.ls.ePack, w.ls.eTheme, w.said], [0, 1, [], "[\"own\"]", "[\"loose\"]", "dark", "Catalog ejected"]);
+  if (w.undo) w.undo();
+  eq("its Undo puts back every key the eject took and the conversations, byte for byte, and starts the desk again",
+    [sorted(w.ls) + sorted(w.ss) === before, w.reloads, w.restarts], [true, 0, 2]);
+  w.F.clearLocalMemory();
+  eq("a clear forgets this desk's own keys, its catalogs' layers and the preferences, keeps the catalog, the folder and a"
+    + " neighbour's keys, and starts the desk again once",
+    [Object.keys(w.ls).sort(), w.reloads, w.restarts, w.said],
+    [["e1zz~Pack", "eCatalog", "eCatalogFolder", "eCatalogFrom", "eCatalogOk", "eCatalogTrust", "eSample"], 0, 3, "Local memory cleared"]);
+  if (w.undo) w.undo();
+  eq("its Undo puts back every key the clear took, byte for byte", [sorted(w.ls) + sorted(w.ss) === before, w.restarts], [true, 4]);
+  const deaf = world(false);
+  deaf.F.ejectCatalog();
+  const took = !("eCatalog" in deaf.ls);
+  if (deaf.undo) deaf.undo();
+  eq("with no session storage the eject still happens at once and its Undo still loads the catalog back",
+    [took, deaf.said, deaf.ls.eCatalog, deaf.reloads], [true, "Catalog ejected", "{\"cards\":[1]}", 0]);
+}
+
+/* THE TOUR'S WAYS ON (Maxim, 2026-09-28 22:20 and 22:22): Next on every step, held back only on the load
+   step; only the name step asks for writing, and the steps that describe wait for no act; a step that opens
+   a window moves on when the person opens it or when Next opens it for them; inside a window, Next closes it
+   and moves on, and Back closes it and returns to the step that opens it. The step table and the functions
+   that move the tour run in bare node inside one scope whose every free name is the page model below. */
+function tourActTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "tour.js"), "utf8");
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const timers = [];
+  /* The page: which window stands (`win`: the card editor, the Library or Settings), Quick facts, the Menu,
+     and whether the controls a step presses are on screen. Each control opens what a person's click opens. */
+  const page = { tourRunning: true, tourIdx: 0, target: {}, win: null, facts: false, menu: false, shown: true, moved: [], ends: [] };
+  const control = (sel, open) => ({ matches: s => s === sel, getClientRects: () => (page.shown ? [{}] : []), click: open });
+  const pencil = control('[data-act="edit"]', () => { page.win = "editor"; });
+  const fab = control("#addCardFab", () => { page.win = "editor"; });
+  const factsBtn = control("#factsBtn", () => { page.facts = true; });
+  const rows = { manage: control('[data-act="manage"]', () => { page.menu = false; page.win = "library"; }),
+    settings: control('[data-act="settings"]', () => { page.menu = false; page.win = "settings"; }) };
+  const next = { hidden: false, disabled: false, textContent: "" };
+  const own = {
+    t: s => s, chordChips: () => "K", tourEls: () => ({ next }), resolveTourTarget: () => page.target,
+    setTimeout: (fn, ms) => { timers.push({ fn, ms, live: true }); return timers.length; },
+    clearTimeout: id => { if (id && timers[id - 1]) timers[id - 1].live = false; },
+    showTourStep: i => { page.tourIdx = i; page.moved.push(T.TOUR_STEPS[i].id); }, endTour: done => { page.ends.push(done); },
+    cardBtn: sel => (sel === '[data-act="edit"]' ? pencil : {}), $: sel => ({ "#addCardFab": fab, "#factsBtn": factsBtn, "#tourName": { value: "" } })[sel],
+    menuOpen: () => page.menu, openSettingsMenu: () => { page.menu = true; },
+    menuTarget: act => (page.menu ? rows[act] || {} : {}),
+    modalOpen: () => !!page.win, closeModal: () => { page.win = null; },
+    factsPanelOpen: () => page.facts, closeFactsPanel: () => { page.facts = false; },
+    cardEditorOpen: () => page.win === "editor", libraryOpen: () => page.win === "library", settingsOpen: () => page.win === "settings",
+    agentName: () => "", wholeThingEmpty: () => page.empty
+  };
+  const scope = new Proxy({}, {
+    has: (o, k) => typeof k === "string",
+    get: (o, k) => k === Symbol.unscopables ? undefined : k in own ? own[k] : k in page ? page[k]
+      : k in globalThis ? globalThis[k] : () => undefined,
+    set: (o, k, v) => { page[k] = v; return true; }
+  });
+  let T = null;
+  try {
+    T = new Function("scope", "with(scope){\n" + ["function tourPress(", "function tourPressRow(", "function shutTourWindow(",
+      "function loadStepBody(", "const TOUR_STEPS=", "function stepOn(", "function onFrom(", "function nextHeld(", "function syncTourNext(",
+      "const TOUR_ACT_MS=", "let tourActT=", "function tourActSoon(", "function tourActCheck(", "function tourFollowWindow(",
+      "function tourNext(", "function tourOn(", "function tourPrev("]
+      .map(m => extractDecl(src, m)).join("\n")
+      + "\nreturn {TOUR_STEPS, nextHeld, syncTourNext, tourActSoon, TOUR_ACT_MS, tourNext, tourPrev};\n}")(scope);
+  } catch (e) { T = null; eq("tour.js carries the step table and the functions that move the tour", e.message, "sliced"); }
+  eq("the step counter is gone from the bubble and from the code that wrote it",
+    [/tourStepLabel/.test(tpl), /tourStepLabel|Tour \{N\}/.test(src)], [false, false]);
+  if (!T) return;
+  const ids = T.TOUR_STEPS.map(s => s.id), at = id => ids.indexOf(id);
+  const fire = () => { const live = timers.filter(x => x.live); timers.forEach(x => { x.live = false; }); live.forEach(x => x.fn()); return live.map(x => x.ms); };
+  const reset = (id, state) => { Object.assign(page, { win: null, facts: false, menu: false, shown: true, empty: false, moved: [], ends: [] }, state || {}); page.tourIdx = at(id); };
+  const where = () => ids[page.tourIdx] + (page.win ? " [" + page.win + "]" : "") + (page.facts ? " [facts]" : "") + (page.menu ? " [menu]" : "");
+
+  const held = () => ids.filter((id, i) => { page.tourIdx = i; next.disabled = false; T.syncTourNext(); return next.disabled || next.hidden; });
+  page.target = {};
+  const heldOn = held();
+  page.target = null;
+  const heldOff = held();
+  page.target = {};
+  eq("Next stands on every step and is held back only on the load step, while its control is on screen",
+    [heldOn, heldOff], [["load"], []]);
+
+  /* The table's shape: the favourite, put-away and edit steps are one step that opens the editor, and the only
+     steps that wait on the person are the load, the Menu (`done`) and the ones that open or stand in a window. */
+  const waitsOn = s => !!(s.waits || s.done || s.opens || s.inside);
+  eq("the steps are the table's, one card step for the star, the eye and the pencil, and every step between the name and the"
+     + " window steps only describes, waiting for no act",
+    [ids.join(","), T.TOUR_STEPS.filter(s => s.name).map(s => s.id), T.TOUR_STEPS.filter(s => !waitsOn(s) && !s.name).map(s => s.id),
+     T.TOUR_STEPS.filter(s => "does" in s).map(s => s.id)],
+    ["name,load,pax,search,rail,cards,pills,tabs,seg,buttons,editor,add,addIn,facts,factsIn,theme,menu,library,libraryIn,settings,settingsIn,done",
+     ["name"], ["pax", "search", "rail", "cards", "pills", "tabs", "seg", "theme", "done"], []]);
+
+  /* The person's act: on a step that describes, nothing they do moves the tour; the Menu step moves on once the
+     Menu is open; a step that opens a window follows the window in. Each read once the act settles. */
+  reset("rail"); T.tourActSoon(); const settled = fire();
+  const stayed = where();
+  reset("menu", { menu: true }); T.tourActSoon(); fire();
+  const menuTo = where();
+  reset("facts", { facts: true }); T.tourActSoon(); fire();
+  const factsTo = where();
+  eq("an act moves on only the steps that wait for one, read once it settles: the Menu opened, a window opened",
+    [settled, stayed, menuTo, factsTo], [[350], "rail", "library [menu]", "factsIn [facts]"]);
+
+  /* Next on each step that opens something: it opens it for the person and the tour goes in with it. */
+  const opened = ["buttons", "add", "facts", "menu", "library", "settings"].map(id => { reset(id); T.tourNext(); return id + ">" + where(); });
+  eq("Next on a step that opens a window opens it and goes inside, and on the Menu step opens the Menu for the Library step",
+    opened, ["buttons>editor [editor]", "add>addIn [editor]", "facts>factsIn [facts]", "menu>library [menu]", "library>libraryIn [library]", "settings>settingsIn [settings]"]);
+  const hidden = ["buttons", "add", "facts"].map(id => { reset(id, { shown: false }); T.tourNext(); return id + ">" + where(); });
+  eq("and where its control is not on screen Next opens nothing and moves on past the window's own step",
+    hidden, ["buttons>add", "add>facts", "facts>theme"]);
+
+  /* Inside a window: Next closes it and moves on; Back closes it and returns to the step that opens it. */
+  const inWin = { editor: { win: "editor" }, addIn: { win: "editor" }, factsIn: { facts: true }, libraryIn: { win: "library" }, settingsIn: { win: "settings" } };
+  const nexts = Object.keys(inWin).map(id => { reset(id, inWin[id]); T.tourNext(); return id + ">" + where(); });
+  const backs = Object.keys(inWin).map(id => { reset(id, inWin[id]); T.tourPrev(); return id + "<" + where(); });
+  eq("inside a window Next closes it and moves on, and Back closes it and returns to the step that opens it",
+    [nexts, backs], [["editor>add", "addIn>facts", "factsIn>theme", "libraryIn>settings", "settingsIn>done"],
+      ["editor<buttons", "addIn<add", "factsIn<facts", "libraryIn<library", "settingsIn<settings"]]);
+
+  /* The load step: Next does nothing while the desk is empty and its control stands, and Finish ends the tour done. */
+  reset("load", { empty: true }); T.tourNext();
+  const loadNext = where();
+  reset("done"); T.tourNext();
+  eq("Next on the load step does nothing while it is held back, and on the last step it ends the tour as done",
+    [loadNext, page.ends], ["load", [true]]);
+
+  /* THE SMOKE WALKS THIS TOUR, not a remembered one. tests/tour-walk.js says which way the walk takes on each step,
+     and the smoke takes it; this holds its rows to the table above: the same ids in order, Next pressed only where
+     the table does not hold it back, the same window opened by the same step, an act only where a step waits for
+     one, and a way out of every window. Its teeth are five doctored tables, each of which must be named. */
+  const TW = require("./tour-walk.js");
+  const clone = () => T.TOUR_STEPS.map(x => Object.assign({}, x));
+  const doctor = fn => { const st = clone(); fn(st); return TW.planProblems(st, s => !!s.waits, T.TOUR_ACT_MS); };
+  const named = (probs, id) => probs.some(x => x.indexOf(id) === 0 || x.indexOf("order") === 0 && x.indexOf(id) > -1);
+  const teeth = [
+    named(doctor(st => { delete st.find(x => x.id === "facts").opens; }), "facts"),
+    named(doctor(st => { st.splice(st.findIndex(x => x.id === "done"), 0, { id: "extra", sel: "#x", title: "", body: "" }); }), "extra"),
+    named(doctor(st => { st.find(x => x.id === "menu").waits = true; }), "menu"),
+    named(doctor(st => { const a = st.findIndex(x => x.id === "menu"), b = st[a - 1]; st[a - 1] = st[a]; st[a] = b; }), "menu"),
+    named(doctor(st => { delete st.find(x => x.id === "libraryIn").inside; }), "libraryIn")
+  ];
+  eq("the smoke's walk of the tour has one row per step of the table, in its order, and takes a way each step offers",
+    [TW.planProblems(T.TOUR_STEPS, T.nextHeld, T.TOUR_ACT_MS), teeth], [[], [true, true, true, true, true]]);
+
+  /* EVERY WORD THE TOUR SHOWS IS IN THE POLISH TABLE, on every host it can meet: a function that composes its own key
+     must hit on each t() it makes, and a string it returns bare must itself be a key, as showTourStep reads both. */
+  const langSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "ui-lang.js"), "utf8");
+  const plAt = langSrc.indexOf("UI_STRINGS.pl={"), plEnd = langSrc.indexOf("\n};", plAt);
+  const PL = new Function("const UI_STRINGS={};\n" + langSrc.slice(plAt, plEnd + 3) + "\nreturn UI_STRINGS.pl;")();
+  const untranslated = [];
+  [[true, "X", true], [true, "X", false], [false, "", true]].forEach(([host, dir, wheel]) => {
+    Object.assign(own, { eHost: () => host, eCatalogFolderShort: () => dir, wheelShown: () => wheel, esc: s => s });
+    T.TOUR_STEPS.forEach(s => ["title", "body"].forEach(k => {
+      let calls = 0, missed = 0;
+      own.t = x => { calls++; if (PL[x] == null) { missed++; return x; } return PL[x]; };
+      const out = typeof s[k] === "function" ? s[k]() : s[k];
+      if (calls ? missed : PL[out] == null) untranslated.push(s.id + "." + k + (host ? "" : " (browser)"));
+    }));
+  });
+  own.t = s => s;
+  eq("every title and body of the tour reads Polish, on the desk and in a browser, with and without the wheel",
+    [...new Set(untranslated)], []);
+  /* WHERE THE TOUR SAYS A PERSON'S THINGS STAY is where they stay on that host, in both languages: the desk keeps
+     them on this computer and a browser in itself, so no step names the other host's place. */
+  const misplaced = [], factsSays = [];
+  [[true, "X", true], [true, "X", false], [false, "", true]].forEach(([host, dir, wheel]) => {
+    Object.assign(own, { eHost: () => host, eCatalogFolderShort: () => dir, wheelShown: () => wheel, esc: s => s });
+    const other = host ? /this browser|przegl/i : /this computer|komputer/i, mine = host ? /this computer|komputer/i : /this browser|przegl/i;
+    [x => x, x => PL[x] == null ? x : PL[x]].forEach((tr, pl) => {
+      own.t = tr;
+      T.TOUR_STEPS.forEach(s => {
+        const out = typeof s.body === "function" ? s.body() : tr(s.body);
+        if (other.test(out)) misplaced.push(s.id + (pl ? " pl" : " en") + (host ? "" : " (browser)"));
+        if (s.id === "factsIn") factsSays.push(mine.test(out));
+      });
+    });
+  });
+  own.t = s => s;
+  eq("the tour names where a person's things stay as the host keeps them: the Quick facts step on each host and language, and no step the other host's place",
+    [misplaced, factsSays], [[], [true, true, true, true, true, true]]);
+  /* THE LOAD STEP NAMES NO SAMPLE BUTTON, because the empty desk draws none: asked on a desk, where the step once
+     named one, in both languages. */
+  Object.assign(own, { eHost: () => true, eCatalogFolderShort: () => "X", esc: s => s });
+  const loadStep = T.TOUR_STEPS.find(s => s.id === "load");
+  const loadSays = [x => x, x => PL[x] == null ? x : PL[x]].map(tr => { own.t = tr; return typeof loadStep.body === "function" ? loadStep.body() : ""; });
+  own.t = s => s;
+  eq("the tour's load step names Load and no sample button, on the desk, in English and in Polish",
+    loadSays.map(b => /Load a catalog|wczytaj katalog/.test(b) && !/sample|przyk/i.test(b)), [true, true]);
+}
+
+/* THE EMPTY DESK OFFERS LOAD AND NO SAMPLE BUTTON: the sample is a file, and Load reaches it (Maxim,
+   2026-09-28). The empty-desk markup is sliced out of render.js and drawn over a model of each host, in
+   both languages. */
+function emptyDeskTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "render.js"), "utf8");
+  const langSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "ui-lang.js"), "utf8");
+  const plAt = langSrc.indexOf("UI_STRINGS.pl={"), plEnd = langSrc.indexOf("\n};", plAt);
+  const PL = new Function("const UI_STRINGS={};\n" + langSrc.slice(plAt, plEnd + 3) + "\nreturn UI_STRINGS.pl;")();
+  const own = { terms: [], list: { innerHTML: "" }, wholeThingEmpty: () => true, esc: s => String(s), E_CATALOG_SCRIPT: "etiuda-catalog.js" };
+  const scope = new Proxy({}, {
+    has: (o, k) => typeof k === "string",
+    get: (o, k) => k === Symbol.unscopables ? undefined : k in own ? own[k] : k in globalThis ? globalThis[k] : () => undefined,
+    set: (o, k, v) => { own[k] = v; return true; }
+  });
+  let draw = null;
+  try {
+    draw = new Function("scope", "with(scope){\n" + extractDecl(src, "const afterBtn=") + "\n"
+      + extractDecl(src, "list.innerHTML=terms.length") + "\nreturn list.innerHTML;\n}");
+  } catch (e) { eq("render.js carries the empty desk's markup", e.message, "sliced"); return; }
+  const hosts = { desk: ["C:/X", "https:"], disk: ["", "file:"], link: ["", "https:"] };
+  const wrong = [];
+  Object.keys(hosts).forEach(h => ["en", "pl"].forEach(lang => {
+    Object.assign(own, { eCatalogFolder: () => hosts[h][0], eCatalogFolderShort: () => "X", location: { protocol: hosts[h][1] },
+      t: lang === "pl" ? x => (PL[x] == null ? x : PL[x]) : x => x });
+    let p;
+    try { p = draw(scope); } catch (e) { p = "threw " + e.message; }
+    if (!/id="emptyLoad"/.test(p) || /emptySample|sample|przyk/i.test(p)) wrong.push(h + " " + lang);
+  }));
+  eq("the empty desk offers Load and no sample button on the desk, from a disk and over a link, in English and in Polish",
+    wrong, []);
+}
+
+/* THE TOP BAR NAMES THE LOADED CATALOG'S FILE, extension and all. Maxim, 2026-09-28 17:06: "It's additional
+   information for the user, so they recognize the file later on when they see it among their files." paintCatNow
+   runs over a model of the bar and of what each load route recorded. */
+function catNowTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-offer.js"), "utf8");
+  const fileSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-file.js"), "utf8");
+  const el = cls => ({ cls, hidden: true, textContent: "", attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } });
+  let paint = null, importText = null;
+  const world = { ns: {}, held: null, applied: "", opts: null };
+  try {
+    paint = new Function("document", "storedCatalog", "nsGet", "eLoadedCatalogFile", "markCut", "t", "E_CATALOG_NAME",
+      extractDecl(src, "function shownCatalogName(") + "\n" + extractDecl(src, "function paintCatNow(") + "\nreturn paintCatNow;");
+    importText = new Function("catalogFromFileText", "hooks", "eWatchClear", "activateCatalog",
+      extractDecl(fileSrc, "function importCatalogText(") + "\nreturn importCatalogText;")(
+      () => ({ name: "Invented shop" }), { offerPickedCatalog: (c, name, accept) => accept() },
+      () => ({ then: fn => fn() }), (c, opts) => { world.opts = opts; return true; });
+  } catch (e) { eq("catalog-offer.js carries the top bar's painter", e.message, "sliced"); return; }
+  const bar = (ns, held, applied, file) => {
+    const own = el("cn-name"), none = el("cn-none");
+    const doc = { getElementById: id => (id === "catNow" ? { querySelector: s => (s === ".cn-name" ? own : none) } : null) };
+    paint(doc, () => held, k => (k in ns ? ns[k] : null), () => file, () => {}, s => s, applied)();
+    return own.hidden ? (none.hidden ? "" : "none: " + none.textContent) : own.textContent;
+  };
+  const held = { name: "Invented shop", cards: [1] };
+  eq("the top bar shows the file the catalog was loaded from, wherever it lay, and the name inside it only where no route named a file",
+    [bar({ CatalogFrom: "sample-catalog.ec", CatalogFile: "sample-catalog.ec" }, held, "Invented shop", "sample-catalog.ec"),
+     bar({ CatalogFrom: "Spring team.ec", CatalogFile: "" }, held, "Invented shop", ""),
+     bar({ CatalogFile: "team.ec" }, held, "Invented shop", "team.ec"),
+     bar({ CatalogFrom: "", CatalogFile: "" }, held, "Invented shop", ""),
+     bar({}, null, "", "")],
+    ["sample-catalog.ec", "Spring team.ec", "team.ec", "Invented shop", "none: No catalog loaded"]);
+  importText("{}", "Spring team.ec");
+  eq("a catalog loaded through the file dialog records the file's name for the bar", (world.opts || {}).from, "Spring team.ec");
+
+  /* AND activateCatalog, which every route ends in, writes what the route named: run whole in a scope whose every
+     other free name is a no-op, over a store that takes the catalog. */
+  const ns = {};
+  const own = { storeCatalog: () => true, pack: {}, carryCardLayer: () => new Set(), catalogCardId: m => m.id, LAYER_KEYS: [],
+    hooks: { restartDesk() {}, flushPillState() {} },
+    nsSet: (k, v) => { ns[k] = v; }, nsDel: k => { delete ns[k]; }, nsGet: k => (k in ns ? ns[k] : null) };
+  const scope = new Proxy({}, {
+    has: (o, k) => typeof k === "string",
+    get: (o, k) => k === Symbol.unscopables ? undefined : k in own ? own[k] : k in globalThis ? globalThis[k] : () => undefined,
+    set: (o, k, v) => { own[k] = v; return true; }
+  });
+  let activate = null;
+  try { activate = new Function("scope", "with(scope){\n" + extractDecl(fileSrc, "function activateCatalog(") + "\n"
+      + extractDecl(fileSrc, "function takeCatalog(") + "\nreturn activateCatalog;\n}")(scope); }
+  catch (e) { eq("catalog-file.js carries activateCatalog", e.message, "sliced"); return; }
+  const wrote = opts => { ns.CatalogFrom = "stale.ec"; activate({ cards: [] }, opts); return ns.CatalogFrom; };
+  eq("activateCatalog records the file a route names, its folder file where that is all it names, and blanks it for a route that names none",
+    [wrote({ from: "Spring team.ec" }), wrote({ file: "team.ec" }), wrote({})],
+    ["Spring team.ec", "team.ec", ""]);
 }
 
 /* Section 2.5 of the specification and the body rules of 2.6, driven over the reader that
@@ -693,6 +1040,26 @@ function v2ValidationTests() {
   eq("a bare alternative still drops the marker line", loadedBare.cards[0].en, "One.\n\nTwo.");
   eq("and writes a bare marker back",
      V.catalogToV2(loadedBare).cards[0].body.en, "[alt]\nOne.\n\n[alt]\nTwo.");
+  /* A BLANK LINE TYPED AFTER A LABELLED MARKER. The desk splits a body on blank lines (parts() in
+     card-model.js), so a label left on a block of its own became an alternative with no text. */
+  const gapped = base();
+  gapped.cards[0].bodyShape = "alts";
+  gapped.cards[0].body.en = "[alt: by post]\n\nOne.\n\n[alt: by phone]\n  \n\nTwo.";
+  eq("v2 a blank line after a labelled alternative has nothing to report", V.v2Problems(gapped), []);
+  const loadedGap = V.catalogFromV2(gapped).cards[0].en;
+  const deskParts = loadedGap.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+  eq("and the desk reads two labelled alternatives, each with its text",
+     [deskParts.map(V.v2PartText), deskParts.map(V.v2AltLabel)], [["One.", "Two."], ["by post", "by phone"]]);
+  {
+    const shellSrc = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+    const markerLine = shellSrc.split("\n").filter(l => l.indexOf("const EC_MARKER =") === 0);
+    const ecBlocks = markerLine.length === 1
+      ? new Function(markerLine[0] + "\n" + extractDecl(shellSrc, "function ecBlocks(") + "\nreturn ecBlocks;")()
+      : null;
+    eq("and the Library's count off the file agrees with the desk's",
+       ecBlocks ? [ecBlocks(gapped.cards[0].body.en, "alts"), deskParts.length] : "no one EC_MARKER line in shell/main.js",
+       [2, 2]);
+  }
   const fmtSrc = fs.readFileSync(path.join(__dirname, "..", "tools", "catalog-v2", "format.mjs"), "utf8");
   const isMarkerLine = new Function(fmtSrc.replace(/\nexport \{[\s\S]*$/, "\nreturn isMarkerLine;"))();
   eq("isMarkerLine and v2Problems agree on [alt: by post]",
@@ -836,18 +1203,19 @@ function copyControlTests() {
    once, which keeps the promise route synchronous here. */
 function copyNoticeTests() {
   const src = sourceText();
-  const decls = ["function copy(", "function fallback("].map(m => extractDecl(src, m)).join("\n");
+  const decls = ["let copyCount=", "function copy(", "function fallback("].map(m => extractDecl(src, m)).join("\n");
   const SAID = "Ready to paste: A card, EN";
   const HAND = "Selecting the text on the card and pressing Ctrl+C copies this one; the browser kept the clipboard closed.";
-  const run = (secure, write, exec) => {
+  const DESK = "Selecting the text on the card and pressing Ctrl+C copies this one; the clipboard would not take it just now.";
+  const run = (secure, write, exec, host) => {
     const said = [];
     const ta = { style: {}, select() {}, remove() {} };
     const doc = { createElement: () => ta, body: { appendChild() {} }, execCommand: exec };
     const nav = write ? { clipboard: { writeText: () => ({ then: (ok, no) => (write === "ok" ? ok() : no()) }) } } : {};
     const copy = new Function("navigator", "window", "document", "toast", "TOAST_HAND_MS",
-      "setRailMarkUsed", "setSemiKind", "hooks", decls + "\nreturn copy;")(
+      "setRailMarkUsed", "setSemiKind", "hooks", "eHost", "t", decls + "\nreturn copy;")(
       nav, { isSecureContext: secure }, doc, m => said.push(m), 5000,
-      () => {}, () => {}, { railDecorate() {} });
+      () => {}, () => {}, { railDecorate() {} }, () => !!host, s => s);
     copy("text", SAID);
     return said;
   };
@@ -856,6 +1224,8 @@ function copyNoticeTests() {
   eq("and with no clipboard API at all, a refused copy command says the same",
      run(false, null, () => false), [HAND]);
   eq("and a copy command that throws says the same", run(false, null, () => { throw new Error("x"); }), [HAND]);
+  eq("on the desk, which has no browser, the same refusal blames none",
+     run(true, "no", () => false, true), [DESK]);
   eq("CONTROL: a clipboard that takes the text still says ready to paste", run(true, "ok", () => false), [SAID]);
   eq("CONTROL: and so does a copy command the browser carries out", run(false, null, () => true), [SAID]);
 }
@@ -987,7 +1357,8 @@ function catalogLangTests() {
 function deskStatsFns() {
   const src = sourceText();
   const decls = ["const STATS_DAYS_KEPT=", "const STATS_YMD=", "function statsYmd(",
-                 "function statsDayBefore(", "function statsDay(", "function statsIdAt(",
+                 "function statsDayBefore(", "function statsDay(", "const STATS_TOUCHED=", "function statsTouch(",
+                 "function statsCompact(", "function statsIdAt(", "const STATS_FORGOT=",
                  "function bumpUse(", "function bumpIntent(", "function bumpMiss(",
                  "function bumpLang(", "function statsForgetCards(", "function statsDoc("]
     .map(m => extractDecl(src, m)).join("\n");
@@ -1111,10 +1482,12 @@ function nameNsAdoptionTests() {
     const lsKeys = () => Object.keys(store);
     const nsKey = n => E_NS + n;
     const said = [];
+    /* A build's own catalog is the one loaded, so its layer is its namespace (storage.js, layerNsOf). */
     const took = new Function("eEmbeddedCatalog", "eNsFor", "E_NS", "lsGet", "lsSet", "lsKeys",
-                              "nsGet", "nsKey", "t", "toast", "setTimeout", body)(
+                              "nsGet", "nsKey", "LAYER_KEYS", "eLayer", "lyGet", "t", "toast", "setTimeout", body)(
       () => catalog, nsFor, E_NS, lsGet, lsSet, lsKeys, n => lsGet(nsKey(n)), nsKey,
-      s => s, s => said.push(s), fn => fn());
+      ["Pack", "Stats", "Days", "CatOrder", "IntentOrder", "IntentsAside", "LinksAside", "RequestsAside", "Exported"],
+      () => E_NS, n => lsGet(nsKey(n)), s => s, s => said.push(s), fn => fn());
     return { took, said, ns: E_NS };
   };
 
@@ -1191,6 +1564,78 @@ function nameNsAdoptionTests() {
      Object.keys(noName).sort().join("|"), noNameSnap);
 }
 
+/* THE ADOPTIONS NEVER CARRY ONE CATALOG'S LAYER INTO ANOTHER'S. A build with a catalog inside it
+   adopts a lone layer an earlier build of that catalog stranded; since each catalog keeps a layer of
+   its own, a lone layer can be another catalog's. Both movers and the order loadPack runs them in,
+   sliced out of pack.js over a store this supplies, with the layer in view and the desk's list of
+   written layers supplied as storage.js keeps them. */
+function strandedAdoptionTests() {
+  const src = sourceText();
+  const decl = m => extractDecl(src, m);
+  const nsFor = new Function(decl("function eNsFor(") + "\nreturn eNsFor;")();
+  const body = ["const NS_CARRY=", "const NS_DROP_POSITIONAL=", "function packWithoutPositional(",
+                "function carryNsLayer(", "const NS_ADOPTED=", "function adoptNameNsLayer(", "function adoptStrandedPack("]
+                 .map(decl).join("\n") + "\nadoptNameNsLayer(); adoptStrandedPack();";
+  const EMBEDDED = { id: "lamp-shop", name: "Lamp Shop" };
+  const own = nsFor(EMBEDDED.id), other = nsFor("fern-shop"), byName = nsFor(EMBEDDED.name), stranger = nsFor("an older seed");
+  const boot = (store, inView, written) => {
+    const lsGet = k => (k in store) ? store[k] : null;
+    new Function("eEmbeddedCatalog", "eNsFor", "E_NS", "lsGet", "lsSet", "lsKeys", "LAYER_KEYS", "eLayer", "eLayers",
+                 "lyGet", "t", "toast", "setTimeout", body)(
+      () => EMBEDDED, nsFor, own, lsGet, (k, v) => { store[k] = String(v); return true; }, () => Object.keys(store),
+      ["Pack", "Stats", "Days", "CatOrder", "IntentOrder", "IntentsAside", "LinksAside", "RequestsAside", "Exported"],
+      () => inView, () => written.slice(), n => lsGet(inView + n), s => s, () => {}, fn => fn());
+    return store;
+  };
+  const PACK = tag => JSON.stringify({ favourites: [tag] });
+  const under = (store, ns) => Object.keys(store).filter(k => k.indexOf(ns) === 0).sort();
+  const marks = store => Object.keys(store).filter(k => k.indexOf("e~nsAdopted:") === 0).length;
+
+  const s1 = boot({ [own + "Pack"]: PACK("an edit over the build's own catalog") }, other, [other]);
+  eq("a catalog loaded over the build's own finds none of that catalog's layer in its own, and nothing is marked",
+     [under(s1, other), marks(s1)], [[], 0]);
+  const s2 = boot({ [other + "Pack"]: PACK("an edit over another catalog") }, own, [other]);
+  eq("the build's own catalog back in view takes nothing from a layer this desk wrote for another catalog",
+     [under(s2, own), marks(s2)], [[], 0]);
+  const s3 = boot({ [byName + "Pack"]: PACK("an edit under the old name hash") }, other, [other]);
+  const s3Other = under(s3, other), s3Marks = marks(s3);
+  boot(s3, own, [other]);
+  eq("the name-hash layer waits while another catalog is in view, and reaches the build's own catalog when it is",
+     [s3Other, s3Marks, JSON.parse(s3[own + "Pack"] || "{}").favourites], [[], 0, ["an edit under the old name hash"]]);
+  const s4 = boot({ [stranger + "Pack"]: PACK("an edit an earlier build stranded") }, own, [other]);
+  eq("a lone stranded layer no catalog of this desk wrote is still adopted by the build's own catalog",
+     JSON.parse(s4[own + "Pack"] || "{}").favourites, ["an edit an earlier build stranded"]);
+}
+
+/* EVERY LANGUAGE BUTTON THE HEADER HOLDS ANSWERS A PRESS, however it got there. The desk starts
+   again in place (restart.js), which rebuilds the buttons for the new catalog's languages and does
+   not run the boot's wiring again. The sync and the boot's wiring sliced out of lang-seg.js over a
+   toy control; a press is the element's own handler called on it, as a click calls it. */
+function langSegWiringTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "lang-seg.js"), "utf8");
+  const names = ["function syncLangSeg(", "function wireLangSeg("].concat(src.indexOf("function segPress(") > -1 ? ["function segPress("] : []);
+  const button = l => ({ dataset: { l: l }, removeAttribute() {}, onclick: null, disabled: false });
+  const desk = (bootLangs, laterLangs) => {
+    const LANGS = bootLangs.slice(), picked = [];
+    let kids = [button("en"), button("pl")];
+    const seg = { setAttribute() {}, querySelectorAll: () => kids.slice(), replaceChildren: (...k) => { kids = k; } };
+    const doc = { createElement: () => button("") };
+    const F = new Function("seg", "CONTENT_LANGS", "lang", "applyLangState", "setLang", "segFolded", "document",
+      names.map(m => extractDecl(src, m)).join("\n") + "\nreturn {syncLangSeg, wireLangSeg};")(
+      seg, LANGS, "en", () => {}, l => picked.push(l), () => false, doc);
+    F.syncLangSeg(); F.wireLangSeg();
+    LANGS.length = 0; laterLangs.forEach(l => LANGS.push(l));
+    F.syncLangSeg();
+    kids.forEach(b => { if (typeof b.onclick === "function") b.onclick.call(b, { currentTarget: b }); });
+    return picked;
+  };
+  const run = (a, b) => { try { return desk(a, b); } catch (e) { return "lang-seg did not run: " + e.message; } };
+  eq("a language a start in place brings to the header answers a press, as the ones boot saw do",
+     run(["en", "pl"], ["en", "de"]), ["en", "de"]);
+  eq("and a desk that booted speaking one language answers both presses once a second language arrives",
+     run(["en"], ["en", "pl"]), ["en", "pl"]);
+}
+
 /* The Electron shell reads the catalog file itself and hands the payload to the page, so it is
    a SECOND reader of the format and nothing else in this harness looks at it. It spoke format 1
    for a day after the engine stopped, and the failure was silent: the shell printed a card count
@@ -1247,6 +1692,1592 @@ function shellBridgeTests() {
   try { deepGot = R.parseRequest(deep); } catch (e) { deepGot = "threw " + e.name; }
   eq("parseRequest refuses a request nested 5,000 deep, and says so, without throwing",
      [deepGot, R.said.length === 1 && /nests deeper/.test(R.said[0])], [null, true]);
+}
+/* WHERE THE WINDOW OPENS (feel pass native-2), on the pure half: the rectangle a launch is given
+   from what the last run saved and the displays there are now. The round trip through a real
+   window is driven outside the suite, since a restored window is one on a display. */
+function windowPlaceTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  const place = new Function(extractDecl(src, "function windowPlace(") + "\nreturn windowPlace;")();
+  const SIZE = { width: 1280, height: 880 };
+  const main = { x: 0, y: 0, width: 1920, height: 1032 }, left = { x: -1600, y: 100, width: 1600, height: 860 };
+  const areas = [main, left];
+  const inside = (r, a) => r.x >= a.x && r.y >= a.y && r.x + r.width <= a.x + a.width && r.y + r.height <= a.y + a.height;
+  const J = JSON.stringify;
+  eq("a first launch opens at the opening size, centred on the primary's work area",
+    J(place(null, areas, main, SIZE)), J({ x: 320, y: 76, width: 1280, height: 880, maximized: false }));
+  eq("a saved rectangle inside a work area comes back as it was, maximised included",
+    J(place({ x: 40, y: 30, width: 1000, height: 700, maximized: true }, areas, main, SIZE)),
+    J({ x: 40, y: 30, width: 1000, height: 700, maximized: true }));
+  eq("a rectangle on the display to the left, at negative x, stays on that display",
+    J(place({ x: -1500, y: 200, width: 900, height: 600, maximized: false }, areas, main, SIZE)),
+    J({ x: -1500, y: 200, width: 900, height: 600, maximized: false }));
+  const gone = place({ x: 6000, y: 6000, width: 1000, height: 700, maximized: true }, areas, main, SIZE);
+  eq("a rectangle on a display that has gone opens centred on the primary, not maximised",
+    J(gone), J({ x: 320, y: 76, width: 1280, height: 880, maximized: false }));
+  const hanging = place({ x: 1700, y: 900, width: 1000, height: 700, maximized: false }, areas, main, SIZE);
+  eq("a rectangle hanging off a work area's corner is moved wholly inside it",
+    [inside(hanging, main), hanging.width, hanging.height], [true, 1000, 700]);
+  const big = place({ x: -1700, y: 50, width: 2400, height: 1400, maximized: false }, areas, main, SIZE);
+  eq("a rectangle larger than its work area is cut to it", J(big), J({ x: -1600, y: 100, width: 1600, height: 860, maximized: false }));
+  const small = { x: 0, y: 0, width: 1366, height: 728 };
+  eq("the opening size is cut to a small primary work area as well",
+    J(place(null, [small], small, SIZE)), J({ x: 43, y: 0, width: 1280, height: 728, maximized: false }));
+  eq("a file that is not a rectangle is read as no file",
+    [place({ x: "a", y: 0, width: 10, height: 10 }, areas, main, SIZE).x, place({ x: 0, y: 0, width: -5, height: 10 }, areas, main, SIZE).x,
+     place(["x"], areas, main, SIZE).x, place({ x: 0, y: 0, width: 800, height: 600, maximized: "yes" }, areas, main, SIZE).maximized],
+    [320, 320, 320, false]);
+}
+/* THE SHIPPED SAMPLE'S FOLDER IS NEVER NAMED (feel pass, the offer's "app.asar\shell"): the shell
+   hands the page no folder for a file it ships, and the page says in words where the file came
+   from, in the offer and in About alike. */
+function shippedFileTests() {
+  const shell = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  const inAsar = "C:\\Users\\someone\\AppData\\Local\\Programs\\Etiuda\\resources\\app.asar\\shell";
+  const own = "C:\\Users\\someone\\Documents\\Etiuda";
+  let S = null;
+  try {
+    S = new Function("path", "BUILT_IN_DIR", ["function isBuiltIn(", "function folderShown("]
+      .map(m => extractDecl(shell, m)).join("\n") + "\nreturn {isBuiltIn,folderShown};")(path.win32, inAsar);
+  } catch (e) { S = null; }
+  eq("the shell tells a shipped file from one in the catalog folder",
+    S ? [S.isBuiltIn(inAsar + "\\sample-catalog.ec"), S.isBuiltIn(own + "\\sample-catalog.ec"), S.isBuiltIn("")] : "no isBuiltIn in shell/main.js",
+    [true, false, false]);
+  eq("the folder the page is handed is empty for a shipped file and the file's own folder otherwise",
+    S ? [S.folderShown(inAsar + "\\sample-catalog.ec"), S.folderShown(own + "\\team.ec"), S.folderShown("")] : "no folderShown in shell/main.js",
+    ["", own, ""]);
+  eq("no send to the page names the loaded file's folder except through folderShown",
+    (shell.match(/path\.dirname\(catalogFrom\)/g) || []).length, 0);
+  const offer = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-offer.js"), "utf8");
+  let found = null;
+  try {
+    found = new Function("t", "esc", "E_CATALOG_SCRIPT", "eCatalogFolder", "eCatalogFolderShort",
+      extractDecl(offer, "function eFoundHtml(") + "\nreturn eFoundHtml;")(s => s, s => s, "etiuda-catalog.js", () => own, s => s);
+  } catch (e) { found = null; }
+  const said = found ? found("sample-catalog.ec", inAsar, true) : "";
+  eq("the offer says a shipped file comes with Etiuda and names no folder, even one it is handed",
+    [/comes with Etiuda/.test(said), said.indexOf("asar") < 0, said.indexOf("sample-catalog.ec") > -1], [true, true, true]);
+  eq("a file from the catalog folder is still located in it",
+    found ? /Located as .*sample-catalog\.ec.* in .*Documents/.test(found("sample-catalog.ec", own, false)) : "no eFoundHtml", true);
+}
+/* THE RAIL IS IN THE FIRST FRAME (feel pass, the rail arriving about 120 ms after the cards at
+   launch): boot ends by placing the panel in its own task, after the last statement that moves the
+   header, and the panel lands without its fade. The placement is sliced and run on stubs that log
+   the order of what it does; the frame itself is the verifier's composed capture. */
+function railPlacementTests() {
+  const panel = fs.readFileSync(path.join(E.ROOT, "src", "modules", "rail-panel.js"), "utf8");
+  const log = [];
+  const rail = { style: { set transition(v) { log.push("transition=" + (v || "(sheet)")); }, get transition() { return ""; } } };
+  const body = { ready: false };
+  let place = null;
+  try {
+    place = new Function("$", "syncRailGeometry", "getComputedStyle",
+      extractDecl(panel, "function placeRailNow(") + "\nreturn placeRailNow;")(
+      sel => sel === "#intentRail" ? rail : null,
+      () => { body.ready = true; log.push("geometry"); },
+      el => { log.push("style read, ready " + body.ready); return { opacity: "1" }; });
+  } catch (e) { place = null; }
+  if (place) place();
+  eq("the panel is placed in one task: transition off, geometry, a style read with the panel ready, transition back",
+    place ? log : "no placeRailNow in rail-panel.js",
+    ["transition=none", "geometry", "style read, ready true", "transition=(sheet)"]);
+  const main = fs.readFileSync(path.join(E.ROOT, "src", "main.js"), "utf8");
+  const at = s => main.indexOf(s);
+  eq("boot places the panel after the chrome is translated and before it reports a boot",
+    [at("railPanel.placeRailNow()") > at("uiLang.translateChrome()"), at("uiLang.translateChrome()") > -1,
+     at("railPanel.placeRailNow()") > -1 && at("railPanel.placeRailNow()") < at("E_BOOT_OK();")],
+    [true, true, true]);
+}
+/* A PAGE THAT STOPPED COMES BACK WHOLE (feel pass, the crash reload): every reload the shell makes
+   after the page stopped is marked for the host answer, which says so once, and the boot guard then
+   holds the first frame until boot has ended, as for a reload the page asks for itself. The guard is
+   run here as it stands in the template, on stubs; the frames are the verifier's capture. */
+function recoveryTests() {
+  const shell = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  const reloads = shell.match(/\.reload\(\)/g) || [];
+  eq("every reload the shell makes of the page goes through recover(), which marks it first",
+    [reloads.length, /const recover = \(\) => \{ recovering\.add\(win\.webContents\.id\); win\.webContents\.reload\(\); \};/.test(shell)],
+    [1, true]);
+  eq("the host answer says so once, by taking the mark", /recovering: recovering\.delete\(e\.sender\.id\),/.test(shell), true);
+  const preload = fs.readFileSync(path.join(E.ROOT, "shell", "preload.js"), "utf8");
+  eq("the preload hands the page that answer", /recovering: !!host\.recovering,/.test(preload), true);
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const m = /<script>([\s\S]*?)<\/script>/.exec(tpl);
+  const guard = m ? m[1] : "";
+  const run = (host, arriving) => {
+    const cls = new Set(), head = [];
+    const store = arriving ? { eArriving: "1" } : {};
+    const el = () => ({ style: { setProperty() {} }, setAttribute(k, v) { this[k] = v; },
+      blocking: { supports: w => w === "render" }, appendChild() {} });
+    const sb = {
+      document: { documentElement: { classList: { add: (...c) => c.forEach(x => cls.add(x)), remove: (...c) => c.forEach(x => cls.delete(x)),
+        contains: c => cls.has(c) }, style: { setProperty() {} } },
+        head: { appendChild: n => head.push(n) }, createElement: el, getElementById: () => null, querySelector: () => null },
+      sessionStorage: { getItem: k => store[k] || null, removeItem: k => { delete store[k]; }, setItem: (k, v) => { store[k] = v; }, clear() {} },
+      localStorage: { getItem: () => null, setItem() {}, removeItem() {}, key: () => null, length: 0 },
+      matchMedia: () => ({ matches: false }), location: { hash: "", href: "file:///x/etiuda.html", protocol: "file:", origin: "null" },
+      navigator: { languages: ["en-US"], language: "en-US", cookieEnabled: true },
+      setTimeout: () => 0, requestAnimationFrame: () => 0, addEventListener() {}
+    };
+    sb.window = sb; sb.E_HOST = host; sb.self = sb; sb.top = sb;
+    require("vm").runInNewContext(guard, sb);
+    const hold = head.filter(n => n.rel === "expect" && n.blocking === "render");
+    return [cls.has("e-arriving"), hold.length];
+  };
+  let got;
+  try {
+    got = [run({ recovering: true }, false), run({ recovering: false }, false), run(null, true), run(null, false)];
+  } catch (e) { got = "the boot guard threw: " + e.message; }
+  /* The page no longer reloads itself to change catalogs, so a session mark alone, which only that
+     reload wrote, holds nothing: the third case is the one that changed. */
+  eq("the guard holds the first frame for the shell's recovery, and for nothing else, a stray session mark included",
+    got, [[true, 1], [false, 0], [false, 0], [false, 0]]);
+}
+/* THE FIRST PAINT READS THE SETTINGS WHERE THEY ARE KEPT: an installed Etiuda keeps them in its desk
+   file and never in localStorage, so the head script reads the desk the shell hands it, once, and
+   storage.js takes that copy rather than reading the file again. The head script runs in a VM on
+   stubs, as recoveryTests runs it; what the first frame looks like is the verifier's. */
+function headPrefsTests() {
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const m = /<script>([\s\S]*?)<\/script>/.exec(tpl);
+  const guard = m ? m[1] : "";
+  const run = (deskKeys, lsKeys, width) => {
+    const cls = new Set(), props = {};
+    let reads = 0;
+    const host = deskKeys ? { deskRead: () => { reads++; return JSON.stringify(deskKeys); }, deskSave: () => true } : null;
+    const sb = {
+      document: { documentElement: { classList: { add: (...c) => c.forEach(x => cls.add(x)), remove: (...c) => c.forEach(x => cls.delete(x)),
+        contains: c => cls.has(c) }, style: { setProperty: (k, v) => { props[k] = v; } } },
+        head: { appendChild() {} }, createElement: () => ({ setAttribute() {}, blocking: { supports: () => true } }),
+        getElementById: () => null, querySelector: () => null },
+      sessionStorage: { getItem: () => null, removeItem() {}, setItem() {}, clear() {} },
+      localStorage: { getItem: k => (k in lsKeys ? lsKeys[k] : null), setItem() {}, removeItem() {}, key: () => null, length: 0 },
+      matchMedia: () => ({ matches: false }), location: { hash: "", href: "file:///x/etiuda.html", protocol: "file:", origin: "null" },
+      navigator: { languages: ["en-US"], language: "en-US", cookieEnabled: true }, innerWidth: width,
+      setTimeout: () => 0, requestAnimationFrame: () => 0, addEventListener() {}
+    };
+    sb.window = sb; sb.self = sb; sb.top = sb; sb.E_HOST = host;
+    require("vm").runInNewContext(guard, sb);
+    return { still: cls.has("e-still"), off: cls.has("e-pills-off"), h: props["--e-pills-h"] || null, reads,
+      handed: sb.eDeskAtBoot ? Object.keys(sb.eDeskAtBoot).length : null };
+  };
+  const kept = { eMotionOff: "1", ePills: "0", eHdrPills: "1500x37" };
+  let got;
+  try {
+    got = [run(kept, {}, 1500), run(kept, kept, 1500), run(null, kept, 1500)]
+      .map(r => [r.still, r.off, r.reads, r.handed]);
+  } catch (e) { got = "the head script threw: " + e.message; }
+  eq("on a desk the first paint is still and without the category bar as its desk file says, whatever localStorage holds; a browser reads localStorage as before",
+    got, [[true, true, 1, 3], [true, true, 1, 3], [true, true, 0, null]]);
+  try {
+    const shown = { ePills: "1", eHdrPills: "1500x37" };
+    got = [run(shown, {}, 1500).h, run(shown, {}, 1280).h, run({}, shown, 1500).h, run(null, shown, 1500).h];
+  } catch (e) { got = "the head script threw: " + e.message; }
+  eq("on a desk the category bar's last height is reserved from the desk file at the width it was measured at, and not from localStorage",
+    got, ["37px", null, null, "37px"]);
+
+  const store = fs.readFileSync(path.join(E.ROOT, "src", "modules", "storage.js"), "utf8");
+  const take = handed => {
+    let reads = 0;
+    const win = { E_HOST: { deskRead: () => { reads++; return JSON.stringify({ eTheme: "dark", eRail: "1" }); }, deskSave: () => true } };
+    if (handed !== undefined) win.eDeskAtBoot = handed;
+    const desk = new Function("window", extractDecl(store, "function eHostDesk(") + "\nreturn eHostDesk();")(win);
+    return [desk ? Object.keys(desk.map).sort().join(",") : null, reads, "eDeskAtBoot" in win];
+  };
+  try {
+    got = [take({ eTheme: "light", eGlassOff: 1 }), take(undefined), take(null)];
+  } catch (e) { got = "eHostDesk threw: " + e.message; }
+  eq("storage.js takes the desk the head script read, once and without reading the file again, and reads it itself when none was handed",
+    got, [["eGlassOff,eTheme", 0, false], ["eRail,eTheme", 1, false], ["eRail,eTheme", 1, false]]);
+}
+/* A COVERED ARRIVAL FADES FROM A FRAME ITS CONTENT WAS DRAWN IN (feel pass; the shell's recovery is
+   what arrives covered now): the boot guard runs in a VM, E_BOOT_OK is called, and the frames and
+   paint timing it waits on are handed to it by hand. What the eye sees is the verifier's composed frames. */
+function arrivalTests() {
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const m = /<script>([\s\S]*?)<\/script>/.exec(tpl);
+  const guard = m ? m[1] : "";
+  const run = paintTiming => {
+    const cls = new Set(), frames = [], seen = [], obs = [];
+    const sb = {
+      document: { documentElement: { classList: { add: (...c) => c.forEach(x => cls.add(x)), remove: (...c) => c.forEach(x => cls.delete(x)),
+        contains: c => cls.has(c) }, style: { setProperty() {} } }, body: { offsetWidth: 1 },
+        head: { appendChild() {} }, createElement: () => ({ setAttribute() {}, blocking: { supports: () => true } }),
+        getElementById: () => null, querySelector: () => null },
+      sessionStorage: { getItem: () => null, removeItem() {}, setItem() {}, clear() {} },
+      localStorage: { getItem: () => null, setItem() {}, removeItem() {}, key: () => null, length: 0 },
+      matchMedia: () => ({ matches: false }), location: { hash: "", href: "file:///x/etiuda.html", protocol: "file:", origin: "null" },
+      navigator: { languages: ["en-US"], language: "en-US", cookieEnabled: true },
+      setTimeout: () => 0, requestAnimationFrame: fn => { frames.push(fn); return frames.length; }, addEventListener() {}
+    };
+    if (paintTiming) {
+      sb.performance = { getEntriesByType: () => [] };
+      sb.PerformanceObserver = class { constructor(cb) { this.cb = cb; obs.push(this); } observe() {} disconnect() {} };
+    }
+    sb.window = sb; sb.E_HOST = { recovering: true }; sb.self = sb; sb.top = sb;
+    require("vm").runInNewContext(guard, sb);
+    const step = what => { seen.push([what, frames.length, cls.has("e-arriving")]); };
+    sb.E_BOOT_OK(); step("boot");
+    if (paintTiming) { obs.forEach(o => o.cb({ getEntries: () => [] }, o)); step("painted"); }
+    while (frames.length) { frames.shift()(); step("frame"); }
+    return seen;
+  };
+  let got;
+  try { got = [run(true), run(false)]; } catch (e) { got = "the boot guard threw: " + e.message; }
+  eq("the arrival waits for its first frame to be presented, then fades from the next; without paint timing, two frames",
+    got, [[["boot", 0, true], ["painted", 1, true], ["frame", 0, false]],
+          [["boot", 1, true], ["frame", 1, true], ["frame", 0, false]]]);
+  const rule = /html\.e-arriving #pillsSlot\{opacity:([.0-9]+)\}/.exec(tpl);
+  eq("held, the content is drawn at a trace rather than not at all, so it is rasterised before its fade",
+    rule ? +rule[1] > 0 && +rule[1] < 0.01 : "no e-arriving rule", true);
+}
+/* THE EMPTY MARK'S CLOCK, as smooth on a first launch as on any later one: empty-mark.js runs in a
+   VM on a clock and a frame queue written here, with one dot flying from x 0 to x 100, so the x it
+   is drawn at is the gather's progress. The tour's start and the boot repaint are sliced into the
+   same VM and asked when they run. What the eye sees on a first launch is the verifier's frames. */
+function markLab() {
+  const read = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
+  const mark = read("empty-mark.js").replace(/^import[^\n]*\n/m, "").replace(/export\s*\{[^}]*\};?\s*$/, "");
+  const tour = read("tour.js"), open = read("on-open.js");
+  const slices = [extractDecl(tour, "const TOUR_AUTO_MS="), extractDecl(tour, "function maybeStartTour("),
+    extractDecl(open, "let eReadyDone="), extractDecl(open, "let lastGreet;"), extractDecl(open, "function markEReady("),
+    extractDecl(open, "function wireOnOpen(")];
+  let clock = 0, seq = 0, frames = [], timers = [], drawnX = null;
+  const log = [], warms = [];
+  const ctx = { setTransform() {}, clearRect() {}, beginPath() {}, fill() {}, moveTo() {}, arc(x) { drawnX = x; } };
+  const sb = {
+    M_MS: { gather: 1100, twinkle: 66 }, mgReduceMotion: () => false,
+    performance: { now: () => clock },
+    requestAnimationFrame: fn => { frames.push({ id: ++seq, fn }); return seq; },
+    cancelAnimationFrame: id => { frames = frames.filter(f => f.id !== id); },
+    setTimeout: (fn, ms) => { timers.push({ id: ++seq, at: clock + (ms || 0), fn }); return seq; },
+    clearTimeout: id => { timers = timers.filter(x => x.id !== id); },
+    requestIdleCallback: fn => { timers.push({ id: ++seq, at: clock, fn }); return seq; },
+    setInterval: () => 0, getComputedStyle: () => ({ color: "#fff" }), devicePixelRatio: 1,
+    MutationObserver: class { observe() {} disconnect() {} },
+    document: { querySelector: () => null, documentElement: {},
+      createElement: () => ({ setAttribute() {}, getContext: () => ctx, isConnected: true, parentNode: null, remove() { this.parentNode = null; } }) },
+    ssGet: () => null, TOUR_AT: "eTourAt", TOUR_STEPS: [], tourRunning: false, tourSeen: () => false, tourInviteDismissed: () => false,
+    startTour: () => log.push(["tour", Math.round(clock)]),
+    applyUiLang: () => log.push(["repaint", Math.round(clock)]),
+    focusFirstEntryOnOpen: () => {}, greeting: () => "", render: () => {},
+    warmMenu: () => warms.push(Math.round(clock))
+  };
+  sb.window = sb;
+  require("vm").runInNewContext(mark + "\n" + slices.join("\n") + "\nfunction __mark(){ return eMark; }\n", sb);
+  sb.markDots = () => [{ x: 100, y: 0, sx: 0, sy: 0, ph: 0, sp: 1 }];
+  const timersTo = t => {
+    for (;;) {
+      const due = timers.filter(x => x.at <= t).sort((a, b) => a.at - b.at || a.id - b.id)[0];
+      if (!due) break;
+      timers = timers.filter(x => x !== due);
+      clock = Math.max(clock, due.at);
+      due.fn();
+    }
+    clock = t;
+  };
+  const frame = t => { timersTo(t); const run = frames; frames = []; run.forEach(f => f.fn(t)); return drawnX; };
+  const host = { firstChild: null, insertBefore(cv) { cv.parentNode = host; } };
+  return { sb, log, warms, frame, timersTo, make: () => sb.syncEmptyMark(host), state: () => sb.__mark(), x: () => drawnX };
+}
+function markClockTests() {
+  const hz = n => 1000 / n;
+  let got;
+  try {
+    // Made 100 ms into the page, its first frame 500 ms later draws the dots where they start.
+    const a = markLab(); a.timersTo(100); a.make();
+    got = +a.frame(600).toFixed(2);
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the gather's clock starts at its first frame, not when boot makes the mark", got, 0);
+
+  try {
+    // Two frames at 250 Hz, then one 200 ms late, against the same two and two more on time.
+    const late = markLab(), even = markLab(); late.make(); even.make();
+    [500, 500 + hz(250), 500 + 2 * hz(250), 700 + 2 * hz(250)].forEach(t => late.frame(t));
+    [0, 1, 2, 3, 4].forEach(i => even.frame(500 + i * hz(250)));
+    got = [+late.x().toFixed(4) === +even.x().toFixed(4), late.x() > 0];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a frame 200 ms late moves the dots as far as two frames of the display, never the wall's 200 ms", got, [true, true]);
+
+  try {
+    got = [240, 60, 30].map(n => {
+      const r = markLab(); r.make();
+      let i = 0;
+      while (r.frame(500 + i * hz(n)) < 100 && i < 2000) i++;
+      const took = i * hz(n);
+      return took >= 1100 - 0.01 && took < 1100 + hz(n) + 0.01;
+    });
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("frames on time still gather in 1100 ms at 240, 60 and 30 Hz", got, [true, true, true]);
+
+  try {
+    // Formed at 250 Hz, then the twinkle's timer-paced frames: each moves the clock by the wall's step.
+    const r = markLab(); r.make();
+    let t = 500, i = 0;
+    while (r.frame(t) < 100) t = 500 + ++i * hz(250);
+    const at = r.state().ms;
+    r.timersTo(t + 66); r.frame(t + 70);
+    got = +(r.state().ms - at).toFixed(3);
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the twinkle after the gather keeps the wall's time", got, 70);
+
+  try {
+    const r = markLab(), seen = [];
+    r.sb.whenMarkFormed(() => seen.push("no mark, at once"));
+    r.make();
+    r.sb.whenMarkFormed(() => seen.push("formed " + Math.round(r.sb.performance.now())));
+    let t = 400, i = 0;
+    while (r.frame(t) < 100) { if (seen.length > 1) seen.push("early"); t = 400 + ++i * hz(250); }
+    r.timersTo(t);
+    const q = markLab(); q.make();
+    q.sb.whenMarkFormed(() => seen.push("no frames, let go at " + Math.round(q.sb.performance.now())));
+    q.timersTo(3000);
+    got = seen;
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a wait on the gather runs once it has formed, at once with no mark, and after 1 s without a frame",
+    got, ["no mark, at once", "formed 1500", "no frames, let go at 1000"]);
+
+  try {
+    got = [];
+    // A cold first frame 600 ms after boot, then 250 Hz; the same with no mark; no frames at all.
+    const c = markLab(); c.make(); c.sb.maybeStartTour();
+    let t = 600, i = 0;
+    while (c.frame(t) < 100) t = 600 + ++i * hz(250);
+    c.timersTo(4000);
+    const n = markLab(); n.sb.maybeStartTour(); n.timersTo(4000);
+    const q = markLab(); q.make(); q.sb.maybeStartTour(); q.timersTo(4000);
+    got = [c.log, n.log, q.log];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the first run's tour starts 200 ms after the mark has formed, never before 1300 ms, and a mark that draws nothing holds it no longer",
+    got, [[["tour", 1900]], [["tour", 1300]], [["tour", 1300]]]);
+
+  try {
+    // A reload in the middle of the tour, parked on a step: the same cold launch, then no mark.
+    const park = r => { r.sb.ssGet = () => "name"; r.sb.tourSeen = () => true; r.sb.TOUR_STEPS = [{ id: "load" }, { id: "name" }];
+      r.sb.startTour = at => r.log.push(["tour", Math.round(r.sb.performance.now()), at]); };
+    const c = markLab(); park(c); c.make(); c.sb.maybeStartTour();
+    let t = 600, i = 0;
+    while (c.frame(t) < 100) t = 600 + ++i * hz(250);
+    c.timersTo(4000);
+    const n = markLab(); park(n); n.sb.maybeStartTour(); n.timersTo(4000);
+    got = [c.log, n.log];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a tour resumed after a reload waits for the mark to form as a first run does, and without one comes at 300 ms as before",
+    got, [[["tour", 1900, 1]], [["tour", 300, 1]]]);
+
+  try {
+    // The same cold launch; then no mark, where the second frame comes 20 ms after boot.
+    const c = markLab(); c.make(); c.sb.wireOnOpen();
+    let t = 600, i = 0;
+    while (c.frame(t) < 100) t = 600 + ++i * hz(250);
+    c.timersTo(4000);
+    const n = markLab(); n.sb.wireOnOpen(); n.frame(10); n.frame(20); n.timersTo(4000);
+    got = [c.log, n.log];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the boot repaint waits for the mark to form, and without one comes on the second frame as before",
+    got, [[["repaint", 1700]], [["repaint", 20]]]);
+
+  try {
+    // The same cold launch, then no mark: when boot draws the menu's warm copy.
+    const c = markLab(); c.make(); c.sb.wireOnOpen();
+    let t = 600, i = 0;
+    while (c.frame(t) < 100) t = 600 + ++i * hz(250);
+    c.timersTo(4000);
+    const n = markLab(); n.sb.wireOnOpen(); n.frame(10); n.frame(20); n.timersTo(4000);
+    got = [c.warms, n.warms];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the menu's warm copy is drawn once, 900 ms after the mark has formed, and 900 ms after boot without one",
+    got, [[2600], [900]]);
+}
+/* THE .ec FILE TYPE IS NAMED IN THE INSTALLER'S LANGUAGE: electron-builder writes the English from
+   fileAssociations, and shell/installer.nsh's customInstall writes the Polish over it when the
+   installer runs in Polish. Read here against electron-builder's own templates and language table;
+   what Explorer shows on a Polish Windows is Maxim's to see. */
+function ecTypeNameTests() {
+  const root = E.ROOT, lib = path.join(root, "node_modules", "app-builder-lib");
+  let got;
+  let assoc = [];
+  try {
+    assoc = (require(path.join(root, "electron-builder.js")).fileAssociations || [])
+      .filter(a => [].concat(a.ext).indexOf("ec") > -1);
+    got = assoc.map(a => [a.name, a.description]);
+  } catch (e) { got = "electron-builder.js threw: " + e.message; }
+  eq("one .ec association, whose class and name are the English \"Etiuda catalog\"", got, [["Etiuda catalog", "Etiuda catalog"]]);
+  try {
+    const nsh = fs.readFileSync(path.join(root, "shell", "installer.nsh"), "utf8");
+    const body = (/!macro customInstall\r?\n([\s\S]*?)!macroend/.exec(nsh) || [])[1] || "";
+    const w = /\$\{If\} \$LANGUAGE == (\d+)\r?\n\s*WriteRegStr SHELL_CONTEXT "Software\\Classes\\([^"]+)" "" "([^"]+)"/.exec(body);
+    const langs = require(path.join(lib, "out", "util", "langs.js"));
+    const cfg = require(path.join(root, "electron-builder.js"));
+    const asked = (cfg.nsis || {}).installerLanguages;
+    const inInstaller = asked == null ? langs.bundledLanguages.indexOf("pl_PL") > -1
+      : [].concat(asked).some(l => /^pl([_-]PL)?$/.test(l));
+    const ui = fs.readFileSync(path.join(root, "src", "modules", "ui-lang.js"), "utf8");
+    const pl = (/\n\s*"Etiuda catalog":"([^"]+)",/.exec(ui) || [])[1];
+    got = w ? [+w[1] === langs.lcid.pl_PL, inInstaller, w[2] === (assoc[0] || {}).name, !!pl && w[3] === pl,
+      /System::Call 'shell32::SHChangeNotify\(i 0x08000000, i 0, i 0, i 0\)'/.test(body.slice(w.index))]
+      : "customInstall writes no name under $LANGUAGE";
+  } catch (e) { got = "the installer's include could not be read: " + e.message; }
+  eq("in Polish the installer writes the interface's own Polish for \"Etiuda catalog\" over the same class, under electron-builder's LCID for Polish, which the installer carries, and tells the shell",
+    got, [true, true, true, true, true]);
+  try {
+    const sect = fs.readFileSync(path.join(lib, "templates", "nsis", "installSection.nsh"), "utf8");
+    const fa = fs.readFileSync(path.join(lib, "templates", "nsis", "include", "FileAssociation.nsh"), "utf8");
+    const reg = sect.indexOf("!insertmacro registerFileAssociations"), mine = sect.indexOf("!insertmacro customInstall");
+    const un = /!macro APP_UNASSOCIATE [^\n]*\n([\s\S]*?)!macroend/.exec(fa);
+    got = [reg > -1 && mine > reg, !!un && /DeleteRegKey SHELL_CONTEXT `Software\\Classes\\\$\{FILECLASS\}`/.test(un[1])];
+  } catch (e) { got = "electron-builder's templates could not be read: " + e.message; }
+  eq("electron-builder writes its English before customInstall runs, and its uninstaller takes the whole class back, Polish and all",
+    got, [true, true]);
+  /* The right-click entry: electron-builder's own verb, the English "Open with Etiuda", and in Polish
+     the copywriter's words over it, in the same branch and before the shell is told. */
+  try {
+    const nsh = fs.readFileSync(path.join(root, "shell", "installer.nsh"), "utf8");
+    const body = (/!macro customInstall\r?\n([\s\S]*?)!macroend/.exec(nsh) || [])[1] || "";
+    const branch = (/\$\{If\} \$LANGUAGE == 1045\r?\n([\s\S]*?)\$\{EndIf\}/.exec(body) || [])[1] || "";
+    const verb = /WriteRegStr SHELL_CONTEXT "Software\\Classes\\([^"\\]+)\\shell\\open" "" "([^"]+)"/.exec(branch);
+    const fa = fs.readFileSync(path.join(lib, "templates", "nsis", "include", "FileAssociation.nsh"), "utf8");
+    const assoc = /!macro APP_ASSOCIATE EXT [^\n]*\n([\s\S]*?)!macroend/.exec(fa);
+    const target = fs.readFileSync(path.join(lib, "out", "targets", "nsis", "NsisTarget.js"), "utf8");
+    const product = (require(path.join(root, "electron-builder.js")).productName) || require(path.join(root, "package.json")).productName;
+    got = [!!assoc && /WriteRegStr SHELL_CONTEXT "Software\\Classes\\\$\{FILECLASS\}\\shell\\open" "" `\$\{COMMANDTEXT\}`/.test(assoc[1]),
+      /const commandText = `"Open with \$\{[^`]*productName\)\}"`/.test(target), product,
+      verb && verb[1], verb && verb[2], !!verb && branch.indexOf("SHChangeNotify") > branch.indexOf(verb[0])];
+  } catch (e) { got = "the installer's include could not be read: " + e.message; }
+  eq("the right-click entry for a .ec file is electron-builder's \"Open with Etiuda\" under the class's open verb, and a Polish installer writes \"Otwórz w Etiudzie\" there before telling the shell",
+    got, [true, true, "Etiuda", "Etiuda catalog", "Otwórz w Etiudzie", true]);
+}
+/* THE MENU'S FIRST OPEN IS PAID FOR BEFORE IT (E9): warmMenu is sliced out of header-menus.js with the
+   one openSettingsMenu that marks the menu drawn, and run on a small element model written here; when
+   boot asks for it is the mark lab's. Whether the first open now runs as smoothly as the second is a
+   per-frame measurement in a window, the verifier's. */
+function menuWarmTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "header-menus.js"), "utf8");
+  class El {
+    constructor(attrs, kids) {
+      this.attrs = Object.assign({}, attrs); this.kids = kids || []; this.parent = null; this.inert = false;
+      this.kids.forEach(k => { k.parent = this; });
+      this.cls = new Set((this.attrs.class || "").split(" ").filter(Boolean)); delete this.attrs.class;
+      const self = this;
+      this.classList = { add: c => self.cls.add(c), remove: c => self.cls.delete(c), contains: c => self.cls.has(c) };
+    }
+    get hidden() { return "hidden" in this.attrs; }
+    set hidden(v) { if (v) this.attrs.hidden = ""; else delete this.attrs.hidden; }
+    setAttribute(k, v) { this.attrs[k] = String(v); }
+    removeAttribute(k) { delete this.attrs[k]; }
+    getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
+    cloneNode() { const c = new El(Object.assign({ class: [...this.cls].join(" ") }, this.attrs), this.kids.map(k => k.cloneNode())); return c; }
+    querySelectorAll() { const out = []; const walk = n => n.kids.forEach(k => { out.push(k); walk(k); }); walk(this); return out; }
+    after(n) { const p = this.parent, i = p.kids.indexOf(this); p.kids.splice(i + 1, 0, n); n.parent = p; }
+    remove() { const p = this.parent; if (p) { p.kids.splice(p.kids.indexOf(this), 1); this.parent = null; } }
+  }
+  const lab = () => {
+    const item = t => new El({ type: "button", role: "menuitem", title: t, id: "m" + t });
+    const menu = new El({ class: "menu", id: "settingsMenu", hidden: "", role: "menu" }, [item("a"), new El({ class: "menu-sep" }), item("b")]);
+    const btn = new El({ id: "settingsBtn" });
+    const wrap = new El({ id: "settingsWrap" }, [btn, menu]);
+    let clock = 0, frames = [], timers = [];
+    const sb = {
+      $: sel => (sel === "#settingsMenu" ? menu : sel === "#settingsBtn" ? btn : null),
+      requestAnimationFrame: fn => { frames.push(fn); return frames.length; },
+      setTimeout: (fn, ms) => { timers.push({ at: clock + ms, fn }); return timers.length; },
+      closeFactsPanel() {}, cutLeaves() {}, syncSettingsMenu() {}, takeKeyboard() {}
+    };
+    require("vm").runInNewContext([extractDecl(src, "let menuDrawn="), extractDecl(src, "function warmMenu("),
+      extractDecl(src, "function openSettingsMenu(")].join("\n"), sb);
+    const frame = () => { const run = frames; frames = []; run.forEach(f => f()); };
+    const to = t => { clock = t; timers.filter(x => x.at <= t).forEach(x => { timers.splice(timers.indexOf(x), 1); x.fn(); }); };
+    const copies = () => wrap.kids.filter(k => k.cls.has("e-warm"));
+    return { sb, menu, wrap, frame, to, copies };
+  };
+  let got;
+  try {
+    const r = lab();
+    r.sb.warmMenu();
+    const c = r.copies()[0], all = c ? [c].concat(c.querySelectorAll()) : [];
+    const seen = [r.copies().length, r.wrap.kids.indexOf(c) === r.wrap.kids.indexOf(r.menu) + 1, c && !c.hidden,
+      c && c.getAttribute("aria-hidden"), c && c.inert, c && c.cls.has("menu"),
+      all.filter(n => ["id", "role", "title"].some(a => n.getAttribute(a) != null)).length,
+      r.menu.hidden, r.menu.getAttribute("id"), r.menu.kids[0].getAttribute("id")];
+    r.frame(); r.frame(); const after2 = r.copies().length; r.frame();
+    got = [seen, after2, r.copies().length];
+  } catch (e) { got = "the menu lab threw: " + e.message; }
+  eq("warmMenu draws one copy of the menu beside it, shown, aria-hidden and inert, with no id, role or title, the menu itself untouched, and takes it away on the third frame",
+    got, [[1, true, true, "true", true, true, 0, true, "settingsMenu", "ma"], 1, 0]);
+  try {
+    const q = lab(); q.sb.warmMenu(); q.to(999); const held = q.copies().length; q.to(1000);
+    const twice = lab(); twice.sb.warmMenu(); twice.frame(); twice.frame(); twice.frame(); twice.sb.warmMenu();
+    const opened = lab(); opened.sb.openSettingsMenu(false); opened.menu.hidden = true; opened.sb.warmMenu();
+    const open = lab(); open.menu.hidden = false; open.sb.warmMenu();
+    got = [held, q.copies().length, twice.copies().length, opened.copies().length, open.copies().length];
+  } catch (e) { got = "the menu lab threw: " + e.message; }
+  eq("without frames the copy goes at 1000 ms, and none is drawn a second time, after the menu has opened, or while it is open",
+    got, [1, 0, 0, 0, 0]);
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const rule = /\n\.menu\.e-warm:not\(\[hidden\]\)\{([^}]*)\}/.exec(tpl);
+  const op = rule && /opacity:([.0-9]+)/.exec(rule[1]);
+  eq("the copy is drawn at a trace, never animated, never pressed, by a rule that outranks the menu's own entrance",
+    rule ? [+op[1] > 0 && +op[1] < 0.01, /animation:none/.test(rule[1]), /pointer-events:none/.test(rule[1]),
+      /\n\.menu\.e-warm \*\{pointer-events:none!important\}/.test(tpl)] : "no .menu.e-warm rule", [true, true, true, true]);
+}
+/* EVERY CLOSE FADES OUT ON THE DISMISS TIER (feel pass motion-9, ruled 2026-09-26 13:14): the three
+   helpers are sliced out of motion.js and run on a small element model written here, and each
+   surface's closer and opener is asked for its call. The fade itself is the verifier's frames. */
+function dismissFakeDom() {
+  class El {
+    constructor(tag, attrs) {
+      this.tag = tag; this.attrs = Object.assign({}, attrs || {}); this.kids = []; this.parent = null;
+      this.cls = new Set((this.attrs.class || "").split(" ").filter(Boolean)); delete this.attrs.class;
+      this.value = this.attrs.value || ""; this.checked = false; this.scrollTop = 0; this.hidden = false; this.inert = false;
+      this.style = { cssText: "" }; this.heard = {};
+      const self = this;
+      this.classList = { add: c => self.cls.add(c), remove: c => self.cls.delete(c), contains: c => self.cls.has(c) };
+    }
+    add(...k) { k.forEach(x => { x.parent = this; this.kids.push(x); }); return this; }
+    get className() { return [...this.cls].join(" "); }
+    set className(v) { this.cls = new Set(String(v).split(" ").filter(Boolean)); }
+    get firstChild() { return this.kids[0] || null; }
+    get isConnected() { let n = this; while (n.parent) n = n.parent; return n.root === true; }
+    all() { return this.kids.reduce((a, k) => a.concat([k], k.all()), []); }
+    querySelectorAll(sel) {
+      const all = this.all();
+      if (sel === "*") return all;
+      if (sel === "[id]") return all.filter(n => n.attrs.id != null);
+      return all.filter(n => ["input", "textarea", "select"].indexOf(n.tag) > -1);
+    }
+    getAttribute(k) { return this.attrs[k] == null ? null : this.attrs[k]; }
+    setAttribute(k, v) { this.attrs[k] = String(v); }
+    removeAttribute(k) { delete this.attrs[k]; }
+    addEventListener(t, fn) { (this.heard[t] = this.heard[t] || []).push(fn); }
+    fire(t, target) { (this.heard[t] || []).forEach(fn => fn({ target: target || this })); }
+    remove() { if (!this.parent) return; this.parent.kids.splice(this.parent.kids.indexOf(this), 1); this.parent = null; }
+    appendChild(n) { n.remove(); n.parent = this; this.kids.push(n); return n; }
+    after(n) { n.remove(); const p = this.parent; p.kids.splice(p.kids.indexOf(this) + 1, 0, n); n.parent = p; }
+    cloneNode() {
+      const c = new El(this.tag, Object.assign({}, this.attrs, { class: [...this.cls].join(" ") }));
+      c.style.cssText = this.style.cssText;
+      this.kids.forEach(k => c.add(k.cloneNode(true)));
+      return c;
+    }
+  }
+  const doc = new El("body"); doc.root = true;
+  return { El, doc };
+}
+function dismissTierTests() {
+  const motion = fs.readFileSync(path.join(E.ROOT, "src", "modules", "motion.js"), "utf8");
+  const timers = [];
+  let still = false, H = null;
+  try {
+    H = new Function("mgReduceMotion", "M_MS", "setTimeout",
+      ["const dismissing=", "function leaveNode(", "function dismissNode(", "function dismissCopy(", "function cutLeaves("]
+        .map(m => extractDecl(motion, m)).join("\n") + "\nreturn {dismissNode,dismissCopy,cutLeaves};")(
+      () => still, { dismiss: 80 }, (fn, ms) => { timers.push([fn, ms]); return timers.length; });
+  } catch (e) { H = null; }
+  eq("motion.js carries dismissNode, dismissCopy and cutLeaves", !!H, true);
+  if (H) dismissHelperTests(H, timers, v => { still = v; });
+  still = false;
+  if (H) menuScreenTests(H);
+  if (H) leavingCopyTests(H);
+  dismissWiringTests();
+}
+function dismissHelperTests(H, timers, setStill) {
+  const { El, doc } = dismissFakeDom();
+
+  // A node on its way out: ids gone with its state, inert, fading, and gone when its own fade ends.
+  const btn = new El("button", { id: "ecYes" });
+  const offer = new El("div", { id: "eCatalogOffer", class: "bub bub-ask" }).add(new El("p").add(btn));
+  doc.add(offer);
+  H.dismissNode(offer);
+  eq("a closing surface stays in the page for its fade, inert, hidden from assistive technology, wearing e-gone",
+    [offer.isConnected, offer.inert, offer.getAttribute("aria-hidden"), offer.classList.contains("e-gone")], [true, true, "true", true]);
+  eq("and it answers to none of its ids, so a lookup asking whether it is open is told no",
+    [offer.getAttribute("id"), btn.getAttribute("id")], [null, null]);
+  offer.fire("animationend", btn);
+  eq("a fade inside it that ends does not take it away", offer.isConnected, true);
+  offer.fire("animationend");
+  eq("its own fade ending does", offer.isConnected, false);
+  eq("and a timer on the tier stands behind the fade, for a window that paints no frames",
+    timers.length && timers[timers.length - 1][1], 200);
+
+  // A surface that stays: a copy after it, with what was typed and scrolled, ids kept for the sheet.
+  const inp = new El("input", { id: "factsEdit" }), list = new El("div", { class: "list" });
+  const panel = new El("div", { id: "factsPanel", class: "facts-panel" }).add(inp, list);
+  const wrap = new El("div", { class: "menu-wrap" }).add(panel, new El("span"));
+  doc.add(wrap);
+  inp.value = "typed"; list.scrollTop = 140;
+  H.dismissCopy(panel);
+  const copy = wrap.kids[1];
+  eq("a surface that stays leaves as a copy placed straight after it, so a lookup by id finds the original first",
+    [wrap.kids[0] === panel, copy !== panel && copy.classList.contains("e-gone"), copy.getAttribute("id")], [true, true, "factsPanel"]);
+  eq("the copy carries what was typed and how far it was scrolled",
+    [copy.kids[0].value, copy.kids[1].scrollTop], ["typed", 140]);
+  const into = new El("div"); doc.add(into);
+  const card = new El("div", { id: "tourCard", class: "tour-card bub" }); card.style.cssText = "top:10px";
+  doc.add(new El("div", { id: "tourRoot" }).add(card));
+  H.dismissCopy(card, "opacity:1", into);
+  eq("a copy lifted out of a root that hides keeps its own place and takes what the root gave it",
+    into.kids.length === 1 && into.kids[0].style.cssText, "top:10px;opacity:1");
+  panel.hidden = true;
+  const before = wrap.kids.length;
+  H.dismissCopy(panel);
+  eq("a surface already hidden leaves nothing behind", wrap.kids.length, before);
+
+  // A surface opening ends every leave at once; stilled, nothing leaves at all.
+  const sure = new El("div", { id: "eSure", class: "modal" }); doc.add(sure);
+  H.dismissNode(sure);
+  H.cutLeaves();
+  eq("a surface that opens ends every leave in the same task", [sure.isConnected, copy.isConnected], [false, false]);
+  setStill(true);
+  const quiet = new El("div", { id: "notePane" }); doc.add(quiet);
+  const menu = new El("div", { id: "moreMenu", class: "menu" }), mw = new El("div").add(menu); doc.add(mw);
+  H.dismissNode(quiet); H.dismissCopy(menu);
+  eq("stilled, a closing node goes at once and a staying one leaves no copy", [quiet.isConnected, mw.kids.length], [false, 1]);
+
+}
+function dismissWiringTests() {
+  // Every surface's closer leaves on the tier and every opener cuts the leaves.
+  const src = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
+  const has = (f, marker, needle) => { try { return extractDecl(src(f), marker).indexOf(needle) > -1; } catch (e) { return false; } };
+  eq("each closer leaves on the dismiss tier: the dialog, the loose content's question, the undo, the name, the offer, the note, the menus, quick facts, the tour", [
+    has("dialog.js", "function closeModal(", "leaveModal();"), has("dialog.js", "function leaveModal(", "dismissNode(g)"),
+    has("catalog-file.js", "function askLoose(", "dismissNode(el)"), has("ui-lang.js", "function offerUndo(", "dismissNode(el)"),
+    has("agent.js", "function askAgentName(", "dismissNode(wrap)"), has("catalog-offer.js", "function eOfferCatalogDialog(", "dismissNode(wrap)"),
+    has("note-pane.js", "function closeNotePane(", "dismissNode(notePaneEl)"),
+    has("header-menus.js", "function closeMoreMenu(", "dismissCopy(m)"), has("header-menus.js", "function closeSettingsMenu(", "dismissCopy(menu)"),
+    has("facts.js", "function closeFactsPanel(", "dismissCopy(p)"), has("tour.js", "function endTour(", "dismissCopy(els.card")],
+    [true, true, true, true, true, true, true, true, true, true, true]);
+  eq("each opener ends the leaves first", [
+    has("dialog.js", "function openDialog(", "cutLeaves()"), has("catalog-file.js", "function askLoose(", "cutLeaves()"),
+    has("ui-lang.js", "function offerUndo(", "cutLeaves()"), has("agent.js", "function askAgentName(", "cutLeaves()"),
+    has("catalog-offer.js", "function eOfferCatalogDialog(", "cutLeaves()"), has("note-pane.js", "function openNotePane(", "cutLeaves()"),
+    has("header-menus.js", "function openMoreMenu(", "cutLeaves()"), has("header-menus.js", "function openSettingsMenu(", "cutLeaves()"),
+    has("facts.js", "function openFactsPanel(", "cutLeaves()"), has("tour.js", "function startTour(", "cutLeaves()")],
+    [true, true, true, true, true, true, true, true, true, true]);
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  eq("the sheet fades e-gone on the dismiss tier, opacity only, and holds what is inside it still",
+    [/\.e-gone\{animation:eLeave var\(--m-dismiss\) ease forwards!important;pointer-events:none!important\}/.test(tpl),
+     /\.e-gone \*\{animation:none!important;transition:none!important\}/.test(tpl), /@keyframes eLeave\{to\{opacity:0\}\}/.test(tpl)],
+    [true, true, true]);
+  const q = [["dialog.js", "function openCover(", ":not(.e-gone)"], ["empty-mark.js", "function dialogStanding(", ":not(.e-gone)"],
+             ["tour.js", "function syncTourBehind(", ".modal:not([hidden]):not(.e-gone)"], ["tour.js", "function syncTourBehind(", ".bub-ask:not(.e-gone)"]];
+  eq("nothing that asks whether a window or a question is up counts one that is leaving", q.map(x => has(x[0], x[1], x[2])), [true, true, true, true]);
+}
+/* A SCREEN OPENED FROM A MENU ROW (feel pass motion-9, the one chain that cross-faded): it opens
+   while the menu is up, so it keeps the Menu button as its opener, and the menu leaves no copy. */
+function menuScreenTests(H) {
+  const src = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
+  {
+    const { El, doc } = dismissFakeDom();
+    const hm = src("header-menus.js");
+    const menu = new El("div", { id: "settingsMenu", class: "menu" }), wrap = new El("div").add(menu);
+    doc.add(wrap);
+    const btn = { classList: { remove() {} }, setAttribute() {} };
+    let C = null, M = null;
+    try {
+      C = new Function("$", "heldMenu", "giveFocusBack", "dismissCopy",
+        extractDecl(hm, "function closeSettingsMenu(") + "\nreturn closeSettingsMenu;")(
+        s => s === "#settingsMenu" ? menu : s === "#settingsBtn" ? btn : null, () => null, () => {}, H.dismissCopy);
+      M = new Function("closeSettingsMenu", extractDecl(hm, "function menuScreen(") + "\nreturn menuScreen;")(C);
+    } catch (e) { M = null; }
+    if (C) C();
+    eq("closed on its own, the menu fades as a copy after it",
+      C ? [menu.hidden, wrap.kids.length, !!wrap.kids[1] && wrap.kids[1].classList.contains("e-gone")] : "no closeSettingsMenu", [true, 2, true]);
+    H.cutLeaves();
+    menu.hidden = false;
+    const saw = [];
+    if (M) M(() => { saw.push(menu.hidden); H.cutLeaves(); });
+    eq("a screen opened from a menu row opens while the menu is up, and the menu then goes with no fading copy",
+      M ? [saw, menu.hidden, wrap.kids.length] : "no menuScreen in header-menus.js", [[false], true, 1]);
+    let wire = "";
+    try { wire = extractDecl(hm, "function wireHeaderMenus("); } catch (e) { wire = ""; }
+    eq("each menu row that opens a screen goes through menuScreen",
+      ["menuScreen(hooks.openSettings)", "menuScreen(hooks.openManage)", "menuScreen(hooks.startTour)", "menuScreen(openAbout)"]
+        .map(s => wire.indexOf(s) > -1), [true, true, true, true]);
+  }
+}
+/* THE HANG WINDOW'S RESTART (the "not responding" question): the page is ended first and reloaded
+   once it has gone, marked like every reload after a stop. The shell's page watch is sliced and run
+   on a window model whose recovery window answers at once; the recovery itself is the verifier's. */
+function pageWatchTests() {
+  const shell = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  const recovering = new Set(), log = [], answers = [], wcOn = {}, winOn = {};
+  let clock = 1000000;
+  const wc = { id: 7, on: (t, fn) => { wcOn[t] = fn; },
+    reload() { log.push(recovering.delete(7) ? "reload marked" : "reload unmarked"); },
+    forcefullyCrashRenderer() { log.push("kill"); } };
+  const win = { webContents: wc, on: (t, fn) => { winOn[t] = fn; }, isDestroyed: () => false, close() { log.push("close"); } };
+  const askInWindow = (w, message) => { log.push("asks " + message); const r = answers.shift(); return { then: fn => fn({ response: r }) }; };
+  const words = { gone: "gone", hung: "hung", restart: "Restart", close: "Close", wait: "Wait" };
+  // A system box, which the watch must not reach for, is logged as one so a regression reads plainly.
+  const dialog = { showMessageBox: (w, o) => { log.push("system box " + o.message); const r = answers.shift(); return { then: fn => fn({ response: r }) }; } };
+  let watch = null;
+  try {
+    watch = new Function("recovering", "askInWindow", "dialog", "PLACED_ASIDE", "shellWords", "console", "Date",
+      extractDecl(shell, "function watchPage(") + "\nreturn watchPage;")(
+      recovering, askInWindow, dialog, false, () => words, { error() {} }, { now: () => clock });
+  } catch (e) { watch = null; }
+  if (!watch) { eq("shell/main.js carries the page watch as watchPage(win)", false, true); return; }
+  watch(win);
+  const step = fn => { log.length = 0; fn(); return log.slice(); };
+  const gone = reason => () => wcOn["render-process-gone"]({}, { reason: reason, exitCode: 1 });
+  eq("the first loss reloads the page at once, marked", step(gone("crashed")), ["reload marked"]);
+  clock += 10000; answers.push(0);
+  eq("a second loss within a minute asks in the recovery window, and its Restart reloads, marked",
+    step(gone("crashed")), ["asks gone", "reload marked"]);
+  clock += 10000; answers.push(1);
+  eq("and its Close closes the window", step(gone("crashed")), ["asks gone", "close"]);
+  answers.push(0);
+  eq("the hang window's Wait leaves the page alone", step(() => winOn.unresponsive()), ["asks hung"]);
+  answers.push(1);
+  eq("the hang window's Restart ends the page and sends no reload while the old page is still going",
+    step(() => winOn.unresponsive()), ["asks hung", "kill"]);
+  eq("the reload comes once the old page has gone, marked, and that loss asks nothing", step(gone("killed")), ["reload marked"]);
+  clock += 120000;
+  eq("a loss a minute after the last counts as a first again", step(gone("crashed")), ["reload marked"]);
+  eq("the shell asks nothing in a system message box any more", /showMessageBox/.test(shell), false);
+}
+
+/* THE RECOVERY WINDOW IS ETIUDA'S OWN: a small window with a renderer of its own, carrying a page
+   with no script, in the desk's language and theme, whose links answer at will-navigate. Sliced out
+   of the shell and run on a window model over a scratch folder; how it looks is Maxim's to see. */
+function recoveryWindowTests() {
+  const shell = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  const made = [], tmp = fs.mkdtempSync(path.join(require("os").tmpdir(), "etiuda-recovery-legs-"));
+  class FakeWin {
+    constructor(o) {
+      const self = this;
+      this.o = o; this.wcOn = {}; this.winOn = {}; this.file = ""; this.closed = false; this.shown = "";
+      this.webContents = { on: (t, fn) => { self.wcOn[t] = fn; }, setWindowOpenHandler: fn => { self.opener = fn; } };
+      made.push(this);
+    }
+    on(t, fn) { this.winOn[t] = fn; }
+    once(t, fn) { this.winOn[t] = fn; }
+    isDestroyed() { return this.closed; }
+    close() { if (this.closed) return; this.closed = true; if (this.winOn.closed) this.winOn.closed(); }
+    loadFile(f) { this.file = f; }
+    show() { this.shown = "show"; }
+    showInactive() { this.shown = "inactive"; }
+  }
+  class NowPromise { constructor(ex) { this.settled = false; ex(v => { if (!this.settled) { this.settled = true; this.value = v; } }); } }
+  const EN = { lang: "en", gone: "Etiuda stopped unexpectedly.", restart: "Restart", close: "Close Etiuda" };
+  const PL = { lang: "pl", gone: "Etiuda niespodziewanie się zatrzymała.", restart: "Uruchom ponownie", close: "Zamknij Etiudę" };
+  const load = (words, dark, aside, fsUsed) => {
+    try {
+      return new Function("BrowserWindow", "nativeTheme", "shellWords", "PLACED_ASIDE", "OFFSCREEN", "OFFSCREEN_SHOWN",
+        "offscreenAt", "console", "Promise", "fs", "path", "os", "process",
+        ["function policyFor(", "function recoveryDoc(", "const RECOVERY_SIZE", "function askInWindow("]
+          .map(m => extractDecl(shell, m)).join("\n") + "\nreturn { recoveryDoc, askInWindow };")(
+        FakeWin, { shouldUseDarkColors: dark }, () => words, aside, aside, false, () => ({ x: 9000, y: 9000 }),
+        { error() {} }, NowPromise, fsUsed || fs, path, { tmpdir: () => tmp }, { pid: 4242 });
+    } catch (e) { return null; }
+  };
+  const R = load(PL, false, false);
+  if (!R) { eq("shell/main.js carries recoveryDoc and askInWindow", false, true); return; }
+  const parent = { getBounds: () => ({ x: 100, y: 100, width: 1200, height: 800 }) };
+  const ask = (Rr, message, buttons, signal) => { made.length = 0; const p = Rr.askInWindow(parent, message, buttons, signal); return { p, w: made[0] }; };
+  const doc = w => { try { return fs.readFileSync(w.file, "utf8"); } catch (e) { return ""; } };
+
+  const a = ask(R, PL.gone, [PL.restart, PL.close]);
+  const o = (a.w && a.w.o) || {}, wp = o.webPreferences || {};
+  eq("a second stop opens a window of its own over the desk: modal to it, centred on it, frameless and fixed in size, with no script and a sandbox",
+    [made.length, o.parent === parent, o.modal, o.frame, o.resizable, o.x, o.y, o.width, o.height, wp.javascript, wp.sandbox, wp.nodeIntegration],
+    [1, true, true, false, false, 500, 444, 400, 112, false, true, false]);
+  const d = doc(a.w);
+  const links = [...d.matchAll(/<a href="\?answer-(\d)"( class="go" autofocus)?>([^<]*)<\/a>/g)].map(m => [+m[1], !!m[2], m[3]]);
+  eq("its page is a file of the desk's language, carries no script under a policy refusing any, and asks in one line with the two choices as links, the leading one filled, focused and last",
+    [a.w && a.w.file === path.join(tmp, "etiuda-recovery-4242.html"), /^<!DOCTYPE html>\n<html lang="pl">\n<meta charset="utf-8">/.test(d),
+     /script-src 'none'/.test(d), /<script/i.test(d), (/<h1>([^<]*)<\/h1>/.exec(d) || [])[1], links],
+    [true, true, true, false, PL.gone, [[1, false, PL.close], [0, true, PL.restart]]]);
+  eq("the page keeps the arrow, cannot be selected, drags by its ground, and has a dark face and a high-contrast ring",
+    [/body\{[^}]*cursor:default/.test(d), /a\{[^}]*cursor:default/.test(d), /user-select:none/.test(d), /-webkit-app-region:drag/.test(d),
+     /@media \(prefers-color-scheme:dark\)/.test(d), /@media \(forced-colors:active\)/.test(d)],
+    [true, true, true, true, true, true]);
+  a.w.winOn["ready-to-show"]();
+  const base = "file:///" + a.w.file.split(path.sep).join("/");
+  const nav = url => { let prevented = false; a.w.wcOn["will-navigate"]({ preventDefault() { prevented = true; } }, url); return prevented; };
+  const stopped = [nav("https://example.com/"), nav(base + "?answer-7")];
+  const unsettled = !a.p.settled;
+  const chose = nav(base + "?answer-1");
+  eq("it shows when drawn, refuses every navigation and new window, passes over a query that is no choice, answers the chosen link's index, closes and takes its file away",
+    [a.w.shown, stopped, a.w.opener && a.w.opener().action, unsettled, chose, a.p.value, a.w.closed, fs.existsSync(a.w.file)],
+    ["show", [true, true], "deny", true, true, { response: 1 }, true, false]);
+
+  const b = ask(R, PL.gone, [PL.restart, PL.close]);
+  b.w.wcOn["before-input-event"]({ preventDefault() {} }, { type: "keyDown", key: "Escape" });
+  const c = ask(R, PL.gone, [PL.restart, PL.close]);
+  c.w.close();
+  const ac = new AbortController(), h = ask(R, "hung", ["Wait", "Restart"], ac.signal);
+  ac.abort();
+  eq("Escape and a close both answer the first choice, and an abort closes the window unanswered",
+    [b.p.value, b.w.closed, c.p.value, h.p.value, h.w.closed], [{ response: 0 }, true, { response: 0 }, { response: -1 }, true]);
+
+  const D = load(EN, true, true), s = ask(D, 'a <b> & "c"', ["x", "y"]);
+  s.w.winOn["ready-to-show"]();
+  const sd = doc(s.w);
+  eq("an English desk in dark gets an English page on the dark panel; the harness's placed-aside window gets a placed-aside one, never shown; words are escaped",
+    [/<html lang="en">/.test(sd), s.w.o.backgroundColor, a.w.o.backgroundColor, s.w.o.focusable, s.w.o.x, s.w.shown,
+     (/<h1>([^<]*)<\/h1>/.exec(sd) || [])[1]],
+    [true, "#1d1f24", "#ffffff", false, 9000, "", "a &lt;b&gt; &amp; &quot;c&quot;"]);
+  s.w.close();
+
+  const N = load(EN, false, false, Object.assign({}, fs, { writeFileSync() { throw new Error("refused"); } }));
+  const n = N ? ask(N, EN.gone, [EN.restart, EN.close]) : { p: {} };
+  eq("where its page cannot be written no window opens and the first choice is taken at once",
+    [made.length, n.p.value], [0, { response: 0 }]);
+  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) { /* the system cleans its own */ }
+}
+
+/* THE LEAVING COPIES KEEP THEIR LOOK AND PLACE: a dialog's copy wears the card's own classes and
+   style, and the tour's copies leave the root that hides, on the element model above. */
+function leavingCopyTests(H) {
+  const src = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
+  {
+    const { El, doc } = dismissFakeDom();
+    const card = new El("div", { class: "modal-card about-modal" }), inside = new El("div", { class: "about-body" });
+    card.style.cssText = "width:640px";
+    card.add(inside);
+    const modal = new El("div", { id: "modal", class: "modal" }).add(new El("div", { class: "modal-bg" }), card);
+    doc.add(modal);
+    let leave = null;
+    try {
+      leave = new Function("modalEl", "modalCard", "mgReduceMotion", "document", "dismissNode",
+        extractDecl(src("dialog.js"), "function leaveModal(") + "\nreturn leaveModal;")(
+        modal, card, () => false, { createElement: t => new El(t), body: doc }, H.dismissNode);
+    } catch (e) { leave = null; }
+    if (leave) leave();
+    const g = doc.kids[doc.kids.length - 1], c = g && g.kids[1];
+    eq("a closing dialog leaves as a copy wearing the card's own classes and style, holding what it showed",
+      leave ? [g !== modal && g.classList.contains("e-gone"), c && c.className, c && c.style.cssText, !!c && c.kids[0] === inside, card.kids.length]
+        : "no leaveModal in dialog.js",
+      [true, "modal-card about-modal", "width:640px", true, 0]);
+  }
+  {
+    const { El, doc } = dismissFakeDom();
+    const card = new El("div", { id: "tourCard", class: "tour-card bub" }), hole = new El("div", { id: "tourHole" });
+    card.style.cssText = "left:40px"; hole.style.cssText = "top:5px"; hole.style.display = "block";
+    const root = new El("div", { id: "tourRoot", class: "on" }).add(card, hole);
+    doc.add(root);
+    let end = null;
+    try {
+      end = new Function("tourRunning", "tourIdx", "tourEls", "getComputedStyle", "dismissCopy", "document",
+        "runTourStepUndo", "closeSettingsMenu", "clearTourFocus", "tourTargetRO", "markTourDone", "markTourInviteDismissed",
+        "ssDel", "TOUR_AT", "toast", "focusIntentOnOpen", "tourAfter",
+        extractDecl(src("tour.js"), "function endTour(") + "\nreturn endTour;")(
+        true, 2, () => ({ root, card, hole, field: null, arrow: null }), () => ({ zIndex: "30" }), H.dismissCopy, { body: doc },
+        () => {}, () => {}, () => {}, null, () => {}, () => {}, () => {}, "t", () => {}, () => {}, []);
+    } catch (e) { end = null; }
+    if (end) end(true);
+    const lifted = doc.kids.filter(k => k.classList.contains("e-gone"));
+    eq("the tour's bubble and ring leave as copies lifted out of the root that hides, at its height and fully shown",
+      end ? [lifted.length, root.kids.filter(k => k.classList.contains("e-gone")).length,
+             lifted.map(k => k.style.cssText.indexOf("z-index:30;opacity:1") > -1)] : "no endTour in tour.js",
+      [2, 0, [true, true]]);
+  }
+}
+
+/* THE SHIPPED FILE'S FLAG, end to end in node: the host answer computes it, the preload hands it to
+   the page, and About and the offer read it. Each half is run, not read. */
+function shippedFlagTests() {
+  const shell = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  const B = String.fromCharCode(92);
+  const inAsar = ["C:", "Users", "someone", "AppData", "Local", "Programs", "Etiuda", "resources", "app.asar", "shell"].join(B);
+  const own = ["C:", "Users", "someone", "Documents", "Etiuda"].join(B);
+  let S = null;
+  try {
+    S = new Function("path", "BUILT_IN_DIR", ["function isBuiltIn(", "function folderShown("]
+      .map(m => extractDecl(shell, m)).join("\n") + "\nreturn {isBuiltIn,folderShown};")(path.win32, inAsar);
+  } catch (e) { S = null; }
+  const answer = (from) => {
+    let handler = null;
+    try {
+      new Function("ipcMain", "fromEngine", "BrowserWindow", "process", "hostBackdrop", "catalogFolder",
+        "path", "catalogFrom", "folderShown", "isBuiltIn", "catalogMtime", "openedWith",
+        "openedRefused", "recovering", "deskFile", "os", "hostAccent",
+        extractDecl(shell, 'ipcMain.on("etiuda:host",'))(
+        { on: (ch, fn) => { handler = fn; } }, () => true, { fromWebContents: () => null }, { platform: "win32" }, () => null,
+        () => own, path.win32, from, S.folderShown, S.isBuiltIn, () => 0, "",
+        null, new Set(), () => "", { homedir: () => "" }, () => "");
+    } catch (e) { return "the host answer did not run: " + e.message; }
+    const ev = { sender: { id: 1 } };
+    handler(ev);
+    return [ev.returnValue.catalogBuiltIn, ev.returnValue.catalogIn];
+  };
+  eq("the host answer flags the shipped sample and hands no folder for it, and a folder file is unflagged with its folder",
+    S ? [answer(inAsar + B + "sample-catalog.ec"), answer(own + B + "team.ec")] : "no isBuiltIn in shell/main.js",
+    [[true, ""], [false, own]]);
+
+  const preload = fs.readFileSync(path.join(E.ROOT, "shell", "preload.js"), "utf8");
+  const bridge = (host) => {
+    let exposed = null;
+    const heard = {};
+    const electron = {
+      contextBridge: { exposeInMainWorld: (k, v) => { if (k === "E_HOST") exposed = v; }, executeInMainWorld() {} },
+      ipcRenderer: { sendSync: ch => ch === "etiuda:host" ? host : null, send() {}, invoke() {}, on: (ch, fn) => { heard[ch] = fn; } },
+      webUtils: {} };
+    require("vm").runInNewContext(preload, { require: m => { if (m !== "electron") throw new Error(m); return electron; } });
+    let handed = null;
+    exposed.onCatalogFile((...a) => { handed = a[5]; });
+    heard["etiuda:catalog-file"]({}, "{}", "sample-catalog.ec", "", false, "", true);
+    return [exposed.catalogBuiltIn, exposed.recovering, handed];
+  };
+  let got;
+  try { got = [bridge({ catalogBuiltIn: true, recovering: true }), bridge({})]; }
+  catch (e) { got = "the preload did not run: " + e.message; }
+  eq("the preload hands the page the shipped flag and the recovery mark as the shell answered them, and the watch's flag too",
+    got, [[true, true, true], [false, false, true]]);
+
+  const about = fs.readFileSync(path.join(E.ROOT, "src", "modules", "about.js"), "utf8");
+  const aboutSays = (file, inDir, builtIn) => {
+    let body = null;
+    try {
+      new Function("t", "esc", "keysLegendHtml", "TILE_MARK", "E_VERSION", "eCatalogFile", "eCatalogIn", "eCatalogBuiltIn",
+        "openDialog", "document", "fillProseIcons", "modalCard", "$", "dismissModal", "TRADEMARK", "uiLang",
+        extractDecl(about, "function openAbout(") + "\nreturn openAbout;")(
+        s => s, s => s, () => "", "", "2", () => file, () => inDir, () => builtIn,
+        o => { body = o.body; }, { getElementById: () => null }, () => {}, null, () => null, () => {}, { en: "" }, () => "en")();
+    } catch (e) { return "openAbout did not run: " + e.message; }
+    const m = /<b>Catalog file<\/b> - (.*?)<br>/.exec(body || "");
+    return m ? m[1] : "";
+  };
+  eq("About says the shipped file comes with Etiuda and names no folder, even one it is handed; a folder file keeps its folder", [
+    aboutSays("sample-catalog.ec", "", true), aboutSays("sample-catalog.ec", inAsar, true), aboutSays("team.ec", own, false)], [
+    "<code>sample-catalog.ec</code> comes with Etiuda.", "<code>sample-catalog.ec</code> comes with Etiuda.",
+    "<code>team.ec</code> in <code>" + own + "</code>."]);
+
+  const offer = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-offer.js"), "utf8");
+  const offers = (given, builtInHost, inHost, file, where, builtIn) => {
+    const seen = {};
+    try {
+      const found = new Function("t", "esc", "E_CATALOG_SCRIPT", "eCatalogFolder", "eCatalogFolderShort",
+        extractDecl(offer, "function eFoundHtml(") + "\nreturn eFoundHtml;")(s => s, s => s, "etiuda-catalog.js", () => own, s => s);
+      new Function("eEmbeddedCatalog", "eCatalog", "storedCatalog", "eCatalogAccepted", "eCatalogFile", "eCatalogBuiltIn", "eHost",
+        "eCatalogIn", "eCatalogFolder", "eOfferCatalogDialog", "eFoundHtml", "lsSet", "E_CATALOG_KEY", "activateCatalog",
+        "eCatalogMtime", "eCatalogSignature", "toast",
+        extractDecl(offer, "function eOfferCatalog(") + "\nreturn eOfferCatalog;")(
+        () => false, () => ({ cards: [] }), () => null, () => false, () => "sample-catalog.ec", () => builtInHost, () => ({}),
+        () => inHost, () => own, (c, o) => { seen.said = o.foundHtml; o.accept("sig"); return true; }, found, () => {}, "k",
+        (c, o) => { seen.file = o.file; }, () => 5, () => "sig", () => {})(given, file, where, true, false, builtIn);
+    } catch (e) { return "eOfferCatalog did not run: " + e.message; }
+    return [/comes with Etiuda/.test(seen.said), seen.said.indexOf("Documents") > -1, seen.file];
+  };
+  eq("the offer of the shipped sample, at boot or from the watch, names no folder and marks no row of the catalog folder as loaded", [
+    offers(null, true, "", "", "", false), offers({ cards: [] }, false, "", "sample-catalog.ec", inAsar, true)],
+    [[true, false, ""], [true, false, ""]]);
+  eq("a file found in the catalog folder is located in it and marks its row", offers(null, false, own, "team.ec", "", false),
+    [false, true, "team.ec"]);
+
+  const copyOf = f => {
+    try { return new Function("t", "esc", extractDecl(offer, "function ecCopyHtml(") + "\nreturn ecCopyHtml;")(s => s, s => s)(f); }
+    catch (e) { return "ecCopyHtml did not run: " + e.message; }
+  };
+  eq("a Library row names the copy Etiuda ships and says nothing of a folder's file of the same name, changed or not",
+    [copyOf({ builtIn: true }), copyOf({ builtIn: false, replaces: true }), copyOf({})],
+    ['<span class="ec-copy" data-ec-copy="builtin">comes with Etiuda</span>', "", ""]);
+
+  const langSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "ui-lang.js"), "utf8");
+  const plAt = langSrc.indexOf("UI_STRINGS.pl={"), plEnd = langSrc.indexOf("\n};", plAt);
+  const PLS = new Function("const UI_STRINGS={};\n" + langSrc.slice(plAt, plEnd + 3) + "\nreturn UI_STRINGS.pl;")();
+  const rowOf = (o, tr) => {
+    try {
+      return new Function("t", "esc", "trustKeyHtml", "ecWatchHtml", "loadedTickHtml",
+        "catalogEdited", "ICON_LOAD", "ICON_EJECT",
+        extractDecl(offer, "function ecRowHtml(") + "\n" + extractDecl(offer, "function ecActHtml(") + "\nreturn ecRowHtml;")(
+        tr, s => s, (s, id) => "<key " + s + "|" + id + ">", () => "", () => "", () => false, "<svg>load</svg>", "<svg>eject</svg>")(o);
+    } catch (e) { return "ecRowHtml did not run: " + e.message; }
+  };
+  const sheet = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const glyph = (/\.ec-list\{--ec-glyph:(\d+)px\}/.exec(sheet) || [])[1];
+  const sized = [/\.ec-tick\{[^}]*width:var\(--ec-glyph\);height:var\(--ec-glyph\)/, /\.ec-key\{[^}]*width:var\(--ec-glyph\);height:var\(--ec-glyph\)/,
+    /\.ec-row \.ec-act \.ic\{width:var\(--ec-glyph\);height:var\(--ec-glyph\)\}/].map(re => re.test(sheet));
+  eq("a Library row's glyphs, the loaded mark, the key and Load or Eject, share one size above a toolbar icon's 15px",
+    [+glyph > 15, sized], [true, [true, true, true]]);
+  const keyThenAct = html => ((/<key ([^>]*)><button[^>]*data-ec-(load|eject)/.exec(String(html)) || []).slice(1).join(" ")) || String(html).slice(0, 120);
+  eq("a Library row's signature is a key beside its Load or Eject, carrying the state and the key's name the list hands it", [
+    keyThenAct(rowOf({ name: "team.ec", mtime: 5, trust: "valid", keyId: "k1" }, s => s)),
+    keyThenAct(rowOf({ name: "team.ec", loaded: true, trust: "none" }, s => s))], ["valid|k1 load", "none| eject"]);
+  const acts = html => (String(html).match(/<button[^>]*>[\s\S]*?<\/button>/g) || []).map(b => {
+    const at = n => ((new RegExp(" " + n + "=\"([^\"]*)\"")).exec(b) || [])[1] || "";
+    return [at("aria-label"), at("title"), b.replace(/^<button[^>]*>|<\/button>$/g, "")];
+  });
+  const en = s => s, pl = s => PLS[s] || s;
+  eq("a Library row's Load and Eject are glyph buttons keeping their word as tooltip and accessible name, in English and Polish", [
+    acts(rowOf({ name: "team.ec", mtime: 5 }, en)), acts(rowOf({ name: "team.ec", loaded: true }, en)),
+    acts(rowOf({ name: "team.ec", mtime: 5 }, pl)), acts(rowOf({ name: "team.ec", loaded: true }, pl))], [
+    [["Load", "Load", "<svg>load</svg>"]], [["Eject", "Eject", "<svg>eject</svg>"]],
+    [["Wczytaj", "Wczytaj", "<svg>load</svg>"]], [["Odłącz", "Odłącz", "<svg>eject</svg>"]]]);
+}
+/* A DIALOG TAKES THE KEYBOARD (feel pass, focus on open): openDialog and tabTargetIn are sliced out of
+   dialog.js and run on a small tree written here. What a real key does there is the verifier's. */
+function dialogFocusTests() {
+  const dlg = fs.readFileSync(path.join(E.ROOT, "src", "modules", "dialog.js"), "utf8");
+  const world = () => {
+    const doc = { activeElement: null };
+    class N {
+      constructor(id, parent, wide) {
+        this.id = id; this.parentNode = parent || null; this.hidden = false; this.className = ""; this.innerHTML = "";
+        this.offsetWidth = wide ? 20 : 0; this.offsetHeight = 0; this.kids = [];
+        if (parent) parent.kids.push(this);
+      }
+      contains(n) { for (let x = n; x; x = x.parentNode) if (x === this) return true; return false; }
+      closest(sel) { for (let x = this; x; x = x.parentNode) if ("#" + x.id === sel) return x; return null; }
+      focus() { doc.activeElement = this; }
+      querySelectorAll() { const out = []; const walk = n => n.kids.forEach(k => { if (k.offsetWidth) out.push(k); walk(k); }); walk(this); return out; }
+    }
+    const body = new N("body"); doc.body = body; doc.documentElement = new N("html"); doc.activeElement = body;
+    const modalEl = new N("modal", body); modalEl.hidden = true;
+    const modalCard = new N("modalCard", modalEl);
+    const x = new N("modalX", modalCard, true), field = new N("field", modalCard, true), save = new N("save", modalCard, true);
+    const tour = new N("tourCard", body), tourBtn = new N("tourNext", tour, true);
+    const cover = new N("cover", body), coverBtn = new N("ecYes", cover, true), search = new N("intent", body, true);
+    return { doc, N, modalEl, modalCard, x, field, save, tourBtn, cover, coverBtn, search, body };
+  };
+  const sliced = w => new Function("document", "modalEl", "modalCard", "cutLeaves", "setModalBack", "modalHead", "t",
+    "refreshDialogReset", "translateTree", "dressDialogInputs", "markCutText", "openCover",
+    "let modalOpener=null, modalOpenerKbd=false, modalNameFn=null, modalResetFn=null, modalResetOn=\"\", modalResetOff=\"\", lastInputWasKey=false;\n"
+    + [extractDecl(dlg, "function openDialog("), extractDecl(dlg, "const MODAL_TABBABLE="), extractDecl(dlg, "function tabTargetIn(")].join("\n")
+    + "\nreturn {openDialog, tabTargetIn};")(
+    w.doc, w.modalEl, w.modalCard, () => {}, () => {}, () => "", s => s, () => {}, () => {}, () => {}, () => {},
+    () => (w.coverOn ? w.cover : null));
+  const open = (from, opts) => {
+    const w = world(); Object.assign(w, opts || {});
+    w.doc.activeElement = typeof from === "function" ? from(w) : w.body;
+    let H;
+    try { H = sliced(w); } catch (e) { return "openDialog did not slice: " + e.message; }
+    try { H.openDialog({ title: "T", wire: w.wire ? () => w.wire(w) : null }); } catch (e) { return "openDialog threw: " + e.message; }
+    return w.doc.activeElement.id;
+  };
+  eq("a dialog opened from the search field, from nothing, and one whose wiring focuses a field: the card, the card, the field",
+    [open(w => w.search), open(), open(null, { wire: w => w.field.focus() })], ["modalCard", "modalCard", "field"]);
+  eq("the tour's bubble and a cover standing over the dialog keep the keyboard they hold",
+    [open(w => w.tourBtn), open(w => w.coverBtn, { coverOn: true })], ["tourNext", "ecYes"]);
+  let tabs;
+  try {
+    const w = world(), H = sliced(w);
+    w.doc.activeElement = w.modalCard;
+    const fwd = H.tabTargetIn(w.modalCard, false), back = H.tabTargetIn(w.modalCard, true);
+    w.doc.activeElement = w.field;
+    tabs = [fwd && fwd.id, back && back.id, H.tabTargetIn(w.modalCard, false)];
+  } catch (e) { tabs = "tabTargetIn did not run: " + e.message; }
+  eq("from the card, Tab reaches its first control and Shift+Tab its last; from a control inside, the browser's own Tab stands",
+    tabs, ["modalX", "save", null]);
+}
+/* A PILL GLIDES FROM WHERE IT WAS PAINTED TO WHERE IT LANDS (797 N1 and N3): a width tween that
+   moves a row break carries a pill across the row mid-glide, and a width that snaps instead starts
+   the pill at a size it was never painted at. flipPills and tweenPillWidths are sliced out and run
+   on a wrapping row modelled here, flex's line breaking with margins included, and the glide is
+   replayed on the one curve its widths, margins and offsets share. The painted frames are the verifier's. */
+function pillRow(W, spec) {
+  const GAP = 6, LINE = 37.5, kids = [];
+  const lay = (ws, ms) => {
+    let x = 0, line = 0;
+    const at = new Map();
+    kids.forEach((k, i) => {
+      const w = ws ? ws[i] : k.w(), [l, r] = ms ? ms[i] : k.m();
+      if (x > 0 && x + l + w + r > W) { line++; x = 0; }
+      at.set(k, { x: x + l, y: line * LINE, w });
+      x += l + w + r + GAP;
+    });
+    return { at, h: (line + 1) * LINE - GAP };
+  };
+  const px = v => v ? parseFloat(v) : null;
+  const shift = t => { const m = /translate\((-?[0-9.]+)px,\s*(-?[0-9.]+)px\)/.exec(t || ""); return m ? [+m[1], +m[2]] : [0, 0]; };
+  spec.forEach(([k, nat]) => {
+    const p = { dataset: { k }, nat, anim: {}, classList: { contains: c => c === "pill-add" && k === null } };
+    if (k === null) delete p.dataset.k;
+    let tf = "", wd = "", tr = "", ml = "", mr = "";
+    p.style = { willChange: "" };
+    Object.defineProperty(p.style, "transition", { get: () => tr, set: v => { tr = v; } });
+    Object.defineProperty(p.style, "transform", { get: () => tf,
+      set: v => { if (/transform/.test(tr) && v !== tf) p.anim.transform = [tf, v]; tf = v; } });
+    Object.defineProperty(p.style, "width", { get: () => wd,
+      set: v => { if (/width/.test(tr) && v !== wd) p.anim.width = [px(wd) || p.nat, px(v) || p.nat]; wd = v; } });
+    Object.defineProperty(p.style, "marginLeft", { get: () => ml,
+      set: v => { if (/margin-left/.test(tr) && v !== ml) p.anim.ml = [px(ml) || 0, px(v) || 0]; ml = v; } });
+    Object.defineProperty(p.style, "marginRight", { get: () => mr,
+      set: v => { if (/margin-right/.test(tr) && v !== mr) p.anim.mr = [px(mr) || 0, px(v) || 0]; mr = v; } });
+    p.w = () => px(wd) || p.nat;
+    p.m = () => [px(ml) || 0, px(mr) || 0];
+    Object.defineProperty(p, "offsetTop", { get: () => lay().at.get(p).y });
+    p.getBoundingClientRect = () => { const a = lay().at.get(p), s = shift(tf);
+      return { left: a.x + s[0], top: a.y + s[1], width: a.w, height: 31.5 }; };
+    kids.push(p);
+  });
+  const row = { children: kids, clientWidth: W, querySelectorAll: () => kids.slice(),
+    get offsetHeight() { return lay().h; }, get scrollHeight() { return lay().h; } };
+  /* What getComputedStyle reads: the row's gap and padding, a pill's margins as its style holds them. */
+  row.style = el => el === row ? { columnGap: GAP + "px", paddingLeft: "0px", paddingRight: "0px" }
+    : { marginLeft: el.style.marginLeft || "0px", marginRight: el.style.marginRight || "0px" };
+  /* Where each pill is painted at progress s of the one curve: widths, margins and offsets all from
+     their start to their end, the layout taken again at those values. */
+  const lerp = (a, s) => a[0] + (a[1] - a[0]) * s;
+  row.at = s => {
+    const ws = kids.map(k => k.anim.width ? lerp(k.anim.width, s) : k.w());
+    const ms = kids.map(k => [k.anim.ml ? lerp(k.anim.ml, s) : k.m()[0], k.anim.mr ? lerp(k.anim.mr, s) : k.m()[1]]);
+    const L = lay(ws, ms);
+    return kids.map(k => { const a = L.at.get(k), d = k.anim.transform ? shift(k.anim.transform[0]) : shift(k.style.transform);
+      return { k: k.dataset.k === undefined ? null : k.dataset.k, x: a.x + d[0] * (1 - s), y: a.y + d[1] * (1 - s), w: a.w,
+        line: a.y }; });
+  };
+  return row;
+}
+/* The worst a glide does, over 200 steps: how far a pill is painted past either end of the line from
+   where it was to where it lands, the longest single step against a smooth one's, how far from where
+   it was painted, size included, it starts, and whether its layout changed line mid-glide. */
+function pillGlideFaults(before, row) {
+  const N = 200, frames = [];
+  for (let i = 0; i <= N; i++) frames.push(row.at(i / N));
+  const out = [];
+  frames[0].forEach((p0, j) => {
+    const b = before.get(p0.k), e = frames[N][j];
+    if (!b) return;
+    const T = [e.x - b.left, e.y - b.top], L = Math.hypot(T[0], T[1]);
+    let past = 0, step = 0, lines = 0;
+    frames.forEach((f, i) => {
+      const P = f[j];
+      if (L > 0) {
+        const t = ((P.x - b.left) * T[0] + (P.y - b.top) * T[1]) / (L * L);
+        past = Math.max(past, t < 0 ? -t * L : t > 1 ? (t - 1) * L : 0);
+      }
+      if (i) { step = Math.max(step, Math.hypot(P.x - frames[i - 1][j].x, P.y - frames[i - 1][j].y)); if (P.line !== frames[i - 1][j].line) lines++; }
+    });
+    const start = Math.max(Math.hypot(frames[0][j].x - b.left, frames[0][j].y - b.top), Math.abs(frames[0][j].w - b.width));
+    if (past > 12 || step > Math.max(2, 4 * L / N) || start > 1 || lines) out.push((p0.k === null ? "add" : p0.k || "All")
+      + " past " + Math.round(past) + " step " + Math.round(step) + " start " + Math.round(start) + (lines ? " relined" : ""));
+  });
+  return out;
+}
+/* WHICH TAB, LANGUAGE, CATEGORY AND INTENT IS ACTIVE, as a screen reader is told it: the drawing
+   functions sliced out of their modules and run over a toy element that keeps its attributes. */
+function activeStateTests() {
+  const mod = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
+  class El {
+    constructor(tag) { this.tagName = tag; this.attrs = {}; this.dataset = {}; this.kids = []; this.cls = new Set();
+      this.style = { setProperty() {}, removeProperty() {} };
+      const me = this;
+      this.classList = { toggle(c, on) { if (on === undefined) on = !me.cls.has(c); if (on) me.cls.add(c); else me.cls.delete(c); return on; },
+        add(...c) { c.forEach(x => me.cls.add(x)); }, remove(...c) { c.forEach(x => me.cls.delete(x)); }, contains(c) { return me.cls.has(c); } }; }
+    set className(v) { this.cls = new Set(String(v).split(/\s+/).filter(Boolean)); }
+    get className() { return [...this.cls].join(" "); }
+    setAttribute(k, v) { this.attrs[k] = String(v); }
+    getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
+    removeAttribute(k) { delete this.attrs[k]; }
+    appendChild(c) { this.kids.push(c); c.parentElement = this; return c; }
+    get firstChild() { return this.kids[0] || null; }
+    set innerHTML(v) { this.html = v; if (v === "") this.kids = []; }
+    get innerHTML() { return this.html || ""; }
+    querySelectorAll() { return []; }
+    focus() {}
+  }
+  const doc = { createElement: tag => new El(tag) };
+  const slice = (f, marker) => extractDecl(mod(f), marker);
+
+  let got;
+  try {
+    const bar = new El("div"); bar.parentElement = new El("div");
+    const H = new Function("document", "$", "tabs", "activeTabId", "t", "tabLabel", "drawTabs", "bindTabScroll", "fitTabLabels",
+      "requestAnimationFrame", "tabAddTitle", "ICON_TAB_X", "ICON_TAB_ADD", "tabDrag",
+      slice("tabs.js", "function drawTabsCore(") + "\nreturn drawTabsCore;")(
+      doc, s => (s === "#tabsBar" ? bar : null), [{ id: "a", pax: "Anna" }, { id: "b", pax: "" }], "b", s => s, tb => tb.pax || "Tab",
+      {}, () => {}, () => {}, () => {}, () => "", "", "", null);
+    H();
+    got = bar.kids.map(k => [k.cls.has("on"), k.kids[0].getAttribute("role"), k.kids[0].getAttribute("aria-selected")]);
+  } catch (e) { got = "drawTabsCore did not run: " + e.message; }
+  eq("each tab's name is a tab to a screen reader, selected exactly where the tab is on",
+    got, [[false, "tab", "false"], [true, "tab", "true"]]);
+
+  const pillsAt = sel => {
+    const pills = new El("div");
+    const H = new Function("document", "pills", "cats", "CATS", "intentCats", "searchCounts", "catIconSvg", "esc", "t", "ICON_EDIT",
+      "ICON_ALL", "ICON_PLUS", "catSlot", "dragState", "totalMacroCount", "counts", "displayCatOrder", "syncPillsCollapseNow",
+      "schedulePillsCollapse",
+      slice("pills-bar.js", "function drawPillsCore(") + "\nreturn drawPillsCore;")(
+      doc, pills, sel, { a: "Alpha", b: "Beta" }, () => ({ specific: [], always: [] }), () => null, () => "", s => s, s => s, "",
+      "", "", () => -1, null, () => 3, { a: 1, b: 2 }, () => ["a", "b"], () => {}, () => {});
+    H();
+    return pills.kids.map(k => [k.dataset.k === undefined ? "+" : k.dataset.k, k.getAttribute("role"), k.getAttribute("aria-pressed")]);
+  };
+  try { got = [pillsAt(["b"]), pillsAt([])]; } catch (e) { got = "drawPillsCore did not run: " + e.message; }
+  eq("each category pill is a toggle pressed exactly while it filters, All while nothing does, and the + is neither",
+    got, [[["", "button", "false"], ["a", "button", "false"], ["b", "button", "true"], ["+", null, null]],
+          [["", "button", "true"], ["a", "button", "false"], ["b", "button", "false"], ["+", null, null]]]);
+
+  try {
+    const paint = new Function("catSlot", "railDrag", "railRelNow", "railRelGroup",
+      slice("rail-list.js", "function railPaintRow(") + "\nreturn railPaintRow;")(() => -1, null, {}, {});
+    const row = new El("button");
+    paint(row, { idx: 1, picked: true }, []);
+    const on = [row.cls.has("on"), row.getAttribute("aria-pressed")];
+    paint(row, { idx: 1, picked: false }, []);
+    got = [on, [row.cls.has("on"), row.getAttribute("aria-pressed")]];
+  } catch (e) { got = "railPaintRow did not run: " + e.message; }
+  eq("an intent row is pressed while its intent is chosen and let go when it is not",
+    got, [[true, "true"], [false, "false"]]);
+
+  try {
+    const en = new El("button"), pl = new El("button"); en.dataset.l = "en"; pl.dataset.l = "pl";
+    const seg = new El("div"); seg.querySelectorAll = () => [en, pl];
+    const apply = new Function("seg", "CONTENT_LANGS", "lsSet", "noteActive",
+      "let lang=\"en\"; function putLang(v){ lang=v; }\n" + slice("lang-seg.js", "function applyLangState(") + "\nreturn applyLangState;")(
+      seg, ["en", "pl"], () => {}, () => {});
+    apply("pl");
+    got = [en.getAttribute("aria-pressed"), pl.getAttribute("aria-pressed"), pl.cls.has("on")];
+  } catch (e) { got = "applyLangState did not run: " + e.message; }
+  eq("the language on screen is the pressed one of its pair", got, ["false", "true", true]);
+}
+/* THE SAME FOUR IN HIGH CONTRAST, where a tint says nothing: each outline is weighed, by layer then
+   specificity, against every rule in the sheet that sets outline to none on the same element, which
+   is how the tour's ring was lost. A rule is matched by its subject compound against every class, id
+   and attribute the element can wear, and every pseudo-class counts as reachable. */
+function highContrastStateTests() {
+  const L = require("./css-layers.js");
+  const raw = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const sheet = L.sheetOf(raw);
+  const lineAt = i => raw.slice(0, sheet.from + i).split("\n").length;
+  const fcAt = raw.indexOf("@media (forced-colors:active){");
+  const fcFrom = raw.slice(0, fcAt).split("\n").length, fcTo = raw.slice(0, raw.indexOf("\n}", fcAt)).split("\n").length + 1;
+  const parsed = L.parseSheet(sheet.css, lineAt);
+  const rank = l => parsed.order.indexOf(l);
+  const feats = sel => {
+    const s = L.subject(sel).replace(/:[-\w]+\((?:[^()]|\([^()]*\))*\)/g, "");
+    if (/::|:(before|after|placeholder|marker|selection)\b/.test(s)) return null;
+    const tag = (/^[a-zA-Z][-\w]*/.exec(s) || [""])[0].toLowerCase();
+    return { tag: tag, cls: [...s.matchAll(/\.([-\w]+)/g)].map(m => m[1]), ids: [...s.matchAll(/#([-\w]+)/g)].map(m => m[1]),
+      attrs: [...s.matchAll(/\[([^\]]+)\]/g)].map(m => m[1].replace(/["']/g, "").replace(/\s/g, "")) };
+  };
+  const fits = (f, el) => f && (!f.tag || f.tag === el.tag) && f.cls.every(c => el.cls.includes(c)) && f.ids.every(i => el.ids.includes(i))
+    && f.attrs.every(a => el.attrs.includes(a) || el.attrs.some(x => x.split("=")[0] === a.split(/[~|^$*]?=/)[0] && !/=/.test(a)));
+  let got;
+  const ELS = [
+    { name: "the chosen tab", state: "on", tag: "div", cls: ["tab", "on", "dragging"], ids: [], attrs: [] },
+    { name: "the chosen category", state: "on", tag: "div", cls: ["pill", "on", "hint", "hint2", "pill-nohit"], ids: [], attrs: ["role=button", "data-k", "data-ec"] },
+    { name: "the language on screen", state: "on", tag: "button", cls: ["on"], ids: [], attrs: ["type=button", "data-l", "data-alt"] },
+    { name: "the tour's selected button", state: "tour-sel", tag: "button", cls: ["btn", "tour-sel", "tour-skip", "primary"], ids: ["tourSkip", "tourPrev", "tourNext"], attrs: ["type=button"] },
+  ];
+  const outlineOff = d => /^outline(-style|-width)?$/.test(d.prop) && /^(none|0)\b/.test(d.val);
+  got = ELS.map(el => {
+    const hc = parsed.decls.filter(d => d.line >= fcFrom && d.line <= fcTo && d.prop === "outline" && /Highlight/.test(d.val)
+      && fits(feats(d.sel), el) && feats(d.sel).cls.includes(el.state));
+    if (!hc.length) return el.name + ": no High Contrast outline";
+    const best = hc[hc.length - 1];
+    const lost = parsed.decls.filter(d => !(d.line >= fcFrom && d.line <= fcTo) && outlineOff(d) && fits(feats(d.sel), el))
+      .filter(d => (d.imp && !best.imp) || rank(d.layer) > rank(best.layer)
+        || (rank(d.layer) === rank(best.layer) && L.cmpSpec(best.spec, d.spec) <= 0));
+    return lost.length ? el.name + ": loses to " + lost.map(d => d.sel + " (line " + d.line + ")").join(", ") : el.name + ": shown";
+  });
+  eq("in High Contrast the chosen tab, category and language and the tour's selected button wear the system highlight, and no rule takes it away",
+    got, ELS.map(el => el.name + ": shown"));
+}
+function pillWrapTests() {
+  const paint = fs.readFileSync(path.join(E.ROOT, "src", "modules", "paint.js"), "utf8");
+  const state = fs.readFileSync(path.join(E.ROOT, "src", "modules", "pill-state.js"), "utf8");
+  const opt = m => paint.indexOf(m) > -1 ? extractDecl(paint, m) : "";
+  const lines = opt("function pillLines("), pin = opt("function pinPillLines(");
+  const flip = (row, style) => new Function("pills", "E_EASE", "setTimeout", "getComputedStyle",
+    extractDecl(paint, "function pillKey(") + "\n" + lines + "\n" + pin + "\n" + extractDecl(paint, "function flipPills(")
+    + "\nreturn flipPills;")(row, "ease", () => 0, style || row.style);
+  const tween = row => new Function("pills", "E_EASE", "mgReduceMotion", "requestAnimationFrame", "setTimeout", "clearTimeout", "getComputedStyle",
+    extractDecl(paint, "function pillKey(") + "\n" + lines + "\n" + pin + "\n" + extractDecl(paint, "function flipPills(") + "\n"
+    + extractDecl(state, "function tweenPillWidths(") + "\nreturn tweenPillWidths;")(
+    row, "ease", () => false, f => f(), () => 0, () => {}, row.style);
+  /* All's count gains a digit, 77px to 83px, and the pill that closed the first line at 296px no
+     longer fits: the row keeps its two lines and trades a pill between them. At 280px it still fits.
+     Then the other way: All loses the digit and the pill at 296px climbs back onto the first line. */
+  const rest = [["a", 200], ["b", 200], ["c", 200]];
+  for (const [what, last, from, to, trades] of [["a pill at the break", 296, 77, 83, true], ["a pill clear of it", 280, 77, 83, false],
+    ["a pill climbing back over the break", 296, 83, 77, true]]) {
+    const old = pillRow(1000, [["", from], ...rest, ["x", last], ["d", 200], ["e", 200], [null, 31]]);
+    const before = new Map(old.children.map(p => [p.dataset.k === undefined ? null : p.dataset.k, p.getBoundingClientRect()]));
+    const now = pillRow(1000, [["", to], ...rest, ["x", last], ["d", 200], ["e", 200], [null, 31]]);
+    eq("the model trades a pill between lines only where it is meant to: " + what,
+      old.children[4].offsetTop !== now.children[4].offsetTop, trades);
+    let got;
+    try { flip(now)(before); got = pillGlideFaults(before, now); } catch (e) { got = "flipPills threw: " + e.message; }
+    eq("a settle that changes All's width glides every pill on its own path at its own size, " + what, got, []);
+    eq("All's width tweens, " + what, !!now.children[0].anim.width, true);
+    const counts = pillRow(1000, [["", to], ...rest, ["x", last], ["d", 200], ["e", 200], [null, 31]]);
+    try { tween(counts)([counts.children[0]], [from], before); got = pillGlideFaults(before, counts); }
+    catch (e) { got = "tweenPillWidths threw: " + e.message; }
+    eq("a count written in place never carries a pill across the row nor snaps its width, " + what, got, []);
+  }
+  /* Where the pin cannot hold the row, here because the gap reads wider than it is, as a browser's
+     rounding might, the widths snap as before and no pill changes line mid-glide. */
+  const old = pillRow(1000, [["", 77], ...rest, ["x", 296], ["d", 200], ["e", 200], [null, 31]]);
+  const before = new Map(old.children.map(p => [p.dataset.k === undefined ? null : p.dataset.k, p.getBoundingClientRect()]));
+  const now = pillRow(1000, [["", 83], ...rest, ["x", 296], ["d", 200], ["e", 200], [null, 31]]);
+  let got;
+  try { flip(now, el => el === now ? Object.assign(now.style(el), { columnGap: "30px" }) : now.style(el))(before); got = pillGlideFaults(before, now); }
+  catch (e) { got = "flipPills threw: " + e.message; }
+  eq("where the pin cannot hold the row, the widths snap and no pill changes line mid-glide", got, ["All past 0 step 0 start 6"]);
+}
+/* THE CLIP FOLLOWS A NEW WIDTH IN THE FRAME THAT PAINTS IT (797 F4), AND MOVES NOTHING ABOVE THE BAR.
+   One frame is modelled from the real syncPillsCollapse and width watch and the sheet's own cap on the
+   slot: the slot's height as laid out is what every observer at the probe's depth or above was handed,
+   so a callback that changes it fails the observer's loop with a page error, and a third line in flow
+   is the drop. The frame itself is the verifier's. */
+function pillsWidthWatchTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "pills-box.js"), "utf8");
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const LINE = 31.5, GAP = 6;
+  /* The slot's max-height from the sheet, evaluated on the slot's own variables. An unset variable
+     makes the declaration invalid at computed-value time, which leaves max-height at none. */
+  const capRule = /\.pills-slot\{max-height:([^}]*)\}/.exec(tpl);
+  const cap = (vars, vw) => {
+    if (!capRule) return Infinity;
+    let unset = false;
+    const js = capRule[1].replace(/var\((--[a-z0-9-]+)\)/g, (m, name) => {
+      if (!(name in vars)) { unset = true; return "0"; }
+      return "(" + parseFloat(vars[name]) + ")";
+    }).replace(/100vw/g, "(" + vw + ")").replace(/([0-9])px/g, "$1")
+      .replace(/\bcalc\(/g, "(").replace(/\bmax\(/g, "Math.max(");
+    return unset ? Infinity : Function("return " + js)();
+  };
+  const st = {}, cls = new Set(), vars = {};
+  const natural = () => st.lines * LINE + (st.lines - 1) * GAP;
+  const slotH = () => cls.has("pills-overflow") ? parseFloat(vars["--pills-2line"]) : Math.min(natural(), cap(vars, st.vw));
+  const kids = () => Array.from({ length: 3 * st.lines }, (_, i) => ({ offsetTop: Math.floor(i / 3) * (LINE + GAP),
+    offsetHeight: LINE, getBoundingClientRect: () => ({ height: LINE }) }));
+  const bar = { get children() { return kids(); }, querySelector: () => kids()[0],
+    get offsetHeight() { return natural(); }, getBoundingClientRect: () => ({ height: natural() }) };
+  const slot = {
+    classList: { add: (...c) => c.forEach(x => cls.add(x)), remove: (...c) => c.forEach(x => cls.delete(x)), contains: c => cls.has(c) },
+    style: { setProperty: (k, v) => { vars[k] = v; }, removeProperty: k => { delete vars[k]; }, getPropertyValue: k => k in vars ? vars[k] : "" },
+    getBoundingClientRect: () => ({ height: slotH() }),
+  };
+  const doc = { documentElement: { style: { removeProperty() {} }, getBoundingClientRect: () => ({ width: st.vw }) },
+    body: { classList: { contains: () => false } } };
+  const probe = { id: "pillsProbe" };
+  let heard = null, observed = null, calls = 0;
+  class RO { constructor(fn) { heard = fn; } observe(el) { observed = el; } }
+  // A fresh module per case, so the watch's last width is its own.
+  const build = () => {
+    const decls = ["let pillsWidthSeen=", "function pillsTwoLines(", "function pillsWrapHeight(", "function syncPillsCollapse(",
+      "function pillsClipDue(", "function wirePillsWidthWatch("].map(m => extractDecl(src, m)).join("\n");
+    return new Function("pills", "ResizeObserver", "$", "pillsSlot", "pillsWanted", "pillsLocked", "document",
+      "getComputedStyle", "ePillsSettled", "counted",
+      decls + "\nconst sync=syncPillsCollapse;\nsyncPillsCollapse=function(){ counted(); sync(); };" +
+      "\nreturn { wire: wirePillsWidthWatch, sync };")(bar, RO, () => probe, () => slot, () => true, () => st.locked, doc,
+      x => x === slot ? { getPropertyValue: k => pillsSlotComputed(tpl, k, st.vw) } : { rowGap: GAP + "px" }, true, () => { calls++; });
+  };
+  /* Boot at `from` with its clip decided, the observer's first delivery, then one frame at `to`:
+     [clips in the observer, loop errors, the slot's height as painted]. */
+  const frame = (from, to) => {
+    cls.clear(); for (const k in vars) delete vars[k];
+    Object.assign(st, { locked: false }, from);
+    const m = build();
+    m.wire(); m.sync();
+    heard([{ contentRect: { width: st.probe, height: 0 } }]);
+    Object.assign(st, to);
+    const laid = slotH(), was = calls;
+    heard([{ contentRect: { width: st.probe, height: 0 } }]);
+    return [calls - was, slotH() !== laid ? 1 : 0, slotH()];
+  };
+  const rest = { vw: 1200, probe: 1172, lines: 2 };
+  const cases = [
+    ["a narrower window wraps the bar to a third line", rest, { vw: 1180, probe: 1152, lines: 3 }, [1, 0, 69]],
+    ["a narrower window keeps two lines", rest, { vw: 1190, probe: 1162, lines: 2 }, [0, 0, 69]],
+    ["one device pixel narrower at 125 per cent wraps a third line", rest, { vw: 1199.2, probe: 1171.2, lines: 3 }, [1, 0, 69]],
+    ["a clipped bar widens to fit in two", { vw: 1180, probe: 1152, lines: 3 }, { vw: 1300, probe: 1272, lines: 2 }, [0, 0, 69]],
+    ["a locked bar wraps a third line and grows", Object.assign({ locked: true }, rest), { vw: 1180, probe: 1152, lines: 3 }, [0, 0, 106.5]],
+    ["at rest, the window a sixty-fourth under its measure, the cap is off", rest, { vw: 1200 - 1 / 64, probe: 1172, lines: 3 }, [0, 0, 106.5]],
+  ];
+  for (const [what, from, to, want] of cases) {
+    let got;
+    try { got = frame(from, to); } catch (e) { got = "threw: " + e.message; }
+    eq("the width watch, " + what, got, want);
+  }
+  /* The slot narrowing under a window that keeps its width (the panel docking) is not capped, so
+     the watch leaves it to the resize pass rather than move the header inside the observer. */
+  let got;
+  try { got = frame(rest, { vw: 1200, probe: 1000, lines: 3 }).slice(0, 2); } catch (e) { got = "threw: " + e.message; }
+  eq("the width watch leaves a slot narrowing at the same window width to the resize pass", got, [0, 0]);
+  eq("the width watch observes the probe, a box the clip it sets cannot resize", observed === probe, true);
+  const rule = /\.pills-probe\{([^}]*)\}/.exec(tpl), slotRule = /\.pills-slot\{max-width:([^;]*);/.exec(tpl);
+  eq("the probe sits outside the slot at the slot's width and no height",
+    [/id="pills"[^>]*><\/div>\s*<\/div>\s*<div class="pills-probe" id="pillsProbe"/.test(tpl),
+      !!rule && !!slotRule && rule[1].indexOf("max-width:" + slotRule[1]) > -1 && /height:0/.test(rule[1])],
+    [true, true]);
+  const boot = fs.readFileSync(path.join(E.ROOT, "src", "main.js"), "utf8");
+  eq("boot wires the watch", /pillsBox\.wirePillsWidthWatch\(\);/.test(boot), true);
+}
+/* A custom property's computed value on the pill slot, read from the sheet: a length registered by
+   @property and declared on .pills-slot in vw computes to px, rounded here to six significant figures
+   as a browser may serialise it; an unregistered one keeps its tokens. */
+function pillsSlotComputed(tpl, name, vw) {
+  const decl = new RegExp("[.]pills-slot[{]" + name + ":([^;}]*)").exec(tpl);
+  if (!decl) return "";
+  const reg = new RegExp("@property " + name + "[{]([^}]*)[}]").exec(tpl);
+  const n = /^([0-9.]+)vw$/.exec(decl[1].trim());
+  if (!reg || !/syntax:"<length>"/.test(reg[1]) || !n) return decl[1].trim();
+  return String(Number((parseFloat(n[1]) * vw / 100).toPrecision(6))) + "px";
+}
+/* WHAT ONE STEP OF A WINDOW DRAG COSTS THE PILL BAR (797 F4). The resize pass, schedulePillsCollapse
+   with its frames run at once, is traced on stubs one step after the last decision, in each state: a
+   layout read with anything written since the last layout is a layout, and a style or layout read
+   after a write to a variable the pills inherit (any the sheet does not register inherits:false)
+   restyles the whole bar, as does the frame if one is still pending. The drag is the verifier's. */
+function pillsResizeCostTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "pills-box.js"), "utf8");
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const own = new Set();
+  for (const m of tpl.matchAll(/@property (--[a-z0-9-]+)[{]([^}]*)[}]/g)) if (/inherits:false/.test(m[2])) own.add(m[1]);
+  const LINE = 31.5, GAP = 6;
+  const st = { vw: 1200, lines: 2 }, vars = {}, cls = new Set();
+  let pend = {}, layouts = 0, restyles = 0;
+  const dirty = () => !!(pend.inh || pend.own || pend.cls || pend.lay);
+  const styleRead = () => { if (pend.inh) restyles++; pend = { lay: dirty() }; };
+  const layoutRead = () => { if (pend.inh) restyles++; if (dirty()) layouts++; pend = {}; };
+  const touch = k => { pend[k.startsWith("--") ? (own.has(k) ? "own" : "inh") : "cls"] = true; };
+  const natural = () => st.lines * LINE + (st.lines - 1) * GAP;
+  const kids = () => Array.from({ length: 3 * st.lines }, (_, i) => ({
+    get offsetTop() { layoutRead(); return Math.floor(i / 3) * (LINE + GAP); },
+    get offsetHeight() { layoutRead(); return LINE; },
+    getBoundingClientRect() { layoutRead(); return { height: LINE }; } }));
+  const bar = { get children() { return kids(); }, querySelector: () => kids()[0],
+    get offsetHeight() { layoutRead(); return natural(); }, getBoundingClientRect() { layoutRead(); return { height: natural() }; } };
+  const slot = {
+    classList: { add: (...c) => c.forEach(x => { if (!cls.has(x)) { cls.add(x); touch(x); } }),
+      remove: (...c) => c.forEach(x => { if (cls.has(x)) { cls.delete(x); touch(x); } }), contains: c => cls.has(c) },
+    style: { setProperty: (k, v) => { if (vars[k] !== v) { vars[k] = v; touch(k); } },
+      removeProperty: k => { if (k in vars) { delete vars[k]; touch(k); } }, getPropertyValue: k => k in vars ? vars[k] : "" },
+    getBoundingClientRect() { layoutRead(); return { height: 2 * LINE + GAP }; } };
+  const doc = { documentElement: { style: { removeProperty() {} }, getBoundingClientRect() { layoutRead(); return { width: st.vw }; } },
+    body: { classList: { contains: () => false } } };
+  const computed = x => x === slot ? { getPropertyValue: k => { styleRead(); return pillsSlotComputed(tpl, k, st.vw); } }
+    : { get rowGap() { styleRead(); return GAP + "px"; } };
+  let got;
+  try {
+    const decls = ["let ePillsSettled=", "function pillsTwoLines(", "function pillsWrapHeight(", "function syncPillsCollapse(",
+      "function schedulePillsCollapse(", "let pillsShapeT=", "function rememberPillsShape("].map(m => extractDecl(src, m)).join("\n");
+    const pass = new Function("pills", "pillsSlot", "pillsWanted", "pillsLocked", "document", "getComputedStyle",
+      "requestAnimationFrame", "hooks", "lsSet", "lsDel", "window", decls + "\nreturn schedulePillsCollapse;")(
+      bar, () => slot, () => true, () => false, doc, computed, fn => fn(), { scheduleRailGeometry() {} }, () => {}, () => {},
+      { innerWidth: 1200 });
+    const step = lines => {
+      cls.clear(); for (const k in vars) delete vars[k];
+      Object.assign(st, { vw: 1202, lines });
+      pass();
+      st.vw = 1200; pend = { lay: true }; layouts = 0; restyles = 0;   // the next width, not yet laid out
+      pass();
+      if (pend.inh) restyles++;
+      return [layouts, restyles];
+    };
+    got = [step(2), step(3)];
+  } catch (e) { got = "threw: " + e.message; }
+  eq("one step of a drag costs the pill bar, as [layouts, bar restyles], two lines then clipped", got, [[1, 0], [4, 2]]);
+}
+/* A RAIL ROW ON SCREEN THAT LEAVES THE WINDOW GLIDES TO ITS EDGE (797 F6): past the travel cap it
+   used to be left where it landed, out of sight, which is a vanish. flipRail is sliced and run on a
+   panel of stub rows; a row that stays on screen and one that arrives are the controls. */
+function railLeaveTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "rail-list.js"), "utf8");
+  const row = (si, y) => {
+    const r = { dataset: { si }, offsetTop: y, offsetHeight: 34, classList: { contains: () => false }, log: [] };
+    r.style = {};
+    ["transform", "opacity", "transition", "willChange"].forEach(k => {
+      let v = "";
+      Object.defineProperty(r.style, k, { get: () => v, set: x => { v = x; if (k !== "transition" && k !== "willChange") r.log.push(k + " " + (x || "none")); } });
+    });
+    return r;
+  };
+  /* A 600px window at the top of the list: the leaver goes from 150 to 700, the stayer from 450 to
+     100, the arrival from 800 to 200. The cap is half the window. */
+  const rows = [row("7", 700), row("8", 100), row("9", 200)];
+  const box = { clientHeight: 600, scrollTop: 0, offsetTop: 0, get offsetHeight() { return 600; }, querySelectorAll: () => rows };
+  let flip = null;
+  try {
+    flip = new Function("$", "M_MS", "E_EASE", "setTimeout", "RAIL_FLIP_TRAVEL",
+      extractDecl(src, "function flipRail(") + "\nreturn flipRail;")(() => box, { move: 180 }, "ease", () => 0, 0.5);
+  } catch (e) { flip = null; }
+  if (flip) flip({ 7: { y: 150, on: false }, 8: { y: 450, on: false }, 9: { y: 800, on: false } }, null);
+  eq("a row that leaves the window past the cap glides from where it was to the window's edge",
+    flip ? rows[0].log : "no flipRail", ["transform translateY(-550px)", "transform translateY(-100px)"]);
+  eq("a row on screen at both ends still glides home, and one arriving from off screen still fades in",
+    flip ? [rows[1].log, rows[2].log] : "no flipRail",
+    [["transform translateY(350px)", "transform none"], ["opacity 0", "opacity none"]]);
+}
+/* A CARD WHOSE TEXT GREW OPENS TO ITS NEW HEIGHT (797 N5): a Ctrl pick fills the top card with the
+   second intent and it grew 63px in one frame. glideSettle is sliced and run on stub cards: the
+   grown card's clip runs from its old height to its own edge on the curve the card below glides on,
+   so the gap between them, read at every step of that curve, stays what it was. */
+function grownCardTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "paint.js"), "utf8");
+  const card = (id, now) => ({ dataset: { id }, runs: [], getBoundingClientRect: () => now,
+    animate(kf, o) { this.runs.push([Object.keys(kf[0]).join("+"), kf[0].clipPath || kf[0].transform || "",
+      kf[1].clipPath || kf[1].transform || "", o.duration]); return { finish() {} }; } });
+  const R = (top, h) => ({ left: 300, top, width: 400, height: h, bottom: top + h, right: 700 });
+  const cards = [card("a", R(220, 344)), card("b", R(584, 200)), card("c", R(700, 300))];
+  const list = { getBoundingClientRect: () => ({ top: 200 }), querySelectorAll: () => cards };
+  let glide = null;
+  try {
+    glide = new Function("list", "window", "CARD_MOVE_MAX", "M_MS", "E_EASE", "E_SPRING_MS", "E_SPRING_OK", "E_SPRING", "eKickPump",
+      "let eSettleRuns=[];\n" + extractDecl(src, "function glideSettle(") + "\nreturn glideSettle;")(
+      list, { innerHeight: 900 }, 40, { move: 180, surface: 180 }, "ease", 371, false, "", () => {});
+  } catch (e) { glide = null; }
+  /* "a" stays put and grows 63px; "b" sits 20px below it and is pushed down by the growth; "c" was
+     below the screen and is shorter than its estimate, which is not a growth anyone saw. */
+  if (glide) glide({ a: R(220, 281), b: R(521, 200), c: R(1400, 220) }, "move");
+  eq("a grown card opens from its old height to its own edge on the glide's curve; a card that only moved only glides",
+    glide ? [cards[0].runs, cards[1].runs] : "no glideSettle",
+    [[["clipPath", "inset(-24px -24px 63px -24px)", "inset(-24px -24px 0px -24px)", 180]],
+      [["transform", "translate(0px,-63px)", "none", 180]]]);
+  /* The grown card's edge is its box or its clip, whichever is higher; both runs share one curve, so
+     one progress reads both. A clip that ends past the edge runs ahead of the card below. */
+  let gap = "no clip on the grown card";
+  const clip = cards[0].runs.find(r => r[0] === "clipPath"), move = cards[1].runs.find(r => r[0] === "transform");
+  const bottomInset = v => { const m = /inset\(([^)]*)\)/.exec(v); if (!m) return null;
+    const s = m[1].trim().split(/\s+/).map(parseFloat), b = s.length > 2 ? s[2] : s[0];
+    return isNaN(b) ? null : b; };
+  if (clip && move && bottomInset(clip[1]) != null && bottomInset(clip[2]) != null) {
+    const b0 = bottomInset(clip[1]), b1 = bottomInset(clip[2]), dy = +/,(-?[0-9.]+)px/.exec(move[1])[1];
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i <= 100; i++) {
+      const p = i / 100, edge = Math.min(564, 564 - (b0 + (b1 - b0) * p)), next = 584 + dy * (1 - p);
+      lo = Math.min(lo, next - edge); hi = Math.max(hi, next - edge);
+    }
+    gap = [Math.round(lo * 10) / 10, Math.round(hi * 10) / 10];
+  }
+  eq("the grown card's edge keeps its 20px gap to the card below at every step of the glide", gap, [20, 20]);
+}
+/* THE MOTION LEGS' JUDGE SEES A LEAP ALONG THE LINE OF TRAVEL (797 N4): N3's pill ran 47px the wrong
+   way, was painted 35px past its end and glided back, all within the off-path margin. judge() from
+   tests/motion.js is run on that track, rebuilt in numbers, and on a clean glide as the control. A
+   motion.js without the export fails these legs rather than stopping the run. */
+function motionJudgeTests() {
+  let M = {};
+  try { M = require("./motion.js"); } catch (e) { M = {}; }
+  const box = (x, y) => ({ x, y, w: 110, top: y, bottom: y + 31.5 });
+  const track = pts => ({ vh: 816, before: { "k:a": box(1233, 94) },
+    frames: pts.map(([x, y], i) => ({ "k:a": Object.assign(box(x, y), { anim: 1 }, i ? {} : { start: box(1233, 94) }) }))
+      .concat([{ "k:a": box(15, 132) }]) });
+  const leap = track([[1280, 94], [-20, 132], [-6, 132], [8, 132], [15, 132]]);
+  const clean = track([[900, 104], [500, 116], [200, 126], [40, 131], [15, 132]]);
+  const only = ["jumped", "snapped", "startOff", "offPath", "pastEnd", "vanished"];
+  let got = "no judge exported by tests/motion.js";
+  if (typeof M.judge === "function") {
+    const a = M.judge(leap, { only }), b = M.judge(clean, { only });
+    got = [a.ok, /pastEnd 1/.test(a.text), /offPath/.test(a.text), b.ok];
+  }
+  eq("the motion judge fails a pill painted past either end of its glide, and passes a clean glide",
+    got, [false, true, false, true]);
+  eq("the motion legs run at 125 and 150 per cent as well as 100",
+    (M.SCALES || []).map(s => s.deviceScaleFactor), [1, 1.25, 1.5]);
+  /* THE CARD A LEG ACTS ON IS FOUND AT EVERY SCALE: at 1536x816 the first row's tops sit above the
+     middle band and the second row's below it, so the band alone found nothing and m7 and m12 were
+     never driven at 125. The band still decides where it has a card; the head of the list is never
+     the pick, nor a card under the header, and nothing is picked from an empty screen. */
+  const card = (id, top, left) => ({ id, top, left });
+  const row125 = [card("h", 240, 300), card("p", 240, 700), card("q", 240, 1100), card("s", 560, 300), card("t", 600, 700), card("u", 580, 1100)];
+  const at100 = [card("h", 220, 300), card("p", 220, 700), card("m", 300, 300), card("n", 520, 700)];
+  const under = [card("h", 150, 300), card("p", 160, 700)];
+  /* At 1280x680 (150 per cent) the head's top, 218, lies inside the band (204 to 408): measured
+     2026-09-27, m7@150 and m12@150 acted on the head. The band's first card that is not the head. */
+  const head150 = [card("h", 218, 20), card("p", 218, 430), card("q", 218, 840), card("s", 520, 20)];
+  got = typeof M.middleCard === "function"
+    ? [M.middleCard(row125, 816, 230), M.middleCard(at100, 900, 200), M.middleCard(under, 680, 230), M.middleCard([], 816, 230),
+      M.middleCard([card("h", 240, 300)], 816, 230), M.middleCard(head150, 680, 150)]
+    : "no middleCard exported by tests/motion.js";
+  eq("the card a leg acts on is the band's first where the band has one, else the nearest to the screen's middle, never the head",
+    got, ["s", "m", null, null, null, "p"]);
 }
 function requestFns() {
   const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
@@ -1677,10 +3708,9 @@ function checkCatalogRoundTrip() {
    The PB_ to E_ pass of 2026-09-13 moved 158 names and deliberately did not move three, each
    for a different reason and each invisible to every other instrument here:
 
-   THE TWO GLOBALS THAT ARRIVE FROM OUTSIDE. A catalog file on disk declares
-   window.E_CATALOG and the sample declares window.E_SAMPLE. Both are written by files this
-   engine does not own - by the converter in tools/catalog-v2, or by a desk - so renaming
-   either end silently stops a catalog loading. The export wrapper and the importer's search
+   THE GLOBAL THAT ARRIVES FROM OUTSIDE. A catalog file on disk declares window.E_CATALOG,
+   written by files this engine does not own - by the converter in tools/catalog-v2, or by a
+   desk - so renaming either end silently stops a catalog loading. The export wrapper and the importer's search
    for it are the same contract read the other way. They were PB_ until 2026-09-14; the clean
    break on the format took the old names with it, since nothing here reads format 1 at all.
 
@@ -1699,22 +3729,28 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 803;
-const UI_STRINGS_SHA256 = "2850c1ea4b4fe0582132ebe1031e96774cb94f7898c88779d4a307308e6ea0ed";
+const UI_STRINGS_COUNT = 849;
+const UI_STRINGS_SHA256 = "73cf5682d3876dc4c914e5c6c4918f2d71bc4136c2d8bb7c70a90bfae3f2df14";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
-   so a Polish value cannot move unremarked either. */
+   so a Polish value cannot move unremarked either.
+
+   THE ENGLISH ENDS AT ITS FIRST UNESCAPED QUOTE. Until 2026-09-28 it ended at the first `":"`
+   and a line whose English held a quote was skipped whole: 10 of the table's lines, the tour's
+   rail, pills, star and settings bodies among them, so a Polish value changed on one of them
+   moved nothing here. Read escape by escape instead, the ten are in and every line the old rule
+   took is taken byte for byte as before (measured over the source document: 810 kept, 0 lost,
+   10 added). */
 function uiStrings(src) {
   const out = [];
   src.split(/\r?\n/).forEach(line => {
     const t = line.trim();
     if (!t.startsWith('"') || !t.endsWith('",')) return;
-    const body = t.slice(1, -2), at = body.indexOf('":"');
-    if (at < 1) return;
-    const en = body.slice(0, at);
-    if (en.indexOf('"') >= 0) return;
-    out.push(en + "\u0000" + body.slice(at + 3));
+    let i = 1;
+    while (i < t.length && t[i] !== '"') i += t[i] === "\\" ? 2 : 1;
+    if (i < 2 || t.slice(i, i + 3) !== '":"') return;
+    out.push(t.slice(1, i) + "\u0000" + t.slice(i + 3, -2));
   });
   out.sort();
   return { count: out.length, sha256: crypto.createHash("sha256").update(out.join("\n"), "utf8").digest("hex") };
@@ -1751,14 +3787,10 @@ function checkFrozenContracts() {
   };
   holds("function eCatalog(", "window.E_CATALOG",
         "a catalog file declares window.E_CATALOG and this is where the engine reads it");
-  holds("function exportCatalog(", '"window.E_CATALOG = "',
-        "the wrapper this writes is what every reader of a format 2 catalog file parses");
+  holds("function exportCatalog(", "JSON.stringify(catalogToV2(",
+        "an export is the .ec document itself, which every reader of a format 2 catalog parses as it stands");
   holds("function parseCatalogFile(", '"E_CATALOG"',
         "the importer finds the payload by that wrapper");
-  holds("function sampleReady(", "typeof E_SAMPLE",
-        "sample-catalog.js is published beside the engine and declares window.E_SAMPLE");
-  holds("function loadSampleCatalog(", "E_SAMPLE",
-        "the sample is read through the name its own file declares");
 
   /* The prefix is evaluated rather than matched, because what must agree is what the two
      sides COMPUTE: nsKey carries an identity ternary that a text search reads straight past. */
@@ -2473,7 +4505,7 @@ function langAgnosticTests() {
      setContentLangs, so it demanded `t` and `en` by name and refused every set without them -
      the defect the 649 commit found and left standing. Driven here on the runtime shape. */
   const WL = [
-    "const CATS=", "const SW_EN=", "const SW_PL=", "const SW_CMT=", "const SW_CMT_PL=",
+    "const STARTER_CATS=", "const CATS=", "const SW_EN=", "const SW_PL=", "const SW_CMT=", "const SW_CMT_PL=",
     "const SW_TOPIC=", "const SW_TOPIC_PL=", "const CONTENT_LANGS=", "const BUILT_IN_LANGS=",
     "function langColumn(", "function catalogLangs(", "const INTENT_TEXT_FIELDS=",
     "const INTENT_FIELD_KEY=", "function intentFieldKey(", "const SW_STORE=",
@@ -2515,6 +4547,82 @@ function langAgnosticTests() {
    on: counting only the cards on screen (the put-away card below carries whitespace and is the
    third of three), and taking the declared languages as the built-in pair (the second leg
    declares one). */
+/* THE LIBRARY'S OWN ROWS AND PANELS, sliced out of their modules and run on stubs: what each row is
+   made of, in which order. How it looks is the smoke's and Maxim's. */
+function libraryRowsTests() {
+  const manageSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "manage.js"), "utf8");
+  const introw = (cat, n, hidden) => {
+    try {
+      return new Function("intentIdAt", "isIntentHiddenIdx", "isIntentFavourite", "esc", "t", "intentIsCustom",
+        "intentIsOverridden", "ICON_EYE_SHUT", "ICON_EYE_OPEN", "ICON_TRASH", "catMarkHtml", "intentNavName", "ICON_EDIT",
+        "ICON_STAR_ON", "ICON_STAR_OFF",
+        extractDecl(manageSrc, "function mgIntentRow(") + "\nreturn mgIntentRow;")(
+        () => "t:one", () => !!hidden, () => false, s => s, s => s, () => false, () => false, "", "", "",
+        k => "<mark " + k + ">", () => "Refund", "", "", "")(0, new Map(cat ? [["t:one", cat]] : []), new Map(n ? [["t:one", n]] : []));
+    } catch (e) { return "mgIntentRow did not run: " + e.message; }
+  };
+  const shape = h => {
+    const m = /^<div class="manage-row mg-int( is-hidden)?"[^>]*>(<mark [^>]*>)<span class="mg-int-t cut-peek" data-i18n-skip>([^<]*)<\/span><span class="mg-int-n">(\d+)<\/span><span class="cacts">/.exec(String(h));
+    return m ? [m[2], m[3], m[4], !!m[1]].join(" ") : String(h).slice(0, 200);
+  };
+  eq("a Library intent row is the rail's: one dominant category's mark at its head, the name that fades, and the count of cards linked to it",
+    [shape(introw("billing", 7)), shape(introw("", 0)), shape(introw("billing", 3, true))],
+    ["<mark billing> Refund 7 false", "<mark > Refund 0 false", "<mark billing> Refund 3 true"]);
+  const cut = fs.readFileSync(path.join(E.ROOT, "src", "modules", "cut-text.js"), "utf8");
+  eq("the Library intent's name is one of the lines the cut pass fades", /\.mg-int-t,/.test(extractDecl(cut, "const CUT_SEL=")), true);
+  const pick = (/\n\.ic-pick\{[^}]*\}/.exec(fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8")) || [""])[0];
+  eq("the category editor's icon grid shows whole, with no height cap and no scroll of its own",
+    [!!pick, /max-height|overflow/.test(pick)], [true, false]);
+
+  const mt = fs.readFileSync(path.join(E.ROOT, "src", "modules", "maintenance.js"), "utf8");
+  const store = fs.readFileSync(path.join(E.ROOT, "src", "modules", "storage.js"), "utf8");
+  const B = String.fromCharCode(92), HOME = "C:" + B + "Users" + B + "ann", DOCS = HOME + B + "Documents" + B + "Etiuda";
+  const place = w => {
+    try {
+      return new Function("E_CATALOG_NAME", "storedCatalog", "eDeskHome", "nsGet", "eHost", "eCatalogAccepted", "eCatalog",
+        "E_CATALOG_SCRIPT", "lsGet", "E_CATALOG_FOLDER_KEY", "eCatalogFolder", "eCatalogFile", "eCatalogBuiltIn", "eCatalogIn",
+        [extractDecl(mt, "function mtSafe("), extractDecl(store, "function eHomeless("), extractDecl(mt, "function mtCatalogPlace(")].join("\n")
+        + "\nreturn mtCatalogPlace;")(
+        w.name || "", () => (w.held ? {} : null), () => HOME, k => (w.ns || {})[k], () => (w.host ? {} : null), () => !!w.accepted, () => ({}),
+        "etiuda-catalog.js", k => (k === "eCatalogFolder" ? w.chosen || null : null), "eCatalogFolder", () => w.folder || DOCS,
+        () => w.file || "", () => !!w.builtIn, () => w.in || "")();
+    } catch (e) { return "mtCatalogPlace did not run: " + e.message; }
+  };
+  const P = o => (typeof o === "string" ? o : [o.file, o.copy, o.folder].join(" | "));
+  eq("the Maintenance panel names where the catalog in use lies, which copy it is and its folder, on a desk and in a browser", [
+    P(place({ host: true, name: "Team", ns: { CatalogFile: "team.ec" } })),
+    P(place({ host: true, name: "Team", ns: { CatalogFile: "team.ec" }, chosen: "D:" + B + "shared", folder: "D:" + B + "shared" })),
+    P(place({ host: true, name: "Sample", ns: { CatalogFile: "" }, accepted: true, builtIn: true, file: "sample-catalog.ec" })),
+    P(place({ host: true, name: "Team", ns: { CatalogFile: "" }, accepted: true, file: "team.ec", in: HOME + B + "Desktop" })),
+    P(place({ host: true, name: "Mine", ns: { CatalogFile: "", CatalogFrom: "mine.ec" } })),
+    P(place({ name: "Sample", accepted: true })), P(place({ name: "Mine", held: true, ns: { CatalogFrom: "mine.ec" } })),
+    P(place({ host: true }))], [
+    "team.ec | Documents" + B + "Etiuda | %USERPROFILE%" + B + "Documents" + B + "Etiuda",
+    "team.ec | the chosen catalog folder's | D:" + B + "shared",
+    "sample-catalog.ec | the program's own | inside the program",
+    "team.ec | found beside the program | %USERPROFILE%" + B + "Desktop",
+    "mine.ec | a file opened by hand | -",
+    "etiuda-catalog.js | beside this page | -", "mine.ec | imported into this browser | -",
+    "- | (none loaded) | -"]);
+  let report;
+  try {
+    report = new Function("mtReadings", "navigator", extractDecl(mt, "function mtReportText(") + "\nreturn mtReportText;")(
+      () => [{ sec: "Catalog file" }, { k: "file", v: "team.ec", panelOnly: true }, { k: "copy", v: "Documents" }], { userAgent: "UA" })();
+  } catch (e) { report = "mtReportText did not run: " + e.message; }
+  // The stub above proves the filter only; the real mtReadings and the real list builder prove the wiring.
+  let wired;
+  try {
+    const readings = new Function("mtCatalogPlace", "eSaveTrouble", "pack", "eDeskRefused", extractDecl(mt, "function mtSafe(") + "\n"
+      + extractDecl(mt, "function mtReadings(") + "\nreturn mtReadings;")(
+      () => ({ file: "team.ec", copy: "Documents", folder: "-" }), () => null, {}, () => []);
+    wired = new Function("mtReadings", "navigator", extractDecl(mt, "function mtReportText(") + "\nreturn mtReportText;")(readings, { userAgent: "UA" })();
+  } catch (e) { wired = "mtReadings did not run: " + e.message; }
+  const lists = extractDecl(manageSrc, "function openManage(");
+  eq("the copied report carries where the catalog lies and never its file's own name, which the panel alone shows",
+    [/\nfile: /.test(report), /\ncopy: Documents\n/.test(report), /team\.ec/.test(wired), /\ncopy: Documents\n/.test(wired),
+     /[\s,]linked=intentCardCounts\(\)[,;]/.test(lists) && /mgIntentRow\(i,catOf,linked\)/.test(lists)],
+    [false, true, false, true, true]);
+}
 function libraryAwaitingTests() {
   const src = sourceText();
   const live = new Function("CONTENT_LANGS", "cardFieldKey", "cards",
@@ -3058,13 +5166,21 @@ if (require.main === module) {
        pixels: the other product that shares this mark reads its own icon pixel by pixel and takes
        this file as its control, so a second decoder here would be a second implementation of a
        claim nobody disputes. ETIUDA_ICON_SOURCE, where set, is the file it was copied from. */
-    const want = "9e738d70894eb57b7a3808414c068d5e7d1caaa0ae11c40aae2302ec97cc5981";
+    const want = "7c2d42d000a943b416be319148ff5d59eb659ccd45bc0893f63471777ddf0bb3";
     if (got !== want) { hardFail++;
       console.error("  ERROR: shell/etiuda.ico is sha256 " + got.slice(0, 16) + ", not the mark"
         + " this build ships (" + want.slice(0, 16) + ") - if the mark was rebuilt, move this hash"
         + " in that commit"); }
     else console.log("  shell/etiuda.ico is the mark as built, sha256 " + got.slice(0, 16)
       + ", " + fs.statSync(ico).size + " bytes");
+    /* The sizes Windows asks for at 100 to 200 per cent; a missing one is drawn from the next
+       larger frame scaled down, and reads soft in the taskbar and Alt+Tab. */
+    const icoBuf = fs.readFileSync(ico), wantSizes = [16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 128, 256];
+    const sizes = [];
+    for (let i = 0; i < icoBuf.readUInt16LE(4); i++) sizes.push(icoBuf.readUInt8(6 + 16 * i) || 256);
+    if (sizes.join() !== wantSizes.join()) { hardFail++;
+      console.error("  ERROR: shell/etiuda.ico holds frames of " + sizes.join(", ") + " px, not " + wantSizes.join(", ")); }
+    else console.log("  and it holds a frame for each of the " + sizes.length + " sizes Windows asks for: " + sizes.join(", "));
     const from = process.env.ETIUDA_ICON_SOURCE || "";
     if (from && fs.existsSync(from)) {
       const src = crypto.createHash("sha256").update(fs.readFileSync(from)).digest("hex");
@@ -3100,10 +5216,21 @@ if (require.main === module) {
       });
       const cfg = fs.readFileSync(path.join(__dirname, "..", "electron-builder.js"), "utf8");
       if (!/buildResources:\s*"shell"/.test(cfg)) bad.push("buildResources is no longer shell/");
+      /* EACH TEXT CLOSES ON THE TRADEMARK NOTICE About shows, read from its one line in about.js,
+         so a registration that edits that line reddens here until both texts follow it. */
+      const decl = extractDecl(sourceText(), "const TRADEMARK=");
+      const mark = new Function("return " + decl.slice(decl.indexOf("=") + 1, -1))();
+      want.forEach(f => {
+        const line = mark[f.slice(8, 10)] || "";
+        const paras = fs.readFileSync(path.join(shell, f), "utf8").replace(/^﻿/, "").trim()
+          .split(/\n\s*\n/);
+        if (!line || paras[paras.length - 1] !== line || paras.filter(p => p === line).length !== 1)
+          bad.push(f + " does not close, once, on the notice " + JSON.stringify(line));
+      });
       bad.forEach(x => console.error("  ERROR: " + x));
       if (bad.length) hardFail++;
       else console.log("  the installer's licence page: " + sizes.join(", ")
-        + ", both UTF-8 with a BOM, under buildResources");
+        + ", both UTF-8 with a BOM, under buildResources, each closing on its trademark notice");
     }
   } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
@@ -3205,6 +5332,28 @@ if (require.main === module) {
       + (debugPages ? "; " + debugPages + " agrees" : ""));
   } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
+  section("[2f/5] the fuses the executable is built with");
+  try {
+    /* ELECTRON-BUILDER COPIES ONLY THE FUSE NAMES IT KNOWS, so a misspelt key leaves that fuse at
+       Electron's default with no error anywhere. Each wanted key is read as electron-builder
+       reads it, in its own generateFuseConfig, and the value the config gives it is checked. */
+    const root = path.join(__dirname, "..");
+    const want = { runAsNode: false, enableNodeOptionsEnvironmentVariable: false,
+                   enableNodeCliInspectArguments: false, onlyLoadAppFromAsar: true };
+    const cfg = require(path.join(root, "electron-builder.js")).electronFuses || {};
+    const packager = fs.readFileSync(path.join(root, "node_modules", "app-builder-lib", "out",
+      "platformPackager.js"), "utf8");
+    const bad = [];
+    Object.keys(cfg).forEach(k => { if (packager.indexOf("fuses." + k + " != null") < 0)
+      bad.push(k + " is not a fuse electron-builder reads"); });
+    Object.keys(want).forEach(k => { if (cfg[k] !== want[k])
+      bad.push(k + " is " + JSON.stringify(cfg[k]) + ", wanted " + want[k]); });
+    bad.forEach(x => console.error("  ERROR: " + x));
+    if (bad.length) hardFail++;
+    else console.log("  " + Object.keys(cfg).length + " fuses set, each one electron-builder reads: "
+      + Object.keys(cfg).map(k => k + " " + cfg[k]).join(", "));
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
+
   section("[3/5] stacking invariants");
   try {
     const s = checkStacking();
@@ -3282,7 +5431,7 @@ if (require.main === module) {
     const f = checkFrozenContracts();
     f.problems.forEach(x => console.error("  ERROR: " + x));
     if (f.problems.length) hardFail++;
-    else console.log("  window.E_CATALOG and window.E_SAMPLE still read, storage namespaced "
+    else console.log("  window.E_CATALOG still read, storage namespaced "
       + JSON.stringify(f.prefix) + " and swept by " + f.shape + " in both copies, no key of the "
       + "old regime left in src/, " + f.ui.count + " interface strings at " + f.ui.sha256.slice(0, 16));
   } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }

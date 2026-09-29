@@ -15,13 +15,34 @@ function themeChoice(){ const t=lsGet("eTheme"); return (t==="light"||t==="dark"
    held its old colour for .1s over a page that had already turned - loudest on the tile the
    cursor is resting on. The class is carried through one forced reflow rather than a frame:
    rAF never runs in a background tab, and this must not be able to stick. */
-function paintTheme(next){
+function landTheme(next){
   const r=document.documentElement;
   r.classList.add("theme-swap");
   r.dataset.theme=next;
   void r.offsetHeight;
   r.classList.remove("theme-swap");
 }
+/* A FLIP ON SCREEN CROSSFADES THE WHOLE WINDOW AS ONE PICTURE (the sheet's ::view-transition
+   rules), and the palette still lands whole underneath it. theme-swap comes off at `ready`, once
+   the fade runs on the compositor: that second full restyle held its start back. `ready` settles
+   whether the fade runs or is skipped. Boot, a hidden page and reduced motion land at once. */
+/* A fade's callback runs a frame late and lands `themeWant`, the LATEST theme asked for: a second
+   press in the same task would otherwise land first and be overwritten by the first. */
+let fading=null, themeWant=null;
+function paintTheme(next, after){
+  const r=document.documentElement, from=r.dataset.theme;
+  themeWant=next;
+  if(!from || (from===next && !fading) || typeof document.startViewTransition!=="function"
+     || document.visibilityState!=="visible" || mgReduceMotion()){ landTheme(next); if(after) after(); return; }
+  let vt;
+  try{ vt=document.startViewTransition(()=>{ r.classList.add("theme-swap"); r.dataset.theme=themeWant; }); }
+  catch(e){ landTheme(next); if(after) after(); return; }
+  fading=next;
+  const done=()=>{ if(fading===next) fading=null; r.classList.remove("theme-swap"); if(after) after(); };
+  vt.ready.then(done, done);
+}
+// The theme the screen is on or already fading to, so a second press inside the fade turns back.
+function shownTheme(){ return fading || document.documentElement.dataset.theme || systemTheme(); }
 function applyTheme(){ paintTheme(themeChoice() || systemTheme()); }
 // The OS keeps the last word while nothing is stored, so the watch stands for the whole session.
 function watchSystemTheme(){
@@ -39,16 +60,19 @@ function wireThemeBtn(){
     /* Flips whatever is on screen, which on a first click means flipping away from the system.
        Storing the result is what pins it: from here the OS no longer moves this page. Reset
        clears eTheme with every other e* key, so a wiped Etiuda follows the system again. */
-    const cur=document.documentElement.dataset.theme||systemTheme();
-    const nx=cur==="dark"?"light":"dark";
-    paintTheme(nx); lsSet("eTheme",nx);
-    // Half a revolution per press, accumulating - see the #theme svg note in the stylesheet.
-    const ic=document.querySelector("#theme svg");
-    if(ic && !mgReduceMotion()){
-      const turns=(+ic.dataset.eTurns||0)+1;
-      ic.dataset.eTurns=turns;
-      ic.style.transform="rotate("+(turns*180)+"deg)";
-    }
+    const nx=shownTheme()==="dark"?"light":"dark";
+    /* Stored as the fade begins: under the shell the write turns the window's material at once,
+       and the material cannot fade. Half a revolution per press, accumulating - see the #theme
+       svg note in the stylesheet - turned once theme-swap is off, which would cut it short. */
+    paintTheme(nx, ()=>{
+      lsSet("eTheme",nx);
+      const ic=document.querySelector("#theme svg");
+      if(ic && !mgReduceMotion()){
+        const turns=(+ic.dataset.eTurns||0)+1;
+        ic.dataset.eTurns=turns;
+        ic.style.transform="rotate("+(turns*180)+"deg)";
+      }
+    });
   };
 }
 

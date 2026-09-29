@@ -38,6 +38,8 @@ function shedWordmarkW(){ return (eShedNat && eShedNat.wordmark>0) ? eShedNat.wo
    pass, where nothing is painted. */
 const ROW_SHED_ORDER=["shed-theme","shed-facts","shed-segfold","shed-seg"];
 let eRowNat=null;   // the tools' natural widths, frozen while they are on screen
+// Measured again at their next use: a catalog's languages decide the seg's natural width.
+function forgetRowNaturals(){ eRowNat=null; }
 function measureRowNaturals(){
   const w=el=>el?Math.ceil(el.getBoundingClientRect().width):0;
   const seg=$("#seg"), segOn=$("#seg button.on")||$("#seg button"), other=$("#seg button:not(.on)");
@@ -177,13 +179,13 @@ function shedStage(before){
       const g=el.cloneNode(true);
       g.style.cssText="position:fixed;left:"+b.r.left+"px;top:"+b.r.top+"px;width:"+b.r.width
         +"px;height:"+b.r.height+"px;margin:0;z-index:200;pointer-events:none;opacity:1;"
-        +"transition:opacity .16s ease";
+        +"transition:opacity var(--m-move) ease";
       document.body.appendChild(g);
       go.push(()=>{ g.style.opacity="0"; setTimeout(()=>g.remove(), 200); });
     } else if(!b.vis && a.vis){
       el.style.transition="none";
       el.style.opacity="0";
-      go.push(()=>{ el.style.transition="opacity .18s ease"; el.style.opacity="";
+      go.push(()=>{ el.style.transition="opacity var(--m-move) ease"; el.style.opacity="";
                     setTimeout(()=>{ el.style.transition=""; }, 220); });
     }
   });
@@ -195,13 +197,14 @@ function shedStage(before){
     if(Math.abs(dx)<1) return;
     el.style.transition="none";
     el.style.transform="translateX("+dx+"px)";
-    go.push(()=>{ el.style.transition="transform .2s "+EASE; el.style.transform="";
+    go.push(()=>{ el.style.transition="transform var(--m-move) "+EASE; el.style.transform="";
                   setTimeout(()=>{ el.style.transition=""; }, 240); });
   });
   return go.length ? (()=>{ for(let i=0;i<go.length;i++) go[i](); }) : null;
 }
 
 export {
+  forgetRowNaturals,
   eShedNat, measureShedNaturals, eRowNat, measureRowNaturals, syncRowShed,
   shedSnap, shedStage, shedAnimate, shedHeld, shedHold, shedHolding, shedWordmarkW,
 };

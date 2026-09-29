@@ -71,7 +71,6 @@ const RL = await import(MOD("rail-list.js"));
   const map = {};
   (list.match(/"([A-Za-z]+)"/g) || []).forEach(s => { map[s.slice(1, -1)] = () => {}; });
   map.cardFillKey = RL.cardFillKey;
-  map.sampleReady = () => false;
   map.tourActive = () => false;
   HK.wireHooks(map);
 }

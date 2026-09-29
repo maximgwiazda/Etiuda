@@ -1,5 +1,5 @@
 import { lsGet, lsSet, lsDel } from "./storage.js";
-import { mgReduceMotion, E_EASE } from "./motion.js";
+import { mgReduceMotion, E_EASE, M_MS } from "./motion.js";
 import { toast } from "./ui-lang.js";
 import { $, pills } from "./dom.js";
 import { hooks } from "./hooks.js";
@@ -23,7 +23,7 @@ let pillsBoxTimer=null;
    wrong height. The transition is NOT in the sheet: a standing one would animate every
    step of a resize drag. */
 function animatePillsBox(mutate,ms){
-  ms=ms||180;
+  ms=ms||M_MS.move;
   const slot=pillsSlot();
   if(!slot || mgReduceMotion()){
     // No ride, but the header still changed height and the fixed panel is pinned to it.
@@ -90,6 +90,20 @@ function pillsSlot(){ return $("#pillsSlot"); }
 // The category bar's SHAPE: whether it is wanted, whether it is locked open, the slot's height
 // as an animation, the two-line cap, and what the head script reserves on the next load.
 
+/* How far the pills wrap, from their layout boxes: scrollHeight also counts a pill a running
+   glide still holds on its old line, and a clip decided from that re-wraps the row mid-glide. */
+function pillsWrapHeight(el){
+  let h=0;
+  for(const c of el.children) h=Math.max(h,c.offsetTop+c.offsetHeight);
+  return h;
+}
+function pillsTwoLines(el){
+  const first=el.querySelector(".pill");
+  if(!first) return 0;
+  const styles=getComputedStyle(el);
+  const gap=parseFloat(styles.rowGap||styles.gap)||6;
+  return first.getBoundingClientRect().height*2+gap;
+}
 // Cap the category bar at two lines of layout space; extra rows overlay when expanded.
 // Skipped when locked (⚙ → Lock categories).
 function syncPillsCollapse(){
@@ -103,25 +117,27 @@ function syncPillsCollapse(){
      flowed three. A bar that is not on screen clips nothing; say so, and the peek needs
      no overrides at all. */
   slot.classList.remove("pills-overflow","pills-expand");
-  slot.style.removeProperty("--pills-2line");
-  if(!pillsWanted()||document.body.classList.contains("pills-off")) return;
-  // Locked: always full height in flow (no 2-line clip / overlay expand).
-  if(pillsLocked()) return;
-  const first=el.querySelector(".pill");
-  if(!first) return;
+  if(!pillsWanted()||document.body.classList.contains("pills-off")
+    ||pillsLocked()                  // locked: always full height in flow (no 2-line clip / overlay expand)
+    ||!el.querySelector(".pill")){
+    slot.style.removeProperty("--pills-2line");
+    slot.style.removeProperty("--pills-vw");
+    return;
+  }
+  /* The slot's cap reads both variables: see .pills-slot in the sheet. --pills-2line is inherited by
+     every pill, so it is written only when it changes; --pills-vw changes at every width, so it is
+     not inherited, and it is set before the measure so that the measure's layout is the only one. */
+  slot.style.setProperty("--pills-vw",getComputedStyle(slot).getPropertyValue("--pills-vw-now"));
   // Measure unconstrained height (overflow class removed → pills are in normal flow).
   void el.offsetHeight;
-  const lineH=first.getBoundingClientRect().height;
-  const styles=getComputedStyle(el);
-  const gap=parseFloat(styles.rowGap||styles.gap)||6;
-  const two=lineH*2+gap;
-  const full=el.scrollHeight;
+  const two=pillsTwoLines(el);
+  const full=pillsWrapHeight(el);
   /* The open bar is a popover; nothing here needs to know where it sits inside the
      header any more. */
   slot.style.removeProperty("--pills-full");
+  if(slot.style.getPropertyValue("--pills-2line")!==two+"px") slot.style.setProperty("--pills-2line",two+"px");
   if(full>two+1){
     slot.classList.add("pills-overflow");
-    slot.style.setProperty("--pills-2line",two+"px");
     /* The open height must be a real length for the transition to run, and it can only be
        read with the open styles applied - padding and border are part of it. Measure with
        the transition suppressed, then hand the number to CSS. One forced layout, in a
@@ -135,19 +151,53 @@ function syncPillsCollapse(){
   }
   if(keepExpand) slot.classList.add("pills-expand");
 }
+let ePillsSettled=false;
+/* A redraw clips in its own task once the boot's first measure has run; before it, the widths
+   the measure waits for are not yet known. */
+function syncPillsCollapseNow(){ if(ePillsSettled) syncPillsCollapse(); }
 function schedulePillsCollapse(){
   // Wait for rail-on / max-width layout to settle before measuring wrap height.
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    ePillsSettled=true;
     syncPillsCollapse();
     rememberPillsShape();
     hooks.scheduleRailGeometry();
   }));
 }
-// What the head script reserves on the next load: the slot's height at rest, per window width.
+/* THE CLIP FOLLOWS A NEW WIDTH IN THE FRAME THAT PAINTS IT: the resize pass waits two frames, and
+   the first frame at a narrower width painted a third line in flow, the list with it. The observer
+   runs after layout and before paint. It clips only a bar wrapped past two lines while the slot's cap
+   holds it at two, so the clip resizes #pills alone, deeper than the probe it watches: a callback
+   that resizes a box at or above that depth fails the observer's loop. The rest is the resize pass's. */
+let pillsWidthSeen=-1;
+function pillsClipDue(){
+  const el=pills, slot=pillsSlot();
+  if(!el||!slot||!pillsWanted()||pillsLocked()||document.body.classList.contains("pills-off")) return false;
+  if(slot.classList.contains("pills-overflow")) return false;
+  const two=pillsTwoLines(el);
+  return !!two && pillsWrapHeight(el)>two+1 && Math.abs(slot.getBoundingClientRect().height-two)<0.5;
+}
+function wirePillsWidthWatch(){
+  const probe=$("#pillsProbe");
+  if(!probe || typeof ResizeObserver!=="function") return;
+  new ResizeObserver(es=>{
+    const w=Math.round(es[es.length-1].contentRect.width);
+    if(w===pillsWidthSeen) return;
+    const first=pillsWidthSeen<0;
+    pillsWidthSeen=w;
+    if(!first && ePillsSettled && pillsClipDue()) syncPillsCollapse();
+  }).observe(probe);
+}
+/* What the head script reserves on the next load: the slot's height at rest, per window width.
+   Written once the width has held for a moment, as the facts panel's size is: a drag is a new
+   width every frame, and only the last is ever read. */
+let pillsShapeT=0;
 function rememberPillsShape(){
   const slot=pillsSlot();
-  if(!slot||!pillsWanted()||document.body.classList.contains("pills-off")){ lsDel("eHdrPills"); return; }
-  lsSet("eHdrPills", window.innerWidth+"x"+(Math.round(slot.getBoundingClientRect().height*10)/10));
+  const shape=(!slot||!pillsWanted()||document.body.classList.contains("pills-off")) ? null
+    : window.innerWidth+"x"+(Math.round(slot.getBoundingClientRect().height*10)/10);
+  clearTimeout(pillsShapeT);
+  pillsShapeT=setTimeout(()=>{ if(shape==null) lsDel("eHdrPills"); else lsSet("eHdrPills",shape); },180);
 }
 export {
   pillsWanted,
@@ -158,6 +208,8 @@ export {
   togglePillsLock,
   pillsSlot,
   syncPillsCollapse,
+  syncPillsCollapseNow,
   schedulePillsCollapse,
+  wirePillsWidthWatch,
   rememberPillsShape,
 };

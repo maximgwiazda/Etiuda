@@ -6,12 +6,12 @@ import { ICON_ALL, ICON_EDIT, ICON_PLUS } from "./icons.js";
 import { esc } from "./esc.js";
 import { t, toast } from "./ui-lang.js";
 import { drawPills, scheduleTabSave } from "./tabs.js";
-import { animateReorder } from "./paint.js";
+import { animateReorder, pillKey, captureSettle, glideSettle } from "./paint.js";
 import { CATS } from "./content-model.js";
-import { nsDel } from "./storage.js";
+import { lyDel } from "./storage.js";
 import { rebuildCards } from "./rebuild.js";
 import { mgReduceMotion } from "./motion.js";
-import { schedulePillsCollapse } from "./pills-box.js";
+import { schedulePillsCollapse, syncPillsCollapseNow } from "./pills-box.js";
 import { cats, setCatsDropArmed, setCats, setPendingScrollHit, intentIdxs, setCatOrder, dragState, suppressClick, setDragState, setSuppressClick } from "./app-state.js";
 import { hooks } from "./hooks.js";
 
@@ -61,6 +61,10 @@ function drawPillsCore(){
           +'</span>'
         : ((n||n===0)?" <b>"+n+"</b>":""));
     b.dataset.k=id;
+    /* A toggle to a screen reader, pressed while it filters; the pencil inside is hidden until
+       Ctrl is held, so the name stays the category and its count. */
+    b.setAttribute("role","button");
+    b.setAttribute("aria-pressed",on?"true":"false");
     const _cs=catSlot(id);
     if(_cs>=0) b.dataset.ec=_cs;
     if(id){
@@ -90,7 +94,10 @@ function drawPillsCore(){
       else setCats((cats.length===1 && cats[0]===id) ? [] : [id]);
       // Opening a category while an intent is selected → jump to its linked entries
       setPendingScrollHit(!!intentIdxs.length);
+      // The cards glide as a settle's do, unless that pending scroll may carry the view away.
+      const cardsBefore=intentIdxs.length ? null : captureSettle();
       drawPills(); hooks.render();
+      glideSettle(cardsBefore,"move");
       hooks.railEchoRedraw(railBefore, relBefore);
       scrollRailTop();
       scheduleTabSave();
@@ -116,7 +123,7 @@ function drawPillsCore(){
   pills.firstChild.title=t("Show all categories; double-click to reset their order");
   pills.firstChild.ondblclick=()=>animateReorder(()=>{
     setCatOrder(Object.keys(CATS));
-    nsDel("CatOrder");
+    lyDel("CatOrder");
   });
   displayCatOrder(hc).forEach(k=>{
     if(!CATS[k]) return;
@@ -137,6 +144,9 @@ function drawPillsCore(){
   add.onclick=()=>startPillCatAdd(add);
   pills.appendChild(add);
   if(addHadFocus) add.focus();
+  /* Clipped in the task that drew it: a pick bolds its linked pills, the row can wrap to a
+     third line, and a clip left to the two frames below painted that line first. */
+  syncPillsCollapseNow();
   // Two rAFs: wait for layout after DOM rebuild, then measure overflow.
   schedulePillsCollapse();
 }
@@ -180,13 +190,13 @@ function startPillCatAdd(addEl){
    sites, and those sites capture, change, redraw, then flip. Opt-in per call site rather
    than folded into drawPills(): most callers (tab restore, rename, wipe) should redraw
    instantly with no motion. */
-/** Rects of every pill, keyed by category key. The "first" half of a FLIP. */
+/** Rects of every pill, keyed by pillKey(). The "first" half of a FLIP. */
 /* THE FLIPS ANSWER THE SWITCH AT THEIR CAPTURE: one handed nothing plays nothing, and every
    caller already treats an empty capture as "redraw, do not animate". Same in the two below. */
 function capturePills(){
   if(mgReduceMotion()) return null;
-  const before={};
-  pills.querySelectorAll(".pill").forEach(p=>{ if(p.dataset.k) before[p.dataset.k]=p.getBoundingClientRect(); });
+  const before=new Map();
+  pills.querySelectorAll(".pill").forEach(p=>{ const k=pillKey(p); if(k!==undefined) before.set(k,p.getBoundingClientRect()); });
   return before;
 }
 export {

@@ -1,7 +1,7 @@
 import { $ } from "./dom.js";
-import { t, toast } from "./ui-lang.js";
+import { t, toastRefusal } from "./ui-lang.js";
 import { lsGet, lsSet, nsGet } from "./storage.js";
-import { eCatalog, eCatalogAccepted, storedCatalog } from "./catalog.js";
+import { eCatalog, eCatalogAccepted, eCatalogHanded, storedCatalog } from "./catalog.js";
 import { pack } from "./pack.js";
 import { statsDoc } from "./desk-stats.js";
 import { E_VERSION } from "./env.js";
@@ -30,9 +30,10 @@ function eCatalogFolder(){
 /* THE FOLDER AS WINDOWS NAMES IT, which is the last two segments: a full path is the answer to
    "where exactly" and belongs on hover, while the sentence in front of a person has to fit one
    line at the narrowest width the band allows. Either separator, since a setting may hold a path
-   typed by hand, and the whole thing where there are not two segments to take. */
-function eCatalogFolderShort(){
-  const full=eCatalogFolder();
+   typed by hand, and the whole thing where there are not two segments to take. Any folder may be
+   named; the catalog folder is the default. */
+function eCatalogFolderShort(dir){
+  const full=dir==null?eCatalogFolder():String(dir);
   const parts=full.split(/[\\/]+/).filter(Boolean);
   if(parts.length<2) return full;
   return parts.slice(-2).join(full.indexOf("\\")>-1?"\\":"/");
@@ -45,16 +46,29 @@ function eOpenCatalogFolder(){
   try{ return Promise.resolve(h.openCatalogFolder()).then(v=>!!v).catch(()=>false); }
   catch(e){ return Promise.resolve(false); }
 }
+/* The ring beside the catalogs as text, "" in a browser and "" wherever the host has none. */
+function eCatalogRing(){
+  const h=eHost();
+  if(!h || typeof h.catalogRing!=="function") return Promise.resolve("");
+  try{ return Promise.resolve(h.catalogRing()).then(v=>typeof v==="string"?v:"").catch(()=>""); }
+  catch(e){ return Promise.resolve(""); }
+}
 /* The file this load is running, and the folder it was found in - which is not always the folder
-   above: a catalog beside the installation still loads when the folder holds none. */
-function eCatalogFile(){ const h=eHost(); return h?String(h.catalogFile||""):""; }
-function eCatalogIn(){ const h=eHost(); return h?String(h.catalogIn||""):""; }
+   above: a catalog beside the installation still loads when the folder holds none. Where the
+   engine refused the file the host named at boot, the file handed in its place answers, and the
+   host's catalog is read first so that no caller is answered about a file about to be refused. */
+function eHanded(){ if(!eHost()) return null; eCatalog(); return eCatalogHanded(); }
+function eCatalogFile(){ const h=eHost(), o=eHanded(); return o?o.file:h?String(h.catalogFile||""):""; }
+function eCatalogIn(){ const h=eHost(), o=eHanded(); return o?o.in:h?String(h.catalogIn||""):""; }
+// True where that file is one Etiuda ships, whose folder the host never names.
+function eCatalogBuiltIn(){ const h=eHost(), o=eHanded(); return o?o.builtIn:!!(h && h.catalogBuiltIn); }
 /* When that file was last written, as the host read it at boot. 0 in a browser and 0 where the
    host has no file, which is what every caller tests. */
-function eCatalogMtime(){ const h=eHost(); return h?(+h.catalogMtime||0):0; }
+function eCatalogMtime(){ const h=eHost(), o=eHanded(); return o?o.mtime:h?(+h.catalogMtime||0):0; }
 /* Whether that file arrived because somebody double-clicked it, rather than because it is the
-   newest in the folder. False in a browser, where no file is ever handed to a launch. */
-function eOpenedWith(){ const h=eHost(); return !!(h && h.openedWith); }
+   newest in the folder. False in a browser, where no file is ever handed to a launch, and false
+   once the engine has refused it. */
+function eOpenedWith(){ const h=eHost(); return !eHanded() && !!(h && h.openedWith); }
 /* The catalog folder's own listing,
    [{name,mtime,cards,edition,macros,intents,cats,awaiting,sample,id,catalogName}],
    in the host's own order: newest first, the sample last whatever its date - the rule and the
@@ -82,7 +96,9 @@ function eCatalogFiles(){
                                            /* The catalog's own identity, for the rule of board
                                               431; empty where the file did not read. */
                                            id:String(f&&f.id||""),
-                                           catalogName:String(f&&f.catalogName||"")}))
+                                           catalogName:String(f&&f.catalogName||""),
+                                           // The copy Etiuda ships, rather than a folder's own file.
+                                           builtIn:!!(f&&f.builtIn)}))
                                  .filter(f=>f.name):[])
       .catch(()=>[]);
   }catch(e){ return Promise.resolve([]); }
@@ -103,7 +119,7 @@ function eLoadedCatalogFile(){
 function eChooseCatalogFolder(title){
   return ePickCatalogFolder(title).then(dir=>{
     if(!dir || dir===eCatalogFolder()) return "";
-    if(lsSet(E_CATALOG_FOLDER_KEY,dir,true)===false){ toast(t("That setting could not be saved.")); return ""; }
+    if(lsSet(E_CATALOG_FOLDER_KEY,dir,true)===false){ toastRefusal(t("That setting could not be saved.")); return ""; }
     return dir;
   });
 }
@@ -144,19 +160,26 @@ function ePickCatalogFile(title,label){
   }catch(e){ return Promise.resolve(null); }
 }
 /* Export's save dialog, the host's for the reason Import's is: the engine calls no OS API, and the
-   host writes the bytes and says whether they landed. {name,ok} for a file chosen, null for a
+   host writes the bytes and says whether they landed. `build` is handed the chosen file's name and
+   returns the text, because the name is the catalog's. {name,ok} for a file chosen, null for a
    dialog closed. */
 function eHasCatalogSaver(){
   const h=eHost();
-  return !!h && typeof h.saveCatalogFile==="function";
+  return !!h && typeof h.chooseCatalogSave==="function" && typeof h.writeCatalogSave==="function";
 }
-function eSaveCatalogFile(title,name,text,label){
+function eSaveCatalogFile(title,name,label,build){
   if(!eHasCatalogSaver()) return Promise.resolve(null);
+  const failed=n=>({name:String(n||name||""),ok:false});
   try{
-    return Promise.resolve(eHost().saveCatalogFile(String(title||""),String(name||""),String(text||""),String(label||"")))
-      .then(v=>(v&&typeof v==="object")?{name:String(v.name||name||""),ok:v.ok===true}:null)
-      .catch(()=>({name:String(name||""),ok:false}));
-  }catch(e){ return Promise.resolve({name:String(name||""),ok:false}); }
+    return Promise.resolve(eHost().chooseCatalogSave(String(title||""),String(name||""),String(label||"")))
+      .then(v=>{
+        if(!(v&&typeof v==="object"&&v.name)) return null;
+        const chosen=String(v.name);
+        return Promise.resolve(eHost().writeCatalogSave(String(build(chosen)||"")))
+          .then(w=>(w&&typeof w==="object")?{name:String(w.name||chosen),ok:w.ok===true}:failed(chosen));
+      })
+      .catch(()=>failed());
+  }catch(e){ return Promise.resolve(failed()); }
 }
 /* A file somebody double-clicked that this launch could not open, {name,why} once and then null:
    the host forgets it as it answers, so a reload does not say it twice. */
@@ -251,9 +274,11 @@ export {
   eCatalogFolder,
   eCatalogFolderShort,
   eCatalogFiles,
+  eCatalogRing,
   eChooseCatalogFolder,
   eLoadedCatalogFile,
   eCatalogIn,
+  eCatalogBuiltIn,
   eCatalogMtime,
   eHasCatalogPicker,
   eHasCatalogSaver,

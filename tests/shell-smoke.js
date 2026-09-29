@@ -163,7 +163,7 @@ const step = async (label, body, opts) => {
  * it is what the count now sees: a mismatch is NO VERDICT, exit 78, not a tally.
  */
 const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7"];
-const EXPECTED = KEEP ? null : 116;
+const EXPECTED = KEEP ? null : 125;
 const phasesSeen = new Set();
 const phase = what => {
   const m = /^\[(\d+)[a-z]*\/\d+\]/.exec(String(what).trim());
@@ -309,9 +309,25 @@ function newUserData(name, seed, realDocuments) {
      launch would count somebody's cards as the fixture's. AFTER the seed, because a seed writes
      desk.json whole and would drop the pin. One leg asks for the real default and says so. */
   if (!realDocuments) E.pinCatalogFolder(dir, catFolder(name));
+  /* PAST THE FIRST RUN, every profile but the first-run legs' own: a first run's tour holds the
+     catalog offer back until it ends, and the legs below are about the offer, not the tour. The
+     first-run legs (the unpinned ones) keep a desk that has seen nothing. */
+  if (!realDocuments) {
+    const file = path.join(dir, "desk.json");
+    const d = JSON.parse(fs.readFileSync(file, "utf8"));
+    Object.assign(d.keys, TOUR_SEEN);
+    fs.writeFileSync(file, JSON.stringify(d), "utf8");
+  }
   return dir;
 }
+const TOUR_SEEN = { eTourDone_v3: "1", eTourInvite_v3: "1" };
 function catFolder(name) { return path.join(LAB, "cat-" + name); }
+/* The boot offer is a bubble whose Escape is its own, answered only with the keyboard inside it;
+   Escape closes it without recording a refusal. */
+async function escOffer(p) {
+  await p.evaluate(() => { const y = document.querySelector("#ecYes"); if (y) y.focus(); });
+  await p.keyboard.press("Escape");
+}
 
 async function launch(ud, args, env, assocExe, realCatalogFolder) {
   port++;
@@ -839,6 +855,81 @@ const placeEc = (dir, from, as, minutesOld) => {
   /* ---- 2c: the catalog on screen, which is a separate launch because accepting reloads ---- */
 
   });
+  /* ---- 1h: the shell's own context menu and a page that stops (feel pass native-1, quiet-17) ---
+     The menu is read from the shell's stdout under ETIUDA_TEST_CONTEXT_MENU, never popped: a
+     native menu takes the pointer and the keyboard of whoever is at the desk. Page.crash is a
+     real renderer crash; the second one inside a minute is the shell's to ask about, and the
+     placed-aside window logs the question in place of the box. */
+  await step("[1h/7] right-click, and a page that stops", async () => {
+  phase("[1h/7] right-click, and a page that stops");
+  const udM = newUserData("menu", withFixture);
+  const deskM = path.join(udM, "desk.json");
+  const dm = JSON.parse(fs.readFileSync(deskM, "utf8"));
+  dm.keys.eUiLang = "pl";
+  fs.writeFileSync(deskM, JSON.stringify(dm), "utf8");
+  s = await launch(udM, [], { ETIUDA_TEST_CONTEXT_MENU: "1" });
+  const cdp = await s.p.target().createCDPSession();
+  const at = await s.p.evaluate(() => { const r = document.getElementById("intent").getBoundingClientRect();
+    return { x: r.x + 20, y: r.y + r.height / 2 }; });
+  for (const type of ["mousePressed", "mouseReleased"])
+    await cdp.send("Input.dispatchMouseEvent", { type, x: at.x, y: at.y, button: "right", clickCount: 1 });
+  await sleep(800);
+  const menuLine = s.said.join("\n").split("\n").filter(l => /etiuda: context menu /.test(l));
+  let items = null;
+  try { items = JSON.parse(menuLine[0].replace(/^.*etiuda: context menu /, "")).map(i => i[0]); } catch (x) { /* none */ }
+  check(menuLine.length === 1 && JSON.stringify(items) === JSON.stringify(["Cofnij", "Wytnij", "Kopiuj", "Wklej", "Zaznacz wszystko"]),
+    "1h a right-click in the search box of a Polish desk opens the shell's menu with the five edit"
+    + " commands in Polish: " + JSON.stringify(items) + " from " + menuLine.length + " menu line(s)");
+  await cdp.detach().catch(() => {});
+
+  const booted = pg => Promise.race([pg.evaluate(() => typeof window.E_VERSION === "string").catch(() => false), sleep(4000).then(() => false)]);
+  const crash = async pg => { const c = await pg.target().createCDPSession(); c.send("Page.crash").catch(() => {}); };
+  await crash(s.p);
+  await sleep(5000);
+  const back = (await s.b.pages()).find(x => /etiuda\.html/.test(x.url()));
+  const backUp = !!back && await booted(back);
+  const stopped = s.said.join("\n").split("\n").filter(l => /etiuda: the page stopped \(crashed/.test(l)).length;
+  check(backUp && stopped === 1,
+    "1h2 a renderer that crashes is reloaded and boots again within 5 s (" + backUp + "), and the shell"
+    + " says why, once: " + stopped + " line(s)");
+  if (back) await crash(back);
+  await sleep(3000);
+  /* The recovery window's page has no script, so it is read and clicked through the DOM and input
+     domains rather than by evaluating anything in it. */
+  const asks = s.said.join("\n").split("\n").map(l => l.trim()).filter(l => l.indexOf("etiuda: the recovery window asks: ") > -1);
+  const box = (await s.b.pages()).find(x => /etiuda-recovery-\d+\.html$/.test(x.url()));
+  const boxFile = box ? decodeURIComponent(new URL(box.url()).pathname).replace(/^\/([A-Za-z]:)/, "$1") : "";
+  let seen = null, clickedRestart = false;
+  if (box) {
+    const c = await box.target().createCDPSession();
+    try {
+      const { root } = await c.send("DOM.getDocument", { depth: -1 });
+      const html = (await c.send("DOM.getOuterHTML", { nodeId: root.nodeId })).outerHTML;
+      seen = { lang: (/<html lang="([a-z]+)"/.exec(html) || [])[1], h1: (/<h1>([^<]*)<\/h1>/.exec(html) || [])[1],
+        links: [...html.matchAll(/<a href="([^"]*)"[^>]*>([^<]*)<\/a>/g)].map(m => [m[1], m[2]]), scripts: (html.match(/<script/gi) || []).length };
+      const { nodeId } = await c.send("DOM.querySelector", { nodeId: root.nodeId, selector: 'a[href="?answer-0"]' });
+      const q = (await c.send("DOM.getBoxModel", { nodeId })).model.content;
+      const at = { x: (q[0] + q[4]) / 2, y: (q[1] + q[5]) / 2 };
+      for (const type of ["mousePressed", "mouseReleased"])
+        await c.send("Input.dispatchMouseEvent", { type, x: at.x, y: at.y, button: "left", clickCount: 1 });
+      clickedRestart = true;
+    } catch (x) { seen = Object.assign(seen || {}, { err: x.message }); }
+    await c.detach().catch(() => {});
+  }
+  check(asks.length === 1 && asks[0].endsWith("Etiuda niespodziewanie się zatrzymała.") && !!seen && seen.lang === "pl"
+        && seen.h1 === "Etiuda niespodziewanie się zatrzymała." && seen.scripts === 0
+        && JSON.stringify(seen.links) === JSON.stringify([["?answer-1", "Zamknij Etiudę"], ["?answer-0", "Uruchom ponownie"]]),
+    "1h3 a second crash inside the minute asks, in Polish, in a recovery window of Etiuda's own rather than reloading"
+    + " again: " + asks.length + " question(s) logged, and the window's page reads " + JSON.stringify(seen));
+  await sleep(5000);
+  const after = await s.b.pages();
+  const again = after.find(x => /etiuda\.html/.test(x.url()));
+  const againUp = !!again && await booted(again);
+  check(clickedRestart && againUp && !after.some(x => /etiuda-recovery-/.test(x.url())) && !!boxFile && !fs.existsSync(boxFile),
+    "1h4 and its Restart, clicked, reloads the desk, which boots again (" + againUp + "), closes the recovery window and"
+    + " takes its page's file away: clicked " + clickedRestart + ", file " + boxFile + " still there: " + (!!boxFile && fs.existsSync(boxFile)));
+  await s.stop();
+  });
   await step("[2/7] the catalog on screen", async () => {
   phase("[2/7] the catalog on screen");
   const udB = newUserData("b", withFixture);
@@ -905,9 +996,9 @@ const placeEc = (dir, from, as, minutesOld) => {
   check(s.said.some(l => l.indexOf("newer-edition.ec, " + FIXTURE_CARDS + " cards") > -1),
     "2f and the shell says which file it read, by name and with the same count");
   const offerLine = await s.p.evaluate(() => {
-    const subs = document.querySelectorAll("#eCatalogModal .modal-sub");
+    const subs = document.querySelectorAll("#eCatalogOffer .ec-sub");
     const last = subs[subs.length - 1];
-    return last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null;
+    return last ? Array.from(last.querySelectorAll("code")).map(c => c.title || c.textContent) : null;
   });
   check(!!offerLine && offerLine.length === 2 && offerLine[0] === "newer-edition.ec"
         && offerLine[1] === catFolder("folder"),
@@ -1028,10 +1119,8 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   const DOCS = path.join(os.homedir(), "Documents", "Etiuda");
   const docsExisted = fs.existsSync(DOCS);
-  /* SINCE BOARD 497 THE SAMPLE GOES INTO THAT FOLDER WHATEVER IT HOLDS, so this leg - the one
-     launch aimed at the desk's own Documents - can now leave a file behind on a desk that has a
-     catalog of its own. Whether the file was there BEFORE is the whole of the cleanup below: one
-     this run wrote goes, one that was already there is somebody's and stays. */
+  /* A FIRST RUN GIVES THIS FOLDER THE SAMPLE (Maxim, 2026-09-28), where no file of its name is there
+     already; the sample is on disk after the run, and one this run wrote is taken away again below. */
   const docsSample = path.join(DOCS, "sample-catalog.ec");
   const sampleExisted = fs.existsSync(docsSample);
   const udI = newUserData("firstrun", null, true);         // NOT pinned: the real default
@@ -1042,15 +1131,15 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " if it made it.");
   const saidFolder = s.said.some(l => l.indexOf("catalog folder " + DOCS) > -1);
   await s.stop();
-  check(saidFolder && fs.existsSync(DOCS),
+  const wroteSample = !sampleExisted && fs.existsSync(docsSample);
+  check(saidFolder && fs.existsSync(DOCS) && (sampleExisted || wroteSample),
     "2k a first run with no folder set makes Documents/Etiuda and reads from it: the shell named "
-    + DOCS + " (" + saidFolder + ") and it is on disk (" + fs.existsSync(DOCS) + ")"
+    + DOCS + " (" + saidFolder + ") and it is on disk (" + fs.existsSync(DOCS) + "), and the sample is in it ("
+    + (sampleExisted ? "it was there before" : "written by this run") + ")"
     + (docsExisted ? "; it was there before this run, so only the naming is this run's" : ""));
-  /* Put back what this run made, and only that. The sample first, and by whether it was there
-     before rather than by whether the folder was: a desk holding catalogs of its own is given one
-     now too, and it is this gate's to take away again. Then the folder, where this run made it -
-     rmdirSync refuses a folder holding anything, so a desk that has since put a catalog in it
-     keeps both. */
+  /* Put back what this run made, and only that: the sample it wrote, then the
+     folder, where this run made it - rmdirSync refuses a folder holding anything, so a desk that
+     has since put a catalog in it keeps both. */
   if (!sampleExisted) {
     try { fs.unlinkSync(docsSample); } catch (x) { /* none was seeded */ }
   }
@@ -1060,11 +1149,11 @@ const placeEc = (dir, from, as, minutesOld) => {
     try { fs.rmdirSync(DOCS); } catch (x) { note("Documents/Etiuda is not empty and stays: " + DOCS); }
   }
 
-  /* ---- 2k2 to 2k4: the sample the installer carries, board item 462 ------------------------
-     The subject is a folder this app WRITES to, and the only folder it ever writes to is the
-     desk's own Documents/Etiuda - which app.getPath cannot be redirected to from outside the
-     process, so these three launches set ETIUDA_TEST_DOCUMENTS and drive a Documents folder of
-     the lab's own. 2k above is the leg that keeps asking for the real one.
+  /* ---- 2k2 to 2k4: the sample the installer carries, and the two folders --------------------
+     The subject is the desk's own Documents/Etiuda, read beside the folder Etiuda is installed in,
+     which app.getPath cannot redirect from outside the process, so these launches set
+     ETIUDA_TEST_DOCUMENTS and drive a Documents folder of the lab's own. 2k above is the leg that
+     keeps asking for the real one.
      The sample is read out of the tree by this process for its card count, the way every other
      count in this file is read from the document it is a count of. */
   });
@@ -1076,29 +1165,62 @@ const placeEc = (dir, from, as, minutesOld) => {
   const seededDir = d => path.join(d, "Etiuda");
   listed = d => { try { return fs.readdirSync(seededDir(d)).sort(); } catch (x) { return ["<no folder>"]; } };
 
+  /* WHAT A FIRST RUN PUTS ON SCREEN, read once the tour has had its moment: the empty desk with
+     its mark, nothing loaded, no catalog offer and no window, and the tour's first bubble, which
+     stands clear of the mark. The mark and the bubble are read as rectangles. */
+  const FIRST_SCREEN = async p => {
+    await new Promise(r => setTimeout(r, 2200));
+    return p.evaluate(() => {
+      const box = el => { if (!el) return null; const r = el.getBoundingClientRect();
+        return r.width ? [Math.round(r.left), Math.round(r.top), Math.round(r.right), Math.round(r.bottom)] : null; };
+      const mark = box(document.querySelector(".e-empty-mark")), bub = box(document.getElementById("tourCard"));
+      const apart = !!mark && !!bub && (bub[2] <= mark[0] || bub[0] >= mark[2] || bub[3] <= mark[1] || bub[1] >= mark[3]);
+      return { cards: document.querySelectorAll("#list .card").length, offer: !!document.querySelector("#eCatalogOffer"),
+        window: !!document.querySelector("body > .modal:not([hidden])"), mark: !!mark, tour: !!bub, apart,
+        title: (document.getElementById("tourTitle") || {}).textContent || "",
+        field: !!document.querySelector("#tourField:not([hidden]) .e-name-inp"),
+        sample: !!document.getElementById("emptySample"), load: !!document.getElementById("emptyLoad"),
+        now: ((document.querySelector("#catNow .cn-none:not([hidden])") || {}).textContent || "") };
+    });
+  };
   const docsA = seedDocs("fresh");
   const udS1 = newUserData("seed-fresh", null, true);
   s = await launch(udS1, [], { ETIUDA_TEST_DOCUMENTS: docsA });
-  const seedSeen = await s.p.evaluate(SEEN);
-  /* The offer's own line does not name the FILE - measured on 2026-09-17, it names the catalog
-     and the folder - so what is asserted here is that the dialog is up over an unloaded desk. */
-  const seedOffered = await s.p.evaluate(() => ({ up: !!document.querySelector("#ecYes") }));
+  const seedFirst = await FIRST_SCREEN(s.p);
   await s.stop();
   const seededFiles = listed(docsA);
-  const seedMark = deskKeys(udS1)["e~sampled"];
-  check(seededFiles.join(",") === "sample-catalog.ec" && seedMark === "1"
-        && seedOffered.up && seedSeen.cards === 0,
-    "2k2 a first run into an empty catalog folder is given the sample and offered it: the folder"
-    + " holds " + JSON.stringify(seededFiles) + ", the desk carries e~sampled "
-    + JSON.stringify(seedMark) + ", the offer is up (" + seedOffered.up + ") with nothing loaded"
-    + " behind it (" + seedSeen.cards + " cards). The"
-    + " sample in the tree holds " + SEED_CARDS + " cards, counted by this process");
+  const givenSame = seededFiles.join(",") === "sample-catalog.ec"
+    && fs.readFileSync(path.join(seededDir(docsA), "sample-catalog.ec")).equals(fs.readFileSync(SAMPLE_IN_TREE));
+  check(givenSame && !seedFirst.sample && seedFirst.load && seedFirst.cards === 0
+        && !seedFirst.offer && !seedFirst.window && seedFirst.mark && seedFirst.tour && seedFirst.apart
+        && seedFirst.title === "Welcome to Etiuda" && seedFirst.field && seedFirst.now === "No catalog loaded",
+    "2k2 a first run gives its catalog folder the sample, byte for byte, and loads nothing, and the empty desk offers Load"
+    + " and no button of its own for the sample Etiuda ships: the folder holds " + JSON.stringify(seededFiles)
+    + ", a sample button " + seedFirst.sample + ", Load " + seedFirst.load
+    + ", and the screen is the empty desk with its mark, no offer and no window, the tour's first bubble"
+    + " asking the name clear of the mark and the band saying no catalog is loaded: " + JSON.stringify(seedFirst)
+    + ". The sample in the tree holds " + SEED_CARDS + " cards, counted by this process");
 
-  /* The same first run into a folder that already holds a catalog, board item 497: the sample
-     goes in all the same - it is a special catalog rather than a stand-in for a missing one - and
-     it is still not what opens. The folder's own file is dated six hours back, so newest-wins
-     would take the sample if it were counted with the others. Which file the shell read is taken
-     off its own stdout by path: no name and no card of this fixture is read here. */
+  /* 2k2b: THE SAME FIRST RUN ON A POLISH SYSTEM, the shell started with Chromium's own --lang, which
+     is the locale Windows' display language gives it: the interface and the first chat are Polish,
+     and so is the tour's first bubble. */
+  const docsP = seedDocs("polish");
+  const udSP = newUserData("seed-polish", null, true);
+  s = await launch(udSP, ["--lang=pl"], { ETIUDA_TEST_DOCUMENTS: docsP });
+  const plScreen = await FIRST_SCREEN(s.p);
+  const plFirst = Object.assign(await s.p.evaluate(() => ({ nav: navigator.language,
+    ui: document.documentElement.lang, reply: lang })), { title: plScreen.title, now: plScreen.now });
+  await s.stop();
+  check(plFirst.ui === "pl" && plFirst.reply === "pl" && plFirst.title === "Witamy w Etiudzie"
+        && plFirst.now === "Nie wczytano katalogu",
+    "2k2b on a Polish system the first run speaks Polish, interface and first chat, and so do the tour's"
+    + " first bubble and the band: " + JSON.stringify(plFirst));
+
+  /* The same first run into a folder that already holds a catalog, board item 497: the sample is
+     given all the same - it is a special catalog rather than a stand-in for a missing one - and it
+     is still not what opens. The folder's own file is dated six hours back, so newest-wins would take
+     the sample if it were counted with the others. Which file the shell read is taken off its own
+     stdout by path: no name and no card of this fixture is read here. */
   const docsB = seedDocs("taken");
   fs.mkdirSync(seededDir(docsB), { recursive: true });
   const mineEc = path.join(seededDir(docsB), "mine.ec");
@@ -1107,44 +1229,84 @@ const placeEc = (dir, from, as, minutesOld) => {
   fs.utimesSync(mineEc, mineAt, mineAt);
   const udS2 = newUserData("seed-taken", null, true);
   s = await launch(udS2, [], { ETIUDA_TEST_DOCUMENTS: docsB });
+  /* On a first run the tour's own step asks for a catalog, so the offer waits for the tour and
+     rises when it is skipped. */
+  const takenFirst = await FIRST_SCREEN(s.p);
+  await s.p.evaluate(() => { const k = document.getElementById("tourSkip"); if (k) k.click(); });
+  await sleep(800);
   const takenSeen = await s.p.evaluate(SEEN);
   const takenRead = (s.said.join(" | ").match(/catalog read from ([^,]+),/) || [])[1] || "";
   await s.stop();
   const takenFiles = listed(docsB);
-  const takenSample = (() => {
-    const f = path.join(seededDir(docsB), "sample-catalog.ec");
-    try { return fs.readFileSync(f).equals(fs.readFileSync(SAMPLE_IN_TREE)); } catch (x) { return false; }
-  })();
-  check(takenFiles.join(",") === "mine.ec,sample-catalog.ec" && takenSample
-        && path.basename(takenRead) === "mine.ec"
-        && deskKeys(udS2)["e~sampled"] === "1" && takenSeen.offer,
-    "2k3 a first run into a folder that ALREADY holds a catalog is given the sample too, and still"
-    + " opens the folder's own: " + JSON.stringify(takenFiles) + ", the sample byte for byte the"
-    + " tree's (" + takenSample + "), the file the shell read " + JSON.stringify(path.basename(takenRead))
-    + " though it is six hours older, marker " + JSON.stringify(deskKeys(udS2)["e~sampled"])
-    + ", and that catalog is offered (" + takenSeen.offer + ")");
+  check(takenFiles.join(",") === "mine.ec,sample-catalog.ec" && path.basename(takenRead) === "mine.ec"
+        && !takenFirst.offer && takenFirst.tour && takenSeen.offer,
+    "2k3 a first run into a folder that ALREADY holds a catalog puts the sample beside it and still"
+    + " opens the folder's own over the sample: " + JSON.stringify(takenFiles)
+    + ", the file the shell read " + JSON.stringify(path.basename(takenRead))
+    + " though it is six hours older than the build's sample"
+    + ", and that catalog is offered once the tour is skipped and not before (" + takenFirst.offer
+    + " with the tour up, " + takenSeen.offer + " after)");
 
-  /* 2k4: and it is never given twice. The catalog is accepted, ejected and then the local memory
-     is cleared - the two acts that empty a desk - and the file itself is taken away by hand,
-     which is the state the marker exists for: an empty folder that has already been given one.
-     Both confirms are stubbed; the native dialog blocks the main process and reads as a hang. */
+  /* 2k4: TWO FOLDERS AND WHICH COPY IS IN USE (Maxim, 2026-09-26 and 2026-09-28). The copy 2k2's first
+     run gave Documents/Etiuda is the one listed, once, as a plain row, being byte for byte the shipped
+     copy; another file of exactly that name put in its place (the sample less its edition, so the two
+     differ in bytes) is the same one row, now saying it takes the shipped copy's place; taken away,
+     the shipped copy is listed as Etiuda's own and the copy is not given again,
+     since this desk has given it once. The Library is opened afresh for each reading, since what is
+     read is the host's listing. */
+  const COPY_ROWS = async () => {
+    const pg = (await s.b.pages())[0];
+    return pg.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      if (!document.getElementById("modal").hidden) closeModal();
+      await wait(300);
+      document.getElementById("settingsBtn").click(); await wait(300);
+      document.querySelector('#settingsMenu [data-act="manage"]').click(); await wait(1200);
+      const fold = document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
+      if (fold && !fold.open) { fold.querySelector("summary").click(); await wait(1200); }
+      const rows = Array.from(document.querySelectorAll("#mgCatList .ec-row")).map(r => ({
+        name: (r.querySelector(".ec-name b") || {}).textContent || "",
+        copy: (r.querySelector("[data-ec-copy]") || { getAttribute: () => "" }).getAttribute("data-ec-copy") }));
+      closeModal();
+      return rows;
+    });
+  };
   s = await launch(udS1, [], { ETIUDA_TEST_DOCUMENTS: docsA });
-  await s.p.evaluate(() => { const y = document.querySelector("#ecYes"); if (y) y.click(); });
+  await sleep(2200);
+  await s.p.evaluate(() => { const k = document.getElementById("tourSkip"); if (k) k.click(); });
+  await sleep(800);
+  await escOffer(s.p);
+  await sleep(600);
+  const shipped = await COPY_ROWS();
+  const ownCopy = path.join(seededDir(docsA), "sample-catalog.ec");
+  fs.copyFileSync(SAMPLE_NOED, ownCopy);
   await sleep(6000);
-  await (await s.b.pages())[0].evaluate(() => { window.confirm = () => true; ejectCatalog(); });
+  const replaced = await COPY_ROWS();
+  fs.unlinkSync(ownCopy);
   await sleep(6000);
-  await (await s.b.pages())[0].evaluate(() => { window.confirm = () => true; clearLocalMemory(); });
+  const restored = await COPY_ROWS();
+  /* 2k4b: A SAMPLE AN EARLIER BUILD SEEDED is read like any file of the name: the 09-17 edition,
+     which the fixtures folder keeps as its sample-catalog.ec, put into Documents/Etiuda under the
+     sample's name is the copy in use, listed once as the folder's. The file is hashed first, so a
+     fixture that has moved on refuses rather than passing. */
+  const SEEDED_FIX = path.join(process.env.ETIUDA_FIXTURES || "", "sample-catalog.ec");
+  const seededSha = crypto.createHash("sha256").update(fs.readFileSync(SEEDED_FIX)).digest("hex");
+  if (seededSha.slice(0, 16) !== "2fa81658b7ad2b4c") throw new Error("2k4b wants the 09-17 sample as " + SEEDED_FIX + " and found sha256 " + seededSha.slice(0, 16));
+  fs.copyFileSync(SEEDED_FIX, ownCopy);
   await sleep(6000);
-  const markAfterWipes = deskKeys(udS1)["e~sampled"];
+  const seeded = await COPY_ROWS();
+  fs.unlinkSync(ownCopy);
+  await sleep(1500);
   await s.stop();
-  fs.unlinkSync(path.join(seededDir(docsA), "sample-catalog.ec"));
-  s = await launch(udS1, [], { ETIUDA_TEST_DOCUMENTS: docsA });
-  const backSeen = await s.p.evaluate(SEEN);
-  await s.stop();
-  check(markAfterWipes === "1" && listed(docsA).join(",") === "" && backSeen.cards === 0,
-    "2k4 an eject and a clear leave the marker where it is (" + JSON.stringify(markAfterWipes)
-    + ") and the restart after the sample is deleted by hand brings nothing back: the folder holds "
-    + JSON.stringify(listed(docsA)) + " and the desk " + backSeen.cards + " cards");
+  const one = rows => rows.length === 1 && rows[0].name === "sample-catalog.ec";
+  check(one(shipped) && shipped[0].copy === "" && one(replaced) && replaced[0].copy === ""
+        && one(restored) && restored[0].copy === "builtin" && listed(docsA).join(",") === "",
+    "2k4 the Library lists the sample once, as the copy the first run gave Documents/Etiuda with nothing said of"
+    + " it, with nothing said of it either once another file of that name differs, and removing it brings the shipped copy back rather than"
+    + " giving it again: " + JSON.stringify({ shipped, replaced, restored }));
+  check(one(seeded) && seeded[0].copy === "",
+    "2k4b a sample an earlier build seeded into Documents/Etiuda, byte for byte the 09-17 edition, is the copy read:"
+    + " the Library lists it once, as a plain row: " + JSON.stringify(seeded));
 
   /* ---- 2k5: the dot field under the cards, board item 419 ---------------------------------
      THE ONE CHECK IN THIS FILE THAT A PICTURE DECIDES, and it is here because no other reading
@@ -1165,8 +1327,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   phase("[2e/7] the ground the cards stand on");
   pristine();
   s = await launch(newUserData("dots"), [], { ETIUDA_TEST_OFFSCREEN: "2" });
-  /* Start empty: the offer stands over the card area, and its scrim is the thing a patch of the
-     ground would otherwise be a picture of. */
+  /* Not now: the offer is answered, so nothing of it stands in the patch of ground pictured below. */
   await s.p.evaluate(() => { const n = document.querySelector("#ecNo"); if (n) n.click(); });
   await sleep(1200);
   const patchOf = async (tag) => {
@@ -1198,13 +1359,13 @@ const placeEc = (dir, from, as, minutesOld) => {
   const darkField = await patchOf("dark");
   const darkScales = await atScales("dark");
   const flat = await s.p.evaluate(() => {
-    const m = document.querySelector("main");
+    const m = document.getElementById("pageScroll");
     const was = getComputedStyle(m).backgroundImage;
     m.style.backgroundImage = "none";
     return was.indexOf("radial-gradient") > -1;
   });
   const darkFlat = await patchOf("dark-off");
-  await s.p.evaluate(() => { document.querySelector("main").style.backgroundImage = ""; });
+  await s.p.evaluate(() => { document.getElementById("pageScroll").style.backgroundImage = ""; });
   const themeNow = await s.p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const t = document.getElementById("theme"); if (t) t.click();
@@ -1252,8 +1413,8 @@ const placeEc = (dir, from, as, minutesOld) => {
      a count and a filename this file chose. */
 
   });
-  await step("[2c/7] Import catalog takes a .ec", async () => {
-  phase("[2c/7] Import catalog takes a .ec");
+  await step("[2c/7] Load catalog takes a .ec", async () => {
+  phase("[2c/7] Load catalog takes a .ec");
   const ecText = fs.readFileSync(FIX, "utf8");
   const udJ = newUserData("import");
   s = await launch(udJ);
@@ -1266,7 +1427,7 @@ const placeEc = (dir, from, as, minutesOld) => {
     if (!item) return { step: "no Library item in the menu" };
     item.click(); await wait(1200);
     const imp = document.getElementById("mgImportCatalog");
-    if (!imp) return { step: "no Import catalog button" };
+    if (!imp) return { step: "no Load catalog button" };
     const r = imp.getBoundingClientRect();
     return { step: "open", box: [Math.round(r.width), Math.round(r.height)],
              wired: typeof imp.onclick === "function",
@@ -1275,12 +1436,12 @@ const placeEc = (dir, from, as, minutesOld) => {
   });
   check(door.step === "open" && door.box[0] > 0 && door.box[1] > 0 && door.wired
         && door.picker === "function" && door.reader === "function",
-    "2l the Import door is whole: the button is on screen and wired, the host answers with a file"
+    "2l the Load door is whole: the button is on screen and wired, the host answers with a file"
     + " picker of its own, and the engine has the reading half behind it: " + JSON.stringify(door));
 
   took = await s.p.evaluate(text => {
-    window.confirm = () => true;              // the native confirm cannot be driven; the answer is
-    return window.importCatalogText(text, "picked-by-hand.ec");
+    /* The offer over a loaded catalog is answered the way a person answers it. */ const acceptOffer = () => { const y = document.querySelector("#ecYes"); if (y) y.click(); return true; };
+    return window.importCatalogText(text, "picked-by-hand.ec") && acceptOffer();
   }, ecText);
   await sleep(6000);
   const landed = await (await s.b.pages())[0].evaluate(SEEN);
@@ -1324,15 +1485,15 @@ const placeEc = (dir, from, as, minutesOld) => {
      sub-line, which is the only place a FILENAME appears, while the heading, the catalog\'s own
      name, its edition and its counts are the body above. */
   const DIALOG = () => {
-    const m = document.getElementById("eCatalogModal");
+    const m = document.getElementById("eCatalogOffer");
     if (!m) return { step: "no dialog" };
-    const subs = m.querySelectorAll(".modal-sub");
+    const subs = m.querySelectorAll(".ec-sub");
     const last = subs[subs.length - 1];
     const counts = m.querySelector(".ec-counts");
-    return { step: "read", title: (m.querySelector("h2") || {}).textContent || "",
-             body: (m.querySelector(".about-body") || {}).textContent || "",
+    return { step: "read", title: (m.querySelector("h3") || {}).textContent || "",
+             body: (m.querySelector(".ec-what") || {}).textContent || "",
              counts: counts ? counts.textContent : "",
-             codes: last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null,
+             codes: last ? Array.from(last.querySelectorAll("code")).map(c => c.title || c.textContent) : null,
              yes: !!m.querySelector("#ecYes"), no: !!m.querySelector("#ecNo") };
   };
   const askedAt = await s.p.evaluate(DIALOG);
@@ -1373,7 +1534,7 @@ const placeEc = (dir, from, as, minutesOld) => {
              rows: box.querySelectorAll(".ec-row").length,
              load: !!document.getElementById("emptyCatLoad"),
              asks: box.innerHTML.indexOf("Load catalog?") > -1,
-             dialog: !!document.getElementById("eCatalogModal"),
+             dialog: !!document.getElementById("eCatalogOffer"),
              says: (box.querySelector(".empty") || {}).textContent || "" };
   });
   const DATE_RE = /^[0-3][0-9]\.[0-1][0-9]\.20[0-9][0-9] [0-2][0-9]:[0-5][0-9]/;
@@ -1395,7 +1556,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   check(bareEmpty.step === "read" && !bareEmpty.offerBox && bareEmpty.rows === 0
         && !bareEmpty.load && !bareEmpty.asks && !bareEmpty.dialog
         && bareEmpty.says.indexOf("Etiuda is ready for its first replies.") === 0
-        && bareEmpty.says.indexOf("import a catalog") > -1,
+        && bareEmpty.says.indexOf("load a catalog") > -1,
     "2p2 and the page the decline leaves behind carries none of it: no offer box ("
     + bareEmpty.offerBox + "), no row (" + bareEmpty.rows + "), no Load button (" + bareEmpty.load
     + ") and the words " + JSON.stringify("Load catalog?") + " nowhere in its markup ("
@@ -1427,7 +1588,7 @@ const placeEc = (dir, from, as, minutesOld) => {
                   glyph and the name it carries rather than a word in a pill. */
                tick: (r.querySelector(".ec-tick") || {}).getAttribute
                  ? r.querySelector(".ec-tick").getAttribute("aria-label") : "",
-               act: Array.from(r.querySelectorAll("button.btn")).map(b => b.textContent).join("|"),
+               act: Array.from(r.querySelectorAll("button.btn")).map(b => b.getAttribute("aria-label") || b.textContent).join("|"),
                box: (() => { const b = r.querySelector("button").getBoundingClientRect();
                              return [Math.round(b.width), Math.round(b.height)]; })(),
              })),
@@ -1456,21 +1617,6 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " cards, macros, intents and categories, counted off the file by the host - "
     + JSON.stringify(edRow.meta) + " and " + JSON.stringify(noEdRow.meta));
 
-  /* Loading one from that list: the same dialog every other route ends in, then the catalog. */
-  const fromList = await s.p.evaluate(async () => {
-    const wait = ms => new Promise(r => setTimeout(r, ms));
-    const row = Array.from(document.querySelectorAll("#mgCatList .ec-row"))
-      .filter(r => (r.querySelector(".ec-name b") || {}).textContent === "another.ec")[0];
-    if (!row) return { step: "no row for another.ec" };
-    row.querySelector("button").click(); await wait(2000);
-    const subs = document.querySelectorAll("#eCatalogModal .modal-sub");
-    const last = subs[subs.length - 1];
-    return { step: "clicked", offer: !!document.querySelector("#ecYes"),
-             codes: last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null };
-  });
-  check(fromList.offer && !!fromList.codes && fromList.codes[0] === "another.ec",
-    "2q2 and its Load button puts that file\'s offer back on screen past the refusal, named: "
-    + JSON.stringify(fromList));
   await s.stop();
 
   s = await launch(udL);
@@ -1490,20 +1636,43 @@ const placeEc = (dir, from, as, minutesOld) => {
   s = await launch(udL);
   const again2 = await s.p.evaluate(SEEN);
   const againLine = await s.p.evaluate(() => {
-    const subs = document.querySelectorAll("#eCatalogModal .modal-sub");
+    const subs = document.querySelectorAll("#eCatalogOffer .ec-sub");
     const last = subs[subs.length - 1];
     return last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null;
   });
   check(again2.offer && !!againLine && againLine[0] === "one-edition.ec",
     "2r and a file REWRITTEN since that refusal is still the one named, the folder\'s newest rule"
     + " deciding which: offer " + again2.offer + ", " + JSON.stringify(againLine));
+
+  /* LOADING ONE FROM THAT LIST ON AN EMPTY DESK LOADS IT AT ONCE (Maxim, 2026-09-26): somebody chose
+     it, past the refusal, and nothing is put down, so nothing is asked. Last on this desk, because
+     it is the act that stops it being empty. Clicked and left: the load reloads the page, and an
+     evaluate still waiting inside it would lose its context. */
+  await escOffer(s.p);
+  await sleep(600);
+  await s.p.evaluate(OPEN_LIB);
+  const fromList = await s.p.evaluate(() => {
+    const row = Array.from(document.querySelectorAll("#mgCatList .ec-row"))
+      .filter(r => (r.querySelector(".ec-name b") || {}).textContent === "another.ec")[0];
+    if (!row) return { step: "no row for another.ec" };
+    row.querySelector("button").click();
+    return { step: "clicked" };
+  });
+  await sleep(7000);
+  const fromListSeen = await (await s.b.pages())[0].evaluate(SEEN);
+  const fromListKeys = deskKeys(udL);
+  check(fromList.step === "clicked" && !fromListSeen.offer && fromListSeen.cards === SAMPLE_CARDS
+        && fromListKeys.eCatalogFile === "another.ec",
+    "2q2 and past that refusal a row\'s Load on the empty desk loads the file at once, nothing asked:"
+    + " " + fromListSeen.cards + " cards against the sample\'s " + SAMPLE_CARDS + ", offer "
+    + fromListSeen.offer + ", file " + JSON.stringify(fromListKeys.eCatalogFile || ""));
   await s.stop();
 
   const udM = newUserData("emptylist");                    // pinned at a folder holding no .ec
   fs.mkdirSync(catFolder("emptylist"), { recursive: true });
   s = await launch(udM);
   const noCard = await s.p.evaluate(() => ({
-    dialog: !!document.getElementById("eCatalogModal"),
+    dialog: !!document.getElementById("eCatalogOffer"),
     offerBox: !!document.getElementById("emptyCatOffer"),
     says: (document.querySelector("#list .empty") || {}).textContent || "",
   }));
@@ -1543,11 +1712,11 @@ const placeEc = (dir, from, as, minutesOld) => {
     + JSON.stringify(setPath) + "). So 2p and 2q read the folder and not a fixed list, and the"
     + " dialog at 2p is that folder\'s rather than a fixture of the empty screen");
   /* A FOLDER WITH NOTHING IN IT SAYS SO IN THE LIST'S OWN SHAPE, board 452, and carries no
-     button: Import is on the bar below, and the same act twice on one screen is the thing this
+     button: Load catalog is on the bar below, and the same act twice on one screen is the thing this
      design took out. The folder inside the sentence stays clickable, because putting a file
      there is the usual answer. */
   check(noRows.phButtons === 0 && noRows.phFolder === catFolder("emptylist")
-        && noRows.empty.indexOf("Import one") > 0,
+        && noRows.empty.indexOf("load one") > 0,
     "2P2 an empty folder is one row-shaped placeholder with no button in it, naming the folder it"
     + " means: " + JSON.stringify(noRows));
   await s.stop();
@@ -1559,7 +1728,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   const udMine = newUserData("mine");
   placeEc(catFolder("mine"), FIX, "one-edition.ec", 5);
   s = await launch(udMine);
-  await s.p.keyboard.press("Escape");
+  await escOffer(s.p);
   await sleep(1000);
   made = await s.p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -1578,12 +1747,12 @@ const placeEc = (dir, from, as, minutesOld) => {
   await sleep(1500);
   await s.stop();
   s = await launch(udMine);
-  await s.p.keyboard.press("Escape");
+  await escOffer(s.p);
   await sleep(1000);
   const mine = await s.p.evaluate(() => ({
     cards: document.querySelectorAll("#list .card").length,
     box: !!document.getElementById("emptyCatOffer"),
-    dialog: !!document.getElementById("eCatalogModal"),
+    dialog: !!document.getElementById("eCatalogOffer"),
     asked: !!document.querySelector("#ecYes"),
   }));
   check(made.step === "saved" && made.cards === 1 && mine.cards === 1 && !mine.box
@@ -1604,24 +1773,20 @@ const placeEc = (dir, from, as, minutesOld) => {
   placeEc(catFolder("library"), FIX, "one-edition.ec", 5);
   placeEc(catFolder("library"), SAMPLE_NOED, "another.ec", 90);
   s = await launch(udLL);
-  await s.p.keyboard.press("Escape");
+  await escOffer(s.p);
   await sleep(800);
   const lib3 = await s.p.evaluate(OPEN_LIB);
-  taken = await s.p.evaluate(async () => {
-    const wait = ms => new Promise(r => setTimeout(r, ms));
+  taken = await s.p.evaluate(() => {
     const row = Array.from(document.querySelectorAll("#mgCatList .ec-row"))
       .filter(r => (r.querySelector(".ec-name b") || {}).textContent === "another.ec")[0];
     if (!row) return { step: "no row for another.ec" };
-    row.querySelector("button").click(); await wait(2200);
-    const y = document.querySelector("#ecYes");
-    if (!y) return { step: "no offer" };
-    y.click();
-    return { step: "accepted" };
+    row.querySelector("button").click();
+    return { step: "clicked" };
   });
-  await sleep(6000);
+  await sleep(7000);
   const listLoaded = await (await s.b.pages())[0].evaluate(SEEN);
   const listKeys = deskKeys(udLL);
-  check(lib3.step === "open" && lib3.rows.length === 2 && taken.step === "accepted"
+  check(lib3.step === "open" && lib3.rows.length === 2 && taken.step === "clicked"
         && listLoaded.cards === SAMPLE_CARDS && listKeys.eCatalogFile === "another.ec"
         && +listKeys.eCatalogFileAt > 0,
     "2q3 loading a file from that list loads THAT file, and the desk on disk records which file"
@@ -1662,6 +1827,25 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " loaded catalog, while the file written after it is marked newer and offers Load: "
     + JSON.stringify([loadedRow, otherRow]));
 
+  /* THE CONTROL for 2q2 and 2q3: over a loaded catalog a row's Load still asks, since one catalog
+     would be put down. Answered with the bubble's own Escape, which records nothing. */
+  const replaceAsk = await (await s.b.pages())[0].evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const row = Array.from(document.querySelectorAll("#mgCatList .ec-row"))
+      .filter(r => (r.querySelector(".ec-name b") || {}).textContent === "one-edition.ec")[0];
+    if (!row) return { step: "no row for one-edition.ec" };
+    row.querySelector("button").click(); await wait(2200);
+    const h = document.querySelector("#eCatalogOffer h3");
+    return { step: "clicked", offer: !!document.querySelector("#ecYes"), title: h ? h.textContent : null,
+             cards: document.querySelectorAll("#list .card").length };
+  });
+  await escOffer((await s.b.pages())[0]);
+  await sleep(600);
+  check(replaceAsk.step === "clicked" && replaceAsk.offer && replaceAsk.title === "Replace catalog?"
+        && replaceAsk.cards === SAMPLE_CARDS,
+    "2q4b control: over a loaded catalog a row\'s Load still asks before putting it down: "
+    + JSON.stringify(replaceAsk));
+
   /* The watch feeds that list: a catalog dropped into the folder while the Library stands open.
      NOT another copy of the fixture: the shell hands the page a catalog only when the folder's
      newest reads differently from what it last sent, so a file whose bytes are already there is
@@ -1678,10 +1862,16 @@ const placeEc = (dir, from, as, minutesOld) => {
     "2q5 a file arriving in the folder reaches the open Library through the host\'s watch: "
     + JSON.stringify(grown));
 
-  /* And putting it down empties the desk WITHOUT asking on the way back, board 424\'s one
-     exception: the Library is reopened over that restart already listing every file, so the
-     dialog would be arguing with somebody who has just answered. */
-  await (await s.b.pages())[0].evaluate(() => { window.confirm = () => true; ejectCatalog(); });
+  /* And putting it down empties the desk WITHOUT asking, board 424\'s one exception: the Library
+     stands open over the desk started again in place, already listing every file, so the dialog
+     would be arguing with somebody who has just answered. */
+  /* Eject happens at once and in place with Undo (Maxim, 2026-09-27 23:28 and 2026-09-28 23:41),
+     so no confirm may stand after the call. */
+  /* A question standing is read by what can put one up (a window not hidden, a bubble that asks, an
+     alert), the Undo bubble and a leaving copy aside; a page that reloaded instead counts as asked. */
+  const ejAsk1 = await (await s.b.pages())[0].evaluate(() => { const standing = () => [...document.querySelectorAll(".modal:not([hidden]), .bub-ask, [role=alertdialog]")].filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
+    const was = standing(); ejectCatalog(); return standing() !== was; })
+    .catch(() => true);
   await sleep(7000);
   let ejPage = (await s.b.pages())[0];
   const afterEject = await ejPage.evaluate(SEEN);
@@ -1690,14 +1880,14 @@ const placeEc = (dir, from, as, minutesOld) => {
     rows: document.querySelectorAll("#mgCatList .ec-row").length }));
   const ejKeys = deskKeys(udLL);
   check(afterEject.cards === 0 && !afterEject.offer && !ejKeys.eCatalogFile
-        && ejLib.lib && ejLib.rows === 3,
-    "2q6 ejecting empties the desk and forgets which file was loaded, and the restart it causes"
-    + " is the one launch NOT asked: " + afterEject.cards + " cards, dialog " + afterEject.offer
+        && ejLib.lib && ejLib.rows === 3 && !ejAsk1,
+    "2q6 ejecting empties the desk and forgets which file was loaded, and the desk it starts again"
+    + " in place is NOT asked: " + afterEject.cards + " cards, dialog " + afterEject.offer
     + ", file key " + JSON.stringify(ejKeys.eCatalogFile || "") + ", and the Library back with its "
-    + ejLib.rows + " rows, which is everything the dialog would have had to say");
+    + ejLib.rows + " rows, which is everything the dialog would have had to say; eject confirm " + ejAsk1);
   await s.stop();
 
-  /* The one-shot is spent on that read, so the next ordinary launch of the same desk asks. */
+  /* Nothing of the eject carries past it, so the next ordinary launch of the same desk asks. */
   s = await launch(udLL);
   const nextUp = await s.p.evaluate(DIALOG);
   check(nextUp.step === "read" && !!nextUp.codes && nextUp.codes[0] === "arrived-later.ec"
@@ -1762,13 +1952,20 @@ const placeEc = (dir, from, as, minutesOld) => {
      address - the picker reaches outside the folder - so the desk records none, and the same
      catalog then took a row of its own at the head while the folder listed its file again
      beneath. Driven through importCatalogText, which is the reading half both import routes end
-     in, over the bytes of a file that IS in the folder. `confirm` is stubbed because a native one
-     blocks the main process and every page's channel. */
+     in, over the bytes of a file that IS in the folder. That catalog is put down first: bringing in
+     the very catalog that is loaded is answered in words and loads nothing, so the desk is emptied
+     and the same file comes in again through the import. The eject asks nothing (2026-09-27 23:28),
+     and a confirm standing after the call fails 2q11's premise. */
+  // Read as ejAsk1 reads it.
+  const ejAsk2 = await (await s.b.pages())[0].evaluate(() => { if (document.getElementById("mgCatList")) closeModal();
+    const standing = () => [...document.querySelectorAll(".modal:not([hidden]), .bub-ask, [role=alertdialog]")].filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
+    const was = standing(); ejectCatalog(); return standing() !== was; }).catch(() => true);
+  await sleep(6000);
   const impRan = await (await s.b.pages())[0].evaluate(async () => {
-    window.confirm = () => true;
+    /* The offer over a loaded catalog is answered the way a person answers it. */ const acceptOffer = () => { const y = document.querySelector("#ecYes"); if (y) y.click(); return true; };
     const got = await eReadCatalogFile("one-edition.ec");
     if (!got || !got.text) return { step: "the file did not read" };
-    return { step: importCatalogText(got.text, got.name) ? "imported" : "refused" };
+    return { step: importCatalogText(got.text, got.name) && acceptOffer() ? "imported" : "refused" };
   });
   await sleep(6000);
   const impPage = (await s.b.pages())[0];
@@ -1777,13 +1974,14 @@ const placeEc = (dir, from, as, minutesOld) => {
   const libImp = await impPage.evaluate(OPEN_LIB);
   const impKeys = deskKeys(udLE);
   const impOn = (libImp.rows || []).filter(r => r.loaded);
-  check(impRan.step === "imported" && libImp.step === "open" && !impKeys.eCatalogFile
+  check(!ejAsk2 && impRan.step === "imported" && libImp.step === "open" && !impKeys.eCatalogFile
         && libImp.rows.length === 2 && impOn.length === 1
         && impOn[0].name === "one-edition.ec" && impOn[0].act === "Eject",
     "2q11 a catalog imported rather than loaded from the folder takes the row of the file it IS,"
     + " matched by the identity of board 431 with no file name recorded (eCatalogFile "
     + JSON.stringify(impKeys.eCatalogFile || "") + "): " + libImp.rows.length + " row(s), "
-    + impOn.length + " of them marked loaded, " + JSON.stringify((libImp.rows || []).map(r => r.name)));
+    + impOn.length + " of them marked loaded, " + JSON.stringify((libImp.rows || []).map(r => r.name))
+    + ", eject confirm " + ejAsk2);
 
   /* THE CONTROL, and it is the whole reason the match is by identity rather than by "something is
      loaded": a catalog the folder does not hold keeps a row of its own at the head and marks none
@@ -1795,8 +1993,8 @@ const placeEc = (dir, from, as, minutesOld) => {
     return JSON.stringify(d);
   })();
   const ctrlIn = await (await s.b.pages())[0].evaluate(text => {
-    window.confirm = () => true;
-    return importCatalogText(text, "probe.ec") ? "imported" : "refused";
+    /* The offer over a loaded catalog is answered the way a person answers it. */ const acceptOffer = () => { const y = document.querySelector("#ecYes"); if (y) y.click(); return true; };
+    return importCatalogText(text, "probe.ec") && acceptOffer() ? "imported" : "refused";
   }, ctrlDoc);
   await sleep(6000);
   const ctrlPage = (await s.b.pages())[0];
@@ -1833,25 +2031,27 @@ const placeEc = (dir, from, as, minutesOld) => {
                .map(r => (r.querySelector(".ec-name b") || {}).textContent || ""),
              empty: (document.querySelector('#modalCard details[data-mg="data"] .manage-secbody > p.manage-empty')
                      || {}).textContent || "",
-             over: !!document.getElementById("eCatalogModal") };
+             over: !!document.getElementById("eCatalogOffer") };
   };
   const udSO = newUserData("stayopen");
   placeEc(catFolder("stayopen"), FIX, "one-edition.ec", 5);
   placeEc(catFolder("stayopen"), SAMPLE_NOED, "another.ec", 90);
-  s = await launch(udSO);
-  await s.p.keyboard.press("Escape");                 // the boot offer, refused without a record
+  /* Export's save dialog is answered by the shell's test hook: the offered name, in this folder. */
+  const SAVED = path.join(LAB, "saved-as");
+  fs.rmSync(SAVED, { recursive: true, force: true });
+  fs.mkdirSync(SAVED, { recursive: true });
+  s = await launch(udSO, [], { ETIUDA_TEST_SAVE_AS: SAVED });
+  await escOffer(s.p);                 // the boot offer, refused without a record
   await sleep(800);
 
   /* Load, from the row: the route every import also takes, so what it proves about the reload
-     it proves about all of them. The offer it raises is answered here, the way a person does. */
+     it proves about all of them. On this empty desk it loads at once (2q2). */
   await s.p.evaluate(OPEN_LIB);
   const beforeLoad = await s.p.evaluate(LIB_STATE);
-  await s.p.evaluate(async () => {
-    const wait = ms => new Promise(r => setTimeout(r, ms));
+  await s.p.evaluate(() => {
     const row = Array.from(document.querySelectorAll("#mgCatList .ec-row"))
       .filter(r => (r.querySelector(".ec-name b") || {}).textContent === "one-edition.ec")[0];
-    row.querySelector("button").click(); await wait(2200);
-    const y = document.querySelector("#ecYes"); if (y) y.click();
+    row.querySelector("button").click();
   });
   await sleep(7000);
   const afterLoad = await (await s.b.pages())[0].evaluate(LIB_STATE);
@@ -1864,8 +2064,8 @@ const placeEc = (dir, from, as, minutesOld) => {
   /* Import. The button itself ends in a file dialog the operating system owns, so the leg drives
      the reader that dialog hands its text to - which is where the reload, and the close, were. */
   const imported = await (await s.b.pages())[0].evaluate(t => {
-    window.confirm = () => true;
-    return window.importCatalogText(t, "brought-in.ec");
+    /* The offer over a loaded catalog is answered the way a person answers it. */ const acceptOffer = () => { const y = document.querySelector("#ecYes"); if (y) y.click(); return true; };
+    return window.importCatalogText(t, "brought-in.ec") && acceptOffer();
   }, fs.readFileSync(SAMPLE, "utf8"));
   await sleep(7000);
   const afterImport = await (await s.b.pages())[0].evaluate(LIB_STATE);
@@ -1885,21 +2085,35 @@ const placeEc = (dir, from, as, minutesOld) => {
     window.pack.who = "Ada"; window.savePack(); window.paintCatalogList();
     await wait(600);
   });
-  /* Export catalog opens a modal of its own on top, and must not take the Library down with it. */
+  /* EXPORT GOES STRAIGHT TO THE SAVE DIALOG (Maxim, 2026-09-26): no question of its own, the file's
+     name names the catalog, and the Library stays open at its fold behind the dialog. What lands is
+     the .ec document named after the loaded catalog, which the engine's own reader takes. */
   const stacked = await (await s.b.pages())[0].evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const b = document.getElementById("mgExportCatalog");
     if (!b) return { there: false };
-    b.click(); await wait(700);
-    const own = !!document.getElementById("eNameModal");
+    const name = (window.storedCatalog() || {}).name || "";
+    b.click(); await wait(1500);
     const fold = document.querySelector('#modalCard details.manage-sec[data-mg="data"]');
-    const out = { there: true, own, lib: !!fold, foldOpen: !!fold && fold.open };
-    const no = document.getElementById("eNameNo"); if (no) no.click(); await wait(500);
-    return out;
+    return { there: true, name, asked: !!document.getElementById("eNameModal"), lib: !!fold,
+             foldOpen: !!fold && fold.open };
   });
-  check(stacked.there && stacked.own && stacked.lib && stacked.foldOpen,
-    "2s3 Export catalog raises a dialog of its own ON TOP of the Library, which is still there"
-    + " and still at its fold: " + JSON.stringify(stacked));
+  const savedAs = fs.readdirSync(SAVED);
+  let savedDoc = null, savedText = "";
+  try { savedText = fs.readFileSync(path.join(SAVED, stacked.name + ".ec"), "utf8"); savedDoc = JSON.parse(savedText); }
+  catch (x) { savedDoc = null; }
+  const readBack = await (await s.b.pages())[0].evaluate(t => {
+    try { return window.parseCatalogFile(t).name; } catch (x) { return "refused: " + x.message; } }, savedText);
+  check(stacked.there && !stacked.asked && stacked.lib && stacked.foldOpen
+        && savedAs.length === 1 && savedAs[0] === stacked.name + ".ec" && !!savedDoc
+        && savedDoc.kind === "etiuda-catalog" && savedDoc.format === 2 && savedDoc.name === stacked.name
+        && readBack === stacked.name,
+    "2s3 Export catalog goes straight to the save dialog with no question of its own and the Library"
+    + " still at its fold, and writes " + savedAs.length + " file, the loaded catalog's name as an .ec ("
+    + (savedAs[0] === stacked.name + ".ec") + "), a format " + (savedDoc && savedDoc.format)
+    + " document carrying that name (" + (!!savedDoc && savedDoc.name === stacked.name)
+    + ") which the engine's reader takes whole (" + (readBack === stacked.name) + "): "
+    + JSON.stringify({ asked: stacked.asked, lib: stacked.lib, foldOpen: stacked.foldOpen }));
 
   /* An editor opened from the Library takes the screen and hands it back, which is a different
      promise from the four above and was already built: it is read here so that it stays built. */
@@ -1962,21 +2176,26 @@ const placeEc = (dir, from, as, minutesOld) => {
     + " Close at the right, still danger, and not in the Catalog & data fold: "
     + JSON.stringify(wipeBar) + " " + JSON.stringify(wipeEnds));
 
-  /* Eject from that row: the Library is still there on the far side of the restart, showing the
-     folder rather than being replaced by a dialog about one file in it, and the section says in
+  /* Eject from that row: the Library is still there over the desk started again in place, showing
+     the folder rather than being replaced by a dialog about one file in it, and the section says in
      words that nothing is loaded. */
-  await (await s.b.pages())[0].evaluate(() => {
-    window.confirm = () => true;
+  // Read as ejAsk1 reads it.
+  const ejAsk3 = await (await s.b.pages())[0].evaluate(() => {
+    const standing = () => [...document.querySelectorAll(".modal:not([hidden]), .bub-ask, [role=alertdialog]")].filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
+    const was = standing();
     const b = document.querySelector("#mgCatList button[data-ec-eject]");
     if (b) b.click();
-  });
+    return { button: !!b, asked: standing() !== was };
+  }).catch(() => ({ button: true, asked: true }));
   await sleep(8000);
   const afterEject2 = await (await s.b.pages())[0].evaluate(LIB_STATE);
   check(afterEject2.open && afterEject2.foldOpen && !afterEject2.over
-        && afterEject2.loaded.length === 0 && afterEject2.rows === 2 && afterEject2.empty === "",
+        && afterEject2.loaded.length === 0 && afterEject2.rows === 2 && afterEject2.empty === ""
+        && ejAsk3.button && !ejAsk3.asked,
     "2s5 the row's Eject leaves the Library open on the folder with no row marked and NOTHING over"
-    + " it, that restart being the one launch board 424 does not ask; since 452 the fold says it"
-    + " with the list rather than with a sentence: " + JSON.stringify(afterEject2));
+    + " it, that start in place being the one board 424 does not ask; since 452 the fold says it"
+    + " with the list rather than with a sentence, and the eject asked nothing (2026-09-27 23:28): "
+    + JSON.stringify(afterEject2) + " " + JSON.stringify(ejAsk3));
 
   /* Clear local memory is driven at 2w below, in a launch of its own: it restarts the app, and
      the legs here are about a dialog that has to still be standing afterwards. */
@@ -2037,11 +2256,9 @@ const placeEc = (dir, from, as, minutesOld) => {
   const beforeWipe = await wp.evaluate(() => ({
     folder: window.lsGet("eCatalogFolder"), theme: window.lsGet("eTheme"),
     hover: window.lsGet("eNoteHover"), cards: document.querySelectorAll(".card").length }));
-  /* A native confirm under the host blocks the main process and every page's CDP channel, so
-     the stub goes in first and is READ BACK: a stub on a document that has since reloaded looks
-     exactly like a dead button. */
-  const stubbed = await wp.evaluate(() => { window.confirm = () => true; return window.confirm() === true; });
-  await wp.evaluate(() => { clearLocalMemory(); });
+  /* Clear happens at once with its Undo standing (2026-09-28 20:06); the Undo is READ BACK, since a
+     press that did nothing looks exactly like a dead button. It is left unanswered. */
+  const stubbed = await wp.evaluate(() => { clearLocalMemory(); return !!document.getElementById("eUndoBtn"); });
   await sleep(9000);
   wp = (await s.b.pages())[0];
   const afterWipe = await wp.evaluate(() => ({
@@ -2101,35 +2318,37 @@ const placeEc = (dir, from, as, minutesOld) => {
   await sleep(6000);
   let rp = (await s.b.pages())[0];
 
-  /* BOARD 290: THE FIRST RUN ASKS FOR A NAME, and this is the launch that sees it - a catalog
-     just accepted, so the desk is no longer empty and the question means something. It is a
-     modal and it covers the screen, which is why it is answered here before the ring legs
-     below reach for the Menu with a real pointer: a mouse click landing on a scrim is a mouse
-     click that did nothing. */
-  asked = await rp.evaluate(() => {
-    const m = document.getElementById("eAgentModal");
-    if (!m) return { there: false };
-    return { there: true, title: (m.querySelector("h2") || {}).textContent,
-             line: m.querySelectorAll(".modal-sub").length,
-             preview: (m.querySelector("#eAgentPrev") || {}).textContent,
-             greyed: (m.querySelector("#eAgentPrev .e-name-ph") || {}).textContent,
-             buttons: [...m.querySelectorAll(".modal-actions button")].map(b => b.textContent) };
+  /* THE NAME IS ASKED WHEN THE FIRST SIGNED REPLY IS COPIED, never at boot: a catalog just accepted
+     brings no question with it. The question is then driven through the one gate both copy routes
+     pass, withAgentName, with a signing text: it stands over the desk with the reply's own signing
+     line as its preview, and Later records the answer, writes no name and lets the copy through.
+     Answered here before the ring legs below reach for the Menu with a real pointer, since a
+     mouse click landing on a scrim is a mouse click that did nothing. */
+  asked = await rp.evaluate(() => ({ atBoot: !!document.getElementById("eAgentAsk") }));
+  const onCopy = await rp.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    window.__copied = 0;
+    withAgentName("Kind regards,\n{AGENT}", () => { window.__copied++; });
+    await wait(300);
+    const m = document.getElementById("eAgentAsk");
+    const out = { there: !!m, copiedFirst: window.__copied,
+      preview: m ? (m.querySelector("#eAgentPrev") || {}).textContent : null,
+      buttons: m ? [...m.querySelectorAll(".tour-actions button")].map(b => b.textContent).join("|") : "" };
+    return out;
   });
-  check(asked.there && asked.title === "Your name" && asked.line === 0
-        && /Anna\.$/.test(asked.preview || "") && asked.greyed === "Anna"
-        && asked.buttons.join("|") === "Later|Save",
-    "2n3 the first run after a catalog is accepted asks for the name: the title, no line under"
-    + " it, a card's own greeting with the sample name greyed, Later and Save: "
-    + JSON.stringify(asked));
+  check(!asked.atBoot && onCopy.there && onCopy.copiedFirst === 0 && /^Kind regards,/.test(onCopy.preview || "")
+        && onCopy.buttons === "Later|Sign with this",
+    "2n3 the name is not asked at boot, and the first signed copy asks it, holding the copy back, with the"
+    + " reply's own signing line as the preview: " + JSON.stringify({ atBoot: asked.atBoot, onCopy }));
   await rp.evaluate(() => { const n = document.getElementById("eAgentNo"); if (n) n.click(); });
   await sleep(900);
   /* Read through the ENGINE's own storage, not localStorage: under the host those keys live in
      desk.json, and localStorage answers null for every one of them. */
   const afterLater = await rp.evaluate(() => ({
-    gone: !document.getElementById("eAgentModal"),
+    gone: !document.getElementById("eAgentAsk"), copied: window.__copied,
     asked: window.lsGet("eNameAsked"), name: window.lsGet("eAgent") }));
-  check(afterLater.gone && afterLater.asked === "1" && !afterLater.name,
-    "2n4 Later closes it, records the ask and writes no name: " + JSON.stringify(afterLater));
+  check(afterLater.gone && afterLater.copied === 1 && afterLater.asked === "1" && !afterLater.name,
+    "2n4 Later closes it, lets the copy through, records the answer and writes no name: " + JSON.stringify(afterLater));
 
   const mouseTrip = async (act, how) => {
     await realClick(rp, "#settingsBtn"); await sleep(500);
@@ -2316,10 +2535,11 @@ const placeEc = (dir, from, as, minutesOld) => {
   const udN = newUserData("openwith");
   s = await launch(udN, [awayEc]);
   opened = await s.p.evaluate(SEEN);
+  /* The folder is named short, its full path the title, as the empty desk names its own (quiet-12). */
   const openedLine = await s.p.evaluate(() => {
-    const subs = document.querySelectorAll("#eCatalogModal .modal-sub");
+    const subs = document.querySelectorAll("#eCatalogOffer .ec-sub");
     const last = subs[subs.length - 1];
-    return last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null;
+    return last ? Array.from(last.querySelectorAll("code")).map(c => c.title || c.textContent) : null;
   });
   check(opened.offer && opened.catalogCards === FIXTURE_CARDS
         && !!openedLine && openedLine[0] === "opened-by-hand.ec" && openedLine[1] === AWAY,
@@ -2382,7 +2602,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   await sleep(9000);
   handed = await (await s.b.pages())[0].evaluate(SEEN);
   const handedLine = await (await s.b.pages())[0].evaluate(() => {
-    const subs = document.querySelectorAll("#eCatalogModal .modal-sub");
+    const subs = document.querySelectorAll("#eCatalogOffer .ec-sub");
     const last = subs[subs.length - 1];
     return last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null;
   });
@@ -2392,6 +2612,40 @@ const placeEc = (dir, from, as, minutesOld) => {
     + "), the copy already running says it was opened with that path and is offered the file,"
     + " named: " + JSON.stringify(handedLine));
   killPid(second.pid);
+
+  /* native-12: a .ec DROPPED on the window is offered as a double-clicked one is. A real drop
+     through the renderer's input, by the protocol's drag events carrying a file from the disk,
+     after the offer above is put away. The control is the same drop of a file that is not a
+     catalog, which the page takes and answers in words, and which must raise no offer. */
+  await escOffer(s.p);
+  await sleep(700);
+  const dropAt = async (file, answer) => {
+    const cdp = await s.p.target().createCDPSession();
+    const data = { items: [], files: [file], dragOperationsMask: 1 };
+    for (const type of ["dragEnter", "dragOver", "drop"]) await cdp.send("Input.dispatchDragEvent", { type, x: 640, y: 420, data });
+    await cdp.detach().catch(() => {});
+    // Read while the answer stands: a toast is gone again 1.7 s after it arrives.
+    await s.p.waitForFunction(a => a === "offer" ? !!document.querySelector("#ecYes") : document.getElementById("toast").classList.contains("show"),
+      { timeout: 3000, polling: 50 }, answer).catch(() => {});
+    return s.p.evaluate(() => {
+      const subs = document.querySelectorAll("#eCatalogOffer .ec-sub"), last = subs[subs.length - 1];
+      return { offer: !!document.querySelector("#ecYes"), url: location.href.split("/").pop(),
+               line: last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null,
+               toast: document.getElementById("toast").classList.contains("show") };
+    });
+  };
+  const notEc = path.join(AWAY, "not-a-catalog.txt");
+  fs.writeFileSync(notEc, "plain words", "utf8");
+  const dropNo = await dropAt(notEc, "toast");
+  check(!dropNo.offer && dropNo.toast && dropNo.url === "etiuda.html",
+    "2V2 control: a dropped file that is not a catalog raises no offer, is answered in words and leaves the"
+    + " document where it was (" + JSON.stringify(dropNo) + ")");
+  const dropEc = placeEc(AWAY, FIX, "dropped.ec", 1);
+  const dropped = await dropAt(dropEc, "offer");
+  check(dropped.offer && !!dropped.line && dropped.line[0] === "dropped.ec"
+        && s.said.some(l => l.indexOf("opened with " + dropEc) > -1),
+    "2v2 a .ec dropped on the window is handed to the shell by its path and offered, named: "
+    + JSON.stringify(dropped));
   await s.stop();
 
   /* ---- 2x to 2z: THE COMMAND LINE THE ASSOCIATION WRITES, board item 393 --------------------
@@ -2438,7 +2692,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   s = await launch(udS, ['"' + assocEc + '"'], null, assocExe);
   const assocCold = await s.p.evaluate(SEEN);
   const assocLine = await s.p.evaluate(() => {
-    const subs = document.querySelectorAll("#eCatalogModal .modal-sub");
+    const subs = document.querySelectorAll("#eCatalogOffer .ec-sub");
     const last = subs[subs.length - 1];
     return last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null;
   });
@@ -2453,7 +2707,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   s = await launch(udS);
   /* The launch\'s own question, dismissed with Escape, which records no refusal: what this leg is
      about is the offer a SECOND copy causes, so the screen has to be clear before it starts. */
-  await s.p.keyboard.press("Escape");
+  await escOffer(s.p);
   await sleep(900);
   const warmBefore = await s.p.evaluate(SEEN);
   const second393 = E.shellLaunch("tests/shell-smoke.js 2z", assocExe,
@@ -2465,7 +2719,7 @@ const placeEc = (dir, from, as, minutesOld) => {
   await sleep(9000);
   const warmAfter = await (await s.b.pages())[0].evaluate(SEEN);
   const warmLine = await (await s.b.pages())[0].evaluate(() => {
-    const subs = document.querySelectorAll("#eCatalogModal .modal-sub");
+    const subs = document.querySelectorAll("#eCatalogOffer .ec-sub");
     const last = subs[subs.length - 1];
     return last ? Array.from(last.querySelectorAll("code")).map(c => c.textContent) : null;
   });

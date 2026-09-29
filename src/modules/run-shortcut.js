@@ -1,5 +1,5 @@
 import { setLang } from "./lang-seg.js";
-import { stepTab, addTab, closeActiveTab, drawPills, escapeLadderStep } from "./tabs.js";
+import { stepTab, addTab, closeActiveTab, drawPills, escapeLadderStep, activeHeard } from "./tabs.js";
 import { closeLooseOverlays } from "./keydown.js";
 import { openMaintenance } from "./maintenance.js";
 import { toggleFactsPanel, factsPanelOpen, closeFactsPanel } from "./facts.js";
@@ -77,6 +77,7 @@ function runShortcut(id){
     setCats([]); drawPills(); render();
     railEchoRedraw(railBefore, relBefore);
     toast("All categories");
+    activeHeard("cats");
     return true;
   }
   if(id==="navUp"||id==="navDown"){

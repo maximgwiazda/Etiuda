@@ -37,37 +37,107 @@
      diagnostic anyone gets when the app is dead. -->
 <script>
 (function(){
-  function clearState(){
+  /* The desk file an installed Etiuda keeps its state in, handed over by the shell's preload before
+     this script runs; null in a browser. */
+  function hostDesk(){
+    var h=window.E_HOST;
+    return (h && typeof h.deskRead==="function" && typeof h.deskSave==="function") ? h : null;
+  }
+  /* The key shape below is E_KEY_RE's in storage.js, repeated because this script imports nothing.
+     withDesk is a person's Reset and nothing else: the silent repair below leaves an installed
+     desk as it is. */
+  function clearState(withDesk){
+    /* A Reset hands the desk to the app's storage where it loaded (eResetClear), before anything is
+       cleared; a page leaving would otherwise send the app's copy back over this. */
+    var done=false;
+    if(withDesk) try{ done=typeof window.eResetClear==="function" && window.eResetClear()===true; }catch(e){}
     try{
-      // The key shape of E_KEY_RE in storage.js, repeated because this script imports nothing
       var keys=[],i;
       for(i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k&&/^e(?:[A-Z]|[0-9a-z]+~)/.test(k)) keys.push(k); }
       for(i=0;i<keys.length;i++) localStorage.removeItem(keys[i]);
     }catch(e){}
     try{ sessionStorage.clear(); }catch(e){}
+    var h=withDesk && !done && hostDesk();
+    if(h) try{
+      var map=JSON.parse(h.deskRead()||"{}"), kept={};
+      for(var key in map) if(!/^e(?:[A-Z]|[0-9a-z]+~)/.test(key)) kept[key]=map[key];
+      h.deskSave(JSON.stringify(kept));
+    }catch(e){}
   }
   // Layer 1: an escape hatch that needs no working app at all
   if(/reset/i.test(location.hash)){
-    clearState();
+    clearState(false);
     location.replace(location.href.split("#")[0]);
     return;
   }
   /* Layer 0: the header's shape before the app script runs. The tab row is CSS; the category
      bar's height is only known once drawn, so the last measurement is kept per window width and
-     reserved here, ahead of the first paint. syncPillsCollapse and syncLayoutPrefs hand both back. */
+     reserved here, ahead of the first paint. syncPillsCollapse and syncLayoutPrefs hand both back.
+     e-still is set from what this script can read; wireStill answers at boot, desk file and all. */
   try{
     var root=document.documentElement;
-    if(localStorage.getItem("ePills")==="0") root.classList.add("e-pills-off");
+    /* An installed Etiuda keeps these in its desk file, read once here and handed to storage.js
+       (eHostDesk), so the file is read once per page. */
+    var desk=null, dh=hostDesk();
+    if(dh) try{ var dt=dh.deskRead(); desk=dt ? JSON.parse(dt) : {}; window.eDeskAtBoot=desk; }catch(e){ desk=null; }
+    var pref=function(k){
+      return desk ? (Object.prototype.hasOwnProperty.call(desk,k) ? String(desk[k]) : null) : localStorage.getItem(k);
+    };
+    if(pref("eMotionOff")==="1" || matchMedia("(prefers-reduced-motion: reduce)").matches)
+      root.classList.add("e-still");
+    /* A COVERED ARRIVAL, the shell's own reload after the page stopped: a dead page could not ask.
+       Rendering is blocked until parsing ends, which is after the app's script and so after boot
+       (#eBooted names nothing, and the block lifts at the end of the document): the frame the last
+       document left stays on screen and nothing half-built is painted. Where blocking is not
+       understood, the body stays unseen. */
+    var host=window.E_HOST;
+    if(host && host.recovering){
+      root.classList.add("e-arriving");
+      var hold=document.createElement("link");
+      if(hold.blocking && hold.blocking.supports && hold.blocking.supports("render")){
+        hold.rel="expect"; hold.href="#eBooted"; hold.setAttribute("blocking","render");
+        document.head.appendChild(hold);
+      } else root.classList.add("e-veiled");
+    }
+    if(pref("ePills")==="0") root.classList.add("e-pills-off");
     else{
-      var shape=/^(\d+)x(\d+(?:\.\d+)?)$/.exec(localStorage.getItem("eHdrPills")||"");
+      var shape=/^(\d+)x(\d+(?:\.\d+)?)$/.exec(pref("eHdrPills")||"");
       if(shape && +shape[1]===window.innerWidth) root.style.setProperty("--e-pills-h",shape[2]+"px");
     }
   }catch(e){}
   var booted=false, tries=0;
   try{ tries=parseInt(sessionStorage.getItem("eBootTry")||"0",10)||0; }catch(e){}
   // Called by the last line of the app script. Until then, boot is assumed to be in progress.
+  /* The arrival: the first frame the block lets through is the band over what reads as nothing, the
+     content drawn under it at a trace (the sheet's e-arriving), and the fade starts in the frame after
+     that one is presented. Not sooner: a fade started before its content was ever drawn spends itself
+     while the content is first rasterised, and arrives in one step. Where paint timing is not known,
+     two frames. A frame does not come to a hidden window, hence the timeout. */
+  function arrive(){
+    var root=document.documentElement, done=false;
+    if(!root.classList.contains("e-arriving")) return;
+    root.classList.add("e-arrived");
+    root.classList.remove("e-veiled");
+    void (document.body && document.body.offsetWidth);
+    function go(){
+      if(done) return;
+      done=true;
+      root.classList.remove("e-arriving");
+      setTimeout(function(){ root.classList.remove("e-arrived"); }, 600);
+    }
+    var painted=null;
+    try{
+      if(!performance.getEntriesByType("paint").length){
+        painted=new PerformanceObserver(function(){ painted.disconnect(); requestAnimationFrame(go); });
+        painted.observe({type:"paint"});
+      }
+    }catch(e){ painted=null; }
+    if(!painted) requestAnimationFrame(function(){ requestAnimationFrame(go); });
+    setTimeout(go, 500);
+  }
   window.E_BOOT_OK=function(){
     booted=true;
+    arrive();
     try{ sessionStorage.removeItem("eBootTry"); }catch(e){}
   };
   /* Probed with a real write - the store only reports unusable when touched. The exception
@@ -75,6 +145,8 @@
      indistinguishable from outside, and naming one as certain sends people to a wrong fix. */
   var E_STORE_ERR=null;
   function storeUsable(){
+    // An installed Etiuda stores in its desk file, which the app reports on for itself (pack.js).
+    if(hostDesk()) return true;
     try{
       localStorage.setItem("__eprobe","1"); localStorage.removeItem("__eprobe");
       E_STORE_ERR=null; return true;
@@ -92,93 +164,127 @@
     try{ c.cookies = navigator.cookieEnabled!==false; }catch(e){}
     return c;
   }
+  /* THE WORDS, in the two languages the interface speaks, chosen as the app chooses: the stored
+     choice, else the system's first language. This script cannot reach t(), so it carries its own.
+     Browser advice is said only in a browser: an installed Etiuda has no address bar, no private
+     window and no site data. */
+  var WORDS={
+    en:{ failed:"Etiuda could not start.",
+      damaged:"Its saved settings on this computer look damaged. Resetting clears them and starts Etiuda again; catalog files are not touched.",
+      reset:"Reset Etiuda", orHash:"or add <b>#reset</b> to the address and press Enter", dismiss:"Dismiss",
+      stuck:"Startup did not finish.",
+      unsaved:"Etiuda cannot save its settings here.",
+      forgets:"It is running without remembering anything: everything works, but it forgets when it is closed. The catalog's cards are safe; they live in the file, not in the browser.",
+      framed:"Etiuda is being shown inside another page. SharePoint, Teams and Outlook all preview attachments this way, and a previewed document is given no storage of its own, whatever the browser's settings. <b>Download the file and open it from your own computer</b>, and it will remember everything as usual.",
+      full:"The storage set aside for Etiuda here is full. Clearing this page's site data will free it.",
+      hosted:"This copy is being served from a website, and the site is not letting it store anything. <b>Download the file and open it from your own computer</b>: run that way, Etiuda keeps its settings locally and needs nothing from the network.",
+      clash:"Most often this is a name clash rather than real damage: this browser tells <b>Etiuda.html</b> and <b>etiuda.html</b> apart, but Windows does not. If you have opened this file under a different capitalisation before, rename it back and it will work. Otherwise, open it from a different folder for a clean slate.",
+      cookiesOff:"The browser is blocking site data here. In Firefox: <b>Settings → Privacy &amp; Security → Cookies and Site Data</b>, and make sure cookies are not set to blocked (<b>Custom → All cookies</b> also blocks local files). Private windows block it too.",
+      policy:"The browser is refusing storage to this file even though cookies are switched on, which usually means a private window or a policy applied to local files. Try a normal window, or open the file from a different folder.",
+      refused:"The browser refused to store anything for this file. Opening it from a different folder, or in a normal (non-private) window, is usually enough." },
+    pl:{ failed:"Nie udało się uruchomić Etiudy.",
+      damaged:"Ustawienia zapisane na tym komputerze wyglądają na uszkodzone. Reset je wyczyści i uruchomi Etiudę od nowa, a pliki katalogów zostaną nietknięte.",
+      reset:"Zresetuj Etiudę", orHash:"można też dopisać <b>#reset</b> do adresu i nacisnąć Enter", dismiss:"Zamknij",
+      stuck:"Uruchamianie nie dobiegło końca.",
+      unsaved:"Etiuda nie może tu zapisywać ustawień.",
+      forgets:"Wszystko działa, tylko nic nie zostanie zapamiętane po zamknięciu. Karty katalogu są bezpieczne: trzyma je plik, nie przeglądarka.",
+      framed:"Etiuda jest pokazywana wewnątrz innej strony: tak SharePoint, Teams i Outlook wyświetlają podgląd załączników, a dokument w podglądzie nie dostaje własnego miejsca na dane, bez względu na ustawienia przeglądarki. <b>Wystarczy pobrać plik i otworzyć go z własnego komputera</b>, a Etiuda zapamięta wszystko jak należy.",
+      full:"Miejsce na dane, które przeglądarka przeznaczyła tu dla Etiudy, jest już pełne. Zwolni je wyczyszczenie danych tej strony.",
+      hosted:"Ta kopia jest otwierana ze strony internetowej, która nie pozwala jej niczego zapisywać. <b>Wystarczy pobrać plik i otworzyć go z własnego komputera</b>: uruchomiona w ten sposób Etiuda trzyma ustawienia na tym komputerze i niczego nie potrzebuje z sieci.",
+      clash:"Najczęściej to nie uszkodzenie, tylko zbieżność nazw: ta przeglądarka odróżnia <b>Etiuda.html</b> od <b>etiuda.html</b>, a Windows nie. Jeśli ten plik był już otwierany pod nazwą pisaną inną wielkością liter, wystarczy przywrócić tamtą nazwę. Można też otworzyć go z innego folderu, co daje czysty start.",
+      cookiesOff:"Przeglądarka blokuje tu dane stron. W Firefoksie wystarczy otworzyć <b>Ustawienia → Prywatność i bezpieczeństwo → Ciasteczka i dane stron</b> i sprawdzić, czy ciasteczka nie są blokowane (ustawienie <b>Własne → Wszystkie ciasteczka</b> blokuje też pliki lokalne). Okna prywatne blokują je tak samo.",
+      policy:"Przeglądarka nie daje temu plikowi miejsca na dane, choć ciasteczka są włączone. Najczęściej stoi za tym okno prywatne albo zasada nałożona na pliki lokalne. Pomaga zwykłe okno albo otwarcie pliku z innego folderu.",
+      refused:"Przeglądarka nie pozwoliła temu plikowi niczego zapisać. Najczęściej wystarczy otworzyć go z innego folderu albo w zwykłym, nieprywatnym oknie." }
+  };
+  function words(){
+    var l="";
+    try{ l=localStorage.getItem("eUiLang")||""; }catch(e){}
+    try{ var h=hostDesk(); if(h) l=String(JSON.parse(h.deskRead()||"{}").eUiLang||l); }catch(e){}
+    if(!WORDS[l]){
+      var list=[];
+      try{ list=(navigator.languages&&navigator.languages.length)?navigator.languages:[navigator.language]; }catch(e){}
+      for(var i=0;i<list.length && !WORDS[l];i++) l=String(list[i]||"").toLowerCase().split("-")[0];
+    }
+    return WORDS[l]||WORDS.en;
+  }
   // The advice has to follow the cause, not the other way round.
-  function storeAdvice(e){
+  function storeAdvice(e, W){
     var n=String((e&&(e.name||e.code))||""), m=String((e&&e.message)||"");
     var c=storeContext();
 
     /* A sandboxed viewer grants no storage and no setting can - the only answer is taking the
        file out of the viewer. !c.local guards it: Firefox reports origin "null" for every
        file:// page. An explicit sandbox message is trusted alone - nothing else produces it. */
-    if(/sandbox/i.test(m) || (!c.local && (c.opaque || c.framed)))
-      return 'Etiuda is being shown inside another page - SharePoint, Teams and Outlook all '
-        +'preview attachments this way, and a previewed document is given no storage of its own. '
-        +'No browser setting can change this. <b>Download the file and open it from your own '
-        +'computer</b>, and it will remember everything normally.';
+    if(/sandbox/i.test(m) || (!c.local && (c.opaque || c.framed))) return W.framed;
 
-    if(/quota|full|exceeded/i.test(n+m))
-      return 'The storage set aside for Etiuda here is full. Clearing this page\'s site data '
-        +'will free it.';
+    if(/quota|full|exceeded/i.test(n+m)) return W.full;
 
     /* Served from a site that will not let it store anything. Everything below this point is
        about local files and would be nonsense here. */
-    if(c.hosted)
-      return 'This copy is being served from a website, and the site is not letting it store '
-        +'anything. <b>Download the file and open it from your own computer</b> - run that way, '
-        +'Etiuda keeps its settings locally and needs nothing from the network.';
+    if(c.hosted) return W.hosted;
 
     /* Usually not damage on Windows: Firefox keys storage by exact URL case, the filesystem
        does not, so etiuda.html against a stored Etiuda.html reads as corruption. Renaming
        back fixes it outright - lead with that, it costs nothing to try. */
-    if(/corrupt/i.test(n+m))
-      return 'Most often this is a name clash rather than real damage: this browser tells '
-        +'<b>Etiuda.html</b> and <b>etiuda.html</b> apart, but Windows does not. If you have '
-        +'opened this file under a different capitalisation before, rename it back and it will '
-        +'work. Otherwise, open it from a different folder for a clean slate.';
+    if(/corrupt/i.test(n+m)) return W.clash;
 
-    if(/security|denied|access/i.test(n+m)){
-      // Never blame cookies when the browser itself reports them enabled - that reads as nonsense
-      // to anyone who checks, and it sends them to a setting that is already correct.
-      if(!c.cookies)
-        return 'The browser is blocking site data here. In Firefox: <b>Settings → Privacy &amp; '
-          +'Security → Cookies and Site Data</b>, and make sure cookies are not set to blocked '
-          +'(<b>Custom → All cookies</b> also blocks local files). Private windows block it too.';
-      return 'The browser is refusing storage to this file even though cookies are switched on, '
-        +'which usually means a private window or a policy applied to local files. Try a normal '
-        +'window, or open the file from a different folder.';
-    }
+    /* Never blame cookies when the browser itself reports them enabled - that reads as nonsense
+       to anyone who checks, and it sends them to a setting that is already correct. */
+    if(/security|denied|access/i.test(n+m)) return c.cookies ? W.policy : W.cookiesOff;
 
-    return 'The browser refused to store anything for this file. Opening it from a different '
-      +'folder, or in a normal (non-private) window, is usually enough.';
+    return W.refused;
   }
+  /* THE RESCUE WEARS THE FAMILY'S BUBBLE (.bub-ask, its type and its entrance) under the band, which
+     holds the window's controls; the fill and the ink are written here as well, so it still
+     reads if the sheet does not. Its text and every error line are text nodes, never markup. */
   function banner(msg, broken){
+    document.documentElement.classList.remove("e-arriving","e-veiled");
     if(document.getElementById("eRescue")) return;
+    var W=words(), inHost=!!hostDesk();
+    var band=document.querySelector(".row"), top=band ? Math.max(0,Math.round(band.getBoundingClientRect().bottom)) : 0;
     var d=document.createElement("div");
     d.id="eRescue";
-    d.style.cssText="position:fixed;left:0;right:0;top:0;z-index:2147483647;"
-      +"background:"+(broken?"#78350f":"#7f1d1d")+";color:#fff;font:14px/1.5 system-ui,Segoe UI,sans-serif;"
-      +"padding:14px 18px;box-shadow:0 2px 14px rgba(0,0,0,.4)";
-    var safe=String(msg||"").replace(/[<>&]/g,"");
-    /* Two different problems needing two different answers. If storage itself is broken, a
-       Reset button is a lie - clearing is the very operation that fails - so say what actually
-       fixes it instead of offering a button that cannot work. */
+    d.className="bub bub-ask e-notice";
+    d.setAttribute("role","alert");
+    d.setAttribute("data-side","none");
+    d.style.cssText="position:fixed;z-index:2147483647;top:"+(top+8)+"px;"
+      +"background:var(--bub,#2563eb);color:var(--bub-ink,#fff)";
     var err=E_STORE_ERR
       ? String(E_STORE_ERR.name||"Error")+": "+String(E_STORE_ERR.message||"")
       : "";
-    d.innerHTML=(broken
-        /* Deliberately not "this browser will not save" - in a preview frame the browser is
-           willing and the viewer is the one refusing, and naming the wrong culprit is what sent
-           people to their cookie settings. "Here" is true in every case. */
-        ? '<b>Etiuda cannot save its settings here.</b> It is running without remembering '
-          +'anything - everything works, but it forgets when you close it. Your cards are safe; '
-          +'they live in the file, not in the browser.'
-          +'<div style="margin-top:6px;opacity:.9">'+storeAdvice(E_STORE_ERR)+'</div>'
-        : '<b>Etiuda could not start.</b> Its saved settings on this computer look damaged. '
-          +'Resetting clears them and reloads - your catalog file is not touched.')
-      +(err?'<div style="opacity:.75;font:12px/1.5 ui-monospace,Consolas,monospace;margin-top:6px">'
-        +err.replace(/[<>&]/g,"")+'</div>':'')
-      +(safe?'<div style="opacity:.75;font:12px/1.5 ui-monospace,Consolas,monospace;margin-top:6px">'+safe+'</div>':'')
-      +'<div style="margin-top:10px">'
-      +(broken?'' :'<button id="eRescueGo" style="font:600 13px system-ui;padding:7px 14px;border:0;'
-        +'border-radius:7px;background:#fff;color:#7f1d1d">Reset Etiuda</button>'
-        +'<span style="margin-left:10px;opacity:.8;font-size:12px">or add <b>#reset</b> to the address and press Enter</span>')
-      +'<button id="eRescueHide" style="font:600 13px system-ui;padding:7px 14px;border:0;border-radius:7px;'
-      +'background:rgba(255,255,255,.18);color:#fff;margin-left:'+(broken?'0':'10px')+'">Dismiss</button></div>';
+    /* Two different problems needing two different answers. If storage itself is broken, a
+       Reset button is a lie - clearing is the very operation that fails - so say what actually
+       fixes it instead of offering a button that cannot work. */
+    var say=document.createElement("p");
+    var lead=document.createElement("b");
+    lead.textContent=broken ? W.unsaved : W.failed;
+    say.appendChild(lead);
+    say.appendChild(document.createTextNode(" "+(broken ? W.forgets : W.damaged)));
+    d.appendChild(say);
+    /* The advice carries its own emphasis, so it is the one piece set as markup; every string in
+       it is this script's own. */
+    if(broken){ var adv=document.createElement("p"); adv.innerHTML=storeAdvice(E_STORE_ERR, W); d.appendChild(adv); }
+    [err, msg===STUCK ? W.stuck : msg].forEach(function(line){
+      if(!line) return;
+      var x=document.createElement("p"); x.className="e-notice-err"; x.textContent=String(line); d.appendChild(x);
+    });
+    var acts=document.createElement("div");
+    acts.className="tour-actions";
+    if(!broken && !inHost){
+      var hint=document.createElement("span"); hint.className="e-notice-hint"; hint.innerHTML=W.orHash; acts.appendChild(hint);
+    }
+    var hide=document.createElement("button");
+    hide.type="button"; hide.className="btn"; hide.id="eRescueHide"; hide.textContent=W.dismiss;
+    hide.onclick=function(){ d.remove(); };
+    acts.appendChild(hide);
+    if(!broken){
+      var go=document.createElement("button");
+      go.type="button"; go.className="btn primary"; go.id="eRescueGo"; go.textContent=W.reset;
+      go.onclick=function(){ clearState(true); location.replace(location.href.split("#")[0]); };
+      acts.appendChild(go);
+    }
+    d.appendChild(acts);
     (document.body||document.documentElement).appendChild(d);
-    var b=document.getElementById("eRescueGo");
-    if(b) b.onclick=function(){ clearState(); location.replace(location.href.split("#")[0]); };
-    var h=document.getElementById("eRescueHide");
-    if(h) h.onclick=function(){ d.remove(); };
   }
   /* Layer 2: one silent repair per boot crash, then stop. Safe only while storage works -
      the "already tried" flag is itself stored, so a corrupt DB reads tries=0 forever and
@@ -187,7 +293,7 @@
     if(booted) return;                       // errors after a good boot are the app's business
     var ok=storeUsable();
     if(ok && tries<1){
-      clearState();
+      clearState(false);
       try{ sessionStorage.setItem("eBootTry","1"); }catch(e){}
       location.reload();
       return;
@@ -195,17 +301,18 @@
     banner(ev&&ev.message, !ok);
   });
   // Layer 3: boot that never finishes and never throws - the filter-stuck case looked like this
-  setTimeout(function(){ if(!booted) banner("Startup did not finish.", !storeUsable()); }, 8000);
+  var STUCK="Startup did not finish.";
+  setTimeout(function(){ if(!booted) banner(STUCK, !storeUsable()); }, 8000);
   /* Layer 4: storage is unusable but the app started anyway, because every read and write now
      falls back to memory. Nothing is broken - but the user is about to lose their settings on
      close without being told why, so say it once, quietly, and let them dismiss it. */
   setTimeout(function(){ if(booted && !storeUsable()) banner("", true); }, 1200);
 })();
 </script>
-<!-- The tab icon is the mark on its blue tile, URL-encoded verbatim from the family's drawing: the
-     same viewBox, transform and numbers. Copy a source file's contents and encode; a hand-scaled
-     transcription is how a third geometry sneaks in. -->
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='56' fill='%232563eb'/%3E%3Cg transform='translate(-7.441 -7.441) scale(1.0581)'%3E%3Cpath fill='%23ffffff' d='M190.65 89.21L191.65 89.01Q203.00 94.28 203.00 106.44L203.00 106.44Q203.00 112.91 200.21 118.54Q197.42 124.17 193.19 127.20Q188.96 130.24 183.03 131.64Q177.10 133.03 163.96 135.32L163.96 135.32Q175.81 140.40 175.81 152.85L175.81 152.85Q175.81 165.10 166.20 175.86Q156.59 186.62 139.11 193.69Q121.63 200.76 102.70 200.76L102.70 200.76Q92.44 200.76 83.53 198.47Q74.61 196.18 67.44 190.90Q60.27 185.62 56.64 178.10Q53.00 170.58 53.00 161.12L53.00 161.12Q53.00 131.54 94.33 118.19L94.33 118.19Q86.37 117.29 80.89 111.42Q75.41 105.54 75.41 96.58L75.41 96.58Q75.41 88.91 79.29 82.63Q83.18 76.36 91.94 69.48Q100.71 62.61 108.68 58.93Q116.65 55.24 127.00 55.24L127.00 55.24Q139.06 55.24 149.41 60.42L149.41 60.42L150.01 61.72Q149.22 63.51 147.62 73.12Q146.03 82.73 145.93 86.02L145.93 86.02L145.13 86.91L140.65 86.91L139.85 86.02L139.45 74.66Q131.49 66.50 119.83 66.50L119.83 66.50Q109.47 66.50 102.40 72.77Q95.33 79.05 95.33 88.91L95.33 88.91Q95.33 95.48 98.57 100.56Q101.80 105.64 106.83 108.03Q111.86 110.42 117.24 110.42L117.24 110.42Q119.24 110.42 122.32 109.92L122.32 109.92L123.12 110.72Q120.93 118.79 120.73 121.97L120.73 121.97Q117.44 121.38 114.35 121.38L114.35 121.38Q104.99 121.38 96.03 125.16Q87.06 128.95 82.08 137.16Q77.10 145.38 77.10 155.44L77.10 155.44Q77.10 165.60 81.93 173.42Q86.76 181.24 95.48 185.47Q104.20 189.70 116.35 189.70L116.35 189.70Q125.21 189.70 132.43 187.46Q139.65 185.22 145.28 180.84Q150.91 176.46 154.20 170.43Q157.48 164.40 157.48 157.53L157.48 157.53Q157.48 152.35 155.24 147.97Q153.00 143.59 148.82 141.55Q144.63 139.50 140.75 139.50L140.75 139.50Q137.76 139.50 134.47 140.75Q131.19 141.99 129.29 144.63Q127.40 147.27 126.75 149.12Q126.11 150.96 125.11 155.44L125.11 155.44L124.22 156.34L120.73 156.34L120.03 155.44L122.22 134.23Q128.80 127.85 136.32 125.46Q143.84 123.07 158.98 121.08L158.98 121.08Q173.12 119.28 180.49 117.59Q187.86 115.90 191.50 112.16Q195.13 108.43 195.13 103.65L195.13 103.65Q195.13 96.18 188.06 93.79L188.06 93.79L188.06 92.49L190.65 89.21Z'/%3E%3C/g%3E%3C/svg%3E">
+<!-- The tab icon is the family's favicon drawing, the bare mark with no tile, URL-encoded
+     verbatim: the header's path, the source's own transform and inks. Copy the source file's
+     contents and encode; a hand-scaled transcription is how a third geometry sneaks in. -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cstyle%3Epath{fill:%232563eb}@media (prefers-color-scheme:dark){path{fill:%237aa2f7}}%3C/style%3E%3Cg transform='translate(-76.800 -76.800) scale(1.600000)'%3E%3Cpath d='M190.65 89.21L191.65 89.01Q203.00 94.28 203.00 106.44L203.00 106.44Q203.00 112.91 200.21 118.54Q197.42 124.17 193.19 127.20Q188.96 130.24 183.03 131.64Q177.10 133.03 163.96 135.32L163.96 135.32Q175.81 140.40 175.81 152.85L175.81 152.85Q175.81 165.10 166.20 175.86Q156.59 186.62 139.11 193.69Q121.63 200.76 102.70 200.76L102.70 200.76Q92.44 200.76 83.53 198.47Q74.61 196.18 67.44 190.90Q60.27 185.62 56.64 178.10Q53.00 170.58 53.00 161.12L53.00 161.12Q53.00 131.54 94.33 118.19L94.33 118.19Q86.37 117.29 80.89 111.42Q75.41 105.54 75.41 96.58L75.41 96.58Q75.41 88.91 79.29 82.63Q83.18 76.36 91.94 69.48Q100.71 62.61 108.68 58.93Q116.65 55.24 127.00 55.24L127.00 55.24Q139.06 55.24 149.41 60.42L149.41 60.42L150.01 61.72Q149.22 63.51 147.62 73.12Q146.03 82.73 145.93 86.02L145.93 86.02L145.13 86.91L140.65 86.91L139.85 86.02L139.45 74.66Q131.49 66.50 119.83 66.50L119.83 66.50Q109.47 66.50 102.40 72.77Q95.33 79.05 95.33 88.91L95.33 88.91Q95.33 95.48 98.57 100.56Q101.80 105.64 106.83 108.03Q111.86 110.42 117.24 110.42L117.24 110.42Q119.24 110.42 122.32 109.92L122.32 109.92L123.12 110.72Q120.93 118.79 120.73 121.97L120.73 121.97Q117.44 121.38 114.35 121.38L114.35 121.38Q104.99 121.38 96.03 125.16Q87.06 128.95 82.08 137.16Q77.10 145.38 77.10 155.44L77.10 155.44Q77.10 165.60 81.93 173.42Q86.76 181.24 95.48 185.47Q104.20 189.70 116.35 189.70L116.35 189.70Q125.21 189.70 132.43 187.46Q139.65 185.22 145.28 180.84Q150.91 176.46 154.20 170.43Q157.48 164.40 157.48 157.53L157.48 157.53Q157.48 152.35 155.24 147.97Q153.00 143.59 148.82 141.55Q144.63 139.50 140.75 139.50L140.75 139.50Q137.76 139.50 134.47 140.75Q131.19 141.99 129.29 144.63Q127.40 147.27 126.75 149.12Q126.11 150.96 125.11 155.44L125.11 155.44L124.22 156.34L120.73 156.34L120.03 155.44L122.22 134.23Q128.80 127.85 136.32 125.46Q143.84 123.07 158.98 121.08L158.98 121.08Q173.12 119.28 180.49 117.59Q187.86 115.90 191.50 112.16Q195.13 108.43 195.13 103.65L195.13 103.65Q195.13 96.18 188.06 93.79L188.06 93.79L188.06 92.49L190.65 89.21Z'/%3E%3C/g%3E%3C/svg%3E">
 <style>
 /* CASCADE LAYERS, spec 11.6: base, components, states, overrides. A later layer beats an
    earlier one however specific the earlier rule is. A run of rules is closed and reopened
@@ -224,6 +331,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      dashed add-affordances). One token doing both reads as a lattice of equally loud lines. */
   --bg:#f7f8fa; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#e4e8ee; --line-strong:#cfd6e0;
   --accent:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8; --mark-ink:#2563eb;
+  /* ONE ACCENT, the bubbles' cobalt, in every theme: white words on it read 5.17:1. */
   /* The dot field under the cards. A share of --dim rather than a colour, so the field follows
      the ink of whichever theme is on; the two shares are PICKED BY EYE from a sheet of twelve
      (ruled 2026-09-17) rather than derived, because a pale ground swallows a dot that a dark one
@@ -283,8 +391,11 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* The combined box: the drum's fixed lane plus a name's worth of typing room. The cap
      sits a fifth below its first draft - the search box is the one that deserves width. */
   --paxrole-field:clamp(172px, 10vw + 112px, 240px);
-  /* Thin scrollbars app-wide */
-  --scroll-thumb:rgba(71,85,105,.4); --scroll-thumb-hover:rgba(71,85,105,.65);
+  /* Thin scrollbars app-wide. The thumb is OPAQUE, so the dot field stops at it, and reads as the
+     see-through grey did: the same grey at the same share, mixed over the canvas. The track stays
+     transparent. All four token blocks. */
+  --scroll-thumb:color-mix(in srgb,rgb(71,85,105) 40%,var(--bg));
+  --scroll-thumb-hover:color-mix(in srgb,rgb(71,85,105) 65%,var(--bg));
   --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
   /* Light cards ARE the panel surface; dark lifts them one step above the header chrome,
      so the card ground gets its own token - see the dark blocks. --txt-mix is the share of
@@ -337,12 +448,13 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
   --band:#0a0d13; --header-bg:#191b20;
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
-  --accent:#7aa2f7; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
+  --accent:#2563eb; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
   --bub-shadow:rgba(0,0,0,.55);
-  --scroll-thumb:rgba(152,162,179,.4); --scroll-thumb-hover:rgba(152,162,179,.75);
+  --scroll-thumb:color-mix(in srgb,rgb(152,162,179) 40%,var(--bg));
+  --scroll-thumb-hover:color-mix(in srgb,rgb(152,162,179) 75%,var(--bg));
   --bevel:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.38),inset 1px 0 0 rgba(255,255,255,.05);
   /* A zero lift, never `none`: it is concatenated into the intent panel's shadow list, as the
      card shadow is into the intent-hit and cat-hit rings, and one `none` inside a shadow list
@@ -378,12 +490,13 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
   --band:#0a0d13; --header-bg:#191b20;
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
-  --accent:#7aa2f7; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
+  --accent:#2563eb; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
   --bub-shadow:rgba(0,0,0,.55);
-  --scroll-thumb:rgba(152,162,179,.4); --scroll-thumb-hover:rgba(152,162,179,.75);
+  --scroll-thumb:color-mix(in srgb,rgb(152,162,179) 40%,var(--bg));
+  --scroll-thumb-hover:color-mix(in srgb,rgb(152,162,179) 75%,var(--bg));
   --bevel:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.38),inset 1px 0 0 rgba(255,255,255,.05);
   /* Zero, not `none` - the twin value in the block above says why. */
   --card-lift:0 0 #0000;
@@ -424,7 +537,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --ed:#1d4ed8; --ed-soft:rgba(29,78,216,.14);
   --pl:#6b3fa0;; --go:#047857; --go-soft:#d1fae5;
   --bub-shadow:rgba(37,99,235,.32);
-  --scroll-thumb:rgba(71,85,105,.4); --scroll-thumb-hover:rgba(71,85,105,.65);
+  --scroll-thumb:color-mix(in srgb,rgb(71,85,105) 40%,var(--bg));
+  --scroll-thumb-hover:color-mix(in srgb,rgb(71,85,105) 65%,var(--bg));
   --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
   --card-bg:var(--panel);      /* the card ground token - see the base block */
   --txt-mix:72%;
@@ -501,11 +615,8 @@ header{position:relative;z-index:50;background:var(--header-bg,var(--panel));
      needs the first, and the second is asserted only once content has scrolled under it - a
      constant shadow claims elevation over an empty page. */
   box-shadow:none;
-  transition:box-shadow .2s ease}
+  transition:box-shadow var(--m-tone) ease}
 body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,42,.09))}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){ header{transition:none!important} }
-}@layer base{
 /* Top toolbar: left flexes/shrinks; right tools never wrap to a second row */
 /* flex-end + shelf line: folder tabs sit on the border and open into the row below */
 /* THE BAND: an underlay pseudo-element bleeds the blue through the header's padding, and
@@ -536,6 +647,10 @@ body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,4
 #seg button.on{background:transparent;color:var(--accent)}
 #seg button[data-alt].on{background:transparent;color:var(--pl)}
 .row-main{flex:1 1 auto;min-width:0;display:flex;gap:8px;align-items:flex-end}
+/* The catalog's name on the band, in the band's ink and quieter than the tabs; cut, never wrapped. */
+.cat-now{flex:0 1 auto;min-width:0;max-width:min(30ch,26vw);align-self:center;
+  font:12.5px var(--sans);color:rgba(var(--band-ink-rgb),.78);white-space:nowrap;overflow:hidden}
+.cat-now .cn-name,.cat-now .cn-none{display:block;overflow:hidden}
 
 /* ---- THE DESKTOP HOST. Every rule here is off in a browser: it hangs on body.e-host, which
    host.js sets only where the shell's preload has put E_HOST on the window. */
@@ -580,7 +695,8 @@ body.e-backdrop{background:transparent}
    dialog up, band alpha .93 against 1.00 over the cards and 3.0x their edge energy. The floor
    goes back under the whole window while one is open, the tint above it unchanged. */
 body.e-backdrop:has(.modal:not([hidden])){background:var(--bg)}
-body.e-backdrop .scroller{background:var(--bg)}
+/* The colour alone: the shorthand would reset the dot field's image on the same element. */
+body.e-backdrop .scroller{background-color:var(--bg)}
 body.e-backdrop header{
   background:linear-gradient(var(--header-bg) 0 0) no-repeat left bottom/100% calc(100% - var(--band-h,36px));
   background-origin:border-box}
@@ -626,8 +742,7 @@ body.e-backdrop .row::before{
   font-family:var(--sans-display);align-self:center;padding-bottom:3px}
 /* 25px on the compact band, a step above the 24px corner boxes so the mark still leads
    the row. No plate in the header - the band is the plate, and the mark whitens with
-   the wordmark: the white-mark asset expressed by the inline geometry. The favicon and
-   the exports keep the blue tile; only this surface goes without. */
+   the wordmark: the white-mark asset expressed by the inline geometry. */
 .brand-tile{flex:0 0 auto;width:25px;height:25px;
   color:var(--band-ink);display:inline-flex;align-items:center;justify-content:center}
 /* One filled path in currentColor, the geometry verbatim from the family's mark drawing: rescaled
@@ -648,29 +763,19 @@ body.e-backdrop .row::before{
 .ic-x{width:14px;height:14px;display:block;fill:none;stroke:currentColor;stroke-width:1.6;
   stroke-linecap:round;stroke-linejoin:round}
 /* One clockwise turn per click. The class rides the BUTTON; reduced motion stills it. */
-.e-spin-pick .ic-x{animation:e-pick-spin .45s cubic-bezier(.2,.7,.3,1)}
+.e-spin-pick .ic-x{animation:e-pick-spin var(--m-celebrate) var(--m-ease)}
 @keyframes e-pick-spin{to{transform:rotate(360deg)}}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){ .e-spin-pick .ic-x{animation:none} }
-}@layer base{
 /* Switching themes turns the half-light half-dark disc over: each press rolls it 180deg
    further, accumulating, so presses keep rolling rather than snapping back. The click
    handler owns the angle; reduced motion skips the increment there. */
-#theme svg{transition:transform .3s cubic-bezier(.2,.7,.3,1)}
+#theme svg{transition:transform var(--m-roll) var(--m-ease)}
 /* Only the SHACKLE moves - the first path in both lock drawings. Translating the whole svg
    read as the icon shifting in its button. The class rides the button, the animation the
    fresh svg syncRailPinBtn swapped in; boot's first sync is not a toggle and stays still. */
-.rail-lock.e-lock-shut svg path:first-of-type{animation:e-lock-shut .16s cubic-bezier(.2,.7,.3,1)}
-.rail-lock.e-lock-open svg path:first-of-type{animation:e-lock-open .16s cubic-bezier(.2,.7,.3,1)}
+.rail-lock.e-lock-shut svg path:first-of-type{animation:e-lock-shut var(--m-move) var(--m-ease)}
+.rail-lock.e-lock-open svg path:first-of-type{animation:e-lock-open var(--m-move) var(--m-ease)}
 @keyframes e-lock-shut{from{transform:translateY(-1.4px)}60%{transform:translateY(.5px)}to{transform:none}}
 @keyframes e-lock-open{from{transform:translateY(1px)}to{transform:none}}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){
-  #theme svg{transition:none}
-  .rail-lock.e-lock-shut svg path:first-of-type,
-  .rail-lock.e-lock-open svg path:first-of-type{animation:none}
-}
-}@layer base{
 /* One stroke weight across the whole drawn set - sizes vary per surface, the weight is
    what makes them one family. ic-fill is for the star, the one icon with a solid state,
    so its two states are the same path and cannot drift. */
@@ -773,7 +878,7 @@ span[data-icon]{line-height:0}
    selected or dragged tab suppresses its own and its follower's, so a face is never
    flanked by seams. The first tab starts the strip and needs no divider. */
 .tab::before{content:"";position:absolute;left:0;top:50%;height:16px;width:1px;
-  transform:translateY(-50%);background:var(--tab-edge);transition:opacity .1s}
+  transform:translateY(-50%);background:var(--tab-edge);transition:opacity var(--m-tone)}
 .tab:first-child::before,.tab:hover::before,.tab:focus-visible::before,
 .tab.on::before,.tab.dragging::before,
 .tab:hover+.tab::before,.tab:focus-visible+.tab::before,.tab.on+.tab::before,.tab.dragging+.tab::before{opacity:0}
@@ -832,16 +937,16 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   max-width:100%;min-width:0}
 /* THE CATEGORY DOT - which chat is on which subject, at a glance: a 7px swatch coloured
    through the same [data-ec] -> --ecat plumbing the pills use (see syncTabAccent), blended
-   when several categories are filtered, white when none is - an accent would sink into the
-   band. FULL STRENGTH ON EVERY TAB: it is the one vivid thing in a deliberately quiet strip
-   and dimming it costs the glance it exists for; the selected tab is marked by its face.
+   when several categories are filtered, the band's ink when none is (dark on a pale band, white
+   on a deep one). FULL STRENGTH ON EVERY TAB: dimming the one vivid thing in a quiet strip costs
+   the glance it exists for; the selected tab is marked by its face.
    INSIDE the label's box - the label clips at its line box and eats anything hung outside. */
 .tab-label::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);
   width:7px;height:7px;border-radius:50%;
-  background-color:var(--ecat,#fff);background-image:var(--tab-accent-img,none);
+  background-color:var(--ecat,var(--band-ink));background-image:var(--tab-accent-img,none);
   pointer-events:none}
-/* The no-category dot changes ground on the selected tab and must change with it: white is
-   right on the band and invisible on the chrome face, which in light is very nearly white.
+/* The no-category dot changes ground on the selected tab and must change with it: the band's
+   ink is right on the band, not on the chrome face, which in light is very nearly white.
    Accent, because that is what "no filter" already wears on the All pill. */
 .tab.on .tab-label::before{background-color:var(--ecat,var(--accent))}
 /* A 20px square holding a 16px drawing - see ICON_TAB_X for why the marks stopped being
@@ -873,7 +978,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    the scroll arrows stand between the two - so the divider goes entirely rather than
    drifting off to mark the gap after an arrow. */
 .tab-add::before{content:"";position:absolute;left:-3px;top:50%;height:16px;width:1px;
-  transform:translateY(-50%);background:var(--tab-edge);transition:opacity .1s}
+  transform:translateY(-50%);background:var(--tab-edge);transition:opacity var(--m-tone)}
 .tabs-wrap.tabs-over .tab-add::before,
 .tabs-wrap:has(.tab:last-child:hover) .tab-add::before,
 .tabs-wrap:has(.tab:last-child:focus-visible) .tab-add::before,
@@ -931,7 +1036,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    halves must BE halves - "EN" renders a couple of pixels wider than "PL" and the thumb would
    land visibly short on one side. Two letters always fit in 38. */
 .seg button{width:38px;padding:4px 0;text-align:center;border:0;background:transparent;color:var(--dim);
-  font:600 12px var(--sans);cursor:default;letter-spacing:.4px;transition:color .18s}
+  font:600 12px var(--sans);cursor:default;letter-spacing:.4px}
 .seg button+button{border-left:1px solid transparent}
 .seg button:hover,.seg button:focus-visible{color:var(--accent)}
 .seg button.on{background:var(--accent);color:#fff}
@@ -942,7 +1047,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .seg{position:relative}
 .seg::before{content:"";position:absolute;top:0;bottom:0;left:0;width:50%;
   background:var(--accent);transform:translateX(0);
-  transition:transform .18s cubic-bezier(.2,.7,.3,1), background-color .18s ease}
+  transition:transform var(--m-move) var(--m-ease), background-color var(--m-move) ease}
 .seg[data-n="1"]::before{width:100%}
 .seg[data-n="3"]::before{width:33.3333%}
 .seg[data-n="4"]::before{width:25%}
@@ -968,11 +1073,6 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    rather than two swapping backgrounds. z-index keeps the letters above the pill. */
 .seg button{position:relative;z-index:1}
 .seg button.on{background:transparent}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){
-  .seg::before{transition:none}
-}
-}@layer base{
 
 .btn{padding:7px 11px;border:1px solid transparent;border-radius:var(--radius-sm);
   background:color-mix(in srgb,var(--ink) 4%,transparent);
@@ -983,6 +1083,13 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
    though it could, and red on a dead Delete promises a risk that is not there. The danger
    hover and the disabled look carry the same weight, so source order alone decided it. */
 .btn:not([disabled]):hover,.btn:not([disabled]):focus-visible,.tour-actions .btn.tour-sel{color:var(--accent);background:var(--accent-soft)}
+/* THE KEYBOARD'S HALF: the tint alone is too faint to follow from key to key, so a focused button
+   in a dialog also takes an edge two pixels deep, the accent the X and the pills wear, in its own
+   colour on a danger button and the dialog's ground inside a filled one. The pointer never sees it. */
+.modal-card .btn:not([disabled]):not(.primary):not(.danger):focus-visible{border-color:var(--accent);
+  box-shadow:inset 0 0 0 1px var(--accent)}
+.modal-card .btn.danger:not([disabled]):focus-visible{box-shadow:inset 0 0 0 1px #c44}
+.modal-card .modal-actions .btn.primary:not([disabled]):focus-visible{box-shadow:inset 0 0 0 2px var(--panel-raised)}
 /* settings menu button + dropdown */
 .menu-wrap{position:relative;flex:0 0 auto}
 /* ---- WHAT THE BAND GIVES UP WHEN IT RUNS OUT OF ROOM. One thing, now that the tools stand
@@ -1024,8 +1131,8 @@ body.shed-segfold #seg::before{width:100%;transform:none}
 /* Menu rows carry icons and lay out as rows; the icons inherit the row's ink - one object, not a
    picture beside a word. The language badge fills the same slot the drawings do, so the three
    rows share one left edge. */
-#moreMenu button{display:flex;align-items:center;gap:9px}
-#moreMenu button .ic{flex:0 0 auto;color:inherit}
+.menu.menu-ic button{display:flex;align-items:center;gap:9px}
+.menu.menu-ic button .ic{flex:0 0 auto;color:inherit}
 .more-lang-badge{flex:0 0 auto;width:15px;text-align:center;
   font:700 10.5px var(--sans);letter-spacing:.4px;color:inherit}
 /* SOLID, not glass: a short list of words has no shape of its own, and blur behind text
@@ -1195,6 +1302,7 @@ body.pills-off.pills-peek .pills-slot{display:block}
 /* The base rule kills the ring so a click does not flash one; :focus-visible puts it back
    for the keyboard, which now reaches this box through the tab order. */
 #roleDrum:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+body.role-waits #roleDrum{display:none}
 #roleDrum .rd-track{position:absolute;inset:0}
 #roleDrum span{position:absolute;left:6px;right:6px;text-align:center;white-space:nowrap;
   overflow:hidden;color:var(--ink)}
@@ -1202,14 +1310,10 @@ body.pills-off.pills-peek .pills-slot{display:block}
 #roleDrum .rd-cur.rd-empty{color:var(--dim);font:italic 400 12.5px var(--sans)}
 #roleDrum .rd-prev{top:-1px;font:9px var(--sans);opacity:.35}
 #roleDrum .rd-next{bottom:-1px;font:9px var(--sans);opacity:.35}
-#roleDrum .rd-track.rd-up{animation:rd-up .15s ease}
-#roleDrum .rd-track.rd-down{animation:rd-down .15s ease}
+#roleDrum .rd-track.rd-up{animation:rd-up var(--m-move) var(--m-ease)}
+#roleDrum .rd-track.rd-down{animation:rd-down var(--m-move) var(--m-ease)}
 @keyframes rd-up{from{transform:translateY(7px)}to{transform:none}}
 @keyframes rd-down{from{transform:translateY(-7px)}to{transform:none}}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){
-  #roleDrum .rd-track.rd-up,#roleDrum .rd-track.rd-down{animation:none}}
-}@layer base{
 /* The row's select and the Settings screen's are the same control, so they are one rule. The
    selector was `.fill select` alone until Settings needed a language list; widened rather than
    copied, for the reason the rest of this release keeps repeating. A text field on that screen
@@ -1234,7 +1338,18 @@ body.pills-off.pills-peek .pills-slot{display:block}
 /* Slot keeps a fixed 2-line height in the layout; the pills layer can expand over UI below */
 .pills-slot{max-width:var(--app-max);margin:8px auto 0;position:relative;z-index:40;
   min-height:var(--e-pills-h,0px)}
+/* While the window is narrower than at the last clip decision (--pills-vw), the slot is held at two
+   lines, so the frame that first lays out the new width puts no third line in flow and the width
+   watch's clip moves nothing above #pills. Unset, the variables leave max-height at none. */
+.pills-slot{max-height:calc(var(--pills-2line) + max(0px,(100vw - var(--pills-vw) + .1px)*1000000))}
+/* --pills-vw-now is 100vw as a computed length, which script reads without a layout. Neither is
+   inherited: a pill that inherits a variable is restyled whenever it changes. */
+@property --pills-vw{syntax:"*";inherits:false}
+@property --pills-vw-now{syntax:"<length>";inherits:false;initial-value:0px}
+.pills-slot{--pills-vw-now:100vw}
 html.e-pills-off .pills-slot{display:none}
+/* The slot's width in a box no clip resizes, for wirePillsWidthWatch: the slot's own width rule. */
+.pills-probe{max-width:var(--app-max);margin:0 auto;height:0}
 .pills{display:flex;gap:6px;flex-wrap:wrap;width:100%;box-sizing:border-box;position:relative}
 /* Overflow: reserve 2 lines in the slot; pills are absolutely positioned so expand overlays */
 .pills-slot.pills-overflow{height:var(--pills-2line,4.2em)}
@@ -1261,14 +1376,14 @@ html.e-pills-off .pills-slot{display:none}
      ALPHA interpolates: the cut and the shadow fade in place rather than growing out of
      nothing under a box that is already moving. */
   box-shadow:var(--bevel-off),var(--shadow-pop-off);
-  /* .12s, the dropdown tier, not the .18s used for the panel and the card column. This bar
+  /* The reveal tier, not the move tier the panel and the card column use. This bar
      opens on HOVER: the pointer is already on its way to a pill, so the reveal has to be over
      before the hand arrives. The slower tier is for things you deliberately toggle. */
-  transition:max-height .12s cubic-bezier(.2,.7,.3,1),
-             padding-bottom .12s cubic-bezier(.2,.7,.3,1),
-             border-color .12s cubic-bezier(.2,.7,.3,1),
-             background-color .12s cubic-bezier(.2,.7,.3,1),
-             box-shadow .12s cubic-bezier(.2,.7,.3,1)}
+  transition:max-height var(--m-reveal) var(--m-ease),
+             padding-bottom var(--m-reveal) var(--m-ease),
+             border-color var(--m-reveal) var(--m-ease),
+             background-color var(--m-reveal) var(--m-ease),
+             box-shadow var(--m-reveal) var(--m-ease)}
 body.pills-lines-expand .pills-slot.pills-overflow .pills,
 .pills-slot.pills-overflow:hover .pills,
 .pills-slot.pills-overflow.pills-navpeek .pills,
@@ -1287,10 +1402,6 @@ body.pills-lines-expand .pills-slot.pills-overflow .pills,
 /* Measured, not animated: --pills-full is read with the open styles applied, and the transition
    must not be running while that happens. */
 .pills-slot.pills-measuring .pills{transition:none!important}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){
-  .pills-slot.pills-overflow .pills{transition:none!important} }
-}@layer base{
 /* Tonal, not outlined: an idle pill is a soft fill with no border of its own, so the coloured
    hint rings below are the only outlines in the row and read from across the desk. */
 /* Flex, not inline: a 21px inline-block dot stretches the line box, and the wrap math
@@ -1341,9 +1452,6 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 .pill.on.hint{background:var(--accent);border-color:var(--accent);color:#fff;
   box-shadow:0 0 0 2px var(--accent-soft);font-weight:650}
 .pill.over{border-color:var(--accent);border-style:dashed}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){ .pill{transition:none!important} }
-}@layer base{
 /* 8px = the old 4px margin plus the ~4px space glyph the flex pill no longer renders. */
 .pill b{font-weight:600;opacity:.65;margin-left:8px;font-size:11px}
 
@@ -1395,8 +1503,8 @@ main{display:flex;flex-direction:column;flex:1 1 auto}
   /* One curve for both directions - the file's standard settle. `ease` decelerates into
      its end, and at low opacity going out the panel appears to linger; this curve is fast
      off the mark. */
-  transition:opacity .18s cubic-bezier(.2,.7,.3,1),transform .18s cubic-bezier(.2,.7,.3,1),
-             visibility 0s linear .18s;
+  transition:opacity var(--m-move) var(--m-ease),transform var(--m-move) var(--m-ease),
+             visibility 0s linear var(--m-move);
   /* EVERY shared box property lives here, not in the state blocks: dropping a state class
      may change only opacity, transform and visibility. A state block carries only what
      genuinely differs - x, width, z-index, shadow. */
@@ -1408,9 +1516,6 @@ main{display:flex;flex-direction:column;flex:1 1 auto}
   -webkit-backdrop-filter:var(--glass-mid-filter);
   backdrop-filter:var(--glass-mid-filter);
   box-shadow:var(--bevel),var(--card-lift)}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){ #intentRail{transition:none!important} }
-}@layer base{
 /* Width handle on the RIGHT EDGE, not a corner - the corner sits under the hand reaching
    for the last intent. It straddles the edge 3px either side, which makes a 1px border
    grabbable. Gone entirely when locked, not disabled: absent reads as locked, inert reads
@@ -1418,13 +1523,10 @@ main{display:flex;flex-direction:column;flex:1 1 auto}
 .rail-resize{position:absolute;top:0;right:-3px;width:7px;height:100%;
   cursor:ew-resize;z-index:2;touch-action:none}
 .rail-resize::after{content:"";position:absolute;top:50%;right:3px;width:1px;height:26px;
-  transform:translateY(-50%);background:var(--line-strong);opacity:0;transition:opacity .12s}
+  transform:translateY(-50%);background:var(--line-strong);opacity:0;transition:opacity var(--m-tone)}
 #intentRail:hover .rail-resize::after{opacity:.75}
 #intentRail.rail-fixed .rail-resize{display:none}
 html.raildrag,html.raildrag *{cursor:ew-resize!important;user-select:none!important}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){ .rail-resize::after{transition:none!important} }
-}@layer base{
 /* Never paint the panel before its geometry exists - see syncRailGeometry(). Additive, so both
    visible states stay exactly as written; this simply outranks them until the flag is set. */
 body:not(.rail-ready) #intentRail{opacity:0!important;visibility:hidden!important;transition:none!important}
@@ -1457,12 +1559,12 @@ main{max-width:none;margin:16px 0 0;padding:0}
    uses - 12px, a .75px dot, about 27 levels above the canvas. It reaches only the gutters,
    the gaps between cards and the margins, --card-bg being opaque, so the card gutter is opened
    below to give it somewhere to be seen. */
-/* ON MAIN'S OWN BACKGROUND, NOT A z-index:-1 PSEUDO: under body.e-backdrop the ground moves off
-   the canvas onto .scroller, and an in-flow ancestor's background paints ABOVE a negative
-   z-index descendant while the canvas paints below one - so the field showed in a browser and
-   not in the shell (2026-09-17). A background on main paints above every ancestor's and below
-   every descendant's, which is what "behind the cards, in front of the ground" means whichever
-   element carries the ground. */
+/* ON THE SCROLLER'S OWN BACKGROUND, so the field stands still while the cards scroll over it: a
+   scroll container's background does not move with its content. Never a z-index:-1 pseudo:
+   under body.e-backdrop the ground is .scroller's colour, and an in-flow ancestor's background
+   paints ABOVE a negative z-index descendant. One element's image paints above its own colour,
+   which is "behind the cards, in front of the ground" whichever element carries the ground. The
+   position is where main begins, so at rest the dots stand where the scrolling field stood. */
 /* The last stop is the ink at zero alpha, NOT the keyword: transparent is transparent BLACK,
    and the two-pixel ramp between the stops would then pass through grey on a pale ground. */
 /* ONE LOOK AT EVERY DISPLAY SCALE, the 150% one, Maxim's choice. A stop is not anti-aliased: a
@@ -1470,10 +1572,10 @@ main{max-width:none;margin:16px 0 0;padding:0}
    and 4 smaller ones at 150%. The stops sit on those pixel centres' distances from the dot's
    (.707 at 100%, .8 at 125%, under .5 at 150%), so each scale paints about the ink of a .75px
    disc and 150% paints what it did; shell smoke 2k6 holds it. */
-main{background-image:radial-gradient(circle at center,var(--dots-ink) 0 .5px,
+.scroller{background-image:radial-gradient(circle at center,var(--dots-ink) 0 .5px,
     color-mix(in srgb,var(--dots-ink) 44%,transparent) .707px .8px,
     color-mix(in srgb,var(--dots-ink) 0%,transparent) 1px);
-  background-size:12px 12px}
+  background-size:12px 12px;background-position:var(--app-pad) 16px}
 #list{margin-bottom:80px}
 /* The count and the fold sit at the far end of the group's own rule, so the eye meets the
    name first and the control only when it is looking for one. See .list-sep.e-catsep::after. */
@@ -1484,27 +1586,23 @@ main{background-image:radial-gradient(circle at center,var(--dots-ink) 0 .5px,
 .list-sep .sep-fold:hover,.list-sep .sep-fold:focus-visible{color:var(--accent)}
 /* Right chevron pointing down when open, and back to the right when shut - the same rotation
    the settings folds use, so it reads as one gesture rather than a new one. */
-.list-sep .sep-fold svg{transform:rotate(90deg);transition:transform .16s ease}
+.list-sep .sep-fold svg{transform:rotate(90deg);transition:transform var(--m-move) var(--m-ease)}
 .list-sep .sep-fold.shut svg{transform:rotate(0deg)}
 /* The render after a fold replaces the chevron mid-turn, so a transition never played
    across a toggle. The handler hands the FRESH button an animation starting from the old
    state - each keyframe names only its from; the resting pose is the rules above. */
-.list-sep .sep-fold.e-turn-shut svg{animation:e-fold-turn-shut .16s ease}
-.list-sep .sep-fold.e-turn-open svg{animation:e-fold-turn-open .16s ease}
+.list-sep .sep-fold.e-turn-shut svg{animation:e-fold-turn-shut var(--m-move) var(--m-ease)}
+.list-sep .sep-fold.e-turn-open svg{animation:e-fold-turn-open var(--m-move) var(--m-ease)}
 @keyframes e-fold-turn-shut{from{transform:rotate(90deg)}}
 @keyframes e-fold-turn-open{from{transform:rotate(0deg)}}
 /* Cards an unfold reveals rise in from their heading; the cards below them glide through
    flipCardsAround at the same time. A collapse plays no exit - the gap closing behind the
    group is this list's standing language for departure. */
-.card.e-unfolding{animation:e-unfold .18s cubic-bezier(.2,.7,.3,1)}
+.card.e-unfolding{animation:e-unfold var(--m-move) var(--m-ease)}
+/* A card put away leaves where it stood: a copy of it takes the family's dismiss while the cards
+   around it close the gap (flipCardsAround). */
+#list .card.e-card-leave{position:fixed;margin:0;pointer-events:none;animation:eLeave var(--m-dismiss) ease forwards}
 @keyframes e-unfold{from{opacity:0;transform:translateY(-6px)}}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){
-  .list-sep .sep-fold svg{transition:none}
-  .list-sep .sep-fold.e-turn-shut svg,.list-sep .sep-fold.e-turn-open svg,
-  .card.e-unfolding{animation:none}
-}
-}@layer base{
 
 /* ---- Card columns: each column is its own stack, groups DEALT into them - first
    category left, second right, third left. Not a grid of cards and not multi-column - see
@@ -1557,6 +1655,9 @@ main{background-image:radial-gradient(circle at center,var(--dots-ink) 0 .5px,
    Firefox has supported this since 125, Chrome since 85; where it is unsupported the property
    is ignored and the list behaves exactly as it did. */
 #list .card{content-visibility:auto;contain-intrinsic-size:auto 220px}
+/* A card at rest is contained, so its last slab's bottom margin stays inside it. A card forced
+   visible loses the containment: flow-root keeps the margin in, or the card snaps 10px shorter. */
+#list .card{display:flow-root}
 .card.dragging{opacity:.55;z-index:2}
 html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;user-select:none!important;-webkit-user-select:none!important}
 .cbadge.hit{background:var(--go-soft);color:var(--go);border:1px solid var(--go)}
@@ -1613,19 +1714,16 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    of thing rather than the first section of one list. */
 .e-favsep .e-favstar{width:13px;height:13px;display:inline-block;fill:currentColor;stroke:none;
   margin-right:6px;vertical-align:-2px}
-/* ONE SPINE, TWO MEANINGS, AND IT IS THE CATEGORY UNTIL IT IS NOT. The card used to carry
-   two marks - a green tick on its left for the recency trace, a hued bar on its top for the
-   identity - because both had to fit round one box's corners. The slab has a whole edge to
-   give, so identity takes it and the trace, which is the transient one and the rarer one,
-   BORROWS it for the three cards it names, fading back into the hue as it ages out. Nothing
-   is lost: a card in the trace is green, every other card is its category's colour. */
-.card[data-erec] .txt{--spine:var(--ok)}
-.card[data-erec="2"] .txt{--spine:color-mix(in srgb,var(--ok) 60%,var(--ecat,var(--line-strong)))}
-.card[data-erec="3"] .txt{--spine:color-mix(in srgb,var(--ok) 35%,var(--ecat,var(--line-strong)))}
+/* ONE SPINE, TWO MEANINGS: a block's spine is its category's colour until the recency trace
+   borrows it for the three blocks last copied, fading back into the hue as it ages out. The
+   trace marks the block copied and not its card, so the card's other blocks keep their hue. */
+.txt[data-erec]{--spine:var(--ok)}
+.txt[data-erec="2"]{--spine:color-mix(in srgb,var(--ok) 60%,var(--ecat,var(--line-strong)))}
+.txt[data-erec="3"]{--spine:color-mix(in srgb,var(--ok) 35%,var(--ecat,var(--line-strong)))}
 /* A CAPTION, NOT A HEAD. It names the slab beneath it and gets out of the way: no ground of its
    own and no rule under it. Its three controls appear on hover - see .chead .cacts - so the
    resting screen is words, and the category is a mark at the head rather than a word beside it. */
-.chead{display:flex;gap:7px;align-items:center;padding:0 3px 5px;flex-wrap:nowrap;
+.chead{--chead-gap:7px;display:flex;gap:var(--chead-gap);align-items:center;padding:0 3px 5px;flex-wrap:nowrap;
   background:var(--chead-bg,transparent);
   border-bottom:var(--chead-border,0 none transparent)}
 /* 600, not 650 - the quieter face that came out of an abandoned usage-titles experiment. The
@@ -1682,13 +1780,8 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
    this starts on the near side of the click - see the note at the eye pop. */
 @keyframes eLangInNext{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
 @keyframes eLangInPrev{from{opacity:0;transform:translateX(-16px)}to{opacity:1;transform:none}}
-.lang-pane.lang-in-next{animation:eLangInNext .19s cubic-bezier(.2,.7,.3,1) both}
-.lang-pane.lang-in-prev{animation:eLangInPrev .19s cubic-bezier(.2,.7,.3,1) both}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){
-  .lang-pane.lang-in-next,.lang-pane.lang-in-prev{animation:none}
-}
-}@layer base{
+.lang-pane.lang-in-next{animation:eLangInNext var(--m-move) var(--m-ease) both}
+.lang-pane.lang-in-prev{animation:eLangInPrev var(--m-move) var(--m-ease) both}
 .mf-shared{margin-top:2px}
 /* A hair of margin, not a header's worth: the scrollport now BEGINS under the header, so
    what scrollIntoView aligns to is already the right line. */
@@ -1767,13 +1860,6 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 .list-sep.e-catsep .sep-fold,.list-sep.e-favsep .sep-fold{order:9}
 .list-sep i{flex:1;height:1px;border-radius:0;background:var(--line)}
 .list-sep span{white-space:nowrap}
-/* Shown only when an un-accepted catalog sits beside the file. Native .modal chrome,
-   centred with a scrim - an empty Etiuda can do nothing useful until this is answered. */
-/* Only the prose centring is this dialog's own - it is all sentences. The export-name
-   prompt shares the shape but holds an input, and centring an input's contents would be a
-   different thing entirely. */
-#eCatalogModal .modal-card{text-align:center}
-#eCatalogModal .ec-counts{font:12px var(--mono);color:var(--dim);margin-top:4px}
 /* One button slot per row, swapped by state: the hide button appears only on the hovered
    row and only while Ctrl is held - on every row at once it was a wall of icons.
    Monochrome until hovered, like the star: Ctrl changes what the slot does, not how loud. */
@@ -1902,7 +1988,7 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
    rest, and at half the current ink: a solid underline inside a quiet grey line reads as
    emphasis rather than as a link. Unscoped, because the same path is on the empty screen, on
    the Library's title line and inside its empty folder, and three copies would drift. */
-code.open-folder{cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px;
+code.open-folder{cursor:default;text-decoration:underline dotted;text-underline-offset:3px;
   text-decoration-color:color-mix(in srgb,currentColor 50%,transparent)}
 code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-decoration:underline}
 /* The category's own icon stands in for the generic drawing, at its size and its weight. */
@@ -1931,7 +2017,7 @@ code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-d
 /* A drawn pin inherits currentColor like every other icon - no grayscale filter, which
    existed only to tame the colour-emoji pin this replaced. Quiet until you reach for it:
    dim at rest, full on hover or while actually holding the panel open. */
-.rail-lock{line-height:1;padding:3px 5px;opacity:.55;transition:opacity .12s,color .12s}
+.rail-lock{line-height:1;padding:3px 5px;opacity:.55;transition:opacity var(--m-tone),color var(--m-tone)}
 .rail-lock:hover,.rail-lock:focus-visible{opacity:1}
 /* No chip behind this one: chips exist where the icon cannot change - this icon IS the
    state (open vs closed shackle), and a box would say it twice. Colour and full opacity
@@ -1946,6 +2032,7 @@ code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-d
 #intentRailList{display:flex;flex-direction:column;gap:2px;
   flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;
   margin:var(--rail-shelf,0px) -2px 0;padding:0 2px 2px}
+.rail-empty{margin:0;padding:6px 8px;color:var(--dim);font:12.5px/1.35 var(--sans);text-wrap:balance}
 /* ONE LINE, TAGS AT THE RIGHT. Stacked, a row spent two lines to say one thing and the
    pinned stack had to measure each one; side by side every row is the same height, which is
    what stackPinnedIntents wanted all along, and twice as many intents fit the panel. */
@@ -2074,8 +2161,12 @@ html.raildrag #intentRailList{margin-top:0}
    (hover:none) below, because a desk with no pointer has no way to ask for them at all and
    would simply lose the pencil, the eye and the star. */
 @media (hover:hover){
-  .chead .cacts{opacity:0;transition:opacity .1s ease}
+  .chead .cacts{opacity:0;transition:opacity var(--m-tone) ease}
   .card:hover>.chead .cacts,.card:focus-within>.chead .cacts{opacity:1}
+  /* While they wait they take no width, so the title runs the whole row and recedes when they
+     come. The cut pass reads their width from here (cut-text.js, cut-rh). */
+  body:not(.tour-cacts) .card:not(:hover,:focus-within,.is-hidden)>.chead .cacts{
+    width:0;overflow:hidden;margin-left:calc(-1*var(--chead-gap))}
 }
 /* A tour has no pointer, so a step showcasing the star, the eye or the pencil was pointing at
    something the rule above had faded out. On the BODY and not on the one card being shown:
@@ -2142,24 +2233,32 @@ html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!importan
 /* Heard and never seen: see sayMark. Clipped rather than hidden, which would silence it. */
 #eSay{position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);
   white-space:nowrap}
-#toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);background:var(--ok);
-  color:#fff;padding:10px 18px;border-radius:999px;font-size:14px;font-weight:600;
-  opacity:0;pointer-events:none;transition:.18s;z-index:300;max-width:88vw;
-  overflow:hidden;white-space:nowrap}
-#toast.show{opacity:1;transform:translate(-50%,0)}
+/* Centred by its margins, so only translateY moves and nothing rests on half a pixel. A long
+   message wraps rather than fading out mid-sentence. */
+#toast{position:fixed;left:0;right:0;margin:0 auto;width:fit-content;bottom:26px;transform:translateY(20px);
+  background:var(--ok);color:#fff;padding:10px 18px;border-radius:999px;font-size:14px;font-weight:600;
+  opacity:0;pointer-events:none;z-index:300;max-width:min(560px,calc(100vw - 24px));
+  text-align:center;text-wrap:balance;
+  transition:opacity var(--m-surface) var(--m-ease),transform var(--m-surface) var(--m-ease)}
+#toast.show{opacity:1;transform:none}
+#toast.show.swap{opacity:0;transition:opacity var(--m-dismiss) ease}
+/* THE REFUSAL: white on the warning's own orange, 5.17:1, the same fill in both themes as the
+   bubble's cobalt is, since the dark theme's --warn is a text colour and too pale to carry white. */
+#toast.refusal{display:flex;align-items:center;gap:8px;text-align:left;background:#c2410c}
+#toast.refusal .ic{width:16px;height:16px;flex:none}
 /* CUT TEXT FADES, IT DOES NOT END IN DOTS. An ellipsis is a character: it arrives in the
    reader's ink, mid-sentence, and says "cut" in the same voice as the words; one TYPED into a
    label is untouched. markCutText() decides, and it decides per SIDE - an unconditional mask
    eats the last word of a line that fits, centred text gives way at both ends, and a field
    that has scrolled gives way behind the caret, never over it. NO LINE KEEPS AN ELLIPSIS AS A
    FALLBACK: an id rule outranks this class, and native dots paint before the scan can run. */
-.is-cut{
+.is-cut,.card:is(:hover,:focus-within)>.chead .cut-rh{
   -webkit-mask-image:linear-gradient(to right,transparent,#000 var(--cut-l,0px),
                      #000 calc(100% - var(--cut-r,0px)),transparent);
   mask-image:linear-gradient(to right,transparent,#000 var(--cut-l,0px),
              #000 calc(100% - var(--cut-r,0px)),transparent)}
 .is-cut.cut-l{--cut-l:1.5em}
-.is-cut.cut-r{--cut-r:1.5em}
+.is-cut.cut-r,.card:is(:hover,:focus-within)>.chead .cut-rh{--cut-r:1.5em}
 /* An input paints its words in the CONTENT box and nothing outside it, so the fade is measured
    there too - against the border box it lands in the padding that clears the button and fades
    nothing at all. Safe only because these inputs go naked: see .fill input. */
@@ -2201,30 +2300,36 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 .cbadge.ed{background:var(--ed-soft);color:var(--ed);border:1px solid color-mix(in srgb,var(--ed) 42%,transparent)}
 .modal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
 /* A keyframe, not a transition - the element returns from display:none with no previous
-   value. IN only: several flows close one dialog and open another in the same breath, and
-   a fade-out would cross-fade the two. Re-rendering an open dialog does not replay it -
-   hidden never changes and the card element is not replaced. */
+   value. The way out is a copy on the dismiss tier (.e-gone), which the next surface to open
+   ends, so a flow that closes one dialog and opens another never cross-fades the two.
+   Re-rendering an open dialog does not replay it - hidden never changes and the card element
+   is not replaced. */
 @keyframes eModalBgIn{from{opacity:0}to{opacity:1}}
 @keyframes eModalCardIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
-.modal:not([hidden]) .modal-bg{animation:eModalBgIn .16s ease both}
-.modal:not([hidden]) .modal-card{animation:eModalCardIn .18s cubic-bezier(.2,.7,.3,1) both}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){
-  .modal:not([hidden]) .modal-bg,.modal:not([hidden]) .modal-card{animation:none!important}
-}
+/* A COVERED ARRIVAL (the boot guard's arrive): the band stays, and what sits under it arrives.
+   The dot field is the scroller's own ground and stays. Held, the content is drawn at a trace no
+   eye resolves rather than not drawn, so it is rasterised before its fade begins. */
+@keyframes eLeave{to{opacity:0}}
+/* A SURFACE CLOSING (motion.js dismissNode): it leaves on the dismiss tier, and what it holds stands still. */
+.e-gone{animation:eLeave var(--m-dismiss) ease forwards!important;pointer-events:none!important}
+.e-gone *{animation:none!important;transition:none!important}
+html.e-veiled body{visibility:hidden}
+html.e-arriving body>:not(header,#railHit,.scroller,script),html.e-arriving .scroller>.shell,
+html.e-arriving #pillsSlot{opacity:.004}
+html.e-arrived body>:not(header,#railHit,.scroller,script),html.e-arrived .scroller>.shell,
+html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
+.modal:not([hidden]) .modal-bg{animation:eModalBgIn var(--m-scrim) ease both}
+.modal:not([hidden]) .modal-card{animation:eModalCardIn var(--m-surface) var(--m-ease) both}
 /* One treatment for everything that hangs below an anchor and toggles with hidden - a
-   short drop, keyframed for the display:none reason above. .12s: these are frequent and
-   lightweight. IN only - a list closing on the item you picked must feel instant.
-   Rebuilding while open does not replay it. */
+   short drop, keyframed for the display:none reason above. The reveal tier: these are
+   frequent and lightweight. Closing leaves a copy on the dismiss tier (.e-gone). Rebuilding
+   while open does not replay it. */
 @keyframes eDropIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
-}@layer base{
 .menu:not([hidden]),.facts-panel:not([hidden]){
-  animation:eDropIn .12s cubic-bezier(.2,.7,.3,1) both}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){
-  .menu:not([hidden]),.facts-panel:not([hidden]){animation:none!important}
-}
-}@layer base{
+  animation:eDropIn var(--m-reveal) var(--m-ease) both}
+/* The menu's warm copy (header-menus.js, warmMenu): drawn, never seen, never pressed. */
+.menu.e-warm:not([hidden]){opacity:.004;animation:none;pointer-events:none}
+.menu.e-warm *{pointer-events:none!important}
 /* The scrim blurs the workspace behind it rather than merely darkening it - the dialog reads
    as a layer above the page, and the cards stay recognisable without competing for the eye. */
 .modal-bg{position:absolute;inset:0;background:rgba(8,12,20,.4);
@@ -2237,8 +2342,6 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
   display:flex;flex-direction:column;overflow:hidden;
   background:var(--panel-raised);color:var(--ink);border:1px solid var(--line);
   border-radius:16px;box-shadow:0 8px 20px rgba(0,0,0,.12),0 28px 68px rgba(0,0,0,.22);padding:0}
-/* The catalog offer wears the small windows' shadow, not the dialogs'. */
-#eCatalogModal .modal-card{box-shadow:var(--shadow-pop)}
 /* The only thing that scrolls, so the scrollbar sits beside the content and stops short of both
    pinned bars. min-height:0 is load-bearing: a flex item will not shrink below its content
    without it, and the middle would push the actions row off the bottom instead of scrolling. */
@@ -2261,18 +2364,13 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
    long name is cut rather than pushing the arrows off the row. */
 .modal-card h2 .modal-name{font-weight:400;color:var(--dim);margin-left:.7ch;
   display:inline-block;min-width:0;overflow:hidden;white-space:nowrap}
-.modal-card h2 .modal-name[data-ed]{animation:edFlip 260ms cubic-bezier(.3,.8,.3,1) both}
+.modal-card h2 .modal-name[data-ed]{animation:edFlip var(--m-move) var(--m-ease) both}
 @keyframes edFlip{
   0%{transform:rotateX(0);opacity:1}
   45%{transform:rotateX(72deg);opacity:.25}
   55%{transform:rotateX(-72deg);opacity:.25}
   100%{transform:rotateX(0);opacity:1}
 }
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){
-  .modal-card h2 .modal-name[data-ed]{animation:none!important}
-}
-}@layer base{
 /* The rules under the heading and over the actions SAY "pinned" - they belong only to a
    dialog with a scrolling middle, which .modal-body is exactly. On a short dialog they
    promised a scroll that never comes and made a five-line question look like a workspace. */
@@ -2385,8 +2483,11 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    cascade layer above all - turns this button pale under the mouse with white text still on
    it. Named at both primary buttons and at the two hint pills; nowhere else in the sheet does
    a variant meet a state at equal weight. */
-.modal-actions .btn.primary:hover,.modal-actions .btn.primary:focus-visible{filter:brightness(1.08);color:#fff;
+.modal-actions .btn.primary:hover,.modal-actions .btn.primary:focus-visible{filter:brightness(.92);color:#fff;
   background:var(--accent);border-color:var(--accent)}
+/* Hover deepens the fill under white in dark, where lightening it would thin the words; light keeps its lift. */
+:root[data-theme=light] .modal-actions .btn.primary:hover,
+:root[data-theme=light] .modal-actions .btn.primary:focus-visible{filter:brightness(1.08)}
 /* THE RING IS MIXED INTO THE GROUND, not stated flat. A fixed pale pink is soft on a white
    page and a bright band on a near-black one - the same declaration reading as a warning in
    one theme and an alarm in the other. Mixing keeps the light look it already had and gives
@@ -2394,10 +2495,9 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 .btn.danger{color:#c44;border-color:color-mix(in srgb,#c44 47%,var(--bg))}
 /* About Etiuda dialog */
 .modal-card.about-modal{max-width:520px}
-/* Two columns of readings was the floor this was set for; the pinned rescue row is the wider
-   claim, and in Polish it missed one row by three pixels. Columns collapse back to one on
-   a phone and the row wraps, so this stays a ceiling rather than a demand. */
-.modal-card.mt-modal{max-width:680px}
+/* THE PANEL TAKES THE WINDOW'S WIDTH, and the readings as many columns as it holds, so the whole of
+   it stands on one screen without scrolling in any reasonably big window. */
+.modal-card.mt-modal{max-width:min(1240px,calc(100vw - 40px))}
 /* Light and OPEN, not bold: the one place the product says its own name was the heaviest
    text in the app. 350 + tracking gives the presence the bold was for. 350 needs Segoe UI
    Variable (Win11); older systems snap to 400 - degrades to plainer, never to broken. */
@@ -2449,6 +2549,10 @@ details.manage-sec>summary:focus-visible h3,details.manage-sec>summary:focus-vis
 details.mf-fold>summary:hover .mf-lab,details.mf-fold>summary:hover .acc-tw,
 details.mf-fold>summary:focus-visible .mf-lab,
 details.mf-fold>summary:focus-visible .acc-tw{color:var(--accent)}
+/* The same for a section's heading, which has no edge to take: its title is underlined. */
+details.acc>summary:focus-visible .acc-title,details.manage-sec>summary:focus-visible h3,
+details.mf-fold>summary:focus-visible .mf-lab{text-decoration:underline 2px var(--accent);
+  text-underline-offset:4px}
 .manage-sec h3{margin:0 0 8px}
 .manage-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px}
 /* Hidden intent: grey label + inactive star; edit / show stay full strength */
@@ -2473,7 +2577,7 @@ details.mf-fold>summary:focus-visible .acc-tw{color:var(--accent)}
 /* THE LOADED ROW SAYS SO WITH A MARK, not with a word: it is the one row whose right-hand end
    also carries its acts, and a pill beside them took enough width to break the line of counts
    underneath onto two. The mark keeps the accent the row's own border already wears. */
-.ec-tick{flex:0 0 auto;width:14px;height:14px;color:var(--go)}
+.ec-tick{flex:0 0 auto;width:var(--ec-glyph);height:var(--ec-glyph);color:var(--go)}
 .ec-await{white-space:nowrap}
 .ec-await .ic{display:inline-block;width:14px;height:14px;vertical-align:-2.5px;margin-right:3px}
 .ec-row .btn{flex:0 0 auto}
@@ -2493,6 +2597,19 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
 .ec-where .ec-where-edit .ic{width:15px;height:15px}
 /* A catalog's own acts ride in its row, at the size the facts panel gives a small action. */
 .ec-row .btn{padding:4px 8px;font-size:12px}
+/* The row's glyphs share one size, --ec-glyph, set on the list. */
+.ec-list{--ec-glyph:18px}
+.ec-row .btn.ec-act{padding:5px}
+.ec-row .ec-act .ic{width:var(--ec-glyph);height:var(--ec-glyph)}
+/* The signature's key: gold is the favourite's gold, grey is no vocabulary at all. */
+.ec-key{flex:0 0 auto;display:flex;width:var(--ec-glyph);height:var(--ec-glyph);color:var(--dim);
+  border-radius:var(--radius-xs);outline:none}
+.ec-key .ic{width:100%;height:100%}
+.ec-key.on{color:var(--fav)}
+.ec-key[data-tip]:focus-visible{background:var(--accent-soft)}
+.ec-key-bub{z-index:236;max-width:min(300px,calc(100vw - 24px));padding:8px 12px;
+  font-size:12.5px;line-height:1.45;pointer-events:none;
+  animation:eModalCardIn var(--m-reveal) var(--m-ease) both}
 /* Three lines change what the row centres on: the name is the subject, so the badge and the
    buttons align to the NAME's line rather than to the middle of a column that grew. */
 .ec-row:has(.ec-watch){align-items:flex-start}
@@ -2502,7 +2619,7 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
 /* A word you can click inside a dim sentence already has a look here - the folder's dotted
    underline - so the two acts wear it rather than becoming a third pair of buttons. */
 .ec-watch .act{appearance:none;-webkit-appearance:none;border:0;background:none;padding:0;margin:0;
-  font:inherit;color:var(--dim);cursor:pointer;text-decoration:underline dotted;
+  font:inherit;color:var(--dim);cursor:default;text-decoration:underline dotted;
   text-underline-offset:3px;text-decoration-color:color-mix(in srgb,currentColor 50%,transparent)}
 .ec-watch .act:hover,.ec-watch .act:focus-visible{color:var(--accent);text-decoration:underline}
 /* The pair wraps as ONE thing: loose, English broke between them and opened its second line
@@ -2529,7 +2646,7 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
 /* The card editor's picker is blue, the intent editor's green. They look alike and sit one
    dialog apart, so the colour is what tells you which one you are in - and it matches the
    difference in behaviour: blue picks exactly one category, green picks any number. */
-#meCatPick .cat-chip.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);
+.cat-pick.pick-one .cat-chip.on{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);
   box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent)}
 /* Dashed like every add affordance, drawn from the strip's own icon. No data-k, which
    keeps bindCatPick's radio logic from mistaking it for a category. EQUAL padding round a
@@ -2549,9 +2666,10 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
   padding:6px 11px!important;width:130px!important;max-width:40vw}
 /* ---- Category editor: the icon grid and the colour swatches. Both are plain buttons in a
    bordered well, the same construction as .cat-pick above, so the dialog has one language. */
+/* THE GRID SHOWS WHOLE and never scrolls on its own: the editor grows to hold it, and a window too
+   short for the editor scrolls the editor's body instead. */
 .ic-pick{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px;padding:8px;
-  border:1px solid var(--line);border-radius:10px;background:var(--bg);
-  max-height:min(34vh,210px);overflow:auto}
+  border:1px solid var(--line);border-radius:10px;background:var(--bg)}
 .ic-opt{display:flex;align-items:center;justify-content:center;padding:7px;margin:0;
   border:0;border-radius:var(--radius-sm);background:transparent;color:var(--dim);cursor:default}
 .ic-opt:hover,.ic-opt:focus-visible{color:var(--accent);background:var(--accent-soft)}
@@ -2638,6 +2756,13 @@ details.manage-sec>summary h3{margin:0}
 .mg-intents .manage-row:hover{background:var(--accent-soft)}
 .mg-intents .manage-row.dragging{background:var(--accent-soft);
   box-shadow:0 0 0 1px var(--accent) inset;border-radius:7px}
+/* AN INTENT ROW IS ONE LINE, as in the rail: the name fades rather than wrapping. Each span is
+   scoped to the row, because `.manage-row span` gives every span a basis of 120px and leave to grow. */
+.mg-intents .manage-row.mg-int{flex-wrap:nowrap;gap:6px}
+.manage-row.mg-int .cat-slot{flex:0 0 16px}
+.manage-row .mg-int-t{flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden}
+.manage-row .mg-int-n{flex:0 0 auto;font:600 11px var(--mono);opacity:.65}
+.manage-row.mg-int.is-hidden .mg-int-t,.manage-row.mg-int.is-hidden .mg-int-n{color:var(--dim);opacity:.72}
 .mg-cat{border-radius:var(--radius-sm)}
 /* cursor:default explicitly - over a text node auto resolves to the I-beam, and the NAME
    kept promising a caret after inline renaming left this row. The row is a drag handle end
@@ -2646,7 +2771,7 @@ details.manage-sec>summary h3{margin:0}
 .mg-cat-row:hover{background:var(--accent-soft)}
 .mg-tw{flex:0 0 auto;width:16px;height:16px;padding:0;border:0;border-radius:4px;
   background:transparent;color:var(--dim);cursor:default;
-  display:flex;align-items:center;justify-content:center;transition:transform .13s ease,color .12s}
+  display:flex;align-items:center;justify-content:center;transition:transform var(--m-move) var(--m-ease),color var(--m-tone)}
 .mg-cat.is-open .mg-tw{transform:rotate(90deg)}
 .mg-tw:hover,.mg-tw:focus-visible{color:var(--accent)}
 .mg-cat-lab2{margin:0;padding:1px 3px;border:1px solid transparent;border-radius:5px;
@@ -2768,13 +2893,10 @@ details.acc>summary{list-style:none;display:flex;align-items:center;gap:8px;padd
   border-radius:7px;cursor:default;user-select:none}
 details.acc>summary::-webkit-details-marker{display:none}
 details.acc>summary:hover,details.acc>summary:focus-visible{background:var(--accent-soft)}
-.acc-tw{flex:0 0 auto;color:var(--dim);transition:transform .16s cubic-bezier(.2,.7,.3,1)}
+.acc-tw{flex:0 0 auto;color:var(--dim);transition:transform var(--m-move) var(--m-ease)}
 details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 .acc-title{font-family:var(--sans)}
 .acc-body{padding:2px 6px 12px}
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){ .acc-tw{transition:none} }
-}@layer base{
 /* Settings rows: label and hint on the left, control on the right, one column that stays
    readable when the dialog is narrow. Deliberately plain, like the Maintenance panel - a
    preferences screen is read once and then left alone, so it earns no ornament. */
@@ -2782,8 +2904,11 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
   padding:9px 0;border-bottom:1px solid var(--line)}
 .set-row:last-child{border-bottom:0}
 .set-label{min-width:0;font:14px var(--sans);color:var(--ink)}
+/* text-wrap:balance across the short descriptions: a last line holding two words reads as
+   unfinished, and evening the halves fixes every translation at once - hand-tuning sentence
+   length would have to be redone in each language and again at every rewording. */
 .set-label small{display:block;margin-top:2px;font:12.5px var(--sans);color:var(--dim);
-  line-height:1.45;text-wrap:balance}   /* see the note at #tourInvite p */
+  line-height:1.45;text-wrap:balance}
 .set-ctl{flex:0 0 auto}
 /* EQUAL COLUMNS the general way: "Light | Dark | System" cannot be halved by width:42px
    like EN/PL, so 1fr columns state the rule whatever the labels are - the thumb's 1/n
@@ -2826,24 +2951,30 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 /* COLUMNS THAT PACK, not a grid that aligns: a grid row costs the height of its taller cell
    on both sides, so a short section beside a long one bought empty space and the panel
    outgrew its window. Whole sections only: half of one at a column foot reads as two. */
-.mt-grid{columns:250px 2;column-gap:26px}
+.mt-grid{columns:228px;column-gap:22px}
 .mt-sec{margin:0 0 12px;break-inside:avoid}
 .mt-sec h3{margin:0 0 4px;font:600 10.5px var(--mono);text-transform:uppercase;
   letter-spacing:.6px;color:var(--dim)}
 .mt-row{display:flex;gap:12px;justify-content:space-between;align-items:baseline;
-  padding:2px 0;font:12.5px var(--mono)}
+  padding:1px 0;font:12px var(--mono)}
 .mt-row .k{color:var(--dim);flex:0 0 auto}
 .mt-row .v{color:var(--ink);text-align:right;overflow-wrap:anywhere;min-width:0}
 /* A COUNT PER COLUMN, when one reading answers the same four questions about two subjects: as
    key and value the label took the whole column and left the numbers wrapping one digit to a
    line. The two subjects share the header because they share the questions. */
 .mt-tab{display:grid;grid-template-columns:1fr repeat(4,auto);gap:1px 10px;
-  padding:2px 0;font:12.5px var(--mono)}
+  padding:1px 0;font:12px var(--mono)}
 .mt-tab span{text-align:right;color:var(--ink);white-space:nowrap}
 .mt-tab span:nth-child(5n+1){text-align:left;color:var(--dim)}
 /* Smaller than the numbers they head: the words are longer in some languages than in others,
    and the column has to hold the longest of them without the name losing its own room. */
 .mt-tab .h{color:var(--dim);opacity:.75;font-size:11px}
+/* A short window takes the readings a size down, which is what keeps the panel on one screen at
+   586 pixels, a 1438 x 879 window at 150 per cent. */
+@media (max-height:700px){
+  .mt-row,.mt-tab{font-size:11px;padding:0}
+  .mt-sec{margin-bottom:8px}
+}
 /* --warn earns its keep again: the one row that explains vanishing personal state. */
 .mt-row .v.mt-warn{color:var(--warn)}
 /* Glass off - a rescue, not a preference. The token lines the no-blur @supports block already
@@ -2858,12 +2989,26 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 /* THE BUBBLE, the shape every notice hangs off a control by, and the one thing in this sheet a
    SECOND program renders from: the build copies everything between these two markers into
    engine/bubble.css, and Studio links that file. So nothing keyed on a name this sheet owns
-   belongs in here - only .bub, .bub-tip and .paper - and a host page owes the family the four
+   belongs in here - only .bub, .bub-tip, .paper and the motion below - and a host owes the four
    tokens below, --panel-raised, --ink, --dim and --line for the paper voice, and the data-side
    attribute, which src/modules/bubble.js writes and Studio imports from the same commit. */
-/* THE FILL, cobalt in BOTH themes. White on it is 5.17:1 where white on the dark theme's own
-   accent would be 2.4:1, so a notice cannot borrow --accent and owns this. A host redeclares
-   the shadow per theme, which is the only one of the four a theme has ever moved. */
+/* THE MOTION VOCABULARY, the family's and not this sheet's: tiers by what moves, one curve and
+   one spring (motion.js M_MS, E_EASE and E_SPRING, held equal by tests/motion-tokens.js). A host
+   sets html.e-still under either quiet switch; it zeroes every tier and halts every keyframe,
+   so a rule written with the tiers needs no guard of its own. */
+:root{--m-tone:100ms; --m-reveal:120ms; --m-move:180ms; --m-surface:180ms; --m-scrim:160ms;
+  --m-resize:200ms; --m-dismiss:80ms; --m-travel:371ms; --m-celebrate:420ms; --m-wash:500ms;
+  --m-roll:300ms; --m-nudge:2s;
+  --m-ease:cubic-bezier(.2,.7,.3,1);
+  --m-spring:linear(0,0.0773,0.2255,0.3951,0.5568,0.6956,0.806,0.8883,0.9458,0.9832,1.0055,1.0169,
+    1.0212,1.0211,1.0186,1.0151,1.0115,1.0082,1.0054,1.0033,1.0018,1.0008,1.0001,1)}
+:root.e-still{--m-tone:0s; --m-reveal:0s; --m-move:0s; --m-surface:0s; --m-scrim:0s;
+  --m-resize:0s; --m-dismiss:0s; --m-travel:0s; --m-celebrate:0s; --m-wash:0s; --m-roll:0s;
+  --m-nudge:0s}
+:root.e-still *,:root.e-still *::before,:root.e-still *::after{animation:none!important}
+/* THE FILL, cobalt in BOTH themes and the same blue as --accent, written out because this span
+   is published to host pages that carry none of the engine's tokens. A host redeclares the
+   shadow per theme, which is the only one of the four a theme has ever moved. */
 :root{--bub:#2563eb; --bub-ink:#fff; --bub-dim:rgba(255,255,255,.92); --bub-shadow:rgba(37,99,235,.32)}
 /* position:fixed because placeBubble() writes viewport coordinates; overflow stays VISIBLE or
    the panel clips its own pointer; drop-shadow and not box-shadow, so the pointer carries the
@@ -2896,40 +3041,60 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .bub.paper[data-side=left]>.bub-tip{border-left:0;border-bottom:0;right:-7px}
 /*@BUBBLE-END*/
 /* ---------- Guided tour (coach marks) ---------- */
-#tourRoot{position:fixed;inset:0;z-index:240;pointer-events:none;--tour-scrim:rgba(8,12,20,.739)}
-/* The tour travels on a spring (stiffness 260, damping 20, sampled at 60 Hz into linear()): 7.6
-   per cent over, still at 629ms. `.still` is set by tour.js under either quiet switch. */
-#tourRoot{--tour-spring:.629s linear(0,0.0412,0.1311,0.2495,0.3806,0.5124,0.6364,0.7469,0.841,
-  0.9174,0.9767,1.02,1.0493,1.0668,1.075,1.076,1.072,1.0645,1.0552,1.0451,1.0351,1.0258,1.0177,
-  1.0108,1.0052,1.001,0.9979,0.9959,0.9947,0.9942,0.9942,0.9946,0.9952,0.996,0.9967,0.9975,0.9982,
-  0.9988,1)}
-#tourRoot.on{pointer-events:auto}
-/* ONE SCRIM, AND THE SPOTLIGHT IS A HOLE IN IT. The darkening is the hole's 9999px box-shadow,
-   which paints OUTSIDE the hole's own box and so cannot reach what the step showcases. The shade
-   keeps its element - it absorbs clicks, see tour.js - and paints only when there is no hole to
-   cut, which is why both read one token. Two scrims each looking right alone composited to .74
-   over the page and .42 over the showcased element, so a step darkened the one thing it points
-   at; .739 is those two multiplied out, and the page behind is the pixels it always was. */
-.tour-shade{position:fixed;inset:0;background:transparent;opacity:0;
-  transition:opacity .28s ease;pointer-events:auto}
-#tourRoot.on .tour-shade{opacity:1}
-#tourRoot.no-hole .tour-shade{background:var(--tour-scrim)}
-/* The ring keeps its job and loses its voice: the bubble is the attention now and the ring only
-   says where, so no pulse and no halo, and the ring in the bubble's own colour. */
+#tourRoot{position:fixed;inset:0;z-index:240;pointer-events:none}
+/* A WINDOW OPENED OVER THE PAGE takes the front, and the bubble waits behind it, under the modals
+   (200); the tour's own dialog steps keep it in front. */
+#tourRoot.behind{z-index:190}
+/* The tour travels on the family's one spring, --m-travel on --m-spring. `.still` is set by
+   tour.js under either quiet switch. */
+/* NOTHING IS DARKENED AND NOTHING IS HELD: the page under the tour stays usable, and only the
+   bubble takes a click. The ring says where a step points, in the bubble's own colour. */
 .tour-hole{position:fixed;z-index:1;border-radius:12px;pointer-events:none;
-  box-shadow:0 0 0 9999px var(--tour-scrim),0 0 0 2.5px var(--bub);
-  transition:top var(--tour-spring),left var(--tour-spring),width var(--tour-spring),
-    height var(--tour-spring),border-radius .2s ease,opacity .2s ease;opacity:0}
+  box-shadow:0 0 0 2.5px var(--bub);
+  transition:top var(--m-travel) var(--m-spring),left var(--m-travel) var(--m-spring),
+    width var(--m-travel) var(--m-spring),height var(--m-travel) var(--m-spring),
+    border-radius var(--m-resize) ease,opacity var(--m-resize) ease;opacity:0}
 #tourRoot.on .tour-hole{opacity:1}
-#tourRoot.still .tour-hole{transition:border-radius .2s ease,opacity .2s ease}
+#tourRoot.still .tour-hole{transition:border-radius var(--m-resize) ease,opacity var(--m-resize) ease}
 /* The long steps scroll in the BODY, never the panel, which also keeps the buttons on screen
    where the old max-height scrolled them away. The shape itself is the family's, above. */
 .tour-card{z-index:3;width:min(360px,calc(100vw - 28px));
   opacity:0;transform:translateY(8px);
-  transition:top var(--tour-spring),left var(--tour-spring),opacity .22s ease,
-    transform var(--tour-spring)}
+  transition:top var(--m-travel) var(--m-spring),left var(--m-travel) var(--m-spring),
+    opacity var(--m-surface) ease,transform var(--m-travel) var(--m-spring)}
 #tourRoot.on .tour-card{opacity:1;transform:translateY(0)}
-#tourRoot.still .tour-card{transition:opacity .22s ease}
+#tourRoot.still .tour-card{transition:opacity var(--m-surface) ease}
+/* THE QUESTIONS THAT HANG FROM A CONTROL, the catalog offer and the name: the family's bubble with
+   the tour card's type, over the dialogs and under the tour. */
+.bub-ask{z-index:235;width:min(340px,calc(100vw - 24px));animation:eModalCardIn var(--m-surface) var(--m-ease) both}
+.bub-ask h3{margin:0 0 6px;font:700 15.5px var(--sans-display);letter-spacing:-.2px}
+.bub-ask p{margin:0 0 8px;font-size:13.5px;line-height:1.5;color:var(--bub-dim);text-wrap:pretty}
+.bub-ask b{color:var(--bub-ink);font-weight:600}
+.bub-ask code{font:12px var(--mono);color:var(--bub-ink);overflow-wrap:anywhere}
+.e-offer .ec-what{margin:0 0 8px;font-size:13.5px;color:var(--bub-ink)}
+.e-offer .ec-counts{font:12px var(--mono);color:var(--bub-dim);margin-top:2px}
+/* THE UNDO, one line and its button at the foot of the window, where a toast speaks. Centred by
+   its margins, since the family's entrance animates transform. */
+.e-undo{left:0;right:0;bottom:24px;margin:0 auto;width:fit-content;max-width:calc(100vw - 24px);
+  display:flex;align-items:center;gap:14px}
+.e-undo p{margin:0;color:var(--bub-ink)}
+.e-undo .tour-actions{margin:0;padding:0;border:0;flex:none}
+/* THE NOTICES THAT OUTLAST A MOMENT: the rescue at a start that failed (the boot guard) and the
+   save and desk notices (pack.js), hung under the band and centred by margins, as the Undo is. */
+.e-notice{left:0;right:0;margin:0 auto;width:min(560px,calc(100vw - 24px))}
+.e-notice p{color:var(--bub-ink)}
+.e-notice p.e-notice-err{font:12px var(--mono);color:var(--bub-dim);overflow-wrap:anywhere}
+.e-notice .e-notice-hint{margin-right:auto;font-size:12.5px;color:var(--bub-dim)}
+#eNotices{position:fixed;left:0;right:0;z-index:2147483646;display:flex;flex-direction:column;gap:8px;
+  pointer-events:none}
+#eNotices .bub{position:relative;pointer-events:auto}
+/* A field on the fill: paper, so what is typed reads as the reader's own. */
+.bub .e-name-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
+  border:1px solid transparent;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans)}
+.bub .e-name-inp:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.bub .e-greet{color:var(--bub-ink);margin:8px 0 10px}
+.tour-field{margin:0 0 4px}
+.bub .e-greet .e-name-ph{color:var(--bub-dim);opacity:.8}
 /* The card note - the family's bubble, ONE kind deliberately: a second louder tier only moves
    the question of which tier a note belongs in onto whoever writes the next one. */
 .note-pane{z-index:120}
@@ -2982,12 +3147,6 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 #tourBody .t-fav{color:#fef3c7}
 #tourBody .t-fav .ic-inline{fill:currentColor;stroke:none;margin-right:2px}
 #tourBody .t-bad{color:#ffecec}
-.tour-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
-.tour-step{font:11px var(--mono);color:var(--dim);letter-spacing:.3px;text-transform:uppercase}
-/* ON A FILLED PANEL A QUIET INK IS AN ILLEGIBLE ONE. White at 72% over the cobalt measures
-   3.45:1; the quiet of a step counter has to come from 11px mono caps instead, which it does,
-   so it takes the body's own ink at 4.63:1. Measured on this build, both themes. */
-.bub .tour-step{color:var(--bub-dim)}
 .tour-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center;
   margin-top:2px;padding-top:10px;border-top:1px solid rgba(255,255,255,.24)}
 /* The buttons are cut OUT of the fill rather than laid on it: a white ghost for the two that
@@ -3003,7 +3162,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .tour-actions .btn.primary,.tour-actions .btn.primary:hover,
 .tour-actions .btn.primary:focus-visible,.tour-actions .btn.primary.tour-sel{
   background:#fff;border-color:#fff;color:var(--bub);font-weight:600}
-.tour-actions .btn.primary:hover,.tour-actions .btn.primary:focus-visible,
+.tour-actions .btn.primary:not([disabled]):hover,.tour-actions .btn.primary:not([disabled]):focus-visible,
 .tour-actions .btn.primary.tour-sel{filter:brightness(.94)}
 .tour-actions .tour-skip{margin-right:auto}
 /* ←/→ move real focus so Enter and screen readers work, but .tour-sel already draws the
@@ -3035,7 +3194,8 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   backdrop-filter:var(--glass-thin-filter);
   display:flex;align-items:center;justify-content:center;
   box-shadow:var(--shadow-pop-off);
-  transition:color .16s,background-color .16s,border-color .16s,box-shadow .16s}
+  transition:color var(--m-tone),background-color var(--m-tone),border-color var(--m-tone),
+    box-shadow var(--m-tone)}
 .fab:hover,.fab:focus-visible{color:var(--accent);border-color:var(--accent);background:var(--accent-soft);
   box-shadow:var(--shadow-pop)}
 /* The clear-intents door, left of the add button and only there while an intent is picked: the
@@ -3043,8 +3203,9 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
    Faded rather than display-toggled, so it arrives; invisible it takes no focus and no click.
    The glyph says intents, a count says how many, and hover turns it into the red X it is. */
 .fab-clear{right:76px;opacity:0;transform:translateY(6px) scale(.9);visibility:hidden;pointer-events:none;
-  transition:opacity .2s cubic-bezier(.2,.7,.3,1),transform .2s cubic-bezier(.2,.7,.3,1),
-    visibility 0s .2s,color .16s,background-color .16s,border-color .16s,box-shadow .16s}
+  transition:opacity var(--m-resize) var(--m-ease),transform var(--m-resize) var(--m-ease),
+    visibility 0s var(--m-resize),color var(--m-tone),background-color var(--m-tone),
+    border-color var(--m-tone),box-shadow var(--m-tone)}
 .fab-clear.on{opacity:1;transform:none;visibility:visible;pointer-events:auto;transition-delay:0s}
 .fab-clear .ic-x,.fab-clear .fab-n{display:none}
 .fab-clear .fab-n{font:600 14px var(--sans);letter-spacing:.2px}
@@ -3054,13 +3215,12 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .fab-clear:hover .ic-x,.fab-clear:focus-visible .ic-x{display:block}
 .fab-clear:hover .ic-intent,.fab-clear:hover .fab-n,.fab-clear:focus-visible .ic-intent,.fab-clear:focus-visible .fab-n{display:none}
 /* A ring grows out of the button and fades, on transform and opacity so it costs no repaint
-   (rule 1 of the Firefox notes). The button keeps its own look; the ring does the asking. */
+   (rule 1 of the Firefox notes). The button keeps its own look; the ring does the asking,
+   three times and then rests: syncAddFab restarts it only when a category newly asks. `both`
+   holds the last frame, opacity 0; without it the static style below cuts in as a solid ring. */
 .fab.nudge::after{content:"";position:absolute;inset:-1px;border-radius:50%;
-  border:1px solid var(--accent);animation:fabNudge 2s ease-out infinite;pointer-events:none}
+  border:1px solid var(--accent);animation:fabNudge var(--m-nudge) ease-out 3 both;pointer-events:none}
 @keyframes fabNudge{ 0%{transform:scale(1);opacity:.6} 70%,100%{transform:scale(1.5);opacity:0} }
-}@layer overrides{
-@media (prefers-reduced-motion:reduce){ .fab,.fab-clear{transition:none} .fab.nudge::after{animation:none} }
-}@layer base{
 #sampleMark{position:fixed;inset:0;z-index:49;pointer-events:none;overflow:hidden;
   display:flex;align-items:center;justify-content:center}
 #sampleMark b{transform:rotate(-22deg);white-space:nowrap;text-transform:uppercase;
@@ -3074,30 +3234,13 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   color:var(--dim);opacity:.13}
 /* Light ink on a light canvas needs less alpha still to sit at the same perceived depth. */
 :root[data-theme=light] #sampleMark b{opacity:.11}
-/* It hangs off the menu button, where Show tour lives, rather than floating in the corner
-   attached to nothing and over the last card. top/left are placeholders: placeTourInvite()
-   writes both before it is shown, and right/bottom would fight them. */
-#tourInvite{top:0;left:0;z-index:230;width:min(300px,calc(100vw - 28px))}
-/* AND IT STEPS ASIDE FOR THE MENU IT POINTS AT. Both hang off the same button and both drop
-   below it, and the invite is at 230 against the menu's 80 inside the header's own stacking
-   context, so the invite covered three of the menu's four rows - measured with
-   elementFromPoint at each row's centre. Presentation only: the invite's own state is
-   untouched and closing the menu brings it straight back. */
-:root:has(#settingsBtn.on) #tourInvite,
-:root:has(#moreBtn.on) #tourInvite{visibility:hidden}
-#tourInvite h3{margin:0 0 6px;font-size:15px;font-family:var(--sans-display)}
-/* text-wrap:balance across the short descriptions: a last line holding two words reads as
-   unfinished, and evening the halves fixes every translation at once - hand-tuning sentence
-   length would have to be redone in each language and again at every rewording. */
-#tourInvite p{margin:0 0 12px;font-size:13px;line-height:1.45;color:var(--bub-dim);text-wrap:balance}
-#tourInvite .tour-actions{border-top:0;padding-top:0;margin-top:0}
 /* ---------- Motion & numerals ---------- */
-/* Colour-only, at .1s - these fire on hover with the pointer already moving. Transform
+/* Colour-only, at the tone tier - these fire on hover with the pointer already moving. Transform
    and layout are deliberately NOT transitioned: drag, the FLIP reorders and the pill bar
    own their timing, and a transitioned transform under a drag fights the hand. */
 .pill,.btn,.seg button,.tab,.rail-item,.cacts button,.cat-chip,.menu button,
 .txt,.tab-x,.field-clear,.combo-clear{
-  transition:background-color .1s ease,color .1s ease,border-color .1s ease}
+  transition:background-color var(--m-tone) ease,color var(--m-tone) ease,border-color var(--m-tone) ease}
 /* A PRESS CHANGES TONE, IT DOES NOT MOVE. The pill was the exception for what turned out to
    be the general reason: a CSS box snaps to device pixels and the vector inside it does not,
    so half a pixel lands differently in two places. A press RECEDES toward the surface behind
@@ -3118,20 +3261,17 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 /* A THEME FLIP IS NOT A STATE CHANGE. Every transition above answers one control changing
    state, and a new palette changes all of their inputs in one frame, so the screen would
    cross-fade to itself and each control would hold its old colour over a page that had
-   already turned. paintTheme() carries this class through the reflow the new palette lands
-   in, and everything is transitional again immediately after it. */
+   already turned. theme.js carries this class through the frame the new palette lands in,
+   and everything is transitional again immediately after it. */
 :root.theme-swap *,:root.theme-swap *::before,:root.theme-swap *::after{transition:none}
-@media (prefers-reduced-motion:reduce){
-  .pill,.btn,.seg button,.tab,.rail-item,.cacts button,.cat-chip,.menu button,
-  .txt,.tab-x,.field-clear,.combo-clear{transition:none!important}
-  /* The press tone STAYS. It is a colour and not a movement, and removing it would leave
-     these controls with no answer to a click at all - which is a loss for exactly the
-     people this query is meant to help. */
-}
+/* The crossfade paintTheme() opens around that flip: one picture, so the ground, the cards, the
+   rail and the band cannot turn at different moments. While it runs every pointer event goes to
+   <html>, whatever pointer-events says on the pseudo-elements; the keyboard is unaffected. */
+::view-transition-old(root),::view-transition-new(root){animation-duration:var(--m-celebrate);animation-timing-function:ease}
 }@layer base{
 /* Tabular figures wherever a number sits beside a label, so a count ticking from 9 to 10
    does not shuffle the text around it. */
-.pill b,.mg-uses,.mg-count,.mg-cat-n,.tour-step,.cbadge,.rail-badge,.tag{
+.pill b,.mg-uses,.mg-count,.mg-cat-n,.cbadge,.rail-badge,.tag{
   font-variant-numeric:tabular-nums}
 /* The star's own path (_STAR), spawned by the click handler as a fixed overlay so it
    survives the re-render that follows the click. 299: under the toast, above everything
@@ -3139,7 +3279,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .e-star-pop{position:fixed;z-index:299;pointer-events:none;width:30px;height:30px;
   margin:-15px 0 0 -15px;color:var(--fav)}
 .e-star-pop svg{display:block;width:100%;height:100%;fill:currentColor;
-  animation:eStarPop .42s cubic-bezier(.2,.7,.3,1) both}
+  animation:eStarPop var(--m-celebrate) var(--m-ease) both}
 @keyframes eStarPop{
   0%{transform:scale(.35);opacity:0}
   30%{transform:scale(1.15);opacity:.95}
@@ -3149,15 +3289,15 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
    the lower one, so the almond shuts into the lid line. The pupil is clipped by that same
    path, so the lid covers it as it comes down rather than the pupil shrinking on its own;
    the lashes arrive once it is shut, and the whole blooms away as the star does - on the
-   star's own .42s, since two celebrations from one row must not read as two lengths. A
+   star's own tier, since two celebrations from one row must not read as two lengths. A
    return runs the lid up. Spawned like the star; reduced motion is guarded in the handler. */
 .e-eye-pop{position:fixed;z-index:299;pointer-events:none;width:28px;height:28px;margin:-14px 0 0 -14px}
 .e-eye-pop svg{display:block;width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.5;
   stroke-linecap:round;stroke-linejoin:round;transform-origin:50% 50%;
-  animation:eEyeBloom .42s cubic-bezier(.2,.7,.3,1) both}
+  animation:eEyeBloom var(--m-celebrate) var(--m-ease) both}
 .e-eye-pop .lid{d:path("M1.9 10C4.5 5.1 15.5 5.1 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z");
-  animation:eLidDown .42s cubic-bezier(.4,0,.2,1) both}
-.e-eye-pop .lashes{opacity:0;animation:eLashesIn .42s both}
+  animation:eLidDown var(--m-celebrate) cubic-bezier(.4,0,.2,1) both}
+.e-eye-pop .lashes{opacity:0;animation:eLashesIn var(--m-celebrate) both}
 .e-eye-pop.open .lid{animation-name:eLidUp}
 .e-eye-pop.open .lashes{animation-name:eLashesOut}
 @keyframes eLidDown{0%{d:path("M1.9 10C4.5 5.1 15.5 5.1 18.1 10C15.5 14.9 4.5 14.9 1.9 10Z")}
@@ -3176,28 +3316,25 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .seg button:focus-visible,.field-clear:focus-visible,.combo-clear:focus-visible,
 .rail-item:focus-visible,.rail-add:focus-visible,.rail-lock:focus-visible,
 button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:none}
-/* HIGH CONTRAST paints every ground and edge in the system's own two colours, so the mark and
-   the focus, both tints here, vanish there; the system's highlight colour stands in for them,
-   and only there. After the rule above and as heavy, so it wins in any layer order. */
+/* HIGH CONTRAST paints every ground and edge in the system's own two colours, so what a tint says
+   here vanishes there: the mark, the focus, the chosen tab, language and category, and the tour's
+   selected button. The system's highlight colour stands in for them, and only there. After the
+   rule above and as heavy, so it wins in any layer order; the tour's outweighs its own ring rule. */
 @media (forced-colors:active){
-  .txt.sel,.rail-item.rail-kbd{outline:2px solid Highlight;outline-offset:-2px}
+  .txt.sel,.rail-item.rail-kbd,:root .tab.on,:root .pill.on,#seg button.on{outline:2px solid Highlight;outline-offset:-2px}
   :root :focus-visible{outline:2px solid Highlight}
+  :root .tour-actions .btn.tour-sel{outline:2px solid Highlight}
 }
+/* The card holds the keyboard where nothing inside it does (openDialog), and wears no ring for it. */
+#modalCard:focus{outline:none}
 /* Confirmation where the eye already is: the toast keeps the WHAT (and the screen-reader
    announcement), this is the WHERE - a success-green wash over the clicked block, a fixed
    overlay so it cannot disturb the block or its ring. Same family as the star bloom. */
 .e-copy-wash{position:fixed;z-index:299;pointer-events:none;border-radius:var(--radius-sm);
   background:color-mix(in srgb,var(--ok) 16%,transparent);
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ok) 45%,transparent);
-  animation:eCopyWash .5s ease-out both}
+  animation:eCopyWash var(--m-wash) ease-out both}
 @keyframes eCopyWash{from{opacity:1}to{opacity:0}}
-/* The copied words lifting off the block, under the wash (pops.js); the tags stay behind. */
-.e-copy-lift{position:fixed;z-index:298;pointer-events:none;margin:0;overflow:hidden;
-  background:transparent;border-style:solid;border-color:transparent;
-  animation:eCopyLift .42s cubic-bezier(.2,.7,.3,1) both}
-.e-copy-lift .tag{visibility:hidden}
-@keyframes eCopyLift{from{opacity:.55;transform:none;filter:blur(0)}
-  to{opacity:0;transform:translateY(-22px) scale(1.02);filter:blur(1.5px)}}
 /* A settled search's words, marked where they stand (search-marks.js): the tint first, the
    underline with it 70ms on. 4px under the baseline clears the Polish ogonek at this size. */
 ::highlight(e-hit-in){background-color:color-mix(in srgb,var(--accent) 8%,transparent)}
@@ -3223,10 +3360,12 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
         <!-- Chevrons drawn, not typed: a text guillemet rides its font's baseline and reads
              smaller beside the drawn +. Same viewBox, same .ic sizing, mirrored around x=10. -->
         <button type="button" class="tabs-nav" id="tabsPrev" tabindex="-1" aria-label="Scroll tabs left" title="Scroll tabs left"><span class="tabs-nav-mark"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M11.9 4.6L6.5 10l5.4 5.4"/></svg></span></button>
-        <div class="tabs-bar" id="tabsBar"></div>
+        <div class="tabs-bar" id="tabsBar" role="tablist"></div>
         <button type="button" class="tabs-nav" id="tabsNext" tabindex="-1" aria-label="Scroll tabs right" title="Scroll tabs right"><span class="tabs-nav-mark"><svg class="ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M8.1 4.6L13.5 10l-5.4 5.4"/></svg></span></button>
       </div>
     </div>
+    <!-- THE CATALOG IN USE, by name, or that none is: inert, and no door to the Library. -->
+    <div class="cat-now" id="catNow"><span class="cn-name" data-i18n-skip hidden></span><span class="cn-none">No catalog loaded</span></div>
     <!-- THE WINDOW'S OWN CONTROLS, drawn here because the desktop shell gives the band the top
          bar. Present in every build and shown only under body.e-host, so the browser is the
          browser. app-region:no-drag is what makes them clickable at all inside a drag band. -->
@@ -3298,7 +3437,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
            automatically. Rows delegate with .click(), which works at display:none. -->
       <div class="menu-wrap" id="moreWrap" hidden>
         <button class="btn icbtn" id="moreBtn" type="button" title="The tools this window is too narrow to show" aria-haspopup="true" aria-expanded="false" aria-label="More tools"><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4.8 5.4 9.4 10l-4.6 4.6"/><path d="M10.6 5.4 15.2 10l-4.6 4.6"/></svg></button>
-        <div class="menu" id="moreMenu" hidden role="menu">
+        <div class="menu menu-ic" id="moreMenu" hidden role="menu">
           <!-- Each row wears the icon of the button it stands in for - a control that lost its
                place must not lose its face. The language row's slot holds the language in force,
                which doubles as the state readout; where it would take you is in the title. -->
@@ -3323,7 +3462,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
           <button type="button" role="menuitem" data-act="rail" id="menuRail" title="Hide the intent panel; its chips then appear on the first card that uses {INTENT}">Hide intent panel</button>
           <button type="button" role="menuitem" data-act="pills" id="menuPills" title="Hide the category bar; hold Ctrl to peek at it while hidden">Hide categories</button>
           <div class="menu-sep"></div>
-          <button type="button" role="menuitem" data-act="tour" title="How a reply gets from here to your customer, in about a minute.">Show tour…</button>
+          <button type="button" role="menuitem" data-act="tour" title="The tour of Etiuda's controls, one at a time">Show tour…</button>
           <button type="button" role="menuitem" data-act="about" title="What Etiuda is, and every keyboard shortcut">About Etiuda</button>
         </div>
       </div>
@@ -3332,6 +3471,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   <div class="pills-slot" id="pillsSlot">
     <div class="pills" id="pills" title="Filter by category; a green ring marks one that relates to the chosen intent"></div>
   </div>
+  <div class="pills-probe" id="pillsProbe" aria-hidden="true"></div>
 </header>
 
 <div id="railHit" title="Hover here or hold Ctrl to show the intent panel" aria-hidden="true"></div>
@@ -3388,31 +3528,20 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 
 <div id="modal" class="modal" hidden>
   <div class="modal-bg" id="modalBg"></div>
-  <div class="modal-card" id="modalCard" role="dialog" aria-modal="true" aria-labelledby="modalTitle"></div>
+  <div class="modal-card" id="modalCard" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1"></div>
 </div>
 
 <div id="tourRoot" hidden aria-hidden="true">
-  <div class="tour-shade" id="tourShade"></div>
   <div class="tour-hole" id="tourHole" aria-hidden="true"></div>
-  <div class="tour-card bub" id="tourCard" role="dialog" aria-modal="true" aria-labelledby="tourTitle">
-    <div class="tour-meta">
-      <span class="tour-step" id="tourStepLabel">Step 1</span>
-    </div>
+  <div class="tour-card bub" id="tourCard" role="dialog" aria-modal="false" aria-labelledby="tourTitle">
     <h3 id="tourTitle">Welcome</h3>
     <p id="tourBody"></p>
+    <div class="tour-field" id="tourField" hidden></div>
     <div class="tour-actions">
       <button type="button" class="btn tour-skip" id="tourSkip">Skip tour</button>
       <button type="button" class="btn" id="tourPrev" hidden>Back</button>
       <button type="button" class="btn primary" id="tourNext">Next</button>
     </div>
-  </div>
-</div>
-<div id="tourInvite" class="bub" hidden role="dialog" aria-labelledby="tourInviteTitle">
-  <h3 id="tourInviteTitle">New here?</h3>
-  <p id="tourInviteBody">How a reply gets from here to your customer, in about a minute.</p>
-  <div class="tour-actions">
-    <button type="button" class="btn tour-skip" id="tourInviteDismiss">Not now</button>
-    <button type="button" class="btn primary" id="tourInviteStart">Show tour</button>
   </div>
 </div>
 
@@ -3423,9 +3552,6 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
      customer's name - any other file comes in via Import. A configurable name must be
      discovered first; one fixed name is what makes the sibling work with no configuration. -->
 <script src="etiuda-catalog.js"></script>
-<!-- The demo, on the same terms and for the same reason as the line above. Absent on a
-     copy downloaded on its own, which is why every route that offers it asks first. -->
-<script src="sample-catalog.js"></script>
 <!-- Embedded catalog slot. Empty in the plain engine; Export HTML fills it to produce a
      self-contained build that opens with its content already loaded and needs no sibling file.
      type="application/json" so the browser stores it as inert text rather than running it. -->

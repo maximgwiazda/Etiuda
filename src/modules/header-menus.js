@@ -5,6 +5,7 @@ import { cancelFactsEdit, closeFactsPanel, factsPanelOpen } from "./facts.js";
 import { endPillNavPeek } from "./pill-nav-peek.js";
 import { measureShedNaturals, syncRowShed } from "./shed.js";
 import { $ } from "./dom.js";
+import { cutLeaves, dismissCopy } from "./motion.js";
 import { togglePills, pillsWanted, pillsLocked } from "./pills-box.js";
 import { toggleRail, railWanted, railLocked, syncRailPinBtn } from "./rail-panel.js";
 import { tabInsertAnimating } from "./tabs.js";
@@ -28,10 +29,10 @@ function wireHeaderMenus(){
     // What opens a screen takes the keyboard with it, so nothing is handed back underneath.
     if(act==="settings"||act==="manage"||act==="tour"||act==="about") menuReturn=null;
     // Add actions sit with the things they create, so this menu carries none of them.
-    if(act==="settings"){ hooks.openSettings(); closeSettingsMenu(); }
-    else if(act==="manage"){ hooks.openManage(); closeSettingsMenu(); }
-    else if(act==="tour"){ hooks.startTour(); closeSettingsMenu(); }
-    else if(act==="about"){ openAbout(); closeSettingsMenu(); }
+    if(act==="settings") menuScreen(hooks.openSettings);
+    else if(act==="manage") menuScreen(hooks.openManage);
+    else if(act==="tour") menuScreen(hooks.startTour);
+    else if(act==="about") menuScreen(openAbout);
     else if(act==="rail"){ toggleRail(); }
     else if(act==="pills"){ togglePills(); }
   };
@@ -77,7 +78,8 @@ function wireHeaderMenus(){
       return;
     }
     if(e.key!=="Escape") return;
-    if(hooks.tourActive()){
+    // The tour's Escape, only while the keyboard is inside its bubble.
+    if(hooks.tourActive() && $("#tourCard") && $("#tourCard").contains(document.activeElement)){
       hooks.endTour(false);
       e.stopPropagation(); e.preventDefault();
       return;
@@ -219,6 +221,7 @@ function giveFocusBack(held){
 function closeMoreMenu(){
   const m=$("#moreMenu"), b=$("#moreBtn");
   const had=heldMenu()===m;
+  dismissCopy(m);
   if(m) m.hidden=true;
   if(b){ b.classList.remove("on"); b.setAttribute("aria-expanded","false"); }
   if(had) giveFocusBack(m);
@@ -226,24 +229,52 @@ function closeMoreMenu(){
 function openMoreMenu(byKey){
   const m=$("#moreMenu"), b=$("#moreBtn");
   if(!m||!b) return;
-  closeSettingsMenu(); closeFactsPanel();
+  closeSettingsMenu(); closeFactsPanel(); cutLeaves();
   syncMoreBtn();   // the rows reflect this instant's measurement, not the last resize's
   m.hidden=false;
   b.classList.add("on");
   b.setAttribute("aria-expanded","true");
   if(byKey) takeKeyboard(m);
 }
-function closeSettingsMenu(){
+function closeSettingsMenu(forScreen){
   const menu=$("#settingsMenu"), btn=$("#settingsBtn");
   const had=heldMenu()===menu;
+  if(!forScreen) dismissCopy(menu);
   if(menu) menu.hidden=true;
   if(btn){ btn.classList.remove("on"); btn.setAttribute("aria-expanded","false"); }
   if(had) giveFocusBack(menu);
 }
+/* A SCREEN OPENED FROM A MENU ROW OPENS FIRST, so it takes the Menu button as where focus returns
+   before the menu's close blurs the row; the menu then leaves no fading copy, because a leave
+   ends when another surface opens and this one has already opened. */
+function menuScreen(open){ open(); closeSettingsMenu(true); }
+/* THE MENU'S FIRST OPEN PAYS A DRAWING COST ITS LATER OPENS DO NOT. A copy is drawn once here, where
+   the menu opens, at an opacity the eye cannot see, and taken away three frames on; it holds no id,
+   role or title, and takes no focus or pointer. Skipped once the menu itself has been drawn. */
+let menuDrawn=false;
+function warmMenu(){
+  const menu=$("#settingsMenu");
+  if(menuDrawn || !menu || !menu.hidden) return;
+  menuDrawn=true;
+  const copy=menu.cloneNode(true);
+  [copy].concat(Array.prototype.slice.call(copy.querySelectorAll("*"))).forEach(n=>{
+    n.removeAttribute("id"); n.removeAttribute("role"); n.removeAttribute("title");
+  });
+  copy.classList.add("e-warm");
+  copy.setAttribute("aria-hidden","true");
+  copy.inert=true;
+  copy.hidden=false;
+  menu.after(copy);
+  let gone=false;
+  const drop=()=>{ if(!gone){ gone=true; copy.remove(); } };
+  requestAnimationFrame(()=>requestAnimationFrame(()=>requestAnimationFrame(drop)));
+  setTimeout(drop,1000);
+}
 function openSettingsMenu(byKey){
   const menu=$("#settingsMenu"), btn=$("#settingsBtn");
   if(!menu||!btn) return;
-  closeFactsPanel();
+  menuDrawn=true;
+  closeFactsPanel(); cutLeaves();
   syncSettingsMenu();
   menu.hidden=false;
   btn.classList.add("on");
@@ -257,6 +288,7 @@ export {
   syncSettingsMenu,
   closeSettingsMenu,
   openSettingsMenu,
+  warmMenu,
   wireHeaderShedSync,
   wireHeaderMenus
 };

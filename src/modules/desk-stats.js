@@ -20,7 +20,7 @@ function statsDayBefore(ymd, n){
   return x.getUTCFullYear()+"-"+p(x.getUTCMonth()+1)+"-"+p(x.getUTCDate());
 }
 /* A BUCKET NAMES AN ID BY ITS PLACE IN `pack.dayIds`, and holds c (cards), i (intents), m
-   (misses) and l (languages): the pack is written whole on every copy, and a year of buckets
+   (misses) and l (languages): the counts are written on every copy, and a year of buckets
    spelling each id out every day is several times the size. `daysSince` is the earliest day
    this desk holds a bucket for, which is what a span's answer says it can speak for. */
 function statsDay(pack, at){
@@ -33,8 +33,41 @@ function statsDay(pack, at){
     Object.keys(pack.days).forEach(k=>{ if(k<cut) delete pack.days[k]; });
     if(!STATS_YMD.test(String(pack.daysSince||""))||day<pack.daysSince) pack.daysSince=day;
     if(pack.daysSince<cut) pack.daysSince=cut;
-  }
+    statsTouch(pack, "*");
+    statsCompact(pack);
+  } else statsTouch(pack, day);
   return b;
+}
+/* WHICH DAYS HAVE BEEN WRITTEN INTO since the pack was last saved, so a save can leave the older
+   days alone when only the newest moved; "*" is a day made, dropped or renumbered. */
+const STATS_TOUCHED=new WeakMap();
+function statsTouch(pack, day){
+  let s=STATS_TOUCHED.get(pack);
+  if(!s) STATS_TOUCHED.set(pack, s=new Set());
+  s.add(day);
+}
+/** Whether any day but the newest was written into since the last ask; asking clears it. */
+function statsOlderTouched(pack, newest){
+  const s=STATS_TOUCHED.get(pack);
+  STATS_TOUCHED.delete(pack);
+  return !!s && [...s].some(d=>d!==newest);
+}
+/* AN ID NO KEPT DAY NAMES IS DROPPED and the places after it renumbered, so dayIds holds the ids
+   the kept days use rather than every id the desk has ever counted. Run when a day is made, which
+   is also when the oldest go. */
+function statsCompact(pack){
+  const ids=Array.isArray(pack.dayIds)?pack.dayIds:[], days=pack.days||{}, used=new Set();
+  const each=fn=>Object.keys(days).forEach(d=>{ const b=days[d]; if(b) ["c","i"].forEach(n=>{ if(b[n]) fn(b,n); }); });
+  each((b,n)=>Object.keys(b[n]).forEach(k=>used.add(k)));
+  const to=Object.create(null), keep=[];
+  ids.forEach((id,at)=>{ if(id!=null && used.has(String(at))){ to[at]=keep.length; keep.push(id); } });
+  if(keep.length===ids.length && used.size===keep.length) return;
+  each((b,n)=>{
+    const out={};
+    Object.keys(b[n]).forEach(k=>{ if(k in to) out[to[k]]=b[n][k]; });
+    b[n]=out;
+  });
+  pack.dayIds=keep;
 }
 function statsIdAt(pack, id){
   if(!Array.isArray(pack.dayIds)) pack.dayIds=[];
@@ -75,13 +108,21 @@ function bumpLang(pack, lang, at){
   const b=statsDay(pack, at);
   b.l[code]=(b.l[code]|0)+1;
 }
-// A departed card's day counts go with its lifetime tally; keep(id) says which ids stay.
+/* A departed card's day counts go with its lifetime tally; keep(id) says which ids stay. Every
+   rebuild asks, so the days are walked only when the ids that would go differ from the last walk. */
+const STATS_FORGOT=new WeakMap();
 function statsForgetCards(pack, keep){
-  const ids=Array.isArray(pack.dayIds)?pack.dayIds:[];
+  const ids=Array.isArray(pack.dayIds)?pack.dayIds:[], gone=[];
+  ids.forEach((id,k)=>{ if(!keep(id)) gone.push(k); });
+  const asked=ids.length+":"+gone.join(",");
+  if(STATS_FORGOT.get(pack)===asked) return;
+  let n=0;
   Object.keys(pack.days||{}).forEach(d=>{
     const c=pack.days[d]&&pack.days[d].c;
-    if(c) Object.keys(c).forEach(k=>{ if(!keep(ids[k])) delete c[k]; });
+    if(c) Object.keys(c).forEach(k=>{ if(!keep(ids[k])){ delete c[k]; n++; } });
   });
+  if(n){ statsTouch(pack, "*"); statsCompact(pack); STATS_FORGOT.delete(pack); }
+  else STATS_FORGOT.set(pack, asked);
 }
 /* A REQUEST NAMES A SPAN AND THE ANSWER IS THAT SPAN, from and to inclusive, summed over the
    day buckets, with `since` beside it; a card's `at` is its last use inside the span. Without
@@ -147,5 +188,6 @@ export {
   bumpUse,
   statsDoc,
   statsForgetCards,
+  statsOlderTouched,
   statsYmd
 };

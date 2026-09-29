@@ -439,6 +439,7 @@ const PORT_BLOCKS = {
                                                   it dozens of times; the run says at its end which
                                                   of the block it actually used */
   "reinstall":     { base: 9560, size: 40 },
+  "update-install": { base: 9610, size: 10 }, /* five launches at most; clear of 27e2's planted row at 9600 */
 };
 const PORT_SHIFT_KEY = "ETIUDA_PORT_SHIFT";
 

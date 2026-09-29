@@ -22,6 +22,8 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const E = require("./engine.js");
+const MOTION = require("./motion.js");
+const TW = require("./tour-walk.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const WHICH = (process.argv[2] || "chrome").toLowerCase();
 /* THE DECLARED NUMBER OF CHECKS, and why a tally is not a verdict without one. A section that
@@ -33,7 +35,12 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-const EXPECTED = { chrome: 214 };
+/* 291 since About closes on the trademark notice (two checks and its clean); 288 since the theme
+   crossfades (two checks and its clean); 285 since a copy lays only the wash over its block and
+   greens only that block's spine, a card's title has the row while its controls wait, the
+   scrollbar's thumb is opaque, every theme has one blue, an idle tab's dot is the band's ink, and
+   Maintenance fits its window unscrolled; 278 was the tour's walk by its acts. */
+const EXPECTED = { chrome: 291 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -244,22 +251,24 @@ const BOOT_SKIP = /skip|not now|close|pomi/;
 async function bootAndDismiss(pg, url, label) {
   const late = [];
   await pg.goto(url, { waitUntil: "load", timeout: 90000 });
-  /* The page is up when it has drawn something: either the cards, or the offer to load the
-     sibling catalog. Whichever comes first ends the wait. */
+  /* The page is up when it has drawn something: the cards, the offer to load the sibling
+     catalog, or a first run's tour, which the offer waits behind. Whichever comes first ends the
+     wait. */
   await until(pg, () => document.querySelectorAll(".card").length > 0
-    || [...document.querySelectorAll("button")].some(x => x.offsetWidth > 0
-         && /^(load|yes|tak)([^a-z]|$)|load it|load the catalog|sample catalog|update/i.test(x.textContent)),
-    label + ": cards or the catalog offer", late, 30000);
+    || !!document.querySelector("#eCatalogOffer")
+    || [...document.querySelectorAll("#tourRoot button")].some(x => x.offsetWidth > 0),
+    label + ": cards, the catalog offer or the tour", late, 30000);
   /* Returns the text of the button it pressed, so the wait after it can name that button and
-     not its family. */
-  const clickVisible = rx => pg.evaluate(r => {
-    const el = [...document.querySelectorAll("button")].filter(x => x.offsetWidth > 0)
+     not its family. Only inside `scope`: the empty desk's own "load a catalog" would answer the
+     offer's words, and "Not now" is the offer's as well as a skip. */
+  const clickVisible = (rx, scope) => pg.evaluate((r, sc) => {
+    const el = [...document.querySelectorAll(sc + " button")].filter(x => x.offsetWidth > 0)
       .find(x => new RegExp(r, "i").test(x.textContent));
     if (!el) return null;
     const was = el.textContent.replace(/\s+/g, " ").trim();
     el.click();
     return was;
-  }, rx.source);
+  }, rx.source, scope);
   /* THE WAIT IS ON THE BUTTON THAT WAS PRESSED, not on every button that matches, and that
      distinction was measured rather than reasoned on 2026-09-20. The main page raises TWO offers
      at once - `#emptySample` "load a sample catalog" and `#ecYes` "Load catalog" - so a wait for
@@ -276,10 +285,14 @@ async function bootAndDismiss(pg, url, label) {
   /* Each press is followed by the disappearance of the words it pressed, which is the event the
      old 1.9 s was standing in for. The loop bound stays: an offer that reappears for ever is a
      fault and not something to wait on. */
-  for (const step of [{ rx: BOOT_OFFER, n: 4, what: "the catalog offer to close" },
-                      { rx: BOOT_SKIP, n: 3, what: "the tour to close" }]) {
+  for (const step of [{ rx: BOOT_SKIP, n: 1, what: "the first run's tour to close", scope: "#tourRoot" },
+                      { rx: BOOT_OFFER, n: 4, what: "the catalog offer to close", scope: "#eCatalogOffer",
+                        wait: 2500 },
+                      { rx: BOOT_SKIP, n: 3, what: "the tour to close", scope: "#tourRoot" }]) {
+    /* The offer a first run holds back rises as the tour is skipped, a moment after it. */
+    if (step.wait) await pg.waitForSelector(step.scope, { timeout: step.wait }).catch(() => {});
     for (let i = 0; i < step.n; i++) {
-      const was = await clickVisible(step.rx);
+      const was = await clickVisible(step.rx, step.scope);
       if (was === null) break;
       let gone = true;
       await goneText(step.rx, was).catch(() => { gone = false; });
@@ -446,42 +459,60 @@ const t0 = Date.now();
   check(mt.open && mt.unavailable === 0,
     "every maintenance reading answered: " + mt.unavailable + " unavailable, " + mt.blank + " blank");
   check(mt.controls === 5, "the panel's rescues and copy are wired: " + mt.controls + " of 5 controls");
+  /* ONE SCREEN, NO SCROLLING, at the two windows the panel was sized for: 1280 x 880, and 959 x 586,
+     which is a 1438 x 879 window at 150 per cent. The panel rebuilds itself on a resize. */
+  const mtFit = [];
+  for (const [w, h] of [[1280, 880], [959, 586]]) {
+    await sized(p, w, h, "maintenance " + w + "x" + h);
+    await sleep(300);
+    mtFit.push(await p.evaluate(() => {
+      const body = document.querySelector("#modalCard.mt-modal .modal-body");
+      return body ? [innerWidth, innerHeight, body.scrollHeight, body.clientHeight] : null;
+    }));
+  }
+  await sized(p, 1500, 950, "maintenance back");
+  check(mtFit.every(f => f && f[2] <= f[3] + 1),
+    "the maintenance panel stands on one screen without scrolling at 1280 x 880 and 959 x 586 (body scroll height against its height): "
+    + JSON.stringify(mtFit));
   await p.keyboard.press("Escape"); await sleep(500);
   clean(e, "the maintenance panel");
 
-  /* The tour, end to end on Enter, watched through the overlay a person sees rather than
-     through the module's own bookkeeping.
+  /* THE TOUR, WALKED AS A PERSON WALKS IT, and watched through what a person sees.
 
-     Until 2026-09-13 these lines read TOUR_STEPS and tourRunning off the page, two names
-     tour.js exported for this check and for nothing else, and the check was
-     `startTour existed && tourRunning went true && tourRunning went false`. That is the tour's
-     own opinion that the tour ended. Measured against an engine whose endTour clears the flag
-     and skips hiding the root - one `if(els.root)` turned to `if(false)`, everything else
-     untouched: the old lines printed `ok tour of 20 steps walked on Enter (20 presses) and
-     ended` with the coach-mark overlay still covering the whole viewport, 1500x950,
-     display block, aria-hidden="false", and not one page or console error in the run.
+     Next stands on every step but the load step, where it is held back (Maxim, 2026-09-28 22:20);
+     a step that opens a window is left by the person's click or by Next, which opens the window for
+     them (22:22); inside a window, Next closes it and Back closes it and returns to the step that
+     opens it. The numbering is gone, and the tour stays restartable from the Menu. So this walk
+     takes one of those ways on each step, with the mouse and the keyboard, at the place the step's
+     ring is drawn, and takes each way at least once; tests/tour-walk.js holds one row per step, and
+     tests/test.js holds those rows to the step table in tour.js, so the walk cannot drift from the
+     tour it walks.
 
-     So: the overlay's own geometry, and the step counter it draws. #tourRoot is position:fixed,
-     so offsetParent is null whether it is up or down, measured - display and width are what
-     say. The counter is read as two numbers, `(\d+)\D+(\d+)`, never as words: its text goes
-     through t("Tour {N} / {TOTAL}") and comparing the wording would be a translation contract
-     this check has no business holding. The counter alone cannot say the tour ended either -
-     it still reads 20 / 20 afterwards - which is why the last assertion is the overlay. */
+     IN A CONTEXT OF ITS OWN. The walk types the agent's name and opens and closes the card editor,
+     Quick facts, the Library and Settings. Every later leg of this file reads the main page, so the
+     walk runs on a desk of its own over the same run folder and catalog, and nothing it did
+     survives it.
+
+     The history this replaces, kept because it is why the overlay is what is read. Until
+     2026-09-13 these lines read TOUR_STEPS and tourRunning off the page and checked the tour's own
+     opinion that it had ended; against an engine whose endTour cleared the flag and skipped hiding
+     the root, that check printed ok with the overlay still covering the viewport. So the end is
+     read as the overlay's own geometry: #tourRoot is position:fixed, so display and width are what
+     say. Where the tour stands is read from sessionStorage.eTourAt, which the tour writes so that a
+     load's reload can resume it: a person-visible fact, since it is where the tour comes back.
+     The counter, which this file read as two numbers until 2026-09-27, is asserted gone.
+
+     BOARD 344. Opened from the Menu's item, not by calling the global startTour(): that item is
+     the only thing in src/ that reaches hooks.startTour. Finish ends the tour from inside tour.js,
+     and Escape inside the bubble ends it through header-menus.js, the only caller of
+     hooks.endTour; both doors are driven below. */
   e = since();
   const tourShot = () => p.evaluate(() => {
     const r = document.getElementById("tourRoot");
-    const lab = document.getElementById("tourStepLabel");
-    const m = /(\d+)\D+(\d+)/.exec((lab && lab.textContent) || "");
     const w = r ? Math.round(r.getBoundingClientRect().width) : 0;
-    return { up: !!(r && getComputedStyle(r).display !== "none" && w > 0), w,
-             n: m ? +m[1] : 0, total: m ? +m[2] : 0 };
+    return { up: !!(r && getComputedStyle(r).display !== "none" && w > 0), w, at: sessionStorage.getItem("eTourAt") };
   });
-  /* BOARD 344. Opened from the menu item, not by calling the global startTour(). The item at
-     header-menus.js:29 is the only thing in src/ that reaches hooks.startTour, so the global
-     call left that route dead while all three checks below passed - measured 2026-09-14,
-     hooks-coverage read 38 of 54 slots with startTour and endTour among the 16 that were not.
-     The menu loop above skips this act on purpose; here is where it is pressed. */
-  const started = await p.evaluate(() => {
+  const menuTour = pg => pg.evaluate(() => {
     const btn = document.getElementById("settingsBtn");
     if (btn) btn.click();
     const item = document.querySelector('#settingsMenu [data-act="tour"]');
@@ -489,40 +520,122 @@ const t0 = Date.now();
     item.click();
     return true;
   });
-  await sleep(700);
-  const first = await tourShot();
-  /* Bounded by the tour's own length and three spare, so a tour that will not close costs
-     three presses rather than forty. */
-  const cap = first.total > 0 ? first.total + 3 : 40;
-  let pressed = 0, advanced = 0, seen = first.n;
-  for (let i = 0; i < cap; i++) {
-    if (!(await tourShot()).up) break;
-    await p.keyboard.press("Enter"); pressed++; await sleep(260);
-    const now = await tourShot();
-    if (now.up && now.n === seen + 1) advanced++;
-    if (now.n > seen) seen = now.n;
+  let walkCtx = null, walk = [], walkStart = null, walkEnd = null, walkLate = [];
+  try {
+    walkCtx = b.createBrowserContext ? await b.createBrowserContext() : await b.createIncognitoBrowserContext();
+    const w = await walkCtx.newPage();
+    await hookInstall(w);
+    await w.setViewport({ width: 1500, height: 950 });
+    w.on("dialog", d => d.accept());
+    w.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
+    w.on("console", m => { if (m.type() === "error" && !/ERR_FILE_NOT_FOUND/.test(m.text())) errs.push("console: " + m.text().slice(0, 160)); });
+    walkLate = await bootAndDismiss(w, ENGINE, "the tour's own desk");
+    const opened = await menuTour(w);
+    await w.waitForFunction(() => sessionStorage.getItem("eTourAt") === "name", { timeout: 5000, polling: 100 }).catch(() => {});
+    walkStart = { opened, at: await TW.at(w) };
+    walk = await TW.walkTour(w, { loaded: true });
+    await sleep(400);
+    walkEnd = await w.evaluate(TW.LOOK);
+  } catch (x) {
+    walkLate.push("the walk threw: " + String(x && x.message || x).slice(0, 160));
+  } finally {
+    await hookDrain(walkCtx, "the tour walk");
+    if (walkCtx) await walkCtx.close().catch(() => {});
   }
-  const tourAfter = await tourShot();
-  check(started && first.up && first.n === 1 && first.total >= 10,
-    "the tour opens its overlay on step " + first.n + " of " + first.total + " (" + first.w + "px wide)");
-  check(advanced === first.total - 1 && pressed === first.total,
-    "and Enter walks it one step at a time to the end (" + advanced + " advances over " + pressed + " presses)");
-  check(!tourAfter.up, "and the overlay leaves the screen when it ends, rather than only being flagged done ("
-    + tourAfter.w + "px wide)");
-  /* BOARD 344, the second door out. Walking to the end ends the tour from inside tour.js;
-     Escape ends it through header-menus.js:65, which is the only caller of hooks.endTour in
-     src/. Without this the way out a person actually uses was never driven. */
-  await p.evaluate(() => {
-    const btn = document.getElementById("settingsBtn"); if (btn) btn.click();
-    const item = document.querySelector('#settingsMenu [data-act="tour"]'); if (item) item.click();
-  });
-  await sleep(700);
+  /* What the walk should meet: every row of the plan but the load, which only an empty desk shows, a
+     step visited again where the walk went back from its window. */
+  const planned = TW.route(true);
+  const windowed = TW.PLAN.filter(r => r.inside).map(r => r.id);
+  const walkedIds = walk.map(r => r.id);
+  check(!!walkStart && walkStart.opened && walkStart.at === "name" && walk.length > 0 && walk[0].look.up
+        && walk.every(r => !r.look.counter),
+    "the tour opens from the Menu on its first step, and no step of it shows a counter: " + JSON.stringify({ start: walkStart,
+      late: walkLate, counted: walk.filter(r => r.look.counter).map(r => r.id) }));
+  /* "Next" should be present on all tour steps, greyed out only for "load catalog" (Maxim, 22:20),
+     which a desk holding a catalog passes over. */
+  const noNext = walk.filter(r => !r.look.next || r.look.held).map(r => r.id);
+  check(walkedIds.join(",") === planned.join(",") && noNext.length === 0,
+    "Next stands on every step and is held back on none of them: " + JSON.stringify(noNext) + ", over " + walk.length + " of " + planned.length + " steps");
+  /* A step says what to do and points at it: the control the act uses answers a point inside the ring. */
+  const missed = walk.filter(r => r.aims.some(a => !a.ok))
+    .map(r => r.id + " " + r.aims.filter(a => !a.ok).map(a => a.sel + " (" + a.found + " matched)").join("; "));
+  check(walk.length === planned.length && missed.length === 0,
+    "every act was done at the step's ring, on a point the page answers with the control the step asks for"
+    + (missed.length ? ": " + JSON.stringify(missed) : " (" + walk.reduce((n, r) => n + r.aims.length, 0) + " presses)"));
+  /* Each step moving on the way its row takes, and by one step: the table's order, to the end. */
+  const wrong = walk.filter(r => r.to !== r.want)
+    .map(r => r.id + " went to " + r.to + ", wanted " + r.want + (r.asked ? ", with a question standing" : ""));
+  check(walkedIds.join(",") === planned.join(",") && wrong.length === 0,
+    "each click, Next and Back moves the tour on by one step, in the table's order, to the end"
+    + (wrong.length ? ": " + JSON.stringify(wrong) : " (" + walk.length + " steps, " + Math.round(walk.reduce((n, r) => n + r.ms, 0) / 1000) + " s)"));
+  /* A WINDOW OPENS BY THE PERSON'S CLICK OR BY NEXT (Maxim, 22:22), and the step inside it stands in
+     front of it with Next and Back. No step outside a window is ever met with a window or Quick facts
+     standing, so Next and Back closed every window they left. */
+  const inside = walk.filter(r => windowed.indexOf(r.id) > -1);
+  const badIn = inside.filter(r => !r.look.next || r.look.held || !r.look.back || r.look.z !== "240" || r.look.behind || !(r.look.window || r.look.facts))
+    .map(r => r.id + " " + JSON.stringify({ next: r.look.next, back: r.look.back, z: r.look.z, open: r.look.window || r.look.facts }));
+  const stood = walk.filter(r => windowed.indexOf(r.id) < 0 && (r.look.window || r.look.facts)).map(r => r.id);
+  check(inside.map(r => r.id).join(",") === planned.filter(id => windowed.indexOf(id) > -1).join(",") && badIn.length === 0 && stood.length === 0,
+    "each window opens by the click or by Next, and the tour goes into it, in front of it with Next and Back,"
+    + " and leaves no window standing behind it: " + JSON.stringify({ inside: inside.map(r => r.id), badIn, stood }));
+  /* The Menu: Next on the Menu step opens it and brings the Library step with the menu open and the
+     bubble beside it, never over its rows; Back inside the Library closes it and stands on the Library
+     step again; Next there opens the Library for the person; "then the same with Settings". */
+  const lib = walk.find(r => r.id === "library"), libAgain = walk.find(r => r.id === "library" && r.visit === 2);
+  const chain = ["menu", "library", "libraryIn", "settings", "settingsIn"].map(id => walk.filter(r => r.id === id))
+    .every(rs => rs.length > 0 && rs.every(r => r.to === r.want));
+  check(!!lib && lib.look.menu && lib.look.clear && !!libAgain && !libAgain.look.window && chain,
+    "the Menu step's Next brings the Library step with the menu open and the bubble clear of its rows, Back inside"
+    + " the Library closes it onto that step, and Library and Settings each take the tour inside: "
+    + JSON.stringify(lib ? { menu: lib.look.menu, clear: lib.look.clear, backClosed: !!libAgain && !libAgain.look.window, chain } : null));
+  const last = walk[walk.length - 1];
+  check(!!walkEnd && !walkEnd.up && !!last && last.id === "done" && last.to === null,
+    "and Finish on the last step takes the overlay off the screen, rather than only flagging the tour done");
+  /* The second door out: Escape while the keyboard is in the bubble, from the Menu's route. The first
+     step takes the keyboard for its name field, so that is where it is. */
+  await menuTour(p); await sleep(700);
   const tourAgain = await tourShot();
   await p.keyboard.press("Escape"); await sleep(500);
   const tourEsc = await tourShot();
-  check(tourAgain.up && !tourEsc.up, "and Escape takes it down again from the menu's own route (step "
-    + tourAgain.n + " of " + tourAgain.total + " up, " + tourEsc.w + "px after)");
+  check(tourAgain.up && tourAgain.at === "name" && !tourEsc.up, "Escape in the bubble takes the tour down again, opened from the"
+    + " menu's own route (" + tourAgain.at + " up, " + tourEsc.w + "px after)");
   await p.keyboard.press("Escape"); await sleep(300);
+  /* THE PAGE STAYS USABLE UNDER THE TOUR (Maxim, 2026-09-26): nothing darkens it or holds its
+     clicks, a click on it never takes the bubble down, and Escape outside the bubble is the page's.
+     The search box is what is clicked, because a click there changes nothing another leg reads.
+     A window opened over the page takes the bubble behind it, and closing the window brings the
+     bubble back: read as the tour's own stacking against the dialogs' 200. */
+  await menuTour(p); await sleep(700);
+  const under = await p.evaluate(() => {
+    /* The first step's bubble hangs below the mark and may cover the box's left end, and the clear
+       button and the placeholder sit on it too, so the point is the first one along the box, right to
+       left, that the box itself answers. */
+    const r = document.getElementById("intent").getBoundingClientRect(), y = Math.round(r.top + r.height / 2);
+    for (let x = Math.round(r.right - 12); x > r.left; x -= 20) {
+      const top = document.elementFromPoint(x, y);
+      if (top && top.id === "intent") return { x, y, page: true };
+    }
+    return { x: 0, y: 0, page: false };
+  });
+  await p.mouse.click(under.x, under.y); await sleep(300);
+  const took = await p.evaluate(() => document.activeElement && document.activeElement.id);
+  await p.keyboard.press("Escape"); await sleep(400);
+  const kept = await tourShot();
+  await p.evaluate(() => { const btn = document.getElementById("settingsBtn"); if (btn) btn.click();
+    const item = document.querySelector('#settingsMenu [data-act="manage"]'); if (item) item.click(); });
+  await sleep(900);
+  const behind = await p.evaluate(() => ({ lib: !!document.getElementById("mgCatList") || !document.getElementById("modal").hidden,
+    z: getComputedStyle(document.getElementById("tourRoot")).zIndex }));
+  await p.evaluate(() => closeModal()); await sleep(600);
+  const front = await p.evaluate(() => getComputedStyle(document.getElementById("tourRoot")).zIndex);
+  await p.evaluate(() => { const k = document.getElementById("tourSkip"); if (k) k.click(); });
+  await sleep(500);
+  check(under.page && took === "intent" && kept.up && kept.at === "name",
+    "the page stays usable under the tour: the search box is what a click there lands on and it takes the"
+    + " keyboard, and the click and an Escape there leave the bubble up on its step (" + JSON.stringify({ under: under.page, took, up: kept.up, at: kept.at }) + ")");
+  check(behind.lib && behind.z === "190" && front === "240",
+    "a window opened over the page takes the bubble behind it, and closing it brings the bubble back (z "
+    + behind.z + " with the Library open, " + front + " after)");
   clean(e, "the tour");
 
   /* Interface language both ways, with the dialogs opened in Polish.
@@ -595,6 +708,40 @@ const t0 = Date.now();
   check(th2.attr === th0.attr && th2.bg === th0.bg, "and a second press returns both");
   clean(e, "the theme control");
 
+  /* THE DOT FIELD STANDS STILL WHILE THE CARDS SCROLL (Maxim, 2026-09-26). One patch of the page,
+     photographed, the list scrolled by 7 px - not a multiple of the field's 12 px pitch, so a field
+     riding the scroll cannot come back to the same picture - and the same patch photographed again.
+     The cards are hidden for the three pictures and keep their boxes, so the patch is the field
+     alone and a card sliding through it cannot pass for dots that moved; the card's own rectangle is
+     the control that the scroll happened. The third picture, with the field switched off, is the
+     control that the patch holds dots at all. Shots of one still state are byte-identical. */
+  e = since();
+  await p.evaluate(() => { const s = document.createElement("style"); s.id = "__stillHide";
+    s.textContent = "#list > *{visibility:hidden!important}"; document.head.appendChild(s);
+    document.getElementById("pageScroll").scrollTop = 0; });
+  await sleep(300);
+  const stillBox = await p.evaluate(() => { const sc = document.getElementById("pageScroll").getBoundingClientRect(),
+    m = document.querySelector("main").getBoundingClientRect();
+    return { x: Math.round(m.left + 40), y: Math.round(sc.top + sc.height / 2), width: 48, height: 48 }; });
+  const stillShot = () => p.screenshot({ clip: stillBox, captureBeyondViewport: false, encoding: "base64" });
+  const cardTop = () => p.evaluate(() => { const c = document.querySelector("#list .card"); return c ? c.getBoundingClientRect().top : null; });
+  const still0 = await stillShot(), top0 = await cardTop();
+  await p.evaluate(() => { document.getElementById("pageScroll").scrollTop += 7; }); await sleep(300);
+  const still1 = await stillShot(), top1 = await cardTop();
+  const scrolled = await p.evaluate(() => document.getElementById("pageScroll").scrollTop);
+  await p.evaluate(() => { document.getElementById("pageScroll").style.backgroundImage = "none"; }); await sleep(200);
+  const stillOff = await stillShot();
+  await p.evaluate(() => { document.getElementById("pageScroll").style.backgroundImage = "";
+    const s = document.getElementById("__stillHide"); if (s) s.remove();
+    document.getElementById("pageScroll").scrollTop = 0; });
+  await sleep(300);
+  check(scrolled === 7 && top0 !== null && Math.round(top0 - top1) === 7 && still0 === still1 && stillOff !== still1,
+    "the dot field stands still while the cards scroll: the list moved " + (top0 === null ? "no card" : Math.round(top0 - top1)
+    + " px") + " at scrollTop " + scrolled + ", and the patch of field at " + stillBox.x + "," + stillBox.y + " is "
+    + (still0 === still1 ? "byte-identical" : "different") + " before and after (" + still0.length + " and " + still1.length
+    + " base64 chars), against " + stillOff.length + " with the field switched off");
+  clean(e, "the still dot field");
+
   /* THE PALETTE LANDS IN ONE FRAME, board 452. Sampled per frame through a real press with the
      pointer resting on the tile, which is where the hold-over was loudest: every colour
      transition in the sheet is written for a state change, and a theme flip used to run all of
@@ -631,6 +778,60 @@ const t0 = Date.now();
   await p.evaluate(() => document.getElementById("theme").click()); await sleep(500);
   await p.evaluate(k => { if (k === null) localStorage.removeItem("eTheme"); else localStorage.setItem("eTheme", k); }, th0.key);
   clean(e, "the theme flip");
+
+  /* THE CROSSFADE, read in pixels: the window outside the theme button, whose icon turns only
+     with motion. Reduced motion is the reference, instant, so the pair are each other's control.
+     The fade (--m-celebrate, 420 ms) is held at 200 ms for one shot. captureBeyondViewport stays
+     false: the default resizes the page to capture it, and in the shell that once shed the wordmark. */
+  if (WHICH === "chrome") {
+    e = since();
+    const isVt = a => a.effect && /^::view-transition/.test(a.effect.pseudoElement || "");
+    const vtNow = () => p.evaluate(f => document.getAnimations().filter(new Function("return " + f)()).length, isVt.toString());
+    const shot = async () => {
+      const r = await p.evaluate(() => { if (document.activeElement) document.activeElement.blur();
+        const b = document.getElementById("theme").getBoundingClientRect();
+        return { W: innerWidth, H: innerHeight, t: Math.floor(b.top), bo: Math.ceil(b.bottom), l: Math.floor(b.left), r: Math.ceil(b.right) }; });
+      const clips = [{ x: 0, y: 0, width: r.W, height: r.t }, { x: 0, y: r.bo, width: r.W, height: r.H - r.bo },
+                     { x: 0, y: r.t, width: r.l, height: r.bo - r.t }, { x: r.r, y: r.t, width: r.W - r.r, height: r.bo - r.t }];
+      const out = [];
+      for (const clip of clips.filter(c => c.width > 0 && c.height > 0))
+        out.push(await p.screenshot({ clip, encoding: "base64", captureBeyondViewport: false }));
+      return out.join("|");
+    };
+    const pressTheme = () => p.evaluate(() => { document.getElementById("theme").click(); return document.documentElement.dataset.theme; });
+    await p.mouse.move(4, 900);
+    await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
+    await sleep(300);
+    const from = await shot();
+    await pressTheme();
+    const instant = { anims: await vtNow(), first: await shot() };
+    await sleep(300);
+    const to = await shot();
+    await pressTheme(); await sleep(300);
+    await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "no-preference" }]);
+    await pressTheme();
+    await p.waitForFunction(f => document.getAnimations().some(new Function("return " + f)()),
+      { timeout: 3000, polling: "raf" }, isVt.toString()).catch(() => {});
+    const held = await p.evaluate(f => { const a = document.getAnimations().filter(new Function("return " + f)());
+      a.forEach(x => { x.pause(); x.currentTime = 200; });
+      return a.filter(x => /-(old|new)\(root\)$/.test(x.effect.pseudoElement)).map(x => x.effect.getComputedTiming().duration); }, isVt.toString());
+    const mid = held.length ? await shot() : from;
+    await p.evaluate(f => document.getAnimations().filter(new Function("return " + f)()).forEach(x => x.finish()), isVt.toString());
+    await sleep(300);
+    const settled = await shot(), left = await vtNow();
+    await pressTheme(); await sleep(700);
+    await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "no-preference" }]);
+    await p.evaluate(k => { if (k === null) localStorage.removeItem("eTheme"); else localStorage.setItem("eTheme", k); }, th0.key);
+    check(held.length > 0 && held.every(d => d === 420) && mid !== from && mid !== to && settled === to && left === 0 && from !== to,
+      "the theme crossfades the whole window and settles in its final colours: " + held.length
+      + " old and new layer animation(s) of " + held.join("/") + " ms, the frame held at 200 ms is "
+      + (mid !== from && mid !== to ? "neither end" : "one of the ends") + ", and at rest the window is "
+      + (settled === to ? "pixel-identical to" : "NOT identical to") + " the same theme reached instantly");
+    check(instant.anims === 0 && instant.first === to,
+      "and under reduced motion it switches instantly: " + instant.anims + " transition animation(s), the first"
+      + " shot after the press " + (instant.first === to ? "already identical to" : "NOT yet") + " the settled theme");
+    clean(e, "the theme crossfade");
+  }
 
   /* Themes and glass. */
   e = since();
@@ -679,6 +880,127 @@ const t0 = Date.now();
   check(aboutMark.dark.fill === "rgb(255, 255, 255)" && aboutMark.light.fill === "rgb(37, 99, 235)",
     "and takes the theme's own mark colour (dark " + aboutMark.dark.fill + ", light " + aboutMark.light.fill + ")");
   clean(e, "the About mark");
+
+  /* THE THEMES' COLOURS, read resolved on the page in each theme: the unset attribute (the dark
+     default before boot writes one), dark and light. Every value is a computed colour, so a
+     colour-mix or a variable is judged by what it paints. */
+  const themeColours = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const was = document.documentElement.dataset.theme;
+    /* Painted into one canvas pixel and read back, so any serialisation (rgb, color(srgb ...))
+       comes out as 0 to 255 and an alpha of 0 to 1. */
+    const cx = Object.assign(document.createElement("canvas"), { width: 1, height: 1 }).getContext("2d", { willReadFrequently: true });
+    const px = c => { cx.clearRect(0, 0, 1, 1); cx.fillStyle = "#000"; cx.fillStyle = c; cx.fillRect(0, 0, 1, 1);
+      const d = cx.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], Math.round(d[3] / 255 * 100) / 100]; };
+    const res = v => { const i = document.createElement("i"); i.style.color = v; document.body.appendChild(i);
+      const c = px(getComputedStyle(i).color); i.remove(); return c; };
+    const out = {};
+    for (const th of ["unset", "dark", "light"]) {
+      if (th === "unset") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = th;
+      await wait(300);
+      const sc = getComputedStyle(document.querySelector(".scroller")).scrollbarColor, cut = sc.indexOf(")") + 1;
+      out[th] = { bg: res("var(--bg)"), thumb: res("var(--scroll-thumb)"), hover: res("var(--scroll-thumb-hover)"),
+        bar: px(sc.slice(0, cut)), track: px(sc.slice(cut).trim()), accent: res("var(--accent)"), bub: res("var(--bub)") };
+      /* Settings holds the segmented switches and the Close button the blue was judged by. */
+      hooks.openSettings(); await wait(700);
+      const card = document.getElementById("modalCard");
+      out[th].segs = [...card.querySelectorAll(".seg")].map(s => px(getComputedStyle(s, "::before").backgroundColor));
+      out[th].close = px(getComputedStyle([...card.querySelectorAll(".modal-actions .btn.primary")].pop()).backgroundColor);
+      dismissModal(); await wait(400);
+    }
+    if (was) document.documentElement.dataset.theme = was; else delete document.documentElement.dataset.theme;
+    await wait(300);
+    return out;
+  });
+  /* The thumb reads as the see-through grey did over the canvas: the grey at its share, laid over
+     --bg, to a unit per channel. The shares are the ones the sheet mixes; the grey is light's
+     slate on a light canvas and dark's on a dark one. */
+  const over = (g, a, bg) => g.map((c, i) => c * a + bg[i] * (1 - a));
+  const near = (x, y) => x.slice(0, 3).every((c, i) => Math.abs(c - y[i]) <= 1);
+  const thumbOk = s => { const dark = s.bg[0] < 128, g = dark ? [152, 162, 179] : [71, 85, 105];
+    return s.thumb[3] === 1 && s.hover[3] === 1 && near(s.thumb, over(g, .4, s.bg)) && near(s.hover, over(g, dark ? .75 : .65, s.bg))
+      && s.track[3] === 0 && near(s.bar, s.thumb) && s.bar[3] === 1; };
+  check(["unset", "dark", "light"].every(th => thumbOk(themeColours[th])),
+    "the scrollbar's thumb is opaque in every theme, hover included, and reads as the see-through grey over the canvas; the track stays clear ("
+    + JSON.stringify(["unset", "dark", "light"].map(th => [themeColours[th].thumb, themeColours[th].hover, themeColours[th].track[3]])) + ")");
+  /* ONE BLUE: the accent, every segmented switch's thumb in Settings and its Close button paint the
+     bubbles' blue in every theme, and white on it reads 4.5:1 or better (WCAG's relative luminance). */
+  const lum = c => c.slice(0, 3).map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); })
+    .reduce((s, v, i) => s + v * [.2126, .7152, .0722][i], 0);
+  const whiteOn = c => 1.05 / (lum(c) + .05);
+  const oneBlue = s => [s.accent, s.close].concat(s.segs).every(c => near(c, s.bub) && c[3] === 1) && s.segs.length > 0
+    && whiteOn(s.bub) >= 4.5;
+  check(["unset", "dark", "light"].every(th => oneBlue(themeColours[th])),
+    "the accent, Settings' switches and its Close button are the bubbles' blue in every theme, white on it at "
+    + whiteOn(themeColours.dark.bub).toFixed(2) + ":1 (" + JSON.stringify(["unset", "dark", "light"].map(th =>
+      [themeColours[th].accent, themeColours[th].segs.length, themeColours[th].segs.filter(c => !near(c, themeColours[th].bub)).length])) + ")");
+
+  /* AN INACTIVE TAB'S DOT, with no category on it, is the band's ink: the theme's text colour on
+     the pale band a light desk draws (the host's backdrop, body.e-backdrop, set here as the host
+     sets it) and white on every deep band. Read off a copy of the selected tab without its
+     selection or category, put on the page for the reading and taken out again. */
+  const tabDots = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const cx = Object.assign(document.createElement("canvas"), { width: 1, height: 1 }).getContext("2d", { willReadFrequently: true });
+    const px = c => { cx.clearRect(0, 0, 1, 1); cx.fillStyle = "#000"; cx.fillStyle = c; cx.fillRect(0, 0, 1, 1);
+      const d = cx.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], Math.round(d[3] / 255 * 100) / 100]; };
+    const res = v => { const i = document.createElement("i"); i.style.color = v; document.body.appendChild(i);
+      const c = px(getComputedStyle(i).color); i.remove(); return c; };
+    const on = document.querySelector(".tab.on");
+    if (!on) return null;
+    const was = document.documentElement.dataset.theme, bd = document.body.classList.contains("e-backdrop");
+    const off = on.cloneNode(true);
+    off.classList.remove("on"); off.removeAttribute("data-ec"); off.removeAttribute("style"); off.removeAttribute("id");
+    off.setAttribute("aria-hidden", "true");
+    document.body.appendChild(off);
+    const out = [];
+    for (const [th, back] of [["light", true], ["dark", true], ["light", false], ["dark", false]]) {
+      document.documentElement.dataset.theme = th; document.body.classList.toggle("e-backdrop", back);
+      await wait(200);
+      out.push({ th, back, dot: px(getComputedStyle(off.querySelector(".tab-label"), "::before").backgroundColor),
+        ink: res("var(--ink)"), band: res("var(--band-ink)") });
+    }
+    off.remove();
+    document.body.classList.toggle("e-backdrop", bd);
+    if (was) document.documentElement.dataset.theme = was; else delete document.documentElement.dataset.theme;
+    await wait(200);
+    return out;
+  });
+  const white = c => c[0] === 255 && c[1] === 255 && c[2] === 255;
+  check(!!tabDots && tabDots.every(r => near(r.dot, r.band) && r.dot[3] === 1)
+    && near(tabDots[0].dot, tabDots[0].ink) && !white(tabDots[0].dot) && white(tabDots[1].dot),
+    "an inactive tab's dot is the theme's text colour on a light desk's pale band and white on dark and on any deep band ("
+    + JSON.stringify(tabDots && tabDots.map(r => [r.th, r.back, r.dot])) + ")");
+
+  /* THE TRADEMARK NOTICE closes About's legal line in the interface's language, once, and the
+     working screen carries it in neither. The shape is asked rather than the sentence, so the
+     word a registration adds leaves this leg standing. */
+  e = since();
+  const tm = await p.evaluate(async () => {
+    const read = async l => {
+      setUiLang(l); await new Promise(r => setTimeout(r, 400));
+      const screen = document.body.innerText;
+      openAbout(); await new Promise(r => setTimeout(r, 250));
+      const sub = (document.querySelector(".about-modal .modal-sub").innerText || "").split("\n");
+      const all = document.querySelector(".about-modal").innerText;
+      dismissModal(); await new Promise(r => setTimeout(r, 200));
+      return { screen, last: sub[sub.length - 1].trim(), all };
+    };
+    const en = await read("en"), pl = await read("pl");
+    setUiLang("en"); await new Promise(r => setTimeout(r, 400));
+    return { en, pl };
+  });
+  const TM_EN = /^Etiuda is a (registered )?trademark of Maxim Gwiazda\.$/, TM_PL = /^Etiuda jest (zarejestrowanym )?znakiem towarowym Maxima Gwiazdy\.$/;
+  const hits = (s, w) => s.split(w).length - 1;
+  check(TM_EN.test(tm.en.last) && hits(tm.en.all, "trademark") === 1 && TM_PL.test(tm.pl.last)
+        && hits(tm.pl.all, "znakiem towarowym") === 1 && hits(tm.pl.all, "trademark") === 0,
+    "About closes its legal line on the trademark notice, once, in each language (" + JSON.stringify(tm.en.last)
+    + ", " + JSON.stringify(tm.pl.last) + ")");
+  check([tm.en.screen, tm.pl.screen].every(s => hits(s, "trademark") + hits(s, "znakiem towarowym") === 0)
+        && tm.en.screen.length > 0 && tm.pl.screen.length > 0,
+    "control: the working screen behind it carries the notice in neither language (" + tm.en.screen.length
+    + " and " + tm.pl.screen.length + " characters read)");
+  clean(e, "the trademark notice");
 
   /* Breakpoints: no horizontal overflow, and the cut-text rule at every width. */
   for (const w of [1600, 1400, 1200, 1000, 900, 800, 700, 600, 500, 430, 390]) {
@@ -1026,7 +1348,7 @@ const t0 = Date.now();
                   change: !!document.getElementById("mgCatFolder"),
                   name: rows[0] ? (rows[0].querySelector(".ec-name b") || {}).textContent : null,
                   loaded: !!rows[0] && rows[0].classList.contains("is-loaded"),
-                  act: rows[0] ? [...rows[0].querySelectorAll("button.btn")].map(x => x.textContent).join("|") : null,
+                  act: rows[0] ? [...rows[0].querySelectorAll("button.btn")].map(x => x.getAttribute("aria-label") || x.textContent).join("|") : null,
                   meta: rows[0] ? (rows[0].querySelector(".ec-meta") || {}).textContent : null,
                   held: (typeof E_CATALOG_NAME === "string" && E_CATALOG_NAME) || "" };
     /* EXPORT COMES WHEN THERE IS SOMETHING TO EXPORT, ruled 2026-09-17: nothing has been edited
@@ -1035,7 +1357,7 @@ const t0 = Date.now();
     window.pack.who = "Ada"; window.savePack(); window.paintCatalogList();
     await wait(600);
     const after = [...document.querySelectorAll("#mgCatList .ec-row")][0];
-    out.actEdited = after ? [...after.querySelectorAll("button.btn")].map(x => x.textContent).join("|") : null;
+    out.actEdited = after ? [...after.querySelectorAll("button.btn")].map(x => x.getAttribute("aria-label") || x.textContent).join("|") : null;
     delete window.pack.who; window.savePack(); window.paintCatalogList();
     await wait(400);
     dismissModal(); await wait(300);
@@ -1107,12 +1429,12 @@ const t0 = Date.now();
       await q.evaluate(() => { if (typeof dismissModal === "function") dismissModal(); });
       /* THE THING THAT MOVES, measured rather than guessed on 2026-09-20: #modalCard is on the
          page from the first paint at offsetWidth 0, so waiting for it to go never ends, and the
-         dialog dismissModal closes is #eCatalogModal. The door below is asked for by EXISTENCE
+         question dismissModal was closing is #eCatalogOffer. The door below is asked for by EXISTENCE
          and not by visibility, for the same reason: it sits in a menu that is closed until it is
          opened, so its offsetWidth is 0 on a page where clicking it works perfectly. Both wrong
          conditions were caught by this leg going red with a sentence naming the wait, which is
          what the change is for. */
-      await untilHere(q, () => { const m = document.querySelector("#eCatalogModal");
+      await untilHere(q, () => { const m = document.querySelector("#eCatalogOffer");
                              return !m || m.offsetWidth === 0; },
                   label + ": the catalog dialog to close", 10000);
       const canManage = await untilHere(q, () => !!document.querySelector('[data-act="manage"]'),
@@ -1453,20 +1775,21 @@ const t0 = Date.now();
       { id: "probe-second-catalog", name: "Second catalog", cards: [],
         intents: { en: ["a"] }, categories: { gen: "General" } },
       { foundHtml: '<code>second.ec</code>', force: true, asked: true, accept: () => false });
-    const card = document.querySelector("#eCatalogModal .modal-card");
+    const card = document.querySelector("#eCatalogOffer");
     const out = { shown: shown, lang: document.documentElement.getAttribute("lang") || "",
-                  h2: card ? card.querySelector("h2").textContent : "",
-                  subs: card ? [...card.querySelectorAll("p.modal-sub")].map(x => x.textContent) : [],
-                  acts: card ? [...card.querySelectorAll(".modal-actions .btn")].length : 0,
-                  name: card ? (card.querySelector(".about-body b") || {}).textContent : "" };
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+                  h2: card ? card.querySelector("h3").textContent : "",
+                  subs: card ? [...card.querySelectorAll("p.ec-sub")].map(x => x.textContent) : [],
+                  acts: card ? [...card.querySelectorAll(".tour-actions .btn")].length : 0,
+                  name: card ? (card.querySelector(".ec-what b") || {}).textContent : "",
+                  focus: !!card && card.contains(document.activeElement) };
+    (document.activeElement || document).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     await wait(250);
-    out.gone = !document.getElementById("eCatalogModal");
+    out.gone = !document.getElementById("eCatalogOffer");
     return out;
   });
   check(offer2.shown && offer2.h2 === HEAD_REPLACE[offer2.lang] && offer2.subs.length === 1
         && offer2.subs[0].indexOf("second.ec") > -1 && offer2.acts === 2
-        && offer2.name === "Second catalog" && offer2.gone,
+        && offer2.name === "Second catalog" && offer2.focus && offer2.gone,
     "a different catalog offered over the loaded one asks " + JSON.stringify(offer2.h2)
     + " in " + offer2.lang + " and says nothing else: " + offer2.subs.length
     + " paragraph(s) under it, " + JSON.stringify(offer2.subs) + ", the catalog named "
@@ -1790,6 +2113,17 @@ const t0 = Date.now();
              key: el && [...el.querySelectorAll("kbd")].map(k => k.textContent).join("+"), nudge: fab.classList.contains("nudge"), ring: getComputedStyle(fab, "::after").animationName }; });
   check(es.icon && es.before === "none" && /empty/i.test(es.text) && es.key === "Alt+N" && es.nudge && es.ring === "fabNudge",
     "an empty category shows its own icon, names the key and rings the add button (" + JSON.stringify({ key: es.key, icon: es.icon, nudge: es.nudge }) + ")");
+  /* How the ring rests is read from paint, not from getAnimations(): an animation with no fill
+     mode is gone from that list once it ends, and the ::after then falls back to its static
+     style, a solid full-opacity ring, which is a cut the eye sees. finish() puts the ring where
+     its third ask ends, 6 s in, without waiting for it. */
+  const ringRest = await p.evaluate(() => { const fab = document.getElementById("addCardFab");
+    const a = document.getAnimations().find(x => x.animationName === "fabNudge");
+    if (!a) return { found: false };
+    a.finish();
+    return { found: true, opacity: getComputedStyle(fab, "::after").opacity, fill: getComputedStyle(fab, "::after").animationFillMode }; });
+  check(ringRest.found && ringRest.opacity === "0",
+    "the add button's ring rests unseen after its third ask, with no cut back to a solid ring (" + JSON.stringify(ringRest) + ")");
   const shut = await p.evaluate(() => !document.getElementById("modalCard").offsetParent);
   await p.keyboard.down("Alt"); await p.keyboard.press("KeyN"); await p.keyboard.up("Alt"); await sleep(700);
   const editorUp = await p.evaluate(() => { const m = document.getElementById("modalCard"); return { on: !!(m && m.offsetParent), title: m ? m.textContent.slice(0, 40) : "" }; });
@@ -1847,127 +2181,106 @@ const t0 = Date.now();
      exported for this check and for nothing else, which asserted the builder's opinion of what
      it would write. The rule is a property of the FILE, so the file is what this reads, and on
      the way it walks the one path nothing else in the suite touches: Manage, the export button,
-     the name dialog, the header, the save route.
+     the save route.
 
      The two save routes are stubbed at the PLATFORM boundary and neither of them is the
      engine's. Chrome on file:// does have showSaveFilePicker and saveCatalogFile takes that
      branch; measured without the stub, the picker never settles, no blob is ever made and the
      export simply hangs, which is what a save dialog nobody can click looks like. Firefox has
      no picker and falls to the anchor-and-blob path. Both are captured, so whichever route the
-     browser under test takes, the bytes are read; and both are put back afterwards.
+     browser under test takes, the bytes are read; and both are put back afterwards. The picker
+     answers with a name of its own, "Smoke.ec", as a person renaming the file in the dialog
+     would, and records what it was offered.
+
+     NO QUESTION BEFORE THE SAVE DIALOG (Maxim, 2026-09-26): the file's name names the catalog and
+     the edition is automatic, so the button goes straight to the dialog, which offers .ec.
 
      COUNTS AND VERDICTS ONLY. What comes back is the catalog, so what is printed is a byte
      count, a card count, the type and length of one field, and whether it equals the built-in. */
   e = since();
   await p.evaluate(() => {
     window.__pbSaved = [];
+    window.__pbOffered = [];
     window.__pbRealBlobUrl = URL.createObjectURL.bind(URL);
     window.__pbRealPicker = window.showSaveFilePicker;
     URL.createObjectURL = b => { window.__pbSaved.push(b); return window.__pbRealBlobUrl(b); };
-    window.showSaveFilePicker = o => Promise.resolve({ name: (o && o.suggestedName) || "catalog",
+    window.showSaveFilePicker = o => { window.__pbOffered.push({ name: o && o.suggestedName,
+        types: JSON.stringify((o && o.types) || []) });
+      return Promise.resolve({ name: "Smoke.ec",
       createWritable: () => Promise.resolve({
         write: t => { window.__pbSaved.push(new Blob([t])); return Promise.resolve(); },
-        close: () => Promise.resolve() }) });
+        close: () => Promise.resolve() }) }); };
   });
   const saveCatalog = async () => {
     const before = await p.evaluate(() => window.__pbSaved.length);
     await p.evaluate(() => document.querySelector('[data-act="manage"]').click()); await sleep(800);
     const btn = await p.evaluate(() => { const x = document.getElementById("mgExportCatalog");
-      if (!x) return false; x.click(); return true; }); await sleep(700);
-    /* The edition field is READ before the dialog is answered, and answered with whatever it
-       proposed: that value is what the file below must carry, so the proposal and the stamp are
-       the same measurement rather than two. */
-    const named = await p.evaluate(() => { const i = document.getElementById("eNameInp"), y = document.getElementById("eNameYes");
-      if (!i || !y) return false; i.value = "Smoke"; i.dispatchEvent(new Event("input"));
-      const ed = document.getElementById("eEdInp");
-      window.__pbEdition = ed ? ed.value : null;
-      y.click(); return true; });
-    await sleep(1600);
+      if (!x) return false; x.click(); return true; }); await sleep(1600);
+    const asked = await p.evaluate(() => !!document.getElementById("eNameModal"));
     const out = await p.evaluate(async n => {
       /* Named zeroes rather than an absent field: this is the branch a dead export button
          lands on, and a FAIL line reading "undefined bytes" says less than "0 bytes". */
       if (window.__pbSaved.length <= n)
         return { saved: 0, bytes: 0, cards: -1, factsType: "none", factsLen: -1, builtIn: false };
       const text = await window.__pbSaved[window.__pbSaved.length - 1].text();
-      const WRAP = "window.E_CATALOG = ";
-      const at = text.indexOf(WRAP);
-      let facts = null, cards = -1, date = null, rev = null;
-      try { const o = JSON.parse(text.slice(at + WRAP.length, text.lastIndexOf(";")));
-            facts = o.facts; cards = (o.cards || []).length;
+      let facts = null, cards = -1, date = null, rev = null, name = null, kind = null, format = null, id = null;
+      /* The whole text parses as JSON: an .ec is the document itself, with no wrapper round it. */
+      try { const o = JSON.parse(text);
+            facts = o.facts; cards = (o.cards || []).length; name = o.name; kind = o.kind; format = o.format; id = o.id;
             date = o.date == null ? null : String(o.date); rev = o.rev == null ? null : +o.rev;
       } catch (err) { facts = null; cards = -2; }
-      return { saved: window.__pbSaved.length - n, bytes: text.length, cards, date, rev,
+      return { saved: window.__pbSaved.length - n, bytes: text.length, cards, date, rev, name, kind, format, id,
                factsType: typeof facts, factsLen: typeof facts === "string" ? facts.length : -1,
-               builtIn: typeof FACTS === "string" && facts === FACTS };
+               builtIn: typeof FACTS === "string" && facts === FACTS,
+               offered: window.__pbOffered[window.__pbOffered.length - 1] || null,
+               loadedName: (storedCatalog() || {}).name || null };
     }, before);
     await p.keyboard.press("Escape"); await sleep(400);
     await p.keyboard.press("Escape"); await sleep(400);
-    const proposed = await p.evaluate(() => window.__pbEdition);
-    return Object.assign({ btn, named, proposed }, out);
+    return Object.assign({ btn, asked }, out);
   };
+  // What the edition must be: a new catalog's first, from the engine's own rule.
+  const proposed = await p.evaluate(() => todayEdition());
   await p.evaluate(() => { window.__pbFactsKeep = pack.facts; pack.facts = ""; });
   const blankFile = await saveCatalog();
   await p.evaluate(() => { pack.facts = null; });
   const unsetFile = await saveCatalog();
   await p.evaluate(() => { pack.facts = window.__pbFactsKeep;
     URL.createObjectURL = window.__pbRealBlobUrl; window.showSaveFilePicker = window.__pbRealPicker; });
-  check(blankFile.btn && blankFile.named && blankFile.saved === 1 && blankFile.cards > 0,
-    "Manage > Export catalog names the file and writes it: " + blankFile.bytes + " bytes, "
-    + blankFile.cards + " cards");
+  const offered = blankFile.offered || {};
+  check(blankFile.btn && !blankFile.asked && blankFile.saved === 1 && blankFile.cards > 0
+        && blankFile.kind === "etiuda-catalog" && blankFile.format === 2 && blankFile.name === "Smoke"
+        && /\.ec$/.test(offered.name || "") && offered.name === blankFile.loadedName + ".ec"
+        && offered.types.indexOf('".ec"') > -1 && offered.types.indexOf('".js"') < 0,
+    "Manage > Export catalog goes straight to the save dialog, which offers the loaded catalog's own name"
+    + " as an .ec (" + (offered.name === blankFile.loadedName + ".ec") + ", accepting " + offered.types
+    + "), and writes the .ec document named after the file chosen: "
+    + blankFile.bytes + " bytes, " + blankFile.cards + " cards, named " + JSON.stringify(blankFile.name)
+    + " for Smoke.ec, a name dialog " + (blankFile.asked ? "shown" : "never shown"));
   check(blankFile.factsType === "string" && blankFile.factsLen === 0,
     "an emptied quick-facts exports empty (" + blankFile.factsType + ", " + blankFile.factsLen + " chars)");
   check(unsetFile.saved === 1 && unsetFile.builtIn && unsetFile.factsLen > 0,
     "and an unwritten one exports the built-in (" + unsetFile.factsLen + " chars, equal to FACTS: "
     + unsetFile.builtIn + ")");
 
-  /* BOARD 406. Exporting is how a desk without Studio publishes, so the file that leaves carries
-     a new edition and the next counter rather than a second copy of what arrived. Read against
-     the catalog THIS page has loaded, so the arithmetic is checked rather than a constant. */
+  /* EXPORT MAKES A NEW CATALOG (Maxim, 2026-09-28 23:00): a new random id every time, the first of
+     its own editions dated today, never the loaded catalog's id or its next counter. */
   const was = await p.evaluate(() => { const c = storedCatalog() || {};
-    return { date: c.version == null ? null : String(c.version), rev: c.rev == null ? null : +c.rev }; });
+    return { date: c.version == null ? null : String(c.version), rev: c.rev == null ? null : +c.rev, id: c.id || null }; });
   const today = (() => { const d = new Date(), q = v => String(v).padStart(2, "0");
     return d.getFullYear() + "-" + q(d.getMonth() + 1) + "-" + q(d.getDate()); })();
-  check(/^[0-9]{4}-[0-9]{2}-[0-9]{2}[a-z]*$/.test(blankFile.proposed || "")
-        && blankFile.date === blankFile.proposed
-        && blankFile.proposed.indexOf(today) === 0,
-    "the export dialog proposes an edition in the one orderable form and the file carries exactly"
-    + " it: proposed " + JSON.stringify(blankFile.proposed) + ", written "
-    + JSON.stringify(blankFile.date) + ", against this process's today " + JSON.stringify(today)
+  check(/^[0-9]{4}-[0-9]{2}-[0-9]{2}[a-z]*$/.test(proposed || "")
+        && blankFile.date === proposed && proposed.indexOf(today) === 0,
+    "the export sets the edition by itself, in the one orderable form: the file carries "
+    + JSON.stringify(blankFile.date) + ", the engine's own proposal " + JSON.stringify(proposed)
+    + ", against this process's today " + JSON.stringify(today)
     + " and the loaded catalog's " + JSON.stringify(was.date));
-  check(was.rev !== null && blankFile.rev === was.rev + 1 && unsetFile.rev === was.rev + 1,
-    "and the edition counter moves with it, so a desk watching the folder reads an update rather"
-    + " than a stranger: loaded rev " + was.rev + ", exported " + blankFile.rev
-    + " (and " + unsetFile.rev + " on the second export, each being one past what is loaded)");
-
-  /* The refusal, driven at the dialog: a value outside the dated form is not evidence of age to
-     any reader, so it is caught here rather than becoming an undated catalog at the next desk. */
-  const refused = await p.evaluate(async () => {
-    const wait = ms => new Promise(r => setTimeout(r, ms));
-    document.querySelector('[data-act="manage"]').click(); await wait(800);
-    document.getElementById("mgExportCatalog").click(); await wait(700);
-    const ed = document.getElementById("eEdInp"), y = document.getElementById("eNameYes");
-    if (!ed || !y) return { step: "no dialog" };
-    ed.value = "spring release"; ed.dispatchEvent(new Event("input"));
-    y.click(); await wait(500);
-    const say = document.getElementById("eEdSay");
-    const open = !!document.getElementById("eNameModal");
-    const shown = !!say && !say.hidden, marked = ed.classList.contains("is-missing");
-    const words = say ? say.textContent : "";
-    /* And the same field put back inside the form is taken, even though it orders BEFORE the
-       catalog loaded here: inside the form the author's value is the author's call. */
-    ed.value = "2020-01-01"; ed.dispatchEvent(new Event("input"));
-    const cleared = !!say && say.hidden;
-    y.click(); await wait(500);
-    return { step: "read", open, shown, marked, words, cleared,
-             closed: !document.getElementById("eNameModal") };
-  });
-  await p.keyboard.press("Escape"); await sleep(400);
-  await p.keyboard.press("Escape"); await sleep(400);
-  check(refused.step === "read" && refused.open && refused.shown && refused.marked
-        && refused.words.indexOf("2026-09-15") > -1 && refused.cleared && refused.closed,
-    "an edition outside the dated form is refused at the dialog, which stays open, marks the box"
-    + " and says the form (" + JSON.stringify(refused.words) + "); a value back inside it is"
-    + " taken even where it orders before the loaded one: " + JSON.stringify(refused));
+  check(blankFile.rev === 1 && unsetFile.rev === 1 && /^[a-z0-9][a-z0-9-]{2,63}$/.test(blankFile.id || "")
+        && /^[a-z0-9][a-z0-9-]{2,63}$/.test(unsetFile.id || "") && blankFile.id !== was.id && unsetFile.id !== was.id
+        && blankFile.id !== unsetFile.id,
+    "and each export is a new catalog: its own random id of the format's shape, never the loaded one's, and its first"
+    + " edition, rev 1 (loaded id kept out: " + (blankFile.id !== was.id) + ", the two exports differ: "
+    + (blankFile.id !== unsetFile.id) + ", revs " + blankFile.rev + " and " + unsetFile.rev + ")");
   clean(e, "the catalog export");
 
   const tip = await p.evaluate(k => {
@@ -2072,6 +2385,107 @@ const t0 = Date.now();
   check(r0.present && !r1.present && r1.n === r0.n - 1,
     "and off the desk (" + r0.n + " cards to " + r1.n + ")");
   clean(e, "the star, the hide and the removal");
+
+  /* NO NATIVE BOX IS RAISED (Maxim, 2026-09-26) AND NO WINDOW ASKS (2026-09-28 20:06): an act
+     happens at once and a bubble offers Undo. window.confirm is counted rather than answered, so a
+     native box anywhere on the way reads as a number. The card is deleted from its editor, as a
+     person deletes one, and Undo puts back the same card; a card left with its title changed but
+     unsaved is gone from at once, and Undo reopens it with the typing in place; Clear local memory
+     clears at once, keeping the catalog, and its Undo gives back the name and the cards. */
+  e = since();
+  const undoLeg = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    let asked = 0; const real = window.confirm; window.confirm = () => { asked++; return true; };
+    const list = () => [...document.querySelectorAll("#list .card")];
+    const n0 = list().length, id = list()[3] ? list()[3].getAttribute("data-id") : null;
+    openCardEditor(id); await wait(700);
+    const del = document.getElementById("meDelete"); if (del) del.click(); await wait(700);
+    const n1 = list().length, bubble = !!document.getElementById("eUndo");
+    const u = document.getElementById("eUndoBtn"); if (u) u.click(); await wait(800);
+    const n2 = list().length, back = list().some(c => c.getAttribute("data-id") === id);
+    openCardEditor(id); await wait(700);
+    const title = document.querySelector('#modalCard input[id^="me"]');
+    if (title) { title.value = title.value + " probe"; title.dispatchEvent(new Event("input", { bubbles: true })); }
+    const typed = title ? title.value : null;
+    const nx = document.getElementById("edNext"); if (nx && !nx.disabled) nx.click(); await wait(700);
+    const moved = !!title && !document.body.contains(title);
+    const u2 = document.getElementById("eUndoBtn"); if (u2) u2.click(); await wait(900);
+    const again = document.querySelector('#modalCard input[id^="me"]');
+    const retyped = !!again && again.value === typed;
+    closeModal(); await wait(400);
+    const had = { agent: lsGet("eAgent"), cards: list().length };
+    /* A window or question standing, by what can put one up: a window not hidden, a bubble that
+       asks, an alert; the Undo bubble is the act's receipt and a leaving copy is on its way out. */
+    const standing = () => [...document.querySelectorAll(".modal:not([hidden]), .bub-ask, [role=alertdialog]")].filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
+    const was = standing();
+    clearLocalMemory(); await wait(700);
+    const cleared = { window: standing() !== was, standing: standing(),
+      undo: !!document.getElementById("eUndoBtn"), agent: lsGet("eAgent"), cards: list().length };
+    const u3 = document.getElementById("eUndoBtn"); if (u3) u3.click(); await wait(900);
+    const after = { agent: lsGet("eAgent") === had.agent, cards: list().length === had.cards };
+    window.confirm = real;
+    return { asked, n0, n1, n2, bubble, back, moved, retyped, cleared, after };
+  });
+  check(undoLeg.asked === 0 && undoLeg.n1 === undoLeg.n0 - 1 && undoLeg.bubble && undoLeg.n2 === undoLeg.n0 && undoLeg.back
+        && undoLeg.moved && undoLeg.retyped,
+    "a card deleted from its editor goes at once with no box and Undo brings the same one back, and an entry left"
+    + " unsaved is left at once and Undo returns to it with the typing in place: " + JSON.stringify(undoLeg));
+  check(undoLeg.asked === 0 && !undoLeg.cleared.window && undoLeg.cleared.undo && undoLeg.cleared.agent === null
+        && undoLeg.cleared.cards > 0 && undoLeg.after.agent && undoLeg.after.cards,
+    "and Clear local memory happens at once with no window, keeps the catalog, and its Undo gives back what it cleared: "
+    + JSON.stringify({ asked: undoLeg.asked, cleared: undoLeg.cleared, after: undoLeg.after }));
+  /* UNDO PUTS BACK THE ACT, NOT THE DESK AS IT STOOD (data-1): a star given while the Undo bubble
+     is still up survives the Undo of the deletion before it. Read off the stored pack, and the
+     star taken off again afterwards so the desk is left as found. */
+  const undoAct = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const read = () => JSON.parse(lyGet("Pack") || "{}");
+    const ids = [...document.querySelectorAll("#list .card[data-id]")].map(c => c.getAttribute("data-id"));
+    const gone = ids[4], star = ids.find((x, i) => i > 4 && (read().favourites || []).indexOf(x) < 0);
+    if (!gone || !star) return { ready: false };
+    removeCard(gone); await wait(500);
+    const bubble = !!document.getElementById("eUndoBtn");
+    toggleFavourite(star); await wait(300);
+    const starred = (read().favourites || []).indexOf(star) > -1;
+    const u = document.getElementById("eUndoBtn"); if (u) u.click(); await wait(800);
+    const now = read();
+    const out = { ready: true, bubble, starred, kept: (now.favourites || []).indexOf(star) > -1,
+      back: (now.removed || []).indexOf(gone) < 0 && !!document.querySelector('#list .card[data-id="' + CSS.escape(gone) + '"]') };
+    if (out.kept) toggleFavourite(star);
+    await wait(300);
+    return out;
+  });
+  check(undoAct.ready && undoAct.bubble && undoAct.starred && undoAct.back && undoAct.kept,
+    "data-1 Undo of a deleted card puts that card back and keeps a star given to another card while the bubble stood: "
+    + JSON.stringify(undoAct));
+  /* A CATALOG SOMEBODY PICKED IS ASKED ABOUT EVEN WHILE A FOUND ONE WAITS (shell-2): the bubble a
+     boot or a watch left standing gives way to the question about the file just chosen, and no
+     toast says it matches the loaded catalog. Invented names; answered Keep current, so nothing
+     loads. */
+  const picked = await p.evaluate(async () => {
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const held = storedCatalog();
+    if (!held) return { held: false };
+    const mk = (id, name) => Object.assign(JSON.parse(JSON.stringify(held)), { id, name });
+    const tst = document.getElementById("toast"); if (tst) tst.classList.remove("show");
+    eOfferCatalogDialog(mk("hunt-found", "Found Probe"), { foundHtml: "", force: true });
+    await wait(300);
+    const first = document.querySelectorAll("#eCatalogOffer").length;
+    let accepted = 0;
+    eOfferPickedCatalog(mk("hunt-picked", "Picked Probe"), "picked.ec", () => { accepted++; });
+    await wait(300);
+    const offers = [...document.querySelectorAll("#eCatalogOffer")];
+    const names = offers.map(o => (o.querySelector(".ec-what b") || {}).textContent || "");
+    const said = !!tst && tst.classList.contains("show") && /matches/.test(tst.textContent);
+    offers.forEach(o => { const n = o.querySelector("#ecNo"); if (n) n.click(); });
+    await wait(300);
+    return { held: true, first, n: offers.length, names, said, accepted, left: document.querySelectorAll("#eCatalogOffer").length };
+  });
+  check(picked.held && picked.first === 1 && picked.n === 1 && picked.names[0] === "Picked Probe" && !picked.said
+        && picked.accepted === 0 && picked.left === 0,
+    "shell-2 a catalog picked while a found one's bubble stands is asked about in its place, with no word that it"
+    + " matches the loaded one: " + JSON.stringify(picked));
+  clean(e, "the undo and the question");
 
   /* BOARD 344. THE ROUTES THE DRIVES ABOVE WALKED AROUND.
 
@@ -2200,7 +2614,22 @@ const t0 = Date.now();
       before = await p.evaluate(async s => { try { await navigator.clipboard.writeText(s);
         return await navigator.clipboard.readText(); } catch (e) { return "refused: " + e.name + ": " + e.message; } }, SENTINEL);
     }
+    /* THE NAME IS ASKED AT THE FIRST SIGNED COPY, and only then: the press on a block that signs
+       with {AGENT} or {INIT} raises the question and the copy waits for the answer, and a block
+       that does not sign copies at once. Answered here with an invented name, so the byte
+       comparison below reads the signed reply. */
+    const signs = await p.evaluate(() => { const el = document.querySelector("#list .card[data-id] .txt[data-v]");
+      const c = el && el.closest(".card[data-id]"), m = c && findCard(c.dataset.id);
+      return !!m && /{(AGENT|INIT)}/.test(parts(m, cardLang(m))[+el.dataset.v] || ""); });
     await p.mouse.click(firstTxt.x, firstTxt.y); await sleep(900);
+    const asked = await p.evaluate(() => !!document.getElementById("eAgentAsk"));
+    if (asked) {
+      await p.type("#eAgentInp", "Invented Agent"); await sleep(200);
+      await p.click("#eAgentYes"); await sleep(900);
+    }
+    check(asked === signs && (!asked || await p.evaluate(() => lsGet("eAgent") === "Invented Agent" && lsGet("eNameAsked") === "1")),
+      "the first press on a reply that signs asks for the name and copies once it is given; one that does not sign asks nothing ("
+      + (signs ? "the first block signs" : "the first block does not sign") + ", asked " + asked + ")");
     const cp = await marked();
     check(cp.n === 1 && cp.idx === 0, "pressing a copyable block rings that block and no other ("
       + cp.n + " ringed, card " + cp.idx + " of " + cp.cards + ")");
@@ -2246,6 +2675,98 @@ const t0 = Date.now();
     check(mk1.idx === mk1.cards - 1 && mk2.idx === 0 && mk1.n === 1 && mk2.n === 1,
       "and Shift+Down carries the mark to the foot of the list and Shift+Up to its head ("
       + mk1.idx + " then " + mk2.idx + " of " + mk1.cards + ")");
+  }
+
+  /* WHAT A COPY LEAVES OVER THE BLOCK. The press answers with the green wash and nothing else
+     over the block: no ghost of the words rising off it. Every node the press adds to <body> is
+     recorded as it arrives with the box it covers, and those covering the pressed block are
+     named. Pressed on the second block of a card of alternatives holding two or more, none of
+     them in the trace, so the trace's legs below can move it. */
+  const cpAt = await p.evaluate(() => {
+    const card = [...document.querySelectorAll("#list .card[data-id]")].find(c =>
+      c.querySelectorAll(".txt[data-v]").length >= 2 && !c.matches("[data-erec]") && !c.querySelector("[data-erec]")
+      && (findCard(c.dataset.id) || {}).alt);
+    if (!card) return null;
+    const el = card.querySelectorAll(".txt[data-v]")[1];
+    el.scrollIntoView({ block: "center" });
+    const r = el.getBoundingClientRect();
+    window.__cpOver = [];
+    window.__cpObs = new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => {
+      if (n.nodeType !== 1) return;
+      const q = n.getBoundingClientRect();
+      if (q.right > r.left && q.left < r.right && q.bottom > r.top && q.top < r.bottom) window.__cpOver.push(String(n.className));
+    })));
+    window.__cpObs.observe(document.body, { childList: true });
+    return { id: card.dataset.id, x: Math.round(r.left + Math.min(40, r.width / 2)), y: Math.round(r.top + r.height / 2) };
+  });
+  if (!cpAt) check(false, "a card with two copyable blocks and no trace, to press");
+  else {
+    await p.mouse.click(cpAt.x, cpAt.y); await sleep(900);
+    const cpOver = await p.evaluate(() => { window.__cpObs.disconnect(); return window.__cpOver; });
+    check(cpOver.length === 1 && cpOver[0] === "e-copy-wash",
+      "a copy washes the block green and lays nothing else over it (" + JSON.stringify(cpOver) + ")");
+    /* THE GREEN SPINE IS THE COPIED MACRO'S ALONE. Read as the eye reads it, the painted colour of
+       each block's spine against --ok resolved on the page; and a drag of the copied block within
+       its card carries the green with it, put back after. */
+    const spines = id => p.evaluate(i => {
+      const probe = document.createElement("i"); probe.style.color = "var(--ok)"; document.body.appendChild(probe);
+      const ok = getComputedStyle(probe).color; probe.remove();
+      const card = document.querySelector('#list .card[data-id="' + CSS.escape(i) + '"]');
+      return card ? [...card.querySelectorAll(".txt[data-v]")].map(b => getComputedStyle(b, "::before").backgroundColor === ok) : null;
+    }, id);
+    const only = (g, at) => !!g && g.every((x, i) => x === (i === at));
+    const g0 = await spines(cpAt.id);
+    await p.evaluate(i => reorderMacroBlocks(i, 1, 0), cpAt.id); await sleep(600);
+    const g1 = await spines(cpAt.id);
+    await p.evaluate(i => reorderMacroBlocks(i, 0, 1), cpAt.id); await sleep(600);
+    const g2 = await spines(cpAt.id);
+    check(only(g0, 1) && only(g1, 0) && only(g2, 1),
+      "the copied block's spine alone turns green, and follows the block when it is dragged within its card ("
+      + JSON.stringify([g0, g1, g2]) + ")");
+  }
+
+  /* THE TITLE HAS THE ROW WHILE THE CONTROLS WAIT. On the card with the widest title on screen:
+     with the pointer away the controls take no width and the title's room runs to the row's end,
+     unfaded where the title fits it; under a real pointer, and again with the keyboard's focus on
+     the pencil, they show and the title ends before them, fading where it is cut; the row's height
+     never moves. */
+  const tAt = await p.evaluate(() => {
+    const rng = document.createRange(), wOf = t => { rng.selectNodeContents(t); return rng.getBoundingClientRect().width; };
+    const ts = [...document.querySelectorAll("#list .card:not(.is-hidden) .ctitle")].filter(t => {
+      const r = t.closest(".card").getBoundingClientRect(); return r.top > 60 && r.bottom < innerHeight - 20; })
+      .sort((a, b) => wOf(b) - wOf(a));
+    if (!ts.length) return null;
+    const card = ts[0].closest(".card"), r = card.getBoundingClientRect();
+    return { id: card.dataset.id, x: Math.round(r.left + r.width / 2), y: Math.round(r.bottom - 10), ay: innerHeight - 5 };
+  });
+  if (!tAt) check(false, "a card title on screen to measure");
+  else {
+    const tRead = () => p.evaluate(i => {
+      const t = document.querySelector('#list .card[data-id="' + CSS.escape(i) + '"] .ctitle'), row = t.parentNode, a = row.querySelector(".cacts");
+      const rs = getComputedStyle(row), rr = row.getBoundingClientRect(), gap = parseFloat(rs.columnGap) || 0;
+      let end = rr.right - parseFloat(rs.paddingRight);
+      for (let n = t.nextElementSibling; n && n !== a; n = n.nextElementSibling) end -= n.getBoundingClientRect().width + gap;
+      const rng = document.createRange(); rng.selectNodeContents(t);
+      const ink = rng.getBoundingClientRect().right, box = t.getBoundingClientRect().right, ar = a.getBoundingClientRect();
+      const cs = getComputedStyle(t);
+      return { end, ink, box, gap, aw: ar.width, al: ar.left, shown: getComputedStyle(a).opacity === "1",
+        fades: cs.maskImage !== "none" || cs.webkitMaskImage !== "none", h: rr.height };
+    }, tAt.id);
+    await p.mouse.move(5, tAt.ay); await sleep(500);
+    const rest = await tRead();
+    await p.mouse.move(tAt.x, tAt.y); await sleep(500);
+    const hov = await tRead();
+    await p.mouse.move(5, tAt.ay); await sleep(300);
+    await p.evaluate(i => document.querySelector('#list .card[data-id="' + CSS.escape(i) + '"] .cacts [data-act=edit]').focus(), tAt.id);
+    await sleep(500);
+    const foc = await tRead();
+    await p.evaluate(() => document.activeElement && document.activeElement.blur());
+    const atRest = s => s.aw === 0 && !s.shown && s.box >= Math.min(s.ink, s.end) - 0.5 && !(s.fades && s.ink <= s.end + 0.5);
+    const receded = s => s.shown && s.aw > 0 && s.box <= s.al - s.gap + 0.5 && (s.ink <= s.box + 0.5 || s.fades);
+    const r1 = n => Math.round(n * 10) / 10;
+    check(atRest(rest) && receded(hov) && receded(foc) && rest.h === hov.h && rest.h === foc.h,
+      "a card's title runs the row while its controls wait, and recedes before them under the pointer and the keyboard ("
+      + JSON.stringify([rest, hov, foc].map(s => [r1(s.box), r1(s.ink), r1(s.end), r1(s.al), r1(s.aw), s.shown, s.fades, s.h])) + ")");
   }
 
   /* The full editor opened from the Library, card-editor.js:584. From the main screen the
@@ -2454,6 +2975,20 @@ const t0 = Date.now();
     + " of a scrollable " + (sc3 && sc3.max));
   clean(e, "the escape ladder's last rung");
 
+  /* THE SAMPLE COMES IN THROUGH LOAD, as any file does: the empty desk draws no button of its own for
+     it. The page's plain file input is the route, the picker undefined for the one press so that
+     Chrome takes it, and the shipped document is the file chosen; an empty desk loads it at once. */
+  const SAMPLE_EC = path.join(E.ROOT, E.TREE_FILE.sampleEc);
+  const loadSample = async q => {
+    await q.evaluate(() => { window.showOpenFilePicker = undefined; });
+    const nav = q.waitForNavigation({ waitUntil: "load", timeout: 4000 }).then(() => true, () => false);
+    const [chooser] = await Promise.all([q.waitForFileChooser({ timeout: 10000 }), q.click("#emptyLoad")]);
+    await chooser.accept([SAMPLE_EC]);
+    const moved = await nav;
+    await q.waitForFunction(() => document.querySelectorAll("#list .card[data-id]").length > 0, { timeout: 20000 }).catch(() => {});
+    return !moved;
+  };
+
   /* The public first run: a folder holding only the engine and the sample, as the README has a
      stranger start. The boot above never takes that path while the real catalog is beside this
      file, and a fresh context is what keeps the adopted catalog's storage out of it. */
@@ -2483,6 +3018,7 @@ const t0 = Date.now();
     await q.goto("file:///" + path.join(pub, "etiuda.html").replace(/\\/g, "/"), { waitUntil: "load", timeout: 90000 });
     await sleep(2400);
     const offer = await q.evaluate(() => ({ cards: document.querySelectorAll(".card").length, real: typeof E_CATALOG !== "undefined",
+      sampleRead: typeof window.E_SAMPLE !== "undefined", load: !!document.getElementById("emptyLoad"),
       btn: ((document.querySelector("#emptySample") || {}).textContent || "").trim() }));
     /* BOARD 344: the Import button beside the sample one, render.js:128, the only route in src/
        to hooks.importCatalogHere - and it is pressed HERE, on the empty screen, because that is
@@ -2499,7 +3035,7 @@ const t0 = Date.now();
       const native = typeof real === "function";
       let asked = 0;
       if (native) window.showOpenFilePicker = () => { asked++; const x = new Error("cancelled"); x.name = "AbortError"; return Promise.reject(x); };
-      const btn = document.getElementById("emptyImport");
+      const btn = document.getElementById("emptyLoad");
       if (btn) btn.click();
       await wait(800);
       if (native) window.showOpenFilePicker = real;
@@ -2507,26 +3043,150 @@ const t0 = Date.now();
     });
     check(imp.btn && imp.cards === 0 && (!imp.native || imp.asked === 1),
       "the empty screen's Import runs its own route and a cancelled picker leaves the desk empty (" + JSON.stringify(imp) + ")");
+    /* quiet-3: the empty rail says one line rather than standing bare beside the drawn empty
+       desk. Lines are counted as the distinct tops of the text's own rects, not guessed from a
+       height, at the rail's width now and at the narrowest the rail allows. */
+    step("the empty rail's one line");
+    const railLine = await q.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const read = () => { const box = document.getElementById("intentRailList"), el = box && box.querySelector(".rail-empty");
+        if (!el) return { kids: box ? box.children.length : -1, lines: 0 };
+        const r = document.createRange(); r.selectNodeContents(el);
+        return { kids: box.children.length, items: box.querySelectorAll(".rail-item").length,
+                 lines: new Set([...r.getClientRects()].map(x => Math.round(x.top))).size, text: el.textContent.length }; };
+      const now = read();
+      document.documentElement.style.setProperty("--rail-max", "200px"); dispatchEvent(new Event("resize")); await wait(300);
+      const narrow = read();
+      document.documentElement.style.removeProperty("--rail-max"); dispatchEvent(new Event("resize")); await wait(300);
+      return { now, narrow };
+    });
+    check([railLine.now, railLine.narrow].every(x => x.kids === 1 && x.items === 0 && x.lines === 1 && x.text > 0),
+      "quiet-3 the empty rail holds exactly one line of its own, at its width and at the narrowest (" + JSON.stringify(railLine) + ")");
+    /* quiet-9, motion-10, pixels-20: on the empty desk, where the footer is on screen. A refusal
+       wears its own ground and glyph, stands clear of the footer and rests with no transform; a
+       second toast over it dips out (the lowest opacity sampled each frame) before its words. */
+    step("the toast on the empty desk");
+    const toasts = await q.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const el = document.getElementById("toast"), f = document.querySelector("footer");
+      toastRefusal("invented.ec could not be read.");
+      await wait(500);
+      const a = el.getBoundingClientRect(), b = f.getBoundingClientRect(), cs = getComputedStyle(el);
+      const first = { refusal: el.classList.contains("refusal"), glyph: !!el.querySelector("svg"), ground: cs.backgroundColor,
+        transform: cs.transform, clear: a.bottom <= b.top || a.top >= b.bottom || a.right <= b.left || a.left >= b.right };
+      const op = [], t0 = performance.now();
+      toast("An invented second message");
+      await new Promise(res => { (function tick() { op.push(+getComputedStyle(el).opacity); if (performance.now() - t0 < 300) requestAnimationFrame(tick); else res(); })(); });
+      const second = { dip: Math.min(...op), words: el.textContent === "An invented second message", refusal: el.classList.contains("refusal") };
+      el.classList.remove("show");
+      return { first, second };
+    });
+    check(toasts.first.refusal && toasts.first.glyph && toasts.first.ground === "rgb(194, 65, 12)" && toasts.first.transform === "none"
+          && toasts.first.clear && toasts.second.dip < 0.2 && toasts.second.words && !toasts.second.refusal,
+      "quiet-9 a refusal toast has its own ground and glyph, clears the footer and rests untransformed, and a toast over it dips before its words ("
+      + JSON.stringify(toasts) + ")");
     /* ADOPTING THE SAMPLE RELOADS THE DOCUMENT - catalog-file.js ends on location.reload(),
        because a catalog arrives on a clean desk and the per-tab state has to go with it. The old
        shape here clicked through an evaluate and then went on driving whatever frame it had,
        which is a race against a navigation the instrument never mentioned. It is now waited for,
        and the wait is a check: the reload is the behaviour board 356 was about. */
-    step("clicking the sample and waiting for the reload");
-    const navigated = q.waitForNavigation({ waitUntil: "load", timeout: 30000 }).then(() => true, () => false);
-    await q.click("#emptySample");
-    const reloaded = await navigated;
-    check(reloaded, "accepting the sample reloads the document, which is how a catalog arrives on a clean desk");
-    step("waiting for the sample's cards after the reload");
+    /* THE TOUR ASKS FOR A CATALOG ON THE EMPTY DESK and carries on past the load: its second step
+       rings the empty desk's own Load button with its Next held back, and the reload a load ends in brings
+       the tour back at the step after it. */
+    step("the tour's load step on the empty desk");
+    const loadStep = await q.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      for (let i = 0; i < 40 && document.getElementById("tourRoot").hidden; i++) await wait(100);
+      const next = document.getElementById("tourNext");
+      if (next) next.click();
+      await wait(800);
+      const ring = document.getElementById("tourHole").getBoundingClientRect(), btn = document.getElementById("emptyLoad");
+      const b = btn ? btn.getBoundingClientRect() : null;
+      return { at: sessionStorage.getItem("eTourAt"), nextHeld: !!next && !next.hidden && next.disabled,
+               rings: !!b && ring.left <= b.left && ring.right >= b.right && ring.top <= b.top && ring.bottom >= b.bottom };
+    });
+    step("loading the sample through Load, in place");
+    const inPlace = await loadSample(q);
+    const resumed = await q.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      for (let i = 0; i < 40 && document.getElementById("tourRoot").hidden; i++) await wait(100);
+      return { up: !document.getElementById("tourRoot").hidden, at: sessionStorage.getItem("eTourAt") };
+    });
+    check(loadStep.at === "load" && loadStep.nextHeld && loadStep.rings && resumed.up && resumed.at === "pax",
+      "on the empty desk the tour's second step rings the Load button and waits with its Next greyed out, and the load"
+      + " takes the tour on to the step after it: " + JSON.stringify({ loadStep, resumed }));
+    check(inPlace, "accepting the sample loads it in place, with no document loaded to do it");
+    const rest = await q.evaluate(() => document.documentElement.className);
+    check(!/e-arriv|e-veiled|e-leaving/.test(rest),
+      "quiet-13 a load in place arrives under no cover: nothing is marked as arriving or veiled (" + JSON.stringify(rest) + ")");
+    /* pixels-3, in the dark theme: white words on a selected pill and on a primary button stand at
+       4.5:1 or better (WCAG's luminance ratio from the computed colours). */
+    step("white on the fill");
+    await q.evaluate(() => { document.documentElement.dataset.theme = "dark"; offerUndo("Invented act", () => {}); });
+    await sleep(500);
+    const onAccent = await q.evaluate(() => {
+      const lum = c => { const m = c.match(/[0-9.]+/g).slice(0, 3).map(v => +v / 255).map(v => v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+        return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]; };
+      const ratio = el => { if (!el) return 0; const cs = getComputedStyle(el), a = lum(cs.backgroundColor), b = lum(cs.color);
+        return +((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)).toFixed(2); };
+      return { pill: ratio(document.querySelector("#pills .pill.on")), primary: ratio(document.getElementById("eUndoBtn")) };
+    });
+    await q.evaluate(() => { const u = document.getElementById("eUndo");
+      if (u) u.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    check(onAccent.pill >= 4.5 && onAccent.primary >= 4.5,
+      "pixels-3 white on the selected pill and on a primary button reads at 4.5:1 or better in dark (" + JSON.stringify(onAccent) + ")");
+    step("waiting for the sample's cards");
     await q.waitForFunction(() => document.querySelectorAll(".card").length > 0, { timeout: 20000 }).catch(() => {});
     await sleep(1200);
     step("dismissing the tour");
     for (let i = 0; i < 3; i++) { const hit = await q.evaluate(() => { const el = [...document.querySelectorAll("button")].filter(x => x.offsetWidth > 0).find(x => /skip|not now|close|pomi/i.test(x.textContent));
       if (el) { el.click(); return true; } return false; }); if (!hit) break; await sleep(500); }
     step("reading the loaded sample back");
-    const got = await q.evaluate(() => ({ cards: document.querySelectorAll(".card").length, rows: document.querySelectorAll("#intentRailList .rail-item").length, pills: document.querySelectorAll("#pills .pill").length }));
-    check(!offer.real && offer.cards === 0 && /sample/i.test(offer.btn), "with no deployment catalog the empty screen offers the sample (" + JSON.stringify(offer.btn) + ")");
-    check(got.cards > 0 && got.rows > 0 && got.pills > 0, "the sample loads: " + got.cards + " cards, " + got.rows + " intents, " + got.pills + " pills");
+    const got = await q.evaluate(() => ({ cards: document.querySelectorAll(".card").length, rows: document.querySelectorAll("#intentRailList .rail-item").length, pills: document.querySelectorAll("#pills .pill").length,
+      bar: ((document.querySelector("#catNow .cn-name:not([hidden])") || {}).textContent || "") }));
+    check(!offer.real && offer.cards === 0 && !offer.sampleRead && offer.load && offer.btn === "",
+      "with no deployment catalog and the old sample script beside the engine, the page reads no sample and the empty screen offers Load and no sample button (" + JSON.stringify(offer) + ")");
+    check(got.cards > 0 && got.rows > 0 && got.pills > 0 && got.bar === path.basename(SAMPLE_EC),
+      "the sample loads: " + got.cards + " cards, " + got.rows + " intents, " + got.pills + " pills, and the top bar names its file "
+      + JSON.stringify(got.bar));
+    /* THE ROLE WHEEL WAITS on the sample until a reply naming somebody of the team is copied, and
+       comes out with one line then; the main desk above, a team's, has driven it from the start. */
+    step("the role wheel on the sample");
+    const wheel = await q.evaluate(async () => {
+      const shown = () => { const d = document.getElementById("roleDrum"); return !!d && d.offsetWidth > 0; };
+      const before = shown();
+      withAgentName("Odpowie {ROLE}.", () => {});
+      await new Promise(r => setTimeout(r, 200));
+      return { before, after: shown(), seen: lsGet("eRoleSeen"), said: document.getElementById("toast").classList.contains("show") };
+    });
+    check(!wheel.before && wheel.after && wheel.seen === "1" && wheel.said,
+      "the role wheel is out of sight on the sample until a reply naming somebody is copied, then comes out with one line ("
+      + JSON.stringify(wheel) + ")");
+    /* quiet-12: the offer names the catalog folder as the empty desk does, short, the full path on
+       hover and the link that opens it. A stub host for the one call, taken away after it. */
+    step("the offer's folder");
+    const offerDir = await q.evaluate(async () => {
+      const dir = ["C:", "Users", "Invented Person", "Documents", "Etiuda"].join(String.fromCharCode(92));
+      let opened = 0;
+      window.E_HOST = { catalogFolder: dir, catalogIn: dir, catalogFile: "invented.ec", openCatalogFolder() { opened++; return true; } };
+      try {
+        const c = JSON.parse(JSON.stringify(storedCatalog())); c.name = "Invented other";
+        eOfferCatalog(c, "invented.ec", dir, true, true);
+        await new Promise(r => setTimeout(r, 300));
+        const w = document.getElementById("eCatalogOffer"), codes = w ? [...w.querySelectorAll(".ec-sub code")] : [];
+        const f = codes[codes.length - 1];
+        if (!f) return { found: false };
+        f.click();
+        const r = document.createRange(); r.selectNodeContents(f);
+        const got = { found: true, short: f.textContent === "Documents" + String.fromCharCode(92) + "Etiuda", full: f.title === dir,
+          lines: new Set([...r.getClientRects()].map(x => Math.round(x.top))).size, cursor: getComputedStyle(f).cursor, opened };
+        w.remove();
+        return got;
+      } finally { delete window.E_HOST; }
+    });
+    check(offerDir.found && offerDir.short && offerDir.full && offerDir.lines === 1 && offerDir.cursor === "default" && offerDir.opened === 1,
+      "quiet-12 the catalog offer names its folder short on one line, the full path on hover, and opens it under the arrow ("
+      + JSON.stringify(offerDir) + ")");
     check(missing.every(m => /^etiuda-catalog\.js/.test(m)), "nothing looked for and missing but the deployment catalog (" + [...new Set(missing)].join(", ") + ")");
   } catch (x) {
     const where = String((x && x.stack || "").split(String.fromCharCode(10))[1] || "").trim();
@@ -2535,6 +3195,253 @@ const t0 = Date.now();
   }
   finally { await hookDrain(ctx, "the public first run"); if (ctx) await ctx.close().catch(() => {}); fs.rmSync(pub, { recursive: true, force: true }); }
   clean(e, "the public first run");
+
+  /* ---- THE FIRST AFTERNOON'S BUG HUNT, the drives that want a desk of their own --------------
+     Each drive in a fresh context of its own over a folder holding the engine and the sample, the
+     public first run's shape; a context given `done` starts with the tour already seen. */
+  e = since();
+  const hunt = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-hunt-"));
+  const huntCtx = [];
+  let huntAt = "the start";
+  fs.copyFileSync(RUN.page, path.join(hunt, "etiuda.html"));
+  fs.copyFileSync(path.join(RUN.dir, E.SIBLING_AS.sampleV2), path.join(hunt, E.SIBLING_AS.sampleV2));
+  const huntUrl = dir => "file:///" + path.join(dir, "etiuda.html").replace(/\\/g, "/");
+  const huntPage = async (dir, done, pre) => {
+    const c = b.createBrowserContext ? await b.createBrowserContext() : await b.createIncognitoBrowserContext();
+    huntCtx.push(c);
+    const q = await c.newPage();
+    await hookInstall(q);
+    await q.setViewport({ width: 1500, height: 950 });
+    q.on("dialog", d => d.accept());
+    q.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
+    if (done) await q.evaluateOnNewDocument(() => { try { localStorage.setItem("eTourDone_v3", "1"); localStorage.setItem("eTourInvite_v3", "1"); } catch (x) {} });
+    if (pre) await pre(q);
+    await q.goto(huntUrl(dir), { waitUntil: "load", timeout: 90000 });
+    return q;
+  };
+  const upFor = (q, fn, ms) => q.waitForFunction(fn, { timeout: ms || 20000, polling: 100 }).then(() => true, () => false);
+  try {
+    /* first-light: THE FIRST RUN'S TOUR WAITS FOR THE LOGO TO FORM. Maxim, 2026-09-27 23:28: the logo forms
+       as smoothly on the very first launch as later, "the first impression is the most important one";
+       and the tour's first bubble comes once it has formed (tour.js, maybeStartTour: 200 ms after the
+       formation and never before 1300 ms). At ordinary speed the formation and the floor end together,
+       so waiting on the clock cannot tell a tour that waits for the mark from one that only waits
+       1300 ms. The mark's own rule makes the difference visible: a window standing over it while it
+       gathers puts the gathering back to the start, to play once the window goes. So a window is held
+       over it from 300 ms to 700 ms after the canvas arrives, shorter than the mark's 1000 ms quiet
+       release, and the tour must come up at least the gather's 1100 and the breath's 200 after the
+       window has gone. A tour on the floor alone comes up about 600 ms after it. Timed inside the page,
+       by a MutationObserver installed before the document exists. */
+    huntAt = "first-light";
+    const qf = await huntPage(hunt, false, q => q.evaluateOnNewDocument(() => {
+      const c = window.__firstLight = { mark: -1, held: -1, gone: -1, tour: -1, err: "" };
+      new MutationObserver(() => {
+        const now = performance.now();
+        if (c.mark < 0 && document.querySelector("canvas.e-empty-mark")) {
+          c.mark = now;
+          setTimeout(() => { try { openSettings(); c.held = performance.now(); }
+            catch (x) { c.err = String(x && x.message || x); } }, 300);
+          setTimeout(() => { try { closeModal(); c.gone = performance.now(); } catch (x) { c.err = String(x && x.message || x); } }, 700);
+        }
+        const r = document.getElementById("tourRoot");
+        if (c.tour < 0 && r && !r.hidden) c.tour = now;
+      }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
+    }));
+    const lit = await upFor(qf, () => !!window.__firstLight && window.__firstLight.tour >= 0, 12000);
+    const fl = await qf.evaluate(() => Object.assign({}, window.__firstLight));
+    const litAfter = fl.gone >= 0 && fl.tour >= 0 ? Math.round(fl.tour - fl.gone) : -1;
+    check(lit && fl.held >= 0 && fl.gone > fl.held && litAfter >= 1290,
+      "first-light the first run's tour waits for the logo to form: a window held " + Math.round(fl.gone - fl.held)
+      + " ms over the gathering mark starts it again, and the tour comes up " + litAfter + " ms after the window goes"
+      + " (the gather and the breath make 1300)" + (fl.err ? " - " + fl.err : ""));
+
+    /* flow-2: A NAME TYPED IN THE TOUR'S FIRST STEP IS KEPT whichever way the step is left: a
+       catalog loaded through the empty desk's Load beside it, Skip, or a reload. */
+    const kept = {};
+    for (const route of ["load", "skip", "reload"]) {
+      huntAt = "flow-2 by " + route;
+      const q = await huntPage(hunt, false);
+      const up = await upFor(q, () => !!document.querySelector("#tourName") && !!document.getElementById("emptyLoad"));
+      if (up) {
+        await q.type("#tourName", "Invented Agent"); await sleep(300);
+        if (route === "load") await loadSample(q);
+        else if (route === "skip") await q.click("#tourSkip");
+        else await q.reload({ waitUntil: "load" });
+        await sleep(800);
+      }
+      kept[route] = up && await q.evaluate(() => lsGet("eAgent") === "Invented Agent" && lsGet("eNameAsked") === "1");
+    }
+    check(kept.load && kept.skip && kept.reload,
+      "flow-2 a name typed into the tour's first step is kept when the step is left by loading a catalog through Load, by Skip"
+      + " and by a reload: " + JSON.stringify(kept));
+
+    /* flow-1: THE NAME QUESTION AT THE TOUR'S CARDS STEP stands in front of the tour, which steps
+       back behind it and comes forward again once it is answered. The name is left empty so the
+       first signed copy asks; the block pressed is the first that signs. */
+    huntAt = "flow-1";
+    const q1 = await huntPage(hunt, false);
+    await upFor(q1, () => !!document.querySelector("#tourName") && !!document.getElementById("emptyLoad"));
+    await q1.click("#tourNext"); await sleep(700);
+    await loadSample(q1);
+    await upFor(q1, () => document.querySelectorAll("#list .card").length > 0 && !document.getElementById("tourRoot").hidden);
+    /* The steps before Cards are walked by the rows of tests/tour-walk.js, which press their Next. */
+    const walked1 = [];
+    for (let i = 0; i < 4; i++) {
+      const id = await TW.at(q1);
+      if (!id || id === "cards") break;
+      const r = await TW.walkStep(q1, id, { loaded: true });
+      walked1.push(r.id + ">" + r.to);
+      if (r.to !== r.want) break;
+    }
+    await sleep(600);
+    const blk = await q1.evaluate(() => {
+      const el = [...document.querySelectorAll("#list .card[data-id] .txt[data-v]")].find(x => {
+        const c = x.closest(".card[data-id]"), m = c && findCard(c.dataset.id);
+        return !!m && /{(AGENT|INIT)}/.test(parts(m, cardLang(m))[+x.dataset.v] || ""); });
+      if (!el) return null;
+      const r = el.getBoundingClientRect(), x = Math.round(r.left + Math.min(40, r.width / 2)), y = Math.round(r.top + Math.min(12, r.height / 2));
+      const top = document.elementFromPoint(x, y);
+      return { x, y, free: !!top && el.contains(top), at: sessionStorage.getItem("eTourAt") };
+    });
+    let ask = { up: false };
+    if (blk && blk.free) {
+      await q1.mouse.click(blk.x, blk.y); await sleep(900);
+      ask = await q1.evaluate(() => {
+        const box = document.getElementById("eAgentAsk");
+        if (!box) return { up: false };
+        const hit = id => { const el = document.getElementById(id); if (!el) return false; const r = el.getBoundingClientRect();
+          const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!top && box.contains(top); };
+        return { up: true, title: hit("eAgentTitle"), field: hit("eAgentInp"), yes: hit("eAgentYes"), no: hit("eAgentNo"),
+                 behind: document.getElementById("tourRoot").classList.contains("behind") };
+      });
+      if (ask.up) { await q1.click("#eAgentNo"); await sleep(600); }
+    }
+    const back = await q1.evaluate(() => ({ gone: !document.getElementById("eAgentAsk"), tour: !document.getElementById("tourRoot").hidden,
+      forward: !document.getElementById("tourRoot").classList.contains("behind") }));
+    check(!!blk && blk.free && blk.at === "cards" && ask.up && ask.title && ask.field && ask.yes && ask.no && ask.behind
+          && back.gone && back.tour && back.forward,
+      "flow-1 at the tour's Cards step the name question opens in front of the tour, every part of it reachable, and"
+      + " the tour comes forward again once it is answered: " + JSON.stringify({ walked1, blk, ask, back }));
+
+    /* data-2: THE SAMPLE LOADED AGAIN KEEPS WHAT AN EJECT KEPT. The sample loaded, one card's title
+       edited and saved, another starred, the catalog ejected, and the sample taken up again through
+       the empty desk's Load: the edit and the star stay in the sample's own layer while it is out,
+       out of view on the empty desk, and are back in view with it. */
+    huntAt = "data-2";
+    const q2 = await huntPage(hunt, true);
+    await upFor(q2, () => !!document.getElementById("emptyLoad"));
+    await loadSample(q2);
+    await upFor(q2, () => document.querySelectorAll("#list .card[data-id]").length > 3);
+    const made = await q2.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const ids = [...document.querySelectorAll("#list .card[data-id]")].map(c => c.getAttribute("data-id"));
+      openCardEditor(ids[0]); await wait(700);
+      const title = document.querySelector('#modalCard input[id^="me"]');
+      if (title) { title.value = title.value + " probe"; title.dispatchEvent(new Event("input", { bubbles: true })); }
+      const save = document.getElementById("meSave"); if (save) save.click(); await wait(700);
+      if (typeof closeModal === "function" && !document.getElementById("modal").hidden) closeModal();
+      toggleFavourite(ids[2]); await wait(300);
+      return { edited: ids[0], starred: ids[2] };
+    });
+    const orbit = await q2.evaluate(() => eLayer());
+    const layer = (q, m) => q.evaluate((m, ns) => { const k = JSON.parse(lsGet(ns + "Pack") || "{}");
+      return { edit: !!(k.overrides || {})[m.edited], star: (k.favourites || []).indexOf(m.starred) > -1,
+               inView: !!document.querySelector('#list .card[data-id="' + CSS.escape(m.edited) + '"]') }; }, m, orbit);
+    const before = await layer(q2, made);
+    /* Eject happens at once and in place with its Undo standing (Maxim, 2026-09-27 23:28 and
+       2026-09-28 23:41): no confirm, no reload, the empty desk under the Undo bubble. The bubble is
+       then put away by its own Escape, not answered, so the Load below is the only way back. */
+    const ejNav = q2.waitForNavigation({ waitUntil: "load", timeout: 4000 }).then(() => true, () => false);
+    // What stands is read as the Clear local memory leg reads it.
+    const ejAsked = await q2.evaluate(() => { const standing = () => [...document.querySelectorAll(".modal:not([hidden]), .bub-ask, [role=alertdialog]")].filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
+      const was = standing(); ejectCatalog(); return standing() !== was; }).catch(() => true);
+    const ejReload = await ejNav;
+    const [ejEmpty, ejUndo] = await Promise.all([upFor(q2, () => !!document.getElementById("emptyLoad")),
+      upFor(q2, () => !!document.getElementById("eUndoBtn"), 8000)]);
+    const eject = { asked: ejAsked, reload: ejReload, empty: ejEmpty, undo: ejUndo };
+    await q2.evaluate(() => { const u = document.getElementById("eUndo");
+      if (u) u.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    await sleep(600);
+    const ejected = await layer(q2, made);
+    await loadSample(q2);
+    await upFor(q2, () => document.querySelectorAll("#list .card[data-id]").length > 3);
+    const again = await layer(q2, made);
+    check(before.edit && before.star && before.inView && ejected.edit && ejected.star && !ejected.inView
+          && again.edit && again.star && again.inView && !eject.asked && !eject.reload && eject.empty && eject.undo,
+      "data-2 the sample loaded again through Load brings back the edit and the star, kept in its own layer while it was out"
+      + " and out of view on the empty desk (ejected at once, in place, with no confirm and an Undo offered): "
+      + JSON.stringify({ before, eject, ejected, again }));
+
+    /* flow-3: THE SAMPLE NEVER ASKS TO REPLACE A CATALOG THE PERSON CHOSE. A desk holding an invented
+       catalog finds the sample beside it at the next launch, as the shell hands it over when the
+       chosen file lives elsewhere, and no offer rises; the control is another catalog found there
+       instead, which is offered. */
+    huntAt = "flow-3";
+    const f3 = path.join(hunt, "f3");
+    fs.mkdirSync(f3);
+    fs.copyFileSync(RUN.page, path.join(f3, "etiuda.html"));
+    const sib = path.join(f3, E.FIXTURE_FILE.catalog);
+    const chosen = Object.assign(JSON.parse(JSON.stringify(sampleData)), { id: "hunt-chosen", name: "Invented Chosen" });
+    delete chosen.sample; delete chosen.hash;
+    fs.writeFileSync(sib, asSibling(chosen));
+    const q3 = await huntPage(f3, true);
+    await upFor(q3, () => !!document.getElementById("ecYes"));
+    await q3.click("#ecYes");
+    await upFor(q3, () => document.querySelectorAll("#list .card[data-id]").length > 3);
+    const sampleSib = Object.assign(JSON.parse(JSON.stringify(sampleData)), { sample: true });
+    fs.writeFileSync(sib, asSibling(sampleSib));
+    await q3.reload({ waitUntil: "load" });
+    await upFor(q3, () => document.querySelectorAll("#list .card[data-id]").length > 3);
+    const sampleOffered = await upFor(q3, () => !!document.getElementById("eCatalogOffer"), 4000);
+    const other = Object.assign(JSON.parse(JSON.stringify(sampleData)), { id: "hunt-other", name: "Invented Other" });
+    delete other.sample; delete other.hash;
+    fs.writeFileSync(sib, asSibling(other));
+    await q3.reload({ waitUntil: "load" });
+    await upFor(q3, () => document.querySelectorAll("#list .card[data-id]").length > 3);
+    const otherOffered = await upFor(q3, () => !!document.getElementById("eCatalogOffer"), 8000);
+    check(!sampleOffered && otherOffered,
+      "flow-3 the sample found beside a desk holding a chosen catalog is not offered over it, and another catalog found"
+      + " there is: " + JSON.stringify({ sampleOffered, otherOffered }));
+  } catch (x) {
+    const where = String((x && x.stack || "").split(String.fromCharCode(10))[1] || "").trim();
+    check(false, "the bug hunt's drives could not run, at " + huntAt + ": " + (x && x.message || x) + (where ? " | " + where : ""));
+  }
+  finally {
+    for (const c of huntCtx) { await hookDrain(c, "the bug hunt"); await c.close().catch(() => {}); }
+    fs.rmSync(hunt, { recursive: true, force: true });
+  }
+  clean(e, "the bug hunt's drives");
+
+  /* ---- THE SYSTEM'S LANGUAGE (the first afternoon) ------------------------------------------
+     The interface's language where nothing is stored: a browser saying Polish first gets a Polish
+     interface and a first chat in Polish, and one saying English gets English. */
+  e = since();
+  let prAt = "the system's language";
+  try {
+    const bySystem = async list => {
+      const c = b.createBrowserContext ? await b.createBrowserContext() : await b.createIncognitoBrowserContext();
+      try {
+        const s = await c.newPage();
+        await s.setViewport({ width: 1400, height: 900 });
+        await s.evaluateOnNewDocument(l => {
+          Object.defineProperty(Navigator.prototype, "languages", { get: () => l, configurable: true });
+          Object.defineProperty(Navigator.prototype, "language", { get: () => l[0], configurable: true });
+        }, list);
+        await s.goto(RUN.url, { waitUntil: "load", timeout: 60000 });
+        await sleep(1800);
+        return await s.evaluate(() => ({ ui: document.documentElement.lang, reply: lang, langs: CONTENT_LANGS.join(","),
+          menu: ((document.querySelector('#settingsMenu [data-act="settings"]') || {}).textContent || "").trim() }));
+      } finally { await c.close().catch(() => {}); }
+    };
+    const pl = await bySystem(["pl-PL", "pl", "en"]), en = await bySystem(["en-US", "en"]);
+    check(pl.ui === "pl" && /Ustawienia/.test(pl.menu) && (pl.langs.split(",").indexOf("pl") < 0 || pl.reply === "pl")
+      && en.ui === "en" && /Settings/.test(en.menu) && (en.langs.split(",").indexOf("en") < 0 || en.reply === "en"),
+      "with nothing stored the interface and the first chat follow the browser's language, Polish for a Polish one and English for an English one ("
+      + JSON.stringify({ pl, en }) + ")");
+  } catch (x) {
+    check(false, "the system's language could not run, at " + prAt + ": " + (x && x.message || x));
+  }
+  clean(e, "the system's language");
 
   /* ---- THE COMMENT LANGUAGE IS WIRED IN THE RIGHT ORDER, board item 534 ---------------------
    *
@@ -2608,6 +3515,37 @@ const t0 = Date.now();
     if (orderCtx) await orderCtx.close().catch(() => {});
   }
   clean(e, "the comment language's wiring");
+
+  /* THE MOTION LEGS, tests/motion.js, which says how a frame is read. A context of their own, so
+     nothing the run above starred, hid or reordered is under them. One line per leg whatever
+     happens, so a boot that fails still counts every leg it did not run. */
+  e = since();
+  let motionCtx = null, motionRan = 0;
+  try {
+    motionCtx = b.createBrowserContext ? await b.createBrowserContext() : await b.createIncognitoBrowserContext();
+    const m = await motionCtx.newPage();
+    await m.setViewport(MOTION.VIEW);
+    m.on("dialog", d => d.accept());
+    m.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
+    const late = await bootAndDismiss(m, RUN.url, "the motion page");
+    await m.evaluate(() => { const x = document.getElementById("eAgentModal"); if (x) x.remove(); });
+    await m.evaluate(MOTION.instrument);
+    if (late.length) console.log("  the motion page WAITED OUT: " + late.join("; "));
+    let view = MOTION.SCALES[0];
+    for (const L of MOTION.RUNS) {
+      view = await MOTION.viewFor(m, L, view);
+      await MOTION.rest(m);
+      let r;
+      try { r = await L.fn(m); } catch (x) { r = { ok: false, text: "threw: " + (x && x.message || x) }; }
+      motionRan++;
+      check(r.ok, L.id + " " + L.what + ": " + r.text);
+    }
+  } catch (x) {
+    MOTION.RUNS.slice(motionRan).forEach(L => check(false, L.id + " " + L.what + ": not driven, " + (x && x.message || x)));
+  } finally {
+    if (motionCtx) await motionCtx.close().catch(() => {});
+  }
+  clean(e, "the motion legs");
 
   /* THE VIEWPORT BATCH'S OWN LEG, board item 630. A batch of sleeps moved onto a condition is
      a change that can be wrong in two directions, and this covers the one the legs downstream

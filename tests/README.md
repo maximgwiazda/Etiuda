@@ -15,23 +15,30 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/pl-diacritics.js                     no fixtures, a dropped Polish diacritic
     node tests/deadcode.js                           no fixtures
     node tests/css-layers.js                         no fixtures, the cascade layers
+    node tests/motion-tokens.js                      no fixtures, the motion tiers and the quiet switch
     node tests/build-fresh.mjs                       no fixtures, builds once
     node tests/catalog-routes.mjs                     no fixtures, the two catalog routes
     node tests/module-calls.mjs                       no fixtures, the modules CALLED
     node tests/desk-ipc.mjs                           no fixtures, the desk's write path, shell stubbed
+    node tests/desk-growth.mjs                        no fixtures, a desk of 300 days: a count or a resize sends only what changed
+    node tests/shell-office.mjs                       no fixtures, the shell against a busy file, a refused catalog, a folder that does not answer
+    node tests/catalog-trust.mjs                      no fixtures, a catalog's signature as the desk reads it, shell stubbed
+    node tests/catalog-trust-desk.mjs                 no fixtures, the desk's own load path saying that signature, one process per launch
     node tests/token-canary.mjs                       no fixtures, TOKEN_CANARY held to fill()
     node tests/test.js                               sections 1 to 3 without fixtures
     ETIUDA_FIXTURES=<folder> node tests/test.js      all five sections
     ETIUDA_FIXTURES=<folder> node tests/smoke.js     the acceptance run, Chrome
     ETIUDA_FIXTURES=<folder> node tests/smoke.js firefox
+    ETIUDA_FIXTURES=<folder> node tests/motion.js    the motion legs alone, at 100, 125 and 150 per cent, which smoke also runs
     node tests/csp.js                                the policy, two unpackaged Electrons
     node tests/desk.js                               the desk in a file, an unpackaged Electron
     ETIUDA_FIXTURES=<folder> node tests/catalog-watch.js  the watched catalog, one app run
+    node tests/swap.mjs                              the desk changed in place held to a fresh start, Chrome, no fixtures
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
     ETIUDA_FIXTURES=<folder> node tests/reinstall.js     install, use, uninstall, install again
 
-`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `module-calls.mjs`, `desk-ipc.mjs`, `token-canary.mjs`, `test.js`, `i18n-scan.js`,
-`pl-diacritics.js` and `css-layers.js`, none of which needs a fixture or a browser. `npm run smoke` needs both.
+`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `module-calls.mjs`, `desk-ipc.mjs`, `desk-growth.mjs`, `shell-office.mjs`, `catalog-trust.mjs`, `catalog-trust-desk.mjs`, `token-canary.mjs`, `test.js`, `i18n-scan.js`,
+`pl-diacritics.js`, `css-layers.js` and `motion-tokens.js`, none of which needs a fixture or a browser. `npm run smoke` needs both.
 
 `css-dead.js`, `ghosts.js` and `storage-keys.js` are reports rather than gates: they print and
 exit 0, and a human reads the list. `i18n-scan.js` is a gate and exits non-zero when a language
@@ -86,6 +93,7 @@ third column is how to check this one.
 | `ghosts.js` | `src/` | comments **are** its subject and esbuild deletes every comment in every module |
 | `storage-keys.js` | `src/` | a call site is JS, and an artefact line number names no file anyone can open |
 | `css-layers.js` | `src/` | it judges the sheet as WRITTEN, layer by layer; the artefact carries the same bytes but no file and line a person can edit |
+| `motion-tokens.js` | `src/` | a duration is judged where it is written, in the sheet and in a module's inline transition; the artefact has neither file nor line |
 | `css-dead.js` | `src/` | the stylesheet half is identical either way, but the evidence half is JS, and a report saying "delete this rule" must name a file that survives the next build |
 | `test.js` sections 1, 3, 4, 5 as text | `src/` | `sourceText()`, `sourceAt()`, `sourceAtLine()` |
 | `test.js` syntax, stacking, dark palettes | artefact | "does the shipped file parse" and "do these CSS rules agree" are questions about the shipped file |
@@ -94,6 +102,7 @@ third column is how to check this one.
 | `build-fresh.mjs` | both | it runs the real build and compares, which is the only thing that can speak for the bundle |
 | `catalog-routes.mjs` | `src/` modules, RUN | the only two catalogs worth comparing are the ones the modules themselves build, so it loads them through node and calls both readers |
 | `module-calls.mjs` | `src/` modules, RUN | a text reading cannot say the code is reached; this one imports each module through node's own loader and compares an answer, which is the only reading that dies when the module does |
+| `catalog-trust-desk.mjs` | `src/` modules and `shell/`, RUN | the claim is that the desk still calls the verifier and still says its answer, which only running the boot's and the Library's own calls can show; what it reads is the markup they rendered, which is also where an offer answered Yes is seen to be down before the desk starts again |
 | `token-canary.mjs` | `src/` modules, RUN, and `sourceDoc()` | it calls `fill()` and compares what it takes with the canary as its two readers read it; the source is read only as a list of candidate names |
 | `smoke.js` | artefact | a browser opens the file that ships |
 | `text-scan-selftest.js` | a toy tree | it proves the five rows above that say `src/` |
@@ -427,6 +436,24 @@ What the sentinel does not see is a name deleted from `src/` altogether. The nam
 the names the source declares, so such a name takes its own sentinel with it. That class wants a
 free-identifier census against a list of host globals, which is a different instrument.
 
+## The motion tiers, and the switch that stills them
+
+`tests/motion-tokens.js`, well under a second, no browser, no fixtures, in `npm test`.
+
+Every duration the sheet runs is a `--m-*` tier (`--m-tone`, `--m-move` and the rest, on `:root` in
+the bubble span, so Studio receives them through the pin), and `html.e-still` zeroes every tier and
+halts every keyframe. The gate fails on a rule keyed on `prefers-reduced-motion` alone, on a time
+literal in a `transition` or `animation` declaration or in a custom property outside `--m-*`, on a
+module writing a literal into an inline transition or an `animate()` duration, on a module other
+than `motion.js` reading the system's query, on a smooth scroll that does not ask the switch, on a
+tier the switch does not zero, and on the sheet's tiers and `motion.js`'s `M_MS` disagreeing. There
+is no allowlist. Seventeen controls run first, each
+a planted sheet or script the gate must refuse or pass; a control that does not fire exits 3.
+
+What it is blind to: a duration computed at run time (`rail-list.js` scales a far row's travel from
+the move tier), a timer that waits out a transition, and whether a surface actually animates. The
+last is measured in a browser, with `document.getAnimations()`, not here.
+
 ## The cascade layers, which no gate had ever read
 
 `tests/css-layers.js`, 0.4 s, no browser, no fixtures, in `npm test`. Board item 358.
@@ -560,6 +587,29 @@ the packaged app could not load a catalog at all and every gate in that sequence
 it, twice, because nothing in the sequence had ever started the built application. A release run
 is about 115 s longer for it. The gate's own control is `ETIUDA_SHELL_APP=<anything> node
 tools/release.mjs`, which makes shell-smoke refuse and must stop the run at gate 7 with exit 7.
+
+## Whether a build can be sold, which no other gate asks
+
+    node tests/sellable.mjs
+    node tools/release.mjs --customer        the customer's questions asked of a preview tree
+
+Every other gate proves that a build is what the tree says. `tools/sellable.mjs` asks whether it
+can be put in front of a customer, and `tools/release.mjs` asks it twice: at gate 2, before any
+test or build, and at the signature gate after the build. **A customer build is told from a
+preview by its version**, which is what the customer sees: a bare x.y.z with a major of 1 or more
+is a customer's; a prerelease part (`2.0.0-dev`) or a major of 0 is a preview. A customer build is
+refused while the version is a preview's, while any licence page in `shell/` carries a bracketed
+placeholder, while no certificate is configured, and after the build unless the installer and
+`win-unpacked/Etiuda.exe` both read Authenticode Valid with a timestamp. A preview packages as it
+always did, is told what would stop it, and is refused only when a certificate WAS configured and
+the result is not Valid. `--customer` asks the questions of any version; nothing skips them.
+
+`tests/sellable.mjs` holds it without packaging: planted licence pages both ways, the real
+`electron-builder.js` with and without `ETIUDA_CERT`, Windows' own reading of a signed tool, of a
+copy with one byte changed (HashMismatch) and of an unsigned one, the signature gate whole on
+those files, and the release itself driven in a throwaway repository to its second gate, where
+exit 2 is a stop and exit 3 (gate 3 finding no name list in the lab) is a pass. The uninstaller
+is not read, since it is sealed inside the installer. 25 checks, about 4 s.
 
 ## The reinstall-survival loop, which is the only thing here that installs anything
 

@@ -21,11 +21,10 @@ const CATALOG_FOLDER_KEY = "eCatalogFolder";
    newest one wins with no rename step to explain. Documents/Etiuda unless Settings says
    otherwise, and the setting is an ORDINARY ENGINE KEY, so it reaches here inside desk.json
    rather than through a second settings file that could disagree with the first. */
-/* THE HARNESS'S OWN DOCUMENTS FOLDER, the twin of ETIUDA_TEST_OFFSCREEN below. This app writes
-   into a person's Documents exactly once - the sample, on a first run - and app.getPath cannot be
-   redirected from OUTSIDE the process, so without this the only way to drive that once is against
-   the real folder of whoever is at the desk. Made before it is set: setPath refuses a path that
-   is not there. */
+/* THE HARNESS'S OWN DOCUMENTS FOLDER, the twin of ETIUDA_TEST_OFFSCREEN below. A first run makes
+   Documents/Etiuda, and app.getPath cannot be redirected from OUTSIDE the process, so without this
+   the only way to drive a first run is against the real folder of whoever is at the desk. Made
+   before it is set: setPath refuses a path that is not there. */
 if (process.env.ETIUDA_TEST_DOCUMENTS) {
   try {
     fs.mkdirSync(process.env.ETIUDA_TEST_DOCUMENTS, { recursive: true });
@@ -43,44 +42,51 @@ function catalogFolder() {
 function ensureCatalogFolder() {
   const dir = defaultCatalogFolder();
   console.log("etiuda: catalog folder " + catalogFolder());
-  if (catalogFolder() !== dir) return;
+  if (catalogFolder() !== dir || !folderAnswers(dir)) return;
   try { fs.mkdirSync(dir, { recursive: true }); }
   catch (e) { console.error("etiuda: " + dir + " could not be made - " + e.message); }
+  giveSamples();
 }
 
-/* THE SAMPLE CATALOG, put in the folder on the first run that does not already find it there,
-   whatever else the folder holds. Ruled 2026-09-17: it is a special catalog rather than a
-   stand-in for the missing one, so what is inside it is worth reaching on a desk that has a
-   catalog of its own too, and sampleLast() below is what keeps it from ever being opened in
-   that catalog's place.
-   THE DESK DECIDES THE OCCASION, and only the desk can, because the folder forgets: a person who
-   throws the sample away leaves nothing behind that says they were given one. The key's name is
-   what keeps a Clear local memory from reaching it - the engine's wipe sweeps its own keys by
-   shape, /^e[A-Z]/ or a named preference, and `e~sampled` is neither, the same trick the 1.x
-   carry's `e~carried` marker lives by.
-   THE DEFAULT FOLDER ONLY, for ensureCatalogFolder's reason: a folder somebody chose was theirs
-   before Etiuda saw it, and dropping a file into it is not this app's business. */
-const SAMPLE_FILE = "sample-catalog.ec";
-const SAMPLE_KEY = "e~sampled";
-function seedSample() {
+/* TWO FOLDERS: the catalogs Etiuda ships (the sample) stay where it was installed, beside this
+   file, and Documents/Etiuda is read as well; a file there with exactly the same name is ALWAYS
+   read instead of the shipped one, edited or not, and the Library lists that name once and says
+   which copy is in use. Paired with the default folder only, for ensureCatalogFolder's reason: a
+   folder somebody chose stands alone. */
+const BUILT_IN_DIR = __dirname;
+/* THE FIRST RUN GIVES THE DEFAULT FOLDER A COPY OF EACH SHIPPED CATALOG, so Load shows the sample
+   among the person's own files. A first run is a desk with no file at all, so an update gives
+   nothing and a copy the person deletes is not put back; a file already there under the name is
+   left alone. The key is written so that the desk exists from this run on. Read and written
+   rather than copied, since the source sits inside the asar. */
+const GIVEN_KEY = "e~sampled";
+function giveSamples() {
   if (deskKeys === undefined) deskKeys = readDesk();
-  if (deskKeys[SAMPLE_KEY]) return;                       // not the first run
   const dir = defaultCatalogFolder();
-  if (catalogFolder() !== dir) return;
-  const dest = path.join(dir, SAMPLE_FILE);
-  if (!fs.existsSync(dest)) {
-    /* Read and write rather than copyFile: the source is inside the asar, which is a file to
-       read and not a file to copy from, and the read is where a corrupt payload would show. */
-    try {
-      fs.writeFileSync(dest, fs.readFileSync(path.join(__dirname, SAMPLE_FILE)));
-      console.log("etiuda: the sample catalog was put in " + dir);
-    } catch (e) {
-      /* Not marked: an error is not an answer, so the next run asks again. */
-      console.error("etiuda: the sample catalog could not be written - " + e.message);
-      return;
+  if (!deskIsNew || catalogFolder() !== dir || !folderAnswers(dir)) return;
+  for (const f of ecFilesIn(BUILT_IN_DIR)) {
+    try { fs.writeFileSync(path.join(dir, path.basename(f)), fs.readFileSync(f), { flag: "wx" }); }
+    catch (e) {
+      if (e.code !== "EEXIST") console.error("etiuda: " + path.basename(f) + " could not be put in " + dir + " - " + e.message);
     }
   }
-  deskSetOwn(SAMPLE_KEY, "1");
+  deskSetOwn(GIVEN_KEY, "1");
+}
+function builtInFiles() {
+  if (catalogFolder() !== defaultCatalogFolder()) return [];
+  const own = ecFilesIn(catalogFolder()).map(f => path.basename(f).toLowerCase());
+  return ecFilesIn(BUILT_IN_DIR).filter(f => own.indexOf(path.basename(f).toLowerCase()) < 0);
+}
+/* THE FOLDER THE PAGE MAY NAME for a file it was handed, and "" for a shipped one: that folder is
+   inside the installation's archive, which nobody can open, so the page says in words where the
+   file came from instead. */
+function isBuiltIn(file) { return !!file && path.dirname(file) === BUILT_IN_DIR; }
+function folderShown(file) { return (!file || isBuiltIn(file)) ? "" : path.dirname(file); }
+/* Which copy of a name is read: the folder's own, else the shipped one. Null for neither. */
+function catalogFileNamed(base) {
+  const own = path.join(catalogFolder(), base);
+  if (folderAnswers(catalogFolder()) && fs.existsSync(own)) return own;
+  return builtInFiles().filter(f => path.basename(f).toLowerCase() === base.toLowerCase())[0] || null;
 }
 
 /* WHAT THE FILE IS, never what it is called and never the id or the `sample` flag inside it: edit
@@ -88,18 +94,22 @@ function seedSample() {
    other file, whatever it is still named. Bytes rather than a hash of the parsed document,
    because bytes are what was copied in - a document reformatted is a document edited. The size
    settles every other file in the folder without reading it. */
-let sampleBytes = null;                     // what this build ships, read once
 function isTheSample(file) {
-  if (sampleBytes === null) {
-    try { sampleBytes = fs.readFileSync(path.join(__dirname, SAMPLE_FILE)); }
-    catch (e) { sampleBytes = Buffer.alloc(0); }
-  }
-  if (!sampleBytes.length) return false;
   try {
-    if (fs.statSync(file).size !== sampleBytes.length) return false;
-    return fs.readFileSync(file).equals(sampleBytes);
+    const size = fs.statSync(file).size;
+    if (!SAMPLE_EDITIONS.some(x => x[0] === size)) return false;
+    const got = crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+    return SAMPLE_EDITIONS.some(x => x[0] === size && x[1] === got);
   } catch (e) { return false; }
 }
+/* EVERY EDITION OF THE SAMPLE A BUILD HAS SHIPPED OR GIVEN, by size and SHA-256, this build's own
+   included (tests/shell-office.mjs holds that, so an edition is added here as it ships). A copy
+   of an older one keeps its place at the foot of the list after the sample moves on. */
+const SAMPLE_EDITIONS = [
+  [39612, "2fa81658b7ad2b4c8e962e7c70134c2c3b86ac9c802fc08743fd41c32988213a"],
+  [39650, "aae9453e5c38b1d29ea394c31226e3ded39e9ce716febcc96274c089deb3a317"],
+  [260051, "60c7a9c39a8778c16f704899f3018e1ea850e0ba5d15ccaa9ab5f4c16f0b98b6"]
+];
 /* NEVER COUNTED AHEAD OF ANOTHER CATALOG, the second half of the ruling above: the sample goes to
    the end of every list of candidates, so a folder holding one real catalog opens that one and a
    folder holding nothing else opens the sample. The Library's list is ordered through here too,
@@ -115,6 +125,7 @@ function sampleLast(files) {
    swap places between launches. A file that cannot be stat'd is one that has just been renamed
    away underneath the listing, and is simply not a candidate. */
 function ecFilesIn(dir) {
+  if (!folderAnswers(dir)) return [];
   let names = [];
   try { names = fs.readdirSync(dir); } catch { return []; }
   return names.filter(n => /\.ec$/i.test(n))
@@ -131,8 +142,8 @@ function catalogFolders() {
   return [catalogFolder(), app.getPath("userData"), path.join(__dirname, "..")];
 }
 function catalogPlaces() {
-  return (openedWith ? [openedWith] : []).concat(sampleLast(catalogFolders().reduce((out, dir) =>
-    out.concat(ecFilesIn(dir), [path.join(dir, CATALOG_SCRIPT)]), [])));
+  return (openedWith ? [openedWith] : []).concat(sampleLast(catalogFolders().filter(folderAnswers).reduce((out, dir) =>
+    out.concat(ecFilesIn(dir), [path.join(dir, CATALOG_SCRIPT)]), []).concat(builtInFiles())));
 }
 
 /* A .ec OPENED FROM THE DESKTOP: the installer registers the extension, so Windows starts Etiuda
@@ -182,9 +193,11 @@ let catalogFrom = "";                          // the file the payload below was
    still about the file in front of it from one said to an earlier edition. 0 where there is no
    file or it has gone since. */
 function catalogMtime() {
-  if (!catalogFrom) return 0;
+  if (!catalogFrom || !fileAnswers(catalogFrom)) return 0;
   try { return Math.round(fs.statSync(catalogFrom).mtimeMs); } catch { return 0; }
 }
+// The pages (webContents ids) this shell reloaded after they stopped, until each has asked once.
+const recovering = new Set();
 /* A FILE SOMEBODY DOUBLE-CLICKED AND THIS LAUNCH COULD NOT OPEN, handed to the page once through
    the host answer and then forgotten. openedWith is dropped with it, so the folder's own catalog
    is what opens and a later re-read does not refuse the same file again. */
@@ -194,8 +207,17 @@ function refuseOpened(file, why) {
   openedRefused = { name: path.basename(file), why: why };
   openedWith = "";
 }
+/* FILES THE ENGINE REFUSED, by path and the edit time it refused: isV2 above is the format's
+   pair and the engine's reader is the whole of v2Problems, so a file can pass here and fail
+   there. Passed over until it is saved again, so an older sound edition opens in its place. */
+const engineRefused = new Map();
+function refusedByEngine(file) {
+  if (!engineRefused.has(file)) return false;
+  try { return Math.round(fs.statSync(file).mtimeMs) === engineRefused.get(file); } catch { return false; }
+}
 function readCatalog() {
   for (const file of catalogPlaces()) {
+    if (refusedByEngine(file)) continue;
     let text;
     try { text = fs.readFileSync(file, "utf8"); } catch { refuseOpened(file, "read"); continue; }
     try {
@@ -220,26 +242,92 @@ function readCatalog() {
    one, and a watch on the file that was there follows the replaced one into the bin. An event is
    only a prompt to read, and the payload is what decides, so a save that arrives as four events
    and a file rewritten with its own bytes are both free. */
+/* A watch that stops, or never started, is armed again: a share dropped by the VPN or a sleep
+   comes back without a word to this process, so the folder is asked again on a timer until it
+   answers, and at once after a resume, and then read, which also answers a statistics request. */
 let catalogSettle = null, catalogWatchers = [], watchedFolder = "";
+const watchSaid = new Map();                   // folder -> the refusal last logged for it
 function watchCatalog(win) {
   catalogWatchers.forEach(w => { try { w.close(); } catch { /* already gone */ } });
   catalogWatchers = [];
   watchedFolder = catalogFolder();
+  clearTimeout(folderRetry);
   const dirs = [];
   catalogFolders().forEach(d => { if (dirs.indexOf(d) < 0) dirs.push(d); });
   for (const dir of dirs) {
+    if (!folderAnswers(dir)) { retryFolder(FOLDER_RETRY_MS); continue; }
     try {
       const w = fs.watch(dir, (ev, name) => {
         if (name && !isCatalogName(path.basename(String(name)))) return;
         clearTimeout(catalogSettle);
         catalogSettle = setTimeout(() => catalogChanged(win), 300);
       });
-      w.on("error", e => console.error("etiuda: the watch on " + dir + " stopped - " + e.message));
+      w.on("error", e => {
+        console.error("etiuda: the watch on " + dir + " stopped - " + e.message);
+        if (dir === watchedFolder) folderDown = dir;
+        retryFolder(FOLDER_SOON_MS);
+      });
       catalogWatchers.push(w);
+      watchSaid.delete(dir);
     } catch (e) {
-      console.error("etiuda: no watch on " + dir + " - " + e.message);
+      if (watchSaid.get(dir) !== e.message) console.error("etiuda: no watch on " + dir + " - " + e.message);
+      watchSaid.set(dir, e.message);
+      if (dir === watchedFolder) retryFolder(FOLDER_RETRY_MS);
     }
   }
+}
+
+/* THE CATALOG FOLDER MAY BE A SHARE THAT DOES NOT ANSWER, and every read of it here is
+   synchronous: one call into an unreachable share waits out the network's own timeout with the
+   window and the page frozen behind it. So it is asked first by an asynchronous stat with a time
+   limit, and read as empty and left unwatched until one comes back. One ask in flight at a time.
+   A watch that stops and a resume from sleep both leave it unread until it has answered again. */
+const FOLDER_ASK_MS = 3000, FOLDER_RETRY_MS = 30000, FOLDER_SOON_MS = 1000;
+let folderDown = "", folderAsking = null, folderRetry = null, folderSaidDown = "";
+function folderAnswers(dir) { return !folderDown || dir !== folderDown; }
+function fileAnswers(file) { return folderAnswers(path.dirname(file)); }
+/* ONLY A STAT THAT SUCCEEDS ANSWERS. A share that has just timed out fails every call at once for
+   a while and then waits out the timeout again, so a failure is no proof that a read will return.
+   A folder that is not there answers through its parent, which is the disk answering. */
+function statAnswers(dir) {
+  const up = path.dirname(dir);
+  return fs.promises.stat(dir).then(() => true, e => ((e && (e.code === "ENOENT" || e.code === "ENOTDIR") && up !== dir)
+    ? fs.promises.stat(up).then(() => true, () => false) : false));
+}
+function askFolder(dir) {
+  if (folderAsking && folderAsking.dir === dir) return folderAsking.answer;
+  let timer = null;
+  const settled = statAnswers(dir);
+  const answer = Promise.race([settled, new Promise(r => { timer = setTimeout(() => r(false), FOLDER_ASK_MS); })])
+    .then(ok => { clearTimeout(timer); return ok; });
+  const asking = { dir: dir, answer: answer };
+  folderAsking = asking;
+  settled.then(() => { if (folderAsking === asking) folderAsking = null; });
+  return answer;
+}
+/* Records what an ask found, said in the log once per change, and whether it answered. */
+function settleFolder(dir, ok) {
+  if (dir !== catalogFolder()) return false;
+  if (!ok && folderSaidDown !== dir)
+    console.error("etiuda: the catalog folder " + dir + " did not answer, so it is read as empty until it does");
+  if (ok && folderSaidDown === dir) console.log("etiuda: the catalog folder " + dir + " answers again");
+  folderDown = ok ? "" : dir;
+  folderSaidDown = folderDown;
+  return ok;
+}
+function armFolder(win) {
+  clearTimeout(folderRetry);
+  const dir = catalogFolder();
+  return askFolder(dir).then(ok => {
+    if (!settleFolder(dir, ok)) { if (dir === catalogFolder()) retryFolder(FOLDER_RETRY_MS); return; }
+    if (!win || win.isDestroyed()) return;
+    watchCatalog(win);
+    catalogChanged(win);
+  });
+}
+function retryFolder(ms) {
+  clearTimeout(folderRetry);
+  folderRetry = setTimeout(() => armFolder(theWindow), ms);
 }
 
 /* THE WATCH FOLLOWS THE SETTING, and the desk's own write is where this hears of a change: the
@@ -252,8 +340,10 @@ function catalogFolderChanged() {
   if (catalogFolder() === watchedFolder) return;
   const win = theWindow;
   console.log("etiuda: catalog folder " + catalogFolder());
-  watchCatalog(win);
-  setTimeout(() => catalogChanged(win), 0);
+  // Somebody has just picked this folder, so it is read as answering while it is asked.
+  folderDown = "";
+  watchedFolder = catalogFolder();
+  armFolder(win);
 }
 
 /* The engine is OFFERED the new file and never given it: replacing a catalog under somebody
@@ -272,7 +362,8 @@ function catalogChanged(win) {
   catalogJson = now;
   if (!now || !win || win.isDestroyed()) return;
   console.log("etiuda: the catalog file changed, and the window has been offered it");
-  win.webContents.send("etiuda:catalog-file", now, path.basename(catalogFrom), path.dirname(catalogFrom));
+  win.webContents.send("etiuda:catalog-file", now, path.basename(catalogFrom), folderShown(catalogFrom),
+    false, "", isBuiltIn(catalogFrom));
 }
 
 /* OFFERED, never loaded, like every other route to a catalog: opening one while somebody is
@@ -314,6 +405,20 @@ ipcMain.on("etiuda:catalog", (e) => {
   if (!fromEngine(e)) { e.returnValue = null; return; }
   if (catalogJson === undefined) catalogJson = readCatalog();
   e.returnValue = catalogJson;
+});
+/* THE ENGINE REFUSED THE FILE IT WAS HANDED, and names it. Answered with the next file this
+   would read, in the shape the host answer gives the first, or null where there is none. */
+ipcMain.on("etiuda:catalog-refused", (e, name) => {
+  if (!fromEngine(e) || !catalogFrom || path.basename(catalogFrom) !== String(name || "")) {
+    e.returnValue = null;
+    return;
+  }
+  console.error("etiuda: the engine refused " + catalogFrom + ", so it is passed over until it is saved again");
+  engineRefused.set(catalogFrom, catalogMtime());
+  if (openedWith === catalogFrom) openedWith = "";
+  catalogJson = readCatalog();
+  e.returnValue = catalogJson ? { json: catalogJson, file: path.basename(catalogFrom), in: folderShown(catalogFrom),
+                                  builtIn: isBuiltIn(catalogFrom), mtime: catalogMtime() } : null;
 });
 
 /* ---- the desk, kept in a file rather than in the renderer's localStorage -------------------
@@ -412,13 +517,37 @@ function deskEnvelopeBody(keysText) {
     + (deskRefused.length ? ',"refused":' + JSON.stringify(deskRefused) : "")
     + ',"keys":' + keysText + "}";
 }
+/* A RENAME OVER A FILE ANOTHER PROGRAM HAS OPEN IS REFUSED ON WINDOWS for as long as it holds
+   it, and a virus scanner or a sync client opening a file just written is the ordinary case, so
+   the rename is asked again for half a second before the refusal stands. */
+const RENAME_BUSY = ["EPERM", "EACCES", "EBUSY"];
+function renamePatiently(from, to) {
+  for (let i = 1; ; i++) {
+    try { fs.renameSync(from, to); return; }
+    catch (e) {
+      if (i >= 10 || RENAME_BUSY.indexOf(e.code) < 0) throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+    }
+  }
+}
+/* Temp file then rename, so a failed write never leaves half a file under the name, and a
+   refused one leaves no temp file behind it. Throws what stopped it. */
+function writeReplacing(file, text) {
+  const tmp = file + ".tmp";
+  try {
+    fs.writeFileSync(tmp, text, "utf8");
+    renamePatiently(tmp, file);
+  } catch (e) {
+    try { fs.unlinkSync(tmp); } catch { /* never made */ }
+    throw e;
+  }
+}
 function persistDeskEnvelope() {
   if (deskKeys === undefined) deskKeys = readDesk();
   const file = deskFile();
   try {
     keepUnkept();
-    fs.writeFileSync(file + ".tmp", deskEnvelopeBody(JSON.stringify(deskKeys)), "utf8");
-    fs.renameSync(file + ".tmp", file);
+    writeReplacing(file, deskEnvelopeBody(JSON.stringify(deskKeys)));
   } catch (e) {
     console.error("etiuda: the desk could not be written - " + e.message);
   }
@@ -457,8 +586,10 @@ function writeStatsAnswer(text) {
   const dir = path.join(catalogFolder(), "stats");
   const dest = path.join(dir, id + ".estat");
   if (path.dirname(dest) !== dir || path.basename(dest) !== id + ".estat") return { ok: false };
-  try { fs.writeFileSync(dest, JSON.stringify(out), "utf8"); }
-  catch {
+  try {
+    if (!folderAnswers(catalogFolder())) throw new Error("the catalog folder is not answering");
+    fs.writeFileSync(dest, JSON.stringify(out), "utf8");
+  } catch {
     heldStats = { id: req.id, text: String(text || "") };
     persistDeskEnvelope();
     return { ok: false };
@@ -470,6 +601,7 @@ function writeStatsAnswer(text) {
   return { ok: true, sync: out.sync, syncMs: now.getTime() };
 }
 function tryAnswerRequest(win) {
+  if (!folderAnswers(catalogFolder())) return;
   let text;
   try { text = fs.readFileSync(path.join(catalogFolder(), REQUEST_NAME), "utf8"); } catch { return; }
   let req = null;
@@ -521,6 +653,7 @@ let deskRefused = [];                          // [{kept, restored}]: the copy, 
 const deskRefusedSeen = new Set();
 let deskUnkept = "";                           // a live desk.json that could not even be read
 let deskRestored = "";                         // when the backup this run opened was saved
+let deskIsNew = false;                         // no desk file at all, nor a backup: a first run
 function keepAside(buf) {
   const to = path.join(path.dirname(deskFile()),
     "desk.unread-" + crypto.createHash("sha256").update(buf).digest("hex").slice(0, 12) + ".json");
@@ -582,7 +715,10 @@ function readDesk() {
   }
   deskRestored = "";
   settleRefused(refused, unread, tried[0], null);
-  if (!refused.length && !unread) console.log("etiuda: no desk file yet, so this run starts one");
+  if (!refused.length && !unread) {
+    deskIsNew = true;
+    console.log("etiuda: no desk file yet, so this run starts one");
+  }
   ensureDeskId();
   return {};
 }
@@ -633,8 +769,7 @@ function saveDeskFile(keysText) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   keepUnkept();
   rotateDesk();
-  fs.writeFileSync(file + ".tmp", deskEnvelopeBody(keysText), "utf8");
-  fs.renameSync(file + ".tmp", file);
+  writeReplacing(file, deskEnvelopeBody(keysText));
 }
 /* A key the MAIN PROCESS owns, written before any window exists. Not writeDesk: that one applies
    a delta against the map a particular load was handed, and re-arms the watch and the theme
@@ -671,6 +806,46 @@ function writeDesk(text, from) {
     return false;
   }
 }
+/* JSON.stringify of the map, byte for byte, with each key's text kept from the write before: a
+   patch re-encodes only what it names, and a catalog is escaped once rather than on every count. */
+const deskKeyText = new Map();                 // key -> [the value, its "key":value text]
+function deskText(keys) {
+  const names = Object.keys(keys);
+  const parts = names.map(k => {
+    const v = keys[k], was = deskKeyText.get(k);
+    if (was && was[0] === v) return was[1];
+    const t = JSON.stringify(k) + ":" + JSON.stringify(v);
+    deskKeyText.set(k, [v, t]);
+    return t;
+  });
+  if (deskKeyText.size > names.length) for (const k of deskKeyText.keys()) if (!(k in keys)) deskKeyText.delete(k);
+  return "{" + parts.join(",") + "}";
+}
+/* A PATCH NAMES ONLY THE KEYS ONE LOAD CHANGED, a string for a value and null for a key deleted,
+   so it is applied as it stands: no other load's key is in it to be undone. */
+function patchDesk(text) {
+  let patch;
+  try { patch = JSON.parse(text); } catch { return false; }
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) return false;
+  const keys = Object.keys(patch);
+  if (keys.some(k => patch[k] !== null && typeof patch[k] !== "string")) return false;
+  if (deskKeys === undefined) deskKeys = readDesk();
+  const has = (k) => Object.prototype.hasOwnProperty.call(deskKeys, k);
+  if (deskWritten && keys.every(k => (patch[k] === null ? !has(k) : deskKeys[k] === patch[k]))) return true;
+  const merged = Object.assign({}, deskKeys);
+  keys.forEach(k => { if (patch[k] === null) delete merged[k]; else merged[k] = patch[k]; });
+  try {
+    saveDeskFile(deskText(merged));
+    deskKeys = merged;
+    deskWritten = true;
+    catalogFolderChanged();
+    applyThemeSource();
+    return true;
+  } catch (e) {
+    console.error("etiuda: the desk could not be written - " + e.message);
+    return false;
+  }
+}
 
 /* PER LOAD, NOT ONCE A RUN. The document reloads inside one app run - accepting a catalog is
    exactly that - and the load after it must be handed the desk the disk holds at that moment.
@@ -692,6 +867,11 @@ ipcMain.on("etiuda:desk-save", (e, text) => {
    finds nothing waiting here: whatever the page has not sent yet it sends on pagehide. */
 ipcMain.handle("etiuda:desk-write", (e, text) =>
   fromEngine(e) && typeof text === "string" && writeDesk(text, e.sender.id));
+ipcMain.on("etiuda:desk-patch-save", (e, text) => {
+  e.returnValue = fromEngine(e) && typeof text === "string" && patchDesk(text);
+});
+ipcMain.handle("etiuda:desk-patch", (e, text) =>
+  fromEngine(e) && typeof text === "string" && patchDesk(text));
 ipcMain.on("etiuda:desk-refused", (e) => {
   e.returnValue = fromEngine(e) ? JSON.stringify(deskRefused) : "[]";
 });
@@ -783,7 +963,7 @@ ipcMain.on("etiuda:window", (e, act) => {
 ipcMain.on("etiuda:host", (e) => {
   if (!fromEngine(e)) {
     e.returnValue = { platform: process.platform, backdrop: null, maximized: false,
-                      catalogFolder: "", catalogFile: "", catalogIn: "" };
+                      catalogFolder: "", catalogFile: "", catalogIn: "", catalogBuiltIn: false };
     return;
   }
   const win = BrowserWindow.fromWebContents(e.sender);
@@ -796,13 +976,17 @@ ipcMain.on("etiuda:host", (e) => {
        catalog first, so catalogFrom is already the answer by the time this is read. */
     catalogFolder: catalogFolder(),
     catalogFile: catalogFrom ? path.basename(catalogFrom) : "",
-    catalogIn: catalogFrom ? path.dirname(catalogFrom) : "",
+    catalogIn: folderShown(catalogFrom),
+    catalogBuiltIn: isBuiltIn(catalogFrom),
     catalogMtime: catalogMtime(),
     /* WHETHER THIS LOAD'S CATALOG IS THE FILE SOMEBODY DOUBLE-CLICKED, which the page cannot
        tell from the folder's own newest: an explicit open is answered even when a refusal was
        remembered for that file or it is already what is loaded. */
     openedWith: !!openedWith && catalogFrom === openedWith,
     openedRefused: openedRefused,
+    /* THIS LOAD IS THE SHELL'S OWN RELOAD after the page stopped, answered once: the page then
+       holds its first frame until boot has ended, as it does for a reload it asks for itself. */
+    recovering: recovering.delete(e.sender.id),
     deskFile: deskFile(),
     home: os.homedir(),
     accent: hostAccent(),
@@ -887,11 +1071,12 @@ function ecCounts(data) {
    page reading every file in the folder each time it paints one list. */
 ipcMain.handle("etiuda:catalog-files", (e) => {
   if (!fromEngine(e)) return [];
-  return sampleLast(ecFilesIn(catalogFolder())).map(f => {
+  return sampleLast(ecFilesIn(catalogFolder()).concat(builtInFiles())).map(f => {
     let mt = 0, cards = -1, edition = "", macros = -1, intents = -1, cats = -1, awaiting = [];
     let id = "", catalogName = "";
     try { mt = Math.round(fs.statSync(f).mtimeMs); } catch { /* renamed away under the listing */ }
     try {
+      if (refusedByEngine(f)) throw new Error("refused by the engine");
       const { data } = catalogPayload(fs.readFileSync(f, "utf8"));
       if (isV2(data) && Array.isArray(data.cards)) {
         cards = data.cards.length;
@@ -905,19 +1090,38 @@ ipcMain.handle("etiuda:catalog-files", (e) => {
     } catch { /* not a catalog, and the Load button is where that is said out loud */ }
     return { name: path.basename(f), mtime: mt, cards: cards, edition: edition,
              macros: macros, intents: intents, cats: cats, awaiting: awaiting,
-             sample: isTheSample(f), id: id, catalogName: catalogName };
+             sample: isTheSample(f), id: id, catalogName: catalogName,
+             // The copy Etiuda ships, rather than a folder's own file of any name.
+             builtIn: path.dirname(f) === BUILT_IN_DIR };
   });
 });
 ipcMain.handle("etiuda:catalog-read", (e, name) => {
   if (!fromEngine(e)) return null;
   const base = String(name || "");
   if (!base || base !== path.basename(base) || !/\.ec$/i.test(base)) return null;
-  const file = path.join(catalogFolder(), base);
-  try { return { name: base, text: fs.readFileSync(file, "utf8") }; }
+  const file = catalogFileNamed(base) || path.join(catalogFolder(), base);
+  try {
+    if (!fileAnswers(file)) throw new Error("the catalog folder is not answering");
+    return { name: base, text: fs.readFileSync(file, "utf8") };
+  }
   catch (err) {
     console.error("etiuda: " + file + " could not be read - " + err.message);
     return { name: base, text: "" };
   }
+});
+/* THE RING, the text of V2_RING_FILE in the catalog folder or "" where there is none: the page
+   reads it with the engine's own v2RingRead, and a ring only adds trust, so absent is not a
+   fault. Bounded like a request, since the share is anybody's to write. */
+const RING_NAME = "etiuda-ring.json";
+ipcMain.handle("etiuda:catalog-ring", (e) => {
+  if (!fromEngine(e) || !folderAnswers(catalogFolder())) return "";
+  let text = "";
+  try {
+    const file = path.join(catalogFolder(), RING_NAME);
+    if (fs.statSync(file).size > 65536) { console.error("etiuda: " + file + " is larger than any ring, so it is not read"); return ""; }
+    text = fs.readFileSync(file, "utf8");
+  } catch { /* no ring, which is the ordinary case */ }
+  return text;
 });
 ipcMain.handle("etiuda:stats-write", (e, text) => {
   if (!fromEngine(e)) return { ok: false };
@@ -967,39 +1171,71 @@ ipcMain.handle("etiuda:pick-catalog-file", async (e, title, label) => {
   }
 });
 
-/* EXPORT'S OWN DIALOG, the shell's for Import's reason. The bytes go to a temp file beside the
-   choice and are renamed over it, so a failed write never leaves half a catalog under that name,
-   and the answer says whether they landed: {name, ok}, or null for a dialog the person closed. */
-ipcMain.handle("etiuda:save-catalog-file", async (e, title, name, text, label) => {
+/* EXPORT'S OWN DIALOG, the shell's for Import's reason, in two calls: the chosen file's name is the
+   catalog's name, so the page writes the catalog only once the choice is made. The path stays
+   here and the page is told the name; the write goes to this window's last choice, once. A name
+   typed without the extension is given it, since the folder lists only that kind of file.
+   ETIUDA_TEST_SAVE_AS is the harness's answer to the dialog: a folder, the offered name inside it. */
+let savePending = null;
+ipcMain.handle("etiuda:choose-catalog-save", async (e, title, name, label) => {
   if (!fromEngine(e)) return null;
-  const base = path.basename(String(name || "")) || "etiuda-catalog.js";
-  const ext = path.extname(base).slice(1) || "js";
+  savePending = null;
+  const base = path.basename(String(name || "")) || "Etiuda catalog.ec";
+  const ext = path.extname(base).slice(1) || "ec";
   const win = BrowserWindow.fromWebContents(e.sender);
   const opts = {
     title: String(title || "Etiuda").slice(0, 120),
     defaultPath: path.join(app.getPath("documents"), base),
     filters: [{ name: String(label || "Etiuda catalog").slice(0, 60), extensions: [ext] }],
   };
-  const r = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
+  const r = process.env.ETIUDA_TEST_SAVE_AS
+    ? { canceled: false, filePath: path.join(process.env.ETIUDA_TEST_SAVE_AS, base) }
+    : win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
   if (r.canceled || !r.filePath) return null;
-  const tmp = r.filePath + ".tmp";
+  let file = r.filePath;
+  if (path.extname(file).toLowerCase() !== "." + ext.toLowerCase()) file += "." + ext;
+  savePending = { id: e.sender.id, file: file };
+  return { name: path.basename(file) };
+});
+/* The bytes go to a temp file beside the choice and are renamed over it, so a failed write never
+   leaves half a catalog under that name, and the answer says whether they landed. */
+ipcMain.handle("etiuda:write-catalog-save", async (e, text) => {
+  if (!fromEngine(e)) return null;
+  const p = savePending;
+  savePending = null;
+  if (!p || p.id !== e.sender.id) return null;
   try {
-    fs.writeFileSync(tmp, String(text || ""), "utf8");
-    fs.renameSync(tmp, r.filePath);
-    return { name: path.basename(r.filePath), ok: true };
+    writeReplacing(p.file, String(text || ""));
+    return { name: path.basename(p.file), ok: true };
   } catch (err) {
-    console.error("etiuda: " + r.filePath + " could not be written - " + err.message);
-    try { fs.unlinkSync(tmp); } catch { /* never made */ }
-    return { name: path.basename(r.filePath), ok: false };
+    console.error("etiuda: " + p.file + " could not be written - " + err.message);
+    return { name: path.basename(p.file), ok: false };
   }
 });
 
-/* The folder in force, opened in the file manager. No path from the renderer: what opens is what
-   the search order above reads, so the one thing this can do is the thing it is for. */
+/* A .ec DROPPED ON THE WINDOW: the renderer names a path, and this answers only an existing file
+   with the extension the installer registers, through the double-click's own route. */
+ipcMain.on("etiuda:offer-dropped", (e, file) => {
+  if (!fromEngine(e)) return;
+  const f = String(file || "");
+  if (!/\.ec$/i.test(f)) return;
+  try { if (!fs.statSync(f).isFile()) return; } catch { return; }
+  offerFile(BrowserWindow.fromWebContents(e.sender), path.resolve(f));
+});
+
+/* The folder in force, opened in the file manager. No path from the renderer, but the setting
+   is a desk key the page writes, so it may name a file, and openPath LAUNCHES a file: only a
+   folder is opened. */
 ipcMain.handle("etiuda:open-catalog-folder", async (e) => {
   if (!fromEngine(e)) return false;
   const dir = catalogFolder();
-  try { fs.mkdirSync(dir, { recursive: true }); } catch { /* it may be a share that is down */ }
+  // A folder that is not answering cannot be shown to be a folder, so it is not opened either.
+  let isDir = false;
+  if (folderAnswers(dir)) {
+    try { fs.mkdirSync(dir, { recursive: true }); } catch { /* it may be a share that is down */ }
+    try { isDir = fs.statSync(dir).isDirectory(); } catch { /* gone, or a share that is down */ }
+  }
+  if (!isDir) { console.error("etiuda: " + dir + " is not a folder, so it is not opened"); return false; }
   const why = await shell.openPath(dir);
   if (why) console.error("etiuda: " + dir + " could not be opened - " + why);
   return !why;
@@ -1086,9 +1322,230 @@ function offscreenAt() {
   return { x: x, y: y };
 }
 
+/* THE WINDOW'S PLACE, kept beside the desk and not in it: desk.json can be carried to another
+   machine, and a rectangle belongs to this one's displays. Read and written only for an ordinary
+   launch, never for the harness's placed-aside window. */
+const OPEN_SIZE = { width: 1280, height: 880 };
+function windowFile() { return path.join(app.getPath("userData"), "window.json"); }
+/* Pure, for tests/test.js. The saved rectangle on the work area it overlaps most, moved and cut
+   to lie wholly inside it; where it overlaps none, the opening size centred on the primary. */
+function windowPlace(saved, areas, primary, size) {
+  const overlap = (a, b) => Math.max(0, Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x))
+    * Math.max(0, Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y));
+  const ok = !!saved && ["x", "y", "width", "height"].every(k => Number.isFinite(saved[k]))
+    && saved.width > 0 && saved.height > 0;
+  let area = null, best = 0;
+  if (ok) for (const a of areas) { const n = overlap(saved, a); if (n > best) { best = n; area = a; } }
+  const r = area ? saved : Object.assign({ x: primary.x + (primary.width - size.width) / 2,
+                                           y: primary.y + (primary.height - size.height) / 2 }, size);
+  const on = area || primary;
+  const width = Math.round(Math.min(r.width, on.width)), height = Math.round(Math.min(r.height, on.height));
+  return {
+    x: Math.round(Math.min(Math.max(r.x, on.x), on.x + on.width - width)),
+    y: Math.round(Math.min(Math.max(r.y, on.y), on.y + on.height - height)),
+    width: width, height: height,
+    maximized: !!area && saved.maximized === true,
+  };
+}
+function readWindowPlace() {
+  let saved = null;
+  try { saved = JSON.parse(fs.readFileSync(windowFile(), "utf8")); } catch { /* first launch, or unreadable */ }
+  try {
+    return windowPlace(saved, screen.getAllDisplays().map(d => d.workArea), screen.getPrimaryDisplay().workArea, OPEN_SIZE);
+  } catch (e) {
+    console.error("etiuda: the displays could not be read - " + e.message);
+    return Object.assign({ maximized: false }, OPEN_SIZE);
+  }
+}
+/* The normal rectangle, so a window closed maximised comes back maximised over the place it
+   will restore to; a snapped one is kept as the rectangle it was snapped to. `maximized` is the
+   last state the caller saw, since a minimised window is neither. Temp file then rename. */
+function saveWindowPlace(win, maximized) {
+  if (!win || win.isDestroyed()) return;
+  const snapped = !maximized && !win.isMinimized() && typeof win.isSnapped === "function" && win.isSnapped();
+  const b = snapped ? win.getBounds() : win.getNormalBounds();
+  const file = windowFile();
+  try {
+    writeReplacing(file, JSON.stringify({ x: b.x, y: b.y, width: b.width, height: b.height,
+                                          maximized: !!maximized }));
+  } catch (e) { console.error("etiuda: the window's place could not be written - " + e.message); }
+}
+
+/* THE SHELL'S OWN WORDS, for the two surfaces the page cannot draw: the context menu, and the
+   recovery window shown when the page itself has stopped. The language is uiLang()'s rule in
+   ui-lang.js: the desk's eUiLang where it names one, else the system's. */
+const SHELL_WORDS = {
+  en: { lang: "en", undo: "Undo", cut: "Cut", copy: "Copy", paste: "Paste", selectAll: "Select all",
+        addWord: "Add to dictionary", gone: "Etiuda stopped unexpectedly.", hung: "Etiuda is not responding.",
+        restart: "Restart", close: "Close Etiuda", wait: "Wait" },
+  pl: { lang: "pl", undo: "Cofnij", cut: "Wytnij", copy: "Kopiuj", paste: "Wklej", selectAll: "Zaznacz wszystko",
+        addWord: "Dodaj do słownika", gone: "Etiuda niespodziewanie się zatrzymała.",
+        hung: "Etiuda nie odpowiada.", restart: "Uruchom ponownie", close: "Zamknij Etiudę", wait: "Czekaj" },
+};
+function shellWords() {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  const stored = deskKeys.eUiLang;
+  if (SHELL_WORDS[stored]) return SHELL_WORDS[stored];
+  /* The page's navigator.languages is the locale, then the system's list, measured on Electron 44. */
+  for (const tag of [app.getLocale()].concat(app.getPreferredSystemLanguages())) {
+    const code = String(tag || "").toLowerCase().split("-")[0];
+    if (SHELL_WORDS[code]) return SHELL_WORDS[code];
+  }
+  return SHELL_WORDS.en;
+}
+
+/* THE CONTEXT MENU. A text field gets the edit commands, with spelling suggestions first over a
+   misspelt word; selected text elsewhere gets Copy; anywhere else nothing opens. */
+function contextMenuFor(wc, p) {
+  const w = shellWords(), f = p.editFlags || {}, items = [];
+  if (p.isEditable && p.misspelledWord) {
+    (p.dictionarySuggestions || []).slice(0, 5).forEach(s =>
+      items.push({ label: s, click: () => wc.replaceMisspelling(s) }));
+    items.push({ label: w.addWord, click: () => wc.session.addWordToSpellCheckerDictionary(p.misspelledWord) });
+    items.push({ type: "separator" });
+  }
+  if (p.isEditable) {
+    items.push({ label: w.undo, role: "undo", enabled: !!f.canUndo }, { type: "separator" },
+      { label: w.cut, role: "cut", enabled: !!f.canCut }, { label: w.copy, role: "copy", enabled: !!f.canCopy },
+      { label: w.paste, role: "paste", enabled: !!f.canPaste }, { type: "separator" },
+      { label: w.selectAll, role: "selectAll", enabled: !!f.canSelectAll });
+  } else if (String(p.selectionText || "").trim()) {
+    items.push({ label: w.copy, role: "copy", enabled: !!f.canCopy });
+  }
+  return items;
+}
+/* ETIUDA_TEST_CONTEXT_MENU: the harness reads the menu from stdout instead of a popup, which would
+   take the pointer and the keyboard of whoever is at the desk until dismissed. */
+const MENU_TO_LOG = !!process.env.ETIUDA_TEST_CONTEXT_MENU;
+
 /* The one window, held so a folder change arriving through a desk save can re-arm the watch and
    offer what the new folder holds. There is exactly one; a second would need a list. */
 let theWindow = null;
+/* THE RECOVERY WINDOW'S PAGE, drawn here because the page that would draw it has stopped. It has
+   no script, like the refusal: each choice is a link to a query of its own, which the window
+   hears at will-navigate. The leading choice is filled and last, as in the engine's own dialogs,
+   and colour-scheme follows nativeTheme, which the desk's theme sets. */
+function recoveryDoc(lang, message, buttons) {
+  const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const order = buttons.map((b, i) => i).filter(i => i > 0).concat([0]);
+  return '<!DOCTYPE html>\n<html lang="' + esc(lang) + '">\n<meta charset="utf-8">\n'
+    + '<meta http-equiv="Content-Security-Policy" content="' + policyFor(["'none'"]) + '">\n'
+    + '<title>Etiuda</title>\n<style>\n'
+    + ':root{color-scheme:light;--bg:#fff;--ink:#0f172a;--soft:color-mix(in srgb,#0f172a 4%,transparent);'
+    + '--over:#dceafe;--over-ink:#2563eb;--fill:#2563eb;--lift:brightness(1.08)}\n'
+    + '@media (prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#1d1f24;--ink:#e3e6ea;'
+    + '--soft:color-mix(in srgb,#e3e6ea 6%,transparent);--over:color-mix(in srgb,#2563eb 30%,transparent);'
+    + '--over-ink:#fff;--lift:brightness(.92)}}\n'
+    + 'html,body{height:100%;margin:0}\n'
+    + 'body{box-sizing:border-box;padding:18px 18px 14px;display:flex;flex-direction:column;'
+    + 'justify-content:space-between;background:var(--bg);color:var(--ink);cursor:default;user-select:none;'
+    + '-webkit-app-region:drag;font:15px/1.5 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}\n'
+    + 'h1{margin:0;font:600 16px/1.35 "Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;'
+    + 'letter-spacing:-.2px;text-wrap:balance}\n'
+    + 'nav{display:flex;justify-content:flex-end;gap:8px}\n'
+    + 'a{-webkit-app-region:no-drag;padding:7px 11px;border:1px solid transparent;border-radius:8px;'
+    + 'background:var(--soft);color:var(--ink);font:13px "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;'
+    + 'text-decoration:none;white-space:nowrap;outline:none;cursor:default}\n'
+    + 'a:hover,a:focus-visible{background:var(--over);color:var(--over-ink)}\n'
+    + 'a.go,a.go:hover,a.go:focus-visible{background:var(--fill);border-color:var(--fill);color:#fff;font-weight:600}\n'
+    + 'a.go:hover,a.go:focus-visible{filter:var(--lift)}\n'
+    + '@media (forced-colors:active){a{border-color:ButtonText}a:focus-visible{outline:2px solid Highlight}}\n'
+    + '</style>\n<h1>' + esc(message) + '</h1>\n<nav>'
+    + order.map(i => '<a href="?answer-' + i + '"' + (i === 0 ? ' class="go" autofocus' : '') + '>'
+      + esc(buttons[i]) + '</a>').join("")
+    + '</nav>\n';
+}
+const RECOVERY_SIZE = { width: 400, height: 112 };
+/* A SMALL WINDOW OF ITS OWN, in its own renderer, so it can ask while the desk's page is gone or
+   hung. Answers { response } as the system box did: the chosen index, 0 for Escape or a close, and
+   nothing once the signal aborts it. ITS PAGE IS A FILE: a link followed in a file:// document
+   reaches will-navigate, as the refusal's does, where Chromium stops one in a data: URL unheard
+   (measured). A file that cannot be written takes the first choice at once. */
+function askInWindow(parent, message, buttons, signal) {
+  return new Promise(done => {
+    const w = shellWords(), dark = !!nativeTheme.shouldUseDarkColors;
+    const file = path.join(os.tmpdir(), "etiuda-recovery-" + process.pid + ".html");
+    try { fs.writeFileSync(file, recoveryDoc(w.lang, message, buttons)); }
+    catch (e) {
+      console.error("etiuda: the recovery window could not be drawn, so its first choice is taken - " + e.message);
+      done({ response: 0 });
+      return;
+    }
+    let at = {};
+    try {
+      const b = parent.getBounds();
+      at = { x: Math.round(b.x + (b.width - RECOVERY_SIZE.width) / 2), y: Math.round(b.y + (b.height - RECOVERY_SIZE.height) / 2) };
+    } catch { /* Electron centres it on the screen */ }
+    const box = new BrowserWindow(Object.assign({
+      parent: parent, modal: true, show: false, frame: false, useContentSize: true,
+      resizable: false, minimizable: false, maximizable: false, fullscreenable: false,
+      title: "Etiuda", backgroundColor: dark ? "#1d1f24" : "#ffffff",
+      webPreferences: { javascript: false, sandbox: true, contextIsolation: true, nodeIntegration: false,
+        webviewTag: false, webSecurity: true, spellcheck: false },
+    }, RECOVERY_SIZE, at, PLACED_ASIDE ? Object.assign({ focusable: false }, offscreenAt()) : {}));
+    let answered = false;
+    const answer = r => {
+      if (answered) return;
+      answered = true;
+      if (!box.isDestroyed()) box.close();
+      try { fs.unlinkSync(file); } catch { /* already gone */ }
+      done({ response: r });
+    };
+    box.webContents.on("will-navigate", (e, url) => {
+      e.preventDefault();
+      const m = /\?answer-(\d+)$/.exec(String(url || ""));
+      if (m && +m[1] < buttons.length) answer(+m[1]);
+    });
+    box.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    box.webContents.on("before-input-event", (e, input) => {
+      if (input.type === "keyDown" && input.key === "Escape") { e.preventDefault(); answer(0); }
+    });
+    box.on("closed", () => answer(0));
+    if (signal) signal.addEventListener("abort", () => answer(-1));
+    box.once("ready-to-show", () => {
+      if (OFFSCREEN_SHOWN) box.showInactive();
+      else if (!OFFSCREEN) box.show();
+    });
+    console.error("etiuda: the recovery window asks: " + message);
+    box.loadFile(file);
+  });
+}
+/* A PAGE THAT STOPS takes the band and its three controls with it, since the window has no frame.
+   The first loss reloads the page; a second within a minute asks in the recovery window above, as
+   a page that stops answering does. */
+function watchPage(win) {
+  let lastGone = 0, restarting = false, hangAsk = null;
+  const recover = () => { recovering.add(win.webContents.id); win.webContents.reload(); };
+  win.webContents.on("render-process-gone", (e, d) => {
+    if (win.isDestroyed() || d.reason === "clean-exit") return;
+    console.error("etiuda: the page stopped (" + d.reason + ", exit code " + d.exitCode + ")");
+    // Restart in the hang window reloads here, once the old page has gone: a reload sent straight
+    // after the kill can land in the dying process and leave the window empty.
+    if (restarting) { restarting = false; recover(); return; }
+    const again = Date.now() - lastGone < 60000;
+    lastGone = Date.now();
+    if (!again) { recover(); return; }
+    const w = shellWords();
+    askInWindow(win, w.gone, [w.restart, w.close]).then(r => {
+      if (win.isDestroyed()) return;
+      if (r.response === 0) recover(); else if (r.response === 1) win.close();
+    });
+  });
+  win.on("unresponsive", () => {
+    if (hangAsk || win.isDestroyed()) return;
+    console.error("etiuda: the page is not responding");
+    const w = shellWords();
+    hangAsk = new AbortController();
+    const signal = hangAsk.signal;
+    askInWindow(win, w.hung, [w.wait, w.restart], signal).then(r => {
+      hangAsk = null;
+      if (signal.aborted || r.response !== 1 || win.isDestroyed()) return;
+      restarting = true;
+      win.webContents.forcefullyCrashRenderer();
+    });
+  });
+  win.on("responsive", () => { if (hangAsk) hangAsk.abort(); });
+}
 function createWindow() {
   const backdrop = hostBackdrop();
   /* A REFUSAL PAGE CARRIES NO SCRIPT OF ITS OWN, so the engine never draws the band's three
@@ -1096,9 +1553,9 @@ function createWindow() {
      already a bad moment. The same readPin() the serve path calls, so there is one rule rather
      than two: a window that is going to show the refusal is given the system's frame. */
   const framed = !!readPin().why;
+  const place = PLACED_ASIDE ? null : readWindowPlace();
   const win = new BrowserWindow({
-    width: 1280,
-    height: 880,
+    ...(place ? { x: place.x, y: place.y, width: place.width, height: place.height } : OPEN_SIZE),
     minWidth: 546,
     show: false,
     /* frame:false, not titleBarStyle 'hidden' with titleBarOverlay. The overlay is drawn by the
@@ -1106,6 +1563,9 @@ function createWindow() {
        unpainted, so an overlay is an opaque rectangle in the band's right corner whatever
        colour it is given. It also owns the three buttons, which board item 290 gives to the
        band. The same construction serves macOS and Linux; only the material is Windows'. */
+    /* So the band's maximise button raises no Snap Layouts flyout: Windows raises it for a point
+       answering WM_NCHITTEST with HTMAXBUTTON, no point of a frameless window does, and
+       hookWindowMessage can watch that message but not answer it. */
     frame: framed,
     backgroundColor: "#00000000",
     ...(PLACED_ASIDE ? Object.assign({ focusable: false }, offscreenAt()) : {}),
@@ -1124,25 +1584,66 @@ function createWindow() {
       webSecurity: true,
     },
   });
+  /* THE SAVED SIZE IS THE SIZE REOPENED. At 150 per cent the constructor's came back up to four
+     pixels larger and setBounds' one larger than asked (measured), so a window reopened daily grew:
+     the difference setBounds makes is measured here and taken off. */
+  if (place) {
+    const want = { x: place.x, y: place.y, width: place.width, height: place.height };
+    win.setBounds(want);
+    const got = win.getBounds();
+    if (got.width !== want.width || got.height !== want.height)
+      win.setBounds(Object.assign({}, want, { width: 2 * want.width - got.width, height: 2 * want.height - got.height }));
+  }
 
   /* showInactive, not show: value 2 wants a window with a rectangle and not the focus of
      whoever is at the desk, and show() takes the focus even from a non-focusable window.
      A NAMED FUNCTION AND A ONE-LINE REGISTRATION, because two checks in the harness insert a
      probe after this statement and match it by its text: a handler whose body is inline makes
      that anchor break every time the body changes. */
+  /* A window closed maximised is SHOWN by maximize(), so its first frame is already maximised. */
   const showWhenReady = () => {
     if (OFFSCREEN_SHOWN) win.showInactive();
-    else if (!OFFSCREEN) win.show();
+    else if (OFFSCREEN) return;
+    else if (place && place.maximized) { win.maximize(); win.focus(); }
+    else win.show();
   };
   win.once("ready-to-show", showWhenReady);
 
   /* The maximise glyph is a picture of the window's state, and the window can reach that state
      without the button: a double-click on the drag band, Windows key and an arrow, a snap. */
+  let maximized = !!(place && place.maximized), placeSave = null;
+  const keepPlace = () => {
+    if (PLACED_ASIDE || win.isDestroyed()) return;
+    if (!win.isMinimized()) maximized = win.isMaximized();
+    clearTimeout(placeSave);
+    placeSave = setTimeout(() => saveWindowPlace(win, maximized), 500);
+  };
   const tellMaximized = () => {
     if (!win.isDestroyed()) win.webContents.send("etiuda:maximized", win.isMaximized());
+    keepPlace();
   };
   win.on("maximize", tellMaximized);
   win.on("unmaximize", tellMaximized);
+  win.on("moved", keepPlace);
+  win.on("resized", keepPlace);
+  win.on("close", () => {
+    if (PLACED_ASIDE) return;
+    clearTimeout(placeSave);
+    if (!win.isMinimized()) maximized = win.isMaximized();
+    saveWindowPlace(win, maximized);
+  });
+
+  win.webContents.on("context-menu", (e, p) => {
+    const items = contextMenuFor(win.webContents, p);
+    if (!items.length) return;
+    if (MENU_TO_LOG) {
+      console.log("etiuda: context menu " + JSON.stringify(items.filter(i => i.label).map(i => [i.label, i.enabled !== false])));
+      return;
+    }
+    Menu.buildFromTemplate(items).popup({ window: win });
+  });
+
+  watchPage(win);
 
   /* The engine carries links to the open internet. Following one inside the window would
      replace the app with a web page and leave no way back to it. */
@@ -1226,15 +1727,14 @@ function refusalDoc(why) {
     + '</div></div>\n';
 }
 
-/* THE TWO SIBLING TAGS ARE NOT SERVED HERE. In a browser they are how a catalog or the demo
-   beside the engine arrives; under this shell the policy refuses both by design, since a catalog
-   comes through the host, and each refusal was a console error on every boot, so a healthy desk
-   never had a clean console (bug hunt 3, item 21). Cut from the served copy only, as the policy is
-   put into it: engine/etiuda.html keeps them for the browser. Each must match exactly once, like
-   the anchor: none means the template moved and the strip is stale, two means the literal has
-   turned up somewhere it must not be cut. tests/csp.js proves the policy still refuses a sibling
-   with one of its own planting, and that a clean boot logs nothing. */
-const SIBLING_TAGS = ['<script src="etiuda-catalog.js"></script>', '<script src="sample-catalog.js"></script>'];
+/* THE SIBLING TAG IS NOT SERVED HERE. In a browser it is how a catalog beside the engine arrives;
+   under this shell the policy refuses it by design, since a catalog comes through the host, and the
+   refusal was a console error on every boot, so a healthy desk never had a clean console (bug hunt
+   3, item 21). Cut from the served copy only, as the policy is put into it: engine/etiuda.html
+   keeps it for the browser. It must match exactly once, like the anchor: none means the template
+   moved and the strip is stale, two means the literal has turned up somewhere it must not be cut.
+   tests/csp.js proves the policy still refuses a sibling with one of its own planting. */
+const SIBLING_TAGS = ['<script src="etiuda-catalog.js"></script>'];
 
 function withPolicy(html) {
   const pin = readPin();
@@ -1288,8 +1788,17 @@ if (!theOnlyOne) {
     offerFile(win, file);
   });
   openedWith = ecFromArgv(process.argv);
+  /* The window waits on the folder's first answer, FOLDER_ASK_MS at most, rather than on a
+     synchronous read of a share that is not there. */
   app.whenReady().then(() => {
-    hardenSession(); applyThemeSource(); ensureCatalogFolder(); seedSample(); createWindow();
+    hardenSession(); applyThemeSource();
+    const dir = catalogFolder();
+    return askFolder(dir).then(ok => {
+      settleFolder(dir, ok);
+      ensureCatalogFolder(); createWindow();
+      // Asked for here: powerMonitor is not to be used before the app is ready.
+      require("electron").powerMonitor.on("resume", () => { folderDown = catalogFolder(); armFolder(theWindow); });
+    });
   });
 }
 

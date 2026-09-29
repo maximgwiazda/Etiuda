@@ -45,6 +45,12 @@ const MOD = n => pathToFileURL(join(MODDIR, n)).href;
 globalThis.window = globalThis.window || { innerWidth: 1280, innerHeight: 800 };
 globalThis.requestAnimationFrame = globalThis.requestAnimationFrame || (fn => setTimeout(fn, 0));
 globalThis.cancelAnimationFrame = globalThis.cancelAnimationFrame || (id => clearTimeout(id));
+/* THE SYSTEM'S LANGUAGE IS PINNED, because the interface follows it where nothing is stored and
+   node answers with this machine's own. English, as every check below that stores nothing
+   expects; the checks of the rule itself set their own list and put this one back. */
+const SYSTEM_LANGS = { list: ["en-US"] };
+Object.defineProperty(globalThis, "navigator", { configurable: true,
+  value: { get language() { return SYSTEM_LANGS.list[0]; }, get languages() { return SYSTEM_LANGS.list; } } });
 
 /* storage.js is imported here as well as tested below, because two other modules read a
    preference out of it and the only honest way to test that is to set the preference. */
@@ -124,6 +130,14 @@ const eq = (got, want) => got === want ? true
 /* ------------------------------------------------------------------ ids.js */
 {
   const I = await import(MOD("ids.js"));
+  /* THE FORMAT'S RULE, written here rather than read from catalog-v2.js: 3 to 64 of a-z, 0-9 and the
+     hyphen, the first not a hyphen. A thousand draws hold the shape and never repeat. */
+  check("ids.js", "a new catalog id has the format's shape, and a thousand of them are all different",
+    () => {
+      const got = new Set(); let bad = "";
+      for (let i = 0; i < 1000; i++) { const v = I.newCatalogId(); if (!/^[a-z0-9][a-z0-9-]{2,63}$/.test(v)) bad = v; got.add(v); }
+      return bad ? "malformed: " + bad : eq(got.size, 1000);
+    });
   check("ids.js", "slugCat lowercases, underscores and prefixes",
     () => eq(I.slugCat("Lost & Found"), "uc_lost_found"));
   check("ids.js", "slugCat of an unslugifiable name falls back to custom",
@@ -275,6 +289,27 @@ const eq = (got, want) => got === want ? true
     () => { S.nsSet("GateN", "v"); return eq(S.nsGet("GateN"), "v"); });
   check("storage.js", "a namespaced key still wears the shape every sweep matches",
     () => eq(S.E_KEY_RE.test(S.nsKey("Pack")), true));
+  /* THE ORBIT. The empty desk's layer is the build's namespace; a catalog's is a hash of its own id,
+     the name standing in only where a stored copy carries none. */
+  check("storage.js", "the empty desk's layer is the build's own namespace, a catalog's is its id's",
+    () => eq([S.layerNsOf(null) === S.E_NS, S.layerNsOf({ id: "lamp-shop", name: "Lamp" }) === S.eNsFor("lamp-shop"),
+      S.layerNsOf({ name: "Lamp" }) === S.eNsFor("Lamp"), S.layerNsOf({ id: "a1" }) !== S.layerNsOf({ id: "a2" })].join(","),
+      "true,true,true,true"));
+  check("storage.js", "a desk from before the orbit has its one layer moved to the catalog loaded, once, and nothing after",
+    () => {
+      ["Pack", "CatOrder"].forEach(n => S.lsSet(S.E_NS + n, "old " + n));
+      S.setLayer(S.eNsFor("orbit-probe"));
+      const moved = S.orbitOldLayer();
+      const there = [S.lyGet("Pack"), S.lyGet("CatOrder"), S.lsGet(S.E_NS + "Pack")];
+      /* Once only, by its marker: the catalog's layer emptied (as a Clear would) and loose work made
+         since, and a second start moves nothing. */
+      S.lyDel("Pack"); S.lsSet(S.E_NS + "Pack", "made later");
+      const again = S.orbitOldLayer();
+      const listed = S.eLayers().indexOf(S.eNsFor("orbit-probe")) > -1;
+      const out = [moved, there.join("|"), again, S.lsGet(S.E_NS + "Pack"), listed];
+      S.lsDel(S.E_NS + "Pack"); S.lyDel("Pack"); S.lyDel("CatOrder"); S.setLayer(S.E_NS);
+      return eq(JSON.stringify(out), JSON.stringify([2, "old Pack|old CatOrder|", 0, "made later", true]));
+    });
   S.lsDel("eGateA"); S.ssDel("eGateS"); S.nsDel("eGateN");
 }
 
@@ -305,6 +340,23 @@ const eq = (got, want) => got === want ? true
             const map = JSON.parse(saved[saved.length - 1]);
             return D.eSaveTrouble() === null && map.eGateLost === "1" ? true
               : JSON.stringify([D.eSaveTrouble(), Object.keys(map)]); });
+  /* AN OWN WRITE IS THE EXCEPTION: its caller speaks for its failure ("Could not save the catalog"),
+     so a refused one must not ride the next write that lands, as the refused key above does. */
+  refuse = true;
+  check("storage.js", "2a an own write the desk refuses is taken back, and the next write that lands does not store it",
+    () => { const own = D.lsSet("eGateOwn", "new", true), read = D.lsGet("eGateOwn");
+            refuse = false; D.lsSet("eGateAfter", "1");
+            const map = JSON.parse(saved[saved.length - 1]);
+            return own === false && read === null && !("eGateOwn" in map) ? true
+              : JSON.stringify([own, read, Object.keys(map)]); });
+  check("storage.js", "2a a refused own write over a value leaves that value, and the same write lands once the desk takes it",
+    () => { refuse = false; D.lsSet("eGateOwn2", "old", true);
+            refuse = true; const r1 = D.lsSet("eGateOwn2", "new", true), kept = D.lsGet("eGateOwn2");
+            refuse = false; const r2 = D.lsSet("eGateOwn2", "new", true);
+            const map = JSON.parse(saved[saved.length - 1]);
+            return r1 === false && kept === "old" && r2 === true && map.eGateOwn2 === "new" ? true
+              : JSON.stringify([r1, kept, r2, map.eGateOwn2]); });
+  refuse = false;
 
   const held = {};
   let full = false;
@@ -486,7 +538,7 @@ const CARD_B = {
     () => eq(C.COLLAPSE_BAND[0] + C.COLLAPSE_FAV[0], "::"));
   check("collapse.js", "a group folds and unfolds",
     () => {
-      C.expandAllGroups();
+      UILANG_STORE.lsDel("eCollapsed"); C.rereadCollapsed();
       const before = C.isCollapsed("gen");
       C.toggleCollapsed("gen");
       const after = C.isCollapsed("gen");
@@ -494,8 +546,13 @@ const CARD_B = {
       return before === false && after === true && C.isCollapsed("gen") === false
         ? true : before + "/" + after;
     });
-  check("collapse.js", "expandAllGroups clears the set held in memory",
-    () => { C.toggleCollapsed("gen"); C.expandAllGroups(); return eq(C.isCollapsed("gen"), false); });
+  check("collapse.js", "rereadCollapsed reads the folds from storage again: a stored fold stays, one taken out of storage goes",
+    () => {
+      C.toggleCollapsed("gen"); C.rereadCollapsed();
+      const kept = C.isCollapsed("gen");
+      UILANG_STORE.lsDel("eCollapsed"); C.rereadCollapsed();
+      return eq(kept + "|" + C.isCollapsed("gen"), "true|false");
+    });
   check("collapse.js", "an empty key is never collapsed",
     () => eq(C.isCollapsed(""), false));
   check("collapse.js", "groupKeyOf falls through to the card's own category",
@@ -543,7 +600,7 @@ const CARD_B = {
       if (had == null) S.lsDel("eUiLang"); else S.lsSet("eUiLang", had);
       return eq(got, "Ustawienia|Anuluj");
     });
-  check("ui-lang.js", "an unknown stored code reads English rather than breaking",
+  check("ui-lang.js", "an unknown stored code reads the system's language rather than breaking",
     () => {
       const S = UILANG_STORE; const had = S.lsGet("eUiLang");
       S.lsSet("eUiLang", "qq");
@@ -551,6 +608,21 @@ const CARD_B = {
       if (had == null) S.lsDel("eUiLang"); else S.lsSet("eUiLang", had);
       return eq(got, "Settings");
     });
+  /* THE SYSTEM DECIDES WHERE NOTHING IS STORED, first code this build has words for, and a stored
+     choice outranks it, English included, which is how English is kept on a Polish Windows. */
+  const underSystem = (list, stored, fn) => {
+    const S = UILANG_STORE, had = S.lsGet("eUiLang"), was = SYSTEM_LANGS.list;
+    SYSTEM_LANGS.list = list;
+    if (stored == null) S.lsDel("eUiLang"); else S.lsSet("eUiLang", stored);
+    try { return fn(); }
+    finally { SYSTEM_LANGS.list = was; if (had == null) S.lsDel("eUiLang"); else S.lsSet("eUiLang", had); }
+  };
+  check("ui-lang.js", "with nothing stored, a Polish system gets a Polish interface",
+    () => underSystem(["pl-PL"], null, () => eq(U.uiLang() + "|" + U.t("Settings"), "pl|Ustawienia")));
+  check("ui-lang.js", "the first code the build has words for wins, so German then English reads English",
+    () => underSystem(["de-DE", "en-GB", "pl"], null, () => eq(U.uiLang() + "|" + U.t("Settings"), "en|Settings")));
+  check("ui-lang.js", "English chosen and stored outranks a Polish system",
+    () => underSystem(["pl-PL"], "en", () => eq(U.uiLang() + "|" + U.t("Settings"), "en|Settings")));
   check("ui-lang.js", "t passes an English string through on an English interface",
     () => eq(U.t("Settings"), "Settings"));
   check("ui-lang.js", "counted picks the singular for one and the plural for more",
@@ -859,6 +931,16 @@ const CARD_B = {
     () => eq(C.cardLinksIntent({ _hidden: 1, allIntents: 1 }, "t:anything"), false));
   check("card-intent.js", "with no intent chosen a favourite outranks a plain card",
     () => eq(C.relevanceRank(CARD_A) >= 0, true));
+  const AS = await import(MOD("app-state.js"));
+  check("card-intent.js", "the Library's count of cards linked to an intent counts each card naming it once, whatever its category",
+    () => {
+      const had = AS.cards;
+      AS.setCards([{ id: "a", c: "x", intents: ["t:one", "t:one", "t:two"] }, { id: "b", intents: ["t:one"] },
+        { id: "c", allIntents: 1, intents: [] }]);
+      let n;
+      try { n = C.intentCardCounts(); } finally { AS.setCards(had); }
+      return eq([n.get("t:one"), n.get("t:two"), n.size].join("|"), "2|1|2");
+    });
 }
 
 /* ------------------------------------------------------------------ cat-relevance.js */
@@ -943,14 +1025,11 @@ const CARD_B = {
     () => eq(F.catalogEditionOlder("2026-01-09z", "2026-01-09aa"), true));
   check("catalog-file.js", "and alphabetically inside one length",
     () => eq(F.catalogEditionOlder("2026-01-09ab", "2026-01-09aa"), false));
-  check("catalog-file.js", "a proposed edition is a date, or a date with letters after it",
-    () => eq(/^\d{4}-\d{2}-\d{2}[a-z]*$/.test(String(F.proposeEdition(null))), true));
-  check("catalog-file.js", "proposing twice on today's edition steps the letters, not the date",
-    () => {
-      const a = F.proposeEdition(null);
-      const b = F.proposeEdition(a);
-      return b === a + "a" ? true : "a=" + a + " b=" + b;
-    });
+  /* A new catalog's first edition is today, written here from the clock by hand: a second route to
+     the same answer. */
+  check("catalog-file.js", "a new catalog's first edition is today's date in the one orderable form",
+    () => { const d = new Date(), p = v => String(v).padStart(2, "0");
+      return eq(F.todayEdition(), d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate())); });
 }
 
 /* ------------------------------------------------------------------ columns.js
@@ -1038,11 +1117,12 @@ const CARD_B = {
 }
 
 /* ------------------------------------------------------------------ local-memory.js
-   The eject flag is a session value read once and cleared, so the notice cannot appear twice. */
+   The two acts are the module's whole surface: nothing parks across a reload any more, so nothing
+   else is exported. What they do is driven in tests/test.js and, in a browser, tests/swap.mjs. */
 {
   const L = await import(MOD("local-memory.js"));
-  check("local-memory.js", "nothing was ejected, so nothing is claimed",
-    () => eq(L.ejectedJustNow(), false));
+  check("local-memory.js", "the module exports the eject and the clear, and nothing else",
+    () => eq(Object.keys(L).sort().join(","), "clearLocalMemory,ejectCatalog"));
 }
 
 /* ==================================================================================
@@ -1355,7 +1435,8 @@ const CARD_B = {
     () => {
       if (typeof P.flushStats === "function") P.flushStats();
       let got = null;
-      try { got = JSON.parse(ST.nsGet("Pack") || "null"); } catch (e) { got = null; }
+      // The counts' own key where the tree keeps them beside the pack, the pack itself where not.
+      try { got = JSON.parse(ST.nsGet("Stats") || ST.nsGet("Pack") || "null"); } catch (e) { got = null; }
       return eq(((got && got.useCounts) || {})["c-counted-copy"], 1);
     });
 }
@@ -1378,6 +1459,58 @@ const CARD_B = {
     () => withCards(CARDS, () => eq(MG.mgCardsIn("bay").map(m => m.id).join(","), "x1,x3")));
   check("manage.js", "a category with nothing in it lists nothing",
     () => withCards(CARDS, () => eq(MG.mgCardsIn("empty").length, 0)));
+}
+
+/* ------------------------------------------------------------------ manage.js, card-body.js
+   WORDS THE LANGUAGE SWEEP CANNOT REACH: a sentence with a number in it, and anything in the card
+   list, which no sweep covers. Under a stored Polish interface neither may carry the English it
+   is built from; the English controls say the check reads the words it means to. */
+{
+  const MG = await import(MOD("manage.js"));
+  const CB = await import(MOD("card-body.js"));
+  const inLang = (l, fn) => {
+    const S = UILANG_STORE, had = S.lsGet("eUiLang");
+    S.lsSet("eUiLang", l);
+    try { return fn(); } finally { if (had == null) S.lsDel("eUiLang"); else S.lsSet("eUiLang", had); }
+  };
+  check("manage.js", "THE CONTROL: on an English interface the copy count reads English, one and several",
+    () => inLang("en", () => eq(MG.mgUsesTip(1) + "|" + MG.mgUsesTip(3),
+      "Copied 1 time in this browser|Copied 3 times in this browser")));
+  check("manage.js", "on a Polish interface the copy count keeps its number, drops the English, and one reads unlike five",
+    () => inLang("pl", () => {
+      const one = MG.mgUsesTip(1), few = MG.mgUsesTip(3), many = MG.mgUsesTip(5);
+      const ok = [one, few, many].every(s => !/Copied|time/.test(s))
+        && one.indexOf("1") > -1 && few.indexOf("3") > -1 && many.indexOf("5") > -1
+        && one.replace("1", "") !== many.replace("5", "");
+      return ok ? true : JSON.stringify([one, few, many]);
+    }));
+  check("card-body.js", "THE CONTROL: the in-card intent strip reads English on an English interface",
+    () => inLang("en", () => {
+      const h = CB.swapStripHtml([]);
+      return h.indexOf('title="Click to pick') > -1 && h.indexOf("<b>Set {INTENT}</b>") > -1 ? true : h;
+    }));
+  check("card-body.js", "on a Polish interface neither the strip's tooltip nor its label is the English",
+    () => inLang("pl", () => {
+      const h = CB.swapStripHtml([]);
+      return h.indexOf("Click to pick") < 0 && h.indexOf("Set {INTENT}") < 0 && h.indexOf("{INTENT}") > -1 ? true : h;
+    }));
+
+  /* THE REFUSAL'S CAUSE. A desk stores in one file, so a catalog it could not keep is refused by
+     naming that file; blaming a browser's storage there points nowhere. Both languages, since the
+     wrong cause was in both. */
+  const C = await import(MOD("catalog.js"));
+  const DESK = "%USERPROFILE%\\AppData\\Roaming\\etiuda\\desk.json";
+  check("catalog.js", "THE CONTROL: with no desk file the catalog refusal is the browser's, in English and in Polish",
+    () => {
+      const en = inLang("en", () => C.catalogStoreRefusal("")), pl = inLang("pl", () => C.catalogStoreRefusal(""));
+      return /browser/.test(en) && /przeglądar/.test(pl) ? true : JSON.stringify([en, pl]);
+    });
+  check("catalog.js", "a desk's catalog refusal names the file it could not write and no browser, in English and in Polish",
+    () => {
+      const en = inLang("en", () => C.catalogStoreRefusal(DESK)), pl = inLang("pl", () => C.catalogStoreRefusal(DESK));
+      return en.indexOf(DESK) > -1 && pl.indexOf(DESK) > -1 && !/browser/i.test(en) && !/przeglądar/i.test(pl)
+        && pl !== en ? true : JSON.stringify([en, pl]);
+    });
 }
 
 /* ------------------------------------------------------------------ favourites.js
@@ -1726,9 +1859,65 @@ const CARD_B = {
   }
 }
 
-/* NOT card-body.js. cardBodyHtml() reads the PAX box off the document through fill(), so it
-   cannot be called without one: it is the browser oracle's, and tests/smoke.js has it. Recorded
-   here rather than left unsaid, because a module missing from this file should say why. */
+/* ------------------------------------------------------------------ tabs.js, what is active, said
+   "Every tab save compares them with what was last said and, once the keys rest, speaks the
+   difference": so a change reaches #eSay through scheduleTabSave, a change undone before the keys
+   rest says nothing, a field a toast has said is not said again, and the same words twice are
+   emptied first. The region is the one element faked here, recording every write; the timers are
+   real, so each case waits out the rest. Category "gen" is content-model's own built-in. */
+{
+  const T = await import(MOD("tabs.js"));
+  const A = await import(MOD("app-state.js"));
+  const CM = await import(MOD("content-model.js"));
+  const writes = [];
+  const say = { _t: "", get textContent() { return this._t; }, set textContent(v) { this._t = v; writes.push(v); } };
+  const hadDoc = globalThis.document;
+  globalThis.document = { getElementById: id => (id === "eSay" ? say : null), querySelector: () => null, querySelectorAll: () => [] };
+  const wasLangs = CM.CONTENT_LANGS.slice(), wasLang = A.lang, wasCats = A.cats.slice(), wasIdxs = A.intentIdxs.slice();
+  const rest = () => new Promise(r => setTimeout(r, 320));
+  const run = async (from, change) => {
+    A.putLang(from.lang || "en"); A.setCats(from.cats || []); A.setIntentIdxs([]);
+    say._t = from.said || ""; writes.length = 0;
+    T.activeHeard();
+    await change();
+    await rest();
+    return writes.join("|");
+  };
+  try {
+    CM.setContentLangs(["en", "pl"]);
+    const r1 = await run({}, () => { A.setCats(["gen"]); T.scheduleTabSave(); });
+    check("tabs.js", "a category chosen after the last thing said is said by its name once the keys rest",
+      () => eq(r1, "General"));
+    const r2 = await run({}, () => { A.putLang("pl"); T.scheduleTabSave(); });
+    check("tabs.js", "a language changed is said in the pair's own words",
+      () => eq(r2, "Polish cards"));
+    const r3 = await run({}, () => { A.setCats(["gen"]); T.scheduleTabSave(); A.setCats([]); T.scheduleTabSave(); });
+    check("tabs.js", "a change undone before the keys rest says nothing",
+      () => eq(r3, ""));
+    const r4 = await run({}, () => { A.setCats(["gen"]); T.scheduleTabSave(); T.activeHeard("cats"); });
+    check("tabs.js", "a change a toast has already said is not said again",
+      () => eq(r4, ""));
+    const r5 = await run({ cats: [], said: "General" }, () => { A.setCats(["gen"]); T.scheduleTabSave(); });
+    check("tabs.js", "the same words as the region holds are emptied first, so they are spoken again",
+      () => eq(r5, "|General"));
+    A.putLang("pl"); A.setCats([]); A.setIntentIdxs([]);
+    T.tabs.push({ id: "mc-b", pax: "Anna Nowak" });
+    const was = { tab: "mc-a", lang: "en", intents: "", cats: "" }, now = { tab: "mc-b", lang: "pl", intents: "", cats: "" };
+    check("tabs.js", "a tab switched to is said whole: the first name, then the language",
+      () => eq(T.activeWords(was, now), "Anna. Polish cards"));
+    check("tabs.js", "intents gone on the same tab are said as cleared",
+      () => eq(T.activeWords({ tab: "x", lang: "pl", intents: "t:1", cats: "" }, { tab: "x", lang: "pl", intents: "", cats: "" }), "{INTENT} cleared"));
+  } finally {
+    T.tabs.splice(0, T.tabs.length);
+    CM.setContentLangs(wasLangs); A.putLang(wasLang); A.setCats(wasCats); A.setIntentIdxs(wasIdxs);
+    await rest();
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+  }
+}
+
+/* NOT cardBodyHtml(). It reads the PAX box off the document through fill(), so it cannot be
+   called without one: it is the browser oracle's, and tests/smoke.js has it. card-body.js is
+   called above only for its intent strip, which reads no document. */
 
 /* ------------------------------------------------------------------ the count, and this
    gate's own liveness. A gate whose covered set silently fell to a handful would still print

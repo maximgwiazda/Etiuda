@@ -1,6 +1,6 @@
 import { findCard } from "./card-model.js";
-import { mgReduceMotion, E_EASE, E_SPRING, E_SPRING_MS, CARD_MOVE_MAX } from "./motion.js";
-import { nsSet } from "./storage.js";
+import { mgReduceMotion, E_EASE, E_SPRING, E_SPRING_MS, M_MS, CARD_MOVE_MAX } from "./motion.js";
+import { lySet } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { intentCats, pillBand } from "./cat-relevance.js";
 import { cardHitsAlwaysCat, cardHitsSelectedIntent } from "./card-intent.js";
@@ -50,23 +50,87 @@ function wirePumpKick(){
   });
 }
 
+/* A pill's key in a capture: its category, "" for All, null for the add button, which has none;
+   undefined for anything else in the row. */
+function pillKey(p){ return p.dataset.k!=null ? p.dataset.k : p.classList.contains("pill-add") ? null : undefined; }
+/* Which line every child of the row sits on. A width tween may run only where the old widths wrap
+   the row as the new ones do: every width rides one curve from one start, so a row that wraps alike
+   at both ends wraps alike throughout, and an equal height does not say so. */
+function pillLines(){ let s=""; for(const c of pills.children) s+=c.offsetTop+","; return s; }
+/* HOLDS THE ROW ON ITS NEW LINES AT THE OLD WIDTHS, where those widths wrap it another way: the first
+   pill of each line takes the left margin that keeps it off the line before, and the last the
+   negative right margin that keeps it on its own. Every width and margin then rides one curve from
+   one start to its end, so each line is a straight sum of them and wraps alike throughout. `tops`
+   are the children's lines at the new widths. Returns the pills it pinned. */
+function pinPillLines(kids,tops){
+  const cs=getComputedStyle(pills), gap=parseFloat(cs.columnGap||cs.gap)||0;
+  const room=pills.clientWidth-(parseFloat(cs.paddingLeft)||0)-(parseFloat(cs.paddingRight)||0);
+  const box=kids.map(c=>{ const s=getComputedStyle(c);
+    return {w:c.getBoundingClientRect().width, l:parseFloat(s.marginLeft)||0, r:parseFloat(s.marginRight)||0}; });
+  const pin=new Map();
+  let lead=0;
+  for(let i=0;i<kids.length;){
+    let j=i, sum=lead+box[i].l+box[i].w+box[i].r;
+    while(j+1<kids.length && tops[j+1]===tops[i]){ j++; sum+=gap+box[j].l+box[j].w+box[j].r; }
+    const tail=Math.min(0,room-1-sum);
+    if(tail) pin.set(j,[pin.has(j)?pin.get(j)[0]:0,tail]);
+    lead=0;
+    if(j+1<kids.length){
+      const n=box[j+1];
+      lead=Math.max(0,room+1-(sum+tail)-gap-n.l-n.w-n.r);
+      if(lead) pin.set(j+1,[lead,0]);
+    }
+    i=j+1;
+  }
+  const pinned=[];
+  pin.forEach(([l,r],i)=>{
+    const p=kids[i];
+    p.style.transition="none";
+    if(l) p.style.marginLeft=(box[i].l+l)+"px";
+    if(r) p.style.marginRight=(box[i].r+r)+"px";
+    pinned.push(p);
+  });
+  return pinned;
+}
 /** The "invert and play" half. Call after the pills have been redrawn in their new order. */
 /* READ EVERY POSITION FIRST, THEN WRITE EVERY TRANSFORM: a rect read after a style
    write forces a full layout PER PILL - interleaved, this was 25.6ms of a 180ms
    animation budget. Split, each pass is one layout. */
 function flipPills(before){
   if(!before) return;
-  const moved=[], deltas=[], wEls=[], wStarts=[];
+  const els=[], bs=[], moved=[], deltas=[], wEls=[], wStarts=[];
   pills.querySelectorAll(".pill").forEach(p=>{
-    const k=p.dataset.k, b=k&&before[k];
-    if(!b) return;
+    const k=pillKey(p), b=k!==undefined && before.get(k);
+    if(b){ els.push(p); bs.push(b); }
+  });
+  const kids=Array.prototype.slice.call(pills.children), tops=kids.map(c=>c.offsetTop);
+  const lines=pillLines();
+  /* Width changes ride the same flip - a selection bolds the name, a recount changes the
+     digits, and either snapping while neighbours slide reads as a glitch. 1.5px floor:
+     fractional DPRs round every pill differently on every pass. */
+  els.forEach((p,i)=>{
+    const w=p.getBoundingClientRect().width;
+    if(Math.abs(bs[i].width-w)>=1.5){ wEls.push(p); wStarts.push(bs[i].width); p.dataset._eW=w; }
+  });
+  /* The old widths go back BEFORE the positions are read: each one shifts every pill after it
+     in the row, so an offset read at the new widths starts the glide that far from the pill. */
+  wEls.forEach((p,i)=>{ p.style.transition="none"; p.style.width=wStarts[i]+"px"; });
+  /* The wrap is the invariant - see pillLines. Where the old widths move a line break, the row is
+     pinned to its new lines; where even that fails, the widths snap and the row still slides. */
+  let pinned=[];
+  if(wEls.length && pillLines()!==lines){
+    pinned=pinPillLines(kids,tops);
+    if(pillLines()!==lines){
+      pinned.forEach(p=>{ p.style.marginLeft=""; p.style.marginRight=""; p.style.transition=""; });
+      pinned=[];
+      wEls.forEach(p=>{ p.style.width=""; p.style.transition=""; delete p.dataset._eW; });
+      wEls.length=0;
+    }
+  }
+  els.forEach((p,i)=>{
     const a=p.getBoundingClientRect();
-    /* Width changes ride the same flip - a selection bolds the name, a recount changes the
-       digits, and either snapping while neighbours slide reads as a glitch. 1.5px floor:
-       fractional DPRs round every pill differently on every pass. */
-    if(Math.abs(b.width-a.width)>=1.5){ wEls.push(p); wStarts.push(b.width); p.dataset._eW=a.width; }
     // whole pixels only - fractional offsets put the text on a half-pixel and it blurs
-    const dx=Math.round(b.left-a.left), dy=Math.round(b.top-a.top);
+    const dx=Math.round(bs[i].left-a.left), dy=Math.round(bs[i].top-a.top);
     if(!dx && !dy) return;
     moved.push(p); deltas.push(dx+"px,"+dy+"px");
   });
@@ -81,10 +145,6 @@ function flipPills(before){
     p.style.willChange="transform";
     p.style.transform="translate("+deltas[i]+")";
   });
-  /* Width rides the SAME transition string as the slide - two tweens fighting over
-     style.transition left whichever wrote last, and the other snapped. */
-  const hNat=pills.scrollHeight;   // through the clip - see the note at tweenPillWidths
-  wEls.forEach((p,i)=>{ if(moved.indexOf(p)<0) p.style.transition="none"; p.style.width=wStarts[i]+"px"; });
   if(!moved.length && !wEls.length) return;
   /* Commit the inverted position before attaching the transition. A frame is not a commitment:
      these elements were often created by the re-render a moment ago, and if the browser never
@@ -93,17 +153,21 @@ function flipPills(before){
      appeared in its new place. One forced reflow, then attach and release in the same task -
      which also removes the rAF that a background tab would otherwise pause indefinitely. */
   void pills.offsetHeight;
-  /* Height is the invariant - see tweenPillWidths. A rolled-back width still slides. */
-  if(wEls.length && pills.scrollHeight!==hNat){
-    wEls.forEach(p=>{ p.style.width=""; delete p.dataset._eW; });
-    wEls.length=0;
-  }
-  const T=".18s "+E_EASE;
-  moved.forEach(p=>{ p.style.transition="transform "+T+(wEls.indexOf(p)>=0?", width "+T:""); p.style.transform=""; });
-  wEls.forEach(p=>{ if(moved.indexOf(p)<0) p.style.transition="width "+T; p.style.width=p.dataset._eW+"px"; });
+  const T="var(--m-move) "+E_EASE;
+  new Set(moved.concat(wEls,pinned)).forEach(p=>{
+    const t=[];
+    if(moved.indexOf(p)>=0) t.push("transform "+T);
+    if(wEls.indexOf(p)>=0) t.push("width "+T);
+    if(pinned.indexOf(p)>=0) t.push("margin-left "+T,"margin-right "+T);
+    p.style.transition=t.join(", ");
+  });
+  moved.forEach(p=>{ p.style.transform=""; });
+  wEls.forEach(p=>{ p.style.width=p.dataset._eW+"px"; });
+  pinned.forEach(p=>{ p.style.marginLeft=""; p.style.marginRight=""; });
   setTimeout(()=>{
     moved.forEach(p=>{ p.style.transition=""; p.style.transform=""; p.style.willChange=""; });
     wEls.forEach(p=>{ p.style.transition=""; p.style.width=""; delete p.dataset._eW; });
+    pinned.forEach(p=>{ p.style.transition=""; p.style.marginLeft=""; p.style.marginRight=""; });
   },200);
 }
 function animateReorder(mutate){
@@ -112,84 +176,23 @@ function animateReorder(mutate){
   drawPills();
   flipPills(before);
 }
-/* FLIP for cards when an intent re-sorts them. Same two-half shape as the pills, but
-   cards need guards the pills do not, because a card list is not a pill strip:
-   - MEMBERSHIP must be identical. Macro search removes 175 of 199 entries; that is a filter,
-     not a reorder, and there is nothing to interpolate for a card that no longer exists.
-   - SIZE cap. In the All view an intent re-sort moves 197 cards a median of 1747px and a
-     maximum of 42861px. A card crossing 42861px in a fifth of a second is a blur artifact,
-     and it would mean 199 transform layers.
-   - TRAVEL cap per card, for the same reason at the level of a single card.
-   - VIEWPORT filter. Cards are ~274px tall, so about three are on screen; animating the rest
-     is invisible work.
-   - SCROLL-TOP only. pickIntent sets pendingScrollHit, and render() then smooth-scrolls to
-     the first linked entry, which can be a 12000px journey. Animating card positions under a
-     viewport travelling that far reads as chaos. Near the top that scroll is a no-op, which
-     is exactly when the animation is worth having, so the two never run at once. */
-/* No cap on how many cards are on the PAGE. The old 25-cap meant a real catalog never
-   animated - the measurement was of the wrong thing: an intent pick moves ~200 cards,
-   but only NINE are anywhere near the viewport. What has to be capped is TRANSFORMS,
-   which the viewport filter and CARD_MOVE_MAX below already do - the same shape
-   flipCardsAround() uses for star and hide. */
-/* Travel cap at half a viewport (~1.5 cards): far enough to watch a card change
-   places, not far enough to be mistaken for the page scrolling - long moves read as
-   unwanted auto-scroll, never as swaps. */
-const CARD_FLIP_TRAVEL_VH=0.5;
+/* A PICK AND A CLEAR RE-SORT THE CARDS UNDER THE SETTLE'S PLAN (glideSettle below): a card on
+   screen before and after glides both ways, across a column too, and one new to the screen rises
+   in where it lands. SCROLL-TOP only: pickIntent sets pendingScrollHit, and render() then
+   smooth-scrolls to the first linked entry, which can be a 12000px journey. Animating card
+   positions under a viewport travelling that far reads as chaos. Near the top that scroll is a
+   no-op, which is exactly when the animation is worth having, so the two never run at once. */
 const CARD_FLIP_SCROLL_TOP=80;     // only when the auto-scroll will not move the view
 function captureCards(){
   if(!list || mgReduceMotion() || pageScrollY()>CARD_FLIP_SCROLL_TOP) return null;
-  const els=list.querySelectorAll(".card[data-id]");
-  if(!els.length) return null;
-  /* Positions for the cards near the viewport, plus the total count. The count is what
-     tells a REORDER from a FILTER: a search removes most of the list, and there is
-     nothing to interpolate for a card that no longer exists. The captured subset cannot
-     say that - it is meant to be smaller than the list. */
-  const margin=window.innerHeight;
-  const tops={};
-  let n=0;
-  els.forEach(c=>{
-    n++;
-    const r=c.getBoundingClientRect();
-    if(r.bottom>-margin && r.top<window.innerHeight+margin) tops[c.dataset.id]=r.top;
-  });
-  return {n:n, tops:tops};
+  return captureSettle();
 }
 function flipCards(before){
-  if(!before || !list) return;
-  const els=Array.prototype.slice.call(list.querySelectorAll(".card[data-id]"));
-  // Identical membership only - a filter is not a reorder.
-  if(!els.length || els.length!==before.n) return;
-  /* Honest rects: the render that preceded this replaced every node, and
-     content-visibility:auto resolves relevancy a frame later - a rect read now sees the
-     220px estimate, not the card. Forcing the property on the watched cards makes their
-     rects real; the scroll-top gate in captureCards() means nothing estimated sits above
-     them, so real is also correct. Released with the transition cleanup, or on any bail. */
-  const watched=[];
-  els.forEach(c=>{ if(before.tops[c.dataset.id]!=null){ watched.push(c); c.style.contentVisibility="visible"; } });
-  const release=()=>watched.forEach(c=>{ c.style.contentVisibility=""; });
-  const limit=window.innerHeight*CARD_FLIP_TRAVEL_VH, margin=window.innerHeight;
-  const moved=[], dys=[];
-  watched.forEach(c=>{
-    const b=before.tops[c.dataset.id];
-    const r=c.getBoundingClientRect();
-    if(r.bottom<-margin || r.top>window.innerHeight+margin) return;
-    // whole pixels only - fractional offsets put the text on a half-pixel and it blurs
-    const dy=Math.round(b-r.top);
-    if(!dy || Math.abs(dy)>limit) return;
-    moved.push(c); dys.push(dy);
-  });
-  if(!moved.length || moved.length>CARD_MOVE_MAX){ release(); return; }
-  moved.forEach((c,i)=>{ c.style.transition="none"; c.style.willChange="transform";
-                         c.style.transform="translateY("+dys[i]+"px)"; });
-  const clear=()=>{ moved.forEach(c=>{ c.style.transition=""; c.style.transform=""; c.style.willChange=""; }); release(); };
-  // Commit the invert before attaching the transition - see the note in flipPills().
-  void list.offsetHeight;
-  moved.forEach(c=>{ c.style.transition="transform .22s "+E_EASE; c.style.transform=""; });
-  setTimeout(clear,280);
+  glideSettle(before,"move");
 }
 /* THE SETTLE'S GLIDE: when a search settles, the cards on screen travel to their new places on
-   the spring, and a card new to the screen rises in. A filter as well as a reorder, unlike the
-   pick's flip above, so matching is by id and membership may differ. Near the top only, for
+   the spring, and a card new to the screen rises in. A filter as well as a reorder, so matching
+   is by id and membership may differ. Near the top only, for
    flipCardsAround()'s reason: deep in the list the new places ride on estimated cards. */
 let eSettleRuns=[];
 function captureSettle(){
@@ -207,7 +210,8 @@ function captureSettle(){
   return at;
 }
 const E_SPRING_OK=typeof CSS!=="undefined" && CSS.supports && CSS.supports("transition-timing-function","linear(0,1)");
-function glideSettle(before){
+/* `tier` "move" is a press's re-sort, on the 180ms curve; a settled search travels on the spring. */
+function glideSettle(before,tier){
   if(!before || !list) return;
   const vh=window.innerHeight;
   if(list.getBoundingClientRect().top<=-vh*0.5) return;
@@ -223,15 +227,24 @@ function glideSettle(before){
     // Past half a screen only a card that began on screen travels; one from beyond the edge
     // rises in where it lands, like a card new to the screen.
     if(!o || (Math.abs(dy)>vh*0.5 && !(o.bottom>0 && o.top<vh))){ plan.push([el]); continue; }
-    if((dx||dy) && Math.abs(dy)<=vh*1.2) plan.push([el,dx,dy]);
+    // A card whose text grew opens to its new height as the cards below it make room.
+    const grew=o.bottom>0 && o.top<vh ? Math.round(r.height-o.height) : 0;
+    if((dx||dy||grew>1) && Math.abs(dy)<=vh*1.2) plan.push([el,dx,dy,grew>1?grew:0]);
   }
   if(!plan.length) return;
-  plan.forEach(([el,dx,dy])=>{
-    eSettleRuns.push(dx==null
-      ? el.animate([{opacity:0,transform:"translateY(8px) scale(.985)"},{opacity:1,transform:"none"}],
-          {duration:160,easing:E_EASE})
-      : el.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],
-          {duration:E_SPRING_MS,easing:E_SPRING_OK?E_SPRING:E_EASE}));
+  const glide=tier==="move" ? {duration:M_MS.move,easing:E_EASE}
+    : {duration:E_SPRING_MS,easing:E_SPRING_OK?E_SPRING:E_EASE};
+  plan.forEach(([el,dx,dy,grew])=>{
+    if(dx==null){
+      eSettleRuns.push(el.animate([{opacity:0,transform:"translateY(8px) scale(.985)"},{opacity:1,transform:"none"}],
+        {duration:M_MS.surface,easing:E_EASE}));
+      return;
+    }
+    if(dx||dy) eSettleRuns.push(el.animate([{transform:"translate("+dx+"px,"+dy+"px)"},{transform:"none"}],glide));
+    /* The clip stands clear of the panels' rings and shadows on three sides; the fourth runs from
+       the old height to the card's own edge, the growth alone, on the curve the cards below travel
+       on, so the two edges keep their gap. Past the edge it would run ahead of the card below. */
+    if(grew) eSettleRuns.push(el.animate([{clipPath:"inset(-24px -24px "+grew+"px -24px)"},{clipPath:"inset(-24px -24px 0px -24px)"}],glide));
   });
   eKickPump();   // no animationstart for a scripted animation, so the pump is asked by hand
 }
@@ -273,7 +286,7 @@ function wirePillDrag(){
   addEventListener("pointerup",()=>{
     if(!dragState) return;
     if(dragState.moved){
-      nsSet("CatOrder",JSON.stringify(catOrder));
+      lySet("CatOrder",JSON.stringify(catOrder));
       setSuppressClick(true);                    // don't let the release toggle the filter
       document.documentElement.classList.remove("pilldrag");
       pills.querySelectorAll(".pill").forEach(p=>p.classList.remove("dragging"));
@@ -303,6 +316,7 @@ function paintRailSelection(){
   const sel=new Set(intentIdxs.map(String));
   box.querySelectorAll(".rail-item[data-si]").forEach(el=>{
     el.classList.toggle("on", sel.has(el.dataset.si));
+    el.setAttribute("aria-pressed", sel.has(el.dataset.si)?"true":"false");
   });
 }
 /* A RING ARRIVES WITH THE CLICK AND LEAVES WITH THE CARD. Additions only: the cards that
@@ -361,7 +375,7 @@ function cancelPickTail(){
 }
 
 export {
-  wirePumpKick, flipPills, animateReorder, captureCards, flipCards, captureSettle, glideSettle,
+  wirePumpKick, pillKey, pillLines, flipPills, animateReorder, captureCards, flipCards, captureSettle, glideSettle,
   wirePillDrag,
   paintRailSelection, paintIntentRings,
   schedulePickTail,

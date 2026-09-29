@@ -1,6 +1,6 @@
 "use strict";
 
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 /* The engine reads window.E_CATALOG while it boots, so the value has to be there before its
    first script runs. A preload is the only code early enough, and a synchronous request the
@@ -29,13 +29,22 @@ contextBridge.exposeInMainWorld("E_HOST", {
   catalogFolder: host.catalogFolder,
   catalogFile: host.catalogFile,
   catalogIn: host.catalogIn,
+  /* True where that file is one Etiuda ships, whose folder is never named. */
+  catalogBuiltIn: !!host.catalogBuiltIn,
   catalogMtime: host.catalogMtime,
   /* True when that file is the one this copy was opened with rather than the folder's newest. */
   openedWith: host.openedWith,
+  /* True once, on the load the shell made after the page stopped. */
+  recovering: !!host.recovering,
+  /* The engine refused the file named: {json, file, in, builtIn, mtime} for the next one the
+     shell would read, or null. Synchronous, because the engine asks while it boots. */
+  catalogRefused: (name) => ipcRenderer.sendSync("etiuda:catalog-refused", String(name || "")),
   /* The folder's own listing and one file out of it, both asked for after boot: Settings shows
      what is there now, and the folder may have moved since this load began. */
   catalogFiles: () => ipcRenderer.invoke("etiuda:catalog-files"),
   openCatalogFolder: () => ipcRenderer.invoke("etiuda:open-catalog-folder"),
+  /* The ring beside the catalogs as text, read afresh each time the page verifies a signature. */
+  catalogRing: () => ipcRenderer.invoke("etiuda:catalog-ring"),
   readCatalogFile: (name) => ipcRenderer.invoke("etiuda:catalog-read", String(name || "")),
   /* The caption is the page's, because the shell has no t(). Async, unlike the desk: a modal
      the person is standing in front of must not hold the renderer's thread. */
@@ -52,6 +61,9 @@ contextBridge.exposeInMainWorld("E_HOST", {
   deskRead: () => ipcRenderer.sendSync("etiuda:desk"),
   deskSave: (text) => ipcRenderer.sendSync("etiuda:desk-save", text),
   deskWrite: (text) => ipcRenderer.invoke("etiuda:desk-write", text),
+  /* Only the keys this load changed, null for one it deleted; `now` waits for the disk as deskSave does. */
+  deskPatch: (text, now) => (now ? ipcRenderer.sendSync("etiuda:desk-patch-save", text)
+    : ipcRenderer.invoke("etiuda:desk-patch", text)),
   /* Where the desk is, and the files it refused and kept aside, as text like the desk itself. */
   deskFile: host.deskFile,
   /* The home folder, so a path the page shows can be written %USERPROFILE% rather than by name. */
@@ -60,14 +72,26 @@ contextBridge.exposeInMainWorld("E_HOST", {
   deskRefusedSeen: () => ipcRenderer.send("etiuda:desk-refused-seen"),
   /* A refused file somebody double-clicked, {name, why}, answered once. */
   openedRefused: host.openedRefused || null,
-  /* Export's dialog: {name, ok} once written or refused, null for a dialog closed. */
-  saveCatalogFile: (title, name, text, label) => ipcRenderer.invoke("etiuda:save-catalog-file",
-    String(title || ""), String(name || ""), String(text || ""), String(label || "")),
+  /* Export's dialog, then the write to what was chosen: {name} or null for a dialog closed, then
+     {name, ok} once written or refused. */
+  chooseCatalogSave: (title, name, label) => ipcRenderer.invoke("etiuda:choose-catalog-save",
+    String(title || ""), String(name || ""), String(label || "")),
+  writeCatalogSave: (text) => ipcRenderer.invoke("etiuda:write-catalog-save", String(text || "")),
   /* The watched file, spec 11.5. Text, like the desk and for the same reason, and parsed by the
      engine's own reader: the shell has already refused anything that is not a format 2 catalog,
      and two parsers agreeing is what keeps a file the shell accepts a file the engine accepts. */
   onCatalogFile: (fn) => ipcRenderer.on("etiuda:catalog-file",
-    (_e, text, name, where, asked, why) => fn(String(text), String(name || ""), String(where || ""), !!asked, String(why || ""))),
+    (_e, text, name, where, asked, why, builtIn) =>
+      fn(String(text), String(name || ""), String(where || ""), !!asked, String(why || ""), !!builtIn)),
+  /* A catalog dropped on the window, handed over by the path its File has on disk and offered as
+     a double-clicked file is. False where the File has no path, and the page reads it instead. */
+  offerDropped: (file) => {
+    let at = "";
+    try { at = webUtils.getPathForFile(file); } catch { /* not a file from the disk */ }
+    if (!at) return false;
+    ipcRenderer.send("etiuda:offer-dropped", at);
+    return true;
+  },
   writeStats: (text) => ipcRenderer.invoke("etiuda:stats-write", String(text || "")),
   onStatsAsk: (fn) => ipcRenderer.on("etiuda:stats-ask", (_e, req) => fn(req && typeof req === "object" ? req : {})),
 });
