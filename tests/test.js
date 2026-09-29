@@ -2096,7 +2096,8 @@ function markClockTests() {
 /* WHAT A BUILD'S INSTALLER WRITES AROUND customInstall, as electron-builder's own makensis
    preprocesses it: the include, then registerFileAssociations only if the build declares a type,
    then installSection.nsh's own lines that insert both. Registry writes come back with the
-   LogicLib conditions open around them; a string is a refusal. */
+   LogicLib conditions open around them; a string is a refusal, and so is a registry line the
+   reader cannot parse, since a skipped write reads exactly like no write. */
 function nsisInstallWrites(root, cfg) {
   const cp = require("child_process");
   const lib = path.join(root, "node_modules", "app-builder-lib");
@@ -2132,8 +2133,9 @@ function nsisInstallWrites(root, cfg) {
     const c = /^StrCmp `([^`]*)` `([^`]*)` `` `([^`]+)`$/.exec(line);
     if (c) { open.push({ when: c[1] + "==" + c[2], label: c[3] }); continue; }
     if (open.length && line === open[open.length - 1].label + ":") { open.pop(); continue; }
-    const w = /^((?:Write|Delete)Reg\w+) (\S+) (["`])(.*?)\3(?: (["`])(.*?)\5)?(?: (["`])(.*?)\7)?$/.exec(line);
-    if (w) writes.push({ op: w[1], key: w[4], name: w[6], value: w[8], when: open.map(o => o.when).join(" && ") });
+    const w = /^((?:Write|Delete)Reg\w+) (\S+) (["'`])(.*?)\3(?: (["'`])(.*?)\5)?(?: (["'`])(.*?)\7)?$/.exec(line);
+    if (w) writes.push({ op: w[1], root: w[2], key: w[4], name: w[6], value: w[8], when: open.map(o => o.when).join(" && ") });
+    else if (/^(Write|Delete)Reg/i.test(line)) return "a registry line the reader cannot parse: " + line;
   }
   return { include, assoc: assoc.length, writes };
 }
@@ -2195,7 +2197,7 @@ function ecTypeNameTests() {
      nothing under Classes in any language while customInstall's other work still runs. */
   const cfgNow = require(path.join(root, "electron-builder.js"));
   const own = new Set([].concat(...(cfgNow.fileAssociations || []).map(a => [].concat(a.ext).map(x => "." + x).concat([a.name]))));
-  const classes = r => r.writes.filter(w => /^Software\\Classes\\/i.test(w.key));
+  const classes = r => r.writes.filter(w => /^Software\\Classes(\\|$)/i.test(w.key) || /^(HKCR|HKEY_CLASSES_ROOT)(32|64)?$/i.test(w.root));
   const desk = nsisInstallWrites(root, cfgNow);
   got = typeof desk === "string" ? desk : [classes(desk).filter(w => w.when).map(w => [w.key, w.value, w.when]),
     classes(desk).every(w => own.has(w.key.split("\\")[2]))];
