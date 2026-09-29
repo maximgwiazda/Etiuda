@@ -1298,9 +1298,26 @@ function fromEngine(e) {
   return !!f && f.parent === null && /\/engine\/etiuda\.html($|[?#])/.test(f.url || "");
 }
 
+/* A WEB ADDRESS LEAVES ONLY FOR A CLICK ON IT. The preload names the link a trusted click landed on,
+   synchronously, before that click's navigation can begin; the address is handed to the browser
+   only if it is that one, once, within LINK_CLICK_MS. Whatever the page opens by script is refused. */
+const LINK_CLICK_MS = 2000;
+let linkClicked = null;
+ipcMain.on("etiuda:link-click", (e, url) => {
+  e.returnValue = null;
+  try { if (fromEngine(e)) linkClicked = { href: new URL(String(url)).href, at: Date.now() }; }
+  catch { linkClicked = null; }
+});
 function openExternally(url) {
   try {
-    if (/^https?:$/.test(new URL(url).protocol)) shell.openExternal(url);
+    const u = new URL(url), c = linkClicked;
+    if (!/^https?:$/.test(u.protocol)) return;
+    if (!c || c.href !== u.href || Date.now() - c.at > LINK_CLICK_MS) {
+      console.error("etiuda: a web address the page opened without a click on it stays closed");
+      return;
+    }
+    linkClicked = null;
+    shell.openExternal(url);
   } catch { /* not a URL this shell can open, and the navigation is refused either way */ }
 }
 
