@@ -97,8 +97,8 @@ function eCatalogFiles(){
                                               431; empty where the file did not read. */
                                            id:String(f&&f.id||""),
                                            catalogName:String(f&&f.catalogName||""),
-                                           // Which copy: the one Etiuda ships, or this folder's in its place.
-                                           builtIn:!!(f&&f.builtIn), replaces:!!(f&&f.replaces)}))
+                                           // The copy Etiuda ships, rather than a folder's own file.
+                                           builtIn:!!(f&&f.builtIn)}))
                                  .filter(f=>f.name):[])
       .catch(()=>[]);
   }catch(e){ return Promise.resolve([]); }

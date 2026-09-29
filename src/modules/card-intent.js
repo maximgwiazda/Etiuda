@@ -113,6 +113,13 @@ function primaryCatKeys(){
   });
   return out;
 }
+/* How many cards link to each intent, by intent id: the cards naming it, as primaryCatKeys counts
+   them, whatever their category. */
+function intentCardCounts(){
+  const n=new Map();
+  (cards||[]).forEach(m=>{ if(m) new Set(normalizeCardIntents(m)).forEach(id=>n.set(id,(n.get(id)||0)+1)); });
+  return n;
+}
 function primaryCatKey(i){
   const want=intentIdAt(i), n={};
   (cards||[]).forEach(m=>{
@@ -130,6 +137,7 @@ export {
   primaryCatLabel,
   primaryCatKey,
   primaryCatKeys,
+  intentCardCounts,
   normalizeCardIntents,
   cardIntentLinks,
   cardLinksIntent,

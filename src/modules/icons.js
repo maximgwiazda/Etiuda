@@ -273,6 +273,12 @@ const ICON_LINT_WARNING='<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" 
   +'<path d="M12.5 3.5l8.5 17h-17z"/><circle cx="12.5" cy="15.25" r="1.5" fill="currentColor" stroke="none"/></svg>';
 const ICON_SUCCESS='<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
   +'<path d="M4.5 13.5l5 5 11-11"/></svg>';
+/* A catalog's two acts in the Library: an arrow into a tray, and the eject mark. */
+const ICON_LOAD=_svg("ic",'<path d="M10 3.6v8.6"/><path d="M6.5 8.9l3.5 3.5 3.5-3.5"/>'
+  +'<path d="M3.6 12.6v2.1a1.7 1.7 0 0 0 1.7 1.7h9.4a1.7 1.7 0 0 0 1.7-1.7v-2.1"/>');
+const ICON_EJECT=_svg("ic",'<path d="M10 4.2l5.6 6.6H4.4z"/><path d="M4.6 15.4h10.8"/>');
+// A catalog's signature: the category family's own key, one drawing for one idea.
+const ICON_KEY=_svg("ic",catIconInner("key"));
 
 export {
   ICON_CLEAR_TEXT,
@@ -281,5 +287,5 @@ export {
   CAT_LABELS_PL, CAT_LABELS_BY_LANG, setCatalogCatLabels, E_HUE_CYCLE, E_HUE_NAMES, CAT_ICON_MUSIC, CAT_ICON_KEYS,
   CAT_ICON_HINTS, ICON_STAR_ON, ICON_STAR_OFF, ICON_INTENT_LINK, ICON_PLUS, fillProseIcons,
   ICON_CHEVRON_R, ICON_X, ICON_LOCK, ICON_LOCK_OPEN, ICON_TAB_X, ICON_TAB_ADD,
-  ICON_AWAITING, ICON_LINT_ERROR, ICON_LINT_WARNING, ICON_SUCCESS,
+  ICON_AWAITING, ICON_LINT_ERROR, ICON_LINT_WARNING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT, ICON_KEY,
 };

@@ -557,6 +557,7 @@ function runUnitTests() {
   lintCatalogTests();
   langAgnosticTests();
   libraryAwaitingTests();
+  libraryRowsTests();
   copyControlTests();
   copyNoticeTests();
   catalogLangTests();
@@ -2555,6 +2556,46 @@ function shippedFlagTests() {
     [[true, false, ""], [true, false, ""]]);
   eq("a file found in the catalog folder is located in it and marks its row", offers(null, false, own, "team.ec", "", false),
     [false, true, "team.ec"]);
+
+  const copyOf = f => {
+    try { return new Function("t", "esc", extractDecl(offer, "function ecCopyHtml(") + "\nreturn ecCopyHtml;")(s => s, s => s)(f); }
+    catch (e) { return "ecCopyHtml did not run: " + e.message; }
+  };
+  eq("a Library row names the copy Etiuda ships and says nothing of a folder's file of the same name, changed or not",
+    [copyOf({ builtIn: true }), copyOf({ builtIn: false, replaces: true }), copyOf({})],
+    ['<span class="ec-copy" data-ec-copy="builtin">comes with Etiuda</span>', "", ""]);
+
+  const langSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "ui-lang.js"), "utf8");
+  const plAt = langSrc.indexOf("UI_STRINGS.pl={"), plEnd = langSrc.indexOf("\n};", plAt);
+  const PLS = new Function("const UI_STRINGS={};\n" + langSrc.slice(plAt, plEnd + 3) + "\nreturn UI_STRINGS.pl;")();
+  const rowOf = (o, tr) => {
+    try {
+      return new Function("t", "esc", "trustKeyHtml", "ecWatchHtml", "loadedTickHtml",
+        "catalogEdited", "ICON_LOAD", "ICON_EJECT",
+        extractDecl(offer, "function ecRowHtml(") + "\n" + extractDecl(offer, "function ecActHtml(") + "\nreturn ecRowHtml;")(
+        tr, s => s, (s, id) => "<key " + s + "|" + id + ">", () => "", () => "", () => false, "<svg>load</svg>", "<svg>eject</svg>")(o);
+    } catch (e) { return "ecRowHtml did not run: " + e.message; }
+  };
+  const sheet = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const glyph = (/\.ec-list\{--ec-glyph:(\d+)px\}/.exec(sheet) || [])[1];
+  const sized = [/\.ec-tick\{[^}]*width:var\(--ec-glyph\);height:var\(--ec-glyph\)/, /\.ec-key\{[^}]*width:var\(--ec-glyph\);height:var\(--ec-glyph\)/,
+    /\.ec-row \.ec-act \.ic\{width:var\(--ec-glyph\);height:var\(--ec-glyph\)\}/].map(re => re.test(sheet));
+  eq("a Library row's glyphs, the loaded mark, the key and Load or Eject, share one size above a toolbar icon's 15px",
+    [+glyph > 15, sized], [true, [true, true, true]]);
+  const keyThenAct = html => ((/<key ([^>]*)><button[^>]*data-ec-(load|eject)/.exec(String(html)) || []).slice(1).join(" ")) || String(html).slice(0, 120);
+  eq("a Library row's signature is a key beside its Load or Eject, carrying the state and the key's name the list hands it", [
+    keyThenAct(rowOf({ name: "team.ec", mtime: 5, trust: "valid", keyId: "k1" }, s => s)),
+    keyThenAct(rowOf({ name: "team.ec", loaded: true, trust: "none" }, s => s))], ["valid|k1 load", "none| eject"]);
+  const acts = html => (String(html).match(/<button[^>]*>[\s\S]*?<\/button>/g) || []).map(b => {
+    const at = n => ((new RegExp(" " + n + "=\"([^\"]*)\"")).exec(b) || [])[1] || "";
+    return [at("aria-label"), at("title"), b.replace(/^<button[^>]*>|<\/button>$/g, "")];
+  });
+  const en = s => s, pl = s => PLS[s] || s;
+  eq("a Library row's Load and Eject are glyph buttons keeping their word as tooltip and accessible name, in English and Polish", [
+    acts(rowOf({ name: "team.ec", mtime: 5 }, en)), acts(rowOf({ name: "team.ec", loaded: true }, en)),
+    acts(rowOf({ name: "team.ec", mtime: 5 }, pl)), acts(rowOf({ name: "team.ec", loaded: true }, pl))], [
+    [["Load", "Load", "<svg>load</svg>"]], [["Eject", "Eject", "<svg>eject</svg>"]],
+    [["Wczytaj", "Wczytaj", "<svg>load</svg>"]], [["Odłącz", "Odłącz", "<svg>eject</svg>"]]]);
 }
 /* A DIALOG TAKES THE KEYBOARD (feel pass, focus on open): openDialog and tabTargetIn are sliced out of
    dialog.js and run on a small tree written here. What a real key does there is the verifier's. */
@@ -3579,8 +3620,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 835;
-const UI_STRINGS_SHA256 = "5b9a0c3b3e8afb0b11a5441cb63a188de332704883ed3f85c6427427df7c063e";
+const UI_STRINGS_COUNT = 863;
+const UI_STRINGS_SHA256 = "3cfa576a230ced6a86df933f58af96e455a8fd7a2a45df76ce7efc11bb6b12ac";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
@@ -4397,6 +4438,82 @@ function langAgnosticTests() {
    on: counting only the cards on screen (the put-away card below carries whitespace and is the
    third of three), and taking the declared languages as the built-in pair (the second leg
    declares one). */
+/* THE LIBRARY'S OWN ROWS AND PANELS, sliced out of their modules and run on stubs: what each row is
+   made of, in which order. How it looks is the smoke's and Maxim's. */
+function libraryRowsTests() {
+  const manageSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "manage.js"), "utf8");
+  const introw = (cat, n, hidden) => {
+    try {
+      return new Function("intentIdAt", "isIntentHiddenIdx", "isIntentFavourite", "esc", "t", "intentIsCustom",
+        "intentIsOverridden", "ICON_EYE_SHUT", "ICON_EYE_OPEN", "ICON_TRASH", "catMarkHtml", "intentNavName", "ICON_EDIT",
+        "ICON_STAR_ON", "ICON_STAR_OFF",
+        extractDecl(manageSrc, "function mgIntentRow(") + "\nreturn mgIntentRow;")(
+        () => "t:one", () => !!hidden, () => false, s => s, s => s, () => false, () => false, "", "", "",
+        k => "<mark " + k + ">", () => "Refund", "", "", "")(0, new Map(cat ? [["t:one", cat]] : []), new Map(n ? [["t:one", n]] : []));
+    } catch (e) { return "mgIntentRow did not run: " + e.message; }
+  };
+  const shape = h => {
+    const m = /^<div class="manage-row mg-int( is-hidden)?"[^>]*>(<mark [^>]*>)<span class="mg-int-t cut-peek" data-i18n-skip>([^<]*)<\/span><span class="mg-int-n">(\d+)<\/span><span class="cacts">/.exec(String(h));
+    return m ? [m[2], m[3], m[4], !!m[1]].join(" ") : String(h).slice(0, 200);
+  };
+  eq("a Library intent row is the rail's: one dominant category's mark at its head, the name that fades, and the count of cards linked to it",
+    [shape(introw("billing", 7)), shape(introw("", 0)), shape(introw("billing", 3, true))],
+    ["<mark billing> Refund 7 false", "<mark > Refund 0 false", "<mark billing> Refund 3 true"]);
+  const cut = fs.readFileSync(path.join(E.ROOT, "src", "modules", "cut-text.js"), "utf8");
+  eq("the Library intent's name is one of the lines the cut pass fades", /\.mg-int-t,/.test(extractDecl(cut, "const CUT_SEL=")), true);
+  const pick = (/\n\.ic-pick\{[^}]*\}/.exec(fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8")) || [""])[0];
+  eq("the category editor's icon grid shows whole, with no height cap and no scroll of its own",
+    [!!pick, /max-height|overflow/.test(pick)], [true, false]);
+
+  const mt = fs.readFileSync(path.join(E.ROOT, "src", "modules", "maintenance.js"), "utf8");
+  const store = fs.readFileSync(path.join(E.ROOT, "src", "modules", "storage.js"), "utf8");
+  const B = String.fromCharCode(92), HOME = "C:" + B + "Users" + B + "ann", DOCS = HOME + B + "Documents" + B + "Etiuda";
+  const place = w => {
+    try {
+      return new Function("E_CATALOG_NAME", "storedCatalog", "eDeskHome", "nsGet", "eHost", "eCatalogAccepted", "eCatalog",
+        "E_CATALOG_SCRIPT", "lsGet", "E_CATALOG_FOLDER_KEY", "eCatalogFolder", "eCatalogFile", "eCatalogBuiltIn", "eCatalogIn",
+        [extractDecl(mt, "function mtSafe("), extractDecl(store, "function eHomeless("), extractDecl(mt, "function mtCatalogPlace(")].join("\n")
+        + "\nreturn mtCatalogPlace;")(
+        w.name || "", () => (w.held ? {} : null), () => HOME, k => (w.ns || {})[k], () => (w.host ? {} : null), () => !!w.accepted, () => ({}),
+        "etiuda-catalog.js", k => (k === "eCatalogFolder" ? w.chosen || null : null), "eCatalogFolder", () => w.folder || DOCS,
+        () => w.file || "", () => !!w.builtIn, () => w.in || "")();
+    } catch (e) { return "mtCatalogPlace did not run: " + e.message; }
+  };
+  const P = o => (typeof o === "string" ? o : [o.file, o.copy, o.folder].join(" | "));
+  eq("the Maintenance panel names where the catalog in use lies, which copy it is and its folder, on a desk and in a browser", [
+    P(place({ host: true, name: "Team", ns: { CatalogFile: "team.ec" } })),
+    P(place({ host: true, name: "Team", ns: { CatalogFile: "team.ec" }, chosen: "D:" + B + "shared", folder: "D:" + B + "shared" })),
+    P(place({ host: true, name: "Sample", ns: { CatalogFile: "" }, accepted: true, builtIn: true, file: "sample-catalog.ec" })),
+    P(place({ host: true, name: "Team", ns: { CatalogFile: "" }, accepted: true, file: "team.ec", in: HOME + B + "Desktop" })),
+    P(place({ host: true, name: "Mine", ns: { CatalogFile: "", CatalogFrom: "mine.ec" } })),
+    P(place({ name: "Sample", accepted: true })), P(place({ name: "Mine", held: true, ns: { CatalogFrom: "mine.ec" } })),
+    P(place({ host: true }))], [
+    "team.ec | Documents" + B + "Etiuda | %USERPROFILE%" + B + "Documents" + B + "Etiuda",
+    "team.ec | the chosen catalog folder's | D:" + B + "shared",
+    "sample-catalog.ec | the program's own | inside the program",
+    "team.ec | found beside the program | %USERPROFILE%" + B + "Desktop",
+    "mine.ec | a file opened by hand | -",
+    "etiuda-catalog.js | beside this page | -", "mine.ec | imported into this browser | -",
+    "- | (none loaded) | -"]);
+  let report;
+  try {
+    report = new Function("mtReadings", "navigator", extractDecl(mt, "function mtReportText(") + "\nreturn mtReportText;")(
+      () => [{ sec: "Catalog file" }, { k: "file", v: "team.ec", panelOnly: true }, { k: "copy", v: "Documents" }], { userAgent: "UA" })();
+  } catch (e) { report = "mtReportText did not run: " + e.message; }
+  // The stub above proves the filter only; the real mtReadings and the real list builder prove the wiring.
+  let wired;
+  try {
+    const readings = new Function("mtCatalogPlace", "eSaveTrouble", "pack", "eDeskRefused", extractDecl(mt, "function mtSafe(") + "\n"
+      + extractDecl(mt, "function mtReadings(") + "\nreturn mtReadings;")(
+      () => ({ file: "team.ec", copy: "Documents", folder: "-" }), () => null, {}, () => []);
+    wired = new Function("mtReadings", "navigator", extractDecl(mt, "function mtReportText(") + "\nreturn mtReportText;")(readings, { userAgent: "UA" })();
+  } catch (e) { wired = "mtReadings did not run: " + e.message; }
+  const lists = extractDecl(manageSrc, "function openManage(");
+  eq("the copied report carries where the catalog lies and never its file's own name, which the panel alone shows",
+    [/\nfile: /.test(report), /\ncopy: Documents\n/.test(report), /team\.ec/.test(wired), /\ncopy: Documents\n/.test(wired),
+     /[\s,]linked=intentCardCounts\(\)[,;]/.test(lists) && /mgIntentRow\(i,catOf,linked\)/.test(lists)],
+    [false, true, false, true, true]);
+}
 function libraryAwaitingTests() {
   const src = sourceText();
   const live = new Function("CONTENT_LANGS", "cardFieldKey", "cards",

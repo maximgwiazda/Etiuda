@@ -19,7 +19,8 @@ import { drawPills } from "./tabs.js";
 import { t, catalogCountsLine, counted, toast } from "./ui-lang.js";
 import { isFavourite, isIntentFavourite, pack, whoOptions, savePack } from "./pack.js";
 import { removeCard, removeIntent, setIntentHidden, syncIntentOrder, toggleFavourite, toggleIntentFavourite } from "./favourites.js";
-import { primaryCatLabel } from "./card-intent.js";
+import { primaryCatKeys, intentCardCounts } from "./card-intent.js";
+import { catMarkHtml } from "./cat-identity.js";
 import { intentIdAt, intentIdxFromId, intentIsCustom, intentIsOverridden, intentOrder, isIntentHiddenIdx } from "./intent-id.js";
 import { applyCatsToGlobal, removeCategory } from "./cat-set.js";
 import { esc } from "./esc.js";
@@ -543,6 +544,40 @@ function mgShowHiddenBtn(kind,n){
     ' title="'+esc(tipShowHidden(kind,n))+'">'+
     esc(t('Show all hidden'))+' ('+n+')</button>';
 }
+/* AN INTENT IN THE RAIL'S FORM: its one dominant category's mark at the head, the name on one line
+   fading where it runs out, and beside it the number of cards linked to it, which the rail does
+   not carry. `catOf` and `linked` are primaryCatKeys() and intentCardCounts(), taken once a list. */
+function mgIntentRow(i,catOf,linked){
+  const iid=intentIdAt(i);
+  const hid=isIntentHiddenIdx(i);
+  const fav=isIntentFavourite(iid);
+  const badge=(intentIsCustom(i)||intentIsOverridden(i))?' <span class="cbadge ed" title="'+esc(t("Changed or added by you, not what the catalog shipped"))+'">'+esc(t("mod"))+'</span>':"";
+  const favTip=fav?"Remove from Favourites":"Add to Favourites";
+  /* Hide toggles; delete is separate and lives only here. Both built-in and custom intents
+     can be deleted now - a built-in goes to pack.intentRemoved and comes back on Reset. */
+  const hideShow=hid
+    ?'<button type="button" data-show-intent="'+esc(iid)+'" title="Show this intent again" aria-label="Show this intent again">'+ICON_EYE_SHUT+'</button>'
+    :'<button type="button" data-hide-intent="'+esc(iid)+'" title="Hide this intent: it greys out and drops to the bottom" aria-label="Hide this intent">'+ICON_EYE_OPEN+'</button>';
+  const trash='<button type="button" class="danger mg-trash" data-remove-intent="'+esc(iid)+'" title="Delete this intent" aria-label="Delete this intent">'+ICON_TRASH+'</button>';
+  /* data-introw so mgRefreshAround() can find this row again after openManage() has replaced
+     every element - the same job data-cardrow does in the tree. */
+  /* data-band mirrors the card rows: a drag may only swap inside its own band, so hidden
+     entries cannot be dragged up among the live ones and a favourite cannot be dragged out of
+     the favourites - the same rule moveIntent() enforces for the panel, so the two surfaces
+     cannot disagree about what order means. Checked again against live state in
+     mgMoveIntentOrder, so a stale attribute cannot smuggle a row past its band. */
+  return '<div class="manage-row mg-int'+(hid?" is-hidden":"")+'" data-introw="'+esc(iid)+'"'+
+    ' data-band="'+(hid?"h":(fav?"f":"r"))+'">'+
+    catMarkHtml(catOf.get(iid)||"")+
+    '<span class="mg-int-t cut-peek" data-i18n-skip>'+esc(intentNavName(i)||"")+badge+'</span>'+
+    '<span class="mg-int-n">'+(linked.get(iid)||0)+'</span>'+
+    '<span class="cacts">'+
+      '<button type="button" data-edit-intent-mg="'+i+'" title="Edit intent" aria-label="Edit intent">'+ICON_EDIT+'</button>'+
+      hideShow+
+      trash+
+      '<button type="button" class="star-btn'+(fav?" on":"")+'" data-fav-intent-mg="'+esc(iid)+'" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'+
+    '</span></div>';
+}
 function openManage(){
   applyCatsToGlobal();
 
@@ -566,36 +601,9 @@ function openManage(){
       return a.n-b.n;
     })
     .map(x=>x.i);
-  const intentListRows=mgIntentIdxs.map(i=>{
-    const iid=intentIdAt(i);
-    const hid=isIntentHiddenIdx(i);
-    const fav=isIntentFavourite(iid);
-    const badge=(intentIsCustom(i)||intentIsOverridden(i))?' <span class="cbadge ed" title="'+esc(t("Changed or added by you, not what the catalog shipped"))+'">'+esc(t("mod"))+'</span>':"";
-    const catLab=primaryCatLabel(i)||"";
-    const favTip=fav?"Remove from Favourites":"Add to Favourites";
-    /* Hide toggles; delete is separate and lives only here. Both built-in and custom intents
-       can be deleted now - a built-in goes to pack.intentRemoved and comes back on Reset. */
-    const hideShow=hid
-      ?'<button type="button" data-show-intent="'+esc(iid)+'" title="Show this intent again" aria-label="Show this intent again">'+ICON_EYE_SHUT+'</button>'
-      :'<button type="button" data-hide-intent="'+esc(iid)+'" title="Hide this intent: it greys out and drops to the bottom" aria-label="Hide this intent">'+ICON_EYE_OPEN+'</button>';
-    const trash='<button type="button" class="danger mg-trash" data-remove-intent="'+esc(iid)+'" title="Delete this intent" aria-label="Delete this intent">'+ICON_TRASH+'</button>';
-    /* data-introw so mgRefreshAround() can find this row again after openManage() has replaced
-       every element - the same job data-cardrow does in the tree. */
-    /* data-band mirrors the card rows: a drag may only swap inside its own band, so hidden
-       entries cannot be dragged up among the live ones and a favourite cannot be dragged out of
-       the favourites - the same rule moveIntent() enforces for the panel, so the two surfaces
-       cannot disagree about what order means. Checked again against live state in
-       mgMoveIntentOrder, so a stale attribute cannot smuggle a row past its band. */
-    return '<div class="manage-row'+(hid?" is-hidden":"")+'" data-introw="'+esc(iid)+'"'+
-      ' data-band="'+(hid?"h":(fav?"f":"r"))+'"><span>'+esc(intentNavName(i)||"")+badge+
-      (catLab?' <span style="color:var(--dim);font:11px var(--mono)">'+esc(catLab)+'</span>':'')+'</span>'+
-      '<span class="cacts">'+
-        '<button type="button" data-edit-intent-mg="'+i+'" title="Edit intent" aria-label="Edit intent">'+ICON_EDIT+'</button>'+
-        hideShow+
-        trash+
-        '<button type="button" class="star-btn'+(fav?" on":"")+'" data-fav-intent-mg="'+esc(iid)+'" title="'+esc(favTip)+'" aria-label="'+esc(favTip)+'" aria-pressed="'+(fav?"true":"false")+'">'+(fav?ICON_STAR_ON:ICON_STAR_OFF)+'</button>'+
-      '</span></div>';
-  }).join("")||'<div class="manage-empty">'+esc(t("No intents."))+'</div>';
+  const catOf=primaryCatKeys(), linked=intentCardCounts();
+  const intentListRows=mgIntentIdxs.map(i=>mgIntentRow(i,catOf,linked)).join("")
+    ||'<div class="manage-empty">'+esc(t("No intents."))+'</div>';
 
   const catCount=Object.keys(CATS).length;
   /* Hiding is the one personal act with no way back at scale: hidden things are

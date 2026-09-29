@@ -2493,10 +2493,9 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 .btn.danger{color:#c44;border-color:color-mix(in srgb,#c44 47%,var(--bg))}
 /* About Etiuda dialog */
 .modal-card.about-modal{max-width:520px}
-/* Two columns of readings was the floor this was set for; the pinned rescue row is the wider
-   claim, and in Polish it missed one row by three pixels. Columns collapse back to one on
-   a phone and the row wraps, so this stays a ceiling rather than a demand. */
-.modal-card.mt-modal{max-width:680px}
+/* THE PANEL TAKES THE WINDOW'S WIDTH, and the readings as many columns as it holds, so the whole of
+   it stands on one screen without scrolling in any reasonably big window. */
+.modal-card.mt-modal{max-width:min(1240px,calc(100vw - 40px))}
 /* Light and OPEN, not bold: the one place the product says its own name was the heaviest
    text in the app. 350 + tracking gives the presence the bold was for. 350 needs Segoe UI
    Variable (Win11); older systems snap to 400 - degrades to plainer, never to broken. */
@@ -2566,13 +2565,13 @@ details.mf-fold>summary:focus-visible .acc-tw{color:var(--accent)}
 .ec-row.is-loaded{border-color:var(--go-edge,var(--go))}
 .ec-name{flex:1 1 auto;min-width:0}
 .ec-name b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ec-meta,.ec-name .ec-trust{display:block;color:var(--dim);font-size:11.5px}
+.ec-meta{display:block;color:var(--dim);font-size:11.5px}
 .ec-tag{flex:0 0 auto;font:600 10.5px var(--mono);color:var(--dim);
   border:1px solid var(--line);border-radius:999px;padding:1px 7px}
 /* THE LOADED ROW SAYS SO WITH A MARK, not with a word: it is the one row whose right-hand end
    also carries its acts, and a pill beside them took enough width to break the line of counts
    underneath onto two. The mark keeps the accent the row's own border already wears. */
-.ec-tick{flex:0 0 auto;width:14px;height:14px;color:var(--go)}
+.ec-tick{flex:0 0 auto;width:var(--ec-glyph);height:var(--ec-glyph);color:var(--go)}
 .ec-await{white-space:nowrap}
 .ec-await .ic{display:inline-block;width:14px;height:14px;vertical-align:-2.5px;margin-right:3px}
 .ec-row .btn{flex:0 0 auto}
@@ -2592,6 +2591,19 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
 .ec-where .ec-where-edit .ic{width:15px;height:15px}
 /* A catalog's own acts ride in its row, at the size the facts panel gives a small action. */
 .ec-row .btn{padding:4px 8px;font-size:12px}
+/* The row's glyphs share one size, --ec-glyph, set on the list. */
+.ec-list{--ec-glyph:18px}
+.ec-row .btn.ec-act{padding:5px}
+.ec-row .ec-act .ic{width:var(--ec-glyph);height:var(--ec-glyph)}
+/* The signature's key: gold is the favourite's gold, grey is no vocabulary at all. */
+.ec-key{flex:0 0 auto;display:flex;width:var(--ec-glyph);height:var(--ec-glyph);color:var(--dim);
+  border-radius:var(--radius-xs);outline:none}
+.ec-key .ic{width:100%;height:100%}
+.ec-key.on{color:var(--fav)}
+.ec-key[data-tip]:focus-visible{background:var(--accent-soft)}
+.ec-key-bub{z-index:236;max-width:min(300px,calc(100vw - 24px));padding:8px 12px;
+  font-size:12.5px;line-height:1.45;pointer-events:none;
+  animation:eModalCardIn var(--m-reveal) var(--m-ease) both}
 /* Three lines change what the row centres on: the name is the subject, so the badge and the
    buttons align to the NAME's line rather than to the middle of a column that grew. */
 .ec-row:has(.ec-watch){align-items:flex-start}
@@ -2648,9 +2660,10 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
   padding:6px 11px!important;width:130px!important;max-width:40vw}
 /* ---- Category editor: the icon grid and the colour swatches. Both are plain buttons in a
    bordered well, the same construction as .cat-pick above, so the dialog has one language. */
+/* THE GRID SHOWS WHOLE and never scrolls on its own: the editor grows to hold it, and a window too
+   short for the editor scrolls the editor's body instead. */
 .ic-pick{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px;padding:8px;
-  border:1px solid var(--line);border-radius:10px;background:var(--bg);
-  max-height:min(34vh,210px);overflow:auto}
+  border:1px solid var(--line);border-radius:10px;background:var(--bg)}
 .ic-opt{display:flex;align-items:center;justify-content:center;padding:7px;margin:0;
   border:0;border-radius:var(--radius-sm);background:transparent;color:var(--dim);cursor:default}
 .ic-opt:hover,.ic-opt:focus-visible{color:var(--accent);background:var(--accent-soft)}
@@ -2737,6 +2750,13 @@ details.manage-sec>summary h3{margin:0}
 .mg-intents .manage-row:hover{background:var(--accent-soft)}
 .mg-intents .manage-row.dragging{background:var(--accent-soft);
   box-shadow:0 0 0 1px var(--accent) inset;border-radius:7px}
+/* AN INTENT ROW IS ONE LINE, as in the rail: the name fades rather than wrapping. Each span is
+   scoped to the row, because `.manage-row span` gives every span a basis of 120px and leave to grow. */
+.mg-intents .manage-row.mg-int{flex-wrap:nowrap;gap:6px}
+.manage-row.mg-int .cat-slot{flex:0 0 16px}
+.manage-row .mg-int-t{flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden}
+.manage-row .mg-int-n{flex:0 0 auto;font:600 11px var(--mono);opacity:.65}
+.manage-row.mg-int.is-hidden .mg-int-t,.manage-row.mg-int.is-hidden .mg-int-n{color:var(--dim);opacity:.72}
 .mg-cat{border-radius:var(--radius-sm)}
 /* cursor:default explicitly - over a text node auto resolves to the I-beam, and the NAME
    kept promising a caret after inline renaming left this row. The row is a drag handle end
@@ -2925,24 +2945,30 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 /* COLUMNS THAT PACK, not a grid that aligns: a grid row costs the height of its taller cell
    on both sides, so a short section beside a long one bought empty space and the panel
    outgrew its window. Whole sections only: half of one at a column foot reads as two. */
-.mt-grid{columns:250px 2;column-gap:26px}
+.mt-grid{columns:228px;column-gap:22px}
 .mt-sec{margin:0 0 12px;break-inside:avoid}
 .mt-sec h3{margin:0 0 4px;font:600 10.5px var(--mono);text-transform:uppercase;
   letter-spacing:.6px;color:var(--dim)}
 .mt-row{display:flex;gap:12px;justify-content:space-between;align-items:baseline;
-  padding:2px 0;font:12.5px var(--mono)}
+  padding:1px 0;font:12px var(--mono)}
 .mt-row .k{color:var(--dim);flex:0 0 auto}
 .mt-row .v{color:var(--ink);text-align:right;overflow-wrap:anywhere;min-width:0}
 /* A COUNT PER COLUMN, when one reading answers the same four questions about two subjects: as
    key and value the label took the whole column and left the numbers wrapping one digit to a
    line. The two subjects share the header because they share the questions. */
 .mt-tab{display:grid;grid-template-columns:1fr repeat(4,auto);gap:1px 10px;
-  padding:2px 0;font:12.5px var(--mono)}
+  padding:1px 0;font:12px var(--mono)}
 .mt-tab span{text-align:right;color:var(--ink);white-space:nowrap}
 .mt-tab span:nth-child(5n+1){text-align:left;color:var(--dim)}
 /* Smaller than the numbers they head: the words are longer in some languages than in others,
    and the column has to hold the longest of them without the name losing its own room. */
 .mt-tab .h{color:var(--dim);opacity:.75;font-size:11px}
+/* A short window takes the readings a size down, which is what keeps the panel on one screen at
+   586 pixels, a 1438 x 879 window at 150 per cent. */
+@media (max-height:700px){
+  .mt-row,.mt-tab{font-size:11px;padding:0}
+  .mt-sec{margin-bottom:8px}
+}
 /* --warn earns its keep again: the one row that explains vanishing personal state. */
 .mt-row .v.mt-warn{color:var(--warn)}
 /* Glass off - a rescue, not a preference. The token lines the no-blur @supports block already

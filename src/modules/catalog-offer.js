@@ -4,7 +4,7 @@ import { activateCatalog, catalogEdited, catalogEditionOlder, catalogMacroCount,
   catalogIntentCount, exportCatalog, isCatalogUpdate } from "./catalog-file.js";
 import { E_CATALOG_KEY, E_CATALOG_NAME, E_CATALOG_VERSION, catalogStamp, catalogVersionLabel,
   eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
-  eWatchClear, parseCatalogFile, eWatchName, eCatalogRefusedNames, eRefuseCatalogFile } from "./catalog.js";
+  eWatchClear, parseCatalogFile, catalogDocOf, eWatchName, eCatalogRefusedNames, eRefuseCatalogFile } from "./catalog.js";
 import { eEmbeddedCatalog } from "./env.js";
 import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
   eCatalogIn, eCatalogBuiltIn, eCatalogMtime, eHost, eLoadedCatalogFile, eOpenCatalogFolder, eOpenedWith,
@@ -23,8 +23,8 @@ import { cardFieldKey } from "./card-fields.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { intentIdAt, intentOrder } from "./intent-id.js";
 import { pack } from "./pack.js";
-import { ICON_AWAITING, ICON_SUCCESS } from "./icons.js";
-import { catalogTrust, whenTrusted, heldCatalogTrust, recheckHeldTrust, trustMetaHtml, trustOfferLine,
+import { ICON_AWAITING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT } from "./icons.js";
+import { catalogTrust, whenTrusted, heldCatalogTrust, recheckHeldTrust, trustKeyHtml, trustOfferLine,
   trustSettled } from "./catalog-trust.js";
 
 /* A catalog sitting beside Etiuda is offered, never forced. Asked once per signature:
@@ -145,10 +145,10 @@ function ecWatchHtml(){
     +'</button></span></small>';
 }
 function ecRowHtml(o){
-  return '<div class="ec-row'+(o.loaded?" is-loaded":"")+'">'
+  return '<div class="ec-row'+(o.loaded?" is-loaded":"")+'"'+(o.file?' data-ec-file="'+esc(o.file)+'"':'')+'>'
     +'<span class="ec-name"><b>'+esc(o.name)+'</b>'
     +(o.meta?'<small class="ec-meta">'+o.meta+'</small>':'')
-    +(o.loaded?trustMetaHtml(heldCatalogTrust(), nsGet("Sample")==="1")+ecWatchHtml():'')+'</span>'
+    +(o.loaded?ecWatchHtml():'')+'</span>'
     /* A MARK RATHER THAN A WORD on the loaded row, and no tag at all on the sample. The row
        carrying the acts is the one with the least room, and a pill beside them wrapped the line
        of counts underneath. The sample is still never told it is Newer - it arrives after
@@ -157,19 +157,57 @@ function ecRowHtml(o){
     +(o.loaded?loadedTickHtml():'')
     +(o.newer&&!o.sample?'<span class="ec-tag" title="'+esc(t("Written after the catalog you have"))+'">'
         +esc(t("Newer"))+'</span>':'')
+    /* EXPORT IS THERE WHEN THERE IS SOMETHING TO EXPORT: with no edit of this desk's own on
+       top of it, the file this catalog came out of already holds every word the export would
+       write, and the button is a third act competing for the row's width. */
+    +(o.loaded&&catalogEdited()
+      ?'<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="'
+        +esc(t("Save everything loaded now as a catalog file, your edits merged in"))+'">'
+        +esc(t("Export…"))+'</button>':'')
+    +trustKeyHtml(o.trust||"",o.keyId||"")
     +(o.loaded
-      /* EXPORT IS THERE WHEN THERE IS SOMETHING TO EXPORT: with no edit of this desk's own on
-         top of it, the file this catalog came out of already holds every word the export would
-         write, and the button is a third act competing for the row's width. */
-      ?(catalogEdited()
-        ?'<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="'
-          +esc(t("Save everything loaded now as a catalog file, your edits merged in"))+'">'
-          +esc(t("Export…"))+'</button>':'')
-        +'<button type="button" class="btn" data-ec-eject="1" title="'
-        +esc(t("Put this catalog down and start empty"))+'">'+esc(t("Eject"))+'</button>'
-      :'<button type="button" class="btn" data-ec-load="'+esc(o.name)+'" data-ec-at="'
-        +(+o.mtime||0)+'">'+esc(t("Load"))+'</button>')
+      ?ecActHtml("Eject",ICON_EJECT,' data-ec-eject="1"')
+      :ecActHtml("Load",ICON_LOAD,' data-ec-load="'+esc(o.name)+'" data-ec-at="'+(+o.mtime||0)+'"'))
     +'</div>';
+}
+/* A FOLDER FILE'S SIGNATURE, checked as a load would check it and kept per name and date: the
+   rows are files nobody has loaded, so each is read once to be told apart. */
+const ecTrustOf=new Map();
+function ecFileTrust(f){
+  const at=f.name+"|"+f.mtime;
+  if(!ecTrustOf.has(at)) ecTrustOf.set(at, eReadCatalogFile(f.name).then(got=>{
+    if(!got) return {state:"",keyId:""};
+    const c=parseCatalogFile(got.text), sig=(catalogDocOf(c)||{}).sig;
+    return whenTrusted(c).then(s=>({state:s, keyId:String(sig&&sig.keyId||"")}));
+  }).catch(()=>({state:"",keyId:""})));
+  return ecTrustOf.get(at);
+}
+/* THE KEY'S BUBBLE, the family's shape pointing at the key: opened by hover or focus on a key
+   with more to say, closed by leaving it, a key press, a pointer press or a scroll anywhere. */
+let ecKeyBub=null;
+function ecKeyBubClose(){ if(ecKeyBub){ dismissNode(ecKeyBub); ecKeyBub=null; } }
+function ecKeyBubOpen(key){
+  ecKeyBubClose();
+  if(!key.isConnected) return;
+  const b=document.createElement("div");
+  b.className="bub ec-key-bub"; b.setAttribute("role","tooltip");
+  b.textContent=key.getAttribute("data-tip")||"";
+  document.body.appendChild(b);
+  const r=key.getBoundingClientRect();
+  placeBubble(b,{top:r.top,left:r.left,width:r.width,height:r.height},{prefer:"above"});
+  ecKeyBub=b;
+  ["keydown","pointerdown","scroll"].forEach(k=>addEventListener(k,ecKeyBubClose,{capture:true,once:true}));
+}
+function wireEcKeys(box){
+  box.querySelectorAll(".ec-key[data-tip]").forEach(k=>{
+    k.onmouseenter=k.onfocus=()=>ecKeyBubOpen(k);
+    k.onmouseleave=k.onblur=ecKeyBubClose;
+  });
+}
+/* A GLYPH BUTTON KEEPS ITS WORD, as its tooltip and as its accessible name. */
+function ecActHtml(word,icon,attrs){
+  const w=esc(t(word));
+  return '<button type="button" class="btn icbtn ec-act"'+attrs+' title="'+w+'" aria-label="'+w+'">'+icon+'</button>';
 }
 /* AN EMPTY FOLDER IS A ROW-SHAPED PLACEHOLDER and carries no button: what to do about it is
    already on the bar below, and a second Import here would be the same act twice on one
@@ -242,11 +280,9 @@ function loadedMeta(stamp){
     .filter(Boolean).map(esc);
   return parts.concat(ecAwaitingHtml(liveAwaiting())).join(" · ");
 }
-/* WHICH COPY A ROW IS, where two could be: the one Etiuda ships, or this folder's file of the same
-   name, which is read in its place. */
+/* The one copy a row names is the one Etiuda ships; a folder's file of the same name is a plain row. */
 function ecCopyHtml(f){
-  const said=f.builtIn ? t("comes with Etiuda") : f.replaces ? t("takes the place of the copy that comes with Etiuda") : "";
-  return said ? '<span class="ec-copy" data-ec-copy="'+(f.builtIn?"builtin":"own")+'">'+esc(said)+'</span>' : "";
+  return f.builtIn ? '<span class="ec-copy" data-ec-copy="builtin">'+esc(t("comes with Etiuda"))+'</span>' : "";
 }
 function paintCatalogList(){
   const box=document.getElementById("mgCatList");
@@ -272,8 +308,8 @@ function paintCatalogList(){
       const on=i===onAt;
       const stamp=catalogStamp(f.edition,f.mtime);
       const copy=ecCopyHtml(f), meta=on?loadedMeta(stamp):ecMeta(stamp,f);
-      return ecRowHtml({ name:f.name, mtime:f.mtime, loaded:on, newer:at>0 && f.mtime>at,
-        sample:!!f.sample, meta:copy&&meta ? copy+" · "+meta : copy||meta });
+      return ecRowHtml({ name:f.name, file:f.name, mtime:f.mtime, loaded:on, newer:at>0 && f.mtime>at,
+        sample:!!f.sample, meta:copy&&meta ? copy+" · "+meta : copy||meta, trust:on?heldCatalogTrust():"" });
     });
     /* THE CATALOG IN USE ALWAYS HAS A ROW, even where no file in the folder is it: a browser's
        import, a copy loaded from elsewhere, or a desk whose catalog was applied before the store
@@ -282,8 +318,20 @@ function paintCatalogList(){
     const applied=(typeof E_CATALOG_NAME!=="undefined" && E_CATALOG_NAME) ? E_CATALOG_NAME : "";
     if((held||applied||(cards||[]).length) && onAt<0)
       rows.unshift(ecRowHtml({ name:shownCatalogName(String(applied||(held&&held.name)||"")),
-        loaded:true, newer:false, meta:loadedMeta("") }));
+        loaded:true, newer:false, meta:loadedMeta(""), trust:heldCatalogTrust() }));
+    ecKeyBubClose();
     box.innerHTML=rows.length?rows.join(""):ecEmptyHtml();
+    wireEcKeys(box);
+    /* Each file's key arrives when its check does; the loaded row keeps the state the desk holds,
+       which the recheck above keeps current, and takes only the key's name from its file. */
+    files.forEach((f,i)=>ecFileTrust(f).then(r=>{
+      const row=Array.from(box.querySelectorAll(".ec-row")).find(x=>x.getAttribute("data-ec-file")===f.name);
+      const key=row && row.querySelector(".ec-key");
+      if(!key) return;
+      key.insertAdjacentHTML("beforebegin",trustKeyHtml(i===onAt?heldCatalogTrust():r.state,r.keyId));
+      key.remove();
+      wireEcKeys(row);
+    }));
     box.querySelectorAll("button[data-ec-load]").forEach(b=>{
       b.onclick=()=>loadCatalogFromFolder(b.getAttribute("data-ec-load"),
                                           +b.getAttribute("data-ec-at")||0);
