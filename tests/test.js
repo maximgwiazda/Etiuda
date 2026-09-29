@@ -5363,7 +5363,8 @@ if (require.main === module) {
        This is the ask only; the built program is read by tools/package.mjs, held by tests/fuses.mjs. */
     const root = path.join(__dirname, "..");
     const want = { runAsNode: false, enableNodeOptionsEnvironmentVariable: false,
-                   enableNodeCliInspectArguments: false, onlyLoadAppFromAsar: true };
+                   enableNodeCliInspectArguments: false, enableEmbeddedAsarIntegrityValidation: false,
+                   onlyLoadAppFromAsar: true, grantFileProtocolExtraPrivileges: true };
     const cfg = require(path.join(root, "electron-builder.js")).electronFuses || {};
     const packager = fs.readFileSync(path.join(root, "node_modules", "app-builder-lib", "out",
       "platformPackager.js"), "utf8");

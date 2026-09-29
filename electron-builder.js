@@ -61,7 +61,9 @@ module.exports = {
     runAsNode: false,
     enableNodeOptionsEnvironmentVariable: false,
     enableNodeCliInspectArguments: false,
+    enableEmbeddedAsarIntegrityValidation: false,
     onlyLoadAppFromAsar: true,
+    grantFileProtocolExtraPrivileges: true,
   },
   // THE .ec ASSOCIATION, so a catalog is a document a person can double-click. The app's own icon
   // rather than a second drawing: a catalog is Etiuda's document, and two pictures are two things
