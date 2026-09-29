@@ -611,6 +611,25 @@ those files, and the release itself driven in a throwaway repository to its seco
 exit 2 is a stop and exit 3 (gate 3 finding no name list in the lab) is a pass. The uninstaller
 is not read, since it is sealed inside the installer. 25 checks, about 4 s.
 
+## The fuses, read out of the program rather than the config
+
+    node tests/fuses.mjs
+    node tools/fuses.mjs <Etiuda.exe>        one program's fuses against what electron-builder.js asks
+
+`test.js` [2f/5] holds `electronFuses` in `electron-builder.js` and cannot see a binary, so a
+program that lost a fuse on the way to `Etiuda.exe` stayed green there: a copy of a packaged
+program with `runAsNode` turned back on went through `tools/package.mjs` with exit 0 (2026-09-29).
+`npm run package` now reads the fuse wire back out of `win-unpacked/Etiuda.exe` with
+`@electron/fuses` and exits 1 on any difference, on a missing program and on an empty ask, so the
+release gate stops at its installer gate through it. The installed copy is not read: the
+installer packs `win-unpacked` after the flip.
+
+`fuses.mjs` holds it without packaging: the stock Electron binary as the control, which reads
+wrong on all four; its wire lifted into a small file and flipped as electron-builder flips it,
+with each fuse turned back alone; the packaging step's question of planted dist folders; and, on
+Windows, `tools/package.mjs` itself in a lab whose `electron-builder` plants the program. 13
+checks, about 3 s; off Windows the three lab checks say NOT RUN.
+
 ## The reinstall-survival loop, which is the only thing here that installs anything
 
     ETIUDA_FIXTURES=<folder> npm run reinstall

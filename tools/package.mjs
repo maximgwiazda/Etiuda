@@ -1,5 +1,6 @@
 /* npm run package: build the engine, then the Windows installer, then refuse to
- * exit 0 unless a fresh installer is in ETIUDA_DIST (or dist/).
+ * exit 0 unless a fresh installer is in ETIUDA_DIST (or dist/) and the program
+ * beside it carries its fuses as electron-builder.js asks.
  *
  * WHY THIS IS A FILE RATHER THAN THE TWO-COMMAND SCRIPT. `npm run build &&
  * electron-builder --win`, launched detached through Win32_Process.Create (a
@@ -17,6 +18,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { packagedFuseProblems, wantedFuses } from './fuses.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DIST = resolve(ROOT, process.env.ETIUDA_DIST || 'dist');
@@ -41,5 +43,18 @@ const fresh = installers(DIST).filter(row => !before.has(row));
 if (fresh.length === 0) {
   console.error('npm run package: no installer in ' + DIST);
   process.exit(1);
+}
+/* THE FUSES, read back out of the program this build wrote (tools/fuses.mjs), since
+   tests/test.js can read only what electron-builder.js asks for. tests/fuses.mjs drives this
+   step on planted programs. */
+if (r.status === 0) {
+  const bad = await packagedFuseProblems(DIST);
+  if (bad.length) {
+    console.error('npm run package: the fuses of the program in ' + DIST + ' are not as electron-builder.js asks:');
+    for (const line of bad) console.error('  ' + line);
+    process.exit(1);
+  }
+  console.log('npm run package: ' + Object.keys(wantedFuses()).length + ' fuse(s) read back from '
+    + join(DIST, 'win-unpacked', 'Etiuda.exe') + ' as asked');
 }
 process.exit(r.status == null ? 1 : r.status);
