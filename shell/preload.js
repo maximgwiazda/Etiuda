@@ -72,6 +72,9 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
      are synchronous: the engine reads its whole desk before its first key, and deskSave is for
      the write that must be on the disk before it returns. deskWrite is every other one. */
   deskRead: () => ipcRenderer.sendSync("etiuda:desk"),
+  /* The tabs' session, held by the app in memory and never written: get, set, del or clear, as text. */
+  session: (op, key, value) => ipcRenderer.sendSync("etiuda:session", String(op || ""), String(key || ""),
+    value === undefined ? null : String(value)),
   deskSave: (text) => ipcRenderer.sendSync("etiuda:desk-save", text),
   deskWrite: (text) => ipcRenderer.invoke("etiuda:desk-write", text),
   /* Only the keys this load changed, null for one it deleted; `now` waits for the disk as deskSave does. */

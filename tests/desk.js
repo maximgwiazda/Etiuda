@@ -26,6 +26,10 @@
  *          must be handed the desk as the disk holds it then rather than as it stood at start.
  *   run B  corrupts desk.json and starts again: the backup that run A rotated is read instead,
  *          and the corrupt file is still on disk rather than quietly replaced.
+ *   run E  types a customer's name and a search into two tabs, quits, and reads EVERY file of the profile
+ *          for both, byte for byte in UTF-8 and UTF-16LE; then again after a kill, and after a launch
+ *          over a Session Storage folder an older build left. The control is a copy of the shell with
+ *          the two changes cut out, and it must show the plants where the shipped shell shows none.
  *   runs C and D  each start on a profile of their own, idle, close cleanly and are read from the
  *          Chromium net log they wrote. C is the shell with its proxy switch cut out and must show
  *          proxy discovery, or D's silence means nothing and is NOT RUN; D is the shipped shell and
@@ -195,7 +199,7 @@ function deskOnDisk(file) {
   return JSON.parse(fs.readFileSync(file || DESK, "utf8"));
 }
 
-async function startShell() {
+async function startShell(appDir, ud) {
   /* OFF SCREEN, board item 385: nothing in this file measures the window, so no launch of it has
      any business taking the screen. E.offscreenEnv() is the one place the flag is set.
 
@@ -206,7 +210,7 @@ async function startShell() {
      redirect is handed to every launch rather than to that one, because a confinement that has
      to be remembered at one call site is the shape of the fault board 467 is about. */
   child = E.shellLaunch("tests/desk.js", electronExe(),
-    [APP, "--remote-debugging-port=" + PORT, "--user-data-dir=" + UD],
+    [appDir || APP, "--remote-debugging-port=" + PORT, "--user-data-dir=" + (ud || UD)],
     { stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv({ ETIUDA_TEST_DOCUMENTS: LABDOCS }) });
   const said = [];
   child.stdout.on("data", d => said.push(String(d).trim()));
@@ -297,6 +301,77 @@ async function netLogArm(appDir, ud, logAt) {
   stopShell(b);
   await sleep(1500);
   return { log: readNetLog(logAt), exitedAlone };
+}
+
+/* ---- what a tab held is not left in the profile ------------------------------------------- */
+
+/* A tab holds a customer's name and the search text. The second name has letters outside Latin-1, which
+   Chromium stores as UTF-16 where a plain one is stored a byte to a letter. */
+const TAB_NAME = "Zygfryd Wzorcowy-Probe", TAB_SEARCH = "lampiony-rozowe-77";
+const TAB_NAME_PL = "\u017Baneta Pr\u00F3bna-Wzorcowa", STALE_PLANT = "Resztkowy-Slad-Sprzed-Zmiany";
+
+/* THE SCAN IS BYTE FOR BYTE, IN BOTH ENCODINGS Chromium's storage keeps a string in. A file that cannot be
+   read and is not empty is counted and fails the check, never skipped: a scan that passed over what it
+   could not open would read exactly like a clean profile. Empty files (the LOCKs) hold nothing. */
+function planted(extra) {
+  const out = [];
+  for (const [lab, str] of [["name", TAB_NAME], ["search", TAB_SEARCH], ["name-pl", TAB_NAME_PL]].concat(extra || [])) {
+    out.push([lab + " as UTF-8", Buffer.from(str, "utf8")]);
+    out.push([lab + " as UTF-16LE", Buffer.from(str, "utf16le")]);
+  }
+  return out;
+}
+function scanFolder(dir, extra) {
+  const hits = [], unread = [], files = [];
+  const walk = d => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const f = path.join(d, e.name);
+      if (e.isDirectory()) walk(f); else files.push(f);
+    }
+  };
+  walk(dir);
+  const needles = planted(extra);
+  for (const f of files) {
+    let b;
+    try { b = fs.readFileSync(f); } catch (x) { if (fs.statSync(f).size > 0) unread.push(path.relative(dir, f)); continue; }
+    for (const [lab, n] of needles)
+      if (b.indexOf(n) >= 0) hits.push(path.relative(dir, f).split(path.sep).join("/") + " holds " + lab);
+  }
+  return { files: files.length, unread, hits };
+}
+const said_ = r => r.files + " file(s) read, " + r.unread.length + " unreadable and not empty"
+  + (r.hits.length ? ", found: " + r.hits.join("; ") : ", nothing found");
+
+async function typeInto(p, sel, text) {
+  await p.evaluate(q => document.querySelector(q).focus(), sel);
+  await p.keyboard.sendCharacter(text);
+  await sleep(700);
+}
+/* Read through the engine's own storage route, so one line answers for a desk that keeps the session
+   in the shell and for the control that leaves it in Chromium's. */
+const tabsHeld = p => p.evaluate(() => {
+  try { return JSON.parse(window.ssGet("eSessionTabs") || "null"); } catch (e) { return null; }
+});
+async function typeTwoTabs(p) {
+  await typeInto(p, "#pax", TAB_NAME);
+  await typeInto(p, "#intent", TAB_SEARCH);
+  await p.evaluate(() => document.querySelector(".tab-add").click());
+  await sleep(700);
+  await typeInto(p, "#pax", TAB_NAME_PL);
+}
+async function quitCleanly(s) {
+  const gone = new Promise(r => { if (child.exitCode !== null) r(true); else child.once("exit", () => r(true)); });
+  try { await s.b.close(); } catch (x) { /* judged by the exit below */ }
+  const t = Date.now();
+  const alone = await Promise.race([gone, sleep(30000).then(() => false)]);
+  console.log("       the window's process " + (alone ? "ended by itself" : "did not end") + " " + (Date.now() - t) + " ms after the close");
+  stopShell(s.b);
+  await sleep(1500);
+  return alone;
+}
+async function startOn(appDir, ud) {
+  E.pinCatalogFolder(ud, path.join(APP, "catalogs"));
+  return startShell(appDir, ud);
 }
 
 (async () => {
@@ -500,6 +575,104 @@ async function netLogArm(appDir, ud, logAt) {
     "the corrupt file was rotated into desk.bak1.json rather than deleted, and the readable backup moved down to desk.bak2.json");
   stopShell(s.b);
   await sleep(1500);
+
+  /* ---- run E: a tab held nothing that stays in the profile ----
+     Chromium wrote the tabs into Session Storage in the data folder, and a delete there only adds a
+     tombstone, so the bytes stayed until a later write reached them. THE CONTROL is a copy of the app
+     with the shell's two changes cut out, and it must show the plants where the shipped app shows none:
+     a scan that finds nothing in both proves nothing about the scan. */
+  const VERB = "  session: (op, key, value) =>", VERB_OFF = "  sessionOff: (op, key, value) =>";
+  const DROP = "dropSessionStorage(); hardenSession();";
+  const TABS_CONTROL = buildApp(path.join(APP, "control-tabs"));
+  const cPre = path.join(TABS_CONTROL, "shell", "preload.js"), cMain = path.join(TABS_CONTROL, "shell", "main.js");
+  const cPreSrc = fs.readFileSync(cPre, "utf8"), cMainSrc = fs.readFileSync(cMain, "utf8");
+  const verbCuts = cPreSrc.split(VERB).length - 1, dropCuts = cMainSrc.split(DROP).length - 1;
+  check(verbCuts === 1 && dropCuts === 1,
+    "the shell holds its session verb once and its launch-time sweep of Session Storage once, so the control copy can cut them: "
+    + verbCuts + " and " + dropCuts);
+  fs.writeFileSync(cPre, cPreSrc.split(VERB).join(VERB_OFF), "utf8");
+  fs.writeFileSync(cMain, cMainSrc.split(DROP).join("hardenSession();"), "utf8");
+
+  /* The scan's own control: a needle in each encoding, one of them in a folder below, must be found. */
+  const SCAN_LAB = path.join(APP, "scan-lab");
+  fs.mkdirSync(path.join(SCAN_LAB, "below"), { recursive: true });
+  fs.writeFileSync(path.join(SCAN_LAB, "one.txt"), "x " + TAB_NAME + " y", "utf8");
+  fs.writeFileSync(path.join(SCAN_LAB, "below", "two.bin"),
+    Buffer.concat([Buffer.from([0, 1]), Buffer.from(TAB_SEARCH, "utf16le")]));
+  const lab = scanFolder(SCAN_LAB);
+  check(lab.hits.length === 2 && lab.hits.some(h => h === "one.txt holds name as UTF-8")
+    && lab.hits.some(h => h === "below/two.bin holds search as UTF-16LE"),
+    "the scan finds a name planted as UTF-8 and a search planted as UTF-16LE in a folder below: " + said_(lab));
+
+  const TUD = path.join(APP, "ud-tabs");
+  fs.mkdirSync(TUD, { recursive: true });
+  s = await startOn(APP, TUD);
+  await typeTwoTabs(s.p);
+  const held = await tabsHeld(s.p);
+  const tabId = held && held.tabs && held.tabs[0] && held.tabs[0].id;
+  check(!!held && held.tabs.length === 2 && held.tabs[0].pax === TAB_NAME && held.tabs[0].intentBox === TAB_SEARCH
+    && held.tabs[1].pax === TAB_NAME_PL && typeof tabId === "string" && tabId.length > 8,
+    "two tabs hold the plants through the engine's own storage route: " + (held && held.tabs ? held.tabs.length : 0)
+    + " tab(s), the first named " + JSON.stringify(held && held.tabs && held.tabs[0] && held.tabs[0].pax));
+  const ID_PLANT = [["tab id", tabId || "no-tab-id"]];
+  console.log("       while the desk runs: " + said_(scanFolder(TUD, ID_PLANT)));
+  await s.p.reload({ waitUntil: "load" });
+  await sleep(3000);
+  const reloaded = await s.p.evaluate(() => ({ pax: document.querySelector("#pax").value,
+    tabs: document.querySelectorAll("#tabsBar .tab").length }));
+  const heldAfter = await tabsHeld(s.p);
+  check(reloaded.pax === TAB_NAME_PL && reloaded.tabs === 2 && !!heldAfter && heldAfter.tabs[0].pax === TAB_NAME
+    && heldAfter.tabs[0].intentBox === TAB_SEARCH,
+    "an in-app reload keeps the tabs as it always did: " + reloaded.tabs + " tab(s), the name field reads "
+    + JSON.stringify(reloaded.pax) + ", the first tab still holds its name and search");
+  check(await quitCleanly(s), "the desk quits by itself when its window is closed");
+  const afterQuit = scanFolder(TUD, ID_PLANT);
+  check(!afterQuit.hits.length && !afterQuit.unread.length,
+    "AFTER THE DESK QUITS no file under its data folder holds a tab's name, search or id: " + said_(afterQuit));
+
+  s = await startOn(APP, TUD);
+  const relaunched = await s.p.evaluate(() => ({ pax: document.querySelector("#pax").value,
+    intent: document.querySelector("#intent").value, tabs: document.querySelectorAll("#tabsBar .tab").length }));
+  check(relaunched.pax === "" && relaunched.intent === "" && relaunched.tabs === 1,
+    "a relaunch opens one empty tab, as it did when the tabs were written to the profile: " + relaunched.tabs
+    + " tab(s), name " + JSON.stringify(relaunched.pax) + ", search " + JSON.stringify(relaunched.intent));
+  await typeTwoTabs(s.p);
+  E.killTree(child.pid);
+  await sleep(2000);
+  stopShell(s.b);
+  await sleep(1000);
+  const afterCrash = scanFolder(TUD, ID_PLANT);
+  check(!afterCrash.hits.length && !afterCrash.unread.length,
+    "AFTER A CRASH (the process killed with its tree, tabs typed a moment before) nothing of them is in the data folder: "
+    + said_(afterCrash));
+
+  /* A folder left by a build that wrote the tabs there, planted where Chromium would have kept it. */
+  const staleDir = path.join(TUD, "Session Storage");
+  fs.mkdirSync(staleDir, { recursive: true });
+  fs.writeFileSync(path.join(staleDir, "stale-residue.log"), Buffer.from(STALE_PLANT, "utf16le"));
+  s = await startOn(APP, TUD);
+  const staleRun = scanFolder(TUD, [["stale plant", STALE_PLANT]]);
+  check(!staleRun.hits.length && !staleRun.unread.length,
+    "AFTER THE NEXT LAUNCH what an earlier build left in Session Storage is gone, and this launch wrote none: "
+    + said_(staleRun));
+  stopShell(s.b);
+  await sleep(1500);
+
+  /* THE CONTROL: the same steps on the copy with the two changes cut out. */
+  const CUD = path.join(TABS_CONTROL, "userdata");
+  fs.mkdirSync(path.join(CUD, "Session Storage"), { recursive: true });
+  fs.writeFileSync(path.join(CUD, "Session Storage", "stale-residue.log"), Buffer.from(STALE_PLANT, "utf16le"));
+  s = await startOn(TABS_CONTROL, CUD);
+  await typeTwoTabs(s.p);
+  const cHeld = await tabsHeld(s.p);
+  const cId = cHeld && cHeld.tabs && cHeld.tabs[0] && cHeld.tabs[0].id;
+  await quitCleanly(s);
+  const ctrl = scanFolder(CUD, [["stale plant", STALE_PLANT], ["tab id", cId || "no-tab-id"]]);
+  const ctrlSeen = l => ctrl.hits.some(h => h.indexOf(l) >= 0);
+  check(ctrlSeen("holds name as UTF-16LE") && ctrlSeen("holds search as UTF-16LE") && ctrlSeen("holds tab id as UTF-16LE")
+    && ctrlSeen("holds stale plant as UTF-16LE") && !ctrl.unread.length,
+    "THE CONTROL, the shell without the session verb and without the launch sweep, keeps the plants in the profile"
+    + " where Chromium writes them, and the old residue stays: " + said_(ctrl));
 
   /* ---- runs C and D: proxy discovery, with and without the shell's switch ---- */
   const SWITCH = 'app.commandLine.appendSwitch("no-proxy-server");';

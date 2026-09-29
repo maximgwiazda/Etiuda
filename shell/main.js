@@ -879,6 +879,30 @@ ipcMain.on("etiuda:desk-patch-save", (e, text) => {
 });
 ipcMain.handle("etiuda:desk-patch", (e, text) =>
   fromEngine(e) && typeof text === "string" && patchDesk(text));
+/* THE TABS' SESSION LIVES HERE, IN MEMORY, PER WINDOW. Chromium's own sessionStorage is written to the
+   profile, where a customer's name and a search would outlast the window; this is never written. */
+const sessionHeld = new Map();
+ipcMain.on("etiuda:session", (e, op, key, value) => {
+  let out = null;
+  if (fromEngine(e) && typeof op === "string" && typeof key === "string") {
+    const id = e.sender.id;
+    if (!sessionHeld.has(id)) {
+      sessionHeld.set(id, new Map());
+      e.sender.once("destroyed", () => sessionHeld.delete(id));
+    }
+    const m = sessionHeld.get(id);
+    if (op === "get") out = m.has(key) ? m.get(key) : null;
+    else if (op === "set" && typeof value === "string") { m.set(key, value); out = true; }
+    else if (op === "del") { m.delete(key); out = true; }
+    else if (op === "clear") { m.clear(); out = true; }
+  }
+  e.returnValue = out;
+});
+/* Left by a build that let Chromium keep the tabs, or by a page that was cut off before it could clear. */
+function dropSessionStorage() {
+  try { fs.rmSync(path.join(app.getPath("userData"), "Session Storage"), { recursive: true, force: true }); }
+  catch (e) { console.error("etiuda: Session Storage could not be cleared - " + e.message); }
+}
 ipcMain.on("etiuda:desk-refused", (e) => {
   e.returnValue = fromEngine(e) ? JSON.stringify(deskRefused) : "[]";
 });
@@ -2149,7 +2173,7 @@ if (!theOnlyOne) {
   /* The window waits on the folder's first answer, FOLDER_ASK_MS at most, rather than on a
      synchronous read of a share that is not there. */
   app.whenReady().then(() => {
-    hardenSession(); applyThemeSource();
+    dropSessionStorage(); hardenSession(); applyThemeSource();
     const dir = catalogFolder();
     return askFolder(dir).then(ok => {
       settleFolder(dir, ok);
