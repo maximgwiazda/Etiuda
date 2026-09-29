@@ -10792,8 +10792,9 @@ What you type stays in this browser only.`;
     eTypoFix.set(term, fix);
     return fix;
   }
-  function cardSearchTerms() {
-    const t2 = foldDiacritics(String(intentEl && intentEl.value || "").trim().toLowerCase());
+  function cardSearchTerms(q) {
+    const own = q == null;
+    const t2 = foldDiacritics(String(own ? intentEl && intentEl.value || "" : q).trim().toLowerCase());
     if (!t2) return [];
     const raw = t2.split(/\s+/).filter(Boolean);
     const fixes = [];
@@ -10805,7 +10806,7 @@ What you type stays in this browser only.`;
       }
       return term;
     });
-    eSpellFix = fixes;
+    if (own) eSpellFix = fixes;
     return out;
   }
 
@@ -12400,6 +12401,7 @@ What you type stays in this browser only.`;
     kbdNav: () => kbdNav,
     markEnd: () => markEnd,
     markSurface: () => markSurface,
+    noteCopy: () => noteCopy,
     railQuery: () => railQuery,
     railStep: () => railStep,
     sayMark: () => sayMark,
@@ -12433,11 +12435,14 @@ What you type stays in this browser only.`;
   function forgetCopies() {
     copyCount = 0;
   }
-  function copy(text, msg) {
+  function noteCopy() {
     copyCount++;
     setRailMarkUsed(true);
     setSemiKind(null);
     hooks.railDecorate(false);
+  }
+  function copy(text, msg) {
+    noteCopy();
     const done = () => toast(msg);
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(text).then(done, () => fallback(text, done));
@@ -12820,6 +12825,7 @@ What you type stays in this browser only.`;
   // src/modules/render.js
   var render_exports = {};
   __export(render_exports, {
+    rankedCards: () => rankedCards,
     render: () => render
   });
 
@@ -16782,15 +16788,10 @@ What you type stays in this browser only.`;
   }
 
   // src/modules/render.js
-  function render() {
-    remPx();
-    closeNotePane();
-    cancelLangChunks();
-    const terms = cardSearchTerms();
-    syncPillCounts();
+  function rankedCards(terms, keep) {
     ensureCardOrder();
     const hits = cards.filter((m) => {
-      if (!cardInActiveCats(m, terms)) return false;
+      if (!keep(m)) return false;
       return cardMatchesSearch(m, terms);
     });
     const sc = /* @__PURE__ */ new Map();
@@ -16801,16 +16802,27 @@ What you type stays in this browser only.`;
         s.band = intentIdxs.length && cardHitsSelectedIntent(m) ? 0 : 1;
         sc.set(m, s);
       });
-      setShown(hits.sort((a, b) => {
+      hits.sort((a, b) => {
         const A = sc.get(a), B = sc.get(b);
         if (A.band !== B.band) return A.band - B.band;
         if (A.tier !== B.tier) return A.tier - B.tier;
         if (A.score !== B.score) return B.score - A.score;
         return cmpCardDisplay(a, b);
-      }));
+      });
     } else {
-      setShown(hits.sort(cmpCardDisplay));
+      hits.sort(cmpCardDisplay);
     }
+    return { hits, sc };
+  }
+  function render() {
+    remPx();
+    closeNotePane();
+    cancelLangChunks();
+    const terms = cardSearchTerms();
+    syncPillCounts();
+    const ranked = rankedCards(terms, (m) => cardInActiveCats(m, terms));
+    const sc = ranked.sc;
+    setShown(ranked.hits);
     if (!shown.length) {
       const oneCat = cats.length === 1 ? cats[0] : null;
       const afterBtn = (c) => (/^[,.;:!?]/.test(c) ? "" : " ") + esc(c);

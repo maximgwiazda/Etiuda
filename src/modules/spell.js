@@ -84,8 +84,10 @@ function correctTerm(term){
   eTypoFix.set(term,fix);
   return fix;
 }
-function cardSearchTerms(){
-  const t=foldDiacritics(String(intentEl&&intentEl.value||"").trim().toLowerCase());
+/* `q` is a query that is not the box's (the picker's); only the box's own fixes are recorded. */
+function cardSearchTerms(q){
+  const own=q==null;
+  const t=foldDiacritics(String(own?(intentEl&&intentEl.value||""):q).trim().toLowerCase());
   if(!t) return []; // bare / mode - no filter until more characters
   const raw=t.split(/\s+/).filter(Boolean);
   const fixes=[];
@@ -97,7 +99,7 @@ function cardSearchTerms(){
   /* Recorded rather than returned, so every existing caller keeps its signature - and there are
      several (render, searchCounts, the pill row), all of which must agree on the same terms or
      the counts and the list would tell different stories. */
-  eSpellFix=fixes;
+  if(own) eSpellFix=fixes;
   return out;
 }
 
