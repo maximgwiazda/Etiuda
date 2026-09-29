@@ -517,7 +517,8 @@ try {
      `const { clipboard: cb } = require("electron")` then `cb.read(...)`, names no API the list above knows. In the
      shell the name stands only as a member of a `require("electron")` destructure, taken whole, and before its one
      write; the electron module is never held whole or indexed. In the engine it is `navigator.clipboard`, tested or
-     written. Each place is found in the text with its strings blanked, so prose that says "clipboard" is not one. */
+     written, and `navigator` itself is only ever read by a plain member name, so `navigator["clip"+"board"]` is a
+     handle too. Each place is found in the text with its strings blanked, so prose that says "clipboard" is not one. */
   const at = (bare, re) => { const out = []; let m; re.lastIndex = 0; while ((m = re.exec(bare))) out.push(m.index); return out; };
   const spans = [];
   { const re = /(?:const|let|var)\s*\{([^}]*)\}\s*=\s*require\(\s*"electron"\s*\)/g; let m;
@@ -530,7 +531,8 @@ try {
     .concat(at(shellBare, /\brequire\s*\(/g).filter(i => /^require\(\s*"electron"\s*\)/.test(shellCode.slice(i, i + 22)) && !inSpan(i)
       && !/^require\(\s*"electron"\s*\)\s*\.\s*(?!clipboard\b)[A-Za-z_$]/.test(shellCode.slice(i, i + 40))).map(i => shellCode.slice(i, i + 30)))
     .concat(at(engineBare, /\bclipboard\b(?!-)/g).filter(i => !(/navigator\.$/.test(engineCode.slice(i - 10, i))
-      && /^clipboard(&&|\.writeText\()/.test(engineCode.slice(i, i + 21)))).map(i => engineCode.slice(Math.max(0, i - 10), i + 24)));
+      && /^clipboard(&&|\.writeText\()/.test(engineCode.slice(i, i + 21)))).map(i => engineCode.slice(Math.max(0, i - 10), i + 24)))
+    .concat(at(engineBare, /\bnavigator\b(?!\s*\.\s*[A-Za-z_$])/g).map(i => engineCode.slice(Math.max(0, i - 10), i + 24)));
   check(reach.length === 0 && oddHandles.length === 0 && /clipboard/.test(shellCode) && /writeText/.test(shellCode),
     "5a no API in the shell or the engine reads another window, the screen or the clipboard, or presses a key, and the clipboard is"
     + " reached through no other name: " + (reach.concat(oddHandles).join(", ") || "none"));
@@ -559,10 +561,13 @@ try {
     + "; child_process required " + cpRequires + " time(s), its name mentioned " + runMentions + " time(s) for " + runCalls + " call(s)"
     + (loaders.length ? "; other loaders " + loaders.join(", ") : ""));
   /* THE PAGE IS GRANTED ONE PERMISSION, the clipboard's write, and every handler that could grant another answers
-     from that list alone (board 818): "clipboard-read" added to the list stayed green, since no API name is in it. */
+     from that list alone (board 818): "clipboard-read" added to the list stayed green, since no API name is in it.
+     The list is named three times, its declaration and its two handlers, and nowhere else, so
+     `Array.prototype.push.call(ALLOWED, ...)` or an alias of it is a change at run time too. */
   const allowDecl = shellCode.match(/\bALLOWED\s*=\s*\[([^\]]*)\]/g) || [];
   const allowList = allowDecl.length === 1 ? /\[([^\]]*)\]/.exec(allowDecl[0])[1].split(",").map(s => s.trim().replace(/^["'`]|["'`]$/g, "")).filter(Boolean) : [];
-  const allowMoved = shellBare.match(/\bALLOWED\s*(?:\.\s*(?:push|unshift|splice|concat|fill|length)\b|\[)/g) || [];
+  const allowMoved = (shellBare.match(/\bALLOWED\s*(?:\.\s*(?:push|unshift|splice|concat|fill|length)\b|\[)/g) || [])
+    .concat((shellBare.match(/\bALLOWED\b/g) || []).length === 3 ? [] : ["the list named other than at its declaration and its two handlers"]);
   const permHandlers = shellCode.match(/\bset(?:Permission\w*|Device\w*|DisplayMedia\w*|Bluetooth\w*|USBProtected\w*)Handler\b/g) || [];
   const reqFrom = /\bsetPermissionRequestHandler\(\((\w+),(\w+),(\w+)\)=>\3\(ALLOWED\.indexOf\(\2\)>-1\)\)/.test(shellCode);
   const chkFrom = /\bsetPermissionCheckHandler\(\((\w+),(\w+)\)=>ALLOWED\.indexOf\(\2\)>-1\)/.test(shellCode);

@@ -1252,7 +1252,12 @@ const placeEc = (dir, from, as, minutesOld) => {
      waits for the tour's bubble and Skip to stand on screen (Skip is in the page from the start, so being there says
      nothing; one run found it at 1 ms with no tour up at 2.2 s), the screen with the tour standing is read as 2k2
      reads it, Skip is clicked only where it stands, and after the click the offer is polled for (up to 5 s); both
-     times are printed, and so is what stood when Skip was clicked. */
+     times are printed, and so is what stood when Skip was clicked.
+     THE OFFER IS DUE AT ONCE, and a late one fails (the lead engineer's read, 2026-09-29): Skip ends the tour and the
+     tour's queue raises the offer in that same task, so it must stand within OFFER_DUE ms of the click, the moment the
+     old leg read it at. Clean runs read it 1 to 3 ms after Skip; the 5 s poll only says how late a late one came. No
+     other leg holds that the offer rises in Skip's own task. */
+  const OFFER_DUE = 800;
   const pollPage = async (fn, ms) => { const t0 = Date.now();
     while (Date.now() - t0 < ms) { if (await s.p.evaluate(fn).catch(() => false)) return Date.now() - t0; await sleep(100); }
     return -1; };
@@ -1266,7 +1271,8 @@ const placeEc = (dir, from, as, minutesOld) => {
   await s.stop();
   const takenFiles = listed(docsB);
   check(takenFiles.join(",") === "mine.ec,sample-catalog.ec" && path.basename(takenRead) === "mine.ec"
-        && skipAfter > -1 && !takenFirst.offer && takenFirst.tour && skipped && offerAfter > -1 && takenSeen.offer,
+        && skipAfter > -1 && !takenFirst.offer && takenFirst.tour && skipped && offerAfter > -1 && offerAfter <= OFFER_DUE
+        && takenSeen.offer,
     "2k3 a first run into a folder that ALREADY holds a catalog puts the sample beside it and still"
     + " opens the folder's own over the sample: " + JSON.stringify(takenFiles)
     + ", the file the shell read " + JSON.stringify(path.basename(takenRead))
@@ -1274,7 +1280,8 @@ const placeEc = (dir, from, as, minutesOld) => {
     + ", and that catalog is offered once the tour is skipped and not before: Skip "
     + (skipAfter > -1 ? "and the tour's bubble stood after " + skipAfter + " ms" : "and the tour's bubble never stood in 20000 ms")
     + ", then the tour up " + takenFirst.tour + " and the offer " + takenFirst.offer + ", Skip clicked " + skipped
-    + ", the offer " + (offerAfter > -1 ? "up " + offerAfter + " ms after" : "not up within 5000 ms") + " (" + takenSeen.offer + " at the last read)");
+    + ", the offer " + (offerAfter > -1 ? "up " + offerAfter + " ms after" + (offerAfter > OFFER_DUE ? ", LATE: due within " + OFFER_DUE + " ms" : "")
+      : "not up within 5000 ms") + " (" + takenSeen.offer + " at the last read)");
 
   /* 2k4: TWO FOLDERS AND WHICH COPY IS IN USE (Maxim, 2026-09-26 and 2026-09-28). The copy 2k2's first
      run gave Documents/Etiuda is the one listed, once, as a plain row, being byte for byte the shipped
