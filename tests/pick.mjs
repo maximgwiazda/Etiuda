@@ -244,6 +244,7 @@ try {
   const electron = {
     app: { getPath: n => (n === "documents" ? DOCS : UD), setPath() {}, requestSingleInstanceLock: () => true, quit() {},
       on() {}, getVersion: () => "0.0.0", whenReady: () => Promise.resolve(), getLocale: () => "en-US",
+      commandLine: { appendSwitch() {} },
       getPreferredSystemLanguages: () => ["en-US"] },
     ipcMain: { on: (ch, fn) => { onH[ch] = fn; }, handle: (ch, fn) => { invH[ch] = fn; } },
     BrowserWindow: BW, Menu: anything(), dialog: anything(), net: anything(), protocol: anything(), session: anything(),

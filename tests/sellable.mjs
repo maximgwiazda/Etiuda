@@ -179,7 +179,7 @@ try {
   const lab = (name, version, licence) => {
     const root = path.join(TMP, 'lab-' + name), dir = path.join(root, 'repo');
     for (const d of ['tools', 'tests', 'shell', path.join('src', 'modules')]) fs.mkdirSync(path.join(dir, d), { recursive: true });
-    for (const f of ['tools/release.mjs', 'tools/sellable.mjs', 'tests/engine.js', 'electron-builder.js', 'package.json'])
+    for (const f of ['tools/release.mjs', 'tools/sellable.mjs', 'tools/sbom.mjs', 'tests/engine.js', 'electron-builder.js', 'package.json'])
       fs.copyFileSync(path.join(ROOT, f), path.join(dir, f));
     fs.writeFileSync(path.join(dir, 'src', 'modules', 'env.js'), 'const E_VERSION="' + version + '";\n');
     fs.writeFileSync(path.join(dir, 'shell', 'license_en.txt'), licence);

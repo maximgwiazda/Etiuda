@@ -19,7 +19,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 36;
+const EXPECTED = 38;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -82,7 +82,8 @@ function anything(over) {
 
 let loads = 0;
 /* opts.ready: app.whenReady resolves, so the shell boots as far as its window; opts.clock: the
-   fake timers above; opts.desk: keys written into desk.json before the shell reads it. */
+   fake timers above; opts.desk: keys written into desk.json before the shell reads it; opts.src:
+   the source to run in place of main.js. */
 function loadShell(opts) {
   const o = opts || {};
   const dir = path.join(LAB, "load" + (++loads));
@@ -95,12 +96,13 @@ function loadShell(opts) {
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: () => {} };
   const noop = () => {};
   const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
-  const on = {}, invoke = {}, power = {}, sent = [];
+  const on = {}, invoke = {}, power = {}, sent = [], switches = [];
   const wc = anything({ send: (...a) => { sent.push(a); }, id: 7 });
   const win = anything({ isDestroyed: () => false, webContents: wc });
   const electron = {
     app: { getPath: n => (n === "documents" ? DOCS : UD), setPath: noop, requestSingleInstanceLock: () => !!o.ready,
            quit: noop, on: noop, getVersion: () => "0.0.0",
+           commandLine: { appendSwitch: (...a) => { switches.push(a); } },
            whenReady: () => (o.ready ? Promise.resolve() : new Promise(noop)) },
     ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
     BrowserWindow: o.ready ? new Proxy(function () {}, { construct: () => win,
@@ -115,14 +117,14 @@ function loadShell(opts) {
   const clock = o.clock || { setTimeout: setTimeout, clearTimeout: clearTimeout };
   const fakeRequire = n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? fs : nodeRequire(n));
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console", "setTimeout", "clearTimeout",
-    SRC + "\nreturn { " + EXPOSE.map(n => n + ": typeof " + n + " === 'undefined' ? undefined : " + n).join(", ") + " };")(
+    (o.src || SRC) + "\nreturn { " + EXPOSE.map(n => n + ": typeof " + n + " === 'undefined' ? undefined : " + n).join(", ") + " };")(
     fakeRequire, path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet,
     clock.setTimeout, clock.clearTimeout);
   const ENGINE = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
   const ipc = (ch, ...args) => { const e = { sender: { id: 1, once: noop }, senderFrame: ENGINE, returnValue: undefined };
     if (on[ch]) on[ch](e, ...args); return e.returnValue; };
   const ask = (ch, ...args) => invoke[ch]({ sender: { id: 1 }, senderFrame: ENGINE }, ...args);
-  return { api, ctl, said, ipc, ask, UD, DOCS, deskFile: path.join(UD, "desk.json"), power, sent, win };
+  return { api, ctl, said, ipc, ask, UD, DOCS, deskFile: path.join(UD, "desk.json"), power, sent, win, switches };
 }
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 /* Invented from nothing, as every fixture here is. The refused one names a shelf that is not
@@ -509,6 +511,19 @@ try {
       return editions.some(x => x[0] === b.length && x[1] === h); });
     check(known, "5e every catalog the shell ships is an edition SAMPLE_EDITIONS names, so a copy of it keeps its place"
       + " at the foot of the list once the sample moves on: " + editions.length + " edition(s) listed");
+  }
+  /* ---- 6. Chromium's proxy discovery is switched off before the app is ready ----------------- */
+  {
+    const S = loadShell();
+    const asked = S.switches.map(a => a.join("="));
+    check(asked.length === 1 && asked[0] === "no-proxy-server",
+      "6a the shell asks Chromium for --no-proxy-server, once, so an idle desk does no proxy"
+      + " discovery and no IPv6 probe: " + JSON.stringify(asked));
+    const stripped = SRC.split('app.commandLine.appendSwitch("no-proxy-server");').join("");
+    const bare = loadShell({ src: stripped });
+    check(stripped !== SRC && bare.switches.length === 0,
+      "6b THE CONTROL: the same shell with that one line removed asks for no switch, so 6a can fail: "
+      + JSON.stringify(bare.switches));
   }
 } catch (e) {
   failed++;

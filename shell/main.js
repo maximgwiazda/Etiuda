@@ -2,6 +2,10 @@
 
 const { app, BrowserWindow, Menu, clipboard, dialog, globalShortcut, ipcMain, nativeTheme, net, protocol, session,
   screen, shell, systemPreferences } = require("electron");
+
+/* --no-proxy-server turns off every proxy, not only discovery: at start there is no wpad lookup and
+   no IPv6 probe at idle. The probe still fires on the first hostname lookup. */
+app.commandLine.appendSwitch("no-proxy-server");
 const { execFileSync } = require("node:child_process");
 const path = require("node:path");
 const fs = require("node:fs");

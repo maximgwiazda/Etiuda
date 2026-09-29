@@ -45,7 +45,7 @@ const opened = [];
 const onHandlers = {}, invokeHandlers = {};
 const electron = {
   app: { getPath: () => UD, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop, getVersion: () => "0.0.0",
-         whenReady: () => new Promise(noop) },
+         whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
   ipcMain: { on: (ch, fn) => { onHandlers[ch] = fn; }, handle: (ch, fn) => { invokeHandlers[ch] = fn; } },
   shell: { openPath: async p => { opened.push(p); return ""; } },
   BrowserWindow: inert, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert,
