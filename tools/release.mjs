@@ -247,7 +247,8 @@ function asarEntries(file) {
 
 if (flag('--package')) {
   gate('the installer, built from this tree into ' + DIST, () => {
-    if (!run('npm', ['run', 'package'], { ETIUDA_DIST: DIST })) return 'electron-builder failed';
+    if (!run('npm', ['run', 'package'], { ETIUDA_DIST: DIST }))
+      return 'npm run package failed: electron-builder, no fresh installer, or the fuses read back from Etiuda.exe (its lines above)';
     const exe = readdirSync(DIST).filter(f => /-setup\.exe$/i.test(f));
     if (exe.length !== 1) return DIST + ' holds ' + exe.length + ' installers; expected 1';
     const file = join(DIST, exe[0]);

@@ -5336,7 +5336,8 @@ if (require.main === module) {
   try {
     /* ELECTRON-BUILDER COPIES ONLY THE FUSE NAMES IT KNOWS, so a misspelt key leaves that fuse at
        Electron's default with no error anywhere. Each wanted key is read as electron-builder
-       reads it, in its own generateFuseConfig, and the value the config gives it is checked. */
+       reads it, in its own generateFuseConfig, and the value the config gives it is checked.
+       This is the ask only; the built program is read by tools/package.mjs, held by tests/fuses.mjs. */
     const root = path.join(__dirname, "..");
     const want = { runAsNode: false, enableNodeOptionsEnvironmentVariable: false,
                    enableNodeCliInspectArguments: false, onlyLoadAppFromAsar: true };
