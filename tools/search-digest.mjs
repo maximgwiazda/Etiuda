@@ -1,6 +1,14 @@
 /* The search one settle runs (the list's filter and score, searchCounts, searchCatRank), over one
  * catalog, as a digest: an oracle for a change to search that is meant to change no result.
  *
+ * THE DESK'S OWN ORDER IS HELD AGAINST IT. settle() below is this file's own copy of the list's
+ * filter and sort, so a digest of it alone cannot see render.js: on 2026-09-29 three faults planted
+ * there (bands inverted, tiers inverted, the category filter dropped) each printed SAME against the
+ * parent. So at every record the tree's own route is run beside it, where the tree has one: render()
+ * itself, as far as the list it hands over (`shown`), and rankedCards, the order the list and the
+ * picker share. Either parting from settle() at any record is a FAIL of this tree alone, before any
+ * comparison. A change to the order that is meant is a change to settle() in the same commit.
+ *
  *   node tools/search-digest.mjs [--catalog <file>] [--against <src/modules>] [--time N] [--scale K]
  *
  * Exit 0 agreed, 1 differed, 78 no verdict. Prints counts and hashes only, never catalog text. */
@@ -30,9 +38,12 @@ if (!args.includes("--child")) {
       "--time", String(TIME), "--scale", String(SCALE)], { encoding: "utf8", maxBuffer: 1 << 28 });
     if (r.status !== 0) { console.log("NO VERDICT: the run over " + dir + " failed" + NL + (r.stderr || "").split(NL).slice(0, 6).join(NL)); process.exit(NO_VERDICT); }
     const cut = r.stdout.indexOf(NL + "----" + NL);
-    return { summary: r.stdout.slice(0, cut), dump: r.stdout.slice(cut + 6) };
+    const head = r.stdout.slice(0, cut).split(NL);
+    return { summary: head.filter(l => !/^#counts /.test(l)).join(NL), counts: head.filter(l => /^#counts /.test(l)).join(NL),
+             dump: r.stdout.slice(cut + 6) };
   };
   const here = run(join(ROOT, "src", "modules"));
+  if (here.counts) console.log(here.counts);            // gate-run's channel, before the verdict line
   console.log("this tree:    " + here.summary);
   if (/ FAIL /.test(here.summary)) process.exit(1);
   const other = opt("--against", "");
@@ -86,6 +97,20 @@ const SP = await import(MOD("spell.js"));
 const CO = await import(MOD("card-order.js"));
 const CI = await import(MOD("card-intent.js"));
 const CM = await import(MOD("content-model.js"));
+/* A tree from before the shared order has no rankedCards; its render() is still held where it runs. */
+let RENDER = null, RAS = null;
+try { RENDER = await import(MOD("render.js")); } catch { RENDER = null; }
+if (RENDER && typeof RENDER.render !== "function") RENDER = null;
+const RANKED = !!RENDER && typeof RENDER.rankedCards === "function";
+if (RENDER) {
+  /* render() reads the root's font size first and draws into the list after handing it over;
+     the drawing is not this file's question, so a throw past setShown is expected and read past. */
+  globalThis.getComputedStyle = globalThis.getComputedStyle || (() => ({ fontSize: "16px", getPropertyValue: () => "" }));
+  globalThis.location = globalThis.location || { protocol: "file:" };
+  RAS = AS;
+}
+let rkChecked = 0, rkDiff = 0, rdChecked = 0, rdDiff = 0, ordering = !!RENDER;   // off while timing
+const orderKey = (arr, map) => arr.map(m => { const x = map && map.get(m); return m.id + (x ? ":" + x.band + "/" + x.tier + "/" + x.score : ""); }).join(",");
 
 CAT.eApplyCatalog(CAT.parseCatalogFile(fs.readFileSync(CATALOG, "utf8")));
 PK.rebuildBaseCards();
@@ -138,6 +163,17 @@ function settle(q) {
       return CO.cmpCardDisplay(a, b);
     });
   } else hits.sort(CO.cmpCardDisplay);
+  if (ordering) {
+    if (RANKED) {
+      const rk = RENDER.rankedCards(terms, m => CC.cardInActiveCats(m, terms));
+      rkChecked++;
+      if (orderKey(rk.hits, rk.sc) !== orderKey(hits, sc)) rkDiff++;
+    }
+    RAS.setShown(null);
+    try { RENDER.render(); } catch { /* the drawing, after the list was handed over */ }
+    rdChecked++;
+    if (!Array.isArray(RAS.shown) || orderKey(RAS.shown) !== orderKey(hits)) rdDiff++;
+  }
   const counts = CC.searchCounts();
   return { terms, shown: hits, sc, counts, rank: counts ? CC.searchCatRank() : null };
 }
@@ -197,6 +233,7 @@ phase("cat", () => { const k = AS.cards[0] && AS.cards[0].c; AS.setCats(k ? [k] 
 
 let timing = "";
 if (TIME) {
+  ordering = false;                                      // a timed settle is the settle alone
   AS.setCats([]); AS.setIntentIdxs([]); PK.pack.favourites = [];
   QUERIES.forEach(q => settle(q));                       // a desk has built its caches already
   const per = [];
@@ -212,8 +249,16 @@ if (TIME) {
 }
 const dump = lines.join(NL) + NL;
 if (!hits || !checked) { console.error("no search reached a card: nothing was compared"); process.exit(NO_VERDICT); }
+if (RENDER && ((RANKED && rkChecked !== lines.length) || rdChecked !== lines.length)) {
+  console.error("the desk's order was not run at every settle: " + rkChecked + " of " + lines.length); process.exit(NO_VERDICT);
+}
+const own = !RENDER ? ", no render() in this tree"
+  : (RANKED ? ", the desk's order against this copy " + (rkChecked - rkDiff) + "/" + rkChecked + (rkDiff ? " FAIL " : "") : ", no rankedCards in this tree")
+    + ", render's list " + (rdChecked - rdDiff) + "/" + rdChecked + (rdDiff ? " FAIL " : "");
 console.log(AS.cards.length + " cards, " + QUERIES.length + " queries, " + lines.length + " records, "
   + hits + " hits, digest " + crypto.createHash("sha256").update(dump).digest("hex").slice(0, 16)
-  + ", warm against cold " + (checked - fails) + "/" + checked + (fails ? " FAIL " : "") + timing
+  + ", warm against cold " + (checked - fails) + "/" + checked + (fails ? " FAIL " : "") + own + timing
+  + NL + "#counts records=" + lines.length + " warmCold=" + checked + " warmColdDiffer=" + fails
+  + (RANKED ? " order=" + rkChecked + " orderDiffer=" + rkDiff : "") + (RENDER ? " renderList=" + rdChecked + " renderListDiffer=" + rdDiff : "")
   + NL + "----" + NL + dump);
 process.exit(0);
