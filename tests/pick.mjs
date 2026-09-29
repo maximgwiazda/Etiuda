@@ -11,6 +11,15 @@
  * hotkeyRefusal in shell/main.js, one case per clause. Everything else is structure: which window
  * a message is answered from, what reaches the clipboard, where the picker is put.
  *
+ * THE PAGE'S OWN SCRIPT IS RUN (section 4): the exact script the picker's document carries, the one
+ * its policy names by hash, over a stand-in of its two elements, with key presses as plain objects.
+ * Before 2026-09-29 it was only read, and five faults planted in its keys all left this file green.
+ *
+ * WHAT THE SHELL MAY NOT DO (section 5) is read from its text with the comments blanked: no API that
+ * reads another window, the screen or the clipboard, or presses keys; one clipboard write; no module
+ * or program it did not have. Those are the brief's "must hold", and a scan is the only node form of
+ * an absence. Strings are NOT blanked, so a name in a command line counts.
+ *
  * NO CONTENT. The cards below are invented here and hold nobody's words.
  */
 process.removeAllListeners("warning");
@@ -26,7 +35,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 34;
+const EXPECTED = 56;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -65,6 +74,8 @@ const ST = await import(MOD("storage.js"));
 const CE = await import(MOD("copy-entry.js"));
 const PICK = await import(MOD("pick.js"));
 const SET = await import(MOD("settings.js"));
+const SP = await import(MOD("spell.js"));
+const MK = await import(MOD("mark.js"));
 
 /* Invented cards. A greeting-and-name line opens two of them, as a real reply's first line would. */
 const CARDS = [
@@ -91,7 +102,7 @@ let LAB = null;
 const pickAnswer = (op, arg) => PICK.answerPick(op, JSON.stringify(arg || {}));
 
 try {
-  console.log("[1/3] the desk's side: what the picker is shown and what its copy makes");
+  console.log("[1/5] the desk's side: what the picker is shown and what its copy makes");
   ST.lsSet("eNameAsked", "1");
   ST.lsSet("eAgent", "Kate");
 
@@ -153,8 +164,32 @@ try {
   check(JSON.stringify(got) === JSON.stringify(["Control+Shift+Space", "Control+Alt+E", null, "Super+K", null]),
     "1n Settings names a key press in the host's spelling, AltGr as the Control and Alt it is: " + JSON.stringify(got));
 
+  /* The repeat of a reply of two blocks is the block copied, not the card's first. */
+  pickAnswer("copy", { id: "c-shade", vi: 1 });
+  const again = pickAnswer("copy", { last: true });
+  check(!!again && again.text === shadeDesk && !/linen/.test(again.text),
+    "1o the repeat of the second of two blocks copies that block again: " + JSON.stringify(again && again.text));
+
+  /* The desk's "Searched for" note belongs to its own box. A typo in the box is recorded; a typo in
+     the picker is corrected for the picker and leaves the note as the box left it. */
+  els["#intent"].value = "workhop";
+  SP.cardSearchTerms();
+  const noteBefore = JSON.stringify(SP.eSpellFix);
+  const typo = pickAnswer("find", { q: "dleivery" });
+  const noteAfter = JSON.stringify(SP.eSpellFix);
+  els["#intent"].value = "";
+  check(/workshop/.test(noteBefore) && ids(typo.rows) === "c-lamp/0" && noteAfter === noteBefore,
+    "1p a typo in the picker is corrected for it and leaves the desk's note alone: " + ids(typo.rows) + ", " + noteAfter);
+
+  /* A copy through the picker is a copy by the desk's own count: the rail's offer is taken. */
+  AS.setRailMarkUsed(false);
+  const made = MK.copiesMade();
+  pickAnswer("copy", { id: "c-sign", vi: 0 });
+  check(AS.railMarkUsed === true && MK.copiesMade() === made + 1,
+    "1q a copy through the picker takes the rail's offer and counts as a copy made: " + made + " to " + MK.copiesMade());
+
   /* ---- 2. the shell --------------------------------------------------------------------- */
-  console.log("\n[2/3] the shell: the hotkey, the relay and the clipboard");
+  console.log("\n[2/5] the shell: the hotkey, the relay and the clipboard");
   LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-pick-"));
   const UD = path.join(LAB, "user-data"), DOCS = path.join(LAB, "documents");
   fs.mkdirSync(UD, { recursive: true }); fs.mkdirSync(DOCS, { recursive: true });
@@ -278,6 +313,10 @@ try {
   const paused = suspended;
   deskPage.E_HOST.pauseHotkey(false);
   check(paused === true && suspended === false, "2e Settings pauses the hotkey while it listens for keys, and lets it go");
+  deskPage.E_HOST.pauseHotkey(true);
+  const setWhilePaused = await deskPage.E_HOST.setHotkey("Control+Shift+F11");
+  check(setWhilePaused.ok === true && suspended === false && held.has("Control+Shift+F11"),
+    "2r a combination set while Settings listens is held and the pause is let go with it: " + JSON.stringify(setWhilePaused) + ", paused " + suspended);
   onH["etiuda:desk-patch-save"](deskEvent(), JSON.stringify({ eHotkey: "" }));
   const off = held.size;
   onH["etiuda:desk-patch-save"](deskEvent(), JSON.stringify({ eHotkey: null }));
@@ -340,10 +379,34 @@ try {
   held.get("Control+Shift+Space")();
   await until(() => pw.visible);
   desk.calls.length = 0;
+  const sentBefore = desk.sent.length;
   const asked = await pickerPage.E_PICK.copy(JSON.stringify({ id: "c-sign", vi: 0 }));
-  check(asked === false && !pw.visible && desk.calls.indexOf("focus") > -1 && clip.length === clips,
-    "2n a reply that needs the agent's name first sends the agent to the desk's own window, and writes nothing");
+  const askSent = desk.sent.slice(sentBefore).filter(a => a[0] === "etiuda:pick-ask" && a[2] === "ask");
+  check(asked === false && !pw.visible && desk.calls.indexOf("focus") > -1 && clip.length === clips
+    && askSent.length === 1 && askSent[0][3] === JSON.stringify({ id: "c-sign", vi: 0 }),
+    "2n a reply that needs the agent's name first sends the agent to the desk's own window, asks the desk there, and writes nothing: "
+    + (askSent.length ? askSent[0][3] : "never asked"));
   ST.lsSet("eNameAsked", "1");
+
+  /* Clicking away is a blur the shell did not ask for: the picker hides and hands nothing back. */
+  held.get("Control+Shift+Space")();
+  await until(() => pw.visible && pw.focused);
+  const callsAt = pw.calls.length;
+  desk.calls.length = 0;
+  (pw.on.blur || []).forEach(fn => fn());
+  const away = pw.calls.slice(callsAt);
+  check(!pw.visible && away.join(" ") === "hide" && desk.calls.indexOf("focus") < 0,
+    "2s clicking away hides the picker, and neither gives the focus up again nor calls the desk forward: " + (away.join(" ") || "nothing"));
+
+  /* A desk that answers nothing (a card gone, a page mid-reload) leaves the clipboard as it was. */
+  held.get("Control+Shift+Space")();
+  await until(() => pw.visible);
+  const clipsNow = clip.length;
+  const gone = await pickerPage.E_PICK.copy(JSON.stringify({ id: "c-gone", vi: 0 }));
+  check(gone === false && clip.length === clipsNow && pw.visible,
+    "2t a copy the desk cannot answer writes nothing and leaves the picker standing: " + (clip.length - clipsNow) + " written");
+  held.get("Control+Shift+Space")();
+  await until(() => !pw.visible);
 
   cursor = { x: 1900, y: 1000 };
   const edge = SH.pickerPlace(cursor, area, SH.PICK_SIZE), small = SH.pickerPlace({ x: 10, y: 10 }, { x: 0, y: 0, width: 400, height: 300 }, SH.PICK_SIZE);
@@ -357,7 +420,7 @@ try {
   check(pw.destroyed, "2q the picker goes with the desk's window, so the app can quit");
 
   /* ---- 3. what the page is ---------------------------------------------------------------- */
-  console.log("\n[3/3] the picker's page");
+  console.log("\n[3/5] the picker's page");
   const doc = decodeURIComponent(String(pw.url || "").replace(/^data:text\/html;charset=utf-8,/, ""));
   const script = (/<script>([\s\S]*?)<\/script>/.exec(doc) || [])[1] || "";
   const hash = "'sha256-" + nodeRequire("node:crypto").createHash("sha256").update(script, "utf8").digest("base64") + "'";
@@ -369,6 +432,85 @@ try {
   check(/\.on\{background:color-mix\(in srgb,var\(--accent\) 20%,transparent\)\}/.test(doc) && /forced-colors:active/.test(doc)
     && /prefers-reduced-motion/.test(doc),
     "3c the marked row wears the desk's mark, and high contrast and reduced motion are answered");
+
+  /* ---- 4. the page's own script, run ---------------------------------------------------- */
+  console.log("\n[4/5] the picker's page, its script run over a stand-in of its two elements");
+  const pageL = {};
+  const qEl = { value: "", placeholder: "", focus() {}, setAttribute() {}, addEventListener: (t, fn) => { pageL["q:" + t] = fn; } };
+  let boxHtml = "";
+  const boxEl = { set innerHTML(v) { boxHtml = v; }, get innerHTML() { return boxHtml; }, setAttribute() {}, querySelectorAll: () => [],
+    addEventListener: (t, fn) => { pageL["box:" + t] = fn; } };
+  const pcalls = [];
+  let pOpen = null, pFound = [];
+  const pWin = { E_PICK: { find: () => Promise.resolve(JSON.stringify({ rows: pFound })),
+    copy: s => { pcalls.push("copy " + s); }, close: () => { pcalls.push("close"); }, ready: () => {}, onOpen: fn => { pOpen = fn; } } };
+  const pDoc = { getElementById: id => (id === "q" ? qEl : id === "rows" ? boxEl : null),
+    documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, lang: "" } };
+  new Function("window", "document", script)(pWin, pDoc);
+  check(typeof pOpen === "function" && typeof pageL["q:keydown"] === "function" && typeof pageL["box:click"] === "function",
+    "4a the page's script, run as its document carries it, listens to its box and its rows");
+  const R = id => ({ id: id, vi: 0, t: "T " + id, x: "x", tag: "" });
+  const pRows = [R("a"), R("b"), R("c")];
+  const press = (k, code, ctrl) => { let prevented = false;
+    pageL["q:keydown"]({ key: k, code: code || "", ctrlKey: !!ctrl, altKey: false, metaKey: false, preventDefault: () => { prevented = true; } });
+    return prevented; };
+  const lastCall = () => pcalls[pcalls.length - 1] || "nothing";
+  const reopen = () => { pcalls.length = 0; qEl.value = ""; pOpen(JSON.stringify({ rows: pRows, last: R("b"), words: { again: "again" } })); };
+  reopen();
+  check(/^<li[^>]*id="r0"[^>]*class="on"[^>]*title="again"/.test(boxHtml), "4b at rest the reply copied last is the first row, and marked");
+  press("Enter", "Enter");
+  check(lastCall() === 'copy {"last":true}', "4c Enter at rest copies the reply copied last again: " + lastCall());
+  reopen(); press("ArrowDown", "ArrowDown"); press("Enter", "Enter");
+  check(lastCall() === 'copy {"id":"a","vi":0}', "4d a step down and Enter copies the row marked: " + lastCall());
+  reopen(); press("1", "Digit1", true);
+  check(lastCall() === 'copy {"id":"a","vi":0}', "4e Ctrl+1 copies the row numbered 1: " + lastCall());
+  reopen(); press("2", "Numpad2", true);
+  check(lastCall() === 'copy {"id":"c","vi":0}', "4f Ctrl+2 copies the row numbered 2, the reply copied last taking no number: " + lastCall());
+  reopen(); press("ArrowDown", "ArrowDown"); press("ArrowDown", "ArrowDown"); press("0", "Digit0", true);
+  check(lastCall() === 'copy {"last":true}', "4g Ctrl+0 copies the reply copied last wherever the mark is: " + lastCall());
+  reopen(); press("Escape", "Escape");
+  check(lastCall() === "close" && pcalls.length === 1, "4h Escape closes and copies nothing: " + pcalls.join(" | "));
+  reopen();
+  check(press("Tab", "Tab") && pcalls.length === 0, "4i Tab stays in the box and copies nothing");
+  reopen(); press("1", "Digit1", false);
+  check(pcalls.length === 0, "4j a digit without Control is typed, and copies nothing");
+  reopen(); press("ArrowUp", "ArrowUp"); press("Enter", "Enter");
+  check(lastCall() === 'copy {"id":"c","vi":0}', "4k a step up from the first row wraps to the last: " + lastCall());
+  reopen();
+  pageL["box:click"]({ target: { closest: () => ({ dataset: { i: "1" } }) } });
+  check(lastCall() === 'copy {"id":"a","vi":0}', "4l a click on a row copies that row: " + lastCall());
+  reopen(); qEl.value = "br"; pFound = [R("c"), R("a")]; pageL["q:input"]();
+  await tick(5);
+  press("Enter", "Enter");
+  check(lastCall() === 'copy {"id":"c","vi":0}' && !/title="again"/.test(boxHtml),
+    "4m with a query the first row found is marked, and the reply copied last steps aside: " + lastCall());
+
+  /* ---- 5. what the shell may not do -------------------------------------------------------- */
+  console.log("\n[5/5] what the shell may not do, read from its text with the comments blanked");
+  const blank = s => s.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, " "))
+    .replace(/(^|[^:"'\\])\/\/[^\n]*/g, (m, p) => p + " ".repeat(m.length - p.length));
+  const PRE = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
+  const shellCode = blank(SRC) + "\n" + blank(PRE);
+  const modDir = path.join(ROOT, "src", "modules");
+  const engineCode = fs.readdirSync(modDir).filter(f => f.endsWith(".js")).map(f => blank(fs.readFileSync(path.join(modDir, f), "utf8")))
+    .concat(blank(fs.readFileSync(path.join(ROOT, "src", "main.js"), "utf8"))).join("\n");
+  const FORBID = /desktopCapturer|capturePage|getSources|getDisplayMedia|getUserMedia|clipboard\s*\.\s*read|readText|readHTML|readImage|readRTF|readBookmark|sendInputEvent|SendKeys|SendInput|keybd_event|mouse_event|SetWindowsHookEx|GetForegroundWindow|GetWindowText|WindowFromPoint|AttachThreadInput|uiohook|iohook|robotjs|nut-js|UIAutomation/g;
+  const reach = (shellCode + "\n" + engineCode).match(FORBID) || [];
+  check(reach.length === 0 && /clipboard/.test(shellCode) && /writeText/.test(shellCode),
+    "5a no API in the shell or the engine reads another window, the screen or the clipboard, or presses a key: " + (reach.join(", ") || "none"));
+  const writes = shellCode.match(/clipboard\s*\.\s*write\w*\s*\(/g) || [];
+  check(writes.length === 1 && /clipboard\.writeText\(pickClipText\(v\.text, process\.platform\)\)/.test(shellCode),
+    "5b the shell writes the clipboard at one place, the desk's own text: " + writes.length + " write site(s)");
+  const MODS = ["electron", "node:child_process", "node:path", "node:fs", "node:os", "node:crypto"];
+  const reqs = (shellCode.match(/\brequire\s*\(\s*[^)]*\)/g) || []).map(r => r.replace(/^require\s*\(\s*|\s*\)$/g, "").replace(/^["']|["']$/g, ""));
+  const strange = reqs.filter(r => MODS.indexOf(r) < 0);
+  const cp = /\{([^}]*)\}\s*=\s*require\(\s*"node:child_process"\s*\)/.exec(shellCode);
+  const runs = shellCode.match(/(?<![.\w])(execFileSync|execFile|execSync|exec|spawnSync|spawn|fork)\s*\(\s*("[^"]*"|[^,)]*)/g) || [];
+  const programs = runs.map(r => r.replace(/^[^(]*\(\s*/, ""));
+  check(reqs.length > 0 && strange.length === 0 && !!cp && cp[1].trim() === "execFileSync"
+    && programs.length > 0 && programs.every(p => p === '"reg"'),
+    "5c the shell loads no module and runs no program it did not have (every one is read against the must-hold before it joins): "
+    + (strange.join(", ") || reqs.length + " requires known") + "; " + (cp ? cp[1].trim() : "no child_process") + " runs " + (programs.join(", ") || "nothing"));
 } catch (e) {
   failed++;
   console.log("  FAIL the run threw: " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

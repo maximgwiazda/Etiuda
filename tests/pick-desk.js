@@ -72,6 +72,7 @@ const FORM_PS1 = [
   "  elseif ($c -eq 'clip') { $a = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes([Windows.Forms.Clipboard]::GetText())) }",
   "  elseif ($c -eq 'text') { $a = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($t.Text)) }",
   "  elseif ($c -eq 'clear') { $t.Text = ''; $a = 'ok' }",
+  "  elseif ($c -like 'setclip *') { [Windows.Forms.Clipboard]::SetText([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($c.Substring(8)))); $a = 'ok' }",
   "  elseif ($c -like 'hold *') { $p = $c.Substring(5).Split(' '); $a = [string][PickU]::RegisterHotKey($f.Handle, [int]$p[0], [uint32]$p[1], [uint32]$p[2]) }",
   "  elseif ($c -like 'free *') { $a = [string][PickU]::UnregisterHotKey($f.Handle, [int]$c.Substring(5)) }",
   "  elseif ($c -like 'keys *') { Press $c.Substring(5); $a = 'ok' }",
@@ -189,12 +190,19 @@ const pickerPage = async () => (await b.pages()).find(p => /^data:text\/html/.te
   await ask("keys ctrl+shift+space");
   check(await until(async () => (await ask("fg")) === "True"), "i a second press closes it the same way");
 
+  /* The clipboard still holds clip1 from e, so "Enter copies it again" would pass on an Enter that
+     copied nothing. A sentinel goes on first, written by the chat's own program, and is read back. */
+  const SENTINEL = "pick-desk sentinel " + process.pid;
+  await ask("setclip " + Buffer.from(SENTINEL, "utf8").toString("base64"));
+  const armed = b64(await ask("clip")) === SENTINEL;
   await ask("keys ctrl+shift+space");
   await until(async () => { pp = await pickerPage(); return !!pp && await pp.evaluate(() => document.hasFocus()); });
   const marked = await pp.evaluate(() => { const on = document.querySelector("#rows li.on"); return on ? on.querySelector(".t").textContent : ""; });
   await ask("keys enter");
   await until(async () => (await ask("fg")) === "True");
-  check(marked === "Lamp delivery" && b64(await ask("clip")) === clip1, "j the reply copied last opens marked, and Enter copies it again");
+  const again = b64(await ask("clip"));
+  check(armed && marked === "Lamp delivery" && again === clip1, "j the reply copied last opens marked, and Enter copies it again over a sentinel ("
+    + (armed ? "sentinel read back" : "SENTINEL NOT PLACED") + ", " + (again === SENTINEL ? "the sentinel still there" : again.length + " characters after") + ")");
 
   const heldByForm = await ask("hold 3 6 120");
   const refused = await desk.evaluate(() => window.E_HOST.setHotkey("Control+Shift+F9"));
