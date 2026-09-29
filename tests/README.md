@@ -627,8 +627,8 @@ release gate stops at its installer gate through it. The installed copy is not r
 installer packs `win-unpacked` after the flip.
 
 `fuses.mjs` holds it without packaging: the stock Electron binary as the control, which reads
-wrong on all four; its wire lifted into a small file and flipped as electron-builder flips it,
-with each fuse turned back alone; a program holding two fuse blocks,
+wrong on the four fuses it ships the other way; its wire lifted into a small file and flipped as
+electron-builder flips it, with each fuse turned back alone; a program holding two fuse blocks,
 which is refused rather than read at the first; the packaging step's question of planted dist
 folders; and, on Windows, `tools/package.mjs` itself in a lab whose `electron-builder` plants the
 program. 14 checks, about 3 s; off Windows the three lab checks say NOT RUN.

@@ -6,8 +6,9 @@
  * tests/test.js [2f/5] holds what electron-builder.js asks for, and cannot see the program: a
  * build that lost a fuse on the way to Etiuda.exe stayed green there. Nothing here packages
  * anything. What each leg holds:
- *   1  the reader asks for the same four fuses [2f/5] holds
- *   2  CONTROL: the stock Electron binary, which ships all four the other way, reads wrong on each
+ *   1  the reader asks for the same six fuses [2f/5] holds
+ *   2  CONTROL: the stock Electron binary, which ships four of them the other way, reads wrong on each of
+ *      those and as asked on the two the config leaves to Electron's defaults
  *   3  a wire lifted from that binary and flipped as electron-builder flips it reads as asked, and
  *      each fuse turned back alone is named, and only that one; a program holding a second wire is
  *      refused, whichever of the two is the wrong one
@@ -40,19 +41,23 @@ function check(ok, line) {
 function skip(why, legs) { for (let i = 0; i < legs; i++) notRun.push(why); console.log('  NOT RUN ' + why); }
 
 const WANT = { runAsNode: false, enableNodeOptionsEnvironmentVariable: false,
-               enableNodeCliInspectArguments: false, onlyLoadAppFromAsar: true };
+               enableNodeCliInspectArguments: false, enableEmbeddedAsarIntegrityValidation: false,
+               onlyLoadAppFromAsar: true, grantFileProtocolExtraPrivileges: true };
+/* The two the stock binary already carries as asked. */
+const KEPT = ['enableEmbeddedAsarIntegrityValidation', 'grantFileProtocolExtraPrivileges'];
+const FOUR = Object.keys(WANT).filter(k => !KEPT.includes(k));
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'etiuda-fuses-'));
 try {
   const want = wantedFuses();
   check(JSON.stringify(want) === JSON.stringify(WANT),
-    '1a the reader asks for what electron-builder.js asks for, the four [2f/5] holds: ' + JSON.stringify(want));
+    '1a the reader asks for what electron-builder.js asks for, the six [2f/5] holds: ' + JSON.stringify(want));
 
   const { flipFuses, FuseVersion, FuseV1Options } = require('@electron/fuses');
   const stock = require('electron');
   let onStock;
   try { onStock = await fuseProblems(stock, want); } catch (e) { onStock = [String(e && e.message)]; }
-  check(onStock.length === 4 && Object.keys(WANT).every(k => onStock.some(l => l.indexOf(k + ' is ') === 0)),
-    '2a CONTROL: the stock Electron binary, which ships all four the other way, reads wrong on each: '
+  check(onStock.length === 4 && FOUR.every(k => onStock.some(l => l.indexOf(k + ' is ') === 0)),
+    '2a CONTROL: the stock Electron binary, which ships four the other way, reads wrong on each and as asked on the two kept: '
     + JSON.stringify(onStock));
 
   /* A PROGRAM IN MINIATURE: the stock binary's wire behind a few bytes, which is all the reader and
@@ -114,7 +119,7 @@ try {
   const pFlipped = await packagedFuseProblems(await dist('d-flipped', flipped));
   const pMissing = await packagedFuseProblems(await dist('d-missing', null));
   const pPlain = await packagedFuseProblems(await dist('d-plain', plain));
-  check(pGood.length === 0, '4a a dist whose program carries the four as asked passes: ' + JSON.stringify(pGood));
+  check(pGood.length === 0, '4a a dist whose program carries the six as asked passes: ' + JSON.stringify(pGood));
   check(pFlipped.length === 1 && /^runAsNode is on /.test(pFlipped[0]),
     '4b one whose program has node turned back on is refused, naming it: ' + JSON.stringify(pFlipped));
   check(pMissing.length === 1 && /is not there/.test(pMissing[0]),
@@ -154,8 +159,8 @@ try {
       return { status: r.status, out: (r.stdout || '') + (r.stderr || '') };
     };
     const a = pack('good', good), b = pack('flipped', flipped), c = pack('missing', null);
-    check(a.status === 0 && /4 fuse\(s\) read back from .*Etiuda\.exe as asked/.test(a.out),
-      '5a the step passes a program carrying the four as asked, and says so, exit ' + a.status);
+    check(a.status === 0 && /6 fuse\(s\) read back from .*Etiuda\.exe as asked/.test(a.out),
+      '5a the step passes a program carrying the six as asked, and says so, exit ' + a.status);
     check(b.status === 1 && /runAsNode is on where electron-builder\.js asks for it off/.test(b.out),
       '5b the step refuses a program with node turned back on, naming the fuse, exit ' + b.status);
     check(c.status === 1 && /is not there, so no fuse was read/.test(c.out),
