@@ -35,7 +35,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 58;
+const EXPECTED = 59;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -193,6 +193,11 @@ try {
   LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-pick-"));
   const UD = path.join(LAB, "user-data"), DOCS = path.join(LAB, "documents");
   fs.mkdirSync(UD, { recursive: true }); fs.mkdirSync(DOCS, { recursive: true });
+  /* The shell reads a catalog from the folder above itself, so it is loaded beside copies of the two
+     folders it needs and never above the checkout: an ignored file at a checkout's root is then not
+     in this world. */
+  const APP = path.join(LAB, "app");
+  ["shell", "engine"].forEach(d => fs.cpSync(path.join(ROOT, d), path.join(APP, d), { recursive: true }));
   fs.writeFileSync(path.join(UD, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
     keys: { eCatalogFolder: path.join(LAB, "catalogs") } }), "utf8");
 
@@ -253,10 +258,13 @@ try {
   const said = [];
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn() {} };
   const SRC = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+  const listed = [];
+  const shellFs = Object.create(fs);
+  shellFs.readdirSync = (p, ...rest) => (listed.push(path.resolve(String(p)).toLowerCase()), fs.readdirSync(p, ...rest));
   const EXPOSE = ["hotkeyRefusal", "pickerPlace", "pickClipText", "PICK_SIZE", "HOTKEY_DEFAULT"];
   const SH = new Function("require", "__dirname", "__filename", "module", "exports", "console",
     SRC + "\nreturn { " + EXPOSE.map(n => n + ": " + n).join(", ") + " };")(
-    n => (n === "electron" ? electron : nodeRequire(n)), path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"),
+    n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? shellFs : nodeRequire(n)), path.join(APP, "shell"), path.join(APP, "shell", "main.js"),
     { exports: {} }, {}, quiet);
 
   const refusals = {
@@ -415,6 +423,13 @@ try {
     + JSON.stringify(edge) + " " + JSON.stringify(small));
   check(SH.pickClipText("a\nb\r\nc", "win32") === "a\r\nb\r\nc" && SH.pickClipText("a\nb", "linux") === "a\nb",
     "2p the line ends are Windows' pair there and left alone elsewhere");
+
+  /* The folder the shell takes for its app root is the lab's copy, and the checkout's own root is
+     never listed, so no file a checkout happens to hold there can reach the boot. */
+  const appListed = listed.includes(path.resolve(APP).toLowerCase()), rootListed = listed.includes(path.resolve(ROOT).toLowerCase());
+  check(appListed && !rootListed,
+    "2u the app root the shell lists is the lab's own, and the checkout's root is never listed: app root listed "
+    + appListed + ", checkout root listed " + rootListed);
 
   desk.on.closed.forEach(fn => fn());
   check(pw.destroyed, "2q the picker goes with the desk's window, so the app can quit");
