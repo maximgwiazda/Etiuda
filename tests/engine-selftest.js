@@ -960,6 +960,79 @@ try {
      "28d and the POSIX arm takes the same live child down, which is what says the branch is"
      + " reached and does something: " + r.out.trim());
 
+  /* 28g to 28k. WHICH PROCESSES killTree TAKES. taskkill /T follows ParentProcessId alone, so a
+     process whose recorded parent died before that pid was reused is taken as its child (two
+     processes of another seat stopped that way). launchTree is the selection as a pure function
+     over a table of { pid, parent, created }, so the fault is planted in a table rather than
+     waited for. 28h is the control: the rule /T applies, written out here over the same table,
+     takes the orphans, so 28g's survivors are the created-later clause's doing. */
+  {
+    const T = (pid, parent, created) => ({ pid, parent, created });
+    /* 100 is the launch; 200 and 700 its children, 300 the grandchild; 400 an older process whose
+       recorded parent is 100 (the reused pid), 600 the child of that orphan; 500 a stranger. */
+    const table = [T(100, 1, 1000), T(200, 100, 1100), T(300, 200, 1200), T(700, 100, 1300),
+                   T(400, 100, 500), T(600, 400, 600), T(500, 1, 900)];
+    const taken = typeof E.launchTree === "function" ? E.launchTree(100, table).slice().sort((a, b) => a - b) : null;
+    ok(!!taken && taken.join() === "100,200,300,700",
+       "28g the tree taken for a launch is the launch, its children and its grandchild, and an older process that carries the launch's"
+       + " pid as its recorded parent survives, with its own child: " + (taken ? JSON.stringify(taken) : "E.launchTree is not there"));
+    const byParentOnly = (root, rows) => { const out = [root];
+      for (let i = 0; i < out.length; i++) for (const p of rows) if (p.parent === out[i] && out.indexOf(p.pid) < 0) out.push(p.pid);
+      return out; };
+    const old = byParentOnly(100, table);
+    ok(old.indexOf(400) > -1 && old.indexOf(600) > -1 && old.indexOf(500) < 0 && old.length === 6,
+       "28h THE CONTROL: the rule taskkill /T applies, children by ParentProcessId alone, over the same table takes the orphan and its"
+       + " child as well (" + JSON.stringify(old.slice().sort((a, b) => a - b)) + "), so 28g reddens on the created-later clause and not on the table");
+    const same = typeof E.launchTree === "function" ? [
+      E.launchTree(9, table),
+      E.launchTree(10, [T(10, 1, 50), T(11, 10, 50), T(12, 10, 51)]),
+      E.launchTree(10, [T(10, 1, 50), T(11, 10, NaN), T(12, 10, undefined), T(13, 10, 60)]),
+      E.launchTree(10, [T(10, 10, 5), T(11, 10, 6), T(12, 11, 7)]),
+      E.launchTree(1, [T(1, 0, 1), T(2, 1, 2), T(3, 2, 3), T(4, 3, 4), T(5, 4, 5), T(6, 5, 6)]),
+    ].map(x => x.slice().sort((a, b) => a - b).join()) : null;
+    ok(!!same && same.join(" | ") === " | 10,12 | 10,13 | 10,11,12 | 1,2,3,4,5,6",
+       "28i the edges: a pid not in the table takes nothing, a child created at the very instant of its parent is not taken, one with no"
+       + " creation time is not taken, a row that is its own parent does not loop, and a chain of six is taken whole: "
+       + (same ? JSON.stringify(same) : "E.launchTree is not there"));
+  }
+  if (HOST_WIN) {
+    /* A three-level tree of real processes and a bystander, killed through killTree, all read back.
+       The children are spawned detached so that they leave the job object libuv gives a parent's
+       children: without it they die with the parent whatever killTree does, and the leg cannot fail. */
+    const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+    const base = path.join(tmp, "tree-" + process.pid);
+    const midJs = path.join(tmp, "tree-mid.js"), rootJs = path.join(tmp, "tree-root.js");
+    fs.writeFileSync(midJs, 'const cp = require("child_process"), fs = require("fs");\n'
+      + 'const leaf = cp.spawn(process.execPath, ["-e", "setInterval(function(){}, 1000);"], { stdio: "ignore", detached: true });\n'
+      + 'fs.writeFileSync(process.argv[2] + ".leaf", String(leaf.pid));\nsetInterval(function () {}, 1000);\n');
+    fs.writeFileSync(rootJs, 'const cp = require("child_process"), fs = require("fs");\n'
+      + 'const mid = cp.spawn(process.execPath, [process.argv[2], process.argv[3]], { stdio: "ignore", detached: true });\n'
+      + 'fs.writeFileSync(process.argv[3] + ".mid", String(mid.pid));\nsetInterval(function () {}, 1000);\n');
+    const root = spawn(process.execPath, [rootJs, midJs, base], { stdio: "ignore" });
+    const bystander = spawn(process.execPath, ["-e", "setInterval(function(){}, 1000);"], { stdio: "ignore" });
+    for (let i = 0; i < 100 && !fs.existsSync(base + ".leaf"); i++) pause(100);
+    const read = f => { try { return Number(fs.readFileSync(f, "utf8")); } catch (e) { return 0; } };
+    const mid = read(base + ".mid"), leaf = read(base + ".leaf");
+    const before = [root.pid, mid, leaf, bystander.pid].map(p => !!p && E.pidAlive(p));
+    const did = E.killTree(root.pid);
+    pause(1200);
+    const after = [root.pid, mid, leaf, bystander.pid].map(p => !!p && E.pidAlive(p));
+    for (const p of [bystander.pid, root.pid, mid, leaf]) { try { if (p) process.kill(p); } catch (e) { /* already gone */ } }
+    ok(before.every(Boolean) && after.slice(0, 3).every(a => !a) && after[3] && did.killed === true,
+       "28j LIVE CONTROL: a launch, its child and its grandchild, three real processes, are alive before killTree (" + before.join()
+       + ") and gone after (" + after.slice(0, 3).join() + "), with an unrelated process of the same run still standing (" + after[3]
+       + "): " + did.how);
+    ok(Array.isArray(did.taken) && did.taken.slice().sort().join() === [root.pid, mid, leaf].sort().join(),
+       "28l and what killTree says it took is exactly those three pids, read from Win32_Process, and no other: " + JSON.stringify(did.taken));
+    const spent = require("child_process").spawnSync(process.execPath, ["-e", ""], { stdio: "ignore" });
+    const late = E.killTree(spent.pid);
+    ok(late.killed === false && /already gone/.test(late.how),
+       "28k and a launch that has already gone is answered as gone, not killed, whatever reuses its pid later: " + JSON.stringify(late));
+  } else {
+    skip("28j and 28k are killTree on Windows, over real processes and Win32_Process; on " + process.platform
+         + " 28d is the arm that runs and 28g to 28i hold the selection, which is arithmetic");
+  }
+
   r = run(AS('const E = require("./engine.js");'
     + 'const v = E.suiteVerdict({ checks: 3, fails: 0, expected: 3, reachedEnd: true });'
     + 'console.log(JSON.stringify(v));'), {});
