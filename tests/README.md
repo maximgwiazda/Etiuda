@@ -649,10 +649,13 @@ The fuses do not reach Chromium's `--remote-debugging-port` or `--remote-debuggi
 either one drives the window. So `shell/main.js`, run from inside `app.asar`, removes both before
 ready unless `ETIUDA_TEST_DEVTOOLS=1` is set, and `E.shellLaunch` sets it whenever a launch
 carries one; a launcher that drives an installed desk some other way must set it itself.
-`tests/shell-office.mjs` leg 7 loads the shell from a checkout (keeps them, the control), from a
-folder named `app.asar` (removes them) and from there with the variable (keeps them), and
+`ETIUDA_TEST_DOCUMENTS` and `ETIUDA_TEST_SAVE_AS`, which move the catalog folder and answer the
+export dialog, stand behind the same variable, and `E.shellLaunch` sets it for a launch carrying
+either. `tests/shell-office.mjs` leg 7 loads the shell from a checkout (keeps them, the control), from a
+folder named `app.asar` (removes them) and from there with the variable (keeps them), for the
+switches in 7a to 7c and for the two variables in 7d to 7f, and
 `tests/engine-selftest.js` 21h proves the launcher sets the variable with the switch and not
-without. What Chromium then does was measured once, outside the harness, on a windowless Electron
+without, and keeps the caller's environment, and 21i does the same for either test variable. What Chromium then does was measured once, outside the harness, on a windowless Electron
 44.3.0 and 44.4.5: removed before ready, neither switch opens an endpoint.
 
 ## The software bill of materials, per release

@@ -342,6 +342,7 @@ try {
       + 'const opts = { stdio: "ignore" };'
       + 'if (o.ownsDesk) opts.ownsDesk = true;'
       + 'if (o.docs !== undefined) opts.env = Object.assign({}, process.env, { ETIUDA_TEST_DOCUMENTS: o.docs });'
+      + 'if (o.saveAs !== undefined) opts.env = Object.assign({}, opts.env || process.env, { ETIUDA_TEST_SAVE_AS: o.saveAs });'
       + 'if (o.declare !== undefined) opts.realCatalogFolder = o.declare;'
       + 'if (o.take) { const t = E.takeDeskLock(o.who); console.log("TOOK " + JSON.stringify(t.ok)); }'
       + 'const c = E.shellLaunch(o.who, process.execPath, [' + JSON.stringify(probeFile)
@@ -431,6 +432,16 @@ try {
        + port.token + ", pipe " + pipe.token + "), and one without reaches it with nothing (" + plain.token
        + "); and the caller's own environment survives beside it: ETIUDA_TEST_DOCUMENTS reaches the shell as "
        + JSON.stringify(kept.docsSeen) + " with the variable set (" + kept.token + ")");
+
+    /* 21i. An installed desk takes ETIUDA_TEST_DOCUMENTS and ETIUDA_TEST_SAVE_AS only behind the same
+       variable (shell/main.js), so the launcher opens the door for either one, with no switch on the
+       line. `plain` above is the launch with neither. */
+    const viaDocs = fire({ who: "a-suite.js", args: ["--user-data-dir=" + ownUd], docs: labDocs });
+    const viaSave = fire({ who: "a-suite.js", args: ["--user-data-dir=" + ownUd], saveAs: labDocs });
+    ok(viaDocs.token === "1" && viaSave.token === "1" && plain.token === "-",
+       "21i a launch carrying ETIUDA_TEST_DOCUMENTS reaches the shell with ETIUDA_TEST_DEVTOOLS=1 (" + viaDocs.token
+       + "), and so does one carrying ETIUDA_TEST_SAVE_AS (" + viaSave.token + "), neither with a debugging switch on"
+       + " the line, where one carrying neither reaches it with nothing (" + plain.token + ")");
   }
 
   /* 22. AND NOTHING LAUNCHES THE SHELL AROUND THE GUARD. Case 21 proves what shellLaunch does;
