@@ -972,9 +972,9 @@ const t0 = Date.now();
     "an inactive tab's dot is the theme's text colour on a light desk's pale band and white on dark and on any deep band ("
     + JSON.stringify(tabDots && tabDots.map(r => [r.th, r.back, r.dot])) + ")");
 
-  /* THE TRADEMARK NOTICE closes About's legal line in the interface's language, once, and the
-     working screen carries it in neither. The shape is asked rather than the sentence, so the
-     word a registration adds leaves this leg standing. */
+  /* THE TRADEMARK NOTICE sits second from last on About's legal line, once, in the interface's language,
+     and the maker line closes it, exact and once; the working screen carries neither. The notice's
+     shape is asked rather than its sentence, so the word a registration adds leaves this leg standing. */
   e = since();
   const tm = await p.evaluate(async () => {
     const read = async l => {
@@ -984,7 +984,7 @@ const t0 = Date.now();
       const sub = (document.querySelector(".about-modal .modal-sub").innerText || "").split("\n");
       const all = document.querySelector(".about-modal").innerText;
       dismissModal(); await new Promise(r => setTimeout(r, 200));
-      return { screen, last: sub[sub.length - 1].trim(), all };
+      return { screen, last: (sub[sub.length - 2] || "").trim(), maker: sub[sub.length - 1].trim(), all };
     };
     const en = await read("en"), pl = await read("pl");
     setUiLang("en"); await new Promise(r => setTimeout(r, 400));
@@ -993,12 +993,15 @@ const t0 = Date.now();
   const TM_EN = /^Etiuda is a (registered )?trademark of Maxim Gwiazda\.$/, TM_PL = /^Etiuda jest (zarejestrowanym )?znakiem towarowym Maxima Gwiazdy\.$/;
   const hits = (s, w) => s.split(w).length - 1;
   check(TM_EN.test(tm.en.last) && hits(tm.en.all, "trademark") === 1 && TM_PL.test(tm.pl.last)
-        && hits(tm.pl.all, "znakiem towarowym") === 1 && hits(tm.pl.all, "trademark") === 0,
-    "About closes its legal line on the trademark notice, once, in each language (" + JSON.stringify(tm.en.last)
-    + ", " + JSON.stringify(tm.pl.last) + ")");
-  check([tm.en.screen, tm.pl.screen].every(s => hits(s, "trademark") + hits(s, "znakiem towarowym") === 0)
+        && hits(tm.pl.all, "znakiem towarowym") === 1 && hits(tm.pl.all, "trademark") === 0
+        && tm.en.maker === "Made by Stardust." && hits(tm.en.all, "Made by Stardust.") === 1
+        && tm.pl.maker === "Etiudę tworzy Gwiezdny Pył." && hits(tm.pl.all, "Etiudę tworzy Gwiezdny Pył.") === 1,
+    "About's legal line has the trademark notice second from last and the maker line last, once each, in each language ("
+    + JSON.stringify([tm.en.last, tm.en.maker]) + ", " + JSON.stringify([tm.pl.last, tm.pl.maker]) + ")");
+  check([tm.en.screen, tm.pl.screen].every(s => hits(s, "trademark") + hits(s, "znakiem towarowym")
+          + hits(s, "Made by Stardust.") + hits(s, "Etiudę tworzy Gwiezdny Pył.") === 0)
         && tm.en.screen.length > 0 && tm.pl.screen.length > 0,
-    "control: the working screen behind it carries the notice in neither language (" + tm.en.screen.length
+    "control: the working screen behind it carries neither the notice nor the maker line, in either language (" + tm.en.screen.length
     + " and " + tm.pl.screen.length + " characters read)");
   clean(e, "the trademark notice");
 
