@@ -231,11 +231,17 @@ function shellLaunch(who, exe, args, options) {
   const opts = Object.assign({}, options || {});
   delete opts.ownsDesk;
   delete opts.realCatalogFolder;
+  /* noDoor is the closure leg's alone (shell-smoke 6d): the launch meets an installed desk with a debugging switch and no door. */
+  const noDoor = opts.noDoor === true;
+  delete opts.noDoor;
   const bad = shellLaunchRefusal(who, args, options);
   if (bad) refuse(bad[0], ...bad.slice(1));
   /* An installed desk drops a debugging switch, and takes neither test variable, unless this rides beside them (shell/main.js). */
   const carried = opts.env || process.env;
-  if ((args || []).some(a => /^--remote-debugging-(port|pipe)\b/.test(String(a))) || carried.ETIUDA_TEST_DOCUMENTS || carried.ETIUDA_TEST_SAVE_AS)
+  if (noDoor) {
+    opts.env = Object.assign({}, carried);
+    delete opts.env.ETIUDA_TEST_DEVTOOLS;
+  } else if ((args || []).some(a => /^--remote-debugging-(port|pipe)\b/.test(String(a))) || carried.ETIUDA_TEST_DOCUMENTS || carried.ETIUDA_TEST_SAVE_AS)
     opts.env = Object.assign({}, carried, { ETIUDA_TEST_DEVTOOLS: "1" });
   return spawn(exe, args, opts);
 }

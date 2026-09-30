@@ -165,7 +165,7 @@ const step = async (label, body, opts) => {
  * it is what the count now sees: a mismatch is NO VERDICT, exit 78, not a tally.
  */
 const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7"];
-const EXPECTED = KEEP ? null : 126;
+const EXPECTED = KEEP ? null : 129;
 const phasesSeen = new Set();
 const phase = what => {
   const m = /^\[(\d+)[a-z]*\/\d+\]/.exec(String(what).trim());
@@ -3125,6 +3125,62 @@ const placeEc = (dir, from, as, minutesOld) => {
 
   /* ---- 6: a plant into the served copy ----------------------------------------------------- */
 
+  });
+  await step("[6b/7] the debugging port an installed desk refuses", async () => {
+  phase("[6b/7] the debugging port an installed desk refuses");
+  /* THE CLOSURE, ON THE REAL EXE (board 822). Every launch above takes the door, because E.shellLaunch sets
+     ETIUDA_TEST_DEVTOOLS=1 beside any debugging switch, so none of them shows that an installed desk given
+     the switch and no door opens nothing. 6d launches the packaged app with --remote-debugging-port=0 and
+     noDoor, and wants no DevToolsActivePort in its own user-data folder after the shell has said it dropped
+     the switch. It has two controls of its own: the door, which must open the port (6e), and the same app
+     with the closure edited out of its shell, which must open it with no door (6f), so the empty folder is
+     the closure's doing and not a reading that could never find the file. */
+  const PORT_FILE = "DevToolsActivePort";
+  const portOfUd = ud => { try { return parseInt(fs.readFileSync(path.join(ud, PORT_FILE), "utf8").split("\n")[0], 10) || 0; } catch (x) { return 0; } };
+  /* One launch with the switch and no page to drive: it waits for the port file or the shell's own line, then
+     four seconds more, which is longer than the control takes to write the file. */
+  const withSwitch = async (ud, door) => {
+    const child = E.shellLaunch("tests/shell-smoke.js 6d", path.join(APPDIR, "Etiuda.exe"),
+      ["--remote-debugging-port=0", "--user-data-dir=" + ud],
+      Object.assign({ stdio: ["ignore", "pipe", "pipe"], env: E.offscreenEnv() }, door ? {} : { noDoor: true }));
+    live.add(child.pid);
+    const said = [];
+    child.stdout.on("data", d => said.push(String(d).trim()));
+    child.stderr.on("data", d => said.push(String(d).trim()));
+    const line = /--remote-debugging-port is not taken by an installed desk/;
+    for (let i = 0; i < 60 && !portOfUd(ud) && !said.some(l => line.test(l)); i++) await sleep(250);
+    await sleep(4000);
+    const seen = { port: portOfUd(ud), file: fs.existsSync(path.join(ud, PORT_FILE)), said: said.join("\n"),
+                   alive: child.exitCode === null };
+    seen.line = line.test(seen.said);
+    seen.listening = /DevTools listening on/.test(seen.said);
+    killPid(child.pid);
+    await sleep(1000);
+    return seen;
+  };
+  const closedRun = await withSwitch(newUserData("closed"), false);
+  check(closedRun.alive && closedRun.line && !closedRun.file && closedRun.port === 0 && !closedRun.listening,
+    "6d the PACKAGED desk handed --remote-debugging-port=0 and no ETIUDA_TEST_DEVTOOLS is running, says it does not take"
+    + " the switch (" + closedRun.line + "), never says it is listening (" + closedRun.listening + "), and has no "
+    + PORT_FILE + " in its user-data folder (file " + closedRun.file + ", port " + closedRun.port + ")");
+  const doorRun = await withSwitch(newUserData("closed-door"), true);
+  check(doorRun.alive && doorRun.port > 0 && doorRun.listening && !doorRun.line,
+    "6e THE CONTROL: the same app handed the same switch WITH the door writes " + PORT_FILE + " (port " + doorRun.port
+    + "), says it is listening (" + doorRun.listening + ") and says nothing of dropping it (" + doorRun.line + ")");
+  let edited = 0;
+  await variant(w => {
+    const f = path.join(w, "shell", "main.js");
+    const text = fs.readFileSync(f, "utf8");
+    const from = 'const TEST_DOOR = !INSTALLED || process.env.ETIUDA_TEST_DEVTOOLS === "1";';
+    edited = text.split(from).length - 1;
+    if (edited === 1) fs.writeFileSync(f, text.replace(from, () => "const TEST_DOOR = true;"), "utf8");
+  });
+  const openRun = await withSwitch(newUserData("closed-open"), false);
+  check(edited === 1 && openRun.alive && openRun.port > 0 && openRun.listening && !openRun.line,
+    "6f THE CONTROL: the same app with its shell's door test edited to always open (" + edited + " place edited), handed the switch"
+    + " and no door, DOES write " + PORT_FILE + " (port " + openRun.port + "), so 6d's empty folder is the closure and not a"
+    + " reading that could not see the file");
+  pristine();
   });
   await step("[6/7] a script planted in the packaged artefact", async () => {
   phase("[6/7] a script planted in the packaged artefact");

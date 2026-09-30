@@ -344,6 +344,8 @@ try {
       + 'if (o.docs !== undefined) opts.env = Object.assign({}, process.env, { ETIUDA_TEST_DOCUMENTS: o.docs });'
       + 'if (o.saveAs !== undefined) opts.env = Object.assign({}, opts.env || process.env, { ETIUDA_TEST_SAVE_AS: o.saveAs });'
       + 'if (o.declare !== undefined) opts.realCatalogFolder = o.declare;'
+      + 'if (o.door) opts.env = Object.assign({}, opts.env || process.env, { ETIUDA_TEST_DEVTOOLS: "1" });'
+      + 'if (o.noDoor) opts.noDoor = true;'
       + 'if (o.take) { const t = E.takeDeskLock(o.who); console.log("TOOK " + JSON.stringify(t.ok)); }'
       + 'const c = E.shellLaunch(o.who, process.execPath, [' + JSON.stringify(probeFile)
       + ', o.marker].concat(o.args || []), opts);'
@@ -442,6 +444,17 @@ try {
        "21i a launch carrying ETIUDA_TEST_DOCUMENTS reaches the shell with ETIUDA_TEST_DEVTOOLS=1 (" + viaDocs.token
        + "), and so does one carrying ETIUDA_TEST_SAVE_AS (" + viaSave.token + "), neither with a debugging switch on"
        + " the line, where one carrying neither reaches it with nothing (" + plain.token + ")");
+
+    /* 21j. The closure leg (shell-smoke 6d) launches the packaged desk with a debugging switch and NO door, so
+       noDoor keeps the variable off the launch even where the switch is on the line and the caller's own
+       environment carries one; the same launch without it (21h) does get it. */
+    const closed = fire({ who: "a-suite.js", args: ["--user-data-dir=" + ownUd, "--remote-debugging-port=0"], noDoor: true });
+    const closedAmbient = fire({ who: "a-suite.js", args: ["--user-data-dir=" + ownUd, "--remote-debugging-port=0"], noDoor: true, door: true });
+    ok(closed.launched === true && closed.token === "-" && closedAmbient.launched === true && closedAmbient.token === "-"
+       && port.token === "1",
+       "21j a launch with noDoor reaches the shell with the switch on its line and ETIUDA_TEST_DEVTOOLS unset ("
+       + closed.token + "), even from a caller whose own environment carries it (" + closedAmbient.token
+       + "), where the same launch without noDoor reaches it set (" + port.token + ")");
   }
 
   /* 22. AND NOTHING LAUNCHES THE SHELL AROUND THE GUARD. Case 21 proves what shellLaunch does;
