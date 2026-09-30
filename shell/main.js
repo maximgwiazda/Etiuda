@@ -6,6 +6,16 @@ const { app, BrowserWindow, Menu, clipboard, dialog, globalShortcut, ipcMain, na
 /* --no-proxy-server turns off every proxy, not only discovery: at start there is no wpad lookup and
    no IPv6 probe at idle. The probe still fires on the first hostname lookup. */
 app.commandLine.appendSwitch("no-proxy-server");
+/* AN INSTALLED DESK, loaded from inside app.asar, opens no debugging endpoint: Chromium's two switches
+   are removed before ready unless ETIUDA_TEST_DEVTOOLS=1, which tests/engine.js shellLaunch sets beside
+   them. tests/shell-office.mjs 7 holds it. */
+if (/[\\/]app\.asar([\\/]|$)/i.test(__dirname) && process.env.ETIUDA_TEST_DEVTOOLS !== "1") {
+  for (const s of ["remote-debugging-port", "remote-debugging-pipe"]) {
+    if (!app.commandLine.hasSwitch(s)) continue;
+    app.commandLine.removeSwitch(s);
+    console.error("etiuda: --" + s + " is not taken by an installed desk");
+  }
+}
 const { execFileSync } = require("node:child_process");
 const path = require("node:path");
 const fs = require("node:fs");

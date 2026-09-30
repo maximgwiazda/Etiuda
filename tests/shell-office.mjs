@@ -19,7 +19,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 38;
+const EXPECTED = 41;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -83,7 +83,8 @@ function anything(over) {
 let loads = 0;
 /* opts.ready: app.whenReady resolves, so the shell boots as far as its window; opts.clock: the
    fake timers above; opts.desk: keys written into desk.json before the shell reads it; opts.src:
-   the source to run in place of main.js. */
+   the source to run in place of main.js; opts.app: the folder it runs from; opts.onLine: switches
+   on its command line. */
 function loadShell(opts) {
   const o = opts || {};
   const dir = path.join(LAB, "load" + (++loads));
@@ -96,13 +97,15 @@ function loadShell(opts) {
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: () => {} };
   const noop = () => {};
   const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
-  const on = {}, invoke = {}, power = {}, sent = [], switches = [];
+  const on = {}, invoke = {}, power = {}, sent = [], switches = [], removed = [];
+  const onLine = new Set(o.onLine || []);
   const wc = anything({ send: (...a) => { sent.push(a); }, id: 7 });
   const win = anything({ isDestroyed: () => false, webContents: wc });
   const electron = {
     app: { getPath: n => (n === "documents" ? DOCS : UD), setPath: noop, requestSingleInstanceLock: () => !!o.ready,
            quit: noop, on: noop, getVersion: () => "0.0.0",
-           commandLine: { appendSwitch: (...a) => { switches.push(a); } },
+           commandLine: { appendSwitch: (...a) => { switches.push(a); }, hasSwitch: k => onLine.has(k),
+                          removeSwitch: k => { if (onLine.delete(k)) removed.push(k); } },
            whenReady: () => (o.ready ? Promise.resolve() : new Promise(noop)) },
     ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
     BrowserWindow: o.ready ? new Proxy(function () {}, { construct: () => win,
@@ -118,13 +121,13 @@ function loadShell(opts) {
   const fakeRequire = n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? fs : nodeRequire(n));
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console", "setTimeout", "clearTimeout",
     (o.src || SRC) + "\nreturn { " + EXPOSE.map(n => n + ": typeof " + n + " === 'undefined' ? undefined : " + n).join(", ") + " };")(
-    fakeRequire, path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet,
+    fakeRequire, path.join(o.app || APP, "shell"), path.join(o.app || APP, "shell", "main.js"), { exports: {} }, {}, quiet,
     clock.setTimeout, clock.clearTimeout);
   const ENGINE = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
   const ipc = (ch, ...args) => { const e = { sender: { id: 1, once: noop }, senderFrame: ENGINE, returnValue: undefined };
     if (on[ch]) on[ch](e, ...args); return e.returnValue; };
   const ask = (ch, ...args) => invoke[ch]({ sender: { id: 1 }, senderFrame: ENGINE }, ...args);
-  return { api, ctl, said, ipc, ask, UD, DOCS, deskFile: path.join(UD, "desk.json"), power, sent, win, switches };
+  return { api, ctl, said, ipc, ask, UD, DOCS, deskFile: path.join(UD, "desk.json"), power, sent, win, switches, removed };
 }
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 /* Invented from nothing, as every fixture here is. The refused one names a shelf that is not
@@ -524,6 +527,29 @@ try {
     check(stripped !== SRC && bare.switches.length === 0,
       "6b THE CONTROL: the same shell with that one line removed asks for no switch, so 6a can fail: "
       + JSON.stringify(bare.switches));
+  }
+  /* ---- 7. an installed desk opens no debugging endpoint unless the harness's launcher asks ----- */
+  {
+    const DEBUG = ["remote-debugging-port", "remote-debugging-pipe"];
+    const INSTALLED = path.join(LAB, "installed", "resources", "app.asar");
+    ["shell", "engine"].forEach(d => realFs.cpSync(path.join(ROOT, d), path.join(INSTALLED, d), { recursive: true }));
+    const was = process.env.ETIUDA_TEST_DEVTOOLS;
+    const load = (app, token) => {
+      if (token) process.env.ETIUDA_TEST_DEVTOOLS = "1"; else delete process.env.ETIUDA_TEST_DEVTOOLS;
+      try { return loadShell({ app, onLine: DEBUG }); }
+      finally { if (was === undefined) delete process.env.ETIUDA_TEST_DEVTOOLS; else process.env.ETIUDA_TEST_DEVTOOLS = was; }
+    };
+    const tree = load(null, false), inst = load(INSTALLED, false), harness = load(INSTALLED, true);
+    const told = inst.said.filter(l => /is not taken by an installed desk/.test(l)).length;
+    check(tree.removed.length === 0,
+      "7a THE CONTROL: the shell run from a checkout keeps both debugging switches, as every unpackaged"
+      + " launch in tests/ needs: removed " + JSON.stringify(tree.removed));
+    check(JSON.stringify(inst.removed) === JSON.stringify(DEBUG) && told === 2,
+      "7b the same shell run from inside app.asar removes " + JSON.stringify(inst.removed)
+      + " before ready and says so in " + told + " line(s)");
+    check(harness.removed.length === 0,
+      "7c and with ETIUDA_TEST_DEVTOOLS=1, which tests/engine.js shellLaunch sets beside the switch,"
+      + " it keeps them for the harness: removed " + JSON.stringify(harness.removed));
   }
 } catch (e) {
   failed++;

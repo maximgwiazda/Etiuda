@@ -233,6 +233,9 @@ function shellLaunch(who, exe, args, options) {
   delete opts.realCatalogFolder;
   const bad = shellLaunchRefusal(who, args, options);
   if (bad) refuse(bad[0], ...bad.slice(1));
+  /* An installed desk drops a debugging switch unless this rides beside it (shell/main.js). */
+  if ((args || []).some(a => /^--remote-debugging-(port|pipe)\b/.test(String(a))))
+    opts.env = Object.assign({}, opts.env || process.env, { ETIUDA_TEST_DEVTOOLS: "1" });
   return spawn(exe, args, opts);
 }
 

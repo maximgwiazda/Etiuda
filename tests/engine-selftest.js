@@ -335,7 +335,8 @@ try {
   let fire = null;   /* case 23 fires the same probe at the desk lock */
   {
     const probeFile = path.join(tmp, "stand-in.js");
-    fs.writeFileSync(probeFile, 'require("fs").writeFileSync(process.argv[2], "launched");\n', "utf8");
+    fs.writeFileSync(probeFile, 'require("fs").writeFileSync(process.argv[2], "launched "'
+      + ' + (process.env.ETIUDA_TEST_DEVTOOLS || "-"));\n', "utf8");
     const probe = o => 'const E = require("./engine.js");'
       + 'const o = ' + JSON.stringify(o) + ';'
       + 'const opts = { stdio: "ignore" };'
@@ -350,7 +351,9 @@ try {
     fire = o => {
       const marker = path.join(tmp, "launched-" + (++mark) + ".txt");
       const r = run(probe(Object.assign({ marker: marker }, o)), {});
-      return { code: r.code, out: r.out, launched: fs.existsSync(marker), marker: marker };
+      const launched = fs.existsSync(marker);
+      return { code: r.code, out: r.out, launched: launched, marker: marker,
+               token: launched ? fs.readFileSync(marker, "utf8").split(" ")[1] : null };
     };
     const ownUd = path.join(tmp, "ud-own");
     const ownUd2 = path.join(tmp, "ud-own-2");
@@ -414,6 +417,15 @@ try {
        + " the guard prints it (exit " + said.code + ", marker " + said.launched + "); a word in"
        + " its place is not a declaration and the launch is still refused (exit " + tooShort.code
        + "). 21c is the same launch without it");
+
+    /* 21h. An installed desk drops Chromium's debugging switches unless ETIUDA_TEST_DEVTOOLS=1
+       rides beside them (shell/main.js), so the one launcher sets it with the switch and not without. */
+    const port = fire({ who: "a-suite.js", args: ["--user-data-dir=" + ownUd, "--remote-debugging-port=0"] });
+    const pipe = fire({ who: "a-suite.js", args: ["--user-data-dir=" + ownUd, "--remote-debugging-pipe"] });
+    const plain = fire({ who: "a-suite.js", args: ["--user-data-dir=" + ownUd] });
+    ok(port.token === "1" && pipe.token === "1" && plain.token === "-",
+       "21h a launch carrying a debugging switch reaches the shell with ETIUDA_TEST_DEVTOOLS=1 (port "
+       + port.token + ", pipe " + pipe.token + "), and one without reaches it with nothing (" + plain.token + ")");
   }
 
   /* 22. AND NOTHING LAUNCHES THE SHELL AROUND THE GUARD. Case 21 proves what shellLaunch does;
