@@ -335,12 +335,14 @@ try {
   let fire = null;   /* case 23 fires the same probe at the desk lock */
   {
     const probeFile = path.join(tmp, "stand-in.js");
-    fs.writeFileSync(probeFile, 'require("fs").writeFileSync(process.argv[2], "launched");\n', "utf8");
+    fs.writeFileSync(probeFile, 'require("fs").writeFileSync(process.argv[2], "launched "'
+      + ' + (process.env.ETIUDA_TEST_DEVTOOLS || "-") + " " + (process.env.ETIUDA_TEST_DOCUMENTS || "-"));\n', "utf8");
     const probe = o => 'const E = require("./engine.js");'
       + 'const o = ' + JSON.stringify(o) + ';'
       + 'const opts = { stdio: "ignore" };'
       + 'if (o.ownsDesk) opts.ownsDesk = true;'
       + 'if (o.docs !== undefined) opts.env = Object.assign({}, process.env, { ETIUDA_TEST_DOCUMENTS: o.docs });'
+      + 'if (o.saveAs !== undefined) opts.env = Object.assign({}, opts.env || process.env, { ETIUDA_TEST_SAVE_AS: o.saveAs });'
       + 'if (o.declare !== undefined) opts.realCatalogFolder = o.declare;'
       + 'if (o.take) { const t = E.takeDeskLock(o.who); console.log("TOOK " + JSON.stringify(t.ok)); }'
       + 'const c = E.shellLaunch(o.who, process.execPath, [' + JSON.stringify(probeFile)
@@ -350,7 +352,10 @@ try {
     fire = o => {
       const marker = path.join(tmp, "launched-" + (++mark) + ".txt");
       const r = run(probe(Object.assign({ marker: marker }, o)), {});
-      return { code: r.code, out: r.out, launched: fs.existsSync(marker), marker: marker };
+      const launched = fs.existsSync(marker);
+      return { code: r.code, out: r.out, launched: launched, marker: marker,
+               token: launched ? fs.readFileSync(marker, "utf8").split(" ")[1] : null,
+               docsSeen: launched ? fs.readFileSync(marker, "utf8").split(" ").slice(2).join(" ") : null };
     };
     const ownUd = path.join(tmp, "ud-own");
     const ownUd2 = path.join(tmp, "ud-own-2");
@@ -414,6 +419,29 @@ try {
        + " the guard prints it (exit " + said.code + ", marker " + said.launched + "); a word in"
        + " its place is not a declaration and the launch is still refused (exit " + tooShort.code
        + "). 21c is the same launch without it");
+
+    /* 21h. An installed desk drops Chromium's debugging switches unless ETIUDA_TEST_DEVTOOLS=1
+       rides beside them (shell/main.js), so the one launcher sets it with the switch and not without. */
+    const port = fire({ who: "a-suite.js", args: ["--user-data-dir=" + ownUd, "--remote-debugging-port=0"] });
+    const pipe = fire({ who: "a-suite.js", args: ["--user-data-dir=" + ownUd, "--remote-debugging-pipe"] });
+    const plain = fire({ who: "a-suite.js", args: ["--user-data-dir=" + ownUd] });
+    /* The variable is added to the caller's environment, not put in place of it. */
+    const kept = fire({ who: "a-suite.js", args: ["--user-data-dir=" + ownUd, "--remote-debugging-port=0"], docs: labDocs });
+    ok(port.token === "1" && pipe.token === "1" && plain.token === "-" && kept.token === "1" && kept.docsSeen === labDocs,
+       "21h a launch carrying a debugging switch reaches the shell with ETIUDA_TEST_DEVTOOLS=1 (port "
+       + port.token + ", pipe " + pipe.token + "), and one without reaches it with nothing (" + plain.token
+       + "); and the caller's own environment survives beside it: ETIUDA_TEST_DOCUMENTS reaches the shell as "
+       + JSON.stringify(kept.docsSeen) + " with the variable set (" + kept.token + ")");
+
+    /* 21i. An installed desk takes ETIUDA_TEST_DOCUMENTS and ETIUDA_TEST_SAVE_AS only behind the same
+       variable (shell/main.js), so the launcher opens the door for either one, with no switch on the
+       line. `plain` above is the launch with neither. */
+    const viaDocs = fire({ who: "a-suite.js", args: ["--user-data-dir=" + ownUd], docs: labDocs });
+    const viaSave = fire({ who: "a-suite.js", args: ["--user-data-dir=" + ownUd], saveAs: labDocs });
+    ok(viaDocs.token === "1" && viaSave.token === "1" && plain.token === "-",
+       "21i a launch carrying ETIUDA_TEST_DOCUMENTS reaches the shell with ETIUDA_TEST_DEVTOOLS=1 (" + viaDocs.token
+       + "), and so does one carrying ETIUDA_TEST_SAVE_AS (" + viaSave.token + "), neither with a debugging switch on"
+       + " the line, where one carrying neither reaches it with nothing (" + plain.token + ")");
   }
 
   /* 22. AND NOTHING LAUNCHES THE SHELL AROUND THE GUARD. Case 21 proves what shellLaunch does;
@@ -1053,6 +1081,40 @@ try {
        "27f " + file + " reads its base through the same door, refusing at load before it builds"
        + " anything, and quotes " + want + " back: "
        + (impossible.out.trim().split(/\r?\n/)[0] || "(said nothing)"));
+  }
+
+  /* 27g. THE PORT REFUSAL DOES NOT DEPEND ON WHAT ELSE IS LIVE. tests/desk.js once asked whether
+     an Electron was live before it asked for its port block, so 27f read the Electron refusal, after
+     a grace, whenever another seat's window was up. A preload stands in for one live run (it
+     rewrites electronRunsLive in the copy of engine.js the child loads, and shortens the grace,
+     and throws if it found nothing to rewrite), so this holds with no window anywhere. 27g2 is the
+     control: the same stand-in and no shift, and desk.js refuses on the Electron, so the stand-in
+     is what 27g had to get past. */
+  {
+    const stubAt = path.join(tmp, "live-electron.js");
+    fs.writeFileSync(stubAt, `const Module = require("node:module"), path = require("node:path");
+const real = Module.prototype._compile;
+Module.prototype._compile = function (content, filename) {
+  if (path.basename(filename) === "engine.js" && path.basename(path.dirname(filename)) === "tests") {
+    const live = 'function electronRunsLive() { return { asked: true, processes: 1, runs: [{ pid: 4242, name: "electron.exe", path: "a stubbed live run", family: 0 }] }; } function electronRunsLiveReal() {';
+    const a = content.replace("function electronRunsLive() {", live);
+    const b = a.replace("graceMs === undefined ? 15000 : graceMs", "graceMs === undefined ? 0 : graceMs");
+    if (a === content || b === a) throw new Error("the live-Electron stand-in found nothing to stand in for");
+    content = b;
+  }
+  return real.call(this, content, filename);
+};
+`, "utf8");
+    const desk = shift => run('process.chdir(require("./engine.js").ROOT);'
+      + 'require("child_process").execFileSync(process.execPath, ["-r", ' + JSON.stringify(stubAt) + ', "tests/desk.js"],'
+      + '{ stdio: "inherit" });', { ETIUDA_PORT_SHIFT: shift, ETIUDA_FIXTURES: "" });
+    const shifted = desk("60000"), plain = desk("");
+    ok(/block at 69424-/.test(shifted.out) && !/another Electron run is live/.test(shifted.out),
+       "27g tests/desk.js with one Electron run stood in as live still refuses on its port block, quoting 69424 back, and never"
+       + " reaches the Electron check: " + (shifted.out.trim().split(/\r?\n/).find(l => /FAIL|block at/.test(l)) || "(said nothing)"));
+    ok(/did not start: another Electron run is live, 1 run\(s\)/.test(plain.out) && /pid 4242/.test(plain.out),
+       "27g2 THE CONTROL: the same stand-in with no shift refuses desk.js on the live run, pid 4242, so 27g is the order and not"
+       + " a stand-in that never took: " + (plain.out.trim().split(/\r?\n/).find(l => /did not start/.test(l)) || "(said nothing)"));
   }
 }
 
