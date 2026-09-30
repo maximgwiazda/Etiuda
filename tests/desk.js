@@ -58,7 +58,6 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
    renderer and GPU processes are lowered by pid after each launch (E.lowerTree). */
 const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
-E.refuseWhileElectronLive("tests/desk.js");
 
 /* THE PORT BLOCK AND THE LEASE, board item 628. A fixed debugging port is not a failed
    connect: two concurrent runs of tests/csp.js at 9422 were measured on 2026-09-20 reading ONE
@@ -67,6 +66,8 @@ E.refuseWhileElectronLive("tests/desk.js");
    checked for overlaps at every call, and the block is leased by its base where the run was
    given a lease command, at load, before anything is built. */
 const PORT = E.portBlock("desk");
+/* After the port block, so a refused shift is refused whatever else is live (engine-selftest 27f, 27g). */
+E.refuseWhileElectronLive("tests/desk.js");
 const LEASED = E.takeLeases(["ports:" + PORT], 20, "tests/desk.js");
 console.log("       debugging port(s) count up from " + PORT
   + (process.env.ETIUDA_PORT_SHIFT ? " (ETIUDA_PORT_SHIFT " + process.env.ETIUDA_PORT_SHIFT + ")"

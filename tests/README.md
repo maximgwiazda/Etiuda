@@ -527,7 +527,7 @@ the shell reads the catalog folder **before** the user-data folder. One exemptio
 `ownsDesk`, and `tests/reinstall.js` is the only file that takes it: the real profile is its
 subject.
 
-The refusals are proved in `tests/engine-selftest.js` 21a to 21g, driven against node as a
+The refusals are proved in `tests/engine-selftest.js` 21a to 21g (21h is the debugging switch below), driven against node as a
 stand-in for the shell: each writes a marker file when it runs, so a refusal that fired after the
 spawn would be caught rather than read as a refusal. Case 22 counts the call sites off the tree
 and fails on a launcher that calls `spawn` itself; 22b counts the exemptions and holds that count
@@ -642,6 +642,21 @@ do that, each on a profile of its own with `--log-net-log`: C is the shell with 
 and must show discovery, D is the shipped shell and must show none. A net log is complete only at
 a clean close, so the window is closed through the debugging port and the log must parse whole
 and hold events. A control that shows no discovery on the machine is NOT RUN, never ok.
+
+## The debugging switches of an installed desk
+
+The fuses do not reach Chromium's `--remote-debugging-port` or `--remote-debugging-pipe`, and
+either one drives the window. So `shell/main.js`, run from inside `app.asar`, removes both before
+ready unless `ETIUDA_TEST_DEVTOOLS=1` is set, and `E.shellLaunch` sets it whenever a launch
+carries one; a launcher that drives an installed desk some other way must set it itself.
+`ETIUDA_TEST_DOCUMENTS` and `ETIUDA_TEST_SAVE_AS`, which move the catalog folder and answer the
+export dialog, stand behind the same variable, and `E.shellLaunch` sets it for a launch carrying
+either. `tests/shell-office.mjs` leg 8 loads the shell from a checkout (keeps them, the control), from a
+folder named `app.asar` (removes them) and from there with the variable (keeps them), for the
+switches in 8a to 8c and for the two variables in 8d to 8f, and
+`tests/engine-selftest.js` 21h proves the launcher sets the variable with the switch and not
+without, and keeps the caller's environment, and 21i does the same for either test variable. What Chromium then does was measured once, outside the harness, on a windowless Electron
+44.3.0 and 44.4.5: removed before ready, neither switch opens an endpoint.
 
 ## The software bill of materials, per release
 

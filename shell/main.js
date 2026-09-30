@@ -6,6 +6,20 @@ const { app, BrowserWindow, Menu, clipboard, dialog, globalShortcut, ipcMain, na
 /* --no-proxy-server turns off every proxy, not only discovery: at start there is no wpad lookup and
    no IPv6 probe at idle. The probe still fires on the first hostname lookup. */
 app.commandLine.appendSwitch("no-proxy-server");
+/* AN INSTALLED DESK, loaded from inside app.asar, opens no debugging endpoint and takes neither
+   ETIUDA_TEST_DOCUMENTS nor ETIUDA_TEST_SAVE_AS unless ETIUDA_TEST_DEVTOOLS=1, which tests/engine.js
+   shellLaunch sets beside any of them. tests/shell-office.mjs 8 holds it. */
+const INSTALLED = /[\\/]app\.asar([\\/]|$)/i.test(__dirname);
+const TEST_DOOR = !INSTALLED || process.env.ETIUDA_TEST_DEVTOOLS === "1";
+if (!TEST_DOOR) {
+  for (const s of ["remote-debugging-port", "remote-debugging-pipe"]) {
+    if (!app.commandLine.hasSwitch(s)) continue;
+    app.commandLine.removeSwitch(s);
+    console.error("etiuda: --" + s + " is not taken by an installed desk");
+  }
+  for (const v of ["ETIUDA_TEST_DOCUMENTS", "ETIUDA_TEST_SAVE_AS"])
+    if (process.env[v]) console.error("etiuda: " + v + " is not taken by an installed desk");
+}
 const { execFileSync } = require("node:child_process");
 const path = require("node:path");
 const fs = require("node:fs");
@@ -29,7 +43,7 @@ const CATALOG_FOLDER_KEY = "eCatalogFolder";
    Documents/Etiuda, and app.getPath cannot be redirected from OUTSIDE the process, so without this
    the only way to drive a first run is against the real folder of whoever is at the desk. Made
    before it is set: setPath refuses a path that is not there. */
-if (process.env.ETIUDA_TEST_DOCUMENTS) {
+if (TEST_DOOR && process.env.ETIUDA_TEST_DOCUMENTS) {
   try {
     fs.mkdirSync(process.env.ETIUDA_TEST_DOCUMENTS, { recursive: true });
     app.setPath("documents", process.env.ETIUDA_TEST_DOCUMENTS);
@@ -1217,7 +1231,7 @@ ipcMain.handle("etiuda:choose-catalog-save", async (e, title, name, label) => {
     defaultPath: path.join(app.getPath("documents"), base),
     filters: [{ name: String(label || "Etiuda catalog").slice(0, 60), extensions: [ext] }],
   };
-  const r = process.env.ETIUDA_TEST_SAVE_AS
+  const r = TEST_DOOR && process.env.ETIUDA_TEST_SAVE_AS
     ? { canceled: false, filePath: path.join(process.env.ETIUDA_TEST_SAVE_AS, base) }
     : win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
   if (r.canceled || !r.filePath) return null;
