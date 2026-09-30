@@ -2,7 +2,8 @@
  * shell/preload.js over the real handlers of shell/main.js, electron stubbed, desk.json in a temp
  * folder. What it holds: a write never waits on the disk, a burst is one send, and a document
  * leaving or hiding right after a write has put it on the disk before the event returns, and none
- * puts back a desk the rescue's Reset has cleared.
+ * puts back a desk the rescue's Reset has cleared. The Reset also empties the tabs' session, in the
+ * page and in main, and the preload sends a link's address to main for a primary or middle click only.
  *
  *   node tests/desk-ipc.mjs            exit code is the number of failed checks, capped at 63
  */
@@ -19,7 +20,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 22;
+const EXPECTED = 29;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -53,12 +54,13 @@ new Function("require", "__dirname", "__filename", "module", "exports", "console
 /* ---- the renderer's side of the pipe. The desk's channels go to main's own handlers; the
    catalog and the host are answered here, because this file is about the desk. ------------- */
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
-const sent = { sync: {}, invoke: {} };
+const sent = { sync: {}, invoke: {}, args: {} };
 const bump = (o, ch) => { o[ch] = (o[ch] || 0) + 1; };
 const eventFor = frame => ({ sender: { id: 1, once: noop }, senderFrame: frame, returnValue: undefined });
 const ipcRenderer = {
   sendSync: (ch, ...args) => {
     bump(sent.sync, ch);
+    sent.args[ch] = args;
     if (ch === "etiuda:catalog") return null;
     if (ch === "etiuda:host") return { platform: "win32", backdrop: null, deskFile: DESK, home: UD };
     const e = eventFor(ENGINE_FRAME);
@@ -81,6 +83,9 @@ globalThis.document = { visibilityState: "visible", addEventListener: listen("do
 const contextBridge = { exposeInMainWorld: (k, v) => { window[k] = v; }, executeInMainWorld: noop };
 new Function("require", shellSrc("preload.js"))(n => (n === "electron" ? { contextBridge, ipcRenderer } : nodeRequire(n)));
 const REAL_HOST = window.E_HOST;
+/* Every listener the preload put on the window or the document, kept before the Reset legs empty the table. */
+const linkListeners = {};
+["window", "document"].forEach(w => Object.keys(listeners[w]).forEach(t => { linkListeners[t] = (linkListeners[t] || []).concat(listeners[w][t]); }));
 
 try {
   const S = await import(MOD("storage.js", "ipc"));
@@ -224,10 +229,16 @@ try {
     if (at < 0 || i >= tpl.length) throw new Error("the template carries no function " + name);
     return tpl.slice(at, i + 1);
   };
-  const lsStub = { length: 0, key: () => null, removeItem: noop }, ssStub = { clear: noop };
+  let ssCleared = 0;
+  const lsStub = { length: 0, key: () => null, removeItem: noop }, ssStub = { clear: () => { ssCleared++; } };
+  const TAB = "eResetTab";
+  const tabPlanted = window.E_HOST.session("set", TAB, "the customer's name") === true && window.E_HOST.session("get", TAB) === "the customer's name";
   const clearState = new Function("window", "localStorage", "sessionStorage",
     slice("hostDesk") + "\n" + slice("clearState") + "\nreturn clearState;")(window, lsStub, ssStub);
+  check(tabPlanted && ssCleared === 0,
+    "5a2 THE CONTROL: the tabs' session in main holds a plant before the Reset, and the page's own sessionStorage has not been cleared yet");
   clearState(true);
+  const tabsAfter = window.E_HOST.session("get", TAB);
   fire("window", "beforeunload");
   fire("window", "pagehide");
   await tick(5); await tick(5);
@@ -235,6 +246,45 @@ try {
   check(!stayed.length && left["e~carried"] === "1",
     "5b the Reset's cleared desk is what remains after the page leaves: " + stayed.length + " app key(s) back on the disk"
     + (stayed.length ? " (" + stayed.slice(0, 4).join(", ") + ")" : "") + ", the carried mark " + left["e~carried"]);
+  check(ssCleared === 1,
+    "5c the Reset clears the page's own sessionStorage, once: " + ssCleared + " call(s)");
+  check(tabsAfter === null,
+    "5d and it clears the tabs main holds, so a customer's name does not outlive the Reset: the plant reads back " + JSON.stringify(tabsAfter));
+  /* The #reset hatch clears with no desk: it runs before the app does, and a customer's name must not outlive it either. */
+  const planted2 = window.E_HOST.session("set", TAB, "the customer's name") === true && window.E_HOST.session("get", TAB) === "the customer's name";
+  clearState(false);
+  const hatchTabs = window.E_HOST.session("get", TAB);
+  check(planted2 && hatchTabs === null && ssCleared === 2,
+    "5e the #reset hatch's clearState(false) clears the tabs too, in main and in the page: planted " + planted2 + ", the plant reads back "
+    + JSON.stringify(hatchTabs) + ", sessionStorage cleared " + ssCleared + " time(s) in all");
+
+  /* ---- a click on a link, at the preload's two listeners: only a middle click, besides the primary
+     one, hands its address to main, and so licenses it; a right click on a link is a context menu ---- */
+  const LINK = "https://links.invalid/right-click-probe";
+  const press = (type, button) => {
+    const before = sent.sync["etiuda:link-click"] || 0;
+    const ev = { type, button, isTrusted: true, composedPath: () => [{ localName: "span" }, { localName: "a", href: LINK }, { localName: "body" }] };
+    (linkListeners[type] || []).forEach(fn => fn(ev));
+    return (sent.sync["etiuda:link-click"] || 0) - before;
+  };
+  const primary = press("click", 0), middle = press("auxclick", 1);
+  check(linkListeners.click.length === 1 && linkListeners.auxclick.length === 1 && primary === 1 && middle === 1
+    && sent.args["etiuda:link-click"][0] === LINK,
+    "6a THE CONTROL: the preload holds one click and one auxclick listener, a trusted primary click and a trusted middle click on a link each send its address to main: "
+    + primary + " and " + middle + " send(s)");
+  const right = press("auxclick", 2);
+  check(right === 0,
+    "6b a right click on a link (auxclick, button 2) sends nothing to main, so it licenses no address: " + right + " send(s)");
+  /* The pointer and the mouse at every button that is not the primary or the middle: no listener of the preload may send. */
+  const DRIVEN = ["pointerdown", "pointerup", "mousedown", "mouseup", "auxclick", "contextmenu"];
+  const mouseLike = Object.keys(linkListeners).filter(t => /click|mouse|pointer|contextmenu|touch|drag|drop/.test(t));
+  const undriven = mouseLike.filter(t => DRIVEN.indexOf(t) < 0 && t !== "click");
+  const sends = [];
+  for (const b of [2, 3, 4]) for (const t of DRIVEN) { const n = press(t, b); if (n) sends.push(t + " " + b + " x" + n); }
+  check(undriven.length === 0 && sends.length === 0,
+    "6c no other button on any mouse or pointer event the preload listens to (" + mouseLike.join(", ") + ") sends a link to main: buttons 2, 3 and 4 over "
+    + DRIVEN.length + " event types, " + sends.length + " send(s)" + (sends.length ? " (" + sends.join(", ") + ")" : "")
+    + ", listener types not driven " + JSON.stringify(undriven));
 } catch (e) {
   failed++;
   console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));
