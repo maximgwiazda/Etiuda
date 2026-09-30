@@ -123,7 +123,7 @@ const run = (cmd, argv, env) => spawnSync(cmd, argv, {
 const npm = script => run('npm', ['run', script]);
 
 gate('the tree is clean, and this is the commit a release would be of', () => {
-  if (sh('git status --porcelain')) return 'uncommitted changes; a release is of a commit, not of a working tree';
+  if (sh('git status --porcelain --untracked-files=all')) return 'uncommitted changes; a release is of a commit, not of a working tree';
   console.log('  ' + sh('git log -1 --oneline') + '   on ' + sh('git rev-parse --abbrev-ref HEAD'));
   return true;
 });
