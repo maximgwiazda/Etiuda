@@ -8,7 +8,7 @@ const { app, BrowserWindow, Menu, clipboard, dialog, globalShortcut, ipcMain, na
 app.commandLine.appendSwitch("no-proxy-server");
 /* AN INSTALLED DESK, loaded from inside app.asar, opens no debugging endpoint and takes neither
    ETIUDA_TEST_DOCUMENTS nor ETIUDA_TEST_SAVE_AS unless ETIUDA_TEST_DEVTOOLS=1, which tests/engine.js
-   shellLaunch sets beside any of them. tests/shell-office.mjs 7 holds it. */
+   shellLaunch sets beside any of them. tests/shell-office.mjs 8 holds it. */
 const INSTALLED = /[\\/]app\.asar([\\/]|$)/i.test(__dirname);
 const TEST_DOOR = !INSTALLED || process.env.ETIUDA_TEST_DEVTOOLS === "1";
 if (!TEST_DOOR) {
