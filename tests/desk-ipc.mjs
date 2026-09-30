@@ -83,9 +83,9 @@ globalThis.document = { visibilityState: "visible", addEventListener: listen("do
 const contextBridge = { exposeInMainWorld: (k, v) => { window[k] = v; }, executeInMainWorld: noop };
 new Function("require", shellSrc("preload.js"))(n => (n === "electron" ? { contextBridge, ipcRenderer } : nodeRequire(n)));
 const REAL_HOST = window.E_HOST;
-/* Every listener the preload put on the window, kept before the Reset legs empty the table. */
+/* Every listener the preload put on the window or the document, kept before the Reset legs empty the table. */
 const linkListeners = {};
-Object.keys(listeners.window).forEach(t => { linkListeners[t] = listeners.window[t].slice(); });
+["window", "document"].forEach(w => Object.keys(listeners[w]).forEach(t => { linkListeners[t] = (linkListeners[t] || []).concat(listeners[w][t]); }));
 
 try {
   const S = await import(MOD("storage.js", "ipc"));
