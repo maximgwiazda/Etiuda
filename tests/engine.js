@@ -550,17 +550,17 @@ function processTable() {
 function killTree(pid) {
   if (!pid) return { killed: false, how: "no pid" };
   if (process.platform === "win32") {
-    const kill = p => { try { execFileSync("taskkill", ["/F", "/PID", String(p)], { stdio: "ignore" }); return true; } catch (e) { return false; } };
+    const kill = p => { try { process.kill(p, "SIGKILL"); return true; } catch (e) { return false; } };
     const t = processTable();
-    if (!t.ok) return kill(pid) ? { killed: true, taken: [pid], how: "taskkill /F on the one pid: the process table could not be read (" + t.why + ")" }
-                                : { killed: false, taken: [], how: "taskkill said no: it had already gone" };
+    if (!t.ok) return kill(pid) ? { killed: true, taken: [pid], how: "process.kill on the one pid: the process table could not be read (" + t.why + ")" }
+                                : { killed: false, taken: [], how: "process.kill said no: it had already gone" };
     const set = launchTree(pid, t.rows);
-    if (!set.length) return { killed: false, taken: [], how: "taskkill not needed: the pid is not in the process table, it had already gone" };
+    if (!set.length) return { killed: false, taken: [], how: "no kill needed: the pid is not in the process table, it had already gone" };
     /* The launch first, so it can start nothing more; a descendant that went with it (a node parent's job) answers no, which is fine. */
     const done = kill(pid);
     set.slice(1).forEach(kill);
-    return done ? { killed: true, taken: set, how: "taskkill /F by pid on the launch and " + (set.length - 1) + " descendant(s), no /T" }
-                : { killed: false, taken: set, how: "taskkill said no to the launch itself: it had already gone" };
+    return done ? { killed: true, taken: set, how: "process.kill by pid on the launch and " + (set.length - 1) + " descendant(s), no /T" }
+                : { killed: false, taken: set, how: "process.kill said no to the launch itself: it had already gone" };
   }
   try { process.kill(pid, "SIGKILL"); return { killed: true, how: "SIGKILL to the one pid" }; }
   catch (e) { return { killed: false, how: "no such process: it had already gone" }; }
