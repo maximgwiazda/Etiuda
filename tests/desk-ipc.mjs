@@ -20,7 +20,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 27;
+const EXPECTED = 29;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -83,8 +83,9 @@ globalThis.document = { visibilityState: "visible", addEventListener: listen("do
 const contextBridge = { exposeInMainWorld: (k, v) => { window[k] = v; }, executeInMainWorld: noop };
 new Function("require", shellSrc("preload.js"))(n => (n === "electron" ? { contextBridge, ipcRenderer } : nodeRequire(n)));
 const REAL_HOST = window.E_HOST;
-/* The two listeners the preload put on the window for a link click, kept before the Reset legs empty the table. */
-const linkListeners = { click: (listeners.window.click || []).slice(), auxclick: (listeners.window.auxclick || []).slice() };
+/* Every listener the preload put on the window, kept before the Reset legs empty the table. */
+const linkListeners = {};
+Object.keys(listeners.window).forEach(t => { linkListeners[t] = listeners.window[t].slice(); });
 
 try {
   const S = await import(MOD("storage.js", "ipc"));
@@ -249,6 +250,13 @@ try {
     "5c the Reset clears the page's own sessionStorage, once: " + ssCleared + " call(s)");
   check(tabsAfter === null,
     "5d and it clears the tabs main holds, so a customer's name does not outlive the Reset: the plant reads back " + JSON.stringify(tabsAfter));
+  /* The #reset hatch clears with no desk: it runs before the app does, and a customer's name must not outlive it either. */
+  const planted2 = window.E_HOST.session("set", TAB, "the customer's name") === true && window.E_HOST.session("get", TAB) === "the customer's name";
+  clearState(false);
+  const hatchTabs = window.E_HOST.session("get", TAB);
+  check(planted2 && hatchTabs === null && ssCleared === 2,
+    "5e the #reset hatch's clearState(false) clears the tabs too, in main and in the page: planted " + planted2 + ", the plant reads back "
+    + JSON.stringify(hatchTabs) + ", sessionStorage cleared " + ssCleared + " time(s) in all");
 
   /* ---- a click on a link, at the preload's two listeners: only a middle click, besides the primary
      one, hands its address to main, and so licenses it; a right click on a link is a context menu ---- */
@@ -267,6 +275,16 @@ try {
   const right = press("auxclick", 2);
   check(right === 0,
     "6b a right click on a link (auxclick, button 2) sends nothing to main, so it licenses no address: " + right + " send(s)");
+  /* The pointer and the mouse at every button that is not the primary or the middle: no listener of the preload may send. */
+  const DRIVEN = ["pointerdown", "pointerup", "mousedown", "mouseup", "auxclick", "contextmenu"];
+  const mouseLike = Object.keys(linkListeners).filter(t => /click|mouse|pointer|contextmenu|touch|drag|drop/.test(t));
+  const undriven = mouseLike.filter(t => DRIVEN.indexOf(t) < 0 && t !== "click");
+  const sends = [];
+  for (const b of [2, 3, 4]) for (const t of DRIVEN) { const n = press(t, b); if (n) sends.push(t + " " + b + " x" + n); }
+  check(undriven.length === 0 && sends.length === 0,
+    "6c no other button on any mouse or pointer event the preload listens to (" + mouseLike.join(", ") + ") sends a link to main: buttons 2, 3 and 4 over "
+    + DRIVEN.length + " event types, " + sends.length + " send(s)" + (sends.length ? " (" + sends.join(", ") + ")" : "")
+    + ", listener types not driven " + JSON.stringify(undriven));
 } catch (e) {
   failed++;
   console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

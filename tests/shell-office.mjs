@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 44;
+const EXPECTED = 45;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -543,13 +543,14 @@ try {
   const refusal = (v, ch) => v === undefined || v === null || v === false || v === "" || v === "[]"
     || (Array.isArray(v) && v.length === 0) || (!!v && typeof v === "object" && v.ok === false)
     || (!!NEUTRAL[ch] && NEUTRAL[ch](v));
-  const STRANGER = () => ({ sender: { id: 9, once: () => {} }, senderFrame: { parent: null, url: "https://example.com/etiuda.html" }, returnValue: undefined });
-  const audit = async src => {
+  const FOREIGN = { parent: null, url: "https://example.com/etiuda.html" };
+  const STRANGER = frame => ({ sender: { id: 9, once: () => {} }, senderFrame: frame || FOREIGN, returnValue: undefined });
+  const audit = async (src, frame) => {
     const S = loadShell({ src: marked(src) });
     const channels = [...Object.keys(S.on).map(c => ["on", c]), ...Object.keys(S.invoke).map(c => ["handle", c])];
     const rows = [];
     for (const [how, ch] of channels) {
-      const e = STRANGER();
+      const e = STRANGER(frame);
       let files = 0, out, threw = null;
       S.ctl.any = () => { files++; };
       try { out = how === "on" ? (S.on[ch](e, "{}", "{}", "{}"), e.returnValue) : await S.invoke[ch](e, "{}", "{}", "{}"); }
@@ -592,6 +593,11 @@ try {
     check(JSON.stringify(seenCut) === JSON.stringify(["etiuda:window"]) && JSON.stringify(seenIgn) === JSON.stringify(["etiuda:desk"]),
       "7f THE CONTROL: with the check cut from etiuda:window 7b names it as the one channel added to its list, and with etiuda:desk asking and ignoring the answer 7d names it as the one added to its own: "
       + JSON.stringify(seenCut) + ", " + JSON.stringify(seenIgn));
+
+    /* The engine's own address in a frame that is not the top one: fromEngine's top-frame clause. */
+    const subframe = unrefused(await audit(SRC, { parent: {}, url: "file:///C:/lab/engine/etiuda.html" }));
+    check(subframe.length === 0,
+      "7g the engine's own page address, spoken from a frame that is not the top one, is refused by every channel too: " + JSON.stringify(subframe));
   }
 } catch (e) {
   failed++;
