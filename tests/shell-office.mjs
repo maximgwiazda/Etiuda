@@ -627,8 +627,9 @@ try {
     /* THE TWO VARIABLES THAT MOVE THE DESK'S FILES stand behind the same door: ETIUDA_TEST_DOCUMENTS
        moves the catalog folder and ETIUDA_TEST_SAVE_AS answers the export dialog. Each arm sets both,
        loads the shell, and presses the save channel while they are still set. */
-    const DOCX = path.join(LAB, "planted-documents"), SAVEX = path.join(LAB, "planted-save");
-    const drive = async (app, door) => {
+    const SAVEX = path.join(LAB, "planted-save");
+    const drive = async (app, door, arm) => {
+      const DOCX = path.join(LAB, "planted-documents-" + arm);
       const put = { ETIUDA_TEST_DOCUMENTS: DOCX, ETIUDA_TEST_SAVE_AS: SAVEX, ETIUDA_TEST_DEVTOOLS: door ? "1" : undefined };
       const keep = {};
       for (const k of Object.keys(put)) { keep[k] = process.env[k]; if (put[k] === undefined) delete process.env[k]; else process.env[k] = put[k]; }
@@ -636,19 +637,20 @@ try {
         const paths = [], dialogs = [];
         const S = loadShell({ app, paths, dialogs });
         const answer = await S.ask("etiuda:choose-catalog-save", "t", "cat.ec", "l");
-        return { S, dialogs: dialogs.length, answer,
+        return { S, dialogs: dialogs.length, answer, made: realFs.existsSync(DOCX),
                  docs: paths.filter(p => p[0] === "documents" && p[1] === DOCX).length,
                  told: S.said.filter(l => /(ETIUDA_TEST_DOCUMENTS|ETIUDA_TEST_SAVE_AS) is not taken by an installed desk/.test(l)).length };
       } finally { for (const k of Object.keys(put)) if (keep[k] === undefined) delete process.env[k]; else process.env[k] = keep[k]; }
     };
-    const own = await drive(null, false), shut = await drive(INSTALLED, false), open = await drive(INSTALLED, true);
+    const own = await drive(null, false, "own"), shut = await drive(INSTALLED, false, "shut"), open = await drive(INSTALLED, true, "open");
     const takes = r => r.docs === 1 && r.dialogs === 0 && !!r.answer && r.answer.name === "cat.ec";
-    check(takes(own) && own.told === 0,
+    check(takes(own) && own.told === 0 && own.made,
       "8d THE CONTROL: the shell run from a checkout takes both variables, ETIUDA_TEST_DOCUMENTS as the documents folder ("
       + own.docs + ") and ETIUDA_TEST_SAVE_AS as the answer to the export dialog (dialogs opened " + own.dialogs + ", answer "
       + JSON.stringify(own.answer) + "), and says nothing of them (" + own.told + ")");
-    check(shut.docs === 0 && shut.dialogs === 1 && shut.answer === null && shut.told === 2,
+    check(shut.docs === 0 && !shut.made && shut.dialogs === 1 && shut.answer === null && shut.told === 2,
       "8e the same shell run from inside app.asar takes neither: the documents folder is not moved (" + shut.docs
+      + ") and no folder is made at that path (made " + shut.made + "; the checkout's own arm made one: " + own.made
       + "), the export dialog opens (" + shut.dialogs + ") and gets no harness answer (" + JSON.stringify(shut.answer)
       + "), and it says so in " + shut.told + " line(s)");
     check(takes(open) && open.told === 0,
