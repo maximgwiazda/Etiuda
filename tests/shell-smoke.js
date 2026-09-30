@@ -269,7 +269,7 @@ function buildApp() {
   if (!fs.existsSync(cli)) E.refuse("electron-builder is not installed", "npm install first");
   const t = Date.now();
   execFileSync(process.execPath, [cli, "--win", "--dir"],
-    { cwd: E.ROOT, env: Object.assign({}, process.env, { ETIUDA_DIST: out }), stdio: "ignore" });
+    { cwd: E.ROOT, env: E.unsignedEnv({ ETIUDA_DIST: out }), stdio: "ignore" });
   APPDIR = path.join(out, "win-unpacked");
   ASAR = path.join(APPDIR, "resources", "app.asar");
   if (!fs.existsSync(ASAR)) E.refuse("electron-builder wrote no asar into " + out);

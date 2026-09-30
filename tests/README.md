@@ -625,11 +625,15 @@ always did, is told what would stop it, and is refused only when a certificate W
 the result is not Valid. `--customer` asks the questions of any version; nothing skips them.
 
 `tests/sellable.mjs` holds it without packaging: planted licence pages both ways, the real
-`electron-builder.js` with and without `ETIUDA_CERT`, Windows' own reading of a signed tool, of a
+`electron-builder.js` under each signing route's variables (a `.pfx` by `ETIUDA_CERT`, a store or
+token certificate by `ETIUDA_CERT_SHA1` or `ETIUDA_CERT_SUBJECT`, Artifact Signing by the four
+`ETIUDA_SIGNING_*`) and its refusal of two routes or half of one, `signingConfigured` judged
+against electron-builder's own schema and signing path on sixteen planted blocks, with the
+function as it stood before the token routes as the control, Windows' own reading of a signed tool, of a
 copy with one byte changed (HashMismatch) and of an unsigned one, the signature gate whole on
 those files, and the release itself driven in a throwaway repository to its second gate, where
 exit 2 is a stop and exit 3 (gate 3 finding no name list in the lab) is a pass. The uninstaller
-is not read, since it is sealed inside the installer. 25 checks, about 4 s.
+is not read, since it is sealed inside the installer. 29 checks, about 6 s.
 
 ## The shell's proxy switch, and how it is proved in two places
 

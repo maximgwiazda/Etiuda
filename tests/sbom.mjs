@@ -27,6 +27,7 @@ import { spawnSync, execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { SIGNING_VARS } from '../tools/sellable.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TOOL = path.join(ROOT, 'tools', 'sbom.mjs');
@@ -355,7 +356,7 @@ async function main() {
   function release(l) {
     const env = { ...process.env, ETIUDA_RELEASE_HOME_ROOT: l.root, ETIUDA_DIST: l.dist, ETIUDA_FIXTURES: 'stub',
       ETIUDA_TEST_ASAR: path.join(ROOT, 'node_modules', '@electron', 'asar') };
-    delete env.ETIUDA_CERT;
+    for (const k of SIGNING_VARS) delete env[k];
     const res = spawnSync(process.execPath, ['tools/release.mjs', '--package'], { cwd: l.dir, env, encoding: 'utf8', timeout: 400000 });
     return { status: res.status, out: String(res.stdout || '') + String(res.stderr || '') };
   }

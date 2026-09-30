@@ -79,13 +79,39 @@ export function licenceProblems(dir) {
   return out;
 }
 
-/** Is signing configured in the builder's own `win` block? The certificate file, Azure's
- *  options, or a custom sign hook: any of the three electron-builder signs with. */
-export function signingConfigured(win) {
-  const w = win || {};
-  const st = w.signtoolOptions || {};
-  return !!(st.certificateFile || st.sign || w.azureSignOptions || w.certificateFile || w.sign);
+/* THE VARIABLES THAT DECIDE WHETHER A BUILD SIGNS, listed here and nowhere else: the nine that pick a
+   route (electron-builder's own certificate links included) and the two passwords a key is opened with. */
+export const SIGNING_VARS = ['ETIUDA_CERT', 'ETIUDA_CERT_SHA1', 'ETIUDA_CERT_SUBJECT', 'ETIUDA_SIGNING_ENDPOINT',
+  'ETIUDA_SIGNING_ACCOUNT', 'ETIUDA_SIGNING_PROFILE', 'ETIUDA_SIGNING_PUBLISHER', 'CSC_LINK', 'WIN_CSC_LINK'];
+export const KEY_PASSWORD_VARS = ['CSC_KEY_PASSWORD', 'WIN_CSC_KEY_PASSWORD'];
+/** `env` less those eleven, so a build a gate makes never signs, asks for a token's PIN or signs in to Azure.
+ *  Names match case-insensitively on Windows, where the child reads them that way. */
+export function withoutSigning(env = process.env) {
+  const drop = new Set(SIGNING_VARS.concat(KEY_PASSWORD_VARS).map(k => k.toUpperCase()));
+  const same = process.platform === 'win32' ? k => k.toUpperCase() : k => k;
+  const out = {};
+  for (const k of Object.keys(env)) if (!drop.has(same(k))) out[k] = env[k];
+  return out;
 }
+
+/* IS SIGNING CONFIGURED: true for every route electron-builder signs with and for nothing else, which
+   tests/sellable.mjs holds against electron-builder's own code. A .pfx, a store certificate by
+   thumbprint or subject (a token's), a sign hook, a certificate link (win.cscLink, then WIN_CSC_LINK,
+   then CSC_LINK, an empty one shadowing the next), or Artifact Signing with the four fields its
+   schema requires, which then wins over the rest; signExecutable false signs nothing. */
+const ARTIFACT_NEEDS = ['endpoint', 'codeSigningAccountName', 'certificateProfileName', 'publisherName'];
+export function signingConfigured(win, env = process.env) {
+  const w = win || {};
+  if (w.signExecutable === false) return false;
+  const az = w.azureSignOptions;
+  if (az != null) return ARTIFACT_NEEDS.every(k => typeof az[k] === 'string' && az[k] !== '');
+  const st = w.signtoolOptions || {};
+  const first = (a, b) => (a != null ? a : b);
+  return !!(st.certificateFile || st.certificateSha1 || st.certificateSubjectName || st.sign
+    || first(w.cscLink, first(env.WIN_CSC_LINK, env.CSC_LINK)));
+}
+const NO_ROUTE = 'no certificate is configured (none of ETIUDA_CERT, ETIUDA_CERT_SHA1, ETIUDA_CERT_SUBJECT'
+  + ' or ETIUDA_SIGNING_* is set), so the installer would be unsigned';
 
 /* WHAT WINDOWS SAYS OF A FILE: the Authenticode status, and whether a timestamp countersigns it.
    Without the timestamp a signature dies with its certificate, and a customer's installer would
@@ -156,6 +182,6 @@ export function beforeBuild({ version, customer, licenceDir, win }) {
   const problems = []
     .concat(versionProblems(version))
     .concat(licenceProblems(licenceDir))
-    .concat(signingConfigured(win) ? [] : ['no certificate is configured (ETIUDA_CERT is unset), so the installer would be unsigned']);
+    .concat(signingConfigured(win) ? [] : [NO_ROUTE]);
   return { customer: asCustomer, problems };
 }

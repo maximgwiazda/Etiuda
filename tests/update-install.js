@@ -152,7 +152,7 @@ function newSetup() {
   const cli = path.join(E.ROOT, "node_modules", "electron-builder", "out", "cli", "cli.js");
   if (!fs.existsSync(cli)) E.refuse("electron-builder is not installed; npm install first");
   execFileSync(process.execPath, [cli, "--win"], { cwd: E.ROOT, stdio: "ignore",
-    env: Object.assign({}, process.env, { ETIUDA_DIST: out }) });
+    env: E.unsignedEnv({ ETIUDA_DIST: out }) });
   const found = listing(out).filter(n => /-setup\.exe$/i.test(n));
   if (found.length !== 1) E.refuse(out + " holds " + found.length + " installers; expected 1");
   return path.join(out, found[0]);

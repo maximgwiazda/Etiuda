@@ -22,19 +22,26 @@ const version = found[1];
 // dist/, which .gitignore already holds back, and a build elsewhere sets ETIUDA_DIST.
 const output = process.env.ETIUDA_DIST || "dist";
 
-// THE SIGNING HOOK. Absent a certificate the whole block is absent, and electron-builder then
-// packages unsigned rather than failing. Point ETIUDA_CERT at a .pfx and give the password in
-// WIN_CSC_KEY_PASSWORD, which electron-builder reads itself; naming it here would put the
-// password in a process listing. Until then Windows SmartScreen warns on first run, which is
-// the defect spec 11.5 names and the reason this hook is left ready.
-const cert = process.env.ETIUDA_CERT || "";
-const signing = cert ? {
-  signtoolOptions: {
-    certificateFile: cert,
-    signingHashAlgorithms: ["sha256"],
-    rfc3161TimeStampServer: "http://timestamp.digicert.com",
-  },
-} : {};
+// THE SIGNING HOOK: one route or none, chosen by which variables are set. With none the block is
+// absent and electron-builder packages unsigned, which SmartScreen warns about (spec 11.5). No route
+// holds a secret here: a .pfx's password is WIN_CSC_KEY_PASSWORD, read by electron-builder itself so
+// it stays out of a process listing; a token keeps its key and asks for its own PIN; Artifact
+// Signing signs in through Azure's own credentials. Two routes at once, or half of one, refuses.
+const SIGN_TIMESTAMP = { signingHashAlgorithms: ["sha256"], rfc3161TimeStampServer: "http://timestamp.digicert.com" };
+const ARTIFACT = { endpoint: "ETIUDA_SIGNING_ENDPOINT", codeSigningAccountName: "ETIUDA_SIGNING_ACCOUNT",
+  certificateProfileName: "ETIUDA_SIGNING_PROFILE", publisherName: "ETIUDA_SIGNING_PUBLISHER" };
+const given = name => process.env[name] || "";
+const cert = given("ETIUDA_CERT"), sha1 = given("ETIUDA_CERT_SHA1"), subject = given("ETIUDA_CERT_SUBJECT");
+const artifact = Object.values(ARTIFACT).filter(given);
+const routes = [cert && "ETIUDA_CERT", (sha1 || subject) && "ETIUDA_CERT_SHA1 or ETIUDA_CERT_SUBJECT",
+  artifact.length && "ETIUDA_SIGNING_*"].filter(Boolean);
+if (routes.length > 1) throw new Error("signing: " + routes.join(" and ") + " are set; set one route or none");
+if (artifact.length && artifact.length < 4)
+  throw new Error("signing: Artifact Signing needs " + Object.values(ARTIFACT).filter(n => !given(n)).join(", ") + " too");
+const signing = cert ? { signtoolOptions: { certificateFile: cert, ...SIGN_TIMESTAMP } }
+  : sha1 || subject ? { signtoolOptions: { ...(sha1 && { certificateSha1: sha1 }), ...(subject && { certificateSubjectName: subject }), ...SIGN_TIMESTAMP } }
+  : artifact.length ? { azureSignOptions: Object.fromEntries(Object.entries(ARTIFACT).map(([key, name]) => [key, given(name)])) }
+  : {};
 
 module.exports = {
   appId: "app.etiuda.desktop",

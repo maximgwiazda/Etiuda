@@ -88,6 +88,10 @@ const HOME_ENV = { USERPROFILE: HOME, APPDATA: PLACES.ApplicationData, LOCALAPPD
                    ELECTRON_BUILDER_CACHE: process.env.ELECTRON_BUILDER_CACHE || join(REAL_LOCAL, 'electron-builder', 'Cache') };
 const gitGlobal = join(REAL_HOME, '.gitconfig');
 if (!process.env.GIT_CONFIG_GLOBAL && existsSync(gitGlobal)) HOME_ENV.GIT_CONFIG_GLOBAL = gitGlobal;
+/* Artifact Signing signs in through Azure's own credentials, and the Azure CLI keeps its sign-in in
+   .azure under the home, which the scratch home would hide from it. */
+const azureDir = join(REAL_HOME, '.azure');
+if (!process.env.AZURE_CONFIG_DIR && existsSync(azureDir)) HOME_ENV.AZURE_CONFIG_DIR = azureDir;
 if (process.platform === 'win32') {
   const E = createRequire(import.meta.url)(join(ROOT, 'tests', 'engine.js'));
   const places = E.placesMismatch(PLACES, { ...process.env, ...HOME_ENV });
