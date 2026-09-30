@@ -1071,6 +1071,40 @@ try {
        + " anything, and quotes " + want + " back: "
        + (impossible.out.trim().split(/\r?\n/)[0] || "(said nothing)"));
   }
+
+  /* 27g. THE PORT REFUSAL DOES NOT DEPEND ON WHAT ELSE IS LIVE. tests/desk.js once asked whether
+     an Electron was live before it asked for its port block, so 27f read the Electron refusal, after
+     a grace, whenever another seat's window was up. A preload stands in for one live run (it
+     rewrites electronRunsLive in the copy of engine.js the child loads, and shortens the grace,
+     and throws if it found nothing to rewrite), so this holds with no window anywhere. 27g2 is the
+     control: the same stand-in and no shift, and desk.js refuses on the Electron, so the stand-in
+     is what 27g had to get past. */
+  {
+    const stubAt = path.join(tmp, "live-electron.js");
+    fs.writeFileSync(stubAt, `const Module = require("node:module"), path = require("node:path");
+const real = Module.prototype._compile;
+Module.prototype._compile = function (content, filename) {
+  if (path.basename(filename) === "engine.js" && path.basename(path.dirname(filename)) === "tests") {
+    const live = 'function electronRunsLive() { return { asked: true, processes: 1, runs: [{ pid: 4242, name: "electron.exe", path: "a stubbed live run", family: 0 }] }; } function electronRunsLiveReal() {';
+    const a = content.replace("function electronRunsLive() {", live);
+    const b = a.replace("graceMs === undefined ? 15000 : graceMs", "graceMs === undefined ? 0 : graceMs");
+    if (a === content || b === a) throw new Error("the live-Electron stand-in found nothing to stand in for");
+    content = b;
+  }
+  return real.call(this, content, filename);
+};
+`, "utf8");
+    const desk = shift => run('process.chdir(require("./engine.js").ROOT);'
+      + 'require("child_process").execFileSync(process.execPath, ["-r", ' + JSON.stringify(stubAt) + ', "tests/desk.js"],'
+      + '{ stdio: "inherit" });', { ETIUDA_PORT_SHIFT: shift, ETIUDA_FIXTURES: "" });
+    const shifted = desk("60000"), plain = desk("");
+    ok(/block at 69424-/.test(shifted.out) && !/another Electron run is live/.test(shifted.out),
+       "27g tests/desk.js with one Electron run stood in as live still refuses on its port block, quoting 69424 back, and never"
+       + " reaches the Electron check: " + (shifted.out.trim().split(/\r?\n/).find(l => /FAIL|block at/.test(l)) || "(said nothing)"));
+    ok(/did not start: another Electron run is live, 1 run\(s\)/.test(plain.out) && /pid 4242/.test(plain.out),
+       "27g2 THE CONTROL: the same stand-in with no shift refuses desk.js on the live run, pid 4242, so 27g is the order and not"
+       + " a stand-in that never took: " + (plain.out.trim().split(/\r?\n/).find(l => /did not start/.test(l)) || "(said nothing)"));
+  }
 }
 
 /* ---- 29: THE NOT-RUN IS A COUNT, board item 628 ---------------------------------------------
