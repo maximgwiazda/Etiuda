@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 45;
+const EXPECTED = 51;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -84,7 +84,8 @@ function anything(over) {
 let loads = 0;
 /* opts.ready: app.whenReady resolves, so the shell boots as far as its window; opts.clock: the
    fake timers above; opts.desk: keys written into desk.json before the shell reads it; opts.src:
-   the source to run in place of main.js. */
+   the source to run in place of main.js; opts.app: the folder it runs from; opts.onLine: switches
+   on its command line; opts.paths and opts.dialogs: arrays that take the setPath calls and the save dialogs it opens. */
 function loadShell(opts) {
   const o = opts || {};
   const dir = path.join(LAB, "load" + (++loads));
@@ -97,18 +98,20 @@ function loadShell(opts) {
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: () => {} };
   const noop = () => {};
   const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
-  const on = {}, invoke = {}, power = {}, sent = [], switches = [];
+  const on = {}, invoke = {}, power = {}, sent = [], switches = [], removed = [];
+  const onLine = new Set(o.onLine || []);
   const wc = anything({ send: (...a) => { sent.push(a); }, id: 7 });
   const win = anything({ isDestroyed: () => false, webContents: wc });
   const electron = {
-    app: { getPath: n => (n === "documents" ? DOCS : UD), setPath: noop, requestSingleInstanceLock: () => !!o.ready,
+    app: { getPath: n => (n === "documents" ? DOCS : UD), setPath: (k, v) => { if (o.paths) o.paths.push([k, v]); }, requestSingleInstanceLock: () => !!o.ready,
            quit: noop, on: noop, getVersion: () => "0.0.0",
-           commandLine: { appendSwitch: (...a) => { switches.push(a); } },
+           commandLine: { appendSwitch: (...a) => { switches.push(a); }, hasSwitch: k => onLine.has(k),
+                          removeSwitch: k => { if (onLine.delete(k)) removed.push(k); } },
            whenReady: () => (o.ready ? Promise.resolve() : new Promise(noop)) },
     ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
     BrowserWindow: o.ready ? new Proxy(function () {}, { construct: () => win,
       get: (t, k) => (k === "fromWebContents" ? () => win : k === "getAllWindows" ? () => [win] : undefined) }) : inert,
-    Menu: inert, dialog: inert, net: inert, protocol: o.ready ? anything() : inert,
+    Menu: inert, dialog: o.dialogs ? { showSaveDialog: async (...a) => { o.dialogs.push(a); return { canceled: true }; } } : inert, net: inert, protocol: o.ready ? anything() : inert,
     session: o.ready ? anything() : inert,
     screen: inert, shell: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },
     powerMonitor: { on: (ev, fn) => { power[ev] = fn; } },
@@ -119,13 +122,13 @@ function loadShell(opts) {
   const fakeRequire = n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? fs : nodeRequire(n));
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console", "setTimeout", "clearTimeout",
     (o.src || SRC) + "\nreturn { " + EXPOSE.map(n => n + ": typeof " + n + " === 'undefined' ? undefined : " + n).join(", ") + " };")(
-    fakeRequire, path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet,
+    fakeRequire, path.join(o.app || APP, "shell"), path.join(o.app || APP, "shell", "main.js"), { exports: {} }, {}, quiet,
     clock.setTimeout, clock.clearTimeout);
   const ENGINE = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
   const ipc = (ch, ...args) => { const e = { sender: { id: 1, once: noop }, senderFrame: ENGINE, returnValue: undefined };
     if (on[ch]) on[ch](e, ...args); return e.returnValue; };
   const ask = (ch, ...args) => invoke[ch]({ sender: { id: 1 }, senderFrame: ENGINE }, ...args);
-  return { api, ctl, said, ipc, ask, on, invoke, UD, DOCS, deskFile: path.join(UD, "desk.json"), power, sent, win, switches };
+  return { api, ctl, said, ipc, ask, on, invoke, UD, DOCS, deskFile: path.join(UD, "desk.json"), power, sent, win, switches, removed };
 }
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 /* Invented from nothing, as every fixture here is. The refused one names a shelf that is not
@@ -598,6 +601,61 @@ try {
     const subframe = unrefused(await audit(SRC, { parent: {}, url: "file:///C:/lab/engine/etiuda.html" }));
     check(subframe.length === 0,
       "7g the engine's own page address, spoken from a frame that is not the top one, is refused by every channel too: " + JSON.stringify(subframe));
+  }
+  /* ---- 8. an installed desk opens no debugging endpoint unless the harness's launcher asks ----- */
+  {
+    const DEBUG = ["remote-debugging-port", "remote-debugging-pipe"];
+    const INSTALLED = path.join(LAB, "installed", "resources", "app.asar");
+    ["shell", "engine"].forEach(d => realFs.cpSync(path.join(ROOT, d), path.join(INSTALLED, d), { recursive: true }));
+    const was = process.env.ETIUDA_TEST_DEVTOOLS;
+    const load = (app, token) => {
+      if (token) process.env.ETIUDA_TEST_DEVTOOLS = "1"; else delete process.env.ETIUDA_TEST_DEVTOOLS;
+      try { return loadShell({ app, onLine: DEBUG }); }
+      finally { if (was === undefined) delete process.env.ETIUDA_TEST_DEVTOOLS; else process.env.ETIUDA_TEST_DEVTOOLS = was; }
+    };
+    const tree = load(null, false), inst = load(INSTALLED, false), harness = load(INSTALLED, true);
+    const told = inst.said.filter(l => /is not taken by an installed desk/.test(l)).length;
+    check(tree.removed.length === 0,
+      "8a THE CONTROL: the shell run from a checkout keeps both debugging switches, as every unpackaged"
+      + " launch in tests/ needs: removed " + JSON.stringify(tree.removed));
+    check(JSON.stringify(inst.removed) === JSON.stringify(DEBUG) && told === 2,
+      "8b the same shell run from inside app.asar removes " + JSON.stringify(inst.removed)
+      + " before ready and says so in " + told + " line(s)");
+    check(harness.removed.length === 0,
+      "8c and with ETIUDA_TEST_DEVTOOLS=1, which tests/engine.js shellLaunch sets beside the switch,"
+      + " it keeps them for the harness: removed " + JSON.stringify(harness.removed));
+    /* THE TWO VARIABLES THAT MOVE THE DESK'S FILES stand behind the same door: ETIUDA_TEST_DOCUMENTS
+       moves the catalog folder and ETIUDA_TEST_SAVE_AS answers the export dialog. Each arm sets both,
+       loads the shell, and presses the save channel while they are still set. */
+    const SAVEX = path.join(LAB, "planted-save");
+    const drive = async (app, door, arm) => {
+      const DOCX = path.join(LAB, "planted-documents-" + arm);
+      const put = { ETIUDA_TEST_DOCUMENTS: DOCX, ETIUDA_TEST_SAVE_AS: SAVEX, ETIUDA_TEST_DEVTOOLS: door ? "1" : undefined };
+      const keep = {};
+      for (const k of Object.keys(put)) { keep[k] = process.env[k]; if (put[k] === undefined) delete process.env[k]; else process.env[k] = put[k]; }
+      try {
+        const paths = [], dialogs = [];
+        const S = loadShell({ app, paths, dialogs });
+        const answer = await S.ask("etiuda:choose-catalog-save", "t", "cat.ec", "l");
+        return { S, dialogs: dialogs.length, answer, made: realFs.existsSync(DOCX),
+                 docs: paths.filter(p => p[0] === "documents" && p[1] === DOCX).length,
+                 told: S.said.filter(l => /(ETIUDA_TEST_DOCUMENTS|ETIUDA_TEST_SAVE_AS) is not taken by an installed desk/.test(l)).length };
+      } finally { for (const k of Object.keys(put)) if (keep[k] === undefined) delete process.env[k]; else process.env[k] = keep[k]; }
+    };
+    const own = await drive(null, false, "own"), shut = await drive(INSTALLED, false, "shut"), open = await drive(INSTALLED, true, "open");
+    const takes = r => r.docs === 1 && r.dialogs === 0 && !!r.answer && r.answer.name === "cat.ec";
+    check(takes(own) && own.told === 0 && own.made,
+      "8d THE CONTROL: the shell run from a checkout takes both variables, ETIUDA_TEST_DOCUMENTS as the documents folder ("
+      + own.docs + ") and ETIUDA_TEST_SAVE_AS as the answer to the export dialog (dialogs opened " + own.dialogs + ", answer "
+      + JSON.stringify(own.answer) + "), and says nothing of them (" + own.told + ")");
+    check(shut.docs === 0 && !shut.made && shut.dialogs === 1 && shut.answer === null && shut.told === 2,
+      "8e the same shell run from inside app.asar takes neither: the documents folder is not moved (" + shut.docs
+      + ") and no folder is made at that path (made " + shut.made + "; the checkout's own arm made one: " + own.made
+      + "), the export dialog opens (" + shut.dialogs + ") and gets no harness answer (" + JSON.stringify(shut.answer)
+      + "), and it says so in " + shut.told + " line(s)");
+    check(takes(open) && open.told === 0,
+      "8f and with ETIUDA_TEST_DEVTOOLS=1, which tests/engine.js shellLaunch sets beside either variable, it takes both"
+      + " for the harness: documents moved " + open.docs + ", dialogs opened " + open.dialogs + ", told " + open.told);
   }
 } catch (e) {
   failed++;

@@ -233,6 +233,10 @@ function shellLaunch(who, exe, args, options) {
   delete opts.realCatalogFolder;
   const bad = shellLaunchRefusal(who, args, options);
   if (bad) refuse(bad[0], ...bad.slice(1));
+  /* An installed desk drops a debugging switch, and takes neither test variable, unless this rides beside them (shell/main.js). */
+  const carried = opts.env || process.env;
+  if ((args || []).some(a => /^--remote-debugging-(port|pipe)\b/.test(String(a))) || carried.ETIUDA_TEST_DOCUMENTS || carried.ETIUDA_TEST_SAVE_AS)
+    opts.env = Object.assign({}, carried, { ETIUDA_TEST_DEVTOOLS: "1" });
   return spawn(exe, args, opts);
 }
 
@@ -512,19 +516,51 @@ function portBlock(gate) {
   return base;
 }
 
-/* KILLING A LAUNCH, board item 613, in one place rather than in six. `taskkill /F /PID n /T`
- * takes the tree Windows can see; off Windows there is no tree to ask for, because nothing here
- * spawns detached and a pid is not a process group, so this kills the process it was given and
- * says so. Electron's renderers go with their main process on both, which is what these gates
- * launch; a Chromium helper that outlives its parent is swept by the lab-process count in
- * shell-smoke, which is Windows anyway. Returns what it did, so a caller can say it. */
+/* KILLING A LAUNCH, in one place rather than in six. On Windows the launch and its real
+ * descendants are read from Win32_Process and each is killed by pid, never with /T: taskkill /T
+ * follows ParentProcessId alone, so a process whose recorded parent died before this pid was
+ * reused is taken as a child. A child counts only if it was created after its parent
+ * (launchTree). Off Windows there is no tree to ask for, so it kills the process it was given.
+ * A Chromium helper that outlives its parent is swept by shell-smoke's lab-process count.
+ * Returns what it did, so a caller can say it. */
+function launchTree(root, table) {
+  const rows = new Map();
+  for (const p of table || [])
+    if (p && Number.isFinite(p.pid) && Number.isFinite(p.parent) && Number.isFinite(p.created)) rows.set(p.pid, p);
+  if (!rows.has(root)) return [];
+  const taken = [root], seen = new Set([root]);
+  for (let i = 0; i < taken.length; i++) {
+    const at = rows.get(taken[i]);
+    for (const p of rows.values())
+      if (p.parent === at.pid && !seen.has(p.pid) && p.created > at.created) { seen.add(p.pid); taken.push(p.pid); }
+  }
+  return taken;
+}
+
+/** Every process Windows can name, as { pid, parent, created } with created in microseconds since
+ *  the epoch; a process with no creation date is left out, and so is never taken as a child. */
+function processTable() {
+  const r = powershellJson("$p = @(Get-CimInstance Win32_Process | Where-Object { $_.CreationDate } | ForEach-Object {"
+    + " [pscustomobject]@{ pid=[int]$_.ProcessId; parent=[int]$_.ParentProcessId; created=[int64](($_.CreationDate.ToUniversalTime()"
+    + " - [datetime]::new(1970,1,1,0,0,0,[DateTimeKind]::Utc)).Ticks / 10) } }); ConvertTo-Json -InputObject $p -Compress");
+  if (!r.ok) return r;
+  return { ok: true, rows: Array.isArray(r.value) ? r.value : [r.value] };
+}
+
 function killTree(pid) {
   if (!pid) return { killed: false, how: "no pid" };
   if (process.platform === "win32") {
-    try {
-      execFileSync("taskkill", ["/F", "/PID", String(pid), "/T"], { stdio: "ignore" });
-      return { killed: true, how: "taskkill /F /T, the whole tree" };
-    } catch (e) { return { killed: false, how: "taskkill said no: it had already gone" }; }
+    const kill = p => { try { execFileSync("taskkill", ["/F", "/PID", String(p)], { stdio: "ignore" }); return true; } catch (e) { return false; } };
+    const t = processTable();
+    if (!t.ok) return kill(pid) ? { killed: true, taken: [pid], how: "taskkill /F on the one pid: the process table could not be read (" + t.why + ")" }
+                                : { killed: false, taken: [], how: "taskkill said no: it had already gone" };
+    const set = launchTree(pid, t.rows);
+    if (!set.length) return { killed: false, taken: [], how: "taskkill not needed: the pid is not in the process table, it had already gone" };
+    /* The launch first, so it can start nothing more; a descendant that went with it (a node parent's job) answers no, which is fine. */
+    const done = kill(pid);
+    set.slice(1).forEach(kill);
+    return done ? { killed: true, taken: set, how: "taskkill /F by pid on the launch and " + (set.length - 1) + " descendant(s), no /T" }
+                : { killed: false, taken: set, how: "taskkill said no to the launch itself: it had already gone" };
   }
   try { process.kill(pid, "SIGKILL"); return { killed: true, how: "SIGKILL to the one pid" }; }
   catch (e) { return { killed: false, how: "no such process: it had already gone" }; }
@@ -1420,7 +1456,7 @@ module.exports = { NO_VERDICT, exitOf, ROOT, ENGINE_PATH, FIXTURE_FILE, TREE_FIL
                    LEASE_HOLDER, takeLeases, releaseLeases, PORT_BLOCKS, portBlock, portSpan, portOverlaps,
                    parkNamedShortcuts, restoreNamedShortcuts,
                    SHELL_FOLDERS, shellFolders, placesMismatch, deskEnvelope, envelopeLine, keepAside,
-                   windowFacts, pickWindow, offscreenVerdict, offscreenCheck, killTree,
+                   windowFacts, pickWindow, offscreenVerdict, offscreenCheck, killTree, launchTree, processTable,
                    electronRunsLive, refuseWhileElectronLive, belowNormal, lowerTree,
                    NOT_PROVED_OFF_WINDOWS, offWindowsNotice,
                    suiteVerdict,
