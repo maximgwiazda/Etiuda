@@ -40,8 +40,9 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
-E.refuseWhileElectronLive("tests/links.js");
 const PORT = E.portBlock("links");
+/* After the port block, so a refused shift is refused whatever else is live (engine-selftest 27h). */
+E.refuseWhileElectronLive("tests/links.js");
 const LEASED = E.takeLeases(["ports:" + PORT], 10, "tests/links.js");
 console.log("       debugging port " + PORT + "; leases: " + LEASED.said);
 

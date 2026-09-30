@@ -988,6 +988,112 @@ try {
      "28d and the POSIX arm takes the same live child down, which is what says the branch is"
      + " reached and does something: " + r.out.trim());
 
+  /* 28g to 28k. WHICH PROCESSES killTree TAKES. taskkill /T follows ParentProcessId alone, so a
+     process whose recorded parent died before that pid was reused is taken as its child (two
+     processes of another seat stopped that way). launchTree is the selection as a pure function
+     over a table of { pid, parent, created }, so the fault is planted in a table rather than
+     waited for. 28h is the control: the rule /T applies, written out here over the same table,
+     takes the orphans, so 28g's survivors are the created-later clause's doing. */
+  {
+    const T = (pid, parent, created) => ({ pid, parent, created });
+    /* 100 is the launch; 200 and 700 its children, 300 the grandchild; 400 an older process whose
+       recorded parent is 100 (the reused pid), 600 the child of that orphan; 500 a stranger. */
+    const table = [T(100, 1, 1000), T(200, 100, 1100), T(300, 200, 1200), T(700, 100, 1300),
+                   T(400, 100, 500), T(600, 400, 600), T(500, 1, 900)];
+    const taken = typeof E.launchTree === "function" ? E.launchTree(100, table).slice().sort((a, b) => a - b) : null;
+    ok(!!taken && taken.join() === "100,200,300,700",
+       "28g the tree taken for a launch is the launch, its children and its grandchild, and an older process that carries the launch's"
+       + " pid as its recorded parent survives, with its own child: " + (taken ? JSON.stringify(taken) : "E.launchTree is not there"));
+    const byParentOnly = (root, rows) => { const out = [root];
+      for (let i = 0; i < out.length; i++) for (const p of rows) if (p.parent === out[i] && out.indexOf(p.pid) < 0) out.push(p.pid);
+      return out; };
+    const old = byParentOnly(100, table);
+    ok(old.indexOf(400) > -1 && old.indexOf(600) > -1 && old.indexOf(500) < 0 && old.length === 6,
+       "28h THE CONTROL: the rule taskkill /T applies, children by ParentProcessId alone, over the same table takes the orphan and its"
+       + " child as well (" + JSON.stringify(old.slice().sort((a, b) => a - b)) + "), so 28g reddens on the created-later clause and not on the table");
+    const same = typeof E.launchTree === "function" ? [
+      E.launchTree(9, table),
+      E.launchTree(10, [T(10, 1, 50), T(11, 10, 50), T(12, 10, 51)]),
+      E.launchTree(10, [T(10, 1, 50), T(11, 10, NaN), T(12, 10, undefined), T(13, 10, 60)]),
+      E.launchTree(10, [T(10, 10, 5), T(11, 10, 6), T(12, 11, 7)]),
+      E.launchTree(1, [T(1, 0, 1), T(2, 1, 2), T(3, 2, 3), T(4, 3, 4), T(5, 4, 5), T(6, 5, 6)]),
+    ].map(x => x.slice().sort((a, b) => a - b).join()) : null;
+    ok(!!same && same.join(" | ") === " | 10,12 | 10,13 | 10,11,12 | 1,2,3,4,5,6",
+       "28i the edges: a pid not in the table takes nothing, a child created at the very instant of its parent is not taken, one with no"
+       + " creation time is not taken, a row that is its own parent does not loop, and a chain of six is taken whole: "
+       + (same ? JSON.stringify(same) : "E.launchTree is not there"));
+  }
+  if (HOST_WIN) {
+    /* A three-level tree of real processes and a bystander, killed through killTree, all read back.
+       The children are spawned detached so that they leave the job object libuv gives a parent's
+       children: without it they die with the parent whatever killTree does, and the leg cannot fail. */
+    const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+    const base = path.join(tmp, "tree-" + process.pid);
+    const midJs = path.join(tmp, "tree-mid.js"), rootJs = path.join(tmp, "tree-root.js");
+    fs.writeFileSync(midJs, 'const cp = require("child_process"), fs = require("fs");\n'
+      + 'const leaf = cp.spawn(process.execPath, ["-e", "setInterval(function(){}, 1000);"], { stdio: "ignore", detached: true });\n'
+      + 'fs.writeFileSync(process.argv[2] + ".leaf", String(leaf.pid));\nsetInterval(function () {}, 1000);\n');
+    fs.writeFileSync(rootJs, 'const cp = require("child_process"), fs = require("fs");\n'
+      + 'const mid = cp.spawn(process.execPath, [process.argv[2], process.argv[3]], { stdio: "ignore", detached: true });\n'
+      + 'fs.writeFileSync(process.argv[3] + ".mid", String(mid.pid));\nsetInterval(function () {}, 1000);\n');
+    const root = spawn(process.execPath, [rootJs, midJs, base], { stdio: "ignore" });
+    const bystander = spawn(process.execPath, ["-e", "setInterval(function(){}, 1000);"], { stdio: "ignore" });
+    for (let i = 0; i < 100 && !fs.existsSync(base + ".leaf"); i++) pause(100);
+    const read = f => { try { return Number(fs.readFileSync(f, "utf8")); } catch (e) { return 0; } };
+    const mid = read(base + ".mid"), leaf = read(base + ".leaf");
+    const before = [root.pid, mid, leaf, bystander.pid].map(p => !!p && E.pidAlive(p));
+    const did = E.killTree(root.pid);
+    pause(1200);
+    const after = [root.pid, mid, leaf, bystander.pid].map(p => !!p && E.pidAlive(p));
+    for (const p of [bystander.pid, root.pid, mid, leaf]) { try { if (p) process.kill(p); } catch (e) { /* already gone */ } }
+    ok(before.every(Boolean) && after.slice(0, 3).every(a => !a) && after[3] && did.killed === true,
+       "28j LIVE CONTROL: a launch, its child and its grandchild, three real processes, are alive before killTree (" + before.join()
+       + ") and gone after (" + after.slice(0, 3).join() + "), with an unrelated process of the same run still standing (" + after[3]
+       + "): " + did.how);
+    ok(Array.isArray(did.taken) && did.taken.slice().sort().join() === [root.pid, mid, leaf].sort().join(),
+       "28l and what killTree says it took is exactly those three pids, read from Win32_Process, and no other: " + JSON.stringify(did.taken));
+    const spent = require("child_process").spawnSync(process.execPath, ["-e", ""], { stdio: "ignore" });
+    const late = E.killTree(spent.pid);
+    ok(late.killed === false && /already gone/.test(late.how),
+       "28k and a launch that has already gone, and whose pid nothing holds, is answered as gone, not killed: " + JSON.stringify(late));
+  } else {
+    skip("28j and 28k are killTree on Windows, over real processes and Win32_Process; on " + process.platform
+         + " 28d is the arm that runs and 28g to 28i hold the selection, which is arithmetic");
+  }
+
+  /* 28m. WHAT killTree ASKS taskkill FOR. 28g holds the selection and 28j the outcome, and neither
+     sees the call: a killTree that read the table, reported the careful set and then killed with /T
+     passed every leg (the test architect's plant, 2026-09-30). Here every door of child_process is
+     replaced before engine.js takes its functions: powershell answers 28g's table with the orphan in
+     it, and any taskkill, by whichever door, is recorded and never run. So the orphan and its child
+     are named in no call and no call carries /T. Patched to win32 where the host is not, since
+     nothing real is asked or killed. */
+  {
+    const SPY = 'const cp = require("child_process"), calls = [];'
+      + 'const T = [[100,1,1000],[200,100,1100],[300,200,1200],[700,100,1300],[400,100,500],[600,400,600],[500,1,900]]'
+      + '.map(function (r) { return { pid: r[0], parent: r[1], created: r[2] }; });'
+      + 'const toks = function (c, a) { return Array.isArray(a) ? [String(c)].concat(a.map(String)) : String(c).split(/\\s+/); };'
+      + 'const fakes = { execFileSync: "", execSync: "", spawnSync: { status: 0, stdout: "", stderr: "" } };'
+      + '["execFileSync", "execSync", "spawnSync", "spawn", "exec", "execFile"].forEach(function (n) {'
+      + '  const real = cp[n];'
+      + '  cp[n] = function (c, a) { const t = toks(c, a);'
+      + '    if (n === "spawnSync" && /powershell/i.test(t[0])) { calls.push(["powershell"]); return { status: 0, stdout: JSON.stringify(T), stderr: "" }; }'
+      + '    if (t.some(function (x) { return /taskkill/i.test(x); })) { calls.push(t);'
+      + '      return n in fakes ? fakes[n] : { pid: 0, on: function () { return this; }, unref: function () {} }; }'
+      + '    return real.apply(this, arguments); }; });'
+      + 'const did = require("./engine.js").killTree(100);'
+      + 'console.log("CALLS " + JSON.stringify(calls) + " TAKEN " + JSON.stringify(did.taken || null));';
+    const r28m = run(AS_WIN(SPY), {});
+    const m = /CALLS (\[.*\]) TAKEN (.*)$/m.exec(r28m.out);
+    const calls = m ? JSON.parse(m[1]) : [];
+    const kills = calls.filter(c => c.some(x => /taskkill/i.test(x)));
+    const named = kills.map(c => Number(c[c.indexOf("/PID") + 1])).sort((a, b) => a - b);
+    const withT = kills.filter(c => c.some(x => /^[\/-]t$/i.test(x)));
+    ok(r28m.code === 0 && calls.some(c => c[0] === "powershell") && withT.length === 0 && named.join() === "100,200,300,700",
+       "28m killTree over 28g's table asks taskkill for the launch, its children and its grandchild by pid, and no call carries /T"
+       + " or names the orphan 400 or its child 600: " + (m ? m[1] : "(no CALLS line) " + r28m.out.trim().slice(0, 160)));
+  }
+
   r = run(AS('const E = require("./engine.js");'
     + 'const v = E.suiteVerdict({ checks: 3, fails: 0, expected: 3, reachedEnd: true });'
     + 'console.log(JSON.stringify(v));'), {});
@@ -1114,6 +1220,39 @@ Module.prototype._compile = function (content, filename) {
        + " reaches the Electron check: " + (shifted.out.trim().split(/\r?\n/).find(l => /FAIL|block at/.test(l)) || "(said nothing)"));
     ok(/did not start: another Electron run is live, 1 run\(s\)/.test(plain.out) && /pid 4242/.test(plain.out),
        "27g2 THE CONTROL: the same stand-in with no shift refuses desk.js on the live run, pid 4242, so 27g is the order and not"
+       + " a stand-in that never took: " + (plain.out.trim().split(/\r?\n/).find(l => /did not start/.test(l)) || "(said nothing)"));
+  }
+
+  /* 27h. tests/links.js ASKS FOR ITS PORT BLOCK BEFORE IT ASKS WHETHER AN ELECTRON IS LIVE, so a refused
+     shift is refused whatever else is up: asked the other way round the run sits through the guard's
+     grace and reads the Electron refusal. links is not in the table 27f walks, so nothing held it.
+     A preload stands in for one live run (it rewrites electronRunsLive in the copy of engine.js the
+     child loads, shortens the grace, and throws if it found nothing to rewrite), so this holds with no
+     window anywhere. 27h2 is the control: the same stand-in and no shift, refused on the live run. */
+  {
+    const stubAt = path.join(tmp, "live-electron-links.js");
+    fs.writeFileSync(stubAt, `const Module = require("node:module"), path = require("node:path");
+const real = Module.prototype._compile;
+Module.prototype._compile = function (content, filename) {
+  if (path.basename(filename) === "engine.js" && path.basename(path.dirname(filename)) === "tests") {
+    const live = 'function electronRunsLive() { return { asked: true, processes: 1, runs: [{ pid: 4242, name: "electron.exe", path: "a stubbed live run", family: 0 }] }; } function electronRunsLiveReal() {';
+    const a = content.replace("function electronRunsLive() {", live);
+    const b = a.replace("graceMs === undefined ? 15000 : graceMs", "graceMs === undefined ? 0 : graceMs");
+    if (a === content || b === a) throw new Error("the live-Electron stand-in found nothing to stand in for");
+    content = b;
+  }
+  return real.call(this, content, filename);
+};
+`, "utf8");
+    const links = shift => run('process.chdir(require("./engine.js").ROOT);'
+      + 'require("child_process").execFileSync(process.execPath, ["-r", ' + JSON.stringify(stubAt) + ', "tests/links.js"],'
+      + '{ stdio: "inherit" });', { ETIUDA_PORT_SHIFT: shift, ETIUDA_FIXTURES: "" });
+    const shifted = links("60000"), plain = links("");
+    ok(/block at 69434-/.test(shifted.out) && !/another Electron run is live/.test(shifted.out),
+       "27h tests/links.js with one Electron run stood in as live still refuses on its port block, quoting 69434 back, and never"
+       + " reaches the Electron check: " + (shifted.out.trim().split(/\r?\n/).find(l => /FAIL|block at/.test(l)) || "(said nothing)"));
+    ok(/did not start: another Electron run is live, 1 run\(s\)/.test(plain.out) && /pid 4242/.test(plain.out),
+       "27h2 THE CONTROL: the same stand-in with no shift refuses links.js on the live run, pid 4242, so 27h is the order and not"
        + " a stand-in that never took: " + (plain.out.trim().split(/\r?\n/).find(l => /did not start/.test(l)) || "(said nothing)"));
   }
 }
