@@ -14,6 +14,9 @@ const TILE_MARK='<svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"
 /* The trademark notice, both languages on one line so that registration is a one-line edit here;
    tests/test.js holds the installer's licence texts to it. A language without a key reads English. */
 const TRADEMARK={en:"Etiuda is a trademark of Maxim Gwiazda.", pl:"Etiuda jest znakiem towarowym Maxima Gwiazdy."};
+/* The maker line, under the notice. The Polish name differs from the English on purpose until the
+   sole-trader registration, when both become one string. A language without a key reads English. */
+const MAKER={en:"Made by Stardust.", pl:"Etiudę tworzy Gwiezdny Pył."};
 // About Etiuda: elegant in-page modal with tool name + footer help/credits.
 function openAbout(){
   /* Built from #aboutInfo plus a freshly rendered shortcut list. The legend cannot simply be
@@ -38,7 +41,7 @@ function openAbout(){
     title: "Etiuda",
     lead: '<span class="brand-tile about-tile" aria-hidden="true">'+TILE_MARK+'</span>',
     sub: t("About Etiuda · Version {V} · <span class='nw'>Etiuda Source-Available Licence 1.0</span>, free for personal use · © 2026 Maxim Gwiazda")
-           .replace("{V}",E_VERSION)+"<br>"+esc(TRADEMARK[uiLang()]||TRADEMARK.en),
+           .replace("{V}",E_VERSION)+"<br>"+esc(TRADEMARK[uiLang()]||TRADEMARK.en)+"<br>"+esc(MAKER[uiLang()]||MAKER.en),
     body: '<div class="about-body">'+keys+fileLine+info+'</div>',
     actions: '<button type="button" class="btn primary" id="aboutClose">Close</button>',
     wire: ()=>{
