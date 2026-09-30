@@ -336,7 +336,7 @@ try {
   {
     const probeFile = path.join(tmp, "stand-in.js");
     fs.writeFileSync(probeFile, 'require("fs").writeFileSync(process.argv[2], "launched "'
-      + ' + (process.env.ETIUDA_TEST_DEVTOOLS || "-"));\n', "utf8");
+      + ' + (process.env.ETIUDA_TEST_DEVTOOLS || "-") + " " + (process.env.ETIUDA_TEST_DOCUMENTS || "-"));\n', "utf8");
     const probe = o => 'const E = require("./engine.js");'
       + 'const o = ' + JSON.stringify(o) + ';'
       + 'const opts = { stdio: "ignore" };'
@@ -353,7 +353,8 @@ try {
       const r = run(probe(Object.assign({ marker: marker }, o)), {});
       const launched = fs.existsSync(marker);
       return { code: r.code, out: r.out, launched: launched, marker: marker,
-               token: launched ? fs.readFileSync(marker, "utf8").split(" ")[1] : null };
+               token: launched ? fs.readFileSync(marker, "utf8").split(" ")[1] : null,
+               docsSeen: launched ? fs.readFileSync(marker, "utf8").split(" ").slice(2).join(" ") : null };
     };
     const ownUd = path.join(tmp, "ud-own");
     const ownUd2 = path.join(tmp, "ud-own-2");
@@ -423,9 +424,13 @@ try {
     const port = fire({ who: "a-suite.js", args: ["--user-data-dir=" + ownUd, "--remote-debugging-port=0"] });
     const pipe = fire({ who: "a-suite.js", args: ["--user-data-dir=" + ownUd, "--remote-debugging-pipe"] });
     const plain = fire({ who: "a-suite.js", args: ["--user-data-dir=" + ownUd] });
-    ok(port.token === "1" && pipe.token === "1" && plain.token === "-",
+    /* The variable is added to the caller's environment, not put in place of it. */
+    const kept = fire({ who: "a-suite.js", args: ["--user-data-dir=" + ownUd, "--remote-debugging-port=0"], docs: labDocs });
+    ok(port.token === "1" && pipe.token === "1" && plain.token === "-" && kept.token === "1" && kept.docsSeen === labDocs,
        "21h a launch carrying a debugging switch reaches the shell with ETIUDA_TEST_DEVTOOLS=1 (port "
-       + port.token + ", pipe " + pipe.token + "), and one without reaches it with nothing (" + plain.token + ")");
+       + port.token + ", pipe " + pipe.token + "), and one without reaches it with nothing (" + plain.token
+       + "); and the caller's own environment survives beside it: ETIUDA_TEST_DOCUMENTS reaches the shell as "
+       + JSON.stringify(kept.docsSeen) + " with the variable set (" + kept.token + ")");
   }
 
   /* 22. AND NOTHING LAUNCHES THE SHELL AROUND THE GUARD. Case 21 proves what shellLaunch does;
