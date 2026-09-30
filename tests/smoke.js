@@ -984,7 +984,7 @@ const t0 = Date.now();
       const sub = (document.querySelector(".about-modal .modal-sub").innerText || "").split("\n");
       const all = document.querySelector(".about-modal").innerText;
       dismissModal(); await new Promise(r => setTimeout(r, 200));
-      return { screen, last: sub[sub.length - 2].trim(), maker: sub[sub.length - 1].trim(), all };
+      return { screen, last: (sub[sub.length - 2] || "").trim(), maker: sub[sub.length - 1].trim(), all };
     };
     const en = await read("en"), pl = await read("pl");
     setUiLang("en"); await new Promise(r => setTimeout(r, 400));
@@ -998,9 +998,10 @@ const t0 = Date.now();
         && tm.pl.maker === "Etiudę tworzy Gwiezdny Pył." && hits(tm.pl.all, "Etiudę tworzy Gwiezdny Pył.") === 1,
     "About's legal line has the trademark notice second from last and the maker line last, once each, in each language ("
     + JSON.stringify([tm.en.last, tm.en.maker]) + ", " + JSON.stringify([tm.pl.last, tm.pl.maker]) + ")");
-  check([tm.en.screen, tm.pl.screen].every(s => hits(s, "trademark") + hits(s, "znakiem towarowym") === 0)
+  check([tm.en.screen, tm.pl.screen].every(s => hits(s, "trademark") + hits(s, "znakiem towarowym")
+          + hits(s, "Made by Stardust.") + hits(s, "Etiudę tworzy Gwiezdny Pył.") === 0)
         && tm.en.screen.length > 0 && tm.pl.screen.length > 0,
-    "control: the working screen behind it carries the notice in neither language (" + tm.en.screen.length
+    "control: the working screen behind it carries neither the notice nor the maker line, in either language (" + tm.en.screen.length
     + " and " + tm.pl.screen.length + " characters read)");
   clean(e, "the trademark notice");
 
