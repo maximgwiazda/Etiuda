@@ -1027,10 +1027,43 @@ try {
     const spent = require("child_process").spawnSync(process.execPath, ["-e", ""], { stdio: "ignore" });
     const late = E.killTree(spent.pid);
     ok(late.killed === false && /already gone/.test(late.how),
-       "28k and a launch that has already gone is answered as gone, not killed, whatever reuses its pid later: " + JSON.stringify(late));
+       "28k and a launch that has already gone, and whose pid nothing holds, is answered as gone, not killed: " + JSON.stringify(late));
   } else {
     skip("28j and 28k are killTree on Windows, over real processes and Win32_Process; on " + process.platform
          + " 28d is the arm that runs and 28g to 28i hold the selection, which is arithmetic");
+  }
+
+  /* 28m. WHAT killTree ASKS taskkill FOR. 28g holds the selection and 28j the outcome, and neither
+     sees the call: a killTree that read the table, reported the careful set and then killed with /T
+     passed every leg (the test architect's plant, 2026-09-30). Here every door of child_process is
+     replaced before engine.js takes its functions: powershell answers 28g's table with the orphan in
+     it, and any taskkill, by whichever door, is recorded and never run. So the orphan and its child
+     are named in no call and no call carries /T. Patched to win32 where the host is not, since
+     nothing real is asked or killed. */
+  {
+    const SPY = 'const cp = require("child_process"), calls = [];'
+      + 'const T = [[100,1,1000],[200,100,1100],[300,200,1200],[700,100,1300],[400,100,500],[600,400,600],[500,1,900]]'
+      + '.map(function (r) { return { pid: r[0], parent: r[1], created: r[2] }; });'
+      + 'const toks = function (c, a) { return Array.isArray(a) ? [String(c)].concat(a.map(String)) : String(c).split(/\\s+/); };'
+      + 'const fakes = { execFileSync: "", execSync: "", spawnSync: { status: 0, stdout: "", stderr: "" } };'
+      + '["execFileSync", "execSync", "spawnSync", "spawn", "exec", "execFile"].forEach(function (n) {'
+      + '  const real = cp[n];'
+      + '  cp[n] = function (c, a) { const t = toks(c, a);'
+      + '    if (n === "spawnSync" && /powershell/i.test(t[0])) { calls.push(["powershell"]); return { status: 0, stdout: JSON.stringify(T), stderr: "" }; }'
+      + '    if (t.some(function (x) { return /taskkill/i.test(x); })) { calls.push(t);'
+      + '      return n in fakes ? fakes[n] : { pid: 0, on: function () { return this; }, unref: function () {} }; }'
+      + '    return real.apply(this, arguments); }; });'
+      + 'const did = require("./engine.js").killTree(100);'
+      + 'console.log("CALLS " + JSON.stringify(calls) + " TAKEN " + JSON.stringify(did.taken || null));';
+    const r28m = run(AS_WIN(SPY), {});
+    const m = /CALLS (\[.*\]) TAKEN (.*)$/m.exec(r28m.out);
+    const calls = m ? JSON.parse(m[1]) : [];
+    const kills = calls.filter(c => c.some(x => /taskkill/i.test(x)));
+    const named = kills.map(c => Number(c[c.indexOf("/PID") + 1])).sort((a, b) => a - b);
+    const withT = kills.filter(c => c.some(x => /^[\/-]t$/i.test(x)));
+    ok(r28m.code === 0 && calls.some(c => c[0] === "powershell") && withT.length === 0 && named.join() === "100,200,300,700",
+       "28m killTree over 28g's table asks taskkill for the launch, its children and its grandchild by pid, and no call carries /T"
+       + " or names the orphan 400 or its child 600: " + (m ? m[1] : "(no CALLS line) " + r28m.out.trim().slice(0, 160)));
   }
 
   r = run(AS('const E = require("./engine.js");'

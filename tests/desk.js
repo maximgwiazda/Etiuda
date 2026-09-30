@@ -245,8 +245,8 @@ function lowered(what, pid) {
     + (t.other.length ? ", not: " + t.other.join(", ") : "") : "priority not lowered, " + (t.why || "not Windows")));
 }
 
-/* By pid and with /T, so the helpers go and nothing outside this run is touched: /IM would
-   reach another seat's Electron or a copy somebody is using. */
+/* By pid, the launch and its real descendants: /IM would reach another seat's Electron or a copy
+   somebody is using. */
 function stopShell(b) {
   try { if (b) b.disconnect(); } catch (x) {}
   E.killTree(child && child.pid);

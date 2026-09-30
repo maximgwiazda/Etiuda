@@ -202,7 +202,7 @@ async function launch(dir, port) {
   return { child: child, browser: b, page: p, said: said, shellSaid: shellSaid };
 }
 
-/* By pid and with /T, so the helpers go and nothing outside this run is touched. */
+/* By pid, the launch and its real descendants: no /IM, which would reach another seat's Electron. */
 function stop(run) {
   try { if (run && run.browser) run.browser.disconnect(); } catch (x) {}
   E.killTree(run && run.child && run.child.pid);
