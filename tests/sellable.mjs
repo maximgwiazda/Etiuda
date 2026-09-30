@@ -146,6 +146,32 @@ try {
   const STORE = [{ Subject: 'CN=' + WHO, Thumbprint: THUMB.toUpperCase(),
     PSParentPath: 'Microsoft.PowerShell.Security\\Certificate::CurrentUser\\My' }];
   const LINK_VARS = ['CSC_LINK', 'WIN_CSC_LINK', 'CSC_KEY_PASSWORD', 'WIN_CSC_KEY_PASSWORD'];
+  /* THE SIGNER IS SEALED WHILE IT RUNS. The check on its source text asks whether the vm is named, not
+     whether it is the only way out: a signer that also starts a process, opens a connection or fetches
+     would be run here against the real profile. So while signIf runs, everything that starts a process
+     or reaches a network throws and is counted in ESCAPES, which 3b requires to be empty. The objects
+     are CommonJS, and electron-builder looks its calls up at call time, so replacing them reaches it. */
+  const ESCAPES = [];
+  const SEALED = [['child_process', require('node:child_process'), ['spawn', 'spawnSync', 'exec', 'execSync', 'execFile', 'execFileSync', 'fork']],
+    ['http', require('node:http'), ['request', 'get']], ['https', require('node:https'), ['request', 'get']],
+    ['net', require('node:net'), ['connect', 'createConnection']], ['net.Socket.prototype', require('node:net').Socket.prototype, ['connect']],
+    ['tls', require('node:tls'), ['connect']],
+    ['dns', require('node:dns'), ['lookup', 'resolve', 'resolve4', 'resolve6', 'resolveAny', 'reverse']],
+    ['dns.promises', require('node:dns').promises, ['lookup', 'resolve', 'resolve4', 'resolve6']], ['globalThis', globalThis, ['fetch']]];
+  async function whileSealed(run) {
+    const put = [];
+    for (const [label, obj, names] of SEALED) for (const n of names) {
+      const was = Object.getOwnPropertyDescriptor(obj, n);
+      if (!was) continue;
+      put.push([obj, n, was]);
+      Object.defineProperty(obj, n, { configurable: true, writable: true, value: function () {
+        ESCAPES.push(label + '.' + n);
+        throw new Error('sealed: ' + label + '.' + n + ' was called while the signer ran');
+      } });
+    }
+    try { return await run(); }
+    finally { for (const [obj, n, was] of put.reverse()) Object.defineProperty(obj, n, was); }
+  }
   async function wouldSign(win, env = {}) {
     const was = {};
     for (const k of LINK_VARS) { was[k] = process.env[k]; delete process.env[k]; if (env[k] != null) process.env[k] = env[k]; }
@@ -165,7 +191,7 @@ try {
       const manager = win.azureSignOptions != null ? new EB.WindowsSignAzureManager(stub) : new EB.WindowsSignToolManager(stub);
       if (manager instanceof EB.WindowsSignToolManager) manager.doSign = async () => {};
       stub.signingManager = { value: Promise.resolve(manager) };
-      try { return { signs: !!(await stub.signIf(path.join(TMP, 'etiuda-setup.exe'))), calls }; }
+      try { return { signs: !!(await whileSealed(() => stub.signIf(path.join(TMP, 'etiuda-setup.exe')))), calls }; }
       catch (e) { return { signs: false, calls, why: 'it throws: ' + String(e.message).slice(0, 80) }; }
     } finally {
       EB.util.log.stream = stream;
@@ -203,8 +229,10 @@ try {
       if (!shape(w) || eb.signs !== signs || signingConfigured(w, {}) !== signs || !timestamped || !reached)
         wrongRoute.push(name + ' (' + routeOf(w) + ', electron-builder ' + eb.signs + (eb.why ? ', ' + eb.why : '') + ')');
     }
-    check(!wrongRoute.length, '3b each of ' + ROUTES.length + ' environments picks its route, which electron-builder\'s'
-      + ' schema accepts and its signing path signs with (none signs nothing)' + (wrongRoute.length ? '; wrong: ' + wrongRoute.join('; ') : ''));
+    check(!wrongRoute.length && ESCAPES.length === 0, '3b each of ' + ROUTES.length + ' environments picks its route, which electron-builder\'s'
+      + ' schema accepts and its signing path signs with (none signs nothing), and the signer, sealed while it ran, started no process and'
+      + ' reached no network (' + ESCAPES.length + ' escape(s))' + (wrongRoute.length ? '; wrong: ' + wrongRoute.join('; ') : '')
+      + (ESCAPES.length ? '; it reached for ' + [...new Set(ESCAPES)].join(', ') : ''));
 
     /* 3c: two routes at once, or Artifact Signing short of a field, refuses by name. */
     const refusal = vars => { try { winWith(vars); return ''; } catch (e) { return String(e.message); } };
