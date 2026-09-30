@@ -9,7 +9,8 @@
  *   1  which version is a customer's, and why one is not
  *   2  a licence page with a bracketed placeholder is refused, one without is not, and no page at
  *      all is refused rather than read as clean
- *   3  signing is read out of the real electron-builder.js, so the block the build uses is judged
+ *   3  signing is read out of the real electron-builder.js, so the block the build uses is judged: each
+ *      environment's route, the refusals, and signingConfigured against electron-builder's own code
  *   4  when a signature is required, only Valid with a timestamp passes; when it is not, nothing
  *      a preview reads stops it
  *   5  what Windows says of a signed file, of the same file with one byte changed, and of an
@@ -33,7 +34,7 @@ import { customerVersion, versionProblems, placeholders, licencePages, licencePr
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 25;
+const EXPECTED = 29;
 
 let asserted = 0, failed = 0;
 const notRun = [];
@@ -46,6 +47,9 @@ function check(ok, line) {
 function skip(why, legs) { for (let i = 0; i < legs; i++) notRun.push(why); console.log('  NOT RUN ' + why); }
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'etiuda-sellable-'));
+/* Every variable that picks a signing route, electron-builder's own certificate links included. */
+const SIGNING_VARS = ['ETIUDA_CERT', 'ETIUDA_CERT_SHA1', 'ETIUDA_CERT_SUBJECT', 'ETIUDA_SIGNING_ENDPOINT',
+  'ETIUDA_SIGNING_ACCOUNT', 'ETIUDA_SIGNING_PROFILE', 'ETIUDA_SIGNING_PUBLISHER', 'CSC_LINK', 'WIN_CSC_LINK'];
 const EN_FILE = path.join(ROOT, 'shell', 'license_en.txt');
 const EN = fs.readFileSync(EN_FILE, 'utf8');
 /* THE LICENCE TEXT TWO WAYS, whatever the tree holds today, so no leg here fights the day the
@@ -91,18 +95,166 @@ try {
     '2d the pages are the names the builder reads, in any case, and nothing else: ' + found.join(','));
 
   /* ---- 3. signing, as the real electron-builder.js configures it ---------------------------- */
+  /* Every variable that picks a route is cleared around each reading, so one set on the desk
+     running this changes nothing here. */
   const builder = path.join(ROOT, 'electron-builder.js');
-  const winWith = cert => {
-    const was = process.env.ETIUDA_CERT;
-    if (cert == null) delete process.env.ETIUDA_CERT; else process.env.ETIUDA_CERT = cert;
+  const winWith = vars => {
+    const was = {};
+    for (const k of SIGNING_VARS) { was[k] = process.env[k]; delete process.env[k]; }
+    Object.assign(process.env, vars || {});
     delete require.cache[require.resolve(builder)];
     try { return require(builder).win; }
-    finally { if (was == null) delete process.env.ETIUDA_CERT; else process.env.ETIUDA_CERT = was; delete require.cache[require.resolve(builder)]; }
+    finally {
+      for (const k of SIGNING_VARS) { if (was[k] == null) delete process.env[k]; else process.env[k] = was[k]; }
+      delete require.cache[require.resolve(builder)];
+    }
   };
-  const unsigned = signingConfigured(winWith(null)), signed = signingConfigured(winWith('C:/nowhere/etiuda.pfx'));
-  check(!unsigned && signed && signingConfigured({ azureSignOptions: { endpoint: 'x' } }) && !signingConfigured({}),
-    '3a the real builder with ETIUDA_CERT unset signs nothing (' + unsigned + ') and with it set signs ('
-    + signed + '); Azure\'s options count as signing and an empty block does not');
+  const PFX = 'C:/nowhere/etiuda.pfx', THUMB = '0123456789abcdef0123456789abcdef01234567', WHO = 'Example Publisher';
+  const AZ = { ETIUDA_SIGNING_ENDPOINT: 'https://weu.codesigning.azure.net', ETIUDA_SIGNING_ACCOUNT: 'exampleaccount',
+    ETIUDA_SIGNING_PROFILE: 'exampleprofile', ETIUDA_SIGNING_PUBLISHER: WHO };
+  const routeOf = w => JSON.stringify({ signtoolOptions: w.signtoolOptions, azureSignOptions: w.azureSignOptions });
+  const unsignedWin = winWith(null), pfxWin = winWith({ ETIUDA_CERT: PFX });
+  const PFX_BEFORE = { signtoolOptions: { certificateFile: PFX, signingHashAlgorithms: ['sha256'],
+    rfc3161TimeStampServer: 'http://timestamp.digicert.com' } };
+  check(routeOf(unsignedWin) === '{}' && !signingConfigured(unsignedWin, {}) && signingConfigured(pfxWin, {})
+    && routeOf(pfxWin) === JSON.stringify(PFX_BEFORE),
+    '3a the real builder with no signing variable signs nothing, and with ETIUDA_CERT set signs from the .pfx by'
+    + ' the block it always did, key for key: ' + routeOf(pfxWin));
+
+  /* ELECTRON-BUILDER'S OWN ANSWER to "would this sign", asked of its code rather than restated: the
+     schema it validates a configuration against, then WinPackager's signIf on a stub packager whose
+     signtool run and PowerShell are replaced, so nothing is signed, installed or read from the real
+     certificate store; the store it is shown holds one planted certificate. The one line restated is
+     the constructor's choice of Artifact Signing whenever azureSignOptions is present. */
+  const ABL = path.join(ROOT, 'node_modules', 'app-builder-lib', 'package.json');
+  let EB = null, ebMissing = '';
+  if (fs.existsSync(ABL)) {
+    try {
+      const abl = createRequire(ABL);
+      abl('app-builder-lib');   /* the index first: winPackager.js loaded alone meets a class cycle */
+      EB = { ...abl('./out/winPackager.js'), ...abl('./out/codeSign/windowsSignToolManager.js'),
+             ...abl('./out/codeSign/windowsSignAzureManager.js'), ...abl('./out/util/config/config.js'),
+             util: abl('builder-util') };
+      for (const k of ['WinPackager', 'WindowsSignToolManager', 'WindowsSignAzureManager', 'validateConfiguration'])
+        if (!EB[k]) throw new Error('app-builder-lib no longer exports ' + k + ' where this leg reads it');
+      /* The Artifact Signing signer is run only while its one way out is the packager's vm, which is
+         the stub below: it must never reach Azure, or a sign-in, from this desk. */
+      if (!/this\.packager\.vm\.value/.test(String(EB.WindowsSignAzureManager.prototype.signFile)))
+        throw new Error('the Artifact Signing signer no longer reaches PowerShell only through the packager\'s vm, so it is not run here');
+    } catch (e) { EB = null; ebMissing = String(e.message).split('\n')[0]; }
+  }
+  const STORE = [{ Subject: 'CN=' + WHO, Thumbprint: THUMB.toUpperCase(),
+    PSParentPath: 'Microsoft.PowerShell.Security\\Certificate::CurrentUser\\My' }];
+  const LINK_VARS = ['CSC_LINK', 'WIN_CSC_LINK', 'CSC_KEY_PASSWORD', 'WIN_CSC_KEY_PASSWORD'];
+  async function wouldSign(win, env = {}) {
+    const was = {};
+    for (const k of LINK_VARS) { was[k] = process.env[k]; delete process.env[k]; if (env[k] != null) process.env[k] = env[k]; }
+    const stream = EB.util.log.stream;
+    EB.util.log.stream = { write: () => true };   /* its own progress lines, not this file's */
+    const calls = [];
+    try {
+      try { await EB.validateConfiguration({ win }, { isEnabled: false }); }
+      catch (e) { return { signs: false, calls, why: 'the schema refuses it' }; }
+      const vm = { powershellCommand: { value: Promise.resolve('powershell.exe') }, toVmFile: f => f,
+        exec: async (ps, args) => { calls.push(args.join(' ')); return JSON.stringify(STORE); } };
+      const stub = Object.create(EB.WinPackager.prototype);
+      Object.assign(stub, { platformSpecificBuildOptions: win, signingQueue: Promise.resolve(true),
+        info: { config: {}, debugLogger: { isEnabled: false }, getWorkspaceRoot: async () => ROOT },
+        appInfo: { productName: 'Etiuda', computePackageUrl: async () => null, type: 'app' },
+        vm: { value: Promise.resolve(vm) } });
+      const manager = win.azureSignOptions != null ? new EB.WindowsSignAzureManager(stub) : new EB.WindowsSignToolManager(stub);
+      if (manager instanceof EB.WindowsSignToolManager) manager.doSign = async () => {};
+      stub.signingManager = { value: Promise.resolve(manager) };
+      try { return { signs: !!(await stub.signIf(path.join(TMP, 'etiuda-setup.exe'))), calls }; }
+      catch (e) { return { signs: false, calls, why: 'it throws: ' + String(e.message).slice(0, 80) }; }
+    } finally {
+      EB.util.log.stream = stream;
+      for (const k of LINK_VARS) { if (was[k] == null) delete process.env[k]; else process.env[k] = was[k]; }
+    }
+  }
+
+  if (!EB) {
+    if (ebMissing) check(false, '3b-3e electron-builder\'s own code could not be read: ' + ebMissing);
+    else skip('3b-3e need app-builder-lib in node_modules to ask electron-builder itself', 4);
+  } else {
+    /* 3b: each environment picks its route, the block passes electron-builder's schema, and its own
+       signing path signs with it; Artifact Signing's values reach the command it would run. */
+    const ST = w => w.signtoolOptions || {}, AO = w => w.azureSignOptions || {};
+    const ROUTES = [
+      ['none', {}, w => !w.signtoolOptions && !w.azureSignOptions, false],
+      ['.pfx', { ETIUDA_CERT: PFX }, w => ST(w).certificateFile === PFX && !w.azureSignOptions, true],
+      ['thumbprint', { ETIUDA_CERT_SHA1: THUMB }, w => ST(w).certificateSha1 === THUMB
+        && !ST(w).certificateFile && !ST(w).certificateSubjectName && !w.azureSignOptions, true],
+      ['subject', { ETIUDA_CERT_SUBJECT: WHO }, w => ST(w).certificateSubjectName === WHO
+        && !ST(w).certificateFile && !ST(w).certificateSha1 && !w.azureSignOptions, true],
+      ['thumbprint and subject', { ETIUDA_CERT_SHA1: THUMB, ETIUDA_CERT_SUBJECT: WHO }, w => ST(w).certificateSha1 === THUMB
+        && ST(w).certificateSubjectName === WHO && !ST(w).certificateFile && !w.azureSignOptions, true],
+      ['Artifact Signing', AZ, w => !w.signtoolOptions && AO(w).endpoint === AZ.ETIUDA_SIGNING_ENDPOINT
+        && AO(w).codeSigningAccountName === AZ.ETIUDA_SIGNING_ACCOUNT
+        && AO(w).certificateProfileName === AZ.ETIUDA_SIGNING_PROFILE
+        && AO(w).publisherName === WHO, true],
+    ];
+    const wrongRoute = [];
+    for (const [name, vars, shape, signs] of ROUTES) {
+      const w = winWith(vars), eb = await wouldSign(w);
+      const timestamped = !w.signtoolOptions || w.signtoolOptions.rfc3161TimeStampServer === 'http://timestamp.digicert.com';
+      const reached = name !== 'Artifact Signing' || (eb.calls.length === 1 && / -Command Invoke-TrustedSigning /.test(eb.calls[0])
+        && ['ETIUDA_SIGNING_ENDPOINT', 'ETIUDA_SIGNING_ACCOUNT', 'ETIUDA_SIGNING_PROFILE'].every(k => eb.calls[0].includes("'" + AZ[k] + "'")));
+      if (!shape(w) || eb.signs !== signs || signingConfigured(w, {}) !== signs || !timestamped || !reached)
+        wrongRoute.push(name + ' (' + routeOf(w) + ', electron-builder ' + eb.signs + (eb.why ? ', ' + eb.why : '') + ')');
+    }
+    check(!wrongRoute.length, '3b each of ' + ROUTES.length + ' environments picks its route, which electron-builder\'s'
+      + ' schema accepts and its signing path signs with (none signs nothing)' + (wrongRoute.length ? '; wrong: ' + wrongRoute.join('; ') : ''));
+
+    /* 3c: two routes at once, or Artifact Signing short of a field, refuses by name. */
+    const refusal = vars => { try { winWith(vars); return ''; } catch (e) { return String(e.message); } };
+    const { ETIUDA_SIGNING_PUBLISHER: _publisher, ...AZ_THREE } = AZ;
+    const r1 = refusal({ ETIUDA_CERT: PFX, ETIUDA_CERT_SHA1: THUMB }), r2 = refusal({ ETIUDA_CERT: PFX, ...AZ });
+    const r3 = refusal({ ETIUDA_CERT_SUBJECT: WHO, ...AZ }), r4 = refusal(AZ_THREE);
+    check(/ETIUDA_CERT and ETIUDA_CERT_SHA1/.test(r1) && /ETIUDA_CERT and ETIUDA_SIGNING_\*/.test(r2)
+      && /ETIUDA_CERT_SUBJECT and ETIUDA_SIGNING_\*/.test(r3) && /needs ETIUDA_SIGNING_PUBLISHER too$/.test(r4),
+      '3c two routes at once refuse naming both, and Artifact Signing short of one field names it: ' + JSON.stringify([r1, r2, r3, r4]));
+
+    /* 3d: signingConfigured says what electron-builder does, on planted blocks: the rehearsal's five
+       first, then those that decide "and nothing else" and the certificate links it reads itself. */
+    const LINK = path.join(TMP, 'planted.pfx');
+    fs.writeFileSync(LINK, 'not a certificate');
+    const TS = { signingHashAlgorithms: ['sha256'], rfc3161TimeStampServer: 'http://timestamp.digicert.com' };
+    const AZ_BLOCK = { endpoint: AZ.ETIUDA_SIGNING_ENDPOINT, codeSigningAccountName: 'a', certificateProfileName: 'p', publisherName: WHO };
+    const PLANTED = [
+      ['pfx', { signtoolOptions: { certificateFile: PFX, ...TS } }],
+      ['azure', { azureSignOptions: AZ_BLOCK }],
+      ['sha1', { signtoolOptions: { certificateSha1: THUMB, ...TS } }],
+      ['subject', { signtoolOptions: { certificateSubjectName: WHO, ...TS } }],
+      ['none', {}],
+      ['azure short of three fields', { azureSignOptions: { endpoint: 'x' } }],
+      ['win.certificateFile', { certificateFile: PFX }],
+      ['win.sign', { sign: './sign.js' }],
+      ['a timestamp alone', { signtoolOptions: TS }],
+      ['pfx with signExecutable false', { signtoolOptions: { certificateFile: PFX, ...TS }, signExecutable: false }],
+      ['win.cscLink', { cscLink: LINK }],
+      ['a sign hook', { signtoolOptions: { sign: async () => {} } }],
+      ['none, CSC_LINK set', {}, { CSC_LINK: LINK }],
+      ['none, WIN_CSC_LINK set', {}, { WIN_CSC_LINK: LINK }],
+      ['none, WIN_CSC_LINK empty over CSC_LINK', {}, { WIN_CSC_LINK: '', CSC_LINK: LINK }],
+      ['win.cscLink empty over CSC_LINK', { cscLink: '' }, { CSC_LINK: LINK }],
+    ];
+    const told = [];
+    for (const [name, win, env] of PLANTED) told.push([name, signingConfigured(win, env || {}), (await wouldSign(win, env)).signs]);
+    const differ = told.filter(t => t[1] !== t[2]);
+    check(!differ.length && told.filter(t => t[2]).length === 8,
+      '3d signingConfigured agrees with electron-builder on ' + (told.length - differ.length) + ' of ' + told.length
+      + ' planted blocks, 8 of which it signs with: ' + told.slice(0, 5).map(t => t[0] + ' ' + t[1]).join(', ')
+      + (differ.length ? '; DIFFER on ' + differ.map(t => t[0] + ' (ours ' + t[1] + ', electron-builder ' + t[2] + ')').join(', ') : ''));
+
+    /* 3e, the control: the function as it stood before the token routes, judged by the same table,
+       differs exactly where the rehearsal found it did among its five. */
+    const BEFORE = win => { const w = win || {}, st = w.signtoolOptions || {};
+      return !!(st.certificateFile || st.sign || w.azureSignOptions || w.certificateFile || w.sign); };
+    const before = told.slice(0, 5).filter((t, i) => BEFORE(PLANTED[i][1]) !== t[2]).map(t => t[0]);
+    check(before.join(',') === 'sha1,subject',
+      '3e control: the function as it stood differs from electron-builder among the five on ' + (before.join(', ') || 'nothing'));
+  }
 
   /* ---- 4. the judgement of a reading -------------------------------------------------------- */
   const r = (status, timestamped) => ({ file: 'C:/d/etiuda-9.9.9-setup.exe', status, timestamped });
@@ -191,7 +343,7 @@ try {
   };
   const release = (l, argv, cert) => {
     const env = { ...process.env, ETIUDA_RELEASE_HOME_ROOT: l.root };
-    delete env.ETIUDA_CERT;
+    for (const k of SIGNING_VARS) delete env[k];
     if (cert) env.ETIUDA_CERT = cert;
     const res = spawnSync(process.execPath, ['tools/release.mjs', ...argv], { cwd: l.dir, env, encoding: 'utf8', timeout: 60000 });
     return { status: res.status, out: String(res.stdout || '') + String(res.stderr || '') };
@@ -217,7 +369,7 @@ try {
      what stands between it and a sale is printed rather than asserted, so this leg does not
      redden on the day the seller or the certificate arrives. */
   const tree = beforeBuild({ version: /E_VERSION\s*=\s*"([^"]+)"/.exec(fs.readFileSync(path.join(ROOT, 'src', 'modules', 'env.js'), 'utf8'))[1],
-    customer: false, licenceDir: path.join(ROOT, 'shell'), win: winWith(process.env.ETIUDA_CERT) });
+    customer: false, licenceDir: path.join(ROOT, 'shell'), win: winWith(Object.fromEntries(SIGNING_VARS.filter(k => process.env[k] != null).map(k => [k, process.env[k]]))) });
   console.log('  info this tree as it stands is ' + (tree.customer ? 'a CUSTOMER build' : 'a preview')
     + ', and as a customer build it would stop on ' + tree.problems.length + ': ' + tree.problems.join('; '));
 } catch (e) {

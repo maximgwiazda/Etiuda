@@ -79,13 +79,24 @@ export function licenceProblems(dir) {
   return out;
 }
 
-/** Is signing configured in the builder's own `win` block? The certificate file, Azure's
- *  options, or a custom sign hook: any of the three electron-builder signs with. */
-export function signingConfigured(win) {
+/* IS SIGNING CONFIGURED: true for every route electron-builder signs with and for nothing else, which
+   tests/sellable.mjs holds against electron-builder's own code. A .pfx, a store certificate by
+   thumbprint or subject (a token's), a sign hook, a certificate link (win.cscLink, then WIN_CSC_LINK,
+   then CSC_LINK, an empty one shadowing the next), or Artifact Signing with the four fields its
+   schema requires, which then wins over the rest; signExecutable false signs nothing. */
+const ARTIFACT_NEEDS = ['endpoint', 'codeSigningAccountName', 'certificateProfileName', 'publisherName'];
+export function signingConfigured(win, env = process.env) {
   const w = win || {};
+  if (w.signExecutable === false) return false;
+  const az = w.azureSignOptions;
+  if (az != null) return ARTIFACT_NEEDS.every(k => typeof az[k] === 'string' && az[k] !== '');
   const st = w.signtoolOptions || {};
-  return !!(st.certificateFile || st.sign || w.azureSignOptions || w.certificateFile || w.sign);
+  const first = (a, b) => (a != null ? a : b);
+  return !!(st.certificateFile || st.certificateSha1 || st.certificateSubjectName || st.sign
+    || first(w.cscLink, first(env.WIN_CSC_LINK, env.CSC_LINK)));
 }
+const NO_ROUTE = 'no certificate is configured (none of ETIUDA_CERT, ETIUDA_CERT_SHA1, ETIUDA_CERT_SUBJECT'
+  + ' or ETIUDA_SIGNING_* is set), so the installer would be unsigned';
 
 /* WHAT WINDOWS SAYS OF A FILE: the Authenticode status, and whether a timestamp countersigns it.
    Without the timestamp a signature dies with its certificate, and a customer's installer would
@@ -156,6 +167,6 @@ export function beforeBuild({ version, customer, licenceDir, win }) {
   const problems = []
     .concat(versionProblems(version))
     .concat(licenceProblems(licenceDir))
-    .concat(signingConfigured(win) ? [] : ['no certificate is configured (ETIUDA_CERT is unset), so the installer would be unsigned']);
+    .concat(signingConfigured(win) ? [] : [NO_ROUTE]);
   return { customer: asCustomer, problems };
 }
