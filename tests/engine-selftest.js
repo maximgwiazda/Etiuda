@@ -1573,7 +1573,12 @@ try {
    eleven set in this process. 35d is the control: the same calls with the whole environment. */
 {
   const S = require("../tools/sellable.mjs");
-  const VARS = S.SIGNING_VARS.concat(S.KEY_PASSWORD_VARS);
+  /* THE ELEVEN NAMES, WRITTEN OUT HERE ON PURPOSE and not read from the list under test: the legs below
+     plant these, and the stub CLI records against these, so a name the exported list loses is still
+     looked for. 35a compares the two. */
+  const VARS = ["ETIUDA_CERT", "ETIUDA_CERT_SHA1", "ETIUDA_CERT_SUBJECT", "ETIUDA_SIGNING_ENDPOINT", "ETIUDA_SIGNING_ACCOUNT",
+    "ETIUDA_SIGNING_PROFILE", "ETIUDA_SIGNING_PUBLISHER", "CSC_LINK", "WIN_CSC_LINK", "CSC_KEY_PASSWORD", "WIN_CSC_KEY_PASSWORD"];
+  const exported = S.SIGNING_VARS.concat(S.KEY_PASSWORD_VARS);
   const was = {};
   for (const k of VARS) { was[k] = process.env[k]; process.env[k] = "planted-" + k; }
   const wasSetup = process.env.ETIUDA_SETUP_EXE;
@@ -1582,9 +1587,12 @@ try {
     const have = typeof E.unsignedEnv === "function";
     const env = have ? E.unsignedEnv() : {};
     ok(have && VARS.every(k => !(k in env)) && VARS.every(k => process.env[k] === "planted-" + k)
-       && (env.PATH || env.Path) === (process.env.PATH || process.env.Path),
-       "35a E.unsignedEnv() drops all " + VARS.length + " signing variables from a caller's environment that holds them, keeps"
-       + " the rest (PATH) and leaves process.env itself alone: " + (have ? VARS.filter(k => k in env).length + " left" : "E.unsignedEnv is not there"));
+       && (env.PATH || env.Path) === (process.env.PATH || process.env.Path)
+       && exported.slice().sort().join() === VARS.slice().sort().join(),
+       "35a the exported list is exactly the eleven names written out above (" + (exported.filter(k => VARS.indexOf(k) < 0).map(k => "extra " + k)
+       .concat(VARS.filter(k => exported.indexOf(k) < 0).map(k => "missing " + k)).join(", ") || "no difference") + "), and E.unsignedEnv() drops all "
+       + VARS.length + " of them from a caller's environment that holds them, keeps the rest (PATH) and leaves process.env itself alone: "
+       + (have ? VARS.filter(k => k in env).length + " left" : "E.unsignedEnv is not there"));
     const laid = have ? E.unsignedEnv({ ETIUDA_DIST: "out", ETIUDA_CERT: "the caller's own word" }) : {};
     const upper = S.withoutSigning({ csc_link: "x", Path: "p", KEEP_ME: "y" });
     ok(have && laid.ETIUDA_DIST === "out" && laid.ETIUDA_CERT === "the caller's own word"
@@ -1641,9 +1649,9 @@ try {
     const listed = ["tests", "tools"].flatMap(d => fs.readdirSync(path.join(E.ROOT, d)).filter(f => /\.(m?js)$/.test(f)).map(f => d + "/" + f))
       .filter(f => /["']ETIUDA_SIGNING_PROFILE["'],\s*["']ETIUDA_SIGNING_PUBLISHER["']/.test(fs.readFileSync(path.join(E.ROOT, f), "utf8")));
     const release = fs.readFileSync(path.join(E.ROOT, "tools", "release.mjs"), "utf8");
-    ok(listed.join() === "tools/sellable.mjs" && !/unsignedEnv|withoutSigning/.test(release),
-       "35f the list of signing variables is written once, in " + JSON.stringify(listed) + " over tests/ and tools/, and tools/release.mjs does not scrub"
-       + " its own environment, which must keep the route (read from the text of both)");
+    ok(listed.join() === "tests/engine-selftest.js,tools/sellable.mjs" && !/unsignedEnv|withoutSigning/.test(release),
+       "35f the list of signing variables is written in " + JSON.stringify(listed) + " over tests/ and tools/, which is the exported one and 35's own fixed"
+       + " oracle and no third, and tools/release.mjs does not scrub its own environment, which must keep the route (read from the text of both)");
   } finally {
     for (const k of VARS) { if (was[k] === undefined) delete process.env[k]; else process.env[k] = was[k]; }
     if (wasSetup === undefined) delete process.env.ETIUDA_SETUP_EXE; else process.env.ETIUDA_SETUP_EXE = wasSetup;
