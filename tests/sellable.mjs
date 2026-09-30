@@ -34,7 +34,7 @@ import { customerVersion, versionProblems, placeholders, licencePages, licencePr
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 29;
+const EXPECTED = 31;
 
 let asserted = 0, failed = 0;
 const notRun = [];
@@ -279,6 +279,40 @@ try {
     const before = told.slice(0, 5).filter((t, i) => BEFORE(PLANTED[i][1]) !== t[2]).map(t => t[0]);
     check(before.join(',') === 'sha1,subject',
       '3e control: the function as it stood differs from electron-builder among the five on ' + (before.join(', ') || 'nothing'));
+
+    /* 3f and 3g, THE SEAL'S OWN TEETH: two planted future signers, each still naming the packager's vm so
+       that the source-text check passes, swapped onto the real prototype for one run each. F1 also starts a
+       process; F4 also opens an HTTPS connection and swallows the refusal, so it still signs and only the
+       count sees it. Counters set up under the seal count what the planted code itself got through, and both
+       must read nought. The control is the same wrapper with no escape in it, which records nothing. */
+    {
+      const proto = EB.WindowsSignAzureManager.prototype, real = proto.signFile;
+      const cp = require('node:child_process'), net = require('node:net'), https = require('node:https');
+      let flag = false, started = 0, connected = 0;
+      const exec = cp.execFileSync, conn = net.Socket.prototype.connect;
+      cp.execFileSync = function () { if (flag) started++; return exec.apply(this, arguments); };
+      net.Socket.prototype.connect = function () { if (flag) connected++; return conn.apply(this, arguments); };
+      const trial = async act => {
+        const mark = ESCAPES.length;
+        started = 0; connected = 0;
+        proto.signFile = async function (...a) { /* this.packager.vm.value */ flag = true; try { act(); } finally { flag = false; } return real.apply(this, a); };
+        try { const r = await wouldSign(winWith(AZ)); return { r, seen: ESCAPES.splice(mark), started, connected }; }
+        finally { proto.signFile = real; }
+      };
+      let f1, f4, none;
+      try {
+        f1 = await trial(() => cp.execFileSync(process.execPath, ['-e', '']));
+        f4 = await trial(() => { try { https.get('https://signer.invalid/', () => {}).on('error', () => {}); } catch (e) { /* swallowed, as a signer might */ } });
+        none = await trial(() => {});
+      } finally { cp.execFileSync = exec; net.Socket.prototype.connect = conn; }
+      check(f1.seen.includes('child_process.execFileSync') && f1.started === 0 && f1.r.signs === false,
+        '3f a planted signer that names the vm and also starts a process is caught by the seal: it reached for ' + JSON.stringify([...new Set(f1.seen)])
+        + ', started ' + f1.started + ' process(es), and its run failed (signs ' + f1.r.signs + ')');
+      check(f4.seen.includes('https.get') && f4.connected === 0 && f4.r.signs === true && none.seen.length === 0 && none.r.signs === true,
+        '3g a planted signer that names the vm and also opens an HTTPS connection, swallowing the refusal, is caught by the count alone: it reached for '
+        + JSON.stringify([...new Set(f4.seen)]) + ', made ' + f4.connected + ' connection(s) and still signed (' + f4.r.signs + '); CONTROL: the same wrapper with no escape'
+        + ' records ' + none.seen.length + ' and signs (' + none.r.signs + ')');
+    }
   }
 
   /* ---- 4. the judgement of a reading -------------------------------------------------------- */
