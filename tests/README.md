@@ -942,9 +942,10 @@ patched `process.platform`:
 
 - `E.killTree(pid)`, one place rather than six: on Windows the launch and its real descendants
   (`E.launchTree` over `Win32_Process`, a child taken only if created after its parent) each killed
-  by pid with `taskkill /F` and no `/T`, which follows `ParentProcessId` alone and takes a process
-  whose dead parent's pid was reused; `SIGKILL` to the one pid elsewhere, which is all a pid can
-  promise where nothing was spawned detached. Selftest 28g to 28l hold it.
+  by pid with `process.kill` (0.1 ms a pid, where a `taskkill` process was 197 ms) and never with
+  `/T`, which follows `ParentProcessId` alone and takes a process whose dead parent's pid was reused;
+  `SIGKILL` to the one pid elsewhere, which is all a pid can promise where nothing was spawned
+  detached. Selftest 28g to 28n hold it, 28m and 28n by a spy on every door and on `process.kill`.
 - `E.offscreenVerdict`, which off Windows is NOT RUN rather than a failed check: the helper is
   PowerShell and user32 and was never able to look, and a gate red for its platform teaches a
   reader to ignore it.

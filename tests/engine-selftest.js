@@ -987,7 +987,7 @@ try {
     + '}, 900);';
   if (HOST_WIN) {
     r = run(SLEEPER, {});
-    ok(r.code === 0 && /BEFORE true AFTER false/.test(r.out) && /taskkill/.test(r.out),
+    ok(r.code === 0 && /BEFORE true AFTER false/.test(r.out) && /process\.kill/.test(r.out),
        "28c killTree takes a live child down through the Windows arm: " + r.out.trim());
   } else {
     /* A win32 patch would reach the Windows arm and find no taskkill, so the child would live
@@ -1094,17 +1094,23 @@ try {
       + '    if (t.some(function (x) { return /taskkill/i.test(x); })) { calls.push(t);'
       + '      return n in fakes ? fakes[n] : { pid: 0, on: function () { return this; }, unref: function () {} }; }'
       + '    return real.apply(this, arguments); }; });'
+      + 'process.kill = function (pid, sig) { calls.push(["process.kill", String(pid), String(sig)]); return true; };'
       + 'const did = require("./engine.js").killTree(100);'
       + 'console.log("CALLS " + JSON.stringify(calls) + " TAKEN " + JSON.stringify(did.taken || null));';
     const r28m = run(AS_WIN(SPY), {});
     const m = /CALLS (\[.*\]) TAKEN (.*)$/m.exec(r28m.out);
     const calls = m ? JSON.parse(m[1]) : [];
     const kills = calls.filter(c => c.some(x => /taskkill/i.test(x)));
-    const named = kills.map(c => Number(c[c.indexOf("/PID") + 1])).sort((a, b) => a - b);
+    const ends = calls.filter(c => c[0] === "process.kill" && c[2] !== "0");
+    const num = (a, b) => a - b;
+    const named = kills.map(c => Number(c[c.indexOf("/PID") + 1])).concat(ends.map(c => Number(c[1]))).sort(num);
     const withT = kills.filter(c => c.some(x => /^[\/-]t$/i.test(x)));
     ok(r28m.code === 0 && calls.some(c => c[0] === "powershell") && withT.length === 0 && named.join() === "100,200,300,700",
-       "28m killTree over 28g's table asks taskkill for the launch, its children and its grandchild by pid, and no call carries /T"
-       + " or names the orphan 400 or its child 600: " + (m ? m[1] : "(no CALLS line) " + r28m.out.trim().slice(0, 160)));
+       "28m killTree over 28g's table ends the launch, its children and its grandchild by pid, by taskkill or by process.kill, no call carries /T"
+       + " and none names the orphan 400 or its child 600: " + (m ? m[1] : "(no CALLS line) " + r28m.out.trim().slice(0, 160)));
+    ok(r28m.code === 0 && kills.length === 0 && ends.map(c => Number(c[1])).sort(num).join() === "100,200,300,700",
+       "28n and it ends each of them with process.kill and spawns no taskkill for it (" + kills.length + " taskkill call(s), "
+       + ends.length + " process.kill), which is 0.1 ms a pid where a taskkill process was 197 ms");
   }
 
   r = run(AS('const E = require("./engine.js");'

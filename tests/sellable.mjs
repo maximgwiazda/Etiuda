@@ -34,7 +34,7 @@ import { customerVersion, versionProblems, placeholders, licencePages, licencePr
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 31;
+const EXPECTED = 33;
 
 let asserted = 0, failed = 0;
 const notRun = [];
@@ -424,6 +424,23 @@ try {
   const d = release(lab('sellable', '2.0.0', FILLED), [], 'C:/nowhere/etiuda.pfx');
   check(past2(d) && /a CUSTOMER build, and nothing in the tree stops it being sold/.test(d.out),
     '6d a customer version with the page filled and a certificate configured passes gate 2, exit ' + d.status);
+  /* 6e and 6f, GATE 1 AND AN UNTRACKED FILE (board 830). A release is of a commit, so gate 1 refuses a tree with
+     anything uncommitted, an untracked file included. git's own configuration can hide untracked files from
+     `git status` (status.showUntrackedFiles=no, set globally or in the repository), and the gate then passed a tree
+     that was not the commit. 6e is the control: a stray untracked file is refused with git's defaults, exit 1.
+     6f plants the setting in the lab repository's own configuration and wants the same refusal. */
+  const strayLab = (name, hide) => {
+    const l = lab(name, '2.0.0-dev', HOLED);
+    fs.writeFileSync(path.join(l.dir, 'stray-note.txt'), 'not committed\n');
+    if (hide) execFileSync('git', ['config', 'status.showUntrackedFiles', 'no'], { cwd: l.dir });
+    return l;
+  };
+  const stopped1 = run => run.status === 1 && /uncommitted changes; a release is of a commit/.test(run.out) && !/\n\[2\] /.test(run.out);
+  const e = release(strayLab('stray', false), []);
+  check(stopped1(e), '6e CONTROL: an untracked file in the tree is refused at gate 1 under git\'s defaults, exit ' + e.status);
+  const f = release(strayLab('stray-hidden', true), []);
+  check(stopped1(f), '6f the same untracked file is still refused at gate 1 with status.showUntrackedFiles=no in the repository\'s own'
+    + ' configuration, exit ' + f.status + (stopped1(f) ? '' : ' (the gate went on as far as gate ' + ([...f.out.matchAll(/\n\[(\d+)\] /g)].pop() || [0, '?'])[1] + ')'));
   /* The real tree as it stands, through the same function gate 2 calls: a preview today, and
      what stands between it and a sale is printed rather than asserted, so this leg does not
      redden on the day the seller or the certificate arrives. */
