@@ -516,7 +516,7 @@ function buildSetup() {
   if (!fs.existsSync(cli)) throw new Error("electron-builder is not installed; npm install first");
   const t = Date.now();
   execFileSync(process.execPath, [cli, "--win"],
-    { cwd: E.ROOT, env: Object.assign({}, process.env, { ETIUDA_DIST: out }), stdio: "ignore" });
+    { cwd: E.ROOT, env: E.unsignedEnv({ ETIUDA_DIST: out }), stdio: "ignore" });
   const found = listing(out).filter(n => /-setup\.exe$/i.test(n));
   if (found.length !== 1) throw new Error(out + " holds " + found.length + " installers; expected 1");
   return { exe: path.join(out, found[0]), built: Math.round((Date.now() - t) / 100) / 10 };

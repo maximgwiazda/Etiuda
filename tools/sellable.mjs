@@ -79,6 +79,21 @@ export function licenceProblems(dir) {
   return out;
 }
 
+/* THE VARIABLES THAT DECIDE WHETHER A BUILD SIGNS, listed here and nowhere else: the nine that pick a
+   route (electron-builder's own certificate links included) and the two passwords a key is opened with. */
+export const SIGNING_VARS = ['ETIUDA_CERT', 'ETIUDA_CERT_SHA1', 'ETIUDA_CERT_SUBJECT', 'ETIUDA_SIGNING_ENDPOINT',
+  'ETIUDA_SIGNING_ACCOUNT', 'ETIUDA_SIGNING_PROFILE', 'ETIUDA_SIGNING_PUBLISHER', 'CSC_LINK', 'WIN_CSC_LINK'];
+export const KEY_PASSWORD_VARS = ['CSC_KEY_PASSWORD', 'WIN_CSC_KEY_PASSWORD'];
+/** `env` less those eleven, so a build a gate makes never signs, asks for a token's PIN or signs in to Azure.
+ *  Names match case-insensitively on Windows, where the child reads them that way. */
+export function withoutSigning(env = process.env) {
+  const drop = new Set(SIGNING_VARS.concat(KEY_PASSWORD_VARS).map(k => k.toUpperCase()));
+  const same = process.platform === 'win32' ? k => k.toUpperCase() : k => k;
+  const out = {};
+  for (const k of Object.keys(env)) if (!drop.has(same(k))) out[k] = env[k];
+  return out;
+}
+
 /* IS SIGNING CONFIGURED: true for every route electron-builder signs with and for nothing else, which
    tests/sellable.mjs holds against electron-builder's own code. A .pfx, a store certificate by
    thumbprint or subject (a token's), a sign hook, a certificate link (win.cscLink, then WIN_CSC_LINK,

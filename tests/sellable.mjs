@@ -29,7 +29,7 @@ import { spawnSync, execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { customerVersion, versionProblems, placeholders, licencePages, licenceProblems,
-         signingConfigured, signatureProblems, readAuthenticode, signatureVerdict, beforeBuild } from '../tools/sellable.mjs';
+         signingConfigured, signatureProblems, readAuthenticode, signatureVerdict, beforeBuild, SIGNING_VARS } from '../tools/sellable.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -47,9 +47,6 @@ function check(ok, line) {
 function skip(why, legs) { for (let i = 0; i < legs; i++) notRun.push(why); console.log('  NOT RUN ' + why); }
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'etiuda-sellable-'));
-/* Every variable that picks a signing route, electron-builder's own certificate links included. */
-const SIGNING_VARS = ['ETIUDA_CERT', 'ETIUDA_CERT_SHA1', 'ETIUDA_CERT_SUBJECT', 'ETIUDA_SIGNING_ENDPOINT',
-  'ETIUDA_SIGNING_ACCOUNT', 'ETIUDA_SIGNING_PROFILE', 'ETIUDA_SIGNING_PUBLISHER', 'CSC_LINK', 'WIN_CSC_LINK'];
 const EN_FILE = path.join(ROOT, 'shell', 'license_en.txt');
 const EN = fs.readFileSync(EN_FILE, 'utf8');
 /* THE LICENCE TEXT TWO WAYS, whatever the tree holds today, so no leg here fights the day the

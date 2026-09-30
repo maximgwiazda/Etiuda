@@ -1564,6 +1564,92 @@ try {
   }
 }
 
+/* 35. A BUILD THE HARNESS MAKES SIGNS NOTHING (board 827, item A). electron-builder signs a --dir build
+   too, and a token route asks for a PIN in a window nobody sees behind stdio "ignore", where Artifact
+   Signing installs a module and signs in. So the three builds the gates make (shell-smoke, reinstall,
+   update-install) take their environment from E.unsignedEnv, which drops the nine route variables and
+   the two key passwords listed once in tools/sellable.mjs. Each build's own call is cut out of its file
+   and run against a stub electron-builder CLI that records which of the eleven it was handed, with all
+   eleven set in this process. 35d is the control: the same calls with the whole environment. */
+{
+  const S = require("../tools/sellable.mjs");
+  const VARS = S.SIGNING_VARS.concat(S.KEY_PASSWORD_VARS);
+  const was = {};
+  for (const k of VARS) { was[k] = process.env[k]; process.env[k] = "planted-" + k; }
+  const wasSetup = process.env.ETIUDA_SETUP_EXE;
+  delete process.env.ETIUDA_SETUP_EXE;
+  try {
+    const have = typeof E.unsignedEnv === "function";
+    const env = have ? E.unsignedEnv() : {};
+    ok(have && VARS.every(k => !(k in env)) && VARS.every(k => process.env[k] === "planted-" + k)
+       && (env.PATH || env.Path) === (process.env.PATH || process.env.Path),
+       "35a E.unsignedEnv() drops all " + VARS.length + " signing variables from a caller's environment that holds them, keeps"
+       + " the rest (PATH) and leaves process.env itself alone: " + (have ? VARS.filter(k => k in env).length + " left" : "E.unsignedEnv is not there"));
+    const laid = have ? E.unsignedEnv({ ETIUDA_DIST: "out", ETIUDA_CERT: "the caller's own word" }) : {};
+    const upper = S.withoutSigning({ csc_link: "x", Path: "p", KEEP_ME: "y" });
+    ok(have && laid.ETIUDA_DIST === "out" && laid.ETIUDA_CERT === "the caller's own word"
+       && upper.KEEP_ME === "y" && ("csc_link" in upper) === (process.platform !== "win32"),
+       "35b CONTROL: what the caller lays over it is kept, even a signing variable it names itself, and on Windows a name in other"
+       + " case (csc_link) is dropped as the child would read it, elsewhere it is another variable and stays: " + JSON.stringify(Object.keys(upper)));
+
+    /* The stub CLI, the lab it stands in, and the cutting of a call or a function out of a script. */
+    const lab = path.join(tmp, "unsigned-lab"), out = path.join(lab, "out");
+    const cli = path.join(lab, "node_modules", "electron-builder", "out", "cli", "cli.js"), rec = path.join(lab, "recorded.json");
+    fs.mkdirSync(path.dirname(cli), { recursive: true });
+    fs.writeFileSync(cli, ['const fs = require("fs"), names = ' + JSON.stringify(VARS) + ".map(n => n.toUpperCase());",
+      "fs.writeFileSync(" + JSON.stringify(rec) + ", JSON.stringify(Object.keys(process.env).filter(k => names.indexOf(k.toUpperCase()) > -1)));", ""].join("\n"));
+    const realExec = require("child_process").execFileSync;
+    const exec = (cmd, args, opts) => realExec(cmd, args, Object.assign({}, opts, { stdio: "ignore" }));
+    const fakeE = () => Object.assign({}, E, { ROOT: lab, refuse: m => { throw new Error(m); } });
+    const listing = d => (fs.existsSync(d) ? fs.readdirSync(d) : []);
+    const balanced = (text, open) => { let depth = 0;
+      for (let i = open; i < text.length; i++) { if (text[i] === "(") depth++; else if (text[i] === ")" && --depth === 0) return i + 1; }
+      return -1; };
+    const callAt = (file, needle) => { const text = fs.readFileSync(path.join(E.ROOT, file), "utf8"), at = text.indexOf(needle);
+      const from = Math.max(text.lastIndexOf("execFileSync(", at), text.lastIndexOf("spawnSync(", at));
+      return at < 0 || from < 0 ? "" : text.slice(from, balanced(text, text.indexOf("(", from))); };
+    const fnAt = (file, head) => { const text = fs.readFileSync(path.join(E.ROOT, file), "utf8"), at = text.indexOf(head);
+      return at < 0 ? "" : text.slice(at, text.indexOf("\n}\n", at) + 3); };
+    const read = () => (fs.existsSync(rec) ? JSON.parse(fs.readFileSync(rec, "utf8")) : null);
+    const reach = (run) => { fs.rmSync(rec, { force: true }); try { run(); } catch (e) { /* the stub builds no installer, so a caller may refuse after the call */ } return read(); };
+    const SITES = [["tests/shell-smoke.js", '[cli, "--win", "--dir"]', null],
+                   ["tests/reinstall.js", '[cli, "--win"]', "function buildSetup() {"],
+                   ["tests/update-install.js", '[cli, "--win"]', "function newSetup() {"]];
+    const shape = { "tests/shell-smoke.js": text => new Function("execFileSync", "E", "cli", "out", "process", "return " + text)(exec, fakeE(), cli, out, process) };
+    const run = (site, text) => site[2]
+      ? new Function("fs", "path", "E", "LAB", "DRY", "execFileSync", "listing", "process", text + "\nreturn " + site[2].replace(/^function |\(\) \{$/g, "") + "();")(fs, path, fakeE(), lab, false, exec, listing, process)
+      : shape[site[0]](text);
+    const body = (site, swap) => { const t = site[2] ? fnAt(site[0], site[2]) : callAt(site[0], site[1]);
+      return swap ? t.split("E.unsignedEnv(").join("Object.assign({}, process.env, ") : t; };
+    const got = SITES.map(s => { const t = body(s, false); return [s[0], t ? reach(() => run(s, t)) : "not found"]; });
+    ok(got.every(g => Array.isArray(g[1]) && g[1].length === 0),
+       "35c each of the three builds, cut out of its script and run with all " + VARS.length + " signing variables set, reaches electron-builder"
+       + " and hands it none of them: " + got.map(g => g[0].replace("tests/", "") + " " + (Array.isArray(g[1]) ? g[1].length + " of " + VARS.length : g[1] === null ? "never reached the CLI" : g[1])).join(", "));
+    const old = SITES.map(s => { const t = body(s, true); return [s[0], t ? reach(() => run(s, t)) : "not found"]; });
+    ok(old.every(g => Array.isArray(g[1]) && g[1].length === VARS.length),
+       "35d CONTROL: the same three with the whole environment handed over, which is what they did, record all " + VARS.length + " each, so the"
+       + " stub is looking and 35c is the helper's doing: " + old.map(g => g[0].replace("tests/", "") + " " + (Array.isArray(g[1]) ? g[1].length : g[1])).join(", "));
+    const setupExe = path.join(lab, "given-setup.exe");
+    fs.writeFileSync(setupExe, "x");
+    process.env.ETIUDA_SETUP_EXE = setupExe;
+    const given = SITES.filter(s => s[2]).map(s => { const t = body(s, false); return [s[0], t ? reach(() => run(s, t)) : "not found"]; });
+    delete process.env.ETIUDA_SETUP_EXE;
+    ok(given.length === 2 && given.every(g => g[1] === null),
+       "35e and a launch handed ETIUDA_SETUP_EXE builds nothing, so it reaches no CLI at all: " + given.map(g => g[0].replace("tests/", "") + " " + (g[1] === null ? "built nothing" : JSON.stringify(g[1]))).join(", "));
+
+    /* One list, and the release keeps its own environment (text, since the release runs whole gates). */
+    const listed = ["tests", "tools"].flatMap(d => fs.readdirSync(path.join(E.ROOT, d)).filter(f => /\.(m?js)$/.test(f)).map(f => d + "/" + f))
+      .filter(f => /["']ETIUDA_SIGNING_PROFILE["'],\s*["']ETIUDA_SIGNING_PUBLISHER["']/.test(fs.readFileSync(path.join(E.ROOT, f), "utf8")));
+    const release = fs.readFileSync(path.join(E.ROOT, "tools", "release.mjs"), "utf8");
+    ok(listed.join() === "tools/sellable.mjs" && !/unsignedEnv|withoutSigning/.test(release),
+       "35f the list of signing variables is written once, in " + JSON.stringify(listed) + " over tests/ and tools/, and tools/release.mjs does not scrub"
+       + " its own environment, which must keep the route (read from the text of both)");
+  } finally {
+    for (const k of VARS) { if (was[k] === undefined) delete process.env[k]; else process.env[k] = was[k]; }
+    if (wasSetup === undefined) delete process.env.ETIUDA_SETUP_EXE; else process.env.ETIUDA_SETUP_EXE = wasSetup;
+  }
+}
+
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
   fs.rmSync(insideRepo, { recursive: true, force: true });

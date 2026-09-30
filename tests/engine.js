@@ -236,6 +236,12 @@ function shellLaunch(who, exe, args, options) {
   return spawn(exe, args, opts);
 }
 
+/* The environment for a build a gate makes: process.env less the signing routes and key passwords
+   (listed once, in tools/sellable.mjs), so a gate never signs or signs in; `extra` is laid over it. */
+function unsignedEnv(extra) {
+  return Object.assign(require("../tools/sellable.mjs").withoutSigning(process.env), extra || {});
+}
+
 /* ---- THE DESK LOCK, the second half of board item 467 --------------------------------------
  *
  * tests/reinstall.js is the one instrument that borrows the real profile, and on 2026-09-17 it
@@ -1408,7 +1414,7 @@ function offscreenCheck(pid, who, check, notRun) {
 module.exports = { NO_VERDICT, exitOf, ROOT, ENGINE_PATH, FIXTURE_FILE, TREE_FILE, SIBLING_AS, SRC_DIR, APP_ANCHOR,
                    CATALOG_FOLDER_KEY, pinCatalogFolder, OFFSCREEN_KEY, offscreenEnv,
                    REAL_USER_DATA, REAL_DOCUMENTS, underOrEqual, userDataDirOf,
-                   catalogConfinement, shellLaunchRefusal, shellLaunch,
+                   catalogConfinement, shellLaunchRefusal, shellLaunch, unsignedEnv,
                    DESK_LOCK, deskLockHolder, takeDeskLock, releaseDeskLock, pidAlive,
                    statIsZombie,
                    LEASE_HOLDER, takeLeases, releaseLeases, PORT_BLOCKS, portBlock, portSpan, portOverlaps,
