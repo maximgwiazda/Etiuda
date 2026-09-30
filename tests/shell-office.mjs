@@ -2,7 +2,8 @@
  * electron stubbed and node:fs wrapped, so that a file another program is holding can be planted
  * where the shell writes, and a catalog the engine refuses where it reads. No window and no
  * browser: each load is a fresh evaluation of the file, and what the checks call is the file's
- * own functions and IPC handlers; the engine's half of a refusal is its own modules, imported.
+ * own functions and IPC handlers; the engine's half of a refusal is its own modules, imported. Leg 7
+ * calls every IPC channel the shell registers with a message from a page that is not the engine.
  *
  *   node tests/shell-office.mjs        exit code is the number of failed checks, capped at 63
  */
@@ -19,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 38;
+const EXPECTED = 44;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -124,7 +125,7 @@ function loadShell(opts) {
   const ipc = (ch, ...args) => { const e = { sender: { id: 1, once: noop }, senderFrame: ENGINE, returnValue: undefined };
     if (on[ch]) on[ch](e, ...args); return e.returnValue; };
   const ask = (ch, ...args) => invoke[ch]({ sender: { id: 1 }, senderFrame: ENGINE }, ...args);
-  return { api, ctl, said, ipc, ask, UD, DOCS, deskFile: path.join(UD, "desk.json"), power, sent, win, switches };
+  return { api, ctl, said, ipc, ask, on, invoke, UD, DOCS, deskFile: path.join(UD, "desk.json"), power, sent, win, switches };
 }
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 /* Invented from nothing, as every fixture here is. The refused one names a shelf that is not
@@ -524,6 +525,73 @@ try {
     check(stripped !== SRC && bare.switches.length === 0,
       "6b THE CONTROL: the same shell with that one line removed asks for no switch, so 6a can fail: "
       + JSON.stringify(bare.switches));
+  }
+  /* ---- 7. every IPC channel asks who is speaking before it answers ---------------------------
+     The shell is loaded with fromEngine and fromPicker each marking the event they are asked about,
+     and every channel it registers is called once with a message from a page that is not the engine.
+     A channel must have asked, must have answered with a refusal, and must have touched no file. */
+  const SENDER = { engine: "function fromEngine(e) {", picker: "function fromPicker(e) {" };
+  const PICKER_CHANNELS = ["etiuda:pick-close", "etiuda:pick-copy", "etiuda:pick-find", "etiuda:pick-ready"];
+  const sourceChannels = src => src.split("\n").filter(l => /\bipcMain\.(?:on|once|handle|handleOnce)\(/.test(l) && !/^\s*(\/\/|\/?\*)/.test(l)).length;
+  const marked = src => Object.keys(SENDER).reduce((out, k) => {
+    if (out.split(SENDER[k]).length !== 2) throw new Error("shell/main.js does not hold " + SENDER[k] + " exactly once");
+    return out.replace(SENDER[k], SENDER[k] + " (e.__asked = e.__asked || []).push(" + JSON.stringify(k) + ");");
+  }, src);
+  /* Two channels refuse with a neutral answer their caller can read as one: the host's empty description, and the picker's "null". */
+  const NEUTRAL = { "etiuda:host": v => !!v && v.catalogFolder === "" && v.catalogFile === "" && v.backdrop === null,
+                    "etiuda:pick-find": v => v === "null" };
+  const refusal = (v, ch) => v === undefined || v === null || v === false || v === "" || v === "[]"
+    || (Array.isArray(v) && v.length === 0) || (!!v && typeof v === "object" && v.ok === false)
+    || (!!NEUTRAL[ch] && NEUTRAL[ch](v));
+  const STRANGER = () => ({ sender: { id: 9, once: () => {} }, senderFrame: { parent: null, url: "https://example.com/etiuda.html" }, returnValue: undefined });
+  const audit = async src => {
+    const S = loadShell({ src: marked(src) });
+    const channels = [...Object.keys(S.on).map(c => ["on", c]), ...Object.keys(S.invoke).map(c => ["handle", c])];
+    const rows = [];
+    for (const [how, ch] of channels) {
+      const e = STRANGER();
+      let files = 0, out, threw = null;
+      S.ctl.any = () => { files++; };
+      try { out = how === "on" ? (S.on[ch](e, "{}", "{}", "{}"), e.returnValue) : await S.invoke[ch](e, "{}", "{}", "{}"); }
+      catch (x) { threw = x; }
+      S.ctl.any = null;
+      rows.push({ ch, how, asked: e.__asked || [], out, threw, files });
+    }
+    return { rows, registered: channels.length, written: sourceChannels(src), S };
+  };
+  const unasked = A => A.rows.filter(r => !r.asked.length).map(r => r.ch);
+  const unrefused = A => A.rows.filter(r => r.threw || !refusal(r.out, r.ch) || r.files).map(r => r.ch
+    + (r.threw ? " (threw)" : "") + (r.files ? " (" + r.files + " file call(s))" : "") + (r.threw || refusal(r.out, r.ch) ? "" : " (answered " + JSON.stringify(r.out).slice(0, 60) + ")"));
+  {
+    const A = await audit(SRC);
+    check(A.registered >= 20 && A.registered === A.written,
+      "7a THE CONTROL: the channels the shell registers when loaded are all the ones its source writes, so the walk below misses none: "
+      + A.registered + " registered, " + A.written + " written");
+    check(unasked(A).length === 0,
+      "7b every channel asks who is speaking before it answers a page that is not the engine: " + A.rows.length
+      + " channel(s), never asked " + JSON.stringify(unasked(A)));
+    const viaPicker = A.rows.filter(r => r.asked.indexOf("picker") > -1).map(r => r.ch).sort();
+    const notEngine = A.rows.filter(r => r.asked.indexOf("engine") < 0 && PICKER_CHANNELS.indexOf(r.ch) < 0).map(r => r.ch);
+    check(notEngine.length === 0 && JSON.stringify(viaPicker) === JSON.stringify(PICKER_CHANNELS),
+      "7c fromEngine is the question every channel asks except the picker's own four, which ask fromPicker: without it "
+      + JSON.stringify(notEngine) + ", asking the picker " + JSON.stringify(viaPicker));
+    check(unrefused(A).length === 0,
+      "7d and the answer to a stranger is a refusal that has touched no file: " + JSON.stringify(unrefused(A)));
+
+    const live = loadShell({ desk: { eSenderProbe: "1" } }).ipc("etiuda:desk");
+    check(typeof live === "string" && live.indexOf("eSenderProbe") > -1 && !refusal(live, "etiuda:desk"),
+      "7e THE CONTROL: the shell answers the engine's own frame on etiuda:desk with the desk, so a refusal is not all 7d can read: "
+      + (typeof live === "string" ? live.length + " characters" : JSON.stringify(live)));
+
+    /* The check cut from one channel, then asked on another and not obeyed: 7b and 7d must each see one. */
+    const cut = SRC.replace('ipcMain.on("etiuda:window", (e, act) => {\n  if (!fromEngine(e)) return;', 'ipcMain.on("etiuda:window", (e, act) => {');
+    const ignored = SRC.replace('ipcMain.on("etiuda:desk", (e) => {\n  if (!fromEngine(e)) { e.returnValue = null; return; }', 'ipcMain.on("etiuda:desk", (e) => {\n  fromEngine(e);');
+    const has = base => name => base.indexOf(name) < 0;
+    const seenCut = cut !== SRC ? unasked(await audit(cut)).filter(has(unasked(A))) : ["<the plant did not apply>"];
+    const seenIgn = ignored !== SRC ? unrefused(await audit(ignored)).map(s => s.split(" ")[0]).filter(has(unrefused(A).map(s => s.split(" ")[0]))) : ["<the plant did not apply>"];
+    check(JSON.stringify(seenCut) === JSON.stringify(["etiuda:window"]) && JSON.stringify(seenIgn) === JSON.stringify(["etiuda:desk"]),
+      "7f THE CONTROL: with the check cut from etiuda:window 7b names it as the one channel added to its list, and with etiuda:desk asking and ignoring the answer 7d names it as the one added to its own: "
+      + JSON.stringify(seenCut) + ", " + JSON.stringify(seenIgn));
   }
 } catch (e) {
   failed++;
