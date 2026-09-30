@@ -660,7 +660,10 @@ folder named `app.asar` (removes them) and from there with the variable (keeps t
 switches in 8a to 8c and for the two variables in 8d to 8f, and
 `tests/engine-selftest.js` 21h proves the launcher sets the variable with the switch and not
 without, and keeps the caller's environment, and 21i does the same for either test variable. What Chromium then does was measured once, outside the harness, on a windowless Electron
-44.3.0 and 44.4.5: removed before ready, neither switch opens an endpoint.
+44.3.0 and 44.4.5: removed before ready, neither switch opens an endpoint. `tests/shell-smoke.js` 6d to 6f hold that on the real packaged exe: it is launched with
+`--remote-debugging-port=0` and no door (`noDoor`, which 21j holds) and leaves no `DevToolsActivePort` in its own user-data
+folder, with the door the port opens (6e), and with the shell's door test edited out of a copy of the asar it opens with no
+door (6f).
 
 ## The software bill of materials, per release
 
