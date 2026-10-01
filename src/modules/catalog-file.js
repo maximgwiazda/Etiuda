@@ -17,7 +17,7 @@ import { esc } from "./esc.js";
 import { newCatalogId } from "./ids.js";
 import { TAB_KEY, tabSaveTimer } from "./tabs.js";
 import { t, catalogCountsLine, toast, toastRefusal } from "./ui-lang.js";
-import { BASE_CATS, pack, whoOptions, savePack, flushStats } from "./pack.js";
+import { BASE_CATS, BASE_M, pack, whoOptions, savePack, flushStats, retiredCards } from "./pack.js";
 import { catIconKey, catSlot } from "./cat-identity.js";
 import { normalizeCardIntents } from "./card-intent.js";
 import { intentIdAt, intentIdxFromId } from "./intent-id.js";
@@ -86,8 +86,15 @@ function currentCatalog(){
   /* Cards are emitted in pack.cardOrder - the user's own arrangement IS the catalog's
      order. NOT the rendered order: the on-screen list layers favourites, intent bands and
      search rank on top, and baking those in would mean starring a card moved its house. */
-  const list=(cards||[]).slice()
-    .sort((a,b)=>cardOrderIdx(a&&a.id)-cardOrderIdx(b&&b.id))
+  const shown=(cards||[]).slice().sort((a,b)=>cardOrderIdx(a&&a.id)-cardOrderIdx(b&&b.id));
+  /* A retired card travels asleep, where the edition had it: after the card that stood before it. */
+  const asleep=new Map(retiredCards().map(m=>[m.id,m]));
+  let anchor=null;
+  if(asleep.size) BASE_M.forEach(b=>{
+    if(asleep.has(b.id)) shown.splice(anchor==null?0:shown.findIndex(m=>m.id===anchor)+1,0,asleep.get(b.id));
+    if(asleep.has(b.id) || shown.some(m=>m.id===b.id)) anchor=b.id;
+  });
+  const list=shown
     .map(m=>{
     const o=cardToExportPlain(m);
     const idx=normalizeCardIntents(m)

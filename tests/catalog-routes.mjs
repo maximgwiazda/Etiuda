@@ -307,6 +307,75 @@ check("18 control: the plain payload carries none of the new keys through either
   check("24 and every card of it keeps the keys it always had, in the order it always had them",
     !!bare && bare.cards.every(c => Object.keys(c).join(",") === "id,shelf,title,body,bodyShape"),
     bare ? Object.keys(bare.cards[0]).join(",") : "nothing");
+  /* A RETIRED CARD CARRIED ASLEEP (C07, choice 4a). Three editions put down one after another over one
+     layer, through the real carry and the real rebuild: the card starred, edited and copied five times,
+     then retired, then back. What the list holds, what the layer keeps and what an export writes. */
+  const FV = await import(MOD("favourites.js"));
+  const CC = await import(MOD("card-carry.js"));
+  const RB = await import(MOD("rebuild.js"));
+  const CMD = await import(MOD("card-model.js"));
+  HK.hooks.syncFavouritesMeta = FV.syncFavouritesMeta;
+  const edition = (retire, drop) => {
+    const d = doc();
+    (retire || []).forEach(id => { d.cards.find(c => c.id === id).retired = true; });
+    d.cards = d.cards.filter(c => (drop || []).indexOf(c.id) < 0);
+    return d;
+  };
+  const land = d => {
+    const cat = CT.parseCatalogFile(JSON.stringify(d));
+    CC.carryCardLayer(cat);
+    ST.lsSet(CT.E_CATALOG_STORE, JSON.stringify(cat), true);
+    CT.eApplyCatalog(cat);
+    PK.pack.baseCards = JSON.parse(JSON.stringify(cat.cards));
+    RB.rebuildCards();
+  };
+  const fresh = () => {
+    PK.resetPack(); land(edition());
+    Object.assign(PK.pack, { favourites: ["c-b", "c-c"], overrides: { "c-b": { en: "my edit" } }, useCounts: { "c-b": 5, "c-c": 2 } });
+    RB.rebuildCards();
+  };
+  const listed = () => AP.cards.map(c => c.id).join(",");
+  const layer = () => JSON.stringify([PK.pack.favourites, PK.pack.overrides, PK.pack.useCounts, PK.pack.custom.length]);
+  const LAYER = JSON.stringify([["c-b", "c-c"], { "c-b": { en: "my edit" } }, { "c-b": 5, "c-c": 2 }, 0]);
+  const bodyOf = id => ((AP.cards.find(c => c.id === id) || {}).en);
+  fresh();
+  const before = listed() + "|" + bodyOf("c-b");
+  land(edition(["c-b"]));
+  check("25 an edition that retires a card leaves it in no list and out of every lookup by id",
+    before === "c-a,c-b,c-c|my edit" && listed() === "c-a,c-c" && CMD.findCard("c-b") === null,
+    "list before " + before + ", after " + listed() + ", findCard " + String(CMD.findCard("c-b")));
+  check("26 and its star, its edit and its count are exactly as they were, with no own card made for the edit",
+    layer() === LAYER, layer());
+  land(edition());
+  check("27 the edition after it, with the flag gone, returns the card whole: listed, starred, edited, counted five times",
+    listed() === "c-a,c-b,c-c" && bodyOf("c-b") === "my edit" && layer() === LAYER && PK.pack.useCounts["c-b"] === 5,
+    listed() + " | " + bodyOf("c-b") + " | " + layer());
+  fresh(); land(edition(["c-b"]));
+  const asleep = await (async () => { written = null; await CF.exportCatalog(); return written === null ? null : JSON.parse(written); })();
+  check("28 a desk's export carries the retired card, flagged, with the desk's edit, where the edition had it",
+    !!asleep && asleep.cards.map(c => c.id).join(",") === "c-a,c-b,c-c" && asleep.cards[1].retired === true
+    && asleep.cards[1].body.en === "my edit" && !("retired" in asleep.cards[0]) && V2R.v2Problems(asleep).length === 0,
+    asleep ? asleep.cards.map(c => c.id + (c.retired ? "*" : "")).join(",") : "nothing");
+  fresh(); land(edition(["c-a", "c-c"]));
+  const ends = await (async () => { written = null; await CF.exportCatalog(); return written === null ? null : JSON.parse(written); })();
+  check("29 and a card retired at the head or the foot of the edition is written at the head or the foot",
+    !!ends && ends.cards.map(c => c.id + (c.retired ? "*" : "")).join(",") === "c-a*,c-b,c-c*",
+    ends ? ends.cards.map(c => c.id + (c.retired ? "*" : "")).join(",") : "nothing");
+  fresh(); PK.pack.removed = ["c-b"]; land(edition(["c-b"]));
+  const gone = await (async () => { written = null; await CF.exportCatalog(); return written === null ? null : JSON.parse(written); })();
+  check("30 a card this desk had removed, which the edition then retires, stays removed: out of the export as it was",
+    !!gone && gone.cards.map(c => c.id).join(",") === "c-a,c-c",
+    gone ? gone.cards.map(c => c.id).join(",") : "nothing");
+  fresh(); land(edition([], ["c-c"]));
+  check("31 control: an edition that drops the card instead, unedited, takes its star and its count, as it always did",
+    listed() === "c-a,c-b" && PK.pack.favourites.join(",") === "c-b" && !("c-c" in PK.pack.useCounts),
+    listed() + " | " + PK.pack.favourites.join(",") + " | " + JSON.stringify(PK.pack.useCounts));
+  fresh();
+  const plain = await (async () => { written = null; await CF.exportCatalog(); return written === null ? null : JSON.parse(written); })();
+  check("32 control: with nothing retired the export is the cards the list holds, in its order, none flagged",
+    !!plain && plain.cards.map(c => c.id).join(",") === "c-a,c-b,c-c" && plain.cards.every(c => !("retired" in c)),
+    plain ? plain.cards.map(c => c.id).join(",") : "nothing");
+  HK.hooks.syncFavouritesMeta = () => {};
   // The toast's own timer fires after the check, against the stand-in, and is let run its course.
   await new Promise(r => setTimeout(r, 2000));
   delete globalThis.document; delete globalThis.window; delete globalThis.innerHeight; delete globalThis.getComputedStyle;

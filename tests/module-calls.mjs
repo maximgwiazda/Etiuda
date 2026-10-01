@@ -1689,6 +1689,35 @@ const CARD_B = {
   check("favourites.js", "and an empty desk prunes nothing either",
     () => withDesk([], ["k1", "departed"],
       () => { F.syncFavouritesMeta(); return eq(P.pack.favourites.join(","), "k1,departed"); }));
+
+  /* A RETIRED CARD IS ASLEEP (C07): in no list, yet alive for everything personal that follows a
+     card. The two catalogs differ by the flag alone, so the flag is what each leg holds. */
+  const CMD = await import(MOD("card-model.js"));
+  const asleepDesk = (flag, fn) => {
+    const hadBase = P.BASE_M.slice(), hadCounts = P.pack.useCounts, hadAt = P.pack.useAt, hadRemoved = P.pack.removed;
+    P.BASE_M.length = 0;
+    P.BASE_M.push({ id: "k1", c: "bay" }, Object.assign({ id: "k2", c: "bay" }, flag ? { retired: 1 } : {}));
+    P.pack.useCounts = { k1: 2, k2: 5, departed: 3 }; P.pack.useAt = { k2: "2026-09-01" }; P.pack.removed = [];
+    try { return withDesk([{ id: "k1", c: "bay" }], ["k1", "k2", "departed"], fn); }
+    finally { P.BASE_M.length = 0; hadBase.forEach(m => P.BASE_M.push(m));
+      P.pack.useCounts = hadCounts; P.pack.useAt = hadAt; P.pack.removed = hadRemoved; }
+  };
+  check("favourites.js", "a retired card keeps its star and its counts while it is in no list, and a departed one loses both",
+    () => asleepDesk(true, () => {
+      F.syncFavouritesMeta();
+      return eq(P.pack.favourites.join(",") + "|" + JSON.stringify(P.pack.useCounts) + "|" + JSON.stringify(P.pack.useAt),
+        'k1,k2|{"k1":2,"k2":5}|{"k2":"2026-09-01"}');
+    }));
+  check("favourites.js", "CONTROL: the same card with no flag is a departed one, and its star and counts go",
+    () => asleepDesk(false, () => {
+      F.syncFavouritesMeta();
+      return eq(P.pack.favourites.join(",") + "|" + JSON.stringify(P.pack.useCounts) + "|" + JSON.stringify(P.pack.useAt),
+        'k1|{"k1":2}|{}');
+    }));
+  check("card-model.js", "a retired card is not found by id, so the picker and a recent copy treat it as absent",
+    () => asleepDesk(true, () => eq(String(CMD.findCard("k2")) + "|" + (CMD.findCard("k1") || {}).id, "null|k1")));
+  check("card-model.js", "CONTROL: the same card with no flag is found where the catalog holds it",
+    () => asleepDesk(false, () => eq((CMD.findCard("k2") || {}).id, "k2")));
 }
 
 /* ------------------------------------------------------------------ rail-list.js
@@ -1855,6 +1884,27 @@ const CARD_B = {
         const own = P.pack.custom[0] || {};
         return eq((own.intents || []).join(",") + "|" + asideEn(own.id), "t:t-first|a request reworded later");
       });
+    check("card-carry.js", "an own card rescued from a card that was retired is not born retired, and keeps its words",
+      () => {
+        clear(); applyOld();
+        P.BASE_M.push({ id: "c-gone", c: "gen", t: "Invented gone", en: "x", retired: 1, commits: 1 });
+        P.pack.overrides = { "c-gone": { en: "an edit" } };
+        CC.carryCardLayer(arriving());
+        const own = P.pack.custom[0] || {};
+        return eq([P.pack.custom.length, /^u:/.test(own.id || ""), own.en, "retired" in own, own.commits].join("|"),
+          "1|true|an edit|false|1");
+      });
+    check("card-carry.js", "CONTROL: an edition that keeps the card as retired makes no own card, and the edit, star and count stay where they were",
+      () => {
+        clear(); applyOld();
+        P.BASE_M.push({ id: "c-gone", c: "gen", t: "Invented gone", en: "x", retired: 1 });
+        Object.assign(P.pack, { overrides: { "c-gone": { en: "an edit" } }, favourites: ["c-gone"], useCounts: { "c-gone": 5 } });
+        const alive = CC.carryCardLayer(arriving([{ id: "c-gone", c: "gen", t: "Invented gone", en: "x", retired: true }]));
+        const got = [P.pack.custom.length, JSON.stringify(P.pack.overrides), P.pack.favourites.join(","), P.pack.useCounts["c-gone"],
+          alive.has("c-gone")].join("|");
+        P.pack.useCounts = {};
+        return eq(got, '0|{"c-gone":{"en":"an edit"}}|c-gone|5|true');
+      });
     check("card-carry.js", "and the links the edit itself chose are set aside under that own card too",
       () => {
         clear(); applyOld();
@@ -2005,6 +2055,19 @@ const CARD_B = {
         const told = boot([]);
         return eq(Object.keys(P.pack.overrides).sort().join(",") + "|" + (P.pack.custom || []).length + "|" + told,
           "c-kept,c-retired|0|0");
+      });
+    /* The desk's own save keeps whole base cards (pack.js keepEditBases), so a flag the edition set
+       rides into storage, and the edition after that drops the card and rescues from that copy. */
+    check("card-carry.js", "an edit rescued at boot from the stored copy of a card that slept is an own card that is awake",
+      () => {
+        clear(); edition([EDITION_1[0], Object.assign({}, EDITION_1[1], { retired: 1 })]);
+        P.pack.overrides = { "c-retired": { en: "the desk's rewrite" } };
+        P.savePack();
+        const stored = P.pack.editBases["c-retired"] || {};
+        boot([EDITION_1[0]]);
+        const own = (P.pack.custom || [])[0] || {};
+        return eq([stored.retired, P.pack.custom.length, own.en, own.pl, "retired" in own].join("|"),
+          "1|1|the desk's rewrite|po polsku|false");
       });
   } finally {
     clear(); STK.M.length = 0; P.pack.baseCards = null; P.rebuildBaseCards();

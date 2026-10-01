@@ -1,6 +1,6 @@
 import { findCard } from "./card-model.js";
 import { intentCount } from "./content-model.js";
-import { pack, savePack, packSnapshot, packUndoFor, ePackEpoch } from "./pack.js";
+import { pack, savePack, packSnapshot, packUndoFor, ePackEpoch, retiredCards } from "./pack.js";
 import { drawIntentRail } from "./rail-list.js";
 import { toast, offerUndo } from "./ui-lang.js";
 import { drawPills, saveTabSession, tabs } from "./tabs.js";
@@ -211,6 +211,8 @@ function syncFavouritesMeta(){
      a catalog: after an eject they are all that is left, and pruning against just them drops
      every star the catalog will bring back. */
   const alive=new Set((cards||[]).map(m=>m&&m.id).filter(Boolean));
+  // A retired card is asleep, not departed: its star and tallies wait for it.
+  retiredCards().forEach(m=>alive.add(m.id));
   const hasCatalog=(cards||[]).some(m=>m&&!m._custom);
   if(hasCatalog) pack.favourites=(pack.favourites||[]).filter(id=>alive.has(id));
   if(hasCatalog) ["useCounts","useAt"].forEach(n=>{

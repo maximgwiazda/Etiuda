@@ -191,6 +191,7 @@ function rescueEdits(alive,pin,lost){
     const full=Object.assign({},base,ov[id]), own={};
     Object.keys(full).forEach(k=>{ if(k.charAt(0)!=="_") own[k]=full[k]; });
     own.id=uid("u:");
+    delete own.retired;   // the base may have slept; an own card is never born asleep
     if(lost[id]){ lost[own.id]=lost[id]; delete lost[id]; }
     if(own.intents) own.intents=pin(own.id,own.intents);
     pack.custom.push(own);

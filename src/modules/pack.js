@@ -45,6 +45,13 @@ function rebuildBaseCards(){
     BASE_M=snapshotStockBaseCards();
   }
 }
+/* A retired card sleeps: out of the list and every search, still the card its star, edit and counts
+   belong to. The card as the list would have shown it; one this desk removed stays removed. */
+function retiredCards(){
+  const removed=new Set(pack.removed||[]), ov=pack.overrides||{};
+  return BASE_M.filter(b=>b.retired && !removed.has(b.id))
+    .map(b=>ov[b.id] ? Object.assign({},b,ov[b.id],{id:b.id,_base:1,_overridden:1}) : Object.assign({},b));
+}
 function emptyPack(){
   return {v:1,hidden:[],removed:[],removedCats:[],overrides:{},custom:[],catLabels:{},catLabelsPl:{},customCats:{},
     catRoles:{},catIcons:{},catColors:{},useCounts:{},useAt:{},intentCounts:{},searchMisses:0,langs:{en:0,pl:0},
@@ -570,6 +577,6 @@ export {
   savePack, saveStats, flushStats,
   packSnapshot,
   packUndoFor,
-  BASE_CATS, BASE_M, catalogCardId, rebuildBaseCards, pack, loadPack, resetPack,
+  BASE_CATS, BASE_M, catalogCardId, rebuildBaseCards, retiredCards, pack, loadPack, resetPack,
   showPackMigrationWarning, syncSaveNotice, showDeskNotices, whoOptions, isFavourite, isIntentFavourite,
 };

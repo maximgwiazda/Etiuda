@@ -4552,6 +4552,7 @@ What you type stays in this browser only.`;
     packUndoFor: () => packUndoFor,
     rebuildBaseCards: () => rebuildBaseCards,
     resetPack: () => resetPack,
+    retiredCards: () => retiredCards,
     savePack: () => savePack,
     saveStats: () => saveStats,
     showDeskNotices: () => showDeskNotices,
@@ -6811,6 +6812,10 @@ What you type stays in this browser only.`;
       BASE_M = snapshotStockBaseCards();
     }
   }
+  function retiredCards() {
+    const removed = new Set(pack.removed || []), ov = pack.overrides || {};
+    return BASE_M.filter((b) => b.retired && !removed.has(b.id)).map((b) => ov[b.id] ? Object.assign({}, b, ov[b.id], { id: b.id, _base: 1, _overridden: 1 }) : Object.assign({}, b));
+  }
   function emptyPack() {
     return {
       v: 1,
@@ -8210,7 +8215,7 @@ What you type stays in this browser only.`;
 
   // src/modules/card-model.js
   function findCard(id) {
-    return cards.find((m) => m.id === id) || BASE_M.find((m) => m.id === id) || (pack.custom || []).find((m) => m.id === id) || null;
+    return cards.find((m) => m.id === id) || BASE_M.find((m) => m.id === id && !m.retired) || (pack.custom || []).find((m) => m.id === id) || null;
   }
   function baseCard(id) {
     return BASE_M.find((m) => m.id === id) || null;
@@ -15359,7 +15364,7 @@ What you type stays in this browser only.`;
     const ov = pack.overrides || {};
     setCards([]);
     BASE_M.forEach((base) => {
-      if (removed.has(base.id)) return;
+      if (removed.has(base.id) || base.retired) return;
       const o = ov[base.id];
       const m = o ? Object.assign({}, base, o, { id: base.id, _base: 1, _overridden: 1 }) : Object.assign({}, base);
       if (hidden.has(base.id)) m._hidden = 1;
@@ -15540,6 +15545,7 @@ What you type stays in this browser only.`;
   }
   function syncFavouritesMeta() {
     const alive = new Set((cards || []).map((m) => m && m.id).filter(Boolean));
+    retiredCards().forEach((m) => alive.add(m.id));
     const hasCatalog = (cards || []).some((m) => m && !m._custom);
     if (hasCatalog) pack.favourites = (pack.favourites || []).filter((id) => alive.has(id));
     if (hasCatalog) ["useCounts", "useAt"].forEach((n) => {
@@ -18855,6 +18861,7 @@ What you type stays in this browser only.`;
         if (k.charAt(0) !== "_") own[k] = full[k];
       });
       own.id = uid("u:");
+      delete own.retired;
       if (lost[id]) {
         lost[own.id] = lost[id];
         delete lost[id];
@@ -18988,7 +18995,14 @@ What you type stays in this browser only.`;
     keep.forEach((oldIdx, newIdx) => {
       remap[oldIdx] = newIdx;
     });
-    const list2 = (cards || []).slice().sort((a, b) => cardOrderIdx(a && a.id) - cardOrderIdx(b && b.id)).map((m) => {
+    const shown2 = (cards || []).slice().sort((a, b) => cardOrderIdx(a && a.id) - cardOrderIdx(b && b.id));
+    const asleep = new Map(retiredCards().map((m) => [m.id, m]));
+    let anchor = null;
+    if (asleep.size) BASE_M.forEach((b) => {
+      if (asleep.has(b.id)) shown2.splice(anchor == null ? 0 : shown2.findIndex((m) => m.id === anchor) + 1, 0, asleep.get(b.id));
+      if (asleep.has(b.id) || shown2.some((m) => m.id === b.id)) anchor = b.id;
+    });
+    const list2 = shown2.map((m) => {
       const o = cardToExportPlain(m);
       const idx = normalizeCardIntents(m).map((id) => intentIdxFromId(id)).filter((i) => i >= 0 && remap[i] != null).map((i) => remap[i]);
       if (idx.length) o.intents = idx;

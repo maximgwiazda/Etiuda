@@ -57,7 +57,7 @@ function rebuildCards(){
   const ov=pack.overrides||{};
   setCards([]);
   BASE_M.forEach(base=>{
-    if(removed.has(base.id)) return;
+    if(removed.has(base.id) || base.retired) return;   // retired: asleep, see retiredCards
     const o=ov[base.id];
     const m=o ? Object.assign({},base,o,{id:base.id,_base:1,_overridden:1})
               : Object.assign({},base);

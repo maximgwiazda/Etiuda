@@ -10,7 +10,8 @@ import { eMoveRecent } from "./recency.js";
 /* CONTRACT: the search order is the answer. The list as it stands outranks the catalog it was
    built from, and both outrank the pack's customs. */
 function findCard(id){
-  return cards.find(m=>m.id===id)||BASE_M.find(m=>m.id===id)
+  // A retired card is not found here: the picker and every id lookup treat it as absent.
+  return cards.find(m=>m.id===id)||BASE_M.find(m=>m.id===id&&!m.retired)
     ||(pack.custom||[]).find(m=>m.id===id)||null;
 }
 function baseCard(id){ return BASE_M.find(m=>m.id===id)||null; }
