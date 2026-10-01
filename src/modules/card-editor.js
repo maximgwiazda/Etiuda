@@ -1,4 +1,4 @@
-import { cardFieldKey, cardStorageKeys, cardRequiredKeys, CARD_TEXT_FIELDS, CARD_FLAG_BOX, CARD_FLAGS, CARD_BOOL_FLAGS, paxVocOn, CARD_SHARED_FIELDS } from "./card-fields.js";
+import { cardFieldKey, cardStorageKeys, cardRequiredKeys, CARD_TEXT_FIELDS, CARD_FLAG_BOX, CARD_FLAGS, CARD_BOOL_FLAGS, carryUnwritten, paxVocOn, CARD_SHARED_FIELDS } from "./card-fields.js";
 import { baseCard, cardText, cardTitle, findCard, overrideAgainstBase } from "./card-model.js";
 import { catSortIdx } from "./card-order.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
@@ -550,6 +550,7 @@ function openCardEditor(id, presetCat, fromManage){
          partial and Object.assign keeps whatever the base declares. */
       const entry=Object.assign({id:isNew?(savedId=uid("u:")):(id),c},text,
         {alt,seq,firstOnly,paxVoc,allIntents,intentTop,lockLang,intents:intentsStored});
+      carryUnwritten(entry, isNew ? null : pack.custom.find(x=>x&&x.id===id));
       cardStorageKeys().forEach(f=>{
         if(!entry[f] && cardRequiredKeys().indexOf(f)<0) delete entry[f];
       });

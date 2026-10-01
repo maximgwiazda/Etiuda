@@ -252,9 +252,12 @@ const eq = (got, want) => got === want ? true
     () => eq(F.paxVocOn({ firstOnly: 1 }), true));
   check("card-fields.js", "paxVoc set to 0 overrides firstOnly, the case with no other spelling",
     () => eq(F.paxVocOn({ firstOnly: 1, paxVoc: 0 }), false));
-  check("card-fields.js", "the boolean flag list excludes paxVoc and keeps the rest",
+  check("card-fields.js", "the boolean flag list excludes paxVoc, keeps the rest of the boxed flags and adds the unboxed ones",
     () => eq(F.CARD_BOOL_FLAGS.indexOf("paxVoc") === -1
-      && F.CARD_BOOL_FLAGS.length === F.CARD_FLAGS.length - 1, true));
+      && F.CARD_BOOL_FLAGS.length === F.CARD_FLAGS.length - 1 + F.CARD_UNBOXED_FLAGS.length
+      && F.CARD_UNBOXED_FLAGS.every(f => F.CARD_BOOL_FLAGS.indexOf(f) > -1 && !(f in F.CARD_FLAG_BOX)), true));
+  check("card-fields.js", "commits is a flag with no box on screen, so no editor can have unticked it",
+    () => eq(F.CARD_UNBOXED_FLAGS.join(","), "commits"));
 }
 
 /* ------------------------------------------------------------------ storage.js
@@ -1490,6 +1493,73 @@ const CARD_B = {
     CM.setContentLangs(hadLangs); AS.putLang(hadLang); AS.setCards(hadCards);
     P.pack.custom = []; delete HK.hooks.rebuildCards;
   }
+}
+
+/* ------------------------------------------------------------------ the format pass (board 834),
+   in card-model.js and macros-json.js: a chain and a seal on a card, carried through the override
+   and through the plain export, with a field the build does not name riding along whole. */
+{
+  const M = await import(MOD("card-model.js"));
+  const J = await import(MOD("macros-json.js"));
+  const base = () => ({ id: "c-one", c: "gen", t: "One", en: "Body.", next: [{ to: "c-two" }] });
+  const onto = extra => M.overrideAgainstBase(base(), Object.assign(base(), extra));
+  check("card-model.js", "ticking commits on a card that lacks it is an override of commits alone",
+    () => eq(JSON.stringify(M.overrideAgainstBase({ id: "c-one", c: "gen", t: "One", en: "Body." },
+      { id: "c-one", c: "gen", t: "One", en: "Body.", commits: 1 })), "{\"commits\":1}"));
+  check("card-model.js", "unticking it writes a 0, which is what lets the base's 1 be overridden",
+    () => eq(JSON.stringify(M.overrideAgainstBase({ id: "c-one", c: "gen", t: "One", en: "Body.", commits: 1 },
+      { id: "c-one", c: "gen", t: "One", en: "Body.", commits: 0 })), "{\"commits\":0}"));
+  check("card-model.js", "CONTROL: a save that does not hold commits has not unticked it",
+    () => eq(JSON.stringify(M.overrideAgainstBase({ id: "c-one", c: "gen", t: "One", en: "Body.", commits: 1 },
+      { id: "c-one", c: "gen", t: "One", en: "Body." })), "{}"));
+  check("card-model.js", "a chain that differs from the base's is stored whole, in order",
+    () => eq(JSON.stringify(onto({ next: [{ to: "c-three" }, { to: "c-two" }] })),
+      "{\"next\":[{\"to\":\"c-three\"},{\"to\":\"c-two\"}]}"));
+  check("card-model.js", "the same chain in another order is a difference",
+    () => eq(JSON.stringify(M.overrideAgainstBase({ id: "c-one", c: "gen", t: "One", en: "Body.", next: [{ to: "a" }, { to: "b" }] },
+      { id: "c-one", c: "gen", t: "One", en: "Body.", next: [{ to: "b" }, { to: "a" }] })),
+      "{\"next\":[{\"to\":\"b\"},{\"to\":\"a\"}]}"));
+  check("card-model.js", "a chain emptied on purpose is stored as an empty list, which overrides the base's",
+    () => eq(JSON.stringify(onto({ next: [] })), "{\"next\":[]}"));
+  check("card-model.js", "CONTROL: a chain that differs only in a key a later build adds to an entry is no difference",
+    () => eq(JSON.stringify(onto({ next: [{ to: "c-two", label: "later" }] })), "{}"));
+  check("card-model.js", "CONTROL: a save that does not hold a chain says nothing about it",
+    () => eq(JSON.stringify(M.overrideAgainstBase(base(), { id: "c-one", c: "gen", t: "One", en: "Body." })), "{}"));
+  check("card-model.js", "CONTROL: a card with none of the new fields stores what it always stored, one reworded field",
+    () => eq(JSON.stringify(M.overrideAgainstBase({ id: "c-one", c: "gen", t: "One", en: "Body." },
+      { id: "c-one", c: "gen", t: "One", en: "Reworded." })), "{\"en\":\"Reworded.\"}"));
+
+  const F2 = await import(MOD("card-fields.js"));
+  const was = { id: "u:1", c: "gen", t: "Old", k: "old words", commits: 1, retired: 1, next: [{ to: "c-two" }], ext: { src: "x" } };
+  check("card-fields.js", "a replaced custom entry takes commits, retired, its chain and the carried fields from the one it replaces",
+    () => eq(JSON.stringify(F2.carryUnwritten({ id: "u:1", c: "gen", t: "New" }, was)),
+      "{\"id\":\"u:1\",\"c\":\"gen\",\"t\":\"New\",\"commits\":1,\"next\":[{\"to\":\"c-two\"}],\"retired\":1,\"ext\":{\"src\":\"x\"}}"));
+  check("card-fields.js", "CONTROL: a text field the save emptied is not brought back, and no entry to replace changes nothing",
+    () => eq(JSON.stringify([F2.carryUnwritten({ id: "u:1", c: "gen", t: "New" }, was).k, F2.carryUnwritten({ id: "u:2" }, null)]),
+      "[null,{\"id\":\"u:2\"}]"));
+  const rich = { id: "c-one", c: "gen", t: "One", en: "Body.", retired: 1, commits: 1,
+    next: [{ to: "c-two", label: "later" }], ext: { src: "a note", future: { a: [1] } } };
+  const plain = J.cardToExportPlain(rich);
+  check("macros-json.js", "a card's export carries retired, commits, its chain and the fields the build does not name",
+    () => eq(JSON.stringify([plain.retired, plain.commits, plain.next, plain.ext]),
+      JSON.stringify([1, 1, rich.next, rich.ext])));
+  check("macros-json.js", "and reads them back, so an import loses none",
+    () => {
+      const back = J.parseMacrosData({ cards: [plain] })[0];
+      return eq(JSON.stringify([back.retired, back.commits, back.next, back.ext]),
+        JSON.stringify([1, 1, rich.next, rich.ext]));
+    });
+  check("macros-json.js", "what is carried is a copy, so a later edit of the export does not reach the card",
+    () => { plain.ext.future.a.push(2); plain.next[0].to = "x"; return eq(JSON.stringify([rich.ext.future.a, rich.next[0].to]), "[[1],\"c-two\"]"); });
+  check("macros-json.js", "an entry of a chain with no to is not read",
+    () => eq(JSON.stringify(J.parseMacrosData({ cards: [Object.assign({}, J.cardToExportPlain({ id: "c-one", c: "gen", t: "One", en: "B." }),
+      { next: [{}, { to: "" }, null, { to: "c-two" }] })] })[0].next), "[{\"to\":\"c-two\"}]"));
+  check("macros-json.js", "CONTROL: a card with none of them exports and imports none of the keys",
+    () => {
+      const p = J.cardToExportPlain({ id: "c-one", c: "gen", t: "One", en: "B." });
+      const back = J.parseMacrosData({ cards: [p] })[0];
+      return eq(["retired", "commits", "next", "ext"].filter(k => k in p || k in back).join(","), "");
+    });
 }
 
 /* ------------------------------------------------------------------ list-pointer.js

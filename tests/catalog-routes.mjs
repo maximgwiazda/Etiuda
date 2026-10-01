@@ -178,6 +178,140 @@ check("12 and two cards with one title are two cards, not one",
     return two.length === 2 && two[0].id !== two[1].id;
   })(), "distinct ids from one title");
 
+/* THE FORMAT PASS (board 834). Every new field, and one unknown field on a card and one in the header,
+   put through both routes into the runtime and back out through the writer. The whitelist is the
+   reader that dropped them before this, so the proof is the answer of the real modules. */
+const V2 = await import(MOD("catalog-v2.js") + "?probe=" + (++probes));
+const HEX = c => c.repeat(64);
+// Sorted keys, because the order of a JSON object is no part of a catalog.
+const canon = v => (v === null || typeof v !== "object") ? JSON.stringify(v)
+  : Array.isArray(v) ? "[" + v.map(canon).join(",") + "]"
+  : "{" + Object.keys(v).sort().map(k => JSON.stringify(k) + ":" + canon(v[k])).join(",") + "}";
+function richPayload() {
+  const p = payload();
+  p.cards = p.cards.filter(c => c.id !== RESERVED_CAT);
+  Object.assign(p.cards[0], { retired: true, commits: true, next: [{ to: "c-steps", label: "later" }],
+    futureCard: { a: [1, { b: 2 }] } });
+  Object.assign(p, { notes: { en: "A note." }, grew: { id: "lamp-shop", rev: 1, sha: "sha256:" + HEX("a") },
+    desk: { id: "k-0123456789abcdef", name: "Ala", key: HEX("b"), box: HEX("c") }, futureHeader: { kept: true } });
+  return p;
+}
+const richBoot = await bootRoute(richPayload());
+const richFile = await fileRoute(richPayload());
+const richNow = richPayload();
+const wanted = [richNow.cards[0], richNow.cards[1], richNow.notes, richNow.grew, richNow.desk, richNow.futureHeader]
+  .map(canon);
+const written = r => {
+  // Through JSON first, as the stored copy goes, then out through the writer the export uses.
+  const out = V2.catalogToV2(JSON.parse(JSON.stringify(r.cat)));
+  return [out.cards[0], out.cards[1], out.notes, out.grew, out.desk, out.futureHeader].map(canon);
+};
+check("13 a catalog holding every new field and an unknown one on a card and in the header is read by the boot route and written back as it was",
+  JSON.stringify(written(richBoot)) === JSON.stringify(wanted),
+  "six values compared by canonical form, the card the file holds first");
+check("14 and by the picked-file route, which is the whitelist an Import goes through",
+  JSON.stringify(written(richFile)) === JSON.stringify(wanted), "the same six");
+check("15 and the two routes still end at the same catalog, the new fields included",
+  diffPaths(richBoot.cat, richFile.cat, "", []).length === 0 && richBoot.sig === richFile.sig,
+  diffPaths(richBoot.cat, richFile.cat, "", []).slice(0, 4).join(" ") || "equal");
+check("16 a change to the new fields alone is a different catalog to the offer dialog, as a reworded card is",
+  richBoot.sig !== boot.sig, "signature of the rich payload against the plain one");
+const richBent = richPayload(); richBent.cards[0].next = [{ to: "c-steps" }, { to: "c-steps" }];
+let refused = "";
+try { await fileRoute(richBent); } catch (e) { refused = String(e.message); }
+check("17 a chain naming a card twice is refused at the door, naming the card",
+  refused.startsWith("card c-warm: next[1] names c-steps a second time"), refused.slice(0, 70) || "accepted");
+check("18 control: the plain payload carries none of the new keys through either route, on the header or on a card",
+  ["notes", "grew", "desk", "ext"].every(k => !(k in boot.cat) && !(k in file.cat))
+  && boot.cat.cards.every(c => !["retired", "commits", "next", "ext"].some(k => k in c)),
+  "none of notes, grew, desk, ext; no card holds retired, commits, next or ext");
+
+/* THE ROUTE OUT, driven for real. exportCatalog() runs end to end in bare node: the document is a
+   stand-in that answers every question with another stand-in, the hooks are empty, and the save
+   dialog is a function handing back a writer that keeps the text. What is asserted is the file
+   that would have been written, from a catalog loaded by the real reader and stored as the desk
+   stores it. This is where currentCatalog() is CALLED; its fields are otherwise read as text. */
+{
+  const fake = () => new Proxy(function () {}, {
+    get: (t, k) => k === Symbol.toPrimitive ? () => "" : (k === "length" ? 0
+      : (["contains", "matches", "hasAttribute"].includes(k) ? () => false : fake())),
+    apply: () => fake(), set: () => true, has: () => true });
+  let written = null;
+  globalThis.window = { innerWidth: 1280, innerHeight: 800,
+    showSaveFilePicker: async () => ({ name: "out.ec", createWritable: async () => ({
+      write: async t => { written = t; }, close: async () => {} }) }) };
+  globalThis.innerHeight = 800;
+  globalThis.getComputedStyle = () => fake();
+  globalThis.requestAnimationFrame = fn => setTimeout(fn, 0);
+  globalThis.document = new Proxy({}, { get: (t, k) => (k === "readyState" ? "complete" : fake()), set: () => true });
+  const HK = await import(MOD("hooks.js"));
+  ["rebuildCards", "render", "syncIntentOrder", "drawIntentRail", "syncFavouritesMeta", "syncSampleMark",
+   "drawPillsCore", "drawTabsCore"].forEach(k => { HK.hooks[k] = () => {}; });
+  const CT = await import(MOD("catalog.js"));
+  const ST = await import(MOD("storage.js"));
+  const PK = await import(MOD("pack.js"));
+  const AP = await import(MOD("app-state.js"));
+  const DM = await import(MOD("dom.js")); DM.grabDom();
+  const CF = await import(MOD("catalog-file.js"));
+  const V2R = await import(MOD("catalog-v2.js"));
+
+  /* A file loaded as the desk loads one, kept as the desk keeps it, applied, and exported. */
+  async function exportOf(doc, removed) {
+    const cat = CT.parseCatalogFile(JSON.stringify(doc));
+    ST.lsSet(CT.E_CATALOG_STORE, JSON.stringify(cat), true);
+    CT.eApplyCatalog(cat);
+    PK.resetPack();
+    PK.pack.baseCards = JSON.parse(JSON.stringify(cat.cards));
+    if (removed) PK.pack.removed = removed.slice();
+    AP.setCards(cat.cards.slice());
+    written = null;
+    await CF.exportCatalog();
+    return written === null ? null : JSON.parse(written);
+  }
+  const doc = () => ({
+    format: 2, kind: "etiuda-catalog", id: "lamp-shop", rev: 4, langs: [{ code: "en", label: "EN" }],
+    tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
+    cards: [
+      { id: "c-a", shelf: "t-op", bodyShape: "plain", title: { en: "A" }, body: { en: "A body." } },
+      { id: "c-b", shelf: "t-op", bodyShape: "plain", title: { en: "B" }, body: { en: "B body." } },
+      { id: "c-c", shelf: "t-op", bodyShape: "plain", title: { en: "C" }, body: { en: "C body." } }]
+  });
+  const rich = () => {
+    const d = doc();
+    Object.assign(d.cards[0], { commits: true, retired: true, next: [{ to: "c-b" }, { to: "c-c", label: "x" }],
+      futureCard: { a: [1, { b: 2 }] } });
+    Object.assign(d, { notes: { en: "A note." }, grew: { id: "lamp-shop", rev: 3, sha: "sha256:" + HEX("a") },
+      desk: { id: "k-0123456789abcdef", name: "Ala", key: HEX("b"), box: HEX("c") }, futureHeader: { kept: true } });
+    return d;
+  };
+  const sent = await exportOf(rich());
+  check("19 the export of a catalog holding every new field carries the card's fields, the notes and the unknown header field as they came",
+    !!sent && canon([sent.cards[0], sent.notes, sent.futureHeader])
+      === canon([rich().cards[0], rich().notes, rich().futureHeader]),
+    sent ? "card, notes and the unknown field compared by canonical form" : "nothing was written");
+  check("20 and it is a NEW catalog: a new id, the first edition, and neither grew nor desk, which describe the file it came from",
+    !!sent && sent.id !== "lamp-shop" && sent.rev === 1 && !("grew" in sent) && !("desk" in sent),
+    sent ? "id " + (sent.id === "lamp-shop" ? "kept" : "new") + ", rev " + sent.rev + ", grew " + ("grew" in sent) + ", desk " + ("desk" in sent) : "nothing");
+  check("21 and it reads back clean, the writer and the validator being one contract",
+    !!sent && V2R.v2Problems(sent).length === 0,
+    sent ? V2R.v2Problems(sent).slice(0, 2).join(" | ") || "no problems" : "nothing");
+  const trimmed = await exportOf(rich(), ["c-b"]);
+  check("22 a card removed at this desk takes its link with it, so the file still reads clean",
+    !!trimmed && canon(trimmed.cards[0].next) === canon([{ to: "c-c", label: "x" }]) && V2R.v2Problems(trimmed).length === 0,
+    trimmed ? "next is " + JSON.stringify(trimmed.cards[0].next) : "nothing");
+  const bare = await exportOf(doc());
+  const NEW = ["notes", "grew", "desk", "ext", "futureHeader"], CARDNEW = ["retired", "commits", "next", "ext", "futureCard"];
+  check("23 control: a catalog holding none of them exports none of them, on the header or on a card",
+    !!bare && NEW.every(k => !(k in bare)) && bare.cards.every(c => CARDNEW.every(k => !(k in c))),
+    bare ? "header keys: " + Object.keys(bare).join(",") : "nothing");
+  check("24 and every card of it keeps the keys it always had, in the order it always had them",
+    !!bare && bare.cards.every(c => Object.keys(c).join(",") === "id,shelf,title,body,bodyShape"),
+    bare ? Object.keys(bare.cards[0]).join(",") : "nothing");
+  // The toast's own timer fires after the check, against the stand-in, and is let run its course.
+  await new Promise(r => setTimeout(r, 2000));
+  delete globalThis.document; delete globalThis.window; delete globalThis.innerHeight; delete globalThis.getComputedStyle;
+}
+
 console.log("  " + pass + "/" + (pass + fail) + " checks passed" + (fail ? "  - " + fail + " FAILED" : ""));
 /* CAPPED AT 63, ballot 4 of the fourth meeting (2026-09-23): an exit code is read modulo 256 by
    bash and by Linux, so a count used as one read 256 failures as success. 63 keeps a small count

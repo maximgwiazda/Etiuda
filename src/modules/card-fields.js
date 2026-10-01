@@ -26,10 +26,20 @@ const CARD_PLAIN_FIELDS=["lockLang"];
 const CARD_FLAG_BOX={alt:"meAlt",seq:"meSeq",firstOnly:"meFirst",paxVoc:"meVoc",
   allIntents:"meAllIntents",intentTop:"meIntentTop"};
 const CARD_FLAGS=Object.keys(CARD_FLAG_BOX);
+/* The flags no box on screen writes yet: carried, compared and exported like the others, but a
+   caller that does not hold one has not unticked it (overrideAgainstBase reads them only when carried). */
+const CARD_UNBOXED_FLAGS=["commits"];
+/* Fields no editor writes yet. A whole entry replaced by a save takes them from the entry it replaces,
+   or the save would drop them. Text fields are never carried: an emptied one stays empty. */
+const CARD_UNWRITTEN_FIELDS=["next","retired","ext"];
+function carryUnwritten(entry,was){
+  if(was) CARD_UNBOXED_FLAGS.concat(CARD_UNWRITTEN_FIELDS).forEach(f=>{ if(was[f]!=null) entry[f]=was[f]; });
+  return entry;
+}
 /* paxVoc is the exception at every site. ABSENT means "follow firstOnly", so it compares by
    EFFECT through paxVocOn() and is stored even when 0 - deleting a false one the way a plain
    flag is deleted would let the fallback switch it back on. */
-const CARD_BOOL_FLAGS=CARD_FLAGS.filter(f=>f!=="paxVoc");
+const CARD_BOOL_FLAGS=CARD_FLAGS.concat(CARD_UNBOXED_FLAGS).filter(f=>f!=="paxVoc");
 /* ABSENT MEANS "as it behaved before this existed": the vocative rode on firstOnly, so a
    catalog written without the flag keeps exactly the sentences it had. Present decides for
    itself - including a 0 on a card that also fills the first name only, which is the case
@@ -82,6 +92,8 @@ export {
   CARD_FLAG_BOX,
   CARD_FLAGS,
   CARD_BOOL_FLAGS,
+  CARD_UNBOXED_FLAGS,
+  carryUnwritten,
   paxVocOn,
   CARD_SHARED_FIELDS,
   CARD_KEY_ALIAS

@@ -4463,10 +4463,12 @@ What you type stays in this browser only.`;
     CARD_PLAIN_FIELDS: () => CARD_PLAIN_FIELDS,
     CARD_SHARED_FIELDS: () => CARD_SHARED_FIELDS,
     CARD_TEXT_FIELDS: () => CARD_TEXT_FIELDS,
+    CARD_UNBOXED_FLAGS: () => CARD_UNBOXED_FLAGS,
     cardFieldKey: () => cardFieldKey,
     cardFieldKeys: () => cardFieldKeys,
     cardRequiredKeys: () => cardRequiredKeys,
     cardStorageKeys: () => cardStorageKeys,
+    carryUnwritten: () => carryUnwritten,
     paxVocOn: () => paxVocOn
   });
   var CARD_FIELD_KEY = {
@@ -4485,7 +4487,15 @@ What you type stays in this browser only.`;
     intentTop: "meIntentTop"
   };
   var CARD_FLAGS = Object.keys(CARD_FLAG_BOX);
-  var CARD_BOOL_FLAGS = CARD_FLAGS.filter((f) => f !== "paxVoc");
+  var CARD_UNBOXED_FLAGS = ["commits"];
+  var CARD_UNWRITTEN_FIELDS = ["next", "retired", "ext"];
+  function carryUnwritten(entry, was) {
+    if (was) CARD_UNBOXED_FLAGS.concat(CARD_UNWRITTEN_FIELDS).forEach((f) => {
+      if (was[f] != null) entry[f] = was[f];
+    });
+    return entry;
+  }
+  var CARD_BOOL_FLAGS = CARD_FLAGS.concat(CARD_UNBOXED_FLAGS).filter((f) => f !== "paxVoc");
   function paxVocOn(m) {
     if (m && m.paxVoc != null) return !!+m.paxVoc;
     return !!(m && m.firstOnly);
@@ -7490,10 +7500,72 @@ What you type stays in this browser only.`;
     return Object.prototype.hasOwnProperty.call(CAT_LABEL_KEY, c) ? CAT_LABEL_KEY[c] : "categories:" + c;
   }
   var CARD_FLAGS2 = ["firstOnly", "allIntents", "intentTop"];
+  var V2_CARD_NAMED = [
+    "id",
+    "shelf",
+    "title",
+    "body",
+    "note",
+    "bodyShape",
+    "k",
+    "firstOnly",
+    "allIntents",
+    "intentTop",
+    "paxVoc",
+    "lockLang",
+    "requests",
+    "retired",
+    "next",
+    "commits"
+  ];
+  var V2_HEAD_NAMED = [
+    "format",
+    "kind",
+    "id",
+    "rev",
+    "date",
+    "langs",
+    "commentLang",
+    "tags",
+    "cards",
+    "role",
+    "facts",
+    "greet",
+    "stop",
+    "sample",
+    "modified",
+    "hash",
+    "sig",
+    "notes",
+    "grew",
+    "desk",
+    "name"
+  ];
   var V2_GREET_PARTS = 3;
   var DEFAULT_LANGS = [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }];
   function v2Str(v) {
     return String(v == null ? "" : v);
+  }
+  function v2Copy(v) {
+    return JSON.parse(JSON.stringify(v));
+  }
+  function v2Put(into, k, v) {
+    Object.defineProperty(into, k, { value: v2Copy(v), enumerable: true, writable: true, configurable: true });
+  }
+  function v2Extra(src, named) {
+    let out = null;
+    Object.keys(src).forEach((k) => {
+      if (named.indexOf(k) > -1 || src[k] === void 0) return;
+      if (!out) out = {};
+      v2Put(out, k, src[k]);
+    });
+    return out;
+  }
+  function v2Restore(into, extra, named) {
+    if (!extra || typeof extra !== "object") return;
+    Object.keys(extra).forEach((k) => {
+      if (named.indexOf(k) < 0 && !Object.prototype.hasOwnProperty.call(into, k)) v2Put(into, k, extra[k]);
+    });
   }
   function v2Codes(c) {
     const l = c && Array.isArray(c.langs) && c.langs.length ? c.langs : DEFAULT_LANGS;
@@ -7755,6 +7827,67 @@ What you type stays in this browser only.`;
   function v2GrammarNotices(data) {
     return v2Codes(data).filter((c) => V2_GRAMMAR_LANGS.indexOf(c) < 0).map((c) => "langs: this build has no grammar for " + c + ', so its text is used as written - no vocative, no declension, and a joined list reads with the English "and"');
   }
+  var V2_SHA_RE = /^sha256:[0-9a-f]{64}$/;
+  var V2_HEX64_RE = /^[0-9a-f]{64}$/;
+  var V2_BRANCH_RE = /^k-[0-9a-f]{16}$/;
+  function v2Missing(v) {
+    return v == null ? "absent" : "malformed";
+  }
+  function v2FlagProblem(c, f, id, out) {
+    if (c && c[f] !== void 0 && c[f] !== true) out.push("card " + id + ": " + f + " is " + JSON.stringify(c[f]) + ", wanted true or absent");
+  }
+  function v2NextProblems(c, id, ids, out) {
+    const next = c && c.next;
+    if (next === void 0) return;
+    if (!Array.isArray(next)) {
+      out.push("card " + id + ": next is not a list");
+      return;
+    }
+    const seen = /* @__PURE__ */ new Set();
+    next.forEach((e, i) => {
+      const where = "card " + id + ": next[" + i + "] ";
+      const to = e && typeof e === "object" && !Array.isArray(e) && typeof e.to === "string" ? e.to : "";
+      if (!to) {
+        out.push(where + "is not an entry with a to");
+        return;
+      }
+      if (to === id) out.push(where + "names the card itself");
+      else if (!Object.prototype.hasOwnProperty.call(ids, to)) out.push(where + "names " + to + ", which is no card");
+      else if (seen.has(to)) out.push(where + "names " + to + " a second time");
+      seen.add(to);
+    });
+  }
+  function v2HeaderProblems(data, codes, out) {
+    if (data.notes !== void 0) {
+      if (!data.notes || typeof data.notes !== "object" || Array.isArray(data.notes)) out.push("notes: not a table of text by language");
+      else Object.keys(data.notes).forEach((code) => {
+        if (codes.indexOf(code) < 0) out.push("notes." + code + ": a language this catalog does not declare");
+        else if (typeof data.notes[code] !== "string") out.push("notes." + code + ": not text");
+      });
+    }
+    const entry = (f, v) => {
+      if (v === void 0) return null;
+      if (!v || typeof v !== "object" || Array.isArray(v)) {
+        out.push(f + ": not an entry");
+        return null;
+      }
+      return v;
+    };
+    const g = entry("grew", data.grew);
+    if (g) {
+      if (!V2_ID_RE.test(v2Str(g.id))) out.push("grew.id: " + v2Missing(g.id) + ", wanted the id of the catalog it grew from");
+      if (typeof g.rev !== "number" || !Number.isFinite(g.rev) || g.rev < 0) out.push("grew.rev: " + v2Missing(g.rev) + ", wanted the edition number it grew from");
+      if (!V2_SHA_RE.test(v2Str(g.sha))) out.push("grew.sha: " + v2Missing(g.sha) + ", wanted sha256: and 64 lower-case hex characters");
+    }
+    const d = entry("desk", data.desk);
+    if (d) {
+      if (!V2_BRANCH_RE.test(v2Str(d.id))) out.push("desk.id: " + v2Missing(d.id) + ", wanted k- and 16 lower-case hex characters");
+      if (d.name !== void 0 && typeof d.name !== "string") out.push("desk.name: not text");
+      ["key", "box"].forEach((f) => {
+        if (!V2_HEX64_RE.test(v2Str(d[f]))) out.push("desk." + f + ": " + v2Missing(d[f]) + ", wanted 64 lower-case hex characters");
+      });
+    }
+  }
   function v2Problems(data) {
     if (!isV2(data)) return ["not an Etiuda catalog (format 2)"];
     if (!Array.isArray(data.cards)) return ["cards: absent, or not a list"];
@@ -7798,7 +7931,11 @@ What you type stays in this browser only.`;
       if (!v2Str((c && c.title || {})[primary])) out.push("card " + id + ": no title in " + primary + ", the primary language");
       if (!v2Str((c && c.body || {})[primary])) out.push("card " + id + ": no body in " + primary + ", the primary language");
       v2BodyProblems(c, id, primary, out);
+      v2FlagProblem(c, "retired", id, out);
+      v2FlagProblem(c, "commits", id, out);
     });
+    data.cards.forEach((c, i) => v2NextProblems(c, v2Str(c && c.id) || "[" + i + "]", cardSeen, out));
+    v2HeaderProblems(data, codes, out);
     if (data.hash != null && v2ContentHash(data) !== v2Str(data.hash))
       out.push("hash: " + v2Str(data.hash) + " is not the hash of what the file holds");
     return out;
@@ -7867,6 +8004,11 @@ What you type stays in this browser only.`;
       if (c.lockLang) m.lockLang = v2Str(c.lockLang);
       const links = (Array.isArray(c.requests) ? c.requests : []).map((id) => idxOf[v2Str(id)]).filter((i) => i != null);
       if (links.length) m.intents = links;
+      if (c.retired) m.retired = 1;
+      if (c.commits) m.commits = 1;
+      if (Array.isArray(c.next) && c.next.length) m.next = v2Copy(c.next);
+      const more2 = v2Extra(c, V2_CARD_NAMED);
+      if (more2) m.ext = more2;
       return m;
     });
     const out = {
@@ -7894,6 +8036,11 @@ What you type stays in this browser only.`;
     if (Array.isArray(data.role) && data.role.length) out.who = data.role.map(v2Str);
     if (typeof data.facts === "string") out.facts = data.facts;
     if (data.sample) out.sample = 1;
+    if (data.notes) out.notes = v2Copy(data.notes);
+    if (data.grew) out.grew = v2Copy(data.grew);
+    if (data.desk) out.desk = v2Copy(data.desk);
+    const more = v2Extra(data, V2_HEAD_NAMED);
+    if (more) out.ext = more;
     return out;
   }
   function catalogToV2(c, opts) {
@@ -7967,7 +8114,21 @@ What you type stays in this browser only.`;
       });
       if (m.paxVoc != null) card.paxVoc = +m.paxVoc ? 1 : 0;
       if (m.lockLang) card.lockLang = v2Str(m.lockLang);
+      if (m.retired) card.retired = true;
+      if (m.commits) card.commits = true;
+      v2Restore(card, m.ext, V2_CARD_NAMED);
       return card;
+    });
+    const cardIds = new Set(cards2.map((x) => x.id));
+    cards2.forEach((card, i) => {
+      const seen = /* @__PURE__ */ new Set();
+      const next = (Array.isArray(c.cards[i].next) ? c.cards[i].next : []).filter((e) => {
+        const to = e && typeof e === "object" && typeof e.to === "string" ? e.to : "";
+        if (!to || to === card.id || !cardIds.has(to) || seen.has(to)) return false;
+        seen.add(to);
+        return true;
+      });
+      if (next.length) card.next = v2Copy(next);
     });
     const out = {
       format: V2_FORMAT,
@@ -7985,6 +8146,10 @@ What you type stays in this browser only.`;
     if (c.greet && typeof c.greet === "object") out.greet = c.greet;
     if (c.stop && typeof c.stop === "object") out.stop = c.stop;
     if (c.sample) out.sample = true;
+    if (c.notes && typeof c.notes === "object") out.notes = v2Copy(c.notes);
+    if (c.grew && typeof c.grew === "object") out.grew = v2Copy(c.grew);
+    if (c.desk && typeof c.desk === "object") out.desk = v2Copy(c.desk);
+    v2Restore(out, c.ext, V2_HEAD_NAMED);
     if (v2Str(c.id)) out.modified = true;
     out.hash = v2ContentHash(out);
     return out;
@@ -8091,6 +8256,10 @@ What you type stays in this browser only.`;
     for (let i = 0; i < aa.length; i++) if (aa[i] !== bb[i]) return false;
     return true;
   }
+  function nextEqualStored(a, b) {
+    const ids = (l) => (Array.isArray(l) ? l : []).map((e) => String(e && e.to != null ? e.to : ""));
+    return intentsEqualStored(ids(a), ids(b));
+  }
   function overrideAgainstBase(base, full) {
     if (!base) return full;
     const o = {};
@@ -8099,12 +8268,14 @@ What you type stays in this browser only.`;
       if (txt(full[f]) !== txt(base[f])) o[f] = txt(full[f]);
     });
     CARD_BOOL_FLAGS.forEach((f) => {
+      if (CARD_UNBOXED_FLAGS.indexOf(f) > -1 && !(f in full)) return;
       if (!!full[f] !== !!base[f]) o[f] = full[f] ? 1 : 0;
     });
     const asSaved = Object.assign({}, base, o);
     delete asSaved.paxVoc;
     if (paxVocOn(full) !== paxVocOn(asSaved)) o.paxVoc = paxVocOn(full) ? 1 : 0;
     if (!intentsEqualStored(full.intents, base.intents)) o.intents = full.intents;
+    if ("next" in full && !nextEqualStored(full.next, base.next)) o.next = Array.isArray(full.next) ? full.next : [];
     return o;
   }
   function reorderMacroBlocks(id, fromVi, toVi) {
@@ -11139,7 +11310,14 @@ What you type stays in this browser only.`;
     if (m.allIntents) o.allIntents = 1;
     if (m.intentTop) o.intentTop = 1;
     if (Array.isArray(m.intents) && m.intents.length) o.intents = m.intents.slice();
+    if (m.retired) o.retired = 1;
+    if (m.commits) o.commits = 1;
+    if (Array.isArray(m.next) && m.next.length) o.next = plainCopy(m.next);
+    if (m.ext && typeof m.ext === "object" && Object.keys(m.ext).length) o.ext = plainCopy(m.ext);
     return o;
+  }
+  function plainCopy(v) {
+    return JSON.parse(JSON.stringify(v));
   }
   function truthyFlag(v) {
     return v === 1 || v === true || v === "1" || v === "true";
@@ -11199,6 +11377,13 @@ What you type stays in this browser only.`;
           return s;
         }).filter((x) => x !== "" && x != null);
       }
+      if (truthyFlag(rawM.retired)) entry.retired = 1;
+      if (truthyFlag(rawM.commits)) entry.commits = 1;
+      if (Array.isArray(rawM.next)) {
+        const next = rawM.next.filter((e) => e && typeof e === "object" && !Array.isArray(e) && String(e.to == null ? "" : e.to).trim());
+        if (next.length) entry.next = plainCopy(next);
+      }
+      if (rawM.ext && typeof rawM.ext === "object" && !Array.isArray(rawM.ext) && Object.keys(rawM.ext).length) entry.ext = plainCopy(rawM.ext);
       out.push(entry);
     });
     const seen = {};
@@ -11408,6 +11593,15 @@ What you type stays in this browser only.`;
     if (data && Array.isArray(data.langs) && data.langs.length) cat.langs = data.langs;
     if (data && data.greet && typeof data.greet === "object") cat.greet = data.greet;
     if (data && data.stop && typeof data.stop === "object") cat.stop = data.stop;
+    const table = (v) => v && typeof v === "object" && !Array.isArray(v) && Object.keys(v).length ? JSON.parse(JSON.stringify(v)) : null;
+    const notes = table(data && data.notes);
+    if (notes) cat.notes = notes;
+    const grew = table(data && data.grew);
+    if (grew) cat.grew = grew;
+    const desk = table(data && data.desk);
+    if (desk) cat.desk = desk;
+    const ext = table(data && data.ext);
+    if (ext) cat.ext = ext;
     if (data && Array.isArray(data.intentIds) && data.intentIds.length) cat.intentIds = data.intentIds.map(String);
     if (data && data.commentLang) cat.commentLang = String(data.commentLang);
     if (data && data.sample) cat.sample = 1;
@@ -18863,6 +19057,8 @@ What you type stays in this browser only.`;
     if (origin && Array.isArray(origin.langs) && origin.langs.length) out.langs = origin.langs;
     if (origin && origin.greet && typeof origin.greet === "object") out.greet = origin.greet;
     if (origin && origin.stop && typeof origin.stop === "object") out.stop = origin.stop;
+    if (origin && origin.notes && typeof origin.notes === "object") out.notes = origin.notes;
+    if (origin && origin.ext && typeof origin.ext === "object") out.ext = origin.ext;
     const wasIds = origin && Array.isArray(origin.intentIds) ? origin.intentIds : [];
     const keptIds = keep.map((oldIdx) => oldIdx < wasIds.length ? String(wasIds[oldIdx] || "") : "");
     if (keptIds.some((x) => x)) out.intentIds = keptIds;
@@ -20584,6 +20780,7 @@ What you type stays in this browser only.`;
           text,
           { alt, seq, firstOnly, paxVoc, allIntents, intentTop, lockLang, intents: intentsStored }
         );
+        carryUnwritten(entry, isNew ? null : pack.custom.find((x) => x && x.id === id));
         cardStorageKeys().forEach((f) => {
           if (!entry[f] && cardRequiredKeys().indexOf(f) < 0) delete entry[f];
         });

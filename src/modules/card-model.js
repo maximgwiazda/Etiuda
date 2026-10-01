@@ -1,4 +1,4 @@
-import { cardFieldKey, cardStorageKeys, CARD_PLAIN_FIELDS, CARD_BOOL_FLAGS, paxVocOn } from "./card-fields.js";
+import { cardFieldKey, cardStorageKeys, CARD_PLAIN_FIELDS, CARD_BOOL_FLAGS, CARD_UNBOXED_FLAGS, paxVocOn } from "./card-fields.js";
 import { CONTENT_LANGS } from "./content-model.js";
 import { uiLang } from "./ui-lang.js";
 import { BASE_M, pack, savePack } from "./pack.js";
@@ -67,6 +67,11 @@ function intentsEqualStored(a,b){
   for(let i=0;i<aa.length;i++) if(aa[i]!==bb[i]) return false;
   return true;
 }
+/* A chain is its ordered ids: a key a later build adds to an entry is not a difference this desk can make. */
+function nextEqualStored(a,b){
+  const ids=l=>(Array.isArray(l)?l:[]).map(e=>String(e&&e.to!=null?e.to:""));
+  return intentsEqualStored(ids(a),ids(b));
+}
 /* Build the override for a built-in: ONLY the fields that differ from the catalog's
    version - storing all twelve pinned a card's everything to remember one word, with an
    "edited" badge that could never clear. Equality against the BASE, never falsiness:
@@ -81,6 +86,7 @@ function overrideAgainstBase(base, full){
     if(txt(full[f])!==txt(base[f])) o[f]=txt(full[f]);
   });
   CARD_BOOL_FLAGS.forEach(f=>{
+    if(CARD_UNBOXED_FLAGS.indexOf(f)>-1 && !(f in full)) return;
     if(!!full[f]!==!!base[f]) o[f]=full[f]?1:0;
   });
   /* AGAINST THE MERGED CARD, NOT THE BASE. paxVoc falls back to firstOnly, and this same
@@ -90,6 +96,8 @@ function overrideAgainstBase(base, full){
   const asSaved=Object.assign({},base,o); delete asSaved.paxVoc;
   if(paxVocOn(full)!==paxVocOn(asSaved)) o.paxVoc=paxVocOn(full)?1:0;
   if(!intentsEqualStored(full.intents, base.intents)) o.intents=full.intents;
+  // Whole list replaces, and only a caller that holds one says anything about it.
+  if("next" in full && !nextEqualStored(full.next, base.next)) o.next=Array.isArray(full.next)?full.next:[];
   return o;
 }
 /* THE INDICES COUNT THE BLOCKS OF THE LANGUAGE ON SCREEN (cardLang), which is what a drag hands

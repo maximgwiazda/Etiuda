@@ -11,7 +11,7 @@ import { catalogLangs, CONTENT_LANGS } from "./content-model.js";
 //   "cards": [
 //     { "id","c","t","en","pl", optional: text fields per cardStorageKeys() - today
 //       "k","note","notePl","tPl" - plus "lockLang","alt","seq","firstOnly","paxVoc",
-//       "allIntents","intentTop","intents" }
+//       "allIntents","intentTop","intents","retired","commits","next","ext" }
 //   ]
 // }
 // Flag fields are 0/1. intents: numbers (base index) and/or strings ("i:0").
@@ -37,8 +37,14 @@ function cardToExportPlain(m){
   if(m.allIntents) o.allIntents=1;
   if(m.intentTop) o.intentTop=1;
   if(Array.isArray(m.intents)&&m.intents.length) o.intents=m.intents.slice();
+  if(m.retired) o.retired=1;
+  if(m.commits) o.commits=1;
+  if(Array.isArray(m.next)&&m.next.length) o.next=plainCopy(m.next);
+  // Fields this build does not name, carried whole: see V2_CARD_NAMED in catalog-v2.js.
+  if(m.ext&&typeof m.ext==="object"&&Object.keys(m.ext).length) o.ext=plainCopy(m.ext);
   return o;
 }
+function plainCopy(v){ return JSON.parse(JSON.stringify(v)); }
 /* One export, and it writes a full catalog - see exportCatalog. The cards-only
    "playbook-cards" kind is still accepted on import, so pre-1.0 files keep working. */
 function truthyFlag(v){
@@ -116,6 +122,13 @@ function parseMacrosData(data){
         return s;
       }).filter(x=>x!==""&&x!=null);
     }
+    if(truthyFlag(rawM.retired)) entry.retired=1;
+    if(truthyFlag(rawM.commits)) entry.commits=1;
+    if(Array.isArray(rawM.next)){
+      const next=rawM.next.filter(e=>e&&typeof e==="object"&&!Array.isArray(e)&&String(e.to==null?"":e.to).trim());
+      if(next.length) entry.next=plainCopy(next);
+    }
+    if(rawM.ext&&typeof rawM.ext==="object"&&!Array.isArray(rawM.ext)&&Object.keys(rawM.ext).length) entry.ext=plainCopy(rawM.ext);
     out.push(entry);
   });
   // Stable ids if duplicates
