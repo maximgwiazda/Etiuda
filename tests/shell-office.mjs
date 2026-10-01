@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 51;
+const EXPECTED = 60;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -39,7 +39,7 @@ const APP = path.join(LAB, "app");
 /* The shell's own names, handed back by a line added after its source: nothing is exported from
    main.js, and a slice would test a copy of one function rather than the file as it runs. */
 const EXPOSE = ["renamePatiently", "writeReplacing", "saveWindowPlace", "windowFile", "readCatalog", "channelHash",
-  "SAMPLE_EDITIONS"];
+  "SAMPLE_EDITIONS", "proxySwitchesFrom"];
 
 /* node:fs with a hook per call: `ctl.renameSync = (real, ...args) => ...` decides that call,
    and a call without a hook goes to the real one. `ctl.any` sees every synchronous call first,
@@ -82,7 +82,16 @@ function anything(over) {
 }
 
 let loads = 0;
-/* opts.ready: app.whenReady resolves, so the shell boots as far as its window; opts.clock: the
+/* WINDOWS' PROXY KEY AS REG PRINTS IT, planted where the shell asks, so no leg reads this machine's own
+   settings and none writes them: the key's values, a blank line, then its subkeys. */
+const REG_TOOL = "C:\\Windows\\System32\\reg.exe";
+const REG_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
+const regDump = values => ["", REG_KEY, ...values.map(([n, ty, v]) => "    " + n + "    " + ty + "    " + v), "",
+  REG_KEY + "\\Connections", REG_KEY + "\\Wpad", ""].join("\r\n");
+const QUIET = regDump([["CertificateRevocation", "REG_DWORD", "0x1"], ["ProxyEnable", "REG_DWORD", "0x0"],
+  ["User Agent", "REG_SZ", "Mozilla/4.0 (compatible; MSIE 8.0; Win32)"]]);
+/* opts.reg: what the key reads as (text, or an Error for a reg that fails). opts.ready: app.whenReady resolves,
+   so the shell boots as far as its window; opts.clock: the
    fake timers above; opts.desk: keys written into desk.json before the shell reads it; opts.src:
    the source to run in place of main.js; opts.app: the folder it runs from; opts.onLine: switches
    on its command line; opts.paths and opts.dialogs: arrays that take the setPath calls and the save dialogs it opens. */
@@ -118,8 +127,15 @@ function loadShell(opts) {
   };
   const ctl = {};
   const fs = wrapFs(ctl);
+  const regCalls = [];
+  const cp = { execFileSync: (file, args, opt) => {
+    if (file !== REG_TOOL) return nodeRequire("node:child_process").execFileSync(file, args, opt);
+    regCalls.push([file, args]);
+    if (o.reg instanceof Error) throw o.reg;
+    return o.reg === undefined ? QUIET : o.reg;
+  } };
   const clock = o.clock || { setTimeout: setTimeout, clearTimeout: clearTimeout };
-  const fakeRequire = n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? fs : nodeRequire(n));
+  const fakeRequire = n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? fs : n === "node:child_process" ? cp : nodeRequire(n));
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console", "setTimeout", "clearTimeout",
     (o.src || SRC) + "\nreturn { " + EXPOSE.map(n => n + ": typeof " + n + " === 'undefined' ? undefined : " + n).join(", ") + " };")(
     fakeRequire, path.join(o.app || APP, "shell"), path.join(o.app || APP, "shell", "main.js"), { exports: {} }, {}, quiet,
@@ -128,7 +144,7 @@ function loadShell(opts) {
   const ipc = (ch, ...args) => { const e = { sender: { id: 1, once: noop }, senderFrame: ENGINE, returnValue: undefined };
     if (on[ch]) on[ch](e, ...args); return e.returnValue; };
   const ask = (ch, ...args) => invoke[ch]({ sender: { id: 1 }, senderFrame: ENGINE }, ...args);
-  return { api, ctl, said, ipc, ask, on, invoke, UD, DOCS, deskFile: path.join(UD, "desk.json"), power, sent, win, switches, removed };
+  return { api, ctl, said, ipc, ask, on, invoke, UD, DOCS, deskFile: path.join(UD, "desk.json"), power, sent, win, switches, removed, regCalls };
 }
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 /* Invented from nothing, as every fixture here is. The refused one names a shelf that is not
@@ -516,18 +532,60 @@ try {
     check(known, "5e every catalog the shell ships is an edition SAMPLE_EDITIONS names, so a copy of it keeps its place"
       + " at the foot of the list once the sample moves on: " + editions.length + " edition(s) listed");
   }
-  /* ---- 6. Chromium's proxy discovery is switched off before the app is ready ----------------- */
+  /* ---- 6. Chromium's proxy is chosen from Windows' own setting, before the app is ready ------
+     The key is planted (see REG_TOOL), never read from this machine. 6a to 6h are what a start does
+     with each answer, 6d and 6i the controls that show those can fail, 6j and 6k the reader alone. */
   {
+    const LINE = "for (const s of windowsProxySwitches()) app.commandLine.appendSwitch(...s);";
+    const asked = S => S.switches.map(a => a.join("="));
     const S = loadShell();
-    const asked = S.switches.map(a => a.join("="));
-    check(asked.length === 1 && asked[0] === "no-proxy-server",
-      "6a the shell asks Chromium for --no-proxy-server, once, so an idle desk does no proxy"
-      + " discovery and no IPv6 probe: " + JSON.stringify(asked));
-    const stripped = SRC.split('app.commandLine.appendSwitch("no-proxy-server");').join("");
+    check(JSON.stringify(asked(S)) === '["no-proxy-server"]',
+      "6a with only automatic detection or nothing set, the shell asks Chromium for --no-proxy-server, once, so an idle"
+      + " desk does no proxy discovery and no IPv6 probe: " + JSON.stringify(asked(S)));
+    check(S.regCalls.length === 1 && S.regCalls[0][0] === REG_TOOL
+      && JSON.stringify(S.regCalls[0][1]) === JSON.stringify(["query", REG_KEY]),
+      "6b the one program it starts for that is Windows' reg tool at its fixed system path, asking for one key, once: "
+      + JSON.stringify(S.regCalls));
+    check(SRC.split(LINE).length === 2, "6c the shell holds its proxy line exactly once, so the control copy can cut it");
+    const stripped = SRC.split(LINE).join("");
     const bare = loadShell({ src: stripped });
     check(stripped !== SRC && bare.switches.length === 0,
-      "6b THE CONTROL: the same shell with that one line removed asks for no switch, so 6a can fail: "
+      "6d THE CONTROL: the same shell with that one line removed asks for no switch, so 6a can fail: "
       + JSON.stringify(bare.switches));
+    const server = loadShell({ reg: regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", "proxy.example.test:3128"],
+      ["ProxyOverride", "REG_SZ", "<local>"]]) });
+    check(JSON.stringify(asked(server)) === '["proxy-server=proxy.example.test:3128"]',
+      "6e a configured proxy server is followed, and the no-proxy switch is not asked: " + JSON.stringify(asked(server)));
+    const script = loadShell({ reg: regDump([["ProxyEnable", "REG_DWORD", "0x0"], ["AutoConfigURL", "REG_SZ", "http://wpad.example.test/proxy.pac"]]) });
+    check(JSON.stringify(asked(script)) === '["proxy-pac-url=http://wpad.example.test/proxy.pac"]',
+      "6f a configured setup-script address is followed: " + JSON.stringify(asked(script)));
+    const stale = loadShell({ reg: regDump([["ProxyEnable", "REG_DWORD", "0x0"], ["ProxyServer", "REG_SZ", "proxy.example.test:3128"]]) });
+    check(JSON.stringify(asked(stale)) === '["no-proxy-server"]',
+      "6g a server left in the key while Windows has the proxy switched off is not followed: " + JSON.stringify(asked(stale)));
+    const failing = loadShell({ reg: new Error("reg.exe did not answer") });
+    check(JSON.stringify(asked(failing)) === '["no-proxy-server"]',
+      "6h a reg tool that fails leaves today's start, no proxy and no lookup: " + JSON.stringify(asked(failing)));
+    const stub = loadShell({ src: SRC.split(LINE).join('app.commandLine.appendSwitch("no-proxy-server");'),
+      reg: regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", "proxy.example.test:3128"]]) });
+    check(SRC.split(LINE).length === 2 && JSON.stringify(asked(stub)) !== '["proxy-server=proxy.example.test:3128"]'
+      && JSON.stringify(asked(stub)) === '["no-proxy-server"]',
+      "6i THE CONTROL: a shell that ignores the reader and always asks for no proxy, handed the planted server, does not"
+      + " give the server, so 6e goes red on it: " + JSON.stringify(asked(stub)));
+    const rd = S.api.proxySwitchesFrom;
+    const out = x => JSON.stringify(rd(x));
+    const NONE = '[["no-proxy-server"]]';
+    check(out(regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", ""], ["Next", "REG_SZ", "other.example.test:1"]])) === NONE
+      && out(regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["AutoConfigURL", "REG_SZ", ""], ["ProxyServer", "REG_SZ", ""]])) === NONE,
+      "6j the reader on its own: a switched-on proxy with no address, whether the value is empty or missing, is none");
+    check(out(regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", "http=a.example.test:1;https=b.example.test:2"],
+        ["AutoConfigURL", "REG_EXPAND_SZ", "https://pac.example.test/a.pac"]])) === '[["proxy-pac-url","https://pac.example.test/a.pac"]]'
+      && out(regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", "http=a.example.test:1;https=b.example.test:2"]]))
+        === '[["proxy-server","http=a.example.test:1;https=b.example.test:2"]]'
+      && out(regDump([["AutoConfigURL", "REG_SZ", "ftp://pac.example.test/a.pac"]])) === NONE
+      && out(regDump([["AutoConfigURL", "REG_SZ", "not an address"]])) === NONE
+      && out("") === NONE && out(undefined) === NONE,
+      "6k the reader on its own: a script outranks a server, a per-scheme server list passes whole, an address that is not http, https"
+      + " or file is none, and no text at all is none");
   }
   /* ---- 7. every IPC channel asks who is speaking before it answers ---------------------------
      The shell is loaded with fromEngine and fromPicker each marking the event they are asked about,

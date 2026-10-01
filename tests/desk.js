@@ -676,7 +676,7 @@ async function startOn(appDir, ud) {
     + " where Chromium writes them, and the old residue stays: " + said_(ctrl));
 
   /* ---- runs C and D: proxy discovery, with and without the shell's switch ---- */
-  const SWITCH = 'app.commandLine.appendSwitch("no-proxy-server");';
+  const SWITCH = "for (const s of windowsProxySwitches()) app.commandLine.appendSwitch(...s);";
   const CONTROL_APP = buildApp(path.join(APP, "control"));
   const controlMain = path.join(CONTROL_APP, "shell", "main.js");
   const controlSrc = fs.readFileSync(controlMain, "utf8");

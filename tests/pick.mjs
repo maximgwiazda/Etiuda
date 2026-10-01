@@ -570,7 +570,7 @@ try {
   const runMentions = (shellBare.match(/\bexecFileSync\b/g) || []).length, runCalls = (shellBare.match(/\bexecFileSync\s*\(/g) || []).length;
   const loaders = shellBare.match(/\bimport\s*\(|\bprocess\s*\.\s*(?:binding|_linkedBinding|dlopen)\b|\bcreateRequire\b|\bmodule\s*\.\s*require\b|\brequire\s*\.\s*(?:cache|main)\b/g) || [];
   check(reqs.length > 0 && strange.length === 0 && !!cp && cp[1].trim() === "execFileSync"
-    && programs.length > 0 && programs.every(p => p === '"reg"')
+    && programs.length > 0 && programs.every(p => p === '"reg"' || p === '"C:\\\\Windows\\\\System32\\\\reg.exe"')
     && cpRequires === 1 && runMentions === runCalls + 1 && loaders.length === 0,
     "5c the shell loads no module and runs no program it did not have (every one is read against the must-hold before it joins): "
     + (strange.join(", ") || reqs.length + " requires known") + "; " + (cp ? cp[1].trim() : "no child_process") + " runs " + (programs.join(", ") || "nothing")

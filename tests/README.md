@@ -637,13 +637,17 @@ is not read, since it is sealed inside the installer. 29 checks, about 6 s.
 
 ## The shell's proxy switch, and how it is proved in two places
 
-The shell turns proxying off with `no-proxy-server`, so at start there is no proxy discovery (no
-wpad lookup) and no IPv6 reachability probe at idle. The probe still fires on the first hostname
-lookup. `tests/shell-office.mjs` leg 6 reads the switches the real `shell/main.js` sets, with
-electron stubbed: exactly the one, and none once its line is cut out of a copy. That leg proves
-the switch is set; only Electron can prove what Chromium then does. `tests/desk.js` runs C and D
+The shell reads Windows' own proxy key with the reg tool before ready and follows a configured
+proxy server or setup-script address. With only automatic detection on, nothing set or a failed
+read it asks for `no-proxy-server`, so at start there is no proxy discovery (no wpad lookup) and no
+IPv6 reachability probe at idle. The probe still fires on the first hostname lookup.
+`tests/shell-office.mjs` leg 6 reads the switches the real `shell/main.js` sets, with electron
+stubbed and the key planted, never read from the machine: the server, the script and the quiet
+answers, and none once the line is cut out of a copy. That leg proves the switch is set; only
+Electron can prove what Chromium then does. `tests/desk.js` runs C and D
 do that, each on a profile of its own with `--log-net-log`: C is the shell with the line cut out
-and must show discovery, D is the shipped shell and must show none. A net log is complete only at
+and must show discovery, D is the shipped shell and must show none, which holds on a machine whose
+own proxy key names no server and no script. A net log is complete only at
 a clean close, so the window is closed through the debugging port and the log must parse whole
 and hold events. A control that shows no discovery on the machine is NOT RUN, never ok.
 
