@@ -1714,6 +1714,16 @@ const CARD_B = {
       return eq(P.pack.favourites.join(",") + "|" + JSON.stringify(P.pack.useCounts) + "|" + JSON.stringify(P.pack.useAt),
         'k1|{"k1":2}|{}');
     }));
+  check("favourites.js", "and its day counts, which the picker's 28 days are summed from, wait for it too, while a departed card's go",
+    () => asleepDesk(true, () => {
+      const hadIds = P.pack.dayIds, hadDays = P.pack.days;
+      P.pack.dayIds = ["k1", "k2", "departed"]; P.pack.days = { "2026-09-30": { c: { 0: 1, 1: 4, 2: 2 } } };
+      try {
+        F.syncFavouritesMeta();
+        const c = P.pack.days["2026-09-30"].c, of = id => { const at = P.pack.dayIds.indexOf(id); return at < 0 ? "-" : String(c[at]); };
+        return eq(["k1", "k2", "departed"].map(of).join(","), "1,4,-");
+      } finally { P.pack.dayIds = hadIds; P.pack.days = hadDays; }
+    }));
   check("card-model.js", "a retired card is not found by id, so the picker and a recent copy treat it as absent",
     () => asleepDesk(true, () => eq(String(CMD.findCard("k2")) + "|" + (CMD.findCard("k1") || {}).id, "null|k1")));
   check("card-model.js", "CONTROL: the same card with no flag is found where the catalog holds it",

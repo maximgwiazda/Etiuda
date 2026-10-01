@@ -326,7 +326,7 @@ check("18 control: the plain payload carries none of the new keys through either
     CC.carryCardLayer(cat);
     ST.lsSet(CT.E_CATALOG_STORE, JSON.stringify(cat), true);
     CT.eApplyCatalog(cat);
-    PK.pack.baseCards = JSON.parse(JSON.stringify(cat.cards));
+    PK.pack.baseCards = null;   // as takeCatalog leaves it: BASE_M comes from the stock route
     RB.rebuildCards();
   };
   const fresh = () => {
@@ -401,6 +401,11 @@ check("18 control: the plain payload carries none of the new keys through either
   const arrangedBase = OC.cardOrderIsBase();
   check("36 control: an agent who did arrange does not, so 35 is not an answer that is always true",
     arrangedBase === false, String(arrangedBase));
+  fresh(); PK.pack.hidden = ["c-b"]; land(edition(["c-b"]));
+  const hidden = await (async () => { written = null; await CF.exportCatalog(); return written === null ? null : JSON.parse(written); })();
+  check("37 a retired card the agent had hidden is still carried, flagged, and its hide is still held",
+    !!hidden && hidden.cards.map(c => c.id + (c.retired ? "*" : "")).join(",") === "c-a,c-b*,c-c" && PK.pack.hidden.join(",") === "c-b",
+    hidden ? hidden.cards.map(c => c.id + (c.retired ? "*" : "")).join(",") + " | " + PK.pack.hidden.join(",") : "nothing");
   HK.hooks.syncFavouritesMeta = () => {};
   // The toast's own timer fires after the check, against the stand-in, and is let run its course.
   await new Promise(r => setTimeout(r, 2000));
