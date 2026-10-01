@@ -70,10 +70,11 @@ function v2Extra(src,named){
   });
   return out;
 }
-/* Carried keys go back where they came from, and a key the build now names wins over its carried copy. */
-function v2Restore(into,extra){
+/* Carried keys go back where they came from. A key the build names is never written from the bag, whether
+   or not the runtime holds it: a hand-made ext could otherwise write what v2Problems refuses. */
+function v2Restore(into,extra,named){
   if(!extra || typeof extra!=="object") return;
-  Object.keys(extra).forEach(k=>{ if(!Object.prototype.hasOwnProperty.call(into,k)) v2Put(into,k,extra[k]); });
+  Object.keys(extra).forEach(k=>{ if(named.indexOf(k)<0 && !Object.prototype.hasOwnProperty.call(into,k)) v2Put(into,k,extra[k]); });
 }
 function v2Codes(c){
   const l=(c&&Array.isArray(c.langs)&&c.langs.length)?c.langs:DEFAULT_LANGS;
@@ -653,7 +654,7 @@ function catalogToV2(c,opts){
     if(m.lockLang) card.lockLang=v2Str(m.lockLang);
     if(m.retired) card.retired=true;
     if(m.commits) card.commits=true;
-    v2Restore(card,m.ext);
+    v2Restore(card,m.ext,V2_CARD_NAMED);
     return card;
   });
   /* A link is read back by this build's own v2Problems, so an export keeps only those that would
@@ -683,7 +684,7 @@ function catalogToV2(c,opts){
   if(c.notes&&typeof c.notes==="object") out.notes=v2Copy(c.notes);
   if(c.grew&&typeof c.grew==="object") out.grew=v2Copy(c.grew);
   if(c.desk&&typeof c.desk==="object") out.desk=v2Copy(c.desk);
-  v2Restore(out,c.ext);
+  v2Restore(out,c.ext,V2_HEAD_NAMED);
   /* Section 5. This engine is never the origin of a catalog, so a file it hands back says so.
      Rev arrives already raised where an export chose a new edition - see currentCatalog - and is
      otherwise left exactly where it was. An id is what says there was an origin at all: a

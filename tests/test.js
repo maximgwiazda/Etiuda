@@ -1297,12 +1297,16 @@ function formatPassTests() {
       first(c => { c.grew = { id: "toy-shop", rev: "1", sha: "sha256:" + HEX("a") }; }),
       first(c => { c.grew = { id: "toy-shop", rev: 1, sha: HEX("a") }; }),
       first(c => { c.grew = { id: "toy-shop", rev: 1, sha: "sha256:" + HEX("A") }; }),
-      first(c => { c.grew = "toy-shop"; })],
+      first(c => { c.grew = "toy-shop"; }),
+      first(c => { c.grew = { id: "toy-shop", rev: -1, sha: "sha256:" + HEX("a") }; }),
+      first(c => { c.grew = { id: "toy-shop", rev: JSON.parse("1e400"), sha: "sha256:" + HEX("a") }; })],
      ["grew.id: malformed, wanted the id of the catalog it grew from",
       "grew.rev: malformed, wanted the edition number it grew from",
       "grew.sha: malformed, wanted sha256: and 64 lower-case hex characters",
       "grew.sha: malformed, wanted sha256: and 64 lower-case hex characters",
-      "grew: not an entry"]);
+      "grew: not an entry",
+      "grew.rev: malformed, wanted the edition number it grew from",
+      "grew.rev: malformed, wanted the edition number it grew from"]);
   eq("834o grew: a part left out is absent, not malformed",
      first(c => { c.grew = { rev: 1, sha: "sha256:" + HEX("a") }; }),
      "grew.id: absent, wanted the id of the catalog it grew from");
@@ -1311,12 +1315,14 @@ function formatPassTests() {
       first(c => { c.desk = { id: "x-0123456789abcdef", name: "Ala", key: HEX("b"), box: HEX("c") }; }),
       first(c => { c.desk = { id: "k-0123456789abcdef", name: "Ala", key: HEX("b").slice(1), box: HEX("c") }; }),
       first(c => { c.desk = { id: "k-0123456789abcdef", name: "Ala", key: HEX("b") }; }),
-      first(c => { c.desk = { id: "k-0123456789abcdef", name: 5, key: HEX("b"), box: HEX("c") }; })],
+      first(c => { c.desk = { id: "k-0123456789abcdef", name: 5, key: HEX("b"), box: HEX("c") }; }),
+      first(c => { c.desk = { id: "k-0123456789abcdef0", name: "Ala", key: HEX("b"), box: HEX("c") }; })],
      ["desk.id: malformed, wanted k- and 16 lower-case hex characters",
       "desk.id: malformed, wanted k- and 16 lower-case hex characters",
       "desk.key: malformed, wanted 64 lower-case hex characters",
       "desk.box: absent, wanted 64 lower-case hex characters",
-      "desk.name: not text"]);
+      "desk.name: not text",
+      "desk.id: malformed, wanted k- and 16 lower-case hex characters"]);
   eq("834q desk: a desk with no name is sound, the name being what the agent typed and may be nothing",
      bent(c => { c.desk = { id: "k-0123456789abcdef", key: HEX("b"), box: HEX("c") }; }), []);
 
@@ -1343,7 +1349,7 @@ function formatPassTests() {
        return [Object.keys(out.cards[0]).indexOf("__proto__") > -1,
                Object.getPrototypeOf(out.cards[0]) === Object.prototype];
      })(), [true, true]);
-  eq("834v a field this build NAMES wins over a carried copy of the same name",
+  eq("834v a field this build NAMES is never written from the carried copy, the runtime holding it or not",
      (() => {
        const rt = V.catalogFromV2(sound());
        rt.cards[0].ext = { bodyShape: "steps", futureCard: 1, retired: true };
@@ -1351,7 +1357,16 @@ function formatPassTests() {
        const out = V.catalogToV2(rt);
        return [out.cards[0].bodyShape, out.cards[0].futureCard, out.cards[0].retired, out.id, out.rev,
                out.futureHeader];
-     })(), ["plain", 1, true, "toy-shop", 3, 2]);
+     })(), ["plain", 1, null, "toy-shop", 3, 2]);
+  /* A carried bag made by hand (through parseMacrosData or normaliseCatalog, never by catalogFromV2) may hold
+     keys the build names. Written back unchecked they make a file this build refuses: three problems. */
+  const handMade = V.catalogFromV2(sound());
+  handMade.cards[0].ext = { next: [{ to: "c-gone" }], retired: false };
+  handMade.ext = { notes: 5 };
+  const handOut = V.catalogToV2(handMade);
+  eq("834D an export of a hand-made carried bag holding named keys reads back clean, and writes none of them",
+     [V.v2Problems(handOut), "next" in handOut.cards[0], "retired" in handOut.cards[0], "notes" in handOut],
+     [[], false, false, false]);
   eq("834w a catalog's name stays gone, and hash, sig and modified are made fresh rather than carried",
      (() => {
        const c = rich(); c.name = "Old"; c.modified = false; c.sig = { alg: "Ed25519", keyId: "k", value: "aa" };
@@ -1383,11 +1398,12 @@ function formatPassTests() {
      custom entry is replaced whole by a save, so it takes the fields no editor writes from the entry
      it replaces BEFORE the sweep that deletes empty ones. An export is a new catalog, so it takes the
      notes and the carried fields from the origin and leaves grew and desk, which describe a file. */
-  const src = sourceText();
+  const src = codeDoc();       // comments blanked: a call kept in a comment is no call
   const editor = extractDecl(src, "function openCardEditor(");
-  const callAt = editor.indexOf("carryUnwritten(entry,"), sweepAt = editor.indexOf("CARD_BOOL_FLAGS.forEach(f=>{ if(!entry[f])");
+  const call = /carryUnwritten\(entry,\s*isNew\s*\?\s*null\s*:\s*pack\.custom\.find\(/.exec(editor);
+  const sweepAt = editor.indexOf("CARD_BOOL_FLAGS.forEach(f=>{ if(!entry[f])");
   eq("834B the custom entry carries the unwritten fields over from the entry it replaces, before the sweep",
-     [callAt > -1, sweepAt > callAt], [true, true]);
+     [!!call, !!call && sweepAt > call.index], [true, true]);
   const exporter = extractDecl(src, "function currentCatalog(");
   eq("834C an export takes notes and the carried fields from the origin, and not grew or desk",
      ["out.notes=origin.notes", "out.ext=origin.ext", "out.grew", "out.desk"].map(x => exporter.indexOf(x) > -1),

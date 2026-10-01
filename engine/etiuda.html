@@ -7533,10 +7533,10 @@ What you type stays in this browser only.`;
     });
     return out;
   }
-  function v2Restore(into, extra) {
+  function v2Restore(into, extra, named) {
     if (!extra || typeof extra !== "object") return;
     Object.keys(extra).forEach((k) => {
-      if (!Object.prototype.hasOwnProperty.call(into, k)) v2Put(into, k, extra[k]);
+      if (named.indexOf(k) < 0 && !Object.prototype.hasOwnProperty.call(into, k)) v2Put(into, k, extra[k]);
     });
   }
   function v2Codes(c) {
@@ -8088,7 +8088,7 @@ What you type stays in this browser only.`;
       if (m.lockLang) card.lockLang = v2Str(m.lockLang);
       if (m.retired) card.retired = true;
       if (m.commits) card.commits = true;
-      v2Restore(card, m.ext);
+      v2Restore(card, m.ext, V2_CARD_NAMED);
       return card;
     });
     const cardIds = new Set(cards2.map((x) => x.id));
@@ -8121,7 +8121,7 @@ What you type stays in this browser only.`;
     if (c.notes && typeof c.notes === "object") out.notes = v2Copy(c.notes);
     if (c.grew && typeof c.grew === "object") out.grew = v2Copy(c.grew);
     if (c.desk && typeof c.desk === "object") out.desk = v2Copy(c.desk);
-    v2Restore(out, c.ext);
+    v2Restore(out, c.ext, V2_HEAD_NAMED);
     if (v2Str(c.id)) out.modified = true;
     out.hash = v2ContentHash(out);
     return out;
