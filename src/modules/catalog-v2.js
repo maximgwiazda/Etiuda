@@ -41,12 +41,40 @@ function v2CatKey(code,primary){
   return Object.prototype.hasOwnProperty.call(CAT_LABEL_KEY,c) ? CAT_LABEL_KEY[c] : ("categories:"+c);
 }
 const CARD_FLAGS=["firstOnly","allIntents","intentTop"];
+/* Every key this build names, on a card and in the header. ANY OTHER KEY IS CARRIED WHOLE, in the
+   runtime's `ext`, so a field a newer build adds survives a round trip here. hash, sig and
+   modified are named so they are never carried: an export re-makes them. So is name, which the
+   format no longer has and no file of this build may give back. */
+const V2_CARD_NAMED=["id","shelf","title","body","note","bodyShape","k","firstOnly","allIntents","intentTop",
+  "paxVoc","lockLang","requests","retired","next","commits"];
+const V2_HEAD_NAMED=["format","kind","id","rev","date","langs","commentLang","tags","cards","role","facts",
+  "greet","stop","sample","modified","hash","sig","notes","grew","desk","name"];
 // One phrase per part of the day, and the clock has three. A language whose greeting covers
 // two parts writes the same phrase twice, which is what the built-in Polish does.
 const V2_GREET_PARTS=3;
 const DEFAULT_LANGS=[{code:"en",label:"EN"},{code:"pl",label:"PL"}];
 
 function v2Str(v){ return String(v==null?"":v); }
+function v2Copy(v){ return JSON.parse(JSON.stringify(v)); }
+/* defineProperty, never assignment: a key named __proto__ would set the prototype and vanish. */
+function v2Put(into,k,v){
+  Object.defineProperty(into,k,{ value:v2Copy(v), enumerable:true, writable:true, configurable:true });
+}
+/* The keys of `src` the build does not name, copied; null where there are none. */
+function v2Extra(src,named){
+  let out=null;
+  Object.keys(src).forEach(k=>{
+    if(named.indexOf(k)>-1 || src[k]===undefined) return;
+    if(!out) out={};
+    v2Put(out,k,src[k]);
+  });
+  return out;
+}
+/* Carried keys go back where they came from, and a key the build now names wins over its carried copy. */
+function v2Restore(into,extra){
+  if(!extra || typeof extra!=="object") return;
+  Object.keys(extra).forEach(k=>{ if(!Object.prototype.hasOwnProperty.call(into,k)) v2Put(into,k,extra[k]); });
+}
 function v2Codes(c){
   const l=(c&&Array.isArray(c.langs)&&c.langs.length)?c.langs:DEFAULT_LANGS;
   return l.map(x=>v2Str(x&&x.code)).filter(Boolean);
@@ -350,6 +378,58 @@ function v2GrammarNotices(data){
     .map(c=>"langs: this build has no grammar for "+c+", so its text is used as written - no"
       +" vocative, no declension, and a joined list reads with the English \"and\"");
 }
+const V2_SHA_RE=/^sha256:[0-9a-f]{64}$/, V2_HEX64_RE=/^[0-9a-f]{64}$/, V2_BRANCH_RE=/^k-[0-9a-f]{16}$/;
+function v2Missing(v){ return v==null?"absent":"malformed"; }
+/* A flag is true or it is not there: false and null are problems rather than a second spelling of absent. */
+function v2FlagProblem(c,f,id,out){
+  if(c&&c[f]!==undefined&&c[f]!==true) out.push("card "+id+": "+f+" is "+JSON.stringify(c[f])+", wanted true or absent");
+}
+/* `next` names cards of this file, so it is read once every id is known. */
+function v2NextProblems(c,id,ids,out){
+  const next=c&&c.next;
+  if(next===undefined) return;
+  if(!Array.isArray(next)){ out.push("card "+id+": next is not a list"); return; }
+  const seen=new Set();
+  next.forEach((e,i)=>{
+    const where="card "+id+": next["+i+"] ";
+    const to=(e&&typeof e==="object"&&!Array.isArray(e)&&typeof e.to==="string") ? e.to : "";
+    if(!to){ out.push(where+"is not an entry with a to"); return; }
+    if(to===id) out.push(where+"names the card itself");
+    else if(!Object.prototype.hasOwnProperty.call(ids,to)) out.push(where+"names "+to+", which is no card");
+    else if(seen.has(to)) out.push(where+"names "+to+" a second time");
+    seen.add(to);
+  });
+}
+/* The envelope fields the branch work adds. Shapes only: that a desk id matches its key, or that a
+   pin matches an archived edition, is for the reader that has the key or the archive. */
+function v2HeaderProblems(data,codes,out){
+  if(data.notes!==undefined){
+    if(!data.notes||typeof data.notes!=="object"||Array.isArray(data.notes)) out.push("notes: not a table of text by language");
+    else Object.keys(data.notes).forEach(code=>{
+      if(codes.indexOf(code)<0) out.push("notes."+code+": a language this catalog does not declare");
+      else if(typeof data.notes[code]!=="string") out.push("notes."+code+": not text");
+    });
+  }
+  const entry=(f,v)=>{
+    if(v===undefined) return null;
+    if(!v||typeof v!=="object"||Array.isArray(v)){ out.push(f+": not an entry"); return null; }
+    return v;
+  };
+  const g=entry("grew",data.grew);
+  if(g){
+    if(!V2_ID_RE.test(v2Str(g.id))) out.push("grew.id: "+v2Missing(g.id)+", wanted the id of the catalog it grew from");
+    if(typeof g.rev!=="number"||!Number.isFinite(g.rev)||g.rev<0) out.push("grew.rev: "+v2Missing(g.rev)+", wanted the edition number it grew from");
+    if(!V2_SHA_RE.test(v2Str(g.sha))) out.push("grew.sha: "+v2Missing(g.sha)+", wanted sha256: and 64 lower-case hex characters");
+  }
+  const d=entry("desk",data.desk);
+  if(d){
+    if(!V2_BRANCH_RE.test(v2Str(d.id))) out.push("desk.id: "+v2Missing(d.id)+", wanted k- and 16 lower-case hex characters");
+    if(d.name!==undefined&&typeof d.name!=="string") out.push("desk.name: not text");
+    ["key","box"].forEach(f=>{
+      if(!V2_HEX64_RE.test(v2Str(d[f]))) out.push("desk."+f+": "+v2Missing(d[f])+", wanted 64 lower-case hex characters");
+    });
+  }
+}
 /** Section 2.5 of the specification, and the body rules of 2.6. Every problem rather than the
  *  first, because a maintainer fixing a file wants the whole list, and every message names the
  *  field and what it belongs to. */
@@ -392,7 +472,11 @@ function v2Problems(data){
     if(!v2Str(((c&&c.title)||{})[primary])) out.push("card "+id+": no title in "+primary+", the primary language");
     if(!v2Str(((c&&c.body)||{})[primary])) out.push("card "+id+": no body in "+primary+", the primary language");
     v2BodyProblems(c,id,primary,out);
+    v2FlagProblem(c,"retired",id,out);
+    v2FlagProblem(c,"commits",id,out);
   });
+  data.cards.forEach((c,i)=>v2NextProblems(c,v2Str(c&&c.id)||("["+i+"]"),cardSeen,out));
+  v2HeaderProblems(data,codes,out);
   if(data.hash!=null && v2ContentHash(data)!==v2Str(data.hash))
     out.push("hash: "+v2Str(data.hash)+" is not the hash of what the file holds");
   return out;
@@ -459,6 +543,11 @@ function catalogFromV2(data){
     if(c.lockLang) m.lockLang=v2Str(c.lockLang);
     const links=(Array.isArray(c.requests)?c.requests:[]).map(id=>idxOf[v2Str(id)]).filter(i=>i!=null);
     if(links.length) m.intents=links;
+    if(c.retired) m.retired=1;
+    if(c.commits) m.commits=1;
+    // The entries whole, so a key a later build adds to one survives; a 2.0 reader acts on `to` alone.
+    if(Array.isArray(c.next)&&c.next.length) m.next=v2Copy(c.next);
+    const more=v2Extra(c,V2_CARD_NAMED); if(more) m.ext=more;
     return m;
   });
   const out={ format:1, kind:"playbook-catalog",
@@ -487,6 +576,11 @@ function catalogFromV2(data){
      written, and the reader downstream falls back to the built-in text on absence. */
   if(typeof data.facts==="string") out.facts=data.facts;
   if(data.sample) out.sample=1;
+  // Validated above. Carried for the readers that act on them; nothing on this desk does yet.
+  if(data.notes) out.notes=v2Copy(data.notes);
+  if(data.grew) out.grew=v2Copy(data.grew);
+  if(data.desk) out.desk=v2Copy(data.desk);
+  const more=v2Extra(data,V2_HEAD_NAMED); if(more) out.ext=more;
   return out;
 }
 /** The runtime's catalog as a format 2 payload, for export. A card and a shelf keep the id they
@@ -557,7 +651,22 @@ function catalogToV2(c,opts){
     CARD_FLAGS.forEach(f=>{ if(m[f]) card[f]=true; });
     if(m.paxVoc!=null) card.paxVoc=(+m.paxVoc)?1:0;
     if(m.lockLang) card.lockLang=v2Str(m.lockLang);
+    if(m.retired) card.retired=true;
+    if(m.commits) card.commits=true;
+    v2Restore(card,m.ext);
     return card;
+  });
+  /* A link is read back by this build's own v2Problems, so an export keeps only those that would
+     pass: a card removed at this desk, a link to itself or a repeat leaves no entry behind. */
+  const cardIds=new Set(cards.map(x=>x.id));
+  cards.forEach((card,i)=>{
+    const seen=new Set();
+    const next=(Array.isArray(c.cards[i].next)?c.cards[i].next:[]).filter(e=>{
+      const to=(e&&typeof e==="object"&&typeof e.to==="string")?e.to:"";
+      if(!to||to===card.id||!cardIds.has(to)||seen.has(to)) return false;
+      seen.add(to); return true;
+    });
+    if(next.length) card.next=v2Copy(next);
   });
   const out={ format:V2_FORMAT, kind:V2_KIND,
               id:v2Str(o.id||c.id)||"etiuda-catalog",
@@ -571,6 +680,10 @@ function catalogToV2(c,opts){
   if(c.greet&&typeof c.greet==="object") out.greet=c.greet;
   if(c.stop&&typeof c.stop==="object") out.stop=c.stop;
   if(c.sample) out.sample=true;
+  if(c.notes&&typeof c.notes==="object") out.notes=v2Copy(c.notes);
+  if(c.grew&&typeof c.grew==="object") out.grew=v2Copy(c.grew);
+  if(c.desk&&typeof c.desk==="object") out.desk=v2Copy(c.desk);
+  v2Restore(out,c.ext);
   /* Section 5. This engine is never the origin of a catalog, so a file it hands back says so.
      Rev arrives already raised where an export chose a new edition - see currentCatalog - and is
      otherwise left exactly where it was. An id is what says there was an origin at all: a

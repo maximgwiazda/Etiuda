@@ -553,6 +553,7 @@ function runUnitTests() {
   grownCardTests();
   motionJudgeTests();
   v2ValidationTests();
+  formatPassTests();
   lintCatalogTests();
   langAgnosticTests();
   libraryAwaitingTests();
@@ -951,9 +952,12 @@ function v2Fns() {
     "function v2SigFold(", "function v2SignedBytes(",
     "const V2_ID_RE=", "const V2_SHAPES=", "const V2_MARKER_RE=", "function v2IsBracketLine(",
     "const V2_GREET_PARTS=", "function v2BodyProblems(", "const V2_LANG_RE=", "function v2LangProblems(",
-    "function v2Problems(",
+    "const V2_SHA_RE=", "function v2Missing(", "function v2FlagProblem(", "function v2NextProblems(",
+    "function v2HeaderProblems(", "function v2Problems(",
     /* CARD_FLAGS is spelled out to its first member: card-fields.js declares the same name
        and comes first in the source document, so the bare marker slices the wrong one. */
+    "const V2_CARD_NAMED=", "const V2_HEAD_NAMED=", "function v2Copy(", "function v2Put(",
+    "function v2Extra(", "function v2Restore(",
     "const CARD_KEY=", "const REQ_KEY=", "const V2_RUNTIME_FIELD=", "function v2ColKey(",
     "const CAT_LABEL_KEY=", "function v2CatKey(",
     "const V2_GRAMMAR_LANGS=", "function v2GrammarNotices(",
@@ -962,7 +966,7 @@ function v2Fns() {
     "function catalogToV2(",
     "function catalogFromV2(",
   ].map(m => extractDecl(src, m)).join("\n");
-  return new Function(decls + "\nreturn {isV2,v2Problems,v2GrammarNotices,v2ContentHash,v2SignedBytes,catalogToV2,catalogFromV2,v2Unmark,v2Mark,v2AltLabel,v2PartText,v2ColKey,v2CatKey,CARD_KEY,REQ_KEY};")();
+  return new Function(decls + "\nreturn {isV2,v2Problems,v2GrammarNotices,v2ContentHash,v2SignedBytes,v2Canonical,catalogToV2,catalogFromV2,v2Unmark,v2Mark,v2AltLabel,v2PartText,v2ColKey,v2CatKey,CARD_KEY,REQ_KEY};")();
 }
 function v2ValidationTests() {
   const V = v2Fns();
@@ -1222,6 +1226,172 @@ function v2ValidationTests() {
   eq("an export gives the greeting back", back.greet, spoken.greet);
   eq("and the stop list", back.stop, spoken.stop);
   eq("and the file it wrote passes the loader's validation", V.v2Problems(back), []);
+}
+
+/* THE FORMAT PASS (board 834): the card fields retired, next and commits, the header fields notes,
+   grew and desk, and a field this build does not name, which is carried whole. Each rule gives its
+   line, and the carrying is held by a round trip over one file that holds every one of them. */
+function formatPassTests() {
+  const V = v2Fns();
+  const HEX = c => c.repeat(64);
+  const sound = () => ({
+    format: 2, kind: "etiuda-catalog", id: "toy-shop", rev: 3,
+    langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }],
+    tags: [{ id: "t-open", kind: "shelf", label: { en: "Open" } }],
+    cards: [{ id: "c-one", shelf: "t-open", bodyShape: "plain", title: { en: "One" }, body: { en: "One." } },
+            { id: "c-two", shelf: "t-open", bodyShape: "plain", title: { en: "Two" }, body: { en: "Two." } }]
+  });
+  const bent = f => { const c = sound(); f(c); return V.v2Problems(c); };
+  const first = f => (bent(f)[0] || "none");
+  const rich = () => Object.assign(sound(), {
+    notes: { en: "A note.", pl: "Uwaga." },
+    grew: { id: "toy-shop", rev: 2, sha: "sha256:" + HEX("a") },
+    desk: { id: "k-0123456789abcdef", name: "Ala", key: HEX("b"), box: HEX("c") },
+    futureHeader: { list: [1, 2], text: "kept" }
+  });
+  const full = () => {
+    const c = rich();
+    Object.assign(c.cards[0], { retired: true, commits: true, next: [{ to: "c-two", label: "later" }],
+      futureCard: { a: [1, { b: 2 }] } });
+    return c;
+  };
+  const NOT_TABLE = "notes: not a table of text by language";
+
+  eq("834a a catalog holding every new field has nothing to report", V.v2Problems(full()), []);
+  eq("834b a catalog holding none of them has nothing to report", V.v2Problems(sound()), []);
+
+  // The card rules.
+  eq("834c retired: false is named, since the flag is true or absent",
+     first(c => { c.cards[0].retired = false; }), "card c-one: retired is false, wanted true or absent");
+  eq("834d retired: anything but true is named, null and a word among them",
+     [null, "yes", 1].map(v => first(c => { c.cards[0].retired = v; })),
+     ["null", "\"yes\"", "1"].map(v => "card c-one: retired is " + v + ", wanted true or absent"));
+  eq("834e commits: false is named", first(c => { c.cards[1].commits = false; }),
+     "card c-two: commits is false, wanted true or absent");
+  eq("834f next: a value that is not a list is named",
+     first(c => { c.cards[0].next = "c-two"; }), "card c-one: next is not a list");
+  eq("834g next: an entry with no usable to is named",
+     [{}, "c-two", { to: 7 }, null].map(e => first(c => { c.cards[0].next = [e]; })),
+     [1, 2, 3, 4].map(() => "card c-one: next[0] is not an entry with a to"));
+  eq("834h next: a card the file does not hold is named, and a link to a card LATER in the file is not one",
+     [first(c => { c.cards[0].next = [{ to: "c-gone" }]; }),
+      bent(c => { c.cards[0].next = [{ to: "c-two" }]; })],
+     ["card c-one: next[0] names c-gone, which is no card", []]);
+  eq("834i next: the card itself is named", first(c => { c.cards[0].next = [{ to: "c-one" }]; }),
+     "card c-one: next[0] names the card itself");
+  eq("834j next: a card named twice is named once, at the second entry",
+     bent(c => { c.cards[0].next = [{ to: "c-two" }, { to: "c-two" }]; }),
+     ["card c-one: next[1] names c-two a second time"]);
+  eq("834k next: a name an object inherits is no card",
+     first(c => { c.cards[0].next = [{ to: "constructor" }]; }),
+     "card c-one: next[0] names constructor, which is no card");
+
+  // The header rules.
+  eq("834l notes: a value that is not a table is named",
+     [null, "text", ["a"]].map(v => first(c => { c.notes = v; })), [NOT_TABLE, NOT_TABLE, NOT_TABLE]);
+  eq("834m notes: a language the catalog does not declare, and a value that is not text, are named",
+     [first(c => { c.notes = { sv: "Hej" }; }), first(c => { c.notes = { en: 3 }; })],
+     ["notes.sv: a language this catalog does not declare", "notes.en: not text"]);
+  eq("834n grew: each part is named when it is wrong, and so is a value that is no entry",
+     [first(c => { c.grew = { id: "A", rev: 1, sha: "sha256:" + HEX("a") }; }),
+      first(c => { c.grew = { id: "toy-shop", rev: "1", sha: "sha256:" + HEX("a") }; }),
+      first(c => { c.grew = { id: "toy-shop", rev: 1, sha: HEX("a") }; }),
+      first(c => { c.grew = { id: "toy-shop", rev: 1, sha: "sha256:" + HEX("A") }; }),
+      first(c => { c.grew = "toy-shop"; })],
+     ["grew.id: malformed, wanted the id of the catalog it grew from",
+      "grew.rev: malformed, wanted the edition number it grew from",
+      "grew.sha: malformed, wanted sha256: and 64 lower-case hex characters",
+      "grew.sha: malformed, wanted sha256: and 64 lower-case hex characters",
+      "grew: not an entry"]);
+  eq("834o grew: a part left out is absent, not malformed",
+     first(c => { c.grew = { rev: 1, sha: "sha256:" + HEX("a") }; }),
+     "grew.id: absent, wanted the id of the catalog it grew from");
+  eq("834p desk: the id, the key, the box and the name are each named when wrong",
+     [first(c => { c.desk = { id: "k-0123", name: "Ala", key: HEX("b"), box: HEX("c") }; }),
+      first(c => { c.desk = { id: "x-0123456789abcdef", name: "Ala", key: HEX("b"), box: HEX("c") }; }),
+      first(c => { c.desk = { id: "k-0123456789abcdef", name: "Ala", key: HEX("b").slice(1), box: HEX("c") }; }),
+      first(c => { c.desk = { id: "k-0123456789abcdef", name: "Ala", key: HEX("b") }; }),
+      first(c => { c.desk = { id: "k-0123456789abcdef", name: 5, key: HEX("b"), box: HEX("c") }; })],
+     ["desk.id: malformed, wanted k- and 16 lower-case hex characters",
+      "desk.id: malformed, wanted k- and 16 lower-case hex characters",
+      "desk.key: malformed, wanted 64 lower-case hex characters",
+      "desk.box: absent, wanted 64 lower-case hex characters",
+      "desk.name: not text"]);
+  eq("834q desk: a desk with no name is sound, the name being what the agent typed and may be nothing",
+     bent(c => { c.desk = { id: "k-0123456789abcdef", key: HEX("b"), box: HEX("c") }; }), []);
+
+  /* THE CARRYING. One file holding every new field and one unknown field on a card and in the
+     header goes through catalogFromV2 and back out through catalogToV2, and every one of them
+     comes out as it went in. Compared through v2Canonical, which sorts keys, because JSON key
+     order is no part of a catalog. */
+  const canon = V.v2Canonical;
+  const back = V.catalogToV2(V.catalogFromV2(full()));
+  const was = full();
+  eq("834r every new field and both unknown ones come back out of an export as they went in",
+     [back.cards[0], back.notes, back.grew, back.desk, back.futureHeader].map(canon),
+     [was.cards[0], was.notes, was.grew, was.desk, was.futureHeader].map(canon));
+  eq("834s and the second card, which holds none of them, gains none",
+     canon(back.cards[1]), canon({ id: "c-two", shelf: "t-open", bodyShape: "plain",
+       title: { en: "Two" }, body: { en: "Two." } }));
+  eq("834t and what was written reads back clean, the validator and the writer being one contract",
+     V.v2Problems(back), []);
+  eq("834u a key named __proto__ is carried as a key and does not become a prototype",
+     (() => {
+       const c = sound();
+       c.cards[0] = JSON.parse(JSON.stringify(c.cards[0]).slice(0, -1) + ",\"__proto__\":{\"x\":1}}");
+       const out = V.catalogToV2(V.catalogFromV2(c));
+       return [Object.keys(out.cards[0]).indexOf("__proto__") > -1,
+               Object.getPrototypeOf(out.cards[0]) === Object.prototype];
+     })(), [true, true]);
+  eq("834v a field this build NAMES wins over a carried copy of the same name",
+     (() => {
+       const rt = V.catalogFromV2(sound());
+       rt.cards[0].ext = { bodyShape: "steps", futureCard: 1, retired: true };
+       rt.ext = { id: "other", rev: 99, futureHeader: 2 };
+       const out = V.catalogToV2(rt);
+       return [out.cards[0].bodyShape, out.cards[0].futureCard, out.cards[0].retired, out.id, out.rev,
+               out.futureHeader];
+     })(), ["plain", 1, true, "toy-shop", 3, 2]);
+  eq("834w a catalog's name stays gone, and hash, sig and modified are made fresh rather than carried",
+     (() => {
+       const c = rich(); c.name = "Old"; c.modified = false; c.sig = { alg: "Ed25519", keyId: "k", value: "aa" };
+       const out = V.catalogToV2(V.catalogFromV2(c));
+       return ["name" in out, out.modified, out.hash === V.v2ContentHash(out), "sig" in out];
+     })(), [false, true, true, false]);
+
+  /* A LINK AN EXPORT WOULD BREAK IS LEFT OUT, because the file it writes is read back by v2Problems:
+     a card removed at this desk, a link to itself and a repeat each leave no entry behind. */
+  const runtime = V.catalogFromV2(sound());
+  runtime.cards[0].next = [{ to: "c-one" }, { to: "c-two" }, { to: "c-two" }, { to: "c-removed" }, { to: 4 }, null];
+  const mended = V.catalogToV2(runtime);
+  eq("834x an export drops a link to itself, a repeat, a card no longer there and an entry with no to",
+     mended.cards[0].next, [{ to: "c-two" }]);
+  eq("834y and the file it wrote passes the loader", V.v2Problems(mended), []);
+  runtime.cards[0].next = [{ to: "c-removed" }];
+  eq("834z CONTROL: where nothing is left the card carries no next at all, not an empty list",
+     "next" in V.catalogToV2(runtime).cards[0], false);
+
+  /* THE CONTROL THAT MATTERS MOST: a catalog holding none of them is written as it was before this
+     pass, the same keys in the same order on the header and on a card. */
+  const plain = V.catalogToV2(V.catalogFromV2(sound()));
+  const keysOf = o => Object.keys(o).join(",");
+  eq("834A CONTROL: a catalog with none of the new fields writes none of them, on the header or on a card",
+     [keysOf(plain), keysOf(plain.cards[0])],
+     ["format,kind,id,rev,langs,commentLang,tags,cards,modified,hash", "id,shelf,title,body,bodyShape"]);
+
+  /* THE TWO SITES NO NODE LEG CAN CALL, held as text like the rest of the editor and the export. The
+     custom entry is replaced whole by a save, so it takes the fields no editor writes from the entry
+     it replaces BEFORE the sweep that deletes empty ones. An export is a new catalog, so it takes the
+     notes and the carried fields from the origin and leaves grew and desk, which describe a file. */
+  const src = sourceText();
+  const editor = extractDecl(src, "function openCardEditor(");
+  const callAt = editor.indexOf("carryUnwritten(entry,"), sweepAt = editor.indexOf("CARD_BOOL_FLAGS.forEach(f=>{ if(!entry[f])");
+  eq("834B the custom entry carries the unwritten fields over from the entry it replaces, before the sweep",
+     [callAt > -1, sweepAt > callAt], [true, true]);
+  const exporter = extractDecl(src, "function currentCatalog(");
+  eq("834C an export takes notes and the carried fields from the origin, and not grew or desk",
+     ["out.notes=origin.notes", "out.ext=origin.ext", "out.grew", "out.desk"].map(x => exporter.indexOf(x) > -1),
+     [true, true, false, false]);
 }
 
 /* Spec 2.6 lines 399-401: where a label is present the copy control shows it in place of

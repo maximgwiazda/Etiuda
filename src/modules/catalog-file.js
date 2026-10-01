@@ -149,6 +149,10 @@ function currentCatalog(){
   if(origin&&Array.isArray(origin.langs)&&origin.langs.length) out.langs=origin.langs;
   if(origin&&origin.greet&&typeof origin.greet==="object") out.greet=origin.greet;
   if(origin&&origin.stop&&typeof origin.stop==="object") out.stop=origin.stop;
+  /* From the origin like greet. grew and desk are left behind on purpose: they describe the file
+     the origin was, and an export is a new catalog. */
+  if(origin&&origin.notes&&typeof origin.notes==="object") out.notes=origin.notes;
+  if(origin&&origin.ext&&typeof origin.ext==="object") out.ext=origin.ext;
   /* The file's request ids, re-indexed onto what survived the removals. The array is aligned
      with the ORIGINAL order, so an intent added at this desk is past its end and has none. */
   const wasIds=(origin&&Array.isArray(origin.intentIds))?origin.intentIds:[];

@@ -198,6 +198,13 @@ function normaliseCatalog(data){
      well as read at the sibling load, or Import would drop what the auto-load keeps. */
   if(data&&data.greet&&typeof data.greet==="object") cat.greet=data.greet;
   if(data&&data.stop&&typeof data.stop==="object") cat.stop=data.stop;
+  /* The format 2 fields no screen reads yet, and whatever a newer build adds: carried so that an
+     export gives back the file it was handed. Validated at catalogFromV2, so only the shape is checked here. */
+  const table=v=>(v&&typeof v==="object"&&!Array.isArray(v)&&Object.keys(v).length) ? JSON.parse(JSON.stringify(v)) : null;
+  const notes=table(data&&data.notes); if(notes) cat.notes=notes;
+  const grew=table(data&&data.grew); if(grew) cat.grew=grew;
+  const desk=table(data&&data.desk); if(desk) cat.desk=desk;
+  const ext=table(data&&data.ext); if(ext) cat.ext=ext;
   /* Index-aligned with the intent arrays, and carried for the same reason as `id`: it is what
      an export needs to hand a request back the id it came with. */
   if(data&&Array.isArray(data.intentIds)&&data.intentIds.length) cat.intentIds=data.intentIds.map(String);
