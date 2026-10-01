@@ -130,7 +130,7 @@ function loadShell(opts) {
   const regCalls = [];
   const cp = { execFileSync: (file, args, opt) => {
     if (file !== REG_TOOL) return nodeRequire("node:child_process").execFileSync(file, args, opt);
-    regCalls.push([file, args]);
+    regCalls.push([file, args, opt]);
     if (o.reg instanceof Error) throw o.reg;
     return o.reg === undefined ? QUIET : o.reg;
   } };
@@ -543,9 +543,10 @@ try {
       "6a with only automatic detection or nothing set, the shell asks Chromium for --no-proxy-server, once, so an idle"
       + " desk does no proxy discovery and no IPv6 probe: " + JSON.stringify(asked(S)));
     check(S.regCalls.length === 1 && S.regCalls[0][0] === REG_TOOL
-      && JSON.stringify(S.regCalls[0][1]) === JSON.stringify(["query", REG_KEY]),
-      "6b the one program it starts for that is Windows' reg tool at its fixed system path, asking for one key, once: "
-      + JSON.stringify(S.regCalls));
+      && JSON.stringify(S.regCalls[0][1]) === JSON.stringify(["query", REG_KEY])
+      && !!S.regCalls[0][2] && S.regCalls[0][2].windowsHide === true && S.regCalls[0][2].timeout === 5000,
+      "6b the one program it starts for that is Windows' reg tool at its fixed system path, asking for one key, once, hidden and"
+      + " given 5000 ms to answer, since the start waits on it: " + JSON.stringify(S.regCalls));
     check(SRC.split(LINE).length === 2, "6c the shell holds its proxy line exactly once, so the control copy can cut it");
     const stripped = SRC.split(LINE).join("");
     const bare = loadShell({ src: stripped });

@@ -47,7 +47,7 @@ function windowsProxySwitches() {
 }
 for (const s of windowsProxySwitches()) app.commandLine.appendSwitch(...s);
 
-const ENGINE =path.join(__dirname, "..", "engine", "etiuda.html");
+const ENGINE = path.join(__dirname, "..", "engine", "etiuda.html");
 
 /* The container is not the format: `.ec` is the catalog document, and the `.js` beside it is
    that same JSON behind a `window.E_CATALOG =` line, which is what a page on file:// can load
