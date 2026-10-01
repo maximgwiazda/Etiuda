@@ -18609,6 +18609,7 @@ What you type stays in this browser only.`;
     catalogIntentCount: () => catalogIntentCount,
     catalogMacroCount: () => catalogMacroCount,
     catalogNameOfFile: () => catalogNameOfFile,
+    deskBranchHolds: () => deskBranchHolds,
     exportCatalog: () => exportCatalog,
     importCatalogHere: () => importCatalogHere,
     importCatalogText: () => importCatalogText,
@@ -19318,7 +19319,7 @@ What you type stays in this browser only.`;
     const origin = storedCatalog();
     if (!origin || !origin.id || !/^sha256:[0-9a-f]{64}$/.test(String(origin.pin || ""))) return Promise.resolve(false);
     const stem = catalogFileStem(catalogNameOfFile(catalogFileName())) + "-" + branchHex(origin);
-    const run = catalogEdited() ? eBranchIdentity().then((who) => who ? eWriteBranch(stem, JSON.stringify(catalogToV2(branchCatalog(who, origin)))) : { ok: false }) : eWriteBranch(stem, "");
+    const run = deskBranchHolds() ? eBranchIdentity().then((who) => who ? eWriteBranch(stem, JSON.stringify(catalogToV2(branchCatalog(who, origin)))) : { ok: false }) : eWriteBranch(stem, "");
     branchBusy = run.then((r) => !!(r && r.ok), () => false).then((ok) => {
       branchBusy = null;
       if (branchAgain) {
@@ -19475,6 +19476,34 @@ What you type stays in this browser only.`;
   }
   function catalogEdited() {
     return !sampleUntouched();
+  }
+  function deskBranchHolds() {
+    const p = pack || {};
+    const bare = (bag, k, read) => {
+      const m = p[bag];
+      p[bag] = Object.keys(m).reduce((o, x) => {
+        if (x !== k) o[x] = m[x];
+        return o;
+      }, {});
+      try {
+        return read(k);
+      } finally {
+        p[bag] = m;
+      }
+    };
+    const differs = (bag, read) => {
+      const m = p[bag] || {};
+      return Object.keys(CATS).some((k) => m[k] != null && m[k] !== "" && m[k] !== bare(bag, k, read));
+    };
+    return LOOSE_FIELDS.some((f) => {
+      const v = p[f];
+      if (f === "cardOrder") return !cardOrderIsBase();
+      if (f === "facts" || f === "who") return v != null;
+      if (f === "catLabelsPl") return differs(f, (k) => CAT_LABELS_PL[k]);
+      if (f === "catIcons") return differs(f, catIconKey);
+      if (f === "catColors") return differs(f, catSlot);
+      return Array.isArray(v) ? v.length > 0 : !!v && typeof v === "object" && Object.keys(v).length > 0;
+    });
   }
   function syncSampleMark() {
     scheduleDeskBranch();

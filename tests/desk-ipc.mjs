@@ -11,6 +11,9 @@
  */
 process.removeAllListeners("warning");
 process.on("warning", () => {});
+const OUT = [];
+const writeOut = process.stdout.write.bind(process.stdout);
+process.stdout.write = (c, ...a) => { OUT.push(String(c)); return writeOut(c, ...a); };
 
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -23,7 +26,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 55;
+const EXPECTED = 65;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -53,7 +56,7 @@ const electron = {
 let sealOk = true, decryptFails = null;
 const safeStorage = {
   isEncryptionAvailable: () => sealOk,
-  encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
+  encryptString: s => { if (!sealOk) throw new Error("encryption is not available"); return Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)); },
   decryptString: b => { if (!sealOk || (decryptFails && Buffer.from(b).toString("base64") === decryptFails)) throw new Error("cannot decrypt for this account"); return Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"); },
 };
 electron.safeStorage = safeStorage;
@@ -62,7 +65,7 @@ const shellSrc = f => fs.readFileSync(path.join(ROOT, "shell", f), "utf8");
 /* main.js is evaluated as a function body, so one line appended to it hands the test the retry that Electron's events call. */
 const mainTest = {};
 new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
-  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches;")(
+  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged;")(
   fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, mainTest);
 
 /* ---- the renderer's side of the pipe. The desk's channels go to main's own handlers; the
@@ -431,11 +434,13 @@ try {
 
   const before = bytesOwn(), mtime0 = timeOwn();
   await tick(20);
-  PK.pack.favourites = ["c-b"]; PK.pack.hidden = ["c-c"]; PK.savePack(); RB.rebuildCards();
+  PK.pack.favourites = ["c-b"]; PK.pack.hidden = ["c-c"];
+  PK.pack.useCounts = { "c-a": 7, "c-b": 3 }; PK.pack.useAt = { "c-a": "2026-10-01", "c-b": "2026-10-01" }; PK.pack.intentCounts = { x: 2 };
+  PK.savePack(); RB.rebuildCards();
   const ok3 = await writeBranch();
   check(ok3 === true && before.length > 0 && Buffer.compare(bytesOwn(), before) === 0 && timeOwn() === mtime0,
-    "77k a star and a hide change nothing in the file: the same bytes and the same time, rev " + readOwn().rev);
-  PK.pack.favourites = []; PK.pack.hidden = []; PK.savePack();
+    "77k a star, a hide and the counts change nothing in the file: the same bytes and the same time, rev " + readOwn().rev);
+  PK.pack.favourites = []; PK.pack.hidden = []; PK.pack.useCounts = {}; PK.pack.useAt = {}; PK.pack.intentCounts = {}; PK.savePack();
 
   /* The private halves: read the sealed envelope back through the stand-in, and look for what they are everywhere the desk can be seen. */
   const br = envelope().branch || { sign: { pub: "", priv: "" }, box: { pub: "", priv: "" } };
@@ -445,12 +450,25 @@ try {
   const secrets = [seedHex, Buffer.from(seedHex, "hex").toString("base64"),
     safeStorage.decryptString(Buffer.from(br.sign.priv, "base64")), safeStorage.decryptString(Buffer.from(br.box.priv, "base64"))].filter(Boolean);
   const answers = [JSON.stringify(await asHost("branchIdentity")), JSON.stringify(await asHost("writeBranch", "lamps-" + hex1, JSON.stringify(d2)))];
-  const seen = () => walk(UD).map(f => fs.readFileSync(f, "utf8")).concat(said, JSON.stringify(sent.args), JSON.stringify(d2), answers);
-  const leaks = texts => texts.filter(t => secrets.some(x => t.indexOf(x) >= 0)).length;
-  check(secrets.length === 4 && leaks(seen().concat(["planted " + secrets[0]])) === 1 && leaks(seen()) === 0
+  const formsOf = pairs => {
+    const out = [];
+    for (const p of pairs) for (const h of [p.sign, p.box]) {
+      let der = null;
+      try { der = Buffer.from(safeStorage.decryptString(Buffer.from(h.priv, "base64")), "base64"); } catch { continue; }
+      const key = crypto.createPrivateKey({ key: der, format: "der", type: "pkcs8" });
+      const seed = der.subarray(-32);
+      [seed, der].forEach(b => { out.push(b.toString("hex"), b.toString("base64").replace(/=+$/, ""), b.toString("base64url")); });
+      out.push(key.export({ format: "jwk" }).d);
+    }
+    return out;
+  };
+  const hitsIn = (texts, forms) => { let n = 0; for (const t of texts) { const lo = t.toLowerCase(); for (const f of forms) if (t.indexOf(f) >= 0 || (/^[0-9a-f]+$/.test(f) && lo.indexOf(f) >= 0)) n++; } return n; };
+  const liveForms = formsOf([br]);
+  const seen = () => walk(UD).map(f => fs.readFileSync(f, "latin1")).concat(said, JSON.stringify(sent), OUT.join(""), JSON.stringify(d2), answers);
+  check(secrets.length === 4 && liveForms.length === 14 && hitsIn(["planted " + liveForms[liveForms.length - 1]], liveForms) >= 1 && hitsIn(seen(), liveForms) === 0
     && Buffer.from(br.sign.priv, "base64").toString("utf8").indexOf(secrets[2]) < 0,
-    "77l the private halves never leave the sealed envelope: " + secrets.length + " forms of them searched in all " + walk(UD).length
-    + " files under the desk, the log and every argument the page sent, none found, and the search finds one planted");
+    "77l the private halves never leave the sealed envelope: both halves in every form (seed and pkcs8, each in hex, base64 and base64url, and the JWK d), " + liveForms.length
+    + " forms searched in all " + walk(UD).length + " files under the desk, the log, every argument the page sent, this run's own output and the answers, none found, and the search finds one planted");
   const signsAsDesk = (() => { try {
     const key = crypto.createPrivateKey({ key: Buffer.from(secrets[2], "base64"), format: "der", type: "pkcs8" });
     return crypto.verify(null, Buffer.from("x"), pubOf(br.sign.pub), crypto.sign(null, Buffer.from("x"), key)); } catch { return false; } })();
@@ -537,22 +555,34 @@ try {
     for (; i < text.length; i++) { const c = text[i]; if (c === "\x7b") depth++; else if (c === "\x7d" && !--depth) break; }
     return at < 0 ? "" : text.slice(at, i + 1);
   };
-  const callsRetry = body => /\btryHeldBranches\(\)/.test(body);
+  const noComments = t => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  const callsRetry = body => /\btryHeldBranches\(\)/.test(noComments(body));
   const loadLine = mainText.split("\n").filter(l => l.indexOf("on(\"did-finish-load\"") >= 0 && l.indexOf("tryAnswerRequest") >= 0)[0] || "";
-  check(callsRetry(bodyOf(mainText, "catalogChanged")) && callsRetry(loadLine)
-    && !callsRetry(bodyOf(mainText, "catalogChanged").replace("tryHeldBranches();", "")) && !callsRetry(loadLine.replace("tryHeldBranches();", "")),
-    "77u the retry of a held write is one function and both events call it: the catalog folder changing and the page finishing a load; the same reading finds neither once its call is taken out");
+  edit("Held for the folder event");
+  await writeBranch();
+  fs.renameSync(FOLDER, FOLDER + ".away");
+  edit("Held for the folder event, second");
+  const rhe = await writeBranch();
+  if (fs.existsSync(FOLDER)) fs.rmSync(FOLDER, { recursive: true, force: true });
+  fs.renameSync(FOLDER + ".away", FOLDER);
+  const beforeEvt = titleOf(readOwn(), 0);
+  mainTest.catalogChanged(null);
+  const afterEvt = titleOf(readOwn(), 0);
+  check(rhe === false && beforeEvt === "Held for the folder event" && afterEvt === "Held for the folder event, second"
+      && callsRetry(loadLine) && !callsRetry(loadLine.replace("tryHeldBranches();", "/* tryHeldBranches(); */")),
+    "77u the folder-changed event itself, driven, writes the held edit (before " + JSON.stringify(beforeEvt) + ", after " + JSON.stringify(afterEvt)
+    + "), and the page-load handler calls the retry in code, where a call kept in a comment does not count");
 
   edit("Held edit");
   fs.renameSync(FOLDER, FOLDER + ".away");
   const rHeld = await writeBranch();
   if (fs.existsSync(FOLDER)) fs.rmSync(FOLDER, { recursive: true, force: true });
   fs.renameSync(FOLDER + ".away", FOLDER);
-  const before77v = fs.existsSync(file);
+  const before77v = titleOf(readOwn(), 0);
   mainTest.tryHeldBranches();
   const d5 = readOwn();
-  check(rHeld === false && !before77v && titleOf(d5, 0) === "Held edit" && verifies(d5),
-    "77v the folder back and no new edit, the retry puts the held edit in the file (answer while away " + rHeld + ", file before the retry " + before77v
+  check(rHeld === false && before77v !== "Held edit" && titleOf(d5, 0) === "Held edit" && verifies(d5),
+    "77v the folder back and no new edit, the retry puts the held edit in the file (answer while away " + rHeld + ", the file before the retry held " + JSON.stringify(before77v)
     + ", after: " + JSON.stringify(titleOf(d5, 0)) + ", rev " + d5.rev + ")");
 
   /* Two catalogs with one stem. */
@@ -611,6 +641,186 @@ try {
     + (env.branchOld || []).length + "), the old desk's files left as they were, and the log says it once ("
     + said.filter(l => /branch key could not be opened/.test(l)).length + ")");
   decryptFails = null;
+
+  /* ---- Clement's named edits and the rulings that came with them: a star and a hide on an unedited layer,
+     a file whose signature alone is spoiled, every form of every private half, the edition after a removal, and the
+     category fields. The state is the one the legs above leave: the second catalog, the replaced pair. */
+  const CM = await import(PLAIN("content-model.js"));
+  const CI = await import(PLAIN("cat-identity.js"));
+  const IC = await import(PLAIN("icons.js"));
+  const IID = await import(PLAIN("intent-id.js"));
+  const CR = await import(PLAIN("cat-roles.js"));
+  const ownNow = path.join(newDir, "renamed-" + hex2 + ".ec");
+  const readNew = () => { try { return JSON.parse(fs.readFileSync(ownNow, "utf8")); } catch { return {}; } };
+  const exportNow = async () => {
+    window.E_HOST = undefined; exported = null;
+    try { await CF.exportCatalog(); } finally { window.E_HOST = REAL_HOST; }
+    return exported ? JSON.parse(exported) : {};
+  };
+  const exportBody = j => { const c = JSON.parse(JSON.stringify(j)); delete c.id; delete c.hash; return JSON.stringify(c); };
+  const clearLayer = () => {
+    PK.pack.favourites = []; PK.pack.hidden = []; PK.pack.useCounts = {}; PK.pack.useAt = {}; PK.pack.intentCounts = {}; PK.pack.overrides = {};
+    PK.savePack(); RB.rebuildCards();
+  };
+
+  /* A star and a hide on an unedited layer make no file. */
+  clearLayer();
+  await writeBranch();
+  const goneNow = !fs.existsSync(ownNow);
+  PK.pack.favourites = ["c-b"]; PK.pack.hidden = ["c-c"]; PK.savePack(); RB.rebuildCards();
+  const rStar = await writeBranch();
+  check(goneNow && rStar === true && listing(newDir).filter(n => n.indexOf(hex2) >= 0).length === 0,
+    "78a on an unedited layer a star and a hide make no file, and the file an edit had made is gone first (removed " + goneNow + ", files " + JSON.stringify(listing(newDir)) + ")");
+  clearLayer();
+
+  /* A file whose signature alone is spoiled is written again at the next save, with no edit. */
+  edit("Signature target");
+  await writeBranch();
+  const sigOnly = readNew(); sigOnly.sig = Object.assign({}, sigOnly.sig, { value: "00".repeat(64) });
+  fs.writeFileSync(ownNow, JSON.stringify(sigOnly, null, 1));
+  const rS = await writeBranch();
+  const afterS = readNew();
+  check(rS === true && !verifies(sigOnly) && verifies(afterS) && afterS.rev === sigOnly.rev + 1 && titleOf(afterS, 0) === "Signature target",
+    "78b an own file whose signature alone was spoiled is written again at the next save, with no edit: verifies " + verifies(afterS) + ", rev " + sigOnly.rev + " to " + afterS.rev);
+
+  /* Every form of every private half, the pair kept aside included. */
+  const idAns = await asHost("branchIdentity");
+  const envNow = envelope();
+  const pairsNow = [envNow.branch].concat(envNow.branchOld || []);
+  const hay = () => walk(UD).map(f => fs.readFileSync(f, "latin1")).concat(said, JSON.stringify(sent), OUT.join(""), JSON.stringify(idAns));
+  const allForms = formsOf(pairsNow);
+  check(allForms.length === 28 && hitsIn(["x" + allForms[allForms.length - 1] + "x"], allForms) >= 1 && hitsIn(hay(), allForms) === 0
+      && Object.keys(idAns || {}).sort().join() === "box,id,key",
+    "78c four private halves (the live pair and the one kept aside) in every form, seed and pkcs8 each in hex, base64, base64url, and the JWK d: " + allForms.length
+    + " forms, found " + hitsIn(hay(), allForms) + " times in every file under the desk, the log, every sent argument, this run's own output and the identity answer, and a planted one is found; the identity answer's keys are " + Object.keys(idAns || {}).sort().join());
+
+  /* The edition after a removal. */
+  const catRev = async (id, rev) => {
+    const o = Object.assign({}, origin, { id, rev });
+    CF.activateCatalog(CT.parseCatalogFile(JSON.stringify(o)), { file: id + ".ec" });
+    CB.applyBootCatalog(); PK.resetPack(); PK.pack.baseCards = null; RB.rebuildCards();
+  };
+  const revOf = async id => {
+    const n = listing(newDir).filter(f => f.indexOf(sha(Buffer.from(id)).slice(0, 8)) >= 0)[0];
+    try { return JSON.parse(fs.readFileSync(path.join(newDir, n), "utf8")).rev; } catch { return 0; }
+  };
+  await catRev("lamp-rev", 1);
+  const idRev = idAns.id + "-" + sha(Buffer.from("lamp-rev")).slice(0, 8);
+  for (let i = 0; i < 5; i++) { edit("Rev " + i); await writeBranch(); }
+  const rev5 = await revOf("lamp-rev");
+  PK.pack.overrides = {}; PK.savePack(); RB.rebuildCards();
+  await writeBranch();
+  const afterRemoval = { files: listing(newDir).filter(f => f.indexOf(sha(Buffer.from("lamp-rev")).slice(0, 8)) >= 0).length, kept: envelope().branchRevs && envelope().branchRevs[idRev] };
+  edit("Rev again");
+  await writeBranch();
+  const rev6 = await revOf("lamp-rev");
+  check(rev5 === 5 && afterRemoval.files === 0 && afterRemoval.kept === 5 && rev6 === 6,
+    "78d rev 5, then the layer emptied and the file removed, then a new edit gives rev 6: the envelope keeps the edition past the removal (" + rev5 + ", files after removal "
+    + afterRemoval.files + ", kept " + afterRemoval.kept + ", then " + rev6 + ")");
+  await catRev("lamp-rev-two", 1);
+  edit("Another catalog");
+  await writeBranch();
+  check(await revOf("lamp-rev-two") === 1 && (envelope().branchRevs || {})[idRev] === 6,
+    "78e THE CONTROL for 78d: a second desk file id starts at 1 (" + await revOf("lamp-rev-two") + "), and the first one's entry stands at " + (envelope().branchRevs || {})[idRev]);
+
+  /* The category fields. A catalog in English and Polish, two shelves, one request. */
+  const par = {
+    format: 2, kind: "etiuda-catalog", id: "lamp-par", rev: 3, langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }],
+    tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers", pl: "Otwieracze" } }, { id: "t-sp", kind: "shelf", label: { en: "Spare", pl: "Zapas" } },
+      { id: "t-r1", kind: "request", clause: { en: "a refund", pl: "zwrot" }, action: { en: "raised it", pl: "zlozono" }, topic: { en: "the refund", pl: "zwrot" } }],
+    cards: ["a", "b", "c"].map(x => ({ id: "c-" + x, shelf: "t-op", bodyShape: "plain", requests: x === "a" ? ["t-r1"] : undefined,
+      title: { en: "Card " + x, pl: "Karta " + x }, body: { en: "Body " + x + ".", pl: "Tresc " + x + "." } }))
+  };
+  const hexP = sha(Buffer.from("lamp-par")).slice(0, 8);
+  const parFile = () => { const n = listing(newDir).filter(f => f.indexOf(hexP) >= 0)[0]; try { return JSON.parse(fs.readFileSync(path.join(newDir, n), "utf8")); } catch { return null; } };
+  CF.activateCatalog(CT.parseCatalogFile(JSON.stringify(par)), { file: "par.ec" });
+  CB.applyBootCatalog(); IID.snapshotBaseIntents(); PK.resetPack(); PK.pack.baseCards = null; RB.rebuildCards();
+  /* Absent in a build without the category check, so its legs read red there. */
+  const holdsNow = typeof CF.deskBranchHolds === "function" ? CF.deskBranchHolds : () => false;
+  const kCat = "t-op";
+  const baseExport = await exportNow();
+  const labelOf = (j, k) => ((j.tags || []).filter(t => t.id === k)[0] || {});
+  const settle = async () => { PK.savePack(); RB.rebuildCards(); await writeBranch(); };
+
+  PK.pack.catLabelsPl = Object.assign({}, PK.pack.catLabelsPl, { [kCat]: "Otwieracze nowe" });
+  await settle();
+  const fPl = parFile();
+  check(!CF.catalogEdited() && holdsNow() && !!fPl && labelOf(fPl, kCat).label.pl === "Otwieracze nowe" && verifies(fPl)
+      && labelOf(await exportNow(), kCat).label.pl === "Otwieracze nowe",
+    "78f a rename of a category in Polish alone gives a file, which Export agrees with, though the watermark's test (catalogEdited) reads false (file " + !!fPl + ", label "
+    + JSON.stringify(fPl && labelOf(fPl, kCat).label)  + ")");
+  PK.pack.catLabelsPl = {};
+  await settle();
+
+  const icons = Object.keys(IC.CAT_ICONS), baseIcon = labelOf(baseExport, kCat).icon;
+  const pickIcon = icons.filter(k => k !== baseIcon)[0];
+  PK.pack.catIcons = { [kCat]: pickIcon };
+  await settle();
+  const fIc = parFile();
+  check(!CF.catalogEdited() && !!fIc && labelOf(fIc, kCat).icon === pickIcon && baseIcon !== pickIcon && verifies(fIc),
+    "78g an icon change alone gives a file (" + baseIcon + " to " + pickIcon + ", file " + !!fIc + ")");
+  PK.pack.catIcons = {};
+  await settle();
+
+  const baseHue = labelOf(baseExport, kCat).hue;
+  const pickHue = [0, 1, 2, 3, 4, 6, 7, 8].filter(n => CI.hueIsOffered(n) && n !== baseHue)[0];
+  PK.pack.catColors = { [kCat]: pickHue };
+  await settle();
+  const fCo = parFile();
+  check(!CF.catalogEdited() && !!fCo && labelOf(fCo, kCat).hue === pickHue && baseHue !== pickHue && verifies(fCo),
+    "78h a colour change alone gives a file (" + baseHue + " to " + pickHue + ", file " + !!fCo + ")");
+  PK.pack.catColors = {};
+  await settle();
+
+  /* THE CONTROL: the category editor saved with nothing changed. */
+  const none = parFile();
+  PK.pack.catIcons[kCat] = CI.catIconKey(kCat); PK.pack.catColors[kCat] = CI.catSlot(kCat); delete PK.pack.catLabelsPl[kCat];
+  await settle();
+  const exportSaved = await exportNow();
+  check(none === null && !holdsNow() && parFile() === null && exportBody(exportSaved) === exportBody(baseExport),
+    "78i THE CONTROL: the category editor saved with nothing changed gives no file, and Export equals an unedited Export apart from its id and hash (file " + !!parFile()
+    + ", holds " + holdsNow() + ", exports equal " + (exportBody(exportSaved) === exportBody(baseExport)) + ")");
+  PK.pack.catIcons = {}; PK.pack.catColors = {};
+  await settle();
+
+  /* PARITY: a change to each of LOOSE_FIELDS makes the check true and Export differ. */
+  const looseFields = ["overrides", "custom", "removed", "removedCats", "intentRemoved", "catLabels", "catLabelsPl", "customCats", "catRoles", "catIcons", "catColors",
+    "intentOverrides", "intentCustom", "facts", "who", "cardOrder"];
+  const clauseKey = CM.intentFieldKey("clause", "en");
+  const plant = {
+    overrides: () => ({ "c-a": { t: "Changed" } }),
+    custom: () => [{ id: "u:parity", c: "t-op", t: "Mine", en: "Mine body" }],
+    removed: () => ["c-b"],
+    removedCats: () => ["t-sp"],
+    intentRemoved: () => [IID.intentIdAt(0)],
+    catLabels: () => ({ [kCat]: "Openers changed" }),
+    catLabelsPl: () => ({ [kCat]: "Otwieracze zmienione" }),
+    customCats: () => ({ uc_parity: "A new shelf" }),
+    catRoles: () => ({ [kCat]: { always: true } }),
+    catIcons: () => ({ [kCat]: pickIcon }),
+    catColors: () => ({ [kCat]: pickHue }),
+    intentOverrides: () => ({ [IID.intentIdAt(0)]: { [clauseKey]: "a changed clause" } }),
+    intentCustom: () => [{ id: "ui:parity", [clauseKey]: "a custom request" }],
+    facts: () => "Some facts of its own",
+    who: () => ["Alpha", "Beta"],
+    cardOrder: () => ["c-c", "c-b", "c-a"]
+  };
+  const parity = [];
+  const baseBody = exportBody(await exportNow());
+  for (const f of looseFields) {
+    const was = PK.pack[f], orderWas = PK.pack.cardOrder.slice();
+    PK.pack[f] = plant[f]();
+    if (f === "catRoles") CR.refreshCatRoles && CR.refreshCatRoles();
+    PK.savePack(); RB.rebuildCards();
+    const holds = holdsNow(), differs = exportBody(await exportNow()) !== baseBody;
+    parity.push(f + ":" + (holds ? "holds" : "NOT held") + "," + (differs ? "differs" : "SAME export"));
+    PK.pack[f] = was;
+    if (f !== "cardOrder") PK.pack.cardOrder = orderWas;
+    if (f === "catRoles") CR.refreshCatRoles && CR.refreshCatRoles();
+    PK.savePack(); RB.rebuildCards();
+  }
+  check(parity.length === 16 && parity.every(l => /:holds,differs$/.test(l)) && !holdsNow(),
+    "78j parity: a change to each of the 16 fields the loose mark reads makes deskBranchHolds true and Export differ, and put back it is false again (" + parity.filter(l => !/:holds,differs$/.test(l)).join("; ") + (parity.every(l => /:holds,differs$/.test(l)) ? "all 16" : "") + ")");
 } catch (e) {
   failed++;
   console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

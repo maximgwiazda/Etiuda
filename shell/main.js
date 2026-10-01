@@ -557,6 +557,7 @@ function deskEnvelopeBody(keysText) {
     + (heldStats ? ',"held":' + JSON.stringify(heldStats) : "")
     + (deskBranch ? ',"branch":' + JSON.stringify(deskBranch) : "")
     + (deskBranchOld.length ? ',"branchOld":' + JSON.stringify(deskBranchOld) : "")
+    + (Object.keys(branchRevs).length ? ',"branchRevs":' + JSON.stringify(branchRevs) : "")
     + (deskRefused.length ? ',"refused":' + JSON.stringify(deskRefused) : "")
     + ',"keys":' + keysText + "}";
 }
@@ -671,6 +672,7 @@ const BRANCH_STEM_MAX = 96, BRANCH_TEXT_MAX = 16 * 1024 * 1024;
 const SPKI_ED25519 = Buffer.from("302a300506032b6570032100", "hex");
 let deskBranch = null;                         // {sign:{pub,priv}, box:{pub,priv}}: hex publics, sealed privates
 let deskBranchOld = [];                        // pairs the envelope could never open again, kept aside and never deleted
+let branchRevs = {};                           // desk file id -> the last edition written, kept when the file is removed
 const heldBranch = new Map();                  // stem -> the text a folder that did not answer is still owed
 function branchPairOk(b) {
   const half = h => !!h && typeof h === "object" && /^[0-9a-f]{64}$/.test(String(h.pub)) && typeof h.priv === "string" && h.priv !== "";
@@ -793,7 +795,7 @@ function ownFilesWithId(dir, id) {
 /* The file is <stem>-<8 hex>.ec and its catalog id ends in the same 8 hex, so two catalogs with one stem
    are two files. An empty text takes every file of that id away. Anything else is a catalog the page
    built, which the desk signs only when it names this desk, and writes by replacement with the edition
-   raised from the highest it finds, then the other files of that id go. */
+   raised from the highest it knows (the envelope keeps it past a removal), then the other files of that id go. */
 function writeBranch(stem, text) {
   stem = String(stem || ""); text = String(text || "");
   const tail = /-([0-9a-f]{8})$/.exec(stem);
@@ -814,8 +816,10 @@ function writeBranch(stem, text) {
   try {
     if (!folderAnswers(at.root) || !fs.statSync(at.root).isDirectory()) return branchHold(stem, text);
     const same = ownFilesWithId(at.dir, id);
+    const lastRev = same.reduce((hi, e) => Math.max(hi, +e.doc.rev || 0), branchRevs[id] || 0);
     const tidy = () => same.forEach(e => { if (e.file !== at.dest) fs.unlinkSync(e.file); });
     if (!doc) {
+      if (lastRev > (branchRevs[id] || 0)) { branchRevs[id] = lastRev; persistDeskEnvelope(); }
       same.forEach(e => fs.unlinkSync(e.file));
       if (!same.some(e => e.file === at.dest) && fs.existsSync(at.dest)) fs.unlinkSync(at.dest);
       heldBranch.delete(stem);
@@ -827,7 +831,7 @@ function writeBranch(stem, text) {
       heldBranch.delete(stem);
       return { ok: true, unchanged: true, rev: +had.rev || 0 };
     }
-    doc.rev = same.reduce((hi, e) => Math.max(hi, +e.doc.rev || 0), 0) + 1;
+    doc.rev = lastRev + 1;
     doc.hash = channelHash(doc);
     doc.sig = { alg: "Ed25519", keyId: me.id };
     doc.sig.value = branchSign(doc);
@@ -837,6 +841,8 @@ function writeBranch(stem, text) {
     }
     writeReplacing(at.dest, JSON.stringify(doc, null, 1) + "\n");
     tidy();
+    branchRevs[id] = doc.rev;
+    persistDeskEnvelope();
     heldBranch.delete(stem);
     return { ok: true, rev: doc.rev };
   } catch (e) {
@@ -947,6 +953,10 @@ function readDesk() {
     }
     if (branchPairOk(doc && doc.branch)) deskBranch = doc.branch;
     if (doc && Array.isArray(doc.branchOld)) deskBranchOld = doc.branchOld.filter(branchPairOk);
+    if (doc && doc.branchRevs && typeof doc.branchRevs === "object" && !Array.isArray(doc.branchRevs)) {
+      branchRevs = {};
+      Object.keys(doc.branchRevs).forEach(k => { if (Number.isInteger(doc.branchRevs[k]) && doc.branchRevs[k] > 0) branchRevs[k] = doc.branchRevs[k]; });
+    }
     ensureDeskId();
     console.log("etiuda: desk read from " + file + ", " + Object.keys(keys).length + " keys");
     return keys;

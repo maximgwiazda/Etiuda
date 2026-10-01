@@ -326,14 +326,14 @@ function branchCatalog(who,origin){
 const BRANCH_WAIT_MS=1500;
 let branchTimer=0, branchBusy=null, branchAgain=false;
 /* One write at a time, the latest state when it runs. A layer holding nothing an export would carry
-   takes the file away; a browser, a desk with no pin and a desk whose key cannot be kept write nothing. */
+   (deskBranchHolds) takes the file away; a browser, a desk with no pin and a desk whose key cannot be kept write nothing. */
 function writeDeskBranch(){
   if(!eHasBranch() || !catalogLoaded()) return Promise.resolve(false);
   if(branchBusy){ branchAgain=true; return branchBusy; }
   const origin=storedCatalog();
   if(!origin || !origin.id || !/^sha256:[0-9a-f]{64}$/.test(String(origin.pin||""))) return Promise.resolve(false);
   const stem=catalogFileStem(catalogNameOfFile(catalogFileName()))+"-"+branchHex(origin);
-  const run=catalogEdited()
+  const run=deskBranchHolds()
     ? eBranchIdentity().then(who=>who ? eWriteBranch(stem,JSON.stringify(catalogToV2(branchCatalog(who,origin)))) : {ok:false})
     : eWriteBranch(stem,"");
   branchBusy=run.then(r=>!!(r&&r.ok),()=>false).then(ok=>{
@@ -497,6 +497,31 @@ function sampleUntouched(){
  *  file this catalog came out of? The test above reads the personal layer alone and never the
  *  sample, so one predicate serves the watermark and the Library's Export button both. */
 function catalogEdited(){ return !sampleUntouched(); }
+/* WHETHER THE LAYER HOLDS ANYTHING AN EXPORT WOULD CARRY, for the desk's own file: the fields are
+   LOOSE_FIELDS, read directly, and presence counts for all but three. The category editor writes the icon
+   and the colour on every save, so those and the Polish name count only where they differ from what the
+   category would show with no pick at all. Order counts as sampleUntouched counts it. */
+function deskBranchHolds(){
+  const p=pack||{};
+  const bare=(bag,k,read)=>{
+    const m=p[bag];
+    p[bag]=Object.keys(m).reduce((o,x)=>{ if(x!==k) o[x]=m[x]; return o; },{});
+    try{ return read(k); } finally{ p[bag]=m; }
+  };
+  const differs=(bag,read)=>{
+    const m=p[bag]||{};
+    return Object.keys(CATS).some(k=>m[k]!=null && m[k]!=="" && m[k]!==bare(bag,k,read));
+  };
+  return LOOSE_FIELDS.some(f=>{
+    const v=p[f];
+    if(f==="cardOrder") return !cardOrderIsBase();
+    if(f==="facts" || f==="who") return v!=null;
+    if(f==="catLabelsPl") return differs(f,k=>CAT_LABELS_PL[k]);
+    if(f==="catIcons") return differs(f,catIconKey);
+    if(f==="catColors") return differs(f,catSlot);
+    return Array.isArray(v) ? v.length>0 : !!v && typeof v==="object" && Object.keys(v).length>0;
+  });
+}
 /** Watermark visibility. The flag is read from storage rather than the live catalog because it
  *  has to survive activateCatalog()'s reload, and because a Reset wipes every e* key - so a
  *  reset Etiuda cannot come back still marked. */
@@ -642,5 +667,6 @@ export {
   importCatalogHere,
   importCatalogText,
   sha256Hex,
+  deskBranchHolds,
   writeDeskBranch
 };
