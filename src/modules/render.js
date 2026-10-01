@@ -15,7 +15,8 @@ import { catIconSvg, catSlot } from "./cat-identity.js";
 import { chordChips } from "./shortcuts.js";
 import { applyCardColumns, remPx } from "./columns.js";
 import { groupKeyOf, COLLAPSE_BAND, COLLAPSE_FAV, isCollapsed, collapseCtrlHtml } from "./collapse.js";
-import { isFavourite, ePackEpoch } from "./pack.js";
+import { isFavourite, ePackEpoch, pack } from "./pack.js";
+import { statsLift, statsRecentUse } from "./desk-stats.js";
 import { ICON_INTENT_LINK, _STAR } from "./icons.js";
 import { CATS, nextContentLang } from "./content-model.js";
 import { cardBodyHtml } from "./card-body.js";
@@ -35,6 +36,24 @@ import { hooks } from "./hooks.js";
 // The render pass: filter, order, group, and hand the list the items it should hold. Every
 // surface that changes what is shown ends here, and this is the only writer of `shown`.
 
+/* A SEARCH LETS A REPLY THIS DESK COPIES LATELY RISE a few places, but only inside its own band and
+   tier: key = place less lift, a tie going to the one that stood ahead. */
+function liftByUse(hits,sc){
+  const use=statsRecentUse(pack);
+  if(!use.size) return;
+  let at=0;
+  while(at<hits.length){
+    const g=sc.get(hits[at]);
+    let end=at+1;
+    while(end<hits.length && sc.get(hits[end]).band===g.band && sc.get(hits[end]).tier===g.tier) end++;
+    const run=hits.slice(at,end).map((m,i)=>({m,i,k:i-statsLift(use.get(String(m.id)))}));
+    if(run.some(o=>o.k!==o.i)){
+      run.sort((a,b)=>a.k-b.k||a.i-b.i);
+      run.forEach((o,i)=>{ hits[at+i]=o.m; });
+    }
+    at=end;
+  }
+}
 /* THE DESK'S ORDER FOR A QUERY, shared by the list and the picker: `keep` is which cards may
    appear at all, and the answer is the matches in the order the list shows them, with `sc` the
    scores the list's separator reads. */
@@ -71,6 +90,7 @@ function rankedCards(terms,keep){
       if(A.score!==B.score) return B.score-A.score;
       return cmpCardDisplay(a,b);
     });
+    liftByUse(hits,sc);
   }else{
     // Intent bands / category+fav groups, then manual order within each band.
     hits.sort(cmpCardDisplay);

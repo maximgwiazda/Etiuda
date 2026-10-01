@@ -6675,6 +6675,34 @@ What you type stays in this browser only.`;
       STATS_FORGOT.delete(pack2);
     } else STATS_FORGOT.set(pack2, asked);
   }
+  var STATS_USE_DAYS = 28;
+  var STATS_LIFT_MAX = 3;
+  var STATS_LIFT_UNIT = 4;
+  function statsLift(n) {
+    let k = 0;
+    while (k < STATS_LIFT_MAX && n >= STATS_LIFT_UNIT * (2 ** (k + 1) - 1)) k++;
+    return k;
+  }
+  var STATS_RECENT = /* @__PURE__ */ new WeakMap();
+  function statsRecentUse(pack2, today) {
+    const out = /* @__PURE__ */ new Map();
+    if (!pack2 || typeof pack2 !== "object") return out;
+    const day = STATS_YMD.test(String(today || "")) ? String(today) : statsYmd();
+    const held = STATS_RECENT.get(pack2);
+    if (held && held.day === day) return held.use;
+    const days = pack2.days && typeof pack2.days === "object" && !Array.isArray(pack2.days) ? pack2.days : {};
+    const ids = Array.isArray(pack2.dayIds) ? pack2.dayIds : [];
+    const from = statsDayBefore(day, STATS_USE_DAYS - 1);
+    Object.keys(days).forEach((d) => {
+      const c = STATS_YMD.test(d) && d >= from && d <= day && days[d] && days[d].c;
+      if (c) Object.keys(c).forEach((k) => {
+        const id = ids[k], n = c[k] | 0;
+        if (id != null && n > 0) out.set(String(id), (out.get(String(id)) || 0) + n);
+      });
+    });
+    STATS_RECENT.set(pack2, { day, use: out });
+    return out;
+  }
   function statsDoc(pack2, info) {
     const from = String(info && info.period && info.period.from || "");
     const to = String(info && info.period && info.period.to || "");
@@ -16798,6 +16826,24 @@ What you type stays in this browser only.`;
   }
 
   // src/modules/render.js
+  function liftByUse(hits, sc) {
+    const use = statsRecentUse(pack);
+    if (!use.size) return;
+    let at = 0;
+    while (at < hits.length) {
+      const g = sc.get(hits[at]);
+      let end = at + 1;
+      while (end < hits.length && sc.get(hits[end]).band === g.band && sc.get(hits[end]).tier === g.tier) end++;
+      const run = hits.slice(at, end).map((m, i) => ({ m, i, k: i - statsLift(use.get(String(m.id))) }));
+      if (run.some((o) => o.k !== o.i)) {
+        run.sort((a, b) => a.k - b.k || a.i - b.i);
+        run.forEach((o, i) => {
+          hits[at + i] = o.m;
+        });
+      }
+      at = end;
+    }
+  }
   function rankedCards(terms, keep) {
     ensureCardOrder();
     const hits = cards.filter((m) => {
@@ -16819,6 +16865,7 @@ What you type stays in this browser only.`;
         if (A.score !== B.score) return B.score - A.score;
         return cmpCardDisplay(a, b);
       });
+      liftByUse(hits, sc);
     } else {
       hits.sort(cmpCardDisplay);
     }
@@ -23231,10 +23278,16 @@ What you type stays in this browser only.`;
     const tag = n < 2 ? "" : m.seq ? t("step") + " " + (vi + 1) + "/" + n : altLabelAt(m, l, vi) || vi + 1 + "/" + n;
     return { id: String(m.id), vi, t: cardTitle(m), x: pickExcerpt(ps[vi], fill(ps[vi], m, 0, l)), tag };
   }
+  function pickByUse(hits) {
+    const use = statsRecentUse(pack);
+    if (!use.size) return hits;
+    return hits.map((m, i) => ({ m, i, n: use.get(String(m.id)) | 0 })).sort((a, b) => b.n - a.n || a.i - b.i).map((o) => o.m);
+  }
   function pickRows(q) {
     const terms = cardSearchTerms(String(q == null ? "" : q));
     const rows = [];
-    for (const m of rankedCards(terms, pickKeep(terms)).hits) {
+    const hits = rankedCards(terms, pickKeep(terms)).hits;
+    for (const m of terms.length ? hits : pickByUse(hits)) {
       const l = cardLang(m), ps = parts(m, l);
       for (let vi = 0; vi < ps.length; vi++) {
         rows.push(pickRow(m, l, ps, vi));

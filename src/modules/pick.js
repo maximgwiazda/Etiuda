@@ -2,6 +2,8 @@ import { eHost } from "./host.js";
 import { wholeThingEmpty } from "./app-state.js";
 import { cardSearchTerms } from "./spell.js";
 import { rankedCards } from "./render.js";
+import { pack } from "./pack.js";
+import { statsRecentUse } from "./desk-stats.js";
 import { cardInActiveCats } from "./card-counts.js";
 import { altLabelAt, cardLang, cardTitle, findCard, parts } from "./card-model.js";
 import { fill } from "./intent-text.js";
@@ -39,11 +41,19 @@ function pickRow(m,l,ps,vi){
   const tag=n<2 ? "" : m.seq ? t("step")+" "+(vi+1)+"/"+n : (altLabelAt(m,l,vi)||((vi+1)+"/"+n));
   return {id:String(m.id), vi:vi, t:cardTitle(m), x:pickExcerpt(ps[vi],fill(ps[vi],m,0,l)), tag:tag};
 }
+/* AT REST THE REPLIES THIS DESK COPIES LATELY COME FIRST, most copied first, the rest in the desk's
+   order; equal counts keep it. With none counted the list is handed back as it came. */
+function pickByUse(hits){
+  const use=statsRecentUse(pack);
+  if(!use.size) return hits;
+  return hits.map((m,i)=>({m,i,n:use.get(String(m.id))|0})).sort((a,b)=>b.n-a.n||a.i-b.i).map(o=>o.m);
+}
 /** The first rows the desk's list would show for `q`: every copyable block of each card in turn. */
 function pickRows(q){
   const terms=cardSearchTerms(String(q==null?"":q));
   const rows=[];
-  for(const m of rankedCards(terms,pickKeep(terms)).hits){
+  const hits=rankedCards(terms,pickKeep(terms)).hits;
+  for(const m of terms.length ? hits : pickByUse(hits)){
     const l=cardLang(m), ps=parts(m,l);
     for(let vi=0;vi<ps.length;vi++){
       rows.push(pickRow(m,l,ps,vi));

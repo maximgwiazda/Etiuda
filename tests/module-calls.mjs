@@ -394,6 +394,63 @@ const eq = (got, want) => got === want ? true
   const D = await import(MOD("desk-stats.js"));
   check("desk-stats.js", "statsYmd is zero-padded ISO for a date it is handed",
     () => eq(D.statsYmd(new Date(2026, 0, 9)), "2026-01-09"));
+  /* THE LIFT, written out from the design's own formula: min(3, floor(log2(1 + n / 4))). */
+  check("desk-stats.js", "22a a count lifts a search hit by 0, 1, 2 and 3 places for 3, 4, 12 and 28 copies, and by 3 for ten thousand",
+    () => eq([3, 4, 12, 28, 10000].map(n => D.statsLift(n)).join(","), "0,1,2,3,3"));
+  check("desk-stats.js", "22b and it is that formula at every count from 0 to 2000",
+    () => {
+      for (let n = 0; n <= 2000; n++) {
+        const want = Math.min(3, Math.floor(Math.log2(1 + n / 4)));
+        if (D.statsLift(n) !== want) return "n=" + n + " gave " + D.statsLift(n) + ", the formula " + want;
+      }
+      return true;
+    });
+  check("desk-stats.js", "22c a copy count nobody can read lifts nothing",
+    () => eq([undefined, null, NaN, -5, "x"].map(n => D.statsLift(n)).join(","), "0,0,0,0,0"));
+  /* 2026-10-01 less 27 days is 2026-09-04, and less 29 is 2026-09-02; the day between is
+     the window's edge and is not asked. */
+  const used = (pack, ymd, id, n) => { for (let i = 0; i < n; i++) D.bumpUse(pack, id, ymd); };
+  check("desk-stats.js", "22d the recent use is this desk's copies over the 28 days ending today, summed from the day buckets",
+    () => {
+      const p = { useCounts: {}, useAt: {} };
+      used(p, "2026-10-01", "c-a", 2); used(p, "2026-09-04", "c-a", 1); used(p, "2026-09-20", "c-b", 4);
+      const u = D.statsRecentUse(p, "2026-10-01");
+      return eq([u.get("c-a"), u.get("c-b"), u.size].join(","), "3,4,2");
+    });
+  check("desk-stats.js", "22e a day dated 29 days back counts for nothing, whatever it holds",
+    () => {
+      const p = { useCounts: {}, useAt: {} };
+      used(p, "2026-09-02", "c-old", 50); used(p, "2026-10-01", "c-new", 1);
+      const u = D.statsRecentUse(p, "2026-10-01");
+      return eq([u.has("c-old"), u.get("c-new"), D.statsLift(u.get("c-old"))].join(","), "false,1,0");
+    });
+  check("desk-stats.js", "22f a copy dated after today is not this window's",
+    () => {
+      const p = { useCounts: {}, useAt: {} };
+      used(p, "2026-10-09", "c-ahead", 5);
+      return eq(D.statsRecentUse(p, "2026-10-01").size, 0);
+    });
+  /* NOTHING REORDERS UNDER THE HAND: the count is made once for a day and read until it turns. */
+  check("desk-stats.js", "22g the count is held for the day it was made, so copies made since change nothing until the next day",
+    () => {
+      const p = { useCounts: {}, useAt: {} };
+      used(p, "2026-10-01", "c-a", 2);
+      const first = D.statsRecentUse(p, "2026-10-01").get("c-a");
+      used(p, "2026-10-01", "c-a", 10);
+      const same = D.statsRecentUse(p, "2026-10-01").get("c-a");
+      const next = D.statsRecentUse(p, "2026-10-02").get("c-a");
+      return eq([first, same, next].join(","), "2,2,12");
+    });
+  check("desk-stats.js", "22h a record loaded afresh (another pack object) is counted afresh, the same day",
+    () => {
+      const p = { useCounts: {}, useAt: {} }, q = { useCounts: {}, useAt: {} };
+      used(p, "2026-10-01", "c-a", 2);
+      D.statsRecentUse(p, "2026-10-01");
+      used(q, "2026-10-01", "c-a", 7);
+      return eq([D.statsRecentUse(p, "2026-10-01").get("c-a"), D.statsRecentUse(q, "2026-10-01").get("c-a")].join(","), "2,7");
+    });
+  check("desk-stats.js", "22i a pack that is not an object, or holds no days, gives no counts and does not throw",
+    () => eq([null, undefined, 3, {}, { days: [] }, { days: { "2026-10-01": null } }].map(p => D.statsRecentUse(p, "2026-10-01").size).join(","), "0,0,0,0,0,0"));
 }
 
 /* ------------------------------------------------------------------ scoring.js, card-search.js,
