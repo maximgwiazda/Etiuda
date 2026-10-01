@@ -451,6 +451,29 @@ const eq = (got, want) => got === want ? true
     });
   check("desk-stats.js", "22i a pack that is not an object, or holds no days, gives no counts and does not throw",
     () => eq([null, undefined, 3, {}, { days: [] }, { days: { "2026-10-01": null } }].map(p => D.statsRecentUse(p, "2026-10-01").size).join(","), "0,0,0,0,0,0"));
+  check("desk-stats.js", "22j a day dated 28 days back is outside the 28 days ending today, and 27 back is inside",
+    () => {
+      const p = { useCounts: {}, useAt: {} };
+      used(p, "2026-09-03", "c-edge", 50); used(p, "2026-09-04", "c-in", 1);
+      const u = D.statsRecentUse(p, "2026-10-01");
+      return eq([u.has("c-edge"), u.get("c-in")].join(","), "false,1");
+    });
+  check("desk-stats.js", "22k called as the desk calls it, with no day named, the count is held through the day and made afresh when the clock turns",
+    () => {
+      const Real = globalThis.Date;
+      let now = Real.UTC(2031, 2, 10, 11, 0, 0);
+      globalThis.Date = class extends Real { constructor(...a) { super(...(a.length ? a : [now])); } static now() { return now; } };
+      try {
+        const p = { useCounts: {}, useAt: {} };
+        used(p, "2031-03-10", "c-a", 2);
+        const first = D.statsRecentUse(p).get("c-a");
+        used(p, "2031-03-10", "c-a", 10);
+        const same = D.statsRecentUse(p).get("c-a");
+        now += 864e5;
+        const next = D.statsRecentUse(p).get("c-a");
+        return eq([first, same, next].join(","), "2,2,12");
+      } finally { globalThis.Date = Real; }
+    });
 }
 
 /* ------------------------------------------------------------------ scoring.js, card-search.js,
