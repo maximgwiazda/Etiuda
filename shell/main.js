@@ -3,9 +3,6 @@
 const { app, BrowserWindow, Menu, clipboard, dialog, globalShortcut, ipcMain, nativeTheme, net, protocol, session,
   screen, shell, systemPreferences } = require("electron");
 
-/* --no-proxy-server turns off every proxy, not only discovery: at start there is no wpad lookup and
-   no IPv6 probe at idle. The probe still fires on the first hostname lookup. */
-app.commandLine.appendSwitch("no-proxy-server");
 /* AN INSTALLED DESK, loaded from inside app.asar, opens no debugging endpoint and takes neither
    ETIUDA_TEST_DOCUMENTS nor ETIUDA_TEST_SAVE_AS unless ETIUDA_TEST_DEVTOOLS=1, which tests/engine.js
    shellLaunch sets beside any of them. tests/shell-office.mjs 8 holds it. */
@@ -25,6 +22,30 @@ const path = require("node:path");
 const fs = require("node:fs");
 const os = require("node:os");
 const crypto = require("node:crypto");
+
+/* THE PROXY IS CHOSEN HERE, BEFORE READY: a setProxy after ready would not stop the first lookup.
+   Windows' own setting is followed where it names a setup script or a server; automatic detection
+   alone, nothing set or a failed read gives no proxy and no wpad lookup. */
+const PROXY_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
+/* The text is the key's values as reg prints them. A script is read before a server, and a server only
+   while ProxyEnable is 1. */
+function proxySwitchesFrom(text) {
+  const t = String(text || "");
+  const str = n => { const m = new RegExp("^[ \\t]+" + n + "[ \\t]+REG_(?:EXPAND_)?SZ[ \\t]+(.*?)[ \\t\\r]*$", "m").exec(t); return m ? m[1] : ""; };
+  const on = /^[ \t]+ProxyEnable[ \t]+REG_DWORD[ \t]+0x([0-9a-f]+)[ \t\r]*$/im.exec(t);
+  const script = str("AutoConfigURL"), server = str("ProxyServer");
+  if (/^(?:https?|file):\/\/\S+$/i.test(script)) return [["proxy-pac-url", script]];
+  if (on && parseInt(on[1], 16) === 1 && /^\S{1,2048}$/.test(server)) return [["proxy-server", server]];
+  return [["no-proxy-server"]];
+}
+function windowsProxySwitches() {
+  if (process.platform !== "win32") return proxySwitchesFrom("");
+  try {
+    return proxySwitchesFrom(execFileSync("C:\\Windows\\System32\\reg.exe", ["query", PROXY_KEY],
+      { encoding: "utf8", windowsHide: true, timeout: 5000 }));
+  } catch { return proxySwitchesFrom(""); }
+}
+for (const s of windowsProxySwitches()) app.commandLine.appendSwitch(...s);
 
 const ENGINE = path.join(__dirname, "..", "engine", "etiuda.html");
 
