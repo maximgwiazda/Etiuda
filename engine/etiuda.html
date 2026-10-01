@@ -11831,6 +11831,7 @@ What you type stays in this browser only.`;
   __export(host_exports, {
     E_CATALOG_FOLDER_KEY: () => E_CATALOG_FOLDER_KEY,
     E_CATALOG_SCRIPT: () => E_CATALOG_SCRIPT,
+    eBranchIdentity: () => eBranchIdentity,
     eCatalogBuiltIn: () => eCatalogBuiltIn,
     eCatalogFile: () => eCatalogFile,
     eCatalogFiles: () => eCatalogFiles,
@@ -11840,6 +11841,7 @@ What you type stays in this browser only.`;
     eCatalogMtime: () => eCatalogMtime,
     eCatalogRing: () => eCatalogRing,
     eChooseCatalogFolder: () => eChooseCatalogFolder,
+    eHasBranch: () => eHasBranch,
     eHasCatalogPicker: () => eHasCatalogPicker,
     eHasCatalogSaver: () => eHasCatalogSaver,
     eHost: () => eHost,
@@ -11853,6 +11855,7 @@ What you type stays in this browser only.`;
     eSaveCatalogFile: () => eSaveCatalogFile,
     eSetAccent: () => eSetAccent,
     eSetMaximized: () => eSetMaximized,
+    eWriteBranch: () => eWriteBranch,
     syncBandHeight: () => syncBandHeight,
     wireHost: () => wireHost
   });
@@ -12006,6 +12009,26 @@ What you type stays in this browser only.`;
       }).catch(() => failed());
     } catch (e) {
       return Promise.resolve(failed());
+    }
+  }
+  function eHasBranch() {
+    const h = eHost();
+    return !!h && typeof h.branchIdentity === "function" && typeof h.writeBranch === "function";
+  }
+  function eBranchIdentity() {
+    if (!eHasBranch()) return Promise.resolve(null);
+    try {
+      return Promise.resolve(eHost().branchIdentity()).then((v) => v && typeof v === "object" && v.id && v.key && v.box ? { id: String(v.id), key: String(v.key), box: String(v.box) } : null).catch(() => null);
+    } catch (e) {
+      return Promise.resolve(null);
+    }
+  }
+  function eWriteBranch(stem, text) {
+    if (!eHasBranch()) return Promise.resolve({ ok: false });
+    try {
+      return Promise.resolve(eHost().writeBranch(String(stem || ""), String(text || ""))).then((v) => ({ ok: !!(v && v.ok) })).catch(() => ({ ok: false }));
+    } catch (e) {
+      return Promise.resolve({ ok: false });
     }
   }
   function eOpenedRefused() {
@@ -14403,15 +14426,15 @@ What you type stays in this browser only.`;
       }
       i = j + 1;
     }
-    const pinned = [];
+    const pinned2 = [];
     pin.forEach(([l, r], i) => {
       const p = kids[i];
       p.style.transition = "none";
       if (l) p.style.marginLeft = box[i].l + l + "px";
       if (r) p.style.marginRight = box[i].r + r + "px";
-      pinned.push(p);
+      pinned2.push(p);
     });
-    return pinned;
+    return pinned2;
   }
   function flipPills(before) {
     if (!before) return;
@@ -14437,16 +14460,16 @@ What you type stays in this browser only.`;
       p.style.transition = "none";
       p.style.width = wStarts[i] + "px";
     });
-    let pinned = [];
+    let pinned2 = [];
     if (wEls.length && pillLines() !== lines) {
-      pinned = pinPillLines(kids, tops);
+      pinned2 = pinPillLines(kids, tops);
       if (pillLines() !== lines) {
-        pinned.forEach((p) => {
+        pinned2.forEach((p) => {
           p.style.marginLeft = "";
           p.style.marginRight = "";
           p.style.transition = "";
         });
-        pinned = [];
+        pinned2 = [];
         wEls.forEach((p) => {
           p.style.width = "";
           p.style.transition = "";
@@ -14470,11 +14493,11 @@ What you type stays in this browser only.`;
     if (!moved.length && !wEls.length) return;
     void pills.offsetHeight;
     const T = "var(--m-move) " + E_EASE;
-    new Set(moved.concat(wEls, pinned)).forEach((p) => {
+    new Set(moved.concat(wEls, pinned2)).forEach((p) => {
       const t2 = [];
       if (moved.indexOf(p) >= 0) t2.push("transform " + T);
       if (wEls.indexOf(p) >= 0) t2.push("width " + T);
-      if (pinned.indexOf(p) >= 0) t2.push("margin-left " + T, "margin-right " + T);
+      if (pinned2.indexOf(p) >= 0) t2.push("margin-left " + T, "margin-right " + T);
       p.style.transition = t2.join(", ");
     });
     moved.forEach((p) => {
@@ -14483,7 +14506,7 @@ What you type stays in this browser only.`;
     wEls.forEach((p) => {
       p.style.width = p.dataset._eW + "px";
     });
-    pinned.forEach((p) => {
+    pinned2.forEach((p) => {
       p.style.marginLeft = "";
       p.style.marginRight = "";
     });
@@ -14498,7 +14521,7 @@ What you type stays in this browser only.`;
         p.style.width = "";
         delete p.dataset._eW;
       });
-      pinned.forEach((p) => {
+      pinned2.forEach((p) => {
         p.style.transition = "";
         p.style.marginLeft = "";
         p.style.marginRight = "";
@@ -15113,7 +15136,7 @@ What you type stays in this browser only.`;
     if (!h) return;
     const limit = h * RAIL_FLIP_TRAVEL;
     const top = box.offsetTop + st;
-    const seen = (y, hgt, pinned) => pinned || y + hgt > top && y < top + h;
+    const seen = (y, hgt, pinned2) => pinned2 || y + hgt > top && y < top + h;
     const moved = [], dys = [], entered = [], left = [];
     box.querySelectorAll(".rail-item[data-si]").forEach((el) => {
       const b = before[el.dataset.si];
@@ -18591,9 +18614,11 @@ What you type stays in this browser only.`;
     importCatalogText: () => importCatalogText,
     isCatalogUpdate: () => isCatalogUpdate,
     sampleUntouched: () => sampleUntouched,
+    sha256Hex: () => sha256Hex,
     syncSampleMark: () => syncSampleMark,
     todayEdition: () => todayEdition,
-    wireCatalogDrop: () => wireCatalogDrop
+    wireCatalogDrop: () => wireCatalogDrop,
+    writeDeskBranch: () => writeDeskBranch
   });
 
   // src/modules/catalog-boot.js
@@ -18975,8 +19000,8 @@ What you type stays in this browser only.`;
     }));
     return out;
   }
-  function currentCatalog() {
-    rebuildCards();
+  function currentCatalog(opts) {
+    if (!(opts && opts.asIs)) rebuildCards();
     const cats2 = {}, catsPl = {}, catsOther = {};
     CONTENT_LANGS.slice(1).forEach((code) => {
       if (code === "pl") return;
@@ -19159,6 +19184,156 @@ What you type stays in this browser only.`;
       return saved;
     });
   }
+  var SHA_K = [
+    1116352408,
+    1899447441,
+    3049323471,
+    3921009573,
+    961987163,
+    1508970993,
+    2453635748,
+    2870763221,
+    3624381080,
+    310598401,
+    607225278,
+    1426881987,
+    1925078388,
+    2162078206,
+    2614888103,
+    3248222580,
+    3835390401,
+    4022224774,
+    264347078,
+    604807628,
+    770255983,
+    1249150122,
+    1555081692,
+    1996064986,
+    2554220882,
+    2821834349,
+    2952996808,
+    3210313671,
+    3336571891,
+    3584528711,
+    113926993,
+    338241895,
+    666307205,
+    773529912,
+    1294757372,
+    1396182291,
+    1695183700,
+    1986661051,
+    2177026350,
+    2456956037,
+    2730485921,
+    2820302411,
+    3259730800,
+    3345764771,
+    3516065817,
+    3600352804,
+    4094571909,
+    275423344,
+    430227734,
+    506948616,
+    659060556,
+    883997877,
+    958139571,
+    1322822218,
+    1537002063,
+    1747873779,
+    1955562222,
+    2024104815,
+    2227730452,
+    2361852424,
+    2428436474,
+    2756734187,
+    3204031479,
+    3329325298
+  ];
+  function sha256Hex(bytes) {
+    const H = [1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225];
+    const n = bytes.length, total = n + 9 + 63 >> 6 << 6, buf = new Uint8Array(total);
+    buf.set(bytes);
+    buf[n] = 128;
+    const dv = new DataView(buf.buffer), w = new Uint32Array(64);
+    dv.setUint32(total - 8, Math.floor(n / 536870912));
+    dv.setUint32(total - 4, n << 3 >>> 0);
+    for (let o = 0; o < total; o += 64) {
+      for (let i = 0; i < 16; i++) w[i] = dv.getUint32(o + i * 4);
+      for (let i = 16; i < 64; i++) {
+        const x = w[i - 15], y = w[i - 2];
+        w[i] = w[i - 16] + ((x >>> 7 | x << 25) ^ (x >>> 18 | x << 14) ^ x >>> 3) + w[i - 7] + ((y >>> 17 | y << 15) ^ (y >>> 19 | y << 13) ^ y >>> 10);
+      }
+      let a = H[0], b = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+      for (let i = 0; i < 64; i++) {
+        const t1 = h + ((e >>> 6 | e << 26) ^ (e >>> 11 | e << 21) ^ (e >>> 25 | e << 7)) + (e & f ^ ~e & g) + SHA_K[i] + w[i];
+        const t2 = ((a >>> 2 | a << 30) ^ (a >>> 13 | a << 19) ^ (a >>> 22 | a << 10)) + (a & b ^ a & c ^ b & c);
+        h = g;
+        g = f;
+        f = e;
+        e = d + t1 | 0;
+        d = c;
+        c = b;
+        b = a;
+        a = t1 + t2 | 0;
+      }
+      [a, b, c, d, e, f, g, h].forEach((v, i) => {
+        H[i] = H[i] + v | 0;
+      });
+    }
+    return H.map((v) => (v >>> 0).toString(16).padStart(8, "0")).join("");
+  }
+  function pinned(c) {
+    const doc = catalogDocOf(c);
+    if (!doc) return c;
+    try {
+      return Object.assign({}, c, { pin: "sha256:" + sha256Hex(v2SignedBytes(doc)) });
+    } catch (e) {
+      return c;
+    }
+  }
+  function branchCatalog(who, origin) {
+    const c = currentCatalog({ asIs: true }), name = String(agentName() || "").trim();
+    c.id = who.id + "-" + sha256Hex(new TextEncoder().encode(String(origin.id))).slice(0, 8);
+    c.rev = 1;
+    c.version = todayEdition();
+    c.grew = { id: String(origin.id), rev: +origin.rev || 0, sha: String(origin.pin) };
+    c.desk = { id: who.id, key: who.key, box: who.box };
+    if (name) c.desk.name = name;
+    return c;
+  }
+  var BRANCH_WAIT_MS = 1500;
+  var branchTimer = 0;
+  var branchBusy = null;
+  var branchAgain = false;
+  function writeDeskBranch() {
+    if (!eHasBranch() || !catalogLoaded()) return Promise.resolve(false);
+    if (branchBusy) {
+      branchAgain = true;
+      return branchBusy;
+    }
+    const origin = storedCatalog();
+    if (!origin || !origin.id || !/^sha256:[0-9a-f]{64}$/.test(String(origin.pin || ""))) return Promise.resolve(false);
+    const stem = catalogFileStem(catalogNameOfFile(catalogFileName()));
+    const run = catalogEdited() ? eBranchIdentity().then((who) => who ? eWriteBranch(stem, JSON.stringify(catalogToV2(branchCatalog(who, origin)))) : { ok: false }) : eWriteBranch(stem, "");
+    branchBusy = run.then((r) => !!(r && r.ok), () => false).then((ok) => {
+      branchBusy = null;
+      if (branchAgain) {
+        branchAgain = false;
+        scheduleDeskBranch();
+      }
+      return ok;
+    });
+    return branchBusy;
+  }
+  function scheduleDeskBranch() {
+    if (!eHasBranch()) return;
+    clearTimeout(branchTimer);
+    branchTimer = setTimeout(() => {
+      branchTimer = 0;
+      writeDeskBranch();
+    }, BRANCH_WAIT_MS);
+  }
   function isCatalogUpdate(incoming, active) {
     if (!incoming || !active) return false;
     const incomingId = String(incoming.id || "").trim();
@@ -19259,7 +19434,7 @@ What you type stays in this browser only.`;
     const same = catalogLoaded() && layerNsOf(c) === eLayer();
     const loose = !catalogLoaded();
     flushLayer();
-    if (!storeCatalog(c)) return false;
+    if (!storeCatalog(pinned(c))) return false;
     if (same) {
       const alive = carryCardLayer(c);
       pack.baseCards = null;
@@ -19299,6 +19474,7 @@ What you type stays in this browser only.`;
     return !sampleUntouched();
   }
   function syncSampleMark() {
+    scheduleDeskBranch();
     const el = document.getElementById("sampleMark");
     if (!el) return;
     let on = false;
@@ -20642,8 +20818,8 @@ What you type stays in this browser only.`;
               "Sorts above the other linked cards when an intent is picked.",
               "Top of the {INT} group"
             );
-            const pinned = CONTENT_LANGS.indexOf(m.lockLang) > -1 ? m.lockLang : "";
-            const pin = '<div class="mf-pin' + (pinned ? "" : " off") + '" id="meLockRow"><label title="' + esc(t("The card keeps this language whatever the EN|PL toggle says, tokens included")) + '"><input type="checkbox" id="meLockLang"' + (pinned ? " checked" : "") + "> " + esc(t("Always one language")) + '</label><div class="seg mf-pin-seg" id="meLockSeg" data-n="' + CONTENT_LANGS.length + '">' + CONTENT_LANGS.map((l) => '<button type="button" data-v="' + esc(l) + '"' + ((pinned || CONTENT_LANGS[0]) === l ? ' class="on"' : "") + ">" + esc(l.toUpperCase()) + "</button>").join("") + "</div></div>";
+            const pinned2 = CONTENT_LANGS.indexOf(m.lockLang) > -1 ? m.lockLang : "";
+            const pin = '<div class="mf-pin' + (pinned2 ? "" : " off") + '" id="meLockRow"><label title="' + esc(t("The card keeps this language whatever the EN|PL toggle says, tokens included")) + '"><input type="checkbox" id="meLockLang"' + (pinned2 ? " checked" : "") + "> " + esc(t("Always one language")) + '</label><div class="seg mf-pin-seg" id="meLockSeg" data-n="' + CONTENT_LANGS.length + '">' + CONTENT_LANGS.map((l) => '<button type="button" data-v="' + esc(l) + '"' + ((pinned2 || CONTENT_LANGS[0]) === l ? ' class="on"' : "") + ">" + esc(l.toUpperCase()) + "</button>").join("") + "</div></div>";
             const cells = rows.concat([pin]);
             return '<div class="mf-cols" style="grid-template-rows:repeat(' + Math.ceil(cells.length / 2) + ',auto)">' + cells.join("") + "</div>";
           })()

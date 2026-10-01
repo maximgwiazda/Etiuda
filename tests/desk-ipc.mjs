@@ -4,12 +4,15 @@
  * leaving or hiding right after a write has put it on the disk before the event returns, and none
  * puts back a desk the rescue's Reset has cleared. The Reset also empties the tabs' session, in the
  * page and in main, and the preload sends a link's address to main for a primary or middle click only.
+ * The last section is the desk's own file in the catalog folder: its key pair behind a stand-in for
+ * safeStorage, a signed catalog under desks/<branch id>/ after an edit, and nothing else touched.
  *
  *   node tests/desk-ipc.mjs            exit code is the number of failed checks, capped at 63
  */
 process.removeAllListeners("warning");
 process.on("warning", () => {});
 
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -20,7 +23,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 29;
+const EXPECTED = 49;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -46,6 +49,14 @@ const electron = {
   BrowserWindow: inert, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert,
   screen: inert, shell: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },
 };
+/* safeStorage as far as main.js asks of it: a reversible sealing that shows nothing of what it holds. */
+let sealOk = true;
+const safeStorage = {
+  isEncryptionAvailable: () => sealOk,
+  encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
+  decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
+};
+electron.safeStorage = safeStorage;
 const fakeRequire = n => (n === "electron" ? electron : nodeRequire(n));
 const shellSrc = f => fs.readFileSync(path.join(ROOT, "shell", f), "utf8");
 new Function("require", "__dirname", "__filename", "module", "exports", "console", shellSrc("main.js"))(
@@ -87,6 +98,7 @@ const REAL_HOST = window.E_HOST;
 const linkListeners = {};
 ["window", "document"].forEach(w => Object.keys(listeners[w]).forEach(t => { linkListeners[t] = (linkListeners[t] || []).concat(listeners[w][t]); }));
 
+let COPY = "";
 try {
   const S = await import(MOD("storage.js", "ipc"));
   /* The engine sends a patch where the host takes one, and the whole map where it does not. */
@@ -285,11 +297,238 @@ try {
     "6c no other button on any mouse or pointer event the preload listens to (" + mouseLike.join(", ") + ") sends a link to main: buttons 2, 3 and 4 over "
     + DRIVEN.length + " event types, " + sends.length + " send(s)" + (sends.length ? " (" + sends.join(", ") + ")" : "")
     + ", listener types not driven " + JSON.stringify(undriven));
+
+  /* ---- the desk's own file in the catalog folder. The page modules run for real over the real
+     preload and the real handlers; safeStorage is the sealing stand-in above; the catalog and the
+     layer are invented here. Every file is read back from the disk the way another desk or Studio
+     would find it, and the signature is checked with node's own Ed25519 over the engine's own
+     signed bytes, so the shell's canonical form is held to the engine's. --------------------- */
+  const FOLDER = path.join(UD, "Etiuda");
+  fs.mkdirSync(FOLDER, { recursive: true });
+  const fake = () => new Proxy(function () {}, {
+    get: (t, k) => k === Symbol.toPrimitive ? () => "" : (k === "length" ? 0
+      : (["contains", "matches", "hasAttribute"].includes(k) ? () => false : fake())),
+    apply: () => fake(), set: () => true, has: () => true });
+  Object.assign(window, { innerWidth: 1280, innerHeight: 800 });
+  globalThis.innerHeight = 800;
+  globalThis.getComputedStyle = () => fake();
+  globalThis.requestAnimationFrame = fn => setTimeout(fn, 0);
+  globalThis.document = new Proxy({}, { set: () => true, get: (t, k) => (k === "readyState" ? "complete"
+    : k === "visibilityState" ? "visible" : (k === "addEventListener" || k === "removeEventListener") ? noop : fake()) });
+  /* A copy of the modules, so this section meets a page that has never been Reset: the latch the rescue
+     sets in storage.js never comes down in the instance the Reset legs used. */
+  COPY = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-ipc-modules-"));
+  fs.cpSync(path.join(ROOT, "src", "modules"), COPY, { recursive: true });
+  const PLAIN = n => pathToFileURL(path.join(COPY, n)).href;
+  const HK = await import(PLAIN("hooks.js"));
+  const slots = [...fs.readFileSync(path.join(ROOT, "src", "modules", "hooks.js"), "utf8")
+    .match(/const SLOTS = \[([\s\S]*?)\];/)[1].matchAll(/"(\w+)"/g)].map(m => m[1]);
+  slots.forEach(k => { HK.hooks[k] = noop; });
+  const CT = await import(PLAIN("catalog.js"));
+  const ST = await import(PLAIN("storage.js"));
+  const PK = await import(PLAIN("pack.js"));
+  const DM = await import(PLAIN("dom.js")); DM.grabDom();
+  const CF = await import(PLAIN("catalog-file.js"));
+  const CB = await import(PLAIN("catalog-boot.js"));
+  const RB = await import(PLAIN("rebuild.js"));
+  const FV = await import(PLAIN("favourites.js"));
+  const V2 = await import(PLAIN("catalog-v2.js"));
+  HK.hooks.syncSampleMark = CF.syncSampleMark;
+  HK.hooks.syncFavouritesMeta = FV.syncFavouritesMeta;
+
+  /* Absent in a build without the desk file, so the legs below read red there rather than stop the run. */
+  const writeBranch = typeof CF.writeDeskBranch === "function" ? CF.writeDeskBranch : async () => false;
+  const asHost = (f, ...a) => (typeof REAL_HOST[f] === "function" ? REAL_HOST[f](...a) : Promise.resolve(null));
+  const SPKI = Buffer.from("302a300506032b6570032100", "hex");
+  const PREFIX = Buffer.from("etiuda-desk-branch\n");
+  const pubOf = hex => crypto.createPublicKey({ key: Buffer.concat([SPKI, Buffer.from(hex, "hex")]), format: "der", type: "spki" });
+  const verifies = (d, prefixed = true) => {
+    try {
+      return crypto.verify(null, Buffer.concat([prefixed ? PREFIX : Buffer.alloc(0), Buffer.from(V2.v2SignedBytes(d))]),
+        pubOf(d.desk.key), Buffer.from(d.sig.value, "hex"));
+    } catch { return false; }
+  };
+  const sha = buf => crypto.createHash("sha256").update(buf).digest("hex");
+  const deskDir = path.join(FOLDER, "desks");
+  const listing = dir => { try { return fs.readdirSync(dir); } catch { return []; } };
+  const walk = dir => listing(dir).flatMap(n => { const f = path.join(dir, n);
+    return fs.statSync(f).isDirectory() ? walk(f) : [f]; });
+  const envelope = () => JSON.parse(fs.readFileSync(DESK, "utf8"));
+
+  const origin = {
+    format: 2, kind: "etiuda-catalog", id: "lamp-shop", rev: 4, langs: [{ code: "en", label: "EN" }],
+    tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
+    cards: ["a", "b", "c"].map(x => ({ id: "c-" + x, shelf: "t-op", bodyShape: "plain",
+      title: { en: "Card " + x + " za\u017c\u00f3\u0142\u0107" }, body: { en: "Body " + x + ", \"quoted\".\nSecond line." } }))
+  };
+  const AG = await import(PLAIN("agent.js"));
+  AG.setAgentName("Ala K.");
+  const loaded = CT.parseCatalogFile(JSON.stringify(origin));
+  CF.activateCatalog(loaded, { file: "lamps.ec" });
+  CB.applyBootCatalog();
+  PK.resetPack(); PK.pack.baseCards = null; RB.rebuildCards();
+  const edit = title => { PK.pack.overrides = { "c-a": { t: title } }; PK.savePack(); RB.rebuildCards(); };
+
+  const pin = "sha256:" + sha(V2.v2SignedBytes(origin));
+  const kept = JSON.parse(ST.lsGet(CT.E_CATALOG_STORE) || "{}");
+  check(kept.pin === pin && kept.id === "lamp-shop",
+    "77a the edition the desk loaded is pinned as it is stored: sha256 over the engine's signed bytes of the file read, "
+    + "computed here by node's own hash (stored " + String(kept.pin).slice(0, 15) + ", expected " + pin.slice(0, 15) + ")");
+
+  await tick(30);
+  check(!fs.existsSync(deskDir) && !("branch" in envelope()) && !walk(UD).some(f => /desks/.test(f)),
+    "77b THE CONTROL: a catalog loaded and nothing edited has made no key and no file: no desks folder, no branch in the envelope");
+
+  const deskIdBefore = envelope().desk;
+  sealOk = false;
+  edit("Edited A");
+  await tick(30);
+  const keysBefore = Object.keys(envelope().keys).sort().join();
+  const noSeal = await writeBranch();
+  check(noSeal === false && !fs.existsSync(deskDir) && !("branch" in envelope()),
+    "77c where Windows cannot seal a key, an edit makes no key and writes no file, and no plain key is kept instead (answer " + noSeal
+    + ", desks folder " + fs.existsSync(deskDir) + ", branch in the envelope " + ("branch" in envelope()) + ")");
+  sealOk = true;
+
+  await tick(1800);
+  const names = listing(deskDir);
+  const myId = names.length === 1 ? names[0] : "";
+  const file = path.join(deskDir, myId, "lamps.ec");
+  check(/^k-[0-9a-f]{16}$/.test(myId) && fs.existsSync(file),
+    "77d the desk writes its own file by itself, shortly after the layer saves: desks/<branch id>/lamps.ec after an edit (folders "
+    + JSON.stringify(names) + ")");
+  const readOwn = () => { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return {}; } };
+  const bytesOwn = () => { try { return fs.readFileSync(file); } catch { return Buffer.alloc(0); } };
+  const timeOwn = () => { try { return fs.statSync(file).mtimeMs; } catch { return 0; } };
+  const titleOf = (d, i) => (((d.cards || [])[i] || {}).title || {}).en;
+  const d1 = readOwn();
+
+  check(!!d1.desk && d1.desk.id === myId && d1.desk.id === "k-" + sha(Buffer.from(String(d1.desk.key), "hex")).slice(0, 16)
+    && /^[0-9a-f]{64}$/.test(d1.desk.key) && /^[0-9a-f]{64}$/.test(d1.desk.box) && d1.desk.key !== d1.desk.box && d1.desk.name === "Ala K.",
+    "77e the header names the desk by its key: the folder, desk.id and sha256 of desk.key agree, both public halves are 64 hex, and the name is the agent's as typed ("
+    + JSON.stringify(d1.desk && d1.desk.id) + ")");
+  check(!!d1.grew && d1.grew.id === "lamp-shop" && d1.grew.rev === 4 && d1.grew.sha === pin && d1.rev === 1
+    && d1.modified === true && d1.id !== "lamp-shop" && V2.v2Problems(d1).length === 0,
+    "77f grew pins the loaded edition (id, rev 4, the sha above), the file is its first edition, a modified catalog of its own id, and the engine's reader finds no problem in it ("
+    + V2.v2Problems(d1).slice(0, 1).join("") + ")");
+  check(verifies(d1) && V2.v2ContentHash(d1) === d1.hash,
+    "77g the signature verifies with desk.key under the desk prefix over the engine's signed bytes, and the hash is the engine's own");
+  const tampered = JSON.parse(JSON.stringify(d1)); if (tampered.cards) tampered.cards[1].title.en = "Card B!";
+  check(!verifies(d1, false) && !verifies(tampered) && !verifies(Object.assign({}, d1, { sig: Object.assign({}, d1.sig, { value: "00".repeat(64) }) })),
+    "77h THE CONTROL for 77g: without the prefix, with one word of a card changed and with a wrong signature the same check refuses");
+  check(titleOf(d1, 0) === "Edited A" && titleOf(d1, 1) === "Card b za\u017c\u00f3\u0142\u0107" && (d1.cards || []).length === 3,
+    "77i the file holds the layer's edit and the edition's other cards as they were");
+
+  edit("Edited A again");
+  const ok2 = await writeBranch();
+  const d2 = readOwn();
+  check(ok2 === true && d2.rev === 2 && titleOf(d2, 0) === "Edited A again" && verifies(d2) && listing(path.join(deskDir, myId)).join() === "lamps.ec",
+    "77j a second edit raises rev to 2 in the same file, signed again (rev " + d2.rev + ", files " + listing(path.join(deskDir, myId)).join() + ")");
+
+  const before = bytesOwn(), mtime0 = timeOwn();
+  await tick(20);
+  PK.pack.favourites = ["c-b"]; PK.pack.hidden = ["c-c"]; PK.savePack(); RB.rebuildCards();
+  const ok3 = await writeBranch();
+  check(ok3 === true && before.length > 0 && Buffer.compare(bytesOwn(), before) === 0 && timeOwn() === mtime0,
+    "77k a star and a hide change nothing in the file: the same bytes and the same time, rev " + readOwn().rev);
+  PK.pack.favourites = []; PK.pack.hidden = []; PK.savePack();
+
+  /* The private halves: read the sealed envelope back through the stand-in, and look for what they are everywhere the desk can be seen. */
+  const br = envelope().branch || { sign: { pub: "", priv: "" }, box: { pub: "", priv: "" } };
+  const seedHex = (() => { try {
+    return crypto.createPrivateKey({ key: Buffer.from(safeStorage.decryptString(Buffer.from(br.sign.priv, "base64")), "base64"),
+      format: "der", type: "pkcs8" }).export({ type: "pkcs8", format: "der" }).subarray(-32).toString("hex"); } catch { return ""; } })();
+  const secrets = [seedHex, Buffer.from(seedHex, "hex").toString("base64"),
+    safeStorage.decryptString(Buffer.from(br.sign.priv, "base64")), safeStorage.decryptString(Buffer.from(br.box.priv, "base64"))].filter(Boolean);
+  const answers = [JSON.stringify(await asHost("branchIdentity")), JSON.stringify(await asHost("writeBranch", "lamps", JSON.stringify(d2)))];
+  const seen = () => walk(UD).map(f => fs.readFileSync(f, "utf8")).concat(said, JSON.stringify(sent.args), JSON.stringify(d2), answers);
+  const leaks = texts => texts.filter(t => secrets.some(x => t.indexOf(x) >= 0)).length;
+  check(secrets.length === 4 && leaks(seen().concat(["planted " + secrets[0]])) === 1 && leaks(seen()) === 0
+    && Buffer.from(br.sign.priv, "base64").toString("utf8").indexOf(secrets[2]) < 0,
+    "77l the private halves never leave the sealed envelope: " + secrets.length + " forms of them searched in all " + walk(UD).length
+    + " files under the desk, the log and every argument the page sent, none found, and the search finds one planted");
+  const signsAsDesk = (() => { try {
+    const key = crypto.createPrivateKey({ key: Buffer.from(secrets[2], "base64"), format: "der", type: "pkcs8" });
+    return crypto.verify(null, Buffer.from("x"), pubOf(br.sign.pub), crypto.sign(null, Buffer.from("x"), key)); } catch { return false; } })();
+  check(signsAsDesk && br.sign.pub === d2.desk.key && br.box.pub === d2.desk.box,
+    "77m THE CONTROL for 77l: what the envelope seals is the private half of the public key in the file, so the search had something to find");
+
+  /* Another desk's folder, ten edits. */
+  const other = path.join(deskDir, "k-ffffffffffffffff");
+  fs.mkdirSync(other, { recursive: true });
+  const planted = path.join(other, "lamps.ec");
+  fs.writeFileSync(planted, "{\"planted\":\"another desk's own file\"}\n");
+  const longAgo = new Date("2020-01-01T00:00:00Z");
+  fs.utimesSync(planted, longAgo, longAgo);
+  const plantedBytes = fs.readFileSync(planted), plantedTime = fs.statSync(planted).mtimeMs;
+  for (let i = 0; i < 10; i++) { edit("Round " + i); await writeBranch(); }
+  const d3 = readOwn();
+  check(Buffer.compare(fs.readFileSync(planted), plantedBytes) === 0 && fs.statSync(planted).mtimeMs === plantedTime
+    && d3.rev === 12 && titleOf(d3, 0) === "Round 9" && listing(other).join() === "lamps.ec",
+    "77n THE CONTROL: a file planted in another desk's folder keeps its bytes and its time across ten edits, while the desk's own went from rev 2 to "
+    + d3.rev + " (planted time " + plantedTime + ")");
+
+  /* What the host will sign and where it will write. */
+  const asked = (stem, text) => asHost("writeBranch", stem, text);
+  const foreign = Object.assign({}, d3, { desk: Object.assign({}, d3.desk, { id: "k-ffffffffffffffff" }) });
+  const strangerKey = Object.assign({}, d3, { desk: Object.assign({}, d3.desk, { key: "ab".repeat(32) }) });
+  const rA = await asked("lamps", JSON.stringify(foreign)), rB = await asked("lamps", JSON.stringify(strangerKey));
+  const rC = await asked("..\\..\\evil", JSON.stringify(d3)), rD = await asked("../evil", JSON.stringify(d3)), rE = await asked("", JSON.stringify(d3));
+  check([rA, rB, rC, rD, rE].every(r => r && r.ok === false) && !walk(UD).some(f => /evil/.test(f))
+    && Buffer.compare(fs.readFileSync(planted), plantedBytes) === 0,
+    "77o the host signs only a catalog that names this desk and writes only under its own folder: another desk's id, another key, two paths out of the folder and an empty name are each refused, and nothing named evil exists");
+
+  /* A catalog folder that does not answer. */
+  const away = FOLDER + ".away";
+  fs.renameSync(FOLDER, away);
+  edit("While away");
+  const rAway = await writeBranch();
+  const remade = fs.existsSync(FOLDER);
+  if (fs.existsSync(FOLDER)) fs.rmSync(FOLDER, { recursive: true, force: true });
+  fs.renameSync(away, FOLDER);
+  const rBack = await writeBranch();
+  const d4 = readOwn();
+  check(rAway === false && !remade && rBack === true && titleOf(d4, 0) === "While away" && d4.rev === 13 && verifies(d4),
+    "77p a catalog folder that is not there is not made again for the write, and the next write after it returns carries the latest edit (away " + rAway
+    + ", folder remade " + remade + ", back " + rBack + ", rev " + d4.rev + ")");
+
+  /* A layer holding nothing an export would carry takes the file away. */
+  PK.pack.overrides = {}; PK.savePack(); RB.rebuildCards();
+  const rGone = await writeBranch();
+  check(rGone === true && !fs.existsSync(file) && fs.existsSync(planted),
+    "77q when the layer holds no exportable change the desk removes its own file, and only its own (file present " + fs.existsSync(file)
+    + ", the planted one present " + fs.existsSync(planted) + ")");
+
+  /* With no host. */
+  const shareNow = () => walk(FOLDER).map(f => f + ":" + fs.statSync(f).size).sort().join("|");
+  const shareBefore = shareNow();
+  window.E_HOST = undefined;
+  edit("No host");
+  const rNone = await writeBranch();
+  let exported = null;
+  window.showSaveFilePicker = async () => ({ name: "out.ec", createWritable: async () => ({ write: async t => { exported = t; }, close: async () => {} }) });
+  await CF.exportCatalog();
+  const x = exported ? JSON.parse(exported) : {};
+  exported = null;
+  await CF.exportCatalog();
+  const x2 = exported ? JSON.parse(exported) : {};
+  const sameShape = j => JSON.stringify(Object.keys(j)) + JSON.stringify((j.cards || []).map(c => Object.keys(c)));
+  check(rNone === false && shareNow() === shareBefore,
+    "77r THE CONTROL: with no host an edit writes nothing, anywhere in the catalog folder (answer " + rNone + ")");
+  await tick(30);
+  const keysAfter = Object.keys(envelope().keys).sort().join();
+  check(/^d[0-9a-f]{32}$/.test(String(deskIdBefore)) && envelope().desk === deskIdBefore && String(deskIdBefore).indexOf(myId.slice(2)) < 0 && myId !== deskIdBefore
+    && keysAfter === keysBefore,
+    "77s the statistics id is the d<hex> one it was, apart from the branch id, and the desk adds no key to the desk it keeps its layer in (id " + String(envelope().desk).slice(0, 5) + "..., " + keysAfter.split(",").length + " keys before and after)");
+  check(!!exported && x.id !== "lamp-shop" && !/^k-/.test(x.id) && x.id !== x2.id && x.rev === 1 && x.modified === true
+    && !("grew" in x) && !("desk" in x) && !("sig" in x) && x.cards[0].title.en === "No host" && sameShape(x) === sameShape(x2),
+    "77t and Export is still a new catalog, plain: a new id each time, rev " + x.rev + ", no grew, no desk, no signature, the edit in it");
 } catch (e) {
   failed++;
   console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));
 } finally {
   try { fs.rmSync(UD, { recursive: true, force: true }); } catch { /* reported below */ }
+  try { if (COPY) fs.rmSync(COPY, { recursive: true, force: true }); } catch { /* a temp folder */ }
   check(!fs.existsSync(UD), "4a the temp desk folder is gone");
 }
 

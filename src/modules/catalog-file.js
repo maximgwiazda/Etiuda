@@ -2,11 +2,12 @@ import { splitPartsRaw } from "./card-model.js";
 import { cardFieldKey } from "./card-fields.js";
 import { cardOrderTouched, cardOrderIsBase, cardOrderIdx } from "./card-order.js";
 import { ALWAYS_CATS } from "./cat-roles.js";
-import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, parseCatalogFile } from "./catalog.js";
+import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, parseCatalogFile, catalogDocOf } from "./catalog.js";
 import { catalogLoaded } from "./catalog-boot.js";
-import { catalogToV2 } from "./catalog-v2.js";
+import { agentName } from "./agent.js";
+import { catalogToV2, v2SignedBytes } from "./catalog-v2.js";
 import { CATS, intentArr, intentFieldKey, intentCount, catalogLangs, CONTENT_LANGS } from "./content-model.js";
-import { eHost, eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile, eLoadedCatalogFile } from "./host.js";
+import { eHost, eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile, eLoadedCatalogFile, eHasBranch, eBranchIdentity, eWriteBranch } from "./host.js";
 import { CAT_LABELS_PL, CAT_LABELS_BY_LANG } from "./icons.js";
 import { fill } from "./intent-text.js";
 import { cardToExportPlain } from "./macros-json.js";
@@ -51,8 +52,9 @@ function intentsExport(keep){
   }));
   return out;
 }
-function currentCatalog(){
-  rebuildCards();
+/* `asIs` reads the cards as they stand, for a caller that must not redraw the list. */
+function currentCatalog(opts){
+  if(!(opts&&opts.asIs)) rebuildCards();
   const cats={}, catsPl={}, catsOther={};
   /* Every declared language past the primary and past Polish, carried out exactly as it came
      in: those have no personal layer and no editor yet, so an export must not lose them. */
@@ -261,6 +263,89 @@ function exportCatalog(){
     return saved;
   });
 }
+/* ---- the desk's own file in the catalog folder -----------------------------------------------
+   The personal layer stays the source of truth and this is its projection: what an export would
+   hold, grown from the edition in use, signed by the desk's own key, which only the host holds.
+   Favourites, hides and counts are not in an export, so they are not in this file either. */
+const SHA_K=[
+  0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+  0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+  0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+  0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+  0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+  0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+  0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+  0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+/* SHA-256 of bytes, as hex, synchronously: the page has no other way to hash inside a save. */
+function sha256Hex(bytes){
+  const H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  const n=bytes.length, total=((n+9+63)>>6)<<6, buf=new Uint8Array(total);
+  buf.set(bytes); buf[n]=0x80;
+  const dv=new DataView(buf.buffer), w=new Uint32Array(64);
+  dv.setUint32(total-8,Math.floor(n/0x20000000)); dv.setUint32(total-4,(n<<3)>>>0);
+  for(let o=0;o<total;o+=64){
+    for(let i=0;i<16;i++) w[i]=dv.getUint32(o+i*4);
+    for(let i=16;i<64;i++){
+      const x=w[i-15], y=w[i-2];
+      w[i]=w[i-16]+(((x>>>7)|(x<<25))^((x>>>18)|(x<<14))^(x>>>3))+w[i-7]+(((y>>>17)|(y<<15))^((y>>>19)|(y<<13))^(y>>>10));
+    }
+    let a=H[0],b=H[1],c=H[2],d=H[3],e=H[4],f=H[5],g=H[6],h=H[7];
+    for(let i=0;i<64;i++){
+      const t1=h+(((e>>>6)|(e<<26))^((e>>>11)|(e<<21))^((e>>>25)|(e<<7)))+((e&f)^(~e&g))+SHA_K[i]+w[i];
+      const t2=(((a>>>2)|(a<<30))^((a>>>13)|(a<<19))^((a>>>22)|(a<<10)))+((a&b)^(a&c)^(b&c));
+      h=g; g=f; f=e; e=(d+t1)|0; d=c; c=b; b=a; a=(t1+t2)|0;
+    }
+    [a,b,c,d,e,f,g,h].forEach((v,i)=>{ H[i]=(H[i]+v)|0; });
+  }
+  return H.map(v=>(v>>>0).toString(16).padStart(8,"0")).join("");
+}
+/* THE EDITION IN USE, PINNED. A signature covers the document and the stored copy keeps only what
+   the runtime reads, so the pin is made where the document is still in hand: every route to a
+   catalog ends in takeCatalog. A catalog stored without one has no desk file until it is loaded again. */
+function pinned(c){
+  const doc=catalogDocOf(c);
+  if(!doc) return c;
+  try{ return Object.assign({},c,{pin:"sha256:"+sha256Hex(v2SignedBytes(doc))}); }
+  catch(e){ return c; }
+}
+/* The desk file's catalog: an export's content with the id this desk and this edition always give
+   it, the edition's own pin in `grew` and the desk's public halves in `desk`. The edition number is
+   the host's to raise, so it is 1 here. */
+function branchCatalog(who,origin){
+  const c=currentCatalog({asIs:true}), name=String(agentName()||"").trim();
+  c.id=who.id+"-"+sha256Hex(new TextEncoder().encode(String(origin.id))).slice(0,8);
+  c.rev=1;
+  c.version=todayEdition();
+  c.grew={id:String(origin.id), rev:+origin.rev||0, sha:String(origin.pin)};
+  c.desk={id:who.id, key:who.key, box:who.box};
+  if(name) c.desk.name=name;
+  return c;
+}
+const BRANCH_WAIT_MS=1500;
+let branchTimer=0, branchBusy=null, branchAgain=false;
+/* One write at a time, the latest state when it runs. A layer holding nothing an export would carry
+   takes the file away; a browser, a desk with no pin and a desk whose key cannot be kept write nothing. */
+function writeDeskBranch(){
+  if(!eHasBranch() || !catalogLoaded()) return Promise.resolve(false);
+  if(branchBusy){ branchAgain=true; return branchBusy; }
+  const origin=storedCatalog();
+  if(!origin || !origin.id || !/^sha256:[0-9a-f]{64}$/.test(String(origin.pin||""))) return Promise.resolve(false);
+  const stem=catalogFileStem(catalogNameOfFile(catalogFileName()));
+  const run=catalogEdited()
+    ? eBranchIdentity().then(who=>who ? eWriteBranch(stem,JSON.stringify(catalogToV2(branchCatalog(who,origin)))) : {ok:false})
+    : eWriteBranch(stem,"");
+  branchBusy=run.then(r=>!!(r&&r.ok),()=>false).then(ok=>{
+    branchBusy=null;
+    if(branchAgain){ branchAgain=false; scheduleDeskBranch(); }
+    return ok;
+  });
+  return branchBusy;
+}
+function scheduleDeskBranch(){
+  if(!eHasBranch()) return;
+  clearTimeout(branchTimer);
+  branchTimer=setTimeout(()=>{ branchTimer=0; writeDeskBranch(); },BRANCH_WAIT_MS);
+}
 /* The same catalog moving forward is not a different catalog arriving. The file's own id decides,
    and a side without one is never the same catalog as anything. */
 function isCatalogUpdate(incoming,active){
@@ -348,7 +433,7 @@ function takeCatalog(c,opts){
   flushLayer();
   /* THE CATALOG LANDS BEFORE ANYTHING IS PRUNED FOR IT: a catalog that could not be written must
      leave the one loaded standing over its own stars, hides and order. */
-  if(!storeCatalog(c)) return false;
+  if(!storeCatalog(pinned(c))) return false;
   if(same){
     const alive=carryCardLayer(c);
     pack.baseCards=null;
@@ -414,6 +499,8 @@ function catalogEdited(){ return !sampleUntouched(); }
  *  has to survive activateCatalog()'s reload, and because a Reset wipes every e* key - so a
  *  reset Etiuda cannot come back still marked. */
 function syncSampleMark(){
+  // Every pack save, a restart and the boot pass here, which makes it the one place the desk file is told.
+  scheduleDeskBranch();
   const el=document.getElementById("sampleMark");
   if(!el) return;
   let on=false;
@@ -551,5 +638,7 @@ export {
   sampleUntouched,
   syncSampleMark,
   importCatalogHere,
-  importCatalogText
+  importCatalogText,
+  sha256Hex,
+  writeDeskBranch
 };

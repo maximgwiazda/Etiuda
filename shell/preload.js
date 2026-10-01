@@ -123,6 +123,10 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
     return true;
   },
   writeStats: (text) => ipcRenderer.invoke("etiuda:stats-write", String(text || "")),
+  /* The desk's branch: {id, key, box}, the public halves only, or null where no key can be kept; and the
+     desk's own catalog file by its stem, an empty text taking it away. Nothing here hands out a key. */
+  branchIdentity: () => ipcRenderer.invoke("etiuda:branch-identity"),
+  writeBranch: (stem, text) => ipcRenderer.invoke("etiuda:branch-write", String(stem || ""), String(text || "")),
   onStatsAsk: (fn) => ipcRenderer.on("etiuda:stats-ask", (_e, req) => fn(req && typeof req === "object" ? req : {})),
   /* The picker's questions, answered by the page as JSON text: what to show, what a query finds, and
      the text a copy puts on the clipboard, which the shell writes. */

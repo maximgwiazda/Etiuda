@@ -179,6 +179,29 @@ function eSaveCatalogFile(title,name,label,build){
       .catch(()=>failed());
   }catch(e){ return Promise.resolve(failed()); }
 }
+/* The desk's branch, both halves through the host and neither in a browser. The identity is the
+   public halves {id,key,box} or null where no key can be kept safely; the write answers {ok}, and an
+   empty text takes the desk's own file for that stem away. */
+function eHasBranch(){
+  const h=eHost();
+  return !!h && typeof h.branchIdentity==="function" && typeof h.writeBranch==="function";
+}
+function eBranchIdentity(){
+  if(!eHasBranch()) return Promise.resolve(null);
+  try{
+    return Promise.resolve(eHost().branchIdentity())
+      .then(v=>(v&&typeof v==="object"&&v.id&&v.key&&v.box)?{id:String(v.id),key:String(v.key),box:String(v.box)}:null)
+      .catch(()=>null);
+  }catch(e){ return Promise.resolve(null); }
+}
+function eWriteBranch(stem,text){
+  if(!eHasBranch()) return Promise.resolve({ok:false});
+  try{
+    return Promise.resolve(eHost().writeBranch(String(stem||""),String(text||"")))
+      .then(v=>({ok:!!(v&&v.ok)}))
+      .catch(()=>({ok:false}));
+  }catch(e){ return Promise.resolve({ok:false}); }
+}
 /* A file somebody double-clicked that this launch could not open, {name,why} once and then null:
    the host forgets it as it answers, so a reload does not say it twice. */
 function eOpenedRefused(){
@@ -266,6 +289,9 @@ function eSetMaximized(on){
 }
 
 export {
+  eBranchIdentity,
+  eHasBranch,
+  eWriteBranch,
   E_CATALOG_FOLDER_KEY,
   E_CATALOG_SCRIPT,
   eCatalogFile,

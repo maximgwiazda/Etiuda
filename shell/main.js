@@ -1,7 +1,7 @@
 "use strict";
 
 const { app, BrowserWindow, Menu, clipboard, dialog, globalShortcut, ipcMain, nativeTheme, net, protocol, session,
-  screen, shell, systemPreferences } = require("electron");
+  safeStorage, screen, shell, systemPreferences } = require("electron");
 
 /* AN INSTALLED DESK, loaded from inside app.asar, opens no debugging endpoint and takes neither
    ETIUDA_TEST_DOCUMENTS nor ETIUDA_TEST_SAVE_AS unless ETIUDA_TEST_DEVTOOLS=1, which tests/engine.js
@@ -398,6 +398,7 @@ function catalogFolderChanged() {
 function catalogChanged(win) {
   const now = readCatalog();
   tryAnswerRequest(win);
+  tryHeldBranches();
   if (now === catalogJson) return;
   catalogJson = now;
   if (!now || !win || win.isDestroyed()) return;
@@ -554,6 +555,7 @@ function deskEnvelopeBody(keysText) {
     + (theDeskId ? ',"desk":' + JSON.stringify(theDeskId) : "")
     + (answeredIds.length ? ',"answered":' + JSON.stringify(answeredIds) : "")
     + (heldStats ? ',"held":' + JSON.stringify(heldStats) : "")
+    + (deskBranch ? ',"branch":' + JSON.stringify(deskBranch) : "")
     + (deskRefused.length ? ',"refused":' + JSON.stringify(deskRefused) : "")
     + ',"keys":' + keysText + "}";
 }
@@ -658,6 +660,165 @@ function tryAnswerRequest(win) {
   win.webContents.send("etiuda:stats-ask", { id: req.id, from: req.from, to: req.to, issued: req.issued });
 }
 
+/* ---- the desk's branch: an identity of its own, and its own file in the catalog folder --------
+   Two key pairs made here at first need, Ed25519 to sign and X25519 to receive a team key. The
+   private halves sit in the desk envelope sealed by safeStorage and never leave it: the page is
+   handed the public halves and asks for a write, and no call signs anything but a desk file. The
+   id is not the statistics id above, so that the two cannot be joined. */
+const BRANCH_PREFIX = "etiuda-desk-branch\n";
+const BRANCH_STEM_MAX = 80, BRANCH_TEXT_MAX = 16 * 1024 * 1024;
+const SPKI_ED25519 = Buffer.from("302a300506032b6570032100", "hex");
+let deskBranch = null;                         // {sign:{pub,priv}, box:{pub,priv}}: hex publics, sealed privates
+const heldBranch = new Map();                  // stem -> the text a folder that did not answer is still owed
+function branchPairOk(b) {
+  const half = h => !!h && typeof h === "object" && /^[0-9a-f]{64}$/.test(String(h.pub)) && typeof h.priv === "string" && h.priv !== "";
+  return !!b && typeof b === "object" && half(b.sign) && half(b.box);
+}
+function branchSealable() {
+  try { return !!safeStorage && safeStorage.isEncryptionAvailable(); } catch { return false; }
+}
+function sealPrivate(key) {
+  return safeStorage.encryptString(key.export({ type: "pkcs8", format: "der" }).toString("base64")).toString("base64");
+}
+/* The private key as an object, or null where Windows will not open the envelope for this account. */
+function openPrivate(sealed) {
+  try {
+    return crypto.createPrivateKey({ key: Buffer.from(safeStorage.decryptString(Buffer.from(sealed, "base64")), "base64"),
+      format: "der", type: "pkcs8" });
+  } catch { return null; }
+}
+function rawPublic(key) { return key.export({ type: "spki", format: "der" }).subarray(-32).toString("hex"); }
+function branchIdOf(pubHex) {
+  return "k-" + crypto.createHash("sha256").update(Buffer.from(pubHex, "hex")).digest("hex").slice(0, 16);
+}
+/* {id, key, box} for the page, or null where no key can be kept safely: a pair the envelope cannot
+   open is never replaced here, since a new one would orphan the file already in the share. */
+function branchIdentity() {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  if (!deskBranch) {
+    if (!branchSealable()) return null;
+    try {
+      const s = crypto.generateKeyPairSync("ed25519"), b = crypto.generateKeyPairSync("x25519");
+      deskBranch = { sign: { pub: rawPublic(s.publicKey), priv: sealPrivate(s.privateKey) },
+                     box: { pub: rawPublic(b.publicKey), priv: sealPrivate(b.privateKey) } };
+      saveDeskFile(JSON.stringify(deskKeys));
+      deskWritten = true;
+    } catch (e) {
+      deskBranch = null;
+      console.error("etiuda: the desk's branch key could not be made or kept - " + e.message);
+      return null;
+    }
+  }
+  if (!openPrivate(deskBranch.sign.priv)) return null;
+  return { id: branchIdOf(deskBranch.sign.pub), key: deskBranch.sign.pub, box: deskBranch.box.pub };
+}
+/* The same canonical form as the engine's v2Canonical, with the signature folded as v2SigFold does:
+   tests/desk-ipc.mjs verifies a file's signature through the engine's own functions. */
+function canonJson(v) {
+  if (v === null || typeof v !== "object") return JSON.stringify(v);
+  if (Array.isArray(v)) return "[" + v.map(canonJson).join(",") + "]";
+  const keys = Object.keys(v).filter(k => v[k] !== undefined).sort();
+  return "{" + keys.map(k => JSON.stringify(k) + ":" + canonJson(v[k])).join(",") + "}";
+}
+function branchSignedBytes(doc) {
+  const copy = {};
+  Object.keys(doc).forEach(k => {
+    if (k === "hash") return;
+    if (k !== "sig") { copy[k] = doc[k]; return; }
+    const s = doc.sig;
+    if (s && typeof s === "object") {
+      copy.sig = {};
+      if (s.alg !== undefined) copy.sig.alg = s.alg;
+      if (s.keyId !== undefined) copy.sig.keyId = s.keyId;
+    }
+  });
+  return Buffer.concat([Buffer.from(BRANCH_PREFIX, "utf8"), Buffer.from(canonJson(copy), "utf8")]);
+}
+function branchSign(doc) {
+  const key = openPrivate(deskBranch.sign.priv);
+  return key ? crypto.sign(null, branchSignedBytes(doc), key).toString("hex") : "";
+}
+function branchGenuine(doc) {
+  try {
+    const pub = crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(deskBranch.sign.pub, "hex")]),
+      format: "der", type: "spki" });
+    return !!doc.sig && /^[0-9a-f]{128}$/.test(String(doc.sig.value))
+      && crypto.verify(null, branchSignedBytes(doc), pub, Buffer.from(doc.sig.value, "hex"));
+  } catch { return false; }
+}
+/* What the desk means by a file, apart from the fields a write moves. */
+function branchContent(doc) {
+  const copy = Object.assign({}, doc);
+  ["rev", "date", "hash", "sig"].forEach(k => { delete copy[k]; });
+  return canonJson(copy);
+}
+function branchStemOk(s) {
+  return !!s && s.length <= BRANCH_STEM_MAX && s === s.trim() && !/[\\/:*?"<>|\u0000-\u001f]/.test(s)
+    && !/[. ]$/.test(s) && s !== "." && s !== ".." && !DESK_ID_RESERVED.test(s);
+}
+/* Where this desk's own file for a catalog goes, and null where the catalog folder is not there to
+   hold it: the folder is never made here, since a share that has gone away would be made again. */
+function branchDest(stem) {
+  const root = catalogFolder(), dir = path.join(root, "desks", deskBranch ? branchIdOf(deskBranch.sign.pub) : "");
+  const dest = path.join(dir, stem + ".ec");
+  if (path.dirname(dest) !== dir || path.basename(dest) !== stem + ".ec") return null;
+  return { root: root, dir: dir, dest: dest };
+}
+function branchHold(stem, text) {
+  heldBranch.set(stem, text);
+  return { ok: false, held: true };
+}
+/* An empty text takes the desk's own file away. Anything else is a catalog the page built, which the
+   desk signs only when it names this desk, and writes by replacement with the edition raised. */
+function writeBranch(stem, text) {
+  stem = String(stem || ""); text = String(text || "");
+  if (!branchStemOk(stem) || text.length > BRANCH_TEXT_MAX) return { ok: false };
+  if (deskKeys === undefined) deskKeys = readDesk();
+  if (!text && !deskBranch) return { ok: true };
+  const me = branchIdentity();
+  if (!me) return { ok: false };
+  let doc = null;
+  if (text) {
+    try { doc = JSON.parse(text); } catch { return { ok: false }; }
+    const d = doc && typeof doc === "object" ? doc.desk : null;
+    if (!d || d.id !== me.id || d.key !== me.key || d.box !== me.box) return { ok: false };
+  }
+  const at = branchDest(stem);
+  if (!at) return { ok: false };
+  try {
+    if (!folderAnswers(at.root) || !fs.statSync(at.root).isDirectory()) return branchHold(stem, text);
+    let had = null;
+    try { had = JSON.parse(fs.readFileSync(at.dest, "utf8")); } catch { /* none, or not ours to trust */ }
+    if (!doc) {
+      if (fs.existsSync(at.dest)) fs.unlinkSync(at.dest);
+      heldBranch.delete(stem);
+      return { ok: true, removed: true };
+    }
+    if (had && typeof had === "object" && branchGenuine(had) && branchContent(had) === branchContent(doc)) {
+      heldBranch.delete(stem);
+      return { ok: true, unchanged: true, rev: +had.rev || 0 };
+    }
+    doc.rev = ((had && typeof had === "object" && +had.rev) || 0) + 1;
+    doc.hash = channelHash(doc);
+    doc.sig = { alg: "Ed25519", keyId: me.id };
+    doc.sig.value = branchSign(doc);
+    if (!doc.sig.value) return { ok: false };
+    for (const dir of [path.join(at.root, "desks"), at.dir]) {
+      try { fs.mkdirSync(dir); } catch (e) { if (e.code !== "EEXIST") throw e; }
+    }
+    writeReplacing(at.dest, JSON.stringify(doc, null, 1) + "\n");
+    heldBranch.delete(stem);
+    return { ok: true, rev: doc.rev };
+  } catch (e) {
+    console.error("etiuda: the desk's own catalog file could not be written - " + e.message);
+    return branchHold(stem, text);
+  }
+}
+function tryHeldBranches() {
+  if (!heldBranch.size || !folderAnswers(catalogFolder())) return;
+  for (const [stem, text] of Array.from(heldBranch)) writeBranch(stem, text);
+}
+
 function deskFile() { return path.join(app.getPath("userData"), "desk.json"); }
 function deskBackup(n) { return path.join(app.getPath("userData"), "desk.bak" + n + ".json"); }
 
@@ -749,6 +910,7 @@ function readDesk() {
         && typeof doc.held.id === "string" && typeof doc.held.text === "string") {
       heldStats = { id: doc.held.id, text: doc.held.text };
     }
+    if (branchPairOk(doc && doc.branch)) deskBranch = doc.branch;
     ensureDeskId();
     console.log("etiuda: desk read from " + file + ", " + Object.keys(keys).length + " keys");
     return keys;
@@ -1191,6 +1353,9 @@ ipcMain.handle("etiuda:stats-write", (e, text) => {
   if (!fromEngine(e)) return { ok: false };
   return writeStatsAnswer(String(text || ""));
 });
+/* The desk's branch: its public identity, and the write of its own file. See writeBranch. */
+ipcMain.handle("etiuda:branch-identity", (e) => (fromEngine(e) ? branchIdentity() : null));
+ipcMain.handle("etiuda:branch-write", (e, stem, text) => (fromEngine(e) ? writeBranch(stem, text) : { ok: false }));
 
 /* The engine calls no OS API, so the folder picker is the shell's. The CAPTION comes from the
    page: the shell has no t(), and a dialog captioned in two languages at once is captioned in
@@ -2106,7 +2271,7 @@ function createWindow() {
   });
   win.loadFile(ENGINE);
   watchCatalog(win);
-  win.webContents.on("did-finish-load", () => { setTimeout(() => tryAnswerRequest(win), 0); });
+  win.webContents.on("did-finish-load", () => { setTimeout(() => { tryAnswerRequest(win); tryHeldBranches(); }, 0); });
 }
 
 /* No File / Edit / View / Window bar: the band is the top bar and the window has no other
