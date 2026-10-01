@@ -308,12 +308,14 @@ function pinned(c){
   try{ return Object.assign({},c,{pin:"sha256:"+sha256Hex(v2SignedBytes(doc))}); }
   catch(e){ return c; }
 }
+/* Eight hex of the grown-from catalog's id: the end of the desk file's own id and of its file name. */
+function branchHex(origin){ return sha256Hex(new TextEncoder().encode(String(origin.id))).slice(0,8); }
 /* The desk file's catalog: an export's content with the id this desk and this edition always give
    it, the edition's own pin in `grew` and the desk's public halves in `desk`. The edition number is
    the host's to raise, so it is 1 here. */
 function branchCatalog(who,origin){
   const c=currentCatalog({asIs:true}), name=String(agentName()||"").trim();
-  c.id=who.id+"-"+sha256Hex(new TextEncoder().encode(String(origin.id))).slice(0,8);
+  c.id=who.id+"-"+branchHex(origin);
   c.rev=1;
   c.version=todayEdition();
   c.grew={id:String(origin.id), rev:+origin.rev||0, sha:String(origin.pin)};
@@ -330,7 +332,7 @@ function writeDeskBranch(){
   if(branchBusy){ branchAgain=true; return branchBusy; }
   const origin=storedCatalog();
   if(!origin || !origin.id || !/^sha256:[0-9a-f]{64}$/.test(String(origin.pin||""))) return Promise.resolve(false);
-  const stem=catalogFileStem(catalogNameOfFile(catalogFileName()));
+  const stem=catalogFileStem(catalogNameOfFile(catalogFileName()))+"-"+branchHex(origin);
   const run=catalogEdited()
     ? eBranchIdentity().then(who=>who ? eWriteBranch(stem,JSON.stringify(catalogToV2(branchCatalog(who,origin)))) : {ok:false})
     : eWriteBranch(stem,"");

@@ -556,6 +556,7 @@ function deskEnvelopeBody(keysText) {
     + (answeredIds.length ? ',"answered":' + JSON.stringify(answeredIds) : "")
     + (heldStats ? ',"held":' + JSON.stringify(heldStats) : "")
     + (deskBranch ? ',"branch":' + JSON.stringify(deskBranch) : "")
+    + (deskBranchOld.length ? ',"branchOld":' + JSON.stringify(deskBranchOld) : "")
     + (deskRefused.length ? ',"refused":' + JSON.stringify(deskRefused) : "")
     + ',"keys":' + keysText + "}";
 }
@@ -666,9 +667,10 @@ function tryAnswerRequest(win) {
    handed the public halves and asks for a write, and no call signs anything but a desk file. The
    id is not the statistics id above, so that the two cannot be joined. */
 const BRANCH_PREFIX = "etiuda-desk-branch\n";
-const BRANCH_STEM_MAX = 80, BRANCH_TEXT_MAX = 16 * 1024 * 1024;
+const BRANCH_STEM_MAX = 96, BRANCH_TEXT_MAX = 16 * 1024 * 1024;
 const SPKI_ED25519 = Buffer.from("302a300506032b6570032100", "hex");
 let deskBranch = null;                         // {sign:{pub,priv}, box:{pub,priv}}: hex publics, sealed privates
+let deskBranchOld = [];                        // pairs the envelope could never open again, kept aside and never deleted
 const heldBranch = new Map();                  // stem -> the text a folder that did not answer is still owed
 function branchPairOk(b) {
   const half = h => !!h && typeof h === "object" && /^[0-9a-f]{64}$/.test(String(h.pub)) && typeof h.priv === "string" && h.priv !== "";
@@ -691,25 +693,29 @@ function rawPublic(key) { return key.export({ type: "spki", format: "der" }).sub
 function branchIdOf(pubHex) {
   return "k-" + crypto.createHash("sha256").update(Buffer.from(pubHex, "hex")).digest("hex").slice(0, 16);
 }
-/* {id, key, box} for the page, or null where no key can be kept safely: a pair the envelope cannot
-   open is never replaced here, since a new one would orphan the file already in the share. */
+/* {id, key, box} for the page, or null where no key can be kept safely. Where encryption is only
+   unavailable nothing is made and nothing is replaced. A pair the envelope throws on is that of another
+   account, so it is kept aside, never deleted, and a new one is made: silence would hide the desk. */
 function branchIdentity() {
   if (deskKeys === undefined) deskKeys = readDesk();
-  if (!deskBranch) {
-    if (!branchSealable()) return null;
+  if (!branchSealable()) return null;
+  const was = deskBranch, wasOld = deskBranchOld;
+  if (!deskBranch || !openPrivate(deskBranch.sign.priv)) {
     try {
+      if (deskBranch) { deskBranchOld = wasOld.concat([deskBranch]); deskBranch = null; }
       const s = crypto.generateKeyPairSync("ed25519"), b = crypto.generateKeyPairSync("x25519");
       deskBranch = { sign: { pub: rawPublic(s.publicKey), priv: sealPrivate(s.privateKey) },
                      box: { pub: rawPublic(b.publicKey), priv: sealPrivate(b.privateKey) } };
       saveDeskFile(JSON.stringify(deskKeys));
       deskWritten = true;
+      if (was) console.log("etiuda: the desk's branch key could not be opened, so a new one was made; the old pair is kept aside");
     } catch (e) {
-      deskBranch = null;
+      deskBranch = was;
+      deskBranchOld = wasOld;
       console.error("etiuda: the desk's branch key could not be made or kept - " + e.message);
       return null;
     }
   }
-  if (!openPrivate(deskBranch.sign.priv)) return null;
   return { id: branchIdOf(deskBranch.sign.pub), key: deskBranch.sign.pub, box: deskBranch.box.pub };
 }
 /* The same canonical form as the engine's v2Canonical, with the signature folded as v2SigFold does:
@@ -768,37 +774,60 @@ function branchHold(stem, text) {
   heldBranch.set(stem, text);
   return { ok: false, held: true };
 }
-/* An empty text takes the desk's own file away. Anything else is a catalog the page built, which the
-   desk signs only when it names this desk, and writes by replacement with the edition raised. */
+/* Every catalog in the desk's own folder holding this id, whatever it is called: a renamed grown-from
+   file leaves its old name behind. */
+function ownFilesWithId(dir, id) {
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch { return []; }
+  const out = [];
+  for (const n of names) {
+    if (!/\.ec$/i.test(n)) continue;
+    const file = path.join(dir, n);
+    try {
+      const d = JSON.parse(fs.readFileSync(file, "utf8"));
+      if (d && typeof d === "object" && d.id === id) out.push({ file: file, doc: d });
+    } catch { /* not a catalog */ }
+  }
+  return out;
+}
+/* The file is <stem>-<8 hex>.ec and its catalog id ends in the same 8 hex, so two catalogs with one stem
+   are two files. An empty text takes every file of that id away. Anything else is a catalog the page
+   built, which the desk signs only when it names this desk, and writes by replacement with the edition
+   raised from the highest it finds, then the other files of that id go. */
 function writeBranch(stem, text) {
   stem = String(stem || ""); text = String(text || "");
-  if (!branchStemOk(stem) || text.length > BRANCH_TEXT_MAX) return { ok: false };
+  const tail = /-([0-9a-f]{8})$/.exec(stem);
+  if (!tail || !branchStemOk(stem) || text.length > BRANCH_TEXT_MAX) return { ok: false };
   if (deskKeys === undefined) deskKeys = readDesk();
   if (!text && !deskBranch) return { ok: true };
   const me = branchIdentity();
   if (!me) return { ok: false };
+  const id = me.id + "-" + tail[1];
   let doc = null;
   if (text) {
     try { doc = JSON.parse(text); } catch { return { ok: false }; }
     const d = doc && typeof doc === "object" ? doc.desk : null;
-    if (!d || d.id !== me.id || d.key !== me.key || d.box !== me.box) return { ok: false };
+    if (!d || d.id !== me.id || d.key !== me.key || d.box !== me.box || doc.id !== id) return { ok: false };
   }
   const at = branchDest(stem);
   if (!at) return { ok: false };
   try {
     if (!folderAnswers(at.root) || !fs.statSync(at.root).isDirectory()) return branchHold(stem, text);
-    let had = null;
-    try { had = JSON.parse(fs.readFileSync(at.dest, "utf8")); } catch { /* none, or not ours to trust */ }
+    const same = ownFilesWithId(at.dir, id);
+    const tidy = () => same.forEach(e => { if (e.file !== at.dest) fs.unlinkSync(e.file); });
     if (!doc) {
-      if (fs.existsSync(at.dest)) fs.unlinkSync(at.dest);
+      same.forEach(e => fs.unlinkSync(e.file));
+      if (!same.some(e => e.file === at.dest) && fs.existsSync(at.dest)) fs.unlinkSync(at.dest);
       heldBranch.delete(stem);
       return { ok: true, removed: true };
     }
-    if (had && typeof had === "object" && branchGenuine(had) && branchContent(had) === branchContent(doc)) {
+    const had = (same.filter(e => e.file === at.dest)[0] || {}).doc || null;
+    if (had && branchGenuine(had) && branchContent(had) === branchContent(doc)) {
+      tidy();
       heldBranch.delete(stem);
       return { ok: true, unchanged: true, rev: +had.rev || 0 };
     }
-    doc.rev = ((had && typeof had === "object" && +had.rev) || 0) + 1;
+    doc.rev = same.reduce((hi, e) => Math.max(hi, +e.doc.rev || 0), 0) + 1;
     doc.hash = channelHash(doc);
     doc.sig = { alg: "Ed25519", keyId: me.id };
     doc.sig.value = branchSign(doc);
@@ -807,6 +836,7 @@ function writeBranch(stem, text) {
       try { fs.mkdirSync(dir); } catch (e) { if (e.code !== "EEXIST") throw e; }
     }
     writeReplacing(at.dest, JSON.stringify(doc, null, 1) + "\n");
+    tidy();
     heldBranch.delete(stem);
     return { ok: true, rev: doc.rev };
   } catch (e) {
@@ -814,9 +844,14 @@ function writeBranch(stem, text) {
     return branchHold(stem, text);
   }
 }
+/* What a folder that did not answer is still owed, asked again when it may have come back: the catalog
+   folder changing and the page finishing a load both call this. */
 function tryHeldBranches() {
   if (!heldBranch.size || !folderAnswers(catalogFolder())) return;
-  for (const [stem, text] of Array.from(heldBranch)) writeBranch(stem, text);
+  for (const [stem, text] of Array.from(heldBranch)) {
+    const r = writeBranch(stem, text);
+    if (!r.ok && !r.held) heldBranch.delete(stem);
+  }
 }
 
 function deskFile() { return path.join(app.getPath("userData"), "desk.json"); }
@@ -911,6 +946,7 @@ function readDesk() {
       heldStats = { id: doc.held.id, text: doc.held.text };
     }
     if (branchPairOk(doc && doc.branch)) deskBranch = doc.branch;
+    if (doc && Array.isArray(doc.branchOld)) deskBranchOld = doc.branchOld.filter(branchPairOk);
     ensureDeskId();
     console.log("etiuda: desk read from " + file + ", " + Object.keys(keys).length + " keys");
     return keys;

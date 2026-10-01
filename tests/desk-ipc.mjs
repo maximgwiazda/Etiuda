@@ -23,7 +23,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 49;
+const EXPECTED = 55;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -50,17 +50,20 @@ const electron = {
   screen: inert, shell: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },
 };
 /* safeStorage as far as main.js asks of it: a reversible sealing that shows nothing of what it holds. */
-let sealOk = true;
+let sealOk = true, decryptFails = null;
 const safeStorage = {
   isEncryptionAvailable: () => sealOk,
   encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
-  decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
+  decryptString: b => { if (!sealOk || (decryptFails && Buffer.from(b).toString("base64") === decryptFails)) throw new Error("cannot decrypt for this account"); return Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"); },
 };
 electron.safeStorage = safeStorage;
 const fakeRequire = n => (n === "electron" ? electron : nodeRequire(n));
 const shellSrc = f => fs.readFileSync(path.join(ROOT, "shell", f), "utf8");
-new Function("require", "__dirname", "__filename", "module", "exports", "console", shellSrc("main.js"))(
-  fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet);
+/* main.js is evaluated as a function body, so one line appended to it hands the test the retry that Electron's events call. */
+const mainTest = {};
+new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
+  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches;")(
+  fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, mainTest);
 
 /* ---- the renderer's side of the pipe. The desk's channels go to main's own handlers; the
    catalog and the host are answered here, because this file is about the desk. ------------- */
@@ -363,6 +366,7 @@ try {
   };
   const AG = await import(PLAIN("agent.js"));
   AG.setAgentName("Ala K.");
+  const hex1 = sha(Buffer.from("lamp-shop")).slice(0, 8), ownName = "lamps-" + hex1 + ".ec";
   const loaded = CT.parseCatalogFile(JSON.stringify(origin));
   CF.activateCatalog(loaded, { file: "lamps.ec" });
   CB.applyBootCatalog();
@@ -393,9 +397,9 @@ try {
   await tick(1800);
   const names = listing(deskDir);
   const myId = names.length === 1 ? names[0] : "";
-  const file = path.join(deskDir, myId, "lamps.ec");
-  check(/^k-[0-9a-f]{16}$/.test(myId) && fs.existsSync(file),
-    "77d the desk writes its own file by itself, shortly after the layer saves: desks/<branch id>/lamps.ec after an edit (folders "
+  const file = path.join(deskDir, myId, listing(path.join(deskDir, myId))[0] || ownName);
+  check(/^k-[0-9a-f]{16}$/.test(myId) && fs.existsSync(file) && path.basename(file) === ownName,
+    "77d the desk writes its own file by itself, shortly after the layer saves: desks/<branch id>/<stem>-<8 hex>.ec after an edit (folders "
     + JSON.stringify(names) + ")");
   const readOwn = () => { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return {}; } };
   const bytesOwn = () => { try { return fs.readFileSync(file); } catch { return Buffer.alloc(0); } };
@@ -422,7 +426,7 @@ try {
   edit("Edited A again");
   const ok2 = await writeBranch();
   const d2 = readOwn();
-  check(ok2 === true && d2.rev === 2 && titleOf(d2, 0) === "Edited A again" && verifies(d2) && listing(path.join(deskDir, myId)).join() === "lamps.ec",
+  check(ok2 === true && d2.rev === 2 && titleOf(d2, 0) === "Edited A again" && verifies(d2) && listing(path.join(deskDir, myId)).join() === ownName,
     "77j a second edit raises rev to 2 in the same file, signed again (rev " + d2.rev + ", files " + listing(path.join(deskDir, myId)).join() + ")");
 
   const before = bytesOwn(), mtime0 = timeOwn();
@@ -440,7 +444,7 @@ try {
       format: "der", type: "pkcs8" }).export({ type: "pkcs8", format: "der" }).subarray(-32).toString("hex"); } catch { return ""; } })();
   const secrets = [seedHex, Buffer.from(seedHex, "hex").toString("base64"),
     safeStorage.decryptString(Buffer.from(br.sign.priv, "base64")), safeStorage.decryptString(Buffer.from(br.box.priv, "base64"))].filter(Boolean);
-  const answers = [JSON.stringify(await asHost("branchIdentity")), JSON.stringify(await asHost("writeBranch", "lamps", JSON.stringify(d2)))];
+  const answers = [JSON.stringify(await asHost("branchIdentity")), JSON.stringify(await asHost("writeBranch", "lamps-" + hex1, JSON.stringify(d2)))];
   const seen = () => walk(UD).map(f => fs.readFileSync(f, "utf8")).concat(said, JSON.stringify(sent.args), JSON.stringify(d2), answers);
   const leaks = texts => texts.filter(t => secrets.some(x => t.indexOf(x) >= 0)).length;
   check(secrets.length === 4 && leaks(seen().concat(["planted " + secrets[0]])) === 1 && leaks(seen()) === 0
@@ -456,7 +460,7 @@ try {
   /* Another desk's folder, ten edits. */
   const other = path.join(deskDir, "k-ffffffffffffffff");
   fs.mkdirSync(other, { recursive: true });
-  const planted = path.join(other, "lamps.ec");
+  const planted = path.join(other, ownName);
   fs.writeFileSync(planted, "{\"planted\":\"another desk's own file\"}\n");
   const longAgo = new Date("2020-01-01T00:00:00Z");
   fs.utimesSync(planted, longAgo, longAgo);
@@ -464,7 +468,7 @@ try {
   for (let i = 0; i < 10; i++) { edit("Round " + i); await writeBranch(); }
   const d3 = readOwn();
   check(Buffer.compare(fs.readFileSync(planted), plantedBytes) === 0 && fs.statSync(planted).mtimeMs === plantedTime
-    && d3.rev === 12 && titleOf(d3, 0) === "Round 9" && listing(other).join() === "lamps.ec",
+    && d3.rev === 12 && titleOf(d3, 0) === "Round 9" && listing(other).join() === ownName,
     "77n THE CONTROL: a file planted in another desk's folder keeps its bytes and its time across ten edits, while the desk's own went from rev 2 to "
     + d3.rev + " (planted time " + plantedTime + ")");
 
@@ -472,8 +476,8 @@ try {
   const asked = (stem, text) => asHost("writeBranch", stem, text);
   const foreign = Object.assign({}, d3, { desk: Object.assign({}, d3.desk, { id: "k-ffffffffffffffff" }) });
   const strangerKey = Object.assign({}, d3, { desk: Object.assign({}, d3.desk, { key: "ab".repeat(32) }) });
-  const rA = await asked("lamps", JSON.stringify(foreign)), rB = await asked("lamps", JSON.stringify(strangerKey));
-  const rC = await asked("..\\..\\evil", JSON.stringify(d3)), rD = await asked("../evil", JSON.stringify(d3)), rE = await asked("", JSON.stringify(d3));
+  const rA = await asked("lamps-" + hex1, JSON.stringify(foreign)), rB = await asked("lamps-" + hex1, JSON.stringify(strangerKey));
+  const rC = await asked("..\\..\\evil-" + hex1, JSON.stringify(d3)), rD = await asked("../evil-" + hex1, JSON.stringify(d3)), rE = await asked("", JSON.stringify(d3));
   check([rA, rB, rC, rD, rE].every(r => r && r.ok === false) && !walk(UD).some(f => /evil/.test(f))
     && Buffer.compare(fs.readFileSync(planted), plantedBytes) === 0,
     "77o the host signs only a catalog that names this desk and writes only under its own folder: another desk's id, another key, two paths out of the folder and an empty name are each refused, and nothing named evil exists");
@@ -523,6 +527,90 @@ try {
   check(!!exported && x.id !== "lamp-shop" && !/^k-/.test(x.id) && x.id !== x2.id && x.rev === 1 && x.modified === true
     && !("grew" in x) && !("desk" in x) && !("sig" in x) && x.cards[0].title.en === "No host" && sameShape(x) === sameShape(x2),
     "77t and Export is still a new catalog, plain: a new id each time, rev " + x.rev + ", no grew, no desk, no signature, the edit in it");
+
+  /* ---- the retry, the name of the file, and a key pair that can never open again. The host is back. */
+  window.E_HOST = REAL_HOST;
+  const mainText = shellSrc("main.js");
+  const bodyOf = (text, name) => {
+    const at = text.indexOf("function " + name + "(");
+    let i = text.indexOf("\x7b", at), depth = 0;
+    for (; i < text.length; i++) { const c = text[i]; if (c === "\x7b") depth++; else if (c === "\x7d" && !--depth) break; }
+    return at < 0 ? "" : text.slice(at, i + 1);
+  };
+  const callsRetry = body => /\btryHeldBranches\(\)/.test(body);
+  const loadLine = mainText.split("\n").filter(l => l.indexOf("on(\"did-finish-load\"") >= 0 && l.indexOf("tryAnswerRequest") >= 0)[0] || "";
+  check(callsRetry(bodyOf(mainText, "catalogChanged")) && callsRetry(loadLine)
+    && !callsRetry(bodyOf(mainText, "catalogChanged").replace("tryHeldBranches();", "")) && !callsRetry(loadLine.replace("tryHeldBranches();", "")),
+    "77u the retry of a held write is one function and both events call it: the catalog folder changing and the page finishing a load; the same reading finds neither once its call is taken out");
+
+  edit("Held edit");
+  fs.renameSync(FOLDER, FOLDER + ".away");
+  const rHeld = await writeBranch();
+  if (fs.existsSync(FOLDER)) fs.rmSync(FOLDER, { recursive: true, force: true });
+  fs.renameSync(FOLDER + ".away", FOLDER);
+  const before77v = fs.existsSync(file);
+  mainTest.tryHeldBranches();
+  const d5 = readOwn();
+  check(rHeld === false && !before77v && titleOf(d5, 0) === "Held edit" && verifies(d5),
+    "77v the folder back and no new edit, the retry puts the held edit in the file (answer while away " + rHeld + ", file before the retry " + before77v
+    + ", after: " + JSON.stringify(titleOf(d5, 0)) + ", rev " + d5.rev + ")");
+
+  /* Two catalogs with one stem. */
+  const hex2 = sha(Buffer.from("lamp-two")).slice(0, 8);
+  const two = Object.assign({}, origin, { id: "lamp-two", rev: 7 });
+  CF.activateCatalog(CT.parseCatalogFile(JSON.stringify(two)), { file: "lamps.ec" });
+  CB.applyBootCatalog();
+  PK.resetPack(); PK.pack.baseCards = null; RB.rebuildCards();
+  edit("Two");
+  await writeBranch();
+  const ownDir = path.join(deskDir, myId);
+  const docsOf = () => listing(ownDir).map(n => ({ n, d: JSON.parse(fs.readFileSync(path.join(ownDir, n), "utf8")) }));
+  const pair = docsOf();
+  check(pair.length === 2 && pair.every(e => /^lamps-[0-9a-f]{8}\.ec$/.test(e.n) && e.n === "lamps-" + e.d.id.slice(-8) + ".ec"
+      && e.d.id.slice(-8) === sha(Buffer.from(e.d.grew.id)).slice(0, 8) && verifies(e.d))
+    && pair.map(e => e.d.grew.id).sort().join() === "lamp-shop,lamp-two" && new Set(pair.map(e => e.n)).size === 2,
+    "77w two catalogs with one stem are two files, each named by its own 8 hex, ending its own id, each growing from its own catalog and signed ("
+    + pair.map(e => e.n + " from " + e.d.grew.id).join(", ") + ")");
+
+  /* A rename of the grown-from file. */
+  const rev2 = (pair.filter(e => e.d.grew.id === "lamp-two")[0] || { d: {} }).d.rev;
+  ST.nsSet("CatalogFrom", "renamed.ec");
+  edit("Two again");
+  await writeBranch();
+  const after = docsOf(), ofTwo = after.filter(e => e.d.grew.id === "lamp-two");
+  check(after.length === 2 && ofTwo.length === 1 && ofTwo[0].n === "renamed-" + hex2 + ".ec" && ofTwo[0].d.rev === rev2 + 1
+      && titleOf(ofTwo[0].d, 0) === "Two again" && after.some(e => e.n === ownName)
+      && Buffer.compare(fs.readFileSync(planted), plantedBytes) === 0 && fs.statSync(planted).mtimeMs === plantedTime,
+    "77x a rename of the grown-from file leaves exactly one own file for it, with its edition carried on (" + after.map(e => e.n + " rev " + e.d.rev).join(", ")
+    + "), the other catalog's file and the file planted in another desk's folder as they were");
+
+  /* A key pair that can never open again. */
+  const pairBefore = JSON.stringify(envelope().branch);
+  sealOk = false;
+  edit("Two while sealing is unavailable");
+  const rUnavail = await writeBranch();
+  sealOk = true;
+  check(rUnavail === false && JSON.stringify(envelope().branch) === pairBefore && !("branchOld" in envelope()),
+    "77y THE CONTROL for 77z: where encryption is only unavailable nothing is made and nothing is replaced: the pair in the envelope is as it was and none is kept aside (answer " + rUnavail + ")");
+
+  const oldBranch = envelope().branch, oldFolderFiles = listing(ownDir).join();
+  decryptFails = oldBranch.sign.priv;
+  edit("Two after the key was lost");
+  const rNew = await writeBranch();
+  edit("Two once more");
+  await writeBranch();
+  const idNow = await asHost("branchIdentity");
+  const newDir = path.join(deskDir, idNow ? idNow.id : "none");
+  const newDoc = (() => { try { return JSON.parse(fs.readFileSync(path.join(newDir, "renamed-" + hex2 + ".ec"), "utf8")); } catch { return {}; } })();
+  const env = envelope();
+  check(rNew === true && !!idNow && idNow.id !== myId && newDoc.desk && newDoc.desk.id === idNow.id && verifies(newDoc) && titleOf(newDoc, 0) === "Two once more"
+      && newDoc.rev === 2 && JSON.stringify(env.branchOld) === JSON.stringify([oldBranch]) && env.branch.sign.pub !== oldBranch.sign.pub
+      && listing(ownDir).join() === oldFolderFiles
+      && said.filter(l => /branch key could not be opened/.test(l)).length === 1,
+    "77z a pair the envelope throws on is replaced: a new identity (" + (idNow ? idNow.id : "none") + ", not " + myId + "), its file written and signed, the old pair kept aside in the envelope ("
+    + (env.branchOld || []).length + "), the old desk's files left as they were, and the log says it once ("
+    + said.filter(l => /branch key could not be opened/.test(l)).length + ")");
+  decryptFails = null;
 } catch (e) {
   failed++;
   console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

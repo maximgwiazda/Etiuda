@@ -19292,9 +19292,12 @@ What you type stays in this browser only.`;
       return c;
     }
   }
+  function branchHex(origin) {
+    return sha256Hex(new TextEncoder().encode(String(origin.id))).slice(0, 8);
+  }
   function branchCatalog(who, origin) {
     const c = currentCatalog({ asIs: true }), name = String(agentName() || "").trim();
-    c.id = who.id + "-" + sha256Hex(new TextEncoder().encode(String(origin.id))).slice(0, 8);
+    c.id = who.id + "-" + branchHex(origin);
     c.rev = 1;
     c.version = todayEdition();
     c.grew = { id: String(origin.id), rev: +origin.rev || 0, sha: String(origin.pin) };
@@ -19314,7 +19317,7 @@ What you type stays in this browser only.`;
     }
     const origin = storedCatalog();
     if (!origin || !origin.id || !/^sha256:[0-9a-f]{64}$/.test(String(origin.pin || ""))) return Promise.resolve(false);
-    const stem = catalogFileStem(catalogNameOfFile(catalogFileName()));
+    const stem = catalogFileStem(catalogNameOfFile(catalogFileName())) + "-" + branchHex(origin);
     const run = catalogEdited() ? eBranchIdentity().then((who) => who ? eWriteBranch(stem, JSON.stringify(catalogToV2(branchCatalog(who, origin)))) : { ok: false }) : eWriteBranch(stem, "");
     branchBusy = run.then((r) => !!(r && r.ok), () => false).then((ok) => {
       branchBusy = null;

@@ -20,6 +20,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/catalog-routes.mjs                     no fixtures, the two catalog routes
     node tests/module-calls.mjs                       no fixtures, the modules CALLED
     node tests/desk-ipc.mjs                           no fixtures, the desk's write path, shell stubbed
+    node tests/desk-ipc.mjs, legs 77a to 77z          no fixtures, the desk's own signed file under desks/<branch id>/: key pair, name, retry of a held write, a replaced pair
     node tests/desk-growth.mjs                        no fixtures, a desk of 300 days: a count or a resize sends only what changed
     node tests/shell-office.mjs                       no fixtures, the shell against a busy file, a refused catalog, a folder that does not answer
     node tests/sbom.mjs                               no fixtures, the software bill of materials: the tool, and the release leaving one beside the installer
