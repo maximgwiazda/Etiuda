@@ -4719,7 +4719,7 @@ function langAgnosticTests() {
     "const CARD_FIELD_KEY=", "const CARD_TEXT_FIELDS=", "const CARD_PLAIN_FIELDS=",
     "const CARD_SHARED_FIELDS=", "const CARD_KEY_ALIAS=", "function cardFieldKey(",
     "function cardFieldKeys(", "function cardStorageKeys(", "function cardRequiredKeys(",
-    "function truthyFlag(", "function isMacrosJsonKind(", "function parseMacrosData(",
+    "function truthyFlag(", "function isMacrosJsonKind(", "function plainCopy(", "function parseMacrosData(",
     "function v2Str(", "const CAT_LABEL_KEY=", "function v2CatKey(",
     "function normaliseCatalog(",
   ].map(m => extractDecl(src, m)).join("\n");
