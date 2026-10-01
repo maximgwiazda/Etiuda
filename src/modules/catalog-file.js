@@ -86,13 +86,15 @@ function currentCatalog(){
   /* Cards are emitted in pack.cardOrder - the user's own arrangement IS the catalog's
      order. NOT the rendered order: the on-screen list layers favourites, intent bands and
      search rank on top, and baking those in would mean starring a card moved its house. */
-  const shown=(cards||[]).slice().sort((a,b)=>cardOrderIdx(a&&a.id)-cardOrderIdx(b&&b.id));
-  /* A retired card travels asleep, where the edition had it: after the card that stood before it. */
-  const asleep=new Map(retiredCards().map(m=>[m.id,m]));
+  // A retired card holds its place in the order like any other; 1e9 is the answer for an id with none.
+  const asleep=retiredCards(), placed=m=>cardOrderIdx(m.id)<1e9;
+  const shown=(cards||[]).concat(asleep.filter(placed)).sort((a,b)=>cardOrderIdx(a&&a.id)-cardOrderIdx(b&&b.id));
+  /* One with no place travels where the edition had it: after the card that stood before it. */
+  const loose=new Map(asleep.filter(m=>!placed(m)).map(m=>[m.id,m]));
   let anchor=null;
-  if(asleep.size) BASE_M.forEach(b=>{
-    if(asleep.has(b.id)) shown.splice(anchor==null?0:shown.findIndex(m=>m.id===anchor)+1,0,asleep.get(b.id));
-    if(asleep.has(b.id) || shown.some(m=>m.id===b.id)) anchor=b.id;
+  if(loose.size) BASE_M.forEach(b=>{
+    if(loose.has(b.id)) shown.splice(anchor==null?0:shown.findIndex(m=>m.id===anchor)+1,0,loose.get(b.id));
+    if(loose.has(b.id) || shown.some(m=>m.id===b.id)) anchor=b.id;
   });
   const list=shown
     .map(m=>{

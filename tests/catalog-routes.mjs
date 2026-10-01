@@ -375,6 +375,32 @@ check("18 control: the plain payload carries none of the new keys through either
   check("32 control: with nothing retired the export is the cards the list holds, in its order, none flagged",
     !!plain && plain.cards.map(c => c.id).join(",") === "c-a,c-b,c-c" && plain.cards.every(c => !("retired" in c)),
     plain ? plain.cards.map(c => c.id).join(",") : "nothing");
+  /* ITS PLACE IN THE AGENT'S OWN ORDER waits for it too: the order c, b, a through a retirement of b and the
+     edition that restores it. A retired card holds a place in the order and no row in the list. */
+  const OC = await import(MOD("card-order.js"));
+  const orderNow = () => { OC.ensureCardOrder(); return PK.pack.cardOrder.join(","); };
+  const arrange = () => { fresh(); PK.pack.cardOrder = ["c-c", "c-b", "c-a"]; OC.cardOrderTouched(); };
+  arrange(); land(edition(["c-b"]));
+  const asleepOrder = orderNow();
+  land(edition());
+  const backOrder = orderNow();
+  check("33 an agent's order c, b, a keeps the retired card's place, and the edition that restores it finds it between c and a",
+    asleepOrder === "c-c,c-b,c-a" && backOrder === "c-c,c-b,c-a", "while asleep " + asleepOrder + ", restored " + backOrder);
+  arrange(); land(edition(["c-b"]));
+  const arranged = await (async () => { written = null; await CF.exportCatalog(); return written === null ? null : JSON.parse(written); })();
+  check("34 and an export of the arranged catalog writes it there, flagged, between c and a",
+    !!arranged && arranged.cards.map(c => c.id + (c.retired ? "*" : "")).join(",") === "c-c,c-b*,c-a",
+    arranged ? arranged.cards.map(c => c.id + (c.retired ? "*" : "")).join(",") : "nothing");
+  fresh();
+  const base0 = OC.cardOrderIsBase();
+  land(edition(["c-b"])); const base1 = OC.cardOrderIsBase();
+  land(edition()); const base2 = OC.cardOrderIsBase();
+  check("35 control: an agent who never arranged still reads the order as the catalog's through the retire and the restore",
+    base0 && base1 && base2, [base0, base1, base2].join(", "));
+  arrange(); land(edition(["c-b"]));
+  const arrangedBase = OC.cardOrderIsBase();
+  check("36 control: an agent who did arrange does not, so 35 is not an answer that is always true",
+    arrangedBase === false, String(arrangedBase));
   HK.hooks.syncFavouritesMeta = () => {};
   // The toast's own timer fires after the check, against the stand-in, and is let run its course.
   await new Promise(r => setTimeout(r, 2000));

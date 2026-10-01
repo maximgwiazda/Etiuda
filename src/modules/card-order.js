@@ -2,7 +2,7 @@ import { affinityWordWeight, intentAffinityGroups, cardIntentAffinity } from "./
 import { FIELD_WEIGHT, Q_EXACT } from "./scoring.js";
 import { cardSearchTerms } from "./spell.js";
 import { findCard } from "./card-model.js";
-import { isFavourite, pack } from "./pack.js";
+import { isFavourite, pack, retiredCards } from "./pack.js";
 import { cardHitsSelectedIntent, relevanceRank } from "./card-intent.js";
 import { CATS } from "./content-model.js";
 import { intentCats, displayCatOrder } from "./cat-relevance.js";
@@ -41,6 +41,7 @@ function ensureCardOrder(){
   // Only a rebuilt `cards` can change which ids are alive; hiding and starring mutate in place.
   if(eOrderCards===cards && eOrderPos && eOrderPos.size===pack.cardOrder.length) return;
   const alive=new Set((cards||[]).map(m=>m&&m.id).filter(Boolean));
+  retiredCards().forEach(m=>alive.add(m.id));   // asleep, so its place waits for it
   const listed=new Set(pack.cardOrder);
   const kept=pack.cardOrder.filter(id=>alive.has(id));
   let changed=kept.length!==pack.cardOrder.length;
@@ -93,7 +94,8 @@ function movedCardIds(){
 /** True while the drag order still matches the order the catalog was built in. */
 function cardOrderIsBase(){
   ensureCardOrder();
-  const o=pack.cardOrder||[], c=cards||[];
+  const c=cards||[], here=new Set(c.map(m=>m&&m.id));
+  const o=(pack.cardOrder||[]).filter(id=>here.has(id));   // a retired card holds a place, not a row
   if(o.length!==c.length) return false;
   for(let i=0;i<c.length;i++) if(c[i] && c[i].id!==o[i]) return false;
   return true;
