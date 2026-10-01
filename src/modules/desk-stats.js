@@ -124,6 +124,40 @@ function statsForgetCards(pack, keep){
   if(n){ statsTouch(pack, "*"); statsCompact(pack); STATS_FORGOT.delete(pack); }
   else STATS_FORGOT.set(pack, asked);
 }
+/* THE WINDOW A REPLY'S RECENT USE IS COUNTED OVER, ending today, and the lift a count gives a
+   search hit: each one constant. */
+const STATS_USE_DAYS=28;
+const STATS_LIFT_MAX=3;
+const STATS_LIFT_UNIT=4;
+/** Places a search hit rises for n copies: min(MAX, floor(log2(1 + n / UNIT))), by exact thresholds. */
+function statsLift(n){
+  let k=0;
+  while(k<STATS_LIFT_MAX && n>=STATS_LIFT_UNIT*(2**(k+1)-1)) k++;
+  return k;
+}
+/* HELD FOR THE DAY, per pack object: copies made while the agent works change no order until the
+   date turns. A pack is replaced, never emptied, when a layer is loaded, so a new object is counted afresh. */
+const STATS_RECENT=new WeakMap();
+/** Copies per card id over the STATS_USE_DAYS days ending `today`, summed from the day buckets. */
+function statsRecentUse(pack, today){
+  const out=new Map();
+  if(!pack||typeof pack!=="object") return out;
+  const day=STATS_YMD.test(String(today||"")) ? String(today) : statsYmd();
+  const held=STATS_RECENT.get(pack);
+  if(held&&held.day===day) return held.use;
+  const days=(pack.days&&typeof pack.days==="object"&&!Array.isArray(pack.days)) ? pack.days : {};
+  const ids=Array.isArray(pack.dayIds) ? pack.dayIds : [];
+  const from=statsDayBefore(day, STATS_USE_DAYS-1);
+  Object.keys(days).forEach(d=>{
+    const c=STATS_YMD.test(d)&&d>=from&&d<=day&&days[d]&&days[d].c;
+    if(c) Object.keys(c).forEach(k=>{
+      const id=ids[k], n=c[k]|0;
+      if(id!=null&&n>0) out.set(String(id),(out.get(String(id))||0)+n);
+    });
+  });
+  STATS_RECENT.set(pack,{day:day,use:out});
+  return out;
+}
 /* A REQUEST NAMES A SPAN AND THE ANSWER IS THAT SPAN, from and to inclusive, summed over the
    day buckets, with `since` beside it; a card's `at` is its last use inside the span. Without
    a whole span the answer is the lifetime counters, as every answer was before. */
@@ -187,6 +221,8 @@ export {
   bumpMiss,
   bumpUse,
   statsDoc,
+  statsLift,
+  statsRecentUse,
   statsForgetCards,
   statsOlderTouched,
   statsYmd

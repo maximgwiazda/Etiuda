@@ -35,7 +35,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 59;
+const EXPECTED = 77;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -76,6 +76,8 @@ const PICK = await import(MOD("pick.js"));
 const SET = await import(MOD("settings.js"));
 const SP = await import(MOD("spell.js"));
 const MK = await import(MOD("mark.js"));
+const DS = await import(MOD("desk-stats.js"));
+const RD = await import(MOD("render.js"));
 
 /* Invented cards. A greeting-and-name line opens two of them, as a real reply's first line would. */
 const CARDS = [
@@ -102,7 +104,7 @@ let LAB = null;
 const pickAnswer = (op, arg) => PICK.answerPick(op, JSON.stringify(arg || {}));
 
 try {
-  console.log("[1/5] the desk's side: what the picker is shown and what its copy makes");
+  console.log("[1/6] the desk's side: what the picker is shown and what its copy makes");
   ST.lsSet("eNameAsked", "1");
   ST.lsSet("eAgent", "Kate");
 
@@ -189,7 +191,7 @@ try {
     "1q a copy through the picker takes the rail's offer and counts as a copy made: " + made + " to " + MK.copiesMade());
 
   /* ---- 2. the shell --------------------------------------------------------------------- */
-  console.log("\n[2/5] the shell: the hotkey, the relay and the clipboard");
+  console.log("\n[2/6] the shell: the hotkey, the relay and the clipboard");
   LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-pick-"));
   const UD = path.join(LAB, "user-data"), DOCS = path.join(LAB, "documents");
   fs.mkdirSync(UD, { recursive: true }); fs.mkdirSync(DOCS, { recursive: true });
@@ -436,7 +438,7 @@ try {
   check(pw.destroyed, "2q the picker goes with the desk's window, so the app can quit");
 
   /* ---- 3. what the page is ---------------------------------------------------------------- */
-  console.log("\n[3/5] the picker's page");
+  console.log("\n[3/6] the picker's page");
   const doc = decodeURIComponent(String(pw.url || "").replace(/^data:text\/html;charset=utf-8,/, ""));
   const script = (/<script>([\s\S]*?)<\/script>/.exec(doc) || [])[1] || "";
   const hash = "'sha256-" + nodeRequire("node:crypto").createHash("sha256").update(script, "utf8").digest("base64") + "'";
@@ -450,7 +452,7 @@ try {
     "3c the marked row wears the desk's mark, and high contrast and reduced motion are answered");
 
   /* ---- 4. the page's own script, run ---------------------------------------------------- */
-  console.log("\n[4/5] the picker's page, its script run over a stand-in of its two elements");
+  console.log("\n[4/6] the picker's page, its script run over a stand-in of its two elements");
   const pageL = {};
   const qEl = { value: "", placeholder: "", focus() {}, setAttribute() {}, addEventListener: (t, fn) => { pageL["q:" + t] = fn; } };
   let boxHtml = "";
@@ -510,7 +512,7 @@ try {
     "4m with a query the first row found is marked, and the reply copied last steps aside: " + lastCall());
 
   /* ---- 5. what the shell may not do -------------------------------------------------------- */
-  console.log("\n[5/5] what the shell may not do, read from its text with the comments taken out");
+  console.log("\n[5/6] what the shell may not do, read from its text with the comments taken out");
   /* THE COMMENTS ARE TAKEN OUT BY A PARSER, esbuild's own, which reprints the program without them and with its
      whitespace squeezed (a plain reprint keeps some comments it attaches to a property). The pattern used before took
      "/*" inside a string for a comment's start, so a read written between a "/*" string and a "*\/" string was blanked
@@ -592,6 +594,99 @@ try {
     "5d the page is granted the clipboard's write and nothing else, and both permission handlers answer from that list: "
     + JSON.stringify(allowList) + (allowMoved.length ? ", the list changed at run time" : "") + ", handlers " + (permHandlers.join(", ") || "none")
     + (reqFrom && chkFrom ? ", both from the list" : ", NOT both from the list"));
+
+  /* ---- 6. the most used replies first, on this desk's own last 28 days ------------------- */
+  console.log("\n[6/6] the most used replies first: the picker at rest, a search, and what stays as it was");
+  /* Each scenario is a desk of its own: a fresh pack, so the day's count is made afresh for it. */
+  const ago = n => { const d = new Date(); return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - n * 864e5).toISOString().slice(0, 10); };
+  const fillers = n => Array.from({ length: n }, (_, i) => ({ id: "c-f" + i, c: "orders", t: "Filler " + i, en: "Filler reply " + i + "." }));
+  const deskOf = extra => { PK.resetPack(); AS.setCats([]); AS.setIntentIdxs([]); AS.setCards(fillers(12).concat(extra || [])); };
+  const A = { id: "c-a", c: "orders", t: "Alpha", en: "Alpha reply." }, B = { id: "c-b", c: "orders", t: "Bravo", en: "Bravo reply." };
+  const GONE = { id: "c-gone", c: "orders", t: "Gone", _hidden: true, en: "Gone reply." };
+  const copies = (id, n, day) => { for (let i = 0; i < n; i++) DS.bumpUse(PK.pack, id, day || ago(0)); };
+  const rest = () => ids(PICK.pickRows(""));
+  const first9 = Array.from({ length: 9 }, (_, i) => "c-f" + i + "/0").join(" ");
+  const fRows = (from, to) => Array.from({ length: to - from }, (_, i) => "c-f" + (from + i) + "/0").join(" ");
+
+  deskOf([A, B, GONE]);
+  check(rest() === first9,
+    "6a with no copy counted the picker at rest is the desk's list, nine rows in catalog order: " + rest());
+  deskOf([A, B, GONE]); copies("c-a", 3); copies("c-b", 1);
+  check(rest() === "c-a/0 c-b/0 " + fRows(0, 7),
+    "6b copies counted for two replies below the first nine bring them to the top, most copied first, the rest after in their order: " + rest());
+  deskOf([A, B, GONE]); copies("c-f10", 2); copies("c-b", 2); copies("c-a", 1);
+  check(rest() === "c-f10/0 c-b/0 c-a/0 " + fRows(0, 6),
+    "6c equal counts keep the desk's order between them: " + rest());
+  deskOf([A, B, GONE]); copies("c-gone", 9); copies("c-a", 1);
+  check(rest() === "c-a/0 " + fRows(0, 8) && rest().indexOf("c-gone") < 0,
+    "6d a put-away reply is not offered whatever its count: " + rest());
+  deskOf([A, B, GONE]); copies("c-a", 50, ago(29));
+  check(rest() === first9,
+    "6e fifty copies dated 29 days back lift nothing: " + rest());
+  deskOf([A, B, GONE]); copies("c-a", 50, ago(27));
+  check(rest() === "c-a/0 " + fRows(0, 8),
+    "6E and the same copies dated 27 days back do: " + rest());
+  deskOf([A, Object.assign({}, B, { alt: 1, en: "Bravo one.\n\nBravo two." }), GONE]); copies("c-a", 2); copies("c-b", 1);
+  check(rest() === "c-a/0 c-b/0 c-b/1 " + fRows(0, 6),
+    "6f a counted reply with two blocks brings both, together: " + rest());
+  deskOf([A, B, GONE]); copies("c-a", 3);
+  const held0 = rest();
+  const uses0 = uses("c-b");
+  for (let i = 0; i < 30; i++) pickAnswer("copy", { id: "c-b", vi: 0 });
+  check(held0 === "c-a/0 " + fRows(0, 8) && rest() === held0 && uses("c-b") === uses0 + 30,
+    "6g thirty copies made while the desk works are counted but move nothing under the hand: " + uses("c-b") + " counted, " + rest());
+  deskOf([A, B, GONE]); copies("c-a", 3); copies("c-b", 30);
+  check(rest() === "c-b/0 c-a/0 " + fRows(0, 7),
+    "6G and a desk that starts with those copies already counted offers them first: " + rest());
+
+  /* A search: the sheet's example, six replies to one word, none counted until the fifth is. */
+  const six = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"].map((w, i) => ({ id: "c-r" + (i + 1), c: "orders", t: "Refund " + w, en: "Reply " + (i + 1) + "." }));
+  const find = q => RD.rankedCards(SP.cardSearchTerms(q), () => true);
+  const rIds = r => r.hits.map(m => m.id).join(" ");
+  deskOf([]); AS.setCards(six.map(c => Object.assign({}, c)));
+  check(rIds(find("refund")) === "c-r1 c-r2 c-r3 c-r4 c-r5 c-r6",
+    "6H a search with no copy counted is the desk's order: " + rIds(find("refund")));
+  deskOf([]); AS.setCards(six.map(c => Object.assign({}, c))); copies("c-r5", 38);
+  check(rIds(find("refund")) === "c-r1 c-r2 c-r5 c-r3 c-r4 c-r6",
+    "6h the fifth of six matches, copied 38 times, lifts three places to a key of 2, and lands third behind the second, which stood ahead: " + rIds(find("refund")));
+  check(ids(PICK.pickRows("refund")) === "c-r1/0 c-r2/0 c-r5/0 c-r3/0 c-r4/0 c-r6/0",
+    "6i and the picker's search is the same order, the list and the picker sharing it: " + ids(PICK.pickRows("refund")));
+  deskOf([]); AS.setCards(six.map(c => Object.assign({}, c))); copies("c-r4", 12); copies("c-r6", 28);
+  check(rIds(find("refund")) === "c-r1 c-r2 c-r4 c-r3 c-r6 c-r5",
+    "6j twelve copies lift a reply two places and twenty-eight three, a tie in the key going to the one that stood ahead: " + rIds(find("refund")));
+
+  /* The tier line: a body-only match is never above a title match, whatever it has been copied. */
+  const tiered = [{ id: "c-t1", c: "orders", t: "Refund timing", en: "Reply one." }, { id: "c-t2", c: "orders", t: "Refund steps", en: "Reply two." },
+    { id: "c-body", c: "orders", t: "Delivery note", en: "Ask about the refund when it arrives." }];
+  deskOf([]); AS.setCards(tiered.map(c => Object.assign({}, c))); copies("c-body", 500);
+  const tr = find("refund");
+  check(rIds(tr) === "c-t1 c-t2 c-body" && tr.sc.get(tr.hits[2]).tier > tr.sc.get(tr.hits[1]).tier,
+    "6k a body-only match copied 500 times stays below every title match: " + rIds(tr) + ", tiers " + tr.hits.map(m => tr.sc.get(m).tier).join("/"));
+  const sameTier = () => { deskOf([]); AS.setCards(tiered.map(c => Object.assign({}, c, c.id === "c-body" ? { t: "Refund note" } : {}))); };
+  sameTier(); const tierBase = rIds(find("refund"));
+  sameTier(); copies("c-body", 500);
+  check(tierBase.split(" ")[0] !== "c-body" && rIds(find("refund")).split(" ")[0] === "c-body",
+    "6K the same 500 on a card that matches in its title does lift it, from " + tierBase + " to " + rIds(find("refund")));
+
+  /* The intent band: a card unlinked to the chosen intent is never above a linked one. */
+  const banded = [{ id: "c-l1", c: "orders", t: "Refund one", allIntents: true, en: "Reply one." }, { id: "c-l2", c: "orders", t: "Refund two", allIntents: true, en: "Reply two." },
+    { id: "c-u", c: "orders", t: "Refund three", en: "Reply three." }];
+  deskOf([]); AS.setCards(banded.map(c => Object.assign({}, c))); AS.setIntentIdxs([0]); copies("c-u", 500);
+  const br = find("refund");
+  check(rIds(br) === "c-l1 c-l2 c-u" && br.sc.get(br.hits[0]).band === 0 && br.sc.get(br.hits[2]).band === 1,
+    "6l a card outside the chosen intent copied 500 times stays below the linked ones: " + rIds(br) + ", bands " + br.hits.map(m => br.sc.get(m).band).join("/"));
+  AS.setIntentIdxs([]);
+  deskOf([]); AS.setCards(banded.map(c => Object.assign({}, c))); const bandBase = rIds(find("refund"));
+  deskOf([]); AS.setCards(banded.map(c => Object.assign({}, c))); copies("c-u", 500);
+  check(bandBase.split(" ")[0] !== "c-u" && rIds(find("refund")).split(" ")[0] === "c-u",
+    "6L and with no intent chosen the same card is on its tier's footing and does rise, from " + bandBase + " to " + rIds(find("refund")));
+
+  /* The desk's own list is not the picker's: counts leave its resting order exactly as it was. */
+  deskOf([A, B]);
+  const resting = RD.rankedCards([], () => true).hits.map(m => m.id).join(" ");
+  deskOf([A, B]); copies("c-b", 40); copies("c-a", 9);
+  check(RD.rankedCards([], () => true).hits.map(m => m.id).join(" ") === resting && resting.split(" ").slice(-2).join(" ") === "c-a c-b",
+    "6m the desk's resting list is the same order with copies counted as without: " + resting.split(" ").slice(-3).join(" "));
 } catch (e) {
   failed++;
   console.log("  FAIL the run threw: " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));
