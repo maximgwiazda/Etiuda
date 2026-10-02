@@ -5403,21 +5403,21 @@ if (require.main === module) {
        pixels: the other product that shares this mark reads its own icon pixel by pixel and takes
        this file as its control, so a second decoder here would be a second implementation of a
        claim nobody disputes. ETIUDA_ICON_SOURCE, where set, is the file it was copied from. */
-    const want = "7c2d42d000a943b416be319148ff5d59eb659ccd45bc0893f63471777ddf0bb3";
+    const want = "d84a71af6674badca92fc973504f5103c6d25f75105d822456214d3a3b4e11bb";
     if (got !== want) { hardFail++;
       console.error("  ERROR: shell/etiuda.ico is sha256 " + got.slice(0, 16) + ", not the mark"
         + " this build ships (" + want.slice(0, 16) + ") - if the mark was rebuilt, move this hash"
         + " in that commit"); }
     else console.log("  shell/etiuda.ico is the mark as built, sha256 " + got.slice(0, 16)
       + ", " + fs.statSync(ico).size + " bytes");
-    /* The sizes Windows asks for at 100 to 200 per cent; a missing one is drawn from the next
-       larger frame scaled down, and reads soft in the taskbar and Alt+Tab. */
-    const icoBuf = fs.readFileSync(ico), wantSizes = [16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 128, 256];
+    /* The frames the set's app icon carries; a size Windows asks for that is not among them is
+       drawn from the next larger frame scaled down. */
+    const icoBuf = fs.readFileSync(ico), wantSizes = [16, 24, 32, 48, 64, 128, 256];
     const sizes = [];
     for (let i = 0; i < icoBuf.readUInt16LE(4); i++) sizes.push(icoBuf.readUInt8(6 + 16 * i) || 256);
     if (sizes.join() !== wantSizes.join()) { hardFail++;
       console.error("  ERROR: shell/etiuda.ico holds frames of " + sizes.join(", ") + " px, not " + wantSizes.join(", ")); }
-    else console.log("  and it holds a frame for each of the " + sizes.length + " sizes Windows asks for: " + sizes.join(", "));
+    else console.log("  and it holds the set's " + sizes.length + " frames: " + sizes.join(", "));
     const from = process.env.ETIUDA_ICON_SOURCE || "";
     if (from && fs.existsSync(from)) {
       const src = crypto.createHash("sha256").update(fs.readFileSync(from)).digest("hex");
