@@ -995,11 +995,11 @@ const t0 = Date.now();
   check(TM_EN.test(tm.en.last) && hits(tm.en.all, "trademark") === 1 && TM_PL.test(tm.pl.last)
         && hits(tm.pl.all, "znakiem towarowym") === 1 && hits(tm.pl.all, "trademark") === 0
         && tm.en.maker === "Made by Stardust." && hits(tm.en.all, "Made by Stardust.") === 1
-        && tm.pl.maker === "Etiudę tworzy Gwiezdny Pył." && hits(tm.pl.all, "Etiudę tworzy Gwiezdny Pył.") === 1,
+        && tm.pl.maker === "Etiuda. Tworzy ją Stardust." && hits(tm.pl.all, "Etiuda. Tworzy ją Stardust.") === 1,
     "About's legal line has the trademark notice second from last and the maker line last, once each, in each language ("
     + JSON.stringify([tm.en.last, tm.en.maker]) + ", " + JSON.stringify([tm.pl.last, tm.pl.maker]) + ")");
   check([tm.en.screen, tm.pl.screen].every(s => hits(s, "trademark") + hits(s, "znakiem towarowym")
-          + hits(s, "Made by Stardust.") + hits(s, "Etiudę tworzy Gwiezdny Pył.") === 0)
+          + hits(s, "Made by Stardust.") + hits(s, "Etiuda. Tworzy ją Stardust.") === 0)
         && tm.en.screen.length > 0 && tm.pl.screen.length > 0,
     "control: the working screen behind it carries neither the notice nor the maker line, in either language (" + tm.en.screen.length
     + " and " + tm.pl.screen.length + " characters read)");

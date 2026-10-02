@@ -2831,33 +2831,42 @@ function shippedFlagTests() {
     let body = null;
     try {
       new Function("t", "esc", "keysLegendHtml", "TILE_MARK", "E_VERSION", "eCatalogFile", "eCatalogIn", "eCatalogBuiltIn",
-        "openDialog", "document", "fillProseIcons", "modalCard", "$", "dismissModal", "TRADEMARK", "MAKER", "uiLang",
+        "openDialog", "document", "fillProseIcons", "modalCard", "$", "dismissModal", "TRADEMARK", "MAKER", "uiLang", "STARDUST_URL",
         extractDecl(about, "function openAbout(") + "\nreturn openAbout;")(
         s => s, s => s, () => "", "", "2", () => file, () => inDir, () => builtIn,
-        o => { body = o.body; }, { getElementById: () => null }, () => {}, null, () => null, () => {}, { en: "" }, { en: "" }, () => "en")();
+        o => { body = o.body; }, { getElementById: () => null }, () => {}, null, () => null, () => {}, { en: "" }, { en: "" }, () => "en", "")();
     } catch (e) { return "openAbout did not run: " + e.message; }
     const m = /<b>Catalog file<\/b> - (.*?)<br>/.exec(body || "");
     return m ? m[1] : "";
   };
-  /* The sub line under one interface language, with TRADEMARK and MAKER read from their own lines in
-     about.js: [part count, the notice is the language's own, the last part]. Three parts is one notice and one maker line. */
-  const aboutTail = lang => {
+  /* The sub line under one interface language, with TRADEMARK, MAKER and STARDUST_URL read from their own lines in
+     about.js, split at its line breaks. Three parts is the version line, one notice and one maker line. */
+  const aboutParts = lang => {
     let sub = null;
     try {
       const konst = name => new Function("return " + extractDecl(about, "const " + name + "=").replace(/^[^=]*=|;$/g, ""))();
       new Function("t", "esc", "keysLegendHtml", "TILE_MARK", "E_VERSION", "eCatalogFile", "eCatalogIn", "eCatalogBuiltIn",
-        "openDialog", "document", "fillProseIcons", "modalCard", "$", "dismissModal", "TRADEMARK", "MAKER", "uiLang",
+        "openDialog", "document", "fillProseIcons", "modalCard", "$", "dismissModal", "TRADEMARK", "MAKER", "uiLang", "STARDUST_URL",
         extractDecl(about, "function openAbout(") + "\nreturn openAbout;")(
         s => s, s => s, () => "", "", "2", () => "", () => "", () => false,
         o => { sub = o.sub; }, { getElementById: () => null }, () => {}, null, () => null, () => {},
-        konst("TRADEMARK"), konst("MAKER"), () => lang)();
-      const mark = konst("TRADEMARK"), parts = String(sub).split("<br>");
-      return [parts.length, parts[parts.length - 2] === (mark[lang] || mark.en), parts[parts.length - 1]];
+        konst("TRADEMARK"), konst("MAKER"), () => lang, about.indexOf("const STARDUST_URL=") > -1 ? konst("STARDUST_URL") : "")();
+      return String(sub).split("<br>");
     } catch (e) { return "openAbout did not run: " + e.message; }
   };
-  eq("About puts the maker line under the trademark line, once: Made by Stardust. in English, Etiudę tworzy Gwiezdny Pył. in Polish, and English in a language with no key",
+  /* [part count, the last part]: the oracle's own copy of the anchor below, so a drift in the source is a difference. */
+  const aboutTail = lang => { const p = aboutParts(lang); return typeof p === "string" ? p : [p.length, p[p.length - 1]]; };
+  const STARDUST = '<a href="https://stardustengineering.dev" target="_blank" rel="noopener">Stardust</a>';
+  eq("About puts the maker line under the trademark line, once, its Stardust a link to the company's address that opens outside the window: Made by Stardust. in English, Etiuda. Tworzy ją Stardust. in Polish, and English in a language with no key",
     [aboutTail("en"), aboutTail("pl"), aboutTail("de")],
-    [[3, true, "Made by Stardust."], [3, true, "Etiudę tworzy Gwiezdny Pył."], [3, true, "Made by Stardust."]]);
+    [[3, "Made by " + STARDUST + "."], [3, "Etiuda. Tworzy ją " + STARDUST + "."], [3, "Made by " + STARDUST + "."]]);
+  eq("About's sub line holds one link, to the company's address once, and the old Polish sentence is gone, in every language",
+    ["en", "pl", "de"].map(l => { const p = aboutParts(l), all = String(p);
+      return typeof p === "string" ? p : [all.split("<a ").length - 1, all.split("https://stardustengineering.dev").length - 1, all.indexOf("Gwiezdny") > -1]; }),
+    [[1, 1, false], [1, 1, false], [1, 1, false]]);
+  eq("control: the trademark line above the maker line is unchanged in each language",
+    ["en", "pl", "de"].map(l => { const p = aboutParts(l); return typeof p === "string" ? p : p[p.length - 2]; }),
+    ["Etiuda is a trademark of Maxim Gwiazda.", "Etiuda jest znakiem towarowym Maxima Gwiazdy.", "Etiuda is a trademark of Maxim Gwiazda."]);
   eq("About says the shipped file comes with Etiuda and names no folder, even one it is handed; a folder file keeps its folder", [
     aboutSays("sample-catalog.ec", "", true), aboutSays("sample-catalog.ec", inAsar, true), aboutSays("team.ec", own, false)], [
     "<code>sample-catalog.ec</code> comes with Etiuda.", "<code>sample-catalog.ec</code> comes with Etiuda.",

@@ -14,9 +14,10 @@ const TILE_MARK='<svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"
 /* The trademark notice, both languages on one line so that registration is a one-line edit here;
    tests/test.js holds the installer's licence texts to it. A language without a key reads English. */
 const TRADEMARK={en:"Etiuda is a trademark of Maxim Gwiazda.", pl:"Etiuda jest znakiem towarowym Maxima Gwiazdy."};
-/* The maker line, under the notice. The Polish name differs from the English on purpose until the
-   sole-trader registration, when both become one string. A language without a key reads English. */
-const MAKER={en:"Made by Stardust.", pl:"Etiudę tworzy Gwiezdny Pył."};
+/* The maker line, under the notice: {STARDUST} becomes the link, whose address is this constant and
+   never text from a catalog or the agent. A language without a key reads English. */
+const STARDUST_URL="https://stardustengineering.dev";
+const MAKER={en:"Made by {STARDUST}.", pl:"Etiuda. Tworzy ją {STARDUST}."};
 // About Etiuda: elegant in-page modal with tool name + footer help/credits.
 function openAbout(){
   /* Built from #aboutInfo plus a freshly rendered shortcut list. The legend cannot simply be
@@ -36,12 +37,14 @@ function openAbout(){
     : '<code>'+esc(file)+'</code>';
   const said=eCatalogBuiltIn() ? t("{FILE} comes with Etiuda.").split("{FILE}").join('<code>'+esc(file)+'</code>') : where+'.';
   const fileLine=file ? '<b>'+esc(t("Catalog file"))+'</b> - '+said+'<br><br>' : "";
+  const maker=esc(MAKER[uiLang()]||MAKER.en).split("{STARDUST}")
+    .join('<a href="'+STARDUST_URL+'" target="_blank" rel="noopener">Stardust</a>');
   openDialog({
     cls: "about-modal",
     title: "Etiuda",
     lead: '<span class="brand-tile about-tile" aria-hidden="true">'+TILE_MARK+'</span>',
     sub: t("About Etiuda · Version {V} · <span class='nw'>Etiuda Source-Available Licence 1.0</span>, free for personal use · © 2026 Maxim Gwiazda")
-           .replace("{V}",E_VERSION)+"<br>"+esc(TRADEMARK[uiLang()]||TRADEMARK.en)+"<br>"+esc(MAKER[uiLang()]||MAKER.en),
+           .replace("{V}",E_VERSION)+"<br>"+esc(TRADEMARK[uiLang()]||TRADEMARK.en)+"<br>"+maker,
     body: '<div class="about-body">'+keys+fileLine+info+'</div>',
     actions: '<button type="button" class="btn primary" id="aboutClose">Close</button>',
     wire: ()=>{

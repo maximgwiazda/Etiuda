@@ -25,6 +25,8 @@
  *   h  a middle click on a link                      handed
  *   i  a real click the page diverts to another      nothing handed
  *   j  i's own address by script after the window    nothing handed: a click goes stale
+ *   k  a real click on About's maker link, English   handed, the company's address
+ *   l  the same, in Polish                           handed, the company's address
  * Real input is the protocol's Input domain, which the page receives as trusted events.
  *
  * Exit code is the number of failed checks, capped at 63 (E.exitOf), 78 where the run produced no
@@ -176,6 +178,27 @@ function buildApp() {
   await sleep(Math.max(0, LINK_MS + 500 - (Date.now() - clickedI)));
   r = await act(() => p.evaluate(u => { window.open(u); }, U("i-diverted")));
   check(none(r) && r.refused === 1, "j  the clicked address opened by script " + (LINK_MS + 500) + " ms after the click hands nothing: " + say(r));
+
+  /* The product's own link, not a probe's: About's maker line, pressed in each language. The probes
+     are hidden so that nothing sits over the dialog; the address is as the page normalises it. */
+  await p.evaluate(() => { document.getElementById("linksProbe").style.display = "none"; });
+  for (const [leg, lang] of [["k", "en"], ["l", "pl"]]) {
+    await p.evaluate(async (l) => {
+      setUiLang(l); await new Promise(r => setTimeout(r, 400));
+      openAbout(); await new Promise(r => setTimeout(r, 400));
+      const a = document.querySelector(".about-modal .modal-sub a");
+      if (a) a.id = "lkAbout";
+    }, lang);
+    const made = await p.evaluate(() => { const a = document.getElementById("lkAbout");
+      return a ? { href: a.href, target: a.target, rel: a.rel } : null; });
+    if (!made) { check(false, leg + "  About's maker line in " + lang + " holds no link to press"); await p.evaluate(() => dismissModal()); continue; }
+    r = await act(click("lkAbout"));
+    check(made.target === "_blank" && r.handed.length === 1 && r.handed[0] === "https://stardustengineering.dev/",
+      leg + "  a real click on About's Stardust link in " + lang + " hands the company's address: " + JSON.stringify(made) + ", " + say(r));
+    await p.evaluate(() => { const a = document.getElementById("lkAbout"); if (a) a.removeAttribute("id"); dismissModal(); });
+    await sleep(300);
+  }
+  await p.evaluate(() => { setUiLang("en"); });
 
   const still = await p.evaluate(() => /\/engine\/etiuda\.html/.test(location.href) && !!document.getElementById("linksProbe"));
   check(still, "and the window still holds the engine: no leg navigated it away");
