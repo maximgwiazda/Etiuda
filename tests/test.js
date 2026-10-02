@@ -537,6 +537,7 @@ function runUnitTests() {
   headPrefsTests();
   arrivalTests();
   markClockTests();
+  fifthTests();
   menuWarmTests();
   ecTypeNameTests();
   pageWatchTests();
@@ -2074,7 +2075,7 @@ function arrivalTests() {
    same VM and asked when they run. What the eye sees on a first launch is the verifier's frames. */
 function markLab() {
   const read = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
-  const mark = read("empty-mark.js").replace(/^import[^\n]*\n/m, "").replace(/export\s*\{[^}]*\};?\s*$/, "");
+  const mark = read("empty-mark.js").replace(/^import[^\n]*\n/gm, "").replace(/export\s*\{[^}]*\};?\s*$/, "");
   const tour = read("tour.js"), open = read("on-open.js");
   const slices = [extractDecl(tour, "const TOUR_AUTO_MS="), extractDecl(tour, "function maybeStartTour("),
     extractDecl(open, "let eReadyDone="), extractDecl(open, "let lastGreet;"), extractDecl(open, "function markEReady("),
@@ -2083,7 +2084,7 @@ function markLab() {
   const log = [], warms = [];
   const ctx = { setTransform() {}, clearRect() {}, beginPath() {}, fill() {}, moveTo() {}, arc(x) { drawnX = x; } };
   const sb = {
-    M_MS: { gather: 1100, twinkle: 66 }, mgReduceMotion: () => false,
+    M_MS: { gather: 1100, twinkle: 66 }, mgReduceMotion: () => !!sb.still,
     performance: { now: () => clock },
     requestAnimationFrame: fn => { frames.push({ id: ++seq, fn }); return seq; },
     cancelAnimationFrame: id => { frames = frames.filter(f => f.id !== id); },
@@ -2101,7 +2102,7 @@ function markLab() {
     warmMenu: () => warms.push(Math.round(clock))
   };
   sb.window = sb;
-  require("vm").runInNewContext(mark + "\n" + slices.join("\n") + "\nfunction __mark(){ return eMark; }\n", sb);
+  require("vm").runInNewContext(mark + "\n" + slices.join("\n") + "\nfunction __mark(){ return eMark; }\nfunction __home(f){ markHome = f; }\n", sb);
   sb.markDots = () => [{ x: 100, y: 0, sx: 0, sy: 0, ph: 0, sp: 1 }];
   const timersTo = t => {
     for (;;) {
@@ -2225,6 +2226,109 @@ function markClockTests() {
   } catch (e) { got = "the lab threw: " + e.message; }
   eq("the menu's warm copy is drawn once, 900 ms after the mark has formed, and 900 ms after boot without one",
     got, [[2600], [900]]);
+}
+/* THE FIFTH TURNING: fifth.js runs in a VM on a frame queue written here, with a header path node that
+   counts what is written to it. The standard figure is held equal to the path the markup ships, and
+   the clock's three promises are measured: it moves, it holds under a quiet switch, and a late
+   frame advances it by one capped step. */
+function fifthLab(still) {
+  const read = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
+  const src = read("fifth.js").replace(/^import[^\n]*\n/gm, "").replace(/export\s*\{[^}]*\};?\s*$/, "");
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  const std = (/<span class="brand-tile"[^>]*><svg[^>]*><g[^>]*><path fill="currentColor" d="([^"]+)"/.exec(tpl) || [])[1] || "";
+  let seq = 0, frames = [], watch = null;
+  const node = { d: std, sets: 0, getAttribute: () => node.d, setAttribute(n, v) { node.d = v; node.sets++; } };
+  const doc = { hidden: false, documentElement: {}, querySelector: () => node, addEventListener() {} };
+  const sb = {
+    still: !!still, mgReduceMotion: () => sb.still, document: doc,
+    requestAnimationFrame: fn => { frames.push({ id: ++seq, fn }); return seq; },
+    cancelAnimationFrame: id => { frames = frames.filter(f => f.id !== id); },
+    MutationObserver: class { constructor(cb) { watch = cb; } observe() {} }
+  };
+  require("vm").runInNewContext(src + "\nglobalThis.__f = { fifthCutPath, fifthPhase, fifthStep, fifthAt, fifthRide, wireFifth, FIFTH_PHI0 };", sb);
+  const f = sb.__f;
+  return { f, node, std, sb, queued: () => frames.length, flip: v => { sb.still = v; watch(); },
+    frame: ms => { const run = frames; frames = []; run.forEach(x => x.fn(ms)); } };
+}
+function fifthTests() {
+  const W0 = 2 * Math.PI * 0.007, PHI0 = Math.PI / 4;
+  let got;
+  try {
+    const a = fifthLab(false), about = fs.readFileSync(path.join(E.ROOT, "src", "modules", "about.js"), "utf8");
+    const aboutD = (/TILE_MARK='[^']*? d="([^"]+)"/.exec(about) || [])[1] || "";
+    const d = a.f.fifthCutPath(a.f.FIFTH_PHI0);
+    got = [a.std.length > 1000, d === a.std, aboutD === a.std, a.f.FIFTH_PHI0 === PHI0];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the figure at its standard phase, pi/4, is the small cut the header and About ship, byte for byte",
+    got, [true, true, true, true]);
+
+  try {
+    const a = fifthLab(false); a.f.wireFifth();
+    for (let i = 0; i < 60; i++) a.frame(1000 + i * 1000 / 60);
+    const adv = a.f.fifthPhase() - PHI0, circles = d => (d.match(/M/g) || []).length;
+    got = [Math.abs(adv - W0) < 1e-9, a.node.d !== a.std, a.node.sets >= 15 && a.node.sets <= 21, a.queued(), circles(a.node.d) > 1.8 * circles(a.std)];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("under motion the phase advances at 2 pi times 0.007 per second, the header's path turns, repaints stay at or under 20 a second, frames keep coming, and the turned path draws both halves of the loop, a circle counted at each M",
+    got, [true, true, true, 1, true]);
+
+  try {
+    const a = fifthLab(true); a.f.wireFifth();
+    for (let i = 0; i < 60; i++) a.frame(1000 + i * 1000 / 60);
+    const held = [a.queued(), a.f.fifthPhase() === PHI0, a.node.d === a.std, a.node.sets];
+    const b = fifthLab(false); b.f.wireFifth();
+    for (let i = 0; i < 60; i++) b.frame(1000 + i * 1000 / 60);
+    b.flip(true);
+    got = [held, [b.queued(), b.f.fifthPhase() === PHI0, b.node.d === b.std]];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("under a quiet switch nothing is asked for, the phase and the path stay the standard figure, and switching on mid-turn puts the standard figure back",
+    got, [[0, true, true, 0], [0, true, true]]);
+
+  try {
+    const a = fifthLab(false); a.f.wireFifth();
+    a.frame(1000); a.frame(1000 + 1000 / 60);
+    const before = a.f.fifthPhase();
+    a.frame(1000 + 1000 / 60 + 3600000);
+    const step = a.f.fifthPhase() - before;
+    got = [Math.abs(step - W0 / 30) < 1e-12, Math.abs(a.f.fifthStep(PHI0, 3600) - PHI0 - W0 / 30) < 1e-12, a.f.fifthStep(PHI0, -5) === PHI0];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a frame an hour late advances the phase by one capped step, 1/30 s, and a negative interval by none",
+    got, [true, true, true]);
+
+  try {
+    const a = fifthLab(false), o = [0, 0], q = [0, 0], to = p => { p[0] = 2 * p[0] + 7; p[1] = 2 * p[1] - 3; };
+    const dots = [];
+    for (let i = 0; i < 400; i++) {
+      const t = 3 * Math.PI / 4 + Math.PI * (i + 0.5) / 400, a2 = i * 2.4, r = 3 + (i % 7);
+      a.f.fifthAt(t, PHI0, o); to(o);
+      dots.push({ x: o[0] + r * Math.cos(a2), y: o[1] + r * Math.sin(a2) });
+    }
+    const home = a.f.fifthRide(dots, to);
+    let rest = 0, away = 0, mirrored = 0;
+    dots.forEach(p => {
+      home(p, PHI0, q); rest = Math.max(rest, Math.hypot(q[0] - p.x, q[1] - p.y));
+      home(p, PHI0 + 1, q); away = Math.max(away, Math.hypot(q[0] - p.x, q[1] - p.y));
+      if (p.t > Math.PI * 7 / 4 || p.t < Math.PI * 3 / 4) mirrored++;
+    });
+    got = [rest < 1e-6, away > 20, mirrored > 100 && mirrored < 300];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("dots riding the figure stand exactly where they stood at the standard phase, move when it turns, and are shared between the loop's two halves",
+    got, [true, true, true]);
+
+  try {
+    const run = still => {
+      const m = markLab(); m.sb.still = still;
+      m.sb.fifthPhase = () => 1;
+      m.sb.markDots = () => [{ x: 100, y: 0, sx: 0, sy: 0, ph: 0, sp: 1 }];
+      m.sb.__home((p, phi, out) => { out[0] = p.x + 20 * phi; out[1] = p.y; });
+      m.make();
+      let x = null;
+      for (let i = 0; i < 150; i++) x = m.frame(500 + i * 1000 / 60);
+      return +x.toFixed(4);
+    };
+    got = [run(false), run(true)];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the empty desk's dots are drawn at their riding homes under motion and at the standard figure's grid under a quiet switch",
+    got, [120, 100]);
 }
 /* THE .ec FILE TYPE IS NAMED IN THE INSTALLER'S LANGUAGE: electron-builder writes the English from
    fileAssociations, and shell/installer.nsh's customInstall writes the Polish over it when the

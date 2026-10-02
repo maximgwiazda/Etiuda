@@ -3,14 +3,16 @@
    dialog standing over the desk holds the gathering until it closes, so it is seen. Under
    either quiet switch it is drawn once, gathered and still. */
 import { mgReduceMotion, M_MS } from "./motion.js";
+import { FIFTH_PHI0, fifthCutPath, fifthPhase, fifthRide } from "./fifth.js";
 
 const MARK_PX=280, MARK_STEP=3.5, GATHER_MS=M_MS.gather, TWINKLE_MS=M_MS.twinkle, ALPHA_STEPS=16;
 // A wait on the gather is let go once no frame has come for this long.
 const MARK_QUIET_MS=1000;
-let eMark=null, markWaiters=[];
+let eMark=null, markWaiters=[], markHome=null;
 
-/* The glyph is read off the header's copy, never redrawn: its path and group transform, scaled
-   from the viewBox to the canvas, sampled on a grid by isPointInPath. */
+/* The glyph is the header's standard figure: its group transform, scaled from the viewBox to the
+   canvas, sampled on a grid by isPointInPath. The header's own path may be mid-turn, so the figure
+   comes from fifth.js, which a leg holds equal to the markup's copy. */
 function markDots(){
   const svg=document.querySelector(".brand svg"), path=svg && svg.querySelector("path");
   if(!path) return [];
@@ -19,7 +21,7 @@ function markDots(){
   probe.setTransform(s,0,0,s,0,0);
   const tf=g && g.transform && g.transform.baseVal.consolidate();
   if(tf){ const m=tf.matrix; probe.transform(m.a,m.b,m.c,m.d,m.e,m.f); }
-  const shape=new Path2D(path.getAttribute("d")), dots=[];
+  const shape=new Path2D(fifthCutPath(FIFTH_PHI0)), dots=[];
   for(let y=MARK_STEP/2; y<MARK_PX; y+=MARK_STEP){
     for(let x=MARK_STEP/2; x<MARK_PX; x+=MARK_STEP){
       if(!probe.isPointInPath(shape,x,y)) continue;
@@ -28,6 +30,11 @@ function markDots(){
         ph:Math.random()*6.2832, sp:0.6+Math.random()*0.9});
     }
   }
+  const m=tf ? tf.matrix : {a:1,b:0,c:0,d:1,e:0,f:0};
+  markHome=fifthRide(dots, o=>{
+    const u=o[0], v=o[1];
+    o[0]=s*(m.a*u+m.c*v+m.e); o[1]=s*(m.b*u+m.d*v+m.f);
+  });
   return dots;
 }
 // Dots are batched by alpha into a few fills a frame rather than one fill a dot. `ms` is the
@@ -36,8 +43,9 @@ function drawMark(k, ms){
   const still=mgReduceMotion(), ctx=k.ctx;
   const t=ms/1000, gather=still ? 1 : Math.min(1,ms/GATHER_MS);
   const e=1-Math.pow(1-gather,3);
-  const bins=[];
+  const bins=[], home=still ? null : k.home, phi=home ? fifthPhase() : 0, o=[0,0];
   k.dots.forEach(p=>{
+    if(home){ home(p, phi, o); p.hx=o[0]; p.hy=o[1]; } else { p.hx=p.x; p.hy=p.y; }
     const tw=still ? 0.75 : 0.55+0.45*Math.sin(p.ph+t*p.sp*1.6);
     const a=Math.min(1, tw*(0.45+0.75*e));
     const b=Math.round(a*ALPHA_STEPS);
@@ -49,7 +57,7 @@ function drawMark(k, ms){
     ctx.globalAlpha=b/ALPHA_STEPS;
     ctx.beginPath();
     ps.forEach(p=>{
-      const x=p.sx+(p.x-p.sx)*e, y=p.sy+(p.y-p.sy)*e;
+      const x=p.sx+(p.hx-p.sx)*e, y=p.sy+(p.hy-p.sy)*e;
       ctx.moveTo(x+1.05,y); ctx.arc(x,y,1.05,0,6.2832);
     });
     ctx.fill();
@@ -144,7 +152,7 @@ function syncEmptyMark(host){
   host.insertBefore(cv, host.firstChild);
   const ctx=cv.getContext("2d");
   ctx.setTransform(dpr,0,0,dpr,0,0);
-  const k=eMark={cv:cv, ctx:ctx, dots:dots, ms:0, last:0, gap:1000/60, formed:false, raf:0, hold:0, theme:null};
+  const k=eMark={cv:cv, ctx:ctx, dots:dots, home:markHome, ms:0, last:0, gap:1000/60, formed:false, raf:0, hold:0, theme:null};
   // A still mark has no frame to pick up a new theme's accent, so it is redrawn on the flip.
   k.theme=new MutationObserver(()=>{ if(mgReduceMotion()) drawMark(k, k.ms); });
   k.theme.observe(document.documentElement,{attributes:true, attributeFilter:["data-theme"]});
