@@ -1,7 +1,7 @@
 /* The catalog sitting beside Etiuda, offered rather than loaded, the watched file that
    offers the same way, and the dialog all three channels end in. */
 import { activateCatalog, catalogEdited, catalogEditionOlder, catalogMacroCount,
-  catalogIntentCount, exportCatalog, isCatalogUpdate, catalogFileName, catalogNameOfFile } from "./catalog-file.js";
+  catalogIntentCount, exportCatalog, isCatalogUpdate, catalogFileName, catalogNameOfFile, pinStoredFrom } from "./catalog-file.js";
 import { catalogLoaded } from "./catalog-boot.js";
 import { E_CATALOG_KEY, E_CATALOG_VERSION, catalogStamp, catalogVersionLabel,
   eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
@@ -87,6 +87,7 @@ function eOfferCatalog(given,name,where,force,asked,builtIn){
    by a "no" said to the last one, and a file this copy was OPENED with is an act of somebody's
    rather than a find. Only a host can date a file or hand one over, so a browser never forces. */
 function eOfferCatalogAtBoot(){
+  pinStoredFrom(eCatalog());
   const at=+(nsGet("CatalogNoAt")||0), mt=eCatalogMtime(), asked=eOpenedWith();
   // A first run's tour asks for a catalog in its own step, so a found file waits for it to end.
   if(!asked && tourDueAtBoot()){ afterTour(eOfferCatalogAtBoot); return; }
@@ -289,8 +290,10 @@ function paintCatalogList(){
   const held=storedCatalog();
   const mine=eLoadedCatalogFile();
   recheckHeldTrust(eCatalog(),held,paintCatalogList);
-  eCatalogFiles().then(files=>{
+  /* A colleague's file is in the listing and has no row yet: how it looks is not decided. */
+  eCatalogFiles().then(all=>{
     if(!box.isConnected) return;
+    const files=all.filter(f=>!f.desk);
     /* WHICH ROW IS THE CATALOG IN USE. The file the load recorded, first: that is the one route
        that knows. Where no route recorded a file - an import through the picker names a file
        this list cannot address, and a desk older than the key names none - the newest file that

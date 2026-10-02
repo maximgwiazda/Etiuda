@@ -1342,11 +1342,53 @@ function ecCounts(data) {
 /* `id` is what the page needs to tell whether a file IS the catalog in use, by the identity rule
    of board 431. It travels with the listing because the alternative is the page reading every
    file in the folder each time it paints one list. */
+/* A DESK'S OWN FILE IS LISTED ONLY WHERE IT IS GENUINE: it sits in the folder named for the desk that wrote it,
+   that desk's id is the one its key makes, and its signature verifies under the desk prefix. Anything else in
+   desks/ is somebody's file in the wrong place and is not listed. Read again only when its date or size moves. */
+const deskFileRead = new Map();                // path -> [mtime|size, the row, or null]
+function deskRowOf(file, folder) {
+  let st;
+  try { st = fs.statSync(file); } catch { return null; }
+  const stamp = Math.round(st.mtimeMs) + "|" + st.size;
+  const had = deskFileRead.get(file);
+  if (had && had[0] === stamp) return had[1];
+  let row = null;
+  try {
+    const { data } = catalogPayload(fs.readFileSync(file, "utf8"));
+    const d = data && typeof data === "object" ? data.desk : null;
+    const sig = data && data.sig;
+    if (isV2(data) && Array.isArray(data.cards) && d && typeof d === "object" && d.id === folder && /^k-[0-9a-f]{16}$/.test(d.id)
+        && /^[0-9a-f]{64}$/.test(String(d.key)) && branchIdOf(d.key) === d.id
+        && sig && sig.alg === "Ed25519" && sig.keyId === d.id && /^[0-9a-f]{128}$/.test(String(sig.value))
+        && crypto.verify(null, branchSignedBytes(data), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(d.key, "hex")]),
+          format: "der", type: "spki" }), Buffer.from(sig.value, "hex"))) {
+      const n = ecCounts(data);
+      row = { name: path.basename(file), mtime: Math.round(st.mtimeMs), cards: data.cards.length, edition: data.date != null ? String(data.date) : "",
+              macros: n.macros, intents: n.intents, cats: n.cats, awaiting: n.awaiting, sample: false, id: data.id != null ? String(data.id) : "",
+              builtIn: false, rev: +data.rev || 0, grew: ecGrew(data), desk: { id: d.id, name: typeof d.name === "string" ? d.name : "" } };
+    }
+  } catch { /* not a catalog */ }
+  deskFileRead.set(file, [stamp, row]);
+  return row;
+}
+function deskRows() {
+  const root = catalogFolder();
+  if (!folderAnswers(root)) return [];
+  let ids = [];
+  try { ids = fs.readdirSync(path.join(root, "desks")); } catch { return []; }
+  return ids.filter(n => /^k-[0-9a-f]{16}$/.test(n)).sort().reduce((out, n) =>
+    out.concat(ecFilesIn(path.join(root, "desks", n)).map(f => deskRowOf(f, n)).filter(Boolean)), []);
+}
+/* What a file says it grew from, or null: the three fields and nothing else. */
+function ecGrew(data) {
+  const g = data && data.grew;
+  return g && typeof g === "object" && typeof g.id === "string" ? { id: g.id, rev: +g.rev || 0, sha: String(g.sha || "") } : null;
+}
 ipcMain.handle("etiuda:catalog-files", (e) => {
   if (!fromEngine(e)) return [];
   return sampleLast(ecFilesIn(catalogFolder()).concat(builtInFiles())).map(f => {
     let mt = 0, cards = -1, edition = "", macros = -1, intents = -1, cats = -1, awaiting = [];
-    let id = "";
+    let id = "", rev = 0, grew = null;
     try { mt = Math.round(fs.statSync(f).mtimeMs); } catch { /* renamed away under the listing */ }
     try {
       if (refusedByEngine(f)) throw new Error("refused by the engine");
@@ -1356,16 +1398,18 @@ ipcMain.handle("etiuda:catalog-files", (e) => {
         const n = ecCounts(data);
         macros = n.macros; intents = n.intents; cats = n.cats; awaiting = n.awaiting;
         if (data.id != null) id = String(data.id);
+        rev = +data.rev || 0;
+        grew = ecGrew(data);
       }
       // `date` is the field the engine reads as the edition - catalogFromV2 renames it there
       if (isV2(data) && data.date != null) edition = String(data.date);
     } catch { /* not a catalog, and the Load button is where that is said out loud */ }
     return { name: path.basename(f), mtime: mt, cards: cards, edition: edition,
              macros: macros, intents: intents, cats: cats, awaiting: awaiting,
-             sample: isTheSample(f), id: id,
+             sample: isTheSample(f), id: id, rev: rev, grew: grew,
              // The copy Etiuda ships, rather than a folder's own file of any name.
              builtIn: path.dirname(f) === BUILT_IN_DIR };
-  });
+  }).concat(deskRows());
 });
 ipcMain.handle("etiuda:catalog-read", (e, name) => {
   if (!fromEngine(e)) return null;

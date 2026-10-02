@@ -11942,6 +11942,11 @@ What you type stays in this browser only.`;
         /* The catalog's own identity, for the rule of board
            431; empty where the file did not read. */
         id: String(f && f.id || ""),
+        // The edition number, and what the file says it grew from, {id,rev,sha} or null.
+        rev: +(f && f.rev) || 0,
+        grew: f && f.grew && typeof f.grew === "object" && f.grew.id ? { id: String(f.grew.id), rev: +f.grew.rev || 0, sha: String(f.grew.sha || "") } : null,
+        // Only a colleague's file in the share has one: {id,name}, the desk that wrote it.
+        desk: f && f.desk && typeof f.desk === "object" && f.desk.id ? { id: String(f.desk.id), name: String(f.desk.name || "") } : null,
         // The copy Etiuda ships, rather than a folder's own file.
         builtIn: !!(f && f.builtIn)
       })).filter((f) => f.name) : []).catch(() => []);
@@ -18614,6 +18619,7 @@ What you type stays in this browser only.`;
     importCatalogHere: () => importCatalogHere,
     importCatalogText: () => importCatalogText,
     isCatalogUpdate: () => isCatalogUpdate,
+    pinStoredFrom: () => pinStoredFrom,
     sampleUntouched: () => sampleUntouched,
     sha256Hex: () => sha256Hex,
     syncSampleMark: () => syncSampleMark,
@@ -19292,6 +19298,12 @@ What you type stays in this browser only.`;
     } catch (e) {
       return c;
     }
+  }
+  function pinStoredFrom(found) {
+    const held = storedCatalog();
+    if (!held || held.pin || !found || !isCatalogUpdate(found, held) || eCatalogSignature(found) !== eCatalogSignature(held)) return false;
+    const p = pinned(found).pin;
+    return !!p && storeCatalog(Object.assign({}, held, { pin: p }));
   }
   function branchHex(origin) {
     return sha256Hex(new TextEncoder().encode(String(origin.id))).slice(0, 8);
@@ -21160,6 +21172,7 @@ What you type stays in this browser only.`;
     return shown2;
   }
   function eOfferCatalogAtBoot() {
+    pinStoredFrom(eCatalog());
     const at = +(nsGet("CatalogNoAt") || 0), mt = eCatalogMtime(), asked = eOpenedWith();
     if (!asked && tourDueAtBoot()) {
       afterTour(eOfferCatalogAtBoot);
@@ -21301,8 +21314,9 @@ What you type stays in this browser only.`;
     const held = storedCatalog();
     const mine = eLoadedCatalogFile();
     recheckHeldTrust(eCatalog(), held, paintCatalogList);
-    eCatalogFiles().then((files) => {
+    eCatalogFiles().then((all) => {
       if (!box.isConnected) return;
+      const files = all.filter((f) => !f.desk);
       let onAt = mine ? files.findIndex((f) => f.name === mine) : -1;
       if (onAt < 0 && held) onAt = files.findIndex((f) => isCatalogUpdate(f, held));
       const at = +(nsGet("CatalogFileAt") || 0) || ((files[onAt] || {}).mtime || 0);

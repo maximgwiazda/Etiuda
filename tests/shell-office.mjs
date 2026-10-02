@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 60;
+const EXPECTED = 66;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -715,6 +715,78 @@ try {
     check(takes(open) && open.told === 0,
       "8f and with ETIUDA_TEST_DEVTOOLS=1, which tests/engine.js shellLaunch sets beside either variable, it takes both"
       + " for the harness: documents moved " + open.docs + ", dialogs opened " + open.dialogs + ", told " + open.told);
+  }
+  /* ---- 9. a colleague's own file in the share: listed where it is genuine, and never the file the desk boots from ---- */
+  {
+    const crypto = nodeRequire("node:crypto");
+    const V2 = await import(MOD("catalog-v2.js"));
+    const S = loadShell();
+    const folder = path.join(S.DOCS, "Etiuda");
+    realFs.mkdirSync(folder, { recursive: true });
+    const TOP = path.join(folder, "lamps.ec");
+    const lead = Object.assign(goodCatalog(), { rev: 4, grew: { id: "lamp-origin", rev: 2, sha: "sha256:" + "ab".repeat(32) } });
+    realFs.writeFileSync(TOP, JSON.stringify(lead), "utf8");
+    realFs.utimesSync(TOP, new Date(2026, 0, 1), new Date(2026, 0, 1));
+    const sha8 = s => crypto.createHash("sha256").update(s).digest("hex").slice(0, 8);
+    /* A desk's file as the shell's own writer makes it: the key's id, the prefix, the engine's signed bytes. */
+    const makeDesk = (name, o) => {
+      const opt = o || {};
+      const pair = crypto.generateKeyPairSync("ed25519");
+      const raw = pair.publicKey.export({ type: "spki", format: "der" }).subarray(-32);
+      const id = opt.claim || "k-" + crypto.createHash("sha256").update(raw).digest("hex").slice(0, 16);
+      const doc = Object.assign(goodCatalog(), { id: id + "-" + sha8("lamp-shop"), rev: 3, modified: true,
+        grew: { id: "lamp-shop", rev: 1, sha: "sha256:" + "cd".repeat(32) },
+        desk: { id: id, name: name, key: raw.toString("hex"), box: "ef".repeat(32) } });
+      doc.cards[0].title = { en: "Warm opening, in " + name + "'s words" };
+      doc.sig = { alg: "Ed25519", keyId: id };
+      doc.sig.value = crypto.sign(null, Buffer.concat([Buffer.from("etiuda-desk-branch\n"), Buffer.from(V2.v2SignedBytes(doc))]), pair.privateKey).toString("hex");
+      if (opt.spoil) doc.cards[0].title.en += "!";
+      const dir = path.join(folder, "desks", opt.inFolder || id);
+      realFs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, "lamps-" + sha8("lamp-shop") + ".ec");
+      realFs.writeFileSync(file, JSON.stringify(doc), "utf8");
+      return { id, file, doc };
+    };
+    const ala = makeDesk("Ala");
+    const rows = await S.ask("etiuda:catalog-files");
+    const top = rows.filter(r => r.name === "lamps.ec")[0] || {}, hers = rows.filter(r => r.desk)[0] || {};
+    check(top.rev === 4 && !!top.grew && top.grew.id === "lamp-origin" && top.grew.rev === 2 && !top.desk,
+      "79a THE CONTROL: a file at the top of the folder is listed with its edition number and what it says it grew from, and is not a desk's (rev " + top.rev + ", grew "
+      + JSON.stringify(top.grew) + ")");
+    check(rows.filter(r => r.desk).length === 1 && hers.name === path.basename(ala.file) && hers.desk.id === ala.id && hers.desk.name === "Ala" && hers.rev === 3
+      && hers.id === ala.doc.id && hers.grew.id === "lamp-shop" && hers.grew.rev === 1 && hers.cards === 1,
+      "79b a colleague's genuine file is listed under its own name with the desk that wrote it, its id, its edition and what it grew from (" + rows.filter(r => r.desk).length + " of hers, "
+      + JSON.stringify({ name: hers.name, desk: hers.desk, rev: hers.rev, grew: hers.grew }) + ")");
+
+    const spoiled = makeDesk("Bea", { spoil: true });
+    const wrongFolder = makeDesk("Cyl", { inFolder: "k-0123456789abcdef" });
+    /* Signed with its own key throughout, but under an id that key does not make: the folder, desk.id and the signature all agree. */
+    const forged = makeDesk("Dan", { claim: "k-1111111111111111" });
+    const rows2 = await S.ask("etiuda:catalog-files");
+    const names2 = rows2.filter(r => r.desk).map(r => r.desk.name);
+    check(names2.join() === "Ala",
+      "79c THE CONTROL: a desk file whose signature fails, one whose folder is not its id, and one whose id is not its key's are not listed, and the genuine one still is (" + JSON.stringify(names2) + ")");
+
+    const newest = new Date(2026, 5, 1);
+    realFs.utimesSync(ala.file, newest, newest);
+    const text = S.ipc("etiuda:catalog"), read = S.api.readCatalog();
+    check(!!read && JSON.parse(read).id === "lamp-shop" && JSON.parse(read).rev === 4 && text === read,
+      "79d a desk's file newer than every file at the top is never the one the desk boots from, nor the one a folder change would offer: the file read is "
+      + (read ? JSON.parse(read).id + " rev " + JSON.parse(read).rev : "none"));
+
+    await S.ask("etiuda:catalog-files");
+    let reads = 0;
+    S.ctl.readFileSync = (real, f, ...a) => { if (String(f).indexOf(path.join("desks")) >= 0) reads++; return real(f, ...a); };
+    await S.ask("etiuda:catalog-files");
+    const after1 = reads;
+    await S.ask("etiuda:catalog-files");
+    check(after1 === 0 && reads === 0,
+      "79e a desk's file is read again only when its date or size moves: two more listings after one that had read it read it " + reads + " time(s)");
+    realFs.appendFileSync(ala.file, " ");
+    realFs.utimesSync(ala.file, newest, newest);
+    await S.ask("etiuda:catalog-files");
+    check(reads === 1,
+      "79f and it is read once when its size moves with its date as it was (" + reads + ")");
   }
 } catch (e) {
   failed++;

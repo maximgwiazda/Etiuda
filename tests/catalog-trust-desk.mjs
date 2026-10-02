@@ -291,6 +291,7 @@ async function launch(plan) {
   const OFFER = await import(MOD("catalog-offer.js"));
   const CF = await import(MOD("catalog-file.js"));
   const TR = await import(MOD("catalog-trust.js"));
+  const ST = await import(MOD("storage.js"));
   const TOUR = await import(MOD("tour.js"));
   /* THE APP-LEVEL ACTIONS the page's boot registers in hooks.js, none of them on the trust path:
      the sample's watermark and the unsaved notice repaint the rest of the page. Named one by one,
@@ -356,6 +357,7 @@ async function launch(plan) {
   if (obs.reloaded) await settle(50);
   obs.askedAtEnd = standing();
   obs.heldAtEnd = TR.heldCatalogTrust();
+  obs.pinAtEnd = (() => { try { return JSON.parse(ST.lsGet("eCatalog") || "{}").pin || ""; } catch { return ""; } })();
   obs.session = Object.fromEntries(session);
   process.stdout.write("#launch " + JSON.stringify(obs) + "\n", () => process.exit(0));
 }
@@ -370,7 +372,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 17;
+  const EXPECTED = 21;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -525,6 +527,43 @@ async function parent() {
     const errs = launches.flatMap(o => o.errors || []);
     check(!errs.length,
       "0b every launch ran its acts without an error" + (errs.length ? ": " + errs.length + ", first " + errs[0] : ""));
+
+    /* 71: A CATALOG STORED BEFORE THE PIN EXISTED is pinned from the file the boot finds in use, where that file is
+       the stored catalog unchanged, and from nothing else. The desk file is edited on disk between launches, as a
+       build older than the pin left it. */
+    const sha = b => crypto.createHash("sha256").update(b).digest("hex");
+    const stored = (lab, change) => {
+      const f = path.join(lab, "userdata", "desk.json"), d = JSON.parse(fs.readFileSync(f, "utf8"));
+      const c = JSON.parse(d.keys.eCatalog); change(c); d.keys.eCatalog = JSON.stringify(c);
+      fs.writeFileSync(f, JSON.stringify(d), "utf8");
+      return c;
+    };
+    const first = sign(payload("2026-09-01"));
+    const lab71 = scenario([["catalogs/lamp.ec", first], ["catalogs/etiuda-ring.json", ring]]);
+    const a71 = run(lab71, ["boot", "settle", "offer", "yes", "settle"]);
+    const wantPin = "sha256:" + sha(V2.v2SignedBytes(first));
+    const held = stored(lab71, c => { delete c.pin; });
+    const b71 = run(lab71, ["boot", "settle"], true);
+    check(a71.reloaded && !held.pin && b71.pinAtEnd === wantPin,
+      "71a a catalog stored with no pin is pinned at boot from the file in use, where that is the stored catalog unchanged: sha256 over the engine's signed bytes of the file ("
+      + b71.pinAtEnd.slice(0, 15) + ", expected " + wantPin.slice(0, 15) + ")");
+    const lab71b = scenario([["catalogs/lamp.ec", first], ["catalogs/etiuda-ring.json", ring]]);
+    run(lab71b, ["boot", "settle", "offer", "yes", "settle"]);
+    stored(lab71b, c => { delete c.pin; });
+    const edited = JSON.parse(JSON.stringify(first)); edited.cards[0].title.en = "Warm opening, reworded"; delete edited.hash;
+    fs.writeFileSync(path.join(lab71b, "catalogs", "lamp.ec"), JSON.stringify(sign(edited)), "utf8");
+    const c71 = run(lab71b, ["boot", "settle", "offer"], true);
+    check(c71.pinAtEnd === "" && (c71.offers[0] || {}).shown === true,
+      "71b THE CONTROL: where the file in the folder is no longer the stored catalog (reworded since), nothing is pinned from it, and it is offered as the update it is (pin " + JSON.stringify(c71.pinAtEnd) + ")");
+    const lab71c = scenario([["catalogs/lamp.ec", first], ["catalogs/etiuda-ring.json", ring]]);
+    run(lab71c, ["boot", "settle", "offer", "yes", "settle"]);
+    const planted = "sha256:" + "00".repeat(32);
+    stored(lab71c, c => { c.pin = planted; });
+    const d71 = run(lab71c, ["boot", "settle"], true);
+    check(d71.pinAtEnd === planted && wantPin !== planted,
+      "71c THE CONTROL: a catalog already pinned keeps the pin it has (" + d71.pinAtEnd.slice(0, 15) + ")");
+    const errs71 = [a71, b71, c71, d71].flatMap(o => o.errors || []);
+    check(!errs71.length, "71d those launches ran their acts without an error" + (errs71.length ? ": " + errs71.length + ", first " + errs71[0] : ""));
   } catch (e) {
     failed++;
     console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

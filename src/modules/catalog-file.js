@@ -2,7 +2,7 @@ import { splitPartsRaw } from "./card-model.js";
 import { cardFieldKey } from "./card-fields.js";
 import { cardOrderTouched, cardOrderIsBase, cardOrderIdx } from "./card-order.js";
 import { ALWAYS_CATS } from "./cat-roles.js";
-import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, parseCatalogFile, catalogDocOf } from "./catalog.js";
+import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, parseCatalogFile, catalogDocOf, eCatalogSignature } from "./catalog.js";
 import { catalogLoaded } from "./catalog-boot.js";
 import { agentName } from "./agent.js";
 import { catalogToV2, v2SignedBytes } from "./catalog-v2.js";
@@ -307,6 +307,14 @@ function pinned(c){
   if(!doc) return c;
   try{ return Object.assign({},c,{pin:"sha256:"+sha256Hex(v2SignedBytes(doc))}); }
   catch(e){ return c; }
+}
+/* A CATALOG STORED BEFORE THE PIN EXISTED is pinned from `found`, the file the boot read, where that file is the stored
+   catalog unchanged: the same id and the same signature, which is the whole of what the desk calls unchanged. */
+function pinStoredFrom(found){
+  const held=storedCatalog();
+  if(!held || held.pin || !found || !isCatalogUpdate(found,held) || eCatalogSignature(found)!==eCatalogSignature(held)) return false;
+  const p=pinned(found).pin;
+  return !!p && storeCatalog(Object.assign({},held,{pin:p}));
 }
 /* Eight hex of the grown-from catalog's id: the end of the desk file's own id and of its file name. */
 function branchHex(origin){ return sha256Hex(new TextEncoder().encode(String(origin.id))).slice(0,8); }
@@ -667,6 +675,7 @@ export {
   importCatalogHere,
   importCatalogText,
   sha256Hex,
+  pinStoredFrom,
   deskBranchHolds,
   writeDeskBranch
 };

@@ -70,7 +70,7 @@ function eCatalogMtime(){ const h=eHost(), o=eHanded(); return o?o.mtime:h?(+h.c
    once the engine has refused it. */
 function eOpenedWith(){ const h=eHost(); return !eHanded() && !!(h && h.openedWith); }
 /* The catalog folder's own listing,
-   [{name,mtime,cards,edition,macros,intents,cats,awaiting,sample,id}],
+   [{name,mtime,cards,edition,macros,intents,cats,awaiting,sample,id,rev,grew,desk}],
    in the host's own order: newest first, the sample last whatever its date - the rule and the
    reason are at sampleLast in shell/main.js. Empty in a browser. Asked for when a screen paints,
    never cached: the folder is a setting. Every count is -1 and `edition` "" where the host could
@@ -96,6 +96,11 @@ function eCatalogFiles(){
                                            /* The catalog's own identity, for the rule of board
                                               431; empty where the file did not read. */
                                            id:String(f&&f.id||""),
+                                           // The edition number, and what the file says it grew from, {id,rev,sha} or null.
+                                           rev:+(f&&f.rev)||0,
+                                           grew:(f&&f.grew&&typeof f.grew==="object"&&f.grew.id)?{id:String(f.grew.id),rev:+f.grew.rev||0,sha:String(f.grew.sha||"")}:null,
+                                           // Only a colleague's file in the share has one: {id,name}, the desk that wrote it.
+                                           desk:(f&&f.desk&&typeof f.desk==="object"&&f.desk.id)?{id:String(f.desk.id),name:String(f.desk.name||"")}:null,
                                            // The copy Etiuda ships, rather than a folder's own file.
                                            builtIn:!!(f&&f.builtIn)}))
                                  .filter(f=>f.name):[])
