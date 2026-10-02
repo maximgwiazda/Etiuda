@@ -1361,9 +1361,13 @@ function ecFacts(file, deskFolder) {
   const stamp = Math.round(st.mtimeMs) + "|" + st.size;
   const had = ecFactsRead.get(file);
   if (had && had[0] === stamp) return had[1];
+  /* A read that fails (another program holds the file) says nothing about the file, so it is not remembered: only a
+     verdict on the text is. */
+  let text;
+  try { text = fs.readFileSync(file, "utf8"); } catch { return null; }
   let out = null;
   try {
-    const { data } = catalogPayload(fs.readFileSync(file, "utf8"));
+    const { data } = catalogPayload(text);
     if (isV2(data) && Array.isArray(data.cards)) {
       const n = ecCounts(data), d = data.desk, sig = data.sig;
       out = { mtime: Math.round(st.mtimeMs), cards: data.cards.length, edition: data.date != null ? String(data.date) : "",

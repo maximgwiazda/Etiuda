@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 74;
+const EXPECTED = 76;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -853,6 +853,24 @@ try {
     const sends = l => /\bsendListing\(win, true\)/.test(bare(l));
     check(sends(loadLine) && !sends(loadLine.replace("sendListing(win, true);", "/* sendListing(win, true); */")),
       "80h the page finishing a load sends the listing, forced: the line is read in code, and a call kept in a comment does not count");
+  }
+
+  /* ---- 11. a file whose read fails once is listed with its id once it can be read ---- */
+  {
+    const S = loadShell();
+    const folder = path.join(S.DOCS, "Etiuda");
+    realFs.mkdirSync(folder, { recursive: true });
+    const A = path.join(folder, "held.ec");
+    realFs.writeFileSync(A, JSON.stringify(goodCatalog()), "utf8");
+    S.ctl.readFileSync = (real, f, ...a) => { if (String(f) === A) throw busy("EBUSY"); return real(f, ...a); };
+    const r1 = ((await S.ask("etiuda:catalog-files")) || []).filter(r => r.name === "held.ec")[0] || {};
+    delete S.ctl.readFileSync;
+    const r2 = ((await S.ask("etiuda:catalog-files")) || []).filter(r => r.name === "held.ec")[0] || {};
+    check(r1.name === "held.ec" && r1.id === "",
+      "81x THE PLANT REACHED: the held file is listed with no id while its read fails (" + JSON.stringify([r1.id, r1.cards]) + ")");
+    check(r2.id === "lamp-shop" && r2.cards > 0,
+      "81y once the read succeeds, the same file (same date and size) is listed with its id and cards, a failed read not being remembered as a verdict on it ("
+      + JSON.stringify([r2.id, r2.cards]) + ")");
   }
 } catch (e) {
   failed++;

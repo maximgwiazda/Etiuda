@@ -388,7 +388,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 35;
+  const EXPECTED = 36;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -700,7 +700,16 @@ async function parent() {
     const m72 = run(lab72i, ["boot", "listing", "offer"], true);
     check(m72.fileAtEnd === "lamp.ec" && ((m72.offers[0] || {}).files || []).includes("lamp-v2.ec"),
       "72m THE CONTROL: the file in use gone and another edition of it under a new name is offered and not followed as a rename (remembered " + JSON.stringify(m72.fileAtEnd) + ")");
-    const errs72 = [a72, c72, d72, e72, f72, g72, h72, lib72f, i72, j72, k72, l72, m72, n72].flatMap(o => o.errors || []);
+    /* A colleague's genuine file of this catalog, named by its stem as the design names it, beside the rename of the file in use. */
+    const labP1 = accepted();
+    deskFile(labP1, Object.assign({}, wanted, { id: ID + "-x" }), "Ola");
+    const dd = path.join(labP1, "catalogs", "desks"), did = fs.readdirSync(dd)[0];
+    fs.renameSync(path.join(dd, did, "colleague.ec"), path.join(dd, did, "lamp.ec"));
+    const p1 = run(labP1, ["boot", "listing", "fsop:rename,lamp.ec,lamp-renamed.ec", "listing", "bar", "offer"], true);
+    check(p1.fileAtEnd === "lamp-renamed.ec" && !(p1.offers[0] || {}).shown && !(p1.errors || []).length,
+      "72o a rename of the file in use is followed while a colleague's genuine file of it, named by the same stem (desks/<id>/lamp.ec), sits in the folder: only the filter keeps its row from hiding the rename (remembered "
+      + JSON.stringify(p1.fileAtEnd) + ")");
+    const errs72 = [a72, c72, d72, e72, f72, g72, h72, lib72f, i72, j72, k72, l72, m72, n72, p1].flatMap(o => o.errors || []);
     check(!errs72.length, "72l those launches ran their acts without an error" + (errs72.length ? ": " + errs72.length + ", first " + errs72[0] : ""));
     const errs71 = [a71, b71, c71, d71].flatMap(o => o.errors || []);
     check(!errs71.length, "71d those launches ran their acts without an error" + (errs71.length ? ": " + errs71.length + ", first " + errs71[0] : ""));
