@@ -75,12 +75,8 @@ function eOpenedWith(){ const h=eHost(); return !eHanded() && !!(h && h.openedWi
    reason are at sampleLast in shell/main.js. Empty in a browser. Asked for when a screen paints,
    never cached: the folder is a setting. Every count is -1 and `edition` "" where the host could
    not read the file as a catalog; what each count means is written at ecCounts in shell/main.js. */
-function eCatalogFiles(){
-  const h=eHost();
-  if(!h || typeof h.catalogFiles!=="function") return Promise.resolve([]);
-  try{
-    return Promise.resolve(h.catalogFiles())
-      .then(v=>Array.isArray(v)?v.map(f=>({name:String(f&&f.name||""),mtime:+(f&&f.mtime)||0,
+function mapListing(v){
+  return Array.isArray(v)?v.map(f=>({name:String(f&&f.name||""),mtime:+(f&&f.mtime)||0,
                                            cards:(f&&f.cards!=null)?+f.cards:-1,
                                            edition:String(f&&f.edition||""),
                                            macros:(f&&f.macros!=null)?+f.macros:-1,
@@ -96,6 +92,8 @@ function eCatalogFiles(){
                                            /* The catalog's own identity, for the rule of board
                                               431; empty where the file did not read. */
                                            id:String(f&&f.id||""),
+                                           // SHA-256 of the file's signed bytes, the form a catalog's pin takes.
+                                           sha:String(f&&f.sha||""),
                                            // The edition number, and what the file says it grew from, {id,rev,sha} or null.
                                            rev:+(f&&f.rev)||0,
                                            grew:(f&&f.grew&&typeof f.grew==="object"&&f.grew.id)?{id:String(f.grew.id),rev:+f.grew.rev||0,sha:String(f.grew.sha||"")}:null,
@@ -103,9 +101,19 @@ function eCatalogFiles(){
                                            desk:(f&&f.desk&&typeof f.desk==="object"&&f.desk.id)?{id:String(f.desk.id),name:String(f.desk.name||"")}:null,
                                            // The copy Etiuda ships, rather than a folder's own file.
                                            builtIn:!!(f&&f.builtIn)}))
-                                 .filter(f=>f.name):[])
-      .catch(()=>[]);
-  }catch(e){ return Promise.resolve([]); }
+                                 .filter(f=>f.name):[];
+}
+function eCatalogFiles(){
+  const h=eHost();
+  if(!h || typeof h.catalogFiles!=="function") return Promise.resolve([]);
+  try{ return Promise.resolve(h.catalogFiles()).then(mapListing).catch(()=>[]); }
+  catch(e){ return Promise.resolve([]); }
+}
+/* The shell's own sending of the listing, in the same shape; nothing in a browser. */
+function eOnCatalogListing(fn){
+  const h=eHost();
+  if(!h || typeof h.onCatalogListing!=="function") return;
+  h.onCatalogListing(rows=>fn(mapListing(rows)));
 }
 /* WHICH FILE IN THAT FOLDER IS THE ONE LOADED, so a list can mark it. The name is written when a
    catalog is activated from the folder and blanked by every other route, so "" means the loaded
@@ -186,15 +194,15 @@ function eSaveCatalogFile(title,name,label,build){
 }
 /* The desk's branch, both halves through the host and neither in a browser. The identity is the
    public halves {id,key,box} or null where no key can be kept safely; the write answers {ok}, and an
-   empty text takes the desk's own file for that stem away. */
+   empty text takes the desk's own file for that stem away. Asked with false, the identity makes nothing. */
 function eHasBranch(){
   const h=eHost();
   return !!h && typeof h.branchIdentity==="function" && typeof h.writeBranch==="function";
 }
-function eBranchIdentity(){
+function eBranchIdentity(make){
   if(!eHasBranch()) return Promise.resolve(null);
   try{
-    return Promise.resolve(eHost().branchIdentity())
+    return Promise.resolve(eHost().branchIdentity(make===false?false:true))
       .then(v=>(v&&typeof v==="object"&&v.id&&v.key&&v.box)?{id:String(v.id),key:String(v.key),box:String(v.box)}:null)
       .catch(()=>null);
   }catch(e){ return Promise.resolve(null); }
@@ -303,6 +311,7 @@ export {
   eCatalogFolder,
   eCatalogFolderShort,
   eCatalogFiles,
+  eOnCatalogListing,
   eCatalogRing,
   eChooseCatalogFolder,
   eLoadedCatalogFile,

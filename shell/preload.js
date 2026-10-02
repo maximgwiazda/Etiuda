@@ -70,6 +70,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
      what is there now, and the folder may have moved since this load began. */
   catalogFiles: () => ipcRenderer.invoke("etiuda:catalog-files"),
   openCatalogFolder: () => ipcRenderer.invoke("etiuda:open-catalog-folder"),
+  /* The listing again, sent by the shell once at boot and whenever the files in it change place, id, edition or hash. */
+  onCatalogListing: (fn) => ipcRenderer.on("etiuda:catalog-listing", (_e, rows) => fn(Array.isArray(rows) ? rows : [])),
   /* The ring beside the catalogs as text, read afresh each time the page verifies a signature. */
   catalogRing: () => ipcRenderer.invoke("etiuda:catalog-ring"),
   readCatalogFile: (name) => ipcRenderer.invoke("etiuda:catalog-read", String(name || "")),
@@ -125,7 +127,7 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   writeStats: (text) => ipcRenderer.invoke("etiuda:stats-write", String(text || "")),
   /* The desk's branch: {id, key, box}, the public halves only, or null where no key can be kept; and the
      desk's own catalog file by its stem, an empty text taking it away. Nothing here hands out a key. */
-  branchIdentity: () => ipcRenderer.invoke("etiuda:branch-identity"),
+  branchIdentity: (make) => ipcRenderer.invoke("etiuda:branch-identity", make === false ? false : true),
   writeBranch: (stem, text) => ipcRenderer.invoke("etiuda:branch-write", String(stem || ""), String(text || "")),
   onStatsAsk: (fn) => ipcRenderer.on("etiuda:stats-ask", (_e, req) => fn(req && typeof req === "object" ? req : {})),
   /* The picker's questions, answered by the page as JSON text: what to show, what a query finds, and

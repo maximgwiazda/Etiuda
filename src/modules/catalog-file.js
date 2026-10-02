@@ -316,6 +316,18 @@ function pinStoredFrom(found){
   const p=pinned(found).pin;
   return !!p && storeCatalog(Object.assign({},held,{pin:p}));
 }
+/* THE FILE THE CATALOG IN USE IS KEPT IN HAS A NEW NAME, found by the identity rule: the remembered names are
+   written as takeCatalog writes them, and the top bar's `from` follows only where it was the old name. */
+function followRenamedFile(old,name,at){
+  if(!name || name===old) return false;
+  const from=nsGet("CatalogFrom");
+  nsSet("CatalogFile",String(name));
+  nsSet("CatalogFileAt",String(+at||0));
+  if(from===old) nsSet("CatalogFrom",String(name));
+  return true;
+}
+/* The id this desk's own file of `origin` has, from the public half of its identity. */
+function branchFileId(who,origin){ return who.id+"-"+branchHex(origin); }
 /* Eight hex of the grown-from catalog's id: the end of the desk file's own id and of its file name. */
 function branchHex(origin){ return sha256Hex(new TextEncoder().encode(String(origin.id))).slice(0,8); }
 /* The desk file's catalog: an export's content with the id this desk and this edition always give
@@ -676,6 +688,8 @@ export {
   importCatalogText,
   sha256Hex,
   pinStoredFrom,
+  followRenamedFile,
+  branchFileId,
   deskBranchHolds,
   writeDeskBranch
 };

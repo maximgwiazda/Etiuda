@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 66;
+const EXPECTED = 74;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -39,7 +39,7 @@ const APP = path.join(LAB, "app");
 /* The shell's own names, handed back by a line added after its source: nothing is exported from
    main.js, and a slice would test a copy of one function rather than the file as it runs. */
 const EXPOSE = ["renamePatiently", "writeReplacing", "saveWindowPlace", "windowFile", "readCatalog", "channelHash",
-  "SAMPLE_EDITIONS", "proxySwitchesFrom"];
+  "SAMPLE_EDITIONS", "proxySwitchesFrom", "catalogChanged", "sendListing"];
 
 /* node:fs with a hook per call: `ctl.renameSync = (real, ...args) => ...` decides that call,
    and a call without a hook goes to the real one. `ctl.any` sees every synchronous call first,
@@ -344,6 +344,11 @@ try {
       "4c and while it does not answer, nothing touches it synchronously: " + d.st.touched.length + " call(s)"
       + (d.st.touched.length ? " (" + d.st.touched.slice(0, 4).join(", ") + ")" : "")
       + ", the boot's catalog, host answer, Library listing and Load all answered empty");
+    const beforeListing = d.st.touched.length;
+    (d.S.api.sendListing || (() => {}))(d.S.win, true);
+    check(d.st.touched.length === beforeListing && d.S.sent.filter(a => a[0] === "etiuda:catalog-listing").length === 0,
+      "80g and nothing is sent, and nothing touched, while the folder does not answer: the listing is read where the folder answers, as the Library's is ("
+      + (d.st.touched.length - beforeListing) + " call(s), " + d.S.sent.filter(a => a[0] === "etiuda:catalog-listing").length + " send(s))");
     const atDoors = d.st.touched.length;
     const ring = await d.S.ask("etiuda:catalog-ring");
     const door = await d.S.ask("etiuda:open-catalog-folder");
@@ -787,6 +792,67 @@ try {
     await S.ask("etiuda:catalog-files");
     check(reads === 1,
       "79f and it is read once when its size moves with its date as it was (" + reads + ")");
+  }
+  /* ---- 10. the listing is sent, not only asked for: at boot, and whenever a file in it changes place, id, edition or hash ---- */
+  {
+    const crypto = nodeRequire("node:crypto");
+    const V2 = await import(MOD("catalog-v2.js"));
+    const S = loadShell();
+    const folder = path.join(S.DOCS, "Etiuda");
+    realFs.mkdirSync(folder, { recursive: true });
+    const A = path.join(folder, "lamps.ec");
+    realFs.writeFileSync(A, JSON.stringify(goodCatalog()), "utf8");
+    realFs.utimesSync(A, new Date(2026, 3, 1), new Date(2026, 3, 1));
+    S.ipc("etiuda:catalog");                       // the boot's read, so that a same-text file is not new text
+    const listings = () => S.sent.filter(a => a[0] === "etiuda:catalog-listing");
+    const texts = () => S.sent.filter(a => a[0] === "etiuda:catalog-file").length;
+    (S.api.sendListing || (() => {}))(S.win, true);
+    const first = listings(), row0 = ((first[0] || [])[1] || []).filter(r => r.name === "lamps.ec")[0] || {};
+    const wantSha = "sha256:" + crypto.createHash("sha256").update(V2.v2SignedBytes(goodCatalog())).digest("hex");
+    check(first.length === 1 && row0.id === "lamp-shop" && row0.rev === 1 && row0.sha === wantSha,
+      "80a THE LISTING IS SENT ONCE AT BOOT, with each file's id, edition and the hash of its signed bytes, which is node's own SHA-256 over the engine's signed bytes: "
+      + first.length + " send(s), sha " + String(row0.sha).slice(0, 15) + " against " + wantSha.slice(0, 15));
+    S.api.catalogChanged(S.win);
+    const t1 = new Date(2026, 3, 2);
+    realFs.utimesSync(A, t1, t1);
+    S.api.catalogChanged(S.win);
+    check(listings().length === 1 && texts() === 0,
+      "80b THE CONTROL: a folder change that changes no file's place, id, edition or hash, a date moving alone included, sends nothing (" + listings().length + " listing(s), " + texts() + " catalog text(s))");
+
+    const B = path.join(folder, "lamps-renamed.ec");
+    realFs.renameSync(A, B);
+    S.api.catalogChanged(S.win);
+    const afterRename = listings(), names1 = ((afterRename[1] || [])[1] || []).map(r => r.name);
+    check(afterRename.length === 2 && names1.indexOf("lamps-renamed.ec") >= 0 && names1.indexOf("lamps.ec") < 0 && texts() === 0,
+      "80c a rename sends the listing and no catalog text: etiuda:catalog-file keeps its one meaning (" + afterRename.length + " listings, names " + JSON.stringify(names1.filter(n => /^lamps/.test(n)))
+      + ", " + texts() + " catalog text(s))");
+
+    const C = path.join(folder, "lamps-v2.ec");
+    realFs.writeFileSync(C, JSON.stringify(Object.assign(goodCatalog(), { rev: 2 })), "utf8");
+    realFs.utimesSync(C, new Date(2026, 0, 1), new Date(2026, 0, 1));
+    S.api.catalogChanged(S.win);
+    const l3 = listings(), r3 = ((l3[2] || [])[1] || []).filter(r => r.name === "lamps-v2.ec")[0] || {};
+    check(l3.length === 3 && r3.rev === 2 && r3.id === "lamp-shop" && texts() === 0,
+      "80d a higher edition under another name and an older date is in the listing that is sent, and the catalog text the shell offers is still the newest file's alone (" + l3.length + " listings, rev " + r3.rev + ", " + texts() + " catalog text(s))");
+
+    const DESK = "k-" + crypto.createHash("sha256").update(Buffer.alloc(32, 7)).digest("hex").slice(0, 16);
+    realFs.mkdirSync(path.join(folder, "desks", DESK), { recursive: true });
+    realFs.writeFileSync(path.join(folder, "desks", DESK, "x.ec"), "{}", "utf8");
+    S.api.catalogChanged(S.win);
+    check(listings().length === 3,
+      "80e a file in desks/ that is not genuine changes nothing in the listing, so sends nothing (" + listings().length + ")");
+
+    realFs.unlinkSync(C);
+    S.api.catalogChanged(S.win);
+    check(listings().length === 4,
+      "80f a file taken away is a change (" + listings().length + " listings)");
+
+    /* The boot's send is the page finishing a load, which no node model fires: the handler's line is read, with its comments off. */
+    const bare = t => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    const loadLine = SRC.split("\n").filter(l => l.indexOf("on(\"did-finish-load\"") >= 0 && l.indexOf("tryAnswerRequest") >= 0)[0] || "";
+    const sends = l => /\bsendListing\(win, true\)/.test(bare(l));
+    check(sends(loadLine) && !sends(loadLine.replace("sendListing(win, true);", "/* sendListing(win, true); */")),
+      "80h the page finishing a load sends the listing, forced: the line is read in code, and a call kept in a comment does not count");
   }
 } catch (e) {
   failed++;

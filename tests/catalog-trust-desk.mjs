@@ -224,7 +224,7 @@ function makeDocument() {
    ================================================================================================ */
 async function launch(plan) {
   const LAB = plan.lab, UD = path.join(LAB, "userdata"), SHELL = path.join(LAB, "shell");
-  const obs = { errors: [], offers: [], library: [], reloaded: false, heldAtStart: null, heldAtEnd: null, tourDue: null };
+  const obs = { errors: [], offers: [], library: [], bars: [], reloaded: false, heldAtStart: null, heldAtEnd: null, tourDue: null };
   process.on("unhandledRejection", e => obs.errors.push("unhandled " + String(e && e.message || e).slice(0, 160)));
   process.on("uncaughtException", e => obs.errors.push("uncaught " + String(e && e.message || e).slice(0, 160)));
   const noop = () => {};
@@ -301,6 +301,7 @@ async function launch(plan) {
   HOOKS.restartDesk = restarted;
   HOOKS.offerPickedCatalog = OFFER.eOfferPickedCatalog;
   obs.heldAtStart = TR.heldCatalogTrust();
+  obs.fileAtStart = ST.nsGet("CatalogFile") || "";
   obs.tourDue = TOUR.tourDueAtBoot();
 
   const settle = ms => new Promise(r => setTimeout(r, ms || 300));
@@ -346,6 +347,20 @@ async function launch(plan) {
     // The file picker's reading half, over a file anywhere: importCatalogText is where both import routes end.
     import: file => { CF.importCatalogText(fs.readFileSync(path.join(LAB, file), "utf8"), path.basename(file)); },
     load: name => { const b = doc.querySelector("button[data-ec-load=\"" + name + "\"]"); if (!b) throw new Error("no Load for " + name); b.onclick(); },
+    /* THE TOP BAR'S NAME is catalogFileName(), which paintCatNow writes into the bar; the stub page has no bar to draw in. */
+    bar: () => { obs.bars.push(CF.catalogFileName()); },
+    /* THE SHELL'S SEND OF THE LISTING, as it reaches the page: the shell's own answer to the listing, handed to the listener the preload registered. */
+    listing: async () => {
+      const rows = await ipcRenderer.invoke("etiuda:catalog-files");
+      (rendererOn["etiuda:catalog-listing"] || []).forEach(fn => fn({}, rows));
+      await settle();
+    },
+    fsop: arg => {
+      const [op, a, b] = String(arg).split(","), dir = path.join(LAB, "catalogs");
+      if (op === "rename") fs.renameSync(path.join(dir, a), path.join(dir, b));
+      else if (op === "copy") fs.copyFileSync(path.join(dir, a), path.join(dir, b));
+      else throw new Error("fsop " + op);
+    },
     watch: file => { const text = fs.readFileSync(path.join(LAB, file), "utf8");
       (rendererOn["etiuda:catalog-file"] || []).forEach(fn => fn({}, text, path.basename(file), path.join(LAB, "catalogs"), false, "", false)); },
   };
@@ -357,6 +372,7 @@ async function launch(plan) {
   if (obs.reloaded) await settle(50);
   obs.askedAtEnd = standing();
   obs.heldAtEnd = TR.heldCatalogTrust();
+  obs.fileAtEnd = ST.nsGet("CatalogFile") || ""; obs.fromAtEnd = ST.nsGet("CatalogFrom") || "";
   obs.pinAtEnd = (() => { try { return JSON.parse(ST.lsGet("eCatalog") || "{}").pin || ""; } catch { return ""; } })();
   obs.session = Object.fromEntries(session);
   process.stdout.write("#launch " + JSON.stringify(obs) + "\n", () => process.exit(0));
@@ -372,7 +388,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 21;
+  const EXPECTED = 35;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -562,6 +578,130 @@ async function parent() {
     const d71 = run(lab71c, ["boot", "settle"], true);
     check(d71.pinAtEnd === planted && wantPin !== planted,
       "71c THE CONTROL: a catalog already pinned keeps the pin it has (" + d71.pinAtEnd.slice(0, 15) + ")");
+
+    /* 72: THE LISTING THE SHELL SENDS, and what the page decides from it, over the catalog in use. */
+    const sha8 = x => sha(Buffer.from(x)).slice(0, 8);
+    const withRev = (doc, rev) => Object.assign({}, doc, { rev: rev });
+    const later = (lab, name, secs) => { const f = path.join(lab, "catalogs", name); const t = Date.now() / 1000 + secs; fs.utimesSync(f, t, t); };
+    const wanted = payload("2026-09-01");
+    /* A desk's genuine file: its own key, its id from the key, the prefix over the engine's signed bytes. */
+    const deskFile = (lab, doc, who, claim) => {
+      const pr = crypto.generateKeyPairSync("ed25519");
+      const raw = pr.publicKey.export({ type: "spki", format: "der" }).subarray(-32);
+      const id = "k-" + sha(raw).slice(0, 16);
+      const d = Object.assign({}, doc, { id: claim ? doc.id : id + "-" + sha8(doc.id), modified: true, desk: { id: id, name: who, key: raw.toString("hex"), box: "ef".repeat(32) } });
+      d.sig = { alg: "Ed25519", keyId: id };
+      d.sig.value = crypto.sign(null, Buffer.concat([Buffer.from("etiuda-desk-branch" + NL), Buffer.from(V2.v2SignedBytes(d))]), pr.privateKey).toString("hex");
+      const dir = path.join(lab, "catalogs", "desks", id);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "colleague.ec"), JSON.stringify(d), "utf8");
+      return d;
+    };
+    const accepted = () => {
+      const lab = scenario([["catalogs/lamp.ec", wanted], ["catalogs/etiuda-ring.json", ring]]);
+      run(lab, ["boot", "settle", "offer", "yes", "settle"]);
+      return lab;
+    };
+
+    const lab72 = accepted();
+    const a72 = run(lab72, ["boot", "bar", "listing", "fsop:rename,lamp.ec,lamp-renamed.ec", "listing", "bar", "offer"], true);
+    check(a72.bars[0] === "lamp.ec" && a72.bars[1] === "lamp-renamed.ec" && a72.fileAtEnd === "lamp-renamed.ec" && a72.fromAtEnd === "lamp-renamed.ec"
+        && !(a72.offers[0] || {}).shown && !a72.reloaded,
+      "72a the file in use renamed under a running desk: the top bar and the remembered name follow, with no offer and no start again (bar " + JSON.stringify(a72.bars) + ", remembered " + JSON.stringify(a72.fileAtEnd) + ")");
+    const c72 = run(lab72, ["boot", "bar", "library"], true);
+    const lib72 = row(c72, "lamp-renamed.ec");
+    check(c72.fileAtStart === "lamp-renamed.ec" && c72.bars[0] === "lamp-renamed.ec" && !!lib72 && lib72.loaded,
+      "72b and a restart after it shows the new name, in the bar and as the Library's loaded row (" + JSON.stringify(c72.bars) + ")");
+
+    const lab72b = accepted();
+    fs.renameSync(path.join(lab72b, "catalogs", "lamp.ec"), path.join(lab72b, "catalogs", "lamp-while-closed.ec"));
+    const d72 = run(lab72b, ["boot", "bar", "listing", "bar", "offer"], true);
+    check(d72.bars[0] === "lamp.ec" && d72.bars[1] === "lamp-while-closed.ec" && d72.fileAtEnd === "lamp-while-closed.ec" && !(d72.offers[0] || {}).shown && !d72.reloaded,
+      "72c a rename made while the desk was closed is followed at boot, from the listing the shell sends then (" + JSON.stringify(d72.bars) + ")");
+
+    const lab72c = accepted();
+    const e72 = run(lab72c, ["boot", "listing", "fsop:copy,lamp.ec,lamp-copy.ec", "listing", "bar", "offer"], true);
+    check(e72.fileAtEnd === "lamp.ec" && e72.bars[0] === "lamp.ec" && !(e72.offers[0] || {}).shown,
+      "72d THE CONTROL: a copy beside the old file is not followed, and is not offered (remembered " + JSON.stringify(e72.fileAtEnd) + ")");
+
+    const lab72d = accepted();
+    fs.writeFileSync(path.join(lab72d, "catalogs", "lamp-v2.ec"), JSON.stringify(withRev(wanted, 2)), "utf8");
+    later(lab72d, "lamp-v2.ec", -7200);
+    const f72 = run(lab72d, ["boot", "listing", "offer"], true);
+    const o72 = f72.offers[0] || {};
+    check(o72.shown === true && o72.files.includes("lamp-v2.ec") && f72.fileAtEnd === "lamp.ec",
+      "72e a higher edition of the catalog in use under another name and an older date is offered (" + JSON.stringify(o72.files || null) + ")");
+    const lab72e = accepted();
+    const reworded = JSON.parse(JSON.stringify(wanted)); reworded.cards[0].title.en = "Warm opening, reworded";
+    fs.writeFileSync(path.join(lab72e, "catalogs", "lamp-same.ec"), JSON.stringify(reworded), "utf8");
+    later(lab72e, "lamp-same.ec", -7200);
+    const g72 = run(lab72e, ["boot", "listing", "offer"], true);
+    check(!(g72.offers[0] || {}).shown,
+      "72f THE CONTROL: the same edition number under another name, its words different, is no higher edition, so nothing is offered");
+
+    const lab72f = accepted();
+    deskFile(lab72f, withRev(wanted, 5), "Ala", true);
+    const h72 = run(lab72f, ["boot", "listing", "offer"], true);
+    const lib72f = run(lab72f, ["library"], true);
+    check(!(h72.offers[0] || {}).shown && h72.fileAtEnd === "lamp.ec" && !((lib72f.library[0] || []).some(r => r.name === "colleague.ec")),
+      "72g a colleague's file, genuine, claiming the id in use and of a higher edition, is never offered nor followed, and has no row in the Library (" + ((lib72f.library[0] || []).map(r => r.name).join(",")) + ")");
+
+    /* A successor: grown from the catalog in use, valid under the ring. */
+    const successor = id => { const d = JSON.parse(JSON.stringify(payload("2026-09-20"))); d.id = id; d.rev = 1;
+      d.grew = { id: ID, rev: 1, sha: "sha256:" + "cd".repeat(32) }; return sign(d); };
+    const ringWith = ids => JSON.stringify({ format: V2.V2_RING_FORMAT, kind: V2.V2_RING_KIND,
+      keys: [ID].concat(ids).map(c => ({ catalog: c, keyId: KEY_ID, alg: V2.V2_SIG_ALG, public: pubHex(pair.publicKey) })) });
+    const lab72g = accepted();
+    fs.writeFileSync(path.join(lab72g, "catalogs", "lamp-next.ec"), JSON.stringify(successor("lamp-next")), "utf8");
+    later(lab72g, "lamp-next.ec", -7200);
+    fs.writeFileSync(path.join(lab72g, "catalogs", "etiuda-ring.json"), ringWith(["lamp-next"]), "utf8");
+    const i72 = run(lab72g, ["boot", "listing", "settle", "offer"], true);
+    check(((i72.offers[0] || {}).files || []).includes("lamp-next.ec"),
+      "72h a file valid under the ring whose grown-from id names the catalog in use is offered (" + JSON.stringify((i72.offers[0] || {}).files || null) + ")");
+    fs.writeFileSync(path.join(lab72g, "catalogs", "etiuda-ring.json"), ring, "utf8");
+    const j72 = run(lab72g, ["boot", "listing", "settle", "offer"], true);
+    check(!((j72.offers[0] || {}).files || []).includes("lamp-next.ec"),
+      "72i THE CONTROL: the same file with no ring line for it is not offered");
+
+    /* This desk's own file of the catalog in use: its identity is the public half in the envelope. */
+    const lab72h = accepted();
+    const rawPub = Buffer.alloc(32, 9), own = "k-" + sha(rawPub).slice(0, 16);
+    const envFile = path.join(lab72h, "userdata", "desk.json"), env = JSON.parse(fs.readFileSync(envFile, "utf8"));
+    env.branch = { sign: { pub: rawPub.toString("hex"), priv: "sealed" }, box: { pub: "ef".repeat(32), priv: "sealed" } };
+    fs.writeFileSync(envFile, JSON.stringify(env), "utf8");
+    const ownId = own + "-" + sha8(ID), theirs = "k-0123456789abcdef-" + sha8(ID);
+    fs.writeFileSync(path.join(lab72h, "catalogs", "from-mine.ec"), JSON.stringify((() => { const d = successor("lamp-from-mine"); return d; })()), "utf8");
+    const fromMine = JSON.parse(fs.readFileSync(path.join(lab72h, "catalogs", "from-mine.ec"), "utf8")); delete fromMine.sig; delete fromMine.hash;
+    fromMine.grew.id = ownId;
+    fs.writeFileSync(path.join(lab72h, "catalogs", "from-mine.ec"), JSON.stringify(sign(fromMine)), "utf8");
+    fs.writeFileSync(path.join(lab72h, "catalogs", "etiuda-ring.json"), ringWith(["lamp-from-mine"]), "utf8");
+    later(lab72h, "from-mine.ec", -7200);
+    const k72 = run(lab72h, ["boot", "listing", "settle", "offer"], true);
+    check(((k72.offers[0] || {}).files || []).includes("from-mine.ec"),
+      "72j a file valid under the ring that grew from this desk's own file of the catalog in use is offered (" + JSON.stringify((k72.offers[0] || {}).files || null) + ")");
+    fromMine.grew.id = theirs; delete fromMine.sig; delete fromMine.hash;
+    fs.writeFileSync(path.join(lab72h, "catalogs", "from-mine.ec"), JSON.stringify(sign(fromMine)), "utf8");
+    later(lab72h, "from-mine.ec", -7200);
+    const l72 = run(lab72h, ["boot", "listing", "settle", "offer"], true);
+    check(!((l72.offers[0] || {}).files || []).includes("from-mine.ec"),
+      "72k THE CONTROL: one that grew from another desk's file of it is not");
+    /* A file taken away and a higher edition under another name is no rename: the bytes are not the pin. */
+    const lab72n = accepted();
+    const reworded2 = JSON.parse(JSON.stringify(wanted)); reworded2.cards[0].title.en = "Warm opening, edited in place";
+    fs.copyFileSync(path.join(lab72n, "catalogs", "lamp.ec"), path.join(lab72n, "catalogs", "lamp-kept.ec"));
+    later(lab72n, "lamp-kept.ec", -7200);
+    fs.writeFileSync(path.join(lab72n, "catalogs", "lamp.ec"), JSON.stringify(reworded2), "utf8");
+    const n72 = run(lab72n, ["boot", "listing", "fsop:rename,lamp-kept.ec,lamp-kept2.ec", "listing"], true);
+    check(n72.fileAtEnd === "lamp.ec",
+      "72n THE CONTROL: the old file still there, edited in place, and a copy of its earlier bytes under another name is not followed (remembered " + JSON.stringify(n72.fileAtEnd) + ")");
+    const lab72i = accepted();
+    fs.unlinkSync(path.join(lab72i, "catalogs", "lamp.ec"));
+    fs.writeFileSync(path.join(lab72i, "catalogs", "lamp-v2.ec"), JSON.stringify(withRev(wanted, 2)), "utf8");
+    const m72 = run(lab72i, ["boot", "listing", "offer"], true);
+    check(m72.fileAtEnd === "lamp.ec" && ((m72.offers[0] || {}).files || []).includes("lamp-v2.ec"),
+      "72m THE CONTROL: the file in use gone and another edition of it under a new name is offered and not followed as a rename (remembered " + JSON.stringify(m72.fileAtEnd) + ")");
+    const errs72 = [a72, c72, d72, e72, f72, g72, h72, lib72f, i72, j72, k72, l72, m72, n72].flatMap(o => o.errors || []);
+    check(!errs72.length, "72l those launches ran their acts without an error" + (errs72.length ? ": " + errs72.length + ", first " + errs72[0] : ""));
     const errs71 = [a71, b71, c71, d71].flatMap(o => o.errors || []);
     check(!errs71.length, "71d those launches ran their acts without an error" + (errs71.length ? ": " + errs71.length + ", first " + errs71[0] : ""));
   } catch (e) {

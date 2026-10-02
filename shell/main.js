@@ -399,6 +399,7 @@ function catalogChanged(win) {
   const now = readCatalog();
   tryAnswerRequest(win);
   tryHeldBranches();
+  sendListing(win, false);
   if (now === catalogJson) return;
   catalogJson = now;
   if (!now || !win || win.isDestroyed()) return;
@@ -698,8 +699,10 @@ function branchIdOf(pubHex) {
 /* {id, key, box} for the page, or null where no key can be kept safely. Where encryption is only
    unavailable nothing is made and nothing is replaced. A pair the envelope throws on is that of another
    account, so it is kept aside, never deleted, and a new one is made: silence would hide the desk. */
-function branchIdentity() {
+function branchIdentity(make) {
   if (deskKeys === undefined) deskKeys = readDesk();
+  /* Asked not to make one, it answers the public halves of the pair there is, or null: nothing is opened or made. */
+  if (make === false) return deskBranch ? { id: branchIdOf(deskBranch.sign.pub), key: deskBranch.sign.pub, box: deskBranch.box.pub } : null;
   if (!branchSealable()) return null;
   const was = deskBranch, wasOld = deskBranchOld;
   if (!deskBranch || !openPrivate(deskBranch.sign.priv)) {
@@ -728,7 +731,8 @@ function canonJson(v) {
   const keys = Object.keys(v).filter(k => v[k] !== undefined).sort();
   return "{" + keys.map(k => JSON.stringify(k) + ":" + canonJson(v[k])).join(",") + "}";
 }
-function branchSignedBytes(doc) {
+/* The bytes a signature covers, as the engine's v2SignedBytes makes them. */
+function signedBytesOf(doc) {
   const copy = {};
   Object.keys(doc).forEach(k => {
     if (k === "hash") return;
@@ -740,8 +744,9 @@ function branchSignedBytes(doc) {
       if (s.keyId !== undefined) copy.sig.keyId = s.keyId;
     }
   });
-  return Buffer.concat([Buffer.from(BRANCH_PREFIX, "utf8"), Buffer.from(canonJson(copy), "utf8")]);
+  return Buffer.from(canonJson(copy), "utf8");
 }
+function branchSignedBytes(doc) { return Buffer.concat([Buffer.from(BRANCH_PREFIX, "utf8"), signedBytesOf(doc)]); }
 function branchSign(doc) {
   const key = openPrivate(deskBranch.sign.priv);
   return key ? crypto.sign(null, branchSignedBytes(doc), key).toString("hex") : "";
@@ -1345,31 +1350,41 @@ function ecCounts(data) {
 /* A DESK'S OWN FILE IS LISTED ONLY WHERE IT IS GENUINE: it sits in the folder named for the desk that wrote it,
    that desk's id is the one its key makes, and its signature verifies under the desk prefix. Anything else in
    desks/ is somebody's file in the wrong place and is not listed. Read again only when its date or size moves. */
-const deskFileRead = new Map();                // path -> [mtime|size, the row, or null]
-function deskRowOf(file, folder) {
+const ecFactsRead = new Map();                  // path -> [mtime|size, the facts, or null]
+/* SHA-256 of a document's signed bytes, the engine's pin: the same function on both sides of a comparison. */
+function signedSha(data) { return "sha256:" + crypto.createHash("sha256").update(signedBytesOf(data)).digest("hex"); }
+/* What a listing says about a catalog file, or null where it is not one. `deskFolder` is the folder a desk's file
+   sits in, and then `deskOk` says whether the file is genuine. */
+function ecFacts(file, deskFolder) {
   let st;
   try { st = fs.statSync(file); } catch { return null; }
   const stamp = Math.round(st.mtimeMs) + "|" + st.size;
-  const had = deskFileRead.get(file);
+  const had = ecFactsRead.get(file);
   if (had && had[0] === stamp) return had[1];
-  let row = null;
+  let out = null;
   try {
     const { data } = catalogPayload(fs.readFileSync(file, "utf8"));
-    const d = data && typeof data === "object" ? data.desk : null;
-    const sig = data && data.sig;
-    if (isV2(data) && Array.isArray(data.cards) && d && typeof d === "object" && d.id === folder && /^k-[0-9a-f]{16}$/.test(d.id)
-        && /^[0-9a-f]{64}$/.test(String(d.key)) && branchIdOf(d.key) === d.id
-        && sig && sig.alg === "Ed25519" && sig.keyId === d.id && /^[0-9a-f]{128}$/.test(String(sig.value))
-        && crypto.verify(null, branchSignedBytes(data), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(d.key, "hex")]),
-          format: "der", type: "spki" }), Buffer.from(sig.value, "hex"))) {
-      const n = ecCounts(data);
-      row = { name: path.basename(file), mtime: Math.round(st.mtimeMs), cards: data.cards.length, edition: data.date != null ? String(data.date) : "",
-              macros: n.macros, intents: n.intents, cats: n.cats, awaiting: n.awaiting, sample: false, id: data.id != null ? String(data.id) : "",
-              builtIn: false, rev: +data.rev || 0, grew: ecGrew(data), desk: { id: d.id, name: typeof d.name === "string" ? d.name : "" } };
+    if (isV2(data) && Array.isArray(data.cards)) {
+      const n = ecCounts(data), d = data.desk, sig = data.sig;
+      out = { mtime: Math.round(st.mtimeMs), cards: data.cards.length, edition: data.date != null ? String(data.date) : "",
+              macros: n.macros, intents: n.intents, cats: n.cats, awaiting: n.awaiting, id: data.id != null ? String(data.id) : "",
+              rev: +data.rev || 0, grew: ecGrew(data), sha: signedSha(data), deskName: d && typeof d.name === "string" ? d.name : "",
+              deskOk: !!deskFolder && !!d && typeof d === "object" && d.id === deskFolder && /^k-[0-9a-f]{16}$/.test(d.id)
+                && /^[0-9a-f]{64}$/.test(String(d.key)) && branchIdOf(d.key) === d.id
+                && !!sig && sig.alg === "Ed25519" && sig.keyId === d.id && /^[0-9a-f]{128}$/.test(String(sig.value))
+                && crypto.verify(null, branchSignedBytes(data), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(d.key, "hex")]),
+                  format: "der", type: "spki" }), Buffer.from(sig.value, "hex")) };
     }
   } catch { /* not a catalog */ }
-  deskFileRead.set(file, [stamp, row]);
-  return row;
+  ecFactsRead.set(file, [stamp, out]);
+  return out;
+}
+function deskRowOf(file, folder) {
+  const x = ecFacts(file, folder);
+  if (!x || !x.deskOk) return null;
+  return { name: path.basename(file), mtime: x.mtime, cards: x.cards, edition: x.edition, macros: x.macros, intents: x.intents, cats: x.cats,
+           awaiting: x.awaiting, sample: false, id: x.id, builtIn: false, rev: x.rev, grew: x.grew, sha: x.sha,
+           desk: { id: folder, name: x.deskName } };
 }
 function deskRows() {
   const root = catalogFolder();
@@ -1384,33 +1399,32 @@ function ecGrew(data) {
   const g = data && data.grew;
   return g && typeof g === "object" && typeof g.id === "string" ? { id: g.id, rev: +g.rev || 0, sha: String(g.sha || "") } : null;
 }
-ipcMain.handle("etiuda:catalog-files", (e) => {
-  if (!fromEngine(e)) return [];
+function listingRows() {
   return sampleLast(ecFilesIn(catalogFolder()).concat(builtInFiles())).map(f => {
-    let mt = 0, cards = -1, edition = "", macros = -1, intents = -1, cats = -1, awaiting = [];
-    let id = "", rev = 0, grew = null;
+    let mt = 0;
     try { mt = Math.round(fs.statSync(f).mtimeMs); } catch { /* renamed away under the listing */ }
-    try {
-      if (refusedByEngine(f)) throw new Error("refused by the engine");
-      const { data } = catalogPayload(fs.readFileSync(f, "utf8"));
-      if (isV2(data) && Array.isArray(data.cards)) {
-        cards = data.cards.length;
-        const n = ecCounts(data);
-        macros = n.macros; intents = n.intents; cats = n.cats; awaiting = n.awaiting;
-        if (data.id != null) id = String(data.id);
-        rev = +data.rev || 0;
-        grew = ecGrew(data);
-      }
-      // `date` is the field the engine reads as the edition - catalogFromV2 renames it there
-      if (isV2(data) && data.date != null) edition = String(data.date);
-    } catch { /* not a catalog, and the Load button is where that is said out loud */ }
-    return { name: path.basename(f), mtime: mt, cards: cards, edition: edition,
-             macros: macros, intents: intents, cats: cats, awaiting: awaiting,
-             sample: isTheSample(f), id: id, rev: rev, grew: grew,
+    const x = refusedByEngine(f) ? null : ecFacts(f, "");
+    return { name: path.basename(f), mtime: mt, cards: x ? x.cards : -1, edition: x ? x.edition : "",
+             macros: x ? x.macros : -1, intents: x ? x.intents : -1, cats: x ? x.cats : -1, awaiting: x ? x.awaiting : [],
+             sample: isTheSample(f), id: x ? x.id : "", rev: x ? x.rev : 0, grew: x ? x.grew : null, sha: x ? x.sha : "",
              // The copy Etiuda ships, rather than a folder's own file of any name.
              builtIn: path.dirname(f) === BUILT_IN_DIR };
   }).concat(deskRows());
-});
+}
+ipcMain.handle("etiuda:catalog-files", (e) => (fromEngine(e) ? listingRows() : []));
+/* THE LISTING IS SENT, not only asked for: once at boot, and again whenever the set of files in it, by place, id,
+   edition and hash, changes, so a rename or a newer edition under another name reaches the page, which decides what
+   it means. A date moving alone is no change, and nothing is sent while the folder does not answer. This is not
+   etiuda:catalog-file, whose one meaning is a catalog's text to offer. */
+let listingSent = "";
+function sendListing(win, force) {
+  if (!win || win.isDestroyed() || !folderAnswers(catalogFolder())) return;
+  const rows = listingRows();
+  const key = JSON.stringify(rows.map(r => [r.desk ? r.desk.id : r.builtIn ? "~" : "", r.name, r.id, r.rev, r.sha]).sort());
+  if (!force && key === listingSent) return;
+  listingSent = key;
+  win.webContents.send("etiuda:catalog-listing", rows);
+}
 ipcMain.handle("etiuda:catalog-read", (e, name) => {
   if (!fromEngine(e)) return null;
   const base = String(name || "");
@@ -1444,7 +1458,7 @@ ipcMain.handle("etiuda:stats-write", (e, text) => {
   return writeStatsAnswer(String(text || ""));
 });
 /* The desk's branch: its public identity, and the write of its own file. See writeBranch. */
-ipcMain.handle("etiuda:branch-identity", (e) => (fromEngine(e) ? branchIdentity() : null));
+ipcMain.handle("etiuda:branch-identity", (e, make) => (fromEngine(e) ? branchIdentity(make === false ? false : true) : null));
 ipcMain.handle("etiuda:branch-write", (e, stem, text) => (fromEngine(e) ? writeBranch(stem, text) : { ok: false }));
 
 /* The engine calls no OS API, so the folder picker is the shell's. The CAPTION comes from the
@@ -2361,7 +2375,7 @@ function createWindow() {
   });
   win.loadFile(ENGINE);
   watchCatalog(win);
-  win.webContents.on("did-finish-load", () => { setTimeout(() => { tryAnswerRequest(win); tryHeldBranches(); }, 0); });
+  win.webContents.on("did-finish-load", () => { setTimeout(() => { tryAnswerRequest(win); tryHeldBranches(); sendListing(win, true); }, 0); });
 }
 
 /* No File / Edit / View / Window bar: the band is the top bar and the window has no other

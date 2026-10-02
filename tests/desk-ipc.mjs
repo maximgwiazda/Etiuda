@@ -26,7 +26,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 65;
+const EXPECTED = 67;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -387,6 +387,9 @@ try {
     "77b THE CONTROL: a catalog loaded and nothing edited has made no key and no file: no desks folder, no branch in the envelope");
 
   const deskIdBefore = envelope().desk;
+  const peekNone = await asHost("branchIdentity", false);
+  check(peekNone === null && !("branch" in envelope()),
+    "81a asked not to make one, the identity answers nothing where there is no key, and makes none (answer " + JSON.stringify(peekNone) + ")");
   sealOk = false;
   edit("Edited A");
   await tick(30);
@@ -409,6 +412,9 @@ try {
   const timeOwn = () => { try { return fs.statSync(file).mtimeMs; } catch { return 0; } };
   const titleOf = (d, i) => (((d.cards || [])[i] || {}).title || {}).en;
   const d1 = readOwn();
+  const peekMine = await asHost("branchIdentity", false);
+  check(!!peekMine && peekMine.id === myId && peekMine.key === d1.desk.key && Object.keys(peekMine).sort().join() === "box,id,key",
+    "81b and where there is one it answers the public halves of that pair, and nothing else (" + JSON.stringify(peekMine && peekMine.id) + ")");
 
   check(!!d1.desk && d1.desk.id === myId && d1.desk.id === "k-" + sha(Buffer.from(String(d1.desk.key), "hex")).slice(0, 16)
     && /^[0-9a-f]{64}$/.test(d1.desk.key) && /^[0-9a-f]{64}$/.test(d1.desk.box) && d1.desk.key !== d1.desk.box && d1.desk.name === "Ala K.",

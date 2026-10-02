@@ -1,7 +1,8 @@
 /* The catalog sitting beside Etiuda, offered rather than loaded, the watched file that
    offers the same way, and the dialog all three channels end in. */
 import { activateCatalog, catalogEdited, catalogEditionOlder, catalogMacroCount,
-  catalogIntentCount, exportCatalog, isCatalogUpdate, catalogFileName, catalogNameOfFile, pinStoredFrom } from "./catalog-file.js";
+  catalogIntentCount, exportCatalog, isCatalogUpdate, catalogFileName, catalogNameOfFile, pinStoredFrom,
+  followRenamedFile, branchFileId } from "./catalog-file.js";
 import { catalogLoaded } from "./catalog-boot.js";
 import { E_CATALOG_KEY, E_CATALOG_VERSION, catalogStamp, catalogVersionLabel,
   eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
@@ -9,7 +10,7 @@ import { E_CATALOG_KEY, E_CATALOG_VERSION, catalogStamp, catalogVersionLabel,
 import { eEmbeddedCatalog } from "./env.js";
 import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
   eCatalogIn, eCatalogBuiltIn, eCatalogMtime, eHost, eLoadedCatalogFile, eOpenCatalogFolder, eOpenedWith,
-  eOpenedRefused, eReadCatalogFile } from "./host.js";
+  eOpenedRefused, eReadCatalogFile, eOnCatalogListing, eBranchIdentity } from "./host.js";
 import { ejectCatalog } from "./local-memory.js";
 import { lsSet, nsGet, nsSet } from "./storage.js";
 import { tourDueAtBoot, afterTour } from "./tour.js";
@@ -25,6 +26,7 @@ import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { intentIdAt, intentOrder } from "./intent-id.js";
 import { pack } from "./pack.js";
 import { ICON_AWAITING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT } from "./icons.js";
+import { V2_SIG_VALID } from "./catalog-v2.js";
 import { catalogTrust, whenTrusted, heldCatalogTrust, recheckHeldTrust, trustKeyHtml, trustOfferLine,
   trustSettled } from "./catalog-trust.js";
 
@@ -546,6 +548,47 @@ function eCheckWatchedFile(interactive){
    Etiuda and hands over its text when it changes. The picker channel cannot serve here - there
    is no handle and no permission to re-grant - but the promise is the same one, so an edit
    surfaces as an offer rather than replacing what somebody is working in. */
+/* THE FOLDER'S LISTING, sent by the shell at boot and whenever a file in it changes place, id, edition or hash, and what
+   it means is decided here, from the catalog in use: it was RENAMED (the same id and the same signed bytes, its pin,
+   under a name the folder now holds once and the old name gone, so a copy beside it is not followed), a HIGHER EDITION
+   of it sits under another name (offered, whatever the file's date), or a SUCCESSOR grew from it or from this desk's own
+   file of it and is valid under the ring (offered). A colleague's file is never any of these, and a file with no ring
+   line is never a successor. */
+function onCatalogListing(all){
+  const held=storedCatalog();
+  if(!held || !held.id) return;
+  const files=all.filter(f=>!f.desk && !f.builtIn);
+  const mine=nsGet("CatalogFile")||"";
+  if(mine && held.pin && !files.some(f=>f.name===mine)){
+    const same=files.filter(f=>f.id===held.id && f.sha===held.pin);
+    if(same.length===1 && followRenamedFile(mine,same[0].name,same[0].mtime)){ paintCatNow(); paintCatalogList(); }
+  }
+  if(eEmbeddedCatalog()) return;
+  const go=()=>offerFromListing(files,held);
+  if(tourDueAtBoot()) afterTour(go); else go();
+}
+function offerListed(f,mustBeValid){
+  return eReadCatalogFile(f.name).then(got=>{
+    if(!got || !got.text) return false;
+    let c=null;
+    try{ c=parseCatalogFile(got.text); }catch(e){ return false; }
+    const offer=()=>{ eOfferCatalog(c,f.name,eCatalogFolder(),false,false,false); return true; };
+    return mustBeValid ? whenTrusted(c).then(s=>s===V2_SIG_VALID && offer()) : offer();
+  }).catch(()=>false);
+}
+function offerFromListing(files,held){
+  const higher=files.filter(f=>f.id===held.id && f.rev>(+held.rev||0)).sort((a,b)=>b.rev-a.rev||b.mtime-a.mtime)[0];
+  if(higher){ offerListed(higher,false); return; }
+  const grown=files.filter(f=>f.grew && f.id!==held.id);
+  if(!grown.length) return;
+  const mine=eBranchIdentity(false).then(who=>who?branchFileId(who,held):"");
+  mine.then(own=>{
+    const ours=new Set([held.id].concat(own?[own]:[]));
+    const next=grown.filter(f=>ours.has(f.grew.id)).sort((a,b)=>b.mtime-a.mtime);
+    // The newest that the ring vouches for; one question at a time.
+    return next.reduce((chain,f)=>chain.then(done=>done||offerListed(f,true)),Promise.resolve(false));
+  });
+}
 /* A file somebody asked for is answered even when it cannot be offered: `why` is the host's
    refusal, "read" for a file it could not open and anything else for one it would not parse. */
 function refuseAskedFile(name,why){
@@ -562,6 +605,7 @@ function wireHostCatalogWatch(){
   const cold=eOpenedRefused()||(eCatalogRefusedNames().length?{name:eCatalogRefusedNames()[0],why:"parse"}:null);
   // Deferred with the same hand as the boot's other toasts: no toast host exists this early.
   if(cold) setTimeout(()=>{ try{ refuseAskedFile(cold.name,cold.why); }catch(e){} },1400);
+  eOnCatalogListing(onCatalogListing);
   h.onCatalogFile((text,name,where,asked,why,builtIn)=>{
     /* The list first, and whatever this text turns out to be: the folder has changed, so a
        Library standing open is out of date whether or not the file is one it can offer. */

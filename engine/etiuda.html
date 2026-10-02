@@ -11846,6 +11846,7 @@ What you type stays in this browser only.`;
     eHasCatalogSaver: () => eHasCatalogSaver,
     eHost: () => eHost,
     eLoadedCatalogFile: () => eLoadedCatalogFile,
+    eOnCatalogListing: () => eOnCatalogListing,
     eOpenCatalogFolder: () => eOpenCatalogFolder,
     eOpenedRefused: () => eOpenedRefused,
     eOpenedWith: () => eOpenedWith,
@@ -11922,37 +11923,47 @@ What you type stays in this browser only.`;
     const h = eHost();
     return !eHanded() && !!(h && h.openedWith);
   }
+  function mapListing(v) {
+    return Array.isArray(v) ? v.map((f) => ({
+      name: String(f && f.name || ""),
+      mtime: +(f && f.mtime) || 0,
+      cards: f && f.cards != null ? +f.cards : -1,
+      edition: String(f && f.edition || ""),
+      macros: f && f.macros != null ? +f.macros : -1,
+      intents: f && f.intents != null ? +f.intents : -1,
+      cats: f && f.cats != null ? +f.cats : -1,
+      /* Board 505's awaiting class, [{code,n}] in the
+         file's declared order; empty for a file with
+         nothing waiting and for one that did not read. */
+      awaiting: (Array.isArray(f && f.awaiting) ? f.awaiting : []).map((a) => ({ code: String(a && a.code || ""), n: +(a && a.n) || 0 })).filter((a) => a.code && a.n > 0),
+      sample: !!(f && f.sample),
+      /* The catalog's own identity, for the rule of board
+         431; empty where the file did not read. */
+      id: String(f && f.id || ""),
+      // SHA-256 of the file's signed bytes, the form a catalog's pin takes.
+      sha: String(f && f.sha || ""),
+      // The edition number, and what the file says it grew from, {id,rev,sha} or null.
+      rev: +(f && f.rev) || 0,
+      grew: f && f.grew && typeof f.grew === "object" && f.grew.id ? { id: String(f.grew.id), rev: +f.grew.rev || 0, sha: String(f.grew.sha || "") } : null,
+      // Only a colleague's file in the share has one: {id,name}, the desk that wrote it.
+      desk: f && f.desk && typeof f.desk === "object" && f.desk.id ? { id: String(f.desk.id), name: String(f.desk.name || "") } : null,
+      // The copy Etiuda ships, rather than a folder's own file.
+      builtIn: !!(f && f.builtIn)
+    })).filter((f) => f.name) : [];
+  }
   function eCatalogFiles() {
     const h = eHost();
     if (!h || typeof h.catalogFiles !== "function") return Promise.resolve([]);
     try {
-      return Promise.resolve(h.catalogFiles()).then((v) => Array.isArray(v) ? v.map((f) => ({
-        name: String(f && f.name || ""),
-        mtime: +(f && f.mtime) || 0,
-        cards: f && f.cards != null ? +f.cards : -1,
-        edition: String(f && f.edition || ""),
-        macros: f && f.macros != null ? +f.macros : -1,
-        intents: f && f.intents != null ? +f.intents : -1,
-        cats: f && f.cats != null ? +f.cats : -1,
-        /* Board 505's awaiting class, [{code,n}] in the
-           file's declared order; empty for a file with
-           nothing waiting and for one that did not read. */
-        awaiting: (Array.isArray(f && f.awaiting) ? f.awaiting : []).map((a) => ({ code: String(a && a.code || ""), n: +(a && a.n) || 0 })).filter((a) => a.code && a.n > 0),
-        sample: !!(f && f.sample),
-        /* The catalog's own identity, for the rule of board
-           431; empty where the file did not read. */
-        id: String(f && f.id || ""),
-        // The edition number, and what the file says it grew from, {id,rev,sha} or null.
-        rev: +(f && f.rev) || 0,
-        grew: f && f.grew && typeof f.grew === "object" && f.grew.id ? { id: String(f.grew.id), rev: +f.grew.rev || 0, sha: String(f.grew.sha || "") } : null,
-        // Only a colleague's file in the share has one: {id,name}, the desk that wrote it.
-        desk: f && f.desk && typeof f.desk === "object" && f.desk.id ? { id: String(f.desk.id), name: String(f.desk.name || "") } : null,
-        // The copy Etiuda ships, rather than a folder's own file.
-        builtIn: !!(f && f.builtIn)
-      })).filter((f) => f.name) : []).catch(() => []);
+      return Promise.resolve(h.catalogFiles()).then(mapListing).catch(() => []);
     } catch (e) {
       return Promise.resolve([]);
     }
+  }
+  function eOnCatalogListing(fn) {
+    const h = eHost();
+    if (!h || typeof h.onCatalogListing !== "function") return;
+    h.onCatalogListing((rows) => fn(mapListing(rows)));
   }
   function eLoadedCatalogFile() {
     const set = nsGet("CatalogFile");
@@ -12020,10 +12031,10 @@ What you type stays in this browser only.`;
     const h = eHost();
     return !!h && typeof h.branchIdentity === "function" && typeof h.writeBranch === "function";
   }
-  function eBranchIdentity() {
+  function eBranchIdentity(make) {
     if (!eHasBranch()) return Promise.resolve(null);
     try {
-      return Promise.resolve(eHost().branchIdentity()).then((v) => v && typeof v === "object" && v.id && v.key && v.box ? { id: String(v.id), key: String(v.key), box: String(v.box) } : null).catch(() => null);
+      return Promise.resolve(eHost().branchIdentity(make === false ? false : true)).then((v) => v && typeof v === "object" && v.id && v.key && v.box ? { id: String(v.id), key: String(v.key), box: String(v.box) } : null).catch(() => null);
     } catch (e) {
       return Promise.resolve(null);
     }
@@ -18608,6 +18619,7 @@ What you type stays in this browser only.`;
   var catalog_file_exports = {};
   __export(catalog_file_exports, {
     activateCatalog: () => activateCatalog,
+    branchFileId: () => branchFileId,
     catalogEdited: () => catalogEdited,
     catalogEditionOlder: () => catalogEditionOlder,
     catalogFileName: () => catalogFileName,
@@ -18616,6 +18628,7 @@ What you type stays in this browser only.`;
     catalogNameOfFile: () => catalogNameOfFile,
     deskBranchHolds: () => deskBranchHolds,
     exportCatalog: () => exportCatalog,
+    followRenamedFile: () => followRenamedFile,
     importCatalogHere: () => importCatalogHere,
     importCatalogText: () => importCatalogText,
     isCatalogUpdate: () => isCatalogUpdate,
@@ -19304,6 +19317,17 @@ What you type stays in this browser only.`;
     if (!held || held.pin || !found || !isCatalogUpdate(found, held) || eCatalogSignature(found) !== eCatalogSignature(held)) return false;
     const p = pinned(found).pin;
     return !!p && storeCatalog(Object.assign({}, held, { pin: p }));
+  }
+  function followRenamedFile(old, name, at) {
+    if (!name || name === old) return false;
+    const from = nsGet("CatalogFrom");
+    nsSet("CatalogFile", String(name));
+    nsSet("CatalogFileAt", String(+at || 0));
+    if (from === old) nsSet("CatalogFrom", String(name));
+    return true;
+  }
+  function branchFileId(who, origin) {
+    return who.id + "-" + branchHex(origin);
   }
   function branchHex(origin) {
     return sha256Hex(new TextEncoder().encode(String(origin.id))).slice(0, 8);
@@ -21561,6 +21585,54 @@ What you type stays in this browser only.`;
       if (interactive) toastRefusal(t("Could not read the watched file."));
     });
   }
+  function onCatalogListing(all) {
+    const held = storedCatalog();
+    if (!held || !held.id) return;
+    const files = all.filter((f) => !f.desk && !f.builtIn);
+    const mine = nsGet("CatalogFile") || "";
+    if (mine && held.pin && !files.some((f) => f.name === mine)) {
+      const same = files.filter((f) => f.id === held.id && f.sha === held.pin);
+      if (same.length === 1 && followRenamedFile(mine, same[0].name, same[0].mtime)) {
+        paintCatNow();
+        paintCatalogList();
+      }
+    }
+    if (eEmbeddedCatalog()) return;
+    const go = () => offerFromListing(files, held);
+    if (tourDueAtBoot()) afterTour(go);
+    else go();
+  }
+  function offerListed(f, mustBeValid) {
+    return eReadCatalogFile(f.name).then((got) => {
+      if (!got || !got.text) return false;
+      let c = null;
+      try {
+        c = parseCatalogFile(got.text);
+      } catch (e) {
+        return false;
+      }
+      const offer = () => {
+        eOfferCatalog(c, f.name, eCatalogFolder(), false, false, false);
+        return true;
+      };
+      return mustBeValid ? whenTrusted(c).then((s) => s === V2_SIG_VALID && offer()) : offer();
+    }).catch(() => false);
+  }
+  function offerFromListing(files, held) {
+    const higher = files.filter((f) => f.id === held.id && f.rev > (+held.rev || 0)).sort((a, b) => b.rev - a.rev || b.mtime - a.mtime)[0];
+    if (higher) {
+      offerListed(higher, false);
+      return;
+    }
+    const grown = files.filter((f) => f.grew && f.id !== held.id);
+    if (!grown.length) return;
+    const mine = eBranchIdentity(false).then((who) => who ? branchFileId(who, held) : "");
+    mine.then((own) => {
+      const ours = new Set([held.id].concat(own ? [own] : []));
+      const next = grown.filter((f) => ours.has(f.grew.id)).sort((a, b) => b.mtime - a.mtime);
+      return next.reduce((chain, f) => chain.then((done) => done || offerListed(f, true)), Promise.resolve(false));
+    });
+  }
   function refuseAskedFile(name, why) {
     toastRefusal(t(why === "read" ? "{FILE} could not be read." : "{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(name || "")));
   }
@@ -21575,6 +21647,7 @@ What you type stays in this browser only.`;
       } catch (e) {
       }
     }, 1400);
+    eOnCatalogListing(onCatalogListing);
     h.onCatalogFile((text, name, where, asked, why, builtIn) => {
       paintCatalogList();
       let c = null;
