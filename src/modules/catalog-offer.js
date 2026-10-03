@@ -2,7 +2,7 @@
    offers the same way, and the dialog all three channels end in. */
 import { activateCatalog, catalogEdited, catalogEditionOlder, catalogMacroCount,
   catalogIntentCount, exportCatalog, isCatalogUpdate, catalogFileName, catalogNameOfFile, pinStoredFrom,
-  followRenamedFile, branchFileId } from "./catalog-file.js";
+  followRenamedFile, branchFileId, looseOrigin } from "./catalog-file.js";
 import { catalogLoaded } from "./catalog-boot.js";
 import { E_CATALOG_KEY, E_CATALOG_VERSION, catalogStamp, catalogVersionLabel,
   eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
@@ -556,6 +556,7 @@ function eCheckWatchedFile(interactive){
    line is never a successor. */
 function onCatalogListing(all){
   const held=storedCatalog();
+  if(!held && !catalogLoaded()){ offerToLooseAuthor(all); return; }
   if(!held || !held.id) return;
   const files=all.filter(f=>!f.desk && !f.builtIn);
   const mine=nsGet("CatalogFile")||"";
@@ -588,6 +589,18 @@ function offerFromListing(files,held){
     // The newest that the ring vouches for; one question at a time.
     return next.reduce((chain,f)=>chain.then(done=>done||offerListed(f,true)),Promise.resolve(false));
   });
+}
+/* AN EMPTY DESK THAT MADE A CATALOG FROM NOTHING follows that file's lineage alone: a file the ring vouches for that grew
+   from this desk's own file of it, which is how the lead's import of the file reaches its author. */
+function offerToLooseAuthor(all){
+  const origin=looseOrigin(false), grown=all.filter(f=>!f.desk && !f.builtIn && f.grew);
+  if(!origin || !grown.length || eEmbeddedCatalog()) return;
+  const go=()=>eBranchIdentity(false).then(who=>{
+    const own=who ? branchFileId(who,origin) : "";
+    const next=grown.filter(f=>own && f.grew.id===own).sort((a,b)=>b.mtime-a.mtime);
+    return next.reduce((chain,f)=>chain.then(done=>done||offerListed(f,true)),Promise.resolve(false));
+  });
+  if(tourDueAtBoot()) afterTour(go); else go();
 }
 /* A file somebody asked for is answered even when it cannot be offered: `why` is the host's
    refusal, "read" for a file it could not open and anything else for one it would not parse. */

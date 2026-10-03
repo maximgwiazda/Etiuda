@@ -18870,6 +18870,7 @@ What you type stays in this browser only.`;
     importCatalogHere: () => importCatalogHere,
     importCatalogText: () => importCatalogText,
     isCatalogUpdate: () => isCatalogUpdate,
+    looseOrigin: () => looseOrigin,
     pinStoredFrom: () => pinStoredFrom,
     sampleUntouched: () => sampleUntouched,
     sha256Hex: () => sha256Hex,
@@ -21838,6 +21839,10 @@ What you type stays in this browser only.`;
   }
   function onCatalogListing(all) {
     const held = storedCatalog();
+    if (!held && !catalogLoaded()) {
+      offerToLooseAuthor(all);
+      return;
+    }
     if (!held || !held.id) return;
     const files = all.filter((f) => !f.desk && !f.builtIn);
     const mine = nsGet("CatalogFile") || "";
@@ -21883,6 +21888,17 @@ What you type stays in this browser only.`;
       const next = grown.filter((f) => ours.has(f.grew.id)).sort((a, b) => b.mtime - a.mtime);
       return next.reduce((chain, f) => chain.then((done) => done || offerListed(f, true)), Promise.resolve(false));
     });
+  }
+  function offerToLooseAuthor(all) {
+    const origin = looseOrigin(false), grown = all.filter((f) => !f.desk && !f.builtIn && f.grew);
+    if (!origin || !grown.length || eEmbeddedCatalog()) return;
+    const go = () => eBranchIdentity(false).then((who) => {
+      const own = who ? branchFileId(who, origin) : "";
+      const next = grown.filter((f) => own && f.grew.id === own).sort((a, b) => b.mtime - a.mtime);
+      return next.reduce((chain, f) => chain.then((done) => done || offerListed(f, true)), Promise.resolve(false));
+    });
+    if (tourDueAtBoot()) afterTour(go);
+    else go();
   }
   function refuseAskedFile(name, why) {
     toastRefusal(t(why === "read" ? "{FILE} could not be read." : "{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(String(name || "")));

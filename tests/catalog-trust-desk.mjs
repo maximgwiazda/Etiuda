@@ -388,7 +388,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 36;
+  const EXPECTED = 40;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -711,6 +711,34 @@ async function parent() {
       + JSON.stringify(p1.fileAtEnd) + ")");
     const errs72 = [a72, c72, d72, e72, f72, g72, h72, lib72f, i72, j72, k72, l72, m72, n72, p1].flatMap(o => o.errors || []);
     check(!errs72.length, "72l those launches ran their acts without an error" + (errs72.length ? ": " + errs72.length + ", first " + errs72[0] : ""));
+    /* 73: AN EMPTY DESK THAT MADE A CATALOG FROM NOTHING, and the lead's import of that file published beside a newer
+       catalog, so the boot's newest-file offer is not the lineage's: the boot's offer is escaped, and then the listing. */
+    const looseId = "c-made0here0on0it", rawLoose = Buffer.alloc(32, 5), ownLoose = "k-" + sha(rawLoose).slice(0, 16);
+    const fromLoose = () => { const d = JSON.parse(JSON.stringify(payload("2026-09-21"))); d.id = "lamp-from-loose"; d.rev = 1;
+      d.grew = { id: ownLoose + "-" + sha8(looseId), rev: 2, sha: "sha256:" + "ab".repeat(32) }; return sign(d); };
+    const other = Object.assign(JSON.parse(JSON.stringify(payload("2026-09-22"))), { id: "lamp-other" });
+    const emptyMaker = (withId, ringIds) => {
+      const lab = scenario([["catalogs/from-loose.ec", fromLoose()], ["catalogs/other.ec", other], ["catalogs/etiuda-ring.json", ringWith(ringIds)]]);
+      const envAt = path.join(lab, "userdata", "desk.json"), envD = JSON.parse(fs.readFileSync(envAt, "utf8"));
+      envD.branch = { sign: { pub: rawLoose.toString("hex"), priv: "sealed" }, box: { pub: "ef".repeat(32), priv: "sealed" } };
+      if (withId) envD.keys.eLooseId = looseId;
+      fs.writeFileSync(envAt, JSON.stringify(envD), "utf8");
+      return run(lab, ["boot", "settle", "offer", "escape", "settle", "listing", "settle", "offer"]);
+    };
+    const filesOf = (o, i) => (o.offers[i] || {}).files || [];
+    const a73 = emptyMaker(true, ["lamp-from-loose"]);
+    check(filesOf(a73, 0).includes("other.ec") && filesOf(a73, 1).includes("from-loose.ec"),
+      "73a on an empty desk holding the id of the catalog it made, a file valid under the ring that grew from this desk's own file of it is offered from the listing (boot "
+      + JSON.stringify(filesOf(a73, 0)) + ", listing " + JSON.stringify(filesOf(a73, 1)) + ")");
+    const b73 = emptyMaker(true, []);
+    check(filesOf(b73, 0).includes("other.ec") && !(b73.offers[1] || {}).shown,
+      "73b THE CONTROL: the same file with no ring line for it is not offered (listing " + JSON.stringify(filesOf(b73, 1)) + ")");
+    const c73 = emptyMaker(false, ["lamp-from-loose"]);
+    check(filesOf(c73, 0).includes("other.ec") && !(c73.offers[1] || {}).shown,
+      "73c THE CONTROL: an empty desk holding no such id offers its newest file at boot as before and nothing from the listing (listing "
+      + JSON.stringify(filesOf(c73, 1)) + ")");
+    const errs73 = [a73, b73, c73].flatMap(o => o.errors || []);
+    check(!errs73.length, "73d those launches ran their acts without an error" + (errs73.length ? ": " + errs73.length + ", first " + errs73[0] : ""));
     const errs71 = [a71, b71, c71, d71].flatMap(o => o.errors || []);
     check(!errs71.length, "71d those launches ran their acts without an error" + (errs71.length ? ": " + errs71.length + ", first " + errs71[0] : ""));
   } catch (e) {

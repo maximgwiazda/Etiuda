@@ -705,6 +705,7 @@ export {
   pinStoredFrom,
   followRenamedFile,
   branchFileId,
+  looseOrigin,
   deskBranchHolds,
   writeDeskBranch
 };
