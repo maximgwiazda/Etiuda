@@ -227,8 +227,9 @@ gate('the shell: npm run csp, npm run desk, npm run links, npm run dot-field-des
    browser against a real boot, and until then no chain called it. About 16 s. tests/engine-selftest.js
    31 holds every gate in tests/ to a chain. swap beside them: load, eject and clear change the desk in
    place, and it holds each against a fresh start, in Chrome, in about a minute. */
-gate('the acceptance run: npm run smoke, npm run storage-carry and npm run swap', () => {
+gate('the acceptance run: npm run smoke, npm run glass-rim, npm run storage-carry and npm run swap', () => {
   if (!npm('smoke')) return 'npm run smoke failed';
+  if (!npm('glass-rim')) return 'npm run glass-rim failed';
   if (!npm('storage-carry')) return 'npm run storage-carry failed: a desk arriving from an earlier version is carried by that code';
   return npm('swap') ? true : 'npm run swap failed: a desk changed in place no longer equals a fresh start';
 });
