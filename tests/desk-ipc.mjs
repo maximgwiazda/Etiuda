@@ -26,7 +26,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 75;
+const EXPECTED = 76;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -827,6 +827,24 @@ try {
   }
   check(parity.length === 16 && parity.every(l => /:holds,differs$/.test(l)) && !holdsNow(),
     "78j parity: a change to each of the 16 fields the loose mark reads makes deskBranchHolds true and Export differ, and put back it is false again (" + parity.filter(l => !/:holds,differs$/.test(l)).join("; ") + (parity.every(l => /:holds,differs$/.test(l)) ? "all 16" : "") + ")");
+
+  /* A catalog taken while the identity is asked: the write that began over the one before, its file already made. */
+  await catRev("lamp-swap-one", 1);
+  edit("Swap, first");
+  await writeBranch();
+  const swapFile = path.join(newDir, "lamp-swap-one-" + sha(Buffer.from("lamp-swap-one")).slice(0, 8) + ".ec");
+  const swapBytes = (() => { try { return fs.readFileSync(swapFile); } catch { return Buffer.alloc(0); } })();
+  const swapTime = (() => { try { return fs.statSync(swapFile).mtimeMs; } catch { return 0; } })();
+  edit("Swap, second");
+  const dirSwap = listing(newDir).join(), runSwap = writeBranch();
+  await catRev("lamp-swap-two", 1);
+  const rSwap = await runSwap;
+  await tick(5); await tick(5);
+  const swapNow = (() => { try { return JSON.parse(fs.readFileSync(swapFile, "utf8")); } catch { return {}; } })();
+  check(rSwap === false && swapBytes.length > 0 && (() => { try { return Buffer.compare(fs.readFileSync(swapFile), swapBytes) === 0 && fs.statSync(swapFile).mtimeMs === swapTime; } catch { return false; } })()
+      && listing(newDir).join() === dirSwap,
+    "78k a catalog taken while the identity is asked writes nothing: the file of the catalog before keeps its bytes and its time, and no file is added (answer " + rSwap
+    + ", that file now rev " + swapNow.rev + " titled " + JSON.stringify(titleOf(swapNow, 0)) + ", folder " + (listing(newDir).join() === dirSwap ? "unchanged" : "changed") + ")");
 
   /* ---- a catalog made from nothing on a desk: no catalog loaded, an edit, and the desk's own file with no grew. The id it
      stands in for the grown-from one is minted once and kept with the loose layer, which a load erases; the file stays. */

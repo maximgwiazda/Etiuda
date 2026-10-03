@@ -358,14 +358,15 @@ function looseOrigin(make){
 function writeDeskBranch(){
   if(!eHasBranch()) return Promise.resolve(false);
   if(branchBusy){ branchAgain=true; return branchBusy; }
-  const loose=!catalogLoaded(), holds=deskBranchHolds();
+  const loose=!catalogLoaded(), holds=deskBranchHolds(), layer=eLayer();
   let origin=loose ? looseOrigin(false) : storedCatalog();
   if(loose ? (!origin && !holds) : (!origin || !origin.id || !/^sha256:[0-9a-f]{64}$/.test(String(origin.pin||"")))) return Promise.resolve(false);
   const stemOf=o=>catalogFileStem(catalogNameOfFile(catalogFileName()))+"-"+branchHex(o), stem=origin ? stemOf(origin) : "";
   const run=holds
     ? eBranchIdentity().then(who=>{
-        // A load landing while the identity was asked is not the empty desk's to write.
-        if(!who || (loose && catalogLoaded())) return {ok:false};
+        /* A catalog taken while the identity was asked is not this write's: its content would land under the stem and
+           grew read before. A catalog with no id keeps the empty desk's layer, so the loose case is asked apart. */
+        if(!who || eLayer()!==layer || (loose && catalogLoaded())) return {ok:false};
         if(!origin) origin=looseOrigin(true);
         return origin ? eWriteBranch(stem||stemOf(origin),JSON.stringify(catalogToV2(branchCatalog(who,origin)))) : {ok:false};
       })

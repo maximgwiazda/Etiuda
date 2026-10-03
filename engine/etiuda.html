@@ -19526,12 +19526,12 @@ What you type stays in this browser only.`;
       branchAgain = true;
       return branchBusy;
     }
-    const loose = !catalogLoaded(), holds = deskBranchHolds();
+    const loose = !catalogLoaded(), holds = deskBranchHolds(), layer = eLayer();
     let origin = loose ? looseOrigin(false) : storedCatalog();
     if (loose ? !origin && !holds : !origin || !origin.id || !/^sha256:[0-9a-f]{64}$/.test(String(origin.pin || ""))) return Promise.resolve(false);
     const stemOf = (o) => catalogFileStem(catalogNameOfFile(catalogFileName())) + "-" + branchHex(o), stem = origin ? stemOf(origin) : "";
     const run = holds ? eBranchIdentity().then((who) => {
-      if (!who || loose && catalogLoaded()) return { ok: false };
+      if (!who || eLayer() !== layer || loose && catalogLoaded()) return { ok: false };
       if (!origin) origin = looseOrigin(true);
       return origin ? eWriteBranch(stem || stemOf(origin), JSON.stringify(catalogToV2(branchCatalog(who, origin)))) : { ok: false };
     }) : eWriteBranch(stem, "");
