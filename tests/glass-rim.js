@@ -10,10 +10,17 @@
  * and the brightness of its edge row at 30 px from the top-left corner along the top is read against the same
  * distance down the left edge, and the bottom-right corner likewise, each less the edge's resting level.
  * A lit top and bottom and a dark side is the claim, and so is a peak below the first pass's (bdf6120).
+ * A 1px line reads thicker the brighter it is, so thickness is read as brightness at both ends of the top and of
+ * the bottom (30 px in from each corner): an edge's dimmer end must hold at least 60 per cent of its brighter
+ * end, and the top must read as the bottom does, end for end (the bottom-right as the top-left, the bottom-left
+ * as the top-right) within 8 per cent. The row profile across the edge was measured separately: one row, no
+ * second line under the rim, at a device pixel ratio of 1 and 2 (fractional ratios split the hairline into two
+ * rows by where the box falls, which this leg does not claim to fix).
  *
  * THE CONTROLS, IN THE SAME LAUNCH. The pixel read is run again with the first pass's gradient (360 x 58, peak
  * .92) and with the first draft's (240 x 96, which lit the sides nearly as far): the first pass must read the
- * brighter peak, and the draft the lower ratio, so a read that cannot tell them apart goes red. The light theme is photographed the same way and must show no lift, which also
+ * brighter peak, and the draft the lower ratio, so a read that cannot tell them apart goes red. The previous
+ * pass's (9e44127, peak .58 top and .46 bottom, a faint .05 line) must fail the ends and the top-to-bottom reads. The light theme is photographed the same way and must show no lift, which also
  * proves the read sees a ring when there is one.
  *
  * Exit code is the number of failed checks, capped at 63 (E.exitOf), 78 where the run produced no verdict. */
@@ -25,7 +32,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
 
-const EXPECTED = 11;
+const EXPECTED = 14;
 const D = 30;
 const OFF = "rgba(0, 0, 0, 0) 0px 0px 0px 0px";
 const ROUND = "radial-gradient(240px 96px at 0 0,rgba(255,255,255,.92),rgba(255,255,255,.26) 38%,transparent 72%),"
@@ -33,6 +40,10 @@ const ROUND = "radial-gradient(240px 96px at 0 0,rgba(255,255,255,.92),rgba(255,
   + "linear-gradient(rgba(255,255,255,.02),rgba(255,255,255,.02))";
 const PASS1 = "radial-gradient(360px 58px at 0 0,rgba(255,255,255,.92),rgba(255,255,255,.26) 38%,transparent 72%),"
   + "radial-gradient(360px 58px at 100% 100%,rgba(255,255,255,.72),rgba(255,255,255,.18) 38%,transparent 72%),"
+  + "linear-gradient(rgba(255,255,255,.02),rgba(255,255,255,.02))";
+const PASS2 = "radial-gradient(520px 36px at 0 0,rgba(255,255,255,.58),rgba(255,255,255,.2) 40%,transparent 85%),"
+  + "radial-gradient(520px 36px at 100% 100%,rgba(255,255,255,.46),rgba(255,255,255,.15) 40%,transparent 85%),"
+  + "linear-gradient(rgba(255,255,255,.05),transparent 14px calc(100% - 14px),rgba(255,255,255,.05)),"
   + "linear-gradient(rgba(255,255,255,.02),rgba(255,255,255,.02))";
 let b; let fails = 0; let checks = 0; let reachedEnd = false;
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
@@ -141,13 +152,22 @@ async function lift(pg) {
     return { top: px(2 + d, 2), side: px(2, 2 + d), rest: px(2, 2 + Math.round(h / 2)),
              peak: Math.max(px(2 + 10, 2), px(2 + 20, 2), px(2 + 30, 2)),
              far: px(2 + 120, 2), mid: px(2 + Math.round(w / 2), 2),
-             bot: px(W + 1 - d, H + 1), bside: px(W + 1, H + 1 - d) };
+             bot: px(W + 1 - d, H + 1), bside: px(W + 1, H + 1 - d),
+             tr: px(W + 1 - d, 2), bl: px(2 + d, H + 1) };
   }, png, r.h, r.w, D);
   const L = k => read[k] - read.rest;
   return { top: L("top"), side: L("side"), rest: read.rest, peak: L("peak"), far: L("far"), mid: L("mid"),
-           bot: L("bot"), bside: L("bside"),
+           bot: L("bot"), bside: L("bside"), tr: L("tr"), bl: L("bl"),
            whole: Math.abs(r.x - x0) < 0.01 && Math.abs(r.y - y0) < 0.01, h: r.h };
 }
+
+/* The thickness reads: each edge's dimmer end against its brighter, and the top against the bottom end for end. */
+const ends = m => ({
+  topRatio: Math.min(m.top, m.tr) / Math.max(m.top, m.tr, 1),
+  botRatio: Math.min(m.bot, m.bl) / Math.max(m.bot, m.bl, 1),
+  tbGap: Math.max(Math.abs(m.top - m.bot) / Math.max(m.top, m.bot, 1), Math.abs(m.tr - m.bl) / Math.max(m.tr, m.bl, 1)) });
+const endsLine = (m, e) => "top " + m.top + " and " + m.tr + " (ratio " + e.topRatio.toFixed(2) + "), bottom " + m.bot + " and " + m.bl
+  + " (ratio " + e.botRatio.toFixed(2) + "), top against bottom end for end differ by " + (100 * e.tbGap).toFixed(1) + " per cent";
 
 (async () => {
   const RUN = E.runFolder("catalogV2", "sampleV2");
@@ -197,6 +217,13 @@ async function lift(pg) {
     check(mine.bot >= 40 && mine.bot >= 4 * Math.max(mine.bside, 1) && mine.far >= 10 && mine.mid >= 4,
       "9gr10 dark: the bottom's right is lit and its side dark likewise, and the line holds along the top (120 px, middle)");
 
+    const eMine = ends(mine);
+    console.log("       the line's ends, brightness above rest: " + endsLine(mine, eMine));
+    check(mine.whole && eMine.topRatio >= 0.6 && eMine.botRatio >= 0.6,
+      "9gr12 dark: along the top and along the bottom the dimmer end holds at least 60 per cent of the brighter, so the line reads as one thickness");
+    check(mine.whole && eMine.tbGap <= 0.08,
+      "9gr13 dark: the top line reads as the bottom line does, end for end, within 8 per cent");
+
     await p.addStyleTag({ content: ":root:not([data-theme=light]){--rim:" + PASS1 + "!important}" });
     await setTheme(p, "dark");
     const pass1 = await lift(p);
@@ -209,6 +236,14 @@ async function lift(pg) {
     console.log("       dark with the first draft's 240 x 96 catch: top " + round.top + ", side " + round.side);
     check(round.top > 0 && mine.top / Math.max(mine.side, 1) >= 1.5 * (round.top / Math.max(round.side, 1)),
       "9GR5 control: the first draft's round catch gives a ratio at most two thirds of the tilted one's");
+
+    await p.addStyleTag({ content: ":root:not([data-theme=light]){--rim:" + PASS2 + "!important}" });
+    await setTheme(p, "dark");
+    const pass2 = await lift(p);
+    const e2 = ends(pass2);
+    console.log("       dark with the previous pass's gradient (9e44127): " + endsLine(pass2, e2));
+    check(e2.topRatio < 0.5 && e2.botRatio < 0.5 && e2.tbGap > 0.08 && eMine.tbGap < e2.tbGap,
+      "9GR12 control: the previous pass's gradient fails both reads (ends under half, top and bottom apart), so they can tell it from this one");
 
     await setTheme(p, "light");
     const lt = await styles(p, ".txt");
