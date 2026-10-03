@@ -26,7 +26,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 72;
+const EXPECTED = 75;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -890,6 +890,79 @@ try {
   check(listing(newDir).some(n => n === "anew-" + hexA + ".ec") && madeBytes.length > 0 && Buffer.compare(bytesMade(), madeBytes) === 0
       && timeMade() === madeTime && madeFiles().join() === m2.join(),
     "82e and the desk stops writing it: an edit over the catalog loaded writes that catalog's own file, and the one made from nothing keeps its bytes and its time");
+
+  /* ---- Clement's named edits for 82: the layer emptied again, a load landing while the identity is asked, and an id the
+     desk cannot keep. Each starts on the empty desk, whose minted id the load in 82d took with the layer. */
+  const toEmpty = () => { ST.lsDel(CT.E_CATALOG_STORE); CB.applyBootCatalog(); PK.resetPack(); PK.pack.baseCards = null; RB.rebuildCards(); };
+  const idsOnDisk = () => Object.keys(onDisk()).filter(k => /LooseId$/.test(k));
+  const landed = async () => { await tick(5); await tick(5); };
+  /* A write starts, and before the identity answers, Load anyway is pressed in the bubble the load raises. */
+  const loadDuring = async (id, fileName) => {
+    const run = writeBranch(), docWas = globalThis.document, made = [];
+    let pressed = false;
+    globalThis.document = new Proxy({}, { set: () => true, get: (t, k) => (k === "createElement" ? () => { const e = kept82(); made.push(e); return e; }
+      : k === "getElementById" ? () => null : k === "readyState" ? "complete" : k === "visibilityState" ? "visible"
+      : (k === "addEventListener" || k === "removeEventListener") ? noop : fake()) });
+    try {
+      CF.activateCatalog(CT.parseCatalogFile(JSON.stringify(Object.assign({}, origin, { id, rev: 1 }))), { file: fileName });
+      const bubble = made.filter(e => e.id === "eLoose")[0], go = bubble && bubble["q#eLooseLoad"];
+      if (go && typeof go.onclick === "function") { go.onclick(); pressed = true; }
+    } finally { globalThis.document = docWas; }
+    CB.applyBootCatalog(); PK.resetPack(); PK.pack.baseCards = null; RB.rebuildCards();
+    const answer = await run;
+    await landed();
+    return { pressed, answer, loaded: CB.catalogLoaded(), ids: looseIds().length + idsOnDisk().length };
+  };
+
+  /* The first write: nothing minted yet when the load lands. */
+  toEmpty();
+  make("Made, and a load lands");
+  const dirRace1 = listing(newDir).join();
+  const race1 = await loadDuring("lamp-race-one", "race-one.ec");
+  const folder1 = listing(newDir).join() === dirRace1 ? "unchanged" : "changed";
+  const race1Ok = race1.pressed && race1.loaded && race1.answer === false && race1.ids === 0 && folder1 === "unchanged";
+
+  toEmpty();
+  make("Made to be taken back");
+  await writeBranch();
+  const m3 = madeFiles().filter(n => m2.indexOf(n) < 0), id3 = looseIds()[0] || "", made3 = path.join(newDir, m3[0] || "none");
+  PK.pack.custom = []; PK.savePack(); RB.rebuildCards();
+  const r82f = await writeBranch();
+  check(m3.length === 1 && m3[0] === "Etiuda catalog-" + sha(Buffer.from(id3)).slice(0, 8) + ".ec" && !CF.deskBranchHolds() && r82f === true
+      && !fs.existsSync(made3) && looseIds().join() === id3,
+    "82f the empty desk emptied again: with nothing left that it made, the file it made is removed and the minted id is kept (answer " + r82f
+    + ", file present " + fs.existsSync(made3) + ", ids " + looseIds().length + ")");
+
+  /* The second write: the file made and its id kept when the load lands. */
+  make("Made again");
+  await writeBranch();
+  const bytes3 = (() => { try { return fs.readFileSync(made3); } catch { return Buffer.alloc(0); } })(), time3 = (() => { try { return fs.statSync(made3).mtimeMs; } catch { return 0; } })();
+  make("Made again, and a load lands");
+  const dirRace2 = listing(newDir).join();
+  const race2 = await loadDuring("lamp-race-two", "race-two.ec");
+  const kept3 = (() => { try { return Buffer.compare(fs.readFileSync(made3), bytes3) === 0 && fs.statSync(made3).mtimeMs === time3; } catch { return false; } })();
+  const folder2 = listing(newDir).join() === dirRace2 ? "unchanged" : "changed";
+  const race2Ok = race2.pressed && race2.loaded && race2.answer === false && race2.ids === 0 && bytes3.length > 0 && kept3 && folder2 === "unchanged";
+  check(race1Ok && race2Ok,
+    "82g a load landing while the identity is asked writes nothing: before the first write no id is minted and no file made, and after it the file made keeps its bytes and its time ("
+    + "first " + JSON.stringify(race1) + ", folder " + folder1 + "; second " + JSON.stringify(race2) + ", folder " + folder2 + ", file kept " + kept3 + ")");
+
+  /* An id that cannot be kept: desk.json read-only, the lever 2d uses, before the first write on the empty desk. */
+  toEmpty();
+  make("Made where the id cannot be kept");
+  await landed();
+  const dirRO = listing(newDir);
+  let rRO = null, idsRO = -1, dirDuring = "";
+  fs.chmodSync(DESK, 0o444);
+  try { rRO = await writeBranch(); idsRO = looseIds().length; dirDuring = listing(newDir).join(); }
+  finally { fs.chmodSync(DESK, 0o666); }
+  const rBackRO = await writeBranch();
+  await landed();
+  const newRO = listing(newDir).filter(n => dirRO.indexOf(n) < 0), idRO = looseIds()[0] || "";
+  check(rRO === false && idsRO === 0 && dirDuring === dirRO.join() && rBackRO === true && looseIds().length === 1 && idsOnDisk().length === 1
+      && newRO.length === 1 && newRO[0] === "Etiuda catalog-" + sha(Buffer.from(idRO)).slice(0, 8) + ".ec",
+    "82h where the minted id cannot be saved the desk makes no file and keeps no id, and once it can, the next write makes one file named by the id kept (answer "
+    + rRO + ", ids " + idsRO + ", then " + rBackRO + ", new files " + JSON.stringify(newRO) + ")");
 } catch (e) {
   failed++;
   console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));
