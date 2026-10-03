@@ -36,6 +36,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/csp.js                                the policy, two unpackaged Electrons
     node tests/desk.js                               the desk in a file, an unpackaged Electron
     node tests/dot-field-desk.js                     the dot field in the desk's own window: where it stands and that it stands still, an unpackaged Electron
+    ETIUDA_FIXTURES=<folder> node tests/glass-rim.js  the glass rim on a macro, the panel and a dialog: painted in dark, absent in light, tilted to the top and bottom, Chrome
     ETIUDA_FIXTURES=<folder> node tests/catalog-watch.js  the watched catalog, one app run
     node tests/pick-desk.js                          the picker over a real window: it takes the foreground and presses keys, so by hand, nobody at the keyboard
     node tests/swap.mjs                              the desk changed in place held to a fresh start, Chrome, no fixtures
@@ -598,6 +599,12 @@ tools/release.mjs`, which makes shell-smoke refuse and must stop the run at gate
     node tests/dot-field-desk.js           npm run dot-field-desk, in the release's shell gate
 
 One launch of the shell, unpackaged, on a throwaway app with the tree's sample catalog taken through the offer. The window is shown without focus and stands on no display (the flag's second value), because a window nobody showed cannot be photographed. Seven checks, about 25 s. Stillness is read from the screencast's frames, the compositor's own output, through a real wheel scroll: the rows of a strip in the gap between two card columns must be the same in every frame, and the control paints the same field on the list, where it scrolls, and must differ. Extent is read as in `smoke.js`, in the window: strips left, right, above and below the cards' column, in four states, differ from their field-off twins only inside the column. It has gone red under four planted faults: the field also on the scroller (extent), the field riding the cards (stillness), no field (both controls) and the old field on main (extent, at the window's bottom edge). It did not go red on the old `background-attachment: fixed` field in stillness: that field stands still in this window, so the desk's failure needs something an off-display window lacks, and a glance at the desk after a change to the field is still the oracle for it.
+
+## The glass rim
+
+    ETIUDA_FIXTURES=<folder> node tests/glass-rim.js    npm run glass-rim
+
+One headless Chrome on the engine and the fixtures' catalog, nine checks, about 10 s, in no gate. Computed style says the ring is painted and the old bevel is off, on all macros, the intent panel and an open Settings dialog in dark, and that none of it paints in light. The eye's part is pixels: the tallest macro is photographed at 1:1 and its edge row read at 30 px from the top-left corner along the top and down the left side, each less the edge's resting level; the top must be at least 100 and at least three times the side. Its controls are in the same launch: the first draft's round 240 x 96 catch gives a ratio under two thirds of the tilted one's, and light reads no lift. It has gone red on the engine before the change (six checks) and under five planted faults: the light guard dropped, the macro bevel kept, a round catch, the panel bevel kept, the dialog ring dropped.
 
 ## Web addresses leave only for a click
 
