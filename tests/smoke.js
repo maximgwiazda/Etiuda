@@ -35,12 +35,12 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-/* 291 since About closes on the trademark notice (two checks and its clean); 288 since the theme
+/* 294 since the dot field's extent (two checks and its clean); 291 since About closes on the trademark notice (two checks and its clean); 288 since the theme
    crossfades (two checks and its clean); 285 since a copy lays only the wash over its block and
    greens only that block's spine, a card's title has the row while its controls wait, the
    scrollbar's thumb is opaque, every theme has one blue, an idle tab's dot is the band's ink, and
    Maintenance fits its window unscrolled; 278 was the tour's walk by its acts. */
-const EXPECTED = { chrome: 291 };
+const EXPECTED = { chrome: 294 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -729,9 +729,9 @@ const t0 = Date.now();
   await p.evaluate(() => { document.getElementById("pageScroll").scrollTop += 7; }); await sleep(300);
   const still1 = await stillShot(), top1 = await cardTop();
   const scrolled = await p.evaluate(() => document.getElementById("pageScroll").scrollTop);
-  await p.evaluate(() => { document.getElementById("pageScroll").style.backgroundImage = "none"; }); await sleep(200);
+  await p.evaluate(() => { document.querySelector("main").style.backgroundImage = "none"; }); await sleep(200);
   const stillOff = await stillShot();
-  await p.evaluate(() => { document.getElementById("pageScroll").style.backgroundImage = "";
+  await p.evaluate(() => { document.querySelector("main").style.backgroundImage = "";
     const s = document.getElementById("__stillHide"); if (s) s.remove();
     document.getElementById("pageScroll").scrollTop = 0; });
   await sleep(300);
@@ -741,6 +741,78 @@ const t0 = Date.now();
     + (still0 === still1 ? "byte-identical" : "different") + " before and after (" + still0.length + " and " + still1.length
     + " base64 chars), against " + stillOff.length + " with the field switched off");
   clean(e, "the still dot field");
+
+  /* THE DOT FIELD STANDS BEHIND THE CARDS AND NOWHERE ELSE (Maxim, 2026-10-03 11:49: "It should only
+     span the background behind the cards segment, while in the latest Etiuda build it spans all the
+     background below the catpill header, including intent rail and the scrollbar."). The still field
+     had moved onto the scroller, which is the whole width below the header, so it also stood in the
+     app padding, in the strip above the list, beside a docked intent panel and in the scrollbar lane.
+     THE MEASURE IS INK IN A STRIP, whichever element carries the field: the cards are hidden (their
+     boxes kept), a strip of the window outside main's column is photographed, the field is switched
+     off on the scroller and on main and the same strip is photographed again, and a strip that holds
+     any dot differs from its twin. A strip is at least 12 px each way, the field's pitch, so a field
+     reaching it cannot fall between its dots. The control is the same photograph of a patch INSIDE
+     main, which must differ: a leg that sees no dots anywhere passes every strip for free. Four
+     states, each with the intent panel docked or not, and with the shell's backdrop class or not -
+     under it the ground is the scroller's colour and the field has to stand above it, which a
+     browser does not do by itself. The scrollbar lane is a strip only where this browser draws one;
+     the run is launched with scrollbars hidden, so the lane is covered by the strip right of main. */
+  e = since();
+  await p.evaluate(() => { const s = document.createElement("style"); s.id = "__extentHide";
+    s.textContent = "#list > *{visibility:hidden!important}"; document.head.appendChild(s);
+    document.getElementById("pageScroll").scrollTop = 0; });
+  const extentRail = () => p.evaluate(() => document.body.classList.contains("rail-on"));
+  const railWas = await extentRail();
+  const extentStates = [];
+  for (const rail of [false, true]) {
+    if ((await extentRail()) !== rail) {
+      await p.evaluate(() => document.querySelector('[data-act="rail"]').click()); await sleep(900);
+    }
+    for (const backdrop of [false, true]) {
+      await p.evaluate(on => document.body.classList.toggle("e-backdrop", on), backdrop); await sleep(300);
+      const at = await p.evaluate(() => {
+        const sc = document.getElementById("pageScroll").getBoundingClientRect(),
+          m = document.querySelector("main").getBoundingClientRect(), w = innerWidth,
+          y = Math.round(sc.top + sc.height / 2), clip = (x, yy, wd, ht) => ({ x: x, y: yy, width: wd, height: ht });
+        return { inside: clip(Math.round(m.left + 40), y, 48, 48),
+          left: clip(0, y, Math.min(Math.floor(m.left), 600), 48),
+          right: clip(Math.ceil(m.right), y, Math.floor(w - m.right), 48),
+          above: clip(Math.round(m.left + 40), Math.ceil(sc.top), 48, Math.floor(m.top - sc.top)) };
+      });
+      const names = Object.keys(at);
+      const shoot = async () => { const o = {};
+        for (const n of names) o[n] = at[n].width >= 12 && at[n].height >= 12
+          ? await p.screenshot({ clip: at[n], captureBeyondViewport: false, encoding: "base64" }) : null;
+        return o; };
+      const on = await shoot();
+      await p.evaluate(() => { const s = document.createElement("style"); s.id = "__extentOff";
+        s.textContent = "#pageScroll,main{background-image:none!important}"; document.head.appendChild(s); });
+      await sleep(200);
+      const off = await shoot();
+      await p.evaluate(() => { const s = document.getElementById("__extentOff"); if (s) s.remove(); });
+      await sleep(200);
+      extentStates.push({ rail: rail, backdrop: backdrop, at: at,
+        small: names.filter(n => on[n] === null),
+        holds: names.filter(n => on[n] !== null && on[n] !== off[n]) });
+    }
+    await p.evaluate(() => document.body.classList.remove("e-backdrop"));
+  }
+  await p.evaluate(() => { document.body.classList.remove("e-backdrop");
+    const s = document.getElementById("__extentHide"); if (s) s.remove();
+    document.getElementById("pageScroll").scrollTop = 0; });
+  if ((await extentRail()) !== railWas) {
+    await p.evaluate(() => document.querySelector('[data-act="rail"]').click()); await sleep(700);
+  }
+  const extentSaid = extentStates.map(s => "rail " + (s.rail ? "docked" : "hidden") + (s.backdrop ? " + backdrop" : "")
+    + ": dots in [" + s.holds.join(",") + "]" + (s.small.length ? ", too small to read [" + s.small.join(",") + "]" : "")).join("; ");
+  check(extentStates.length === 4 && extentStates.every(s => s.small.length === 0
+      && s.holds.every(n => n === "inside")),
+    "the dot field stands behind the cards only, and not in the padding, above the list, beside a docked"
+    + " intent panel or in the scrollbar lane: " + extentSaid);
+  check(extentStates.length === 4 && extentStates.every(s => s.holds.indexOf("inside") > -1),
+    "and the leg still sees the dots where they belong: a 48x48 patch inside the cards' column holds"
+    + " them in all four states, so the strips above were read by a leg that can see a dot");
+  clean(e, "the dot field's extent");
 
   /* THE PALETTE LANDS IN ONE FRAME, board 452. Sampled per frame through a real press with the
      pointer resting on the tile, which is where the hold-over was loudest: every colour

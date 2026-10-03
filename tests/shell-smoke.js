@@ -1395,13 +1395,13 @@ const placeEc = (dir, from, as, minutesOld) => {
   const darkField = await patchOf("dark");
   const darkScales = await atScales("dark");
   const flat = await s.p.evaluate(() => {
-    const m = document.getElementById("pageScroll");
+    const m = document.querySelector("main");
     const was = getComputedStyle(m).backgroundImage;
     m.style.backgroundImage = "none";
     return was.indexOf("radial-gradient") > -1;
   });
   const darkFlat = await patchOf("dark-off");
-  await s.p.evaluate(() => { document.getElementById("pageScroll").style.backgroundImage = ""; });
+  await s.p.evaluate(() => { document.querySelector("main").style.backgroundImage = ""; });
   const themeNow = await s.p.evaluate(async () => {
     const wait = ms => new Promise(r => setTimeout(r, ms));
     const t = document.getElementById("theme"); if (t) t.click();

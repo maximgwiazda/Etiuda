@@ -696,8 +696,7 @@ body.e-backdrop{background:transparent}
    dialog up, band alpha .93 against 1.00 over the cards and 3.0x their edge energy. The floor
    goes back under the whole window while one is open, the tint above it unchanged. */
 body.e-backdrop:has(.modal:not([hidden])){background:var(--bg)}
-/* The colour alone: the shorthand would reset the dot field's image on the same element. */
-body.e-backdrop .scroller{background-color:var(--bg)}
+body.e-backdrop .scroller{background:var(--bg)}
 body.e-backdrop header{
   background:linear-gradient(var(--header-bg) 0 0) no-repeat left bottom/100% calc(100% - var(--band-h,36px));
   background-origin:border-box}
@@ -1560,12 +1559,18 @@ main{max-width:none;margin:16px 0 0;padding:0}
    uses - 12px, a .75px dot, about 27 levels above the canvas. It reaches only the gutters,
    the gaps between cards and the margins, --card-bg being opaque, so the card gutter is opened
    below to give it somewhere to be seen. */
-/* ON THE SCROLLER'S OWN BACKGROUND, so the field stands still while the cards scroll over it: a
-   scroll container's background does not move with its content. Never a z-index:-1 pseudo:
-   under body.e-backdrop the ground is .scroller's colour, and an in-flow ancestor's background
-   paints ABOVE a negative z-index descendant. One element's image paints above its own colour,
-   which is "behind the cards, in front of the ground" whichever element carries the ground. The
-   position is where main begins, so at rest the dots stand where the scrolling field stood. */
+/* ON MAIN'S OWN BACKGROUND, FIXED TO THE WINDOW. Main is the cards' column and nothing else: not the
+   app padding, the strip above the list, the column a docked intent panel stands in or the scrollbar's
+   lane, so the field reaches only where the cards are (Maxim, 2026-10-03). `fixed` keeps it still while
+   the cards scroll over it (Maxim, 2026-09-26), where main's own scrolling background rode every scroll. */
+/* Never a z-index:-1 pseudo: under body.e-backdrop the ground is .scroller's colour, and an in-flow
+   ancestor's background paints ABOVE a negative z-index descendant. A background on main paints above
+   every ancestor's and below every descendant's, which is "behind the cards, in front of the ground"
+   whichever element carries the ground. */
+/* The x origin is the app padding, where it stood when the scroller carried the field (the scroller's
+   left edge is the window's). The y origin is the window's top, so nothing here reads the header's
+   height: the ink at each display scale (shell smoke 2k6) moved by under 4 per cent over every
+   quarter-pixel phase of that origin. */
 /* The last stop is the ink at zero alpha, NOT the keyword: transparent is transparent BLACK,
    and the two-pixel ramp between the stops would then pass through grey on a pale ground. */
 /* ONE LOOK AT EVERY DISPLAY SCALE, the 150% one, Maxim's choice. A stop is not anti-aliased: a
@@ -1573,10 +1578,10 @@ main{max-width:none;margin:16px 0 0;padding:0}
    and 4 smaller ones at 150%. The stops sit on those pixel centres' distances from the dot's
    (.707 at 100%, .8 at 125%, under .5 at 150%), so each scale paints about the ink of a .75px
    disc and 150% paints what it did; shell smoke 2k6 holds it. */
-.scroller{background-image:radial-gradient(circle at center,var(--dots-ink) 0 .5px,
+main{background-image:radial-gradient(circle at center,var(--dots-ink) 0 .5px,
     color-mix(in srgb,var(--dots-ink) 44%,transparent) .707px .8px,
     color-mix(in srgb,var(--dots-ink) 0%,transparent) 1px);
-  background-size:12px 12px;background-position:var(--app-pad) 16px}
+  background-size:12px 12px;background-attachment:fixed;background-position:var(--app-pad) 16px}
 #list{margin-bottom:80px}
 /* The count and the fold sit at the far end of the group's own rule, so the eye meets the
    name first and the control only when it is looking for one. See .list-sep.e-catsep::after. */
@@ -2308,7 +2313,7 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 @keyframes eModalBgIn{from{opacity:0}to{opacity:1}}
 @keyframes eModalCardIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
 /* A COVERED ARRIVAL (the boot guard's arrive): the band stays, and what sits under it arrives.
-   The dot field is the scroller's own ground and stays. Held, the content is drawn at a trace no
+   The dot field is main's own ground and arrives with the content. Held, the content is drawn at a trace no
    eye resolves rather than not drawn, so it is rasterised before its fade begins. */
 @keyframes eLeave{to{opacity:0}}
 /* A SURFACE CLOSING (motion.js dismissNode): it leaves on the dismiss tier, and what it holds stands still. */
