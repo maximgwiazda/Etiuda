@@ -26,7 +26,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 67;
+const EXPECTED = 72;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -827,6 +827,69 @@ try {
   }
   check(parity.length === 16 && parity.every(l => /:holds,differs$/.test(l)) && !holdsNow(),
     "78j parity: a change to each of the 16 fields the loose mark reads makes deskBranchHolds true and Export differ, and put back it is false again (" + parity.filter(l => !/:holds,differs$/.test(l)).join("; ") + (parity.every(l => /:holds,differs$/.test(l)) ? "all 16" : "") + ")");
+
+  /* ---- a catalog made from nothing on a desk: no catalog loaded, an edit, and the desk's own file with no grew. The id it
+     stands in for the grown-from one is minted once and kept with the loose layer, which a load erases; the file stays. */
+  ST.lsDel(CT.E_CATALOG_STORE);
+  CB.applyBootCatalog(); PK.resetPack(); PK.pack.baseCards = null; RB.rebuildCards();
+  const looseIds = () => ST.lsKeys().filter(k => /LooseId$/.test(k)).map(k => ST.lsGet(k));
+  const madeFiles = () => listing(newDir).filter(n => /^Etiuda catalog-[0-9a-f]{8}\.ec$/.test(n));
+  const madeDoc = n => { try { return JSON.parse(fs.readFileSync(path.join(newDir, n), "utf8")); } catch { return {}; } };
+  const make = title => { PK.pack.custom = [{ id: "u:made", c: Object.keys(CM.CATS)[0], t: title, en: title + ", the body." }]; PK.savePack(); RB.rebuildCards(); };
+  const dirBefore82 = listing(newDir).join();
+  const r82a = await writeBranch();
+  check(!CB.catalogLoaded() && !CF.deskBranchHolds() && r82a === false && looseIds().length === 0 && listing(newDir).join() === dirBefore82,
+    "82a THE CONTROL: on the empty desk with nothing made, a write makes no file and mints no id (answer " + r82a + ", ids " + looseIds().length + ")");
+
+  make("Made here");
+  const r82b = await writeBranch();
+  const m1 = madeFiles(), minted = looseIds()[0] || "", hexM = sha(Buffer.from(minted)).slice(0, 8), dM1 = madeDoc(m1[0]);
+  check(r82b === true && looseIds().length === 1 && /^c-[a-z0-9]{16}$/.test(minted) && m1.length === 1 && m1[0] === "Etiuda catalog-" + hexM + ".ec"
+      && dM1.id === idAns.id + "-" + hexM && !("grew" in dM1) && !!dM1.desk && dM1.desk.id === idAns.id && dM1.rev === 1 && dM1.modified === true
+      && verifies(dM1) && V2.v2Problems(dM1).length === 0 && (dM1.cards || []).length === 1 && titleOf(dM1, 0) === "Made here",
+    "82b an edit on an empty desk writes one file with no grew: <stem>-<8 hex of a catalog id minted once>.ec, its id the branch id and the same 8 hex, "
+    + "first edition, signed, and the engine's reader finds no problem in it (files " + JSON.stringify(m1) + ", grew " + ("grew" in dM1) + ", rev " + dM1.rev
+    + ", " + V2.v2Problems(dM1).slice(0, 1).join("") + ")");
+
+  make("Made here again");
+  const r82c = await writeBranch();
+  const m2 = madeFiles(), dM2 = madeDoc(m2[0]);
+  check(r82c === true && m2.length === 1 && m2[0] === m1[0] && dM2.id === dM1.id && dM2.rev === 2 && !("grew" in dM2) && verifies(dM2)
+      && titleOf(dM2, 0) === "Made here again" && looseIds().join() === minted,
+    "82c a second edit raises its rev in the same file, under the same minted id (files " + JSON.stringify(m2) + ", rev " + dM2.rev + ")");
+
+  /* Load anyway, pressed in the bubble the load raises; a document that keeps what is set on what it makes. */
+  const madePath = path.join(newDir, m2[0] || "none");
+  const bytesMade = () => { try { return fs.readFileSync(madePath); } catch { return Buffer.alloc(0); } };
+  const timeMade = () => { try { return fs.statSync(madePath).mtimeMs; } catch { return 0; } };
+  const madeBytes = bytesMade(), madeTime = timeMade();
+  const docWas = globalThis.document, made82 = [];
+  const kept82 = () => { const st = {}; return new Proxy(function () {}, {
+    get: (t, k) => (k in st ? st[k] : k === "querySelector" ? (s => st["q" + s] || (st["q" + s] = kept82()))
+      : k === Symbol.toPrimitive ? () => "" : k === "length" ? 0 : (["contains", "matches", "hasAttribute"].includes(k) ? () => false : fake())),
+    set: (t, k, v) => { st[k] = v; return true; }, apply: () => fake(), has: () => true }); };
+  globalThis.document = new Proxy({}, { set: () => true, get: (t, k) => (k === "createElement" ? () => { const e = kept82(); made82.push(e); return e; }
+    : k === "getElementById" ? () => null : k === "readyState" ? "complete" : k === "visibilityState" ? "visible"
+    : (k === "addEventListener" || k === "removeEventListener") ? noop : fake()) });
+  let pressed82 = false;
+  try {
+    CF.activateCatalog(CT.parseCatalogFile(JSON.stringify(Object.assign({}, origin, { id: "lamp-anew", rev: 2 }))), { file: "anew.ec" });
+    const bubble = made82.filter(e => e.id === "eLoose")[0], loadAnyway = bubble && bubble["q#eLooseLoad"];
+    if (loadAnyway && typeof loadAnyway.onclick === "function") { loadAnyway.onclick(); pressed82 = true; }
+  } finally { globalThis.document = docWas; }
+  CB.applyBootCatalog(); PK.resetPack(); PK.pack.baseCards = null; RB.rebuildCards();
+  await writeBranch();
+  check(pressed82 && CB.catalogLoaded() && looseIds().length === 0 && madeFiles().join() === m2.join()
+      && madeBytes.length > 0 && Buffer.compare(bytesMade(), madeBytes) === 0 && timeMade() === madeTime,
+    "82d after Load anyway the file is still there with the same bytes and time, and the minted id went with the loose layer (pressed " + pressed82
+    + ", loaded " + CB.catalogLoaded() + ", ids " + looseIds().length + ", files " + JSON.stringify(madeFiles()) + ")");
+
+  edit("Over the catalog loaded");
+  await writeBranch();
+  const hexA = sha(Buffer.from("lamp-anew")).slice(0, 8);
+  check(listing(newDir).some(n => n === "anew-" + hexA + ".ec") && madeBytes.length > 0 && Buffer.compare(bytesMade(), madeBytes) === 0
+      && timeMade() === madeTime && madeFiles().join() === m2.join(),
+    "82e and the desk stops writing it: an edit over the catalog loaded writes that catalog's own file, and the one made from nothing keeps its bytes and its time");
 } catch (e) {
   failed++;
   console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

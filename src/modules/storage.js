@@ -279,7 +279,7 @@ function nsDel(name){ lsDel(nsKey(name)); }
 /* THE PERSONAL LAYER ORBITS ITS CATALOG: what a person makes over a catalog is kept under that
    catalog's own id and shows only while it is loaded, and what is made on the empty desk is loose,
    under this build's namespace. LAYER_KEYS is the whole layer; the rest of a namespace is the desk's. */
-const LAYER_KEYS=["Pack","Stats","Days","CatOrder","IntentOrder","IntentsAside","LinksAside","RequestsAside","Exported"];
+const LAYER_KEYS=["Pack","Stats","Days","CatOrder","IntentOrder","IntentsAside","LinksAside","RequestsAside","Exported","LooseId"];
 function layerNsOf(c){
   const id=c ? String(c.id||"").trim() : "";
   return id ? eNsFor(id) : E_NS;
@@ -288,7 +288,7 @@ let E_LAYER=E_NS;
 function eLayer(){ return E_LAYER; }
 function setLayer(ns){ E_LAYER=ns; if(ns!==E_NS) noteLayer(ns); }
 function lyGet(name){ return lsGet(E_LAYER+name); }
-function lySet(name,v){ return lsSet(E_LAYER+name,v); }
+function lySet(name,v,own){ return lsSet(E_LAYER+name,v,own); }
 function lyDel(name){ lsDel(E_LAYER+name); }
 /* EVERY LAYER THIS DESK HAS WRITTEN, for a Clear to sweep: a hash alone cannot tell this copy's
    layer from a neighbour's on a file:// origin they share. */

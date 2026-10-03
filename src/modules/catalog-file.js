@@ -338,23 +338,37 @@ function branchCatalog(who,origin){
   c.id=who.id+"-"+branchHex(origin);
   c.rev=1;
   c.version=todayEdition();
-  c.grew={id:String(origin.id), rev:+origin.rev||0, sha:String(origin.pin)};
+  if(!origin.loose) c.grew={id:String(origin.id), rev:+origin.rev||0, sha:String(origin.pin)};
   c.desk={id:who.id, key:who.key, box:who.box};
   if(name) c.desk.name=name;
   return c;
 }
 const BRANCH_WAIT_MS=1500;
 let branchTimer=0, branchBusy=null, branchAgain=false;
+/* A CATALOG MADE FROM NOTHING: the empty desk's own catalog id, minted at its first write and kept with the loose layer,
+   so a load that erases the layer leaves the file in the share and the desk stops writing it. It stands in for the
+   grown-from id, and the file has no grew. Null where none is kept, or where one could not be kept. */
+function looseOrigin(make){
+  let id=String(lyGet("LooseId")||"");
+  if(!id && make){ id=newCatalogId(); if(!lySet("LooseId",id,true)) return null; }
+  return id ? {id:id, loose:true} : null;
+}
 /* One write at a time, the latest state when it runs. A layer holding nothing an export would carry
    (deskBranchHolds) takes the file away; a browser, a desk with no pin and a desk whose key cannot be kept write nothing. */
 function writeDeskBranch(){
-  if(!eHasBranch() || !catalogLoaded()) return Promise.resolve(false);
+  if(!eHasBranch()) return Promise.resolve(false);
   if(branchBusy){ branchAgain=true; return branchBusy; }
-  const origin=storedCatalog();
-  if(!origin || !origin.id || !/^sha256:[0-9a-f]{64}$/.test(String(origin.pin||""))) return Promise.resolve(false);
-  const stem=catalogFileStem(catalogNameOfFile(catalogFileName()))+"-"+branchHex(origin);
-  const run=deskBranchHolds()
-    ? eBranchIdentity().then(who=>who ? eWriteBranch(stem,JSON.stringify(catalogToV2(branchCatalog(who,origin)))) : {ok:false})
+  const loose=!catalogLoaded(), holds=deskBranchHolds();
+  let origin=loose ? looseOrigin(false) : storedCatalog();
+  if(loose ? (!origin && !holds) : (!origin || !origin.id || !/^sha256:[0-9a-f]{64}$/.test(String(origin.pin||"")))) return Promise.resolve(false);
+  const stemOf=o=>catalogFileStem(catalogNameOfFile(catalogFileName()))+"-"+branchHex(o), stem=origin ? stemOf(origin) : "";
+  const run=holds
+    ? eBranchIdentity().then(who=>{
+        // A load landing while the identity was asked is not the empty desk's to write.
+        if(!who || (loose && catalogLoaded())) return {ok:false};
+        if(!origin) origin=looseOrigin(true);
+        return origin ? eWriteBranch(stem||stemOf(origin),JSON.stringify(catalogToV2(branchCatalog(who,origin)))) : {ok:false};
+      })
     : eWriteBranch(stem,"");
   branchBusy=run.then(r=>!!(r&&r.ok),()=>false).then(ok=>{
     branchBusy=null;
