@@ -331,8 +331,11 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      --line separates passively (dividers), --line-strong marks a real edge (fields, tabs,
      dashed add-affordances). One token doing both reads as a lattice of equally loud lines. */
   --bg:#f7f8fa; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#e4e8ee; --line-strong:#cfd6e0;
-  --accent:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8; --mark-ink:#2563eb;
-  /* ONE ACCENT, the bubbles' cobalt, in every theme: white words on it read 5.17:1. */
+  --accent:#2563eb; --accent-fill:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8; --mark-ink:#2563eb;
+  /* TWO BLUES IN THE DARK THEMES, ONE IN LIGHT. --accent is what a mark, a line, a link or a focus ring
+     wears: the dark themes' former blue, #7aa2f7, which reads 6 to 7.5:1 on their grounds where the
+     cobalt reads 2.9 to 3.7. --accent-fill is what carries white words, a solid button, a selected pill,
+     a switch's thumb: the bubbles' cobalt in every theme, 5.17:1 under white. Light has one blue. */
   /* The dot field under the cards. A share of --dim rather than a colour, so the field follows
      the ink of whichever theme is on; the two shares are PICKED BY EYE from a sheet of twelve
      (ruled 2026-09-17) rather than derived, because a pale ground swallows a dot that a dark one
@@ -449,7 +452,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
   --band:#0a0d13; --header-bg:#191b20;
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
-  --accent:#2563eb; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
+  --accent:#7aa2f7; --accent-fill:#2563eb; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
@@ -491,7 +494,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
   --band:#0a0d13; --header-bg:#191b20;
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
-  --accent:#2563eb; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
+  --accent:#7aa2f7; --accent-fill:#2563eb; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
@@ -530,7 +533,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* The light half of the WinUI dress - the law lives at the base :root block. */
   --band:#1a4fa0; --header-bg:#f0f2f5;
   --field:#fdfdfd; --field-line:#e0e4ea; --field-edge:#aab3c0;
-  --accent:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8; --mark-ink:#2563eb;
+  --accent:#2563eb; --accent-fill:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8; --mark-ink:#2563eb;
   /* The star is a mark you scan for, not text you read - its ~2.6:1 on white is spent
      deliberately, and the badge, the filled star and the intent panel's gold edge always say
      it too. DARK IS NOT SYNCED to this hue and must not be. */
@@ -1041,14 +1044,14 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   font:600 12px var(--sans);cursor:default;letter-spacing:.4px}
 .seg button+button{border-left:1px solid transparent}
 .seg button:hover,.seg button:focus-visible{color:var(--accent)}
-.seg button.on{background:var(--accent);color:#fff}
+.seg button.on{background:var(--accent-fill);color:#fff}
 .seg button[data-alt].on{background:var(--pl)}
 /* One thumb behind the letters, driven entirely by the .on class - :has() reads it, CSS
    animates it. Generalised: track 1/n, position n-indexed - data-n says how many,
    :has(button:nth-child(k).on) says which - so ANY seg slides, no JS. */
 .seg{position:relative}
 .seg::before{content:"";position:absolute;top:0;bottom:0;left:0;width:50%;
-  background:var(--accent);transform:translateX(0);
+  background:var(--accent-fill);transform:translateX(0);
   transition:transform var(--m-move) var(--m-ease), background-color var(--m-move) ease}
 .seg[data-n="1"]::before{width:100%}
 .seg[data-n="3"]::before{width:33.3333%}
@@ -1424,7 +1427,7 @@ body.pills-lines-expand .pills-slot.pills-overflow .pills,
    worse than any gain in emphasis; the cobalt fill and the white text already say which slice is
    below. The hint rules below keep their weight and so do their .on pairs, so a ringed pill is
    the same width picked or not, and picking is the one thing that never changes a width. */
-.pill.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:none}
+.pill.on{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;box-shadow:none}
 /* normal arrow while reordering pills (no grab/hand cue) */
 /* pan-y: a finger resting on a pill can still scroll the page - see the rail rows */
 .pill{touch-action:pan-y}
@@ -1449,9 +1452,9 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 .pill.hint:hover,.pill.hint:focus-visible{color:var(--dim);border-color:var(--accent)}
 .pill.hint2:hover,.pill.hint2:focus-visible{color:var(--dim);border-color:var(--go-edge)}
 /* selected + intent-relevant: blue fill, keep green border ring */
-.pill.on.hint2{background:var(--accent);border-color:var(--go-edge);color:#fff;
+.pill.on.hint2{background:var(--accent-fill);border-color:var(--go-edge);color:#fff;
   box-shadow:0 0 0 2px var(--go-soft);font-weight:650}
-.pill.on.hint{background:var(--accent);border-color:var(--accent);color:#fff;
+.pill.on.hint{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;
   box-shadow:0 0 0 2px var(--accent-soft);font-weight:650}
 .pill.over{border-color:var(--accent);border-style:dashed}
 /* 8px = the old 4px margin plus the ~4px space glyph the flex pill no longer renders. */
@@ -1844,7 +1847,7 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 .swap code{background:var(--accent-soft);color:var(--accent);padding:1px 6px;border-radius:4px;
   font:12px var(--mono);cursor:default;display:inline-block;margin:2px 3px 2px 0}
 .swap code:hover{outline:1px solid var(--accent)}
-.swap code.on{background:var(--accent);color:#fff}
+.swap code.on{background:var(--accent-fill);color:#fff}
 .swap code.on::after{content:" ✕";opacity:.7}
 /* Soft separator at the macro-search tier boundary: above it the entries are *about* the
    query (title / keywords / category), below they only mention it in the body. A hairline
@@ -2481,7 +2484,7 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 /* PRIMARY IS A BAR'S DRESSING rather than a modifier a button may carry anywhere: only an
    actions bar decides which of its buttons leads, so outside one the class paints nothing and
    is not written. Measured, it had been on four buttons that read as plain. */
-.modal-actions .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.modal-actions .btn.primary{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;font-weight:600}
 /* Two buttons at the same edge read as one loosely spaced group, and one of these forgets your
    work while the other brings a file in. A hairline says they are two things. */
 .modal-actions .mf-left .mf-sep{align-self:stretch;width:1px;margin:3px;background:var(--line-strong);
@@ -2493,7 +2496,7 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    it. Named at both primary buttons and at the two hint pills; nowhere else in the sheet does
    a variant meet a state at equal weight. */
 .modal-actions .btn.primary:hover,.modal-actions .btn.primary:focus-visible{filter:brightness(.92);color:#fff;
-  background:var(--accent);border-color:var(--accent)}
+  background:var(--accent-fill);border-color:var(--accent-fill)}
 /* Hover deepens the fill under white in dark, where lightening it would thin the words; light keeps its lift. */
 :root[data-theme=light] .modal-actions .btn.primary:hover,
 :root[data-theme=light] .modal-actions .btn.primary:focus-visible{filter:brightness(1.08)}
@@ -2946,7 +2949,7 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 .mf-pin .mf-pin-seg button{padding:4px 12px;font:600 12px var(--sans)}
 .mf-pin.off .mf-pin-seg{opacity:.4;pointer-events:none}
 .set-slider{display:flex;align-items:center;gap:10px;width:100%}
-.set-slider input[type=range]{flex:1;min-width:0;accent-color:var(--accent)}
+.set-slider input[type=range]{flex:1;min-width:0;accent-color:var(--accent-fill)}
 .set-slider output{flex:none;min-width:52px;text-align:right;font:600 12.5px var(--sans);
   color:var(--dim);font-variant-numeric:tabular-nums}
 
@@ -3015,7 +3018,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   --m-resize:0s; --m-dismiss:0s; --m-travel:0s; --m-celebrate:0s; --m-wash:0s; --m-roll:0s;
   --m-nudge:0s}
 :root.e-still *,:root.e-still *::before,:root.e-still *::after{animation:none!important}
-/* THE FILL, cobalt in BOTH themes and the same blue as --accent, written out because this span
+/* THE FILL, cobalt in BOTH themes and the same blue as --accent-fill, written out because this span
    is published to host pages that carry none of the engine's tokens. A host redeclares the
    shadow per theme, which is the only one of the four a theme has ever moved. */
 :root{--bub:#2563eb; --bub-ink:#fff; --bub-dim:rgba(255,255,255,.92); --bub-shadow:rgba(37,99,235,.32)}
