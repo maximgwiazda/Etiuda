@@ -775,15 +775,21 @@ const t0 = Date.now();
         const sc = document.getElementById("pageScroll").getBoundingClientRect(),
           m = document.querySelector("main").getBoundingClientRect(), w = innerWidth,
           y = Math.round(sc.top + sc.height / 2), clip = (x, yy, wd, ht) => ({ x: x, y: yy, width: wd, height: ht });
+        /* The field reaches one pitch (12 px) past main on each side: leftBand and rightBand are that pitch and
+           hold dots; left and right are what lies beyond it, to the window's edge, and hold none. */
         return { inside: clip(Math.round(m.left + 40), y, 48, 48),
-          left: clip(0, y, Math.min(Math.floor(m.left), 600), 48),
-          right: clip(Math.ceil(m.right), y, Math.floor(w - m.right), 48),
+          leftBand: clip(Math.round(m.left) - 12, y, 12, 48),
+          left: clip(0, y, Math.min(Math.round(m.left) - 12, 600), 48),
+          rightBand: clip(Math.ceil(m.right), y, 12, 48),
+          right: clip(Math.ceil(m.right) + 12, y, Math.floor(w - m.right) - 12, 48),
           above: clip(Math.round(m.left + 40), Math.ceil(sc.top), 48, Math.floor(m.top - sc.top)),
           below: clip(Math.round(m.left + 40), Math.floor(sc.bottom) - 14, 48, 14) };
       });
       const names = Object.keys(at);
+      /* The two outer strips can be narrower than a pitch (2 px beside the window's edge): a dot cannot fall in
+         them, which is the point, so they only need to exist. */
       const shoot = async () => { const o = {};
-        for (const n of names) o[n] = at[n].width >= 12 && at[n].height >= 12
+        for (const n of names) o[n] = at[n].width >= (n === "left" || n === "right" ? 1 : 12) && at[n].height >= 12
           ? await p.screenshot({ clip: at[n], captureBeyondViewport: false, encoding: "base64" }) : null;
         return o; };
       const on = await shoot();
@@ -807,10 +813,11 @@ const t0 = Date.now();
   }
   const extentSaid = extentStates.map(s => "rail " + (s.rail ? "docked" : "hidden") + (s.backdrop ? " + backdrop" : "")
     + ": dots in [" + s.holds.join(",") + "]" + (s.small.length ? ", too small to read [" + s.small.join(",") + "]" : "")).join("; ");
+  const extentBand = ["inside", "leftBand", "rightBand"];
   check(extentStates.length === 4 && extentStates.every(s => s.small.length === 0
-      && s.holds.every(n => n === "inside")),
-    "the dot field stands behind the cards only, and not in the padding, above the list, beside a docked"
-    + " intent panel, in the scrollbar lane or at the window's bottom edge: " + extentSaid);
+      && s.holds.every(n => extentBand.indexOf(n) > -1) && s.holds.indexOf("leftBand") > -1 && s.holds.indexOf("rightBand") > -1),
+    "the dot field reaches one 12 px pitch past the cards on the left and on the right and no further: dots in both bands,"
+    + " none beyond them, above the list, beside a docked intent panel, in the scrollbar lane or at the window's bottom edge: " + extentSaid);
   check(extentStates.length === 4 && extentStates.every(s => s.holds.indexOf("inside") > -1),
     "and the leg still sees the dots where they belong: a 48x48 patch inside the cards' column holds"
     + " them in all four states, so the strips above were read by a leg that can see a dot");

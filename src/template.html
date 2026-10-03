@@ -1578,7 +1578,11 @@ main{max-width:none;margin:16px 0 0;padding:0}
    (.707 at 100%, .8 at 125%, under .5 at 150%), so each scale paints about the ink of a .75px
    disc and 150% paints what it did; shell smoke 2k6 holds it. */
 .dotfield{pointer-events:none;overflow:hidden;scrollbar-gutter:stable;padding:16px var(--app-pad) var(--app-pad)}
-.dotfield>div{height:100%;margin-left:calc(var(--rail-col,0px) + var(--rail-colgap,0px));
+/* ONE PITCH PAST THE CARDS ON EACH SIDE (Maxim, 2026-10-03 21:01: "ever so slightly bigger, so that it extends just so
+   beyond the cards"). 12px is the background-size below, a whole pitch, so the pattern's phase on the window is the
+   one it had at main's edges. On the left it ends in the docked panel's gap (18px) and never under the panel; on the
+   right it stops short of the scrollbar lane, which the padding keeps clear. */
+.dotfield>div{height:100%;margin-left:calc(var(--rail-col,0px) + var(--rail-colgap,0px) - 12px);margin-right:-12px;
   background-image:radial-gradient(circle at center,var(--dots-ink) 0 .5px,
     color-mix(in srgb,var(--dots-ink) 44%,transparent) .707px .8px,
     color-mix(in srgb,var(--dots-ink) 0%,transparent) 1px);
