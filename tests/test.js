@@ -538,6 +538,7 @@ function runUnitTests() {
   arrivalTests();
   markClockTests();
   fifthTests();
+  emptyBandTests();
   menuWarmTests();
   ecTypeNameTests();
   pageWatchTests();
@@ -2084,7 +2085,7 @@ function markLab() {
   const log = [], warms = [];
   const ctx = { setTransform() {}, clearRect() {}, beginPath() {}, fill() {}, moveTo() {}, arc(x) { drawnX = x; } };
   const sb = {
-    M_MS: { gather: 1100, twinkle: 66 }, mgReduceMotion: () => !!sb.still,
+    M_MS: { gather: 1100, twinkle: 66 }, FIFTH_PHI0: Math.PI / 4, mgReduceMotion: () => !!sb.still,
     performance: { now: () => clock },
     requestAnimationFrame: fn => { frames.push({ id: ++seq, fn }); return seq; },
     cancelAnimationFrame: id => { frames = frames.filter(f => f.id !== id); },
@@ -2102,7 +2103,7 @@ function markLab() {
     warmMenu: () => warms.push(Math.round(clock))
   };
   sb.window = sb;
-  require("vm").runInNewContext(mark + "\n" + slices.join("\n") + "\nfunction __mark(){ return eMark; }\nfunction __home(f){ markHome = f; }\n", sb);
+  require("vm").runInNewContext(mark + "\n" + slices.join("\n") + "\nfunction __mark(){ return eMark; }\nfunction __lay(f){ markLay = f; }\n", sb);
   sb.markDots = () => [{ x: 100, y: 0, sx: 0, sy: 0, ph: 0, sp: 1 }];
   const timersTo = t => {
     for (;;) {
@@ -2245,7 +2246,7 @@ function fifthLab(still) {
     cancelAnimationFrame: id => { frames = frames.filter(f => f.id !== id); },
     MutationObserver: class { constructor(cb) { watch = cb; } observe() {} }
   };
-  require("vm").runInNewContext(src + "\nglobalThis.__f = { fifthCutPath, fifthPhase, fifthStep, fifthAt, fifthRide, wireFifth, FIFTH_PHI0 };", sb);
+  require("vm").runInNewContext(src + "\nglobalThis.__f = { fifthCutPath, fifthPhase, fifthStep, fifthBand, fifthLay, wireFifth, FIFTH_PHI0 };", sb);
   const f = sb.__f;
   return { f, node, std, sb, queued: () => frames.length, flip: v => { sb.still = v; watch(); },
     frame: ms => { const run = frames; frames = []; run.forEach(x => x.fn(ms)); } };
@@ -2295,40 +2296,142 @@ function fifthTests() {
     got, [true, true, true]);
 
   try {
-    const a = fifthLab(false), o = [0, 0], q = [0, 0], to = p => { p[0] = 2 * p[0] + 7; p[1] = 2 * p[1] - 3; };
-    const dots = [];
-    for (let i = 0; i < 400; i++) {
-      const t = 3 * Math.PI / 4 + Math.PI * (i + 0.5) / 400, a2 = i * 2.4, r = 3 + (i % 7);
-      a.f.fifthAt(t, PHI0, o); to(o);
-      dots.push({ x: o[0] + r * Math.cos(a2), y: o[1] + r * Math.sin(a2) });
-    }
-    const home = a.f.fifthRide(dots, to);
-    let rest = 0, away = 0, mirrored = 0;
-    dots.forEach(p => {
-      home(p, PHI0, q); rest = Math.max(rest, Math.hypot(q[0] - p.x, q[1] - p.y));
-      home(p, PHI0 + 1, q); away = Math.max(away, Math.hypot(q[0] - p.x, q[1] - p.y));
-      if (p.t > Math.PI * 7 / 4 || p.t < Math.PI * 3 / 4) mirrored++;
-    });
-    got = [rest < 1e-6, away > 20, mirrored > 100 && mirrored < 300];
+    const a = fifthLab(false), at0 = a.f.fifthBand(PHI0), at1 = a.f.fifthBand(PHI0 + 1);
+    const circles = d => (d.match(/M/g) || []).length, z1 = at1.map(p => p[2]);
+    const pairs = at1.every((p, i) => i % 2 === 0 || (Math.abs(p[0] + at1[i - 1][0] - 256) < 1e-9 && Math.abs(p[1] - at1[i - 1][1]) < 1e-9 && Math.abs(p[2] + at1[i - 1][2]) < 1e-12));
+    got = [at0.length === 2 * circles(a.f.fifthCutPath(PHI0)), at1.length === circles(a.f.fifthCutPath(PHI0 + 1)) + 2,
+      Math.min(...z1) < -0.99 && Math.max(...z1) > 0.99, pairs];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("dots riding the figure stand exactly where they stood at the standard phase, move when it turns, and are shared between the loop's two halves",
-    got, [true, true, true]);
+  eq("the band holds both halves of the loop at every phase, the standard one included, and each mirrored centre is as far as its pass is near",
+    got, [true, true, true, true]);
+
+  try {
+    const a = fifthLab(false), lat = { x0: 0.5, y0: 0.5, step: 1, nx: 40, ny: 40 }, out = new Float32Array(1600);
+    const to = p => { p[0] = 0.25 * p[0] - 12; p[1] = 0.25 * p[1] - 12; };
+    a.f.fifthLay(PHI0, to, 3, 0.5, lat, out);
+    const lit = out.reduce((n, v) => n + (v > 0 ? 1 : 0), 0), top = Math.max(...out), dim = Math.min(...[...out].filter(v => v > 0));
+    const again = new Float32Array(1600); a.f.fifthLay(PHI0, to, 3, 0.5, lat, again);
+    const turned = new Float32Array(1600); a.f.fifthLay(PHI0 + 1.3, to, 3, 0.5, lat, turned);
+    const litTurned = turned.reduce((n, v) => n + (v > 0 ? 1 : 0), 0);
+    got = [lit > 100, top <= 1 && top > 0.9, dim > 0 && dim < 0.5, out.every((v, i) => v === again[i]), litTurned > 1.3 * lit];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the band laid on a lattice lights the dots inside it, by depth and fading at the rim, the same twice, and more of them where the turned loop's two passes part",
+    got, [true, true, true, true, true]);
 
   try {
     const run = still => {
       const m = markLab(); m.sb.still = still;
       m.sb.fifthPhase = () => 1;
-      m.sb.markDots = () => [{ x: 100, y: 0, sx: 0, sy: 0, ph: 0, sp: 1 }];
-      m.sb.__home((p, phi, out) => { out[0] = p.x + 20 * phi; out[1] = p.y; });
+      m.sb.markDots = () => [{ x: 100, y: 0, sx: 0, sy: 0, ph: 0, sp: 1, l: 0 }];
+      m.sb.__lay((ds, phi) => { ds.forEach(p => { p.l = Math.abs(phi - 1) < 1e-9 ? 1 : 0; }); });
       m.make();
       let x = null;
       for (let i = 0; i < 150; i++) x = m.frame(500 + i * 1000 / 60);
-      return +x.toFixed(4);
+      return x === null ? null : +x.toFixed(4);
     };
     got = [run(false), run(true)];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the empty desk's dots are drawn at their riding homes under motion and at the standard figure's grid under a quiet switch",
-    got, [120, 100]);
+  eq("the empty desk's dots are drawn where the band lights them at the clock's phase under motion, and at the standard figure's phase under a quiet switch",
+    got, [100, null]);
+}
+/* THE EMPTY DESK'S MARK IS ONE SOLID, EVEN BAND AT EVERY PHASE OF THE TURN (Maxim, 2026-10-03 19:09: "Currently it's
+   very thin and fragile/patchy looking."). empty-mark.js and fifth.js run in a VM over a canvas written here, which
+   keeps every dot it is told to draw; its hit test is the circle test the figure's own path allows, so the lab needs
+   no browser. The band's true centreline is worked out again from the figure's definition (x = sin(3s + phi),
+   y = sin(2s), fitted to 150 of the 256 box, the header's group transform, the canvas scale), never from the code
+   under test, and the dots are read against it:
+   - FILL: around each of 240 points of the centreline, the dots drawn within 0.8 of the band's radius, over the
+     number a full lattice of the desk's pitch holds in that disc (a disc entirely inside the band). A thin or
+     patchy stretch is a low fill, a pile of dots a high one;
+   - STRAYS: the share of dots farther from the centreline than the band's radius and a pixel. */
+function bandLab(phi, still) {
+  const read = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
+  const strip = s => s.replace(/^import[^\n]*\n/gm, "").replace(/export\s*\{[^}]*\};?\s*$/, "");
+  const arcs = [], T = { a: 1.0581, b: 0, c: 0, d: 1.0581, e: -7.441, f: -7.441 };
+  class Path2D {
+    constructor(d) { this.circles = []; const re = /M(-?[\d.]+) (-?[\d.]+)a(-?[\d.]+) /g; let m;
+      while ((m = re.exec(d))) this.circles.push([+m[1] + +m[3], +m[2], +m[3]]); }
+  }
+  const mkCtx = () => {
+    let M = [1, 0, 0, 1, 0, 0];
+    const ctx = { globalAlpha: 1, clearRect() {}, beginPath() {}, fill() {}, moveTo() {},
+      arc(x, y, r) { arcs.push([x, y, r, ctx.globalAlpha]); },
+      setTransform(...m) { M = m; },
+      transform(a, b, c, d, e, f) { const [A, B, C, D, E_, F] = M;
+        M = [A * a + C * b, B * a + D * b, A * c + C * d, B * c + D * d, A * e + C * f + E_, B * e + D * f + F]; },
+      isPointInPath(path, x, y) { const [a, b, c, d, e, f] = M, det = a * d - b * c;
+        const u = (d * (x - e) - c * (y - f)) / det, v = (-b * (x - e) + a * (y - f)) / det;
+        return path.circles.some(k => Math.hypot(u - k[0], v - k[1]) <= k[2]); } };
+    return ctx;
+  };
+  const glyph = { parentNode: { transform: { baseVal: { consolidate: () => ({ matrix: T }) } } } };
+  const svg = { viewBox: { baseVal: { width: 256 } }, querySelector: () => glyph };
+  glyph.parentNode.parentNode = svg;
+  const sb = {
+    M_MS: { gather: 1100, twinkle: 66 }, mgReduceMotion: () => !!still, Path2D,
+    performance: { now: () => 0 }, requestAnimationFrame: () => 1, cancelAnimationFrame() {},
+    setTimeout: () => 1, clearTimeout() {}, getComputedStyle: () => ({ color: "#fff" }), devicePixelRatio: 1,
+    MutationObserver: class { observe() {} disconnect() {} },
+    document: { documentElement: {}, querySelector: sel => sel === ".brand svg" ? svg : null,
+      createElement: () => { const ctx = mkCtx(); return { setAttribute() {}, getContext: () => ctx, isConnected: true,
+        parentNode: null, remove() { this.parentNode = null; } }; } }
+  };
+  sb.window = sb;
+  const seed = "Math.random = (() => { let s = 7; return () => (s = s * 16807 % 2147483647) / 2147483647; })();\n";
+  require("vm").runInNewContext(seed + strip(read("fifth.js")) + "\n" + strip(read("empty-mark.js"))
+    + "\nfunction __phase(p){ fifthClock.phi = p; }\nfunction __draw(ms){ drawMark(eMark, ms); }\n", sb);
+  const host = { firstChild: null, insertBefore(cv) { cv.parentNode = host; } };
+  if (!still) sb.__phase(phi);
+  sb.syncEmptyMark(host);
+  if (!still) { arcs.length = 0; sb.__draw(5000); }
+  return arcs.map(a => [a[0], a[1], a[3]]);
+}
+/* The band's centreline in canvas pixels at a phase, 2400 points round the whole loop, and its radius. */
+function bandTruth(phi) {
+  const A = 96, R = 10, K = 150 / (2 * (A + R)), S = 280 / 256, G = 1.0581, T = -7.441, line = [];
+  for (let i = 0; i < 2400; i++) {
+    const t = i / 2400 * 2 * Math.PI, x = 128 + K * A * Math.sin(3 * t + phi), y = 128 + K * A * Math.sin(2 * t);
+    line.push([S * (G * x + T), S * (G * y + T)]);
+  }
+  return { line, rad: R * K * G * S };
+}
+function bandStats(dots, phi) {
+  const { line, rad } = bandTruth(phi), step = 3.5, rho = 0.8 * rad, full = Math.PI * rho * rho / (step * step);
+  let min = Infinity, max = 0, strays = 0;
+  for (let i = 0; i < line.length; i += 10) {
+    let n = 0;
+    for (const d of dots) if (Math.hypot(d[0] - line[i][0], d[1] - line[i][1]) <= rho) n++;
+    min = Math.min(min, n / full); max = Math.max(max, n / full);
+  }
+  for (const d of dots) {
+    let best = Infinity;
+    for (const p of line) best = Math.min(best, Math.hypot(d[0] - p[0], d[1] - p[1]));
+    if (best > rad + 1) strays++;
+  }
+  return { phi, dots: dots.length, min, max, strays: strays / Math.max(1, dots.length) };
+}
+function emptyBandTests() {
+  const PHI0 = Math.PI / 4, r2 = v => Math.round(v * 100) / 100;
+  const phases = [PHI0, 0.5, 1.2, 2, 2.8, 3.6, 4.5, 5.5], solid = s => s.min >= 0.7 && s.max <= 1.5 && s.strays <= 0.02;
+  let got;
+  try {
+    const rows = phases.map(p => bandStats(bandLab(p, false), p)).concat([bandStats(bandLab(PHI0, true), PHI0)]);
+    got = rows.filter(s => !solid(s)).map(s => [r2(s.phi), s.dots, r2(s.min), r2(s.max), r2(s.strays)]);
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the empty desk's mark is one solid, even band at eight phases of the turn and standing still: around every point of its centreline the dots drawn fill 0.7 to 1.5 of a full lattice, and at most 2 per cent stand outside the band (phase, dots, least fill, most fill, strays of each that fails)",
+    got, []);
+  try {
+    const t = bandTruth(2), base = [];
+    for (let j = 0; j < 80; j++) for (let i = 0; i < 80; i++) {
+      const x = 1.75 + 3.5 * i, y = 1.75 + 3.5 * j;
+      if (t.line.some(p => Math.hypot(x - p[0], y - p[1]) < t.rad)) base.push([x, y, 1]);
+    }
+    const sparse = base.filter((d, i) => i % 2), moved = base.map(d => [d[0] + t.rad + 4, d[1], d[2]]);
+    const piled = base.concat(base.map(d => [d[0] + 0.5, d[1] + 0.5, d[2]]));
+    got = [solid(bandStats(base, 2)), solid(bandStats(sparse, 2)), solid(bandStats(moved, 2)), solid(bandStats(piled, 2))];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the measure sees what it guards, control: an ideal band of lattice dots is solid, with every other dot gone it is not, shifted out of the band it is not, and with every dot doubled it is not",
+    got, [true, false, false, false]);
 }
 /* THE .ec FILE TYPE IS NAMED IN THE INSTALLER'S LANGUAGE: electron-builder writes the English from
    fileAssociations, and shell/installer.nsh's customInstall writes the Polish over it when the

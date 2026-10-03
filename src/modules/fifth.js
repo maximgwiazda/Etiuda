@@ -14,7 +14,7 @@ function fifthPass(phi){
   const fine=[];
   for(let i=0;i<=FIFTH_FINE;i++){
     const t=FIFTH_T0+(FIFTH_T1-FIFTH_T0)*i/FIFTH_FINE;
-    fine.push([128+FIFTH_A*Math.sin(3*t+phi), 128+FIFTH_A*Math.sin(2*t)]);
+    fine.push([128+FIFTH_A*Math.sin(3*t+phi), 128+FIFTH_A*Math.sin(2*t), t]);
   }
   const out=[fine[0]]; let acc=0;
   for(let i=1;i<fine.length;i++){
@@ -45,37 +45,51 @@ function fifthCutPath(phi){
     return "M"+fifthF2(x-r)+" "+fifthF2(y)+"a"+fifthF2(r)+" "+fifthF2(r)+" 0 1 0 "+fifthF2(2*r)+" 0a"+fifthF2(r)+" "+fifthF2(r)+" 0 1 0 "+fifthF2(-2*r)+" 0";
   }).join("")+"Z";
 }
-// The figure's point at parameter t and phase phi, in the header's box, written into out.
-function fifthAt(t, phi, out){
-  const f=fifthFit();
-  out[0]=(128+FIFTH_A*Math.sin(3*t+phi))*f.k+f.ox;
-  out[1]=(128+FIFTH_A*Math.sin(2*t))*f.k+f.oy;
+/* THE BAND AT A PHASE, for marks drawn in dots: the centres of the discs the small cut is made of, in the
+   header's box, both halves of the loop whatever the phase (at the standard one they lie on one another).
+   Each carries its depth, z from -1 (far) to 1 (near): the figure is the shadow of a curve on a turning
+   cylinder, so the pass is at cos(3t + phi) and its mirror, half a turn on, at the opposite. */
+function fifthBand(phi){
+  const f=fifthFit(), pass=fifthPass(phi), out=[];
+  pass.forEach(p=>{
+    const z=Math.cos(3*p[2]+phi);
+    out.push([p[0]*f.k+f.ox, p[1]*f.k+f.oy, z]);
+    out.push([(FIFTH_BOX-p[0])*f.k+f.ox, p[1]*f.k+f.oy, -z]);
+  });
+  return out;
+}
+// The discs' radius in the header's box.
+function fifthRadius(){ return FIFTH_R*fifthFit().k; }
+// Light by depth, never gone: the far pass is FIFTH_FAR of the near one, eased between.
+const FIFTH_FAR=0.6;
+function fifthLight(z){
+  const u=z*0.5+0.5;
+  return FIFTH_FAR+(1-FIFTH_FAR)*u*u*(3-2*u);
 }
 
-/* DOTS THAT RIDE THE FIGURE: each takes the parameter of its nearest point on the standard pass and
-   the offset from it, so at the standard phase it stands where it stood. Half take the mirrored
-   parameter, the same point there and the loop's other half once it turns. `to` maps the header's
-   box into the dots' units, in place. */
-function fifthRide(dots, to){
-  const N=1500, ts=[], xs=[], ys=[], o=[0,0];
-  for(let i=0;i<=N;i++){
-    const t=FIFTH_T0+(FIFTH_T1-FIFTH_T0)*i/N;
-    fifthAt(t, FIFTH_PHI0, o); to(o);
-    ts.push(t); xs.push(o[0]); ys.push(o[1]);
-  }
-  dots.forEach(p=>{
-    let b=0, bd=Infinity;
-    for(let i=0;i<=N;i++){
-      const d=(p.x-xs[i])*(p.x-xs[i])+(p.y-ys[i])*(p.y-ys[i]);
-      if(d<bd){ bd=d; b=i; }
+/* THE BAND LAID ON A LATTICE: lat={x0,y0,step,nx,ny} is a grid of dots, `to` maps the header's box into the
+   grid's units in place, rad is the disc radius in those units. Writes into out (nx*ny, row by row) each
+   dot's light, 0 to 1: a dot inside a disc is lit by its pass's depth, fading over `feather` at the rim,
+   and where passes cross the nearer one wins. A dot is lit when and only when it is inside the band, so
+   the band is solid and even at every phase and the dots lit follow its area. */
+function fifthLay(phi, to, rad, feather, lat, out){
+  out.fill(0);
+  const o=[0,0];
+  fifthBand(phi).forEach(p=>{
+    o[0]=p[0]; o[1]=p[1]; to(o);
+    const lum=fifthLight(p[2]);
+    const i0=Math.max(0,Math.ceil((o[0]-rad-lat.x0)/lat.step)), i1=Math.min(lat.nx-1,Math.floor((o[0]+rad-lat.x0)/lat.step));
+    const j0=Math.max(0,Math.ceil((o[1]-rad-lat.y0)/lat.step)), j1=Math.min(lat.ny-1,Math.floor((o[1]+rad-lat.y0)/lat.step));
+    for(let j=j0;j<=j1;j++){
+      for(let i=i0;i<=i1;i++){
+        const d=Math.hypot(lat.x0+i*lat.step-o[0], lat.y0+j*lat.step-o[1]);
+        if(d>=rad) continue;
+        const v=Math.min(1,(rad-d)/feather)*lum, k=j*lat.nx+i;
+        if(v>out[k]) out[k]=v;
+      }
     }
-    p.t=Math.random()<0.5 ? ts[b] : 3*Math.PI/2-ts[b];
-    p.ox=p.x-xs[b]; p.oy=p.y-ys[b];
   });
-  return (p, phi, out)=>{
-    fifthAt(p.t, phi, out); to(out);
-    out[0]+=p.ox; out[1]+=p.oy;
-  };
+  return out;
 }
 
 // ---- the one clock ----
@@ -117,9 +131,10 @@ function wireFifth(){
 
 export {
   FIFTH_PHI0,
-  fifthAt,
+  fifthBand,
   fifthCutPath,
+  fifthLay,
   fifthPhase,
-  fifthRide,
+  fifthRadius,
   wireFifth
 };
