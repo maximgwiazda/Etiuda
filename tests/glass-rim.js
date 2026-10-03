@@ -30,7 +30,8 @@
  * and read twice: computed style (the ring painted, the bevel's bright line gone), and pixels (the bottom edge's right end,
  * 30 px in, against the row 9 px inside it: lit by the rim, darkened by the old bevel's foot, flat with neither). The old
  * look (the ring hidden, the bevel back) is injected in the same launch as the control. The small controls (a pill, a
- * button, the add button, the toast) must paint no ring.
+ * button, the add button, the toast) must paint no ring. A click must reach what is inside each ring: the centre of a
+ * leaf inside a macro, a dialog and those four is hit-tested and must resolve inside the surface, not to it.
  *
  * THE CONTROLS, IN THE SAME LAUNCH. The pixel read is run again with the first pass's gradient (360 x 58, peak
  * .92) and with the first draft's (240 x 96, which lit the sides nearly as far): the first pass must read the
@@ -47,7 +48,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
 
-const EXPECTED = 23;
+const EXPECTED = 24;
 const D = 30;
 const OFF = "rgba(0, 0, 0, 0) 0px 0px 0px 0px";
 const ROUND = "radial-gradient(240px 96px at 0 0,rgba(255,255,255,.92),rgba(255,255,255,.26) 38%,transparent 72%),"
@@ -258,6 +259,24 @@ const OLD_LOOK = ":root:not([data-theme=light]) .menu::after,:root:not([data-the
   + ":root:not([data-theme=light]) .facts-panel,:root:not([data-theme=light]) .pills-slot.pills-overflow .pills{--bevel:" + OLD_BEVEL + "!important}";
 const RAISED = [["menu", "#settingsMenu"], ["facts", "#factsPanel"], ["pills", "#pills"], ["peek", "#intentRail"]];
 
+/* A click passes through the ring: the centre of a leaf inside the surface must resolve to something inside it. A ring that
+   takes pointer events lands the point on the surface itself, since a pseudo-element's box answers for its element. */
+const hitThrough = (pg, sel) => pg.evaluate(sel => {
+  const inView = e => { const q = e.getBoundingClientRect(); return q.width > 0 && q.height > 0 && q.left >= 0 && q.top >= 0 && q.right <= innerWidth && q.bottom <= innerHeight; };
+  const el = [...document.querySelectorAll(sel)].find(inView);
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  const child = [...el.querySelectorAll("*")].find(c => {
+    if (c.children.length || getComputedStyle(c).pointerEvents === "none") return false;
+    const q = c.getBoundingClientRect(), x = q.left + q.width / 2, y = q.top + q.height / 2;
+    return q.width >= 6 && q.height >= 6 && x > r.left && x < r.right && y > r.top && y < r.bottom && x < innerWidth && y < innerHeight;
+  });
+  if (!child) return { ok: false, child: "no leaf to aim at", hit: "-" };
+  const q = child.getBoundingClientRect(), hit = document.elementFromPoint(q.left + q.width / 2, q.top + q.height / 2);
+  return { ok: !!hit && hit !== el && el.contains(hit), child: child.tagName.toLowerCase(),
+           hit: hit ? hit.tagName.toLowerCase() + (hit === el ? " (the surface itself)" : "") : "nothing" };
+}, sel);
+
 const surfaceRead = (pg, sel) => pg.evaluate(async sel => {
   const el = document.querySelector(sel);
   if (!el) return null;
@@ -295,7 +314,7 @@ async function openAndRead(pg, name, sel, lift) {
     await pg.mouse.move(2, 400); await sleep(1400);
   }
   const r = await surfaceRead(pg, sel);
-  if (r && lift) r.lift = await surfaceLift(pg, r);
+  if (r && lift) { r.hit = await hitThrough(pg, sel); r.lift = await surfaceLift(pg, r); }
   if (name === "menu") await pg.keyboard.press("Escape");
   else if (name === "facts") await pg.evaluate(() => { const b = document.getElementById("factsBtn"); if (b.getAttribute("aria-expanded") === "true") b.click(); });
   else if (name === "pills") await pg.mouse.move(700, 700);
@@ -361,6 +380,7 @@ const endsLine = (m, e) => "top " + m.top + " and " + m.tr + " (ratio " + e.topR
     check(dk.length >= 10 && dk.every(s => s.shadow === OFF),
       "9gr2 dark: the macro's bevel is off wherever the rim is on");
 
+    const hitMacro = await hitThrough(p, ".txt");
     const rail = (await styles(p, "#intentRail"))[0];
     check(!!rail && rail.rim && rail.pos === "absolute" && !/255, 255, 255, 0\.16/.test(rail.shadow),
       "9gr3 dark: the intent panel paints the rim and its bevel's bright line is off");
@@ -375,6 +395,7 @@ const endsLine = (m, e) => "top " + m.top + " and " + m.tr + " (ratio " + e.topR
       const a = getComputedStyle(card, "::after");
       return { rim: a.content !== "none" && a.content !== "normal", pos: a.position, w: card.offsetWidth, h: card.offsetHeight };
     });
+    const hitDialog = await hitThrough(p, ".modal:not([hidden]) .modal-card");
     await p.keyboard.press("Escape");
     await p.waitForFunction(() => !document.querySelector(".modal:not([hidden])"), { timeout: 10000 }).catch(() => {});
     await sleep(600);
@@ -448,6 +469,10 @@ const endsLine = (m, e) => "top " + m.top + " and " + m.tr + " (ratio " + e.topR
       "9gr18 light: none of the four paints the ring, and Quick facts keeps its bevel");
     check(sf.small.length === 5 && sf.small.every(x => !x.rim),
       "9gr19 dark: a pill, a button, the add button, the toast and a switch's button paint no ring (" + sf.small.map(x => x.s).join(" ") + ")");
+    const hits = [["a macro", hitMacro], ["a dialog", hitDialog], ...RAISED.map(([n]) => [n, sf.dark[n] && sf.dark[n].hit])];
+    check(hits.every(([, h]) => h && h.ok),
+      "9gr20 dark: the centre of a leaf inside each rimmed surface resolves inside it, so a click passes through the ring ("
+      + hits.map(([n, h]) => n + ": " + (h ? h.child + " to " + h.hit : "not found")).join(", ") + ")");
 
     await setTheme(p, "light");
     const lt = await styles(p, ".txt");
