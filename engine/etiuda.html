@@ -1863,10 +1863,11 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 /* THE RIM IS A REAL BORDER where the browser can clip a background to one. A border is snapped to whole
    device pixels and a masked ring is not, so at a fractional scale (125 and 150 per cent) the mask split the
    line over two rows, differently at the top and the bottom. The ring is the pseudo's own 1px transparent border
-   with the gradient clipped to it, laid exactly over the macro's border: the border's snapped width is
-   --rim-bw, which is floor(ratio) / ratio of a pixel, so the inset is the same width to the device pixel (the
-   steps are the Windows scales; between them the error stays under a quarter of a device pixel). Hover, the
-   mark and the accent rings still set the macro's own border and shadow, and the ring still sits over them. */
+   with the gradient clipped to it, laid exactly over the macro's border. */
+/* --rim-bw is the macro border's snapped width, floor(ratio) / ratio of a pixel, so the inset is the same
+   width to the device pixel (the steps are the Windows scales; between them the error stays under a quarter
+   of a device pixel). Hover, the mark and the accent rings still set the macro's own border and shadow, and
+   the ring still sits over them. */
 :root{--rim-bw:1px}
 @media (min-resolution:1.25dppx){:root{--rim-bw:.8px}}
 @media (min-resolution:1.5dppx){:root{--rim-bw:.666667px}}
