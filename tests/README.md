@@ -36,7 +36,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/csp.js                                the policy, two unpackaged Electrons
     node tests/desk.js                               the desk in a file, an unpackaged Electron
     node tests/dot-field-desk.js                     the dot field in the desk's own window: where it stands and that it stands still, an unpackaged Electron
-    ETIUDA_FIXTURES=<folder> node tests/glass-rim.js  the glass rim on a macro, the panel and a dialog: painted in dark, absent in light, tilted to the top and bottom, Chrome
+    ETIUDA_FIXTURES=<folder> node tests/glass-rim.js  the glass rim on a macro, the panel and a dialog: painted in dark, absent in light, a quiet line along the top and bottom, Chrome
     ETIUDA_FIXTURES=<folder> node tests/catalog-watch.js  the watched catalog, one app run
     node tests/pick-desk.js                          the picker over a real window: it takes the foreground and presses keys, so by hand, nobody at the keyboard
     node tests/swap.mjs                              the desk changed in place held to a fresh start, Chrome, no fixtures
@@ -604,7 +604,7 @@ One launch of the shell, unpackaged, on a throwaway app with the tree's sample c
 
     ETIUDA_FIXTURES=<folder> node tests/glass-rim.js    npm run glass-rim
 
-One headless Chrome on the engine and the fixtures' catalog, nine checks, about 10 s, in no gate. Computed style says the ring is painted and the old bevel is off, on all macros, the intent panel and an open Settings dialog in dark, and that none of it paints in light. The eye's part is pixels: the tallest macro is photographed at 1:1 and its edge row read at 30 px from the top-left corner along the top and down the left side, each less the edge's resting level; the top must be at least 100 and at least three times the side. Its controls are in the same launch: the first draft's round 240 x 96 catch gives a ratio under two thirds of the tilted one's, and light reads no lift. It has gone red on the engine before the change (six checks) and under five planted faults: the light guard dropped, the macro bevel kept, a round catch, the panel bevel kept, the dialog ring dropped.
+One headless Chrome on the engine and the fixtures' catalog, eleven checks, about 12 s, in no gate. Computed style says the ring is painted and the old bevel is off, on all macros, the intent panel and an open Settings dialog in dark, and that none of it paints in light. The eye's part is pixels: the tallest macro is photographed whole at 1:1 and its edge read at 30 px from the top-left and bottom-right corners along the edge and down the side, each less the edge's resting level; the top must be at least 50 and four times the side, the bottom likewise, and the line must hold at 120 px and at the middle of the top. Its controls are in the same launch: the first pass's gradient (360 x 58, peak .92) must read a peak the new one is at most three quarters of, the first draft's round 240 x 96 catch gives a ratio under two thirds, and light reads no lift. Red on the engine before the change (the peak check), and under three planted faults: the sides lit, the bottom catch moved to the top, the peak back at .92.
 
 ## Web addresses leave only for a click
 

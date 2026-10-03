@@ -1843,12 +1843,14 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 .tag{position:absolute;top:8px;right:10px;font:10px var(--mono);color:var(--dim);
   letter-spacing:.5px;pointer-events:none}
 .txt.plx .tag{color:var(--pl)}
-/* THE GLASS RIM: light catching an edge, drawn as a 1px ring cut from this gradient. Two catches,
-   top left and bottom right, wide and short so the light runs far along the top and bottom edges
-   and is gone within a few pixels down the left and right ones. Dark themes only. */
+/* THE GLASS RIM: light catching an edge, drawn as a 1px ring cut from this gradient. A line along
+   the top and the bottom edge, brightest at the top's left and the bottom's right and fading along
+   the edge, wide and shallow so the sides are all but dark; a faint line holds the full length of
+   both edges. Static, and quieter than the first pass (peak .58 against .92). Dark themes only. */
 :root:not([data-theme=light]){
-  --rim:radial-gradient(360px 58px at 0 0,rgba(255,255,255,.92),rgba(255,255,255,.26) 38%,transparent 72%),
-        radial-gradient(360px 58px at 100% 100%,rgba(255,255,255,.72),rgba(255,255,255,.18) 38%,transparent 72%),
+  --rim:radial-gradient(520px 36px at 0 0,rgba(255,255,255,.58),rgba(255,255,255,.2) 40%,transparent 85%),
+        radial-gradient(520px 36px at 100% 100%,rgba(255,255,255,.46),rgba(255,255,255,.15) 40%,transparent 85%),
+        linear-gradient(rgba(255,255,255,.05),transparent 14px calc(100% - 14px),rgba(255,255,255,.05)),
         linear-gradient(rgba(255,255,255,.02),rgba(255,255,255,.02))}
 /* The macro's bevel gives way to the rim; the ring sits over its border. */
 :root:not([data-theme=light]) .txt{--card-shadow:0 0 #0000}

@@ -1,18 +1,19 @@
-/* The glass rim: a 1px catch of light on the edge of a macro, the intent panel and a dialog, in the dark
- * themes only, wide and short so it runs along the top and bottom edges and dies down the sides.
+/* The glass rim: a 1px line of light along the top and bottom edges of a macro, the intent panel and a dialog,
+ * in the dark themes only, brightest at the top's left and the bottom's right, the sides nearly dark, static.
  *
  *   ETIUDA_FIXTURES=<folder> node tests/glass-rim.js
  *
  * The page is the engine beside the fixtures folder's format 2 catalog, in headless Chrome.
  *
  * WHAT IS MEASURED. Computed style says the ring is painted and the old bevel is off, per theme, on every
- * macro and on the panel and a dialog. The eye's part is pixels: the macro's corner is photographed at 1:1
+ * macro and on the panel and a dialog. The eye's part is pixels: the macro is photographed whole at 1:1
  * and the brightness of its edge row at 30 px from the top-left corner along the top is read against the same
- * distance down the left edge, each less the edge's resting level. A lit top and a dark side is the claim.
+ * distance down the left edge, and the bottom-right corner likewise, each less the edge's resting level.
+ * A lit top and bottom and a dark side is the claim, and so is a peak below the first pass's (bdf6120).
  *
- * THE CONTROLS, IN THE SAME LAUNCH. The pixel read is run again with the first draft's gradient (240 x 96,
- * which lit the sides nearly as far), and must give the lower ratio, so a read that cannot tell a tilt from
- * a round catch goes red. The light theme is photographed the same way and must show no lift, which also
+ * THE CONTROLS, IN THE SAME LAUNCH. The pixel read is run again with the first pass's gradient (360 x 58, peak
+ * .92) and with the first draft's (240 x 96, which lit the sides nearly as far): the first pass must read the
+ * brighter peak, and the draft the lower ratio, so a read that cannot tell them apart goes red. The light theme is photographed the same way and must show no lift, which also
  * proves the read sees a ring when there is one.
  *
  * Exit code is the number of failed checks, capped at 63 (E.exitOf), 78 where the run produced no verdict. */
@@ -24,11 +25,14 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
 
-const EXPECTED = 9;
+const EXPECTED = 11;
 const D = 30;
 const OFF = "rgba(0, 0, 0, 0) 0px 0px 0px 0px";
 const ROUND = "radial-gradient(240px 96px at 0 0,rgba(255,255,255,.92),rgba(255,255,255,.26) 38%,transparent 72%),"
   + "radial-gradient(240px 96px at 100% 100%,rgba(255,255,255,.72),rgba(255,255,255,.18) 38%,transparent 72%),"
+  + "linear-gradient(rgba(255,255,255,.02),rgba(255,255,255,.02))";
+const PASS1 = "radial-gradient(360px 58px at 0 0,rgba(255,255,255,.92),rgba(255,255,255,.26) 38%,transparent 72%),"
+  + "radial-gradient(360px 58px at 100% 100%,rgba(255,255,255,.72),rgba(255,255,255,.18) 38%,transparent 72%),"
   + "linear-gradient(rgba(255,255,255,.02),rgba(255,255,255,.02))";
 let b; let fails = 0; let checks = 0; let reachedEnd = false;
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
@@ -123,8 +127,8 @@ async function lift(pg) {
     return { x: q.left, y: q.top, w: q.width, h: q.height };
   });
   const x0 = Math.round(r.x), y0 = Math.round(r.y);
-  const png = await pg.screenshot({ clip: { x: x0 - 2, y: y0 - 2, width: D + 10, height: Math.round(r.h) + 4 }, captureBeyondViewport: false, encoding: "base64" });
-  const read = await pg.evaluate(async (b64, h, d) => {
+  const png = await pg.screenshot({ clip: { x: x0 - 2, y: y0 - 2, width: Math.round(r.w) + 4, height: Math.round(r.h) + 4 }, captureBeyondViewport: false, encoding: "base64" });
+  const read = await pg.evaluate(async (b64, h, w, d) => {
     const img = new Image();
     img.src = "data:image/png;base64," + b64;
     await img.decode();
@@ -133,9 +137,15 @@ async function lift(pg) {
     const g = c.getContext("2d");
     g.drawImage(img, 0, 0);
     const px = (x, y) => g.getImageData(x, y, 1, 1).data[0];
-    return { top: px(2 + d, 2), side: px(2, 2 + d), rest: px(2, 2 + Math.round(h / 2)) };
-  }, png, r.h, D);
-  return { top: read.top - read.rest, side: read.side - read.rest, rest: read.rest,
+    const W = Math.round(w), H = Math.round(h);
+    return { top: px(2 + d, 2), side: px(2, 2 + d), rest: px(2, 2 + Math.round(h / 2)),
+             peak: Math.max(px(2 + 10, 2), px(2 + 20, 2), px(2 + 30, 2)),
+             far: px(2 + 120, 2), mid: px(2 + Math.round(w / 2), 2),
+             bot: px(W + 1 - d, H + 1), bside: px(W + 1, H + 1 - d) };
+  }, png, r.h, r.w, D);
+  const L = k => read[k] - read.rest;
+  return { top: L("top"), side: L("side"), rest: read.rest, peak: L("peak"), far: L("far"), mid: L("mid"),
+           bot: L("bot"), bside: L("bside"),
            whole: Math.abs(r.x - x0) < 0.01 && Math.abs(r.y - y0) < 0.01, h: r.h };
 }
 
@@ -180,10 +190,19 @@ async function lift(pg) {
 
     const mine = await lift(p);
     console.log("       dark, " + D + " px from the corner, less the edge at rest (" + mine.rest + "): top " + mine.top + ", side " + mine.side
-      + ", macro " + Math.round(mine.h) + " px high");
-    check(mine.whole && mine.h >= 70 && mine.top >= 100 && mine.top >= 3 * Math.max(mine.side, 1),
-      "9gr5 dark: along the top the rim is at least 100 and at least three times its brightness down the side, at " + D + " px");
+      + ", peak (best of 10, 20, 30 px) " + mine.peak + ", top at 120 px " + mine.far + ", top at the middle " + mine.mid
+      + ", bottom " + mine.bot + ", right side " + mine.bside + ", macro " + Math.round(mine.h) + " px high");
+    check(mine.whole && mine.h >= 70 && mine.top >= 50 && mine.top >= 4 * Math.max(mine.side, 1),
+      "9gr5 dark: along the top the rim is at least 50 and at least four times its brightness down the side, at " + D + " px");
+    check(mine.bot >= 40 && mine.bot >= 4 * Math.max(mine.bside, 1) && mine.far >= 10 && mine.mid >= 4,
+      "9gr10 dark: the bottom's right is lit and its side dark likewise, and the line holds along the top (120 px, middle)");
 
+    await p.addStyleTag({ content: ":root:not([data-theme=light]){--rim:" + PASS1 + "!important}" });
+    await setTheme(p, "dark");
+    const pass1 = await lift(p);
+    console.log("       dark with the first pass's gradient (bdf6120): top " + pass1.top + ", side " + pass1.side + ", peak " + pass1.peak);
+    check(pass1.peak > 100 && mine.peak <= 0.75 * pass1.peak && mine.peak >= 0.25 * pass1.peak,
+      "9gr11 dark: the peak (" + mine.peak + ") is quieter than the first pass's (" + pass1.peak + "), at most three quarters of it, and still a line");
     await p.addStyleTag({ content: ":root:not([data-theme=light]){--rim:" + ROUND + "!important}" });
     await setTheme(p, "dark");
     const round = await lift(p);
