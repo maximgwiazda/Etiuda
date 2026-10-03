@@ -45,7 +45,7 @@ function v2Fns() {
     "const V2_HARNESS_TEST_KEYID=", "const V2_HARNESS_TEST_PUB=", "const V2_RING_FORMAT=",
     "const V2_KNOWN_KEYS=",
     "function v2SigFold(", "function v2SignedBytes(", "function v2HexBytes(", "function v2SigState(",
-    "function v2RingRead(",
+    "function v2RingRead(", "const V2_TEAM_FORMAT=", "function v2TeamRead(", "function v2TeamSigState(",
     "const V2_ID_RE=", "const V2_SHAPES=", "const V2_MARKER_RE=", "function v2IsBracketLine(",
     "const V2_GREET_PARTS=", "function v2BodyProblems(", "const V2_LANG_RE=", "function v2LangProblems(",
     "const V2_SHA_RE=", "function v2Missing(", "function v2FlagProblem(", "function v2NextProblems(",
@@ -61,6 +61,7 @@ function v2Fns() {
   ].map(m => extractDecl(src, m)).join("\n");
   return new Function(decls + "\nreturn {v2Problems,v2SignedBytes,v2SigState,catalogFromV2,"
     + "v2RingRead,V2_RING_FORMAT,V2_RING_KIND,V2_RING_FILE,V2_HARNESS_TEST_KEYID,"
+    + "v2TeamRead,v2TeamSigState,V2_TEAM_FORMAT,V2_TEAM_KIND,V2_TEAM_FILE,"
     + "V2_HARNESS_TEST_PUB,"
     + "V2_KNOWN_KEYS,V2_SIG_ALG,V2_SIG_VALID,V2_SIG_INVALID,V2_SIG_NONE,V2_SIG_UNKNOWN};")();
 }
@@ -253,6 +254,60 @@ async function main() {
   ok(builtIn(read) === v2.V2_HARNESS_TEST_PUB && builtIn(v2.v2RingRead(null)) === v2.V2_HARNESS_TEST_PUB,
      "605h a ring file adds to what is compiled in and takes nothing away: the built-in"
      + " binding survives a read of " + ringDoc.keys.length + " entries");
+
+  /* ---- the team file, board 834 step 8. Studio writes it; this is the reader the desk holds. -- */
+
+  const deskOf = (seed, name) => {
+    const key = crypto.createHash("sha256").update("desk " + seed).digest("hex");
+    const d = { id: "k-" + crypto.createHash("sha256").update(Buffer.from(key, "hex")).digest("hex").slice(0, 16),
+                key: key, box: crypto.createHash("sha256").update("box " + seed).digest("hex") };
+    if (name) d.name = name;
+    return d;
+  };
+  const teamDoc = { format: v2.V2_TEAM_FORMAT, kind: v2.V2_TEAM_KIND, id: "t-" + "0123456789abcdef",
+    catalogs: [fixture.id], lead: { keyId: keyId, public: pubHex(pair.publicKey) },
+    sealed: false, exportsSealed: false, epoch: 1,
+    roster: [{ desk: deskOf(1, "Ala") }, { desk: deskOf(2), name: "Front desk" }], later: { kept: true } };
+  const teamSigned = attachSig(v2, teamDoc, v2.V2_SIG_ALG, keyId, pair.privateKey);
+  const t1 = v2.v2TeamRead(JSON.stringify(teamSigned));
+  const tState = t1.team ? await v2.v2TeamSigState(t1.team) : "no team";
+  ok(t1.problems.length === 0 && t1.team && t1.team.roster.length === 2 && t1.team.roster[1].name === "Front desk"
+     && t1.team.later && t1.team.later.kept === true && tState === v2.V2_SIG_VALID && v2.V2_TEAM_FILE === "etiuda-team.json",
+     "88a a team file signed by the lead reads whole, its roster, its names and a field this build does not name kept, and"
+     + " verifies under the lead key it names: " + JSON.stringify(t1.problems) + ", " + tState);
+
+  const teamBent = JSON.parse(JSON.stringify(teamSigned));
+  teamBent.roster[1].name = "Back desk";
+  const teamOther = attachSig(v2, teamDoc, v2.V2_SIG_ALG, keyId, other.privateKey);
+  const teamRenamed = JSON.parse(JSON.stringify(teamSigned));
+  teamRenamed.lead.keyId = secondId;
+  const tStates = [];
+  for (const d of [teamBent, teamOther, teamRenamed]) tStates.push(await v2.v2TeamSigState(v2.v2TeamRead(d).team));
+  ok(tStates.join() === [v2.V2_SIG_INVALID, v2.V2_SIG_INVALID, v2.V2_SIG_UNKNOWN].join(),
+     "88b THE CONTROL: a name in the roster changed and the file signed by another key read invalid, and a lead key id"
+     + " the signature does not carry reads unknown: " + tStates.join(", "));
+
+  const teamAbsent = [null, "", "{not json", "[]", JSON.stringify({ format: 9, kind: v2.V2_TEAM_KIND }),
+                      JSON.stringify({ format: v2.V2_TEAM_FORMAT, kind: v2.V2_RING_KIND })];
+  const tNull = teamAbsent.map(x => v2.v2TeamRead(x));
+  ok(tNull.every(r => r.team === null) && tNull.filter(r => r.problems.length === 1).length === teamAbsent.length - 2,
+     "88c " + teamAbsent.length + " absent, empty or foreign files read as no team without a throw, and each but the"
+     + " two absent says one line: " + tNull.map(r => r.problems.length).join(","));
+
+  const teamBroken = Object.assign({}, teamDoc, { lead: { keyId: keyId }, epoch: 0, sealed: "no", roster: {} });
+  const t4 = v2.v2TeamRead(teamBroken);
+  ok(t4.team === null && t4.problems.length === 4,
+     "88d a team file with no lead key, epoch 0, sealed not true or false and a roster that is not a list is no team,"
+     + " with a line for each: " + JSON.stringify(t4.problems));
+
+  const teamEntries = Object.assign({}, teamDoc, { catalogs: [fixture.id, "UPPER", fixture.id],
+    roster: [null, { desk: { id: "k-123", key: "00", box: "00" } }, { desk: deskOf(1, "Ala") },
+             { desk: deskOf(3), name: 7 }, { desk: deskOf(1), name: "the same desk again" }] });
+  const t5 = v2.v2TeamRead(teamEntries);
+  ok(t5.team && t5.team.roster.length === 1 && t5.team.roster[0].desk.name === "Ala" && t5.team.catalogs.join() === fixture.id
+     && t5.problems.length === 5,
+     "88e unusable entries are dropped with a line each and their neighbours stand: a bad catalog id, four bad desks or"
+     + " a desk twice, the first standing (" + t5.problems.length + " lines, " + (t5.team ? t5.team.roster.length : 0) + " desk)");
 
   console.log(fails ? "RESULT: FAIL, " + fails + " of " + n + " failed"
                     : "RESULT: OK, " + n + " checks");

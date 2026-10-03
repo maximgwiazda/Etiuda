@@ -1353,6 +1353,18 @@ function ecCounts(data) {
 const ecFactsRead = new Map();                  // path -> [mtime|size, the facts, or null]
 /* SHA-256 of a document's signed bytes, the engine's pin: the same function on both sides of a comparison. */
 function signedSha(data) { return "sha256:" + crypto.createHash("sha256").update(signedBytesOf(data)).digest("hex"); }
+/* Whether a catalog read from desks/<folder>/ is that desk's own, by the rule above. Studio reads desk files through
+   this function, sliced from its pinned copy of this file, so it has one statement. */
+function deskFileGenuine(data, folder) {
+  const d = data && data.desk, sig = data && data.sig;
+  try {
+    return !!folder && !!d && typeof d === "object" && d.id === folder && /^k-[0-9a-f]{16}$/.test(d.id)
+      && /^[0-9a-f]{64}$/.test(String(d.key)) && branchIdOf(d.key) === d.id
+      && !!sig && sig.alg === "Ed25519" && sig.keyId === d.id && /^[0-9a-f]{128}$/.test(String(sig.value))
+      && crypto.verify(null, branchSignedBytes(data), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(d.key, "hex")]),
+        format: "der", type: "spki" }), Buffer.from(sig.value, "hex"));
+  } catch { return false; }
+}
 /* What a listing says about a catalog file, or null where it is not one. `deskFolder` is the folder a desk's file
    sits in, and then `deskOk` says whether the file is genuine. */
 function ecFacts(file, deskFolder) {
@@ -1369,15 +1381,11 @@ function ecFacts(file, deskFolder) {
   try {
     const { data } = catalogPayload(text);
     if (isV2(data) && Array.isArray(data.cards)) {
-      const n = ecCounts(data), d = data.desk, sig = data.sig;
+      const n = ecCounts(data), d = data.desk;
       out = { mtime: Math.round(st.mtimeMs), cards: data.cards.length, edition: data.date != null ? String(data.date) : "",
               macros: n.macros, intents: n.intents, cats: n.cats, awaiting: n.awaiting, id: data.id != null ? String(data.id) : "",
               rev: +data.rev || 0, grew: ecGrew(data), sha: signedSha(data), deskName: d && typeof d.name === "string" ? d.name : "",
-              deskOk: !!deskFolder && !!d && typeof d === "object" && d.id === deskFolder && /^k-[0-9a-f]{16}$/.test(d.id)
-                && /^[0-9a-f]{64}$/.test(String(d.key)) && branchIdOf(d.key) === d.id
-                && !!sig && sig.alg === "Ed25519" && sig.keyId === d.id && /^[0-9a-f]{128}$/.test(String(sig.value))
-                && crypto.verify(null, branchSignedBytes(data), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(d.key, "hex")]),
-                  format: "der", type: "spki" }), Buffer.from(sig.value, "hex")) };
+              deskOk: deskFileGenuine(data, deskFolder) };
     }
   } catch { /* not a catalog */ }
   ecFactsRead.set(file, [stamp, out]);

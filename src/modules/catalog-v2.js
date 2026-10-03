@@ -279,6 +279,57 @@ function v2RingRead(src){
   });
   return out;
 }
+/* THE TEAM FILE, one per shared folder beside the catalogs: written and signed by the lead's Studio, naming the catalogs it
+   covers, the lead's key, whether the team's catalogs are sealed, the team key's epoch, and the roster of desks the lead has
+   met. `team` is null where the file is absent or unusable, with a line saying why; an unusable roster entry is dropped
+   and said, and its neighbours stand. Fields this build does not name are kept. */
+const V2_TEAM_FORMAT=1, V2_TEAM_KIND="etiuda-team", V2_TEAM_FILE="etiuda-team.json", V2_TEAM_ID_RE=/^t-[0-9a-f]{16}$/;
+function v2TeamRead(src){
+  const problems=[], out={team:null, problems:problems};
+  if(src==null||src==="") return out;
+  let doc=src;
+  if(typeof src==="string"){
+    try{ doc=JSON.parse(src); }
+    catch(e){ problems.push("team: the file is not JSON, "+e.message); return out; }
+  }
+  if(!doc||typeof doc!=="object"||Array.isArray(doc)){ problems.push("team: wanted an object"); return out; }
+  if(+doc.format!==V2_TEAM_FORMAT||doc.kind!==V2_TEAM_KIND){
+    problems.push("team: wanted format "+V2_TEAM_FORMAT+" and kind "+JSON.stringify(V2_TEAM_KIND));
+    return out;
+  }
+  const hex64=/^[0-9a-f]{64}$/, lead=doc.lead, bad=[];
+  if(!V2_TEAM_ID_RE.test(v2Str(doc.id))) bad.push("id: wanted t- and 16 lower-case hex characters");
+  if(!lead||typeof lead!=="object"||Array.isArray(lead)||!V2_ID_RE.test(v2Str(lead.keyId))||!hex64.test(v2Str(lead.public)))
+    bad.push("lead: wanted a keyId and a public key of 64 lower-case hex characters");
+  ["sealed","exportsSealed"].forEach(f=>{ if(typeof doc[f]!=="boolean") bad.push(f+": wanted true or false"); });
+  if(!Number.isInteger(doc.epoch)||doc.epoch<1) bad.push("epoch: wanted a whole number from 1");
+  if(!Array.isArray(doc.catalogs)) bad.push("catalogs: wanted the list of catalog ids");
+  if(!Array.isArray(doc.roster)) bad.push("roster: wanted the list of desks");
+  if(bad.length){ bad.forEach(b=>problems.push("team "+b)); return out; }
+  const team=Object.assign({},doc,{catalogs:[],roster:[]}), seen={};
+  doc.catalogs.forEach((c,i)=>{
+    if(!V2_ID_RE.test(v2Str(c))) problems.push("team catalogs["+i+"]: wanted a catalog id");
+    else if(team.catalogs.indexOf(c)<0) team.catalogs.push(c);
+  });
+  doc.roster.forEach((e,i)=>{
+    const where="team roster["+i+"]: ", d=e&&typeof e==="object"&&!Array.isArray(e)?e.desk:null;
+    if(!d||typeof d!=="object"||Array.isArray(d)||!/^k-[0-9a-f]{16}$/.test(v2Str(d.id))||!hex64.test(v2Str(d.key))||!hex64.test(v2Str(d.box))){
+      problems.push(where+"wanted a desk with its id, key and box"); return;
+    }
+    if((d.name!==undefined&&typeof d.name!=="string")||(e.name!==undefined&&typeof e.name!=="string")){ problems.push(where+"a name that is not text"); return; }
+    if(seen[d.id]){ problems.push(where+"desk "+d.id+" a second time, the first stands"); return; }
+    seen[d.id]=1;
+    team.roster.push(e);
+  });
+  out.team=team;
+  return out;
+}
+/* The team file's signature against the lead key it names, so it says the file is whole, not that the key is the lead's:
+   that trust comes from the ring or from the desk's admission. */
+function v2TeamSigState(team){
+  const lead=(team&&team.lead)||{};
+  return v2SigState(team, {[v2Str(team&&team.id)]:{[v2Str(lead.keyId)]:v2Str(lead.public)}});
+}
 const V2_ID_RE=/^[a-z0-9][a-z0-9-]{2,63}$/;
 const V2_SHAPES={plain:1,steps:1,alts:1};
 /* THE ONE MARKER SHAPE, and both readers use it: what a marker line looks like is written
@@ -696,4 +747,4 @@ function catalogToV2(c,opts){
   return out;
 }
 
-export { isV2, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2AltLabel, v2PartText, v2Problems, v2GrammarNotices, v2CatKey, V2_GRAMMAR_LANGS, v2ContentHash, v2SignedBytes, v2SigState, v2RingRead, V2_FORMAT, V2_KIND, V2_KNOWN_KEYS, V2_RING_FORMAT, V2_RING_KIND, V2_RING_FILE, V2_HARNESS_TEST_KEYID, V2_HARNESS_TEST_PUB, V2_SIG_NONE, V2_SIG_VALID, V2_SIG_INVALID, V2_SIG_UNKNOWN, V2_SIG_ALG };
+export { isV2, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2AltLabel, v2PartText, v2Problems, v2GrammarNotices, v2CatKey, V2_GRAMMAR_LANGS, v2ContentHash, v2SignedBytes, v2SigState, v2RingRead, v2TeamRead, v2TeamSigState, V2_FORMAT, V2_KIND, V2_KNOWN_KEYS, V2_RING_FORMAT, V2_RING_KIND, V2_RING_FILE, V2_TEAM_FORMAT, V2_TEAM_KIND, V2_TEAM_FILE, V2_HARNESS_TEST_KEYID, V2_HARNESS_TEST_PUB, V2_SIG_NONE, V2_SIG_VALID, V2_SIG_INVALID, V2_SIG_UNKNOWN, V2_SIG_ALG };
