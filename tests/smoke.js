@@ -749,7 +749,7 @@ const t0 = Date.now();
      app padding, in the strip above the list, beside a docked intent panel and in the scrollbar lane.
      THE MEASURE IS INK IN A STRIP, whichever element carries the field: the cards are hidden (their
      boxes kept), a strip of the window outside main's column is photographed, the field is switched
-     off on its layer, the scroller and main and the same strip is photographed again, and a strip that holds
+     off wherever it is painted and the same strip is photographed again, and a strip that holds
      any dot differs from its twin. A strip is at least 12 px each way, the field's pitch, so a field
      reaching it cannot fall between its dots. The control is the same photograph of a patch INSIDE
      main, which must differ: a leg that sees no dots anywhere passes every strip for free. Four
@@ -792,12 +792,28 @@ const t0 = Date.now();
         for (const n of names) o[n] = at[n].width >= (n === "left" || n === "right" ? 1 : 12) && at[n].height >= 12
           ? await p.screenshot({ clip: at[n], captureBeyondViewport: false, encoding: "base64" }) : null;
         return o; };
+      /* The twin switches the field off wherever it is painted: on the three layers it has stood on, and on every
+         other element or pseudo-element whose computed image holds the field's own, so a copy laid on a layer this
+         leg never named (the stage, the body) is switched off in the twin too and read as ink. The marks are set
+         before the photograph and change nothing in it, so the two photographs stay as close in time as they were. */
+      await p.evaluate(() => {
+        const was = getComputedStyle(document.querySelector("#dotField>div")).backgroundImage;
+        const carries = (el, pe) => was !== "none" && getComputedStyle(el, pe).backgroundImage.indexOf(was) > -1;
+        for (const el of document.querySelectorAll("*")) {
+          if (carries(el)) el.setAttribute("data-extent-off", "");
+          if (carries(el, "::before")) el.setAttribute("data-extent-off-before", "");
+          if (carries(el, "::after")) el.setAttribute("data-extent-off-after", "");
+        }
+      });
       const on = await shoot();
       await p.evaluate(() => { const s = document.createElement("style"); s.id = "__extentOff";
-        s.textContent = "#dotField>div,#pageScroll,main{background-image:none!important}"; document.head.appendChild(s); });
+        s.textContent = "#dotField>div,#pageScroll,main,[data-extent-off],[data-extent-off-before]::before,"
+          + "[data-extent-off-after]::after{background-image:none!important}"; document.head.appendChild(s); });
       await sleep(200);
       const off = await shoot();
-      await p.evaluate(() => { const s = document.getElementById("__extentOff"); if (s) s.remove(); });
+      await p.evaluate(() => { const s = document.getElementById("__extentOff"); if (s) s.remove();
+        for (const el of document.querySelectorAll("[data-extent-off],[data-extent-off-before],[data-extent-off-after]"))
+          for (const n of ["data-extent-off", "data-extent-off-before", "data-extent-off-after"]) el.removeAttribute(n); });
       await sleep(200);
       extentStates.push({ rail: rail, backdrop: backdrop, at: at,
         small: names.filter(n => on[n] === null),
