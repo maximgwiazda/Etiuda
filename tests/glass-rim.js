@@ -319,7 +319,7 @@ async function surfaces() {
     out.small = await q.evaluate(() => [".pill", ".btn", "#addCardFab", "#toast", ".seg button"].map(s => {
       const el = [...document.querySelectorAll(s)].find(e => e.offsetWidth > 0) || document.querySelector(s);
       const a = el && getComputedStyle(el, "::after");
-      return { s, rim: !!a && /radial-gradient\(520px/.test(a.backgroundImage) };
+      return { s, rim: !!a && a.content !== "none" && a.content !== "normal" && (a.backgroundImage.match(/radial-gradient/g) || []).length === 2 };
     }));
     await q.addStyleTag({ content: OLD_LOOK });
     await setTheme(q, "dark");
