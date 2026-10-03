@@ -2392,20 +2392,34 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
   display:flex;flex-direction:column;overflow:hidden;
   background:var(--panel-raised);color:var(--ink);border:1px solid var(--line);
   border-radius:16px;box-shadow:0 8px 20px rgba(0,0,0,.12),0 28px 68px rgba(0,0,0,.22);padding:0}
-/* The intent panel and the dialogs wear the rim inside their border, which both clip; the panel's
-   bevel gives way to it. A dialog that scrolls as a whole carries the ring with its content. */
-:root:not([data-theme=light]) #intentRail{--bevel:var(--bevel-off)}
+/* The intent panel, the dialogs, the menus, Quick facts and the opened pill bar wear the rim inside their
+   border; their bevel gives way to it. A surface that scrolls as a whole carries the ring with its content. */
+:root:not([data-theme=light]) #intentRail,
+:root:not([data-theme=light]) .facts-panel,
+:root:not([data-theme=light]) .pills-slot.pills-overflow .pills{--bevel:var(--bevel-off)}
 :root:not([data-theme=light]) #intentRail::after,
-:root:not([data-theme=light]) .modal-card::after{content:"";position:absolute;inset:0;
+:root:not([data-theme=light]) .modal-card::after,
+:root:not([data-theme=light]) .menu::after,
+:root:not([data-theme=light]) .facts-panel::after,
+:root:not([data-theme=light]) .pills-slot.pills-overflow .pills::after{content:"";position:absolute;inset:0;
   border-radius:calc(var(--radius) - 1px);padding:1px;background:var(--rim);pointer-events:none;z-index:3;
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
   mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude}
 :root:not([data-theme=light]) .modal-card::after{border-radius:15px}
+/* The pill bar is flat while it is closed, so its ring fades in with the glass and the shadow. */
+:root:not([data-theme=light]) .pills-slot.pills-overflow .pills::after{opacity:0;transition:opacity var(--m-reveal) var(--m-ease)}
+:root:not([data-theme=light]) body.pills-lines-expand .pills-slot.pills-overflow .pills::after,
+:root:not([data-theme=light]) .pills-slot.pills-overflow:hover .pills::after,
+:root:not([data-theme=light]) .pills-slot.pills-overflow.pills-navpeek .pills::after,
+:root:not([data-theme=light]) .pills-slot.pills-overflow.pills-expand .pills::after{opacity:1}
 /* Inside their own border, so the same real border as the macro's: no inset to match, the pseudo's box is the
    padding box and its 1px border snaps with it. */
 @supports (background-clip:border-area){
   :root:not([data-theme=light]) #intentRail::after,
-  :root:not([data-theme=light]) .modal-card::after{padding:0;border:1px solid transparent;
+  :root:not([data-theme=light]) .modal-card::after,
+  :root:not([data-theme=light]) .menu::after,
+  :root:not([data-theme=light]) .facts-panel::after,
+  :root:not([data-theme=light]) .pills-slot.pills-overflow .pills::after{padding:0;border:1px solid transparent;
     background-origin:border-box;background-clip:border-area;
     -webkit-mask:none;mask:none}
 }

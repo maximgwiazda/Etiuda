@@ -25,6 +25,13 @@
  * brightness above the card, over the peak row, in CSS pixels) within 0.1 of a pixel between them. The control is
  * the previous pass's masked ring injected in the same launch, which must read the two apart.
  *
+ * THE OTHER RAISED SURFACES. The menus, Quick facts, the opened pill bar and the peeking intent panel wear the same ring
+ * inside their border and their bevel is off, in dark; in light none of them does. Each is opened in a launch of its own
+ * and read twice: computed style (the ring painted, the bevel's bright line gone), and pixels (the bottom edge's right end,
+ * 30 px in, against the row 9 px inside it: lit by the rim, darkened by the old bevel's foot, flat with neither). The old
+ * look (the ring hidden, the bevel back) is injected in the same launch as the control. The small controls (a pill, a
+ * button, the add button, the toast) must paint no ring.
+ *
  * THE CONTROLS, IN THE SAME LAUNCH. The pixel read is run again with the first pass's gradient (360 x 58, peak
  * .92) and with the first draft's (240 x 96, which lit the sides nearly as far): the first pass must read the
  * brighter peak, and the draft the lower ratio, so a read that cannot tell them apart goes red. The previous
@@ -40,7 +47,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
 
-const EXPECTED = 18;
+const EXPECTED = 23;
 const D = 30;
 const OFF = "rgba(0, 0, 0, 0) 0px 0px 0px 0px";
 const ROUND = "radial-gradient(240px 96px at 0 0,rgba(255,255,255,.92),rgba(255,255,255,.26) 38%,transparent 72%),"
@@ -243,6 +250,90 @@ async function atRatio(ratio) {
   }
 }
 
+/* The other raised surfaces. Each is opened, then read: the ring's pseudo and the shadow, and the bottom edge's right end
+   (30 px in) less the row 9 px inside it, at 1:1 in the page's own pixels. The reads are named by the surface. */
+const OLD_BEVEL = "inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.38),inset 1px 0 0 rgba(255,255,255,.05)";
+const OLD_LOOK = ":root:not([data-theme=light]) .menu::after,:root:not([data-theme=light]) .facts-panel::after,"
+  + ":root:not([data-theme=light]) .pills-slot.pills-overflow .pills::after,:root:not([data-theme=light]) #intentRail::after{display:none!important}"
+  + ":root:not([data-theme=light]) .facts-panel,:root:not([data-theme=light]) .pills-slot.pills-overflow .pills{--bevel:" + OLD_BEVEL + "!important}";
+const RAISED = [["menu", "#settingsMenu"], ["facts", "#factsPanel"], ["pills", "#pills"], ["peek", "#intentRail"]];
+
+const surfaceRead = (pg, sel) => pg.evaluate(async sel => {
+  const el = document.querySelector(sel);
+  if (!el) return null;
+  const a = getComputedStyle(el, "::after"), q = el.getBoundingClientRect();
+  return { rim: a.content !== "none" && a.content !== "normal" && +a.opacity > 0.5, bg: a.backgroundImage,
+           shadow: getComputedStyle(el).boxShadow, x: q.left, y: q.top, w: q.width, h: q.height };
+}, sel);
+
+async function surfaceLift(pg, r) {
+  const png = await pg.screenshot({ captureBeyondViewport: false, encoding: "base64" });
+  return pg.evaluate(async (b64, r, d) => {
+    const img = new Image();
+    img.src = "data:image/png;base64," + b64;
+    await img.decode();
+    const c = document.createElement("canvas");
+    c.width = img.width; c.height = img.height;
+    const g = c.getContext("2d");
+    g.drawImage(img, 0, 0);
+    const px = (x, y) => g.getImageData(x, y, 1, 1).data[0];
+    /* A box that is not on the pixel grid ends between two rows, so the ring is the brightest of the last three. */
+    const x = Math.round(r.x + r.w) - d, y = Math.round(r.y + r.h) - 1;
+    return Math.max(px(x, y), px(x, y - 1), px(x, y - 2)) - px(x, y - 9);
+  }, png, r, D);
+}
+
+/* Open one surface, read it, put it away. The peek needs a window too narrow to dock the panel. */
+async function openAndRead(pg, name, sel, lift) {
+  if (name === "menu") { await pg.click("#settingsBtn"); await sleep(900); }
+  else if (name === "facts") { await pg.click("#factsBtn"); await sleep(900); }
+  else if (name === "pills") {
+    const b = await pg.evaluate(() => { const q = document.getElementById("pills").getBoundingClientRect(); return { x: q.left + 40, y: q.top + 10 }; });
+    await pg.mouse.move(b.x, b.y); await sleep(1400);
+  } else if (name === "peek") {
+    await pg.setViewport({ width: 760, height: 900, deviceScaleFactor: 1 }); await sleep(1200);
+    await pg.mouse.move(2, 400); await sleep(1400);
+  }
+  const r = await surfaceRead(pg, sel);
+  if (r && lift) r.lift = await surfaceLift(pg, r);
+  if (name === "menu") await pg.keyboard.press("Escape");
+  else if (name === "facts") await pg.evaluate(() => { const b = document.getElementById("factsBtn"); if (b.getAttribute("aria-expanded") === "true") b.click(); });
+  else if (name === "pills") await pg.mouse.move(700, 700);
+  else if (name === "peek") { await pg.mouse.move(700, 700); await pg.setViewport({ width: 1500, height: 950, deviceScaleFactor: 1 }); }
+  await sleep(900);
+  return r;
+}
+
+async function surfaces() {
+  const RUN3 = E.runFolder("catalogV2", "sampleV2");
+  let b3;
+  try {
+    b3 = await puppeteer.launch({ executablePath: E.browserPath("chrome"), headless: true, args: ["--hide-scrollbars"], protocolTimeout: 120000 });
+    const q = await b3.newPage();
+    await q.setViewport({ width: 1500, height: 950, deviceScaleFactor: 1 });
+    q.on("dialog", d => d.accept());
+    await bootAndDismiss(q, RUN3.url);
+    const out = { dark: {}, old: {}, light: {}, small: [] };
+    await setTheme(q, "dark");
+    for (const [n, sel] of RAISED) out.dark[n] = await openAndRead(q, n, sel, true);
+    out.small = await q.evaluate(() => [".pill", ".btn", "#addCardFab", "#toast", ".seg button"].map(s => {
+      const el = [...document.querySelectorAll(s)].find(e => e.offsetWidth > 0) || document.querySelector(s);
+      const a = el && getComputedStyle(el, "::after");
+      return { s, rim: !!a && /radial-gradient\(520px/.test(a.backgroundImage) };
+    }));
+    await q.addStyleTag({ content: OLD_LOOK });
+    await setTheme(q, "dark");
+    for (const [n, sel] of RAISED) out.old[n] = await openAndRead(q, n, sel, true);
+    await setTheme(q, "light");
+    for (const [n, sel] of RAISED) out.light[n] = await openAndRead(q, n, sel, false);
+    return out;
+  } finally {
+    try { if (b3) await b3.close(); } catch (x) {}
+    RUN3.drop();
+  }
+}
+const liftLine = o => RAISED.map(([n]) => n + " " + (o[n] ? o[n].lift + " [" + Math.round(o[n].x) + "," + Math.round(o[n].y) + " " + Math.round(o[n].w) + "x" + Math.round(o[n].h) + "]" : "none")).join(", ");
+
 /* The thickness reads: each edge's dimmer end against its brighter, and the top against the bottom end for end. */
 const ends = m => ({
   topRatio: Math.min(m.top, m.tr) / Math.max(m.top, m.tr, 1),
@@ -341,6 +432,22 @@ const endsLine = (m, e) => "top " + m.top + " and " + m.tr + " (ratio " + e.topR
       "9gr15 dark at a device pixel ratio of 1.5: the top and the bottom line are one row each, as wide as each other (within 0.1 px) at both ends and the middle");
     check(f150.dpr === 1.5 && seenApart(f150.old),
       "9GR15 control at 1.5: the masked ring of eacc361 reads the top and the bottom apart, so the read can tell it from this one");
+
+    const sf = await surfaces();
+    const names = RAISED.map(([n]) => n);
+    console.log("       dark, the bottom edge's right end less the row 9 px inside: " + liftLine(sf.dark));
+    console.log("       dark with the old look injected (ring hidden, bevel back): " + liftLine(sf.old));
+    check(names.every(n => sf.dark[n] && sf.dark[n].rim && (sf.dark[n].bg.match(/radial-gradient/g) || []).length === 2
+        && !/255, 255, 255, 0\.16\) 0px 1px 0px 0px inset/.test(sf.dark[n].shadow)),
+      "9gr16 dark: the menu, Quick facts, the opened pill bar and the peeking intent panel each paint the ring, and the bevel's bright top line is off");
+    check(names.every(n => sf.dark[n] && sf.dark[n].lift >= 40),
+      "9gr17 dark: at the right end of the bottom edge of each of those four the rim lifts the row at least 40 above the row 9 px inside it");
+    check(names.every(n => sf.old[n] && sf.old[n].lift < 20) && names.every(n => sf.dark[n] && sf.old[n] && sf.dark[n].lift - sf.old[n].lift >= 40),
+      "9GR17 control: with the ring hidden and the old bevel back the same read is under 20 on each, at least 40 below this one's, so it can tell the old look from the new");
+    check(names.every(n => sf.light[n] && !sf.light[n].rim) && sf.light.facts && /255, 255, 255\)/.test(sf.light.facts.shadow),
+      "9gr18 light: none of the four paints the ring, and Quick facts keeps its bevel");
+    check(sf.small.length === 5 && sf.small.every(x => !x.rim),
+      "9gr19 dark: a pill, a button, the add button, the toast and a switch's button paint no ring (" + sf.small.map(x => x.s).join(" ") + ")");
 
     await setTheme(p, "light");
     const lt = await styles(p, ".txt");
