@@ -14,8 +14,16 @@
  * the bottom (30 px in from each corner): an edge's dimmer end must hold at least 60 per cent of its brighter
  * end, and the top must read as the bottom does, end for end (the bottom-right as the top-left, the bottom-left
  * as the top-right) within 8 per cent. The row profile across the edge was measured separately: one row, no
- * second line under the rim, at a device pixel ratio of 1 and 2 (fractional ratios split the hairline into two
- * rows by where the box falls, which this leg does not claim to fix).
+ * second line under the rim, at a device pixel ratio of 1 and 2.
+ *
+ * THE FRACTIONAL RATIOS (125 and 150 per cent displays). A masked ring is not snapped to device pixels, so it split
+ * the line over two rows, differently at the top and the bottom; the ring is now a real 1px border, which is. Each
+ * ratio gets its own headless Chrome with --force-device-scale-factor (the emulated ratio does not snap borders the way
+ * a real display does, so it would prove nothing), the macro is photographed whole at the device's own pixels, and
+ * at three places along the top and the bottom (30 px in from each end and the middle) the rows are read: the same
+ * number of rows above half of the line's own peak at the top and the bottom, and the equivalent width (the rows'
+ * brightness above the card, over the peak row, in CSS pixels) within 0.1 of a pixel between them. The control is
+ * the previous pass's masked ring injected in the same launch, which must read the two apart.
  *
  * THE CONTROLS, IN THE SAME LAUNCH. The pixel read is run again with the first pass's gradient (360 x 58, peak
  * .92) and with the first draft's (240 x 96, which lit the sides nearly as far): the first pass must read the
@@ -32,7 +40,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
 
-const EXPECTED = 14;
+const EXPECTED = 18;
 const D = 30;
 const OFF = "rgba(0, 0, 0, 0) 0px 0px 0px 0px";
 const ROUND = "radial-gradient(240px 96px at 0 0,rgba(255,255,255,.92),rgba(255,255,255,.26) 38%,transparent 72%),"
@@ -45,6 +53,11 @@ const PASS2 = "radial-gradient(520px 36px at 0 0,rgba(255,255,255,.58),rgba(255,
   + "radial-gradient(520px 36px at 100% 100%,rgba(255,255,255,.46),rgba(255,255,255,.15) 40%,transparent 85%),"
   + "linear-gradient(rgba(255,255,255,.05),transparent 14px calc(100% - 14px),rgba(255,255,255,.05)),"
   + "linear-gradient(rgba(255,255,255,.02),rgba(255,255,255,.02))";
+/* The previous pass's ring (eacc361), forced back over the real border: a 1px padding cut out by a mask, 1px outside the macro. */
+const MASKED = ":root:not([data-theme=light]) .txt::after{inset:-1px!important;padding:1px!important;border:0!important;"
+  + "background-origin:padding-box!important;background-clip:border-box!important;"
+  + "-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0)!important;-webkit-mask-composite:xor!important;"
+  + "mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0)!important;mask-composite:exclude!important}";
 let b; let fails = 0; let checks = 0; let reachedEnd = false;
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 const errs = [];
@@ -105,16 +118,10 @@ const pickMacro = pg => pg.evaluate(() => {
   return true;
 });
 
-/* captureBeyondViewport is off because a clipped shot that resizes the page moves a lazily laid list
-   under the very rectangle it was asked for.
-
-   Edge-row brightness, 1:1: the red channel of the border row at D px along the top, and of the border
-   column at D px down the left side, each less the resting level read at the left edge's middle. The box is
-   whole pixels (the macro is laid on the pixel grid) and the read says if it was not. */
-async function lift(pg) {
+/* The list lays out lazily, so one scroll can land short: bring the probe macro to the middle again until it is
+   wholly in the window and its box has held still for ten frames. */
+async function settle(pg) {
   await pickMacro(pg);
-  /* The list lays out lazily, so one scroll can land short: bring it to the middle again until it is
-     wholly in the window and its box has held still for ten frames. */
   const inView = await pg.evaluate(async () => {
     const el = document.querySelector("[data-rim-probe]");
     for (let go = 0; go < 8; go++) {
@@ -132,6 +139,16 @@ async function lift(pg) {
     return false;
   });
   if (!inView) throw new Error("the macro never came wholly into the window");
+}
+
+/* captureBeyondViewport is off because a clipped shot that resizes the page moves a lazily laid list
+   under the very rectangle it was asked for.
+
+   Edge-row brightness, 1:1: the red channel of the border row at D px along the top, and of the border
+   column at D px down the left side, each less the resting level read at the left edge's middle. The box is
+   whole pixels (the macro is laid on the pixel grid) and the read says if it was not. */
+async function lift(pg) {
+  await settle(pg);
   const r = await pg.evaluate(() => {
     const el = document.querySelector("[data-rim-probe]");
     const q = el.getBoundingClientRect();
@@ -159,6 +176,71 @@ async function lift(pg) {
   return { top: L("top"), side: L("side"), rest: read.rest, peak: L("peak"), far: L("far"), mid: L("mid"),
            bot: L("bot"), bside: L("bside"), tr: L("tr"), bl: L("bl"),
            whole: Math.abs(r.x - x0) < 0.01 && Math.abs(r.y - y0) < 0.01, h: r.h };
+}
+
+/* The rows across the top edge and the bottom edge of the probe macro at the device's own pixels: the whole window is
+   photographed (no clip to round), the edge rows are the box's rounded top and bottom, and at three places along each
+   the red channel is read from outside to inside (top) and inside to outside (bottom). The card's own level inside is
+   the rest; the page outside is darker than it, so only brightness above the rest counts. rows: those above half the
+   line's peak; width: all of it over the peak row, in CSS pixels (a device pixel is 1 / ratio of one). */
+async function edgeRows(pg, ratio) {
+  await settle(pg);
+  const r = await pg.evaluate(() => {
+    const q = document.querySelector("[data-rim-probe]").getBoundingClientRect();
+    return { t: q.top, b: q.bottom, l: q.left, r: q.right };
+  });
+  const png = await pg.screenshot({ captureBeyondViewport: false, encoding: "base64" });
+  return pg.evaluate(async (b64, r, d, dist) => {
+    const img = new Image();
+    img.src = "data:image/png;base64," + b64;
+    await img.decode();
+    const c = document.createElement("canvas");
+    c.width = img.width; c.height = img.height;
+    const g = c.getContext("2d");
+    g.drawImage(img, 0, 0);
+    const px = (x, y) => g.getImageData(x, y, 1, 1).data[0];
+    const topRow = Math.round(r.t * d), botRow = Math.round(r.b * d) - 1, span = Math.ceil(2 * d) + 2;
+    const xs = [Math.round((r.l + dist) * d), Math.round((r.l + r.r) / 2 * d), Math.round((r.r - dist) * d)];
+    const read = (x, y0, dy) => {
+      const a = [];
+      for (let i = -span; i <= span; i++) a.push(px(x, y0 + dy * i));   /* i < 0 is outside the card, i >= 0 inside */
+      const rest = a[a.length - 1];
+      const e = a.map(v => Math.max(0, v - rest));
+      const peak = Math.max(...e);
+      return { peak, rows: e.filter(v => v > 0 && v >= peak / 2).length, width: e.reduce((p, q) => p + q, 0) / Math.max(peak, 1) / d };
+    };
+    return { ratio: d, top: xs.map(x => read(x, topRow, 1)), bot: xs.map(x => read(x, botRow, -1)) };
+  }, png, r, ratio, D);
+}
+const edgeLine = e => "top rows " + e.top.map(x => x.rows).join("/") + " widths " + e.top.map(x => x.width.toFixed(2)).join("/")
+  + ", bottom rows " + e.bot.map(x => x.rows).join("/") + " widths " + e.bot.map(x => x.width.toFixed(2)).join("/") + " (CSS px, ends and middle)";
+/* One row at the top and one at the bottom, both as wide as each other, at every place read. */
+const sameRows = e => e.top.every((t, i) => t.peak >= 30 && e.bot[i].peak >= 30 && t.rows === e.bot[i].rows && t.rows === 1
+  && Math.abs(t.width - e.bot[i].width) <= 0.1);
+/* The previous ring is seen apart when any place has a different number of rows or a width gap past two tenths. */
+const seenApart = e => e.top.some((t, i) => t.rows !== e.bot[i].rows || Math.abs(t.width - e.bot[i].width) > 0.2);
+
+/* A launch of its own at a real device pixel ratio, the page booted the way the main read is. */
+async function atRatio(ratio) {
+  const RUN2 = E.runFolder("catalogV2", "sampleV2");
+  let b2;
+  try {
+    b2 = await puppeteer.launch({ executablePath: E.browserPath("chrome"), headless: true, defaultViewport: null,
+      args: ["--hide-scrollbars", "--force-device-scale-factor=" + ratio, "--window-size=1500,950"], protocolTimeout: 120000 });
+    const q = await b2.newPage();
+    q.on("dialog", d => d.accept());
+    await bootAndDismiss(q, RUN2.url);
+    const dpr = await q.evaluate(() => devicePixelRatio);
+    await setTheme(q, "dark");
+    const now = await edgeRows(q, dpr);
+    await q.addStyleTag({ content: MASKED });
+    await setTheme(q, "dark");
+    const old = await edgeRows(q, dpr);
+    return { dpr, now, old };
+  } finally {
+    try { if (b2) await b2.close(); } catch (x) {}
+    RUN2.drop();
+  }
 }
 
 /* The thickness reads: each edge's dimmer end against its brighter, and the top against the bottom end for end. */
@@ -244,6 +326,21 @@ const endsLine = (m, e) => "top " + m.top + " and " + m.tr + " (ratio " + e.topR
     console.log("       dark with the previous pass's gradient (9e44127): " + endsLine(pass2, e2));
     check(e2.topRatio < 0.5 && e2.botRatio < 0.5 && e2.tbGap > 0.08 && eMine.tbGap < e2.tbGap,
       "9GR12 control: the previous pass's gradient fails both reads (ends under half, top and bottom apart), so they can tell it from this one");
+
+    const f125 = await atRatio(1.25);
+    console.log("       ratio " + f125.dpr + ", this ring: " + edgeLine(f125.now));
+    console.log("       ratio " + f125.dpr + ", the masked ring (eacc361): " + edgeLine(f125.old));
+    check(f125.dpr === 1.25 && sameRows(f125.now),
+      "9gr14 dark at a device pixel ratio of 1.25: the top and the bottom line are one row each, as wide as each other (within 0.1 px) at both ends and the middle");
+    check(f125.dpr === 1.25 && seenApart(f125.old),
+      "9GR14 control at 1.25: the masked ring of eacc361 reads the top and the bottom apart, so the read can tell it from this one");
+    const f150 = await atRatio(1.5);
+    console.log("       ratio " + f150.dpr + ", this ring: " + edgeLine(f150.now));
+    console.log("       ratio " + f150.dpr + ", the masked ring (eacc361): " + edgeLine(f150.old));
+    check(f150.dpr === 1.5 && sameRows(f150.now),
+      "9gr15 dark at a device pixel ratio of 1.5: the top and the bottom line are one row each, as wide as each other (within 0.1 px) at both ends and the middle");
+    check(f150.dpr === 1.5 && seenApart(f150.old),
+      "9GR15 control at 1.5: the masked ring of eacc361 reads the top and the bottom apart, so the read can tell it from this one");
 
     await setTheme(p, "light");
     const lt = await styles(p, ".txt");

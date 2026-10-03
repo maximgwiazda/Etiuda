@@ -1860,6 +1860,28 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
   border-radius:inherit;padding:1px;background:var(--rim);pointer-events:none;
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
   mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude}
+/* THE RIM IS A REAL BORDER where the browser can clip a background to one. A border is snapped to whole
+   device pixels and a masked ring is not, so at a fractional scale (125 and 150 per cent) the mask split the
+   line over two rows, differently at the top and the bottom. The ring is the pseudo's own 1px transparent border
+   with the gradient clipped to it, laid exactly over the macro's border: the border's snapped width is
+   --rim-bw, which is floor(ratio) / ratio of a pixel, so the inset is the same width to the device pixel (the
+   steps are the Windows scales; between them the error stays under a quarter of a device pixel). Hover, the
+   mark and the accent rings still set the macro's own border and shadow, and the ring still sits over them. */
+:root{--rim-bw:1px}
+@media (min-resolution:1.25dppx){:root{--rim-bw:.8px}}
+@media (min-resolution:1.5dppx){:root{--rim-bw:.666667px}}
+@media (min-resolution:1.75dppx){:root{--rim-bw:.571429px}}
+@media (min-resolution:2dppx){:root{--rim-bw:1px}}
+@media (min-resolution:2.25dppx){:root{--rim-bw:.888889px}}
+@media (min-resolution:2.5dppx){:root{--rim-bw:.8px}}
+@media (min-resolution:3dppx){:root{--rim-bw:1px}}
+@media (min-resolution:3.5dppx){:root{--rim-bw:.857143px}}
+@media (min-resolution:4dppx){:root{--rim-bw:1px}}
+@supports (background-clip:border-area){
+  :root:not([data-theme=light]) .txt::after{inset:calc(-1 * var(--rim-bw));padding:0;border:1px solid transparent;
+    background-origin:border-box;background-clip:border-area;
+    -webkit-mask:none;mask:none}
+}
 /* The two in-card notices keep the slabs' own gutter, which is none: the card has no padding
    left to inset them from. */
 .miss{margin:0 0 10px;padding:9px 12px;border:1px dashed var(--line-strong);border-radius:var(--radius-sm);
@@ -2379,6 +2401,14 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
   mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude}
 :root:not([data-theme=light]) .modal-card::after{border-radius:15px}
+/* Inside their own border, so the same real border as the macro's: no inset to match, the pseudo's box is the
+   padding box and its 1px border snaps with it. */
+@supports (background-clip:border-area){
+  :root:not([data-theme=light]) #intentRail::after,
+  :root:not([data-theme=light]) .modal-card::after{padding:0;border:1px solid transparent;
+    background-origin:border-box;background-clip:border-area;
+    -webkit-mask:none;mask:none}
+}
 /* The only thing that scrolls, so the scrollbar sits beside the content and stops short of both
    pinned bars. min-height:0 is load-bearing: a flex item will not shrink below its content
    without it, and the middle would push the actions row off the bottom instead of scrolling. */
