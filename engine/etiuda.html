@@ -586,7 +586,9 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);
   display:flex;flex-direction:column;height:100%;overflow:hidden}
 /* Reserve the scrollbar lane: filtering swings the list across one viewport many times a
    minute, and each crossing otherwise reflows the whole centred column sideways. */
-.scroller{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;
+.stage{flex:1 1 auto;min-height:0;display:grid;grid-template:minmax(0,1fr)/minmax(0,1fr)}
+.scroller,.dotfield{grid-area:1/1}
+.scroller{overflow-y:auto;overflow-x:hidden;
   scrollbar-gutter:stable;display:flex;flex-direction:column}
 /* Selected text carries the accent rather than the browser default, so even an accidental
    drag looks like part of the interface. */
@@ -686,7 +688,7 @@ body.e-host .row button,body.e-host .row input,body.e-host .row .tab{
 
 /* ---- THE BACKDROP. A material is composited behind the window and shows only where the
    window leaves pixels unpainted, so under e-backdrop the band's strip is the one place
-   nothing opaque is painted: the body's colour moves to the scroller, and the header's own
+   nothing opaque is painted: the body's colour moves to the dot field's layer under the scroller, and the header's own
    surface starts where the band ends. --band-h is measured by host.js, because the band's
    height moves with the shed ladder and with zoom. */
 body.e-backdrop{background:transparent}
@@ -696,7 +698,7 @@ body.e-backdrop{background:transparent}
    dialog up, band alpha .93 against 1.00 over the cards and 3.0x their edge energy. The floor
    goes back under the whole window while one is open, the tint above it unchanged. */
 body.e-backdrop:has(.modal:not([hidden])){background:var(--bg)}
-body.e-backdrop .scroller{background:var(--bg)}
+body.e-backdrop .dotfield{background:var(--bg)}
 body.e-backdrop header{
   background:linear-gradient(var(--header-bg) 0 0) no-repeat left bottom/100% calc(100% - var(--band-h,36px));
   background-origin:border-box}
@@ -1559,18 +1561,12 @@ main{max-width:none;margin:16px 0 0;padding:0}
    uses - 12px, a .75px dot, about 27 levels above the canvas. It reaches only the gutters,
    the gaps between cards and the margins, --card-bg being opaque, so the card gutter is opened
    below to give it somewhere to be seen. */
-/* ON MAIN'S OWN BACKGROUND, FIXED TO THE WINDOW. Main is the cards' column and nothing else: not the
-   app padding, the strip above the list, the column a docked intent panel stands in or the scrollbar's
-   lane, so the field reaches only where the cards are (Maxim, 2026-10-03). `fixed` keeps it still while
-   the cards scroll over it (Maxim, 2026-09-26), where main's own scrolling background rode every scroll. */
-/* Never a z-index:-1 pseudo: under body.e-backdrop the ground is .scroller's colour, and an in-flow
-   ancestor's background paints ABOVE a negative z-index descendant. A background on main paints above
-   every ancestor's and below every descendant's, which is "behind the cards, in front of the ground"
-   whichever element carries the ground. */
-/* The x origin is the app padding, where it stood when the scroller carried the field (the scroller's
-   left edge is the window's). The y origin is the window's top, so nothing here reads the header's
-   height: the ink at each display scale (shell smoke 2k6) moved by under 4 per cent over every
-   quarter-pixel phase of that origin. */
+/* A LAYER OF ITS OWN, UNDER THE SCROLLER IN THE SCROLLER'S GRID CELL. Nothing that scrolls carries the field, so
+   it stands still while the cards scroll: a background on the scrolled content, fixed or not, moved with them in
+   the desk. It paints only where the cards are, with the margins main has: 16px above, the app padding below
+   and right, and on the left the shell's own columns, the docked panel's included. */
+/* The lane is reserved the way the scroller reserves it, so the right margin is measured from the same edge.
+   Under body.e-backdrop this layer is the window's ground and the scroller above it is clear. */
 /* The last stop is the ink at zero alpha, NOT the keyword: transparent is transparent BLACK,
    and the two-pixel ramp between the stops would then pass through grey on a pale ground. */
 /* ONE LOOK AT EVERY DISPLAY SCALE, the 150% one, Maxim's choice. A stop is not anti-aliased: a
@@ -1578,10 +1574,12 @@ main{max-width:none;margin:16px 0 0;padding:0}
    and 4 smaller ones at 150%. The stops sit on those pixel centres' distances from the dot's
    (.707 at 100%, .8 at 125%, under .5 at 150%), so each scale paints about the ink of a .75px
    disc and 150% paints what it did; shell smoke 2k6 holds it. */
-main{background-image:radial-gradient(circle at center,var(--dots-ink) 0 .5px,
+.dotfield{pointer-events:none;overflow:hidden;scrollbar-gutter:stable;padding:16px var(--app-pad) var(--app-pad)}
+.dotfield>div{height:100%;margin-left:calc(var(--rail-col,0px) + var(--rail-colgap,0px));
+  background-image:radial-gradient(circle at center,var(--dots-ink) 0 .5px,
     color-mix(in srgb,var(--dots-ink) 44%,transparent) .707px .8px,
     color-mix(in srgb,var(--dots-ink) 0%,transparent) 1px);
-  background-size:12px 12px;background-attachment:fixed;background-position:var(--app-pad) 16px}
+  background-size:12px 12px}
 #list{margin-bottom:80px}
 /* The count and the fold sit at the far end of the group's own rule, so the eye meets the
    name first and the control only when it is looking for one. See .list-sep.e-catsep::after. */
@@ -2186,7 +2184,7 @@ body.tour-cacts .card>.chead .cacts{opacity:1}
 /* Docked sets only the two values that animate; everything structural lives on .shell.
    var(--rail-max) replaces minmax(160px,...): a minmax cannot be interpolated, and the
    shrink it allowed was unreachable - docking is gated at 2.5 panel widths. */
-body.rail-on .shell{--rail-col:var(--rail-max);--rail-colgap:var(--rail-gap)}
+body.rail-on .shell,body.rail-on .dotfield{--rail-col:var(--rail-max);--rail-colgap:var(--rail-gap)}
 /* align-items:start keeps the panel at its natural height; main alone stretches, so the footer
    still reaches the bottom of the window when the list is short. */
 main{align-self:stretch}   /* the shell is a grid in both states now, so this is unconditional */
@@ -2313,16 +2311,16 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 @keyframes eModalBgIn{from{opacity:0}to{opacity:1}}
 @keyframes eModalCardIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
 /* A COVERED ARRIVAL (the boot guard's arrive): the band stays, and what sits under it arrives.
-   The dot field is main's own ground and arrives with the content. Held, the content is drawn at a trace no
+   The dot field stays with its ground. Held, the content is drawn at a trace no
    eye resolves rather than not drawn, so it is rasterised before its fade begins. */
 @keyframes eLeave{to{opacity:0}}
 /* A SURFACE CLOSING (motion.js dismissNode): it leaves on the dismiss tier, and what it holds stands still. */
 .e-gone{animation:eLeave var(--m-dismiss) ease forwards!important;pointer-events:none!important}
 .e-gone *{animation:none!important;transition:none!important}
 html.e-veiled body{visibility:hidden}
-html.e-arriving body>:not(header,#railHit,.scroller,script),html.e-arriving .scroller>.shell,
+html.e-arriving body>:not(header,#railHit,.stage,script),html.e-arriving .scroller>.shell,
 html.e-arriving #pillsSlot{opacity:.004}
-html.e-arrived body>:not(header,#railHit,.scroller,script),html.e-arrived .scroller>.shell,
+html.e-arrived body>:not(header,#railHit,.stage,script),html.e-arrived .scroller>.shell,
 html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
 .modal:not([hidden]) .modal-bg{animation:eModalBgIn var(--m-scrim) ease both}
 .modal:not([hidden]) .modal-card{animation:eModalCardIn var(--m-surface) var(--m-ease) both}
@@ -3486,6 +3484,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 </header>
 
 <div id="railHit" title="Hover here or hold Ctrl to show the intent panel" aria-hidden="true"></div>
+<div class="stage">
+<div class="dotfield" id="dotField" aria-hidden="true"><div></div></div>
 <div class="scroller" id="pageScroll">
 <div class="shell">
 <div class="rail-slot" id="railSlot">
@@ -3512,6 +3512,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
     Created by <b>Maxim Gwiazda</b> © 2026 · Etiuda <b>v</b><b id="eVer"></b> · <b class="nw cut-peek">Etiuda Source-Available Licence 1.0</b> · free for personal use
   </footer>
 </main>
+</div>
 </div>
 </div>
 

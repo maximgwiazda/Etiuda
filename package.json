@@ -25,6 +25,7 @@
     "csp": "node tests/csp.js",
     "desk": "node tests/desk.js",
     "links": "node tests/links.js",
+    "dot-field-desk": "node tests/dot-field-desk.js",
     "catalog-watch": "node tests/catalog-watch.js",
     "gates": "node tools/gate-run.mjs test split-guard desk links",
     "release": "node tools/release.mjs",

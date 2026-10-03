@@ -35,6 +35,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/motion.js    the motion legs alone, at 100, 125 and 150 per cent, which smoke also runs
     node tests/csp.js                                the policy, two unpackaged Electrons
     node tests/desk.js                               the desk in a file, an unpackaged Electron
+    node tests/dot-field-desk.js                     the dot field in the desk's own window: where it stands and that it stands still, an unpackaged Electron
     ETIUDA_FIXTURES=<folder> node tests/catalog-watch.js  the watched catalog, one app run
     node tests/pick-desk.js                          the picker over a real window: it takes the foreground and presses keys, so by hand, nobody at the keyboard
     node tests/swap.mjs                              the desk changed in place held to a fresh start, Chrome, no fixtures
@@ -591,6 +592,12 @@ the packaged app could not load a catalog at all and every gate in that sequence
 it, twice, because nothing in the sequence had ever started the built application. A release run
 is about 115 s longer for it. The gate's own control is `ETIUDA_SHELL_APP=<anything> node
 tools/release.mjs`, which makes shell-smoke refuse and must stop the run at gate 7 with exit 7.
+
+## The dot field in the desk's window
+
+    node tests/dot-field-desk.js           npm run dot-field-desk, in the release's shell gate
+
+One launch of the shell, unpackaged, on a throwaway app with the tree's sample catalog taken through the offer. The window is shown without focus and stands on no display (the flag's second value), because a window nobody showed cannot be photographed. Seven checks, about 25 s. Stillness is read from the screencast's frames, the compositor's own output, through a real wheel scroll: the rows of a strip in the gap between two card columns must be the same in every frame, and the control paints the same field on the list, where it scrolls, and must differ. Extent is read as in `smoke.js`, in the window: strips left, right, above and below the cards' column, in four states, differ from their field-off twins only inside the column. It has gone red under four planted faults: the field also on the scroller (extent), the field riding the cards (stillness), no field (both controls) and the old field on main (extent, at the window's bottom edge). It did not go red on the old `background-attachment: fixed` field in stillness: that field stands still in this window, so the desk's failure needs something an off-display window lacks, and a glance at the desk after a change to the field is still the oracle for it.
 
 ## Web addresses leave only for a click
 

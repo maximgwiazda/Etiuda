@@ -729,9 +729,9 @@ const t0 = Date.now();
   await p.evaluate(() => { document.getElementById("pageScroll").scrollTop += 7; }); await sleep(300);
   const still1 = await stillShot(), top1 = await cardTop();
   const scrolled = await p.evaluate(() => document.getElementById("pageScroll").scrollTop);
-  await p.evaluate(() => { document.querySelector("main").style.backgroundImage = "none"; }); await sleep(200);
+  await p.evaluate(() => { document.querySelector("#dotField > div").style.backgroundImage = "none"; }); await sleep(200);
   const stillOff = await stillShot();
-  await p.evaluate(() => { document.querySelector("main").style.backgroundImage = "";
+  await p.evaluate(() => { document.querySelector("#dotField > div").style.backgroundImage = "";
     const s = document.getElementById("__stillHide"); if (s) s.remove();
     document.getElementById("pageScroll").scrollTop = 0; });
   await sleep(300);
@@ -749,13 +749,14 @@ const t0 = Date.now();
      app padding, in the strip above the list, beside a docked intent panel and in the scrollbar lane.
      THE MEASURE IS INK IN A STRIP, whichever element carries the field: the cards are hidden (their
      boxes kept), a strip of the window outside main's column is photographed, the field is switched
-     off on the scroller and on main and the same strip is photographed again, and a strip that holds
+     off on its layer, the scroller and main and the same strip is photographed again, and a strip that holds
      any dot differs from its twin. A strip is at least 12 px each way, the field's pitch, so a field
      reaching it cannot fall between its dots. The control is the same photograph of a patch INSIDE
      main, which must differ: a leg that sees no dots anywhere passes every strip for free. Four
      states, each with the intent panel docked or not, and with the shell's backdrop class or not -
-     under it the ground is the scroller's colour and the field has to stand above it, which a
-     browser does not do by itself. The scrollbar lane is a strip only where this browser draws one;
+     under it the ground is the field's layer and the field has to stand above it, which a
+     browser does not do by itself. The strip below is the window's bottom edge (Maxim, 2026-10-03 12:37:
+     "There should be a margin there, similar to the margin on the right side."). The scrollbar lane is a strip only where this browser draws one;
      the run is launched with scrollbars hidden, so the lane is covered by the strip right of main. */
   e = since();
   await p.evaluate(() => { const s = document.createElement("style"); s.id = "__extentHide";
@@ -777,7 +778,8 @@ const t0 = Date.now();
         return { inside: clip(Math.round(m.left + 40), y, 48, 48),
           left: clip(0, y, Math.min(Math.floor(m.left), 600), 48),
           right: clip(Math.ceil(m.right), y, Math.floor(w - m.right), 48),
-          above: clip(Math.round(m.left + 40), Math.ceil(sc.top), 48, Math.floor(m.top - sc.top)) };
+          above: clip(Math.round(m.left + 40), Math.ceil(sc.top), 48, Math.floor(m.top - sc.top)),
+          below: clip(Math.round(m.left + 40), Math.floor(sc.bottom) - 14, 48, 14) };
       });
       const names = Object.keys(at);
       const shoot = async () => { const o = {};
@@ -786,7 +788,7 @@ const t0 = Date.now();
         return o; };
       const on = await shoot();
       await p.evaluate(() => { const s = document.createElement("style"); s.id = "__extentOff";
-        s.textContent = "#pageScroll,main{background-image:none!important}"; document.head.appendChild(s); });
+        s.textContent = "#dotField>div,#pageScroll,main{background-image:none!important}"; document.head.appendChild(s); });
       await sleep(200);
       const off = await shoot();
       await p.evaluate(() => { const s = document.getElementById("__extentOff"); if (s) s.remove(); });
@@ -808,7 +810,7 @@ const t0 = Date.now();
   check(extentStates.length === 4 && extentStates.every(s => s.small.length === 0
       && s.holds.every(n => n === "inside")),
     "the dot field stands behind the cards only, and not in the padding, above the list, beside a docked"
-    + " intent panel or in the scrollbar lane: " + extentSaid);
+    + " intent panel, in the scrollbar lane or at the window's bottom edge: " + extentSaid);
   check(extentStates.length === 4 && extentStates.every(s => s.holds.indexOf("inside") > -1),
     "and the leg still sees the dots where they belong: a 48x48 patch inside the cards' column holds"
     + " them in all four states, so the strips above were read by a leg that can see a dot");
