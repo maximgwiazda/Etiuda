@@ -2873,6 +2873,41 @@ const CARD_B = {
         () => eq([shownFirst, wrote, after, emptied, LN.writeLaneList(["c-ln-b"])].join("|"),
           'true|true|[{"to":"c-ln-c"},{"to":"c-ln-b"}]|true|false'));
     } finally { P.pack.custom = hadCustom; }
+    /* A catalog card's list is written to its override beside the ids it replaced, the catalog's own card is
+       never touched, and Back to the catalog's, clicked in the lanes, offers the agent's list back. */
+    const CMod = await import(MOD("card-model.js"));
+    const hadOv = P.pack.overrides, hadMake = document.createElement, hadContains = lanesBox.contains;
+    const cat = { id: "c-ln-cat", c: "orders", en: "Body of c-ln-cat", t: "Title c-ln-cat", next: [{ to: "c-ln-b" }, { to: "c-ln-c" }] };
+    const base = JSON.parse(JSON.stringify(cat));
+    let undoBtn = null;
+    try {
+      Object.assign(window, { E_CATALOG: { kind: "etiuda-catalog", format: 2, cards: [cat] } });
+      P.pack.overrides = {}; P.BASE_M.push(base);
+      AS.setCards(AS.cards.concat([Object.assign({}, base)]));
+      document.createElement = () => el({ isConnected: false, remove() {}, removeAttribute() {},
+        querySelector: s => (s === "#eUndoBtn" ? (undoBtn = {}) : null) });
+      body.appendChild = () => {};
+      lanesBox.contains = () => true;
+      const kept = () => JSON.stringify([CMod.baseCard("c-ln-cat").next, window.E_CATALOG.cards[0].next]);
+      const ov = () => JSON.stringify(P.pack.overrides["c-ln-cat"] || null);
+      const catalogs = kept();
+      document.activeElement = body; LN.lanesKey();
+      LP.bumpUseCount("c-ln-cat", "en");
+      const wrote = LN.writeLaneList(["c-ln-c", "c-ln-b", "c-ln-d"]), mine = ov(), kept1 = kept() === catalogs;
+      const back = { closest: s => (s === ".ln-back" ? back : null) };
+      ((lanesBox.heard && lanesBox.heard.click) || []).forEach(fn => fn({ target: back }));
+      const given = ov(), kept2 = kept() === catalogs, offered = !!(undoBtn && undoBtn.onclick);
+      if (offered) undoBtn.onclick();
+      check("lanes.js", "814ed3 a catalog card's list edited in the lanes is written to its override with the ids it replaced, the catalog's card and E_CATALOG stay as they were, and Back to the catalog's offers Undo, which restores the override",
+        () => eq([wrote, mine, kept1, given, kept2, offered, ov() === mine, kept() === catalogs].join("|"),
+          'true|{"next":[{"to":"c-ln-c"},{"to":"c-ln-b"},{"to":"c-ln-d"}],"nextWas":["c-ln-b","c-ln-c"]}|true|null|true|true|true|true'));
+    } finally {
+      LN.toggleLanes(false);
+      document.createElement = hadMake; delete body.appendChild;
+      if (hadContains === undefined) delete lanesBox.contains; else lanesBox.contains = hadContains;
+      const at = P.BASE_M.indexOf(base); if (at > -1) P.BASE_M.splice(at, 1);
+      P.pack.overrides = hadOv; delete window.E_CATALOG;
+    }
     await new Promise(r => setTimeout(r, 20));
   } finally {
     LN.toggleLanes(false);

@@ -265,7 +265,7 @@ function wireLaneEdits(el){
     if(at.closest(".nx-x")){ writeLaneList(laneListIds().filter(x=>x!==row.dataset.to), "Taken off the list"); return true; }
     if(at.closest(".ln-keep")){ writeLaneList(laneListIds().concat(row.dataset.to)); return true; }
     if(at.closest(".nx-grip")) return true;
-    if(at.closest(".ln-back")){ const st=laneState(); writeLaneList(st.fold && st.fold.catalog ? nextIdsOf(st.fold.catalog) : []); return true; }
+    if(at.closest(".ln-back")){ const st=laneState(); writeLaneList(st.fold && st.fold.catalog ? nextIdsOf(st.fold.catalog) : [], "Back to the catalog's"); return true; }
     if(at.closest(".ln-add-btn")){ laneFindOpen(true); return true; }
     const hit=at.closest(".nx-hit");
     if(hit){ laneTake(hit.getAttribute("data-to")); return true; }

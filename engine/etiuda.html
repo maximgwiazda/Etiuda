@@ -26649,7 +26649,7 @@ What you type stays in this browser only.`;
       if (at.closest(".nx-grip")) return true;
       if (at.closest(".ln-back")) {
         const st = laneState();
-        writeLaneList(st.fold && st.fold.catalog ? nextIdsOf(st.fold.catalog) : []);
+        writeLaneList(st.fold && st.fold.catalog ? nextIdsOf(st.fold.catalog) : [], "Back to the catalog's");
         return true;
       }
       if (at.closest(".ln-add-btn")) {
