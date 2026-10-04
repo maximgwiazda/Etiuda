@@ -2865,6 +2865,72 @@ const CARD_B = {
   }
 }
 
+/* ------------------------------------------------------------------ the path's beads on each conversation tab
+   Board 814, S5 (decisions 2026-10-01 10:34): a filled bead for each reply sent along the conversation's chain
+   and an open one while replies wait; a tab with no chain shows none. The chain is the run at the path's end in
+   which each reply follows the one before on its card's list or by what the desk learnt. Invented cards only;
+   every global set here is put back. */
+{
+  const T = await import(MOD("tabs.js"));
+  const H = await import(MOD("hooks.js"));
+  const AS = await import(MOD("app-state.js"));
+  const hadDoc = globalThis.document, hadAdd = globalThis.addEventListener;
+  const STUBS = ["applyLangUI", "updateIntentPlaceholder", "drawPillsCore", "drawIntentRail", "render", "scheduleRailGeometry"];
+  const hadHooks = STUBS.map(k => [k, Object.prototype.hasOwnProperty.call(H.hooks, k), H.hooks[k]]);
+  const hadCards = AS.cards;
+  const quiet = { toggle() {}, add() {}, remove() {}, contains() { return false; } };
+  globalThis.document = { getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
+    body: { classList: quiet }, documentElement: { style: { setProperty() {} }, classList: quiet } };
+  if (typeof globalThis.addEventListener !== "function") globalThis.addEventListener = () => {};
+  STUBS.forEach(k => { if (typeof H.hooks[k] !== "function") H.hooks[k] = () => {}; });
+  const ND = await import(MOD("next-dock.js"));
+  const LP = await import(MOD("list-pointer.js"));
+  const ST = await import(MOD("storage.js"));
+  const fs = await import("node:fs");
+  const card = (id, next) => (next ? { id, c: "orders", en: "Body of " + id, t: "Title " + id, next: next.map(to => ({ to })) }
+    : { id, c: "orders", en: "Body of " + id, t: "Title " + id });
+  const pairs = new Set(["a>b", "b>c", "c>d", "d>e"]), linked = (a, b) => pairs.has(a + ">" + b);
+  const said = b => (b ? b.sent + (b.more ? "+" : "") + (b.open ? "o" : "") : "none");
+  check("next-dock.js", "814bd1 the beads are the linked run at the path's end, at most three and a lead-in past them, an open one while replies wait, and none for a lone reply with nothing waiting",
+    () => eq([ND.chainBeads([], linked, true), ND.chainBeads(["a"], linked, false), ND.chainBeads(["a"], linked, true),
+      ND.chainBeads(["x", "a", "b", "c"], linked, false), ND.chainBeads(["a", "b", "c", "d", "e"], linked, true),
+      ND.chainBeads(["a", "b", "z"], linked, false), ND.chainBeads(["a", "b", "z"], linked, true), ND.chainBeads(["a", "b"], linked, false)]
+      .map(said).join(","), "none,none,1o,3,3+o,none,1o,2"));
+  try {
+    AS.setCards([card("c-bd-p", ["c-bd-q"]), card("c-bd-q"), card("c-bd-r"), card("c-bd-s"), card("c-bd-t", ["c-bd-q"])]);
+    T.tabs.splice(0, T.tabs.length);
+    ST.ssSet(T.TAB_KEY, "null");
+    T.initTabs();
+    const fresh = () => { T.tabs.push({ id: "mc-bd" + T.tabs.length, pax: "" }); T.stepTab(1); };
+    // Once r then s: not yet learnt, so q, r, s holds no chain; twice, and r to s is a link.
+    LP.bumpUseCount("c-bd-r", "en"); LP.bumpUseCount("c-bd-s", "en");
+    const once = said(ND.pathBeads(["c-bd-q", "c-bd-r", "c-bd-s"]));
+    fresh(); LP.bumpUseCount("c-bd-r", "en"); LP.bumpUseCount("c-bd-s", "en");
+    const twice = said(ND.pathBeads(["c-bd-q", "c-bd-r", "c-bd-s"]));
+    fresh(); LP.bumpUseCount("c-bd-t", "en");
+    const front = said(ND.tabBeadsOf(T.tabs.find(t => t.id === T.tabPathNow().tab)));
+    check("next-dock.js", "814bd2 a reply on the last card's list or learnt after it twice extends the chain, once does not, and a tab whose last card offers replies opens a bead",
+      () => eq([said(ND.pathBeads(["c-bd-p", "c-bd-q"])), once, twice, front, said(ND.pathBeads(["c-bd-q"])), said(ND.tabBeadsOf({ id: "x" }))].join(","),
+        "2,none,2,1o,none,none"));
+    await new Promise(r => setTimeout(r, 20));
+  } finally {
+    T.tabs.splice(0, T.tabs.length);
+    AS.setCards(hadCards);
+    hadHooks.forEach(([k, own, v]) => { if (own) H.hooks[k] = v; else delete H.hooks[k]; });
+    if (hadAdd === undefined) delete globalThis.addEventListener; else globalThis.addEventListener = hadAdd;
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+  }
+  check("tabs.js", "814bd3 the beads are drawn filled then open, after every redraw of the strip and every sync of the button, between a tab's name and its close button",
+    () => {
+      const tabs = fs.readFileSync(join(MODDIR, "tabs.js"), "utf8"), dock = fs.readFileSync(join(MODDIR, "next-dock.js"), "utf8");
+      return eq([T.tabBeadsHtml({ sent: 2, more: true, open: true }), T.tabBeadsHtml(null),
+        tabs.indexOf("function drawTabs(){ const r=drawTabsCore.apply(this,arguments); syncTabAccent(); syncTabBeads(); return r; }") > -1,
+        tabs.indexOf('el.insertBefore(bd, el.querySelector(".tab-x"));') > -1,
+        dock.indexOf("  syncTabBeads();\n  if(dockWatch) dockWatch(arrived===true);") > -1, dock.indexOf("setTabBeads(tabBeadsOf);") > -1].join("|"),
+        '<i class="bd-more"></i><i class="bd"></i><i class="bd"></i><i class="bd bd-open"></i>||true|true|true|true');
+    });
+}
+
 /* NOT cardBodyHtml(). It reads the PAX box off the document through fill(), so it cannot be
    called without one: it is the browser oracle's, and tests/smoke.js has it. card-body.js is
    called above only for its intent strip, which reads no document. */

@@ -955,6 +955,20 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 /* White like the rest of the band furniture, NOT --dim: the chrome token was legible while
    the strip stood on the chrome, and is 1.03:1 on cobalt. The selected tab keeps --dim below,
    because its face IS the chrome. */
+/* THE PATH'S BEADS, a filled one for each reply sent along the conversation's chain and an open one while
+   replies wait. Inside the tab's own width, between the name and the close button, so they take room from
+   the name, which fades as any name does, and never from the strip. */
+.tab-beads{--bd:5px;flex:none;display:inline-flex;align-items:center;gap:var(--bd);
+  color:rgba(var(--band-ink-rgb),.85);pointer-events:none}
+.tab.on .tab-beads{color:var(--accent)}
+.tab-beads .bd{position:relative;flex:none;width:var(--bd);height:var(--bd);border-radius:50%;background:currentColor}
+.tab-beads .bd+.bd::before{content:"";position:absolute;right:100%;top:calc(var(--bd) / 2 - .5px);width:var(--bd);
+  height:1px;background:currentColor}
+.tab-beads .bd-open{background:transparent;box-shadow:inset 0 0 0 1px currentColor}
+.tab-beads .bd+.bd-open::before{height:0;background:none;border-top:1px dotted currentColor}
+.tab-beads .bd-more{flex:none;width:calc(var(--bd) * 1.6);height:0;margin-right:calc(var(--bd) * -1);
+  border-top:1px dotted currentColor}
+.ln-head .tab-beads{--bd:7px;color:var(--accent)}
 .tab-x{border:0;background:transparent;color:rgba(var(--band-ink-rgb),.7);cursor:default;padding:2px;
   border-radius:4px;flex:0 0 auto;opacity:.75;
   display:inline-flex;align-items:center;justify-content:center}
@@ -9584,7 +9598,10 @@ What you type stays in this browser only.`;
     noteActive: () => noteActive,
     saveTabSession: () => saveTabSession,
     scheduleTabSave: () => scheduleTabSave,
+    setTabBeads: () => setTabBeads,
     stepTab: () => stepTab,
+    syncTabBeads: () => syncTabBeads,
+    tabBeadsHtml: () => tabBeadsHtml,
     tabInsertAnimating: () => tabInsertAnimating,
     tabPathNow: () => tabPathNow,
     tabPathStep: () => tabPathStep,
@@ -10411,6 +10428,40 @@ What you type stays in this browser only.`;
   function watchTabPath(fn) {
     tabPathWatch = fn || null;
   }
+  var tabBeadsFn = null;
+  function setTabBeads(fn) {
+    tabBeadsFn = fn || null;
+  }
+  function tabBeadsHtml(b) {
+    if (!b) return "";
+    let h = b.more ? '<i class="bd-more"></i>' : "";
+    for (let i = 0; i < b.sent; i++) h += '<i class="bd"></i>';
+    return h + (b.open ? '<i class="bd bd-open"></i>' : "");
+  }
+  function fillTabBeads(el, tb) {
+    const h = tabBeadsHtml(tabBeadsFn && tb ? tabBeadsFn(tb) : null);
+    if (el.innerHTML === h && el.hidden === !h) return false;
+    el.innerHTML = h;
+    el.hidden = !h;
+    return true;
+  }
+  function syncTabBeads() {
+    const bar = $("#tabsBar");
+    if (!bar) return;
+    let moved = false;
+    bar.querySelectorAll(".tab").forEach((el) => {
+      let bd = el.querySelector(".tab-beads");
+      if (!bd) {
+        bd = document.createElement("span");
+        bd.className = "tab-beads";
+        bd.setAttribute("aria-hidden", "true");
+        bd.hidden = true;
+        el.insertBefore(bd, el.querySelector(".tab-x"));
+      }
+      if (fillTabBeads(bd, tabs.find((x) => x.id === el.dataset.tid))) moved = true;
+    });
+    if (moved) fitTabLabels();
+  }
   function tabPathNow() {
     const tb = tabs.find((x) => x.id === activeTabId);
     return { tab: tb ? tb.id : "", path: tb && Array.isArray(tb.path) ? tb.path.slice() : [] };
@@ -11086,6 +11137,7 @@ What you type stays in this browser only.`;
   function drawTabs() {
     const r = drawTabsCore.apply(this, arguments);
     syncTabAccent();
+    syncTabBeads();
     return r;
   }
   function drawTabsCore() {
@@ -25994,8 +26046,10 @@ What you type stays in this browser only.`;
   // src/modules/next-dock.js
   var next_dock_exports = {};
   __export(next_dock_exports, {
+    BEADS_MAX: () => BEADS_MAX,
     DOCK_LEARNT_MIN: () => DOCK_LEARNT_MIN,
     DOCK_MAX: () => DOCK_MAX,
+    chainBeads: () => chainBeads,
     copyNextReply: () => copyNextReply,
     dockClear: () => dockClear,
     dockList: () => dockList,
@@ -26003,7 +26057,9 @@ What you type stays in this browser only.`;
     dockNow: () => dockNow,
     foldNextDock: () => foldNextDock,
     nextDockOpen: () => nextDockOpen,
+    pathBeads: () => pathBeads,
     syncNextDock: () => syncNextDock,
+    tabBeadsOf: () => tabBeadsOf,
     watchNextDock: () => watchNextDock,
     wireNextDock: () => wireNextDock
   });
@@ -26029,6 +26085,28 @@ What you type stays in this browser only.`;
     });
     return out;
   }
+  var BEADS_MAX = 3;
+  function chainBeads(path, linked, open) {
+    const p = Array.isArray(path) ? path.map(String) : [];
+    if (!p.length) return null;
+    let run = 1;
+    for (let i = p.length - 1; i > 0 && linked(p[i - 1], p[i]); i--) run++;
+    if (run < 2 && !open) return null;
+    return { sent: Math.min(run, BEADS_MAX), more: run > BEADS_MAX, open: !!open };
+  }
+  function pathBeads(path) {
+    const p = (Array.isArray(path) ? path : []).map(String);
+    if (!p.length) return null;
+    const live = new Map((cards || []).filter((m) => m && m.id).map((m) => [String(m.id), m]));
+    const linked = (a, b) => {
+      const m = live.get(a);
+      if (m && nextLive(m.next, a, live).some((e) => e.to === b)) return true;
+      return statsLearntAfter(pack, a).some((o) => o && String(o.id) === b && (o.n | 0) >= DOCK_LEARNT_MIN);
+    };
+    const last = p[p.length - 1];
+    return chainBeads(p, linked, dockList(last, live, statsLearntAfter(pack, last), new Set(p)).length > 0);
+  }
+  var tabBeadsOf = (tb) => pathBeads(tb && tb.path);
   function dockClear(want, avoid, gap) {
     const g = gap | 0, rs = (avoid || []).filter((r) => r && r.width > 0 && r.height > 0);
     let left = want.left;
@@ -26087,6 +26165,7 @@ What you type stays in this browser only.`;
     } else if (changed) fab.classList.remove("nudge");
     if (!n || lanes) foldNextDock();
     else if (nextDockOpen() && (changed || arrived === true)) drawDock();
+    syncTabBeads();
     if (dockWatch) dockWatch(arrived === true);
   }
   function dockRowHtml(r, i) {
@@ -26201,6 +26280,7 @@ What you type stays in this browser only.`;
     const fab = dockFab();
     if (!fab) return;
     watchTabPath(() => syncNextDock(true));
+    setTabBeads(tabBeadsOf);
     fab.addEventListener("pointerenter", () => {
       clearTimeout(dockLeaveT);
       dockLeaveT = 0;
@@ -26324,7 +26404,7 @@ What you type stays in this browser only.`;
   }
   function lanesHtml(st) {
     const back = String(t("{KEY} back to the cards")).split("{KEY}");
-    const head = '<div class="ln-head"><span class="ln-title">' + esc(t("This conversation")) + '</span><span class="ln-hint">' + esc(back[0] || "") + "<kbd>" + esc(formatActionChord("lanes")) + "</kbd>" + esc(back.slice(1).join("{KEY}")) + "</span></div>";
+    const head = '<div class="ln-head"><span class="ln-title">' + esc(t("This conversation")) + '</span><span class="tab-beads" aria-hidden="true">' + tabBeadsHtml(pathBeads(st.now.path)) + '</span><span class="ln-hint">' + esc(back[0] || "") + "<kbd>" + esc(formatActionChord("lanes")) + "</kbd>" + esc(back.slice(1).join("{KEY}")) + "</span></div>";
     const m = st.nowCard;
     if (!m) return head + '<p class="ln-empty">' + esc(t("Each reply you send appears here, with what can follow it.")) + "</p>";
     const k = st.sent.length, slot = catSlot(m.c), l = cardLang(m), blocks = parts(m, l).length;

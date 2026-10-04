@@ -2,7 +2,7 @@ import { cardCommits, cardLang, cardTitle, parts } from "./card-model.js";
 import { cards, lang } from "./app-state.js";
 import { pack } from "./pack.js";
 import { statsLearntAfter } from "./desk-stats.js";
-import { tabPathNow, watchTabPath } from "./tabs.js";
+import { setTabBeads, syncTabBeads, tabPathNow, watchTabPath } from "./tabs.js";
 import { formatActionChord } from "./shortcuts.js";
 import { t, uiLang } from "./ui-lang.js";
 import { esc } from "./esc.js";
@@ -42,6 +42,34 @@ function dockList(from, live, learnt, sent){
   });
   return out;
 }
+// The replies sent along a chain show as at most this many beads; a longer chain shows a lead-in before them.
+const BEADS_MAX=3;
+/** A conversation's beads, or null where it has no chain. The chain is the run of replies at the path's end that
+ *  each follow the one before by `linked`; `open` is whether replies wait after the last. A lone reply with
+ *  nothing waiting is no chain. */
+function chainBeads(path, linked, open){
+  const p=Array.isArray(path) ? path.map(String) : [];
+  if(!p.length) return null;
+  let run=1;
+  for(let i=p.length-1;i>0 && linked(p[i-1],p[i]);i--) run++;
+  if(run<2 && !open) return null;
+  return {sent:Math.min(run,BEADS_MAX), more:run>BEADS_MAX, open:!!open};
+}
+/** The beads of a path as the button offers: a reply follows another when it is on that card's own list or was
+ *  learnt after it, and replies wait when the button would show a digit after the last. */
+function pathBeads(path){
+  const p=(Array.isArray(path) ? path : []).map(String);
+  if(!p.length) return null;
+  const live=new Map((cards||[]).filter(m=>m&&m.id).map(m=>[String(m.id),m]));
+  const linked=(a,b)=>{
+    const m=live.get(a);
+    if(m && nextLive(m.next, a, live).some(e=>e.to===b)) return true;
+    return statsLearntAfter(pack, a).some(o=>o && String(o.id)===b && (o.n|0)>=DOCK_LEARNT_MIN);
+  };
+  const last=p[p.length-1];
+  return chainBeads(p, linked, dockList(last, live, statsLearntAfter(pack, last), new Set(p)).length>0);
+}
+const tabBeadsOf=tb=>pathBeads(tb && tb.path);
 /** The left edge that keeps the unfolded dock off every rect in `avoid` by `gap`: its own when clear, else
  *  moved left past what it meets, or null where that would leave the window. Rects are {left,top,width,height}. */
 function dockClear(want, avoid, gap){
@@ -98,6 +126,7 @@ function syncNextDock(arrived){
   else if(changed) fab.classList.remove("nudge");
   if(!n || lanes) foldNextDock();
   else if(nextDockOpen() && (changed || arrived===true)) drawDock();
+  syncTabBeads();
   if(dockWatch) dockWatch(arrived===true);
 }
 function dockRowHtml(r, i){
@@ -207,6 +236,7 @@ function wireNextDock(){
   const fab=dockFab();
   if(!fab) return;
   watchTabPath(()=>syncNextDock(true));
+  setTabBeads(tabBeadsOf);
   fab.addEventListener("pointerenter", ()=>{
     clearTimeout(dockLeaveT); dockLeaveT=0;
     if(nextDockOpen()){ openBy.hover=true; return; }
@@ -228,6 +258,10 @@ function wireNextDock(){
 export {
   DOCK_MAX,
   DOCK_LEARNT_MIN,
+  BEADS_MAX,
+  chainBeads,
+  pathBeads,
+  tabBeadsOf,
   dockList,
   dockClear,
   dockNear,

@@ -62,6 +62,42 @@ function tabPathStep(id){
    replies is. A switch of tab is a render, never a step. */
 let tabPathWatch=null;
 function watchTabPath(fn){ tabPathWatch=fn||null; }
+/* THE PATH'S BEADS are drawn here and decided by the action button (next-dock.js), which knows what a chain is:
+   it answers a tab with {sent, more, open}, or null for a tab with no chain. */
+let tabBeadsFn=null;
+function setTabBeads(fn){ tabBeadsFn=fn||null; }
+function tabBeadsHtml(b){
+  if(!b) return "";
+  let h=b.more ? '<i class="bd-more"></i>' : "";
+  for(let i=0;i<b.sent;i++) h+='<i class="bd"></i>';
+  return h+(b.open ? '<i class="bd bd-open"></i>' : "");
+}
+function fillTabBeads(el, tb){
+  const h=tabBeadsHtml(tabBeadsFn && tb ? tabBeadsFn(tb) : null);
+  if(el.innerHTML===h && el.hidden===!h) return false;
+  el.innerHTML=h; el.hidden=!h;
+  return true;
+}
+/** Every drawn tab's beads, between its name and its close button, after a redraw of the strip, a step or a
+ *  sync of the button. They share the tab's width with its name, so the names are fitted again whenever a
+ *  tab's beads changed. */
+function syncTabBeads(){
+  const bar=$("#tabsBar");
+  if(!bar) return;
+  let moved=false;
+  bar.querySelectorAll(".tab").forEach(el=>{
+    let bd=el.querySelector(".tab-beads");
+    if(!bd){
+      bd=document.createElement("span");
+      bd.className="tab-beads";
+      bd.setAttribute("aria-hidden","true");
+      bd.hidden=true;
+      el.insertBefore(bd, el.querySelector(".tab-x"));
+    }
+    if(fillTabBeads(bd, tabs.find(x=>x.id===el.dataset.tid))) moved=true;
+  });
+  if(moved) fitTabLabels();
+}
 // The tab in front's path as it stands, read without adding to it.
 function tabPathNow(){
   const tb=tabs.find(x=>x.id===activeTabId);
@@ -940,7 +976,7 @@ function syncTabAccent(){
    inside a Core must not skip it. The wrapping is a declaration rather than an assignment to
    the name, because an imported binding cannot be assigned. */
 function drawPills(){ const r=hooks.drawPillsCore.apply(this,arguments); syncTabAccent(); return r; }
-function drawTabs(){ const r=drawTabsCore.apply(this,arguments); syncTabAccent(); return r; }
+function drawTabs(){ const r=drawTabsCore.apply(this,arguments); syncTabAccent(); syncTabBeads(); return r; }
 function drawTabsCore(){
   const bar=$("#tabsBar");
   if(!bar) return;
@@ -1126,6 +1162,9 @@ export {
   wireTabDrag,
   initTabs,
   tabPathStep,
+  setTabBeads,
+  tabBeadsHtml,
+  syncTabBeads,
   tabPathNow,
   watchTabPath,
   TAB_KEY,

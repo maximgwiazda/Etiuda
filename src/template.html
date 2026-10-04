@@ -955,6 +955,20 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 /* White like the rest of the band furniture, NOT --dim: the chrome token was legible while
    the strip stood on the chrome, and is 1.03:1 on cobalt. The selected tab keeps --dim below,
    because its face IS the chrome. */
+/* THE PATH'S BEADS, a filled one for each reply sent along the conversation's chain and an open one while
+   replies wait. Inside the tab's own width, between the name and the close button, so they take room from
+   the name, which fades as any name does, and never from the strip. */
+.tab-beads{--bd:5px;flex:none;display:inline-flex;align-items:center;gap:var(--bd);
+  color:rgba(var(--band-ink-rgb),.85);pointer-events:none}
+.tab.on .tab-beads{color:var(--accent)}
+.tab-beads .bd{position:relative;flex:none;width:var(--bd);height:var(--bd);border-radius:50%;background:currentColor}
+.tab-beads .bd+.bd::before{content:"";position:absolute;right:100%;top:calc(var(--bd) / 2 - .5px);width:var(--bd);
+  height:1px;background:currentColor}
+.tab-beads .bd-open{background:transparent;box-shadow:inset 0 0 0 1px currentColor}
+.tab-beads .bd+.bd-open::before{height:0;background:none;border-top:1px dotted currentColor}
+.tab-beads .bd-more{flex:none;width:calc(var(--bd) * 1.6);height:0;margin-right:calc(var(--bd) * -1);
+  border-top:1px dotted currentColor}
+.ln-head .tab-beads{--bd:7px;color:var(--accent)}
 .tab-x{border:0;background:transparent;color:rgba(var(--band-ink-rgb),.7);cursor:default;padding:2px;
   border-radius:4px;flex:0 0 auto;opacity:.75;
   display:inline-flex;align-items:center;justify-content:center}

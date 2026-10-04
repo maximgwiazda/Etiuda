@@ -2,7 +2,8 @@ import { cardCommits, cardLang, cardTitle, parts } from "./card-model.js";
 import { pack } from "./pack.js";
 import { lang } from "./app-state.js";
 import { statsLearntAfter } from "./desk-stats.js";
-import { dockList, dockNow, copyNextReply, foldNextDock, syncNextDock, watchNextDock } from "./next-dock.js";
+import { dockList, dockNow, copyNextReply, foldNextDock, pathBeads, syncNextDock, watchNextDock } from "./next-dock.js";
+import { tabBeadsHtml } from "./tabs.js";
 import { formatActionChord } from "./shortcuts.js";
 import { t, uiLang } from "./ui-lang.js";
 import { esc } from "./esc.js";
@@ -83,6 +84,7 @@ function laneRowHtml(st, r, i){
 function lanesHtml(st){
   const back=String(t("{KEY} back to the cards")).split("{KEY}");
   const head='<div class="ln-head"><span class="ln-title">'+esc(t("This conversation"))+'</span>'
+    +'<span class="tab-beads" aria-hidden="true">'+tabBeadsHtml(pathBeads(st.now.path))+'</span>'
     +'<span class="ln-hint">'+esc(back[0]||"")+'<kbd>'+esc(formatActionChord("lanes"))+'</kbd>'+esc(back.slice(1).join("{KEY}"))+'</span></div>';
   const m=st.nowCard;
   if(!m) return head+'<p class="ln-empty">'+esc(t("Each reply you send appears here, with what can follow it."))+'</p>';
