@@ -109,8 +109,11 @@ function checkDuplicateStrings(src) {
   const seen = new Map(), problems = [];
   src.split(/\r?\n/).forEach((line, i) => {
     const t = line.trim();
-    if (!t.startsWith('"') || !t.endsWith('",')) return;
-    const body = t.slice(1, -2);
+    /* A table's last pair ends `"` with no comma, and is read too (2026-10-04, as uiPairs): until
+       then a key repeated on the table's last line was never compared. */
+    const tail = t.endsWith('",') ? 2 : t.endsWith('"') ? 1 : 0;
+    if (!tail || !t.startsWith('"')) return;
+    const body = t.slice(1, -tail);
     const at = body.indexOf('":"');
     if (at < 1) return;
     const en = body.slice(0, at), pl = body.slice(at + 3);
