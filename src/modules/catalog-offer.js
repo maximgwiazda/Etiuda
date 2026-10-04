@@ -27,6 +27,10 @@ import { intentIdAt, intentOrder } from "./intent-id.js";
 import { pack } from "./pack.js";
 import { ICON_AWAITING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT } from "./icons.js";
 import { V2_SIG_VALID } from "./catalog-v2.js";
+import { editionChanges } from "./edition-changes.js";
+import { editionOfferHtml, openEditionPanel, repaintEditionRows } from "./edition-panel.js";
+import { closeModal } from "./dialog.js";
+import { hooks } from "./hooks.js";
 import { catalogTrust, whenTrusted, heldCatalogTrust, recheckHeldTrust, trustKeyHtml, trustOfferLine,
   trustSettled } from "./catalog-trust.js";
 
@@ -394,6 +398,9 @@ function eOfferCatalogDialog(c,src){
   const replacing=!!active;
   const updating=isCatalogUpdate(c,active);
   const older=updating && catalogEditionOlder(c.version, active.version);
+  // What the edition changes stands where the counts would, which an update leaves equal so often.
+  const changes=updating ? editionChanges(active,c,pack) : null;
+  const changeHtml=changes ? editionOfferHtml(c,active,changes) : "";
   const n=(c.cards||[]).length,
         i=catalogIntentCount(c),
         k=Object.keys(c.categories||{}).length;
@@ -423,10 +430,11 @@ function eOfferCatalogDialog(c,src){
         : '')
     /* A single text node, which the sweep cannot reach inside: the line is built from counted
        noun phrases and the key carries only their order. */
-    +'<div class="ec-counts">'
+    +(changeHtml ? '' : '<div class="ec-counts">'
     +catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
        n, catalogMacroCount(c), i, k)
-    +'</div></div>'
+    +'</div>')+'</div>'
+    +changeHtml
     /* The filename is an element, so this paragraph is not a leaf and the sweep would skip
        it - each half is translated where it is written, and the <code> stays between them. */
     +'<p class="ec-sub">'+src.foundHtml
@@ -441,6 +449,14 @@ function eOfferCatalogDialog(c,src){
   // Placed against the indicator, and again on a resize, since it may outlive one.
   const place=()=>{
     const at=document.getElementById("catNow"), r=at && at.getBoundingClientRect();
+    /* A LONG LIST SCROLLS INSIDE THE BUBBLE, so the bubble still hangs below the name rather than beside it:
+       23 is bubble.js's gap and margin below a target, and one more for its strict test. */
+    const box=wrap.querySelector(".ec-change");
+    if(box){
+      box.style.maxHeight="";
+      const over=(r && r.width) ? wrap.offsetHeight-(innerHeight-Math.ceil(r.bottom)-23) : 0;
+      if(over>0) box.style.maxHeight=Math.max(96,box.offsetHeight-over)+"px";
+    }
     placeBubble(wrap, (r && r.width) ? {top:r.top, left:r.left, width:r.width, height:r.height}
       : {top:0, left:innerWidth-24, width:0, height:40}, {width:340});
   };
@@ -480,6 +496,19 @@ function eOfferCatalogDialog(c,src){
        WHEN, which is what lets a later edition of the same file ask again. */
     if(src.refusedKey){ nsSet(src.refusedKey,sig); nsSet(src.refusedKey+"At",String(Date.now())); }
     close();
+  };
+  /* THE PANEL STANDS IN FOR THE BUBBLE while it is open: its two answers are the bubble's own, and
+     leaving it brings the bubble back, and the Library under it where the offer was made from there. */
+  const diff=wrap.querySelector("#ecDiff");
+  if(diff) diff.onclick=()=>{
+    const library=!!document.getElementById("mgCatList");
+    const answer=id=>()=>{ closeModal(); if(library && id==="#ecNo") hooks.openManage(); wrap.hidden=false; wrap.querySelector(id).click(); };
+    wrap.hidden=true;
+    openEditionPanel({c:c, held:active, changes:changes,
+      version:catalogVersionLabel(c.version), name:catalogNameOfFile(String(src.file||"")||E_CATALOG_SCRIPT),
+      keep:answer("#ecNo"), load:answer("#ecYes"),
+      taken:()=>repaintEditionRows(wrap,c,active,changes),
+      back:()=>{ closeModal(); if(library) hooks.openManage(); wrap.hidden=false; place(); diff.focus(); }});
   };
   // Only an act of somebody's takes the keyboard; a file found at boot leaves it in the search.
   if(src.asked){ const yes=wrap.querySelector("#ecYes"); if(yes) yes.focus(); }
