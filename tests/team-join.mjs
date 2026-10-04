@@ -24,7 +24,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 19;
+const EXPECTED = 22;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -222,6 +222,34 @@ try {
   const viaLead = await D4.join("state");
   check(viaLead.joined && JSON.stringify(D4.envelope().teamPins) === JSON.stringify({ [TEAM]: LEAD }),
     "15s THE CONTROL: the same admission under the lead it compared codes with pins that lead and joins");
+
+  /* ---- before the answer, no first admission at all: the forger's file lands after the request is written -------- */
+  const pinnedNothing = D => !D.envelope().teamPins && !D.envelope().teamKeys && D.api.readCatalog() === null;
+  const D5 = newDesk("five", SHARE), me5 = await D5.ask("etiuda:branch-identity", true);
+  await D5.join("ask", "lamps.ec", "Ewa");
+  put(SHARE, "etiuda-team.json", teamFile([entry(me5, K1, 1)], { lead: FORGED, signer: forger.privateKey }));
+  const waitForged = await D5.join("state");
+  check(waitForged.joined === null && waitForged.join && waitForged.join.state === "waiting" && pinnedNothing(D5)
+    && !D5.said.some(l => /lead this desk asked to join/.test(l)),
+    "15t while the request waits on the lead's answer, a team file wrapping the key for this desk under any lead pins nothing,"
+    + " opens nothing, is not said as joined, and the log names no lead the desk has not yet been told");
+  const D6 = newDesk("six", SHARE), me6 = await D6.ask("etiuda:branch-identity", true);
+  await D6.join("ask", "lamps.ec", "Iga");
+  put(SHARE, P.JOINS_NAME, joins([{ desk: me6.id, commit: request(me6).commit, refused: true }]));
+  const refusedFirst = await D6.join("state");
+  put(SHARE, "etiuda-team.json", teamFile([entry(me6, K1, 1)], { lead: FORGED, signer: forger.privateKey }));
+  const refusedForged = await D6.join("state");
+  check(refusedFirst.join && refusedFirst.join.state === "refused" && refusedForged.joined === null && refusedForged.join
+    && refusedForged.join.state === "refused" && pinnedNothing(D6),
+    "15u after the lead refused, a team file wrapping the key for this desk under any lead pins nothing, opens nothing and the"
+    + " desk still reads refused");
+  put(SHARE, "etiuda-team.json", teamFile([entry(me6, K1, 1)]));
+  const refusedLead = await D6.join("state");
+  const dropped = await D6.join("cancel");
+  check(refusedLead.join && refusedLead.join.state === "refused" && dropped.join === null && dropped.sealed === null
+    && JSON.stringify(D6.envelope().teamPins) === JSON.stringify({ [TEAM]: LEAD }) && D6.api.readCatalog() === A1.trim(),
+    "15v the lead's own admission read while the request stands refused waits too, and the cancel alone, the team file"
+    + " unchanged since, has it read again and the catalog open");
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
 }

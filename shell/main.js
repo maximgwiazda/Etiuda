@@ -1190,7 +1190,7 @@ function heedTeam() {
   if (!folderAnswers(root)) return;
   const file = path.join(root, TEAM_NAME);
   const stamp = [file, fileStamp(file), fileStamp(path.join(root, RING_NAME)), deskBranch ? deskBranch.box.pub : "",
-    teamJoin && teamJoin.opened ? teamJoin.team + ":" + teamJoin.opened.lead.public : ""].join("|");
+    teamJoin && teamJoin.opened ? teamJoin.team + ":" + teamJoin.opened.lead.public : "", teamJoin ? teamJoin.commit : ""].join("|");
   if (stamp === teamStamp) return;
   /* The stamp is a verdict on the text, so a read that fails or a key that is not kept leaves it unset and the next
      call reads again. */
@@ -1206,9 +1206,10 @@ function heedTeam() {
     teamSay(file + " is signed by a key other than the lead's this desk trusts for team " + doc.id + ", so nothing in it is used");
     return;
   }
-  const asked = !pin && teamJoin && teamJoin.team === doc.id && teamJoin.opened ? teamJoin.opened.lead : null;
+  const asked = !pin && teamJoin && teamJoin.team === doc.id ? (teamJoin.opened ? teamJoin.opened.lead : { keyId: "", public: "" }) : null;
   if (asked && (asked.keyId !== lead.keyId || asked.public !== lead.public)) {
-    teamSay(file + " is signed by a key other than the lead this desk asked to join team " + doc.id + ", so nothing in it is used");
+    if (asked.public)
+      teamSay(file + " is signed by a key other than the lead this desk asked to join team " + doc.id + ", so nothing in it is used");
     return;
   }
   const key = ownTeamKey(doc);
@@ -1242,7 +1243,8 @@ function teamOpen(data) {
 /* ---- this desk asking to join a team: one request at a time, made by the agent's press ---------------
    The request sits in the desk's own folder; the nonce it commits to stays in the desk envelope until the
    lead's opening for that very commitment is read, and is then revealed against that opening alone, which
-   is kept: a later opening is never answered, and the lead it names is the one a first admission must carry. */
+   is kept: a later opening is never answered, and the lead it names is the one a first admission must carry. While the
+   request waits or stands refused, no first admission is taken for its team. */
 let teamJoin = null;                            // {team, file, nonce, commit, asked, held, name, opened?, refused?}
 let joinSent = "";
 function newestEpoch(team) {
