@@ -16,7 +16,8 @@
  * Before 2026-09-29 it was only read, and five faults planted in its keys all left this file green.
  *
  * WHAT THE SHELL MAY NOT DO (section 5) is read from its text with the comments blanked: no API that
- * reads another window, the screen or the clipboard, or presses keys; one clipboard write; no module
+ * reads another window, the screen or the clipboard, or presses keys, bar the one read behind the agent's
+ * own Alt+V (Maxim, 2026-09-28 13:35), held by its exact text in 5e; one clipboard write; no module
  * or program it did not have. Those are the brief's "must hold", and a scan is the only node form of
  * an absence. Strings are NOT blanked, so a name in a command line counts.
  *
@@ -35,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 77;
+const EXPECTED = 85;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -78,6 +79,7 @@ const SP = await import(MOD("spell.js"));
 const MK = await import(MOD("mark.js"));
 const DS = await import(MOD("desk-stats.js"));
 const RD = await import(MOD("render.js"));
+const FD = await import(MOD("fields.js"));
 
 /* Invented cards. A greeting-and-name line opens two of them, as a real reply's first line would. */
 const CARDS = [
@@ -230,6 +232,7 @@ try {
       loadURL: note("loadURL", u => { w.url = u; setImmediate(() => fire("did-finish-load")); }),
     });
     w.self = self;
+    w.fire = fire;
     wins.push(w);
     /* A window's preload runs as it is made, before its page has loaded: so does its stand-in. */
     if (((opts.webPreferences || {}).additionalArguments || []).indexOf("--etiuda-picker") > -1 && madeAPicker) madeAPicker(w);
@@ -239,6 +242,7 @@ try {
     get: (t, k) => k === "fromWebContents" ? (wc => { const w = wins.find(x => x.webContents === wc); return w ? w.self : null; })
       : k === "getAllWindows" ? () => wins.filter(x => !x.destroyed).map(x => x.self) : undefined });
   const held = new Map(), taken = new Set(["Control+Shift+F9"]), clip = [];
+  let clipText = "", clipReads = 0;
   let suspended = null;
   const onH = {}, invH = {};
   const area = { x: 0, y: 0, width: 1920, height: 1040 };
@@ -250,7 +254,7 @@ try {
       getPreferredSystemLanguages: () => ["en-US"] },
     ipcMain: { on: (ch, fn) => { onH[ch] = fn; }, handle: (ch, fn) => { invH[ch] = fn; } },
     BrowserWindow: BW, Menu: anything(), dialog: anything(), net: anything(), protocol: anything(), session: anything(),
-    clipboard: { writeText: t => clip.push(t) },
+    clipboard: { writeText: t => clip.push(t), readText: () => { clipReads++; return clipText; } },
     globalShortcut: { register: (a, fn) => { if (taken.has(a)) return false; held.set(a, fn); return true; },
       unregister: a => { held.delete(a); }, unregisterAll: () => held.clear(), setSuspended: v => { suspended = !!v; } },
     screen: { getCursorScreenPoint: () => cursor, getDisplayNearestPoint: () => ({ workArea: area }),
@@ -419,6 +423,63 @@ try {
   held.get("Control+Shift+Space")();
   await until(() => !pw.visible);
 
+  /* C03, THE CLIPBOARD ON THE AGENT'S OWN ALT+V. The press is a before-input-event on the window it was
+     made in, as Electron delivers a real key; the read is the channel the page calls. */
+  const ALT_V = { type: "keyDown", alt: true, control: false, meta: false, shift: false, code: "KeyV", isAutoRepeat: false };
+  clipText = "Order MRB-2024-10412 left today"; clipReads = 0;
+  const unpressed = await invH["etiuda:clip-read"](deskEvent());
+  check(unpressed === null && clipReads === 0,
+    "2v the desk's read with no press before it answers null and never touches the clipboard: " + JSON.stringify(unpressed) + ", " + clipReads + " read(s)");
+  desk.fire("before-input-event", {}, ALT_V);
+  const pressed = await invH["etiuda:clip-read"](deskEvent()), twice = await invH["etiuda:clip-read"](deskEvent());
+  check(pressed === clipText && twice === null && clipReads === 1,
+    "2w one Alt+V on the desk's window answers one read with the clipboard's text, and the read after it is refused: " + JSON.stringify([pressed, twice]));
+  const arms = [];
+  for (const [label, win, input] of [["AltGr+V", desk, Object.assign({}, ALT_V, { control: true })], ["V alone", desk, Object.assign({}, ALT_V, { alt: false })],
+    ["Alt+V held down", desk, Object.assign({}, ALT_V, { isAutoRepeat: true })], ["Alt+V in the picker", pw, ALT_V]]) {
+    win.fire("before-input-event", {}, input);
+    arms.push(label + " " + ((await invH["etiuda:clip-read"](deskEvent())) === null ? "refused" : "READ"));
+  }
+  desk.fire("before-input-event", {}, ALT_V);
+  const realNow = Date.now;
+  Date.now = () => realNow() + 2000;
+  let late;
+  try { late = await invH["etiuda:clip-read"](deskEvent()); } finally { Date.now = realNow; }
+  arms.push("a press 2 s old " + (late === null ? "refused" : "READ"));
+  check(arms.every(a => / refused$/.test(a)) && clipReads === 1,
+    "2x no other key arms the desk's read, nor the picker's own press, nor a press grown old: " + arms.join(", "));
+
+  /* A reply holding a field the conversation has no value for opens it in the picker's own row. */
+  FD.setCatalogFillFields([{ id: "order", label: { en: "order number" }, kind: "pattern", pattern: "MRB-0000-00000" }]);
+  AS.setCards(CARDS.map(c => Object.assign({}, c)).concat([{ id: "c-where", c: "orders", t: "Where it is", en: "Order {order number} is on its way." }]));
+  AS.setFieldVals({});
+  held.get("Control+Shift+Space")();
+  await until(() => pw.visible);
+  const clipsAsk = clip.length;
+  const needed = await pickerPage.E_PICK.copy(JSON.stringify({ id: "c-where", vi: 0 }));
+  let need = null; try { need = JSON.parse(needed).need; } catch (e) { need = null; }
+  check(!!need && need.fields.length === 1 && need.fields[0].id === "order" && need.fields[0].label === "order number"
+    && clip.length === clipsAsk && pw.visible,
+    "2y a reply with an empty field is answered with the field to fill, nothing is written and the picker stands: " + JSON.stringify(need && need.fields));
+  clipText = "Dzien dobry, zamowienie mrb-2024-10412 z soboty";
+  /* 2x left the picker's own press standing; a read once it has grown old is the read with no press. */
+  Date.now = () => realNow() + 2000;
+  let noPress;
+  try { noPress = await pickerPage.E_PICK.clip(JSON.stringify({ id: "c-where", vi: 0, field: "order" })); } finally { Date.now = realNow; }
+  pw.fire("before-input-event", {}, ALT_V);
+  const fitted = JSON.parse(await pickerPage.E_PICK.clip(JSON.stringify({ id: "c-where", vi: 0, field: "order" })));
+  check(noPress === "null" && fitted && fitted.value === "MRB-2024-10412",
+    "2z the picker's Alt+V takes from the clipboard only the part that fits the field, and nothing without the press: " + noPress + ", " + JSON.stringify(fitted));
+  const refusedAsk = JSON.parse(await pickerPage.E_PICK.copy(JSON.stringify({ id: "c-where", vi: 0, values: { order: "12345" } })));
+  check(!!refusedAsk.need && refusedAsk.need.at === 0 && /order number/.test(refusedAsk.need.said) && clip.length === clipsAsk && !AS.fieldVals.order,
+    "2A a value that does not fit is refused in the row, naming the field, and nothing is kept or written: " + JSON.stringify(refusedAsk.need && refusedAsk.need.said));
+  const done = await pickerPage.E_PICK.copy(JSON.stringify({ id: "c-where", vi: 0, values: { order: fitted.value } }));
+  check(done === true && clip[clip.length - 1] === "Order MRB-2024-10412 is on its way." && AS.fieldVals.order === "MRB-2024-10412" && !pw.visible,
+    "2B the filled value goes into the reply, is kept for the conversation in front, and the picker goes: " + JSON.stringify(clip[clip.length - 1]));
+  FD.setCatalogFillFields(null);
+  AS.setFieldVals({});
+  AS.setCards(CARDS.map(c => Object.assign({}, c)));
+
   cursor = { x: 1900, y: 1000 };
   const edge = SH.pickerPlace(cursor, area, SH.PICK_SIZE), small = SH.pickerPlace({ x: 10, y: 10 }, { x: 0, y: 0, width: 400, height: 300 }, SH.PICK_SIZE);
   check(edge.x + edge.width <= 1920 && edge.y + edge.height <= 1000 - 18 && edge.y >= 0 && small.width === 400 && small.height === 300,
@@ -530,7 +591,12 @@ try {
     .concat(blank(fs.readFileSync(path.join(ROOT, "src", "main.js"), "utf8"))).join("\n");
   const engineBare = mask(engineCode);
   const FORBID = /desktopCapturer|capturePage|getSources|getDisplayMedia|getUserMedia|clipboard\s*\.\s*read|clipboard-read|readText|readHTML|readImage|readRTF|readBookmark|readBuffer|readFindText|availableFormats|sendInputEvent|SendKeys|SendInput|keybd_event|mouse_event|SetWindowsHookEx|GetForegroundWindow|GetWindowText|WindowFromPoint|AttachThreadInput|uiohook|iohook|robotjs|nut-js|UIAutomation/g;
-  const reach = (shellCode + "\n" + engineCode).match(FORBID) || [];
+  /* THE ONE READ, and only behind the press: the whole function as the shell prints it, taken out of the
+     text once before the forbidden list is read over what is left, so a second read anywhere is still found. */
+  const READ_DOOR = 'function readClipOnce(wc){const at=clipArmed.get(wc.id);clipArmed.delete(wc.id);if(!at||Date.now()-at>CLIP_PRESS_MS)return null;return String(clipboard.readText()||"").slice(0,CLIP_MAX)}';
+  const doors = shellCode.split(READ_DOOR).length - 1;
+  const shellLess = shellCode.split(READ_DOOR).join(" ".repeat(READ_DOOR.length));
+  const reach = (shellLess + "\n" + engineCode).match(FORBID) || [];
   /* EVERY HANDLE ON THE CLIPBOARD IS ONE OF THE KNOWN ONES (board 818): a read through another name, as
      `const { clipboard: cb } = require("electron")` then `cb.read(...)`, names no API the list above knows. In the
      shell the name stands only as a member of a `require("electron")` destructure, taken whole, and before its one
@@ -542,7 +608,7 @@ try {
   { const re = /(?:const|let|var)\s*\{([^}]*)\}\s*=\s*require\(\s*"electron"\s*\)/g; let m;
     while ((m = re.exec(shellCode))) spans.push([m.index, m.index + m[0].length]); }
   const inSpan = i => spans.some(s => i >= s[0] && i < s[1]);
-  const oddHandles = at(shellBare, /\bclipboard\b(?!-)/g).filter(i => {
+  const oddHandles = at(mask(shellLess), /\bclipboard\b(?!-)/g).filter(i => {
     if (shellCode.startsWith("clipboard.writeText(", i)) return false;
     return !(inSpan(i) && /[{,]\s*$/.test(shellCode.slice(i - 2, i)) && /^clipboard\s*[,}]/.test(shellCode.slice(i, i + 11)));
   }).map(i => shellCode.slice(i, i + 24))
@@ -594,6 +660,13 @@ try {
     "5d the page is granted the clipboard's write and nothing else, and both permission handlers answer from that list: "
     + JSON.stringify(allowList) + (allowMoved.length ? ", the list changed at run time" : "") + ", handlers " + (permHandlers.join(", ") || "none")
     + (reqFrom && chkFrom ? ", both from the list" : ", NOT both from the list"));
+  /* The door's callers: the two channels that ask who is speaking first, and nothing else names it. */
+  const doorCalls = (shellCode.match(/\breadClipOnce\(/g) || []).length;
+  const deskDoor = /ipcMain\.handle\("etiuda:clip-read",\(?e\)?=>\{if\(!fromEngine\(e\)\)return null;return readClipOnce\(e\.sender\)\}\)/.test(shellCode);
+  const pickDoor = /ipcMain\.handle\("etiuda:pick-clip",\(e,what\)=>\{if\(!fromPicker\(e\)\)return null;const text=readClipOnce\(e\.sender\);/.test(shellCode);
+  check(doors === 1 && doorCalls === 3 && deskDoor && pickDoor,
+    "5e the clipboard is read at one place, behind the press its own window saw, and called only by the desk's and the picker's channels, each asking who speaks first: "
+    + doors + " read door(s), " + (doorCalls - 1) + " caller(s), desk " + deskDoor + ", picker " + pickDoor);
 
   /* ---- 6. the most used replies first, on this desk's own last 28 days ------------------- */
   console.log("\n[6/6] the most used replies first: the picker at rest, a search, and what stays as it was");

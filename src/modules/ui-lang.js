@@ -945,7 +945,22 @@ UI_STRINGS.pl={
   "It does not match":"Nie zgadza się",
   "Team lead's key":"Klucz lidera zespołu",
   "Forget this lead":"Zapomnij tego lidera",
-  "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.":"Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze."
+  "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.":"Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze.",
+  "Fill in before copying":"Uzupełnij przed kopiowaniem",
+  "from this conversation":"z tej rozmowy",
+  "may be skipped":"można pominąć",
+  "from the clipboard":"ze schowka",
+  "paste or type":"wklej albo wpisz",
+  "What is filled in stays with this conversation, for every reply that needs it.":"To, co wpisane, zostaje w tej rozmowie dla każdej odpowiedzi, która tego potrzebuje.",
+  "Copy":"Kopiuj",
+  "Does not fit the field: {LABEL}":"Nie pasuje do pola: {LABEL}",
+  "The reply does not go without: {LABEL}":"Bez tego odpowiedź nie wyjdzie: {LABEL}",
+  "The clipboard could not be read just now.":"Schowka nie udało się teraz odczytać.",
+  "Taken from the clipboard.":"Wzięte ze schowka.",
+  "Nothing on the clipboard fits this field. It holds: {TEXT}":"Nic ze schowka nie pasuje do tego pola. Jest w nim: {TEXT}",
+  "The clipboard is empty.":"Schowek jest pusty.",
+  "Ctrl+V pastes into the field here.":"Tutaj do pola wkleja się przez Ctrl+V.",
+  "Enter copies once the field is filled. Esc goes back to the list.":"Enter kopiuje, gdy pole jest wypełnione. Esc wraca do listy."
 };
 // Is this a language this build carries? The table itself stays private to this file.
 function uiLangKnown(l){ return !!(l && UI_STRINGS[l]); }
