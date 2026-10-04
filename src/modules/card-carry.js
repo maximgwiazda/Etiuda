@@ -192,6 +192,11 @@ function rescueEdits(alive,pin,lost){
     Object.keys(full).forEach(k=>{ if(k.charAt(0)!=="_") own[k]=full[k]; });
     own.id=uid("u:");
     delete own.retired;   // the base may have slept; an own card is never born asleep
+    // A link kept names a card that lives on; the card it came from and the ones gone with it do not.
+    if(Array.isArray(own.next)){
+      own.next=own.next.filter(e=>e && alive.has(e.to));
+      if(!own.next.length) delete own.next;
+    }
     if(lost[id]){ lost[own.id]=lost[id]; delete lost[id]; }
     if(own.intents) own.intents=pin(own.id,own.intents);
     pack.custom.push(own);
