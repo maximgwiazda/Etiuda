@@ -51,6 +51,14 @@ function nextSaveFields(rows,catalog,base,ov,touched){
   const kept=!touched && !!ov && Array.isArray(ov.next) && Array.isArray(ov.nextWas);
   return {next:rows.slice(), nextWas:kept ? ov.nextWas.map(String) : nextIdsOf(base&&base.next)};
 }
+/** A save that never touched the fold hands on the list AS STORED. The fold draws live cards only, and
+ *  `cards` leaves out a removed card (back on Reset) and a retired one (asleep, rebuild.js), so writing
+ *  the drawn rows back would drop both on a title edit, where card-order.js and favourites.js keep a retired card's place. */
+function nextStoredFields(card,catalog,base,ov){
+  if(!catalog) return {next:Array.isArray(card&&card.next) ? card.next.slice() : []};
+  if(!ov || !Array.isArray(ov.next)) return {};
+  return {next:ov.next.slice(), nextWas:Array.isArray(ov.nextWas) ? ov.nextWas.map(String) : nextIdsOf(base&&base.next)};
+}
 /* Every title of every live card, folded as search folds it: a prefix of the title first, then of a
    word in it, then anywhere, each in list order. */
 function nextFold(s){ return foldDiacritics(String(s==null?"":s).toLowerCase()); }
@@ -294,7 +302,7 @@ function nextReplies(card,base,ov){
   }
   return {
     sum:sum, body:body, wire:wire,
-    fields:()=>nextSaveFields(rows,catalog,base,ov,touched)
+    fields:()=>touched ? nextSaveFields(rows,catalog,base,ov,true) : nextStoredFields(card,catalog,base,ov)
   };
 }
 

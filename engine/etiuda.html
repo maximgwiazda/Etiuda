@@ -13579,6 +13579,11 @@ What you type stays in this browser only.`;
     const kept = !touched && !!ov && Array.isArray(ov.next) && Array.isArray(ov.nextWas);
     return { next: rows.slice(), nextWas: kept ? ov.nextWas.map(String) : nextIdsOf(base && base.next) };
   }
+  function nextStoredFields(card, catalog, base, ov) {
+    if (!catalog) return { next: Array.isArray(card && card.next) ? card.next.slice() : [] };
+    if (!ov || !Array.isArray(ov.next)) return {};
+    return { next: ov.next.slice(), nextWas: Array.isArray(ov.nextWas) ? ov.nextWas.map(String) : nextIdsOf(base && base.next) };
+  }
   function nextFold(s) {
     return foldDiacritics(String(s == null ? "" : s).toLowerCase());
   }
@@ -13864,7 +13869,7 @@ What you type stays in this browser only.`;
       sum,
       body,
       wire,
-      fields: () => nextSaveFields(rows, catalog, base, ov, touched)
+      fields: () => touched ? nextSaveFields(rows, catalog, base, ov, true) : nextStoredFields(card, catalog, base, ov)
     };
   }
   function stampToggleHtml(on) {

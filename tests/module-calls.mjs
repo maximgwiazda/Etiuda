@@ -2518,6 +2518,22 @@ const CARD_B = {
   check("card-chain.js", "814C a list emptied on purpose is the agent's too, and an own card's list is handed on whole",
     () => eq(JSON.stringify(CH.nextSaveFields([], to("c-a"), base(to("c-a")), null, true)) + "|"
       + JSON.stringify(CH.nextSaveFields(to("c-b"), null, null, null, false)), '{"next":[],"nextWas":["c-a"]}|{"next":[{"to":"c-b"}]}'));
+  {
+    const hadCards = AS.cards;
+    try {
+      check("card-chain.js", "814R a save that never touched the fold hands the stored list on whole, a removed or retired card's link kept, and a catalog card without its own list says nothing",
+        () => {
+          AS.setCards([{ id: "c-a" }, { id: "c-b" }, { id: "c-self" }, { id: "u:1" }]);
+          const b = base(to("c-a"));
+          const save = (card, bs, ov) => JSON.stringify(CH.nextReplies(card, bs, ov).fields());
+          const ovB = { next: to("c-b", "c-retired"), nextWas: ["c-a"] }, ovC = { next: to("c-a", "c-retired"), nextWas: ["c-a"] };
+          return eq([save({ id: "u:1", next: to("c-a", "c-removed") }, null, null),
+            save(Object.assign({}, b, ovB), b, ovB), save(Object.assign({}, b, ovC), b, ovC), save(Object.assign({}, b), b, null)].join("|"),
+            '{"next":[{"to":"c-a"},{"to":"c-removed"}]}|{"next":[{"to":"c-b"},{"to":"c-retired"}],"nextWas":["c-a"]}|'
+            + '{"next":[{"to":"c-a"},{"to":"c-retired"}],"nextWas":["c-a"]}|{}');
+        });
+    } finally { AS.setCards(hadCards); }
+  }
   check("card-model.js", "814D the catalog's ids ride the override only beside a list it writes",
     () => {
       const b = base(to("c-a"));
