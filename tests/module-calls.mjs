@@ -3011,6 +3011,46 @@ const CARD_B = {
     });
 }
 
+/* ------------------------------------------------------------------ card-editor.js, the title the browser oracle types into
+   tests/smoke.js reaches the card editor's title by a selector and types into it, for the walk-away Undo and for a
+   saved edit (data-2). The editor's markup comes from the real openCardEditor on a stand-in document that keeps it;
+   every selector smoke uses for the editor's inputs must reach the first language's title before anything else. An
+   invented card only; every global set here is put back, and nothing below awaits, so no frame runs under it. */
+{
+  const Dom = await import(MOD("dom.js"));
+  const AS = await import(MOD("app-state.js"));
+  const CE = await import(MOD("card-editor.js"));
+  const CM = await import(MOD("content-model.js"));
+  const fs = await import("node:fs");
+  const hadDoc = globalThis.document, hadCards = AS.cards;
+  const quiet = { toggle() {}, add() {}, remove() {}, contains() { return false; } };
+  const stub = () => ({ hidden: true, style: {}, classList: quiet, dataset: {}, setAttribute() {}, getAttribute() { return null; },
+    removeAttribute() {}, addEventListener() {}, querySelector() { return null; }, querySelectorAll() { return []; }, contains() { return false; },
+    getBoundingClientRect() { return { left: 0, top: 0, width: 0, height: 0 }; }, appendChild() {}, focus() {}, getContext() { return {}; } });
+  let drawn = "";
+  const els = { "#modalCard": Object.defineProperty(stub(), "innerHTML", { get() { return drawn; }, set(v) { drawn = String(v); } }) };
+  const smoke = fs.readFileSync(join(HERE, "smoke.js"), "utf8");
+  const sites = [...smoke.matchAll(/#modalCard input\[id\^="([^"]*)"\]/g)].map(m => m[1]);
+  try {
+    globalThis.document = { querySelector: s => els[s] || (els[s] = stub()), getElementById: id => els["#" + id] || null, querySelectorAll: () => [],
+      createElement: () => stub(), createRange: () => stub(), addEventListener() {}, activeElement: null,
+      body: { classList: quiet }, documentElement: { style: { setProperty() {} }, classList: quiet } };
+    Dom.grabDom();
+    AS.setCards([{ id: "c-ti-a", c: "gen", t: "Invented title", en: "Invented body" }, { id: "c-ti-b", c: "gen", t: "Second", en: "Two" }]);
+    CE.openCardEditor("c-ti-a");
+    const inputs = [...drawn.matchAll(/<input\b[^>]*>/g)].map(m => m[0]);
+    const idOf = tag => (tag.match(/\bid="([^"]*)"/) || [])[1] || "";
+    const reach = p => { const tag = inputs.find(x => idOf(x).indexOf(p) === 0) || "";
+      return idOf(tag) + (/\btype="(?!text")/.test(tag) || /\shidden\b/.test(tag) ? " not a text field" : ""); };
+    check("card-editor.js", "814st1 every selector by which tests/smoke.js types into the card editor reaches the first language's title, a visible text field, before any other input",
+      () => eq([sites.length >= 3, [...new Set(sites.map(reach))].join(",")].join("|"), "true|me_t_" + CM.CONTENT_LANGS[0]));
+  } finally {
+    AS.setCards(hadCards);
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+    if (hadDoc !== undefined) Dom.grabDom();
+  }
+}
+
 /* NOT cardBodyHtml(). It reads the PAX box off the document through fill(), so it cannot be
    called without one: it is the browser oracle's, and tests/smoke.js has it. card-body.js is
    called above only for its intent strip, which reads no document. */

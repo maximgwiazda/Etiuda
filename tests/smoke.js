@@ -2571,13 +2571,14 @@ const t0 = Date.now();
     const u = document.getElementById("eUndoBtn"); if (u) u.click(); await wait(800);
     const n2 = list().length, back = list().some(c => c.getAttribute("data-id") === id);
     openCardEditor(id); await wait(700);
-    const title = document.querySelector('#modalCard input[id^="me"]');
+    // The title by its field id (langFieldId): a hidden box stands before it in the Content fold.
+    const title = document.querySelector('#modalCard input[id^="me_t_"]');
     if (title) { title.value = title.value + " probe"; title.dispatchEvent(new Event("input", { bubbles: true })); }
     const typed = title ? title.value : null;
     const nx = document.getElementById("edNext"); if (nx && !nx.disabled) nx.click(); await wait(700);
     const moved = !!title && !document.body.contains(title);
     const u2 = document.getElementById("eUndoBtn"); if (u2) u2.click(); await wait(900);
-    const again = document.querySelector('#modalCard input[id^="me"]');
+    const again = document.querySelector('#modalCard input[id^="me_t_"]');
     const retyped = !!again && again.value === typed;
     closeModal(); await wait(400);
     const had = { agent: lsGet("eAgent"), cards: list().length };
@@ -3503,7 +3504,7 @@ const t0 = Date.now();
       const wait = ms => new Promise(r => setTimeout(r, ms));
       const ids = [...document.querySelectorAll("#list .card[data-id]")].map(c => c.getAttribute("data-id"));
       openCardEditor(ids[0]); await wait(700);
-      const title = document.querySelector('#modalCard input[id^="me"]');
+      const title = document.querySelector('#modalCard input[id^="me_t_"]');
       if (title) { title.value = title.value + " probe"; title.dispatchEvent(new Event("input", { bubbles: true })); }
       const save = document.getElementById("meSave"); if (save) save.click(); await wait(700);
       if (typeof closeModal === "function" && !document.getElementById("modal").hidden) closeModal();
