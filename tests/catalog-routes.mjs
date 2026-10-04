@@ -421,10 +421,22 @@ check("18 control: the plain payload carries none of the new keys through either
   const r38 = ED.editionChanges(read(doc()), read(three), NONE);
   check("38 an edition with a card changed, one added and one retired counts 1, 1 and 1, and names each",
     kinds(r38) === "1,1,0,1,0" && said(r38) === "changed:c-a new:c-d retired:c-c", kinds(r38) + " | " + said(r38));
+  const EP = await import(MOD("edition-panel.js"));
+  const comeback = (await import(MOD("esc.js"))).esc((await import(MOD("ui-lang.js"))).t("It comes back with your star and your edits."));
+  const sleeper = lay => { const r = ED.editionChanges(read(doc()), read(three), lay), it = r.items.find(i => i.id === "c-c");
+    return (it && it.asleep ? "asleep" : "awake") + "/" + (EP.editionOfferHtml(read(three), read(doc()), r).indexOf(comeback) > -1 ? "line" : "none"); };
+  const r38a = [NONE, { overrides: {}, removed: [], favourites: ["c-c"] }, { overrides: { "c-c": { en: "my edit" } }, removed: [], favourites: [] }]
+    .map(sleeper).join(" ");
+  check("38a the offer promises a retired card back with a star and edits only where it has one: not unstarred and unedited, yes starred, yes edited",
+    r38a === "awake/none asleep/line asleep/line", r38a);
   const r39 = ED.editionChanges(read(doc()), read(doc()), NONE);
   check("39 control: the same file offered again counts nothing", kinds(r39) === "0,0,0,0,0" && !r39.items.length, kinds(r39));
   const r40 = ED.editionChanges(read(doc()), read(next(d => d.cards.reverse())), NONE);
   check("40 a change in the order of the cards alone counts nothing", kinds(r40) === "0,0,0,0,0", kinds(r40));
+  const r40a = ED.editionChanges(read(doc()),
+    read(next(d => { d.cards[0].firstOnly = true; d.cards[1].k = "lamp, bulb"; d.cards[2].commits = true; })), NONE);
+  check("40a a card whose only change is a flag or its keywords counts nothing", kinds(r40a) === "0,0,0,0,0" && !r40a.items.length,
+    kinds(r40a) + " | " + said(r40a));
   const asleepDoc = next(d => { d.cards[1].retired = true; });
   const r41 = ED.editionChanges(read(asleepDoc), read(next(d => { d.cards.splice(2, 1); })), NONE);
   check("41 a card the edition wakes is restored, and one it leaves out altogether is removed, not retired",
@@ -461,14 +473,21 @@ check("18 control: the plain payload carries none of the new keys through either
   fresh(); land(next(d => bodyIs(d, "c-b", "lead text")));
   check("48 a field the lead changed otherwise stays the agent's", ovB() === JSON.stringify({ en: "my edit" }) && bodyOf("c-b") === "my edit",
     ovB() + " | " + bodyOf("c-b"));
-  fresh();
-  const taken = read(next(d => bodyIs(d, "c-b", "lead text")));
-  CC.takeTeamText(taken, "c-b", true);
-  CC.carryCardLayer(taken); ST.lsSet(CT.E_CATALOG_STORE, JSON.stringify(taken), true); CT.eApplyCatalog(taken);
-  PK.pack.baseCards = null; RB.rebuildCards();
+  const takeLand = () => {
+    const taken = read(next(d => bodyIs(d, "c-b", "lead text")));
+    CC.takeTeamText(taken, "c-b", true);
+    CC.carryCardLayer(taken); ST.lsSet(CT.E_CATALOG_STORE, JSON.stringify(taken), true); CT.eApplyCatalog(taken);
+    PK.pack.baseCards = null; RB.rebuildCards();
+  };
+  fresh(); takeLand();
   check("49 the team's new text taken in the offer: after the load the edit is gone and the card says what the edition says",
     ovB() === "null" && bodyOf("c-b") === "lead text" && PK.pack.favourites.indexOf("c-b") > -1,
     ovB() + " | " + bodyOf("c-b"));
+  const titleOf = id => ((AP.cards.find(c => c.id === id) || {}).t);
+  fresh(); PK.pack.overrides["c-b"].t = "My title"; RB.rebuildCards(); takeLand();
+  check("49a and a field of the agent's edit the lead never changed stays: the title the agent wrote, beside the team's text",
+    ovB() === JSON.stringify({ t: "My title" }) && bodyOf("c-b") === "lead text" && titleOf("c-b") === "My title",
+    ovB() + " | " + bodyOf("c-b") + " | " + titleOf("c-b"));
   const own = (body) => { fresh(); PK.pack.custom = [{ id: "u:own1", c: "t-op", t: "Mine", en: body }];
     PK.pack.favourites.push("u:own1"); RB.rebuildCards(); };
   const adopting = next(d => d.cards.push({ id: "u:own1", shelf: "t-op", bodyShape: "plain", title: { en: "Mine" }, body: { en: "Mine body." } }));
