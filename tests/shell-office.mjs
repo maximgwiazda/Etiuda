@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 76;
+const EXPECTED = 79;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -374,6 +374,46 @@ try {
     check(d.onShare().length === 1 && offered.join() === goodCatalog().name && asked.join() === "req-office",
       "4e when it answers again it is watched, what it holds is offered, and the statistics request is answered: watch "
       + d.onShare().length + ", offered " + offered.length + ", asked " + asked.join());
+
+    /* The file the desk writes for a request, from a text the page sends (board 814, S2): the shell
+       rebuilds it field by field, so what the page's statsDoc carries reaches the file only where
+       the shell copies it. Each case is a desk of its own, asked and answered as 4e's was. */
+    const answerWith = async (sent) => {
+      const a = boot(true);
+      await settle();
+      a.clock.fire(3000);
+      await settle();
+      a.st.back();
+      await settle();
+      const rq = { format: 1, kind: "etiuda-request", id: "req-pairs", issued: "2026-09-01",
+        from: "2026-09-01", to: "2026-09-27", expires: "2099-01-01" };
+      rq.hash = a.S.api.channelHash(rq);
+      realFs.writeFileSync(path.join(a.share, "etiuda-request.ereq"), JSON.stringify(rq), "utf8");
+      realFs.mkdirSync(path.join(a.share, "stats"), { recursive: true });
+      a.clock.fire(30000);
+      await settle();
+      const res = await a.S.ask("etiuda:stats-write", JSON.stringify(Object.assign(
+        { engine: "2.0.0", cards: [{ id: "c-a", n: 2, at: "2026-09-02" }], intents: [], misses: 0, langs: { en: 2 } }, sent)));
+      const names = realFs.readdirSync(path.join(a.share, "stats")).filter(n => /\.estat$/.test(n));
+      let doc = null;
+      try { doc = JSON.parse(realFs.readFileSync(path.join(a.share, "stats", names[0]), "utf8")); } catch { doc = null; }
+      const rehash = doc ? a.S.api.channelHash(doc) : "";
+      return { ok: !!(res && res.ok), files: names.length, doc, hashOk: !!doc && doc.hash === rehash };
+    };
+    const withPair = await answerWith({ pairs: [{ from: "c-a", to: "c-m", n: 3, name: "smuggled" }] });
+    check(withPair.ok && withPair.files === 1 && withPair.hashOk
+      && JSON.stringify(withPair.doc && withPair.doc.pairs) === JSON.stringify([{ from: "c-a", to: "c-m", n: 3 }]),
+      "4v the statistics answer carries the pairs the page counted into the file, each row rebuilt as from, to and n, under the file's hash: "
+      + (withPair.doc ? "pairs " + JSON.stringify(withPair.doc.pairs) : "no file") + ", hash " + withPair.hashOk);
+    const noPairs = await answerWith({});
+    check(noPairs.ok && noPairs.files === 1 && noPairs.hashOk && !("pairs" in noPairs.doc)
+      && Object.keys(noPairs.doc).sort().join() === "cards,desk,engine,format,hash,intents,kind,langs,misses,period,sync",
+      "4w THE TWIN: a desk with no pairs writes the file it always wrote, with no pairs key: "
+      + (noPairs.doc ? Object.keys(noPairs.doc).sort().join() : "no file"));
+    const emptyPairs = await answerWith({ pairs: [{ from: "c-a", to: "", n: 1 }, { from: "c-a", to: "c-b", n: 0 }, { from: 5, to: "c-b", n: 1 }, null] });
+    check(emptyPairs.ok && emptyPairs.files === 1 && !("pairs" in emptyPairs.doc),
+      "4x a pairs list with no row that survives writes no key, not an empty one: "
+      + (emptyPairs.doc ? "pairs " + JSON.stringify(emptyPairs.doc.pairs) : "no file"));
 
     const armed = d.onShare().length;
     const first = d.onShare()[0];
