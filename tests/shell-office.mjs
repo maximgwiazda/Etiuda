@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 79;
+const EXPECTED = 85;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -911,6 +911,83 @@ try {
     check(r2.id === "lamp-shop" && r2.cards > 0,
       "81y once the read succeeds, the same file (same date and size) is listed with its id and cards, a failed read not being remembered as a verdict on it ("
       + JSON.stringify([r2.id, r2.cards]) + ")");
+  }
+  /* ---- 12. a colleague's file read by its desk's folder, and desks/ watched one folder down ---- */
+  {
+    const crypto = nodeRequire("node:crypto");
+    const V2 = await import(MOD("catalog-v2.js"));
+    const share = path.join(LAB, "desks-share");
+    realFs.mkdirSync(share, { recursive: true });
+    realFs.writeFileSync(path.join(share, "lamps.ec"), JSON.stringify(goodCatalog()), "utf8");
+    const sha8 = s => crypto.createHash("sha256").update(s).digest("hex").slice(0, 8);
+    /* A desk's genuine file, as section 9 writes one; `spoil` changes a word after signing, `rev` its edition. */
+    const deskAt = (name, o) => {
+      const opt = o || {}, pair = opt.pair || crypto.generateKeyPairSync("ed25519");
+      const raw = pair.publicKey.export({ type: "spki", format: "der" }).subarray(-32);
+      const id = "k-" + crypto.createHash("sha256").update(raw).digest("hex").slice(0, 16);
+      const doc = Object.assign(goodCatalog(), { id: id + "-" + sha8("lamp-shop"), rev: opt.rev || 2, modified: true,
+        grew: { id: "lamp-shop", rev: 1, sha: "sha256:" + "cd".repeat(32) }, desk: { id: id, name: name, key: raw.toString("hex"), box: "ef".repeat(32) } });
+      doc.sig = { alg: "Ed25519", keyId: id };
+      doc.sig.value = crypto.sign(null, Buffer.concat([Buffer.from("etiuda-desk-branch\n"), Buffer.from(V2.v2SignedBytes(doc))]), pair.privateKey).toString("hex");
+      if (opt.spoil) doc.cards[0].title.en += "!";
+      const dir = path.join(share, "desks", id);
+      realFs.mkdirSync(dir, { recursive: true });
+      realFs.writeFileSync(path.join(dir, "lamps-" + sha8("lamp-shop") + ".ec"), JSON.stringify(doc), "utf8");
+      return { id, pair, name: "lamps-" + sha8("lamp-shop") + ".ec", doc };
+    };
+    const clock = fakeClock();
+    const S = loadShell({ ready: true, clock: clock, desk: { eCatalogFolder: share } });
+    const watches = [];
+    S.ctl.watch = (real, dir, opts, fn) => { const w = new EventEmitter(); w.close = () => { w.closed = true; }; w.dir = dir;
+      w.opts = typeof opts === "function" ? null : opts; w.fn = typeof opts === "function" ? opts : fn; watches.push(w); return w; };
+    for (let i = 0; i < 4; i++) await new Promise(r => setImmediate(r));
+    await new Promise(r => setTimeout(r, 40));
+    const ala = deskAt("Ala"), bea = deskAt("Bea", { spoil: true });
+    const got = await S.ask("etiuda:catalog-read", ala.name, ala.id);
+    check(!!got && got.name === ala.name && JSON.parse(got.text || "{}").id === ala.doc.id,
+      "86a a colleague's genuine file is read by its desk's folder, its text as written (" + (got ? JSON.parse(got.text || "{}").id : "none") + ")");
+    const spoiled = await S.ask("etiuda:catalog-read", bea.name, bea.id);
+    const wrongId = await S.ask("etiuda:catalog-read", ala.name, "k-zz");
+    const up = await S.ask("etiuda:catalog-read", ala.name, "..");
+    const top = await S.ask("etiuda:catalog-read", "lamps.ec");
+    check(!!spoiled && spoiled.text === "" && wrongId === null && up === null && !!top && JSON.parse(top.text).id === "lamp-shop",
+      "86A THE CONTROL: a desk file whose signature fails is handed as unreadable, a folder that is not a desk's id and a step out of desks/ are refused outright, and the folder's own file still reads by name alone ("
+      + JSON.stringify([spoiled && spoiled.text.length, wrongId, up]) + ")");
+    /* The watches the window armed: the share's own, and desks/ beneath it over its subfolders. */
+    const onShare = watches.filter(w => w.dir === share), onDesks = watches.filter(w => w.dir === path.join(share, "desks"));
+    check(onShare.length === 1 && onDesks.length === 1 && !!onDesks[0].opts && onDesks[0].opts.recursive === true,
+      "86b desks/ has a watch of its own over its subfolders, beside the share's (" + onShare.length + " on the share, " + onDesks.length + " on desks/, recursive "
+      + JSON.stringify(onDesks[0] && onDesks[0].opts) + ")");
+    const listings = () => S.sent.filter(a => a[0] === "etiuda:catalog-listing").length;
+    clock.fire(300);
+    const before = listings();
+    deskAt("Ala", { pair: ala.pair, rev: 3 });
+    const deskWatch = onDesks[0] || { fn: () => {} };
+    deskWatch.fn("change", path.join(ala.id, ala.name));
+    const settles = clock.fire(300);
+    const after = listings();
+    check(settles === 1 && after === before + 1,
+      "86c a colleague's file changing in desks/<id>/ reaches the page as the listing, sent once the folder settles (" + settles + " settle, listings " + before + " then " + after + ")");
+    deskWatch.fn("change", path.join(ala.id, "notes.txt"));
+    check(clock.fire(300) === 0,
+      "86C THE CONTROL: a file under desks/ that is no catalog asks for nothing");
+    /* A share with no desks/ when the window opened: the share's own watch sees it appear and arms the one beneath. */
+    const late = path.join(LAB, "desks-late");
+    realFs.mkdirSync(late, { recursive: true });
+    realFs.writeFileSync(path.join(late, "lamps.ec"), JSON.stringify(goodCatalog()), "utf8");
+    const S2 = loadShell({ ready: true, clock: fakeClock(), desk: { eCatalogFolder: late } });
+    const w2 = [];
+    S2.ctl.watch = (real, dir, opts, fn) => {
+      if (dir === path.join(late, "desks") && !realFs.existsSync(dir)) throw Object.assign(new Error("no such folder"), { code: "ENOENT" });
+      const w = new EventEmitter(); w.close = () => {}; w.dir = dir; w.fn = typeof opts === "function" ? opts : fn; w2.push(w); return w; };
+    for (let i = 0; i < 4; i++) await new Promise(r => setImmediate(r));
+    await new Promise(r => setTimeout(r, 40));
+    const none = w2.filter(w => w.dir === path.join(late, "desks")).length;
+    realFs.mkdirSync(path.join(late, "desks"));
+    (w2.find(w => w.dir === late) || { fn: () => {} }).fn("rename", "desks");
+    const armed = w2.filter(w => w.dir === path.join(late, "desks")).length;
+    check(none === 0 && armed === 1,
+      "86d a share with no desks/ at first is watched there once desks/ appears in it (" + none + " before, " + armed + " after)");
   }
 } catch (e) {
   failed++;

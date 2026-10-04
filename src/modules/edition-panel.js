@@ -20,15 +20,18 @@ function editionKindWord(k){
   if(k==="retired") return t("retired");
   return t("removed");
 }
-function editionCountsHtml(n){
+function editionCountWords(n){
   const parts=[];
   if(n.changed) parts.push(counted(n.changed,"{N} changed","{N} changed"));
   if(n.new) parts.push(counted(n.new,"{N} new","{N} new"));
   if(n.restored) parts.push(counted(n.restored,"{N} restored","{N} restored"));
   if(n.retired) parts.push(counted(n.retired,"{N} retired","{N} retired"));
   if(n.removed) parts.push(counted(n.removed,"{N} removed","{N} removed"));
+  return parts;
+}
+function editionCountsHtml(n){
   // Each count held to its word by its own box, for the reason counted() gives for its spaces.
-  return '<div class="ec-counts">'+parts.map(p=>'<span class="ec-n">'+esc(p)+'</span>').join(" · ")+'</div>';
+  return '<div class="ec-counts">'+editionCountWords(n).map(p=>'<span class="ec-n">'+esc(p)+'</span>').join(" · ")+'</div>';
 }
 function editionNoteHtml(note,cls){
   return '<div class="'+cls+'"><small>'+esc(t("Note for this edition"))+'</small><p>'+esc(note)+'</p></div>';
@@ -43,8 +46,9 @@ function editionSubline(it,c){
   if(it.kind==="retired" && it.asleep) return t("It comes back with your star and your edits.");
   return "";
 }
-function editionRowInner(it,held,c){
-  const sub=editionSubline(it,c);
+// `own` answers a row's small line in place of the offer's, for a colleague's desk.
+function editionRowInner(it,held,c,own){
+  const sub=own?own(it):editionSubline(it,c);
   return '<span class="ec-kind">'+esc(editionKindWord(it.kind))+'</span>'
     +'<span class="ec-t">'+esc(cardTitle(editionCard(it,held,c))||it.id)
     +(sub?'<small>'+esc(sub)+'</small>':'')+'</span>';
@@ -71,7 +75,9 @@ function editionSide(ops,mine){
     .map(o=>o.op==="same"?esc(o.text):'<span class="ed-'+mine+'">'+esc(o.text)+'</span>').join("");
 }
 function editionFieldWord(f){ return f==="t"?t("Title"):f==="note"?t("Note"):t("Text"); }
-function editionPaneHtml(it,held,c){
+/* `desk` is a colleague's desk looked at: its two heads in place of Was and Becomes, and its one act, which takes
+   that desk's text of a changed card into this desk's own edits, in place of the offer's pair. */
+function editionPaneHtml(it,held,c,desk){
   const was=((held&&held.cards)||[]).find(m=>String(m.id)===it.id)||null;
   const now=((c&&c.cards)||[]).find(m=>String(m.id)===it.id)||null;
   const mine=(pack.overrides||{})[it.id]||null, many=CONTENT_LANGS.length>1;
@@ -86,7 +92,7 @@ function editionPaneHtml(it,held,c){
     const own=blocks.map(f=>(it.own && mine && mine[f.key]!=null && String(mine[f.key])!==cardText(now,f.field,f.code))
       ? String(mine[f.key]) : null);
     cols=own.some(v=>v!=null)?3:2;
-    rows=head(t("Was"))+head(t("Becomes"))+(cols>2?head(t("Your version")):"");
+    rows=head(desk?desk.was:t("Was"))+head(desk?desk.now:t("Becomes"))+(cols>2?head(t("Your version")):"");
     // The choice sits under the last of the agent's own versions, and the pressed one is the choice made.
     const last=own.map((v,i)=>v!=null?i:-1).reduce((a,b)=>Math.max(a,b),-1), took=teamTextTaken(c,it.id);
     const acts='<div class="ed-acts">'
@@ -96,40 +102,51 @@ function editionPaneHtml(it,held,c){
       if(blocks.length>1 || f.field!=="body") rows+='<div class="ed-field">'+esc(editionFieldWord(f.field)+(many?" · "+f.code.toUpperCase():""))+'</div>';
       const ops=wordDiff(cardText(was,f.field,f.code),cardText(now,f.field,f.code));
       rows+=cell(editionSide(ops,"del"))+cell(editionSide(ops,"ins"))
-        +(cols>2?'<div class="ed-own">'+(own[i]!=null?cell(esc(own[i])):"")+(i===last?acts:"")+'</div>':"");
+        +(cols>2?'<div class="ed-own">'+(own[i]!=null?cell(esc(own[i])):"")+(i===last&&!desk?acts:"")+'</div>':"");
     });
+    if(desk && desk.take) rows+='<div class="ed-acts ed-acts-desk"><button type="button" class="btn" data-ed-mine="1" aria-pressed="'
+      +!!desk.taken(it)+'">'+esc(desk.take)+'</button></div>';
   } else {
     const gone=it.kind==="retired"||it.kind==="removed", m=gone?was:now, code=cardText(m,"body",lang)?lang:CONTENT_LANGS[0];
-    rows=head(t(gone?"Was":"Becomes"))+cell(esc(cardText(m,"body",code)));
-    const sub=editionSubline(it,c);
+    rows=head(desk?(gone?desk.was:desk.now):t(gone?"Was":"Becomes"))+cell(esc(cardText(m,"body",code)));
+    const sub=desk?"":editionSubline(it,c);
     if(sub) rows+='<p class="ed-sub">'+esc(sub)+'</p>';
   }
   return '<h3>'+esc(cardTitle(now||was||{})||it.id)+'</h3><div class="ed-grid ed-c'+cols+'">'+rows+'</div>';
 }
 /** The panel behind the offer: every card the edition changes at the left, the chosen one at the right.
  *  `o` carries the catalog offered and the one held, the changes, the version and the name to head it,
- *  and the offer's own three ways out: keep, load and back to the bubble. */
+ *  and the offer's own three ways out: keep, load and back to the bubble. A colleague's desk comes as `o.desk`, its
+ *  title, heads, words for the two ways out and its take (editionPaneHtml); its file carries no note of its own. */
 function openEditionPanel(o){
-  const items=o.changes.items, c=o.c;
+  const items=o.changes.items, c=o.c, desk=o.desk||null, sub=desk?desk.sub:null;
   let at=Math.max(0,items.findIndex(it=>it.own));
-  const note=editionNoteText(c,uiLang());
+  const note=desk?"":editionNoteText(c,uiLang());
   const row=(it,i)=>'<button type="button" class="ed-row" data-ed-at="'+i+'"'+(i===at?' aria-current="true"':'')+'>'
-    +editionRowInner(it,o.held,c)+'</button>';
+    +editionRowInner(it,o.held,c,sub)+'</button>';
   openDialog({
     cls:"ed-modal",
-    title:t("What is new in edition {V}").split("{V}").join(o.version),
+    title:desk?desk.title:t("What is new in edition {V}").split("{V}").join(o.version),
     name:o.name,
     back:o.back,
     body:'<div class="ed-panel" data-i18n-skip><div class="ed-left">'
       +(note?editionNoteHtml(note,"ed-note"):'')+editionCountsHtml(o.changes.counts)
       +'<div class="ed-list">'+items.map(row).join("")+'</div></div>'
       +'<div class="ed-pane" id="edPane" aria-live="polite"></div></div>',
-    actions:'<button type="button" class="btn" id="edKeep">'+esc(t("Keep current"))+'</button>'
-      +'<button type="button" class="btn primary" id="edLoad">'+esc(t("Load the update"))+'</button>',
+    actions:'<button type="button" class="btn" id="edKeep">'+esc(desk?desk.keep:t("Keep current"))+'</button>'
+      +'<button type="button" class="btn primary" id="edLoad">'+esc(desk?desk.load:t("Load the update"))+'</button>',
     wire:()=>{
       const pane=document.getElementById("edPane"), list=document.querySelector(".ed-list");
       const draw=()=>{
-        pane.innerHTML=editionPaneHtml(items[at],o.held,c);
+        pane.innerHTML=editionPaneHtml(items[at],o.held,c,desk);
+        pane.querySelectorAll("[data-ed-mine]").forEach(b=>{
+          b.onclick=()=>{
+            desk.toggle(items[at]);
+            const r=list.querySelector('[data-ed-at="'+at+'"]');
+            if(r) r.innerHTML=editionRowInner(items[at],o.held,c,sub);
+            draw();
+          };
+        });
         pane.querySelectorAll("[data-ed-take]").forEach(b=>{
           b.onclick=()=>{
             takeTeamText(c,items[at].id,b.getAttribute("data-ed-take")==="1");
@@ -163,6 +180,7 @@ function repaintEditionRows(wrap,c,held,changes){
 }
 
 export {
+  editionCountWords,
   editionOfferHtml,
   openEditionPanel,
   repaintEditionRows
