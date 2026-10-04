@@ -1741,6 +1741,9 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .ctitle,.ccat{min-width:0;overflow:hidden;white-space:nowrap}
 .chead .ctitle{flex:0 1 auto}
 .chead .cbadge{flex:0 0 auto}
+/* A card that commits the firm: the stamp after its title, in the warning colour. */
+.chead .cstamp{flex:0 0 auto;display:inline-flex;color:var(--warn)}
+.cstamp .ic,.nx-stamp .ic{width:16px;height:16px}
 .intent-pick{max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius-sm);
   padding:4px;background:var(--bg);display:flex;flex-direction:column;gap:1px;min-width:0}
 /* Nested under .mf, so selectors must beat .mf input / .mf label (width:100%, mono dim). */
@@ -2267,6 +2270,11 @@ html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!importan
    bubble's cobalt is, since the dark theme's --warn is a text colour and too pale to carry white. */
 #toast.refusal{display:flex;align-items:center;gap:8px;text-align:left;background:#c2410c}
 #toast.refusal .ic{width:16px;height:16px;flex:none}
+/* The stamp's chip: white with the warning's ink on the toast's own green, the same in both themes. */
+#toast.stamped{display:flex;align-items:center;gap:10px;text-align:left}
+#toast .t-stamp{display:inline-flex;align-items:center;gap:6px;flex:none;padding:1px 9px 1px 7px;border-radius:999px;
+  background:#fff;color:#9a3412;white-space:nowrap}
+#toast .t-stamp .ic{width:15px;height:15px;color:#c2410c}
 /* CUT TEXT FADES, IT DOES NOT END IN DOTS. An ellipsis is a character: it arrives in the
    reader's ink, mid-sentence, and says "cut" in the same voice as the words; one TYPED into a
    label is untouched. markCutText() decides, and it decides per SIDE - an unconditional mask
@@ -2962,6 +2970,50 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 .mf-pin .mf-pin-seg{flex:none}
 .mf-pin .mf-pin-seg button{padding:4px 12px;font:600 12px var(--sans)}
 .mf-pin.off .mf-pin-seg{opacity:.4;pointer-events:none}
+/* The stamp toggle sits on the Title row of every language, beside its label. */
+.mf-titled{position:relative}
+.me-stamp{position:absolute;right:0;top:-5px;display:inline-flex;align-items:center;gap:6px;height:24px;
+  padding:0 9px 0 7px;border-radius:999px;border:1px solid var(--line-strong);background:transparent;
+  color:var(--dim);font:500 12.5px var(--sans);cursor:default;
+  transition:color var(--m-tone),background-color var(--m-tone),border-color var(--m-tone)}
+.me-stamp .ic{width:15px;height:15px}
+.me-stamp:hover,.me-stamp:focus-visible{color:var(--ink);border-color:var(--field-edge)}
+.me-stamp[aria-pressed=true]{background:var(--warn-bg);border-color:color-mix(in srgb,var(--warn) 55%,transparent);color:var(--warn)}
+.me-stamp[aria-pressed=true]:hover,.me-stamp[aria-pressed=true]:focus-visible{border-color:var(--warn);color:var(--warn)}
+.me-stamp-note{margin:2px 0 0;font:12.5px/1.45 var(--sans);color:var(--dim)}
+.me-stamp-note b{font-weight:600;color:var(--ink)}
+/* Next replies: whose list it is, the list, and the way to add to it. */
+.nx{display:grid;gap:8px;padding:6px 0 4px}
+.nx-src{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--dim)}
+.nx-who{flex:none;white-space:nowrap;display:inline-flex;align-items:center;height:22px;padding:0 9px;
+  border-radius:999px;font:600 12px var(--sans);background:var(--header-bg);color:var(--ink);border:1px solid var(--line)}
+.nx-who.own{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.nx-say{flex:1 1 auto;min-width:0}
+.nx-back{flex:none}
+.nx-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.nx-list:empty{display:none}
+.nx-row{display:flex;align-items:center;gap:9px;min-height:38px;padding:0 6px;border:1px solid var(--field-line);
+  border-radius:var(--radius-sm);background:var(--field);cursor:default;user-select:none;
+  transition:transform var(--m-surface) var(--m-ease)}
+.nx-row.nx-new{border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+.nx-row.nx-drag{position:relative;z-index:1;border-color:var(--accent);box-shadow:0 4px 14px rgba(0,0,0,.14)}
+.nx-grip{flex:none;width:14px;height:20px;padding:0;border:0;border-radius:4px;cursor:default;opacity:.8;
+  background:radial-gradient(var(--dim) 1.1px,transparent 1.4px) 1px 2px/6px 5.3px}
+.nx-t{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;font-size:14px;color:var(--ink)}
+.nx-stamp{flex:none;display:inline-flex;color:var(--warn)}
+.nx-tag{flex:none;font:600 11px var(--sans);letter-spacing:.3px;color:var(--accent)}
+.nx-x{flex:none;width:26px;height:26px;display:grid;place-items:center;padding:0;border:0;border-radius:6px;
+  background:transparent;color:var(--dim);cursor:default}
+.nx-x:hover,.nx-x:focus-visible{background:color-mix(in srgb,var(--ink) 8%,transparent);color:var(--ink)}
+.nx-add-btn{display:inline-flex;align-items:center;gap:6px}
+.nx-add-btn .ic{width:14px;height:14px}
+.nx-hits{margin-top:4px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--panel-raised);overflow:hidden}
+.nx-hits:empty{display:none}
+.nx-hit{display:flex;align-items:center;gap:8px;padding:7px 10px;font-size:14px;cursor:default}
+.nx-hit:hover,.nx-hit.on{background:var(--accent-soft)}
+.nx-hit>span{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden}
+.nx-hit small{flex:none;color:var(--dim);font-size:12px}
+.nx-was{margin:0;font-size:12.5px;color:var(--dim)}
 .set-slider{display:flex;align-items:center;gap:10px;width:100%}
 .set-slider input[type=range]{flex:1;min-width:0;accent-color:var(--accent)}
 .set-slider output{flex:none;min-width:52px;text-align:right;font:600 12.5px var(--sans);
@@ -3737,6 +3789,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
     ICON_LOCK_OPEN: () => ICON_LOCK_OPEN,
     ICON_PLUS: () => ICON_PLUS,
     ICON_ROLE_ALWAYS: () => ICON_ROLE_ALWAYS,
+    ICON_STAMP: () => ICON_STAMP,
     ICON_STAR_OFF: () => ICON_STAR_OFF,
     ICON_STAR_ON: () => ICON_STAR_ON,
     ICON_SUCCESS: () => ICON_SUCCESS,
@@ -3950,6 +4003,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   var ICON_LOAD = _svg("ic", '<path d="M10 3.6v8.6"/><path d="M6.5 8.9l3.5 3.5 3.5-3.5"/><path d="M3.6 12.6v2.1a1.7 1.7 0 0 0 1.7 1.7h9.4a1.7 1.7 0 0 0 1.7-1.7v-2.1"/>');
   var ICON_EJECT = _svg("ic", '<path d="M10 4.2l5.6 6.6H4.4z"/><path d="M4.6 15.4h10.8"/>');
   var ICON_KEY = _svg("ic", catIconInner("key"));
+  var ICON_STAMP = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10.2 12.5l.6-4.2a2.6 2.6 0 1 1 3.4 0l.6 4.2"/><path d="M5 17v-2.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2V17z" fill="currentColor"/><path d="M6 20.5h13"/></svg>';
 
   // src/modules/stock.js
   var stock_exports = {};
@@ -4563,9 +4617,9 @@ What you type stays in this browser only.`;
   };
   var CARD_FLAGS = Object.keys(CARD_FLAG_BOX);
   var CARD_UNBOXED_FLAGS = ["commits"];
-  var CARD_UNWRITTEN_FIELDS = ["next", "retired", "ext"];
+  var CARD_UNWRITTEN_FIELDS = ["retired", "ext"];
   function carryUnwritten(entry, was) {
-    if (was) CARD_UNBOXED_FLAGS.concat(CARD_UNWRITTEN_FIELDS).forEach((f) => {
+    if (was) CARD_UNWRITTEN_FIELDS.forEach((f) => {
       if (was[f] != null) entry[f] = was[f];
     });
     return entry;
@@ -5225,6 +5279,7 @@ What you type stays in this browser only.`;
     t: () => t,
     tc: () => tc,
     toast: () => toast,
+    toastHtml: () => toastHtml,
     toastRefusal: () => toastRefusal,
     toastSerial: () => toastSerial,
     translateChrome: () => translateChrome,
@@ -5501,7 +5556,7 @@ What you type stays in this browser only.`;
   }
 
   // src/modules/cut-text.js
-  var CUT_SEL = ".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-int-t,.mg-count,.acc-note,.mf-sum,#toast,#intentPh,#roleDrum span,.tab-label>span,.fills input,.cat-now .cn-name,.mf input:not([type]),.mf input[type=text],.rail-t,footer .nw";
+  var CUT_SEL = ".ctitle,.ccat,.modal-name,.mg-card-lab,.mg-int-t,.mg-count,.acc-note,.mf-sum,#toast,#intentPh,#roleDrum span,.tab-label>span,.fills input,.cat-now .cn-name,.mf input:not([type]),.mf input[type=text],.rail-t,footer .nw,.nx-t,.nx-hit>span";
   var CUT_MARGIN = 400;
   var CUT_EPS = 0.01;
   var CUT_SLACK = 1.5;
@@ -6517,7 +6572,28 @@ What you type stays in this browser only.`;
     "It does not match": "Nie zgadza się",
     "Team lead's key": "Klucz lidera zespołu",
     "Forget this lead": "Zapomnij tego lidera",
-    "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.": "Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze."
+    "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.": "Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze.",
+    "Next replies": "Kolejne odpowiedzi",
+    "Commits the firm": "Zobowiązuje firmę",
+    "the catalog's": "z katalogu",
+    "yours": "własna",
+    "yours; the catalog's has changed": "własna; lista z katalogu się zmieniła",
+    "added": "dodana",
+    "Take it off the list": "Usuń z listy",
+    "Your list": "Własna lista",
+    "Replaces the catalog's on this desk, and travels in your exports.": "Zastępuje listę z katalogu na tym stanowisku i trafia do eksportów.",
+    "Back to the catalog's": "Wróć do listy z katalogu",
+    "The catalog's list": "Lista z katalogu",
+    "Change anything and this card follows your own list instead.": "Po każdej zmianie ta karta pójdzie za własną listą.",
+    "The catalog's list has changed since you made yours: {LIST}": "Lista z katalogu zmieniła się od utworzenia własnej: {LIST}",
+    "The catalog's list: {LIST}": "Lista z katalogu: {LIST}",
+    "Add a reply": "Dodaj odpowiedź",
+    "Find a card to add": "Znajdź kartę do dodania",
+    "a card's title": "tytuł karty",
+    "Yours, not the catalog's.": "Pieczątka własna, nie z katalogu.",
+    "The catalog does not stamp this card; your desk and your exports will.": "Katalog nie oznacza tej karty pieczątką; to stanowisko i jego eksporty tak.",
+    "The catalog stamps this card.": "Katalog oznacza tę kartę pieczątką.",
+    "You took the stamp off on this desk. Reset puts it back.": "Na tym stanowisku pieczątka jest zdjęta. Reset ją przywraca."
   };
   function uiLangKnown(l) {
     return !!(l && UI_STRINGS[l]);
@@ -6584,15 +6660,22 @@ What you type stays in this browser only.`;
     const lift = r && r.height && r.top < innerHeight ? Math.round(innerHeight - r.top) : 0;
     el.style.bottom = lift ? lift + 8 + "px" : "";
   }
-  function toast(m, ms, refusal) {
+  function toastHtml(m, refusal, stamped) {
+    if (refusal) return ICON_LINT_WARNING + "<span>" + esc(m) + "</span>";
+    if (stamped) return "<span>" + esc(m) + '</span><span class="t-stamp">' + ICON_STAMP + esc(t("Commits the firm")) + "</span>";
+    return null;
+  }
+  function toast(m, ms, refusal, stamped) {
     toastSerial++;
     m = t(m);
     const el = $("#toast");
     const put = () => {
       el.classList.remove("swap");
       el.classList.toggle("refusal", !!refusal);
-      if (refusal) el.innerHTML = ICON_LINT_WARNING + "<span>" + esc(m) + "</span>";
-      else el.textContent = m;
+      el.classList.toggle("stamped", !refusal && !!stamped);
+      const html = toastHtml(m, refusal, stamped);
+      if (html == null) el.textContent = m;
+      else el.innerHTML = html;
       placeToast(el);
       markCut(el);
       el.classList.add("show");
@@ -7630,6 +7713,7 @@ What you type stays in this browser only.`;
   __export(card_model_exports, {
     altLabelAt: () => altLabelAt,
     baseCard: () => baseCard,
+    cardCommits: () => cardCommits,
     cardLang: () => cardLang,
     cardText: () => cardText,
     cardTitle: () => cardTitle,
@@ -8536,6 +8620,9 @@ What you type stays in this browser only.`;
   function cardTitle(m) {
     return cardTextUi(m, "t");
   }
+  function cardCommits(m) {
+    return !!(m && +m.commits);
+  }
   function noteFor(m) {
     return cardTextUi(m, "note");
   }
@@ -8587,6 +8674,7 @@ What you type stays in this browser only.`;
     if (paxVocOn(full) !== paxVocOn(asSaved)) o.paxVoc = paxVocOn(full) ? 1 : 0;
     if (!intentsEqualStored(full.intents, base.intents)) o.intents = full.intents;
     if ("next" in full && !nextEqualStored(full.next, base.next)) o.next = Array.isArray(full.next) ? full.next : [];
+    if (o.next && Array.isArray(full.nextWas)) o.nextWas = full.nextWas.map(String);
     return o;
   }
   function reorderMacroBlocks(id, fromVi, toVi) {
@@ -13038,9 +13126,9 @@ What you type stays in this browser only.`;
     setSemiKind(null);
     hooks.railDecorate(false);
   }
-  function copy(text, msg) {
+  function copy(text, msg, stamped) {
     noteCopy();
-    const done = () => toast(msg);
+    const done = () => toast(msg, 0, false, stamped);
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(text).then(done, () => fallback(text, done));
     } else fallback(text, done);
@@ -13444,6 +13532,366 @@ What you type stays in this browser only.`;
     cardBodyHtml: () => cardBodyHtml,
     swapStripHtml: () => swapStripHtml
   });
+
+  // src/modules/card-chain.js
+  var card_chain_exports = {};
+  __export(card_chain_exports, {
+    nextFoldState: () => nextFoldState,
+    nextHitHtml: () => nextHitHtml,
+    nextHits: () => nextHits,
+    nextIdsOf: () => nextIdsOf,
+    nextLive: () => nextLive,
+    nextReplies: () => nextReplies,
+    nextSaveFields: () => nextSaveFields,
+    stampHtml: () => stampHtml,
+    stampNoteHtml: () => stampNoteHtml,
+    stampToggleHtml: () => stampToggleHtml,
+    wireStampToggle: () => wireStampToggle
+  });
+  var NX_DOT = " " + String.fromCharCode(183) + " ";
+  var NX_HITS = 6;
+  function nextIdsOf(list2) {
+    return (Array.isArray(list2) ? list2 : []).map((e) => String(e && e.to != null ? e.to : "")).filter(Boolean);
+  }
+  function nextSameIds(a, b) {
+    return a.length === b.length && a.every((x, i) => x === b[i]);
+  }
+  function nextLive(list2, self, live) {
+    const seen = /* @__PURE__ */ new Set();
+    return (Array.isArray(list2) ? list2 : []).filter((e) => {
+      const to = e && typeof e === "object" && typeof e.to === "string" ? e.to : "";
+      if (!to || to === self || !live.has(to) || seen.has(to)) return false;
+      seen.add(to);
+      return true;
+    });
+  }
+  function nextFoldState(card, base, ov, live) {
+    const self = String(card && card.id || "");
+    const catalog = base ? nextLive(base.next, self, live) : null;
+    const rows = nextLive(card && card.next, self, live);
+    const own = !!catalog && !nextSameIds(nextIdsOf(rows), nextIdsOf(catalog));
+    const changed = own && !!ov && Array.isArray(ov.next) && Array.isArray(ov.nextWas) && !nextSameIds(ov.nextWas.map(String), nextIdsOf(base.next));
+    return { catalog, rows, own, changed };
+  }
+  function nextSaveFields(rows, catalog, base, ov, touched) {
+    if (!catalog) return { next: rows.slice() };
+    if (nextSameIds(nextIdsOf(rows), nextIdsOf(catalog))) return {};
+    const kept = !touched && !!ov && Array.isArray(ov.next) && Array.isArray(ov.nextWas);
+    return { next: rows.slice(), nextWas: kept ? ov.nextWas.map(String) : nextIdsOf(base && base.next) };
+  }
+  function nextFold(s) {
+    return foldDiacritics(String(s == null ? "" : s).toLowerCase());
+  }
+  function nextHits(q, self, taken, limit) {
+    const f = nextFold(q).trim();
+    if (!f) return [];
+    const ranked = [];
+    (cards || []).forEach((m, i) => {
+      if (!m || !m.id || m.id === self || taken.has(m.id)) return;
+      let best = 3;
+      CONTENT_LANGS.forEach((l) => {
+        const h = nextFold(cardText(m, "t", l)), at = h.indexOf(f);
+        if (at < 0) return;
+        const rank = at === 0 ? 0 : h.indexOf(" " + f) > -1 ? 1 : 2;
+        if (rank < best) best = rank;
+      });
+      if (best < 3) ranked.push({ m, rank: best, i });
+    });
+    ranked.sort((a, b) => a.rank - b.rank || a.i - b.i);
+    return ranked.slice(0, limit || NX_HITS).map((r) => r.m);
+  }
+  function nextHitHtml(title, q) {
+    const f = nextFold(q).trim(), h = nextFold(title), at = f ? h.indexOf(f) : -1;
+    if (at < 0 || h.length !== title.length) return esc(title);
+    return esc(title.slice(0, at)) + "<b>" + esc(title.slice(at, at + f.length)) + "</b>" + esc(title.slice(at + f.length));
+  }
+  function stampHtml(cls) {
+    return '<span class="' + cls + '" title="' + esc(t("Commits the firm")) + '">' + ICON_STAMP + "</span>";
+  }
+  function nextReplies(card, base, ov) {
+    const self = String(card && card.id || "");
+    const live = new Map((cards || []).filter((m) => m && m.id).map((m) => [m.id, m]));
+    const st = nextFoldState(card, base, ov, new Set(live.keys()));
+    const catalog = st.catalog, catIds = catalog ? nextIdsOf(catalog) : [];
+    let rows = st.rows.slice(), touched = false, drag = null, marked = 0, hits = [];
+    const own = () => !!catalog && !nextSameIds(nextIdsOf(rows), catIds);
+    const changed = () => st.changed && own() && !touched;
+    const el = (id) => modalCard && modalCard.querySelector("#" + id);
+    const entryFor = (id) => rows.concat(catalog || [], st.rows).find((e) => e.to === id) || { to: id };
+    function sum() {
+      const n = rows.length ? String(rows.length) : t("none");
+      if (!catalog) return n;
+      if (!own()) return rows.length || catIds.length ? n + NX_DOT + t("the catalog's") : n;
+      return n + NX_DOT + t(changed() ? "yours; the catalog's has changed" : "yours");
+    }
+    function rowHtml(e) {
+      const m = live.get(e.to), added = own() && catIds.indexOf(e.to) < 0;
+      return '<li class="nx-row' + (added ? " nx-new" : "") + '" data-to="' + esc(e.to) + '"><button type="button" class="nx-grip" title="' + esc(t("Drag to reorder")) + '" aria-label="' + esc(t("Drag to reorder")) + '"></button><span class="nx-t">' + esc(m ? cardTitle(m) : e.to) + "</span>" + (m && cardCommits(m) ? stampHtml("nx-stamp") : "") + (added ? '<span class="nx-tag">' + esc(t("added")) + "</span>" : "") + '<button type="button" class="nx-x" title="' + esc(t("Take it off the list")) + '" aria-label="' + esc(t("Take it off the list")) + '">' + ICON_X + "</button></li>";
+    }
+    function srcHtml() {
+      if (!catalog) return "";
+      return own() ? '<span class="nx-who own">' + esc(t("Your list")) + '</span><span class="nx-say">' + esc(t("Replaces the catalog's on this desk, and travels in your exports.")) + '</span><button type="button" class="btn nx-back">' + esc(t("Back to the catalog's")) + "</button>" : '<span class="nx-who">' + esc(t("The catalog's list")) + '</span><span class="nx-say">' + esc(t("Change anything and this card follows your own list instead.")) + "</span>";
+    }
+    function wasText() {
+      if (!own()) return "";
+      const names = catIds.map((id) => {
+        const m = live.get(id);
+        return m ? cardTitle(m) : id;
+      });
+      const list2 = names.length ? names.join(NX_DOT) : t("none");
+      return t(changed() ? "The catalog's list has changed since you made yours: {LIST}" : "The catalog's list: {LIST}").replace("{LIST}", list2);
+    }
+    function body() {
+      return '<div class="nx" data-i18n-skip><input type="hidden" id="meNextIds" value="' + esc(JSON.stringify(nextIdsOf(rows))) + '">' + (catalog ? '<div class="nx-src" id="meNextSrc">' + srcHtml() + "</div>" : "") + '<ol class="nx-list" id="meNextList">' + rows.map(rowHtml).join("") + '</ol><div class="nx-add"><button type="button" class="btn nx-add-btn" id="meNextAdd">' + ICON_PLUS + "<span>" + esc(t("Add a reply")) + '</span></button></div><div class="nx-find" id="meNextFindBox" hidden><input type="text" id="meNextFind" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="meNextHits" aria-label="' + esc(t("Find a card to add")) + '" placeholder="' + esc(t("a card's title")) + '"><div class="nx-hits" id="meNextHits" role="listbox"></div></div>' + (catalog ? '<p class="nx-was" id="meNextWas" hidden>' + esc(wasText()) + "</p>" : "") + "</div>";
+    }
+    function sync(focus) {
+      const list2 = el("meNextList");
+      if (!list2) return;
+      list2.innerHTML = rows.map(rowHtml).join("");
+      const ids = el("meNextIds");
+      if (ids) ids.value = JSON.stringify(nextIdsOf(rows));
+      const src = el("meNextSrc");
+      if (src) src.innerHTML = srcHtml();
+      const was = el("meNextWas");
+      if (was) {
+        was.textContent = wasText();
+        was.hidden = !own();
+      }
+      const s = el("meNextSum");
+      if (s) s.textContent = sum();
+      markCutText(list2);
+      if (focus) focus();
+    }
+    function change(mutate, focus) {
+      touched = true;
+      modalResize(() => {
+        mutate();
+        sync(focus);
+      });
+    }
+    function focusRow(i, sel) {
+      const li = el("meNextList") && el("meNextList").children[i];
+      const b = li ? li.querySelector(sel) : el("meNextAdd");
+      if (b) b.focus();
+    }
+    function drawHits() {
+      const box = el("meNextHits"), q = el("meNextFind");
+      if (!box || !q) return;
+      hits = nextHits(q.value, self, new Set(nextIdsOf(rows)));
+      if (marked >= hits.length) marked = 0;
+      box.innerHTML = hits.map((m, i) => '<div class="nx-hit' + (i === marked ? " on" : "") + '" role="option" id="meNextHit' + i + '" aria-selected="' + (i === marked ? "true" : "false") + '" data-to="' + esc(m.id) + '"><span>' + nextHitHtml(cardTitle(m), q.value) + "</span><small>" + esc(CATS[m.c] || "") + "</small></div>").join("");
+      markCutText(box);
+      q.setAttribute("aria-expanded", hits.length ? "true" : "false");
+      if (hits.length) q.setAttribute("aria-activedescendant", "meNextHit" + marked);
+      else q.removeAttribute("aria-activedescendant");
+    }
+    function openFind(on) {
+      const box = el("meNextFindBox"), q = el("meNextFind"), add = el("meNextAdd");
+      if (!box || !q) return;
+      modalResize(() => {
+        box.hidden = !on;
+        if (add) add.parentNode.hidden = on;
+        if (!on) {
+          q.value = "";
+          marked = 0;
+          drawHits();
+        }
+      });
+      (on ? q : add).focus();
+    }
+    function take(id) {
+      if (!id || !live.has(id)) return;
+      change(() => {
+        rows.push(entryFor(id));
+      }, () => {
+        const q = el("meNextFind");
+        if (q) {
+          q.value = "";
+          marked = 0;
+          drawHits();
+          q.focus();
+        }
+      });
+    }
+    function move(from, to) {
+      if (to < 0 || to >= rows.length || from === to) return;
+      rows.splice(to, 0, rows.splice(from, 1)[0]);
+    }
+    function slide(list2, mutate) {
+      const kids = Array.from(list2.children), was = kids.map((k) => k.getBoundingClientRect().top);
+      mutate();
+      if (mgReduceMotion()) return;
+      const now = kids.map((k) => k.getBoundingClientRect().top);
+      kids.forEach((k, i) => {
+        const d = was[i] - now[i];
+        if (!d || k === (drag && drag.li)) return;
+        k.style.transition = "none";
+        k.style.transform = "translateY(" + d + "px)";
+      });
+      void list2.offsetHeight;
+      kids.forEach((k) => {
+        if (k.style.transform) {
+          k.style.transition = "";
+          k.style.transform = "";
+        }
+      });
+    }
+    function wire() {
+      const list2 = el("meNextList"), q = el("meNextFind"), root = list2 && list2.closest(".nx");
+      if (!list2 || !root) return;
+      const was = el("meNextWas");
+      if (was) was.hidden = !own();
+      const fold = root.closest("details");
+      if (fold) fold.addEventListener("toggle", () => {
+        if (fold.open) markCutText(list2);
+      });
+      root.addEventListener("click", (e) => {
+        const x = e.target.closest(".nx-x");
+        if (x) {
+          const i = Array.from(list2.children).indexOf(x.closest(".nx-row"));
+          if (i > -1) change(() => {
+            rows.splice(i, 1);
+          }, () => focusRow(Math.min(i, rows.length - 1), ".nx-x"));
+          return;
+        }
+        if (e.target.closest(".nx-back")) {
+          change(() => {
+            rows = catalog.slice();
+          }, () => focusRow(-1));
+          return;
+        }
+        if (e.target.closest("#meNextAdd")) {
+          openFind(true);
+          return;
+        }
+        const hit = e.target.closest(".nx-hit");
+        if (hit) take(hit.getAttribute("data-to"));
+      });
+      root.addEventListener("pointerdown", (e) => {
+        if (e.target.closest(".nx-hit")) e.preventDefault();
+      });
+      root.addEventListener("keydown", (e) => {
+        const g = e.target.closest && e.target.closest(".nx-grip");
+        if (!g || e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+        e.preventDefault();
+        e.stopPropagation();
+        const i = Array.from(list2.children).indexOf(g.closest(".nx-row")), to = i + (e.key === "ArrowUp" ? -1 : 1);
+        if (to < 0 || to >= rows.length) return;
+        change(() => move(i, to), () => focusRow(to, ".nx-grip"));
+      });
+      if (q) {
+        q.addEventListener("input", () => {
+          marked = 0;
+          modalResize(drawHits);
+        });
+        q.addEventListener("keydown", (e) => {
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            if (!hits.length) return;
+            e.preventDefault();
+            marked = (marked + (e.key === "ArrowDown" ? 1 : hits.length - 1)) % hits.length;
+            drawHits();
+          } else if (e.key === "Enter") {
+            e.preventDefault();
+            e.stopPropagation();
+            if (hits[marked]) take(hits[marked].id);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            openFind(false);
+          }
+        });
+        q.addEventListener("blur", () => {
+          setTimeout(() => {
+            if (document.activeElement !== q && !q.value.trim() && !el("meNextFindBox").hidden) openFind(false);
+          }, 0);
+        });
+      }
+      const ids = el("meNextIds");
+      if (ids) ids.addEventListener("input", () => {
+        let want = [];
+        try {
+          want = JSON.parse(ids.value || "[]");
+        } catch (_) {
+        }
+        change(() => {
+          rows = nextLive((Array.isArray(want) ? want : []).map(String).map(entryFor), self, new Set(live.keys()));
+        });
+      });
+      list2.addEventListener("pointerdown", (e) => {
+        if (e.button !== 0 || e.pointerType === "touch" || e.target.closest(".nx-x")) return;
+        const li = e.target.closest(".nx-row");
+        if (!li) return;
+        drag = { li, y: e.clientY, moved: false };
+        try {
+          list2.setPointerCapture(e.pointerId);
+        } catch (_) {
+        }
+      });
+      list2.addEventListener("pointermove", (e) => {
+        if (!drag) return;
+        if (!drag.moved) {
+          if (Math.abs(e.clientY - drag.y) < 4) return;
+          drag.moved = true;
+          drag.li.classList.add("nx-drag");
+        }
+        const kids = Array.from(list2.children), at = kids.indexOf(drag.li);
+        let to = 0;
+        kids.forEach((k) => {
+          if (k === drag.li) return;
+          const r = k.getBoundingClientRect();
+          if (e.clientY > r.top + r.height / 2) to++;
+        });
+        if (to === at) return;
+        slide(list2, () => {
+          list2.insertBefore(drag.li, kids.filter((k) => k !== drag.li)[to] || null);
+        });
+      });
+      const onUp = () => {
+        if (!drag) return;
+        const d = drag;
+        drag = null;
+        if (!d.moved) return;
+        d.li.classList.remove("nx-drag");
+        const order = Array.from(list2.children).map((k) => k.getAttribute("data-to"));
+        if (nextSameIds(order, nextIdsOf(rows))) return;
+        change(() => {
+          rows = order.map(entryFor);
+        });
+      };
+      ["pointerup", "pointercancel", "lostpointercapture"].forEach((k) => list2.addEventListener(k, onUp));
+    }
+    return {
+      sum,
+      body,
+      wire,
+      fields: () => nextSaveFields(rows, catalog, base, ov, touched)
+    };
+  }
+  function stampToggleHtml(on) {
+    return '<button type="button" class="me-stamp" aria-pressed="' + (on ? "true" : "false") + '" data-i18n-skip>' + ICON_STAMP + "<span>" + esc(t("Commits the firm")) + "</span></button>";
+  }
+  function stampNoteHtml(on, base) {
+    if (!base || on === cardCommits(base)) return "";
+    return on ? "<b>" + esc(t("Yours, not the catalog's.")) + "</b> " + esc(t("The catalog does not stamp this card; your desk and your exports will.")) : "<b>" + esc(t("The catalog stamps this card.")) + "</b> " + esc(t("You took the stamp off on this desk. Reset puts it back."));
+  }
+  function wireStampToggle(base) {
+    const box = modalCard && modalCard.querySelector("#meCommits");
+    if (!box) return;
+    const sync = () => {
+      const on = box.checked, note = stampNoteHtml(on, base);
+      modalCard.querySelectorAll(".me-stamp").forEach((b) => b.setAttribute("aria-pressed", on ? "true" : "false"));
+      modalCard.querySelectorAll(".me-stamp-note").forEach((p) => {
+        p.innerHTML = note;
+        p.hidden = !note;
+      });
+    };
+    modalCard.querySelectorAll(".me-stamp").forEach((b) => b.addEventListener("click", () => {
+      box.checked = !box.checked;
+      box.dispatchEvent(new Event("change", { bubbles: true }));
+    }));
+    box.addEventListener("change", () => modalResize(sync));
+    sync();
+  }
 
   // src/modules/list-pointer.js
   var list_pointer_exports = {};
@@ -16683,7 +17131,7 @@ What you type stays in this browser only.`;
       txtEl.addEventListener("pointerleave", () => txtEl.classList.remove("just-picked"), { once: true });
       withAgentName(ps[vi], () => {
         bumpUseCount(mid, cl);
-        copy(fill(ps[vi], m), copiedToastMsg(m, cl, vi, ps.length));
+        copy(fill(ps[vi], m), copiedToastMsg(m, cl, vi, ps.length), cardCommits(m));
       }, txtEl);
     });
   }
@@ -16707,7 +17155,7 @@ What you type stays in this browser only.`;
     let cardH = "";
     cardH += '<div class="card' + (m._hidden ? " is-hidden" : "") + (hit ? " intent-hit" : "") + (catHit ? " cat-hit" : "") + (cardDrag && cardDrag.moved && cardDrag.key === m.id ? " dragging" : "") + '" data-i="' + i + '" data-id="' + esc(m.id || "") + '" data-rank="' + esc(band) + '"' + (catSlot(m.c) >= 0 ? ' data-ec="' + catSlot(m.c) + '"' : "") + ' title="' + esc(dragTip) + '">';
     cardH += '<div class="chead">';
-    cardH += catMarkHtml(m.c) + '<span class="ctitle" data-i18n-skip>' + esc(cardTitle(m)) + "</span>";
+    cardH += catMarkHtml(m.c) + '<span class="ctitle" data-i18n-skip>' + esc(cardTitle(m)) + "</span>" + (cardCommits(m) ? stampHtml("cstamp") : "");
     const hitBadge = '<span class="cbadge hit" title="' + esc(t("Linked to the selected intent")) + '">' + esc(t("int")) + "</span>";
     const catBadge = '<span class="cbadge cat" title="' + esc(t("In a supporting category, relevant regardless of the intent")) + '">' + esc(t("sup")) + "</span>";
     if (hit) cardH += hitBadge;
@@ -16784,7 +17232,7 @@ What you type stays in this browser only.`;
     el.setAttribute("data-rank", it.band);
     const head = el.querySelector(".chead");
     if (!head) return;
-    const anchor = head.querySelector(".ctitle");
+    const anchor = head.querySelector(".cstamp") || head.querySelector(".ctitle");
     if (!anchor) return;
     let hitB = head.querySelector(".cbadge.hit"), catB = head.querySelector(".cbadge.cat");
     if (it.hit && !hitB) {
@@ -19721,6 +20169,7 @@ What you type stays in this browser only.`;
       });
       own.id = uid("u:");
       delete own.retired;
+      delete own.nextWas;
       if (Array.isArray(own.next)) {
         own.next = own.next.filter((e) => e && alive.has(e.to));
         if (!own.next.length) delete own.next;
@@ -19761,7 +20210,7 @@ What you type stays in this browser only.`;
     const s = takenFor.get(c);
     return !!s && s.has(String(id));
   }
-  var UNSETTLED = ["intents", "next", "paxVoc", "ext"];
+  var UNSETTLED = ["intents", "next", "nextWas", "paxVoc", "ext"];
   function settleEdits(c, list2, was) {
     const ov = pack.overrides || {}, bases = pack.editBases || {}, takes = takenFor.get(c);
     const now = new Map(list2.map((m) => [catalogCardId(m), m])), old = new Map(was.map((m) => [m.id, m]));
@@ -21588,7 +22037,7 @@ What you type stays in this browser only.`;
   }
   function meLangPanel(m, l, i) {
     const id = (f) => meFieldId(f, l), v = (f) => esc(cardText(m, f, l));
-    return langPane(l, i, '<div class="mf"><label>Title</label><input id="' + id("t") + '" value="' + v("t") + '" autocomplete="off" placeholder="' + esc(t("a short name you will recognise")) + '"></div><div class="mf"><label>' + esc(t("Macro")) + '</label><textarea id="' + id("body") + '" spellcheck="true" placeholder="' + esc(t("the text the customer receives")) + '">' + v("body") + '</textarea></div><div class="mf"><label>Note</label><input id="' + id("note") + '" value="' + v("note") + '" autocomplete="off" placeholder="' + esc(t("guidance for you, never sent")) + '"></div>');
+    return langPane(l, i, '<div class="mf mf-titled"><label>Title</label>' + stampToggleHtml(cardCommits(m)) + '<input id="' + id("t") + '" value="' + v("t") + '" autocomplete="off" placeholder="' + esc(t("a short name you will recognise")) + '"><p class="me-stamp-note" data-i18n-skip hidden></p></div><div class="mf"><label>' + esc(t("Macro")) + '</label><textarea id="' + id("body") + '" spellcheck="true" placeholder="' + esc(t("the text the customer receives")) + '">' + v("body") + '</textarea></div><div class="mf"><label>Note</label><input id="' + id("note") + '" value="' + v("note") + '" autocomplete="off" placeholder="' + esc(t("guidance for you, never sent")) + '"></div>');
   }
   function meSharedFields(m) {
     return '<div class="mf mf-shared"><input id="me_k" value="' + esc(String(m && m.k || "")) + '" autocomplete="off" placeholder="extra words for search"></div>';
@@ -21658,6 +22107,7 @@ What you type stays in this browser only.`;
     const startCat = presetCat && CATS[presetCat] ? presetCat : "";
     const m = existing || { t: "", c: startCat, en: "", pl: "", note: "", k: "", alt: 0, firstOnly: 0, intents: [] };
     const linked = normalizeCardIntents(m);
+    const nx = nextReplies(existing, base, base ? pack.overrides[id] : null);
     const backToManage = !!fromManage;
     function doneCardEditor() {
       if (backToManage) hooks.openManage();
@@ -21692,7 +22142,14 @@ What you type stays in this browser only.`;
           sum: esc(meLangSummary(m)),
           sumId: "meTextSum",
           sumSkip: true,
-          body: langTabs() + CONTENT_LANGS.map((l, i) => meLangPanel(m, l, i)).join("")
+          body: '<input type="checkbox" id="meCommits" hidden' + (cardCommits(m) ? " checked" : "") + ">" + langTabs() + CONTENT_LANGS.map((l, i) => meLangPanel(m, l, i)).join("")
+        }) + mfSec({
+          key: "next",
+          label: "Next replies",
+          sum: esc(nx.sum()),
+          sumId: "meNextSum",
+          sumSkip: true,
+          body: nx.body()
         }) + mfSec({
           key: "keys",
           label: "Keywords",
@@ -21882,6 +22339,8 @@ What you type stays in this browser only.`;
       bindCatPick(meCatBox, true);
     }
     wireFolds(modalCard, "details.mf-fold", "details.mf-fold");
+    nx.wire();
+    wireStampToggle(base);
     syncMeIntentPick();
     if ($("#meReset")) $("#meReset").onclick = () => {
       delete pack.overrides[id];
@@ -21911,6 +22370,7 @@ What you type stays in this browser only.`;
       const allIntents = $("#meAllIntents").checked ? 1 : 0;
       const intentTop = $("#meIntentTop").checked ? 1 : 0;
       const lockLang = readMeLockLang();
+      const commits = $("#meCommits") && $("#meCommits").checked ? 1 : 0;
       const need = [];
       const fld = (field, msg) => ({
         msg,
@@ -21930,9 +22390,12 @@ What you type stays in this browser only.`;
         const entry = Object.assign(
           { id: isNew ? savedId = uid("u:") : id, c },
           text,
-          { alt, seq, firstOnly, paxVoc, allIntents, intentTop, lockLang, intents: intentsStored }
+          { alt, seq, firstOnly, paxVoc, allIntents, intentTop, lockLang, commits, intents: intentsStored }
         );
         carryUnwritten(entry, isNew ? null : pack.custom.find((x) => x && x.id === id));
+        const own = nx.fields().next;
+        if (own && own.length) entry.next = own;
+        else delete entry.next;
         cardStorageKeys().forEach((f) => {
           if (!entry[f] && cardRequiredKeys().indexOf(f) < 0) delete entry[f];
         });
@@ -21956,8 +22419,9 @@ What you type stays in this browser only.`;
           paxVoc,
           allIntents,
           intentTop,
-          lockLang
-        });
+          lockLang,
+          commits
+        }, nx.fields());
         const o = overrideAgainstBase(baseCard(id), full);
         if (Object.keys(o).length) pack.overrides[id] = o;
         else delete pack.overrides[id];
@@ -23929,7 +24393,7 @@ What you type stays in this browser only.`;
     const id = entrySel.id;
     withAgentName(ps[vi], () => {
       bumpUseCount(id, l);
-      copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length));
+      copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length), cardCommits(m));
       eCopyFeedback(id, vi);
     }, document.querySelector("#list .txt.sel"));
     return true;
@@ -24944,7 +25408,7 @@ What you type stays in this browser only.`;
     withAgentName(ps[vi], () => {
       bumpUseCount(m.id, l);
       eNoteRecent(m.id, vi);
-      copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length));
+      copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length), cardCommits(m));
     }, null);
     return { asked: true };
   }
@@ -24972,7 +25436,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, team_join_exports, edition_changes_exports, edition_panel_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, team_join_exports, edition_changes_exports, edition_panel_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });

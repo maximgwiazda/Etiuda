@@ -5,7 +5,7 @@ import { rankedCards } from "./render.js";
 import { pack } from "./pack.js";
 import { statsRecentUse } from "./desk-stats.js";
 import { cardInActiveCats } from "./card-counts.js";
-import { altLabelAt, cardLang, cardTitle, findCard, parts } from "./card-model.js";
+import { altLabelAt, cardCommits, cardLang, cardTitle, findCard, parts } from "./card-model.js";
 import { fill } from "./intent-text.js";
 import { bumpUseCount, copiedToastMsg } from "./list-pointer.js";
 import { eLastRecent, eNoteRecent } from "./recency.js";
@@ -114,7 +114,7 @@ function pickAsk(id,vi){
   withAgentName(ps[vi],()=>{
     bumpUseCount(m.id,l);
     eNoteRecent(m.id,vi);
-    copy(fill(ps[vi],m,0,l), copiedToastMsg(m,l,vi,ps.length));
+    copy(fill(ps[vi],m,0,l), copiedToastMsg(m,l,vi,ps.length), cardCommits(m));
   },null);
   return {asked:true};
 }

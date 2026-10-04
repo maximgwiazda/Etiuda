@@ -3,7 +3,7 @@ import { markCut } from "./cut-text.js";
 import { $ } from "./dom.js";
 import { esc } from "./esc.js";
 import { cutLeaves, dismissNode, mgReduceMotion, M_MS } from "./motion.js";
-import { ICON_LINT_WARNING } from "./icons.js";
+import { ICON_LINT_WARNING, ICON_STAMP } from "./icons.js";
 
 /* ---- UI LANGUAGE ------------------------------------------------------------------------
    The CHROME's language, not the CONTENT's: the EN|PL switch decides what is copied to
@@ -945,7 +945,28 @@ UI_STRINGS.pl={
   "It does not match":"Nie zgadza się",
   "Team lead's key":"Klucz lidera zespołu",
   "Forget this lead":"Zapomnij tego lidera",
-  "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.":"Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze."
+  "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.":"Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze.",
+  "Next replies":"Kolejne odpowiedzi",
+  "Commits the firm":"Zobowiązuje firmę",
+  "the catalog's":"z katalogu",
+  "yours":"własna",
+  "yours; the catalog's has changed":"własna; lista z katalogu się zmieniła",
+  "added":"dodana",
+  "Take it off the list":"Usuń z listy",
+  "Your list":"Własna lista",
+  "Replaces the catalog's on this desk, and travels in your exports.":"Zastępuje listę z katalogu na tym stanowisku i trafia do eksportów.",
+  "Back to the catalog's":"Wróć do listy z katalogu",
+  "The catalog's list":"Lista z katalogu",
+  "Change anything and this card follows your own list instead.":"Po każdej zmianie ta karta pójdzie za własną listą.",
+  "The catalog's list has changed since you made yours: {LIST}":"Lista z katalogu zmieniła się od utworzenia własnej: {LIST}",
+  "The catalog's list: {LIST}":"Lista z katalogu: {LIST}",
+  "Add a reply":"Dodaj odpowiedź",
+  "Find a card to add":"Znajdź kartę do dodania",
+  "a card's title":"tytuł karty",
+  "Yours, not the catalog's.":"Pieczątka własna, nie z katalogu.",
+  "The catalog does not stamp this card; your desk and your exports will.":"Katalog nie oznacza tej karty pieczątką; to stanowisko i jego eksporty tak.",
+  "The catalog stamps this card.":"Katalog oznacza tę kartę pieczątką.",
+  "You took the stamp off on this desk. Reset puts it back.":"Na tym stanowisku pieczątka jest zdjęta. Reset ją przywraca."
 };
 // Is this a language this build carries? The table itself stays private to this file.
 function uiLangKnown(l){ return !!(l && UI_STRINGS[l]); }
@@ -1015,7 +1036,14 @@ function placeToast(el){
   const lift=(r && r.height && r.top<innerHeight) ? Math.round(innerHeight-r.top) : 0;
   el.style.bottom=lift ? (lift+8)+"px" : "";
 }
-function toast(m, ms, refusal){
+/* What a toast holds, given its words already translated: null where they are plain text. A copy of a
+   card that commits the firm says so beside them, in the same words on every card. */
+function toastHtml(m, refusal, stamped){
+  if(refusal) return ICON_LINT_WARNING+'<span>'+esc(m)+'</span>';
+  if(stamped) return '<span>'+esc(m)+'</span><span class="t-stamp">'+ICON_STAMP+esc(t("Commits the firm"))+'</span>';
+  return null;
+}
+function toast(m, ms, refusal, stamped){
   toastSerial++;
   /* Every message the app speaks passes through here, so this is the one place a toast needs
      translating - not fifty call sites. */
@@ -1024,8 +1052,9 @@ function toast(m, ms, refusal){
   const put=()=>{
     el.classList.remove("swap");
     el.classList.toggle("refusal",!!refusal);
-    if(refusal) el.innerHTML=ICON_LINT_WARNING+'<span>'+esc(m)+'</span>';
-    else el.textContent=m;
+    el.classList.toggle("stamped",!refusal && !!stamped);
+    const html=toastHtml(m, refusal, stamped);
+    if(html==null) el.textContent=m; else el.innerHTML=html;
     placeToast(el); markCut(el); el.classList.add("show");
   };
   /* A TOAST ARRIVING OVER ONE THAT SHOWS dips out on the dismiss tier and comes back with its new
@@ -1164,6 +1193,7 @@ export {
   translateTree,
   translateChrome,
   toast,
+  toastHtml,
   toastRefusal,
   TOAST_MS,
   TOAST_HAND_MS,

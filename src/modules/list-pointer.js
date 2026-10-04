@@ -1,5 +1,5 @@
 import { animateTxtReorder } from "./card-blocks.js";
-import { cardLang, cardTitle, findCard, parts } from "./card-model.js";
+import { cardCommits, cardLang, cardTitle, findCard, parts } from "./card-model.js";
 import { moveCardOrder } from "./card-order.js";
 import { isCollapsed, toggleCollapsed } from "./collapse.js";
 import { intentPickedLine, fill } from "./intent-text.js";
@@ -434,7 +434,7 @@ function wireListPointer(){
     txtEl.addEventListener("pointerleave", ()=>txtEl.classList.remove("just-picked"), {once:true});
     withAgentName(ps[vi],()=>{
       bumpUseCount(mid, cl);
-      copy(fill(ps[vi],m), copiedToastMsg(m, cl, vi, ps.length));
+      copy(fill(ps[vi],m), copiedToastMsg(m, cl, vi, ps.length), cardCommits(m));
     },txtEl);
   });
 }

@@ -256,7 +256,7 @@ const eq = (got, want) => got === want ? true
     () => eq(F.CARD_BOOL_FLAGS.indexOf("paxVoc") === -1
       && F.CARD_BOOL_FLAGS.length === F.CARD_FLAGS.length - 1 + F.CARD_UNBOXED_FLAGS.length
       && F.CARD_UNBOXED_FLAGS.every(f => F.CARD_BOOL_FLAGS.indexOf(f) > -1 && !(f in F.CARD_FLAG_BOX)), true));
-  check("card-fields.js", "commits is a flag with no box on screen, so no editor can have unticked it",
+  check("card-fields.js", "commits is a flag with no box in Advanced, so a caller that does not hold it has not unticked it",
     () => eq(F.CARD_UNBOXED_FLAGS.join(","), "commits"));
 }
 
@@ -1652,9 +1652,9 @@ const CARD_B = {
 
   const F2 = await import(MOD("card-fields.js"));
   const was = { id: "u:1", c: "gen", t: "Old", k: "old words", commits: 1, retired: 1, next: [{ to: "c-two" }], ext: { src: "x" } };
-  check("card-fields.js", "a replaced custom entry takes commits, retired, its chain and the carried fields from the one it replaces",
+  check("card-fields.js", "814s a replaced custom entry takes retired and the carried fields from the one it replaces, and not commits or its chain, which the editor writes",
     () => eq(JSON.stringify(F2.carryUnwritten({ id: "u:1", c: "gen", t: "New" }, was)),
-      "{\"id\":\"u:1\",\"c\":\"gen\",\"t\":\"New\",\"commits\":1,\"next\":[{\"to\":\"c-two\"}],\"retired\":1,\"ext\":{\"src\":\"x\"}}"));
+      "{\"id\":\"u:1\",\"c\":\"gen\",\"t\":\"New\",\"retired\":1,\"ext\":{\"src\":\"x\"}}"));
   check("card-fields.js", "CONTROL: a text field the save emptied is not brought back, and no entry to replace changes nothing",
     () => eq(JSON.stringify([F2.carryUnwritten({ id: "u:1", c: "gen", t: "New" }, was).k, F2.carryUnwritten({ id: "u:2" }, null)]),
       "[null,{\"id\":\"u:2\"}]"));
@@ -2302,6 +2302,23 @@ const CARD_B = {
         const told = boot(EDITION_1);
         return eq((JSON.stringify(P.pack) === was) + "|" + told, "true|0");
       });
+    check("card-carry.js", "814t the next edition keeps the agent's list and the catalog's ids it replaced, an empty list of them included",
+      () => {
+        clear(); P.pack.editBases = {}; edition(EDITION_1);
+        P.pack.overrides = { "c-kept": { next: [{ to: "c-retired" }], nextWas: [] } };
+        P.savePack();
+        boot([Object.assign({}, EDITION_1[0], { en: "the lead's new words" }), EDITION_1[1]]);
+        return eq(JSON.stringify(P.pack.overrides["c-kept"] || null), '{"next":[{"to":"c-retired"}],"nextWas":[]}');
+      });
+    check("card-carry.js", "814u an edit rescued as an own card keeps its list and drops the catalog's ids it replaced",
+      () => {
+        clear(); edition(EDITION_1);
+        P.pack.overrides = { "c-retired": { en: "the desk's rewrite", next: [{ to: "c-kept" }], nextWas: ["c-kept", "c-gone"] } };
+        P.savePack();
+        boot([EDITION_1[0]]);
+        const own = (P.pack.custom || [])[0] || {};
+        return eq(JSON.stringify(own.next) + "|" + ("nextWas" in own), '[{"to":"c-kept"}]|false');
+      });
   } finally {
     clear(); STK.M.length = 0; P.pack.baseCards = null; P.rebuildBaseCards();
   }
@@ -2436,6 +2453,158 @@ const CARD_B = {
     if (hadAdd === undefined) delete globalThis.addEventListener; else globalThis.addEventListener = hadAdd;
     if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
   }
+}
+
+/* ------------------------------------------------------------------ card-chain.js, the editor's chain
+   Board 814, S4b: the agent's own Next list replaces the catalog's whole, remembers the catalog's ids
+   it replaced so the desk can say when the lead has changed them, and travels in an export without
+   that memory; the stamp is a flag the desk sets or clears either way. Every card here is invented. */
+{
+  const CH = await import(MOD("card-chain.js"));
+  const M = await import(MOD("card-model.js"));
+  const J = await import(MOD("macros-json.js"));
+  const AS = await import(MOD("app-state.js"));
+  const CM = await import(MOD("content-model.js"));
+  const P = await import(MOD("pack.js"));
+  const HK = await import(MOD("hooks.js"));
+  const UL = await import(MOD("ui-lang.js"));
+  const fs = await import("node:fs");
+  const NL = String.fromCharCode(10);
+  const ids = l => (l || []).map(e => e.to).join(",");
+  const LIVE = new Set(["c-a", "c-b", "c-c", "c-self"]);
+  const to = (...xs) => xs.map(x => ({ to: x }));
+  const base = (next, extra) => Object.assign({ id: "c-self", c: "gen", t: "Invented", en: "Body." }, next ? { next: next } : {}, extra || {});
+
+  check("card-model.js", "814v the stamp is on for a catalog's true and an override's 1, and off for 0, absent, or no card",
+    () => eq([{ commits: true }, { commits: 1 }, { commits: 0 }, {}, null].map(M.cardCommits).join(","), "true,true,false,false,false"));
+  check("card-chain.js", "814w a list offers live cards only, never the card itself, never one twice, and keeps each entry whole",
+    () => eq(JSON.stringify(CH.nextLive([{ to: "c-a", n: 2 }, { to: "c-gone" }, { to: "c-self" }, { to: "c-a" }, null, { to: 5 }, { to: "c-b" }], "c-self", LIVE)),
+      '[{"to":"c-a","n":2},{"to":"c-b"}]'));
+  check("card-chain.js", "814x the list is the catalog's while its ids are the catalog's live ones, a dead link in the catalog's set aside",
+    () => {
+      const b = base(to("c-a", "c-gone", "c-b"));
+      const st = CH.nextFoldState(Object.assign({}, b), b, null, LIVE);
+      return eq([st.own, st.changed, ids(st.rows), ids(st.catalog)].join("|"), "false|false|c-a,c-b|c-a,c-b");
+    });
+  check("card-chain.js", "814y the agent's list is theirs, and the catalog's has changed once its ids differ from the ones it replaced",
+    () => {
+      const b = base(to("c-a", "c-b"));
+      const ov = { next: to("c-c"), nextWas: ["c-a"] }, same = { next: to("c-c"), nextWas: ["c-a", "c-b"] };
+      const st = CH.nextFoldState(Object.assign({}, b, ov), b, ov, LIVE);
+      const st2 = CH.nextFoldState(Object.assign({}, b, same), b, same, LIVE);
+      return eq([st.own, st.changed, ids(st.rows), st2.own, st2.changed].join("|"), "true|true|c-c|true|false");
+    });
+  check("card-chain.js", "814z CONTROL: an own card has no catalog's list, so it is neither the catalog's nor changed",
+    () => {
+      const st = CH.nextFoldState({ id: "u:mine", next: to("c-a") }, null, null, LIVE);
+      return eq([st.catalog, st.own, st.changed, ids(st.rows)].join("|"), "|false|false|c-a");
+    });
+  check("card-chain.js", "814A a save of the catalog's list says nothing about it, so the override drops a list replaced before",
+    () => {
+      const b = base(to("c-a", "c-b"));
+      const f = CH.nextSaveFields(to("c-a", "c-b"), to("c-a", "c-b"), b, { next: to("c-c"), nextWas: ["c-a", "c-b"] }, true);
+      const o = M.overrideAgainstBase(b, Object.assign({}, b, { en: "Reworded." }, f));
+      return eq(JSON.stringify(f) + "|" + JSON.stringify(o), '{}|{"en":"Reworded."}');
+    });
+  check("card-chain.js", "814B a changed list is saved whole with the catalog's ids it replaced, and an untouched one keeps the ids it replaced before",
+    () => {
+      const b = base(to("c-a", "c-b"));
+      const ov = { next: to("c-c"), nextWas: ["c-a"] };
+      const touched = CH.nextSaveFields(to("c-b", "c-a"), to("c-a", "c-b"), b, ov, true);
+      const kept = CH.nextSaveFields(to("c-c"), to("c-a", "c-b"), b, ov, false);
+      return eq(JSON.stringify(touched) + "|" + JSON.stringify(kept),
+        '{"next":[{"to":"c-b"},{"to":"c-a"}],"nextWas":["c-a","c-b"]}|{"next":[{"to":"c-c"}],"nextWas":["c-a"]}');
+    });
+  check("card-chain.js", "814C a list emptied on purpose is the agent's too, and an own card's list is handed on whole",
+    () => eq(JSON.stringify(CH.nextSaveFields([], to("c-a"), base(to("c-a")), null, true)) + "|"
+      + JSON.stringify(CH.nextSaveFields(to("c-b"), null, null, null, false)), '{"next":[],"nextWas":["c-a"]}|{"next":[{"to":"c-b"}]}'));
+  check("card-model.js", "814D the catalog's ids ride the override only beside a list it writes",
+    () => {
+      const b = base(to("c-a"));
+      const w = M.overrideAgainstBase(b, Object.assign({}, b, { next: to("c-b"), nextWas: ["c-a"] }));
+      const n = M.overrideAgainstBase(b, Object.assign({}, b, { next: to("c-a"), nextWas: ["c-a"] }));
+      return eq(JSON.stringify(w) + "|" + JSON.stringify(n), '{"next":[{"to":"c-b"}],"nextWas":["c-a"]}|{}');
+    });
+  {
+    const hadCards = AS.cards, hadLang = AS.lang;
+    HK.hooks.rebuildCards = () => {};
+    const b = { id: "c-chain", c: "gen", alt: 1, t: "Invented", en: ["E1", "E2"].join(NL + NL), pl: ["P1", "P2"].join(NL + NL), next: to("c-a") };
+    try {
+      check("card-model.js", "814E a block reorder on a card with its own list keeps the list and the catalog's ids it replaced",
+        () => {
+          AS.putLang("en"); P.BASE_M.push(b); P.pack.custom = [];
+          P.pack.overrides["c-chain"] = { next: to("c-b"), nextWas: ["c-a"] };
+          AS.setCards([Object.assign({}, b, P.pack.overrides["c-chain"])]);
+          M.reorderMacroBlocks("c-chain", 0, 1);
+          const o = P.pack.overrides["c-chain"] || {};
+          return eq(JSON.stringify([o.next, o.nextWas]) + "|" + String(o.en).split(NL).join("/"), '[[{"to":"c-b"}],["c-a"]]|E2//E1');
+        });
+    } finally {
+      const at = P.BASE_M.indexOf(b); if (at > -1) P.BASE_M.splice(at, 1);
+      delete P.pack.overrides["c-chain"]; AS.setCards(hadCards); AS.putLang(hadLang); delete HK.hooks.rebuildCards;
+    }
+  }
+  check("macros-json.js", "814F CONTROL: the catalog's ids a list replaced never leave the desk: a card holding them exports byte for byte as one without",
+    () => {
+      const card = base(to("c-a"), { commits: 1 });
+      return eq(JSON.stringify(J.cardToExportPlain(Object.assign({}, card, { nextWas: ["c-b"] }))) === JSON.stringify(J.cardToExportPlain(card)), true);
+    });
+  {
+    const hadCards = AS.cards, hadLangs = CM.CONTENT_LANGS.slice();
+    const zolw = String.fromCharCode(0x17b, 0xf3, 0x142) + "w";
+    CM.setContentLangs(["en", "pl"]);
+    AS.setCards([
+      { id: "c-self", c: "gen", t: "Firing self" },
+      { id: "c-4", c: "gen", t: "Refiring a glaze" },
+      { id: "c-1", c: "gen", t: "Order, pieces from one firing" },
+      { id: "c-2", c: "gen", t: "Firing dates" },
+      { id: "c-3", c: "gen", t: "Damaged, waiting for the next firing" },
+      { id: "c-5", c: "gen", t: "Nothing alike", tPl: zolw },
+      { id: "c-6", c: "gen", t: "Taken firing" }]);
+    try {
+      check("card-chain.js", "814G a find puts a title's start first, a word's start next, anywhere last, and offers neither the card itself nor one listed",
+        () => eq(CH.nextHits("FIR", "c-self", new Set(["c-6"])).map(m => m.id).join(","), "c-2,c-1,c-3,c-4"));
+      check("card-chain.js", "814J a find reads every language's title, folded as search folds it",
+        () => eq(CH.nextHits("zolw", "", new Set()).map(m => m.id).join(","), "c-5"));
+      check("card-chain.js", "814K the part found is bold and the rest escaped, and a title that folds to another length is left plain",
+        () => eq([CH.nextHitHtml("A <b> firing", "fir"), CH.nextHitHtml("Stra" + String.fromCharCode(223) + "e firing", "fir")].join("|"),
+          "A &lt;b&gt; <b>fir</b>ing|Stra" + String.fromCharCode(223) + "e firing"));
+    } finally { AS.setCards(hadCards); CM.setContentLangs(hadLangs); }
+  }
+  check("card-chain.js", "814L the editor says when the desk's stamp differs from the catalog's, either way, and says nothing for an own card",
+    () => {
+      const on = CH.stampNoteHtml(true, { commits: 0 }), off = CH.stampNoteHtml(false, { commits: true });
+      return eq([on.indexOf("Yours, not the catalog") > -1, off.indexOf("You took the stamp off") > -1,
+        CH.stampNoteHtml(true, { commits: 1 }), CH.stampNoteHtml(false, {}), CH.stampNoteHtml(true, null)].join("|"), "true|true|||");
+    });
+  check("ui-lang.js", "814M a copy of a stamped card carries the stamp in the same words on every card, and a plain copy or a refusal does not",
+    () => {
+      const a = UL.toastHtml("Ready to paste: One, EN", false, true), b = UL.toastHtml("Ready to paste: Two, PL", false, true);
+      const chip = h => h.slice(h.indexOf('<span class="t-stamp">'));
+      return eq([chip(a) === chip(b), chip(a).indexOf("Commits the firm") > -1, a.indexOf("Ready to paste: One, EN") > -1,
+        UL.toastHtml("Plain", false, false), UL.toastHtml("No", true, true).indexOf("t-stamp")].join("|"), "true|true|true||-1");
+    });
+  /* THE SITES NO NODE LEG CAN CALL, held as text: each needs a document. Every copy route hands the
+     toast the card's stamp; the head puts the stamp after the title, and a patched card files its
+     badges after the stamp as a rebuild does; the editor's two saves write the list and the stamp. */
+  const src = f => fs.readFileSync(join(MODDIR, f), "utf8");
+  check("list-pointer.js", "814O every copy route of a card hands the toast the card's stamp",
+    () => eq(["list-pointer.js", "copy-entry.js", "pick.js"].map(f => {
+      const s = src(f);
+      return f + ":" + (s.split("copy(fill(").length - 1) + "/" + (s.split("), cardCommits(m));").length - 1);
+    }).join(","), "list-pointer.js:1/1,copy-entry.js:1/1,pick.js:1/1"));
+  check("card-body.js", "814P the stamp follows a card's title before its badges, and a patched card files its badges after the stamp",
+    () => {
+      const body = src("card-body.js"), pool = src("card-pool.js"), at = body.indexOf('stampHtml("cstamp")');
+      return eq([at > body.indexOf('<span class="ctitle"'), at < body.indexOf("const hitBadge="),
+        pool.indexOf('const anchor=head.querySelector(".cstamp")||head.querySelector(".ctitle");') > -1].join(","), "true,true,true");
+    });
+  check("card-editor.js", "814Q a save writes the stamp and the list: whole into a custom entry after the carry, through the override for a catalog card",
+    () => {
+      const ed = src("card-editor.js"), carry = ed.indexOf("carryUnwritten(entry,"), put = ed.indexOf("if(own&&own.length) entry.next=own; else delete entry.next;");
+      return eq([carry > -1 && put > carry, ed.indexOf("intentTop,lockLang,commits,intents:intentsStored}") > -1,
+        ed.indexOf("lockLang, commits}, nx.fields());") > -1].join(","), "true,true,true");
+    });
 }
 
 /* NOT cardBodyHtml(). It reads the PAX box off the document through fill(), so it cannot be

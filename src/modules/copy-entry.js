@@ -1,5 +1,5 @@
 import { nextContentLang } from "./content-model.js";
-import { cardLang, findCard, parts } from "./card-model.js";
+import { cardCommits, cardLang, findCard, parts } from "./card-model.js";
 import { fill } from "./intent-text.js";
 import { bumpUseCount, copiedToastMsg } from "./list-pointer.js";
 import { eCopyFeedback } from "./pops.js";
@@ -23,7 +23,7 @@ function copyEntrySel(otherLang){
   const id=entrySel.id;
   withAgentName(ps[vi],()=>{
     bumpUseCount(id, l);
-    copy(fill(ps[vi],m,0,l), copiedToastMsg(m, l, vi, ps.length));
+    copy(fill(ps[vi],m,0,l), copiedToastMsg(m, l, vi, ps.length), cardCommits(m));
     eCopyFeedback(id,vi);   // wash the selected block + recency trace, same as a click
   },document.querySelector("#list .txt.sel"));
   return true;

@@ -1,5 +1,6 @@
 import { cardFieldKey, cardStorageKeys, cardRequiredKeys, CARD_TEXT_FIELDS, CARD_FLAG_BOX, CARD_FLAGS, CARD_BOOL_FLAGS, carryUnwritten, paxVocOn, CARD_SHARED_FIELDS } from "./card-fields.js";
-import { baseCard, cardText, cardTitle, findCard, overrideAgainstBase } from "./card-model.js";
+import { baseCard, cardCommits, cardText, cardTitle, findCard, overrideAgainstBase } from "./card-model.js";
+import { nextReplies, stampToggleHtml, wireStampToggle } from "./card-chain.js";
 import { catSortIdx } from "./card-order.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { closeModal, edMarkClean, edNavHtml, edWireNav, mfSec, openDialog, refreshDialogChrome, wireFolds } from "./dialog.js";
@@ -201,8 +202,10 @@ function meLangPanel(m,l,i){
   /* Each placeholder says what its LABEL does not: what the box is for, what the text becomes,
      and who reads it. A placeholder that repeats its label is decoration. */
   return langPane(l,i,""
-    +'<div class="mf"><label>Title</label><input id="'+id("t")+'" value="'+v("t")+'"'
-      +' autocomplete="off" placeholder="'+esc(t("a short name you will recognise"))+'"></div>'
+    +'<div class="mf mf-titled"><label>Title</label>'+stampToggleHtml(cardCommits(m))
+      +'<input id="'+id("t")+'" value="'+v("t")+'"'
+      +' autocomplete="off" placeholder="'+esc(t("a short name you will recognise"))+'">'
+      +'<p class="me-stamp-note" data-i18n-skip hidden></p></div>'
     +'<div class="mf"><label>'+esc(t("Macro"))+'</label>'
     +'<textarea id="'+id("body")+'" spellcheck="true"'
       +' placeholder="'+esc(t("the text the customer receives"))+'">'+v("body")+'</textarea></div>'
@@ -303,6 +306,7 @@ function openCardEditor(id, presetCat, fromManage){
   const startCat=(presetCat && CATS[presetCat]) ? presetCat : "";
   const m=existing||{t:"",c:startCat,en:"",pl:"",note:"",k:"",alt:0,firstOnly:0,intents:[]};
   const linked=normalizeCardIntents(m);
+  const nx=nextReplies(existing, base, base ? pack.overrides[id] : null);
   const backToManage=!!fromManage;
   function doneCardEditor(){
     if(backToManage) hooks.openManage();
@@ -329,7 +333,11 @@ function openCardEditor(id, presetCat, fromManage){
     mfSec({key:"text", cls:"mf-main", open:true, label:"Content",
       sum:esc(meLangSummary(m)), sumId:"meTextSum", sumSkip:true,
       body:
-      langTabs()+CONTENT_LANGS.map((l,i)=>meLangPanel(m,l,i)).join("")})+
+      '<input type="checkbox" id="meCommits" hidden'+(cardCommits(m)?" checked":"")+'>'
+      +langTabs()+CONTENT_LANGS.map((l,i)=>meLangPanel(m,l,i)).join("")})+
+    mfSec({key:"next", label:"Next replies",
+      sum:esc(nx.sum()), sumId:"meNextSum", sumSkip:true,
+      body:nx.body()})+
     mfSec({key:"keys", label:"Keywords",
       sum:esc(meKeysSummary(m)), sumId:"meKeysSum", sumSkip:true,
       body:meSharedFields(m)})+
@@ -500,6 +508,8 @@ function openCardEditor(id, presetCat, fromManage){
      freezes the current height on the way in so the <details> toggle has something to grow from,
      and the toggle handler animates to the new one. */
   wireFolds(modalCard,"details.mf-fold","details.mf-fold");
+  nx.wire();
+  wireStampToggle(base);
   syncMeIntentPick();
   if($("#meReset")) $("#meReset").onclick=()=>{
     delete pack.overrides[id];
@@ -529,6 +539,7 @@ function openCardEditor(id, presetCat, fromManage){
     const allIntents=$("#meAllIntents").checked?1:0;
     const intentTop=$("#meIntentTop").checked?1:0;
     const lockLang=readMeLockLang();
+    const commits=$("#meCommits")&&$("#meCommits").checked?1:0;
     /* ONLY THE PRIMARY IS REQUIRED. A missing translation falls back to it when the card is
        read (see cardLang), so demanding both taxed every card for a language the desk may not
        write. In reading order, so the dialog lands on the topmost gap. */
@@ -549,8 +560,10 @@ function openCardEditor(id, presetCat, fromManage){
          them the first time it was edited. Built-ins never had the bug: their override is
          partial and Object.assign keeps whatever the base declares. */
       const entry=Object.assign({id:isNew?(savedId=uid("u:")):(id),c},text,
-        {alt,seq,firstOnly,paxVoc,allIntents,intentTop,lockLang,intents:intentsStored});
+        {alt,seq,firstOnly,paxVoc,allIntents,intentTop,lockLang,commits,intents:intentsStored});
       carryUnwritten(entry, isNew ? null : pack.custom.find(x=>x&&x.id===id));
+      const own=nx.fields().next;
+      if(own&&own.length) entry.next=own; else delete entry.next;
       cardStorageKeys().forEach(f=>{
         if(!entry[f] && cardRequiredKeys().indexOf(f)<0) delete entry[f];
       });
@@ -565,7 +578,7 @@ function openCardEditor(id, presetCat, fromManage){
       }
     } else {
       const full=Object.assign({c},text,{intents:intentsStored,
-        alt:alt?1:0, seq:seq?1:0, firstOnly:firstOnly?1:0, paxVoc, allIntents, intentTop, lockLang});
+        alt:alt?1:0, seq:seq?1:0, firstOnly:firstOnly?1:0, paxVoc, allIntents, intentTop, lockLang, commits}, nx.fields());
       const o=overrideAgainstBase(baseCard(id), full);
       // Nothing differs from the catalog any more - drop the override so the badge clears too
       if(Object.keys(o).length) pack.overrides[id]=o; else delete pack.overrides[id];

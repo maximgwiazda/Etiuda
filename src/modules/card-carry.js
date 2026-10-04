@@ -194,6 +194,7 @@ function rescueEdits(alive,pin,lost){
     Object.keys(full).forEach(k=>{ if(k.charAt(0)!=="_") own[k]=full[k]; });
     own.id=uid("u:");
     delete own.retired;   // the base may have slept; an own card is never born asleep
+    delete own.nextWas;   // an own card has no catalog list to have replaced
     // A link kept names a card that lives on; the card it came from and the ones gone with it do not.
     if(Array.isArray(own.next)){
       own.next=own.next.filter(e=>e && alive.has(e.to));
@@ -234,7 +235,7 @@ function teamTextTaken(c,id){ const s=takenFor.get(c); return !!s && s.has(Strin
    changed otherwise stays the agent's unless the offer took the team's text; an own card the edition
    now holds becomes that card, with whatever still differs kept as the agent's edit of it. `was` is
    the edition being left, as far as it is known. Returns whether anything moved. */
-const UNSETTLED=["intents","next","paxVoc","ext"];
+const UNSETTLED=["intents","next","nextWas","paxVoc","ext"];
 function settleEdits(c,list,was){
   const ov=pack.overrides||{}, bases=pack.editBases||{}, takes=takenFor.get(c);
   const now=new Map(list.map(m=>[catalogCardId(m),m])), old=new Map(was.map(m=>[m.id,m]));

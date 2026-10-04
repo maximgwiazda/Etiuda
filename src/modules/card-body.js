@@ -1,7 +1,8 @@
 import { CONTENT_LANGS } from "./content-model.js";
 import { ICON_EDIT, ICON_EYE_OPEN, ICON_EYE_SHUT, ICON_STAR_OFF, ICON_STAR_ON, _NOTE, _svg } from "./icons.js";
+import { stampHtml } from "./card-chain.js";
 import { cardDrag } from "./list-pointer.js";
-import { altLabelAt, cardLang, cardTitle, noteFor, parts } from "./card-model.js";
+import { altLabelAt, cardCommits, cardLang, cardTitle, noteFor, parts } from "./card-model.js";
 import { catMarkHtml, catSlot } from "./cat-identity.js";
 import { esc } from "./esc.js";
 import { escFilled, fill } from "./intent-text.js";
@@ -27,7 +28,7 @@ function cardBodyHtml(m,i,ctx){
     /* data-i18n-skip: a card title is the employer's content, and so is the name on the mark's
        slot. Nothing sweeps the card list today, but the marker travels with the markup. A card
        has exactly one category, so the mark is simply its own - no counting, unlike a rail row. */
-    cardH+=catMarkHtml(m.c)+'<span class="ctitle" data-i18n-skip>'+esc(cardTitle(m))+'</span>';
+    cardH+=catMarkHtml(m.c)+'<span class="ctitle" data-i18n-skip>'+esc(cardTitle(m))+'</span>'+(cardCommits(m)?stampHtml("cstamp"):"");
     /* Captured rather than appended inline: a kept card has its badges added and removed by
        patchCard(), and they must be the same bytes a rebuild would have written. */
     const hitBadge='<span class="cbadge hit" title="'+esc(t("Linked to the selected intent"))+'">'+esc(t("int"))+'</span>';
