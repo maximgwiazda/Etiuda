@@ -21,10 +21,47 @@ const puppeteer = require("puppeteer-core");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
+const zlib = require("zlib");
 const E = require("./engine.js");
 const MOTION = require("./motion.js");
 const TW = require("./tour-walk.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+/* Two screenshots of one strip differ where a pixel moves by more than one level of one channel: the same state photographed
+   twice can drift by one level in a 1 px column. Only 8-bit RGB or RGBA is read; anything else throws, so it cannot pass unread. */
+const pngPixels = b64 => {
+  const buf = Buffer.from(b64, "base64"), idat = []; let at = 8, w = 0, h = 0, bpp = 0;
+  while (at < buf.length) {
+    const n = buf.readUInt32BE(at), t = buf.toString("latin1", at + 4, at + 8);
+    if (t === "IHDR") {
+      w = buf.readUInt32BE(at + 8); h = buf.readUInt32BE(at + 12);
+      if (buf[at + 16] !== 8 || (buf[at + 17] !== 2 && buf[at + 17] !== 6) || buf[at + 20] !== 0) throw new Error("png: not 8-bit RGB or RGBA, or interlaced");
+      bpp = buf[at + 17] === 6 ? 4 : 3;
+    }
+    if (t === "IDAT") idat.push(buf.subarray(at + 8, at + 8 + n));
+    at += 12 + n;
+  }
+  const raw = zlib.inflateSync(Buffer.concat(idat)), stride = w * bpp, out = Buffer.alloc(stride * h);
+  for (let y = 0; y < h; y++) {
+    const f = raw[y * (stride + 1)];
+    for (let x = 0; x < stride; x++) {
+      const a = x >= bpp ? out[y * stride + x - bpp] : 0, b = y ? out[(y - 1) * stride + x] : 0,
+        c = x >= bpp && y ? out[(y - 1) * stride + x - bpp] : 0;
+      let p = 0;
+      if (f === 1) p = a; else if (f === 2) p = b; else if (f === 3) p = (a + b) >> 1;
+      else if (f === 4) { const q = a + b - c, pa = Math.abs(q - a), pb = Math.abs(q - b), pc = Math.abs(q - c); p = pa <= pb && pa <= pc ? a : pb <= pc ? b : c; }
+      else if (f !== 0) throw new Error("png: filter " + f);
+      out[y * stride + x] = (raw[y * (stride + 1) + 1 + x] + p) & 255;
+    }
+  }
+  return { w: w, h: h, px: out };
+};
+const pngDiffers = (a, b) => {
+  if (a === b) return false;
+  const A = pngPixels(a), B = pngPixels(b);
+  if (A.w !== B.w || A.h !== B.h) return true;
+  for (let i = 0; i < A.px.length; i++) if (Math.abs(A.px[i] - B.px[i]) > 1) return true;
+  return false;
+};
 const WHICH = (process.argv[2] || "chrome").toLowerCase();
 /* THE DECLARED NUMBER OF CHECKS, and why a tally is not a verdict without one. A section that
    throws takes the rest of its checks with it, the catch writes one FAIL, and the line at the
@@ -750,7 +787,7 @@ const t0 = Date.now();
      THE MEASURE IS INK IN A STRIP, whichever element carries the field: the cards are hidden (their
      boxes kept), a strip of the window outside main's column is photographed, the field is switched
      off wherever it is painted and the same strip is photographed again, and a strip that holds
-     any dot differs from its twin. A strip is at least 12 px each way, the field's pitch, so a field
+     any dot differs from its twin by more than one level of a channel. A strip is at least 12 px each way, the field's pitch, so a field
      reaching it cannot fall between its dots. The control is the same photograph of a patch INSIDE
      main, which must differ: a leg that sees no dots anywhere passes every strip for free. Four
      states, each with the intent panel docked or not, and with the shell's backdrop class or not -
@@ -817,7 +854,7 @@ const t0 = Date.now();
       await sleep(200);
       extentStates.push({ rail: rail, backdrop: backdrop, at: at,
         small: names.filter(n => on[n] === null),
-        holds: names.filter(n => on[n] !== null && on[n] !== off[n]) });
+        holds: names.filter(n => on[n] !== null && pngDiffers(on[n], off[n])) });
     }
     await p.evaluate(() => document.body.classList.remove("e-backdrop"));
   }
