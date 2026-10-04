@@ -20447,11 +20447,14 @@ What you type stays in this browser only.`;
         return "file";
       }
       const deskMoved = m !== refDesk(loc, bv), fileMoved = f !== refFile(loc, bv);
-      seen(loc, f, m);
       if (fileMoved) {
-        if (deskMoved || m !== sharedCanon(bv)) held.add(loc);
+        if (deskMoved || m !== sharedCanon(bv)) {
+          held.add(loc);
+          seen(loc, f, m);
+        } else deskSeen[loc] = m;
         return "file";
       }
+      seen(loc, f, m);
       if (!deskMoved) return "file";
       fileSeen[loc] = m;
       return "mine";
@@ -20540,7 +20543,8 @@ What you type stays in this browser only.`;
         else forget(ORDER);
       } else {
         const deskMoved = m !== only(was(deskSeen)), fileMoved = f !== only(was(fileSeen));
-        if (fileMoved && (deskMoved || m !== only(ids(B)))) held.add(ORDER);
+        const hold = fileMoved && (deskMoved || m !== only(ids(B)));
+        if (hold) held.add(ORDER);
         if (deskMoved && !fileMoved) {
           const slots = [], at = sharedById(out.cards), mo = ids(M2).filter(common);
           out.cards.forEach((x, i) => {
@@ -20551,7 +20555,8 @@ What you type stays in this browser only.`;
           });
           wrote = true;
         }
-        keep();
+        if (fileMoved && !hold) deskSeen[ORDER] = sharedCanon(ids(M2));
+        else keep();
       }
     }
     return {

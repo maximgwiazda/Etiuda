@@ -65,9 +65,10 @@ function mergeShared(F,B,M,touched,state,all){
     }
     if(m===f){ if(mark) seen(loc,f,m); else forget(loc); return "file"; }
     const deskMoved=m!==refDesk(loc,bv), fileMoved=f!==refFile(loc,bv);
-    seen(loc,f,m);
     // The file moved under a value the desk holds as its own, edited now or before: held, never written over.
-    if(fileMoved){ if(deskMoved || m!==sharedCanon(bv)) held.add(loc); return "file"; }
+    // Not held, the colleague's value is carried but never becomes the reference: this desk's person was not shown it.
+    if(fileMoved){ if(deskMoved || m!==sharedCanon(bv)){ held.add(loc); seen(loc,f,m); } else deskSeen[loc]=m; return "file"; }
+    seen(loc,f,m);
     if(!deskMoved) return "file";
     fileSeen[loc]=m;
     return "mine";
@@ -138,14 +139,16 @@ function mergeShared(F,B,M,touched,state,all){
     else if(m===f){ if(scope.order) keep(); else forget(ORDER); }
     else {
       const deskMoved=m!==only(was(deskSeen)), fileMoved=f!==only(was(fileSeen));
-      if(fileMoved && (deskMoved || m!==only(ids(B)))) held.add(ORDER);
+      const hold=fileMoved && (deskMoved || m!==only(ids(B)));
+      if(hold) held.add(ORDER);
       if(deskMoved && !fileMoved){
         const slots=[], at=sharedById(out.cards), mo=ids(M).filter(common);
         out.cards.forEach((x,i)=>{ if(common(String(x.id))) slots.push(i); });
         mo.forEach((id,n)=>{ out.cards[slots[n]]=at.get(id); });
         wrote=true;
       }
-      keep();
+      // As in `decide`: a colleague's order carried, not held, is not the reference.
+      if(fileMoved && !hold) deskSeen[ORDER]=sharedCanon(ids(M)); else keep();
     }
   }
   return { doc:out, wrote:wrote, state:{ file:fileSeen, desk:deskSeen, held:Array.from(held) },

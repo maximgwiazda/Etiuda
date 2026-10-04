@@ -23,7 +23,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 28;
+const EXPECTED = 30;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -292,6 +292,42 @@ try {
   const rF = await save(finn, {}, "Taken.ec");
   check(rF.wrote !== true && rF.why === "other" && stamp(OTHER) === taken0,
     "7c a name already holding another catalog is never written over, and the page moves to the next name");
+
+  /* ---- a colleague's value this desk's write carried, its person never shown it --------------------------------- */
+  const SEEN = path.join(FOLDER, "seen.ec"), seenBase = catalog("seen");
+  const ORD = path.join(FOLDER, "order.ec"), ordBase = catalog("order");
+  fs.writeFileSync(SEEN, text(seenBase));
+  fs.writeFileSync(ORD, text(ordBase));
+  await A.ask("etiuda:catalog-files"); await B.ask("etiuda:catalog-files"); await tick(5);
+  const ann8 = desk(A, seenBase), bea8 = desk(B, seenBase);
+  edit(ann8, "c-a", "title", { en: "Ann's a" });
+  const r8a = await save(ann8, cards("c-a"), "seen.ec");
+  edit(bea8, "c-a", "body", { en: "Bea's body." });
+  const r8b = await save(bea8, cards("c-a"), "seen.ec");
+  const carried = titleOf(onDisk(SEEN), "c-a"), shown = titleOf(bea8.mine, "c-a");
+  edit(bea8, "c-a", "title", { en: "Bea's a" });
+  const r8c = await save(bea8, cards("c-a"), "seen.ec");
+  check(r8a.wrote === true && r8b.wrote === true && carried === "Ann's a" && shown === "Title a"
+    && titleOf(onDisk(SEEN), "c-a") === "Ann's a" && r8c.fresh.some(l => /c-a\u0001title$/.test(l)),
+    "8a a colleague's title a desk's own write carried, while the desk still shows the edition's, is not written over by the desk's later edit there: it is held, with a notice ("
+    + titleOf(onDisk(SEEN), "c-a") + ", " + r8c.fresh.length + " notice)");
+  const ann9 = desk(A, ordBase), bea9 = desk(B, ordBase);
+  const order = d => (d.cards || []).map(c => c.id.slice(2)).join("");
+  const move = (d, id, to) => { const i = d.mine.cards.findIndex(c => c.id === id), [c] = d.mine.cards.splice(i, 1); d.mine.cards.splice(to, 0, c); };
+  move(bea9, "c-f", 0);
+  await save(bea9, { order: true }, "order.ec");
+  move(bea9, "c-f", 5);
+  await save(bea9, { order: false }, "order.ec");
+  move(ann9, "c-a", 5);
+  const r9a = await save(ann9, { order: true }, "order.ec"), annOrder = order(onDisk(ORD));
+  edit(bea9, "c-c", "title", { en: "Bea's c" });
+  const r9b = await save(bea9, cards("c-c"), "order.ec");
+  move(bea9, "c-e", 0);
+  const r9c = await save(bea9, Object.assign(cards("c-c"), { order: true }), "order.ec");
+  check(r9a.wrote === true && annOrder === "bcdefa" && r9b.wrote === true && order(bea9.mine) === "eabcdf"
+    && order(onDisk(ORD)) === "bcdefa" && r9c.fresh.some(l => /^order\u0001cards$/.test(l)),
+    "8b the same in the order of the cards: a colleague's move the desk's write carried is not undone by the desk's later move, which is held, with a notice ("
+    + annOrder + " then " + order(onDisk(ORD)) + ", " + r9c.fresh.length + " notice)");
 
   /* ---- the history under a folder setting spelled otherwise ------------------------------------------------------ */
   A.test.setFolder(FOLDER.split(path.sep).join("/") + "/");
