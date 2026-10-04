@@ -732,7 +732,7 @@ function hpkeOpen(skR, enc, info, aad, ct) {
     const pkR = crypto.createPublicKey(skR).export({ type: "spki", format: "der" }).subarray(-32);
     const dh = crypto.diffieHellman({ privateKey: skR, publicKey: hpkeX25519Public(enc) });
     const ks = hpkeSchedule(hpkeShared(dh, enc, pkR), info);
-    const d = crypto.createDecipheriv("aes-128-gcm", ks.key, ks.nonce);
+    const d = crypto.createDecipheriv("aes-128-gcm", ks.key, ks.nonce, { authTagLength: 16 });
     d.setAAD(aad);
     d.setAuthTag(ct.subarray(ct.length - 16));
     return Buffer.concat([d.update(ct.subarray(0, ct.length - 16)), d.final()]);

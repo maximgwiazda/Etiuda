@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 30;
+const EXPECTED = 32;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -131,6 +131,12 @@ function main() {
     ["the ct cut by a byte", H.hpkeOpen(skR, v.enc, v.info, v.aad, v.ct.subarray(0, v.ct.length - 1))],
   ];
   nulls.forEach(([what, got], i) => check(got === null, "12h" + (i + 1) + " " + what + " does not open: " + (got === null ? "null" : "it opened")));
+  /* A GCM tag cut short is a valid prefix, and a runtime may take a 4- or 8-byte one: the empty message's ct is its bare tag. */
+  const bare = H.hpkeSeal(v.pkRm, v.info, v.aad, Buffer.alloc(0)), whole = H.hpkeOpen(skR, bare.enc, v.info, v.aad, bare.ct);
+  const cut = [4, 8].map(n => H.hpkeOpen(skR, bare.enc, v.info, v.aad, bare.ct.subarray(0, n)));
+  check(!!whole && whole.length === 0 && cut.every(got => got === null),
+    "12h7 an empty message opens with its whole tag, and not with the tag cut to 4 or 8 bytes: "
+    + cut.map(got => got === null ? "null" : "it opened").join(", "));
 
   const other = crypto.generateKeyPairSync("x25519").privateKey;
   check(H.hpkeOpen(other, v.enc, v.info, v.aad, v.ct) === null, "12i another desk's private key does not open it");
@@ -202,6 +208,11 @@ function main() {
     .filter(([k, d]) => { try { return S.openSealed(k, d) === null; } catch { return false; } }).length;
   check(quiet === 5, "12t opening gives null without a throw for a 31-byte key, no envelope, its text unparsed, another kind"
     + " and a ct shorter than its tag: " + quiet + " of 5");
+  const bareEnv = S.sealCatalog(teamKey, TEAM, 1, "");
+  const bareCut = [4, 8].map(n => S.openSealed(teamKey, Object.assign({}, bareEnv, { ct: bareEnv.ct.slice(0, 2 * n) })));
+  check(S.openSealed(teamKey, bareEnv) === "" && bareCut.every(got => got === null),
+    "12u an empty text opens with its whole tag, and not with the tag cut to 4 or 8 bytes: "
+    + bareCut.map(got => got === null ? "null" : "it opened").join(", "));
 }
 
 try { main(); }
