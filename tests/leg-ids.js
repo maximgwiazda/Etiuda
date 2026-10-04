@@ -19,6 +19,10 @@
  * control with the same id in capitals (1c and its control 1C), and folding case would report
  * that convention as a collision.
  *
+ * ONE LEG, SEVERAL CHECKS. tests/module-calls.mjs gives one id to a group of checks on purpose
+ * (2a heads six), so an id repeated with no other id between the repeats is one run and counts
+ * once. An id that returns after a different id is a second use, and is refused.
+ *
  * LIVENESS. A scan that matches nothing passes, and a regex that drifts matches nothing, so the
  * run refuses unless it finds at least FLOOR ids over at least FILES files. The census is
  * printed whether or not anything is wrong, so a drift shows up as a number that fell rather
@@ -32,14 +36,22 @@ const path = require("path");
 const E = require("./engine.js");
 
 const ID = /^\s*(?:\+\s*)?["']([0-9]+[A-Za-z]+[0-9]*) /;
+/* The second form: the id opens the name inside a check( or eq( call on the same line, as the
+   first string or after a module label ("storage.js", "2a ..."). Named calls only, because a
+   skip( line repeats the id of the leg it skips and is not a leg. */
+const CALL_ID = /\b(?:check|eq)\(\s*(?:["'][^"'\n]*["']\s*,\s*)?["']([0-9]+[A-Za-z]+[0-9]*) /;
 const FLOOR = 100;      /* 129 on 2026-09-17 over three files; a floor, not the number */
 const FILES = 3;
 
 function scan(file) {
   const ids = new Map();
+  let last = null;
   fs.readFileSync(file, "utf8").split(/\r?\n/).forEach((line, i) => {
-    const m = line.match(ID);
+    const m = line.match(ID) || line.match(CALL_ID);
     if (!m) return;
+    const again = m[1] === last;
+    last = m[1];
+    if (again) return;
     if (!ids.has(m[1])) ids.set(m[1], []);
     ids.get(m[1]).push(i + 1);
   });
