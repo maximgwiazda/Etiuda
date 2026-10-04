@@ -30,7 +30,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 41;
+const EXPECTED = 42;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -246,6 +246,14 @@ function main() {
     && wrap2.enc !== wrap.enc && wrap2.ct !== wrap.ct && W.unwrapTeamKey(box.privateKey, wrap2, TEAM, 3, DESK).equals(teamKey),
     "12w a wrap is its epoch, a 32-byte enc and the 48-byte ct in hex; the desk's own box key opens it to the team key, and a"
     + " second wrap of the same key differs and opens too");
+  /* The binding's text written out, not called: wrap and unwrap share teamWrapInfo, so a changed or dropped label
+     round-trips above, and Studio's wraps (its tw1b) and a desk opening them meet only on this text. */
+  const fixed = (team, epoch, desk) => H.hpkeOpen(box.privateKey, hex(wrap.enc),
+    Buffer.from("etiuda-team-key\n" + team + "\n" + epoch, "utf8"), Buffer.from(desk, "utf8"), hex(wrap.ct));
+  const bound = fixed(TEAM, 3, DESK);
+  check(!!bound && bound.equals(teamKey) && fixed(TEAM, 4, DESK) === null && fixed(TEAM, 3, DESK2) === null,
+    "12W the binding as declared: the shell's hpkeOpen, given the info written out as \"etiuda-team-key\\n\" + team + \"\\n\""
+    + " + epoch and the desk id as aad, opens the wrap to the team key, and with the epoch or desk changed opens nothing");
   const moved = [
     ["copied onto another roster entry", [box.privateKey, wrap, TEAM, 3, DESK2]],
     ["copied into another team", [box.privateKey, wrap, "t-0123456789abcdee", 3, DESK]],
