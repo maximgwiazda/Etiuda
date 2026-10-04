@@ -26,7 +26,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 67;
+const EXPECTED = 76;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -827,6 +827,160 @@ try {
   }
   check(parity.length === 16 && parity.every(l => /:holds,differs$/.test(l)) && !holdsNow(),
     "78j parity: a change to each of the 16 fields the loose mark reads makes deskBranchHolds true and Export differ, and put back it is false again (" + parity.filter(l => !/:holds,differs$/.test(l)).join("; ") + (parity.every(l => /:holds,differs$/.test(l)) ? "all 16" : "") + ")");
+
+  /* A catalog taken while the identity is asked: the write that began over the one before, its file already made. */
+  await catRev("lamp-swap-one", 1);
+  edit("Swap, first");
+  await writeBranch();
+  const swapFile = path.join(newDir, "lamp-swap-one-" + sha(Buffer.from("lamp-swap-one")).slice(0, 8) + ".ec");
+  const swapBytes = (() => { try { return fs.readFileSync(swapFile); } catch { return Buffer.alloc(0); } })();
+  const swapTime = (() => { try { return fs.statSync(swapFile).mtimeMs; } catch { return 0; } })();
+  edit("Swap, second");
+  const dirSwap = listing(newDir).join(), runSwap = writeBranch();
+  await catRev("lamp-swap-two", 1);
+  const rSwap = await runSwap;
+  await tick(5); await tick(5);
+  const swapNow = (() => { try { return JSON.parse(fs.readFileSync(swapFile, "utf8")); } catch { return {}; } })();
+  check(rSwap === false && swapBytes.length > 0 && (() => { try { return Buffer.compare(fs.readFileSync(swapFile), swapBytes) === 0 && fs.statSync(swapFile).mtimeMs === swapTime; } catch { return false; } })()
+      && listing(newDir).join() === dirSwap,
+    "78k a catalog taken while the identity is asked writes nothing: the file of the catalog before keeps its bytes and its time, and no file is added (answer " + rSwap
+    + ", that file now rev " + swapNow.rev + " titled " + JSON.stringify(titleOf(swapNow, 0)) + ", folder " + (listing(newDir).join() === dirSwap ? "unchanged" : "changed") + ")");
+
+  /* ---- a catalog made from nothing on a desk: no catalog loaded, an edit, and the desk's own file with no grew. The id it
+     stands in for the grown-from one is minted once and kept with the loose layer, which a load erases; the file stays. */
+  ST.lsDel(CT.E_CATALOG_STORE);
+  CB.applyBootCatalog(); PK.resetPack(); PK.pack.baseCards = null; RB.rebuildCards();
+  const looseIds = () => ST.lsKeys().filter(k => /LooseId$/.test(k)).map(k => ST.lsGet(k));
+  const madeFiles = () => listing(newDir).filter(n => /^Etiuda catalog-[0-9a-f]{8}\.ec$/.test(n));
+  const madeDoc = n => { try { return JSON.parse(fs.readFileSync(path.join(newDir, n), "utf8")); } catch { return {}; } };
+  const make = title => { PK.pack.custom = [{ id: "u:made", c: Object.keys(CM.CATS)[0], t: title, en: title + ", the body." }]; PK.savePack(); RB.rebuildCards(); };
+  const dirBefore82 = listing(newDir).join();
+  const r82a = await writeBranch();
+  check(!CB.catalogLoaded() && !CF.deskBranchHolds() && r82a === false && looseIds().length === 0 && listing(newDir).join() === dirBefore82,
+    "82a THE CONTROL: on the empty desk with nothing made, a write makes no file and mints no id (answer " + r82a + ", ids " + looseIds().length + ")");
+
+  make("Made here");
+  const r82b = await writeBranch();
+  const m1 = madeFiles(), minted = looseIds()[0] || "", hexM = sha(Buffer.from(minted)).slice(0, 8), dM1 = madeDoc(m1[0]);
+  check(r82b === true && looseIds().length === 1 && /^c-[a-z0-9]{16}$/.test(minted) && m1.length === 1 && m1[0] === "Etiuda catalog-" + hexM + ".ec"
+      && dM1.id === idAns.id + "-" + hexM && !("grew" in dM1) && !!dM1.desk && dM1.desk.id === idAns.id && dM1.rev === 1 && dM1.modified === true
+      && verifies(dM1) && V2.v2Problems(dM1).length === 0 && (dM1.cards || []).length === 1 && titleOf(dM1, 0) === "Made here",
+    "82b an edit on an empty desk writes one file with no grew: <stem>-<8 hex of a catalog id minted once>.ec, its id the branch id and the same 8 hex, "
+    + "first edition, signed, and the engine's reader finds no problem in it (files " + JSON.stringify(m1) + ", grew " + ("grew" in dM1) + ", rev " + dM1.rev
+    + ", " + V2.v2Problems(dM1).slice(0, 1).join("") + ")");
+
+  make("Made here again");
+  const r82c = await writeBranch();
+  const m2 = madeFiles(), dM2 = madeDoc(m2[0]);
+  check(r82c === true && m2.length === 1 && m2[0] === m1[0] && dM2.id === dM1.id && dM2.rev === 2 && !("grew" in dM2) && verifies(dM2)
+      && titleOf(dM2, 0) === "Made here again" && looseIds().join() === minted,
+    "82c a second edit raises its rev in the same file, under the same minted id (files " + JSON.stringify(m2) + ", rev " + dM2.rev + ")");
+
+  /* Load anyway, pressed in the bubble the load raises; a document that keeps what is set on what it makes. */
+  const madePath = path.join(newDir, m2[0] || "none");
+  const bytesMade = () => { try { return fs.readFileSync(madePath); } catch { return Buffer.alloc(0); } };
+  const timeMade = () => { try { return fs.statSync(madePath).mtimeMs; } catch { return 0; } };
+  const madeBytes = bytesMade(), madeTime = timeMade();
+  const docWas = globalThis.document, made82 = [];
+  const kept82 = () => { const st = {}; return new Proxy(function () {}, {
+    get: (t, k) => (k in st ? st[k] : k === "querySelector" ? (s => st["q" + s] || (st["q" + s] = kept82()))
+      : k === Symbol.toPrimitive ? () => "" : k === "length" ? 0 : (["contains", "matches", "hasAttribute"].includes(k) ? () => false : fake())),
+    set: (t, k, v) => { st[k] = v; return true; }, apply: () => fake(), has: () => true }); };
+  globalThis.document = new Proxy({}, { set: () => true, get: (t, k) => (k === "createElement" ? () => { const e = kept82(); made82.push(e); return e; }
+    : k === "getElementById" ? () => null : k === "readyState" ? "complete" : k === "visibilityState" ? "visible"
+    : (k === "addEventListener" || k === "removeEventListener") ? noop : fake()) });
+  let pressed82 = false;
+  try {
+    CF.activateCatalog(CT.parseCatalogFile(JSON.stringify(Object.assign({}, origin, { id: "lamp-anew", rev: 2 }))), { file: "anew.ec" });
+    const bubble = made82.filter(e => e.id === "eLoose")[0], loadAnyway = bubble && bubble["q#eLooseLoad"];
+    if (loadAnyway && typeof loadAnyway.onclick === "function") { loadAnyway.onclick(); pressed82 = true; }
+  } finally { globalThis.document = docWas; }
+  CB.applyBootCatalog(); PK.resetPack(); PK.pack.baseCards = null; RB.rebuildCards();
+  await writeBranch();
+  check(pressed82 && CB.catalogLoaded() && looseIds().length === 0 && madeFiles().join() === m2.join()
+      && madeBytes.length > 0 && Buffer.compare(bytesMade(), madeBytes) === 0 && timeMade() === madeTime,
+    "82d after Load anyway the file is still there with the same bytes and time, and the minted id went with the loose layer (pressed " + pressed82
+    + ", loaded " + CB.catalogLoaded() + ", ids " + looseIds().length + ", files " + JSON.stringify(madeFiles()) + ")");
+
+  edit("Over the catalog loaded");
+  await writeBranch();
+  const hexA = sha(Buffer.from("lamp-anew")).slice(0, 8);
+  check(listing(newDir).some(n => n === "anew-" + hexA + ".ec") && madeBytes.length > 0 && Buffer.compare(bytesMade(), madeBytes) === 0
+      && timeMade() === madeTime && madeFiles().join() === m2.join(),
+    "82e and the desk stops writing it: an edit over the catalog loaded writes that catalog's own file, and the one made from nothing keeps its bytes and its time");
+
+  /* ---- Clement's named edits for 82: the layer emptied again, a load landing while the identity is asked, and an id the
+     desk cannot keep. Each starts on the empty desk, whose minted id the load in 82d took with the layer. */
+  const toEmpty = () => { ST.lsDel(CT.E_CATALOG_STORE); CB.applyBootCatalog(); PK.resetPack(); PK.pack.baseCards = null; RB.rebuildCards(); };
+  const idsOnDisk = () => Object.keys(onDisk()).filter(k => /LooseId$/.test(k));
+  const landed = async () => { await tick(5); await tick(5); };
+  /* A write starts, and before the identity answers, Load anyway is pressed in the bubble the load raises. */
+  const loadDuring = async (id, fileName) => {
+    const run = writeBranch(), docWas = globalThis.document, made = [];
+    let pressed = false;
+    globalThis.document = new Proxy({}, { set: () => true, get: (t, k) => (k === "createElement" ? () => { const e = kept82(); made.push(e); return e; }
+      : k === "getElementById" ? () => null : k === "readyState" ? "complete" : k === "visibilityState" ? "visible"
+      : (k === "addEventListener" || k === "removeEventListener") ? noop : fake()) });
+    try {
+      CF.activateCatalog(CT.parseCatalogFile(JSON.stringify(Object.assign({}, origin, { id, rev: 1 }))), { file: fileName });
+      const bubble = made.filter(e => e.id === "eLoose")[0], go = bubble && bubble["q#eLooseLoad"];
+      if (go && typeof go.onclick === "function") { go.onclick(); pressed = true; }
+    } finally { globalThis.document = docWas; }
+    CB.applyBootCatalog(); PK.resetPack(); PK.pack.baseCards = null; RB.rebuildCards();
+    const answer = await run;
+    await landed();
+    return { pressed, answer, loaded: CB.catalogLoaded(), ids: looseIds().length + idsOnDisk().length };
+  };
+
+  /* The first write: nothing minted yet when the load lands. */
+  toEmpty();
+  make("Made, and a load lands");
+  const dirRace1 = listing(newDir).join();
+  const race1 = await loadDuring("lamp-race-one", "race-one.ec");
+  const folder1 = listing(newDir).join() === dirRace1 ? "unchanged" : "changed";
+  const race1Ok = race1.pressed && race1.loaded && race1.answer === false && race1.ids === 0 && folder1 === "unchanged";
+
+  toEmpty();
+  make("Made to be taken back");
+  await writeBranch();
+  const m3 = madeFiles().filter(n => m2.indexOf(n) < 0), id3 = looseIds()[0] || "", made3 = path.join(newDir, m3[0] || "none");
+  PK.pack.custom = []; PK.savePack(); RB.rebuildCards();
+  const r82f = await writeBranch();
+  check(m3.length === 1 && m3[0] === "Etiuda catalog-" + sha(Buffer.from(id3)).slice(0, 8) + ".ec" && !CF.deskBranchHolds() && r82f === true
+      && !fs.existsSync(made3) && looseIds().join() === id3,
+    "82f the empty desk emptied again: with nothing left that it made, the file it made is removed and the minted id is kept (answer " + r82f
+    + ", file present " + fs.existsSync(made3) + ", ids " + looseIds().length + ")");
+
+  /* The second write: the file made and its id kept when the load lands. */
+  make("Made again");
+  await writeBranch();
+  const bytes3 = (() => { try { return fs.readFileSync(made3); } catch { return Buffer.alloc(0); } })(), time3 = (() => { try { return fs.statSync(made3).mtimeMs; } catch { return 0; } })();
+  make("Made again, and a load lands");
+  const dirRace2 = listing(newDir).join();
+  const race2 = await loadDuring("lamp-race-two", "race-two.ec");
+  const kept3 = (() => { try { return Buffer.compare(fs.readFileSync(made3), bytes3) === 0 && fs.statSync(made3).mtimeMs === time3; } catch { return false; } })();
+  const folder2 = listing(newDir).join() === dirRace2 ? "unchanged" : "changed";
+  const race2Ok = race2.pressed && race2.loaded && race2.answer === false && race2.ids === 0 && bytes3.length > 0 && kept3 && folder2 === "unchanged";
+  check(race1Ok && race2Ok,
+    "82g a load landing while the identity is asked writes nothing: before the first write no id is minted and no file made, and after it the file made keeps its bytes and its time ("
+    + "first " + JSON.stringify(race1) + ", folder " + folder1 + "; second " + JSON.stringify(race2) + ", folder " + folder2 + ", file kept " + kept3 + ")");
+
+  /* An id that cannot be kept: desk.json read-only, the lever 2d uses, before the first write on the empty desk. */
+  toEmpty();
+  make("Made where the id cannot be kept");
+  await landed();
+  const dirRO = listing(newDir);
+  let rRO = null, idsRO = -1, dirDuring = "";
+  fs.chmodSync(DESK, 0o444);
+  try { rRO = await writeBranch(); idsRO = looseIds().length; dirDuring = listing(newDir).join(); }
+  finally { fs.chmodSync(DESK, 0o666); }
+  const rBackRO = await writeBranch();
+  await landed();
+  const newRO = listing(newDir).filter(n => dirRO.indexOf(n) < 0), idRO = looseIds()[0] || "";
+  check(rRO === false && idsRO === 0 && dirDuring === dirRO.join() && rBackRO === true && looseIds().length === 1 && idsOnDisk().length === 1
+      && newRO.length === 1 && newRO[0] === "Etiuda catalog-" + sha(Buffer.from(idRO)).slice(0, 8) + ".ec",
+    "82h where the minted id cannot be saved the desk makes no file and keeps no id, and once it can, the next write makes one file named by the id kept (answer "
+    + rRO + ", ids " + idsRO + ", then " + rBackRO + ", new files " + JSON.stringify(newRO) + ")");
 } catch (e) {
   failed++;
   console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));
