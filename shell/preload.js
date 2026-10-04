@@ -129,6 +129,10 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
      desk's own catalog file by its stem, an empty text taking it away. Nothing here hands out a key. */
   branchIdentity: (make) => ipcRenderer.invoke("etiuda:branch-identity", make === false ? false : true),
   writeBranch: (stem, text) => ipcRenderer.invoke("etiuda:branch-write", String(stem || ""), String(text || "")),
+  /* Asking to join the team a sealed catalog in the folder belongs to: "state", "ask" with the file's name and the
+     agent's, or "cancel", each answered {sealed, join, joined}; and that answer again whenever it changes. */
+  teamJoin: (op, file, name) => ipcRenderer.invoke("etiuda:team-join", String(op || ""), String(file || ""), String(name || "")),
+  onTeamJoin: (fn) => ipcRenderer.on("etiuda:team-join", (_e, v) => fn(v && typeof v === "object" ? v : {})),
   onStatsAsk: (fn) => ipcRenderer.on("etiuda:stats-ask", (_e, req) => fn(req && typeof req === "object" ? req : {})),
   /* The picker's questions, answered by the page as JSON text: what to show, what a query finds, and
      the text a copy puts on the clipboard, which the shell writes. */

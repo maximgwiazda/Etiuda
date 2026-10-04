@@ -57,6 +57,7 @@ import * as cardScore from "./modules/card-score.js";
 import * as searchBox from "./modules/search-box.js";
 import * as keydown from "./modules/keydown.js";
 import * as catalogOffer from "./modules/catalog-offer.js";
+import * as teamJoin from "./modules/team-join.js";
 import * as editionChangesMod from "./modules/edition-changes.js";
 import * as editionPanel from "./modules/edition-panel.js";
 import * as catalogTrustMod from "./modules/catalog-trust.js";
@@ -110,7 +111,7 @@ import * as host from "./modules/host.js";
 import * as hookSlots from "./modules/hooks.js";
 import * as restart from "./modules/restart.js";
 import * as pick from "./modules/pick.js";
-Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, cardCarry, langTabs, cardEditor, macrosJson, tabs, motion, fifth, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, editionChangesMod, editionPanel, catalogTrustMod, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots, restart, pick);
+Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, cardCarry, langTabs, cardEditor, macrosJson, tabs, motion, fifth, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, teamJoin, editionChangesMod, editionPanel, catalogTrustMod, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots, restart, pick);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place
@@ -251,6 +252,7 @@ function boot(){
     syncSampleMark: catalogFile.syncSampleMark,
     syncSaveNotice: personalPack.syncSaveNotice,
     importCatalogHere: catalogFile.importCatalogHere,
+    loadCatalogFromFolder: catalogOffer.loadCatalogFromFolder,
     offerPickedCatalog: catalogOffer.eOfferPickedCatalog,
     restartDesk: restart.restartDesk,
     runShortcut: runShortcut.runShortcut,
@@ -419,6 +421,8 @@ function boot(){
   // The catalog in use, named on the band, and the catalog found beside it offered
   catalogOffer.paintCatNow();
   catalogOffer.eOfferCatalogAtBoot();
+  // A sealed catalog in the folder this desk cannot open, and any request to join its team
+  teamJoin.wireTeamJoin();
   // The role wheel, which waits on the sample until a reply names somebody
   agent.syncRoleWheel();
   /* A FIRST RUN OPENS ON THE EMPTY DESK and the tour starts by itself once the logo has formed; it

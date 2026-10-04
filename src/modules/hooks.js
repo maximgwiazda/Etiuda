@@ -9,6 +9,7 @@ const SLOTS = [
   "syncSampleMark",
   "syncSaveNotice",
   "importCatalogHere",
+  "loadCatalogFromFolder",
   "offerPickedCatalog",
   "openManage",
   "mgCardsIn",

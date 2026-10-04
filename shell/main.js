@@ -205,7 +205,7 @@ const REQUEST_NAME = "etiuda-request.ereq";
 const TEAM_NAME = "etiuda-team.json";
 function isCatalogName(name) {
   const n = path.basename(String(name || ""));
-  return /\.ec$/i.test(n) || n === CATALOG_SCRIPT || n === REQUEST_NAME || n === TEAM_NAME;
+  return /\.ec$/i.test(n) || n === CATALOG_SCRIPT || n === REQUEST_NAME || n === TEAM_NAME || n === JOINS_NAME;
 }
 
 /* A catalog is read as data and never run, and the order of the two attempts is the trap: the
@@ -425,6 +425,7 @@ function catalogChanged(win) {
   tryAnswerRequest(win);
   tryHeldBranches();
   sendListing(win, false);
+  sendJoin(win);
   if (now === catalogJson) return;
   catalogJson = now;
   if (!now || !win || win.isDestroyed()) return;
@@ -587,6 +588,7 @@ function deskEnvelopeBody(keysText) {
     + (Object.keys(teamPins).length ? ',"teamPins":' + JSON.stringify(teamPins) : "")
     + (Object.keys(teamKeys).length ? ',"teamKeys":' + JSON.stringify(teamKeys) : "")
     + (teamOpened.size ? ',"teamOpened":' + JSON.stringify(Array.from(teamOpened)) : "")
+    + (teamJoin ? ',"teamJoin":' + JSON.stringify(teamJoin) : "")
     + (deskRefused.length ? ',"refused":' + JSON.stringify(deskRefused) : "")
     + ',"keys":' + keysText + "}";
 }
@@ -829,6 +831,57 @@ function unwrapTeamKey(skR, wrap, teamId, epoch, deskId) {
   const key = hpkeOpen(skR, Buffer.from(enc, "hex"), teamWrapInfo(String(teamId), epoch), Buffer.from(String(deskId), "utf8"),
     Buffer.from(ct, "hex"));
   return key && key.length === 32 ? key : null;
+}
+
+/* ---- joining a team: the desk's request, the lead's opening, and the code both sides read --------
+   Commit then reveal: a request commits to the desk's nonce before the lead's opening exists, and the desk
+   reveals it only against the one opening it took, so a request made to match a code has one chance in a
+   million whatever it computes. The code covers the team, both desk keys, the lead's key and both nonces.
+   Studio slices these to read a request and to say its code. */
+const JOIN_PREFIX = "etiuda-desk-join\n";
+const JOIN_KIND = "etiuda-join", JOINS_KIND = "etiuda-team-joins", JOINS_NAME = "etiuda-team-joins.json";
+const JOIN_HEX_RE = /^[0-9a-f]{64}$/;
+function joinHash(parts) {
+  return crypto.createHash("sha256").update(Buffer.from(JOIN_PREFIX + parts.map(String).join("\n"), "utf8")).digest();
+}
+/* The commitment a request carries, in hex: the team, the desk's two keys and its nonce. */
+function joinCommit(teamId, key, box, nonce) {
+  return joinHash(["commit", teamId, key, box, nonce]).toString("hex");
+}
+/* Six digits, or "" where any part is malformed. */
+function joinCode(teamId, key, box, lead, deskNonce, leadNonce) {
+  const parts = [key, box, lead, deskNonce, leadNonce];
+  if (!SEALED_TEAM_RE.test(String(teamId)) || !parts.every(p => JOIN_HEX_RE.test(String(p)))) return "";
+  return String(joinHash(["code", teamId].concat(parts)).readUIntBE(0, 6) % 1000000).padStart(6, "0");
+}
+function joinSignedBytes(doc) { return Buffer.concat([Buffer.from(JOIN_PREFIX, "utf8"), signedBytesOf(doc)]); }
+/* Whether a request read from desks/<folder>/join.json is that desk's own, signed under the join prefix, and
+   holds together: a revealed nonce meets the commitment, and an opening is taken only with a reveal. */
+function joinGenuine(doc, folder) {
+  const d = doc && doc.desk, sig = doc && doc.sig, o = doc && doc.opened;
+  try {
+    return !!folder && +doc.format === 1 && doc.kind === JOIN_KIND && SEALED_TEAM_RE.test(String(doc.team))
+      && !!d && typeof d === "object" && d.id === folder && /^k-[0-9a-f]{16}$/.test(d.id) && JOIN_HEX_RE.test(String(d.key))
+      && JOIN_HEX_RE.test(String(d.box)) && branchIdOf(d.key) === d.id && (d.name === undefined || typeof d.name === "string")
+      && JOIN_HEX_RE.test(String(doc.commit))
+      && (doc.reveal === undefined || (JOIN_HEX_RE.test(String(doc.reveal)) && joinCommit(doc.team, d.key, d.box, doc.reveal) === doc.commit))
+      && (o === undefined || (doc.reveal !== undefined && !!o && typeof o === "object" && !!o.lead && typeof o.lead.keyId === "string"
+        && JOIN_HEX_RE.test(String(o.lead.public)) && JOIN_HEX_RE.test(String(o.nonce))))
+      && !!sig && sig.alg === "Ed25519" && sig.keyId === d.id && /^[0-9a-f]{128}$/.test(String(sig.value))
+      && crypto.verify(null, joinSignedBytes(doc), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(d.key, "hex")]),
+        format: "der", type: "spki" }), Buffer.from(sig.value, "hex"));
+  } catch { return false; }
+}
+/* What the lead's file of openings, beside the team file, says to one request: {lead, nonce}, {refused: true},
+   or null. It is not signed; the code covers the lead's key and nonce, so a forged opening shows a wrong code. */
+function joinOpening(joins, teamId, deskId, commit) {
+  const lead = joins && joins.lead, open = joins && Array.isArray(joins.open) ? joins.open : [];
+  if (!joins || +joins.format !== 1 || joins.kind !== JOINS_KIND || joins.team !== teamId || !lead || typeof lead.keyId !== "string"
+    || !JOIN_HEX_RE.test(String(lead.public))) return null;
+  const e = open.find(x => !!x && x.desk === deskId && x.commit === commit);
+  if (!e) return null;
+  if (e.refused === true) return { refused: true };
+  return JOIN_HEX_RE.test(String(e.nonce)) ? { lead: { keyId: lead.keyId, public: lead.public }, nonce: e.nonce } : null;
 }
 
 /* ---- the desk's branch: an identity of its own, and its own file in the catalog folder --------
@@ -1136,7 +1189,8 @@ function heedTeam() {
   const root = catalogFolder();
   if (!folderAnswers(root)) return;
   const file = path.join(root, TEAM_NAME);
-  const stamp = [file, fileStamp(file), fileStamp(path.join(root, RING_NAME)), deskBranch ? deskBranch.box.pub : ""].join("|");
+  const stamp = [file, fileStamp(file), fileStamp(path.join(root, RING_NAME)), deskBranch ? deskBranch.box.pub : "",
+    teamJoin && teamJoin.opened ? teamJoin.team + ":" + teamJoin.opened.lead.public : ""].join("|");
   if (stamp === teamStamp) return;
   /* The stamp is a verdict on the text, so a read that fails or a key that is not kept leaves it unset and the next
      call reads again. */
@@ -1150,6 +1204,11 @@ function heedTeam() {
   const lead = { keyId: doc.lead.keyId, public: doc.lead.public }, pin = teamPins[doc.id];
   if (pin && (pin.keyId !== lead.keyId || pin.public !== lead.public)) {
     teamSay(file + " is signed by a key other than the lead's this desk trusts for team " + doc.id + ", so nothing in it is used");
+    return;
+  }
+  const asked = !pin && teamJoin && teamJoin.team === doc.id && teamJoin.opened ? teamJoin.opened.lead : null;
+  if (asked && (asked.keyId !== lead.keyId || asked.public !== lead.public)) {
+    teamSay(file + " is signed by a key other than the lead this desk asked to join team " + doc.id + ", so nothing in it is used");
     return;
   }
   const key = ownTeamKey(doc);
@@ -1178,6 +1237,124 @@ function teamOpen(data) {
   let key = null;
   try { key = Buffer.from(safeStorage.decryptString(Buffer.from(sealed, "base64")), "base64"); } catch { return null; }
   return openSealed(key, data);
+}
+
+/* ---- this desk asking to join a team: one request at a time, made by the agent's press ---------------
+   The request sits in the desk's own folder; the nonce it commits to stays in the desk envelope until the
+   lead's opening for that very commitment is read, and is then revealed against that opening alone, which
+   is kept: a later opening is never answered, and the lead it names is the one a first admission must carry. */
+let teamJoin = null;                            // {team, file, nonce, commit, asked, held, name, opened?, refused?}
+let joinSent = "";
+function newestEpoch(team) {
+  return Object.keys(teamKeys[team] || {}).reduce((hi, n) => Math.max(hi, +n || 0), 0);
+}
+/* The newest envelope in the catalog folder whose epoch this desk keeps no key for, as {file, team}, or null. */
+function sealedOutside() {
+  heedTeam();
+  for (const f of ecFilesIn(catalogFolder())) {
+    let d = null;
+    try { if (fs.statSync(f).size <= BRANCH_TEXT_MAX) d = catalogPayload(fs.readFileSync(f, "utf8")).data; } catch { continue; }
+    if (!d || d.kind !== SEALED_KIND || !SEALED_TEAM_RE.test(String(d.team)) || !Number.isInteger(d.epoch)) continue;
+    if (!(teamKeys[d.team] && teamKeys[d.team][d.epoch])) return { file: path.basename(f), team: String(d.team) };
+  }
+  return null;
+}
+function joinFile() {
+  return path.join(catalogFolder(), "desks", branchIdOf(deskBranch.sign.pub), "join.json");
+}
+/* Signs the request with the desk's key under the join prefix and writes it by replacement; throws what stopped it. */
+function writeJoin(doc) {
+  const key = openPrivate(deskBranch.sign.priv);
+  if (!key) throw new Error("the desk's key could not be opened");
+  doc.sig = { alg: "Ed25519", keyId: branchIdOf(deskBranch.sign.pub) };
+  doc.sig.value = crypto.sign(null, joinSignedBytes(doc), key).toString("hex");
+  const file = joinFile();
+  for (const dir of [path.dirname(path.dirname(file)), path.dirname(file)]) {
+    try { fs.mkdirSync(dir); } catch (e) { if (e.code !== "EEXIST") throw e; }
+  }
+  writeReplacing(file, JSON.stringify(doc, null, 1) + "\n");
+}
+function joinRequestDoc(j, reveal) {
+  const me = branchIdentity(false), desk = { id: me.id, key: me.key, box: me.box };
+  if (j.name) desk.name = j.name;
+  const doc = { format: 1, kind: JOIN_KIND, team: j.team, desk: desk, date: new Date(j.asked).toISOString(), commit: j.commit };
+  if (reveal) { doc.reveal = j.nonce; doc.opened = reveal; }
+  return doc;
+}
+function askJoin(file, name) {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  const me = branchIdentity(), root = catalogFolder(), at = path.join(root, path.basename(String(file || "")));
+  if (!me || !folderAnswers(root)) return joinView();
+  const out = sealedOutside();
+  let d = null;
+  try { d = catalogPayload(fs.readFileSync(at, "utf8")).data; } catch { return joinView(); }
+  if (!out || !d || d.kind !== SEALED_KIND || !SEALED_TEAM_RE.test(String(d.team)) || (teamKeys[d.team] && teamKeys[d.team][d.epoch]))
+    return joinView();
+  const nonce = crypto.randomBytes(32).toString("hex"), team = String(d.team);
+  const j = { team: team, file: path.basename(at), nonce: nonce, commit: joinCommit(team, me.key, me.box, nonce), asked: Date.now(),
+              held: newestEpoch(team), name: String(name || "").trim().slice(0, 120) };
+  try { writeJoin(joinRequestDoc(j, null)); }
+  catch (e) { console.error("etiuda: the request to join could not be written - " + e.message); return joinView(); }
+  teamJoin = j;
+  persistDeskEnvelope();
+  return joinView();
+}
+function cancelJoin() {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  if (teamJoin && deskBranch) { try { fs.unlinkSync(joinFile()); } catch { /* gone already, or the share is away */ } }
+  teamJoin = null;
+  persistDeskEnvelope();
+  return joinView();
+}
+/* Moves the request on and says where it stands: admitted once this desk keeps a newer key for the team than when it
+   asked, revealed once the lead's opening for its commitment is read and the reveal written, refused where the lead said so. */
+function joinView() {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  const view = { sealed: null, join: null, joined: null };
+  const root = catalogFolder();
+  if (!folderAnswers(root)) return view;
+  heedTeam();
+  const j = teamJoin, me = branchIdentity(false);
+  if (j && me && newestEpoch(j.team) > j.held) {
+    try { fs.unlinkSync(joinFile()); } catch { /* gone already */ }
+    teamJoin = null;
+    persistDeskEnvelope();
+    view.joined = { team: j.team, file: j.file };
+  } else if (j && me) {
+    if (!j.opened && !j.refused) {
+      let joins = null;
+      try { joins = JSON.parse(fs.readFileSync(path.join(root, JOINS_NAME), "utf8")); } catch { /* none yet */ }
+      const got = joinOpening(joins, j.team, me.id, j.commit);
+      if (got && got.refused) { j.refused = true; persistDeskEnvelope(); }
+      else if (got) {
+        try { writeJoin(joinRequestDoc(j, got)); j.opened = got; persistDeskEnvelope(); }
+        catch (e) { console.error("etiuda: the request to join could not be answered - " + e.message); }
+      }
+    }
+    view.join = { team: j.team, file: j.file, asked: j.asked, name: j.name,
+                  state: j.refused ? "refused" : j.opened ? "code" : "waiting",
+                  code: j.opened ? joinCode(j.team, me.key, me.box, j.opened.lead.public, j.nonce, j.opened.nonce) : "" };
+  }
+  view.sealed = sealedOutside();
+  return view;
+}
+function sendJoin(win) {
+  if (!win || win.isDestroyed()) return;
+  const v = joinView(), said = JSON.stringify(v);
+  if (said === joinSent) return;
+  joinSent = said;
+  win.webContents.send("etiuda:team-join", v);
+}
+/* The request as the desk envelope kept it, or null where any field is not what askJoin and joinView write. */
+function joinKept(j) {
+  const o = j && j.opened;
+  const ok = !!j && typeof j === "object" && SEALED_TEAM_RE.test(String(j.team)) && typeof j.file === "string"
+    && JOIN_HEX_RE.test(String(j.nonce)) && JOIN_HEX_RE.test(String(j.commit)) && Number.isFinite(j.asked)
+    && Number.isInteger(j.held) && j.held >= 0 && typeof j.name === "string"
+    && (o === undefined || (!!o && !!o.lead && typeof o.lead.keyId === "string" && JOIN_HEX_RE.test(String(o.lead.public))
+      && JOIN_HEX_RE.test(String(o.nonce))))
+    && (j.refused === undefined || j.refused === true);
+  return ok ? j : null;
 }
 
 function deskFile() { return path.join(app.getPath("userData"), "desk.json"); }
@@ -1289,6 +1466,7 @@ function readDesk() {
       Object.keys(k).forEach(n => { if (/^[1-9][0-9]*$/.test(n) && typeof k[n] === "string" && k[n]) (teamKeys[t] = teamKeys[t] || {})[n] = k[n]; });
     });
     if (doc && Array.isArray(doc.teamOpened)) doc.teamOpened.forEach(c => { if (typeof c === "string" && c) teamOpened.add(c); });
+    teamJoin = joinKept(doc && doc.teamJoin);
     ensureDeskId();
     console.log("etiuda: desk read from " + file + ", " + Object.keys(keys).length + " keys");
     return keys;
@@ -1799,6 +1977,8 @@ ipcMain.handle("etiuda:stats-write", (e, text) => {
 /* The desk's branch: its public identity, and the write of its own file. See writeBranch. */
 ipcMain.handle("etiuda:branch-identity", (e, make) => (fromEngine(e) ? branchIdentity(make === false ? false : true) : null));
 ipcMain.handle("etiuda:branch-write", (e, stem, text) => (fromEngine(e) ? writeBranch(stem, text) : { ok: false }));
+ipcMain.handle("etiuda:team-join", (e, op, file, name) => (!fromEngine(e) ? null
+  : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : joinView()));
 
 /* The engine calls no OS API, so the folder picker is the shell's. The CAPTION comes from the
    page: the shell has no t(), and a dialog captioned in two languages at once is captioned in

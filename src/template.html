@@ -2001,6 +2001,18 @@ code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-d
 .empty-cat::before{content:none}
 .empty .empty-ic{display:block;width:48px;height:48px;margin:0 auto 16px;vertical-align:0;
   opacity:.4;stroke-width:1.2}
+/* A sealed catalog's empty desk and its bubble: the title with its lock, the code in two threes, and six drawn places
+   while the code is still to come. */
+.e-join-t{font-size:19px;font-weight:600;color:var(--ink);display:inline-flex;align-items:center;gap:8px}
+.e-join-t .ic{color:var(--accent)}
+.e-join p{margin:8px auto 0;max-width:620px}
+.e-join-code{font:600 34px var(--mono);color:var(--ink);margin:18px 0 6px;display:flex;justify-content:center;gap:.6em}
+.e-join-wait i{display:inline-block;width:.62em;height:3px;margin:0 .1em;vertical-align:middle;border-radius:2px;background:var(--dim);opacity:.6}
+.e-join-meta{font:12px var(--mono);opacity:.75;margin-top:8px}
+.e-join-acts{display:flex;justify-content:center;gap:8px;margin-top:16px}
+.e-join-bub .e-join-code{color:var(--bub-ink);font-size:28px;justify-content:flex-start;margin:8px 0 2px}
+.e-join-bub .e-join-wait i{background:var(--bub-dim)}
+.e-join-bub .e-join-meta{color:var(--bub-dim);margin:0 0 8px}
 
 /* Intent side rail - shown when body.rail-on (user toggle; no min-width gate) */
 .rail-head{display:flex;align-items:center;justify-content:space-between;gap:8px;

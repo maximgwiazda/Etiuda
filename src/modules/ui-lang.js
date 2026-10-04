@@ -921,6 +921,22 @@ UI_STRINGS.pl={
   "The catalog you load stays in this browser, ready whenever you come back.":"Wczytany katalog zostaje w tej przeglądarce i czeka na powrót.",
   "Load catalog…":"Wczytaj katalog…",
   "The catalog could not be loaded:":"Nie udało się wczytać katalogu:",
+  "{FILE} is sealed for its team":"{FILE} jest zaszyfrowany dla swojego zespołu",
+  "Once the team's lead lets this desk in, the catalog opens here by itself.":"Gdy lider zespołu wpuści to stanowisko, katalog otworzy się tutaj sam.",
+  "Asks as {NAME}, the name in Settings.":"Prośba pójdzie jako {NAME}, pod nazwą z Ustawień.",
+  "this desk":"to stanowisko",
+  "Ask to join":"Poproś o dołączenie",
+  "Load another catalog":"Wczytaj inny katalog",
+  "Waiting for the lead to open the request":"Prośba czeka, aż lider ją otworzy",
+  "The code to read to them appears here as soon as they do.":"Gdy to zrobi, pojawi się tu kod do podania.",
+  "Read this code to the team's lead":"Podaj ten kod liderowi zespołu",
+  "They type it in Studio, and the catalog opens here once they let this desk in.":"Lider wpisze go w Studio, a po wpuszczeniu stanowiska katalog otworzy się tutaj.",
+  "{NAME}, asked at {TIME}":"{NAME}, prośba z {TIME}",
+  "Cancel the request":"Wycofaj prośbę",
+  "The lead turned the request down":"Lider zespołu odrzucił prośbę",
+  "Asking again sends a new request.":"Ponowna prośba trafi do lidera jako nowa.",
+  "Ask again":"Poproś ponownie",
+  "Hide":"Ukryj",
   "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.":"Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze."
 };
 // Is this a language this build carries? The table itself stays private to this file.

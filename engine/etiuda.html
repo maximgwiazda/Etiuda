@@ -2001,6 +2001,18 @@ code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-d
 .empty-cat::before{content:none}
 .empty .empty-ic{display:block;width:48px;height:48px;margin:0 auto 16px;vertical-align:0;
   opacity:.4;stroke-width:1.2}
+/* A sealed catalog's empty desk and its bubble: the title with its lock, the code in two threes, and six drawn places
+   while the code is still to come. */
+.e-join-t{font-size:19px;font-weight:600;color:var(--ink);display:inline-flex;align-items:center;gap:8px}
+.e-join-t .ic{color:var(--accent)}
+.e-join p{margin:8px auto 0;max-width:620px}
+.e-join-code{font:600 34px var(--mono);color:var(--ink);margin:18px 0 6px;display:flex;justify-content:center;gap:.6em}
+.e-join-wait i{display:inline-block;width:.62em;height:3px;margin:0 .1em;vertical-align:middle;border-radius:2px;background:var(--dim);opacity:.6}
+.e-join-meta{font:12px var(--mono);opacity:.75;margin-top:8px}
+.e-join-acts{display:flex;justify-content:center;gap:8px;margin-top:16px}
+.e-join-bub .e-join-code{color:var(--bub-ink);font-size:28px;justify-content:flex-start;margin:8px 0 2px}
+.e-join-bub .e-join-wait i{background:var(--bub-dim)}
+.e-join-bub .e-join-meta{color:var(--bub-dim);margin:0 0 8px}
 
 /* Intent side rail - shown when body.rail-on (user toggle; no min-width gate) */
 .rail-head{display:flex;align-items:center;justify-content:space-between;gap:8px;
@@ -4705,6 +4717,7 @@ What you type stays in this browser only.`;
     "syncSampleMark",
     "syncSaveNotice",
     "importCatalogHere",
+    "loadCatalogFromFolder",
     "offerPickedCatalog",
     "openManage",
     "mgCardsIn",
@@ -6477,6 +6490,22 @@ What you type stays in this browser only.`;
     "The catalog you load stays in this browser, ready whenever you come back.": "Wczytany katalog zostaje w tej przeglądarce i czeka na powrót.",
     "Load catalog…": "Wczytaj katalog…",
     "The catalog could not be loaded:": "Nie udało się wczytać katalogu:",
+    "{FILE} is sealed for its team": "{FILE} jest zaszyfrowany dla swojego zespołu",
+    "Once the team's lead lets this desk in, the catalog opens here by itself.": "Gdy lider zespołu wpuści to stanowisko, katalog otworzy się tutaj sam.",
+    "Asks as {NAME}, the name in Settings.": "Prośba pójdzie jako {NAME}, pod nazwą z Ustawień.",
+    "this desk": "to stanowisko",
+    "Ask to join": "Poproś o dołączenie",
+    "Load another catalog": "Wczytaj inny katalog",
+    "Waiting for the lead to open the request": "Prośba czeka, aż lider ją otworzy",
+    "The code to read to them appears here as soon as they do.": "Gdy to zrobi, pojawi się tu kod do podania.",
+    "Read this code to the team's lead": "Podaj ten kod liderowi zespołu",
+    "They type it in Studio, and the catalog opens here once they let this desk in.": "Lider wpisze go w Studio, a po wpuszczeniu stanowiska katalog otworzy się tutaj.",
+    "{NAME}, asked at {TIME}": "{NAME}, prośba z {TIME}",
+    "Cancel the request": "Wycofaj prośbę",
+    "The lead turned the request down": "Lider zespołu odrzucił prośbę",
+    "Asking again sends a new request.": "Ponowna prośba trafi do lidera jako nowa.",
+    "Ask again": "Poproś ponownie",
+    "Hide": "Ukryj",
     "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.": "Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze."
   };
   function uiLangKnown(l) {
@@ -17507,6 +17536,167 @@ What you type stays in this browser only.`;
     startMark(k);
   }
 
+  // src/modules/team-join.js
+  var team_join_exports = {};
+  __export(team_join_exports, {
+    closeJoinBubble: () => closeJoinBubble,
+    teamJoinEmptyHtml: () => teamJoinEmptyHtml,
+    teamJoinShown: () => teamJoinShown,
+    wireTeamJoin: () => wireTeamJoin,
+    wireTeamJoinEmpty: () => wireTeamJoinEmpty
+  });
+  var joinNow = null;
+  var joinShut = "";
+  function eHasJoin() {
+    const h = eHost();
+    return !!h && typeof h.teamJoin === "function";
+  }
+  function joinAsk(op, file, name) {
+    if (!eHasJoin()) return Promise.resolve(null);
+    try {
+      return Promise.resolve(eHost().teamJoin(op, file || "", name || "")).then(joinTook, () => null);
+    } catch (e) {
+      return Promise.resolve(null);
+    }
+  }
+  function teamJoinShown() {
+    return !!joinNow && (!!joinNow.join || !!joinNow.sealed);
+  }
+  function joinTook(v) {
+    const s = v && typeof v === "object" ? v : {};
+    const was = JSON.stringify(joinNow);
+    joinNow = {
+      sealed: s.sealed && s.sealed.file ? { file: String(s.sealed.file), team: String(s.sealed.team || "") } : null,
+      join: s.join && s.join.file ? {
+        file: String(s.join.file),
+        state: String(s.join.state || ""),
+        code: String(s.join.code || ""),
+        asked: +s.join.asked || 0,
+        name: String(s.join.name || "")
+      } : null
+    };
+    if (s.joined && s.joined.file) {
+      closeJoinBubble();
+      hooks.loadCatalogFromFolder(String(s.joined.file), 0);
+    }
+    if (JSON.stringify(joinNow) !== was) paintJoin();
+    return joinNow;
+  }
+  function wireTeamJoin() {
+    if (!eHasJoin()) return;
+    if (typeof eHost().onTeamJoin === "function") eHost().onTeamJoin(joinTook);
+    joinAsk("state");
+  }
+  function paintJoin() {
+    if (wholeThingEmpty()) {
+      closeJoinBubble();
+      hooks.render();
+      return;
+    }
+    if (teamJoinShown() && JSON.stringify(joinNow) !== joinShut) openJoinBubble();
+    else if (!teamJoinShown()) closeJoinBubble();
+  }
+  function joinTime(ms) {
+    const d = new Date(ms || Date.now());
+    return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
+  function joinCodeHtml(code) {
+    return code ? '<div class="e-join-code"><span>' + esc(code.slice(0, 3)) + "</span><span>" + esc(code.slice(3)) + "</span></div>" : '<div class="e-join-code e-join-wait" aria-hidden="true"><span><i></i><i></i><i></i></span><span><i></i><i></i><i></i></span></div>';
+  }
+  function joinParts() {
+    const j = joinNow && joinNow.join, s = joinNow && joinNow.sealed, who = agentName() || t("this desk");
+    const meta = j ? '<div class="e-join-meta">' + esc(t("{NAME}, asked at {TIME}").split("{NAME}").join(j.name || who).split("{TIME}").join(joinTime(j.asked))) + "</div>" : "";
+    if (j && j.state === "code") return {
+      title: t("Read this code to the team's lead"),
+      line: t("They type it in Studio, and the catalog opens here once they let this desk in."),
+      body: joinCodeHtml(j.code) + meta,
+      acts: [["cancel", t("Cancel the request")]]
+    };
+    if (j && j.state === "refused") return {
+      title: t("The lead turned the request down"),
+      line: t("Asking again sends a new request."),
+      body: meta,
+      acts: [["ask", t("Ask again")], ["load", t("Load another catalog")]]
+    };
+    if (j) return {
+      title: t("Waiting for the lead to open the request"),
+      line: t("The code to read to them appears here as soon as they do."),
+      body: joinCodeHtml("") + meta,
+      acts: [["cancel", t("Cancel the request")]]
+    };
+    return {
+      title: t("{FILE} is sealed for its team").split("{FILE}").join(s ? s.file : ""),
+      line: t("Once the team's lead lets this desk in, the catalog opens here by itself."),
+      body: '<div class="e-join-meta">' + esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who)) + "</div>",
+      acts: [["ask", t("Ask to join")], ["load", t("Load another catalog")]]
+    };
+  }
+  function joinAct(act) {
+    const j = joinNow && joinNow.join, s = joinNow && joinNow.sealed;
+    if (act === "ask") return joinAsk("ask", j && j.file || s && s.file || "", agentName());
+    if (act === "cancel") return joinAsk("cancel");
+    if (act === "load") return Promise.resolve(hooks.importCatalogHere());
+    return Promise.resolve(null);
+  }
+  function teamJoinEmptyHtml() {
+    if (!teamJoinShown()) return "";
+    const p = joinParts();
+    return '<div class="empty e-join"><div class="e-join-t">' + ICON_LOCK + esc(p.title) + "</div><p>" + esc(p.line) + "</p>" + p.body + '<div class="e-join-acts">' + p.acts.map((a) => '<button type="button" class="btn" data-join="' + a[0] + '">' + esc(a[1]) + "</button>").join("") + "</div></div>";
+  }
+  function wireTeamJoinEmpty(root) {
+    if (!root) return;
+    root.querySelectorAll("[data-join]").forEach((b) => {
+      b.onclick = () => joinAct(b.getAttribute("data-join"));
+    });
+  }
+  var joinBubbleClose = null;
+  function closeJoinBubble() {
+    if (joinBubbleClose) joinBubbleClose();
+  }
+  function openJoinBubble() {
+    closeJoinBubble();
+    if (document.getElementById("eCatalogOffer")) return;
+    const p = joinParts();
+    const wrap = document.createElement("div");
+    wrap.className = "bub bub-ask e-offer e-join-bub";
+    wrap.id = "eTeamJoin";
+    wrap.setAttribute("role", "dialog");
+    wrap.setAttribute("aria-labelledby", "ejTitle");
+    wrap.innerHTML = '<h3 id="ejTitle">' + esc(p.title) + '</h3><p class="ec-sub">' + esc(p.line) + "</p>" + p.body + '<div class="tour-actions"><button type="button" class="btn" data-join="hide">' + esc(t("Hide")) + "</button>" + p.acts.map((a, i) => '<button type="button" class="btn' + (i ? "" : " primary") + '" data-join="' + a[0] + '">' + esc(a[1]) + "</button>").join("") + "</div>";
+    cutLeaves();
+    document.body.appendChild(wrap);
+    const place = () => {
+      const at = document.getElementById("catNow"), r = at && at.getBoundingClientRect();
+      placeBubble(wrap, r && r.width ? { top: r.top, left: r.left, width: r.width, height: r.height } : { top: 0, left: innerWidth - 24, width: 0, height: 40 }, { width: 340 });
+    };
+    place();
+    addEventListener("resize", place);
+    const close = () => {
+      removeEventListener("resize", place);
+      dismissNode(wrap);
+      if (joinBubbleClose === close) joinBubbleClose = null;
+    };
+    joinBubbleClose = close;
+    const hide = () => {
+      joinShut = JSON.stringify(joinNow);
+      close();
+    };
+    wrap.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      hide();
+    });
+    wrap.querySelectorAll("[data-join]").forEach((b) => {
+      const act = b.getAttribute("data-join");
+      b.onclick = () => {
+        if (act === "hide") return hide();
+        close();
+        joinAct(act);
+      };
+    });
+  }
+
   // src/modules/render.js
   function liftByUse(hits, sc) {
     const use = statsRecentUse(pack);
@@ -17565,7 +17755,8 @@ What you type stays in this browser only.`;
     if (!shown.length) {
       const oneCat = cats.length === 1 ? cats[0] : null;
       const afterBtn = (c) => (/^[,.;:!?]/.test(c) ? "" : " ") + esc(c);
-      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>" : wholeThingEmpty() ? '<div class="empty empty-desk">' + esc(t("Etiuda is ready for its first replies.")) + "<br><br>" + esc(t("Add a card to a category, or")) + ' <button type="button" class="btn" id="emptyLoad">' + esc(t("load a catalog")) + "</button>" + afterBtn(t("you already have.")) + '<br><br><span style="font-size:12.5px;opacity:.75">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with the button above.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with the button above.")) : esc(t("The catalog you load stays in this browser, ready whenever you come back."))) + "</span></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
+      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>" : wholeThingEmpty() && teamJoinShown() ? teamJoinEmptyHtml() : wholeThingEmpty() ? '<div class="empty empty-desk">' + esc(t("Etiuda is ready for its first replies.")) + "<br><br>" + esc(t("Add a card to a category, or")) + ' <button type="button" class="btn" id="emptyLoad">' + esc(t("load a catalog")) + "</button>" + afterBtn(t("you already have.")) + '<br><br><span style="font-size:12.5px;opacity:.75">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with the button above.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with the button above.")) : esc(t("The catalog you load stays in this browser, ready whenever you come back."))) + "</span></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
+      wireTeamJoinEmpty(list.querySelector(".e-join"));
       const ei = $("#emptyLoad");
       if (ei) ei.onclick = hooks.importCatalogHere;
       const ef = $("#emptyCatFolder");
@@ -24716,7 +24907,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, edition_changes_exports, edition_panel_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, team_join_exports, edition_changes_exports, edition_panel_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
@@ -24841,6 +25032,7 @@ What you type stays in this browser only.`;
       syncSampleMark,
       syncSaveNotice,
       importCatalogHere,
+      loadCatalogFromFolder,
       offerPickedCatalog: eOfferPickedCatalog,
       restartDesk,
       runShortcut
@@ -24941,6 +25133,7 @@ What you type stays in this browser only.`;
     syncSampleMark();
     paintCatNow();
     eOfferCatalogAtBoot();
+    wireTeamJoin();
     syncRoleWheel();
     maybeStartTour();
     wireHostCatalogWatch();
