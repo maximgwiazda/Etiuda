@@ -19206,6 +19206,10 @@ What you type stays in this browser only.`;
       });
       own.id = uid("u:");
       delete own.retired;
+      if (Array.isArray(own.next)) {
+        own.next = own.next.filter((e) => e && alive.has(e.to));
+        if (!own.next.length) delete own.next;
+      }
       if (lost[id]) {
         lost[own.id] = lost[id];
         delete lost[id];

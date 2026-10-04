@@ -2018,6 +2018,67 @@ const CARD_B = {
         return eq((own.intents || []).join(",") + "|" + asideEn(own.id) + "|" + Object.keys(aside() || {}).length,
           "t:t-fourth|a request reworded later|1");
       });
+    /* A card's next links name other cards by id. The own card an edit becomes keeps those that name
+       a card the edition or the desk still holds, in their order, and none that name the card it was. */
+    const stays = { id: "c-stays", c: "gen", t: "Invented stays", en: "x" };
+    const nextOf = o => JSON.stringify(o.next === undefined ? "absent" : o.next);
+    check("card-carry.js", "an own card rescued from an edit keeps the links that name a card still alive, in order, and drops the rest",
+      () => {
+        clear(); applyOld();
+        P.BASE_M.push({ id: "c-gone", c: "gen", t: "Invented gone", en: "x" });
+        P.pack.custom = [{ id: "u:mine", c: "gen", t: "Invented mine", en: "x" }];
+        P.pack.overrides = { "c-gone": { en: "an edit", next: [{ to: "u:mine" }, { to: "c-away" }, { to: "c-stays", cue: "extra" }] } };
+        CC.carryCardLayer(arriving([stays]));
+        const own = P.pack.custom[1] || {};
+        return eq(nextOf(own), '[{"to":"u:mine"},{"to":"c-stays","cue":"extra"}]');
+      });
+    check("card-carry.js", "and it never links to itself, under its new id or the one it had",
+      () => {
+        clear(); applyOld();
+        P.BASE_M.push({ id: "c-gone", c: "gen", t: "Invented gone", en: "x" });
+        P.pack.overrides = { "c-gone": { en: "an edit", next: [{ to: "c-gone" }, { to: "c-stays" }] } };
+        CC.carryCardLayer(arriving([stays]));
+        const own = P.pack.custom[0] || {};
+        const to = (own.next || []).map(e => e.to);
+        return eq([/^u:/.test(own.id || ""), to.indexOf(own.id) > -1, to.indexOf("c-gone") > -1, to.join(",")].join("|"),
+          "true|false|false|c-stays");
+      });
+    check("card-carry.js", "an own card whose every link is gone has no next at all, not an empty list",
+      () => {
+        clear(); applyOld();
+        P.BASE_M.push({ id: "c-gone", c: "gen", t: "Invented gone", en: "x" });
+        P.pack.overrides = { "c-gone": { en: "an edit", next: [{ to: "c-away" }, { to: "c-also-away" }] } };
+        CC.carryCardLayer(arriving([stays]));
+        const own = P.pack.custom[0] || {};
+        return eq(P.pack.custom.length + "|" + nextOf(own), '1|"absent"');
+      });
+    check("card-carry.js", "the links the retired card itself held, which the edit did not touch, are kept to the same rule",
+      () => {
+        clear(); applyOld();
+        P.BASE_M.push({ id: "c-gone", c: "gen", t: "Invented gone", en: "x", next: [{ to: "c-away" }, { to: "c-stays" }] });
+        P.pack.overrides = { "c-gone": { en: "an edit" } };
+        CC.carryCardLayer(arriving([stays]));
+        const own = P.pack.custom[0] || {};
+        return eq(nextOf(own), '[{"to":"c-stays"}]');
+      });
+    check("card-carry.js", "CONTROL: an edit that names no links leaves an own card with none",
+      () => {
+        clear(); applyOld();
+        P.BASE_M.push({ id: "c-gone", c: "gen", t: "Invented gone", en: "x" });
+        P.pack.overrides = { "c-gone": { en: "an edit" } };
+        CC.carryCardLayer(arriving([stays]));
+        const own = P.pack.custom[0] || {};
+        return eq(P.pack.custom.length + "|" + nextOf(own), '1|"absent"');
+      });
+    check("card-carry.js", "CONTROL: a card the edition still holds keeps its edit, links to cards the edition lacks included, and no own card is made",
+      () => {
+        clear(); applyOld();
+        P.BASE_M.push(stays);
+        const ov = { "c-stays": { en: "an edit", next: [{ to: "c-away" }, { to: "c-stays" }] } };
+        P.pack.overrides = JSON.parse(JSON.stringify(ov));
+        CC.carryCardLayer(arriving([stays]));
+        return eq(P.pack.custom.length + "|" + JSON.stringify(P.pack.overrides), "0|" + JSON.stringify(ov));
+      });
     check("card-carry.js", "a request's rewording, star, hide, removal and count follow it to its id where the next catalog words it the same, once",
       () => {
         clear(); applyOld();
@@ -2158,6 +2219,15 @@ const CARD_B = {
         const told = boot([]);
         return eq(Object.keys(P.pack.overrides).sort().join(",") + "|" + (P.pack.custom || []).length + "|" + told,
           "c-kept,c-retired|0|0");
+      });
+    check("card-carry.js", "an edit rescued at boot keeps only the links that name a card still alive",
+      () => {
+        clear(); edition(EDITION_1);
+        P.pack.overrides = { "c-retired": { en: "the desk's rewrite", next: [{ to: "c-kept" }, { to: "c-retired" }, { to: "c-vanished" }] } };
+        P.savePack();
+        boot([EDITION_1[0]]);
+        const own = (P.pack.custom || [])[0] || {};
+        return eq(JSON.stringify(own.next) + "|" + (own.next || []).some(e => e.to === own.id), '[{"to":"c-kept"}]|false');
       });
     /* The desk's own save keeps whole base cards (pack.js keepEditBases), so a flag the edition set
        rides into storage, and the edition after that drops the card and rescues from that copy. */
