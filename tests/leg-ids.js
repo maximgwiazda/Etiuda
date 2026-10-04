@@ -40,6 +40,9 @@ const ID = /^\s*(?:\+\s*)?["']([0-9]+[A-Za-z]+[0-9]*) /;
    first string or after a module label ("storage.js", "2a ..."). Named calls only, because a
    skip( line repeats the id of the leg it skips and is not a leg. */
 const CALL_ID = /\b(?:check|eq)\(\s*(?:["'][^"'\n]*["']\s*,\s*)?["']([0-9]+[A-Za-z]+[0-9]*) /;
+/* The third form: the id opens a string after a comma inside such a call, the leg's condition
+   written before its name on the same line, as 14y is in tests/team-desk.mjs. */
+const AFTER_ID = /\b(?:check|eq)\(.*,\s*["']([0-9]+[A-Za-z]+[0-9]*) /;
 const FLOOR = 100;      /* 129 on 2026-09-17 over three files; a floor, not the number */
 const FILES = 3;
 
@@ -47,7 +50,7 @@ function scan(file) {
   const ids = new Map();
   let last = null;
   fs.readFileSync(file, "utf8").split(/\r?\n/).forEach((line, i) => {
-    const m = line.match(ID) || line.match(CALL_ID);
+    const m = line.match(ID) || line.match(CALL_ID) || line.match(AFTER_ID);
     if (!m) return;
     const again = m[1] === last;
     last = m[1];
