@@ -28,7 +28,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 38;
+const EXPECTED = 42;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -137,9 +137,9 @@ try {
   const seal = (key, epoch, t, team) => JSON.stringify(D1.api.sealCatalog(key, team || TEAM, epoch, t));
   const entry = (who, key, epoch, team) => ({ desk: { id: who.id, key: who.key, box: who.box },
     wrap: D1.api.wrapTeamKey(key, who.box, team || TEAM, epoch, who.id) });
-  const teamFile = (o) => sign({ format: 1, kind: "etiuda-team", id: o.team || TEAM, catalogs: o.catalogs || ["lamp-shop", "tea-room"],
+  const teamFile = (o) => sign(Object.assign({ format: 1, kind: "etiuda-team", id: o.team || TEAM, catalogs: o.catalogs || ["lamp-shop", "tea-room"],
     lead: { keyId: o.keyId || LEAD.keyId, public: o.public || LEAD.public }, sealed: true, exportsSealed: false,
-    epoch: o.epoch, roster: o.roster }, o.signer || lead.privateKey, o.keyId || LEAD.keyId);
+    epoch: o.epoch, roster: o.roster }, o.handover ? { handover: o.handover } : {}), o.signer || lead.privateKey, o.keyId || LEAD.keyId);
   const put = (dir, name, t) => fs.writeFileSync(path.join(dir, name), t, "utf8");
   const epochs = (D, team) => Object.keys(((D.envelope().teamKeys || {})[team || TEAM]) || {}).sort().join();
   const read = async (D, name) => ((await D.ask("etiuda:catalog-read", name)) || {}).text;
@@ -529,6 +529,67 @@ try {
       "14ai one signed edition opened from envelopes of two teams seals the desk's own file for neither, whichever is listed"
       + " first, even where the second team's file stands at the folder: " + wAX.map(said).join(", ")
       + ", the share's file sealed for team " + who(eAX.team));
+  }
+
+  /* ---- the lead hands the team to a new key: a statement signed by the pinned key, in the team file ---------------
+     The statement's bytes are made here from the engine's own v2SignedBytes behind the handover prefix, not by the shell. */
+  {
+    const ROT = folder("rotate"), R = newDesk("rotate", ROT), meR = await R.ask("etiuda:branch-identity", true);
+    const TR = "t-" + crypto.randomBytes(8).toString("hex"), KR = [0, 1, 2, 3, 4, 5].map(() => crypto.randomBytes(32));
+    const keys = [lead, 2, 3, 4, 5].map(k => (k === lead ? lead : crypto.generateKeyPairSync("ed25519")));
+    const L = keys.map((k, i) => ({ keyId: "lead-" + i, public: pubHex(k.publicKey) }));
+    L[0] = LEAD;
+    const handover = (from, i, to, o) => {
+      const s = { format: 1, kind: "etiuda-team-handover", team: (o && o.team) || TR, from: L[from], to: L[to], sig: { alg: "Ed25519", keyId: L[from].keyId } };
+      s.sig.value = crypto.sign(null, Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), Buffer.from(V2.v2SignedBytes(s))]),
+        keys[i].privateKey).toString("hex");
+      return s;
+    };
+    const ledBy = (i, epoch, ho) => JSON.stringify(teamFile({ team: TR, catalogs: ["lamp-shop"], keyId: L[i].keyId, public: L[i].public,
+      signer: keys[i].privateKey, epoch: epoch, roster: [entry(meR, KR[epoch], epoch, TR)], handover: ho }));
+    const pinOf = D => JSON.stringify((D.envelope().teamPins || {})[TR] || null);
+    const opens = async epoch => { put(ROT, "lamps.ec", seal(KR[epoch], epoch, A2, TR)); return (await read(R, "lamps.ec")) === A2.trim(); };
+    put(ROT, "etiuda-team.json", ledBy(0, 1));
+    const first = await opens(1) && pinOf(R) === JSON.stringify(LEAD);
+
+    put(ROT, "etiuda-team.json", ledBy(1, 2, [handover(0, 0, 1)]));
+    const moved = await opens(2), pin1 = pinOf(R), fresh1 = pinOf(loadDesk(R.ud));
+    check(first && moved && pin1 === JSON.stringify(L[1]) && fresh1 === pin1 && epochs(R, TR) === "1,2"
+      && R.said.some(l => l.indexOf("hands team " + TR) >= 0),
+      "14ak a team file under a new key, carrying a handover the pinned lead's key signed naming that key, moves the pin to it:"
+      + " the new epoch's envelope opens " + (moved ? "yes" : "no") + ", the pin is the new key " + (pin1 === JSON.stringify(L[1]) ? "yes" : "no")
+      + " and stays so in a fresh run, epochs kept " + epochs(R, TR));
+
+    put(ROT, "etiuda-team.json", ledBy(0, 3));
+    check(!(await opens(3)) && pinOf(R) === JSON.stringify(L[1]) && epochs(R, TR) === "1,2",
+      "14al after the handover, a file under the old lead's key is refused like any other key: epoch 3 kept "
+      + (epochs(R, TR).indexOf("3") >= 0 ? "yes" : "no") + ", the pin still the new key");
+
+    const tampered = handover(1, 1, 2);
+    tampered.to = L[3];
+    const refused = [
+      ["no handover", ledBy(2, 3)],
+      ["signed by the new key itself", ledBy(2, 3, [handover(1, 2, 2)])],
+      ["another team's handover", ledBy(2, 3, [handover(1, 1, 2, { team: TEAM })])],
+      ["a handover to a key other than the file's lead", ledBy(2, 3, [handover(1, 1, 3)])],
+      ["a handover changed after signing", ledBy(3, 3, [tampered])],
+      ["a handover from a key this desk never pinned", ledBy(2, 3, [handover(0, 0, 2)])],
+    ];
+    const kept = [];
+    for (const [why, file] of refused) {
+      put(ROT, "etiuda-team.json", file);
+      kept.push(why + ": " + ((await opens(3)) || pinOf(R) !== JSON.stringify(L[1]) || epochs(R, TR) !== "1,2" ? "taken" : "refused"));
+    }
+    check(kept.every(s => /refused$/.test(s)),
+      "14am a team file under another key whose handover is missing, self-signed, another team's, to another key, altered,"
+      + " or from a key the desk does not trust moves nothing and keeps nothing: " + kept.join("; "));
+
+    put(ROT, "etiuda-team.json", ledBy(4, 4, [handover(2, 2, 3), handover(3, 3, 4), handover(1, 1, 2)]));
+    const chained = await opens(4);
+    check(chained && pinOf(R) === JSON.stringify(L[4]) && epochs(R, TR) === "1,2,4",
+      "14an a desk that missed a handover follows the chain from the key it pinned, in any order in the file, to the file's"
+      + " lead: opens " + (chained ? "yes" : "no") + ", the pin the last key " + (pinOf(R) === JSON.stringify(L[4]) ? "yes" : "no")
+      + ", epochs kept " + epochs(R, TR));
   }
 
   /* ---- a keep that fails: safeStorage away for one read, the team file unchanged after it ----------------------- */

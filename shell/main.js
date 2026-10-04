@@ -889,6 +889,35 @@ function joinOpening(joins, teamId, deskId, commit) {
    private halves sit in the desk envelope sealed by safeStorage and never leave it: the page is
    handed the public halves and asks for a write, and no call signs anything but a desk file. The
    id is not the statistics id above, so that the two cannot be joined. */
+/* ---- the lead handing its team to a new key: a statement the old key signs, carried in the team file -------------
+   Signed under its own prefix, so it is never a team file, a desk file or a request. */
+const HANDOVER_PREFIX = "etiuda-team-handover\n";
+const HANDOVER_KIND = "etiuda-team-handover", HANDOVER_STEPS = 8;
+function handoverSignedBytes(doc) { return Buffer.concat([Buffer.from(HANDOVER_PREFIX, "utf8"), signedBytesOf(doc)]); }
+/* Whether `s` hands team `teamId` to another key, signed by the key `from`; the signature is the whole of the check on `from`. */
+function handoverGenuine(s, teamId, from) {
+  const to = s && s.to, sig = s && s.sig;
+  try {
+    return !!s && typeof s === "object" && +s.format === 1 && s.kind === HANDOVER_KIND && s.team === teamId
+      && !!to && typeof to.keyId === "string" && /^[0-9a-f]{64}$/.test(String(to.public)) && to.public !== from.public
+      && !!sig && sig.alg === "Ed25519" && /^[0-9a-f]{128}$/.test(String(sig.value))
+      && crypto.verify(null, handoverSignedBytes(s), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(from.public, "hex")]),
+        format: "der", type: "spki" }), Buffer.from(sig.value, "hex"));
+  } catch { return false; }
+}
+/* Whether the team file's handovers lead, one genuine step at a time, from the key `pin` to the lead the file names. */
+function handedTo(doc, pin) {
+  const list = Array.isArray(doc.handover) ? doc.handover : [];
+  let at = pin;
+  for (let step = 0; step < HANDOVER_STEPS; step++) {
+    const s = list.find(x => handoverGenuine(x, doc.id, at));
+    if (!s) return false;
+    at = { keyId: s.to.keyId, public: s.to.public };
+    if (at.keyId === doc.lead.keyId && at.public === doc.lead.public) return true;
+  }
+  return false;
+}
+
 const BRANCH_PREFIX = "etiuda-desk-branch\n";
 const BRANCH_STEM_MAX = 96, BRANCH_TEXT_MAX = 16 * 1024 * 1024;
 const SPKI_ED25519 = Buffer.from("302a300506032b6570032100", "hex");
@@ -1136,7 +1165,8 @@ function tryHeldBranches() {
    A team file verifies under the lead key it names, so it is whole and nothing more: anybody who can write the
    share can sign one. Its lead's key is pinned where the ring lists it for a catalog the team covers, or at the
    first admission, a file whose roster carries a wrap this desk opens; nothing in a file under any other key is
-   then used. Each epoch's key is kept, so an edition sealed before a new epoch still opens. */
+   then used, unless the file's handovers lead to that key from the pinned one, and the pin then moves to it. Each
+   epoch's key is kept, so an edition sealed before a new epoch still opens. */
 const TEAM_MAX = 1024 * 1024;
 let teamPins = {};                             // team id -> {keyId, public}: the lead's key, once trusted
 let teamKeys = {};                             // team id -> {epoch: the team key sealed by safeStorage, base64}
@@ -1205,7 +1235,8 @@ function heedTeam() {
   try { if (text !== null) doc = JSON.parse(text.replace(/^\uFEFF/, "")); } catch { return; }
   if (!teamWhole(doc)) { teamSay(file + " is not a team file whole under its lead's key, so nothing in it is used"); return; }
   const lead = { keyId: doc.lead.keyId, public: doc.lead.public }, pin = teamPins[doc.id];
-  if (pin && (pin.keyId !== lead.keyId || pin.public !== lead.public)) {
+  const handed = !!pin && (pin.keyId !== lead.keyId || pin.public !== lead.public);
+  if (handed && !handedTo(doc, pin)) {
     teamSay(file + " is signed by a key other than the lead's this desk trusts for team " + doc.id + ", so nothing in it is used");
     return;
   }
@@ -1219,7 +1250,8 @@ function heedTeam() {
   if (key === false) teamStamp = "";
   if (!pin && !key && !ringVouches(doc)) return;
   let changed = false;
-  if (!pin) { teamPins[doc.id] = lead; changed = true; }
+  if (!pin || handed) { teamPins[doc.id] = lead; changed = true; }
+  if (handed) teamSay(file + " hands team " + doc.id + " from the lead key this desk trusted to " + lead.public + ", which it now trusts instead");
   const kept = teamKeys[doc.id] || {};
   if (key && !kept[doc.epoch]) {
     try {
