@@ -544,6 +544,15 @@ const eq = (got, want) => got === want ? true
       D.statsForgetCards(p, id => id !== "c-c" && id !== "c-d");
       return eq([after(p, "c-a", "2026-10-01"), after(p, "c-d", "2026-10-01"), p.dayIds.join(",")].join("|"), "c-b:1||c-a,c-b");
     });
+  check("desk-stats.js", "814o a pair met on several days counts all of them, and keeps its later day when the earlier one is counted after it",
+    () => {
+      const p = fresh();
+      D.bumpPair(p, "c-a", "c-b", "2026-09-20"); D.bumpPair(p, "c-a", "c-b", "2026-09-25");
+      D.bumpPair(p, "c-a", "c-c", "2026-10-01");
+      D.bumpPair(p, "c-a", "c-d", "2026-09-30"); D.bumpPair(p, "c-a", "c-d", "2026-09-10");
+      D.bumpPair(p, "c-a", "c-e", "2026-09-29"); D.bumpPair(p, "c-a", "c-e", "2026-09-29");
+      return eq(after(p, "c-a", "2026-10-01"), "c-d:2,c-e:2,c-b:2,c-c:1");
+    });
   check("desk-stats.js", "814H CONTROL: a day that has counted no pair keeps the shape it always had",
     () => {
       const p = fresh();
@@ -2278,6 +2287,19 @@ const CARD_B = {
     check("list-pointer.js", "814N CONTROL: with no tab in front a copy still counts, and follows nothing",
       () => eq([(P.pack.useCounts["c-mc-lone"] | 0) - was,
         typeof D.statsLearntAfter === "function" ? D.statsLearntAfter(P.pack, "c-mc-lone").length : 0].join(","), "1,0"));
+    T.tabs.splice(0, T.tabs.length);
+    ST.ssSet(T.TAB_KEY, "null");
+    T.initTabs();
+    const many = Array.from({ length: 45 }, (_, i) => "c-q" + i);
+    many.slice(0, 41).forEach(id => step(id));
+    const walked = (T.tabs[0].path || []).slice();
+    T.tabs.splice(0, T.tabs.length);
+    ST.ssSet(T.TAB_KEY, JSON.stringify({ v: 1, activeTabId: "mc-p1", tabs: [{ id: "mc-p1", path: many }] }));
+    T.initTabs();
+    const restored = ((T.tabs[0] && T.tabs[0].path) || []).slice();
+    const ends = a => [a.length, a[0], a[a.length - 1]].join(",");
+    check("tabs.js", "814p a path keeps its last 40 steps: 41 cards copied in one tab keep the 2nd to the 41st, and a restored 45 the 6th to the 45th",
+      () => eq(ends(walked) + "|" + ends(restored), "40,c-q1,c-q40|40,c-q5,c-q44"));
   } finally {
     T.tabs.splice(0, T.tabs.length);
     hadHooks.forEach(([k, own, v]) => { if (own) H.hooks[k] = v; else delete H.hooks[k]; });
