@@ -28,7 +28,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 26;
+const EXPECTED = 28;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -330,6 +330,41 @@ try {
   const D1c = loadDesk(D1.ud);
   check(await read(D1c, "lamps.ec") === A2.trim() && JSON.stringify(D1c.envelope().teamPins) === JSON.stringify({ [TEAM]: LEAD }),
     "14x an unsigned team file takes nothing away: the kept key opens what it opened and the pin stands");
+
+  /* ---- the desk's own file: what the page writes after an edit, grown from the catalog it was handed ----------- */
+  const OWN = folder("own"), D9 = newDesk("nine", OWN), me9 = await D9.ask("etiuda:branch-identity", true);
+  fs.writeFileSync(path.join(OWN, "etiuda-ring.json"), JSON.stringify(ring), "utf8");
+  put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 1, roster: [entry(me9, K1, 1)] })));
+  put(OWN, "lamps.ec", seal(K1, 1, A2));
+  put(OWN, "tea.ec", B1);
+  /* The page's branchCatalog over a handed text: the desk's id ending in eight hex of the grown-from id, and grew. */
+  const grownFrom = (handed, who, name) => {
+    const doc = JSON.parse(handed), from = { id: doc.id, rev: doc.rev };
+    const hex8 = crypto.createHash("sha256").update(String(from.id)).digest("hex").slice(0, 8);
+    delete doc.sig;
+    doc.id = who.id + "-" + hex8;
+    doc.rev = 1;
+    doc.grew = { id: from.id, rev: from.rev, sha: "sha256:" + crypto.createHash("sha256").update(handed).digest("hex") };
+    doc.desk = { id: who.id, key: who.key, box: who.box };
+    return { stem: name + "-" + hex8, text: JSON.stringify(doc), file: path.join(OWN, "desks", who.id, name + "-" + hex8 + ".ec") };
+  };
+  const holding = needle => walk(OWN).filter(f => fs.readFileSync(f, "utf8").indexOf(needle) >= 0).length;
+  const lamps = grownFrom(await read(D9, "lamps.ec"), me9, "lamps");
+  const heldNow = await D9.ask("etiuda:branch-write", lamps.stem, lamps.text);
+  const heldAfter = await loadDesk(D9.ud).ask("etiuda:branch-write", lamps.stem, lamps.text);
+  check(JSON.parse(lamps.text).grew.id === "lamp-shop" && JSON.stringify(heldNow) === JSON.stringify({ ok: false, held: true })
+    && JSON.stringify(heldAfter) === JSON.stringify({ ok: false, held: true }) && holding("Good day, Lamp Shop.") === 0,
+    "14aa the desk's own file of a catalog it opened from an envelope is held, not written in the clear, and still held by a"
+    + " fresh run of the shell that has not opened it: " + JSON.stringify(heldNow) + ", " + JSON.stringify(heldAfter)
+    + ", the catalog's text in " + holding("Good day, Lamp Shop.") + " file(s) of the share");
+  const teaHanded = await read(D9, "tea.ec"), tea = grownFrom(teaHanded, me9, "tea");
+  const teaW = await D9.ask("etiuda:branch-write", tea.stem, tea.text);
+  const teaOut = fs.existsSync(tea.file) ? fs.readFileSync(tea.file, "utf8") : "";
+  const teaBack = teaOut ? JSON.parse(teaOut) : {};
+  check(teaHanded === B1 && JSON.stringify(teaW) === JSON.stringify({ ok: true, rev: 1 })
+    && teaOut === JSON.stringify(Object.assign(JSON.parse(tea.text), { rev: 1, hash: teaBack.hash, sig: teaBack.sig }), null, 1) + "\n",
+    "14AA THE CONTROL: on the same admitted desk, its own file of an unsealed catalog is written as the page sent it, with"
+    + " the edition, hash and signature the shell adds: " + JSON.stringify(teaW) + ", " + teaOut.length + " bytes");
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
 }
