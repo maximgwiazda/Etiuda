@@ -118,6 +118,9 @@ class El {
   dispatch(t, ev) { (this.listeners[t] || []).slice().forEach(fn => fn(Object.assign({ type: t, target: this,
     preventDefault() {}, stopPropagation() {} }, ev || {}))); }
   focus() { this.ownerDocument.activeElement = this; }
+  /* A press by the page's own code, as the offer's panel presses the bubble's buttons: the handler, and nothing a pointer adds. */
+  click() { if (typeof this.onclick === "function") this.onclick({ type: "click", target: this, preventDefault() {}, stopPropagation() {} }); this.dispatch("click"); }
+  getContext() { return {}; }
   blur() {}
   getBoundingClientRect() { return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 }; }
   getClientRects() { return []; }
@@ -157,8 +160,9 @@ function parseInto(root, html) {
   }
   if (at < html.length) stack[stack.length - 1].appendChild(new TextNode(html.slice(at)));
 }
-/* Compound selectors joined by descendant spaces or `>`, and `:scope >` at the head. Nothing else. */
-const COMPOUND = /^([a-zA-Z][\w-]*|\*)?((?:#[\w-]+|\.[\w-]+|\[[\w-]+(?:="[^"]*")?\])*)$/;
+/* Compound selectors joined by descendant spaces or `>`, and `:scope >` at the head, and a `:not(...)` over one simple selector. Nothing else. */
+const SIMPLE = String.raw`#[\w-]+|\.[\w-]+|\[[\w-]+(?:="[^"]*")?\]`;
+const COMPOUND = new RegExp("^([a-zA-Z][\\w-]*|\\*)?((?:" + SIMPLE + "|:not\\((?:" + SIMPLE + ")\\))*)$");
 function parts(sel) {
   const s = String(sel).trim();
   if (s.includes(",")) throw new Error("stub page: selector list " + s);
@@ -168,10 +172,11 @@ function compound(el, c) {
   const m = COMPOUND.exec(c);
   if (!m) throw new Error("stub page: selector " + c);
   if (m[1] && m[1] !== "*" && el.localName !== m[1].toLowerCase()) return false;
-  const bits = m[2].match(/#[\w-]+|\.[\w-]+|\[[\w-]+(?:="[^"]*")?\]/g) || [];
-  return bits.every(b => b[0] === "#" ? el.id === b.slice(1)
+  const bits = m[2].match(new RegExp(":not\\((?:" + SIMPLE + ")\\)|" + SIMPLE, "g")) || [];
+  const one = b => b[0] === "#" ? el.id === b.slice(1)
     : b[0] === "." ? el.classList.contains(b.slice(1))
-    : (() => { const q = /^\[([\w-]+)(?:="([^"]*)")?\]$/.exec(b); return q[2] === undefined ? el.hasAttribute(q[1]) : el.getAttribute(q[1]) === q[2]; })());
+    : (() => { const q = /^\[([\w-]+)(?:="([^"]*)")?\]$/.exec(b); return q[2] === undefined ? el.hasAttribute(q[1]) : el.getAttribute(q[1]) === q[2]; })();
+  return bits.every(b => b.startsWith(":not(") ? !one(b.slice(5, -1)) : one(b));
 }
 function matches(el, sel, scope) {
   const ps = parts(sel);
@@ -209,6 +214,8 @@ function makeDocument() {
   doc.head = doc.documentElement.appendChild(new El("head", doc));
   doc.body = doc.documentElement.appendChild(new El("body", doc));
   doc.activeElement = doc.body;
+  doc.createRange = () => ({});
+  doc.contains = n => doc.documentElement.contains(n);
   doc.getElementById = id => queryAll(doc.documentElement, "#" + id)[0] || null;
   doc.querySelector = sel => queryAll(doc.documentElement, sel)[0] || null;
   doc.querySelectorAll = sel => queryAll(doc.documentElement, sel);
@@ -224,7 +231,7 @@ function makeDocument() {
    ================================================================================================ */
 async function launch(plan) {
   const LAB = plan.lab, UD = path.join(LAB, "userdata"), SHELL = path.join(LAB, "shell");
-  const obs = { errors: [], offers: [], library: [], bars: [], reloaded: false, heldAtStart: null, heldAtEnd: null, tourDue: null };
+  const obs = { errors: [], offers: [], library: [], bars: [], read: {}, reloaded: false, heldAtStart: null, heldAtEnd: null, tourDue: null };
   process.on("unhandledRejection", e => obs.errors.push("unhandled " + String(e && e.message || e).slice(0, 160)));
   process.on("uncaughtException", e => obs.errors.push("uncaught " + String(e && e.message || e).slice(0, 160)));
   const noop = () => {};
@@ -293,6 +300,12 @@ async function launch(plan) {
   const TR = await import(MOD("catalog-trust.js"));
   const ST = await import(MOD("storage.js"));
   const TOUR = await import(MOD("tour.js"));
+  const DOMM = await import(MOD("dom.js"));
+  const PACK = await import(MOD("pack.js"));
+  const BOOT = await import(MOD("catalog-boot.js"));
+  const CAT = await import(MOD("catalog.js"));
+  const DLG = await import(MOD("dialog.js"));
+  const APP = await import(MOD("app-state.js"));
   /* THE APP-LEVEL ACTIONS the page's boot registers in hooks.js, none of them on the trust path:
      the sample's watermark and the unsaved notice repaint the rest of the page. Named one by one,
      so a slot this path starts calling is a TypeError in 0b rather than a silent stub. */
@@ -364,6 +377,63 @@ async function launch(plan) {
     watch: file => { const text = fs.readFileSync(path.join(LAB, file), "utf8");
       (rendererOn["etiuda:catalog-file"] || []).forEach(fn => fn({}, text, path.basename(file), path.join(LAB, "catalogs"), false, "", false)); },
   };
+  /* THE OFFER'S PANEL, driven as the desk drives it. `desk` is the page's own start in order, as restart.js runs it
+     (the catalog applied, then the layer read), with the modal window the page has and this stub has not; the acts
+     after it press the handlers the offer and the panel wired, and write down what then stood on the page. */
+  const pressed = sel => doc.querySelectorAll(sel).map(n => n.getAttribute("aria-pressed"));
+  const bubble = () => doc.getElementById("eCatalogOffer");
+  const modalUp = () => { const m = doc.getElementById("modal"); return !!m && !m.hidden; };
+  const cardRow = id => { const b = bubble(), li = b && b.querySelector("li[data-ec-id=\"" + id + "\"]"); return li ? li.textContent.trim() : null; };
+  const bodyOf = (c, id) => { const m = ((c && c.cards) || []).find(x => x.id === id); return m ? String(m.en) : null; };
+  const takes = () => pressed("[data-ed-take=\"1\"]").concat(pressed("[data-ed-take=\"0\"]"));
+  Object.assign(act, {
+    desk: () => {
+      const m = doc.createElement("div"), card = doc.createElement("div");
+      m.id = "modal"; m.hidden = true; card.id = "modalCard"; m.appendChild(card); doc.body.appendChild(m);
+      DOMM.grabDom();
+      /* The two sweeps the dialog makes over its card after wiring, which the stub's selectors cannot say (a list, and :not()),
+         are the dressing of a form's text inputs and the fade of a cut line: neither is the panel's business, so each is
+         answered with nothing found, and every other query still has to be one the stub knows. */
+      const ask = card.querySelectorAll.bind(card);
+      card.querySelectorAll = sel => (/^(\.mf input|\.ctitle,)/.test(sel) ? [] : ask(sel));
+      BOOT.applyBootCatalog();
+      PACK.loadPack();
+      PACK.rebuildBaseCards();
+      /* The cards the list would hold, as rebuild.js makes them, so the desk is not "empty" to the boot's offer (wholeThingEmpty). */
+      const ov = PACK.pack.overrides || {};
+      APP.setCards(PACK.BASE_M.filter(b => !b.retired).map(b => (ov[b.id] ? Object.assign({}, b, ov[b.id]) : Object.assign({}, b))));
+    },
+    override: () => { PACK.pack.overrides = Object.assign(PACK.pack.overrides || {}, { "c-b": plan.override }); PACK.savePack(); },
+    readchange: () => {
+      const b = bubble();
+      obs.read.bubble = !b ? null : { hidden: b.hidden, change: b.querySelectorAll(".ec-change").length,
+        counts: b.querySelectorAll(".ec-counts").map(n => ({ text: n.textContent.trim(), n: n.querySelectorAll(".ec-n").length })),
+        n: texts(b, ".ec-n"), ids: b.querySelectorAll("[data-ec-id]").map(n => n.getAttribute("data-ec-id")),
+        diff: b.querySelectorAll("#ecDiff").length, own: cardRow("c-b") };
+    },
+    panel: () => {
+      doc.getElementById("ecDiff").onclick();
+      const card = doc.getElementById("modalCard"), g = card.querySelector("#edPane .ed-grid");
+      obs.read.panel = { bubbleHidden: bubble().hidden, modal: modalUp(), cls: card.className, rows: card.querySelectorAll(".ed-row").length,
+        current: texts(card, ".ed-row[aria-current=\"true\"]"), grid: g ? g.className : null, take: takes() };
+    },
+    take: arg => {
+      doc.querySelector("[data-ed-take=\"" + arg + "\"]").onclick();
+      obs.read["take" + arg] = { take: takes(), row: texts(doc.getElementById("modalCard"), ".ed-row[aria-current=\"true\"]"), own: cardRow("c-b") };
+    },
+    edload: () => { doc.getElementById("edLoad").onclick(); obs.read.afterLoad = { modal: modalUp() }; },
+    edkeep: () => { doc.getElementById("edKeep").onclick(); obs.read.afterKeep = { modal: modalUp() }; },
+    edback: () => {
+      DLG.dismissModal();
+      const b = bubble();
+      obs.read.afterBack = { modal: modalUp(), bubble: !!b, hidden: !!b && b.hidden, focus: doc.activeElement && doc.activeElement.id };
+    },
+    readdesk: () => {
+      const o = (PACK.pack.overrides || {})["c-b"], b = PACK.BASE_M.find(m => m.id === "c-b");
+      obs.read.desk = { over: o ? JSON.parse(JSON.stringify(o)) : null, base: b ? String(b.en) : null, held: bodyOf(CAT.storedCatalog(), "c-b"),
+        refused: ST.nsGet("CatalogNo") || "", standing: standing() };
+    },
+  });
   for (const a of plan.acts) {
     if (obs.reloaded) break;
     const [name, arg] = String(a).split(":");
@@ -388,7 +458,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 41;
+  const EXPECTED = 51;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -431,8 +501,8 @@ async function parent() {
   };
   const launches = [];
   let session = {};
-  const run = (lab, acts, carry) => {
-    const r = spawnSync(process.execPath, [SELF, "--launch", JSON.stringify({ lab, acts, session: carry ? session : {} })],
+  const run = (lab, acts, carry, extra) => {
+    const r = spawnSync(process.execPath, [SELF, "--launch", JSON.stringify(Object.assign({ lab, acts, session: carry ? session : {} }, extra || {}))],
       { encoding: "utf8", timeout: 30000, windowsHide: true });
     const line = String(r.stdout || "").split(/\r?\n/).find(l => l.startsWith("#launch "));
     let obs = null;
@@ -745,6 +815,72 @@ async function parent() {
     check(!errs73.length, "73d those launches ran their acts without an error" + (errs73.length ? ": " + errs73.length + ", first " + errs73[0] : ""));
     const errs71 = [a71, b71, c71, d71].flatMap(o => o.errors || []);
     check(!errs71.length, "71d those launches ran their acts without an error" + (errs71.length ? ": " + errs71.length + ", first " + errs71[0] : ""));
+
+    /* 74: THE OFFER OF A NEW EDITION, THE PANEL BEHIND IT AND THE LOAD THAT FOLLOWS, from the bubble to the next launch's
+       desk file. Each leg of the chain is read from what the page showed or what the next launch read from desk.json, never
+       from a variable: a Take keyed to a copy of the catalog, or a Load handed a re-parsed one, shows nowhere before the
+       desk starts again, and then the lead's text is gone from the agent's desk or the agent's own words are. The desk
+       holds edition 1 with an edit of this agent's on one card, two text fields of it (title and text). The folder holds
+       edition 2: the lead changed that card's text, added one card, retired one, and left a note. */
+    const BODY1 = "Good day, how can I help?", BODY2 = "Good day, how may I help you today?";
+    const ed1 = () => { const d = payload("2026-09-01");
+      d.cards = [{ id: "c-a", shelf: "t-op", bodyShape: "plain", title: { en: "Opening" }, body: { en: "Hello." } },
+        { id: "c-b", shelf: "t-op", bodyShape: "plain", title: { en: "Greeting" }, body: { en: BODY1 } },
+        { id: "c-r", shelf: "t-rt", bodyShape: "plain", title: { en: "Old offer" }, body: { en: "Ask about the old offer." } }];
+      return d; };
+    const ed2 = () => { const d = ed1(); d.rev = 2; d.date = "2026-09-20"; d.notes = { en: "A note from the lead." };
+      d.cards[1].body.en = BODY2; d.cards[2].retired = true;
+      d.cards.push({ id: "c-n", shelf: "t-op", bodyShape: "plain", title: { en: "Late opening" }, body: { en: "Thank you for waiting." } });
+      return d; };
+    const AGENT = { t: "My greeting", en: "Good day, how can I be of use?" };
+    /* A desk that holds edition 1 and carries the agent's edit, the edit made by the page's own save, and edition 2 in the folder. */
+    const editionDesk = () => {
+      const lab = scenario([["catalogs/lamp.ec", ed1()]]);
+      run(lab, ["boot", "settle", "offer", "yes", "settle"]);
+      const s74 = run(lab, ["desk", "override", "settle"], false, { override: AGENT });
+      fs.writeFileSync(path.join(lab, "catalogs", "lamp.ec"), JSON.stringify(ed2()), "utf8");
+      return { lab: lab, setup: s74 };
+    };
+    const rd = (o, k) => (o && o.read && o.read[k]) || {};
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const ASK = ["desk", "boot", "settle"];
+    const d74 = editionDesk();
+    const A74 = run(d74.lab, ASK.concat(["readchange", "panel", "take:1", "edload", "settle"]));
+    const B74 = run(d74.lab, ["desk", "readdesk"]);
+    const bub = rd(A74, "bubble"), pan = rd(A74, "panel"), tk = rd(A74, "take1"), ld = rd(A74, "afterLoad"), dk = rd(B74, "desk");
+    check(bub.change === 1 && !(bub.counts || []).some(c => c.n === 0 && /\d+ cards?\b/.test(c.text)),
+      "74a the offer of a new edition carries the change block where the counts line stood, and the old counts line is gone: " + JSON.stringify(bub.counts || null));
+    check(same(bub.n, ["1 changed", "1 new", "1 retired"]) && same(bub.ids, ["c-b", "c-n", "c-r"]) && bub.diff === 1,
+      "74b the block counts 1 changed, 1 new and 1 retired, lists the cards in that order, and offers the differences: " + JSON.stringify(bub.n || null) + " " + JSON.stringify(bub.ids || null) + ", button " + bub.diff);
+    check(pan.bubbleHidden === true && pan.modal === true && /\bed-modal\b/.test(pan.cls || "") && pan.rows === 3
+      && (pan.current || []).length === 1 && /Greeting/.test(pan.current[0]) && /\bed-c3\b/.test(pan.grid || "") && same(pan.take, ["false", "true"]),
+      "74c the differences button hides the bubble and stands the panel: three rows, the changed card's the current one, its pane in three columns, Keep mine the choice made: "
+      + JSON.stringify(pan));
+    check(same(tk.take, ["true", "false"]) && /your own version/.test(bub.own || "") && /team's new text/.test(tk.own || "") && /team's new text/.test((tk.row || [""])[0]),
+      "74d Take presses, and the bubble's row for that card goes from your own version to the team's new text: " + JSON.stringify(bub.own || null) + " then " + JSON.stringify(tk.own || null));
+    check(ld.modal === false && A74.reloaded === true && A74.askedAtRestart === 0,
+      "74e the panel's Load closes the panel and the load runs, the desk starting again with the question already down: " + JSON.stringify({ panelUp: ld.modal, started: A74.reloaded, asked: A74.askedAtRestart }));
+    check(same(dk.over, { t: AGENT.t }) && dk.base === BODY2,
+      "74f THE POINT: the next launch's desk file holds edition 2 and the agent's title alone, the text they took from the team no longer an edit of theirs: " + JSON.stringify(dk.over) + ", text " + JSON.stringify(dk.base));
+    const dKeep = editionDesk();
+    const AK = run(dKeep.lab, ASK.concat(["panel", "take:1", "take:0", "edload", "settle"]));
+    const BK = run(dKeep.lab, ["desk", "readdesk"]);
+    check(AK.reloaded === true && same(rd(BK, "desk").over, AGENT) && rd(BK, "desk").base === BODY2,
+      "74g THE CONTROL: the same offer with Keep mine chosen loads edition 2 and the next launch holds both of the agent's fields: " + JSON.stringify(rd(BK, "desk").over) + ", text " + JSON.stringify(rd(BK, "desk").base));
+    const dNo = editionDesk();
+    const AN = run(dNo.lab, ASK.concat(["panel", "edkeep", "settle", "readdesk"]));
+    const CN = run(dNo.lab, ASK.concat(["readchange", "readdesk"]));
+    check(rd(AN, "afterKeep").modal === false && !AN.reloaded && rd(AN, "desk").standing === 0 && rd(AN, "desk").refused !== "" && rd(AN, "desk").held === BODY1
+      && CN.read && CN.read.bubble === null && rd(CN, "desk").held === BODY1,
+      "74h THE CONTROL: Keep current in the panel loads nothing and records the refusal, which the next launch's boot honours, edition 1 still held: "
+      + JSON.stringify({ closed: rd(AN, "afterKeep").modal === false, started: AN.reloaded, refused: rd(AN, "desk").refused !== "", held: rd(AN, "desk").held }));
+    const dBack = editionDesk();
+    const AB = run(dBack.lab, ASK.concat(["panel", "edback", "readdesk"]));
+    const ab = rd(AB, "afterBack");
+    check(ab.modal === false && ab.bubble === true && ab.hidden === false && ab.focus === "ecDiff" && !AB.reloaded && rd(AB, "desk").held === BODY1,
+      "74i THE CONTROL: the panel's way back closes the panel, brings the bubble back with the differences button focused, and loads nothing: " + JSON.stringify(ab));
+    const errs74 = [d74.setup, A74, B74, dKeep.setup, AK, BK, dNo.setup, AN, CN, dBack.setup, AB].flatMap(o => o.errors || []);
+    check(!errs74.length, "74j those launches ran their acts without an error" + (errs74.length ? ": " + errs74.length + ", first " + errs74[0] : ""));
   } catch (e) {
     failed++;
     console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));
