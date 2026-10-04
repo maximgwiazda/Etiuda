@@ -25,11 +25,12 @@ import { cardFieldKey } from "./card-fields.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { intentIdAt, intentOrder } from "./intent-id.js";
 import { pack } from "./pack.js";
-import { ICON_AWAITING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT } from "./icons.js";
+import { ICON_AWAITING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT, ICON_DESK, ICON_LOOK } from "./icons.js";
 import { V2_SIG_VALID } from "./catalog-v2.js";
 import { editionChanges } from "./edition-changes.js";
 import { editionOfferHtml, openEditionPanel, repaintEditionRows } from "./edition-panel.js";
 import { closeModal } from "./dialog.js";
+import { deskName, deskKey, deskBase, deskChangeWords, openDeskLook } from "./desk-look.js";
 import { hooks } from "./hooks.js";
 import { catalogTrust, whenTrusted, heldCatalogTrust, recheckHeldTrust, trustKeyHtml, trustOfferLine,
   trustSettled } from "./catalog-trust.js";
@@ -111,8 +112,9 @@ function eOfferCatalogAtBoot(){
    asking outranks it - the same rule the explicit watch check follows - and through the one
    bubble, which loads at once only where nothing is loaded. The date arrives from the row that was clicked: the
    host read it with the listing, and asking again would be asking for a second answer. */
-function loadCatalogFromFolder(name,mtime){
-  eReadCatalogFile(name).then(got=>{
+/* `desk` is a colleague's folder under desks/, whose file is worked from: no file of the catalog folder is then in use. */
+function loadCatalogFromFolder(name,mtime,desk){
+  eReadCatalogFile(name,desk).then(got=>{
     if(!got) return;
     if(!got.text){ toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(String(name||""))); return; }
     let c=null;
@@ -122,13 +124,17 @@ function loadCatalogFromFolder(name,mtime){
       return;
     }
     const shown=eOfferCatalogDialog(c,{
-      file:got.name, foundHtml:eFoundHtml(got.name,eCatalogFolder()),
+      file:got.name, foundHtml:eFoundHtml(got.name,desk?deskFolderOf(desk):eCatalogFolder()),
       refusedKey:"CatalogNo", force:true, asked:true, direct:true,
       accept:sig=>{ lsSet(E_CATALOG_KEY,sig);
-        return activateCatalog(c,{file:got.name, fileAt:+mtime||0}); }
+        return activateCatalog(c,desk?{file:"", from:got.name}:{file:got.name, fileAt:+mtime||0}); }
     });
     if(!shown) toast(t("That file matches the catalog you already have."));
   });
+}
+function deskFolderOf(id){
+  const dir=eCatalogFolder(), sep=dir.indexOf("\\")>-1?"\\":"/";
+  return dir+sep+"desks"+sep+id;
 }
 /* THE LIBRARY'S LIST OF CATALOGS, painted from this file rather than from the Library's own:
    the host's watch ends here, and a folder that changes under an open Library has to reach the
@@ -154,7 +160,7 @@ function ecRowHtml(o){
   return '<div class="ec-row'+(o.loaded?" is-loaded":"")+'"'+(o.file?' data-ec-file="'+esc(o.file)+'"':'')+'>'
     +'<span class="ec-name"><b>'+esc(o.name)+'</b>'
     +(o.meta?'<small class="ec-meta">'+o.meta+'</small>':'')
-    +(o.loaded?ecWatchHtml():'')+'</span>'
+    +(o.loaded?ecWatchHtml():'')+(o.extra||'')+'</span>'
     /* A MARK RATHER THAN A WORD on the loaded row, and no tag at all on the sample. The row
        carrying the acts is the one with the least room, and a pill beside them wrapped the line
        of counts underneath. The sample is still never told it is Newer - it arrives after
@@ -175,6 +181,31 @@ function ecRowHtml(o){
       ?ecActHtml("Eject",ICON_EJECT,' data-ec-eject="1"')
       :ecActHtml("Load",ICON_LOAD,' data-ec-load="'+esc(o.name)+'" data-ec-at="'+(+o.mtime||0)+'"'))
     +'</div>';
+}
+// The loaded row's Export as ecRowHtml writes it inline, which tests/test.js slices with no helper beside it.
+function ecExportHtml(){
+  return catalogEdited()
+    ?'<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="'
+      +esc(t("Save everything loaded now as a catalog file, your edits merged in"))+'">'
+      +esc(t("Export…"))+'</button>':'';
+}
+/* A COLLEAGUE'S ROW: the desk's name, with the first four of its key where two desks share one, the desk's glyph where a
+   catalog wears its key, Look, and Work from it where Load would be. `at` is the row's place in the list of desks. */
+function ecDeskRowHtml(f,o){
+  const who=deskName(f);
+  const tip=t("Signed by {DESK}, key {KEY}. Only that desk can change this file; anyone with the folder can read it.")
+    .split("{DESK}").join(who).split("{KEY}").join(deskKey(f));
+  return '<div class="ec-row ec-desk'+(o.nested?'':' ec-alone')+(o.loaded?' is-loaded':'')+'" data-ec-desk="'+o.at+'">'
+    +'<span class="ec-name"><b>'+esc(who)+(o.twin?'<span class="ec-fp">'+esc(o.twin)+'</span>':'')+'</b>'
+    +'<small class="ec-meta">'+o.meta+'</small>'+(o.extra||'')+'</span>'
+    +(o.loaded?loadedTickHtml()+ecExportHtml():'')
+    +'<span class="ec-who" role="img" tabindex="0" aria-label="'+esc(who)+'" data-tip="'+esc(tip)+'">'+ICON_DESK+'</span>'
+    +ecActHtml("Look",ICON_LOOK,' data-ec-look="'+o.at+'"')
+    +(o.loaded?ecActHtml("Eject",ICON_EJECT,' data-ec-eject="1"'):ecActHtml("Work from it",ICON_LOAD,' data-ec-work="'+o.at+'"'))
+    +'</div>';
+}
+function ecMineHtml(line,glyph){
+  return '<small class="ec-mine">'+(glyph?ICON_DESK:'')+'<span>'+esc(line)+'</span></small>';
 }
 /* A FOLDER FILE'S SIGNATURE, checked as a load would check it and kept per name and date: the
    rows are files nobody has loaded, so each is read once to be told apart. */
@@ -205,7 +236,7 @@ function ecKeyBubOpen(key){
   ["keydown","pointerdown","scroll"].forEach(k=>addEventListener(k,ecKeyBubClose,{capture:true,once:true}));
 }
 function wireEcKeys(box){
-  box.querySelectorAll(".ec-key[data-tip]").forEach(k=>{
+  Array.from(box.querySelectorAll(".ec-key[data-tip]")).concat(Array.from(box.querySelectorAll(".ec-who[data-tip]"))).forEach(k=>{
     k.onmouseenter=k.onfocus=()=>ecKeyBubOpen(k);
     k.onmouseleave=k.onblur=ecKeyBubClose;
   });
@@ -296,10 +327,14 @@ function paintCatalogList(){
   const held=storedCatalog();
   const mine=eLoadedCatalogFile();
   recheckHeldTrust(eCatalog(),held,paintCatalogList);
-  /* A colleague's file is in the listing and has no row yet: how it looks is not decided. */
-  eCatalogFiles().then(all=>{
+  /* A COLLEAGUE'S FILE HAS A ROW where it is the shape a desk writes, its id that desk's own followed by eight hex of
+     what it grew from, so a file claiming any other id has none. This desk's own file is a line, not a row. */
+  Promise.all([eCatalogFiles(),eBranchIdentity(false)]).then(([all,me])=>{
     if(!box.isConnected) return;
     const files=all.filter(f=>!f.desk);
+    const shaped=f=>!!f.desk && f.id.indexOf(f.desk.id+"-")===0;
+    const desks=all.filter(f=>shaped(f) && !(me && f.desk.id===me.id)), own=me?all.filter(f=>shaped(f) && f.desk.id===me.id):[];
+    const heldId=held?String(held.id||""):"";
     /* WHICH ROW IS THE CATALOG IN USE. The file the load recorded, first: that is the one route
        that knows. Where no route recorded a file - an import through the picker names a file
        this list cannot address, and a desk older than the key names none - the newest file that
@@ -308,27 +343,60 @@ function paintCatalogList(){
        at the head and the folder listed the very same file again beneath it. */
     let onAt=mine?files.findIndex(f=>f.name===mine):-1;
     if(onAt<0 && held) onAt=files.findIndex(f=>isCatalogUpdate(f,held));
+    const deskOn=heldId?desks.findIndex(f=>f.id===heldId):-1;
     /* WHAT "NEWER" IS MEASURED AGAINST: the file's own date at the moment it was loaded, so the
        loaded file rewritten since is marked too. A desk older than that key falls back to the
        loaded row's date, which can only under-mark - the safe direction. */
     const at=+(nsGet("CatalogFileAt")||0) || ((files[onAt]||{}).mtime||0);
-    const rows=files.map((f,i)=>{
+    /* THIS DESK'S OWN FILE, said under the catalog it grew from: in use, that its edits are in the folder; not in use,
+       that they wait for it. */
+    const ownOf=id=>own.find(o=>o.grew && o.grew.id===id);
+    const mineLine=ownOf(heldId) ? ecMineHtml(t("Your edits are in the folder as {DESK}").split("{DESK}").join(deskName(ownOf(heldId))),true) : "";
+    const extraFor=(id,on)=>on ? mineLine : (id && id!==heldId && ownOf(id)) ? ecMineHtml(t("Your own edits on it wait here until you load it again"),false) : "";
+    const tops=files.map((f,i)=>{
       const on=i===onAt;
       const stamp=catalogStamp(f.edition,f.mtime);
       const copy=ecCopyHtml(f), meta=on?loadedMeta(stamp):ecMeta(stamp,f);
-      return ecRowHtml({ name:f.name, file:f.name, mtime:f.mtime, loaded:on, newer:at>0 && f.mtime>at,
-        sample:!!f.sample, meta:copy&&meta ? copy+" · "+meta : copy||meta, trust:on?heldCatalogTrust():"" });
+      return {id:f.id, sha:f.sha, on:on, html:ecRowHtml({ name:f.name, file:f.name, mtime:f.mtime, loaded:on, newer:at>0 && f.mtime>at,
+        sample:!!f.sample, meta:copy&&meta ? copy+" · "+meta : copy||meta, trust:on?heldCatalogTrust():"", extra:extraFor(f.id,on) })};
     });
     /* THE CATALOG IN USE ALWAYS HAS A ROW, even where no file in the folder is it: a browser's
        import, a copy loaded from elsewhere, or a desk whose catalog was applied before the store
        existed. What is APPLIED decides rather than what is stored, because "no catalog" over two
-       hundred visible cards is worse than useless. */
-    if((held||catalogLoaded()||(cards||[]).length) && onAt<0)
-      rows.unshift(ecRowHtml({ name:shownCatalogName(catalogFileName()),
-        loaded:true, newer:false, meta:loadedMeta(""), trust:heldCatalogTrust() }));
+       hundred visible cards is worse than useless. A colleague's file worked from is its own row. */
+    if((held||catalogLoaded()||(cards||[]).length) && onAt<0 && deskOn<0)
+      tops.unshift({id:heldId, sha:String(held&&held.pin||""), on:true, html:ecRowHtml({ name:shownCatalogName(catalogFileName()),
+        loaded:true, newer:false, meta:loadedMeta(""), trust:heldCatalogTrust(), extra:mineLine })});
+    /* Under the catalog each grew from: the row in use, else the edition it grew from, else the newest of that catalog.
+       The rest stand at the foot. */
+    const under=tops.map(()=>[]), alone=[], named=new Map(), nested=[];
+    desks.forEach(f=>{ const n=deskName(f); named.set(n,(named.get(n)||0)+1); });
+    desks.forEach((f,i)=>{
+      const g=f.grew, on=i===deskOn, stamp=catalogStamp(f.edition,f.mtime);
+      const of=g ? tops.map((x,k)=>k).filter(k=>!!tops[k].id && tops[k].id===g.id) : [];
+      const p=[of.find(k=>tops[k].on), of.find(k=>tops[k].sha===g.sha), of[0]].find(k=>k!=null);
+      const meta=on ? loadedMeta(stamp) : p!=null ? esc(stamp) : g ? ecMeta(stamp,f) : esc(t("A catalog of its own"))+" · "+ecMeta(stamp,f);
+      (p!=null?under[p]:alone).push(ecDeskRowHtml(f,{at:i, nested:p!=null, loaded:on, meta:meta, extra:extraFor(f.id,on),
+        twin:named.get(deskName(f))>1 ? deskKey(f).slice(0,4) : ""}));
+      if(p!=null && !on) nested.push(i);
+    });
     ecKeyBubClose();
+    const rows=tops.reduce((out,x,k)=>out.concat([x.html],under[k]),[]).concat(alone);
     box.innerHTML=rows.length?rows.join(""):ecEmptyHtml();
     wireEcKeys(box);
+    // A hanging row's line says what that desk changed, once both files have been read.
+    nested.forEach(i=>deskChangeWords(desks[i],deskBase(desks[i],files,held)).then(words=>{
+      const row=box.querySelector('[data-ec-desk="'+i+'"]'), meta=row && row.querySelector(".ec-meta");
+      if(meta && words && words.length) meta.textContent=words.concat([catalogStamp(desks[i].edition,desks[i].mtime)]).join(" · ");
+    }));
+    box.querySelectorAll("button[data-ec-look]").forEach(b=>{
+      const f=desks[+b.getAttribute("data-ec-look")];
+      b.onclick=()=>lookAtDesk(f,files,held);
+    });
+    box.querySelectorAll("button[data-ec-work]").forEach(b=>{
+      const f=desks[+b.getAttribute("data-ec-work")];
+      b.onclick=()=>loadCatalogFromFolder(f.name,f.mtime,f.desk.id);
+    });
     /* Each file's key arrives when its check does; the loaded row keeps the state the desk holds,
        which the recheck above keeps current, and takes only the key's name from its file. */
     files.forEach((f,i)=>ecFileTrust(f).then(r=>{
@@ -362,6 +430,15 @@ function paintCatalogList(){
       dir.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); eOpenCatalogFolder(); } };
     }
   });
+}
+/* LOOK, from a colleague's row: the panel stands where the Library was, and its two ways out go back to the Library or
+   on to the question that loads that desk's file, as the row's own Work from it does. */
+function lookAtDesk(f,files,held){
+  const base=deskBase(f,files,held);
+  const name=shownCatalogName(catalogNameOfFile(!base ? f.name : base.held ? catalogFileName() : base.file.name));
+  openDeskLook(f,base,name,
+    ()=>{ closeModal(); loadCatalogFromFolder(f.name,f.mtime,f.desk.id); },
+    ()=>{ closeModal(); hooks.openManage(); });
 }
 /* Every channel ends here: same guards, same wording, same promise about what is kept.
    Returns whether anything was actually put on screen, which is how an explicit check
@@ -584,6 +661,8 @@ function eCheckWatchedFile(interactive){
    file of it and is valid under the ring (offered). A colleague's file is never any of these, and a file with no ring
    line is never a successor. */
 function onCatalogListing(all){
+  // A colleague's file reaches an open Library this way only.
+  paintCatalogList();
   const held=storedCatalog();
   if(!held && !catalogLoaded()){ offerToLooseAuthor(all); return; }
   if(!held || !held.id) return;
