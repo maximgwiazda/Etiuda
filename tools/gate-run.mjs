@@ -55,8 +55,8 @@
  *     not of the gate: the number of keys declared twice with DIFFERENT values, where the later
  *     was kept. Board item 518. Nought is the ordinary case and it is written every time, so that
  *     its absence one day is legible rather than silent.
- *   - `refused`, beside the counts: the wall a gate named on a `#refused <wall>` line of its own,
- *     `window-wall` where tests/engine.js refused a window, and empty otherwise. The run is then
+ *   - `refused`, beside the counts: the wall a gate named on a `#refused <wall>` line of its own and an
+ *     exit of 78, `window-wall` where tests/engine.js refused a window, and empty otherwise. The run is then
  *     summed up as refused, not failed; the exit stays the gate's own.
  * A gate's exit code is the verdict. The counts are how a green that fell is noticed.
  *
@@ -327,8 +327,10 @@ for (const step of steps) {
      withdrawal can be made to stick. */
   const verdict = moved.length ? NO_VERDICT : res.exit;
   /* A gate that refuses by a named wall says so on a line of its own, `#refused <wall>`, and the
-     record carries the name, empty for every other run, so a refusal never reads as a failure. */
-  const refused = (/^#refused ([a-z][a-z0-9-]*)\s*$/m.exec(res.out) || [])[1] || "";
+     record carries the name, empty for every other run, so a refusal never reads as a failure.
+     Taken only with the gate's own exit 78, so a gate that echoes a child's marker and passes is
+     not recorded as refused. */
+  const refused = res.exit === NO_VERDICT ? (/^#refused ([a-z][a-z0-9-]*)\s*$/m.exec(res.out) || [])[1] || "" : "";
   const { counts, from, clashed } = countsOf(res.out, verdict);
   if (clashed.length) console.log("  clash: " + clashed.length + " key(s) declared twice with"
     + " different values, the later kept: " + clashed.join(", "));

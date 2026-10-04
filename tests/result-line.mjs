@@ -37,7 +37,7 @@ const TOOL = path.join(ROOT, "tools", "gate-run.mjs");
 const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. */
-const EXPECTED = 37;
+const EXPECTED = 38;
 
 let asserted = 0, failed = 0;
 function check(cond, line) {
@@ -467,6 +467,18 @@ function main() {
     "9i a gate refusing by a named wall is recorded as refused (" + JSON.stringify(trWallGate && trWallGate.refused)
     + ", exit " + (trWallGate && trWallGate.exit) + ") and summed up as " + JSON.stringify(summaryOf(trWallRun))
     + "; 9h's twin without the line records " + JSON.stringify(trOwnGate && trOwnGate.refused) + " and says no REFUSED");
+
+  /* 9j THE MARKER WITHOUT THE REFUSAL. 9i's gate with exit 0 in place of 78, as a gate that echoes a
+     child's marker and passes: not recorded as refused, and the chain goes on. */
+  const trEcho = makeLab("tree-wall-echo", { refuses: 'console.log("#refused window-wall");' + NL
+    + 'console.log("  ok   echoed");' + NL + "process.exit(0);" + NL, after: trStub(1) },
+    { files: TR_FILES, git: true });
+  const trEchoRun = run(trEcho, ["refuses", "after"]);
+  const trEchoGate = trEchoRun.byGate["tests-refuses"];
+  check(trEchoRun.exit === 0 && !!trEchoGate && trEchoGate.refused === "" && !!trEchoRun.byGate["tests-after"]
+    && !/REFUSED/.test(summaryOf(trEchoRun)),
+    "9j a gate printing the marker and exiting 0 is recorded with refused " + JSON.stringify(trEchoGate && trEchoGate.refused)
+    + " and the chain ran on: " + JSON.stringify(summaryOf(trEchoRun).replace(/^.*, tree /, "tree ")));
 
   /* 9c THE CONTROL: the same write, the same bytes. A guard that fired on the act of writing
      rather than on the change would redden this, and a guard that reddens work nobody objects to

@@ -196,6 +196,19 @@ gate('line endings and dashes', () => {
   return true;
 });
 
+/* The shell gate opens windows, so the window wall is asked here, before the minutes of npm test,
+   and a refusal stops the run as refused (exit 78), not as a failed gate (tests/engine.js). */
+{
+  const wall = createRequire(import.meta.url)(join(ROOT, 'tests', 'engine.js'))
+    .windowWallRefusal('tools/release.mjs, whose shell gate opens windows');
+  if (wall) {
+    console.log('#refused window-wall');
+    console.error('  REFUSED, not failed: ' + wall[0]);
+    wall.slice(1).forEach(l => console.error('       ' + l));
+    process.exit(78);
+  }
+}
+
 /* npm test carries build-fresh, so the artefact and its hash pin are proved to be the build of
    src/ inside this gate rather than beside it. */
 gate('the harness: npm test' + (FIXTURES ? ' with fixtures' : ', WITHOUT fixtures'), () => {

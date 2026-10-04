@@ -670,7 +670,8 @@ try {
        + ", where " + slow.join(" and ") + " (npm run gates' other two scripts) are both launch-site files");
 
     /* 22e. NO GATE GIVES ITSELF THE WORD. The variable is named in tests/ and tools/ by engine.js
-       alone, and an environment is keyed by it only in this file's probes. */
+       alone, and an environment is keyed by it only in this file's probes and in sbom.mjs's release
+       lab, whose window gates are `node -e 0`. */
     const LITERAL = new RegExp("ETIUDA_" + "WINDOWS"), KEYED = /\[\s*E\.WINDOWS_VAR\s*\]/;
     const every = (dir, rel) => fs.readdirSync(dir, { withFileTypes: true }).flatMap(d =>
       d.isDirectory() ? (d.name === "node_modules" ? [] : every(path.join(dir, d.name), rel + d.name + "/"))
@@ -679,7 +680,7 @@ try {
     const naming = scripts.filter(f => LITERAL.test(fs.readFileSync(path.join(E.ROOT, f), "utf8")));
     const keying = scripts.filter(f => KEYED.test(fs.readFileSync(path.join(E.ROOT, f), "utf8")));
     const plantedName = LITERAL.test("process.env." + "ETIUDA_" + "WINDOWS = today;");
-    ok(naming.join() === "tests/engine.js" && keying.join() === "tests/engine-selftest.js" && plantedName,
+    ok(naming.join() === "tests/engine.js" && keying.join() === "tests/engine-selftest.js,tests/sbom.mjs" && plantedName,
        "22e the variable is named by " + JSON.stringify(naming) + " and keyed by " + JSON.stringify(keying) + " over "
        + scripts.length + " script(s) in tests/ and tools/; the regex finds a planted assignment (" + plantedName + ")");
   }

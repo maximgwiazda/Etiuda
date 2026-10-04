@@ -33,8 +33,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TOOL = path.join(ROOT, 'tools', 'sbom.mjs');
 const KEEP = process.argv.indexOf('--keep') > -1;
 const require = createRequire(import.meta.url);
+const E = require('./engine.js');
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 28;
+const EXPECTED = 29;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -353,9 +354,12 @@ async function main() {
     put(path.join(gitDir, 'hooks', 'pre-commit'), '#!/bin/sh\nexit 0\n');
     return { root, dir, dist: path.join(root, 'dist') };
   }
-  function release(l) {
+  function release(l, word) {
     const env = { ...process.env, ETIUDA_RELEASE_HOME_ROOT: l.root, ETIUDA_DIST: l.dist, ETIUDA_FIXTURES: 'stub',
-      ETIUDA_TEST_ASAR: path.join(ROOT, 'node_modules', '@electron', 'asar') };
+      ETIUDA_TEST_ASAR: path.join(ROOT, 'node_modules', '@electron', 'asar'),
+      /* The lab's window gates are `node -e 0`, so it carries the window wall's word and opens nothing. */
+      [E.WINDOWS_VAR]: E.WINDOWS_DAY };
+    if (word === null) delete env[E.WINDOWS_VAR];
     for (const k of SIGNING_VARS) delete env[k];
     const res = spawnSync(process.execPath, ['tools/release.mjs', '--package'], { cwd: l.dir, env, encoding: 'utf8', timeout: 400000 });
     return { status: res.status, out: String(res.stdout || '') + String(res.stderr || '') };
@@ -380,6 +384,15 @@ async function main() {
   check(!!sbomHash && said === sbomHash && full.out.indexOf('its bill of materials beside it, sha256 ' + sbomHash) > -1,
     '7b its SHA-256 is printed at the gate and again on the closing line: printed ' + JSON.stringify(said)
     + ', against the file\'s ' + sbomHash);
+
+  /* 7w THE WINDOW WALL, ASKED BEFORE THE MINUTES OF npm test. The same lab without the word stops after
+     gate 4 as refused, exit 78 with the marker, and gate 5 never starts. */
+  const walled = release(releaseLab('wall', null), null);
+  check(walled.status === 78 && /^#refused window-wall\r?$/m.test(walled.out)
+    && /REFUSED, not failed: WINDOW WALL: tools\/release\.mjs/.test(walled.out)
+    && /\n\[4\] /.test(walled.out) && !/\n\[5\] /.test(walled.out),
+    '7w without the window wall\'s word a release stops before npm test as refused, exit ' + walled.status
+    + ' (78 wanted), gate 4 reached and gate 5 not: ' + JSON.stringify((/REFUSED[^\r\n]*/.exec(walled.out) || [''])[0].slice(0, 90)));
 
   /* The contradiction: alpha is a production dependency the six-file app would not carry, so the
      list is not what ships. The document a run left there earlier goes too, or it would read as
