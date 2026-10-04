@@ -406,6 +406,99 @@ check("18 control: the plain payload carries none of the new keys through either
   check("37 a retired card the agent had hidden is still carried, flagged, and its hide is still held",
     !!hidden && hidden.cards.map(c => c.id + (c.retired ? "*" : "")).join(",") === "c-a,c-b*,c-c" && PK.pack.hidden.join(",") === "c-b",
     hidden ? hidden.cards.map(c => c.id + (c.retired ? "*" : "")).join(",") + " | " + PK.pack.hidden.join(",") : "nothing");
+  /* WHAT A NEW EDITION CHANGES (C08) and what the load does with the desk's own edits (branches point 10).
+     The comparison is pure and is called on catalogs read by the real reader; the settling runs inside the
+     real carry, as an edition of the same catalog is put down. */
+  const ED = await import(MOD("edition-changes.js"));
+  const read = d => CT.parseCatalogFile(JSON.stringify(d));
+  const next = f => { const d = doc(); f(d); return d; };
+  const bodyIs = (d, id, v) => { d.cards.find(c => c.id === id).body.en = v; };
+  const kinds = r => ["changed", "new", "restored", "retired", "removed"].map(k => r.counts[k]).join(",");
+  const said = r => r.items.map(i => i.kind + ":" + i.id + (i.own ? "*" : "")).join(" ");
+  const NONE = { overrides: {}, removed: [], favourites: [] };
+  const three = next(d => { bodyIs(d, "c-a", "A body, changed."); d.cards[2].retired = true;
+    d.cards.push({ id: "c-d", shelf: "t-op", bodyShape: "plain", title: { en: "D" }, body: { en: "D body." } }); });
+  const r38 = ED.editionChanges(read(doc()), read(three), NONE);
+  check("38 an edition with a card changed, one added and one retired counts 1, 1 and 1, and names each",
+    kinds(r38) === "1,1,0,1,0" && said(r38) === "changed:c-a new:c-d retired:c-c", kinds(r38) + " | " + said(r38));
+  const EP = await import(MOD("edition-panel.js"));
+  const comeback = (await import(MOD("esc.js"))).esc((await import(MOD("ui-lang.js"))).t("It comes back with your star and your edits."));
+  const sleeper = lay => { const r = ED.editionChanges(read(doc()), read(three), lay), it = r.items.find(i => i.id === "c-c");
+    return (it && it.asleep ? "asleep" : "awake") + "/" + (EP.editionOfferHtml(read(three), read(doc()), r).indexOf(comeback) > -1 ? "line" : "none"); };
+  const r38a = [NONE, { overrides: {}, removed: [], favourites: ["c-c"] }, { overrides: { "c-c": { en: "my edit" } }, removed: [], favourites: [] }]
+    .map(sleeper).join(" ");
+  check("38a the offer promises a retired card back with a star and edits only where it has one: not unstarred and unedited, yes starred, yes edited",
+    r38a === "awake/none asleep/line asleep/line", r38a);
+  const r39 = ED.editionChanges(read(doc()), read(doc()), NONE);
+  check("39 control: the same file offered again counts nothing", kinds(r39) === "0,0,0,0,0" && !r39.items.length, kinds(r39));
+  const r40 = ED.editionChanges(read(doc()), read(next(d => d.cards.reverse())), NONE);
+  check("40 a change in the order of the cards alone counts nothing", kinds(r40) === "0,0,0,0,0", kinds(r40));
+  const r40a = ED.editionChanges(read(doc()),
+    read(next(d => { d.cards[0].firstOnly = true; d.cards[1].k = "lamp, bulb"; d.cards[2].commits = true; })), NONE);
+  check("40a a card whose only change is a flag or its keywords counts nothing", kinds(r40a) === "0,0,0,0,0" && !r40a.items.length,
+    kinds(r40a) + " | " + said(r40a));
+  const asleepDoc = next(d => { d.cards[1].retired = true; });
+  const r41 = ED.editionChanges(read(asleepDoc), read(next(d => { d.cards.splice(2, 1); })), NONE);
+  check("41 a card the edition wakes is restored, and one it leaves out altogether is removed, not retired",
+    said(r41) === "restored:c-b removed:c-c", said(r41));
+  const mineOn = id => ({ overrides: { [id]: { en: "my edit" } }, removed: [], favourites: [] });
+  const leadB = read(next(d => bodyIs(d, "c-b", "lead text")));
+  const r42a = ED.editionChanges(read(doc()), leadB, mineOn("c-b"));
+  const r42b = ED.editionChanges(read(doc()), leadB, mineOn("c-a"));
+  const r42c = ED.editionChanges(read(doc()), read(next(d => bodyIs(d, "c-b", "my edit"))), mineOn("c-b"));
+  check("42 an edited card the lead changed otherwise is the agent's own version; one the lead left, or changed to the agent's words, is not",
+    said(r42a) === "changed:c-b*" && said(r42b) === "changed:c-b" && said(r42c) === "changed:c-b",
+    [said(r42a), said(r42b), said(r42c)].join(" | "));
+  const r43 = ED.editionChanges(read(doc()), leadB, { overrides: {}, removed: ["c-b"], favourites: [] });
+  check("43 a card this desk removed is nobody's news when the lead changes it", !r43.items.length, said(r43) || "nothing");
+  const noted = n => Object.assign(doc(), { langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }], notes: n });
+  check("44 the lead's note: none gives none, English alone shows on a Polish desk, Polish shows there when written",
+    ED.editionNoteText(read(doc()), "pl") === "" && ED.editionNoteText(read(noted({ en: "Why." })), "pl") === "Why."
+    && ED.editionNoteText(read(noted({ en: "Why.", pl: "Dlaczego." })), "pl") === "Dlaczego.", "three notes");
+  const pairs = [["The courier costs 18 a box.", "The courier costs 19 a box."], ["", "New."], ["Old.", ""],
+    ["one two three", "one three two"], ["a ".repeat(800), "b ".repeat(800)]];
+  const joined = (ops, mine) => ops.filter(o => o.op === "same" || o.op === mine).map(o => o.text).join("");
+  const w = ED.wordDiff(pairs[0][0], pairs[0][1]);
+  check("45 a word diff marks the one word that moved, and each side joins back to its own text, past the cap too",
+    w.filter(o => o.op !== "same").map(o => o.op + ":" + o.text).join(" ") === "del:18 ins:19"
+    && pairs.every(p => { const ops = ED.wordDiff(p[0], p[1]); return joined(ops, "del") === p[0] && joined(ops, "ins") === p[1]; }),
+    w.map(o => o.op + ":" + o.text).join("|"));
+  const ovB = () => JSON.stringify(PK.pack.overrides["c-b"] || null);
+  fresh(); land(next(d => bodyIs(d, "c-b", "my edit")));
+  check("46 an edition that took the agent's edit word for word leaves no edit behind, and nothing for the desk's own file",
+    ovB() === "null" && bodyOf("c-b") === "my edit" && CF.deskBranchHolds() === false,
+    ovB() + " | " + bodyOf("c-b") + " | holds " + CF.deskBranchHolds());
+  fresh(); land(doc());
+  check("47 control: the same edition put down again drops nothing", ovB() === JSON.stringify({ en: "my edit" }), ovB());
+  fresh(); land(next(d => bodyIs(d, "c-b", "lead text")));
+  check("48 a field the lead changed otherwise stays the agent's", ovB() === JSON.stringify({ en: "my edit" }) && bodyOf("c-b") === "my edit",
+    ovB() + " | " + bodyOf("c-b"));
+  const takeLand = () => {
+    const taken = read(next(d => bodyIs(d, "c-b", "lead text")));
+    CC.takeTeamText(taken, "c-b", true);
+    CC.carryCardLayer(taken); ST.lsSet(CT.E_CATALOG_STORE, JSON.stringify(taken), true); CT.eApplyCatalog(taken);
+    PK.pack.baseCards = null; RB.rebuildCards();
+  };
+  fresh(); takeLand();
+  check("49 the team's new text taken in the offer: after the load the edit is gone and the card says what the edition says",
+    ovB() === "null" && bodyOf("c-b") === "lead text" && PK.pack.favourites.indexOf("c-b") > -1,
+    ovB() + " | " + bodyOf("c-b"));
+  const titleOf = id => ((AP.cards.find(c => c.id === id) || {}).t);
+  fresh(); PK.pack.overrides["c-b"].t = "My title"; RB.rebuildCards(); takeLand();
+  check("49a and a field of the agent's edit the lead never changed stays: the title the agent wrote, beside the team's text",
+    ovB() === JSON.stringify({ t: "My title" }) && bodyOf("c-b") === "lead text" && titleOf("c-b") === "My title",
+    ovB() + " | " + bodyOf("c-b") + " | " + titleOf("c-b"));
+  const own = (body) => { fresh(); PK.pack.custom = [{ id: "u:own1", c: "t-op", t: "Mine", en: body }];
+    PK.pack.favourites.push("u:own1"); RB.rebuildCards(); };
+  const adopting = next(d => d.cards.push({ id: "u:own1", shelf: "t-op", bodyShape: "plain", title: { en: "Mine" }, body: { en: "Mine body." } }));
+  own("Mine body."); land(adopting);
+  const ownIds = () => AP.cards.filter(c => c.id === "u:own1").length;
+  check("50 an own card the edition now holds shows once, still starred, and is no longer the agent's own",
+    ownIds() === 1 && PK.pack.favourites.indexOf("u:own1") > -1 && !PK.pack.custom.some(c => c.id === "u:own1")
+    && !("u:own1" in PK.pack.overrides), ownIds() + " shown | custom " + PK.pack.custom.length + " | override " + ("u:own1" in PK.pack.overrides));
+  own("Mine body, later."); land(adopting);
+  check("51 and the agent's words written since the proposal stay, as the agent's edit of that card",
+    ownIds() === 1 && bodyOf("u:own1") === "Mine body, later." && !PK.pack.custom.length, bodyOf("u:own1"));
   HK.hooks.syncFavouritesMeta = () => {};
   // The toast's own timer fires after the check, against the stand-in, and is let run its course.
   await new Promise(r => setTimeout(r, 2000));

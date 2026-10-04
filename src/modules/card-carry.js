@@ -5,6 +5,8 @@ import { uid } from "./ids.js";
 import { lyGet, lySet, ssGet, ssSet, ssDel } from "./storage.js";
 import { catalogCountsLine, toast } from "./ui-lang.js";
 import { CAT_LABELS_PL } from "./icons.js";
+import { CARD_BOOL_FLAGS } from "./card-fields.js";
+import { editionFieldKeys } from "./edition-changes.js";
 
 /* WHAT A PERSON MADE OUTLIVES THE CATALOG UNDER IT. A card still there keeps its edit, star, hide
    and place; an edit whose card is gone becomes an own card, carrying all three; a star on a card
@@ -218,6 +220,47 @@ function keepOwnShelves(cats){
     if(CAT_LABELS_PL[k] && !pack.catLabelsPl[k]) pack.catLabelsPl[k]=CAT_LABELS_PL[k];
   });
 }
+/* THE CARDS WHOSE NEW TEXT THE AGENT TOOK in the offer, kept against the catalog object the offer
+   was about, which is the object its load is handed. Nothing is written before that load. */
+const takenFor=new WeakMap();
+function takeTeamText(c,id,on){
+  let s=takenFor.get(c);
+  if(!s){ s=new Set(); takenFor.set(c,s); }
+  if(on) s.add(String(id)); else s.delete(String(id));
+}
+function teamTextTaken(c,id){ const s=takenFor.get(c); return !!s && s.has(String(id)); }
+/* AFTER A MERGE, each of this desk's edits is read against the edition arriving: a field it now holds
+   as the agent wrote it is dropped, so a later change of the lead's reaches this desk; one the lead
+   changed otherwise stays the agent's unless the offer took the team's text; an own card the edition
+   now holds becomes that card, with whatever still differs kept as the agent's edit of it. */
+const UNSETTLED=["intents","next","paxVoc","ext"];
+function settleEdits(c,list){
+  const ov=pack.overrides||{}, bases=pack.editBases||{}, takes=takenFor.get(c);
+  const now=new Map(list.map(m=>[catalogCardId(m),m])), old=new Map(BASE_M.map(m=>[m.id,m]));
+  const flag=new Set(CARD_BOOL_FLAGS);
+  const text=new Set(editionFieldKeys(c,{langs:CONTENT_LANGS.map(code=>({code:code}))}).map(k=>k.key));
+  const same=(k,a,b)=>flag.has(k) ? !!(+a||0)===!!(+b||0) : String(a==null?"":a)===String(b==null?"":b);
+  const settled=k=>k.charAt(0)!=="_" && UNSETTLED.indexOf(k)<0;
+  Object.keys(ov).forEach(id=>{
+    const m=now.get(id), o=ov[id];
+    if(!m || !o || typeof o!=="object") return;
+    const b=old.get(id)||bases[id]||null, took=!!takes && takes.has(id);
+    Object.keys(o).forEach(k=>{
+      if(!settled(k)) return;
+      if(same(k,o[k],m[k]) || (took && text.has(k) && b && !same(k,b[k],m[k]))) delete o[k];
+    });
+    if(!Object.keys(o).length) delete ov[id];
+  });
+  pack.custom=(pack.custom||[]).filter(own=>{
+    const m=own && now.get(own.id);
+    if(!m || old.has(own.id)) return true;
+    const o={};
+    Object.keys(own).forEach(k=>{ if(k!=="id" && settled(k) && !same(k,own[k],m[k])) o[k]=own[k]; });
+    if(Object.keys(o).length) ov[own.id]=o;
+    return false;
+  });
+  pack.overrides=ov;
+}
 /** Before a catalog is put down: every personal layer re-read against the one arriving. Returns
  *  the ids that live on, for the prune that follows. The count rides the reload in the session. */
 function carryCardLayer(c){
@@ -226,6 +269,7 @@ function carryCardLayer(c){
   (pack.custom||[]).forEach(m=>{ if(m&&m.id) alive.add(m.id); });
   rekeyOldCards(list,alive);
   rekeyOldShelves((c&&c.categories)||{});
+  settleEdits(c,list);
   const find=linkFinder(c), lost={};
   const pin=(id,l)=>{
     const gone=[], out=pinLinks(l,find,gone);
@@ -284,5 +328,7 @@ function tellCarried(){
 
 export {
   carryCardLayer,
-  carryAtBoot
+  carryAtBoot,
+  takeTeamText,
+  teamTextTaken
 };
