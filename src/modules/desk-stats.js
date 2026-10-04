@@ -99,7 +99,7 @@ function bumpUse(pack, id, at){
 }
 /* "B AFTER A": a card copied straight after another in one conversation, counted in the day's `p`
    as p[place of A][place of B]. `p` is made by the first pair of the day, so a day without one
-   keeps its shape. It stays on the desk: the statistics answer does not carry it. */
+   keeps its shape. The statistics answer for a span carries its pairs. */
 function bumpPair(pack, from, to, at){
   if(!from||!to||String(from)===String(to)) return;
   const b=statsDay(pack, at), a=statsIdAt(pack, String(from)), z=statsIdAt(pack, String(to));
@@ -216,7 +216,8 @@ function statsLearntAfter(pack, from, today){
 }
 /* A REQUEST NAMES A SPAN AND THE ANSWER IS THAT SPAN, from and to inclusive, summed over the
    day buckets, with `since` beside it; a card's `at` is its last use inside the span. Without
-   a whole span the answer is the lifetime counters, as every answer was before. */
+   a whole span the answer is the lifetime counters, as every answer was before. A span's answer
+   also carries `pairs` [{from, to, n}] summed from the same days, and omits the key when none. */
 function statsDoc(pack, info){
   const from=String(info&&info.period&&info.period.from||"");
   const to=String(info&&info.period&&info.period.to||"");
@@ -225,6 +226,7 @@ function statsDoc(pack, info){
   let misses=(pack&&pack.searchMisses)|0;
   let lc=(pack&&pack.langs&&typeof pack.langs==="object"&&!Array.isArray(pack.langs))?pack.langs:{};
   let since="";
+  const pr=new Map();
   if(spanned){
     const days=(pack&&pack.days&&typeof pack.days==="object"&&!Array.isArray(pack.days))?pack.days:{};
     const ids=(pack&&Array.isArray(pack.dayIds))?pack.dayIds:[];
@@ -238,6 +240,18 @@ function statsDoc(pack, info){
       Object.keys(b.i||{}).forEach(k=>{ const id=ids[k]; if(id!=null) ic[id]=(ic[id]|0)+(b.i[k]|0); });
       Object.keys(b.l||{}).forEach(c=>{ lc[c]=(lc[c]|0)+(b.l[c]|0); });
       misses+=b.m|0;
+      const bp=b.p&&typeof b.p==="object"?b.p:{};
+      Object.keys(bp).forEach(a=>{
+        const row=bp[a]&&typeof bp[a]==="object"?bp[a]:{};
+        Object.keys(row).forEach(z=>{
+          const f=ids[a], t=ids[z], n=row[z]|0;
+          if(f==null||t==null||n<=0||String(f)===String(t)) return;
+          const k=JSON.stringify([String(f),String(t)]);
+          const o=pr.get(k)||{from:String(f),to:String(t),n:0};
+          o.n+=n;
+          pr.set(k,o);
+        });
+      });
     });
     since=STATS_YMD.test(String(pack&&pack.daysSince||"")) ? String(pack.daysSince) : statsYmd();
   }
@@ -264,6 +278,7 @@ function statsDoc(pack, info){
   };
   if(spanned) doc.since=since;
   Object.assign(doc,{cards,intents,misses,langs});
+  if(pr.size) doc.pairs=[...pr.values()].sort((x,y)=>y.n-x.n || (x.from<y.from ? -1 : x.from>y.from ? 1 : 0) || (x.to<y.to ? -1 : x.to>y.to ? 1 : 0));
   if(info&&info.catalog&&info.catalog.id){
     doc.catalog={id:String(info.catalog.id),rev:+info.catalog.rev||0};
   }
