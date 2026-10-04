@@ -251,6 +251,9 @@ try {
 
   /* ---- an index that will not read ------------------------------------------------------------------------------------ */
   const copies = blobs().length;
+  // Copies older than the 30 days: a rebuild that dated them by their files would let the next save prune them.
+  const aged = (Date.now() - 40 * DAY) / 1000;
+  blobs().forEach(n => fs.utimesSync(path.join(HIST, n), aged, aged));
   fs.mkdirSync(HIST, { recursive: true });
   fs.writeFileSync(path.join(HIST, "index.json"), "{ not an index");
   A = boot();

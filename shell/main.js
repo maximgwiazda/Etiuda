@@ -1504,7 +1504,8 @@ function historyText(sha) {
   if (sha256Hex(buf) !== sha) throw new Error("the kept copy does not match its name");
   return buf.toString("utf8");
 }
-/* An index that will not read is made again from the blobs, which then belong to no file: nothing kept is lost to it. */
+/* An index that will not read is made again from the blobs, which then belong to no file: nothing kept is lost to it.
+   Each is last seen at the rebuild, not at its copy's time, or the next save prunes every copy older than the days. */
 function historyRebuilt() {
   let names = [];
   try { names = fs.readdirSync(historyDir()); } catch { return []; }
@@ -1514,7 +1515,7 @@ function historyRebuilt() {
     if (!m) continue;
     try {
       const text = historyText(m[1]), st = fs.statSync(historyBlob(m[1])), at = Math.round(st.mtimeMs);
-      out.push(Object.assign({ sha: m[1], path: "", size: Buffer.byteLength(text, "utf8"), gz: st.size, first: at, last: at,
+      out.push(Object.assign({ sha: m[1], path: "", size: Buffer.byteLength(text, "utf8"), gz: st.size, first: at, last: Date.now(),
         wrote: false }, historyFacts(text)));
     } catch { /* a blob that does not open is left where it is */ }
   }
