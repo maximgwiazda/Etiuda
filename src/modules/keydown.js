@@ -11,6 +11,7 @@ import { scCaptureId, scCaptureSlot, scRepaint, scStopCapture } from "./shortcut
 import { activateTourFocus, endTour, moveTourFocus, tourActive, tourHasFocus } from "./tour.js";
 import { t, toast } from "./ui-lang.js";
 import { pageKeyScroll } from "./page-scroll.js";
+import { lanesPageScroller } from "./lanes.js";
 import { $, intentEl } from "./dom.js";
 import { closeNotePane } from "./note-pane.js";
 import { eHost } from "./host.js";
@@ -190,9 +191,10 @@ function wireGlobalKeydown(){
 
     /* After the rebindable pass, so a binding placed on one of these still wins. Page up and
        down run from inside the search box too - a caret in a single-line field has no use for
-       them - while Home and End keep their meaning there, behind the guard below. */
+       them - while Home and End keep their meaning there, behind the guard below. While the lanes
+       show, the four scroll the lanes and the list underneath keeps its place. */
     const plain=!e.ctrlKey && !e.altKey && !e.metaKey;
-    if(plain && (e.key==="PageDown"||e.key==="PageUp") && pageKeyScroll(e.key)){ e.preventDefault(); return; }
+    if(plain && (e.key==="PageDown"||e.key==="PageUp") && pageKeyScroll(e.key, lanesPageScroller())){ e.preventDefault(); return; }
     if(inField) return;
     /* A FOCUSED CONTROL KEEPS ITS OWN TWO KEYS. Enter is the copy key and Space is an ordinary
        character, so both were taken from whatever the keyboard had just walked to: the Menu
@@ -204,7 +206,7 @@ function wireGlobalKeydown(){
     if(plain && !e.shiftKey && (e.key==="Enter"||e.key===" ") && onControl
        && typeof onControl.matches==="function"
        && onControl.matches("button:not([disabled]),summary,a[href],[role=menuitem]")) return;
-    if(plain && (e.key==="Home"||e.key==="End") && pageKeyScroll(e.key)){ e.preventDefault(); return; }
+    if(plain && (e.key==="Home"||e.key==="End") && pageKeyScroll(e.key, lanesPageScroller())){ e.preventDefault(); return; }
     if(eventMatchesAction(e,"navUp")){ e.preventDefault(); hooks.runShortcut("navUp"); return; }
     if(eventMatchesAction(e,"navDown")){ e.preventDefault(); hooks.runShortcut("navDown"); return; }
     if(eventMatchesAction(e,"markTop")){ e.preventDefault(); hooks.runShortcut("markTop"); return; }

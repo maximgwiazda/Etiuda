@@ -575,6 +575,62 @@ function runUnitTests() {
   emptyDeskTests();
   catNowTests();
   libraryHeadTests();
+  lanePageKeyTests();
+}
+
+/* THE PAGE KEYS WHILE THE LANES SHOW: the document's keydown is sliced and run with the real page keys
+   on a model of the two scrollers. Up, the lanes take the keys and the list keeps its place unseen; shut,
+   the list takes them by the cards' own rule, and a caret in a field keeps Home and End. */
+function lanePageKeyTests() {
+  const src = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
+  const box = id => ({ id, scrollTop: 0, clientHeight: 600, scrollHeight: 5000,
+    scrollBy(o) { this.scrollTop = Math.max(0, Math.min(this.scrollHeight - this.clientHeight, this.scrollTop + o.top)); } });
+  const list = box("pageScroll"), lanesBox = box("lanes");
+  const world = { open: false, active: null, listener: null };
+  const doc = { getElementById: id => (id === "pageScroll" ? list : null), get activeElement() { return world.active; },
+    body: {}, scrollingElement: null, documentElement: null };
+  const off = () => false;
+  const own = { document: doc, addEventListener: (k, fn) => { if (k === "keydown") world.listener = fn; },
+    $: s => (s === "#lanes" ? lanesBox : null), scCaptureId: "", SC_DEFS: [], intentEl: null,
+    tourActive: off, tourHasFocus: off, openCover: () => null, modalOpen: off, factsPanelOpen: off,
+    eventMatchesAction: off, eHost: off, hooks: { runShortcut: off }, mgReduceMotion: off };
+  Object.defineProperty(own, "lanesOn", { get: () => world.open });
+  const scope = new Proxy({}, {
+    has: (o, k) => typeof k === "string",
+    get: (o, k) => k === Symbol.unscopables ? undefined : k in own ? own[k] : k in globalThis ? globalThis[k] : off,
+    set: (o, k, v) => { own[k] = v; return true; }
+  });
+  const decls = [["page-scroll.js", "function pageScroller("], ["page-scroll.js", "function pageKeyScroll("],
+    ["keydown.js", "function typingInField("], ["keydown.js", "function wireGlobalKeydown("],
+    ["lanes.js", "const lanesEl="], ["lanes.js", "function lanesOpen("], ["lanes.js", "function lanesPageScroller("]];
+  let body = "";
+  decls.forEach(d => { try { body += extractDecl(src(d[0]), d[1]) + "\n"; } catch (e) { /* a missing one shows as the keys' behaviour below */ } });
+  try { new Function("scope", "with(scope){\n" + body + "wireGlobalKeydown();\n}")(scope); }
+  catch (e) { eq("the keydown slice runs", e.message, "ran"); return; }
+  if (!world.listener) { eq("the keydown slice registers its listener", "none", "registered"); return; }
+  const press = key => { let held = false;
+    world.listener({ key, ctrlKey: false, altKey: false, metaKey: false, shiftKey: false, target: null, preventDefault() { held = true; } });
+    return held; };
+  const at = (open, active, listTop, lanesTop) => { world.open = open; world.active = active; list.scrollTop = listTop; lanesBox.scrollTop = lanesTop; };
+  const field = { tagName: "INPUT", isContentEditable: false };
+
+  at(true, null, 1000, 0);
+  const pd = [press("PageDown"), lanesBox.scrollTop, list.scrollTop];
+  press("PageUp");
+  eq("with the lanes up, PageDown and PageUp scroll the lanes by the page and the list keeps its place",
+    pd.concat([lanesBox.scrollTop, list.scrollTop]), [true, 540, 1000, 0, 1000]);
+  at(true, null, 1000, 300);
+  const end = [press("End"), lanesBox.scrollTop, list.scrollTop];
+  press("Home");
+  eq("with the lanes up, End and Home go to the foot and the top of the lanes, and the list keeps its place",
+    end.concat([lanesBox.scrollTop, list.scrollTop]), [true, 4400, 1000, 0, 1000]);
+  at(true, field, 1000, 300);
+  eq("with the lanes up and a caret in a field, PageDown still scrolls the lanes, and Home is left to the field",
+    [press("PageDown"), lanesBox.scrollTop, press("Home"), lanesBox.scrollTop, list.scrollTop], [true, 840, false, 840, 1000]);
+  at(false, null, 1000, 300);
+  eq("THE CONTROL: with the lanes shut, PageDown, End and Home scroll the list by the cards' rule and the lanes are not touched",
+    [press("PageDown"), list.scrollTop, press("End"), list.scrollTop, press("Home"), list.scrollTop, lanesBox.scrollTop],
+    [true, 1540, true, 4400, true, 0, 300]);
 }
 
 /* EJECT AND CLEAR HAPPEN AT ONCE AND IN PLACE, AND EACH UNDO PUTS BACK WHAT IT TOOK (Maxim, 2026-09-27

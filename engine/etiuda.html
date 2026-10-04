@@ -10325,8 +10325,8 @@ What you type stays in this browser only.`;
     const el = pageScroller();
     return el && el.scrollTop || 0;
   }
-  function pageKeyScroll(key) {
-    const sc = pageScroller(), page = Math.max(120, sc.clientHeight - 60);
+  function pageKeyScroll(key, el) {
+    const sc = el || pageScroller(), page = Math.max(120, sc.clientHeight - 60);
     const dy = key === "PageDown" ? page : key === "PageUp" ? -page : key === "End" ? sc.scrollHeight : key === "Home" ? -sc.scrollHeight : null;
     if (dy == null) return false;
     sc.scrollBy({ top: dy, left: 0, behavior: "auto" });
@@ -26135,491 +26135,19 @@ What you type stays in this browser only.`;
     wireCaptureKeydown: () => wireCaptureKeydown,
     wireGlobalKeydown: () => wireGlobalKeydown
   });
-  function closeLooseOverlays() {
-    if ($("#settingsMenu") && !$("#settingsMenu").hidden) {
-      closeSettingsMenu();
-    }
-    if ($("#moreMenu") && !$("#moreMenu").hidden) {
-      closeMoreMenu();
-    }
-    if (factsPanelOpen()) {
-      closeFactsPanel();
-    }
-    closeNotePane();
-  }
-  function typingInField() {
-    const a = document.activeElement;
-    if (!a) return false;
-    if (a.isContentEditable) return true;
-    const tag = (a.tagName || "").toLowerCase();
-    return tag === "input" || tag === "textarea" || tag === "select";
-  }
-  function wireCaptureKeydown() {
-    addEventListener("keydown", (e) => {
-      if (!scCaptureId || !modalOpen()) return;
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        scStopCapture();
-        if (scRepaint) scRepaint();
-        return;
-      }
-      const id = scCaptureId, slot = scCaptureSlot;
-      if (e.key === "Backspace" || e.key === "Delete") {
-        e.preventDefault();
-        e.stopPropagation();
-        const d = SC_DEFS.find((x) => x.id === id);
-        if (slot === 2) scMap2[id] = emptyChord();
-        else scTake(id, 1, cloneChord(d.def));
-        scStopCapture();
-        saveShortcuts();
-        if (scRepaint) scRepaint();
-        toast(slot === 2 ? "Alternative cleared" : "Back to the default");
-        return;
-      }
-      const chord = chordFromEvent(e);
-      if (!chord) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const fixedOwner = SC_DEFS.find((d) => d.fixed && (chordsEqual(d.def, chord) || chordsEqual(d.def2, chord)));
-      if (fixedOwner) {
-        toast(t("{KEY} is fixed and keeps its own meaning").replace("{KEY}", formatChord(chord)));
-        return;
-      }
-      scTake(id, slot, chord);
-      scStopCapture();
-      saveShortcuts();
-      if (scRepaint) scRepaint();
-      toast(t("Saved {KEY}").replace("{KEY}", formatChord(chord)));
-    }, true);
-  }
-  function wireGlobalKeydown() {
-    addEventListener("keydown", (e) => {
-      if (scCaptureId) return;
-      if (tourActive() && tourHasFocus()) {
-        if (e.target && e.target.id === "tourName" && e.key !== "Escape") return;
-        if (e.key === "Escape" || eventMatchesAction(e, "escape")) {
-          e.preventDefault();
-          endTour(false);
-        }
-        if (e.key === "ArrowRight") {
-          e.preventDefault();
-          moveTourFocus(1);
-        } else if (e.key === "ArrowLeft") {
-          e.preventDefault();
-          moveTourFocus(-1);
-        } else if (e.key === "Enter") {
-          e.preventDefault();
-          activateTourFocus();
-        }
-        return;
-      }
-      const cover = openCover();
-      if (cover) {
-        if (e.key === "Tab") {
-          const to = tabTargetIn(cover.querySelector(".modal-card"), e.shiftKey);
-          if (to) {
-            e.preventDefault();
-            try {
-              to.focus({ preventScroll: true });
-            } catch (x) {
-              to.focus();
-            }
-          }
-        }
-        return;
-      }
-      if (modalOpen()) {
-        if (e.key === "Escape") {
-          e.preventDefault();
-          dismissModal();
-        } else if (eventMatchesAction(e, "maintenance")) {
-          e.preventDefault();
-          const back = $("#mgClose") ? (() => hooks.openManage()) : $("#setBody") ? (() => openSettings("keys")) : null;
-          openMaintenance(back);
-        } else if (eventMatchesAction(e, "edPrevEntry")) {
-          e.preventDefault();
-          hooks.runShortcut("edPrevEntry");
-        } else if (eventMatchesAction(e, "edNextEntry")) {
-          e.preventDefault();
-          hooks.runShortcut("edNextEntry");
-        } else if (eventMatchesAction(e, "edPrevLang")) {
-          e.preventDefault();
-          hooks.runShortcut("edPrevLang");
-        } else if (eventMatchesAction(e, "edNextLang")) {
-          e.preventDefault();
-          hooks.runShortcut("edNextLang");
-        } else if (e.key === "Tab") {
-          const to = modalTabTarget(e.shiftKey);
-          if (to) {
-            e.preventDefault();
-            try {
-              to.focus({ preventScroll: true });
-            } catch (x) {
-              to.focus();
-            }
-          }
-        }
-        return;
-      }
-      if (eventMatchesAction(e, "escape")) {
-        if ($("#settingsMenu") && !$("#settingsMenu").hidden) {
-          e.preventDefault();
-          closeSettingsMenu();
-          return;
-        }
-        if ($("#moreMenu") && !$("#moreMenu").hidden) {
-          e.preventDefault();
-          closeMoreMenu();
-          return;
-        }
-        if (factsPanelOpen()) {
-          e.preventDefault();
-          closeFactsPanel();
-          return;
-        }
-      }
-      const inField = typingInField();
-      for (let i = 0; i < SC_DEFS.length; i++) {
-        const d = SC_DEFS[i];
-        if (d.fixed) continue;
-        if (!eventMatchesAction(e, d.id)) continue;
-        if (inField && !d.inField) continue;
-        if (hooks.runShortcut(d.id) !== false) {
-          e.preventDefault();
-          return;
-        }
-      }
-      if (eHost() && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.code === "KeyW" || e.key === "w" || e.key === "W")) {
-        e.preventDefault();
-        hooks.runShortcut("tabClose");
-        return;
-      }
-      const plain = !e.ctrlKey && !e.altKey && !e.metaKey;
-      if (plain && (e.key === "PageDown" || e.key === "PageUp") && pageKeyScroll(e.key)) {
-        e.preventDefault();
-        return;
-      }
-      if (inField) return;
-      const onControl = document.activeElement;
-      if (plain && !e.shiftKey && (e.key === "Enter" || e.key === " ") && onControl && typeof onControl.matches === "function" && onControl.matches("button:not([disabled]),summary,a[href],[role=menuitem]")) return;
-      if (plain && (e.key === "Home" || e.key === "End") && pageKeyScroll(e.key)) {
-        e.preventDefault();
-        return;
-      }
-      if (eventMatchesAction(e, "navUp")) {
-        e.preventDefault();
-        hooks.runShortcut("navUp");
-        return;
-      }
-      if (eventMatchesAction(e, "navDown")) {
-        e.preventDefault();
-        hooks.runShortcut("navDown");
-        return;
-      }
-      if (eventMatchesAction(e, "markTop")) {
-        e.preventDefault();
-        hooks.runShortcut("markTop");
-        return;
-      }
-      if (eventMatchesAction(e, "markBottom")) {
-        e.preventDefault();
-        hooks.runShortcut("markBottom");
-        return;
-      }
-      if (eventMatchesAction(e, "navPillFirst")) {
-        e.preventDefault();
-        hooks.runShortcut("navPillFirst");
-        return;
-      }
-      if (eventMatchesAction(e, "navPillLast")) {
-        e.preventDefault();
-        hooks.runShortcut("navPillLast");
-        return;
-      }
-      if (eventMatchesAction(e, "navPillLeft")) {
-        e.preventDefault();
-        hooks.runShortcut("navPillLeft");
-        return;
-      }
-      if (eventMatchesAction(e, "navPillRight")) {
-        e.preventDefault();
-        hooks.runShortcut("navPillRight");
-        return;
-      }
-      if (eventMatchesAction(e, "copyOther")) {
-        e.preventDefault();
-        hooks.runShortcut("copyOther");
-        return;
-      }
-      if (eventMatchesAction(e, "copy")) {
-        e.preventDefault();
-        hooks.runShortcut("copy");
-        return;
-      }
-      if (eventMatchesAction(e, "escape")) {
-        e.preventDefault();
-        hooks.runShortcut("escape");
-        return;
-      }
-      if (e.ctrlKey || e.altKey || e.metaKey) return;
-      if (e.key.length !== 1) return;
-      if (!intentEl) return;
-      e.preventDefault();
-      closeLooseOverlays();
-      try {
-        intentEl.focus({ preventScroll: true });
-      } catch (_) {
-        try {
-          intentEl.focus();
-        } catch (__) {
-        }
-      }
-      const v = String(intentEl.value || "");
-      const start = intentEl.selectionStart == null ? v.length : intentEl.selectionStart;
-      const end = intentEl.selectionEnd == null ? v.length : intentEl.selectionEnd;
-      intentEl.value = v.slice(0, start) + e.key + v.slice(end);
-      const caret = start + e.key.length;
-      try {
-        intentEl.setSelectionRange(caret, caret);
-      } catch (_) {
-      }
-      intentEl.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-  }
 
-  // src/modules/role-turn.js
-  var role_turn_exports = {};
-  __export(role_turn_exports, {
-    wireRoleDrum: () => wireRoleDrum
-  });
-  function stepRoleDrum(dir) {
-    const d = $("#roleDrum");
-    if (!d) return;
-    const opts = roleOpts();
-    let i = opts.indexOf(roleSel.value);
-    if (i < 0) i = 0;
-    roleSel.value = opts[(i + dir + opts.length) % opts.length];
-    syncRoleDrum();
-    const tr = d.querySelector(".rd-track");
-    tr.classList.remove("rd-up", "rd-down");
-    void tr.offsetWidth;
-    tr.classList.add(dir > 0 ? "rd-up" : "rd-down");
-    render();
-    scheduleTabSave();
-  }
-  function wireRoleDrum() {
-    const d = $("#roleDrum");
-    if (!d) return;
-    d.addEventListener("wheel", (e) => {
-      e.preventDefault();
-      stepRoleDrum(e.deltaY > 0 ? 1 : -1);
-    }, { passive: false });
-    d.addEventListener("click", () => {
-      stepRoleDrum(1);
-    });
-    d.addEventListener("keydown", (e) => {
-      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
-      e.preventDefault();
-      e.stopPropagation();
-      stepRoleDrum(e.key === "ArrowDown" ? 1 : -1);
-    });
-    syncRoleDrum();
-  }
-
-  // src/modules/field-clear.js
-  var field_clear_exports = {};
-  __export(field_clear_exports, {
-    bindFieldClear: () => bindFieldClear
-  });
-  function bindFieldClear(input, btn, onClear) {
-    if (!input || !btn) return;
-    function sync() {
-      btn.disabled = !String(input.value || "").length;
-    }
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (btn.disabled) return;
-      input.value = "";
-      if (typeof onClear === "function") onClear();
-      else input.dispatchEvent(new Event("input", { bubbles: true }));
-      sync();
-      try {
-        input.focus();
-      } catch (_) {
-      }
-    });
-    input.addEventListener("input", sync);
-    sync();
-    return sync;
-  }
-
-  // src/modules/lang-seg.js
-  var lang_seg_exports = {};
-  __export(lang_seg_exports, {
-    applyLangHeavy: () => applyLangHeavy,
-    applyLangState: () => applyLangState,
-    applyLangUI: () => applyLangUI,
-    cancelLangTail: () => cancelLangTail,
-    segFolded: () => segFolded,
-    setLang: () => setLang,
-    syncLangSeg: () => syncLangSeg,
-    wireLangSeg: () => wireLangSeg
-  });
-  function applyLangState(l) {
-    putLang(CONTENT_LANGS.indexOf(l) > -1 ? l : CONTENT_LANGS[0]);
-    lsSet("eLang", lang);
-    seg.querySelectorAll("button").forEach((b) => {
-      b.classList.toggle("on", b.dataset.l === lang);
-      b.setAttribute("aria-pressed", b.dataset.l === lang ? "true" : "false");
-    });
-    noteActive();
-  }
-  function applyLangHeavy() {
-    syncShortcutTitles();
-    drawIntentRail();
-    recountMacros();
-  }
-  function applyLangUI(l) {
-    cancelLangTail();
-    applyLangState(l);
-    applyLangHeavy();
-  }
-  var eLangTailT = 0;
-  function cancelLangTail() {
-    if (eLangTailT) {
-      clearTimeout(eLangTailT);
-      eLangTailT = 0;
-    }
-  }
-  function setLang(l) {
-    applyLangState(l);
-    const tail = () => {
-      applyLangHeavy();
-      syncIntentInput();
-      if (typeof catOrder !== "undefined") drawPills();
-      if (cardSearchTerms().length || typeof list === "undefined" || !list || !list.querySelector(".card[data-id]") || typeof cardDrag !== "undefined" && cardDrag) {
-        render();
-      } else {
-        cancelLangChunks();
-        list.querySelectorAll(".list-sep.e-catsep span[data-k]").forEach((sp) => {
-          const k = sp.getAttribute("data-k");
-          sp.innerHTML = catIconSvg(k) + esc(CATS[k] || k || "");
-        });
-        const vh = (window.innerHeight || 900) + 240;
-        const els = list.querySelectorAll(".card[data-id]");
-        const nowIds = [], laterIds = [];
-        let past = false;
-        for (let k = 0; k < els.length; k++) {
-          const id = els[k].getAttribute("data-id");
-          if (past) {
-            laterIds.push(id);
-            continue;
-          }
-          const r = els[k].getBoundingClientRect();
-          if (r.top > vh) {
-            past = true;
-            laterIds.push(id);
-          } else if (r.bottom < -240) laterIds.push(id);
-          else nowIds.push(id);
-        }
-        rebuildCardsInPlace(nowIds);
-        runLangChunks(laterIds);
-      }
-      scheduleTabSave();
-    };
-    cancelLangTail();
-    if (mgReduceMotion()) {
-      tail();
-      return;
-    }
-    eLangTailT = setTimeout(() => {
-      eLangTailT = 0;
-      tail();
-    }, 200);
-  }
-  function segFolded() {
-    return [...seg.querySelectorAll("button")].some((b) => b.offsetParent === null);
-  }
-  function syncLangSeg() {
-    if (!seg) return;
-    const declared = CONTENT_LANGS.length;
-    seg.setAttribute("data-n", String(declared));
-    const had = {};
-    seg.querySelectorAll("button").forEach((b) => {
-      had[b.dataset.l] = b;
-    });
-    seg.replaceChildren(...CONTENT_LANGS.map((l, i) => {
-      const b = had[l] || document.createElement("button");
-      if (!had[l]) {
-        b.type = "button";
-        b.dataset.l = l;
-        b.textContent = l.toUpperCase();
-      }
-      if (i) b.dataset.alt = "1";
-      else delete b.dataset.alt;
-      b.disabled = declared < 2;
-      if (declared < 2) b.removeAttribute("title");
-      b.onclick = segPress;
-      return b;
-    }));
-    applyLangState(lang);
-  }
-  function segPress() {
-    const b = this;
-    const other = [...seg.querySelectorAll("button")].find((x) => x !== b);
-    setLang(segFolded() && other ? other.dataset.l : b.dataset.l);
-  }
-  function wireLangSeg() {
-    if (CONTENT_LANGS.length < 2) return;
-    seg.querySelectorAll("button").forEach((b) => b.onclick = segPress);
-  }
-
-  // src/modules/browser-suggest.js
-  var browser_suggest_exports = {};
-  __export(browser_suggest_exports, {
-    suppressBrowserSuggest: () => suppressBrowserSuggest
-  });
-  function suppressBrowserSuggest() {
-    function harden(el, token) {
-      if (!el) return;
-      el.setAttribute("autocomplete", token || "rc-" + (el.id || "field"));
-      el.setAttribute("autocorrect", "off");
-      el.setAttribute("autocapitalize", "off");
-      el.setAttribute("spellcheck", "false");
-      el.setAttribute("data-lpignore", "true");
-      el.setAttribute("data-1p-ignore", "true");
-      el.setAttribute("data-form-type", "other");
-    }
-    harden(pax, "rc-pax");
-    harden(intentEl, "rc-intent");
-    harden($("#factsEdit"), "rc-facts");
-    document.addEventListener("focusin", (e) => {
-      const el = e.target;
-      if (!el || el.tagName !== "INPUT" && el.tagName !== "TEXTAREA") return;
-      if (el.tagName === "INPUT") {
-        const t2 = (el.type || "text").toLowerCase();
-        if (t2 && t2 !== "text" && t2 !== "search" && t2 !== "") return;
-      }
-      const ac = el.getAttribute("autocomplete");
-      if (!ac || ac === "off" || ac === "on") el.setAttribute("autocomplete", "rc-" + (el.id || el.name || "x"));
-      if (el.tagName === "INPUT" || el.getAttribute("spellcheck") === "false") {
-        el.setAttribute("autocorrect", "off");
-        el.setAttribute("autocapitalize", "off");
-        el.setAttribute("spellcheck", "false");
-        el.setAttribute("data-lpignore", "true");
-        el.setAttribute("data-1p-ignore", "true");
-        el.setAttribute("data-form-type", "other");
-      }
-    }, true);
-  }
-
-  // src/modules/run-shortcut.js
-  var run_shortcut_exports = {};
-  __export(run_shortcut_exports, {
-    runShortcut: () => runShortcut
+  // src/modules/lanes.js
+  var lanes_exports = {};
+  __export(lanes_exports, {
+    SENT_SHOWN: () => SENT_SHOWN,
+    lanesKey: () => lanesKey,
+    lanesKeyFree: () => lanesKeyFree,
+    lanesOpen: () => lanesOpen,
+    lanesPageScroller: () => lanesPageScroller,
+    lanesShortcut: () => lanesShortcut,
+    toggleLanes: () => toggleLanes,
+    wireLanes: () => wireLanes,
+    writeLaneList: () => writeLaneList
   });
 
   // src/modules/next-dock.js
@@ -26899,17 +26427,6 @@ What you type stays in this browser only.`;
   }
 
   // src/modules/lanes.js
-  var lanes_exports = {};
-  __export(lanes_exports, {
-    SENT_SHOWN: () => SENT_SHOWN,
-    lanesKey: () => lanesKey,
-    lanesKeyFree: () => lanesKeyFree,
-    lanesOpen: () => lanesOpen,
-    lanesShortcut: () => lanesShortcut,
-    toggleLanes: () => toggleLanes,
-    wireLanes: () => wireLanes,
-    writeLaneList: () => writeLaneList
-  });
   var SENT_SHOWN = 6;
   var LN_DOT = " " + String.fromCharCode(183) + " ";
   var lanesOn = false;
@@ -26927,6 +26444,9 @@ What you type stays in this browser only.`;
   var lanesEl = () => $("#lanes");
   function lanesOpen() {
     return lanesOn;
+  }
+  function lanesPageScroller() {
+    return lanesOn ? lanesEl() : null;
   }
   function lanesKeyFree(active, box, body) {
     if (!active || active === body) return true;
@@ -27316,7 +26836,493 @@ What you type stays in this browser only.`;
     }
   }
 
+  // src/modules/keydown.js
+  function closeLooseOverlays() {
+    if ($("#settingsMenu") && !$("#settingsMenu").hidden) {
+      closeSettingsMenu();
+    }
+    if ($("#moreMenu") && !$("#moreMenu").hidden) {
+      closeMoreMenu();
+    }
+    if (factsPanelOpen()) {
+      closeFactsPanel();
+    }
+    closeNotePane();
+  }
+  function typingInField() {
+    const a = document.activeElement;
+    if (!a) return false;
+    if (a.isContentEditable) return true;
+    const tag = (a.tagName || "").toLowerCase();
+    return tag === "input" || tag === "textarea" || tag === "select";
+  }
+  function wireCaptureKeydown() {
+    addEventListener("keydown", (e) => {
+      if (!scCaptureId || !modalOpen()) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        scStopCapture();
+        if (scRepaint) scRepaint();
+        return;
+      }
+      const id = scCaptureId, slot = scCaptureSlot;
+      if (e.key === "Backspace" || e.key === "Delete") {
+        e.preventDefault();
+        e.stopPropagation();
+        const d = SC_DEFS.find((x) => x.id === id);
+        if (slot === 2) scMap2[id] = emptyChord();
+        else scTake(id, 1, cloneChord(d.def));
+        scStopCapture();
+        saveShortcuts();
+        if (scRepaint) scRepaint();
+        toast(slot === 2 ? "Alternative cleared" : "Back to the default");
+        return;
+      }
+      const chord = chordFromEvent(e);
+      if (!chord) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const fixedOwner = SC_DEFS.find((d) => d.fixed && (chordsEqual(d.def, chord) || chordsEqual(d.def2, chord)));
+      if (fixedOwner) {
+        toast(t("{KEY} is fixed and keeps its own meaning").replace("{KEY}", formatChord(chord)));
+        return;
+      }
+      scTake(id, slot, chord);
+      scStopCapture();
+      saveShortcuts();
+      if (scRepaint) scRepaint();
+      toast(t("Saved {KEY}").replace("{KEY}", formatChord(chord)));
+    }, true);
+  }
+  function wireGlobalKeydown() {
+    addEventListener("keydown", (e) => {
+      if (scCaptureId) return;
+      if (tourActive() && tourHasFocus()) {
+        if (e.target && e.target.id === "tourName" && e.key !== "Escape") return;
+        if (e.key === "Escape" || eventMatchesAction(e, "escape")) {
+          e.preventDefault();
+          endTour(false);
+        }
+        if (e.key === "ArrowRight") {
+          e.preventDefault();
+          moveTourFocus(1);
+        } else if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          moveTourFocus(-1);
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          activateTourFocus();
+        }
+        return;
+      }
+      const cover = openCover();
+      if (cover) {
+        if (e.key === "Tab") {
+          const to = tabTargetIn(cover.querySelector(".modal-card"), e.shiftKey);
+          if (to) {
+            e.preventDefault();
+            try {
+              to.focus({ preventScroll: true });
+            } catch (x) {
+              to.focus();
+            }
+          }
+        }
+        return;
+      }
+      if (modalOpen()) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          dismissModal();
+        } else if (eventMatchesAction(e, "maintenance")) {
+          e.preventDefault();
+          const back = $("#mgClose") ? (() => hooks.openManage()) : $("#setBody") ? (() => openSettings("keys")) : null;
+          openMaintenance(back);
+        } else if (eventMatchesAction(e, "edPrevEntry")) {
+          e.preventDefault();
+          hooks.runShortcut("edPrevEntry");
+        } else if (eventMatchesAction(e, "edNextEntry")) {
+          e.preventDefault();
+          hooks.runShortcut("edNextEntry");
+        } else if (eventMatchesAction(e, "edPrevLang")) {
+          e.preventDefault();
+          hooks.runShortcut("edPrevLang");
+        } else if (eventMatchesAction(e, "edNextLang")) {
+          e.preventDefault();
+          hooks.runShortcut("edNextLang");
+        } else if (e.key === "Tab") {
+          const to = modalTabTarget(e.shiftKey);
+          if (to) {
+            e.preventDefault();
+            try {
+              to.focus({ preventScroll: true });
+            } catch (x) {
+              to.focus();
+            }
+          }
+        }
+        return;
+      }
+      if (eventMatchesAction(e, "escape")) {
+        if ($("#settingsMenu") && !$("#settingsMenu").hidden) {
+          e.preventDefault();
+          closeSettingsMenu();
+          return;
+        }
+        if ($("#moreMenu") && !$("#moreMenu").hidden) {
+          e.preventDefault();
+          closeMoreMenu();
+          return;
+        }
+        if (factsPanelOpen()) {
+          e.preventDefault();
+          closeFactsPanel();
+          return;
+        }
+      }
+      const inField = typingInField();
+      for (let i = 0; i < SC_DEFS.length; i++) {
+        const d = SC_DEFS[i];
+        if (d.fixed) continue;
+        if (!eventMatchesAction(e, d.id)) continue;
+        if (inField && !d.inField) continue;
+        if (hooks.runShortcut(d.id) !== false) {
+          e.preventDefault();
+          return;
+        }
+      }
+      if (eHost() && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.code === "KeyW" || e.key === "w" || e.key === "W")) {
+        e.preventDefault();
+        hooks.runShortcut("tabClose");
+        return;
+      }
+      const plain = !e.ctrlKey && !e.altKey && !e.metaKey;
+      if (plain && (e.key === "PageDown" || e.key === "PageUp") && pageKeyScroll(e.key, lanesPageScroller())) {
+        e.preventDefault();
+        return;
+      }
+      if (inField) return;
+      const onControl = document.activeElement;
+      if (plain && !e.shiftKey && (e.key === "Enter" || e.key === " ") && onControl && typeof onControl.matches === "function" && onControl.matches("button:not([disabled]),summary,a[href],[role=menuitem]")) return;
+      if (plain && (e.key === "Home" || e.key === "End") && pageKeyScroll(e.key, lanesPageScroller())) {
+        e.preventDefault();
+        return;
+      }
+      if (eventMatchesAction(e, "navUp")) {
+        e.preventDefault();
+        hooks.runShortcut("navUp");
+        return;
+      }
+      if (eventMatchesAction(e, "navDown")) {
+        e.preventDefault();
+        hooks.runShortcut("navDown");
+        return;
+      }
+      if (eventMatchesAction(e, "markTop")) {
+        e.preventDefault();
+        hooks.runShortcut("markTop");
+        return;
+      }
+      if (eventMatchesAction(e, "markBottom")) {
+        e.preventDefault();
+        hooks.runShortcut("markBottom");
+        return;
+      }
+      if (eventMatchesAction(e, "navPillFirst")) {
+        e.preventDefault();
+        hooks.runShortcut("navPillFirst");
+        return;
+      }
+      if (eventMatchesAction(e, "navPillLast")) {
+        e.preventDefault();
+        hooks.runShortcut("navPillLast");
+        return;
+      }
+      if (eventMatchesAction(e, "navPillLeft")) {
+        e.preventDefault();
+        hooks.runShortcut("navPillLeft");
+        return;
+      }
+      if (eventMatchesAction(e, "navPillRight")) {
+        e.preventDefault();
+        hooks.runShortcut("navPillRight");
+        return;
+      }
+      if (eventMatchesAction(e, "copyOther")) {
+        e.preventDefault();
+        hooks.runShortcut("copyOther");
+        return;
+      }
+      if (eventMatchesAction(e, "copy")) {
+        e.preventDefault();
+        hooks.runShortcut("copy");
+        return;
+      }
+      if (eventMatchesAction(e, "escape")) {
+        e.preventDefault();
+        hooks.runShortcut("escape");
+        return;
+      }
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      if (e.key.length !== 1) return;
+      if (!intentEl) return;
+      e.preventDefault();
+      closeLooseOverlays();
+      try {
+        intentEl.focus({ preventScroll: true });
+      } catch (_) {
+        try {
+          intentEl.focus();
+        } catch (__) {
+        }
+      }
+      const v = String(intentEl.value || "");
+      const start = intentEl.selectionStart == null ? v.length : intentEl.selectionStart;
+      const end = intentEl.selectionEnd == null ? v.length : intentEl.selectionEnd;
+      intentEl.value = v.slice(0, start) + e.key + v.slice(end);
+      const caret = start + e.key.length;
+      try {
+        intentEl.setSelectionRange(caret, caret);
+      } catch (_) {
+      }
+      intentEl.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
+  // src/modules/role-turn.js
+  var role_turn_exports = {};
+  __export(role_turn_exports, {
+    wireRoleDrum: () => wireRoleDrum
+  });
+  function stepRoleDrum(dir) {
+    const d = $("#roleDrum");
+    if (!d) return;
+    const opts = roleOpts();
+    let i = opts.indexOf(roleSel.value);
+    if (i < 0) i = 0;
+    roleSel.value = opts[(i + dir + opts.length) % opts.length];
+    syncRoleDrum();
+    const tr = d.querySelector(".rd-track");
+    tr.classList.remove("rd-up", "rd-down");
+    void tr.offsetWidth;
+    tr.classList.add(dir > 0 ? "rd-up" : "rd-down");
+    render();
+    scheduleTabSave();
+  }
+  function wireRoleDrum() {
+    const d = $("#roleDrum");
+    if (!d) return;
+    d.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      stepRoleDrum(e.deltaY > 0 ? 1 : -1);
+    }, { passive: false });
+    d.addEventListener("click", () => {
+      stepRoleDrum(1);
+    });
+    d.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      stepRoleDrum(e.key === "ArrowDown" ? 1 : -1);
+    });
+    syncRoleDrum();
+  }
+
+  // src/modules/field-clear.js
+  var field_clear_exports = {};
+  __export(field_clear_exports, {
+    bindFieldClear: () => bindFieldClear
+  });
+  function bindFieldClear(input, btn, onClear) {
+    if (!input || !btn) return;
+    function sync() {
+      btn.disabled = !String(input.value || "").length;
+    }
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (btn.disabled) return;
+      input.value = "";
+      if (typeof onClear === "function") onClear();
+      else input.dispatchEvent(new Event("input", { bubbles: true }));
+      sync();
+      try {
+        input.focus();
+      } catch (_) {
+      }
+    });
+    input.addEventListener("input", sync);
+    sync();
+    return sync;
+  }
+
+  // src/modules/lang-seg.js
+  var lang_seg_exports = {};
+  __export(lang_seg_exports, {
+    applyLangHeavy: () => applyLangHeavy,
+    applyLangState: () => applyLangState,
+    applyLangUI: () => applyLangUI,
+    cancelLangTail: () => cancelLangTail,
+    segFolded: () => segFolded,
+    setLang: () => setLang,
+    syncLangSeg: () => syncLangSeg,
+    wireLangSeg: () => wireLangSeg
+  });
+  function applyLangState(l) {
+    putLang(CONTENT_LANGS.indexOf(l) > -1 ? l : CONTENT_LANGS[0]);
+    lsSet("eLang", lang);
+    seg.querySelectorAll("button").forEach((b) => {
+      b.classList.toggle("on", b.dataset.l === lang);
+      b.setAttribute("aria-pressed", b.dataset.l === lang ? "true" : "false");
+    });
+    noteActive();
+  }
+  function applyLangHeavy() {
+    syncShortcutTitles();
+    drawIntentRail();
+    recountMacros();
+  }
+  function applyLangUI(l) {
+    cancelLangTail();
+    applyLangState(l);
+    applyLangHeavy();
+  }
+  var eLangTailT = 0;
+  function cancelLangTail() {
+    if (eLangTailT) {
+      clearTimeout(eLangTailT);
+      eLangTailT = 0;
+    }
+  }
+  function setLang(l) {
+    applyLangState(l);
+    const tail = () => {
+      applyLangHeavy();
+      syncIntentInput();
+      if (typeof catOrder !== "undefined") drawPills();
+      if (cardSearchTerms().length || typeof list === "undefined" || !list || !list.querySelector(".card[data-id]") || typeof cardDrag !== "undefined" && cardDrag) {
+        render();
+      } else {
+        cancelLangChunks();
+        list.querySelectorAll(".list-sep.e-catsep span[data-k]").forEach((sp) => {
+          const k = sp.getAttribute("data-k");
+          sp.innerHTML = catIconSvg(k) + esc(CATS[k] || k || "");
+        });
+        const vh = (window.innerHeight || 900) + 240;
+        const els = list.querySelectorAll(".card[data-id]");
+        const nowIds = [], laterIds = [];
+        let past = false;
+        for (let k = 0; k < els.length; k++) {
+          const id = els[k].getAttribute("data-id");
+          if (past) {
+            laterIds.push(id);
+            continue;
+          }
+          const r = els[k].getBoundingClientRect();
+          if (r.top > vh) {
+            past = true;
+            laterIds.push(id);
+          } else if (r.bottom < -240) laterIds.push(id);
+          else nowIds.push(id);
+        }
+        rebuildCardsInPlace(nowIds);
+        runLangChunks(laterIds);
+      }
+      scheduleTabSave();
+    };
+    cancelLangTail();
+    if (mgReduceMotion()) {
+      tail();
+      return;
+    }
+    eLangTailT = setTimeout(() => {
+      eLangTailT = 0;
+      tail();
+    }, 200);
+  }
+  function segFolded() {
+    return [...seg.querySelectorAll("button")].some((b) => b.offsetParent === null);
+  }
+  function syncLangSeg() {
+    if (!seg) return;
+    const declared = CONTENT_LANGS.length;
+    seg.setAttribute("data-n", String(declared));
+    const had = {};
+    seg.querySelectorAll("button").forEach((b) => {
+      had[b.dataset.l] = b;
+    });
+    seg.replaceChildren(...CONTENT_LANGS.map((l, i) => {
+      const b = had[l] || document.createElement("button");
+      if (!had[l]) {
+        b.type = "button";
+        b.dataset.l = l;
+        b.textContent = l.toUpperCase();
+      }
+      if (i) b.dataset.alt = "1";
+      else delete b.dataset.alt;
+      b.disabled = declared < 2;
+      if (declared < 2) b.removeAttribute("title");
+      b.onclick = segPress;
+      return b;
+    }));
+    applyLangState(lang);
+  }
+  function segPress() {
+    const b = this;
+    const other = [...seg.querySelectorAll("button")].find((x) => x !== b);
+    setLang(segFolded() && other ? other.dataset.l : b.dataset.l);
+  }
+  function wireLangSeg() {
+    if (CONTENT_LANGS.length < 2) return;
+    seg.querySelectorAll("button").forEach((b) => b.onclick = segPress);
+  }
+
+  // src/modules/browser-suggest.js
+  var browser_suggest_exports = {};
+  __export(browser_suggest_exports, {
+    suppressBrowserSuggest: () => suppressBrowserSuggest
+  });
+  function suppressBrowserSuggest() {
+    function harden(el, token) {
+      if (!el) return;
+      el.setAttribute("autocomplete", token || "rc-" + (el.id || "field"));
+      el.setAttribute("autocorrect", "off");
+      el.setAttribute("autocapitalize", "off");
+      el.setAttribute("spellcheck", "false");
+      el.setAttribute("data-lpignore", "true");
+      el.setAttribute("data-1p-ignore", "true");
+      el.setAttribute("data-form-type", "other");
+    }
+    harden(pax, "rc-pax");
+    harden(intentEl, "rc-intent");
+    harden($("#factsEdit"), "rc-facts");
+    document.addEventListener("focusin", (e) => {
+      const el = e.target;
+      if (!el || el.tagName !== "INPUT" && el.tagName !== "TEXTAREA") return;
+      if (el.tagName === "INPUT") {
+        const t2 = (el.type || "text").toLowerCase();
+        if (t2 && t2 !== "text" && t2 !== "search" && t2 !== "") return;
+      }
+      const ac = el.getAttribute("autocomplete");
+      if (!ac || ac === "off" || ac === "on") el.setAttribute("autocomplete", "rc-" + (el.id || el.name || "x"));
+      if (el.tagName === "INPUT" || el.getAttribute("spellcheck") === "false") {
+        el.setAttribute("autocorrect", "off");
+        el.setAttribute("autocapitalize", "off");
+        el.setAttribute("spellcheck", "false");
+        el.setAttribute("data-lpignore", "true");
+        el.setAttribute("data-1p-ignore", "true");
+        el.setAttribute("data-form-type", "other");
+      }
+    }, true);
+  }
+
   // src/modules/run-shortcut.js
+  var run_shortcut_exports = {};
+  __export(run_shortcut_exports, {
+    runShortcut: () => runShortcut
+  });
   function runShortcut(id) {
     if (id === "lanes") return lanesKey();
     if (lanesOpen()) {

@@ -9,9 +9,10 @@ function pageScroller(){
 function pageScrollY(){ const el=pageScroller(); return (el&&el.scrollTop)||0; }
 /* THE PAGE KEYS: the browser answered these while the window was the scroller and cannot now,
    because the scrolling element is never the focused one. Instant, like the keys they stand
-   in for. Which of them survive a caret is the callers' business, not this one's. */
-function pageKeyScroll(key){
-  const sc=pageScroller(), page=Math.max(120, sc.clientHeight-60);
+   in for. Which of them survive a caret is the callers' business, not this one's. A caller may name
+   another scroller, which then moves by the same rule. */
+function pageKeyScroll(key, el){
+  const sc=el||pageScroller(), page=Math.max(120, sc.clientHeight-60);
   const dy = key==="PageDown" ?  page : key==="PageUp" ? -page
            : key==="End"      ?  sc.scrollHeight : key==="Home" ? -sc.scrollHeight : null;
   if(dy==null) return false;

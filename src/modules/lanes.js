@@ -30,6 +30,8 @@ let laneRows=[], laneFrom=null, laneFind=false, laneHits=[], laneHit=0, laneFocu
 const lanesEl=()=>$("#lanes");
 
 function lanesOpen(){ return lanesOn; }
+// What the page keys scroll while the lanes show, which is the lanes; null while they are shut.
+function lanesPageScroller(){ return lanesOn ? lanesEl() : null; }
 /** Whether the lanes key may switch views: with nothing focused, or with the search box focused and
  *  empty. Anything else focused keeps the key: a field types it, a button is pressed by it. */
 function lanesKeyFree(active, box, body){
@@ -349,6 +351,7 @@ function wireLanes(){
 export {
   SENT_SHOWN,
   lanesOpen,
+  lanesPageScroller,
   lanesKeyFree,
   lanesKey,
   toggleLanes,
