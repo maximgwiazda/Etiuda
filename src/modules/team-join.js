@@ -116,7 +116,8 @@ let joinBubbleClose=null;
 function closeJoinBubble(){ if(joinBubbleClose) joinBubbleClose(); }
 function openJoinBubble(){
   closeJoinBubble();
-  if(document.getElementById("eCatalogOffer")) return;
+  const offer=document.getElementById("eCatalogOffer");
+  if(offer && !offer.classList.contains("e-gone")) return;
   const p=joinParts();
   const wrap=document.createElement("div");
   wrap.className="bub bub-ask e-offer e-join-bub";
@@ -152,4 +153,4 @@ function forgetTeamLead(team,then){
   return joinAsk("forget",team).then(v=>{ if(typeof then==="function") then(); return v; });
 }
 
-export { wireTeamJoin, teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadKeyText, forgetTeamLead };
+export { wireTeamJoin, teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadKeyText, forgetTeamLead, paintJoin };

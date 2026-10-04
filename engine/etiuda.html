@@ -17554,6 +17554,7 @@ What you type stays in this browser only.`;
     closeJoinBubble: () => closeJoinBubble,
     forgetTeamLead: () => forgetTeamLead,
     leadKeyText: () => leadKeyText,
+    paintJoin: () => paintJoin,
     teamJoinEmptyHtml: () => teamJoinEmptyHtml,
     teamJoinShown: () => teamJoinShown,
     teamLeads: () => teamLeads,
@@ -17695,7 +17696,8 @@ What you type stays in this browser only.`;
   }
   function openJoinBubble() {
     closeJoinBubble();
-    if (document.getElementById("eCatalogOffer")) return;
+    const offer = document.getElementById("eCatalogOffer");
+    if (offer && !offer.classList.contains("e-gone")) return;
     const p = joinParts();
     const wrap = document.createElement("div");
     wrap.className = "bub bub-ask e-offer e-join-bub";
@@ -24824,6 +24826,7 @@ What you type stays in this browser only.`;
     mtRefreshLive();
     tourAfterRestart();
     maybeStartTour();
+    if (teamJoinShown()) paintJoin();
   }
 
   // src/modules/pick.js
