@@ -2644,6 +2644,21 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
 .ec-key-bub{z-index:236;max-width:min(300px,calc(100vw - 24px));padding:8px 12px;
   font-size:12.5px;line-height:1.45;pointer-events:none;
   animation:eModalCardIn var(--m-reveal) var(--m-ease) both}
+/* A COLLEAGUE'S FILE hangs under the catalog it grew from, dashed, by a hook at its left; one with nothing here to hang
+   from stands alone at the foot of the list. */
+.ec-row.ec-desk{margin-left:22px;position:relative;background:transparent;border-style:dashed}
+.ec-row.ec-desk::before{content:"";position:absolute;left:-14px;top:-7px;bottom:50%;width:9px;
+  border-left:1.5px solid var(--line-strong);border-bottom:1.5px solid var(--line-strong);border-bottom-left-radius:6px}
+.ec-row.ec-desk.is-loaded{border-style:solid;background:var(--panel)}
+.ec-row.ec-desk.ec-alone{margin-left:0}
+.ec-row.ec-desk.ec-alone::before{display:none}
+.ec-who{flex:0 0 auto;display:flex;width:var(--ec-glyph);height:var(--ec-glyph);color:var(--accent);
+  border-radius:var(--radius-xs);outline:none}
+.ec-who .ic{width:100%;height:100%}
+.ec-who:focus-visible{background:var(--accent-soft)}
+.ec-fp{font:600 10.5px var(--mono);color:var(--dim);margin-left:6px;letter-spacing:.3px}
+.ec-mine{display:flex;align-items:center;gap:5px;margin-top:3px;color:var(--dim);font-size:11.5px}
+.ec-mine .ic{flex:0 0 auto;width:14px;height:14px;color:var(--accent)}
 /* Three lines change what the row centres on: the name is the subject, so the badge and the
    buttons align to the NAME's line rather than to the middle of a column that grew. */
 .ec-row:has(.ec-watch){align-items:flex-start}
@@ -3201,6 +3216,8 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .ed-acts{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin-top:10px}
 /* The choice made wears the ring, as a toggle that is on does; primary belongs to a bar. */
 .ed-acts .btn[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
+/* A colleague's desk's one act stands under that desk's own column. */
+.ed-acts-desk{grid-column:2}
 .ed-sub{margin:6px 0 0;font-size:12.5px;font-style:italic;color:var(--dim)}
 /* THE UNDO, one line and its button at the foot of the window, where a toast speaks. Centred by
    its margins, since the family's entrance animates transform. */
@@ -3819,6 +3836,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
     ICON_AWAITING: () => ICON_AWAITING,
     ICON_CHEVRON_R: () => ICON_CHEVRON_R,
     ICON_CLEAR_TEXT: () => ICON_CLEAR_TEXT,
+    ICON_DESK: () => ICON_DESK,
     ICON_EDIT: () => ICON_EDIT,
     ICON_EJECT: () => ICON_EJECT,
     ICON_EYE_OPEN: () => ICON_EYE_OPEN,
@@ -3830,6 +3848,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
     ICON_LOAD: () => ICON_LOAD,
     ICON_LOCK: () => ICON_LOCK,
     ICON_LOCK_OPEN: () => ICON_LOCK_OPEN,
+    ICON_LOOK: () => ICON_LOOK,
     ICON_PLUS: () => ICON_PLUS,
     ICON_ROLE_ALWAYS: () => ICON_ROLE_ALWAYS,
     ICON_STAMP: () => ICON_STAMP,
@@ -4045,6 +4064,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   var ICON_SUCCESS = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4.5 13.5l5 5 11-11"/></svg>';
   var ICON_LOAD = _svg("ic", '<path d="M10 3.6v8.6"/><path d="M6.5 8.9l3.5 3.5 3.5-3.5"/><path d="M3.6 12.6v2.1a1.7 1.7 0 0 0 1.7 1.7h9.4a1.7 1.7 0 0 0 1.7-1.7v-2.1"/>');
   var ICON_EJECT = _svg("ic", '<path d="M10 4.2l5.6 6.6H4.4z"/><path d="M4.6 15.4h10.8"/>');
+  var ICON_DESK = _svg("ic", '<rect x="3.2" y="7.4" width="10" height="6.6" rx="1.6"/><path d="M8.2 14v3.2M5.8 17.2h4.8M7.2 7.4V5.6a1.6 1.6 0 0 1 1.6-1.6h6.6a1.6 1.6 0 0 1 1.6 1.6v5a1.6 1.6 0 0 1-1.6 1.6h-2.2"/>');
+  var ICON_LOOK = _svg("ic", '<path d="M1.9 10S5 5.1 10 5.1 18.1 10 18.1 10 15 14.9 10 14.9 1.9 10 1.9 10Z"/><circle cx="10" cy="10" r="2.5"/>');
   var ICON_KEY = _svg("ic", catIconInner("key"));
   var ICON_STAMP = '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10.2 12.5l.6-4.2a2.6 2.6 0 1 1 3.4 0l.6 4.2"/><path d="M5 17v-2.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2V17z" fill="currentColor"/><path d="M6 20.5h13"/></svg>';
 
@@ -6677,7 +6698,22 @@ What you type stays in this browser only.`;
     "Nothing on the clipboard fits this field. It holds: {TEXT}": "Nic ze schowka nie pasuje do tego pola. Jest w nim: {TEXT}",
     "The clipboard is empty.": "Schowek jest pusty.",
     "Ctrl+V pastes into the field here.": "Tutaj do pola wkleja się przez Ctrl+V.",
-    "Enter copies once the field is filled. Esc goes back to the list.": "Enter kopiuje, gdy pole jest wypełnione. Esc wraca do listy."
+    "Enter copies once the field is filled. Esc goes back to the list.": "Enter kopiuje, gdy pole jest wypełnione. Esc wraca do listy.",
+    "{NAME}'s desk": "Stanowisko: {NAME}",
+    "A colleague's desk": "Stanowisko współpracownika",
+    "Signed by {DESK}, key {KEY}. Only that desk can change this file; anyone with the folder can read it.": "Podpisane kluczem {KEY} ({DESK}). Zmienić ten plik może tylko to stanowisko; odczytać każdy, kto ma dostęp do folderu.",
+    "Look": "Zobacz",
+    "Work from it": "Pracuj na nim",
+    "A catalog of its own": "Osobny katalog",
+    "Your edits are in the folder as {DESK}": "Twoje zmiany są w folderze ({DESK})",
+    "Your own edits on it wait here until you load it again": "Twoje zmiany w nim czekają tutaj, aż wczytasz go ponownie",
+    "In the team's edition": "W wydaniu zespołu",
+    "At {DESK}": "{DESK}",
+    "Back to the Library": "Wróć do Biblioteki",
+    "Work from {DESK}": "Pracuj na tym pliku",
+    "Take the text from {DESK} into mine": "Weź tę treść do swoich zmian",
+    "in your edits": "w Twoich zmianach",
+    "That desk's cards match the team's edition.": "Karty na tym stanowisku są takie same jak w wydaniu zespołu."
   };
   function uiLangKnown(l) {
     return !!(l && UI_STRINGS[l]);
@@ -12761,11 +12797,11 @@ What you type stays in this browser only.`;
       return dir;
     });
   }
-  function eReadCatalogFile(name) {
+  function eReadCatalogFile(name, desk) {
     const h = eHost();
     if (!h || typeof h.readCatalogFile !== "function") return Promise.resolve(null);
     try {
-      return Promise.resolve(h.readCatalogFile(String(name || ""))).then((v) => v && typeof v === "object" ? { name: String(v.name || ""), text: String(v.text || "") } : null).catch(() => null);
+      return Promise.resolve(desk ? h.readCatalogFile(String(name || ""), String(desk)) : h.readCatalogFile(String(name || ""))).then((v) => v && typeof v === "object" ? { name: String(v.name || ""), text: String(v.text || "") } : null).catch(() => null);
     } catch (e) {
       return Promise.resolve(null);
     }
@@ -23102,6 +23138,7 @@ What you type stays in this browser only.`;
   // src/modules/edition-panel.js
   var edition_panel_exports = {};
   __export(edition_panel_exports, {
+    editionCountWords: () => editionCountWords,
     editionOfferHtml: () => editionOfferHtml,
     openEditionPanel: () => openEditionPanel,
     repaintEditionRows: () => repaintEditionRows
@@ -23114,14 +23151,17 @@ What you type stays in this browser only.`;
     if (k === "retired") return t("retired");
     return t("removed");
   }
-  function editionCountsHtml(n) {
+  function editionCountWords(n) {
     const parts2 = [];
     if (n.changed) parts2.push(counted(n.changed, "{N} changed", "{N} changed"));
     if (n.new) parts2.push(counted(n.new, "{N} new", "{N} new"));
     if (n.restored) parts2.push(counted(n.restored, "{N} restored", "{N} restored"));
     if (n.retired) parts2.push(counted(n.retired, "{N} retired", "{N} retired"));
     if (n.removed) parts2.push(counted(n.removed, "{N} removed", "{N} removed"));
-    return '<div class="ec-counts">' + parts2.map((p) => '<span class="ec-n">' + esc(p) + "</span>").join(" · ") + "</div>";
+    return parts2;
+  }
+  function editionCountsHtml(n) {
+    return '<div class="ec-counts">' + editionCountWords(n).map((p) => '<span class="ec-n">' + esc(p) + "</span>").join(" · ") + "</div>";
   }
   function editionNoteHtml(note, cls) {
     return '<div class="' + cls + '"><small>' + esc(t("Note for this edition")) + "</small><p>" + esc(note) + "</p></div>";
@@ -23135,8 +23175,8 @@ What you type stays in this browser only.`;
     if (it.kind === "retired" && it.asleep) return t("It comes back with your star and your edits.");
     return "";
   }
-  function editionRowInner(it, held, c) {
-    const sub = editionSubline(it, c);
+  function editionRowInner(it, held, c, own) {
+    const sub = own ? own(it) : editionSubline(it, c);
     return '<span class="ec-kind">' + esc(editionKindWord(it.kind)) + '</span><span class="ec-t">' + esc(cardTitle(editionCard(it, held, c)) || it.id) + (sub ? "<small>" + esc(sub) + "</small>" : "") + "</span>";
   }
   function editionOfferHtml(c, held, changes) {
@@ -23151,7 +23191,7 @@ What you type stays in this browser only.`;
   function editionFieldWord(f) {
     return f === "t" ? t("Title") : f === "note" ? t("Note") : t("Text");
   }
-  function editionPaneHtml(it, held, c) {
+  function editionPaneHtml(it, held, c, desk) {
     const was = (held && held.cards || []).find((m) => String(m.id) === it.id) || null;
     const now = (c && c.cards || []).find((m) => String(m.id) === it.id) || null;
     const mine = (pack.overrides || {})[it.id] || null, many = CONTENT_LANGS.length > 1;
@@ -23165,38 +23205,47 @@ What you type stays in this browser only.`;
       }).filter(Boolean);
       const own = blocks.map((f) => it.own && mine && mine[f.key] != null && String(mine[f.key]) !== cardText(now, f.field, f.code) ? String(mine[f.key]) : null);
       cols = own.some((v) => v != null) ? 3 : 2;
-      rows = head(t("Was")) + head(t("Becomes")) + (cols > 2 ? head(t("Your version")) : "");
+      rows = head(desk ? desk.was : t("Was")) + head(desk ? desk.now : t("Becomes")) + (cols > 2 ? head(t("Your version")) : "");
       const last = own.map((v, i) => v != null ? i : -1).reduce((a, b) => Math.max(a, b), -1), took = teamTextTaken(c, it.id);
       const acts = '<div class="ed-acts"><button type="button" class="btn" data-ed-take="1" aria-pressed="' + took + '">' + esc(t("Take the team's new text")) + '</button><button type="button" class="btn" data-ed-take="0" aria-pressed="' + !took + '">' + esc(t("Keep mine")) + "</button></div>";
       blocks.forEach((f, i) => {
         if (blocks.length > 1 || f.field !== "body") rows += '<div class="ed-field">' + esc(editionFieldWord(f.field) + (many ? " · " + f.code.toUpperCase() : "")) + "</div>";
         const ops = wordDiff(cardText(was, f.field, f.code), cardText(now, f.field, f.code));
-        rows += cell(editionSide(ops, "del")) + cell(editionSide(ops, "ins")) + (cols > 2 ? '<div class="ed-own">' + (own[i] != null ? cell(esc(own[i])) : "") + (i === last ? acts : "") + "</div>" : "");
+        rows += cell(editionSide(ops, "del")) + cell(editionSide(ops, "ins")) + (cols > 2 ? '<div class="ed-own">' + (own[i] != null ? cell(esc(own[i])) : "") + (i === last && !desk ? acts : "") + "</div>" : "");
       });
+      if (desk && desk.take) rows += '<div class="ed-acts ed-acts-desk"><button type="button" class="btn" data-ed-mine="1" aria-pressed="' + !!desk.taken(it) + '">' + esc(desk.take) + "</button></div>";
     } else {
       const gone = it.kind === "retired" || it.kind === "removed", m = gone ? was : now, code = cardText(m, "body", lang) ? lang : CONTENT_LANGS[0];
-      rows = head(t(gone ? "Was" : "Becomes")) + cell(esc(cardText(m, "body", code)));
-      const sub = editionSubline(it, c);
+      rows = head(desk ? gone ? desk.was : desk.now : t(gone ? "Was" : "Becomes")) + cell(esc(cardText(m, "body", code)));
+      const sub = desk ? "" : editionSubline(it, c);
       if (sub) rows += '<p class="ed-sub">' + esc(sub) + "</p>";
     }
     return "<h3>" + esc(cardTitle(now || was || {}) || it.id) + '</h3><div class="ed-grid ed-c' + cols + '">' + rows + "</div>";
   }
   function openEditionPanel(o) {
-    const items = o.changes.items, c = o.c;
+    const items = o.changes.items, c = o.c, desk = o.desk || null, sub = desk ? desk.sub : null;
     let at = Math.max(0, items.findIndex((it) => it.own));
-    const note = editionNoteText(c, uiLang());
-    const row = (it, i) => '<button type="button" class="ed-row" data-ed-at="' + i + '"' + (i === at ? ' aria-current="true"' : "") + ">" + editionRowInner(it, o.held, c) + "</button>";
+    const note = desk ? "" : editionNoteText(c, uiLang());
+    const row = (it, i) => '<button type="button" class="ed-row" data-ed-at="' + i + '"' + (i === at ? ' aria-current="true"' : "") + ">" + editionRowInner(it, o.held, c, sub) + "</button>";
     openDialog({
       cls: "ed-modal",
-      title: t("What is new in edition {V}").split("{V}").join(o.version),
+      title: desk ? desk.title : t("What is new in edition {V}").split("{V}").join(o.version),
       name: o.name,
       back: o.back,
       body: '<div class="ed-panel" data-i18n-skip><div class="ed-left">' + (note ? editionNoteHtml(note, "ed-note") : "") + editionCountsHtml(o.changes.counts) + '<div class="ed-list">' + items.map(row).join("") + '</div></div><div class="ed-pane" id="edPane" aria-live="polite"></div></div>',
-      actions: '<button type="button" class="btn" id="edKeep">' + esc(t("Keep current")) + '</button><button type="button" class="btn primary" id="edLoad">' + esc(t("Load the update")) + "</button>",
+      actions: '<button type="button" class="btn" id="edKeep">' + esc(desk ? desk.keep : t("Keep current")) + '</button><button type="button" class="btn primary" id="edLoad">' + esc(desk ? desk.load : t("Load the update")) + "</button>",
       wire: () => {
         const pane = document.getElementById("edPane"), list2 = document.querySelector(".ed-list");
         const draw = () => {
-          pane.innerHTML = editionPaneHtml(items[at], o.held, c);
+          pane.innerHTML = editionPaneHtml(items[at], o.held, c, desk);
+          pane.querySelectorAll("[data-ed-mine]").forEach((b) => {
+            b.onclick = () => {
+              desk.toggle(items[at]);
+              const r = list2.querySelector('[data-ed-at="' + at + '"]');
+              if (r) r.innerHTML = editionRowInner(items[at], o.held, c, sub);
+              draw();
+            };
+          });
           pane.querySelectorAll("[data-ed-take]").forEach((b) => {
             b.onclick = () => {
               takeTeamText(c, items[at].id, b.getAttribute("data-ed-take") === "1");
@@ -23226,6 +23275,124 @@ What you type stays in this browser only.`;
     changes.items.slice(0, EDITION_SHOWN).forEach((it) => {
       const li = Array.from(wrap.querySelectorAll("[data-ec-id]")).find((x) => x.getAttribute("data-ec-id") === it.id);
       if (li) li.innerHTML = editionRowInner(it, held, c);
+    });
+  }
+
+  // src/modules/desk-look.js
+  var desk_look_exports = {};
+  __export(desk_look_exports, {
+    deskBase: () => deskBase,
+    deskChangeWords: () => deskChangeWords,
+    deskKey: () => deskKey,
+    deskName: () => deskName,
+    openDeskLook: () => openDeskLook
+  });
+  function deskName(f) {
+    const n = String(f && f.desk && f.desk.name || "").trim();
+    return n ? t("{NAME}'s desk").split("{NAME}").join(n) : t("A colleague's desk");
+  }
+  function deskKey(f) {
+    return leadKeyText(String(f.desk.id).slice(2));
+  }
+  function deskBase(f, files, held) {
+    const g = f && f.grew;
+    if (!g) return null;
+    const inUse = !!held && String(held.id || "") === g.id;
+    if (inUse && held.pin === g.sha) return { held: true };
+    const exact = files.find((x) => x.id === g.id && x.sha === g.sha);
+    if (exact) return { file: exact };
+    if (inUse) return { held: true };
+    const any = files.find((x) => x.id === g.id);
+    return any ? { file: any } : null;
+  }
+  var deskReads = /* @__PURE__ */ new Map();
+  function readParsed(name, desk, mtime) {
+    const at = (desk || "") + "/" + name + "|" + mtime;
+    if (!deskReads.has(at)) deskReads.set(at, eReadCatalogFile(name, desk).then((got) => {
+      try {
+        return got && got.text ? parseCatalogFile(got.text) : null;
+      } catch (e) {
+        return null;
+      }
+    }).catch(() => null));
+    return deskReads.get(at);
+  }
+  function deskSides(f, base) {
+    const team = !base ? Promise.resolve(null) : base.held ? Promise.resolve(storedCatalog()) : readParsed(base.file.name, "", base.file.mtime);
+    return Promise.all([readParsed(f.name, f.desk.id, f.mtime), team]).then(([hers, team2]) => {
+      if (!hers || base && !team2) return null;
+      return { hers, team: team2 || { cards: [], langs: hers.langs } };
+    });
+  }
+  function deskChangeWords(f, base) {
+    return deskSides(f, base).then((s) => s ? editionCountWords(editionChanges(s.team, s.hers, base && base.held ? pack : null).counts) : null);
+  }
+  var cardIn = (c, id) => (c && c.cards || []).find((m) => String(m.id) === id) || null;
+  var deskText = (v) => String(v == null ? "" : v);
+  function deskCardNow(id) {
+    const b = baseCard(id);
+    return b ? Object.assign({}, b, (pack.overrides || {})[id] || {}) : null;
+  }
+  function deskTaken(it, hers) {
+    const m = deskCardNow(it.id), h = cardIn(hers, it.id);
+    return !!m && !!h && it.fields.every((f) => deskText(m[f.key]) === deskText(h[f.key]));
+  }
+  function deskToggle(it, hers, prior) {
+    const base = baseCard(it.id), now = deskCardNow(it.id), h = cardIn(hers, it.id);
+    if (!base || !now || !h || it.kind !== "changed") return false;
+    if (!pack.overrides) pack.overrides = {};
+    const on = !deskTaken(it, hers), was = pack.overrides[it.id];
+    if (on && !prior.has(it.id)) prior.set(it.id, was ? JSON.parse(JSON.stringify(was)) : null);
+    const set = (from) => {
+      const moved = {};
+      it.fields.forEach((f) => {
+        moved[f.key] = deskText(from[f.key]);
+      });
+      return overrideAgainstBase(base, Object.assign(now, moved));
+    };
+    const o = on ? set(h) : prior.has(it.id) ? prior.get(it.id) : set(base);
+    if (o && Object.keys(o).length) pack.overrides[it.id] = o;
+    else delete pack.overrides[it.id];
+    savePack();
+    hooks.rebuildCards();
+    return true;
+  }
+  function openDeskLook(f, base, name, work, back) {
+    return deskSides(f, base).then((s) => {
+      if (!s) {
+        toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(String(f.name || "")));
+        return false;
+      }
+      const inUse = !!(base && base.held), changes = editionChanges(s.team, s.hers, inUse ? pack : null);
+      if (!changes.items.length) {
+        toast(t("That desk's cards match the team's edition."));
+        return false;
+      }
+      const who = deskName(f), prior = /* @__PURE__ */ new Map();
+      openEditionPanel({
+        c: s.hers,
+        held: s.team,
+        changes,
+        version: "",
+        name,
+        keep: back,
+        load: work,
+        back,
+        taken: () => {
+        },
+        desk: {
+          title: who,
+          was: t("In the team's edition"),
+          now: t("At {DESK}").split("{DESK}").join(who),
+          keep: t("Back to the Library"),
+          load: t("Work from {DESK}").split("{DESK}").join(who),
+          take: inUse ? t("Take the text from {DESK} into mine").split("{DESK}").join(who) : "",
+          taken: (it) => deskTaken(it, s.hers),
+          toggle: (it) => deskToggle(it, s.hers, prior),
+          sub: (it) => it.kind === "changed" && inUse && deskTaken(it, s.hers) ? t("in your edits") : it.own ? t("you have your own version") : ""
+        }
+      });
+      return true;
     });
   }
 
@@ -23276,8 +23443,8 @@ What you type stays in this browser only.`;
     if (!asked && found && found.sample && held && !isCatalogUpdate(found, held)) return;
     eOfferCatalog(null, "", "", asked || wholeThingEmpty() || !!(at && mt && mt > at), asked);
   }
-  function loadCatalogFromFolder(name, mtime) {
-    eReadCatalogFile(name).then((got) => {
+  function loadCatalogFromFolder(name, mtime, desk) {
+    eReadCatalogFile(name, desk).then((got) => {
       if (!got) return;
       if (!got.text) {
         toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(String(name || "")));
@@ -23292,25 +23459,40 @@ What you type stays in this browser only.`;
       }
       const shown2 = eOfferCatalogDialog(c, {
         file: got.name,
-        foundHtml: eFoundHtml(got.name, eCatalogFolder()),
+        foundHtml: eFoundHtml(got.name, desk ? deskFolderOf(desk) : eCatalogFolder()),
         refusedKey: "CatalogNo",
         force: true,
         asked: true,
         direct: true,
         accept: (sig) => {
           lsSet(E_CATALOG_KEY, sig);
-          return activateCatalog(c, { file: got.name, fileAt: +mtime || 0 });
+          return activateCatalog(c, desk ? { file: "", from: got.name } : { file: got.name, fileAt: +mtime || 0 });
         }
       });
       if (!shown2) toast(t("That file matches the catalog you already have."));
     });
+  }
+  function deskFolderOf(id) {
+    const dir = eCatalogFolder(), sep = dir.indexOf("\\") > -1 ? "\\" : "/";
+    return dir + sep + "desks" + sep + id;
   }
   function ecWatchHtml() {
     if (!(eWatchSupported() && eWatchName())) return "";
     return '<small class="ec-watch">' + esc(t("Watching")) + " <code>" + esc(eWatchName()) + '</code> · <span class="acts"><button type="button" class="act" data-ec-check="1" title="' + esc(t("Read that file again and offer it if it has changed")) + '">' + esc(t("Check for updates")) + '</button><span class="sep" aria-hidden="true">·</span><button type="button" class="act" data-ec-unwatch="1">' + esc(t("Stop watching")) + "</button></span></small>";
   }
   function ecRowHtml(o) {
-    return '<div class="ec-row' + (o.loaded ? " is-loaded" : "") + '"' + (o.file ? ' data-ec-file="' + esc(o.file) + '"' : "") + '><span class="ec-name"><b>' + esc(o.name) + "</b>" + (o.meta ? '<small class="ec-meta">' + o.meta + "</small>" : "") + (o.loaded ? ecWatchHtml() : "") + "</span>" + (o.loaded ? loadedTickHtml() : "") + (o.newer && !o.sample ? '<span class="ec-tag" title="' + esc(t("Written after the catalog you have")) + '">' + esc(t("Newer")) + "</span>" : "") + (o.loaded && catalogEdited() ? '<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="' + esc(t("Save everything loaded now as a catalog file, your edits merged in")) + '">' + esc(t("Export…")) + "</button>" : "") + trustKeyHtml(o.trust || "", o.keyId || "") + (o.loaded ? ecActHtml("Eject", ICON_EJECT, ' data-ec-eject="1"') : ecActHtml("Load", ICON_LOAD, ' data-ec-load="' + esc(o.name) + '" data-ec-at="' + (+o.mtime || 0) + '"')) + "</div>";
+    return '<div class="ec-row' + (o.loaded ? " is-loaded" : "") + '"' + (o.file ? ' data-ec-file="' + esc(o.file) + '"' : "") + '><span class="ec-name"><b>' + esc(o.name) + "</b>" + (o.meta ? '<small class="ec-meta">' + o.meta + "</small>" : "") + (o.loaded ? ecWatchHtml() : "") + (o.extra || "") + "</span>" + (o.loaded ? loadedTickHtml() : "") + (o.newer && !o.sample ? '<span class="ec-tag" title="' + esc(t("Written after the catalog you have")) + '">' + esc(t("Newer")) + "</span>" : "") + (o.loaded && catalogEdited() ? '<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="' + esc(t("Save everything loaded now as a catalog file, your edits merged in")) + '">' + esc(t("Export…")) + "</button>" : "") + trustKeyHtml(o.trust || "", o.keyId || "") + (o.loaded ? ecActHtml("Eject", ICON_EJECT, ' data-ec-eject="1"') : ecActHtml("Load", ICON_LOAD, ' data-ec-load="' + esc(o.name) + '" data-ec-at="' + (+o.mtime || 0) + '"')) + "</div>";
+  }
+  function ecExportHtml() {
+    return catalogEdited() ? '<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="' + esc(t("Save everything loaded now as a catalog file, your edits merged in")) + '">' + esc(t("Export…")) + "</button>" : "";
+  }
+  function ecDeskRowHtml(f, o) {
+    const who = deskName(f);
+    const tip = t("Signed by {DESK}, key {KEY}. Only that desk can change this file; anyone with the folder can read it.").split("{DESK}").join(who).split("{KEY}").join(deskKey(f));
+    return '<div class="ec-row ec-desk' + (o.nested ? "" : " ec-alone") + (o.loaded ? " is-loaded" : "") + '" data-ec-desk="' + o.at + '"><span class="ec-name"><b>' + esc(who) + (o.twin ? '<span class="ec-fp">' + esc(o.twin) + "</span>" : "") + '</b><small class="ec-meta">' + o.meta + "</small>" + (o.extra || "") + "</span>" + (o.loaded ? loadedTickHtml() + ecExportHtml() : "") + '<span class="ec-who" role="img" tabindex="0" aria-label="' + esc(who) + '" data-tip="' + esc(tip) + '">' + ICON_DESK + "</span>" + ecActHtml("Look", ICON_LOOK, ' data-ec-look="' + o.at + '"') + (o.loaded ? ecActHtml("Eject", ICON_EJECT, ' data-ec-eject="1"') : ecActHtml("Work from it", ICON_LOAD, ' data-ec-work="' + o.at + '"')) + "</div>";
+  }
+  function ecMineHtml(line, glyph) {
+    return '<small class="ec-mine">' + (glyph ? ICON_DESK : "") + "<span>" + esc(line) + "</span></small>";
   }
   var ecTrustOf = /* @__PURE__ */ new Map();
   function ecFileTrust(f) {
@@ -23343,7 +23525,7 @@ What you type stays in this browser only.`;
     ["keydown", "pointerdown", "scroll"].forEach((k) => addEventListener(k, ecKeyBubClose, { capture: true, once: true }));
   }
   function wireEcKeys(box) {
-    box.querySelectorAll(".ec-key[data-tip]").forEach((k) => {
+    Array.from(box.querySelectorAll(".ec-key[data-tip]")).concat(Array.from(box.querySelectorAll(".ec-who[data-tip]"))).forEach((k) => {
       k.onmouseenter = k.onfocus = () => ecKeyBubOpen(k);
       k.onmouseleave = k.onblur = ecKeyBubClose;
     });
@@ -23408,17 +23590,24 @@ What you type stays in this browser only.`;
     const held = storedCatalog();
     const mine = eLoadedCatalogFile();
     recheckHeldTrust(eCatalog(), held, paintCatalogList);
-    eCatalogFiles().then((all) => {
+    Promise.all([eCatalogFiles(), eBranchIdentity(false)]).then(([all, me]) => {
       if (!box.isConnected) return;
       const files = all.filter((f) => !f.desk);
+      const shaped = (f) => !!f.desk && f.id.indexOf(f.desk.id + "-") === 0;
+      const desks = all.filter((f) => shaped(f) && !(me && f.desk.id === me.id)), own = me ? all.filter((f) => shaped(f) && f.desk.id === me.id) : [];
+      const heldId = held ? String(held.id || "") : "";
       let onAt = mine ? files.findIndex((f) => f.name === mine) : -1;
       if (onAt < 0 && held) onAt = files.findIndex((f) => isCatalogUpdate(f, held));
+      const deskOn = heldId ? desks.findIndex((f) => f.id === heldId) : -1;
       const at = +(nsGet("CatalogFileAt") || 0) || ((files[onAt] || {}).mtime || 0);
-      const rows = files.map((f, i) => {
+      const ownOf = (id) => own.find((o) => o.grew && o.grew.id === id);
+      const mineLine = ownOf(heldId) ? ecMineHtml(t("Your edits are in the folder as {DESK}").split("{DESK}").join(deskName(ownOf(heldId))), true) : "";
+      const extraFor = (id, on) => on ? mineLine : id && id !== heldId && ownOf(id) ? ecMineHtml(t("Your own edits on it wait here until you load it again"), false) : "";
+      const tops = files.map((f, i) => {
         const on = i === onAt;
         const stamp = catalogStamp(f.edition, f.mtime);
         const copy2 = ecCopyHtml(f), meta = on ? loadedMeta(stamp) : ecMeta(stamp, f);
-        return ecRowHtml({
+        return { id: f.id, sha: f.sha, on, html: ecRowHtml({
           name: f.name,
           file: f.name,
           mtime: f.mtime,
@@ -23426,20 +23615,55 @@ What you type stays in this browser only.`;
           newer: at > 0 && f.mtime > at,
           sample: !!f.sample,
           meta: copy2 && meta ? copy2 + " · " + meta : copy2 || meta,
-          trust: on ? heldCatalogTrust() : ""
-        });
+          trust: on ? heldCatalogTrust() : "",
+          extra: extraFor(f.id, on)
+        }) };
       });
-      if ((held || catalogLoaded() || (cards || []).length) && onAt < 0)
-        rows.unshift(ecRowHtml({
+      if ((held || catalogLoaded() || (cards || []).length) && onAt < 0 && deskOn < 0)
+        tops.unshift({ id: heldId, sha: String(held && held.pin || ""), on: true, html: ecRowHtml({
           name: shownCatalogName(catalogFileName()),
           loaded: true,
           newer: false,
           meta: loadedMeta(""),
-          trust: heldCatalogTrust()
+          trust: heldCatalogTrust(),
+          extra: mineLine
+        }) });
+      const under = tops.map(() => []), alone = [], named = /* @__PURE__ */ new Map(), nested = [];
+      desks.forEach((f) => {
+        const n = deskName(f);
+        named.set(n, (named.get(n) || 0) + 1);
+      });
+      desks.forEach((f, i) => {
+        const g = f.grew, on = i === deskOn, stamp = catalogStamp(f.edition, f.mtime);
+        const of = g ? tops.map((x, k) => k).filter((k) => !!tops[k].id && tops[k].id === g.id) : [];
+        const p = [of.find((k) => tops[k].on), of.find((k) => tops[k].sha === g.sha), of[0]].find((k) => k != null);
+        const meta = on ? loadedMeta(stamp) : p != null ? esc(stamp) : g ? ecMeta(stamp, f) : esc(t("A catalog of its own")) + " · " + ecMeta(stamp, f);
+        (p != null ? under[p] : alone).push(ecDeskRowHtml(f, {
+          at: i,
+          nested: p != null,
+          loaded: on,
+          meta,
+          extra: extraFor(f.id, on),
+          twin: named.get(deskName(f)) > 1 ? deskKey(f).slice(0, 4) : ""
         }));
+        if (p != null && !on) nested.push(i);
+      });
       ecKeyBubClose();
+      const rows = tops.reduce((out2, x, k) => out2.concat([x.html], under[k]), []).concat(alone);
       box.innerHTML = rows.length ? rows.join("") : ecEmptyHtml();
       wireEcKeys(box);
+      nested.forEach((i) => deskChangeWords(desks[i], deskBase(desks[i], files, held)).then((words) => {
+        const row = box.querySelector('[data-ec-desk="' + i + '"]'), meta = row && row.querySelector(".ec-meta");
+        if (meta && words && words.length) meta.textContent = words.concat([catalogStamp(desks[i].edition, desks[i].mtime)]).join(" · ");
+      }));
+      box.querySelectorAll("button[data-ec-look]").forEach((b) => {
+        const f = desks[+b.getAttribute("data-ec-look")];
+        b.onclick = () => lookAtDesk(f, files, held);
+      });
+      box.querySelectorAll("button[data-ec-work]").forEach((b) => {
+        const f = desks[+b.getAttribute("data-ec-work")];
+        b.onclick = () => loadCatalogFromFolder(f.name, f.mtime, f.desk.id);
+      });
       files.forEach((f, i) => ecFileTrust(f).then((r) => {
         const row = Array.from(box.querySelectorAll(".ec-row")).find((x) => x.getAttribute("data-ec-file") === f.name);
         const key = row && row.querySelector(".ec-key");
@@ -23476,6 +23700,23 @@ What you type stays in this browser only.`;
         };
       }
     });
+  }
+  function lookAtDesk(f, files, held) {
+    const base = deskBase(f, files, held);
+    const name = shownCatalogName(catalogNameOfFile(!base ? f.name : base.held ? catalogFileName() : base.file.name));
+    openDeskLook(
+      f,
+      base,
+      name,
+      () => {
+        closeModal();
+        loadCatalogFromFolder(f.name, f.mtime, f.desk.id);
+      },
+      () => {
+        closeModal();
+        hooks.openManage();
+      }
+    );
   }
   var offerStanding = null;
   function eOfferCatalogDialog(c, src) {
@@ -23692,6 +23933,7 @@ What you type stays in this browser only.`;
     });
   }
   function onCatalogListing(all) {
+    paintCatalogList();
     const held = storedCatalog();
     if (!held && !catalogLoaded()) {
       offerToLooseAuthor(all);
@@ -26336,7 +26578,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, team_join_exports, edition_changes_exports, edition_panel_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, fields_exports, field_ask_exports, next_dock_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, fields_exports, field_ask_exports, next_dock_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });

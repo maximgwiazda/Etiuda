@@ -277,6 +277,10 @@ const ICON_SUCCESS='<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focus
 const ICON_LOAD=_svg("ic",'<path d="M10 3.6v8.6"/><path d="M6.5 8.9l3.5 3.5 3.5-3.5"/>'
   +'<path d="M3.6 12.6v2.1a1.7 1.7 0 0 0 1.7 1.7h9.4a1.7 1.7 0 0 0 1.7-1.7v-2.1"/>');
 const ICON_EJECT=_svg("ic",'<path d="M10 4.2l5.6 6.6H4.4z"/><path d="M4.6 15.4h10.8"/>');
+/* A colleague's desk file in the Library: the desk that wrote it, Studio's desks drawing on this grid, and the eye that
+   looks at it, the hide eye's drawing at the acts' size. */
+const ICON_DESK=_svg("ic",'<rect x="3.2" y="7.4" width="10" height="6.6" rx="1.6"/><path d="M8.2 14v3.2M5.8 17.2h4.8M7.2 7.4V5.6a1.6 1.6 0 0 1 1.6-1.6h6.6a1.6 1.6 0 0 1 1.6 1.6v5a1.6 1.6 0 0 1-1.6 1.6h-2.2"/>');
+const ICON_LOOK=_svg("ic",'<path d="M1.9 10S5 5.1 10 5.1 18.1 10 18.1 10 15 14.9 10 14.9 1.9 10 1.9 10Z"/><circle cx="10" cy="10" r="2.5"/>');
 // A catalog's signature: the category family's own key, one drawing for one idea.
 const ICON_KEY=_svg("ic",catIconInner("key"));
 /* A card that commits the firm wears the firm's rubber stamp, 24-grid; its pad is filled. */
@@ -291,5 +295,5 @@ export {
   CAT_LABELS_PL, CAT_LABELS_BY_LANG, setCatalogCatLabels, E_HUE_CYCLE, E_HUE_NAMES, CAT_ICON_MUSIC, CAT_ICON_KEYS,
   CAT_ICON_HINTS, ICON_STAR_ON, ICON_STAR_OFF, ICON_INTENT_LINK, ICON_PLUS, fillProseIcons,
   ICON_CHEVRON_R, ICON_X, ICON_LOCK, ICON_LOCK_OPEN, ICON_TAB_X, ICON_TAB_ADD,
-  ICON_AWAITING, ICON_LINT_ERROR, ICON_LINT_WARNING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT, ICON_KEY, ICON_STAMP,
+  ICON_AWAITING, ICON_LINT_ERROR, ICON_LINT_WARNING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT, ICON_KEY, ICON_STAMP, ICON_DESK, ICON_LOOK,
 };
