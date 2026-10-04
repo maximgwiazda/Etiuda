@@ -23,7 +23,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 49;
+const EXPECTED = 52;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -362,6 +362,18 @@ try {
     "4p a click on a block copies straight through with every field known, and with one empty copies nothing and asks: "
     + JSON.stringify({ clicked, clickedEmpty, boxes: inputs().length }));
   if (asking()) fire(inputs()[0], "keydown", { key: "Escape" });
+  /* 4q the click's copy spends a field kept for one copy, as 4n's keyboard copy does. Each of the
+     four copy sites calls spendFields after its own copy, and until 2026-10-04 only the keyboard's
+     was seen: the call removed from the click, the picker's copy or its ask left every leg green. */
+  const handBlock = listEl.appendChild(new Hit("div", { class: "card", "data-id": "c-hand" })).appendChild(new Hit("p", { class: "txt", "data-v": "0" }));
+  AS.setFieldVals({ order: "MRB-2024-10412", kept: "a refund" });
+  let handGot = null;
+  navigator.clipboard = { writeText: t => { handGot = t; return { then() {} }; } };
+  fire(handBlock, "click", { button: 0 });
+  navigator.clipboard = null;
+  check(handGot === "Order MRB-2024-10412. Promised: a refund." && !AS.fieldVals.kept && AS.fieldVals.order === "MRB-2024-10412",
+    "4q the click's copy spends a field kept for one copy, and the conversation's own stays: " + JSON.stringify({ handGot, vals: AS.fieldVals }));
+  if (asking()) fire(inputs()[0], "keydown", { key: "Escape" });
   delete els["#list"]; Dom.grabDom();
 
   console.log("\n[5/7] the picker's answers and where a value is kept");
@@ -402,6 +414,21 @@ try {
     const other = Object.assign({}, AS.fieldVals);
     check(a.order === SENT && Object.keys(fresh).length === 0 && back.order === SENT && other.order === "MRB-1111-22222",
       "5f a new conversation starts with no values, and each tab gets back its own: " + JSON.stringify({ a, fresh, back, other })); }
+  /* 5g, 5h the picker's two copies spend a field kept for one copy, as 4n and 4q do: its own copy,
+     whose text the shell writes, and its ask, the desk's copy made in the desk's window. */
+  AS.setFieldVals({ order: "MRB-2024-10412", kept: "a refund" });
+  const viaCopy = pa("copy", { id: "c-hand", vi: 0 });
+  const afterCopy = Object.assign({}, AS.fieldVals);
+  check(!!viaCopy && viaCopy.text === "Order MRB-2024-10412. Promised: a refund." && !afterCopy.kept && afterCopy.order === "MRB-2024-10412",
+    "5g the picker's copy spends a field kept for one copy, and the conversation's own stays: " + JSON.stringify({ viaCopy, afterCopy }));
+  AS.setFieldVals({ order: "MRB-2024-10412", kept: "a refund" });
+  let askGot = null;
+  navigator.clipboard = { writeText: t => { askGot = t; return { then() {} }; } };
+  const viaAsk = pa("ask", { id: "c-hand", vi: 0 });
+  navigator.clipboard = null;
+  const afterAsk = Object.assign({}, AS.fieldVals);
+  check(!!viaAsk && viaAsk.asked === true && askGot === "Order MRB-2024-10412. Promised: a refund." && !afterAsk.kept && afterAsk.order === "MRB-2024-10412",
+    "5h the picker's ask copies in the desk and spends a field kept for one copy, and the conversation's own stays: " + JSON.stringify({ askGot, afterAsk }));
 
   console.log("\n[6/7] the lint: a declared field is a token the desk fills");
   const LT = nodeRequire(path.join(ROOT, "tests", "test.js"));
