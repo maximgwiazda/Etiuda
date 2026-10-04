@@ -419,10 +419,10 @@ function writeShared(loose,origin,holds,layer){
         if(loose){ lySet("SharedFile",name); lySet("Exported",looseMark()); }
         sharedSaid=false;
       }
-      if(r.fresh && r.fresh.length) toast(t("The shared catalog had changed the same text, so your version is kept in this desk's own file."));
+      if(r.fresh && r.fresh.length) toast(t("A colleague changed the same text first, so the shared catalog keeps theirs and yours stays in this desk's own file."));
       else if(r.why && r.why!=="signed" && !sharedSaid){
         sharedSaid=true;
-        toast(t("The shared catalog could not be written just now, so this change is kept in this desk's own file."));
+        toast(t("The shared catalog could not be written this time; this change is safe in this desk's own file."));
         if(r.why==="busy") setTimeout(scheduleDeskBranch,SHARED_RETRY_MS);
       }
       return r;

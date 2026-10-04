@@ -59,17 +59,17 @@ const SC_DEFS=[
     def:{code:"KeyA",key:"a",ctrl:0,alt:1,shift:0,meta:0},inField:1},
   /* The action button's replies, in its order. Ctrl because holding it already shows them; inField,
      because the caret is in the search box between two copies. */
-  {id:"nextCopy1",label:"Next reply 1",hint:"Copy the first reply offered after the one sent last",
+  {id:"nextCopy1",label:"Next reply 1",hint:"Copy the first of the replies offered after the last one sent",
     def:{code:"Digit1",key:"1",ctrl:1,alt:0,shift:0,meta:0},inField:1},
-  {id:"nextCopy2",label:"Next reply 2",hint:"Copy the second reply offered after the one sent last",
+  {id:"nextCopy2",label:"Next reply 2",hint:"Copy the second of the replies offered after the last one sent",
     def:{code:"Digit2",key:"2",ctrl:1,alt:0,shift:0,meta:0},inField:1},
-  {id:"nextCopy3",label:"Next reply 3",hint:"Copy the third reply offered after the one sent last",
+  {id:"nextCopy3",label:"Next reply 3",hint:"Copy the third of the replies offered after the last one sent",
     def:{code:"Digit3",key:"3",ctrl:1,alt:0,shift:0,meta:0},inField:1},
-  {id:"nextCopy4",label:"Next reply 4",hint:"Copy the fourth reply offered after the one sent last",
+  {id:"nextCopy4",label:"Next reply 4",hint:"Copy the fourth of the replies offered after the last one sent",
     def:{code:"Digit4",key:"4",ctrl:1,alt:0,shift:0,meta:0},inField:1},
   /* inField so an empty search box still switches; run-shortcut declines it wherever something is being
      typed or a control is focused, and the press then types or presses as before. */
-  {id:"lanes",label:"Cards or lanes",hint:"Switch between the cards and the lanes while nothing is being typed",
+  {id:"lanes",label:"Cards or the conversation's path",hint:"Switch between the cards and the conversation's path while nothing is being typed",
     def:{code:"Space",key:" ",ctrl:0,alt:0,shift:0,meta:0},inField:1},
   {id:"expandPills",label:"Reveal / expand categories",
     hint:"Hold Ctrl (Cmd on Mac): show the pills when hidden, or expand them past two rows",
@@ -287,7 +287,7 @@ function keysLegendHtml(){
     K(esc(f("quickFacts")))+" "+w("facts")+" · "+
     K(esc(f("toggleRail")))+" "+w("rail")+" · "+
     K(esc(f("expandPills")))+" "+w("categories")+" · "+
-    K(esc(f("lanes")))+" "+w("lanes")+" · "+
+    K(esc(f("lanes")))+" "+w("path")+" · "+
     K("Esc")+" "+w("clear");
 }
 function tabAddTitle(){

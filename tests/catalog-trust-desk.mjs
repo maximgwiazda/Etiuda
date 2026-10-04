@@ -961,21 +961,21 @@ async function parent() {
     const rowOf = (rows, four) => rows.find(r => r.desk && r.fp === four) || {};
     const olaRow = rowOf(rows75, ola1.four), ola2Row = rowOf(rows75, ola2.four), p75 = rows75.find(r => r.name === "Piotr's desk") || {};
     check(same(rows75.map(r => r.name), ["lamp.ec", "Ola's desk", "Ola's desk", "Piotr's desk"]) && rows75[0].loaded
-      && !olaRow.alone && !ola2Row.alone && p75.alone && deskRows.every(r => r.file === null) && same(olaRow.acts, ["Look", "Work from it"]),
+      && !olaRow.alone && !ola2Row.alone && p75.alone && deskRows.every(r => r.file === null) && same(olaRow.acts, ["See what changed", "Work from this file"]),
       "75a the colleagues' files hang under the catalog in use, the one grown from nothing stands alone at the foot, each with Look and Work from it; this desk's own file and one claiming the id in use have no row: "
       + JSON.stringify(rows75.map(r => [r.name, r.fp, r.alone, r.acts.join("/")])));
     check(olaRow.fp === ola1.four && ola2Row.fp === ola2.four && p75.fp === "" && olaRow.tip.indexOf(grouped(ola1.id)) > -1 && /^Signed by Ola's desk, key /.test(olaRow.tip),
       "75b two desks of one name each carry the first four of their key, and the desk's glyph names its key in four groups: " + JSON.stringify([olaRow.fp, ola2Row.fp, p75.fp, olaRow.tip]));
-    check(same(rows75[0].mine, ["Your edits are in the folder as Max's desk"]) && /^1 changed · 1 new · /.test(olaRow.meta) && /^A catalog of its own · /.test(p75.meta),
+    check(same(rows75[0].mine, ["Your edits are in the folder, for the team to see"]) && /^1 changed · 1 new · /.test(olaRow.meta) && /^A catalog of its own · /.test(p75.meta),
       "75c the loaded row says this desk's edits are in the folder under its desk's name; a hanging row says what that desk changed, and one grown from nothing says so: "
       + JSON.stringify([rows75[0].mine, olaRow.meta, p75.meta]));
 
     const L2 = run(lab75, ["desk", "rows", "look:" + olaRow.at, "mine", "mine", "edback2"], true, { card: "c-warm" });
     const lk = rd(L2, "look"), m1 = ((L2.read || {}).mine || [])[0] || {}, m2 = ((L2.read || {}).mine || [])[1] || {};
     check(!!lk.title && lk.title === "Ola's desk" && lk.name === "lamp" && same(lk.heads, ["In the team's edition", "At Ola's desk"]) && lk.rows === 2
-      && same(lk.mine, ["false"]) && same(lk.take, []) && lk.keep === "Back to the Library" && lk.load === "Work from Ola's desk",
+      && same(lk.mine, ["false"]) && same(lk.take, []) && lk.keep === "Back to the Library" && lk.load === "Work from this file",
       "75d Look stands the edition panel told it is a desk: its name, the catalog compared with, the two heads, the card changed and the one added, one take and no offer's pair: " + JSON.stringify(lk));
-    check(same(m1.pressed, ["true"]) && same(m1.over, { en: HERS }) && m1.rebuilt === 1 && /in your edits/.test((m1.row || [""])[0]),
+    check(same(m1.pressed, ["true"]) && same(m1.over, { en: HERS }) && m1.rebuilt === 1 && /Now in your edits/.test((m1.row || [""])[0]),
       "75e the take makes that desk's text of the changed field this desk's own edit at once, that field alone, and the cards are drawn again: " + JSON.stringify(m1));
     check(same(m2.pressed, ["false"]) && m2.over === null && rd(L2, "back").modal === false && rd(L2, "back").backs === 1,
       "75E THE CONTROL: pressed again, the edit is what it was before the take (none), and Back to the Library closes the panel and opens the Library: " + JSON.stringify([m2, rd(L2, "back")]));
@@ -1003,8 +1003,8 @@ async function parent() {
     const L7 = run(lab75, ["desk", "rows", "over"], true);
     const rows7 = L7.rows[0] || [], olaRow7 = rowOf(rows7, ola1.four);
     check(rd(L7, "over") && rd(L7, "heldId") === ola1.doc.id && L7.fileAtStart === "" && L7.fromAtEnd === "lamp-" + sha8(ID) + ".ec"
-      && olaRow7.loaded && same(olaRow7.acts, ["Look", "Eject"]) && rows7.filter(r => r.loaded).length === 1 && !rows7[0].loaded
-      && same(rows7[0].mine, ["Your own edits on it wait here until you load it again"]) && same(rd(L7, "over"), {}),
+      && olaRow7.loaded && same(olaRow7.acts, ["See what changed", "Eject"]) && rows7.filter(r => r.loaded).length === 1 && !rows7[0].loaded
+      && same(rows7[0].mine, ["Your edits to it come back when it is loaded again"]) && same(rd(L7, "over"), {}),
       "75h Work from it makes that desk's file the catalog in use, its row the loaded one and no other; no file of the folder is named in use, and the team's catalog says this desk's edits wait for it: "
       + JSON.stringify({ held: rd(L7, "heldId"), file: L7.fileAtStart, from: L7.fromAtEnd, rows: rows7.map(r => [r.name, r.loaded, r.mine]), over: rd(L7, "over") }));
     const L8 = run(lab75, ["desk", "rows", "load:lamp.ec", "settle", "yes", "settle"], true);

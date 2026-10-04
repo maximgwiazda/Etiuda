@@ -88,6 +88,8 @@ function decode(text) {
    the four cuts in the header. To retire one, delete it here and say in the commit message which
    word made the bare spelling legitimate. To add the Polish of a new feature, run --census: it
    prints the words in the tree that this list does not guard. */
+/* "wersje" left the list on 2026-10-05: it is a word in its own right, the plural ("Tu zostają wersje"),
+   so it fails the rule above as "intencje" does. */
 const REFUSED = new Set([
   "agentow angielska bedzie bezplatnie blekitu blokuja byc cala calkowicie calosc chipow chowac",
   "chowal czolo czynnosc czysci dokladnie dol domyslne domyslny dostepnych dowolna druga duzo",
@@ -117,7 +119,7 @@ const REFUSED = new Set([
   "szerokosc szerokosci szerokoscia takze tez tlo trafnosci tresc tresci twoj tytul udalo uklad",
   "uklada ukladaja ukladu ukryc ukrywaja uporzadkowanym uruchomic ustalona ustawien usun usunac",
   "usunieta usuniete usunieto usuniety utworz utworzyc uzyc uzyj uzyta uzytek uzytku uzywa",
-  "waska waskich waskie waskim watpliwosci wczesniejsze wczesniejszej wczytac wedlug wersje",
+  "waska waskich waskie waskim watpliwosci wczesniejsze wczesniejszej wczytac wedlug",
   "wewnatrz wewnetrzne wewnetrzny wewnetrznych widza widziec wiec wiecej wlaczone wlasciciel",
   "wlasne wlasnie wlasny wlasnym wnetrza wolacz wolaczu wracaja wroci wrocisz wskaznik",
   "wskazowka wspierajacej wspolna wspolne wspominaja wybor wybrac wyczysc wyczyscic",

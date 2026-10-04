@@ -119,7 +119,7 @@ function syncNextDock(arrived){
   fab.hidden=!n && !now.path.length && !lanes;
   const badge=fab.querySelector(".fab-badge");
   if(badge) badge.textContent=n ? String(n) : "";
-  fab.title=t(lanes ? "Back to the cards" : "Show the lanes");
+  fab.title=t(lanes ? "Back to the cards" : "Show the conversation's path");
   fab.setAttribute("aria-label", t("Next replies")+": "+n);
   fab.setAttribute("aria-pressed", lanes ? "true" : "false");
   if(arrived===true && n){ fab.classList.remove("nudge"); void fab.offsetWidth; fab.classList.add("nudge"); }
@@ -141,7 +141,7 @@ function dockRowHtml(r, i){
     +'<span class="nd-main"><span class="nd-head">'+catIconSvg(m.c,"cat-ic nd-cat")
     +'<span class="nd-t">'+esc(cardTitle(m))+'</span>'
     +(cardCommits(m) ? stampHtml("nd-stamp") : "")
-    +(r.learnt ? '<span class="nd-learnt" title="'+esc(t("Sent after this card {N} times in four weeks").replace("{N}",String(r.n)))+'">'
+    +(r.learnt ? '<span class="nd-learnt" title="'+esc(t("Sent after this card {N} times in the last four weeks").replace("{N}",String(r.n)))+'">'
       +esc(t("learnt"))+'</span>' : "")
     +'</span><span class="nd-b">'+esc(body)+'</span></span></button>';
 }

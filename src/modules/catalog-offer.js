@@ -200,8 +200,8 @@ function ecDeskRowHtml(f,o){
     +'<small class="ec-meta">'+o.meta+'</small>'+(o.extra||'')+'</span>'
     +(o.loaded?loadedTickHtml()+ecExportHtml():'')
     +'<span class="ec-who" role="img" tabindex="0" aria-label="'+esc(who)+'" data-tip="'+esc(tip)+'">'+ICON_DESK+'</span>'
-    +ecActHtml("Look",ICON_LOOK,' data-ec-look="'+o.at+'"')
-    +(o.loaded?ecActHtml("Eject",ICON_EJECT,' data-ec-eject="1"'):ecActHtml("Work from it",ICON_LOAD,' data-ec-work="'+o.at+'"'))
+    +ecActHtml("See what changed",ICON_LOOK,' data-ec-look="'+o.at+'"')
+    +(o.loaded?ecActHtml("Eject",ICON_EJECT,' data-ec-eject="1"'):ecActHtml("Work from this file",ICON_LOAD,' data-ec-work="'+o.at+'"'))
     +'</div>';
 }
 function ecMineHtml(line,glyph){
@@ -351,8 +351,8 @@ function paintCatalogList(){
     /* THIS DESK'S OWN FILE, said under the catalog it grew from: in use, that its edits are in the folder; not in use,
        that they wait for it. */
     const ownOf=id=>own.find(o=>o.grew && o.grew.id===id);
-    const mineLine=ownOf(heldId) ? ecMineHtml(t("Your edits are in the folder as {DESK}").split("{DESK}").join(deskName(ownOf(heldId))),true) : "";
-    const extraFor=(id,on)=>on ? mineLine : (id && id!==heldId && ownOf(id)) ? ecMineHtml(t("Your own edits on it wait here until you load it again"),false) : "";
+    const mineLine=ownOf(heldId) ? ecMineHtml(t("Your edits are in the folder, for the team to see").split("{DESK}").join(deskName(ownOf(heldId))),true) : "";
+    const extraFor=(id,on)=>on ? mineLine : (id && id!==heldId && ownOf(id)) ? ecMineHtml(t("Your edits to it come back when it is loaded again"),false) : "";
     const tops=files.map((f,i)=>{
       const on=i===onAt;
       const stamp=catalogStamp(f.edition,f.mtime);

@@ -89,7 +89,7 @@ function laneRowHtml(st, r, i){
   return '<div class="card ln-row'+(i===laneMark?" on":"")+'" data-k="'+i+'" data-to="'+esc(r.id)+'"'+(slot>=0 ? ' data-ec="'+slot+'"' : "")
     +(r.learnt ? ' data-learnt=""' : "")+'><div class="chead">'+grip
     +(key&&key!=="-" ? '<kbd class="ln-key">'+esc(key)+'</kbd>' : "")+laneTitleHtml(m)
-    +(r.learnt ? '<span class="nd-learnt" title="'+esc(t("Sent after this card {N} times in four weeks").replace("{N}",String(r.n)))+'">'
+    +(r.learnt ? '<span class="nd-learnt" title="'+esc(t("Sent after this card {N} times in the last four weeks").replace("{N}",String(r.n)))+'">'
       +esc(t("learnt"))+'</span>' : "")
     +'<span class="ln-acts">'+act+'</span>'
     +'</div><div class="txt ln-txt'+(i===laneMark?" sel":"")+'" role="button"><span class="ln-clamp">'+esc(laneBody(m,0).replace(/\s+/g," ").trim())+'</span></div>'

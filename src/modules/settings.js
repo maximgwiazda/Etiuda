@@ -171,9 +171,9 @@ function settingsBodyHtml(){
       /* Under a host only: a browser has no catalog folder to share. */
       (eHasShared()
         ? row(t("Edit the shared catalog directly"),
-            t("For a team without Studio: changes go into the catalog in the catalog folder itself. A catalog the team lead signed is never changed."),
+            t("For a team that keeps its catalog without Studio: each change is written into the catalog in the shared folder. A catalog the team's lead signed is never touched."),
             onoff("sharededit", lsGet("eSharedEdit")==="1",
-                  t("Each change goes into the shared catalog, and one a colleague made first is kept"),
+                  t("Each change goes into the shared catalog; where a colleague changed the same text first, theirs stays and yours waits in this desk's own file"),
                   t("Each change stays in this desk's own file")))
         : ""),
       personalNote(),
@@ -321,7 +321,7 @@ function paintSettings(){
           if(on) lsSet("eSharedEdit","1"); else lsDel("eSharedEdit");
           // The desk writes at once, as after an edit, so what it holds already goes where the setting now says.
           hooks.syncSampleMark();
-          toast(on?t("Changes go into the shared catalog"):t("Changes stay in this desk's own file"));
+          toast(on?t("From now on, changes go into the shared catalog"):t("From now on, changes stay in this desk's own file"));
         }
         else if(seg==="raillock"){ if(railLocked()!==on) toggleRailLock(); }
         else if(seg==="pillslock"){ if(pillsLocked()!==on) togglePillsLock(); }

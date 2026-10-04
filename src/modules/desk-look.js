@@ -86,10 +86,10 @@ function openDeskLook(f,base,name,work,back){
     const who=deskName(f), prior=new Map();
     openEditionPanel({c:s.hers, held:s.team, changes:changes, version:"", name:name, keep:back, load:work, back:back, taken:()=>{},
       desk:{title:who, was:t("In the team's edition"), now:t("At {DESK}").split("{DESK}").join(who),
-        keep:t("Back to the Library"), load:t("Work from {DESK}").split("{DESK}").join(who),
-        take:inUse ? t("Take the text from {DESK} into mine").split("{DESK}").join(who) : "",
+        keep:t("Back to the Library"), load:t("Work from this file").split("{DESK}").join(who),
+        take:inUse ? t("Take this text").split("{DESK}").join(who) : "",
         taken:it=>deskTaken(it,s.hers), toggle:it=>deskToggle(it,s.hers,prior),
-        sub:it=>(it.kind==="changed" && inUse && deskTaken(it,s.hers)) ? t("in your edits") : it.own ? t("you have your own version") : ""}});
+        sub:it=>(it.kind==="changed" && inUse && deskTaken(it,s.hers)) ? t("Now in your edits") : it.own ? t("you have your own version") : ""}});
     return true;
   });
 }

@@ -52,7 +52,7 @@ function historyRowHtml(v,key){
   return '<div class="ec-row'+(v.current?" is-current":"")+'">'
     +'<span class="ec-name"><b>'+esc(fileStamp(v.first))+'</b>'+(meta?'<small class="ec-meta">'+meta+'</small>':'')+'</span>'
     +(v.current?'<span class="ec-tag">'+esc(t("Current"))+'</span>':'')
-    +(v.wrote && v.place!=="own"?'<span class="ec-tag">'+esc(t("Written by this desk"))+'</span>':'')
+    +(v.wrote && v.place!=="own"?'<span class="ec-tag">'+esc(t("Saved on this desk"))+'</span>':'')
     +(acts.indexOf("put")>-1?'<button type="button" class="btn" data-eh-put="'+key+'" title="'
       +esc(t("Put this version back in the catalog folder, in place of the file there now"))+'">'+esc(t("Put back"))+'</button>':'')
     +'<button type="button" class="btn icbtn ec-act" data-eh-open="'+key+'" title="'+esc(open)+'" aria-label="'+esc(open)+'">'
@@ -62,7 +62,7 @@ function historyRowHtml(v,key){
 function historyBodyHtml(groups){
   if(!groups.length)
     return '<div class="ec-list"><div class="ec-row ec-empty">'
-      +esc(t("Earlier versions of each catalog this desk reads or writes stay here for 30 days."))+'</div></div>';
+      +esc(t("Each catalog this desk opens or saves leaves its versions here, kept for 30 days."))+'</div></div>';
   let n=0;
   return groups.map(g=>historyHeadHtml(g)+'<div class="ec-list">'+g.map(v=>historyRowHtml(v,n++)).join("")+'</div>').join("");
 }
@@ -85,7 +85,7 @@ function historyOpen(v){
 }
 function historyPutBack(v){
   const h=historyHost(); if(!h) return;
-  const refuse=()=>toastRefusal(t("{FILE} could not be put back in the catalog folder.").split("{FILE}").join(String(v.name||"")));
+  const refuse=()=>toastRefusal(t("{FILE} could not be put back in the catalog folder. The version stays here, ready to try again.").split("{FILE}").join(String(v.name||"")));
   Promise.resolve(h.historyPut(v.sha,v.path)).then(r=>{
     if(!r || !r.ok){ refuse(); return; }
     if(document.getElementById("ehView")) openHistory();
