@@ -6852,6 +6852,7 @@ What you type stays in this browser only.`;
     let misses = (pack2 && pack2.searchMisses) | 0;
     let lc = pack2 && pack2.langs && typeof pack2.langs === "object" && !Array.isArray(pack2.langs) ? pack2.langs : {};
     let since = "";
+    const pr = /* @__PURE__ */ new Map();
     if (spanned) {
       const days = pack2 && pack2.days && typeof pack2.days === "object" && !Array.isArray(pack2.days) ? pack2.days : {};
       const ids = pack2 && Array.isArray(pack2.dayIds) ? pack2.dayIds : [];
@@ -6877,6 +6878,18 @@ What you type stays in this browser only.`;
           lc[c] = (lc[c] | 0) + (b.l[c] | 0);
         });
         misses += b.m | 0;
+        const bp = b.p && typeof b.p === "object" ? b.p : {};
+        Object.keys(bp).forEach((a) => {
+          const row = bp[a] && typeof bp[a] === "object" ? bp[a] : {};
+          Object.keys(row).forEach((z) => {
+            const f = ids[a], t2 = ids[z], n = row[z] | 0;
+            if (f == null || t2 == null || n <= 0 || String(f) === String(t2)) return;
+            const k = JSON.stringify([String(f), String(t2)]);
+            const o = pr.get(k) || { from: String(f), to: String(t2), n: 0 };
+            o.n += n;
+            pr.set(k, o);
+          });
+        });
       });
       since = STATS_YMD.test(String(pack2 && pack2.daysSince || "")) ? String(pack2.daysSince) : statsYmd();
     }
@@ -6905,6 +6918,7 @@ What you type stays in this browser only.`;
     };
     if (spanned) doc.since = since;
     Object.assign(doc, { cards: cards2, intents, misses, langs });
+    if (pr.size) doc.pairs = [...pr.values()].sort((x, y) => y.n - x.n || (x.from < y.from ? -1 : x.from > y.from ? 1 : 0) || (x.to < y.to ? -1 : x.to > y.to ? 1 : 0));
     if (info && info.catalog && info.catalog.id) {
       doc.catalog = { id: String(info.catalog.id), rev: +info.catalog.rev || 0 };
     }

@@ -627,6 +627,17 @@ function writeStatsAnswer(text) {
   if (data.catalog && data.catalog.id) {
     out.catalog = { id: String(data.catalog.id), rev: +data.catalog.rev || 0 };
   }
+  /* "B after A" for the span (board 814): rebuilt row by row like the rest, and the key is written
+     only when a row survives, so a desk with none writes the file it always wrote. */
+  if (Array.isArray(data.pairs)) {
+    const pairs = [];
+    data.pairs.forEach(p => {
+      if (!p || typeof p !== "object" || typeof p.from !== "string" || typeof p.to !== "string") return;
+      if (!p.from || !p.to || (p.n | 0) < 1) return;
+      pairs.push({ from: p.from, to: p.to, n: p.n | 0 });
+    });
+    if (pairs.length) out.pairs = pairs;
+  }
   out.hash = channelHash(out);
   const dir = path.join(catalogFolder(), "stats");
   const dest = path.join(dir, id + ".estat");

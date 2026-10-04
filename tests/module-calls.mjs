@@ -483,8 +483,9 @@ const eq = (got, want) => got === want ? true
    Board 814, ruled 2026-09-28 19:00: the desk learns "B after A" locally. The oracle is the
    module's own contract: a pair is counted per day by the places of both ids in dayIds, read
    back over STATS_PAIR_DAYS ending today, most often first, then the later day, then the id.
-   The two CONTROLS hold on any tree: a day with no pair keeps its shape, and the statistics
-   answer carries no pair, since Studio refuses a file holding a key it was not told of. */
+   The two CONTROLS hold on any tree: a day with no pair keeps its shape, and a desk that never
+   counted one answers as it always did. The answer for a span carries the pairs counted inside
+   it, as `pairs` [{from, to, n}], and an answer without a span carries none. */
 {
   const D = await import(MOD("desk-stats.js"));
   const after = (p, from, today) => D.statsLearntAfter(p, from, today).map(o => o.id + ":" + o.n).join(",");
@@ -559,16 +560,43 @@ const eq = (got, want) => got === want ? true
       D.bumpUse(p, "c-a", "2026-10-01");
       return eq(Object.keys(p.days["2026-10-01"]).sort().join(","), "c,i,l,m");
     });
-  check("desk-stats.js", "814I CONTROL: the statistics answer is the same with pairs counted as without, spanned and not",
+  check("desk-stats.js", "814I the statistics answer for a span carries the pairs counted inside it, and an answer without a span carries none",
     () => {
       const p = fresh();
       D.bumpUse(p, "c-a", "2026-10-01"); D.bumpUse(p, "c-b", "2026-10-01");
-      const bare = JSON.parse(JSON.stringify(p));
-      p.days["2026-10-01"].p = { 0: { 1: 4 } };
-      if (typeof D.bumpPair === "function") D.bumpPair(p, "c-b", "c-a", "2026-10-01");
+      D.bumpPair(p, "c-a", "c-b", "2026-10-01");
       const span = { engine: "x", period: { from: "2026-09-01", to: "2026-10-31" } };
-      return eq(JSON.stringify(D.statsDoc(p, span)) + JSON.stringify(D.statsDoc(p, { engine: "x" })),
-        JSON.stringify(D.statsDoc(bare, span)) + JSON.stringify(D.statsDoc(bare, { engine: "x" })));
+      return eq(JSON.stringify(D.statsDoc(p, span).pairs) + "|" + ("pairs" in D.statsDoc(p, { engine: "x" })),
+        '[{"from":"c-a","to":"c-b","n":1}]|false');
+    });
+  check("desk-stats.js", "814q a span's pairs are summed over the days inside it by card id, a day outside is left out, and the most often counted comes first",
+    () => {
+      const p = fresh();
+      D.bumpPair(p, "c-a", "c-b", "2026-09-10"); D.bumpPair(p, "c-a", "c-b", "2026-09-20"); D.bumpPair(p, "c-a", "c-b", "2026-10-20");
+      D.bumpPair(p, "c-b", "c-a", "2026-09-15"); D.bumpPair(p, "c-a", "c-c", "2026-09-30");
+      D.bumpPair(p, "c-a", "c-b", "2026-08-31"); D.bumpPair(p, "c-c", "c-d", "2026-11-01");
+      const doc = D.statsDoc(p, { engine: "x", period: { from: "2026-09-01", to: "2026-10-31" } });
+      const octo = D.statsDoc(p, { engine: "x", period: { from: "2026-10-01", to: "2026-10-31" } });
+      return eq(doc.pairs.map(o => o.from + ">" + o.to + ":" + o.n).join() + "|" + JSON.stringify(octo.pairs),
+        'c-a>c-b:3,c-a>c-c:1,c-b>c-a:1|[{"from":"c-a","to":"c-b","n":1}]');
+    });
+  check("desk-stats.js", "814r CONTROL: a desk that never counted a pair answers byte for byte as it did, spanned and not, with no pairs key",
+    () => {
+      const p = fresh();
+      D.bumpUse(p, "c-a", "2026-10-01"); D.bumpUse(p, "c-b", "2026-10-01");
+      const span = { engine: "x", period: { from: "2026-09-01", to: "2026-10-31" } };
+      const was = JSON.stringify({ format: 1, kind: "etiuda-statistics", engine: "x",
+        period: { from: "2026-09-01", to: "2026-10-31" }, since: "2026-10-01",
+        cards: [{ id: "c-a", n: 1, at: "2026-10-01" }, { id: "c-b", n: 1, at: "2026-10-01" }],
+        intents: [], misses: 0, langs: {} });
+      const lifetime = JSON.stringify({ format: 1, kind: "etiuda-statistics", engine: "x",
+        period: { from: "", to: "" },
+        cards: [{ id: "c-a", n: 1, at: "2026-10-01" }, { id: "c-b", n: 1, at: "2026-10-01" }],
+        intents: [], misses: 0, langs: {} });
+      const withCounts = JSON.parse(JSON.stringify(p));
+      withCounts.days["2026-10-01"].p = {};
+      return eq(JSON.stringify(D.statsDoc(p, span)) + "|" + JSON.stringify(D.statsDoc(p, { engine: "x" }))
+        + "|" + JSON.stringify(D.statsDoc(withCounts, span)), [was, lifetime, was].join("|"));
     });
 }
 
