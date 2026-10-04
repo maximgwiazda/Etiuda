@@ -28,7 +28,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 29;
+const EXPECTED = 31;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -41,7 +41,7 @@ const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-team-desk-"));
 const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
-const EXPOSE = ["sealCatalog", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName"];
+const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "isCatalogName"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -335,8 +335,11 @@ try {
 
   /* ---- the desk's own file: what the page writes after an edit, grown from the catalog it was handed ----------- */
   const OWN = folder("own"), D9 = newDesk("nine", OWN), me9 = await D9.ask("etiuda:branch-identity", true);
+  const D12 = newDesk("twelve", OWN), me12 = await D12.ask("etiuda:branch-identity", true);
+  const D13 = newDesk("thirteen", OWN);
+  await D13.ask("etiuda:branch-identity", true);
   fs.writeFileSync(path.join(OWN, "etiuda-ring.json"), JSON.stringify(ring), "utf8");
-  put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 1, roster: [entry(me9, K1, 1)] })));
+  put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 1, roster: [entry(me9, K1, 1), entry(me12, K1, 1)] })));
   put(OWN, "lamps.ec", seal(K1, 1, A2));
   put(OWN, "tea.ec", B1);
   /* The page's branchCatalog over a handed text: the desk's id ending in eight hex of the grown-from id, and grew. */
@@ -352,13 +355,28 @@ try {
   };
   const holding = needle => walk(OWN).filter(f => fs.readFileSync(f, "utf8").indexOf(needle) >= 0).length;
   const lamps = grownFrom(await read(D9, "lamps.ec"), me9, "lamps");
-  const heldNow = await D9.ask("etiuda:branch-write", lamps.stem, lamps.text);
-  const heldAfter = await loadDesk(D9.ud).ask("etiuda:branch-write", lamps.stem, lamps.text);
-  check(JSON.parse(lamps.text).grew.id === "lamp-shop" && JSON.stringify(heldNow) === JSON.stringify({ ok: false, held: true })
-    && JSON.stringify(heldAfter) === JSON.stringify({ ok: false, held: true }) && holding("Good day, Lamp Shop.") === 0,
-    "14aa the desk's own file of a catalog it opened from an envelope is held, not written in the clear, and still held by a"
-    + " fresh run of the shell that has not opened it: " + JSON.stringify(heldNow) + ", " + JSON.stringify(heldAfter)
-    + ", the catalog's text in " + holding("Good day, Lamp Shop.") + " file(s) of the share");
+  const lampsId = JSON.parse(lamps.text).id;
+  const landed = () => (fs.existsSync(lamps.file) ? JSON.parse(fs.readFileSync(lamps.file, "utf8")) : {});
+  const ownRow = async D => ((await D.ask("etiuda:catalog-files")) || []).find(r => !!r.desk && r.desk.id === me9.id && r.id === lampsId) || null;
+  const said = r => JSON.stringify(r);
+  const sealedW = await D9.ask("etiuda:branch-write", lamps.stem, lamps.text);
+  const env9 = landed(), inner9 = env9.kind === "etiuda-sealed" ? D1.api.openSealed(K1, env9) : null;
+  const signed9 = inner9 ? JSON.parse(inner9) : {};
+  const again = await D9.ask("etiuda:branch-write", lamps.stem, lamps.text);
+  const edited = JSON.stringify(Object.assign(JSON.parse(lamps.text), { name: "Lamp Shop, edited" }));
+  const freshW = await loadDesk(D9.ud).ask("etiuda:branch-write", lamps.stem, edited);
+  const env9b = landed(), inTeam = await ownRow(D12), outside = await ownRow(D13);
+  check(JSON.parse(lamps.text).grew.id === "lamp-shop" && said(sealedW) === said({ ok: true, rev: 1 })
+    && env9.team === TEAM && env9.epoch === 1 && inner9 === JSON.stringify(Object.assign(JSON.parse(lamps.text),
+      { rev: 1, hash: signed9.hash, sig: signed9.sig }), null, 1) + "\n"
+    && said(again) === said({ ok: true, unchanged: true, rev: 1 }) && said(freshW) === said({ ok: true, rev: 2 })
+    && env9b.kind === "etiuda-sealed" && env9b.epoch === 1 && holding("Good day, Lamp Shop.") === 0
+    && outside === null && !!inTeam && inTeam.rev === 2 && inTeam.grew.id === "lamp-shop",
+    "14aa the desk's own file of a catalog it opened from an envelope lands as an envelope under the team's key, the signed file"
+    + " inside it, also from a fresh run of the shell that has not opened the catalog; a desk without the key cannot open it and"
+    + " does not list it, a desk on the roster lists it as genuine: " + said(sealedW) + ", " + said(again) + ", " + said(freshW)
+    + ", the catalog's text in " + holding("Good day, Lamp Shop.") + " file(s) of the share, listed by the outsider "
+    + (outside ? "yes" : "no") + ", by the member " + (inTeam ? "yes" : "no"));
   const teaHanded = await read(D9, "tea.ec"), tea = grownFrom(teaHanded, me9, "tea");
   const teaW = await D9.ask("etiuda:branch-write", tea.stem, tea.text);
   const teaOut = fs.existsSync(tea.file) ? fs.readFileSync(tea.file, "utf8") : "";
@@ -367,6 +385,27 @@ try {
     && teaOut === JSON.stringify(Object.assign(JSON.parse(tea.text), { rev: 1, hash: teaBack.hash, sig: teaBack.sig }), null, 1) + "\n",
     "14AA THE CONTROL: on the same admitted desk, its own file of an unsealed catalog is written as the page sent it, with"
     + " the edition, hash and signature the shell adds: " + JSON.stringify(teaW) + ", " + teaOut.length + " bytes");
+
+  /* ---- a new epoch removes desk twelve: the desk's next write stands under the newest key it keeps --------------- */
+  put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)] })));
+  const resealed = await D9.ask("etiuda:branch-write", lamps.stem, edited);
+  const env9c = landed(), mine = await ownRow(D9), removed = await ownRow(D12);
+  check(said(resealed) === said({ ok: true, rev: 3 }) && env9c.kind === "etiuda-sealed" && env9c.epoch === 2
+    && D1.api.openSealed(K1, env9c) === null && D1.api.openSealed(K2, env9c) !== null && !!mine && mine.rev === 3 && removed === null,
+    "14ac after a new epoch the same file, written again, is sealed under the newest key the desk keeps: " + said(resealed)
+    + ", epoch " + env9c.epoch + "; the writer lists it " + (mine ? "yes" : "no") + ", the desk removed at the epoch "
+    + (removed ? "yes" : "no"));
+
+  /* ---- a desk envelope that records the opening and not its team, as the shell before the seal wrote it --------- */
+  const before6 = D9.envelope();
+  delete before6.teamOf;
+  fs.writeFileSync(path.join(D9.ud, "desk.json"), JSON.stringify(before6), "utf8");
+  const unsure = await loadDesk(D9.ud).ask("etiuda:branch-write", lamps.stem,
+    JSON.stringify(Object.assign(JSON.parse(lamps.text), { name: "Lamp Shop, edited twice" })));
+  check(before6.teamOpened.indexOf("lamp-shop") >= 0 && said(unsure) === said({ ok: false, held: true })
+    && landed().epoch === 2 && holding("Good day, Lamp Shop.") === 0 && holding("edited twice") === 0,
+    "14ad a desk that knows it opened the catalog from an envelope but not under which team holds its file and writes nothing"
+    + " in the clear: " + said(unsure) + ", the share's file still the epoch " + landed().epoch + " envelope");
 
   /* ---- a keep that fails: safeStorage away for one read, the team file unchanged after it ----------------------- */
   const FLAKY = folder("flaky"), flaky10 = { down: "" }, flaky11 = { down: "" };
