@@ -619,6 +619,11 @@ try {
       ["a handover to a key other than the file's lead", ledBy(2, 3, [handover(1, 1, 3)])],
       ["a handover changed after signing", ledBy(3, 3, [tampered])],
       ["a handover from a key this desk never pinned", ledBy(2, 3, [handover(0, 0, 2)])],
+      /* The genuine handover to key 2, under a lead that keeps key 2's label over key 3's public half and signs with
+         key 3: refused only where the chain's end is compared by its public half as well as its label. */
+      ["a lead with the handed-to key's label over another key", JSON.stringify(teamFile({ team: TR, catalogs: ["lamp-shop"],
+        keyId: L[2].keyId, public: L[3].public, signer: keys[3].privateKey, epoch: 3, roster: [entry(meR, KR[3], 3, TR)],
+        handover: [handover(1, 1, 2)] }))],
     ];
     const kept = [];
     for (const [why, file] of refused) {
@@ -627,7 +632,7 @@ try {
     }
     check(kept.every(s => /refused$/.test(s)),
       "14am a team file under another key whose handover is missing, self-signed, another team's, to another key, altered,"
-      + " or from a key the desk does not trust moves nothing and keeps nothing: " + kept.join("; "));
+      + " from a key the desk does not trust, or to a lead wearing the new key's label over another key moves nothing and keeps nothing: " + kept.join("; "));
 
     put(ROT, "etiuda-team.json", ledBy(4, 4, [handover(2, 2, 3), handover(3, 3, 4), handover(1, 1, 2)]));
     const chained = await opens(4);

@@ -499,6 +499,30 @@ check("18 control: the plain payload carries none of the new keys through either
   own("Mine body, later."); land(adopting);
   check("51 and the agent's words written since the proposal stay, as the agent's edit of that card",
     ownIds() === 1 && bodyOf("u:own1") === "Mine body, later." && !PK.pack.custom.length, bodyOf("u:own1"));
+  /* THE DESK'S EXPORT, THROUGH A HOST (board 834, step 12, a file leaving the team). Every export above takes the
+     browser's dialog, where `from` goes nowhere; on the desk it is what the shell seals the file for, and team-desk 14aq
+     drives host.js with a `from` the test supplies. Here the real exportCatalog() reaches a host, from a catalog stored
+     under a LITERAL pin, so a page that hands over anything but the stored id and pin, or nothing, goes red. */
+  const PIN = "sha256:" + "5e".repeat(32), handed = [];
+  globalThis.window.E_HOST = {
+    chooseCatalogSave: async () => ({ name: "Host.ec" }),
+    writeCatalogSave: async (text, from) => { handed.push(from === undefined ? "undefined" : from);
+      return { name: "Host.ec", ok: !!JSON.parse(text).cards.length, sealed: !!from }; } };
+  const viaHost = async stored => {
+    const cat = CT.parseCatalogFile(JSON.stringify(doc()));
+    if (stored) ST.lsSet(CT.E_CATALOG_STORE, JSON.stringify(Object.assign(cat, { pin: PIN })), true); else ST.lsDel(CT.E_CATALOG_STORE);
+    CT.eApplyCatalog(cat); PK.resetPack(); AP.setCards(cat.cards.slice());
+    handed.length = 0;
+    return [await CF.exportCatalog(), JSON.stringify(handed)];
+  };
+  const sealedFrom = await viaHost(true);
+  check("52a the desk's Export hands its host the stored catalog's id and pin, as the catalog the file was made from",
+    sealedFrom[0] === "Host.ec" && sealedFrom[1] === JSON.stringify([{ id: "lamp-shop", sha: PIN }]),
+    "saved " + sealedFrom[0] + ", handed " + sealedFrom[1]);
+  const fromNothing = await viaHost(false);
+  check("52A THE CONTROL: with no catalog stored the same Export hands over null, so 52a is not an answer that is always given",
+    fromNothing[0] === "Host.ec" && fromNothing[1] === "[null]", "saved " + fromNothing[0] + ", handed " + fromNothing[1]);
+  delete globalThis.window.E_HOST;
   HK.hooks.syncFavouritesMeta = () => {};
   // The toast's own timer fires after the check, against the stand-in, and is let run its course.
   await new Promise(r => setTimeout(r, 2000));
