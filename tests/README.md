@@ -554,6 +554,22 @@ down where it lives: a recycled pid reads as a live holder, and the cost of that
 nobody needed. Cases 23 to 23f prove all of it, with a real process as the holder rather than a
 lock file written by hand.
 
+### The window wall
+
+A test opens an Electron window only when its command carries `ETIUDA_WINDOWS` set to today's
+date, the form `ETIUDA_PUSH` takes for a push: `ETIUDA_WINDOWS=$(date +%F) npm run desk`. A run
+that opens windows is argued before it starts, so a chain or a search of `tests/` that reaches a
+window gate meets a refusal, exit 78, rather than windows. The wall stands in two places: at the
+top of every gate with a launch site (`E.windowWall`, before it builds, waits or leases anything)
+and inside `E.shellLaunchRefusal`, after every other refusal, so a launch that slips past the first
+still meets it. A refusal prints `#refused window-wall`, and `tools/gate-run.mjs` records the step
+with `refused` set and sums the run up as refused rather than failed. `npm test` and
+`npm run split-guard` open no window and need no variable.
+
+Cases 21k to 21l and 22c to 22e prove it with the stand-in: refused without the variable and with
+yesterday's date, the day local rather than UTC, every launch-site file calling the wall itself,
+the fast chains free of launch sites, and the variable named only in `tests/engine.js`.
+
 ## The shell, which no browser run can reach
 
 `npm run smoke` drives `engine/etiuda.html` in a browser, where `window.E_HOST` is absent, the

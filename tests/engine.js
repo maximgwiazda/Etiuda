@@ -173,11 +173,48 @@ function catalogConfinement(ud, env) {
   return { ok: true, how: CATALOG_FOLDER_KEY + " in " + file + " is pinned at " + pinned };
 }
 
+/* THE WINDOW WALL. A test opens an Electron window only when the command carries ETIUDA_WINDOWS
+   set to today's date, as ETIUDA_PUSH guards a push, so a chain or a grep that reaches a window
+   gate meets a refusal rather than windows. The day is local, like `date +%F`, and read once at
+   load, so a run that crosses midnight keeps the word it started with. */
+const WINDOWS_VAR = "ETIUDA_WINDOWS";
+const dayOf = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-"
+  + String(d.getDate()).padStart(2, "0");
+const WINDOWS_DAY = dayOf(new Date());
+
+/** Null where this process may open a window, or the lines of the refusal. Reads the
+ *  environment of the process that launches, never the one it hands the launch. */
+function windowWallRefusal(who, env) {
+  const said = (env || process.env)[WINDOWS_VAR];
+  if (said === WINDOWS_DAY) return null;
+  return ["WINDOW WALL: " + who + " would open an Electron window, and " + WINDOWS_VAR + " is "
+            + (said === undefined || said === "" ? "not set" : JSON.stringify(said)) + ", not today's date " + WINDOWS_DAY,
+          "a test that opens windows runs only when it has been deliberately chosen (a heavy run is decided before"
+            + " it starts, never picked up by a pattern); whoever chose it sets the variable, for that one command:",
+          "  bash: " + WINDOWS_VAR + "=$(date +%F) <command>    PowerShell: $env:" + WINDOWS_VAR + " = Get-Date -Format yyyy-MM-dd",
+          "this is a refusal and not a failure: no window was opened and nothing about the product was measured"];
+}
+
+/** The wall at the top of a window gate, before it builds, waits or leases anything. The marker
+ *  line is what tools/gate-run.mjs reads to record the step as refused by the wall. */
+function windowWall(who) {
+  const bad = windowWallRefusal(who);
+  if (!bad) return;
+  console.log("#refused window-wall");
+  refuse(bad[0], ...bad.slice(1));
+}
+
 /* THE REFUSAL, SEPARATED FROM THE SPAWN, so that every one of these can be driven without an
    Electron and without a window: the selftest asserts the wording and the exit code, and its
    controls prove that nothing was spawned at all. Answers null where the launch is allowed, or
-   the lines refuse() would print. */
+   the lines refuse() would print.
+   The window wall is asked last of all, so every other refusal keeps its own words; the declared
+   exemption in deskRefusal returns early and must not skip it. */
 function shellLaunchRefusal(who, args, options) {
+  return deskRefusal(who, args, options) || windowWallRefusal(who);
+}
+
+function deskRefusal(who, args, options) {
   const opts = options || {};
   const ud = userDataDirOf(args);
   const env = opts.env || process.env;
@@ -234,8 +271,9 @@ function shellLaunch(who, exe, args, options) {
   /* noDoor is the closure leg's alone (shell-smoke 6d): the launch meets an installed desk with a debugging switch and no door. */
   const noDoor = opts.noDoor === true;
   delete opts.noDoor;
-  const bad = shellLaunchRefusal(who, args, options);
+  const bad = deskRefusal(who, args, options);
   if (bad) refuse(bad[0], ...bad.slice(1));
+  windowWall(who);
   /* An installed desk drops a debugging switch, and takes neither test variable, unless this rides beside them (shell/main.js). */
   const carried = opts.env || process.env;
   if (noDoor) {
@@ -1457,6 +1495,7 @@ module.exports = { NO_VERDICT, exitOf, ROOT, ENGINE_PATH, FIXTURE_FILE, TREE_FIL
                    CATALOG_FOLDER_KEY, pinCatalogFolder, OFFSCREEN_KEY, offscreenEnv,
                    REAL_USER_DATA, REAL_DOCUMENTS, underOrEqual, userDataDirOf,
                    catalogConfinement, shellLaunchRefusal, shellLaunch, unsignedEnv,
+                   WINDOWS_VAR, WINDOWS_DAY, dayOf, windowWallRefusal, windowWall,
                    DESK_LOCK, deskLockHolder, takeDeskLock, releaseDeskLock, pidAlive,
                    statIsZombie,
                    LEASE_HOLDER, takeLeases, releaseLeases, PORT_BLOCKS, portBlock, portSpan, portOverlaps,

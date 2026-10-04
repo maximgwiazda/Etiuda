@@ -55,6 +55,9 @@
  *     not of the gate: the number of keys declared twice with DIFFERENT values, where the later
  *     was kept. Board item 518. Nought is the ordinary case and it is written every time, so that
  *     its absence one day is legible rather than silent.
+ *   - `refused`, beside the counts: the wall a gate named on a `#refused <wall>` line of its own,
+ *     `window-wall` where tests/engine.js refused a window, and empty otherwise. The run is then
+ *     summed up as refused, not failed; the exit stays the gate's own.
  * A gate's exit code is the verdict. The counts are how a green that fell is noticed.
  *
  * THIS FILE IS GATED BY tests/result-line.mjs, which is a control rather than a description:
@@ -307,7 +310,7 @@ function runStep(step) {
   });
 }
 
-let worst = 0, written = 0, treeMoved = false;
+let worst = 0, written = 0, treeMoved = false, refusedAt = null;
 /* The tree as it stood before the first gate. Every step is judged against the step before it,
    so the record says WHICH gate the tree moved under and not merely that it moved. */
 let before = fingerprint();
@@ -323,6 +326,9 @@ for (const step of steps) {
      goes beside it as `gateExit`. A reader reads `counts`, so this is the only place the
      withdrawal can be made to stick. */
   const verdict = moved.length ? NO_VERDICT : res.exit;
+  /* A gate that refuses by a named wall says so on a line of its own, `#refused <wall>`, and the
+     record carries the name, empty for every other run, so a refusal never reads as a failure. */
+  const refused = (/^#refused ([a-z][a-z0-9-]*)\s*$/m.exec(res.out) || [])[1] || "";
   const { counts, from, clashed } = countsOf(res.out, verdict);
   if (clashed.length) console.log("  clash: " + clashed.length + " key(s) declared twice with"
     + " different values, the later kept: " + clashed.join(", "));
@@ -335,6 +341,7 @@ for (const step of steps) {
     counts: counts,
     countsFrom: from,
     clash: clashed.length,
+    refused: refused,
     treeHash: after.hash,
     treeFiles: after.count,
     treeHow: after.how,
@@ -348,7 +355,7 @@ for (const step of steps) {
   fs.writeFileSync(file, JSON.stringify(line) + "\n", "utf8");
   written++;
   console.log("  gate-run: " + path.basename(file) + " " + JSON.stringify(line.counts)
-              + " exit " + line.exit + " in " + line.wallMs + " ms");
+              + " exit " + line.exit + (refused ? " REFUSED by the " + refused : "") + " in " + line.wallMs + " ms");
   if (moved.length) {
     console.log("  FAIL the tree moved under " + line.gate + ", so this run has no verdict: "
                 + moved.length + " file(s) changed while it ran");
@@ -366,13 +373,15 @@ for (const step of steps) {
     break;
   }
   before = after;
-  if (res.exit !== 0) { worst = res.exit; break; }   /* && semantics: the chain stops */
+  if (res.exit !== 0) { worst = res.exit; if (refused) refusedAt = line; break; }   /* && semantics: the chain stops */
 }
 
 console.log("\ngate-run: " + written + " of " + steps.length + " gate(s) run from "
             + asked.length + " npm script(s), " + written + " line(s) in " + RUNS
             + ", tree " + before.hash
             + (treeMoved ? ", NO VERDICT: the tree moved under a gate"
+               : refusedAt ? ", stopped at " + refusedAt.gate + ", REFUSED by the " + refusedAt.refused
+                 + " and not failed: nothing was opened or measured, and its own lines above say what lets it run"
                : worst === NO_VERDICT ? ", stopped at a gate exiting " + worst + ", its own NO VERDICT: it"
                  + " refused, did not finish, or left a leg not run"
                : worst ? ", stopped at a gate exiting " + worst : ", all green"));

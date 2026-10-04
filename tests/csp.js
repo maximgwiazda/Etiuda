@@ -77,6 +77,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
    checked for overlaps at every call, and the block is leased by its base where the run was
    given a lease command, at load, before anything is built. */
 const PORT = E.portBlock("csp");
+E.windowWall("tests/csp.js");
 const PORT2 = PORT + 1;
 const LEASED = E.takeLeases(["ports:" + PORT], 20, "tests/csp.js");
 console.log("       debugging port(s) count up from " + PORT

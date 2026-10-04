@@ -38,6 +38,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
    checked for overlaps at every call, and the block is leased by its base where the run was
    given a lease command, at load, before anything is built. */
 const PORT = E.portBlock("catalog-watch");
+E.windowWall("tests/catalog-watch.js");
 const LEASED = E.takeLeases(["ports:" + PORT], 20, "tests/catalog-watch.js");
 console.log("       debugging port(s) count up from " + PORT
   + (process.env.ETIUDA_PORT_SHIFT ? " (ETIUDA_PORT_SHIFT " + process.env.ETIUDA_PORT_SHIFT + ")"

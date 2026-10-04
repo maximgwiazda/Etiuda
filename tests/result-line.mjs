@@ -37,7 +37,7 @@ const TOOL = path.join(ROOT, "tools", "gate-run.mjs");
 const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. */
-const EXPECTED = 36;
+const EXPECTED = 37;
 
 let asserted = 0, failed = 0;
 function check(cond, line) {
@@ -156,10 +156,10 @@ function main() {
   check(dBase.gate === "tests-base" && dBase.script === "base"
     && dBase.cmd === "node tests/base.mjs" && dBase.exit === 0
     && typeof dBase.wallMs === "number" && typeof dBase.time === "string"
-    && "commit" in dBase && "dirty" in dBase
+    && "commit" in dBase && "dirty" in dBase && dBase.refused === ""
     && Object.keys(dBase).sort().join(",")
-       === "clash,cmd,commit,counts,countsFrom,dirty,exit,gate,gateExit,script,time,treeChanged,treeFiles,treeHash,treeHow,wallMs",
-    "1d the line's shape is the sixteen keys the record reads, gate named from the step's path: "
+       === "clash,cmd,commit,counts,countsFrom,dirty,exit,gate,gateExit,refused,script,time,treeChanged,treeFiles,treeHash,treeHow,wallMs",
+    "1d the line's shape is the seventeen keys the record reads, `refused` empty on a gate that refused nothing, gate named from the step's path: "
     + Object.keys(dBase).sort().join(","));
 
   /* ---- 2. THE DECLARED CHANNEL ------------------------------------------------------------ */
@@ -451,6 +451,22 @@ function main() {
     && /NO VERDICT: the tree moved under a gate/.test(summaryOf(trMovedRun)),
     "9h a gate exiting 78 over a tree that did not move is summed up as its own exit, not as a moved tree: "
     + JSON.stringify(summaryOf(trOwnRun)) + ", against 9b's " + JSON.stringify(summaryOf(trMovedRun)));
+
+  /* 9i A WALL'S REFUSAL IS RECORDED AS ONE. 9h's gate with one line added, `#refused window-wall`:
+     the record names the wall and the summary says refused and not failed, where 9h's twin records
+     an empty name and says neither. */
+  const trWall = makeLab("tree-wall-78", { refuses: 'console.log("#refused window-wall");' + NL
+    + 'console.log("  FAIL refused");' + NL + "process.exit(78);" + NL, after: trStub(1) },
+    { files: TR_FILES, git: true });
+  const trWallRun = run(trWall, ["refuses", "after"]);
+  const trWallGate = trWallRun.byGate["tests-refuses"];
+  check(trWallRun.exit === 78 && !!trWallGate && trWallGate.refused === "window-wall" && trWallGate.exit === 78
+    && trWallGate.counts.exitCode === 78 && !trWallRun.byGate["tests-after"]
+    && /stopped at tests-refuses, REFUSED by the window-wall and not failed/.test(summaryOf(trWallRun))
+    && !!trOwnGate && trOwnGate.refused === "" && !/REFUSED/.test(summaryOf(trOwnRun)),
+    "9i a gate refusing by a named wall is recorded as refused (" + JSON.stringify(trWallGate && trWallGate.refused)
+    + ", exit " + (trWallGate && trWallGate.exit) + ") and summed up as " + JSON.stringify(summaryOf(trWallRun))
+    + "; 9h's twin without the line records " + JSON.stringify(trOwnGate && trOwnGate.refused) + " and says no REFUSED");
 
   /* 9c THE CONTROL: the same write, the same bytes. A guard that fired on the act of writing
      rather than on the change would redden this, and a guard that reddens work nobody objects to

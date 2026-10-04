@@ -66,6 +66,7 @@ console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " +
    checked for overlaps at every call, and the block is leased by its base where the run was
    given a lease command, at load, before anything is built. */
 const PORT = E.portBlock("desk");
+E.windowWall("tests/desk.js");
 /* After the port block, so a refused shift is refused whatever else is live (engine-selftest 27f, 27g). */
 E.refuseWhileElectronLive("tests/desk.js");
 const LEASED = E.takeLeases(["ports:" + PORT], 20, "tests/desk.js");
