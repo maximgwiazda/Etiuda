@@ -55,11 +55,14 @@ function sliceDecl(src, marker) {
   }
   throw new Error("an unterminated declaration: " + marker);
 }
-function hpkeFrom(src) {
+function hpkeFrom(src, cr = crypto) {
   const body = HPKE_DECLS.map(m => sliceDecl(src, m)).join("\n");
   return new Function("crypto", "Buffer", body
-    + "\nreturn { hpkeLabeledExtract, hpkeShared, hpkeSchedule, hpkeSeal, hpkeOpen };")(crypto, Buffer);
+    + "\nreturn { hpkeLabeledExtract, hpkeShared, hpkeSchedule, hpkeSeal, hpkeOpen };")(cr, Buffer);
 }
+/* hpkeSeal takes no ephemeral key, so the vector's reaches it through the crypto handed to the slice. */
+const withEphemeral = skE => new Proxy(crypto, {
+  get: (t, k) => k === "generateKeyPairSync" ? () => ({ privateKey: skE, publicKey: crypto.createPublicKey(skE) }) : t[k] });
 /* The sealed envelope's declarations, sliced the same way: tests/catalog-sig.js 88f slices this list too. */
 const SEAL_DECLS = ["const SEALED_KIND =", "const SEALED_TEAM_RE =", "function sealedAad(", "function sealCatalog(",
   "function openSealed("];
@@ -108,7 +111,7 @@ function main() {
   check(ks.key.equals(v.key) && ks.nonce.equals(v.base_nonce),
     "12d the key schedule gives the vector's key and base_nonce: " + ks.key.toString("hex") + ", " + ks.nonce.toString("hex"));
 
-  const sealed = H.hpkeSeal(v.pkRm, v.info, v.aad, v.pt, skE);
+  const sealed = hpkeFrom(SRC, withEphemeral(skE)).hpkeSeal(v.pkRm, v.info, v.aad, v.pt);
   check(sealed.enc.equals(v.enc) && sealed.ct.equals(v.ct),
     "12e sealing the vector's pt to pkRm with its ephemeral key gives its enc and its sequence 0 ct, byte for byte ("
     + sealed.ct.length + " bytes)");
@@ -117,10 +120,11 @@ function main() {
   check(!!opened && opened.equals(v.pt), "12f opening the vector's enc and ct with skRm gives its pt");
 
   const team = crypto.randomBytes(32), info = Buffer.from("info"), aad = Buffer.from("aad");
-  const a = H.hpkeSeal(v.pkRm, info, aad, team), b = H.hpkeSeal(v.pkRm, info, aad, team);
+  const a = H.hpkeSeal(v.pkRm, info, aad, team, skE), b = H.hpkeSeal(v.pkRm, info, aad, team, skE);
   const backA = H.hpkeOpen(skR, a.enc, info, aad, a.ct), backB = H.hpkeOpen(skR, b.enc, info, aad, b.ct);
   check(!a.enc.equals(b.enc) && !a.ct.equals(b.ct) && !!backA && backA.equals(team) && !!backB && backB.equals(team),
-    "12g with no ephemeral key given, two seals of one 32-byte key differ in enc and ct and both open to it");
+    "12g two seals of one 32-byte key differ in enc and ct and both open to it, though each caller passed one fixed key"
+    + " as a fifth argument, which the seal does not take");
 
   const nulls = [
     ["a ct byte flipped", H.hpkeOpen(skR, v.enc, v.info, v.aad, flip(v.ct, 0))],
@@ -156,8 +160,8 @@ function main() {
   /* THE MUTATION: one byte of the label every Extract and Expand carries. */
   const label = '"HPKE-v1"', count = SRC.split(label).length - 1;
   let M = null;
-  try { M = hpkeFrom(SRC.split(label).join('"HPKE-v2"')); } catch { M = null; }
-  const mutated = M ? M.hpkeSeal(v.pkRm, v.info, v.aad, v.pt, skE) : null;
+  try { M = hpkeFrom(SRC.split(label).join('"HPKE-v2"'), withEphemeral(skE)); } catch { M = null; }
+  const mutated = M ? M.hpkeSeal(v.pkRm, v.info, v.aad, v.pt) : null;
   check(count === 2 && !!mutated && !mutated.ct.equals(v.ct) && M.hpkeOpen(skR, v.enc, v.info, v.aad, v.ct) === null,
     "12L with the label changed by one byte at its " + count + " sites, the same slices miss the vector's ct and refuse to open it");
 

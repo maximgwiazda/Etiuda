@@ -712,10 +712,10 @@ function hpkeSchedule(shared, info) {
   return { key: hpkeLabeledExpand(HPKE_SUITE, secret, "key", ctx, 16),
            nonce: hpkeLabeledExpand(HPKE_SUITE, secret, "base_nonce", ctx, 12) };
 }
-/* {enc, ct} for pt sealed to pkR, 32 raw bytes, at sequence 0; it throws on a key it cannot seal to. Only
-   the vector test passes an ephemeral key: one used for two messages gives both away. */
-function hpkeSeal(pkR, info, aad, pt, ephemeral) {
-  const skE = ephemeral || crypto.generateKeyPairSync("x25519").privateKey;
+/* {enc, ct} for pt sealed to pkR, 32 raw bytes, at sequence 0; it throws on a key it cannot seal to. The
+   ephemeral key is made here on every call and no caller can pass one: one used for two messages gives both away. */
+function hpkeSeal(pkR, info, aad, pt) {
+  const skE = crypto.generateKeyPairSync("x25519").privateKey;
   const enc = crypto.createPublicKey(skE).export({ type: "spki", format: "der" }).subarray(-32);
   const dh = crypto.diffieHellman({ privateKey: skE, publicKey: hpkeX25519Public(pkR) });
   const ks = hpkeSchedule(hpkeShared(dh, enc, pkR), info);
