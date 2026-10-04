@@ -357,7 +357,7 @@ try {
       storedCatalog: () => page.active, eCatalogSignature: c => (c ? String(c.id) + "@" + c.rev : ""), nsGet: () => null,
       catalogTrust: c => { page.trusted.push(c); throw new Error("offered"); },
     };
-    const scope = new Proxy({}, { has: () => true, get: (o, k) => (k === Symbol.unscopables ? undefined : k in own ? own[k] : globalThis[k]) });
+    const scope = new Proxy({}, { has: () => true, get: (o, k) => (k === Symbol.unscopables ? undefined : k in own ? own[k] : k in globalThis ? globalThis[k] : (() => { throw new ReferenceError(String(k) + " is not defined"); })()) });
     const fileSrc = pageSrc("catalog-file.js");
     const P = new Function("scope", "with(scope){\n" + ["function pinned(", "function sharedTouched(", "function sharedOwnPin(", "function sharedOwnWrite("]
       .map(m => slice(fileSrc, m)).join("\n") + "\n" + slice(pageSrc("catalog-offer.js"), "function eOfferCatalogDialog(")

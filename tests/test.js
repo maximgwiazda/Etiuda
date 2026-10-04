@@ -597,7 +597,7 @@ function lanePageKeyTests() {
   Object.defineProperty(own, "lanesOn", { get: () => world.open });
   const scope = new Proxy({}, {
     has: (o, k) => typeof k === "string",
-    get: (o, k) => k === Symbol.unscopables ? undefined : k in own ? own[k] : k in globalThis ? globalThis[k] : off,
+    get: (o, k) => k === Symbol.unscopables ? undefined : k in own ? own[k] : k in globalThis ? globalThis[k] : (() => { throw new ReferenceError(String(k) + " is not defined"); })(),
     set: (o, k, v) => { own[k] = v; return true; }
   });
   const decls = [["page-scroll.js", "function pageScroller("], ["page-scroll.js", "function pageKeyScroll("],
