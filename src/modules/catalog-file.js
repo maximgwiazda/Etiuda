@@ -5,14 +5,15 @@ import { ALWAYS_CATS } from "./cat-roles.js";
 import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, parseCatalogFile, catalogDocOf, eCatalogSignature } from "./catalog.js";
 import { catalogLoaded } from "./catalog-boot.js";
 import { agentName } from "./agent.js";
-import { catalogToV2, v2SignedBytes } from "./catalog-v2.js";
+import { catalogToV2, v2SignedBytes, v2Problems, v2ContentHash } from "./catalog-v2.js";
+import { directWrite } from "./catalog-merge.js";
 import { CATS, intentArr, intentFieldKey, intentCount, catalogLangs, CONTENT_LANGS } from "./content-model.js";
-import { eHost, eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile, eLoadedCatalogFile, eHasBranch, eBranchIdentity, eWriteBranch } from "./host.js";
+import { eHost, eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile, eLoadedCatalogFile, eHasBranch, eBranchIdentity, eWriteBranch, eHasShared, eSharedRead, eSharedWrite } from "./host.js";
 import { CAT_LABELS_PL, CAT_LABELS_BY_LANG } from "./icons.js";
 import { fill } from "./intent-text.js";
 import { cardToExportPlain } from "./macros-json.js";
 import { FACTS, normWhoList } from "./stock.js";
-import { ssDel, nsGet, nsSet, nsDel, LAYER_KEYS, layerNsOf, eLayer, lyGet, lySet, lyDel } from "./storage.js";
+import { lsGet, ssDel, nsGet, nsSet, nsDel, LAYER_KEYS, layerNsOf, eLayer, lyGet, lySet, lyDel } from "./storage.js";
 import { cutLeaves, dismissNode } from "./motion.js";
 import { esc } from "./esc.js";
 import { newCatalogId } from "./ids.js";
@@ -358,6 +359,77 @@ function looseOrigin(make){
   if(!id && make){ id=newCatalogId(); if(!lySet("LooseId",id,true)) return null; }
   return id ? {id:id, loose:true} : null;
 }
+/* ---- the shared catalog, edited directly: the page's half (the merge is catalog-merge.js) --------------------------
+   With the setting on, the unsigned catalog loaded from the top of the catalog folder takes the layer's changes itself,
+   and the desk's own file is written only for what the shared one could not take. A catalog made from nothing goes to
+   the top of the folder unsigned. Off, or for any other catalog, the desk's own file is written as it always was. */
+const SHARED_RETRY_MS=5000, SHARED_NAMES=9;
+let sharedSaid=false;
+function sharedEditing(){ return lsGet("eSharedEdit")==="1" && eHasShared(); }
+/* What the layer touches, by the file's own ids: the fields of LOOSE_FIELDS, as sharedScope reads them. */
+function sharedTouched(){
+  const p=pack||{}, keys=o=>Object.keys(o && typeof o==="object" ? o : {}), list=a=>Array.isArray(a) ? a.map(String) : [];
+  return {
+    cards:keys(p.overrides).concat((p.custom||[]).map(m=>m&&m.id).filter(Boolean).map(String),list(p.removed)),
+    tags:["catLabels","catLabelsPl","customCats","catRoles","catIcons","catColors"].reduce((o,f)=>o.concat(keys(p[f])),[]).concat(list(p.removedCats)),
+    head:(p.facts!=null?["facts"]:[]).concat(p.who!=null?["role"]:[]),
+    requests:["intentOverrides","intentCustom","intentRemoved"].some(f=>Array.isArray(p[f]) ? p[f].length>0 : keys(p[f]).length>0),
+    order:!cardOrderIsBase()
+  };
+}
+/* What this desk knows of the file it writes, kept with the layer: a new edition loaded is the new ground, so what was
+   known of the old one goes, and what the desk holds back stays held. */
+function sharedState(name,pin){
+  let s=null;
+  try{ s=JSON.parse(lyGet("Shared")||"null"); }catch(e){ s=null; }
+  const st=(s && typeof s==="object" && s.file===name && s.state && typeof s.state==="object") ? s.state : {};
+  const held=Array.isArray(st.held) ? st.held : [];
+  return (s && s.pin===pin) ? {file:st.file||{}, desk:st.desk||{}, held:held} : {file:{}, desk:{}, held:held};
+}
+/* The pin of the edition this desk last wrote and nobody else had touched, which it is never offered unasked. */
+function sharedOwnPin(){ return String(lyGet("SharedOwn")||""); }
+function sharedOwnWrite(c){ const own=sharedOwnPin(); return !!own && pinned(c).pin===own; }
+/* The write, or null where it does not apply. Its answer's route says whether the desk's own file is still wanted. */
+function writeShared(loose,origin,holds,layer){
+  if(!sharedEditing()) return null;
+  const pin=loose ? "" : String(origin.pin||"");
+  const at=loose ? String(lyGet("SharedFile")||"") : String(nsGet("CatalogFile")||"");
+  if(!loose && !at) return null;
+  const state=sharedState(at,pin);
+  if(!holds && !Object.keys(state.file).length && !state.held.length) return null;
+  const from=loose ? (origin||looseOrigin(true)) : origin;
+  if(!from) return null;
+  const mine=catalogToV2(Object.assign(currentCatalog({asIs:true}),{id:String(from.id), rev:+from.rev||0}));
+  const stem=catalogFileStem(catalogNameOfFile(catalogFileName()));
+  const go=n=>{
+    // A catalog made from nothing takes the first free name, and keeps the one it was first written under.
+    const name=at || (stem+(n?" "+(n+1):"")+".ec");
+    const same=()=>eLayer()===layer && catalogLoaded()===!loose;
+    return directWrite({
+      read:()=>eSharedRead(name,pin),
+      write:(text,sha,create)=>same() ? eSharedWrite(name,text,sha,create) : {ok:false, refused:true},
+      mine:mine, touched:sharedTouched(), state:state, pin:pin, own:sharedOwnPin(),
+      check:v2Problems, hash:v2ContentHash, pinOf:d=>"sha256:"+sha256Hex(v2SignedBytes(d)), today:todayEdition()
+    }).then(r=>{
+      if(!same()) return {route:"branch"};
+      if(!at && (r.why==="taken" || r.why==="other") && n+1<SHARED_NAMES) return go(n+1);
+      lySet("Shared",JSON.stringify({file:name, pin:pin, state:r.state}));
+      if(r.wrote){
+        lySet("SharedOwn",r.others ? "" : r.pin);
+        if(loose){ lySet("SharedFile",name); lySet("Exported",looseMark()); }
+        sharedSaid=false;
+      }
+      if(r.fresh && r.fresh.length) toast(t("The shared catalog had changed the same text, so your version is kept in this desk's own file."));
+      else if(r.why && r.why!=="signed" && !sharedSaid){
+        sharedSaid=true;
+        toast(t("The shared catalog could not be written just now, so this change is kept in this desk's own file."));
+        if(r.why==="busy") setTimeout(scheduleDeskBranch,SHARED_RETRY_MS);
+      }
+      return r;
+    });
+  };
+  return go(0);
+}
 /* One write at a time, the latest state when it runs. A layer holding nothing an export would carry
    (deskBranchHolds) takes the file away; a browser, a desk with no pin and a desk whose key cannot be kept write nothing. */
 function writeDeskBranch(){
@@ -366,16 +438,20 @@ function writeDeskBranch(){
   const loose=!catalogLoaded(), holds=deskBranchHolds(), layer=eLayer();
   let origin=loose ? looseOrigin(false) : storedCatalog();
   if(loose ? (!origin && !holds) : (!origin || !origin.id || !/^sha256:[0-9a-f]{64}$/.test(String(origin.pin||"")))) return Promise.resolve(false);
-  const stemOf=o=>catalogFileStem(catalogNameOfFile(catalogFileName()))+"-"+branchHex(o), stem=origin ? stemOf(origin) : "";
-  const run=holds
+  const stemOf=o=>catalogFileStem(catalogNameOfFile(catalogFileName()))+"-"+branchHex(o);
+  // `keep` false takes the desk's own file away: the shared catalog holds all the layer has.
+  const own=keep=>(keep && holds)
     ? eBranchIdentity().then(who=>{
         /* A catalog taken while the identity was asked is not this write's: its content would land under the stem and
            grew read before. A catalog with no id keeps the empty desk's layer, so the loose case is asked apart. */
         if(!who || eLayer()!==layer || (loose && catalogLoaded())) return {ok:false};
         if(!origin) origin=looseOrigin(true);
-        return origin ? eWriteBranch(stem||stemOf(origin),JSON.stringify(catalogToV2(branchCatalog(who,origin)))) : {ok:false};
+        return origin ? eWriteBranch(stemOf(origin),JSON.stringify(catalogToV2(branchCatalog(who,origin)))) : {ok:false};
       })
-    : eWriteBranch(stem,"");
+    : eWriteBranch(origin ? stemOf(origin) : "","");
+  const direct=writeShared(loose,origin,holds,layer);
+  // A write that fails in any way leaves the desk's own file written as with the setting off.
+  const run=direct ? direct.catch(()=>({route:"branch"})).then(r=>{ if(loose && !origin) origin=looseOrigin(false); return own(r.route!=="none"); }) : own(true);
   branchBusy=run.then(r=>!!(r&&r.ok),()=>false).then(ok=>{
     branchBusy=null;
     if(branchAgain){ branchAgain=false; scheduleDeskBranch(); }
@@ -712,5 +788,7 @@ export {
   branchFileId,
   looseOrigin,
   deskBranchHolds,
-  writeDeskBranch
+  writeDeskBranch,
+  sharedOwnPin,
+  sharedOwnWrite
 };

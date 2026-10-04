@@ -624,7 +624,7 @@ try {
   check(writes.length === 1 && /clipboard\.writeText\(pickClipText\(v\.text,\s*process\.platform\)\)/.test(shellCode)
     && (shellBare.match(/clipboard\.writeText\(/g) || []).length === 1,
     "5b the shell writes the clipboard at one place, the desk's own text: " + writes.length + " write site(s)");
-  const MODS = ["electron", "node:child_process", "node:path", "node:fs", "node:os", "node:crypto"];
+  const MODS = ["electron", "node:child_process", "node:path", "node:fs", "node:os", "node:crypto", "node:zlib"];
   const reqs = (shellCode.match(/\brequire\s*\(\s*[^)]*\)/g) || []).map(r => r.replace(/^require\s*\(\s*|\s*\)$/g, "").replace(/^["']|["']$/g, ""));
   const strange = reqs.filter(r => MODS.indexOf(r) < 0);
   const cp = /\{([^}]*)\}\s*=\s*require\(\s*"node:child_process"\s*\)/.exec(shellCode);

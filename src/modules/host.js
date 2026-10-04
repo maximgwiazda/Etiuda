@@ -217,6 +217,28 @@ function eWriteBranch(stem,text){
       .catch(()=>({ok:false}));
   }catch(e){ return Promise.resolve({ok:false}); }
 }
+/* The shared catalog edited directly, both halves through the host and neither in a browser: the read answers
+   {text,sha,free,base} or null, the write {ok} or why not, {changed}, {busy}, {taken} or {refused}. */
+function eHasShared(){
+  const h=eHost();
+  return !!h && typeof h.sharedRead==="function" && typeof h.sharedWrite==="function";
+}
+function eSharedRead(name,pin){
+  if(!eHasShared()) return Promise.resolve(null);
+  try{
+    return Promise.resolve(eHost().sharedRead(String(name||""),String(pin||"")))
+      .then(v=>(v&&typeof v==="object")?{text:String(v.text||""),sha:String(v.sha||""),free:v.free===true,base:String(v.base||"")}:null)
+      .catch(()=>null);
+  }catch(e){ return Promise.resolve(null); }
+}
+function eSharedWrite(name,text,sha,create){
+  if(!eHasShared()) return Promise.resolve({ok:false});
+  try{
+    return Promise.resolve(eHost().sharedWrite(String(name||""),String(text||""),String(sha||""),create===true))
+      .then(v=>(v&&typeof v==="object")?{ok:v.ok===true,changed:v.changed===true,busy:v.busy===true,taken:v.taken===true,refused:v.refused===true}:{ok:false})
+      .catch(()=>({ok:false}));
+  }catch(e){ return Promise.resolve({ok:false}); }
+}
 /* A file somebody double-clicked that this launch could not open, {name,why} once and then null:
    the host forgets it as it answers, so a reload does not say it twice. */
 function eOpenedRefused(){
@@ -307,6 +329,9 @@ export {
   eBranchIdentity,
   eHasBranch,
   eWriteBranch,
+  eHasShared,
+  eSharedRead,
+  eSharedWrite,
   E_CATALOG_FOLDER_KEY,
   E_CATALOG_SCRIPT,
   eCatalogFile,
