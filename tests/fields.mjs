@@ -23,7 +23,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 47;
+const EXPECTED = 49;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -519,6 +519,53 @@ try {
       navigator.clipboard = null; if (asking()) fire(inputs()[0], "keydown", { key: "Escape" });
       fabEl.remove(); delete els["#toast"];
       TB.tabs.splice(0, TB.tabs.length);
+      globalThis.getComputedStyle = window.getComputedStyle = hadGCS;
+    }
+  }
+  /* The action button after a copy (decisions 2026-10-01 10:29 and 10:34, 09:27): a step brings the digit and
+     the pulse and never unfolds the dock; holding Ctrl does, and letting go folds it; a reply learnt after
+     the last one that commits the firm is offered like any other, with its seal and its learnt mark. */
+  { const ND = await import(MOD("next-dock.js"));
+    const hadGCS = globalThis.getComputedStyle, hadAdd = globalThis.addEventListener, hadDE = DOC.documentElement.addEventListener;
+    const on = {};
+    globalThis.addEventListener = (k, fn) => { (on[k] = on[k] || []).push(fn); };
+    DOC.documentElement.addEventListener = () => {};
+    globalThis.getComputedStyle = window.getComputedStyle = () => ({ getPropertyValue: () => "", borderLeftWidth: "0", borderRightWidth: "0", paddingLeft: "0", paddingRight: "0" });
+    const modal = new El("div", { id: "modal" }); modal.hidden = true; els["#modal"] = modal; const hadRange = DOC.createRange; DOC.createRange = () => ({ selectNodeContents() {}, getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }) }); Dom.grabDom();
+    const fabEl = DOC.body.appendChild(new El("button", { id: "nextFab", class: "fab fab-next" }));
+    fabEl.hidden = true;
+    fabEl.getBoundingClientRect = () => ({ top: 760, left: 1106, width: 44, height: 44 });
+    const key = (type, ctrl) => (on[type] || []).forEach(fn => fn({ type, key: "Control", ctrlKey: ctrl, metaKey: false }));
+    AS.setCards([
+      { id: "c-lead9", c: "orders", t: "Lead", en: "Opening." },
+      { id: "c-sworn9", c: "orders", t: "Sworn", en: "It ships today.", commits: 1 },
+    ]);
+    const fresh = () => { TB.tabs.splice(0, TB.tabs.length); ST.ssSet(TB.TAB_KEY, "null"); TB.initTabs(); };
+    try {
+      navigator.clipboard = { writeText: () => ({ then(ok) { ok(); } }) };
+      ND.wireNextDock();
+      fresh(); ["c-lead9", "c-sworn9", "c-lead9", "c-sworn9"].forEach(id => LP.bumpUseCount(id, "en"));
+      fresh();
+      const before = { shown: !fabEl.hidden, open: ND.nextDockOpen() };
+      LP.bumpUseCount("c-lead9", "en");
+      const after = { shown: !fabEl.hidden, pulse: fabEl.classList.contains("nudge"), open: ND.nextDockOpen() };
+      key("keydown", true);
+      const held = { open: ND.nextDockOpen() };
+      const dock = DOC.getElementById("nextDock"), html = dock ? dock.innerHTML : "";
+      const row = (/<button[^>]*class="nd-row"[\s\S]*?<\/button>/.exec(html) || [""])[0];
+      key("keyup", false);
+      held.folded = !ND.nextDockOpen();
+      check(!before.shown && !before.open && after.shown && after.pulse && !after.open && held.open && held.folded,
+        "8d a copy shows the action button and pulses it and never unfolds the dock; holding Ctrl unfolds it and letting go folds it: " + JSON.stringify({ before, after, held }));
+      check(/Sworn/.test(row) && /nd-stamp/.test(row) && /nd-learnt/.test(row),
+        "8e a reply learnt after the last one that commits the firm is offered, with its seal and its learnt mark: " + JSON.stringify(row.replace(/<svg[\s\S]*?<\/svg>/g, "").slice(0, 200)));
+    } finally {
+      ND.foldNextDock(); TB.watchTabPath(null);
+      navigator.clipboard = null;
+      fabEl.remove(); const d = DOC.getElementById("nextDock"); if (d) d.remove();
+      delete els["#modal"]; DOC.createRange = hadRange; Dom.grabDom();
+      TB.tabs.splice(0, TB.tabs.length);
+      globalThis.addEventListener = hadAdd; DOC.documentElement.addEventListener = hadDE;
       globalThis.getComputedStyle = window.getComputedStyle = hadGCS;
     }
   }
