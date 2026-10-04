@@ -23,7 +23,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 35;
+const EXPECTED = 36;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -320,6 +320,14 @@ try {
   fire(inputs()[1], "keydown", altV);
   await tick(5);
   check(/Ctrl\+V pastes/.test(said()), "4m with no host to read through, the browser's Ctrl+V is named: " + JSON.stringify(said()));
+  fire(inputs()[0], "keydown", { key: "Escape" });
+
+  /* A second copy while a question stands closes the first by its own close. */
+  AS.setFieldVals({});
+  deskCopy("c-where"); deskCopy("c-hand");
+  const standing = DOC.body.kids.filter(k => k.attrs.id === "eFieldAsk");
+  check(standing.length === 1 && inputs().length === 2 && /what was promised/.test(asking().innerHTML),
+    "4o a second copy while a question stands leaves one question, the second reply's: " + standing.length);
   fire(inputs()[0], "keydown", { key: "Escape" });
 
   /* A field kept for one copy goes with it. */

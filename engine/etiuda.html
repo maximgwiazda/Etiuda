@@ -16604,9 +16604,9 @@ What you type stays in this browser only.`;
     const one = line.split(/(?<=[.?!])\s+/).find(lab) || line;
     return (one !== line && line.indexOf(one) > 0 ? "…" : "") + one;
   }
+  var askClose = null;
   function askFields(raw, m, l, go, anchor) {
-    const was = document.getElementById("eFieldAsk");
-    if (was) was.remove();
+    if (askClose) askClose();
     const all = fillFieldsIn(raw), mine = fieldVals;
     const wrap = document.createElement("div");
     wrap.className = "bub bub-ask e-field-ask";
@@ -16652,10 +16652,12 @@ What you type stays in this browser only.`;
     place();
     addEventListener("resize", place);
     const close = () => {
+      if (askClose === close) askClose = null;
       watchFieldVals(null);
       removeEventListener("resize", place);
       dismissNode(wrap);
     };
+    askClose = close;
     watchFieldVals(() => {
       if (fieldVals !== mine) close();
     });

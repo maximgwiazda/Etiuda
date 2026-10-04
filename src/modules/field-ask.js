@@ -54,9 +54,10 @@ function fieldLine(raw,f,l){
   const one=line.split(/(?<=[.?!])\s+/).find(lab)||line;
   return (one!==line && line.indexOf(one)>0 ? "…" : "")+one;
 }
+/* One question at a time: a second copy closes the first through its own close, listeners and all. */
+let askClose=null;
 function askFields(raw,m,l,go,anchor){
-  const was=document.getElementById("eFieldAsk");
-  if(was) was.remove();
+  if(askClose) askClose();
   const all=fillFieldsIn(raw), mine=fieldVals;
   const wrap=document.createElement("div");
   wrap.className="bub bub-ask e-field-ask";
@@ -106,7 +107,8 @@ function askFields(raw,m,l,go,anchor){
   };
   place();
   addEventListener("resize",place);
-  const close=()=>{ watchFieldVals(null); removeEventListener("resize",place); dismissNode(wrap); };
+  const close=()=>{ if(askClose===close) askClose=null; watchFieldVals(null); removeEventListener("resize",place); dismissNode(wrap); };
+  askClose=close;
   /* The tab under the question is the one it answers for: another tab put on screen closes it. */
   watchFieldVals(()=>{ if(fieldVals!==mine) close(); });
   const submit=()=>{
