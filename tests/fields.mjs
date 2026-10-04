@@ -23,7 +23,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 36;
+const EXPECTED = 38;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -129,6 +129,7 @@ const PICK = await import(MOD("pick.js"));
 const TB = await import(MOD("tabs.js"));
 const V2 = await import(MOD("catalog-v2.js"));
 const RL = await import(MOD("rail-list.js"));
+const LP = await import(MOD("list-pointer.js"));
 ST.lsSet("eMotionOff", "1");
 ST.lsSet("eNameAsked", "1");
 ST.lsSet("eAgent", "Kate");
@@ -336,10 +337,38 @@ try {
   check(once === "Order MRB-2024-10412. Promised: a refund." && !AS.fieldVals.kept && AS.fieldVals.order === "MRB-2024-10412",
     "4n a field kept for one copy is gone after it, and the conversation's own stays: " + JSON.stringify(AS.fieldVals));
 
+  /* A click on a block, through list-pointer's own handler on a detached #list. The stand-in's
+     matches() takes one simple selector, so the card and its block answer `.class[attr]` here. */
+  class Hit extends El {
+    get dataset() { const d = {}; for (const k in this.attrs) if (k.startsWith("data-")) d[k.slice(5)] = this.attrs[k]; return d; }
+    matches(sel) { const m = /^\.([\w-]+)\[([\w-]+)\]$/.exec(sel); return m ? this.classList.contains(m[1]) && m[2] in this.attrs : super.matches(sel); }
+  }
+  const listEl = new El("div", { id: "list" });
+  const block = listEl.appendChild(new Hit("div", { class: "card", "data-id": "c-where" })).appendChild(new Hit("p", { class: "txt", "data-v": "0" }));
+  els["#list"] = listEl; Dom.grabDom(); LP.wireListPointer();
+  const clickCopy = () => {
+    let got = null;
+    navigator.clipboard = { writeText: t => { got = t; return { then() {} }; } };
+    fire(block, "click", { button: 0 });
+    navigator.clipboard = null;
+    return got;
+  };
+  AS.setFieldVals({ order: "MRB-2024-10412", track: "https://t.example/1" });
+  const clicked = clickCopy(), askedKnown = !!asking();
+  AS.setFieldVals({});
+  const clickedEmpty = clickCopy();
+  check(clicked === "Order MRB-2024-10412 left today: https://t.example/1" && !askedKnown
+    && clickedEmpty === null && !!asking() && inputs().length === 2,
+    "4p a click on a block copies straight through with every field known, and with one empty copies nothing and asks: "
+    + JSON.stringify({ clicked, clickedEmpty, boxes: inputs().length }));
+  if (asking()) fire(inputs()[0], "keydown", { key: "Escape" });
+  delete els["#list"]; Dom.grabDom();
+
   console.log("\n[5/6] the picker's answers and where a value is kept");
   /* One conversation on screen, as the desk starts with, so a value has a tab to be kept with. */
   ["applyLangUI", "updateIntentPlaceholder", "drawIntentRail", "drawPillsCore", "drawTabsCore", "scheduleRailGeometry"]
     .forEach(k => { HK.hooks[k] = () => {}; });
+  AS.setFieldVals({});
   TB.initTabs();
   const pa = (op, arg) => PICK.answerPick(op, JSON.stringify(arg || {}));
   const need = pa("copy", { id: "c-where", vi: 0 });
@@ -362,6 +391,17 @@ try {
   check(local.indexOf(SENT) < 0 && sess.indexOf(SENT) > -1,
     "5e a value is kept with the conversation's tab and nowhere in the desk's own storage, counts included (the tab's session holds it: "
     + (sess.indexOf(SENT) > -1) + ")");
+  /* 5f a value stays with its own conversation through the real tab switch. */
+  { const a = Object.assign({}, AS.fieldVals);
+    TB.tabs.push({ id: "tprobe", lang: "en", pax: "", intentIdxs: [], cats: [], path: [], fields: {} }); TB.stepTab(1);
+    const fresh = Object.assign({}, AS.fieldVals);
+    pa("copy", { id: "c-where", vi: 0, values: { order: "MRB-1111-22222", track: "https://t.example/b" } });
+    TB.stepTab(-1);
+    const back = Object.assign({}, AS.fieldVals);
+    TB.stepTab(1);
+    const other = Object.assign({}, AS.fieldVals);
+    check(a.order === SENT && Object.keys(fresh).length === 0 && back.order === SENT && other.order === "MRB-1111-22222",
+      "5f a new conversation starts with no values, and each tab gets back its own: " + JSON.stringify({ a, fresh, back, other })); }
 
   console.log("\n[6/6] the lint: a declared field is a token the desk fills");
   const LT = nodeRequire(path.join(ROOT, "tests", "test.js"));
