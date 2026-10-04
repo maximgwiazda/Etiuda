@@ -131,6 +131,11 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
      desk's own catalog file by its stem, an empty text taking it away. Nothing here hands out a key. */
   branchIdentity: (make) => ipcRenderer.invoke("etiuda:branch-identity", make === false ? false : true),
   writeBranch: (stem, text) => ipcRenderer.invoke("etiuda:branch-write", String(stem || ""), String(text || "")),
+  /* The desk's earlier versions of its catalogs: the list, {name, text} for one, and putting one back in the catalog
+     folder, answered {ok, replaced}. A version is its hash and the file it was kept for. */
+  historyList: () => ipcRenderer.invoke("etiuda:history-list"),
+  historyRead: (sha, file) => ipcRenderer.invoke("etiuda:history-read", String(sha || ""), String(file || "")),
+  historyPut: (sha, file) => ipcRenderer.invoke("etiuda:history-put", String(sha || ""), String(file || "")),
   /* Asking to join the team a sealed catalog in the folder belongs to: "state", "ask" with the file's name and the
      agent's, or "cancel", each answered {sealed, join, joined}; and that answer again whenever it changes. */
   teamJoin: (op, file, name) => ipcRenderer.invoke("etiuda:team-join", String(op || ""), String(file || ""), String(name || "")),

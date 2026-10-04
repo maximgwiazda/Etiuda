@@ -22,6 +22,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const os = require("node:os");
 const crypto = require("node:crypto");
+const zlib = require("node:zlib");
 
 /* THE PROXY IS CHOSEN HERE, BEFORE READY: a setProxy after ready would not stop the first lookup.
    Windows' own setting is followed where it names a setup script or a server; automatic detection
@@ -291,6 +292,7 @@ function readCatalog() {
       const cards = Array.isArray(data.cards) ? data.cards.length : 0;
       console.log("etiuda: catalog read from " + file + ", " + cards + " cards");
       catalogFrom = file;
+      historySoon(file, text);
       return json;
     } catch (e) {
       console.error("etiuda: " + file + " did not parse as a catalog - " + e.message);
@@ -454,6 +456,7 @@ function offerFile(win, file) {
     openedWith = file;
     catalogJson = json;
     catalogFrom = file;
+    historySoon(file, text);
     const cards = Array.isArray(data.cards) ? data.cards.length : 0;
     console.log("etiuda: opened with " + file + ", " + cards + " cards");
     /* The fourth argument says somebody ASKED for this file, which the watch's own send does
@@ -1142,7 +1145,9 @@ function writeBranch(stem, text) {
       try { fs.mkdirSync(dir); } catch (e) { if (e.code !== "EEXIST") throw e; }
     }
     const signed = JSON.stringify(doc, null, 1) + "\n";
-    writeReplacing(at.dest, seal ? JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, signed), null, 1) + "\n" : signed);
+    const written = seal ? JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, signed), null, 1) + "\n" : signed;
+    writeReplacing(at.dest, written);
+    historyKeep(at.dest, written, true);
     tidy();
     branchRevs[id] = doc.rev;
     persistDeskEnvelope();
@@ -1433,6 +1438,225 @@ function forgetLead(team) {
   persistDeskEnvelope();
   console.error("etiuda: the lead of team " + team + " is forgotten, with the keys this desk kept for it");
   return joinView();
+}
+
+/* ---- the desk's own history of the catalogs it reads and writes --------------------------------------------------
+   One gzip per content, named by its SHA-256, and an index of where and when each was seen, beside desk.json: nobody
+   else's desk reads this folder. A version stays 30 days after it was last seen and the newest of each file whatever its
+   age; past the cap the longest unseen go first. A sealed file is kept as sealed. */
+const HISTORY_KIND = "etiuda-catalog-history", HISTORY_INDEX = "index.json";
+const HISTORY_DAY_MS = 24 * 60 * 60 * 1000, HISTORY_DAYS = 30, HISTORY_CAP = 100 * 1024 * 1024;
+// A version seen again within this long is not written down again.
+const HISTORY_SEEN_MS = 60 * 60 * 1000;
+const HISTORY_SHA_RE = /^[0-9a-f]{64}$/;
+let historyIndex = null, historySwept = false;
+function historyDir() { return path.join(app.getPath("userData"), "catalog-history"); }
+function historyBlob(sha) { return path.join(historyDir(), sha + ".gz"); }
+function sha256Hex(buf) { return crypto.createHash("sha256").update(buf).digest("hex"); }
+/* What a version says about itself, read once as it is kept; -1 cards for bytes that are not a catalog. `signed` is
+   "lead" or "desk" for a signature of either, and any sealed file counts as signed. */
+function historyFacts(text) {
+  const out = { id: "", rev: 0, date: "", cards: -1, macros: -1, intents: -1, cats: -1, signed: "", sealed: "" };
+  try {
+    let data = catalogPayload(text).data;
+    if (data && data.kind === SEALED_KIND) {
+      out.sealed = String(data.team || "-");
+      const inner = teamOpen(data);
+      out.signed = "lead";
+      data = inner === null ? null : catalogPayload(inner).data;
+    }
+    if (!isV2(data)) return out;
+    const n = ecCounts(data), sig = data.sig;
+    out.id = data.id != null ? String(data.id) : "";
+    out.rev = +data.rev || 0;
+    out.date = data.date != null ? String(data.date) : "";
+    out.cards = Array.isArray(data.cards) ? data.cards.length : 0;
+    out.macros = n.macros; out.intents = n.intents; out.cats = n.cats;
+    if (sig && typeof sig === "object" && sig.value) out.signed = data.desk ? "desk" : "lead";
+  } catch { /* not a catalog */ }
+  return out;
+}
+function historyEntryOk(v) {
+  return !!v && typeof v === "object" && HISTORY_SHA_RE.test(String(v.sha)) && typeof v.path === "string"
+    && Number.isFinite(v.first) && Number.isFinite(v.last);
+}
+/* The text a kept version holds, and a blob that does not match its own name throws. */
+function historyText(sha) {
+  const buf = zlib.gunzipSync(fs.readFileSync(historyBlob(sha)));
+  if (sha256Hex(buf) !== sha) throw new Error("the kept copy does not match its name");
+  return buf.toString("utf8");
+}
+/* An index that will not read is made again from the blobs, which then belong to no file: nothing kept is lost to it. */
+function historyRebuilt() {
+  let names = [];
+  try { names = fs.readdirSync(historyDir()); } catch { return []; }
+  const out = [];
+  for (const n of names) {
+    const m = /^([0-9a-f]{64})\.gz$/.exec(n);
+    if (!m) continue;
+    try {
+      const text = historyText(m[1]), st = fs.statSync(historyBlob(m[1])), at = Math.round(st.mtimeMs);
+      out.push(Object.assign({ sha: m[1], path: "", size: Buffer.byteLength(text, "utf8"), gz: st.size, first: at, last: at,
+        wrote: false }, historyFacts(text)));
+    } catch { /* a blob that does not open is left where it is */ }
+  }
+  if (out.length) console.error("etiuda: the catalog history's index did not read, so it was made again from " + out.length + " kept copies");
+  return out;
+}
+function historyRead() {
+  if (historyIndex) return historyIndex;
+  let doc = null;
+  try { doc = JSON.parse(fs.readFileSync(path.join(historyDir(), HISTORY_INDEX), "utf8")); } catch { doc = null; }
+  historyIndex = { versions: doc && doc.kind === HISTORY_KIND && Array.isArray(doc.versions)
+    ? doc.versions.filter(historyEntryOk) : historyRebuilt() };
+  return historyIndex;
+}
+/* Pure: which versions stay, by the rule at the head of this section. The cap counts each content once. */
+function historyKept(versions, now, days, cap) {
+  const newest = new Map();
+  versions.forEach(v => {
+    const n = newest.get(v.path);
+    if (!n || v.last > n.last || (v.last === n.last && v.first > n.first)) newest.set(v.path, v);
+  });
+  const pinned = v => newest.get(v.path) === v;
+  let kept = versions.filter(v => pinned(v) || now - v.last <= days * HISTORY_DAY_MS);
+  const weight = list => {
+    const each = new Map();
+    list.forEach(v => each.set(v.sha, +v.gz || +v.size || 0));
+    let sum = 0;
+    each.forEach(n => { sum += n; });
+    return sum;
+  };
+  const spare = kept.filter(v => !pinned(v)).sort((a, b) => a.last - b.last || a.first - b.first);
+  while (spare.length && weight(kept) > cap) {
+    const v = spare.shift();
+    kept = kept.filter(x => x !== v);
+  }
+  return kept;
+}
+/* The index is written before any blob goes, so an index never names a copy that is not there. */
+function historySave(idx, now) {
+  const kept = historyKept(idx.versions, now, HISTORY_DAYS, HISTORY_CAP);
+  const dropped = kept.length !== idx.versions.length;
+  idx.versions = kept;
+  fs.mkdirSync(historyDir(), { recursive: true });
+  writeReplacing(path.join(historyDir(), HISTORY_INDEX), JSON.stringify({ format: 1, kind: HISTORY_KIND, versions: kept }));
+  if (historySwept && !dropped) return;
+  historySwept = true;
+  const live = new Set(kept.map(v => v.sha));
+  let names = [];
+  try { names = fs.readdirSync(historyDir()); } catch { return; }
+  names.forEach(n => {
+    const m = /^([0-9a-f]{64})\.gz$/.exec(n);
+    if (m && !live.has(m[1])) { try { fs.unlinkSync(historyBlob(m[1])); } catch { /* held open; the next sweep */ } }
+  });
+}
+/* Keeps these bytes as a version of `file`, and answers its entry, or null where nothing was kept. A file Etiuda ships,
+   or the sample as given, is not kept: the installation holds it. */
+function historyShipped(buf, sha) { return SAMPLE_EDITIONS.some(x => x[0] === buf.length && x[1] === sha); }
+function historyKeep(file, text, wrote) {
+  try {
+    const at = file ? path.resolve(String(file)) : "";
+    if (!at || isBuiltIn(at) || typeof text !== "string" || !text) return null;
+    const buf = Buffer.from(text, "utf8"), sha = sha256Hex(buf);
+    if (buf.length > BRANCH_TEXT_MAX || historyShipped(buf, sha)) return null;
+    const now = Date.now(), idx = historyRead();
+    let e = idx.versions.find(v => v.sha === sha && v.path === at);
+    if (e) {
+      if ((e.wrote || !wrote) && now - e.last < HISTORY_SEEN_MS) return e;
+      e.wrote = e.wrote || !!wrote;
+      e.last = Math.max(e.last, now);
+    } else {
+      // The version this one replaces was there until now, as far as this desk knows.
+      const was = idx.versions.filter(v => v.path === at).sort((a, b) => b.last - a.last)[0];
+      if (was && was.last < now) was.last = now - 1;
+      fs.mkdirSync(historyDir(), { recursive: true });
+      if (!fs.existsSync(historyBlob(sha))) writeReplacing(historyBlob(sha), zlib.gzipSync(buf));
+      e = Object.assign({ sha: sha, path: at, size: buf.length, gz: fs.statSync(historyBlob(sha)).size, first: now, last: now,
+        wrote: !!wrote }, historyFacts(text));
+      idx.versions.push(e);
+    }
+    historySave(idx, now);
+    return e;
+  } catch (err) {
+    console.error("etiuda: an earlier version of " + file + " could not be kept - " + err.message);
+    return null;
+  }
+}
+/* A read keeps its version after the read has answered, so no route waits on a copy being made. */
+function historySoon(file, text) { setImmediate(() => historyKeep(file, text, false)); }
+/* Keeps what a file holds now, before it is replaced: {entry} for bytes kept, {none: true} where there is nothing a
+   history would keep there, and null where it could not be kept. */
+function historyKeepFile(file) {
+  let text;
+  try { text = fs.readFileSync(file, "utf8"); }
+  catch (e) { return e.code === "ENOENT" ? { none: true } : null; }
+  const buf = Buffer.from(text, "utf8");
+  if (!text || historyShipped(buf, sha256Hex(buf))) return { none: true };
+  const entry = historyKeep(file, text, false);
+  return entry ? { entry: entry } : null;
+}
+function historyFind(sha, file) {
+  return historyRead().versions.find(v => v.sha === String(sha || "") && v.path === String(file || "")) || null;
+}
+/* What may be put back, and what may be put back over: a catalog with no signature and no seal. The desk never writes a
+   catalog somebody signed, nor writes over one. */
+function historyFree(v) { return !!v && !v.signed && !v.sealed && v.cards >= 0; }
+/* Every version, for the page: where it sits (the catalog folder, this desk's own folder, or elsewhere), whether the file
+   there holds it now, and whether it may be put back there. */
+function historyView() {
+  const root = catalogFolder(), up = folderAnswers(root);
+  const own = deskBranch ? path.join(root, "desks", branchIdOf(deskBranch.sign.pub)) : "";
+  const now = new Map();
+  const there = file => {
+    if (!now.has(file)) {
+      let got = null;
+      try { const text = fs.readFileSync(file, "utf8"); got = { sha: sha256Hex(Buffer.from(text, "utf8")), free: historyFree(historyFacts(text)) }; }
+      catch (e) { got = e.code === "ENOENT" ? { sha: "", free: true } : null; }
+      now.set(file, got);
+    }
+    return now.get(file);
+  };
+  return historyRead().versions.map(v => {
+    const dir = v.path ? path.dirname(v.path) : "";
+    const place = !v.path ? "" : dir === root ? "folder" : own && dir === own ? "own" : "other";
+    const held = (place === "folder" || place === "own") && up ? there(v.path) : null;
+    const current = !!held && held.sha === v.sha;
+    return { sha: v.sha, path: v.path, name: v.path ? path.basename(v.path) : "", dir: dir, place: place, first: v.first, last: v.last,
+      wrote: !!v.wrote, id: v.id || "", rev: +v.rev || 0, date: v.date || "", cards: +v.cards, macros: +v.macros, intents: +v.intents,
+      cats: +v.cats, signed: !!v.signed, sealed: !!v.sealed, current: current,
+      put: place === "folder" && !current && !!held && held.free && historyFree(v) && /\.ec$/i.test(v.path) };
+  });
+}
+/* A kept version's catalog for the page, opened where it is sealed and this desk holds the key; "" where it is not. */
+function historyOpen(sha, file) {
+  const v = historyFind(sha, file);
+  if (!v) return null;
+  const name = v.path ? path.basename(v.path) : "";
+  try { return { name: name, text: catalogRead(historyText(v.sha)).json }; }
+  catch (e) { console.error("etiuda: an earlier version of " + (v.path || v.sha) + " could not be opened - " + e.message); return { name: name, text: "" }; }
+}
+/* Writes a kept version back over its file in the catalog folder, by the rule at historyFree and only after the bytes it
+   replaces are kept themselves: `replaced` names them, so the page can offer them back. */
+function historyPutBack(sha, file) {
+  const v = historyFind(sha, file), root = catalogFolder();
+  if (!v || !historyFree(v) || !v.path || path.dirname(v.path) !== root || !/\.ec$/i.test(v.path) || !folderAnswers(root)) return { ok: false };
+  try {
+    const text = historyText(v.sha);
+    let was = "";
+    try { was = fs.readFileSync(v.path, "utf8"); } catch (e) { if (e.code !== "ENOENT") throw e; }
+    if (was && sha256Hex(Buffer.from(was, "utf8")) === v.sha) return { ok: true, unchanged: true };
+    if (was && !historyFree(historyFacts(was))) return { ok: false };
+    const before = historyKeepFile(v.path);
+    if (!before) return { ok: false };
+    writeReplacing(v.path, text);
+    historyKeep(v.path, text, true);
+    console.log("etiuda: " + v.path + " was put back as this desk kept it");
+    return { ok: true, replaced: before.entry ? before.entry.sha : "" };
+  } catch (e) {
+    console.error("etiuda: " + v.path + " could not be put back - " + e.message);
+    return { ok: false };
+  }
 }
 
 function deskFile() { return path.join(app.getPath("userData"), "desk.json"); }
@@ -1967,6 +2191,8 @@ function ecFacts(file, deskFolder) {
   try {
     const { data } = catalogRead(text);
     if (isV2(data) && Array.isArray(data.cards)) {
+      // A colleague's file is that desk's to keep.
+      if (!deskFolder) historySoon(file, text);
       const n = ecCounts(data), d = data.desk;
       out = { mtime: Math.round(st.mtimeMs), cards: data.cards.length, edition: data.date != null ? String(data.date) : "",
               macros: n.macros, intents: n.intents, cats: n.cats, awaiting: n.awaiting, id: data.id != null ? String(data.id) : "",
@@ -2058,6 +2284,11 @@ ipcMain.handle("etiuda:stats-write", (e, text) => {
 /* The desk's branch: its public identity, and the write of its own file. See writeBranch. */
 ipcMain.handle("etiuda:branch-identity", (e, make) => (fromEngine(e) ? branchIdentity(make === false ? false : true) : null));
 ipcMain.handle("etiuda:branch-write", (e, stem, text) => (fromEngine(e) ? writeBranch(stem, text) : { ok: false }));
+/* The desk's earlier versions: the list, one version's catalog, and putting one back. A version is named by its hash and
+   the file it was kept for, and only a pair the history holds is answered. */
+ipcMain.handle("etiuda:history-list", (e) => (fromEngine(e) ? historyView() : []));
+ipcMain.handle("etiuda:history-read", (e, sha, file) => (fromEngine(e) ? historyOpen(sha, file) : null));
+ipcMain.handle("etiuda:history-put", (e, sha, file) => (fromEngine(e) ? historyPutBack(sha, file) : { ok: false }));
 // "seen" and "forget" name a team where the others name a file.
 ipcMain.handle("etiuda:team-join", (e, op, file, name) => (!fromEngine(e) ? null
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
@@ -2099,7 +2330,11 @@ ipcMain.handle("etiuda:pick-catalog-file", async (e, title, label) => {
   const file = (!r.canceled && r.filePaths && r.filePaths[0]) ? r.filePaths[0] : "";
   if (!file) return null;
   const name = path.basename(file);
-  try { return { name: name, text: catalogTextOf(fs.readFileSync(file, "utf8")) }; }
+  try {
+    const text = fs.readFileSync(file, "utf8");
+    historySoon(file, text);
+    return { name: name, text: catalogTextOf(text) };
+  }
   catch (err) {
     console.error("etiuda: " + file + " could not be read - " + err.message);
     return { name: name, text: "" };
@@ -2153,7 +2388,9 @@ ipcMain.handle("etiuda:write-catalog-save", async (e, text, from) => {
       console.error("etiuda: " + p.file + " was not written: it is a sealed team's catalog this desk cannot seal");
       return { name: path.basename(p.file), ok: false, sealed: true };
     }
+    historyKeepFile(p.file);
     writeReplacing(p.file, out);
+    historyKeep(p.file, out, true);
     return out === String(text || "") ? { name: path.basename(p.file), ok: true } : { name: path.basename(p.file), ok: true, sealed: true };
   } catch (err) {
     console.error("etiuda: " + p.file + " could not be written - " + err.message);

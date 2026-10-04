@@ -2663,6 +2663,13 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
 /* An empty folder takes the row's own box, dashed as every "nothing here yet" in this tree is. */
 .ec-empty{display:block;color:var(--dim);border-style:dashed;border-color:var(--line-strong);
   background:transparent;line-height:1.5}
+/* Earlier versions: each file's name heads its own list, and the version its file holds now wears the loaded row's edge. */
+.eh-head{display:flex;align-items:baseline;gap:8px;margin:18px 0 0;font-size:13px;min-width:0}
+.eh-head:first-child{margin-top:2px}
+.eh-head b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.eh-head small{flex:0 0 auto;color:var(--dim);font-size:11.5px}
+.eh-head+.ec-list{margin-top:6px}
+.ec-row.is-current{border-color:var(--go-edge,var(--go))}
 /* The same row on an empty screen, with the folder's count over it. Left-aligned inside a centred
    empty state, because a filename and a date are data rather than a sentence, and hidden while it
    holds nothing so a browser's empty state is exactly what it was. */

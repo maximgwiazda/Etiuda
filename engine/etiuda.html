@@ -2663,6 +2663,13 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
 /* An empty folder takes the row's own box, dashed as every "nothing here yet" in this tree is. */
 .ec-empty{display:block;color:var(--dim);border-style:dashed;border-color:var(--line-strong);
   background:transparent;line-height:1.5}
+/* Earlier versions: each file's name heads its own list, and the version its file holds now wears the loaded row's edge. */
+.eh-head{display:flex;align-items:baseline;gap:8px;margin:18px 0 0;font-size:13px;min-width:0}
+.eh-head:first-child{margin-top:2px}
+.eh-head b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.eh-head small{flex:0 0 auto;color:var(--dim);font-size:11.5px}
+.eh-head+.ec-list{margin-top:6px}
+.ec-row.is-current{border-color:var(--go-edge,var(--go))}
 /* The same row on an empty screen, with the folder's count over it. Left-aligned inside a centred
    empty state, because a filename and a date are data rather than a sentence, and hidden while it
    holds nothing so a browser's empty state is exactly what it was. */
@@ -6573,6 +6580,18 @@ What you type stays in this browser only.`;
     "Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with the button above.": "Etiuda proponuje najnowszy katalog z {FOLDER}; katalog z innego miejsca można wczytać przyciskiem powyżej.",
     "The catalog you load stays in this browser, ready whenever you come back.": "Wczytany katalog zostaje w tej przeglądarce i czeka na powrót.",
     "Load catalog…": "Wczytaj katalog…",
+    "Earlier versions…": "Historia wersji…",
+    "Earlier versions": "Historia wersji",
+    "Earlier versions of each catalog this desk reads or writes stay here for 30 days.": "Historia każdego katalogu, który to stanowisko odczytuje lub zapisuje, zostaje tu przez 30 dni.",
+    "This desk's own file": "Własny plik tego stanowiska",
+    "Current": "Aktualna",
+    "Written by this desk": "Zapisana na tym stanowisku",
+    "Open this version": "Otwórz tę wersję",
+    "Put back": "Przywróć",
+    "Put this version back in the catalog folder, in place of the file there now": "Przywraca tę wersję do folderu katalogów w miejsce obecnego pliku",
+    "{FILE} as it was on {WHEN}, kept on this desk.": "{FILE} w wersji z {WHEN}, zachowanej na tym stanowisku.",
+    "{FILE} could not be put back in the catalog folder.": "Nie udało się przywrócić pliku {FILE} do folderu katalogów.",
+    "Version put back": "Przywrócono wersję",
     "The catalog could not be loaded:": "Nie udało się wczytać katalogu:",
     "{FILE} is sealed for its team": "{FILE} jest zaszyfrowany dla swojego zespołu",
     "Once the team's lead lets this desk in, the catalog opens here by itself.": "Gdy lider zespołu wpuści to stanowisko, katalog otworzy się tutaj sam.",
@@ -23688,6 +23707,131 @@ What you type stays in this browser only.`;
     });
   }
 
+  // src/modules/catalog-history.js
+  var catalog_history_exports = {};
+  __export(catalog_history_exports, {
+    eHasHistory: () => eHasHistory,
+    historyActs: () => historyActs,
+    historyGroups: () => historyGroups,
+    openHistory: () => openHistory
+  });
+  function historyHost() {
+    const h = eHost();
+    return h && typeof h.historyList === "function" && typeof h.historyRead === "function" && typeof h.historyPut === "function" ? h : null;
+  }
+  function eHasHistory() {
+    return !!historyHost();
+  }
+  function historyGroups(list2) {
+    const by = /* @__PURE__ */ new Map();
+    (Array.isArray(list2) ? list2 : []).forEach((v) => {
+      if (!v || typeof v.path !== "string" || typeof v.sha !== "string") return;
+      if (!by.has(v.path)) by.set(v.path, []);
+      by.get(v.path).push(v);
+    });
+    const newest = (a, b) => (+b.first || 0) - (+a.first || 0) || (a.sha < b.sha ? -1 : a.sha > b.sha ? 1 : 0);
+    const groups = Array.from(by.values()).map((vs) => vs.sort(newest));
+    return groups.sort((a, b) => newest(a[0], b[0]) || (a[0].path < b[0].path ? -1 : 1));
+  }
+  function historyActs(v) {
+    return v && v.put === true && !v.current ? ["open", "put"] : ["open"];
+  }
+  function historyFileName(g) {
+    const v = g[0], name = String(v.name || "");
+    if (!name) return t("Unnamed catalog");
+    return v.place === "own" ? name.replace(/-[0-9a-f]{8}(\.ec)$/i, "$1") : name;
+  }
+  function historyHeadHtml(g) {
+    const v = g[0];
+    const where = v.place === "own" ? "<small>" + esc(t("This desk's own file")) + "</small>" : v.place === "other" && v.dir ? '<small title="' + esc(v.dir) + '">' + esc(eCatalogFolderShort(v.dir)) + "</small>" : "";
+    return '<div class="eh-head"><b data-i18n-skip>' + esc(historyFileName(g)) + "</b>" + where + "</div>";
+  }
+  function historyRowHtml(v, key) {
+    const meta = [
+      catalogVersionLabel(v.date),
+      +v.cards >= 0 ? catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}", +v.cards, +v.macros, +v.intents, +v.cats) : ""
+    ].filter(Boolean).map(esc).join(" · ");
+    const acts = historyActs(v), open = t("Open this version");
+    return '<div class="ec-row' + (v.current ? " is-current" : "") + '"><span class="ec-name"><b>' + esc(fileStamp(v.first)) + "</b>" + (meta ? '<small class="ec-meta">' + meta + "</small>" : "") + "</span>" + (v.current ? '<span class="ec-tag">' + esc(t("Current")) + "</span>" : "") + (v.wrote && v.place !== "own" ? '<span class="ec-tag">' + esc(t("Written by this desk")) + "</span>" : "") + (acts.indexOf("put") > -1 ? '<button type="button" class="btn" data-eh-put="' + key + '" title="' + esc(t("Put this version back in the catalog folder, in place of the file there now")) + '">' + esc(t("Put back")) + "</button>" : "") + '<button type="button" class="btn icbtn ec-act" data-eh-open="' + key + '" title="' + esc(open) + '" aria-label="' + esc(open) + '">' + ICON_LOAD + "</button></div>";
+  }
+  function historyBodyHtml(groups) {
+    if (!groups.length)
+      return '<div class="ec-list"><div class="ec-row ec-empty">' + esc(t("Earlier versions of each catalog this desk reads or writes stay here for 30 days.")) + "</div></div>";
+    let n = 0;
+    return groups.map((g) => historyHeadHtml(g) + '<div class="ec-list">' + g.map((v) => historyRowHtml(v, n++)).join("") + "</div>").join("");
+  }
+  function historyOpen(v) {
+    const h = historyHost();
+    if (!h) return;
+    Promise.resolve(h.historyRead(v.sha, v.path)).then((got) => {
+      const name = String(got && got.name || v.name || "");
+      if (!got || !got.text) {
+        toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(name));
+        return;
+      }
+      let c = null;
+      try {
+        c = parseCatalogFile(String(got.text));
+      } catch (e) {
+        toastRefusal(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(name));
+        return;
+      }
+      const shown2 = eOfferCatalogDialog(c, {
+        file: name,
+        force: true,
+        asked: true,
+        direct: true,
+        foundHtml: esc(t("{FILE} as it was on {WHEN}, kept on this desk.")).split("{FILE}").join("<code>" + esc(name) + "</code>").split("{WHEN}").join(esc(fileStamp(v.first))),
+        accept: (sig) => {
+          lsSet(E_CATALOG_KEY, sig);
+          return activateCatalog(c, { from: name });
+        }
+      });
+      if (!shown2) toast(t("That file matches the catalog you already have."));
+    }).catch(() => {
+    });
+  }
+  function historyPutBack(v) {
+    const h = historyHost();
+    if (!h) return;
+    const refuse = () => toastRefusal(t("{FILE} could not be put back in the catalog folder.").split("{FILE}").join(String(v.name || "")));
+    Promise.resolve(h.historyPut(v.sha, v.path)).then((r) => {
+      if (!r || !r.ok) {
+        refuse();
+        return;
+      }
+      if (document.getElementById("ehView")) openHistory();
+      if (r.replaced) offerUndo("Version put back", () => Promise.resolve(h.historyPut(r.replaced, v.path)).then((u) => {
+        if (!u || !u.ok) refuse();
+        else if (document.getElementById("ehView")) openHistory();
+      }));
+    }).catch(refuse);
+  }
+  function openHistory() {
+    const h = historyHost();
+    if (!h) return;
+    Promise.resolve(h.historyList()).then((list2) => {
+      const groups = historyGroups(list2), flat = [].concat.apply([], groups);
+      openDialog({
+        title: "Earlier versions",
+        back: () => hooks.openManage(),
+        body: '<div id="ehView">' + historyBodyHtml(groups) + "</div>",
+        actions: '<button type="button" class="btn" id="ehClose">' + esc(t("Close")) + "</button>",
+        wire: () => {
+          const box = document.getElementById("ehView");
+          box.querySelectorAll("[data-eh-open]").forEach((b) => {
+            b.onclick = () => historyOpen(flat[+b.getAttribute("data-eh-open")]);
+          });
+          box.querySelectorAll("[data-eh-put]").forEach((b) => {
+            b.onclick = () => historyPutBack(flat[+b.getAttribute("data-eh-put")]);
+          });
+          document.getElementById("ehClose").onclick = () => hooks.openManage();
+        }
+      });
+    }).catch(() => {
+    });
+  }
+
   // src/modules/manage.js
   function mgSec(key, title, body, count, tail) {
     return '<details class="manage-sec" data-mg="' + esc(key) + '"' + (mgOpen.has(key) ? " open" : "") + '><summary><span class="acc-tw" aria-hidden="true">' + ICON_CHEVRON_R + "</span><h3>" + esc(title) + "</h3>" + (count != null ? '<span class="mg-count">' + esc(String(count)) + "</span>" : "") + (tail || "") + '</summary><div class="manage-secbody">' + body + "</div></details>";
@@ -24149,7 +24293,7 @@ What you type stays in this browser only.`;
       /* Wipe sits at the bar's LEFT EDGE, with Close at the far right: same as Settings' Reset,
          and .mf-left is the group that carries it there. Danger kept, because this one forgets
          personal state. */
-      actions: '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe" title="' + esc(eHost() ? t("Forget every personal card, edit, hide, rename and layout choice on this computer; the loaded catalog stays. It is also how you bring back anything you deleted.") : t("Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted.")) + '">' + esc(t("Clear local memory")) + '</button><span class="mf-sep" aria-hidden="true"></span><button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog…</button></div><button type="button" class="btn" id="mgClose">' + esc(t("Close")) + "</button>",
+      actions: '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe" title="' + esc(eHost() ? t("Forget every personal card, edit, hide, rename and layout choice on this computer; the loaded catalog stays. It is also how you bring back anything you deleted.") : t("Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted.")) + '">' + esc(t("Clear local memory")) + '</button><span class="mf-sep" aria-hidden="true"></span><button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog…</button>' + (eHasHistory() ? '<button type="button" class="btn" id="mgHistory">' + esc(t("Earlier versions…")) + "</button>" : "") + '</div><button type="button" class="btn" id="mgClose">' + esc(t("Close")) + "</button>",
       wire: wireManage
     });
     function wireManage() {
@@ -24164,6 +24308,7 @@ What you type stays in this browser only.`;
         syncRoleDrum();
       };
       $("#mgImportCatalog").onclick = importCatalogHere;
+      if ($("#mgHistory")) $("#mgHistory").onclick = openHistory;
       paintCatalogList();
       const fpath = $("#mgCatFolderPath");
       if (fpath) {
@@ -25958,7 +26103,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, team_join_exports, edition_changes_exports, edition_panel_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, fields_exports, field_ask_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, team_join_exports, edition_changes_exports, edition_panel_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, fields_exports, field_ask_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
