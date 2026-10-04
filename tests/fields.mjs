@@ -23,7 +23,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 38;
+const EXPECTED = 44;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -163,7 +163,7 @@ const inputs = () => asking() ? asking().querySelectorAll(".e-field-inp") : [];
 const said = () => (asking() && asking().querySelector("#eFieldSaid") || {}).textContent || "";
 
 try {
-  console.log("[1/6] the format: what v2Problems takes and refuses under `fields`");
+  console.log("[1/7] the format: what v2Problems takes and refuses under `fields`");
   const doc = extra => Object.assign({ format: 2, kind: "etiuda-catalog", id: "lamp-shop", rev: 1,
     langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }],
     tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
@@ -204,7 +204,7 @@ try {
     && !(read.ext && "fields" in read.ext) && !("fields" in V2.catalogFromV2(doc())),
     "1d the reader keeps the fields as a field of its own, not a stranger carried in ext, and the writer gives them back whole");
 
-  console.log("\n[2/6] a value: what it may hold and what of a clipboard fits");
+  console.log("\n[2/7] a value: what it may hold and what of a clipboard fits");
   const nb = String.fromCharCode(0xa0), zw = String.fromCharCode(0x200d);
   check(FD.fillFieldClean("  Jan\r\nKowalski\t" + zw + "{x}" + nb) === "Jan Kowalski x",
     "2a a value is one line: breaks and tabs become a space, invisible and hard spaces go, braces go: "
@@ -228,7 +228,7 @@ try {
     && FD.fillFieldOk(FIELDS[1], "https://a.example/b") && !FD.fillFieldOk(FIELDS[1], "a.example") && !FD.fillFieldOk(FIELDS[2], " "),
     "2c a typed value must fit whole, and an empty one never does");
 
-  console.log("\n[3/6] the fill: what the card shows and what the clipboard receives");
+  console.log("\n[3/7] the fill: what the card shows and what the clipboard receives");
   FD.setCatalogFillFields(FIELDS);
   AS.setFieldVals({});
   const where = card("c-where"), hand = card("c-hand"), plain = card("c-plain");
@@ -257,7 +257,7 @@ try {
   check(k1 !== k2 && k1 !== "" && RL.cardFillKey(card("c-plain")) !== "",
     "3f a card holding a field is redrawn when the value changes, its key moving with it");
 
-  console.log("\n[4/6] the question at the copy");
+  console.log("\n[4/7] the question at the copy");
   AS.setFieldVals({ order: "MRB-2024-10412", track: "https://t.example/1" });
   const straight = deskCopy("c-where");
   check(straight === "Order MRB-2024-10412 left today: https://t.example/1" && !asking(),
@@ -364,7 +364,7 @@ try {
   if (asking()) fire(inputs()[0], "keydown", { key: "Escape" });
   delete els["#list"]; Dom.grabDom();
 
-  console.log("\n[5/6] the picker's answers and where a value is kept");
+  console.log("\n[5/7] the picker's answers and where a value is kept");
   /* One conversation on screen, as the desk starts with, so a value has a tab to be kept with. */
   ["applyLangUI", "updateIntentPlaceholder", "drawIntentRail", "drawPillsCore", "drawTabsCore", "scheduleRailGeometry"]
     .forEach(k => { HK.hooks[k] = () => {}; });
@@ -403,7 +403,7 @@ try {
     check(a.order === SENT && Object.keys(fresh).length === 0 && back.order === SENT && other.order === "MRB-1111-22222",
       "5f a new conversation starts with no values, and each tab gets back its own: " + JSON.stringify({ a, fresh, back, other })); }
 
-  console.log("\n[6/6] the lint: a declared field is a token the desk fills");
+  console.log("\n[6/7] the lint: a declared field is a token the desk fills");
   const LT = nodeRequire(path.join(ROOT, "tests", "test.js"));
   const linted = extra => LT.lintCatalog(doc(extra)).warnings;
   /* One label of words and one that is a bare name, which the desk's own token rule would otherwise claim. */
@@ -416,6 +416,61 @@ try {
     "6b a misspelt field and an undeclared name are each named, and a field no card uses is said: " + mis.length + " warning(s)");
   const none = LT.lintCatalog(doc({ cards: [{ id: "c-a", shelf: "t-op", bodyShape: "plain", title: { en: "A" }, body: { en: "A {thing in braces}." } }] })).warnings;
   check(none.length === 0, "6c control: a catalog that declares no field is linted as before, prose braces and all: " + JSON.stringify(none));
+  console.log("\n[7/7] a copy through the field question still carries the card's stamp, on every route");
+  /* The stamp (S4b) rides the copy's third argument into mark.js's copy() and on to toast(); the field
+     question (C02) defers that copy until the question is answered. module-calls 814O reads the three
+     calls as text and 814M the formatter alone, so nothing else sees the stamp arrive in the toast after
+     a deferred copy. A card with commits:1 toasts stamped on the keyboard, click and picker-ask routes,
+     and one without does not (the control). */
+  { const hadGCS = globalThis.getComputedStyle;
+    const toastEl = new El("div", { id: "toast" }); els["#toast"] = toastEl;
+    toastEl.getBoundingClientRect = () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 });
+    globalThis.getComputedStyle = window.getComputedStyle = () => ({ getPropertyValue: () => "", borderLeftWidth: "0", borderRightWidth: "0", paddingLeft: "0", paddingRight: "0" });
+    const stampShown = () => /t-stamp/.test(toastEl.innerHTML) && toastEl.classList.contains("stamped");
+    FD.setCatalogFillFields(FIELDS);
+    AS.setCards([
+      { id: "c-sworn", c: "orders", t: "Sworn", en: "Order {order number} is promised today.", commits: 1 },
+      { id: "c-loose", c: "orders", t: "Loose", en: "Order {order number} may go today." },
+    ]);
+    class Hit7 extends El {
+      get dataset() { const d = {}; for (const k in this.attrs) if (k.startsWith("data-")) d[k.slice(5)] = this.attrs[k]; return d; }
+      matches(sel) { const m = /^\.([\w-]+)\[([\w-]+)\]$/.exec(sel); return m ? this.classList.contains(m[1]) && m[2] in this.attrs : super.matches(sel); }
+    }
+    const list7 = new El("div", { id: "list" }), block7 = {};
+    for (const id of ["c-sworn", "c-loose"]) block7[id] = list7.appendChild(new Hit7("div", { class: "card", "data-id": id })).appendChild(new Hit7("p", { class: "txt", "data-v": "0" }));
+    els["#list"] = list7; Dom.grabDom(); LP.wireListPointer();
+    /* One copy by one route; `asked` is whether the question stood with nothing copied yet. */
+    const route = (how, id) => {
+      const sink = {};
+      AS.setFieldVals(how === "ask" ? { order: "MRB-2024-10412" } : {});
+      toastEl.innerHTML = ""; toastEl.textContent = ""; toastEl.classList.remove("stamped"); toastEl.classList.remove("show");
+      navigator.clipboard = { writeText: t => { sink.got = t; return { then(ok) { ok(); } }; } };
+      if (how === "key") { AS.putEntrySel({ id, vi: 0 }); CE.copyEntrySel(false); }
+      if (how === "click") fire(block7[id], "click", { button: 0 });
+      if (how === "ask") PICK.answerPick("ask", JSON.stringify({ id, vi: 0 }));
+      const asked = how === "ask" || (!!asking() && sink.got === undefined);
+      if (how !== "ask" && asking()) { inputs()[0].value = "MRB-2024-10412"; fire(inputs()[0], "keydown", { key: "Enter" }); }
+      navigator.clipboard = null;
+      return { asked, copied: /MRB-2024-10412/.test(sink.got || ""), stamped: stampShown() };
+    };
+    const ok7 = (r, want) => r.asked && r.copied && r.stamped === want;
+    try {
+      const r = {
+        a: route("key", "c-sworn"), b: route("click", "c-sworn"), c: route("ask", "c-sworn"),
+        d: route("key", "c-loose"), e: route("click", "c-loose"), f: route("ask", "c-loose"),
+      };
+      check(ok7(r.a, true), "7a the keyboard copy of a card that commits asks, then copies, toast stamped: " + JSON.stringify(r.a));
+      check(ok7(r.b, true), "7b the click copy of a card that commits asks, then copies, toast stamped: " + JSON.stringify(r.b));
+      check(ok7(r.c, true), "7c the picker's ask copy of a card that commits, toast stamped: " + JSON.stringify(r.c));
+      check(ok7(r.d, false), "7d control: the keyboard copy of a card that does not commit, toast not stamped: " + JSON.stringify(r.d));
+      check(ok7(r.e, false), "7e control: the click copy of a card that does not commit, toast not stamped: " + JSON.stringify(r.e));
+      check(ok7(r.f, false), "7f control: the picker's ask copy of a card that does not commit, toast not stamped: " + JSON.stringify(r.f));
+    } finally {
+      navigator.clipboard = null; if (asking()) fire(inputs()[0], "keydown", { key: "Escape" });
+      delete els["#list"]; delete els["#toast"]; Dom.grabDom();
+      globalThis.getComputedStyle = window.getComputedStyle = hadGCS;
+    }
+  }
 } catch (e) {
   failed++;
   console.log("  FAIL the run threw: " + String(e && e.stack || e).split("\n").slice(0, 4).join(" | "));
