@@ -18937,8 +18937,136 @@ What you type stays in this browser only.`;
   var card_carry_exports = {};
   __export(card_carry_exports, {
     carryAtBoot: () => carryAtBoot,
-    carryCardLayer: () => carryCardLayer
+    carryCardLayer: () => carryCardLayer,
+    takeTeamText: () => takeTeamText,
+    teamTextTaken: () => teamTextTaken
   });
+
+  // src/modules/edition-changes.js
+  var edition_changes_exports = {};
+  __export(edition_changes_exports, {
+    EDITION_KINDS: () => EDITION_KINDS,
+    editionChanges: () => editionChanges,
+    editionFieldKeys: () => editionFieldKeys,
+    editionNoteText: () => editionNoteText,
+    wordDiff: () => wordDiff
+  });
+  var EDITION_KINDS = ["changed", "new", "restored", "retired", "removed"];
+  function editionFieldKeys(a, b) {
+    const codes = catalogLangs(a).concat(catalogLangs(b)).filter((c, i, all) => all.indexOf(c) === i);
+    const out = [];
+    CARD_TEXT_FIELDS.forEach((field) => codes.forEach((code) => {
+      const key = cardFieldKey(field, code);
+      if (key && !out.some((k) => k.key === key)) out.push({ field, code, key });
+    }));
+    return out;
+  }
+  function editionText(m, key) {
+    return String(m && m[key] != null ? m[key] : "");
+  }
+  function editionChanges(held, offered, layer) {
+    const lay = layer || {}, ov = lay.overrides || {};
+    const gone = new Set(lay.removed || []), stars = new Set(lay.favourites || []);
+    const keys = editionFieldKeys(held, offered);
+    const was = new Map((held && held.cards || []).map((m) => [String(m.id), m]));
+    const now = new Map((offered && offered.cards || []).map((m) => [String(m.id), m]));
+    const items = [];
+    now.forEach((m, id) => {
+      const b = was.get(id);
+      if (!b) {
+        if (!m.retired) items.push({ id, kind: "new", fields: [] });
+        return;
+      }
+      if (gone.has(id) || m.retired && b.retired) return;
+      if (m.retired) {
+        items.push({ id, kind: "retired", fields: [], asleep: stars.has(id) || !!ov[id] });
+        return;
+      }
+      if (b.retired) {
+        items.push({ id, kind: "restored", fields: [] });
+        return;
+      }
+      const fields = keys.filter((k) => editionText(b, k.key) !== editionText(m, k.key));
+      if (!fields.length) return;
+      const mine = ov[id];
+      items.push({
+        id,
+        kind: "changed",
+        fields,
+        own: !!mine && fields.some((k) => mine[k.key] != null && String(mine[k.key]) !== editionText(m, k.key))
+      });
+    });
+    was.forEach((b, id) => {
+      if (!now.has(id) && !gone.has(id) && !b.retired) items.push({ id, kind: "removed", fields: [] });
+    });
+    const at = (k) => EDITION_KINDS.indexOf(k);
+    items.sort((x, y) => at(x.kind) - at(y.kind));
+    const counts2 = {};
+    EDITION_KINDS.forEach((k) => {
+      counts2[k] = 0;
+    });
+    items.forEach((i) => {
+      counts2[i.kind]++;
+    });
+    return { items, counts: counts2 };
+  }
+  function editionNoteText(c, ui) {
+    const n = c && c.notes;
+    if (!n || typeof n !== "object") return "";
+    const pick = [ui].concat(catalogLangs(c), Object.keys(n));
+    for (const code of pick) {
+      const v = Object.prototype.hasOwnProperty.call(n, code) ? n[code] : null;
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+    return "";
+  }
+  var EDITION_DIFF_CAP = 25e4;
+  function wordDiff(a, b) {
+    const A = String(a == null ? "" : a).match(/\s+|\S+/g) || [], B = String(b == null ? "" : b).match(/\s+|\S+/g) || [];
+    let s = 0, ea = A.length, eb = B.length;
+    while (s < ea && s < eb && A[s] === B[s]) s++;
+    while (ea > s && eb > s && A[ea - 1] === B[eb - 1]) {
+      ea--;
+      eb--;
+    }
+    const out = [];
+    const put = (op, text) => {
+      if (!text) return;
+      const l = out[out.length - 1];
+      if (l && l.op === op) l.text += text;
+      else out.push({ op, text });
+    };
+    put("same", A.slice(0, s).join(""));
+    const a2 = A.slice(s, ea), b2 = B.slice(s, eb), n = a2.length, m = b2.length;
+    if (n * m > EDITION_DIFF_CAP) {
+      put("del", a2.join(""));
+      put("ins", b2.join(""));
+    } else {
+      const w = m + 1, L = new Uint32Array((n + 1) * w);
+      for (let i2 = n - 1; i2 >= 0; i2--) for (let j2 = m - 1; j2 >= 0; j2--)
+        L[i2 * w + j2] = a2[i2] === b2[j2] ? L[(i2 + 1) * w + j2 + 1] + 1 : Math.max(L[(i2 + 1) * w + j2], L[i2 * w + j2 + 1]);
+      let i = 0, j = 0;
+      while (i < n && j < m) {
+        if (a2[i] === b2[j]) {
+          put("same", a2[i]);
+          i++;
+          j++;
+        } else if (L[(i + 1) * w + j] >= L[i * w + j + 1]) {
+          put("del", a2[i]);
+          i++;
+        } else {
+          put("ins", b2[j]);
+          j++;
+        }
+      }
+      while (i < n) put("del", a2[i++]);
+      while (j < m) put("ins", b2[j++]);
+    }
+    put("same", A.slice(ea).join(""));
+    return out;
+  }
+
+  // src/modules/card-carry.js
   var ID_LISTS = ["favourites", "hidden", "cardOrder", "removed"];
   var CARRIED = "eCarriedNow";
   var bootStars = 0;
@@ -19170,6 +19298,50 @@ What you type stays in this browser only.`;
       if (CAT_LABELS_PL[k] && !pack.catLabelsPl[k]) pack.catLabelsPl[k] = CAT_LABELS_PL[k];
     });
   }
+  var takenFor = /* @__PURE__ */ new WeakMap();
+  function takeTeamText(c, id, on) {
+    let s = takenFor.get(c);
+    if (!s) {
+      s = /* @__PURE__ */ new Set();
+      takenFor.set(c, s);
+    }
+    if (on) s.add(String(id));
+    else s.delete(String(id));
+  }
+  function teamTextTaken(c, id) {
+    const s = takenFor.get(c);
+    return !!s && s.has(String(id));
+  }
+  var UNSETTLED = ["intents", "next", "paxVoc", "ext"];
+  function settleEdits(c, list2) {
+    const ov = pack.overrides || {}, bases = pack.editBases || {}, takes = takenFor.get(c);
+    const now = new Map(list2.map((m) => [catalogCardId(m), m])), old = new Map(BASE_M.map((m) => [m.id, m]));
+    const flag = new Set(CARD_BOOL_FLAGS);
+    const text = new Set(editionFieldKeys(c, { langs: CONTENT_LANGS.map((code) => ({ code })) }).map((k) => k.key));
+    const same = (k, a, b) => flag.has(k) ? !!(+a || 0) === !!(+b || 0) : String(a == null ? "" : a) === String(b == null ? "" : b);
+    const settled = (k) => k.charAt(0) !== "_" && UNSETTLED.indexOf(k) < 0;
+    Object.keys(ov).forEach((id) => {
+      const m = now.get(id), o = ov[id];
+      if (!m || !o || typeof o !== "object") return;
+      const b = old.get(id) || bases[id] || null, took = !!takes && takes.has(id);
+      Object.keys(o).forEach((k) => {
+        if (!settled(k)) return;
+        if (same(k, o[k], m[k]) || took && text.has(k) && b && !same(k, b[k], m[k])) delete o[k];
+      });
+      if (!Object.keys(o).length) delete ov[id];
+    });
+    pack.custom = (pack.custom || []).filter((own) => {
+      const m = own && now.get(own.id);
+      if (!m || old.has(own.id)) return true;
+      const o = {};
+      Object.keys(own).forEach((k) => {
+        if (k !== "id" && settled(k) && !same(k, own[k], m[k])) o[k] = own[k];
+      });
+      if (Object.keys(o).length) ov[own.id] = o;
+      return false;
+    });
+    pack.overrides = ov;
+  }
   function carryCardLayer(c) {
     const list2 = c && c.cards || [];
     const alive = new Set(list2.map(catalogCardId));
@@ -19178,6 +19350,7 @@ What you type stays in this browser only.`;
     });
     rekeyOldCards(list2, alive);
     rekeyOldShelves(c && c.categories || {});
+    settleEdits(c, list2);
     const find = linkFinder(c), lost = {};
     const pin = (id, l) => {
       const gone = [], out = pinLinks(l, find, gone);
@@ -24156,7 +24329,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, edition_changes_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
