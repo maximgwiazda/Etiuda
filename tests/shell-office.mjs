@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 85;
+const EXPECTED = 86;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -583,55 +583,65 @@ try {
   {
     const LINE = "for (const s of windowsProxySwitches()) app.commandLine.appendSwitch(...s);";
     const asked = S => S.switches.map(a => a.join("="));
-    const S = loadShell();
-    check(JSON.stringify(asked(S)) === '["no-proxy-server"]',
-      "6a with only automatic detection or nothing set, the shell asks Chromium for --no-proxy-server, once, so an idle"
-      + " desk does no proxy discovery and no IPv6 probe: " + JSON.stringify(asked(S)));
-    check(S.regCalls.length === 1 && S.regCalls[0][0] === REG_TOOL
-      && JSON.stringify(S.regCalls[0][1]) === JSON.stringify(["query", REG_KEY])
-      && !!S.regCalls[0][2] && S.regCalls[0][2].windowsHide === true && S.regCalls[0][2].timeout === 5000,
-      "6b the one program it starts for that is Windows' reg tool at its fixed system path, asking for one key, once, hidden and"
-      + " given 5000 ms to answer, since the start waits on it: " + JSON.stringify(S.regCalls));
-    check(SRC.split(LINE).length === 2, "6c the shell holds its proxy line exactly once, so the control copy can cut it");
-    const stripped = SRC.split(LINE).join("");
-    const bare = loadShell({ src: stripped });
-    check(stripped !== SRC && bare.switches.length === 0,
-      "6d THE CONTROL: the same shell with that one line removed asks for no switch, so 6a can fail: "
-      + JSON.stringify(bare.switches));
-    const server = loadShell({ reg: regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", "proxy.example.test:3128"],
-      ["ProxyOverride", "REG_SZ", "<local>"]]) });
-    check(JSON.stringify(asked(server)) === '["proxy-server=proxy.example.test:3128"]',
-      "6e a configured proxy server is followed, and the no-proxy switch is not asked: " + JSON.stringify(asked(server)));
-    const script = loadShell({ reg: regDump([["ProxyEnable", "REG_DWORD", "0x0"], ["AutoConfigURL", "REG_SZ", "http://wpad.example.test/proxy.pac"]]) });
-    check(JSON.stringify(asked(script)) === '["proxy-pac-url=http://wpad.example.test/proxy.pac"]',
-      "6f a configured setup-script address is followed: " + JSON.stringify(asked(script)));
-    const stale = loadShell({ reg: regDump([["ProxyEnable", "REG_DWORD", "0x0"], ["ProxyServer", "REG_SZ", "proxy.example.test:3128"]]) });
-    check(JSON.stringify(asked(stale)) === '["no-proxy-server"]',
-      "6g a server left in the key while Windows has the proxy switched off is not followed: " + JSON.stringify(asked(stale)));
-    const failing = loadShell({ reg: new Error("reg.exe did not answer") });
-    check(JSON.stringify(asked(failing)) === '["no-proxy-server"]',
-      "6h a reg tool that fails leaves today's start, no proxy and no lookup: " + JSON.stringify(asked(failing)));
-    const stub = loadShell({ src: SRC.split(LINE).join('app.commandLine.appendSwitch("no-proxy-server");'),
-      reg: regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", "proxy.example.test:3128"]]) });
-    check(SRC.split(LINE).length === 2 && JSON.stringify(asked(stub)) !== '["proxy-server=proxy.example.test:3128"]'
-      && JSON.stringify(asked(stub)) === '["no-proxy-server"]',
-      "6i THE CONTROL: a shell that ignores the reader and always asks for no proxy, handed the planted server, does not"
-      + " give the server, so 6e goes red on it: " + JSON.stringify(asked(stub)));
-    const rd = S.api.proxySwitchesFrom;
-    const out = x => JSON.stringify(rd(x));
-    const NONE = '[["no-proxy-server"]]';
-    check(out(regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", ""], ["Next", "REG_SZ", "other.example.test:1"]])) === NONE
-      && out(regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["AutoConfigURL", "REG_SZ", ""], ["ProxyServer", "REG_SZ", ""]])) === NONE,
-      "6j the reader on its own: a switched-on proxy with no address, whether the value is empty or missing, is none");
-    check(out(regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", "http=a.example.test:1;https=b.example.test:2"],
-        ["AutoConfigURL", "REG_EXPAND_SZ", "https://pac.example.test/a.pac"]])) === '[["proxy-pac-url","https://pac.example.test/a.pac"]]'
-      && out(regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", "http=a.example.test:1;https=b.example.test:2"]]))
-        === '[["proxy-server","http=a.example.test:1;https=b.example.test:2"]]'
-      && out(regDump([["AutoConfigURL", "REG_SZ", "ftp://pac.example.test/a.pac"]])) === NONE
-      && out(regDump([["AutoConfigURL", "REG_SZ", "not an address"]])) === NONE
-      && out("") === NONE && out(undefined) === NONE,
-      "6k the reader on its own: a script outranks a server, a per-scheme server list passes whole, an address that is not http, https"
-      + " or file is none, and no text at all is none");
+    /* Every leg to 6k asks the Windows arm, so the shell is loaded as Windows on any machine. */
+    const platformWas = Object.getOwnPropertyDescriptor(process, "platform");
+    try {
+      Object.defineProperty(process, "platform", { value: "linux" });
+      const asLinux = loadShell();
+      Object.defineProperty(process, "platform", { value: "win32" });
+      check(JSON.stringify(asked(asLinux)) === '["no-proxy-server"]' && asLinux.regCalls.length === 0,
+        "6l off Windows the shell starts no program and asks for no proxy and no lookup: " + JSON.stringify(asked(asLinux))
+        + ", " + asLinux.regCalls.length + " program(s)");
+      const S = loadShell();
+      check(JSON.stringify(asked(S)) === '["no-proxy-server"]',
+        "6a with only automatic detection or nothing set, the shell asks Chromium for --no-proxy-server, once, so an idle"
+        + " desk does no proxy discovery and no IPv6 probe: " + JSON.stringify(asked(S)));
+      check(S.regCalls.length === 1 && S.regCalls[0][0] === REG_TOOL
+        && JSON.stringify(S.regCalls[0][1]) === JSON.stringify(["query", REG_KEY])
+        && !!S.regCalls[0][2] && S.regCalls[0][2].windowsHide === true && S.regCalls[0][2].timeout === 5000,
+        "6b the one program it starts for that is Windows' reg tool at its fixed system path, asking for one key, once, hidden and"
+        + " given 5000 ms to answer, since the start waits on it: " + JSON.stringify(S.regCalls));
+      check(SRC.split(LINE).length === 2, "6c the shell holds its proxy line exactly once, so the control copy can cut it");
+      const stripped = SRC.split(LINE).join("");
+      const bare = loadShell({ src: stripped });
+      check(stripped !== SRC && bare.switches.length === 0,
+        "6d THE CONTROL: the same shell with that one line removed asks for no switch, so 6a can fail: "
+        + JSON.stringify(bare.switches));
+      const server = loadShell({ reg: regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", "proxy.example.test:3128"],
+        ["ProxyOverride", "REG_SZ", "<local>"]]) });
+      check(JSON.stringify(asked(server)) === '["proxy-server=proxy.example.test:3128"]',
+        "6e a configured proxy server is followed, and the no-proxy switch is not asked: " + JSON.stringify(asked(server)));
+      const script = loadShell({ reg: regDump([["ProxyEnable", "REG_DWORD", "0x0"], ["AutoConfigURL", "REG_SZ", "http://wpad.example.test/proxy.pac"]]) });
+      check(JSON.stringify(asked(script)) === '["proxy-pac-url=http://wpad.example.test/proxy.pac"]',
+        "6f a configured setup-script address is followed: " + JSON.stringify(asked(script)));
+      const stale = loadShell({ reg: regDump([["ProxyEnable", "REG_DWORD", "0x0"], ["ProxyServer", "REG_SZ", "proxy.example.test:3128"]]) });
+      check(JSON.stringify(asked(stale)) === '["no-proxy-server"]',
+        "6g a server left in the key while Windows has the proxy switched off is not followed: " + JSON.stringify(asked(stale)));
+      const failing = loadShell({ reg: new Error("reg.exe did not answer") });
+      check(JSON.stringify(asked(failing)) === '["no-proxy-server"]',
+        "6h a reg tool that fails leaves today's start, no proxy and no lookup: " + JSON.stringify(asked(failing)));
+      const stub = loadShell({ src: SRC.split(LINE).join('app.commandLine.appendSwitch("no-proxy-server");'),
+        reg: regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", "proxy.example.test:3128"]]) });
+      check(SRC.split(LINE).length === 2 && JSON.stringify(asked(stub)) !== '["proxy-server=proxy.example.test:3128"]'
+        && JSON.stringify(asked(stub)) === '["no-proxy-server"]',
+        "6i THE CONTROL: a shell that ignores the reader and always asks for no proxy, handed the planted server, does not"
+        + " give the server, so 6e goes red on it: " + JSON.stringify(asked(stub)));
+      const rd = S.api.proxySwitchesFrom;
+      const out = x => JSON.stringify(rd(x));
+      const NONE = '[["no-proxy-server"]]';
+      check(out(regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", ""], ["Next", "REG_SZ", "other.example.test:1"]])) === NONE
+        && out(regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["AutoConfigURL", "REG_SZ", ""], ["ProxyServer", "REG_SZ", ""]])) === NONE,
+        "6j the reader on its own: a switched-on proxy with no address, whether the value is empty or missing, is none");
+      check(out(regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", "http=a.example.test:1;https=b.example.test:2"],
+          ["AutoConfigURL", "REG_EXPAND_SZ", "https://pac.example.test/a.pac"]])) === '[["proxy-pac-url","https://pac.example.test/a.pac"]]'
+        && out(regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", "http=a.example.test:1;https=b.example.test:2"]]))
+          === '[["proxy-server","http=a.example.test:1;https=b.example.test:2"]]'
+        && out(regDump([["AutoConfigURL", "REG_SZ", "ftp://pac.example.test/a.pac"]])) === NONE
+        && out(regDump([["AutoConfigURL", "REG_SZ", "not an address"]])) === NONE
+        && out("") === NONE && out(undefined) === NONE,
+        "6k the reader on its own: a script outranks a server, a per-scheme server list passes whole, an address that is not http, https"
+        + " or file is none, and no text at all is none");
+    } finally { Object.defineProperty(process, "platform", platformWas); }
   }
   /* ---- 7. every IPC channel asks who is speaking before it answers ---------------------------
      The shell is loaded with fromEngine and fromPicker each marking the event they are asked about,

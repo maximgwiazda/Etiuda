@@ -1707,6 +1707,7 @@ Module.prototype._compile = function (content, filename) {
     "install-plan.js": "the library tests/update-install.js judges with; every clause is held by tests/install-plan-selftest.js in npm test",
     "pick-desk.js": "a machine-window gate: it takes the real foreground and presses real keys, so it runs by hand with nobody at the keyboard; its node half is tests/pick.mjs in npm test",
     "update-install.js": "a machine-window gate: it needs an older installer, and for --all-users an elevated shell, so no chain can run it; its plan and verdicts are held by tests/install-plan-selftest.js",
+    "linux-desk.js": "a machine-window gate on Linux: it needs the .deb installed or the AppImage and a display, so it runs by hand; its packages are judged by tests/linux-package.mjs in npm test",
   };
   const CHAIN_SCRIPTS = ["test", "split-guard"];
   function reachOf(scripts, releaseSrc) {

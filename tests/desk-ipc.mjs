@@ -26,7 +26,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 76;
+const EXPECTED = 78;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -39,6 +39,12 @@ const tick = ms => new Promise(r => setTimeout(r, ms || 0));
 /* ---- electron, as small as main.js needs at load and at a desk write ---------------------- */
 const UD = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-ipc-"));
 const DESK = path.join(UD, "desk.json");
+/* A desk.json no write can replace. Windows refuses a rename over a read-only file; elsewhere the
+   rename asks only the folder, so the folder is held read-only too (which root ignores). */
+const holdDesk = on => {
+  if (process.platform !== "win32") fs.chmodSync(UD, on ? 0o555 : 0o700);
+  fs.chmodSync(DESK, on ? 0o444 : 0o666);
+};
 const onDisk = () => { try { return JSON.parse(fs.readFileSync(DESK, "utf8")).keys || {}; } catch { return {}; } };
 const said = [];
 const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: () => {} };
@@ -53,9 +59,10 @@ const electron = {
   screen: inert, shell: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },
 };
 /* safeStorage as far as main.js asks of it: a reversible sealing that shows nothing of what it holds. */
-let sealOk = true, decryptFails = null;
+let sealOk = true, decryptFails = null, keyring = "gnome_libsecret";
 const safeStorage = {
   isEncryptionAvailable: () => sealOk,
+  getSelectedStorageBackend: () => keyring,
   encryptString: s => { if (!sealOk) throw new Error("encryption is not available"); return Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)); },
   decryptString: b => { if (!sealOk || (decryptFails && Buffer.from(b).toString("base64") === decryptFails)) throw new Error("cannot decrypt for this account"); return Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"); },
 };
@@ -65,7 +72,7 @@ const shellSrc = f => fs.readFileSync(path.join(ROOT, "shell", f), "utf8");
 /* main.js is evaluated as a function body, so one line appended to it hands the test the retry that Electron's events call. */
 const mainTest = {};
 new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
-  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged;")(
+  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal;")(
   fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, mainTest);
 
 /* ---- the renderer's side of the pipe. The desk's channels go to main's own handlers; the
@@ -188,11 +195,11 @@ try {
 
   /* A read-only desk.json is a rename Windows refuses however long it is asked, which is main
      answering false, the way a file held by a scanner past the shell's patience is. */
-  fs.chmodSync(DESK, 0o444);
+  holdDesk(true);
   S.lsSet("eIpcRefused", "1");
   await tick(5); await tick(5);
   const troubleAfterRefusal = S.eSaveTrouble();
-  fs.chmodSync(DESK, 0o666);
+  holdDesk(false);
   const syncBeforeLeave = syncSaves();
   fire("window", "pagehide");
   check(troubleAfterRefusal !== null && syncSaves() === syncBeforeLeave + 1
@@ -399,6 +406,22 @@ try {
     "77c where Windows cannot seal a key, an edit makes no key and writes no file, and no plain key is kept instead (answer " + noSeal
     + ", desks folder " + fs.existsSync(deskDir) + ", branch in the envelope " + ("branch" in envelope()) + ")");
   sealOk = true;
+
+  /* With no keyring Electron on Linux seals with a key built into itself, which is no seal; see sealsForReal. */
+  const asks = [["linux", "basic_text"], ["linux", "unknown"], ["linux", "gnome_libsecret"], ["linux", "kwallet6"], ["win32", "basic_text"]];
+  const seals = asks.map(([p, b]) => mainTest.sealsForReal({ isEncryptionAvailable: () => true, getSelectedStorageBackend: () => b }, p));
+  check(seals.join() === "false,false,true,true,true",
+    "77c1 only a named keyring seals on Linux, and Windows never asks which (" + asks.map((a, i) => a.join(" ") + " " + seals[i]).join(", ") + ")");
+  const platformWas = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: "linux" });
+  keyring = "basic_text";
+  let plain = null;
+  try { edit("Edited A"); await tick(30); plain = await writeBranch(); }
+  finally { Object.defineProperty(process, "platform", platformWas); keyring = "gnome_libsecret"; }
+  check(plain === false && !fs.existsSync(deskDir) && !("branch" in envelope())
+      && said.some(l => /^ERR etiuda: no keyring answers/.test(l)),
+    "77c2 on Linux with no keyring an edit makes no key and writes no file, and says so (answer " + plain
+    + ", desks folder " + fs.existsSync(deskDir) + ", branch in the envelope " + ("branch" in envelope()) + ")");
 
   await tick(1800);
   const names = listing(deskDir);
@@ -971,9 +994,9 @@ try {
   await landed();
   const dirRO = listing(newDir);
   let rRO = null, idsRO = -1, dirDuring = "";
-  fs.chmodSync(DESK, 0o444);
+  holdDesk(true);
   try { rRO = await writeBranch(); idsRO = looseIds().length; dirDuring = listing(newDir).join(); }
-  finally { fs.chmodSync(DESK, 0o666); }
+  finally { holdDesk(false); }
   const rBackRO = await writeBranch();
   await landed();
   const newRO = listing(newDir).filter(n => dirRO.indexOf(n) < 0), idRO = looseIds()[0] || "";

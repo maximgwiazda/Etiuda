@@ -952,8 +952,25 @@ function branchPairOk(b) {
   const half = h => !!h && typeof h === "object" && /^[0-9a-f]{64}$/.test(String(h.pub)) && typeof h.priv === "string" && h.priv !== "";
   return !!b && typeof b === "object" && half(b.sign) && half(b.box);
 }
+/* Whether `storage` keeps a key sealed. On Linux with no keyring Electron falls back to "basic_text", a
+   key built into Chromium, which is plain text in all but name, so only a named keyring counts there
+   whatever isEncryptionAvailable answers. Pure. */
+const LINUX_KEYRINGS = /^(gnome_libsecret|kwallet[56]?)$/;
+function sealsForReal(storage, platform) {
+  try {
+    if (!storage || !storage.isEncryptionAvailable()) return false;
+    if (platform !== "linux" || typeof storage.getSelectedStorageBackend !== "function") return true;
+    return LINUX_KEYRINGS.test(String(storage.getSelectedStorageBackend()));
+  } catch { return false; }
+}
+let plainSaid = false;
 function branchSealable() {
-  try { return !!safeStorage && safeStorage.isEncryptionAvailable(); } catch { return false; }
+  const ok = sealsForReal(safeStorage, process.platform);
+  if (!ok && !plainSaid && process.platform === "linux") {
+    plainSaid = true;
+    console.error("etiuda: no keyring answers on this desk, so no private key is kept and the desk's own file is not written");
+  }
+  return ok;
 }
 function sealPrivate(key) {
   return safeStorage.encryptString(key.export({ type: "pkcs8", format: "der" }).toString("base64")).toString("base64");
@@ -3562,6 +3579,10 @@ function hardenSession() {
   const ALLOWED = ["clipboard-sanitized-write"];
   session.defaultSession.setPermissionRequestHandler((wc, name, done) => done(ALLOWED.indexOf(name) > -1));
   session.defaultSession.setPermissionCheckHandler((wc, name) => ALLOWED.indexOf(name) > -1);
+  /* THE TRAP: on Linux Chromium fetches its spelling dictionaries from Google at the first page. Pointed
+     at a folder that holds none, it asks nothing of the network (tests/linux-desk.js 7a). */
+  if (process.platform === "linux")
+    session.defaultSession.setSpellCheckerDictionaryDownloadURL("file://" + path.join(__dirname, "no-dictionaries").split("/").map(encodeURIComponent).join("/") + "/");
 }
 
 /* ONE ETIUDA AT A TIME, which is what makes the association useful rather than annoying: without

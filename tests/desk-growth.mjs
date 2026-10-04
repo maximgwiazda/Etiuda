@@ -68,6 +68,11 @@ const packBefore = { v: 1, hidden: [], removed: [], custom: [], overrides: { [ca
 
 const UD = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-growth-"));
 const DESK = path.join(UD, "desk.json");
+/* The trap is written out at holdDesk in tests/desk-ipc.mjs. */
+const holdDesk = on => {
+  if (process.platform !== "win32") fs.chmodSync(UD, on ? 0o555 : 0o700);
+  fs.chmodSync(DESK, on ? 0o444 : 0o666);
+};
 fs.writeFileSync(DESK, JSON.stringify({ kind: "etiuda-desk", schema: 1, app: "0.0.0", saved: new Date().toISOString(),
   keys: { eCatalog: catalog, ePack: JSON.stringify(packBefore), eTheme: "dark" } }));
 const deskText = () => fs.readFileSync(DESK, "utf8");
@@ -252,10 +257,10 @@ try {
     + (text.length - keysAt - 9) + " character(s))");
 
   /* ---- a refusal: a patch main answers false is carried by the next send ---- */
-  fs.chmodSync(DESK, 0o444);
+  holdDesk(true);
   S.lsSet("eGrowthRefused", "1"); await settle();
   const troubled = S.eSaveTrouble() !== null;
-  fs.chmodSync(DESK, 0o666);
+  holdDesk(false);
   at = sends.length;
   S.lsSet("eGrowthLater", "2"); await settle();
   const carried = sentSince(at);
@@ -282,7 +287,7 @@ try {
   failed++;
   console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));
 } finally {
-  try { fs.chmodSync(DESK, 0o666); } catch { /* not made */ }
+  try { holdDesk(false); } catch { /* not made */ }
   try { fs.rmSync(UD, { recursive: true, force: true }); } catch { /* reported below */ }
   check(!fs.existsSync(UD), "10a the temp desk folder is gone");
 }

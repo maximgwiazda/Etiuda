@@ -2368,9 +2368,11 @@ function nsisInstallWrites(root, cfg) {
     + ".then(r => process.stdout.write(JSON.stringify(r)), e => { process.stderr.write(String(e)); process.exit(1); })",
     path.join(lib, "out", "toolsets", "windows.js"), (cfg.toolsets || {}).nsis || ""], { encoding: "utf8" });
   let mk;
-  try { mk = JSON.parse(where.stdout); } catch (e) { return "electron-builder named no makensis: " + String(where.stderr).trim(); }
+  /* The answer is the last line: a first run downloads makensis and logs that on stdout above it. */
+  try { mk = JSON.parse(String(where.stdout).trim().split(/\r?\n/).pop()); } catch (e) { return "electron-builder named no makensis: " + String(where.stderr).trim(); }
   const r = cp.spawnSync(mk.path, ["-INPUTCHARSET", "UTF8", "-OUTPUTCHARSET", "UTF8", "-SAFEPPO", "-"],
-    { input: script, encoding: "utf8", env: Object.assign({}, process.env, mk.env || {}) });
+    /* Off Windows makensis prints in the locale's charset whatever -OUTPUTCHARSET says, and under C a Polish letter comes back "?". */
+    { input: script, encoding: "utf8", env: Object.assign({}, process.env, process.platform === "win32" ? {} : { LC_ALL: "C.UTF-8" }, mk.env || {}) });
   if (r.status !== 0) return "makensis refused the script: " + String(r.stdout + r.stderr).trim().split(/\r?\n/).slice(-2).join(" / ");
   const open = [], writes = [];
   for (const line of r.stdout.split(/\r?\n/).map(l => l.trim())) {

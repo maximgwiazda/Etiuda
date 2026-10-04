@@ -22,6 +22,20 @@ const version = found[1];
 // dist/, which .gitignore already holds back, and a build elsewhere sets ETIUDA_DIST.
 const output = process.env.ETIUDA_DIST || "dist";
 
+// A Linux desktop takes PNGs by size, and every entry of the .ico already is one, so each is copied
+// out byte for byte rather than redrawn or rescaled. Written before packing, only for --linux.
+const LINUX_ICONS = path.resolve(output, ".linux-icons");
+function linuxIcons() {
+  const ico = fs.readFileSync(path.join(__dirname, "shell", "etiuda.ico"));
+  fs.mkdirSync(LINUX_ICONS, { recursive: true });
+  for (let i = 0; i < ico.readUInt16LE(4); i++) {
+    const at = 6 + 16 * i, size = ico[at] || 256, len = ico.readUInt32LE(at + 8), off = ico.readUInt32LE(at + 12);
+    const png = ico.subarray(off, off + len);
+    if (png.readUInt32BE(0) !== 0x89504e47) throw new Error("etiuda.ico entry " + size + " is not a PNG");
+    fs.writeFileSync(path.join(LINUX_ICONS, size + "x" + size + ".png"), png);
+  }
+}
+
 // THE SIGNING HOOK: one route or none, chosen by which variables are set. With none the block is
 // absent and electron-builder packages unsigned, which SmartScreen warns about (spec 11.5). No route
 // holds a secret here: a .pfx's password is WIN_CSC_KEY_PASSWORD, read by electron-builder itself so
@@ -96,6 +110,27 @@ module.exports = {
   // running in and falling back to the English for the rest. Its `license` option takes ONE file,
   // so a localised pair cannot be named, and a rename would drop the page in silence; tests/test.js
   // holds the two names instead. The files carry a BOM already, or the build writes one into them.
+  // THE UBUNTU DESK, a .deb and an AppImage (board 633). Nothing here reaches the Windows build:
+  // electron-builder reads this block only for --linux. The association is added here rather than
+  // above because only a Linux desktop wants a MIME type, and electron-builder concatenates the two
+  // lists. tools/package-linux.mjs builds these and refuses a package missing any of them.
+  linux: {
+    target: [{ target: "deb", arch: ["x64"] }, { target: "AppImage", arch: ["x64"] }],
+    executableName: "etiuda",
+    icon: LINUX_ICONS,
+    category: "Office",
+    maintainer: "Maxim Gwiazda",
+    synopsis: require("./package.json").description,
+    // No updater, as on Windows: without this the build writes app-update.yml and latest-linux.yml.
+    publish: null,
+    fileAssociations: [{ ext: "ec", name: "Etiuda catalog", description: "Etiuda catalog",
+      mimeType: "application/x-etiuda-catalog" }],
+    // The class the window is measured to carry (tests/linux-desk.js 5a), so a dock groups it under this entry.
+    desktop: { entry: { StartupWMClass: "etiuda" } },
+  },
+  beforePack: context => { if (context.electronPlatformName === "linux") linuxIcons(); },
+  deb: { artifactName: "etiuda_${version}_amd64.${ext}" },
+  appImage: { artifactName: "etiuda-${version}-x86_64.${ext}" },
   nsis: {
     oneClick: false,
     perMachine: false,

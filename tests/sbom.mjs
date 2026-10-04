@@ -144,8 +144,10 @@ async function main() {
     if (extra) p.dependencies = Object.assign({}, p.dependencies, extra);
     put(path.join(d, 'package.json'), p);
     put(path.join(d, 'src', 'modules', 'env.js'), envJs(VERSION));
-    execFileSync('cmd.exe', ['/d', '/c', 'mklink', '/J', path.join(d, 'node_modules'), path.join(ROOT, 'node_modules')],
-      { stdio: 'ignore', windowsHide: true });
+    if (process.platform === 'win32')
+      execFileSync('cmd.exe', ['/d', '/c', 'mklink', '/J', path.join(d, 'node_modules'), path.join(ROOT, 'node_modules')],
+        { stdio: 'ignore', windowsHide: true });
+    else fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(d, 'node_modules'), 'dir');
     JUNCTIONS.push(path.join(d, 'node_modules'));
     return { d, p };
   }
@@ -409,10 +411,13 @@ async function main() {
 }
 
 /* The junctions go first, by rmdir, which removes a junction and never what it points at: a
-   recursive removal that followed one would take the real node_modules with it. */
+   recursive removal that followed one would take the real node_modules with it. Off Windows each is
+   a symbolic link, and unlink is the same promise. */
 function tidy() {
-  for (const j of JUNCTIONS) if (fs.existsSync(j))
-    spawnSync('cmd.exe', ['/d', '/c', 'rmdir', j], { stdio: 'ignore', windowsHide: true });
+  for (const j of JUNCTIONS) if (fs.existsSync(j)) {
+    if (process.platform === 'win32') spawnSync('cmd.exe', ['/d', '/c', 'rmdir', j], { stdio: 'ignore', windowsHide: true });
+    else fs.unlinkSync(j);
+  }
   if (JUNCTIONS.some(j => fs.existsSync(j))) { console.log('  a junction stayed; the scratch stays at ' + SCRATCH); return; }
   if (KEEP) { console.log('--keep: ' + SCRATCH); return; }
   try { fs.rmSync(SCRATCH, { recursive: true, force: true }); } catch { /* reported below */ }

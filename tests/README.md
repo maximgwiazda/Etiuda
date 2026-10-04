@@ -33,6 +33,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/catalog-trust-desk.mjs                 no fixtures, the desk's own load path saying that signature, one process per launch
     node tests/catalog-trust-desk.mjs, legs 73a to 73e no fixtures, an empty desk that made a catalog from nothing offered the lead's import of it by its lineage
     node tests/token-canary.mjs                       no fixtures, TOKEN_CANARY held to fill()
+    node tests/linux-package.mjs                      no fixtures, the Ubuntu desk's .deb as tools/package-linux.mjs judges it, on planted trees
     node tests/test.js                               sections 1 to 3 without fixtures
     ETIUDA_FIXTURES=<folder> node tests/test.js      all five sections
     ETIUDA_FIXTURES=<folder> node tests/smoke.js     the acceptance run, Chrome
@@ -732,6 +733,31 @@ electron-builder flips it, with each fuse turned back alone; a program holding t
 which is refused rather than read at the first; the packaging step's question of planted dist
 folders; and, on Windows, `tools/package.mjs` itself in a lab whose `electron-builder` plants the
 program. 14 checks, about 3 s; off Windows the three lab checks say NOT RUN.
+
+## The Ubuntu desk: a .deb and an AppImage
+
+    npm run package:linux                     the build, then both packages into dist/ or $ETIUDA_DIST, refused unless judged
+    node tests/linux-package.mjs              no fixtures, no packaging: the judge on planted trees, and the icons
+    ETIUDA_WINDOWS=$(date +%F) xvfb-run -a -s "-screen 0 1280x900x24" node tests/linux-desk.js <program> [--shot <file.png>]
+
+`tools/package-linux.mjs` is the Linux twin of `tools/package.mjs` and leaves the Windows one alone.
+It refuses unless a fresh `.deb` and `.AppImage` are in the folder, the program in `linux-unpacked`
+carries its fuses, and the unpacked `.deb` holds the AppArmor profile allowing `userns` for
+`/opt/Etiuda/etiuda` (Ubuntu 24.04 refuses Chromium's sandbox a user namespace without one), the
+SUID `chrome-sandbox` beside it, a `.desktop` entry that names `application/x-etiuda-catalog` and
+hands the program its file, the MIME file giving that type to `*.ec`, and no updater's file.
+`linux-package.mjs` holds that judge with each of those taken out alone, 15 checks, under 1 s; it
+runs in `npm test` on both platforms.
+
+`linux-desk.js` is a window gate and runs by hand on a Linux machine, never as root: `<program>` is
+`/opt/Etiuda/etiuda` after `apt install ./etiuda_<version>_amd64.deb`, or the AppImage. It launches
+through `E.shellLaunch`, so the window wall and the lab rules hold, with Documents moved into the lab,
+and reads the result off the display and `/proc`: the window paints (distinct colours over every
+pixel of an `xwd` capture), the first run puts the shipped sample in Documents/Etiuda, no process
+carries `--no-sandbox` and every renderer lives in a user or PID namespace the browser does not,
+with a `--no-sandbox` launch as the control; the hotkey registers and shows the picker; the window's
+class is the installed entry's `StartupWMClass`; and the net log names no web address. 11 checks,
+about 20 s. Where the kernel runs no AppArmor it says the profile was NOT RUN.
 
 ## The reinstall-survival loop, which is the only thing here that installs anything
 
