@@ -674,6 +674,108 @@ function tryAnswerRequest(win) {
   win.webContents.send("etiuda:stats-ask", { id: req.id, from: req.from, to: req.to, issued: req.issued });
 }
 
+/* ---- HPKE, RFC 9180 base mode: DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-128-GCM ----------
+   One message sealed to one X25519 public key, which is how a team key reaches a desk. These
+   declarations name only crypto and Buffer, so Studio can slice them from its pinned copy of this file;
+   tests/hpke.mjs holds them to the RFC's own vectors. A private key is taken as a KeyObject, never as bytes. */
+const HPKE_KEM = Buffer.from("4b454d0020", "hex");               // "KEM", kem_id
+const HPKE_SUITE = Buffer.from("48504b45002000010001", "hex");   // "HPKE", kem_id, kdf_id, aead_id
+const SPKI_X25519 = Buffer.from("302a300506032b656e032100", "hex");
+function hpkeLabeledExtract(suite, salt, label, ikm) {
+  return crypto.createHmac("sha256", salt).update(Buffer.concat([Buffer.from("HPKE-v1"), suite, Buffer.from(label), ikm])).digest();
+}
+function hpkeLabeledExpand(suite, prk, label, info, len) {
+  const head = Buffer.concat([Buffer.from([len >> 8, len & 255]), Buffer.from("HPKE-v1"), suite, Buffer.from(label), info]);
+  let t = Buffer.alloc(0), out = Buffer.alloc(0);
+  for (let i = 1; out.length < len; i++) {
+    t = crypto.createHmac("sha256", prk).update(Buffer.concat([t, head, Buffer.from([i])])).digest();
+    out = Buffer.concat([out, t]);
+  }
+  return out.subarray(0, len);
+}
+function hpkeX25519Public(raw) {
+  if (!Buffer.isBuffer(raw) || raw.length !== 32) throw new Error("hpke: a public key is 32 bytes");
+  return crypto.createPublicKey({ key: Buffer.concat([SPKI_X25519, raw]), format: "der", type: "spki" });
+}
+/* An all-zero X25519 output means a low-order key, and RFC 9180 section 7.1.4 says to abort. */
+function hpkeShared(dh, enc, pkR) {
+  if (dh.every(b => b === 0)) throw new Error("hpke: a low-order public key");
+  const prk = hpkeLabeledExtract(HPKE_KEM, Buffer.alloc(0), "eae_prk", dh);
+  return hpkeLabeledExpand(HPKE_KEM, prk, "shared_secret", Buffer.concat([enc, pkR]), 32);
+}
+/* Base mode has no PSK, so psk_id_hash and the secret's ikm are taken over the empty string. */
+function hpkeSchedule(shared, info) {
+  const none = Buffer.alloc(0);
+  const ctx = Buffer.concat([Buffer.from([0]), hpkeLabeledExtract(HPKE_SUITE, none, "psk_id_hash", none),
+    hpkeLabeledExtract(HPKE_SUITE, none, "info_hash", info)]);
+  const secret = hpkeLabeledExtract(HPKE_SUITE, shared, "secret", none);
+  return { key: hpkeLabeledExpand(HPKE_SUITE, secret, "key", ctx, 16),
+           nonce: hpkeLabeledExpand(HPKE_SUITE, secret, "base_nonce", ctx, 12) };
+}
+/* {enc, ct} for pt sealed to pkR, 32 raw bytes, at sequence 0; it throws on a key it cannot seal to. The
+   ephemeral key is made here on every call and no caller can pass one: one used for two messages gives both away. */
+function hpkeSeal(pkR, info, aad, pt) {
+  const skE = crypto.generateKeyPairSync("x25519").privateKey;
+  const enc = crypto.createPublicKey(skE).export({ type: "spki", format: "der" }).subarray(-32);
+  const dh = crypto.diffieHellman({ privateKey: skE, publicKey: hpkeX25519Public(pkR) });
+  const ks = hpkeSchedule(hpkeShared(dh, enc, pkR), info);
+  const c = crypto.createCipheriv("aes-128-gcm", ks.key, ks.nonce);
+  c.setAAD(aad);
+  const ct = Buffer.concat([c.update(pt), c.final(), c.getAuthTag()]);
+  return { enc: Buffer.from(enc), ct: ct };
+}
+/* The plaintext, or null for anything that does not open: a changed byte, another info or aad, another key. */
+function hpkeOpen(skR, enc, info, aad, ct) {
+  try {
+    if (!(skR instanceof crypto.KeyObject) || skR.type !== "private" || skR.asymmetricKeyType !== "x25519") return null;
+    if (!Buffer.isBuffer(ct) || ct.length < 16) return null;
+    const pkR = crypto.createPublicKey(skR).export({ type: "spki", format: "der" }).subarray(-32);
+    const dh = crypto.diffieHellman({ privateKey: skR, publicKey: hpkeX25519Public(enc) });
+    const ks = hpkeSchedule(hpkeShared(dh, enc, pkR), info);
+    const d = crypto.createDecipheriv("aes-128-gcm", ks.key, ks.nonce, { authTagLength: 16 });
+    d.setAAD(aad);
+    d.setAuthTag(ct.subarray(ct.length - 16));
+    return Buffer.concat([d.update(ct.subarray(0, ct.length - 16)), d.final()]);
+  } catch { return null; }
+}
+
+/* ---- the sealed envelope: a signed catalog's text under the team key, AES-256-GCM -------------
+   The associated data is the envelope's kind, team and epoch, so a ct moved into another team's or
+   epoch's envelope does not open. Pure like HPKE above, and sliced the same way. */
+const SEALED_KIND = "etiuda-sealed";
+const SEALED_TEAM_RE = /^t-[0-9a-f]{16}$/;
+function sealedAad(team, epoch) {
+  return Buffer.from(SEALED_KIND + "\n" + team + "\n" + epoch, "utf8");
+}
+/* {format, kind, team, epoch, nonce, ct}, the ct carrying its tag, under a fresh nonce on every call; it throws on a key,
+   team, epoch or text it cannot seal. The team key is its 32 raw bytes, as hpkeOpen gives them back. */
+function sealCatalog(teamKey, teamId, epoch, text) {
+  if (!Buffer.isBuffer(teamKey) || teamKey.length !== 32) throw new Error("seal: a team key is 32 bytes");
+  if (!SEALED_TEAM_RE.test(String(teamId))) throw new Error("seal: a team id is t- and 16 lower-case hex characters");
+  if (!Number.isInteger(epoch) || epoch < 1) throw new Error("seal: an epoch is a whole number from 1");
+  if (typeof text !== "string") throw new Error("seal: the catalog is sealed as its text");
+  const nonce = crypto.randomBytes(12);
+  const c = crypto.createCipheriv("aes-256-gcm", teamKey, nonce);
+  c.setAAD(sealedAad(teamId, epoch));
+  const ct = Buffer.concat([c.update(text, "utf8"), c.final(), c.getAuthTag()]);
+  return { format: 2, kind: SEALED_KIND, team: teamId, epoch: epoch, nonce: nonce.toString("hex"), ct: ct.toString("hex") };
+}
+/* The text, or null for anything that does not open: a changed byte, another team, epoch or key. */
+function openSealed(teamKey, doc) {
+  try {
+    if (!Buffer.isBuffer(teamKey) || teamKey.length !== 32) return null;
+    if (!doc || typeof doc !== "object" || +doc.format !== 2 || doc.kind !== SEALED_KIND) return null;
+    if (!SEALED_TEAM_RE.test(String(doc.team)) || !Number.isInteger(doc.epoch) || doc.epoch < 1) return null;
+    const nonce = String(doc.nonce), hex = String(doc.ct);
+    if (!/^[0-9a-f]{24}$/.test(nonce) || !/^[0-9a-f]*$/.test(hex) || hex.length % 2 || hex.length < 32) return null;
+    const ct = Buffer.from(hex, "hex");
+    const d = crypto.createDecipheriv("aes-256-gcm", teamKey, Buffer.from(nonce, "hex"), { authTagLength: 16 });
+    d.setAAD(sealedAad(doc.team, doc.epoch));
+    d.setAuthTag(ct.subarray(ct.length - 16));
+    return Buffer.concat([d.update(ct.subarray(0, ct.length - 16)), d.final()]).toString("utf8");
+  } catch { return null; }
+}
+
 /* ---- the desk's branch: an identity of its own, and its own file in the catalog folder --------
    Two key pairs made here at first need, Ed25519 to sign and X25519 to receive a team key. The
    private halves sit in the desk envelope sealed by safeStorage and never leave it: the page is
