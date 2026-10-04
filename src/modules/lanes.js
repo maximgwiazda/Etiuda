@@ -206,8 +206,8 @@ function lanesShortcut(id){
   return undefined;
 }
 
-/* ---- Editing the list in the lanes: the agent's own layer, as the editor's Next fold writes it (decisions
-   2026-10-01 09:38 and 09:40), applied at once; taking a reply off offers it back. */
+/* ---- Editing the list in the lanes: the agent's own layer, written as the editor's Next fold writes it and
+   applied at once; taking a reply off offers it back. */
 const laneListIds=()=>laneRows.filter(r=>!r.learnt).map(r=>r.id);
 function writeLaneList(ids, said){
   const id=lanesOn ? laneFrom : null, card=id!=null ? (cards||[]).find(m=>m&&String(m.id)===id) : null;
