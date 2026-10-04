@@ -1605,7 +1605,7 @@ Module.prototype._compile = function (content, filename) {
     "ghosts.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
     "storage-keys.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
     "motion.js": "legs tests/smoke.js requires and runs; alone it is the quick run of one leg",
-    "badge-room.js": "the badge's room: a Chrome sweep run by hand, with the fixtures, beside motion.js; no chain runs it yet, which its commit says",
+    "badge-room.js": "the badge's room, a sweep tests/smoke.js requires and runs; alone it is the quick run of that sweep",
     "tour-walk.js": "the tour's walk tests/smoke.js requires and runs; its plan is held to the step table by tests/test.js",
     "install-plan.js": "the library tests/update-install.js judges with; every clause is held by tests/install-plan-selftest.js in npm test",
     "pick-desk.js": "a machine-window gate: it takes the real foreground and presses real keys, so it runs by hand with nobody at the keyboard; its node half is tests/pick.mjs in npm test",
