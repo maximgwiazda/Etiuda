@@ -2847,9 +2847,12 @@ const CARD_B = {
     const typed = LN.lanesKey();
     box.value = ""; const opened = LN.lanesKey(); seen.push(state());
     document.activeElement = body; const closed = LN.lanesKey(); seen.push(state());
-    check("lanes.js", "814ln4 the button and Space switch to the lanes and back: a line before the first reply, the reply now and its next after a copy, and typing in the search box gives the cards back whole",
+    // A reply with nothing after it leaves the button there, digitless, as the door to the lanes.
+    LP.bumpUseCount("c-ln-d", "en"); seen.push(state() + " digit:" + (badge.textContent || "-"));
+    check("lanes.js", "814ln4 the button and Space switch to the lanes and back: a line before the first reply, the reply now and its next after a copy, typing in the search box gives the cards back whole, and the button stays once a reply was sent",
       () => eq(seen.join(" | ") + " | " + [empty, drawn, typed, opened, closed].join(";"),
         "cards live hidden nofab false | lanes inert shown fab true | cards live hidden fab false emptied | lanes inert shown fab true | cards live hidden fab false"
+        + " | cards live hidden fab false digit:-"
         + " | true;true,2,true,true;false;true;true"));
     /* A list edited in the lanes is written where the editor writes it: an own card's whole list in its entry,
        by the same rule (814ed1), and only the reply sent last is edited. */
