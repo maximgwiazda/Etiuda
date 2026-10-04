@@ -1833,6 +1833,11 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 .tag{position:absolute;top:8px;right:10px;font:10px var(--mono);color:var(--dim);
   letter-spacing:.5px;pointer-events:none}
 .txt.plx .tag{color:var(--pl)}
+/* The badge is out of the flow, so a float the badge's own width makes the first line stop short of it.
+   Its width is the badge's, in the badge's font, less the 44px the block's padding already gives:
+   10px right offset, 8px clear, 44px padding. The block's own padding is never touched. */
+.troom{float:right;height:1px;pointer-events:none;font:10px var(--mono);letter-spacing:.5px;
+  width:calc(var(--n)*(1ch + .5px) + 18px - 44px)}
 /* The two in-card notices keep the slabs' own gutter, which is none: the card has no padding
    left to inset them from. */
 .miss{margin:0 0 10px;padding:9px 12px;border:1px dashed var(--line-strong);border-radius:var(--radius-sm);
