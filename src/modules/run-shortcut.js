@@ -16,6 +16,7 @@ import { kbdNav, railStep, markEnd } from "./mark.js";
 import { navEntry } from "./entry-walk.js";
 import { navPill, navPillEnd } from "./pill-walk.js";
 import { copyEntrySel } from "./copy-entry.js";
+import { copyNextReply, foldNextDock, nextDockOpen } from "./next-dock.js";
 import { notePaneOpen, closeNotePane } from "./note-pane.js";
 import { closeSettingsMenu, openSettingsMenu } from "./header-menus.js";
 import { lang, setCats, semiKind, railMarkUsed, railSel, railMarkIdx, railOrder, setRailSel, setRailMarkIdx, setSemiKind, pickRun, intentIdxs, setRailMarkUsed, setPickRun, entrySel } from "./app-state.js";
@@ -111,6 +112,8 @@ function runShortcut(id){
   if(id==="navPillFirst"||id==="navPillLast"){
     return navPillEnd(id==="navPillLast"?1:-1);
   }
+  // Declined when the action button offers no reply at that place, so the key falls through.
+  if(/^nextCopy[1-4]$/.test(id)) return copyNextReply(+id.slice(8)-1);
   if(id==="copy"||id==="copyOther"){
     kbdNav(true);
     // The mark's surface decides what Enter means: an intent mark is picked, a card copied.
@@ -132,6 +135,8 @@ function runShortcut(id){
     if(notePaneOpen()){ closeNotePane(); return true; }
     if(factsPanelOpen()){ closeFactsPanel(); return true; }
     if($("#settingsMenu")&&!$("#settingsMenu").hidden){ closeSettingsMenu(); return true; }
+    // An unfolded dock is shed before the search is.
+    if(nextDockOpen()){ foldNextDock(); return true; }
     escapeLadderStep();
     return true;
   }

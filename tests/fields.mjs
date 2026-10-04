@@ -23,7 +23,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 44;
+const EXPECTED = 47;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -468,6 +468,57 @@ try {
     } finally {
       navigator.clipboard = null; if (asking()) fire(inputs()[0], "keydown", { key: "Escape" });
       delete els["#list"]; delete els["#toast"]; Dom.grabDom();
+      globalThis.getComputedStyle = window.getComputedStyle = hadGCS;
+    }
+  }
+  /* The action button's replies (board 814, S5): Ctrl+1 to 4 copy the reply at that place of the tab in
+     front by the desk's own route, so a reply holding a field asks first, from the button, and a stamped
+     one toasts stamped; a place holding nothing copies nothing and lets the key fall through. */
+  { const ND = await import(MOD("next-dock.js"));
+    const hadGCS = globalThis.getComputedStyle;
+    const toastEl = new El("div", { id: "toast" }); els["#toast"] = toastEl;
+    toastEl.getBoundingClientRect = () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 });
+    globalThis.getComputedStyle = window.getComputedStyle = () => ({ getPropertyValue: () => "", borderLeftWidth: "0", borderRightWidth: "0", paddingLeft: "0", paddingRight: "0" });
+    const fabEl = DOC.body.appendChild(new El("button", { id: "nextFab", class: "fab fab-next" }));
+    let fabAsked = 0;
+    fabEl.getBoundingClientRect = () => { fabAsked++; return { top: 760, left: 1106, width: 44, height: 44 }; };
+    FD.setCatalogFillFields(FIELDS);
+    AS.setCards([
+      { id: "c-from8", c: "orders", t: "From", en: "Opening.", next: [{ to: "c-sworn8" }, { to: "c-plain8" }] },
+      { id: "c-sworn8", c: "orders", t: "Sworn", en: "Order {order number} is promised today.", commits: 1 },
+      { id: "c-plain8", c: "orders", t: "Plain", en: "A reply with no field." },
+    ]);
+    AS.setFieldVals({});
+    TB.tabs.splice(0, TB.tabs.length); ST.ssSet(TB.TAB_KEY, "null"); TB.initTabs();
+    const sink = {};
+    const last = () => ((TB.tabs[0] && TB.tabs[0].path) || []).slice(-1)[0] || "";
+    const stamped = () => /t-stamp/.test(toastEl.innerHTML) && toastEl.classList.contains("stamped");
+    const fresh = () => { sink.got = undefined; toastEl.innerHTML = ""; toastEl.textContent = ""; toastEl.classList.remove("stamped"); fabAsked = 0; };
+    try {
+      navigator.clipboard = { writeText: t => { sink.got = t; return { then(ok) { ok(); } }; } };
+      LP.bumpUseCount("c-from8", "en");
+      fresh();
+      const r2 = ND.copyNextReply(1);
+      const b = { ret: r2, copied: sink.got === "A reply with no field.", stamped: stamped(), last: last() };
+      LP.bumpUseCount("c-from8", "en");
+      fresh();
+      const r1 = ND.copyNextReply(0);
+      const a = { ret: r1, asked: !!asking() && sink.got === undefined, fromButton: fabAsked > 0 };
+      if (asking()) { inputs()[0].value = "MRB-2024-10412"; fire(inputs()[0], "keydown", { key: "Enter" }); }
+      Object.assign(a, { copied: /MRB-2024-10412/.test(sink.got || ""), stamped: stamped(), last: last() });
+      LP.bumpUseCount("c-from8", "en");
+      fresh();
+      const c = { ret: ND.copyNextReply(2), copied: sink.got !== undefined, last: last() };
+      check(a.ret === true && a.asked && a.fromButton && a.copied && a.stamped && a.last === "c-sworn8",
+        "8a Ctrl+1 copies the first reply of the tab in front: it asks for its field from the action button, then copies, toast stamped, and the conversation steps on: " + JSON.stringify(a));
+      check(b.ret === true && b.copied && !b.stamped && b.last === "c-plain8",
+        "8b Ctrl+2 copies the second at once when it holds no field, its toast plain: " + JSON.stringify(b));
+      check(c.ret === false && !c.copied && c.last === "c-from8",
+        "8c control: Ctrl+3 where nothing waits copies nothing, answers false so the key falls through, and the path stays: " + JSON.stringify(c));
+    } finally {
+      navigator.clipboard = null; if (asking()) fire(inputs()[0], "keydown", { key: "Escape" });
+      fabEl.remove(); delete els["#toast"];
+      TB.tabs.splice(0, TB.tabs.length);
       globalThis.getComputedStyle = window.getComputedStyle = hadGCS;
     }
   }

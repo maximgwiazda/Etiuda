@@ -42,6 +42,7 @@ const SLOTS = [
   "syncFavouritesMeta",
   "ensureCustomCat",
   "syncAddFab",
+  "syncNextDock",
   "openCardEditor",
   "flushPillState",
   "markEntrySel",

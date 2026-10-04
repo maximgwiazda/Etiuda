@@ -449,12 +449,13 @@ function eOfferCatalogDialog(c,src){
   // Placed against the indicator, and again on a resize, since it may outlive one.
   const place=()=>{
     const at=document.getElementById("catNow"), r=at && at.getBoundingClientRect();
-    /* A LONG LIST SCROLLS INSIDE THE BUBBLE, so the bubble still hangs below the name rather than beside it:
-       23 is bubble.js's gap and margin below a target, and one more for its strict test. */
+    /* A LONG LIST SCROLLS INSIDE THE BUBBLE, so the bubble still hangs below the name rather than beside it,
+       and ends above the round buttons: 10 is bubble.js's gap below a target, 76 the buttons' row with the
+       same gap over it (bottom 22, height 44), and one more for its strict test. */
     const box=wrap.querySelector(".ec-change");
     if(box){
       box.style.maxHeight="";
-      const over=(r && r.width) ? wrap.offsetHeight-(innerHeight-Math.ceil(r.bottom)-23) : 0;
+      const over=(r && r.width) ? wrap.offsetHeight-(innerHeight-Math.ceil(r.bottom)-87) : 0;
       if(over>0) box.style.maxHeight=Math.max(96,box.offsetHeight-over)+"px";
     }
     placeBubble(wrap, (r && r.width) ? {top:r.top, left:r.left, width:r.width, height:r.height}

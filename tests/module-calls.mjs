@@ -2608,7 +2608,7 @@ const CARD_B = {
     () => eq(["list-pointer.js", "copy-entry.js", "pick.js"].map(f => {
       const s = src(f);
       return f + ":" + (s.split("copy(fill(").length - 1) + "/" + (s.split("), cardCommits(m));").length - 1);
-    }).join(","), "list-pointer.js:1/1,copy-entry.js:1/1,pick.js:1/1"));
+    }).join(","), "list-pointer.js:1/1,copy-entry.js:2/2,pick.js:1/1"));
   check("card-body.js", "814P the stamp follows a card's title before its badges, and a patched card files its badges after the stamp",
     () => {
       const body = src("card-body.js"), pool = src("card-pool.js"), at = body.indexOf('stampHtml("cstamp")');
@@ -2621,6 +2621,146 @@ const CARD_B = {
       return eq([carry > -1 && put > carry, ed.indexOf("intentTop,lockLang,commits,intents:intentsStored}") > -1,
         ed.indexOf("lockLang, commits}, nx.fields());") > -1].join(","), "true,true,true");
     });
+}
+
+/* ------------------------------------------------------------------ next-dock.js, the action button
+   Board 814, S5: after a reply is sent, the card's own list (the catalog's, or the agent's in its place)
+   is offered first in its order, then what this desk learnt follows that card, most often first, up to
+   four places, each learnt one marked (ledger, the night of 4 October). The button shows the count for
+   the tab in front and pulses only when a step brings new replies (decisions 2026-10-01 10:29, 10:34).
+   Every card here is invented; every global and hook set here is put back. */
+{
+  /* The stand-ins go up before the dock is first imported: loading a module lets the frames the path's
+     legs above left waiting run, and they read the hooks and the document. */
+  const T = await import(MOD("tabs.js"));
+  const H = await import(MOD("hooks.js"));
+  const AS = await import(MOD("app-state.js"));
+  const hadDoc = globalThis.document, hadAdd = globalThis.addEventListener;
+  const STUBS = ["applyLangUI", "updateIntentPlaceholder", "drawPillsCore", "drawIntentRail", "render", "scheduleRailGeometry", "segFolded"];
+  const hadHooks = STUBS.map(k => [k, Object.prototype.hasOwnProperty.call(H.hooks, k), H.hooks[k]]);
+  const hadCards = AS.cards;
+  const quiet = { toggle() {}, add() {}, remove() {}, contains() { return false; } };
+  const ring = new Set(), badge = { textContent: "" };
+  const fab = { hidden: true, title: "", attrs: {}, offsetWidth: 44, addEventListener() {},
+    classList: { add: c => ring.add(c), remove: c => ring.delete(c), contains: c => ring.has(c), toggle() {} },
+    querySelector: s => (s === ".fab-badge" ? badge : null), setAttribute(k, v) { this.attrs[k] = String(v); } };
+  globalThis.document = { querySelector: s => (s === "#nextFab" ? fab : null), getElementById: () => null, querySelectorAll: () => [],
+    addEventListener() {}, body: { classList: quiet }, documentElement: { style: { setProperty() {} }, classList: quiet, addEventListener() {} } };
+  if (typeof globalThis.addEventListener !== "function") globalThis.addEventListener = () => {};
+  STUBS.forEach(k => { if (typeof H.hooks[k] !== "function") H.hooks[k] = () => {}; });
+  const ND = await import(MOD("next-dock.js"));
+  const LP = await import(MOD("list-pointer.js"));
+  const ST = await import(MOD("storage.js"));
+  const SC = await import(MOD("shortcuts.js"));
+  const CH = await import(MOD("card-chain.js"));
+  const fs = await import("node:fs");
+  const card = (id, next) => (next ? { id, c: "orders", en: "Body of " + id, t: "Title " + id, next: next.map(to => ({ to })) }
+    : { id, c: "orders", en: "Body of " + id, t: "Title " + id });
+  const liveOf = list => new Map(list.map(m => [m.id, m]));
+  const said = rows => rows.map(r => r.id + (r.learnt ? "~" + r.n : "")).join(",");
+  const L1 = [card("c-nd-a", ["c-nd-b", "c-nd-gone", "c-nd-a", "c-nd-c"]), card("c-nd-b"), card("c-nd-c"), card("c-nd-d"),
+    card("c-nd-e"), card("c-nd-f"), card("c-nd-g")];
+  check("next-dock.js", "814S the card's own list comes first in its order, live cards only and never itself; learnt replies fill the places left, most often first, each marked, four in all",
+    () => eq(said(ND.dockList("c-nd-a", liveOf(L1),
+      [{ id: "c-nd-d", n: 5 }, { id: "c-nd-b", n: 9 }, { id: "c-nd-gone", n: 8 }, { id: "c-nd-e", n: 3 }, { id: "c-nd-f", n: 2 }], new Set())),
+      "c-nd-b,c-nd-c,c-nd-d~5,c-nd-e~3"));
+  check("next-dock.js", "814T a pair seen once is not yet learnt, and a learnt reply this conversation already sent is passed over, where the card's own list keeps one",
+    () => eq(said(ND.dockList("c-nd-x", liveOf([card("c-nd-x", ["c-nd-y"]), card("c-nd-y"), card("c-nd-z"), card("c-nd-w"), card("c-nd-v")]),
+      [{ id: "c-nd-v", n: 1 }, { id: "c-nd-z", n: 4 }, { id: "c-nd-w", n: 2 }], new Set(["c-nd-y", "c-nd-z"]))), "c-nd-y,c-nd-w~2"));
+  check("next-dock.js", "814U CONTROL: a card with no list and nothing learnt offers nothing, an unknown card nothing, and a list of six live cards its first four and no learnt one",
+    () => {
+      const six = card("c-nd-6", ["c-nd-b", "c-nd-c", "c-nd-d", "c-nd-e", "c-nd-f", "c-nd-g"]);
+      return eq([said(ND.dockList("c-nd-b", liveOf(L1), [], new Set())), said(ND.dockList("c-nd-none", liveOf(L1), [{ id: "c-nd-b", n: 9 }], new Set())),
+        said(ND.dockList("c-nd-6", liveOf(L1.concat([six])), [{ id: "c-nd-a", n: 9 }], new Set()))].join("|"), "||c-nd-b,c-nd-c,c-nd-d,c-nd-e");
+    });
+  check("next-dock.js", "814V the unfolded dock keeps its place when clear, moves left past a question it would meet, keeps the gap, and stands down where the window has no room",
+    () => {
+      const want = { left: 628, top: 500, width: 640, height: 300 }, ask = { left: 928, top: 52, width: 340, height: 460 };
+      return eq([ND.dockClear(want, [], 12), ND.dockClear(want, [ask], 12), ND.dockClear(want, [{ left: 928, top: 52, width: 340, height: 436 }], 12),
+        ND.dockClear(want, [{ left: 600, top: 52, width: 340, height: 460 }], 12)].join(","), "628,276,628,");
+    });
+  check("next-dock.js", "814n the vicinity is the rect grown by its margin on every side, and no further",
+    () => {
+      const r = { left: 100, top: 100, width: 44, height: 44 };
+      return eq([[52, 120], [192, 192], [51, 120], [120, 193]].map(([x, y]) => ND.dockNear(r, x, y, 48)).join(","), "true,true,false,false");
+    });
+  /* The button itself, against a stand-in that keeps what the dock writes; the tabs are drawn for real,
+     as the path's own legs above do, and copies go through the desk's copy route. */
+  const shown = () => [fab.hidden ? "hidden" : "shown", badge.textContent || "-", ring.has("nudge") ? "pulse" : "still"].join(" ");
+  try {
+    AS.setCards([card("c-nd-p", ["c-nd-q", "c-nd-r"]), card("c-nd-q", ["c-nd-p"]), card("c-nd-r"), card("c-nd-s")]);
+    T.tabs.splice(0, T.tabs.length);
+    ST.ssSet(T.TAB_KEY, "null");
+    T.initTabs();
+    ND.wireNextDock();
+    const seen = [shown()];
+    LP.bumpUseCount("c-nd-p", "en"); seen.push(shown());
+    ND.syncNextDock(); seen.push(shown());
+    T.tabs.push({ id: "mc-nd2", pax: "" }); T.stepTab(1); ND.syncNextDock(); seen.push(shown());
+    LP.bumpUseCount("c-nd-q", "en"); seen.push(shown());
+    T.stepTab(1); ND.syncNextDock(); seen.push(shown());
+    check("next-dock.js", "814W the action button shows the tab in front's count: hidden before a copy, pulsing when one brings replies, still on a redraw, and per tab, a switch showing the digit without a pulse",
+      () => eq(seen.join(" | "), "hidden - still | shown 2 pulse | shown 2 pulse | hidden - still | shown 1 pulse | shown 2 still"));
+    /* Two copies of s straight after r teach the pair; a third tab sending r then offers the card's
+       own none and the learnt one, and the count reaches the button. */
+    T.tabs.push({ id: "mc-nd3", pax: "" }); T.stepTab(1);
+    LP.bumpUseCount("c-nd-r", "en"); LP.bumpUseCount("c-nd-s", "en"); LP.bumpUseCount("c-nd-r", "en"); LP.bumpUseCount("c-nd-s", "en");
+    T.tabs.push({ id: "mc-nd4", pax: "" }); T.stepTab(1); ND.syncNextDock();
+    const before = shown();
+    LP.bumpUseCount("c-nd-r", "en");
+    check("next-dock.js", "814X what the desk learnt reaches the button: a reply sent twice after another is offered after it in a fresh conversation",
+      () => eq(before + " | " + shown(), "hidden - still | shown 1 pulse"));
+    // A switch of tab finishes on the next frame, which reads hooks put back below.
+    await new Promise(r => setTimeout(r, 20));
+  /* The keys and the labels. Ctrl+1 to 4 are four rows of the shortcuts list like any other, read in the
+     search box; the editor's fold names the key of each of its first four rows, and a rebind reaches it. */
+  SC.loadShortcuts();
+  check("shortcuts.js", "814Y Ctrl+1 to 4 copy the next replies: four rebindable rows on the digits, live in a field, each dispatched to its own place",
+    () => {
+      const rows = ["nextCopy1", "nextCopy2", "nextCopy3", "nextCopy4"].map(id => SC.SC_DEFS.find(d => d.id === id));
+      const rs = fs.readFileSync(join(MODDIR, "run-shortcut.js"), "utf8");
+      return eq([rows.map(d => d ? [d.def.code, d.def.ctrl, d.def.alt, d.inField, d.fixed ? 1 : 0].join(":") : "none").join(","),
+        SC.formatActionChord("nextCopy3"),
+        rs.indexOf("if(/^nextCopy[1-4]$/.test(id)) return copyNextReply(+id.slice(8)-1);") > -1,
+        rs.indexOf("if(nextDockOpen()){ foldNextDock(); return true; }") > -1 && rs.indexOf("if(nextDockOpen())") < rs.indexOf("escapeLadderStep();")].join("|"),
+        "Digit1:1:0:1:0,Digit2:1:0:1:0,Digit3:1:0:1:0,Digit4:1:0:1:0|Ctrl+3|true|true");
+    });
+  {
+    const hadCards2 = AS.cards;
+    const five = card("c-nd-k", ["c-nd-k1", "c-nd-k2", "c-nd-k3", "c-nd-k4", "c-nd-k5"]);
+    AS.setCards([five].concat(["c-nd-k1", "c-nd-k2", "c-nd-k3", "c-nd-k4", "c-nd-k5"].map(id => card(id))));
+    try {
+      const keys = () => (CH.nextReplies(five, null, null).body().match(/<kbd class="nx-key">[^<]*<\/kbd>/g) || [])
+        .map(k => k.replace(/<[^>]+>/g, "")).join(",");
+      const was = keys();
+      SC.scTake("nextCopy2", 1, { code: "KeyJ", key: "j", ctrl: 0, alt: 1, shift: 0, meta: 0 });
+      const rebound = keys();
+      check("card-chain.js", "814Z the editor's Next rows name the keys that copy them: the first four, the fifth none, and a rebind shows",
+        () => eq(was + " | " + rebound, "Ctrl+1,Ctrl+2,Ctrl+3,Ctrl+4 | Ctrl+1,Alt+J,Ctrl+3,Ctrl+4"));
+    } finally { AS.setCards(hadCards2); SC.loadShortcuts(); }
+  }
+  /* THE TWO BUBBLES IN ONE CORNER (ledger, the night of 4 October): the catalog's offer hangs from the name
+     at the top and its list scrolls, so it ends above the round buttons' row; the action button keeps the
+     corner, one step left of the clear door. Numbers read from the sheet and from bubble.js. */
+  check("catalog-offer.js", "814h a long catalog offer ends above the round buttons with the bubble's gap to spare, and the action button sits one step left of the clear door",
+    () => {
+      const off = fs.readFileSync(join(MODDIR, "catalog-offer.js"), "utf8"), bub = fs.readFileSync(join(MODDIR, "bubble.js"), "utf8");
+      const sheet = fs.readFileSync(join(MODDIR, "..", "template.html"), "utf8");
+      const cap = +((/innerHeight-Math\.ceil\(r\.bottom\)-(\d+)\)/.exec(off) || [])[1]), gap = +((/gap:(\d+),/.exec(bub) || [])[1]);
+      const fabRule = /\.fab\{position:fixed;right:(\d+)px;bottom:(\d+)px;z-index:\d+;width:(\d+)px;height:(\d+)px/.exec(sheet) || [];
+      const right = sel => +((new RegExp("\\." + sel + "\\{right:(\\d+)px").exec(sheet) || [])[1]);
+      const row = +fabRule[2] + +fabRule[4], step = right("fab-clear") - +fabRule[1];
+      // The bubble's foot is the name's foot, the gap, and the list at its cap: vh - (cap - gap) from the top.
+      return eq([cap - gap > row + gap, right("fab-next") - right("fab-clear") === step, step > +fabRule[3]].join(","), "true,true,true");
+    });
+  } finally {
+    T.watchTabPath(null);
+    T.tabs.splice(0, T.tabs.length);
+    AS.setCards(hadCards);
+    hadHooks.forEach(([k, own, v]) => { if (own) H.hooks[k] = v; else delete H.hooks[k]; });
+    if (hadAdd === undefined) delete globalThis.addEventListener; else globalThis.addEventListener = hadAdd;
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+  }
 }
 
 /* NOT cardBodyHtml(). It reads the PAX box off the document through fill(), so it cannot be

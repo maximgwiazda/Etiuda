@@ -9,6 +9,7 @@ import { modalResize } from "./dialog.js";
 import { modalCard } from "./dom.js";
 import { markCutText } from "./cut-text.js";
 import { mgReduceMotion } from "./motion.js";
+import { formatActionChord } from "./shortcuts.js";
 
 /* ---- The card editor's chain: the replies a card offers next, and the stamp of a card that commits
    the firm. The agent's list replaces the catalog's whole, in the agent's own layer, and travels in
@@ -16,6 +17,8 @@ import { mgReduceMotion } from "./motion.js";
 
 const NX_DOT=" "+String.fromCharCode(0xb7)+" ";
 const NX_HITS=6;
+// The places the action button offers, each on its own key: the first rows of a list are those keys.
+const NEXT_KEYS=4;
 
 // A chain is its ordered ids, as card-model.js compares it.
 function nextIdsOf(list){
@@ -109,10 +112,11 @@ function nextReplies(card,base,ov){
     if(!own()) return (rows.length||catIds.length) ? n+NX_DOT+t("the catalog's") : n;
     return n+NX_DOT+t(changed() ? "yours; the catalog's has changed" : "yours");
   }
-  function rowHtml(e){
-    const m=live.get(e.to), added=own() && catIds.indexOf(e.to)<0;
+  function rowHtml(e,i){
+    const m=live.get(e.to), added=own() && catIds.indexOf(e.to)<0, key=i<NEXT_KEYS ? formatActionChord("nextCopy"+(i+1)) : "";
     return '<li class="nx-row'+(added?" nx-new":"")+'" data-to="'+esc(e.to)+'">'
       +'<button type="button" class="nx-grip" title="'+esc(t("Drag to reorder"))+'" aria-label="'+esc(t("Drag to reorder"))+'"></button>'
+      +(key&&key!=="-" ? '<kbd class="nx-key">'+esc(key)+'</kbd>' : "")
       +'<span class="nx-t">'+esc(m?cardTitle(m):e.to)+'</span>'
       +(m&&cardCommits(m) ? stampHtml("nx-stamp") : "")
       +(added ? '<span class="nx-tag">'+esc(t("added"))+'</span>' : "")
@@ -336,6 +340,7 @@ function wireStampToggle(base){
 }
 
 export {
+  NEXT_KEYS,
   nextIdsOf,
   nextLive,
   nextFoldState,

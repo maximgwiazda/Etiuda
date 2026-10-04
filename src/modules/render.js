@@ -171,6 +171,7 @@ function render(){
       ef.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); eOpenCatalogFolder(); } };
     }
     hooks.syncAddFab();
+    hooks.syncNextDock();
     applyCardColumns();
     setPendingScrollHit(false);
     putEntrySel(null);
@@ -282,6 +283,7 @@ function render(){
   });
   paintList(spellNote,items);
   hooks.syncAddFab();
+  hooks.syncNextDock();
   /* Last thing before anything measures the list: everything above builds one flat
      sequence, and this is the only step that knows about columns. */
   applyCardColumns();

@@ -3,6 +3,7 @@ import { cardCommits, cardLang, findCard, parts } from "./card-model.js";
 import { fill } from "./intent-text.js";
 import { bumpUseCount, copiedToastMsg } from "./list-pointer.js";
 import { eCopyFeedback } from "./pops.js";
+import { eNoteRecent } from "./recency.js";
 import { t, toast } from "./ui-lang.js";
 import { copy } from "./mark.js";
 import { entrySel, shown } from "./app-state.js";
@@ -30,7 +31,24 @@ function copyEntrySel(otherLang){
   },at),at);
   return true;
 }
+/** Copy a card's block `vi` in the language it shows, from outside the list: a field question hangs
+ *  from `anchor`, and the trace of recent copies is kept as a click would keep it. */
+function copyCardPart(id, vi, anchor){
+  const m=findCard(id);
+  if(!m) return false;
+  const l=cardLang(m), ps=parts(m,l);
+  if(!ps.length){ toast(t("No {LANG} version for this card").replace("{LANG}",l.toUpperCase())); return true; }
+  const k=Math.max(0, Math.min(ps.length-1, vi|0));
+  withFields(ps[k],m,l,()=>withAgentName(ps[k],()=>{
+    bumpUseCount(m.id, l);
+    copy(fill(ps[k],m,0,l), copiedToastMsg(m, l, k, ps.length), cardCommits(m));
+    spendFields(ps[k]);
+    eNoteRecent(m.id,k);
+  },anchor),anchor);
+  return true;
+}
 
 export {
+  copyCardPart,
   copyEntrySel
 };

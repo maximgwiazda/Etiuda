@@ -55,7 +55,17 @@ function tabPathStep(id){
   tb.path=path.concat(at).slice(-TAB_PATH_MAX);
   clearTimeout(tabSaveTimer);
   tabSaveTimer=setTimeout(saveTabSession, 250);
+  if(tabPathWatch) tabPathWatch();
   return prev;
+}
+/* One listener, the dock: told when the tab in front takes a step, which is what a new batch of next
+   replies is. A switch of tab is a render, never a step. */
+let tabPathWatch=null;
+function watchTabPath(fn){ tabPathWatch=fn||null; }
+// The tab in front's path as it stands, read without adding to it.
+function tabPathNow(){
+  const tb=tabs.find(x=>x.id===activeTabId);
+  return {tab:tb ? tb.id : "", path:tb&&Array.isArray(tb.path) ? tb.path.slice() : []};
 }
 function tabLabel(tb, i){
   // tb.title is IGNORED on purpose - renaming is retired, but sessions saved before that
@@ -1116,6 +1126,8 @@ export {
   wireTabDrag,
   initTabs,
   tabPathStep,
+  tabPathNow,
+  watchTabPath,
   TAB_KEY,
   tabs,
   tabSaveTimer,
