@@ -1023,29 +1023,32 @@ function ownFilesWithId(dir, id) {
   }
   return out;
 }
-/* The team whose team file at `root` is whole under the lead this desk pinned and lists the catalog, or "". */
+/* The team file at `root` where it is whole under the lead this desk pinned and lists the catalog, else null. */
 function teamCovering(root, catalogId) {
   let doc = null;
   try {
     const file = path.join(root, TEAM_NAME);
     if (fs.statSync(file).size <= TEAM_MAX) doc = JSON.parse(fs.readFileSync(file, "utf8").trim());
-  } catch { return ""; }
-  if (!teamWhole(doc)) return "";
+  } catch { return null; }
+  if (!teamWhole(doc)) return null;
   const pin = teamPins[doc.id];
   return !!pin && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public && Array.isArray(doc.catalogs)
-    && doc.catalogs.map(String).indexOf(catalogId) >= 0 ? doc.id : "";
+    && doc.catalogs.map(String).indexOf(catalogId) >= 0 ? doc : null;
 }
 /* The newest key this desk keeps, as {team, epoch, key}, for the one team whose envelope held the edition a file grew from
    (`pin`), where that team also covers the catalog at the folder written to; else null. An edition not opened in this run
-   is looked for among the folder's catalogs first. */
+   is looked for among the folder's catalogs first. A desk the covering file leaves off its roster at an epoch newer than
+   any key it keeps is out of the team, and gets null too. */
 function sealFor(catalogId, pin, root) {
   heedTeam();
   if (!editionTeam.has(pin)) ecFilesIn(root).forEach(f => ecFacts(f, ""));
-  const team = editionTeam.get(pin) || "";
-  if (!team || teamCovering(root, catalogId) !== team) return null;
+  const team = editionTeam.get(pin) || "", cover = team ? teamCovering(root, catalogId) : null;
+  if (!cover || cover.id !== team) return null;
   const kept = teamKeys[team] || {};
   const epoch = Object.keys(kept).map(Number).filter(n => Number.isInteger(n) && n >= 1).sort((a, b) => b - a)[0];
   if (!epoch) return null;
+  const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "";
+  if (cover.epoch > epoch && !cover.roster.some(x => !!x && !!x.desk && x.desk.id === me)) return null;
   try {
     const key = Buffer.from(safeStorage.decryptString(Buffer.from(kept[epoch], "base64")), "base64");
     return key.length === 32 ? { team: team, epoch: epoch, key: key } : null;
@@ -1076,8 +1079,8 @@ function writeBranch(stem, text) {
   try {
     if (!folderAnswers(at.root) || !fs.statSync(at.root).isDirectory()) return branchHold(stem, text);
     /* A file grown from a catalog this desk opened from an envelope is that catalog, so it is signed and then sealed for the
-       team that sealed the edition it grew from; where that team, its cover at this folder or its key cannot be had it is
-       held, never written in the clear. */
+       team that sealed the edition it grew from; where that team, its cover at this folder or its key cannot be had, or the
+       team has left this desk out, it is held, never written in the clear. */
     if (grewId) {
       seal = sealFor(grewId, String(doc.grew.sha || ""), at.root);
       if (!seal) return branchHold(stem, text);

@@ -28,7 +28,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 37;
+const EXPECTED = 38;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -388,6 +388,8 @@ try {
     + " the edition, hash and signature the shell adds: " + JSON.stringify(teaW) + ", " + teaOut.length + " bytes");
 
   /* ---- a new epoch removes desk twelve: the desk's next write stands under the newest key it keeps --------------- */
+  const lamps12 = grownFrom(await read(D12, "lamps.ec"), me12, "lamps");
+  const file12 = path.join(OWN, "desks", me12.id, path.basename(lamps12.file));
   put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)] })));
   const resealed = await D9.ask("etiuda:branch-write", lamps.stem, edited);
   const env9c = landed(), mine = await ownRow(D9), removed = await ownRow(D12);
@@ -396,6 +398,24 @@ try {
     "14ac after a new epoch the same file, written again, is sealed under the newest key the desk keeps: " + said(resealed)
     + ", epoch " + env9c.epoch + "; the writer lists it " + (mine ? "yes" : "no") + ", the desk removed at the epoch "
     + (removed ? "yes" : "no"));
+
+  /* ---- the desk removed at that epoch writes nothing, in this run or a fresh one, until the lead lets it in again -- */
+  {
+    const out12 = [await D12.ask("etiuda:branch-write", lamps12.stem, lamps12.text),
+      await loadDesk(D12.ud).ask("etiuda:branch-write", lamps12.stem, lamps12.text)];
+    const none12 = !fs.existsSync(file12), K3 = crypto.randomBytes(32);
+    put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 3, roster: [entry(me12, K3, 3)] })));
+    const back12 = await D12.ask("etiuda:branch-write", lamps12.stem, lamps12.text);
+    const env12 = fs.existsSync(file12) ? JSON.parse(fs.readFileSync(file12, "utf8")) : {};
+    put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)] })));
+    check(out12.every(r => said(r) === said({ ok: false, held: true })) && none12 && said(back12) === said({ ok: true, rev: 1 })
+      && env12.kind === "etiuda-sealed" && env12.epoch === 3 && D1.api.openSealed(K3, env12) !== null
+      && D1.api.openSealed(K1, env12) === null && holding("Good day, Lamp Shop.") === 0,
+      "14aj a desk the team file leaves off its roster at an epoch newer than any key it keeps holds its own file, in the run"
+      + " that opened the catalog and in a fresh one, and writes nothing the old epoch's key opens: " + out12.map(said).join(", ")
+      + ", a file on the share " + (none12 ? "no" : "yes") + "; let in again at epoch 3, it writes " + said(back12)
+      + " sealed under epoch " + env12.epoch);
+  }
 
   /* ---- the folder's team file no longer lists the catalog: no team covers it where the file is written ---------- */
   put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)], catalogs: ["tea-room"] })));
