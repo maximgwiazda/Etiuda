@@ -29,6 +29,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 if (process.platform !== "win32") E.refuse("tests/pick-desk.js drives Windows' own hotkey and focus, so it runs on Windows only");
 const PORT = E.portBlock("pick-desk");
+E.windowWall("tests/pick-desk.js");
 const LEASED = E.takeLeases(["ports:" + PORT, "desk:foreground"], 10, "tests/pick-desk.js");
 console.log("       debugging port " + PORT + "; leases: " + LEASED.said);
 const EXPECTED = 11;

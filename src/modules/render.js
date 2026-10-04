@@ -33,6 +33,7 @@ import { closeNotePane } from "./note-pane.js";
 import { E_CATALOG_SCRIPT, eCatalogFolder, eCatalogFolderShort, eOpenCatalogFolder } from "./host.js";
 import { cards, intentIdxs, setShown, shown, cats, setPendingScrollHit, putEntrySel, lang, entrySel, pendingScrollHit, semiKind, cardCounts, wholeThingEmpty } from "./app-state.js";
 import { hooks } from "./hooks.js";
+import { teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty } from "./team-join.js";
 // The render pass: filter, order, group, and hand the list the items it should hold. Every
 // surface that changes what is shown ends here, and this is the only writer of `shown`.
 
@@ -119,6 +120,8 @@ function render(){
     list.innerHTML=terms.length
       ? '<div class="empty">'+esc(t("A different word may do better."))+'<br><br>'
         +esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}","<kbd>Esc</kbd>")+'</div>'
+      /* A sealed catalog this desk cannot open, or a request to join its team, is what the empty desk says first. */
+      : (wholeThingEmpty() && teamJoinShown()) ? teamJoinEmptyHtml()
       : (wholeThingEmpty()
         ? '<div class="empty empty-desk">'+esc(t("Etiuda is ready for its first replies."))+'<br><br>'
           /* A first run has no menu habits yet, and Load is the route someone who downloaded
@@ -159,6 +162,7 @@ function render(){
               +esc(t("Press"))+' '+chordChips("newCard")+' '
               +esc(t("to create a card here."))+'</div>')
           : '<div class="empty">'+esc(t("Nothing here yet."))+'</div>'));
+    wireTeamJoinEmpty(list.querySelector(".e-join"));
     const ei=$("#emptyLoad");
     if(ei) ei.onclick=hooks.importCatalogHere;
     const ef=$("#emptyCatFolder");
@@ -167,6 +171,7 @@ function render(){
       ef.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); eOpenCatalogFolder(); } };
     }
     hooks.syncAddFab();
+    hooks.syncNextDock();
     applyCardColumns();
     setPendingScrollHit(false);
     putEntrySel(null);
@@ -278,6 +283,7 @@ function render(){
   });
   paintList(spellNote,items);
   hooks.syncAddFab();
+  hooks.syncNextDock();
   /* Last thing before anything measures the list: everything above builds one flat
      sequence, and this is the only step that knows about columns. */
   applyCardColumns();

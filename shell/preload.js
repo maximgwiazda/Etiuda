@@ -2,7 +2,7 @@
 
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
-/* THE PICKER'S WINDOW is told so by the shell on its command line, and gets its own five verbs and
+/* THE PICKER'S WINDOW is told so by the shell on its command line, and gets its own six verbs and
    nothing of the desk's; main answers them only from that window, and the desk's only from the desk. */
 const PICKER = typeof process !== "undefined" && Array.isArray(process.argv) && process.argv.indexOf("--etiuda-picker") > -1;
 if (PICKER) {
@@ -12,6 +12,7 @@ if (PICKER) {
     close: () => ipcRenderer.send("etiuda:pick-close"),
     ready: () => ipcRenderer.send("etiuda:pick-ready"),
     onOpen: (fn) => ipcRenderer.on("etiuda:pick-open", (_e, text) => fn(String(text || ""))),
+    clip: (what) => ipcRenderer.invoke("etiuda:pick-clip", String(what || "")).then(v => (typeof v === "string" ? v : "null")),
   });
 }
 
@@ -74,7 +75,7 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   onCatalogListing: (fn) => ipcRenderer.on("etiuda:catalog-listing", (_e, rows) => fn(Array.isArray(rows) ? rows : [])),
   /* The ring beside the catalogs as text, read afresh each time the page verifies a signature. */
   catalogRing: () => ipcRenderer.invoke("etiuda:catalog-ring"),
-  readCatalogFile: (name) => ipcRenderer.invoke("etiuda:catalog-read", String(name || "")),
+  readCatalogFile: (name, desk) => ipcRenderer.invoke("etiuda:catalog-read", String(name || ""), desk ? String(desk) : ""),
   /* The caption is the page's, because the shell has no t(). Async, unlike the desk: a modal
      the person is standing in front of must not hold the renderer's thread. */
   pickCatalogFolder: (title) => ipcRenderer.invoke("etiuda:pick-catalog-folder", String(title || "")),
@@ -105,10 +106,11 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   /* A refused file somebody double-clicked, {name, why}, answered once. */
   openedRefused: host.openedRefused || null,
   /* Export's dialog, then the write to what was chosen: {name} or null for a dialog closed, then
-     {name, ok} once written or refused. */
+     {name, ok, sealed} once written or refused. `from` is the catalog the export was made from, {id, sha}. */
   chooseCatalogSave: (title, name, label) => ipcRenderer.invoke("etiuda:choose-catalog-save",
     String(title || ""), String(name || ""), String(label || "")),
-  writeCatalogSave: (text) => ipcRenderer.invoke("etiuda:write-catalog-save", String(text || "")),
+  writeCatalogSave: (text, from) => ipcRenderer.invoke("etiuda:write-catalog-save", String(text || ""),
+    from && typeof from === "object" ? { id: String(from.id || ""), sha: String(from.sha || "") } : null),
   /* The watched file, spec 11.5. Text, like the desk and for the same reason, and parsed by the
      engine's own reader: the shell has already refused anything that is not a format 2 catalog,
      and two parsers agreeing is what keeps a file the shell accepts a file the engine accepts. */
@@ -129,6 +131,20 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
      desk's own catalog file by its stem, an empty text taking it away. Nothing here hands out a key. */
   branchIdentity: (make) => ipcRenderer.invoke("etiuda:branch-identity", make === false ? false : true),
   writeBranch: (stem, text) => ipcRenderer.invoke("etiuda:branch-write", String(stem || ""), String(text || "")),
+  /* The desk's earlier versions of its catalogs: the list, {name, text} for one, and putting one back in the catalog
+     folder, answered {ok, replaced}. A version is its hash and the file it was kept for. */
+  historyList: () => ipcRenderer.invoke("etiuda:history-list"),
+  historyRead: (sha, file) => ipcRenderer.invoke("etiuda:history-read", String(sha || ""), String(file || "")),
+  historyPut: (sha, file) => ipcRenderer.invoke("etiuda:history-put", String(sha || ""), String(file || "")),
+  /* The shared catalog this desk edits directly, by its name in the catalog folder: {text, sha, free, base} for the
+     file and the edition `pin` names, and a write answered only while the file still holds the bytes `sha` names. */
+  sharedRead: (name, pin) => ipcRenderer.invoke("etiuda:shared-read", String(name || ""), String(pin || "")),
+  sharedWrite: (name, text, sha, create) => ipcRenderer.invoke("etiuda:shared-write", String(name || ""), String(text || ""),
+    String(sha || ""), create === true),
+  /* Asking to join the team a sealed catalog in the folder belongs to: "state", "ask" with the file's name and the
+     agent's, or "cancel", each answered {sealed, join, joined}; and that answer again whenever it changes. */
+  teamJoin: (op, file, name) => ipcRenderer.invoke("etiuda:team-join", String(op || ""), String(file || ""), String(name || "")),
+  onTeamJoin: (fn) => ipcRenderer.on("etiuda:team-join", (_e, v) => fn(v && typeof v === "object" ? v : {})),
   onStatsAsk: (fn) => ipcRenderer.on("etiuda:stats-ask", (_e, req) => fn(req && typeof req === "object" ? req : {})),
   /* The picker's questions, answered by the page as JSON text: what to show, what a query finds, and
      the text a copy puts on the clipboard, which the shell writes. */
@@ -139,6 +155,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   }),
   /* The hotkey Settings shows: {accel, held, taken} now, a combination tried as {ok, why}, and the
      one held paused while Settings listens for keys. */
+  /* The clipboard's text at the agent's Alt+V, which the shell saw pressed, or null. */
+  readClip: () => ipcRenderer.invoke("etiuda:clip-read"),
   hotkeyState: () => ipcRenderer.sendSync("etiuda:hotkey-state"),
   setHotkey: (accel) => ipcRenderer.invoke("etiuda:hotkey-set", String(accel || "")),
   pauseHotkey: (on) => ipcRenderer.send("etiuda:hotkey-hold", !!on),

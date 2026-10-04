@@ -25,6 +25,7 @@ const zlib = require("zlib");
 const E = require("./engine.js");
 const MOTION = require("./motion.js");
 const TW = require("./tour-walk.js");
+const BADGE = require("./badge-room.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 /* Two screenshots of one strip differ where a pixel moves by more than one level of one channel: the same state photographed
    twice can drift by one level in a 1 px column. Only 8-bit RGB or RGBA is read; anything else throws, so it cannot pass unread. */
@@ -72,12 +73,14 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-/* 294 since the dot field's extent (two checks and its clean); 291 since About closes on the trademark notice (two checks and its clean); 288 since the theme
+/* 299 since a macro's text keeps out from under its badge (four checks and its clean) and the
+   dot field's extent (two checks and its clean); 291 since About closes on the trademark notice
+   (two checks and its clean); 288 since the theme
    crossfades (two checks and its clean); 285 since a copy lays only the wash over its block and
    greens only that block's spine, a card's title has the row while its controls wait, the
    scrollbar's thumb is opaque, every theme has one blue, an idle tab's dot is the band's ink, and
    Maintenance fits its window unscrolled; 278 was the tour's walk by its acts. */
-const EXPECTED = { chrome: 294 };
+const EXPECTED = { chrome: 299 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -916,7 +919,15 @@ const t0 = Date.now();
   /* THE CROSSFADE, read in pixels: the window outside the theme button, whose icon turns only
      with motion. Reduced motion is the reference, instant, so the pair are each other's control.
      The fade (--m-celebrate, 420 ms) is held at 200 ms for one shot. captureBeyondViewport stays
-     false: the default resizes the page to capture it, and in the shell that once shed the wordmark. */
+     false: the default resizes the page to capture it, and in the shell that once shed the wordmark.
+     THE HEADER MARK TURNS since the fifth (b0075b8, 140 s a turn, repainted every 50 ms), so a
+     settled shot taken under motion and the target shot taken under reduced motion differ inside
+     its box whatever the fade did: 65 pixels, all at x 18 to 34, measured 2026-10-04. The mark's
+     drawing is therefore held out of every shot of this leg (visibility only, so nothing moves),
+     which is the same treatment the theme button gets and costs the leg only the mark's own
+     colour; the rest of the band, the tile it sits on included, is still compared. The strips
+     are not cut around the mark's box instead because a box of the header that is exempt is a
+     box in which a half-faded header could hide, where a hidden path is one thin drawing. */
   if (WHICH === "chrome") {
     e = since();
     const isVt = a => a.effect && /^::view-transition/.test(a.effect.pseudoElement || "");
@@ -934,6 +945,8 @@ const t0 = Date.now();
     };
     const pressTheme = () => p.evaluate(() => { document.getElementById("theme").click(); return document.documentElement.dataset.theme; });
     await p.mouse.move(4, 900);
+    await p.evaluate(() => { const s = document.createElement("style"); s.id = "__markHold";
+      s.textContent = ".brand-tile svg path{visibility:hidden!important}"; document.head.appendChild(s); });
     await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
     await sleep(300);
     const from = await shot();
@@ -955,7 +968,8 @@ const t0 = Date.now();
     const settled = await shot(), left = await vtNow();
     await pressTheme(); await sleep(700);
     await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "no-preference" }]);
-    await p.evaluate(k => { if (k === null) localStorage.removeItem("eTheme"); else localStorage.setItem("eTheme", k); }, th0.key);
+    await p.evaluate(k => { const h = document.getElementById("__markHold"); if (h) h.remove();
+      if (k === null) localStorage.removeItem("eTheme"); else localStorage.setItem("eTheme", k); }, th0.key);
     check(held.length > 0 && held.every(d => d === 420) && mid !== from && mid !== to && settled === to && left === 0 && from !== to,
       "the theme crossfades the whole window and settles in its final colours: " + held.length
       + " old and new layer animation(s) of " + held.join("/") + " ms, the frame held at 200 ms is "
@@ -3699,6 +3713,37 @@ const t0 = Date.now();
     if (motionCtx) await motionCtx.close().catch(() => {});
   }
   clean(e, "the motion legs");
+
+  /* THE BADGE'S ROOM, tests/badge-room.js, which says what is measured. A context of its own, as
+     the motion legs have; four lines whatever happens, so a boot that fails still counts them. */
+  e = since();
+  let badgeCtx = null, badgeSaid = 0;
+  const badgeCheck = (ok, what) => { badgeSaid++; check(ok, what); };
+  try {
+    badgeCtx = b.createBrowserContext ? await b.createBrowserContext() : await b.createIncognitoBrowserContext();
+    const g = await badgeCtx.newPage();
+    await g.setViewport({ width: 1500, height: 950 });
+    g.on("dialog", d => d.accept());
+    g.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
+    const late = await bootAndDismiss(g, RUN.url, "the badge page");
+    await g.evaluate(() => { const x = document.getElementById("eAgentModal"); if (x) x.remove(); });
+    if (late.length) console.log("  the badge page WAITED OUT: " + late.join("; "));
+    const rows = await BADGE.sweep(g, w => sized(g, w, 950, "the badge's room"));
+    await sized(g, 1500, 950, "the badge's room");
+    const reach = rows.reduce((a, r) => a + r.reaching, 0), under = rows.filter(r => r.hits.length);
+    badgeCheck(reach >= BADGE.FLOOR, "br1 the sweep met " + reach + " blocks whose badge reaches the text column (floor " + BADGE.FLOOR + ")");
+    badgeCheck(under.length === 0, "br2 no line runs under a badge in " + rows.length + " combinations of language and width ("
+      + rows.reduce((a, r) => a + r.hits.length, 0) + " blocks do"
+      + (under.length ? ": " + under.slice(0, 3).map(r => r.ui + "/" + r.card + " " + r.w + "px " + r.hits[0]).join("; ") : "") + ")");
+    badgeCheck(rows.every(r => r.shortWithRoom === 0 && r.longWithout === 0), "br3 a short tag carries no room element and a long one carries one");
+    const pr = await BADGE.pressAtTag(g);
+    badgeCheck(pr.ok, "br4 a press beside the badge copies the block as before (" + pr.why + ")");
+  } catch (x) {
+    for (let i = badgeSaid; i < 4; i++) check(false, "br" + (i + 1) + " the badge's room: not driven, " + (x && x.message || x));
+  } finally {
+    if (badgeCtx) await badgeCtx.close().catch(() => {});
+  }
+  clean(e, "the badge's room");
 
   /* THE VIEWPORT BATCH'S OWN LEG, board item 630. A batch of sleeps moved onto a condition is
      a change that can be wrong in two directions, and this covers the one the legs downstream

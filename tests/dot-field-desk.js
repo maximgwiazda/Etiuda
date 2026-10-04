@@ -44,6 +44,7 @@ if (process.platform !== "win32") E.refuse("tests/dot-field-desk.js reads the wi
 const PRIO = E.belowNormal();
 console.log("       this run at " + (PRIO.below ? "below-normal" : "priority " + PRIO.priority) + " priority");
 const PORT = E.portBlock("dot-field-desk");
+E.windowWall("tests/dot-field-desk.js");
 /* After the port block, so a refused shift is refused whatever else is live (engine-selftest 27h). */
 E.refuseWhileElectronLive("tests/dot-field-desk.js");
 const LEASED = E.takeLeases(["ports:" + PORT], 10, "tests/dot-field-desk.js");

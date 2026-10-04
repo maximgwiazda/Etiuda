@@ -16,6 +16,8 @@ import { kbdNav, railStep, markEnd } from "./mark.js";
 import { navEntry } from "./entry-walk.js";
 import { navPill, navPillEnd } from "./pill-walk.js";
 import { copyEntrySel } from "./copy-entry.js";
+import { copyNextReply, foldNextDock, nextDockOpen } from "./next-dock.js";
+import { lanesKey, lanesOpen, lanesShortcut, toggleLanes } from "./lanes.js";
 import { notePaneOpen, closeNotePane } from "./note-pane.js";
 import { closeSettingsMenu, openSettingsMenu } from "./header-menus.js";
 import { lang, setCats, semiKind, railMarkUsed, railSel, railMarkIdx, railOrder, setRailSel, setRailMarkIdx, setSemiKind, pickRun, intentIdxs, setRailMarkUsed, setPickRun, entrySel } from "./app-state.js";
@@ -24,6 +26,9 @@ import { lang, setCats, semiKind, railMarkUsed, railSel, railMarkIdx, railOrder,
 
 // ---- running a shortcut: the dispatcher reaches the whole app, so it stays here -------
 function runShortcut(id){
+  if(id==="lanes") return lanesKey();
+  // While the lanes show, the keys that walk and copy cards walk and copy the replies there.
+  if(lanesOpen()){ const r=lanesShortcut(id); if(r!==undefined) return r; }
   /* THE NEXT DECLARED LANGUAGE, WRAPPING, which is the honest generalisation of a toggle and is
      exactly today's flip at two: the pair was written here as a literal, so at one declared
      language this switched the desk into a language with no text in it. Spec 2026-09-04 - it
@@ -111,6 +116,8 @@ function runShortcut(id){
   if(id==="navPillFirst"||id==="navPillLast"){
     return navPillEnd(id==="navPillLast"?1:-1);
   }
+  // Declined when the action button offers no reply at that place, so the key falls through.
+  if(/^nextCopy[1-4]$/.test(id)) return copyNextReply(+id.slice(8)-1);
   if(id==="copy"||id==="copyOther"){
     kbdNav(true);
     // The mark's surface decides what Enter means: an intent mark is picked, a card copied.
@@ -132,6 +139,9 @@ function runShortcut(id){
     if(notePaneOpen()){ closeNotePane(); return true; }
     if(factsPanelOpen()){ closeFactsPanel(); return true; }
     if($("#settingsMenu")&&!$("#settingsMenu").hidden){ closeSettingsMenu(); return true; }
+    // The lanes and then an unfolded dock are shed before the search is.
+    if(lanesOpen()){ toggleLanes(false); return true; }
+    if(nextDockOpen()){ foldNextDock(); return true; }
     escapeLadderStep();
     return true;
   }

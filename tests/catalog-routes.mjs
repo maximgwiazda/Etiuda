@@ -193,24 +193,26 @@ function richPayload() {
   Object.assign(p.cards[0], { retired: true, commits: true, next: [{ to: "c-steps", label: "later" }],
     futureCard: { a: [1, { b: 2 }] } });
   Object.assign(p, { notes: { en: "A note." }, grew: { id: "lamp-shop", rev: 1, sha: "sha256:" + HEX("a") },
-    desk: { id: "k-0123456789abcdef", name: "Ala", key: HEX("b"), box: HEX("c") }, futureHeader: { kept: true } });
+    desk: { id: "k-0123456789abcdef", name: "Ala", key: HEX("b"), box: HEX("c") }, futureHeader: { kept: true },
+    fields: [{ id: "order", label: { en: "order number" }, kind: "pattern", pattern: "LS-0000", clip: true },
+      { id: "kept", label: { en: "what was kept" }, kind: "text", required: false, skip: { en: "nothing" }, keep: "copy" }] });
   return p;
 }
 const richBoot = await bootRoute(richPayload());
 const richFile = await fileRoute(richPayload());
 const richNow = richPayload();
-const wanted = [richNow.cards[0], richNow.cards[1], richNow.notes, richNow.grew, richNow.desk, richNow.futureHeader]
+const wanted = [richNow.cards[0], richNow.cards[1], richNow.notes, richNow.grew, richNow.desk, richNow.futureHeader, richNow.fields]
   .map(canon);
 const written = r => {
   // Through JSON first, as the stored copy goes, then out through the writer the export uses.
   const out = V2.catalogToV2(JSON.parse(JSON.stringify(r.cat)));
-  return [out.cards[0], out.cards[1], out.notes, out.grew, out.desk, out.futureHeader].map(canon);
+  return [out.cards[0], out.cards[1], out.notes, out.grew, out.desk, out.futureHeader, out.fields].map(canon);
 };
 check("13 a catalog holding every new field and an unknown one on a card and in the header is read by the boot route and written back as it was",
   JSON.stringify(written(richBoot)) === JSON.stringify(wanted),
-  "six values compared by canonical form, the card the file holds first");
+  "seven values compared by canonical form, the card the file holds first, the fill-in fields last");
 check("14 and by the picked-file route, which is the whitelist an Import goes through",
-  JSON.stringify(written(richFile)) === JSON.stringify(wanted), "the same six");
+  JSON.stringify(written(richFile)) === JSON.stringify(wanted), "the same seven");
 check("15 and the two routes still end at the same catalog, the new fields included",
   diffPaths(richBoot.cat, richFile.cat, "", []).length === 0 && richBoot.sig === richFile.sig,
   diffPaths(richBoot.cat, richFile.cat, "", []).slice(0, 4).join(" ") || "equal");
@@ -222,9 +224,9 @@ try { await fileRoute(richBent); } catch (e) { refused = String(e.message); }
 check("17 a chain naming a card twice is refused at the door, naming the card",
   refused.startsWith("card c-warm: next[1] names c-steps a second time"), refused.slice(0, 70) || "accepted");
 check("18 control: the plain payload carries none of the new keys through either route, on the header or on a card",
-  ["notes", "grew", "desk", "ext"].every(k => !(k in boot.cat) && !(k in file.cat))
+  ["notes", "grew", "desk", "ext", "fields"].every(k => !(k in boot.cat) && !(k in file.cat))
   && boot.cat.cards.every(c => !["retired", "commits", "next", "ext"].some(k => k in c)),
-  "none of notes, grew, desk, ext; no card holds retired, commits, next or ext");
+  "none of notes, grew, desk, ext, fields; no card holds retired, commits, next or ext");
 
 /* THE ROUTE OUT, driven for real. exportCatalog() runs end to end in bare node: the document is a
    stand-in that answers every question with another stand-in, the hooks are empty, and the save
@@ -281,14 +283,16 @@ check("18 control: the plain payload carries none of the new keys through either
     Object.assign(d.cards[0], { commits: true, retired: true, next: [{ to: "c-b" }, { to: "c-c", label: "x" }],
       futureCard: { a: [1, { b: 2 }] } });
     Object.assign(d, { notes: { en: "A note." }, grew: { id: "lamp-shop", rev: 3, sha: "sha256:" + HEX("a") },
-      desk: { id: "k-0123456789abcdef", name: "Ala", key: HEX("b"), box: HEX("c") }, futureHeader: { kept: true } });
+      desk: { id: "k-0123456789abcdef", name: "Ala", key: HEX("b"), box: HEX("c") }, futureHeader: { kept: true },
+      fields: [{ id: "order", label: { en: "order number" }, kind: "pattern", pattern: "LS-0000", clip: true },
+      { id: "kept", label: { en: "what was kept" }, kind: "text", required: false, skip: { en: "nothing" }, keep: "copy" }] });
     return d;
   };
   const sent = await exportOf(rich());
   check("19 the export of a catalog holding every new field carries the card's fields, the notes and the unknown header field as they came",
-    !!sent && canon([sent.cards[0], sent.notes, sent.futureHeader])
-      === canon([rich().cards[0], rich().notes, rich().futureHeader]),
-    sent ? "card, notes and the unknown field compared by canonical form" : "nothing was written");
+    !!sent && canon([sent.cards[0], sent.notes, sent.futureHeader, sent.fields])
+      === canon([rich().cards[0], rich().notes, rich().futureHeader, rich().fields]),
+    sent ? "card, notes, the unknown field and the fill-in fields compared by canonical form" : "nothing was written");
   check("20 and it is a NEW catalog: a new id, the first edition, and neither grew nor desk, which describe the file it came from",
     !!sent && sent.id !== "lamp-shop" && sent.rev === 1 && !("grew" in sent) && !("desk" in sent),
     sent ? "id " + (sent.id === "lamp-shop" ? "kept" : "new") + ", rev " + sent.rev + ", grew " + ("grew" in sent) + ", desk " + ("desk" in sent) : "nothing");
@@ -300,7 +304,7 @@ check("18 control: the plain payload carries none of the new keys through either
     !!trimmed && canon(trimmed.cards[0].next) === canon([{ to: "c-c", label: "x" }]) && V2R.v2Problems(trimmed).length === 0,
     trimmed ? "next is " + JSON.stringify(trimmed.cards[0].next) : "nothing");
   const bare = await exportOf(doc());
-  const NEW = ["notes", "grew", "desk", "ext", "futureHeader"], CARDNEW = ["retired", "commits", "next", "ext", "futureCard"];
+  const NEW = ["notes", "grew", "desk", "ext", "futureHeader", "fields"], CARDNEW = ["retired", "commits", "next", "ext", "futureCard"];
   check("23 control: a catalog holding none of them exports none of them, on the header or on a card",
     !!bare && NEW.every(k => !(k in bare)) && bare.cards.every(c => CARDNEW.every(k => !(k in c))),
     bare ? "header keys: " + Object.keys(bare).join(",") : "nothing");
@@ -406,6 +410,123 @@ check("18 control: the plain payload carries none of the new keys through either
   check("37 a retired card the agent had hidden is still carried, flagged, and its hide is still held",
     !!hidden && hidden.cards.map(c => c.id + (c.retired ? "*" : "")).join(",") === "c-a,c-b*,c-c" && PK.pack.hidden.join(",") === "c-b",
     hidden ? hidden.cards.map(c => c.id + (c.retired ? "*" : "")).join(",") + " | " + PK.pack.hidden.join(",") : "nothing");
+  /* WHAT A NEW EDITION CHANGES (C08) and what the load does with the desk's own edits (branches point 10).
+     The comparison is pure and is called on catalogs read by the real reader; the settling runs inside the
+     real carry, as an edition of the same catalog is put down. */
+  const ED = await import(MOD("edition-changes.js"));
+  const read = d => CT.parseCatalogFile(JSON.stringify(d));
+  const next = f => { const d = doc(); f(d); return d; };
+  const bodyIs = (d, id, v) => { d.cards.find(c => c.id === id).body.en = v; };
+  const kinds = r => ["changed", "new", "restored", "retired", "removed"].map(k => r.counts[k]).join(",");
+  const said = r => r.items.map(i => i.kind + ":" + i.id + (i.own ? "*" : "")).join(" ");
+  const NONE = { overrides: {}, removed: [], favourites: [] };
+  const three = next(d => { bodyIs(d, "c-a", "A body, changed."); d.cards[2].retired = true;
+    d.cards.push({ id: "c-d", shelf: "t-op", bodyShape: "plain", title: { en: "D" }, body: { en: "D body." } }); });
+  const r38 = ED.editionChanges(read(doc()), read(three), NONE);
+  check("38 an edition with a card changed, one added and one retired counts 1, 1 and 1, and names each",
+    kinds(r38) === "1,1,0,1,0" && said(r38) === "changed:c-a new:c-d retired:c-c", kinds(r38) + " | " + said(r38));
+  const EP = await import(MOD("edition-panel.js"));
+  const comeback = (await import(MOD("esc.js"))).esc((await import(MOD("ui-lang.js"))).t("It comes back with your star and your edits."));
+  const sleeper = lay => { const r = ED.editionChanges(read(doc()), read(three), lay), it = r.items.find(i => i.id === "c-c");
+    return (it && it.asleep ? "asleep" : "awake") + "/" + (EP.editionOfferHtml(read(three), read(doc()), r).indexOf(comeback) > -1 ? "line" : "none"); };
+  const r38a = [NONE, { overrides: {}, removed: [], favourites: ["c-c"] }, { overrides: { "c-c": { en: "my edit" } }, removed: [], favourites: [] }]
+    .map(sleeper).join(" ");
+  check("38a the offer promises a retired card back with a star and edits only where it has one: not unstarred and unedited, yes starred, yes edited",
+    r38a === "awake/none asleep/line asleep/line", r38a);
+  const r39 = ED.editionChanges(read(doc()), read(doc()), NONE);
+  check("39 control: the same file offered again counts nothing", kinds(r39) === "0,0,0,0,0" && !r39.items.length, kinds(r39));
+  const r40 = ED.editionChanges(read(doc()), read(next(d => d.cards.reverse())), NONE);
+  check("40 a change in the order of the cards alone counts nothing", kinds(r40) === "0,0,0,0,0", kinds(r40));
+  const r40a = ED.editionChanges(read(doc()),
+    read(next(d => { d.cards[0].firstOnly = true; d.cards[1].k = "lamp, bulb"; d.cards[2].commits = true; })), NONE);
+  check("40a a card whose only change is a flag or its keywords counts nothing", kinds(r40a) === "0,0,0,0,0" && !r40a.items.length,
+    kinds(r40a) + " | " + said(r40a));
+  const asleepDoc = next(d => { d.cards[1].retired = true; });
+  const r41 = ED.editionChanges(read(asleepDoc), read(next(d => { d.cards.splice(2, 1); })), NONE);
+  check("41 a card the edition wakes is restored, and one it leaves out altogether is removed, not retired",
+    said(r41) === "restored:c-b removed:c-c", said(r41));
+  const mineOn = id => ({ overrides: { [id]: { en: "my edit" } }, removed: [], favourites: [] });
+  const leadB = read(next(d => bodyIs(d, "c-b", "lead text")));
+  const r42a = ED.editionChanges(read(doc()), leadB, mineOn("c-b"));
+  const r42b = ED.editionChanges(read(doc()), leadB, mineOn("c-a"));
+  const r42c = ED.editionChanges(read(doc()), read(next(d => bodyIs(d, "c-b", "my edit"))), mineOn("c-b"));
+  check("42 an edited card the lead changed otherwise is the agent's own version; one the lead left, or changed to the agent's words, is not",
+    said(r42a) === "changed:c-b*" && said(r42b) === "changed:c-b" && said(r42c) === "changed:c-b",
+    [said(r42a), said(r42b), said(r42c)].join(" | "));
+  const r43 = ED.editionChanges(read(doc()), leadB, { overrides: {}, removed: ["c-b"], favourites: [] });
+  check("43 a card this desk removed is nobody's news when the lead changes it", !r43.items.length, said(r43) || "nothing");
+  const noted = n => Object.assign(doc(), { langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }], notes: n });
+  check("44 the lead's note: none gives none, English alone shows on a Polish desk, Polish shows there when written",
+    ED.editionNoteText(read(doc()), "pl") === "" && ED.editionNoteText(read(noted({ en: "Why." })), "pl") === "Why."
+    && ED.editionNoteText(read(noted({ en: "Why.", pl: "Dlaczego." })), "pl") === "Dlaczego.", "three notes");
+  const pairs = [["The courier costs 18 a box.", "The courier costs 19 a box."], ["", "New."], ["Old.", ""],
+    ["one two three", "one three two"], ["a ".repeat(800), "b ".repeat(800)]];
+  const joined = (ops, mine) => ops.filter(o => o.op === "same" || o.op === mine).map(o => o.text).join("");
+  const w = ED.wordDiff(pairs[0][0], pairs[0][1]);
+  check("45 a word diff marks the one word that moved, and each side joins back to its own text, past the cap too",
+    w.filter(o => o.op !== "same").map(o => o.op + ":" + o.text).join(" ") === "del:18 ins:19"
+    && pairs.every(p => { const ops = ED.wordDiff(p[0], p[1]); return joined(ops, "del") === p[0] && joined(ops, "ins") === p[1]; }),
+    w.map(o => o.op + ":" + o.text).join("|"));
+  const ovB = () => JSON.stringify(PK.pack.overrides["c-b"] || null);
+  fresh(); land(next(d => bodyIs(d, "c-b", "my edit")));
+  check("46 an edition that took the agent's edit word for word leaves no edit behind, and nothing for the desk's own file",
+    ovB() === "null" && bodyOf("c-b") === "my edit" && CF.deskBranchHolds() === false,
+    ovB() + " | " + bodyOf("c-b") + " | holds " + CF.deskBranchHolds());
+  fresh(); land(doc());
+  check("47 control: the same edition put down again drops nothing", ovB() === JSON.stringify({ en: "my edit" }), ovB());
+  fresh(); land(next(d => bodyIs(d, "c-b", "lead text")));
+  check("48 a field the lead changed otherwise stays the agent's", ovB() === JSON.stringify({ en: "my edit" }) && bodyOf("c-b") === "my edit",
+    ovB() + " | " + bodyOf("c-b"));
+  const takeLand = () => {
+    const taken = read(next(d => bodyIs(d, "c-b", "lead text")));
+    CC.takeTeamText(taken, "c-b", true);
+    CC.carryCardLayer(taken); ST.lsSet(CT.E_CATALOG_STORE, JSON.stringify(taken), true); CT.eApplyCatalog(taken);
+    PK.pack.baseCards = null; RB.rebuildCards();
+  };
+  fresh(); takeLand();
+  check("49 the team's new text taken in the offer: after the load the edit is gone and the card says what the edition says",
+    ovB() === "null" && bodyOf("c-b") === "lead text" && PK.pack.favourites.indexOf("c-b") > -1,
+    ovB() + " | " + bodyOf("c-b"));
+  const titleOf = id => ((AP.cards.find(c => c.id === id) || {}).t);
+  fresh(); PK.pack.overrides["c-b"].t = "My title"; RB.rebuildCards(); takeLand();
+  check("49a and a field of the agent's edit the lead never changed stays: the title the agent wrote, beside the team's text",
+    ovB() === JSON.stringify({ t: "My title" }) && bodyOf("c-b") === "lead text" && titleOf("c-b") === "My title",
+    ovB() + " | " + bodyOf("c-b") + " | " + titleOf("c-b"));
+  const own = (body) => { fresh(); PK.pack.custom = [{ id: "u:own1", c: "t-op", t: "Mine", en: body }];
+    PK.pack.favourites.push("u:own1"); RB.rebuildCards(); };
+  const adopting = next(d => d.cards.push({ id: "u:own1", shelf: "t-op", bodyShape: "plain", title: { en: "Mine" }, body: { en: "Mine body." } }));
+  own("Mine body."); land(adopting);
+  const ownIds = () => AP.cards.filter(c => c.id === "u:own1").length;
+  check("50 an own card the edition now holds shows once, still starred, and is no longer the agent's own",
+    ownIds() === 1 && PK.pack.favourites.indexOf("u:own1") > -1 && !PK.pack.custom.some(c => c.id === "u:own1")
+    && !("u:own1" in PK.pack.overrides), ownIds() + " shown | custom " + PK.pack.custom.length + " | override " + ("u:own1" in PK.pack.overrides));
+  own("Mine body, later."); land(adopting);
+  check("51 and the agent's words written since the proposal stay, as the agent's edit of that card",
+    ownIds() === 1 && bodyOf("u:own1") === "Mine body, later." && !PK.pack.custom.length, bodyOf("u:own1"));
+  /* THE DESK'S EXPORT, THROUGH A HOST (board 834, step 12, a file leaving the team). Every export above takes the
+     browser's dialog, where `from` goes nowhere; on the desk it is what the shell seals the file for, and team-desk 14aq
+     drives host.js with a `from` the test supplies. Here the real exportCatalog() reaches a host, from a catalog stored
+     under a LITERAL pin, so a page that hands over anything but the stored id and pin, or nothing, goes red. */
+  const PIN = "sha256:" + "5e".repeat(32), handed = [];
+  globalThis.window.E_HOST = {
+    chooseCatalogSave: async () => ({ name: "Host.ec" }),
+    writeCatalogSave: async (text, from) => { handed.push(from === undefined ? "undefined" : from);
+      return { name: "Host.ec", ok: !!JSON.parse(text).cards.length, sealed: !!from }; } };
+  const viaHost = async stored => {
+    const cat = CT.parseCatalogFile(JSON.stringify(doc()));
+    if (stored) ST.lsSet(CT.E_CATALOG_STORE, JSON.stringify(Object.assign(cat, { pin: PIN })), true); else ST.lsDel(CT.E_CATALOG_STORE);
+    CT.eApplyCatalog(cat); PK.resetPack(); AP.setCards(cat.cards.slice());
+    handed.length = 0;
+    return [await CF.exportCatalog(), JSON.stringify(handed)];
+  };
+  const sealedFrom = await viaHost(true);
+  check("52a the desk's Export hands its host the stored catalog's id and pin, as the catalog the file was made from",
+    sealedFrom[0] === "Host.ec" && sealedFrom[1] === JSON.stringify([{ id: "lamp-shop", sha: PIN }]),
+    "saved " + sealedFrom[0] + ", handed " + sealedFrom[1]);
+  const fromNothing = await viaHost(false);
+  check("52A THE CONTROL: with no catalog stored the same Export hands over null, so 52a is not an answer that is always given",
+    fromNothing[0] === "Host.ec" && fromNothing[1] === "[null]", "saved " + fromNothing[0] + ", handed " + fromNothing[1]);
+  delete globalThis.window.E_HOST;
   HK.hooks.syncFavouritesMeta = () => {};
   // The toast's own timer fires after the check, against the stand-in, and is let run its course.
   await new Promise(r => setTimeout(r, 2000));

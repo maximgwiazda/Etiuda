@@ -1,0 +1,290 @@
+/* The shell's HPKE, held to the published vectors of RFC 9180 for the one suite the team key's wrap
+ * uses: base mode, DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-128-GCM. Board 834, step 12. From 12m, the
+ * sealed envelope beside it: a catalog's text under the team key, AES-256-GCM, held by refusals alone. From 12v,
+ * the team key's wrap for one roster entry, bound to its team, epoch and desk.
+ *
+ *     node tests/hpke.mjs        exit code is the number of failed checks, capped at 63
+ *
+ * THE ORACLE IS THE STANDARD, NOT OUR OWN OUTPUT. Every value in VECTOR is copied from RFC 9180,
+ * appendix A.1.1 and A.1.1.1, sequence number 0, as the RFC Editor publishes it at
+ * https://www.rfc-editor.org/rfc/rfc9180.txt. A wrap checked only against itself round-trips
+ * whatever it does, a wrong label included, and no other implementation could then open it.
+ *
+ * skEm and skRm are as the RFC prints them. Its verified erratum 7121 gives them in their RFC 7748 clamped
+ * form, 50c4a758a802cd8b936eceea314432798d5baf2d7e9235dc084ab1b9cfa2f776 and
+ * 4012c550263fc8ad58375df3f557aac531d26850903e55a9f23f21d8534e8a48. X25519 clamps on use, so both forms
+ * give the same pkEm and pkRm, and every value derived from them is unchanged: the vectors still stand.
+ *
+ * THE DECLARATIONS ARE SLICED, AS STUDIO WILL SLICE THEM. They are cut out of shell/main.js by the
+ * marker list below and evaluated with crypto and Buffer as their only names, so a free name would
+ * fail here as it would in Studio, and what is tested is the text a second program runs.
+ *
+ * EVERY CONTROL IS A REFUSAL OR A MUTATION: a changed byte, info, aad or key must not open, and the
+ * same slices with one byte of the HPKE label changed must miss the vector, or 12a to 12e would pass
+ * a function that matched nothing in particular.
+ */
+import fs from "node:fs";
+import crypto from "node:crypto";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+/* The floor: every leg below runs, or the file says it did not complete. */
+const EXPECTED = 42;
+
+let asserted = 0, failed = 0;
+function check(ok, line) {
+  asserted++;
+  if (ok) console.log("  ok   " + line);
+  else { failed++; console.log("  FAIL " + line); }
+}
+
+const HPKE_DECLS = ["const HPKE_KEM =", "const HPKE_SUITE =", "const SPKI_X25519 =", "function hpkeLabeledExtract(",
+  "function hpkeLabeledExpand(", "function hpkeX25519Public(", "function hpkeShared(", "function hpkeSchedule(",
+  "function hpkeSeal(", "function hpkeOpen("];
+
+function sliceDecl(src, marker) {
+  const at = src.indexOf(marker);
+  if (at < 0) throw new Error("no " + JSON.stringify(marker) + " in shell/main.js");
+  if (src.indexOf(marker, at + 1) >= 0) throw new Error(JSON.stringify(marker) + " is in shell/main.js twice");
+  const isFn = marker.startsWith("function");
+  let par = 0, brk = 0, brc = 0, sawBrace = false;
+  for (let i = at; i < src.length; i++) {
+    const ch = src[i];
+    if (ch === "(") par++; else if (ch === ")") par--;
+    else if (ch === "[") brk++; else if (ch === "]") brk--;
+    else if (ch === "{") { brc++; sawBrace = true; }
+    else if (ch === "}") {
+      brc--;
+      if (isFn && sawBrace && !par && !brk && !brc) return src.slice(at, i + 1);
+    } else if (ch === ";" && !par && !brk && !brc && !isFn) return src.slice(at, i + 1);
+  }
+  throw new Error("an unterminated declaration: " + marker);
+}
+function hpkeFrom(src, cr = crypto) {
+  const body = HPKE_DECLS.map(m => sliceDecl(src, m)).join("\n");
+  return new Function("crypto", "Buffer", body
+    + "\nreturn { hpkeLabeledExtract, hpkeShared, hpkeSchedule, hpkeSeal, hpkeOpen };")(cr, Buffer);
+}
+/* hpkeSeal takes no ephemeral key, so the vector's reaches it through the crypto handed to the slice. */
+const withEphemeral = skE => new Proxy(crypto, {
+  get: (t, k) => k === "generateKeyPairSync" ? () => ({ privateKey: skE, publicKey: crypto.createPublicKey(skE) }) : t[k] });
+/* The sealed envelope's declarations, sliced the same way: tests/catalog-sig.js 88f slices this list too. */
+const SEAL_DECLS = ["const SEALED_KIND =", "const SEALED_TEAM_RE =", "function sealedAad(", "function sealCatalog(",
+  "function openSealed("];
+function sealFrom(src) {
+  return new Function("crypto", "Buffer", SEAL_DECLS.map(m => sliceDecl(src, m)).join("\n")
+    + "\nreturn { sealCatalog, openSealed };")(crypto, Buffer);
+}
+/* The team key's wrap, sliced with HPKE and the team id's shape, which is what Studio slices from its pin. */
+const WRAP_DECLS = ["const TEAM_WRAP_LABEL =", "function teamWrapInfo(", "function wrapTeamKey(", "function unwrapTeamKey("];
+function wrapFrom(src) {
+  const body = HPKE_DECLS.concat(["const SEALED_TEAM_RE ="], WRAP_DECLS).map(m => sliceDecl(src, m)).join("\n");
+  return new Function("crypto", "Buffer", body + "\nreturn { teamWrapInfo, wrapTeamKey, unwrapTeamKey };")(crypto, Buffer);
+}
+
+const VECTOR = {
+  info: "4f6465206f6e2061204772656369616e2055726e",
+  pkEm: "37fda3567bdbd628e88668c3c8d7e97d1d1253b6d4ea6d44c150f741f1bf4431",
+  skEm: "52c4a758a802cd8b936eceea314432798d5baf2d7e9235dc084ab1b9cfa2f736",
+  pkRm: "3948cfe0ad1ddb695d780e59077195da6c56506b027329794ab02bca80815c4d",
+  skRm: "4612c550263fc8ad58375df3f557aac531d26850903e55a9f23f21d8534e8ac8",
+  enc: "37fda3567bdbd628e88668c3c8d7e97d1d1253b6d4ea6d44c150f741f1bf4431",
+  shared_secret: "fe0e18c9f024ce43799ae393c7e8fe8fce9d218875e8227b0187c04e7d2ea1fc",
+  key: "4531685d41d65f03dc48f6b8302c05b0",
+  base_nonce: "56d890e5accaaf011cff4b7d",
+  pt: "4265617574792069732074727574682c20747275746820626561757479",
+  aad: "436f756e742d30",
+  ct: "f938558b5d72f1a23810b4be2ab4f84331acc02fc97babc53a52ae8218a355a96d8770ac83d07bea87e13c512a",
+};
+const hex = h => Buffer.from(h, "hex");
+const PKCS8_X25519 = hex("302e020100300506032b656e04220420");
+const privateOf = raw => crypto.createPrivateKey({ key: Buffer.concat([PKCS8_X25519, raw]), format: "der", type: "pkcs8" });
+const rawPublicOf = key => crypto.createPublicKey(key).export({ type: "spki", format: "der" }).subarray(-32);
+const flip = (buf, i) => { const b = Buffer.from(buf); b[i] ^= 1; return b; };
+
+function main() {
+  const SRC = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+  let H = null;
+  try { H = hpkeFrom(SRC); } catch (e) { check(false, "12a the HPKE declarations slice and evaluate - " + e.message); }
+  if (H) check(true, "12a the " + HPKE_DECLS.length + " HPKE declarations slice out of shell/main.js and evaluate with crypto and Buffer alone");
+  if (!H) return;
+
+  const v = Object.fromEntries(Object.entries(VECTOR).map(([k, h]) => [k, hex(h)]));
+  const skE = privateOf(v.skEm), skR = privateOf(v.skRm);
+  check(rawPublicOf(skE).equals(v.pkEm) && rawPublicOf(skR).equals(v.pkRm),
+    "12b the vector's private keys load as KeyObjects whose public halves are its pkEm and pkRm");
+
+  const dh = crypto.diffieHellman({ privateKey: skE, publicKey: crypto.createPublicKey(skR) });
+  const shared = H.hpkeShared(dh, v.enc, v.pkRm);
+  check(shared.equals(v.shared_secret), "12c the KEM's shared_secret is the vector's: " + shared.toString("hex").slice(0, 16) + "...");
+
+  const ks = H.hpkeSchedule(v.shared_secret, v.info);
+  check(ks.key.equals(v.key) && ks.nonce.equals(v.base_nonce),
+    "12d the key schedule gives the vector's key and base_nonce: " + ks.key.toString("hex") + ", " + ks.nonce.toString("hex"));
+
+  const sealed = hpkeFrom(SRC, withEphemeral(skE)).hpkeSeal(v.pkRm, v.info, v.aad, v.pt);
+  check(sealed.enc.equals(v.enc) && sealed.ct.equals(v.ct),
+    "12e sealing the vector's pt to pkRm with its ephemeral key gives its enc and its sequence 0 ct, byte for byte ("
+    + sealed.ct.length + " bytes)");
+
+  const opened = H.hpkeOpen(skR, v.enc, v.info, v.aad, v.ct);
+  check(!!opened && opened.equals(v.pt), "12f opening the vector's enc and ct with skRm gives its pt");
+
+  const team = crypto.randomBytes(32), info = Buffer.from("info"), aad = Buffer.from("aad");
+  const a = H.hpkeSeal(v.pkRm, info, aad, team, skE), b = H.hpkeSeal(v.pkRm, info, aad, team, skE);
+  const backA = H.hpkeOpen(skR, a.enc, info, aad, a.ct), backB = H.hpkeOpen(skR, b.enc, info, aad, b.ct);
+  check(!a.enc.equals(b.enc) && !a.ct.equals(b.ct) && !!backA && backA.equals(team) && !!backB && backB.equals(team),
+    "12g two seals of one 32-byte key differ in enc and ct and both open to it, though each caller passed one fixed key"
+    + " as a fifth argument, which the seal does not take");
+
+  const nulls = [
+    ["a ct byte flipped", H.hpkeOpen(skR, v.enc, v.info, v.aad, flip(v.ct, 0))],
+    ["a tag byte flipped", H.hpkeOpen(skR, v.enc, v.info, v.aad, flip(v.ct, v.ct.length - 1))],
+    ["an enc byte flipped", H.hpkeOpen(skR, flip(v.enc, 5), v.info, v.aad, v.ct)],
+    ["an info byte flipped", H.hpkeOpen(skR, v.enc, flip(v.info, 0), v.aad, v.ct)],
+    ["an aad byte flipped", H.hpkeOpen(skR, v.enc, v.info, flip(v.aad, 6), v.ct)],
+    ["the ct cut by a byte", H.hpkeOpen(skR, v.enc, v.info, v.aad, v.ct.subarray(0, v.ct.length - 1))],
+  ];
+  nulls.forEach(([what, got], i) => check(got === null, "12h" + (i + 1) + " " + what + " does not open: " + (got === null ? "null" : "it opened")));
+  /* A GCM tag cut short is a valid prefix, and a runtime may take a 4- or 8-byte one: the empty message's ct is its bare tag. */
+  const bare = H.hpkeSeal(v.pkRm, v.info, v.aad, Buffer.alloc(0)), whole = H.hpkeOpen(skR, bare.enc, v.info, v.aad, bare.ct);
+  const cut = [4, 8].map(n => H.hpkeOpen(skR, bare.enc, v.info, v.aad, bare.ct.subarray(0, n)));
+  check(!!whole && whole.length === 0 && cut.every(got => got === null),
+    "12h7 an empty message opens with its whole tag, and not with the tag cut to 4 or 8 bytes: "
+    + cut.map(got => got === null ? "null" : "it opened").join(", "));
+
+  const other = crypto.generateKeyPairSync("x25519").privateKey;
+  check(H.hpkeOpen(other, v.enc, v.info, v.aad, v.ct) === null, "12i another desk's private key does not open it");
+  check(H.hpkeOpen(v.skRm, v.enc, v.info, v.aad, v.ct) === null,
+    "12j a private key handed over as bytes rather than a KeyObject is refused, though the bytes are the right ones");
+
+  let threw = "";
+  try { H.hpkeSeal(Buffer.alloc(32), info, aad, team); } catch (e) { threw = e.message; }
+  check(threw !== "" && H.hpkeOpen(skR, Buffer.alloc(32), v.info, v.aad, v.ct) === null,
+    "12k a low-order public key of 32 zero bytes is refused both ways: sealing throws (" + (threw || "it did not throw")
+    + ") and opening is null");
+  /* Node's own X25519 already refuses that key, so the shell's check is held where it stands, on a zero output. */
+  let zero = "";
+  try { H.hpkeShared(Buffer.alloc(32), v.enc, v.pkRm); } catch (e) { zero = e.message; }
+  check(/low-order/.test(zero), "12K an all-zero X25519 output is refused by the shell's own check: " + (zero || "it was taken"));
+
+  /* THE MUTATION: one byte of the label every Extract and Expand carries. */
+  const label = '"HPKE-v1"', count = SRC.split(label).length - 1;
+  let M = null;
+  try { M = hpkeFrom(SRC.split(label).join('"HPKE-v2"'), withEphemeral(skE)); } catch { M = null; }
+  const mutated = M ? M.hpkeSeal(v.pkRm, v.info, v.aad, v.pt) : null;
+  check(count === 2 && !!mutated && !mutated.ct.equals(v.ct) && M.hpkeOpen(skR, v.enc, v.info, v.aad, v.ct) === null,
+    "12L with the label changed by one byte at its " + count + " sites, the same slices miss the vector's ct and refuse to open it");
+
+  /* ---- the sealed envelope: a signed catalog's text under the team key, AES-256-GCM ---------- */
+  let S = null;
+  try { S = sealFrom(SRC); } catch (e) { check(false, "12m the sealed envelope's declarations slice and evaluate - " + e.message); }
+  if (S) check(true, "12m the " + SEAL_DECLS.length + " sealed envelope declarations slice out of shell/main.js and evaluate with crypto and Buffer alone");
+  if (!S) return;
+
+  const teamKey = crypto.randomBytes(32), TEAM = "t-0123456789abcdef";
+  const text = JSON.stringify({ format: 2, kind: "etiuda-catalog", id: "sealed-sample",
+    name: "Za\u017c\u00f3\u0142\u0107 g\u0119\u015bl\u0105 ja\u017a\u0144" }, null, 2) + "\n";
+  const env = S.sealCatalog(teamKey, TEAM, 1, text);
+  check(Object.keys(env).join() === "format,kind,team,epoch,nonce,ct" && env.format === 2 && env.kind === "etiuda-sealed"
+    && env.team === TEAM && env.epoch === 1 && /^[0-9a-f]{24}$/.test(env.nonce) && /^[0-9a-f]+$/.test(env.ct)
+    && env.ct.length === 2 * (Buffer.byteLength(text) + 16),
+    "12n the envelope is format 2, kind etiuda-sealed, its team and epoch, a 12-byte nonce and the ct with its 16-byte tag, in hex");
+  const back = S.openSealed(teamKey, env);
+  check(typeof back === "string" && Buffer.from(back, "utf8").equals(Buffer.from(text, "utf8")),
+    "12o it opens under the same team key to the same " + Buffer.byteLength(text) + " bytes, diacritics included");
+  const env2 = S.sealCatalog(teamKey, TEAM, 1, text);
+  check(env2.nonce !== env.nonce && env2.ct !== env.ct && S.openSealed(teamKey, env2) === text,
+    "12p a second seal of the same text takes a fresh nonce, so its ct differs, and it opens too");
+
+  const hexFlip = (h, i) => flip(Buffer.from(h, "hex"), i).toString("hex");
+  const sealedNulls = [
+    ["a nonce byte flipped", Object.assign({}, env, { nonce: hexFlip(env.nonce, 3) })],
+    ["a ct byte flipped", Object.assign({}, env, { ct: hexFlip(env.ct, 0) })],
+    ["a tag byte flipped", Object.assign({}, env, { ct: hexFlip(env.ct, env.ct.length / 2 - 1) })],
+    ["the team changed to another well-formed id", Object.assign({}, env, { team: "t-0123456789abcdee" })],
+    ["the epoch changed to 2", Object.assign({}, env, { epoch: 2 })],
+  ];
+  sealedNulls.forEach(([what, doc], i) => {
+    const got = S.openSealed(teamKey, doc);
+    check(got === null, "12q" + (i + 1) + " " + what + " does not open: " + (got === null ? "null" : "it opened"));
+  });
+  const nextKey = crypto.randomBytes(32), env3 = S.sealCatalog(nextKey, TEAM, 2, text);
+  check(S.openSealed(nextKey, env3) === text && S.openSealed(nextKey, env) === null && S.openSealed(teamKey, env3) === null,
+    "12r each epoch's key opens its own envelope and not the other epoch's, either way");
+
+  const refused = [[teamKey.subarray(0, 31), TEAM, 1, text], [teamKey.toString("hex"), TEAM, 1, text],
+    [teamKey, "t-0123456789ABCDEF", 1, text], [teamKey, TEAM, 0, text], [teamKey, TEAM, 1.5, text], [teamKey, TEAM, 1, null]]
+    .filter(args => { try { S.sealCatalog(...args); return false; } catch { return true; } }).length;
+  check(refused === 6, "12s sealing throws on a 31-byte key, a key in hex, an upper-case team id, epoch 0 or 1.5 and a text"
+    + " that is not a string: " + refused + " of 6");
+  const quiet = [[teamKey.subarray(0, 31), env], [teamKey, null], [teamKey, JSON.stringify(env)],
+    [teamKey, Object.assign({}, env, { kind: "etiuda-catalog" })], [teamKey, Object.assign({}, env, { ct: env.ct.slice(0, 30) })]]
+    .filter(([k, d]) => { try { return S.openSealed(k, d) === null; } catch { return false; } }).length;
+  check(quiet === 5, "12t opening gives null without a throw for a 31-byte key, no envelope, its text unparsed, another kind"
+    + " and a ct shorter than its tag: " + quiet + " of 5");
+  const bareEnv = S.sealCatalog(teamKey, TEAM, 1, "");
+  const bareCut = [4, 8].map(n => S.openSealed(teamKey, Object.assign({}, bareEnv, { ct: bareEnv.ct.slice(0, 2 * n) })));
+  check(S.openSealed(teamKey, bareEnv) === "" && bareCut.every(got => got === null),
+    "12u an empty text opens with its whole tag, and not with the tag cut to 4 or 8 bytes: "
+    + bareCut.map(got => got === null ? "null" : "it opened").join(", "));
+
+  /* ---- the team key's wrap for one roster entry: HPKE with the team and epoch in info, the desk id as aad -- */
+  let W = null;
+  try { W = wrapFrom(SRC); } catch (e) { check(false, "12v the team key wrap's declarations slice and evaluate - " + e.message); }
+  if (W) check(true, "12v the " + HPKE_DECLS.length + " HPKE and " + (WRAP_DECLS.length + 1) + " wrap declarations slice out of"
+    + " shell/main.js and evaluate with crypto and Buffer alone");
+  if (!W) return;
+
+  const box = crypto.generateKeyPairSync("x25519"), stranger = crypto.generateKeyPairSync("x25519");
+  const BOX = rawPublicOf(box.privateKey).toString("hex"), DESK = "k-0123456789abcdef", DESK2 = "k-fedcba9876543210";
+  const wrap = W.wrapTeamKey(teamKey, BOX, TEAM, 3, DESK), wrap2 = W.wrapTeamKey(teamKey, BOX, TEAM, 3, DESK);
+  const own = W.unwrapTeamKey(box.privateKey, wrap, TEAM, 3, DESK);
+  check(Object.keys(wrap).join() === "epoch,enc,ct" && wrap.epoch === 3 && /^[0-9a-f]{64}$/.test(wrap.enc)
+    && /^[0-9a-f]{96}$/.test(wrap.ct) && Buffer.isBuffer(own) && own.equals(teamKey)
+    && wrap2.enc !== wrap.enc && wrap2.ct !== wrap.ct && W.unwrapTeamKey(box.privateKey, wrap2, TEAM, 3, DESK).equals(teamKey),
+    "12w a wrap is its epoch, a 32-byte enc and the 48-byte ct in hex; the desk's own box key opens it to the team key, and a"
+    + " second wrap of the same key differs and opens too");
+  /* The binding's text written out, not called: wrap and unwrap share teamWrapInfo, so a changed or dropped label
+     round-trips above, and Studio's wraps (its tw1b) and a desk opening them meet only on this text. */
+  const fixed = (team, epoch, desk) => H.hpkeOpen(box.privateKey, hex(wrap.enc),
+    Buffer.from("etiuda-team-key\n" + team + "\n" + epoch, "utf8"), Buffer.from(desk, "utf8"), hex(wrap.ct));
+  const bound = fixed(TEAM, 3, DESK);
+  check(!!bound && bound.equals(teamKey) && fixed(TEAM, 4, DESK) === null && fixed(TEAM, 3, DESK2) === null,
+    "12W the binding as declared: the shell's hpkeOpen, given the info written out as \"etiuda-team-key\\n\" + team + \"\\n\""
+    + " + epoch and the desk id as aad, opens the wrap to the team key, and with the epoch or desk changed opens nothing");
+  const moved = [
+    ["copied onto another roster entry", [box.privateKey, wrap, TEAM, 3, DESK2]],
+    ["copied into another team", [box.privateKey, wrap, "t-0123456789abcdee", 3, DESK]],
+    ["copied into another epoch with its own epoch rewritten", [box.privateKey, Object.assign({}, wrap, { epoch: 4 }), TEAM, 4, DESK]],
+    ["read for an epoch it does not say", [box.privateKey, wrap, TEAM, 4, DESK]],
+  ];
+  moved.forEach(([what, args], i) => {
+    const got = W.unwrapTeamKey(...args);
+    check(got === null, "12x" + (i + 1) + " a wrap " + what + " does not open: " + (got === null ? "null" : "it opened"));
+  });
+  check(W.unwrapTeamKey(stranger.privateKey, wrap, TEAM, 3, DESK) === null,
+    "12y THE CONTROL: another desk's box key opens nothing");
+  const wrapRefused = [[teamKey.subarray(0, 31), BOX, TEAM, 1, DESK], [teamKey, BOX.slice(2), TEAM, 1, DESK],
+    [teamKey, BOX, "t-XYZ", 1, DESK], [teamKey, BOX, TEAM, 0, DESK], [teamKey, BOX, TEAM, 1, "d0123"]]
+    .filter(args => { try { W.wrapTeamKey(...args); return false; } catch { return true; } }).length;
+  check(wrapRefused === 5, "12z wrapping throws on a 31-byte key, a 31-byte box, a malformed team, epoch 0 and a desk id that"
+    + " is not a branch id: " + wrapRefused + " of 5");
+  const wrapQuiet = [[box.privateKey, null], [box.privateKey, "a wrap"], [box.privateKey, Object.assign({}, wrap, { ct: wrap.ct.slice(0, 94) })],
+    [box.privateKey, Object.assign({}, wrap, { enc: wrap.enc.slice(2) })], [rawPublicOf(box.privateKey), wrap]]
+    .filter(([k, w]) => { try { return W.unwrapTeamKey(k, w, TEAM, 3, DESK) === null; } catch { return false; } }).length;
+  check(wrapQuiet === 5, "12Z unwrapping gives null without a throw for no wrap, a string, a short ct, a short enc and a key as"
+    + " bytes: " + wrapQuiet + " of 5");
+}
+
+try { main(); }
+catch (e) { check(false, "harness: " + (e && e.stack ? e.stack : e)); }
+console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
+if (asserted < EXPECTED) {
+  console.log("SUITE DID NOT COMPLETE: " + asserted + " of " + EXPECTED + " checks ran");
+  process.exit(78);
+}
+console.log(failed ? "  RESULT: FAIL " + failed + " of " + asserted : "  RESULT: ok " + asserted + " check(s)");
+/* CAPPED AT 63, as every driver here: an exit code is read modulo 256. */
+process.exit(Math.min(failed, 63));

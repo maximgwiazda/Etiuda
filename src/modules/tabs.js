@@ -13,7 +13,7 @@ import { syncIntentClearBtns } from "./intent-clear.js";
 import { intentEscapeStep } from "./escape-ladder.js";
 import { syncRoleDrum } from "./role-drum.js";
 import { pax, intentEl, roleSel, $ } from "./dom.js";
-import { lang, intentIdxs, intentText, cats, entrySel, setIntentIdxs, setIntentText, setCats, putEntrySel, setPickRun } from "./app-state.js";
+import { lang, intentIdxs, intentText, cats, entrySel, setIntentIdxs, setIntentText, setCats, putEntrySel, setPickRun, fieldVals, setFieldVals } from "./app-state.js";
 import { hooks } from "./hooks.js";
 
 // ---- booking tabs (shared settings; per-tab language / PAX / intent / ROLE / cats / search) --
@@ -36,8 +36,72 @@ function blankTab(){
     who:"",
     cats:[],
     entrySel:null,
-    scrollY:0
+    scrollY:0,
+    path:[],
+    /* The fill-in fields this conversation has answered, field id to value. Kept with the tab, which
+       under the shell lives in the app's memory, so a value goes when its conversation closes. */
+    fields:{}
   };
+}
+/* THE REPLIES SENT IN THIS CONVERSATION, one card id per step, oldest first, the last TAB_PATH_MAX
+   kept. A card copied again straight after itself (another block, the other language) is the same
+   step. Answers the card before this one, or null where there is none. */
+const TAB_PATH_MAX=40;
+function tabPathStep(id){
+  const tb=tabs.find(x=>x.id===activeTabId), at=String(id==null?"":id);
+  if(!tb||!at) return null;
+  const path=Array.isArray(tb.path) ? tb.path : [], prev=path.length ? path[path.length-1] : null;
+  if(prev===at) return null;
+  tb.path=path.concat(at).slice(-TAB_PATH_MAX);
+  clearTimeout(tabSaveTimer);
+  tabSaveTimer=setTimeout(saveTabSession, 250);
+  if(tabPathWatch) tabPathWatch();
+  return prev;
+}
+/* One listener, the dock: told when the tab in front takes a step, which is what a new batch of next
+   replies is. A switch of tab is a render, never a step. */
+let tabPathWatch=null;
+function watchTabPath(fn){ tabPathWatch=fn||null; }
+/* THE PATH'S BEADS are drawn here and decided by the action button (next-dock.js), which knows what a chain is:
+   it answers a tab with {sent, more, open}, or null for a tab with no chain. */
+let tabBeadsFn=null;
+function setTabBeads(fn){ tabBeadsFn=fn||null; }
+function tabBeadsHtml(b){
+  if(!b) return "";
+  let h=b.more ? '<i class="bd-more"></i>' : "";
+  for(let i=0;i<b.sent;i++) h+='<i class="bd"></i>';
+  return h+(b.open ? '<i class="bd bd-open"></i>' : "");
+}
+function fillTabBeads(el, tb){
+  const h=tabBeadsHtml(tabBeadsFn && tb ? tabBeadsFn(tb) : null);
+  if(el.innerHTML===h && el.hidden===!h) return false;
+  el.innerHTML=h; el.hidden=!h;
+  return true;
+}
+/** Every drawn tab's beads, between its name and its close button, after a redraw of the strip, a step or a
+ *  sync of the button. They share the tab's width with its name, so the names are fitted again whenever a
+ *  tab's beads changed. */
+function syncTabBeads(){
+  const bar=$("#tabsBar");
+  if(!bar) return;
+  let moved=false;
+  bar.querySelectorAll(".tab").forEach(el=>{
+    let bd=el.querySelector(".tab-beads");
+    if(!bd){
+      bd=document.createElement("span");
+      bd.className="tab-beads";
+      bd.setAttribute("aria-hidden","true");
+      bd.hidden=true;
+      el.insertBefore(bd, el.querySelector(".tab-x"));
+    }
+    if(fillTabBeads(bd, tabs.find(x=>x.id===el.dataset.tid))) moved=true;
+  });
+  if(moved) fitTabLabels();
+}
+// The tab in front's path as it stands, read without adding to it.
+function tabPathNow(){
+  const tb=tabs.find(x=>x.id===activeTabId);
+  return {tab:tb ? tb.id : "", path:tb&&Array.isArray(tb.path) ? tb.path.slice() : []};
 }
 function tabLabel(tb, i){
   // tb.title is IGNORED on purpose - renaming is retired, but sessions saved before that
@@ -65,6 +129,7 @@ function snapshotActiveTab(){
   t.cats=cats.slice();
   t.entrySel=entrySel?{id:entrySel.id, vi:entrySel.vi}:null;
   t.scrollY=pageScrollY();
+  t.fields=Object.assign({},fieldVals);
 }
 function saveTabSession(){
   snapshotActiveTab();
@@ -160,7 +225,8 @@ function loadTabSession(){
       // restored last-used one rather than being forced to English.
       lang:(t.lang==="pl"||t.lang==="en")?t.lang:lang,
       intentIdxs:Array.isArray(t.intentIdxs)?t.intentIdxs.filter(intentOk):[],
-      cats:Array.isArray(t.cats)?t.cats.filter(catOk):[]
+      cats:Array.isArray(t.cats)?t.cats.filter(catOk):[],
+      path:Array.isArray(t.path)?t.path.filter(x=>typeof x==="string"&&x).slice(-TAB_PATH_MAX):[]
     }));
     activeTabId=data.activeTabId;
     if(!tabs.some(t=>t.id===activeTabId)) activeTabId=tabs[0].id;
@@ -175,6 +241,7 @@ function applyTab(tb){
   setIntentIdxs(Array.isArray(tb.intentIdxs)?tb.intentIdxs.slice().filter(i=>Number.isInteger(i)&&i>=0&&i<intentCount()):[]);
   setIntentText(tb.intentText||"");
   setCats(Array.isArray(tb.cats)?tb.cats.slice():[]);
+  setFieldVals(tabFieldVals(tb));
   if(tb.entrySel&&tb.entrySel.id!=null){
     putEntrySel({id:String(tb.entrySel.id), vi:+tb.entrySel.vi||0});
   } else {
@@ -378,9 +445,15 @@ function closeActiveTab(){
    so a stray press must not reach it. The second press has to land while the toast that
    asked for it is still up, so the window is the toast's own life. */
 let tabWipeArmedAt=0, tabWipeToast=-1;
+/* Strings only, from a session that may have been written by an older build or by hand. */
+function tabFieldVals(tb){
+  const out={}, f=(tb&&tb.fields&&typeof tb.fields==="object")?tb.fields:{};
+  Object.keys(f).forEach(k=>{ if(typeof f[k]==="string" && f[k]) out[k]=f[k]; });
+  return out;
+}
 function tabHasWork(tb){
   if(!tb) return false;
-  return !!(String(tb.pax||"").trim() || String(tb.intentBox||"").trim()
+  return !!(String(tb.pax||"").trim() || String(tb.intentBox||"").trim() || Object.keys(tabFieldVals(tb)).length
     || String(tb.who||"").trim() || String(tb.intentText||"").trim()
     || (tb.cats&&tb.cats.length) || (tb.intentIdxs&&tb.intentIdxs.length));
 }
@@ -903,7 +976,7 @@ function syncTabAccent(){
    inside a Core must not skip it. The wrapping is a declaration rather than an assignment to
    the name, because an imported binding cannot be assigned. */
 function drawPills(){ const r=hooks.drawPillsCore.apply(this,arguments); syncTabAccent(); return r; }
-function drawTabs(){ const r=drawTabsCore.apply(this,arguments); syncTabAccent(); return r; }
+function drawTabs(){ const r=drawTabsCore.apply(this,arguments); syncTabAccent(); syncTabBeads(); return r; }
 function drawTabsCore(){
   const bar=$("#tabsBar");
   if(!bar) return;
@@ -1088,6 +1161,12 @@ export {
   drawTabs,
   wireTabDrag,
   initTabs,
+  tabPathStep,
+  setTabBeads,
+  tabBeadsHtml,
+  syncTabBeads,
+  tabPathNow,
+  watchTabPath,
   TAB_KEY,
   tabs,
   tabSaveTimer,

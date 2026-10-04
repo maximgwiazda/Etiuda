@@ -1,11 +1,11 @@
 import { animateTxtReorder } from "./card-blocks.js";
-import { cardLang, cardTitle, findCard, parts } from "./card-model.js";
+import { cardCommits, cardLang, cardTitle, findCard, parts } from "./card-model.js";
 import { moveCardOrder } from "./card-order.js";
 import { isCollapsed, toggleCollapsed } from "./collapse.js";
 import { intentPickedLine, fill } from "./intent-text.js";
 import { mgReduceMotion, E_EASE, CARD_MOVE_MAX, M_MS } from "./motion.js";
 import { pack, savePack, saveStats } from "./pack.js";
-import { bumpLang, bumpUse } from "./desk-stats.js";
+import { bumpLang, bumpPair, bumpUse } from "./desk-stats.js";
 import { cardSearchTerms } from "./spell.js";
 import { t, toast } from "./ui-lang.js";
 import { toggleFavourite } from "./favourites.js";
@@ -18,7 +18,8 @@ import { toggleNotePane } from "./note-pane.js";
 import { entrySel, putEntrySel, intentIdxs, shown } from "./app-state.js";
 import { hooks } from "./hooks.js";
 import { withAgentName } from "./agent.js";
-import { activeHeard } from "./tabs.js";
+import { withFields, spendFields } from "./field-ask.js";
+import { activeHeard, tabPathStep } from "./tabs.js";
 
 // ---- card drag-reorder (within same relevance band only) ----------------
 let cardDrag=null, cardSwapLock=0, cardSuppressClick=false;
@@ -432,10 +433,11 @@ function wireListPointer(){
     // it answers hover again once the pointer leaves and comes back.
     txtEl.classList.add("just-picked");
     txtEl.addEventListener("pointerleave", ()=>txtEl.classList.remove("just-picked"), {once:true});
-    withAgentName(ps[vi],()=>{
+    withFields(ps[vi],m,cl,()=>withAgentName(ps[vi],()=>{
       bumpUseCount(mid, cl);
-      copy(fill(ps[vi],m), copiedToastMsg(m, cl, vi, ps.length));
-    },txtEl);
+      copy(fill(ps[vi],m), copiedToastMsg(m, cl, vi, ps.length), cardCommits(m));
+      spendFields(ps[vi]);
+    },txtEl),txtEl);
   });
 }
 
@@ -453,11 +455,13 @@ function copiedToastMsg(m, lang, vi, total){
    only as a file on the organisation's own share, on request. Answers two questions
    nothing else can: which phrases earn their place - a count on the Manage rows - and
    how often the tool is actually used, the honest denominator for any time-saved
-   estimate. Reset clears it with everything else. */
+   estimate. Reset clears it with everything else. The tab's path says which card it followed. */
 function bumpUseCount(id, lang){
   if(!id) return;
   bumpUse(pack, id);
   bumpLang(pack, lang);
+  const prev=tabPathStep(id);
+  if(prev) bumpPair(pack, prev, id);
   saveStats();
 }
 

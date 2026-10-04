@@ -18,7 +18,9 @@ import { pillsLocked, togglePillsLock, syncLayoutPrefs } from "./pills-box.js";
 import { rereadCollapsed } from "./collapse.js";
 import { applyStoredFactsSize } from "./facts.js";
 import { agentName, setAgentName } from "./agent.js";
-import { eHost } from "./host.js";
+import { eHost, eHasShared } from "./host.js";
+import { hooks } from "./hooks.js";
+import { teamLeads, leadKeyText, forgetTeamLead } from "./team-join.js";
 
 /* THE SETTINGS SCREEN. One test decides what belongs: would you set it once and
    forget it? Anything touched weekly is a Menu item or a header control; Data stays in
@@ -161,6 +163,18 @@ function settingsBodyHtml(){
           langSel)+
       (lastSyncStamp
         ? row(t("Last sync"), "", '<span>'+esc(lastSyncStamp)+'</span>')
+        : "")+
+      /* One row per team lead this desk trusts: the key the agent compared, and the way out where it was wrong. */
+      teamLeads().map(l=>row(t("Team lead's key"), "",
+        '<span class="e-lead-key">'+esc(leadKeyText(l.print))+'</span>'
+        +'<button type="button" class="btn" data-forget-lead="'+esc(l.team)+'">'+esc(t("Forget this lead"))+'</button>')).join("")+
+      /* Under a host only: a browser has no catalog folder to share. */
+      (eHasShared()
+        ? row(t("Edit the shared catalog directly"),
+            t("For a team without Studio: changes go into the catalog in the catalog folder itself. A catalog the team lead signed is never changed."),
+            onoff("sharededit", lsGet("eSharedEdit")==="1",
+                  t("Each change goes into the shared catalog, and one a colleague made first is kept"),
+                  t("Each change stays in this desk's own file")))
         : ""),
       personalNote(),
       t("The name customers see, and the language Etiuda's own buttons and menus are written in"));
@@ -249,6 +263,9 @@ function paintSettings(){
   /* Stored on the keystroke, like every other row here: there is no Save on this screen. The
      summary beside the section title is the same value, so it follows the box rather than
      waiting for the next repaint to agree with it. */
+  box.querySelectorAll("[data-forget-lead]").forEach(b=>{
+    b.onclick=()=>forgetTeamLead(b.getAttribute("data-forget-lead"),()=>paintSettings());
+  });
   const nameBox=box.querySelector("#setAgentName");
   if(nameBox) nameBox.oninput=()=>{
     setAgentName(nameBox.value);
@@ -300,6 +317,12 @@ function paintSettings(){
           closeNotePane();
           toast(on?t("Notes open on hover"):t("Notes open from the i"));
         }
+        else if(seg==="sharededit"){
+          if(on) lsSet("eSharedEdit","1"); else lsDel("eSharedEdit");
+          // The desk writes at once, as after an edit, so what it holds already goes where the setting now says.
+          hooks.syncSampleMark();
+          toast(on?t("Changes go into the shared catalog"):t("Changes stay in this desk's own file"));
+        }
         else if(seg==="raillock"){ if(railLocked()!==on) toggleRailLock(); }
         else if(seg==="pillslock"){ if(pillsLocked()!==on) togglePillsLock(); }
         /* No repaint: the class above is the whole visual change, and rebuilding would undo
@@ -346,7 +369,7 @@ function syncColFloorRow(){
 function resetAllSettings(){
   const was={};
   ["eTheme","eGlassOff","eMotionOff","eUiLang","ePillsLock","eRailLock","ePills","eRail",
-   "eShortcuts","eHdrPills","eNoteHover","eRailW","eFactsW","eFactsH","eCollapsed",E_HOTKEY_KEY]
+   "eShortcuts","eHdrPills","eNoteHover","eRailW","eFactsW","eFactsH","eCollapsed","eSharedEdit",E_HOTKEY_KEY]
     .forEach(k=>{ was[k]=lsGet(k); try{ lsDel(k); }catch(e){} });
   was[nsKey("Cols")]=nsGet("Cols"); was[nsKey("Floor")]=nsGet("Floor");
   nsDel("Cols"); nsDel("Floor");

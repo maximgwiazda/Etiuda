@@ -351,9 +351,12 @@ try {
       + ', o.marker].concat(o.args || []), opts);'
       + 'c.on("exit", function (code) { console.log("SPAWNED, the stand-in exited " + code); });';
     let mark = 0;
-    fire = o => {
+    /* Every probe but 21k's carries the window wall's word, so each refusal here is the folder's
+       or the lock's and each allowed launch is the stand-in's; 21k takes the word away. */
+    const WALL_OPEN = { [E.WINDOWS_VAR]: E.WINDOWS_DAY };
+    fire = (o, env) => {
       const marker = path.join(tmp, "launched-" + (++mark) + ".txt");
-      const r = run(probe(Object.assign({ marker: marker }, o)), {});
+      const r = run(probe(Object.assign({ marker: marker }, o)), env === undefined ? WALL_OPEN : env);
       const launched = fs.existsSync(marker);
       return { code: r.code, out: r.out, launched: launched, marker: marker,
                token: launched ? fs.readFileSync(marker, "utf8").split(" ")[1] : null,
@@ -455,6 +458,52 @@ try {
        "21j a launch with noDoor reaches the shell with the switch on its line and ETIUDA_TEST_DEVTOOLS unset ("
        + closed.token + "), even from a caller whose own environment carries it (" + closedAmbient.token
        + "), where the same launch without noDoor reaches it set (" + port.token + ")");
+
+    /* 21k. THE WINDOW WALL. 21d's launch with the variable empty and with yesterday's date, each
+       refused before the spawn; 21d itself, carrying today's, is the allow arm. The declared
+       exemption leaves the folder rules early and must still meet the wall. */
+    const NO_WORD = { [E.WINDOWS_VAR]: "" };
+    const before = new Date(); before.setDate(before.getDate() - 1);
+    const yesterday = E.dayOf(before);
+    const wallShut = fire({ who: "a-suite.js", args: ["--user-data-dir=" + ownUd] }, NO_WORD);
+    const wallOld = fire({ who: "a-suite.js", args: ["--user-data-dir=" + ownUd] }, { [E.WINDOWS_VAR]: yesterday });
+    const wallDeclared = fire({ who: "smoke-2k-shaped.js", args: ["--user-data-dir=" + ownUd2],
+                                declare: "2k asks what a first run with no setting reads, and the answer is this machine's own folder" }, NO_WORD);
+    const walled = (r, who) => r.code === E.NO_VERDICT && r.launched === false
+      && r.out.indexOf("WINDOW WALL: " + who) > -1 && r.out.indexOf(E.WINDOWS_VAR) > -1
+      && /deliberately chosen/.test(r.out) && /^#refused window-wall\r?$/m.test(r.out);
+    ok(walled(wallShut, "a-suite.js") && /is not set, not today's date/.test(wallShut.out)
+       && walled(wallOld, "a-suite.js") && wallOld.out.indexOf(JSON.stringify(yesterday) + ", not today's date") > -1
+       && walled(wallDeclared, "smoke-2k-shaped.js") && pinned.launched === true && said.launched === true,
+       "21k a launch without " + E.WINDOWS_VAR + " set to today is refused before the spawn, naming the variable and the rule:"
+       + " empty (exit " + wallShut.code + ", marker " + wallShut.launched + "), yesterday " + yesterday + " (exit " + wallOld.code
+       + ", marker " + wallOld.launched + "), and under the declared exemption (exit " + wallDeclared.code + ", marker "
+       + wallDeclared.launched + "); the same launches carrying " + E.WINDOWS_DAY + " went through at 21d and 21g ("
+       + pinned.launched + ", " + said.launched + ")");
+
+    /* 21k2. shellLaunchRefusal is what a caller with a spawn of its own asks (Studio's installer
+       gates do), so it answers the wall too, and null once the word is given. */
+    const ask = env => run('const E = require("./engine.js");'
+      + 'console.log("ANSWER " + JSON.stringify(E.shellLaunchRefusal("an-asker.js", [' + JSON.stringify("--user-data-dir=" + ownUd) + '], {})));', env);
+    const askShut = ask(NO_WORD), askOpen = ask(WALL_OPEN);
+    ok(/^ANSWER \["WINDOW WALL: an-asker\.js/m.test(askShut.out) && /^ANSWER null\r?$/m.test(askOpen.out),
+       "21k2 E.shellLaunchRefusal answers the wall's lines without the word and null with it: "
+       + JSON.stringify(askShut.out.trim().slice(0, 60)) + " against " + JSON.stringify(askOpen.out.trim()));
+
+    /* 21l. TODAY IS THE LOCAL DAY, as `date +%F` prints it, not the UTC one. Two zones fourteen
+       and twelve hours either side of UTC: in each the wall's day is the local date, and in at
+       least one of them the UTC date differs, so a toISOString day could not pass both. */
+    const zone = tz => run('const E = require("./engine.js"); const d = new Date();'
+      + 'const p = n => String(n).padStart(2, "0");'
+      + 'console.log("DAY " + E.WINDOWS_DAY + " LOCAL " + d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate())'
+      + ' + " UTC " + d.toISOString().slice(0, 10));', { TZ: tz });
+    const days = ["Etc/GMT-14", "Etc/GMT+12"].map(tz => {
+      const m = /DAY (\S+) LOCAL (\S+) UTC (\S+)/.exec(zone(tz).out) || [];
+      return { tz: tz, day: m[1], local: m[2], utc: m[3] };
+    });
+    ok(days.every(d => d.day && d.day === d.local) && days.some(d => d.local !== d.utc),
+       "21l the wall's day is the local date in both zones and differs from the UTC date in at least one: "
+       + JSON.stringify(days));
   }
 
   /* 22. AND NOTHING LAUNCHES THE SHELL AROUND THE GUARD. Case 21 proves what shellLaunch does;
@@ -467,7 +516,8 @@ try {
      tomorrow is caught by the same regex. The floor is the liveness: a census that finds nothing
      has stopped matching rather than found a clean tree, and it would then pass for free. */
   {
-    const EXE = /electronExe\(\)|Etiuda\.exe|assocExe|deskExe|ETIUDA_DESK_EXE/;
+    /* The product name joined to ".exe" is update-install.js's spelling of the packaged app. */
+    const EXE = /electronExe\(\)|Etiuda\.exe|assocExe|deskExe|ETIUDA_DESK_EXE|PRODUCT \+ "\.exe"/;
     const CALL = /(?:E\.)?(shellLaunch|spawn)\(([\s\S]{0,140})/g;
     const sites = [];
     for (const name of fs.readdirSync(path.join(E.ROOT, "tests")).filter(f => /\.(js|mjs)$/.test(f))) {
@@ -588,6 +638,51 @@ try {
        + " working tree of tests/*.js and *.mjs excluding engine.js, of which " + direct.length
        + " call spawn directly" + (direct.length ? ": " + JSON.stringify(direct) : "")
        + ". The floor of 7 is this case's own liveness");
+
+    /* 22c. EVERY FILE WITH A LAUNCH SITE CALLS THE WALL ITSELF, at its top, so a refusal arrives
+       before a build or a wait rather than at the first launch. Read with comments stripped; the
+       planted twins are the control, built by concatenation so this file is not one of them. */
+    const codeOf = text => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'\\])\/\/.*$/gm, "$1");
+    const WALL_CALL = /\bE\.windowWall\s*\(/;
+    const callsWall = text => WALL_CALL.test(codeOf(text));
+    const siteFiles = [...new Set(sites.map(s => s.file))].sort();
+    const wallless = siteFiles.filter(f => !callsWall(fs.readFileSync(path.join(E.ROOT, "tests", f), "utf8")));
+    const call = "E." + "windowWall(WHO);";
+    const twins = [call, "/* " + call + " */", "// " + call, "x = 1; // " + call].map(callsWall);
+    ok(wallless.length === 0 && siteFiles.length >= 7 && twins.join() === "true,false,false,false",
+       "22c each of the " + siteFiles.length + " file(s) with a launch site calls E.windowWall itself"
+       + (wallless.length ? ", and these do not: " + wallless.join(", ") : "") + ", by regex over each with comments stripped;"
+       + " the control reads a planted call as a call and the same call in three comments as none: " + twins.join());
+
+    /* 22d. THE FAST CHAINS OPEN NO WINDOW: no step of `test` or `split-guard` is a file with a
+       launch site or a wall of its own, while the window gates of `npm run gates` are both. */
+    const pkgJson = JSON.parse(fs.readFileSync(path.join(E.ROOT, "package.json"), "utf8"));
+    const stepsOf = name => String(pkgJson.scripts[name] || "").split("&&")
+      .map(s => (/^\s*node\s+(\S+)/.exec(s) || [])[1]).filter(Boolean);
+    const fast = stepsOf("test").concat(stepsOf("split-guard"));
+    const fastWindows = fast.filter(f => siteFiles.indexOf(f.replace(/^tests\//, "")) > -1
+      || callsWall(fs.readFileSync(path.join(E.ROOT, f), "utf8")));
+    const slow = ["desk", "links"].map(stepsOf).flat();
+    ok(fast.length >= 30 && fastWindows.length === 0 && slow.length === 2
+       && slow.every(f => siteFiles.indexOf(f.replace(/^tests\//, "")) > -1),
+       "22d none of the " + fast.length + " steps of npm test and split-guard opens a window"
+       + (fastWindows.length ? ", but these would: " + fastWindows.join(", ") : "")
+       + ", where " + slow.join(" and ") + " (npm run gates' other two scripts) are both launch-site files");
+
+    /* 22e. NO GATE GIVES ITSELF THE WORD. The variable is named in tests/ and tools/ by engine.js
+       alone, and an environment is keyed by it only in this file's probes and in sbom.mjs's release
+       lab, whose window gates are `node -e 0`. */
+    const LITERAL = new RegExp("ETIUDA_" + "WINDOWS"), KEYED = /\[\s*E\.WINDOWS_VAR\s*\]/;
+    const every = (dir, rel) => fs.readdirSync(dir, { withFileTypes: true }).flatMap(d =>
+      d.isDirectory() ? (d.name === "node_modules" ? [] : every(path.join(dir, d.name), rel + d.name + "/"))
+      : /\.(js|mjs|cjs)$/.test(d.name) ? [rel + d.name] : []);
+    const scripts = every(path.join(E.ROOT, "tests"), "tests/").concat(every(path.join(E.ROOT, "tools"), "tools/"));
+    const naming = scripts.filter(f => LITERAL.test(fs.readFileSync(path.join(E.ROOT, f), "utf8")));
+    const keying = scripts.filter(f => KEYED.test(fs.readFileSync(path.join(E.ROOT, f), "utf8")));
+    const plantedName = LITERAL.test("process.env." + "ETIUDA_" + "WINDOWS = today;");
+    ok(naming.join() === "tests/engine.js" && keying.join() === "tests/engine-selftest.js,tests/sbom.mjs" && plantedName,
+       "22e the variable is named by " + JSON.stringify(naming) + " and keyed by " + JSON.stringify(keying) + " over "
+       + scripts.length + " script(s) in tests/ and tools/; the regex finds a planted assignment (" + plantedName + ")");
   }
 
   /* 24 to 24e: PARKING A SHORTCUT, board item 514. The reinstall loop runs a real installer
@@ -1230,9 +1325,10 @@ Module.prototype._compile = function (content, filename) {
   return real.call(this, content, filename);
 };
 `, "utf8");
+    /* The wall's word rides along, so what refuses here is the port block or the live run. */
     const desk = shift => run('process.chdir(require("./engine.js").ROOT);'
       + 'require("child_process").execFileSync(process.execPath, ["-r", ' + JSON.stringify(stubAt) + ', "tests/desk.js"],'
-      + '{ stdio: "inherit" });', { ETIUDA_PORT_SHIFT: shift, ETIUDA_FIXTURES: "" });
+      + '{ stdio: "inherit" });', { ETIUDA_PORT_SHIFT: shift, ETIUDA_FIXTURES: "", [E.WINDOWS_VAR]: E.WINDOWS_DAY });
     const shifted = desk("60000"), plain = desk("");
     ok(/block at 69424-/.test(shifted.out) && !/another Electron run is live/.test(shifted.out),
        "27g tests/desk.js with one Electron run stood in as live still refuses on its port block, quoting 69424 back, and never"
@@ -1263,9 +1359,10 @@ Module.prototype._compile = function (content, filename) {
   return real.call(this, content, filename);
 };
 `, "utf8");
+    /* The wall's word rides along, so what refuses here is the port block or the live run. */
     const links = shift => run('process.chdir(require("./engine.js").ROOT);'
       + 'require("child_process").execFileSync(process.execPath, ["-r", ' + JSON.stringify(stubAt) + ', "tests/links.js"],'
-      + '{ stdio: "inherit" });', { ETIUDA_PORT_SHIFT: shift, ETIUDA_FIXTURES: "" });
+      + '{ stdio: "inherit" });', { ETIUDA_PORT_SHIFT: shift, ETIUDA_FIXTURES: "", [E.WINDOWS_VAR]: E.WINDOWS_DAY });
     const shifted = links("60000"), plain = links("");
     ok(/block at 69434-/.test(shifted.out) && !/another Electron run is live/.test(shifted.out),
        "27h tests/links.js with one Electron run stood in as live still refuses on its port block, quoting 69434 back, and never"
@@ -1605,6 +1702,7 @@ Module.prototype._compile = function (content, filename) {
     "ghosts.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
     "storage-keys.js": "a report, as deadcode.js; its scanner is held by tests/text-scan-selftest.js",
     "motion.js": "legs tests/smoke.js requires and runs; alone it is the quick run of one leg",
+    "badge-room.js": "the badge's room, a sweep tests/smoke.js requires and runs; alone it is the quick run of that sweep",
     "tour-walk.js": "the tour's walk tests/smoke.js requires and runs; its plan is held to the step table by tests/test.js",
     "install-plan.js": "the library tests/update-install.js judges with; every clause is held by tests/install-plan-selftest.js in npm test",
     "pick-desk.js": "a machine-window gate: it takes the real foreground and presses real keys, so it runs by hand with nobody at the keyboard; its node half is tests/pick.mjs in npm test",

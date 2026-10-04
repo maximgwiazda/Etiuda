@@ -959,6 +959,20 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 /* White like the rest of the band furniture, NOT --dim: the chrome token was legible while
    the strip stood on the chrome, and is 1.03:1 on cobalt. The selected tab keeps --dim below,
    because its face IS the chrome. */
+/* THE PATH'S BEADS, a filled one for each reply sent along the conversation's chain and an open one while
+   replies wait. Inside the tab's own width, between the name and the close button, so they take room from
+   the name, which fades as any name does, and never from the strip. */
+.tab-beads{--bd:5px;flex:none;display:inline-flex;align-items:center;gap:var(--bd);
+  color:rgba(var(--band-ink-rgb),.85);pointer-events:none}
+.tab.on .tab-beads{color:var(--accent)}
+.tab-beads .bd{position:relative;flex:none;width:var(--bd);height:var(--bd);border-radius:50%;background:currentColor}
+.tab-beads .bd+.bd::before{content:"";position:absolute;right:100%;top:calc(var(--bd) / 2 - .5px);width:var(--bd);
+  height:1px;background:currentColor}
+.tab-beads .bd-open{background:transparent;box-shadow:inset 0 0 0 1px currentColor}
+.tab-beads .bd+.bd-open::before{height:0;background:none;border-top:1px dotted currentColor}
+.tab-beads .bd-more{flex:none;width:calc(var(--bd) * 1.6);height:0;margin-right:calc(var(--bd) * -1);
+  border-top:1px dotted currentColor}
+.ln-head .tab-beads{--bd:7px;color:var(--accent)}
 .tab-x{border:0;background:transparent;color:rgba(var(--band-ink-rgb),.7);cursor:default;padding:2px;
   border-radius:4px;flex:0 0 auto;opacity:.75;
   display:inline-flex;align-items:center;justify-content:center}
@@ -1751,6 +1765,9 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .ctitle,.ccat{min-width:0;overflow:hidden;white-space:nowrap}
 .chead .ctitle{flex:0 1 auto}
 .chead .cbadge{flex:0 0 auto}
+/* A card that commits the firm: the stamp after its title, in the warning colour. */
+.chead .cstamp{flex:0 0 auto;display:inline-flex;color:var(--warn)}
+.cstamp .ic,.nx-stamp .ic{width:16px;height:16px}
 .intent-pick{max-height:200px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius-sm);
   padding:4px;background:var(--bg);display:flex;flex-direction:column;gap:1px;min-width:0}
 /* Nested under .mf, so selectors must beat .mf input / .mf label (width:100%, mono dim). */
@@ -1883,6 +1900,11 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
     background-origin:border-box;background-clip:border-area;
     -webkit-mask:none;mask:none}
 }
+/* The badge is out of the flow, so a float the badge's own width makes the first line stop short of it.
+   Its width is the badge's, in the badge's font, less the 44px the block's padding already gives:
+   10px right offset, 8px clear, 44px padding. The block's own padding is never touched. */
+.troom{float:right;height:1px;pointer-events:none;font:10px var(--mono);letter-spacing:.5px;
+  width:calc(var(--n)*(1ch + .5px) + 18px - 44px)}
 /* The two in-card notices keep the slabs' own gutter, which is none: the card has no padding
    left to inset them from. */
 .miss{margin:0 0 10px;padding:9px 12px;border:1px dashed var(--line-strong);border-radius:var(--radius-sm);
@@ -2046,6 +2068,21 @@ code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-d
 .empty-cat::before{content:none}
 .empty .empty-ic{display:block;width:48px;height:48px;margin:0 auto 16px;vertical-align:0;
   opacity:.4;stroke-width:1.2}
+/* A sealed catalog's empty desk and its bubble: the title with its lock, the code in two threes, and six drawn places
+   while the code is still to come. */
+.e-join-t{font-size:19px;font-weight:600;color:var(--ink);display:inline-flex;align-items:center;gap:8px}
+.e-join-t .ic{color:var(--accent)}
+.e-join p{margin:8px auto 0;max-width:620px}
+.e-join-code{font:600 34px var(--mono);color:var(--ink);margin:18px 0 6px;display:flex;justify-content:center;gap:.6em}
+.e-join-wait i{display:inline-block;width:.62em;height:3px;margin:0 .1em;vertical-align:middle;border-radius:2px;background:var(--dim);opacity:.6}
+.e-join-meta{font:12px var(--mono);opacity:.75;margin-top:8px}
+.e-join-acts{display:flex;justify-content:center;gap:8px;margin-top:16px}
+.e-join-bub .e-join-code{color:var(--bub-ink);font-size:28px;justify-content:flex-start;margin:8px 0 2px}
+.e-join-bub .e-join-wait i{background:var(--bub-dim)}
+.e-join-bub .e-join-meta{color:var(--bub-dim);margin:0 0 8px}
+.e-join-key{font:600 22px var(--mono);color:var(--ink);margin:16px 0 4px;white-space:nowrap}
+.e-join-bub .e-join-key{color:var(--bub-ink);font-size:19px;margin:8px 0 10px}
+.e-lead-key{font:600 13px var(--mono);margin-right:10px;white-space:nowrap}
 
 /* Intent side rail - shown when body.rail-on (user toggle; no min-width gate) */
 .rail-head{display:flex;align-items:center;justify-content:space-between;gap:8px;
@@ -2297,6 +2334,11 @@ html.raildrag, html.raildrag .rail-item, html.raildrag *{cursor:default!importan
    bubble's cobalt is, since the dark theme's --warn is a text colour and too pale to carry white. */
 #toast.refusal{display:flex;align-items:center;gap:8px;text-align:left;background:#c2410c}
 #toast.refusal .ic{width:16px;height:16px;flex:none}
+/* The stamp's chip: white with the warning's ink on the toast's own green, the same in both themes. */
+#toast.stamped{display:flex;align-items:center;gap:10px;text-align:left}
+#toast .t-stamp{display:inline-flex;align-items:center;gap:6px;flex:none;padding:1px 9px 1px 7px;border-radius:999px;
+  background:#fff;color:#9a3412;white-space:nowrap}
+#toast .t-stamp .ic{width:15px;height:15px;color:#c2410c}
 /* CUT TEXT FADES, IT DOES NOT END IN DOTS. An ellipsis is a character: it arrives in the
    reader's ink, mid-sentence, and says "cut" in the same voice as the words; one TYPED into a
    label is untouched. markCutText() decides, and it decides per SIDE - an unconditional mask
@@ -2697,6 +2739,21 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
 .ec-key-bub{z-index:236;max-width:min(300px,calc(100vw - 24px));padding:8px 12px;
   font-size:12.5px;line-height:1.45;pointer-events:none;
   animation:eModalCardIn var(--m-reveal) var(--m-ease) both}
+/* A COLLEAGUE'S FILE hangs under the catalog it grew from, dashed, by a hook at its left; one with nothing here to hang
+   from stands alone at the foot of the list. */
+.ec-row.ec-desk{margin-left:22px;position:relative;background:transparent;border-style:dashed}
+.ec-row.ec-desk::before{content:"";position:absolute;left:-14px;top:-7px;bottom:50%;width:9px;
+  border-left:1.5px solid var(--line-strong);border-bottom:1.5px solid var(--line-strong);border-bottom-left-radius:6px}
+.ec-row.ec-desk.is-loaded{border-style:solid;background:var(--panel)}
+.ec-row.ec-desk.ec-alone{margin-left:0}
+.ec-row.ec-desk.ec-alone::before{display:none}
+.ec-who{flex:0 0 auto;display:flex;width:var(--ec-glyph);height:var(--ec-glyph);color:var(--accent);
+  border-radius:var(--radius-xs);outline:none}
+.ec-who .ic{width:100%;height:100%}
+.ec-who:focus-visible{background:var(--accent-soft)}
+.ec-fp{font:600 10.5px var(--mono);color:var(--dim);margin-left:6px;letter-spacing:.3px}
+.ec-mine{display:flex;align-items:center;gap:5px;margin-top:3px;color:var(--dim);font-size:11.5px}
+.ec-mine .ic{flex:0 0 auto;width:14px;height:14px;color:var(--accent)}
 /* Three lines change what the row centres on: the name is the subject, so the badge and the
    buttons align to the NAME's line rather than to the middle of a column that grew. */
 .ec-row:has(.ec-watch){align-items:flex-start}
@@ -2716,6 +2773,13 @@ details.manage-sec>summary .ec-where{margin-left:auto;flex:0 1 auto;min-width:0;
 /* An empty folder takes the row's own box, dashed as every "nothing here yet" in this tree is. */
 .ec-empty{display:block;color:var(--dim);border-style:dashed;border-color:var(--line-strong);
   background:transparent;line-height:1.5}
+/* Earlier versions: each file's name heads its own list, and the version its file holds now wears the loaded row's edge. */
+.eh-head{display:flex;align-items:baseline;gap:8px;margin:18px 0 0;font-size:13px;min-width:0}
+.eh-head:first-child{margin-top:2px}
+.eh-head b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.eh-head small{flex:0 0 auto;color:var(--dim);font-size:11.5px}
+.eh-head+.ec-list{margin-top:6px}
+.ec-row.is-current{border-color:var(--go-edge,var(--go))}
 /* The same row on an empty screen, with the folder's count over it. Left-aligned inside a centred
    empty state, because a filename and a date are data rather than a sentence, and hidden while it
    holds nothing so a browser's empty state is exactly what it was. */
@@ -3023,6 +3087,51 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 .mf-pin .mf-pin-seg{flex:none}
 .mf-pin .mf-pin-seg button{padding:4px 12px;font:600 12px var(--sans)}
 .mf-pin.off .mf-pin-seg{opacity:.4;pointer-events:none}
+/* The stamp toggle sits on the Title row of every language, beside its label. */
+.mf-titled{position:relative}
+.me-stamp{position:absolute;right:0;top:-5px;display:inline-flex;align-items:center;gap:6px;height:24px;
+  padding:0 9px 0 7px;border-radius:999px;border:1px solid var(--line-strong);background:transparent;
+  color:var(--dim);font:500 12.5px var(--sans);cursor:default;
+  transition:color var(--m-tone),background-color var(--m-tone),border-color var(--m-tone)}
+.me-stamp .ic{width:15px;height:15px}
+.me-stamp:hover,.me-stamp:focus-visible{color:var(--ink);border-color:var(--field-edge)}
+.me-stamp[aria-pressed=true]{background:var(--warn-bg);border-color:color-mix(in srgb,var(--warn) 55%,transparent);color:var(--warn)}
+.me-stamp[aria-pressed=true]:hover,.me-stamp[aria-pressed=true]:focus-visible{border-color:var(--warn);color:var(--warn)}
+.me-stamp-note{margin:2px 0 0;font:12.5px/1.45 var(--sans);color:var(--dim)}
+.me-stamp-note b{font-weight:600;color:var(--ink)}
+/* Next replies: whose list it is, the list, and the way to add to it. */
+.nx{display:grid;gap:8px;padding:6px 0 4px}
+.nx-src{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--dim)}
+.nx-who{flex:none;white-space:nowrap;display:inline-flex;align-items:center;height:22px;padding:0 9px;
+  border-radius:999px;font:600 12px var(--sans);background:var(--header-bg);color:var(--ink);border:1px solid var(--line)}
+.nx-who.own{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.nx-say{flex:1 1 auto;min-width:0}
+.nx-back{flex:none}
+.nx-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.nx-list:empty{display:none}
+.nx-row{display:flex;align-items:center;gap:9px;min-height:38px;padding:0 6px;border:1px solid var(--field-line);
+  border-radius:var(--radius-sm);background:var(--field);cursor:default;user-select:none;
+  transition:transform var(--m-surface) var(--m-ease)}
+.nx-row.nx-new{border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+.nx-row.nx-drag{position:relative;z-index:1;border-color:var(--accent);box-shadow:0 4px 14px rgba(0,0,0,.14)}
+.nx-grip{flex:none;width:14px;height:20px;padding:0;border:0;border-radius:4px;cursor:default;opacity:.8;
+  background:radial-gradient(var(--dim) 1.1px,transparent 1.4px) 1px 2px/6px 5.3px}
+.nx-key{flex:none;font:11.5px var(--mono);border:1px solid var(--line);border-radius:4px;padding:0 5px;color:var(--dim)}
+.nx-t{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;font-size:14px;color:var(--ink)}
+.nx-stamp{flex:none;display:inline-flex;color:var(--warn)}
+.nx-tag{flex:none;font:600 11px var(--sans);letter-spacing:.3px;color:var(--accent)}
+.nx-x{flex:none;width:26px;height:26px;display:grid;place-items:center;padding:0;border:0;border-radius:6px;
+  background:transparent;color:var(--dim);cursor:default}
+.nx-x:hover,.nx-x:focus-visible{background:color-mix(in srgb,var(--ink) 8%,transparent);color:var(--ink)}
+.nx-add-btn{display:inline-flex;align-items:center;gap:6px}
+.nx-add-btn .ic{width:14px;height:14px}
+.nx-hits{margin-top:4px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--panel-raised);overflow:hidden}
+.nx-hits:empty{display:none}
+.nx-hit{display:flex;align-items:center;gap:8px;padding:7px 10px;font-size:14px;cursor:default}
+.nx-hit:hover,.nx-hit.on{background:var(--accent-soft)}
+.nx-hit>span{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden}
+.nx-hit small{flex:none;color:var(--dim);font-size:12px}
+.nx-was{margin:0;font-size:12.5px;color:var(--dim)}
 .set-slider{display:flex;align-items:center;gap:10px;width:100%}
 .set-slider input[type=range]{flex:1;min-width:0;accent-color:var(--accent-fill)}
 .set-slider output{flex:none;min-width:52px;text-align:right;font:600 12.5px var(--sans);
@@ -3160,6 +3269,58 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .bub-ask code{font:12px var(--mono);color:var(--bub-ink);overflow-wrap:anywhere}
 .e-offer .ec-what{margin:0 0 8px;font-size:13.5px;color:var(--bub-ink)}
 .e-offer .ec-counts{font:12px var(--mono);color:var(--bub-dim);margin-top:2px}
+/* WHAT AN EDITION CHANGES, in the offer (edition-panel.js): the lead's note, the counts, the titles by kind.
+   The block scrolls on its own where the window is short, so the answers stay where they are. */
+.e-offer .ec-change{overflow:auto;overscroll-behavior:contain;margin:0 0 8px}
+.e-offer .ec-note,.ed-note{margin:0 0 8px;padding:6px 10px;border-radius:8px;border-left:3px solid}
+.e-offer .ec-note{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.7)}
+.ec-note small,.ed-note small{display:block;font:600 10.5px var(--sans);letter-spacing:.6px;text-transform:uppercase}
+.e-offer .ec-note p{margin:2px 0 0;color:var(--bub-ink)}
+.ec-n{white-space:nowrap}
+.e-offer .ec-change .ec-counts{margin:0 0 4px;color:var(--bub-ink)}
+.ec-list{list-style:none;margin:0;padding:0}
+.ec-list li,.ed-row{display:flex;gap:8px;align-items:baseline;margin:3px 0;font-size:13.5px;line-height:1.35}
+.e-offer .ec-list li{color:var(--bub-ink)}
+.ec-kind{flex:none;font:10.5px var(--mono);padding:0 4px;border:1px solid;border-radius:4px;line-height:1.5}
+.e-offer .ec-kind{border-color:rgba(255,255,255,.75)}
+.ec-t small{display:block;font-style:italic;font-size:12px}
+.e-offer .ec-t small,.e-offer .ec-more{color:var(--bub-dim)}
+.e-offer .ec-more{font-size:12.5px;margin-top:2px}
+.e-offer .ec-diff{appearance:none;-webkit-appearance:none;border:0;background:none;padding:0;margin:0 0 8px;
+  font:600 13.5px var(--sans);color:var(--bub-ink);text-decoration:underline;text-underline-offset:3px}
+.e-offer .ec-diff:focus-visible{outline:2px solid #fff;outline-offset:2px;border-radius:2px}
+/* THE PANEL BEHIND IT: the cards at the left, the chosen one at the right as it was, as it becomes and,
+   where the agent has an edit, as the agent wrote it. */
+.modal-card.ed-modal{max-width:min(1120px,100%)}
+.ed-panel{display:grid;grid-template-columns:minmax(220px,34%) 1fr;gap:20px;align-items:start}
+@media (max-width:760px){ .ed-panel{grid-template-columns:1fr} }
+.ed-note{background:var(--accent-soft);border-color:var(--accent);color:var(--ink)}
+.ed-note small{color:var(--dim)}
+.ed-note p{margin:2px 0 0;font-size:13.5px;line-height:1.45}
+.ed-left .ec-counts{font:12px var(--mono);color:var(--dim);margin:0 0 6px}
+.ed-row{width:100%;margin:0;padding:6px 8px;border:0;border-radius:8px;background:transparent;color:var(--ink);
+  font-family:var(--sans);text-align:left}
+.ed-row:hover,.ed-row:focus-visible{background:var(--accent-soft)}
+.ed-row[aria-current="true"]{background:var(--accent-soft)}
+.ed-row .ec-kind{color:var(--dim);border-color:var(--line-strong)}
+.ed-row .ec-t small{color:var(--dim)}
+.ed-pane h3{margin:0 0 8px;font:600 15px var(--sans-display)}
+.ed-grid{display:grid;gap:6px 12px;align-items:start}
+.ed-grid.ed-c1{grid-template-columns:1fr}
+.ed-grid.ed-c2{grid-template-columns:repeat(2,1fr)}
+.ed-grid.ed-c3{grid-template-columns:repeat(3,1fr)}
+.ed-head{font:600 10.5px var(--sans);letter-spacing:.6px;text-transform:uppercase;color:var(--dim)}
+.ed-field{grid-column:1/-1;font-size:12px;color:var(--dim);margin-top:4px}
+.ed-cell{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13.5px;line-height:1.55;padding:8px 12px;
+  border-left:3px solid var(--line-strong);border-radius:6px;background:var(--panel)}
+.ed-del{text-decoration:line-through;color:var(--warn)}
+.ed-ins{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;color:var(--ok)}
+.ed-acts{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin-top:10px}
+/* The choice made wears the ring, as a toggle that is on does; primary belongs to a bar. */
+.ed-acts .btn[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
+/* A colleague's desk's one act stands under that desk's own column. */
+.ed-acts-desk{grid-column:2}
+.ed-sub{margin:6px 0 0;font-size:12.5px;font-style:italic;color:var(--dim)}
 /* THE UNDO, one line and its button at the foot of the window, where a toast speaks. Centred by
    its margins, since the family's entrance animates transform. */
 .e-undo{left:0;right:0;bottom:24px;margin:0 auto;width:fit-content;max-width:calc(100vw - 24px);
@@ -3176,9 +3337,21 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   pointer-events:none}
 #eNotices .bub{position:relative;pointer-events:auto}
 /* A field on the fill: paper, so what is typed reads as the reader's own. */
-.bub .e-name-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
+.bub .e-name-inp,.bub .e-field-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
   border:1px solid transparent;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans)}
-.bub .e-name-inp:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.bub .e-name-inp:focus-visible,.bub .e-field-inp:focus-visible{outline:2px solid #fff;outline-offset:2px}
+/* THE FILL-IN FIELDS ASKED AT A COPY (field-ask.js): one row per field, its name, what it holds already,
+   and the key that takes the clipboard. A field refused wears a dashed edge. */
+.e-field-row{display:block;margin:0 0 8px}
+.e-field-head{display:flex;align-items:baseline;gap:8px;font-size:13px;color:var(--bub-ink)}
+.e-field-name{font-weight:600}
+.e-field-note,.e-field-clip{font-size:12px;color:var(--bub-dim)}
+.e-field-clip{margin-left:auto;white-space:nowrap}
+.e-field-clip kbd{font:10.5px var(--mono);padding:0 4px;border:1px solid rgba(255,255,255,.6);border-radius:4px}
+.bub .e-field-inp[aria-invalid]{border:1px dashed #fff}
+.bub-ask p.e-field-said{color:var(--bub-ink);margin:0 0 8px}
+.bub-ask p.e-field-said:empty{display:none}
+.e-field-ask .btn.primary.e-waits{opacity:.6}
 .bub .e-greet{color:var(--bub-ink);margin:8px 0 10px}
 .tour-field{margin:0 0 4px}
 .bub .e-greet .e-name-ph{color:var(--bub-dim);opacity:.8}
@@ -3308,6 +3481,98 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .fab.nudge::after{content:"";position:absolute;inset:-1px;border-radius:50%;
   border:1px solid var(--accent);animation:fabNudge var(--m-nudge) ease-out 3 both;pointer-events:none}
 @keyframes fabNudge{ 0%{transform:scale(1);opacity:.6} 70%,100%{transform:scale(1.5);opacity:0} }
+/* THE ACTION BUTTON, left of the two doors and there while replies wait: its digit says how many, in the
+   bubble's blue, and .nudge is its pulse. The dock it unfolds is the paper bubble, under every dialog. */
+.fab-next{right:130px}
+.fab-badge{position:absolute;top:-5px;right:-5px;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;
+  border-radius:9px;background:var(--bub);color:var(--bub-ink);font:700 11px/18px var(--sans);text-align:center;
+  pointer-events:none}
+.fab-badge:empty{display:none}
+#nextDock{z-index:60;padding:8px 6px 6px;animation:eModalCardIn var(--m-reveal) var(--m-ease) both}
+.nd-top{display:flex;align-items:baseline;gap:8px;min-width:0;padding:2px 8px 6px}
+.nd-after{flex:none;font:600 11.5px var(--sans);letter-spacing:.6px;text-transform:uppercase;color:var(--dim)}
+.nd-from{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;font:600 13px var(--sans);color:var(--ink)}
+.nd-rows{display:grid}
+.nd-row{display:flex;align-items:flex-start;gap:10px;width:100%;margin:0;padding:8px;border:0;
+  border-top:1px solid var(--line);border-radius:0;background:transparent;color:inherit;font:inherit;
+  text-align:left;cursor:default}
+.nd-row:first-child{border-top-color:transparent}
+.nd-row:hover,.nd-row:focus-visible{background:var(--accent-soft);border-radius:var(--radius-sm)}
+.nd-key{flex:none;min-width:58px;padding-top:2px}
+.nd-key kbd{font:12px var(--mono);border:1px solid var(--line-strong);border-radius:4px;padding:1px 5px;
+  color:var(--dim);background:var(--panel)}
+.nd-main{flex:1 1 auto;min-width:0;display:grid;gap:2px}
+.nd-head{display:flex;align-items:center;gap:7px;min-width:0}
+.nd-head .cat-ic{flex:none;width:14px;height:14px;margin:0;vertical-align:0}
+.nd-t{flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;font:600 15px var(--sans);color:var(--ink)}
+.nd-stamp{flex:none;display:inline-flex;color:var(--warn)}
+.nd-stamp .ic{width:16px;height:16px}
+.nd-learnt{flex:none;padding:0 7px;border:1px dashed var(--line-strong);border-radius:999px;
+  font:600 11px/17px var(--sans);letter-spacing:.2px;color:var(--dim)}
+.nd-b{min-width:0;white-space:nowrap;overflow:hidden;font-size:13.5px;color:var(--dim)}
+/* THE LANES, over the list while they show: under the header and the round buttons, on the list's own dot
+   field, which stays. The list keeps its place and its scroll unseen; the category bar leaves. */
+#lanes{position:fixed;left:0;right:0;bottom:0;top:calc(var(--rail-top,120px) - 8px);z-index:47;
+  overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable;cursor:default}
+body.e-lanes #pageScroll>.shell{opacity:0}
+body.e-lanes #pageScroll{scrollbar-color:transparent transparent}
+body.e-lanes #pageScroll::-webkit-scrollbar-thumb{background-color:transparent}
+body.e-lanes #railHit{display:none}
+body.e-lanes #addCardFab,body.e-lanes #clearIntentsFab{visibility:hidden;pointer-events:none}
+body.e-lanes #pillsSlot{display:none}
+body.e-lanes #pillsSlot.pills-anim{display:block}
+.fab-next[aria-pressed=true]{border-style:solid;border-color:var(--accent);color:var(--accent)}
+.ln-wrap{max-width:var(--app-max);margin:0 auto;padding:14px var(--app-pad) 96px}
+.ln-wrap.ln-open{animation:eLanesIn var(--m-move) var(--m-ease) both}
+.ln-wrap.ln-step .ln-next{animation:eLanesIn var(--m-move) var(--m-ease) both}
+@keyframes eLanesIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.ln-head{display:flex;align-items:center;gap:12px;min-width:0;padding:0 2px 14px}
+.ln-title{flex:none;font:600 15px var(--sans);color:var(--ink)}
+.ln-hint{margin-left:auto;flex:none;font-size:13px;color:var(--dim);white-space:nowrap}
+.ln-hint kbd,.ln-key{font:12px var(--mono);border:1px solid var(--line-strong);border-radius:4px;padding:1px 5px;
+  color:var(--dim);background:var(--panel)}
+.ln-hint kbd{margin-right:6px}
+.ln-key{flex:none}
+.ln-empty{margin:48px 0;text-align:center;font-size:14px;color:var(--dim)}
+.ln-cols{position:relative;display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.15fr) minmax(0,1.3fr);
+  column-gap:64px;row-gap:2px;align-items:start}
+.ln-h{grid-row:1;padding:0 2px 8px;font:600 11.5px var(--sans);letter-spacing:.6px;text-transform:uppercase;color:var(--dim)}
+.ln-h1{grid-column:1}
+.ln-h2{grid-column:2}
+.ln-h3{grid-column:3}
+.ln-sent{grid-column:1;display:flex;align-items:center;gap:7px;min-width:0;padding:7px 0 7px 20px}
+.ln-sent .ctitle{min-width:0;overflow:hidden;white-space:nowrap;font-size:14px}
+.ln-cols .cat-ic{flex:none;width:14px;height:14px;margin:0}
+.ln-sent .cstamp{flex:none;display:inline-flex;color:var(--warn)}
+.ln-now{grid-column:2;margin:0}
+.ln-next{grid-column:3;display:grid;gap:16px;align-content:start}
+.ln-row{margin:0}
+.ln-txt,.ln-blk{padding-right:16px}
+/* The clamp is on the text and not the slab, whose padding would show the start of a fourth line. */
+.ln-txt{white-space:normal;margin-bottom:4px}
+.ln-clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
+.ln-txt:hover,.ln-blk:hover{border-color:var(--accent)}
+.ln-then{padding:0 3px;font-size:12.5px;color:var(--dim);white-space:nowrap;overflow:hidden}
+.ln-wires{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
+.ln-w{fill:none;stroke:var(--accent);stroke-width:1.6}
+.ln-w-learnt{stroke:var(--dim);stroke-dasharray:2 4}
+.ln-dot{fill:var(--accent)}
+.ln-dot-open{fill:none;stroke:var(--accent);stroke-width:1.6}
+/* Editing the list in the lanes: the grip and the row's own action show under the pointer or the keyboard. */
+.ln-acts{margin-left:auto;flex:none;display:inline-flex;align-items:center}
+.ln-row .nx-grip,.ln-row .ln-acts{opacity:0;transition:opacity var(--m-tone) ease}
+.ln-row:hover .nx-grip,.ln-row:hover .ln-acts,.ln-row:focus-within .nx-grip,.ln-row:focus-within .ln-acts{opacity:1}
+.ln-keep{flex:none;width:26px;height:26px;display:grid;place-items:center;padding:0;border:0;border-radius:6px;
+  background:transparent;color:var(--dim);cursor:default}
+.ln-keep:hover,.ln-keep:focus-visible{background:var(--accent-soft);color:var(--accent)}
+.ln-keep .ic{width:14px;height:14px}
+.ln-row.ln-drag{position:relative;z-index:1;opacity:.85}
+.ln-src{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ln-add{justify-self:start}
+.ln-find{display:grid;max-width:440px}
+.ln-find input{font:14px var(--sans);padding:8px 10px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
+  background:var(--field);color:var(--ink);outline:none}
+.ln-find input:focus{border-color:var(--accent)}
 #sampleMark{position:fixed;inset:0;z-index:49;pointer-events:none;overflow:hidden;
   display:flex;align-items:center;justify-content:center}
 #sampleMark b{transform:rotate(-22deg);white-space:nowrap;text-transform:uppercase;
@@ -3615,6 +3880,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 <div id="sampleMark" hidden aria-hidden="true"><b>Sample catalog</b></div>
 <button type="button" id="addCardFab" class="fab" hidden><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 5v10M5 10h10"/></svg></button>
 <button type="button" id="clearIntentsFab" class="fab fab-clear" aria-hidden="true" tabindex="-1"><svg class="ic ic-lg ic-intent" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M8.3 10.8a4.2 4.2 0 0 0 6.3.5l2.5-2.5a4.2 4.2 0 0 0-5.9-5.9l-1.4 1.4"/><path d="M11.7 9.2a4.2 4.2 0 0 0-6.3-.5l-2.5 2.5a4.2 4.2 0 0 0 5.9 5.9l1.4-1.4"/></svg><b class="fab-n" data-i18n-skip></b><svg class="ic ic-lg ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5 5l10 10M15 5L5 15"/></svg></button>
+<button type="button" id="nextFab" class="fab fab-next" hidden><svg class="ic ic-lg" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4.5 4.5v3.5a4 4 0 0 0 4 4h7"/><path d="M12 8.5l3.5 3.5-3.5 3.5"/></svg><b class="fab-badge" aria-hidden="true" data-i18n-skip></b></button>
+<div id="lanes" hidden data-i18n-skip></div>
 
 <div id="modal" class="modal" hidden>
   <div class="modal-bg" id="modalBg"></div>

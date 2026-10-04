@@ -48,7 +48,7 @@ const CARD_FLAGS=["firstOnly","allIntents","intentTop"];
 const V2_CARD_NAMED=["id","shelf","title","body","note","bodyShape","k","firstOnly","allIntents","intentTop",
   "paxVoc","lockLang","requests","retired","next","commits"];
 const V2_HEAD_NAMED=["format","kind","id","rev","date","langs","commentLang","tags","cards","role","facts",
-  "greet","stop","sample","modified","hash","sig","notes","grew","desk","name"];
+  "greet","stop","sample","modified","hash","sig","notes","grew","desk","name","fields"];
 // One phrase per part of the day, and the clock has three. A language whose greeting covers
 // two parts writes the same phrase twice, which is what the built-in Polish does.
 const V2_GREET_PARTS=3;
@@ -279,6 +279,97 @@ function v2RingRead(src){
   });
   return out;
 }
+/* THE TEAM FILE, one per shared folder beside the catalogs: written and signed by the lead's Studio, naming the catalogs it
+   covers, the lead's key, whether the team's catalogs are sealed, the team key's epoch, and the roster of desks the lead has
+   met, an admitted desk's carrying its wrap of the team key. `team` is null where the file is absent or unusable, with a line
+   saying why; an unusable roster entry, wrap or recovery copy is dropped and said, and the rest stands. Fields this build
+   does not name are kept. */
+const V2_TEAM_FORMAT=1, V2_TEAM_KIND="etiuda-team", V2_TEAM_FILE="etiuda-team.json", V2_TEAM_ID_RE=/^t-[0-9a-f]{16}$/;
+function v2TeamRead(src){
+  const problems=[], out={team:null, problems:problems};
+  if(src==null||src==="") return out;
+  let doc=src;
+  if(typeof src==="string"){
+    try{ doc=JSON.parse(src); }
+    catch(e){ problems.push("team: the file is not JSON, "+e.message); return out; }
+  }
+  if(!doc||typeof doc!=="object"||Array.isArray(doc)){ problems.push("team: wanted an object"); return out; }
+  if(+doc.format!==V2_TEAM_FORMAT||doc.kind!==V2_TEAM_KIND){
+    problems.push("team: wanted format "+V2_TEAM_FORMAT+" and kind "+JSON.stringify(V2_TEAM_KIND));
+    return out;
+  }
+  const hex64=/^[0-9a-f]{64}$/, lead=doc.lead, bad=[];
+  if(!V2_TEAM_ID_RE.test(v2Str(doc.id))) bad.push("id: wanted t- and 16 lower-case hex characters");
+  if(!lead||typeof lead!=="object"||Array.isArray(lead)||!V2_ID_RE.test(v2Str(lead.keyId))||!hex64.test(v2Str(lead.public)))
+    bad.push("lead: wanted a keyId and a public key of 64 lower-case hex characters");
+  ["sealed","exportsSealed"].forEach(f=>{ if(typeof doc[f]!=="boolean") bad.push(f+": wanted true or false"); });
+  if(!Number.isInteger(doc.epoch)||doc.epoch<1) bad.push("epoch: wanted a whole number from 1");
+  if(!Array.isArray(doc.catalogs)) bad.push("catalogs: wanted the list of catalog ids");
+  if(!Array.isArray(doc.roster)) bad.push("roster: wanted the list of desks");
+  if(bad.length){ bad.forEach(b=>problems.push("team "+b)); return out; }
+  const team=Object.assign({},doc,{catalogs:[],roster:[]}), seen={};
+  doc.catalogs.forEach((c,i)=>{
+    if(!V2_ID_RE.test(v2Str(c))) problems.push("team catalogs["+i+"]: wanted a catalog id");
+    else if(team.catalogs.indexOf(c)<0) team.catalogs.push(c);
+  });
+  doc.roster.forEach((e,i)=>{
+    const where="team roster["+i+"]: ", d=e&&typeof e==="object"&&!Array.isArray(e)?e.desk:null;
+    if(!d||typeof d!=="object"||Array.isArray(d)||!/^k-[0-9a-f]{16}$/.test(v2Str(d.id))||!hex64.test(v2Str(d.key))||!hex64.test(v2Str(d.box))){
+      problems.push(where+"wanted a desk with its id, key and box"); return;
+    }
+    if((d.name!==undefined&&typeof d.name!=="string")||(e.name!==undefined&&typeof e.name!=="string")){ problems.push(where+"a name that is not text"); return; }
+    if(seen[d.id]){ problems.push(where+"desk "+d.id+" a second time, the first stands"); return; }
+    seen[d.id]=1;
+    /* A wrap is the team key sealed to this desk's box for the team's own epoch (shell/main.js wrapTeamKey). */
+    if(e.wrap!==undefined&&!(e.wrap&&typeof e.wrap==="object"&&e.wrap.epoch===doc.epoch&&hex64.test(v2Str(e.wrap.enc))
+      &&/^[0-9a-f]{96}$/.test(v2Str(e.wrap.ct)))){
+      problems.push(where+"a wrap that is not the team key for epoch "+doc.epoch+", the desk stands without it");
+      e=Object.assign({},e); delete e.wrap;
+    }
+    team.roster.push(e);
+  });
+  /* The lead's own copy of the team key under a passphrase, which only Studio opens (sign.mjs's scrypt and AES-GCM). */
+  const rc=doc.recovery;
+  if(rc!==undefined&&!(rc&&typeof rc==="object"&&rc.epoch===doc.epoch&&rc.kdf==="scrypt"&&rc.cipher==="aes-256-gcm"
+    &&[rc.N,rc.r,rc.p].every(x=>Number.isInteger(x)&&x>0)&&/^[0-9a-f]{32}$/.test(v2Str(rc.salt))
+    &&/^[0-9a-f]{24}$/.test(v2Str(rc.iv))&&/^[0-9a-f]{96}$/.test(v2Str(rc.ct)))){
+    problems.push("team recovery: wanted the team key for epoch "+doc.epoch+" under a passphrase, the team stands without it");
+    delete team.recovery;
+  }
+  out.team=team;
+  return out;
+}
+/* The team file's signature against the lead key it names, so it says the file is whole, not that the key is the lead's:
+   that trust comes from the ring or from the desk's admission. */
+function v2TeamSigState(team){
+  const lead=(team&&team.lead)||{};
+  return v2SigState(team, {[v2Str(team&&team.id)]:{[v2Str(lead.keyId)]:v2Str(lead.public)}});
+}
+/* THE SEALED ENVELOPE, a signed catalog under the team key, which only a shell opens: this reads its shape. `sealed` is
+   null where the file is absent or unusable, with a line for each field that is wrong. */
+const V2_SEALED_KIND="etiuda-sealed";
+function v2SealedRead(src){
+  const problems=[], out={sealed:null, problems:problems};
+  if(src==null||src==="") return out;
+  let doc=src;
+  if(typeof src==="string"){
+    try{ doc=JSON.parse(src); }
+    catch(e){ problems.push("sealed: the file is not JSON, "+e.message); return out; }
+  }
+  if(!doc||typeof doc!=="object"||Array.isArray(doc)){ problems.push("sealed: wanted an object"); return out; }
+  if(+doc.format!==V2_FORMAT||doc.kind!==V2_SEALED_KIND){
+    problems.push("sealed: wanted format "+V2_FORMAT+" and kind "+JSON.stringify(V2_SEALED_KIND));
+    return out;
+  }
+  const bad=[], ct=v2Str(doc.ct);
+  if(!V2_TEAM_ID_RE.test(v2Str(doc.team))) bad.push("team: wanted t- and 16 lower-case hex characters");
+  if(!Number.isInteger(doc.epoch)||doc.epoch<1) bad.push("epoch: wanted a whole number from 1");
+  if(!/^[0-9a-f]{24}$/.test(v2Str(doc.nonce))) bad.push("nonce: wanted 24 lower-case hex characters");
+  if(!/^[0-9a-f]*$/.test(ct)||ct.length%2||ct.length<32) bad.push("ct: wanted lower-case hex of at least the 16-byte tag");
+  if(bad.length){ bad.forEach(b=>problems.push("sealed "+b)); return out; }
+  out.sealed=Object.assign({},doc);
+  return out;
+}
 const V2_ID_RE=/^[a-z0-9][a-z0-9-]{2,63}$/;
 const V2_SHAPES={plain:1,steps:1,alts:1};
 /* THE ONE MARKER SHAPE, and both readers use it: what a marker line looks like is written
@@ -431,6 +522,60 @@ function v2HeaderProblems(data,codes,out){
     });
   }
 }
+/* FILL-IN FIELDS: a label per language, which a card's text names in braces, and how a value is
+   checked. No label may spell a token the desk fills itself; tests/fields.mjs holds this list to
+   TOKEN_CANARY, and {WHO}, which the lint still names. */
+const V2_FIELD_KINDS=["text","link","date","amount","pattern"];
+const V2_DESK_TOKENS=["GREET","AGENT","PAX","ROLE","INIT","INTENT","ACTION","TOPIC","Z","DAYPART","WHO"];
+const V2_FIELD_ID_RE=/^[a-z0-9][a-z0-9-]{0,63}$/;
+function v2FieldProblems(data,codes,primary,out){
+  if(data.fields===undefined) return;
+  if(!Array.isArray(data.fields)){ out.push("fields: not a list"); return; }
+  const ids={}, labels={};
+  const text=(name,f,v)=>{
+    if(v===undefined) return;
+    if(!v||typeof v!=="object"||Array.isArray(v)){ out.push(name+": "+f+" is not text by language"); return; }
+    Object.keys(v).forEach(code=>{
+      if(codes.indexOf(code)<0) out.push(name+": "+f+"."+code+" is a language this catalog does not declare");
+      else if(typeof v[code]!=="string") out.push(name+": "+f+"."+code+" is not text");
+    });
+  };
+  data.fields.forEach((f,i)=>{
+    const at="fields["+i+"]";
+    if(!f||typeof f!=="object"||Array.isArray(f)){ out.push(at+": not an entry"); return; }
+    const id=v2Str(f.id), name=V2_FIELD_ID_RE.test(id)?"field "+id:at;
+    if(!V2_FIELD_ID_RE.test(id)) out.push(at+".id: "+v2Missing(f.id)+", wanted 1 to 64 of a-z, 0-9 and the hyphen");
+    else if(ids[id]) out.push(name+": the id is claimed twice");
+    ids[id]=1;
+    const lab=f.label;
+    if(!lab||typeof lab!=="object"||Array.isArray(lab)) out.push(name+": label absent, or not text by language");
+    else{
+      if(!v2Str(lab[primary]).trim()) out.push(name+": no label in "+primary+", the primary language");
+      const own={};
+      Object.keys(lab).forEach(code=>{
+        const v=lab[code];
+        if(codes.indexOf(code)<0){ out.push(name+": label."+code+" is a language this catalog does not declare"); return; }
+        if(typeof v!=="string"||!v.trim()){ out.push(name+": label."+code+" is not text"); return; }
+        if(v.length>60||/[{}:\n]/.test(v)){ out.push(name+": label."+code+" holds a brace, a colon or a line break, or runs past 60 characters"); return; }
+        const k=v.normalize("NFC").toLowerCase().replace(/\s+/g," ").trim();
+        if(V2_DESK_TOKENS.indexOf(k.toUpperCase())>-1){ out.push(name+": label."+code+" spells {"+k.toUpperCase()+"}, which the desk fills itself"); return; }
+        if(labels[k]) out.push(name+": label."+code+" is also the label of "+labels[k]);
+        own[k]=1;
+      });
+      Object.keys(own).forEach(k=>{ if(!labels[k]) labels[k]=name; });
+    }
+    if(V2_FIELD_KINDS.indexOf(v2Str(f.kind))<0)
+      out.push(name+": kind "+v2Missing(f.kind)+", wanted one of "+V2_FIELD_KINDS.join(", "));
+    else if(f.kind==="pattern" && (typeof f.pattern!=="string"||!f.pattern.trim()||f.pattern.length>60))
+      out.push(name+": pattern "+v2Missing(f.pattern)+", wanted the shape of a value in 1 to 60 characters");
+    ["required","clip"].forEach(k=>{
+      if(f[k]!==undefined && typeof f[k]!=="boolean") out.push(name+": "+k+" is not true or false");
+    });
+    if(f.keep!==undefined && f.keep!=="conversation" && f.keep!=="copy")
+      out.push(name+": keep is not conversation or copy");
+    text(name,"skip",f.skip);
+  });
+}
 /** Section 2.5 of the specification, and the body rules of 2.6. Every problem rather than the
  *  first, because a maintainer fixing a file wants the whole list, and every message names the
  *  field and what it belongs to. */
@@ -478,6 +623,7 @@ function v2Problems(data){
   });
   data.cards.forEach((c,i)=>v2NextProblems(c,v2Str(c&&c.id)||("["+i+"]"),cardSeen,out));
   v2HeaderProblems(data,codes,out);
+  v2FieldProblems(data,codes,primary,out);
   if(data.hash!=null && v2ContentHash(data)!==v2Str(data.hash))
     out.push("hash: "+v2Str(data.hash)+" is not the hash of what the file holds");
   return out;
@@ -581,6 +727,7 @@ function catalogFromV2(data){
   if(data.notes) out.notes=v2Copy(data.notes);
   if(data.grew) out.grew=v2Copy(data.grew);
   if(data.desk) out.desk=v2Copy(data.desk);
+  if(Array.isArray(data.fields)) out.fields=v2Copy(data.fields);
   const more=v2Extra(data,V2_HEAD_NAMED); if(more) out.ext=more;
   return out;
 }
@@ -684,6 +831,7 @@ function catalogToV2(c,opts){
   if(c.notes&&typeof c.notes==="object") out.notes=v2Copy(c.notes);
   if(c.grew&&typeof c.grew==="object") out.grew=v2Copy(c.grew);
   if(c.desk&&typeof c.desk==="object") out.desk=v2Copy(c.desk);
+  if(Array.isArray(c.fields)) out.fields=v2Copy(c.fields);
   v2Restore(out,c.ext,V2_HEAD_NAMED);
   /* Section 5. This engine is never the origin of a catalog, so a file it hands back says so.
      Rev arrives already raised where an export chose a new edition - see currentCatalog - and is
@@ -696,4 +844,4 @@ function catalogToV2(c,opts){
   return out;
 }
 
-export { isV2, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2AltLabel, v2PartText, v2Problems, v2GrammarNotices, v2CatKey, V2_GRAMMAR_LANGS, v2ContentHash, v2SignedBytes, v2SigState, v2RingRead, V2_FORMAT, V2_KIND, V2_KNOWN_KEYS, V2_RING_FORMAT, V2_RING_KIND, V2_RING_FILE, V2_HARNESS_TEST_KEYID, V2_HARNESS_TEST_PUB, V2_SIG_NONE, V2_SIG_VALID, V2_SIG_INVALID, V2_SIG_UNKNOWN, V2_SIG_ALG };
+export { isV2, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2AltLabel, v2PartText, v2Problems, v2GrammarNotices, v2CatKey, V2_GRAMMAR_LANGS, v2ContentHash, v2SignedBytes, v2SigState, v2RingRead, v2TeamRead, v2TeamSigState, v2SealedRead, V2_SEALED_KIND, V2_FORMAT, V2_KIND, V2_KNOWN_KEYS, V2_RING_FORMAT, V2_RING_KIND, V2_RING_FILE, V2_TEAM_FORMAT, V2_TEAM_KIND, V2_TEAM_FILE, V2_HARNESS_TEST_KEYID, V2_HARNESS_TEST_PUB, V2_SIG_NONE, V2_SIG_VALID, V2_SIG_INVALID, V2_SIG_UNKNOWN, V2_SIG_ALG };

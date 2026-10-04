@@ -153,6 +153,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
    checked for overlaps at every call, and the block is leased by its base where the run was
    given a lease command, at load, before anything is built. */
 const PORT_BASE = E.portBlock("reinstall");
+E.windowWall("tests/reinstall.js");
 const LEASED = E.takeLeases(["ports:" + PORT_BASE], 45, "tests/reinstall.js");
 console.log("       debugging port(s) count up from " + PORT_BASE
   + (process.env.ETIUDA_PORT_SHIFT ? " (ETIUDA_PORT_SHIFT " + process.env.ETIUDA_PORT_SHIFT + ")"

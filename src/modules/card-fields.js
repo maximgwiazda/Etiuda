@@ -26,14 +26,14 @@ const CARD_PLAIN_FIELDS=["lockLang"];
 const CARD_FLAG_BOX={alt:"meAlt",seq:"meSeq",firstOnly:"meFirst",paxVoc:"meVoc",
   allIntents:"meAllIntents",intentTop:"meIntentTop"};
 const CARD_FLAGS=Object.keys(CARD_FLAG_BOX);
-/* The flags no box on screen writes yet: carried, compared and exported like the others, but a
-   caller that does not hold one has not unticked it (overrideAgainstBase reads them only when carried). */
+/* The flags with no box in Advanced (the editor's stamp writes commits): carried, compared and exported
+   like the others, but a caller that does not hold one has not unticked it (overrideAgainstBase reads them only when carried). */
 const CARD_UNBOXED_FLAGS=["commits"];
 /* Fields no editor writes yet. A whole entry replaced by a save takes them from the entry it replaces,
    or the save would drop them. Text fields are never carried: an emptied one stays empty. */
-const CARD_UNWRITTEN_FIELDS=["next","retired","ext"];
+const CARD_UNWRITTEN_FIELDS=["retired","ext"];
 function carryUnwritten(entry,was){
-  if(was) CARD_UNBOXED_FLAGS.concat(CARD_UNWRITTEN_FIELDS).forEach(f=>{ if(was[f]!=null) entry[f]=was[f]; });
+  if(was) CARD_UNWRITTEN_FIELDS.forEach(f=>{ if(was[f]!=null) entry[f]=was[f]; });
   return entry;
 }
 /* paxVoc is the exception at every site. ABSENT means "follow firstOnly", so it compares by

@@ -118,6 +118,9 @@ class El {
   dispatch(t, ev) { (this.listeners[t] || []).slice().forEach(fn => fn(Object.assign({ type: t, target: this,
     preventDefault() {}, stopPropagation() {} }, ev || {}))); }
   focus() { this.ownerDocument.activeElement = this; }
+  /* A press by the page's own code, as the offer's panel presses the bubble's buttons: the handler, and nothing a pointer adds. */
+  click() { if (typeof this.onclick === "function") this.onclick({ type: "click", target: this, preventDefault() {}, stopPropagation() {} }); this.dispatch("click"); }
+  getContext() { return {}; }
   blur() {}
   getBoundingClientRect() { return { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 }; }
   getClientRects() { return []; }
@@ -157,8 +160,9 @@ function parseInto(root, html) {
   }
   if (at < html.length) stack[stack.length - 1].appendChild(new TextNode(html.slice(at)));
 }
-/* Compound selectors joined by descendant spaces or `>`, and `:scope >` at the head. Nothing else. */
-const COMPOUND = /^([a-zA-Z][\w-]*|\*)?((?:#[\w-]+|\.[\w-]+|\[[\w-]+(?:="[^"]*")?\])*)$/;
+/* Compound selectors joined by descendant spaces or `>`, and `:scope >` at the head, and a `:not(...)` over one simple selector. Nothing else. */
+const SIMPLE = String.raw`#[\w-]+|\.[\w-]+|\[[\w-]+(?:="[^"]*")?\]`;
+const COMPOUND = new RegExp("^([a-zA-Z][\\w-]*|\\*)?((?:" + SIMPLE + "|:not\\((?:" + SIMPLE + ")\\))*)$");
 function parts(sel) {
   const s = String(sel).trim();
   if (s.includes(",")) throw new Error("stub page: selector list " + s);
@@ -168,10 +172,11 @@ function compound(el, c) {
   const m = COMPOUND.exec(c);
   if (!m) throw new Error("stub page: selector " + c);
   if (m[1] && m[1] !== "*" && el.localName !== m[1].toLowerCase()) return false;
-  const bits = m[2].match(/#[\w-]+|\.[\w-]+|\[[\w-]+(?:="[^"]*")?\]/g) || [];
-  return bits.every(b => b[0] === "#" ? el.id === b.slice(1)
+  const bits = m[2].match(new RegExp(":not\\((?:" + SIMPLE + ")\\)|" + SIMPLE, "g")) || [];
+  const one = b => b[0] === "#" ? el.id === b.slice(1)
     : b[0] === "." ? el.classList.contains(b.slice(1))
-    : (() => { const q = /^\[([\w-]+)(?:="([^"]*)")?\]$/.exec(b); return q[2] === undefined ? el.hasAttribute(q[1]) : el.getAttribute(q[1]) === q[2]; })());
+    : (() => { const q = /^\[([\w-]+)(?:="([^"]*)")?\]$/.exec(b); return q[2] === undefined ? el.hasAttribute(q[1]) : el.getAttribute(q[1]) === q[2]; })();
+  return bits.every(b => b.startsWith(":not(") ? !one(b.slice(5, -1)) : one(b));
 }
 function matches(el, sel, scope) {
   const ps = parts(sel);
@@ -209,6 +214,8 @@ function makeDocument() {
   doc.head = doc.documentElement.appendChild(new El("head", doc));
   doc.body = doc.documentElement.appendChild(new El("body", doc));
   doc.activeElement = doc.body;
+  doc.createRange = () => ({});
+  doc.contains = n => doc.documentElement.contains(n);
   doc.getElementById = id => queryAll(doc.documentElement, "#" + id)[0] || null;
   doc.querySelector = sel => queryAll(doc.documentElement, sel)[0] || null;
   doc.querySelectorAll = sel => queryAll(doc.documentElement, sel);
@@ -224,7 +231,7 @@ function makeDocument() {
    ================================================================================================ */
 async function launch(plan) {
   const LAB = plan.lab, UD = path.join(LAB, "userdata"), SHELL = path.join(LAB, "shell");
-  const obs = { errors: [], offers: [], library: [], bars: [], reloaded: false, heldAtStart: null, heldAtEnd: null, tourDue: null };
+  const obs = { errors: [], offers: [], library: [], bars: [], read: {}, reloaded: false, heldAtStart: null, heldAtEnd: null, tourDue: null };
   process.on("unhandledRejection", e => obs.errors.push("unhandled " + String(e && e.message || e).slice(0, 160)));
   process.on("uncaughtException", e => obs.errors.push("uncaught " + String(e && e.message || e).slice(0, 160)));
   const noop = () => {};
@@ -293,6 +300,12 @@ async function launch(plan) {
   const TR = await import(MOD("catalog-trust.js"));
   const ST = await import(MOD("storage.js"));
   const TOUR = await import(MOD("tour.js"));
+  const DOMM = await import(MOD("dom.js"));
+  const PACK = await import(MOD("pack.js"));
+  const BOOT = await import(MOD("catalog-boot.js"));
+  const CAT = await import(MOD("catalog.js"));
+  const DLG = await import(MOD("dialog.js"));
+  const APP = await import(MOD("app-state.js"));
   /* THE APP-LEVEL ACTIONS the page's boot registers in hooks.js, none of them on the trust path:
      the sample's watermark and the unsaved notice repaint the rest of the page. Named one by one,
      so a slot this path starts calling is a TypeError in 0b rather than a silent stub. */
@@ -364,6 +377,110 @@ async function launch(plan) {
     watch: file => { const text = fs.readFileSync(path.join(LAB, file), "utf8");
       (rendererOn["etiuda:catalog-file"] || []).forEach(fn => fn({}, text, path.basename(file), path.join(LAB, "catalogs"), false, "", false)); },
   };
+  /* THE OFFER'S PANEL, driven as the desk drives it. `desk` is the page's own start in order, as restart.js runs it
+     (the catalog applied, then the layer read), with the modal window the page has and this stub has not; the acts
+     after it press the handlers the offer and the panel wired, and write down what then stood on the page. */
+  const pressed = sel => doc.querySelectorAll(sel).map(n => n.getAttribute("aria-pressed"));
+  const bubble = () => doc.getElementById("eCatalogOffer");
+  const modalUp = () => { const m = doc.getElementById("modal"); return !!m && !m.hidden; };
+  const cardRow = id => { const b = bubble(), li = b && b.querySelector("li[data-ec-id=\"" + id + "\"]"); return li ? li.textContent.trim() : null; };
+  const bodyOf = (c, id) => { const m = ((c && c.cards) || []).find(x => x.id === id); return m ? String(m.en) : null; };
+  const takes = () => pressed("[data-ed-take=\"1\"]").concat(pressed("[data-ed-take=\"0\"]"));
+  Object.assign(act, {
+    desk: () => {
+      const m = doc.createElement("div"), card = doc.createElement("div");
+      m.id = "modal"; m.hidden = true; card.id = "modalCard"; m.appendChild(card); doc.body.appendChild(m);
+      DOMM.grabDom();
+      /* The two sweeps the dialog makes over its card after wiring, which the stub's selectors cannot say (a list, and :not()),
+         are the dressing of a form's text inputs and the fade of a cut line: neither is the panel's business, so each is
+         answered with nothing found, and every other query still has to be one the stub knows. */
+      const ask = card.querySelectorAll.bind(card);
+      card.querySelectorAll = sel => (/^(\.mf input|\.ctitle,)/.test(sel) ? [] : ask(sel));
+      BOOT.applyBootCatalog();
+      PACK.loadPack();
+      PACK.rebuildBaseCards();
+      /* The cards the list would hold, as rebuild.js makes them, so the desk is not "empty" to the boot's offer (wholeThingEmpty). */
+      const ov = PACK.pack.overrides || {};
+      APP.setCards(PACK.BASE_M.filter(b => !b.retired).map(b => (ov[b.id] ? Object.assign({}, b, ov[b.id]) : Object.assign({}, b))));
+    },
+    override: () => { PACK.pack.overrides = Object.assign(PACK.pack.overrides || {}, { "c-b": plan.override }); PACK.savePack(); },
+    readchange: () => {
+      const b = bubble();
+      obs.read.bubble = !b ? null : { hidden: b.hidden, change: b.querySelectorAll(".ec-change").length,
+        counts: b.querySelectorAll(".ec-counts").map(n => ({ text: n.textContent.trim(), n: n.querySelectorAll(".ec-n").length })),
+        n: texts(b, ".ec-n"), ids: b.querySelectorAll("[data-ec-id]").map(n => n.getAttribute("data-ec-id")),
+        diff: b.querySelectorAll("#ecDiff").length, own: cardRow("c-b") };
+    },
+    panel: () => {
+      doc.getElementById("ecDiff").onclick();
+      const card = doc.getElementById("modalCard"), g = card.querySelector("#edPane .ed-grid");
+      obs.read.panel = { bubbleHidden: bubble().hidden, modal: modalUp(), cls: card.className, rows: card.querySelectorAll(".ed-row").length,
+        current: texts(card, ".ed-row[aria-current=\"true\"]"), grid: g ? g.className : null, take: takes() };
+    },
+    take: arg => {
+      doc.querySelector("[data-ed-take=\"" + arg + "\"]").onclick();
+      obs.read["take" + arg] = { take: takes(), row: texts(doc.getElementById("modalCard"), ".ed-row[aria-current=\"true\"]"), own: cardRow("c-b") };
+    },
+    edload: () => { doc.getElementById("edLoad").onclick(); obs.read.afterLoad = { modal: modalUp() }; },
+    edkeep: () => { doc.getElementById("edKeep").onclick(); obs.read.afterKeep = { modal: modalUp() }; },
+    edback: () => {
+      DLG.dismissModal();
+      const b = bubble();
+      obs.read.afterBack = { modal: modalUp(), bubble: !!b, hidden: !!b && b.hidden, focus: doc.activeElement && doc.activeElement.id };
+    },
+    readdesk: () => {
+      const o = (PACK.pack.overrides || {})["c-b"], b = PACK.BASE_M.find(m => m.id === "c-b");
+      obs.read.desk = { over: o ? JSON.parse(JSON.stringify(o)) : null, base: b ? String(b.en) : null, held: bodyOf(CAT.storedCatalog(), "c-b"),
+        refused: ST.nsGet("CatalogNo") || "", standing: standing() };
+    },
+  });
+  /* A COLLEAGUE'S FILE IN THE LIBRARY, and the panel behind its Look: each row as the list drew it, the desk's own place
+     in the list (`at`) for the acts that press its buttons, and the hooks this path calls, counted rather than stubbed. */
+  const readRows = () => {
+    const box = doc.getElementById("mgCatList");
+    return box ? box.querySelectorAll(".ec-row").map(r => {
+      const b = r.querySelector(".ec-name b"), who = r.querySelector(".ec-who");
+      return { name: b && b.childNodes[0] ? b.childNodes[0].textContent : "", desk: r.classList.contains("ec-desk"), alone: r.classList.contains("ec-alone"),
+               loaded: r.classList.contains("is-loaded"), file: r.getAttribute("data-ec-file"), at: r.getAttribute("data-ec-desk"),
+               fp: texts(r, ".ec-fp")[0] || "", tip: who ? (who.getAttribute("data-tip") || "").replace(/&(?:amp|lt|gt|quot|#39|nbsp);/g, m => ENT[m]) : "", mine: texts(r, ".ec-mine"),
+               meta: texts(r, ".ec-meta")[0] || "", acts: r.querySelectorAll("button").map(x => x.getAttribute("aria-label") || x.id) };
+    }) : [];
+  };
+  obs.rows = [];
+  Object.assign(act, {
+    rows: async () => {
+      if (!doc.getElementById("mgCatList")) { const l = doc.createElement("div"); l.id = "mgCatList"; doc.body.appendChild(l); }
+      OFFER.paintCatalogList();
+      await settle();
+      obs.rows.push(readRows());
+    },
+    look: async at => {
+      obs.backs = 0; HOOKS.openManage = () => { obs.backs++; };
+      const b = doc.querySelector("button[data-ec-look=\"" + at + "\"]");
+      if (!b) throw new Error("no Look on row " + at);
+      b.onclick();
+      await settle();
+      const card = doc.getElementById("modalCard");
+      obs.read.look = !modalUp() ? null : { title: texts(card, ".modal-t")[0] || "", name: texts(card, ".modal-name")[0] || "",
+        heads: texts(card, ".ed-head"), rows: card.querySelectorAll(".ed-row").length, mine: pressed("[data-ed-mine]"),
+        mineWord: texts(card, "[data-ed-mine]"), keep: texts(card, "#edKeep")[0] || "", load: texts(card, "#edLoad")[0] || "", take: takes() };
+    },
+    mine: () => {
+      obs.rebuilt = obs.rebuilt || 0; HOOKS.rebuildCards = () => { obs.rebuilt++; };
+      const b = doc.querySelector("[data-ed-mine]");
+      if (!b) throw new Error("no take on the panel");
+      b.onclick();
+      obs.read.mine = (obs.read.mine || []).concat([{ pressed: pressed("[data-ed-mine]"),
+        row: texts(doc.getElementById("modalCard"), ".ed-row[aria-current=\"true\"]"),
+        over: JSON.parse(JSON.stringify((PACK.pack.overrides || {})[plan.card] || null)), rebuilt: obs.rebuilt }]);
+    },
+    edback2: () => { doc.getElementById("edKeep").onclick(); obs.read.back = { modal: modalUp(), backs: obs.backs }; },
+    work: at => { const b = doc.querySelector("button[data-ec-work=\"" + at + "\"]"); if (!b) throw new Error("no Work on row " + at); b.onclick(); },
+    over: () => { obs.read.over = JSON.parse(JSON.stringify(PACK.pack.overrides || {})); obs.read.heldId = String((CAT.storedCatalog() || {}).id || ""); },
+    // A colleague's file landing while the Library is open, and the list read as it then stands, painted by nothing here.
+    drop: () => { const at = path.join(LAB, "catalogs", plan.drop.rel); fs.mkdirSync(path.dirname(at), { recursive: true }); fs.writeFileSync(at, plan.drop.text, "utf8"); },
+    reread: async () => { await settle(); obs.rows.push(readRows()); },
+  });
   for (const a of plan.acts) {
     if (obs.reloaded) break;
     const [name, arg] = String(a).split(":");
@@ -388,7 +505,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 36;
+  const EXPECTED = 64;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -431,8 +548,8 @@ async function parent() {
   };
   const launches = [];
   let session = {};
-  const run = (lab, acts, carry) => {
-    const r = spawnSync(process.execPath, [SELF, "--launch", JSON.stringify({ lab, acts, session: carry ? session : {} })],
+  const run = (lab, acts, carry, extra) => {
+    const r = spawnSync(process.execPath, [SELF, "--launch", JSON.stringify(Object.assign({ lab, acts, session: carry ? session : {} }, extra || {}))],
       { encoding: "utf8", timeout: 30000, windowsHide: true });
     const line = String(r.stdout || "").split(/\r?\n/).find(l => l.startsWith("#launch "));
     let obs = null;
@@ -711,8 +828,199 @@ async function parent() {
       + JSON.stringify(p1.fileAtEnd) + ")");
     const errs72 = [a72, c72, d72, e72, f72, g72, h72, lib72f, i72, j72, k72, l72, m72, n72, p1].flatMap(o => o.errors || []);
     check(!errs72.length, "72l those launches ran their acts without an error" + (errs72.length ? ": " + errs72.length + ", first " + errs72[0] : ""));
+    /* 73: AN EMPTY DESK THAT MADE A CATALOG FROM NOTHING, and the lead's import of that file published beside a newer
+       catalog, so the boot's newest-file offer is not the lineage's: the boot's offer is escaped, and then the listing. */
+    const looseId = "c-made0here0on0it", rawLoose = Buffer.alloc(32, 5), ownLoose = "k-" + sha(rawLoose).slice(0, 16);
+    const fromLoose = (from) => { const d = JSON.parse(JSON.stringify(payload("2026-09-21"))); d.id = "lamp-from-loose"; d.rev = 1;
+      d.grew = { id: (from || ownLoose) + "-" + sha8(looseId), rev: 2, sha: "sha256:" + "ab".repeat(32) }; return sign(d); };
+    const other = Object.assign(JSON.parse(JSON.stringify(payload("2026-09-22"))), { id: "lamp-other" });
+    const emptyMaker = (withId, ringIds, from) => {
+      const lab = scenario([["catalogs/from-loose.ec", fromLoose(from)], ["catalogs/other.ec", other], ["catalogs/etiuda-ring.json", ringWith(ringIds)]]);
+      const envAt = path.join(lab, "userdata", "desk.json"), envD = JSON.parse(fs.readFileSync(envAt, "utf8"));
+      envD.branch = { sign: { pub: rawLoose.toString("hex"), priv: "sealed" }, box: { pub: "ef".repeat(32), priv: "sealed" } };
+      if (withId) envD.keys.eLooseId = looseId;
+      fs.writeFileSync(envAt, JSON.stringify(envD), "utf8");
+      return run(lab, ["boot", "settle", "offer", "escape", "settle", "listing", "settle", "offer"]);
+    };
+    const filesOf = (o, i) => (o.offers[i] || {}).files || [];
+    const a73 = emptyMaker(true, ["lamp-from-loose"]);
+    check(filesOf(a73, 0).includes("other.ec") && filesOf(a73, 1).includes("from-loose.ec"),
+      "73a on an empty desk holding the id of the catalog it made, a file valid under the ring that grew from this desk's own file of it is offered from the listing (boot "
+      + JSON.stringify(filesOf(a73, 0)) + ", listing " + JSON.stringify(filesOf(a73, 1)) + ")");
+    const b73 = emptyMaker(true, []);
+    check(filesOf(b73, 0).includes("other.ec") && !(b73.offers[1] || {}).shown,
+      "73b THE CONTROL: the same file with no ring line for it is not offered (listing " + JSON.stringify(filesOf(b73, 1)) + ")");
+    const c73 = emptyMaker(false, ["lamp-from-loose"]);
+    check(filesOf(c73, 0).includes("other.ec") && !(c73.offers[1] || {}).shown,
+      "73c THE CONTROL: an empty desk holding no such id offers its newest file at boot as before and nothing from the listing (listing "
+      + JSON.stringify(filesOf(c73, 1)) + ")");
+    const e73 = emptyMaker(true, ["lamp-from-loose"], "k-" + sha(Buffer.alloc(32, 6)).slice(0, 16));
+    check(filesOf(e73, 0).includes("other.ec") && !(e73.offers[1] || {}).shown,
+      "73e THE CONTROL: the same file, valid under the ring, grown from another desk's own file of the same made-from-nothing id is not offered (listing "
+      + JSON.stringify(filesOf(e73, 1)) + ")");
+    const errs73 = [a73, b73, c73, e73].flatMap(o => o.errors || []);
+    check(!errs73.length, "73d those launches ran their acts without an error" + (errs73.length ? ": " + errs73.length + ", first " + errs73[0] : ""));
     const errs71 = [a71, b71, c71, d71].flatMap(o => o.errors || []);
     check(!errs71.length, "71d those launches ran their acts without an error" + (errs71.length ? ": " + errs71.length + ", first " + errs71[0] : ""));
+
+    /* 74: THE OFFER OF A NEW EDITION, THE PANEL BEHIND IT AND THE LOAD THAT FOLLOWS, from the bubble to the next launch's
+       desk file. Each leg of the chain is read from what the page showed or what the next launch read from desk.json, never
+       from a variable: a Take keyed to a copy of the catalog, or a Load handed a re-parsed one, shows nowhere before the
+       desk starts again, and then the lead's text is gone from the agent's desk or the agent's own words are. The desk
+       holds edition 1 with an edit of this agent's on one card, two text fields of it (title and text). The folder holds
+       edition 2: the lead changed that card's text, added one card, retired one, and left a note. */
+    const BODY1 = "Good day, how can I help?", BODY2 = "Good day, how may I help you today?";
+    const ed1 = () => { const d = payload("2026-09-01");
+      d.cards = [{ id: "c-a", shelf: "t-op", bodyShape: "plain", title: { en: "Opening" }, body: { en: "Hello." } },
+        { id: "c-b", shelf: "t-op", bodyShape: "plain", title: { en: "Greeting" }, body: { en: BODY1 } },
+        { id: "c-r", shelf: "t-rt", bodyShape: "plain", title: { en: "Old offer" }, body: { en: "Ask about the old offer." } }];
+      return d; };
+    const ed2 = () => { const d = ed1(); d.rev = 2; d.date = "2026-09-20"; d.notes = { en: "A note from the lead." };
+      d.cards[1].body.en = BODY2; d.cards[2].retired = true;
+      d.cards.push({ id: "c-n", shelf: "t-op", bodyShape: "plain", title: { en: "Late opening" }, body: { en: "Thank you for waiting." } });
+      return d; };
+    const AGENT = { t: "My greeting", en: "Good day, how can I be of use?" };
+    /* A desk that holds edition 1 and carries the agent's edit, the edit made by the page's own save, and edition 2 in the folder. */
+    const editionDesk = () => {
+      const lab = scenario([["catalogs/lamp.ec", ed1()]]);
+      run(lab, ["boot", "settle", "offer", "yes", "settle"]);
+      const s74 = run(lab, ["desk", "override", "settle"], false, { override: AGENT });
+      fs.writeFileSync(path.join(lab, "catalogs", "lamp.ec"), JSON.stringify(ed2()), "utf8");
+      return { lab: lab, setup: s74 };
+    };
+    const rd = (o, k) => (o && o.read && o.read[k]) || {};
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const ASK = ["desk", "boot", "settle"];
+    const d74 = editionDesk();
+    const A74 = run(d74.lab, ASK.concat(["readchange", "panel", "take:1", "edload", "settle"]));
+    const B74 = run(d74.lab, ["desk", "readdesk"]);
+    const bub = rd(A74, "bubble"), pan = rd(A74, "panel"), tk = rd(A74, "take1"), ld = rd(A74, "afterLoad"), dk = rd(B74, "desk");
+    check(bub.change === 1 && !(bub.counts || []).some(c => c.n === 0 && /\d+ cards?\b/.test(c.text)),
+      "74a the offer of a new edition carries the change block where the counts line stood, and the old counts line is gone: " + JSON.stringify(bub.counts || null));
+    check(same(bub.n, ["1 changed", "1 new", "1 retired"]) && same(bub.ids, ["c-b", "c-n", "c-r"]) && bub.diff === 1,
+      "74b the block counts 1 changed, 1 new and 1 retired, lists the cards in that order, and offers the differences: " + JSON.stringify(bub.n || null) + " " + JSON.stringify(bub.ids || null) + ", button " + bub.diff);
+    check(pan.bubbleHidden === true && pan.modal === true && /\bed-modal\b/.test(pan.cls || "") && pan.rows === 3
+      && (pan.current || []).length === 1 && /Greeting/.test(pan.current[0]) && /\bed-c3\b/.test(pan.grid || "") && same(pan.take, ["false", "true"]),
+      "74c the differences button hides the bubble and stands the panel: three rows, the changed card's the current one, its pane in three columns, Keep mine the choice made: "
+      + JSON.stringify(pan));
+    check(same(tk.take, ["true", "false"]) && /your own version/.test(bub.own || "") && /team's new text/.test(tk.own || "") && /team's new text/.test((tk.row || [""])[0]),
+      "74d Take presses, and the bubble's row for that card goes from your own version to the team's new text: " + JSON.stringify(bub.own || null) + " then " + JSON.stringify(tk.own || null));
+    check(ld.modal === false && A74.reloaded === true && A74.askedAtRestart === 0,
+      "74e the panel's Load closes the panel and the load runs, the desk starting again with the question already down: " + JSON.stringify({ panelUp: ld.modal, started: A74.reloaded, asked: A74.askedAtRestart }));
+    check(same(dk.over, { t: AGENT.t }) && dk.base === BODY2,
+      "74f THE POINT: the next launch's desk file holds edition 2 and the agent's title alone, the text they took from the team no longer an edit of theirs: " + JSON.stringify(dk.over) + ", text " + JSON.stringify(dk.base));
+    const dKeep = editionDesk();
+    const AK = run(dKeep.lab, ASK.concat(["panel", "take:1", "take:0", "edload", "settle"]));
+    const BK = run(dKeep.lab, ["desk", "readdesk"]);
+    check(AK.reloaded === true && same(rd(BK, "desk").over, AGENT) && rd(BK, "desk").base === BODY2,
+      "74g THE CONTROL: the same offer with Keep mine chosen loads edition 2 and the next launch holds both of the agent's fields: " + JSON.stringify(rd(BK, "desk").over) + ", text " + JSON.stringify(rd(BK, "desk").base));
+    const dNo = editionDesk();
+    const AN = run(dNo.lab, ASK.concat(["panel", "edkeep", "settle", "readdesk"]));
+    const CN = run(dNo.lab, ASK.concat(["readchange", "readdesk"]));
+    check(rd(AN, "afterKeep").modal === false && !AN.reloaded && rd(AN, "desk").standing === 0 && rd(AN, "desk").refused !== "" && rd(AN, "desk").held === BODY1
+      && CN.read && CN.read.bubble === null && rd(CN, "desk").held === BODY1,
+      "74h THE CONTROL: Keep current in the panel loads nothing and records the refusal, which the next launch's boot honours, edition 1 still held: "
+      + JSON.stringify({ closed: rd(AN, "afterKeep").modal === false, started: AN.reloaded, refused: rd(AN, "desk").refused !== "", held: rd(AN, "desk").held }));
+    const dBack = editionDesk();
+    const AB = run(dBack.lab, ASK.concat(["panel", "edback", "readdesk"]));
+    const ab = rd(AB, "afterBack");
+    check(ab.modal === false && ab.bubble === true && ab.hidden === false && ab.focus === "ecDiff" && !AB.reloaded && rd(AB, "desk").held === BODY1,
+      "74i THE CONTROL: the panel's way back closes the panel, brings the bubble back with the differences button focused, and loads nothing: " + JSON.stringify(ab));
+    const errs74 = [d74.setup, A74, B74, dKeep.setup, AK, BK, dNo.setup, AN, CN, dBack.setup, AB].flatMap(o => o.errors || []);
+    check(!errs74.length, "74j those launches ran their acts without an error" + (errs74.length ? ": " + errs74.length + ", first " + errs74[0] : ""));
+    /* 75: A COLLEAGUE'S FILE IN THE LIBRARY, LOOK, AND WORK FROM IT. The folder holds the catalog in use (lamp.ec); two
+       desks both called Ola, each with a file grown from that edition, the first rewording one card and adding one; Piotr's
+       catalog made from nothing; Ala's file claiming the id in use; and this desk's own file, its key the one the desk
+       envelope names. Each reading is of the markup the list drew or of desk.json at the next launch. */
+    const lab75 = accepted();
+    const envAt75 = path.join(lab75, "userdata", "desk.json");
+    const pin75 = JSON.parse(JSON.parse(fs.readFileSync(envAt75, "utf8")).keys.eCatalog).pin;
+    const deskOf = (doc, who, pr, inLab) => {
+      const pair = pr || crypto.generateKeyPairSync("ed25519"), lab = inLab || lab75;
+      const raw = pair.publicKey.export({ type: "spki", format: "der" }).subarray(-32), id = "k-" + sha(raw).slice(0, 16);
+      const d = Object.assign({}, JSON.parse(JSON.stringify(doc)), { id: id + "-" + sha8(doc.id), modified: true, desk: { id: id, name: who, key: raw.toString("hex"), box: "ef".repeat(32) } });
+      d.sig = { alg: "Ed25519", keyId: id };
+      d.sig.value = crypto.sign(null, Buffer.concat([Buffer.from("etiuda-desk-branch" + NL), Buffer.from(V2.v2SignedBytes(d))]), pair.privateKey).toString("hex");
+      fs.mkdirSync(path.join(lab, "catalogs", "desks", id), { recursive: true });
+      fs.writeFileSync(path.join(lab, "catalogs", "desks", id, "lamp-" + sha8(doc.id) + ".ec"), JSON.stringify(d), "utf8");
+      return { id: id, raw: raw, doc: d, four: id.slice(2, 6) };
+    };
+    const HERS = "Good day, and welcome.";
+    const grown = (body, extra) => { const d = JSON.parse(JSON.stringify(wanted)); d.grew = { id: ID, rev: 1, sha: pin75 };
+      d.cards[0].body.en = body; d.cards[0].firstOnly = true; if (extra) d.cards.push({ id: "c-hers", shelf: "t-op", bodyShape: "plain", title: { en: "Her own" }, body: { en: "Thank you." } }); return d; };
+    const ola1 = deskOf(grown(HERS, true), "Ola"), ola2 = deskOf(grown("Good day to you."), "Ola");
+    const piotr = deskOf(Object.assign(JSON.parse(JSON.stringify(wanted)), { id: "made-here" }), "Piotr");
+    deskFile(lab75, withRev(wanted, 5), "Ala", true);
+    const ownPair = crypto.generateKeyPairSync("ed25519"), ownDesk = deskOf(grown("Hello there."), "Max", ownPair);
+    const env75 = JSON.parse(fs.readFileSync(envAt75, "utf8"));
+    env75.branch = { sign: { pub: ownDesk.raw.toString("hex"), priv: "sealed" }, box: { pub: "ef".repeat(32), priv: "sealed" } };
+    fs.writeFileSync(envAt75, JSON.stringify(env75), "utf8");
+    const grouped = id => id.slice(2).replace(/(.{4})(?=.)/g, "$1 ");
+    const r75 = run(lab75, ["desk", "rows"], true);
+    const rows75 = r75.rows[0] || [], deskRows = rows75.filter(r => r.desk);
+    const rowOf = (rows, four) => rows.find(r => r.desk && r.fp === four) || {};
+    const olaRow = rowOf(rows75, ola1.four), ola2Row = rowOf(rows75, ola2.four), p75 = rows75.find(r => r.name === "Piotr's desk") || {};
+    check(same(rows75.map(r => r.name), ["lamp.ec", "Ola's desk", "Ola's desk", "Piotr's desk"]) && rows75[0].loaded
+      && !olaRow.alone && !ola2Row.alone && p75.alone && deskRows.every(r => r.file === null) && same(olaRow.acts, ["Look", "Work from it"]),
+      "75a the colleagues' files hang under the catalog in use, the one grown from nothing stands alone at the foot, each with Look and Work from it; this desk's own file and one claiming the id in use have no row: "
+      + JSON.stringify(rows75.map(r => [r.name, r.fp, r.alone, r.acts.join("/")])));
+    check(olaRow.fp === ola1.four && ola2Row.fp === ola2.four && p75.fp === "" && olaRow.tip.indexOf(grouped(ola1.id)) > -1 && /^Signed by Ola's desk, key /.test(olaRow.tip),
+      "75b two desks of one name each carry the first four of their key, and the desk's glyph names its key in four groups: " + JSON.stringify([olaRow.fp, ola2Row.fp, p75.fp, olaRow.tip]));
+    check(same(rows75[0].mine, ["Your edits are in the folder as Max's desk"]) && /^1 changed · 1 new · /.test(olaRow.meta) && /^A catalog of its own · /.test(p75.meta),
+      "75c the loaded row says this desk's edits are in the folder under its desk's name; a hanging row says what that desk changed, and one grown from nothing says so: "
+      + JSON.stringify([rows75[0].mine, olaRow.meta, p75.meta]));
+
+    const L2 = run(lab75, ["desk", "rows", "look:" + olaRow.at, "mine", "mine", "edback2"], true, { card: "c-warm" });
+    const lk = rd(L2, "look"), m1 = ((L2.read || {}).mine || [])[0] || {}, m2 = ((L2.read || {}).mine || [])[1] || {};
+    check(!!lk.title && lk.title === "Ola's desk" && lk.name === "lamp" && same(lk.heads, ["In the team's edition", "At Ola's desk"]) && lk.rows === 2
+      && same(lk.mine, ["false"]) && same(lk.take, []) && lk.keep === "Back to the Library" && lk.load === "Work from Ola's desk",
+      "75d Look stands the edition panel told it is a desk: its name, the catalog compared with, the two heads, the card changed and the one added, one take and no offer's pair: " + JSON.stringify(lk));
+    check(same(m1.pressed, ["true"]) && same(m1.over, { en: HERS }) && m1.rebuilt === 1 && /in your edits/.test((m1.row || [""])[0]),
+      "75e the take makes that desk's text of the changed field this desk's own edit at once, that field alone, and the cards are drawn again: " + JSON.stringify(m1));
+    check(same(m2.pressed, ["false"]) && m2.over === null && rd(L2, "back").modal === false && rd(L2, "back").backs === 1,
+      "75E THE CONTROL: pressed again, the edit is what it was before the take (none), and Back to the Library closes the panel and opens the Library: " + JSON.stringify([m2, rd(L2, "back")]));
+    const L3 = run(lab75, ["desk", "rows", "look:" + olaRow.at, "mine", "settle"], true, { card: "c-warm" });
+    const L4 = run(lab75, ["desk", "over"], true);
+    check(same((rd(L4, "over") || {})["c-warm"], { en: HERS }),
+      "75f and the take is on disk: the next launch holds it as this desk's own edit (" + JSON.stringify((rd(L4, "over") || {})["c-warm"]) + ")");
+    const L5 = run(lab75, ["desk", "rows", "look:" + p75.at], true);
+    const lk5 = rd(L5, "look");
+    check(!!lk5.title && same(lk5.mine, []) && lk5.heads[0] === "At Piotr's desk" && lk5.rows === 3,
+      "75g THE CONTROL: a file compared with no catalog in use is looked at and nothing of it can be taken: " + JSON.stringify(lk5));
+    /* A file grown from another catalog in the folder, not the one in use: it hangs under that one, and its changed card cannot be taken. */
+    const lab75g = accepted(), otherCat = Object.assign(JSON.parse(JSON.stringify(wanted)), { id: "lamp-other" });
+    fs.writeFileSync(path.join(lab75g, "catalogs", "other.ec"), JSON.stringify(otherCat), "utf8");
+    const fromOther = JSON.parse(JSON.stringify(otherCat)); fromOther.grew = { id: "lamp-other", rev: 1, sha: "sha256:" + sha(V2.v2SignedBytes(otherCat)) }; fromOther.cards[0].body.en = HERS;
+    deskOf(fromOther, "Bo", null, lab75g);
+    const G1 = run(lab75g, ["desk", "rows"], true), gRows = G1.rows[0] || [], gBo = gRows.find(r => r.name === "Bo's desk") || {};
+    const G2 = run(lab75g, ["desk", "rows", "look:" + gBo.at], true), lkG = rd(G2, "look");
+    check(gRows.map(r => r.name).join("|").indexOf("other.ec|Bo's desk") > -1 && !gBo.alone && !!lkG.title && lkG.name === "other"
+      && same(lkG.heads, ["In the team's edition", "At Bo's desk"]) && same(lkG.mine, []) && same(lkG.take, []),
+      "75G THE CONTROL: a file grown from a catalog in the folder that is not in use hangs under that catalog, is compared with it, and its changed card cannot be taken: "
+      + JSON.stringify([gRows.map(r => r.name), lkG]));
+
+    const L6 = run(lab75, ["desk", "rows", "work:" + olaRow.at, "settle", "yes", "settle"], true);
+    const L7 = run(lab75, ["desk", "rows", "over"], true);
+    const rows7 = L7.rows[0] || [], olaRow7 = rowOf(rows7, ola1.four);
+    check(rd(L7, "over") && rd(L7, "heldId") === ola1.doc.id && L7.fileAtStart === "" && L7.fromAtEnd === "lamp-" + sha8(ID) + ".ec"
+      && olaRow7.loaded && same(olaRow7.acts, ["Look", "Eject"]) && rows7.filter(r => r.loaded).length === 1 && !rows7[0].loaded
+      && same(rows7[0].mine, ["Your own edits on it wait here until you load it again"]) && same(rd(L7, "over"), {}),
+      "75h Work from it makes that desk's file the catalog in use, its row the loaded one and no other; no file of the folder is named in use, and the team's catalog says this desk's edits wait for it: "
+      + JSON.stringify({ held: rd(L7, "heldId"), file: L7.fileAtStart, from: L7.fromAtEnd, rows: rows7.map(r => [r.name, r.loaded, r.mine]), over: rd(L7, "over") }));
+    const L8 = run(lab75, ["desk", "rows", "load:lamp.ec", "settle", "yes", "settle"], true);
+    const L9 = run(lab75, ["desk", "over"], true);
+    check(rd(L9, "heldId") === ID && same((rd(L9, "over") || {})["c-warm"], { en: HERS }),
+      "75i and loading the team's catalog again brings this desk's own edit of it back (" + JSON.stringify([rd(L9, "heldId"), (rd(L9, "over") || {})["c-warm"]]) + ")");
+    /* The listing the shell sends is what repaints an open Library: a colleague's file written under it appears with no other paint. */
+    const cyLab = lab75g, cyPair = crypto.generateKeyPairSync("ed25519"), cy = deskOf(grown("Good day, from Cy."), "Cy", cyPair, cyLab);
+    const cyRel = path.join("desks", cy.id, "lamp-" + sha8(ID) + ".ec"), cyText = fs.readFileSync(path.join(cyLab, "catalogs", cyRel), "utf8");
+    fs.rmSync(path.join(cyLab, "catalogs", "desks", cy.id), { recursive: true, force: true });
+    const G3 = run(cyLab, ["desk", "boot", "settle", "rows", "drop", "listing", "reread"], true, { drop: { rel: cyRel, text: cyText } });
+    const cyBefore = (G3.rows[0] || []).map(r => r.name), cyAfter = (G3.rows[1] || []).map(r => r.name);
+    check(cyBefore.indexOf("Cy's desk") < 0 && cyAfter.indexOf("Cy's desk") > -1,
+      "75k a colleague's file written while the Library is open appears in it once the shell's listing arrives, with no other paint (" + JSON.stringify([cyBefore, cyAfter]) + ")");
+    const errs75 = [r75, L2, L3, L4, L5, L6, L7, L8, L9, G1, G2, G3].flatMap(o => o.errors || []);
+    check(!errs75.length, "75j those launches ran their acts without an error" + (errs75.length ? ": " + errs75.length + ", first " + errs75[0] : ""));
   } catch (e) {
     failed++;
     console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

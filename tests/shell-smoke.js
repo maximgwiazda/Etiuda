@@ -75,6 +75,7 @@ const KEEP = process.argv.indexOf("--keep") > -1;
  * minutes in. The take is here, at load, because buildApp costs minutes and a refusal must
  * arrive before them. */
 const PORT_BASE = E.portBlock("shell-smoke");
+E.windowWall("tests/shell-smoke.js");
 const LEASED = E.takeLeases(["ports:" + PORT_BASE, "desk:installed-app"], 45, "shell-smoke");
 let port = PORT_BASE;
 let fails = 0, checks = 0, reachedEnd = false;

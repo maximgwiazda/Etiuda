@@ -32,6 +32,7 @@ import * as catalogFile from "./modules/catalog-file.js";
 import * as catalogV2 from "./modules/catalog-v2.js";
 import * as langTabs from "./modules/lang-tabs.js";
 import * as cardEditor from "./modules/card-editor.js";
+import * as cardChain from "./modules/card-chain.js";
 import * as macrosJson from "./modules/macros-json.js";
 import * as tabs from "./modules/tabs.js";
 import * as motion from "./modules/motion.js";
@@ -57,6 +58,12 @@ import * as cardScore from "./modules/card-score.js";
 import * as searchBox from "./modules/search-box.js";
 import * as keydown from "./modules/keydown.js";
 import * as catalogOffer from "./modules/catalog-offer.js";
+import * as catalogHistory from "./modules/catalog-history.js";
+import * as catalogMerge from "./modules/catalog-merge.js";
+import * as teamJoin from "./modules/team-join.js";
+import * as editionChangesMod from "./modules/edition-changes.js";
+import * as editionPanel from "./modules/edition-panel.js";
+import * as deskLook from "./modules/desk-look.js";
 import * as catalogTrustMod from "./modules/catalog-trust.js";
 import * as pops from "./modules/pops.js";
 import * as recency from "./modules/recency.js";
@@ -108,7 +115,11 @@ import * as host from "./modules/host.js";
 import * as hookSlots from "./modules/hooks.js";
 import * as restart from "./modules/restart.js";
 import * as pick from "./modules/pick.js";
-Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, cardCarry, langTabs, cardEditor, macrosJson, tabs, motion, fifth, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, catalogTrustMod, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots, restart, pick);
+import * as fieldsMod from "./modules/fields.js";
+import * as fieldAsk from "./modules/field-ask.js";
+import * as nextDock from "./modules/next-dock.js";
+import * as lanes from "./modules/lanes.js";
+Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, cardCarry, langTabs, cardEditor, cardChain, macrosJson, tabs, motion, fifth, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, catalogHistory, catalogMerge, teamJoin, editionChangesMod, editionPanel, deskLook, catalogTrustMod, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots, restart, pick, fieldsMod, fieldAsk, nextDock, lanes);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place
@@ -179,6 +190,7 @@ Object.defineProperty(globalThis, "entrySel", { get: () => appState.entrySel, se
 Object.defineProperty(globalThis, "pendingScrollHit", { get: () => appState.pendingScrollHit, set: v => appState.setPendingScrollHit(v) });
 Object.defineProperty(globalThis, "intentIdxs", { get: () => appState.intentIdxs, set: v => appState.setIntentIdxs(v) });
 Object.defineProperty(globalThis, "intentText", { get: () => appState.intentText, set: v => appState.setIntentText(v) });
+Object.defineProperty(globalThis, "fieldVals", { get: () => appState.fieldVals, set: v => appState.setFieldVals(v) });
 Object.defineProperty(globalThis, "lang", { get: () => appState.lang, set: v => appState.putLang(v) });
 Object.defineProperty(globalThis, "cards", { get: () => appState.cards, set: v => appState.setCards(v) });
 Object.defineProperty(globalThis, "cardCounts", { get: () => appState.cardCounts, set: v => appState.setCardCounts(v) });
@@ -216,6 +228,7 @@ function boot(){
     flushPillState: pillState.flushPillState,
     ensureCustomCat: cardEditor.ensureCustomCat,
     syncAddFab: cardEditor.syncAddFab,
+    syncNextDock: nextDock.syncNextDock,
     openCardEditor: cardEditor.openCardEditor,
     setIntentHidden: favourites.setIntentHidden,
     syncIntentOrder: favourites.syncIntentOrder,
@@ -249,6 +262,7 @@ function boot(){
     syncSampleMark: catalogFile.syncSampleMark,
     syncSaveNotice: personalPack.syncSaveNotice,
     importCatalogHere: catalogFile.importCatalogHere,
+    loadCatalogFromFolder: catalogOffer.loadCatalogFromFolder,
     offerPickedCatalog: catalogOffer.eOfferPickedCatalog,
     restartDesk: restart.restartDesk,
     runShortcut: runShortcut.runShortcut,
@@ -357,6 +371,10 @@ function boot(){
 
   // Every pointer gesture the card list answers
   listPointer.wireListPointer();
+  // The action button: its digit, its hover, Ctrl and the replies it copies
+  nextDock.wireNextDock();
+  // The lanes: Space and the action button switch to them, and they follow the button's every sync
+  lanes.wireLanes();
 
 
   // The quick facts text, its copy targets and its editor
@@ -417,6 +435,8 @@ function boot(){
   // The catalog in use, named on the band, and the catalog found beside it offered
   catalogOffer.paintCatNow();
   catalogOffer.eOfferCatalogAtBoot();
+  // A sealed catalog in the folder this desk cannot open, and any request to join its team
+  teamJoin.wireTeamJoin();
   // The role wheel, which waits on the sample until a reply names somebody
   agent.syncRoleWheel();
   /* A FIRST RUN OPENS ON THE EMPTY DESK and the tour starts by itself once the logo has formed; it

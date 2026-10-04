@@ -256,7 +256,7 @@ const eq = (got, want) => got === want ? true
     () => eq(F.CARD_BOOL_FLAGS.indexOf("paxVoc") === -1
       && F.CARD_BOOL_FLAGS.length === F.CARD_FLAGS.length - 1 + F.CARD_UNBOXED_FLAGS.length
       && F.CARD_UNBOXED_FLAGS.every(f => F.CARD_BOOL_FLAGS.indexOf(f) > -1 && !(f in F.CARD_FLAG_BOX)), true));
-  check("card-fields.js", "commits is a flag with no box on screen, so no editor can have unticked it",
+  check("card-fields.js", "commits is a flag with no box in Advanced, so a caller that does not hold it has not unticked it",
     () => eq(F.CARD_UNBOXED_FLAGS.join(","), "commits"));
 }
 
@@ -476,6 +476,127 @@ const eq = (got, want) => got === want ? true
         const next = D.statsRecentUse(p).get("c-a");
         return eq([first, same, next].join(","), "2,2,12");
       } finally { globalThis.Date = Real; }
+    });
+}
+
+/* ------------------------------------------------------------------ desk-stats.js, B after A
+   Board 814, ruled 2026-09-28 19:00: the desk learns "B after A" locally. The oracle is the
+   module's own contract: a pair is counted per day by the places of both ids in dayIds, read
+   back over STATS_PAIR_DAYS ending today, most often first, then the later day, then the id.
+   The two CONTROLS hold on any tree: a day with no pair keeps its shape, and a desk that never
+   counted one answers as it always did. The answer for a span carries the pairs counted inside
+   it, as `pairs` [{from, to, n}], and an answer without a span carries none. */
+{
+  const D = await import(MOD("desk-stats.js"));
+  const after = (p, from, today) => D.statsLearntAfter(p, from, today).map(o => o.id + ":" + o.n).join(",");
+  const fresh = () => ({ useCounts: {}, useAt: {} });
+  check("desk-stats.js", "814a a card copied straight after another is counted, and read back as the cards that follow it",
+    () => {
+      const p = fresh();
+      for (let i = 0; i < 3; i++) D.bumpPair(p, "c-a", "c-b", "2026-10-01");
+      D.bumpPair(p, "c-a", "c-c", "2026-09-30");
+      D.bumpPair(p, "c-b", "c-a", "2026-10-01");
+      return eq(after(p, "c-a", "2026-10-01") + "|" + after(p, "c-b", "2026-10-01") + "|" + after(p, "c-c", "2026-10-01"),
+        "c-b:3,c-c:1|c-a:1|");
+    });
+  check("desk-stats.js", "814b equal counts put the pair met on the later day first, and a tie on both goes by id",
+    () => {
+      const p = fresh();
+      D.bumpPair(p, "c-a", "c-old", "2026-09-20");
+      D.bumpPair(p, "c-a", "c-new", "2026-09-29");
+      D.bumpPair(p, "c-a", "c-z", "2026-09-25"); D.bumpPair(p, "c-a", "c-y", "2026-09-25");
+      return eq(after(p, "c-a", "2026-10-01"), "c-new:1,c-y:1,c-z:1,c-old:1");
+    });
+  check("desk-stats.js", "814c a pair counts over the 28 days ending today: 27 days back is in, 28 back is out, after today is out",
+    () => {
+      const p = fresh();
+      D.bumpPair(p, "c-a", "c-in", "2026-09-04");
+      D.bumpPair(p, "c-a", "c-edge", "2026-09-03");
+      D.bumpPair(p, "c-a", "c-ahead", "2026-10-02");
+      return eq([after(p, "c-a", "2026-10-01"), D.STATS_PAIR_DAYS].join("|"), "c-in:1|28");
+    });
+  check("desk-stats.js", "814d a card after itself is no pair, and neither is one with an end missing",
+    () => {
+      const p = fresh();
+      D.bumpPair(p, "c-a", "c-a", "2026-10-01"); D.bumpPair(p, "", "c-a", "2026-10-01"); D.bumpPair(p, "c-a", null, "2026-10-01");
+      return eq([after(p, "c-a", "2026-10-01"), Object.keys(p.days || {}).length].join("|"), "|0");
+    });
+  check("desk-stats.js", "814e the oldest day going renumbers the ids, and the pairs follow their cards",
+    () => {
+      const p = fresh();
+      D.bumpUse(p, "c-x", "2025-08-20");
+      D.bumpUse(p, "c-a", "2026-09-20"); D.bumpUse(p, "c-b", "2026-09-20"); D.bumpPair(p, "c-a", "c-b", "2026-09-20");
+      D.bumpUse(p, "c-a", "2026-10-01");
+      return eq([p.dayIds.indexOf("c-x"), after(p, "c-a", "2026-10-01")].join("|"), "-1|c-b:1");
+    });
+  check("desk-stats.js", "814f an id a pair alone still names is kept when the day that counted its copy goes",
+    () => {
+      const p = fresh();
+      D.bumpUse(p, "c-a", "2025-01-01");
+      D.bumpUse(p, "c-b", "2025-01-02"); D.bumpPair(p, "c-a", "c-b", "2025-01-02");
+      D.bumpUse(p, "c-z", "2026-02-06");
+      return eq([Object.keys(p.days).sort().join(","), after(p, "c-a", "2025-01-02")].join("|"), "2025-01-02,2026-02-06|c-b:1");
+    });
+  check("desk-stats.js", "814g a card the catalog no longer has takes its pairs with it, from either end, and the rest stay",
+    () => {
+      const p = fresh();
+      ["c-a", "c-b", "c-c", "c-d"].forEach(id => D.bumpUse(p, id, "2026-10-01"));
+      D.bumpPair(p, "c-a", "c-b", "2026-10-01"); D.bumpPair(p, "c-a", "c-c", "2026-10-01"); D.bumpPair(p, "c-d", "c-a", "2026-10-01");
+      D.statsForgetCards(p, id => id !== "c-c" && id !== "c-d");
+      return eq([after(p, "c-a", "2026-10-01"), after(p, "c-d", "2026-10-01"), p.dayIds.join(",")].join("|"), "c-b:1||c-a,c-b");
+    });
+  check("desk-stats.js", "814o a pair met on several days counts all of them, and keeps its later day when the earlier one is counted after it",
+    () => {
+      const p = fresh();
+      D.bumpPair(p, "c-a", "c-b", "2026-09-20"); D.bumpPair(p, "c-a", "c-b", "2026-09-25");
+      D.bumpPair(p, "c-a", "c-c", "2026-10-01");
+      D.bumpPair(p, "c-a", "c-d", "2026-09-30"); D.bumpPair(p, "c-a", "c-d", "2026-09-10");
+      D.bumpPair(p, "c-a", "c-e", "2026-09-29"); D.bumpPair(p, "c-a", "c-e", "2026-09-29");
+      return eq(after(p, "c-a", "2026-10-01"), "c-d:2,c-e:2,c-b:2,c-c:1");
+    });
+  check("desk-stats.js", "814H CONTROL: a day that has counted no pair keeps the shape it always had",
+    () => {
+      const p = fresh();
+      D.bumpUse(p, "c-a", "2026-10-01");
+      return eq(Object.keys(p.days["2026-10-01"]).sort().join(","), "c,i,l,m");
+    });
+  check("desk-stats.js", "814I the statistics answer for a span carries the pairs counted inside it, and an answer without a span carries none",
+    () => {
+      const p = fresh();
+      D.bumpUse(p, "c-a", "2026-10-01"); D.bumpUse(p, "c-b", "2026-10-01");
+      D.bumpPair(p, "c-a", "c-b", "2026-10-01");
+      const span = { engine: "x", period: { from: "2026-09-01", to: "2026-10-31" } };
+      return eq(JSON.stringify(D.statsDoc(p, span).pairs) + "|" + ("pairs" in D.statsDoc(p, { engine: "x" })),
+        '[{"from":"c-a","to":"c-b","n":1}]|false');
+    });
+  check("desk-stats.js", "814q a span's pairs are summed over the days inside it by card id, a day outside is left out, and the most often counted comes first",
+    () => {
+      const p = fresh();
+      D.bumpPair(p, "c-a", "c-b", "2026-09-10"); D.bumpPair(p, "c-a", "c-b", "2026-09-20"); D.bumpPair(p, "c-a", "c-b", "2026-10-20");
+      D.bumpPair(p, "c-b", "c-a", "2026-09-15"); D.bumpPair(p, "c-a", "c-c", "2026-09-30");
+      D.bumpPair(p, "c-a", "c-b", "2026-08-31"); D.bumpPair(p, "c-c", "c-d", "2026-11-01");
+      const doc = D.statsDoc(p, { engine: "x", period: { from: "2026-09-01", to: "2026-10-31" } });
+      const octo = D.statsDoc(p, { engine: "x", period: { from: "2026-10-01", to: "2026-10-31" } });
+      return eq(doc.pairs.map(o => o.from + ">" + o.to + ":" + o.n).join() + "|" + JSON.stringify(octo.pairs),
+        'c-a>c-b:3,c-a>c-c:1,c-b>c-a:1|[{"from":"c-a","to":"c-b","n":1}]');
+    });
+  check("desk-stats.js", "814r CONTROL: a desk that never counted a pair answers byte for byte as it did, spanned and not, with no pairs key",
+    () => {
+      const p = fresh();
+      D.bumpUse(p, "c-a", "2026-10-01"); D.bumpUse(p, "c-b", "2026-10-01");
+      const span = { engine: "x", period: { from: "2026-09-01", to: "2026-10-31" } };
+      const was = JSON.stringify({ format: 1, kind: "etiuda-statistics", engine: "x",
+        period: { from: "2026-09-01", to: "2026-10-31" }, since: "2026-10-01",
+        cards: [{ id: "c-a", n: 1, at: "2026-10-01" }, { id: "c-b", n: 1, at: "2026-10-01" }],
+        intents: [], misses: 0, langs: {} });
+      const lifetime = JSON.stringify({ format: 1, kind: "etiuda-statistics", engine: "x",
+        period: { from: "", to: "" },
+        cards: [{ id: "c-a", n: 1, at: "2026-10-01" }, { id: "c-b", n: 1, at: "2026-10-01" }],
+        intents: [], misses: 0, langs: {} });
+      const withCounts = JSON.parse(JSON.stringify(p));
+      withCounts.days["2026-10-01"].p = {};
+      return eq(JSON.stringify(D.statsDoc(p, span)) + "|" + JSON.stringify(D.statsDoc(p, { engine: "x" }))
+        + "|" + JSON.stringify(D.statsDoc(withCounts, span)), [was, lifetime, was].join("|"));
     });
 }
 
@@ -1531,9 +1652,9 @@ const CARD_B = {
 
   const F2 = await import(MOD("card-fields.js"));
   const was = { id: "u:1", c: "gen", t: "Old", k: "old words", commits: 1, retired: 1, next: [{ to: "c-two" }], ext: { src: "x" } };
-  check("card-fields.js", "a replaced custom entry takes commits, retired, its chain and the carried fields from the one it replaces",
+  check("card-fields.js", "814s a replaced custom entry takes retired and the carried fields from the one it replaces, and not commits or its chain, which the editor writes",
     () => eq(JSON.stringify(F2.carryUnwritten({ id: "u:1", c: "gen", t: "New" }, was)),
-      "{\"id\":\"u:1\",\"c\":\"gen\",\"t\":\"New\",\"commits\":1,\"next\":[{\"to\":\"c-two\"}],\"retired\":1,\"ext\":{\"src\":\"x\"}}"));
+      "{\"id\":\"u:1\",\"c\":\"gen\",\"t\":\"New\",\"retired\":1,\"ext\":{\"src\":\"x\"}}"));
   check("card-fields.js", "CONTROL: a text field the save emptied is not brought back, and no entry to replace changes nothing",
     () => eq(JSON.stringify([F2.carryUnwritten({ id: "u:1", c: "gen", t: "New" }, was).k, F2.carryUnwritten({ id: "u:2" }, null)]),
       "[null,{\"id\":\"u:2\"}]"));
@@ -1925,6 +2046,67 @@ const CARD_B = {
         return eq((own.intents || []).join(",") + "|" + asideEn(own.id) + "|" + Object.keys(aside() || {}).length,
           "t:t-fourth|a request reworded later|1");
       });
+    /* A card's next links name other cards by id. The own card an edit becomes keeps those that name
+       a card the edition or the desk still holds, in their order, and none that name the card it was. */
+    const stays = { id: "c-stays", c: "gen", t: "Invented stays", en: "x" };
+    const nextOf = o => JSON.stringify(o.next === undefined ? "absent" : o.next);
+    check("card-carry.js", "an own card rescued from an edit keeps the links that name a card still alive, in order, and drops the rest",
+      () => {
+        clear(); applyOld();
+        P.BASE_M.push({ id: "c-gone", c: "gen", t: "Invented gone", en: "x" });
+        P.pack.custom = [{ id: "u:mine", c: "gen", t: "Invented mine", en: "x" }];
+        P.pack.overrides = { "c-gone": { en: "an edit", next: [{ to: "u:mine" }, { to: "c-away" }, { to: "c-stays", cue: "extra" }] } };
+        CC.carryCardLayer(arriving([stays]));
+        const own = P.pack.custom[1] || {};
+        return eq(nextOf(own), '[{"to":"u:mine"},{"to":"c-stays","cue":"extra"}]');
+      });
+    check("card-carry.js", "and it never links to itself, under its new id or the one it had",
+      () => {
+        clear(); applyOld();
+        P.BASE_M.push({ id: "c-gone", c: "gen", t: "Invented gone", en: "x" });
+        P.pack.overrides = { "c-gone": { en: "an edit", next: [{ to: "c-gone" }, { to: "c-stays" }] } };
+        CC.carryCardLayer(arriving([stays]));
+        const own = P.pack.custom[0] || {};
+        const to = (own.next || []).map(e => e.to);
+        return eq([/^u:/.test(own.id || ""), to.indexOf(own.id) > -1, to.indexOf("c-gone") > -1, to.join(",")].join("|"),
+          "true|false|false|c-stays");
+      });
+    check("card-carry.js", "an own card whose every link is gone has no next at all, not an empty list",
+      () => {
+        clear(); applyOld();
+        P.BASE_M.push({ id: "c-gone", c: "gen", t: "Invented gone", en: "x" });
+        P.pack.overrides = { "c-gone": { en: "an edit", next: [{ to: "c-away" }, { to: "c-also-away" }] } };
+        CC.carryCardLayer(arriving([stays]));
+        const own = P.pack.custom[0] || {};
+        return eq(P.pack.custom.length + "|" + nextOf(own), '1|"absent"');
+      });
+    check("card-carry.js", "the links the retired card itself held, which the edit did not touch, are kept to the same rule",
+      () => {
+        clear(); applyOld();
+        P.BASE_M.push({ id: "c-gone", c: "gen", t: "Invented gone", en: "x", next: [{ to: "c-away" }, { to: "c-stays" }] });
+        P.pack.overrides = { "c-gone": { en: "an edit" } };
+        CC.carryCardLayer(arriving([stays]));
+        const own = P.pack.custom[0] || {};
+        return eq(nextOf(own), '[{"to":"c-stays"}]');
+      });
+    check("card-carry.js", "CONTROL: an edit that names no links leaves an own card with none",
+      () => {
+        clear(); applyOld();
+        P.BASE_M.push({ id: "c-gone", c: "gen", t: "Invented gone", en: "x" });
+        P.pack.overrides = { "c-gone": { en: "an edit" } };
+        CC.carryCardLayer(arriving([stays]));
+        const own = P.pack.custom[0] || {};
+        return eq(P.pack.custom.length + "|" + nextOf(own), '1|"absent"');
+      });
+    check("card-carry.js", "CONTROL: a card the edition still holds keeps its edit, links to cards the edition lacks included, and no own card is made",
+      () => {
+        clear(); applyOld();
+        P.BASE_M.push(stays);
+        const ov = { "c-stays": { en: "an edit", next: [{ to: "c-away" }, { to: "c-stays" }] } };
+        P.pack.overrides = JSON.parse(JSON.stringify(ov));
+        CC.carryCardLayer(arriving([stays]));
+        return eq(P.pack.custom.length + "|" + JSON.stringify(P.pack.overrides), "0|" + JSON.stringify(ov));
+      });
     check("card-carry.js", "a request's rewording, star, hide, removal and count follow it to its id where the next catalog words it the same, once",
       () => {
         clear(); applyOld();
@@ -2066,6 +2248,15 @@ const CARD_B = {
         return eq(Object.keys(P.pack.overrides).sort().join(",") + "|" + (P.pack.custom || []).length + "|" + told,
           "c-kept,c-retired|0|0");
       });
+    check("card-carry.js", "an edit rescued at boot keeps only the links that name a card still alive",
+      () => {
+        clear(); edition(EDITION_1);
+        P.pack.overrides = { "c-retired": { en: "the desk's rewrite", next: [{ to: "c-kept" }, { to: "c-retired" }, { to: "c-vanished" }] } };
+        P.savePack();
+        boot([EDITION_1[0]]);
+        const own = (P.pack.custom || [])[0] || {};
+        return eq(JSON.stringify(own.next) + "|" + (own.next || []).some(e => e.to === own.id), '[{"to":"c-kept"}]|false');
+      });
     /* The desk's own save keeps whole base cards (pack.js keepEditBases), so a flag the edition set
        rides into storage, and the edition after that drops the card and rescues from that copy. */
     check("card-carry.js", "an edit rescued at boot from the stored copy of a card that slept is an own card that is awake",
@@ -2078,6 +2269,55 @@ const CARD_B = {
         const own = (P.pack.custom || [])[0] || {};
         return eq([stored.retired, P.pack.custom.length, own.en, own.pl, "retired" in own].join("|"),
           "1|1|the desk's rewrite|po polsku|false");
+      });
+    /* The edition a build brings settles the desk's edits as one put down at a load does (settleEdits): a
+       field it now holds as the agent wrote it is dropped, and an own card whose id it now holds becomes it. */
+    check("card-carry.js", "the next edition of a build that holds an edit word for word drops it, and keeps a field the lead wrote otherwise",
+      () => {
+        clear(); P.pack.editBases = {}; edition(EDITION_1);
+        P.pack.overrides = { "c-kept": { en: "kept, edited", t: "My title" } };
+        P.savePack();
+        boot([Object.assign({}, EDITION_1[0], { en: "kept, edited", t: "The lead's title" }), EDITION_1[1]]);
+        return eq(JSON.stringify(P.pack.overrides), '{"c-kept":{"t":"My title"}}');
+      });
+    check("card-carry.js", "the next edition of a build that holds an own card's id makes it that card, listed once, with its star and what still differs",
+      () => {
+        clear(); P.pack.editBases = {}; edition(EDITION_1);
+        P.pack.custom = [{ id: "c-grown", c: "gen", t: "Invented grown", en: "the desk's words" }];
+        P.pack.favourites = ["c-grown"];
+        P.savePack();
+        boot(EDITION_1.concat([{ id: "c-grown", c: "gen", t: "Invented grown", en: "the team's words" }]));
+        return eq([P.pack.custom.filter(m => m.id === "c-grown").length, P.BASE_M.filter(m => m.id === "c-grown").length,
+          JSON.stringify(P.pack.overrides["c-grown"] || null), P.pack.favourites.join(",")].join("|"),
+          "0|1|{\"en\":\"the desk's words\"}|c-grown");
+      });
+    check("card-carry.js", "CONTROL: a boot whose build brings the edition the desk already holds changes nothing in its layer",
+      () => {
+        clear(); P.pack.editBases = {}; edition(EDITION_1);
+        P.pack.overrides = { "c-kept": { en: "kept, edited" } };
+        P.pack.custom = [{ id: "u:own", c: "gen", t: "Invented own", en: "mine" }];
+        P.pack.favourites = ["c-retired", "u:own"];
+        P.savePack();
+        const was = JSON.stringify(P.pack);
+        const told = boot(EDITION_1);
+        return eq((JSON.stringify(P.pack) === was) + "|" + told, "true|0");
+      });
+    check("card-carry.js", "814t the next edition keeps the agent's list and the catalog's ids it replaced, an empty list of them included",
+      () => {
+        clear(); P.pack.editBases = {}; edition(EDITION_1);
+        P.pack.overrides = { "c-kept": { next: [{ to: "c-retired" }], nextWas: [] } };
+        P.savePack();
+        boot([Object.assign({}, EDITION_1[0], { en: "the lead's new words" }), EDITION_1[1]]);
+        return eq(JSON.stringify(P.pack.overrides["c-kept"] || null), '{"next":[{"to":"c-retired"}],"nextWas":[]}');
+      });
+    check("card-carry.js", "814u an edit rescued as an own card keeps its list and drops the catalog's ids it replaced",
+      () => {
+        clear(); edition(EDITION_1);
+        P.pack.overrides = { "c-retired": { en: "the desk's rewrite", next: [{ to: "c-kept" }], nextWas: ["c-kept", "c-gone"] } };
+        P.savePack();
+        boot([EDITION_1[0]]);
+        const own = (P.pack.custom || [])[0] || {};
+        return eq(JSON.stringify(own.next) + "|" + ("nextWas" in own), '[{"to":"c-kept"}]|false');
       });
   } finally {
     clear(); STK.M.length = 0; P.pack.baseCards = null; P.rebuildBaseCards();
@@ -2138,6 +2378,637 @@ const CARD_B = {
     await rest();
     if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
   }
+}
+
+/* ------------------------------------------------------------------ tabs.js, the path of a conversation
+   Board 814: each conversation tab keeps the replies sent in it (ruled 2026-10-01 10:34), and a
+   card copied straight after another in the same tab is what the desk learns from. The tabs are
+   drawn for real against a document that holds nothing and hooks that do nothing, so applyTab's
+   own route sets the tab in front; every hook and global set here is put back. */
+{
+  const T = await import(MOD("tabs.js"));
+  const H = await import(MOD("hooks.js"));
+  const LP = await import(MOD("list-pointer.js"));
+  const P = await import(MOD("pack.js"));
+  const D = await import(MOD("desk-stats.js"));
+  const ST = await import(MOD("storage.js"));
+  const hadDoc = globalThis.document, hadAdd = globalThis.addEventListener;
+  const STUBS = ["applyLangUI", "updateIntentPlaceholder", "drawPillsCore", "drawIntentRail", "render", "scheduleRailGeometry"];
+  const hadHooks = STUBS.map(k => [k, Object.prototype.hasOwnProperty.call(H.hooks, k), H.hooks[k]]);
+  const quiet = { toggle() {}, add() {}, remove() {}, contains() { return false; } };
+  globalThis.document = { getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
+    body: { classList: quiet }, documentElement: { style: { setProperty() {} }, classList: quiet } };
+  if (typeof globalThis.addEventListener !== "function") globalThis.addEventListener = () => {};
+  STUBS.forEach(k => { if (typeof H.hooks[k] !== "function") H.hooks[k] = () => {}; });
+  const step = id => (typeof T.tabPathStep === "function" ? T.tabPathStep(id) : "no tabPathStep");
+  try {
+    ST.ssSet(T.TAB_KEY, JSON.stringify({ v: 1, activeTabId: "mc-p1",
+      tabs: [{ id: "mc-p1", path: ["c-a", 5, "", null, "c-b"] }, { id: "mc-p2", path: "c-a" }] }));
+    T.initTabs();
+    check("tabs.js", "814m a restored session keeps each tab's path, and drops what cannot be a card's id",
+      () => eq(T.tabs.map(t => (Array.isArray(t.path) ? t.path.join(",") : "none")).join("|"), "c-a,c-b|"));
+    T.tabs.splice(0, T.tabs.length);
+    ST.ssSet(T.TAB_KEY, "null");
+    T.initTabs();
+    const one = [step("c-a"), step("c-b"), step("c-b"), step("c-c")];
+    check("tabs.js", "814j in the tab in front, the first copy follows nothing, the next names the one before, and a card copied again straight after itself is the same step",
+      () => eq(JSON.stringify(one) + "|" + (T.tabs[0].path || []).join(","), "[null,\"c-a\",null,\"c-b\"]|c-a,c-b,c-c"));
+    T.tabs.push({ id: "mc-p2", pax: "" });
+    T.stepTab(1);
+    const two = [step("c-x"), step("c-y")];
+    T.stepTab(1);
+    const back = step("c-d");
+    check("tabs.js", "814k each tab keeps its own path: another conversation's first copy follows nothing, and coming back the first goes on from its own last",
+      () => eq(JSON.stringify(two) + "|" + back + "|" + T.tabs.map(t => (t.path || []).join(",")).join("|"),
+        "[null,\"c-x\"]|c-c|c-a,c-b,c-c,c-d|c-x,c-y"));
+    T.tabs.splice(0, T.tabs.length);
+    ST.ssSet(T.TAB_KEY, "null");
+    T.initTabs();
+    LP.bumpUseCount("c-mc-from", "en"); LP.bumpUseCount("c-mc-to", "en"); LP.bumpUseCount("c-mc-to", "pl");
+    check("list-pointer.js", "814l the desk's copy route learns it: a reply copied after another in one tab is counted once, whatever the language",
+      () => eq(typeof D.statsLearntAfter === "function"
+        ? D.statsLearntAfter(P.pack, "c-mc-from").map(o => o.id + ":" + o.n).join(",") : "no statsLearntAfter", "c-mc-to:1"));
+    T.tabs.splice(0, T.tabs.length);
+    const was = (P.pack.useCounts || {})["c-mc-lone"] | 0;
+    LP.bumpUseCount("c-mc-lone", "en"); LP.bumpUseCount("c-mc-after", "en");
+    check("list-pointer.js", "814N CONTROL: with no tab in front a copy still counts, and follows nothing",
+      () => eq([(P.pack.useCounts["c-mc-lone"] | 0) - was,
+        typeof D.statsLearntAfter === "function" ? D.statsLearntAfter(P.pack, "c-mc-lone").length : 0].join(","), "1,0"));
+    T.tabs.splice(0, T.tabs.length);
+    ST.ssSet(T.TAB_KEY, "null");
+    T.initTabs();
+    const many = Array.from({ length: 45 }, (_, i) => "c-q" + i);
+    many.slice(0, 41).forEach(id => step(id));
+    const walked = (T.tabs[0].path || []).slice();
+    T.tabs.splice(0, T.tabs.length);
+    ST.ssSet(T.TAB_KEY, JSON.stringify({ v: 1, activeTabId: "mc-p1", tabs: [{ id: "mc-p1", path: many }] }));
+    T.initTabs();
+    const restored = ((T.tabs[0] && T.tabs[0].path) || []).slice();
+    const ends = a => [a.length, a[0], a[a.length - 1]].join(",");
+    check("tabs.js", "814p a path keeps its last 40 steps: 41 cards copied in one tab keep the 2nd to the 41st, and a restored 45 the 6th to the 45th",
+      () => eq(ends(walked) + "|" + ends(restored), "40,c-q1,c-q40|40,c-q5,c-q44"));
+  } finally {
+    T.tabs.splice(0, T.tabs.length);
+    hadHooks.forEach(([k, own, v]) => { if (own) H.hooks[k] = v; else delete H.hooks[k]; });
+    if (hadAdd === undefined) delete globalThis.addEventListener; else globalThis.addEventListener = hadAdd;
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+  }
+}
+
+/* ------------------------------------------------------------------ card-chain.js, the editor's chain
+   Board 814, S4b: the agent's own Next list replaces the catalog's whole, remembers the catalog's ids
+   it replaced so the desk can say when the lead has changed them, and travels in an export without
+   that memory; the stamp is a flag the desk sets or clears either way. Every card here is invented. */
+{
+  const CH = await import(MOD("card-chain.js"));
+  const M = await import(MOD("card-model.js"));
+  const J = await import(MOD("macros-json.js"));
+  const AS = await import(MOD("app-state.js"));
+  const CM = await import(MOD("content-model.js"));
+  const P = await import(MOD("pack.js"));
+  const HK = await import(MOD("hooks.js"));
+  const UL = await import(MOD("ui-lang.js"));
+  const fs = await import("node:fs");
+  const NL = String.fromCharCode(10);
+  const ids = l => (l || []).map(e => e.to).join(",");
+  const LIVE = new Set(["c-a", "c-b", "c-c", "c-self"]);
+  const to = (...xs) => xs.map(x => ({ to: x }));
+  const base = (next, extra) => Object.assign({ id: "c-self", c: "gen", t: "Invented", en: "Body." }, next ? { next: next } : {}, extra || {});
+
+  check("card-model.js", "814v the stamp is on for a catalog's true and an override's 1, and off for 0, absent, or no card",
+    () => eq([{ commits: true }, { commits: 1 }, { commits: 0 }, {}, null].map(M.cardCommits).join(","), "true,true,false,false,false"));
+  check("card-chain.js", "814w a list offers live cards only, never the card itself, never one twice, and keeps each entry whole",
+    () => eq(JSON.stringify(CH.nextLive([{ to: "c-a", n: 2 }, { to: "c-gone" }, { to: "c-self" }, { to: "c-a" }, null, { to: 5 }, { to: "c-b" }], "c-self", LIVE)),
+      '[{"to":"c-a","n":2},{"to":"c-b"}]'));
+  check("card-chain.js", "814x the list is the catalog's while its ids are the catalog's live ones, a dead link in the catalog's set aside",
+    () => {
+      const b = base(to("c-a", "c-gone", "c-b"));
+      const st = CH.nextFoldState(Object.assign({}, b), b, null, LIVE);
+      return eq([st.own, st.changed, ids(st.rows), ids(st.catalog)].join("|"), "false|false|c-a,c-b|c-a,c-b");
+    });
+  check("card-chain.js", "814y the agent's list is theirs, and the catalog's has changed once its ids differ from the ones it replaced",
+    () => {
+      const b = base(to("c-a", "c-b"));
+      const ov = { next: to("c-c"), nextWas: ["c-a"] }, same = { next: to("c-c"), nextWas: ["c-a", "c-b"] };
+      const st = CH.nextFoldState(Object.assign({}, b, ov), b, ov, LIVE);
+      const st2 = CH.nextFoldState(Object.assign({}, b, same), b, same, LIVE);
+      return eq([st.own, st.changed, ids(st.rows), st2.own, st2.changed].join("|"), "true|true|c-c|true|false");
+    });
+  check("card-chain.js", "814z CONTROL: an own card has no catalog's list, so it is neither the catalog's nor changed",
+    () => {
+      const st = CH.nextFoldState({ id: "u:mine", next: to("c-a") }, null, null, LIVE);
+      return eq([st.catalog, st.own, st.changed, ids(st.rows)].join("|"), "|false|false|c-a");
+    });
+  check("card-chain.js", "814A a save of the catalog's list says nothing about it, so the override drops a list replaced before",
+    () => {
+      const b = base(to("c-a", "c-b"));
+      const f = CH.nextSaveFields(to("c-a", "c-b"), to("c-a", "c-b"), b, { next: to("c-c"), nextWas: ["c-a", "c-b"] }, true);
+      const o = M.overrideAgainstBase(b, Object.assign({}, b, { en: "Reworded." }, f));
+      return eq(JSON.stringify(f) + "|" + JSON.stringify(o), '{}|{"en":"Reworded."}');
+    });
+  check("card-chain.js", "814B a changed list is saved whole with the catalog's ids it replaced, and an untouched one keeps the ids it replaced before",
+    () => {
+      const b = base(to("c-a", "c-b"));
+      const ov = { next: to("c-c"), nextWas: ["c-a"] };
+      const touched = CH.nextSaveFields(to("c-b", "c-a"), to("c-a", "c-b"), b, ov, true);
+      const kept = CH.nextSaveFields(to("c-c"), to("c-a", "c-b"), b, ov, false);
+      return eq(JSON.stringify(touched) + "|" + JSON.stringify(kept),
+        '{"next":[{"to":"c-b"},{"to":"c-a"}],"nextWas":["c-a","c-b"]}|{"next":[{"to":"c-c"}],"nextWas":["c-a"]}');
+    });
+  check("card-chain.js", "814C a list emptied on purpose is the agent's too, and an own card's list is handed on whole",
+    () => eq(JSON.stringify(CH.nextSaveFields([], to("c-a"), base(to("c-a")), null, true)) + "|"
+      + JSON.stringify(CH.nextSaveFields(to("c-b"), null, null, null, false)), '{"next":[],"nextWas":["c-a"]}|{"next":[{"to":"c-b"}]}'));
+  {
+    const hadCards = AS.cards;
+    try {
+      check("card-chain.js", "814R a save that never touched the fold hands the stored list on whole, a removed or retired card's link kept, and a catalog card without its own list says nothing",
+        () => {
+          AS.setCards([{ id: "c-a" }, { id: "c-b" }, { id: "c-self" }, { id: "u:1" }]);
+          const b = base(to("c-a"));
+          const save = (card, bs, ov) => JSON.stringify(CH.nextReplies(card, bs, ov).fields());
+          const ovB = { next: to("c-b", "c-retired"), nextWas: ["c-a"] }, ovC = { next: to("c-a", "c-retired"), nextWas: ["c-a"] };
+          return eq([save({ id: "u:1", next: to("c-a", "c-removed") }, null, null),
+            save(Object.assign({}, b, ovB), b, ovB), save(Object.assign({}, b, ovC), b, ovC), save(Object.assign({}, b), b, null)].join("|"),
+            '{"next":[{"to":"c-a"},{"to":"c-removed"}]}|{"next":[{"to":"c-b"},{"to":"c-retired"}],"nextWas":["c-a"]}|'
+            + '{"next":[{"to":"c-a"},{"to":"c-retired"}],"nextWas":["c-a"]}|{}');
+        });
+    } finally { AS.setCards(hadCards); }
+  }
+  check("card-model.js", "814D the catalog's ids ride the override only beside a list it writes",
+    () => {
+      const b = base(to("c-a"));
+      const w = M.overrideAgainstBase(b, Object.assign({}, b, { next: to("c-b"), nextWas: ["c-a"] }));
+      const n = M.overrideAgainstBase(b, Object.assign({}, b, { next: to("c-a"), nextWas: ["c-a"] }));
+      return eq(JSON.stringify(w) + "|" + JSON.stringify(n), '{"next":[{"to":"c-b"}],"nextWas":["c-a"]}|{}');
+    });
+  {
+    const hadCards = AS.cards, hadLang = AS.lang;
+    HK.hooks.rebuildCards = () => {};
+    const b = { id: "c-chain", c: "gen", alt: 1, t: "Invented", en: ["E1", "E2"].join(NL + NL), pl: ["P1", "P2"].join(NL + NL), next: to("c-a") };
+    try {
+      check("card-model.js", "814E a block reorder on a card with its own list keeps the list and the catalog's ids it replaced",
+        () => {
+          AS.putLang("en"); P.BASE_M.push(b); P.pack.custom = [];
+          P.pack.overrides["c-chain"] = { next: to("c-b"), nextWas: ["c-a"] };
+          AS.setCards([Object.assign({}, b, P.pack.overrides["c-chain"])]);
+          M.reorderMacroBlocks("c-chain", 0, 1);
+          const o = P.pack.overrides["c-chain"] || {};
+          return eq(JSON.stringify([o.next, o.nextWas]) + "|" + String(o.en).split(NL).join("/"), '[[{"to":"c-b"}],["c-a"]]|E2//E1');
+        });
+    } finally {
+      const at = P.BASE_M.indexOf(b); if (at > -1) P.BASE_M.splice(at, 1);
+      delete P.pack.overrides["c-chain"]; AS.setCards(hadCards); AS.putLang(hadLang); delete HK.hooks.rebuildCards;
+    }
+  }
+  check("macros-json.js", "814F CONTROL: the catalog's ids a list replaced never leave the desk: a card holding them exports byte for byte as one without",
+    () => {
+      const card = base(to("c-a"), { commits: 1 });
+      return eq(JSON.stringify(J.cardToExportPlain(Object.assign({}, card, { nextWas: ["c-b"] }))) === JSON.stringify(J.cardToExportPlain(card)), true);
+    });
+  {
+    const hadCards = AS.cards, hadLangs = CM.CONTENT_LANGS.slice();
+    const zolw = String.fromCharCode(0x17b, 0xf3, 0x142) + "w";
+    CM.setContentLangs(["en", "pl"]);
+    AS.setCards([
+      { id: "c-self", c: "gen", t: "Firing self" },
+      { id: "c-4", c: "gen", t: "Refiring a glaze" },
+      { id: "c-1", c: "gen", t: "Order, pieces from one firing" },
+      { id: "c-2", c: "gen", t: "Firing dates" },
+      { id: "c-3", c: "gen", t: "Damaged, waiting for the next firing" },
+      { id: "c-5", c: "gen", t: "Nothing alike", tPl: zolw },
+      { id: "c-6", c: "gen", t: "Taken firing" }]);
+    try {
+      check("card-chain.js", "814G a find puts a title's start first, a word's start next, anywhere last, and offers neither the card itself nor one listed",
+        () => eq(CH.nextHits("FIR", "c-self", new Set(["c-6"])).map(m => m.id).join(","), "c-2,c-1,c-3,c-4"));
+      check("card-chain.js", "814J a find reads every language's title, folded as search folds it",
+        () => eq(CH.nextHits("zolw", "", new Set()).map(m => m.id).join(","), "c-5"));
+      check("card-chain.js", "814K the part found is bold and the rest escaped, and a title that folds to another length is left plain",
+        () => eq([CH.nextHitHtml("A <b> firing", "fir"), CH.nextHitHtml("Stra" + String.fromCharCode(223) + "e firing", "fir")].join("|"),
+          "A &lt;b&gt; <b>fir</b>ing|Stra" + String.fromCharCode(223) + "e firing"));
+    } finally { AS.setCards(hadCards); CM.setContentLangs(hadLangs); }
+  }
+  check("card-chain.js", "814L the editor says when the desk's stamp differs from the catalog's, either way, and says nothing for an own card",
+    () => {
+      const on = CH.stampNoteHtml(true, { commits: 0 }), off = CH.stampNoteHtml(false, { commits: true });
+      return eq([on.indexOf("Yours, not the catalog") > -1, off.indexOf("You took the stamp off") > -1,
+        CH.stampNoteHtml(true, { commits: 1 }), CH.stampNoteHtml(false, {}), CH.stampNoteHtml(true, null)].join("|"), "true|true|||");
+    });
+  check("ui-lang.js", "814M a copy of a stamped card carries the stamp in the same words on every card, and a plain copy or a refusal does not",
+    () => {
+      const a = UL.toastHtml("Ready to paste: One, EN", false, true), b = UL.toastHtml("Ready to paste: Two, PL", false, true);
+      const chip = h => h.slice(h.indexOf('<span class="t-stamp">'));
+      return eq([chip(a) === chip(b), chip(a).indexOf("Commits the firm") > -1, a.indexOf("Ready to paste: One, EN") > -1,
+        UL.toastHtml("Plain", false, false), UL.toastHtml("No", true, true).indexOf("t-stamp")].join("|"), "true|true|true||-1");
+    });
+  /* THE SITES NO NODE LEG CAN CALL, held as text: each needs a document. Every copy route hands the
+     toast the card's stamp; the head puts the stamp after the title, and a patched card files its
+     badges after the stamp as a rebuild does; the editor's two saves write the list and the stamp. */
+  const src = f => fs.readFileSync(join(MODDIR, f), "utf8");
+  check("list-pointer.js", "814O every copy route of a card hands the toast the card's stamp",
+    () => eq(["list-pointer.js", "copy-entry.js", "pick.js"].map(f => {
+      const s = src(f);
+      return f + ":" + (s.split("copy(fill(").length - 1) + "/" + (s.split("), cardCommits(m));").length - 1);
+    }).join(","), "list-pointer.js:1/1,copy-entry.js:2/2,pick.js:1/1"));
+  check("card-body.js", "814P the stamp follows a card's title before its badges, and a patched card files its badges after the stamp",
+    () => {
+      const body = src("card-body.js"), pool = src("card-pool.js"), at = body.indexOf('stampHtml("cstamp")');
+      return eq([at > body.indexOf('<span class="ctitle"'), at < body.indexOf("const hitBadge="),
+        pool.indexOf('const anchor=head.querySelector(".cstamp")||head.querySelector(".ctitle");') > -1].join(","), "true,true,true");
+    });
+  check("card-editor.js", "814Q a save writes the stamp and the list: whole into a custom entry after the carry, through the override for a catalog card",
+    () => {
+      const ed = src("card-editor.js"), carry = ed.indexOf("carryUnwritten(entry,"), put = ed.indexOf("if(own&&own.length) entry.next=own; else delete entry.next;");
+      return eq([carry > -1 && put > carry, ed.indexOf("intentTop,lockLang,commits,intents:intentsStored}") > -1,
+        ed.indexOf("lockLang, commits}, nx.fields());") > -1].join(","), "true,true,true");
+    });
+}
+
+/* ------------------------------------------------------------------ next-dock.js, the action button
+   Board 814, S5: after a reply is sent, the card's own list (the catalog's, or the agent's in its place)
+   is offered first in its order, then what this desk learnt follows that card, most often first, up to
+   four places, each learnt one marked (ledger, the night of 4 October). The button shows the count for
+   the tab in front and pulses only when a step brings new replies (decisions 2026-10-01 10:29, 10:34).
+   Every card here is invented; every global and hook set here is put back. */
+{
+  /* The stand-ins go up before the dock is first imported: loading a module lets the frames the path's
+     legs above left waiting run, and they read the hooks and the document. */
+  const T = await import(MOD("tabs.js"));
+  const H = await import(MOD("hooks.js"));
+  const AS = await import(MOD("app-state.js"));
+  const hadDoc = globalThis.document, hadAdd = globalThis.addEventListener;
+  const STUBS = ["applyLangUI", "updateIntentPlaceholder", "drawPillsCore", "drawIntentRail", "render", "scheduleRailGeometry", "segFolded"];
+  const hadHooks = STUBS.map(k => [k, Object.prototype.hasOwnProperty.call(H.hooks, k), H.hooks[k]]);
+  const hadCards = AS.cards;
+  const quiet = { toggle() {}, add() {}, remove() {}, contains() { return false; } };
+  const ring = new Set(), badge = { textContent: "" };
+  const fab = { hidden: true, title: "", attrs: {}, offsetWidth: 44, addEventListener() {},
+    classList: { add: c => ring.add(c), remove: c => ring.delete(c), contains: c => ring.has(c), toggle() {} },
+    querySelector: s => (s === ".fab-badge" ? badge : null), setAttribute(k, v) { this.attrs[k] = String(v); } };
+  globalThis.document = { querySelector: s => (s === "#nextFab" ? fab : null), getElementById: () => null, querySelectorAll: () => [],
+    addEventListener() {}, body: { classList: quiet }, documentElement: { style: { setProperty() {} }, classList: quiet, addEventListener() {} } };
+  if (typeof globalThis.addEventListener !== "function") globalThis.addEventListener = () => {};
+  STUBS.forEach(k => { if (typeof H.hooks[k] !== "function") H.hooks[k] = () => {}; });
+  const ND = await import(MOD("next-dock.js"));
+  const LP = await import(MOD("list-pointer.js"));
+  const ST = await import(MOD("storage.js"));
+  const SC = await import(MOD("shortcuts.js"));
+  const CH = await import(MOD("card-chain.js"));
+  const fs = await import("node:fs");
+  const card = (id, next) => (next ? { id, c: "orders", en: "Body of " + id, t: "Title " + id, next: next.map(to => ({ to })) }
+    : { id, c: "orders", en: "Body of " + id, t: "Title " + id });
+  const liveOf = list => new Map(list.map(m => [m.id, m]));
+  const said = rows => rows.map(r => r.id + (r.learnt ? "~" + r.n : "")).join(",");
+  const L1 = [card("c-nd-a", ["c-nd-b", "c-nd-gone", "c-nd-a", "c-nd-c"]), card("c-nd-b"), card("c-nd-c"), card("c-nd-d"),
+    card("c-nd-e"), card("c-nd-f"), card("c-nd-g")];
+  check("next-dock.js", "814S the card's own list comes first in its order, live cards only and never itself; learnt replies fill the places left, most often first, each marked, four in all",
+    () => eq(said(ND.dockList("c-nd-a", liveOf(L1),
+      [{ id: "c-nd-d", n: 5 }, { id: "c-nd-b", n: 9 }, { id: "c-nd-gone", n: 8 }, { id: "c-nd-e", n: 3 }, { id: "c-nd-f", n: 2 }], new Set())),
+      "c-nd-b,c-nd-c,c-nd-d~5,c-nd-e~3"));
+  check("next-dock.js", "814T a pair seen once is not yet learnt, and a learnt reply this conversation already sent is passed over, where the card's own list keeps one",
+    () => eq(said(ND.dockList("c-nd-x", liveOf([card("c-nd-x", ["c-nd-y"]), card("c-nd-y"), card("c-nd-z"), card("c-nd-w"), card("c-nd-v")]),
+      [{ id: "c-nd-v", n: 1 }, { id: "c-nd-z", n: 4 }, { id: "c-nd-w", n: 2 }], new Set(["c-nd-y", "c-nd-z"]))), "c-nd-y,c-nd-w~2"));
+  check("next-dock.js", "814U CONTROL: a card with no list and nothing learnt offers nothing, an unknown card nothing, and a list of six live cards its first four and no learnt one",
+    () => {
+      const six = card("c-nd-6", ["c-nd-b", "c-nd-c", "c-nd-d", "c-nd-e", "c-nd-f", "c-nd-g"]);
+      return eq([said(ND.dockList("c-nd-b", liveOf(L1), [], new Set())), said(ND.dockList("c-nd-none", liveOf(L1), [{ id: "c-nd-b", n: 9 }], new Set())),
+        said(ND.dockList("c-nd-6", liveOf(L1.concat([six])), [{ id: "c-nd-a", n: 9 }], new Set()))].join("|"), "||c-nd-b,c-nd-c,c-nd-d,c-nd-e");
+    });
+  check("next-dock.js", "814V the unfolded dock keeps its place when clear, moves left past a question it would meet, keeps the gap, and stands down where the window has no room",
+    () => {
+      const want = { left: 628, top: 500, width: 640, height: 300 }, ask = { left: 928, top: 52, width: 340, height: 460 };
+      return eq([ND.dockClear(want, [], 12), ND.dockClear(want, [ask], 12), ND.dockClear(want, [{ left: 928, top: 52, width: 340, height: 436 }], 12),
+        ND.dockClear(want, [{ left: 600, top: 52, width: 340, height: 460 }], 12)].join(","), "628,276,628,");
+    });
+  check("next-dock.js", "814n the vicinity is the rect grown by its margin on every side, and no further",
+    () => {
+      const r = { left: 100, top: 100, width: 44, height: 44 };
+      return eq([[52, 120], [192, 192], [51, 120], [120, 193]].map(([x, y]) => ND.dockNear(r, x, y, 48)).join(","), "true,true,false,false");
+    });
+  /* The button itself, against a stand-in that keeps what the dock writes; the tabs are drawn for real,
+     as the path's own legs above do, and copies go through the desk's copy route. */
+  const shown = () => [fab.hidden ? "hidden" : "shown", badge.textContent || "-", ring.has("nudge") ? "pulse" : "still"].join(" ");
+  try {
+    AS.setCards([card("c-nd-p", ["c-nd-q", "c-nd-r"]), card("c-nd-q", ["c-nd-p"]), card("c-nd-r"), card("c-nd-s")]);
+    T.tabs.splice(0, T.tabs.length);
+    ST.ssSet(T.TAB_KEY, "null");
+    T.initTabs();
+    ND.wireNextDock();
+    const seen = [shown()];
+    LP.bumpUseCount("c-nd-p", "en"); seen.push(shown());
+    ND.syncNextDock(); seen.push(shown());
+    T.tabs.push({ id: "mc-nd2", pax: "" }); T.stepTab(1); ND.syncNextDock(); seen.push(shown());
+    LP.bumpUseCount("c-nd-q", "en"); seen.push(shown());
+    T.stepTab(1); ND.syncNextDock(); seen.push(shown());
+    check("next-dock.js", "814W the action button shows the tab in front's count: hidden before a copy, pulsing when one brings replies, still on a redraw, and per tab, a switch showing the digit without a pulse",
+      () => eq(seen.join(" | "), "hidden - still | shown 2 pulse | shown 2 pulse | hidden - still | shown 1 pulse | shown 2 still"));
+    /* Two copies of s straight after r teach the pair; a third tab sending r then offers the card's
+       own none and the learnt one, and the count reaches the button. */
+    T.tabs.push({ id: "mc-nd3", pax: "" }); T.stepTab(1);
+    LP.bumpUseCount("c-nd-r", "en"); LP.bumpUseCount("c-nd-s", "en"); LP.bumpUseCount("c-nd-r", "en"); LP.bumpUseCount("c-nd-s", "en");
+    T.tabs.push({ id: "mc-nd4", pax: "" }); T.stepTab(1); ND.syncNextDock();
+    const before = shown();
+    LP.bumpUseCount("c-nd-r", "en");
+    check("next-dock.js", "814X what the desk learnt reaches the button: a reply sent twice after another is offered after it in a fresh conversation",
+      () => eq(before + " | " + shown(), "hidden - still | shown 1 pulse"));
+    // A switch of tab finishes on the next frame, which reads hooks put back below.
+    await new Promise(r => setTimeout(r, 20));
+  /* The keys and the labels. Ctrl+1 to 4 are four rows of the shortcuts list like any other, read in the
+     search box; the editor's fold names the key of each of its first four rows, and a rebind reaches it. */
+  SC.loadShortcuts();
+  check("shortcuts.js", "814Y Ctrl+1 to 4 copy the next replies: four rebindable rows on the digits, live in a field, each dispatched to its own place",
+    () => {
+      const rows = ["nextCopy1", "nextCopy2", "nextCopy3", "nextCopy4"].map(id => SC.SC_DEFS.find(d => d.id === id));
+      const rs = fs.readFileSync(join(MODDIR, "run-shortcut.js"), "utf8");
+      return eq([rows.map(d => d ? [d.def.code, d.def.ctrl, d.def.alt, d.inField, d.fixed ? 1 : 0].join(":") : "none").join(","),
+        SC.formatActionChord("nextCopy3"),
+        rs.indexOf("if(/^nextCopy[1-4]$/.test(id)) return copyNextReply(+id.slice(8)-1);") > -1,
+        rs.indexOf("if(nextDockOpen()){ foldNextDock(); return true; }") > -1 && rs.indexOf("if(nextDockOpen())") < rs.indexOf("escapeLadderStep();")].join("|"),
+        "Digit1:1:0:1:0,Digit2:1:0:1:0,Digit3:1:0:1:0,Digit4:1:0:1:0|Ctrl+3|true|true");
+    });
+  {
+    const hadCards2 = AS.cards;
+    const five = card("c-nd-k", ["c-nd-k1", "c-nd-k2", "c-nd-k3", "c-nd-k4", "c-nd-k5"]);
+    AS.setCards([five].concat(["c-nd-k1", "c-nd-k2", "c-nd-k3", "c-nd-k4", "c-nd-k5"].map(id => card(id))));
+    try {
+      const keys = () => (CH.nextReplies(five, null, null).body().match(/<kbd class="nx-key">[^<]*<\/kbd>/g) || [])
+        .map(k => k.replace(/<[^>]+>/g, "")).join(",");
+      const was = keys();
+      SC.scTake("nextCopy2", 1, { code: "KeyJ", key: "j", ctrl: 0, alt: 1, shift: 0, meta: 0 });
+      const rebound = keys();
+      check("card-chain.js", "814Z the editor's Next rows name the keys that copy them: the first four, the fifth none, and a rebind shows",
+        () => eq(was + " | " + rebound, "Ctrl+1,Ctrl+2,Ctrl+3,Ctrl+4 | Ctrl+1,Alt+J,Ctrl+3,Ctrl+4"));
+    } finally { AS.setCards(hadCards2); SC.loadShortcuts(); }
+  }
+  /* THE TWO BUBBLES IN ONE CORNER (ledger, the night of 4 October): the catalog's offer hangs from the name
+     at the top and its list scrolls, so it ends above the round buttons' row; the action button keeps the
+     corner, one step left of the clear door. Numbers read from the sheet and from bubble.js. */
+  check("catalog-offer.js", "814h a long catalog offer ends above the round buttons with the bubble's gap to spare, and the action button sits one step left of the clear door",
+    () => {
+      const off = fs.readFileSync(join(MODDIR, "catalog-offer.js"), "utf8"), bub = fs.readFileSync(join(MODDIR, "bubble.js"), "utf8");
+      const sheet = fs.readFileSync(join(MODDIR, "..", "template.html"), "utf8");
+      const cap = +((/innerHeight-Math\.ceil\(r\.bottom\)-(\d+)\)/.exec(off) || [])[1]), gap = +((/gap:(\d+),/.exec(bub) || [])[1]);
+      const fabRule = /\.fab\{position:fixed;right:(\d+)px;bottom:(\d+)px;z-index:\d+;width:(\d+)px;height:(\d+)px/.exec(sheet) || [];
+      const right = sel => +((new RegExp("\\." + sel + "\\{right:(\\d+)px").exec(sheet) || [])[1]);
+      const row = +fabRule[2] + +fabRule[4], step = right("fab-clear") - +fabRule[1];
+      // The bubble's foot is the name's foot, the gap, and the list at its cap: vh - (cap - gap) from the top.
+      return eq([cap - gap > row + gap, right("fab-next") - right("fab-clear") === step, step > +fabRule[3]].join(","), "true,true,true");
+    });
+  } finally {
+    T.watchTabPath(null);
+    T.tabs.splice(0, T.tabs.length);
+    AS.setCards(hadCards);
+    hadHooks.forEach(([k, own, v]) => { if (own) H.hooks[k] = v; else delete H.hooks[k]; });
+    if (hadAdd === undefined) delete globalThis.addEventListener; else globalThis.addEventListener = hadAdd;
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+  }
+}
+
+/* ------------------------------------------------------------------ lanes.js, the cards or the lanes
+   Board 814, S5: Space switches between the cards and the lanes while nothing is being typed (decisions
+   2026-10-01 01:11), and so does a click on the action button (10:29). The lanes stand over the list and
+   give it back whole. Driven through the desk's own route against stand-ins that keep what is written; every
+   card is invented, and every global and hook set here is put back. */
+{
+  const T = await import(MOD("tabs.js"));
+  const H = await import(MOD("hooks.js"));
+  const AS = await import(MOD("app-state.js"));
+  const Dom = await import(MOD("dom.js"));
+  const hadDoc = globalThis.document, hadAdd = globalThis.addEventListener;
+  const STUBS = ["applyLangUI", "updateIntentPlaceholder", "drawPillsCore", "drawIntentRail", "render", "scheduleRailGeometry",
+    "segFolded", "syncRailGeometry", "rebuildCards", "syncSampleMark"];
+  const hadHooks = STUBS.map(k => [k, Object.prototype.hasOwnProperty.call(H.hooks, k), H.hooks[k]]);
+  const hadCards = AS.cards;
+  const on = o => ({ add: c => o.add(c), remove: c => o.delete(c), contains: c => o.has(c),
+    toggle: (c, f) => { const w = f === undefined ? !o.has(c) : !!f; if (w) o.add(c); else o.delete(c); return w; } });
+  const bodyCls = new Set(), quiet = { toggle() {}, add() {}, remove() {}, contains() { return false; } };
+  const el = extra => Object.assign({ hidden: false, attrs: {}, innerHTML: "", style: {}, setAttribute(k, v) { this.attrs[k] = String(v); },
+    getAttribute(k) { return this.attrs[k]; }, querySelector: () => null, querySelectorAll: () => [],
+    addEventListener(k, fn) { (this.heard = this.heard || {})[k] = (this.heard[k] || []).concat(fn); } }, extra || {});
+  const badge = { textContent: "" };
+  const fab = el({ hidden: true, offsetWidth: 44, classList: on(new Set()), querySelector: s => (s === ".fab-badge" ? badge : null) });
+  const lanesBox = el({ hidden: true }), shell = el({ inert: false }), box = el({ value: "", tagName: "INPUT", classList: on(new Set()) });
+  const byId = { "#nextFab": fab, "#lanes": lanesBox, "#pageScroll > .shell": shell, "#intent": box, "#modal": { hidden: true },
+    "#pax": el({ value: "" }), "#roleSel": el({ value: "" }) };
+  const body = { classList: on(bodyCls) };
+  globalThis.document = { querySelector: s => byId[s] || null, getElementById: () => null, querySelectorAll: () => [],
+    addEventListener() {}, createElement: () => el({ getContext: () => ({}) }), createRange: () => ({}), activeElement: null, body,
+    documentElement: { style: { setProperty() {}, removeProperty() {} }, classList: quiet, addEventListener() {} } };
+  globalThis.addEventListener = () => {};
+  STUBS.forEach(k => { if (typeof H.hooks[k] !== "function") H.hooks[k] = () => {}; });
+  Dom.grabDom();
+  const LN = await import(MOD("lanes.js"));
+  const ND = await import(MOD("next-dock.js"));
+  const LP = await import(MOD("list-pointer.js"));
+  const ST = await import(MOD("storage.js"));
+  const SC = await import(MOD("shortcuts.js"));
+  const fs = await import("node:fs");
+  const card = (id, next) => (next ? { id, c: "orders", en: "Body of " + id, t: "Title " + id, next: next.map(to => ({ to })) }
+    : { id, c: "orders", en: "Body of " + id, t: "Title " + id });
+  const pax = el({ value: "Anna" }), full = el({ value: "x", tagName: "INPUT" });
+  check("lanes.js", "814ln1 the lanes key is free with nothing focused or the search box focused and empty, and kept by a box holding text, another field or a button",
+    () => eq([LN.lanesKeyFree(null, box, body), LN.lanesKeyFree(body, box, body), LN.lanesKeyFree(box, box, body),
+      LN.lanesKeyFree(full, full, body), LN.lanesKeyFree(pax, box, body), LN.lanesKeyFree(el({ tagName: "BUTTON" }), box, body)].join(","),
+      "true,true,true,false,false,false"));
+  check("shortcuts.js", "814ln2 Space is the lanes' row, rebindable and live in a field; the dispatcher asks the lanes first, and Escape sheds them before the dock and the search",
+    () => {
+      const d = SC.SC_DEFS.find(x => x.id === "lanes"), rs = fs.readFileSync(join(MODDIR, "run-shortcut.js"), "utf8");
+      const top = rs.indexOf('if(id==="lanes") return lanesKey();'), ask = rs.indexOf("lanesShortcut(id)");
+      const shed = rs.indexOf("if(lanesOpen()){ toggleLanes(false); return true; }");
+      return eq([d ? [d.def.code, d.def.key === " ", d.def.ctrl, d.def.alt, d.def.shift, d.inField, d.fixed ? 1 : 0].join(":") : "none",
+        top > -1 && top < rs.indexOf('if(id==="navUp"'), ask > top && ask < rs.indexOf('if(id==="langToggle")'),
+        shed > -1 && shed < rs.indexOf("if(nextDockOpen()){ foldNextDock(); return true; }") && shed < rs.indexOf("escapeLadderStep();")].join("|"),
+        "Space:true:0:0:0:1:0|true|true|true");
+    });
+  check("lanes.js", "814ln3 while the lanes show, the keys that walk and copy cards stay in the lanes and the category keys do nothing; tabs, language and Escape pass",
+    () => eq(["navDown", "navUp", "markTop", "markBottom", "copy", "copyOther", "navPillLeft", "navPillLast", "tabNext", "langToggle", "escape", "clearIntent"]
+      .map(id => String(LN.lanesShortcut(id))).join(","), "true,true,true,true,true,true,true,true,undefined,undefined,undefined,undefined"));
+  try {
+    ST.lsSet("eMotionOff", "1");
+    SC.loadShortcuts();
+    AS.setCards([card("c-ln-a", ["c-ln-b", "c-ln-c"]), card("c-ln-b"), card("c-ln-c"), card("c-ln-d")]);
+    T.tabs.splice(0, T.tabs.length);
+    ST.ssSet(T.TAB_KEY, "null");
+    T.initTabs();
+    ND.wireNextDock();
+    LN.wireLanes();
+    ND.syncNextDock();
+    const state = () => [bodyCls.has("e-lanes") ? "lanes" : "cards", shell.inert ? "inert" : "live", lanesBox.hidden ? "hidden" : "shown",
+      fab.hidden ? "nofab" : "fab", fab.attrs["aria-pressed"] || "-"].join(" ");
+    const click = () => ((fab.heard && fab.heard.click) || []).forEach(fn => fn({}));
+    const seen = [state()];
+    click(); seen.push(state());
+    const empty = /class="ln-empty"/.test(lanesBox.innerHTML) && !/ln-now/.test(lanesBox.innerHTML);
+    LP.bumpUseCount("c-ln-a", "en");
+    const html = lanesBox.innerHTML;
+    const drawn = [/class="card ln-now"/.test(html), (html.match(/class="card ln-row/g) || []).length, /Title c-ln-a/.test(html), /Ctrl\+2/.test(html)].join(",");
+    box.value = "x"; ((box.heard && box.heard.input) || []).forEach(fn => fn({}));
+    seen.push(state() + (lanesBox.innerHTML ? " kept" : " emptied"));
+    document.activeElement = box;
+    const typed = LN.lanesKey();
+    box.value = ""; const opened = LN.lanesKey(); seen.push(state());
+    document.activeElement = body; const closed = LN.lanesKey(); seen.push(state());
+    // A reply with nothing after it leaves the button there, digitless, as the door to the lanes.
+    LP.bumpUseCount("c-ln-d", "en"); seen.push(state() + " digit:" + (badge.textContent || "-"));
+    check("lanes.js", "814ln4 the button and Space switch to the lanes and back: a line before the first reply, the reply now and its next after a copy, typing in the search box gives the cards back whole, and the button stays once a reply was sent",
+      () => eq(seen.join(" | ") + " | " + [empty, drawn, typed, opened, closed].join(";"),
+        "cards live hidden nofab false | lanes inert shown fab true | cards live hidden fab false emptied | lanes inert shown fab true | cards live hidden fab false"
+        + " | cards live hidden fab false digit:-"
+        + " | true;true,2,true,true;false;true;true"));
+    /* A list edited in the lanes is written where the editor writes it: an own card's whole list in its entry,
+       by the same rule (814ed1), and only the reply sent last is edited. */
+    const P = await import(MOD("pack.js"));
+    const hadCustom = P.pack.custom;
+    try {
+      const own = { id: "u:ln-own", c: "orders", en: "Body of own", t: "Title own", next: [{ to: "c-ln-b" }, { to: "c-ln-c" }] };
+      P.pack.custom = [JSON.parse(JSON.stringify(own))];
+      AS.setCards(AS.cards.concat([own]));
+      document.activeElement = body; LN.lanesKey();
+      LP.bumpUseCount("u:ln-own", "en");
+      const shownFirst = /data-to="c-ln-b"[\s\S]*data-to="c-ln-c"/.test(lanesBox.innerHTML);
+      const wrote = LN.writeLaneList(["c-ln-c", "c-ln-b", "c-ln-gone"]);
+      const after = JSON.stringify(P.pack.custom[0].next);
+      const emptied = LN.writeLaneList([]) && !("next" in P.pack.custom[0]);
+      LN.toggleLanes(false);
+      check("lanes.js", "814ed2 a reorder in the lanes writes the reply sent last's own list, live cards only, and an emptied list leaves no list",
+        () => eq([shownFirst, wrote, after, emptied, LN.writeLaneList(["c-ln-b"])].join("|"),
+          'true|true|[{"to":"c-ln-c"},{"to":"c-ln-b"}]|true|false'));
+    } finally { P.pack.custom = hadCustom; }
+    /* A catalog card's list is written to its override beside the ids it replaced, the catalog's own card is
+       never touched, and Back to the catalog's, clicked in the lanes, offers the agent's list back. */
+    const CMod = await import(MOD("card-model.js"));
+    const hadOv = P.pack.overrides, hadMake = document.createElement, hadContains = lanesBox.contains;
+    const cat = { id: "c-ln-cat", c: "orders", en: "Body of c-ln-cat", t: "Title c-ln-cat", next: [{ to: "c-ln-b" }, { to: "c-ln-c" }] };
+    const base = JSON.parse(JSON.stringify(cat));
+    let undoBtn = null;
+    try {
+      Object.assign(window, { E_CATALOG: { kind: "etiuda-catalog", format: 2, cards: [cat] } });
+      P.pack.overrides = {}; P.BASE_M.push(base);
+      AS.setCards(AS.cards.concat([Object.assign({}, base)]));
+      document.createElement = () => el({ isConnected: false, remove() {}, removeAttribute() {},
+        querySelector: s => (s === "#eUndoBtn" ? (undoBtn = {}) : null) });
+      body.appendChild = () => {};
+      lanesBox.contains = () => true;
+      const kept = () => JSON.stringify([CMod.baseCard("c-ln-cat").next, window.E_CATALOG.cards[0].next]);
+      const ov = () => JSON.stringify(P.pack.overrides["c-ln-cat"] || null);
+      const catalogs = kept();
+      document.activeElement = body; LN.lanesKey();
+      LP.bumpUseCount("c-ln-cat", "en");
+      const wrote = LN.writeLaneList(["c-ln-c", "c-ln-b", "c-ln-d"]), mine = ov(), kept1 = kept() === catalogs;
+      const back = { closest: s => (s === ".ln-back" ? back : null) };
+      ((lanesBox.heard && lanesBox.heard.click) || []).forEach(fn => fn({ target: back }));
+      const given = ov(), kept2 = kept() === catalogs, offered = !!(undoBtn && undoBtn.onclick);
+      if (offered) undoBtn.onclick();
+      check("lanes.js", "814ed3 a catalog card's list edited in the lanes is written to its override with the ids it replaced, the catalog's card and E_CATALOG stay as they were, and Back to the catalog's offers Undo, which restores the override",
+        () => eq([wrote, mine, kept1, given, kept2, offered, ov() === mine, kept() === catalogs].join("|"),
+          'true|{"next":[{"to":"c-ln-c"},{"to":"c-ln-b"},{"to":"c-ln-d"}],"nextWas":["c-ln-b","c-ln-c"]}|true|null|true|true|true|true'));
+    } finally {
+      LN.toggleLanes(false);
+      document.createElement = hadMake; delete body.appendChild;
+      if (hadContains === undefined) delete lanesBox.contains; else lanesBox.contains = hadContains;
+      const at = P.BASE_M.indexOf(base); if (at > -1) P.BASE_M.splice(at, 1);
+      P.pack.overrides = hadOv; delete window.E_CATALOG;
+    }
+    await new Promise(r => setTimeout(r, 20));
+  } finally {
+    LN.toggleLanes(false);
+    ND.watchNextDock(null);
+    T.watchTabPath(null);
+    T.tabs.splice(0, T.tabs.length);
+    AS.setCards(hadCards);
+    hadHooks.forEach(([k, own, v]) => { if (own) H.hooks[k] = v; else delete H.hooks[k]; });
+    if (hadAdd === undefined) delete globalThis.addEventListener; else globalThis.addEventListener = hadAdd;
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+    if (hadDoc !== undefined) Dom.grabDom();
+  }
+}
+
+/* ------------------------------------------------------------------ the path's beads on each conversation tab
+   Board 814, S5 (decisions 2026-10-01 10:34): a filled bead for each reply sent along the conversation's chain
+   and an open one while replies wait; a tab with no chain shows none. The chain is the run at the path's end in
+   which each reply follows the one before on its card's list or by what the desk learnt. Invented cards only;
+   every global set here is put back. */
+{
+  const T = await import(MOD("tabs.js"));
+  const H = await import(MOD("hooks.js"));
+  const AS = await import(MOD("app-state.js"));
+  const hadDoc = globalThis.document, hadAdd = globalThis.addEventListener;
+  const STUBS = ["applyLangUI", "updateIntentPlaceholder", "drawPillsCore", "drawIntentRail", "render", "scheduleRailGeometry"];
+  const hadHooks = STUBS.map(k => [k, Object.prototype.hasOwnProperty.call(H.hooks, k), H.hooks[k]]);
+  const hadCards = AS.cards;
+  const quiet = { toggle() {}, add() {}, remove() {}, contains() { return false; } };
+  globalThis.document = { getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
+    body: { classList: quiet }, documentElement: { style: { setProperty() {} }, classList: quiet } };
+  if (typeof globalThis.addEventListener !== "function") globalThis.addEventListener = () => {};
+  STUBS.forEach(k => { if (typeof H.hooks[k] !== "function") H.hooks[k] = () => {}; });
+  const ND = await import(MOD("next-dock.js"));
+  const LP = await import(MOD("list-pointer.js"));
+  const ST = await import(MOD("storage.js"));
+  const fs = await import("node:fs");
+  const card = (id, next) => (next ? { id, c: "orders", en: "Body of " + id, t: "Title " + id, next: next.map(to => ({ to })) }
+    : { id, c: "orders", en: "Body of " + id, t: "Title " + id });
+  const pairs = new Set(["a>b", "b>c", "c>d", "d>e"]), linked = (a, b) => pairs.has(a + ">" + b);
+  const said = b => (b ? b.sent + (b.more ? "+" : "") + (b.open ? "o" : "") : "none");
+  check("next-dock.js", "814bd1 the beads are the linked run at the path's end, at most three and a lead-in past them, an open one while replies wait, and none for a lone reply with nothing waiting",
+    () => eq([ND.chainBeads([], linked, true), ND.chainBeads(["a"], linked, false), ND.chainBeads(["a"], linked, true),
+      ND.chainBeads(["x", "a", "b", "c"], linked, false), ND.chainBeads(["a", "b", "c", "d", "e"], linked, true),
+      ND.chainBeads(["a", "b", "z"], linked, false), ND.chainBeads(["a", "b", "z"], linked, true), ND.chainBeads(["a", "b"], linked, false)]
+      .map(said).join(","), "none,none,1o,3,3+o,none,1o,2"));
+  try {
+    AS.setCards([card("c-bd-p", ["c-bd-q"]), card("c-bd-q"), card("c-bd-r"), card("c-bd-s"), card("c-bd-t", ["c-bd-q"])]);
+    T.tabs.splice(0, T.tabs.length);
+    ST.ssSet(T.TAB_KEY, "null");
+    T.initTabs();
+    const fresh = () => { T.tabs.push({ id: "mc-bd" + T.tabs.length, pax: "" }); T.stepTab(1); };
+    // Once r then s: not yet learnt, so q, r, s holds no chain; twice, and r to s is a link.
+    LP.bumpUseCount("c-bd-r", "en"); LP.bumpUseCount("c-bd-s", "en");
+    const once = said(ND.pathBeads(["c-bd-q", "c-bd-r", "c-bd-s"]));
+    fresh(); LP.bumpUseCount("c-bd-r", "en"); LP.bumpUseCount("c-bd-s", "en");
+    const twice = said(ND.pathBeads(["c-bd-q", "c-bd-r", "c-bd-s"]));
+    fresh(); LP.bumpUseCount("c-bd-t", "en");
+    const front = said(ND.tabBeadsOf(T.tabs.find(t => t.id === T.tabPathNow().tab)));
+    check("next-dock.js", "814bd2 a reply on the last card's list or learnt after it twice extends the chain, once does not, and a tab whose last card offers replies opens a bead",
+      () => eq([said(ND.pathBeads(["c-bd-p", "c-bd-q"])), once, twice, front, said(ND.pathBeads(["c-bd-q"])), said(ND.tabBeadsOf({ id: "x" }))].join(","),
+        "2,none,2,1o,none,none"));
+    await new Promise(r => setTimeout(r, 20));
+  } finally {
+    T.tabs.splice(0, T.tabs.length);
+    AS.setCards(hadCards);
+    hadHooks.forEach(([k, own, v]) => { if (own) H.hooks[k] = v; else delete H.hooks[k]; });
+    if (hadAdd === undefined) delete globalThis.addEventListener; else globalThis.addEventListener = hadAdd;
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+  }
+  check("tabs.js", "814bd3 the beads are drawn filled then open, after every redraw of the strip and every sync of the button, between a tab's name and its close button",
+    () => {
+      const tabs = fs.readFileSync(join(MODDIR, "tabs.js"), "utf8"), dock = fs.readFileSync(join(MODDIR, "next-dock.js"), "utf8");
+      return eq([T.tabBeadsHtml({ sent: 2, more: true, open: true }), T.tabBeadsHtml(null),
+        tabs.indexOf("function drawTabs(){ const r=drawTabsCore.apply(this,arguments); syncTabAccent(); syncTabBeads(); return r; }") > -1,
+        tabs.indexOf('el.insertBefore(bd, el.querySelector(".tab-x"));') > -1,
+        dock.indexOf("  syncTabBeads();\n  if(dockWatch) dockWatch(arrived===true);") > -1, dock.indexOf("setTabBeads(tabBeadsOf);") > -1].join("|"),
+        '<i class="bd-more"></i><i class="bd"></i><i class="bd"></i><i class="bd bd-open"></i>||true|true|true|true');
+    });
+}
+
+/* ------------------------------------------------------------------ card-chain.js, a list edited outside the editor
+   Board 814, S5: the lanes edit the reply sent last's list in the agent's own layer, as the editor's Next fold
+   does on a save that touched it (decisions 2026-10-01 09:40). Invented ids; nothing global is set. */
+{
+  const CH = await import(MOD("card-chain.js"));
+  const to = ids => ids.map(x => ({ to: x }));
+  const live = new Set(["c-ed-a", "c-ed-b", "c-ed-c", "c-ed-self"]);
+  const base = { id: "c-ed-self", t: "Self", next: to(["c-ed-a", "c-ed-b"]) };
+  const merged = ov => Object.assign({}, base, ov || {});
+  const w = (card, b, ov, ids) => JSON.stringify(CH.nextListWrite(card, b, ov, ids, live));
+  check("card-chain.js", "814ed1 a list changed outside the editor writes what the editor's fold writes on a touched save: an own card's whole live list, a catalog card's list and the ids it replaced beside every other field kept, and nothing once it is the catalog's again",
+    () => {
+      const own = { id: "u:ed", next: to(["c-ed-a", "c-ed-b"]) };
+      const ov1 = { t: "Mine" }, ov2 = { t: "Mine", next: to(["c-ed-c"]), nextWas: ["c-ed-a"] }, ov3 = { next: to(["c-ed-b"]), nextWas: ["c-ed-a", "c-ed-b"] };
+      const same = JSON.stringify({ override: Object.assign({ t: "Mine" }, CH.nextSaveFields(to(["c-ed-c", "c-ed-a"]), to(["c-ed-a", "c-ed-b"]), base, ov2, true)) });
+      return eq([w(own, null, null, ["c-ed-b", "c-ed-a", "c-ed-gone", "u:ed"]), w(merged(ov1), base, ov1, ["c-ed-b", "c-ed-a"]),
+        w(merged(ov2), base, ov2, ["c-ed-c", "c-ed-a"]) === same, w(merged(ov3), base, ov3, ["c-ed-a", "c-ed-b"]),
+        w(merged(ov2), base, ov2, ["c-ed-a", "c-ed-b"])].join("|"),
+        '{"own":[{"to":"c-ed-b"},{"to":"c-ed-a"}]}|{"override":{"t":"Mine","next":[{"to":"c-ed-b"},{"to":"c-ed-a"}],"nextWas":["c-ed-a","c-ed-b"]}}'
+        + '|true|{"override":null}|{"override":{"t":"Mine"}}');
+    });
 }
 
 /* NOT cardBodyHtml(). It reads the PAX box off the document through fill(), so it cannot be

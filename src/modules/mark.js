@@ -42,9 +42,9 @@ function noteCopy(){
   setRailMarkUsed(true); setSemiKind(null);
   hooks.railDecorate(false);
 }
-function copy(text,msg){
+function copy(text,msg,stamped){
   noteCopy();
-  const done=()=>toast(msg);
+  const done=()=>toast(msg,0,false,stamped);
   if(navigator.clipboard && window.isSecureContext){
     navigator.clipboard.writeText(text).then(done,()=>fallback(text,done));
   } else fallback(text,done);

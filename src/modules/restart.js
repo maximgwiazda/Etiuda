@@ -34,6 +34,7 @@ import { focusIntentOnOpen } from "./on-open.js";
 import { openManage } from "./manage.js";
 import { mtRefreshLive } from "./maintenance.js";
 import { tourAfterRestart, maybeStartTour } from "./tour.js";
+import { paintJoin, teamJoinShown } from "./team-join.js";
 
 function restartDesk(){
   // The Undo of an act before this one has nothing left to undo.
@@ -77,6 +78,8 @@ function restartDesk(){
   mtRefreshLive();
   tourAfterRestart();
   maybeStartTour();
+  // The catalog a team let this desk in to has just landed: its lead's key, not yet shown, hangs from its name now.
+  if(teamJoinShown()) paintJoin();
 }
 
 export {

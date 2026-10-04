@@ -10,6 +10,7 @@ import { catalogFromV2, isV2, v2CatKey } from "./catalog-v2.js";
 import { setCatalogGreet } from "./greeting.js";
 import { setCatalogStop } from "./affinity.js";
 import { fileStamp, toastRefusal, t } from "./ui-lang.js";
+import { setCatalogFillFields } from "./fields.js";
 
 /* ---- catalog: Etiuda ships empty - a catalog supplies cards, intents, categories and
    facts, playing the role built-in content used to (pack.baseCards still overrides it,
@@ -205,6 +206,7 @@ function normaliseCatalog(data){
   const grew=table(data&&data.grew); if(grew) cat.grew=grew;
   const desk=table(data&&data.desk); if(desk) cat.desk=desk;
   const ext=table(data&&data.ext); if(ext) cat.ext=ext;
+  if(data&&Array.isArray(data.fields)) cat.fields=JSON.parse(JSON.stringify(data.fields));
   /* Index-aligned with the intent arrays, and carried for the same reason as `id`: it is what
      an export needs to hand a request back the id it came with. */
   if(data&&Array.isArray(data.intentIds)&&data.intentIds.length) cat.intentIds=data.intentIds.map(String);
@@ -397,6 +399,7 @@ function eApplyCatalog(c){
      loading a plain catalog over a rich one takes the rich one's tables away with it. */
   setCatalogGreet((c.greet&&typeof c.greet==="object")?c.greet:null);
   setCatalogStop((c.stop&&typeof c.stop==="object")?c.stop:null);
+  setCatalogFillFields(Array.isArray(c.fields)?c.fields:null);
   // After the categories, never before: roles are resolved against what actually exists.
   const i=c.intents||{};
   /* Every field of every language, named by the table rather than one line each. The pad
@@ -435,6 +438,7 @@ function eResetCatalog(){
   setCatalogCatLooks({},{});
   setCatalogGreet(null);
   setCatalogStop(null);
+  setCatalogFillFields(null);
   eApplyRoles(null);
   resetStock();
   E_CATALOG_VERSION=null;

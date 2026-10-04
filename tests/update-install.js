@@ -181,6 +181,7 @@ const asarText = (dir, file) => { try { return require("@electron/asar").extract
 /* ---- launching the installed app into the scratch home ---------------------------------------- */
 
 const PORT_BASE = DRY ? 0 : E.portBlock("update-install");
+if (!DRY) E.windowWall(WHO);
 let port = PORT_BASE;
 const live = new Set();
 let offscreenAsked = false;

@@ -117,7 +117,8 @@ function syncPillsCollapse(){
      flowed three. A bar that is not on screen clips nothing; say so, and the peek needs
      no overrides at all. */
   slot.classList.remove("pills-overflow","pills-expand");
-  if(!pillsWanted()||document.body.classList.contains("pills-off")
+  // The lanes take the bar off screen as a hidden bar is, without touching the preference.
+  if(!pillsWanted()||document.body.classList.contains("pills-off")||document.body.classList.contains("e-lanes")
     ||pillsLocked()                  // locked: always full height in flow (no 2-line clip / overlay expand)
     ||!el.querySelector(".pill")){
     slot.style.removeProperty("--pills-2line");
@@ -172,7 +173,8 @@ function schedulePillsCollapse(){
 let pillsWidthSeen=-1;
 function pillsClipDue(){
   const el=pills, slot=pillsSlot();
-  if(!el||!slot||!pillsWanted()||pillsLocked()||document.body.classList.contains("pills-off")) return false;
+  if(!el||!slot||!pillsWanted()||pillsLocked()||document.body.classList.contains("pills-off")
+    ||document.body.classList.contains("e-lanes")) return false;
   if(slot.classList.contains("pills-overflow")) return false;
   const two=pillsTwoLines(el);
   return !!two && pillsWrapHeight(el)>two+1 && Math.abs(slot.getBoundingClientRect().height-two)<0.5;
@@ -193,6 +195,7 @@ function wirePillsWidthWatch(){
    width every frame, and only the last is ever read. */
 let pillsShapeT=0;
 function rememberPillsShape(){
+  if(document.body.classList.contains("e-lanes")) return;
   const slot=pillsSlot();
   const shape=(!slot||!pillsWanted()||document.body.classList.contains("pills-off")) ? null
     : window.innerWidth+"x"+(Math.round(slot.getBoundingClientRect().height*10)/10);

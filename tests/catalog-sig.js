@@ -45,11 +45,12 @@ function v2Fns() {
     "const V2_HARNESS_TEST_KEYID=", "const V2_HARNESS_TEST_PUB=", "const V2_RING_FORMAT=",
     "const V2_KNOWN_KEYS=",
     "function v2SigFold(", "function v2SignedBytes(", "function v2HexBytes(", "function v2SigState(",
-    "function v2RingRead(",
+    "function v2RingRead(", "const V2_TEAM_FORMAT=", "function v2TeamRead(", "function v2TeamSigState(",
+    "const V2_SEALED_KIND=", "function v2SealedRead(",
     "const V2_ID_RE=", "const V2_SHAPES=", "const V2_MARKER_RE=", "function v2IsBracketLine(",
     "const V2_GREET_PARTS=", "function v2BodyProblems(", "const V2_LANG_RE=", "function v2LangProblems(",
     "const V2_SHA_RE=", "function v2Missing(", "function v2FlagProblem(", "function v2NextProblems(",
-    "function v2HeaderProblems(", "function v2Problems(",
+    "function v2HeaderProblems(", "const V2_FIELD_KINDS=", "const V2_DESK_TOKENS=", "const V2_FIELD_ID_RE=", "function v2FieldProblems(", "function v2Problems(",
     "const V2_CARD_NAMED=", "const V2_HEAD_NAMED=", "function v2Copy(", "function v2Put(",
     "function v2Extra(", "function v2Restore(",
     "const CARD_KEY=", "const REQ_KEY=", "const V2_RUNTIME_FIELD=", "function v2ColKey(",
@@ -61,8 +62,18 @@ function v2Fns() {
   ].map(m => extractDecl(src, m)).join("\n");
   return new Function(decls + "\nreturn {v2Problems,v2SignedBytes,v2SigState,catalogFromV2,"
     + "v2RingRead,V2_RING_FORMAT,V2_RING_KIND,V2_RING_FILE,V2_HARNESS_TEST_KEYID,"
+    + "v2TeamRead,v2TeamSigState,V2_TEAM_FORMAT,V2_TEAM_KIND,V2_TEAM_FILE,v2SealedRead,V2_SEALED_KIND,"
     + "V2_HARNESS_TEST_PUB,"
     + "V2_KNOWN_KEYS,V2_SIG_ALG,V2_SIG_VALID,V2_SIG_INVALID,V2_SIG_NONE,V2_SIG_UNKNOWN};")();
+}
+
+/* The shell's sealed envelope, sliced as tests/hpke.mjs slices it, so 88f seals with the code a desk runs. */
+const SEAL_DECLS = ["const SEALED_KIND =", "const SEALED_TEAM_RE =", "function sealedAad(", "function sealCatalog(",
+  "function openSealed("];
+function shellSeal() {
+  const src = fs.readFileSync(path.join(__dirname, "..", "shell", "main.js"), "utf8");
+  return new Function("crypto", "Buffer", SEAL_DECLS.map(m => extractDecl(src, m)).join("\n")
+    + "\nreturn { sealCatalog, openSealed };")(crypto, Buffer);
 }
 
 function pubHex(publicKey) {
@@ -253,6 +264,124 @@ async function main() {
   ok(builtIn(read) === v2.V2_HARNESS_TEST_PUB && builtIn(v2.v2RingRead(null)) === v2.V2_HARNESS_TEST_PUB,
      "605h a ring file adds to what is compiled in and takes nothing away: the built-in"
      + " binding survives a read of " + ringDoc.keys.length + " entries");
+
+  /* ---- the team file, board 834 step 8. Studio writes it; this is the reader the desk holds. -- */
+
+  const deskOf = (seed, name) => {
+    const key = crypto.createHash("sha256").update("desk " + seed).digest("hex");
+    const d = { id: "k-" + crypto.createHash("sha256").update(Buffer.from(key, "hex")).digest("hex").slice(0, 16),
+                key: key, box: crypto.createHash("sha256").update("box " + seed).digest("hex") };
+    if (name) d.name = name;
+    return d;
+  };
+  const teamDoc = { format: v2.V2_TEAM_FORMAT, kind: v2.V2_TEAM_KIND, id: "t-" + "0123456789abcdef",
+    catalogs: [fixture.id], lead: { keyId: keyId, public: pubHex(pair.publicKey) },
+    sealed: false, exportsSealed: false, epoch: 1,
+    roster: [{ desk: deskOf(1, "Ala") }, { desk: deskOf(2), name: "Front desk" }], later: { kept: true } };
+  const teamSigned = attachSig(v2, teamDoc, v2.V2_SIG_ALG, keyId, pair.privateKey);
+  const t1 = v2.v2TeamRead(JSON.stringify(teamSigned));
+  const tState = t1.team ? await v2.v2TeamSigState(t1.team) : "no team";
+  ok(t1.problems.length === 0 && t1.team && t1.team.roster.length === 2 && t1.team.roster[1].name === "Front desk"
+     && t1.team.later && t1.team.later.kept === true && tState === v2.V2_SIG_VALID && v2.V2_TEAM_FILE === "etiuda-team.json",
+     "88a a team file signed by the lead reads whole, its roster, its names and a field this build does not name kept, and"
+     + " verifies under the lead key it names: " + JSON.stringify(t1.problems) + ", " + tState);
+
+  const teamBent = JSON.parse(JSON.stringify(teamSigned));
+  teamBent.roster[1].name = "Back desk";
+  const teamOther = attachSig(v2, teamDoc, v2.V2_SIG_ALG, keyId, other.privateKey);
+  const teamRenamed = JSON.parse(JSON.stringify(teamSigned));
+  teamRenamed.lead.keyId = secondId;
+  const tStates = [];
+  for (const d of [teamBent, teamOther, teamRenamed]) tStates.push(await v2.v2TeamSigState(v2.v2TeamRead(d).team));
+  ok(tStates.join() === [v2.V2_SIG_INVALID, v2.V2_SIG_INVALID, v2.V2_SIG_UNKNOWN].join(),
+     "88b THE CONTROL: a name in the roster changed and the file signed by another key read invalid, and a lead key id"
+     + " the signature does not carry reads unknown: " + tStates.join(", "));
+
+  const teamAbsent = [null, "", "{not json", "[]", JSON.stringify({ format: 9, kind: v2.V2_TEAM_KIND }),
+                      JSON.stringify({ format: v2.V2_TEAM_FORMAT, kind: v2.V2_RING_KIND })];
+  const tNull = teamAbsent.map(x => v2.v2TeamRead(x));
+  ok(tNull.every(r => r.team === null) && tNull.filter(r => r.problems.length === 1).length === teamAbsent.length - 2,
+     "88c " + teamAbsent.length + " absent, empty or foreign files read as no team without a throw, and each but the"
+     + " two absent says one line: " + tNull.map(r => r.problems.length).join(","));
+
+  const teamBroken = Object.assign({}, teamDoc, { lead: { keyId: keyId }, epoch: 0, sealed: "no", roster: {} });
+  const t4 = v2.v2TeamRead(teamBroken);
+  ok(t4.team === null && t4.problems.length === 4,
+     "88d a team file with no lead key, epoch 0, sealed not true or false and a roster that is not a list is no team,"
+     + " with a line for each: " + JSON.stringify(t4.problems));
+
+  const teamEntries = Object.assign({}, teamDoc, { catalogs: [fixture.id, "UPPER", fixture.id],
+    roster: [null, { desk: { id: "k-123", key: "00", box: "00" } }, { desk: deskOf(1, "Ala") },
+             { desk: deskOf(3), name: 7 }, { desk: deskOf(1), name: "the same desk again" }] });
+  const t5 = v2.v2TeamRead(teamEntries);
+  ok(t5.team && t5.team.roster.length === 1 && t5.team.roster[0].desk.name === "Ala" && t5.team.catalogs.join() === fixture.id
+     && t5.problems.length === 5,
+     "88e unusable entries are dropped with a line each and their neighbours stand: a bad catalog id, four bad desks or"
+     + " a desk twice, the first standing (" + t5.problems.length + " lines, " + (t5.team ? t5.team.roster.length : 0) + " desk)");
+
+  /* ---- the sealed envelope, board 834 step 12. The shell seals and opens it; the engine reads its shape. -- */
+
+  const S = shellSeal(), teamKey = crypto.randomBytes(32);
+  const signedText = JSON.stringify(signed, null, 2) + "\n";
+  const sealedDoc = S.sealCatalog(teamKey, teamDoc.id, 1, signedText);
+  const s1 = v2.v2SealedRead(JSON.stringify(sealedDoc));
+  const inside = s1.sealed ? S.openSealed(teamKey, s1.sealed) : null;
+  const sState = inside ? await v2.v2SigState(JSON.parse(inside), keys) : "nothing opened";
+  ok(s1.problems.length === 0 && !!s1.sealed && s1.sealed.kind === v2.V2_SEALED_KIND && inside !== null
+     && Buffer.from(inside, "utf8").equals(Buffer.from(signedText, "utf8")) && sState === v2.V2_SIG_VALID,
+     "88f a signed catalog sealed by the shell reads as an envelope with no problem, opens to the same "
+     + Buffer.byteLength(signedText) + " bytes, and its signature still verifies: " + JSON.stringify(s1.problems) + ", " + sState);
+
+  const sBroken = v2.v2SealedRead(Object.assign({}, sealedDoc,
+    { team: "t-XYZ", epoch: 0, nonce: sealedDoc.nonce.slice(2), ct: "zz" }));
+  const sShort = v2.v2SealedRead(Object.assign({}, sealedDoc, { ct: "00".repeat(15) }));
+  const named = r => r.problems.map(p => p.split(":")[0]).join();
+  ok(sBroken.sealed === null && named(sBroken) === "sealed team,sealed epoch,sealed nonce,sealed ct"
+     && sShort.sealed === null && named(sShort) === "sealed ct",
+     "88g THE CONTROL: a bad team, epoch, nonce and ct are no envelope with a line naming each, and a ct shorter than its"
+     + " tag is one line: " + named(sBroken) + "; " + named(sShort));
+
+  const sAbsent = [null, "", "{not json", "[]", JSON.stringify(teamSigned), JSON.stringify(signed)];
+  const sNull = sAbsent.map(x => v2.v2SealedRead(x));
+  ok(sNull.every(r => r.sealed === null) && sNull.filter(r => r.problems.length === 1).length === sAbsent.length - 2,
+     "88h " + sAbsent.length + " absent, empty or foreign files, a team file and a plain catalog among them, read as no"
+     + " envelope without a throw, and each but the two absent says one line: " + sNull.map(r => r.problems.length).join(","));
+
+  /* ---- the wraps in the team file, board 834 step 12 S3: the shapes the reader keeps, not the crypto -- */
+
+  const hexOf = (seed, n) => crypto.createHash("sha512").update(seed).digest("hex").slice(0, n);
+  const wrapOf = seed => ({ epoch: 1, enc: hexOf("enc " + seed, 64), ct: hexOf("ct " + seed, 96) });
+  const recovery = { epoch: 1, kdf: "scrypt", N: 32768, r: 8, p: 1, cipher: "aes-256-gcm",
+    salt: hexOf("salt", 32), iv: hexOf("iv", 24), ct: hexOf("recovery", 96) };
+  const wrappedDoc = Object.assign({}, teamDoc, { sealed: true, recovery: recovery,
+    roster: [{ desk: deskOf(1, "Ala"), wrap: wrapOf(1) }, { desk: deskOf(2), name: "Front desk", wrap: wrapOf(2) }] });
+  const wrappedSigned = attachSig(v2, wrappedDoc, v2.V2_SIG_ALG, keyId, pair.privateKey);
+  const t6 = v2.v2TeamRead(JSON.stringify(wrappedSigned));
+  const t6State = t6.team ? await v2.v2TeamSigState(t6.team) : "no team";
+  ok(t6.team && t6.problems.length === 0 && t6.team.roster.length === 2
+     && JSON.stringify(t6.team.roster.map(e => e.wrap)) === JSON.stringify([wrapOf(1), wrapOf(2)])
+     && JSON.stringify(t6.team.recovery) === JSON.stringify(recovery) && t6State === v2.V2_SIG_VALID,
+     "88i a sealed team file whose desks carry their wraps and whose lead keeps a recovery copy reads whole, both kept as"
+     + " written, and verifies: " + JSON.stringify(t6.problems) + ", " + t6State);
+
+  const badWraps = [Object.assign(wrapOf(3), { enc: hexOf("short", 63) }), Object.assign(wrapOf(4), { ct: hexOf("short", 94) }),
+    Object.assign(wrapOf(5), { epoch: 2 }), "a wrap", null];
+  const t7 = v2.v2TeamRead(Object.assign({}, wrappedDoc,
+    { roster: badWraps.map((w, i) => ({ desk: deskOf(10 + i), wrap: w })).concat([{ desk: deskOf(20), wrap: wrapOf(20) }]) }));
+  ok(t7.team && t7.team.roster.length === 6 && t7.team.roster.filter(e => "wrap" in e).length === 1
+     && t7.team.roster[5].wrap.enc === wrapOf(20).enc && t7.problems.length === badWraps.length
+     && t7.problems.every(p => /wrap/.test(p)),
+     "88j THE CONTROL: a wrap with a short enc or ct, of another epoch, or not an object is dropped with a line and its desk"
+     + " stands, and the good neighbour keeps its own (" + t7.problems.length + " lines, "
+     + (t7.team ? t7.team.roster.filter(e => "wrap" in e).length : 0) + " wrap kept)");
+
+  const badRecoveries = [{ kdf: "pbkdf2" }, { epoch: 2 }, { N: 0 }, { cipher: "aes-128-gcm" }, { salt: hexOf("s", 30) },
+    { iv: hexOf("i", 22) }, { ct: hexOf("c", 64) }].map(over => Object.assign({}, recovery, over)).concat(["a recovery"]);
+  const t8 = badRecoveries.map(rc => v2.v2TeamRead(Object.assign({}, wrappedDoc, { recovery: rc })));
+  ok(t8.every(r => r.team && !("recovery" in r.team) && r.team.roster.length === 2 && r.problems.length === 1
+     && /recovery/.test(r.problems[0])),
+     "88k THE CONTROL: a recovery copy of another kdf, epoch, cost, cipher, salt, iv or ct length, or not an object, is"
+     + " dropped with one line and the team stands: " + t8.map(r => r.problems.length).join(","));
 
   console.log(fails ? "RESULT: FAIL, " + fails + " of " + n + " failed"
                     : "RESULT: OK, " + n + " checks");

@@ -137,11 +137,11 @@ function eChooseCatalogFolder(title){
 }
 /* One file out of that folder, by name. {name,text} or null; an empty text is a file that would
    not read, which is the caller's to speak about. */
-function eReadCatalogFile(name){
+function eReadCatalogFile(name,desk){
   const h=eHost();
   if(!h || typeof h.readCatalogFile!=="function") return Promise.resolve(null);
   try{
-    return Promise.resolve(h.readCatalogFile(String(name||"")))
+    return Promise.resolve(desk?h.readCatalogFile(String(name||""),String(desk)):h.readCatalogFile(String(name||"")))
       .then(v=>(v&&typeof v==="object")?{name:String(v.name||""),text:String(v.text||"")}:null)
       .catch(()=>null);
   }catch(e){ return Promise.resolve(null); }
@@ -173,21 +173,23 @@ function ePickCatalogFile(title,label){
 }
 /* Export's save dialog, the host's for the reason Import's is: the engine calls no OS API, and the
    host writes the bytes and says whether they landed. `build` returns the text, once a file is
-   chosen. {name,ok} for a file chosen, null for a dialog closed. */
+   chosen, and `from` names the catalog it was made from, {id,sha}, which the host seals it for where that
+   catalog came sealed. {name,ok,sealed} for a file chosen, null for a dialog closed. */
 function eHasCatalogSaver(){
   const h=eHost();
   return !!h && typeof h.chooseCatalogSave==="function" && typeof h.writeCatalogSave==="function";
 }
-function eSaveCatalogFile(title,name,label,build){
+function eSaveCatalogFile(title,name,label,build,from){
   if(!eHasCatalogSaver()) return Promise.resolve(null);
-  const failed=n=>({name:String(n||name||""),ok:false});
+  const failed=n=>({name:String(n||name||""),ok:false,sealed:false});
+  const of=(from&&typeof from==="object")?{id:String(from.id||""),sha:String(from.sha||"")}:null;
   try{
     return Promise.resolve(eHost().chooseCatalogSave(String(title||""),String(name||""),String(label||"")))
       .then(v=>{
         if(!(v&&typeof v==="object"&&v.name)) return null;
         const chosen=String(v.name);
-        return Promise.resolve(eHost().writeCatalogSave(String(build()||"")))
-          .then(w=>(w&&typeof w==="object")?{name:String(w.name||chosen),ok:w.ok===true}:failed(chosen));
+        return Promise.resolve(eHost().writeCatalogSave(String(build()||""),of))
+          .then(w=>(w&&typeof w==="object")?{name:String(w.name||chosen),ok:w.ok===true,sealed:w.sealed===true}:failed(chosen));
       })
       .catch(()=>failed());
   }catch(e){ return Promise.resolve(failed()); }
@@ -212,6 +214,28 @@ function eWriteBranch(stem,text){
   try{
     return Promise.resolve(eHost().writeBranch(String(stem||""),String(text||"")))
       .then(v=>({ok:!!(v&&v.ok)}))
+      .catch(()=>({ok:false}));
+  }catch(e){ return Promise.resolve({ok:false}); }
+}
+/* The shared catalog edited directly, both halves through the host and neither in a browser: the read answers
+   {text,sha,free,base} or null, the write {ok} or why not, {changed}, {busy}, {taken} or {refused}. */
+function eHasShared(){
+  const h=eHost();
+  return !!h && typeof h.sharedRead==="function" && typeof h.sharedWrite==="function";
+}
+function eSharedRead(name,pin){
+  if(!eHasShared()) return Promise.resolve(null);
+  try{
+    return Promise.resolve(eHost().sharedRead(String(name||""),String(pin||"")))
+      .then(v=>(v&&typeof v==="object")?{text:String(v.text||""),sha:String(v.sha||""),free:v.free===true,base:String(v.base||"")}:null)
+      .catch(()=>null);
+  }catch(e){ return Promise.resolve(null); }
+}
+function eSharedWrite(name,text,sha,create){
+  if(!eHasShared()) return Promise.resolve({ok:false});
+  try{
+    return Promise.resolve(eHost().sharedWrite(String(name||""),String(text||""),String(sha||""),create===true))
+      .then(v=>(v&&typeof v==="object")?{ok:v.ok===true,changed:v.changed===true,busy:v.busy===true,taken:v.taken===true,refused:v.refused===true}:{ok:false})
       .catch(()=>({ok:false}));
   }catch(e){ return Promise.resolve({ok:false}); }
 }
@@ -305,6 +329,9 @@ export {
   eBranchIdentity,
   eHasBranch,
   eWriteBranch,
+  eHasShared,
+  eSharedRead,
+  eSharedWrite,
   E_CATALOG_FOLDER_KEY,
   E_CATALOG_SCRIPT,
   eCatalogFile,

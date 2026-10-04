@@ -279,7 +279,7 @@ function nsDel(name){ lsDel(nsKey(name)); }
 /* THE PERSONAL LAYER ORBITS ITS CATALOG: what a person makes over a catalog is kept under that
    catalog's own id and shows only while it is loaded, and what is made on the empty desk is loose,
    under this build's namespace. LAYER_KEYS is the whole layer; the rest of a namespace is the desk's. */
-const LAYER_KEYS=["Pack","Stats","Days","CatOrder","IntentOrder","IntentsAside","LinksAside","RequestsAside","Exported","LooseId"];
+const LAYER_KEYS=["Pack","Stats","Days","CatOrder","IntentOrder","IntentsAside","LinksAside","RequestsAside","Exported","LooseId","Shared","SharedOwn","SharedFile"];
 function layerNsOf(c){
   const id=c ? String(c.id||"").trim() : "";
   return id ? eNsFor(id) : E_NS;

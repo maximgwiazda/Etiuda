@@ -3,7 +3,7 @@ import { markCut } from "./cut-text.js";
 import { $ } from "./dom.js";
 import { esc } from "./esc.js";
 import { cutLeaves, dismissNode, mgReduceMotion, M_MS } from "./motion.js";
-import { ICON_LINT_WARNING } from "./icons.js";
+import { ICON_LINT_WARNING, ICON_STAMP } from "./icons.js";
 
 /* ---- UI LANGUAGE ------------------------------------------------------------------------
    The CHROME's language, not the CONTENT's: the EN|PL switch decides what is copied to
@@ -412,6 +412,39 @@ UI_STRINGS.pl={
   "Your own cards and edits are kept.":"Własne karty i zmiany zostają.",
   "Load the update":"Wczytaj aktualizację",
   "You have {V}.":"Wczytane: {V}.",
+  "Note for this edition":"Notatka do wydania",
+  "{N} changed":"{N} zmieniona",
+  "few␟{N} changed":"{N} zmienione",
+  "many␟{N} changed":"{N} zmienionych",
+  "{N} new":"{N} nowa",
+  "few␟{N} new":"{N} nowe",
+  "many␟{N} new":"{N} nowych",
+  "{N} restored":"{N} przywrócona",
+  "few␟{N} restored":"{N} przywrócone",
+  "many␟{N} restored":"{N} przywróconych",
+  "{N} retired":"{N} wycofana",
+  "few␟{N} retired":"{N} wycofane",
+  "many␟{N} retired":"{N} wycofanych",
+  "{N} removed":"{N} usunięta",
+  "few␟{N} removed":"{N} usunięte",
+  "many␟{N} removed":"{N} usuniętych",
+  "changed":"zmiana",
+  "new":"nowa",
+  "restored":"przywrócona",
+  "retired":"wycofana",
+  "removed":"usunięta",
+  "you have your own version":"masz własną wersję",
+  "the team's new text":"nowa treść zespołu",
+  "It comes back with your star and your edits.":"Wróci z Twoją gwiazdką i zmianami.",
+  "and {N} more":"i {N} więcej",
+  "Show the differences":"Pokaż różnice",
+  "What is new in edition {V}":"Co nowego w wydaniu {V}",
+  "Was":"Było",
+  "Becomes":"Będzie",
+  "Your version":"Twoja wersja",
+  "Text":"Treść",
+  "Take the team's new text":"Weź nową treść zespołu",
+  "Keep mine":"Zostaw moją",
   "Load catalog?":"Wczytać katalog?",
   "Replace catalog?":"Zastąpić katalog?",
   "Located as {FILE}.":"Znaleziony jako {FILE}.",
@@ -887,8 +920,127 @@ UI_STRINGS.pl={
   "Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with the button above.":"Etiuda proponuje najnowszy katalog z {FOLDER}; katalog z innego miejsca można wczytać przyciskiem powyżej.",
   "The catalog you load stays in this browser, ready whenever you come back.":"Wczytany katalog zostaje w tej przeglądarce i czeka na powrót.",
   "Load catalog…":"Wczytaj katalog…",
+  "Earlier versions…":"Historia wersji…",
+  "Earlier versions":"Historia wersji",
+  "Earlier versions of each catalog this desk reads or writes stay here for 30 days.":"Historia każdego katalogu, który to stanowisko odczytuje lub zapisuje, zostaje tu przez 30 dni.",
+  "This desk's own file":"Własny plik tego stanowiska",
+  "Edit the shared catalog directly":"Edytuj wspólny katalog bezpośrednio",
+  "For a team without Studio: changes go into the catalog in the catalog folder itself. A catalog the team lead signed is never changed.":"Dla zespołu bez Studio: zmiany trafiają wprost do katalogu w folderze katalogów. Katalog podpisany przez lidera zespołu nigdy nie jest zmieniany.",
+  "Each change goes into the shared catalog, and one a colleague made first is kept":"Każda zmiana trafia do wspólnego katalogu, a zmiana współpracownika wprowadzona wcześniej zostaje",
+  "Each change stays in this desk's own file":"Każda zmiana zostaje we własnym pliku tego stanowiska",
+  "Changes go into the shared catalog":"Zmiany trafiają do wspólnego katalogu",
+  "Changes stay in this desk's own file":"Zmiany zostają we własnym pliku tego stanowiska",
+  "The shared catalog had changed the same text, so your version is kept in this desk's own file.":"Ten sam tekst zmienił się już we wspólnym katalogu, więc ta wersja zostaje we własnym pliku tego stanowiska.",
+  "The shared catalog could not be written just now, so this change is kept in this desk's own file.":"Nie udało się teraz zapisać wspólnego katalogu, więc ta zmiana zostaje we własnym pliku tego stanowiska.",
+  "Current":"Aktualna",
+  "Written by this desk":"Zapisana na tym stanowisku",
+  "Open this version":"Otwórz tę wersję",
+  "Put back":"Przywróć",
+  "Put this version back in the catalog folder, in place of the file there now":"Przywraca tę wersję do folderu katalogów w miejsce obecnego pliku",
+  "{FILE} as it was on {WHEN}, kept on this desk.":"{FILE} w wersji z {WHEN}, zachowanej na tym stanowisku.",
+  "{FILE} could not be put back in the catalog folder.":"Nie udało się przywrócić pliku {FILE} do folderu katalogów.",
+  "Version put back":"Przywrócono wersję",
   "The catalog could not be loaded:":"Nie udało się wczytać katalogu:",
-  "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.":"Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze."
+  "{FILE} is sealed for its team":"{FILE} jest zaszyfrowany dla swojego zespołu",
+  "Once the team's lead lets this desk in, the catalog opens here by itself.":"Gdy lider zespołu wpuści to stanowisko, katalog otworzy się tutaj sam.",
+  "Asks as {NAME}, the name in Settings.":"Prośba pójdzie jako {NAME}, pod nazwą z Ustawień.",
+  "this desk":"to stanowisko",
+  "Ask to join":"Poproś o dołączenie",
+  "Load another catalog":"Wczytaj inny katalog",
+  "Waiting for the lead to open the request":"Prośba czeka, aż lider ją otworzy",
+  "The code to read to them appears here as soon as they do.":"Gdy to zrobi, pojawi się tu kod do podania.",
+  "Read this code to the team's lead":"Podaj ten kod liderowi zespołu",
+  "They type it in Studio, and the catalog opens here once they let this desk in.":"Lider wpisze go w Studio, a po wpuszczeniu stanowiska katalog otworzy się tutaj.",
+  "{NAME}, asked at {TIME}":"{NAME}, prośba z {TIME}",
+  "Cancel the request":"Wycofaj prośbę",
+  "The lead turned the request down":"Lider zespołu odrzucił prośbę",
+  "Asking again sends a new request.":"Ponowna prośba trafi do lidera jako nowa.",
+  "Ask again":"Poproś ponownie",
+  "Hide":"Ukryj",
+  "{FILE} was not saved: the team's catalog leaves this desk only sealed, and this desk cannot seal for the team now.":"Nie zapisano pliku {FILE}: katalog zespołu opuszcza to stanowisko tylko zaszyfrowany, a to stanowisko nie może teraz szyfrować dla zespołu.",
+  "Exported {FILE}, sealed for its team, with {MACROS} in {CARDS}":"Wyeksportowano {FILE}, zaszyfrowany dla zespołu: {MACROS}, {CARDS}",
+  "You are on the team":"To stanowisko należy do zespołu",
+  "Compare this key with the Signing key in the lead's Studio Settings. Every later edition is checked against it.":"Ten klucz powinien być taki sam jak Klucz podpisu w Ustawieniach Studia lidera. Według niego sprawdzane jest każde kolejne wydanie.",
+  "It matches":"Zgadza się",
+  "It does not match":"Nie zgadza się",
+  "Team lead's key":"Klucz lidera zespołu",
+  "Forget this lead":"Zapomnij tego lidera",
+  "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.":"Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze.",
+  "Next replies":"Kolejne odpowiedzi",
+  "Commits the firm":"Zobowiązuje firmę",
+  "the catalog's":"z katalogu",
+  "yours":"własna",
+  "yours; the catalog's has changed":"własna; lista z katalogu się zmieniła",
+  "added":"dodana",
+  "Take it off the list":"Usuń z listy",
+  "Your list":"Własna lista",
+  "Replaces the catalog's on this desk, and travels in your exports.":"Zastępuje listę z katalogu na tym stanowisku i trafia do eksportów.",
+  "Back to the catalog's":"Wróć do listy z katalogu",
+  "The catalog's list":"Lista z katalogu",
+  "Change anything and this card follows your own list instead.":"Po każdej zmianie ta karta pójdzie za własną listą.",
+  "The catalog's list has changed since you made yours: {LIST}":"Lista z katalogu zmieniła się od utworzenia własnej: {LIST}",
+  "The catalog's list: {LIST}":"Lista z katalogu: {LIST}",
+  "Add a reply":"Dodaj odpowiedź",
+  "Find a card to add":"Znajdź kartę do dodania",
+  "a card's title":"tytuł karty",
+  "Yours, not the catalog's.":"Pieczątka własna, nie z katalogu.",
+  "The catalog does not stamp this card; your desk and your exports will.":"Katalog nie oznacza tej karty pieczątką; to stanowisko i jego eksporty tak.",
+  "The catalog stamps this card.":"Katalog oznacza tę kartę pieczątką.",
+  "You took the stamp off on this desk. Reset puts it back.":"Na tym stanowisku pieczątka jest zdjęta. Reset ją przywraca.",
+  "Next after":"Dalej po",
+  "learnt":"z praktyki",
+  "Sent after this card {N} times in four weeks":"Wysłana po tej karcie {N} razy w ciągu czterech tygodni",
+  "Next reply 1":"Następna odpowiedź 1",
+  "Next reply 2":"Następna odpowiedź 2",
+  "Next reply 3":"Następna odpowiedź 3",
+  "Next reply 4":"Następna odpowiedź 4",
+  "Copy the first reply offered after the one sent last":"Kopiuje pierwszą z odpowiedzi proponowanych po ostatnio wysłanej",
+  "Copy the second reply offered after the one sent last":"Kopiuje drugą z odpowiedzi proponowanych po ostatnio wysłanej",
+  "Copy the third reply offered after the one sent last":"Kopiuje trzecią z odpowiedzi proponowanych po ostatnio wysłanej",
+  "Copy the fourth reply offered after the one sent last":"Kopiuje czwartą z odpowiedzi proponowanych po ostatnio wysłanej",
+  "Show the lanes":"Pokaż ścieżkę rozmowy",
+  "Back to the cards":"Wróć do kart",
+  "This conversation":"Ta rozmowa",
+  "{KEY} back to the cards":"{KEY} wraca do kart",
+  "Each reply you send appears here, with what can follow it.":"Każda wysłana odpowiedź pojawi się tutaj razem z tym, co może po niej nastąpić.",
+  "Sent":"Wysłane",
+  "Now":"Teraz",
+  "then: {LIST}":"potem: {LIST}",
+  "Cards or lanes":"Karty albo ścieżka rozmowy",
+  "Switch between the cards and the lanes while nothing is being typed":"Przełącza między kartami a ścieżką rozmowy, gdy nic nie jest wpisywane",
+  "lanes":"ścieżka rozmowy",
+  "Add it to the list":"Dodaj do listy",
+  "Taken off the list":"Usunięto z listy",
+  "Fill in before copying":"Uzupełnij przed kopiowaniem",
+  "from this conversation":"z tej rozmowy",
+  "may be skipped":"można pominąć",
+  "from the clipboard":"ze schowka",
+  "paste or type":"wklej albo wpisz",
+  "What is filled in stays with this conversation, for every reply that needs it.":"To, co wpisane, zostaje w tej rozmowie dla każdej odpowiedzi, która tego potrzebuje.",
+  "Copy":"Kopiuj",
+  "Does not fit the field: {LABEL}":"Nie pasuje do pola: {LABEL}",
+  "The reply does not go without: {LABEL}":"Bez tego odpowiedź nie wyjdzie: {LABEL}",
+  "The clipboard could not be read just now.":"Schowka nie udało się teraz odczytać.",
+  "Taken from the clipboard.":"Wzięte ze schowka.",
+  "Nothing on the clipboard fits this field. It holds: {TEXT}":"Nic ze schowka nie pasuje do tego pola. Jest w nim: {TEXT}",
+  "The clipboard is empty.":"Schowek jest pusty.",
+  "Ctrl+V pastes into the field here.":"Tutaj do pola wkleja się przez Ctrl+V.",
+  "Enter copies once the field is filled. Esc goes back to the list.":"Enter kopiuje, gdy pole jest wypełnione. Esc wraca do listy.",
+  "{NAME}'s desk":"Stanowisko: {NAME}",
+  "A colleague's desk":"Stanowisko współpracownika",
+  "Signed by {DESK}, key {KEY}. Only that desk can change this file; anyone with the folder can read it.":"Podpisane kluczem {KEY} ({DESK}). Zmienić ten plik może tylko to stanowisko; odczytać każdy, kto ma dostęp do folderu.",
+  "Look":"Zobacz",
+  "Work from it":"Pracuj na nim",
+  "A catalog of its own":"Osobny katalog",
+  "Your edits are in the folder as {DESK}":"Twoje zmiany są w folderze ({DESK})",
+  "Your own edits on it wait here until you load it again":"Twoje zmiany w nim czekają tutaj, aż wczytasz go ponownie",
+  "In the team's edition":"W wydaniu zespołu",
+  "At {DESK}":"{DESK}",
+  "Back to the Library":"Wróć do Biblioteki",
+  "Work from {DESK}":"Pracuj na tym pliku",
+  "Take the text from {DESK} into mine":"Weź tę treść do swoich zmian",
+  "in your edits":"w Twoich zmianach",
+  "That desk's cards match the team's edition.":"Karty na tym stanowisku są takie same jak w wydaniu zespołu."
 };
 // Is this a language this build carries? The table itself stays private to this file.
 function uiLangKnown(l){ return !!(l && UI_STRINGS[l]); }
@@ -958,7 +1110,14 @@ function placeToast(el){
   const lift=(r && r.height && r.top<innerHeight) ? Math.round(innerHeight-r.top) : 0;
   el.style.bottom=lift ? (lift+8)+"px" : "";
 }
-function toast(m, ms, refusal){
+/* What a toast holds, given its words already translated: null where they are plain text. A copy of a
+   card that commits the firm says so beside them, in the same words on every card. */
+function toastHtml(m, refusal, stamped){
+  if(refusal) return ICON_LINT_WARNING+'<span>'+esc(m)+'</span>';
+  if(stamped) return '<span>'+esc(m)+'</span><span class="t-stamp">'+ICON_STAMP+esc(t("Commits the firm"))+'</span>';
+  return null;
+}
+function toast(m, ms, refusal, stamped){
   toastSerial++;
   /* Every message the app speaks passes through here, so this is the one place a toast needs
      translating - not fifty call sites. */
@@ -967,8 +1126,9 @@ function toast(m, ms, refusal){
   const put=()=>{
     el.classList.remove("swap");
     el.classList.toggle("refusal",!!refusal);
-    if(refusal) el.innerHTML=ICON_LINT_WARNING+'<span>'+esc(m)+'</span>';
-    else el.textContent=m;
+    el.classList.toggle("stamped",!refusal && !!stamped);
+    const html=toastHtml(m, refusal, stamped);
+    if(html==null) el.textContent=m; else el.innerHTML=html;
     placeToast(el); markCut(el); el.classList.add("show");
   };
   /* A TOAST ARRIVING OVER ONE THAT SHOWS dips out on the dismiss tier and comes back with its new
@@ -1107,6 +1267,7 @@ export {
   translateTree,
   translateChrome,
   toast,
+  toastHtml,
   toastRefusal,
   TOAST_MS,
   TOAST_HAND_MS,

@@ -30,6 +30,8 @@ function cardTextUi(m,field){
   return cardText(m,field,uiLang()) || cardText(m,field,CONTENT_LANGS[0]);
 }
 function cardTitle(m){ return cardTextUi(m,"t"); }
+// A catalog writes the flag true, an override 1 or 0: the stamp is on for either truth.
+function cardCommits(m){ return !!(m && +m.commits); }
 /* A note is guidance for the AGENT, so it follows the interface language and never the
    language of the macro being sent: a note must not change because a chat turned Polish.
    Falls back to English, since guidance in the other language beats a card that quietly
@@ -99,6 +101,8 @@ function overrideAgainstBase(base, full){
   if(!intentsEqualStored(full.intents, base.intents)) o.intents=full.intents;
   // Whole list replaces, and only a caller that holds one says anything about it.
   if("next" in full && !nextEqualStored(full.next, base.next)) o.next=Array.isArray(full.next)?full.next:[];
+  // The catalog's ids when the list was replaced (card-chain.js), kept only beside a list.
+  if(o.next && Array.isArray(full.nextWas)) o.nextWas=full.nextWas.map(String);
   return o;
 }
 /* THE INDICES COUNT THE BLOCKS OF THE LANGUAGE ON SCREEN (cardLang), which is what a drag hands
@@ -150,6 +154,7 @@ export {
   baseCard,
   cardText,
   cardTitle,
+  cardCommits,
   noteFor,
   cardLang,
   parts,

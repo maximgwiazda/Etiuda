@@ -23,16 +23,22 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/desk-ipc.mjs, legs 77a to 82h          no fixtures, the desk's own signed file under desks/<branch id>/: key pair, name, retry of a held write, a replaced pair, the edition kept past a removal, the category fields, a catalog taken while the identity is asked (78k), a catalog made from nothing on the empty desk (82)
     node tests/desk-growth.mjs                        no fixtures, a desk of 300 days: a count or a resize sends only what changed
     node tests/shell-office.mjs                       no fixtures, the shell against a busy file, a refused catalog, a folder that does not answer
+    node tests/hpke.mjs                               no fixtures, the shell's HPKE held to RFC 9180 appendix A.1.1 byte for byte, its refusals, and a one-byte label mutation that must miss; then the sealed envelope, AES-256-GCM under the team key, and what must not open it; then the team key wrapped for one desk, bound to its team, epoch and desk id
+    node tests/team-desk.mjs                          no fixtures, the desk opens a sealed catalog: the lead's key pinned from the ring or at the first admission, a team file under another key trusted for nothing unless a chain of handovers the pinned key began names it, which then moves the pin, a missing, self-signed, foreign, misdirected or altered handover moving nothing, every epoch's key kept, and an opened catalog judged as its unsealed twin, another catalog's envelope and an older edition's included; the desk's own file of such a catalog sealed under the newest key it keeps for the one team whose envelope held the edition it grew from, where that team's file in the folder written to lists the catalog; a second team's catalog of the same id, a planted or fresh team file, an edition held while the folder moves to another team's share, or one edition sealed for two teams moving nothing, and the file held where no such team or key can be had, or where that team file leaves the desk off its roster at an epoch newer than any key it keeps; an export made from such a catalog written sealed for the same team, refused where it cannot be, and any other export as the page sent it
+    node tests/team-join.mjs                          no fixtures, a desk asks to join the team of a sealed catalog it cannot open: the join code's six digits over the team, both desk keys, the lead's key and both nonces; the request genuine under its own prefix and no desk file; nothing written until the agent asks; the nonce revealed only against the first opening for its commitment, the code reaching the page as the opening lands; a refusal, a cancel and a restart; admission opening the catalog; and a first admission refused under any lead but the one the desk compared codes with, and under every lead while the request waits or stands refused, the team file read again once it is cancelled; the lead a desk pinned named by the key Studio's Settings show, made from its public half and never its keyId, until the agent has seen it; a forgotten lead's pin and keys gone and its team taking no first admission until a request is answered; and the page showing that key in four groups and sending the agent's answer
     node tests/sbom.mjs                               no fixtures, the software bill of materials: the tool, and the release leaving one beside the installer
     node tests/pick.mjs                               no fixtures, the picker over the chat: the desk's answers, the preload and the shell, electron stubbed
+    node tests/fields.mjs                             no fixtures, fill-in fields: the format's refusals, what of a value or a clipboard fits, the fill, the question asked at a copy, the picker's answers, and the lint
     node tests/catalog-trust.mjs                      no fixtures, a catalog's signature as the desk reads it, shell stubbed
     node tests/catalog-trust-desk.mjs                 no fixtures, the desk's own load path saying that signature, one process per launch
+    node tests/catalog-trust-desk.mjs, legs 73a to 73e no fixtures, an empty desk that made a catalog from nothing offered the lead's import of it by its lineage
     node tests/token-canary.mjs                       no fixtures, TOKEN_CANARY held to fill()
     node tests/test.js                               sections 1 to 3 without fixtures
     ETIUDA_FIXTURES=<folder> node tests/test.js      all five sections
     ETIUDA_FIXTURES=<folder> node tests/smoke.js     the acceptance run, Chrome
     ETIUDA_FIXTURES=<folder> node tests/smoke.js firefox
     ETIUDA_FIXTURES=<folder> node tests/motion.js    the motion legs alone, at 100, 125 and 150 per cent, which smoke also runs
+    ETIUDA_FIXTURES=<folder> node tests/badge-room.js  no line of a macro's text runs under its STEP or EN badge, both languages, six widths (br1 to br4), Chrome, which smoke also runs
     node tests/csp.js                                the policy, two unpackaged Electrons
     node tests/desk.js                               the desk in a file, an unpackaged Electron
     node tests/dot-field-desk.js                     the dot field in the desk's own window: where it stands and that it stands still, an unpackaged Electron
@@ -43,7 +49,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
     ETIUDA_FIXTURES=<folder> node tests/reinstall.js     install, use, uninstall, install again
 
-`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `module-calls.mjs`, `desk-ipc.mjs`, `desk-growth.mjs`, `shell-office.mjs`, `pick.mjs`, `catalog-trust.mjs`, `catalog-trust-desk.mjs`, `token-canary.mjs`, `test.js`, `i18n-scan.js`,
+`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `module-calls.mjs`, `desk-ipc.mjs`, `desk-growth.mjs`, `shell-office.mjs`, `hpke.mjs`, `team-desk.mjs`, `team-join.mjs`, `pick.mjs`, `fields.mjs`, `catalog-trust.mjs`, `catalog-trust-desk.mjs`, `token-canary.mjs`, `test.js`, `i18n-scan.js`,
 `pl-diacritics.js`, `css-layers.js` and `motion-tokens.js`, none of which needs a fixture or a browser. `npm run smoke` needs both.
 
 `css-dead.js`, `ghosts.js` and `storage-keys.js` are reports rather than gates: they print and
@@ -550,6 +556,22 @@ died does not wedge the harness until somebody deletes a file by hand. Its one h
 down where it lives: a recycled pid reads as a live holder, and the cost of that is a refusal
 nobody needed. Cases 23 to 23f prove all of it, with a real process as the holder rather than a
 lock file written by hand.
+
+### The window wall
+
+A test opens an Electron window only when its command carries `ETIUDA_WINDOWS` set to today's
+date, the form `ETIUDA_PUSH` takes for a push: `ETIUDA_WINDOWS=$(date +%F) npm run desk`. A run
+that opens windows is argued before it starts, so a chain or a search of `tests/` that reaches a
+window gate meets a refusal, exit 78, rather than windows. The wall stands in two places: at the
+top of every gate with a launch site (`E.windowWall`, before it builds, waits or leases anything)
+and inside `E.shellLaunchRefusal`, after every other refusal, so a launch that slips past the first
+still meets it. A refusal prints `#refused window-wall`, and `tools/gate-run.mjs` records the step
+with `refused` set and sums the run up as refused rather than failed. `npm test` and
+`npm run split-guard` open no window and need no variable.
+
+Cases 21k to 21l and 22c to 22e prove it with the stand-in: refused without the variable and with
+yesterday's date, the day local rather than UTC, every launch-site file calling the wall itself,
+the fast chains free of launch sites, and the variable named only in `tests/engine.js`.
 
 ## The shell, which no browser run can reach
 

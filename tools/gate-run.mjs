@@ -48,6 +48,9 @@
  *     fingerprint of the tree the gate ran over, and whether it moved while the gate ran.
  *     A step whose tree moved has no verdict and the chain stops. Board item 645, and the
  *     long note is beside the code.
+ *   - `unmerged`, beside them: the number of paths in conflict in the index when the step ended,
+ *     0 for every run outside a merge in progress and for a lab with no git. Where it is not 0,
+ *     `treeHash` is the working tree's bytes, each path once, and no commit holds them yet.
  *   - `gateExit`: the gate's own exit code, which is the same number as `exit` except where
  *     the tree moved, in which case `exit` and `counts.exitCode` are NO_VERDICT and this is
  *     what the gate itself said before its verdict was withdrawn.
@@ -55,6 +58,9 @@
  *     not of the gate: the number of keys declared twice with DIFFERENT values, where the later
  *     was kept. Board item 518. Nought is the ordinary case and it is written every time, so that
  *     its absence one day is legible rather than silent.
+ *   - `refused`, beside the counts: the wall a gate named on a `#refused <wall>` line of its own and an
+ *     exit of 78, `window-wall` where tests/engine.js refused a window, and empty otherwise. The run is then
+ *     summed up as refused, not failed; the exit stays the gate's own.
  * A gate's exit code is the verdict. The counts are how a green that fell is noticed.
  *
  * THIS FILE IS GATED BY tests/result-line.mjs, which is a control rather than a description:
@@ -192,23 +198,40 @@ function walkInto(dir, prefix, out) {
   }
 }
 
-/* The file list and the method that produced it, never one without the other. */
+/* The file list and the method that produced it, never one without the other.
+ *
+ * AN UNMERGED INDEX LISTS A CONFLICTED PATH ONCE PER STAGE. Mid-merge, `git ls-files -c` names
+ * each conflicted path up to three times, and until 2026-10-04 each name was hashed as a file of
+ * its own, so a gate run before the resolution was staged recorded a hash that matched no commit,
+ * even where the bytes on disk were exactly the ones committed next (the round-two engine merge's
+ * 52 records). Each path is now taken once, which changes nothing for an index with no conflict,
+ * and the number of unmerged paths goes into the record as `unmerged`, so a reader knows the run
+ * was over a merge in progress: the hash is of the working tree's bytes, not of anything staged. */
 function treeFiles() {
   let listed = "";
   try {
     listed = execFileSync("git", ["ls-files", "-z", "-c", "-o", "--exclude-standard"],
       { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 });
   } catch (e) { listed = ""; }
-  const names = listed.split("\0").filter(Boolean);
-  if (names.length) return { how: "git ls-files -co --exclude-standard", files: names.sort() };
+  const names = [...new Set(listed.split("\0").filter(Boolean))];
+  if (names.length) return { how: "git ls-files -co --exclude-standard", files: names.sort(), unmerged: unmergedPaths() };
   const out = [];
   walkInto(ROOT, "", out);
-  return { how: "walk skipping .git and node_modules", files: out.sort() };
+  return { how: "walk skipping .git and node_modules", files: out.sort(), unmerged: 0 };
+}
+
+/* `git ls-files -u` prints `<mode> <object> <stage>\t<path>` per stage; the paths, counted once. */
+function unmergedPaths() {
+  let listed = "";
+  try {
+    listed = execFileSync("git", ["ls-files", "-z", "-u"], { cwd: ROOT, encoding: "utf8", maxBuffer: 1 << 28 });
+  } catch (e) { return 0; }
+  return new Set(listed.split("\0").filter(Boolean).map(l => l.slice(l.indexOf("\t") + 1))).size;
 }
 
 /* A digest per file and one over the lot. The per-file map is what names the movers. */
 function fingerprint() {
-  const { how, files } = treeFiles();
+  const { how, files, unmerged } = treeFiles();
   const per = new Map();
   const whole = crypto.createHash("sha256");
   let bytes = 0;
@@ -222,7 +245,7 @@ function fingerprint() {
     per.set(f, d);
     whole.update(f); whole.update("\0"); whole.update(d); whole.update("\0");
   }
-  return { how, hash: whole.digest("hex").slice(0, 16), count: files.length, bytes, per };
+  return { how, hash: whole.digest("hex").slice(0, 16), count: files.length, bytes, per, unmerged };
 }
 
 function movedFiles(before, after) {
@@ -307,7 +330,7 @@ function runStep(step) {
   });
 }
 
-let worst = 0, written = 0, treeMoved = false;
+let worst = 0, written = 0, treeMoved = false, refusedAt = null;
 /* The tree as it stood before the first gate. Every step is judged against the step before it,
    so the record says WHICH gate the tree moved under and not merely that it moved. */
 let before = fingerprint();
@@ -323,6 +346,11 @@ for (const step of steps) {
      goes beside it as `gateExit`. A reader reads `counts`, so this is the only place the
      withdrawal can be made to stick. */
   const verdict = moved.length ? NO_VERDICT : res.exit;
+  /* A gate that refuses by a named wall says so on a line of its own, `#refused <wall>`, and the
+     record carries the name, empty for every other run, so a refusal never reads as a failure.
+     Taken only with the gate's own exit 78, so a gate that echoes a child's marker and passes is
+     not recorded as refused. */
+  const refused = res.exit === NO_VERDICT ? (/^#refused ([a-z][a-z0-9-]*)\s*$/m.exec(res.out) || [])[1] || "" : "";
   const { counts, from, clashed } = countsOf(res.out, verdict);
   if (clashed.length) console.log("  clash: " + clashed.length + " key(s) declared twice with"
     + " different values, the later kept: " + clashed.join(", "));
@@ -335,10 +363,12 @@ for (const step of steps) {
     counts: counts,
     countsFrom: from,
     clash: clashed.length,
+    refused: refused,
     treeHash: after.hash,
     treeFiles: after.count,
     treeHow: after.how,
     treeChanged: moved.length,
+    unmerged: after.unmerged,
     wallMs: res.wallMs,
     commit: COMMIT,
     dirty: DIRTY,
@@ -348,7 +378,9 @@ for (const step of steps) {
   fs.writeFileSync(file, JSON.stringify(line) + "\n", "utf8");
   written++;
   console.log("  gate-run: " + path.basename(file) + " " + JSON.stringify(line.counts)
-              + " exit " + line.exit + " in " + line.wallMs + " ms");
+              + " exit " + line.exit + (refused ? " REFUSED by the " + refused : "") + " in " + line.wallMs + " ms");
+  if (line.unmerged) console.log("  note: run over an UNMERGED index (" + line.unmerged + " path(s) in conflict), so treeHash is"
+    + " the working tree's bytes, each path once, and no commit holds them until the resolution is committed");
   if (moved.length) {
     console.log("  FAIL the tree moved under " + line.gate + ", so this run has no verdict: "
                 + moved.length + " file(s) changed while it ran");
@@ -366,13 +398,15 @@ for (const step of steps) {
     break;
   }
   before = after;
-  if (res.exit !== 0) { worst = res.exit; break; }   /* && semantics: the chain stops */
+  if (res.exit !== 0) { worst = res.exit; if (refused) refusedAt = line; break; }   /* && semantics: the chain stops */
 }
 
 console.log("\ngate-run: " + written + " of " + steps.length + " gate(s) run from "
             + asked.length + " npm script(s), " + written + " line(s) in " + RUNS
             + ", tree " + before.hash
             + (treeMoved ? ", NO VERDICT: the tree moved under a gate"
+               : refusedAt ? ", stopped at " + refusedAt.gate + ", REFUSED by the " + refusedAt.refused
+                 + " and not failed: nothing was opened or measured, and its own lines above say what lets it run"
                : worst === NO_VERDICT ? ", stopped at a gate exiting " + worst + ", its own NO VERDICT: it"
                  + " refused, did not finish, or left a leg not run"
                : worst ? ", stopped at a gate exiting " + worst : ", all green"));

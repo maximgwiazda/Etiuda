@@ -29,6 +29,7 @@ import { macroBlockCount, recountMacros, totalMacroCount } from "./card-counts.j
 import { rebuildCards } from "./rebuild.js";
 import { render } from "./render.js";
 import { paintCatalogList } from "./catalog-offer.js";
+import { eHasHistory, openHistory } from "./catalog-history.js";
 import { eCatalogFolder, eCatalogFolderShort, eChooseCatalogFolder, eHost, eOpenCatalogFolder } from "./host.js";
 import { cards, catOrder, mgOpen, cardCounts } from "./app-state.js";
 
@@ -690,6 +691,7 @@ function openManage(){
          a file in. Plain, not primary: a filled button beside a destructive one is a contest. */
       '<span class="mf-sep" aria-hidden="true"></span>'+
       '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog…</button>'+
+      (eHasHistory()?'<button type="button" class="btn" id="mgHistory">'+esc(t("Earlier versions…"))+'</button>':'')+
       '</div>'+
       '<button type="button" class="btn" id="mgClose">'+esc(t("Close"))+'</button>',
     wire: wireManage
@@ -709,6 +711,7 @@ function openManage(){
     syncRoleDrum();   // the drum turns over the new list
   };
   $("#mgImportCatalog").onclick=importCatalogHere;
+  if($("#mgHistory")) $("#mgHistory").onclick=openHistory;
   paintCatalogList();
   /* BOTH LIVE INSIDE A SUMMARY, where a click is the browser's own way of folding the section:
      each stops the event before that happens. The path answers Enter and Space as well, the way

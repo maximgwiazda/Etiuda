@@ -5,14 +5,15 @@ import { ALWAYS_CATS } from "./cat-roles.js";
 import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, parseCatalogFile, catalogDocOf, eCatalogSignature } from "./catalog.js";
 import { catalogLoaded } from "./catalog-boot.js";
 import { agentName } from "./agent.js";
-import { catalogToV2, v2SignedBytes } from "./catalog-v2.js";
+import { catalogToV2, v2SignedBytes, v2Problems, v2ContentHash } from "./catalog-v2.js";
+import { directWrite } from "./catalog-merge.js";
 import { CATS, intentArr, intentFieldKey, intentCount, catalogLangs, CONTENT_LANGS } from "./content-model.js";
-import { eHost, eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile, eLoadedCatalogFile, eHasBranch, eBranchIdentity, eWriteBranch } from "./host.js";
+import { eHost, eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile, eLoadedCatalogFile, eHasBranch, eBranchIdentity, eWriteBranch, eHasShared, eSharedRead, eSharedWrite } from "./host.js";
 import { CAT_LABELS_PL, CAT_LABELS_BY_LANG } from "./icons.js";
 import { fill } from "./intent-text.js";
 import { cardToExportPlain } from "./macros-json.js";
 import { FACTS, normWhoList } from "./stock.js";
-import { ssDel, nsGet, nsSet, nsDel, LAYER_KEYS, layerNsOf, eLayer, lyGet, lySet, lyDel } from "./storage.js";
+import { lsGet, ssDel, nsGet, nsSet, nsDel, LAYER_KEYS, layerNsOf, eLayer, lyGet, lySet, lyDel } from "./storage.js";
 import { cutLeaves, dismissNode } from "./motion.js";
 import { esc } from "./esc.js";
 import { newCatalogId } from "./ids.js";
@@ -163,6 +164,7 @@ function currentCatalog(opts){
   /* From the origin like greet. grew and desk are left behind on purpose: they describe the file
      the origin was, and an export is a new catalog. */
   if(origin&&origin.notes&&typeof origin.notes==="object") out.notes=origin.notes;
+  if(origin&&Array.isArray(origin.fields)) out.fields=origin.fields;
   if(origin&&origin.ext&&typeof origin.ext==="object") out.ext=origin.ext;
   /* The file's request ids, re-indexed onto what survived the removals. The array is aligned
      with the ORIGINAL order, so an intent added at this desk is past its end and has none. */
@@ -212,11 +214,13 @@ function catalogFileName(){
 }
 /** Write the file. Where it lands is the person's call in a save dialog: the host's, else the
  *  browser's showSaveFilePicker (Chromium), else an ordinary download (Firefox). `build` makes the
- *  text, and runs only once the choice is made. */
-function saveCatalogFile(name, build){
-  if(eHasCatalogSaver()) return eSaveCatalogFile(t("Export"),name,t("Catalogs"),build).then(r=>{
-    if(r && !r.ok) toastRefusal(t("{FILE} could not be saved.").split("{FILE}").join(r.name));
-    return (r && r.ok) ? r.name : null;
+ *  text, and runs only once the choice is made; `from` is the catalog it was made from, which the host seals it for
+ *  where that came sealed. Resolves to {name, sealed}, or null where nothing was saved. */
+function saveCatalogFile(name, build, from){
+  if(eHasCatalogSaver()) return eSaveCatalogFile(t("Export"),name,t("Catalogs"),build,from).then(r=>{
+    if(r && !r.ok) toastRefusal((r.sealed ? t("{FILE} was not saved: the team's catalog leaves this desk only sealed, and this desk cannot seal for the team now.")
+      : t("{FILE} could not be saved.")).split("{FILE}").join(r.name));
+    return (r && r.ok) ? {name:r.name, sealed:r.sealed} : null;
   });
   if(typeof window.showSaveFilePicker==="function"){
     return window.showSaveFilePicker({
@@ -225,16 +229,16 @@ function saveCatalogFile(name, build){
       })
       .then(h=>{
         const as=h.name||name, text=build();
-        return h.createWritable().then(w=>w.write(text).then(()=>w.close())).then(()=>as);
+        return h.createWritable().then(w=>w.write(text).then(()=>w.close())).then(()=>({name:as, sealed:false}));
       })
       .catch(e=>{
         /* AbortError is the person closing the dialog, and only that is silent. NotAllowedError is
            the browser refusing to open it, so it falls back to the download like any failure. */
         if(e && e.name==="AbortError") return null;
-        return downloadCatalogFile(name, build());
+        return {name:downloadCatalogFile(name, build()), sealed:false};
       });
   }
-  return Promise.resolve(downloadCatalogFile(name, build()));
+  return Promise.resolve({name:downloadCatalogFile(name, build()), sealed:false});
 }
 function downloadCatalogFile(name, text){
   const blob=new Blob([text],{type:"application/json;charset=utf-8"});
@@ -255,12 +259,14 @@ function exportCatalog(){
     c=currentCatalog();
     return JSON.stringify(catalogToV2(c),null,1)+"\n";
   };
-  return saveCatalogFile(catalogFileStem(catalogNameOfFile(catalogFileName()))+".ec", build).then(saved=>{
+  const origin=storedCatalog(), from=(origin&&!origin.loose&&origin.id)?{id:origin.id,sha:origin.pin}:null;
+  return saveCatalogFile(catalogFileStem(catalogNameOfFile(catalogFileName()))+".ec", build, from).then(saved=>{
     if(!saved || !c) return null;                    // cancelled in the Save dialog
     if(!catalogLoaded()) lySet("Exported",looseMark());
-    toast(catalogCountsLine("Exported {FILE} with {MACROS} in {CARDS}",
-      c.cards.length, catalogMacroCount(c), 0, 0).replace("{FILE}",saved));
-    return saved;
+    toast((saved.sealed ? catalogCountsLine("Exported {FILE}, sealed for its team, with {MACROS} in {CARDS}",
+      c.cards.length, catalogMacroCount(c), 0, 0) : catalogCountsLine("Exported {FILE} with {MACROS} in {CARDS}",
+      c.cards.length, catalogMacroCount(c), 0, 0)).replace("{FILE}",saved.name));
+    return saved.name;
   });
 }
 /* ---- the desk's own file in the catalog folder -----------------------------------------------
@@ -353,6 +359,77 @@ function looseOrigin(make){
   if(!id && make){ id=newCatalogId(); if(!lySet("LooseId",id,true)) return null; }
   return id ? {id:id, loose:true} : null;
 }
+/* ---- the shared catalog, edited directly: the page's half (the merge is catalog-merge.js) --------------------------
+   With the setting on, the unsigned catalog loaded from the top of the catalog folder takes the layer's changes itself,
+   and the desk's own file is written only for what the shared one could not take. A catalog made from nothing goes to
+   the top of the folder unsigned. Off, or for any other catalog, the desk's own file is written as it always was. */
+const SHARED_RETRY_MS=5000, SHARED_NAMES=9;
+let sharedSaid=false;
+function sharedEditing(){ return lsGet("eSharedEdit")==="1" && eHasShared(); }
+/* What the layer touches, by the file's own ids: the fields of LOOSE_FIELDS, as sharedScope reads them. */
+function sharedTouched(){
+  const p=pack||{}, keys=o=>Object.keys(o && typeof o==="object" ? o : {}), list=a=>Array.isArray(a) ? a.map(String) : [];
+  return {
+    cards:keys(p.overrides).concat((p.custom||[]).map(m=>m&&m.id).filter(Boolean).map(String),list(p.removed)),
+    tags:["catLabels","catLabelsPl","customCats","catRoles","catIcons","catColors"].reduce((o,f)=>o.concat(keys(p[f])),[]).concat(list(p.removedCats)),
+    head:(p.facts!=null?["facts"]:[]).concat(p.who!=null?["role"]:[]),
+    requests:["intentOverrides","intentCustom","intentRemoved"].some(f=>Array.isArray(p[f]) ? p[f].length>0 : keys(p[f]).length>0),
+    order:!cardOrderIsBase()
+  };
+}
+/* What this desk knows of the file it writes, kept with the layer: a new edition loaded is the new ground, so what was
+   known of the old one goes, and what the desk holds back stays held. */
+function sharedState(name,pin){
+  let s=null;
+  try{ s=JSON.parse(lyGet("Shared")||"null"); }catch(e){ s=null; }
+  const st=(s && typeof s==="object" && s.file===name && s.state && typeof s.state==="object") ? s.state : {};
+  const held=Array.isArray(st.held) ? st.held : [];
+  return (s && s.pin===pin) ? {file:st.file||{}, desk:st.desk||{}, held:held} : {file:{}, desk:{}, held:held};
+}
+/* The pin of the edition this desk last wrote and nobody else had touched, which it is never offered unasked. */
+function sharedOwnPin(){ return String(lyGet("SharedOwn")||""); }
+function sharedOwnWrite(c){ const own=sharedOwnPin(); return !!own && pinned(c).pin===own; }
+/* The write, or null where it does not apply. Its answer's route says whether the desk's own file is still wanted. */
+function writeShared(loose,origin,holds,layer){
+  if(!sharedEditing()) return null;
+  const pin=loose ? "" : String(origin.pin||"");
+  const at=loose ? String(lyGet("SharedFile")||"") : String(nsGet("CatalogFile")||"");
+  if(!loose && !at) return null;
+  const state=sharedState(at,pin);
+  if(!holds && !Object.keys(state.file).length && !state.held.length) return null;
+  const from=loose ? (origin||looseOrigin(true)) : origin;
+  if(!from) return null;
+  const mine=catalogToV2(Object.assign(currentCatalog({asIs:true}),{id:String(from.id), rev:+from.rev||0}));
+  const stem=catalogFileStem(catalogNameOfFile(catalogFileName()));
+  const go=n=>{
+    // A catalog made from nothing takes the first free name, and keeps the one it was first written under.
+    const name=at || (stem+(n?" "+(n+1):"")+".ec");
+    const same=()=>eLayer()===layer && catalogLoaded()===!loose;
+    return directWrite({
+      read:()=>eSharedRead(name,pin),
+      write:(text,sha,create)=>same() ? eSharedWrite(name,text,sha,create) : {ok:false, refused:true},
+      mine:mine, touched:sharedTouched(), state:state, pin:pin, own:sharedOwnPin(),
+      check:v2Problems, hash:v2ContentHash, pinOf:d=>"sha256:"+sha256Hex(v2SignedBytes(d)), today:todayEdition()
+    }).then(r=>{
+      if(!same()) return {route:"branch"};
+      if(!at && (r.why==="taken" || r.why==="other") && n+1<SHARED_NAMES) return go(n+1);
+      lySet("Shared",JSON.stringify({file:name, pin:pin, state:r.state}));
+      if(r.wrote){
+        lySet("SharedOwn",r.others ? "" : r.pin);
+        if(loose){ lySet("SharedFile",name); lySet("Exported",looseMark()); }
+        sharedSaid=false;
+      }
+      if(r.fresh && r.fresh.length) toast(t("The shared catalog had changed the same text, so your version is kept in this desk's own file."));
+      else if(r.why && r.why!=="signed" && !sharedSaid){
+        sharedSaid=true;
+        toast(t("The shared catalog could not be written just now, so this change is kept in this desk's own file."));
+        if(r.why==="busy") setTimeout(scheduleDeskBranch,SHARED_RETRY_MS);
+      }
+      return r;
+    });
+  };
+  return go(0);
+}
 /* One write at a time, the latest state when it runs. A layer holding nothing an export would carry
    (deskBranchHolds) takes the file away; a browser, a desk with no pin and a desk whose key cannot be kept write nothing. */
 function writeDeskBranch(){
@@ -361,16 +438,20 @@ function writeDeskBranch(){
   const loose=!catalogLoaded(), holds=deskBranchHolds(), layer=eLayer();
   let origin=loose ? looseOrigin(false) : storedCatalog();
   if(loose ? (!origin && !holds) : (!origin || !origin.id || !/^sha256:[0-9a-f]{64}$/.test(String(origin.pin||"")))) return Promise.resolve(false);
-  const stemOf=o=>catalogFileStem(catalogNameOfFile(catalogFileName()))+"-"+branchHex(o), stem=origin ? stemOf(origin) : "";
-  const run=holds
+  const stemOf=o=>catalogFileStem(catalogNameOfFile(catalogFileName()))+"-"+branchHex(o);
+  // `keep` false takes the desk's own file away: the shared catalog holds all the layer has.
+  const own=keep=>(keep && holds)
     ? eBranchIdentity().then(who=>{
         /* A catalog taken while the identity was asked is not this write's: its content would land under the stem and
            grew read before. A catalog with no id keeps the empty desk's layer, so the loose case is asked apart. */
         if(!who || eLayer()!==layer || (loose && catalogLoaded())) return {ok:false};
         if(!origin) origin=looseOrigin(true);
-        return origin ? eWriteBranch(stem||stemOf(origin),JSON.stringify(catalogToV2(branchCatalog(who,origin)))) : {ok:false};
+        return origin ? eWriteBranch(stemOf(origin),JSON.stringify(catalogToV2(branchCatalog(who,origin)))) : {ok:false};
       })
-    : eWriteBranch(stem,"");
+    : eWriteBranch(origin ? stemOf(origin) : "","");
+  const direct=writeShared(loose,origin,holds,layer);
+  // A write that fails in any way leaves the desk's own file written as with the setting off.
+  const run=direct ? direct.catch(()=>({route:"branch"})).then(r=>{ if(loose && !origin) origin=looseOrigin(false); return own(r.route!=="none"); }) : own(true);
   branchBusy=run.then(r=>!!(r&&r.ok),()=>false).then(ok=>{
     branchBusy=null;
     if(branchAgain){ branchAgain=false; scheduleDeskBranch(); }
@@ -705,6 +786,9 @@ export {
   pinStoredFrom,
   followRenamedFile,
   branchFileId,
+  looseOrigin,
   deskBranchHolds,
-  writeDeskBranch
+  writeDeskBranch,
+  sharedOwnPin,
+  sharedOwnWrite
 };

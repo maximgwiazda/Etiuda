@@ -59,6 +59,9 @@ function statsCompact(pack){
   const ids=Array.isArray(pack.dayIds)?pack.dayIds:[], days=pack.days||{}, used=new Set();
   const each=fn=>Object.keys(days).forEach(d=>{ const b=days[d]; if(b) ["c","i"].forEach(n=>{ if(b[n]) fn(b,n); }); });
   each((b,n)=>Object.keys(b[n]).forEach(k=>used.add(k)));
+  // A pair names both of its ids by place too (bumpPair), and an id only a pair names is still used.
+  const pairs=fn=>Object.keys(days).forEach(d=>{ const b=days[d]; if(b&&b.p&&typeof b.p==="object") fn(b); });
+  pairs(b=>Object.keys(b.p).forEach(a=>{ used.add(a); Object.keys(b.p[a]||{}).forEach(z=>used.add(z)); }));
   const to=Object.create(null), keep=[];
   ids.forEach((id,at)=>{ if(id!=null && used.has(String(at))){ to[at]=keep.length; keep.push(id); } });
   if(keep.length===ids.length && used.size===keep.length) return;
@@ -66,6 +69,16 @@ function statsCompact(pack){
     const out={};
     Object.keys(b[n]).forEach(k=>{ if(k in to) out[to[k]]=b[n][k]; });
     b[n]=out;
+  });
+  pairs(b=>{
+    const out={};
+    Object.keys(b.p).forEach(a=>{
+      const row=b.p[a];
+      if(!(a in to)||!row||typeof row!=="object") return;
+      const r=out[to[a]]={};
+      Object.keys(row).forEach(z=>{ if(z in to) r[to[z]]=row[z]; });
+    });
+    b.p=out;
   });
   pack.dayIds=keep;
 }
@@ -83,6 +96,16 @@ function bumpUse(pack, id, at){
   pack.useAt[id]=at||statsYmd();
   const b=statsDay(pack, at), k=statsIdAt(pack, String(id));
   b.c[k]=(b.c[k]|0)+1;
+}
+/* "B AFTER A": a card copied straight after another in one conversation, counted in the day's `p`
+   as p[place of A][place of B]. `p` is made by the first pair of the day, so a day without one
+   keeps its shape. The statistics answer for a span carries its pairs. */
+function bumpPair(pack, from, to, at){
+  if(!from||!to||String(from)===String(to)) return;
+  const b=statsDay(pack, at), a=statsIdAt(pack, String(from)), z=statsIdAt(pack, String(to));
+  if(!b.p||typeof b.p!=="object"||Array.isArray(b.p)) b.p={};
+  const row=(b.p[a]&&typeof b.p[a]==="object") ? b.p[a] : (b.p[a]={});
+  row[z]=(row[z]|0)+1;
 }
 function bumpIntent(pack, id, at){
   if(!id) return;
@@ -118,8 +141,16 @@ function statsForgetCards(pack, keep){
   if(STATS_FORGOT.get(pack)===asked) return;
   let n=0;
   Object.keys(pack.days||{}).forEach(d=>{
-    const c=pack.days[d]&&pack.days[d].c;
+    const c=pack.days[d]&&pack.days[d].c, p=pack.days[d]&&pack.days[d].p;
     if(c) Object.keys(c).forEach(k=>{ if(!keep(ids[k])){ delete c[k]; n++; } });
+    // A pair goes with either of its cards.
+    if(p&&typeof p==="object") Object.keys(p).forEach(a=>{
+      const row=p[a];
+      if(row&&typeof row==="object"&&keep(ids[a])){
+        Object.keys(row).forEach(z=>{ if(!keep(ids[z])){ delete row[z]; n++; } });
+        if(!Object.keys(row).length) delete p[a];
+      } else { delete p[a]; n++; }
+    });
   });
   if(n){ statsTouch(pack, "*"); statsCompact(pack); STATS_FORGOT.delete(pack); }
   else STATS_FORGOT.set(pack, asked);
@@ -158,9 +189,35 @@ function statsRecentUse(pack, today){
   STATS_RECENT.set(pack,{day:day,use:out});
   return out;
 }
+const STATS_PAIR_DAYS=28;
+/** The cards copied straight after `from` over the STATS_PAIR_DAYS days ending `today`, as
+    [{id, n}]: most often first, then the one met on the later day, then by id. */
+function statsLearntAfter(pack, from, today){
+  if(!pack||typeof pack!=="object"||from==null) return [];
+  const day=STATS_YMD.test(String(today||"")) ? String(today) : statsYmd();
+  const days=(pack.days&&typeof pack.days==="object"&&!Array.isArray(pack.days)) ? pack.days : {};
+  const ids=Array.isArray(pack.dayIds) ? pack.dayIds : [];
+  const a=ids.indexOf(String(from)), first=statsDayBefore(day, STATS_PAIR_DAYS-1), seen=new Map();
+  if(a<0) return [];
+  Object.keys(days).forEach(d=>{
+    const p=STATS_YMD.test(d)&&d>=first&&d<=day&&days[d]&&days[d].p, row=p&&p[a];
+    if(row&&typeof row==="object") Object.keys(row).forEach(z=>{
+      const id=ids[z], n=row[z]|0;
+      if(id==null||n<=0||String(id)===String(from)) return;
+      const o=seen.get(String(id))||{id:String(id),n:0,last:""};
+      o.n+=n;
+      if(d>o.last) o.last=d;
+      seen.set(o.id,o);
+    });
+  });
+  return [...seen.values()]
+    .sort((x,y)=>y.n-x.n || (x.last<y.last ? 1 : x.last>y.last ? -1 : 0) || (x.id<y.id ? -1 : x.id>y.id ? 1 : 0))
+    .map(o=>({id:o.id,n:o.n}));
+}
 /* A REQUEST NAMES A SPAN AND THE ANSWER IS THAT SPAN, from and to inclusive, summed over the
    day buckets, with `since` beside it; a card's `at` is its last use inside the span. Without
-   a whole span the answer is the lifetime counters, as every answer was before. */
+   a whole span the answer is the lifetime counters, as every answer was before. A span's answer
+   also carries `pairs` [{from, to, n}] summed from the same days, and omits the key when none. */
 function statsDoc(pack, info){
   const from=String(info&&info.period&&info.period.from||"");
   const to=String(info&&info.period&&info.period.to||"");
@@ -169,6 +226,7 @@ function statsDoc(pack, info){
   let misses=(pack&&pack.searchMisses)|0;
   let lc=(pack&&pack.langs&&typeof pack.langs==="object"&&!Array.isArray(pack.langs))?pack.langs:{};
   let since="";
+  const pr=new Map();
   if(spanned){
     const days=(pack&&pack.days&&typeof pack.days==="object"&&!Array.isArray(pack.days))?pack.days:{};
     const ids=(pack&&Array.isArray(pack.dayIds))?pack.dayIds:[];
@@ -182,6 +240,18 @@ function statsDoc(pack, info){
       Object.keys(b.i||{}).forEach(k=>{ const id=ids[k]; if(id!=null) ic[id]=(ic[id]|0)+(b.i[k]|0); });
       Object.keys(b.l||{}).forEach(c=>{ lc[c]=(lc[c]|0)+(b.l[c]|0); });
       misses+=b.m|0;
+      const bp=b.p&&typeof b.p==="object"?b.p:{};
+      Object.keys(bp).forEach(a=>{
+        const row=bp[a]&&typeof bp[a]==="object"?bp[a]:{};
+        Object.keys(row).forEach(z=>{
+          const f=ids[a], t=ids[z], n=row[z]|0;
+          if(f==null||t==null||n<=0||String(f)===String(t)) return;
+          const k=JSON.stringify([String(f),String(t)]);
+          const o=pr.get(k)||{from:String(f),to:String(t),n:0};
+          o.n+=n;
+          pr.set(k,o);
+        });
+      });
     });
     since=STATS_YMD.test(String(pack&&pack.daysSince||"")) ? String(pack.daysSince) : statsYmd();
   }
@@ -208,6 +278,7 @@ function statsDoc(pack, info){
   };
   if(spanned) doc.since=since;
   Object.assign(doc,{cards,intents,misses,langs});
+  if(pr.size) doc.pairs=[...pr.values()].sort((x,y)=>y.n-x.n || (x.from<y.from ? -1 : x.from>y.from ? 1 : 0) || (x.to<y.to ? -1 : x.to>y.to ? 1 : 0));
   if(info&&info.catalog&&info.catalog.id){
     doc.catalog={id:String(info.catalog.id),rev:+info.catalog.rev||0};
   }
@@ -216,11 +287,14 @@ function statsDoc(pack, info){
 
 export {
   STATS_DAYS_KEPT,
+  STATS_PAIR_DAYS,
   bumpIntent,
   bumpLang,
   bumpMiss,
+  bumpPair,
   bumpUse,
   statsDoc,
+  statsLearntAfter,
   statsLift,
   statsRecentUse,
   statsForgetCards,
