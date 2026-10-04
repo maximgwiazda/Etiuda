@@ -1,5 +1,6 @@
 /* The shell's HPKE, held to the published vectors of RFC 9180 for the one suite the team key's wrap
- * uses: base mode, DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-128-GCM. Board 834, step 12.
+ * uses: base mode, DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-128-GCM. Board 834, step 12. From 12m, the
+ * sealed envelope beside it: a catalog's text under the team key, AES-256-GCM, held by refusals alone.
  *
  *     node tests/hpke.mjs        exit code is the number of failed checks, capped at 63
  *
@@ -23,7 +24,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 18;
+const EXPECTED = 30;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -58,6 +59,13 @@ function hpkeFrom(src) {
   const body = HPKE_DECLS.map(m => sliceDecl(src, m)).join("\n");
   return new Function("crypto", "Buffer", body
     + "\nreturn { hpkeLabeledExtract, hpkeShared, hpkeSchedule, hpkeSeal, hpkeOpen };")(crypto, Buffer);
+}
+/* The sealed envelope's declarations, sliced the same way: tests/catalog-sig.js 88f slices this list too. */
+const SEAL_DECLS = ["const SEALED_KIND =", "const SEALED_TEAM_RE =", "function sealedAad(", "function sealCatalog(",
+  "function openSealed("];
+function sealFrom(src) {
+  return new Function("crypto", "Buffer", SEAL_DECLS.map(m => sliceDecl(src, m)).join("\n")
+    + "\nreturn { sealCatalog, openSealed };")(crypto, Buffer);
 }
 
 const VECTOR = {
@@ -146,6 +154,54 @@ function main() {
   const mutated = M ? M.hpkeSeal(v.pkRm, v.info, v.aad, v.pt, skE) : null;
   check(count === 2 && !!mutated && !mutated.ct.equals(v.ct) && M.hpkeOpen(skR, v.enc, v.info, v.aad, v.ct) === null,
     "12L with the label changed by one byte at its " + count + " sites, the same slices miss the vector's ct and refuse to open it");
+
+  /* ---- the sealed envelope: a signed catalog's text under the team key, AES-256-GCM ---------- */
+  let S = null;
+  try { S = sealFrom(SRC); } catch (e) { check(false, "12m the sealed envelope's declarations slice and evaluate - " + e.message); }
+  if (S) check(true, "12m the " + SEAL_DECLS.length + " sealed envelope declarations slice out of shell/main.js and evaluate with crypto and Buffer alone");
+  if (!S) return;
+
+  const teamKey = crypto.randomBytes(32), TEAM = "t-0123456789abcdef";
+  const text = JSON.stringify({ format: 2, kind: "etiuda-catalog", id: "sealed-sample",
+    name: "Za\u017c\u00f3\u0142\u0107 g\u0119\u015bl\u0105 ja\u017a\u0144" }, null, 2) + "\n";
+  const env = S.sealCatalog(teamKey, TEAM, 1, text);
+  check(Object.keys(env).join() === "format,kind,team,epoch,nonce,ct" && env.format === 2 && env.kind === "etiuda-sealed"
+    && env.team === TEAM && env.epoch === 1 && /^[0-9a-f]{24}$/.test(env.nonce) && /^[0-9a-f]+$/.test(env.ct)
+    && env.ct.length === 2 * (Buffer.byteLength(text) + 16),
+    "12n the envelope is format 2, kind etiuda-sealed, its team and epoch, a 12-byte nonce and the ct with its 16-byte tag, in hex");
+  const back = S.openSealed(teamKey, env);
+  check(typeof back === "string" && Buffer.from(back, "utf8").equals(Buffer.from(text, "utf8")),
+    "12o it opens under the same team key to the same " + Buffer.byteLength(text) + " bytes, diacritics included");
+  const env2 = S.sealCatalog(teamKey, TEAM, 1, text);
+  check(env2.nonce !== env.nonce && env2.ct !== env.ct && S.openSealed(teamKey, env2) === text,
+    "12p a second seal of the same text takes a fresh nonce, so its ct differs, and it opens too");
+
+  const hexFlip = (h, i) => flip(Buffer.from(h, "hex"), i).toString("hex");
+  const sealedNulls = [
+    ["a nonce byte flipped", Object.assign({}, env, { nonce: hexFlip(env.nonce, 3) })],
+    ["a ct byte flipped", Object.assign({}, env, { ct: hexFlip(env.ct, 0) })],
+    ["a tag byte flipped", Object.assign({}, env, { ct: hexFlip(env.ct, env.ct.length / 2 - 1) })],
+    ["the team changed to another well-formed id", Object.assign({}, env, { team: "t-0123456789abcdee" })],
+    ["the epoch changed to 2", Object.assign({}, env, { epoch: 2 })],
+  ];
+  sealedNulls.forEach(([what, doc], i) => {
+    const got = S.openSealed(teamKey, doc);
+    check(got === null, "12q" + (i + 1) + " " + what + " does not open: " + (got === null ? "null" : "it opened"));
+  });
+  const nextKey = crypto.randomBytes(32), env3 = S.sealCatalog(nextKey, TEAM, 2, text);
+  check(S.openSealed(nextKey, env3) === text && S.openSealed(nextKey, env) === null && S.openSealed(teamKey, env3) === null,
+    "12r each epoch's key opens its own envelope and not the other epoch's, either way");
+
+  const refused = [[teamKey.subarray(0, 31), TEAM, 1, text], [teamKey.toString("hex"), TEAM, 1, text],
+    [teamKey, "t-0123456789ABCDEF", 1, text], [teamKey, TEAM, 0, text], [teamKey, TEAM, 1.5, text], [teamKey, TEAM, 1, null]]
+    .filter(args => { try { S.sealCatalog(...args); return false; } catch { return true; } }).length;
+  check(refused === 6, "12s sealing throws on a 31-byte key, a key in hex, an upper-case team id, epoch 0 or 1.5 and a text"
+    + " that is not a string: " + refused + " of 6");
+  const quiet = [[teamKey.subarray(0, 31), env], [teamKey, null], [teamKey, JSON.stringify(env)],
+    [teamKey, Object.assign({}, env, { kind: "etiuda-catalog" })], [teamKey, Object.assign({}, env, { ct: env.ct.slice(0, 30) })]]
+    .filter(([k, d]) => { try { return S.openSealed(k, d) === null; } catch { return false; } }).length;
+  check(quiet === 5, "12t opening gives null without a throw for a 31-byte key, no envelope, its text unparsed, another kind"
+    + " and a ct shorter than its tag: " + quiet + " of 5");
 }
 
 try { main(); }

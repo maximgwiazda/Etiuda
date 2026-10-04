@@ -330,6 +330,31 @@ function v2TeamSigState(team){
   const lead=(team&&team.lead)||{};
   return v2SigState(team, {[v2Str(team&&team.id)]:{[v2Str(lead.keyId)]:v2Str(lead.public)}});
 }
+/* THE SEALED ENVELOPE, a signed catalog under the team key, which only a shell opens: this reads its shape. `sealed` is
+   null where the file is absent or unusable, with a line for each field that is wrong. */
+const V2_SEALED_KIND="etiuda-sealed";
+function v2SealedRead(src){
+  const problems=[], out={sealed:null, problems:problems};
+  if(src==null||src==="") return out;
+  let doc=src;
+  if(typeof src==="string"){
+    try{ doc=JSON.parse(src); }
+    catch(e){ problems.push("sealed: the file is not JSON, "+e.message); return out; }
+  }
+  if(!doc||typeof doc!=="object"||Array.isArray(doc)){ problems.push("sealed: wanted an object"); return out; }
+  if(+doc.format!==V2_FORMAT||doc.kind!==V2_SEALED_KIND){
+    problems.push("sealed: wanted format "+V2_FORMAT+" and kind "+JSON.stringify(V2_SEALED_KIND));
+    return out;
+  }
+  const bad=[], ct=v2Str(doc.ct);
+  if(!V2_TEAM_ID_RE.test(v2Str(doc.team))) bad.push("team: wanted t- and 16 lower-case hex characters");
+  if(!Number.isInteger(doc.epoch)||doc.epoch<1) bad.push("epoch: wanted a whole number from 1");
+  if(!/^[0-9a-f]{24}$/.test(v2Str(doc.nonce))) bad.push("nonce: wanted 24 lower-case hex characters");
+  if(!/^[0-9a-f]*$/.test(ct)||ct.length%2||ct.length<32) bad.push("ct: wanted lower-case hex of at least the 16-byte tag");
+  if(bad.length){ bad.forEach(b=>problems.push("sealed "+b)); return out; }
+  out.sealed=Object.assign({},doc);
+  return out;
+}
 const V2_ID_RE=/^[a-z0-9][a-z0-9-]{2,63}$/;
 const V2_SHAPES={plain:1,steps:1,alts:1};
 /* THE ONE MARKER SHAPE, and both readers use it: what a marker line looks like is written
@@ -747,4 +772,4 @@ function catalogToV2(c,opts){
   return out;
 }
 
-export { isV2, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2AltLabel, v2PartText, v2Problems, v2GrammarNotices, v2CatKey, V2_GRAMMAR_LANGS, v2ContentHash, v2SignedBytes, v2SigState, v2RingRead, v2TeamRead, v2TeamSigState, V2_FORMAT, V2_KIND, V2_KNOWN_KEYS, V2_RING_FORMAT, V2_RING_KIND, V2_RING_FILE, V2_TEAM_FORMAT, V2_TEAM_KIND, V2_TEAM_FILE, V2_HARNESS_TEST_KEYID, V2_HARNESS_TEST_PUB, V2_SIG_NONE, V2_SIG_VALID, V2_SIG_INVALID, V2_SIG_UNKNOWN, V2_SIG_ALG };
+export { isV2, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2AltLabel, v2PartText, v2Problems, v2GrammarNotices, v2CatKey, V2_GRAMMAR_LANGS, v2ContentHash, v2SignedBytes, v2SigState, v2RingRead, v2TeamRead, v2TeamSigState, v2SealedRead, V2_SEALED_KIND, V2_FORMAT, V2_KIND, V2_KNOWN_KEYS, V2_RING_FORMAT, V2_RING_KIND, V2_RING_FILE, V2_TEAM_FORMAT, V2_TEAM_KIND, V2_TEAM_FILE, V2_HARNESS_TEST_KEYID, V2_HARNESS_TEST_PUB, V2_SIG_NONE, V2_SIG_VALID, V2_SIG_INVALID, V2_SIG_UNKNOWN, V2_SIG_ALG };

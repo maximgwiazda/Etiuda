@@ -739,6 +739,43 @@ function hpkeOpen(skR, enc, info, aad, ct) {
   } catch { return null; }
 }
 
+/* ---- the sealed envelope: a signed catalog's text under the team key, AES-256-GCM -------------
+   The associated data is the envelope's kind, team and epoch, so a ct moved into another team's or
+   epoch's envelope does not open. Pure like HPKE above, and sliced the same way. */
+const SEALED_KIND = "etiuda-sealed";
+const SEALED_TEAM_RE = /^t-[0-9a-f]{16}$/;
+function sealedAad(team, epoch) {
+  return Buffer.from(SEALED_KIND + "\n" + team + "\n" + epoch, "utf8");
+}
+/* {format, kind, team, epoch, nonce, ct}, the ct carrying its tag, under a fresh nonce on every call; it throws on a key,
+   team, epoch or text it cannot seal. The team key is its 32 raw bytes, as hpkeOpen gives them back. */
+function sealCatalog(teamKey, teamId, epoch, text) {
+  if (!Buffer.isBuffer(teamKey) || teamKey.length !== 32) throw new Error("seal: a team key is 32 bytes");
+  if (!SEALED_TEAM_RE.test(String(teamId))) throw new Error("seal: a team id is t- and 16 lower-case hex characters");
+  if (!Number.isInteger(epoch) || epoch < 1) throw new Error("seal: an epoch is a whole number from 1");
+  if (typeof text !== "string") throw new Error("seal: the catalog is sealed as its text");
+  const nonce = crypto.randomBytes(12);
+  const c = crypto.createCipheriv("aes-256-gcm", teamKey, nonce);
+  c.setAAD(sealedAad(teamId, epoch));
+  const ct = Buffer.concat([c.update(text, "utf8"), c.final(), c.getAuthTag()]);
+  return { format: 2, kind: SEALED_KIND, team: teamId, epoch: epoch, nonce: nonce.toString("hex"), ct: ct.toString("hex") };
+}
+/* The text, or null for anything that does not open: a changed byte, another team, epoch or key. */
+function openSealed(teamKey, doc) {
+  try {
+    if (!Buffer.isBuffer(teamKey) || teamKey.length !== 32) return null;
+    if (!doc || typeof doc !== "object" || +doc.format !== 2 || doc.kind !== SEALED_KIND) return null;
+    if (!SEALED_TEAM_RE.test(String(doc.team)) || !Number.isInteger(doc.epoch) || doc.epoch < 1) return null;
+    const nonce = String(doc.nonce), hex = String(doc.ct);
+    if (!/^[0-9a-f]{24}$/.test(nonce) || !/^[0-9a-f]*$/.test(hex) || hex.length % 2 || hex.length < 32) return null;
+    const ct = Buffer.from(hex, "hex");
+    const d = crypto.createDecipheriv("aes-256-gcm", teamKey, Buffer.from(nonce, "hex"), { authTagLength: 16 });
+    d.setAAD(sealedAad(doc.team, doc.epoch));
+    d.setAuthTag(ct.subarray(ct.length - 16));
+    return Buffer.concat([d.update(ct.subarray(0, ct.length - 16)), d.final()]).toString("utf8");
+  } catch { return null; }
+}
+
 /* ---- the desk's branch: an identity of its own, and its own file in the catalog folder --------
    Two key pairs made here at first need, Ed25519 to sign and X25519 to receive a team key. The
    private halves sit in the desk envelope sealed by safeStorage and never leave it: the page is
