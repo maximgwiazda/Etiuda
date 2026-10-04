@@ -28,7 +28,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 31;
+const EXPECTED = 34;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -137,7 +137,7 @@ try {
   const seal = (key, epoch, t, team) => JSON.stringify(D1.api.sealCatalog(key, team || TEAM, epoch, t));
   const entry = (who, key, epoch, team) => ({ desk: { id: who.id, key: who.key, box: who.box },
     wrap: D1.api.wrapTeamKey(key, who.box, team || TEAM, epoch, who.id) });
-  const teamFile = (o) => sign({ format: 1, kind: "etiuda-team", id: o.team || TEAM, catalogs: ["lamp-shop", "tea-room"],
+  const teamFile = (o) => sign({ format: 1, kind: "etiuda-team", id: o.team || TEAM, catalogs: o.catalogs || ["lamp-shop", "tea-room"],
     lead: { keyId: o.keyId || LEAD.keyId, public: o.public || LEAD.public }, sealed: true, exportsSealed: false,
     epoch: o.epoch, roster: o.roster }, o.signer || lead.privateKey, o.keyId || LEAD.keyId);
   const put = (dir, name, t) => fs.writeFileSync(path.join(dir, name), t, "utf8");
@@ -396,16 +396,64 @@ try {
     + ", epoch " + env9c.epoch + "; the writer lists it " + (mine ? "yes" : "no") + ", the desk removed at the epoch "
     + (removed ? "yes" : "no"));
 
-  /* ---- a desk envelope that records the opening and not its team, as the shell before the seal wrote it --------- */
-  const before6 = D9.envelope();
-  delete before6.teamOf;
-  fs.writeFileSync(path.join(D9.ud, "desk.json"), JSON.stringify(before6), "utf8");
+  /* ---- the folder's team file no longer lists the catalog: no team covers it where the file is written ---------- */
+  put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)], catalogs: ["tea-room"] })));
   const unsure = await loadDesk(D9.ud).ask("etiuda:branch-write", lamps.stem,
     JSON.stringify(Object.assign(JSON.parse(lamps.text), { name: "Lamp Shop, edited twice" })));
-  check(before6.teamOpened.indexOf("lamp-shop") >= 0 && said(unsure) === said({ ok: false, held: true })
+  check(D9.envelope().teamOpened.indexOf("lamp-shop") >= 0 && said(unsure) === said({ ok: false, held: true })
     && landed().epoch === 2 && holding("Good day, Lamp Shop.") === 0 && holding("edited twice") === 0,
-    "14ad a desk that knows it opened the catalog from an envelope but not under which team holds its file and writes nothing"
+    "14ad where the team file at the folder written to does not list the catalog, the desk holds its file and writes nothing"
     + " in the clear: " + said(unsure) + ", the share's file still the epoch " + landed().epoch + " envelope");
+  put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)] })));
+
+  /* ---- two teams, one catalog id: the desk lists the other team's folder, then writes in its own --------------- */
+  {
+    const OTHER = folder("other"), TB = "t-" + crypto.randomBytes(8).toString("hex"), KB = crypto.randomBytes(32);
+    const point = (D, dir) => {
+      const e = D.envelope();
+      e.keys = Object.assign({}, e.keys, { eCatalogFolder: dir });
+      fs.writeFileSync(path.join(D.ud, "desk.json"), JSON.stringify(e), "utf8");
+      return loadDesk(D.ud);
+    };
+    const name = n => JSON.stringify(Object.assign(JSON.parse(lamps.text), { name: n }));
+    const who = t => t === TEAM ? "A" : t === TB ? "B" : String(t);
+    let P = point(D9, OWN);
+    const r0 = await read(P, "lamps.ec");
+    const w0 = await P.ask("etiuda:branch-write", lamps.stem, name("Lamp Shop, before the other folder"));
+    const e0 = landed();
+    check(r0 === A2.trim() && !!w0.ok && e0.team === TEAM && e0.epoch === 2 && D1.api.openSealed(K2, e0) !== null,
+      "14AE THE CONTROL: one team, in its own folder, the desk's own file lands sealed for that team: " + said(w0) + ", team "
+      + who(e0.team) + ", epoch " + e0.epoch);
+    fs.writeFileSync(path.join(OTHER, "etiuda-ring.json"), JSON.stringify(ring), "utf8");
+    put(OTHER, "etiuda-team.json", JSON.stringify(teamFile({ team: TB, epoch: 1, roster: [entry(me9, KB, 1, TB)] })));
+    put(OTHER, "sales.ec", seal(KB, 1, text(catalog("lamp-shop", 1, "Other Shop", "2026-03-01")), TB));
+    P = point(P, OTHER);
+    const listed = ((await P.ask("etiuda:catalog-files")) || []).find(r => r.name === "sales.ec");
+    P = point(P, OWN);
+    const w1 = await P.ask("etiuda:branch-write", lamps.stem, name("Lamp Shop, after the other folder"));
+    const e1 = landed();
+    const byB = e1.kind === "etiuda-sealed" ? D1.api.openSealed(KB, e1) : null;
+    check(!!listed && listed.id === "lamp-shop" && !!w1.ok && e1.team === TEAM && D1.api.openSealed(K2, e1) !== null && byB === null,
+      "14ae a desk in two teams that each have a catalog of one id lists the other team's folder, then writes its own file in"
+      + " its own team's folder: it lands sealed for the team covering it there, " + said(w1) + ", team " + who(e1.team)
+      + ", the other team's key opens it " + (byB !== null ? "yes" : "no"));
+    const forgedB = teamFile({ team: TB, epoch: 1, roster: [], public: pubHex(forger.publicKey), signer: forger.privateKey });
+    const alteredB = JSON.parse(JSON.stringify(teamFile({ team: TB, epoch: 1, roster: [entry(me9, KB, 1, TB)] })));
+    alteredB.exportsSealed = true;
+    const planted = [];
+    for (const f of [forgedB, alteredB]) {
+      put(OWN, "etiuda-team.json", JSON.stringify(f));
+      planted.push(await P.ask("etiuda:branch-write", lamps.stem, name("Lamp Shop, under a planted team file")));
+    }
+    const e2 = landed();
+    put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)] })));
+    check(planted.every(r => said(r) === said({ ok: false, held: true })) && e2.team === TEAM
+      && (D1.api.openSealed(K2, e2) || "").indexOf("after the other folder") >= 0
+      && D1.api.openSealed(KB, e2) === null && holding("planted team file") === 0,
+      "14af a team file in the folder naming the other team, under a key other than its pinned lead's or changed after signing,"
+      + " moves nothing: the desk holds its file, " + planted.map(said).join(", ") + ", and the share's file stays team "
+      + who(e2.team) + "'s");
+  }
 
   /* ---- a keep that fails: safeStorage away for one read, the team file unchanged after it ----------------------- */
   const FLAKY = folder("flaky"), flaky10 = { down: "" }, flaky11 = { down: "" };
