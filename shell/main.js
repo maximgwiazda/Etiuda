@@ -325,6 +325,7 @@ function watchCatalog(win) {
     if (!folderAnswers(dir)) { retryFolder(FOLDER_RETRY_MS); continue; }
     try {
       const w = fs.watch(dir, (ev, name) => {
+        if (name && String(name) === "desks" && dir === watchedFolder && !desksWatcher) watchDesks(win);
         if (name && !isCatalogName(path.basename(String(name)))) return;
         clearTimeout(catalogSettle);
         catalogSettle = setTimeout(() => catalogChanged(win), 300);
@@ -342,6 +343,23 @@ function watchCatalog(win) {
       if (dir === watchedFolder) retryFolder(FOLDER_RETRY_MS);
     }
   }
+  watchDesks(win);
+}
+/* A COLLEAGUE'S FILE CHANGES ONE FOLDER DOWN, in desks/<id>/, where the folder's own watch does not reach, so desks/ has a
+   watch of its own over its subfolders alone. With no desks/ yet there is none, and the folder's watch arms it when one appears. */
+let desksWatcher = null;
+function watchDesks(win) {
+  if (desksWatcher) { try { desksWatcher.close(); } catch { /* already gone */ } desksWatcher = null; }
+  if (!folderAnswers(catalogFolder())) return;
+  try {
+    const w = fs.watch(path.join(catalogFolder(), "desks"), { recursive: true }, (ev, name) => {
+      if (name && !/\.ec$/i.test(path.basename(String(name)))) return;
+      clearTimeout(catalogSettle);
+      catalogSettle = setTimeout(() => catalogChanged(win), 300);
+    });
+    w.on("error", () => { try { w.close(); } catch { /* already gone */ } if (desksWatcher === w) desksWatcher = null; });
+    desksWatcher = w;
+  } catch { desksWatcher = null; }
 }
 
 /* THE CATALOG FOLDER MAY BE A SHARE THAT DOES NOT ANSWER, and every read of it here is
@@ -2249,13 +2267,16 @@ function sendListing(win, force) {
   listingSent = key;
   win.webContents.send("etiuda:catalog-listing", rows);
 }
-ipcMain.handle("etiuda:catalog-read", (e, name) => {
+/* `desk` names a colleague's folder under desks/, and its file is handed only where the listing would list it. */
+ipcMain.handle("etiuda:catalog-read", (e, name, desk) => {
   if (!fromEngine(e)) return null;
-  const base = String(name || "");
+  const base = String(name || ""), who = desk == null ? "" : String(desk);
   if (!base || base !== path.basename(base) || !/\.ec$/i.test(base)) return null;
-  const file = catalogFileNamed(base) || path.join(catalogFolder(), base);
+  if (who && !/^k-[0-9a-f]{16}$/.test(who)) return null;
+  const file = who ? path.join(catalogFolder(), "desks", who, base) : (catalogFileNamed(base) || path.join(catalogFolder(), base));
   try {
-    if (!fileAnswers(file)) throw new Error("the catalog folder is not answering");
+    if (!fileAnswers(file) || (who && !folderAnswers(catalogFolder()))) throw new Error("the catalog folder is not answering");
+    if (who && !(ecFacts(file, who) || {}).deskOk) throw new Error("not a desk's own file");
     return { name: base, text: catalogTextOf(fs.readFileSync(file, "utf8")) };
   }
   catch (err) {

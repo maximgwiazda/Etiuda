@@ -434,6 +434,53 @@ async function launch(plan) {
         refused: ST.nsGet("CatalogNo") || "", standing: standing() };
     },
   });
+  /* A COLLEAGUE'S FILE IN THE LIBRARY, and the panel behind its Look: each row as the list drew it, the desk's own place
+     in the list (`at`) for the acts that press its buttons, and the hooks this path calls, counted rather than stubbed. */
+  const readRows = () => {
+    const box = doc.getElementById("mgCatList");
+    return box ? box.querySelectorAll(".ec-row").map(r => {
+      const b = r.querySelector(".ec-name b"), who = r.querySelector(".ec-who");
+      return { name: b && b.childNodes[0] ? b.childNodes[0].textContent : "", desk: r.classList.contains("ec-desk"), alone: r.classList.contains("ec-alone"),
+               loaded: r.classList.contains("is-loaded"), file: r.getAttribute("data-ec-file"), at: r.getAttribute("data-ec-desk"),
+               fp: texts(r, ".ec-fp")[0] || "", tip: who ? (who.getAttribute("data-tip") || "").replace(/&(?:amp|lt|gt|quot|#39|nbsp);/g, m => ENT[m]) : "", mine: texts(r, ".ec-mine"),
+               meta: texts(r, ".ec-meta")[0] || "", acts: r.querySelectorAll("button").map(x => x.getAttribute("aria-label") || x.id) };
+    }) : [];
+  };
+  obs.rows = [];
+  Object.assign(act, {
+    rows: async () => {
+      if (!doc.getElementById("mgCatList")) { const l = doc.createElement("div"); l.id = "mgCatList"; doc.body.appendChild(l); }
+      OFFER.paintCatalogList();
+      await settle();
+      obs.rows.push(readRows());
+    },
+    look: async at => {
+      obs.backs = 0; HOOKS.openManage = () => { obs.backs++; };
+      const b = doc.querySelector("button[data-ec-look=\"" + at + "\"]");
+      if (!b) throw new Error("no Look on row " + at);
+      b.onclick();
+      await settle();
+      const card = doc.getElementById("modalCard");
+      obs.read.look = !modalUp() ? null : { title: texts(card, ".modal-t")[0] || "", name: texts(card, ".modal-name")[0] || "",
+        heads: texts(card, ".ed-head"), rows: card.querySelectorAll(".ed-row").length, mine: pressed("[data-ed-mine]"),
+        mineWord: texts(card, "[data-ed-mine]"), keep: texts(card, "#edKeep")[0] || "", load: texts(card, "#edLoad")[0] || "", take: takes() };
+    },
+    mine: () => {
+      obs.rebuilt = obs.rebuilt || 0; HOOKS.rebuildCards = () => { obs.rebuilt++; };
+      const b = doc.querySelector("[data-ed-mine]");
+      if (!b) throw new Error("no take on the panel");
+      b.onclick();
+      obs.read.mine = (obs.read.mine || []).concat([{ pressed: pressed("[data-ed-mine]"),
+        row: texts(doc.getElementById("modalCard"), ".ed-row[aria-current=\"true\"]"),
+        over: JSON.parse(JSON.stringify((PACK.pack.overrides || {})[plan.card] || null)), rebuilt: obs.rebuilt }]);
+    },
+    edback2: () => { doc.getElementById("edKeep").onclick(); obs.read.back = { modal: modalUp(), backs: obs.backs }; },
+    work: at => { const b = doc.querySelector("button[data-ec-work=\"" + at + "\"]"); if (!b) throw new Error("no Work on row " + at); b.onclick(); },
+    over: () => { obs.read.over = JSON.parse(JSON.stringify(PACK.pack.overrides || {})); obs.read.heldId = String((CAT.storedCatalog() || {}).id || ""); },
+    // A colleague's file landing while the Library is open, and the list read as it then stands, painted by nothing here.
+    drop: () => { const at = path.join(LAB, "catalogs", plan.drop.rel); fs.mkdirSync(path.dirname(at), { recursive: true }); fs.writeFileSync(at, plan.drop.text, "utf8"); },
+    reread: async () => { await settle(); obs.rows.push(readRows()); },
+  });
   for (const a of plan.acts) {
     if (obs.reloaded) break;
     const [name, arg] = String(a).split(":");
@@ -458,7 +505,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 51;
+  const EXPECTED = 64;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -881,6 +928,99 @@ async function parent() {
       "74i THE CONTROL: the panel's way back closes the panel, brings the bubble back with the differences button focused, and loads nothing: " + JSON.stringify(ab));
     const errs74 = [d74.setup, A74, B74, dKeep.setup, AK, BK, dNo.setup, AN, CN, dBack.setup, AB].flatMap(o => o.errors || []);
     check(!errs74.length, "74j those launches ran their acts without an error" + (errs74.length ? ": " + errs74.length + ", first " + errs74[0] : ""));
+    /* 75: A COLLEAGUE'S FILE IN THE LIBRARY, LOOK, AND WORK FROM IT. The folder holds the catalog in use (lamp.ec); two
+       desks both called Ola, each with a file grown from that edition, the first rewording one card and adding one; Piotr's
+       catalog made from nothing; Ala's file claiming the id in use; and this desk's own file, its key the one the desk
+       envelope names. Each reading is of the markup the list drew or of desk.json at the next launch. */
+    const lab75 = accepted();
+    const envAt75 = path.join(lab75, "userdata", "desk.json");
+    const pin75 = JSON.parse(JSON.parse(fs.readFileSync(envAt75, "utf8")).keys.eCatalog).pin;
+    const deskOf = (doc, who, pr, inLab) => {
+      const pair = pr || crypto.generateKeyPairSync("ed25519"), lab = inLab || lab75;
+      const raw = pair.publicKey.export({ type: "spki", format: "der" }).subarray(-32), id = "k-" + sha(raw).slice(0, 16);
+      const d = Object.assign({}, JSON.parse(JSON.stringify(doc)), { id: id + "-" + sha8(doc.id), modified: true, desk: { id: id, name: who, key: raw.toString("hex"), box: "ef".repeat(32) } });
+      d.sig = { alg: "Ed25519", keyId: id };
+      d.sig.value = crypto.sign(null, Buffer.concat([Buffer.from("etiuda-desk-branch" + NL), Buffer.from(V2.v2SignedBytes(d))]), pair.privateKey).toString("hex");
+      fs.mkdirSync(path.join(lab, "catalogs", "desks", id), { recursive: true });
+      fs.writeFileSync(path.join(lab, "catalogs", "desks", id, "lamp-" + sha8(doc.id) + ".ec"), JSON.stringify(d), "utf8");
+      return { id: id, raw: raw, doc: d, four: id.slice(2, 6) };
+    };
+    const HERS = "Good day, and welcome.";
+    const grown = (body, extra) => { const d = JSON.parse(JSON.stringify(wanted)); d.grew = { id: ID, rev: 1, sha: pin75 };
+      d.cards[0].body.en = body; d.cards[0].firstOnly = true; if (extra) d.cards.push({ id: "c-hers", shelf: "t-op", bodyShape: "plain", title: { en: "Her own" }, body: { en: "Thank you." } }); return d; };
+    const ola1 = deskOf(grown(HERS, true), "Ola"), ola2 = deskOf(grown("Good day to you."), "Ola");
+    const piotr = deskOf(Object.assign(JSON.parse(JSON.stringify(wanted)), { id: "made-here" }), "Piotr");
+    deskFile(lab75, withRev(wanted, 5), "Ala", true);
+    const ownPair = crypto.generateKeyPairSync("ed25519"), ownDesk = deskOf(grown("Hello there."), "Max", ownPair);
+    const env75 = JSON.parse(fs.readFileSync(envAt75, "utf8"));
+    env75.branch = { sign: { pub: ownDesk.raw.toString("hex"), priv: "sealed" }, box: { pub: "ef".repeat(32), priv: "sealed" } };
+    fs.writeFileSync(envAt75, JSON.stringify(env75), "utf8");
+    const grouped = id => id.slice(2).replace(/(.{4})(?=.)/g, "$1 ");
+    const r75 = run(lab75, ["desk", "rows"], true);
+    const rows75 = r75.rows[0] || [], deskRows = rows75.filter(r => r.desk);
+    const rowOf = (rows, four) => rows.find(r => r.desk && r.fp === four) || {};
+    const olaRow = rowOf(rows75, ola1.four), ola2Row = rowOf(rows75, ola2.four), p75 = rows75.find(r => r.name === "Piotr's desk") || {};
+    check(same(rows75.map(r => r.name), ["lamp.ec", "Ola's desk", "Ola's desk", "Piotr's desk"]) && rows75[0].loaded
+      && !olaRow.alone && !ola2Row.alone && p75.alone && deskRows.every(r => r.file === null) && same(olaRow.acts, ["Look", "Work from it"]),
+      "75a the colleagues' files hang under the catalog in use, the one grown from nothing stands alone at the foot, each with Look and Work from it; this desk's own file and one claiming the id in use have no row: "
+      + JSON.stringify(rows75.map(r => [r.name, r.fp, r.alone, r.acts.join("/")])));
+    check(olaRow.fp === ola1.four && ola2Row.fp === ola2.four && p75.fp === "" && olaRow.tip.indexOf(grouped(ola1.id)) > -1 && /^Signed by Ola's desk, key /.test(olaRow.tip),
+      "75b two desks of one name each carry the first four of their key, and the desk's glyph names its key in four groups: " + JSON.stringify([olaRow.fp, ola2Row.fp, p75.fp, olaRow.tip]));
+    check(same(rows75[0].mine, ["Your edits are in the folder as Max's desk"]) && /^1 changed · 1 new · /.test(olaRow.meta) && /^A catalog of its own · /.test(p75.meta),
+      "75c the loaded row says this desk's edits are in the folder under its desk's name; a hanging row says what that desk changed, and one grown from nothing says so: "
+      + JSON.stringify([rows75[0].mine, olaRow.meta, p75.meta]));
+
+    const L2 = run(lab75, ["desk", "rows", "look:" + olaRow.at, "mine", "mine", "edback2"], true, { card: "c-warm" });
+    const lk = rd(L2, "look"), m1 = ((L2.read || {}).mine || [])[0] || {}, m2 = ((L2.read || {}).mine || [])[1] || {};
+    check(!!lk.title && lk.title === "Ola's desk" && lk.name === "lamp" && same(lk.heads, ["In the team's edition", "At Ola's desk"]) && lk.rows === 2
+      && same(lk.mine, ["false"]) && same(lk.take, []) && lk.keep === "Back to the Library" && lk.load === "Work from Ola's desk",
+      "75d Look stands the edition panel told it is a desk: its name, the catalog compared with, the two heads, the card changed and the one added, one take and no offer's pair: " + JSON.stringify(lk));
+    check(same(m1.pressed, ["true"]) && same(m1.over, { en: HERS }) && m1.rebuilt === 1 && /in your edits/.test((m1.row || [""])[0]),
+      "75e the take makes that desk's text of the changed field this desk's own edit at once, that field alone, and the cards are drawn again: " + JSON.stringify(m1));
+    check(same(m2.pressed, ["false"]) && m2.over === null && rd(L2, "back").modal === false && rd(L2, "back").backs === 1,
+      "75E THE CONTROL: pressed again, the edit is what it was before the take (none), and Back to the Library closes the panel and opens the Library: " + JSON.stringify([m2, rd(L2, "back")]));
+    const L3 = run(lab75, ["desk", "rows", "look:" + olaRow.at, "mine", "settle"], true, { card: "c-warm" });
+    const L4 = run(lab75, ["desk", "over"], true);
+    check(same((rd(L4, "over") || {})["c-warm"], { en: HERS }),
+      "75f and the take is on disk: the next launch holds it as this desk's own edit (" + JSON.stringify((rd(L4, "over") || {})["c-warm"]) + ")");
+    const L5 = run(lab75, ["desk", "rows", "look:" + p75.at], true);
+    const lk5 = rd(L5, "look");
+    check(!!lk5.title && same(lk5.mine, []) && lk5.heads[0] === "At Piotr's desk" && lk5.rows === 3,
+      "75g THE CONTROL: a file compared with no catalog in use is looked at and nothing of it can be taken: " + JSON.stringify(lk5));
+    /* A file grown from another catalog in the folder, not the one in use: it hangs under that one, and its changed card cannot be taken. */
+    const lab75g = accepted(), otherCat = Object.assign(JSON.parse(JSON.stringify(wanted)), { id: "lamp-other" });
+    fs.writeFileSync(path.join(lab75g, "catalogs", "other.ec"), JSON.stringify(otherCat), "utf8");
+    const fromOther = JSON.parse(JSON.stringify(otherCat)); fromOther.grew = { id: "lamp-other", rev: 1, sha: "sha256:" + sha(V2.v2SignedBytes(otherCat)) }; fromOther.cards[0].body.en = HERS;
+    deskOf(fromOther, "Bo", null, lab75g);
+    const G1 = run(lab75g, ["desk", "rows"], true), gRows = G1.rows[0] || [], gBo = gRows.find(r => r.name === "Bo's desk") || {};
+    const G2 = run(lab75g, ["desk", "rows", "look:" + gBo.at], true), lkG = rd(G2, "look");
+    check(gRows.map(r => r.name).join("|").indexOf("other.ec|Bo's desk") > -1 && !gBo.alone && !!lkG.title && lkG.name === "other"
+      && same(lkG.heads, ["In the team's edition", "At Bo's desk"]) && same(lkG.mine, []) && same(lkG.take, []),
+      "75G THE CONTROL: a file grown from a catalog in the folder that is not in use hangs under that catalog, is compared with it, and its changed card cannot be taken: "
+      + JSON.stringify([gRows.map(r => r.name), lkG]));
+
+    const L6 = run(lab75, ["desk", "rows", "work:" + olaRow.at, "settle", "yes", "settle"], true);
+    const L7 = run(lab75, ["desk", "rows", "over"], true);
+    const rows7 = L7.rows[0] || [], olaRow7 = rowOf(rows7, ola1.four);
+    check(rd(L7, "over") && rd(L7, "heldId") === ola1.doc.id && L7.fileAtStart === "" && L7.fromAtEnd === "lamp-" + sha8(ID) + ".ec"
+      && olaRow7.loaded && same(olaRow7.acts, ["Look", "Eject"]) && rows7.filter(r => r.loaded).length === 1 && !rows7[0].loaded
+      && same(rows7[0].mine, ["Your own edits on it wait here until you load it again"]) && same(rd(L7, "over"), {}),
+      "75h Work from it makes that desk's file the catalog in use, its row the loaded one and no other; no file of the folder is named in use, and the team's catalog says this desk's edits wait for it: "
+      + JSON.stringify({ held: rd(L7, "heldId"), file: L7.fileAtStart, from: L7.fromAtEnd, rows: rows7.map(r => [r.name, r.loaded, r.mine]), over: rd(L7, "over") }));
+    const L8 = run(lab75, ["desk", "rows", "load:lamp.ec", "settle", "yes", "settle"], true);
+    const L9 = run(lab75, ["desk", "over"], true);
+    check(rd(L9, "heldId") === ID && same((rd(L9, "over") || {})["c-warm"], { en: HERS }),
+      "75i and loading the team's catalog again brings this desk's own edit of it back (" + JSON.stringify([rd(L9, "heldId"), (rd(L9, "over") || {})["c-warm"]]) + ")");
+    /* The listing the shell sends is what repaints an open Library: a colleague's file written under it appears with no other paint. */
+    const cyLab = lab75g, cyPair = crypto.generateKeyPairSync("ed25519"), cy = deskOf(grown("Good day, from Cy."), "Cy", cyPair, cyLab);
+    const cyRel = path.join("desks", cy.id, "lamp-" + sha8(ID) + ".ec"), cyText = fs.readFileSync(path.join(cyLab, "catalogs", cyRel), "utf8");
+    fs.rmSync(path.join(cyLab, "catalogs", "desks", cy.id), { recursive: true, force: true });
+    const G3 = run(cyLab, ["desk", "boot", "settle", "rows", "drop", "listing", "reread"], true, { drop: { rel: cyRel, text: cyText } });
+    const cyBefore = (G3.rows[0] || []).map(r => r.name), cyAfter = (G3.rows[1] || []).map(r => r.name);
+    check(cyBefore.indexOf("Cy's desk") < 0 && cyAfter.indexOf("Cy's desk") > -1,
+      "75k a colleague's file written while the Library is open appears in it once the shell's listing arrives, with no other paint (" + JSON.stringify([cyBefore, cyAfter]) + ")");
+    const errs75 = [r75, L2, L3, L4, L5, L6, L7, L8, L9, G1, G2, G3].flatMap(o => o.errors || []);
+    check(!errs75.length, "75j those launches ran their acts without an error" + (errs75.length ? ": " + errs75.length + ", first " + errs75[0] : ""));
   } catch (e) {
     failed++;
     console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

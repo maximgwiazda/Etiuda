@@ -993,7 +993,22 @@ UI_STRINGS.pl={
   "Nothing on the clipboard fits this field. It holds: {TEXT}":"Nic ze schowka nie pasuje do tego pola. Jest w nim: {TEXT}",
   "The clipboard is empty.":"Schowek jest pusty.",
   "Ctrl+V pastes into the field here.":"Tutaj do pola wkleja się przez Ctrl+V.",
-  "Enter copies once the field is filled. Esc goes back to the list.":"Enter kopiuje, gdy pole jest wypełnione. Esc wraca do listy."
+  "Enter copies once the field is filled. Esc goes back to the list.":"Enter kopiuje, gdy pole jest wypełnione. Esc wraca do listy.",
+  "{NAME}'s desk":"Stanowisko: {NAME}",
+  "A colleague's desk":"Stanowisko współpracownika",
+  "Signed by {DESK}, key {KEY}. Only that desk can change this file; anyone with the folder can read it.":"Podpisane kluczem {KEY} ({DESK}). Zmienić ten plik może tylko to stanowisko; odczytać każdy, kto ma dostęp do folderu.",
+  "Look":"Zobacz",
+  "Work from it":"Pracuj na nim",
+  "A catalog of its own":"Osobny katalog",
+  "Your edits are in the folder as {DESK}":"Twoje zmiany są w folderze ({DESK})",
+  "Your own edits on it wait here until you load it again":"Twoje zmiany w nim czekają tutaj, aż wczytasz go ponownie",
+  "In the team's edition":"W wydaniu zespołu",
+  "At {DESK}":"{DESK}",
+  "Back to the Library":"Wróć do Biblioteki",
+  "Work from {DESK}":"Pracuj na tym pliku",
+  "Take the text from {DESK} into mine":"Weź tę treść do swoich zmian",
+  "in your edits":"w Twoich zmianach",
+  "That desk's cards match the team's edition.":"Karty na tym stanowisku są takie same jak w wydaniu zespołu."
 };
 // Is this a language this build carries? The table itself stays private to this file.
 function uiLangKnown(l){ return !!(l && UI_STRINGS[l]); }
