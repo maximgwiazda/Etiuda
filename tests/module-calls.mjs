@@ -3030,7 +3030,9 @@ const CARD_B = {
   let drawn = "";
   const els = { "#modalCard": Object.defineProperty(stub(), "innerHTML", { get() { return drawn; }, set(v) { drawn = String(v); } }) };
   const smoke = fs.readFileSync(join(HERE, "smoke.js"), "utf8");
-  const sites = [...smoke.matchAll(/#modalCard input\[id\^="([^"]*)"\]/g)].map(m => m[1]);
+  /* Read in any quoting (double, single, none) and through a descendant step ('#modalCard .mf input[...]'), within one
+     string literal; a qualifier such as .mf is treated as absent, which errs towards red. Comments are read too. */
+  const sites = [...smoke.matchAll(/#modalCard[^'"`\n]*?\binput\[id\^=["']?([^"'\]]*)["']?\]/g)].map(m => m[1]);
   try {
     globalThis.document = { querySelector: s => els[s] || (els[s] = stub()), getElementById: id => els["#" + id] || null, querySelectorAll: () => [],
       createElement: () => stub(), createRange: () => stub(), addEventListener() {}, activeElement: null,
