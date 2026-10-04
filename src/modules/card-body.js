@@ -71,6 +71,7 @@ function cardBodyHtml(m,i,ctx){
         // purpose: 200+ stops would swamp the tab order, and ↑↓/Enter already drive them.
         return '<div class="txt'+cls+on+'" role="button" data-v="'+vi+'"'+(many?' title="'+esc(t("Click to copy, or drag to reorder these"))+'"':' title="'+esc(t("Click to copy"))+'"')+'>'+
         '<span class="tag">'+esc(tag)+'</span>'+
+        (tag.length>4?'<i class="troom" style="--n:'+tag.length+'"></i>':'')+
         escFilled(fill(p,m,true))+'</div>';
       }).join("");
     } else {
