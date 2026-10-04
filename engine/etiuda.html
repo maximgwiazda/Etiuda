@@ -7969,8 +7969,18 @@ What you type stays in this browser only.`;
         return;
       }
       seen[d.id] = 1;
+      if (e.wrap !== void 0 && !(e.wrap && typeof e.wrap === "object" && e.wrap.epoch === doc.epoch && hex64.test(v2Str(e.wrap.enc)) && /^[0-9a-f]{96}$/.test(v2Str(e.wrap.ct)))) {
+        problems.push(where + "a wrap that is not the team key for epoch " + doc.epoch + ", the desk stands without it");
+        e = Object.assign({}, e);
+        delete e.wrap;
+      }
       team.roster.push(e);
     });
+    const rc = doc.recovery;
+    if (rc !== void 0 && !(rc && typeof rc === "object" && rc.epoch === doc.epoch && rc.kdf === "scrypt" && rc.cipher === "aes-256-gcm" && [rc.N, rc.r, rc.p].every((x) => Number.isInteger(x) && x > 0) && /^[0-9a-f]{32}$/.test(v2Str(rc.salt)) && /^[0-9a-f]{24}$/.test(v2Str(rc.iv)) && /^[0-9a-f]{96}$/.test(v2Str(rc.ct)))) {
+      problems.push("team recovery: wanted the team key for epoch " + doc.epoch + " under a passphrase, the team stands without it");
+      delete team.recovery;
+    }
     out.team = team;
     return out;
   }

@@ -347,6 +347,42 @@ async function main() {
      "88h " + sAbsent.length + " absent, empty or foreign files, a team file and a plain catalog among them, read as no"
      + " envelope without a throw, and each but the two absent says one line: " + sNull.map(r => r.problems.length).join(","));
 
+  /* ---- the wraps in the team file, board 834 step 12 S3: the shapes the reader keeps, not the crypto -- */
+
+  const hexOf = (seed, n) => crypto.createHash("sha512").update(seed).digest("hex").slice(0, n);
+  const wrapOf = seed => ({ epoch: 1, enc: hexOf("enc " + seed, 64), ct: hexOf("ct " + seed, 96) });
+  const recovery = { epoch: 1, kdf: "scrypt", N: 32768, r: 8, p: 1, cipher: "aes-256-gcm",
+    salt: hexOf("salt", 32), iv: hexOf("iv", 24), ct: hexOf("recovery", 96) };
+  const wrappedDoc = Object.assign({}, teamDoc, { sealed: true, recovery: recovery,
+    roster: [{ desk: deskOf(1, "Ala"), wrap: wrapOf(1) }, { desk: deskOf(2), name: "Front desk", wrap: wrapOf(2) }] });
+  const wrappedSigned = attachSig(v2, wrappedDoc, v2.V2_SIG_ALG, keyId, pair.privateKey);
+  const t6 = v2.v2TeamRead(JSON.stringify(wrappedSigned));
+  const t6State = t6.team ? await v2.v2TeamSigState(t6.team) : "no team";
+  ok(t6.team && t6.problems.length === 0 && t6.team.roster.length === 2
+     && JSON.stringify(t6.team.roster.map(e => e.wrap)) === JSON.stringify([wrapOf(1), wrapOf(2)])
+     && JSON.stringify(t6.team.recovery) === JSON.stringify(recovery) && t6State === v2.V2_SIG_VALID,
+     "88i a sealed team file whose desks carry their wraps and whose lead keeps a recovery copy reads whole, both kept as"
+     + " written, and verifies: " + JSON.stringify(t6.problems) + ", " + t6State);
+
+  const badWraps = [Object.assign(wrapOf(3), { enc: hexOf("short", 63) }), Object.assign(wrapOf(4), { ct: hexOf("short", 94) }),
+    Object.assign(wrapOf(5), { epoch: 2 }), "a wrap", null];
+  const t7 = v2.v2TeamRead(Object.assign({}, wrappedDoc,
+    { roster: badWraps.map((w, i) => ({ desk: deskOf(10 + i), wrap: w })).concat([{ desk: deskOf(20), wrap: wrapOf(20) }]) }));
+  ok(t7.team && t7.team.roster.length === 6 && t7.team.roster.filter(e => "wrap" in e).length === 1
+     && t7.team.roster[5].wrap.enc === wrapOf(20).enc && t7.problems.length === badWraps.length
+     && t7.problems.every(p => /wrap/.test(p)),
+     "88j THE CONTROL: a wrap with a short enc or ct, of another epoch, or not an object is dropped with a line and its desk"
+     + " stands, and the good neighbour keeps its own (" + t7.problems.length + " lines, "
+     + (t7.team ? t7.team.roster.filter(e => "wrap" in e).length : 0) + " wrap kept)");
+
+  const badRecoveries = [{ kdf: "pbkdf2" }, { epoch: 2 }, { N: 0 }, { cipher: "aes-128-gcm" }, { salt: hexOf("s", 30) },
+    { iv: hexOf("i", 22) }, { ct: hexOf("c", 64) }].map(over => Object.assign({}, recovery, over)).concat(["a recovery"]);
+  const t8 = badRecoveries.map(rc => v2.v2TeamRead(Object.assign({}, wrappedDoc, { recovery: rc })));
+  ok(t8.every(r => r.team && !("recovery" in r.team) && r.team.roster.length === 2 && r.problems.length === 1
+     && /recovery/.test(r.problems[0])),
+     "88k THE CONTROL: a recovery copy of another kdf, epoch, cost, cipher, salt, iv or ct length, or not an object, is"
+     + " dropped with one line and the team stands: " + t8.map(r => r.problems.length).join(","));
+
   console.log(fails ? "RESULT: FAIL, " + fails + " of " + n + " failed"
                     : "RESULT: OK, " + n + " checks");
   /* CAPPED AT 63, ballot 4 of the fourth meeting (2026-09-23): an exit code is read modulo 256 by

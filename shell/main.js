@@ -776,6 +776,33 @@ function openSealed(teamKey, doc) {
   } catch { return null; }
 }
 
+/* ---- the team key's wrap, one per roster entry: the team key sealed by HPKE to the desk's box ---------
+   info binds the team and the epoch and the aad the desk id, so a wrap copied onto another entry, or into
+   another team or epoch, does not open. Studio slices these with HPKE to wrap; a desk opens its own. */
+const TEAM_WRAP_LABEL = "etiuda-team-key\n";
+function teamWrapInfo(teamId, epoch) {
+  return Buffer.from(TEAM_WRAP_LABEL + teamId + "\n" + epoch, "utf8");
+}
+/* {epoch, enc, ct} in hex, a roster entry's wrap; it throws on a key, box, team, epoch or desk id it cannot wrap for. */
+function wrapTeamKey(teamKey, box, teamId, epoch, deskId) {
+  if (!Buffer.isBuffer(teamKey) || teamKey.length !== 32) throw new Error("wrap: a team key is 32 bytes");
+  if (!/^[0-9a-f]{64}$/.test(String(box))) throw new Error("wrap: a desk's box is 64 lower-case hex characters");
+  if (!SEALED_TEAM_RE.test(String(teamId))) throw new Error("wrap: a team id is t- and 16 lower-case hex characters");
+  if (!Number.isInteger(epoch) || epoch < 1) throw new Error("wrap: an epoch is a whole number from 1");
+  if (!/^k-[0-9a-f]{16}$/.test(String(deskId))) throw new Error("wrap: a desk id is k- and 16 lower-case hex characters");
+  const w = hpkeSeal(Buffer.from(box, "hex"), teamWrapInfo(teamId, epoch), Buffer.from(deskId, "utf8"), teamKey);
+  return { epoch: epoch, enc: w.enc.toString("hex"), ct: w.ct.toString("hex") };
+}
+/* The 32-byte team key for this team, epoch and desk, or null: a wrap that says another epoch opens nothing. */
+function unwrapTeamKey(skR, wrap, teamId, epoch, deskId) {
+  if (!wrap || typeof wrap !== "object" || wrap.epoch !== epoch || !Number.isInteger(epoch) || epoch < 1) return null;
+  const enc = String(wrap.enc), ct = String(wrap.ct);
+  if (!/^[0-9a-f]{64}$/.test(enc) || !/^[0-9a-f]{96}$/.test(ct)) return null;
+  const key = hpkeOpen(skR, Buffer.from(enc, "hex"), teamWrapInfo(String(teamId), epoch), Buffer.from(String(deskId), "utf8"),
+    Buffer.from(ct, "hex"));
+  return key && key.length === 32 ? key : null;
+}
+
 /* ---- the desk's branch: an identity of its own, and its own file in the catalog folder --------
    Two key pairs made here at first need, Ed25519 to sign and X25519 to receive a team key. The
    private halves sit in the desk envelope sealed by safeStorage and never leave it: the page is

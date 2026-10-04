@@ -281,8 +281,9 @@ function v2RingRead(src){
 }
 /* THE TEAM FILE, one per shared folder beside the catalogs: written and signed by the lead's Studio, naming the catalogs it
    covers, the lead's key, whether the team's catalogs are sealed, the team key's epoch, and the roster of desks the lead has
-   met. `team` is null where the file is absent or unusable, with a line saying why; an unusable roster entry is dropped
-   and said, and its neighbours stand. Fields this build does not name are kept. */
+   met, an admitted desk's carrying its wrap of the team key. `team` is null where the file is absent or unusable, with a line
+   saying why; an unusable roster entry, wrap or recovery copy is dropped and said, and the rest stands. Fields this build
+   does not name are kept. */
 const V2_TEAM_FORMAT=1, V2_TEAM_KIND="etiuda-team", V2_TEAM_FILE="etiuda-team.json", V2_TEAM_ID_RE=/^t-[0-9a-f]{16}$/;
 function v2TeamRead(src){
   const problems=[], out={team:null, problems:problems};
@@ -319,8 +320,22 @@ function v2TeamRead(src){
     if((d.name!==undefined&&typeof d.name!=="string")||(e.name!==undefined&&typeof e.name!=="string")){ problems.push(where+"a name that is not text"); return; }
     if(seen[d.id]){ problems.push(where+"desk "+d.id+" a second time, the first stands"); return; }
     seen[d.id]=1;
+    /* A wrap is the team key sealed to this desk's box for the team's own epoch (shell/main.js wrapTeamKey). */
+    if(e.wrap!==undefined&&!(e.wrap&&typeof e.wrap==="object"&&e.wrap.epoch===doc.epoch&&hex64.test(v2Str(e.wrap.enc))
+      &&/^[0-9a-f]{96}$/.test(v2Str(e.wrap.ct)))){
+      problems.push(where+"a wrap that is not the team key for epoch "+doc.epoch+", the desk stands without it");
+      e=Object.assign({},e); delete e.wrap;
+    }
     team.roster.push(e);
   });
+  /* The lead's own copy of the team key under a passphrase, which only Studio opens (sign.mjs's scrypt and AES-GCM). */
+  const rc=doc.recovery;
+  if(rc!==undefined&&!(rc&&typeof rc==="object"&&rc.epoch===doc.epoch&&rc.kdf==="scrypt"&&rc.cipher==="aes-256-gcm"
+    &&[rc.N,rc.r,rc.p].every(x=>Number.isInteger(x)&&x>0)&&/^[0-9a-f]{32}$/.test(v2Str(rc.salt))
+    &&/^[0-9a-f]{24}$/.test(v2Str(rc.iv))&&/^[0-9a-f]{96}$/.test(v2Str(rc.ct)))){
+    problems.push("team recovery: wanted the team key for epoch "+doc.epoch+" under a passphrase, the team stands without it");
+    delete team.recovery;
+  }
   out.team=team;
   return out;
 }

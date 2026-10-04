@@ -1,6 +1,7 @@
 /* The shell's HPKE, held to the published vectors of RFC 9180 for the one suite the team key's wrap
  * uses: base mode, DHKEM(X25519, HKDF-SHA256), HKDF-SHA256, AES-128-GCM. Board 834, step 12. From 12m, the
- * sealed envelope beside it: a catalog's text under the team key, AES-256-GCM, held by refusals alone.
+ * sealed envelope beside it: a catalog's text under the team key, AES-256-GCM, held by refusals alone. From 12v,
+ * the team key's wrap for one roster entry, bound to its team, epoch and desk.
  *
  *     node tests/hpke.mjs        exit code is the number of failed checks, capped at 63
  *
@@ -29,7 +30,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 32;
+const EXPECTED = 41;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -74,6 +75,12 @@ const SEAL_DECLS = ["const SEALED_KIND =", "const SEALED_TEAM_RE =", "function s
 function sealFrom(src) {
   return new Function("crypto", "Buffer", SEAL_DECLS.map(m => sliceDecl(src, m)).join("\n")
     + "\nreturn { sealCatalog, openSealed };")(crypto, Buffer);
+}
+/* The team key's wrap, sliced with HPKE and the team id's shape, which is what Studio slices from its pin. */
+const WRAP_DECLS = ["const TEAM_WRAP_LABEL =", "function teamWrapInfo(", "function wrapTeamKey(", "function unwrapTeamKey("];
+function wrapFrom(src) {
+  const body = HPKE_DECLS.concat(["const SEALED_TEAM_RE ="], WRAP_DECLS).map(m => sliceDecl(src, m)).join("\n");
+  return new Function("crypto", "Buffer", body + "\nreturn { teamWrapInfo, wrapTeamKey, unwrapTeamKey };")(crypto, Buffer);
 }
 
 const VECTOR = {
@@ -222,6 +229,45 @@ function main() {
   check(S.openSealed(teamKey, bareEnv) === "" && bareCut.every(got => got === null),
     "12u an empty text opens with its whole tag, and not with the tag cut to 4 or 8 bytes: "
     + bareCut.map(got => got === null ? "null" : "it opened").join(", "));
+
+  /* ---- the team key's wrap for one roster entry: HPKE with the team and epoch in info, the desk id as aad -- */
+  let W = null;
+  try { W = wrapFrom(SRC); } catch (e) { check(false, "12v the team key wrap's declarations slice and evaluate - " + e.message); }
+  if (W) check(true, "12v the " + HPKE_DECLS.length + " HPKE and " + (WRAP_DECLS.length + 1) + " wrap declarations slice out of"
+    + " shell/main.js and evaluate with crypto and Buffer alone");
+  if (!W) return;
+
+  const box = crypto.generateKeyPairSync("x25519"), stranger = crypto.generateKeyPairSync("x25519");
+  const BOX = rawPublicOf(box.privateKey).toString("hex"), DESK = "k-0123456789abcdef", DESK2 = "k-fedcba9876543210";
+  const wrap = W.wrapTeamKey(teamKey, BOX, TEAM, 3, DESK), wrap2 = W.wrapTeamKey(teamKey, BOX, TEAM, 3, DESK);
+  const own = W.unwrapTeamKey(box.privateKey, wrap, TEAM, 3, DESK);
+  check(Object.keys(wrap).join() === "epoch,enc,ct" && wrap.epoch === 3 && /^[0-9a-f]{64}$/.test(wrap.enc)
+    && /^[0-9a-f]{96}$/.test(wrap.ct) && Buffer.isBuffer(own) && own.equals(teamKey)
+    && wrap2.enc !== wrap.enc && wrap2.ct !== wrap.ct && W.unwrapTeamKey(box.privateKey, wrap2, TEAM, 3, DESK).equals(teamKey),
+    "12w a wrap is its epoch, a 32-byte enc and the 48-byte ct in hex; the desk's own box key opens it to the team key, and a"
+    + " second wrap of the same key differs and opens too");
+  const moved = [
+    ["copied onto another roster entry", [box.privateKey, wrap, TEAM, 3, DESK2]],
+    ["copied into another team", [box.privateKey, wrap, "t-0123456789abcdee", 3, DESK]],
+    ["copied into another epoch with its own epoch rewritten", [box.privateKey, Object.assign({}, wrap, { epoch: 4 }), TEAM, 4, DESK]],
+    ["read for an epoch it does not say", [box.privateKey, wrap, TEAM, 4, DESK]],
+  ];
+  moved.forEach(([what, args], i) => {
+    const got = W.unwrapTeamKey(...args);
+    check(got === null, "12x" + (i + 1) + " a wrap " + what + " does not open: " + (got === null ? "null" : "it opened"));
+  });
+  check(W.unwrapTeamKey(stranger.privateKey, wrap, TEAM, 3, DESK) === null,
+    "12y THE CONTROL: another desk's box key opens nothing");
+  const wrapRefused = [[teamKey.subarray(0, 31), BOX, TEAM, 1, DESK], [teamKey, BOX.slice(2), TEAM, 1, DESK],
+    [teamKey, BOX, "t-XYZ", 1, DESK], [teamKey, BOX, TEAM, 0, DESK], [teamKey, BOX, TEAM, 1, "d0123"]]
+    .filter(args => { try { W.wrapTeamKey(...args); return false; } catch { return true; } }).length;
+  check(wrapRefused === 5, "12z wrapping throws on a 31-byte key, a 31-byte box, a malformed team, epoch 0 and a desk id that"
+    + " is not a branch id: " + wrapRefused + " of 5");
+  const wrapQuiet = [[box.privateKey, null], [box.privateKey, "a wrap"], [box.privateKey, Object.assign({}, wrap, { ct: wrap.ct.slice(0, 94) })],
+    [box.privateKey, Object.assign({}, wrap, { enc: wrap.enc.slice(2) })], [rawPublicOf(box.privateKey), wrap]]
+    .filter(([k, w]) => { try { return W.unwrapTeamKey(k, w, TEAM, 3, DESK) === null; } catch { return false; } }).length;
+  check(wrapQuiet === 5, "12Z unwrapping gives null without a throw for no wrap, a string, a short ct, a short enc and a key as"
+    + " bytes: " + wrapQuiet + " of 5");
 }
 
 try { main(); }
