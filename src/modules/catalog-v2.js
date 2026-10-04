@@ -48,7 +48,7 @@ const CARD_FLAGS=["firstOnly","allIntents","intentTop"];
 const V2_CARD_NAMED=["id","shelf","title","body","note","bodyShape","k","firstOnly","allIntents","intentTop",
   "paxVoc","lockLang","requests","retired","next","commits"];
 const V2_HEAD_NAMED=["format","kind","id","rev","date","langs","commentLang","tags","cards","role","facts",
-  "greet","stop","sample","modified","hash","sig","notes","grew","desk","name"];
+  "greet","stop","sample","modified","hash","sig","notes","grew","desk","name","fields"];
 // One phrase per part of the day, and the clock has three. A language whose greeting covers
 // two parts writes the same phrase twice, which is what the built-in Polish does.
 const V2_GREET_PARTS=3;
@@ -522,6 +522,60 @@ function v2HeaderProblems(data,codes,out){
     });
   }
 }
+/* FILL-IN FIELDS: a label per language, which a card's text names in braces, and how a value is
+   checked. No label may spell a token the desk fills itself; tests/fields.mjs holds this list to
+   TOKEN_CANARY, and {WHO}, which the lint still names. */
+const V2_FIELD_KINDS=["text","link","date","amount","pattern"];
+const V2_DESK_TOKENS=["GREET","AGENT","PAX","ROLE","INIT","INTENT","ACTION","TOPIC","Z","DAYPART","WHO"];
+const V2_FIELD_ID_RE=/^[a-z0-9][a-z0-9-]{0,63}$/;
+function v2FieldProblems(data,codes,primary,out){
+  if(data.fields===undefined) return;
+  if(!Array.isArray(data.fields)){ out.push("fields: not a list"); return; }
+  const ids={}, labels={};
+  const text=(name,f,v)=>{
+    if(v===undefined) return;
+    if(!v||typeof v!=="object"||Array.isArray(v)){ out.push(name+": "+f+" is not text by language"); return; }
+    Object.keys(v).forEach(code=>{
+      if(codes.indexOf(code)<0) out.push(name+": "+f+"."+code+" is a language this catalog does not declare");
+      else if(typeof v[code]!=="string") out.push(name+": "+f+"."+code+" is not text");
+    });
+  };
+  data.fields.forEach((f,i)=>{
+    const at="fields["+i+"]";
+    if(!f||typeof f!=="object"||Array.isArray(f)){ out.push(at+": not an entry"); return; }
+    const id=v2Str(f.id), name=V2_FIELD_ID_RE.test(id)?"field "+id:at;
+    if(!V2_FIELD_ID_RE.test(id)) out.push(at+".id: "+v2Missing(f.id)+", wanted 1 to 64 of a-z, 0-9 and the hyphen");
+    else if(ids[id]) out.push(name+": the id is claimed twice");
+    ids[id]=1;
+    const lab=f.label;
+    if(!lab||typeof lab!=="object"||Array.isArray(lab)) out.push(name+": label absent, or not text by language");
+    else{
+      if(!v2Str(lab[primary]).trim()) out.push(name+": no label in "+primary+", the primary language");
+      const own={};
+      Object.keys(lab).forEach(code=>{
+        const v=lab[code];
+        if(codes.indexOf(code)<0){ out.push(name+": label."+code+" is a language this catalog does not declare"); return; }
+        if(typeof v!=="string"||!v.trim()){ out.push(name+": label."+code+" is not text"); return; }
+        if(v.length>60||/[{}:\n]/.test(v)){ out.push(name+": label."+code+" holds a brace, a colon or a line break, or runs past 60 characters"); return; }
+        const k=v.normalize("NFC").toLowerCase().replace(/\s+/g," ").trim();
+        if(V2_DESK_TOKENS.indexOf(k.toUpperCase())>-1){ out.push(name+": label."+code+" spells {"+k.toUpperCase()+"}, which the desk fills itself"); return; }
+        if(labels[k]) out.push(name+": label."+code+" is also the label of "+labels[k]);
+        own[k]=1;
+      });
+      Object.keys(own).forEach(k=>{ if(!labels[k]) labels[k]=name; });
+    }
+    if(V2_FIELD_KINDS.indexOf(v2Str(f.kind))<0)
+      out.push(name+": kind "+v2Missing(f.kind)+", wanted one of "+V2_FIELD_KINDS.join(", "));
+    else if(f.kind==="pattern" && (typeof f.pattern!=="string"||!f.pattern.trim()||f.pattern.length>60))
+      out.push(name+": pattern "+v2Missing(f.pattern)+", wanted the shape of a value in 1 to 60 characters");
+    ["required","clip"].forEach(k=>{
+      if(f[k]!==undefined && typeof f[k]!=="boolean") out.push(name+": "+k+" is not true or false");
+    });
+    if(f.keep!==undefined && f.keep!=="conversation" && f.keep!=="copy")
+      out.push(name+": keep is not conversation or copy");
+    text(name,"skip",f.skip);
+  });
+}
 /** Section 2.5 of the specification, and the body rules of 2.6. Every problem rather than the
  *  first, because a maintainer fixing a file wants the whole list, and every message names the
  *  field and what it belongs to. */
@@ -569,6 +623,7 @@ function v2Problems(data){
   });
   data.cards.forEach((c,i)=>v2NextProblems(c,v2Str(c&&c.id)||("["+i+"]"),cardSeen,out));
   v2HeaderProblems(data,codes,out);
+  v2FieldProblems(data,codes,primary,out);
   if(data.hash!=null && v2ContentHash(data)!==v2Str(data.hash))
     out.push("hash: "+v2Str(data.hash)+" is not the hash of what the file holds");
   return out;
@@ -672,6 +727,7 @@ function catalogFromV2(data){
   if(data.notes) out.notes=v2Copy(data.notes);
   if(data.grew) out.grew=v2Copy(data.grew);
   if(data.desk) out.desk=v2Copy(data.desk);
+  if(Array.isArray(data.fields)) out.fields=v2Copy(data.fields);
   const more=v2Extra(data,V2_HEAD_NAMED); if(more) out.ext=more;
   return out;
 }
@@ -775,6 +831,7 @@ function catalogToV2(c,opts){
   if(c.notes&&typeof c.notes==="object") out.notes=v2Copy(c.notes);
   if(c.grew&&typeof c.grew==="object") out.grew=v2Copy(c.grew);
   if(c.desk&&typeof c.desk==="object") out.desk=v2Copy(c.desk);
+  if(Array.isArray(c.fields)) out.fields=v2Copy(c.fields);
   v2Restore(out,c.ext,V2_HEAD_NAMED);
   /* Section 5. This engine is never the origin of a catalog, so a file it hands back says so.
      Rev arrives already raised where an export chose a new edition - see currentCatalog - and is

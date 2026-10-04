@@ -966,7 +966,22 @@ UI_STRINGS.pl={
   "Yours, not the catalog's.":"Pieczątka własna, nie z katalogu.",
   "The catalog does not stamp this card; your desk and your exports will.":"Katalog nie oznacza tej karty pieczątką; to stanowisko i jego eksporty tak.",
   "The catalog stamps this card.":"Katalog oznacza tę kartę pieczątką.",
-  "You took the stamp off on this desk. Reset puts it back.":"Na tym stanowisku pieczątka jest zdjęta. Reset ją przywraca."
+  "You took the stamp off on this desk. Reset puts it back.":"Na tym stanowisku pieczątka jest zdjęta. Reset ją przywraca.",
+  "Fill in before copying":"Uzupełnij przed kopiowaniem",
+  "from this conversation":"z tej rozmowy",
+  "may be skipped":"można pominąć",
+  "from the clipboard":"ze schowka",
+  "paste or type":"wklej albo wpisz",
+  "What is filled in stays with this conversation, for every reply that needs it.":"To, co wpisane, zostaje w tej rozmowie dla każdej odpowiedzi, która tego potrzebuje.",
+  "Copy":"Kopiuj",
+  "Does not fit the field: {LABEL}":"Nie pasuje do pola: {LABEL}",
+  "The reply does not go without: {LABEL}":"Bez tego odpowiedź nie wyjdzie: {LABEL}",
+  "The clipboard could not be read just now.":"Schowka nie udało się teraz odczytać.",
+  "Taken from the clipboard.":"Wzięte ze schowka.",
+  "Nothing on the clipboard fits this field. It holds: {TEXT}":"Nic ze schowka nie pasuje do tego pola. Jest w nim: {TEXT}",
+  "The clipboard is empty.":"Schowek jest pusty.",
+  "Ctrl+V pastes into the field here.":"Tutaj do pola wkleja się przez Ctrl+V.",
+  "Enter copies once the field is filled. Esc goes back to the list.":"Enter kopiuje, gdy pole jest wypełnione. Esc wraca do listy."
 };
 // Is this a language this build carries? The table itself stays private to this file.
 function uiLangKnown(l){ return !!(l && UI_STRINGS[l]); }

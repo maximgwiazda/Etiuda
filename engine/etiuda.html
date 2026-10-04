@@ -3217,9 +3217,21 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   pointer-events:none}
 #eNotices .bub{position:relative;pointer-events:auto}
 /* A field on the fill: paper, so what is typed reads as the reader's own. */
-.bub .e-name-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
+.bub .e-name-inp,.bub .e-field-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
   border:1px solid transparent;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans)}
-.bub .e-name-inp:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.bub .e-name-inp:focus-visible,.bub .e-field-inp:focus-visible{outline:2px solid #fff;outline-offset:2px}
+/* THE FILL-IN FIELDS ASKED AT A COPY (field-ask.js): one row per field, its name, what it holds already,
+   and the key that takes the clipboard. A field refused wears a dashed edge. */
+.e-field-row{display:block;margin:0 0 8px}
+.e-field-head{display:flex;align-items:baseline;gap:8px;font-size:13px;color:var(--bub-ink)}
+.e-field-name{font-weight:600}
+.e-field-note,.e-field-clip{font-size:12px;color:var(--bub-dim)}
+.e-field-clip{margin-left:auto;white-space:nowrap}
+.e-field-clip kbd{font:10.5px var(--mono);padding:0 4px;border:1px solid rgba(255,255,255,.6);border-radius:4px}
+.bub .e-field-inp[aria-invalid]{border:1px dashed #fff}
+.bub-ask p.e-field-said{color:var(--bub-ink);margin:0 0 8px}
+.bub-ask p.e-field-said:empty{display:none}
+.e-field-ask .btn.primary.e-waits{opacity:.6}
 .bub .e-greet{color:var(--bub-ink);margin:8px 0 10px}
 .tour-field{margin:0 0 4px}
 .bub .e-greet .e-name-ph{color:var(--bub-dim);opacity:.8}
@@ -4383,6 +4395,7 @@ What you type stays in this browser only.`;
     catsDropArmed: () => catsDropArmed,
     dragState: () => dragState,
     entrySel: () => entrySel,
+    fieldVals: () => fieldVals,
     intentIdxs: () => intentIdxs,
     intentText: () => intentText,
     lang: () => lang,
@@ -4406,6 +4419,7 @@ What you type stays in this browser only.`;
     setCats: () => setCats,
     setCatsDropArmed: () => setCatsDropArmed,
     setDragState: () => setDragState,
+    setFieldVals: () => setFieldVals,
     setIntentIdxs: () => setIntentIdxs,
     setIntentText: () => setIntentText,
     setPendingScrollHit: () => setPendingScrollHit,
@@ -4424,6 +4438,7 @@ What you type stays in this browser only.`;
     shown: () => shown,
     suppressClick: () => suppressClick,
     swapLock: () => swapLock,
+    watchFieldVals: () => watchFieldVals,
     wholeThingEmpty: () => wholeThingEmpty
   });
   var cards = [];
@@ -4444,6 +4459,8 @@ What you type stays in this browser only.`;
   var pendingScrollHit = false;
   var intentIdxs = [];
   var intentText = "";
+  var fieldVals = {};
+  var fieldValsWatch = null;
   var lang = "en";
   var mgOpen = /* @__PURE__ */ new Set(["data"]);
   var cardCounts = {};
@@ -4469,6 +4486,7 @@ What you type stays in this browser only.`;
     pendingScrollHit = false;
     intentIdxs = [];
     intentText = "";
+    fieldVals = {};
     cardCounts = {};
     dragState = null;
     suppressClick = false;
@@ -4527,6 +4545,14 @@ What you type stays in this browser only.`;
   }
   function setIntentText(v) {
     intentText = v;
+  }
+  function setFieldVals(v) {
+    fieldVals = v;
+    const w = fieldValsWatch;
+    if (w) w();
+  }
+  function watchFieldVals(fn) {
+    fieldValsWatch = fn || null;
   }
   function putLang(v) {
     lang = v;
@@ -6593,7 +6619,22 @@ What you type stays in this browser only.`;
     "Yours, not the catalog's.": "Pieczątka własna, nie z katalogu.",
     "The catalog does not stamp this card; your desk and your exports will.": "Katalog nie oznacza tej karty pieczątką; to stanowisko i jego eksporty tak.",
     "The catalog stamps this card.": "Katalog oznacza tę kartę pieczątką.",
-    "You took the stamp off on this desk. Reset puts it back.": "Na tym stanowisku pieczątka jest zdjęta. Reset ją przywraca."
+    "You took the stamp off on this desk. Reset puts it back.": "Na tym stanowisku pieczątka jest zdjęta. Reset ją przywraca.",
+    "Fill in before copying": "Uzupełnij przed kopiowaniem",
+    "from this conversation": "z tej rozmowy",
+    "may be skipped": "można pominąć",
+    "from the clipboard": "ze schowka",
+    "paste or type": "wklej albo wpisz",
+    "What is filled in stays with this conversation, for every reply that needs it.": "To, co wpisane, zostaje w tej rozmowie dla każdej odpowiedzi, która tego potrzebuje.",
+    "Copy": "Kopiuj",
+    "Does not fit the field: {LABEL}": "Nie pasuje do pola: {LABEL}",
+    "The reply does not go without: {LABEL}": "Bez tego odpowiedź nie wyjdzie: {LABEL}",
+    "The clipboard could not be read just now.": "Schowka nie udało się teraz odczytać.",
+    "Taken from the clipboard.": "Wzięte ze schowka.",
+    "Nothing on the clipboard fits this field. It holds: {TEXT}": "Nic ze schowka nie pasuje do tego pola. Jest w nim: {TEXT}",
+    "The clipboard is empty.": "Schowek jest pusty.",
+    "Ctrl+V pastes into the field here.": "Tutaj do pola wkleja się przez Ctrl+V.",
+    "Enter copies once the field is filled. Esc goes back to the list.": "Enter kopiuje, gdy pole jest wypełnione. Esc wraca do listy."
   };
   function uiLangKnown(l) {
     return !!(l && UI_STRINGS[l]);
@@ -7824,7 +7865,8 @@ What you type stays in this browser only.`;
     "notes",
     "grew",
     "desk",
-    "name"
+    "name",
+    "fields"
   ];
   var V2_GREET_PARTS = 3;
   var DEFAULT_LANGS = [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }];
@@ -8283,6 +8325,80 @@ What you type stays in this browser only.`;
       });
     }
   }
+  var V2_FIELD_KINDS = ["text", "link", "date", "amount", "pattern"];
+  var V2_DESK_TOKENS = ["GREET", "AGENT", "PAX", "ROLE", "INIT", "INTENT", "ACTION", "TOPIC", "Z", "DAYPART", "WHO"];
+  var V2_FIELD_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+  function v2FieldProblems(data, codes, primary, out) {
+    if (data.fields === void 0) return;
+    if (!Array.isArray(data.fields)) {
+      out.push("fields: not a list");
+      return;
+    }
+    const ids = {}, labels = {};
+    const text = (name, f, v) => {
+      if (v === void 0) return;
+      if (!v || typeof v !== "object" || Array.isArray(v)) {
+        out.push(name + ": " + f + " is not text by language");
+        return;
+      }
+      Object.keys(v).forEach((code) => {
+        if (codes.indexOf(code) < 0) out.push(name + ": " + f + "." + code + " is a language this catalog does not declare");
+        else if (typeof v[code] !== "string") out.push(name + ": " + f + "." + code + " is not text");
+      });
+    };
+    data.fields.forEach((f, i) => {
+      const at = "fields[" + i + "]";
+      if (!f || typeof f !== "object" || Array.isArray(f)) {
+        out.push(at + ": not an entry");
+        return;
+      }
+      const id = v2Str(f.id), name = V2_FIELD_ID_RE.test(id) ? "field " + id : at;
+      if (!V2_FIELD_ID_RE.test(id)) out.push(at + ".id: " + v2Missing(f.id) + ", wanted 1 to 64 of a-z, 0-9 and the hyphen");
+      else if (ids[id]) out.push(name + ": the id is claimed twice");
+      ids[id] = 1;
+      const lab = f.label;
+      if (!lab || typeof lab !== "object" || Array.isArray(lab)) out.push(name + ": label absent, or not text by language");
+      else {
+        if (!v2Str(lab[primary]).trim()) out.push(name + ": no label in " + primary + ", the primary language");
+        const own = {};
+        Object.keys(lab).forEach((code) => {
+          const v = lab[code];
+          if (codes.indexOf(code) < 0) {
+            out.push(name + ": label." + code + " is a language this catalog does not declare");
+            return;
+          }
+          if (typeof v !== "string" || !v.trim()) {
+            out.push(name + ": label." + code + " is not text");
+            return;
+          }
+          if (v.length > 60 || /[{}:\n]/.test(v)) {
+            out.push(name + ": label." + code + " holds a brace, a colon or a line break, or runs past 60 characters");
+            return;
+          }
+          const k = v.normalize("NFC").toLowerCase().replace(/\s+/g, " ").trim();
+          if (V2_DESK_TOKENS.indexOf(k.toUpperCase()) > -1) {
+            out.push(name + ": label." + code + " spells {" + k.toUpperCase() + "}, which the desk fills itself");
+            return;
+          }
+          if (labels[k]) out.push(name + ": label." + code + " is also the label of " + labels[k]);
+          own[k] = 1;
+        });
+        Object.keys(own).forEach((k) => {
+          if (!labels[k]) labels[k] = name;
+        });
+      }
+      if (V2_FIELD_KINDS.indexOf(v2Str(f.kind)) < 0)
+        out.push(name + ": kind " + v2Missing(f.kind) + ", wanted one of " + V2_FIELD_KINDS.join(", "));
+      else if (f.kind === "pattern" && (typeof f.pattern !== "string" || !f.pattern.trim() || f.pattern.length > 60))
+        out.push(name + ": pattern " + v2Missing(f.pattern) + ", wanted the shape of a value in 1 to 60 characters");
+      ["required", "clip"].forEach((k) => {
+        if (f[k] !== void 0 && typeof f[k] !== "boolean") out.push(name + ": " + k + " is not true or false");
+      });
+      if (f.keep !== void 0 && f.keep !== "conversation" && f.keep !== "copy")
+        out.push(name + ": keep is not conversation or copy");
+      text(name, "skip", f.skip);
+    });
+  }
   function v2Problems(data) {
     if (!isV2(data)) return ["not an Etiuda catalog (format 2)"];
     if (!Array.isArray(data.cards)) return ["cards: absent, or not a list"];
@@ -8331,6 +8447,7 @@ What you type stays in this browser only.`;
     });
     data.cards.forEach((c, i) => v2NextProblems(c, v2Str(c && c.id) || "[" + i + "]", cardSeen, out));
     v2HeaderProblems(data, codes, out);
+    v2FieldProblems(data, codes, primary, out);
     if (data.hash != null && v2ContentHash(data) !== v2Str(data.hash))
       out.push("hash: " + v2Str(data.hash) + " is not the hash of what the file holds");
     return out;
@@ -8434,6 +8551,7 @@ What you type stays in this browser only.`;
     if (data.notes) out.notes = v2Copy(data.notes);
     if (data.grew) out.grew = v2Copy(data.grew);
     if (data.desk) out.desk = v2Copy(data.desk);
+    if (Array.isArray(data.fields)) out.fields = v2Copy(data.fields);
     const more = v2Extra(data, V2_HEAD_NAMED);
     if (more) out.ext = more;
     return out;
@@ -8544,6 +8662,7 @@ What you type stays in this browser only.`;
     if (c.notes && typeof c.notes === "object") out.notes = v2Copy(c.notes);
     if (c.grew && typeof c.grew === "object") out.grew = v2Copy(c.grew);
     if (c.desk && typeof c.desk === "object") out.desk = v2Copy(c.desk);
+    if (Array.isArray(c.fields)) out.fields = v2Copy(c.fields);
     v2Restore(out, c.ext, V2_HEAD_NAMED);
     if (v2Str(c.id)) out.modified = true;
     out.hash = v2ContentHash(out);
@@ -10071,7 +10190,10 @@ What you type stays in this browser only.`;
       cats: [],
       entrySel: null,
       scrollY: 0,
-      path: []
+      path: [],
+      /* The fill-in fields this conversation has answered, field id to value. Kept with the tab, which
+         under the shell lives in the app's memory, so a value goes when its conversation closes. */
+      fields: {}
     };
   }
   var TAB_PATH_MAX = 40;
@@ -10104,6 +10226,7 @@ What you type stays in this browser only.`;
     t2.cats = cats.slice();
     t2.entrySel = entrySel ? { id: entrySel.id, vi: entrySel.vi } : null;
     t2.scrollY = pageScrollY();
+    t2.fields = Object.assign({}, fieldVals);
   }
   function saveTabSession() {
     snapshotActiveTab();
@@ -10205,6 +10328,7 @@ What you type stays in this browser only.`;
     setIntentIdxs(Array.isArray(tb.intentIdxs) ? tb.intentIdxs.slice().filter((i) => Number.isInteger(i) && i >= 0 && i < intentCount()) : []);
     setIntentText(tb.intentText || "");
     setCats(Array.isArray(tb.cats) ? tb.cats.slice() : []);
+    setFieldVals(tabFieldVals(tb));
     if (tb.entrySel && tb.entrySel.id != null) {
       putEntrySel({ id: String(tb.entrySel.id), vi: +tb.entrySel.vi || 0 });
     } else {
@@ -10386,9 +10510,16 @@ What you type stays in this browser only.`;
   }
   var tabWipeArmedAt = 0;
   var tabWipeToast = -1;
+  function tabFieldVals(tb) {
+    const out = {}, f = tb && tb.fields && typeof tb.fields === "object" ? tb.fields : {};
+    Object.keys(f).forEach((k) => {
+      if (typeof f[k] === "string" && f[k]) out[k] = f[k];
+    });
+    return out;
+  }
   function tabHasWork(tb) {
     if (!tb) return false;
-    return !!(String(tb.pax || "").trim() || String(tb.intentBox || "").trim() || String(tb.who || "").trim() || String(tb.intentText || "").trim() || tb.cats && tb.cats.length || tb.intentIdxs && tb.intentIdxs.length);
+    return !!(String(tb.pax || "").trim() || String(tb.intentBox || "").trim() || Object.keys(tabFieldVals(tb)).length || String(tb.who || "").trim() || String(tb.intentText || "").trim() || tb.cats && tb.cats.length || tb.intentIdxs && tb.intentIdxs.length);
   }
   function closeAllTabs() {
     const keepId = tabs[0] ? tabs[0].id : null;
@@ -11036,6 +11167,133 @@ What you type stays in this browser only.`;
     }
   }
 
+  // src/modules/fields.js
+  var fields_exports = {};
+  __export(fields_exports, {
+    FILL_FIELD_KINDS: () => FILL_FIELD_KINDS,
+    FILL_FIELD_RE: () => FILL_FIELD_RE,
+    FILL_FIELD_VALUE_MAX: () => FILL_FIELD_VALUE_MAX,
+    catalogFillFields: () => catalogFillFields,
+    fillFieldClean: () => fillFieldClean,
+    fillFieldFit: () => fillFieldFit,
+    fillFieldFold: () => fillFieldFold,
+    fillFieldFor: () => fillFieldFor,
+    fillFieldLabel: () => fillFieldLabel,
+    fillFieldOk: () => fillFieldOk,
+    fillFieldOnce: () => fillFieldOnce,
+    fillFieldPatternRe: () => fillFieldPatternRe,
+    fillFieldRequired: () => fillFieldRequired,
+    fillFieldSkip: () => fillFieldSkip,
+    fillFieldTakesClip: () => fillFieldTakesClip,
+    fillFieldsIn: () => fillFieldsIn,
+    setCatalogFillFields: () => setCatalogFillFields
+  });
+  var FILL_FIELD_KINDS = ["text", "link", "date", "amount", "pattern"];
+  var FILL_FIELD_VALUE_MAX = 300;
+  var FILL_FIELD_RE = /\{([^{}:\n]{1,60})\}/g;
+  var fillFieldList = [];
+  var fillFieldIndex = /* @__PURE__ */ new Map();
+  function fillFieldFold(s) {
+    return String(s == null ? "" : s).normalize("NFC").toLowerCase().replace(/\s+/g, " ").trim();
+  }
+  function setCatalogFillFields(list2) {
+    fillFieldList = Array.isArray(list2) ? list2.filter((f) => f && typeof f === "object" && typeof f.id === "string") : [];
+    fillFieldIndex = /* @__PURE__ */ new Map();
+    fillFieldList.forEach((f) => {
+      Object.keys(f.label || {}).forEach((code) => {
+        const k = fillFieldFold(f.label[code]);
+        if (k && !fillFieldIndex.has(k)) fillFieldIndex.set(k, f);
+      });
+    });
+  }
+  function catalogFillFields() {
+    return fillFieldList;
+  }
+  function fillFieldFor(name) {
+    return fillFieldIndex.get(fillFieldFold(name)) || null;
+  }
+  function fillFieldsIn(text) {
+    const out = [];
+    if (!fillFieldList.length) return out;
+    String(text == null ? "" : text).replace(FILL_FIELD_RE, (raw, name) => {
+      const f = fillFieldFor(name);
+      if (f && out.indexOf(f) < 0) out.push(f);
+      return raw;
+    });
+    return out;
+  }
+  function fillFieldLabel(f, l) {
+    const lab = f && f.label || {};
+    if (typeof lab[l] === "string" && lab[l].trim()) return lab[l].trim();
+    const k = Object.keys(lab).find((c) => typeof lab[c] === "string" && lab[c].trim());
+    return k ? lab[k].trim() : String(f && f.id || "");
+  }
+  function fillFieldRequired(f) {
+    return !(f && f.required === false);
+  }
+  function fillFieldOnce(f) {
+    return !!(f && f.keep === "copy");
+  }
+  function fillFieldTakesClip(f) {
+    return !(f && f.clip === false);
+  }
+  function fillFieldSkip(f, l) {
+    const s = f && f.skip || {};
+    return typeof s[l] === "string" ? s[l] : "";
+  }
+  var FILL_FIELD_INVISIBLE = new RegExp("[" + String.fromCharCode(8203, 8204, 8205, 8288, 65279, 173) + "]", "g");
+  var FILL_FIELD_SPACES = new RegExp("[" + String.fromCharCode(160, 8199, 8239, 12288) + String.fromCharCode(8192) + "-" + String.fromCharCode(8202) + "]", "g");
+  var FILL_FIELD_BREAKS = new RegExp("[\\x00-\\x1f\\x7f-\\x9f" + String.fromCharCode(8232, 8233) + "]", "g");
+  function fillFieldClean(s) {
+    return String(s == null ? "" : s).normalize("NFC").replace(FILL_FIELD_INVISIBLE, "").replace(FILL_FIELD_SPACES, " ").replace(FILL_FIELD_BREAKS, " ").replace(/[{}]/g, "").replace(/\s+/g, " ").trim().slice(0, FILL_FIELD_VALUE_MAX);
+  }
+  function fillFieldPatternRe(p) {
+    const src = String(p == null ? "" : p).split("").map((ch) => ch === "0" ? "\\d" : ch === "?" ? "[\\p{L}\\p{N}]" : /[\^$\\.*+()[\]{}|\/]/.test(ch) ? "\\" + ch : ch).join("");
+    try {
+      return new RegExp("(?<![\\p{L}\\p{N}])" + src + "(?![\\p{L}\\p{N}])", "iu");
+    } catch (e) {
+      return null;
+    }
+  }
+  var FILL_FIELD_NUM = "\\d{1,3}(?:[ .]\\d{3})+(?:,\\d{1,2})?|\\d+(?:[.,]\\d{1,2})?";
+  var FILL_FIELD_CUR = "z\\u0142|zl|pln|eur|usd|gbp|\\u20ac|\\$|\\u00a3";
+  function fillFieldFit(f, raw) {
+    const s = fillFieldClean(raw);
+    if (!s || !f) return null;
+    const kind = f.kind || "text";
+    let v = "";
+    if (kind === "text") v = s;
+    else if (kind === "link") {
+      const m = /(?:https?:\/\/|www\.)[^\s<>"']+/i.exec(s);
+      v = m ? m[0].replace(/[.,;:!?)\]'"]+$/, "") : "";
+    } else if (kind === "date") {
+      const re = /(?<![\d.,])(\d{4})-(\d{1,2})-(\d{1,2})(?![\d])|(?<![\d.,])(\d{1,2})[./-](\d{1,2})(?:[./-](\d{4}|\d{2}))?(?![\d]|[.,]\d)/g;
+      let m;
+      while (m = re.exec(s)) {
+        const d = +(m[3] || m[4]), mo = +(m[2] || m[5]);
+        if (d >= 1 && d <= 31 && mo >= 1 && mo <= 12) {
+          v = m[0];
+          break;
+        }
+      }
+    } else if (kind === "amount") {
+      const near = new RegExp("(?<![\\d.,])(" + FILL_FIELD_NUM + ")\\s?(?:" + FILL_FIELD_CUR + ")|(?:" + FILL_FIELD_CUR + ")\\s?(" + FILL_FIELD_NUM + ")(?![\\d])", "iu").exec(s);
+      const any = new RegExp("(?<![\\d.,])(?:" + FILL_FIELD_NUM + ")(?![\\d])").exec(s);
+      v = near ? near[1] || near[2] : any ? any[0] : "";
+    } else if (kind === "pattern") {
+      const re = fillFieldPatternRe(f.pattern), m = re && re.exec(s), pat = String(f.pattern);
+      v = m ? m[0].split("").map((ch, i) => /\p{L}/u.test(pat[i]) ? pat[i] : ch).join("") : "";
+    }
+    v = String(v || "").trim();
+    return v ? { value: v } : null;
+  }
+  function fillFieldOk(f, v) {
+    const s = fillFieldClean(v);
+    if (!s) return false;
+    const fit = fillFieldFit(f, s);
+    return !!fit && fit.value === s;
+  }
+
   // src/modules/intent-text.js
   function joinIntents(list2, lg) {
     const L = lg || lang;
@@ -11123,7 +11381,7 @@ What you type stays in this browser only.`;
   var FILL_M_B = "";
   var FILL_STRIP = /[\u0001\u0002\u0003\u0004]/g;
   var Z_TOKEN = /\{Z\}([ \t]*)/g;
-  function fill(s, m, mark, inL) {
+  function fill(s, m, mark, inL, vals) {
     if (!s) return s;
     const L = CONTENT_LANGS.indexOf(inL) > -1 ? inL : cardLang(m);
     if (mark) s = s.replace(FILL_STRIP, "");
@@ -11132,6 +11390,13 @@ What you type stays in this browser only.`;
       const t2 = String(v == null ? "" : v);
       return t2 ? FILL_A + t2.replace(FILL_STRIP, "") + FILL_B : MISS(name || "?");
     }) : ((v) => String(v == null ? "" : v));
+    if (catalogFillFields().length) s = s.replace(FILL_FIELD_RE, (raw, name) => {
+      const f = fillFieldFor(name);
+      if (!f) return raw;
+      const v = (vals || fieldVals)[f.id];
+      if (v) return M2(v, fillFieldLabel(f, L));
+      return mark ? MISS(fillFieldLabel(f, L)) : fillFieldRequired(f) ? "" : fillFieldSkip(f, L);
+    });
     s = s.replace(/\{GREET\}/g, () => M2(greeting(L), t("GREET")));
     s = s.replace(/\{DAYPART:([^}]*)\}/g, (_, body) => {
       const parts2 = String(body).split("|");
@@ -12015,6 +12280,7 @@ What you type stays in this browser only.`;
     if (desk) cat.desk = desk;
     const ext = table(data && data.ext);
     if (ext) cat.ext = ext;
+    if (data && Array.isArray(data.fields)) cat.fields = JSON.parse(JSON.stringify(data.fields));
     if (data && Array.isArray(data.intentIds) && data.intentIds.length) cat.intentIds = data.intentIds.map(String);
     if (data && data.commentLang) cat.commentLang = String(data.commentLang);
     if (data && data.sample) cat.sample = 1;
@@ -12179,6 +12445,7 @@ What you type stays in this browser only.`;
     setCommentLang(c.commentLang);
     setCatalogGreet(c.greet && typeof c.greet === "object" ? c.greet : null);
     setCatalogStop(c.stop && typeof c.stop === "object" ? c.stop : null);
+    setCatalogFillFields(Array.isArray(c.fields) ? c.fields : null);
     const i = c.intents || {};
     Object.keys(SW_STORE).forEach((k) => {
       SW_STORE[k].length = 0;
@@ -12215,6 +12482,7 @@ What you type stays in this browser only.`;
     setCatalogCatLooks({}, {});
     setCatalogGreet(null);
     setCatalogStop(null);
+    setCatalogFillFields(null);
     eApplyRoles(null);
     resetStock();
     E_CATALOG_VERSION = null;
@@ -15748,9 +16016,10 @@ What you type stays in this browser only.`;
   var TOKEN_CANARY = "{GREET}{AGENT}{PAX}{ROLE}{INIT}{INTENT}{ACTION}{TOPIC}{Z}x{DAYPART:a|b|c}";
   function cardFillKey(m) {
     const raw = String(m && m.en || "") + String(m && m.pl || "");
-    if (!CARD_TOKEN_RE.test(raw)) return "";
+    const held = fillFieldsIn(raw);
+    if (!CARD_TOKEN_RE.test(raw) && !held.length) return "";
     try {
-      return fill(TOKEN_CANARY, m);
+      return fill(TOKEN_CANARY, m) + (held.length ? JSON.stringify(held.map((f) => fieldVals[f.id] || "")) : "");
     } catch (e) {
       return "?" + ePackEpoch;
     }
@@ -16731,6 +17000,204 @@ What you type stays in this browser only.`;
     });
   }
 
+  // src/modules/field-ask.js
+  var field_ask_exports = {};
+  __export(field_ask_exports, {
+    askFields: () => askFields,
+    clipAnswer: () => clipAnswer,
+    fieldRefusal: () => fieldRefusal,
+    fieldsWanted: () => fieldsWanted,
+    spendFields: () => spendFields,
+    withFields: () => withFields
+  });
+  function fieldsWanted(raw) {
+    return fillFieldsIn(raw).filter((f) => !fieldVals[f.id]);
+  }
+  function spendFields(raw) {
+    let gone = false;
+    fillFieldsIn(raw).forEach((f) => {
+      if (fillFieldOnce(f) && fieldVals[f.id]) {
+        delete fieldVals[f.id];
+        gone = true;
+      }
+    });
+    if (gone) {
+      scheduleTabSave();
+      renderFillsSoon();
+    }
+  }
+  function fieldRefusal(f, l, raw) {
+    const v = fillFieldClean(raw);
+    if (v && !fillFieldOk(f, v)) return t("Does not fit the field: {LABEL}").replace("{LABEL}", () => fillFieldLabel(f, l));
+    if (!v && fillFieldRequired(f)) return t("The reply does not go without: {LABEL}").replace("{LABEL}", () => fillFieldLabel(f, l));
+    return "";
+  }
+  function clipAnswer(f, text) {
+    if (typeof text !== "string") return { said: t("The clipboard could not be read just now.") };
+    const fit = fillFieldFit(f, text);
+    if (fit) return { value: fit.value, said: t("Taken from the clipboard.") };
+    const g = clipGlimpse(text);
+    return { said: g ? t("Nothing on the clipboard fits this field. It holds: {TEXT}").replace("{TEXT}", () => g) : t("The clipboard is empty.") };
+  }
+  function withFields(raw, m, l, go, anchor) {
+    if (!fieldsWanted(raw).length) {
+      go();
+      return;
+    }
+    askFields(raw, m, l, go, anchor);
+  }
+  function clipGlimpse(text) {
+    const s = fillFieldClean(text);
+    return s.length > 60 ? s.slice(0, 60).replace(/\s+\S*$/, "") + "…" : s;
+  }
+  function fieldLine(raw, f, l) {
+    const lines = String(raw || "").split("\n");
+    const lab = (t2) => fillFieldsIn(t2).indexOf(f) > -1;
+    const line = (lines.find(lab) || "").trim();
+    const one = line.split(/(?<=[.?!])\s+/).find(lab) || line;
+    return (one !== line && line.indexOf(one) > 0 ? "…" : "") + one;
+  }
+  var askClose = null;
+  function askFields(raw, m, l, go, anchor) {
+    if (askClose) askClose();
+    const all = fillFieldsIn(raw), mine = fieldVals;
+    const wrap = document.createElement("div");
+    wrap.className = "bub bub-ask e-field-ask";
+    wrap.id = "eFieldAsk";
+    wrap.setAttribute("role", "dialog");
+    wrap.setAttribute("aria-labelledby", "eFieldTitle");
+    const kept = all.some((f) => !fillFieldOnce(f));
+    wrap.innerHTML = '<h3 id="eFieldTitle">Fill in before copying</h3>' + all.map((f, i) => {
+      const had = mine[f.id] || "";
+      const note = had ? '<span class="e-field-note">' + esc(t("from this conversation")) + "</span>" : !fillFieldRequired(f) ? '<span class="e-field-note">' + esc(t("may be skipped")) + "</span>" : "";
+      const clip = fillFieldTakesClip(f) ? '<span class="e-field-clip"><kbd>Alt+V</kbd> ' + esc(t("from the clipboard")) + "</span>" : "";
+      return '<label class="e-field-row"><span class="e-field-head"><span class="e-field-name" data-i18n-skip>' + esc(fillFieldLabel(f, l)) + "</span>" + note + clip + '</span><input class="e-field-inp" data-i="' + i + '" autocomplete="off" spellcheck="false" placeholder="' + esc(t("paste or type")) + '" value="' + esc(had) + '"></label>';
+    }).join("") + '<p class="e-greet e-field-prev" id="eFieldPrev" data-i18n-skip></p><p class="e-field-said" id="eFieldSaid" aria-live="polite"></p>' + (kept ? "<p>" + esc(t("What is filled in stays with this conversation, for every reply that needs it.")) + "</p>" : "") + '<div class="tour-actions"><button type="button" class="btn" id="eFieldNo">Cancel</button><button type="button" class="btn primary" id="eFieldYes">Copy</button></div>';
+    cutLeaves();
+    document.body.appendChild(wrap);
+    translateTree(wrap);
+    const inps = Array.prototype.slice.call(wrap.querySelectorAll(".e-field-inp"));
+    const prev = wrap.querySelector("#eFieldPrev"), said = wrap.querySelector("#eFieldSaid");
+    const first = all.find((f) => !mine[f.id]) || all[0];
+    const draft = () => {
+      const d = Object.assign({}, mine);
+      all.forEach((f, i) => {
+        const v = fillFieldClean(inps[i].value);
+        if (v) d[f.id] = v;
+        else delete d[f.id];
+      });
+      return d;
+    };
+    const sync = () => {
+      prev.innerHTML = escFilled(fill(fieldLine(raw, first, l), m, true, l, draft()));
+      const go2 = wrap.querySelector("#eFieldYes");
+      go2.classList.toggle("e-waits", all.some((f, i) => fillFieldRequired(f) && !fillFieldClean(inps[i].value)));
+    };
+    const say = (s, i) => {
+      said.textContent = s;
+      inps.forEach((x, k) => x.toggleAttribute("aria-invalid", k === i));
+      if (i != null && inps[i]) inps[i].focus();
+    };
+    const place = () => {
+      const r = anchor && anchor.isConnected ? anchor.getBoundingClientRect() : null;
+      placeBubble(wrap, r && r.width ? { top: r.top, left: r.left, width: r.width, height: r.height } : { top: innerHeight / 2, left: innerWidth / 2, width: 0, height: 0 }, { width: 360 });
+    };
+    place();
+    addEventListener("resize", place);
+    const close = () => {
+      if (askClose === close) askClose = null;
+      watchFieldVals(null);
+      removeEventListener("resize", place);
+      dismissNode(wrap);
+    };
+    askClose = close;
+    watchFieldVals(() => {
+      if (fieldVals !== mine) close();
+    });
+    const submit = () => {
+      if (fieldVals !== mine) {
+        close();
+        return;
+      }
+      for (let i = 0; i < all.length; i++) {
+        const no = fieldRefusal(all[i], l, inps[i].value);
+        if (no) {
+          say(no, i);
+          return;
+        }
+      }
+      all.forEach((f, i) => {
+        const v = fillFieldClean(inps[i].value);
+        if (v) mine[f.id] = v;
+        else delete mine[f.id];
+      });
+      scheduleTabSave();
+      renderFillsSoon();
+      close();
+      go();
+    };
+    const takeClip = (i) => {
+      const f = all[i], h = eHost();
+      if (!fillFieldTakesClip(f)) return;
+      if (!h || typeof h.readClip !== "function") {
+        say(t("Ctrl+V pastes into the field here."), i);
+        return;
+      }
+      Promise.resolve(h.readClip()).then((text) => {
+        if (!wrap.isConnected) return;
+        const a = clipAnswer(f, text);
+        if (a.value == null) {
+          say(a.said, i);
+          return;
+        }
+        inps[i].value = a.value;
+        say(a.said);
+        inps[i].focus();
+        sync();
+      }, () => {
+        if (wrap.isConnected) say(clipAnswer(f, null).said, i);
+      });
+    };
+    wrap.addEventListener("input", () => {
+      if (fieldVals !== mine) {
+        close();
+        return;
+      }
+      said.textContent = "";
+      sync();
+    });
+    wrap.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+        return;
+      }
+      const i = inps.indexOf(e.target);
+      if (i < 0) return;
+      if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === "KeyV") {
+        e.preventDefault();
+        e.stopPropagation();
+        takeClip(i);
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        const next = inps.findIndex((x, k) => k > i && !fillFieldClean(x.value));
+        if (next > -1) inps[next].focus();
+        else submit();
+      }
+    });
+    wrap.querySelector("#eFieldYes").onclick = submit;
+    wrap.querySelector("#eFieldNo").onclick = close;
+    sync();
+    try {
+      inps[Math.max(0, all.indexOf(first))].focus();
+    } catch (e) {
+    }
+  }
+
   // src/modules/list-pointer.js
   var cardDrag = null;
   var cardSwapLock = 0;
@@ -17134,10 +17601,11 @@ What you type stays in this browser only.`;
       setEntrySel(mid, vi);
       txtEl.classList.add("just-picked");
       txtEl.addEventListener("pointerleave", () => txtEl.classList.remove("just-picked"), { once: true });
-      withAgentName(ps[vi], () => {
+      withFields(ps[vi], m, cl, () => withAgentName(ps[vi], () => {
         bumpUseCount(mid, cl);
         copy(fill(ps[vi], m), copiedToastMsg(m, cl, vi, ps.length), cardCommits(m));
-      }, txtEl);
+        spendFields(ps[vi]);
+      }, txtEl), txtEl);
     });
   }
   function copiedToastMsg(m, lang2, vi, total) {
@@ -20445,6 +20913,7 @@ What you type stays in this browser only.`;
     if (origin && origin.greet && typeof origin.greet === "object") out.greet = origin.greet;
     if (origin && origin.stop && typeof origin.stop === "object") out.stop = origin.stop;
     if (origin && origin.notes && typeof origin.notes === "object") out.notes = origin.notes;
+    if (origin && Array.isArray(origin.fields)) out.fields = origin.fields;
     if (origin && origin.ext && typeof origin.ext === "object") out.ext = origin.ext;
     const wasIds = origin && Array.isArray(origin.intentIds) ? origin.intentIds : [];
     const keptIds = keep.map((oldIdx) => oldIdx < wasIds.length ? String(wasIds[oldIdx] || "") : "");
@@ -24395,12 +24864,13 @@ What you type stays in this browser only.`;
       return true;
     }
     const vi = Math.max(0, Math.min(ps.length - 1, entrySel.vi | 0));
-    const id = entrySel.id;
-    withAgentName(ps[vi], () => {
+    const id = entrySel.id, at = document.querySelector("#list .txt.sel");
+    withFields(ps[vi], m, l, () => withAgentName(ps[vi], () => {
       bumpUseCount(id, l);
       copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length), cardCommits(m));
+      spendFields(ps[vi]);
       eCopyFeedback(id, vi);
-    }, document.querySelector("#list .txt.sel"));
+    }, at), at);
     return true;
   }
 
@@ -25385,15 +25855,55 @@ What you type stays in this browser only.`;
       list: t("Replies"),
       again: t("The reply copied last"),
       none: t("A different word may do better."),
-      empty: wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet.")
+      empty: wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet."),
+      clip: t("from the clipboard"),
+      paste: t("paste or type"),
+      keys: t("Enter copies once the field is filled. Esc goes back to the list.")
     };
   }
-  function pickCopy(id, vi) {
+  function pickNeed(m, l, raw, vi, said, at) {
+    return {
+      id: String(m.id),
+      vi,
+      said: said || "",
+      at: at == null ? -1 : at,
+      fields: fillFieldsIn(raw).map((f) => ({
+        id: f.id,
+        label: fillFieldLabel(f, l),
+        clip: fillFieldTakesClip(f),
+        value: fieldVals[f.id] || "",
+        note: fieldVals[f.id] ? t("from this conversation") : fillFieldRequired(f) ? "" : t("may be skipped")
+      }))
+    };
+  }
+  function pickTakeValues(m, l, raw, vi, values) {
+    const all = fillFieldsIn(raw);
+    for (let i = 0; i < all.length; i++) {
+      const v = Object.prototype.hasOwnProperty.call(values, all[i].id) ? values[all[i].id] : fieldVals[all[i].id];
+      const no = fieldRefusal(all[i], l, v);
+      if (no) return { need: pickNeed(m, l, raw, vi, no, i) };
+    }
+    all.forEach((f) => {
+      if (!Object.prototype.hasOwnProperty.call(values, f.id)) return;
+      const v = fillFieldClean(values[f.id]);
+      if (v) fieldVals[f.id] = v;
+      else delete fieldVals[f.id];
+    });
+    scheduleTabSave();
+    renderFillsSoon();
+    return null;
+  }
+  function pickCopy(id, vi, values) {
     const m = findCard(String(id || ""));
     if (!m) return null;
     const l = cardLang(m), ps = parts(m, l);
     vi = vi | 0;
     if (vi < 0 || vi >= ps.length) return null;
+    if (values && typeof values === "object") {
+      const no = pickTakeValues(m, l, ps[vi], vi, values);
+      if (no) return no;
+    }
+    if (fieldsWanted(ps[vi]).length) return { need: pickNeed(m, l, ps[vi], vi) };
     if (wantsAgentName(ps[vi])) return { ask: { id: String(m.id), vi } };
     let text = null;
     withAgentName(ps[vi], () => {
@@ -25401,6 +25911,7 @@ What you type stays in this browser only.`;
       eNoteRecent(m.id, vi);
       noteCopy();
       text = fill(ps[vi], m, 0, l);
+      spendFields(ps[vi]);
     }, null);
     return text == null ? null : { text };
   }
@@ -25414,6 +25925,7 @@ What you type stays in this browser only.`;
       bumpUseCount(m.id, l);
       eNoteRecent(m.id, vi);
       copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length), cardCommits(m));
+      spendFields(ps[vi]);
     }, null);
     return { asked: true };
   }
@@ -25427,9 +25939,14 @@ What you type stays in this browser only.`;
     if (op === "open") return { look: pickLook(), words: pickWords(), rows: pickRows(""), last: pickLastRow() };
     if (op === "find") return { rows: pickRows(a.q) };
     if (op === "copy") {
-      if (!a.last) return pickCopy(a.id, a.vi);
+      if (!a.last) return pickCopy(a.id, a.vi, a.values);
       const r = eLastRecent();
       return r ? pickCopy(r.id, r.vi) : null;
+    }
+    if (op === "fit") {
+      const m = findCard(String(a.id || "")), l = m && cardLang(m), ps = m ? parts(m, l) : [];
+      const f = m && ps[a.vi | 0] != null ? fillFieldsIn(ps[a.vi | 0]).find((x) => x.id === String(a.field || "")) : null;
+      return f ? clipAnswer(f, typeof a.text === "string" ? a.text : null) : null;
     }
     if (op === "ask") return pickAsk(a.id, a.vi);
     return null;
@@ -25441,7 +25958,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, team_join_exports, edition_changes_exports, edition_panel_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, team_join_exports, edition_changes_exports, edition_panel_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, fields_exports, field_ask_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
@@ -25502,6 +26019,7 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "pendingScrollHit", { get: () => pendingScrollHit, set: (v) => setPendingScrollHit(v) });
   Object.defineProperty(globalThis, "intentIdxs", { get: () => intentIdxs, set: (v) => setIntentIdxs(v) });
   Object.defineProperty(globalThis, "intentText", { get: () => intentText, set: (v) => setIntentText(v) });
+  Object.defineProperty(globalThis, "fieldVals", { get: () => fieldVals, set: (v) => setFieldVals(v) });
   Object.defineProperty(globalThis, "lang", { get: () => lang, set: (v) => putLang(v) });
   Object.defineProperty(globalThis, "cards", { get: () => cards, set: (v) => setCards(v) });
   Object.defineProperty(globalThis, "cardCounts", { get: () => cardCounts, set: (v) => setCardCounts(v) });

@@ -18,7 +18,8 @@ import { esc } from "./esc.js";
 import { syncIntentClearBtns } from "./intent-clear.js";
 import { $, intentEl, pills } from "./dom.js";
 import { railQuery, markSurface, kbdNav, sayMark } from "./mark.js";
-import { dragState, cats, setRailOrder, setRailMatch, setRailMarkIdx, railMatch, railMarkIdx, railOrder, railSortT, setRailSortT, catsDropArmed, setCatsDropArmed, setCats, railSel, setRailSel, setRailSettled, setSemiKind, setRailMarkUsed, entrySel, putEntrySel, semiKind, intentIdxs, shown } from "./app-state.js";
+import { dragState, cats, setRailOrder, setRailMatch, setRailMarkIdx, railMatch, railMarkIdx, railOrder, railSortT, setRailSortT, catsDropArmed, setCatsDropArmed, setCats, railSel, setRailSel, setRailSettled, setSemiKind, setRailMarkUsed, entrySel, putEntrySel, semiKind, intentIdxs, shown, fieldVals } from "./app-state.js";
+import { fillFieldsIn } from "./fields.js";
 import { captureSettle, glideSettle } from "./paint.js";
 import { hooks } from "./hooks.js";
 
@@ -348,8 +349,10 @@ const CARD_TOKEN_RE=/\{(GREET|AGENT|PAX|ROLE|INIT|INTENT|ACTION|TOPIC|Z|DAYPART)
 const TOKEN_CANARY="{GREET}{AGENT}{PAX}{ROLE}{INIT}{INTENT}{ACTION}{TOPIC}{Z}x{DAYPART:a|b|c}";
 function cardFillKey(m){
   const raw=String(m&&m.en||"")+String(m&&m.pl||"");
-  if(!CARD_TOKEN_RE.test(raw)) return "";
-  try{ return fill(TOKEN_CANARY,m); }catch(e){ return "?"+ePackEpoch; }
+  // A field's value is the tab's, not the canary's, so a card holding one keys on the values too.
+  const held=fillFieldsIn(raw);
+  if(!CARD_TOKEN_RE.test(raw) && !held.length) return "";
+  try{ return fill(TOKEN_CANARY,m)+(held.length ? JSON.stringify(held.map(f=>fieldVals[f.id]||"")) : ""); }catch(e){ return "?"+ePackEpoch; }
 }
 function drawIntentRail(){ drawIntentRailCore(); syncRailCount(); railDecorate(false); scheduleCutScan(); }
 /* HOW MANY, AND HOW MANY PUT AWAY - the two questions a list of intents is asked. Counted over
