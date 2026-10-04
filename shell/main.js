@@ -2795,7 +2795,7 @@ function pickerDoc() {
     + '<script>' + PICK_SCRIPT + '</script>\n';
 }
 
-/* THE CLIPBOARD IS READ ONLY ON THE AGENT'S OWN ALT+V (Maxim, 2026-09-28 13:35): the press, seen here
+/* THE CLIPBOARD IS READ ONLY ON THE AGENT'S OWN ALT+V: the press, seen here
    before its page sees it, arms one read for that window alone; the read disarms it, a read with no
    press is refused, and nothing read is kept. The permission list still grants no read at all. */
 const CLIP_PRESS_MS = 1500, CLIP_MAX = 4000;
