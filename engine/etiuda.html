@@ -6506,6 +6506,8 @@ What you type stays in this browser only.`;
     "Asking again sends a new request.": "Ponowna prośba trafi do lidera jako nowa.",
     "Ask again": "Poproś ponownie",
     "Hide": "Ukryj",
+    "{FILE} was not saved: the team's catalog leaves this desk only sealed, and this desk cannot seal for the team now.": "Nie zapisano pliku {FILE}: katalog zespołu opuszcza to stanowisko tylko zaszyfrowany, a to stanowisko nie może teraz szyfrować dla zespołu.",
+    "Exported {FILE}, sealed for its team, with {MACROS} in {CARDS}": "Wyeksportowano {FILE}, zaszyfrowany dla zespołu: {MACROS}, {CARDS}",
     "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.": "Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze."
   };
   function uiLangKnown(l) {
@@ -12323,14 +12325,15 @@ What you type stays in this browser only.`;
     const h = eHost();
     return !!h && typeof h.chooseCatalogSave === "function" && typeof h.writeCatalogSave === "function";
   }
-  function eSaveCatalogFile(title, name, label, build) {
+  function eSaveCatalogFile(title, name, label, build, from) {
     if (!eHasCatalogSaver()) return Promise.resolve(null);
-    const failed = (n) => ({ name: String(n || name || ""), ok: false });
+    const failed = (n) => ({ name: String(n || name || ""), ok: false, sealed: false });
+    const of = from && typeof from === "object" ? { id: String(from.id || ""), sha: String(from.sha || "") } : null;
     try {
       return Promise.resolve(eHost().chooseCatalogSave(String(title || ""), String(name || ""), String(label || ""))).then((v) => {
         if (!(v && typeof v === "object" && v.name)) return null;
         const chosen = String(v.name);
-        return Promise.resolve(eHost().writeCatalogSave(String(build() || ""))).then((w) => w && typeof w === "object" ? { name: String(w.name || chosen), ok: w.ok === true } : failed(chosen));
+        return Promise.resolve(eHost().writeCatalogSave(String(build() || ""), of)).then((w) => w && typeof w === "object" ? { name: String(w.name || chosen), ok: w.ok === true, sealed: w.sealed === true } : failed(chosen));
       }).catch(() => failed());
     } catch (e) {
       return Promise.resolve(failed());
@@ -19975,10 +19978,10 @@ What you type stays in this browser only.`;
     if (!catalogLoaded() && !storedCatalog()) return "";
     return String(nsGet("CatalogFrom") || eLoadedCatalogFile() || "");
   }
-  function saveCatalogFile(name, build) {
-    if (eHasCatalogSaver()) return eSaveCatalogFile(t("Export"), name, t("Catalogs"), build).then((r) => {
-      if (r && !r.ok) toastRefusal(t("{FILE} could not be saved.").split("{FILE}").join(r.name));
-      return r && r.ok ? r.name : null;
+  function saveCatalogFile(name, build, from) {
+    if (eHasCatalogSaver()) return eSaveCatalogFile(t("Export"), name, t("Catalogs"), build, from).then((r) => {
+      if (r && !r.ok) toastRefusal((r.sealed ? t("{FILE} was not saved: the team's catalog leaves this desk only sealed, and this desk cannot seal for the team now.") : t("{FILE} could not be saved.")).split("{FILE}").join(r.name));
+      return r && r.ok ? { name: r.name, sealed: r.sealed } : null;
     });
     if (typeof window.showSaveFilePicker === "function") {
       return window.showSaveFilePicker({
@@ -19986,13 +19989,13 @@ What you type stays in this browser only.`;
         types: [{ description: t("Etiuda catalog"), accept: { "application/json": [".ec"] } }]
       }).then((h) => {
         const as = h.name || name, text = build();
-        return h.createWritable().then((w) => w.write(text).then(() => w.close())).then(() => as);
+        return h.createWritable().then((w) => w.write(text).then(() => w.close())).then(() => ({ name: as, sealed: false }));
       }).catch((e) => {
         if (e && e.name === "AbortError") return null;
-        return downloadCatalogFile(name, build());
+        return { name: downloadCatalogFile(name, build()), sealed: false };
       });
     }
-    return Promise.resolve(downloadCatalogFile(name, build()));
+    return Promise.resolve({ name: downloadCatalogFile(name, build()), sealed: false });
   }
   function downloadCatalogFile(name, text) {
     const blob = new Blob([text], { type: "application/json;charset=utf-8" });
@@ -20013,17 +20016,24 @@ What you type stays in this browser only.`;
       c = currentCatalog();
       return JSON.stringify(catalogToV2(c), null, 1) + "\n";
     };
-    return saveCatalogFile(catalogFileStem(catalogNameOfFile(catalogFileName())) + ".ec", build).then((saved) => {
+    const origin = storedCatalog(), from = origin && !origin.loose && origin.id ? { id: origin.id, sha: origin.pin } : null;
+    return saveCatalogFile(catalogFileStem(catalogNameOfFile(catalogFileName())) + ".ec", build, from).then((saved) => {
       if (!saved || !c) return null;
       if (!catalogLoaded()) lySet("Exported", looseMark());
-      toast(catalogCountsLine(
+      toast((saved.sealed ? catalogCountsLine(
+        "Exported {FILE}, sealed for its team, with {MACROS} in {CARDS}",
+        c.cards.length,
+        catalogMacroCount(c),
+        0,
+        0
+      ) : catalogCountsLine(
         "Exported {FILE} with {MACROS} in {CARDS}",
         c.cards.length,
         catalogMacroCount(c),
         0,
         0
-      ).replace("{FILE}", saved));
-      return saved;
+      )).replace("{FILE}", saved.name));
+      return saved.name;
     });
   }
   var SHA_K = [

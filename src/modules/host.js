@@ -173,21 +173,23 @@ function ePickCatalogFile(title,label){
 }
 /* Export's save dialog, the host's for the reason Import's is: the engine calls no OS API, and the
    host writes the bytes and says whether they landed. `build` returns the text, once a file is
-   chosen. {name,ok} for a file chosen, null for a dialog closed. */
+   chosen, and `from` names the catalog it was made from, {id,sha}, which the host seals it for where that
+   catalog came sealed. {name,ok,sealed} for a file chosen, null for a dialog closed. */
 function eHasCatalogSaver(){
   const h=eHost();
   return !!h && typeof h.chooseCatalogSave==="function" && typeof h.writeCatalogSave==="function";
 }
-function eSaveCatalogFile(title,name,label,build){
+function eSaveCatalogFile(title,name,label,build,from){
   if(!eHasCatalogSaver()) return Promise.resolve(null);
-  const failed=n=>({name:String(n||name||""),ok:false});
+  const failed=n=>({name:String(n||name||""),ok:false,sealed:false});
+  const of=(from&&typeof from==="object")?{id:String(from.id||""),sha:String(from.sha||"")}:null;
   try{
     return Promise.resolve(eHost().chooseCatalogSave(String(title||""),String(name||""),String(label||"")))
       .then(v=>{
         if(!(v&&typeof v==="object"&&v.name)) return null;
         const chosen=String(v.name);
-        return Promise.resolve(eHost().writeCatalogSave(String(build()||"")))
-          .then(w=>(w&&typeof w==="object")?{name:String(w.name||chosen),ok:w.ok===true}:failed(chosen));
+        return Promise.resolve(eHost().writeCatalogSave(String(build()||""),of))
+          .then(w=>(w&&typeof w==="object")?{name:String(w.name||chosen),ok:w.ok===true,sealed:w.sealed===true}:failed(chosen));
       })
       .catch(()=>failed());
   }catch(e){ return Promise.resolve(failed()); }

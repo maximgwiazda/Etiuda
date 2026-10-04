@@ -2086,16 +2086,29 @@ ipcMain.handle("etiuda:choose-catalog-save", async (e, title, name, label) => {
   savePending = { id: e.sender.id, file: file };
   return { name: path.basename(file) };
 });
+/* An export made from a catalog this desk opened from an envelope (`from`, the stored catalog's id and pin) stays sealed,
+   for the team that sealed that edition, under the newest key the desk keeps for it; null where it cannot be sealed. */
+function exportText(text, from) {
+  const id = from && typeof from === "object" ? String(from.id || "") : "";
+  if (!id || !teamOpened.has(id)) return text;
+  const seal = sealFor(id, String(from.sha || ""), catalogFolder());
+  return seal ? JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, text), null, 1) + "\n" : null;
+}
 /* The bytes go to a temp file beside the choice and are renamed over it, so a failed write never
    leaves half a catalog under that name, and the answer says whether they landed. */
-ipcMain.handle("etiuda:write-catalog-save", async (e, text) => {
+ipcMain.handle("etiuda:write-catalog-save", async (e, text, from) => {
   if (!fromEngine(e)) return null;
   const p = savePending;
   savePending = null;
   if (!p || p.id !== e.sender.id) return null;
   try {
-    writeReplacing(p.file, String(text || ""));
-    return { name: path.basename(p.file), ok: true };
+    const out = exportText(String(text || ""), from);
+    if (out === null) {
+      console.error("etiuda: " + p.file + " was not written: it is a sealed team's catalog this desk cannot seal");
+      return { name: path.basename(p.file), ok: false, sealed: true };
+    }
+    writeReplacing(p.file, out);
+    return out === String(text || "") ? { name: path.basename(p.file), ok: true } : { name: path.basename(p.file), ok: true, sealed: true };
   } catch (err) {
     console.error("etiuda: " + p.file + " could not be written - " + err.message);
     return { name: path.basename(p.file), ok: false };

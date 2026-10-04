@@ -212,11 +212,13 @@ function catalogFileName(){
 }
 /** Write the file. Where it lands is the person's call in a save dialog: the host's, else the
  *  browser's showSaveFilePicker (Chromium), else an ordinary download (Firefox). `build` makes the
- *  text, and runs only once the choice is made. */
-function saveCatalogFile(name, build){
-  if(eHasCatalogSaver()) return eSaveCatalogFile(t("Export"),name,t("Catalogs"),build).then(r=>{
-    if(r && !r.ok) toastRefusal(t("{FILE} could not be saved.").split("{FILE}").join(r.name));
-    return (r && r.ok) ? r.name : null;
+ *  text, and runs only once the choice is made; `from` is the catalog it was made from, which the host seals it for
+ *  where that came sealed. Resolves to {name, sealed}, or null where nothing was saved. */
+function saveCatalogFile(name, build, from){
+  if(eHasCatalogSaver()) return eSaveCatalogFile(t("Export"),name,t("Catalogs"),build,from).then(r=>{
+    if(r && !r.ok) toastRefusal((r.sealed ? t("{FILE} was not saved: the team's catalog leaves this desk only sealed, and this desk cannot seal for the team now.")
+      : t("{FILE} could not be saved.")).split("{FILE}").join(r.name));
+    return (r && r.ok) ? {name:r.name, sealed:r.sealed} : null;
   });
   if(typeof window.showSaveFilePicker==="function"){
     return window.showSaveFilePicker({
@@ -225,16 +227,16 @@ function saveCatalogFile(name, build){
       })
       .then(h=>{
         const as=h.name||name, text=build();
-        return h.createWritable().then(w=>w.write(text).then(()=>w.close())).then(()=>as);
+        return h.createWritable().then(w=>w.write(text).then(()=>w.close())).then(()=>({name:as, sealed:false}));
       })
       .catch(e=>{
         /* AbortError is the person closing the dialog, and only that is silent. NotAllowedError is
            the browser refusing to open it, so it falls back to the download like any failure. */
         if(e && e.name==="AbortError") return null;
-        return downloadCatalogFile(name, build());
+        return {name:downloadCatalogFile(name, build()), sealed:false};
       });
   }
-  return Promise.resolve(downloadCatalogFile(name, build()));
+  return Promise.resolve({name:downloadCatalogFile(name, build()), sealed:false});
 }
 function downloadCatalogFile(name, text){
   const blob=new Blob([text],{type:"application/json;charset=utf-8"});
@@ -255,12 +257,14 @@ function exportCatalog(){
     c=currentCatalog();
     return JSON.stringify(catalogToV2(c),null,1)+"\n";
   };
-  return saveCatalogFile(catalogFileStem(catalogNameOfFile(catalogFileName()))+".ec", build).then(saved=>{
+  const origin=storedCatalog(), from=(origin&&!origin.loose&&origin.id)?{id:origin.id,sha:origin.pin}:null;
+  return saveCatalogFile(catalogFileStem(catalogNameOfFile(catalogFileName()))+".ec", build, from).then(saved=>{
     if(!saved || !c) return null;                    // cancelled in the Save dialog
     if(!catalogLoaded()) lySet("Exported",looseMark());
-    toast(catalogCountsLine("Exported {FILE} with {MACROS} in {CARDS}",
-      c.cards.length, catalogMacroCount(c), 0, 0).replace("{FILE}",saved));
-    return saved;
+    toast((saved.sealed ? catalogCountsLine("Exported {FILE}, sealed for its team, with {MACROS} in {CARDS}",
+      c.cards.length, catalogMacroCount(c), 0, 0) : catalogCountsLine("Exported {FILE} with {MACROS} in {CARDS}",
+      c.cards.length, catalogMacroCount(c), 0, 0)).replace("{FILE}",saved.name));
+    return saved.name;
   });
 }
 /* ---- the desk's own file in the catalog folder -----------------------------------------------

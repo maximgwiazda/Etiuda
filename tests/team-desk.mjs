@@ -28,7 +28,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 42;
+const EXPECTED = 46;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -415,6 +415,51 @@ try {
       + " that opened the catalog and in a fresh one, and writes nothing the old epoch's key opens: " + out12.map(said).join(", ")
       + ", a file on the share " + (none12 ? "no" : "yes") + "; let in again at epoch 3, it writes " + said(back12)
       + " sealed under epoch " + env12.epoch);
+  }
+
+  /* ---- Export: what the page made from a catalog that came sealed leaves this desk sealed, and nothing else changes - */
+  {
+    const SAVED = folder("saved");
+    process.env.ETIUDA_TEST_SAVE_AS = SAVED;
+    const made = text(catalog("lamp-export", 1, "Lamp Shop", "2026-02-04"));
+    const lampFrom = { id: "lamp-shop", sha: JSON.parse(lamps.text).grew.sha }, teaFrom = { id: "tea-room", sha: "sha256:" + "0".repeat(64) };
+    const exportAs = async (D, name, from) => {
+      await D.ask("etiuda:choose-catalog-save", "Export", name, "Catalogs");
+      const r = await D.ask("etiuda:write-catalog-save", made, from);
+      const at = path.join(SAVED, name);
+      return { r: r, text: fs.existsSync(at) ? fs.readFileSync(at, "utf8") : null };
+    };
+    const inSaved = needle => walk(SAVED).filter(f => fs.readFileSync(f, "utf8").indexOf(needle) >= 0).length;
+    const sealedOut = await exportAs(D9, "Lamp Shop.ec", lampFrom), env = sealedOut.text ? JSON.parse(sealedOut.text) : {};
+    const byMember = env.kind === "etiuda-sealed" ? (await (async () => { put(OWN, "lamp-copy.ec", sealedOut.text);
+      const t = await read(loadDesk(D9.ud), "lamp-copy.ec"); fs.unlinkSync(path.join(OWN, "lamp-copy.ec")); return t; })()) : "";
+    check(said(sealedOut.r) === said({ name: "Lamp Shop.ec", ok: true, sealed: true }) && env.team === TEAM && env.epoch === 2
+      && D1.api.openSealed(K2, env) === made && byMember === made.trim() && inSaved("Good day, Lamp Shop.") === 0,
+      "14ao an export the page made from a catalog that came sealed is written sealed for that team under the newest key the"
+      + " desk keeps, the page's text inside it byte for byte, and a member opens it: " + said(sealedOut.r) + ", epoch " + env.epoch
+      + ", the catalog's text in " + inSaved("Good day, Lamp Shop.") + " file(s) of the save folder");
+    const plain = [await exportAs(D9, "Tea.ec", teaFrom), await exportAs(D9, "Loose.ec", null), await exportAs(D13, "Outside.ec", lampFrom)];
+    check(plain.every(p => said(p.r) === said({ name: p.r.name, ok: true }) && p.text === made),
+      "14AO THE CONTROL: an export made from an unsealed catalog, from no catalog, or on a desk that never opened an envelope is"
+      + " written as the page sent it: " + plain.map(p => said(p.r) + " " + (p.text === made ? "byte for byte" : "changed")).join(", "));
+    put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)], catalogs: ["tea-room"] })));
+    const refused = await exportAs(D9, "Refused.ec", lampFrom);
+    put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)] })));
+    check(said(refused.r) === said({ name: "Refused.ec", ok: false, sealed: true }) && refused.text === null
+      && !fs.readdirSync(SAVED).some(n => /^Refused/.test(n)),
+      "14ap where the desk cannot seal for the team, here the folder's team file no longer listing the catalog, the export is"
+      + " refused and nothing is written: " + said(refused.r) + ", a file " + (refused.text === null ? "no" : "yes"));
+    /* The page's half: host.js hands the host the catalog the export was made from, and the host's sealed answer back. */
+    const H = await import(MOD("host.js"));
+    const realWrite = D1.invoke["etiuda:write-catalog-save"], got = [];
+    D1.invoke["etiuda:write-catalog-save"] = (e, t, from) => { got.push(from); return { name: "Page.ec", ok: true, sealed: from !== null }; };
+    const viaPage = [await H.eSaveCatalogFile("Export", "Page.ec", "Catalogs", () => made, { id: "lamp-shop", sha: lampFrom.sha, extra: 1 }),
+      await H.eSaveCatalogFile("Export", "Page.ec", "Catalogs", () => made)];
+    D1.invoke["etiuda:write-catalog-save"] = realWrite;
+    check(said(got) === said([{ id: "lamp-shop", sha: lampFrom.sha }, null])
+      && said(viaPage) === said([{ name: "Page.ec", ok: true, sealed: true }, { name: "Page.ec", ok: true, sealed: false }]),
+      "14aq the page's save hands the host the catalog an export was made from, as {id, sha} and nothing else, or null, and"
+      + " reads back whether the host sealed it: " + said(got) + ", " + said(viaPage));
   }
 
   /* ---- the folder's team file no longer lists the catalog: no team covers it where the file is written ---------- */

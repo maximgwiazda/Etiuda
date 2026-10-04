@@ -937,6 +937,8 @@ UI_STRINGS.pl={
   "Asking again sends a new request.":"Ponowna prośba trafi do lidera jako nowa.",
   "Ask again":"Poproś ponownie",
   "Hide":"Ukryj",
+  "{FILE} was not saved: the team's catalog leaves this desk only sealed, and this desk cannot seal for the team now.":"Nie zapisano pliku {FILE}: katalog zespołu opuszcza to stanowisko tylko zaszyfrowany, a to stanowisko nie może teraz szyfrować dla zespołu.",
+  "Exported {FILE}, sealed for its team, with {MACROS} in {CARDS}":"Wyeksportowano {FILE}, zaszyfrowany dla zespołu: {MACROS}, {CARDS}",
   "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.":"Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze."
 };
 // Is this a language this build carries? The table itself stays private to this file.
