@@ -37,7 +37,7 @@ const TOOL = path.join(ROOT, "tools", "gate-run.mjs");
 const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. */
-const EXPECTED = 38;
+const EXPECTED = 40;
 
 let asserted = 0, failed = 0;
 function check(cond, line) {
@@ -158,8 +158,8 @@ function main() {
     && typeof dBase.wallMs === "number" && typeof dBase.time === "string"
     && "commit" in dBase && "dirty" in dBase && dBase.refused === ""
     && Object.keys(dBase).sort().join(",")
-       === "clash,cmd,commit,counts,countsFrom,dirty,exit,gate,gateExit,refused,script,time,treeChanged,treeFiles,treeHash,treeHow,wallMs",
-    "1d the line's shape is the seventeen keys the record reads, `refused` empty on a gate that refused nothing, gate named from the step's path: "
+       === "clash,cmd,commit,counts,countsFrom,dirty,exit,gate,gateExit,refused,script,time,treeChanged,treeFiles,treeHash,treeHow,unmerged,wallMs",
+    "1d the line's shape is the eighteen keys the record reads, `refused` empty on a gate that refused nothing, gate named from the step's path: "
     + Object.keys(dBase).sort().join(","));
 
   /* ---- 2. THE DECLARED CHANNEL ------------------------------------------------------------ */
@@ -562,6 +562,52 @@ function main() {
     + (trWalkQuiet && trWalkQuiet.treeFiles) + " file(s), quiet gate treeChanged "
     + (trWalkQuiet && trWalkQuiet.treeChanged) + ", moving gate "
     + (trWalkMoved && trWalkMoved.treeChanged) + ", chain exit " + trWalkRun.exit);
+
+  /* 9k AN UNMERGED INDEX (2026-10-04). Mid-merge, `git ls-files -c` lists a conflicted path once
+     per stage, so until then the fingerprint took its bytes three times and the record's hash
+     matched no commit, even where the resolved bytes on disk were exactly the ones committed next:
+     the round-two engine merge's 52 records had to be tied to their commit by hand. The lab is a
+     two-branch conflict on one file, resolved on disk and not staged, and the gate runs over it;
+     then the resolution is committed and the gate runs again. The first record must carry the
+     second's hash and file count and say how many paths were unmerged; the second says none. */
+  const trMerge = makeLab("tree-unmerged", { quiet: trStub(2) },
+    { files: Object.assign({ "src/both.js": "export const v = 0;\n" }, TR_FILES), git: true });
+  const mgEnv = Object.assign({}, process.env, { GIT_EDITOR: "true", GIT_MERGE_AUTOEDIT: "no" });
+  const mg = args => spawnSync("git", args, { cwd: trMerge.lab, encoding: "utf8", timeout: 30000, env: mgEnv });
+  const mgPut = text => fs.writeFileSync(path.join(trMerge.lab, "src", "both.js"), text);
+  const mgSteps = [];
+  const mgOk = args => { const r = mg(args); mgSteps.push(args[0] + ":" + r.status); return r.status === 0; };
+  let mgBase = "";
+  const mgBuilt = mgOk(["config", "core.autocrlf", "false"]) && mgOk(["config", "user.name", "lab"])
+    && mgOk(["config", "user.email", "lab@example.invalid"]) && mgOk(["config", "commit.gpgsign", "false"])
+    && mgOk(["add", "-A"]) && mgOk(["commit", "-q", "-m", "base"])
+    && !!(mgBase = String(mg(["symbolic-ref", "--short", "HEAD"]).stdout || "").trim())
+    && mgOk(["checkout", "-q", "-b", "side"]) && (mgPut("export const v = 1;\n"), mgOk(["commit", "-q", "-am", "side"]))
+    && mgOk(["checkout", "-q", mgBase]) && (mgPut("export const v = 2;\n"), mgOk(["commit", "-q", "-am", "base two"]));
+  const mgConflict = mgBuilt && mg(["merge", "-q", "side"]).status === 1;
+  const mgStages = mgConflict ? String(mg(["ls-files", "-u"]).stdout || "").trim().split(/\r?\n/).filter(Boolean).length : 0;
+  if (mgConflict) mgPut("export const v = 3;\n");
+  const mgOpen = mgConflict ? run(trMerge, ["quiet"]) : { exit: null, out: "", byGate: {} };
+  const mgOpenLine = mgOpen.byGate["tests-quiet"];
+  const mgCommitted = mgConflict && mgOk(["add", "src/both.js"]) && mgOk(["commit", "-q", "-m", "merged"]);
+  for (const f of fs.readdirSync(trMerge.runs)) fs.renameSync(path.join(trMerge.runs, f), path.join(trMerge.root, "open-" + f));
+  const mgShut = mgCommitted ? run(trMerge, ["quiet"]) : { exit: null, out: "", byGate: {} };
+  const mgShutLine = mgShut.byGate["tests-quiet"];
+  check(mgConflict && mgStages === 3 && mgOpen.exit === 0 && !!mgOpenLine && !!mgShutLine
+    && mgOpenLine.unmerged === 1 && mgShutLine.unmerged === 0
+    && mgOpenLine.treeHash === mgShutLine.treeHash && mgOpenLine.treeFiles === mgShutLine.treeFiles
+    && mgOpenLine.counts.exitCode === 0 && mgOpenLine.treeChanged === 0,
+    "9k a run over an unmerged index fingerprints each path once, so its record carries the hash of the"
+    + " commit that resolution became (" + (mgOpenLine && mgOpenLine.treeHash) + " over "
+    + (mgOpenLine && mgOpenLine.treeFiles) + " file(s), against " + (mgShutLine && mgShutLine.treeHash) + " over "
+    + (mgShutLine && mgShutLine.treeFiles) + " after the commit), and says it: unmerged "
+    + (mgOpenLine && mgOpenLine.unmerged) + " then " + (mgShutLine && mgShutLine.unmerged) + "; the lab "
+    + (mgConflict ? "conflicted on " + mgStages + " stage(s)" : "did not conflict: " + mgSteps.join(" ")));
+  check(/UNMERGED/.test(mgOpen.out) && !/UNMERGED/.test(mgShut.out) && !!trQuietOne && trQuietOne.unmerged === 0
+    && !!trWalkQuiet && trWalkQuiet.unmerged === 0,
+    "9l the run over the unmerged index says so on its own line and the committed run does not; a tree"
+    + " with nothing unmerged records 0 by git (9a: " + (trQuietOne && trQuietOne.unmerged) + ") and by the walk (9g: "
+    + (trWalkQuiet && trWalkQuiet.unmerged) + ")");
 
   /* ---- 10. THE DEFAULT RUNS FOLDER -------------------------------------------------------------- */
   /* Every leg above names ETIUDA_RUNS, so none of them ever saw the default, which until
