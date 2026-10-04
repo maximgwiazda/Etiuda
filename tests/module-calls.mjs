@@ -2270,6 +2270,38 @@ const CARD_B = {
         return eq([stored.retired, P.pack.custom.length, own.en, own.pl, "retired" in own].join("|"),
           "1|1|the desk's rewrite|po polsku|false");
       });
+    /* The edition a build brings settles the desk's edits as one put down at a load does (settleEdits): a
+       field it now holds as the agent wrote it is dropped, and an own card whose id it now holds becomes it. */
+    check("card-carry.js", "the next edition of a build that holds an edit word for word drops it, and keeps a field the lead wrote otherwise",
+      () => {
+        clear(); P.pack.editBases = {}; edition(EDITION_1);
+        P.pack.overrides = { "c-kept": { en: "kept, edited", t: "My title" } };
+        P.savePack();
+        boot([Object.assign({}, EDITION_1[0], { en: "kept, edited", t: "The lead's title" }), EDITION_1[1]]);
+        return eq(JSON.stringify(P.pack.overrides), '{"c-kept":{"t":"My title"}}');
+      });
+    check("card-carry.js", "the next edition of a build that holds an own card's id makes it that card, listed once, with its star and what still differs",
+      () => {
+        clear(); P.pack.editBases = {}; edition(EDITION_1);
+        P.pack.custom = [{ id: "c-grown", c: "gen", t: "Invented grown", en: "the desk's words" }];
+        P.pack.favourites = ["c-grown"];
+        P.savePack();
+        boot(EDITION_1.concat([{ id: "c-grown", c: "gen", t: "Invented grown", en: "the team's words" }]));
+        return eq([P.pack.custom.filter(m => m.id === "c-grown").length, P.BASE_M.filter(m => m.id === "c-grown").length,
+          JSON.stringify(P.pack.overrides["c-grown"] || null), P.pack.favourites.join(",")].join("|"),
+          "0|1|{\"en\":\"the desk's words\"}|c-grown");
+      });
+    check("card-carry.js", "CONTROL: a boot whose build brings the edition the desk already holds changes nothing in its layer",
+      () => {
+        clear(); P.pack.editBases = {}; edition(EDITION_1);
+        P.pack.overrides = { "c-kept": { en: "kept, edited" } };
+        P.pack.custom = [{ id: "u:own", c: "gen", t: "Invented own", en: "mine" }];
+        P.pack.favourites = ["c-retired", "u:own"];
+        P.savePack();
+        const was = JSON.stringify(P.pack);
+        const told = boot(EDITION_1);
+        return eq((JSON.stringify(P.pack) === was) + "|" + told, "true|0");
+      });
   } finally {
     clear(); STK.M.length = 0; P.pack.baseCards = null; P.rebuildBaseCards();
   }

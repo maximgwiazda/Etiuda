@@ -19472,9 +19472,10 @@ What you type stays in this browser only.`;
     return !!s && s.has(String(id));
   }
   var UNSETTLED = ["intents", "next", "paxVoc", "ext"];
-  function settleEdits(c, list2) {
+  function settleEdits(c, list2, was) {
     const ov = pack.overrides || {}, bases = pack.editBases || {}, takes = takenFor.get(c);
-    const now = new Map(list2.map((m) => [catalogCardId(m), m])), old = new Map(BASE_M.map((m) => [m.id, m]));
+    const now = new Map(list2.map((m) => [catalogCardId(m), m])), old = new Map(was.map((m) => [m.id, m]));
+    let moved = 0;
     const flag = new Set(CARD_BOOL_FLAGS);
     const text = new Set(editionFieldKeys(c, { langs: CONTENT_LANGS.map((code) => ({ code })) }).map((k) => k.key));
     const same = (k, a, b) => flag.has(k) ? !!(+a || 0) === !!(+b || 0) : String(a == null ? "" : a) === String(b == null ? "" : b);
@@ -19485,9 +19486,15 @@ What you type stays in this browser only.`;
       const b = old.get(id) || bases[id] || null, took = !!takes && takes.has(id);
       Object.keys(o).forEach((k) => {
         if (!settled(k)) return;
-        if (same(k, o[k], m[k]) || took && text.has(k) && b && !same(k, b[k], m[k])) delete o[k];
+        if (same(k, o[k], m[k]) || took && text.has(k) && b && !same(k, b[k], m[k])) {
+          delete o[k];
+          moved++;
+        }
       });
-      if (!Object.keys(o).length) delete ov[id];
+      if (!Object.keys(o).length) {
+        delete ov[id];
+        moved++;
+      }
     });
     pack.custom = (pack.custom || []).filter((own) => {
       const m = own && now.get(own.id);
@@ -19497,9 +19504,11 @@ What you type stays in this browser only.`;
         if (k !== "id" && settled(k) && !same(k, own[k], m[k])) o[k] = own[k];
       });
       if (Object.keys(o).length) ov[own.id] = o;
+      moved++;
       return false;
     });
     pack.overrides = ov;
+    return moved > 0;
   }
   function carryCardLayer(c) {
     const list2 = c && c.cards || [];
@@ -19509,7 +19518,7 @@ What you type stays in this browser only.`;
     });
     rekeyOldCards(list2, alive);
     rekeyOldShelves(c && c.categories || {});
-    settleEdits(c, list2);
+    settleEdits(c, list2, BASE_M);
     const find = linkFinder(c), lost = {};
     const pin = (id, l) => {
       const gone = [], out = pinLinks(l, find, gone);
@@ -19544,9 +19553,10 @@ What you type stays in this browser only.`;
         if (m && m.id) alive.add(m.id);
       });
       const moved = rekeyOldCards(BASE_M, alive) + rekeyOldShelves(BASE_CATS);
+      const settled = settleEdits(null, BASE_M, []);
       bootKept = rescueEdits(alive, (id, l) => l, {});
       if (bootKept) keepOwnShelves(BASE_CATS);
-      if (moved + bootKept) savePack();
+      if (moved + bootKept || settled) savePack();
       bootStars = (pack.favourites || []).filter((id) => !alive.has(id)).length;
     }
     tellCarried();
