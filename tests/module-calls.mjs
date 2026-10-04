@@ -2763,6 +2763,108 @@ const CARD_B = {
   }
 }
 
+/* ------------------------------------------------------------------ lanes.js, the cards or the lanes
+   Board 814, S5: Space switches between the cards and the lanes while nothing is being typed (decisions
+   2026-10-01 01:11), and so does a click on the action button (10:29). The lanes stand over the list and
+   give it back whole. Driven through the desk's own route against stand-ins that keep what is written; every
+   card is invented, and every global and hook set here is put back. */
+{
+  const T = await import(MOD("tabs.js"));
+  const H = await import(MOD("hooks.js"));
+  const AS = await import(MOD("app-state.js"));
+  const Dom = await import(MOD("dom.js"));
+  const hadDoc = globalThis.document, hadAdd = globalThis.addEventListener;
+  const STUBS = ["applyLangUI", "updateIntentPlaceholder", "drawPillsCore", "drawIntentRail", "render", "scheduleRailGeometry",
+    "segFolded", "syncRailGeometry"];
+  const hadHooks = STUBS.map(k => [k, Object.prototype.hasOwnProperty.call(H.hooks, k), H.hooks[k]]);
+  const hadCards = AS.cards;
+  const on = o => ({ add: c => o.add(c), remove: c => o.delete(c), contains: c => o.has(c),
+    toggle: (c, f) => { const w = f === undefined ? !o.has(c) : !!f; if (w) o.add(c); else o.delete(c); return w; } });
+  const bodyCls = new Set(), quiet = { toggle() {}, add() {}, remove() {}, contains() { return false; } };
+  const el = extra => Object.assign({ hidden: false, attrs: {}, innerHTML: "", style: {}, setAttribute(k, v) { this.attrs[k] = String(v); },
+    getAttribute(k) { return this.attrs[k]; }, querySelector: () => null, querySelectorAll: () => [],
+    addEventListener(k, fn) { (this.heard = this.heard || {})[k] = (this.heard[k] || []).concat(fn); } }, extra || {});
+  const badge = { textContent: "" };
+  const fab = el({ hidden: true, offsetWidth: 44, classList: on(new Set()), querySelector: s => (s === ".fab-badge" ? badge : null) });
+  const lanesBox = el({ hidden: true }), shell = el({ inert: false }), box = el({ value: "", tagName: "INPUT", classList: on(new Set()) });
+  const byId = { "#nextFab": fab, "#lanes": lanesBox, "#pageScroll > .shell": shell, "#intent": box, "#modal": { hidden: true },
+    "#pax": el({ value: "" }), "#roleSel": el({ value: "" }) };
+  const body = { classList: on(bodyCls) };
+  globalThis.document = { querySelector: s => byId[s] || null, getElementById: () => null, querySelectorAll: () => [],
+    addEventListener() {}, createElement: () => el({ getContext: () => ({}) }), createRange: () => ({}), activeElement: null, body,
+    documentElement: { style: { setProperty() {}, removeProperty() {} }, classList: quiet, addEventListener() {} } };
+  globalThis.addEventListener = () => {};
+  STUBS.forEach(k => { if (typeof H.hooks[k] !== "function") H.hooks[k] = () => {}; });
+  Dom.grabDom();
+  const LN = await import(MOD("lanes.js"));
+  const ND = await import(MOD("next-dock.js"));
+  const LP = await import(MOD("list-pointer.js"));
+  const ST = await import(MOD("storage.js"));
+  const SC = await import(MOD("shortcuts.js"));
+  const fs = await import("node:fs");
+  const card = (id, next) => (next ? { id, c: "orders", en: "Body of " + id, t: "Title " + id, next: next.map(to => ({ to })) }
+    : { id, c: "orders", en: "Body of " + id, t: "Title " + id });
+  const pax = el({ value: "Anna" }), full = el({ value: "x", tagName: "INPUT" });
+  check("lanes.js", "814ln1 the lanes key is free with nothing focused or the search box focused and empty, and kept by a box holding text, another field or a button",
+    () => eq([LN.lanesKeyFree(null, box, body), LN.lanesKeyFree(body, box, body), LN.lanesKeyFree(box, box, body),
+      LN.lanesKeyFree(full, full, body), LN.lanesKeyFree(pax, box, body), LN.lanesKeyFree(el({ tagName: "BUTTON" }), box, body)].join(","),
+      "true,true,true,false,false,false"));
+  check("shortcuts.js", "814ln2 Space is the lanes' row, rebindable and live in a field; the dispatcher asks the lanes first, and Escape sheds them before the dock and the search",
+    () => {
+      const d = SC.SC_DEFS.find(x => x.id === "lanes"), rs = fs.readFileSync(join(MODDIR, "run-shortcut.js"), "utf8");
+      const top = rs.indexOf('if(id==="lanes") return lanesKey();'), ask = rs.indexOf("lanesShortcut(id)");
+      const shed = rs.indexOf("if(lanesOpen()){ toggleLanes(false); return true; }");
+      return eq([d ? [d.def.code, d.def.key === " ", d.def.ctrl, d.def.alt, d.def.shift, d.inField, d.fixed ? 1 : 0].join(":") : "none",
+        top > -1 && top < rs.indexOf('if(id==="navUp"'), ask > top && ask < rs.indexOf('if(id==="langToggle")'),
+        shed > -1 && shed < rs.indexOf("if(nextDockOpen()){ foldNextDock(); return true; }") && shed < rs.indexOf("escapeLadderStep();")].join("|"),
+        "Space:true:0:0:0:1:0|true|true|true");
+    });
+  check("lanes.js", "814ln3 while the lanes show, the keys that walk and copy cards stay in the lanes and the category keys do nothing; tabs, language and Escape pass",
+    () => eq(["navDown", "navUp", "markTop", "markBottom", "copy", "copyOther", "navPillLeft", "navPillLast", "tabNext", "langToggle", "escape", "clearIntent"]
+      .map(id => String(LN.lanesShortcut(id))).join(","), "true,true,true,true,true,true,true,true,undefined,undefined,undefined,undefined"));
+  try {
+    ST.lsSet("eMotionOff", "1");
+    SC.loadShortcuts();
+    AS.setCards([card("c-ln-a", ["c-ln-b", "c-ln-c"]), card("c-ln-b"), card("c-ln-c"), card("c-ln-d")]);
+    T.tabs.splice(0, T.tabs.length);
+    ST.ssSet(T.TAB_KEY, "null");
+    T.initTabs();
+    ND.wireNextDock();
+    LN.wireLanes();
+    ND.syncNextDock();
+    const state = () => [bodyCls.has("e-lanes") ? "lanes" : "cards", shell.inert ? "inert" : "live", lanesBox.hidden ? "hidden" : "shown",
+      fab.hidden ? "nofab" : "fab", fab.attrs["aria-pressed"] || "-"].join(" ");
+    const click = () => ((fab.heard && fab.heard.click) || []).forEach(fn => fn({}));
+    const seen = [state()];
+    click(); seen.push(state());
+    const empty = /class="ln-empty"/.test(lanesBox.innerHTML) && !/ln-now/.test(lanesBox.innerHTML);
+    LP.bumpUseCount("c-ln-a", "en");
+    const html = lanesBox.innerHTML;
+    const drawn = [/class="card ln-now"/.test(html), (html.match(/class="card ln-row/g) || []).length, /Title c-ln-a/.test(html), /Ctrl\+2/.test(html)].join(",");
+    box.value = "x"; ((box.heard && box.heard.input) || []).forEach(fn => fn({}));
+    seen.push(state() + (lanesBox.innerHTML ? " kept" : " emptied"));
+    document.activeElement = box;
+    const typed = LN.lanesKey();
+    box.value = ""; const opened = LN.lanesKey(); seen.push(state());
+    document.activeElement = body; const closed = LN.lanesKey(); seen.push(state());
+    check("lanes.js", "814ln4 the button and Space switch to the lanes and back: a line before the first reply, the reply now and its next after a copy, and typing in the search box gives the cards back whole",
+      () => eq(seen.join(" | ") + " | " + [empty, drawn, typed, opened, closed].join(";"),
+        "cards live hidden nofab false | lanes inert shown fab true | cards live hidden fab false emptied | lanes inert shown fab true | cards live hidden fab false"
+        + " | true;true,2,true,true;false;true;true"));
+    await new Promise(r => setTimeout(r, 20));
+  } finally {
+    LN.toggleLanes(false);
+    ND.watchNextDock(null);
+    T.watchTabPath(null);
+    T.tabs.splice(0, T.tabs.length);
+    AS.setCards(hadCards);
+    hadHooks.forEach(([k, own, v]) => { if (own) H.hooks[k] = v; else delete H.hooks[k]; });
+    if (hadAdd === undefined) delete globalThis.addEventListener; else globalThis.addEventListener = hadAdd;
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+    if (hadDoc !== undefined) Dom.grabDom();
+  }
+}
+
 /* NOT cardBodyHtml(). It reads the PAX box off the document through fill(), so it cannot be
    called without one: it is the browser oracle's, and tests/smoke.js has it. card-body.js is
    called above only for its intent strip, which reads no document. */

@@ -67,6 +67,10 @@ const SC_DEFS=[
     def:{code:"Digit3",key:"3",ctrl:1,alt:0,shift:0,meta:0},inField:1},
   {id:"nextCopy4",label:"Next reply 4",hint:"Copy the fourth reply offered after the one sent last",
     def:{code:"Digit4",key:"4",ctrl:1,alt:0,shift:0,meta:0},inField:1},
+  /* inField so an empty search box still switches; run-shortcut declines it wherever something is being
+     typed or a control is focused, and the press then types or presses as before. */
+  {id:"lanes",label:"Cards or lanes",hint:"Switch between the cards and the lanes while nothing is being typed",
+    def:{code:"Space",key:" ",ctrl:0,alt:0,shift:0,meta:0},inField:1},
   {id:"expandPills",label:"Reveal / expand categories",
     hint:"Hold Ctrl (Cmd on Mac): show the pills when hidden, or expand them past two rows",
     def:{code:"ControlLeft",key:"Control",ctrl:1,alt:0,shift:0,meta:0},inField:1,fixed:1,hold:1,
@@ -283,6 +287,7 @@ function keysLegendHtml(){
     K(esc(f("quickFacts")))+" "+w("facts")+" · "+
     K(esc(f("toggleRail")))+" "+w("rail")+" · "+
     K(esc(f("expandPills")))+" "+w("categories")+" · "+
+    K(esc(f("lanes")))+" "+w("lanes")+" · "+
     K("Esc")+" "+w("clear");
 }
 function tabAddTitle(){

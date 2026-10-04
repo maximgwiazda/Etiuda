@@ -116,7 +116,8 @@ import * as pick from "./modules/pick.js";
 import * as fieldsMod from "./modules/fields.js";
 import * as fieldAsk from "./modules/field-ask.js";
 import * as nextDock from "./modules/next-dock.js";
-Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, cardCarry, langTabs, cardEditor, cardChain, macrosJson, tabs, motion, fifth, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, teamJoin, editionChangesMod, editionPanel, deskLook, catalogTrustMod, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots, restart, pick, fieldsMod, fieldAsk, nextDock);
+import * as lanes from "./modules/lanes.js";
+Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, cardCarry, langTabs, cardEditor, cardChain, macrosJson, tabs, motion, fifth, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, teamJoin, editionChangesMod, editionPanel, deskLook, catalogTrustMod, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots, restart, pick, fieldsMod, fieldAsk, nextDock, lanes);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place
@@ -370,6 +371,8 @@ function boot(){
   listPointer.wireListPointer();
   // The action button: its digit, its hover, Ctrl and the replies it copies
   nextDock.wireNextDock();
+  // The lanes: Space and the action button switch to them, and they follow the button's every sync
+  lanes.wireLanes();
 
 
   // The quick facts text, its copy targets and its editor

@@ -31,12 +31,12 @@ function copyEntrySel(otherLang){
   },at),at);
   return true;
 }
-/** Copy a card's block `vi` in the language it shows, from outside the list: a field question hangs
- *  from `anchor`, and the trace of recent copies is kept as a click would keep it. */
-function copyCardPart(id, vi, anchor){
+/** Copy a card's block `vi` in the language it shows, or with `other` the next one, from outside the
+ *  list: a field question hangs from `anchor`, and the trace of recent copies is kept as a click would. */
+function copyCardPart(id, vi, anchor, other){
   const m=findCard(id);
   if(!m) return false;
-  const l=cardLang(m), ps=parts(m,l);
+  const l=other ? nextContentLang(cardLang(m)) : cardLang(m), ps=parts(m,l);
   if(!ps.length){ toast(t("No {LANG} version for this card").replace("{LANG}",l.toUpperCase())); return true; }
   const k=Math.max(0, Math.min(ps.length-1, vi|0));
   withFields(ps[k],m,l,()=>withAgentName(ps[k],()=>{

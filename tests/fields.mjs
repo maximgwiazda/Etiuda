@@ -545,7 +545,8 @@ try {
       navigator.clipboard = { writeText: () => ({ then(ok) { ok(); } }) };
       ND.wireNextDock();
       fresh(); ["c-lead9", "c-sworn9", "c-lead9", "c-sworn9"].forEach(id => LP.bumpUseCount(id, "en"));
-      fresh();
+      // A new conversation is drawn as the desk draws one, through render's sync of the button.
+      fresh(); ND.syncNextDock();
       const before = { shown: !fabEl.hidden, open: ND.nextDockOpen() };
       LP.bumpUseCount("c-lead9", "en");
       const after = { shown: !fabEl.hidden, pulse: fabEl.classList.contains("nudge"), open: ND.nextDockOpen() };

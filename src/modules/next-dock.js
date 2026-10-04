@@ -62,15 +62,20 @@ function dockNear(r, x, y, d){
 }
 
 let dockRows=[], dockFrom=null, dockLive=new Map(), dockKey="", dockEl=null;
-let openBy={hover:false, ctrl:false, click:false}, dockHoverT=0, dockLeaveT=0;
+let openBy={hover:false, ctrl:false}, dockHoverT=0, dockLeaveT=0, dockWatch=null;
 const dockFab=()=>$("#nextFab");
+// The lanes give the conversation the whole window, so the dock stands down while they show.
+const lanesShown=()=>!!document.body && document.body.classList.contains("e-lanes");
+/* One listener, the lanes: told after every sync of the button, with whether a step brought it, as the
+   tabs tell the dock. */
+function watchNextDock(fn){ dockWatch=fn||null; }
 
 // What the tab in front offers now, from the last reply it sent.
 function dockNow(){
   const now=tabPathNow(), path=now.path, from=path.length ? path[path.length-1] : null;
   const live=new Map((cards||[]).filter(m=>m&&m.id).map(m=>[String(m.id),m]));
   const rows=from==null ? [] : dockList(from, live, statsLearntAfter(pack, from), new Set(path));
-  return {tab:now.tab, from:from, rows:rows, live:live};
+  return {tab:now.tab, from:from, rows:rows, live:live, path:path};
 }
 /** The button's digit and its pulse, and the open dock's rows. `arrived` is a step just taken in the tab
  *  in front, which is what pulses; a switch of tab or any other redraw shows the digit still. */
@@ -81,15 +86,19 @@ function syncNextDock(arrived){
   const key=[now.tab, now.from||"", now.rows.map(r=>r.id+(r.learnt?"~":"")).join(","), lang, uiLang()].join("|");
   const changed=key!==dockKey;
   dockRows=now.rows; dockFrom=now.from; dockLive=now.live; dockKey=key;
-  fab.hidden=!n;
+  const lanes=lanesShown();
+  // The button is the door to the lanes too, so it stays once the conversation has sent a reply.
+  fab.hidden=!n && !now.path.length && !lanes;
   const badge=fab.querySelector(".fab-badge");
   if(badge) badge.textContent=n ? String(n) : "";
-  fab.title=t("Next replies");
+  fab.title=t(lanes ? "Back to the cards" : "Show the lanes");
   fab.setAttribute("aria-label", t("Next replies")+": "+n);
+  fab.setAttribute("aria-pressed", lanes ? "true" : "false");
   if(arrived===true && n){ fab.classList.remove("nudge"); void fab.offsetWidth; fab.classList.add("nudge"); }
   else if(changed) fab.classList.remove("nudge");
-  if(!n){ foldNextDock(); return; }
-  if(nextDockOpen() && (changed || arrived===true)) drawDock();
+  if(!n || lanes) foldNextDock();
+  else if(nextDockOpen() && (changed || arrived===true)) drawDock();
+  if(dockWatch) dockWatch(arrived===true);
 }
 function dockRowHtml(r, i){
   const m=dockLive.get(r.id);
@@ -132,7 +141,7 @@ function placeDock(){
 }
 function nextDockOpen(){ return !!dockEl && !dockEl.hidden; }
 function unfoldDock(by){
-  if(!dockRows.length || modalOpen() || openCover()) return;
+  if(!dockRows.length || lanesShown() || modalOpen() || openCover()) return;
   openBy[by]=true;
   if(!dockEl){
     dockEl=document.createElement("div");
@@ -150,27 +159,28 @@ function unfoldDock(by){
   if(dockEl.hidden) drawDock();
 }
 function settleDock(){
-  if(!openBy.hover && !openBy.ctrl && !openBy.click && dockEl) dockEl.hidden=true;
+  if(!openBy.hover && !openBy.ctrl && dockEl) dockEl.hidden=true;
 }
 /** Folds the dock whatever opened it. */
 function foldNextDock(){
-  openBy={hover:false, ctrl:false, click:false};
+  openBy={hover:false, ctrl:false};
   clearTimeout(dockHoverT); clearTimeout(dockLeaveT); dockHoverT=dockLeaveT=0;
   if(dockEl) dockEl.hidden=true;
 }
 /** Copies the reply at place `k` (0 to 3) of the tab in front, by its first block in the language it
- *  shows; false when there is none, so the key falls through. */
-function copyNextReply(k){
+ *  shows, or the other one; false when there is none, so the key falls through. A question for its
+ *  fields hangs from `anchor`, the button where none is given. */
+function copyNextReply(k, anchor, other){
   const r=dockNow().rows[k];
   if(!r) return false;
-  copyCardPart(r.id, 0, dockFab());
+  copyCardPart(r.id, 0, anchor||dockFab(), other);
   // A reply that asks for its fields first hangs the question from the button, so the dock steps aside.
   if(document.getElementById("eFieldAsk")) foldNextDock();
   return true;
 }
 function dockLeft(){
   if(dockLeaveT) return;
-  dockLeaveT=setTimeout(()=>{ dockLeaveT=0; openBy.hover=false; openBy.click=false; settleDock(); }, DOCK_LEAVE_MS);
+  dockLeaveT=setTimeout(()=>{ dockLeaveT=0; openBy.hover=false; settleDock(); }, DOCK_LEAVE_MS);
 }
 function onDockMove(e){
   if(!nextDockOpen()) return;
@@ -184,7 +194,7 @@ function onDockPress(e){
   if(!nextDockOpen()) return;
   const fab=dockFab(), at=e.target;
   if(at && ((fab && fab.contains(at)) || dockEl.contains(at))) return;
-  openBy.hover=false; openBy.click=false;
+  openBy.hover=false;
   settleDock();
 }
 // Holding Ctrl shows the dock with the other folded things, and letting go folds what Ctrl alone opened.
@@ -204,7 +214,7 @@ function wireNextDock(){
     dockHoverT=setTimeout(()=>{ dockHoverT=0; unfoldDock("hover"); }, DOCK_HOVER_MS);
   });
   fab.addEventListener("pointerleave", ()=>{ clearTimeout(dockHoverT); dockHoverT=0; });
-  fab.addEventListener("click", ()=>{ clearTimeout(dockHoverT); dockHoverT=0; unfoldDock("click"); });
+  fab.addEventListener("click", ()=>{ clearTimeout(dockHoverT); dockHoverT=0; });
   addEventListener("keydown", onDockKey);
   addEventListener("keyup", onDockKey);
   addEventListener("blur", ()=>{ if(openBy.ctrl){ openBy.ctrl=false; settleDock(); } });
@@ -221,6 +231,8 @@ export {
   dockList,
   dockClear,
   dockNear,
+  dockNow,
+  watchNextDock,
   syncNextDock,
   nextDockOpen,
   foldNextDock,
