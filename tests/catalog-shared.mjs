@@ -8,6 +8,8 @@
  * the write is read again, and a lock another desk holds sends the change to the desk's own file; the bytes every
  * write replaces are kept first; nothing is written where nothing changed; a catalog made from nothing is created at
  * the top of the folder, unsigned; and the history lists the folder's versions under a folder setting spelled otherwise.
+ * The page side, sliced from src/modules/catalog-file.js and catalog-offer.js: what the layer touches is named by the
+ * file's own ids, and the edition a desk wrote itself is offered back to it only when it asks.
  *
  *   node tests/catalog-shared.mjs      exit code is the number of failed checks, capped at 63
  */
@@ -23,7 +25,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 30;
+const EXPECTED = 36;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -335,6 +337,72 @@ try {
   check(rows.length > 1 && rows.every(v => v.place === "folder") && rows.some(v => v.put === true),
     "9a with the folder setting in forward slashes and a trailing one, the history still lists the folder's versions as the folder's, and offers them back ("
     + rows.map(v => v.place).filter((x, i, a) => a.indexOf(x) === i).join() + ")");
+
+  /* ---- the page side: what the layer touches, and the desk's own edition ------------------------------------------ */
+  {
+    const pageSrc = f => fs.readFileSync(path.join(ROOT, "src", "modules", f), "utf8");
+    const slice = (src, marker) => {
+      const at = src.indexOf(marker);
+      if (at < 0 || src.indexOf(marker, at + 1) > -1) throw new Error("not there exactly once: " + marker);
+      for (let i = src.indexOf("{", at), depth = 0; i < src.length; i++) {
+        if (src[i] === "{") depth++;
+        else if (src[i] === "}" && --depth === 0) return src.slice(at, i + 1);
+      }
+      throw new Error("unterminated: " + marker);
+    };
+    const page = { pack: {}, base: true, ly: {}, docs: new Map(), active: null, trusted: [] };
+    const own = {
+      get pack() { return page.pack; }, cardOrderIsBase: () => page.base, lyGet: k => (k in page.ly ? page.ly[k] : null),
+      catalogDocOf: c => page.docs.get(c) || null, sha256Hex: b => sha(Buffer.from(b)), v2SignedBytes: V2.v2SignedBytes,
+      storedCatalog: () => page.active, eCatalogSignature: c => (c ? String(c.id) + "@" + c.rev : ""), nsGet: () => null,
+      catalogTrust: c => { page.trusted.push(c); throw new Error("offered"); },
+    };
+    const scope = new Proxy({}, { has: () => true, get: (o, k) => (k === Symbol.unscopables ? undefined : k in own ? own[k] : k in globalThis ? globalThis[k] : (() => { throw new ReferenceError(String(k) + " is not defined"); })()) });
+    const fileSrc = pageSrc("catalog-file.js");
+    const P = new Function("scope", "with(scope){\n" + ["function pinned(", "function sharedTouched(", "function sharedOwnPin(", "function sharedOwnWrite("]
+      .map(m => slice(fileSrc, m)).join("\n") + "\n" + slice(pageSrc("catalog-offer.js"), "function eOfferCatalogDialog(")
+      + "\nreturn { sharedTouched, sharedOwnWrite, eOfferCatalogDialog };\n}")(scope);
+    const facts = [{ k: { en: "Hours" }, v: { en: "Nine to five" } }];
+    page.pack = { overrides: { "c-a": { title: "Ann's a" } }, custom: [{ id: "c-own", title: "Mine" }], removed: ["c-gone"],
+      catLabels: { "t-op": "Greetings" }, facts: facts, intentCustom: [], intentOverrides: {} };
+    const t1 = P.sharedTouched();
+    check(JSON.stringify(t1) === JSON.stringify({ cards: ["c-a", "c-own", "c-gone"], tags: ["t-op"], head: ["facts"], requests: false, order: false }),
+      "10a a layer with an override, a card of its own, a removal, a category renamed and facts names exactly those, by the file's ids ("
+      + JSON.stringify(t1) + ")");
+    page.pack = {};
+    const t0 = P.sharedTouched();
+    check(JSON.stringify(t0) === JSON.stringify({ cards: [], tags: [], head: [], requests: false, order: false }),
+      "10b THE CONTROL: an empty layer touches nothing (" + JSON.stringify(t0) + ")");
+    page.pack = { intentCustom: [{ id: "r-1" }], who: ["Agent"] };
+    page.base = false;
+    const t2 = P.sharedTouched();
+    page.base = true;
+    check(t2.requests === true && t2.order === true && JSON.stringify(t2.head) === JSON.stringify(["role"]) && t2.cards.length === 0,
+      "10c a request of the desk's own, the role list and a moved card are named as the requests, the role and the order (" + JSON.stringify(t2) + ")");
+
+    const written = catalog("shop-own", { rev: 4 }), shown = catalog("shop-own", { rev: 3 });
+    const held = { id: "shop-own", rev: 4, cards: [] };
+    page.docs.set(held, written);
+    page.active = { id: "shop-own", rev: 3, cards: [] };
+    page.docs.set(page.active, shown);
+    const offer = (asked, ownPin) => {
+      page.ly = ownPin == null ? {} : { SharedOwn: ownPin };
+      page.trusted.length = 0;
+      let r;
+      try { r = P.eOfferCatalogDialog(held, { asked: asked, refusedKey: "", accept: () => {} }); }
+      catch (e) { r = e.message; }
+      return { r: r, offered: page.trusted.length === 1 };
+    };
+    const unasked = offer(false, pinOf(written)), asked = offer(true, pinOf(written));
+    check(unasked.r === false && !unasked.offered && P.sharedOwnWrite(held) === true,
+      "10d the edition this desk wrote, found unasked, is not offered back to it (" + JSON.stringify(unasked) + ")");
+    check(asked.offered,
+      "10e the same edition is offered when the desk asks for it (" + JSON.stringify(asked) + ")");
+    const other = offer(false, pinOf(shown)), none = offer(false, null);
+    check(other.offered && none.offered && P.sharedOwnWrite(held) === false,
+      "10f THE CONTROL: found unasked, an edition this desk did not write is offered, with another pin kept as its own or none ("
+      + JSON.stringify([other, none]) + ")");
+  }
 } catch (e) {
   failed++;
   console.log("  FAIL the run stopped: " + (e && e.stack || e));
