@@ -744,7 +744,7 @@ program. 14 checks, about 3 s; off Windows the three lab checks say NOT RUN.
 It refuses unless a fresh `.deb` and `.AppImage` are in the folder, the program in `linux-unpacked`
 carries its fuses, and the unpacked `.deb` holds the AppArmor profile allowing `userns` for
 `/opt/Etiuda/etiuda` (Ubuntu 24.04 refuses Chromium's sandbox a user namespace without one), the
-SUID `chrome-sandbox` beside it, a `.desktop` entry that names `application/x-etiuda-catalog` and
+`chrome-sandbox` beside it (made SUID by the after-install only where no user namespace works), a `.desktop` entry that names `application/x-etiuda-catalog` and
 hands the program its file, the MIME file giving that type to `*.ec`, and no updater's file.
 `linux-package.mjs` holds that judge with each of those taken out alone, 15 checks, under 1 s; it
 runs in `npm test` on both platforms.

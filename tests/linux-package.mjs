@@ -5,7 +5,7 @@
  *
  * Nothing here packages anything or opens a window; tests/linux-desk.js launches what was built.
  * What each leg holds:
- *   1  the Linux block asks a .deb and an AppImage for x64, and the Windows block is as it was
+ *   1  the Linux block asks a .deb and an AppImage for x64, and the Windows target, its icon and the shared association are as they were
  *   2  before packing for Linux every entry of shell/etiuda.ico is written out byte for byte under its
  *      size, and before packing for Windows nothing is written
  *   3  a planted tree carrying everything passes, and each thing taken out of it alone is named: the

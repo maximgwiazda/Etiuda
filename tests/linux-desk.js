@@ -17,6 +17,7 @@
  *      namespaces, so leg 3 can fail
  *   4  the global hotkey is registered with the display, and pressing it shows the picker
  *   5  the window's class is the one the installed .desktop entry names, where there is one
+ *   6  each launch's processes are killed and its lab is gone
  *   7  the desk asks nothing of the web: its net log names no http or https address
  * AppArmor is not measured where the kernel does not run it, and the run says so.
  *
