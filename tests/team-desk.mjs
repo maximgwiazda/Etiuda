@@ -28,7 +28,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 28;
+const EXPECTED = 29;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -48,14 +48,16 @@ const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
 const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
 
 /* One desk: its own user-data folder and desk.json naming the catalog folder, the shell evaluated afresh over it. The
-   safeStorage stand-in is reversible and shows nothing of what it holds. */
-function loadDesk(ud) {
+   safeStorage stand-in is reversible and shows nothing of what it holds. While `flaky.down` is "seal" it seals nothing,
+   and while it is "all" it opens nothing either, throwing as Electron's does. */
+function loadDesk(ud, flaky) {
   const said = [], on = {}, invoke = {};
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop };
+  const down = () => (flaky && flaky.down) || "";
   const safeStorage = {
-    isEncryptionAvailable: () => true,
-    encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
-    decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
+    isEncryptionAvailable: () => !down(),
+    encryptString: s => { if (down()) throw new Error("unavailable"); return Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)); },
+    decryptString: b => { if (down() === "all") throw new Error("unavailable"); return Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"); },
   };
   const electron = {
     app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop, getVersion: () => "0.0.0",
@@ -72,12 +74,12 @@ function loadDesk(ud) {
   const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
   return { api, ask, ipc, on, invoke, said, ud, envelope };
 }
-function newDesk(name, folder) {
+function newDesk(name, folder, flaky) {
   const ud = path.join(LAB, name);
   fs.mkdirSync(ud, { recursive: true });
   fs.writeFileSync(path.join(ud, "desk.json"),
     JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: folder, eUiLang: "en" } }), "utf8");
-  return loadDesk(ud);
+  return loadDesk(ud, flaky);
 }
 const folder = name => { const f = path.join(LAB, name); fs.mkdirSync(f, { recursive: true }); return f; };
 const walk = dir => fs.readdirSync(dir, { withFileTypes: true })
@@ -365,6 +367,26 @@ try {
     && teaOut === JSON.stringify(Object.assign(JSON.parse(tea.text), { rev: 1, hash: teaBack.hash, sig: teaBack.sig }), null, 1) + "\n",
     "14AA THE CONTROL: on the same admitted desk, its own file of an unsealed catalog is written as the page sent it, with"
     + " the edition, hash and signature the shell adds: " + JSON.stringify(teaW) + ", " + teaOut.length + " bytes");
+
+  /* ---- a keep that fails: safeStorage away for one read, the team file unchanged after it ----------------------- */
+  const FLAKY = folder("flaky"), flaky10 = { down: "" }, flaky11 = { down: "" };
+  const D10 = newDesk("ten", FLAKY, flaky10), D11 = newDesk("eleven", FLAKY, flaky11);
+  const me10 = await D10.ask("etiuda:branch-identity", true), me11 = await D11.ask("etiuda:branch-identity", true);
+  put(FLAKY, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 1, roster: [entry(me10, K1, 1), entry(me11, K1, 1)] })));
+  put(FLAKY, "lamps.ec", seal(K1, 1, A2));
+  const shut = t => JSON.parse(t).kind === "etiuda-sealed";
+  const retried = [];
+  for (const [D, f, how] of [[D10, flaky10, "all"], [D11, flaky11, "seal"]]) {
+    f.down = how;
+    const away = await read(D, "lamps.ec");
+    f.down = "";
+    const back = await read(D, "lamps.ec");
+    retried.push({ ok: shut(away) && back === A2.trim() && epochs(D) === "1",
+      said: how + ": " + (shut(away) ? "shut" : "opened") + " while away, " + (back === A2.trim() ? "opened" : "still shut") + " once back" });
+  }
+  check(retried.every(r => r.ok),
+    "14ab a team key that could not be kept is tried again at the next read, the team file unchanged, whether safeStorage"
+    + " could open nothing or seal nothing: " + retried.map(r => r.said).join("; "));
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
 }

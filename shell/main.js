@@ -1065,14 +1065,15 @@ function ringVouches(doc) {
     && ring.keys.some(e => !!e && typeof e === "object" && covers.indexOf(String(e.catalog)) >= 0 && e.keyId === doc.lead.keyId
       && e.alg === "Ed25519" && e.public === doc.lead.public);
 }
-/* The team key this desk's own roster entry wraps for the file's epoch, or null. HPKE binds the box and the aad the id. */
+/* The team key this desk's own roster entry wraps for the file's epoch, or null; false where the desk's own box would
+   not open, which a later read may yet do. HPKE binds the box and the aad the id. */
 function ownTeamKey(doc) {
   if (!deskBranch) return null;
   const id = branchIdOf(deskBranch.sign.pub);
   const e = doc.roster.find(x => !!x && !!x.desk && x.desk.id === id);
   if (!e || !e.wrap) return null;
   const sk = openPrivate(deskBranch.box.priv);
-  return sk ? unwrapTeamKey(sk, e.wrap, doc.id, doc.epoch, id) : null;
+  return sk ? unwrapTeamKey(sk, e.wrap, doc.id, doc.epoch, id) : false;
 }
 function teamSay(line) {
   if (teamSaid.has(line)) return;
@@ -1091,9 +1092,14 @@ function heedTeam() {
   const file = path.join(root, TEAM_NAME);
   const stamp = [file, fileStamp(file), fileStamp(path.join(root, RING_NAME)), deskBranch ? deskBranch.box.pub : ""].join("|");
   if (stamp === teamStamp) return;
+  /* The stamp is a verdict on the text, so a read that fails or a key that is not kept leaves it unset and the next
+     call reads again. */
+  let text;
+  try { text = fs.statSync(file).size <= TEAM_MAX ? fs.readFileSync(file, "utf8") : null; }
+  catch (e) { if (e.code === "ENOENT") teamStamp = stamp; return; }
   teamStamp = stamp;
   let doc = null;
-  try { if (fs.statSync(file).size <= TEAM_MAX) doc = JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "")); } catch { return; }
+  try { if (text !== null) doc = JSON.parse(text.replace(/^\uFEFF/, "")); } catch { return; }
   if (!teamWhole(doc)) { teamSay(file + " is not a team file whole under its lead's key, so nothing in it is used"); return; }
   const lead = { keyId: doc.lead.keyId, public: doc.lead.public }, pin = teamPins[doc.id];
   if (pin && (pin.keyId !== lead.keyId || pin.public !== lead.public)) {
@@ -1101,17 +1107,19 @@ function heedTeam() {
     return;
   }
   const key = ownTeamKey(doc);
+  if (key === false) teamStamp = "";
   if (!pin && !key && !ringVouches(doc)) return;
   let changed = false;
   if (!pin) { teamPins[doc.id] = lead; changed = true; }
   const kept = teamKeys[doc.id] || {};
-  if (key && !kept[doc.epoch] && branchSealable()) {
+  if (key && !kept[doc.epoch]) {
     try {
+      if (!branchSealable()) throw new Error("safeStorage is not available");
       kept[doc.epoch] = safeStorage.encryptString(key.toString("base64")).toString("base64");
       teamKeys[doc.id] = kept;
       ecFactsRead.clear();
       changed = true;
-    } catch (e) { teamSay("the team key for " + doc.id + " could not be kept - " + e.message); }
+    } catch (e) { teamStamp = ""; teamSay("the team key for " + doc.id + " could not be kept - " + e.message); }
   }
   if (changed) persistDeskEnvelope();
 }
