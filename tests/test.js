@@ -4061,8 +4061,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 954;
-const UI_STRINGS_SHA256 = "a5e79c3a92f4bfc68c48da76ebc3cf745476d5161ffef2b7f22e755fe73e1b06";
+const UI_STRINGS_COUNT = 956;
+const UI_STRINGS_SHA256 = "ca00e1a2995894e0bb5e73b56af3d197b675e05ae2e8a1b6387fdb5d8e1e2cf8";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
@@ -4073,17 +4073,29 @@ const UI_STRINGS_SHA256 = "a5e79c3a92f4bfc68c48da76ebc3cf745476d5161ffef2b7f22e7
    rail, pills, star and settings bodies among them, so a Polish value changed on one of them
    moved nothing here. Read escape by escape instead, the ten are in and every line the old rule
    took is taken byte for byte as before (measured over the source document: 810 kept, 0 lost,
-   10 added). */
-function uiStrings(src) {
+   10 added).
+
+   A TABLE'S LAST PAIR HAS NO COMMA. Until 2026-10-04 a line had to end `",`, so the last line of
+   the table, which ends `"` above its `};`, was never read: at engine main 4e14085 that line's
+   Polish value changed and this section stayed green, while the same change one line up went red.
+   A line ending `"` is read too, its value one character shorter; every line the comma rule took
+   is taken byte for byte as before. checkFrozenContracts runs this over a planted table as well,
+   so a rule that drops a last pair again fails there and not only when somebody edits that line. */
+function uiPairs(src) {
   const out = [];
   src.split(/\r?\n/).forEach(line => {
     const t = line.trim();
-    if (!t.startsWith('"') || !t.endsWith('",')) return;
+    const tail = t.endsWith('",') ? 2 : t.endsWith('"') ? 1 : 0;
+    if (!tail || !t.startsWith('"')) return;
     let i = 1;
     while (i < t.length && t[i] !== '"') i += t[i] === "\\" ? 2 : 1;
     if (i < 2 || t.slice(i, i + 3) !== '":"') return;
-    out.push(t.slice(1, i) + "\u0000" + t.slice(i + 3, -2));
+    out.push(t.slice(1, i) + "\u0000" + t.slice(i + 3, -tail));
   });
+  return out;
+}
+function uiStrings(src) {
+  const out = uiPairs(src);
   out.sort();
   return { count: out.length, sha256: crypto.createHash("sha256").update(out.join("\n"), "utf8").digest("hex") };
 }
@@ -4209,6 +4221,12 @@ function checkFrozenContracts() {
     problems.push("the old-key rule no longer names a planted key (" + JSON.stringify(planted)
       + "), so its silence over src/ means nothing");
 
+  /* The census over a planted table, so that its silence over a last line is a measurement: two
+     pairs, the second with no comma, and an object that is no pair at all. */
+  const plantedUi = uiPairs('T={\n  "One":"Jeden",\n  "Two \\"2\\"":"Dwa"\n};\nU={ "n": 1 };');
+  if (plantedUi.join("|") !== 'One\u0000Jeden|Two \\"2\\"\u0000Dwa')
+    problems.push("the interface-string census no longer reads every pair of a planted table ("
+      + JSON.stringify(plantedUi) + "), so a changed last pair would pass it unseen");
   const ui = uiStrings(src);
   if (ui.count !== UI_STRINGS_COUNT || ui.sha256 !== UI_STRINGS_SHA256)
     problems.push("the interface strings have moved: " + ui.count + " pairs, sha256 "
