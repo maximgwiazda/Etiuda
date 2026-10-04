@@ -588,6 +588,8 @@ function deskEnvelopeBody(keysText) {
     + (Object.keys(teamPins).length ? ',"teamPins":' + JSON.stringify(teamPins) : "")
     + (Object.keys(teamKeys).length ? ',"teamKeys":' + JSON.stringify(teamKeys) : "")
     + (teamOpened.size ? ',"teamOpened":' + JSON.stringify(Array.from(teamOpened)) : "")
+    + (teamSeen.size ? ',"teamSeen":' + JSON.stringify(Array.from(teamSeen)) : "")
+    + (teamBarred.size ? ',"teamBarred":' + JSON.stringify(Array.from(teamBarred)) : "")
     + (teamJoin ? ',"teamJoin":' + JSON.stringify(teamJoin) : "")
     + (deskRefused.length ? ',"refused":' + JSON.stringify(deskRefused) : "")
     + ',"keys":' + keysText + "}";
@@ -1171,6 +1173,8 @@ const TEAM_MAX = 1024 * 1024;
 let teamPins = {};                             // team id -> {keyId, public}: the lead's key, once trusted
 let teamKeys = {};                             // team id -> {epoch: the team key sealed by safeStorage, base64}
 const teamOpened = new Set();                  // catalog ids this desk has opened from an envelope, kept in the desk envelope
+const teamSeen = new Set();                    // teams whose pinned lead key the agent has been shown, kept in the desk envelope
+const teamBarred = new Set();                  // teams whose lead the agent forgot: no first admission but by an answered request
 const editionTeam = new Map();                 // an opened edition's pin -> the team whose envelope held it, "" if two did; this run only
 let teamStamp = "";                            // what the team file, the ring and the box were when last heeded
 const teamSaid = new Set();
@@ -1240,7 +1244,9 @@ function heedTeam() {
     teamSay(file + " is signed by a key other than the lead's this desk trusts for team " + doc.id + ", so nothing in it is used");
     return;
   }
-  const asked = !pin && teamJoin && teamJoin.team === doc.id ? (teamJoin.opened ? teamJoin.opened.lead : { keyId: "", public: "" }) : null;
+  // A forgotten lead is held like a request still waiting: no lead is known until an answered request names one.
+  const asked = !pin && teamJoin && teamJoin.team === doc.id ? (teamJoin.opened ? teamJoin.opened.lead : { keyId: "", public: "" })
+    : !pin && teamBarred.has(doc.id) ? { keyId: "", public: "" } : null;
   if (asked && (asked.keyId !== lead.keyId || asked.public !== lead.public)) {
     if (asked.public)
       teamSay(file + " is signed by a key other than the lead this desk asked to join team " + doc.id + ", so nothing in it is used");
@@ -1251,6 +1257,7 @@ function heedTeam() {
   if (!pin && !key && !ringVouches(doc)) return;
   let changed = false;
   if (!pin || handed) { teamPins[doc.id] = lead; changed = true; }
+  if (!pin) teamBarred.delete(doc.id);
   if (handed) teamSay(file + " hands team " + doc.id + " from the lead key this desk trusted to " + lead.public + ", which it now trusts instead");
   const kept = teamKeys[doc.id] || {};
   if (key && !kept[doc.epoch]) {
@@ -1344,10 +1351,11 @@ function cancelJoin() {
   return joinView();
 }
 /* Moves the request on and says where it stands: admitted once this desk keeps a newer key for the team than when it
-   asked, revealed once the lead's opening for its commitment is read and the reveal written, refused where the lead said so. */
+   asked, revealed once the lead's opening for its commitment is read and the reveal written, refused where the lead said so.
+   `leads` is leadsView's. */
 function joinView() {
   if (deskKeys === undefined) deskKeys = readDesk();
-  const view = { sealed: null, join: null, joined: null };
+  const view = { sealed: null, join: null, joined: null, leads: leadsView() };
   const root = catalogFolder();
   if (!folderAnswers(root)) return view;
   heedTeam();
@@ -1373,6 +1381,7 @@ function joinView() {
                   code: j.opened ? joinCode(j.team, me.key, me.box, j.opened.lead.public, j.nonce, j.opened.nonce) : "" };
   }
   view.sealed = sealedOutside();
+  view.leads = leadsView();
   return view;
 }
 function sendJoin(win) {
@@ -1392,6 +1401,38 @@ function joinKept(j) {
       && JOIN_HEX_RE.test(String(o.nonce))))
     && (j.refused === undefined || j.refused === true);
   return ok ? j : null;
+}
+/* The lead key as Studio's Settings show it, the 16 hex after "studio-" (sign.mjs keyIdFor), made from the public half and
+   never from the file's keyId, which any writer of the share chooses. */
+function leadPrint(publicHex) {
+  return crypto.createHash("sha256").update(Buffer.from(String(publicHex), "hex")).digest("hex").slice(0, 16);
+}
+/* Every lead this desk trusts, for the agent to compare once after admission and to forget at any time. */
+function leadsView() {
+  return Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t)).map(t => ({ team: t, print: leadPrint(teamPins[t].public),
+    admitted: newestEpoch(t) > 0, seen: teamSeen.has(t) }));
+}
+function leadSeen(team) {
+  team = String(team || "");
+  if (teamPins[team] && !teamSeen.has(team)) { teamSeen.add(team); persistDeskEnvelope(); }
+  return joinView();
+}
+/* Forgetting a lead takes its pin and every key kept under it, and bars a first admission for its team until a request the
+   agent makes is answered: the file that pinned it is likely still on the share. What this desk opened stays held back. */
+function forgetLead(team) {
+  team = String(team || "");
+  if (deskKeys === undefined) deskKeys = readDesk();
+  if (!SEALED_TEAM_RE.test(team) || !teamPins[team]) return joinView();
+  delete teamPins[team];
+  delete teamKeys[team];
+  teamSeen.delete(team);
+  teamBarred.add(team);
+  for (const [pin, t] of Array.from(editionTeam)) if (t === team) editionTeam.delete(pin);
+  ecFactsRead.clear();
+  teamStamp = "";
+  persistDeskEnvelope();
+  console.error("etiuda: the lead of team " + team + " is forgotten, with the keys this desk kept for it");
+  return joinView();
 }
 
 function deskFile() { return path.join(app.getPath("userData"), "desk.json"); }
@@ -1503,6 +1544,9 @@ function readDesk() {
       Object.keys(k).forEach(n => { if (/^[1-9][0-9]*$/.test(n) && typeof k[n] === "string" && k[n]) (teamKeys[t] = teamKeys[t] || {})[n] = k[n]; });
     });
     if (doc && Array.isArray(doc.teamOpened)) doc.teamOpened.forEach(c => { if (typeof c === "string" && c) teamOpened.add(c); });
+    [["teamSeen", teamSeen], ["teamBarred", teamBarred]].forEach(([k, set]) => {
+      if (doc && Array.isArray(doc[k])) doc[k].forEach(t => { if (SEALED_TEAM_RE.test(String(t))) set.add(String(t)); });
+    });
     teamJoin = joinKept(doc && doc.teamJoin);
     ensureDeskId();
     console.log("etiuda: desk read from " + file + ", " + Object.keys(keys).length + " keys");
@@ -2014,8 +2058,10 @@ ipcMain.handle("etiuda:stats-write", (e, text) => {
 /* The desk's branch: its public identity, and the write of its own file. See writeBranch. */
 ipcMain.handle("etiuda:branch-identity", (e, make) => (fromEngine(e) ? branchIdentity(make === false ? false : true) : null));
 ipcMain.handle("etiuda:branch-write", (e, stem, text) => (fromEngine(e) ? writeBranch(stem, text) : { ok: false }));
+// "seen" and "forget" name a team where the others name a file.
 ipcMain.handle("etiuda:team-join", (e, op, file, name) => (!fromEngine(e) ? null
-  : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : joinView()));
+  : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
+  : op === "forget" ? forgetLead(file) : joinView()));
 
 /* The engine calls no OS API, so the folder picker is the shell's. The CAPTION comes from the
    page: the shell has no t(), and a dialog captioned in two languages at once is captioned in

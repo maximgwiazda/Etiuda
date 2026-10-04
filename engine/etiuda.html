@@ -2013,6 +2013,9 @@ code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-d
 .e-join-bub .e-join-code{color:var(--bub-ink);font-size:28px;justify-content:flex-start;margin:8px 0 2px}
 .e-join-bub .e-join-wait i{background:var(--bub-dim)}
 .e-join-bub .e-join-meta{color:var(--bub-dim);margin:0 0 8px}
+.e-join-key{font:600 22px var(--mono);color:var(--ink);margin:16px 0 4px;white-space:nowrap}
+.e-join-bub .e-join-key{color:var(--bub-ink);font-size:19px;margin:8px 0 10px}
+.e-lead-key{font:600 13px var(--mono);margin-right:10px;white-space:nowrap}
 
 /* Intent side rail - shown when body.rail-on (user toggle; no min-width gate) */
 .rail-head{display:flex;align-items:center;justify-content:space-between;gap:8px;
@@ -6508,6 +6511,12 @@ What you type stays in this browser only.`;
     "Hide": "Ukryj",
     "{FILE} was not saved: the team's catalog leaves this desk only sealed, and this desk cannot seal for the team now.": "Nie zapisano pliku {FILE}: katalog zespołu opuszcza to stanowisko tylko zaszyfrowany, a to stanowisko nie może teraz szyfrować dla zespołu.",
     "Exported {FILE}, sealed for its team, with {MACROS} in {CARDS}": "Wyeksportowano {FILE}, zaszyfrowany dla zespołu: {MACROS}, {CARDS}",
+    "You are on the team": "To stanowisko należy do zespołu",
+    "Compare this key with the Signing key in the lead's Studio Settings. Every later edition is checked against it.": "Ten klucz powinien być taki sam jak Klucz podpisu w Ustawieniach Studia lidera. Według niego sprawdzane jest każde kolejne wydanie.",
+    "It matches": "Zgadza się",
+    "It does not match": "Nie zgadza się",
+    "Team lead's key": "Klucz lidera zespołu",
+    "Forget this lead": "Zapomnij tego lidera",
     "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.": "Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze."
   };
   function uiLangKnown(l) {
@@ -17543,8 +17552,11 @@ What you type stays in this browser only.`;
   var team_join_exports = {};
   __export(team_join_exports, {
     closeJoinBubble: () => closeJoinBubble,
+    forgetTeamLead: () => forgetTeamLead,
+    leadKeyText: () => leadKeyText,
     teamJoinEmptyHtml: () => teamJoinEmptyHtml,
     teamJoinShown: () => teamJoinShown,
+    teamLeads: () => teamLeads,
     wireTeamJoin: () => wireTeamJoin,
     wireTeamJoinEmpty: () => wireTeamJoinEmpty
   });
@@ -17563,7 +17575,16 @@ What you type stays in this browser only.`;
     }
   }
   function teamJoinShown() {
-    return !!joinNow && (!!joinNow.join || !!joinNow.sealed);
+    return !!joinNow && (!!leadToShow() || !!joinNow.join || !!joinNow.sealed);
+  }
+  function leadToShow() {
+    return (joinNow && joinNow.leads || []).filter((l) => l.admitted && !l.seen)[0] || null;
+  }
+  function teamLeads() {
+    return (joinNow && joinNow.leads || []).slice();
+  }
+  function leadKeyText(print) {
+    return String(print || "").replace(/(.{4})(?=.)/g, "$1 ");
   }
   function joinTook(v) {
     const s = v && typeof v === "object" ? v : {};
@@ -17576,7 +17597,13 @@ What you type stays in this browser only.`;
         code: String(s.join.code || ""),
         asked: +s.join.asked || 0,
         name: String(s.join.name || "")
-      } : null
+      } : null,
+      leads: Array.isArray(s.leads) ? s.leads.filter((l) => l && l.team).map((l) => ({
+        team: String(l.team),
+        print: String(l.print || ""),
+        admitted: l.admitted === true,
+        seen: l.seen === true
+      })) : []
     };
     if (s.joined && s.joined.file) {
       closeJoinBubble();
@@ -17607,7 +17634,14 @@ What you type stays in this browser only.`;
     return code ? '<div class="e-join-code"><span>' + esc(code.slice(0, 3)) + "</span><span>" + esc(code.slice(3)) + "</span></div>" : '<div class="e-join-code e-join-wait" aria-hidden="true"><span><i></i><i></i><i></i></span><span><i></i><i></i><i></i></span></div>';
   }
   function joinParts() {
-    const j = joinNow && joinNow.join, s = joinNow && joinNow.sealed, who = agentName() || t("this desk");
+    const j = joinNow && joinNow.join, s = joinNow && joinNow.sealed, who = agentName() || t("this desk"), l = leadToShow();
+    if (l) return {
+      title: t("You are on the team"),
+      line: t("Compare this key with the Signing key in the lead's Studio Settings. Every later edition is checked against it."),
+      body: '<div class="e-join-key">' + esc(leadKeyText(l.print)) + "</div>",
+      acts: [["seen", t("It matches")], ["forget", t("It does not match")]],
+      lead: l.team
+    };
     const meta = j ? '<div class="e-join-meta">' + esc(t("{NAME}, asked at {TIME}").split("{NAME}").join(j.name || who).split("{TIME}").join(joinTime(j.asked))) + "</div>" : "";
     if (j && j.state === "code") return {
       title: t("Read this code to the team's lead"),
@@ -17638,6 +17672,9 @@ What you type stays in this browser only.`;
     const j = joinNow && joinNow.join, s = joinNow && joinNow.sealed;
     if (act === "ask") return joinAsk("ask", j && j.file || s && s.file || "", agentName());
     if (act === "cancel") return joinAsk("cancel");
+    const l = leadToShow();
+    if (act === "seen" && l) return joinAsk("seen", l.team);
+    if (act === "forget" && l) return joinAsk("forget", l.team);
     if (act === "load") return Promise.resolve(hooks.importCatalogHere());
     return Promise.resolve(null);
   }
@@ -17683,6 +17720,7 @@ What you type stays in this browser only.`;
     const hide = () => {
       joinShut = JSON.stringify(joinNow);
       close();
+      if (p.lead) joinAsk("seen", p.lead);
     };
     wrap.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
@@ -17697,6 +17735,12 @@ What you type stays in this browser only.`;
         close();
         joinAct(act);
       };
+    });
+  }
+  function forgetTeamLead(team, then) {
+    return joinAsk("forget", team).then((v) => {
+      if (typeof then === "function") then();
+      return v;
     });
   }
 
@@ -23444,7 +23488,12 @@ What you type stays in this browser only.`;
         t("Interface language"),
         t("The language of the buttons and menus, not of the macros: those follow EN|PL in the header"),
         langSel
-      ) + (lastSyncStamp ? row(t("Last sync"), "", "<span>" + esc(lastSyncStamp) + "</span>") : ""),
+      ) + (lastSyncStamp ? row(t("Last sync"), "", "<span>" + esc(lastSyncStamp) + "</span>") : "") + /* One row per team lead this desk trusts: the key the agent compared, and the way out where it was wrong. */
+      teamLeads().map((l) => row(
+        t("Team lead's key"),
+        "",
+        '<span class="e-lead-key">' + esc(leadKeyText(l.print)) + '</span><button type="button" class="btn" data-forget-lead="' + esc(l.team) + '">' + esc(t("Forget this lead")) + "</button>"
+      )).join(""),
       personalNote(),
       t("The name customers see, and the language Etiuda's own buttons and menus are written in")
     );
@@ -23574,6 +23623,9 @@ What you type stays in this browser only.`;
         render();
       };
     }
+    box.querySelectorAll("[data-forget-lead]").forEach((b) => {
+      b.onclick = () => forgetTeamLead(b.getAttribute("data-forget-lead"), () => paintSettings());
+    });
     const nameBox = box.querySelector("#setAgentName");
     if (nameBox) nameBox.oninput = () => {
       setAgentName(nameBox.value);

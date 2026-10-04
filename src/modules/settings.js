@@ -19,6 +19,7 @@ import { rereadCollapsed } from "./collapse.js";
 import { applyStoredFactsSize } from "./facts.js";
 import { agentName, setAgentName } from "./agent.js";
 import { eHost } from "./host.js";
+import { teamLeads, leadKeyText, forgetTeamLead } from "./team-join.js";
 
 /* THE SETTINGS SCREEN. One test decides what belongs: would you set it once and
    forget it? Anything touched weekly is a Menu item or a header control; Data stays in
@@ -161,7 +162,11 @@ function settingsBodyHtml(){
           langSel)+
       (lastSyncStamp
         ? row(t("Last sync"), "", '<span>'+esc(lastSyncStamp)+'</span>')
-        : ""),
+        : "")+
+      /* One row per team lead this desk trusts: the key the agent compared, and the way out where it was wrong. */
+      teamLeads().map(l=>row(t("Team lead's key"), "",
+        '<span class="e-lead-key">'+esc(leadKeyText(l.print))+'</span>'
+        +'<button type="button" class="btn" data-forget-lead="'+esc(l.team)+'">'+esc(t("Forget this lead"))+'</button>')).join(""),
       personalNote(),
       t("The name customers see, and the language Etiuda's own buttons and menus are written in"));
   return personalSection+
@@ -249,6 +254,9 @@ function paintSettings(){
   /* Stored on the keystroke, like every other row here: there is no Save on this screen. The
      summary beside the section title is the same value, so it follows the box rather than
      waiting for the next repaint to agree with it. */
+  box.querySelectorAll("[data-forget-lead]").forEach(b=>{
+    b.onclick=()=>forgetTeamLead(b.getAttribute("data-forget-lead"),()=>paintSettings());
+  });
   const nameBox=box.querySelector("#setAgentName");
   if(nameBox) nameBox.oninput=()=>{
     setAgentName(nameBox.value);

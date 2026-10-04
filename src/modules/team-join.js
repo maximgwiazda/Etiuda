@@ -1,6 +1,7 @@
 /* Asking to join the team a sealed catalog in the folder belongs to: on the empty desk where nothing is loaded,
    and in a bubble from the catalog's name where a catalog is open. The shell keeps the request and says where it
-   stands; this paints that answer and sends the agent's three acts back. */
+   stands; this paints that answer and sends the agent's acts back. Once admitted, the same place shows the pinned
+   lead's key once, to compare with the lead's, and Settings lists every such key with a way to forget it. */
 import { eHost } from "./host.js";
 import { t } from "./ui-lang.js";
 import { esc } from "./esc.js";
@@ -11,7 +12,7 @@ import { cutLeaves, dismissNode } from "./motion.js";
 import { hooks } from "./hooks.js";
 import { ICON_LOCK } from "./icons.js";
 
-let joinNow=null;                 // the shell's last answer: {sealed:{file,team}|null, join:{...}|null}
+let joinNow=null;                 // the shell's last answer: {sealed:{file,team}|null, join:{...}|null, leads:[{team,print,admitted,seen}]}
 let joinShut="";                  // the answer the agent last hid the bubble on
 function eHasJoin(){
   const h=eHost();
@@ -22,16 +23,25 @@ function joinAsk(op,file,name){
   try{ return Promise.resolve(eHost().teamJoin(op,file||"",name||"")).then(joinTook,()=>null); }
   catch(e){ return Promise.resolve(null); }
 }
-/* What the empty desk and the bubble show: a sealed catalog, or a request under way. */
+/* What the empty desk and the bubble show: a lead's key not yet shown, a sealed catalog, or a request under way. */
 function teamJoinShown(){
-  return !!joinNow && (!!joinNow.join || !!joinNow.sealed);
+  return !!joinNow && (!!leadToShow() || !!joinNow.join || !!joinNow.sealed);
 }
+function leadToShow(){
+  return ((joinNow&&joinNow.leads)||[]).filter(l=>l.admitted && !l.seen)[0]||null;
+}
+/* The leads this desk trusts, as the shell last said them. */
+function teamLeads(){ return ((joinNow&&joinNow.leads)||[]).slice(); }
+/* The key in four groups of four, as it is read aloud. */
+function leadKeyText(print){ return String(print||"").replace(/(.{4})(?=.)/g,"$1 "); }
 function joinTook(v){
   const s=v&&typeof v==="object"?v:{};
   const was=JSON.stringify(joinNow);
   joinNow={sealed:s.sealed&&s.sealed.file?{file:String(s.sealed.file),team:String(s.sealed.team||"")}:null,
            join:s.join&&s.join.file?{file:String(s.join.file),state:String(s.join.state||""),code:String(s.join.code||""),
-                                      asked:+s.join.asked||0,name:String(s.join.name||"")}:null};
+                                      asked:+s.join.asked||0,name:String(s.join.name||"")}:null,
+           leads:Array.isArray(s.leads)?s.leads.filter(l=>l&&l.team).map(l=>({team:String(l.team),print:String(l.print||""),
+                                      admitted:l.admitted===true,seen:l.seen===true})):[]};
   /* Admitted, the catalog is loaded the way a Library row loads one: at once on an empty desk, asked over a loaded one. */
   if(s.joined && s.joined.file){ closeJoinBubble(); hooks.loadCatalogFromFolder(String(s.joined.file),0); }
   if(JSON.stringify(joinNow)!==was) paintJoin();
@@ -58,7 +68,10 @@ function joinCodeHtml(code){
 }
 /* The title, the line under it, and the acts, for whichever state the request is in. */
 function joinParts(){
-  const j=joinNow&&joinNow.join, s=joinNow&&joinNow.sealed, who=agentName()||t("this desk");
+  const j=joinNow&&joinNow.join, s=joinNow&&joinNow.sealed, who=agentName()||t("this desk"), l=leadToShow();
+  if(l) return {title:t("You are on the team"),
+    line:t("Compare this key with the Signing key in the lead's Studio Settings. Every later edition is checked against it."),
+    body:'<div class="e-join-key">'+esc(leadKeyText(l.print))+'</div>', acts:[["seen",t("It matches")],["forget",t("It does not match")]], lead:l.team};
   const meta=j?'<div class="e-join-meta">'+esc(t("{NAME}, asked at {TIME}").split("{NAME}").join(j.name||who)
     .split("{TIME}").join(joinTime(j.asked)))+'</div>':'';
   if(j && j.state==="code") return {title:t("Read this code to the team's lead"),
@@ -78,6 +91,9 @@ function joinAct(act){
   const j=joinNow&&joinNow.join, s=joinNow&&joinNow.sealed;
   if(act==="ask") return joinAsk("ask",(j&&j.file)||(s&&s.file)||"",agentName());
   if(act==="cancel") return joinAsk("cancel");
+  const l=leadToShow();
+  if(act==="seen" && l) return joinAsk("seen",l.team);
+  if(act==="forget" && l) return joinAsk("forget",l.team);
   if(act==="load") return Promise.resolve(hooks.importCatalogHere());
   return Promise.resolve(null);
 }
@@ -122,7 +138,8 @@ function openJoinBubble(){
   addEventListener("resize",place);
   const close=()=>{ removeEventListener("resize",place); dismissNode(wrap); if(joinBubbleClose===close) joinBubbleClose=null; };
   joinBubbleClose=close;
-  const hide=()=>{ joinShut=JSON.stringify(joinNow); close(); };
+  // Hiding the lead's key counts as having been shown it; the key stays in Settings.
+  const hide=()=>{ joinShut=JSON.stringify(joinNow); close(); if(p.lead) joinAsk("seen",p.lead); };
   wrap.addEventListener("keydown",e=>{ if(e.key!=="Escape") return; e.preventDefault(); e.stopPropagation(); hide(); });
   wrap.querySelectorAll("[data-join]").forEach(b=>{
     const act=b.getAttribute("data-join");
@@ -130,4 +147,9 @@ function openJoinBubble(){
   });
 }
 
-export { wireTeamJoin, teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble };
+/* Forgets a lead from Settings, then `then()` once the shell has answered. */
+function forgetTeamLead(team,then){
+  return joinAsk("forget",team).then(v=>{ if(typeof then==="function") then(); return v; });
+}
+
+export { wireTeamJoin, teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadKeyText, forgetTeamLead };

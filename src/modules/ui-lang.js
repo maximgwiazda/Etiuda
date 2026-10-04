@@ -939,6 +939,12 @@ UI_STRINGS.pl={
   "Hide":"Ukryj",
   "{FILE} was not saved: the team's catalog leaves this desk only sealed, and this desk cannot seal for the team now.":"Nie zapisano pliku {FILE}: katalog zespołu opuszcza to stanowisko tylko zaszyfrowany, a to stanowisko nie może teraz szyfrować dla zespołu.",
   "Exported {FILE}, sealed for its team, with {MACROS} in {CARDS}":"Wyeksportowano {FILE}, zaszyfrowany dla zespołu: {MACROS}, {CARDS}",
+  "You are on the team":"To stanowisko należy do zespołu",
+  "Compare this key with the Signing key in the lead's Studio Settings. Every later edition is checked against it.":"Ten klucz powinien być taki sam jak Klucz podpisu w Ustawieniach Studia lidera. Według niego sprawdzane jest każde kolejne wydanie.",
+  "It matches":"Zgadza się",
+  "It does not match":"Nie zgadza się",
+  "Team lead's key":"Klucz lidera zespołu",
+  "Forget this lead":"Zapomnij tego lidera",
   "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.":"Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze."
 };
 // Is this a language this build carries? The table itself stays private to this file.

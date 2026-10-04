@@ -24,7 +24,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 22;
+const EXPECTED = 27;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -250,6 +250,65 @@ try {
     && JSON.stringify(D6.envelope().teamPins) === JSON.stringify({ [TEAM]: LEAD }) && D6.api.readCatalog() === A1.trim(),
     "15v the lead's own admission read while the request stands refused waits too, and the cancel alone, the team file"
     + " unchanged since, has it read again and the catalog open");
+
+  /* ---- the pinned lead's key, shown once to compare, and forgotten where it is not the lead's ------------------- */
+  // Studio's Settings show its key as "studio-" and these 16 hex (src/sign.mjs keyIdFor): made here from the public half.
+  const printOf = pub => crypto.createHash("sha256").update(Buffer.from(pub, "hex")).digest("hex").slice(0, 16);
+  const leadsOf = v => JSON.stringify((v && v.leads) || null);
+  const shown = await D1r.join("state");
+  const seenNow = await D1r.join("seen", TEAM);
+  const seenLater = await loadDesk(D1r.ud).join("state");
+  check(leadsOf(shown) === JSON.stringify([{ team: TEAM, print: printOf(LEAD.public), admitted: true, seen: false }])
+    && leadsOf(seenNow) === JSON.stringify([{ team: TEAM, print: printOf(LEAD.public), admitted: true, seen: true }])
+    && leadsOf(seenLater) === leadsOf(seenNow) && leadsOf(gone) === "[]",
+    "15w admitted by its request, the desk names the lead it pinned by the key Studio's Settings show, not yet shown, then shown"
+    + " once the agent has seen it, in a fresh run too: " + leadsOf(shown) + "; a desk that pinned nothing names none");
+
+  const D7 = newDesk("seven", SHARE), me7 = await D7.ask("etiuda:branch-identity", true);
+  put(SHARE, "etiuda-team.json", teamFile([entry(me7, K1, 1)], { lead: FORGED, signer: forger.privateKey }));
+  const tofu = await D7.join("state");
+  check(leadsOf(tofu) === JSON.stringify([{ team: TEAM, print: printOf(FORGED.public), admitted: true, seen: false }])
+    && FORGED.keyId === LEAD.keyId && printOf(FORGED.public) !== printOf(LEAD.public),
+    "15x a first admission with no request, a forger's team file under the lead's own keyId, is named by the forger's key and"
+    + " not the label it wrote, and is to be shown: " + leadsOf(tofu));
+
+  const forgot = await D7.join("forget", TEAM);
+  const after = D7.envelope(), fresh7 = loadDesk(D7.ud), still = await fresh7.join("state");
+  check(leadsOf(forgot) === "[]" && !after.teamPins && !after.teamKeys && JSON.stringify(after.teamBarred) === JSON.stringify([TEAM])
+    && leadsOf(still) === "[]" && D7.api.readCatalog() === null && fresh7.api.readCatalog() === null
+    && still.sealed && still.sealed.team === TEAM,
+    "15y forgotten, the lead's pin and every key kept under it are gone, and the same forger's file still on the share pins"
+    + " nothing again, in this run or a fresh one: the catalog is shut and said sealed again, barred " + JSON.stringify(after.teamBarred));
+
+  await fresh7.join("ask", "lamps.ec", "Zoe");
+  put(SHARE, P.JOINS_NAME, joins([{ desk: me7.id, commit: (request(me7) || {}).commit, nonce: nonce() }]));
+  await fresh7.join("state");
+  put(SHARE, "etiuda-team.json", teamFile([entry(me7, K1, 1)]));
+  const rejoined = await fresh7.join("state");
+  check(rejoined.joined && leadsOf(rejoined) === JSON.stringify([{ team: TEAM, print: printOf(LEAD.public), admitted: true, seen: false }])
+    && !fresh7.envelope().teamBarred && fresh7.api.readCatalog() === A1.trim(),
+    "15z THE CONTROL: after forgetting, a request answered by the real lead admits the desk, pins that lead, lifts the bar and"
+    + " shows the new key once: " + leadsOf(rejoined));
+
+  /* ---- the page: the engine's own team-join.js over this desk's shell ------------------------------------------- */
+  globalThis.window = { addEventListener: noop, removeEventListener: noop };
+  globalThis.document = { addEventListener: noop, removeEventListener: noop, getElementById: () => null, querySelectorAll: () => [] };
+  window.E_HOST = { teamJoin: (op, file, name) => fresh7.join(op, file, name), onTeamJoin: noop };
+  const HK = await import(MOD("hooks.js"));
+  HK.hooks.render = noop;
+  const TJ = await import(MOD("team-join.js"));
+  TJ.wireTeamJoin();
+  await new Promise(r => setTimeout(r, 30));
+  const html = TJ.teamJoinEmptyHtml(), buttons = {};
+  TJ.wireTeamJoinEmpty({ querySelectorAll: () => ["seen", "forget"].map(a => (buttons[a] = { getAttribute: () => a })) });
+  const grouped = printOf(LEAD.public).replace(/(.{4})(?=.)/g, "$1 ");
+  await buttons.seen.onclick();
+  const afterPage = await fresh7.join("state");
+  check(html.indexOf('<div class="e-join-key">' + grouped + "</div>") >= 0 && /data-join="seen"/.test(html) && /data-join="forget"/.test(html)
+    && leadsOf(afterPage) === JSON.stringify([{ team: TEAM, print: printOf(LEAD.public), admitted: true, seen: true }])
+    && JSON.stringify(TJ.teamLeads()) === JSON.stringify(afterPage.leads),
+    "15aa the page shows the shell's key in four groups of four with the two answers, and the agent's \"it matches\" reaches"
+    + " the shell as seen: " + grouped);
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
 }
