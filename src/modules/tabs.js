@@ -36,8 +36,23 @@ function blankTab(){
     who:"",
     cats:[],
     entrySel:null,
-    scrollY:0
+    scrollY:0,
+    path:[]
   };
+}
+/* THE REPLIES SENT IN THIS CONVERSATION, one card id per step, oldest first, the last TAB_PATH_MAX
+   kept. A card copied again straight after itself (another block, the other language) is the same
+   step. Answers the card before this one, or null where there is none. */
+const TAB_PATH_MAX=40;
+function tabPathStep(id){
+  const tb=tabs.find(x=>x.id===activeTabId), at=String(id==null?"":id);
+  if(!tb||!at) return null;
+  const path=Array.isArray(tb.path) ? tb.path : [], prev=path.length ? path[path.length-1] : null;
+  if(prev===at) return null;
+  tb.path=path.concat(at).slice(-TAB_PATH_MAX);
+  clearTimeout(tabSaveTimer);
+  tabSaveTimer=setTimeout(saveTabSession, 250);
+  return prev;
 }
 function tabLabel(tb, i){
   // tb.title is IGNORED on purpose - renaming is retired, but sessions saved before that
@@ -160,7 +175,8 @@ function loadTabSession(){
       // restored last-used one rather than being forced to English.
       lang:(t.lang==="pl"||t.lang==="en")?t.lang:lang,
       intentIdxs:Array.isArray(t.intentIdxs)?t.intentIdxs.filter(intentOk):[],
-      cats:Array.isArray(t.cats)?t.cats.filter(catOk):[]
+      cats:Array.isArray(t.cats)?t.cats.filter(catOk):[],
+      path:Array.isArray(t.path)?t.path.filter(x=>typeof x==="string"&&x).slice(-TAB_PATH_MAX):[]
     }));
     activeTabId=data.activeTabId;
     if(!tabs.some(t=>t.id===activeTabId)) activeTabId=tabs[0].id;
@@ -1088,6 +1104,7 @@ export {
   drawTabs,
   wireTabDrag,
   initTabs,
+  tabPathStep,
   TAB_KEY,
   tabs,
   tabSaveTimer,

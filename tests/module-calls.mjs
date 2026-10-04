@@ -479,6 +479,90 @@ const eq = (got, want) => got === want ? true
     });
 }
 
+/* ------------------------------------------------------------------ desk-stats.js, B after A
+   Board 814, ruled 2026-09-28 19:00: the desk learns "B after A" locally. The oracle is the
+   module's own contract: a pair is counted per day by the places of both ids in dayIds, read
+   back over STATS_PAIR_DAYS ending today, most often first, then the later day, then the id.
+   The two CONTROLS hold on any tree: a day with no pair keeps its shape, and the statistics
+   answer carries no pair, since Studio refuses a file holding a key it was not told of. */
+{
+  const D = await import(MOD("desk-stats.js"));
+  const after = (p, from, today) => D.statsLearntAfter(p, from, today).map(o => o.id + ":" + o.n).join(",");
+  const fresh = () => ({ useCounts: {}, useAt: {} });
+  check("desk-stats.js", "814a a card copied straight after another is counted, and read back as the cards that follow it",
+    () => {
+      const p = fresh();
+      for (let i = 0; i < 3; i++) D.bumpPair(p, "c-a", "c-b", "2026-10-01");
+      D.bumpPair(p, "c-a", "c-c", "2026-09-30");
+      D.bumpPair(p, "c-b", "c-a", "2026-10-01");
+      return eq(after(p, "c-a", "2026-10-01") + "|" + after(p, "c-b", "2026-10-01") + "|" + after(p, "c-c", "2026-10-01"),
+        "c-b:3,c-c:1|c-a:1|");
+    });
+  check("desk-stats.js", "814b equal counts put the pair met on the later day first, and a tie on both goes by id",
+    () => {
+      const p = fresh();
+      D.bumpPair(p, "c-a", "c-old", "2026-09-20");
+      D.bumpPair(p, "c-a", "c-new", "2026-09-29");
+      D.bumpPair(p, "c-a", "c-z", "2026-09-25"); D.bumpPair(p, "c-a", "c-y", "2026-09-25");
+      return eq(after(p, "c-a", "2026-10-01"), "c-new:1,c-y:1,c-z:1,c-old:1");
+    });
+  check("desk-stats.js", "814c a pair counts over the 28 days ending today: 27 days back is in, 28 back is out, after today is out",
+    () => {
+      const p = fresh();
+      D.bumpPair(p, "c-a", "c-in", "2026-09-04");
+      D.bumpPair(p, "c-a", "c-edge", "2026-09-03");
+      D.bumpPair(p, "c-a", "c-ahead", "2026-10-02");
+      return eq([after(p, "c-a", "2026-10-01"), D.STATS_PAIR_DAYS].join("|"), "c-in:1|28");
+    });
+  check("desk-stats.js", "814d a card after itself is no pair, and neither is one with an end missing",
+    () => {
+      const p = fresh();
+      D.bumpPair(p, "c-a", "c-a", "2026-10-01"); D.bumpPair(p, "", "c-a", "2026-10-01"); D.bumpPair(p, "c-a", null, "2026-10-01");
+      return eq([after(p, "c-a", "2026-10-01"), Object.keys(p.days || {}).length].join("|"), "|0");
+    });
+  check("desk-stats.js", "814e the oldest day going renumbers the ids, and the pairs follow their cards",
+    () => {
+      const p = fresh();
+      D.bumpUse(p, "c-x", "2025-08-20");
+      D.bumpUse(p, "c-a", "2026-09-20"); D.bumpUse(p, "c-b", "2026-09-20"); D.bumpPair(p, "c-a", "c-b", "2026-09-20");
+      D.bumpUse(p, "c-a", "2026-10-01");
+      return eq([p.dayIds.indexOf("c-x"), after(p, "c-a", "2026-10-01")].join("|"), "-1|c-b:1");
+    });
+  check("desk-stats.js", "814f an id a pair alone still names is kept when the day that counted its copy goes",
+    () => {
+      const p = fresh();
+      D.bumpUse(p, "c-a", "2025-01-01");
+      D.bumpUse(p, "c-b", "2025-01-02"); D.bumpPair(p, "c-a", "c-b", "2025-01-02");
+      D.bumpUse(p, "c-z", "2026-02-06");
+      return eq([Object.keys(p.days).sort().join(","), after(p, "c-a", "2025-01-02")].join("|"), "2025-01-02,2026-02-06|c-b:1");
+    });
+  check("desk-stats.js", "814g a card the catalog no longer has takes its pairs with it, from either end, and the rest stay",
+    () => {
+      const p = fresh();
+      ["c-a", "c-b", "c-c", "c-d"].forEach(id => D.bumpUse(p, id, "2026-10-01"));
+      D.bumpPair(p, "c-a", "c-b", "2026-10-01"); D.bumpPair(p, "c-a", "c-c", "2026-10-01"); D.bumpPair(p, "c-d", "c-a", "2026-10-01");
+      D.statsForgetCards(p, id => id !== "c-c" && id !== "c-d");
+      return eq([after(p, "c-a", "2026-10-01"), after(p, "c-d", "2026-10-01"), p.dayIds.join(",")].join("|"), "c-b:1||c-a,c-b");
+    });
+  check("desk-stats.js", "814H CONTROL: a day that has counted no pair keeps the shape it always had",
+    () => {
+      const p = fresh();
+      D.bumpUse(p, "c-a", "2026-10-01");
+      return eq(Object.keys(p.days["2026-10-01"]).sort().join(","), "c,i,l,m");
+    });
+  check("desk-stats.js", "814I CONTROL: the statistics answer is the same with pairs counted as without, spanned and not",
+    () => {
+      const p = fresh();
+      D.bumpUse(p, "c-a", "2026-10-01"); D.bumpUse(p, "c-b", "2026-10-01");
+      const bare = JSON.parse(JSON.stringify(p));
+      p.days["2026-10-01"].p = { 0: { 1: 4 } };
+      if (typeof D.bumpPair === "function") D.bumpPair(p, "c-b", "c-a", "2026-10-01");
+      const span = { engine: "x", period: { from: "2026-09-01", to: "2026-10-31" } };
+      return eq(JSON.stringify(D.statsDoc(p, span)) + JSON.stringify(D.statsDoc(p, { engine: "x" })),
+        JSON.stringify(D.statsDoc(bare, span)) + JSON.stringify(D.statsDoc(bare, { engine: "x" })));
+    });
+}
+
 /* ------------------------------------------------------------------ scoring.js, card-search.js,
    card-score.js, affinity.js, card-intent.js
    One invented card, scored against a typed query. Nothing here freezes a score: what is
@@ -2136,6 +2220,68 @@ const CARD_B = {
     T.tabs.splice(0, T.tabs.length);
     CM.setContentLangs(wasLangs); A.putLang(wasLang); A.setCats(wasCats); A.setIntentIdxs(wasIdxs);
     await rest();
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+  }
+}
+
+/* ------------------------------------------------------------------ tabs.js, the path of a conversation
+   Board 814: each conversation tab keeps the replies sent in it (ruled 2026-10-01 10:34), and a
+   card copied straight after another in the same tab is what the desk learns from. The tabs are
+   drawn for real against a document that holds nothing and hooks that do nothing, so applyTab's
+   own route sets the tab in front; every hook and global set here is put back. */
+{
+  const T = await import(MOD("tabs.js"));
+  const H = await import(MOD("hooks.js"));
+  const LP = await import(MOD("list-pointer.js"));
+  const P = await import(MOD("pack.js"));
+  const D = await import(MOD("desk-stats.js"));
+  const ST = await import(MOD("storage.js"));
+  const hadDoc = globalThis.document, hadAdd = globalThis.addEventListener;
+  const STUBS = ["applyLangUI", "updateIntentPlaceholder", "drawPillsCore", "drawIntentRail", "render", "scheduleRailGeometry"];
+  const hadHooks = STUBS.map(k => [k, Object.prototype.hasOwnProperty.call(H.hooks, k), H.hooks[k]]);
+  const quiet = { toggle() {}, add() {}, remove() {}, contains() { return false; } };
+  globalThis.document = { getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
+    body: { classList: quiet }, documentElement: { style: { setProperty() {} }, classList: quiet } };
+  if (typeof globalThis.addEventListener !== "function") globalThis.addEventListener = () => {};
+  STUBS.forEach(k => { if (typeof H.hooks[k] !== "function") H.hooks[k] = () => {}; });
+  const step = id => (typeof T.tabPathStep === "function" ? T.tabPathStep(id) : "no tabPathStep");
+  try {
+    ST.ssSet(T.TAB_KEY, JSON.stringify({ v: 1, activeTabId: "mc-p1",
+      tabs: [{ id: "mc-p1", path: ["c-a", 5, "", null, "c-b"] }, { id: "mc-p2", path: "c-a" }] }));
+    T.initTabs();
+    check("tabs.js", "814m a restored session keeps each tab's path, and drops what cannot be a card's id",
+      () => eq(T.tabs.map(t => (Array.isArray(t.path) ? t.path.join(",") : "none")).join("|"), "c-a,c-b|"));
+    T.tabs.splice(0, T.tabs.length);
+    ST.ssSet(T.TAB_KEY, "null");
+    T.initTabs();
+    const one = [step("c-a"), step("c-b"), step("c-b"), step("c-c")];
+    check("tabs.js", "814j in the tab in front, the first copy follows nothing, the next names the one before, and a card copied again straight after itself is the same step",
+      () => eq(JSON.stringify(one) + "|" + (T.tabs[0].path || []).join(","), "[null,\"c-a\",null,\"c-b\"]|c-a,c-b,c-c"));
+    T.tabs.push({ id: "mc-p2", pax: "" });
+    T.stepTab(1);
+    const two = [step("c-x"), step("c-y")];
+    T.stepTab(1);
+    const back = step("c-d");
+    check("tabs.js", "814k each tab keeps its own path: another conversation's first copy follows nothing, and coming back the first goes on from its own last",
+      () => eq(JSON.stringify(two) + "|" + back + "|" + T.tabs.map(t => (t.path || []).join(",")).join("|"),
+        "[null,\"c-x\"]|c-c|c-a,c-b,c-c,c-d|c-x,c-y"));
+    T.tabs.splice(0, T.tabs.length);
+    ST.ssSet(T.TAB_KEY, "null");
+    T.initTabs();
+    LP.bumpUseCount("c-mc-from", "en"); LP.bumpUseCount("c-mc-to", "en"); LP.bumpUseCount("c-mc-to", "pl");
+    check("list-pointer.js", "814l the desk's copy route learns it: a reply copied after another in one tab is counted once, whatever the language",
+      () => eq(typeof D.statsLearntAfter === "function"
+        ? D.statsLearntAfter(P.pack, "c-mc-from").map(o => o.id + ":" + o.n).join(",") : "no statsLearntAfter", "c-mc-to:1"));
+    T.tabs.splice(0, T.tabs.length);
+    const was = (P.pack.useCounts || {})["c-mc-lone"] | 0;
+    LP.bumpUseCount("c-mc-lone", "en"); LP.bumpUseCount("c-mc-after", "en");
+    check("list-pointer.js", "814N CONTROL: with no tab in front a copy still counts, and follows nothing",
+      () => eq([(P.pack.useCounts["c-mc-lone"] | 0) - was,
+        typeof D.statsLearntAfter === "function" ? D.statsLearntAfter(P.pack, "c-mc-lone").length : 0].join(","), "1,0"));
+  } finally {
+    T.tabs.splice(0, T.tabs.length);
+    hadHooks.forEach(([k, own, v]) => { if (own) H.hooks[k] = v; else delete H.hooks[k]; });
+    if (hadAdd === undefined) delete globalThis.addEventListener; else globalThis.addEventListener = hadAdd;
     if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
   }
 }

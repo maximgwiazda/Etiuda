@@ -6612,6 +6612,14 @@ What you type stays in this browser only.`;
       });
     });
     each((b, n) => Object.keys(b[n]).forEach((k) => used.add(k)));
+    const pairs = (fn) => Object.keys(days).forEach((d) => {
+      const b = days[d];
+      if (b && b.p && typeof b.p === "object") fn(b);
+    });
+    pairs((b) => Object.keys(b.p).forEach((a) => {
+      used.add(a);
+      Object.keys(b.p[a] || {}).forEach((z) => used.add(z));
+    }));
     const to = /* @__PURE__ */ Object.create(null), keep = [];
     ids.forEach((id, at) => {
       if (id != null && used.has(String(at))) {
@@ -6626,6 +6634,18 @@ What you type stays in this browser only.`;
         if (k in to) out[to[k]] = b[n][k];
       });
       b[n] = out;
+    });
+    pairs((b) => {
+      const out = {};
+      Object.keys(b.p).forEach((a) => {
+        const row = b.p[a];
+        if (!(a in to) || !row || typeof row !== "object") return;
+        const r = out[to[a]] = {};
+        Object.keys(row).forEach((z) => {
+          if (z in to) r[to[z]] = row[z];
+        });
+      });
+      b.p = out;
     });
     pack2.dayIds = keep;
   }
@@ -6646,6 +6666,13 @@ What you type stays in this browser only.`;
     pack2.useAt[id] = at || statsYmd();
     const b = statsDay(pack2, at), k = statsIdAt(pack2, String(id));
     b.c[k] = (b.c[k] | 0) + 1;
+  }
+  function bumpPair(pack2, from, to, at) {
+    if (!from || !to || String(from) === String(to)) return;
+    const b = statsDay(pack2, at), a = statsIdAt(pack2, String(from)), z = statsIdAt(pack2, String(to));
+    if (!b.p || typeof b.p !== "object" || Array.isArray(b.p)) b.p = {};
+    const row = b.p[a] && typeof b.p[a] === "object" ? b.p[a] : b.p[a] = {};
+    row[z] = (row[z] | 0) + 1;
   }
   function bumpIntent(pack2, id, at) {
     if (!id) return;
@@ -6677,10 +6704,25 @@ What you type stays in this browser only.`;
     if (STATS_FORGOT.get(pack2) === asked) return;
     let n = 0;
     Object.keys(pack2.days || {}).forEach((d) => {
-      const c = pack2.days[d] && pack2.days[d].c;
+      const c = pack2.days[d] && pack2.days[d].c, p = pack2.days[d] && pack2.days[d].p;
       if (c) Object.keys(c).forEach((k) => {
         if (!keep(ids[k])) {
           delete c[k];
+          n++;
+        }
+      });
+      if (p && typeof p === "object") Object.keys(p).forEach((a) => {
+        const row = p[a];
+        if (row && typeof row === "object" && keep(ids[a])) {
+          Object.keys(row).forEach((z) => {
+            if (!keep(ids[z])) {
+              delete row[z];
+              n++;
+            }
+          });
+          if (!Object.keys(row).length) delete p[a];
+        } else {
+          delete p[a];
           n++;
         }
       });
@@ -8992,6 +9034,7 @@ What you type stays in this browser only.`;
     scheduleTabSave: () => scheduleTabSave,
     stepTab: () => stepTab,
     tabInsertAnimating: () => tabInsertAnimating,
+    tabPathStep: () => tabPathStep,
     tabSaveTimer: () => tabSaveTimer,
     tabs: () => tabs,
     wireTabDrag: () => wireTabDrag
@@ -9752,8 +9795,20 @@ What you type stays in this browser only.`;
       who: "",
       cats: [],
       entrySel: null,
-      scrollY: 0
+      scrollY: 0,
+      path: []
     };
+  }
+  var TAB_PATH_MAX = 40;
+  function tabPathStep(id) {
+    const tb = tabs.find((x) => x.id === activeTabId), at = String(id == null ? "" : id);
+    if (!tb || !at) return null;
+    const path = Array.isArray(tb.path) ? tb.path : [], prev = path.length ? path[path.length - 1] : null;
+    if (prev === at) return null;
+    tb.path = path.concat(at).slice(-TAB_PATH_MAX);
+    clearTimeout(tabSaveTimer);
+    tabSaveTimer = setTimeout(saveTabSession, 250);
+    return prev;
   }
   function tabLabel(tb, i) {
     if (tb && tb.pax && String(tb.pax).trim()) {
@@ -9857,7 +9912,8 @@ What you type stays in this browser only.`;
         // restored last-used one rather than being forced to English.
         lang: t2.lang === "pl" || t2.lang === "en" ? t2.lang : lang,
         intentIdxs: Array.isArray(t2.intentIdxs) ? t2.intentIdxs.filter(intentOk) : [],
-        cats: Array.isArray(t2.cats) ? t2.cats.filter(catOk) : []
+        cats: Array.isArray(t2.cats) ? t2.cats.filter(catOk) : [],
+        path: Array.isArray(t2.path) ? t2.path.filter((x) => typeof x === "string" && x).slice(-TAB_PATH_MAX) : []
       }));
       activeTabId = data.activeTabId;
       if (!tabs.some((t2) => t2.id === activeTabId)) activeTabId = tabs[0].id;
@@ -16452,6 +16508,8 @@ What you type stays in this browser only.`;
     if (!id) return;
     bumpUse(pack, id);
     bumpLang(pack, lang2);
+    const prev = tabPathStep(id);
+    if (prev) bumpPair(pack, prev, id);
     saveStats();
   }
 
