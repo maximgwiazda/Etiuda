@@ -9,6 +9,11 @@
  * https://www.rfc-editor.org/rfc/rfc9180.txt. A wrap checked only against itself round-trips
  * whatever it does, a wrong label included, and no other implementation could then open it.
  *
+ * skEm and skRm are as the RFC prints them. Its verified erratum 7121 gives them in their RFC 7748 clamped
+ * form, 50c4a758a802cd8b936eceea314432798d5baf2d7e9235dc084ab1b9cfa2f776 and
+ * 4012c550263fc8ad58375df3f557aac531d26850903e55a9f23f21d8534e8a48. X25519 clamps on use, so both forms
+ * give the same pkEm and pkRm, and every value derived from them is unchanged: the vectors still stand.
+ *
  * THE DECLARATIONS ARE SLICED, AS STUDIO WILL SLICE THEM. They are cut out of shell/main.js by the
  * marker list below and evaluated with crypto and Buffer as their only names, so a free name would
  * fail here as it would in Studio, and what is tested is the text a second program runs.
