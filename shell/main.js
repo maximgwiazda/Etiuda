@@ -240,6 +240,10 @@ function catalogRead(text) {
   if (opened.data && opened.data.kind === SEALED_KIND) throw new Error("an envelope sealed inside another");
   const id = opened.data && typeof opened.data.id === "string" ? opened.data.id : "";
   if (id && !teamOpened.has(id)) { teamOpened.add(id); persistDeskEnvelope(); }
+  try {
+    const pin = signedSha(opened.data), team = String(got.data.team), was = editionTeam.get(pin);
+    editionTeam.set(pin, was === undefined || was === team ? team : "");
+  } catch { /* nothing to pin */ }
   return opened;
 }
 /* The text a route hands the page: the catalog inside an envelope this desk opens, else the file exactly as read. */
@@ -966,8 +970,7 @@ function ownFilesWithId(dir, id) {
   }
   return out;
 }
-/* The team whose team file at `root` is whole under the lead this desk pinned and lists the catalog, or "". Not the team
-   the catalog was last opened under: two teams may each have a catalog of one id, and a listing opens both. */
+/* The team whose team file at `root` is whole under the lead this desk pinned and lists the catalog, or "". */
 function teamCovering(root, catalogId) {
   let doc = null;
   try {
@@ -979,11 +982,14 @@ function teamCovering(root, catalogId) {
   return !!pin && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public && Array.isArray(doc.catalogs)
     && doc.catalogs.map(String).indexOf(catalogId) >= 0 ? doc.id : "";
 }
-/* The newest key this desk keeps for the team covering a catalog at the folder written to, as {team, epoch, key}, or null. */
-function sealFor(catalogId, root) {
+/* The newest key this desk keeps, as {team, epoch, key}, for the one team whose envelope held the edition a file grew from
+   (`pin`), where that team also covers the catalog at the folder written to; else null. An edition not opened in this run
+   is looked for among the folder's catalogs first. */
+function sealFor(catalogId, pin, root) {
   heedTeam();
-  const team = teamCovering(root, catalogId);
-  if (!team) return null;
+  if (!editionTeam.has(pin)) ecFilesIn(root).forEach(f => ecFacts(f, ""));
+  const team = editionTeam.get(pin) || "";
+  if (!team || teamCovering(root, catalogId) !== team) return null;
   const kept = teamKeys[team] || {};
   const epoch = Object.keys(kept).map(Number).filter(n => Number.isInteger(n) && n >= 1).sort((a, b) => b - a)[0];
   if (!epoch) return null;
@@ -1017,10 +1023,10 @@ function writeBranch(stem, text) {
   try {
     if (!folderAnswers(at.root) || !fs.statSync(at.root).isDirectory()) return branchHold(stem, text);
     /* A file grown from a catalog this desk opened from an envelope is that catalog, so it is signed and then sealed for the
-       team covering it in the folder it is written to; where that team or its key cannot be had it is held, never written
-       in the clear. */
+       team that sealed the edition it grew from; where that team, its cover at this folder or its key cannot be had it is
+       held, never written in the clear. */
     if (grewId) {
-      seal = sealFor(grewId, at.root);
+      seal = sealFor(grewId, String(doc.grew.sha || ""), at.root);
       if (!seal) return branchHold(stem, text);
     }
     const same = ownFilesWithId(at.dir, id);
@@ -1079,6 +1085,7 @@ const TEAM_MAX = 1024 * 1024;
 let teamPins = {};                             // team id -> {keyId, public}: the lead's key, once trusted
 let teamKeys = {};                             // team id -> {epoch: the team key sealed by safeStorage, base64}
 const teamOpened = new Set();                  // catalog ids this desk has opened from an envelope, kept in the desk envelope
+const editionTeam = new Map();                 // an opened edition's pin -> the team whose envelope held it, "" if two did; this run only
 let teamStamp = "";                            // what the team file, the ring and the box were when last heeded
 const teamSaid = new Set();
 /* Whether a team file is whole under the lead key it names, which is what the engine's v2TeamSigState says. */

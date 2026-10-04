@@ -28,7 +28,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 34;
+const EXPECTED = 37;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -349,7 +349,8 @@ try {
     delete doc.sig;
     doc.id = who.id + "-" + hex8;
     doc.rev = 1;
-    doc.grew = { id: from.id, rev: from.rev, sha: "sha256:" + crypto.createHash("sha256").update(handed).digest("hex") };
+    // The edition's pin as the engine's pinned() makes it: the signed bytes of the catalog handed.
+    doc.grew = { id: from.id, rev: from.rev, sha: "sha256:" + crypto.createHash("sha256").update(Buffer.from(V2.v2SignedBytes(JSON.parse(handed)))).digest("hex") };
     doc.desk = { id: who.id, key: who.key, box: who.box };
     return { stem: name + "-" + hex8, text: JSON.stringify(doc), file: path.join(OWN, "desks", who.id, name + "-" + hex8 + ".ec") };
   };
@@ -416,7 +417,7 @@ try {
       return loadDesk(D.ud);
     };
     const name = n => JSON.stringify(Object.assign(JSON.parse(lamps.text), { name: n }));
-    const who = t => t === TEAM ? "A" : t === TB ? "B" : String(t);
+    const who = t => t === TEAM ? "A" : t === TB ? "B" : t ? "X, a third" : "none";
     let P = point(D9, OWN);
     const r0 = await read(P, "lamps.ec");
     const w0 = await P.ask("etiuda:branch-write", lamps.stem, name("Lamp Shop, before the other folder"));
@@ -453,6 +454,61 @@ try {
       "14af a team file in the folder naming the other team, under a key other than its pinned lead's or changed after signing,"
       + " moves nothing: the desk holds its file, " + planted.map(said).join(", ") + ", and the share's file stays team "
       + who(e2.team) + "'s");
+
+    /* A team file planted at the folder for a team nobody pinned, wrapping a key for this desk, admits it at once. */
+    const TX = "t-" + crypto.randomBytes(8).toString("hex"), KX = crypto.randomBytes(32);
+    const restoreA = () => put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)] })));
+    const teamX = JSON.stringify(teamFile({ team: TX, epoch: 1, roster: [entry(me9, KX, 1, TX)], public: pubHex(forger.publicKey),
+      signer: forger.privateKey }));
+    const openedBy = (e, k) => (e.kind === "etiuda-sealed" ? D1.api.openSealed(k, e) : null) || "";
+    put(OWN, "etiuda-team.json", teamX);
+    const wX = await P.ask("etiuda:branch-write", lamps.stem, name("Lamp Shop, under a fresh team"));
+    const eX = landed();
+    restoreA();
+    check(said(wX) === said({ ok: false, held: true }) && eX.team === TEAM && openedBy(eX, KX) === ""
+      && holding("under a fresh team") === 0,
+      "14ag a team file planted at the folder for a fresh team, signed by a key nobody pinned and wrapping a key for this desk,"
+      + " does not receive the desk's own file of the edition team A sealed: " + said(wX) + ", the share's file sealed for team "
+      + who(eX.team) + ", the fresh team's key opens it " + (openedBy(eX, KX) ? "yes" : "no"));
+
+    /* The page holds team B's edition of the id while the folder is moved, in the same run, to team A's share. */
+    const move = dir => {
+      const e = P.envelope();
+      e.keys = Object.assign({}, e.keys, { eCatalogFolder: dir });
+      fs.writeFileSync(path.join(P.ud, "desk.json"), JSON.stringify(e), "utf8");
+      P.ipc("etiuda:desk");
+    };
+    move(OTHER);
+    const bEdition = grownFrom(await read(P, "sales.ec"), me9, "lamps");
+    move(OWN);
+    const wB = await P.ask("etiuda:branch-write", bEdition.stem,
+      JSON.stringify(Object.assign(JSON.parse(bEdition.text), { name: "Other Shop, edited" })));
+    const eB = landed();
+    check(JSON.parse(bEdition.text).grew.id === "lamp-shop" && said(wB) === said({ ok: false, held: true })
+      && openedBy(eB, K2).indexOf("Other Shop") < 0 && holding("Other Shop") === 0,
+      "14ah a desk holding team B's edition of an id team A also covers, its folder moved to team A's share in the same run,"
+      + " does not seal B's catalog for team A: " + said(wB) + ", team A's key opens B's text in the share's file "
+      + (openedBy(eB, K2).indexOf("Other Shop") >= 0 ? "yes" : "no"));
+
+    /* The same signed edition in the folder twice, sealed for team A and for a team planted beside it. */
+    put(OWN, "etiuda-team.json", teamX);
+    const copyX = path.join(OWN, "lamps-x.ec");
+    put(OWN, "lamps-x.ec", seal(KX, 1, A2, TX));
+    const lampsAt = fs.statSync(path.join(OWN, "lamps.ec")).mtimeMs;
+    const wAX = [];
+    for (const s of [-60, 60]) {                 // the listing reads newest first: the copy after team A's, then before it
+      fs.utimesSync(copyX, new Date(lampsAt + s * 1000), new Date(lampsAt + s * 1000));
+      const Q = loadDesk(P.ud);
+      await Q.ask("etiuda:catalog-files");
+      wAX.push(await Q.ask("etiuda:branch-write", lamps.stem, name("Lamp Shop, beside a copy")));
+    }
+    const eAX = landed();
+    fs.unlinkSync(copyX);
+    restoreA();
+    check(wAX.every(r => said(r) === said({ ok: false, held: true })) && eAX.team === TEAM && openedBy(eAX, KX) === "",
+      "14ai one signed edition opened from envelopes of two teams seals the desk's own file for neither, whichever is listed"
+      + " first, even where the second team's file stands at the folder: " + wAX.map(said).join(", ")
+      + ", the share's file sealed for team " + who(eAX.team));
   }
 
   /* ---- a keep that fails: safeStorage away for one read, the team file unchanged after it ----------------------- */
