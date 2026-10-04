@@ -5245,7 +5245,7 @@ What you type stays in this browser only.`;
   function nsDel(name) {
     lsDel(nsKey(name));
   }
-  var LAYER_KEYS = ["Pack", "Stats", "Days", "CatOrder", "IntentOrder", "IntentsAside", "LinksAside", "RequestsAside", "Exported", "LooseId"];
+  var LAYER_KEYS = ["Pack", "Stats", "Days", "CatOrder", "IntentOrder", "IntentsAside", "LinksAside", "RequestsAside", "Exported", "LooseId", "Shared", "SharedOwn", "SharedFile"];
   function layerNsOf(c) {
     const id = c ? String(c.id || "").trim() : "";
     return id ? eNsFor(id) : E_NS;
@@ -6605,6 +6605,14 @@ What you type stays in this browser only.`;
     "Earlier versions": "Historia wersji",
     "Earlier versions of each catalog this desk reads or writes stay here for 30 days.": "Historia każdego katalogu, który to stanowisko odczytuje lub zapisuje, zostaje tu przez 30 dni.",
     "This desk's own file": "Własny plik tego stanowiska",
+    "Edit the shared catalog directly": "Edytuj wspólny katalog bezpośrednio",
+    "For a team without Studio: changes go into the catalog in the catalog folder itself. A catalog the team lead signed is never changed.": "Dla zespołu bez Studio: zmiany trafiają wprost do katalogu w folderze katalogów. Katalog podpisany przez lidera zespołu nigdy nie jest zmieniany.",
+    "Each change goes into the shared catalog, and one a colleague made first is kept": "Każda zmiana trafia do wspólnego katalogu, a zmiana współpracownika wprowadzona wcześniej zostaje",
+    "Each change stays in this desk's own file": "Każda zmiana zostaje we własnym pliku tego stanowiska",
+    "Changes go into the shared catalog": "Zmiany trafiają do wspólnego katalogu",
+    "Changes stay in this desk's own file": "Zmiany zostają we własnym pliku tego stanowiska",
+    "The shared catalog had changed the same text, so your version is kept in this desk's own file.": "Ten sam tekst zmienił się już we wspólnym katalogu, więc ta wersja zostaje we własnym pliku tego stanowiska.",
+    "The shared catalog could not be written just now, so this change is kept in this desk's own file.": "Nie udało się teraz zapisać wspólnego katalogu, więc ta zmiana zostaje we własnym pliku tego stanowiska.",
     "Current": "Aktualna",
     "Written by this desk": "Zapisana na tym stanowisku",
     "Open this version": "Otwórz tę wersję",
@@ -12575,6 +12583,7 @@ What you type stays in this browser only.`;
     eHasBranch: () => eHasBranch,
     eHasCatalogPicker: () => eHasCatalogPicker,
     eHasCatalogSaver: () => eHasCatalogSaver,
+    eHasShared: () => eHasShared,
     eHost: () => eHost,
     eLoadedCatalogFile: () => eLoadedCatalogFile,
     eOnCatalogListing: () => eOnCatalogListing,
@@ -12587,6 +12596,8 @@ What you type stays in this browser only.`;
     eSaveCatalogFile: () => eSaveCatalogFile,
     eSetAccent: () => eSetAccent,
     eSetMaximized: () => eSetMaximized,
+    eSharedRead: () => eSharedRead,
+    eSharedWrite: () => eSharedWrite,
     eWriteBranch: () => eWriteBranch,
     syncBandHeight: () => syncBandHeight,
     wireHost: () => wireHost
@@ -12775,6 +12786,26 @@ What you type stays in this browser only.`;
     if (!eHasBranch()) return Promise.resolve({ ok: false });
     try {
       return Promise.resolve(eHost().writeBranch(String(stem || ""), String(text || ""))).then((v) => ({ ok: !!(v && v.ok) })).catch(() => ({ ok: false }));
+    } catch (e) {
+      return Promise.resolve({ ok: false });
+    }
+  }
+  function eHasShared() {
+    const h = eHost();
+    return !!h && typeof h.sharedRead === "function" && typeof h.sharedWrite === "function";
+  }
+  function eSharedRead(name, pin) {
+    if (!eHasShared()) return Promise.resolve(null);
+    try {
+      return Promise.resolve(eHost().sharedRead(String(name || ""), String(pin || ""))).then((v) => v && typeof v === "object" ? { text: String(v.text || ""), sha: String(v.sha || ""), free: v.free === true, base: String(v.base || "") } : null).catch(() => null);
+    } catch (e) {
+      return Promise.resolve(null);
+    }
+  }
+  function eSharedWrite(name, text, sha, create) {
+    if (!eHasShared()) return Promise.resolve({ ok: false });
+    try {
+      return Promise.resolve(eHost().sharedWrite(String(name || ""), String(text || ""), String(sha || ""), create === true)).then((v) => v && typeof v === "object" ? { ok: v.ok === true, changed: v.changed === true, busy: v.busy === true, taken: v.taken === true, refused: v.refused === true } : { ok: false }).catch(() => ({ ok: false }));
     } catch (e) {
       return Promise.resolve({ ok: false });
     }
@@ -20295,6 +20326,8 @@ What you type stays in this browser only.`;
     pinStoredFrom: () => pinStoredFrom,
     sampleUntouched: () => sampleUntouched,
     sha256Hex: () => sha256Hex,
+    sharedOwnPin: () => sharedOwnPin,
+    sharedOwnWrite: () => sharedOwnWrite,
     syncSampleMark: () => syncSampleMark,
     todayEdition: () => todayEdition,
     wireCatalogDrop: () => wireCatalogDrop,
@@ -20325,6 +20358,265 @@ What you type stays in this browser only.`;
     if (E_APPLIED) eApplyCatalog(E_APPLIED);
     setLayer(layerNsOf(E_APPLIED));
     orbitOldLayer();
+  }
+
+  // src/modules/catalog-merge.js
+  var catalog_merge_exports = {};
+  __export(catalog_merge_exports, {
+    directWrite: () => directWrite,
+    mergeShared: () => mergeShared,
+    sharedCanon: () => sharedCanon,
+    sharedDate: () => sharedDate,
+    sharedScope: () => sharedScope
+  });
+  function sharedCanon(v) {
+    if (v === void 0) return "";
+    if (v === null || typeof v !== "object") return JSON.stringify(v);
+    if (Array.isArray(v)) return "[" + v.map(sharedCanon).join(",") + "]";
+    return "{" + Object.keys(v).filter((k) => v[k] !== void 0).sort().map((k) => JSON.stringify(k) + ":" + sharedCanon(v[k])).join(",") + "}";
+  }
+  var SHARED_OWN_KEYS = ["format", "kind", "id", "rev", "date", "hash", "sig", "modified", "grew", "desk", "sample", "cards", "tags"];
+  var SHARED_SEP = "";
+  function sharedById(list2) {
+    const m = /* @__PURE__ */ new Map();
+    (Array.isArray(list2) ? list2 : []).forEach((x) => {
+      if (x && typeof x === "object" && x.id != null) m.set(String(x.id), x);
+    });
+    return m;
+  }
+  function sharedHas(o, k) {
+    return Object.prototype.hasOwnProperty.call(o, k);
+  }
+  function sharedCopy(v) {
+    return v === void 0 ? void 0 : JSON.parse(JSON.stringify(v));
+  }
+  function sharedScope(touched, M2, F, B, all) {
+    const cards2 = /* @__PURE__ */ new Map(), tags = /* @__PURE__ */ new Set(), head = /* @__PURE__ */ new Set();
+    const t2 = touched || {};
+    if (all) {
+      sharedById(M2.cards).forEach((x, id) => cards2.set(id, null));
+      sharedById(M2.tags).forEach((x, id) => tags.add(id));
+      Object.keys(M2).forEach((k) => {
+        if (SHARED_OWN_KEYS.indexOf(k) < 0) head.add(k);
+      });
+    }
+    (t2.cards || []).forEach((id) => cards2.set(String(id), null));
+    (t2.tags || []).forEach((id) => tags.add(String(id)));
+    (t2.head || []).forEach((k) => head.add(String(k)));
+    if (t2.requests) {
+      [M2, F, B].forEach((d) => {
+        sharedById(d.tags).forEach((x, id) => {
+          if (x.kind === "request") tags.add(id);
+        });
+        sharedById(d.cards).forEach((x, id) => {
+          if (!cards2.has(id)) cards2.set(id, ["requests"]);
+        });
+      });
+    }
+    return { cards: cards2, tags, head, order: !!(all || t2.order) };
+  }
+  function mergeShared(F, B, M2, touched, state, all) {
+    const st = state || {};
+    const fileSeen = Object.assign({}, st.file || {}), deskSeen = Object.assign({}, st.desk || {}), held = new Set(st.held || []), before = new Set(held);
+    const out = sharedCopy(F);
+    if (!Array.isArray(out.cards)) out.cards = [];
+    if (!Array.isArray(out.tags)) out.tags = [];
+    let wrote = false;
+    const refFile = (loc, bv) => sharedHas(fileSeen, loc) ? fileSeen[loc] : sharedCanon(bv);
+    const refDesk = (loc, bv) => sharedHas(deskSeen, loc) ? deskSeen[loc] : sharedCanon(bv);
+    const seen = (loc, f, m) => {
+      fileSeen[loc] = f;
+      deskSeen[loc] = m;
+    };
+    const forget = (loc) => {
+      delete fileSeen[loc];
+      delete deskSeen[loc];
+    };
+    const decide = (loc, mv, fv, bv, mark) => {
+      const m = sharedCanon(mv), f = sharedCanon(fv);
+      if (held.has(loc)) {
+        if (m === f) {
+          held.delete(loc);
+          seen(loc, f, m);
+        }
+        return "file";
+      }
+      if (m === f) {
+        if (mark) seen(loc, f, m);
+        else forget(loc);
+        return "file";
+      }
+      const deskMoved = m !== refDesk(loc, bv), fileMoved = f !== refFile(loc, bv);
+      seen(loc, f, m);
+      if (fileMoved) {
+        if (deskMoved || m !== sharedCanon(bv)) held.add(loc);
+        return "file";
+      }
+      if (!deskMoved) return "file";
+      fileSeen[loc] = m;
+      return "mine";
+    };
+    const scope = sharedScope(touched, M2, F, B, all);
+    const named = (pre) => Object.keys(fileSeen).concat(Array.from(held)).filter((l) => l.indexOf(pre) === 0).map((l) => l.slice(pre.length).split(SHARED_SEP)[0]);
+    const mergeList = (key, scoped, keysOf) => {
+      const fm = sharedById(F[key]), bm = sharedById(B[key]), mm = sharedById(M2[key]), mOrder = (Array.isArray(M2[key]) ? M2[key] : []).map((x) => String(x && x.id));
+      new Set(Array.from(scoped).concat(named(key + SHARED_SEP))).forEach((id) => {
+        const at = key + SHARED_SEP + id, mc = mm.get(id), fc = fm.get(id), bc = bm.get(id), keys = keysOf(id), whole = scoped.has(id) && !keys;
+        const keyList = (...docs) => {
+          const s = /* @__PURE__ */ new Set();
+          docs.forEach((d) => {
+            if (d) Object.keys(d).forEach((k) => {
+              if (k !== "id" && (!keys || keys.indexOf(k) > -1)) s.add(k);
+            });
+          });
+          named(at + SHARED_SEP).forEach((k) => s.add(k));
+          return Array.from(s);
+        };
+        const movedFile = (c, ks) => ks.some((k) => sharedCanon(c && c[k]) !== refFile(at + SHARED_SEP + k, bc && bc[k]));
+        const movedDesk = (c, ks) => ks.some((k) => sharedCanon(c && c[k]) !== refDesk(at + SHARED_SEP + k, bc && bc[k]));
+        const p = decide(at, mc ? 1 : void 0, fc ? 1 : void 0, bc ? 1 : void 0, whole);
+        if (p === "mine" && mc) {
+          const after = mOrder.slice(0, mOrder.indexOf(id)).reverse().find((x) => out[key].some((y) => String(y.id) === x));
+          out[key].splice(after == null ? 0 : out[key].findIndex((y) => String(y.id) === after) + 1, 0, sharedCopy(mc));
+          keyList(mc).forEach((k) => seen(at + SHARED_SEP + k, sharedCanon(mc[k]), sharedCanon(mc[k])));
+          wrote = true;
+          return;
+        }
+        if (p === "mine") {
+          if (movedFile(fc, keyList(fc, bc))) {
+            held.add(at);
+            fileSeen[at] = sharedCanon(1);
+            return;
+          }
+          out[key] = out[key].filter((y) => String(y.id) !== id);
+          Object.keys(fileSeen).forEach((l) => {
+            if (l.indexOf(at + SHARED_SEP) === 0) forget(l);
+          });
+          wrote = true;
+          return;
+        }
+        if (mc && !fc) {
+          if (bc && movedDesk(mc, keyList(mc, bc))) held.add(at);
+          return;
+        }
+        if (!mc || !fc) return;
+        const target = out[key].find((y) => String(y.id) === id);
+        keyList(mc, fc, bc).forEach((k) => {
+          if (decide(at + SHARED_SEP + k, mc[k], fc[k], bc && bc[k], scoped.has(id)) !== "mine") return;
+          if (mc[k] === void 0) delete target[k];
+          else target[k] = sharedCopy(mc[k]);
+          wrote = true;
+        });
+      });
+    };
+    mergeList("tags", scope.tags, () => null);
+    mergeList("cards", new Set(scope.cards.keys()), (id) => scope.cards.get(id) || null);
+    new Set(Array.from(scope.head).concat(named("head" + SHARED_SEP))).forEach((k) => {
+      if (SHARED_OWN_KEYS.indexOf(k) > -1) return;
+      if (decide("head" + SHARED_SEP + k, M2[k], F[k], B[k], scope.head.has(k)) !== "mine") return;
+      if (M2[k] === void 0) delete out[k];
+      else out[k] = sharedCopy(M2[k]);
+      wrote = true;
+    });
+    const ORDER = "order" + SHARED_SEP + "cards";
+    if (scope.order || sharedHas(fileSeen, ORDER) || held.has(ORDER)) {
+      const ids = (d) => (Array.isArray(d.cards) ? d.cards : []).map((x) => String(x && x.id));
+      const inB = new Set(ids(B)), inM = new Set(ids(M2)), inOut = new Set(ids(out));
+      const common = (id) => (all || inB.has(id)) && inM.has(id) && inOut.has(id);
+      const only = (list2) => sharedCanon(list2.filter(common));
+      const was = (s) => sharedHas(s, ORDER) ? JSON.parse(s[ORDER]) : ids(B);
+      const m = only(ids(M2)), f = only(ids(out));
+      const keep = () => {
+        fileSeen[ORDER] = sharedCanon(ids(out));
+        deskSeen[ORDER] = sharedCanon(ids(M2));
+      };
+      if (held.has(ORDER)) {
+        if (m === f) {
+          held.delete(ORDER);
+          keep();
+        }
+      } else if (m === f) {
+        if (scope.order) keep();
+        else forget(ORDER);
+      } else {
+        const deskMoved = m !== only(was(deskSeen)), fileMoved = f !== only(was(fileSeen));
+        if (fileMoved && (deskMoved || m !== only(ids(B)))) held.add(ORDER);
+        if (deskMoved && !fileMoved) {
+          const slots = [], at = sharedById(out.cards), mo = ids(M2).filter(common);
+          out.cards.forEach((x, i) => {
+            if (common(String(x.id))) slots.push(i);
+          });
+          mo.forEach((id, n) => {
+            out.cards[slots[n]] = at.get(id);
+          });
+          wrote = true;
+        }
+        keep();
+      }
+    }
+    return {
+      doc: out,
+      wrote,
+      state: { file: fileSeen, desk: deskSeen, held: Array.from(held) },
+      fresh: Array.from(held).filter((l) => !before.has(l))
+    };
+  }
+  function sharedDate(was, today) {
+    const m = /^([0-9]{4}-[0-9]{2}-[0-9]{2})/.exec(String(was == null ? "" : was));
+    return m && m[1] >= today ? String(was) : today;
+  }
+  function sharedPayload(text) {
+    const raw = String(text || "").replace(/^﻿/, "").trim();
+    try {
+      return JSON.parse(raw);
+    } catch (e) {
+    }
+    const at = raw.indexOf("E_CATALOG"), eq = at > -1 ? raw.indexOf("=", at) : -1;
+    if (eq < 0) throw new Error("not a catalog");
+    return JSON.parse(raw.slice(eq + 1).trim().replace(/;\s*$/, ""));
+  }
+  function directWrite(io) {
+    const loose = !io.pin, quit = (why) => ({ route: "branch", why, state: io.state, fresh: [] });
+    const attempt = (n) => Promise.resolve(io.read()).then((r) => {
+      if (!r || !r.free) return quit(r ? "signed" : "read");
+      let F = null, B = null;
+      if (r.text) {
+        try {
+          F = sharedPayload(r.text);
+        } catch (e) {
+          return quit("read");
+        }
+        if (!F || typeof F !== "object" || String(F.id) !== String(io.mine.id)) return quit("other");
+      } else if (!loose) return quit("read");
+      if (loose) B = { cards: [], tags: [] };
+      else {
+        try {
+          B = r.base ? sharedPayload(r.base) : null;
+        } catch (e) {
+          B = null;
+        }
+        if (!B) return quit("base");
+      }
+      const Fdoc = F || { format: 2, kind: "etiuda-catalog", id: String(io.mine.id), rev: 0, cards: [], tags: [] };
+      const m = mergeShared(Fdoc, B, io.mine, io.touched, io.state, loose);
+      const route = m.state.held.length ? "branch" : "none";
+      if (!m.wrote) return { route, state: m.state, fresh: m.fresh };
+      const doc = m.doc;
+      doc.rev = (+Fdoc.rev || 0) + 1;
+      doc.date = sharedDate(Fdoc.date, io.today);
+      doc.modified = true;
+      delete doc.sig;
+      delete doc.hash;
+      if ((io.check(doc) || []).length) return quit("problems");
+      doc.hash = io.hash(doc);
+      const others = !!F && [io.pin, io.own].indexOf(io.pinOf(F)) < 0;
+      return Promise.resolve(io.write(JSON.stringify(doc, null, 1) + "\n", r.sha || "", !F)).then((w) => {
+        if (w && w.ok) return { route, state: m.state, fresh: m.fresh, pin: io.pinOf(doc), others, wrote: true };
+        if (w && w.changed && n < 1) return attempt(n + 1);
+        return quit(w && w.busy ? "busy" : w && w.taken ? "taken" : w && w.changed ? "beaten" : "refused");
+      });
+    });
+    return attempt(0);
   }
 
   // src/modules/ids.js
@@ -21210,6 +21502,89 @@ What you type stays in this browser only.`;
     }
     return id ? { id, loose: true } : null;
   }
+  var SHARED_RETRY_MS = 5e3;
+  var SHARED_NAMES = 9;
+  var sharedSaid = false;
+  function sharedEditing() {
+    return lsGet("eSharedEdit") === "1" && eHasShared();
+  }
+  function sharedTouched() {
+    const p = pack || {}, keys = (o) => Object.keys(o && typeof o === "object" ? o : {}), list2 = (a) => Array.isArray(a) ? a.map(String) : [];
+    return {
+      cards: keys(p.overrides).concat((p.custom || []).map((m) => m && m.id).filter(Boolean).map(String), list2(p.removed)),
+      tags: ["catLabels", "catLabelsPl", "customCats", "catRoles", "catIcons", "catColors"].reduce((o, f) => o.concat(keys(p[f])), []).concat(list2(p.removedCats)),
+      head: (p.facts != null ? ["facts"] : []).concat(p.who != null ? ["role"] : []),
+      requests: ["intentOverrides", "intentCustom", "intentRemoved"].some((f) => Array.isArray(p[f]) ? p[f].length > 0 : keys(p[f]).length > 0),
+      order: !cardOrderIsBase()
+    };
+  }
+  function sharedState(name, pin) {
+    let s = null;
+    try {
+      s = JSON.parse(lyGet("Shared") || "null");
+    } catch (e) {
+      s = null;
+    }
+    const st = s && typeof s === "object" && s.file === name && s.state && typeof s.state === "object" ? s.state : {};
+    const held = Array.isArray(st.held) ? st.held : [];
+    return s && s.pin === pin ? { file: st.file || {}, desk: st.desk || {}, held } : { file: {}, desk: {}, held };
+  }
+  function sharedOwnPin() {
+    return String(lyGet("SharedOwn") || "");
+  }
+  function sharedOwnWrite(c) {
+    const own = sharedOwnPin();
+    return !!own && pinned(c).pin === own;
+  }
+  function writeShared(loose, origin, holds, layer) {
+    if (!sharedEditing()) return null;
+    const pin = loose ? "" : String(origin.pin || "");
+    const at = loose ? String(lyGet("SharedFile") || "") : String(nsGet("CatalogFile") || "");
+    if (!loose && !at) return null;
+    const state = sharedState(at, pin);
+    if (!holds && !Object.keys(state.file).length && !state.held.length) return null;
+    const from = loose ? origin || looseOrigin(true) : origin;
+    if (!from) return null;
+    const mine = catalogToV2(Object.assign(currentCatalog({ asIs: true }), { id: String(from.id), rev: +from.rev || 0 }));
+    const stem = catalogFileStem(catalogNameOfFile(catalogFileName()));
+    const go = (n) => {
+      const name = at || stem + (n ? " " + (n + 1) : "") + ".ec";
+      const same = () => eLayer() === layer && catalogLoaded() === !loose;
+      return directWrite({
+        read: () => eSharedRead(name, pin),
+        write: (text, sha, create) => same() ? eSharedWrite(name, text, sha, create) : { ok: false, refused: true },
+        mine,
+        touched: sharedTouched(),
+        state,
+        pin,
+        own: sharedOwnPin(),
+        check: v2Problems,
+        hash: v2ContentHash,
+        pinOf: (d) => "sha256:" + sha256Hex(v2SignedBytes(d)),
+        today: todayEdition()
+      }).then((r) => {
+        if (!same()) return { route: "branch" };
+        if (!at && (r.why === "taken" || r.why === "other") && n + 1 < SHARED_NAMES) return go(n + 1);
+        lySet("Shared", JSON.stringify({ file: name, pin, state: r.state }));
+        if (r.wrote) {
+          lySet("SharedOwn", r.others ? "" : r.pin);
+          if (loose) {
+            lySet("SharedFile", name);
+            lySet("Exported", looseMark());
+          }
+          sharedSaid = false;
+        }
+        if (r.fresh && r.fresh.length) toast(t("The shared catalog had changed the same text, so your version is kept in this desk's own file."));
+        else if (r.why && r.why !== "signed" && !sharedSaid) {
+          sharedSaid = true;
+          toast(t("The shared catalog could not be written just now, so this change is kept in this desk's own file."));
+          if (r.why === "busy") setTimeout(scheduleDeskBranch, SHARED_RETRY_MS);
+        }
+        return r;
+      });
+    };
+    return go(0);
+  }
   function writeDeskBranch() {
     if (!eHasBranch()) return Promise.resolve(false);
     if (branchBusy) {
@@ -21219,12 +21594,17 @@ What you type stays in this browser only.`;
     const loose = !catalogLoaded(), holds = deskBranchHolds(), layer = eLayer();
     let origin = loose ? looseOrigin(false) : storedCatalog();
     if (loose ? !origin && !holds : !origin || !origin.id || !/^sha256:[0-9a-f]{64}$/.test(String(origin.pin || ""))) return Promise.resolve(false);
-    const stemOf = (o) => catalogFileStem(catalogNameOfFile(catalogFileName())) + "-" + branchHex(o), stem = origin ? stemOf(origin) : "";
-    const run = holds ? eBranchIdentity().then((who) => {
+    const stemOf = (o) => catalogFileStem(catalogNameOfFile(catalogFileName())) + "-" + branchHex(o);
+    const own = (keep) => keep && holds ? eBranchIdentity().then((who) => {
       if (!who || eLayer() !== layer || loose && catalogLoaded()) return { ok: false };
       if (!origin) origin = looseOrigin(true);
-      return origin ? eWriteBranch(stem || stemOf(origin), JSON.stringify(catalogToV2(branchCatalog(who, origin)))) : { ok: false };
-    }) : eWriteBranch(stem, "");
+      return origin ? eWriteBranch(stemOf(origin), JSON.stringify(catalogToV2(branchCatalog(who, origin)))) : { ok: false };
+    }) : eWriteBranch(origin ? stemOf(origin) : "", "");
+    const direct = writeShared(loose, origin, holds, layer);
+    const run = direct ? direct.catch(() => ({ route: "branch" })).then((r) => {
+      if (loose && !origin) origin = looseOrigin(false);
+      return own(r.route !== "none");
+    }) : own(true);
     branchBusy = run.then((r) => !!(r && r.ok), () => false).then((ok) => {
       branchBusy = null;
       if (branchAgain) {
@@ -23633,6 +24013,7 @@ What you type stays in this browser only.`;
     const sig = eCatalogSignature(c);
     const active = storedCatalog();
     if (active && eCatalogSignature(active) === sig) return false;
+    if (!src.asked && sharedOwnWrite(c)) return false;
     if (!src.force && src.refusedKey && nsGet(src.refusedKey) === sig) return false;
     catalogTrust(c);
     if (src.direct && !active) {
@@ -23881,7 +24262,8 @@ What you type stays in this browser only.`;
     }).catch(() => false);
   }
   function offerFromListing(files, held) {
-    const higher = files.filter((f) => f.id === held.id && f.rev > (+held.rev || 0)).sort((a, b) => b.rev - a.rev || b.mtime - a.mtime)[0];
+    const own = sharedOwnPin();
+    const higher = files.filter((f) => f.id === held.id && f.rev > (+held.rev || 0) && !(own && f.sha === own)).sort((a, b) => b.rev - a.rev || b.mtime - a.mtime)[0];
     if (higher) {
       offerListed(higher, false);
       return;
@@ -23889,8 +24271,8 @@ What you type stays in this browser only.`;
     const grown = files.filter((f) => f.grew && f.id !== held.id);
     if (!grown.length) return;
     const mine = eBranchIdentity(false).then((who) => who ? branchFileId(who, held) : "");
-    mine.then((own) => {
-      const ours = new Set([held.id].concat(own ? [own] : []));
+    mine.then((own2) => {
+      const ours = new Set([held.id].concat(own2 ? [own2] : []));
       const next = grown.filter((f) => ours.has(f.grew.id)).sort((a, b) => b.mtime - a.mtime);
       return next.reduce((chain, f) => chain.then((done) => done || offerListed(f, true)), Promise.resolve(false));
     });
@@ -24820,7 +25202,17 @@ What you type stays in this browser only.`;
         t("Team lead's key"),
         "",
         '<span class="e-lead-key">' + esc(leadKeyText(l.print)) + '</span><button type="button" class="btn" data-forget-lead="' + esc(l.team) + '">' + esc(t("Forget this lead")) + "</button>"
-      )).join(""),
+      )).join("") + /* Under a host only: a browser has no catalog folder to share. */
+      (eHasShared() ? row(
+        t("Edit the shared catalog directly"),
+        t("For a team without Studio: changes go into the catalog in the catalog folder itself. A catalog the team lead signed is never changed."),
+        onoff(
+          "sharededit",
+          lsGet("eSharedEdit") === "1",
+          t("Each change goes into the shared catalog, and one a colleague made first is kept"),
+          t("Each change stays in this desk's own file")
+        )
+      ) : ""),
       personalNote(),
       t("The name customers see, and the language Etiuda's own buttons and menus are written in")
     );
@@ -24994,6 +25386,11 @@ What you type stays in this browser only.`;
             else lsSet("eNoteHover", "0");
             closeNotePane();
             toast(on ? t("Notes open on hover") : t("Notes open from the i"));
+          } else if (seg2 === "sharededit") {
+            if (on) lsSet("eSharedEdit", "1");
+            else lsDel("eSharedEdit");
+            hooks.syncSampleMark();
+            toast(on ? t("Changes go into the shared catalog") : t("Changes stay in this desk's own file"));
           } else if (seg2 === "raillock") {
             if (railLocked() !== on) toggleRailLock();
           } else if (seg2 === "pillslock") {
@@ -25040,6 +25437,7 @@ What you type stays in this browser only.`;
       "eFactsW",
       "eFactsH",
       "eCollapsed",
+      "eSharedEdit",
       E_HOTKEY_KEY
     ].forEach((k) => {
       was[k] = lsGet(k);
@@ -26345,7 +26743,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, fields_exports, field_ask_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, fields_exports, field_ask_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });

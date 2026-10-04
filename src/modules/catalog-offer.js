@@ -2,7 +2,7 @@
    offers the same way, and the dialog all three channels end in. */
 import { activateCatalog, catalogEdited, catalogEditionOlder, catalogMacroCount,
   catalogIntentCount, exportCatalog, isCatalogUpdate, catalogFileName, catalogNameOfFile, pinStoredFrom,
-  followRenamedFile, branchFileId, looseOrigin } from "./catalog-file.js";
+  followRenamedFile, branchFileId, looseOrigin, sharedOwnPin, sharedOwnWrite } from "./catalog-file.js";
 import { catalogLoaded } from "./catalog-boot.js";
 import { E_CATALOG_KEY, E_CATALOG_VERSION, catalogStamp, catalogVersionLabel,
   eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
@@ -453,6 +453,8 @@ function eOfferCatalogDialog(c,src){
      catalog, both surface here rather than being applied behind the user's back. */
   const active=storedCatalog();
   if(active && eCatalogSignature(active)===sig) return false;
+  // What this desk wrote into the shared catalog is what it shows already, so only somebody asking is offered it.
+  if(!src.asked && sharedOwnWrite(c)) return false;
   /* A refusal is remembered so boot does not nag, but ASKING outranks it: an explicit check
      that answered "already have it" about a file you declined would simply be untrue. */
   if(!src.force && src.refusedKey && nsGet(src.refusedKey)===sig) return false;
@@ -686,7 +688,8 @@ function offerListed(f,mustBeValid){
   }).catch(()=>false);
 }
 function offerFromListing(files,held){
-  const higher=files.filter(f=>f.id===held.id && f.rev>(+held.rev||0)).sort((a,b)=>b.rev-a.rev||b.mtime-a.mtime)[0];
+  const own=sharedOwnPin();
+  const higher=files.filter(f=>f.id===held.id && f.rev>(+held.rev||0) && !(own && f.sha===own)).sort((a,b)=>b.rev-a.rev||b.mtime-a.mtime)[0];
   if(higher){ offerListed(higher,false); return; }
   const grown=files.filter(f=>f.grew && f.id!==held.id);
   if(!grown.length) return;

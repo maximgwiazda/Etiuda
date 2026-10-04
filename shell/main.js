@@ -1624,7 +1624,8 @@ function historyFree(v) { return !!v && !v.signed && !v.sealed && v.cards >= 0; 
 /* Every version, for the page: where it sits (the catalog folder, this desk's own folder, or elsewhere), whether the file
    there holds it now, and whether it may be put back there. */
 function historyView() {
-  const root = catalogFolder(), up = folderAnswers(root);
+  // Resolved as the history resolves each file it keeps, so a folder setting with another spelling still matches.
+  const root = path.resolve(catalogFolder()), up = folderAnswers(catalogFolder());
   const own = deskBranch ? path.join(root, "desks", branchIdOf(deskBranch.sign.pub)) : "";
   const now = new Map();
   const there = file => {
@@ -1658,8 +1659,8 @@ function historyOpen(sha, file) {
 /* Writes a kept version back over its file in the catalog folder, by the rule at historyFree and only after the bytes it
    replaces are kept themselves: `replaced` names them, so the page can offer them back. */
 function historyPutBack(sha, file) {
-  const v = historyFind(sha, file), root = catalogFolder();
-  if (!v || !historyFree(v) || !v.path || path.dirname(v.path) !== root || !/\.ec$/i.test(v.path) || !folderAnswers(root)) return { ok: false };
+  const v = historyFind(sha, file), root = path.resolve(catalogFolder());
+  if (!v || !historyFree(v) || !v.path || path.dirname(v.path) !== root || !/\.ec$/i.test(v.path) || !folderAnswers(catalogFolder())) return { ok: false };
   try {
     const text = historyText(v.sha);
     let was = "";
@@ -1675,6 +1676,106 @@ function historyPutBack(sha, file) {
   } catch (e) {
     console.error("etiuda: " + v.path + " could not be put back - " + e.message);
     return { ok: false };
+  }
+}
+
+/* ---- editing the shared catalog directly: the host's half -----------------------------------------------------------
+   The page merges (src/modules/catalog-merge.js) and this reads and writes, so a desk's write is a compare and swap: the
+   file is read with the SHA-256 of its bytes and written only while it still holds those bytes, under a lock file beside
+   it taken by exclusive create. Only a catalog with no signature and no seal is read for this or written, and the bytes
+   a write replaces are kept in the history first. */
+// A lock this old is a desk that stopped mid-write, and is taken over.
+const SHARED_LOCK_MS = 30 * 1000;
+function sharedFile(name) {
+  const base = String(name || ""), root = catalogFolder();
+  if (!base || base !== path.basename(base) || !/\.ec$/i.test(base) || !folderAnswers(root)) return "";
+  return path.resolve(root, base);
+}
+/* The edition the layer grew from, as the file held it: the file itself while it is that edition, else the copy the
+   history kept, seen again as it is used so the history does not let it go while a desk still merges against it. */
+function sharedBase(file, text, pin) {
+  if (!pin) return "";
+  let id = "";
+  try { const d = catalogPayload(text).data; if (signedSha(d) === pin) return text; id = String(d.id); } catch { /* none there */ }
+  const versions = historyRead().versions.filter(v => !v.sealed && (v.path === file || (!!id && v.id === id)))
+    .sort((a, b) => (b.path === file) - (a.path === file) || b.last - a.last);
+  for (const v of versions) {
+    try {
+      const kept = historyText(v.sha);
+      if (signedSha(catalogPayload(kept).data) !== pin) continue;
+      historyKeep(v.path, kept, false);
+      return kept;
+    } catch { /* a copy that does not open */ }
+  }
+  return "";
+}
+/* {text, sha, free, base}, text and sha "" where there is no file yet; null where the folder does not answer or the
+   file will not read. `free` is false for a signed or sealed file or edition, and nothing of either is handed then. */
+function sharedRead(name, pin) {
+  const file = sharedFile(name);
+  if (!file) return null;
+  let text = "";
+  try { text = fs.readFileSync(file, "utf8"); }
+  catch (e) { if (e.code !== "ENOENT") return null; }
+  const base = sharedBase(file, text, String(pin || ""));
+  const free = (!text || historyFree(historyFacts(text))) && (!base || historyFree(historyFacts(base)));
+  return { text: free ? text : "", sha: text ? sha256Hex(Buffer.from(text, "utf8")) : "", free: free, base: free ? base : "" };
+}
+/* {lock, token} once this desk holds the lock, else null. A stale lock is moved aside before it is taken, so of two
+   desks taking over one only one succeeds; a share that lies about either is caught by the compare before the write. */
+function sharedLock(file) {
+  const lock = file + ".lock", token = crypto.randomBytes(16).toString("hex");
+  const take = () => {
+    const fd = fs.openSync(lock, "wx");
+    try { fs.writeSync(fd, JSON.stringify({ kind: "etiuda-lock", token: token, at: Date.now() })); } finally { fs.closeSync(fd); }
+  };
+  try { take(); return { lock: lock, token: token }; }
+  catch (e) { if (e.code !== "EEXIST") throw e; }
+  let st = null;
+  try { st = fs.statSync(lock); } catch { /* let go meanwhile */ }
+  if (st && Date.now() - st.mtimeMs <= SHARED_LOCK_MS) return null;
+  if (st) {
+    const aside = lock + "." + token + ".stale";
+    try { renamePatiently(lock, aside); } catch { return null; }
+    try { fs.unlinkSync(aside); } catch { /* left beside it */ }
+  }
+  try { take(); return { lock: lock, token: token }; }
+  catch (e) { if (e.code === "EEXIST") return null; throw e; }
+}
+function sharedHolds(held) {
+  try { return JSON.parse(fs.readFileSync(held.lock, "utf8")).token === held.token; } catch { return false; }
+}
+/* Writes the page's merged catalog over the file it read, answered {ok, rev}, or {changed} where the file is no longer
+   the one read, {busy} where another desk holds the lock, {taken} where a file to be created is already there, and
+   {refused} for a signed or sealed catalog on either side. */
+function sharedWrite(name, text, sha, create) {
+  const file = sharedFile(name);
+  text = String(text || "");
+  if (!file || !text || text.length > BRANCH_TEXT_MAX) return { ok: false };
+  let data = null;
+  try { data = catalogPayload(text).data; } catch { return { ok: false }; }
+  if (!isV2(data) || !historyFree(historyFacts(text))) return { ok: false, refused: true };
+  let held = null;
+  try { held = sharedLock(file); }
+  catch (e) { console.error("etiuda: the lock beside " + file + " could not be taken - " + e.message); }
+  if (!held) return { ok: false, busy: true };
+  try {
+    let now = "";
+    try { now = fs.readFileSync(file, "utf8"); } catch (e) { if (e.code !== "ENOENT") throw e; }
+    if (create && now) return { ok: false, taken: true };
+    if (!create && (!now || sha256Hex(Buffer.from(now, "utf8")) !== String(sha || ""))) return { ok: false, changed: true };
+    if (now && !historyFree(historyFacts(now))) return { ok: false, refused: true };
+    if (now && !historyKeepFile(file)) return { ok: false, busy: true };
+    if (!sharedHolds(held)) return { ok: false, changed: true };
+    writeReplacing(file, text);
+    historyKeep(file, text, true);
+    console.log("etiuda: " + file + " now holds this desk's changes, edition " + (+data.rev || 0));
+    return { ok: true, rev: +data.rev || 0 };
+  } catch (e) {
+    console.error("etiuda: " + file + " could not be written - " + e.message);
+    return { ok: false, busy: true };
+  } finally {
+    if (sharedHolds(held)) { try { fs.unlinkSync(held.lock); } catch { /* stale in SHARED_LOCK_MS */ } }
   }
 }
 
@@ -2311,6 +2412,9 @@ ipcMain.handle("etiuda:branch-write", (e, stem, text) => (fromEngine(e) ? writeB
 ipcMain.handle("etiuda:history-list", (e) => (fromEngine(e) ? historyView() : []));
 ipcMain.handle("etiuda:history-read", (e, sha, file) => (fromEngine(e) ? historyOpen(sha, file) : null));
 ipcMain.handle("etiuda:history-put", (e, sha, file) => (fromEngine(e) ? historyPutBack(sha, file) : { ok: false }));
+ipcMain.handle("etiuda:shared-read", (e, name, pin) => (fromEngine(e) ? sharedRead(name, pin) : null));
+ipcMain.handle("etiuda:shared-write", (e, name, text, sha, create) =>
+  (fromEngine(e) ? sharedWrite(name, text, sha, create === true) : { ok: false }));
 // "seen" and "forget" name a team where the others name a file.
 ipcMain.handle("etiuda:team-join", (e, op, file, name) => (!fromEngine(e) ? null
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
