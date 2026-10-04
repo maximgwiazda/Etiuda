@@ -24,6 +24,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/desk-growth.mjs                        no fixtures, a desk of 300 days: a count or a resize sends only what changed
     node tests/shell-office.mjs                       no fixtures, the shell against a busy file, a refused catalog, a folder that does not answer
     node tests/hpke.mjs                               no fixtures, the shell's HPKE held to RFC 9180 appendix A.1.1 byte for byte, its refusals, and a one-byte label mutation that must miss; then the sealed envelope, AES-256-GCM under the team key, and what must not open it; then the team key wrapped for one desk, bound to its team, epoch and desk id
+    node tests/team-desk.mjs                          no fixtures, the desk opens a sealed catalog: the lead's key pinned from the ring or at the first admission, a team file under another key trusted for nothing, every epoch's key kept, and an opened catalog judged as its unsealed twin, another catalog's envelope and an older edition's included
     node tests/sbom.mjs                               no fixtures, the software bill of materials: the tool, and the release leaving one beside the installer
     node tests/pick.mjs                               no fixtures, the picker over the chat: the desk's answers, the preload and the shell, electron stubbed
     node tests/catalog-trust.mjs                      no fixtures, a catalog's signature as the desk reads it, shell stubbed
@@ -44,7 +45,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
     ETIUDA_FIXTURES=<folder> node tests/reinstall.js     install, use, uninstall, install again
 
-`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `module-calls.mjs`, `desk-ipc.mjs`, `desk-growth.mjs`, `shell-office.mjs`, `hpke.mjs`, `pick.mjs`, `catalog-trust.mjs`, `catalog-trust-desk.mjs`, `token-canary.mjs`, `test.js`, `i18n-scan.js`,
+`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `module-calls.mjs`, `desk-ipc.mjs`, `desk-growth.mjs`, `shell-office.mjs`, `hpke.mjs`, `team-desk.mjs`, `pick.mjs`, `catalog-trust.mjs`, `catalog-trust-desk.mjs`, `token-canary.mjs`, `test.js`, `i18n-scan.js`,
 `pl-diacritics.js`, `css-layers.js` and `motion-tokens.js`, none of which needs a fixture or a browser. `npm run smoke` needs both.
 
 `css-dead.js`, `ghosts.js` and `storage-keys.js` are reports rather than gates: they print and

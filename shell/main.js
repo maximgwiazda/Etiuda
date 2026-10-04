@@ -201,9 +201,11 @@ function ecFromArgv(argv) {
   return "";
 }
 const REQUEST_NAME = "etiuda-request.ereq";
+// The engine's V2_TEAM_FILE. Watched with the catalogs, since an admission is what opens a sealed one.
+const TEAM_NAME = "etiuda-team.json";
 function isCatalogName(name) {
   const n = path.basename(String(name || ""));
-  return /\.ec$/i.test(n) || n === CATALOG_SCRIPT || n === REQUEST_NAME;
+  return /\.ec$/i.test(n) || n === CATALOG_SCRIPT || n === REQUEST_NAME || n === TEAM_NAME;
 }
 
 /* A catalog is read as data and never run, and the order of the two attempts is the trap: the
@@ -226,6 +228,22 @@ function catalogPayload(text) {
    stdout is the only place a deployment can be told which file was wrong. */
 function isV2(data) {
   return !!data && typeof data === "object" && +data.format === 2 && data.kind === "etiuda-catalog";
+}
+/* catalogPayload with a sealed envelope opened first, so every route hands the page the catalog inside and the page
+   reads it as it reads an unsealed file, signature and identity alike. One this desk holds no key for throws. */
+function catalogRead(text) {
+  const got = catalogPayload(text);
+  if (!got.data || typeof got.data !== "object" || got.data.kind !== SEALED_KIND) return got;
+  const inner = teamOpen(got.data);
+  if (inner === null) throw new Error("sealed for team " + String(got.data.team) + ", which this desk holds no key for");
+  const opened = catalogPayload(inner);
+  if (opened.data && opened.data.kind === SEALED_KIND) throw new Error("an envelope sealed inside another");
+  return opened;
+}
+/* The text a route hands the page: the catalog inside an envelope this desk opens, else the file exactly as read. */
+function catalogTextOf(text) {
+  try { if (catalogPayload(text).data.kind === SEALED_KIND) return catalogRead(text).json; } catch { /* the page refuses it */ }
+  return text;
 }
 
 let catalogFrom = "";                          // the file the payload below was read out of
@@ -256,12 +274,13 @@ function refusedByEngine(file) {
   try { return Math.round(fs.statSync(file).mtimeMs) === engineRefused.get(file); } catch { return false; }
 }
 function readCatalog() {
+  heedTeam();
   for (const file of catalogPlaces()) {
     if (refusedByEngine(file)) continue;
     let text;
     try { text = fs.readFileSync(file, "utf8"); } catch { refuseOpened(file, "read"); continue; }
     try {
-      const { json, data } = catalogPayload(text);
+      const { json, data } = catalogRead(text);
       if (!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
       const cards = Array.isArray(data.cards) ? data.cards.length : 0;
       console.log("etiuda: catalog read from " + file + ", " + cards + " cards");
@@ -423,7 +442,7 @@ function offerFile(win, file) {
   try { text = fs.readFileSync(file, "utf8"); }
   catch (e) { console.error("etiuda: " + file + " could not be read - " + e.message); refuse("read"); return; }
   try {
-    const { json, data } = catalogPayload(text);
+    const { json, data } = catalogRead(text);
     if (!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
     openedWith = file;
     catalogJson = json;
@@ -559,6 +578,8 @@ function deskEnvelopeBody(keysText) {
     + (deskBranch ? ',"branch":' + JSON.stringify(deskBranch) : "")
     + (deskBranchOld.length ? ',"branchOld":' + JSON.stringify(deskBranchOld) : "")
     + (Object.keys(branchRevs).length ? ',"branchRevs":' + JSON.stringify(branchRevs) : "")
+    + (Object.keys(teamPins).length ? ',"teamPins":' + JSON.stringify(teamPins) : "")
+    + (Object.keys(teamKeys).length ? ',"teamKeys":' + JSON.stringify(teamKeys) : "")
     + (deskRefused.length ? ',"refused":' + JSON.stringify(deskRefused) : "")
     + ',"keys":' + keysText + "}";
 }
@@ -1005,6 +1026,100 @@ function tryHeldBranches() {
   }
 }
 
+/* ---- the team: its file beside the catalogs, its lead's key pinned, and this desk's team keys -----------
+   A team file verifies under the lead key it names, so it is whole and nothing more: anybody who can write the
+   share can sign one. Its lead's key is pinned where the ring lists it for a catalog the team covers, or at the
+   first admission, a file whose roster carries a wrap this desk opens; nothing in a file under any other key is
+   then used. Each epoch's key is kept, so an edition sealed before a new epoch still opens. */
+const TEAM_MAX = 1024 * 1024;
+let teamPins = {};                             // team id -> {keyId, public}: the lead's key, once trusted
+let teamKeys = {};                             // team id -> {epoch: the team key sealed by safeStorage, base64}
+let teamStamp = "";                            // what the team file, the ring and the box were when last heeded
+const teamSaid = new Set();
+/* Whether a team file is whole under the lead key it names, which is what the engine's v2TeamSigState says. */
+function teamWhole(doc) {
+  const lead = doc && doc.lead, sig = doc && doc.sig;
+  try {
+    return +doc.format === 1 && doc.kind === "etiuda-team" && SEALED_TEAM_RE.test(String(doc.id)) && Number.isInteger(doc.epoch)
+      && doc.epoch >= 1 && Array.isArray(doc.roster) && !!lead && typeof lead === "object" && typeof lead.keyId === "string"
+      && /^[0-9a-f]{64}$/.test(String(lead.public)) && !!sig && sig.keyId === lead.keyId && /^[0-9a-f]{128}$/.test(String(sig.value))
+      && crypto.verify(null, signedBytesOf(doc), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(lead.public, "hex")]),
+        format: "der", type: "spki" }), Buffer.from(sig.value, "hex"));
+  } catch { return false; }
+}
+/* Whether the ring beside the catalogs lists the team's lead key for a catalog the team covers, read as v2RingRead reads it. */
+function ringVouches(doc) {
+  let ring = null;
+  try {
+    const file = path.join(catalogFolder(), RING_NAME);
+    if (fs.statSync(file).size <= 65536) ring = JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch { return false; }
+  const covers = Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [];
+  return !!ring && typeof ring === "object" && +ring.format === 1 && ring.kind === "etiuda-ring" && Array.isArray(ring.keys)
+    && ring.keys.some(e => !!e && typeof e === "object" && covers.indexOf(String(e.catalog)) >= 0 && e.keyId === doc.lead.keyId
+      && e.alg === "Ed25519" && e.public === doc.lead.public);
+}
+/* The team key this desk's own roster entry wraps for the file's epoch, or null. HPKE binds the box and the aad the id. */
+function ownTeamKey(doc) {
+  if (!deskBranch) return null;
+  const id = branchIdOf(deskBranch.sign.pub);
+  const e = doc.roster.find(x => !!x && !!x.desk && x.desk.id === id);
+  if (!e || !e.wrap) return null;
+  const sk = openPrivate(deskBranch.box.priv);
+  return sk ? unwrapTeamKey(sk, e.wrap, doc.id, doc.epoch, id) : null;
+}
+function teamSay(line) {
+  if (teamSaid.has(line)) return;
+  teamSaid.add(line);
+  console.error("etiuda: " + line);
+}
+function fileStamp(file) {
+  try { const st = fs.statSync(file); return Math.round(st.mtimeMs) + "|" + st.size; } catch { return "-"; }
+}
+/* Reads the team file where it, the ring or the desk's box has changed since, pins its lead by the rule above and
+   keeps this desk's key for its epoch. What it learns is in teamPins and teamKeys, and in the desk envelope. */
+function heedTeam() {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  const root = catalogFolder();
+  if (!folderAnswers(root)) return;
+  const file = path.join(root, TEAM_NAME);
+  const stamp = [file, fileStamp(file), fileStamp(path.join(root, RING_NAME)), deskBranch ? deskBranch.box.pub : ""].join("|");
+  if (stamp === teamStamp) return;
+  teamStamp = stamp;
+  let doc = null;
+  try { if (fs.statSync(file).size <= TEAM_MAX) doc = JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "")); } catch { return; }
+  if (!teamWhole(doc)) { teamSay(file + " is not a team file whole under its lead's key, so nothing in it is used"); return; }
+  const lead = { keyId: doc.lead.keyId, public: doc.lead.public }, pin = teamPins[doc.id];
+  if (pin && (pin.keyId !== lead.keyId || pin.public !== lead.public)) {
+    teamSay(file + " is signed by a key other than the lead's this desk trusts for team " + doc.id + ", so nothing in it is used");
+    return;
+  }
+  const key = ownTeamKey(doc);
+  if (!pin && !key && !ringVouches(doc)) return;
+  let changed = false;
+  if (!pin) { teamPins[doc.id] = lead; changed = true; }
+  const kept = teamKeys[doc.id] || {};
+  if (key && !kept[doc.epoch] && branchSealable()) {
+    try {
+      kept[doc.epoch] = safeStorage.encryptString(key.toString("base64")).toString("base64");
+      teamKeys[doc.id] = kept;
+      ecFactsRead.clear();
+      changed = true;
+    } catch (e) { teamSay("the team key for " + doc.id + " could not be kept - " + e.message); }
+  }
+  if (changed) persistDeskEnvelope();
+}
+/* The catalog's text inside a sealed envelope, where this desk holds its team's key for its epoch, else null. */
+function teamOpen(data) {
+  heedTeam();
+  const kept = teamKeys[String(data.team)];
+  const sealed = kept && Number.isInteger(data.epoch) ? kept[data.epoch] : "";
+  if (!sealed) return null;
+  let key = null;
+  try { key = Buffer.from(safeStorage.decryptString(Buffer.from(sealed, "base64")), "base64"); } catch { return null; }
+  return openSealed(key, data);
+}
+
 function deskFile() { return path.join(app.getPath("userData"), "desk.json"); }
 function deskBackup(n) { return path.join(app.getPath("userData"), "desk.bak" + n + ".json"); }
 
@@ -1102,6 +1217,17 @@ function readDesk() {
       branchRevs = {};
       Object.keys(doc.branchRevs).forEach(k => { if (Number.isInteger(doc.branchRevs[k]) && doc.branchRevs[k] > 0) branchRevs[k] = doc.branchRevs[k]; });
     }
+    const table = v => !!v && typeof v === "object" && !Array.isArray(v);
+    if (doc && table(doc.teamPins)) Object.keys(doc.teamPins).forEach(t => {
+      const p = doc.teamPins[t];
+      if (SEALED_TEAM_RE.test(t) && table(p) && typeof p.keyId === "string" && /^[0-9a-f]{64}$/.test(String(p.public)))
+        teamPins[t] = { keyId: p.keyId, public: p.public };
+    });
+    if (doc && table(doc.teamKeys)) Object.keys(doc.teamKeys).forEach(t => {
+      const k = doc.teamKeys[t];
+      if (!SEALED_TEAM_RE.test(t) || !table(k)) return;
+      Object.keys(k).forEach(n => { if (/^[1-9][0-9]*$/.test(n) && typeof k[n] === "string" && k[n]) (teamKeys[t] = teamKeys[t] || {})[n] = k[n]; });
+    });
     ensureDeskId();
     console.log("etiuda: desk read from " + file + ", " + Object.keys(keys).length + " keys");
     return keys;
@@ -1519,7 +1645,7 @@ function ecFacts(file, deskFolder) {
   try { text = fs.readFileSync(file, "utf8"); } catch { return null; }
   let out = null;
   try {
-    const { data } = catalogPayload(text);
+    const { data } = catalogRead(text);
     if (isV2(data) && Array.isArray(data.cards)) {
       const n = ecCounts(data), d = data.desk;
       out = { mtime: Math.round(st.mtimeMs), cards: data.cards.length, edition: data.date != null ? String(data.date) : "",
@@ -1584,7 +1710,7 @@ ipcMain.handle("etiuda:catalog-read", (e, name) => {
   const file = catalogFileNamed(base) || path.join(catalogFolder(), base);
   try {
     if (!fileAnswers(file)) throw new Error("the catalog folder is not answering");
-    return { name: base, text: fs.readFileSync(file, "utf8") };
+    return { name: base, text: catalogTextOf(fs.readFileSync(file, "utf8")) };
   }
   catch (err) {
     console.error("etiuda: " + file + " could not be read - " + err.message);
@@ -1649,7 +1775,7 @@ ipcMain.handle("etiuda:pick-catalog-file", async (e, title, label) => {
   const file = (!r.canceled && r.filePaths && r.filePaths[0]) ? r.filePaths[0] : "";
   if (!file) return null;
   const name = path.basename(file);
-  try { return { name: name, text: fs.readFileSync(file, "utf8") }; }
+  try { return { name: name, text: catalogTextOf(fs.readFileSync(file, "utf8")) }; }
   catch (err) {
     console.error("etiuda: " + file + " could not be read - " + err.message);
     return { name: name, text: "" };
