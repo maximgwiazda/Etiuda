@@ -2775,7 +2775,7 @@ const CARD_B = {
   const Dom = await import(MOD("dom.js"));
   const hadDoc = globalThis.document, hadAdd = globalThis.addEventListener;
   const STUBS = ["applyLangUI", "updateIntentPlaceholder", "drawPillsCore", "drawIntentRail", "render", "scheduleRailGeometry",
-    "segFolded", "syncRailGeometry"];
+    "segFolded", "syncRailGeometry", "rebuildCards", "syncSampleMark"];
   const hadHooks = STUBS.map(k => [k, Object.prototype.hasOwnProperty.call(H.hooks, k), H.hooks[k]]);
   const hadCards = AS.cards;
   const on = o => ({ add: c => o.add(c), remove: c => o.delete(c), contains: c => o.has(c),
@@ -2851,6 +2851,25 @@ const CARD_B = {
       () => eq(seen.join(" | ") + " | " + [empty, drawn, typed, opened, closed].join(";"),
         "cards live hidden nofab false | lanes inert shown fab true | cards live hidden fab false emptied | lanes inert shown fab true | cards live hidden fab false"
         + " | true;true,2,true,true;false;true;true"));
+    /* A list edited in the lanes is written where the editor writes it: an own card's whole list in its entry,
+       by the same rule (814ed1), and only the reply sent last is edited. */
+    const P = await import(MOD("pack.js"));
+    const hadCustom = P.pack.custom;
+    try {
+      const own = { id: "u:ln-own", c: "orders", en: "Body of own", t: "Title own", next: [{ to: "c-ln-b" }, { to: "c-ln-c" }] };
+      P.pack.custom = [JSON.parse(JSON.stringify(own))];
+      AS.setCards(AS.cards.concat([own]));
+      document.activeElement = body; LN.lanesKey();
+      LP.bumpUseCount("u:ln-own", "en");
+      const shownFirst = /data-to="c-ln-b"[\s\S]*data-to="c-ln-c"/.test(lanesBox.innerHTML);
+      const wrote = LN.writeLaneList(["c-ln-c", "c-ln-b", "c-ln-gone"]);
+      const after = JSON.stringify(P.pack.custom[0].next);
+      const emptied = LN.writeLaneList([]) && !("next" in P.pack.custom[0]);
+      LN.toggleLanes(false);
+      check("lanes.js", "814ed2 a reorder in the lanes writes the reply sent last's own list, live cards only, and an emptied list leaves no list",
+        () => eq([shownFirst, wrote, after, emptied, LN.writeLaneList(["c-ln-b"])].join("|"),
+          'true|true|[{"to":"c-ln-c"},{"to":"c-ln-b"}]|true|false'));
+    } finally { P.pack.custom = hadCustom; }
     await new Promise(r => setTimeout(r, 20));
   } finally {
     LN.toggleLanes(false);
@@ -2928,6 +2947,29 @@ const CARD_B = {
         tabs.indexOf('el.insertBefore(bd, el.querySelector(".tab-x"));') > -1,
         dock.indexOf("  syncTabBeads();\n  if(dockWatch) dockWatch(arrived===true);") > -1, dock.indexOf("setTabBeads(tabBeadsOf);") > -1].join("|"),
         '<i class="bd-more"></i><i class="bd"></i><i class="bd"></i><i class="bd bd-open"></i>||true|true|true|true');
+    });
+}
+
+/* ------------------------------------------------------------------ card-chain.js, a list edited outside the editor
+   Board 814, S5: the lanes edit the reply sent last's list in the agent's own layer, as the editor's Next fold
+   does on a save that touched it (decisions 2026-10-01 09:40). Invented ids; nothing global is set. */
+{
+  const CH = await import(MOD("card-chain.js"));
+  const to = ids => ids.map(x => ({ to: x }));
+  const live = new Set(["c-ed-a", "c-ed-b", "c-ed-c", "c-ed-self"]);
+  const base = { id: "c-ed-self", t: "Self", next: to(["c-ed-a", "c-ed-b"]) };
+  const merged = ov => Object.assign({}, base, ov || {});
+  const w = (card, b, ov, ids) => JSON.stringify(CH.nextListWrite(card, b, ov, ids, live));
+  check("card-chain.js", "814ed1 a list changed outside the editor writes what the editor's fold writes on a touched save: an own card's whole live list, a catalog card's list and the ids it replaced beside every other field kept, and nothing once it is the catalog's again",
+    () => {
+      const own = { id: "u:ed", next: to(["c-ed-a", "c-ed-b"]) };
+      const ov1 = { t: "Mine" }, ov2 = { t: "Mine", next: to(["c-ed-c"]), nextWas: ["c-ed-a"] }, ov3 = { next: to(["c-ed-b"]), nextWas: ["c-ed-a", "c-ed-b"] };
+      const same = JSON.stringify({ override: Object.assign({ t: "Mine" }, CH.nextSaveFields(to(["c-ed-c", "c-ed-a"]), to(["c-ed-a", "c-ed-b"]), base, ov2, true)) });
+      return eq([w(own, null, null, ["c-ed-b", "c-ed-a", "c-ed-gone", "u:ed"]), w(merged(ov1), base, ov1, ["c-ed-b", "c-ed-a"]),
+        w(merged(ov2), base, ov2, ["c-ed-c", "c-ed-a"]) === same, w(merged(ov3), base, ov3, ["c-ed-a", "c-ed-b"]),
+        w(merged(ov2), base, ov2, ["c-ed-a", "c-ed-b"])].join("|"),
+        '{"own":[{"to":"c-ed-b"},{"to":"c-ed-a"}]}|{"override":{"t":"Mine","next":[{"to":"c-ed-b"},{"to":"c-ed-a"}],"nextWas":["c-ed-a","c-ed-b"]}}'
+        + '|true|{"override":null}|{"override":{"t":"Mine"}}');
     });
 }
 

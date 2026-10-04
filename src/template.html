@@ -3460,7 +3460,9 @@ body.e-lanes #pillsSlot.pills-anim{display:block}
 .ln-next{grid-column:3;display:grid;gap:16px;align-content:start}
 .ln-row{margin:0}
 .ln-txt,.ln-blk{padding-right:16px}
-.ln-txt{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;white-space:normal;margin-bottom:4px}
+/* The clamp is on the text and not the slab, whose padding would show the start of a fourth line. */
+.ln-txt{white-space:normal;margin-bottom:4px}
+.ln-clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}
 .ln-txt:hover,.ln-blk:hover{border-color:var(--accent)}
 .ln-then{padding:0 3px;font-size:12.5px;color:var(--dim);white-space:nowrap;overflow:hidden}
 .ln-wires{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
@@ -3468,6 +3470,21 @@ body.e-lanes #pillsSlot.pills-anim{display:block}
 .ln-w-learnt{stroke:var(--dim);stroke-dasharray:2 4}
 .ln-dot{fill:var(--accent)}
 .ln-dot-open{fill:none;stroke:var(--accent);stroke-width:1.6}
+/* Editing the list in the lanes: the grip and the row's own action show under the pointer or the keyboard. */
+.ln-acts{margin-left:auto;flex:none;display:inline-flex;align-items:center}
+.ln-row .nx-grip,.ln-row .ln-acts{opacity:0;transition:opacity var(--m-tone) ease}
+.ln-row:hover .nx-grip,.ln-row:hover .ln-acts,.ln-row:focus-within .nx-grip,.ln-row:focus-within .ln-acts{opacity:1}
+.ln-keep{flex:none;width:26px;height:26px;display:grid;place-items:center;padding:0;border:0;border-radius:6px;
+  background:transparent;color:var(--dim);cursor:default}
+.ln-keep:hover,.ln-keep:focus-visible{background:var(--accent-soft);color:var(--accent)}
+.ln-keep .ic{width:14px;height:14px}
+.ln-row.ln-drag{position:relative;z-index:1;opacity:.85}
+.ln-src{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ln-add{justify-self:start}
+.ln-find{display:grid;max-width:440px}
+.ln-find input{font:14px var(--sans);padding:8px 10px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
+  background:var(--field);color:var(--ink);outline:none}
+.ln-find input:focus{border-color:var(--accent)}
 #sampleMark{position:fixed;inset:0;z-index:49;pointer-events:none;overflow:hidden;
   display:flex;align-items:center;justify-content:center}
 #sampleMark b{transform:rotate(-22deg);white-space:nowrap;text-transform:uppercase;

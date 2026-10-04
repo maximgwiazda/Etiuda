@@ -989,6 +989,8 @@ UI_STRINGS.pl={
   "Cards or lanes":"Karty albo ścieżka rozmowy",
   "Switch between the cards and the lanes while nothing is being typed":"Przełącza między kartami a ścieżką rozmowy, gdy nic nie jest wpisywane",
   "lanes":"ścieżka rozmowy",
+  "Add it to the list":"Dodaj do listy",
+  "Taken off the list":"Usunięto z listy",
   "Fill in before copying":"Uzupełnij przed kopiowaniem",
   "from this conversation":"z tej rozmowy",
   "may be skipped":"można pominąć",

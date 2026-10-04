@@ -62,6 +62,19 @@ function nextStoredFields(card,catalog,base,ov){
   if(!ov || !Array.isArray(ov.next)) return {};
   return {next:ov.next.slice(), nextWas:Array.isArray(ov.nextWas) ? ov.nextWas.map(String) : nextIdsOf(base&&base.next)};
 }
+/** What a change to a card's list made outside the editor writes, as the editor's fold writes it on a save that
+ *  touched it: an own card's whole list (`own`), or a catalog card's override (`override`, null to drop it) with
+ *  `next` and `nextWas` set or dropped and every other field kept. `ids` are the replies in their new order. */
+function nextListWrite(card,base,ov,ids,live){
+  const self=String(card&&card.id||"");
+  const st=nextFoldState(card,base,ov,live), pool=st.rows.concat(st.catalog||[]);
+  const rows=nextLive((Array.isArray(ids)?ids:[]).map(String).map(id=>pool.find(e=>e.to===id)||{to:id}),self,live);
+  if(!base) return {own:rows};
+  const o=Object.assign({},ov||{});
+  delete o.next; delete o.nextWas;
+  Object.assign(o,nextSaveFields(rows,st.catalog,base,ov,true));
+  return {override:Object.keys(o).length ? o : null};
+}
 /* Every title of every live card, folded as search folds it: a prefix of the title first, then of a
    word in it, then anywhere, each in list order. */
 function nextFold(s){ return foldDiacritics(String(s==null?"":s).toLowerCase()); }
@@ -345,6 +358,7 @@ export {
   nextLive,
   nextFoldState,
   nextSaveFields,
+  nextListWrite,
   nextHits,
   nextHitHtml,
   nextReplies,
