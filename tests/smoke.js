@@ -21,11 +21,48 @@ const puppeteer = require("puppeteer-core");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
+const zlib = require("zlib");
 const E = require("./engine.js");
 const MOTION = require("./motion.js");
 const TW = require("./tour-walk.js");
 const BADGE = require("./badge-room.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+/* Two screenshots of one strip differ where a pixel moves by more than one level of one channel: the same state photographed
+   twice can drift by one level in a 1 px column. Only 8-bit RGB or RGBA is read; anything else throws, so it cannot pass unread. */
+const pngPixels = b64 => {
+  const buf = Buffer.from(b64, "base64"), idat = []; let at = 8, w = 0, h = 0, bpp = 0;
+  while (at < buf.length) {
+    const n = buf.readUInt32BE(at), t = buf.toString("latin1", at + 4, at + 8);
+    if (t === "IHDR") {
+      w = buf.readUInt32BE(at + 8); h = buf.readUInt32BE(at + 12);
+      if (buf[at + 16] !== 8 || (buf[at + 17] !== 2 && buf[at + 17] !== 6) || buf[at + 20] !== 0) throw new Error("png: not 8-bit RGB or RGBA, or interlaced");
+      bpp = buf[at + 17] === 6 ? 4 : 3;
+    }
+    if (t === "IDAT") idat.push(buf.subarray(at + 8, at + 8 + n));
+    at += 12 + n;
+  }
+  const raw = zlib.inflateSync(Buffer.concat(idat)), stride = w * bpp, out = Buffer.alloc(stride * h);
+  for (let y = 0; y < h; y++) {
+    const f = raw[y * (stride + 1)];
+    for (let x = 0; x < stride; x++) {
+      const a = x >= bpp ? out[y * stride + x - bpp] : 0, b = y ? out[(y - 1) * stride + x] : 0,
+        c = x >= bpp && y ? out[(y - 1) * stride + x - bpp] : 0;
+      let p = 0;
+      if (f === 1) p = a; else if (f === 2) p = b; else if (f === 3) p = (a + b) >> 1;
+      else if (f === 4) { const q = a + b - c, pa = Math.abs(q - a), pb = Math.abs(q - b), pc = Math.abs(q - c); p = pa <= pb && pa <= pc ? a : pb <= pc ? b : c; }
+      else if (f !== 0) throw new Error("png: filter " + f);
+      out[y * stride + x] = (raw[y * (stride + 1) + 1 + x] + p) & 255;
+    }
+  }
+  return { w: w, h: h, px: out };
+};
+const pngDiffers = (a, b) => {
+  if (a === b) return false;
+  const A = pngPixels(a), B = pngPixels(b);
+  if (A.w !== B.w || A.h !== B.h) return true;
+  for (let i = 0; i < A.px.length; i++) if (Math.abs(A.px[i] - B.px[i]) > 1) return true;
+  return false;
+};
 const WHICH = (process.argv[2] || "chrome").toLowerCase();
 /* THE DECLARED NUMBER OF CHECKS, and why a tally is not a verdict without one. A section that
    throws takes the rest of its checks with it, the catch writes one FAIL, and the line at the
@@ -36,13 +73,14 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-/* 296 since a macro's text keeps out from under its badge (four checks and its clean); 291 since
-   About closes on the trademark notice (two checks and its clean); 288 since the theme
+/* 299 since a macro's text keeps out from under its badge (four checks and its clean) and the
+   dot field's extent (two checks and its clean); 291 since About closes on the trademark notice
+   (two checks and its clean); 288 since the theme
    crossfades (two checks and its clean); 285 since a copy lays only the wash over its block and
    greens only that block's spine, a card's title has the row while its controls wait, the
    scrollbar's thumb is opaque, every theme has one blue, an idle tab's dot is the band's ink, and
    Maintenance fits its window unscrolled; 278 was the tour's walk by its acts. */
-const EXPECTED = { chrome: 296 };
+const EXPECTED = { chrome: 299 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -731,9 +769,9 @@ const t0 = Date.now();
   await p.evaluate(() => { document.getElementById("pageScroll").scrollTop += 7; }); await sleep(300);
   const still1 = await stillShot(), top1 = await cardTop();
   const scrolled = await p.evaluate(() => document.getElementById("pageScroll").scrollTop);
-  await p.evaluate(() => { document.getElementById("pageScroll").style.backgroundImage = "none"; }); await sleep(200);
+  await p.evaluate(() => { document.querySelector("#dotField > div").style.backgroundImage = "none"; }); await sleep(200);
   const stillOff = await stillShot();
-  await p.evaluate(() => { document.getElementById("pageScroll").style.backgroundImage = "";
+  await p.evaluate(() => { document.querySelector("#dotField > div").style.backgroundImage = "";
     const s = document.getElementById("__stillHide"); if (s) s.remove();
     document.getElementById("pageScroll").scrollTop = 0; });
   await sleep(300);
@@ -743,6 +781,103 @@ const t0 = Date.now();
     + (still0 === still1 ? "byte-identical" : "different") + " before and after (" + still0.length + " and " + still1.length
     + " base64 chars), against " + stillOff.length + " with the field switched off");
   clean(e, "the still dot field");
+
+  /* THE DOT FIELD STANDS BEHIND THE CARDS AND NOWHERE ELSE (Maxim, 2026-10-03 11:49: "It should only
+     span the background behind the cards segment, while in the latest Etiuda build it spans all the
+     background below the catpill header, including intent rail and the scrollbar."). The still field
+     had moved onto the scroller, which is the whole width below the header, so it also stood in the
+     app padding, in the strip above the list, beside a docked intent panel and in the scrollbar lane.
+     THE MEASURE IS INK IN A STRIP, whichever element carries the field: the cards are hidden (their
+     boxes kept), a strip of the window outside main's column is photographed, the field is switched
+     off wherever it is painted and the same strip is photographed again, and a strip that holds
+     any dot differs from its twin by more than one level of a channel. A strip is at least 12 px each way, the field's pitch, so a field
+     reaching it cannot fall between its dots. The control is the same photograph of a patch INSIDE
+     main, which must differ: a leg that sees no dots anywhere passes every strip for free. Four
+     states, each with the intent panel docked or not, and with the shell's backdrop class or not -
+     under it the ground is the field's layer and the field has to stand above it, which a
+     browser does not do by itself. The strip below is the window's bottom edge (Maxim, 2026-10-03 12:37:
+     "There should be a margin there, similar to the margin on the right side."). The scrollbar lane is a strip only where this browser draws one;
+     the run is launched with scrollbars hidden, so the lane is covered by the strip right of main. */
+  e = since();
+  await p.evaluate(() => { const s = document.createElement("style"); s.id = "__extentHide";
+    s.textContent = "#list > *{visibility:hidden!important}"; document.head.appendChild(s);
+    document.getElementById("pageScroll").scrollTop = 0; });
+  const extentRail = () => p.evaluate(() => document.body.classList.contains("rail-on"));
+  const railWas = await extentRail();
+  const extentStates = [];
+  for (const rail of [false, true]) {
+    if ((await extentRail()) !== rail) {
+      await p.evaluate(() => document.querySelector('[data-act="rail"]').click()); await sleep(900);
+    }
+    for (const backdrop of [false, true]) {
+      await p.evaluate(on => document.body.classList.toggle("e-backdrop", on), backdrop); await sleep(300);
+      const at = await p.evaluate(() => {
+        const sc = document.getElementById("pageScroll").getBoundingClientRect(),
+          m = document.querySelector("main").getBoundingClientRect(), w = innerWidth,
+          y = Math.round(sc.top + sc.height / 2), clip = (x, yy, wd, ht) => ({ x: x, y: yy, width: wd, height: ht });
+        /* The field reaches one pitch (12 px) past main on each side: leftBand and rightBand are that pitch and
+           hold dots; left and right are what lies beyond it, to the window's edge, and hold none. */
+        return { inside: clip(Math.round(m.left + 40), y, 48, 48),
+          leftBand: clip(Math.round(m.left) - 12, y, 12, 48),
+          left: clip(0, y, Math.min(Math.round(m.left) - 12, 600), 48),
+          rightBand: clip(Math.ceil(m.right), y, 12, 48),
+          right: clip(Math.ceil(m.right) + 12, y, Math.floor(w - m.right) - 12, 48),
+          above: clip(Math.round(m.left + 40), Math.ceil(sc.top), 48, Math.floor(m.top - sc.top)),
+          below: clip(Math.round(m.left + 40), Math.floor(sc.bottom) - 14, 48, 14) };
+      });
+      const names = Object.keys(at);
+      /* The two outer strips can be narrower than a pitch (2 px beside the window's edge): a dot cannot fall in
+         them, which is the point, so they only need to exist. */
+      const shoot = async () => { const o = {};
+        for (const n of names) o[n] = at[n].width >= (n === "left" || n === "right" ? 1 : 12) && at[n].height >= 12
+          ? await p.screenshot({ clip: at[n], captureBeyondViewport: false, encoding: "base64" }) : null;
+        return o; };
+      /* The twin switches the field off wherever it is painted: on the three layers it has stood on, and on every
+         other element or pseudo-element whose computed image holds the field's own, so a copy laid on a layer this
+         leg never named (the stage, the body) is switched off in the twin too and read as ink. The marks are set
+         before the photograph and change nothing in it, so the two photographs stay as close in time as they were. */
+      await p.evaluate(() => {
+        const was = getComputedStyle(document.querySelector("#dotField>div")).backgroundImage;
+        const carries = (el, pe) => was !== "none" && getComputedStyle(el, pe).backgroundImage.indexOf(was) > -1;
+        for (const el of document.querySelectorAll("*")) {
+          if (carries(el)) el.setAttribute("data-extent-off", "");
+          if (carries(el, "::before")) el.setAttribute("data-extent-off-before", "");
+          if (carries(el, "::after")) el.setAttribute("data-extent-off-after", "");
+        }
+      });
+      const on = await shoot();
+      await p.evaluate(() => { const s = document.createElement("style"); s.id = "__extentOff";
+        s.textContent = "#dotField>div,#pageScroll,main,[data-extent-off],[data-extent-off-before]::before,"
+          + "[data-extent-off-after]::after{background-image:none!important}"; document.head.appendChild(s); });
+      await sleep(200);
+      const off = await shoot();
+      await p.evaluate(() => { const s = document.getElementById("__extentOff"); if (s) s.remove();
+        for (const el of document.querySelectorAll("[data-extent-off],[data-extent-off-before],[data-extent-off-after]"))
+          for (const n of ["data-extent-off", "data-extent-off-before", "data-extent-off-after"]) el.removeAttribute(n); });
+      await sleep(200);
+      extentStates.push({ rail: rail, backdrop: backdrop, at: at,
+        small: names.filter(n => on[n] === null),
+        holds: names.filter(n => on[n] !== null && pngDiffers(on[n], off[n])) });
+    }
+    await p.evaluate(() => document.body.classList.remove("e-backdrop"));
+  }
+  await p.evaluate(() => { document.body.classList.remove("e-backdrop");
+    const s = document.getElementById("__extentHide"); if (s) s.remove();
+    document.getElementById("pageScroll").scrollTop = 0; });
+  if ((await extentRail()) !== railWas) {
+    await p.evaluate(() => document.querySelector('[data-act="rail"]').click()); await sleep(700);
+  }
+  const extentSaid = extentStates.map(s => "rail " + (s.rail ? "docked" : "hidden") + (s.backdrop ? " + backdrop" : "")
+    + ": dots in [" + s.holds.join(",") + "]" + (s.small.length ? ", too small to read [" + s.small.join(",") + "]" : "")).join("; ");
+  const extentBand = ["inside", "leftBand", "rightBand"];
+  check(extentStates.length === 4 && extentStates.every(s => s.small.length === 0
+      && s.holds.every(n => extentBand.indexOf(n) > -1) && s.holds.indexOf("leftBand") > -1 && s.holds.indexOf("rightBand") > -1),
+    "the dot field reaches one 12 px pitch past the cards on the left and on the right and no further: dots in both bands,"
+    + " none beyond them, above the list, beside a docked intent panel, in the scrollbar lane or at the window's bottom edge: " + extentSaid);
+  check(extentStates.length === 4 && extentStates.every(s => s.holds.indexOf("inside") > -1),
+    "and the leg still sees the dots where they belong: a 48x48 patch inside the cards' column holds"
+    + " them in all four states, so the strips above were read by a leg that can see a dot");
+  clean(e, "the dot field's extent");
 
   /* THE PALETTE LANDS IN ONE FRAME, board 452. Sampled per frame through a real press with the
      pointer resting on the tile, which is where the hold-over was loudest: every colour
@@ -920,6 +1055,13 @@ const t0 = Date.now();
       out[th].segs = [...card.querySelectorAll(".seg")].map(s => px(getComputedStyle(s, "::before").backgroundColor));
       out[th].close = px(getComputedStyle([...card.querySelectorAll(".modal-actions .btn.primary")].pop()).backgroundColor);
       dismissModal(); await wait(400);
+      /* A MARK AND A FILL, each painted: the empty desk's mark is a canvas that reads its colour from CSS, and a
+         selected pill is a solid fill under white words. Put on the page for the reading and taken out again. */
+      const paint = (cls, tag) => { const el = document.createElement(tag); el.className = cls; document.body.appendChild(el);
+        const cs = getComputedStyle(el), r = { color: px(cs.color), bg: px(cs.backgroundColor) }; el.remove(); return r; };
+      out[th].fill = res("var(--accent-fill)");
+      out[th].mark = paint("e-empty-mark", "canvas").color;
+      out[th].pill = paint("pill on", "span").bg;
     }
     if (was) document.documentElement.dataset.theme = was; else delete document.documentElement.dataset.theme;
     await wait(300);
@@ -936,17 +1078,25 @@ const t0 = Date.now();
   check(["unset", "dark", "light"].every(th => thumbOk(themeColours[th])),
     "the scrollbar's thumb is opaque in every theme, hover included, and reads as the see-through grey over the canvas; the track stays clear ("
     + JSON.stringify(["unset", "dark", "light"].map(th => [themeColours[th].thumb, themeColours[th].hover, themeColours[th].track[3]])) + ")");
-  /* ONE BLUE: the accent, every segmented switch's thumb in Settings and its Close button paint the
-     bubbles' blue in every theme, and white on it reads 4.5:1 or better (WCAG's relative luminance). */
+  /* TWO BLUES IN THE DARK THEMES, ONE IN LIGHT (Maxim, 2026-10-03 19:09 and 19:10): "we should revert to the former
+     blue in case of marks of all sort, and in case of Etiuda logo in empty state", and solid blue buttons and
+     such keep the darker one; "I meant the dark mode specifically. In light mode colors are peachy". So in
+     the dark themes the accent and the empty desk's mark are the former blue, 122,162,247, while every
+     segmented switch's thumb in Settings, its Close button, a selected pill and the fill token paint the
+     bubbles' blue, which white on reads 4.5:1 or better (WCAG's relative luminance). Light has one blue. */
   const lum = c => c.slice(0, 3).map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); })
     .reduce((s, v, i) => s + v * [.2126, .7152, .0722][i], 0);
   const whiteOn = c => 1.05 / (lum(c) + .05);
-  const oneBlue = s => [s.accent, s.close].concat(s.segs).every(c => near(c, s.bub) && c[3] === 1) && s.segs.length > 0
-    && whiteOn(s.bub) >= 4.5;
-  check(["unset", "dark", "light"].every(th => oneBlue(themeColours[th])),
-    "the accent, Settings' switches and its Close button are the bubbles' blue in every theme, white on it at "
+  const FORMER_BLUE = [122, 162, 247];
+  const twoBlues = s => { const mark = s.bg[0] < 128 ? FORMER_BLUE : s.bub;
+    return [s.accent, s.mark].every(c => near(c, mark) && c[3] === 1)
+      && [s.fill, s.close, s.pill].concat(s.segs).every(c => near(c, s.bub) && c[3] === 1) && s.segs.length > 0
+      && whiteOn(s.bub) >= 4.5; };
+  check(["unset", "dark", "light"].every(th => twoBlues(themeColours[th])),
+    "the dark themes' accent and the empty desk's mark are the former blue while the switches, Close, a selected pill and the fill token keep the bubbles' blue, light has one blue, white on the fill at "
     + whiteOn(themeColours.dark.bub).toFixed(2) + ":1 (" + JSON.stringify(["unset", "dark", "light"].map(th =>
-      [themeColours[th].accent, themeColours[th].segs.length, themeColours[th].segs.filter(c => !near(c, themeColours[th].bub)).length])) + ")");
+      [themeColours[th].accent, themeColours[th].mark, themeColours[th].fill, themeColours[th].pill, themeColours[th].segs.length,
+        themeColours[th].segs.filter(c => !near(c, themeColours[th].bub)).length])) + ")");
 
   /* AN INACTIVE TAB'S DOT, with no category on it, is the band's ink: the theme's text colour on
      the pale band a light desk draws (the host's backdrop, body.e-backdrop, set here as the host
@@ -2421,13 +2571,14 @@ const t0 = Date.now();
     const u = document.getElementById("eUndoBtn"); if (u) u.click(); await wait(800);
     const n2 = list().length, back = list().some(c => c.getAttribute("data-id") === id);
     openCardEditor(id); await wait(700);
-    const title = document.querySelector('#modalCard input[id^="me"]');
+    // The title by its field id (langFieldId): a hidden box stands before it in the Content fold.
+    const title = document.querySelector('#modalCard input[id^="me_t_"]');
     if (title) { title.value = title.value + " probe"; title.dispatchEvent(new Event("input", { bubbles: true })); }
     const typed = title ? title.value : null;
     const nx = document.getElementById("edNext"); if (nx && !nx.disabled) nx.click(); await wait(700);
     const moved = !!title && !document.body.contains(title);
     const u2 = document.getElementById("eUndoBtn"); if (u2) u2.click(); await wait(900);
-    const again = document.querySelector('#modalCard input[id^="me"]');
+    const again = document.querySelector('#modalCard input[id^="me_t_"]');
     const retyped = !!again && again.value === typed;
     closeModal(); await wait(400);
     const had = { agent: lsGet("eAgent"), cards: list().length };
@@ -3353,7 +3504,7 @@ const t0 = Date.now();
       const wait = ms => new Promise(r => setTimeout(r, ms));
       const ids = [...document.querySelectorAll("#list .card[data-id]")].map(c => c.getAttribute("data-id"));
       openCardEditor(ids[0]); await wait(700);
-      const title = document.querySelector('#modalCard input[id^="me"]');
+      const title = document.querySelector('#modalCard input[id^="me_t_"]');
       if (title) { title.value = title.value + " probe"; title.dispatchEvent(new Event("input", { bubbles: true })); }
       const save = document.getElementById("meSave"); if (save) save.click(); await wait(700);
       if (typeof closeModal === "function" && !document.getElementById("modal").hidden) closeModal();

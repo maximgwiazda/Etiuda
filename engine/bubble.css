@@ -22,7 +22,7 @@
   --m-resize:0s; --m-dismiss:0s; --m-travel:0s; --m-celebrate:0s; --m-wash:0s; --m-roll:0s;
   --m-nudge:0s}
 :root.e-still *,:root.e-still *::before,:root.e-still *::after{animation:none!important}
-/* THE FILL, cobalt in BOTH themes and the same blue as --accent, written out because this span
+/* THE FILL, cobalt in BOTH themes and the same blue as --accent-fill, written out because this span
    is published to host pages that carry none of the engine's tokens. A host redeclares the
    shadow per theme, which is the only one of the four a theme has ever moved. */
 :root{--bub:#2563eb; --bub-ink:#fff; --bub-dim:rgba(255,255,255,.92); --bub-shadow:rgba(37,99,235,.32)}

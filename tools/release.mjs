@@ -226,10 +226,11 @@ gate('the module gates: npm run split-guard', () => npm('split-guard') ? true : 
    this script was green over it, twice, because nothing in the sequence had ever started the
    built application. It costs about 115 s and it needs Windows, as csp.js and desk.js already
    do since both kill Electron through taskkill. */
-gate('the shell: npm run csp, npm run desk, npm run links, npm run catalog-watch and npm run shell-smoke', () => {
+gate('the shell: npm run csp, npm run desk, npm run links, npm run dot-field-desk, npm run catalog-watch and npm run shell-smoke', () => {
   if (!npm('csp')) return 'npm run csp failed';
   if (!npm('desk')) return 'npm run desk failed';
   if (!npm('links')) return 'npm run links failed';
+  if (!npm('dot-field-desk')) return 'npm run dot-field-desk failed';
   if (!npm('catalog-watch')) return 'npm run catalog-watch failed';
   return npm('shell-smoke') ? true : 'npm run shell-smoke failed: the packaged app is what ships, so this gate is not optional';
 });
@@ -239,8 +240,9 @@ gate('the shell: npm run csp, npm run desk, npm run links, npm run catalog-watch
    browser against a real boot, and until then no chain called it. About 16 s. tests/engine-selftest.js
    31 holds every gate in tests/ to a chain. swap beside them: load, eject and clear change the desk in
    place, and it holds each against a fresh start, in Chrome, in about a minute. */
-gate('the acceptance run: npm run smoke, npm run storage-carry and npm run swap', () => {
+gate('the acceptance run: npm run smoke, npm run glass-rim, npm run storage-carry and npm run swap', () => {
   if (!npm('smoke')) return 'npm run smoke failed';
+  if (!npm('glass-rim')) return 'npm run glass-rim failed';
   if (!npm('storage-carry')) return 'npm run storage-carry failed: a desk arriving from an earlier version is carried by that code';
   return npm('swap') ? true : 'npm run swap failed: a desk changed in place no longer equals a fresh start';
 });

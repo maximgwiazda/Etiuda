@@ -331,8 +331,11 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      --line separates passively (dividers), --line-strong marks a real edge (fields, tabs,
      dashed add-affordances). One token doing both reads as a lattice of equally loud lines. */
   --bg:#f7f8fa; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#e4e8ee; --line-strong:#cfd6e0;
-  --accent:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8; --mark-ink:#2563eb;
-  /* ONE ACCENT, the bubbles' cobalt, in every theme: white words on it read 5.17:1. */
+  --accent:#2563eb; --accent-fill:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8; --mark-ink:#2563eb;
+  /* TWO BLUES IN THE DARK THEMES, ONE IN LIGHT. --accent is what a mark, a line, a link or a focus ring
+     wears: the dark themes' former blue, #7aa2f7, which reads 6 to 7.5:1 on their grounds where the
+     cobalt reads 2.9 to 3.7. --accent-fill is what carries white words, a solid button, a selected pill,
+     a switch's thumb: the bubbles' cobalt in every theme, 5.17:1 under white. Light has one blue. */
   /* The dot field under the cards. A share of --dim rather than a colour, so the field follows
      the ink of whichever theme is on; the two shares are PICKED BY EYE from a sheet of twelve
      (ruled 2026-09-17) rather than derived, because a pale ground swallows a dot that a dark one
@@ -449,7 +452,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
   --band:#0a0d13; --header-bg:#191b20;
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
-  --accent:#2563eb; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
+  --accent:#7aa2f7; --accent-fill:#2563eb; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
@@ -491,7 +494,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
   --band:#0a0d13; --header-bg:#191b20;
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
-  --accent:#2563eb; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
+  --accent:#7aa2f7; --accent-fill:#2563eb; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
   --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
@@ -530,7 +533,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* The light half of the WinUI dress - the law lives at the base :root block. */
   --band:#1a4fa0; --header-bg:#f0f2f5;
   --field:#fdfdfd; --field-line:#e0e4ea; --field-edge:#aab3c0;
-  --accent:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8; --mark-ink:#2563eb;
+  --accent:#2563eb; --accent-fill:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8; --mark-ink:#2563eb;
   /* The star is a mark you scan for, not text you read - its ~2.6:1 on white is spent
      deliberately, and the badge, the filled star and the intent panel's gold edge always say
      it too. DARK IS NOT SYNCED to this hue and must not be. */
@@ -586,7 +589,9 @@ body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--sans);
   display:flex;flex-direction:column;height:100%;overflow:hidden}
 /* Reserve the scrollbar lane: filtering swings the list across one viewport many times a
    minute, and each crossing otherwise reflows the whole centred column sideways. */
-.scroller{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;
+.stage{flex:1 1 auto;min-height:0;display:grid;grid-template:minmax(0,1fr)/minmax(0,1fr)}
+.scroller,.dotfield{grid-area:1/1}
+.scroller{overflow-y:auto;overflow-x:hidden;
   scrollbar-gutter:stable;display:flex;flex-direction:column}
 /* Selected text carries the accent rather than the browser default, so even an accidental
    drag looks like part of the interface. */
@@ -686,7 +691,7 @@ body.e-host .row button,body.e-host .row input,body.e-host .row .tab{
 
 /* ---- THE BACKDROP. A material is composited behind the window and shows only where the
    window leaves pixels unpainted, so under e-backdrop the band's strip is the one place
-   nothing opaque is painted: the body's colour moves to the scroller, and the header's own
+   nothing opaque is painted: the body's colour moves to the dot field's layer under the scroller, and the header's own
    surface starts where the band ends. --band-h is measured by host.js, because the band's
    height moves with the shed ladder and with zoom. */
 body.e-backdrop{background:transparent}
@@ -696,8 +701,7 @@ body.e-backdrop{background:transparent}
    dialog up, band alpha .93 against 1.00 over the cards and 3.0x their edge energy. The floor
    goes back under the whole window while one is open, the tint above it unchanged. */
 body.e-backdrop:has(.modal:not([hidden])){background:var(--bg)}
-/* The colour alone: the shorthand would reset the dot field's image on the same element. */
-body.e-backdrop .scroller{background-color:var(--bg)}
+body.e-backdrop .dotfield{background:var(--bg)}
 body.e-backdrop header{
   background:linear-gradient(var(--header-bg) 0 0) no-repeat left bottom/100% calc(100% - var(--band-h,36px));
   background-origin:border-box}
@@ -1054,14 +1058,14 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   font:600 12px var(--sans);cursor:default;letter-spacing:.4px}
 .seg button+button{border-left:1px solid transparent}
 .seg button:hover,.seg button:focus-visible{color:var(--accent)}
-.seg button.on{background:var(--accent);color:#fff}
+.seg button.on{background:var(--accent-fill);color:#fff}
 .seg button[data-alt].on{background:var(--pl)}
 /* One thumb behind the letters, driven entirely by the .on class - :has() reads it, CSS
    animates it. Generalised: track 1/n, position n-indexed - data-n says how many,
    :has(button:nth-child(k).on) says which - so ANY seg slides, no JS. */
 .seg{position:relative}
 .seg::before{content:"";position:absolute;top:0;bottom:0;left:0;width:50%;
-  background:var(--accent);transform:translateX(0);
+  background:var(--accent-fill);transform:translateX(0);
   transition:transform var(--m-move) var(--m-ease), background-color var(--m-move) ease}
 .seg[data-n="1"]::before{width:100%}
 .seg[data-n="3"]::before{width:33.3333%}
@@ -1437,7 +1441,7 @@ body.pills-lines-expand .pills-slot.pills-overflow .pills,
    worse than any gain in emphasis; the cobalt fill and the white text already say which slice is
    below. The hint rules below keep their weight and so do their .on pairs, so a ringed pill is
    the same width picked or not, and picking is the one thing that never changes a width. */
-.pill.on{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:none}
+.pill.on{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;box-shadow:none}
 /* normal arrow while reordering pills (no grab/hand cue) */
 /* pan-y: a finger resting on a pill can still scroll the page - see the rail rows */
 .pill{touch-action:pan-y}
@@ -1462,9 +1466,9 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 .pill.hint:hover,.pill.hint:focus-visible{color:var(--dim);border-color:var(--accent)}
 .pill.hint2:hover,.pill.hint2:focus-visible{color:var(--dim);border-color:var(--go-edge)}
 /* selected + intent-relevant: blue fill, keep green border ring */
-.pill.on.hint2{background:var(--accent);border-color:var(--go-edge);color:#fff;
+.pill.on.hint2{background:var(--accent-fill);border-color:var(--go-edge);color:#fff;
   box-shadow:0 0 0 2px var(--go-soft);font-weight:650}
-.pill.on.hint{background:var(--accent);border-color:var(--accent);color:#fff;
+.pill.on.hint{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;
   box-shadow:0 0 0 2px var(--accent-soft);font-weight:650}
 .pill.over{border-color:var(--accent);border-style:dashed}
 /* 8px = the old 4px margin plus the ~4px space glyph the flex pill no longer renders. */
@@ -1574,12 +1578,12 @@ main{max-width:none;margin:16px 0 0;padding:0}
    uses - 12px, a .75px dot, about 27 levels above the canvas. It reaches only the gutters,
    the gaps between cards and the margins, --card-bg being opaque, so the card gutter is opened
    below to give it somewhere to be seen. */
-/* ON THE SCROLLER'S OWN BACKGROUND, so the field stands still while the cards scroll over it: a
-   scroll container's background does not move with its content. Never a z-index:-1 pseudo:
-   under body.e-backdrop the ground is .scroller's colour, and an in-flow ancestor's background
-   paints ABOVE a negative z-index descendant. One element's image paints above its own colour,
-   which is "behind the cards, in front of the ground" whichever element carries the ground. The
-   position is where main begins, so at rest the dots stand where the scrolling field stood. */
+/* A LAYER OF ITS OWN, UNDER THE SCROLLER IN THE SCROLLER'S GRID CELL. Nothing that scrolls carries the field, so
+   it stands still while the cards scroll: a background on the scrolled content, fixed or not, moved with them in
+   the desk. It paints only where the cards are, with the margins main has: 16px above, the app padding below
+   and right, and on the left the shell's own columns, the docked panel's included. */
+/* The lane is reserved the way the scroller reserves it, so the right margin is measured from the same edge.
+   Under body.e-backdrop this layer is the window's ground and the scroller above it is clear. */
 /* The last stop is the ink at zero alpha, NOT the keyword: transparent is transparent BLACK,
    and the two-pixel ramp between the stops would then pass through grey on a pale ground. */
 /* ONE LOOK AT EVERY DISPLAY SCALE, the 150% one, Maxim's choice. A stop is not anti-aliased: a
@@ -1587,10 +1591,16 @@ main{max-width:none;margin:16px 0 0;padding:0}
    and 4 smaller ones at 150%. The stops sit on those pixel centres' distances from the dot's
    (.707 at 100%, .8 at 125%, under .5 at 150%), so each scale paints about the ink of a .75px
    disc and 150% paints what it did; shell smoke 2k6 holds it. */
-.scroller{background-image:radial-gradient(circle at center,var(--dots-ink) 0 .5px,
+.dotfield{pointer-events:none;overflow:hidden;scrollbar-gutter:stable;padding:16px var(--app-pad) var(--app-pad)}
+/* ONE PITCH PAST THE CARDS ON EACH SIDE (Maxim, 2026-10-03 21:01: "ever so slightly bigger, so that it extends just so
+   beyond the cards"). 12px is the background-size below, a whole pitch, so the pattern's phase on the window is the
+   one it had at main's edges. On the left it ends in the docked panel's gap (18px) and never under the panel; on the
+   right it stops short of the scrollbar lane, which the padding keeps clear. */
+.dotfield>div{height:100%;margin-left:calc(var(--rail-col,0px) + var(--rail-colgap,0px) - 12px);margin-right:-12px;
+  background-image:radial-gradient(circle at center,var(--dots-ink) 0 .5px,
     color-mix(in srgb,var(--dots-ink) 44%,transparent) .707px .8px,
     color-mix(in srgb,var(--dots-ink) 0%,transparent) 1px);
-  background-size:12px 12px;background-position:var(--app-pad) 16px}
+  background-size:12px 12px}
 #list{margin-bottom:80px}
 /* The count and the fold sit at the far end of the group's own rule, so the eye meets the
    name first and the control only when it is looking for one. See .list-sep.e-catsep::after. */
@@ -1850,6 +1860,46 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 .tag{position:absolute;top:8px;right:10px;font:10px var(--mono);color:var(--dim);
   letter-spacing:.5px;pointer-events:none}
 .txt.plx .tag{color:var(--pl)}
+/* THE GLASS RIM: light catching an edge, drawn as a 1px ring cut from this gradient. A
+   line along the top and the bottom edge, brightest at the top's left and the bottom's right and
+   fading along the edge, wide and shallow so the sides are all but dark. The two catches are one
+   mirrored pair (top and bottom read alike) and a steady line holds both edges, so the brightest
+   point is within about one and a half times the dimmest and the line does not read thicker where it is brighter. Static.
+   Dark themes only. */
+:root:not([data-theme=light]){
+  --rim:radial-gradient(520px 36px at 0 0,rgba(255,255,255,.2),rgba(255,255,255,.08) 40%,transparent 85%),
+        radial-gradient(520px 36px at 100% 100%,rgba(255,255,255,.2),rgba(255,255,255,.08) 40%,transparent 85%),
+        linear-gradient(rgba(255,255,255,.18),transparent 12px calc(100% - 12px),rgba(255,255,255,.18)),
+        linear-gradient(rgba(255,255,255,.02),rgba(255,255,255,.02))}
+/* The macro's bevel gives way to the rim; the ring sits over its border. */
+:root:not([data-theme=light]) .txt{--card-shadow:0 0 #0000}
+:root:not([data-theme=light]) .txt::after{content:"";position:absolute;inset:-1px;
+  border-radius:inherit;padding:1px;background:var(--rim);pointer-events:none;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude}
+/* THE RIM IS A REAL BORDER where the browser can clip a background to one. A border is snapped to whole
+   device pixels and a masked ring is not, so at a fractional scale (125 and 150 per cent) the mask split the
+   line over two rows, differently at the top and the bottom. The ring is the pseudo's own 1px transparent border
+   with the gradient clipped to it, laid exactly over the macro's border. */
+/* --rim-bw is the macro border's snapped width, floor(ratio) / ratio of a pixel, so the inset is the same
+   width to the device pixel (the steps are the Windows scales; between them the error stays under a quarter
+   of a device pixel). Hover, the mark and the accent rings still set the macro's own border and shadow, and
+   the ring still sits over them. */
+:root{--rim-bw:1px}
+@media (min-resolution:1.25dppx){:root{--rim-bw:.8px}}
+@media (min-resolution:1.5dppx){:root{--rim-bw:.666667px}}
+@media (min-resolution:1.75dppx){:root{--rim-bw:.571429px}}
+@media (min-resolution:2dppx){:root{--rim-bw:1px}}
+@media (min-resolution:2.25dppx){:root{--rim-bw:.888889px}}
+@media (min-resolution:2.5dppx){:root{--rim-bw:.8px}}
+@media (min-resolution:3dppx){:root{--rim-bw:1px}}
+@media (min-resolution:3.5dppx){:root{--rim-bw:.857143px}}
+@media (min-resolution:4dppx){:root{--rim-bw:1px}}
+@supports (background-clip:border-area){
+  :root:not([data-theme=light]) .txt::after{inset:calc(-1 * var(--rim-bw));padding:0;border:1px solid transparent;
+    background-origin:border-box;background-clip:border-area;
+    -webkit-mask:none;mask:none}
+}
 /* The badge is out of the flow, so a float the badge's own width makes the first line stop short of it.
    Its width is the badge's, in the badge's font, less the 44px the block's padding already gives:
    10px right offset, 8px clear, 44px padding. The block's own padding is never touched. */
@@ -1863,7 +1913,7 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 .swap code{background:var(--accent-soft);color:var(--accent);padding:1px 6px;border-radius:4px;
   font:12px var(--mono);cursor:default;display:inline-block;margin:2px 3px 2px 0}
 .swap code:hover{outline:1px solid var(--accent)}
-.swap code.on{background:var(--accent);color:#fff}
+.swap code.on{background:var(--accent-fill);color:#fff}
 .swap code.on::after{content:" ✕";opacity:.7}
 /* Soft separator at the macro-search tier boundary: above it the entries are *about* the
    query (title / keywords / category), below they only mention it in the body. A hairline
@@ -2218,7 +2268,7 @@ body.tour-cacts .card>.chead .cacts{opacity:1}
 /* Docked sets only the two values that animate; everything structural lives on .shell.
    var(--rail-max) replaces minmax(160px,...): a minmax cannot be interpolated, and the
    shrink it allowed was unreachable - docking is gated at 2.5 panel widths. */
-body.rail-on .shell{--rail-col:var(--rail-max);--rail-colgap:var(--rail-gap)}
+body.rail-on .shell,body.rail-on .dotfield{--rail-col:var(--rail-max);--rail-colgap:var(--rail-gap)}
 /* align-items:start keeps the panel at its natural height; main alone stretches, so the footer
    still reaches the bottom of the window when the list is short. */
 main{align-self:stretch}   /* the shell is a grid in both states now, so this is unconditional */
@@ -2350,16 +2400,16 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 @keyframes eModalBgIn{from{opacity:0}to{opacity:1}}
 @keyframes eModalCardIn{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
 /* A COVERED ARRIVAL (the boot guard's arrive): the band stays, and what sits under it arrives.
-   The dot field is the scroller's own ground and stays. Held, the content is drawn at a trace no
+   The dot field stays with its ground. Held, the content is drawn at a trace no
    eye resolves rather than not drawn, so it is rasterised before its fade begins. */
 @keyframes eLeave{to{opacity:0}}
 /* A SURFACE CLOSING (motion.js dismissNode): it leaves on the dismiss tier, and what it holds stands still. */
 .e-gone{animation:eLeave var(--m-dismiss) ease forwards!important;pointer-events:none!important}
 .e-gone *{animation:none!important;transition:none!important}
 html.e-veiled body{visibility:hidden}
-html.e-arriving body>:not(header,#railHit,.scroller,script),html.e-arriving .scroller>.shell,
+html.e-arriving body>:not(header,#railHit,.stage,script),html.e-arriving .scroller>.shell,
 html.e-arriving #pillsSlot{opacity:.004}
-html.e-arrived body>:not(header,#railHit,.scroller,script),html.e-arrived .scroller>.shell,
+html.e-arrived body>:not(header,#railHit,.stage,script),html.e-arrived .scroller>.shell,
 html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
 .modal:not([hidden]) .modal-bg{animation:eModalBgIn var(--m-scrim) ease both}
 .modal:not([hidden]) .modal-card{animation:eModalCardIn var(--m-surface) var(--m-ease) both}
@@ -2385,6 +2435,37 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
   display:flex;flex-direction:column;overflow:hidden;
   background:var(--panel-raised);color:var(--ink);border:1px solid var(--line);
   border-radius:16px;box-shadow:0 8px 20px rgba(0,0,0,.12),0 28px 68px rgba(0,0,0,.22);padding:0}
+/* The intent panel, the dialogs, the menus, Quick facts and the opened pill bar wear the rim inside their
+   border; their bevel gives way to it. A surface that scrolls as a whole carries the ring with its content. */
+:root:not([data-theme=light]) #intentRail,
+:root:not([data-theme=light]) .facts-panel,
+:root:not([data-theme=light]) .pills-slot.pills-overflow .pills{--bevel:var(--bevel-off)}
+:root:not([data-theme=light]) #intentRail::after,
+:root:not([data-theme=light]) .modal-card::after,
+:root:not([data-theme=light]) .menu::after,
+:root:not([data-theme=light]) .facts-panel::after,
+:root:not([data-theme=light]) .pills-slot.pills-overflow .pills::after{content:"";position:absolute;inset:0;
+  border-radius:calc(var(--radius) - 1px);padding:1px;background:var(--rim);pointer-events:none;z-index:3;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude}
+:root:not([data-theme=light]) .modal-card::after{border-radius:15px}
+/* The pill bar is flat while it is closed, so its ring fades in with the glass and the shadow. */
+:root:not([data-theme=light]) .pills-slot.pills-overflow .pills::after{opacity:0;transition:opacity var(--m-reveal) var(--m-ease)}
+:root:not([data-theme=light]) body.pills-lines-expand .pills-slot.pills-overflow .pills::after,
+:root:not([data-theme=light]) .pills-slot.pills-overflow:hover .pills::after,
+:root:not([data-theme=light]) .pills-slot.pills-overflow.pills-navpeek .pills::after,
+:root:not([data-theme=light]) .pills-slot.pills-overflow.pills-expand .pills::after{opacity:1}
+/* Inside their own border, so the same real border as the macro's: no inset to match, the pseudo's box is the
+   padding box and its 1px border snaps with it. */
+@supports (background-clip:border-area){
+  :root:not([data-theme=light]) #intentRail::after,
+  :root:not([data-theme=light]) .modal-card::after,
+  :root:not([data-theme=light]) .menu::after,
+  :root:not([data-theme=light]) .facts-panel::after,
+  :root:not([data-theme=light]) .pills-slot.pills-overflow .pills::after{padding:0;border:1px solid transparent;
+    background-origin:border-box;background-clip:border-area;
+    -webkit-mask:none;mask:none}
+}
 /* The only thing that scrolls, so the scrollbar sits beside the content and stops short of both
    pinned bars. min-height:0 is load-bearing: a flex item will not shrink below its content
    without it, and the middle would push the actions row off the bottom instead of scrolling. */
@@ -2520,7 +2601,7 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 /* PRIMARY IS A BAR'S DRESSING rather than a modifier a button may carry anywhere: only an
    actions bar decides which of its buttons leads, so outside one the class paints nothing and
    is not written. Measured, it had been on four buttons that read as plain. */
-.modal-actions .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.modal-actions .btn.primary{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff;font-weight:600}
 /* Two buttons at the same edge read as one loosely spaced group, and one of these forgets your
    work while the other brings a file in. A hairline says they are two things. */
 .modal-actions .mf-left .mf-sep{align-self:stretch;width:1px;margin:3px;background:var(--line-strong);
@@ -2532,7 +2613,7 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    it. Named at both primary buttons and at the two hint pills; nowhere else in the sheet does
    a variant meet a state at equal weight. */
 .modal-actions .btn.primary:hover,.modal-actions .btn.primary:focus-visible{filter:brightness(.92);color:#fff;
-  background:var(--accent);border-color:var(--accent)}
+  background:var(--accent-fill);border-color:var(--accent-fill)}
 /* Hover deepens the fill under white in dark, where lightening it would thin the words; light keeps its lift. */
 :root[data-theme=light] .modal-actions .btn.primary:hover,
 :root[data-theme=light] .modal-actions .btn.primary:focus-visible{filter:brightness(1.08)}
@@ -3052,7 +3133,7 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 .nx-hit small{flex:none;color:var(--dim);font-size:12px}
 .nx-was{margin:0;font-size:12.5px;color:var(--dim)}
 .set-slider{display:flex;align-items:center;gap:10px;width:100%}
-.set-slider input[type=range]{flex:1;min-width:0;accent-color:var(--accent)}
+.set-slider input[type=range]{flex:1;min-width:0;accent-color:var(--accent-fill)}
 .set-slider output{flex:none;min-width:52px;text-align:right;font:600 12.5px var(--sans);
   color:var(--dim);font-variant-numeric:tabular-nums}
 
@@ -3121,7 +3202,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   --m-resize:0s; --m-dismiss:0s; --m-travel:0s; --m-celebrate:0s; --m-wash:0s; --m-roll:0s;
   --m-nudge:0s}
 :root.e-still *,:root.e-still *::before,:root.e-still *::after{animation:none!important}
-/* THE FILL, cobalt in BOTH themes and the same blue as --accent, written out because this span
+/* THE FILL, cobalt in BOTH themes and the same blue as --accent-fill, written out because this span
    is published to host pages that carry none of the engine's tokens. A host redeclares the
    shadow per theme, which is the only one of the four a theme has ever moved. */
 :root{--bub:#2563eb; --bub-ink:#fff; --bub-dim:rgba(255,255,255,.92); --bub-shadow:rgba(37,99,235,.32)}
@@ -3746,6 +3827,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 </header>
 
 <div id="railHit" title="Hover here or hold Ctrl to show the intent panel" aria-hidden="true"></div>
+<div class="stage">
+<div class="dotfield" id="dotField" aria-hidden="true"><div></div></div>
 <div class="scroller" id="pageScroll">
 <div class="shell">
 <div class="rail-slot" id="railSlot">
@@ -3772,6 +3855,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
     Created by <b>Maxim Gwiazda</b> © 2026 · Etiuda <b>v</b><b id="eVer"></b> · <b class="nw cut-peek">Etiuda Source-Available Licence 1.0</b> · free for personal use
   </footer>
 </main>
+</div>
 </div>
 </div>
 
@@ -18479,10 +18563,11 @@ What you type stays in this browser only.`;
   var fifth_exports = {};
   __export(fifth_exports, {
     FIFTH_PHI0: () => FIFTH_PHI0,
-    fifthAt: () => fifthAt,
+    fifthBand: () => fifthBand,
     fifthCutPath: () => fifthCutPath,
+    fifthLay: () => fifthLay,
     fifthPhase: () => fifthPhase,
-    fifthRide: () => fifthRide,
+    fifthRadius: () => fifthRadius,
     wireFifth: () => wireFifth
   });
   var FIFTH_PHI0 = Math.PI / 4;
@@ -18501,7 +18586,7 @@ What you type stays in this browser only.`;
     const fine = [];
     for (let i = 0; i <= FIFTH_FINE; i++) {
       const t2 = FIFTH_T0 + (FIFTH_T1 - FIFTH_T0) * i / FIFTH_FINE;
-      fine.push([128 + FIFTH_A * Math.sin(3 * t2 + phi), 128 + FIFTH_A * Math.sin(2 * t2)]);
+      fine.push([128 + FIFTH_A * Math.sin(3 * t2 + phi), 128 + FIFTH_A * Math.sin(2 * t2), t2]);
     }
     const out = [fine[0]];
     let acc = 0;
@@ -18534,40 +18619,43 @@ What you type stays in this browser only.`;
       return "M" + fifthF2(x - r) + " " + fifthF2(y) + "a" + fifthF2(r) + " " + fifthF2(r) + " 0 1 0 " + fifthF2(2 * r) + " 0a" + fifthF2(r) + " " + fifthF2(r) + " 0 1 0 " + fifthF2(-2 * r) + " 0";
     }).join("") + "Z";
   }
-  function fifthAt(t2, phi, out) {
-    const f = fifthFit();
-    out[0] = (128 + FIFTH_A * Math.sin(3 * t2 + phi)) * f.k + f.ox;
-    out[1] = (128 + FIFTH_A * Math.sin(2 * t2)) * f.k + f.oy;
+  function fifthBand(phi) {
+    const f = fifthFit(), pass = fifthPass(phi), out = [];
+    pass.forEach((p) => {
+      const z = Math.cos(3 * p[2] + phi);
+      out.push([p[0] * f.k + f.ox, p[1] * f.k + f.oy, z]);
+      out.push([(FIFTH_BOX - p[0]) * f.k + f.ox, p[1] * f.k + f.oy, -z]);
+    });
+    return out;
   }
-  function fifthRide(dots, to) {
-    const N = 1500, ts = [], xs = [], ys = [], o = [0, 0];
-    for (let i = 0; i <= N; i++) {
-      const t2 = FIFTH_T0 + (FIFTH_T1 - FIFTH_T0) * i / N;
-      fifthAt(t2, FIFTH_PHI0, o);
+  function fifthRadius() {
+    return FIFTH_R * fifthFit().k;
+  }
+  var FIFTH_FAR = 0.6;
+  function fifthLight(z) {
+    const u = z * 0.5 + 0.5;
+    return FIFTH_FAR + (1 - FIFTH_FAR) * u * u * (3 - 2 * u);
+  }
+  function fifthLay(phi, to, rad, feather, lat, out) {
+    out.fill(0);
+    const o = [0, 0];
+    fifthBand(phi).forEach((p) => {
+      o[0] = p[0];
+      o[1] = p[1];
       to(o);
-      ts.push(t2);
-      xs.push(o[0]);
-      ys.push(o[1]);
-    }
-    dots.forEach((p) => {
-      let b = 0, bd = Infinity;
-      for (let i = 0; i <= N; i++) {
-        const d = (p.x - xs[i]) * (p.x - xs[i]) + (p.y - ys[i]) * (p.y - ys[i]);
-        if (d < bd) {
-          bd = d;
-          b = i;
+      const lum = fifthLight(p[2]);
+      const i0 = Math.max(0, Math.ceil((o[0] - rad - lat.x0) / lat.step)), i1 = Math.min(lat.nx - 1, Math.floor((o[0] + rad - lat.x0) / lat.step));
+      const j0 = Math.max(0, Math.ceil((o[1] - rad - lat.y0) / lat.step)), j1 = Math.min(lat.ny - 1, Math.floor((o[1] + rad - lat.y0) / lat.step));
+      for (let j = j0; j <= j1; j++) {
+        for (let i = i0; i <= i1; i++) {
+          const d = Math.hypot(lat.x0 + i * lat.step - o[0], lat.y0 + j * lat.step - o[1]);
+          if (d >= rad) continue;
+          const v = Math.min(1, (rad - d) / feather) * lum, k = j * lat.nx + i;
+          if (v > out[k]) out[k] = v;
         }
       }
-      p.t = Math.random() < 0.5 ? ts[b] : 3 * Math.PI / 2 - ts[b];
-      p.ox = p.x - xs[b];
-      p.oy = p.y - ys[b];
     });
-    return (p, phi, out) => {
-      fifthAt(p.t, phi, out);
-      to(out);
-      out[0] += p.ox;
-      out[1] += p.oy;
-    };
+    return out;
   }
   var fifthClock = { phi: FIFTH_PHI0, last: null };
   function fifthStep(phi, dt) {
@@ -18620,63 +18708,76 @@ What you type stays in this browser only.`;
   // src/modules/empty-mark.js
   var MARK_PX = 280;
   var MARK_STEP = 3.5;
+  var MARK_FEATHER = MARK_STEP / 2;
   var GATHER_MS = M_MS.gather;
   var TWINKLE_MS = M_MS.twinkle;
   var ALPHA_STEPS = 16;
   var MARK_QUIET_MS = 1e3;
   var eMark = null;
   var markWaiters = [];
-  var markHome = null;
+  var markLay = null;
   function markDots() {
     const svg = document.querySelector(".brand svg"), path = svg && svg.querySelector("path");
     if (!path) return [];
-    const g = path.parentNode, probe = document.createElement("canvas").getContext("2d");
+    const g = path.parentNode;
     const vb = svg.viewBox && svg.viewBox.baseVal, s = MARK_PX / (vb && vb.width || 256);
-    probe.setTransform(s, 0, 0, s, 0, 0);
     const tf = g && g.transform && g.transform.baseVal.consolidate();
-    if (tf) {
-      const m2 = tf.matrix;
-      probe.transform(m2.a, m2.b, m2.c, m2.d, m2.e, m2.f);
-    }
-    const shape = new Path2D(fifthCutPath(FIFTH_PHI0)), dots = [];
-    for (let y = MARK_STEP / 2; y < MARK_PX; y += MARK_STEP) {
-      for (let x = MARK_STEP / 2; x < MARK_PX; x += MARK_STEP) {
-        if (!probe.isPointInPath(shape, x, y)) continue;
+    const m = tf ? tf.matrix : { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+    const to = (o2) => {
+      const u = o2[0], v = o2[1];
+      o2[0] = s * (m.a * u + m.c * v + m.e);
+      o2[1] = s * (m.b * u + m.d * v + m.f);
+    };
+    const rad = fifthRadius() * s * Math.hypot(m.a, m.b), o = [0, 0];
+    let x1 = Infinity, x2 = -Infinity, y1 = Infinity, y2 = -Infinity;
+    fifthBand(FIFTH_PHI0).forEach((p) => {
+      o[0] = p[0];
+      o[1] = p[1];
+      to(o);
+      x1 = Math.min(x1, o[0]);
+      x2 = Math.max(x2, o[0]);
+      y1 = Math.min(y1, o[1]);
+      y2 = Math.max(y2, o[1]);
+    });
+    const pad = rad + MARK_STEP, half = MARK_STEP / 2;
+    const i0 = Math.max(0, Math.floor((x1 - pad - half) / MARK_STEP)), i1 = Math.min(Math.floor(MARK_PX / MARK_STEP) - 1, Math.ceil((x2 + pad - half) / MARK_STEP));
+    const j0 = Math.max(0, Math.floor((y1 - pad - half) / MARK_STEP)), j1 = Math.min(Math.floor(MARK_PX / MARK_STEP) - 1, Math.ceil((y2 + pad - half) / MARK_STEP));
+    const lat = { x0: half + i0 * MARK_STEP, y0: half + j0 * MARK_STEP, step: MARK_STEP, nx: i1 - i0 + 1, ny: j1 - j0 + 1 }, dots = [];
+    for (let j = 0; j < lat.ny; j++) {
+      for (let i = 0; i < lat.nx; i++) {
         const a = Math.random() * 6.2832, r = 60 + Math.random() * 140;
         dots.push({
-          x,
-          y,
+          x: lat.x0 + i * MARK_STEP,
+          y: lat.y0 + j * MARK_STEP,
           sx: MARK_PX / 2 + Math.cos(a) * r,
           sy: MARK_PX / 2 + Math.sin(a) * r,
           ph: Math.random() * 6.2832,
-          sp: 0.6 + Math.random() * 0.9
+          sp: 0.6 + Math.random() * 0.9,
+          l: 0
         });
       }
     }
-    const m = tf ? tf.matrix : { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
-    markHome = fifthRide(dots, (o) => {
-      const u = o[0], v = o[1];
-      o[0] = s * (m.a * u + m.c * v + m.e);
-      o[1] = s * (m.b * u + m.d * v + m.f);
-    });
+    const light = new Float32Array(dots.length);
+    markLay = (ds, phi) => {
+      fifthLay(phi, to, rad, MARK_FEATHER, lat, light);
+      for (let n = 0; n < ds.length; n++) ds[n].l = light[n];
+    };
     return dots;
   }
   function drawMark(k, ms) {
     const still = mgReduceMotion(), ctx = k.ctx;
     const t2 = ms / 1e3, gather = still ? 1 : Math.min(1, ms / GATHER_MS);
     const e = 1 - Math.pow(1 - gather, 3);
-    const bins = [], home = still ? null : k.home, phi = home ? fifthPhase() : 0, o = [0, 0];
+    const bins = [], phi = k.lay ? still ? FIFTH_PHI0 : fifthPhase() : 0;
+    if (k.lay && k.laid !== phi) {
+      k.lay(k.dots, phi);
+      k.laid = phi;
+    }
     k.dots.forEach((p) => {
-      if (home) {
-        home(p, phi, o);
-        p.hx = o[0];
-        p.hy = o[1];
-      } else {
-        p.hx = p.x;
-        p.hy = p.y;
-      }
+      const lit = k.lay ? p.l : 1;
+      if (!lit) return;
       const tw = still ? 0.75 : 0.55 + 0.45 * Math.sin(p.ph + t2 * p.sp * 1.6);
-      const a = Math.min(1, tw * (0.45 + 0.75 * e));
+      const a = Math.min(1, tw * (0.45 + 0.75 * e)) * lit;
       const b = Math.round(a * ALPHA_STEPS);
       if (b) (bins[b] || (bins[b] = [])).push(p);
     });
@@ -18686,7 +18787,7 @@ What you type stays in this browser only.`;
       ctx.globalAlpha = b / ALPHA_STEPS;
       ctx.beginPath();
       ps.forEach((p) => {
-        const x = p.sx + (p.hx - p.sx) * e, y = p.sy + (p.hy - p.sy) * e;
+        const x = p.sx + (p.x - p.sx) * e, y = p.sy + (p.y - p.sy) * e;
         ctx.moveTo(x + 1.05, y);
         ctx.arc(x, y, 1.05, 0, 6.2832);
       });
@@ -18804,7 +18905,7 @@ What you type stays in this browser only.`;
     host.insertBefore(cv, host.firstChild);
     const ctx = cv.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const k = eMark = { cv, ctx, dots, home: markHome, ms: 0, last: 0, gap: 1e3 / 60, formed: false, raf: 0, hold: 0, theme: null };
+    const k = eMark = { cv, ctx, dots, lay: markLay, laid: null, ms: 0, last: 0, gap: 1e3 / 60, formed: false, raf: 0, hold: 0, theme: null };
     k.theme = new MutationObserver(() => {
       if (mgReduceMotion()) drawMark(k, k.ms);
     });

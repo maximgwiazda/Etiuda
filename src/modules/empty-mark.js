@@ -3,38 +3,49 @@
    dialog standing over the desk holds the gathering until it closes, so it is seen. Under
    either quiet switch it is drawn once, gathered and still. */
 import { mgReduceMotion, M_MS } from "./motion.js";
-import { FIFTH_PHI0, fifthCutPath, fifthPhase, fifthRide } from "./fifth.js";
+import { FIFTH_PHI0, fifthBand, fifthLay, fifthPhase, fifthRadius } from "./fifth.js";
 
-const MARK_PX=280, MARK_STEP=3.5, GATHER_MS=M_MS.gather, TWINKLE_MS=M_MS.twinkle, ALPHA_STEPS=16;
+const MARK_PX=280, MARK_STEP=3.5, MARK_FEATHER=MARK_STEP/2, GATHER_MS=M_MS.gather, TWINKLE_MS=M_MS.twinkle, ALPHA_STEPS=16;
 // A wait on the gather is let go once no frame has come for this long.
 const MARK_QUIET_MS=1000;
-let eMark=null, markWaiters=[], markHome=null;
+let eMark=null, markWaiters=[], markLay=null;
 
-/* The glyph is the header's standard figure: its group transform, scaled from the viewBox to the
-   canvas, sampled on a grid by isPointInPath. The header's own path may be mid-turn, so the figure
-   comes from fifth.js, which a leg holds equal to the markup's copy. */
+/* THE DESK'S DOTS ARE A FIXED LATTICE and the figure is the band laid over it, as the hero's is: a dot is lit
+   when it stands inside the band at the phase (fifth.js, fifthLay), so the band is one solid, even stretch of
+   dots at every phase, the dots lit follow its area, and a dot at the rim fades rather than blinks. Depth is
+   light only, the far pass dimmer, never gone. The lattice holds every dot the band can reach: the figure
+   never leaves the standard one's square. The header's group transform, scaled to the canvas, takes the
+   figure's box onto it; the figure comes from fifth.js, the header's own path may be mid-turn. */
 function markDots(){
   const svg=document.querySelector(".brand svg"), path=svg && svg.querySelector("path");
   if(!path) return [];
-  const g=path.parentNode, probe=document.createElement("canvas").getContext("2d");
+  const g=path.parentNode;
   const vb=svg.viewBox && svg.viewBox.baseVal, s=MARK_PX/((vb && vb.width)||256);
-  probe.setTransform(s,0,0,s,0,0);
   const tf=g && g.transform && g.transform.baseVal.consolidate();
-  if(tf){ const m=tf.matrix; probe.transform(m.a,m.b,m.c,m.d,m.e,m.f); }
-  const shape=new Path2D(fifthCutPath(FIFTH_PHI0)), dots=[];
-  for(let y=MARK_STEP/2; y<MARK_PX; y+=MARK_STEP){
-    for(let x=MARK_STEP/2; x<MARK_PX; x+=MARK_STEP){
-      if(!probe.isPointInPath(shape,x,y)) continue;
+  const m=tf ? tf.matrix : {a:1,b:0,c:0,d:1,e:0,f:0};
+  const to=o=>{ const u=o[0], v=o[1]; o[0]=s*(m.a*u+m.c*v+m.e); o[1]=s*(m.b*u+m.d*v+m.f); };
+  const rad=fifthRadius()*s*Math.hypot(m.a,m.b), o=[0,0];
+  let x1=Infinity, x2=-Infinity, y1=Infinity, y2=-Infinity;
+  fifthBand(FIFTH_PHI0).forEach(p=>{
+    o[0]=p[0]; o[1]=p[1]; to(o);
+    x1=Math.min(x1,o[0]); x2=Math.max(x2,o[0]); y1=Math.min(y1,o[1]); y2=Math.max(y2,o[1]);
+  });
+  const pad=rad+MARK_STEP, half=MARK_STEP/2;
+  const i0=Math.max(0,Math.floor((x1-pad-half)/MARK_STEP)), i1=Math.min(Math.floor(MARK_PX/MARK_STEP)-1,Math.ceil((x2+pad-half)/MARK_STEP));
+  const j0=Math.max(0,Math.floor((y1-pad-half)/MARK_STEP)), j1=Math.min(Math.floor(MARK_PX/MARK_STEP)-1,Math.ceil((y2+pad-half)/MARK_STEP));
+  const lat={x0:half+i0*MARK_STEP, y0:half+j0*MARK_STEP, step:MARK_STEP, nx:i1-i0+1, ny:j1-j0+1}, dots=[];
+  for(let j=0;j<lat.ny;j++){
+    for(let i=0;i<lat.nx;i++){
       const a=Math.random()*6.2832, r=60+Math.random()*140;
-      dots.push({x:x, y:y, sx:MARK_PX/2+Math.cos(a)*r, sy:MARK_PX/2+Math.sin(a)*r,
-        ph:Math.random()*6.2832, sp:0.6+Math.random()*0.9});
+      dots.push({x:lat.x0+i*MARK_STEP, y:lat.y0+j*MARK_STEP, sx:MARK_PX/2+Math.cos(a)*r, sy:MARK_PX/2+Math.sin(a)*r,
+        ph:Math.random()*6.2832, sp:0.6+Math.random()*0.9, l:0});
     }
   }
-  const m=tf ? tf.matrix : {a:1,b:0,c:0,d:1,e:0,f:0};
-  markHome=fifthRide(dots, o=>{
-    const u=o[0], v=o[1];
-    o[0]=s*(m.a*u+m.c*v+m.e); o[1]=s*(m.b*u+m.d*v+m.f);
-  });
+  const light=new Float32Array(dots.length);
+  markLay=(ds, phi)=>{
+    fifthLay(phi, to, rad, MARK_FEATHER, lat, light);
+    for(let n=0;n<ds.length;n++) ds[n].l=light[n];
+  };
   return dots;
 }
 // Dots are batched by alpha into a few fills a frame rather than one fill a dot. `ms` is the
@@ -43,11 +54,13 @@ function drawMark(k, ms){
   const still=mgReduceMotion(), ctx=k.ctx;
   const t=ms/1000, gather=still ? 1 : Math.min(1,ms/GATHER_MS);
   const e=1-Math.pow(1-gather,3);
-  const bins=[], home=still ? null : k.home, phi=home ? fifthPhase() : 0, o=[0,0];
+  const bins=[], phi=k.lay ? (still ? FIFTH_PHI0 : fifthPhase()) : 0;
+  if(k.lay && k.laid!==phi){ k.lay(k.dots, phi); k.laid=phi; }
   k.dots.forEach(p=>{
-    if(home){ home(p, phi, o); p.hx=o[0]; p.hy=o[1]; } else { p.hx=p.x; p.hy=p.y; }
+    const lit=k.lay ? p.l : 1;
+    if(!lit) return;
     const tw=still ? 0.75 : 0.55+0.45*Math.sin(p.ph+t*p.sp*1.6);
-    const a=Math.min(1, tw*(0.45+0.75*e));
+    const a=Math.min(1, tw*(0.45+0.75*e))*lit;
     const b=Math.round(a*ALPHA_STEPS);
     if(b) (bins[b]||(bins[b]=[])).push(p);
   });
@@ -57,7 +70,7 @@ function drawMark(k, ms){
     ctx.globalAlpha=b/ALPHA_STEPS;
     ctx.beginPath();
     ps.forEach(p=>{
-      const x=p.sx+(p.hx-p.sx)*e, y=p.sy+(p.hy-p.sy)*e;
+      const x=p.sx+(p.x-p.sx)*e, y=p.sy+(p.y-p.sy)*e;
       ctx.moveTo(x+1.05,y); ctx.arc(x,y,1.05,0,6.2832);
     });
     ctx.fill();
@@ -152,7 +165,7 @@ function syncEmptyMark(host){
   host.insertBefore(cv, host.firstChild);
   const ctx=cv.getContext("2d");
   ctx.setTransform(dpr,0,0,dpr,0,0);
-  const k=eMark={cv:cv, ctx:ctx, dots:dots, home:markHome, ms:0, last:0, gap:1000/60, formed:false, raf:0, hold:0, theme:null};
+  const k=eMark={cv:cv, ctx:ctx, dots:dots, lay:markLay, laid:null, ms:0, last:0, gap:1000/60, formed:false, raf:0, hold:0, theme:null};
   // A still mark has no frame to pick up a new theme's accent, so it is redrawn on the flip.
   k.theme=new MutationObserver(()=>{ if(mgReduceMotion()) drawMark(k, k.ms); });
   k.theme.observe(document.documentElement,{attributes:true, attributeFilter:["data-theme"]});

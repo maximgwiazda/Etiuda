@@ -491,6 +491,7 @@ const PORT_BLOCKS = {
   "catalog-watch": { base: 9428, size: 4 },
   "pick-desk":     { base: 9432, size: 2 },   /* one launch: the picker over a window of its own */
   "links":         { base: 9434, size: 2 },   /* one launch: the links pressed and opened by script */
+  "dot-field-desk": { base: 9436, size: 2 },  /* one launch: the dot field's place and stillness in the desk's window */
   "shell-smoke":   { base: 9460, size: 80 },   /* one port per launch of the shell, and it launches
                                                   it dozens of times; the run says at its end which
                                                   of the block it actually used */
