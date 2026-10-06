@@ -31,6 +31,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/sbom.mjs                               no fixtures, the software bill of materials: the tool, and the release leaving one beside the installer
     node tests/pick.mjs                               no fixtures, the picker over the chat: the desk's answers, the preload and the shell, electron stubbed
     node tests/copy-routes.mjs                        no fixtures, the copy routes over a stand-in document: a brace copied as written with nothing asked, the card's stamp in the toast on every route, and the action button's replies and dock
+    node tests/about.mjs                              no fixtures, the About as built: engine/etiuda.html's own script in a vm, every screen read back against the copywriter's rows in both languages, the build's day, and the agreement opened from the installer's text with no network
     node tests/catalog-trust.mjs                      no fixtures, a catalog's signature as the desk reads it, shell stubbed
     node tests/catalog-trust-desk.mjs                 no fixtures, the desk's own load path saying that signature, one process per launch
     node tests/catalog-trust-desk.mjs, legs 73a to 73e no fixtures, an empty desk that made a catalog from nothing offered the lead's import of it by its lineage
@@ -49,10 +50,11 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/catalog-watch.js  the watched catalog, one app run
     node tests/pick-desk.js                          the picker over a real window: it takes the foreground and presses keys, so by hand, nobody at the keyboard
     node tests/swap.mjs                              the desk changed in place held to a fresh start, Chrome, no fixtures
+    node tests/theme-fade.mjs                        every category, then the theme's fade: the page lives, the hold is let go, the record Maintenance shows across a reload, and a control that the fault still kills the page without the hold, Chrome, no fixtures
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
     ETIUDA_FIXTURES=<folder> node tests/reinstall.js     install, use, uninstall, install again
 
-`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `module-calls.mjs`, `desk-ipc.mjs`, `catalog-history.mjs`, `catalog-shared.mjs`, `desk-growth.mjs`, `shell-office.mjs`, `hpke.mjs`, `team-desk.mjs`, `team-join.mjs`, `pick.mjs`, `copy-routes.mjs`, `catalog-trust.mjs`, `catalog-trust-desk.mjs`, `token-canary.mjs`, `test.js`, `i18n-scan.js`,
+`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `module-calls.mjs`, `desk-ipc.mjs`, `catalog-history.mjs`, `catalog-shared.mjs`, `desk-growth.mjs`, `shell-office.mjs`, `hpke.mjs`, `team-desk.mjs`, `team-join.mjs`, `pick.mjs`, `copy-routes.mjs`, `about.mjs`, `catalog-trust.mjs`, `catalog-trust-desk.mjs`, `token-canary.mjs`, `test.js`, `i18n-scan.js`,
 `pl-diacritics.js`, `css-layers.js` and `motion-tokens.js`, none of which needs a fixture or a browser. `npm run smoke` needs both.
 
 `css-dead.js`, `ghosts.js` and `storage-keys.js` are reports rather than gates: they print and

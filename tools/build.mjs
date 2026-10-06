@@ -69,6 +69,40 @@ function bubbleCss(template) {
        + '   there. A host page owes this file the tokens the span names. */\n' + body;
 }
 
+// WHAT THE SOURCE CANNOT KNOW, written into the bundle over string literals that src/ holds once
+// each: the day of the build, and the end-user agreement from the installer's own files, so the
+// program shows the text the installer showed and needs no connection to show it.
+const BUILT_SLOT = '"@E_BUILT@"';
+const EULA_SLOTS = [['"@EULA_EN@"', 'license_en.txt'], ['"@EULA_PL@"', 'license_pl.txt']];
+
+function once(bundle, slot) {
+  const hits = bundle.split(slot).length - 1;
+  if (hits !== 1) throw new Error(slot + ' matched ' + hits + ' times in the bundle, expected 1');
+  return bundle;
+}
+const fill = (bundle, slot, value) => once(bundle, slot).split(slot).join(value);
+// A string literal inside an inline script, so a `<` is escaped and no text can close the script.
+function agreement(name) {
+  const text = readFileSync(join(ROOT, 'shell', name), 'utf8').replace(/^\ufeff/, '').replace(/\r\n/g, '\n');
+  return JSON.stringify(text).split('<').join('\\u003c');
+}
+const today = () => {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+};
+/** The day an artefact says it was built, or null. */
+export function builtStamp(html) {
+  const m = /\bE_BUILT = "(\d{4}-\d\d-\d\d)";/.exec(html || '');
+  return m ? m[1] : null;
+}
+/* THE DAY MOVES WITH THE BUILD'S CONTENT. A rebuild that would change nothing but the date keeps
+   the date it finds, so an unchanged tree builds byte for byte (tests/build-fresh.mjs depends on
+   it); anything else takes today. */
+export function stampFor(previous, htmlAt, day) {
+  const kept = builtStamp(previous);
+  return kept && htmlAt(kept) === previous ? kept : day;
+}
+
 // LF in this tree. A CR reaching the artifact would report as every line changed in the next
 // diff, so it is refused at the source rather than explained afterwards.
 function read(name) {
@@ -85,8 +119,10 @@ export async function build() {
   const result = await esbuild.build({ ...OPTIONS, absWorkingDir: ROOT, entryPoints: [join(SRC, 'main.js')] });
   if (result.outputFiles.length !== 1)
     throw new Error('esbuild emitted ' + result.outputFiles.length + ' files; the artifact is one file');
-  const bundle = result.outputFiles[0].text;
+  let bundle = result.outputFiles[0].text;
   if (bundle.includes('\r')) throw new Error('the bundle holds a CR byte');
+  for (const [slot, name] of EULA_SLOTS) bundle = fill(bundle, slot, agreement(name));
+  once(bundle, BUILT_SLOT);
 
   const template = read('template.html');
   const hits = template.split(ANCHOR).length - 1;
@@ -94,7 +130,12 @@ export async function build() {
 
   // split/join rather than replace: the engine's own text holds `$&` and `$1`, which a
   // replacement string would substitute rather than copy.
-  const html = template.split(ANCHOR).join(bundle);
+  const htmlAt = day => template.split(ANCHOR).join(bundle.split(BUILT_SLOT).join(JSON.stringify(day)));
+  let previous = '';
+  try { previous = readFileSync(OUT_FILE, 'utf8'); } catch { /* a first build */ }
+  const day = stampFor(previous, htmlAt, today());
+  const html = htmlAt(day);
+  if (builtStamp(html) !== day) throw new Error('the build day ' + day + ' cannot be read back out of the artifact');
   writeFileSync(OUT_FILE, html, 'utf8');
   const hashes = scriptHashes(html);
   if (hashes.length !== 2)

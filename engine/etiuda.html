@@ -2528,16 +2528,16 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
 .modal-sub{margin:0 0 14px;font-size:12.5px;color:var(--dim);text-wrap:balance}
 /* A link in the sub line keeps the sentence's colour and an underline, and takes the accent on hover
    and focus as the dialog's other interactive text does; the ring shows for the keyboard only. */
-.modal-sub a{color:inherit;text-decoration:underline;text-underline-offset:3px}
-.modal-sub a:hover,.modal-sub a:focus-visible{color:var(--accent)}
-.modal-sub a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
+.modal-sub a,.about-credit a{color:inherit;text-decoration:underline;text-underline-offset:3px}
+.modal-sub a:hover,.modal-sub a:focus-visible,.about-credit a:hover,.about-credit a:focus-visible{color:var(--accent)}
+.modal-sub a:focus-visible,.about-credit a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
 /* THE CARD'S OWN VOICE, under the field that fills it. The first-run question shows what the
    name is for instead of saying it, so this line is a sample of a card rather than another line
    of the dialog: full ink, and the sample name greyed until a letter is typed so the line never
    sits empty and never reads as a fact about somebody. */
 .e-greet{margin:6px 0 2px;font:13.5px var(--sans);color:var(--ink)}
 .e-greet .e-name-ph{color:var(--dim)}
-/* The licence name in the About sub-line, held whole. Balanced text breaks it at its own
+/* The licence name in the footer, held whole. Balanced text breaks it at its own
    hyphen otherwise, and a no-break space cannot reach a hyphen. */
 .nw{white-space:nowrap}
 .mf{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
@@ -2622,8 +2622,8 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    one theme and an alarm in the other. Mixing keeps the light look it already had and gives
    dark the quiet version of it. */
 .btn.danger{color:#c44;border-color:color-mix(in srgb,#c44 47%,var(--bg))}
-/* About Etiuda dialog */
-.modal-card.about-modal{max-width:520px}
+/* About Etiuda dialog, and the pages it opens */
+.modal-card.about-modal,.modal-card.about-page{max-width:520px}
 /* THE PANEL TAKES THE WINDOW'S WIDTH, and the readings as many columns as it holds, so the whole of
    it stands on one screen without scrolling in any reasonably big window. */
 .modal-card.mt-modal{max-width:min(1240px,calc(100vw - 40px))}
@@ -2639,23 +2639,31 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    x-height, below where the row centres. */
 .about-tile{width:40px;height:40px;flex:0 0 auto;color:var(--mark-ink);
   position:relative;top:3px}
-/* Balance reaches only the keys legend here: the prose runs below it are long enough that
-   engines decline to balance them, and a paragraph ending short is how paragraphs end. */
-.about-body{margin:0 0 4px;padding:14px 16px;border:1px solid var(--line);border-radius:10px;
-  background:var(--bg);color:var(--dim);font-size:13.5px;line-height:1.55;text-wrap:balance}
-.about-body b{color:var(--ink)}
-/* nowrap: a chip broken across a line renders as two half-chips, which Firefox did to the
-   token that used to carry the signing slash. A name is one object; it does not wrap. */
-.about-body code{font:12px var(--mono);background:var(--accent-soft);color:var(--accent);
-  padding:1px 6px;border-radius:4px;white-space:nowrap}
-.about-body kbd{font:12px var(--mono);border:1px solid var(--line);border-radius:4px;
-  padding:1px 5px;color:var(--ink)}
+/* The version at display size, its caption beside it on the number's baseline. */
+.about-ver{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;margin:4px 0 14px}
+.about-num{font-size:54px;font-weight:300;line-height:1;letter-spacing:.5px;color:var(--ink)}
+.about-cap{font-size:13px;line-height:1.55;color:var(--dim)}
+.about-h{margin:0 0 8px}
+.about-new{margin:0 0 14px;padding:0;list-style:none;display:grid;gap:10px}
+.about-new li{position:relative;padding-left:30px;font-size:13.5px;line-height:1.5;color:var(--dim)}
+.about-new li::before{content:"";position:absolute;left:6px;top:7px;width:8px;height:8px;border-radius:50%;
+  background:var(--accent)}
+.about-new b{color:var(--ink);font-weight:600}
+.about-lic{display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--line);
+  border-radius:10px;background:var(--bg)}
+.about-lic-t{flex:1 1 auto;min-width:0;font-size:13.5px;color:var(--ink)}
+.about-lic-t small{display:block;font-size:12.5px;line-height:1.5;color:var(--dim)}
+.about-lic .btn{flex:0 0 auto;white-space:nowrap}
+.about-credit{margin:14px 0 2px;font-size:12.5px;line-height:1.6;color:var(--dim)}
+.about-legal{font-size:13px;line-height:1.6;color:var(--dim)}
+.about-legal p{margin:0 0 10px}
+.about-legal b{color:var(--ink);font-weight:600}
 .manage-sec{margin:0 0 14px;padding-bottom:12px;border-bottom:1px solid var(--line)}
 .manage-sec:last-child{border-bottom:0;margin-bottom:0;padding-bottom:0}
 /* SECTION TITLES: one rule for every screen with sections - a second copy with the same
    values is what drifts the moment one is tuned. Settings keeps its own margin; its title
    sits in a clickable row. */
-.manage-sec h3,.acc-title,.mf-lab,#tourBody .t-sec{font-size:13px;font-weight:700;letter-spacing:.2px;
+.manage-sec h3,.acc-title,.mf-lab,#tourBody .t-sec,.about-h{font-size:13px;font-weight:700;letter-spacing:.2px;
   text-transform:uppercase;color:var(--dim)}
 /* Section header states for all three accordion screens - base, open, hover, focus, in
    that order, in this one place; hover wins by source order at equal weight, so nobody
@@ -3608,6 +3616,10 @@ body.e-lanes #pillsSlot.pills-anim{display:block}
    rail and the band cannot turn at different moments. While it runs every pointer event goes to
    <html>, whatever pointer-events says on the pseudo-elements; the keyboard is unaffected. */
 ::view-transition-old(root),::view-transition-new(root){animation-duration:var(--m-celebrate);animation-timing-function:ease}
+/* A FADE HOLDS EVERY CARD REAL. Chrome's renderer dies starting a view transition while cards a
+   glide has moved rest at content-visibility:auto: a category switch, then the theme, lost the page
+   on the first press. Held visible from before the capture to the fade's end, it lives. */
+:root.theme-fade #list .card{content-visibility:visible}
 }@layer base{
 /* Tabular figures wherever a number sits beside a label, so a count ticking from 9 to 10
    does not shuffle the text around it. */
@@ -3803,7 +3815,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
           <button type="button" role="menuitem" data-act="pills" id="menuPills" title="Hide the category bar; hold Ctrl to peek at it while hidden">Hide categories</button>
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-act="tour" title="The tour of Etiuda's controls, one at a time">Show tour…</button>
-          <button type="button" role="menuitem" data-act="about" title="What Etiuda is, and every keyboard shortcut">About Etiuda</button>
+          <button type="button" role="menuitem" data-act="about" title="This version of Etiuda, what is new in it, and its licence">About Etiuda</button>
         </div>
       </div>
     </div>
@@ -3836,7 +3848,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 </div>
 <main>
   <div id="list"></div>
-  <!-- CREDIT ONLY. The key legend is About's and Settings' job: rendered here it is the
+  <!-- CREDIT ONLY. The key legend is Settings' job: rendered here it is the
        densest text on the empty screen, aimed at somebody whose next move is loading a
        catalog. -->
   <footer>
@@ -3847,17 +3859,6 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 </div>
 </div>
 
-<!-- The source About reads. Kept as markup rather than a JS string so it stays editable
-     as prose. Tokens, badges and the menu's own name carry data-i18n-skip: they are NAMES, the
-     same in every language, and the sweep would otherwise look them up like words - which is how
-     the keys legend once told a Polish reader to press a bookmark. What is left is prose, and
-     i18n-scan holds every run of it to having an entry. -->
-<div id="aboutInfo" hidden>
-  Click any macro to copy <b>just that macro</b> - cards badged <b data-i18n-skip>1/4</b>, <b data-i18n-skip>2/4</b>… are alternatives, copied one at a time. <code data-i18n-skip>{PAX}</code> fills from the name box; <code data-i18n-skip>{AGENT}</code> and <code data-i18n-skip>{INIT}</code> from the agent name; <code data-i18n-skip>{INTENT}</code> from the side panel, from the chips under the opener when the panel is off, or from what you type. A listed intent follows EN|PL; typed text does not. Typing in SEARCH ranks intents and filters cards in both languages.
-  <br><br><code data-i18n-skip>{TOPIC}</code> is the subject of the chat as a noun phrase: where <code data-i18n-skip>{INTENT}</code> names an act, this names a thing. <code data-i18n-skip>{ACTION}</code> is what was DONE, for internal comments. Both are set per intent in its editor.
-  <br><br>Drag to reorder: intents in the side panel (double-click its title to reset), a card header within its highlight group (intent-linked / favourited / both / regular), or alternative and step macros inside a card (EN and PL stay aligned). Show or hide the panel from the <b data-i18n-skip><span data-icon="settings"></span> Menu</b>.
-  <br><br><b><span data-icon="facts"></span></b> Quick facts - fees and deadlines. <b data-i18n-skip><span data-icon="settings"></span> Menu</b> - cards, intent panel, category pills, shortcuts. <b><span data-icon="theme"></span></b> toggles theme.
-</div>
 <!-- role=status/aria-live so copy confirmations reach screen readers without stealing focus -->
 <div id="toast" role="status" aria-live="polite"></div>
 <!-- What the arrows mark, read out: mark.js sayMark. Drawn nowhere. -->
@@ -4954,11 +4955,13 @@ What you type stays in this browser only.`;
   // src/modules/env.js
   var env_exports = {};
   __export(env_exports, {
+    E_BUILT: () => E_BUILT,
     E_SELF: () => E_SELF,
     E_VERSION: () => E_VERSION,
     eEmbeddedCatalog: () => eEmbeddedCatalog
   });
   var E_VERSION = "2.0.0-dev";
+  var E_BUILT = "2026-10-06";
   var E_SELF = (function() {
     try {
       let out = "";
@@ -5923,6 +5926,8 @@ What you type stays in this browser only.`;
     "maintenance␟seen or declined": "obejrzany lub odrzucony",
     "maintenance␟this start": "to uruchomienie",
     "maintenance␟after a crash": "po awarii",
+    "maintenance␟last crash": "ostatnia awaria",
+    "maintenance␟theme fades": "przejścia motywu",
     "maintenance␟ordinary": "zwykłe",
     "maintenance␟desk backup": "kopia zapasowa danych",
     "maintenance␟not needed": "niepotrzebna",
@@ -6083,12 +6088,9 @@ What you type stays in this browser only.`;
     "categories": "kategorie",
     "intent": "intencja",
     "copy": "kopiuj",
-    "other language": "drugi język",
     "facts": "fakty",
     "rail": "panel",
     "clear": "wyczyść",
-    "customise in": "dostosuj w",
-    "→ Settings → Keyboard shortcuts": "→ Ustawienia → Skróty klawiszowe",
     "· Etiuda": "· Etiuda",
     "Clear tab fields": "Wyczyść pola rozmowy",
     "Close tab": "Zamknij rozmowę",
@@ -6097,10 +6099,6 @@ What you type stays in this browser only.`;
     "and": "i",
     "Searched for": "Szukano",
     "you typed": "wpisano",
-    "Drag to reorder: intents in the side panel (double-click its title to reset), a card header within its highlight group (intent-linked / favourited / both / regular), or alternative and step macros inside a card (EN and PL stay aligned). Show or hide the panel from the": "Przeciągnij, aby zmienić kolejność: intencje w panelu bocznym (kliknij dwukrotnie jego tytuł, aby ją przywrócić), nagłówek karty wśród kart o tym samym wyróżnieniu (powiązane z intencją / ulubione / oba / zwykłe) albo warianty i kroki wewnątrz karty (EN i PL pozostają zgodne). Panel można pokazać lub ukryć z",
-    "Quick facts - fees and deadlines.": "Szybkie fakty - opłaty i terminy.",
-    "- cards, intent panel, category pills, shortcuts.": "- karty, panel intencji, pasek kategorii, skróty.",
-    "toggles theme.": "przełącza motyw.",
     "Toggle theme": "Przełącz motyw",
     "Switch language": "Przełącz język kart",
     "int": "int",
@@ -6154,9 +6152,25 @@ What you type stays in this browser only.`;
     "Advanced": "Zaawansowane",
     "Favourites": "Ulubione",
     "Sample catalog": "Przykładowy katalog",
-    "Keys": "Klawisze",
     "No catalog loaded - Etiuda is empty.": "Nie wczytano katalogu, więc Etiuda jest pusta.",
-    "About Etiuda · Version {V} · <span class='nw'>Etiuda Source-Available Licence 1.0</span>, free for personal use · © 2026 Maxim Gwiazda": "O Etiudzie · Wersja {V} · <span class='nw'>Etiuda Source-Available Licence 1.0</span>, bezpłatnie do użytku osobistego · © 2026 Maxim Gwiazda",
+    "the version on this computer": "wersja na tym komputerze",
+    "Built on {DATE}": "z {DATE}",
+    "New in this version": "Co nowego w tej wersji",
+    "The team's catalog in editions.": "Nowe wydania katalogu.",
+    "When the catalog changes, the desk offers the new edition and shows, card by card, what changed, before anything is loaded.": "Gdy pojawi się nowe wydanie katalogu zespołu, stanowisko je proponuje i jeszcze przed wczytaniem pokazuje, karta po karcie, co się zmieniło.",
+    "Signed by the team's lead.": "Podpis lidera zespołu.",
+    "A desk that joins a team keeps its lead's key and checks every later edition against it, and a file changed after signing never goes unnoticed.": "Stanowisko, które dołącza do zespołu, zapamiętuje klucz lidera i według niego sprawdza każde kolejne wydanie, więc plik zmieniony po podpisaniu nie przejdzie niezauważony.",
+    "The conversation's path.": "Ścieżka rozmowy.",
+    "Space turns from the cards to the conversation in front: the replies it has sent and those that can follow. Space again brings the cards back.": "Spacja przenosi od kart do bieżącej rozmowy: widać, co już w niej wysłano i co może nastąpić dalej. Ponowna spacja wraca do kart.",
+    "Next replies on {KEY1} to {KEY4}.": "Kolejne odpowiedzi pod {KEY1} do {KEY4}.",
+    "After each reply sent, up to four that can follow wait one key each: the catalog's own first, then those this desk has learnt.": "Po każdej wysłanej odpowiedzi czekają do czterech następnych, każda pod własnym klawiszem: najpierw te z katalogu, potem te z praktyki tego stanowiska.",
+    "Etiuda End-User Licence Agreement": "Umowa licencyjna Etiudy",
+    "Read the licence": "Przeczytaj umowę",
+    "Earlier versions of Etiuda": "Poprzednie wersje Etiudy",
+    "{VERSION}, built on {DATE}": "{VERSION}, z {DATE}",
+    "Up to 1.16.7.": "Do wersji 1.16.7.",
+    "Etiuda as a single file, opened in a web browser, under the MIT licence. The last of them, 1.16.7, still opens at etiuda.dev/v1.": "Etiuda w jednym pliku, otwierana w przeglądarce, na licencji MIT. Ostatnia z nich, 1.16.7, wciąż otwiera się pod adresem etiuda.dev/v1.",
+    "about␟Back": "Wróć",
     "Toggle language": "Przełącz język",
     "Next tab": "Następna rozmowa",
     "New tab": "Nowa rozmowa",
@@ -6236,16 +6250,6 @@ What you type stays in this browser only.`;
     "Click to filter · Ctrl+click to add/remove · drag to reorder": "Kliknij, aby filtrować · Ctrl+kliknij, aby dodać lub usunąć · przeciągnij, aby zmienić kolejność",
     "Green ring: holds a card linked to the chosen intent": "Zielona obwódka: zawiera kartę powiązaną z wybraną intencją",
     "Blue ring: a supporting category": "Niebieska obwódka: kategoria wspierająca",
-    "Click any macro to copy": "Kliknij dowolne makro, aby skopiować",
-    "… are alternatives, copied one at a time.": "… to warianty, kopiowane pojedynczo.",
-    "fills from the name box;": "wypełnia się z pola imienia;",
-    "from the agent name;": "z nazwy agenta;",
-    "from the side panel, from the chips under the opener when the panel is off, or from what you type. A listed intent follows EN|PL; typed text does not. Typing in SEARCH ranks intents and filters cards in both languages.": "z panelu bocznego, z przycisków intencji pod kartą powitalną, gdy panel jest ukryty, albo z wpisanego tekstu. Intencja z listy zmienia się razem z EN|PL; tekst wpisany ręcznie już nie. Tekst wpisany w SZUKAJ szereguje intencje i filtruje karty w obu językach.",
-    "is the subject of the chat as a noun phrase: where": "to temat rozmowy nazwany rzeczownikiem: tam, gdzie",
-    "names an act, this names a thing.": "nazywa czynność, ten token nazywa rzecz.",
-    "is what was DONE, for internal comments. Both are set per intent in its editor.": "to opis tego, co ZOSTAŁO ZROBIONE, do komentarzy wewnętrznych. Oba ustawia się przy każdej intencji, w jej edytorze.",
-    "just that macro": "tylko to makro",
-    "- cards badged": "- karty oznaczone",
     "are alternatives and copy one at a time.": "to warianty i kopiują się pojedynczo.",
     "Older catalog found": "Znaleziono starszy katalog",
     "Load it anyway": "Wczytaj mimo to",
@@ -6301,8 +6305,6 @@ What you type stays in this browser only.`;
     "Located as {FILE}.": "Znaleziony jako {FILE}.",
     "Located as {FILE} in {FOLDER}.": "Znaleziony jako {FILE} w {FOLDER}.",
     "{FILE} comes with Etiuda.": "{FILE} jest dołączony do Etiudy.",
-    "{FILE} in {FOLDER}": "{FILE} w {FOLDER}",
-    "Catalog file": "Plik katalogu",
     "Card added": "Dodano kartę",
     "Card saved": "Zapisano kartę",
     "Intent added": "Dodano intencję",
@@ -6552,7 +6554,7 @@ What you type stays in this browser only.`;
     "No intents available.": "Brak dostępnych intencji.",
     "Uncategorised": "Bez kategorii",
     "Reset shortcuts": "Przywróć skróty",
-    "What Etiuda is, and every keyboard shortcut": "Czym jest Etiuda i wszystkie skróty klawiszowe",
+    "This version of Etiuda, what is new in it, and its licence": "Ta wersja Etiudy, jej nowości i licencja",
     "Interface language, appearance and keyboard shortcuts": "Język interfejsu, wygląd i skróty klawiszowe",
     "Hide the category bar; hold Ctrl to peek at it while hidden": "Ukryj pasek kategorii; przytrzymaj Ctrl, aby na niego zerknąć",
     "Hide the intent panel; its chips then appear on the first card that uses {INTENT}": "Ukryj panel intencji; przyciski intencji pojawią się wtedy na pierwszej karcie, która używa {INTENT}",
@@ -6762,7 +6764,7 @@ What you type stays in this browser only.`;
     'One more window: open the <span data-icon="settings"></span> Menu again and click <b>Settings</b>.': 'Jeszcze jedno okno: proszę znów otworzyć <span data-icon="settings"></span> Menu i wybrać <b>Ustawienia</b>.',
     "Once the window is open, the tour goes inside with it.": "Po otwarciu okna przewodnik zajrzy do środka.",
     "The tour carries on once this window is closed.": "Przewodnik ruszy dalej, gdy to okno się zamknie.",
-    'That is the whole tour. <b>Show tour…</b> in the <span data-icon="settings"></span> Menu brings it back, and <b>About Etiuda</b> lists every shortcut.': 'To cały przewodnik. <b>Pokaż przewodnik…</b> w <span data-icon="settings"></span> Menu otwiera go ponownie, a w <b>O Etiudzie</b> są wszystkie skróty.',
+    'That is the whole tour. <b>Show tour…</b> in the <span data-icon="settings"></span> Menu brings it back, and <b>Settings</b> lists every shortcut.': 'To cały przewodnik. <b>Pokaż przewodnik…</b> w <span data-icon="settings"></span> Menu otwiera go ponownie, a wszystkie skróty są w <b>Ustawieniach</b>.',
     "load a catalog": "wczytaj katalog",
     "Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with the button above.": "Etiuda proponuje najnowszy katalog z {FOLDER}; katalog z innego miejsca można wczytać przyciskiem powyżej.",
     "The catalog you load stays in this browser, ready whenever you come back.": "Wczytany katalog zostaje w tej przeglądarce i czeka na powrót.",
@@ -9631,7 +9633,6 @@ What you type stays in this browser only.`;
     eventMatchesAction: () => eventMatchesAction,
     formatActionChord: () => formatActionChord,
     formatChord: () => formatChord,
-    keysLegendHtml: () => keysLegendHtml,
     loadShortcuts: () => loadShortcuts,
     saveShortcuts: () => saveShortcuts,
     scChord: () => scChord,
@@ -10083,12 +10084,6 @@ What you type stays in this browser only.`;
   }
   function eventMatchesAction(e, id) {
     return eventMatchesChord(e, scChord(id)) || eventMatchesChord(e, scChord2(id));
-  }
-  function keysLegendHtml() {
-    const f = formatActionChord;
-    const w = (k) => esc(t(k));
-    const K = (c) => "<kbd data-i18n-skip>" + c + "</kbd>";
-    return K("↑↓") + " " + w("cards") + " · " + K("←→") + " " + w("categories") + " · " + K("Enter") + " " + w("copy") + " · " + K("Shift+Enter") + " " + w("other language") + " · " + K(esc(f("langToggle"))) + " " + esc(CONTENT_LANGS.map((l) => String(l).toUpperCase()).join(" ↔ ")) + " · " + K(esc(f("tabNext"))) + " " + w("tabs") + " · " + K(esc(f("quickFacts"))) + " " + w("facts") + " · " + K(esc(f("toggleRail"))) + " " + w("rail") + " · " + K(esc(f("expandPills"))) + " " + w("categories") + " · " + K(esc(f("lanes"))) + " " + w("path") + " · " + K("Esc") + " " + w("clear");
   }
   function tabAddTitle() {
     return t("New tab (same shared settings; cleared PAX, intent, ROLE, categories)") + " (" + formatActionChord("tabNew") + ")";
@@ -13432,7 +13427,7 @@ What you type stays in this browser only.`;
     modalBack = null;
     leaveModal();
     modalEl.hidden = true;
-    modalCard.classList.remove("about-modal", "mt-modal");
+    modalCard.classList.remove("about-modal", "about-page", "mt-modal");
     modalCard.innerHTML = "";
     const back = modalOpener, kbd = modalOpenerKbd;
     modalOpener = null;
@@ -18842,31 +18837,90 @@ What you type stays in this browser only.`;
   // src/modules/about.js
   var about_exports = {};
   __export(about_exports, {
+    aboutEarlierHtml: () => aboutEarlierHtml,
     openAbout: () => openAbout
   });
   var TILE_MARK = '<svg viewBox="0 0 256 256" aria-hidden="true" focusable="false"><g transform="translate(-7.441 -7.441) scale(1.0581)"><path fill="currentColor" d="M188.85 60.08a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M184.92 61.83a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M181 63.6a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M177.13 65.37a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M173.19 67.19a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M169.33 69a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M165.48 70.82a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M161.62 72.67a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M157.68 74.59a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M153.83 76.49a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M149.99 78.41a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M146.18 80.35a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M142.27 82.37a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M138.44 84.38a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M134.54 86.45a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M130.76 88.51a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M126.94 90.62a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M123.11 92.78a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M119.43 94.9a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M115.75 97.07a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M112.09 99.27a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M108.46 101.52a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M104.86 103.79a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M101.16 106.2a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M97.51 108.64a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M93.95 111.11a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M90.47 113.6a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M86.95 116.22a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M83.54 118.85a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M80.14 121.61a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M76.89 124.37a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M73.69 127.25a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M70.58 130.24a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M67.58 133.33a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M64.75 136.51a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M62.03 139.89a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M59.51 143.44a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M57.27 147.16a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M55.41 151.01a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M53.98 155.07a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M53.15 159.31a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M53.06 163.58a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M53.81 167.84a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M55.38 171.79a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M57.69 175.42a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M60.52 178.6a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M63.8 181.41a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M67.32 183.82a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M71.05 185.92a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M74.9 187.73a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M78.91 189.32a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M83.05 190.71a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M87.27 191.91a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M91.52 192.92a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M95.77 193.76a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M99.99 194.45a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M104.29 195a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M108.67 195.43a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M112.94 195.72a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M117.25 195.88a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M121.56 195.92a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M125.88 195.84a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M130.18 195.64a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M134.44 195.32a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M138.8 194.86a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M143.08 194.27a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M147.26 193.55a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M151.48 192.67a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M155.68 191.62a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M159.85 190.38a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M163.93 188.95a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M167.89 187.32a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M171.77 185.41a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M175.5 183.2a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M178.98 180.68a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M182.11 177.81a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M184.83 174.5a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M186.95 170.8a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M188.33 166.71a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M188.84 162.49a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M188.54 158.17a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M187.54 153.99a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M186 150a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M184 146.13a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M181.71 142.51a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M179.17 139.05a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M176.47 135.77a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M173.57 132.59a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M170.51 129.49a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M167.34 126.51a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M164.1 123.63a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M160.81 120.87a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M157.37 118.11a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M153.93 115.48a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M150.38 112.87a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M146.87 110.39a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M143.28 107.93a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M139.62 105.49a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M135.9 103.1a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M132.29 100.83a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M128.64 98.6a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M124.98 96.41a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M121.3 94.25a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M117.46 92.06a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M113.63 89.91a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M109.82 87.82a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M106.06 85.78a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M102.18 83.73a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M98.37 81.74a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M94.49 79.74a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M90.56 77.76a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M86.76 75.87a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M82.83 73.94a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M78.96 72.06a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M75.05 70.2a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M71.19 68.38a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M67.25 66.54a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M63.32 64.73a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M59.42 62.95a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M55.52 61.2a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0M53 60.08a7.08 7.08 0 1 0 14.15 0a7.08 7.08 0 1 0 -14.15 0Z"/></g></svg>';
   var TRADEMARK = { en: "Etiuda is a trademark of Maxim Gwiazda.", pl: "Etiuda jest znakiem towarowym Maxima Gwiazdy." };
   var STARDUST_URL = "https://stardustengineering.dev";
   var MAKER = { en: "Made by {STARDUST}.", pl: "Etiuda. Tworzy ją {STARDUST}." };
+  var TERMS = { en: "Free for your own affairs; at work, each person has a subscription of their own.", pl: "Do własnych spraw bezpłatnie; w pracy każda osoba ma własną subskrypcję." };
+  var EULA = { en: "Etiuda End-User Licence Agreement\n\nMaxim Gwiazda, [registered address], Poland. This licence covers Etiuda and Etiuda Studio.\n\nThe licence. Etiuda is licensed to you, not sold: the right to install and use the software on the terms below. This licence governs the program as it is installed from either installer. The Etiuda Source-Available Licence 1.0 governs the published source, and each keeps to its own.\n\nSeats. A licence covers one named person and up to three devices they work on. An organisation holds a licence for each person who uses the software. Etiuda Studio is covered by the licence that includes it, held for each author an organisation names.\n\nPersonal use and work. Etiuda is free for your own affairs. A licence is bought when the software is used for work, whether for an employer, a client, or a business of your own.\n\nTrial. An organisation may use Etiuda in full for fourteen days to see whether it suits the work. After that a licence is bought, or the software is removed.\n\nUpdates. A licence carries the versions released in the twelve months after purchase, and the last of those stays in use without limit of time. Etiuda does not update itself.\n\nPrivacy. Etiuda runs on the desk it is installed on, asks for no account, opens no connection and sends us nothing, so a catalog stays with its author. Figures Studio gathers from an organisation's desks travel over its own share and reach us only if it sends them.\n\nTransfer. A licence stays with the person named on it and may not be sold, rented, lent or sublicensed. When that person leaves, an organisation may name a colleague instead.\n\nWarranty. The software is supplied as it stands, without a promise that it fits a particular purpose or runs without fault. Nothing here narrows the rights a consumer holds by law.\n\nLiability. Our liability is limited to what was paid for the licence in the twelve months before the claim; lost profit, lost time and lost or damaged data are excluded. Liability for death or personal injury caused by our negligence, for fraud, and wherever the law forbids a limit, is unlimited.\n\nTermination. The licence ends whenever you remove the software. We may end it if its terms are broken and not put right within thirty days of our asking, and the software is then removed from every device.\n\nGoverning law. Polish law governs this licence. A consumer may bring a claim before the courts of their own country; other claims go to the courts of the seller's registered seat.\n\nEtiuda is a trademark of Maxim Gwiazda.\n", pl: "Umowa licencyjna użytkownika końcowego Etiudy\n\nMaxim Gwiazda, [adres siedziby], Polska. Licencja obejmuje Etiudę i Etiudę Studio.\n\nLicencja. Etiuda jest licencjonowana, a nie sprzedawana: to prawo do zainstalowania i używania oprogramowania na warunkach poniżej. Ta licencja reguluje program zainstalowany z któregokolwiek z instalatorów. Opublikowany kod źródłowy reguluje Licencja Etiuda Source-Available 1.0, a każdy z tych dokumentów zostaje przy swoim.\n\nStanowiska. Licencja obejmuje jedną wskazaną z imienia i nazwiska osobę oraz do trzech urządzeń, na których ta osoba pracuje. Organizacja ma licencję dla każdej osoby, która korzysta z oprogramowania. Etiuda Studio jest objęta licencją, która ją zawiera, po jednej na każdego autora wskazanego przez organizację.\n\nUżytek własny i praca. Do własnych spraw Etiuda jest bezpłatna. Licencję kupuje się wtedy, gdy oprogramowanie służy pracy: dla pracodawcy, dla klienta albo we własnej firmie.\n\nOkres próbny. Organizacja może korzystać z pełnej Etiudy przez czternaście dni i sprawdzić, czy narzędzie odpowiada jej pracy. Potem kupuje licencję albo usuwa oprogramowanie.\n\nAktualizacje. Licencja obejmuje wersje wydane w ciągu dwunastu miesięcy od zakupu, a ostatnia z nich zostaje do używania bez ograniczenia w czasie. Etiuda nie aktualizuje się sama.\n\nPrywatność. Etiuda działa na tym komputerze, na którym została zainstalowana, nie zakłada konta, nie nawiązuje połączeń i nic do nas nie wysyła, więc katalog zostaje u swojego autora. Zestawienia, które Studio zbiera z komputerów organizacji, idą przez jej własny zasób sieciowy i docierają do nas tylko wtedy, gdy organizacja sama je prześle.\n\nPrzeniesienie. Licencja zostaje przy osobie, na którą została wystawiona, i nie podlega sprzedaży, najmowi, użyczeniu ani dalszemu licencjonowaniu. Gdy ta osoba odchodzi, organizacja może wskazać na jej miejsce kogoś innego.\n\nZapewnienia. Oprogramowanie jest udostępniane w takiej postaci, w jakiej jest, bez zapewnienia, że nadaje się do określonego celu albo że działa bez usterek. Nic w tej licencji nie uszczupla praw, które przysługują konsumentowi z mocy prawa.\n\nOdpowiedzialność. Nasza odpowiedzialność ogranicza się do kwoty zapłaconej za licencję w ciągu dwunastu miesięcy przed zgłoszeniem roszczenia; nie obejmuje utraconych korzyści, straconego czasu ani utraty lub uszkodzenia danych. Odpowiedzialność za śmierć lub uszczerbek na zdrowiu wskutek naszego niedbalstwa, za oszustwo oraz wszędzie tam, gdzie prawo nie dopuszcza ograniczenia, pozostaje nieograniczona.\n\nZakończenie. Licencja kończy się, kiedy usuwasz oprogramowanie. Możemy ją zakończyć, jeśli jej warunki zostaną naruszone i naruszenie nie ustanie w ciągu trzydziestu dni od naszego wezwania; wtedy oprogramowanie usuwa się z każdego urządzenia.\n\nPrawo właściwe. Licencję reguluje prawo polskie. Konsument może wnieść sprawę przed sąd swojego kraju; pozostałe sprawy rozpatrują sądy właściwe dla siedziby sprzedawcy.\n\nEtiuda jest znakiem towarowym Maxima Gwiazdy.\n" };
+  var ABOUT_NEW = [
+    { title: "The team's catalog in editions.", body: "When the catalog changes, the desk offers the new edition and shows, card by card, what changed, before anything is loaded." },
+    { title: "Signed by the team's lead.", body: "A desk that joins a team keeps its lead's key and checks every later edition against it, and a file changed after signing never goes unnoticed." },
+    { title: "The conversation's path.", body: "Space turns from the cards to the conversation in front: the replies it has sent and those that can follow. Space again brings the cards back." },
+    { title: "Next replies on {KEY1} to {KEY4}.", body: "After each reply sent, up to four that can follow wait one key each: the catalog's own first, then those this desk has learnt." }
+  ];
+  var ABOUT_EARLIER = [
+    { items: [{ title: "Up to 1.16.7.", body: "Etiuda as a single file, opened in a web browser, under the MIT licence. The last of them, 1.16.7, still opens at etiuda.dev/v1." }] }
+  ];
+  function aboutDay(iso) {
+    const m = /^(\d{4})-(\d\d)-(\d\d)$/.exec(String(iso || ""));
+    if (!m) return "";
+    const lang2 = uiLang();
+    try {
+      return new Intl.DateTimeFormat(lang2 === "en" ? "en-GB" : lang2, { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(Date.UTC(+m[1], m[2] - 1, +m[3]));
+    } catch (e) {
+      return m[0];
+    }
+  }
+  function aboutItemHtml(it) {
+    const keyed = t(it.title).split("{KEY1}").join(formatActionChord("nextCopy1")).split("{KEY4}").join(formatActionChord("nextCopy4"));
+    return "<li><b>" + esc(keyed) + "</b> " + esc(t(it.body)) + "</li>";
+  }
+  function aboutEarlierHtml(list2) {
+    return list2.map((r) => (r.v ? '<h3 class="about-h">' + esc(t("{VERSION}, built on {DATE}").split("{VERSION}").join(r.v).split("{DATE}").join(aboutDay(r.built))) + "</h3>" : "") + '<ul class="about-new" data-i18n-skip>' + r.items.map(aboutItemHtml).join("") + "</ul>").join("");
+  }
+  function aboutCredit(lang2) {
+    const maker = esc(MAKER[lang2] || MAKER.en).split("{STARDUST}").join('<a href="' + STARDUST_URL + '" target="_blank" rel="noopener">Stardust</a>');
+    return "© 2026 Maxim Gwiazda. " + esc(TRADEMARK[lang2] || TRADEMARK.en) + "<br>" + maker;
+  }
+  function aboutPage(title, body) {
+    openDialog({
+      cls: "about-page",
+      title,
+      back: openAbout,
+      body,
+      actions: '<button type="button" class="btn primary" id="aboutBack">' + esc(tc("about", "Back")) + "</button>",
+      wire: () => {
+        const b = $("#aboutBack");
+        if (b) {
+          b.onclick = () => dismissModal();
+          try {
+            b.focus();
+          } catch (_) {
+          }
+        }
+      }
+    });
+  }
+  function openEarlier() {
+    aboutPage("Earlier versions of Etiuda", aboutEarlierHtml(ABOUT_EARLIER));
+  }
+  function openLicence() {
+    const paras = String(EULA[uiLang()] || EULA.en).split(/\n\s*\n/).map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean);
+    const title = paras.shift() || "";
+    aboutPage(title, '<div class="about-legal" data-i18n-skip>' + paras.map((p) => {
+      const m = /^([^.,]+\.) (.+)$/.exec(p);
+      return "<p>" + (m && m[1].split(" ").length <= 4 ? "<b>" + esc(m[1]) + "</b> " + esc(m[2]) : esc(p)) + "</p>";
+    }).join("") + "</div>");
+  }
   function openAbout() {
-    const src = document.getElementById("aboutInfo");
-    const info = src ? src.innerHTML : "";
-    const keys = "<b>" + esc(t("Keys")) + "</b> - " + keysLegendHtml() + " · " + esc(t("customise in")) + ' <b><span data-icon="settings"></span> ' + esc(t("→ Settings → Keyboard shortcuts")) + "</b>.<br><br>";
-    const file = eCatalogFile(), inDir = eCatalogIn();
-    const where = inDir ? t("{FILE} in {FOLDER}").split("{FILE}").join("<code>" + esc(file) + "</code>").split("{FOLDER}").join("<code>" + esc(inDir) + "</code>") : "<code>" + esc(file) + "</code>";
-    const said = eCatalogBuiltIn() ? t("{FILE} comes with Etiuda.").split("{FILE}").join("<code>" + esc(file) + "</code>") : where + ".";
-    const fileLine = file ? "<b>" + esc(t("Catalog file")) + "</b> - " + said + "<br><br>" : "";
-    const maker = esc(MAKER[uiLang()] || MAKER.en).split("{STARDUST}").join('<a href="' + STARDUST_URL + '" target="_blank" rel="noopener">Stardust</a>');
+    const lang2 = uiLang(), day = aboutDay(E_BUILT);
+    const cap = esc(t("the version on this computer")) + (day ? "<br>" + esc(t("Built on {DATE}").split("{DATE}").join(day)) : "");
     openDialog({
       cls: "about-modal",
       title: "Etiuda",
       lead: '<span class="brand-tile about-tile" aria-hidden="true">' + TILE_MARK + "</span>",
-      sub: t("About Etiuda · Version {V} · <span class='nw'>Etiuda Source-Available Licence 1.0</span>, free for personal use · © 2026 Maxim Gwiazda").replace("{V}", E_VERSION) + "<br>" + esc(TRADEMARK[uiLang()] || TRADEMARK.en) + "<br>" + maker,
-      body: '<div class="about-body">' + keys + fileLine + info + "</div>",
-      actions: '<button type="button" class="btn primary" id="aboutClose">Close</button>',
+      body: '<div class="about-ver" data-i18n-skip><span class="about-num">' + esc(E_VERSION) + '</span><span class="about-cap">' + cap + '</span></div><h3 class="about-h">' + esc(t("New in this version")) + '</h3><ul class="about-new" data-i18n-skip>' + ABOUT_NEW.map(aboutItemHtml).join("") + '</ul><div class="about-lic" data-i18n-skip><span class="about-lic-t">' + esc(t("Etiuda End-User Licence Agreement")) + "<small>" + esc(TERMS[lang2] || TERMS.en) + '</small></span><button type="button" class="btn" id="aboutLicence">' + esc(t("Read the licence")) + '</button></div><p class="about-credit" data-i18n-skip>' + aboutCredit(lang2) + "</p>",
+      actions: '<div class="mf-left"><button type="button" class="btn" id="aboutEarlier">' + esc(t("Earlier versions of Etiuda")) + '</button></div><button type="button" class="btn primary" id="aboutClose">' + esc(t("Close")) + "</button>",
       wire: () => {
-        fillProseIcons(modalCard);
-        const closeBtn = $("#aboutClose");
+        const x = $("#modalX");
+        if (x) x.setAttribute("aria-label", t("Close"));
+        const lic = $("#aboutLicence"), earlier = $("#aboutEarlier"), closeBtn = $("#aboutClose");
+        if (lic) lic.onclick = openLicence;
+        if (earlier) earlier.onclick = openEarlier;
         if (closeBtn) {
           closeBtn.onclick = () => dismissModal();
           try {
@@ -19736,7 +19790,7 @@ What you type stays in this browser only.`;
       id: "done",
       sel: ".brand",
       title: "Ready for the first customer",
-      body: 'That is the whole tour. <b>Show tour…</b> in the <span data-icon="settings"></span> Menu brings it back, and <b>About Etiuda</b> lists every shortcut.',
+      body: 'That is the whole tour. <b>Show tour…</b> in the <span data-icon="settings"></span> Menu brings it back, and <b>Settings</b> lists every shortcut.',
       pad: 10
     }
   ];
@@ -21931,6 +21985,8 @@ What you type stays in this browser only.`;
     applyTheme: () => applyTheme,
     systemTheme: () => systemTheme,
     themeChoice: () => themeChoice,
+    themeTrace: () => themeTrace,
+    traceNote: () => traceNote,
     watchSystemTheme: () => watchSystemTheme,
     wireThemeBtn: () => wireThemeBtn
   });
@@ -21954,6 +22010,21 @@ What you type stays in this browser only.`;
   }
   var fading = null;
   var themeWant = null;
+  var fadeHolds = 0;
+  var fadeLast = 0;
+  var TRACE_KEY = "eTrace";
+  var TRACE_MAX = 30;
+  function themeTrace() {
+    try {
+      const a = JSON.parse(lsGet(TRACE_KEY) || "[]");
+      return Array.isArray(a) ? a : [];
+    } catch (e) {
+      return [];
+    }
+  }
+  function traceNote(row, now) {
+    lsSet(TRACE_KEY, JSON.stringify(themeTrace().concat([[Date.now()].concat(row)]).slice(-TRACE_MAX)), !!now);
+  }
   function paintTheme(next, after) {
     const r = document.documentElement, from = r.dataset.theme;
     themeWant = next;
@@ -21962,6 +22033,10 @@ What you type stays in this browser only.`;
       if (after) after();
       return;
     }
+    const n = fadeLast = Math.max(Date.now(), fadeLast + 1);
+    traceNote(["fade", n, "start", next], true);
+    r.classList.add("theme-fade");
+    fadeHolds++;
     let vt;
     try {
       vt = document.startViewTransition(() => {
@@ -21969,6 +22044,8 @@ What you type stays in this browser only.`;
         r.dataset.theme = themeWant;
       });
     } catch (e) {
+      traceNote(["fade", n, "cancel"]);
+      if (!--fadeHolds) r.classList.remove("theme-fade");
       landTheme(next);
       if (after) after();
       return;
@@ -21979,7 +22056,18 @@ What you type stays in this browser only.`;
       r.classList.remove("theme-swap");
       if (after) after();
     };
-    vt.ready.then(done, done);
+    vt.ready.then(() => {
+      traceNote(["fade", n, "ready"]);
+      done();
+    }, () => {
+      traceNote(["fade", n, "cancel"]);
+      done();
+    });
+    const end = () => {
+      traceNote(["fade", n, "finish"]);
+      if (!--fadeHolds) r.classList.remove("theme-fade");
+    };
+    vt.finished.then(end, end);
   }
   function shownTheme() {
     return fading || document.documentElement.dataset.theme || systemTheme();
@@ -22205,6 +22293,20 @@ What you type stays in this browser only.`;
     row("catalog folder", S(() => eHost() ? eHomeless(eCatalogFolder(), eDeskHome()) : ""));
     row("tour", S(() => tourActive() ? "under way" : tourDueAtBoot() ? "offered at the next start" : "seen or declined"));
     row("this start", S(() => eHost() && eHost().recovering ? "after a crash" : "ordinary"));
+    row("last crash", S(() => {
+      const l = themeTrace().filter((x) => x[1] === "lost").pop();
+      return l ? fileStamp(l[4] || l[0]) + ", " + l[2] + (l[3] != null ? " (" + l[3] + ")" : "") : "";
+    }));
+    row("theme fades", S(() => {
+      const rows = themeTrace().filter((x) => x[1] === "fade"), seen = [];
+      rows.forEach((x) => {
+        if (x[3] === "start") seen.push(x[2]);
+      });
+      return seen.slice(-3).reverse().map((n) => {
+        const mine = rows.filter((x) => x[2] === n), s = mine[0], d = new Date(s[0]), p = (v) => String(v).padStart(2, "0");
+        return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()) + " " + s[4] + ": " + mine.map((x) => x[3]).join(", ");
+      }).join("; ");
+    }));
     row("desk backup", S(() => {
       const r2 = eDeskRefused()[0];
       return r2 ? "restored" + (r2.restored ? " from " + fileStamp(r2.restored) : "") : "not needed";
@@ -22284,6 +22386,8 @@ What you type stays in this browser only.`;
   }
   function wireMaintenanceWatch() {
     try {
+      const h = eHost();
+      if (h && h.recovering && h.lostPage) traceNote(["lost", String(h.lostPage.reason), h.lostPage.exitCode, +h.lostPage.at || 0]);
       ["(prefers-color-scheme: light)", M_STILL_Q, "(forced-colors: active)"].forEach((q) => {
         const m = matchMedia(q);
         if (m.addEventListener) m.addEventListener("change", mtRefreshLive);

@@ -2011,6 +2011,8 @@ function recoveryTests() {
   eq("the host answer says so once, by taking the mark", /recovering: recovering\.delete\(e\.sender\.id\),/.test(shell), true);
   const preload = fs.readFileSync(path.join(E.ROOT, "shell", "preload.js"), "utf8");
   eq("the preload hands the page that answer", /recovering: !!host\.recovering,/.test(preload), true);
+  eq("and the last loss's reason rides the same answer to the page, which Maintenance shows",
+    [/lostPage: e\.sender\.etiudaLost \|\| null,/.test(shell), /lostPage: host\.lostPage \|\| null,/.test(preload)], [true, true]);
   const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
   const m = /<script>([\s\S]*?)<\/script>/.exec(tpl);
   const guard = m ? m[1] : "";
@@ -2901,6 +2903,8 @@ function pageWatchTests() {
   const step = fn => { log.length = 0; fn(); return log.slice(); };
   const gone = reason => () => wcOn["render-process-gone"]({}, { reason: reason, exitCode: 1 });
   eq("the first loss reloads the page at once, marked", step(gone("crashed")), ["reload marked"]);
+  eq("the loss is kept on the page for the host answer, with its reason, exit code and time",
+    wc.etiudaLost, { reason: "crashed", exitCode: 1, at: clock });
   clock += 10000; answers.push(0);
   eq("a second loss within a minute asks in the recovery window, and its Restart reloads, marked",
     step(gone("crashed")), ["asks gone", "reload marked"]);
@@ -3107,50 +3111,33 @@ function shippedFlagTests() {
     got, [[true, true, true], [false, false, true]]);
 
   const about = fs.readFileSync(path.join(E.ROOT, "src", "modules", "about.js"), "utf8");
-  const aboutSays = (file, inDir, builtIn) => {
-    let body = null;
-    try {
-      new Function("t", "esc", "keysLegendHtml", "TILE_MARK", "E_VERSION", "eCatalogFile", "eCatalogIn", "eCatalogBuiltIn",
-        "openDialog", "document", "fillProseIcons", "modalCard", "$", "dismissModal", "TRADEMARK", "MAKER", "uiLang", "STARDUST_URL",
-        extractDecl(about, "function openAbout(") + "\nreturn openAbout;")(
-        s => s, s => s, () => "", "", "2", () => file, () => inDir, () => builtIn,
-        o => { body = o.body; }, { getElementById: () => null }, () => {}, null, () => null, () => {}, { en: "" }, { en: "" }, () => "en", "")();
-    } catch (e) { return "openAbout did not run: " + e.message; }
-    const m = /<b>Catalog file<\/b> - (.*?)<br>/.exec(body || "");
-    return m ? m[1] : "";
-  };
-  /* The sub line under one interface language, with TRADEMARK, MAKER and STARDUST_URL read from their own lines in
-     about.js, split at its line breaks. Three parts is the version line, one notice and one maker line. */
+  /* The credit under one interface language, with TRADEMARK, MAKER and STARDUST_URL read from their own lines in
+     about.js, split at its line break. Two parts: the copyright with the notice, then the maker line. */
   const aboutParts = lang => {
-    let sub = null;
     try {
       const konst = name => new Function("return " + extractDecl(about, "const " + name + "=").replace(/^[^=]*=|;$/g, ""))();
-      new Function("t", "esc", "keysLegendHtml", "TILE_MARK", "E_VERSION", "eCatalogFile", "eCatalogIn", "eCatalogBuiltIn",
-        "openDialog", "document", "fillProseIcons", "modalCard", "$", "dismissModal", "TRADEMARK", "MAKER", "uiLang", "STARDUST_URL",
-        extractDecl(about, "function openAbout(") + "\nreturn openAbout;")(
-        s => s, s => s, () => "", "", "2", () => "", () => "", () => false,
-        o => { sub = o.sub; }, { getElementById: () => null }, () => {}, null, () => null, () => {},
-        konst("TRADEMARK"), konst("MAKER"), () => lang, about.indexOf("const STARDUST_URL=") > -1 ? konst("STARDUST_URL") : "")();
-      return String(sub).split("<br>");
-    } catch (e) { return "openAbout did not run: " + e.message; }
+      const credit = new Function("esc", "TRADEMARK", "MAKER", "STARDUST_URL",
+        extractDecl(about, "function aboutCredit(") + "\nreturn aboutCredit;")(
+        s => s, konst("TRADEMARK"), konst("MAKER"), about.indexOf("const STARDUST_URL=") > -1 ? konst("STARDUST_URL") : "");
+      return String(credit(lang)).split("<br>");
+    } catch (e) { return "aboutCredit did not run: " + e.message; }
   };
   /* [part count, the last part]: the oracle's own copy of the anchor below, so a drift in the source is a difference. */
   const aboutTail = lang => { const p = aboutParts(lang); return typeof p === "string" ? p : [p.length, p[p.length - 1]]; };
   const STARDUST = '<a href="https://stardustengineering.dev" target="_blank" rel="noopener">Stardust</a>';
   eq("About puts the maker line under the trademark line, once, its Stardust a link to the company's address that opens outside the window: Made by Stardust. in English, Etiuda. Tworzy ją Stardust. in Polish, and English in a language with no key",
     [aboutTail("en"), aboutTail("pl"), aboutTail("de")],
-    [[3, "Made by " + STARDUST + "."], [3, "Etiuda. Tworzy ją " + STARDUST + "."], [3, "Made by " + STARDUST + "."]]);
-  eq("About's sub line holds one link, to the company's address once, and the old Polish sentence is gone, in every language",
+    [[2, "Made by " + STARDUST + "."], [2, "Etiuda. Tworzy ją " + STARDUST + "."], [2, "Made by " + STARDUST + "."]]);
+  eq("About's credit holds one link, to the company's address once, and the old Polish sentence is gone, in every language",
     ["en", "pl", "de"].map(l => { const p = aboutParts(l), all = String(p);
       return typeof p === "string" ? p : [all.split("<a ").length - 1, all.split("https://stardustengineering.dev").length - 1, all.indexOf("Gwiezdny") > -1]; }),
     [[1, 1, false], [1, 1, false], [1, 1, false]]);
-  eq("control: the trademark line above the maker line is unchanged in each language",
+  eq("control: the trademark line above the maker line is unchanged in each language, after the copyright",
     ["en", "pl", "de"].map(l => { const p = aboutParts(l); return typeof p === "string" ? p : p[p.length - 2]; }),
-    ["Etiuda is a trademark of Maxim Gwiazda.", "Etiuda jest znakiem towarowym Maxima Gwiazdy.", "Etiuda is a trademark of Maxim Gwiazda."]);
-  eq("About says the shipped file comes with Etiuda and names no folder, even one it is handed; a folder file keeps its folder", [
-    aboutSays("sample-catalog.ec", "", true), aboutSays("sample-catalog.ec", inAsar, true), aboutSays("team.ec", own, false)], [
-    "<code>sample-catalog.ec</code> comes with Etiuda.", "<code>sample-catalog.ec</code> comes with Etiuda.",
-    "<code>team.ec</code> in <code>" + own + "</code>."]);
+    ["© 2026 Maxim Gwiazda. Etiuda is a trademark of Maxim Gwiazda.", "© 2026 Maxim Gwiazda. Etiuda jest znakiem towarowym Maxima Gwiazdy.",
+     "© 2026 Maxim Gwiazda. Etiuda is a trademark of Maxim Gwiazda."]);
+  eq("About names no catalog file: it reads none of the host's catalog answers",
+    ["eCatalogFile", "eCatalogIn", "eCatalogBuiltIn", "./host.js"].filter(n => about.indexOf(n) > -1), []);
 
   const offer = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-offer.js"), "utf8");
   const offers = (given, builtInHost, inHost, file, where, builtIn) => {
@@ -4237,8 +4224,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 997;
-const UI_STRINGS_SHA256 = "002c03fbab2865df9c6ed44f4bcf2f811ea561d73837bf86623001e7aad12c43";
+const UI_STRINGS_COUNT = 996;
+const UI_STRINGS_SHA256 = "2edd0847f5bc4c374324036c391ef0911e62cb17f59f314a6e4d2ea320f53773";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

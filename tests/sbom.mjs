@@ -338,7 +338,7 @@ async function main() {
       if (fs.existsSync(path.join(ROOT, f))) fs.copyFileSync(path.join(ROOT, f), path.join(dir, f));
     const ok = "node -e 0";
     const scripts = {};
-    for (const s of ['test', 'split-guard', 'csp', 'desk', 'links', 'dot-field-desk', 'catalog-watch', 'shell-smoke', 'smoke', 'glass-rim', 'storage-carry', 'swap', 'reinstall']) scripts[s] = ok;
+    for (const s of ['test', 'split-guard', 'csp', 'desk', 'links', 'dot-field-desk', 'catalog-watch', 'shell-smoke', 'smoke', 'glass-rim', 'storage-carry', 'swap', 'theme-fade', 'reinstall']) scripts[s] = ok;
     scripts.package = 'node tools/stub-package.mjs';
     put(path.join(dir, 'package.json'), { name: 'etiuda', version: '0.0.0', scripts, dependencies: deps || undefined });
     put(path.join(dir, 'tools', 'stub-package.mjs'), STUB_PACKAGE);

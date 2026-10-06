@@ -28,18 +28,36 @@ function landTheme(next){
    whether the fade runs or is skipped. Boot, a hidden page and reduced motion land at once. */
 /* A fade's callback runs a frame late and lands `themeWant`, the LATEST theme asked for: a second
    press in the same task would otherwise land first and be overwritten by the first. */
-let fading=null, themeWant=null;
+let fading=null, themeWant=null, fadeHolds=0, fadeLast=0;
+/* WHAT EACH FADE DID, and any page the shell had to reload, newest last, for Maintenance: the start
+   is written before the fade can begin, so a page lost inside one leaves a start with no finish.
+   A fade is keyed by the moment it started: the record outlives the page, and a count kept per load
+   would file the next load's fades under the lost one's key. */
+const TRACE_KEY="eTrace", TRACE_MAX=30;
+function themeTrace(){
+  try{ const a=JSON.parse(lsGet(TRACE_KEY)||"[]"); return Array.isArray(a) ? a : []; }
+  catch(e){ return []; }
+}
+function traceNote(row, now){
+  lsSet(TRACE_KEY, JSON.stringify(themeTrace().concat([[Date.now()].concat(row)]).slice(-TRACE_MAX)), !!now);
+}
 function paintTheme(next, after){
   const r=document.documentElement, from=r.dataset.theme;
   themeWant=next;
   if(!from || (from===next && !fading) || typeof document.startViewTransition!=="function"
      || document.visibilityState!=="visible" || mgReduceMotion()){ landTheme(next); if(after) after(); return; }
+  const n=fadeLast=Math.max(Date.now(), fadeLast+1);
+  traceNote(["fade",n,"start",next], true);
+  /* theme-fade holds every card real until the last fade ends: see the sheet's note on it. */
+  r.classList.add("theme-fade"); fadeHolds++;
   let vt;
   try{ vt=document.startViewTransition(()=>{ r.classList.add("theme-swap"); r.dataset.theme=themeWant; }); }
-  catch(e){ landTheme(next); if(after) after(); return; }
+  catch(e){ traceNote(["fade",n,"cancel"]); if(!--fadeHolds) r.classList.remove("theme-fade"); landTheme(next); if(after) after(); return; }
   fading=next;
   const done=()=>{ if(fading===next) fading=null; r.classList.remove("theme-swap"); if(after) after(); };
-  vt.ready.then(done, done);
+  vt.ready.then(()=>{ traceNote(["fade",n,"ready"]); done(); }, ()=>{ traceNote(["fade",n,"cancel"]); done(); });
+  const end=()=>{ traceNote(["fade",n,"finish"]); if(!--fadeHolds) r.classList.remove("theme-fade"); };
+  vt.finished.then(end, end);
 }
 // The theme the screen is on or already fading to, so a second press inside the fade turns back.
 function shownTheme(){ return fading || document.documentElement.dataset.theme || systemTheme(); }
@@ -77,6 +95,8 @@ function wireThemeBtn(){
 }
 
 export {
+  themeTrace,
+  traceNote,
   systemTheme,
   themeChoice,
   applyTheme,

@@ -2213,6 +2213,8 @@ ipcMain.on("etiuda:host", (e) => {
     /* THIS LOAD IS THE SHELL'S OWN RELOAD after the page stopped, answered once: the page then
        holds its first frame until boot has ended, as it does for a reload it asks for itself. */
     recovering: recovering.delete(e.sender.id),
+    // The last time this page stopped and why, which Maintenance shows after the reload.
+    lostPage: e.sender.etiudaLost || null,
     deskFile: deskFile(),
     home: os.homedir(),
     accent: hostAccent(),
@@ -2864,6 +2866,8 @@ function watchPage(win) {
   win.webContents.on("render-process-gone", (e, d) => {
     if (win.isDestroyed() || d.reason === "clean-exit") return;
     console.error("etiuda: the page stopped (" + d.reason + ", exit code " + d.exitCode + ")");
+    // Kept on the webContents, which outlives the reload, for the host answer to hand on.
+    win.webContents.etiudaLost = { reason: String(d.reason), exitCode: d.exitCode, at: Date.now() };
     // Restart in the hang window reloads here, once the old page has gone: a reload sent straight
     // after the kill can land in the dying process and leave the window empty.
     if (restarting) { restarting = false; recover(); return; }
