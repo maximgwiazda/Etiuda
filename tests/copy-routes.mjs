@@ -22,7 +22,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 16;
+const EXPECTED = 20;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -334,6 +334,56 @@ try {
       delete els["#modal"]; DOC.createRange = hadRange; Dom.grabDom();
       TB.tabs.splice(0, TB.tabs.length);
       globalThis.addEventListener = hadAdd; DOC.documentElement.addEventListener = hadDE;
+      globalThis.getComputedStyle = window.getComputedStyle = hadGCS;
+    }
+  }
+  /* A name cleared ends the conversation's path (ruling 8e-B): the tab is reused for the next customer, so the
+     next copy is the first of a path, no pair is learnt across the two, the beads empty and the action button
+     leaves with them. Only the step from a name to none does it. */
+  { const ND = await import(MOD("next-dock.js")), DS = await import(MOD("desk-stats.js"));
+    const hadGCS = globalThis.getComputedStyle, hadSync = HK.hooks.syncNextDock;
+    globalThis.getComputedStyle = window.getComputedStyle = () => ({ getPropertyValue: () => "", borderLeftWidth: "0", borderRightWidth: "0", paddingLeft: "0", paddingRight: "0" });
+    const fabEl = DOC.body.appendChild(new El("button", { id: "nextFab", class: "fab fab-next" }));
+    fabEl.getBoundingClientRect = () => ({ top: 760, left: 1106, width: 44, height: 44 });
+    HK.hooks.syncNextDock = () => ND.syncNextDock();
+    AS.setCards([
+      { id: "c-a9", c: "orders", t: "A", en: "First.", next: [{ to: "c-b9" }] },
+      { id: "c-b9", c: "orders", t: "B", en: "Second.", next: [{ to: "c-c9" }] },
+      { id: "c-c9", c: "orders", t: "C", en: "Third." },
+    ]);
+    const name = els["#pax"];
+    const path = () => TB.tabPathNow().path.join(",");
+    const learntAfterB = () => DS.statsLearntAfter(PK.pack, "c-b9").map(o => o.id).join(",");
+    try {
+      TB.tabs.splice(0, TB.tabs.length); ST.ssSet(TB.TAB_KEY, "null"); TB.initTabs();
+      Dom.grabDom();
+      name.value = "Anna Nowak"; TB.scheduleTabSave();
+      LP.bumpUseCount("c-a9", "en"); LP.bumpUseCount("c-b9", "en");
+      const before = { path: path(), beads: ND.pathBeads(TB.tabPathNow().path) };
+      name.value = "Anna Now"; TB.scheduleTabSave();
+      const typed = { path: path(), shown: !fabEl.hidden };
+      name.value = "Anna Nowak"; TB.scheduleTabSave();
+      name.value = ""; TB.scheduleTabSave();
+      const cleared = { path: path(), beads: ND.pathBeads(TB.tabPathNow().path), shown: !fabEl.hidden };
+      LP.bumpUseCount("c-c9", "en");
+      const after = { path: path(), learnt: learntAfterB() };
+      check(before.path === "c-a9,c-b9" && !!before.beads && before.beads.sent === 2 && typed.path === "c-a9,c-b9" && typed.shown,
+        "3f typing over a name leaves the conversation's path and its beads as they were: " + JSON.stringify({ before, typed }));
+      check(cleared.path === "" && cleared.beads === null && !cleared.shown,
+        "3g clearing the name ends the path: nothing is left of it, the beads are empty and the action button leaves: " + JSON.stringify(cleared));
+      check(after.path === "c-c9" && after.learnt === "",
+        "3h the next copy starts at step 1, and no pair is learnt from the copy before the name was cleared: " + JSON.stringify(after));
+      // A tab that never had a name: a save with the box empty is no clearing.
+      TB.tabs.splice(0, TB.tabs.length); ST.ssSet(TB.TAB_KEY, "null"); TB.initTabs();
+      name.value = ""; TB.scheduleTabSave();
+      LP.bumpUseCount("c-a9", "en"); LP.bumpUseCount("c-b9", "en");
+      TB.scheduleTabSave();
+      check(path() === "c-a9,c-b9",
+        "3i control: a conversation that never named the customer keeps its path through a save with the box empty: " + JSON.stringify(path()));
+    } finally {
+      ND.foldNextDock(); TB.watchTabPath(null);
+      fabEl.remove(); HK.hooks.syncNextDock = hadSync;
+      TB.tabs.splice(0, TB.tabs.length);
       globalThis.getComputedStyle = window.getComputedStyle = hadGCS;
     }
   }

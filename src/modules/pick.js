@@ -19,7 +19,7 @@ const PICK_ROWS=9;
 /* The desk's colours as its sheet computed them, sent at every opening so the picker wears the
    theme on screen now. */
 const PICK_LOOK=["--panel","--panel-raised","--ink","--dim","--line","--line-strong","--accent",
-  "--accent-soft","--field","--field-line","--field-edge","--sans","--mono","--radius-sm","--intent-type"];
+  "--accent-soft","--warn","--field","--field-line","--field-edge","--sans","--mono","--radius-sm","--intent-type"];
 
 /* A put-away card is never offered, whatever is chosen: the list offers it at the foot of its own
    shelf, and the picker has no shelf to be at the foot of. A query searches every category, as the
@@ -39,7 +39,9 @@ function pickExcerpt(raw,filled){
 function pickRow(m,l,ps,vi){
   const n=ps.length;
   const tag=n<2 ? "" : m.seq ? t("step")+" "+(vi+1)+"/"+n : (altLabelAt(m,l,vi)||((vi+1)+"/"+n));
-  return {id:String(m.id), vi:vi, t:cardTitle(m), x:pickExcerpt(ps[vi],fill(ps[vi],m,0,l)), tag:tag};
+  const row={id:String(m.id), vi:vi, t:cardTitle(m), x:pickExcerpt(ps[vi],fill(ps[vi],m,0,l)), tag:tag};
+  if(cardCommits(m)) row.commits=1;
+  return row;
 }
 /* AT REST THE REPLIES THIS DESK COPIES LATELY COME FIRST, most copied first, the rest in the desk's
    order; equal counts keep it. With none counted the list is handed back as it came. */
@@ -82,7 +84,7 @@ function pickLook(){
 }
 function pickWords(){
   return {lang:uiLang(), search:t("search replies"), list:t("Replies"), again:t("The reply copied last"),
-          none:t("A different word may do better."),
+          none:t("A different word may do better."), stamp:t("Commits the firm"),
           empty:wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet.")};
 }
 /* THE TEXT THE DESK'S OWN COPY WOULD MAKE, counted as the desk counts a copy: the fill of the block

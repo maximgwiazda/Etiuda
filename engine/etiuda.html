@@ -2996,6 +2996,8 @@ html.mgdrag,html.mgdrag *{cursor:default!important;user-select:none!important}
   color:var(--ink);font:13px var(--sans);
   overflow:hidden;white-space:nowrap}
 .manage-row .mg-badge{flex:0 0 auto}
+.manage-row .mg-stamp{flex:0 0 auto;display:inline-flex;color:var(--warn)}
+.mg-stamp .ic{width:16px;height:16px}
 /* Local copy counter on Manage rows - appears once a card has been copied at least once.
    SCOPED TO THE ROW so it can refuse to flex: `.manage-row span` gives every span a basis of
    120px and permission to grow - written for the category label, which is the only span in
@@ -10548,8 +10550,12 @@ What you type stays in this browser only.`;
   function scheduleTabSave() {
     const tb = tabs.find((x) => x.id === activeTabId);
     if (tb) {
-      const was = tabLabel(tb);
+      const was = tabLabel(tb), named = !!String(tb.pax || "").trim();
       tb.pax = pax ? pax.value : "";
+      if (named && !tb.pax.trim() && Array.isArray(tb.path) && tb.path.length) {
+        tb.path = [];
+        hooks.syncNextDock();
+      }
       if (tabLabel(tb) !== was) drawTabs();
       else syncTabAccent();
     }
@@ -23427,6 +23433,7 @@ What you type stays in this browser only.`;
   // src/modules/manage.js
   var manage_exports = {};
   __export(manage_exports, {
+    mgCardRow: () => mgCardRow,
     mgCardsIn: () => mgCardsIn,
     mgUsesTip: () => mgUsesTip,
     openManage: () => openManage,
@@ -23597,6 +23604,7 @@ What you type stays in this browser only.`;
     deskChangeWords: () => deskChangeWords,
     deskKey: () => deskKey,
     deskName: () => deskName,
+    forgetLookEdits: () => forgetLookEdits,
     openDeskLook: () => openDeskLook
   });
   function deskName(f) {
@@ -23649,12 +23657,16 @@ What you type stays in this browser only.`;
     const m = deskCardNow(it.id), h = cardIn(hers, it.id);
     return !!m && !!h && it.fields.every((f) => deskText(m[f.key]) === deskText(h[f.key]));
   }
-  function deskToggle(it, hers, prior) {
+  var lookEdits = /* @__PURE__ */ new Map();
+  function forgetLookEdits() {
+    lookEdits.clear();
+  }
+  function deskToggle(it, hers) {
     const base = baseCard(it.id), now = deskCardNow(it.id), h = cardIn(hers, it.id);
     if (!base || !now || !h || it.kind !== "changed") return false;
     if (!pack.overrides) pack.overrides = {};
-    const on = !deskTaken(it, hers), was = pack.overrides[it.id];
-    if (on && !prior.has(it.id)) prior.set(it.id, was ? JSON.parse(JSON.stringify(was)) : null);
+    const on = !deskTaken(it, hers), was = pack.overrides[it.id], held = lookEdits.get(it.id);
+    if (on && (!held || held.after !== JSON.stringify(was || null))) lookEdits.set(it.id, { before: was ? JSON.parse(JSON.stringify(was)) : null, after: "" });
     const set = (from) => {
       const moved = {};
       it.fields.forEach((f) => {
@@ -23662,7 +23674,9 @@ What you type stays in this browser only.`;
       });
       return overrideAgainstBase(base, Object.assign(now, moved));
     };
-    const o = on ? set(h) : prior.has(it.id) ? prior.get(it.id) : set(base);
+    const o = on ? set(h) : held ? held.before : set(base);
+    if (on) lookEdits.get(it.id).after = JSON.stringify(o || null);
+    else lookEdits.delete(it.id);
     if (o && Object.keys(o).length) pack.overrides[it.id] = o;
     else delete pack.overrides[it.id];
     savePack();
@@ -23680,7 +23694,7 @@ What you type stays in this browser only.`;
         toast(t("That desk's cards match the team's edition."));
         return false;
       }
-      const who = deskName(f), prior = /* @__PURE__ */ new Map();
+      const who = deskName(f);
       openEditionPanel({
         c: s.hers,
         held: s.team,
@@ -23700,7 +23714,7 @@ What you type stays in this browser only.`;
           load: t("Work from this file").split("{DESK}").join(who),
           take: inUse ? t("Take this text").split("{DESK}").join(who) : "",
           taken: (it) => deskTaken(it, s.hers),
-          toggle: (it) => deskToggle(it, s.hers, prior),
+          toggle: (it) => deskToggle(it, s.hers),
           sub: (it) => it.kind === "changed" && inUse && deskTaken(it, s.hers) ? t("Now in your edits") : it.own ? t("you have your own version") : ""
         }
       });
@@ -24495,7 +24509,7 @@ What you type stays in this browser only.`;
     const useBadge = uses ? '<span class="mg-uses" title="' + esc(mgUsesTip(uses)) + '">' + uses + "×</span>" : "";
     const favTip = fav ? "Remove from Favourites" : "Add to Favourites";
     const hideShow = hid ? '<button type="button" data-show-card="' + esc(m.id) + '" title="Show this card again" aria-label="Show this card again">' + ICON_EYE_SHUT + "</button>" : '<button type="button" data-hide-card="' + esc(m.id) + '" title="Put this card away: it greys out at the foot of this category" aria-label="Put this card away">' + ICON_EYE_OPEN + "</button>";
-    return '<div class="manage-row mg-card' + (hid ? " is-hidden" : "") + '" data-cardrow="' + esc(m.id) + '" data-band="' + esc(mgCardBand(m)) + '" title="Drag to reorder, or onto a category to move it there"><span class="mg-card-lab">' + esc(cardTitle(m) || "") + "</span>" + badge + useBadge + '<span class="cacts"><button type="button" data-edit-card="' + esc(m.id) + '" title="Open the full editor" aria-label="Edit card">' + ICON_EDIT + "</button>" + hideShow + '<button type="button" class="danger mg-trash" data-remove-card="' + esc(m.id) + '" title="Delete this card" aria-label="Delete card">' + ICON_TRASH + '</button><button type="button" class="star-btn' + (fav ? " on" : "") + '" data-fav-card="' + esc(m.id) + '" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
+    return '<div class="manage-row mg-card' + (hid ? " is-hidden" : "") + '" data-cardrow="' + esc(m.id) + '" data-band="' + esc(mgCardBand(m)) + '" title="Drag to reorder, or onto a category to move it there"><span class="mg-card-lab">' + esc(cardTitle(m) || "") + "</span>" + (cardCommits(m) ? stampHtml("mg-stamp") : "") + badge + useBadge + '<span class="cacts"><button type="button" data-edit-card="' + esc(m.id) + '" title="Open the full editor" aria-label="Edit card">' + ICON_EDIT + "</button>" + hideShow + '<button type="button" class="danger mg-trash" data-remove-card="' + esc(m.id) + '" title="Delete this card" aria-label="Delete card">' + ICON_TRASH + '</button><button type="button" class="star-btn' + (fav ? " on" : "") + '" data-fav-card="' + esc(m.id) + '" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
   }
   function mgCardCmp(a, b) {
     return (a.m._hidden ? 1 : 0) - (b.m._hidden ? 1 : 0) || (isFavourite(a.m.id) ? 0 : 1) - (isFavourite(b.m.id) ? 0 : 1) || cardOrderIdx(a.m.id) - cardOrderIdx(b.m.id) || a.i - b.i;
@@ -27284,6 +27298,7 @@ What you type stays in this browser only.`;
     forgetRowNaturals();
     eForgetRecency();
     forgetCopies();
+    forgetLookEdits();
     rearmTrustRecheck();
     putLang(lsGet("eLang") || uiLang());
     applyBootCatalog();
@@ -27334,6 +27349,7 @@ What you type stays in this browser only.`;
     "--line-strong",
     "--accent",
     "--accent-soft",
+    "--warn",
     "--field",
     "--field-line",
     "--field-edge",
@@ -27355,7 +27371,9 @@ What you type stays in this browser only.`;
   function pickRow(m, l, ps, vi) {
     const n = ps.length;
     const tag = n < 2 ? "" : m.seq ? t("step") + " " + (vi + 1) + "/" + n : altLabelAt(m, l, vi) || vi + 1 + "/" + n;
-    return { id: String(m.id), vi, t: cardTitle(m), x: pickExcerpt(ps[vi], fill(ps[vi], m, 0, l)), tag };
+    const row = { id: String(m.id), vi, t: cardTitle(m), x: pickExcerpt(ps[vi], fill(ps[vi], m, 0, l)), tag };
+    if (cardCommits(m)) row.commits = 1;
+    return row;
   }
   function pickByUse(hits) {
     const use = statsRecentUse(pack);
@@ -27403,6 +27421,7 @@ What you type stays in this browser only.`;
       list: t("Replies"),
       again: t("The reply copied last"),
       none: t("A different word may do better."),
+      stamp: t("Commits the firm"),
       empty: wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet.")
     };
   }

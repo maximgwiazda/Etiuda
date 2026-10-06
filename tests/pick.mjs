@@ -35,7 +35,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 79;
+const EXPECTED = 83;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -189,6 +189,16 @@ try {
   pickAnswer("copy", { id: "c-sign", vi: 0 });
   check(AS.railMarkUsed === true && MK.copiesMade() === made + 1,
     "1q a copy through the picker takes the rail's offer and counts as a copy made: " + made + " to " + MK.copiesMade());
+
+  /* A reply that commits the firm is offered with its stamp, as the desk's own lists draw it: the row says so and the
+     page is given the words for it. A row of a card that does not commit is what it was, to the key. */
+  AS.setCards(CARDS.map(c => Object.assign({}, c)).concat([{ id: "c-oath", c: "orders", t: "Oath", en: "It ships today.", commits: 1 }]));
+  const oathRows = pickAnswer("open"), oathRow = oathRows.rows.find(r => r.id === "c-oath") || {}, lampRow = oathRows.rows.find(r => r.id === "c-lamp") || {};
+  AS.setCards(CARDS.map(c => Object.assign({}, c)));
+  check(oathRow.commits === 1 && oathRows.words.stamp === "Commits the firm",
+    "1r a reply that commits the firm is offered marked, and the page is given the desk's words for the mark: " + JSON.stringify([oathRow.commits, oathRows.words.stamp]));
+  check(Object.keys(lampRow).join(",") === "id,vi,t,x,tag",
+    "1s control: the row of a reply that does not commit carries no mark and no key it did not: " + Object.keys(lampRow).join(","));
 
   /* ---- 2. the shell --------------------------------------------------------------------- */
   console.log("\n[2/6] the shell: the hotkey, the relay and the clipboard");
@@ -526,6 +536,16 @@ try {
   press("Enter", "Enter");
   check(lastCall() === 'copy {"id":"c","vi":0}' && !/title="again"/.test(boxHtml),
     "4m with a query the first row found is marked, and the reply copied last steps aside: " + lastCall());
+  /* A row marked as committing is drawn with the stamp after its title, the words for it its tooltip; a row not marked is
+     drawn without one. */
+  const sworn = Object.assign(R("s"), { commits: 1 });
+  pcalls.length = 0; qEl.value = ""; pOpen(JSON.stringify({ rows: [sworn, R("p")], words: { stamp: "Commits the firm" } }));
+  const lis = boxHtml.split("</li>").filter(x => x.indexOf("<li") > -1);
+  const stampAfterTitle = (lis[0] || "").indexOf('<span class="t">T s</span><span class="st" title="Commits the firm"><svg') > -1;
+  check(stampAfterTitle && (lis[0].match(/class="st"/g) || []).length === 1,
+    "4o a row of a reply that commits the firm wears the stamp straight after its title, the desk's words as its tooltip: " + JSON.stringify((lis[0] || "").slice(0, 160)));
+  check(lis.length === 2 && lis[1].indexOf('class="st"') < 0,
+    "4p control: the row beside it, not marked, wears none: " + lis.length + " row(s), " + (lis[1] || "").indexOf('class="st"'));
 
   /* ---- 5. what the shell may not do -------------------------------------------------------- */
   console.log("\n[5/6] what the shell may not do, read from its text with the comments taken out");

@@ -61,16 +61,21 @@ function deskTaken(it,hers){
   const m=deskCardNow(it.id), h=cardIn(hers,it.id);
   return !!m && !!h && it.fields.every(f=>deskText(m[f.key])===deskText(h[f.key]));
 }
+/* THE AGENT'S EDIT OF A CARD AS IT STOOD BEFORE A TAKE, with the edit the take made, kept across openings of Look for as
+   long as the desk stays on this catalog: restartDesk forgets it. A take over an edit made since is a new first take. */
+const lookEdits=new Map();
+function forgetLookEdits(){ lookEdits.clear(); }
 /* TAKEN, the fields where that desk's text differs become this desk's own edit of the card, nothing else of the card;
-   given back, the edit returns to what it was before the first take in this panel, or to the team's text. */
-function deskToggle(it,hers,prior){
+   given back, the edit returns to what it was before the take, or to the team's text. */
+function deskToggle(it,hers){
   const base=baseCard(it.id), now=deskCardNow(it.id), h=cardIn(hers,it.id);
   if(!base || !now || !h || it.kind!=="changed") return false;
   if(!pack.overrides) pack.overrides={};
-  const on=!deskTaken(it,hers), was=pack.overrides[it.id];
-  if(on && !prior.has(it.id)) prior.set(it.id, was ? JSON.parse(JSON.stringify(was)) : null);
+  const on=!deskTaken(it,hers), was=pack.overrides[it.id], held=lookEdits.get(it.id);
+  if(on && (!held || held.after!==JSON.stringify(was||null))) lookEdits.set(it.id, {before:was ? JSON.parse(JSON.stringify(was)) : null, after:""});
   const set=from=>{ const moved={}; it.fields.forEach(f=>{ moved[f.key]=deskText(from[f.key]); }); return overrideAgainstBase(base,Object.assign(now,moved)); };
-  const o=on ? set(h) : prior.has(it.id) ? prior.get(it.id) : set(base);
+  const o=on ? set(h) : held ? held.before : set(base);
+  if(on) lookEdits.get(it.id).after=JSON.stringify(o||null); else lookEdits.delete(it.id);
   if(o && Object.keys(o).length) pack.overrides[it.id]=o; else delete pack.overrides[it.id];
   savePack();
   hooks.rebuildCards();
@@ -83,12 +88,12 @@ function openDeskLook(f,base,name,work,back){
     if(!s){ toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(String(f.name||""))); return false; }
     const inUse=!!(base && base.held), changes=editionChanges(s.team,s.hers,inUse?pack:null);
     if(!changes.items.length){ toast(t("That desk's cards match the team's edition.")); return false; }
-    const who=deskName(f), prior=new Map();
+    const who=deskName(f);
     openEditionPanel({c:s.hers, held:s.team, changes:changes, version:"", name:name, keep:back, load:work, back:back, taken:()=>{},
       desk:{title:who, was:t("In the team's edition"), now:t("At {DESK}").split("{DESK}").join(who),
         keep:t("Back to the Library"), load:t("Work from this file").split("{DESK}").join(who),
         take:inUse ? t("Take this text").split("{DESK}").join(who) : "",
-        taken:it=>deskTaken(it,s.hers), toggle:it=>deskToggle(it,s.hers,prior),
+        taken:it=>deskTaken(it,s.hers), toggle:it=>deskToggle(it,s.hers),
         sub:it=>(it.kind==="changed" && inUse && deskTaken(it,s.hers)) ? t("Now in your edits") : it.own ? t("you have your own version") : ""}});
     return true;
   });
@@ -99,5 +104,6 @@ export {
   deskKey,
   deskBase,
   deskChangeWords,
+  forgetLookEdits,
   openDeskLook
 };

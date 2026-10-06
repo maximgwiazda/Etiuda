@@ -1732,6 +1732,15 @@ const CARD_B = {
     () => withCards(CARDS, () => eq(MG.mgCardsIn("bay").map(m => m.id).join(","), "x1,x3")));
   check("manage.js", "a category with nothing in it lists nothing",
     () => withCards(CARDS, () => eq(MG.mgCardsIn("empty").length, 0)));
+  /* The Library's row of a card that commits the firm wears the stamp after its title, and the row of a card
+     that does not is what it was: the same row with the stamp cut out is the plain card's, to the byte. */
+  const CH = await import(MOD("card-chain.js"));
+  const sworn = MG.mgCardRow({ id: "x4", c: "bay", t: "Four", commits: 1 }), plain = MG.mgCardRow({ id: "x4", c: "bay", t: "Four" });
+  const stampAt = sworn.indexOf(CH.stampHtml("mg-stamp"));
+  check("manage.js", "28a1 the Library's row of a card that commits the firm wears the stamp straight after its title",
+    () => eq([stampAt > sworn.indexOf("Four</span>"), sworn.slice(stampAt - 7, stampAt) === "</span>"].join(","), "true,true"));
+  check("manage.js", "28a2 control: the row of a card that does not commit has no stamp, and is the stamped row less its stamp",
+    () => eq([plain.indexOf("mg-stamp") < 0, sworn.replace(CH.stampHtml("mg-stamp"), "") === plain].join(","), "true,true"));
 }
 
 /* ------------------------------------------------------------------ manage.js, card-body.js
@@ -2620,6 +2629,13 @@ const CARD_B = {
       const ed = src("card-editor.js"), carry = ed.indexOf("carryUnwritten(entry,"), put = ed.indexOf("if(own&&own.length) entry.next=own; else delete entry.next;");
       return eq([carry > -1 && put > carry, ed.indexOf("intentTop,lockLang,commits,intents:intentsStored}") > -1,
         ed.indexOf("lockLang, commits}, nx.fields());") > -1].join(","), "true,true,true");
+    });
+  /* The desk starting again in place is where what Look kept of the agent's earlier edits is let go: a catalog loaded,
+     or local memory cleared, must not leave an edit behind for a take to give back. restartDesk is not callable in node. */
+  check("desk-look.js", "26b1 the desk starting again in place has Look forget the edits it kept, once, before the catalog is read",
+    () => {
+      const r = src("restart.js"), at = r.indexOf("  forgetLookEdits();");
+      return eq([r.split("forgetLookEdits();").length - 1, at > r.indexOf("function restartDesk()"), at < r.indexOf("applyBootCatalog();")].join(","), "1,true,true");
     });
 }
 

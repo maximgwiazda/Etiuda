@@ -194,8 +194,10 @@ function activeHeard(field){
 function scheduleTabSave(){
   const tb=tabs.find(x=>x.id===activeTabId);
   if(tb){
-    const was=tabLabel(tb);
+    const was=tabLabel(tb), named=!!String(tb.pax||"").trim();
     tb.pax=pax?pax.value:"";
+    // The customer's name cleared is the conversation over: the tab's next reply is the first of a new path.
+    if(named && !tb.pax.trim() && Array.isArray(tb.path) && tb.path.length){ tb.path=[]; hooks.syncNextDock(); }
     if(tabLabel(tb)!==was) drawTabs(); else syncTabAccent();
   }
   clearTimeout(tabSaveTimer);

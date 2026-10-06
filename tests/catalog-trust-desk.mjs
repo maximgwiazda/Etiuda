@@ -474,6 +474,11 @@ async function launch(plan) {
         row: texts(doc.getElementById("modalCard"), ".ed-row[aria-current=\"true\"]"),
         over: JSON.parse(JSON.stringify((PACK.pack.overrides || {})[plan.card] || null)), rebuilt: obs.rebuilt }]);
     },
+    // The agent's own wording of the card, as an edit made before the Look, and put away again after it.
+    ownedit: which => { PACK.pack.overrides = Object.assign(PACK.pack.overrides || {}, { [plan.card]: plan[which || "own"] }); PACK.savePack(); },
+    // The desk starting again in place, which is where restart.js has Look forget what it kept.
+    forgetlook: async () => { (await import(MOD("desk-look.js"))).forgetLookEdits(); },
+    ownclear: () => { delete (PACK.pack.overrides || {})[plan.card]; PACK.savePack(); },
     edback2: () => { doc.getElementById("edKeep").onclick(); obs.read.back = { modal: modalUp(), backs: obs.backs }; },
     work: at => { const b = doc.querySelector("button[data-ec-work=\"" + at + "\"]"); if (!b) throw new Error("no Work on row " + at); b.onclick(); },
     over: () => { obs.read.over = JSON.parse(JSON.stringify(PACK.pack.overrides || {})); obs.read.heldId = String((CAT.storedCatalog() || {}).id || ""); },
@@ -505,7 +510,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 64;
+  const EXPECTED = 69;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -979,6 +984,31 @@ async function parent() {
       "75e the take makes that desk's text of the changed field this desk's own edit at once, that field alone, and the cards are drawn again: " + JSON.stringify(m1));
     check(same(m2.pressed, ["false"]) && m2.over === null && rd(L2, "back").modal === false && rd(L2, "back").backs === 1,
       "75E THE CONTROL: pressed again, the edit is what it was before the take (none), and Back to the Library closes the panel and opens the Library: " + JSON.stringify([m2, rd(L2, "back")]));
+    /* The earlier edit outlasts the panel (ruling 26b-B): taken, the panel shut and Look opened again, giving the take back
+       returns the agent's own wording, where it used to return the team's text. With no edit before the take, it returns none. */
+    const OWN = "My own wording.";
+    const L2o = run(lab75, ["desk", "ownedit", "rows", "look:" + olaRow.at, "mine", "edback2", "look:" + olaRow.at, "mine", "mine", "ownclear", "settle"], true, { card: "c-warm", own: { en: OWN } });
+    const w1 = ((L2o.read || {}).mine || [])[0] || {}, w2 = ((L2o.read || {}).mine || [])[1] || {}, w3 = ((L2o.read || {}).mine || [])[2] || {};
+    check(same(w1.over, { en: HERS }) && same(w2.pressed, ["false"]) && same(w2.over, { en: OWN }) && same(w3.pressed, ["true"]) && same(w3.over, { en: HERS }),
+      "75l an earlier edit of the agent's is given back by a take given back after the panel was shut and Look opened again, and the take can be made again: "
+      + JSON.stringify([w1.over, w2.over, w3.over]));
+    const L2p = run(lab75, ["desk", "rows", "look:" + olaRow.at, "mine", "edback2", "look:" + olaRow.at, "mine", "settle"], true, { card: "c-warm" });
+    const w4 = ((L2p.read || {}).mine || [])[1] || {};
+    check(same(w4.pressed, ["false"]) && w4.over === null,
+      "75m THE CONTROL: with no edit before the take, giving it back after Look opened again leaves none: " + JSON.stringify(w4));
+    /* The edit kept is the one before the take that is being given back: an edit made after a take, then Look opened and the
+       text taken again, is the one that comes back. And once the desk starts again in place, nothing is kept. */
+    const L2q = run(lab75, ["desk", "ownedit", "rows", "look:" + olaRow.at, "mine", "edback2", "ownedit:own2", "look:" + olaRow.at, "mine", "mine", "ownclear", "settle"], true, { card: "c-warm", own: { en: OWN }, own2: { en: "Another wording." } });
+    const w5 = ((L2q.read || {}).mine || [])[2] || {};
+    check(same(w5.pressed, ["false"]) && same(w5.over, { en: "Another wording." }),
+      "75o an edit the agent made after a take is what a take made over it gives back, not the one before: " + JSON.stringify(w5));
+    const L2r = run(lab75, ["desk", "ownedit", "rows", "look:" + olaRow.at, "mine", "edback2", "forgetlook", "look:" + olaRow.at, "mine", "ownclear", "settle"], true, { card: "c-warm", own: { en: OWN } });
+    const w6 = ((L2r.read || {}).mine || [])[1] || {};
+    check(same(w6.pressed, ["false"]) && w6.over === null,
+      "75p forgetLookEdits, called as restartDesk calls it when the desk starts again in place, leaves nothing of the agent's earlier"
+        + " edit for a take to give back; module-calls 26b1 holds the call itself: " + JSON.stringify(w6));
+    const errs75o = [L2o, L2p, L2q, L2r].flatMap(o => o.errors || []);
+    check(!errs75o.length, "75n those launches ran their acts without an error" + (errs75o.length ? ": " + errs75o.length + ", first " + errs75o[0] : ""));
     const L3 = run(lab75, ["desk", "rows", "look:" + olaRow.at, "mine", "settle"], true, { card: "c-warm" });
     const L4 = run(lab75, ["desk", "over"], true);
     check(same((rd(L4, "over") || {})["c-warm"], { en: HERS }),

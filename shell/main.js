@@ -2986,6 +2986,9 @@ function pickPage() {
   const esc = s => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const ICON_AGAIN = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor"'
     + ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.6-3.7"/><path d="M13 2.5v3h-3"/></svg>';
+  const ICON_STAMP = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.2 12.5l.6-4.2a2.6 2.6 0 1 1 3.4 0l.6 4.2"/>'
+    + '<path d="M5 17v-2.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2V17z" fill="currentColor"/><path d="M6 20.5h13"/></svg>';
   const list = () => (!q.value.trim() && last)
     ? [Object.assign({ again: true }, last)].concat(rows.filter(r => r.id !== last.id || r.vi !== last.vi)) : rows;
   const paint = () => {
@@ -2996,7 +2999,9 @@ function pickPage() {
         + (i === at ? ' class="on" aria-selected="true"' : ' aria-selected="false"')
         + (r.again ? ' title="' + esc(words.again) + '"' : '') + '>'
         + '<span class="n">' + (r.again ? ICON_AGAIN : (++n <= 9 ? String(n) : "")) + '</span>'
-        + '<span class="t">' + esc(r.t) + '</span><span class="x">' + esc(r.x) + '</span>'
+        + '<span class="t">' + esc(r.t) + '</span>'
+        + (r.commits ? '<span class="st" title="' + esc(words.stamp) + '">' + ICON_STAMP + '</span>' : '')
+        + '<span class="x">' + esc(r.x) + '</span>'
         + (r.tag ? '<span class="g">' + esc(r.tag) + '</span>' : '') + '</li>').join("")
       : '<li class="none" role="presentation">' + esc(q.value.trim() ? words.none : words.empty) + '</li>';
     q.setAttribute("aria-activedescendant", all.length ? "r" + at : "");
@@ -3072,7 +3077,7 @@ function pickerDoc() {
     + '<title>Etiuda</title>\n<style>\n'
     + ':root{color-scheme:light;--panel:#fff;--panel-raised:#fff;--ink:#0f172a;--dim:#475569;--line:#e4e8ee;'
     + '--accent:#2563eb;--field:#fdfdfd;--field-line:#e0e4ea;--field-edge:#aab3c0;--radius-sm:8px;'
-    + '--intent-type:16.5px;--mono:ui-monospace,Consolas,monospace;'
+    + '--intent-type:16.5px;--warn:#c2410c;--mono:ui-monospace,Consolas,monospace;'
     + '--sans:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}\n'
     + ':root[data-theme=dark]{color-scheme:dark}\n'
     + 'html,body{margin:0;height:100%;overflow:hidden;background:var(--panel-raised)}\n'
@@ -3094,6 +3099,7 @@ function pickerDoc() {
     + '.x{flex:1 1 0;min-width:0;overflow:hidden;color:var(--dim);font-size:13px}\n'
     + '.cut{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent);'
     + 'mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent)}\n'
+    + '.st{flex:0 0 auto;display:flex;color:var(--warn)}\n'
     + '.g{flex:0 0 auto;font:10px var(--mono);color:var(--dim)}\n'
     + '#rows li.none{height:auto;padding:14px 12px;color:var(--dim);white-space:normal}\n'
     + ':root.still #rows li{transition:none}\n'

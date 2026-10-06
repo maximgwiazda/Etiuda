@@ -1,5 +1,6 @@
 import { ensureCustomCat, openCardEditor, hideCard } from "./card-editor.js";
-import { baseCard, cardTitle, findCard } from "./card-model.js";
+import { baseCard, cardCommits, cardTitle, findCard } from "./card-model.js";
+import { stampHtml } from "./card-chain.js";
 import { movedCardIds, cardOrderIdx, catSortIdx, ensureCardOrder, cardOrderTouched } from "./card-order.js";
 import { isAlwaysCat, setCatAlways } from "./cat-roles.js";
 import { importCatalogHere, catalogFileName } from "./catalog-file.js";
@@ -77,7 +78,7 @@ function mgCardRow(m){
      because they have no editor to send you to. */
   return '<div class="manage-row mg-card'+(hid?" is-hidden":"")+'" data-cardrow="'+esc(m.id)+'"'+
       ' data-band="'+esc(mgCardBand(m))+'" title="Drag to reorder, or onto a category to move it there">'+
-    '<span class="mg-card-lab">'+esc(cardTitle(m)||"")+'</span>'+badge+useBadge+
+    '<span class="mg-card-lab">'+esc(cardTitle(m)||"")+'</span>'+(cardCommits(m)?stampHtml("mg-stamp"):"")+badge+useBadge+
     '<span class="cacts">'+
       '<button type="button" data-edit-card="'+esc(m.id)+'" title="Open the full editor" aria-label="Edit card">'+ICON_EDIT+'</button>'+
       hideShow+
@@ -846,6 +847,7 @@ function openManage(){
 }
 
 export {
+  mgCardRow,
   mgCardsIn,
   mgUsesTip,
   openManage,

@@ -11,6 +11,7 @@ import { dropCardPool } from "./card-pool.js";
 import { forgetRowNaturals } from "./shed.js";
 import { eForgetRecency } from "./recency.js";
 import { forgetCopies } from "./mark.js";
+import { forgetLookEdits } from "./desk-look.js";
 import { rearmTrustRecheck } from "./catalog-trust.js";
 import { lsGet } from "./storage.js";
 import { uiLang, translateChrome } from "./ui-lang.js";
@@ -48,6 +49,7 @@ function restartDesk(){
   forgetRowNaturals();
   eForgetRecency();
   forgetCopies();
+  forgetLookEdits();
   rearmTrustRecheck();
   putLang(lsGet("eLang") || uiLang());
   applyBootCatalog();
