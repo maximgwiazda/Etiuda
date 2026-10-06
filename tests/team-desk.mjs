@@ -28,7 +28,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 46;
+const EXPECTED = 48;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -138,7 +138,7 @@ try {
   const entry = (who, key, epoch, team) => ({ desk: { id: who.id, key: who.key, box: who.box },
     wrap: D1.api.wrapTeamKey(key, who.box, team || TEAM, epoch, who.id) });
   const teamFile = (o) => sign(Object.assign({ format: 1, kind: "etiuda-team", id: o.team || TEAM, catalogs: o.catalogs || ["lamp-shop", "tea-room"],
-    lead: { keyId: o.keyId || LEAD.keyId, public: o.public || LEAD.public }, sealed: true, exportsSealed: false,
+    lead: { keyId: o.keyId || LEAD.keyId, public: o.public || LEAD.public }, sealed: true, exportsSealed: o.exportsSealed === true,
     epoch: o.epoch, roster: o.roster }, o.handover ? { handover: o.handover } : {}), o.signer || lead.privateKey, o.keyId || LEAD.keyId);
   const put = (dir, name, t) => fs.writeFileSync(path.join(dir, name), t, "utf8");
   const epochs = (D, team) => Object.keys(((D.envelope().teamKeys || {})[team || TEAM]) || {}).sort().join();
@@ -430,6 +430,8 @@ try {
       return { r: r, text: fs.existsSync(at) ? fs.readFileSync(at, "utf8") : null };
     };
     const inSaved = needle => walk(SAVED).filter(f => fs.readFileSync(f, "utf8").indexOf(needle) >= 0).length;
+    /* The lead's word on exports, as Studio writes it for every team it makes: sealed. 14ar turns it to false. */
+    put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)], exportsSealed: true })));
     const sealedOut = await exportAs(D9, "Lamp Shop.ec", lampFrom), env = sealedOut.text ? JSON.parse(sealedOut.text) : {};
     const byMember = env.kind === "etiuda-sealed" ? (await (async () => { put(OWN, "lamp-copy.ec", sealedOut.text);
       const t = await read(loadDesk(D9.ud), "lamp-copy.ec"); fs.unlinkSync(path.join(OWN, "lamp-copy.ec")); return t; })()) : "";
@@ -449,6 +451,24 @@ try {
       && !fs.readdirSync(SAVED).some(n => /^Refused/.test(n)),
       "14ap where the desk cannot seal for the team, here the folder's team file no longer listing the catalog, the export is"
       + " refused and nothing is written: " + said(refused.r) + ", a file " + (refused.text === null ? "no" : "yes"));
+    /* THE PLAIN ARM (Studio's Desks screen, "A desk's export"): the team file the desk trusts says exportsSealed false. */
+    const plainArm = await exportAs(D9, "Let out.ec", lampFrom);
+    check(said(plainArm.r) === said({ name: "Let out.ec", ok: true }) && plainArm.text === made,
+      "14ar where the team's file at the folder, whole under the pinned lead and listing the catalog, says exportsSealed false,"
+      + " an export made from that team's sealed catalog is written as the page sent it: " + said(plainArm.r) + ", "
+      + (plainArm.text === made ? "byte for byte" : "changed"));
+    const bent = JSON.parse(JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)], exportsSealed: true })));
+    bent.exportsSealed = false;
+    put(OWN, "etiuda-team.json", JSON.stringify(bent));
+    const bentOut = await exportAs(D9, "Bent.ec", lampFrom);
+    put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 3, roster: [], exportsSealed: false })));
+    const leftOut = await exportAs(D9, "Left.ec", lampFrom);
+    put(OWN, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 2, roster: [entry(me9, K2, 2)] })));
+    check(said(bentOut.r) === said({ name: "Bent.ec", ok: false, sealed: true }) && bentOut.text === null
+      && said(leftOut.r) === said({ name: "Left.ec", ok: false, sealed: true }) && leftOut.text === null
+      && !fs.readdirSync(SAVED).some(n => /^(Bent|Left)/.test(n)),
+      "14aR THE CONTROL: exportsSealed false in a team file changed after signing, or from a team that has left this desk off"
+      + " its roster at a newer epoch, lets nothing out: " + said(bentOut.r) + ", " + said(leftOut.r));
     /* The page's half: host.js hands the host the catalog the export was made from, and the host's sealed answer back. */
     const H = await import(MOD("host.js"));
     const realWrite = D1.invoke["etiuda:write-catalog-save"], got = [];

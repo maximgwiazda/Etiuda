@@ -1104,10 +1104,10 @@ function teamCovering(root, catalogId) {
   return !!pin && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public && Array.isArray(doc.catalogs)
     && doc.catalogs.map(String).indexOf(catalogId) >= 0 ? doc : null;
 }
-/* The newest key this desk keeps, as {team, epoch, key}, for the one team whose envelope held the edition a file grew from
+/* The newest key this desk keeps, as {team, epoch, key, plain}, for the one team whose envelope held the edition a file grew from
    (`pin`), where that team also covers the catalog at the folder written to; else null. An edition not opened in this run
    is looked for among the folder's catalogs first. A desk the covering file leaves off its roster at an epoch newer than
-   any key it keeps is out of the team, and gets null too. */
+   any key it keeps is out of the team, and gets null too. `plain` is the covering file's exportsSealed set false. */
 function sealFor(catalogId, pin, root) {
   heedTeam();
   if (!editionTeam.has(pin)) ecFilesIn(root).forEach(f => ecFacts(f, ""));
@@ -1120,7 +1120,7 @@ function sealFor(catalogId, pin, root) {
   if (cover.epoch > epoch && !cover.roster.some(x => !!x && !!x.desk && x.desk.id === me)) return null;
   try {
     const key = Buffer.from(safeStorage.decryptString(Buffer.from(kept[epoch], "base64")), "base64");
-    return key.length === 32 ? { team: team, epoch: epoch, key: key } : null;
+    return key.length === 32 ? { team: team, epoch: epoch, key: key, plain: cover.exportsSealed === false } : null;
   } catch { return null; }
 }
 /* The file is <stem>-<8 hex>.ec and its catalog id ends in the same 8 hex, so two catalogs with one stem
@@ -2513,12 +2513,14 @@ ipcMain.handle("etiuda:choose-catalog-save", async (e, title, name, label) => {
   return { name: path.basename(file) };
 });
 /* An export made from a catalog this desk opened from an envelope (`from`, the stored catalog's id and pin) stays sealed,
-   for the team that sealed that edition, under the newest key the desk keeps for it; null where it cannot be sealed. */
+   for the team that sealed that edition, under the newest key the desk keeps for it; null where it cannot be sealed.
+   Where it could be and that team's file says exportsSealed false, the lead has let exports out in the clear. */
 function exportText(text, from) {
   const id = from && typeof from === "object" ? String(from.id || "") : "";
   if (!id || !teamOpened.has(id)) return text;
   const seal = sealFor(id, String(from.sha || ""), catalogFolder());
-  return seal ? JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, text), null, 1) + "\n" : null;
+  if (!seal) return null;
+  return seal.plain ? text : JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, text), null, 1) + "\n";
 }
 /* The bytes go to a temp file beside the choice and are renamed over it, so a failed write never
    leaves half a catalog under that name, and the answer says whether they landed. */
