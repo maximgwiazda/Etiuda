@@ -37,6 +37,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/catalog-trust-desk.mjs                 no fixtures, the desk's own load path saying that signature, one process per launch
     node tests/catalog-trust-desk.mjs, legs 73a to 73e no fixtures, an empty desk that made a catalog from nothing offered the lead's import of it by its lineage
     node tests/token-canary.mjs                       no fixtures, TOKEN_CANARY held to fill()
+    node tests/variables.mjs                          no fixtures, a catalog's variables, the gender glyph, the override of {PAX}, {NAME}; git for leg 9
     node tests/linux-package.mjs                      no fixtures, the Ubuntu desk's .deb as tools/package-linux.mjs judges it, on planted trees
     node tests/test.js                               sections 1 to 3 without fixtures
     ETIUDA_FIXTURES=<folder> node tests/test.js      all five sections
@@ -55,7 +56,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
     ETIUDA_FIXTURES=<folder> node tests/reinstall.js     install, use, uninstall, install again
 
-`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `module-calls.mjs`, `desk-ipc.mjs`, `catalog-history.mjs`, `catalog-shared.mjs`, `desk-growth.mjs`, `shell-office.mjs`, `hpke.mjs`, `team-desk.mjs`, `team-join.mjs`, `pick.mjs`, `copy-routes.mjs`, `about.mjs`, `catalog-trust.mjs`, `catalog-trust-desk.mjs`, `token-canary.mjs`, `test.js`, `i18n-scan.js`,
+`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `module-calls.mjs`, `desk-ipc.mjs`, `catalog-history.mjs`, `catalog-shared.mjs`, `desk-growth.mjs`, `shell-office.mjs`, `hpke.mjs`, `team-desk.mjs`, `team-join.mjs`, `pick.mjs`, `copy-routes.mjs`, `about.mjs`, `catalog-trust.mjs`, `catalog-trust-desk.mjs`, `token-canary.mjs`, `variables.mjs`, `test.js`, `i18n-scan.js`,
 `pl-diacritics.js`, `css-layers.js`, `motion-tokens.js` and `kin-contrast.mjs`, none of which needs a fixture or a browser. `npm run smoke` needs both.
 
 `css-dead.js`, `ghosts.js` and `storage-keys.js` are reports rather than gates: they print and
@@ -124,6 +125,7 @@ third column is how to check this one.
 | `catalog-history.mjs` | `shell/` and `src/` modules, RUN | the backups are kept, pruned and put back by the shell, so it runs `shell/main.js` under a stubbed electron over temp folders and reads the bytes on disk; the rows the Library shows are the page's, so `catalog-history.js` is imported and called rather than read |
 | `catalog-shared.mjs` | `shell/` and `src/` modules, RUN, and `src/` sliced | two desks are two evaluations of `shell/main.js` sharing one documents folder, and each page's write is the real `catalog-merge.js`; legs 10a to 10f slice the page's own half out of `catalog-file.js` and `catalog-offer.js` and run it over a stated scope, the way `test.js` does, by choice rather than need, since other gates import `catalog-file.js` in bare node; a name the scope does not state throws |
 | `token-canary.mjs` | `src/` modules, RUN, and `sourceDoc()` | it calls `fill()` and compares what it takes with the canary as its two readers read it; the source is read only as a list of candidate names |
+| `variables.mjs` | `src/` modules, RUN, and the same modules at e3fe06b out of git | a rule and a card are read through the evaluator and `fill()` themselves; whether a catalog without variables copies what it copied before is a comparison with the code before, which only that code can answer |
 | `smoke.js` | artefact | a browser opens the file that ships |
 | `text-scan-selftest.js` | a toy tree | it proves the five rows above that say `src/` |
 

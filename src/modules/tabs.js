@@ -12,6 +12,7 @@ import { cssEsc } from "./css-esc.js";
 import { syncIntentClearBtns } from "./intent-clear.js";
 import { intentEscapeStep } from "./escape-ladder.js";
 import { syncRoleDrum } from "./role-drum.js";
+import { getHandGender, putHandGender, syncGenderGlyph } from "./gender-drum.js";
 import { pax, intentEl, roleSel, $ } from "./dom.js";
 import { lang, intentIdxs, intentText, cats, entrySel, setIntentIdxs, setIntentText, setCats, putEntrySel, setPickRun } from "./app-state.js";
 import { hooks } from "./hooks.js";
@@ -34,6 +35,7 @@ function blankTab(){
     intentText:"",
     intentBox:"",
     who:"",
+    gender:null,
     cats:[],
     entrySel:null,
     scrollY:0,
@@ -123,6 +125,7 @@ function snapshotActiveTab(){
   t.intentText=intentText;
   t.intentBox=intentEl?intentEl.value:"";
   t.who=roleSel?roleSel.value:"";
+  t.gender=getHandGender();
   t.cats=cats.slice();
   t.entrySel=entrySel?{id:entrySel.id, vi:entrySel.vi}:null;
   t.scrollY=pageScrollY();
@@ -236,6 +239,7 @@ function applyTab(tb){
   activeTabId=tb.id;
   if(pax) pax.value=tb.pax||"";
   if(roleSel) roleSel.value=tb.who||"";
+  putHandGender(tb.gender);
   setIntentIdxs(Array.isArray(tb.intentIdxs)?tb.intentIdxs.slice().filter(i=>Number.isInteger(i)&&i>=0&&i<intentCount()):[]);
   setIntentText(tb.intentText||"");
   setCats(Array.isArray(tb.cats)?tb.cats.slice():[]);
@@ -255,6 +259,7 @@ function applyTab(tb){
   }
   syncIntentClearBtns();
   syncRoleDrum();   // the drum shows the tab's own role
+  syncGenderGlyph();
 
   // Refresh clear-button disabled states without firing oninput (avoids re-entrant tab save)
   const paxClear=$("#paxClear"); if(paxClear) paxClear.disabled=!String(pax&&pax.value||"").length;

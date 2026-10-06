@@ -21,6 +21,7 @@ import { railQuery, markSurface, kbdNav, sayMark } from "./mark.js";
 import { dragState, cats, setRailOrder, setRailMatch, setRailMarkIdx, railMatch, railMarkIdx, railOrder, railSortT, setRailSortT, catsDropArmed, setCatsDropArmed, setCats, railSel, setRailSel, setRailSettled, setSemiKind, setRailMarkUsed, entrySel, putEntrySel, semiKind, intentIdxs, shown } from "./app-state.js";
 import { captureSettle, glideSettle } from "./paint.js";
 import { hooks } from "./hooks.js";
+import { catalogVariables } from "./variables.js";
 
 // The rail's rows: the order they sit in, what each one says, how the list is painted and
 // every gesture on them. How wide the rail is and when it docks is the app's, and stays there.
@@ -344,12 +345,21 @@ function railBracketPass(relRows){
    is the filled text, which depends on the agent's name, the clock and the SELECTED INTENT.
    A canary carrying every token is filled per card; cards whose text holds no token (250 of
    257 in the working catalog) short-circuit to a constant and survive every pick. */
-const CARD_TOKEN_RE=/\{(GREET|AGENT|PAX|ROLE|INIT|INTENT|ACTION|TOPIC|Z|DAYPART)/;
-const TOKEN_CANARY="{GREET}{AGENT}{PAX}{ROLE}{INIT}{INTENT}{ACTION}{TOPIC}{Z}x{DAYPART:a|b|c}";
+/* Any capital after a brace, because a catalog's own variables are tokens too and none is named here. */
+const CARD_TOKEN_RE=/\{[A-Z]/;
+const TOKEN_CANARY="{GREET}{AGENT}{PAX}{ROLE}{INIT}{INTENT}{ACTION}{TOPIC}{Z}x{DAYPART:a|b|c}{NAME}{GENDER:a|b|c}{GREET:a|b|c}{PAX:a|b|c}{NAME:a|b|c}{INTENT:a|b|c}{TOPIC:a|b|c}{AGENT:a|b|c}{ROLE:a|b|c}";
+/* The catalog's own variables, bare and inline with a word per rule, so the key moves when one does. */
+function catalogCanary(){
+  const v=catalogVariables(), list=(v&&Array.isArray(v.list))?v.list:[];
+  return list.map(d=>{
+    const n=d&&d.name, k=(d&&Array.isArray(d.rules))?d.rules.length:0;
+    return n ? "{"+n+"}{"+n+":"+Array.from({length:k},(_,i)=>i).join("|")+"}" : "";
+  }).join("");
+}
 function cardFillKey(m){
   const raw=String(m&&m.en||"")+String(m&&m.pl||"");
   if(!CARD_TOKEN_RE.test(raw)) return "";
-  try{ return fill(TOKEN_CANARY,m); }catch(e){ return "?"+ePackEpoch; }
+  try{ return fill(TOKEN_CANARY+catalogCanary(),m); }catch(e){ return "?"+ePackEpoch; }
 }
 function drawIntentRail(){ drawIntentRailCore(); syncRailCount(); railDecorate(false); scheduleCutScan(); }
 /* HOW MANY, AND HOW MANY PUT AWAY - the two questions a list of intents is asked. Counted over

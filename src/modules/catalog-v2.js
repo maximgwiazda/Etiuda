@@ -46,9 +46,9 @@ const CARD_FLAGS=["firstOnly","allIntents","intentTop"];
    modified are named so they are never carried: an export re-makes them. So is name, which the
    format no longer has and no file of this build may give back. */
 const V2_CARD_NAMED=["id","shelf","title","body","note","bodyShape","k","firstOnly","allIntents","intentTop",
-  "paxVoc","lockLang","requests","retired","next","commits"];
+  "paxVoc","paxOwn","lockLang","requests","retired","next","commits"];
 const V2_HEAD_NAMED=["format","kind","id","rev","date","langs","commentLang","tags","cards","role","facts",
-  "greet","stop","sample","modified","hash","sig","notes","grew","desk","name"];
+  "greet","stop","sample","modified","hash","sig","notes","grew","desk","name","variables"];
 // One phrase per part of the day, and the clock has three. A language whose greeting covers
 // two parts writes the same phrase twice, which is what the built-in Polish does.
 const V2_GREET_PARTS=3;
@@ -522,6 +522,54 @@ function v2HeaderProblems(data,codes,out){
     });
   }
 }
+/* THE TEAM'S VARIABLES, by shape: the vocabulary of facts and comparisons is variables.js's, and a
+   condition this build does not know never holds there, so a newer Studio's rule is not a refusal.
+   Written out here because this module imports nothing; a leg holds the two name lists together. */
+function v2VarProblems(v,codes,out){
+  const V2_VAR_NAME_RE=/^[A-Z][A-Z0-9]*$/, V2_VAR_FIXED=["Z","GENDER","DAYPART","INIT","ACTION"];
+  const V2_VAR_PARTS=["morning","afternoon","evening"];
+  if(v===undefined) return;
+  if(!v||typeof v!=="object"||Array.isArray(v)){ out.push("variables: not an entry"); return; }
+  const clock=s=>{ const m=/^(\d{2}):(\d{2})$/.exec(v2Str(s)); return m&&+m[1]<24&&+m[2]<60 ? (+m[1])*60+(+m[2]) : NaN; };
+  if(v.hours!==undefined){
+    const h=v.hours, at=h&&typeof h==="object"&&!Array.isArray(h) ? V2_VAR_PARTS.map(k=>clock(h[k])) : [];
+    if(at.length!==3||at.some(n=>!Number.isFinite(n))) out.push("variables.hours: wanted morning, afternoon and evening as HH:MM");
+    else if(!(at[0]<at[1]&&at[1]<at[2])) out.push("variables.hours: wanted morning before afternoon before evening");
+  }
+  if(v.list===undefined) return;
+  if(!Array.isArray(v.list)){ out.push("variables.list: not a list"); return; }
+  const seen={};
+  v.list.forEach((d,i)=>{
+    const name=v2Str(d&&d.name), where="variables "+(name||("["+i+"]"))+": ";
+    if(!d||typeof d!=="object"||Array.isArray(d)){ out.push("variables["+i+"]: not an entry"); return; }
+    if(!V2_VAR_NAME_RE.test(name)){ out.push(where+"wanted a name of capital letters and digits, starting with a letter"); return; }
+    if(seen[name]){ out.push(where+"the name is claimed twice"); return; }
+    seen[name]=1;
+    if(V2_VAR_FIXED.indexOf(name)>-1){ out.push(where+"Etiuda's own, and not set by rules"); return; }
+    if(d.about!==undefined&&typeof d.about!=="string") out.push(where+"about is not text");
+    const rules=d.rules;
+    if(!Array.isArray(rules)||!rules.length){ out.push(where+"wanted a list of rules"); return; }
+    rules.forEach((r,j)=>{
+      const at=where+"rule "+(j+1)+" ";
+      if(!r||typeof r!=="object"||Array.isArray(r)){ out.push(at+"is not an entry"); return; }
+      if(!Array.isArray(r.when)) out.push(at+"has no list of conditions");
+      else r.when.forEach((c,k)=>{
+        if(!c||typeof c!=="object"||typeof c.fact!=="string"||typeof c.op!=="string")
+          out.push(at+"condition "+(k+1)+" wanted a fact and a comparison");
+      });
+      if(r.join!==undefined&&r.join!=="and"&&r.join!=="or") out.push(at+"joins its conditions by "+JSON.stringify(r.join)+", wanted and or or");
+      if(r.name!==undefined&&typeof r.name!=="string") out.push(at+"has a name that is not text");
+      const w=r.write;
+      if(!w||typeof w!=="object"||Array.isArray(w)) out.push(at+"wanted its words by language");
+      else Object.keys(w).forEach(code=>{
+        if(codes.indexOf(code)<0) out.push(at+"writes "+code+", a language this catalog does not declare");
+        else if(typeof w[code]!=="string") out.push(at+"writes "+code+" as something other than text");
+      });
+    });
+    const last=rules[rules.length-1];
+    if(last&&Array.isArray(last.when)&&last.when.length) out.push(where+"the last rule has conditions, and the last is Otherwise");
+  });
+}
 /** Section 2.5 of the specification, and the body rules of 2.6. Every problem rather than the
  *  first, because a maintainer fixing a file wants the whole list, and every message names the
  *  field and what it belongs to. */
@@ -566,9 +614,11 @@ function v2Problems(data){
     v2BodyProblems(c,id,primary,out);
     v2FlagProblem(c,"retired",id,out);
     v2FlagProblem(c,"commits",id,out);
+    if(c&&c.paxOwn!==undefined&&c.paxOwn!==0&&c.paxOwn!==1) out.push("card "+id+": paxOwn is "+JSON.stringify(c.paxOwn)+", wanted 0, 1 or absent");
   });
   data.cards.forEach((c,i)=>v2NextProblems(c,v2Str(c&&c.id)||("["+i+"]"),cardSeen,out));
   v2HeaderProblems(data,codes,out);
+  v2VarProblems(data.variables,codes,out);
   if(data.hash!=null && v2ContentHash(data)!==v2Str(data.hash))
     out.push("hash: "+v2Str(data.hash)+" is not the hash of what the file holds");
   return out;
@@ -632,6 +682,7 @@ function catalogFromV2(data){
     else if(c.bodyShape==="alts"){ m.alt=1; }
     CARD_FLAGS.forEach(f=>{ if(c[f]) m[f]=1; });
     if(c.paxVoc!=null) m.paxVoc=(+c.paxVoc)?1:0;
+    if(c.paxOwn!=null) m.paxOwn=(+c.paxOwn)?1:0;
     if(c.lockLang) m.lockLang=v2Str(c.lockLang);
     const links=(Array.isArray(c.requests)?c.requests:[]).map(id=>idxOf[v2Str(id)]).filter(i=>i!=null);
     if(links.length) m.intents=links;
@@ -672,6 +723,7 @@ function catalogFromV2(data){
   if(data.notes) out.notes=v2Copy(data.notes);
   if(data.grew) out.grew=v2Copy(data.grew);
   if(data.desk) out.desk=v2Copy(data.desk);
+  if(data.variables) out.variables=v2Copy(data.variables);
   const more=v2Extra(data,V2_HEAD_NAMED); if(more) out.ext=more;
   return out;
 }
@@ -742,6 +794,7 @@ function catalogToV2(c,opts){
     const k=v2Str(m.k).trim(); if(k) card.k=k;
     CARD_FLAGS.forEach(f=>{ if(m[f]) card[f]=true; });
     if(m.paxVoc!=null) card.paxVoc=(+m.paxVoc)?1:0;
+    if(m.paxOwn!=null) card.paxOwn=(+m.paxOwn)?1:0;
     if(m.lockLang) card.lockLang=v2Str(m.lockLang);
     if(m.retired) card.retired=true;
     if(m.commits) card.commits=true;
@@ -775,6 +828,7 @@ function catalogToV2(c,opts){
   if(c.notes&&typeof c.notes==="object") out.notes=v2Copy(c.notes);
   if(c.grew&&typeof c.grew==="object") out.grew=v2Copy(c.grew);
   if(c.desk&&typeof c.desk==="object") out.desk=v2Copy(c.desk);
+  if(c.variables&&typeof c.variables==="object") out.variables=v2Copy(c.variables);
   v2Restore(out,c.ext,V2_HEAD_NAMED);
   /* Section 5. This engine is never the origin of a catalog, so a file it hands back says so.
      Rev arrives already raised where an export chose a new edition - see currentCatalog - and is

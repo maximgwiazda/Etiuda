@@ -8,6 +8,7 @@ import { BASE_CATS } from "./pack.js";
 import { hueIsOffered } from "./cat-identity.js";
 import { catalogFromV2, isV2, v2CatKey } from "./catalog-v2.js";
 import { setCatalogGreet } from "./greeting.js";
+import { setCatalogVariables } from "./variables.js";
 import { setCatalogStop } from "./affinity.js";
 import { fileStamp, toastRefusal, t } from "./ui-lang.js";
 
@@ -198,6 +199,7 @@ function normaliseCatalog(data){
      well as read at the sibling load, or Import would drop what the auto-load keeps. */
   if(data&&data.greet&&typeof data.greet==="object") cat.greet=data.greet;
   if(data&&data.stop&&typeof data.stop==="object") cat.stop=data.stop;
+  if(data&&data.variables&&typeof data.variables==="object") cat.variables=JSON.parse(JSON.stringify(data.variables));
   /* The format 2 fields no screen reads yet, and whatever a newer build adds: carried so that an
      export gives back the file it was handed. Validated at catalogFromV2, so only the shape is checked here. */
   const table=v=>(v&&typeof v==="object"&&!Array.isArray(v)&&Object.keys(v).length) ? JSON.parse(JSON.stringify(v)) : null;
@@ -397,6 +399,7 @@ function eApplyCatalog(c){
      loading a plain catalog over a rich one takes the rich one's tables away with it. */
   setCatalogGreet((c.greet&&typeof c.greet==="object")?c.greet:null);
   setCatalogStop((c.stop&&typeof c.stop==="object")?c.stop:null);
+  setCatalogVariables((c.variables&&typeof c.variables==="object")?c.variables:null);
   // After the categories, never before: roles are resolved against what actually exists.
   const i=c.intents||{};
   /* Every field of every language, named by the table rather than one line each. The pad

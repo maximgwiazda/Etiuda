@@ -5,6 +5,7 @@ import { applyCatsToGlobal } from "./cat-set.js";
 import { drawIntentRail } from "./rail-list.js";
 import { drawPills, drawTabs } from "./tabs.js";
 import { syncRoleDrum } from "./role-drum.js";
+import { syncGenderGlyph } from "./gender-drum.js";
 import { render } from "./render.js";
 import { refreshDialogName } from "./dialog.js";
 import { syncSettingsMenu } from "./header-menus.js";
@@ -27,7 +28,7 @@ function applyUiLang(){
   /* References, never names looked up on window: a top-level function is a property of window
      in a classic script and is not one in a module, so a lookup by string turns quietly false
      and these six surfaces stop repainting with nothing thrown and nothing logged. */
-  [applyCatsToGlobal,drawIntentRail,drawPills,drawTabs,syncRoleDrum,render].forEach(f=>{
+  [applyCatsToGlobal,drawIntentRail,drawPills,drawTabs,syncRoleDrum,syncGenderGlyph,render].forEach(f=>{
     try{ f(); }catch(e){}
   });
   translateChrome();

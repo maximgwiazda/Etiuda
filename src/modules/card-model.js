@@ -1,4 +1,4 @@
-import { cardFieldKey, cardStorageKeys, CARD_PLAIN_FIELDS, CARD_BOOL_FLAGS, CARD_UNBOXED_FLAGS, paxVocOn } from "./card-fields.js";
+import { cardFieldKey, cardStorageKeys, CARD_PLAIN_FIELDS, CARD_BOOL_FLAGS, CARD_UNBOXED_FLAGS, paxVocOn, paxOwnOn } from "./card-fields.js";
 import { CONTENT_LANGS } from "./content-model.js";
 import { uiLang } from "./ui-lang.js";
 import { BASE_M, pack, savePack } from "./pack.js";
@@ -98,6 +98,9 @@ function overrideAgainstBase(base, full){
      NEW value and answers the opposite. */
   const asSaved=Object.assign({},base,o); delete asSaved.paxVoc;
   if(paxVocOn(full)!==paxVocOn(asSaved)) o.paxVoc=paxVocOn(full)?1:0;
+  /* The same for the override, which derives from the boxes and the text this override may change. */
+  const asOwn=Object.assign({},base,o); delete asOwn.paxOwn;
+  if(paxOwnOn(full)!==paxOwnOn(asOwn)) o.paxOwn=paxOwnOn(full)?1:0;
   if(!intentsEqualStored(full.intents, base.intents)) o.intents=full.intents;
   // Whole list replaces, and only a caller that holds one says anything about it.
   if("next" in full && !nextEqualStored(full.next, base.next)) o.next=Array.isArray(full.next)?full.next:[];

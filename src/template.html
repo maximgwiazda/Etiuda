@@ -394,6 +394,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* The combined box: the drum's fixed lane plus a name's worth of typing room. The cap
      sits a fifth below its first draft - the search box is the one that deserves width. */
   --paxrole-field:clamp(172px, 10vw + 112px, 240px);
+  --gender-glyph:32px;
   /* Thin scrollbars app-wide. The thumb is OPAQUE, so the dot field stops at it, and reads as the
      see-through grey did: the same grey at the same share, mixed over the canvas. The track stays
      transparent. All four token blocks. */
@@ -1288,7 +1289,7 @@ body.pills-off.pills-peek .pills-slot{display:block}
    window. A little under the search box's own minimum, and tracking it, so the pair keeps its
    order at every width; the warning above is about a floor ABOVE a box's basis, and this one is
    below it by construction. */
-.fills .fill:nth-child(1){flex:0 1 var(--paxrole-field);
+.fills .fill:nth-child(1){flex:0 1 calc(var(--paxrole-field) + var(--gender-glyph));
   min-width:calc(max(var(--name-field),var(--paxrole-field) - 70px) - 12px)}
 .fills .fill:nth-child(2){flex:1 0 max(var(--name-field),calc(var(--paxrole-field) - 70px));min-width:0}
 /* The tools are drawn at their own size and never squeezed: a control narrower than its glyph
@@ -1296,7 +1297,7 @@ body.pills-off.pills-peek .pills-slot{display:block}
 .fills .fill:nth-child(3){flex:0 0 auto;min-width:0}
 /* Widths come from the :root tokens, so the boxes cannot drift into per-box clamps.
    Order is ROLE+PAX | SEARCH | TOOLS; the middle keeps the nth-child(2) grow rule. */
-.fills .fill:nth-child(1) .field-wrap{width:var(--paxrole-field)}
+.fills .fill:nth-child(1) .field-wrap{width:calc(var(--paxrole-field) + var(--gender-glyph))}
 /* The four that left the band. THE SWITCHER SETS THEIR HEIGHT: .btn's 7px is drawn round a row
    of text and these hold a 16px glyph, which left them a third taller than the EN|PL beside
    them. 4px is what the seg's own buttons carry, so both boxes are built the same way and land
@@ -1330,6 +1331,25 @@ body.role-waits #roleDrum{display:none}
 #roleDrum .rd-next{bottom:-1px;font:9px var(--sans);opacity:.35}
 #roleDrum .rd-track.rd-up{animation:rd-up var(--m-move) var(--m-ease)}
 #roleDrum .rd-track.rd-down{animation:rd-down var(--m-move) var(--m-ease)}
+/* The gender glyph at the box's right end: grey when read from the name, ink and the accent's dot when
+   set by hand. A click, the wheel and the arrow keys turn it (gender-turn.js). */
+#genderDrum{position:relative;flex:0 0 auto;width:var(--gender-glyph);border-left:1px solid var(--field-line);
+  overflow:hidden;user-select:none;-webkit-user-select:none;outline:none;
+  border-radius:0 var(--radius-sm) var(--radius-sm) 0}
+#genderDrum:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.paxrole .field-clear{right:calc(var(--gender-glyph) + 4px)}
+#genderDrum .gd-track{position:absolute;inset:0}
+#genderDrum svg{position:absolute;left:50%;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
+#genderDrum .gd-cur{top:50%;width:15px;height:15px;transform:translate(-50%,-50%);stroke-width:1.65;color:var(--dim)}
+#genderDrum.gd-hand .gd-cur{color:var(--ink);stroke-width:1.9}
+#genderDrum .gd-prev,#genderDrum .gd-next{width:7px;height:7px;transform:translateX(-50%);stroke-width:2.4;
+  color:var(--ink);opacity:.35}
+#genderDrum .gd-prev{top:0}
+#genderDrum .gd-next{bottom:0}
+#genderDrum.gd-hand::after{content:"";position:absolute;right:4px;top:50%;width:4px;height:4px;margin-top:-2px;
+  border-radius:50%;background:var(--accent)}
+#genderDrum .gd-track.rd-up{animation:rd-up var(--m-move) var(--m-ease)}
+#genderDrum .gd-track.rd-down{animation:rd-down var(--m-move) var(--m-ease)}
 @keyframes rd-up{from{transform:translateY(7px)}to{transform:none}}
 @keyframes rd-down{from{transform:translateY(-7px)}to{transform:none}}
 /* The row's select and the Settings screen's are the same control, so they are one rule. The
@@ -3085,6 +3105,20 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 /* The language pin, under the Advanced flags. Dimmed rather than hidden while off, for the
    same reason the narrowest-column slider is. */
 .mf-pin{display:flex;align-items:center;gap:10px;margin-top:8px}
+/* The override of {PAX}: off shows where the address comes from, on shows the two boxes, indented
+   under the switch's label. */
+.mf-cols .mf-own{grid-row:span 2;display:flex;flex-direction:column;gap:8px;min-width:0}
+.mf-own .mf-own-off{font:12.5px var(--sans);color:var(--dim);line-height:1.4;padding-left:37px;margin-top:-4px}
+.mf-own .mf-own-on{display:none;flex-direction:column;gap:8px;padding-left:37px}
+.mf-own.on .mf-own-on{display:flex}
+.mf-own.on .mf-own-off{display:none}
+.mf-switch{appearance:none;-webkit-appearance:none;position:relative;flex:0 0 auto;width:28px;height:16px;
+  margin:1px 0 0 3px;border-radius:8px;background:var(--line-strong);outline:none}
+.mf-switch::after{content:"";position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:50%;
+  background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.mf-switch:checked{background:var(--accent-fill)}
+.mf-switch:checked::after{left:14px}
+.mf-switch:focus-visible{box-shadow:0 0 0 2px var(--accent-soft)}
 /* A cell like the others, so it drops the standalone spacing - AND IT SPANS THE EMPTY CELL
    BELOW IT. A row is as tall as its tallest cell across BOTH columns, so a switcher taller
    than a checkbox pushed the next row down; spanning takes room this column already had.
@@ -3746,6 +3780,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
                autocorrect="off" autocapitalize="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                title="The customer's name as the chat gives it, filling {PAX} with the tidied first name">
         <button type="button" class="field-clear" id="paxClear" title="Clear customer name" aria-label="Clear PAX"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
+        <!-- Its words are set by syncGenderGlyph, by how the gender was reached; the sweep is kept off. -->
+        <div id="genderDrum" role="spinbutton" tabindex="0" data-i18n-skip><div class="gd-track"></div></div>
       </div></div>
     <div class="fill">
       <div class="combo" id="intentComboWrap">

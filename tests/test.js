@@ -90,7 +90,7 @@ function checkCommentCeiling(src) {
    composer and not for the search that has to find the card composing it, and {GREET} cards
    would quietly stop matching. Reads the table, then insists no reader repeats a phrase of it. */
 function checkGreetingsOnce(src) {
-  const table = extractDecl(src, "const GREETINGS=");
+  const table = extractDecl(src, "const VAR_GREETINGS=");
   const phrases = (table.match(/"[^"]+"/g) || []).map(w => w.slice(1, -1)).filter(w => w.indexOf(" ") > 0);
   const readers = ["function expandSearchPlaceholders(", "function greeting("];
   const problems = [];
@@ -1037,7 +1037,7 @@ function v2Fns() {
     "const V2_ID_RE=", "const V2_SHAPES=", "const V2_MARKER_RE=", "function v2IsBracketLine(",
     "const V2_GREET_PARTS=", "function v2BodyProblems(", "const V2_LANG_RE=", "function v2LangProblems(",
     "const V2_SHA_RE=", "function v2Missing(", "function v2FlagProblem(", "function v2NextProblems(",
-    "function v2HeaderProblems(", "function v2Problems(",
+    "function v2HeaderProblems(", "function v2VarProblems(", "function v2Problems(",
     /* CARD_FLAGS is spelled out to its first member: card-fields.js declares the same name
        and comes first in the source document, so the bare marker slices the wrong one. */
     "const V2_CARD_NAMED=", "const V2_HEAD_NAMED=", "function v2Copy(", "function v2Put(",
@@ -1560,6 +1560,9 @@ function catalogLangFns() {
     "function intentArr(", "function setContentLangs(",
     "let COMMENT_LANG=", "function setCommentLang(", "function commentLang(",
     "function intentStoreKeys(", "function intentFieldAt(",
+    /* The table and the clock's hours are variables.js's, which greeting.js reads. */
+    "const VAR_GREETINGS=", "const VAR_DAYPARTS=", "const VAR_HOURS=", "function varMinutes(",
+    "let VAR_CATALOG=", "function varHours(", "function varDayPart(",
     "const GREETINGS=", "function greetWordList(", "let CATALOG_GREETINGS=",
     "function greetTable(", "let GREET_WORDS=", "function setCatalogGreet(",
     "function dayPart(", "function greeting(",
@@ -4291,8 +4294,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 999;
-const UI_STRINGS_SHA256 = "275280448fe370d77364f7497da1a62a978d29b5f07a94be33119edfd6185bd0";
+const UI_STRINGS_COUNT = 1016;
+const UI_STRINGS_SHA256 = "16da930640ad69cf4241385f2709d0d9220bb612d8ec6eb0689c0b26bab01c0b";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
@@ -4516,6 +4519,7 @@ function searchFns() {
        the table, its flattening and the list itself - in that order, since each reads the one
        above it. The list is a `let` now: a catalog may bring its own phrases, and both readers
        have to move together when it does. */
+    "const VAR_GREETINGS=",
     "const GREETINGS=",
     "function greetWordList(",
     "let GREET_WORDS=",
@@ -4854,9 +4858,9 @@ function lintCatalogTests() {
      ["card 1: {FOO} in the PL body is not a token the desk fills, so it is copied as written"]);
   eq("and so do the forms fill() leaves alone: a bare DAYPART, an argument on a bare token,"
      + " another case, while {WHO} is left to its own error",
-     lintCatalog(tokens("{DAYPART} {GREET:x} {date} {WHO}.", "Dzien {FOO} {FOO} dobry.")).warnings,
+     lintCatalog(tokens("{DAYPART} {INIT:x} {date} {WHO}.", "Dzien {FOO} {FOO} dobry.")).warnings,
      ["card 1: {DAYPART} in the EN body is not a token the desk fills, so it is copied as written",
-      "card 1: {GREET:x} in the EN body is not a token the desk fills, so it is copied as written",
+      "card 1: {INIT:x} in the EN body is not a token the desk fills, so it is copied as written",
       "card 1: {date} in the EN body is not a token the desk fills, so it is copied as written",
       "card 1: {FOO} in the PL body is not a token the desk fills, so it is copied as written"]);
   const known = "{GREET} {PAX}, {AGENT} {INIT} {ROLE} {Z} {INTENT} {ACTION} {TOPIC}"
@@ -4864,6 +4868,32 @@ function lintCatalogTests() {
   const silent = lintCatalog(tokens(known, known));
   eq("CONTROL: every token the desk fills, and the square-bracket blanks, raise no warning",
      [silent.errors, silent.warnings.filter(w => TOK_WARN.test(w))], [[], []]);
+
+  /* THE CATALOG'S VARIABLES. A team's own token is filled, so it is no unknown; an inline form short of
+     its variable's rules says so, GENDER's nonbinary in its own words; a card overriding {PAX} under a
+     team's address is listed. The control is the same catalog without the variables. */
+  const withVars = (en, pl, more) => { const c = tokens(en, pl); Object.assign(c.cards[0], more || {});
+    c.variables = { list: [{ name: "REPLYBY", rules: [{ when: [{ fact: "gender", op: "is", value: "m" }], write: { en: "a" } },
+      { when: [{ fact: "gender", op: "is", value: "f" }], write: { en: "b" } }, { when: [], write: { en: "c" } }] },
+      { name: "PAX", rules: [{ when: [], write: { en: "{@first}", pl: "{@first-voc}" } }] }] }; return c; };
+  const VW = / gives \{| sets \{PAX\} by hand| is not a token the desk fills/;
+  eq("a team's variable is a token the desk fills, bare and inline with a word per rule",
+     lintCatalog(withVars("{REPLYBY} {REPLYBY:x|y|z}", "{REPLYBY}")).warnings.filter(w => VW.test(w)), []);
+  eq("an inline form short of its variable's rules says so once, and GENDER's nonbinary in its own words",
+     lintCatalog(withVars("{REPLYBY:x|y} {REPLYBY:x|y} {GENDER:Mr|Ms}", "{GREET:Dzień dobry} {GENDER:Pan}")).warnings.filter(w => VW.test(w)),
+     ["card 1: This card gives {REPLYBY} fewer words than it has rules; the rest write the first.",
+      "card 1: This card gives {GENDER} no words for nonbinary, so for a nonbinary customer the desk leaves that place to the agent.",
+      "card 1: This card gives {GREET} fewer words than it has rules; the rest write the first.",
+      "card 1: This card gives {GENDER} no words for nonbinary, so for a nonbinary customer the desk leaves that place to the agent.",
+      "card 1: This card gives {GENDER} fewer words than it has rules; the rest write the first."]);
+  eq("a card overriding {PAX} under the team's address is listed; one following it is not",
+     [lintCatalog(withVars("Hi {PAX}", "Hej {PAX}", { paxOwn: 1 })).warnings.filter(w => VW.test(w)),
+      lintCatalog(withVars("Hi {PAX}", "Hej {PAX}", { paxOwn: 0 })).warnings.filter(w => VW.test(w))],
+     [["card 1: This card sets {PAX} by hand, apart from the catalog's address."], []]);
+  const noVars = tokens("{REPLYBY} Hi {PAX}", "Hej {PAX}"); noVars.cards[0].paxOwn = 1;
+  eq("CONTROL: without the variables a team's token is unknown and an override says nothing",
+     lintCatalog(noVars).warnings.filter(w => VW.test(w)),
+     ["card 1: {REPLYBY} in the EN body is not a token the desk fills, so it is copied as written"]);
 
   /* ONE CARD THE READER REFUSES HIDES NOTHING ELSE. The refused card comes first so that the
      rest's findings would name the wrong card if its positions were the rest's own. */
@@ -5274,6 +5304,16 @@ function filledTokens() {
   if (!bare.size) throw new Error("TOKEN_CANARY in rail-list.js carries no token: " + canary);
   return (FILLED_TOKENS = { bare, arg, raw: String(canary) });
 }
+/* ETIUDA'S OWN VARIABLES AS RULES, and the override's reading, sliced out of src/ so the lint counts a
+   variable's rules and reads a card's override exactly as the desk does. */
+let VAR_RULES = null;
+function varRules() {
+  if (VAR_RULES) return VAR_RULES;
+  const src = sourceText();
+  const decls = ["const VAR_GREETINGS=", "function varText(", "function varIs(", "function varBuiltin(",
+    "function paxVocOn(", "function paxOwnOn("].map(m => extractDecl(src, m)).join("\n");
+  return (VAR_RULES = new Function(decls + "\nreturn { varBuiltin, paxOwnOn };")());
+}
 /* A payload the runtime can hold. A format 2 file is validated and mapped; anything else is
    already that shape, which is what Studio's importer lints and what the runtime-shape legs
    above hand in. */
@@ -5522,6 +5562,14 @@ function lintCatalog(c, at) {
     : ["en", "pl"];
   const primary = declared[0] || "en";
   const BODY_OF = {}; declared.forEach(code => { BODY_OF[code] = KEY("body", code); });
+  /* The catalog's own variables are tokens the desk fills, bare and inline. An inline form gives a
+     word per rule; GENDER's third is nonbinary, which the desk leaves to the agent when missing. */
+  const VR = varRules();
+  const varList = (c.variables && Array.isArray(c.variables.list)) ? c.variables.list : [];
+  const catVar = name => varList.find(d => d && d.name === name) || null;
+  const INLINE = /^(GENDER|GREET|PAX|NAME|INTENT|TOPIC|AGENT|ROLE)$/;
+  const rulesOf = name => { const d = catVar(name) || (INLINE.test(name) ? VR.varBuiltin(name) : null);
+    return d && Array.isArray(d.rules) ? d.rules.length : 0; };
   const lacking = Object.create(null);
   cards.forEach((m, ix) => {
     const title = m && m[KEY("t", primary)];
@@ -5572,7 +5620,19 @@ function lintCatalog(c, at) {
       const key = BODY_OF[code], seen = new Set();
       String(m[key] == null ? "" : m[key]).replace(TOKEN_SHAPE, (raw, name, a) => {
         const T = filledTokens();
-        if ((a ? T.arg : T.bare).has(name) || seen.has(raw)) return raw;
+        if (seen.has(raw)) return raw;
+        if (a && name !== "DAYPART" && rulesOf(name)) {
+          seen.add(raw);
+          const given = a.slice(1).split("|").length, n = rulesOf(name);
+          if (name === "GENDER" && given < 3)
+            warn("card " + place(ix) + ": This card gives {GENDER} no words for nonbinary, so for a nonbinary"
+              + " customer the desk leaves that place to the agent.");
+          if (given < n && !(name === "GENDER" && given === 2))
+            warn("card " + place(ix) + ": This card gives {" + name + "} fewer words than it has rules;"
+              + " the rest write the first.");
+          return raw;
+        }
+        if ((a ? T.arg : T.bare).has(name) || (!a && catVar(name))) return raw;
         if (raw === "{WHO}" && (key === "en" || key === "pl")) return raw;
         seen.add(raw);
         warn("card " + place(ix) + ": " + raw + " in the " + code.toUpperCase()
@@ -5581,6 +5641,8 @@ function lintCatalog(c, at) {
       });
     });
     if (m.seq && !m.alt) warn(where + ": seq without alt does nothing (blocks only split when alt is set)");
+    if (catVar("PAX") && VR.paxOwnOn(m) && declared.some(code => String(m[BODY_OF[code]] || "").indexOf("{PAX}") > -1))
+      warn("card " + place(ix) + ": This card sets {PAX} by hand, apart from the catalog's address.");
     /* THE BLOCK COUNTS, AND ONLY WHERE THERE ARE TWO COPIES TO DIVERGE, spec 2.7 and board item
        511. This compared en against pl unconditionally, so a card carrying no Polish at all - the
        whole of what 505 made legal - warned "2 EN blocks vs 0 PL blocks", which is the format 1

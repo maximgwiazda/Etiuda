@@ -1,5 +1,5 @@
 import { cardLang, parts } from "./card-model.js";
-import { paxVocOn } from "./card-fields.js";
+import { paxVocOn, paxOwnOn } from "./card-fields.js";
 import { intentArr, CONTENT_LANGS, commentLang } from "./content-model.js";
 import { esc } from "./esc.js";
 import { dayPart, noActionText, greeting, GREET_WORDS } from "./greeting.js";
@@ -12,6 +12,9 @@ import { intentIdAt, intentIsCustom, intentIsOverridden, intentOrder, isIntentHi
 import { pax, roleSel } from "./dom.js";
 import { agentName, agentParts } from "./agent.js";
 import { lang, intentIdxs, intentText, cards } from "./app-state.js";
+import { catalogVariables, catalogVariable, varBuiltin, varResolve, varInlinePick, VAR_TOKEN_RE,
+  VAR_DAYPARTS } from "./variables.js";
+import { custGender } from "./gender-drum.js";
 
 // Resolve {INTENT} for a card: a chip selection is an index (the clause follows the
 // language toggle), free text is verbatim in both. "A", "A and B", "A, B and C". The last
@@ -158,6 +161,65 @@ const FILL_A="\u0001", FILL_B="\u0002", FILL_M_A="\u0003", FILL_M_B="\u0004",
    engine's own rule, written beside {DAYPART}: the engine supplies the decision, the catalog every
    word - and it has no words of its own for a language it has no grammar for. */
 const Z_TOKEN=/\{Z\}([ \t]*)/g;
+/* EVERYTHING A RULE CAN ASK AND EVERY WORD IT CAN WRITE, read once per fill and only when a token
+   needs it. The time is the copy's, and the gender the glyph's. */
+function varFacts(m,L){
+  const d=new Date(), mo=d.getMonth()+1, da=d.getDate();
+  const full=formatPaxName(pax.value), words=full?full.split(" "):[];
+  const first=words[0]||"", surname=words.length>1?words[words.length-1]:"";
+  const firstVoc=(L==="pl"&&first)?plVocative(first):first;
+  const a=agentParts(agentName());
+  return { minutes:d.getHours()*60+d.getMinutes(), weekday:String(d.getDay()||7),
+    date:(mo<10?"0":"")+mo+"-"+(da<10?"0":"")+da, daypart:VAR_DAYPARTS[dayPart()], lang:L,
+    name:full, first:first, surname:surname, surnameOr:surname||firstVoc, firstVoc:firstVoc,
+    gender:custGender().v,
+    intentIds:intentIdxs.map(i=>String(intentIdAt(i)).replace(/^t:/,"")),
+    intentSet:intentIdxs.length>0||!!intentText.trim(), intents:intentIdxs.length,
+    intentWords:intentFirst(L), intentsWords:intentFor(L), topic:commentPartTopic(L),
+    action:commentPartCmt(L,noActionText(L)), agent:agentName(), agentDisplay:a.display, init:a.init,
+    role:roleSel.value.trim() };
+}
+function varMark(name){
+  switch(name){
+    case "NAME": return t("NAME");
+    case "GENDER": return t("GENDER");
+    case "GREET": return t("GREET");
+    case "PAX": return t("PAX");
+    case "INTENT": return t("INTENT");
+    case "TOPIC": return t("TOPIC");
+    case "AGENT": return t("AGENT");
+    case "ROLE": return t("ROLE");
+  }
+  return name;
+}
+/* A rule's words are a card's words: the tokens in them are filled the same way, plain, and a
+   variable that names itself stops at the depth below rather than looping. */
+let VAR_DEPTH=0;
+/* The built-ins a card may give its own words to, {GENDER:a|b|c}; {DAYPART} keeps its own branch. */
+const VAR_INLINE_BUILTIN=/^(GENDER|GREET|PAX|NAME|INTENT|TOPIC|AGENT|ROLE)$/;
+function varWritten(def,m,L,F){
+  const r=varResolve(def,F,L,CONTENT_LANGS[0]);
+  if(!r.text) return "";
+  if(VAR_DEPTH>3) return r.text.replace(VAR_TOKEN_RE,"");
+  VAR_DEPTH++;
+  try{ return fill(r.text,m,false,L); } finally{ VAR_DEPTH--; }
+}
+/* THE CATALOG'S VARIABLES AND EVERY INLINE FORM BUT {DAYPART}'s, before Etiuda's own code below,
+   which finds no token this has filled. {PAX} is left to its own branch, which knows the override. */
+function fillVariables(s,m,L,M,facts){
+  const vars=catalogVariables();
+  return s.replace(VAR_TOKEN_RE,(raw,name,arg)=>{
+    if(arg!=null){
+      if(name==="DAYPART") return raw;
+      const def=catalogVariable(name) || (VAR_INLINE_BUILTIN.test(name) ? varBuiltin(name) : null);
+      if(!def) return raw;
+      return M(varInlinePick(name,def,arg.split("|"),facts()),varMark(name));
+    }
+    if(!vars || name==="PAX") return raw;
+    const def=catalogVariable(name);
+    return def ? M(varWritten(def,m,L,facts()),varMark(name)) : raw;
+  });
+}
 function fill(s,m,mark,inL){
   if(!s) return s;
   /* Every token below resolves in the language of the TEXT it is being put into: this card's,
@@ -181,6 +243,11 @@ function fill(s,m,mark,inL){
     ? ((v,name)=>{ const t=String(v==null?"":v);
                    return t?FILL_A+t.replace(FILL_STRIP,"")+FILL_B:MISS(name||"?"); })
     : (v=>String(v==null?"":v));
+  let VF=null;
+  const facts=()=>VF||(VF=varFacts(m,L));
+  s=fillVariables(s,m,L,M,facts);
+  /* {NAME} names the customer in full, for a card that mentions them rather than addressing them. */
+  s=s.replace(/\{NAME\}/g, ()=>M(formatPaxName(pax.value),t("NAME")));
   s=s.replace(/\{GREET\}/g, ()=>M(greeting(L),t("GREET")));
   /* {DAYPART:day|evening} - or three parts for morning|afternoon|evening. The engine
      supplies the DECISION and the catalog every word: phrasing belongs to the desk, and
@@ -203,12 +270,19 @@ function fill(s,m,mark,inL){
      THE CARD'S LANGUAGE DECIDES, NOT THE DESK'S: a pinned card renders in its own language,
      and reading the toggle here declined a name inside English text and left it undeclined
      in Polish - each wrong in whichever direction the desk happened to sit. */
+  /* THE ADDRESS: the card's two boxes where it overrides, the catalog's rules where it has them, and
+     Etiuda's own otherwise, which is the first name in the vocative. A rule writing nothing is the
+     no-name branch below. */
   let n=formatPaxName(pax.value);
   if(n && m){
-    if(m.firstOnly) n=n.split(" ")[0];
-    if(L==="pl" && paxVocOn(m)){
-      const sp=n.indexOf(" ");
-      n = sp<0 ? plVocative(n) : plVocative(n.slice(0,sp))+n.slice(sp);
+    const own=paxOwnOn(m), def=!own && catalogVariable("PAX");
+    if(def) n=varWritten(def,m,L,facts());
+    else{
+      if(own ? m.firstOnly : true) n=n.split(" ")[0];
+      if(L==="pl" && (own ? paxVocOn(m) : true)){
+        const sp=n.indexOf(" ");
+        n = sp<0 ? plVocative(n) : plVocative(n.slice(0,sp))+n.slice(sp);
+      }
     }
   }
   if(n) s=s.replace(/\{PAX\}/g, ()=>M(n,t("PAX")));
