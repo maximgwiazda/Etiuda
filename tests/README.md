@@ -16,7 +16,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/deadcode.js                           no fixtures
     node tests/css-layers.js                         no fixtures, the cascade layers
     node tests/motion-tokens.js                      no fixtures, the motion tiers and the quiet switch
-    node tests/kin-contrast.mjs                      no fixtures, the desk's blue in the four token blocks as drawn (kc1), the ratios it keeps (kc2) and the bubbles' fill (kc3)
+    node tests/kin-contrast.mjs                      no fixtures, the desk's blue in the four token blocks as drawn (kc1), the ratios it keeps (kc2), the bubbles' fill (kc3) and no retired blue in shell/*.js (kc4)
     node tests/build-fresh.mjs                       no fixtures, builds once
     node tests/catalog-routes.mjs                     no fixtures, the two catalog routes
     node tests/module-calls.mjs                       no fixtures, the modules CALLED
