@@ -3115,7 +3115,7 @@ function leavingCopyTests(H) {
     try {
       end = new Function("tourRunning", "tourIdx", "tourEls", "getComputedStyle", "dismissCopy", "document",
         "runTourStepUndo", "closeSettingsMenu", "clearTourFocus", "tourTargetRO", "markTourDone", "markTourInviteDismissed",
-        "ssDel", "TOUR_AT", "toast", "focusIntentOnOpen", "tourAfter",
+        "ssDel", "TOUR_AT", "toast", "focusFirstEntryOnOpen", "tourAfter",
         extractDecl(src("tour.js"), "function endTour(") + "\nreturn endTour;")(
         true, 2, () => ({ root, card, hole, field: null, arrow: null }), () => ({ zIndex: "30" }), H.dismissCopy, { body: doc },
         () => {}, () => {}, () => {}, null, () => {}, () => {}, () => {}, "t", () => {}, () => {}, []);

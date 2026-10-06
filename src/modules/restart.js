@@ -30,7 +30,7 @@ import { syncSampleMark } from "./catalog-file.js";
 import { paintCatNow } from "./catalog-offer.js";
 import { syncRoleWheel } from "./agent.js";
 import { applyPrefs } from "./settings.js";
-import { focusIntentOnOpen } from "./on-open.js";
+import { focusFirstEntryOnOpen } from "./on-open.js";
 import { openManage } from "./manage.js";
 import { mtRefreshLive } from "./maintenance.js";
 import { tourAfterRestart, maybeStartTour } from "./tour.js";
@@ -72,7 +72,7 @@ function restartDesk(){
   applyPrefs();
   translateChrome();
   placeRailNow();
-  focusIntentOnOpen();
+  focusFirstEntryOnOpen();
   // A dialog standing over the desk shows the new one.
   if(document.getElementById("mgCatList")) openManage();
   mtRefreshLive();

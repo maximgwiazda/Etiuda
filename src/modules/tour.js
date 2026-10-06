@@ -1,7 +1,7 @@
 import { closeModal, modalOpen } from "./dialog.js";
 import { closeFactsPanel, factsPanelOpen } from "./facts.js";
 import { fillProseIcons } from "./icons.js";
-import { focusIntentOnOpen } from "./on-open.js";
+import { focusFirstEntryOnOpen } from "./on-open.js";
 import { drawIntentRail } from "./rail-list.js";
 import { chordChips } from "./shortcuts.js";
 import { lsGet, lsSet, lsDel, ssGet, ssSet, ssDel } from "./storage.js";
@@ -683,7 +683,7 @@ function endTour(completed){
   ssDel(TOUR_AT);
   if(els.root) els.root.classList.remove("behind");
   if(!completed) toast("The tour waits in the Menu, under Show tour…");
-  focusIntentOnOpen();
+  focusFirstEntryOnOpen();
   const later=tourAfter; tourAfter=[];
   later.forEach(fn=>{ try{ fn(); }catch(_){} });
 }
