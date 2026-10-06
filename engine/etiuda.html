@@ -8395,7 +8395,6 @@ What you type stays in this browser only.`;
     v2AltLabel: () => v2AltLabel,
     v2CatKey: () => v2CatKey,
     v2ContentHash: () => v2ContentHash,
-    v2GrammarNotices: () => v2GrammarNotices,
     v2Mark: () => v2Mark,
     v2PartText: () => v2PartText,
     v2Problems: () => v2Problems,
@@ -8863,9 +8862,6 @@ What you type stays in this browser only.`;
     }
   }
   var V2_GRAMMAR_LANGS = ["en", "pl"];
-  function v2GrammarNotices(data) {
-    return v2Codes(data).filter((c) => V2_GRAMMAR_LANGS.indexOf(c) < 0).map((c) => "langs: this build has no grammar for " + c + ', so its text is used as written - no vocative, no declension, and a joined list reads with the English "and"');
-  }
   var V2_SHA_RE = /^sha256:[0-9a-f]{64}$/;
   var V2_HEX64_RE = /^[0-9a-f]{64}$/;
   var V2_BRANCH_RE = /^k-[0-9a-f]{16}$/;

@@ -1044,13 +1044,12 @@ function v2Fns() {
     "function v2Extra(", "function v2Restore(",
     "const CARD_KEY=", "const REQ_KEY=", "const V2_RUNTIME_FIELD=", "function v2ColKey(",
     "const CAT_LABEL_KEY=", "function v2CatKey(",
-    "const V2_GRAMMAR_LANGS=", "function v2GrammarNotices(",
     'const CARD_FLAGS=["firstOnly"',
     "function v2Mark(", "function v2Unmark(", "function v2AltLabel(", "function v2PartText(",
     "function catalogToV2(",
     "function catalogFromV2(",
   ].map(m => extractDecl(src, m)).join("\n");
-  return new Function(decls + "\nreturn {isV2,v2Problems,v2GrammarNotices,v2ContentHash,v2SignedBytes,v2Canonical,catalogToV2,catalogFromV2,v2Unmark,v2Mark,v2AltLabel,v2PartText,v2ColKey,v2CatKey,CARD_KEY,REQ_KEY};")();
+  return new Function(decls + "\nreturn {isV2,v2Problems,v2ContentHash,v2SignedBytes,v2Canonical,catalogToV2,catalogFromV2,v2Unmark,v2Mark,v2AltLabel,v2PartText,v2ColKey,v2CatKey,CARD_KEY,REQ_KEY};")();
 }
 function v2ValidationTests() {
   const V = v2Fns();
@@ -5063,13 +5062,9 @@ function langAgnosticTests() {
      Object.keys(pairRuntime.cards[0]).sort().join(" "),
      "c en id intents k note notePl pl t tPl");
 
-  /* The grammar is the closed half and it says so rather than pretending. */
-  eq("646e a language the build has no grammar for is a NOTICE and not a problem with the"
-     + " catalog, and the founding pair raises none",
-     [V.v2Problems(invent(["en", "de"])).length, V.v2GrammarNotices(invent(["en", "de"])),
-      V.v2GrammarNotices(invent(["en", "pl"]))],
-     [0, ['langs: this build has no grammar for de, so its text is used as written - no'
-          + ' vocative, no declension, and a joined list reads with the English "and"'], []]);
+  /* The grammar is the closed half, and a language outside it is carried rather than refused. */
+  eq("646e a language the build has no grammar for is not a problem with the catalog",
+     V.v2Problems(invent(["en", "de"])).length, 0);
   const bad = codes => { const c = invent(["en"]); c.langs = codes.map(x => ({ code: x })); return V.v2Problems(c).filter(p => /^langs/.test(p)); };
   const notACode = s => "langs: " + JSON.stringify(s) + " is not usable as a language code,"
     + ' wanted a-z, then any hyphened parts of a-z and 0-9, as "en" or "pt-br"';

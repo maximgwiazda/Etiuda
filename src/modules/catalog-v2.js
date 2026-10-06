@@ -426,8 +426,7 @@ function v2BodyProblems(c,id,primary,out){
    only in it name one language - and the alphabet is what keeps every column flat and typeable. */
 const V2_LANG_RE=/^[a-z]{2,8}(?:-[a-z0-9]{1,8}){0,8}$/;
 /* The languages, and the two tables a catalog may bring for them. Having no GRAMMAR for a code is
-   not a problem with the catalog and is not reported here; v2GrammarNotices says it, and it is a
-   notice rather than a refusal. */
+   not a problem with the catalog and is not reported here (V2_GRAMMAR_LANGS says what follows). */
 function v2LangProblems(data,codes,out){
   if(!Array.isArray(data.langs)||!data.langs.length){
     out.push("langs: absent, wanted the languages this catalog speaks, the first of them primary");
@@ -463,13 +462,6 @@ function v2LangProblems(data,codes,out){
    not be confused. A language absent from this list is CARRIED - its text is used exactly as
    written - and the engine supplies it no inflection and no words. */
 const V2_GRAMMAR_LANGS=["en","pl"];
-/** One notice per declared language this build has no grammar for. Not a problem with the
- *  catalog: the file is sound, and this says plainly what the engine will not do with it. */
-function v2GrammarNotices(data){
-  return v2Codes(data).filter(c=>V2_GRAMMAR_LANGS.indexOf(c)<0)
-    .map(c=>"langs: this build has no grammar for "+c+", so its text is used as written - no"
-      +" vocative, no declension, and a joined list reads with the English \"and\"");
-}
 const V2_SHA_RE=/^sha256:[0-9a-f]{64}$/, V2_HEX64_RE=/^[0-9a-f]{64}$/, V2_BRANCH_RE=/^k-[0-9a-f]{16}$/;
 function v2Missing(v){ return v==null?"absent":"malformed"; }
 /* A flag is true or it is not there: false and null are problems rather than a second spelling of absent. */
@@ -841,4 +833,4 @@ function catalogToV2(c,opts){
   return out;
 }
 
-export { isV2, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2AltLabel, v2PartText, v2Problems, v2GrammarNotices, v2CatKey, V2_GRAMMAR_LANGS, v2ContentHash, v2SignedBytes, v2SigState, v2RingRead, v2TeamRead, v2TeamSigState, v2SealedRead, V2_SEALED_KIND, V2_FORMAT, V2_KIND, V2_KNOWN_KEYS, V2_RING_FORMAT, V2_RING_KIND, V2_RING_FILE, V2_TEAM_FORMAT, V2_TEAM_KIND, V2_TEAM_FILE, V2_HARNESS_TEST_KEYID, V2_HARNESS_TEST_PUB, V2_SIG_NONE, V2_SIG_VALID, V2_SIG_INVALID, V2_SIG_UNKNOWN, V2_SIG_ALG };
+export { isV2, catalogFromV2, catalogToV2, v2Mark, v2Unmark, v2AltLabel, v2PartText, v2Problems, v2CatKey, V2_GRAMMAR_LANGS, v2ContentHash, v2SignedBytes, v2SigState, v2RingRead, v2TeamRead, v2TeamSigState, v2SealedRead, V2_SEALED_KIND, V2_FORMAT, V2_KIND, V2_KNOWN_KEYS, V2_RING_FORMAT, V2_RING_KIND, V2_RING_FILE, V2_TEAM_FORMAT, V2_TEAM_KIND, V2_TEAM_FILE, V2_HARNESS_TEST_KEYID, V2_HARNESS_TEST_PUB, V2_SIG_NONE, V2_SIG_VALID, V2_SIG_INVALID, V2_SIG_UNKNOWN, V2_SIG_ALG };
