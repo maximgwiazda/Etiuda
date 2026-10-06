@@ -5953,6 +5953,8 @@ What you type stays in this browser only.`;
     "maintenance␟seen or declined": "obejrzany lub odrzucony",
     "maintenance␟this start": "to uruchomienie",
     "maintenance␟after a crash": "po awarii",
+    "maintenance␟last crash": "ostatnia awaria",
+    "maintenance␟theme fades": "przejścia motywu",
     "maintenance␟ordinary": "zwykłe",
     "maintenance␟desk backup": "kopia zapasowa danych",
     "maintenance␟not needed": "niepotrzebna",
@@ -22382,6 +22384,8 @@ What you type stays in this browser only.`;
     applyTheme: () => applyTheme,
     systemTheme: () => systemTheme,
     themeChoice: () => themeChoice,
+    themeTrace: () => themeTrace,
+    traceNote: () => traceNote,
     watchSystemTheme: () => watchSystemTheme,
     wireThemeBtn: () => wireThemeBtn
   });
@@ -22406,6 +22410,20 @@ What you type stays in this browser only.`;
   var fading = null;
   var themeWant = null;
   var fadeHolds = 0;
+  var fadeSeq = 0;
+  var TRACE_KEY = "eTrace";
+  var TRACE_MAX = 30;
+  function themeTrace() {
+    try {
+      const a = JSON.parse(lsGet(TRACE_KEY) || "[]");
+      return Array.isArray(a) ? a : [];
+    } catch (e) {
+      return [];
+    }
+  }
+  function traceNote(row, now) {
+    lsSet(TRACE_KEY, JSON.stringify(themeTrace().concat([[Date.now()].concat(row)]).slice(-TRACE_MAX)), !!now);
+  }
   function paintTheme(next, after) {
     const r = document.documentElement, from = r.dataset.theme;
     themeWant = next;
@@ -22414,6 +22432,8 @@ What you type stays in this browser only.`;
       if (after) after();
       return;
     }
+    const n = ++fadeSeq;
+    traceNote(["fade", n, "start", next], true);
     r.classList.add("theme-fade");
     fadeHolds++;
     let vt;
@@ -22423,6 +22443,7 @@ What you type stays in this browser only.`;
         r.dataset.theme = themeWant;
       });
     } catch (e) {
+      traceNote(["fade", n, "cancel"]);
       if (!--fadeHolds) r.classList.remove("theme-fade");
       landTheme(next);
       if (after) after();
@@ -22434,8 +22455,15 @@ What you type stays in this browser only.`;
       r.classList.remove("theme-swap");
       if (after) after();
     };
-    vt.ready.then(done, done);
+    vt.ready.then(() => {
+      traceNote(["fade", n, "ready"]);
+      done();
+    }, () => {
+      traceNote(["fade", n, "cancel"]);
+      done();
+    });
     const end = () => {
+      traceNote(["fade", n, "finish"]);
       if (!--fadeHolds) r.classList.remove("theme-fade");
     };
     vt.finished.then(end, end);
@@ -22664,6 +22692,20 @@ What you type stays in this browser only.`;
     row("catalog folder", S(() => eHost() ? eHomeless(eCatalogFolder(), eDeskHome()) : ""));
     row("tour", S(() => tourActive() ? "under way" : tourDueAtBoot() ? "offered at the next start" : "seen or declined"));
     row("this start", S(() => eHost() && eHost().recovering ? "after a crash" : "ordinary"));
+    row("last crash", S(() => {
+      const l = themeTrace().filter((x) => x[1] === "lost").pop();
+      return l ? fileStamp(l[4] || l[0]) + ", " + l[2] + (l[3] != null ? " (" + l[3] + ")" : "") : "";
+    }));
+    row("theme fades", S(() => {
+      const rows = themeTrace().filter((x) => x[1] === "fade"), seen = [];
+      rows.forEach((x) => {
+        if (x[3] === "start") seen.push(x[2]);
+      });
+      return seen.slice(-3).reverse().map((n) => {
+        const mine = rows.filter((x) => x[2] === n), s = mine[0], d = new Date(s[0]), p = (v) => String(v).padStart(2, "0");
+        return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()) + " " + s[4] + ": " + mine.map((x) => x[3]).join(", ");
+      }).join(", ");
+    }));
     row("desk backup", S(() => {
       const r2 = eDeskRefused()[0];
       return r2 ? "restored" + (r2.restored ? " from " + fileStamp(r2.restored) : "") : "not needed";
@@ -22743,6 +22785,8 @@ What you type stays in this browser only.`;
   }
   function wireMaintenanceWatch() {
     try {
+      const h = eHost();
+      if (h && h.recovering && h.lostPage) traceNote(["lost", String(h.lostPage.reason), h.lostPage.exitCode, +h.lostPage.at || 0]);
       ["(prefers-color-scheme: light)", M_STILL_Q, "(forced-colors: active)"].forEach((q) => {
         const m = matchMedia(q);
         if (m.addEventListener) m.addEventListener("change", mtRefreshLive);

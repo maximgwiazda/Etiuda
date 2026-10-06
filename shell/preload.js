@@ -64,6 +64,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   openedWith: host.openedWith,
   /* True once, on the load the shell made after the page stopped. */
   recovering: !!host.recovering,
+  /* {reason, exitCode, at} of the last time this page stopped, or null. */
+  lostPage: host.lostPage || null,
   /* The engine refused the file named: {json, file, in, builtIn, mtime} for the next one the
      shell would read, or null. Synchronous, because the engine asks while it boots. */
   catalogRefused: (name) => ipcRenderer.sendSync("etiuda:catalog-refused", String(name || "")),

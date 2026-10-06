@@ -16,6 +16,8 @@
  *        motion, a browser without the API) cannot pass tf1 by never reaching the case
  *   tf3  the hold is let go: after two presses inside one fade, every card is content-visibility
  *        auto again and the class is off the root, or every card would be laid out for ever
+ *   tf4  the record Maintenance shows, read after tf1: every press it still holds wrote its start,
+ *        its ready and its finish in that order, the newest press among them, within its cap
  *
  * The catalog is the shipped sample beside the page, so nothing here is content. Exit code is the
  * number of failed checks; 78 when the run could not complete.
@@ -31,7 +33,7 @@ const puppeteer = require("puppeteer-core");
 let fails = 0, checks = 0;
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 3;
+const EXPECTED = 4;
 const t0 = Date.now();
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-theme-fade-"));
@@ -93,8 +95,9 @@ try {
   check(!crashed && nPills >= 10 && landed === nPills && stored === nPills,
     "tf1 a category pressed, then the theme: the page lives through every fade and lands on the theme asked for, stored ("
     + JSON.stringify({ categories: nPills, pressed, landed, stored, died: firstDeath || "no" }) + ")");
-  if (crashed) throw new Error("the page died, so tf2 and tf3 have nothing to read");
+  if (crashed) throw new Error("the page died, so tf2 to tf4 have nothing to read");
 
+  const rec = await q.evaluate(() => { try { return JSON.parse(localStorage.getItem("eTrace") || "null"); } catch (x) { return "unreadable"; } });
   const fades = await q.evaluate(() => window.__fades);
   check(fades === pressed, "tf2 every press faded through a view transition (" + fades + " of " + pressed + ")");
 
@@ -111,6 +114,16 @@ try {
   check(!crashed && !held.cls && held.real === 0 && held.cards > 0,
     "tf3 after two presses inside one fade the hold is let go: no class on the root, no card held real (" + JSON.stringify(held) + ")");
 
+  // Per press: start <theme> #n, then ready #n, then finish #n; the cap may have dropped the oldest.
+  const fadeRows = Array.isArray(rec) ? rec.filter(r => Array.isArray(r) && r[1] === "fade") : [];
+  const kept = [...new Set(fadeRows.filter(r => r[3] === "start").map(r => r[2]))];
+  const whole = kept.filter(n => {
+    const mine = fadeRows.filter(r => r[2] === n).map(r => r[3] + (r[4] ? " " + r[4] : ""));
+    return mine.length === 3 && /^start (light|dark)$/.test(mine[0]) && mine[1] === "ready" && mine[2] === "finish";
+  });
+  check(Array.isArray(rec) && rec.length <= 30 && kept.length >= 8 && whole.length === kept.length && kept.indexOf(pressed) > -1,
+    "tf4 the record holds each press's start, ready and finish in order (" + whole.length + " whole of " + kept.length
+    + " presses kept, " + (Array.isArray(rec) ? rec.length : rec) + " rows, the newest press " + (kept.indexOf(pressed) > -1 ? "among them" : "MISSING") + ")");
   check(errs.length === 0, "no page errors" + (errs.length ? ": " + errs.slice(0, 3).join(" | ") : ""));
 } catch (e) {
   console.log("  FAIL the run stopped: " + String(e && e.message || e).split("\n")[0]);

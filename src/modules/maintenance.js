@@ -23,7 +23,7 @@ import { pageScroller } from "./page-scroll.js";
 import { intentOrder } from "./intent-id.js";
 import { esc } from "./esc.js";
 import { list, modalEl, modalCard, $ } from "./dom.js";
-import { systemTheme, themeChoice } from "./theme.js";
+import { systemTheme, themeChoice, themeTrace, traceNote } from "./theme.js";
 import { copy } from "./mark.js";
 import { pillsLocked } from "./pills-box.js";
 import { cards, lang } from "./app-state.js";
@@ -227,6 +227,20 @@ function mtReadings(){
   row("catalog folder",S(()=>eHost()?eHomeless(eCatalogFolder(),eDeskHome()):""));
   row("tour",S(()=>tourActive()?"under way":tourDueAtBoot()?"offered at the next start":"seen or declined"));
   row("this start",S(()=>(eHost()&&eHost().recovering)?"after a crash":"ordinary"));
+  row("last crash",S(()=>{
+    const l=themeTrace().filter(x=>x[1]==="lost").pop();
+    return l ? fileStamp(l[4]||l[0])+", "+l[2]+(l[3]!=null?" ("+l[3]+")":"") : "";
+  }));
+  /* The last three fades, newest first: when each began and how far it got. */
+  row("theme fades",S(()=>{
+    const rows=themeTrace().filter(x=>x[1]==="fade"), seen=[];
+    rows.forEach(x=>{ if(x[3]==="start") seen.push(x[2]); });
+    return seen.slice(-3).reverse().map(n=>{
+      const mine=rows.filter(x=>x[2]===n), s=mine[0], d=new Date(s[0]), p=v=>String(v).padStart(2,"0");
+      return p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds())+" "+s[4]+": "
+        +mine.map(x=>x[3]).join(", ");
+    }).join(", ");
+  }));
   row("desk backup",S(()=>{
     const r=eDeskRefused()[0];
     return r ? "restored"+(r.restored?" from "+fileStamp(r.restored):"") : "not needed";
@@ -317,6 +331,8 @@ function mtRefreshLive(){
    states that change with no resize at all - and the store, which another tab can write. */
 function wireMaintenanceWatch(){
 try{
+  const h=eHost();
+  if(h && h.recovering && h.lostPage) traceNote(["lost",String(h.lostPage.reason),h.lostPage.exitCode,+h.lostPage.at||0]);
   ["(prefers-color-scheme: light)",M_STILL_Q,"(forced-colors: active)"]
     .forEach(q=>{
       const m=matchMedia(q);
