@@ -18,7 +18,6 @@ import { toggleNotePane } from "./note-pane.js";
 import { entrySel, putEntrySel, intentIdxs, shown } from "./app-state.js";
 import { hooks } from "./hooks.js";
 import { withAgentName } from "./agent.js";
-import { withFields, spendFields } from "./field-ask.js";
 import { activeHeard, tabPathStep } from "./tabs.js";
 
 // ---- card drag-reorder (within same relevance band only) ----------------
@@ -433,11 +432,10 @@ function wireListPointer(){
     // it answers hover again once the pointer leaves and comes back.
     txtEl.classList.add("just-picked");
     txtEl.addEventListener("pointerleave", ()=>txtEl.classList.remove("just-picked"), {once:true});
-    withFields(ps[vi],m,cl,()=>withAgentName(ps[vi],()=>{
+    withAgentName(ps[vi],()=>{
       bumpUseCount(mid, cl);
       copy(fill(ps[vi],m), copiedToastMsg(m, cl, vi, ps.length), cardCommits(m));
-      spendFields(ps[vi]);
-    },txtEl),txtEl);
+    },txtEl);
   });
 }
 

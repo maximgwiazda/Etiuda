@@ -13,7 +13,7 @@ import { syncIntentClearBtns } from "./intent-clear.js";
 import { intentEscapeStep } from "./escape-ladder.js";
 import { syncRoleDrum } from "./role-drum.js";
 import { pax, intentEl, roleSel, $ } from "./dom.js";
-import { lang, intentIdxs, intentText, cats, entrySel, setIntentIdxs, setIntentText, setCats, putEntrySel, setPickRun, fieldVals, setFieldVals } from "./app-state.js";
+import { lang, intentIdxs, intentText, cats, entrySel, setIntentIdxs, setIntentText, setCats, putEntrySel, setPickRun } from "./app-state.js";
 import { hooks } from "./hooks.js";
 
 // ---- booking tabs (shared settings; per-tab language / PAX / intent / ROLE / cats / search) --
@@ -37,10 +37,7 @@ function blankTab(){
     cats:[],
     entrySel:null,
     scrollY:0,
-    path:[],
-    /* The fill-in fields this conversation has answered, field id to value. Kept with the tab, which
-       under the shell lives in the app's memory, so a value goes when its conversation closes. */
-    fields:{}
+    path:[]
   };
 }
 /* THE REPLIES SENT IN THIS CONVERSATION, one card id per step, oldest first, the last TAB_PATH_MAX
@@ -129,7 +126,6 @@ function snapshotActiveTab(){
   t.cats=cats.slice();
   t.entrySel=entrySel?{id:entrySel.id, vi:entrySel.vi}:null;
   t.scrollY=pageScrollY();
-  t.fields=Object.assign({},fieldVals);
 }
 function saveTabSession(){
   snapshotActiveTab();
@@ -241,7 +237,6 @@ function applyTab(tb){
   setIntentIdxs(Array.isArray(tb.intentIdxs)?tb.intentIdxs.slice().filter(i=>Number.isInteger(i)&&i>=0&&i<intentCount()):[]);
   setIntentText(tb.intentText||"");
   setCats(Array.isArray(tb.cats)?tb.cats.slice():[]);
-  setFieldVals(tabFieldVals(tb));
   if(tb.entrySel&&tb.entrySel.id!=null){
     putEntrySel({id:String(tb.entrySel.id), vi:+tb.entrySel.vi||0});
   } else {
@@ -445,15 +440,9 @@ function closeActiveTab(){
    so a stray press must not reach it. The second press has to land while the toast that
    asked for it is still up, so the window is the toast's own life. */
 let tabWipeArmedAt=0, tabWipeToast=-1;
-/* Strings only, from a session that may have been written by an older build or by hand. */
-function tabFieldVals(tb){
-  const out={}, f=(tb&&tb.fields&&typeof tb.fields==="object")?tb.fields:{};
-  Object.keys(f).forEach(k=>{ if(typeof f[k]==="string" && f[k]) out[k]=f[k]; });
-  return out;
-}
 function tabHasWork(tb){
   if(!tb) return false;
-  return !!(String(tb.pax||"").trim() || String(tb.intentBox||"").trim() || Object.keys(tabFieldVals(tb)).length
+  return !!(String(tb.pax||"").trim() || String(tb.intentBox||"").trim()
     || String(tb.who||"").trim() || String(tb.intentText||"").trim()
     || (tb.cats&&tb.cats.length) || (tb.intentIdxs&&tb.intentIdxs.length));
 }

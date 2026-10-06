@@ -41,9 +41,6 @@ let pendingScrollHit=false;
 // Several intents can be active at once (ctrl+click). Stored as indexes so each one
 // re-maps when the language flips; free text is a separate, single value.
 let intentIdxs=[], intentText="";
-/* THE CONVERSATION'S FIELD VALUES, field id to value, for the tab on screen: applyTab installs a
-   fresh object per tab, so whoever holds one can tell by identity that the tab has changed. */
-let fieldVals={}, fieldValsWatch=null;
 /* Language is PER-TAB: two chats side by side are routinely in different languages.
    blankTab() carries it, applyTab() installs it, setLang() writes it back; "eLang"
    records the language last on screen and seeds new tabs - defaulting them to English
@@ -76,7 +73,7 @@ let dragState=null, suppressClick=false, swapLock=0;
 function resetAppState(){
   cards=[]; railSel=-1; railOrder=[]; railMarkIdx=-1; railMatch=null;
   railSortT=0; railSettled=true; railMarkUsed=false; catsDropArmed=false; pickRun=false; semiKind=null;
-  catOrder=[]; cats=[]; shown=[]; entrySel=null; pendingScrollHit=false; intentIdxs=[]; intentText=""; fieldVals={};
+  catOrder=[]; cats=[]; shown=[]; entrySel=null; pendingScrollHit=false; intentIdxs=[]; intentText="";
   cardCounts={}; dragState=null; suppressClick=false; swapLock=0;
 }
 function setRailSel(v){ railSel=v; }
@@ -100,9 +97,6 @@ function putEntrySel(v){ entrySel=v; }
 function setPendingScrollHit(v){ pendingScrollHit=v; }
 function setIntentIdxs(v){ intentIdxs=v; }
 function setIntentText(v){ intentText=v; }
-function setFieldVals(v){ fieldVals=v; const w=fieldValsWatch; if(w) w(); }
-/* One listener, the open field question: it closes when the tab under it changes. */
-function watchFieldVals(fn){ fieldValsWatch=fn||null; }
 function putLang(v){ lang=v; }
 function setCards(v){ cards=v; }
 function setCardCounts(v){ cardCounts=v; }
@@ -128,7 +122,6 @@ export {
   entrySel,
   pendingScrollHit,
   intentIdxs,
-  fieldVals,
   intentText,
   lang,
   cards,
@@ -154,8 +147,6 @@ export {
   putEntrySel,
   setPendingScrollHit,
   setIntentIdxs,
-  setFieldVals,
-  watchFieldVals,
   setIntentText,
   putLang,
   setCards,

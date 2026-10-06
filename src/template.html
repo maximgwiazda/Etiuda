@@ -3337,21 +3337,9 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   pointer-events:none}
 #eNotices .bub{position:relative;pointer-events:auto}
 /* A field on the fill: paper, so what is typed reads as the reader's own. */
-.bub .e-name-inp,.bub .e-field-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
+.bub .e-name-inp{display:block;width:100%;box-sizing:border-box;margin:4px 0 0;padding:7px 9px;
   border:1px solid transparent;border-radius:8px;background:#fff;color:#0f172a;font:13.5px var(--sans)}
-.bub .e-name-inp:focus-visible,.bub .e-field-inp:focus-visible{outline:2px solid #fff;outline-offset:2px}
-/* THE FILL-IN FIELDS ASKED AT A COPY (field-ask.js): one row per field, its name, what it holds already,
-   and the key that takes the clipboard. A field refused wears a dashed edge. */
-.e-field-row{display:block;margin:0 0 8px}
-.e-field-head{display:flex;align-items:baseline;gap:8px;font-size:13px;color:var(--bub-ink)}
-.e-field-name{font-weight:600}
-.e-field-note,.e-field-clip{font-size:12px;color:var(--bub-dim)}
-.e-field-clip{margin-left:auto;white-space:nowrap}
-.e-field-clip kbd{font:10.5px var(--mono);padding:0 4px;border:1px solid rgba(255,255,255,.6);border-radius:4px}
-.bub .e-field-inp[aria-invalid]{border:1px dashed #fff}
-.bub-ask p.e-field-said{color:var(--bub-ink);margin:0 0 8px}
-.bub-ask p.e-field-said:empty{display:none}
-.e-field-ask .btn.primary.e-waits{opacity:.6}
+.bub .e-name-inp:focus-visible{outline:2px solid #fff;outline-offset:2px}
 .bub .e-greet{color:var(--bub-ink);margin:8px 0 10px}
 .tour-field{margin:0 0 4px}
 .bub .e-greet .e-name-ph{color:var(--bub-dim);opacity:.8}

@@ -648,7 +648,7 @@ try {
      and every channel it registers is called once with a message from a page that is not the engine.
      A channel must have asked, must have answered with a refusal, and must have touched no file. */
   const SENDER = { engine: "function fromEngine(e) {", picker: "function fromPicker(e) {" };
-  const PICKER_CHANNELS = ["etiuda:pick-clip", "etiuda:pick-close", "etiuda:pick-copy", "etiuda:pick-find", "etiuda:pick-ready"];
+  const PICKER_CHANNELS = ["etiuda:pick-close", "etiuda:pick-copy", "etiuda:pick-find", "etiuda:pick-ready"];
   const sourceChannels = src => src.split("\n").filter(l => /\bipcMain\.(?:on|once|handle|handleOnce)\(/.test(l) && !/^\s*(\/\/|\/?\*)/.test(l)).length;
   const marked = src => Object.keys(SENDER).reduce((out, k) => {
     if (out.split(SENDER[k]).length !== 2) throw new Error("shell/main.js does not hold " + SENDER[k] + " exactly once");
@@ -691,7 +691,7 @@ try {
     const viaPicker = A.rows.filter(r => r.asked.indexOf("picker") > -1).map(r => r.ch).sort();
     const notEngine = A.rows.filter(r => r.asked.indexOf("engine") < 0 && PICKER_CHANNELS.indexOf(r.ch) < 0).map(r => r.ch);
     check(notEngine.length === 0 && JSON.stringify(viaPicker) === JSON.stringify(PICKER_CHANNELS),
-      "7c fromEngine is the question every channel asks except the picker's own five, which ask fromPicker: without it "
+      "7c fromEngine is the question every channel asks except the picker's own four, which ask fromPicker: without it "
       + JSON.stringify(notEngine) + ", asking the picker " + JSON.stringify(viaPicker));
     check(unrefused(A).length === 0,
       "7d and the answer to a stranger is a refusal that has touched no file: " + JSON.stringify(unrefused(A)));
