@@ -2391,12 +2391,15 @@ function fifthTests() {
     const a = fifthLab(false), t = lineTruth(PHI0), out = outlinePoints(a.std), turn = a.f.fifthLinePath(PHI0);
     const atHalf = pts => pts.length > 500 && pts.every(p => Math.abs(lineGap(t.line, p) - t.h) <= 0.03);
     const reaches = pts => t.line.filter((p, i) => i % 20 === 0).every(q => pts.some(p => Math.hypot(p[0] - q[0], p[1] - q[1]) <= t.h + 1));
+    const t1 = lineTruth(PHI0 + 1), turn1 = outlinePoints(a.f.fifthLinePath(PHI0 + 1));
     got = [atHalf(out), reaches(out), outlinePoints(turn).every(p => lineGap(t.line, p) <= 0.06),
       Math.abs(2 * a.f.fifthRadius() - 2 * t.h) < 0.01, !/Z$/.test(turn) && /Z$/.test(a.f.fifthLinePath(PHI0 + 1)),
+      turn1.length > 500 && turn1.every(p => lineGap(t1.line, p) <= 0.06),
+      t1.line.filter((p, i) => i % 20 === 0).every(q => turn1.some(p => Math.hypot(p[0] - q[0], p[1] - q[1]) <= 1)),
       atHalf(out.map(p => [p[0] + 0.5, p[1]])), reaches(out.filter(p => p[0] >= 128))];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the path shipped is the turning line standing: every point of its outline lies half the line's width from the figure's centreline at pi/4 (within 0.03) and the outline reaches all of it; the turn's centreline at pi/4 lies on the figure's (within 0.06) at the same width, open there and closed at any other phase; controls: moved half a unit, or with its left half gone, it is not",
-    got, [true, true, true, true, true, false, false]);
+  eq("the path shipped is the turning line standing: every point of its outline lies half the line's width from the figure's centreline at pi/4 (within 0.03) and the outline reaches all of it; the turn's centreline at pi/4 lies on the figure's (within 0.06) at the same width, open there and closed at any other phase; at pi/4 + 1 the turn's centreline, both halves of the loop, lies on the figure's (within 0.06) and reaches every point of it (within 1); controls: moved half a unit, or with its left half gone, it is not",
+    got, [true, true, true, true, true, true, true, false, false]);
 
   try {
     const a = fifthLab(false); a.f.wireFifth();
