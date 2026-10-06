@@ -50,7 +50,7 @@ function v2Fns() {
     "const V2_ID_RE=", "const V2_SHAPES=", "const V2_MARKER_RE=", "function v2IsBracketLine(",
     "const V2_GREET_PARTS=", "function v2BodyProblems(", "const V2_LANG_RE=", "function v2LangProblems(",
     "const V2_SHA_RE=", "function v2Missing(", "function v2FlagProblem(", "function v2NextProblems(",
-    "function v2HeaderProblems(", "function v2Problems(",
+    "function v2HeaderProblems(", "function v2VarProblems(", "function v2Problems(",
     "const V2_CARD_NAMED=", "const V2_HEAD_NAMED=", "function v2Copy(", "function v2Put(",
     "function v2Extra(", "function v2Restore(",
     "const CARD_KEY=", "const REQ_KEY=", "const V2_RUNTIME_FIELD=", "function v2ColKey(",

@@ -48,6 +48,21 @@ function paxVocOn(m){
   if(m && m.paxVoc!=null) return !!(+m.paxVoc);
   return !!(m && m.firstOnly);
 }
+/* THE MANUAL OVERRIDE OF {PAX}: on, the card's two boxes decide; off, the catalog's address does,
+   Etiuda's own being the first name in the vocative. ABSENT IS DERIVED, as paxVoc is: boxes saying
+   anything else read as overridden, so a card keeps the sentence it had. */
+function paxOwnOn(m){
+  if(m && m.paxOwn!=null) return !!(+m.paxOwn);
+  return !!m && !(m.firstOnly && paxVocOn(m));
+}
+/* What the editor's switch shows: a derived override only where the card's text uses {PAX}. */
+function cardUsesPax(m){
+  return !!m && cardFieldKeys("body").concat(cardFieldKeys("note")).some(k=>String(m[k]==null?"":m[k]).indexOf("{PAX}")>-1);
+}
+function paxOwnShown(m){
+  if(m && m.paxOwn!=null) return !!(+m.paxOwn);
+  return paxOwnOn(m) && cardUsesPax(m);
+}
 /* KEYWORDS ARE NOT A TRANSLATION. A title, a macro and a note each have a VERSION per language;
    the words someone might type to find the card only accumulate. Splitting them asks the editor
    which language a reference code belongs to - a question with no answer - and would have it retyped in
@@ -95,6 +110,9 @@ export {
   CARD_UNBOXED_FLAGS,
   carryUnwritten,
   paxVocOn,
+  paxOwnOn,
+  paxOwnShown,
+  cardUsesPax,
   CARD_SHARED_FIELDS,
   CARD_KEY_ALIAS
 };

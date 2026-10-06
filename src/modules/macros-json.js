@@ -10,7 +10,7 @@ import { catalogLangs, CONTENT_LANGS } from "./content-model.js";
 //   "exported": "ISO date",
 //   "cards": [
 //     { "id","c","t","en","pl", optional: text fields per cardStorageKeys() - today
-//       "k","note","notePl","tPl" - plus "lockLang","alt","seq","firstOnly","paxVoc",
+//       "k","note","notePl","tPl" - plus "lockLang","alt","seq","firstOnly","paxVoc","paxOwn",
 //       "allIntents","intentTop","intents","retired","commits","next","ext" }
 //   ]
 // }
@@ -34,6 +34,7 @@ function cardToExportPlain(m){
   if(m.firstOnly) o.firstOnly=1;
   // 0 is meaningful here, so this writes whenever the flag is SET rather than when it is true.
   if(m.paxVoc!=null) o.paxVoc=(+m.paxVoc)?1:0;
+  if(m.paxOwn!=null) o.paxOwn=(+m.paxOwn)?1:0;
   if(m.allIntents) o.allIntents=1;
   if(m.intentTop) o.intentTop=1;
   if(Array.isArray(m.intents)&&m.intents.length) o.intents=m.intents.slice();
@@ -112,6 +113,7 @@ function parseMacrosData(data){
     if(truthyFlag(rawM.seq)) entry.seq=1;
     if(truthyFlag(rawM.firstOnly)) entry.firstOnly=1;
     if(rawM.paxVoc!=null) entry.paxVoc=truthyFlag(rawM.paxVoc)?1:0;
+    if(rawM.paxOwn!=null) entry.paxOwn=truthyFlag(rawM.paxOwn)?1:0;
     if(truthyFlag(rawM.allIntents)) entry.allIntents=1;
     if(truthyFlag(rawM.intentTop)) entry.intentTop=1;
     if(Array.isArray(rawM.intents)&&rawM.intents.length){

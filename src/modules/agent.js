@@ -1,5 +1,6 @@
 import { lsSet, lsGet, lsDel, nsGet } from "./storage.js";
 import { pax } from "./dom.js";
+import { syncGenderGlyph } from "./gender-drum.js";
 import { t, translateTree, toast, TOAST_HAND_MS } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { greetLine } from "./greeting.js";
@@ -50,6 +51,7 @@ function renderFillsSoon(){
 // appears in every card as it is typed rather than only when one is copied.
 function wirePaxFill(){
   pax.oninput=()=>{
+    syncGenderGlyph();
     renderFillsSoon();
     scheduleTabSave();
   };

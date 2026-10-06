@@ -161,6 +161,7 @@ function currentCatalog(opts){
   if(origin&&Array.isArray(origin.langs)&&origin.langs.length) out.langs=origin.langs;
   if(origin&&origin.greet&&typeof origin.greet==="object") out.greet=origin.greet;
   if(origin&&origin.stop&&typeof origin.stop==="object") out.stop=origin.stop;
+  if(origin&&origin.variables&&typeof origin.variables==="object") out.variables=origin.variables;
   /* From the origin like greet. grew and desk are left behind on purpose: they describe the file
      the origin was, and an export is a new catalog. */
   if(origin&&origin.notes&&typeof origin.notes==="object") out.notes=origin.notes;

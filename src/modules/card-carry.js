@@ -235,7 +235,7 @@ function teamTextTaken(c,id){ const s=takenFor.get(c); return !!s && s.has(Strin
    changed otherwise stays the agent's unless the offer took the team's text; an own card the edition
    now holds becomes that card, with whatever still differs kept as the agent's edit of it. `was` is
    the edition being left, as far as it is known. Returns whether anything moved. */
-const UNSETTLED=["intents","next","nextWas","paxVoc","ext"];
+const UNSETTLED=["intents","next","nextWas","paxVoc","paxOwn","ext"];
 function settleEdits(c,list,was){
   const ov=pack.overrides||{}, bases=pack.editBases||{}, takes=takenFor.get(c);
   const now=new Map(list.map(m=>[catalogCardId(m),m])), old=new Map(was.map(m=>[m.id,m]));

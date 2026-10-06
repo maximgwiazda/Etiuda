@@ -1,4 +1,4 @@
-import { cardFieldKey, cardStorageKeys, cardRequiredKeys, CARD_TEXT_FIELDS, CARD_FLAG_BOX, CARD_FLAGS, CARD_BOOL_FLAGS, carryUnwritten, paxVocOn, CARD_SHARED_FIELDS } from "./card-fields.js";
+import { cardFieldKey, cardStorageKeys, cardRequiredKeys, CARD_TEXT_FIELDS, CARD_FLAG_BOX, CARD_FLAGS, CARD_BOOL_FLAGS, carryUnwritten, paxVocOn, paxOwnOn, paxOwnShown, cardUsesPax, CARD_SHARED_FIELDS } from "./card-fields.js";
 import { baseCard, cardCommits, cardText, cardTitle, findCard, overrideAgainstBase } from "./card-model.js";
 import { nextReplies, stampToggleHtml, wireStampToggle } from "./card-chain.js";
 import { catSortIdx } from "./card-order.js";
@@ -261,8 +261,12 @@ function meLangSummary(m){
 function meAdvSummary(m){
   const on=[];
   if(m&&m.alt) on.push(t(m.seq?"steps":"alt"));
-  if(m&&m.firstOnly) on.push(tc("pax","first name"));
-  if(paxVocOn(m)) on.push(t("vocative"));
+  /* The two boxes speak only under the override; off, the catalog's address decides. */
+  if(paxOwnShown(m)){
+    on.push(t("override"));
+    if(m.firstOnly) on.push(tc("pax","first name"));
+    if(paxVocOn(m)) on.push(t("vocative"));
+  }
   if(m&&m.allIntents) on.push(t("every intent"));
   if(m&&m.intentTop) on.push(t("top"));
   /* The pin is a toggle like the rest and was the only one leaving no trace. It carries a
@@ -381,11 +385,22 @@ function openCardEditor(id, presetCat, fromManage){
             "Split by blank lines into alternatives");
         box("meSeq",m.seq,!m.alt,"Numbers the alternatives as ordered steps.",
             "Ordered sequence (STEP badges)");
+        /* THE MANUAL OVERRIDE: a switch, since it reveals two boxes rather than setting one. Off, the
+           line under it says where the address comes from; on, the boxes as they always worked. */
+        const own=paxOwnShown(m), sub=[];
+        const at=rows.length;
         box("meFirst",m.firstOnly,false,"{PAX} fills the first name even when the chat gives the full name.",
             "{PAX} as first name only");
         box("meVoc",paxVocOn(m),false,
             "Polish only: declines the name into the vocative, the form Polish uses to address someone. Only the first name declines; a surname is left as written.",
             "{PAX} in the vocative");
+        sub.push.apply(sub, rows.splice(at,2));
+        rows.push('<div class="mf-own'+(own?" on":"")+'" id="meOwnRow">'
+          +'<label title="'+esc(t("For a card that sets {PAX} its own way, such as a note that mentions the customer rather than addressing them."))+'">'
+          +'<input type="checkbox" class="mf-switch" role="switch" id="meOwn"'+(own?" checked":"")+'> '
+          +esc(t("Manual override of {PAX}")).split("{PAX}").join(paxTag)+'</label>'
+          +'<div class="mf-own-off">'+esc(t("{PAX} takes the catalog's address for customers.")).split("{PAX}").join(paxTag)+'</div>'
+          +'<div class="mf-own-on">'+sub.join("")+'</div></div>');
         box("meAllIntents",m.allIntents,false,
             "Rings green under every intent - for text that always applies, like an opener.",
             "Linked to every {INT}");
@@ -406,11 +421,11 @@ function openCardEditor(id, presetCat, fromManage){
           +CONTENT_LANGS.map(l=>'<button type="button" data-v="'+esc(l)+'"'
             +((pinned||CONTENT_LANGS[0])===l?' class="on"':'')+'>'+esc(l.toUpperCase())+'</button>').join("")
           +'</div></div>';
-        /* The pin is the seventh cell, so four rows put alternatives, steps and the two
-           {PAX} boxes down the left, and the two intent boxes and the pin down the right. */
-        const cells=rows.concat([pin]);
-        return '<div class="mf-cols" style="grid-template-rows:repeat('
-          +Math.ceil(cells.length/2)+',auto)">'+cells.join("")+'</div>';
+        /* Alternatives, steps and the override (two rows tall) down the left; the two intent boxes and
+           the pin down the right. */
+        const left=rows.slice(0,3), right=rows.slice(3);
+        const cells=left.concat(right,[pin]);
+        return '<div class="mf-cols" style="grid-template-rows:repeat(4,auto)">'+cells.join("")+'</div>';
       })()})
     ,actions:
       // Pushed to the far left by .mf-del, away from Save - a destructive action should not sit
@@ -443,6 +458,7 @@ function openCardEditor(id, presetCat, fromManage){
       const cur={note:($("#"+meFieldId("note",mePrimary))||{}).value||"",
         k:($("#me_k")||{}).value||"", lockLang:readMeLockLang()};
       CARD_FLAGS.forEach(f=>{ const el=$("#"+CARD_FLAG_BOX[f]); cur[f]=el&&el.checked?1:0; });
+      cur.paxOwn=$("#meOwn")&&$("#meOwn").checked?1:0;
       return cur;
     };
     const upd=()=>{
@@ -467,6 +483,8 @@ function openCardEditor(id, presetCat, fromManage){
     });
     /* The pin greys its own switcher, and the switcher moves its own class - the same
        "the class moves, the element stays" rule the Settings segs follow. */
+    const ownBox=$("#meOwn"), ownRow=$("#meOwnRow");
+    if(ownBox && ownRow) ownBox.addEventListener("change",()=>{ ownRow.classList.toggle("on",ownBox.checked); upd(); });
     const pinBox=$("#meLockLang"), pinRow=$("#meLockRow"), pinSeg=$("#meLockSeg");
     if(pinBox && pinRow){
       pinBox.addEventListener("change",()=>{ pinRow.classList.toggle("off",!pinBox.checked); upd(); });
@@ -536,6 +554,10 @@ function openCardEditor(id, presetCat, fromManage){
     const seq=(alt && $("#meSeq")&&$("#meSeq").checked)?1:0;
     const firstOnly=$("#meFirst").checked?1:0;
     const paxVoc=$("#meVoc").checked?1:0;
+    /* Written only where it says something the boxes do not: on a card using {PAX}, or once set. */
+    const ownNow=$("#meOwn")&&$("#meOwn").checked?1:0;
+    const paxOwn=(m.paxOwn==null && (!cardUsesPax(text) || ownNow===(paxOwnOn({firstOnly,paxVoc})?1:0)))
+      ? undefined : ownNow;
     const allIntents=$("#meAllIntents").checked?1:0;
     const intentTop=$("#meIntentTop").checked?1:0;
     const lockLang=readMeLockLang();
@@ -560,7 +582,7 @@ function openCardEditor(id, presetCat, fromManage){
          them the first time it was edited. Built-ins never had the bug: their override is
          partial and Object.assign keeps whatever the base declares. */
       const entry=Object.assign({id:isNew?(savedId=uid("u:")):(id),c},text,
-        {alt,seq,firstOnly,paxVoc,allIntents,intentTop,lockLang,commits,intents:intentsStored});
+        {alt,seq,firstOnly,paxVoc,paxOwn,allIntents,intentTop,lockLang,commits,intents:intentsStored});
       carryUnwritten(entry, isNew ? null : pack.custom.find(x=>x&&x.id===id));
       const own=nx.fields().next;
       if(own&&own.length) entry.next=own; else delete entry.next;
@@ -569,6 +591,7 @@ function openCardEditor(id, presetCat, fromManage){
       });
       /* paxVoc is deliberately absent from this sweep - see CARD_BOOL_FLAGS. */
       CARD_BOOL_FLAGS.forEach(f=>{ if(!entry[f]) delete entry[f]; });
+      if(entry.paxOwn==null) delete entry.paxOwn;
       if(!entry.lockLang) delete entry.lockLang;
       if(!entry.intents||!entry.intents.length) delete entry.intents;
       if(isNew) pack.custom.push(entry);
@@ -578,7 +601,7 @@ function openCardEditor(id, presetCat, fromManage){
       }
     } else {
       const full=Object.assign({c},text,{intents:intentsStored,
-        alt:alt?1:0, seq:seq?1:0, firstOnly:firstOnly?1:0, paxVoc, allIntents, intentTop, lockLang, commits}, nx.fields());
+        alt:alt?1:0, seq:seq?1:0, firstOnly:firstOnly?1:0, paxVoc, paxOwn, allIntents, intentTop, lockLang, commits}, nx.fields());
       const o=overrideAgainstBase(baseCard(id), full);
       // Nothing differs from the catalog any more - drop the override so the badge clears too
       if(Object.keys(o).length) pack.overrides[id]=o; else delete pack.overrides[id];

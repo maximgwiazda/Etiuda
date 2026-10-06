@@ -394,6 +394,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* The combined box: the drum's fixed lane plus a name's worth of typing room. The cap
      sits a fifth below its first draft - the search box is the one that deserves width. */
   --paxrole-field:clamp(172px, 10vw + 112px, 240px);
+  --gender-glyph:32px;
   /* Thin scrollbars app-wide. The thumb is OPAQUE, so the dot field stops at it, and reads as the
      see-through grey did: the same grey at the same share, mixed over the canvas. The track stays
      transparent. All four token blocks. */
@@ -1288,7 +1289,7 @@ body.pills-off.pills-peek .pills-slot{display:block}
    window. A little under the search box's own minimum, and tracking it, so the pair keeps its
    order at every width; the warning above is about a floor ABOVE a box's basis, and this one is
    below it by construction. */
-.fills .fill:nth-child(1){flex:0 1 var(--paxrole-field);
+.fills .fill:nth-child(1){flex:0 1 calc(var(--paxrole-field) + var(--gender-glyph));
   min-width:calc(max(var(--name-field),var(--paxrole-field) - 70px) - 12px)}
 .fills .fill:nth-child(2){flex:1 0 max(var(--name-field),calc(var(--paxrole-field) - 70px));min-width:0}
 /* The tools are drawn at their own size and never squeezed: a control narrower than its glyph
@@ -1296,7 +1297,7 @@ body.pills-off.pills-peek .pills-slot{display:block}
 .fills .fill:nth-child(3){flex:0 0 auto;min-width:0}
 /* Widths come from the :root tokens, so the boxes cannot drift into per-box clamps.
    Order is ROLE+PAX | SEARCH | TOOLS; the middle keeps the nth-child(2) grow rule. */
-.fills .fill:nth-child(1) .field-wrap{width:var(--paxrole-field)}
+.fills .fill:nth-child(1) .field-wrap{width:calc(var(--paxrole-field) + var(--gender-glyph))}
 /* The four that left the band. THE SWITCHER SETS THEIR HEIGHT: .btn's 7px is drawn round a row
    of text and these hold a 16px glyph, which left them a third taller than the EN|PL beside
    them. 4px is what the seg's own buttons carry, so both boxes are built the same way and land
@@ -1330,6 +1331,25 @@ body.role-waits #roleDrum{display:none}
 #roleDrum .rd-next{bottom:-1px;font:9px var(--sans);opacity:.35}
 #roleDrum .rd-track.rd-up{animation:rd-up var(--m-move) var(--m-ease)}
 #roleDrum .rd-track.rd-down{animation:rd-down var(--m-move) var(--m-ease)}
+/* The gender glyph at the box's right end: grey when read from the name, ink and the accent's dot when
+   set by hand. A click, the wheel and the arrow keys turn it (gender-turn.js). */
+#genderDrum{position:relative;flex:0 0 auto;width:var(--gender-glyph);border-left:1px solid var(--field-line);
+  overflow:hidden;user-select:none;-webkit-user-select:none;outline:none;
+  border-radius:0 var(--radius-sm) var(--radius-sm) 0}
+#genderDrum:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.paxrole .field-clear{right:calc(var(--gender-glyph) + 4px)}
+#genderDrum .gd-track{position:absolute;inset:0}
+#genderDrum svg{position:absolute;left:50%;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
+#genderDrum .gd-cur{top:50%;width:15px;height:15px;transform:translate(-50%,-50%);stroke-width:1.65;color:var(--dim)}
+#genderDrum.gd-hand .gd-cur{color:var(--ink);stroke-width:1.9}
+#genderDrum .gd-prev,#genderDrum .gd-next{width:7px;height:7px;transform:translateX(-50%);stroke-width:2.4;
+  color:var(--ink);opacity:.35}
+#genderDrum .gd-prev{top:0}
+#genderDrum .gd-next{bottom:0}
+#genderDrum.gd-hand::after{content:"";position:absolute;right:4px;top:50%;width:4px;height:4px;margin-top:-2px;
+  border-radius:50%;background:var(--accent)}
+#genderDrum .gd-track.rd-up{animation:rd-up var(--m-move) var(--m-ease)}
+#genderDrum .gd-track.rd-down{animation:rd-down var(--m-move) var(--m-ease)}
 @keyframes rd-up{from{transform:translateY(7px)}to{transform:none}}
 @keyframes rd-down{from{transform:translateY(-7px)}to{transform:none}}
 /* The row's select and the Settings screen's are the same control, so they are one rule. The
@@ -3085,6 +3105,20 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 /* The language pin, under the Advanced flags. Dimmed rather than hidden while off, for the
    same reason the narrowest-column slider is. */
 .mf-pin{display:flex;align-items:center;gap:10px;margin-top:8px}
+/* The override of {PAX}: off shows where the address comes from, on shows the two boxes, indented
+   under the switch's label. */
+.mf-cols .mf-own{grid-row:span 2;display:flex;flex-direction:column;gap:8px;min-width:0}
+.mf-own .mf-own-off{font:12.5px var(--sans);color:var(--dim);line-height:1.4;padding-left:37px;margin-top:-4px}
+.mf-own .mf-own-on{display:none;flex-direction:column;gap:8px;padding-left:37px}
+.mf-own.on .mf-own-on{display:flex}
+.mf-own.on .mf-own-off{display:none}
+.mf-switch{appearance:none;-webkit-appearance:none;position:relative;flex:0 0 auto;width:28px;height:16px;
+  margin:1px 0 0 3px;border-radius:8px;background:var(--line-strong);outline:none}
+.mf-switch::after{content:"";position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:50%;
+  background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.mf-switch:checked{background:var(--accent-fill)}
+.mf-switch:checked::after{left:14px}
+.mf-switch:focus-visible{box-shadow:0 0 0 2px var(--accent-soft)}
 /* A cell like the others, so it drops the standalone spacing - AND IT SPANS THE EMPTY CELL
    BELOW IT. A row is as tall as its tallest cell across BOTH columns, so a switcher taller
    than a checkbox pushed the next row down; spanning takes room this column already had.
@@ -3746,6 +3780,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
                autocorrect="off" autocapitalize="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other"
                title="The customer's name as the chat gives it, filling {PAX} with the tidied first name">
         <button type="button" class="field-clear" id="paxClear" title="Clear customer name" aria-label="Clear PAX"><svg class="ic-x" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5.8 17.5l-3.6-3.6c-.8-.8-.8-2 0-2.8l8-8c.8-.8 2-.8 2.8 0l4.7 4.7c.8.8.8 2 0 2.8l-6.9 6.9"/><path d="M18.3 17.5H5.8"/><path d="M4.2 9.2l7.5 7.5"/></svg></button>
+        <!-- Its words are set by syncGenderGlyph, by how the gender was reached; the sweep is kept off. -->
+        <div id="genderDrum" role="spinbutton" tabindex="0" data-i18n-skip><div class="gd-track"></div></div>
       </div></div>
     <div class="fill">
       <div class="combo" id="intentComboWrap">
@@ -4770,19 +4806,357 @@ What you type stays in this browser only.`;
     swapLock = v;
   }
 
+  // src/modules/variables.js
+  var variables_exports = {};
+  __export(variables_exports, {
+    VAR_ADDRESS_EN: () => VAR_ADDRESS_EN,
+    VAR_ADDRESS_PL: () => VAR_ADDRESS_PL,
+    VAR_BUILTIN_EDITABLE: () => VAR_BUILTIN_EDITABLE,
+    VAR_BUILTIN_NAMES: () => VAR_BUILTIN_NAMES,
+    VAR_DAYPARTS: () => VAR_DAYPARTS,
+    VAR_FACTS: () => VAR_FACTS,
+    VAR_FACT_GROUPS: () => VAR_FACT_GROUPS,
+    VAR_GENDERS: () => VAR_GENDERS,
+    VAR_GREETINGS: () => VAR_GREETINGS,
+    VAR_HOURS: () => VAR_HOURS,
+    VAR_INLINE_ONLY: () => VAR_INLINE_ONLY,
+    VAR_NAME_RE: () => VAR_NAME_RE,
+    VAR_OPS: () => VAR_OPS,
+    VAR_TOKEN_RE: () => VAR_TOKEN_RE,
+    VAR_WORD_FACT: () => VAR_WORD_FACT,
+    catalogVariable: () => catalogVariable,
+    catalogVariables: () => catalogVariables,
+    condHolds: () => condHolds,
+    nameGender: () => nameGender,
+    ruleHolds: () => ruleHolds,
+    setCatalogVariables: () => setCatalogVariables,
+    varAddressOf: () => varAddressOf,
+    varAddressRules: () => varAddressRules,
+    varBuiltin: () => varBuiltin,
+    varClock: () => varClock,
+    varDayPart: () => varDayPart,
+    varFillWords: () => varFillWords,
+    varHours: () => varHours,
+    varInlinePick: () => varInlinePick,
+    varMinutes: () => varMinutes,
+    varResolve: () => varResolve,
+    varRuleAt: () => varRuleAt,
+    varTokensIn: () => varTokensIn,
+    varWordsOf: () => varWordsOf
+  });
+  var VAR_NAME_RE = /^[A-Z][A-Z0-9]*$/;
+  var VAR_FACTS = {
+    time: "time",
+    weekday: "weekday",
+    date: "date",
+    daypart: "daypart",
+    lang: "lang",
+    name: "text",
+    first: "text",
+    gender: "gender",
+    intent: "intent",
+    intents: "count",
+    topic: "text",
+    agent: "text",
+    role: "text"
+  };
+  var VAR_FACT_GROUPS = [
+    ["clock", ["time", "weekday", "date", "daypart"]],
+    ["card", ["lang"]],
+    ["customer", ["name", "first", "gender"]],
+    ["chat", ["intent", "intents", "topic"]],
+    ["desk", ["agent", "role"]]
+  ];
+  var VAR_OPS = {
+    time: ["before", "after"],
+    weekday: ["is", "isnot", "oneof"],
+    date: ["is", "isnot", "before", "after"],
+    daypart: ["is", "isnot", "oneof"],
+    lang: ["is", "isnot", "oneof"],
+    text: ["is", "isnot", "oneof", "set", "unset"],
+    gender: ["is", "isnot", "oneof"],
+    intent: ["is", "isnot", "oneof", "set", "unset"],
+    count: ["is", "isnot", "more", "less"]
+  };
+  var VAR_DAYPARTS = ["morning", "afternoon", "evening"];
+  var VAR_GENDERS = ["m", "f", "n"];
+  var VAR_WORD_FACT = {
+    "first-voc": "firstVoc",
+    first: "first",
+    surname: "surnameOr",
+    name: "name",
+    intent: "intentWords",
+    intents: "intentsWords",
+    topic: "topic",
+    agent: "agentDisplay",
+    role: "role",
+    init: "init",
+    action: "action"
+  };
+  var VAR_WORD_RE = /\{@([a-z][a-z-]*)\}/g;
+  var VAR_GREETINGS = {
+    en: ["Good morning", "Good afternoon", "Good evening"],
+    pl: ["Dzień dobry", "Dzień dobry", "Dobry wieczór"]
+  };
+  var VAR_HOURS = { morning: 240, afternoon: 720, evening: 1080 };
+  function varText(v) {
+    return String(v == null ? "" : v);
+  }
+  function varFold(v) {
+    return varText(v).trim().toLowerCase();
+  }
+  function varMinutes(s) {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(varText(s).trim());
+    if (!m || +m[1] > 23 || +m[2] > 59) return NaN;
+    return +m[1] * 60 + +m[2];
+  }
+  function varClock(min) {
+    const h = Math.floor(min / 60), m = min % 60;
+    return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
+  }
+  var VAR_CATALOG = null;
+  function setCatalogVariables(v) {
+    VAR_CATALOG = v && typeof v === "object" && !Array.isArray(v) ? JSON.parse(JSON.stringify(v)) : null;
+  }
+  function catalogVariables() {
+    return VAR_CATALOG;
+  }
+  function varListOf(vars) {
+    return vars && Array.isArray(vars.list) ? vars.list : [];
+  }
+  function catalogVariable(name, vars) {
+    const list2 = varListOf(vars === void 0 ? VAR_CATALOG : vars);
+    for (let i = 0; i < list2.length; i++) if (list2[i] && list2[i].name === name) return list2[i];
+    return null;
+  }
+  function varHours(vars) {
+    const h = ((vars === void 0 ? VAR_CATALOG : vars) || {}).hours, out = Object.assign({}, VAR_HOURS);
+    if (h && typeof h === "object") VAR_DAYPARTS.forEach((k) => {
+      const n = varMinutes(h[k]);
+      if (Number.isFinite(n)) out[k] = n;
+    });
+    return out;
+  }
+  function varDayPart(min, vars) {
+    const h = varHours(vars);
+    if (min >= h.evening || min < h.morning) return 2;
+    return min < h.afternoon ? 0 : 1;
+  }
+  var VAR_NAMES_M = "kuba barnaba bonawentura kosma jarema zawisza juda ilja ilia misza wania kostia mike joe george steve pierre jose josé jorge andre andré rene rené giuseppe dante felipe bruce wayne kyle dave jake luke philippe";
+  var VAR_NAMES_F = "noemi naomi heidi beatrycze abigail ingrid carmen miriam ruth rut rachel agnes karin kirsten elizabeth judith edith megan karen ellen helen lily emily mary kelly ashley sally molly holly nancy lucy betty judy wendy amy cathy kathy daisy ivy dolores mercedes nicole michelle jane anne alice sophie chloe zoe catherine caroline charlotte claire marie julie josephine christine simone yvonne irene louise elise rose grace kate jade natalie stephanie valerie denise diane elaine doris iris gladys";
+  var VAR_NAMES_N = "kim alex aleks sasha sasza andrea nikola nicola jean robin sam chris charlie jordan taylor morgan ariel dominique claude camille maxime luca nikita dana eden noa kai yuki michele leslie";
+  var VAR_NAME_TABLE = {};
+  [["m", VAR_NAMES_M], ["f", VAR_NAMES_F], ["n", VAR_NAMES_N]].forEach((p) => {
+    p[1].split(/\s+/).forEach((w) => {
+      if (w) VAR_NAME_TABLE[w] = p[0];
+    });
+  });
+  function varFirstKey(first) {
+    const w = varText(first).trim().split(/\s+/)[0] || "";
+    const parts2 = w.split("-").filter(Boolean);
+    return varFold((parts2[parts2.length - 1] || "").replace(/^[^\p{L}]+|[^\p{L}]+$/gu, ""));
+  }
+  function nameGender(first) {
+    const k = varFirstKey(first);
+    if (!k) return "n";
+    if (Object.prototype.hasOwnProperty.call(VAR_NAME_TABLE, k)) return VAR_NAME_TABLE[k];
+    const end = k.charAt(k.length - 1);
+    if (k.length < 2) return "n";
+    if (end === "a") return "f";
+    if ("yio".indexOf(end) > -1) return "m";
+    if (/\p{L}/u.test(end) && "aąeęioóuy".indexOf(end) < 0) return "m";
+    return "n";
+  }
+  function condHolds(c, F) {
+    if (!c || typeof c !== "object") return false;
+    const kind = VAR_FACTS[c.fact], op = c.op, val = c.value;
+    if (!kind || VAR_OPS[kind].indexOf(op) < 0) return false;
+    const list2 = Array.isArray(val) ? val : [val];
+    const among = (have, want) => want.some((x) => varFold(x) === have);
+    switch (kind) {
+      case "time": {
+        const at = varMinutes(val);
+        if (!Number.isFinite(at)) return false;
+        return op === "before" ? F.minutes < at : F.minutes >= at;
+      }
+      case "date": {
+        const at = varText(val).trim(), d = varText(F.date);
+        if (!/^\d{2}-\d{2}$/.test(at)) return false;
+        if (op === "is") return d === at;
+        if (op === "isnot") return d !== at;
+        return op === "before" ? d < at : d > at;
+      }
+      case "count": {
+        const n = +val;
+        if (!Number.isFinite(n)) return false;
+        const have = +F.intents || 0;
+        return op === "is" ? have === n : op === "isnot" ? have !== n : op === "more" ? have > n : have < n;
+      }
+      case "intent": {
+        const ids = (Array.isArray(F.intentIds) ? F.intentIds : []).map(varFold);
+        if (op === "set") return !!F.intentSet;
+        if (op === "unset") return !F.intentSet;
+        const hit = list2.some((x) => ids.indexOf(varFold(x)) > -1);
+        return op === "isnot" ? !hit : hit;
+      }
+      default: {
+        const have = varFold(kind === "weekday" ? F.weekday : F[c.fact]);
+        if (op === "set") return have !== "";
+        if (op === "unset") return have === "";
+        if (op === "isnot") return !among(have, [val]);
+        return among(have, op === "oneof" ? list2 : [val]);
+      }
+    }
+  }
+  function ruleHolds(r, F) {
+    const cs = r && Array.isArray(r.when) ? r.when : [];
+    if (!cs.length) return true;
+    return r.join === "or" ? cs.some((c) => condHolds(c, F)) : cs.every((c) => condHolds(c, F));
+  }
+  function varRuleAt(def, F) {
+    const rs = def && Array.isArray(def.rules) ? def.rules : [];
+    for (let i = 0; i < rs.length; i++) if (ruleHolds(rs[i], F)) return i;
+    return -1;
+  }
+  function varWordsOf(rule, L, primary) {
+    const w = rule && rule.write;
+    if (!w || typeof w !== "object") return "";
+    const own = (k) => Object.prototype.hasOwnProperty.call(w, k) && typeof w[k] === "string";
+    if (own(L)) return w[L];
+    if (primary && own(primary)) return w[primary];
+    return own("en") ? w.en : "";
+  }
+  function varFillWords(s, F) {
+    return varText(s).replace(VAR_WORD_RE, (raw, k) => {
+      const f = Object.prototype.hasOwnProperty.call(VAR_WORD_FACT, k) ? VAR_WORD_FACT[k] : null;
+      return f ? varText(F[f]) : raw;
+    });
+  }
+  function varResolve(def, F, L, primary) {
+    const i = varRuleAt(def, F);
+    if (i < 0) return { rule: -1, text: "" };
+    return { rule: i, text: varFillWords(varWordsOf(def.rules[i], L, primary), F) };
+  }
+  function varInlinePick(name, def, parts2, F) {
+    const i = varRuleAt(def, F);
+    const own = i > -1 && i < parts2.length ? parts2[i] : null;
+    if (own != null) return own;
+    if (name === "GENDER" && i === 2) return "";
+    return parts2[0] == null ? "" : parts2[0];
+  }
+  var VAR_BUILTIN_NAMES = ["GREET", "PAX", "NAME", "GENDER", "DAYPART", "INTENT", "TOPIC", "AGENT", "INIT", "ROLE", "ACTION"];
+  var VAR_BUILTIN_EDITABLE = ["GREET", "PAX", "NAME", "INTENT", "TOPIC", "AGENT", "ROLE"];
+  var VAR_INLINE_ONLY = ["GENDER", "DAYPART"];
+  function varIs(fact, op, value) {
+    return value === void 0 ? { fact, op } : { fact, op, value };
+  }
+  function varBuiltin(name, greet) {
+    const g = greet && typeof greet === "object" ? Object.assign({}, VAR_GREETINGS, greet) : VAR_GREETINGS;
+    const byPart = (i) => {
+      const w = {};
+      Object.keys(g).forEach((k) => {
+        if (Array.isArray(g[k])) w[k] = varText(g[k][i]);
+      });
+      return w;
+    };
+    const parts2 = (write) => [
+      { key: "morning", when: [varIs("daypart", "is", "morning")], write: write(0) },
+      { key: "afternoon", when: [varIs("daypart", "is", "afternoon")], write: write(1) },
+      { key: "evening", when: [], write: write(2) }
+    ];
+    const one = (w) => [{ when: [], write: w }];
+    switch (name) {
+      case "GREET":
+        return { name, rules: parts2(byPart) };
+      case "DAYPART":
+        return { name, rules: parts2(() => ({})) };
+      case "PAX":
+        return { name, rules: one({ en: "{@first}", pl: "{@first-voc}" }) };
+      case "NAME":
+        return { name, rules: one({ en: "{@name}", pl: "{@name}" }) };
+      case "GENDER":
+        return { name, rules: [
+          { key: "male", when: [varIs("gender", "is", "m")], write: {} },
+          { key: "female", when: [varIs("gender", "is", "f")], write: {} },
+          { key: "nonbinary", when: [], write: {} }
+        ] };
+      case "INTENT":
+        return { name, rules: [
+          { key: "one", when: [varIs("intents", "less", 2), varIs("intent", "set")], write: { en: "{@intent}", pl: "{@intent}" } },
+          { key: "several", when: [varIs("intents", "more", 1)], write: { en: "{@intents}", pl: "{@intents}" } },
+          { when: [], write: { en: "", pl: "" } }
+        ] };
+      case "TOPIC":
+        return { name, rules: [
+          { when: [varIs("topic", "set")], write: { en: "{@topic}", pl: "{@topic}" } },
+          { when: [], write: { en: "", pl: "" } }
+        ] };
+      case "AGENT":
+        return { name, rules: one({ en: "{@agent}", pl: "{@agent}" }) };
+      case "INIT":
+        return { name, rules: one({ en: "{@init}", pl: "{@init}" }) };
+      case "ROLE":
+        return { name, rules: one({ en: "{@role}", pl: "{@role}" }) };
+      case "ACTION":
+        return { name, rules: one({ en: "{@action}", pl: "{@action}" }) };
+    }
+    return null;
+  }
+  var VAR_ADDRESS_PL = ["first", "titleFirst", "titleSurname", "none"];
+  var VAR_ADDRESS_EN = ["first", "titleSurname"];
+  function varAddressWords(choice, lang2, g) {
+    if (lang2 === "pl") {
+      if (choice === "none") return "";
+      if (choice === "first") return "{@first-voc}";
+      const who = g === "m" ? "Panie " : g === "f" ? "Pani " : "";
+      if (!who) return "Państwo";
+      return who + (choice === "titleSurname" ? "{@surname}" : "{@first-voc}");
+    }
+    if (choice === "titleSurname") return (g === "m" ? "Mr " : g === "f" ? "Ms " : "Mx ") + "{@surname}";
+    return "{@first}";
+  }
+  function varAddressRules(pl, en) {
+    const gendered = pl !== "first" && pl !== "none" || en === "titleSurname";
+    const write = (g) => ({ en: varAddressWords(en, "en", g), pl: varAddressWords(pl, "pl", g) });
+    if (!gendered) return [{ when: [], write: write("n") }];
+    return [
+      { key: "male", when: [varIs("gender", "is", "m")], write: write("m") },
+      { key: "female", when: [varIs("gender", "is", "f")], write: write("f") },
+      { key: "nonbinary", when: [], write: write("n") }
+    ];
+  }
+  function varAddressOf(def) {
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const rs = def && Array.isArray(def.rules) ? def.rules.map((r) => ({ key: r.key, when: r.when || [], write: r.write || {} })) : null;
+    if (!rs) return { pl: "first", en: "first" };
+    for (const pl of VAR_ADDRESS_PL) for (const en of VAR_ADDRESS_EN) {
+      const want = varAddressRules(pl, en).map((r) => ({ key: r.key, when: r.when, write: r.write }));
+      if (same(rs, want)) return { pl, en };
+    }
+    return null;
+  }
+  var VAR_TOKEN_RE = /\{([A-Z][A-Z0-9]*)(?::([^{}]*))?\}/g;
+  function varTokensIn(text) {
+    const out = [], seen = {};
+    varText(text).replace(VAR_TOKEN_RE, (raw, name, arg) => {
+      if (!seen[raw]) {
+        seen[raw] = 1;
+        out.push({ raw, name, parts: arg == null ? null : arg.split("|") });
+      }
+      return raw;
+    });
+    return out;
+  }
+
   // src/modules/greeting.js
   function dayPart() {
-    const h = (/* @__PURE__ */ new Date()).getHours();
-    if (h >= 18 || h < 4) return 2;
-    return h < 12 ? 0 : 1;
+    const d = /* @__PURE__ */ new Date();
+    return varDayPart(d.getHours() * 60 + d.getMinutes());
   }
   function noActionText(l) {
     return l === "pl" ? "nie podjęto działań" : "no action taken";
   }
-  var GREETINGS = {
-    en: ["Good morning", "Good afternoon", "Good evening"],
-    pl: ["Dzień dobry", "Dzień dobry", "Dobry wieczór"]
-  };
+  var GREETINGS = VAR_GREETINGS;
   var CATALOG_GREETINGS = null;
   function greetTable() {
     return CATALOG_GREETINGS || GREETINGS;
@@ -4820,7 +5194,10 @@ What you type stays in this browser only.`;
     cardFieldKeys: () => cardFieldKeys,
     cardRequiredKeys: () => cardRequiredKeys,
     cardStorageKeys: () => cardStorageKeys,
+    cardUsesPax: () => cardUsesPax,
     carryUnwritten: () => carryUnwritten,
+    paxOwnOn: () => paxOwnOn,
+    paxOwnShown: () => paxOwnShown,
     paxVocOn: () => paxVocOn
   });
   var CARD_FIELD_KEY = {
@@ -4851,6 +5228,17 @@ What you type stays in this browser only.`;
   function paxVocOn(m) {
     if (m && m.paxVoc != null) return !!+m.paxVoc;
     return !!(m && m.firstOnly);
+  }
+  function paxOwnOn(m) {
+    if (m && m.paxOwn != null) return !!+m.paxOwn;
+    return !!m && !(m.firstOnly && paxVocOn(m));
+  }
+  function cardUsesPax(m) {
+    return !!m && cardFieldKeys("body").concat(cardFieldKeys("note")).some((k) => String(m[k] == null ? "" : m[k]).indexOf("{PAX}") > -1);
+  }
+  function paxOwnShown(m) {
+    if (m && m.paxOwn != null) return !!+m.paxOwn;
+    return paxOwnOn(m) && cardUsesPax(m);
   }
   var CARD_SHARED_FIELDS = ["k"];
   var CARD_KEY_ALIAS = { k: "keywords" };
@@ -6203,6 +6591,23 @@ What you type stays in this browser only.`;
     "Maintenance panel": "Panel konserwacji",
     "Select search text": "Zaznacz tekst wyszukiwania",
     "{PAX} in the vocative": "{PAX} w wołaczu",
+    "Customer's gender": "Płeć klienta",
+    "male, read from the name": "męska, odczytana z imienia",
+    "female, read from the name": "żeńska, odczytana z imienia",
+    "nonbinary, as the name leaves it open": "niebinarna, bo imię tego nie rozstrzyga",
+    "nonbinary, until a name is typed": "niebinarna, do czasu wpisania imienia",
+    "male, set by hand": "męska, ustawiona ręcznie",
+    "female, set by hand": "żeńska, ustawiona ręcznie",
+    "nonbinary, set by hand": "niebinarna, ustawiona ręcznie",
+    "Gender, read from the first name. A click or the wheel changes it.": "Płeć odczytana z imienia. Kliknięcie lub kółko myszy ją zmienia.",
+    "Gender, nonbinary while the name leaves it open. A click or the wheel changes it.": "Płeć niebinarna, dopóki imię tego nie rozstrzyga. Kliknięcie lub kółko myszy ją zmienia.",
+    "Gender, set by hand. A new name is read afresh.": "Płeć ustawiona ręcznie. Nowe imię zostanie odczytane od nowa.",
+    "GENDER": "PŁEĆ",
+    "NAME": "IMIĘ I NAZWISKO",
+    "Manual override of {PAX}": "Ręczne ustawienie {PAX}",
+    "{PAX} takes the catalog's address for customers.": "{PAX} przyjmuje zwrot do klientów ustalony w katalogu.",
+    "For a card that sets {PAX} its own way, such as a note that mentions the customer rather than addressing them.": "Dla karty, która ustawia {PAX} po swojemu, na przykład notatki, która wspomina o kliencie, a nie zwraca się do niego.",
+    "override": "ręcznie",
     "Polish only: declines the name into the vocative, the form Polish uses to address someone. Only the first name declines; a surname is left as written.": "Dotyczy tylko polskiego: imię pojawia się w wołaczu, na przykład Anno. Nazwisko się nie odmienia i zostaje tak, jak je wpisano.",
     "vocative": "wołacz",
     "Previous card": "Poprzednia karta",
@@ -8102,6 +8507,7 @@ What you type stays in this browser only.`;
     "allIntents",
     "intentTop",
     "paxVoc",
+    "paxOwn",
     "lockLang",
     "requests",
     "retired",
@@ -8129,7 +8535,8 @@ What you type stays in this browser only.`;
     "notes",
     "grew",
     "desk",
-    "name"
+    "name",
+    "variables"
   ];
   var V2_GREET_PARTS = 3;
   var DEFAULT_LANGS = [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }];
@@ -8588,6 +8995,78 @@ What you type stays in this browser only.`;
       });
     }
   }
+  function v2VarProblems(v, codes, out) {
+    const V2_VAR_NAME_RE = /^[A-Z][A-Z0-9]*$/, V2_VAR_FIXED = ["Z", "GENDER", "DAYPART", "INIT", "ACTION"];
+    const V2_VAR_PARTS = ["morning", "afternoon", "evening"];
+    if (v === void 0) return;
+    if (!v || typeof v !== "object" || Array.isArray(v)) {
+      out.push("variables: not an entry");
+      return;
+    }
+    const clock = (s) => {
+      const m = /^(\d{2}):(\d{2})$/.exec(v2Str(s));
+      return m && +m[1] < 24 && +m[2] < 60 ? +m[1] * 60 + +m[2] : NaN;
+    };
+    if (v.hours !== void 0) {
+      const h = v.hours, at = h && typeof h === "object" && !Array.isArray(h) ? V2_VAR_PARTS.map((k) => clock(h[k])) : [];
+      if (at.length !== 3 || at.some((n) => !Number.isFinite(n))) out.push("variables.hours: wanted morning, afternoon and evening as HH:MM");
+      else if (!(at[0] < at[1] && at[1] < at[2])) out.push("variables.hours: wanted morning before afternoon before evening");
+    }
+    if (v.list === void 0) return;
+    if (!Array.isArray(v.list)) {
+      out.push("variables.list: not a list");
+      return;
+    }
+    const seen = {};
+    v.list.forEach((d, i) => {
+      const name = v2Str(d && d.name), where = "variables " + (name || "[" + i + "]") + ": ";
+      if (!d || typeof d !== "object" || Array.isArray(d)) {
+        out.push("variables[" + i + "]: not an entry");
+        return;
+      }
+      if (!V2_VAR_NAME_RE.test(name)) {
+        out.push(where + "wanted a name of capital letters and digits, starting with a letter");
+        return;
+      }
+      if (seen[name]) {
+        out.push(where + "the name is claimed twice");
+        return;
+      }
+      seen[name] = 1;
+      if (V2_VAR_FIXED.indexOf(name) > -1) {
+        out.push(where + "Etiuda's own, and not set by rules");
+        return;
+      }
+      if (d.about !== void 0 && typeof d.about !== "string") out.push(where + "about is not text");
+      const rules = d.rules;
+      if (!Array.isArray(rules) || !rules.length) {
+        out.push(where + "wanted a list of rules");
+        return;
+      }
+      rules.forEach((r, j) => {
+        const at = where + "rule " + (j + 1) + " ";
+        if (!r || typeof r !== "object" || Array.isArray(r)) {
+          out.push(at + "is not an entry");
+          return;
+        }
+        if (!Array.isArray(r.when)) out.push(at + "has no list of conditions");
+        else r.when.forEach((c, k) => {
+          if (!c || typeof c !== "object" || typeof c.fact !== "string" || typeof c.op !== "string")
+            out.push(at + "condition " + (k + 1) + " wanted a fact and a comparison");
+        });
+        if (r.join !== void 0 && r.join !== "and" && r.join !== "or") out.push(at + "joins its conditions by " + JSON.stringify(r.join) + ", wanted and or or");
+        if (r.name !== void 0 && typeof r.name !== "string") out.push(at + "has a name that is not text");
+        const w = r.write;
+        if (!w || typeof w !== "object" || Array.isArray(w)) out.push(at + "wanted its words by language");
+        else Object.keys(w).forEach((code) => {
+          if (codes.indexOf(code) < 0) out.push(at + "writes " + code + ", a language this catalog does not declare");
+          else if (typeof w[code] !== "string") out.push(at + "writes " + code + " as something other than text");
+        });
+      });
+      const last = rules[rules.length - 1];
+      if (last && Array.isArray(last.when) && last.when.length) out.push(where + "the last rule has conditions, and the last is Otherwise");
+    });
+  }
   function v2Problems(data) {
     if (!isV2(data)) return ["not an Etiuda catalog (format 2)"];
     if (!Array.isArray(data.cards)) return ["cards: absent, or not a list"];
@@ -8633,9 +9112,11 @@ What you type stays in this browser only.`;
       v2BodyProblems(c, id, primary, out);
       v2FlagProblem(c, "retired", id, out);
       v2FlagProblem(c, "commits", id, out);
+      if (c && c.paxOwn !== void 0 && c.paxOwn !== 0 && c.paxOwn !== 1) out.push("card " + id + ": paxOwn is " + JSON.stringify(c.paxOwn) + ", wanted 0, 1 or absent");
     });
     data.cards.forEach((c, i) => v2NextProblems(c, v2Str(c && c.id) || "[" + i + "]", cardSeen, out));
     v2HeaderProblems(data, codes, out);
+    v2VarProblems(data.variables, codes, out);
     if (data.hash != null && v2ContentHash(data) !== v2Str(data.hash))
       out.push("hash: " + v2Str(data.hash) + " is not the hash of what the file holds");
     return out;
@@ -8701,6 +9182,7 @@ What you type stays in this browser only.`;
         if (c[f]) m[f] = 1;
       });
       if (c.paxVoc != null) m.paxVoc = +c.paxVoc ? 1 : 0;
+      if (c.paxOwn != null) m.paxOwn = +c.paxOwn ? 1 : 0;
       if (c.lockLang) m.lockLang = v2Str(c.lockLang);
       const links = (Array.isArray(c.requests) ? c.requests : []).map((id) => idxOf[v2Str(id)]).filter((i) => i != null);
       if (links.length) m.intents = links;
@@ -8739,6 +9221,7 @@ What you type stays in this browser only.`;
     if (data.notes) out.notes = v2Copy(data.notes);
     if (data.grew) out.grew = v2Copy(data.grew);
     if (data.desk) out.desk = v2Copy(data.desk);
+    if (data.variables) out.variables = v2Copy(data.variables);
     const more = v2Extra(data, V2_HEAD_NAMED);
     if (more) out.ext = more;
     return out;
@@ -8813,6 +9296,7 @@ What you type stays in this browser only.`;
         if (m[f]) card[f] = true;
       });
       if (m.paxVoc != null) card.paxVoc = +m.paxVoc ? 1 : 0;
+      if (m.paxOwn != null) card.paxOwn = +m.paxOwn ? 1 : 0;
       if (m.lockLang) card.lockLang = v2Str(m.lockLang);
       if (m.retired) card.retired = true;
       if (m.commits) card.commits = true;
@@ -8849,6 +9333,7 @@ What you type stays in this browser only.`;
     if (c.notes && typeof c.notes === "object") out.notes = v2Copy(c.notes);
     if (c.grew && typeof c.grew === "object") out.grew = v2Copy(c.grew);
     if (c.desk && typeof c.desk === "object") out.desk = v2Copy(c.desk);
+    if (c.variables && typeof c.variables === "object") out.variables = v2Copy(c.variables);
     v2Restore(out, c.ext, V2_HEAD_NAMED);
     if (v2Str(c.id)) out.modified = true;
     out.hash = v2ContentHash(out);
@@ -8977,6 +9462,9 @@ What you type stays in this browser only.`;
     const asSaved = Object.assign({}, base, o);
     delete asSaved.paxVoc;
     if (paxVocOn(full) !== paxVocOn(asSaved)) o.paxVoc = paxVocOn(full) ? 1 : 0;
+    const asOwn = Object.assign({}, base, o);
+    delete asOwn.paxOwn;
+    if (paxOwnOn(full) !== paxOwnOn(asOwn)) o.paxOwn = paxOwnOn(full) ? 1 : 0;
     if (!intentsEqualStored(full.intents, base.intents)) o.intents = full.intents;
     if ("next" in full && !nextEqualStored(full.next, base.next)) o.next = Array.isArray(full.next) ? full.next : [];
     if (o.next && Array.isArray(full.nextWas)) o.nextWas = full.nextWas.map(String);
@@ -9592,6 +10080,71 @@ What you type stays in this browser only.`;
     wirePaxFill: () => wirePaxFill,
     withAgentName: () => withAgentName
   });
+
+  // src/modules/gender-drum.js
+  var gender_drum_exports = {};
+  __export(gender_drum_exports, {
+    custGender: () => custGender,
+    getHandGender: () => getHandGender,
+    putHandGender: () => putHandGender,
+    setHandGender: () => setHandGender,
+    syncGenderGlyph: () => syncGenderGlyph
+  });
+  var handGender = null;
+  function firstKeyOf(raw) {
+    return String(raw == null ? "" : raw).trim().split(/\s+/)[0].toLowerCase();
+  }
+  function custGender() {
+    const first = firstKeyOf(pax ? pax.value : "");
+    if (handGender && handGender.first !== first) handGender = null;
+    if (handGender) return { v: handGender.v, hand: true, empty: !first };
+    return { v: nameGender(first), hand: false, empty: !first };
+  }
+  function setHandGender(v) {
+    if (VAR_GENDERS.indexOf(v) < 0) return;
+    handGender = { v, first: firstKeyOf(pax ? pax.value : "") };
+  }
+  function getHandGender() {
+    return handGender ? { v: handGender.v, first: handGender.first } : null;
+  }
+  function putHandGender(h) {
+    handGender = h && VAR_GENDERS.indexOf(h.v) > -1 ? { v: h.v, first: String(h.first == null ? "" : h.first) } : null;
+  }
+  var GENDER_GLYPH = {
+    m: '<path d="M11.3 8.7 16 4"/><path d="M12 4h4v4"/><circle cx="8.2" cy="11.8" r="4.4"/>',
+    f: '<circle cx="10" cy="7.6" r="4.4"/><path d="M10 12v6.2"/><path d="M7.2 15.3h5.6"/>',
+    n: '<circle cx="10" cy="13.4" r="4.4"/><path d="M10 9V2"/><path d="M7.4 3.6l5.2 3.2"/><path d="M12.6 3.6 7.4 6.8"/>'
+  };
+  function genderSvg(g, cls) {
+    return '<svg class="' + cls + '" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + GENDER_GLYPH[g] + "</svg>";
+  }
+  function genderSaid(s) {
+    if (s.hand) return {
+      text: s.v === "m" ? t("male, set by hand") : s.v === "f" ? t("female, set by hand") : t("nonbinary, set by hand"),
+      tip: t("Gender, set by hand. A new name is read afresh.")
+    };
+    if (s.v === "n") return {
+      text: s.empty ? t("nonbinary, until a name is typed") : t("nonbinary, as the name leaves it open"),
+      tip: t("Gender, nonbinary while the name leaves it open. A click or the wheel changes it.")
+    };
+    return {
+      text: s.v === "m" ? t("male, read from the name") : t("female, read from the name"),
+      tip: t("Gender, read from the first name. A click or the wheel changes it.")
+    };
+  }
+  function syncGenderGlyph() {
+    const d = $("#genderDrum");
+    if (!d) return;
+    const s = custGender(), i = VAR_GENDERS.indexOf(s.v), n = VAR_GENDERS.length;
+    const tr = d.querySelector(".gd-track");
+    if (tr) tr.innerHTML = genderSvg(VAR_GENDERS[(i - 1 + n) % n], "gd-prev") + genderSvg(s.v, "gd-cur") + genderSvg(VAR_GENDERS[(i + 1) % n], "gd-next");
+    d.classList.toggle("gd-hand", s.hand);
+    d.dataset.g = s.v;
+    const said = genderSaid(s);
+    d.setAttribute("aria-label", t("Customer's gender"));
+    d.setAttribute("aria-valuetext", said.text);
+    d.title = said.tip;
+  }
 
   // src/modules/tabs.js
   var tabs_exports = {};
@@ -10410,6 +10963,7 @@ What you type stays in this browser only.`;
       intentText: "",
       intentBox: "",
       who: "",
+      gender: null,
       cats: [],
       entrySel: null,
       scrollY: 0,
@@ -10486,6 +11040,7 @@ What you type stays in this browser only.`;
     t2.intentText = intentText;
     t2.intentBox = intentEl ? intentEl.value : "";
     t2.who = roleSel ? roleSel.value : "";
+    t2.gender = getHandGender();
     t2.cats = cats.slice();
     t2.entrySel = entrySel ? { id: entrySel.id, vi: entrySel.vi } : null;
     t2.scrollY = pageScrollY();
@@ -10591,6 +11146,7 @@ What you type stays in this browser only.`;
     activeTabId = tb.id;
     if (pax) pax.value = tb.pax || "";
     if (roleSel) roleSel.value = tb.who || "";
+    putHandGender(tb.gender);
     setIntentIdxs(Array.isArray(tb.intentIdxs) ? tb.intentIdxs.slice().filter((i) => Number.isInteger(i) && i >= 0 && i < intentCount()) : []);
     setIntentText(tb.intentText || "");
     setCats(Array.isArray(tb.cats) ? tb.cats.slice() : []);
@@ -10608,6 +11164,7 @@ What you type stays in this browser only.`;
     }
     syncIntentClearBtns();
     syncRoleDrum();
+    syncGenderGlyph();
     const paxClear = $("#paxClear");
     if (paxClear) paxClear.disabled = !String(pax && pax.value || "").length;
     drawPills();
@@ -11304,6 +11861,7 @@ What you type stays in this browser only.`;
   }
   function wirePaxFill() {
     pax.oninput = () => {
+      syncGenderGlyph();
       renderFillsSoon();
       scheduleTabSave();
     };
@@ -11513,6 +12071,85 @@ What you type stays in this browser only.`;
   var FILL_M_B = "";
   var FILL_STRIP = /[\u0001\u0002\u0003\u0004]/g;
   var Z_TOKEN = /\{Z\}([ \t]*)/g;
+  function varFacts(m, L) {
+    const d = /* @__PURE__ */ new Date(), mo = d.getMonth() + 1, da = d.getDate();
+    const full = formatPaxName(pax.value), words = full ? full.split(" ") : [];
+    const first = words[0] || "", surname = words.length > 1 ? words[words.length - 1] : "";
+    const firstVoc = L === "pl" && first ? plVocative(first) : first;
+    const a = agentParts(agentName());
+    return {
+      minutes: d.getHours() * 60 + d.getMinutes(),
+      weekday: String(d.getDay() || 7),
+      date: (mo < 10 ? "0" : "") + mo + "-" + (da < 10 ? "0" : "") + da,
+      daypart: VAR_DAYPARTS[dayPart()],
+      lang: L,
+      name: full,
+      first,
+      surname,
+      surnameOr: surname || firstVoc,
+      firstVoc,
+      gender: custGender().v,
+      intentIds: intentIdxs.map((i) => String(intentIdAt(i)).replace(/^t:/, "")),
+      intentSet: intentIdxs.length > 0 || !!intentText.trim(),
+      intents: intentIdxs.length,
+      intentWords: intentFirst(L),
+      intentsWords: intentFor(L),
+      topic: commentPartTopic(L),
+      action: commentPartCmt(L, noActionText(L)),
+      agent: agentName(),
+      agentDisplay: a.display,
+      init: a.init,
+      role: roleSel.value.trim()
+    };
+  }
+  function varMark(name) {
+    switch (name) {
+      case "NAME":
+        return t("NAME");
+      case "GENDER":
+        return t("GENDER");
+      case "GREET":
+        return t("GREET");
+      case "PAX":
+        return t("PAX");
+      case "INTENT":
+        return t("INTENT");
+      case "TOPIC":
+        return t("TOPIC");
+      case "AGENT":
+        return t("AGENT");
+      case "ROLE":
+        return t("ROLE");
+    }
+    return name;
+  }
+  var VAR_DEPTH = 0;
+  var VAR_INLINE_BUILTIN = /^(GENDER|GREET|PAX|NAME|INTENT|TOPIC|AGENT|ROLE)$/;
+  function varWritten(def, m, L, F) {
+    const r = varResolve(def, F, L, CONTENT_LANGS[0]);
+    if (!r.text) return "";
+    if (VAR_DEPTH > 3) return r.text.replace(VAR_TOKEN_RE, "");
+    VAR_DEPTH++;
+    try {
+      return fill(r.text, m, false, L);
+    } finally {
+      VAR_DEPTH--;
+    }
+  }
+  function fillVariables(s, m, L, M2, facts) {
+    const vars = catalogVariables();
+    return s.replace(VAR_TOKEN_RE, (raw, name, arg) => {
+      if (arg != null) {
+        if (name === "DAYPART") return raw;
+        const def2 = catalogVariable(name) || (VAR_INLINE_BUILTIN.test(name) ? varBuiltin(name) : null);
+        if (!def2) return raw;
+        return M2(varInlinePick(name, def2, arg.split("|"), facts()), varMark(name));
+      }
+      if (!vars || name === "PAX") return raw;
+      const def = catalogVariable(name);
+      return def ? M2(varWritten(def, m, L, facts()), varMark(name)) : raw;
+    });
+  }
   function fill(s, m, mark, inL) {
     if (!s) return s;
     const L = CONTENT_LANGS.indexOf(inL) > -1 ? inL : cardLang(m);
@@ -11522,6 +12159,10 @@ What you type stays in this browser only.`;
       const t2 = String(v == null ? "" : v);
       return t2 ? FILL_A + t2.replace(FILL_STRIP, "") + FILL_B : MISS(name || "?");
     }) : ((v) => String(v == null ? "" : v));
+    let VF = null;
+    const facts = () => VF || (VF = varFacts(m, L));
+    s = fillVariables(s, m, L, M2, facts);
+    s = s.replace(/\{NAME\}/g, () => M2(formatPaxName(pax.value), t("NAME")));
     s = s.replace(/\{GREET\}/g, () => M2(greeting(L), t("GREET")));
     s = s.replace(/\{DAYPART:([^}]*)\}/g, (_, body) => {
       const parts2 = String(body).split("|");
@@ -11534,10 +12175,14 @@ What you type stays in this browser only.`;
     });
     let n = formatPaxName(pax.value);
     if (n && m) {
-      if (m.firstOnly) n = n.split(" ")[0];
-      if (L === "pl" && paxVocOn(m)) {
-        const sp = n.indexOf(" ");
-        n = sp < 0 ? plVocative(n) : plVocative(n.slice(0, sp)) + n.slice(sp);
+      const own = paxOwnOn(m), def = !own && catalogVariable("PAX");
+      if (def) n = varWritten(def, m, L, facts());
+      else {
+        if (own ? m.firstOnly : true) n = n.split(" ")[0];
+        if (L === "pl" && (own ? paxVocOn(m) : true)) {
+          const sp = n.indexOf(" ");
+          n = sp < 0 ? plVocative(n) : plVocative(n.slice(0, sp)) + n.slice(sp);
+        }
       }
     }
     if (n) s = s.replace(/\{PAX\}/g, () => M2(n, t("PAX")));
@@ -12110,6 +12755,7 @@ What you type stays in this browser only.`;
     if (m.seq) o.seq = 1;
     if (m.firstOnly) o.firstOnly = 1;
     if (m.paxVoc != null) o.paxVoc = +m.paxVoc ? 1 : 0;
+    if (m.paxOwn != null) o.paxOwn = +m.paxOwn ? 1 : 0;
     if (m.allIntents) o.allIntents = 1;
     if (m.intentTop) o.intentTop = 1;
     if (Array.isArray(m.intents) && m.intents.length) o.intents = m.intents.slice();
@@ -12170,6 +12816,7 @@ What you type stays in this browser only.`;
       if (truthyFlag(rawM.seq)) entry.seq = 1;
       if (truthyFlag(rawM.firstOnly)) entry.firstOnly = 1;
       if (rawM.paxVoc != null) entry.paxVoc = truthyFlag(rawM.paxVoc) ? 1 : 0;
+      if (rawM.paxOwn != null) entry.paxOwn = truthyFlag(rawM.paxOwn) ? 1 : 0;
       if (truthyFlag(rawM.allIntents)) entry.allIntents = 1;
       if (truthyFlag(rawM.intentTop)) entry.intentTop = 1;
       if (Array.isArray(rawM.intents) && rawM.intents.length) {
@@ -12396,6 +13043,7 @@ What you type stays in this browser only.`;
     if (data && Array.isArray(data.langs) && data.langs.length) cat.langs = data.langs;
     if (data && data.greet && typeof data.greet === "object") cat.greet = data.greet;
     if (data && data.stop && typeof data.stop === "object") cat.stop = data.stop;
+    if (data && data.variables && typeof data.variables === "object") cat.variables = JSON.parse(JSON.stringify(data.variables));
     const table = (v) => v && typeof v === "object" && !Array.isArray(v) && Object.keys(v).length ? JSON.parse(JSON.stringify(v)) : null;
     const notes = table(data && data.notes);
     if (notes) cat.notes = notes;
@@ -12569,6 +13217,7 @@ What you type stays in this browser only.`;
     setCommentLang(c.commentLang);
     setCatalogGreet(c.greet && typeof c.greet === "object" ? c.greet : null);
     setCatalogStop(c.stop && typeof c.stop === "object" ? c.stop : null);
+    setCatalogVariables(c.variables && typeof c.variables === "object" ? c.variables : null);
     const i = c.intents || {};
     Object.keys(SW_STORE).forEach((k) => {
       SW_STORE[k].length = 0;
@@ -16172,13 +16821,20 @@ What you type stays in this browser only.`;
       });
     });
   }
-  var CARD_TOKEN_RE = /\{(GREET|AGENT|PAX|ROLE|INIT|INTENT|ACTION|TOPIC|Z|DAYPART)/;
-  var TOKEN_CANARY = "{GREET}{AGENT}{PAX}{ROLE}{INIT}{INTENT}{ACTION}{TOPIC}{Z}x{DAYPART:a|b|c}";
+  var CARD_TOKEN_RE = /\{[A-Z]/;
+  var TOKEN_CANARY = "{GREET}{AGENT}{PAX}{ROLE}{INIT}{INTENT}{ACTION}{TOPIC}{Z}x{DAYPART:a|b|c}{NAME}{GENDER:a|b|c}{GREET:a|b|c}{PAX:a|b|c}{NAME:a|b|c}{INTENT:a|b|c}{TOPIC:a|b|c}{AGENT:a|b|c}{ROLE:a|b|c}";
+  function catalogCanary() {
+    const v = catalogVariables(), list2 = v && Array.isArray(v.list) ? v.list : [];
+    return list2.map((d) => {
+      const n = d && d.name, k = d && Array.isArray(d.rules) ? d.rules.length : 0;
+      return n ? "{" + n + "}{" + n + ":" + Array.from({ length: k }, (_, i) => i).join("|") + "}" : "";
+    }).join("");
+  }
   function cardFillKey(m) {
     const raw = String(m && m.en || "") + String(m && m.pl || "");
     if (!CARD_TOKEN_RE.test(raw)) return "";
     try {
-      return fill(TOKEN_CANARY, m);
+      return fill(TOKEN_CANARY + catalogCanary(), m);
     } catch (e) {
       return "?" + ePackEpoch;
     }
@@ -19403,7 +20059,7 @@ What you type stays in this browser only.`;
     document.documentElement.lang = uiLang();
     syncSettingsMenu();
     syncShortcutTitles();
-    [applyCatsToGlobal, drawIntentRail, drawPills, drawTabs, syncRoleDrum, render].forEach((f) => {
+    [applyCatsToGlobal, drawIntentRail, drawPills, drawTabs, syncRoleDrum, syncGenderGlyph, render].forEach((f) => {
       try {
         f();
       } catch (e) {
@@ -21006,7 +21662,7 @@ What you type stays in this browser only.`;
     const s = takenFor.get(c);
     return !!s && s.has(String(id));
   }
-  var UNSETTLED = ["intents", "next", "nextWas", "paxVoc", "ext"];
+  var UNSETTLED = ["intents", "next", "nextWas", "paxVoc", "paxOwn", "ext"];
   function settleEdits(c, list2, was) {
     const ov = pack.overrides || {}, bases = pack.editBases || {}, takes = takenFor.get(c);
     const now = new Map(list2.map((m) => [catalogCardId(m), m])), old = new Map(was.map((m) => [m.id, m]));
@@ -21235,6 +21891,7 @@ What you type stays in this browser only.`;
     if (origin && Array.isArray(origin.langs) && origin.langs.length) out.langs = origin.langs;
     if (origin && origin.greet && typeof origin.greet === "object") out.greet = origin.greet;
     if (origin && origin.stop && typeof origin.stop === "object") out.stop = origin.stop;
+    if (origin && origin.variables && typeof origin.variables === "object") out.variables = origin.variables;
     if (origin && origin.notes && typeof origin.notes === "object") out.notes = origin.notes;
     if (origin && origin.ext && typeof origin.ext === "object") out.ext = origin.ext;
     const wasIds = origin && Array.isArray(origin.intentIds) ? origin.intentIds : [];
@@ -23030,8 +23687,11 @@ What you type stays in this browser only.`;
   function meAdvSummary(m) {
     const on = [];
     if (m && m.alt) on.push(t(m.seq ? "steps" : "alt"));
-    if (m && m.firstOnly) on.push(tc("pax", "first name"));
-    if (paxVocOn(m)) on.push(t("vocative"));
+    if (paxOwnShown(m)) {
+      on.push(t("override"));
+      if (m.firstOnly) on.push(tc("pax", "first name"));
+      if (paxVocOn(m)) on.push(t("vocative"));
+    }
     if (m && m.allIntents) on.push(t("every intent"));
     if (m && m.intentTop) on.push(t("top"));
     if (m && CONTENT_LANGS.indexOf(m.lockLang) > -1)
@@ -23163,6 +23823,8 @@ What you type stays in this browser only.`;
               "Numbers the alternatives as ordered steps.",
               "Ordered sequence (STEP badges)"
             );
+            const own = paxOwnShown(m), sub = [];
+            const at = rows.length;
             box(
               "meFirst",
               m.firstOnly,
@@ -23177,6 +23839,8 @@ What you type stays in this browser only.`;
               "Polish only: declines the name into the vocative, the form Polish uses to address someone. Only the first name declines; a surname is left as written.",
               "{PAX} in the vocative"
             );
+            sub.push.apply(sub, rows.splice(at, 2));
+            rows.push('<div class="mf-own' + (own ? " on" : "") + '" id="meOwnRow"><label title="' + esc(t("For a card that sets {PAX} its own way, such as a note that mentions the customer rather than addressing them.")) + '"><input type="checkbox" class="mf-switch" role="switch" id="meOwn"' + (own ? " checked" : "") + "> " + esc(t("Manual override of {PAX}")).split("{PAX}").join(paxTag) + '</label><div class="mf-own-off">' + esc(t("{PAX} takes the catalog's address for customers.")).split("{PAX}").join(paxTag) + '</div><div class="mf-own-on">' + sub.join("") + "</div></div>");
             box(
               "meAllIntents",
               m.allIntents,
@@ -23193,8 +23857,9 @@ What you type stays in this browser only.`;
             );
             const pinned2 = CONTENT_LANGS.indexOf(m.lockLang) > -1 ? m.lockLang : "";
             const pin = '<div class="mf-pin' + (pinned2 ? "" : " off") + '" id="meLockRow"><label title="' + esc(t("The card keeps this language whatever the EN|PL toggle says, tokens included")) + '"><input type="checkbox" id="meLockLang"' + (pinned2 ? " checked" : "") + "> " + esc(t("Always one language")) + '</label><div class="seg mf-pin-seg" id="meLockSeg" data-n="' + CONTENT_LANGS.length + '">' + CONTENT_LANGS.map((l) => '<button type="button" data-v="' + esc(l) + '"' + ((pinned2 || CONTENT_LANGS[0]) === l ? ' class="on"' : "") + ">" + esc(l.toUpperCase()) + "</button>").join("") + "</div></div>";
-            const cells = rows.concat([pin]);
-            return '<div class="mf-cols" style="grid-template-rows:repeat(' + Math.ceil(cells.length / 2) + ',auto)">' + cells.join("") + "</div>";
+            const left = rows.slice(0, 3), right = rows.slice(3);
+            const cells = left.concat(right, [pin]);
+            return '<div class="mf-cols" style="grid-template-rows:repeat(4,auto)">' + cells.join("") + "</div>";
           })()
         })
       ),
@@ -23230,6 +23895,7 @@ What you type stays in this browser only.`;
           const el = $("#" + CARD_FLAG_BOX[f]);
           cur[f] = el && el.checked ? 1 : 0;
         });
+        cur.paxOwn = $("#meOwn") && $("#meOwn").checked ? 1 : 0;
         return cur;
       };
       const upd = () => {
@@ -23256,6 +23922,11 @@ What you type stays in this browser only.`;
       CARD_FLAGS.forEach((f) => {
         const el = $("#" + CARD_FLAG_BOX[f]);
         if (el) el.addEventListener("change", upd);
+      });
+      const ownBox = $("#meOwn"), ownRow = $("#meOwnRow");
+      if (ownBox && ownRow) ownBox.addEventListener("change", () => {
+        ownRow.classList.toggle("on", ownBox.checked);
+        upd();
       });
       const pinBox = $("#meLockLang"), pinRow = $("#meLockRow"), pinSeg = $("#meLockSeg");
       if (pinBox && pinRow) {
@@ -23324,6 +23995,8 @@ What you type stays in this browser only.`;
       const seq = alt && $("#meSeq") && $("#meSeq").checked ? 1 : 0;
       const firstOnly = $("#meFirst").checked ? 1 : 0;
       const paxVoc = $("#meVoc").checked ? 1 : 0;
+      const ownNow = $("#meOwn") && $("#meOwn").checked ? 1 : 0;
+      const paxOwn = m.paxOwn == null && (!cardUsesPax(text) || ownNow === (paxOwnOn({ firstOnly, paxVoc }) ? 1 : 0)) ? void 0 : ownNow;
       const allIntents = $("#meAllIntents").checked ? 1 : 0;
       const intentTop = $("#meIntentTop").checked ? 1 : 0;
       const lockLang = readMeLockLang();
@@ -23347,7 +24020,7 @@ What you type stays in this browser only.`;
         const entry = Object.assign(
           { id: isNew ? savedId = uid("u:") : id, c },
           text,
-          { alt, seq, firstOnly, paxVoc, allIntents, intentTop, lockLang, commits, intents: intentsStored }
+          { alt, seq, firstOnly, paxVoc, paxOwn, allIntents, intentTop, lockLang, commits, intents: intentsStored }
         );
         carryUnwritten(entry, isNew ? null : pack.custom.find((x) => x && x.id === id));
         const own = nx.fields().next;
@@ -23359,6 +24032,7 @@ What you type stays in this browser only.`;
         CARD_BOOL_FLAGS.forEach((f) => {
           if (!entry[f]) delete entry[f];
         });
+        if (entry.paxOwn == null) delete entry.paxOwn;
         if (!entry.lockLang) delete entry.lockLang;
         if (!entry.intents || !entry.intents.length) delete entry.intents;
         if (isNew) pack.custom.push(entry);
@@ -23374,6 +24048,7 @@ What you type stays in this browser only.`;
           seq: seq ? 1 : 0,
           firstOnly: firstOnly ? 1 : 0,
           paxVoc,
+          paxOwn,
           allIntents,
           intentTop,
           lockLang,
@@ -26928,6 +27603,47 @@ What you type stays in this browser only.`;
     syncRoleDrum();
   }
 
+  // src/modules/gender-turn.js
+  var gender_turn_exports = {};
+  __export(gender_turn_exports, {
+    stepGender: () => stepGender,
+    wireGenderDrum: () => wireGenderDrum
+  });
+  function stepGender(dir) {
+    const d = $("#genderDrum");
+    if (!d) return;
+    const i = VAR_GENDERS.indexOf(custGender().v), n = VAR_GENDERS.length;
+    setHandGender(VAR_GENDERS[(i + dir + n) % n]);
+    syncGenderGlyph();
+    const tr = d.querySelector(".gd-track");
+    if (tr) {
+      tr.classList.remove("rd-up", "rd-down");
+      void tr.offsetWidth;
+      tr.classList.add(dir > 0 ? "rd-up" : "rd-down");
+    }
+    hooks.render();
+    scheduleTabSave();
+  }
+  function wireGenderDrum() {
+    const d = $("#genderDrum");
+    if (!d) return;
+    d.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      stepGender(e.deltaY > 0 ? 1 : -1);
+    }, { passive: false });
+    d.addEventListener("click", () => {
+      stepGender(1);
+    });
+    d.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      stepGender(e.key === "ArrowDown" ? 1 : -1);
+    });
+    syncGenderGlyph();
+  }
+
   // src/modules/field-clear.js
   var field_clear_exports = {};
   __export(field_clear_exports, {
@@ -27498,7 +28214,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
@@ -27669,6 +28385,7 @@ What you type stays in this browser only.`;
     wireSearchBox();
     updateIntentPlaceholder();
     bindFieldClear(pax, $("#paxClear"), () => {
+      syncGenderGlyph();
       render();
       scheduleTabSave();
     });
@@ -27687,6 +28404,7 @@ What you type stays in this browser only.`;
     wireRailHover();
     wireRailPointer();
     wireRoleDrum();
+    wireGenderDrum();
     wireColResize();
     wireColWidthWatch();
     wirePillsWidthWatch();
