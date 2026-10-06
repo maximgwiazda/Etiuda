@@ -239,7 +239,7 @@ function mtReadings(){
       const mine=rows.filter(x=>x[2]===n), s=mine[0], d=new Date(s[0]), p=v=>String(v).padStart(2,"0");
       return p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds())+" "+s[4]+": "
         +mine.map(x=>x[3]).join(", ");
-    }).join(", ");
+    }).join("; ");
   }));
   row("desk backup",S(()=>{
     const r=eDeskRefused()[0];

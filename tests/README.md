@@ -49,7 +49,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/catalog-watch.js  the watched catalog, one app run
     node tests/pick-desk.js                          the picker over a real window: it takes the foreground and presses keys, so by hand, nobody at the keyboard
     node tests/swap.mjs                              the desk changed in place held to a fresh start, Chrome, no fixtures
-    node tests/theme-fade.mjs                        every category, then the theme's fade: the page lives, the hold is let go, the record Maintenance shows, Chrome, no fixtures
+    node tests/theme-fade.mjs                        every category, then the theme's fade: the page lives, the hold is let go, the record Maintenance shows across a reload, and a control that the fault still kills the page without the hold, Chrome, no fixtures
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
     ETIUDA_FIXTURES=<folder> node tests/reinstall.js     install, use, uninstall, install again
 
