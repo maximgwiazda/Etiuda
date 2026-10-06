@@ -3477,10 +3477,40 @@ function hardenSession() {
   const ALLOWED = ["clipboard-sanitized-write"];
   session.defaultSession.setPermissionRequestHandler((wc, name, done) => done(ALLOWED.indexOf(name) > -1));
   session.defaultSession.setPermissionCheckHandler((wc, name) => ALLOWED.indexOf(name) > -1);
-  /* THE TRAP: on Linux Chromium fetches its spelling dictionaries from Google at the first page. Pointed
-     at a folder that holds none, it asks nothing of the network (tests/linux-desk.js 7a). */
-  if (process.platform === "linux")
-    session.defaultSession.setSpellCheckerDictionaryDownloadURL("file://" + path.join(__dirname, "no-dictionaries").split("/").map(encodeURIComponent).join("/") + "/");
+  if (process.platform === "linux") spellingFromPackage(session.defaultSession);
+}
+
+/* SPELLING ON LINUX, FROM THE PACKAGE AND NEVER FROM THE WEB. Windows checks spelling with its own checker
+   and none of this runs there. On Linux Chromium uses Hunspell and, for each language the session has,
+   reads <userData>/Dictionaries/<name> or else downloads <name> from Google's server at the first page.
+   THE TRAP, measured 2026-10-06 on Electron 44: the download address cannot be the package. The loader
+   refuses file:// (net error -302), and a custom scheme or a file handler fails the same way, so the
+   address below is a stopper, not a source: a language without a file asks nothing of the network
+   (tests/linux-desk.js 7a, 7b). What loads is a copy: the package's files (electron-builder.js, the
+   linux block) are copied into the profile before the session is given its languages, under
+   Chromium's own casing; the name it asks the server for is lowercased and a copy under that name is
+   never read (measured the same day). English and Polish are the languages the desk is written in.
+   tests/shell-office.mjs 13 holds both platforms, tests/linux-desk.js 8 the installed package. */
+const SPELLING = { langs: ["en-US", "pl"], files: ["en-US-10-1.bdic", "pl-PL-3-0.bdic"] };
+function spellingFromPackage(s) {
+  const from = path.join(process.resourcesPath || "", "dictionaries");
+  s.setSpellCheckerDictionaryDownloadURL("file://" + from.split("/").map(encodeURIComponent).join("/") + "/");
+  const to = path.join(app.getPath("userData"), "Dictionaries"), placed = [];
+  for (const name of SPELLING.files) {
+    try {
+      const bytes = fs.readFileSync(path.join(from, name));
+      let had = null;
+      try { had = fs.readFileSync(path.join(to, name)); } catch { /* not there yet */ }
+      if (had && had.equals(bytes)) continue;
+      fs.mkdirSync(to, { recursive: true });
+      writeReplacing(path.join(to, name), bytes);
+      placed.push(name);
+    } catch (e) {
+      console.error("etiuda: the spelling dictionary " + name + " was not placed: " + (e && e.code || e));
+    }
+  }
+  s.setSpellCheckerLanguages(SPELLING.langs);
+  return placed;
 }
 
 /* ONE ETIUDA AT A TIME, which is what makes the association useful rather than annoying: without

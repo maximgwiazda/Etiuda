@@ -18,7 +18,14 @@
  *   4  the global hotkey is registered with the display, and pressing it shows the picker
  *   5  the window's class is the one the installed .desktop entry names, where there is one
  *   6  each launch's processes are killed and its lab is gone
- *   7  the desk asks nothing of the web: its net log names no http or https address
+ *   7  the desk asks nothing of the web: its net log names no http or https address (7a), and, with spelling
+ *      in use, no dictionary address of any scheme (7b). Until 2026-10-06 7a held a desk whose dictionary
+ *      address pointed at nothing and which so checked no spelling; it now holds one checking English and
+ *      Polish from the files its package carries
+ *   8  spelling from the package: the shell copies the package's two dictionaries into the profile (8a), and
+ *      a misspelt English and a misspelt Polish word, typed into a field the page is given over the debugging
+ *      port and right-clicked, open the shell's menu with suggestions (8b, 8c), read from its stdout under
+ *      ETIUDA_TEST_CONTEXT_MENU as shell-smoke 1h reads it; the same words spelt right open it without (8D)
  * AppArmor is not measured where the kernel does not run it, and the run says so.
  *
  * Exit code is the number of failed checks, capped at 63, or 78 where the run produced no verdict.
@@ -32,7 +39,7 @@ const zlib = require("node:zlib");
 const E = require("./engine.js");
 
 const WHO = "tests/linux-desk.js";
-const EXPECTED = 11;
+const EXPECTED = 16;
 const argv = process.argv.slice(2);
 const PROGRAM = argv[0] ? path.resolve(argv[0]) : "";
 const SHOT = argv.indexOf("--shot") > -1 ? path.resolve(argv[argv.indexOf("--shot") + 1] || "") : "";
@@ -126,13 +133,13 @@ function png(img, file) {
 }
 
 /* ---- one launch on a lab of its own ---- */
-async function launch(name, extra) {
+async function launch(name, extra, env) {
   const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-linux-desk-" + name + "-"));
   const ud = path.join(lab, "user-data"), docs = path.join(lab, "documents"), cats = path.join(docs, "Etiuda"), net = path.join(lab, "net.json");
   fs.mkdirSync(docs, { recursive: true });
   const out = [];
   const child = E.shellLaunch(WHO, PROGRAM, ["--user-data-dir=" + ud, "--log-net-log=" + net].concat(extra || []),
-    { stdio: ["ignore", "pipe", "pipe"], env: Object.assign({}, process.env, { ETIUDA_TEST_DOCUMENTS: docs }) });
+    { stdio: ["ignore", "pipe", "pipe"], env: Object.assign({}, process.env, { ETIUDA_TEST_DOCUMENTS: docs }, env || {}) });
   child.stdout.on("data", d => out.push(String(d)));
   child.stderr.on("data", d => out.push(String(d)));
   let wid = "";
@@ -144,6 +151,49 @@ async function launch(name, extra) {
   await sleep(6000);
   return { lab, ud, cats, net, child, out, wid };
 }
+/* ---- spelling: a field the page is given, typed into and right-clicked over the debugging port ----
+   The menu each right-click opens is read off the shell's stdout, one line per menu, labels only. */
+const MENU = /etiuda: context menu /;
+async function spellingMenus(run, words) {
+  const puppeteer = require("puppeteer-core");
+  let port = "";
+  for (let i = 0; i < 40 && !port; i++) {
+    try { port = fs.readFileSync(path.join(run.ud, "DevToolsActivePort"), "utf8").split("\n")[0].trim(); } catch { await sleep(250); }
+  }
+  if (!port) return { why: "no DevToolsActivePort in the lab's user-data folder" };
+  const b = await puppeteer.connect({ browserURL: "http://127.0.0.1:" + port, defaultViewport: null });
+  try {
+    const p = (await b.pages()).find(x => /etiuda\.html/.test(x.url()));
+    if (!p) return { why: "no page of etiuda.html" };
+    const cdp = await p.target().createCDPSession();
+    const menus = {};
+    for (const w of words) {
+      const at = await p.evaluate(() => {
+        let t = document.getElementById("eSpellProbe");
+        if (!t) {
+          t = document.createElement("textarea");
+          t.id = "eSpellProbe"; t.spellcheck = true;
+          t.setAttribute("style", "position:fixed;left:40px;top:40px;width:420px;height:80px;z-index:2147483647;font:20px sans-serif");
+          document.body.appendChild(t);
+        }
+        t.value = ""; t.focus();
+        const r = t.getBoundingClientRect();
+        return { x: r.x + 14, y: r.y + 16 };
+      });
+      await cdp.send("Input.insertText", { text: w + " " });
+      await sleep(1500);
+      const had = run.out.join("").split("\n").filter(l => MENU.test(l)).length;
+      for (const type of ["mousePressed", "mouseReleased"])
+        await cdp.send("Input.dispatchMouseEvent", { type, x: at.x, y: at.y, button: "right", clickCount: 1 });
+      await sleep(800);
+      const lines = run.out.join("").split("\n").filter(l => MENU.test(l));
+      menus[w] = lines.length > had ? JSON.parse(lines[lines.length - 1].replace(/^.*etiuda: context menu /, "")).map(i => i[0]) : null;
+    }
+    await cdp.detach().catch(() => {});
+    return { menus };
+  } finally { await b.disconnect(); }
+}
+
 function close(run) {
   const n = killAll(run.child.pid);
   const gone = E.removeLab(run.lab);
@@ -158,7 +208,7 @@ function close(run) {
     + ", apparmor_restrict_unprivileged_userns " + restrict);
   if (!apparmor) console.log("  NOT RUN what the AppArmor profile allows: this kernel runs no AppArmor, so the sandbox below stands on user namespaces alone");
 
-  const run = await launch("main", []);
+  const run = await launch("main", ["--remote-debugging-port=0"], { ETIUDA_TEST_CONTEXT_MENU: "1" });
   try {
     check(!!run.wid, "1a a window named Etiuda is shown within 30 s: " + (run.wid || "none") + (run.wid ? "" : "; the program said: " + run.out.join("").slice(-600)));
     const img = run.wid ? capture(run.wid) : null;
@@ -200,14 +250,41 @@ function close(run) {
       notRun++;
       console.log("  NOT RUN 5a no installed .desktop entry is this program's, so there is no class to hold it to: " + cls);
     }
+
+    const carried = path.join(path.dirname(PROGRAM), "resources", "dictionaries"), into = path.join(run.ud, "Dictionaries");
+    const NAMES = ["en-US-10-1.bdic", "pl-PL-3-0.bdic"];
+    if (fs.existsSync(carried)) {
+      const same = NAMES.filter(n => { try { return fs.readFileSync(path.join(into, n)).equals(fs.readFileSync(path.join(carried, n))); } catch { return false; } });
+      check(same.length === 2, "8a the shell copied the package's two dictionaries into the profile byte for byte, under Chromium's casing: "
+        + JSON.stringify(same) + " of " + JSON.stringify(fs.existsSync(into) ? fs.readdirSync(into) : []));
+    } else {
+      notRun++;
+      console.log("  NOT RUN 8a no resources/dictionaries beside the program, as in an AppImage, so the copy has nothing to be held to");
+    }
+    const sp = await spellingMenus(run, ["teh", "dzienkujemy", "the", "dzi\u0119kujemy"]);
+    const m = sp.menus || {}, plain = m.the || [];
+    const offered = w => { const extra = (m[w] || []).filter(l => plain.indexOf(l) < 0); return extra.slice(0, -1); };
+    check(!!m.teh && offered("teh").indexOf("the") > -1,
+      "8b a right-click on the misspelt English word teh opens the shell's menu with suggestions, the among them: "
+      + JSON.stringify(offered("teh")) + " in " + JSON.stringify(m.teh || sp.why || null));
+    check(!!m.dzienkujemy && offered("dzienkujemy").indexOf("dzi\u0119kujemy") > -1,
+      "8c a right-click on the misspelt Polish word dzienkujemy opens it with suggestions, dzi\u0119kujemy among them: "
+      + JSON.stringify(offered("dzienkujemy")) + " in " + JSON.stringify(m.dzienkujemy || sp.why || null));
+    check(plain.length > 0 && JSON.stringify(m["dzi\u0119kujemy"]) === JSON.stringify(plain)
+      && (m.teh || []).length > plain.length && (m.dzienkujemy || []).length > plain.length,
+      "8D CONTROL: the same words spelt right open the menu with the edit commands alone, so 8b and 8c can fail: "
+      + JSON.stringify([plain, m["dzi\u0119kujemy"] || null]));
   } finally {
     const n = killAll(run.child.pid);
     await sleep(500);
     let log = "";
     try { log = fs.readFileSync(run.net, "utf8"); } catch { log = ""; }
     const web = [...new Set((log.match(/"url":"https?:[^"]*"/g) || []))];
-    check(log.length > 0 && web.length === 0, "7a the desk asks nothing of the web: " + log.length + " byte(s) of net log, "
+    check(log.length > 0 && web.length === 0, "7a the desk asks nothing of the web, with spelling in use: " + log.length + " byte(s) of net log, "
       + web.length + " http or https address(es)" + (web.length ? ": " + web.join(", ") : ""));
+    const dict = [...new Set((log.match(/"url":"[^"]*\.bdic"/g) || []))];
+    check(log.length > 0 && dict.length === 0, "7b and asks for no dictionary at any address, file:// included, since the package's were"
+      + " where Chromium reads them: " + dict.length + (dict.length ? ": " + dict.join(", ") : ""));
     const c = { n, gone: E.removeLab(run.lab) };
     check(c.gone, "6a the launch's " + c.n + " process(es) are killed and its lab is gone");
   }

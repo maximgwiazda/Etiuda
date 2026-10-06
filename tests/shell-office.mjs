@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 86;
+const EXPECTED = 92;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -39,7 +39,7 @@ const APP = path.join(LAB, "app");
 /* The shell's own names, handed back by a line added after its source: nothing is exported from
    main.js, and a slice would test a copy of one function rather than the file as it runs. */
 const EXPOSE = ["renamePatiently", "writeReplacing", "saveWindowPlace", "windowFile", "readCatalog", "channelHash",
-  "SAMPLE_EDITIONS", "proxySwitchesFrom", "catalogChanged", "sendListing"];
+  "SAMPLE_EDITIONS", "proxySwitchesFrom", "catalogChanged", "sendListing", "spellingFromPackage"];
 
 /* node:fs with a hook per call: `ctl.renameSync = (real, ...args) => ...` decides that call,
    and a call without a hook goes to the real one. `ctl.any` sees every synchronous call first,
@@ -94,7 +94,8 @@ const QUIET = regDump([["CertificateRevocation", "REG_DWORD", "0x1"], ["ProxyEna
    so the shell boots as far as its window; opts.clock: the
    fake timers above; opts.desk: keys written into desk.json before the shell reads it; opts.src:
    the source to run in place of main.js; opts.app: the folder it runs from; opts.onLine: switches
-   on its command line; opts.paths and opts.dialogs: arrays that take the setPath calls and the save dialogs it opens. */
+   on its command line; opts.paths and opts.dialogs: arrays that take the setPath calls and the save dialogs it opens;
+   opts.session: the electron session in place of the stand-in; opts.order: an array a window's construction is pushed to. */
 function loadShell(opts) {
   const o = opts || {};
   const dir = path.join(LAB, "load" + (++loads));
@@ -118,10 +119,10 @@ function loadShell(opts) {
                           removeSwitch: k => { if (onLine.delete(k)) removed.push(k); } },
            whenReady: () => (o.ready ? Promise.resolve() : new Promise(noop)) },
     ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
-    BrowserWindow: o.ready ? new Proxy(function () {}, { construct: () => win,
+    BrowserWindow: o.ready ? new Proxy(function () {}, { construct: () => { if (o.order) o.order.push(["window"]); return win; },
       get: (t, k) => (k === "fromWebContents" ? () => win : k === "getAllWindows" ? () => [win] : undefined) }) : inert,
     Menu: inert, dialog: o.dialogs ? { showSaveDialog: async (...a) => { o.dialogs.push(a); return { canceled: true }; } } : inert, net: inert, protocol: o.ready ? anything() : inert,
-    session: o.ready ? anything() : inert,
+    session: o.session || (o.ready ? anything() : inert),
     screen: inert, shell: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },
     powerMonitor: { on: (ev, fn) => { power[ev] = fn; } },
   };
@@ -998,6 +999,77 @@ try {
     const armed = w2.filter(w => w.dir === path.join(late, "desks")).length;
     check(none === 0 && armed === 1,
       "86d a share with no desks/ at first is watched there once desks/ appears in it (" + none + " before, " + armed + " after)");
+  }
+  /* ---- 13. spelling on Linux comes from the package, before the window, and Windows is not touched ----
+     The package's resources folder is planted (process.resourcesPath, which bare node does not have) with
+     two files of invented bytes under the names the shell copies; the session records what it is asked. */
+  {
+    const NAMES = ["en-US-10-1.bdic", "pl-PL-3-0.bdic"];
+    const RES = path.join(LAB, "resources"), DICT = path.join(RES, "dictionaries");
+    realFs.mkdirSync(DICT, { recursive: true });
+    NAMES.forEach((n, i) => realFs.writeFileSync(path.join(DICT, n), Buffer.from("planted dictionary " + i + " " + n)));
+    const spelling = async (platform, extra) => {
+      const order = [];
+      const rec = k => (...a) => { order.push([k].concat(a)); };
+      const sess = anything({ setSpellCheckerDictionaryDownloadURL: rec("url"), setSpellCheckerLanguages: rec("langs") });
+      const platformWas = Object.getOwnPropertyDescriptor(process, "platform"), resWas = process.resourcesPath;
+      let S;
+      try {
+        Object.defineProperty(process, "platform", { value: platform });
+        process.resourcesPath = RES;
+        S = loadShell(Object.assign({ ready: true, clock: fakeClock(), session: anything({ defaultSession: sess }), order }, extra || {}));
+        for (let i = 0; i < 4; i++) await new Promise(r => setImmediate(r));
+        await new Promise(r => setTimeout(r, 40));
+      } finally {
+        Object.defineProperty(process, "platform", platformWas);
+        if (resWas === undefined) delete process.resourcesPath; else process.resourcesPath = resWas;
+      }
+      const into = path.join(S.UD, "Dictionaries");
+      const copied = realFs.existsSync(into) ? realFs.readdirSync(into).sort() : [];
+      return { S, order, into, copied, steps: order.map(o => o[0]) };
+    };
+    const same = (into, n) => { try { return realFs.readFileSync(path.join(into, n)).equals(realFs.readFileSync(path.join(DICT, n))); } catch { return false; } };
+    const L = await spelling("linux");
+    const url = (L.order.find(o => o[0] === "url") || [])[1] || "";
+    const langs = (L.order.find(o => o[0] === "langs") || [])[1];
+    check(url === "file://" + DICT + "/" && !/^https?:/.test(url) && JSON.stringify(langs) === '["en-US","pl"]'
+      && JSON.stringify(L.steps.slice(0, 3)) === '["url","langs","window"]',
+      "13a on Linux, before the window, the session's dictionary address is the package's own folder, which the loader"
+      + " cannot fetch from, and its languages are English and Polish: " + JSON.stringify([url, langs, L.steps]));
+    check(JSON.stringify(L.copied) === JSON.stringify(NAMES) && NAMES.every(n => same(L.into, n)),
+      "13b the two files are copied byte for byte into the profile's Dictionaries folder under Chromium's own casing,"
+      + " which is where it reads them: " + JSON.stringify(L.copied));
+    let writes = 0;
+    const again = await spelling("linux");
+    realFs.writeFileSync(path.join(again.into, NAMES[1]), "a damaged copy");
+    const before = realFs.readFileSync(path.join(again.into, NAMES[0]));
+    const third = await (async () => {
+      const resWas = process.resourcesPath;
+      process.resourcesPath = RES;
+      try {
+        again.S.ctl.writeFileSync = (real, ...a) => { writes++; return real(...a); };
+        return again.S.api.spellingFromPackage(anything());
+      } finally { if (resWas === undefined) delete process.resourcesPath; else process.resourcesPath = resWas; }
+    })();
+    check(JSON.stringify(third) === JSON.stringify([NAMES[1]]) && writes === 1 && same(again.into, NAMES[1])
+      && realFs.readFileSync(path.join(again.into, NAMES[0])).equals(before),
+      "13c a start that finds a whole copy writes nothing for it, and a copy with other bytes is replaced: placed "
+      + JSON.stringify(third) + " in " + writes + " write(s)");
+    realFs.renameSync(DICT, DICT + "-away");
+    const bare = await spelling("linux");
+    realFs.renameSync(DICT + "-away", DICT);
+    const saidNot = bare.S.said.filter(l => /the spelling dictionary .* was not placed: ENOENT/.test(l)).length;
+    check(bare.copied.length === 0 && saidNot === 2 && JSON.stringify(bare.steps.slice(0, 3)) === '["url","langs","window"]',
+      "13d a package without the files places nothing, says so once a file, and still gives the stopper and the languages"
+      + " before the window: " + JSON.stringify([bare.copied, saidNot, bare.steps]));
+    const W = await spelling("win32");
+    check(W.steps.filter(k => k !== "window").length === 0 && W.copied.length === 0 && !realFs.existsSync(W.into),
+      "13E CONTROL: on Windows the session is asked nothing about spelling and no Dictionaries folder is made: "
+      + JSON.stringify(W.steps));
+    const lower = await spelling("linux", { src: SRC.split('files: ["en-US-10-1.bdic", "pl-PL-3-0.bdic"]').join('files: ["en-us-10-1.bdic", "pl-pl-3-0.bdic"]') });
+    check(SRC.split('files: ["en-US-10-1.bdic", "pl-PL-3-0.bdic"]').length === 2
+      && !(JSON.stringify(lower.copied) === JSON.stringify(NAMES) && NAMES.every(n => same(lower.into, n))),
+      "13B CONTROL: the shell copying under the lowercased names, the measured trap, fails 13b: " + JSON.stringify(lower.copied));
   }
 } catch (e) {
   failed++;

@@ -25,6 +25,10 @@ const output = process.env.ETIUDA_DIST || "dist";
 // A Linux desktop takes PNGs by size, and every entry of the .ico already is one, so each is copied
 // out byte for byte rather than redrawn or rescaled. Written before packing, only for --linux.
 const LINUX_ICONS = path.resolve(output, ".linux-icons");
+// THE SPELLING DICTIONARIES, fetched by hash into the output folder by tools/package-linux.mjs before
+// packing (tools/dictionaries.mjs says why they are not in this tree), and copied whole into
+// resources/dictionaries, outside the asar, where the shell finds them by process.resourcesPath.
+const LINUX_DICTIONARIES = path.resolve(output, ".dictionaries");
 function linuxIcons() {
   const ico = fs.readFileSync(path.join(__dirname, "shell", "etiuda.ico"));
   fs.mkdirSync(LINUX_ICONS, { recursive: true });
@@ -127,6 +131,8 @@ module.exports = {
       mimeType: "application/x-etiuda-catalog" }],
     // The class the window is measured to carry (tests/linux-desk.js 5a), so a dock groups it under this entry.
     desktop: { entry: { StartupWMClass: "etiuda" } },
+    // Linux only: Windows checks spelling with its own checker and fetches nothing (shell/main.js).
+    extraResources: [{ from: LINUX_DICTIONARIES, to: "dictionaries" }],
   },
   beforePack: context => { if (context.electronPlatformName === "linux") linuxIcons(); },
   deb: { artifactName: "etiuda_${version}_amd64.${ext}" },

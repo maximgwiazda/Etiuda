@@ -1,6 +1,8 @@
 /* npm run package:linux: build the engine, then the Ubuntu desk's .deb and AppImage, and refuse to
  * exit 0 unless both are fresh in ETIUDA_DIST (or dist/), the program beside them carries its fuses
- * as electron-builder.js asks, and the .deb carries what a Linux desk needs from it.
+ * as electron-builder.js asks, and the .deb carries what a Linux desk needs from it. The spelling
+ * dictionaries are fetched first, by hash, into the folder electron-builder.js copies from
+ * (tools/dictionaries.mjs); this is the one step that reaches the network, and it fails closed.
  *
  *   node tools/package-linux.mjs
  *   ETIUDA_DIST=<folder>  where the packages go; dist/ when unset
@@ -15,6 +17,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fuseProblems, wantedFuses } from './fuses.mjs';
+import { FILES, NOTICE_FILE, dictionaryProblems, fetchDictionaries } from './dictionaries.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -23,8 +26,10 @@ const require = createRequire(import.meta.url);
 export function linuxAsk(cfg) {
   const c = cfg || require('../electron-builder.js');
   const linux = c.linux || {};
+  const dict = (linux.extraResources || []).find(r => r && r.to === 'dictionaries') || {};
   return { product: c.productName, exe: linux.executableName,
-    types: (linux.fileAssociations || []).filter(a => a.mimeType).map(a => ({ ext: a.ext, mime: a.mimeType })) };
+    types: (linux.fileAssociations || []).filter(a => a.mimeType).map(a => ({ ext: a.ext, mime: a.mimeType })),
+    dictionariesFrom: dict.from || '', dictionaries: FILES, notice: readFileSync(NOTICE_FILE) };
 }
 
 /** One line per thing the unpacked .deb at `tree` lacks; [] when it has them all. A tree that is not
@@ -61,6 +66,9 @@ export function debTreeProblems(tree, ask) {
     if (at < 0 || end < 0) out.push('the MIME file does not declare ' + t.mime);
     else if (mime.slice(at, end).indexOf('<glob pattern="*.' + t.ext + '"/>') < 0) out.push(t.mime + ' is not given to *.' + t.ext);
   }
+  /* The spelling dictionaries and their notices, the pinned bytes, where the shell looks (process.resourcesPath). */
+  if (a.dictionaries) for (const line of dictionaryProblems(join(tree, opt, 'resources', 'dictionaries'), a.dictionaries, a.notice))
+    out.push(opt + 'resources/dictionaries: ' + line);
   /* No updater, as on Windows. */
   if (existsSync(join(tree, opt, 'resources', 'app-update.yml'))) out.push(opt + 'resources/app-update.yml is there, for an updater this product does not have');
   return out;
@@ -82,6 +90,10 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     if (r.status !== 0) { console.error('npm run package:linux: ' + what + ' exited ' + r.status); process.exit(r.status == null ? 1 : r.status); }
   };
   step('the build', [join(ROOT, 'tools', 'build.mjs')]);
+  const ask0 = linuxAsk();
+  if (!ask0.dictionariesFrom) { console.error('npm run package:linux: electron-builder.js names no folder for the dictionaries'); process.exit(1); }
+  try { await fetchDictionaries(ask0.dictionariesFrom); }
+  catch (e) { console.error('npm run package:linux: the dictionaries: ' + ((e && e.message) || e)); process.exit(1); }
   step('electron-builder', [join(ROOT, 'node_modules', 'electron-builder', 'cli.js'), '--linux']);
   const fresh = packages(DIST).filter(row => !before.has(row)).map(row => row.split('\t')[0]);
   const bad = [];
@@ -106,5 +118,6 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     process.exit(1);
   }
   console.log('npm run package:linux: ' + fresh.join(', ') + ' in ' + DIST + '; ' + Object.keys(wantedFuses()).length
-    + ' fuse(s) read back from ' + exe + ' as asked; the .deb carries its AppArmor profile, its .desktop entry and its MIME type');
+    + ' fuse(s) read back from ' + exe + ' as asked; the .deb carries its AppArmor profile, its .desktop entry, its MIME type'
+    + ' and the ' + ask.dictionaries.length + ' pinned dictionary file(s) with their notice');
 }

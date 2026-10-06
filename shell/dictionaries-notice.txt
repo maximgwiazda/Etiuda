@@ -1,0 +1,23 @@
+Spelling dictionaries
+
+This program checks spelling on Linux with two dictionaries from the Chromium project, shipped as
+Chromium builds them, from chromium/deps/hunspell_dictionaries at commit
+cccf64a8acc951afe3f47fee023908e55699bc58:
+https://chromium.googlesource.com/chromium/deps/hunspell_dictionaries/+/cccf64a8acc951afe3f47fee023908e55699bc58
+
+They are not covered by this program's licence. Each keeps its own terms, set out in the files
+beside this one. At start the program copies the two .bdic files into the Dictionaries folder of its
+own profile, which is where Chromium reads them; nothing is downloaded.
+
+English (US): en-US-10-1.bdic
+This is a modified version: Chromium's build of the SCOWL en_US Hunspell dictionary, version
+2020.12.07, with Chromium's en_US.dic_delta added. Its copyright notices, permission notices and
+disclaimers are in README_en_US.txt, reproduced whole.
+
+Polish: pl-PL-3-0.bdic
+Chromium's build of the Polish spelling dictionary of 2006-12-02 (kurnik.org, maintainer Marek
+Futrega), with Chromium's pl_PL.dic_delta added. README_pl_PL.txt, reproduced whole, offers it under
+several licences, and it is distributed here under the Mozilla Public License 1.1, whose text is
+COPYING.MPL. The Source Code of this Covered Code (pl_PL.aff, pl_PL.dic and pl_PL.dic_delta) is
+available under the terms of the Mozilla Public License 1.1 at the address above. Nothing in this
+program's licence limits or alters the recipient's rights in that Source Code.
