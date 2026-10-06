@@ -94,7 +94,6 @@ const VOLATILE = {
   ePackEpoch: "counts every save the page has made, so a restart that saved once more reads higher",
   toastSerial: "counts toasts shown since the page opened",
   eDeskSeen: "the moment of the last start",
-  E_SELF: "the document as this page parsed it, the head script's classes of that load included",
   tabSaveTimer: "a timer's handle, a number the browser picks",
 };
 
@@ -138,8 +137,6 @@ async function fingerprint(q) {
       if (typeof v === "function") return;
       state[n] = mask(ser(v, 0));
     });
-    // A module's own count that nothing exports as a value, read through the getter it does export.
-    if (typeof copiesMade === "function") state["copiesMade()"] = String(copiesMade());
     /* The markup written canonically: attributes in name order and an empty style or class
        attribute as none, since neither the order a script sets them in nor an emptied attribute is
        a difference anybody sees. */

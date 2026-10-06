@@ -550,13 +550,7 @@ function isSafeDeskId(id) {
 function channelHash(obj) {
   const copy = {};
   Object.keys(obj).forEach(k => { if (k !== "hash" && k !== "sig") copy[k] = obj[k]; });
-  function canon(v) {
-    if (v === null || typeof v !== "object") return JSON.stringify(v);
-    if (Array.isArray(v)) return "[" + v.map(canon).join(",") + "]";
-    const keys = Object.keys(v).filter(k => v[k] !== undefined).sort();
-    return "{" + keys.map(k => JSON.stringify(k) + ":" + canon(v[k])).join(",") + "}";
-  }
-  let h = 5381; const s = canon(copy);
+  let h = 5381; const s = canonJson(copy);
   for (let i = 0; i < s.length; i++) h = (((h << 5) + h) ^ s.charCodeAt(i)) >>> 0;
   return "djb2:" + h.toString(16);
 }

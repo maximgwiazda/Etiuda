@@ -10,7 +10,6 @@ import { resetIntentIds, snapshotBaseIntents } from "./intent-id.js";
 import { dropCardPool } from "./card-pool.js";
 import { forgetRowNaturals } from "./shed.js";
 import { eForgetRecency } from "./recency.js";
-import { forgetCopies } from "./mark.js";
 import { forgetLookEdits } from "./desk-look.js";
 import { rearmTrustRecheck } from "./catalog-trust.js";
 import { lsGet } from "./storage.js";
@@ -31,7 +30,7 @@ import { syncSampleMark } from "./catalog-file.js";
 import { paintCatNow } from "./catalog-offer.js";
 import { syncRoleWheel } from "./agent.js";
 import { applyPrefs } from "./settings.js";
-import { focusIntentOnOpen } from "./on-open.js";
+import { focusFirstEntryOnOpen } from "./on-open.js";
 import { openManage } from "./manage.js";
 import { mtRefreshLive } from "./maintenance.js";
 import { tourAfterRestart, maybeStartTour } from "./tour.js";
@@ -48,7 +47,6 @@ function restartDesk(){
   dropCardPool();
   forgetRowNaturals();
   eForgetRecency();
-  forgetCopies();
   forgetLookEdits();
   rearmTrustRecheck();
   putLang(lsGet("eLang") || uiLang());
@@ -74,7 +72,7 @@ function restartDesk(){
   applyPrefs();
   translateChrome();
   placeRailNow();
-  focusIntentOnOpen();
+  focusFirstEntryOnOpen();
   // A dialog standing over the desk shows the new one.
   if(document.getElementById("mgCatList")) openManage();
   mtRefreshLive();

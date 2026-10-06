@@ -46,6 +46,11 @@ function eOpenCatalogFolder(){
   try{ return Promise.resolve(h.openCatalogFolder()).then(v=>!!v).catch(()=>false); }
   catch(e){ return Promise.resolve(false); }
 }
+/* A link to that folder answers a click, Enter and Space alike. */
+function wireFolderLink(el){
+  el.onclick=()=>eOpenCatalogFolder();
+  el.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); eOpenCatalogFolder(); } };
+}
 /* The ring beside the catalogs as text, "" in a browser and "" wherever the host has none. */
 function eCatalogRing(){
   const h=eHost();
@@ -349,6 +354,7 @@ export {
   eHasCatalogSaver,
   eHost,
   eOpenCatalogFolder,
+  wireFolderLink,
   eOpenedWith,
   eOpenedRefused,
   ePickCatalogFile,

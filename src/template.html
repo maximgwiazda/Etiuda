@@ -402,10 +402,8 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --scroll-thumb-hover:color-mix(in srgb,rgb(71,85,105) 65%,var(--bg));
   --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
   /* Light cards ARE the panel surface; dark lifts them one step above the header chrome,
-     so the card ground gets its own token - see the dark blocks. --txt-mix is the share of
-     canvas in a macro slab's tone: light keeps its 72%, dark recesses a lifted card less. */
+     so the card ground gets its own token - see the dark blocks. */
   --card-bg:var(--panel);
-  --txt-mix:72%;
   --panel-raised:var(--panel); /* raised surfaces lighten only in dark - see the dark blocks */
   --shadow-pop:0 18px 48px rgba(0,0,0,.28);
   /* The same two shadows at alpha zero: a transition from here to --shadow-pop fades the
@@ -477,7 +475,6 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --e-c6:#ce3ac6; --e-c7:#0b93a8;
   --card-border:rgba(255,255,255,.075);   /* a hairline, and half of what separates a card */
   --card-bg:#16181c;           /* one step above the canvas - the other half */
-  --txt-mix:62%;
   --panel-raised:#1d1f24;      /* menus rise a further step, over surfaces that barely rise */
   --line-strong:#3a4048;
   /* Pop and pop-off must keep the SAME geometry so only the alpha interpolates. */
@@ -517,7 +514,6 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --e-c6:#ce3ac6; --e-c7:#0b93a8;
   --card-border:rgba(255,255,255,.075);   /* a hairline, and half of what separates a card */
   --card-bg:#16181c;           /* one step above the canvas - the other half */
-  --txt-mix:62%;
   --panel-raised:#1d1f24;      /* menus rise a further step, over surfaces that barely rise */
   --line-strong:#3a4048;
   /* Pop and pop-off must keep the SAME geometry so only the alpha interpolates. */
@@ -545,7 +541,6 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --scroll-thumb-hover:color-mix(in srgb,rgb(71,85,105) 65%,var(--bg));
   --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
   --card-bg:var(--panel);      /* the card ground token - see the base block */
-  --txt-mix:72%;
   --panel-raised:var(--panel); /* raised surfaces lighten only in dark - see the dark blocks */
   --shadow-pop:0 18px 48px rgba(0,0,0,.28);
   /* The same two shadows at alpha zero: a transition from here to --shadow-pop fades the
@@ -3427,17 +3422,15 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   border-radius:999px;background:rgba(0,0,0,.14);color:#fff;
   font-size:12px;font-weight:600;line-height:1.4;vertical-align:1px}
 #tourBody .t-pill .ic-inline{width:12px;height:12px}
-/* The vocabulary's own hues on cobalt: the page's greens and violets are chosen against the
-   page and go muddy or vanish here, so each is the same hue lifted until it clears 4.5:1 on
-   the fill - 4.56, 4.54, 4.64 and 4.54 as written, measured rather than picked by eye. The
+/* The vocabulary's own hues on cobalt: the page's own are chosen against the page and go muddy
+   or vanish here, so each is the same hue lifted until it clears 4.5:1 on the fill - 4.56 and
+   4.64 as written, measured rather than picked by eye. The
    accent has no lift left - it IS the fill - so the one word in it is underlined instead. */
 #tourBody .t-go{color:#d1fae5}
 #tourBody .t-acc{color:#fff;text-decoration:underline;text-underline-offset:3px}
-#tourBody .t-pl{color:#f5edff}
 #tourBody .t-sec{color:#fff}
 #tourBody .t-fav{color:#fef3c7}
 #tourBody .t-fav .ic-inline{fill:currentColor;stroke:none;margin-right:2px}
-#tourBody .t-bad{color:#ffecec}
 .tour-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center;
   margin-top:2px;padding-top:10px;border-top:1px solid rgba(255,255,255,.24)}
 /* The buttons are cut OUT of the fill rather than laid on it: a white ghost for the two that
@@ -3910,7 +3903,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 <div id="lanes" hidden data-i18n-skip></div>
 
 <div id="modal" class="modal" hidden>
-  <div class="modal-bg" id="modalBg"></div>
+  <div class="modal-bg"></div>
   <div class="modal-card" id="modalCard" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1"></div>
 </div>
 

@@ -75,7 +75,6 @@ const CE = await import(MOD("copy-entry.js"));
 const PICK = await import(MOD("pick.js"));
 const SET = await import(MOD("settings.js"));
 const SP = await import(MOD("spell.js"));
-const MK = await import(MOD("mark.js"));
 const DS = await import(MOD("desk-stats.js"));
 const RD = await import(MOD("render.js"));
 
@@ -183,12 +182,10 @@ try {
   check(/workshop/.test(noteBefore) && ids(typo.rows) === "c-lamp/0" && noteAfter === noteBefore,
     "1p a typo in the picker is corrected for it and leaves the desk's note alone: " + ids(typo.rows) + ", " + noteAfter);
 
-  /* A copy through the picker is a copy by the desk's own count: the rail's offer is taken. */
+  /* A copy through the picker is a copy by the desk's own rule: the rail's offer is taken. */
   AS.setRailMarkUsed(false);
-  const made = MK.copiesMade();
   pickAnswer("copy", { id: "c-sign", vi: 0 });
-  check(AS.railMarkUsed === true && MK.copiesMade() === made + 1,
-    "1q a copy through the picker takes the rail's offer and counts as a copy made: " + made + " to " + MK.copiesMade());
+  check(AS.railMarkUsed === true, "1q a copy through the picker takes the rail's offer: " + AS.railMarkUsed);
 
   /* A reply that commits the firm is offered with its stamp, as the desk's own lists draw it: the row says so and the
      page is given the words for it. A row of a card that does not commit is what it was, to the key. */

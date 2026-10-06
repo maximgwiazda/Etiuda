@@ -218,20 +218,24 @@ function cmpCardDisplay(a,b){
   const hz=hidLast(a,b); if(hz) return hz;
   return cardOrderIdx(a&&a.id)-cardOrderIdx(b&&b.id);
 }
+/* A dragged card's move within its band, the band as the caller reads it: the list's display band
+   or Manage's. The caller has run ensureCardOrder. */
+function moveCardWithin(fromId,toId,bandOf){
+  const a=findCard(fromId), b=findCard(toId);
+  if(!a||!b||bandOf(a)!==bandOf(b)) return false;
+  const from=pack.cardOrder.indexOf(fromId), to=pack.cardOrder.indexOf(toId);
+  if(from<0||to<0||from===to) return false;
+  pack.cardOrder.splice(to,0,pack.cardOrder.splice(from,1)[0]);
+  cardOrderTouched();   // a reorder keeps the length, so only this can invalidate the positions
+  return true;
+}
 function moveCardOrder(fromId, toId){
   ensureCardOrder();
   // Not while macro search is on: the list is ranked by relevance, so a drop would only
   // snap back to its score position. Drag returns as soon as the query is cleared.
   if(cardSearchTerms().length) return false;
   // Same display band only (intent rank, or category+fav when no intent)
-  const a=findCard(fromId), b=findCard(toId);
-  if(!a||!b) return false;
-  if(displayBandKey(a)!==displayBandKey(b)) return false;
-  const from=pack.cardOrder.indexOf(fromId), to=pack.cardOrder.indexOf(toId);
-  if(from<0||to<0||from===to) return false;
-  pack.cardOrder.splice(to,0,pack.cardOrder.splice(from,1)[0]);
-  cardOrderTouched();   // a reorder keeps the length, so only this can invalidate the positions
-  return true;
+  return moveCardWithin(fromId,toId,displayBandKey);
 }
 
 /* ---- What the list is showing: three questions render and the column layout both ask,
@@ -289,5 +293,6 @@ export {
   cardOrderIdx,
   CAT_UNKNOWN,
   cmpCardDisplay,
+  moveCardWithin,
   moveCardOrder
 };

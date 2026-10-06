@@ -1,14 +1,14 @@
 import { closeModal, modalOpen } from "./dialog.js";
 import { closeFactsPanel, factsPanelOpen } from "./facts.js";
 import { fillProseIcons } from "./icons.js";
-import { focusIntentOnOpen } from "./on-open.js";
+import { focusFirstEntryOnOpen } from "./on-open.js";
 import { drawIntentRail } from "./rail-list.js";
 import { chordChips } from "./shortcuts.js";
 import { lsGet, lsSet, lsDel, ssGet, ssSet, ssDel } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { t, toast } from "./ui-lang.js";
 import { railActive, railWanted, scheduleRailGeometry, syncRailLayout } from "./rail-panel.js";
-import { pageScroller } from "./page-scroll.js";
+import { scrollPageTop } from "./page-scroll.js";
 import { list, $ } from "./dom.js";
 import { whenMarkFormed } from "./empty-mark.js";
 import { setEntrySel } from "./mark.js";
@@ -99,11 +99,7 @@ function tourEnsurePills(){
    scrollIntoView({block:"nearest"}) then parks it under the sticky header and the
    spotlight lands on the header instead of the card. Instant, not smooth, so the tour has
    settled geometry to measure. */
-function tourScrollListTop(){
-  const el=pageScroller();
-  try{ el.scrollTo({top:0, left:0, behavior:"auto"}); }
-  catch(_){ try{ el.scrollTop=0; }catch(__){} }
-}
+function tourScrollListTop(){ scrollPageTop(true); }
 function tourPickFirstCard(){
   const txt=list&&list.querySelector(".card[data-id] .txt[data-v]");
   if(txt){
@@ -683,7 +679,7 @@ function endTour(completed){
   ssDel(TOUR_AT);
   if(els.root) els.root.classList.remove("behind");
   if(!completed) toast("The tour waits in the Menu, under Show tour…");
-  focusIntentOnOpen();
+  focusFirstEntryOnOpen();
   const later=tourAfter; tourAfter=[];
   later.forEach(fn=>{ try{ fn(); }catch(_){} });
 }

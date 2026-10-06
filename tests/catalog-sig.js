@@ -46,7 +46,6 @@ function v2Fns() {
     "const V2_KNOWN_KEYS=",
     "function v2SigFold(", "function v2SignedBytes(", "function v2HexBytes(", "function v2SigState(",
     "function v2RingRead(", "const V2_TEAM_FORMAT=", "function v2TeamRead(", "function v2TeamSigState(",
-    "const V2_SEALED_KIND=", "function v2SealedRead(",
     "const V2_ID_RE=", "const V2_SHAPES=", "const V2_MARKER_RE=", "function v2IsBracketLine(",
     "const V2_GREET_PARTS=", "function v2BodyProblems(", "const V2_LANG_RE=", "function v2LangProblems(",
     "const V2_SHA_RE=", "function v2Missing(", "function v2FlagProblem(", "function v2NextProblems(",
@@ -62,7 +61,7 @@ function v2Fns() {
   ].map(m => extractDecl(src, m)).join("\n");
   return new Function(decls + "\nreturn {v2Problems,v2SignedBytes,v2SigState,catalogFromV2,"
     + "v2RingRead,V2_RING_FORMAT,V2_RING_KIND,V2_RING_FILE,V2_HARNESS_TEST_KEYID,"
-    + "v2TeamRead,v2TeamSigState,V2_TEAM_FORMAT,V2_TEAM_KIND,V2_TEAM_FILE,v2SealedRead,V2_SEALED_KIND,"
+    + "v2TeamRead,v2TeamSigState,V2_TEAM_FORMAT,V2_TEAM_KIND,V2_TEAM_FILE,"
     + "V2_HARNESS_TEST_PUB,"
     + "V2_KNOWN_KEYS,V2_SIG_ALG,V2_SIG_VALID,V2_SIG_INVALID,V2_SIG_NONE,V2_SIG_UNKNOWN};")();
 }
@@ -319,33 +318,16 @@ async function main() {
      "88e unusable entries are dropped with a line each and their neighbours stand: a bad catalog id, four bad desks or"
      + " a desk twice, the first standing (" + t5.problems.length + " lines, " + (t5.team ? t5.team.roster.length : 0) + " desk)");
 
-  /* ---- the sealed envelope, board 834 step 12. The shell seals and opens it; the engine reads its shape. -- */
+  /* ---- the sealed envelope, board 834 step 12. The shell seals and opens it, and only the shell. -- */
 
   const S = shellSeal(), teamKey = crypto.randomBytes(32);
   const signedText = JSON.stringify(signed, null, 2) + "\n";
   const sealedDoc = S.sealCatalog(teamKey, teamDoc.id, 1, signedText);
-  const s1 = v2.v2SealedRead(JSON.stringify(sealedDoc));
-  const inside = s1.sealed ? S.openSealed(teamKey, s1.sealed) : null;
+  const inside = S.openSealed(teamKey, JSON.parse(JSON.stringify(sealedDoc)));
   const sState = inside ? await v2.v2SigState(JSON.parse(inside), keys) : "nothing opened";
-  ok(s1.problems.length === 0 && !!s1.sealed && s1.sealed.kind === v2.V2_SEALED_KIND && inside !== null
-     && Buffer.from(inside, "utf8").equals(Buffer.from(signedText, "utf8")) && sState === v2.V2_SIG_VALID,
-     "88f a signed catalog sealed by the shell reads as an envelope with no problem, opens to the same "
-     + Buffer.byteLength(signedText) + " bytes, and its signature still verifies: " + JSON.stringify(s1.problems) + ", " + sState);
-
-  const sBroken = v2.v2SealedRead(Object.assign({}, sealedDoc,
-    { team: "t-XYZ", epoch: 0, nonce: sealedDoc.nonce.slice(2), ct: "zz" }));
-  const sShort = v2.v2SealedRead(Object.assign({}, sealedDoc, { ct: "00".repeat(15) }));
-  const named = r => r.problems.map(p => p.split(":")[0]).join();
-  ok(sBroken.sealed === null && named(sBroken) === "sealed team,sealed epoch,sealed nonce,sealed ct"
-     && sShort.sealed === null && named(sShort) === "sealed ct",
-     "88g THE CONTROL: a bad team, epoch, nonce and ct are no envelope with a line naming each, and a ct shorter than its"
-     + " tag is one line: " + named(sBroken) + "; " + named(sShort));
-
-  const sAbsent = [null, "", "{not json", "[]", JSON.stringify(teamSigned), JSON.stringify(signed)];
-  const sNull = sAbsent.map(x => v2.v2SealedRead(x));
-  ok(sNull.every(r => r.sealed === null) && sNull.filter(r => r.problems.length === 1).length === sAbsent.length - 2,
-     "88h " + sAbsent.length + " absent, empty or foreign files, a team file and a plain catalog among them, read as no"
-     + " envelope without a throw, and each but the two absent says one line: " + sNull.map(r => r.problems.length).join(","));
+  ok(inside !== null && Buffer.from(inside, "utf8").equals(Buffer.from(signedText, "utf8")) && sState === v2.V2_SIG_VALID,
+     "88f a signed catalog sealed by the shell, written out and read back, opens to the same "
+     + Buffer.byteLength(signedText) + " bytes, and its signature still verifies: " + sState);
 
   /* ---- the wraps in the team file, board 834 step 12 S3: the shapes the reader keeps, not the crypto -- */
 

@@ -31,14 +31,9 @@ function railQuery(){
   return (typeof intentEl!=="undefined" && intentEl) ? String(intentEl.value||"").trim() : "";
 }
 
-// How many copies this page has made, which the tour's copying step reads.
-let copyCount=0;
-function copiesMade(){ return copyCount; }
-function forgetCopies(){ copyCount=0; }
 /* Copying consumes the semi-selection - every copy, click, keyboard or the picker, funnels through
    here. The picker's text reaches the clipboard through the host, so it takes this half alone. */
 function noteCopy(){
-  copyCount++;
   setRailMarkUsed(true); setSemiKind(null);
   hooks.railDecorate(false);
 }
@@ -154,7 +149,5 @@ export {
   markEnd,
   copy,
   noteCopy,
-  copiesMade,
-  forgetCopies,
   fallback,
 };

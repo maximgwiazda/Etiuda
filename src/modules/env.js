@@ -5,21 +5,6 @@ const E_VERSION="2.0.0-dev";
 /* The day this build was made, YYYY-MM-DD, written over the placeholder by tools/build.mjs; the
    source itself carries none, and About leaves the line out until it is a date. */
 const E_BUILT="@E_BUILT@";
-/* ---- self-source snapshot, taken as the app script's first statement, when the DOM IS
-   the file (this script is the document's last element). fetch(location.href) is blocked
-   in Chromium on file://, so serialising the DOM is the only route that works everywhere.
-   document.childNodes, not documentElement.outerHTML - doctype and banner sit before <html>. */
-const E_SELF=(function(){
-  try{
-    let out="";
-    Array.prototype.forEach.call(document.childNodes,n=>{
-      if(n.nodeType===8) out+="<!--"+n.data+"-->\n";                 // comment
-      else if(n.nodeType===10) out+="<!DOCTYPE "+n.name+">\n";       // doctype
-      else if(n.nodeType===1) out+=n.outerHTML;                      // <html>
-    });
-    return out;
-  }catch(e){ return ""; }
-})();
 /** The catalog baked into this file, if it is an integrated build. Inert text until parsed. */
 function eEmbeddedCatalog(){
   try{
@@ -34,6 +19,5 @@ function eEmbeddedCatalog(){
 export {
   eEmbeddedCatalog,
   E_BUILT,
-  E_VERSION,
-  E_SELF
+  E_VERSION
 };

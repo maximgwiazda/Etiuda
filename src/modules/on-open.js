@@ -34,8 +34,6 @@ function focusFirstEntryOnOpen(){
   if(!card) return;
   setEntrySel(card.dataset.id, +el.dataset.v, {scroll:false, smooth:false});
 }
-// Back-compat name used after tour
-function focusIntentOnOpen(){ focusFirstEntryOnOpen(); }
 
 function wireOnOpen(){
   /* Boot is painted, so a saved interface language may repaint the chrome. Two frames, so the
@@ -61,6 +59,6 @@ function wireOnOpen(){
 }
 
 export {
-  focusIntentOnOpen,
+  focusFirstEntryOnOpen,
   wireOnOpen
 };
