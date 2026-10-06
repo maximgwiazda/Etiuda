@@ -2313,7 +2313,7 @@ function markClockTests() {
     got, [[2600], [900]]);
 }
 /* THE FIFTH TURNING: fifth.js runs in a VM on a frame queue written here, with a header path node that
-   counts what is written to it. The standard figure is held equal to the path the markup ships, and
+   keeps what is written to it. The path the markup ships is held to the line the turn strokes, and
    the clock's three promises are measured: it moves, it holds under a quiet switch, and a late
    frame advances it by one capped step. */
 function fifthLab(still) {
@@ -2322,7 +2322,8 @@ function fifthLab(still) {
   const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
   const std = (/<span class="brand-tile"[^>]*><svg[^>]*><g[^>]*><path fill="currentColor" d="([^"]+)"/.exec(tpl) || [])[1] || "";
   let seq = 0, frames = [], watch = null;
-  const node = { d: std, sets: 0, getAttribute: () => node.d, setAttribute(n, v) { node.d = v; node.sets++; } };
+  const node = { d: std, sets: 0, attrs: {}, getAttribute: n => (n === "d" ? node.d : node.attrs[n]),
+    setAttribute(n, v) { if (n === "d") { node.d = v; node.sets++; } else node.attrs[n] = v; } };
   const doc = { hidden: false, documentElement: {}, querySelector: () => node, addEventListener() {} };
   const sb = {
     still: !!still, mgReduceMotion: () => sb.still, document: doc,
@@ -2330,10 +2331,47 @@ function fifthLab(still) {
     cancelAnimationFrame: id => { frames = frames.filter(f => f.id !== id); },
     MutationObserver: class { constructor(cb) { watch = cb; } observe() {} }
   };
-  require("vm").runInNewContext(src + "\nglobalThis.__f = { fifthCutPath, fifthPhase, fifthStep, fifthBand, fifthLay, wireFifth, FIFTH_PHI0 };", sb);
+  require("vm").runInNewContext(src + "\nglobalThis.__f = { fifthLinePath, fifthRadius, fifthPhase, fifthStep, fifthBand, fifthLay, wireFifth, FIFTH_PHI0 };", sb);
   const f = sb.__f;
   return { f, node, std, sb, queued: () => frames.length, flip: v => { sb.still = v; watch(); },
     frame: ms => { const run = frames; frames = []; run.forEach(x => x.fn(ms)); } };
+}
+/* THE LINE, worked out again from the figure's definition and never from the code under test: the centreline
+   x = sin(3t + phi), y = sin(2t) at amplitude 96 with a line 20 wide, fitted so the standard figure's ink spans 150
+   of the 256 box, as a polyline of 6000 points, and its half width. */
+function lineTruth(phi) {
+  const A = 96, R = 10, K = 150 / (2 * (A + R)), line = [];
+  for (let i = 0; i <= 6000; i++) { const t = i / 6000 * 2 * Math.PI; line.push([128 + K * A * Math.sin(3 * t + phi), 128 + K * A * Math.sin(2 * t)]); }
+  return { line, h: R * K };
+}
+function lineGap(line, p) {
+  let best = Infinity;
+  for (let i = 1; i < line.length; i++) {
+    const a = line[i - 1], b = line[i], dx = b[0] - a[0], dy = b[1] - a[1];
+    if (Math.abs(p[0] - a[0]) > 12 || Math.abs(p[1] - a[1]) > 12) continue;
+    const u = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1)));
+    best = Math.min(best, Math.hypot(p[0] - a[0] - u * dx, p[1] - a[1] - u * dy));
+  }
+  return best;
+}
+/* Points along a path of absolute M, L, C, A and Z, as the mark's set writes it: eight on each cubic, the end of each arc. */
+function outlinePoints(d) {
+  const tok = d.match(/[MLCAZ]|-?[\d.]+/g) || [], out = [];
+  let i = 0, cmd = "", cur = [0, 0];
+  const n = () => +tok[i++];
+  while (i < tok.length) {
+    if (/[MLCAZ]/.test(tok[i])) { cmd = tok[i++]; if (cmd === "Z") continue; }
+    if (cmd === "M" || cmd === "L") { cur = [n(), n()]; out.push(cur); }
+    else if (cmd === "C") {
+      const c = [n(), n(), n(), n(), n(), n()];
+      for (let k = 1; k <= 8; k++) { const u = k / 8, g = 1 - u;
+        out.push([g * g * g * cur[0] + 3 * g * g * u * c[0] + 3 * g * u * u * c[2] + u * u * u * c[4],
+          g * g * g * cur[1] + 3 * g * g * u * c[1] + 3 * g * u * u * c[3] + u * u * u * c[5]]); }
+      cur = [c[4], c[5]];
+    } else if (cmd === "A") { const a = [n(), n(), n(), n(), n(), n(), n()]; cur = [a[5], a[6]]; out.push(cur); }
+    else return [];
+  }
+  return out;
 }
 function fifthTests() {
   const W0 = 2 * Math.PI * 0.007, PHI0 = Math.PI / 4;
@@ -2341,32 +2379,47 @@ function fifthTests() {
   try {
     const a = fifthLab(false), about = fs.readFileSync(path.join(E.ROOT, "src", "modules", "about.js"), "utf8");
     const aboutD = (/TILE_MARK='[^']*? d="([^"]+)"/.exec(about) || [])[1] || "";
-    const d = a.f.fifthCutPath(a.f.FIFTH_PHI0);
-    got = [a.std.length > 1000, d === a.std, aboutD === a.std, a.f.FIFTH_PHI0 === PHI0];
+    const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+    const fav = (/<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml,([^"]+)"/.exec(tpl) || [])[1] || "";
+    const favD = (/ d='([^']+)'/.exec(decodeURIComponent(fav)) || [])[1] || "";
+    got = [a.std.length > 1000, aboutD === a.std, favD === a.std, a.f.FIFTH_PHI0 === PHI0];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the figure at its standard phase, pi/4, is the small cut the header and About ship, byte for byte",
+  eq("the header, About and the tab icon ship one path, byte for byte",
     got, [true, true, true, true]);
+
+  try {
+    const a = fifthLab(false), t = lineTruth(PHI0), out = outlinePoints(a.std), turn = a.f.fifthLinePath(PHI0);
+    const atHalf = pts => pts.length > 500 && pts.every(p => Math.abs(lineGap(t.line, p) - t.h) <= 0.03);
+    const reaches = pts => t.line.filter((p, i) => i % 20 === 0).every(q => pts.some(p => Math.hypot(p[0] - q[0], p[1] - q[1]) <= t.h + 1));
+    got = [atHalf(out), reaches(out), outlinePoints(turn).every(p => lineGap(t.line, p) <= 0.06),
+      Math.abs(2 * a.f.fifthRadius() - 2 * t.h) < 0.01, !/Z$/.test(turn) && /Z$/.test(a.f.fifthLinePath(PHI0 + 1)),
+      atHalf(out.map(p => [p[0] + 0.5, p[1]])), reaches(out.filter(p => p[0] >= 128))];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the path shipped is the turning line standing: every point of its outline lies half the line's width from the figure's centreline at pi/4 (within 0.03) and the outline reaches all of it; the turn's centreline at pi/4 lies on the figure's (within 0.06) at the same width, open there and closed at any other phase; controls: moved half a unit, or with its left half gone, it is not",
+    got, [true, true, true, true, true, false, false]);
 
   try {
     const a = fifthLab(false); a.f.wireFifth();
     for (let i = 0; i < 60; i++) a.frame(1000 + i * 1000 / 60);
-    const adv = a.f.fifthPhase() - PHI0, circles = d => (d.match(/M/g) || []).length;
-    got = [Math.abs(adv - W0) < 1e-9, a.node.d !== a.std, a.node.sets >= 15 && a.node.sets <= 21, a.queued(), circles(a.node.d) > 1.8 * circles(a.std)];
+    const adv = a.f.fifthPhase() - PHI0, segs = d => (d.match(/C/g) || []).length, at = a.node.attrs;
+    got = [Math.abs(adv - W0) < 1e-9, a.node.d !== a.std, a.node.sets >= 15 && a.node.sets <= 21, a.queued(),
+      segs(a.node.d) > 1.8 * segs(a.f.fifthLinePath(PHI0)) && /Z$/.test(a.node.d),
+      [at.fill, at.stroke, at["stroke-linecap"], at["stroke-linejoin"], +at["stroke-width"] === Math.round(200 * a.f.fifthRadius()) / 100]];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("under motion the phase advances at 2 pi times 0.007 per second, the header's path turns, repaints stay at or under 20 a second, frames keep coming, and the turned path draws both halves of the loop, a circle counted at each M",
-    got, [true, true, true, 1, true]);
+  eq("under motion the phase advances at 2 pi times 0.007 per second, the header's path turns, repaints stay at or under 20 a second, frames keep coming, and the turned path is the line stroked round both halves of the loop, at its width with round ends and joins",
+    got, [true, true, true, 1, true, ["none", "currentColor", "round", "round", true]]);
 
   try {
     const a = fifthLab(true); a.f.wireFifth();
     for (let i = 0; i < 60; i++) a.frame(1000 + i * 1000 / 60);
-    const held = [a.queued(), a.f.fifthPhase() === PHI0, a.node.d === a.std, a.node.sets];
+    const held = [a.queued(), a.f.fifthPhase() === PHI0, a.node.d === a.std, a.node.sets, a.node.attrs.stroke];
     const b = fifthLab(false); b.f.wireFifth();
     for (let i = 0; i < 60; i++) b.frame(1000 + i * 1000 / 60);
     b.flip(true);
-    got = [held, [b.queued(), b.f.fifthPhase() === PHI0, b.node.d === b.std]];
+    got = [held, [b.queued(), b.f.fifthPhase() === PHI0, b.node.d === b.std, b.node.attrs.fill, b.node.attrs.stroke]];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("under a quiet switch nothing is asked for, the phase and the path stay the standard figure, and switching on mid-turn puts the standard figure back",
-    got, [[0, true, true, 0], [0, true, true]]);
+  eq("under a quiet switch nothing is asked for, the phase and the path stay the standard figure, and switching on mid-turn puts the standard figure back, filled and unstroked",
+    got, [[0, true, true, 0, undefined], [0, true, true, "currentColor", "none"]]);
 
   try {
     const a = fifthLab(false); a.f.wireFifth();
@@ -2381,9 +2434,9 @@ function fifthTests() {
 
   try {
     const a = fifthLab(false), at0 = a.f.fifthBand(PHI0), at1 = a.f.fifthBand(PHI0 + 1);
-    const circles = d => (d.match(/M/g) || []).length, z1 = at1.map(p => p[2]);
+    const segs = d => (d.match(/C/g) || []).length, z1 = at1.map(p => p[2]);
     const pairs = at1.every((p, i) => i % 2 === 0 || (Math.abs(p[0] + at1[i - 1][0] - 256) < 1e-9 && Math.abs(p[1] - at1[i - 1][1]) < 1e-9 && Math.abs(p[2] + at1[i - 1][2]) < 1e-12));
-    got = [at0.length === 2 * circles(a.f.fifthCutPath(PHI0)), at1.length === circles(a.f.fifthCutPath(PHI0 + 1)) + 2,
+    got = [at0.length === 2 * (segs(a.f.fifthLinePath(PHI0)) + 1), at1.length === segs(a.f.fifthLinePath(PHI0 + 1)) + 2,
       Math.min(...z1) < -0.99 && Math.max(...z1) > 0.99, pairs];
   } catch (e) { got = "the lab threw: " + e.message; }
   eq("the band holds both halves of the loop at every phase, the standard one included, and each mirrored centre is as far as its pass is near",
@@ -5699,7 +5752,7 @@ if (require.main === module) {
        pixels: the other product that shares this mark reads its own icon pixel by pixel and takes
        this file as its control, so a second decoder here would be a second implementation of a
        claim nobody disputes. ETIUDA_ICON_SOURCE, where set, is the file it was copied from. */
-    const want = "d84a71af6674badca92fc973504f5103c6d25f75105d822456214d3a3b4e11bb";
+    const want = "e8826f7def36deb0b794a4a55ac02989247c48bca7625e72789b2b6aa5382e3d";
     if (got !== want) { hardFail++;
       console.error("  ERROR: shell/etiuda.ico is sha256 " + got.slice(0, 16) + ", not the mark"
         + " this build ships (" + want.slice(0, 16) + ") - if the mark was rebuilt, move this hash"

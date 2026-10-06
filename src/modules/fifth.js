@@ -35,17 +35,24 @@ function fifthFit(){
   return fifthFitStd={k:k, ox:FIFTH_BOX/2-k*(x1+x2)/2, oy:FIFTH_BOX/2-k*(y1+y2)/2};
 }
 const fifthF2=v=>(Math.round(v*100)/100).toFixed(2).replace(/\.?0+$/,"");
-// The small cut at a phase: one filled path of overlapping circles, in the header's own box.
-function fifthCutPath(phi){
-  const f=fifthFit(), pass=fifthPass(phi), pts=pass.slice();
-  if(Math.abs(phi-FIFTH_PHI0)>1e-9) for(let i=pass.length-2;i>0;i--) pts.push([FIFTH_BOX-pass[i][0], pass[i][1]]);
-  const r=FIFTH_R*f.k;
-  return pts.map(p=>{
-    const x=p[0]*f.k+f.ox, y=p[1]*f.k+f.oy;
-    return "M"+fifthF2(x-r)+" "+fifthF2(y)+"a"+fifthF2(r)+" "+fifthF2(r)+" 0 1 0 "+fifthF2(2*r)+" 0a"+fifthF2(r)+" "+fifthF2(r)+" 0 1 0 "+fifthF2(-2*r)+" 0";
-  }).join("")+"Z";
+/* The line's centreline at a phase, in the header's own box: Hermite cubics through the pass from the
+   figure's own derivatives, open at the standard phase and closed by the mirrored pass at any other.
+   Stroked at 2 fifthRadius() with round ends and joins, it paints the mark's one smooth line. */
+function fifthLinePath(phi){
+  const f=fifthFit(), pass=fifthPass(phi), n=pass.length, closed=Math.abs(phi-FIFTH_PHI0)>1e-9;
+  const pt=(p,m)=>[(m ? FIFTH_BOX-p[0] : p[0])*f.k+f.ox, p[1]*f.k+f.oy];
+  const vel=(t,m)=>[(m ? -3 : 3)*FIFTH_A*Math.cos(3*t+phi)*f.k, 2*FIFTH_A*Math.cos(2*t)*f.k];
+  const seq=pass.map(p=>[p,false]);
+  if(closed) for(let i=1;i<n;i++) seq.push([pass[i],true]);
+  let d="M"+pt(seq[0][0],false).map(fifthF2).join(" ");
+  for(let i=1;i<seq.length;i++){
+    const a=seq[i-1], b=seq[i], dt=(b[0][2]-a[0][2]+Math.PI)%Math.PI;
+    const p0=pt(a[0],a[1]), p1=pt(b[0],b[1]), v0=vel(a[0][2],a[1]), v1=vel(b[0][2],b[1]);
+    d+="C"+[p0[0]+v0[0]*dt/3, p0[1]+v0[1]*dt/3, p1[0]-v1[0]*dt/3, p1[1]-v1[1]*dt/3, p1[0], p1[1]].map(fifthF2).join(" ");
+  }
+  return closed ? d+"Z" : d;
 }
-/* THE BAND AT A PHASE, for marks drawn in dots: the centres of the discs the small cut is made of, in the
+/* THE BAND AT A PHASE, for marks drawn in dots: the centres of the pass and its mirror, in the
    header's box, both halves of the loop whatever the phase (at the standard one they lie on one another).
    Each carries its depth, z from -1 (far) to 1 (near): the figure is the shadow of a curve on a turning
    cylinder, so the pass is at cos(3t + phi) and its mirror, half a turn on, at the opposite. */
@@ -110,19 +117,29 @@ function wireFifth(){
   const node=document.querySelector(".brand-tile svg path");
   if(!node) return;
   const std=node.getAttribute("d");
-  let raf=0, painted=-Infinity;
+  let raf=0, painted=-Infinity, stroked=false;
+  // The markup's path is the mark's filled outline, which no frame could remake: turning, the node
+  // strokes the centreline instead, and standing it is the markup's again.
+  const stroke=on=>{
+    if(on===stroked) return;
+    stroked=on;
+    node.setAttribute("fill", on ? "none" : "currentColor");
+    node.setAttribute("stroke", on ? "currentColor" : "none");
+    if(on){ node.setAttribute("stroke-width", fifthF2(2*fifthRadius())); node.setAttribute("stroke-linecap","round"); node.setAttribute("stroke-linejoin","round"); }
+  };
   const frame=ms=>{
     raf=requestAnimationFrame(frame);
     fifthTick(ms);
     if(ms-painted<FIFTH_PAINT_MS) return;
     painted=ms;
-    node.setAttribute("d", fifthCutPath(fifthPhase()));
+    stroke(true);
+    node.setAttribute("d", fifthLinePath(fifthPhase()));
   };
   const sync=()=>{
     const still=mgReduceMotion(), go=!still && !document.hidden;
     if(go && !raf){ fifthClock.last=null; raf=requestAnimationFrame(frame); }
     if(!go && raf){ cancelAnimationFrame(raf); raf=0; }
-    if(still){ fifthRest(); if(node.getAttribute("d")!==std) node.setAttribute("d",std); }
+    if(still){ fifthRest(); stroke(false); if(node.getAttribute("d")!==std) node.setAttribute("d",std); }
   };
   document.addEventListener("visibilitychange",sync);
   new MutationObserver(sync).observe(document.documentElement,{attributes:true, attributeFilter:["class"]});
@@ -132,7 +149,7 @@ function wireFifth(){
 export {
   FIFTH_PHI0,
   fifthBand,
-  fifthCutPath,
+  fifthLinePath,
   fifthLay,
   fifthPhase,
   fifthRadius,
