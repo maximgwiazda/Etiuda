@@ -5345,25 +5345,11 @@ What you type stays in this browser only.`;
   var env_exports = {};
   __export(env_exports, {
     E_BUILT: () => E_BUILT,
-    E_SELF: () => E_SELF,
     E_VERSION: () => E_VERSION,
     eEmbeddedCatalog: () => eEmbeddedCatalog
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-06";
-  var E_SELF = (function() {
-    try {
-      let out = "";
-      Array.prototype.forEach.call(document.childNodes, (n) => {
-        if (n.nodeType === 8) out += "<!--" + n.data + "-->\n";
-        else if (n.nodeType === 10) out += "<!DOCTYPE " + n.name + ">\n";
-        else if (n.nodeType === 1) out += n.outerHTML;
-      });
-      return out;
-    } catch (e) {
-      return "";
-    }
-  })();
+  var E_BUILT = "2026-10-07";
   function eEmbeddedCatalog() {
     try {
       const el = document.getElementById("eEmbedded");

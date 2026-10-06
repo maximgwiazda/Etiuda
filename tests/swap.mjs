@@ -94,7 +94,6 @@ const VOLATILE = {
   ePackEpoch: "counts every save the page has made, so a restart that saved once more reads higher",
   toastSerial: "counts toasts shown since the page opened",
   eDeskSeen: "the moment of the last start",
-  E_SELF: "the document as this page parsed it, the head script's classes of that load included",
   tabSaveTimer: "a timer's handle, a number the browser picks",
 };
 
