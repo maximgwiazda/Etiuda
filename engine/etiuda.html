@@ -10722,10 +10722,10 @@ What you type stays in this browser only.`;
     sc.scrollBy({ top: dy, left: 0, behavior: "auto" });
     return true;
   }
-  function scrollPageTop() {
+  function scrollPageTop(instant) {
     const el = pageScroller();
     try {
-      el.scrollTo({ top: 0, left: 0, behavior: mgReduceMotion() ? "auto" : "smooth" });
+      el.scrollTo({ top: 0, left: 0, behavior: instant === true || mgReduceMotion() ? "auto" : "smooth" });
     } catch (_) {
       try {
         el.scrollTop = 0;
@@ -20067,15 +20067,7 @@ What you type stays in this browser only.`;
     }
   }
   function tourScrollListTop() {
-    const el = pageScroller();
-    try {
-      el.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    } catch (_) {
-      try {
-        el.scrollTop = 0;
-      } catch (__) {
-      }
-    }
+    scrollPageTop(true);
   }
   function tourPickFirstCard() {
     const txt = list && list.querySelector(".card[data-id] .txt[data-v]");

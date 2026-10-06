@@ -22,10 +22,11 @@ function pageKeyScroll(key, el){
 /* Landing on the FIRST macro means the top of the page, not merely far enough up to see
    it: scroll-margin-top stops short - correct for every other entry, wrong for this one,
    because nothing above it is worth hiding and arriving at the beginning should look like
-   the beginning. Every way of arriving there uses this. */
-function scrollPageTop(){
+   the beginning. Every way of arriving there uses this. `instant` counts only as
+   exactly true, so an argument a callback passes never turns the glide off. */
+function scrollPageTop(instant){
   const el=pageScroller();
-  try{ el.scrollTo({top:0, left:0, behavior:mgReduceMotion()?"auto":"smooth"}); }
+  try{ el.scrollTo({top:0, left:0, behavior:(instant===true||mgReduceMotion())?"auto":"smooth"}); }
   catch(_){ try{ el.scrollTop=0; }catch(__){} }
 }
 
