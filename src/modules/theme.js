@@ -28,18 +28,22 @@ function landTheme(next){
    whether the fade runs or is skipped. Boot, a hidden page and reduced motion land at once. */
 /* A fade's callback runs a frame late and lands `themeWant`, the LATEST theme asked for: a second
    press in the same task would otherwise land first and be overwritten by the first. */
-let fading=null, themeWant=null;
+let fading=null, themeWant=null, fadeHolds=0;
 function paintTheme(next, after){
   const r=document.documentElement, from=r.dataset.theme;
   themeWant=next;
   if(!from || (from===next && !fading) || typeof document.startViewTransition!=="function"
      || document.visibilityState!=="visible" || mgReduceMotion()){ landTheme(next); if(after) after(); return; }
+  /* theme-fade holds every card real until the last fade ends: see the sheet's note on it. */
+  r.classList.add("theme-fade"); fadeHolds++;
   let vt;
   try{ vt=document.startViewTransition(()=>{ r.classList.add("theme-swap"); r.dataset.theme=themeWant; }); }
-  catch(e){ landTheme(next); if(after) after(); return; }
+  catch(e){ if(!--fadeHolds) r.classList.remove("theme-fade"); landTheme(next); if(after) after(); return; }
   fading=next;
   const done=()=>{ if(fading===next) fading=null; r.classList.remove("theme-swap"); if(after) after(); };
   vt.ready.then(done, done);
+  const end=()=>{ if(!--fadeHolds) r.classList.remove("theme-fade"); };
+  vt.finished.then(end, end);
 }
 // The theme the screen is on or already fading to, so a second press inside the fade turns back.
 function shownTheme(){ return fading || document.documentElement.dataset.theme || systemTheme(); }

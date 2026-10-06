@@ -3620,6 +3620,10 @@ body.e-lanes #pillsSlot.pills-anim{display:block}
    rail and the band cannot turn at different moments. While it runs every pointer event goes to
    <html>, whatever pointer-events says on the pseudo-elements; the keyboard is unaffected. */
 ::view-transition-old(root),::view-transition-new(root){animation-duration:var(--m-celebrate);animation-timing-function:ease}
+/* A FADE HOLDS EVERY CARD REAL. Chrome's renderer dies starting a view transition while cards a
+   glide has moved rest at content-visibility:auto: a category switch, then the theme, lost the page
+   on the first press. Held visible from before the capture to the fade's end, it lives. */
+:root.theme-fade #list .card{content-visibility:visible}
 }@layer base{
 /* Tabular figures wherever a number sits beside a label, so a count ticking from 9 to 10
    does not shuffle the text around it. */
@@ -22401,6 +22405,7 @@ What you type stays in this browser only.`;
   }
   var fading = null;
   var themeWant = null;
+  var fadeHolds = 0;
   function paintTheme(next, after) {
     const r = document.documentElement, from = r.dataset.theme;
     themeWant = next;
@@ -22409,6 +22414,8 @@ What you type stays in this browser only.`;
       if (after) after();
       return;
     }
+    r.classList.add("theme-fade");
+    fadeHolds++;
     let vt;
     try {
       vt = document.startViewTransition(() => {
@@ -22416,6 +22423,7 @@ What you type stays in this browser only.`;
         r.dataset.theme = themeWant;
       });
     } catch (e) {
+      if (!--fadeHolds) r.classList.remove("theme-fade");
       landTheme(next);
       if (after) after();
       return;
@@ -22427,6 +22435,10 @@ What you type stays in this browser only.`;
       if (after) after();
     };
     vt.ready.then(done, done);
+    const end = () => {
+      if (!--fadeHolds) r.classList.remove("theme-fade");
+    };
+    vt.finished.then(end, end);
   }
   function shownTheme() {
     return fading || document.documentElement.dataset.theme || systemTheme();

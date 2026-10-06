@@ -239,12 +239,14 @@ gate('the shell: npm run csp, npm run desk, npm run links, npm run dot-field-des
    keys, a layer an older build stranded, positions re-keyed by tag id) are driven there in a
    browser against a real boot, and until then no chain called it. About 16 s. tests/engine-selftest.js
    31 holds every gate in tests/ to a chain. swap beside them: load, eject and clear change the desk in
-   place, and it holds each against a fresh start, in Chrome, in about a minute. */
-gate('the acceptance run: npm run smoke, npm run glass-rim, npm run storage-carry and npm run swap', () => {
+   place, and it holds each against a fresh start, in Chrome, in about a minute. theme-fade beside them:
+   every category then the theme, which killed the renderer, in Chrome, in about a minute. */
+gate('the acceptance run: npm run smoke, npm run glass-rim, npm run storage-carry, npm run swap and npm run theme-fade', () => {
   if (!npm('smoke')) return 'npm run smoke failed';
   if (!npm('glass-rim')) return 'npm run glass-rim failed';
   if (!npm('storage-carry')) return 'npm run storage-carry failed: a desk arriving from an earlier version is carried by that code';
-  return npm('swap') ? true : 'npm run swap failed: a desk changed in place no longer equals a fresh start';
+  if (!npm('swap')) return 'npm run swap failed: a desk changed in place no longer equals a fresh start';
+  return npm('theme-fade') ? true : 'npm run theme-fade failed: the page lost to a fade after a category switch';
 });
 
 /* The asar is where the allowlist is either kept or quietly widened, so it is read rather than
