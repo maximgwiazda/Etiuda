@@ -6085,6 +6085,7 @@ What you type stays in this browser only.`;
     "STEP": "KROK",
     "step": "krok",
     "Ready to paste: {TITLE}, {WHAT}": "Gotowe do wklejenia: {TITLE}, {WHAT}",
+    "A commitment, ready to paste: {TITLE}, {WHAT}": "Gotowe do wklejenia zobowiązanie: {TITLE}, {WHAT}",
     "All": "Wszystkie",
     "cards": "karty",
     "categories": "kategorie",
@@ -6819,6 +6820,8 @@ What you type stays in this browser only.`;
     "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.": "Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze.",
     "Next replies": "Kolejne odpowiedzi",
     "Commits the firm": "Zobowiązuje firmę",
+    "Commitment": "Zobowiązanie",
+    "Commitment: the customer can hold the firm to this.": "Zobowiązanie: klient może trzymać firmę za słowo.",
     "the catalog's": "z katalogu",
     "yours": "własna",
     "yours; the catalog's has changed": "własna; lista z katalogu się zmieniła",
@@ -14036,7 +14039,7 @@ What you type stays in this browser only.`;
     return esc(title.slice(0, at)) + "<b>" + esc(title.slice(at, at + f.length)) + "</b>" + esc(title.slice(at + f.length));
   }
   function stampHtml(cls) {
-    return '<span class="' + cls + '" title="' + esc(t("Commits the firm")) + '">' + ICON_STAMP + "</span>";
+    return '<span class="' + cls + '" role="img" aria-label="' + esc(t("Commitment")) + '" title="' + esc(t("Commitment: the customer can hold the firm to this.")) + '">' + ICON_STAMP + "</span>";
   }
   function nextReplies(card, base, ov) {
     const self = String(card && card.id || "");
@@ -17569,7 +17572,7 @@ What you type stays in this browser only.`;
   function copiedToastMsg(m, lang2, vi, total) {
     const code = String(lang2 || "").toUpperCase();
     const where = m && m.seq ? code + " " + t("step") + " " + (vi + 1) + "/" + total : code + (total > 1 ? " " + (vi + 1) + "/" + total : "");
-    return t("Ready to paste: {TITLE}, {WHAT}").replace("{WHAT}", where).replace("{TITLE}", cardTitle(m));
+    return (cardCommits(m) ? t("A commitment, ready to paste: {TITLE}, {WHAT}") : t("Ready to paste: {TITLE}, {WHAT}")).replace("{WHAT}", where).replace("{TITLE}", cardTitle(m));
   }
   function bumpUseCount(id, lang2) {
     if (!id) return;

@@ -447,7 +447,7 @@ function copiedToastMsg(m, lang, vi, total){
   const code=String(lang||"").toUpperCase();
   const where=m&&m.seq ? code+" "+t("step")+" "+(vi+1)+"/"+total
                        : code+(total>1 ? " "+(vi+1)+"/"+total : "");
-  return t("Ready to paste: {TITLE}, {WHAT}").replace("{WHAT}",where).replace("{TITLE}",cardTitle(m));
+  return (cardCommits(m) ? t("A commitment, ready to paste: {TITLE}, {WHAT}") : t("Ready to paste: {TITLE}, {WHAT}")).replace("{WHAT}",where).replace("{TITLE}",cardTitle(m));
 }
 /* Local copy counter: one integer per card id, stored in the pack. It leaves the desk
    only as a file on the organisation's own share, on request. Answers two questions

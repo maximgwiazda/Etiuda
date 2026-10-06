@@ -1695,6 +1695,20 @@ const CARD_B = {
   check("list-pointer.js", "a card whose blocks are steps says step",
     () => eq(LP.copiedToastMsg(Object.assign({}, CARD_A, { seq: true }), "en", 1, 3),
       "Ready to paste: Damaged bag, EN step 2/3"));
+  /* THE COMMITMENT COPY PASS (board 844, package 21, 32b-B): the toast of a card that commits opens on the word, in
+     both languages, and a card that does not keeps the plain line above. */
+  const COMMITS_A = Object.assign({}, CARD_A, { commits: 1 });
+  const inPolish = fn => {
+    const had = UILANG_STORE.lsGet("eUiLang");
+    UILANG_STORE.lsSet("eUiLang", "pl");
+    try { return fn(); } finally { if (had == null) UILANG_STORE.lsDel("eUiLang"); else UILANG_STORE.lsSet("eUiLang", had); }
+  };
+  check("list-pointer.js", "844A a card that commits toasts as a commitment, ready to paste",
+    () => eq(LP.copiedToastMsg(COMMITS_A, "en", 0, 1), "A commitment, ready to paste: Damaged bag, EN"));
+  check("list-pointer.js", "844B and in Polish the participle comes before the noun",
+    () => inPolish(() => eq(LP.copiedToastMsg(COMMITS_A, "pl", 1, 3), "Gotowe do wklejenia zobowiązanie: Uszkodzona torba, PL 2/3")));
+  check("list-pointer.js", "844C CONTROL: a card that does not commit keeps the plain line in Polish too",
+    () => inPolish(() => eq(LP.copiedToastMsg(Object.assign({}, CARD_A, { commits: 0 }), "pl", 0, 1), "Gotowe do wklejenia: Uszkodzona torba, PL")));
   /* A COPY'S COUNT IS NOT A MARKUP CHANGE. ePackEpoch heads every card's pool signature, so a
      count that moved it rebuilt every shown card on the next render; the browser half, cards
      kept across a pick and a copy, is tests/smoke.js's. The CONTROL is that the count still
@@ -1741,6 +1755,16 @@ const CARD_B = {
     () => eq([stampAt > sworn.indexOf("Four</span>"), sworn.slice(stampAt - 7, stampAt) === "</span>"].join(","), "true,true"));
   check("manage.js", "28a2 control: the row of a card that does not commit has no stamp, and is the stamped row less its stamp",
     () => eq([plain.indexOf("mg-stamp") < 0, sworn.replace(CH.stampHtml("mg-stamp"), "") === plain].join(","), "true,true"));
+  /* THE SEAL'S WORDS (board 844, package 21, D1 and D2): a name for a screen reader and a tooltip that says what the
+     seal means, the same pair on every card that wears it, in both languages. */
+  const sealIn = l => {
+    const had = UILANG_STORE.lsGet("eUiLang");
+    if (l) UILANG_STORE.lsSet("eUiLang", l); else UILANG_STORE.lsDel("eUiLang");
+    try { return CH.stampHtml("mg-stamp"); } finally { if (had == null) UILANG_STORE.lsDel("eUiLang"); else UILANG_STORE.lsSet("eUiLang", had); }
+  };
+  check("card-chain.js", "844D the seal is named Commitment and its tooltip says what it means, in English and in Polish",
+    () => eq([sealIn("en").indexOf('role="img" aria-label="Commitment" title="Commitment: the customer can hold the firm to this."') > -1,
+      sealIn("pl").indexOf('role="img" aria-label="Zobowiązanie" title="Zobowiązanie: klient może trzymać firmę za słowo."') > -1].join(","), "true,true"));
 }
 
 /* ------------------------------------------------------------------ manage.js, card-body.js

@@ -103,7 +103,8 @@ function nextHitHtml(title,q){
   return esc(title.slice(0,at))+"<b>"+esc(title.slice(at,at+f.length))+"</b>"+esc(title.slice(at+f.length));
 }
 function stampHtml(cls){
-  return '<span class="'+cls+'" title="'+esc(t("Commits the firm"))+'">'+ICON_STAMP+'</span>';
+  return '<span class="'+cls+'" role="img" aria-label="'+esc(t("Commitment"))+'" title="'
+    +esc(t("Commitment: the customer can hold the firm to this."))+'">'+ICON_STAMP+'</span>';
 }
 
 /** One per editor open. `card` is the card as the desk holds it (null for a new one), `base` the
