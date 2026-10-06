@@ -1,6 +1,7 @@
 // The 2.x build pipeline, proved on a toy source tree before a single module is extracted
 // from the engine. Spec section 9 binds three conditions on it: never minify, esbuild rather
-// than webpack, and an output that is genuinely one file. `checks.mjs` measures all three.
+// than webpack, and an output that is genuinely one file. `constraints.mjs`, the first leg of
+// `npm run split-guard`, measures what esbuild does under these options.
 //
 //   node tools/bundler-probe/build.mjs
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
