@@ -137,8 +137,6 @@ async function fingerprint(q) {
       if (typeof v === "function") return;
       state[n] = mask(ser(v, 0));
     });
-    // A module's own count that nothing exports as a value, read through the getter it does export.
-    if (typeof copiesMade === "function") state["copiesMade()"] = String(copiesMade());
     /* The markup written canonically: attributes in name order and an empty style or class
        attribute as none, since neither the order a script sets them in nor an emptied attribute is
        a difference anybody sees. */

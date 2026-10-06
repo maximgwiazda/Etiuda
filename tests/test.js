@@ -1519,7 +1519,7 @@ function copyControlTests() {
    once, which keeps the promise route synchronous here. */
 function copyNoticeTests() {
   const src = sourceText();
-  const decls = ["let copyCount=", "function noteCopy(", "function copy(", "function fallback("].map(m => extractDecl(src, m)).join("\n");
+  const decls = ["function noteCopy(", "function copy(", "function fallback("].map(m => extractDecl(src, m)).join("\n");
   const SAID = "Ready to paste: A card, EN";
   const HAND = "Selecting the text on the card and pressing Ctrl+C copies this one; the browser kept the clipboard closed.";
   const DESK = "Selecting the text on the card and pressing Ctrl+C copies this one; the clipboard would not take it just now.";

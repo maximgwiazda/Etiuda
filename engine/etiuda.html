@@ -14082,10 +14082,8 @@ What you type stays in this browser only.`;
   // src/modules/mark.js
   var mark_exports = {};
   __export(mark_exports, {
-    copiesMade: () => copiesMade,
     copy: () => copy,
     fallback: () => fallback,
-    forgetCopies: () => forgetCopies,
     kbdNav: () => kbdNav,
     markEnd: () => markEnd,
     markSurface: () => markSurface,
@@ -14116,15 +14114,7 @@ What you type stays in this browser only.`;
   function railQuery() {
     return typeof intentEl !== "undefined" && intentEl ? String(intentEl.value || "").trim() : "";
   }
-  var copyCount = 0;
-  function copiesMade() {
-    return copyCount;
-  }
-  function forgetCopies() {
-    copyCount = 0;
-  }
   function noteCopy() {
-    copyCount++;
     setRailMarkUsed(true);
     setSemiKind(null);
     hooks.railDecorate(false);
@@ -27974,7 +27964,6 @@ What you type stays in this browser only.`;
     dropCardPool();
     forgetRowNaturals();
     eForgetRecency();
-    forgetCopies();
     forgetLookEdits();
     rearmTrustRecheck();
     putLang(lsGet("eLang") || uiLang());
