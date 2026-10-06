@@ -13184,6 +13184,7 @@ What you type stays in this browser only.`;
     eSharedWrite: () => eSharedWrite,
     eWriteBranch: () => eWriteBranch,
     syncBandHeight: () => syncBandHeight,
+    wireFolderLink: () => wireFolderLink,
     wireHost: () => wireHost
   });
   function eHost() {
@@ -13214,6 +13215,15 @@ What you type stays in this browser only.`;
     } catch (e) {
       return Promise.resolve(false);
     }
+  }
+  function wireFolderLink(el) {
+    el.onclick = () => eOpenCatalogFolder();
+    el.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        eOpenCatalogFolder();
+      }
+    };
   }
   function eCatalogRing() {
     const h = eHost();
@@ -19247,15 +19257,7 @@ What you type stays in this browser only.`;
       const ei = $("#emptyLoad");
       if (ei) ei.onclick = hooks.importCatalogHere;
       const ef = $("#emptyCatFolder");
-      if (ef) {
-        ef.onclick = () => eOpenCatalogFolder();
-        ef.onkeydown = (e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            eOpenCatalogFolder();
-          }
-        };
-      }
+      if (ef) wireFolderLink(ef);
       hooks.syncAddFab();
       hooks.syncNextDock();
       applyCardColumns();
@@ -24566,15 +24568,7 @@ What you type stays in this browser only.`;
         paintCatalogList();
       });
       const dir = box.querySelector("[data-ec-open]");
-      if (dir) {
-        dir.onclick = () => eOpenCatalogFolder();
-        dir.onkeydown = (e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            eOpenCatalogFolder();
-          }
-        };
-      }
+      if (dir) wireFolderLink(dir);
     });
   }
   function lookAtDesk(f, files, held) {
@@ -24679,15 +24673,7 @@ What you type stays in this browser only.`;
         src.accept(sig);
       });
     };
-    wrap.querySelectorAll("[data-ec-open]").forEach((el) => {
-      el.onclick = () => eOpenCatalogFolder();
-      el.onkeydown = (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          eOpenCatalogFolder();
-        }
-      };
-    });
+    wrap.querySelectorAll("[data-ec-open]").forEach(wireFolderLink);
     wrap.querySelector("#ecNo").onclick = () => {
       if (src.refusedKey) {
         nsSet(src.refusedKey, sig);

@@ -9,7 +9,7 @@ import { E_CATALOG_KEY, E_CATALOG_VERSION, catalogStamp, catalogVersionLabel,
   eWatchClear, parseCatalogFile, catalogDocOf, eWatchName, eCatalogRefusedNames, eRefuseCatalogFile } from "./catalog.js";
 import { eEmbeddedCatalog } from "./env.js";
 import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
-  eCatalogIn, eCatalogBuiltIn, eCatalogMtime, eHost, eLoadedCatalogFile, eOpenCatalogFolder, eOpenedWith,
+  eCatalogIn, eCatalogBuiltIn, eCatalogMtime, eHost, eLoadedCatalogFile, wireFolderLink, eOpenedWith,
   eOpenedRefused, eReadCatalogFile, eOnCatalogListing, eBranchIdentity } from "./host.js";
 import { ejectCatalog } from "./local-memory.js";
 import { lsSet, nsGet, nsSet } from "./storage.js";
@@ -425,10 +425,7 @@ function paintCatalogList(){
       paintCatalogList();
     });
     const dir=box.querySelector("[data-ec-open]");
-    if(dir){
-      dir.onclick=()=>eOpenCatalogFolder();
-      dir.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); eOpenCatalogFolder(); } };
-    }
+    if(dir) wireFolderLink(dir);
   });
 }
 /* LOOK, from a colleague's row: the panel stands where the Library was, and its two ways out go back to the Library or
@@ -567,10 +564,7 @@ function eOfferCatalogDialog(c,src){
     taking=true;
     whenTrusted(c).then(()=>{ taking=false; close(); src.accept(sig); });
   };
-  wrap.querySelectorAll("[data-ec-open]").forEach(el=>{
-    el.onclick=()=>eOpenCatalogFolder();
-    el.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); eOpenCatalogFolder(); } };
-  });
+  wrap.querySelectorAll("[data-ec-open]").forEach(wireFolderLink);
   wrap.querySelector("#ecNo").onclick=()=>{
     /* The date as well as the signature: the signature says WHAT was refused and the date says
        WHEN, which is what lets a later edition of the same file ask again. */

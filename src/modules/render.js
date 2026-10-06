@@ -30,7 +30,7 @@ import { scheduleCutScan } from "./cut-text.js";
 import { markSearchHits } from "./search-marks.js";
 import { syncEmptyMark } from "./empty-mark.js";
 import { closeNotePane } from "./note-pane.js";
-import { E_CATALOG_SCRIPT, eCatalogFolder, eCatalogFolderShort, eOpenCatalogFolder } from "./host.js";
+import { E_CATALOG_SCRIPT, eCatalogFolder, eCatalogFolderShort, wireFolderLink } from "./host.js";
 import { cards, intentIdxs, setShown, shown, cats, setPendingScrollHit, putEntrySel, lang, entrySel, pendingScrollHit, semiKind, cardCounts, wholeThingEmpty } from "./app-state.js";
 import { hooks } from "./hooks.js";
 import { teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty } from "./team-join.js";
@@ -166,10 +166,7 @@ function render(){
     const ei=$("#emptyLoad");
     if(ei) ei.onclick=hooks.importCatalogHere;
     const ef=$("#emptyCatFolder");
-    if(ef){
-      ef.onclick=()=>eOpenCatalogFolder();
-      ef.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); eOpenCatalogFolder(); } };
-    }
+    if(ef) wireFolderLink(ef);
     hooks.syncAddFab();
     hooks.syncNextDock();
     applyCardColumns();
