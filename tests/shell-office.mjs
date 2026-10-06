@@ -1032,7 +1032,7 @@ try {
     const L = await spelling("linux");
     const url = (L.order.find(o => o[0] === "url") || [])[1] || "";
     const langs = (L.order.find(o => o[0] === "langs") || [])[1];
-    check(url === "file://" + DICT + "/" && !/^https?:/.test(url) && JSON.stringify(langs) === '["en-US","pl"]'
+    check(url.startsWith("file://") && decodeURIComponent(url.slice("file://".length)) === DICT + "/" &&!/^https?:/.test(url) && JSON.stringify(langs) === '["en-US","pl"]'
       && JSON.stringify(L.steps.slice(0, 3)) === '["url","langs","window"]',
       "13a on Linux, before the window, the session's dictionary address is the package's own folder, which the loader"
       + " cannot fetch from, and its languages are English and Polish: " + JSON.stringify([url, langs, L.steps]));

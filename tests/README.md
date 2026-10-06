@@ -769,7 +769,7 @@ carries its fuses, and the unpacked `.deb` holds the AppArmor profile allowing `
 `/opt/Etiuda/etiuda` (Ubuntu 24.04 refuses Chromium's sandbox a user namespace without one), the
 `chrome-sandbox` beside it (made SUID by the after-install only where no user namespace works), a `.desktop` entry that names `application/x-etiuda-catalog` and
 hands the program its file, the MIME file giving that type to `*.ec`, and no updater's file.
-`linux-package.mjs` holds that judge with each of those taken out alone, 15 checks, under 1 s; it
+`linux-package.mjs` holds that judge with each of those taken out alone, 24 checks, under 1 s; it
 runs in `npm test` on both platforms.
 
 `linux-desk.js` is a window gate and runs by hand on a Linux machine, never as root: `<program>` is
