@@ -1,7 +1,7 @@
 import { cardCommits, cardLang, cardTitle, parts } from "./card-model.js";
 import { cards, lang } from "./app-state.js";
 import { pack } from "./pack.js";
-import { statsLearntAfter } from "./desk-stats.js";
+import { statsLearntAfter, statsRecentUse } from "./desk-stats.js";
 import { setTabBeads, syncTabBeads, tabPathNow, watchTabPath } from "./tabs.js";
 import { formatActionChord } from "./shortcuts.js";
 import { t, uiLang } from "./ui-lang.js";
@@ -17,7 +17,7 @@ import { $ } from "./dom.js";
 
 /* ---- The dock: what the conversation in front can send next, behind the action button in the corner.
    The card's own list comes first, the catalog's or the one the agent put in its place; what this desk
-   learnt fills the places left. */
+   learnt fills the places left, and then the desk's most-used cards. */
 const DOCK_MAX=NEXT_KEYS;
 const DOCK_LEARNT_MIN=2;
 const DOCK_W=640;
@@ -26,8 +26,9 @@ const DOCK_HOVER_MS=150, DOCK_LEAVE_MS=700, DOCK_NEAR=48, DOCK_GAP=12;
 
 /** The replies offered after `from`, at most DOCK_MAX, as {id, learnt, n}. `live` maps an id to its card,
  *  `learnt` is statsLearntAfter's answer, and `sent` holds the ids this conversation has sent: a learnt
- *  reply already sent is passed over, the card's own list is kept whole. */
-function dockList(from, live, learnt, sent){
+ *  reply already sent is passed over, the card's own list is kept whole. `used`, where given, is dockUsed's
+ *  answer and tops up the places left, each such row marked `used`, passing over a hidden card as well. */
+function dockList(from, live, learnt, sent, used){
   const m=from!=null && live ? live.get(String(from)) : null;
   if(!m) return [];
   const self=String(m.id);
@@ -40,7 +41,18 @@ function dockList(from, live, learnt, sent){
     taken.add(id);
     out.push({id:id, learnt:true, n:n});
   });
+  (Array.isArray(used)?used:[]).forEach(o=>{
+    const id=String(o&&o.id!=null?o.id:""), n=o ? o.n|0 : 0, c=id ? live.get(id) : null;
+    if(out.length>=DOCK_MAX || !c || c._hidden || taken.has(id) || n<1 || (sent && sent.has(id))) return;
+    taken.add(id);
+    out.push({id:id, learnt:false, used:true, n:n});
+  });
   return out;
+}
+/** The desk's cards by their copies over the days statsRecentUse counts, most first, then by id, as [{id, n}]. */
+function dockUsed(){
+  return [...statsRecentUse(pack)].map(([id,n])=>({id:id, n:n}))
+    .sort((x,y)=>y.n-x.n || (x.id<y.id ? -1 : x.id>y.id ? 1 : 0));
 }
 // The replies sent along a chain show as at most this many beads; a longer chain shows a lead-in before them.
 const BEADS_MAX=3;
@@ -102,16 +114,17 @@ function watchNextDock(fn){ dockWatch=fn||null; }
 function dockNow(){
   const now=tabPathNow(), path=now.path, from=path.length ? path[path.length-1] : null;
   const live=new Map((cards||[]).filter(m=>m&&m.id).map(m=>[String(m.id),m]));
-  const rows=from==null ? [] : dockList(from, live, statsLearntAfter(pack, from), new Set(path));
+  const rows=from==null ? [] : dockList(from, live, statsLearntAfter(pack, from), new Set(path), dockUsed());
   return {tab:now.tab, from:from, rows:rows, live:live, path:path};
 }
 /** The button's digit and its pulse, and the open dock's rows. `arrived` is a step just taken in the tab
- *  in front, which is what pulses; a switch of tab or any other redraw shows the digit still. */
+ *  in front, which pulses where it brings the card's list or a learnt reply; a row only there by use counts in
+ *  the digit and does not pulse. A switch of tab or any other redraw shows the digit still. */
 function syncNextDock(arrived){
   const fab=dockFab();
   if(!fab) return;
   const now=dockNow(), n=now.rows.length;
-  const key=[now.tab, now.from||"", now.rows.map(r=>r.id+(r.learnt?"~":"")).join(","), lang, uiLang()].join("|");
+  const key=[now.tab, now.from||"", now.rows.map(r=>r.id+(r.learnt?"~":r.used?"+":"")).join(","), lang, uiLang()].join("|");
   const changed=key!==dockKey;
   dockRows=now.rows; dockFrom=now.from; dockLive=now.live; dockKey=key;
   const lanes=lanesShown();
@@ -122,7 +135,7 @@ function syncNextDock(arrived){
   fab.title=t(lanes ? "Back to the cards" : "Show the conversation's path");
   fab.setAttribute("aria-label", t("Next replies")+": "+n);
   fab.setAttribute("aria-pressed", lanes ? "true" : "false");
-  if(arrived===true && n){ fab.classList.remove("nudge"); void fab.offsetWidth; fab.classList.add("nudge"); }
+  if(arrived===true && now.rows.some(r=>!r.used)){ fab.classList.remove("nudge"); void fab.offsetWidth; fab.classList.add("nudge"); }
   else if(changed) fab.classList.remove("nudge");
   if(!n || lanes) foldNextDock();
   else if(nextDockOpen() && (changed || arrived===true)) drawDock();
@@ -200,7 +213,8 @@ function foldNextDock(){
  *  shows, or the other one; false when there is none, so the key falls through. A question for its
  *  fields hangs from `anchor`, the button where none is given. */
 function copyNextReply(k, anchor, other){
-  const r=dockNow().rows[k];
+  // The lanes show no row offered by use alone, so their keys reach only the rows they show.
+  const r=dockNow().rows.filter(x=>!lanesShown() || !x.used)[k];
   if(!r) return false;
   copyCardPart(r.id, 0, anchor||dockFab(), other);
   return true;
@@ -261,6 +275,7 @@ export {
   pathBeads,
   tabBeadsOf,
   dockList,
+  dockUsed,
   dockClear,
   dockNear,
   dockNow,

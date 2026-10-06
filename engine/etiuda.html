@@ -25813,6 +25813,7 @@ What you type stays in this browser only.`;
     dockList: () => dockList,
     dockNear: () => dockNear,
     dockNow: () => dockNow,
+    dockUsed: () => dockUsed,
     foldNextDock: () => foldNextDock,
     nextDockOpen: () => nextDockOpen,
     pathBeads: () => pathBeads,
@@ -25828,7 +25829,7 @@ What you type stays in this browser only.`;
   var DOCK_LEAVE_MS = 700;
   var DOCK_NEAR = 48;
   var DOCK_GAP = 12;
-  function dockList(from, live, learnt, sent) {
+  function dockList(from, live, learnt, sent, used) {
     const m = from != null && live ? live.get(String(from)) : null;
     if (!m) return [];
     const self = String(m.id);
@@ -25841,7 +25842,16 @@ What you type stays in this browser only.`;
       taken.add(id);
       out.push({ id, learnt: true, n });
     });
+    (Array.isArray(used) ? used : []).forEach((o) => {
+      const id = String(o && o.id != null ? o.id : ""), n = o ? o.n | 0 : 0, c = id ? live.get(id) : null;
+      if (out.length >= DOCK_MAX || !c || c._hidden || taken.has(id) || n < 1 || sent && sent.has(id)) return;
+      taken.add(id);
+      out.push({ id, learnt: false, used: true, n });
+    });
     return out;
+  }
+  function dockUsed() {
+    return [...statsRecentUse(pack)].map(([id, n]) => ({ id, n })).sort((x, y) => y.n - x.n || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
   }
   var BEADS_MAX = 3;
   function chainBeads(path, linked, open) {
@@ -25896,14 +25906,14 @@ What you type stays in this browser only.`;
   function dockNow() {
     const now = tabPathNow(), path = now.path, from = path.length ? path[path.length - 1] : null;
     const live = new Map((cards || []).filter((m) => m && m.id).map((m) => [String(m.id), m]));
-    const rows = from == null ? [] : dockList(from, live, statsLearntAfter(pack, from), new Set(path));
+    const rows = from == null ? [] : dockList(from, live, statsLearntAfter(pack, from), new Set(path), dockUsed());
     return { tab: now.tab, from, rows, live, path };
   }
   function syncNextDock(arrived) {
     const fab = dockFab();
     if (!fab) return;
     const now = dockNow(), n = now.rows.length;
-    const key = [now.tab, now.from || "", now.rows.map((r) => r.id + (r.learnt ? "~" : "")).join(","), lang, uiLang()].join("|");
+    const key = [now.tab, now.from || "", now.rows.map((r) => r.id + (r.learnt ? "~" : r.used ? "+" : "")).join(","), lang, uiLang()].join("|");
     const changed = key !== dockKey;
     dockRows = now.rows;
     dockFrom = now.from;
@@ -25916,7 +25926,7 @@ What you type stays in this browser only.`;
     fab.title = t(lanes ? "Back to the cards" : "Show the conversation's path");
     fab.setAttribute("aria-label", t("Next replies") + ": " + n);
     fab.setAttribute("aria-pressed", lanes ? "true" : "false");
-    if (arrived === true && n) {
+    if (arrived === true && now.rows.some((r) => !r.used)) {
       fab.classList.remove("nudge");
       void fab.offsetWidth;
       fab.classList.add("nudge");
@@ -25992,7 +26002,7 @@ What you type stays in this browser only.`;
     if (dockEl) dockEl.hidden = true;
   }
   function copyNextReply(k, anchor, other) {
-    const r = dockNow().rows[k];
+    const r = dockNow().rows.filter((x) => !lanesShown() || !x.used)[k];
     if (!r) return false;
     copyCardPart(r.id, 0, anchor || dockFab(), other);
     return true;

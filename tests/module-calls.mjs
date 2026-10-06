@@ -2658,6 +2658,7 @@ const CARD_B = {
     : { id, c: "orders", en: "Body of " + id, t: "Title " + id });
   const liveOf = list => new Map(list.map(m => [m.id, m]));
   const said = rows => rows.map(r => r.id + (r.learnt ? "~" + r.n : "")).join(",");
+  const said2 = rows => rows.map(r => r.id + (r.learnt ? "~" + r.n : r.used ? "+" + r.n : "")).join(",");
   const L1 = [card("c-nd-a", ["c-nd-b", "c-nd-gone", "c-nd-a", "c-nd-c"]), card("c-nd-b"), card("c-nd-c"), card("c-nd-d"),
     card("c-nd-e"), card("c-nd-f"), card("c-nd-g")];
   check("next-dock.js", "814S the card's own list comes first in its order, live cards only and never itself; learnt replies fill the places left, most often first, each marked, four in all",
@@ -2672,6 +2673,17 @@ const CARD_B = {
       const six = card("c-nd-6", ["c-nd-b", "c-nd-c", "c-nd-d", "c-nd-e", "c-nd-f", "c-nd-g"]);
       return eq([said(ND.dockList("c-nd-b", liveOf(L1), [], new Set())), said(ND.dockList("c-nd-none", liveOf(L1), [{ id: "c-nd-b", n: 9 }], new Set())),
         said(ND.dockList("c-nd-6", liveOf(L1.concat([six])), [{ id: "c-nd-a", n: 9 }], new Set()))].join("|"), "||c-nd-b,c-nd-c,c-nd-d,c-nd-e");
+    });
+  /* 8f (Maxim, 2026-10-05 18:26, "Fill with the desk's most-used cards"): what the list and the learnt replies
+     leave is topped up by the desk's copies, most first, each such row marked as offered by use. */
+  check("next-dock.js", "814S1 places the list and the learnt replies leave are topped up by use, most first: never the card itself, one already offered or sent, a hidden card, one gone or one not copied; four in all",
+    () => {
+      const L = [card("c-nd-m", ["c-nd-m1"]), card("c-nd-m1"), card("c-nd-m2"), card("c-nd-m3"), card("c-nd-m4"), card("c-nd-m5"), card("c-nd-m6"), card("c-nd-m7")];
+      L[5]._hidden = 1;
+      return eq(said2(ND.dockList("c-nd-m", liveOf(L), [{ id: "c-nd-m2", n: 3 }], new Set(["c-nd-m6"]),
+        [{ id: "c-nd-m", n: 9 }, { id: "c-nd-m1", n: 8 }, { id: "c-nd-m5", n: 7 }, { id: "c-nd-m6", n: 6 }, { id: "c-nd-gone", n: 5 },
+          { id: "c-nd-m3", n: 4 }, { id: "c-nd-m2", n: 3 }, { id: "c-nd-m7", n: 0 }, { id: "c-nd-m4", n: 1 }])),
+        "c-nd-m1,c-nd-m2~3,c-nd-m3+4,c-nd-m4+1");
     });
   check("next-dock.js", "814V the unfolded dock keeps its place when clear, moves left past a question it would meet, keeps the gap, and stands down where the window has no room",
     () => {
@@ -2708,8 +2720,32 @@ const CARD_B = {
     T.tabs.push({ id: "mc-nd4", pax: "" }); T.stepTab(1); ND.syncNextDock();
     const before = shown();
     LP.bumpUseCount("c-nd-r", "en");
-    check("next-dock.js", "814X what the desk learnt reaches the button: a reply sent twice after another is offered after it in a fresh conversation",
-      () => eq(before + " | " + shown(), "hidden - still | shown 1 pulse"));
+    const learntNow = said(ND.dockNow().rows.filter(r => !r.used));
+    check("next-dock.js", "814X what the desk learnt reaches the button: a reply sent twice after another is offered after it in a fresh conversation, and it pulses",
+      () => eq(before + " | " + (ring.has("nudge") ? "pulse" : "still") + " " + learntNow, "hidden - still | pulse c-nd-s~2"));
+    /* 8f at the button: a reply with nothing on its list and nothing learnt is offered the desk's most-used cards and
+       shows their count, and only a step bringing the list or a learnt reply pulses (the queue's "the pulse kept
+       meaningful"). A pack of its own with invented days, the one before put back. */
+    {
+      const PK = await import(MOD("pack.js"));
+      const DS = await import(MOD("desk-stats.js"));
+      const held = JSON.stringify(PK.pack);
+      try {
+        PK.resetPack();
+        const ids = ["c-nd-u1", "c-nd-u2", "c-nd-u3", "c-nd-u4"];
+        PK.pack.dayIds = ids.slice();
+        PK.pack.days = { [DS.statsYmd()]: { c: { 0: 6, 1: 4, 2: 2, 3: 1 }, i: {}, m: 0, l: {} } };
+        AS.setCards([card("c-nd-bare"), card("c-nd-lead", ["c-nd-u4"])].concat(ids.map(id => card(id))));
+        T.tabs.push({ id: "mc-nd5", pax: "" }); T.stepTab(1);
+        LP.bumpUseCount("c-nd-bare", "en");
+        const bare = shown() + " " + said2(ND.dockNow().rows);
+        T.tabs.push({ id: "mc-nd6", pax: "" }); T.stepTab(1);
+        LP.bumpUseCount("c-nd-lead", "en");
+        const lead = shown() + " " + said2(ND.dockNow().rows);
+        check("next-dock.js", "814X1 a reply with no list and nothing learnt is offered the desk's most-used cards, most first, and the button shows their count without a pulse; a reply with its own list pulses, its list first and the most-used after",
+          () => eq(bare + " | " + lead, "shown 4 still c-nd-u1+6,c-nd-u2+4,c-nd-u3+2,c-nd-u4+1 | shown 4 pulse c-nd-u4,c-nd-u1+6,c-nd-u2+4,c-nd-u3+2"));
+      } finally { PK.resetPack(); Object.assign(PK.pack, JSON.parse(held)); }
+    }
     // A switch of tab finishes on the next frame, which reads hooks put back below.
     await new Promise(r => setTimeout(r, 20));
   /* The keys and the labels. Ctrl+1 to 4 are four rows of the shortcuts list like any other, read in the
