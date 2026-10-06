@@ -14876,6 +14876,7 @@ What you type stays in this browser only.`;
     intentBandOn: () => intentBandOn,
     listIsAll: () => listIsAll,
     moveCardOrder: () => moveCardOrder,
+    moveCardWithin: () => moveCardWithin,
     movedCardIds: () => movedCardIds
   });
 
@@ -15306,17 +15307,19 @@ What you type stays in this browser only.`;
     if (hz) return hz;
     return cardOrderIdx(a && a.id) - cardOrderIdx(b && b.id);
   }
-  function moveCardOrder(fromId, toId) {
-    ensureCardOrder();
-    if (cardSearchTerms().length) return false;
+  function moveCardWithin(fromId, toId, bandOf) {
     const a = findCard(fromId), b = findCard(toId);
-    if (!a || !b) return false;
-    if (displayBandKey(a) !== displayBandKey(b)) return false;
+    if (!a || !b || bandOf(a) !== bandOf(b)) return false;
     const from = pack.cardOrder.indexOf(fromId), to = pack.cardOrder.indexOf(toId);
     if (from < 0 || to < 0 || from === to) return false;
     pack.cardOrder.splice(to, 0, pack.cardOrder.splice(from, 1)[0]);
     cardOrderTouched();
     return true;
+  }
+  function moveCardOrder(fromId, toId) {
+    ensureCardOrder();
+    if (cardSearchTerms().length) return false;
+    return moveCardWithin(fromId, toId, displayBandKey);
   }
   function listIsAll() {
     return !(cats || []).length;
@@ -25240,13 +25243,7 @@ What you type stays in this browser only.`;
   }
   function mgMoveCardOrder(fromId, toId) {
     ensureCardOrder();
-    const a = findCard(fromId), b = findCard(toId);
-    if (!a || !b || mgCardBand(a) !== mgCardBand(b)) return false;
-    const from = pack.cardOrder.indexOf(fromId), to = pack.cardOrder.indexOf(toId);
-    if (from < 0 || to < 0 || from === to) return false;
-    pack.cardOrder.splice(to, 0, pack.cardOrder.splice(from, 1)[0]);
-    cardOrderTouched();
-    return true;
+    return moveCardWithin(fromId, toId, mgCardBand);
   }
   function wireManageDrag() {
     addEventListener("pointerdown", (e) => {

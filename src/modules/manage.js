@@ -1,7 +1,7 @@
 import { ensureCustomCat, openCardEditor, hideCard } from "./card-editor.js";
 import { baseCard, cardCommits, cardTitle, findCard } from "./card-model.js";
 import { stampHtml } from "./card-chain.js";
-import { movedCardIds, cardOrderIdx, catSortIdx, ensureCardOrder, cardOrderTouched } from "./card-order.js";
+import { movedCardIds, cardOrderIdx, catSortIdx, ensureCardOrder, cardOrderTouched, moveCardWithin } from "./card-order.js";
 import { isAlwaysCat, setCatAlways } from "./cat-roles.js";
 import { importCatalogHere, catalogFileName } from "./catalog-file.js";
 import { CATS } from "./content-model.js";
@@ -353,13 +353,7 @@ function mgMoveIntentOrder(fromId,toId){
  *  attribute, so a stale row cannot smuggle a favourite past a plain entry. */
 function mgMoveCardOrder(fromId,toId){
   ensureCardOrder();
-  const a=findCard(fromId), b=findCard(toId);
-  if(!a||!b||mgCardBand(a)!==mgCardBand(b)) return false;
-  const from=pack.cardOrder.indexOf(fromId), to=pack.cardOrder.indexOf(toId);
-  if(from<0||to<0||from===to) return false;
-  pack.cardOrder.splice(to,0,pack.cardOrder.splice(from,1)[0]);
-  cardOrderTouched();   // a reorder keeps the length - see cardOrderPos
-  return true;
+  return moveCardWithin(fromId,toId,mgCardBand);
 }
 function wireManageDrag(){
   addEventListener("pointerdown",e=>{
