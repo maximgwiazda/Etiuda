@@ -425,6 +425,10 @@ try {
   const ALT_V = { type: "keyDown", alt: true, control: false, meta: false, shift: false, code: "KeyV", isAutoRepeat: false };
   desk.fire("before-input-event", {}, ALT_V);
   pw.fire("before-input-event", {}, ALT_V);
+  /* Every registered handler is then called, once for each window, so a read armed by the press and paid out
+     under any name shows in clipReads; a handler that throws or hangs on empty arguments has read nothing. */
+  for (const ch of Object.keys(invH)) for (const ev of [deskEvent(), pickerEvent()])
+    await Promise.race([Promise.resolve().then(() => invH[ch](ev)).catch(() => {}), tick(40)]);
   const clipDoors = Object.keys(invH).concat(Object.keys(onH)).filter(ch => /clip/i.test(ch));
   const clipVerbs = Object.keys(deskPage.E_HOST).concat(Object.keys(pickerPage.E_PICK)).filter(k => /clip/i.test(k));
   check(clipReads === 0 && clipDoors.length === 0 && clipVerbs.length === 0,
