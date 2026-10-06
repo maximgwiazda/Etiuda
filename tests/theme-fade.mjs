@@ -25,6 +25,11 @@
  *        (reloaded inside it), then two fades on the next load, so the second load's fades fall in
  *        the same places as the first's; Maintenance's "theme fades" row shows the newest two whole
  *        and the lost one as a start alone, which is the sign of a page lost inside a fade
+ *   tf6  a press, then the page hidden and returned within 90 ms, 40 times: the hiding skips the fade
+ *        and its update callback still runs, so nothing may be left on the root that turns every
+ *        transition off, and the theme asked for must be landed and stored
+ *   tf7  the control of tf6: the hiding rejected the fade in at least 10 of the 40, so a Chrome that
+ *        no longer skips a hidden fade cannot pass tf6 by never reaching the case
  *
  * The catalog is the shipped sample beside the page, so nothing here is content. Exit code is the
  * number of failed checks; 78 when the run could not complete.
@@ -40,7 +45,7 @@ const puppeteer = require("puppeteer-core");
 let fails = 0, checks = 0;
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const EXPECTED = 6;
+const EXPECTED = 8;
 const t0 = Date.now();
 
 const lab = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-theme-fade-"));
@@ -219,6 +224,53 @@ try {
       && fadesShown[2].stages === "start" && fadesShown[2].theme === asked,
     "tf5 a fade lost to a reload, then two fades on the next load: Maintenance shows the two whole and the lost one a start alone ("
     + JSON.stringify(row) + ")");
+  /* tf6 and tf7. A press, then the page hidden within 90 ms and brought back, 40 times, hide and
+     return times drawn from a seeded sequence. A page hidden before the fade's ready rejects it, and
+     the update callback still runs after: what that run leaves on the root is read once it settles.
+     Its own context and its own pair of pages, so hiding one is the other coming to the front. */
+  {
+    const ctx = await browser.createBrowserContext();
+    const h = await ctx.newPage(), other = await ctx.newPage();
+    h.on("pageerror", x => errs.push(String(x.message || x)));
+    await h.setViewport({ width: 1600, height: 1000, deviceScaleFactor: 1 });
+    await h.evaluateOnNewDocument(() => {
+      try {
+        localStorage.setItem("eTourDone_v3", "1"); localStorage.setItem("eTourInvite_v3", "1");
+        localStorage.setItem("eAgent", "Invented Agent"); localStorage.setItem("eNameAsked", "1");
+      } catch (x) {}
+      window.__rejected = 0;
+      const vt = document.startViewTransition;
+      if (typeof vt === "function") document.startViewTransition = function () {
+        const t = vt.apply(this, arguments); t.ready.catch(() => { window.__rejected++; }); return t;
+      };
+    });
+    await h.bringToFront();
+    await h.goto(url, { waitUntil: "load", timeout: 60000 });
+    await settled(h);
+    const TRIALS = 40;
+    let seed = 20261006;
+    const draw = n => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return Math.floor(seed / 0x7fffffff * n); };
+    let stuck = 0, reached = 0, wrong = 0;
+    for (let t = 0; t < TRIALS; t++) {
+      const hideAfter = draw(90), backAfter = draw(120);
+      const before = await h.evaluate(() => [window.__rejected, document.documentElement.dataset.theme]);
+      await h.evaluate(() => document.querySelector("#theme").click());
+      await sleep(hideAfter); await other.bringToFront(); await sleep(backAfter); await h.bringToFront();
+      await sleep(900);
+      const after = await h.evaluate(() => [window.__rejected, document.documentElement.dataset.theme,
+        localStorage.getItem("eTheme"), document.documentElement.classList.contains("theme-swap")]);
+      if (after[3]) stuck++;
+      if (after[0] > before[0]) reached++;
+      if (after[1] === before[1] || after[2] !== after[1]) wrong++;
+    }
+    check(stuck === 0 && wrong === 0,
+      "tf6 a fade the page's hiding skipped leaves no animation-off setting on the root, and the theme asked for is landed and stored ("
+      + JSON.stringify({ trials: TRIALS, themeSwapLeft: stuck, notAsked: wrong }) + ")");
+    check(reached >= 10,
+      "tf7 tf6 reached its case: the hiding rejected the fade's ready in " + reached + " of " + TRIALS
+      + " trials, so a run in which hiding skips nothing cannot pass tf6");
+    await ctx.close().catch(() => {});
+  }
   check(errs.length === 0, "no page errors" + (errs.length ? ": " + errs.slice(0, 3).join(" | ") : ""));
 } catch (e) {
   console.log("  FAIL the run stopped: " + String(e && e.message || e).split("\n")[0]);

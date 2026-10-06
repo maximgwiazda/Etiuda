@@ -56,7 +56,9 @@ function paintTheme(next, after){
   fading=next;
   const done=()=>{ if(fading===next) fading=null; r.classList.remove("theme-swap"); if(after) after(); };
   vt.ready.then(()=>{ traceNote(["fade",n,"ready"]); done(); }, ()=>{ traceNote(["fade",n,"cancel"]); done(); });
-  const end=()=>{ traceNote(["fade",n,"finish"]); if(!--fadeHolds) r.classList.remove("theme-fade"); };
+  /* A fade skipped before its callback ran (the page hidden) rejects ready first and runs the callback after,
+     which turns theme-swap on again: the last fade to finish takes it off. */
+  const end=()=>{ traceNote(["fade",n,"finish"]); if(!--fadeHolds) r.classList.remove("theme-fade","theme-swap"); };
   vt.finished.then(end, end);
 }
 // The theme the screen is on or already fading to, so a second press inside the fade turns back.
