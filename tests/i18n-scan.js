@@ -25,8 +25,9 @@
  *   5. prose in the STATIC html - the sentences around those controls
 *   6. text the chrome sweep translates that rule 5 cannot see: runs between inline tags,
 *      keyed as translateTree keys them, with data-i18n-skip subtrees left out
- *   7. (the report) ORPHANS: table entries no rule found. Advisory, not a delete list - a
- *      string composed at its call site legitimately shows up here.
+ *   7. (the report) ORPHANS: table entries no rule found, in three groups by a second reading
+ *      (orphanReading). Advisory, not a delete list - a string composed at its call site
+ *      legitimately shows up here.
  *
  * TWO RULES THE ENGINE KEEPS, and this depends on:
  *   - a key never carries a leading or trailing space; the space lives in the concatenation
@@ -325,6 +326,38 @@ function langs(){
   return out;
 }
 
+/* THE ORPHANS, READ A SECOND TIME, board 858. No rule found them, and that one list held both a
+   string a route the rules do not follow still hands to a sink and a line nothing can reach. So each
+   is looked for again over the source with the tables cut and comments blanked: as the whole of a
+   string literal or of a markup text run, inside a longer one, or nowhere. Only the last are
+   candidates to delete, and even they are read at their site first: a string assembled from
+   pieces (a ternary's " (system)" after a value) is found nowhere too. */
+function orphanReading(){
+  const BT=String.fromCharCode(96), CR=String.fromCharCode(13);
+  const blank=s=>s.replace(/[^\n]/g, " ");
+  const LIT=new RegExp('"(?:[^"'+BS+BS+NL+']|'+BS+BS+'.)*"|'+"'(?:[^'"+BS+BS+NL+"]|"+BS+BS+".)*'|"
+    +BT+"(?:[^"+BT+BS+BS+"]|"+BS+BS+"[^])*"+BT+"|//[^"+NL+"]*|/"+BS+"*[^]*?"+BS+"*/", "g");
+  const whole=new Set(), longer=[];
+  const runs=s=>{ const out=[];
+    s.replace(/>([^<>]+)</g, (m, x)=>{ out.push(x); return m; });
+    s.replace(/[\w-]+=(?:"([^"<>]*)"|'([^'<>]*)')/g, (m, a, b)=>{ out.push(a!=null ? a : b); return m; });
+    return out; };
+  const add=v=>{ v=v.split("&amp;").join("&").replace(/\s+/g, " ").trim(); if(v){ whole.add(v); longer.push(v); } };
+  const code=SRC_NT.replace(LIT, m=>{
+    if(m.charAt(0)==="/") return blank(m);
+    const body=unesc(m.slice(1, -1)).split(BS+BS).join(BS).split(CR).join("");
+    add(body); runs(body).forEach(add);
+    return m;
+  });
+  runs(SRC_HTML).forEach(add);
+  return function(key){
+    const en=key.split(String.fromCharCode(0x241f)).pop().trim();
+    if(whole.has(en)) return "whole";
+    if(longer.some(v=>v.indexOf(en)>-1) || code.indexOf(en)>-1) return "inside";
+    return "nowhere";
+  };
+}
+
 const all=strings();
 const arg=process.argv[2], stub=process.argv.includes("--stub");
 
@@ -353,8 +386,15 @@ targets.forEach(l=>{
   const pct=Math.round((all.length-missing.length)/all.length*100);
   console.log("\n"+l.toUpperCase()+": "+(all.length-missing.length)+"/"+all.length+" ("+pct+"%)");
   if(orphan.length){
-    console.log("  ORPHANS - in the table, not found in the source. Usually a string the scanner\n  cannot see (composed at its call site), sometimes an English line that was edited.\n  Advisory: check the source before deleting one.");
-    orphan.forEach(o=>console.log("    - "+o.slice(0,80)));
+    const where=orphanReading(), by={ whole:[], inside:[], nowhere:[] };
+    orphan.forEach(o=>by[where(o)].push(o));
+    console.log("  ORPHANS - in the table, not found by any rule above. Advisory: check the source before\n  deleting one. Read a second time, as a whole literal or markup text, inside a longer one, or nowhere:");
+    console.log("  ORPHANS FOUND WHOLE " + by.whole.length + " - reached by a route no rule follows; not dead.");
+    by.whole.forEach(o=>console.log("    - "+o.slice(0,80)));
+    console.log("  ORPHANS FOUND INSIDE A LONGER STRING " + by.inside.length + " - a fragment, or a line edited; read the site.");
+    by.inside.forEach(o=>console.log("    - "+o.slice(0,80)));
+    console.log("  ORPHANS FOUND NOWHERE " + by.nowhere.length + " - candidates to delete, unless assembled from pieces.");
+    by.nowhere.forEach(o=>console.log("    - "+o.slice(0,80)));
   }
   if(missing.length){
     bad++;

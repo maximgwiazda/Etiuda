@@ -207,6 +207,26 @@ const CSS_DOC = [
 PATCH.cssbuilt = "const txt = " + JSON.stringify(CSS_DOC) + ";\n"
   + "E.sourceDoc = () => ({ text: txt, files: ['synthetic'], at: () => 'synthetic:1', atLine: k => 'synthetic:' + k });";
 
+/* i18n-scan.js's orphans: one key a sink reads, two no rule reads but the code holds whole (a
+   literal handed on by a variable, an attribute inside a literal), one held only inside a longer
+   string, and one held nowhere but a comment. Invented words throughout. */
+const ORPHAN_DOC = [
+  "UI_STRINGS.pl={",
+  '  "Found":"Jest",',
+  '  "Planted whole":"Cale",',
+  '  "Kept; in an attribute":"Atrybut",',
+  '  "Planted part":"Czesc",',
+  '  "Planted gone":"Brak",',
+  "};",
+  "/* \"Planted gone\" was here once. */",
+  'const L="Planted whole"; toast(t(L)); toast(t("Found"));',
+  "const B='<b title=\"Kept; in an attribute\">'+x+'</b>';",
+  'const P="Planted part, and the rest of it";',
+  ""
+].join("\n");
+PATCH.orphans = "const txt = " + JSON.stringify(ORPHAN_DOC) + ";\n"
+  + "E.sourceDoc = () => ({ text: txt, files: ['synthetic'], at: () => 'synthetic:1', atLine: k => 'synthetic:' + k });";
+
 /* deadcode.js: two live names reached only through a namespace and a spread, and three dead ones
    that look nearly alike: a member of a namespace bound to another file, a member of an object
    that is no namespace, and one nobody names. Invented names throughout. */
@@ -384,6 +404,18 @@ try {
   ok(cs.code === 0 && csDead === "pd-dead,pk-gone,pl-row-open" && csBuilt === "pq-c1,pq-c2,ps-on,pt-x",
      "css-dead.js        lists classes built from a prefix apart (" + csBuilt + ") and still calls "
      + "dead a look-alike, a prefix written where no class is, and an unnamed class (" + csDead + ")");
+
+  /* 29. i18n-scan.js READS ITS ORPHANS A SECOND TIME, board 858. At 09fae6f it printed 227 in one
+     list; 180 are held whole by the code, and the 42 lines found dead are all among the other 47.
+     The key in a comment is the teeth: a reading that counted comments would call it held whole. */
+  const orp = scan(roots.mod, "i18n-scan.js", "orphans", ["pl"]);
+  const group = title => ((orp.out.split(title)[1] || "").split(/\n  [A-Z]/)[0].match(/^    - (.+)$/gm) || [])
+    .map(s => s.slice(6)).sort().join("|");
+  const orpWhole = group("ORPHANS FOUND WHOLE"), orpIn = group("ORPHANS FOUND INSIDE"), orpNone = group("ORPHANS FOUND NOWHERE");
+  ok(orp.code === 0 && /PL: 1\/1 /.test(orp.out) && orpWhole === "Kept; in an attribute|Planted whole"
+     && orpIn === "Planted part" && orpNone === "Planted gone",
+     "i18n-scan.js       sorts its orphans: whole [" + orpWhole + "], inside a longer string [" + orpIn
+     + "], nowhere but a comment [" + orpNone + "]");
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
 }
