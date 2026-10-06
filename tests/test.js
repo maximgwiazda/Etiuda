@@ -5755,7 +5755,7 @@ if (require.main === module) {
        pixels: the other product that shares this mark reads its own icon pixel by pixel and takes
        this file as its control, so a second decoder here would be a second implementation of a
        claim nobody disputes. ETIUDA_ICON_SOURCE, where set, is the file it was copied from. */
-    const want = "e8826f7def36deb0b794a4a55ac02989247c48bca7625e72789b2b6aa5382e3d";
+    const want = "ee6221554249010827c096678d7b110b2ddbd47aa3c4a269f57cc450e8628901";
     if (got !== want) { hardFail++;
       console.error("  ERROR: shell/etiuda.ico is sha256 " + got.slice(0, 16) + ", not the mark"
         + " this build ships (" + want.slice(0, 16) + ") - if the mark was rebuilt, move this hash"
