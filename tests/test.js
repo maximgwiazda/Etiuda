@@ -3845,7 +3845,7 @@ function motionJudgeTests() {
 }
 function requestFns() {
   const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
-  const decls = ["const DESK_ID_RE =", "function channelHash(", "function ymdOk(",
+  const decls = ["const DESK_ID_RE =", "function canonJson(", "function channelHash(", "function ymdOk(",
                  "function parseRequest("].map(m => extractDecl(src, m)).join("\n");
   const said = [];
   const quiet = { log: (s) => said.push(String(s)), error: (s) => said.push(String(s)) };
