@@ -203,8 +203,6 @@ function copyNextReply(k, anchor, other){
   const r=dockNow().rows[k];
   if(!r) return false;
   copyCardPart(r.id, 0, anchor||dockFab(), other);
-  // A reply that asks for its fields first hangs the question from the button, so the dock steps aside.
-  if(document.getElementById("eFieldAsk")) foldNextDock();
   return true;
 }
 function dockLeft(){

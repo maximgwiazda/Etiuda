@@ -30,7 +30,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/team-join.mjs                          no fixtures, a desk asks to join the team of a sealed catalog it cannot open: the join code's six digits over the team, both desk keys, the lead's key and both nonces; the request genuine under its own prefix and no desk file; nothing written until the agent asks; the nonce revealed only against the first opening for its commitment, the code reaching the page as the opening lands; a refusal, a cancel and a restart; admission opening the catalog; and a first admission refused under any lead but the one the desk compared codes with, and under every lead while the request waits or stands refused, the team file read again once it is cancelled; the lead a desk pinned named by the key Studio's Settings show, made from its public half and never its keyId, until the agent has seen it; a forgotten lead's pin and keys gone and its team taking no first admission until a request is answered; and the page showing that key in four groups and sending the agent's answer
     node tests/sbom.mjs                               no fixtures, the software bill of materials: the tool, and the release leaving one beside the installer
     node tests/pick.mjs                               no fixtures, the picker over the chat: the desk's answers, the preload and the shell, electron stubbed
-    node tests/fields.mjs                             no fixtures, fill-in fields: the format's refusals, what of a value or a clipboard fits, the fill, the question asked at a copy, the picker's answers, and the lint
+    node tests/copy-routes.mjs                        no fixtures, the copy routes over a stand-in document: a brace copied as written with nothing asked, the card's stamp in the toast on every route, and the action button's replies and dock
     node tests/catalog-trust.mjs                      no fixtures, a catalog's signature as the desk reads it, shell stubbed
     node tests/catalog-trust-desk.mjs                 no fixtures, the desk's own load path saying that signature, one process per launch
     node tests/catalog-trust-desk.mjs, legs 73a to 73e no fixtures, an empty desk that made a catalog from nothing offered the lead's import of it by its lineage
@@ -52,7 +52,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
     ETIUDA_FIXTURES=<folder> node tests/reinstall.js     install, use, uninstall, install again
 
-`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `module-calls.mjs`, `desk-ipc.mjs`, `catalog-history.mjs`, `catalog-shared.mjs`, `desk-growth.mjs`, `shell-office.mjs`, `hpke.mjs`, `team-desk.mjs`, `team-join.mjs`, `pick.mjs`, `fields.mjs`, `catalog-trust.mjs`, `catalog-trust-desk.mjs`, `token-canary.mjs`, `test.js`, `i18n-scan.js`,
+`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `module-calls.mjs`, `desk-ipc.mjs`, `catalog-history.mjs`, `catalog-shared.mjs`, `desk-growth.mjs`, `shell-office.mjs`, `hpke.mjs`, `team-desk.mjs`, `team-join.mjs`, `pick.mjs`, `copy-routes.mjs`, `catalog-trust.mjs`, `catalog-trust-desk.mjs`, `token-canary.mjs`, `test.js`, `i18n-scan.js`,
 `pl-diacritics.js`, `css-layers.js` and `motion-tokens.js`, none of which needs a fixture or a browser. `npm run smoke` needs both.
 
 `css-dead.js`, `ghosts.js` and `storage-keys.js` are reports rather than gates: they print and

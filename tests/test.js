@@ -1014,7 +1014,7 @@ function v2Fns() {
     "const V2_ID_RE=", "const V2_SHAPES=", "const V2_MARKER_RE=", "function v2IsBracketLine(",
     "const V2_GREET_PARTS=", "function v2BodyProblems(", "const V2_LANG_RE=", "function v2LangProblems(",
     "const V2_SHA_RE=", "function v2Missing(", "function v2FlagProblem(", "function v2NextProblems(",
-    "function v2HeaderProblems(", "const V2_FIELD_KINDS=", "const V2_DESK_TOKENS=", "const V2_FIELD_ID_RE=", "function v2FieldProblems(", "function v2Problems(",
+    "function v2HeaderProblems(", "function v2Problems(",
     /* CARD_FLAGS is spelled out to its first member: card-fields.js declares the same name
        and comes first in the source document, so the bare marker slices the wrong one. */
     "const V2_CARD_NAMED=", "const V2_HEAD_NAMED=", "function v2Copy(", "function v2Put(",
@@ -4225,8 +4225,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1014;
-const UI_STRINGS_SHA256 = "5f45ee03c1ccf61d1c466bcc118fcb7c3eaa8879b796cdfe5963134f2d7cc349";
+const UI_STRINGS_COUNT = 999;
+const UI_STRINGS_SHA256 = "e0a798e7cba851a4b09ce819de40babd9cfdf552867f15ad9371c25c10dab686";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
@@ -5208,22 +5208,6 @@ function filledTokens() {
   if (!bare.size) throw new Error("TOKEN_CANARY in rail-list.js carries no token: " + canary);
   return (FILLED_TOKENS = { bare, arg, raw: String(canary) });
 }
-/* THE CATALOG'S OWN FIELDS, by the label each declares, folded by the engine's own rule (sliced from
-   src/modules/fields.js, so the lint and the desk cannot fold apart). */
-let FIELD_RULES = null;
-function fieldRules() {
-  return FIELD_RULES || (FIELD_RULES = new Function(extractDecl(sourceText(), "function fillFieldFold(") + "\n"
-    + extractDecl(sourceText(), "const FILL_FIELD_RE=") + "\nreturn { fold: fillFieldFold, re: FILL_FIELD_RE };")());
-}
-const fieldFold = s => fieldRules().fold(s);
-function declaredFields(c) {
-  const by = new Map();
-  (Array.isArray(c && c.fields) ? c.fields : []).forEach(f => {
-    if (!f || typeof f !== "object") return;
-    Object.keys(f.label || {}).forEach(code => { const k = fieldFold(f.label[code]); if (k && !by.has(k)) by.set(k, f); });
-  });
-  return by;
-}
 /* A payload the runtime can hold. A format 2 file is validated and mapped; anything else is
    already that shape, which is what Studio's importer lints and what the runtime-shape legs
    above hand in. */
@@ -5369,7 +5353,6 @@ function lintCatalog(c, at) {
     c = r.cat;
   }
   const place = ix => (at ? at[ix] : ix) + 1;
-  const fieldsBy = declaredFields(c), fieldsMet = new Set(), unusedSaid = new Set();
   /* WHERE EVERY LANGUAGE-KEYED FIELD LIVES ON A RUNTIME CARD. The founding pair keeps its
      legacy spelling and every other code takes the derived column - the runtime field name, a
      colon, the code. Written out here rather than imported because this file is a harness the
@@ -5524,25 +5507,10 @@ function lintCatalog(c, at) {
       String(m[key] == null ? "" : m[key]).replace(TOKEN_SHAPE, (raw, name, a) => {
         const T = filledTokens();
         if ((a ? T.arg : T.bare).has(name) || seen.has(raw)) return raw;
-        if (!a && fieldsBy.has(fieldFold(name))) { fieldsMet.add(fieldsBy.get(fieldFold(name))); return raw; }
         if (raw === "{WHO}" && (key === "en" || key === "pl")) return raw;
         seen.add(raw);
         warn("card " + place(ix) + ": " + raw + " in the " + code.toUpperCase()
           + " body is not a token the desk fills, so it is copied as written");
-        return raw;
-      });
-    });
-    /* A brace holding words rather than a name is a field only where the catalog declares one; in
-       a catalog that declares fields at all, any other is a field misspelt, and is copied as written. */
-    if (fieldsBy.size) declared.forEach(code => {
-      const seen = new Set();
-      String(m[BODY_OF[code]] == null ? "" : m[BODY_OF[code]]).replace(new RegExp(fieldRules().re.source, "g"), (raw, name) => {
-        if (/^[A-Za-z][A-Za-z0-9_]*$/.test(name) || seen.has(raw)) return raw;
-        seen.add(raw);
-        const f = fieldsBy.get(fieldFold(name));
-        if (f) fieldsMet.add(f);
-        else warn("card " + place(ix) + ": " + raw + " in the " + code.toUpperCase()
-          + " body names no field this catalog declares, so it is copied as written");
         return raw;
       });
     });
@@ -5604,10 +5572,6 @@ function lintCatalog(c, at) {
           + legacy.slice(0, 5).join(", ") + (legacy.length > 5 ? ", …" : ""));
   }
 
-  fieldsBy.forEach(f => { if (!fieldsMet.has(f) && !unusedSaid.has(f)) {
-    unusedSaid.add(f);
-    warn("field " + String(f.id) + " is in no card's text, so the desk never asks for it");
-  } });
   if (typeof c.facts === "string") {
     const long = c.facts.split("\n").filter(l => l.length > 100).length;
     if (long) warn("facts: " + long + " line(s) over 100 chars - the panel is white-space:pre and will scroll sideways");

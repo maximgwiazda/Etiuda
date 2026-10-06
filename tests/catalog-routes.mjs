@@ -193,26 +193,24 @@ function richPayload() {
   Object.assign(p.cards[0], { retired: true, commits: true, next: [{ to: "c-steps", label: "later" }],
     futureCard: { a: [1, { b: 2 }] } });
   Object.assign(p, { notes: { en: "A note." }, grew: { id: "lamp-shop", rev: 1, sha: "sha256:" + HEX("a") },
-    desk: { id: "k-0123456789abcdef", name: "Ala", key: HEX("b"), box: HEX("c") }, futureHeader: { kept: true },
-    fields: [{ id: "order", label: { en: "order number" }, kind: "pattern", pattern: "LS-0000", clip: true },
-      { id: "kept", label: { en: "what was kept" }, kind: "text", required: false, skip: { en: "nothing" }, keep: "copy" }] });
+    desk: { id: "k-0123456789abcdef", name: "Ala", key: HEX("b"), box: HEX("c") }, futureHeader: { kept: true } });
   return p;
 }
 const richBoot = await bootRoute(richPayload());
 const richFile = await fileRoute(richPayload());
 const richNow = richPayload();
-const wanted = [richNow.cards[0], richNow.cards[1], richNow.notes, richNow.grew, richNow.desk, richNow.futureHeader, richNow.fields]
+const wanted = [richNow.cards[0], richNow.cards[1], richNow.notes, richNow.grew, richNow.desk, richNow.futureHeader]
   .map(canon);
 const written = r => {
   // Through JSON first, as the stored copy goes, then out through the writer the export uses.
   const out = V2.catalogToV2(JSON.parse(JSON.stringify(r.cat)));
-  return [out.cards[0], out.cards[1], out.notes, out.grew, out.desk, out.futureHeader, out.fields].map(canon);
+  return [out.cards[0], out.cards[1], out.notes, out.grew, out.desk, out.futureHeader].map(canon);
 };
 check("13 a catalog holding every new field and an unknown one on a card and in the header is read by the boot route and written back as it was",
   JSON.stringify(written(richBoot)) === JSON.stringify(wanted),
-  "seven values compared by canonical form, the card the file holds first, the fill-in fields last");
+  "six values compared by canonical form, the card the file holds first");
 check("14 and by the picked-file route, which is the whitelist an Import goes through",
-  JSON.stringify(written(richFile)) === JSON.stringify(wanted), "the same seven");
+  JSON.stringify(written(richFile)) === JSON.stringify(wanted), "the same six");
 check("15 and the two routes still end at the same catalog, the new fields included",
   diffPaths(richBoot.cat, richFile.cat, "", []).length === 0 && richBoot.sig === richFile.sig,
   diffPaths(richBoot.cat, richFile.cat, "", []).slice(0, 4).join(" ") || "equal");
@@ -224,9 +222,9 @@ try { await fileRoute(richBent); } catch (e) { refused = String(e.message); }
 check("17 a chain naming a card twice is refused at the door, naming the card",
   refused.startsWith("card c-warm: next[1] names c-steps a second time"), refused.slice(0, 70) || "accepted");
 check("18 control: the plain payload carries none of the new keys through either route, on the header or on a card",
-  ["notes", "grew", "desk", "ext", "fields"].every(k => !(k in boot.cat) && !(k in file.cat))
+  ["notes", "grew", "desk", "ext"].every(k => !(k in boot.cat) && !(k in file.cat))
   && boot.cat.cards.every(c => !["retired", "commits", "next", "ext"].some(k => k in c)),
-  "none of notes, grew, desk, ext, fields; no card holds retired, commits, next or ext");
+  "none of notes, grew, desk, ext; no card holds retired, commits, next or ext");
 
 /* THE ROUTE OUT, driven for real. exportCatalog() runs end to end in bare node: the document is a
    stand-in that answers every question with another stand-in, the hooks are empty, and the save
@@ -283,16 +281,14 @@ check("18 control: the plain payload carries none of the new keys through either
     Object.assign(d.cards[0], { commits: true, retired: true, next: [{ to: "c-b" }, { to: "c-c", label: "x" }],
       futureCard: { a: [1, { b: 2 }] } });
     Object.assign(d, { notes: { en: "A note." }, grew: { id: "lamp-shop", rev: 3, sha: "sha256:" + HEX("a") },
-      desk: { id: "k-0123456789abcdef", name: "Ala", key: HEX("b"), box: HEX("c") }, futureHeader: { kept: true },
-      fields: [{ id: "order", label: { en: "order number" }, kind: "pattern", pattern: "LS-0000", clip: true },
-      { id: "kept", label: { en: "what was kept" }, kind: "text", required: false, skip: { en: "nothing" }, keep: "copy" }] });
+      desk: { id: "k-0123456789abcdef", name: "Ala", key: HEX("b"), box: HEX("c") }, futureHeader: { kept: true } });
     return d;
   };
   const sent = await exportOf(rich());
   check("19 the export of a catalog holding every new field carries the card's fields, the notes and the unknown header field as they came",
-    !!sent && canon([sent.cards[0], sent.notes, sent.futureHeader, sent.fields])
-      === canon([rich().cards[0], rich().notes, rich().futureHeader, rich().fields]),
-    sent ? "card, notes, the unknown field and the fill-in fields compared by canonical form" : "nothing was written");
+    !!sent && canon([sent.cards[0], sent.notes, sent.futureHeader])
+      === canon([rich().cards[0], rich().notes, rich().futureHeader]),
+    sent ? "card, notes and the unknown field compared by canonical form" : "nothing was written");
   check("20 and it is a NEW catalog: a new id, the first edition, and neither grew nor desk, which describe the file it came from",
     !!sent && sent.id !== "lamp-shop" && sent.rev === 1 && !("grew" in sent) && !("desk" in sent),
     sent ? "id " + (sent.id === "lamp-shop" ? "kept" : "new") + ", rev " + sent.rev + ", grew " + ("grew" in sent) + ", desk " + ("desk" in sent) : "nothing");
@@ -304,7 +300,7 @@ check("18 control: the plain payload carries none of the new keys through either
     !!trimmed && canon(trimmed.cards[0].next) === canon([{ to: "c-c", label: "x" }]) && V2R.v2Problems(trimmed).length === 0,
     trimmed ? "next is " + JSON.stringify(trimmed.cards[0].next) : "nothing");
   const bare = await exportOf(doc());
-  const NEW = ["notes", "grew", "desk", "ext", "futureHeader", "fields"], CARDNEW = ["retired", "commits", "next", "ext", "futureCard"];
+  const NEW = ["notes", "grew", "desk", "ext", "futureHeader"], CARDNEW = ["retired", "commits", "next", "ext", "futureCard"];
   check("23 control: a catalog holding none of them exports none of them, on the header or on a card",
     !!bare && NEW.every(k => !(k in bare)) && bare.cards.every(c => CARDNEW.every(k => !(k in c))),
     bare ? "header keys: " + Object.keys(bare).join(",") : "nothing");
