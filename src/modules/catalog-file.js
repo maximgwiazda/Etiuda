@@ -786,6 +786,7 @@ export {
   followRenamedFile,
   branchFileId,
   looseOrigin,
+  LOOSE_FIELDS,
   deskBranchHolds,
   writeDeskBranch,
   sharedOwnPin,

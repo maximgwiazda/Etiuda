@@ -26,7 +26,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 78;
+const EXPECTED = 80;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -469,6 +469,29 @@ try {
   const ok3 = await writeBranch();
   check(ok3 === true && before.length > 0 && Buffer.compare(bytesOwn(), before) === 0 && timeOwn() === mtime0,
     "77k a star, a hide and the counts change nothing in the file: the same bytes and the same time, rev " + readOwn().rev);
+  /* CLEAR LOCAL MEMORY CLEARS ONLY WHAT IS LOCAL (Maxim, 2026-10-05, 12c): the star, the hide and the counts go, the edit
+     stays in the layer, and the start in place after it writes the desk's own file as it stood rather than taking it away.
+     The start in place is modelled by its three steps that read the layer; the storage is put back after. */
+  const LM = await import(PLAIN("local-memory.js"));
+  const keysNow = () => ST.lsKeys().reduce((o, k) => { o[k] = ST.lsGet(k); return o; }, {});
+  const heldKeys = keysNow(), bytesHeld = bytesOwn(), revHeld = readOwn().rev;
+  let cleared = true;
+  try { LM.clearLocalMemory(); } catch (e) { cleared = String(e && e.message || e); }
+  PK.resetPack(); PK.loadPack(); RB.rebuildCards();
+  const rClear = await writeBranch();
+  const layerAfter = { stars: PK.pack.favourites.length, hides: PK.pack.hidden.length, counted: Object.keys(PK.pack.useCounts).length,
+    edit: (PK.pack.overrides["c-a"] || {}).t || null };
+  check(cleared === true && fs.existsSync(file) && Buffer.compare(bytesOwn(), bytesHeld) === 0 && readOwn().rev === revHeld
+      && layerAfter.edit === "Edited A again",
+    "77k1 Clear local memory and the write after it leave the desk's own file in the share byte for byte at rev " + revHeld
+    + ", and the edit in the layer (clear " + JSON.stringify(cleared) + ", write " + rClear + ", file there " + fs.existsSync(file)
+    + ", edit " + JSON.stringify(layerAfter.edit) + ")");
+  check(layerAfter.stars === 0 && layerAfter.hides === 0 && layerAfter.counted === 0,
+    "77k2 THE CONTROL for 77k1: the same clear forgot the star, the hide and the counts, which live only on this desk ("
+    + JSON.stringify(layerAfter) + ")");
+  Object.keys(keysNow()).forEach(k => { if (!(k in heldKeys)) ST.lsDel(k); });
+  Object.keys(heldKeys).forEach(k => ST.lsSet(k, heldKeys[k]));
+  PK.resetPack(); PK.loadPack(); RB.rebuildCards();
   PK.pack.favourites = []; PK.pack.hidden = []; PK.pack.useCounts = {}; PK.pack.useAt = {}; PK.pack.intentCounts = {}; PK.savePack();
 
   /* The private halves: read the sealed envelope back through the stand-in, and look for what they are everywhere the desk can be seen. */

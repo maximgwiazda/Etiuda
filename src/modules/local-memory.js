@@ -1,4 +1,5 @@
 import { E_CATALOG_KEY, E_CATALOG_STORE, eWatchClear, eWatchGet, eWatchPut, catalogStoreRefusal } from "./catalog.js";
+import { LOOSE_FIELDS } from "./catalog-file.js";
 import { flushStats } from "./pack.js";
 import { E_NS, eDeskFileShown, eLayers, lsDel, lsGet, lsKeys, lsSet, nsKey, ssDel, ssGet, ssSet } from "./storage.js";
 import { TAB_KEY, saveTabSession, tabSaveTimer } from "./tabs.js";
@@ -17,6 +18,20 @@ function catalogKeep(){ return [E_CATALOG_STORE,E_CATALOG_KEY,nsKey("Sample"),ns
    for files it was pointed at once, and the person has to find them again. Kept by the wipe and
    NOT by catalogKeep above, which the eject deletes. */
 const E_WIPE_KEEP=["eCatalogFolder"];
+/* CLEAR FORGETS WHAT LIVES ONLY ON THIS DESK. What the desk's own file in the shared folder carries stays: the
+   pack's LOOSE_FIELDS with the fields their ids are keyed by, the keys naming that file, the name it is signed with
+   and the list of layers holding them. Emptied, a layer would take its file out of the share at the next write. */
+const SHARE_KEEP=["eAgent","eLayers"];
+const PACK_KEEP=["v","intentKeys","editBases","baseCards","macroOrder","baseMacros"];
+const LAYER_KEEP=["Exported","LooseId","Shared","SharedOwn","SharedFile"];
+function packFileHalf(raw){
+  let p=null;
+  try{ p=JSON.parse(raw); }catch(e){ p=null; }
+  if(!p || typeof p!=="object" || Array.isArray(p) || !LOOSE_FIELDS.some(k=>k in p)) return null;
+  const o={};
+  LOOSE_FIELDS.concat(PACK_KEEP).forEach(k=>{ if(k in p) o[k]=p[k]; });
+  return JSON.stringify(o);
+}
 /* WHOSE KEYS ARE THESE. Preferences are bare and deliberately machine-wide - a theme is
    shared, a catalog is not - so Reset forgets them wherever they were set. Everything else
    is namespaced, and the trap is that the plain engine's own namespace IS the bare prefix:
@@ -51,14 +66,15 @@ function putBack(was){
 /* CLEARING HAPPENS AT ONCE, and its Undo puts every key back. The watched file's HANDLE lives in
    IndexedDB, out of any key sweep, so it is read before it goes and given back with the rest. */
 function clearLocalMemory(){
-  const layers=eLayers();
-  const keys=lsKeys().filter(k=>(eKeyIsMine(k,layers)||eKeyIsPref(k))
-    && catalogKeep().indexOf(k)<0 && E_WIPE_KEEP.indexOf(k)<0);
+  const layers=eLayers(), spaces=[E_NS].concat(layers);
+  const kept=new Set(ejectKeys().concat(E_WIPE_KEEP, SHARE_KEEP, ...spaces.map(ns=>LAYER_KEEP.map(n=>ns+n))));
+  const packs=new Set(spaces.map(ns=>ns+"Pack"));
+  const keys=lsKeys().filter(k=>(eKeyIsMine(k,layers)||eKeyIsPref(k)) && !kept.has(k));
   const was=keepKeys(keys);
   let handle=null;
   eWatchGet().then(h=>{ handle=h||null; });
   eWatchClear();
-  keys.forEach(k=>lsDel(k));
+  keys.forEach(k=>{ const half=packs.has(k) ? packFileHalf(was.keys[k]) : null; if(half!=null) lsSet(k,half); else lsDel(k); });
   ssDel(TAB_KEY);
   hooks.restartDesk();
   offerUndo("Local memory cleared", ()=>{

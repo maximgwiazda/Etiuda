@@ -681,11 +681,7 @@ function openManage(){
     /* Wipe sits at the bar's LEFT EDGE, with Close at the far right: same as Settings' Reset,
        and .mf-left is the group that carries it there. Danger kept, because this one forgets
        personal state. */
-    actions: '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe" title="'+
-      esc(eHost()
-        ? t("Forget every personal card, edit, hide, rename and layout choice on this computer; the loaded catalog stays. It is also how you bring back anything you deleted.")
-        : t("Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted."))+
-      '">'+esc(t("Clear local memory"))+'</button>'+
+    actions: '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe">'+esc(t("Clear local memory"))+'</button>'+
       /* A hairline rather than a gap: two buttons at the same edge with space between them read
          as one group loosely spaced, and one of these forgets your work while the other brings
          a file in. Plain, not primary: a filled button beside a destructive one is a contest. */

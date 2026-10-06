@@ -6399,8 +6399,6 @@ What you type stays in this browser only.`;
     "Your intent edits and stars are set aside: this catalog cannot say which intent each belongs to.": "Odłożono własne zmiany i gwiazdki przy intencjach: ten katalog nie wskazuje, której intencji dotyczą.",
     "Edited cards this catalog does not have are kept as your own: {CARDS}.": "Zmienione karty, których ten katalog nie ma, zostają jako własne: {CARDS}.",
     "Starred cards this catalog does not have are off your list: {CARDS}.": "Karty z gwiazdką, których ten katalog nie ma, znikają z listy: {CARDS}.",
-    "Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted.": "Zapomina wszystkie własne karty, zmiany, ukrycia, zmiany nazw i ustawienia układu w tej przeglądarce; wczytany katalog zostaje. W ten sposób wraca też wszystko, co usunięto.",
-    "Forget every personal card, edit, hide, rename and layout choice on this computer; the loaded catalog stays. It is also how you bring back anything you deleted.": "Zapomina wszystkie własne karty, zmiany, ukrycia, zmiany nazw i ustawienia układu na tym komputerze; wczytany katalog zostaje. W ten sposób wraca też wszystko, co usunięto.",
     "Put the catalog down and restart empty. Your cards, edits, name, theme and layout all stay.": "Odłącza katalog i uruchamia Etiudę bez niego. Własne karty, zmiany, nazwa, motyw i układ zostają.",
     "Your own cards, edits, stars and card order are KEPT - load this catalog again": "Twoje własne karty, zmiany, gwiazdki i kolejność kart ZOSTAJĄ - wczytaj ten katalog ponownie,",
     "Save everything loaded now as a catalog file, your edits merged in": "Zapisuje wszystko, co wczytane, jako plik katalogu, razem z własnymi zmianami",
@@ -20200,6 +20198,7 @@ What you type stays in this browser only.`;
   // src/modules/catalog-file.js
   var catalog_file_exports = {};
   __export(catalog_file_exports, {
+    LOOSE_FIELDS: () => LOOSE_FIELDS,
     activateCatalog: () => activateCatalog,
     branchFileId: () => branchFileId,
     catalogEdited: () => catalogEdited,
@@ -21806,6 +21805,23 @@ What you type stays in this browser only.`;
     return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample"), nsKey("CatalogTrust"), nsKey("CatalogFrom")];
   }
   var E_WIPE_KEEP = ["eCatalogFolder"];
+  var SHARE_KEEP = ["eAgent", "eLayers"];
+  var PACK_KEEP = ["v", "intentKeys", "editBases", "baseCards", "macroOrder", "baseMacros"];
+  var LAYER_KEEP = ["Exported", "LooseId", "Shared", "SharedOwn", "SharedFile"];
+  function packFileHalf(raw) {
+    let p = null;
+    try {
+      p = JSON.parse(raw);
+    } catch (e) {
+      p = null;
+    }
+    if (!p || typeof p !== "object" || Array.isArray(p) || !LOOSE_FIELDS.some((k) => k in p)) return null;
+    const o = {};
+    LOOSE_FIELDS.concat(PACK_KEEP).forEach((k) => {
+      if (k in p) o[k] = p[k];
+    });
+    return JSON.stringify(o);
+  }
   var E_PREF_KEYS = [
     "eTheme",
     "eGlassOff",
@@ -21862,15 +21878,21 @@ What you type stays in this browser only.`;
     hooks.restartDesk();
   }
   function clearLocalMemory() {
-    const layers = eLayers();
-    const keys = lsKeys().filter((k) => (eKeyIsMine(k, layers) || eKeyIsPref(k)) && catalogKeep().indexOf(k) < 0 && E_WIPE_KEEP.indexOf(k) < 0);
+    const layers = eLayers(), spaces = [E_NS].concat(layers);
+    const kept = new Set(ejectKeys().concat(E_WIPE_KEEP, SHARE_KEEP, ...spaces.map((ns) => LAYER_KEEP.map((n) => ns + n))));
+    const packs = new Set(spaces.map((ns) => ns + "Pack"));
+    const keys = lsKeys().filter((k) => (eKeyIsMine(k, layers) || eKeyIsPref(k)) && !kept.has(k));
     const was = keepKeys(keys);
     let handle = null;
     eWatchGet().then((h) => {
       handle = h || null;
     });
     eWatchClear();
-    keys.forEach((k) => lsDel(k));
+    keys.forEach((k) => {
+      const half = packs.has(k) ? packFileHalf(was.keys[k]) : null;
+      if (half != null) lsSet(k, half);
+      else lsDel(k);
+    });
     ssDel(TAB_KEY);
     hooks.restartDesk();
     offerUndo("Local memory cleared", () => {
@@ -24813,7 +24835,7 @@ What you type stays in this browser only.`;
       /* Wipe sits at the bar's LEFT EDGE, with Close at the far right: same as Settings' Reset,
          and .mf-left is the group that carries it there. Danger kept, because this one forgets
          personal state. */
-      actions: '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe" title="' + esc(eHost() ? t("Forget every personal card, edit, hide, rename and layout choice on this computer; the loaded catalog stays. It is also how you bring back anything you deleted.") : t("Forget every personal card, edit, hide, rename and layout choice in this browser; the loaded catalog stays. It is also how you bring back anything you deleted.")) + '">' + esc(t("Clear local memory")) + '</button><span class="mf-sep" aria-hidden="true"></span><button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog…</button>' + (eHasHistory() ? '<button type="button" class="btn" id="mgHistory">' + esc(t("Earlier versions…")) + "</button>" : "") + '</div><button type="button" class="btn" id="mgClose">' + esc(t("Close")) + "</button>",
+      actions: '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe">' + esc(t("Clear local memory")) + '</button><span class="mf-sep" aria-hidden="true"></span><button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog…</button>' + (eHasHistory() ? '<button type="button" class="btn" id="mgHistory">' + esc(t("Earlier versions…")) + "</button>" : "") + '</div><button type="button" class="btn" id="mgClose">' + esc(t("Close")) + "</button>",
       wire: wireManage
     });
     function wireManage() {

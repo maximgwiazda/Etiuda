@@ -641,9 +641,13 @@ function lanePageKeyTests() {
    stands, because what it gives back is held in memory. */
 function ejectUndoTests() {
   const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "local-memory.js"), "utf8");
-  const markers = ["function catalogKeep(", "const E_WIPE_KEEP=", "const E_PREF_KEYS=", "function eKeyIsPref(",
+  const loose = extractDecl(fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-file.js"), "utf8"), "const LOOSE_FIELDS=");
+  const markers = ["function catalogKeep(", "const E_WIPE_KEEP=", "const SHARE_KEEP=", "const PACK_KEEP=", "const LAYER_KEEP=",
+    "function packFileHalf(", "const E_PREF_KEYS=", "function eKeyIsPref(",
     "function eKeyIsMine(", "function keepKeys(", "function putBack(", "function clearLocalMemory(",
     "function ejectKeys(", "function ejectCatalog(", "function undoEject("];
+  const OWN_PACK = JSON.stringify({ overrides: { c1: { t: "mine" } }, custom: [{ id: "u1" }], favourites: ["c1"], hidden: ["c2"],
+    intentFavourites: ["i1"], intentHidden: ["i2"], intentKeys: "tag", editBases: { c1: "b" }, macroOrder: ["c1"], cardOrder: ["c1"] });
   const world = ssOk => {
     const w = { ls: {}, ss: {}, restarts: 0, undo: null, said: null, reloads: 0 };
     const ns = k => "e" + k;
@@ -653,7 +657,7 @@ function ejectUndoTests() {
       w.F = new Function("E_CATALOG_STORE", "E_CATALOG_KEY", "E_NS", "nsKey", "hooks", "flushStats", "clearTimeout", "tabSaveTimer",
         "saveTabSession", "ssGet", "ssSet", "ssDel", "TAB_KEY", "lsGet", "lsSet", "lsDel", "lsKeys", "eLayers",
         "eWatchGet", "eWatchClear", "eWatchPut", "offerUndo", "toastRefusal", "catalogStoreRefusal", "eDeskFileShown", "location",
-        markers.map(m => extractDecl(src, m)).join("\n") + "\nreturn {ejectCatalog, clearLocalMemory};")(
+        loose + "\n" + markers.map(m => extractDecl(src, m)).join("\n") + "\nreturn {ejectCatalog, clearLocalMemory};")(
         ns("Catalog"), ns("CatalogOk"), "e", ns, hooks, () => {}, () => {}, null, () => {},
         ssGet, (k, v) => { if (ssOk) w.ss[k] = String(v); }, k => { delete w.ss[k]; }, "eSessionTabs",
         k => (k in w.ls ? w.ls[k] : null), (k, v) => { w.ls[k] = String(v); return true; }, k => { delete w.ls[k]; },
@@ -663,7 +667,9 @@ function ejectUndoTests() {
         { reload: () => { w.reloads++; } });
     } catch (e) { w.F = null; w.err = e.message; }
     w.ls = { eCatalog: "{\"cards\":[1]}", eCatalogOk: "sig", eSample: "1", eCatalogNo: "no", eCatalogFile: "shop.ec",
-             eCatalogFileAt: "1700", eCatalogTrust: "valid", eCatalogFrom: "shop.ec", "eab12~Pack": "[\"own\"]", ePack: "[\"loose\"]",
+             eCatalogFileAt: "1700", eCatalogTrust: "valid", eCatalogFrom: "shop.ec", "eab12~Pack": OWN_PACK, ePack: "[\"loose\"]",
+             "eab12~Stats": "{\"useCounts\":{\"c1\":4}}", "eab12~CatOrder": "[\"t2\",\"t1\"]", "eab12~LinksAside": "{}",
+             "eab12~LooseId": "c-own", "eab12~SharedFile": "shop.ec", eLayers: "[\"eab12~\"]",
              eTheme: "dark", eAgent: "Ann", eCatalogFolder: "C:/cat", "e1zz~Pack": "a neighbour's", eTourDone_v3: "1" };
     w.ss = { eSessionTabs: "tabs-a" };
     return w;
@@ -677,15 +683,21 @@ function ejectUndoTests() {
   eq("an eject asks nothing, reloads nothing and starts the desk again once, with the catalog and what names it gone"
     + " and every personal layer where it was",
     [w.reloads, w.restarts, ["eCatalog", "eCatalogOk", "eSample", "eCatalogNo", "eCatalogFile", "eCatalogFileAt", "eCatalogTrust", "eCatalogFrom"].filter(k => k in w.ls),
-     w.ls["eab12~Pack"], w.ls.ePack, w.ls.eTheme, w.said], [0, 1, [], "[\"own\"]", "[\"loose\"]", "dark", "Catalog ejected"]);
+     w.ls["eab12~Pack"], w.ls.ePack, w.ls.eTheme, w.said], [0, 1, [], OWN_PACK, "[\"loose\"]", "dark", "Catalog ejected"]);
   if (w.undo) w.undo();
   eq("its Undo puts back every key the eject took and the conversations, byte for byte, and starts the desk again",
     [sorted(w.ls) + sorted(w.ss) === before, w.reloads, w.restarts], [true, 0, 2]);
   w.F.clearLocalMemory();
-  eq("a clear forgets this desk's own keys, its catalogs' layers and the preferences, keeps the catalog, the folder and a"
-    + " neighbour's keys, and starts the desk again once",
+  eq("a clear forgets what lives only on this desk (the preferences, the counts, the orders, the asides, a pack with nothing a"
+    + " file carries), keeps the catalog with what names it, the folder, a neighbour's keys, the name the desk's file is signed"
+    + " with, the keys naming that file and the layer list, and starts the desk again once",
     [Object.keys(w.ls).sort(), w.reloads, w.restarts, w.said],
-    [["e1zz~Pack", "eCatalog", "eCatalogFolder", "eCatalogFrom", "eCatalogOk", "eCatalogTrust", "eSample"], 0, 3, "Local memory cleared"]);
+    [["e1zz~Pack", "eAgent", "eCatalog", "eCatalogFile", "eCatalogFileAt", "eCatalogFolder", "eCatalogFrom", "eCatalogNo", "eCatalogOk",
+      "eCatalogTrust", "eLayers", "eSample", "eab12~LooseId", "eab12~Pack", "eab12~SharedFile"], 0, 3, "Local memory cleared"]);
+  eq("and of a layer's pack it keeps what the desk's own file carries with the fields its ids are keyed by, and forgets the"
+    + " stars and the hides (Maxim, 2026-10-05, 12c: only what is actually in the local memory)",
+    JSON.parse(w.ls["eab12~Pack"] || "null"),
+    { overrides: { c1: { t: "mine" } }, custom: [{ id: "u1" }], cardOrder: ["c1"], intentKeys: "tag", editBases: { c1: "b" }, macroOrder: ["c1"] });
   if (w.undo) w.undo();
   eq("its Undo puts back every key the clear took, byte for byte", [sorted(w.ls) + sorted(w.ss) === before, w.restarts], [true, 4]);
   const deaf = world(false);
@@ -4225,8 +4237,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 999;
-const UI_STRINGS_SHA256 = "e0a798e7cba851a4b09ce819de40babd9cfdf552867f15ad9371c25c10dab686";
+const UI_STRINGS_COUNT = 997;
+const UI_STRINGS_SHA256 = "002c03fbab2865df9c6ed44f4bcf2f811ea561d73837bf86623001e7aad12c43";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

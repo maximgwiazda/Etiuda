@@ -2581,16 +2581,19 @@ const t0 = Date.now();
     const again = document.querySelector('#modalCard input[id^="me_t_"]');
     const retyped = !!again && again.value === typed;
     closeModal(); await wait(400);
-    const had = { agent: lsGet("eAgent"), cards: list().length };
+    const hoverWas = lsGet("eNoteHover");
+    lsSet("eNoteHover", "0");
+    const had = { hover: lsGet("eNoteHover"), cards: list().length };
     /* A window or question standing, by what can put one up: a window not hidden, a bubble that
        asks, an alert; the Undo bubble is the act's receipt and a leaving copy is on its way out. */
     const standing = () => [...document.querySelectorAll(".modal:not([hidden]), .bub-ask, [role=alertdialog]")].filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
     const was = standing();
     clearLocalMemory(); await wait(700);
     const cleared = { window: standing() !== was, standing: standing(),
-      undo: !!document.getElementById("eUndoBtn"), agent: lsGet("eAgent"), cards: list().length };
+      undo: !!document.getElementById("eUndoBtn"), hover: lsGet("eNoteHover"), cards: list().length };
     const u3 = document.getElementById("eUndoBtn"); if (u3) u3.click(); await wait(900);
-    const after = { agent: lsGet("eAgent") === had.agent, cards: list().length === had.cards };
+    const after = { hover: lsGet("eNoteHover") === had.hover, cards: list().length === had.cards };
+    if (hoverWas === null) lsDel("eNoteHover"); else lsSet("eNoteHover", hoverWas);
     window.confirm = real;
     return { asked, n0, n1, n2, bubble, back, moved, retyped, cleared, after };
   });
@@ -2598,8 +2601,8 @@ const t0 = Date.now();
         && undoLeg.moved && undoLeg.retyped,
     "a card deleted from its editor goes at once with no box and Undo brings the same one back, and an entry left"
     + " unsaved is left at once and Undo returns to it with the typing in place: " + JSON.stringify(undoLeg));
-  check(undoLeg.asked === 0 && !undoLeg.cleared.window && undoLeg.cleared.undo && undoLeg.cleared.agent === null
-        && undoLeg.cleared.cards > 0 && undoLeg.after.agent && undoLeg.after.cards,
+  check(undoLeg.asked === 0 && !undoLeg.cleared.window && undoLeg.cleared.undo && undoLeg.cleared.hover === null
+        && undoLeg.cleared.cards > 0 && undoLeg.after.hover && undoLeg.after.cards,
     "and Clear local memory happens at once with no window, keeps the catalog, and its Undo gives back what it cleared: "
     + JSON.stringify({ asked: undoLeg.asked, cleared: undoLeg.cleared, after: undoLeg.after }));
   /* UNDO PUTS BACK THE ACT, NOT THE DESK AS IT STOOD (data-1): a star given while the Undo bubble
