@@ -187,7 +187,7 @@ function buildApp() {
     await p.evaluate(async (l) => {
       setUiLang(l); await new Promise(r => setTimeout(r, 400));
       openAbout(); await new Promise(r => setTimeout(r, 400));
-      const a = document.querySelector(".about-modal .modal-sub a");
+      const a = document.querySelector(".about-modal .about-credit a");
       if (a) a.id = "lkAbout";
     }, lang);
     const made = await p.evaluate(() => { const a = document.getElementById("lkAbout");

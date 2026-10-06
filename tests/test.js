@@ -3095,50 +3095,33 @@ function shippedFlagTests() {
     got, [[true, true, true], [false, false, true]]);
 
   const about = fs.readFileSync(path.join(E.ROOT, "src", "modules", "about.js"), "utf8");
-  const aboutSays = (file, inDir, builtIn) => {
-    let body = null;
-    try {
-      new Function("t", "esc", "keysLegendHtml", "TILE_MARK", "E_VERSION", "eCatalogFile", "eCatalogIn", "eCatalogBuiltIn",
-        "openDialog", "document", "fillProseIcons", "modalCard", "$", "dismissModal", "TRADEMARK", "MAKER", "uiLang", "STARDUST_URL",
-        extractDecl(about, "function openAbout(") + "\nreturn openAbout;")(
-        s => s, s => s, () => "", "", "2", () => file, () => inDir, () => builtIn,
-        o => { body = o.body; }, { getElementById: () => null }, () => {}, null, () => null, () => {}, { en: "" }, { en: "" }, () => "en", "")();
-    } catch (e) { return "openAbout did not run: " + e.message; }
-    const m = /<b>Catalog file<\/b> - (.*?)<br>/.exec(body || "");
-    return m ? m[1] : "";
-  };
-  /* The sub line under one interface language, with TRADEMARK, MAKER and STARDUST_URL read from their own lines in
-     about.js, split at its line breaks. Three parts is the version line, one notice and one maker line. */
+  /* The credit under one interface language, with TRADEMARK, MAKER and STARDUST_URL read from their own lines in
+     about.js, split at its line break. Two parts: the copyright with the notice, then the maker line. */
   const aboutParts = lang => {
-    let sub = null;
     try {
       const konst = name => new Function("return " + extractDecl(about, "const " + name + "=").replace(/^[^=]*=|;$/g, ""))();
-      new Function("t", "esc", "keysLegendHtml", "TILE_MARK", "E_VERSION", "eCatalogFile", "eCatalogIn", "eCatalogBuiltIn",
-        "openDialog", "document", "fillProseIcons", "modalCard", "$", "dismissModal", "TRADEMARK", "MAKER", "uiLang", "STARDUST_URL",
-        extractDecl(about, "function openAbout(") + "\nreturn openAbout;")(
-        s => s, s => s, () => "", "", "2", () => "", () => "", () => false,
-        o => { sub = o.sub; }, { getElementById: () => null }, () => {}, null, () => null, () => {},
-        konst("TRADEMARK"), konst("MAKER"), () => lang, about.indexOf("const STARDUST_URL=") > -1 ? konst("STARDUST_URL") : "")();
-      return String(sub).split("<br>");
-    } catch (e) { return "openAbout did not run: " + e.message; }
+      const credit = new Function("esc", "TRADEMARK", "MAKER", "STARDUST_URL",
+        extractDecl(about, "function aboutCredit(") + "\nreturn aboutCredit;")(
+        s => s, konst("TRADEMARK"), konst("MAKER"), about.indexOf("const STARDUST_URL=") > -1 ? konst("STARDUST_URL") : "");
+      return String(credit(lang)).split("<br>");
+    } catch (e) { return "aboutCredit did not run: " + e.message; }
   };
   /* [part count, the last part]: the oracle's own copy of the anchor below, so a drift in the source is a difference. */
   const aboutTail = lang => { const p = aboutParts(lang); return typeof p === "string" ? p : [p.length, p[p.length - 1]]; };
   const STARDUST = '<a href="https://stardustengineering.dev" target="_blank" rel="noopener">Stardust</a>';
   eq("About puts the maker line under the trademark line, once, its Stardust a link to the company's address that opens outside the window: Made by Stardust. in English, Etiuda. Tworzy ją Stardust. in Polish, and English in a language with no key",
     [aboutTail("en"), aboutTail("pl"), aboutTail("de")],
-    [[3, "Made by " + STARDUST + "."], [3, "Etiuda. Tworzy ją " + STARDUST + "."], [3, "Made by " + STARDUST + "."]]);
-  eq("About's sub line holds one link, to the company's address once, and the old Polish sentence is gone, in every language",
+    [[2, "Made by " + STARDUST + "."], [2, "Etiuda. Tworzy ją " + STARDUST + "."], [2, "Made by " + STARDUST + "."]]);
+  eq("About's credit holds one link, to the company's address once, and the old Polish sentence is gone, in every language",
     ["en", "pl", "de"].map(l => { const p = aboutParts(l), all = String(p);
       return typeof p === "string" ? p : [all.split("<a ").length - 1, all.split("https://stardustengineering.dev").length - 1, all.indexOf("Gwiezdny") > -1]; }),
     [[1, 1, false], [1, 1, false], [1, 1, false]]);
-  eq("control: the trademark line above the maker line is unchanged in each language",
+  eq("control: the trademark line above the maker line is unchanged in each language, after the copyright",
     ["en", "pl", "de"].map(l => { const p = aboutParts(l); return typeof p === "string" ? p : p[p.length - 2]; }),
-    ["Etiuda is a trademark of Maxim Gwiazda.", "Etiuda jest znakiem towarowym Maxima Gwiazdy.", "Etiuda is a trademark of Maxim Gwiazda."]);
-  eq("About says the shipped file comes with Etiuda and names no folder, even one it is handed; a folder file keeps its folder", [
-    aboutSays("sample-catalog.ec", "", true), aboutSays("sample-catalog.ec", inAsar, true), aboutSays("team.ec", own, false)], [
-    "<code>sample-catalog.ec</code> comes with Etiuda.", "<code>sample-catalog.ec</code> comes with Etiuda.",
-    "<code>team.ec</code> in <code>" + own + "</code>."]);
+    ["© 2026 Maxim Gwiazda. Etiuda is a trademark of Maxim Gwiazda.", "© 2026 Maxim Gwiazda. Etiuda jest znakiem towarowym Maxima Gwiazdy.",
+     "© 2026 Maxim Gwiazda. Etiuda is a trademark of Maxim Gwiazda."]);
+  eq("About names no catalog file: it reads none of the host's catalog answers",
+    ["eCatalogFile", "eCatalogIn", "eCatalogBuiltIn", "./host.js"].filter(n => about.indexOf(n) > -1), []);
 
   const offer = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog-offer.js"), "utf8");
   const offers = (given, builtInHost, inHost, file, where, builtIn) => {
@@ -4225,8 +4208,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 999;
-const UI_STRINGS_SHA256 = "e0a798e7cba851a4b09ce819de40babd9cfdf552867f15ad9371c25c10dab686";
+const UI_STRINGS_COUNT = 996;
+const UI_STRINGS_SHA256 = "10d6831d1b016b230300d27791396125bfca02765270205c4664750e15518dbe";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

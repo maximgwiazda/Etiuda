@@ -1,11 +1,9 @@
 import { dismissModal, openDialog } from "./dialog.js";
-import { E_VERSION } from "./env.js";
-import { fillProseIcons } from "./icons.js";
-import { keysLegendHtml } from "./shortcuts.js";
-import { t, uiLang } from "./ui-lang.js";
+import { E_BUILT, E_VERSION } from "./env.js";
+import { formatActionChord } from "./shortcuts.js";
+import { t, tc, uiLang } from "./ui-lang.js";
 import { esc } from "./esc.js";
-import { modalCard, $ } from "./dom.js";
-import { eCatalogBuiltIn, eCatalogFile, eCatalogIn } from "./host.js";
+import { $ } from "./dom.js";
 
 /* The brand mark for anywhere that is not the header's own markup - the header keeps
    its copy inline so the tile paints on first parse. If the mark is ever redrawn, both
@@ -18,38 +16,102 @@ const TRADEMARK={en:"Etiuda is a trademark of Maxim Gwiazda.", pl:"Etiuda jest z
    never text from a catalog or the agent. A language without a key reads English. */
 const STARDUST_URL="https://stardustengineering.dev";
 const MAKER={en:"Made by {STARDUST}.", pl:"Etiuda. Tworzy ją {STARDUST}."};
-// About Etiuda: elegant in-page modal with tool name + footer help/credits.
-function openAbout(){
-  /* Built from #aboutInfo plus a freshly rendered shortcut list. The legend cannot simply be
-     cloned from the footer - it lives in an element with an id, and two of those in one
-     document is a bug waiting to happen - so it is regenerated here from the same source. */
-  const src=document.getElementById("aboutInfo");
-  const info=src ? src.innerHTML : "";
-  const keys='<b>'+esc(t("Keys"))+'</b> - '+keysLegendHtml()+' · '+esc(t("customise in"))
-    +' <b><span data-icon="settings"></span> '+esc(t("→ Settings → Keyboard shortcuts"))+'</b>.<br><br>';
-  /* WHICH FILE IS LOADED, and the folder it lies in. Only where a host found one - a browser's
-     catalog came through Import and lives in this browser, and there is no file to name. */
-  const file=eCatalogFile(), inDir=eCatalogIn();
-  // A placeholder key, never two halves round a <code>: see the note at eFoundHtml.
-  const where=inDir ? t("{FILE} in {FOLDER}")
-      .split("{FILE}").join('<code>'+esc(file)+'</code>')
-      .split("{FOLDER}").join('<code>'+esc(inDir)+'</code>')
-    : '<code>'+esc(file)+'</code>';
-  const said=eCatalogBuiltIn() ? t("{FILE} comes with Etiuda.").split("{FILE}").join('<code>'+esc(file)+'</code>') : where+'.';
-  const fileLine=file ? '<b>'+esc(t("Catalog file"))+'</b> - '+said+'<br><br>' : "";
-  const maker=esc(MAKER[uiLang()]||MAKER.en).split("{STARDUST}")
+/* The licence card's line, both languages on one line so that the wording still open is a one-line swap.
+   The other wording: {en:"At work, each person has a subscription of their own.", pl:"W pracy każda osoba ma własną subskrypcję."} */
+const TERMS={en:"Free for your own affairs; at work, each person has a subscription of their own.", pl:"Do własnych spraw bezpłatnie; w pracy każda osoba ma własną subskrypcję."};
+/* The end-user agreement, the installer's own text: tools/build.mjs writes each file over its
+   placeholder. A language without a key reads English. */
+const EULA={en:"@EULA_EN@", pl:"@EULA_PL@"};
+/* WHAT THIS VERSION BROUGHT, then what each earlier one did, newest first. A version's list is
+   written for it before it ships and moves to ABOUT_EARLIER with the next, taking its number as `v`
+   and its build's day as `built`. {KEY1} and {KEY4} are the live bindings, so a rebound key reads true. */
+const ABOUT_NEW=[
+  {title:"The team's catalog in editions.", body:"When the catalog changes, the desk offers the new edition and shows, card by card, what changed, before anything is loaded."},
+  {title:"Signed by the team's lead.", body:"A desk that joins a team keeps its lead's key and checks every later edition against it, and a file changed after signing never goes unnoticed."},
+  {title:"The conversation's path.", body:"Space turns from the cards to the conversation in front: the replies it has sent and those that can follow. Space again brings the cards back."},
+  {title:"Next replies on {KEY1} to {KEY4}.", body:"After each reply sent, up to four that can follow wait one key each: the catalog's own first, then those this desk has learnt."}
+];
+const ABOUT_EARLIER=[
+  {items:[{title:"Up to 1.16.7.", body:"Etiuda as a single file, opened in a web browser, under the MIT licence. The last of them, 1.16.7, still opens at etiuda.dev/v1."}]}
+];
+/* A day as the interface's language writes it, empty for anything that is not a date, which is the
+   source before a build has stamped it. */
+function aboutDay(iso){
+  const m=/^(\d{4})-(\d\d)-(\d\d)$/.exec(String(iso||""));
+  if(!m) return "";
+  const lang=uiLang();
+  try{
+    return new Intl.DateTimeFormat(lang==="en"?"en-GB":lang,{day:"numeric",month:"long",year:"numeric",timeZone:"UTC"})
+      .format(Date.UTC(+m[1],m[2]-1,+m[3]));
+  }catch(e){ return m[0]; }
+}
+function aboutItemHtml(it){
+  const keyed=t(it.title).split("{KEY1}").join(formatActionChord("nextCopy1")).split("{KEY4}").join(formatActionChord("nextCopy4"));
+  return '<li><b>'+esc(keyed)+'</b> '+esc(t(it.body))+'</li>';
+}
+/** The Earlier versions page: a version headed by its number and its day, the 1.x line on its own. */
+function aboutEarlierHtml(list){
+  return list.map(r=>(r.v ? '<h3 class="about-h">'+esc(t("{VERSION}, built on {DATE}").split("{VERSION}").join(r.v)
+      .split("{DATE}").join(aboutDay(r.built)))+'</h3>' : "")
+    +'<ul class="about-new" data-i18n-skip>'+r.items.map(aboutItemHtml).join("")+'</ul>').join("");
+}
+/* The credit: copyright and the trademark notice, then the maker line, whose {STARDUST} becomes the link. */
+function aboutCredit(lang){
+  const maker=esc(MAKER[lang]||MAKER.en).split("{STARDUST}")
     .join('<a href="'+STARDUST_URL+'" target="_blank" rel="noopener">Stardust</a>');
+  return "© 2026 Maxim Gwiazda. "+esc(TRADEMARK[lang]||TRADEMARK.en)+"<br>"+maker;
+}
+/* A page within the About: its X, Escape and Back all return there. */
+function aboutPage(title, body){
+  openDialog({
+    cls: "about-page",
+    title: title,
+    back: openAbout,
+    body: body,
+    actions: '<button type="button" class="btn primary" id="aboutBack">'+esc(tc("about","Back"))+'</button>',
+    wire: ()=>{
+      const b=$("#aboutBack");
+      if(b){ b.onclick=()=>dismissModal(); try{ b.focus(); }catch(_){} }
+    }
+  });
+}
+function openEarlier(){
+  aboutPage("Earlier versions of Etiuda", aboutEarlierHtml(ABOUT_EARLIER));
+}
+/* The agreement's first line is its title, the rest its paragraphs; a paragraph that opens on a
+   heading of four words or fewer ("Seats.") sets it in bold. */
+function openLicence(){
+  const paras=String(EULA[uiLang()]||EULA.en).split(/\n\s*\n/).map(p=>p.replace(/\s+/g," ").trim()).filter(Boolean);
+  const title=paras.shift()||"";
+  aboutPage(title, '<div class="about-legal" data-i18n-skip>'+paras.map(p=>{
+    const m=/^([^.,]+\.) (.+)$/.exec(p);
+    return '<p>'+(m && m[1].split(" ").length<=4 ? '<b>'+esc(m[1])+'</b> '+esc(m[2]) : esc(p))+'</p>';
+  }).join("")+'</div>');
+}
+function openAbout(){
+  const lang=uiLang(), day=aboutDay(E_BUILT);
+  const cap=esc(t("the version on this computer"))+(day ? '<br>'+esc(t("Built on {DATE}").split("{DATE}").join(day)) : "");
   openDialog({
     cls: "about-modal",
     title: "Etiuda",
     lead: '<span class="brand-tile about-tile" aria-hidden="true">'+TILE_MARK+'</span>',
-    sub: t("About Etiuda · Version {V} · <span class='nw'>Etiuda Source-Available Licence 1.0</span>, free for personal use · © 2026 Maxim Gwiazda")
-           .replace("{V}",E_VERSION)+"<br>"+esc(TRADEMARK[uiLang()]||TRADEMARK.en)+"<br>"+maker,
-    body: '<div class="about-body">'+keys+fileLine+info+'</div>',
-    actions: '<button type="button" class="btn primary" id="aboutClose">Close</button>',
+    body: '<div class="about-ver" data-i18n-skip><span class="about-num">'+esc(E_VERSION)+'</span>'
+        +'<span class="about-cap">'+cap+'</span></div>'
+      +'<h3 class="about-h">'+esc(t("New in this version"))+'</h3>'
+      +'<ul class="about-new" data-i18n-skip>'+ABOUT_NEW.map(aboutItemHtml).join("")+'</ul>'
+      +'<div class="about-lic" data-i18n-skip><span class="about-lic-t">'+esc(t("Etiuda End-User Licence Agreement"))
+        +'<small>'+esc(TERMS[lang]||TERMS.en)+'</small></span>'
+        +'<button type="button" class="btn" id="aboutLicence">'+esc(t("Read the licence"))+'</button></div>'
+      +'<p class="about-credit" data-i18n-skip>'+aboutCredit(lang)+'</p>',
+    actions: '<div class="mf-left"><button type="button" class="btn" id="aboutEarlier">'+esc(t("Earlier versions of Etiuda"))+'</button></div>'
+      +'<button type="button" class="btn primary" id="aboutClose">'+esc(t("Close"))+'</button>',
     wire: ()=>{
-      fillProseIcons(modalCard);
-      const closeBtn=$("#aboutClose");
+      // The X is named for a screen reader as the Close beside it.
+      const x=$("#modalX");
+      if(x) x.setAttribute("aria-label", t("Close"));
+      const lic=$("#aboutLicence"), earlier=$("#aboutEarlier"), closeBtn=$("#aboutClose");
+      if(lic) lic.onclick=openLicence;
+      if(earlier) earlier.onclick=openEarlier;
       if(closeBtn){
         /* Just dismissModal - the modifier class is the opener's business (openDialog resets
            the card's class list). */
@@ -61,5 +123,6 @@ function openAbout(){
 }
 
 export {
+  aboutEarlierHtml,
   openAbout
 };

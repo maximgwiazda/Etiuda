@@ -406,7 +406,7 @@ function closeModal(){
   modalBack=null;
   leaveModal();
   modalEl.hidden=true;
-  modalCard.classList.remove("about-modal","mt-modal");
+  modalCard.classList.remove("about-modal","about-page","mt-modal");
   modalCard.innerHTML="";
   const back=modalOpener, kbd=modalOpenerKbd;
   modalOpener=null; modalOpenerKbd=false;

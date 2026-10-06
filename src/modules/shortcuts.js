@@ -268,28 +268,6 @@ function eventMatchesChord(e,c){
 function eventMatchesAction(e,id){
   return eventMatchesChord(e,scChord(id)) || eventMatchesChord(e,scChord2(id));
 }
-/** The key legend About renders - one function, so a rebind reaches every key it names. */
-function keysLegendHtml(){
-  const f=formatActionChord;
-  /* One key per word, not one per line: the chords are data and the words are the sentence.
-     A translator sees "toggle search", not "<kbd>/</kbd> toggle search · ".
-     data-i18n-skip on every cap: a key NAME is not a word. The chrome sweep found the Tab cap
-     and handed back the table's "Tab", which is the word for a chat tab, so the legend told a
-     Polish reader to press a bookmark. Names of keys are the same in every language. */
-  const w=k=>esc(t(k));
-  const K=c=>'<kbd data-i18n-skip>'+c+'</kbd>';
-  return K("↑↓")+" "+w("cards")+" · "+
-    K("←→")+" "+w("categories")+" · "+
-    K("Enter")+" "+w("copy")+" · "+
-    K("Shift+Enter")+" "+w("other language")+" · "+
-    K(esc(f("langToggle")))+" "+esc(CONTENT_LANGS.map(l=>String(l).toUpperCase()).join(" ↔ "))+" · "+
-    K(esc(f("tabNext")))+" "+w("tabs")+" · "+
-    K(esc(f("quickFacts")))+" "+w("facts")+" · "+
-    K(esc(f("toggleRail")))+" "+w("rail")+" · "+
-    K(esc(f("expandPills")))+" "+w("categories")+" · "+
-    K(esc(f("lanes")))+" "+w("path")+" · "+
-    K("Esc")+" "+w("clear");
-}
 function tabAddTitle(){
   return t("New tab (same shared settings; cleared PAX, intent, ROLE, categories)")+" ("+formatActionChord("tabNew")+")";
 }
@@ -334,9 +312,8 @@ function syncShortcutTitles(){
      to teach. */
   if(pillsEl) pillsEl.title=t("Filter by category; a green ring marks one that relates to the chosen intent, and {KEY} shows every row")
     .replace("{KEY}",formatActionChord("expandPills"));
-  /* The placeholder and the label title name the key too, and so does the About reference -
-     every <kbd data-sc> in static markup takes the live binding here, so a rebind reaches
-     prose that was authored as HTML. */
+  /* The placeholder and the label title name the key too, and every <kbd data-sc> in static
+     markup takes the live binding here, so a rebind reaches prose that was authored as HTML. */
   hooks.updateIntentPlaceholder();
   document.querySelectorAll("kbd[data-sc]").forEach(k=>{
     k.textContent=formatActionChord(k.getAttribute("data-sc"));
@@ -358,7 +335,6 @@ export {
   scChord,
   scChord2,
   eventMatchesAction,
-  keysLegendHtml,
   syncShortcutTitles,
   SC_DEFS,
   scReady,

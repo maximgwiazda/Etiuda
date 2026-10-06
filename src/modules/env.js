@@ -2,6 +2,9 @@
    PATCH fixes. The catalog carries its own separate version - engine and content are
    released independently, and `format` in the catalog is the compatibility contract. */
 const E_VERSION="2.0.0-dev";
+/* The day this build was made, YYYY-MM-DD, written over the placeholder by tools/build.mjs; the
+   source itself carries none, and About leaves the line out until it is a date. */
+const E_BUILT="@E_BUILT@";
 /* ---- self-source snapshot, taken as the app script's first statement, when the DOM IS
    the file (this script is the document's last element). fetch(location.href) is blocked
    in Chromium on file://, so serialising the DOM is the only route that works everywhere.
@@ -30,6 +33,7 @@ function eEmbeddedCatalog(){
 
 export {
   eEmbeddedCatalog,
+  E_BUILT,
   E_VERSION,
   E_SELF
 };

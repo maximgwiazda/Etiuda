@@ -291,8 +291,7 @@ function boot(){
 
   // The footer's version, and the icons the prose slots hold
   try{ const _v=document.getElementById("eVer"); if(_v) _v.textContent=env.E_VERSION; }catch(e){}
-  /* Fills the footer's icon slots and, more importantly, #aboutInfo's - About is built by reading
-     that element's innerHTML, so the icons have to be in it before anyone opens the dialog. */
+  // Fills the icon slots in the document's static prose.
   try{ icons.fillProseIcons(document); }catch(e){}
 
   catalogBoot.applyBootCatalog();

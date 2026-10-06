@@ -2528,16 +2528,16 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
 .modal-sub{margin:0 0 14px;font-size:12.5px;color:var(--dim);text-wrap:balance}
 /* A link in the sub line keeps the sentence's colour and an underline, and takes the accent on hover
    and focus as the dialog's other interactive text does; the ring shows for the keyboard only. */
-.modal-sub a{color:inherit;text-decoration:underline;text-underline-offset:3px}
-.modal-sub a:hover,.modal-sub a:focus-visible{color:var(--accent)}
-.modal-sub a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
+.modal-sub a,.about-credit a{color:inherit;text-decoration:underline;text-underline-offset:3px}
+.modal-sub a:hover,.modal-sub a:focus-visible,.about-credit a:hover,.about-credit a:focus-visible{color:var(--accent)}
+.modal-sub a:focus-visible,.about-credit a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
 /* THE CARD'S OWN VOICE, under the field that fills it. The first-run question shows what the
    name is for instead of saying it, so this line is a sample of a card rather than another line
    of the dialog: full ink, and the sample name greyed until a letter is typed so the line never
    sits empty and never reads as a fact about somebody. */
 .e-greet{margin:6px 0 2px;font:13.5px var(--sans);color:var(--ink)}
 .e-greet .e-name-ph{color:var(--dim)}
-/* The licence name in the About sub-line, held whole. Balanced text breaks it at its own
+/* The licence name in the footer, held whole. Balanced text breaks it at its own
    hyphen otherwise, and a no-break space cannot reach a hyphen. */
 .nw{white-space:nowrap}
 .mf{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
@@ -2622,8 +2622,8 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    one theme and an alarm in the other. Mixing keeps the light look it already had and gives
    dark the quiet version of it. */
 .btn.danger{color:#c44;border-color:color-mix(in srgb,#c44 47%,var(--bg))}
-/* About Etiuda dialog */
-.modal-card.about-modal{max-width:520px}
+/* About Etiuda dialog, and the pages it opens */
+.modal-card.about-modal,.modal-card.about-page{max-width:520px}
 /* THE PANEL TAKES THE WINDOW'S WIDTH, and the readings as many columns as it holds, so the whole of
    it stands on one screen without scrolling in any reasonably big window. */
 .modal-card.mt-modal{max-width:min(1240px,calc(100vw - 40px))}
@@ -2639,23 +2639,31 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
    x-height, below where the row centres. */
 .about-tile{width:40px;height:40px;flex:0 0 auto;color:var(--mark-ink);
   position:relative;top:3px}
-/* Balance reaches only the keys legend here: the prose runs below it are long enough that
-   engines decline to balance them, and a paragraph ending short is how paragraphs end. */
-.about-body{margin:0 0 4px;padding:14px 16px;border:1px solid var(--line);border-radius:10px;
-  background:var(--bg);color:var(--dim);font-size:13.5px;line-height:1.55;text-wrap:balance}
-.about-body b{color:var(--ink)}
-/* nowrap: a chip broken across a line renders as two half-chips, which Firefox did to the
-   token that used to carry the signing slash. A name is one object; it does not wrap. */
-.about-body code{font:12px var(--mono);background:var(--accent-soft);color:var(--accent);
-  padding:1px 6px;border-radius:4px;white-space:nowrap}
-.about-body kbd{font:12px var(--mono);border:1px solid var(--line);border-radius:4px;
-  padding:1px 5px;color:var(--ink)}
+/* The version at display size, its caption beside it on the number's baseline. */
+.about-ver{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;margin:4px 0 14px}
+.about-num{font-size:54px;font-weight:300;line-height:1;letter-spacing:.5px;color:var(--ink)}
+.about-cap{font-size:13px;line-height:1.55;color:var(--dim)}
+.about-h{margin:0 0 8px}
+.about-new{margin:0 0 14px;padding:0;list-style:none;display:grid;gap:10px}
+.about-new li{position:relative;padding-left:30px;font-size:13.5px;line-height:1.5;color:var(--dim)}
+.about-new li::before{content:"";position:absolute;left:6px;top:7px;width:8px;height:8px;border-radius:50%;
+  background:var(--accent)}
+.about-new b{color:var(--ink);font-weight:600}
+.about-lic{display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--line);
+  border-radius:10px;background:var(--bg)}
+.about-lic-t{flex:1 1 auto;min-width:0;font-size:13.5px;color:var(--ink)}
+.about-lic-t small{display:block;font-size:12.5px;line-height:1.5;color:var(--dim)}
+.about-lic .btn{flex:0 0 auto;white-space:nowrap}
+.about-credit{margin:14px 0 2px;font-size:12.5px;line-height:1.6;color:var(--dim)}
+.about-legal{font-size:13px;line-height:1.6;color:var(--dim)}
+.about-legal p{margin:0 0 10px}
+.about-legal b{color:var(--ink);font-weight:600}
 .manage-sec{margin:0 0 14px;padding-bottom:12px;border-bottom:1px solid var(--line)}
 .manage-sec:last-child{border-bottom:0;margin-bottom:0;padding-bottom:0}
 /* SECTION TITLES: one rule for every screen with sections - a second copy with the same
    values is what drifts the moment one is tuned. Settings keeps its own margin; its title
    sits in a clickable row. */
-.manage-sec h3,.acc-title,.mf-lab,#tourBody .t-sec{font-size:13px;font-weight:700;letter-spacing:.2px;
+.manage-sec h3,.acc-title,.mf-lab,#tourBody .t-sec,.about-h{font-size:13px;font-weight:700;letter-spacing:.2px;
   text-transform:uppercase;color:var(--dim)}
 /* Section header states for all three accordion screens - base, open, hover, focus, in
    that order, in this one place; hover wins by source order at equal weight, so nobody
@@ -3803,7 +3811,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
           <button type="button" role="menuitem" data-act="pills" id="menuPills" title="Hide the category bar; hold Ctrl to peek at it while hidden">Hide categories</button>
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-act="tour" title="The tour of Etiuda's controls, one at a time">Show tour…</button>
-          <button type="button" role="menuitem" data-act="about" title="What Etiuda is, and every keyboard shortcut">About Etiuda</button>
+          <button type="button" role="menuitem" data-act="about" title="This version of Etiuda, what is new in it, and its licence">About Etiuda</button>
         </div>
       </div>
     </div>
@@ -3836,7 +3844,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 </div>
 <main>
   <div id="list"></div>
-  <!-- CREDIT ONLY. The key legend is About's and Settings' job: rendered here it is the
+  <!-- CREDIT ONLY. The key legend is Settings' job: rendered here it is the
        densest text on the empty screen, aimed at somebody whose next move is loading a
        catalog. -->
   <footer>
@@ -3847,17 +3855,6 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 </div>
 </div>
 
-<!-- The source About reads. Kept as markup rather than a JS string so it stays editable
-     as prose. Tokens, badges and the menu's own name carry data-i18n-skip: they are NAMES, the
-     same in every language, and the sweep would otherwise look them up like words - which is how
-     the keys legend once told a Polish reader to press a bookmark. What is left is prose, and
-     i18n-scan holds every run of it to having an entry. -->
-<div id="aboutInfo" hidden>
-  Click any macro to copy <b>just that macro</b> - cards badged <b data-i18n-skip>1/4</b>, <b data-i18n-skip>2/4</b>… are alternatives, copied one at a time. <code data-i18n-skip>{PAX}</code> fills from the name box; <code data-i18n-skip>{AGENT}</code> and <code data-i18n-skip>{INIT}</code> from the agent name; <code data-i18n-skip>{INTENT}</code> from the side panel, from the chips under the opener when the panel is off, or from what you type. A listed intent follows EN|PL; typed text does not. Typing in SEARCH ranks intents and filters cards in both languages.
-  <br><br><code data-i18n-skip>{TOPIC}</code> is the subject of the chat as a noun phrase: where <code data-i18n-skip>{INTENT}</code> names an act, this names a thing. <code data-i18n-skip>{ACTION}</code> is what was DONE, for internal comments. Both are set per intent in its editor.
-  <br><br>Drag to reorder: intents in the side panel (double-click its title to reset), a card header within its highlight group (intent-linked / favourited / both / regular), or alternative and step macros inside a card (EN and PL stay aligned). Show or hide the panel from the <b data-i18n-skip><span data-icon="settings"></span> Menu</b>.
-  <br><br><b><span data-icon="facts"></span></b> Quick facts - fees and deadlines. <b data-i18n-skip><span data-icon="settings"></span> Menu</b> - cards, intent panel, category pills, shortcuts. <b><span data-icon="theme"></span></b> toggles theme.
-</div>
 <!-- role=status/aria-live so copy confirmations reach screen readers without stealing focus -->
 <div id="toast" role="status" aria-live="polite"></div>
 <!-- What the arrows mark, read out: mark.js sayMark. Drawn nowhere. -->
