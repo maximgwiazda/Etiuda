@@ -183,6 +183,30 @@ function filesPatch(parts) {
     + "E.sourceDoc = () => ({ text: txt, files: parts.map(p => p[0]), at: at, atLine: k => 'synthetic:' + k });";
 }
 
+/* css-dead.js: four classes reached only by a prefix written where a class is (a fragment and a
+   value, a hyphen and a value, an interpolation), and three dead ones: a class that only LOOKS
+   like a prefix's (pl-row closes before its ternary adds whole classes), a prefix written where no
+   class is, and a class nobody names. The stylesheet sits past offset 1000, where the scan looks. */
+const CSS_DOC = [
+  "<!-- " + "x".repeat(1000) + " -->",
+  "<style>",
+  ".pq-c1{color:red} .pq-c2{color:red} .ps-on{color:red} .pt-x{color:red}",
+  ".pl-row{color:red} .pl-open{color:red} .pl-row-open{color:red} .pk-gone{color:red} .pd-dead{color:red}",
+  "</style>",
+  "<script>",
+  "function region(el,n,state,k,open,id){",
+  "  el.innerHTML='<div class=\"pq pq-c'+n+'\"></div>';",
+  "  el.classList.add(\"ps-\"+state);",
+  "  el.innerHTML=`<i class=\"pt-${k}\"></i>`;",
+  "  el.innerHTML='<p class=\"pl-row'+(open?\" pl-open\":\"\")+'\"></p>';",
+  "  return \"pk-\"+id;",
+  "}",
+  "</script>",
+  ""
+].join("\n");
+PATCH.cssbuilt = "const txt = " + JSON.stringify(CSS_DOC) + ";\n"
+  + "E.sourceDoc = () => ({ text: txt, files: ['synthetic'], at: () => 'synthetic:1', atLine: k => 'synthetic:' + k });";
+
 /* deadcode.js: two live names reached only through a namespace and a spread, and three dead ones
    that look nearly alike: a member of a namespace bound to another file, a member of an object
    that is no namespace, and one nobody names. Invented names throughout. */
@@ -348,6 +372,18 @@ try {
   ok(dc.code === 0 && dcNames === "deadHere,propOnly,shadowNs",
      "deadcode.js        reads alpha.liveByNs() and ...liveBySpread() as uses, and still reports "
      + "a member of another namespace, of an object, and a name nobody calls: " + JSON.stringify(dcNames));
+
+  /* 28. css-dead.js LISTS A CLASS BUILT BY CONCATENATION APART, board 858. At 09fae6f 5 of its 7
+     dead classes were built so (`class="ed-c'+cols`, `class="ed-'+mine`). The three that stay dead
+     are the teeth: a rule that took every fragment for a prefix would lose them. */
+  const cs = scan(roots.mod, "css-dead.js", "cssbuilt", []);
+  const section = title => ((cs.out.split(title)[1] || "").split("\n===")[0].match(/^  (\S+)/gm) || [])
+    .map(s => s.trim()).sort().join(",");
+  const csDead = section("=== classes styled but never mentioned outside the stylesheet");
+  const csBuilt = section("=== classes styled and named only by a prefix built at run time");
+  ok(cs.code === 0 && csDead === "pd-dead,pk-gone,pl-row-open" && csBuilt === "pq-c1,pq-c2,ps-on,pt-x",
+     "css-dead.js        lists classes built from a prefix apart (" + csBuilt + ") and still calls "
+     + "dead a look-alike, a prefix written where no class is, and an unnamed class (" + csDead + ")");
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
 }

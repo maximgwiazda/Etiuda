@@ -2,7 +2,8 @@
    like deadcode.js: a class or id in a selector counts as alive if the word appears anywhere
    outside the stylesheet (markup, JS strings, classList calls); a custom property counts as read
    if var(--x) or getPropertyValue("--x") appears anywhere. Hits are CANDIDATES to read, not
-   verdicts - names built by concatenation will show up here.
+   verdicts. A class built by concatenation where a class is written is listed apart with its
+   prefix; one assembled anywhere else, in a variable first, still shows up as unmentioned.
    Usage: node css-dead.js  (run in the etiuda folder)
 
    WHAT IT READS: src/, through E.sourceDoc(). Both halves want the source. The stylesheet half
@@ -39,7 +40,31 @@ while ((m = selRe.exec(cssCode))) {
   for (const c of sel.matchAll(/#(-?[A-Za-z_][A-Za-z0-9_-]*)/g)) if (!ids.has(c[1])) ids.set(c[1], at);
 }
 const word = (name, hay) => new RegExp("(^|[^A-Za-z0-9_-])" + name.replace(/[-]/g, "\\-") + "(?![A-Za-z0-9_-])").test(hay);
-const deadClasses = [...classes].filter(([n]) => !word(n, restCode));
+
+/* A CLASS BUILT BY CONCATENATION, `class="ed-c'+cols` or `classList.add("e-"+x)`. The fragment is
+   a prefix only where a class is being written (class=, classList, className) and only when it
+   ends in a hyphen or runs straight into a value: `class="pill'+(on?" on":"")` closes the class
+   pill and adds whole ones. A styled class with such a prefix is listed apart, with the prefix's
+   place, so a reader sees what it hangs on; tests/text-scan-selftest.js plants both shapes. */
+const NAME = "([A-Za-z_-][A-Za-z0-9_-]*)";
+const PREFIX_AT = [
+  new RegExp("class=[\"'](?:[^\"'`<>]*?\\s)?" + NAME + "(?:[\"']\\s*\\+\\s*|\\$\\{\\s*)(.)", "g"),
+  new RegExp("(?:classList\\.(?:add|toggle|remove|contains|replace)\\(\\s*|className\\s*\\+?=\\s*)([\"'`])(?:[^\"'`]*\\s)?"
+             + NAME + "(?:\\1\\s*\\+\\s*|\\$\\{\\s*)(.)", "g")
+];
+const prefixes = new Map();
+const restAt = i => i < styleAt ? i : i + (styleEnd - styleAt);
+PREFIX_AT.forEach((re, k) => {
+  for (const p of restCode.matchAll(re)) {
+    const tail = k ? p[2] : p[1], next = k ? p[3] : p[2];
+    if ((/-$/.test(tail) || /[\w$]/.test(next)) && !prefixes.has(tail)) prefixes.set(tail, restAt(p.index));
+  }
+});
+const builtBy = n => [...prefixes.keys()].filter(p => n.length > p.length && n.startsWith(p))
+  .sort((a, b) => b.length - a.length)[0];
+const unnamed = [...classes].filter(([n]) => !word(n, restCode));
+const deadClasses = unnamed.filter(([n]) => !builtBy(n));
+const builtClasses = unnamed.filter(([n]) => builtBy(n));
 const deadIds = [...ids].filter(([n]) => !word(n, restCode));
 
 /* Custom properties. */
@@ -58,7 +83,7 @@ const noFallback = neverDefined.filter(n => new RegExp("var\\(\\s*" + n + "\\s*\
    no rule styles, or a rule for a state nothing toggles. */
 const allNames = new Set([...classes.keys()]);
 for (const c of restCode.matchAll(/classList\.(?:add|toggle|remove|contains)\(\s*["']([A-Za-z_-][A-Za-z0-9_-]*)["']/g)) allNames.add(c[1]);
-const once = [...allNames].filter(n => {
+const once = [...allNames].filter(n => !prefixes.has(n) && !builtBy(n)).filter(n => {
   const re = new RegExp("(^|[^A-Za-z0-9_-])" + n.replace(/[-]/g, "\\-") + "(?![A-Za-z0-9_-])", "g");
   const total = (strip(src.replace(/(^|[^:\\"'])\/\/[^\n]*/g, "$1")).match(re) || []).length;
   return total === 1;
@@ -67,6 +92,8 @@ const once = [...allNames].filter(n => {
 const show = (title, list, f) => { console.log("\n=== " + title + " (" + list.length + ") ==="); list.forEach(x => console.log("  " + f(x))); };
 console.log("selectors: " + classes.size + " classes, " + ids.size + " ids | custom properties: " + defined.size + " defined, " + read.size + " read");
 show("classes styled but never mentioned outside the stylesheet", deadClasses, ([n, a]) => n.padEnd(28) + " " + DOC.at(a));
+show("classes styled and named only by a prefix built at run time", builtClasses,
+     ([n]) => n.padEnd(28) + " " + JSON.stringify(builtBy(n)) + "+ at " + DOC.at(prefixes.get(builtBy(n))));
 show("ids styled but never mentioned outside the stylesheet", deadIds, ([n, a]) => n.padEnd(28) + " " + DOC.at(a));
 show("custom properties defined but never read", neverRead, ([n, a]) => n.padEnd(28) + " " + DOC.at(a));
 show("custom properties read but never defined (fallback covers them unless listed below)", neverDefined, n => n);
