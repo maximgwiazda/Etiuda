@@ -2982,22 +2982,13 @@ function pickClipText(text, platform) {
 function pickPage() {
   const P = window.E_PICK, q = document.getElementById("q"), box = document.getElementById("rows");
   if (!P || !q || !box) return;
-  let rows = [], last = null, words = {}, at = 0, asked = 0, ask = null;
+  let rows = [], last = null, words = {}, at = 0, asked = 0;
   const esc = s => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const ICON_AGAIN = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor"'
     + ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.6-3.7"/><path d="M13 2.5v3h-3"/></svg>';
   const list = () => (!q.value.trim() && last)
     ? [Object.assign({ again: true }, last)].concat(rows.filter(r => r.id !== last.id || r.vi !== last.vi)) : rows;
-  /* A REPLY'S FIELDS OPEN UNDER ITS ROW, and what is typed there outlives a repaint. */
-  const askHtml = a => '<li class="ask" role="presentation">' + a.fields.map((f, i) => '<div class="fh"><label class="fl" for="f' + i
-      + '">' + esc(f.label) + '</label>' + (f.note ? '<span class="fn">' + esc(f.note) + '</span>' : '')
-      + (f.clip ? '<span class="fc"><kbd>Alt+V</kbd> ' + esc(words.clip) + '</span>' : '') + '</div><input class="fi" id="f' + i
-      + '" data-i="' + i + '" autocomplete="off" spellcheck="false" placeholder="' + esc(words.paste) + '" value="' + esc(f.value) + '"'
-      + (i === a.at ? ' aria-invalid="true"' : '') + '>').join("")
-    + '<div class="fs" aria-live="polite">' + esc(a.said) + '</div><div class="fk">' + esc(words.keys) + '</div></li>';
-  const inputs = () => Array.prototype.slice.call(box.querySelectorAll(".fi"));
   const paint = () => {
-    if (ask) inputs().forEach(x => { ask.fields[+x.dataset.i].value = x.value; });
     const all = list();
     if (at >= all.length) at = all.length ? all.length - 1 : 0;
     let n = 0;
@@ -3010,58 +3001,8 @@ function pickPage() {
       : '<li class="none" role="presentation">' + esc(q.value.trim() ? words.none : words.empty) + '</li>';
     q.setAttribute("aria-activedescendant", all.length ? "r" + at : "");
     box.querySelectorAll(".t,.x").forEach(el => el.classList.toggle("cut", el.scrollWidth > el.clientWidth + 1));
-    const row = ask && document.getElementById("r" + ask.row);
-    if (row) row.insertAdjacentHTML("afterend", askHtml(ask));
   };
-  const opened = (o, r) => {
-    if (!o || !o.need) return;
-    ask = { id: o.need.id, vi: o.need.vi, row: r, said: o.need.said || "", at: o.need.at, fields: o.need.fields || [] };
-    paint();
-    const ins = inputs(), first = ins.find(x => !x.value) || ins[0];
-    if (first) first.focus();
-  };
-  const answer = (sent, r) => Promise.resolve(P.copy(sent)).then(res => {
-    if (typeof res !== "string") return;
-    let o = null;
-    try { o = JSON.parse(res); } catch (e) { o = null; }
-    if (!o || !o.need) return;
-    if (ask) {
-      ask.said = o.need.said || ""; ask.at = o.need.at; paint();
-      const bad = inputs()[ask.at];
-      if (bad) bad.focus();
-    } else opened(o, r);
-  });
-  const take = r => { if (r) answer(JSON.stringify(r.again ? { last: true } : { id: r.id, vi: r.vi }), at); };
-  const send = () => {
-    const values = {};
-    inputs().forEach(x => { values[ask.fields[+x.dataset.i].id] = x.value; });
-    answer(JSON.stringify({ id: ask.id, vi: ask.vi, values: values }), ask.row);
-  };
-  const clipInto = i => {
-    const f = ask.fields[i];
-    if (!f || !f.clip || !P.clip) return;
-    Promise.resolve(P.clip(JSON.stringify({ id: ask.id, vi: ask.vi, field: f.id }))).then(text => {
-      let o = null;
-      try { o = JSON.parse(text); } catch (e) { o = null; }
-      const x = inputs()[i], said = box.querySelector(".fs");
-      if (!o || !x) return;
-      if (typeof o.value === "string") x.value = o.value;
-      if (said) said.textContent = o.said || "";
-      x.focus();
-    });
-  };
-  box.addEventListener("keydown", e => {
-    const x = e.target;
-    if (!ask || !x || !x.classList || !x.classList.contains("fi")) return;
-    const i = +x.dataset.i;
-    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); ask = null; paint(); q.focus(); return; }
-    if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === "KeyV") { e.preventDefault(); clipInto(i); return; }
-    if (e.key === "Enter") {
-      e.preventDefault();
-      const ins = inputs(), next = ins.findIndex((y, k) => k > i && !y.value.trim());
-      if (next > -1) ins[next].focus(); else send();
-    }
-  });
+  const take = r => { if (r) P.copy(JSON.stringify(r.again ? { last: true } : { id: r.id, vi: r.vi })); };
   P.onOpen(text => {
     let o = {};
     try { o = JSON.parse(text) || {}; } catch (e) { o = {}; }
@@ -3076,13 +3017,12 @@ function pickPage() {
     box.setAttribute("aria-label", words.list || "");
     rows = Array.isArray(o.rows) ? o.rows : [];
     last = o.last || null;
-    q.value = ""; at = 0; asked++; ask = null;
+    q.value = ""; at = 0; asked++;
     paint();
     q.focus();
     P.ready();
   });
   q.addEventListener("input", () => {
-    ask = null;
     const mine = ++asked;
     P.find(q.value).then(text => {
       if (mine !== asked) return;
@@ -3113,13 +3053,11 @@ function pickPage() {
     }
   });
   box.addEventListener("mousemove", e => {
-    if (ask) return;
     const li = e.target.closest && e.target.closest("li[data-i]");
     if (li && +li.dataset.i !== at) { at = +li.dataset.i; paint(); }
   });
-  box.addEventListener("mousedown", e => { if (!(e.target.classList && e.target.classList.contains("fi"))) e.preventDefault(); });
+  box.addEventListener("mousedown", e => e.preventDefault());
   box.addEventListener("click", e => {
-    if (ask) return;
     const li = e.target.closest && e.target.closest("li[data-i]");
     if (li) take(list()[+li.dataset.i]);
   });
@@ -3158,16 +3096,6 @@ function pickerDoc() {
     + 'mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent)}\n'
     + '.g{flex:0 0 auto;font:10px var(--mono);color:var(--dim)}\n'
     + '#rows li.none{height:auto;padding:14px 12px;color:var(--dim);white-space:normal}\n'
-    + '#rows li.ask{display:block;height:auto;padding:4px 10px 8px 38px;white-space:normal;'
-    + 'background:color-mix(in srgb,var(--accent) 8%,transparent)}\n'
-    + '.fh{display:flex;align-items:baseline;gap:8px;margin:4px 0 4px}\n'
-    + '.fl{font-weight:600}.fn,.fc,.fk,.fs{color:var(--dim);font-size:12px}.fc{margin-left:auto}\n'
-    + 'kbd{font:10.5px var(--mono);padding:0 4px;border:1px solid var(--line);border-radius:4px}\n'
-    + '.fi{box-sizing:border-box;width:100%;height:34px;padding:0 10px;border:1px solid var(--field-line);'
-    + 'border-bottom-color:var(--field-edge);border-radius:var(--radius-sm);background:var(--field);color:var(--ink);'
-    + 'font:14px var(--sans);outline:none;user-select:text}\n'
-    + '.fi:focus{border-color:var(--accent)}.fi[aria-invalid]{border-color:var(--accent);border-style:dashed}\n'
-    + '.fs:empty{display:none}.fs,.fk{margin-top:4px}\n'
     + ':root.still #rows li{transition:none}\n'
     + '@media (prefers-reduced-motion:reduce){#rows li{transition:none}}\n'
     + '@media (forced-colors:active){#rows li.on{outline:2px solid Highlight;outline-offset:-2px}'
@@ -3177,22 +3105,6 @@ function pickerDoc() {
     + ' autocomplete="off" spellcheck="false">\n'
     + '<ul id="rows" role="listbox"></ul>\n'
     + '<script>' + PICK_SCRIPT + '</script>\n';
-}
-
-/* THE CLIPBOARD IS READ ONLY ON THE AGENT'S OWN ALT+V: the press, seen here
-   before its page sees it, arms one read for that window alone; the read disarms it, a read with no
-   press is refused, and nothing read is kept. The permission list still grants no read at all. */
-const CLIP_PRESS_MS = 1500, CLIP_MAX = 4000;
-const clipArmed = new Map();
-function armClip(wc, input) {
-  if (input && input.type === "keyDown" && input.alt && !input.control && !input.meta && input.code === "KeyV" && !input.isAutoRepeat)
-    clipArmed.set(wc.id, Date.now());
-}
-function readClipOnce(wc) {
-  const at = clipArmed.get(wc.id);
-  clipArmed.delete(wc.id);
-  if (!at || Date.now() - at > CLIP_PRESS_MS) return null;
-  return String(clipboard.readText() || "").slice(0, CLIP_MAX);
 }
 
 let pickWin = null, pickLoaded = null, pickOpening = false, pickShown = null;
@@ -3230,7 +3142,6 @@ function ensurePicker() {
   const win = pickWin;
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", e => e.preventDefault());
-  win.webContents.on("before-input-event", (e, input) => armClip(win.webContents, input));
   win.on("blur", () => hidePicker(false));
   win.on("closed", () => { if (pickWin === win) { pickWin = null; pickLoaded = null; } });
   pickLoaded = new Promise(done => win.webContents.once("did-finish-load", () => done(true)));
@@ -3300,39 +3211,15 @@ ipcMain.handle("etiuda:pick-copy", (e, what) => {
   let pick = {};
   try { pick = JSON.parse(String(what || "")) || {}; } catch { pick = {}; }
   const arg = pick.last ? { last: true } : { id: String(pick.id || ""), vi: pick.vi | 0 };
-  /* The fields the picker's row filled: text only, a few and short, as the desk's own question takes them. */
-  if (!pick.last && pick.values && typeof pick.values === "object") {
-    arg.values = {};
-    Object.keys(pick.values).slice(0, 20).forEach(k => {
-      if (typeof pick.values[k] === "string") arg.values[String(k).slice(0, 64)] = pick.values[k].slice(0, 300);
-    });
-  }
   return askDesk("copy", arg).then(v => {
     if (v && typeof v.text === "string") {
       clipboard.writeText(pickClipText(v.text, process.platform));
       hidePicker(true);
       return true;
     }
-    if (v && v.need) return JSON.stringify({ need: v.need });
     if (v && v.ask) { hidePicker(false); focusDesk(); askDesk("ask", v.ask); }
     return false;
   });
-});
-/* ALT+V IN THE PICKER'S FIELD: the clipboard read at that press, handed to the desk's page, which
-   keeps only the part that fits and says why where none does. */
-ipcMain.handle("etiuda:pick-clip", (e, what) => {
-  if (!fromPicker(e)) return null;
-  const text = readClipOnce(e.sender);
-  if (text === null) return null;
-  let pick = {};
-  try { pick = JSON.parse(String(what || "")) || {}; } catch { pick = {}; }
-  return askDesk("fit", { id: String(pick.id || ""), vi: pick.vi | 0, field: String(pick.field || ""), text })
-    .then(v => JSON.stringify(v));
-});
-/* The desk's own question, the same read at the same press. */
-ipcMain.handle("etiuda:clip-read", (e) => {
-  if (!fromEngine(e)) return null;
-  return readClipOnce(e.sender);
 });
 /* Settings' row: which combination the desk asks for, and whether Windows let the desk hold it. */
 ipcMain.on("etiuda:hotkey-state", (e) => {
@@ -3466,7 +3353,6 @@ function createWindow() {
     openExternally(url);
   });
 
-  win.webContents.on("before-input-event", (e, input) => armClip(win.webContents, input));
   /* THE ZOOM KEYS, which left with the application menu: Ctrl with plus, minus or nought, the
      keypad's as well, in the menu roles' half steps, before the page ever sees the key. */
   win.webContents.on("before-input-event", (e, input) => {

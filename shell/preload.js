@@ -2,7 +2,7 @@
 
 const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
-/* THE PICKER'S WINDOW is told so by the shell on its command line, and gets its own six verbs and
+/* THE PICKER'S WINDOW is told so by the shell on its command line, and gets its own five verbs and
    nothing of the desk's; main answers them only from that window, and the desk's only from the desk. */
 const PICKER = typeof process !== "undefined" && Array.isArray(process.argv) && process.argv.indexOf("--etiuda-picker") > -1;
 if (PICKER) {
@@ -12,7 +12,6 @@ if (PICKER) {
     close: () => ipcRenderer.send("etiuda:pick-close"),
     ready: () => ipcRenderer.send("etiuda:pick-ready"),
     onOpen: (fn) => ipcRenderer.on("etiuda:pick-open", (_e, text) => fn(String(text || ""))),
-    clip: (what) => ipcRenderer.invoke("etiuda:pick-clip", String(what || "")).then(v => (typeof v === "string" ? v : "null")),
   });
 }
 
@@ -157,8 +156,6 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   }),
   /* The hotkey Settings shows: {accel, held, taken} now, a combination tried as {ok, why}, and the
      one held paused while Settings listens for keys. */
-  /* The clipboard's text at the agent's Alt+V, which the shell saw pressed, or null. */
-  readClip: () => ipcRenderer.invoke("etiuda:clip-read"),
   hotkeyState: () => ipcRenderer.sendSync("etiuda:hotkey-state"),
   setHotkey: (accel) => ipcRenderer.invoke("etiuda:hotkey-set", String(accel || "")),
   pauseHotkey: (on) => ipcRenderer.send("etiuda:hotkey-hold", !!on),

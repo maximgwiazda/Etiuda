@@ -8,7 +8,6 @@ import { t, toast } from "./ui-lang.js";
 import { copy } from "./mark.js";
 import { entrySel, shown } from "./app-state.js";
 import { withAgentName } from "./agent.js";
-import { withFields, spendFields } from "./field-ask.js";
 
 /** Copy the focused block (or other language at the same part index). */
 function copyEntrySel(otherLang){
@@ -22,29 +21,28 @@ function copyEntrySel(otherLang){
   const ps=parts(m,l);
   if(!ps.length){ toast(t("No {LANG} version for this card").replace("{LANG}",l.toUpperCase())); return true; }
   const vi=Math.max(0, Math.min(ps.length-1, entrySel.vi|0));
-  const id=entrySel.id, at=document.querySelector("#list .txt.sel");
-  withFields(ps[vi],m,l,()=>withAgentName(ps[vi],()=>{
+  const id=entrySel.id;
+  withAgentName(ps[vi],()=>{
     bumpUseCount(id, l);
     copy(fill(ps[vi],m,0,l), copiedToastMsg(m, l, vi, ps.length), cardCommits(m));
-    spendFields(ps[vi]);
     eCopyFeedback(id,vi);   // wash the selected block + recency trace, same as a click
-  },at),at);
+  },document.querySelector("#list .txt.sel"));
   return true;
 }
 /** Copy a card's block `vi` in the language it shows, or with `other` the next one, from outside the
- *  list: a field question hangs from `anchor`, and the trace of recent copies is kept as a click would. */
+ *  list: the question for the agent's name hangs from `anchor`, and the trace of recent copies is
+ *  kept as a click would. */
 function copyCardPart(id, vi, anchor, other){
   const m=findCard(id);
   if(!m) return false;
   const l=other ? nextContentLang(cardLang(m)) : cardLang(m), ps=parts(m,l);
   if(!ps.length){ toast(t("No {LANG} version for this card").replace("{LANG}",l.toUpperCase())); return true; }
   const k=Math.max(0, Math.min(ps.length-1, vi|0));
-  withFields(ps[k],m,l,()=>withAgentName(ps[k],()=>{
+  withAgentName(ps[k],()=>{
     bumpUseCount(m.id, l);
     copy(fill(ps[k],m,0,l), copiedToastMsg(m, l, k, ps.length), cardCommits(m));
-    spendFields(ps[k]);
     eNoteRecent(m.id,k);
-  },anchor),anchor);
+  },anchor);
   return true;
 }
 

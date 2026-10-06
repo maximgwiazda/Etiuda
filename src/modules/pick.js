@@ -12,11 +12,6 @@ import { eLastRecent, eNoteRecent } from "./recency.js";
 import { wantsAgentName, withAgentName } from "./agent.js";
 import { copy, noteCopy } from "./mark.js";
 import { t, uiLang } from "./ui-lang.js";
-import { fieldVals } from "./app-state.js";
-import { fillFieldsIn, fillFieldLabel, fillFieldRequired, fillFieldTakesClip, fillFieldClean } from "./fields.js";
-import { fieldsWanted, fieldRefusal, clipAnswer, spendFields } from "./field-ask.js";
-import { scheduleTabSave } from "./tabs.js";
-import { renderFillsSoon } from "./agent.js";
 // The picker's answers: the desk's replies as a short list for the window the shell draws over the
 // chat, found by the desk's own search and copied by the desk's own route.
 
@@ -88,49 +83,17 @@ function pickLook(){
 function pickWords(){
   return {lang:uiLang(), search:t("search replies"), list:t("Replies"), again:t("The reply copied last"),
           none:t("A different word may do better."),
-          empty:wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet."),
-          clip:t("from the clipboard"), paste:t("paste or type"),
-          keys:t("Enter copies once the field is filled. Esc goes back to the list.")};
-}
-/* A REPLY WITH FIELDS STILL TO FILL opens them in the picker's own row: what each is, and what this
-   conversation already holds for it. `said` and `at` name a refusal and the field it is about. */
-function pickNeed(m,l,raw,vi,said,at){
-  return {id:String(m.id), vi:vi, said:said||"", at:at==null?-1:at,
-    fields:fillFieldsIn(raw).map(f=>({id:f.id, label:fillFieldLabel(f,l), clip:fillFieldTakesClip(f), value:fieldVals[f.id]||"",
-      note:fieldVals[f.id] ? t("from this conversation") : (fillFieldRequired(f) ? "" : t("may be skipped"))}))};
-}
-/* The values the picker sends, checked as the desk's own question checks them, then kept for the
-   conversation in front. Answers a need where one does not fit, else null. */
-function pickTakeValues(m,l,raw,vi,values){
-  const all=fillFieldsIn(raw);
-  for(let i=0;i<all.length;i++){
-    const v=Object.prototype.hasOwnProperty.call(values,all[i].id) ? values[all[i].id] : fieldVals[all[i].id];
-    const no=fieldRefusal(all[i],l,v);
-    if(no) return {need:pickNeed(m,l,raw,vi,no,i)};
-  }
-  all.forEach(f=>{
-    if(!Object.prototype.hasOwnProperty.call(values,f.id)) return;
-    const v=fillFieldClean(values[f.id]);
-    if(v) fieldVals[f.id]=v; else delete fieldVals[f.id];
-  });
-  scheduleTabSave();
-  renderFillsSoon();
-  return null;
+          empty:wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet.")};
 }
 /* THE TEXT THE DESK'S OWN COPY WOULD MAKE, counted as the desk counts a copy: the fill of the block
    in the card's language, for the chat tab in front. The shell writes it to the clipboard. A reply
    signing with a name never given is handed back as `ask`, since the question needs the desk. */
-function pickCopy(id,vi,values){
+function pickCopy(id,vi){
   const m=findCard(String(id||""));
   if(!m) return null;
   const l=cardLang(m), ps=parts(m,l);
   vi=vi|0;
   if(vi<0 || vi>=ps.length) return null;
-  if(values && typeof values==="object"){
-    const no=pickTakeValues(m,l,ps[vi],vi,values);
-    if(no) return no;
-  }
-  if(fieldsWanted(ps[vi]).length) return {need:pickNeed(m,l,ps[vi],vi)};
   if(wantsAgentName(ps[vi])) return {ask:{id:String(m.id), vi:vi}};
   let text=null;
   withAgentName(ps[vi],()=>{
@@ -138,7 +101,6 @@ function pickCopy(id,vi,values){
     eNoteRecent(m.id,vi);
     noteCopy();
     text=fill(ps[vi],m,0,l);
-    spendFields(ps[vi]);
   },null);
   return text==null ? null : {text:text};
 }
@@ -153,7 +115,6 @@ function pickAsk(id,vi){
     bumpUseCount(m.id,l);
     eNoteRecent(m.id,vi);
     copy(fill(ps[vi],m,0,l), copiedToastMsg(m,l,vi,ps.length), cardCommits(m));
-    spendFields(ps[vi]);
   },null);
   return {asked:true};
 }
@@ -163,15 +124,9 @@ function answerPick(op,argText){
   if(op==="open") return {look:pickLook(), words:pickWords(), rows:pickRows(""), last:pickLastRow()};
   if(op==="find") return {rows:pickRows(a.q)};
   if(op==="copy"){
-    if(!a.last) return pickCopy(a.id,a.vi,a.values);
+    if(!a.last) return pickCopy(a.id,a.vi);
     const r=eLastRecent();
     return r ? pickCopy(r.id,r.vi) : null;
-  }
-  /* The clipboard's text, read by the shell at the agent's Alt+V in the picker: the part that fits. */
-  if(op==="fit"){
-    const m=findCard(String(a.id||"")), l=m&&cardLang(m), ps=m?parts(m,l):[];
-    const f=m && ps[a.vi|0]!=null ? fillFieldsIn(ps[a.vi|0]).find(x=>x.id===String(a.field||"")) : null;
-    return f ? clipAnswer(f, typeof a.text==="string" ? a.text : null) : null;
   }
   if(op==="ask") return pickAsk(a.id,a.vi);
   return null;

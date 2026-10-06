@@ -11,8 +11,7 @@ import { primaryCatKeys } from "./card-intent.js";
 import { intentIdAt, intentIsCustom, intentIsOverridden, intentOrder, isIntentHiddenIdx } from "./intent-id.js";
 import { pax, roleSel } from "./dom.js";
 import { agentName, agentParts } from "./agent.js";
-import { lang, intentIdxs, intentText, cards, fieldVals } from "./app-state.js";
-import { catalogFillFields, fillFieldFor, fillFieldLabel, fillFieldRequired, fillFieldSkip, FILL_FIELD_RE } from "./fields.js";
+import { lang, intentIdxs, intentText, cards } from "./app-state.js";
 
 // Resolve {INTENT} for a card: a chip selection is an index (the clause follows the
 // language toggle), free text is verbatim in both. "A", "A and B", "A, B and C". The last
@@ -159,7 +158,7 @@ const FILL_A="\u0001", FILL_B="\u0002", FILL_M_A="\u0003", FILL_M_B="\u0004",
    engine's own rule, written beside {DAYPART}: the engine supplies the decision, the catalog every
    word - and it has no words of its own for a language it has no grammar for. */
 const Z_TOKEN=/\{Z\}([ \t]*)/g;
-function fill(s,m,mark,inL,vals){
+function fill(s,m,mark,inL){
   if(!s) return s;
   /* Every token below resolves in the language of the TEXT it is being put into: this card's,
      which is the toggle's unless the card pinned itself to one - or the other one, when the
@@ -182,16 +181,6 @@ function fill(s,m,mark,inL,vals){
     ? ((v,name)=>{ const t=String(v==null?"":v);
                    return t?FILL_A+t.replace(FILL_STRIP,"")+FILL_B:MISS(name||"?"); })
     : (v=>String(v==null?"":v));
-  /* FIELDS FIRST, while every brace is still the catalog's own: a kept value holds no brace, so
-     nothing below can read one back as a token. Empty, a skippable field leaves the lead's words
-     on the clipboard; a required one never reaches it, the copy being stopped before this. */
-  if(catalogFillFields().length) s=s.replace(FILL_FIELD_RE,(raw,name)=>{
-    const f=fillFieldFor(name);
-    if(!f) return raw;
-    const v=(vals||fieldVals)[f.id];
-    if(v) return M(v,fillFieldLabel(f,L));
-    return mark ? MISS(fillFieldLabel(f,L)) : (fillFieldRequired(f) ? "" : fillFieldSkip(f,L));
-  });
   s=s.replace(/\{GREET\}/g, ()=>M(greeting(L),t("GREET")));
   /* {DAYPART:day|evening} - or three parts for morning|afternoon|evening. The engine
      supplies the DECISION and the catalog every word: phrasing belongs to the desk, and
