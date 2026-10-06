@@ -94,8 +94,8 @@ function primaryCatLabel(i){
    them. A tie goes to the CATALOG's declared order and never to catOrder - the same authority
    catSlot reads for a colour, and for its reason: rearranging the pills must not change a mark.
    Same set of cards as intentTagCats, so the mark names what the words named. */
-/* primaryCatKey for every intent in one pass over the cards, by intent id, same tie rule:
-   asked per intent, each row of the rail walked the whole catalog. */
+/* For every intent in one pass over the cards, by intent id: asked per intent, each row of the
+   rail walked the whole catalog. */
 function primaryCatKeys(){
   const per=new Map();
   (cards||[]).forEach(m=>{
@@ -120,22 +120,10 @@ function intentCardCounts(){
   (cards||[]).forEach(m=>{ if(m) new Set(normalizeCardIntents(m)).forEach(id=>n.set(id,(n.get(id)||0)+1)); });
   return n;
 }
-function primaryCatKey(i){
-  const want=intentIdAt(i), n={};
-  (cards||[]).forEach(m=>{
-    if(!m||!m.c||!CATS[m.c]) return;
-    if(normalizeCardIntents(m).indexOf(want)<0) return;
-    n[m.c]=(n[m.c]||0)+1;
-  });
-  let best="", most=0;
-  Object.keys(CATS).forEach(k=>{ if((n[k]||0)>most){ most=n[k]; best=k; } });
-  return best;
-}
 
 export {
   intentTagCats,
   primaryCatLabel,
-  primaryCatKey,
   primaryCatKeys,
   intentCardCounts,
   normalizeCardIntents,
