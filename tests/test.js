@@ -1999,6 +1999,8 @@ function recoveryTests() {
   eq("the host answer says so once, by taking the mark", /recovering: recovering\.delete\(e\.sender\.id\),/.test(shell), true);
   const preload = fs.readFileSync(path.join(E.ROOT, "shell", "preload.js"), "utf8");
   eq("the preload hands the page that answer", /recovering: !!host\.recovering,/.test(preload), true);
+  eq("and the last loss's reason rides the same answer to the page, which Maintenance shows",
+    [/lostPage: e\.sender\.etiudaLost \|\| null,/.test(shell), /lostPage: host\.lostPage \|\| null,/.test(preload)], [true, true]);
   const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
   const m = /<script>([\s\S]*?)<\/script>/.exec(tpl);
   const guard = m ? m[1] : "";
@@ -2889,6 +2891,8 @@ function pageWatchTests() {
   const step = fn => { log.length = 0; fn(); return log.slice(); };
   const gone = reason => () => wcOn["render-process-gone"]({}, { reason: reason, exitCode: 1 });
   eq("the first loss reloads the page at once, marked", step(gone("crashed")), ["reload marked"]);
+  eq("the loss is kept on the page for the host answer, with its reason, exit code and time",
+    wc.etiudaLost, { reason: "crashed", exitCode: 1, at: clock });
   clock += 10000; answers.push(0);
   eq("a second loss within a minute asks in the recovery window, and its Restart reloads, marked",
     step(gone("crashed")), ["asks gone", "reload marked"]);
@@ -4208,8 +4212,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 996;
-const UI_STRINGS_SHA256 = "10d6831d1b016b230300d27791396125bfca02765270205c4664750e15518dbe";
+const UI_STRINGS_COUNT = 998;
+const UI_STRINGS_SHA256 = "38614e2647b54aebb32f7c74ee41b0c79108234ffbd23b19175e4f21463c6b69";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
