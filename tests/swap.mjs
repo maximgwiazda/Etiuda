@@ -338,10 +338,10 @@ try {
     const clearedShows = await q.evaluate(m => ({ cards: cards.length, own: cards.some(c => c.id === "u:swapown"),
       star: isFavourite(m.starred), agent: localStorage.getItem("eAgent"), undo: !!document.getElementById("eUndoBtn") }), made);
     clearedShows.standing = await q.evaluate(STANDING);
-    check(cleared && clearedShows.cards > 0 && clearedShows.own && !clearedShows.star && clearedShows.agent === "Invented Agent"
+    check(cleared && clearedShows.cards > 0 && !clearedShows.own && !clearedShows.star && clearedShows.agent === null
           && clearedShows.undo && clearedShows.standing === standingBefore,
-      "3b clearing local memory happens at once, asks nothing, keeps the catalog, keeps what the desk's own file carries (the own card,"
-      + " the name), forgets the star, and offers Undo (" + JSON.stringify(clearedShows) + ")");
+      "3b clearing local memory happens at once, asks nothing, keeps the catalog and offers Undo, and with no desk file it forgets"
+      + " all of it: the own card, the star and the name (" + JSON.stringify(clearedShows) + ")");
     const unCleared = await inPlace(q, () => { const b = document.getElementById("eUndoBtn"); if (b) b.click(); });
     const afterClearUndo = await fingerprint(q);
     const dClearUndo = diff(notLoose(afterClearUndo), notLoose(withLayer));

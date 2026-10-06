@@ -648,7 +648,7 @@ function ejectUndoTests() {
     "function ejectKeys(", "function ejectCatalog(", "function undoEject("];
   const OWN_PACK = JSON.stringify({ overrides: { c1: { t: "mine" } }, custom: [{ id: "u1" }], favourites: ["c1"], hidden: ["c2"],
     intentFavourites: ["i1"], intentHidden: ["i2"], intentKeys: "tag", editBases: { c1: "b" }, macroOrder: ["c1"], cardOrder: ["c1"] });
-  const world = ssOk => {
+  const world = (ssOk, desk = true) => {
     const w = { ls: {}, ss: {}, restarts: 0, undo: null, said: null, reloads: 0 };
     const ns = k => "e" + k;
     const hooks = { flushPillState: () => {}, restartDesk: () => { w.restarts++; }, tourActive: () => false, endTour: () => {} };
@@ -656,15 +656,15 @@ function ejectUndoTests() {
     try {
       w.F = new Function("E_CATALOG_STORE", "E_CATALOG_KEY", "E_NS", "nsKey", "hooks", "flushStats", "clearTimeout", "tabSaveTimer",
         "saveTabSession", "ssGet", "ssSet", "ssDel", "TAB_KEY", "lsGet", "lsSet", "lsDel", "lsKeys", "eLayers",
-        "eWatchGet", "eWatchClear", "eWatchPut", "offerUndo", "toastRefusal", "catalogStoreRefusal", "eDeskFileShown", "location",
-        loose + "\n" + markers.map(m => extractDecl(src, m)).join("\n") + "\nreturn {ejectCatalog, clearLocalMemory};")(
+        "eWatchGet", "eWatchClear", "eWatchPut", "offerUndo", "toastRefusal", "catalogStoreRefusal", "eDeskFileShown", "location", "eHasBranch",
+        loose +"\n" + markers.map(m => extractDecl(src, m)).join("\n") + "\nreturn {ejectCatalog, clearLocalMemory};")(
         ns("Catalog"), ns("CatalogOk"), "e", ns, hooks, () => {}, () => {}, null, () => {},
         ssGet, (k, v) => { if (ssOk) w.ss[k] = String(v); }, k => { delete w.ss[k]; }, "eSessionTabs",
         k => (k in w.ls ? w.ls[k] : null), (k, v) => { w.ls[k] = String(v); return true; }, k => { delete w.ls[k]; },
         () => Object.keys(w.ls), () => ["eab12~"],
         () => Promise.resolve(null), () => Promise.resolve(), () => {},
         (said, fn) => { w.said = said; w.undo = fn; }, () => {}, () => "", () => "",
-        { reload: () => { w.reloads++; } });
+        { reload: () => { w.reloads++; } }, () => desk);
     } catch (e) { w.F = null; w.err = e.message; }
     w.ls = { eCatalog: "{\"cards\":[1]}", eCatalogOk: "sig", eSample: "1", eCatalogNo: "no", eCatalogFile: "shop.ec",
              eCatalogFileAt: "1700", eCatalogTrust: "valid", eCatalogFrom: "shop.ec", "eab12~Pack": OWN_PACK, ePack: "[\"loose\"]",
@@ -700,6 +700,17 @@ function ejectUndoTests() {
     { overrides: { c1: { t: "mine" } }, custom: [{ id: "u1" }], cardOrder: ["c1"], intentKeys: "tag", editBases: { c1: "b" }, macroOrder: ["c1"] });
   if (w.undo) w.undo();
   eq("its Undo puts back every key the clear took, byte for byte", [sorted(w.ls) + sorted(w.ss) === before, w.restarts], [true, 4]);
+  const page = world(true, false);
+  const pageBefore = sorted(page.ls) + sorted(page.ss);
+  page.F.clearLocalMemory();
+  eq("with no desk file (a browser), a clear forgets the own cards, edits and deletions with every layer's pack, the keys"
+    + " naming a file, the name and the layer list, and keeps the catalog with what names it, the folder and a neighbour's keys"
+    + " (12c: in a browser all of it is local memory)",
+    [Object.keys(page.ls).sort(), page.restarts, page.said],
+    [["e1zz~Pack", "eCatalog", "eCatalogFile", "eCatalogFileAt", "eCatalogFolder", "eCatalogFrom", "eCatalogNo", "eCatalogOk",
+      "eCatalogTrust", "eSample"], 1, "Local memory cleared"]);
+  if (page.undo) page.undo();
+  eq("and its Undo puts every key back, byte for byte", sorted(page.ls) + sorted(page.ss) === pageBefore, true);
   const deaf = world(false);
   deaf.F.ejectCatalog();
   const took = !("eCatalog" in deaf.ls);

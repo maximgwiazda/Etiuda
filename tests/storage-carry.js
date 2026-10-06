@@ -312,18 +312,14 @@ const t0 = Date.now();
   });
   check(twice.same, "a second pass adopts nothing and writes no key (key set unchanged " + twice.same + ")");
 
-  /* The Clear the user asked for, driven as they drive it: it forgets what lives only on this desk, leaves
-     the name hash's keys alone, and starts the desk again in place. The layer must not walk back in: what the
-     desk's own file carries stays in the pack, and nothing the clear forgot returns from the old namespace. */
+  /* The Clear the user asked for, driven as they drive it: with no desk file it deletes this namespace's keys,
+     leaves the name hash's alone, and starts the desk again in place. The layer must not walk back in. */
   await q.evaluate(() => { clearLocalMemory(); }).catch(() => {});
   await sleep(3500);
   const after2 = await readStore(q);
-  let packLeft = null;
-  try { packLeft = JSON.parse(after2.store[ID_NS + "Pack"] || "null"); } catch (x) {}
-  const walkedBack = CARRIED_NAMES.filter(n => n !== "Pack" && after2.store[ID_NS + n] != null)
-    .concat(["favourites", "intentFavourites", "intentHidden"].filter(f => packLeft && Array.isArray(packLeft[f]) && packLeft[f].length));
+  const walkedBack = CARRIED_NAMES.filter(n => after2.store[ID_NS + n] != null);
   check(walkedBack.length === 0, "after a Clear and the start in place it performs, none of the "
-    + (CARRIED_NAMES.length - 1) + " other keys and no star or hide came back" + (walkedBack.length ? " - back: " + walkedBack.join(", ") : ""));
+    + CARRIED_NAMES.length + " keys came back" + (walkedBack.length ? " - back: " + walkedBack.join(", ") : ""));
   check(after2.store[NS_MARK + NAME_NS] === "1" && after2.store[NAME_NS + "Pack"] === NAME_LAYER[NAME_NS + "Pack"],
     "because the marker outlived the Clear, and so did the layer it points at");
   /* ---- part three: the personal layer, re-keyed from positions to tag ids -------------------

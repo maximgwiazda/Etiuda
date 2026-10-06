@@ -21932,9 +21932,9 @@ What you type stays in this browser only.`;
     hooks.restartDesk();
   }
   function clearLocalMemory() {
-    const layers = eLayers(), spaces = [E_NS].concat(layers);
-    const kept = new Set(ejectKeys().concat(E_WIPE_KEEP, SHARE_KEEP, ...spaces.map((ns) => LAYER_KEEP.map((n) => ns + n))));
-    const packs = new Set(spaces.map((ns) => ns + "Pack"));
+    const layers = eLayers(), spaces = [E_NS].concat(layers), desk = eHasBranch();
+    const kept = new Set(ejectKeys().concat(E_WIPE_KEEP, desk ? SHARE_KEEP.concat(...spaces.map((ns) => LAYER_KEEP.map((n) => ns + n))) : []));
+    const packs = new Set(desk ? spaces.map((ns) => ns + "Pack") : []);
     const keys = lsKeys().filter((k) => (eKeyIsMine(k, layers) || eKeyIsPref(k)) && !kept.has(k));
     const was = keepKeys(keys);
     let handle = null;

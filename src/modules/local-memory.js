@@ -1,5 +1,6 @@
 import { E_CATALOG_KEY, E_CATALOG_STORE, eWatchClear, eWatchGet, eWatchPut, catalogStoreRefusal } from "./catalog.js";
 import { LOOSE_FIELDS } from "./catalog-file.js";
+import { eHasBranch } from "./host.js";
 import { flushStats } from "./pack.js";
 import { E_NS, eDeskFileShown, eLayers, lsDel, lsGet, lsKeys, lsSet, nsKey, ssDel, ssGet, ssSet } from "./storage.js";
 import { TAB_KEY, saveTabSession, tabSaveTimer } from "./tabs.js";
@@ -20,7 +21,8 @@ function catalogKeep(){ return [E_CATALOG_STORE,E_CATALOG_KEY,nsKey("Sample"),ns
 const E_WIPE_KEEP=["eCatalogFolder"];
 /* CLEAR FORGETS WHAT LIVES ONLY ON THIS DESK. What the desk's own file in the shared folder carries stays: the
    pack's LOOSE_FIELDS with the fields their ids are keyed by, the keys naming that file, the name it is signed with
-   and the list of layers holding them. Emptied, a layer would take its file out of the share at the next write. */
+   and the list of layers holding them. Emptied, a layer would take its file out of the share at the next write.
+   With no desk file (a browser) all of it is local memory, and all of it goes. */
 const SHARE_KEEP=["eAgent","eLayers"];
 const PACK_KEEP=["v","intentKeys","editBases","baseCards","macroOrder","baseMacros"];
 const LAYER_KEEP=["Exported","LooseId","Shared","SharedOwn","SharedFile"];
@@ -66,9 +68,9 @@ function putBack(was){
 /* CLEARING HAPPENS AT ONCE, and its Undo puts every key back. The watched file's HANDLE lives in
    IndexedDB, out of any key sweep, so it is read before it goes and given back with the rest. */
 function clearLocalMemory(){
-  const layers=eLayers(), spaces=[E_NS].concat(layers);
-  const kept=new Set(ejectKeys().concat(E_WIPE_KEEP, SHARE_KEEP, ...spaces.map(ns=>LAYER_KEEP.map(n=>ns+n))));
-  const packs=new Set(spaces.map(ns=>ns+"Pack"));
+  const layers=eLayers(), spaces=[E_NS].concat(layers), desk=eHasBranch();
+  const kept=new Set(ejectKeys().concat(E_WIPE_KEEP, desk ? SHARE_KEEP.concat(...spaces.map(ns=>LAYER_KEEP.map(n=>ns+n))) : []));
+  const packs=new Set(desk ? spaces.map(ns=>ns+"Pack") : []);
   const keys=lsKeys().filter(k=>(eKeyIsMine(k,layers)||eKeyIsPref(k)) && !kept.has(k));
   const was=keepKeys(keys);
   let handle=null;
