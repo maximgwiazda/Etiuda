@@ -131,7 +131,7 @@ function buildTree(root, phase) {
   ].join("\n"));
   execFileSync(process.execPath, [builder], { cwd: TESTS, stdio: ["ignore", "pipe", "pipe"] });
 
-  for (const f of ["engine.js", "i18n-scan.js", "css-dead.js", "ghosts.js", "storage-keys.js"])
+  for (const f of ["engine.js", "i18n-scan.js", "css-dead.js", "ghosts.js", "storage-keys.js", "deadcode.js"])
     fs.copyFileSync(path.join(TESTS, f), path.join(root, "tests", f));
 }
 
@@ -171,6 +171,36 @@ const ARROW_DOC = [
 ].join("\n");
 PATCH.arrowbody = "const txt = " + JSON.stringify(ARROW_DOC) + ";\n"
   + "E.sourceDoc = () => ({ text: txt, files: ['synthetic'], at: () => 'synthetic:1', atLine: k => 'synthetic:' + k });";
+
+/* A reading of files, for the scans that ask which file a name is declared in. Each part is
+   [file, text]; at() answers the file of an offset, as the real sourceDoc() does. */
+function filesPatch(parts) {
+  return "const parts = " + JSON.stringify(parts) + ";\n"
+    + "let txt = ''; const starts = [];\n"
+    + "parts.forEach(p => { starts.push([txt.length, p[0]]); txt += p[1]; });\n"
+    + "const at = i => { let f = starts[0]; starts.forEach(s => { if (i >= s[0]) f = s; });"
+    + " return f[1] + ':' + txt.slice(f[0], i).split('\\n').length; };\n"
+    + "E.sourceDoc = () => ({ text: txt, files: parts.map(p => p[0]), at: at, atLine: k => 'synthetic:' + k });";
+}
+
+/* deadcode.js: two live names reached only through a namespace and a spread, and three dead ones
+   that look nearly alike: a member of a namespace bound to another file, a member of an object
+   that is no namespace, and one nobody names. Invented names throughout. */
+PATCH.deadns = filesPatch([
+  ["src/modules/alpha.js", [
+    "export function liveByNs(){ return 1; }",
+    "function liveBySpread(){ return [1]; }",
+    "export function useSpread(){ return Math.max(...liveBySpread()); }",
+    "export function deadHere(){ return 2; }",
+    "export function propOnly(){ return 3; }",
+    ""].join("\n")],
+  ["src/modules/beta.js", "export function shadowNs(){ return 4; }\n"],
+  ["src/main.js", [
+    'import * as alpha from "./modules/alpha.js";',
+    'import * as beta from "./modules/beta.js";',
+    "alpha.liveByNs(); alpha.useSpread(); alpha.shadowNs(); other.propOnly();",
+    ""].join("\n")]
+]);
 
 function scan(root, tool, reading, args) {
   const code = [
@@ -308,6 +338,16 @@ try {
   ok(ab.code === 1 && /PL: 2\/4 /.test(ab.out) && /"Drifted  one":""/.test(abMissing) && /"Named one":""/.test(abMissing)
      && !/"no"/.test(abMissing) && !/Kept/.test(abMissing),
      "i18n-scan.js       reads copy a function returns, arrow or named, and nothing it only compares");
+
+  /* 27. deadcode.js READS A NAMESPACE MEMBER AND A SPREAD AS USES, board 858. At 09fae6f 61 of its
+     78 hits were live, 60 called as `ns.fn()` from boot() and one as `...hitRanges(`. The three
+     dead names are the teeth: a scan that counted every name after a dot would lose them. */
+  const dc = scan(roots.mod, "deadcode.js", "deadns", []);
+  const dcDead = (dc.out.split("=== nothing references these ===")[1] || "").match(/^\s+\w+\s+(\w+)/gm) || [];
+  const dcNames = dcDead.map(s => s.trim().split(/\s+/)[1]).sort().join(",");
+  ok(dc.code === 0 && dcNames === "deadHere,propOnly,shadowNs",
+     "deadcode.js        reads alpha.liveByNs() and ...liveBySpread() as uses, and still reports "
+     + "a member of another namespace, of an object, and a name nobody calls: " + JSON.stringify(dcNames));
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
 }
