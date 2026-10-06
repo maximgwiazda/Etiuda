@@ -1,6 +1,6 @@
 ﻿Etiuda End-User Licence Agreement
 
-[Seller's legal name], [registered address], Poland. This licence covers Etiuda and Etiuda Studio.
+Maxim Gwiazda, [registered address], Poland. This licence covers Etiuda and Etiuda Studio.
 
 The licence. Etiuda is licensed to you, not sold: the right to install and use the software on the terms below. This licence governs the program as it is installed from either installer. The Etiuda Source-Available Licence 1.0 governs the published source, and each keeps to its own.
 

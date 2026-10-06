@@ -1,6 +1,6 @@
 ﻿Umowa licencyjna użytkownika końcowego Etiudy
 
-[Nazwa firmy], [adres siedziby], Polska. Licencja obejmuje Etiudę i Etiudę Studio.
+Maxim Gwiazda, [adres siedziby], Polska. Licencja obejmuje Etiudę i Etiudę Studio.
 
 Licencja. Etiuda jest licencjonowana, a nie sprzedawana: to prawo do zainstalowania i używania oprogramowania na warunkach poniżej. Ta licencja reguluje program zainstalowany z któregokolwiek z instalatorów. Opublikowany kod źródłowy reguluje Licencja Etiuda Source-Available 1.0, a każdy z tych dokumentów zostaje przy swoim.
 
