@@ -16,6 +16,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/deadcode.js                           no fixtures
     node tests/css-layers.js                         no fixtures, the cascade layers
     node tests/motion-tokens.js                      no fixtures, the motion tiers and the quiet switch
+    node tests/kin-contrast.mjs                      no fixtures, the desk's blue in the four token blocks as drawn (kc1), the ratios it keeps (kc2) and the bubbles' fill (kc3)
     node tests/build-fresh.mjs                       no fixtures, builds once
     node tests/catalog-routes.mjs                     no fixtures, the two catalog routes
     node tests/module-calls.mjs                       no fixtures, the modules CALLED
@@ -50,12 +51,12 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/catalog-watch.js  the watched catalog, one app run
     node tests/pick-desk.js                          the picker over a real window: it takes the foreground and presses keys, so by hand, nobody at the keyboard
     node tests/swap.mjs                              the desk changed in place held to a fresh start, Chrome, no fixtures
-    node tests/theme-fade.mjs                        every category, then the theme's fade: the page lives, the hold is let go, the record Maintenance shows across a reload, and a control that the fault still kills the page without the hold, Chrome, no fixtures
+    node tests/theme-fade.mjs                        every category, then the theme's fade: the page lives, the hold is let go, the record Maintenance shows across a reload, a control that the fault still kills the page without the hold, and a fade skipped by the page's hiding leaving nothing on the root (tf6, tf7), Chrome, no fixtures
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
     ETIUDA_FIXTURES=<folder> node tests/reinstall.js     install, use, uninstall, install again
 
 `npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `module-calls.mjs`, `desk-ipc.mjs`, `catalog-history.mjs`, `catalog-shared.mjs`, `desk-growth.mjs`, `shell-office.mjs`, `hpke.mjs`, `team-desk.mjs`, `team-join.mjs`, `pick.mjs`, `copy-routes.mjs`, `about.mjs`, `catalog-trust.mjs`, `catalog-trust-desk.mjs`, `token-canary.mjs`, `test.js`, `i18n-scan.js`,
-`pl-diacritics.js`, `css-layers.js` and `motion-tokens.js`, none of which needs a fixture or a browser. `npm run smoke` needs both.
+`pl-diacritics.js`, `css-layers.js`, `motion-tokens.js` and `kin-contrast.mjs`, none of which needs a fixture or a browser. `npm run smoke` needs both.
 
 `css-dead.js`, `ghosts.js` and `storage-keys.js` are reports rather than gates: they print and
 exit 0, and a human reads the list. `i18n-scan.js` is a gate and exits non-zero when a language

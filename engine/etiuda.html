@@ -331,11 +331,10 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      --line separates passively (dividers), --line-strong marks a real edge (fields, tabs,
      dashed add-affordances). One token doing both reads as a lattice of equally loud lines. */
   --bg:#f7f8fa; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#e4e8ee; --line-strong:#cfd6e0;
-  --accent:#2563eb; --accent-fill:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8; --mark-ink:#2563eb;
-  /* TWO BLUES IN THE DARK THEMES, ONE IN LIGHT. --accent is what a mark, a line, a link or a focus ring
-     wears: the dark themes' former blue, #7aa2f7, which reads 6 to 7.5:1 on their grounds where the
-     cobalt reads 2.9 to 3.7. --accent-fill is what carries white words, a solid button, a selected pill,
-     a switch's thumb: the bubbles' cobalt in every theme, 5.17:1 under white. Light has one blue. */
+  --accent:#0e67d8; --accent-fill:#0e67d8; --accent-soft:#dde9fc; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8; --mark-ink:#0e67d8;
+  /* TWO STEPS OF ONE BLUE IN THE DARK THEMES, ONE STEP IN LIGHT. --accent is what a mark, a line, a link
+     or a focus ring wears; --accent-fill carries white words: a solid button, a selected pill, a switch's
+     thumb. tests/kin-contrast.mjs holds both ratios. */
   /* The dot field under the cards. A share of --dim rather than a colour, so the field follows
      the ink of whichever theme is on; the two shares are PICKED BY EYE from a sheet of twelve
      (ruled 2026-09-17) rather than derived, because a pale ground swallows a dot that a dark one
@@ -344,7 +343,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* The WinUI dress: header fields sit ABOVE their chrome - lighter than it in both themes -
      and wear a darker bottom edge; focus underlines in accent instead of ringing. The band
      is the blue behind brand and tabs; the chrome is the header below it. */
-  --band:#1a4fa0; --header-bg:#f0f2f5;
+  --band:#0f4c9d; --header-bg:#f0f2f5;
   /* What stands ON the band, as a colour and as a triple for the alphas the furniture uses.
      White wherever the band is deep, which is everywhere but a light session under the host's
      material; the rule that flips it sits beside the scrim. */
@@ -354,7 +353,7 @@ button,a,label,select,summary,[role="button"]{cursor:default}
      deliberately, and the badge, the filled star and the intent panel's gold edge always say
      it too. DARK IS NOT SYNCED to this hue and must not be. */
   --fav:#c69a2a; --fav-soft:rgba(218,180,65,.30);
-  --ed:#1d4ed8; --ed-soft:rgba(29,78,216,.14);
+  --ed:#0e67d8; --ed-soft:rgba(14,103,216,.13);
   --pl:#6b3fa0;; --go:#047857; --go-soft:#d1fae5;
   /* The radius scale: 12 surfaces, 8 controls sitting on them, 6 small targets inside
      controls, 999 chips. The 4-5px one-offs on tiny hover pads are optical fits, not scale
@@ -452,11 +451,11 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
   --band:#0a0d13; --header-bg:#191b20;
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
-  --accent:#7aa2f7; --accent-fill:#2563eb; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
+  --accent:#409afc; --accent-fill:#136adc; --accent-soft:#16233a; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
-  --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
+  --ed:#409afc; --ed-soft:rgba(64,154,252,.16);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
-  --bub-shadow:rgba(0,0,0,.55);
+  --bub:#136adc; --bub-shadow:rgba(0,0,0,.55);
   --scroll-thumb:color-mix(in srgb,rgb(152,162,179) 40%,var(--bg));
   --scroll-thumb-hover:color-mix(in srgb,rgb(152,162,179) 75%,var(--bg));
   --bevel:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.38),inset 1px 0 0 rgba(255,255,255,.05);
@@ -494,11 +493,11 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   /* Darker than the chrome, so the band recedes and the active tab pops FORWARD. */
   --band:#0a0d13; --header-bg:#191b20;
   --field:#23262c; --field-line:#343941; --field-edge:rgba(255,255,255,.30);
-  --accent:#7aa2f7; --accent-fill:#2563eb; --accent-soft:#1b2231; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
+  --accent:#409afc; --accent-fill:#136adc; --accent-soft:#16233a; --ok:#4ec98a; --warn:#ff9f43; --warn-bg:rgba(255,159,67,.14); --mark-ink:#fff;
   --fav:#e0b84a; --fav-soft:rgba(224,184,74,.28);
-  --ed:#60a5fa; --ed-soft:rgba(96,165,250,.18);
+  --ed:#409afc; --ed-soft:rgba(64,154,252,.16);
   --pl:#b795e8;; --go:#4ec98a; --go-soft:#132419;
-  --bub-shadow:rgba(0,0,0,.55);
+  --bub:#136adc; --bub-shadow:rgba(0,0,0,.55);
   --scroll-thumb:color-mix(in srgb,rgb(152,162,179) 40%,var(--bg));
   --scroll-thumb-hover:color-mix(in srgb,rgb(152,162,179) 75%,var(--bg));
   --bevel:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.38),inset 1px 0 0 rgba(255,255,255,.05);
@@ -531,16 +530,16 @@ button,a,label,select,summary,[role="button"]{cursor:default}
   --bg:#f7f8fa; --panel:#ffffff; --ink:#0f172a; --dim:#475569; --line:#e4e8ee; --line-strong:#cfd6e0;
   --dots-ink:color-mix(in srgb,var(--dim) 60%,transparent);
   /* The light half of the WinUI dress - the law lives at the base :root block. */
-  --band:#1a4fa0; --header-bg:#f0f2f5;
+  --band:#0f4c9d; --header-bg:#f0f2f5;
   --field:#fdfdfd; --field-line:#e0e4ea; --field-edge:#aab3c0;
-  --accent:#2563eb; --accent-fill:#2563eb; --accent-soft:#dceafe; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8; --mark-ink:#2563eb;
+  --accent:#0e67d8; --accent-fill:#0e67d8; --accent-soft:#dde9fc; --ok:#0a7d4a; --warn:#c2410c; --warn-bg:#fff4e8; --mark-ink:#0e67d8;
   /* The star is a mark you scan for, not text you read - its ~2.6:1 on white is spent
      deliberately, and the badge, the filled star and the intent panel's gold edge always say
      it too. DARK IS NOT SYNCED to this hue and must not be. */
   --fav:#c69a2a; --fav-soft:rgba(218,180,65,.30);
-  --ed:#1d4ed8; --ed-soft:rgba(29,78,216,.14);
+  --ed:#0e67d8; --ed-soft:rgba(14,103,216,.13);
   --pl:#6b3fa0;; --go:#047857; --go-soft:#d1fae5;
-  --bub-shadow:rgba(37,99,235,.32);
+  --bub:#0e67d8; --bub-shadow:rgba(14,103,216,.30);
   --scroll-thumb:color-mix(in srgb,rgb(71,85,105) 40%,var(--bg));
   --scroll-thumb-hover:color-mix(in srgb,rgb(71,85,105) 65%,var(--bg));
   --card-border:transparent;   /* light cards sit on their shadow; dark keeps a light seam */
@@ -22074,7 +22073,7 @@ What you type stays in this browser only.`;
     });
     const end = () => {
       traceNote(["fade", n, "finish"]);
-      if (!--fadeHolds) r.classList.remove("theme-fade");
+      if (!--fadeHolds) r.classList.remove("theme-fade", "theme-swap");
     };
     vt.finished.then(end, end);
   }
