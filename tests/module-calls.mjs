@@ -3027,12 +3027,15 @@ const CARD_B = {
         heard("pointerup").forEach(fn => fn({}));
       } finally { lanesBox.querySelectorAll = hadAll; }
       const dragged = JSON.stringify(P.pack.custom[0].next);
+      const lanesFirst = dragTags.slice(0, 4).map(tag => /data-to="([^"]*)"/.exec(tag)[1] + (tag.indexOf(" data-learnt=") > -1 ? "~" : tag.indexOf(" data-used=") > -1 ? "+" : ""));
+      const dockFirst = ND.dockNow().rows.map(r => r.id + (r.learnt ? "~" : r.used ? "+" : ""));
+      const keys = [lanesFirst.join(",") === dockFirst.join(","), dockFirst.length, dockFirst.some(k => k.endsWith("+"))].join(",");
       P.pack.custom[0].next = own.next.map(e => ({ to: e.to }));
       const rowEl = { dataset: { k: "0", to: "c-ln-b" } }, x = { closest: s => (s === ".nx-x" ? x : s === ".ln-row" ? rowEl : null) };
       ((lanesBox.heard && lanesBox.heard.click) || []).forEach(fn => fn({ target: x }));
       const written = JSON.stringify(P.pack.custom[0].next);
-      check("lanes.js", "863w1 a reply offered by use alone is offered in the lanes, marked often, with the way to add it and no grip, and taking a reply off the list or dragging one never writes it in",
-        () => eq(offered + "|" + written + "|" + dragged, 'true,true,true,false,true,false|[{"to":"c-ln-c"}]|[{"to":"c-ln-c"},{"to":"c-ln-b"}]'));
+      check("lanes.js", "863w1 a reply offered by use alone is offered in the lanes, marked often, with the way to add it and no grip, and taking a reply off the list or dragging one never writes it in, and the first four rows are the action button's rows, in its order, so its keys copy the same replies",
+        () => eq(offered + "|" + written + "|" + dragged + "|" + keys, 'true,true,true,false,true,false|[{"to":"c-ln-c"}]|[{"to":"c-ln-c"},{"to":"c-ln-b"}]|true,4,true'));
       LP.bumpUseCount("c-ln-c", "en");
       await new Promise(r => setTimeout(r, 80));
       const after = lanesBox.innerHTML, saidNext = sayEl.textContent;
