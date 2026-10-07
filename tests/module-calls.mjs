@@ -3009,11 +3009,30 @@ const CARD_B = {
       const rowOf = id => html.split('<div class="card ln-row').find(p => p.indexOf('data-to="' + id + '"') > -1) || "";
       const d = rowOf("c-ln-d"), b = rowOf("c-ln-b");
       const offered = [/data-used=""/.test(d), />often</.test(d), /class="ln-keep"/.test(d), /nx-grip/.test(d), /nx-grip/.test(b), /ln-trail/.test(html)].join(",");
+      /* A drag reorders the list's own rows only: the lanes' pointer handlers run over rows that answer the drag's own
+         selector, and what is written is the list without the reply offered by use alone. */
+      const dragTags = [...html.matchAll(/<div class="card ln-row[^"]*"([^>]*)>/g)].map(m => m[1]);
+      let dragOrder = [];
+      const dragWrap = { insertBefore(r, ref) { dragOrder = dragOrder.filter(o => o !== r); const at = ref ? dragOrder.indexOf(ref) : -1; if (at > -1) dragOrder.splice(at, 0, r); else dragOrder.push(r); } };
+      dragOrder = dragTags.map((tag, i) => { const r = { dataset: { to: /data-to="([^"]*)"/.exec(tag)[1] }, parentNode: dragWrap, classList: { add() {}, remove() {} },
+        hasAttribute: a => tag.indexOf(" " + a + "=") > -1, getBoundingClientRect: () => ({ top: i * 50, height: 40 }), get nextSibling() { return dragOrder[dragOrder.indexOf(r) + 1] || null; } };
+        return r; });
+      const hadAll = lanesBox.querySelectorAll;
+      lanesBox.querySelectorAll = sel => (sel.indexOf(".ln-row") === 0 ? dragOrder.filter(r => [...sel.matchAll(/:not\(\[([\w-]+)\]\)/g)].every(m => !r.hasAttribute(m[1]))) : []);
+      const heard = k => (lanesBox.heard && lanesBox.heard[k]) || [];
+      try {
+        const grip = { closest: s => (s === ".ln-row" ? dragOrder[0] : null), setPointerCapture() {} };
+        heard("pointerdown").forEach(fn => fn({ button: 0, pointerType: "mouse", pointerId: 1, clientY: 0, target: { closest: s => (s === ".nx-grip" ? grip : null) } }));
+        heard("pointermove").forEach(fn => fn({ clientY: 110 }));
+        heard("pointerup").forEach(fn => fn({}));
+      } finally { lanesBox.querySelectorAll = hadAll; }
+      const dragged = JSON.stringify(P.pack.custom[0].next);
+      P.pack.custom[0].next = own.next.map(e => ({ to: e.to }));
       const rowEl = { dataset: { k: "0", to: "c-ln-b" } }, x = { closest: s => (s === ".nx-x" ? x : s === ".ln-row" ? rowEl : null) };
       ((lanesBox.heard && lanesBox.heard.click) || []).forEach(fn => fn({ target: x }));
       const written = JSON.stringify(P.pack.custom[0].next);
-      check("lanes.js", "863w1 a reply offered by use alone is offered in the lanes, marked often, with the way to add it and no grip, and taking a reply off the list never writes it in",
-        () => eq(offered + "|" + written, 'true,true,true,false,true,false|[{"to":"c-ln-c"}]'));
+      check("lanes.js", "863w1 a reply offered by use alone is offered in the lanes, marked often, with the way to add it and no grip, and taking a reply off the list or dragging one never writes it in",
+        () => eq(offered + "|" + written + "|" + dragged, 'true,true,true,false,true,false|[{"to":"c-ln-c"}]|[{"to":"c-ln-c"},{"to":"c-ln-b"}]'));
       LP.bumpUseCount("c-ln-c", "en");
       await new Promise(r => setTimeout(r, 80));
       const after = lanesBox.innerHTML, saidNext = sayEl.textContent;
