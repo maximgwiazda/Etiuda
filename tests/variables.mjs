@@ -5,7 +5,7 @@
  *                                verdict was reached
  *
  * THE ORACLES. A rule is read through variables.js's own evaluator against facts set here; a card is
- * read as the text fill() gives the clipboard or the screen. The glyph is read as its accessible name
+ * read as the text fill() gives the clipboard or the screen, and a card's own form of address the same way. The glyph is read as its accessible name
  * and state, which is what a screen reader hears; how it LOOKS is Maxim's to judge on the desk.
  *
  * THE OLD TEXT. Section 9 fills one grid of cards, names, flags, languages, intents and hours twice: with
@@ -71,7 +71,7 @@ if (process.argv[2] === "--grid") {
 }
 
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
-const EXPECTED = 72;
+const EXPECTED = 80;
 let asserted = 0, failed = 0;
 function check(ok, line) {
   asserted++;
@@ -341,6 +341,56 @@ try {
   }
   const edited = V.varAddressRules("titleFirst", "first"); edited[0].write.pl = "Szanowny Panie {@surname}";
   check(choices.every(Boolean) && V.varAddressOf({ rules: edited }) === null, "12 every choice reads back as itself, and rules changed by hand as none");
+
+  /* ---- 13. a card's own form of address under the override, and the glyph reaching it ---------- */
+  const M = await import(MOD("macros-json.js"));
+  const formed = (pl, en, more) => Object.assign(card("Dzień dobry, {PAX}."), { paxOwn: 1, firstOnly: 1 },
+    pl ? { addressPl: pl } : {}, en ? { addressEn: en } : {}, more || {});
+  const say = (m, L) => I.fill(L === "pl" ? "Dzień dobry, {PAX}." : "Hello, {PAX}.", m, false, L);
+  const titled = formed("titleFirst", "titleSurname");
+  world({ name: "Anna Kowalska" });
+  const byGlyph = [say(titled, "pl"), say(titled, "en")];
+  ["m", "n"].forEach(g => { G.setHandGender(g); byGlyph.push(say(titled, "pl"), say(titled, "en")); });
+  G.putHandGender(null);
+  check(JSON.stringify(byGlyph) === JSON.stringify(["Dzień dobry, Pani Anno.", "Hello, Ms Kowalska.",
+    "Dzień dobry, Panie Anno.", "Hello, Mr Kowalska.", "Dzień dobry, Państwo.", "Hello, Mx Kowalska."]),
+    "13a a card set to Pani or Pan with the first name, and to title and surname in English, follows the glyph: " + JSON.stringify(byGlyph));
+  const boxed = formed("", "", { paxVoc: 0 });
+  const boxF = say(boxed, "pl"); G.setHandGender("m"); const boxM = say(boxed, "pl"); G.putHandGender(null);
+  check(boxF === boxM && boxF === "Dzień dobry, Anna.",
+    "13b CONTROL: a card addressing by name has no word the glyph changes, so 13a sees the form and not the name");
+  world({ name: "Tomasz Nowak" });
+  check(say(formed("titleSurname", ""), "pl") === "Dzień dobry, Panie Nowak." && say(formed("titleSurname", ""), "en") === "Hello, Tomasz."
+    && say(formed("none", ""), "pl") === "Dzień dobry." && say(formed("none", "", { paxVoc: 1 }), "en") === "Hello, Tomasz.",
+    "13c Pani or Pan with the surname, and no name, in Polish; English addresses by the name the boxes shape");
+  world({ name: "Anna Kowalska" });
+  const derived = Object.assign(card("Dzień dobry, {PAX}."), { firstOnly: 1, addressPl: "titleSurname" });
+  V.setCatalogVariables({ list: [{ name: "PAX", rules: V.varAddressRules("first", "first") }] });
+  const underTeam = say(derived, "pl");
+  const off2 = say(Object.assign({}, derived, { paxOwn: 0 }), "pl");
+  V.setCatalogVariables(null);
+  check(F.paxOwnOn(derived) && underTeam === "Dzień dobry, Pani Kowalska." && off2 === "Dzień dobry, Anno.",
+    "13d a form with no paxOwn reads as overridden and beats the team's address; switched off, the team's: " + JSON.stringify([underTeam, off2]));
+  check(say(formed("titleSecond", "first"), "pl") === "Dzień dobry, Anno." && F.paxAddressOf(formed("titleSecond", "first"), "en") === ""
+    && F.paxAddressOf({ addressEn: "titleFirst" }, "en") === "",
+    "13e a form this build does not know, or Studio's first, or a Polish form in English, addresses by name");
+  const file2 = { format: 2, kind: "etiuda-catalog", id: "toy-shop", rev: 1, langs: [{ code: "en" }, { code: "pl" }],
+    tags: [{ id: "t-open", kind: "shelf", label: { en: "Open" } }],
+    cards: [{ id: "c-a", shelf: "t-open", bodyShape: "plain", title: { en: "A" }, body: { en: "Hi {PAX}" }, paxOwn: 1,
+      address: { pl: "titleFirst", en: "titleSurname" } },
+      { id: "c-b", shelf: "t-open", bodyShape: "plain", title: { en: "B" }, body: { en: "Hi {PAX}" }, address: { pl: "none" } }] };
+  const rt = C2.catalogFromV2(file2), back3 = C2.catalogToV2(rt);
+  check(C2.v2Problems(file2).length === 0 && rt.cards[0].addressPl === "titleFirst" && rt.cards[0].addressEn === "titleSurname"
+    && !rt.cards[0].ext && JSON.stringify(back3.cards.map(c => c.address)) === JSON.stringify([{ en: "titleSurname", pl: "titleFirst" }, { pl: "none" }]),
+    "13f the format carries a card's forms, read into the runtime and written back as they came: " + JSON.stringify(back3.cards.map(c => c.address)));
+  const refused = [{ address: "titleFirst" }, { address: { de: "titleFirst" } }, { address: { pl: 1 } }]
+    .map(x => C2.v2Problems(Object.assign({}, file2, { cards: [Object.assign({}, file2.cards[0], x)] })));
+  check(refused.every(r => r.length === 1 && /address/.test(r[0])), "13g refused, one problem each: a form that is no object, a language with no forms, a form that is no word: "
+    + JSON.stringify(refused.map(r => r[0])));
+  const plain = M.cardToExportPlain(Object.assign({ id: "u:1", c: "open", t: "A" }, formed("titleSurname", "titleSurname")));
+  const again = M.parseMacrosData({ format: 1, kind: "playbook-cards", cards: [plain] })[0];
+  check(plain.addressPl === "titleSurname" && plain.addressEn === "titleSurname" && again.addressPl === "titleSurname" && again.addressEn === "titleSurname",
+    "13h the cards file writes a card's forms and reads them back");
 } catch (e) {
   failed++;
   console.log("  FAIL the run threw: " + String(e && e.stack || e).split("\n").slice(0, 4).join(" | "));

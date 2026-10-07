@@ -1,4 +1,5 @@
 import { CONTENT_LANGS, langColumn } from "./content-model.js";
+import { VAR_ADDRESS_PL, VAR_ADDRESS_EN } from "./variables.js";
 
 /* ---- Which language a card speaks: normally the EN/PL toggle decides; a card may
    PIN itself, and then shows that version and resolves every token in it whatever the
@@ -18,7 +19,7 @@ const CARD_TEXT_FIELDS=Object.keys(CARD_FIELD_KEY);
 /* Stored on a card, set from the editor, carried by the format - but neither a translation nor
    a boolean flag, so the two loops that handle those both used to miss it. Everything that
    copies a card field must include this list. */
-const CARD_PLAIN_FIELDS=["lockLang"];
+const CARD_PLAIN_FIELDS=["lockLang","addressEn","addressPl"];
 /* THE ADVANCED FLAGS, NAMED ONCE, with the box each one lives in. Six sites used to list
    this set by hand and four had drifted, every one of them dropping a different member.
    The id belongs here rather than beside the markup for exactly that reason: a second list
@@ -48,12 +49,21 @@ function paxVocOn(m){
   if(m && m.paxVoc!=null) return !!(+m.paxVoc);
   return !!(m && m.firstOnly);
 }
-/* THE MANUAL OVERRIDE OF {PAX}: on, the card's two boxes decide; off, the catalog's address does,
-   Etiuda's own being the first name in the vocative. ABSENT IS DERIVED, as paxVoc is: boxes saying
-   anything else read as overridden, so a card keeps the sentence it had. */
+/* THE MANUAL OVERRIDE OF {PAX}: on, the card's form and two boxes decide; off, the catalog's address
+   does, Etiuda's own being the first name in the vocative. ABSENT IS DERIVED, as paxVoc is: a form, or
+   boxes saying anything else, read as overridden, so a card keeps the sentence it had. */
 function paxOwnOn(m){
   if(m && m.paxOwn!=null) return !!(+m.paxOwn);
-  return !!m && !(m.firstOnly && paxVocOn(m));
+  return !!m && (!!(m.addressEn || m.addressPl) || !(m.firstOnly && paxVocOn(m)));
+}
+/* THE FORM A CARD'S OVERRIDE ADDRESSES BY, per grammar language: Studio's choices for a team's
+   address bar its first, which here is the name the two boxes shape, written as no form at all. */
+const PAX_ADDRESS_KEY={en:"addressEn", pl:"addressPl"};
+const PAX_ADDRESS_FORMS={en:VAR_ADDRESS_EN.filter(k=>k!=="first"), pl:VAR_ADDRESS_PL.filter(k=>k!=="first")};
+function paxAddressOf(m,L){
+  const k=Object.prototype.hasOwnProperty.call(PAX_ADDRESS_KEY,L) ? PAX_ADDRESS_KEY[L] : "";
+  const v=(k && m && m[k]!=null) ? String(m[k]) : "";
+  return (k && PAX_ADDRESS_FORMS[L].indexOf(v)>-1) ? v : "";
 }
 /* What the editor's switch shows: a derived override only where the card's text uses {PAX}. */
 function cardUsesPax(m){
@@ -113,6 +123,9 @@ export {
   paxOwnOn,
   paxOwnShown,
   cardUsesPax,
+  PAX_ADDRESS_KEY,
+  PAX_ADDRESS_FORMS,
+  paxAddressOf,
   CARD_SHARED_FIELDS,
   CARD_KEY_ALIAS
 };

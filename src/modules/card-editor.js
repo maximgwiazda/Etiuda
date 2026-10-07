@@ -1,4 +1,4 @@
-import { cardFieldKey, cardStorageKeys, cardRequiredKeys, CARD_TEXT_FIELDS, CARD_FLAG_BOX, CARD_FLAGS, CARD_BOOL_FLAGS, carryUnwritten, paxVocOn, paxOwnOn, paxOwnShown, cardUsesPax, CARD_SHARED_FIELDS } from "./card-fields.js";
+import { cardFieldKey, cardStorageKeys, cardRequiredKeys, CARD_TEXT_FIELDS, CARD_FLAG_BOX, CARD_FLAGS, CARD_BOOL_FLAGS, carryUnwritten, paxVocOn, paxOwnOn, paxOwnShown, cardUsesPax, CARD_SHARED_FIELDS, PAX_ADDRESS_KEY, PAX_ADDRESS_FORMS, paxAddressOf } from "./card-fields.js";
 import { baseCard, cardCommits, cardText, cardTitle, findCard, overrideAgainstBase } from "./card-model.js";
 import { nextReplies, stampToggleHtml, wireStampToggle } from "./card-chain.js";
 import { catSortIdx } from "./card-order.js";
@@ -7,7 +7,7 @@ import { closeModal, edMarkClean, edNavHtml, edWireNav, mfSec, openDialog, refre
 import { afterPaint } from "./motion.js";
 import { ICON_PLUS } from "./icons.js";
 import { intentNavName } from "./intent-text.js";
-import { langTabs, langPane, langFieldId, markMissing, edReportMissing, langFocus } from "./lang-tabs.js";
+import { langTabs, langPane, langFieldId, markMissing, edReportMissing, langFocus, langEndonym } from "./lang-tabs.js";
 import { lySet } from "./storage.js";
 import { drawPills } from "./tabs.js";
 import { t, counted, toast, tc } from "./ui-lang.js";
@@ -250,6 +250,37 @@ function readMeLockLang(){
   if(!box||!box.checked) return "";
   return ((($("#meLockSeg .on")||{}).dataset||{}).v)||CONTENT_LANGS[0];
 }
+/* THE OVERRIDE'S FORMS OF ADDRESS, Polish first, where the titles matter most, and only in a language
+   the catalog declares. A form names a title or no name; the name itself is "", which the boxes shape. */
+function meAddressLangs(){ return ["pl","en"].filter(L=>CONTENT_LANGS.indexOf(L)>-1); }
+function meAddressName(L,k){
+  if(!k) return t("By name");
+  if(k==="none") return t("No name");
+  if(L==="en") return t("Title and surname");
+  return k==="titleFirst" ? t("Pani or Pan, with the first name") : t("Pani or Pan, with the surname");
+}
+function meAddressHtml(m,L){
+  const now=paxAddressOf(m,L), forms=PAX_ADDRESS_FORMS[L];
+  const order=forms.filter(k=>k!=="none").concat([""], forms.filter(k=>k==="none"));
+  return '<div class="mf-addr" role="radiogroup" aria-label="'+esc(langEndonym(L))+'">'
+    +'<span class="mf-addr-l" data-i18n-skip>'+esc(langEndonym(L))+'</span>'
+    +order.map(k=>'<label><input type="radio" name="meAddr_'+L+'" value="'+k+'"'+(k===now?" checked":"")+'> '
+      +esc(meAddressName(L,k))+'</label>').join("")+'</div>';
+}
+/* The forms as the dialog holds them; a language with no group on screen keeps what the card had. */
+function readMeAddress(m){
+  const out={};
+  Object.keys(PAX_ADDRESS_KEY).forEach(L=>{
+    const key=PAX_ADDRESS_KEY[L], group=document.querySelector('input[name="meAddr_'+L+'"]');
+    const el=group && document.querySelector('input[name="meAddr_'+L+'"]:checked');
+    out[key]=group ? (el?el.value:"") : String((m&&m[key])||"");
+  });
+  return out;
+}
+/* The boxes shape the name, so each acts only where a language still addresses by it. */
+function meNameBoxesLive(m){
+  return {first:CONTENT_LANGS.some(L=>!paxAddressOf(m,L)), voc:!paxAddressOf(m,"pl")};
+}
 /* The card's NAME is in the heading, so repeating it here said nothing twice. What a shut
    fold genuinely hides is whether a language is missing, which is invisible everywhere else
    and is the one thing worth catching while walking a catalog. */
@@ -265,8 +296,10 @@ function meAdvSummary(m){
   /* The two boxes speak only under the override; off, the catalog's address decides. */
   if(paxOwnShown(m)){
     on.push(t("override"));
-    if(m.firstOnly) on.push(tc("pax","first name"));
-    if(paxVocOn(m)) on.push(t("vocative"));
+    meAddressLangs().forEach(L=>{ const k=paxAddressOf(m,L); if(k) on.push(L.toUpperCase()+" "+meAddressName(L,k)); });
+    const live=meNameBoxesLive(m);
+    if(live.first && m.firstOnly) on.push(tc("pax","first name"));
+    if(live.voc && paxVocOn(m)) on.push(t("vocative"));
   }
   if(m&&m.allIntents) on.push(t("every intent"));
   if(m&&m.intentTop) on.push(t("top"));
@@ -386,9 +419,10 @@ function openCardEditor(id, presetCat, fromManage){
             "Split by blank lines into alternatives");
         box("meSeq",m.seq,!m.alt,"Numbers the alternatives as ordered steps.",
             "Ordered sequence (STEP badges)");
-        /* THE MANUAL OVERRIDE: a switch, since it reveals two boxes rather than setting one. Off, the
-           line under it says where the address comes from; on, the boxes as they always worked. */
-        const own=paxOwnShown(m), sub=[];
+        /* THE MANUAL OVERRIDE: a switch, since it reveals the forms and two boxes rather than setting one.
+           Off, the line under it says where the address comes from; on, Studio's forms of address, then the
+           boxes as they always worked. */
+        const own=paxOwnShown(m), sub=meAddressLangs().map(L=>meAddressHtml(m,L));
         const at=rows.length;
         box("meFirst",m.firstOnly,false,"{PAX} fills the first name even when the chat gives the full name.",
             "{PAX} as first name only");
@@ -460,7 +494,7 @@ function openCardEditor(id, presetCat, fromManage){
         k:($("#me_k")||{}).value||"", lockLang:readMeLockLang()};
       CARD_FLAGS.forEach(f=>{ const el=$("#"+CARD_FLAG_BOX[f]); cur[f]=el&&el.checked?1:0; });
       cur.paxOwn=$("#meOwn")&&$("#meOwn").checked?1:0;
-      return cur;
+      return Object.assign(cur, readMeAddress(m));
     };
     const upd=()=>{
       const cur=read();
@@ -486,6 +520,13 @@ function openCardEditor(id, presetCat, fromManage){
        "the class moves, the element stays" rule the Settings segs follow. */
     const ownBox=$("#meOwn"), ownRow=$("#meOwnRow");
     if(ownBox && ownRow) ownBox.addEventListener("change",()=>{ ownRow.classList.toggle("on",ownBox.checked); upd(); });
+    const syncNameBoxes=()=>{
+      const live=meNameBoxesLive(readMeAddress(m)), fb=$("#meFirst"), vb=$("#meVoc");
+      if(fb) fb.disabled=!live.first;
+      if(vb) vb.disabled=!live.voc;
+    };
+    document.querySelectorAll('#meOwnRow input[type=radio]').forEach(el=>el.addEventListener("change",()=>{ syncNameBoxes(); upd(); }));
+    syncNameBoxes();
     const pinBox=$("#meLockLang"), pinRow=$("#meLockRow"), pinSeg=$("#meLockSeg");
     if(pinBox && pinRow){
       pinBox.addEventListener("change",()=>{ pinRow.classList.toggle("off",!pinBox.checked); upd(); });
@@ -558,7 +599,8 @@ function openCardEditor(id, presetCat, fromManage){
     const paxVoc=$("#meVoc").checked?1:0;
     /* Written only where it says something the boxes do not: on a card using {PAX}, or once set. */
     const ownNow=$("#meOwn")&&$("#meOwn").checked?1:0;
-    const paxOwn=(m.paxOwn==null && (!cardUsesPax(text) || ownNow===(paxOwnOn({firstOnly,paxVoc})?1:0)))
+    const addr=readMeAddress(m);
+    const paxOwn=(m.paxOwn==null && (!cardUsesPax(text) || ownNow===(paxOwnOn(Object.assign({firstOnly,paxVoc},addr))?1:0)))
       ? undefined : ownNow;
     const allIntents=$("#meAllIntents").checked?1:0;
     const intentTop=$("#meIntentTop").checked?1:0;
@@ -583,7 +625,7 @@ function openCardEditor(id, presetCat, fromManage){
          and intentTop were missing, which silently stripped them from any custom card that had
          them the first time it was edited. Built-ins never had the bug: their override is
          partial and Object.assign keeps whatever the base declares. */
-      const entry=Object.assign({id:isNew?(savedId=uid("u:")):(id),c},text,
+      const entry=Object.assign({id:isNew?(savedId=uid("u:")):(id),c},text,addr,
         {alt,seq,firstOnly,paxVoc,paxOwn,allIntents,intentTop,lockLang,commits,intents:intentsStored});
       carryUnwritten(entry, isNew ? null : pack.custom.find(x=>x&&x.id===id));
       const own=nx.fields().next;
@@ -595,6 +637,7 @@ function openCardEditor(id, presetCat, fromManage){
       CARD_BOOL_FLAGS.forEach(f=>{ if(!entry[f]) delete entry[f]; });
       if(entry.paxOwn==null) delete entry.paxOwn;
       if(!entry.lockLang) delete entry.lockLang;
+      Object.keys(addr).forEach(k=>{ if(!entry[k]) delete entry[k]; });
       if(!entry.intents||!entry.intents.length) delete entry.intents;
       if(isNew) pack.custom.push(entry);
       else {
@@ -602,7 +645,7 @@ function openCardEditor(id, presetCat, fromManage){
         if(ix>-1) pack.custom[ix]=entry; else pack.custom.push(entry);
       }
     } else {
-      const full=Object.assign({c},text,{intents:intentsStored,
+      const full=Object.assign({c},text,addr,{intents:intentsStored,
         alt:alt?1:0, seq:seq?1:0, firstOnly:firstOnly?1:0, paxVoc, paxOwn, allIntents, intentTop, lockLang, commits}, nx.fields());
       const o=overrideAgainstBase(baseCard(id), full);
       // Nothing differs from the catalog any more - drop the override so the badge clears too

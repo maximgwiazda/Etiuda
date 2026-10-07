@@ -3142,6 +3142,9 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 .mf-own .mf-own-on{display:none;flex-direction:column;gap:8px;padding-left:37px}
 .mf-own.on .mf-own-on{display:flex}
 .mf-own.on .mf-own-off{display:none}
+/* A group of forms per language, its name over it in the label tone of the dialog's quiet lines. */
+.mf-own .mf-addr{display:flex;flex-direction:column;gap:6px}
+.mf-own .mf-addr-l{font:12.5px var(--sans);color:var(--dim)}
 .mf-switch{appearance:none;-webkit-appearance:none;position:relative;flex:0 0 auto;width:28px;height:16px;
   margin:1px 0 0 3px;border-radius:8px;background:var(--line-strong);outline:none}
 .mf-switch::after{content:"";position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:50%;
@@ -5261,12 +5264,15 @@ What you type stays in this browser only.`;
     CARD_SHARED_FIELDS: () => CARD_SHARED_FIELDS,
     CARD_TEXT_FIELDS: () => CARD_TEXT_FIELDS,
     CARD_UNBOXED_FLAGS: () => CARD_UNBOXED_FLAGS,
+    PAX_ADDRESS_FORMS: () => PAX_ADDRESS_FORMS,
+    PAX_ADDRESS_KEY: () => PAX_ADDRESS_KEY,
     cardFieldKey: () => cardFieldKey,
     cardFieldKeys: () => cardFieldKeys,
     cardRequiredKeys: () => cardRequiredKeys,
     cardStorageKeys: () => cardStorageKeys,
     cardUsesPax: () => cardUsesPax,
     carryUnwritten: () => carryUnwritten,
+    paxAddressOf: () => paxAddressOf,
     paxOwnOn: () => paxOwnOn,
     paxOwnShown: () => paxOwnShown,
     paxVocOn: () => paxVocOn
@@ -5277,7 +5283,7 @@ What you type stays in this browser only.`;
     note: { en: "note", pl: "notePl" }
   };
   var CARD_TEXT_FIELDS = Object.keys(CARD_FIELD_KEY);
-  var CARD_PLAIN_FIELDS = ["lockLang"];
+  var CARD_PLAIN_FIELDS = ["lockLang", "addressEn", "addressPl"];
   var CARD_FLAG_BOX = {
     alt: "meAlt",
     seq: "meSeq",
@@ -5302,7 +5308,14 @@ What you type stays in this browser only.`;
   }
   function paxOwnOn(m) {
     if (m && m.paxOwn != null) return !!+m.paxOwn;
-    return !!m && !(m.firstOnly && paxVocOn(m));
+    return !!m && (!!(m.addressEn || m.addressPl) || !(m.firstOnly && paxVocOn(m)));
+  }
+  var PAX_ADDRESS_KEY = { en: "addressEn", pl: "addressPl" };
+  var PAX_ADDRESS_FORMS = { en: VAR_ADDRESS_EN.filter((k) => k !== "first"), pl: VAR_ADDRESS_PL.filter((k) => k !== "first") };
+  function paxAddressOf(m, L) {
+    const k = Object.prototype.hasOwnProperty.call(PAX_ADDRESS_KEY, L) ? PAX_ADDRESS_KEY[L] : "";
+    const v = k && m && m[k] != null ? String(m[k]) : "";
+    return k && PAX_ADDRESS_FORMS[L].indexOf(v) > -1 ? v : "";
   }
   function cardUsesPax(m) {
     return !!m && cardFieldKeys("body").concat(cardFieldKeys("note")).some((k) => String(m[k] == null ? "" : m[k]).indexOf("{PAX}") > -1);
@@ -6654,6 +6667,11 @@ What you type stays in this browser only.`;
     "override": "ręcznie",
     "Polish only: declines the name into the vocative, the form Polish uses to address someone. Only the first name declines; a surname is left as written.": "Dotyczy tylko polskiego: imię pojawia się w wołaczu, na przykład Anno. Nazwisko się nie odmienia i zostaje tak, jak je wpisano.",
     "vocative": "wołacz",
+    "Pani or Pan, with the first name": "Pani lub Pan z imieniem",
+    "Pani or Pan, with the surname": "Pani lub Pan z nazwiskiem",
+    "By name": "Po imieniu",
+    "No name": "Bez imienia",
+    "Title and surname": "Tytuł i nazwisko",
     "Previous card": "Poprzednia karta",
     "Next card": "Następna karta",
     "Previous category": "Poprzednia kategoria",
@@ -8559,6 +8577,7 @@ What you type stays in this browser only.`;
     "intentTop",
     "paxVoc",
     "paxOwn",
+    "address",
     "lockLang",
     "requests",
     "retired",
@@ -9128,6 +9147,13 @@ What you type stays in this browser only.`;
       v2FlagProblem(c, "retired", id, out);
       v2FlagProblem(c, "commits", id, out);
       if (c && c.paxOwn !== void 0 && c.paxOwn !== 0 && c.paxOwn !== 1) out.push("card " + id + ": paxOwn is " + JSON.stringify(c.paxOwn) + ", wanted 0, 1 or absent");
+      const ad = c && c.address;
+      if (ad !== void 0 && (!ad || typeof ad !== "object" || Array.isArray(ad)))
+        out.push("card " + id + ": address is " + JSON.stringify(ad) + ", wanted an object or absent");
+      else if (ad !== void 0) Object.keys(ad).forEach((k) => {
+        if (k !== "en" && k !== "pl") out.push("card " + id + ": address names " + k + ", and only en and pl have forms of address");
+        else if (typeof ad[k] !== "string") out.push("card " + id + ": address." + k + " is " + JSON.stringify(ad[k]) + ", wanted a word");
+      });
     });
     data.cards.forEach((c, i) => v2NextProblems(c, v2Str(c && c.id) || "[" + i + "]", cardSeen, out));
     v2HeaderProblems(data, codes, out);
@@ -9198,6 +9224,8 @@ What you type stays in this browser only.`;
       });
       if (c.paxVoc != null) m.paxVoc = +c.paxVoc ? 1 : 0;
       if (c.paxOwn != null) m.paxOwn = +c.paxOwn ? 1 : 0;
+      if (c.address && v2Str(c.address.en)) m.addressEn = v2Str(c.address.en);
+      if (c.address && v2Str(c.address.pl)) m.addressPl = v2Str(c.address.pl);
       if (c.lockLang) m.lockLang = v2Str(c.lockLang);
       const links = (Array.isArray(c.requests) ? c.requests : []).map((id) => idxOf[v2Str(id)]).filter((i) => i != null);
       if (links.length) m.intents = links;
@@ -9312,6 +9340,11 @@ What you type stays in this browser only.`;
       });
       if (m.paxVoc != null) card.paxVoc = +m.paxVoc ? 1 : 0;
       if (m.paxOwn != null) card.paxOwn = +m.paxOwn ? 1 : 0;
+      if (v2Str(m.addressEn) || v2Str(m.addressPl)) {
+        card.address = {};
+        if (v2Str(m.addressEn)) card.address.en = v2Str(m.addressEn);
+        if (v2Str(m.addressPl)) card.address.pl = v2Str(m.addressPl);
+      }
       if (m.lockLang) card.lockLang = v2Str(m.lockLang);
       if (m.retired) card.retired = true;
       if (m.commits) card.commits = true;
@@ -12177,8 +12210,9 @@ What you type stays in this browser only.`;
     });
     let n = formatPaxName(pax.value);
     if (n && m) {
-      const own = paxOwnOn(m), def = !own && catalogVariable("PAX");
+      const own = paxOwnOn(m), def = !own && catalogVariable("PAX"), form = own ? paxAddressOf(m, L) : "";
       if (def) n = varWritten(def, m, L, facts());
+      else if (form) n = varResolve({ rules: varAddressRules(L === "pl" ? form : "first", L === "en" ? form : "first") }, facts(), L, L).text;
       else {
         if (own ? m.firstOnly : true) n = n.split(" ")[0];
         if (L === "pl" && (own ? paxVocOn(m) : true)) {
@@ -12819,6 +12853,8 @@ What you type stays in this browser only.`;
       if (truthyFlag(rawM.firstOnly)) entry.firstOnly = 1;
       if (rawM.paxVoc != null) entry.paxVoc = truthyFlag(rawM.paxVoc) ? 1 : 0;
       if (rawM.paxOwn != null) entry.paxOwn = truthyFlag(rawM.paxOwn) ? 1 : 0;
+      if (String(rawM.addressEn != null ? rawM.addressEn : "").trim()) entry.addressEn = String(rawM.addressEn).trim();
+      if (String(rawM.addressPl != null ? rawM.addressPl : "").trim()) entry.addressPl = String(rawM.addressPl).trim();
       if (truthyFlag(rawM.allIntents)) entry.allIntents = 1;
       if (truthyFlag(rawM.intentTop)) entry.intentTop = 1;
       if (Array.isArray(rawM.intents) && rawM.intents.length) {
@@ -24397,6 +24433,32 @@ What you type stays in this browser only.`;
     if (!box || !box.checked) return "";
     return (($("#meLockSeg .on") || {}).dataset || {}).v || CONTENT_LANGS[0];
   }
+  function meAddressLangs() {
+    return ["pl", "en"].filter((L) => CONTENT_LANGS.indexOf(L) > -1);
+  }
+  function meAddressName(L, k) {
+    if (!k) return t("By name");
+    if (k === "none") return t("No name");
+    if (L === "en") return t("Title and surname");
+    return k === "titleFirst" ? t("Pani or Pan, with the first name") : t("Pani or Pan, with the surname");
+  }
+  function meAddressHtml(m, L) {
+    const now = paxAddressOf(m, L), forms = PAX_ADDRESS_FORMS[L];
+    const order = forms.filter((k) => k !== "none").concat([""], forms.filter((k) => k === "none"));
+    return '<div class="mf-addr" role="radiogroup" aria-label="' + esc(langEndonym(L)) + '"><span class="mf-addr-l" data-i18n-skip>' + esc(langEndonym(L)) + "</span>" + order.map((k) => '<label><input type="radio" name="meAddr_' + L + '" value="' + k + '"' + (k === now ? " checked" : "") + "> " + esc(meAddressName(L, k)) + "</label>").join("") + "</div>";
+  }
+  function readMeAddress(m) {
+    const out = {};
+    Object.keys(PAX_ADDRESS_KEY).forEach((L) => {
+      const key = PAX_ADDRESS_KEY[L], group = document.querySelector('input[name="meAddr_' + L + '"]');
+      const el = group && document.querySelector('input[name="meAddr_' + L + '"]:checked');
+      out[key] = group ? el ? el.value : "" : String(m && m[key] || "");
+    });
+    return out;
+  }
+  function meNameBoxesLive(m) {
+    return { first: CONTENT_LANGS.some((L) => !paxAddressOf(m, L)), voc: !paxAddressOf(m, "pl") };
+  }
   function meLangSummary(m) {
     const have = CONTENT_LANGS.filter((l) => String(m && m[cardFieldKey("body", l)] || "").trim());
     if (!have.length) return t("no text yet");
@@ -24408,8 +24470,13 @@ What you type stays in this browser only.`;
     if (m && m.alt) on.push(t(m.seq ? "steps" : "alt"));
     if (paxOwnShown(m)) {
       on.push(t("override"));
-      if (m.firstOnly) on.push(tc("pax", "first name"));
-      if (paxVocOn(m)) on.push(t("vocative"));
+      meAddressLangs().forEach((L) => {
+        const k = paxAddressOf(m, L);
+        if (k) on.push(L.toUpperCase() + " " + meAddressName(L, k));
+      });
+      const live = meNameBoxesLive(m);
+      if (live.first && m.firstOnly) on.push(tc("pax", "first name"));
+      if (live.voc && paxVocOn(m)) on.push(t("vocative"));
     }
     if (m && m.allIntents) on.push(t("every intent"));
     if (m && m.intentTop) on.push(t("top"));
@@ -24542,7 +24609,7 @@ What you type stays in this browser only.`;
               "Numbers the alternatives as ordered steps.",
               "Ordered sequence (STEP badges)"
             );
-            const own = paxOwnShown(m), sub = [];
+            const own = paxOwnShown(m), sub = meAddressLangs().map((L) => meAddressHtml(m, L));
             const at = rows.length;
             box(
               "meFirst",
@@ -24615,7 +24682,7 @@ What you type stays in this browser only.`;
           cur[f] = el && el.checked ? 1 : 0;
         });
         cur.paxOwn = $("#meOwn") && $("#meOwn").checked ? 1 : 0;
-        return cur;
+        return Object.assign(cur, readMeAddress(m));
       };
       const upd = () => {
         const cur = read();
@@ -24647,6 +24714,16 @@ What you type stays in this browser only.`;
         ownRow.classList.toggle("on", ownBox.checked);
         upd();
       });
+      const syncNameBoxes = () => {
+        const live = meNameBoxesLive(readMeAddress(m)), fb = $("#meFirst"), vb = $("#meVoc");
+        if (fb) fb.disabled = !live.first;
+        if (vb) vb.disabled = !live.voc;
+      };
+      document.querySelectorAll("#meOwnRow input[type=radio]").forEach((el) => el.addEventListener("change", () => {
+        syncNameBoxes();
+        upd();
+      }));
+      syncNameBoxes();
       const pinBox = $("#meLockLang"), pinRow = $("#meLockRow"), pinSeg = $("#meLockSeg");
       if (pinBox && pinRow) {
         pinBox.addEventListener("change", () => {
@@ -24716,7 +24793,8 @@ What you type stays in this browser only.`;
       const firstOnly = $("#meFirst").checked ? 1 : 0;
       const paxVoc = $("#meVoc").checked ? 1 : 0;
       const ownNow = $("#meOwn") && $("#meOwn").checked ? 1 : 0;
-      const paxOwn = m.paxOwn == null && (!cardUsesPax(text) || ownNow === (paxOwnOn({ firstOnly, paxVoc }) ? 1 : 0)) ? void 0 : ownNow;
+      const addr = readMeAddress(m);
+      const paxOwn = m.paxOwn == null && (!cardUsesPax(text) || ownNow === (paxOwnOn(Object.assign({ firstOnly, paxVoc }, addr)) ? 1 : 0)) ? void 0 : ownNow;
       const allIntents = $("#meAllIntents").checked ? 1 : 0;
       const intentTop = $("#meIntentTop").checked ? 1 : 0;
       const lockLang = readMeLockLang();
@@ -24740,6 +24818,7 @@ What you type stays in this browser only.`;
         const entry = Object.assign(
           { id: isNew ? savedId = uid("u:") : id, c },
           text,
+          addr,
           { alt, seq, firstOnly, paxVoc, paxOwn, allIntents, intentTop, lockLang, commits, intents: intentsStored }
         );
         carryUnwritten(entry, isNew ? null : pack.custom.find((x) => x && x.id === id));
@@ -24754,6 +24833,9 @@ What you type stays in this browser only.`;
         });
         if (entry.paxOwn == null) delete entry.paxOwn;
         if (!entry.lockLang) delete entry.lockLang;
+        Object.keys(addr).forEach((k) => {
+          if (!entry[k]) delete entry[k];
+        });
         if (!entry.intents || !entry.intents.length) delete entry.intents;
         if (isNew) pack.custom.push(entry);
         else {
@@ -24762,7 +24844,7 @@ What you type stays in this browser only.`;
           else pack.custom.push(entry);
         }
       } else {
-        const full = Object.assign({ c }, text, {
+        const full = Object.assign({ c }, text, addr, {
           intents: intentsStored,
           alt: alt ? 1 : 0,
           seq: seq ? 1 : 0,

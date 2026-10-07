@@ -1,5 +1,5 @@
 import { cardLang, parts } from "./card-model.js";
-import { paxVocOn, paxOwnOn } from "./card-fields.js";
+import { paxVocOn, paxOwnOn, paxAddressOf } from "./card-fields.js";
 import { intentArr, CONTENT_LANGS, commentLang } from "./content-model.js";
 import { esc } from "./esc.js";
 import { dayPart, noActionText, greeting, GREET_WORDS } from "./greeting.js";
@@ -13,7 +13,7 @@ import { pax, roleSel } from "./dom.js";
 import { agentName, agentParts } from "./agent.js";
 import { lang, intentIdxs, intentText, cards } from "./app-state.js";
 import { catalogVariables, catalogVariable, varBuiltin, varResolve, varInlinePick, VAR_TOKEN_RE,
-  VAR_DAYPARTS } from "./variables.js";
+  VAR_DAYPARTS, varAddressRules } from "./variables.js";
 import { custGender } from "./gender-drum.js";
 
 // Resolve {INTENT} for a card: a chip selection is an index (the clause follows the
@@ -270,13 +270,15 @@ function fill(s,m,mark,inL){
      THE CARD'S LANGUAGE DECIDES, NOT THE DESK'S: a pinned card renders in its own language,
      and reading the toggle here declined a name inside English text and left it undeclined
      in Polish - each wrong in whichever direction the desk happened to sit. */
-  /* THE ADDRESS: the card's two boxes where it overrides, the catalog's rules where it has them, and
-     Etiuda's own otherwise, which is the first name in the vocative. A rule writing nothing is the
+  /* THE ADDRESS: the card's form or its two boxes where it overrides, the catalog's rules where it has
+     them, and Etiuda's own otherwise, which is the first name in the vocative. A form is the rules
+     Studio writes for that choice, so the glyph's gender reaches it. A rule writing nothing is the
      no-name branch below. */
   let n=formatPaxName(pax.value);
   if(n && m){
-    const own=paxOwnOn(m), def=!own && catalogVariable("PAX");
+    const own=paxOwnOn(m), def=!own && catalogVariable("PAX"), form=own ? paxAddressOf(m,L) : "";
     if(def) n=varWritten(def,m,L,facts());
+    else if(form) n=varResolve({rules:varAddressRules(L==="pl"?form:"first", L==="en"?form:"first")},facts(),L,L).text;
     else{
       if(own ? m.firstOnly : true) n=n.split(" ")[0];
       if(L==="pl" && (own ? paxVocOn(m) : true)){

@@ -46,7 +46,7 @@ const CARD_FLAGS=["firstOnly","allIntents","intentTop"];
    modified are named so they are never carried: an export re-makes them. So is name, which the
    format no longer has and no file of this build may give back. */
 const V2_CARD_NAMED=["id","shelf","title","body","note","bodyShape","k","firstOnly","allIntents","intentTop",
-  "paxVoc","paxOwn","lockLang","requests","retired","next","commits"];
+  "paxVoc","paxOwn","address","lockLang","requests","retired","next","commits"];
 const V2_HEAD_NAMED=["format","kind","id","rev","date","langs","commentLang","tags","cards","role","facts",
   "greet","stop","sample","modified","hash","sig","notes","grew","desk","name","variables"];
 // One phrase per part of the day, and the clock has three. A language whose greeting covers
@@ -582,6 +582,15 @@ function v2Problems(data){
     v2FlagProblem(c,"retired",id,out);
     v2FlagProblem(c,"commits",id,out);
     if(c&&c.paxOwn!==undefined&&c.paxOwn!==0&&c.paxOwn!==1) out.push("card "+id+": paxOwn is "+JSON.stringify(c.paxOwn)+", wanted 0, 1 or absent");
+    /* A card's own form of address, as Studio names a team's: words keyed by en and pl, the two languages
+       with a grammar for it. A form this build does not know is carried, and the desk writes the name. */
+    const ad=c&&c.address;
+    if(ad!==undefined&&(!ad||typeof ad!=="object"||Array.isArray(ad)))
+      out.push("card "+id+": address is "+JSON.stringify(ad)+", wanted an object or absent");
+    else if(ad!==undefined) Object.keys(ad).forEach(k=>{
+      if(k!=="en"&&k!=="pl") out.push("card "+id+": address names "+k+", and only en and pl have forms of address");
+      else if(typeof ad[k]!=="string") out.push("card "+id+": address."+k+" is "+JSON.stringify(ad[k])+", wanted a word");
+    });
   });
   data.cards.forEach((c,i)=>v2NextProblems(c,v2Str(c&&c.id)||("["+i+"]"),cardSeen,out));
   v2HeaderProblems(data,codes,out);
@@ -650,6 +659,8 @@ function catalogFromV2(data){
     CARD_FLAGS.forEach(f=>{ if(c[f]) m[f]=1; });
     if(c.paxVoc!=null) m.paxVoc=(+c.paxVoc)?1:0;
     if(c.paxOwn!=null) m.paxOwn=(+c.paxOwn)?1:0;
+    if(c.address&&v2Str(c.address.en)) m.addressEn=v2Str(c.address.en);
+    if(c.address&&v2Str(c.address.pl)) m.addressPl=v2Str(c.address.pl);
     if(c.lockLang) m.lockLang=v2Str(c.lockLang);
     const links=(Array.isArray(c.requests)?c.requests:[]).map(id=>idxOf[v2Str(id)]).filter(i=>i!=null);
     if(links.length) m.intents=links;
@@ -762,6 +773,11 @@ function catalogToV2(c,opts){
     CARD_FLAGS.forEach(f=>{ if(m[f]) card[f]=true; });
     if(m.paxVoc!=null) card.paxVoc=(+m.paxVoc)?1:0;
     if(m.paxOwn!=null) card.paxOwn=(+m.paxOwn)?1:0;
+    if(v2Str(m.addressEn)||v2Str(m.addressPl)){
+      card.address={};
+      if(v2Str(m.addressEn)) card.address.en=v2Str(m.addressEn);
+      if(v2Str(m.addressPl)) card.address.pl=v2Str(m.addressPl);
+    }
     if(m.lockLang) card.lockLang=v2Str(m.lockLang);
     if(m.retired) card.retired=true;
     if(m.commits) card.commits=true;
