@@ -2574,6 +2574,17 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 .mf input.is-missing:not([type=checkbox]):not([type=radio]):focus,
 .mf textarea.is-missing,.mf textarea.is-missing:focus{
   border-color:#c44;box-shadow:0 0 0 2px rgba(196,68,68,.16)}
+/* THE MACRO BOX'S FIELDS AS CHIPS (card-margin.js): a mirror over the box draws its words, and the box keeps the
+   caret, the selection and the typing. contain:size lets the box alone size the row, so a long text scrolls it. */
+.me-macro{display:grid;grid-template-columns:minmax(0,1fr)}
+.me-macro>textarea,.me-macro>.me-mirror{grid-area:1/1}
+.me-mirror{contain:size;overflow:hidden;pointer-events:none;visibility:hidden;white-space:pre-wrap;overflow-wrap:break-word;
+  border:1px solid transparent;padding:8px 10px;font:13px/1.45 var(--sans);color:var(--ink)}
+.me-macro>textarea.me-chipped{color:transparent;caret-color:var(--ink)}
+.me-macro>textarea.me-chipped+.me-mirror{visibility:visible}
+.me-chip{color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);border-radius:4px}
+.me-chip>.me-br{color:transparent}
+.me-bad,.lang-tabs button.me-stale{text-decoration:underline wavy var(--accent);text-decoration-skip-ink:none;text-underline-offset:3px}
 /* THE EDITORS' TEXT INPUTS WEAR THEIR CHROME ON A WRAP, as the header fields do: a cut value
    fades under a mask, and a mask over an input takes its fill and border along with the words,
    so the fade showed the panel behind the field. dressDialogInputs() wraps them as a dialog
@@ -3365,6 +3376,10 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   display:flex;align-items:center;gap:14px}
 .e-undo p{margin:0;color:var(--bub-ink)}
 .e-undo .tour-actions{margin:0;padding:0;border:0;flex:none}
+/* THE CARD EDITOR'S MARGIN (card-margin.js): the acts on the left, where the finding stands on the right. */
+.e-margin .tour-actions{justify-content:flex-start}
+.e-margin .e-margin-at{margin-left:auto;font:12px var(--mono);color:var(--bub-dim)}
+.e-margin .e-margin-said{margin:0;color:var(--bub-ink)}
 /* THE NOTICES THAT OUTLAST A MOMENT: the rescue at a start that failed (the boot guard) and the
    save and desk notices (pack.js), hung under the band and centred by margins, as the Undo is. */
 .e-notice{left:0;right:0;margin:0 auto;width:min(560px,calc(100vw - 24px))}
@@ -6789,6 +6804,33 @@ What you type stays in this browser only.`;
     "Icon": "Ikona",
     "Colour": "Kolor",
     "Macro": "Makro",
+    "the greeting for the time of day": "powitanie dobrane do pory dnia",
+    "the customer's name": "imię klienta",
+    "the customer's full name": "imię i nazwisko klienta",
+    "the name customers see": "nazwa, którą widzą klienci",
+    "the initials of the name customers see": "inicjały nazwy, którą widzą klienci",
+    "who is on the chat": "kto jest po drugiej stronie czatu",
+    "the intent chosen in this conversation": "intencja wybrana w tej rozmowie",
+    "what was done, for internal comments": "co zostało zrobione, do komentarzy wewnętrznych",
+    "the topic of the chosen intent": "temat wybranej intencji",
+    "z or ze, to suit the word after it": "z albo ze, zależnie od następnego słowa",
+    "words chosen by the time of day": "słowa dobrane do pory dnia",
+    "filled by this catalog": "wypełnia je katalog",
+    "Perhaps {SUGGESTED}, {WHAT}?": "Może chodzi o {SUGGESTED}, czyli {WHAT}?",
+    "{TOKEN} is not a field this catalog fills, so the customer would see it as typed, braces and all.": "Pola {TOKEN} katalog nie wypełnia, więc klient zobaczyłby je dosłownie, razem z nawiasami.",
+    "{TOKEN} goes out exactly as typed": "{TOKEN} trafi do klienta dosłownie",
+    "This catalog fills no field by that name.": "Katalog nie ma pola o tej nazwie.",
+    "Change it to {SUGGESTED}": "Zamień na {SUGGESTED}",
+    "Leave it as it is": "Zostaw tak, jak jest",
+    "{TAB} still has the earlier text": "W zakładce {TAB} jest jeszcze dawny tekst",
+    "Copied in that language, the card goes out as it was before this edit.": "Skopiowana w tym języku karta wyjdzie w dawnej postaci, bez tej zmiany.",
+    "Open {TAB}": "Otwórz {TAB}",
+    "{AT} of {ALL} · F8: next": "{AT} z {ALL} · F8: następna",
+    "Changed to {SUGGESTED}. Still to answer: {N}. F8: next": "Zamieniono na {SUGGESTED}. Do rozstrzygnięcia: {N}. F8: następna",
+    "Left as it is. Still to answer: {N}. F8: next": "Zostawiono bez zmian. Do rozstrzygnięcia: {N}. F8: następna",
+    "Every finding is answered.": "Wszystkie uwagi są rozstrzygnięte.",
+    "Finding: {HEADING}": "Uwaga: {HEADING}",
+    "Finding {AT} of {ALL}: {HEADING}": "Uwaga {AT} z {ALL}: {HEADING}",
     "Clause": "Fraza",
     "Comment action": "Czynność do komentarza",
     "Clause is required": "Wpisz frazę",
@@ -23360,6 +23402,519 @@ What you type stays in this browser only.`;
     openCardEditor: () => openCardEditor,
     syncAddFab: () => syncAddFab
   });
+
+  // src/modules/card-margin.js
+  var card_margin_exports = {};
+  __export(card_margin_exports, {
+    MARGIN_ARGS: () => MARGIN_ARGS,
+    MARGIN_BARE: () => MARGIN_BARE,
+    marginFindings: () => marginFindings,
+    marginHeading: () => marginHeading,
+    marginHtml: () => marginHtml,
+    marginKnown: () => marginKnown,
+    marginNear: () => marginNear,
+    marginReplace: () => marginReplace,
+    marginSame: () => marginSame,
+    marginTokens: () => marginTokens,
+    wireCardMargin: () => wireCardMargin
+  });
+  var MARGIN_BARE = ["GREET", "PAX", "NAME", "AGENT", "INIT", "ROLE", "INTENT", "ACTION", "TOPIC", "Z"];
+  var MARGIN_ARGS = ["GENDER", "GREET", "PAX", "NAME", "INTENT", "TOPIC", "AGENT", "ROLE", "DAYPART"];
+  var MARGIN_NAME = /^([A-Z][A-Z0-9]*)(?::([^{}]*))?$/;
+  var MARGIN_TOKEN = /\{([^{}\r\n]{1,40})\}/g;
+  var MARGIN_PAUSE_MS = 1e3;
+  var MARGIN_DONE_MS = 4e3;
+  function marginKnown(vars) {
+    const own = (vars && Array.isArray(vars.list) ? vars.list : []).map((v) => v && v.name).filter(Boolean);
+    return { bare: new Set(MARGIN_BARE.concat(own)), args: new Set(MARGIN_ARGS.concat(own)), own: new Set(own) };
+  }
+  function marginTokens(text, known) {
+    const out = [], s = String(text == null ? "" : text);
+    s.replace(MARGIN_TOKEN, (raw, inner, at) => {
+      const m = MARGIN_NAME.exec(inner);
+      const ok = !!m && (m[2] == null ? known.bare.has(m[1]) : known.args.has(m[1]));
+      out.push({ at, end: at + raw.length, raw, inner, known: ok });
+      return raw;
+    });
+    return out;
+  }
+  function marginDist(a, b) {
+    const d = [];
+    for (let i = 0; i <= a.length; i++) d.push([i]);
+    for (let j = 1; j <= b.length; j++) d[0][j] = j;
+    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+    return d[a.length][b.length];
+  }
+  function marginNear(inner, known) {
+    const m = /^([^:]*)(:[^]*)?$/.exec(String(inner == null ? "" : inner));
+    const name = m[1].toUpperCase(), rest = m[2] || "";
+    if (!name) return "";
+    const hits = Array.from(rest ? known.args : known.bare).filter((k) => {
+      if (k === "GENDER") return false;
+      const limit = k.length <= 2 || name.length <= 2 ? 0 : Math.max(k.length, name.length) >= 6 ? 2 : 1;
+      return marginDist(name, k) <= limit;
+    });
+    return hits.length === 1 ? "{" + hits[0] + rest + "}" : "";
+  }
+  function marginNorm(s) {
+    return String(s == null ? "" : s).replace(/\r\n?/g, "\n").trim();
+  }
+  function marginCount(text, raw) {
+    return String(text == null ? "" : text).split(raw).length - 1;
+  }
+  function marginFindings(o) {
+    const known = o.known, text = String(o.text == null ? "" : o.text), sil = o.silenced || {};
+    const theirs = new Set(marginTokens(o.base || "", known).map((x) => x.raw));
+    const out = [], nth = {};
+    marginTokens(text, known).forEach((x) => {
+      if (x.known || theirs.has(x.raw)) return;
+      if (sil.fields && sil.fields[x.raw] === marginCount(text, x.raw)) return;
+      nth[x.raw] = (nth[x.raw] || 0) + 1;
+      out.push({ kind: "field", at: x.at, end: x.end, raw: x.raw, nth: nth[x.raw], sug: marginNear(x.inner, known) });
+    });
+    if (o.base != null && marginNorm(text) !== marginNorm(o.base)) (o.others || []).forEach((x) => {
+      const now = marginNorm(x.text);
+      if (!marginNorm(x.base) || now !== marginNorm(x.base)) return;
+      if (sil.langs && Object.prototype.hasOwnProperty.call(sil.langs, x.l) && sil.langs[x.l] === now) return;
+      out.push({ kind: "lang", l: x.l });
+    });
+    return out;
+  }
+  function marginReplace(text, f, sug) {
+    const s = String(text == null ? "" : text);
+    return s.slice(0, f.at) + sug + s.slice(f.end);
+  }
+  function marginHtml(text, known, bad) {
+    const s = String(text == null ? "" : text);
+    let out = "", i = 0;
+    marginTokens(s, known).forEach((x) => {
+      out += esc(s.slice(i, x.at));
+      if (x.known) out += '<span class="me-chip"><span class="me-br">{</span>' + esc(x.inner) + '<span class="me-br">}</span></span>';
+      else if (bad && bad.has(x.at)) out += '<span class="me-bad" data-at="' + x.at + '">' + esc(x.raw) + "</span>";
+      else out += esc(x.raw);
+      i = x.end;
+    });
+    out += esc(s.slice(i));
+    if (!s || s.charAt(s.length - 1) === "\n") out += String.fromCharCode(8203);
+    return out;
+  }
+  function marginWhat(name, known) {
+    if (known && known.own.has(name)) return t("filled by this catalog");
+    switch (name) {
+      case "GREET":
+        return t("the greeting for the time of day");
+      case "PAX":
+        return t("the customer's name");
+      case "NAME":
+        return t("the customer's full name");
+      case "AGENT":
+        return t("the name customers see");
+      case "INIT":
+        return t("the initials of the name customers see");
+      case "ROLE":
+        return t("who is on the chat");
+      case "INTENT":
+        return t("the intent chosen in this conversation");
+      case "ACTION":
+        return t("what was done, for internal comments");
+      case "TOPIC":
+        return t("the topic of the chosen intent");
+      case "Z":
+        return t("z or ze, to suit the word after it");
+      case "DAYPART":
+        return t("words chosen by the time of day");
+    }
+    return "";
+  }
+  function marginSugName(sug) {
+    const m = /^\{([A-Z][A-Z0-9]*)/.exec(String(sug || ""));
+    return m ? m[1] : "";
+  }
+  function marginTab(l) {
+    return '"' + langEndonym(l) + '"';
+  }
+  function marginHeading(f, known) {
+    if (f.kind === "lang") return t("{TAB} still has the earlier text").replace("{TAB}", () => marginTab(f.l));
+    if (f.sug) return t("Perhaps {SUGGESTED}, {WHAT}?").replace("{SUGGESTED}", () => f.sug).replace("{WHAT}", () => marginWhat(marginSugName(f.sug), known));
+    return t("{TOKEN} goes out exactly as typed").replace("{TOKEN}", () => f.raw);
+  }
+  function marginLine(f) {
+    if (f.kind === "lang") return t("Copied in that language, the card goes out as it was before this edit.");
+    if (f.sug) return t("{TOKEN} is not a field this catalog fills, so the customer would see it as typed, braces and all.").replace("{TOKEN}", () => f.raw);
+    return t("This catalog fills no field by that name.");
+  }
+  function marginCode(words, tok, val) {
+    return esc(words).split(tok).join("<code>" + esc(val) + "</code>");
+  }
+  function marginBubbleHtml(f, at, all, known) {
+    let head, line, acts = "";
+    if (f.kind === "lang") {
+      head = esc(t("{TAB} still has the earlier text")).split("{TAB}").join(esc(marginTab(f.l)));
+      line = esc(marginLine(f));
+      acts = '<button type="button" class="btn primary" data-act="open">' + esc(t("Open {TAB}").replace("{TAB}", () => marginTab(f.l))) + "</button>";
+    } else if (f.sug) {
+      head = marginCode(t("Perhaps {SUGGESTED}, {WHAT}?"), "{SUGGESTED}", f.sug).split("{WHAT}").join(esc(marginWhat(marginSugName(f.sug), known)));
+      line = marginCode(t("{TOKEN} is not a field this catalog fills, so the customer would see it as typed, braces and all."), "{TOKEN}", f.raw);
+      acts = '<button type="button" class="btn primary" data-act="fix">' + esc(t("Change it to {SUGGESTED}").replace("{SUGGESTED}", () => f.sug)) + "</button>";
+    } else {
+      head = marginCode(t("{TOKEN} goes out exactly as typed"), "{TOKEN}", f.raw);
+      line = esc(marginLine(f));
+    }
+    acts += '<button type="button" class="btn" data-act="leave">' + esc(t("Leave it as it is")) + "</button>";
+    return "<h3>" + head + "</h3><p>" + line + '</p><div class="tour-actions">' + acts + '<span class="e-margin-at">' + esc(t("{AT} of {ALL} · F8: next").replace("{AT}", at).replace("{ALL}", all)) + "</span></div>";
+  }
+  function marginSay(words) {
+    const out = document.getElementById("eSay");
+    if (!out) return;
+    out.textContent = "";
+    setTimeout(() => {
+      out.textContent = words;
+    }, 40);
+  }
+  var marginSame = (a, b) => !!a && !!b && a.kind === b.kind && (a.kind === "lang" ? a.l === b.l : a.raw === b.raw && a.nth === b.nth);
+  var MG = null;
+  function marginDown() {
+    if (MG) {
+      const m = MG;
+      MG = null;
+      m.down();
+    }
+  }
+  function wireCardMargin(base) {
+    marginDown();
+    const boxes = CONTENT_LANGS.map((l) => {
+      const ta = document.getElementById(langFieldId("me", "body", l)), mir = ta && ta.nextElementSibling;
+      if (!ta || !mir || !mir.classList || !mir.classList.contains("me-mirror")) return null;
+      return { l, ta, mir, over: null, base: base ? String(base[cardFieldKey("body", l)] == null ? "" : base[cardFieldKey("body", l)]) : null };
+    }).filter(Boolean);
+    if (!boxes.length) return;
+    const known = marginKnown(catalogVariables());
+    const sil = { fields: {}, langs: {} };
+    let bub = null, box = null, cur = null, folded = false, spoken = /* @__PURE__ */ new Set(), pauseT = 0, doneT = 0, acting = false, dead = false;
+    let moveAt = null, moveRaf = 0;
+    const active = () => boxes.find((b) => b.ta.closest && b.ta.closest(".lang-pane.on")) || null;
+    const findings = (b) => marginFindings({
+      text: b.ta.value,
+      base: b.base,
+      known,
+      silenced: sil,
+      others: b.base == null ? [] : boxes.filter((o) => o !== b).map((o) => ({ l: o.l, text: o.ta.value, base: o.base }))
+    });
+    const metrics = (b) => {
+      const cs = getComputedStyle(b.ta);
+      [
+        "fontFamily",
+        "fontSize",
+        "fontWeight",
+        "fontStyle",
+        "lineHeight",
+        "letterSpacing",
+        "wordSpacing",
+        "tabSize",
+        "textIndent",
+        "textTransform",
+        "paddingTop",
+        "paddingLeft",
+        "paddingBottom",
+        "borderTopWidth",
+        "borderRightWidth",
+        "borderBottomWidth",
+        "borderLeftWidth"
+      ].forEach((k) => {
+        b.mir.style[k] = cs[k];
+      });
+      const bar = b.ta.offsetWidth - b.ta.clientWidth - parseFloat(cs.borderLeftWidth) - parseFloat(cs.borderRightWidth);
+      b.mir.style.paddingRight = parseFloat(cs.paddingRight) + Math.max(0, bar) + "px";
+      b.over = b.ta.scrollHeight > b.ta.clientHeight;
+    };
+    const paint = (b, fl) => {
+      const bad = new Set((fl || findings(b)).filter((f) => f.kind === "field" && spoken.has(f.raw)).map((f) => f.at));
+      b.mir.innerHTML = marginHtml(b.ta.value, known, bad);
+      b.ta.classList.toggle("me-chipped", !!b.ta.value);
+      if (b.ta.scrollHeight > b.ta.clientHeight !== b.over) metrics(b);
+      b.mir.scrollTop = b.ta.scrollTop;
+    };
+    const describe = (b, fl) => {
+      const f = cur && box === b && fl.find((x) => marginSame(x, cur)) || fl[0];
+      if (f) b.ta.setAttribute("aria-description", t("Finding: {HEADING}").replace("{HEADING}", () => marginHeading(f, known)));
+      else b.ta.removeAttribute("aria-description");
+    };
+    const tabFor = (b, l) => {
+      const pane = b.ta.closest(".lang-pane"), strip = pane && pane.parentNode && pane.parentNode.querySelector(".lang-tabs");
+      return strip ? strip.querySelector('button[data-l="' + l + '"]') : null;
+    };
+    const unmarkTabs = () => {
+      if (modalCard) modalCard.querySelectorAll(".lang-tabs .me-stale").forEach((x) => x.classList.remove("me-stale"));
+    };
+    const place = () => {
+      if (!bub || !box) return;
+      if (!box.ta.isConnected) {
+        down();
+        return;
+      }
+      const r = box.ta.getBoundingClientRect();
+      let target = { left: r.left + 24, width: 0, top: r.top, height: r.height }, prefer = "below";
+      if (cur && cur.kind === "lang") {
+        const tab = tabFor(box, cur.l), tr = tab && tab.getBoundingClientRect();
+        if (tr && tr.width) {
+          target = { left: tr.left, width: tr.width, top: tr.top, height: Math.max(tr.height, r.bottom - tr.top) };
+          prefer = "above";
+        }
+      } else if (cur) {
+        const sp = box.mir.querySelector('.me-bad[data-at="' + cur.at + '"]'), sr = sp && sp.getClientRects()[0];
+        if (sr) {
+          const x = Math.max(r.left, Math.min(r.right, sr.left));
+          target.left = x;
+          target.width = Math.max(0, Math.min(sr.width, r.right - x));
+        }
+      }
+      const res = r.width && r.height ? placeBubble(bub, target, { prefer }) : { side: "none" };
+      bub.style.visibility = res.side === "none" ? "hidden" : "";
+    };
+    const hide = () => {
+      clearTimeout(doneT);
+      if (bub) {
+        const b = bub;
+        bub = null;
+        dismissNode(b);
+      }
+      cur = null;
+      folded = false;
+      unmarkTabs();
+    };
+    const show = (b, fl, i, viaKey) => {
+      clearTimeout(doneT);
+      const f = fl[i], was = bub && !folded && bub.style.visibility !== "hidden" ? bub.getBoundingClientRect() : null;
+      if (!bub) {
+        bub = document.createElement("div");
+        bub.className = "bub bub-ask e-margin";
+        bub.addEventListener("click", onAct);
+        bub.addEventListener("keydown", onBubKey);
+        bub.innerHTML = marginBubbleHtml(f, i + 1, fl.length, known);
+        document.body.appendChild(bub);
+      } else bub.innerHTML = marginBubbleHtml(f, i + 1, fl.length, known);
+      box = b;
+      cur = f;
+      folded = false;
+      unmarkTabs();
+      if (f.kind === "lang") {
+        const tab = tabFor(b, f.l);
+        if (tab) tab.classList.add("me-stale");
+      }
+      paint(b, fl);
+      place();
+      if (was && !mgReduceMotion() && bub.animate) {
+        const now = bub.getBoundingClientRect(), dx = was.left - now.left, dy = was.top - now.top;
+        if (dx || dy) bub.animate([{ transform: "translate(" + dx + "px," + dy + "px)" }, { transform: "none" }], { duration: M_MS.travel, easing: E_SPRING });
+      }
+      describe(b, fl);
+      const head = marginHeading(f, known);
+      marginSay(viaKey ? t("Finding {AT} of {ALL}: {HEADING}").replace("{AT}", i + 1).replace("{ALL}", fl.length).replace("{HEADING}", () => head) : head + (/[.?!]$/.test(head) ? " " : ". ") + marginLine(f));
+    };
+    const fold = (words) => {
+      const fl = findings(box);
+      folded = true;
+      cur = null;
+      unmarkTabs();
+      bub.innerHTML = '<p class="e-margin-said">' + esc(fl.length ? words.replace("{N}", fl.length) : t("Every finding is answered.")) + "</p>";
+      if (!fl.length) doneT = setTimeout(hide, MARGIN_DONE_MS);
+      spoken = new Set(fl.filter((f) => f.kind === "field" && spoken.has(f.raw)).map((f) => f.raw));
+      paint(box, fl);
+      place();
+      describe(box, fl);
+      marginSay(bub.textContent);
+    };
+    const pause = (b) => {
+      if (dead || active() !== b) return;
+      const fl = findings(b);
+      spoken = new Set(fl.filter((f) => f.kind === "field").map((f) => f.raw));
+      paint(b, fl);
+      describe(b, fl);
+      if (!fl.length) {
+        if (bub && !folded) hide();
+        return;
+      }
+      const i = bub && !folded && box === b && cur ? fl.findIndex((x) => marginSame(x, cur)) : -1;
+      if (i > -1) {
+        cur = fl[i];
+        bub.innerHTML = marginBubbleHtml(cur, i + 1, fl.length, known);
+        place();
+        return;
+      }
+      show(b, fl, 0, false);
+    };
+    const onInput = (e) => {
+      const b = boxes.find((x) => x.ta === e.target);
+      if (!b) return;
+      const fl = findings(b);
+      paint(b, fl);
+      if (acting) return;
+      if (bub && folded) hide();
+      else if (bub && box === b) {
+        const i = cur ? fl.findIndex((x) => marginSame(x, cur)) : -1;
+        if (i < 0) hide();
+        else {
+          cur = fl[i];
+          place();
+        }
+      }
+      clearTimeout(pauseT);
+      pauseT = setTimeout(() => pause(b), MARGIN_PAUSE_MS);
+    };
+    const onScroll = (e) => {
+      const b = boxes.find((x) => x.ta === e.target);
+      if (b) b.mir.scrollTop = b.ta.scrollTop;
+      place();
+    };
+    const onMove = (e) => {
+      moveAt = e;
+      if (moveRaf) return;
+      moveRaf = requestAnimationFrame(() => {
+        moveRaf = 0;
+        const ev = moveAt, b = ev && boxes.find((x) => x.ta === ev.target);
+        if (!b) return;
+        let tip = "";
+        b.mir.querySelectorAll(".me-chip").forEach((c) => {
+          if (tip) return;
+          Array.prototype.some.call(c.getClientRects(), (r) => {
+            if (ev.clientX < r.left || ev.clientX > r.right || ev.clientY < r.top || ev.clientY > r.bottom) return false;
+            const raw = c.textContent, m = MARGIN_NAME.exec(raw.slice(1, -1)), what = m ? marginWhat(m[1], known) : "";
+            tip = what ? raw + ": " + what : raw;
+            return true;
+          });
+        });
+        if (tip) b.ta.title = tip;
+        else b.ta.removeAttribute("title");
+      });
+    };
+    const onKey = (e) => {
+      if (e.key !== "F8" || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+      const b = active();
+      if (!b) return;
+      e.preventDefault();
+      clearTimeout(pauseT);
+      const fl = findings(b);
+      if (!fl.length) {
+        if (bub) hide();
+        describe(b, fl);
+        return;
+      }
+      spoken = new Set(fl.filter((f) => f.kind === "field").map((f) => f.raw));
+      const at = bub && !folded && box === b && cur ? fl.findIndex((x) => marginSame(x, cur)) : -1;
+      show(b, fl, at < 0 ? 0 : (at + 1) % fl.length, true);
+    };
+    const onBubKey = (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      const b = box;
+      hide();
+      if (b && b.ta.isConnected) b.ta.focus({ preventScroll: true });
+    };
+    function onAct(e) {
+      const btn = e.target.closest && e.target.closest("button[data-act]");
+      if (!btn || !cur || !box) return;
+      const f = cur, b = box, act = btn.getAttribute("data-act");
+      if (act === "fix") {
+        const ta = b.ta, s0 = ta.selectionStart, s1 = ta.selectionEnd, d = f.sug.length - (f.end - f.at);
+        const moved = (p) => p >= f.end ? p + d : p > f.at ? f.at + f.sug.length : p;
+        const want = marginReplace(ta.value, f, f.sug);
+        acting = true;
+        try {
+          ta.focus({ preventScroll: true });
+          ta.setSelectionRange(f.at, f.end);
+          try {
+            document.execCommand("insertText", false, f.sug);
+          } catch (x) {
+          }
+          if (ta.value !== want) {
+            ta.value = want;
+            ta.dispatchEvent(new Event("input", { bubbles: true }));
+          }
+          ta.setSelectionRange(moved(s0), moved(s1));
+        } finally {
+          acting = false;
+        }
+        fold(t("Changed to {SUGGESTED}. Still to answer: {N}. F8: next").replace("{SUGGESTED}", () => f.sug));
+      } else if (act === "leave") {
+        if (f.kind === "field") sil.fields[f.raw] = marginCount(b.ta.value, f.raw);
+        else {
+          const o = boxes.find((x) => x.l === f.l);
+          sil.langs[f.l] = marginNorm(o ? o.ta.value : "");
+        }
+        fold(t("Left as it is. Still to answer: {N}. F8: next"));
+        b.ta.focus({ preventScroll: true });
+      } else if (act === "open") {
+        const tab = tabFor(b, f.l), o = boxes.find((x) => x.l === f.l);
+        hide();
+        if (tab) tab.click();
+        if (o) o.ta.focus({ preventScroll: true });
+      }
+    }
+    const onTabs = (e) => {
+      if (!e.target.closest || !e.target.closest(".lang-tabs button[data-l]")) return;
+      clearTimeout(pauseT);
+      hide();
+    };
+    const onResize = () => {
+      boxes.forEach((b) => {
+        if (b.ta.offsetWidth) metrics(b);
+      });
+      place();
+    };
+    const ro = typeof ResizeObserver === "function" ? new ResizeObserver(onResize) : null;
+    const mo = typeof MutationObserver === "function" && modalCard ? new MutationObserver(() => {
+      if (!modalCard.contains(boxes[0].ta)) down();
+    }) : null;
+    function down() {
+      if (dead) return;
+      dead = true;
+      if (MG && MG.down === down) MG = null;
+      clearTimeout(pauseT);
+      clearTimeout(doneT);
+      if (moveRaf) cancelAnimationFrame(moveRaf);
+      if (bub) {
+        const b = bub;
+        bub = null;
+        b.remove();
+      }
+      unmarkTabs();
+      boxes.forEach((b) => {
+        b.ta.removeEventListener("input", onInput);
+        b.ta.removeEventListener("scroll", onScroll);
+        b.ta.removeEventListener("mousemove", onMove);
+      });
+      document.removeEventListener("keydown", onKey);
+      removeEventListener("resize", onResize);
+      if (modalCard) {
+        modalCard.removeEventListener("click", onTabs);
+        modalCard.removeEventListener("scroll", place, true);
+      }
+      if (ro) ro.disconnect();
+      if (mo) mo.disconnect();
+    }
+    boxes.forEach((b) => {
+      b.ta.addEventListener("input", onInput);
+      b.ta.addEventListener("scroll", onScroll);
+      b.ta.addEventListener("mousemove", onMove);
+      if (ro) ro.observe(b.ta);
+      if (b.ta.offsetWidth) metrics(b);
+      paint(b);
+    });
+    document.addEventListener("keydown", onKey);
+    addEventListener("resize", onResize);
+    if (modalCard) {
+      modalCard.addEventListener("click", onTabs);
+      modalCard.addEventListener("scroll", place, true);
+    }
+    if (mo) mo.observe(modalCard, { childList: true });
+    MG = { down };
+  }
+
+  // src/modules/card-editor.js
   function cardCatPickHtml(selected) {
     const sel = String(selected || "");
     const chips = Object.keys(CATS).sort((a, b) => catSortIdx(a) - catSortIdx(b)).map((k) => {
@@ -23511,7 +24066,7 @@ What you type stays in this browser only.`;
   }
   function meLangPanel(m, l, i) {
     const id = (f) => meFieldId(f, l), v = (f) => esc(cardText(m, f, l));
-    return langPane(l, i, '<div class="mf mf-titled"><label>Title</label>' + stampToggleHtml(cardCommits(m)) + '<input id="' + id("t") + '" value="' + v("t") + '" autocomplete="off" placeholder="' + esc(t("a short name you will recognise")) + '"><p class="me-stamp-note" data-i18n-skip hidden></p></div><div class="mf"><label>' + esc(t("Macro")) + '</label><textarea id="' + id("body") + '" spellcheck="true" placeholder="' + esc(t("the text the customer receives")) + '">' + v("body") + '</textarea></div><div class="mf"><label>Note</label><input id="' + id("note") + '" value="' + v("note") + '" autocomplete="off" placeholder="' + esc(t("guidance for you, never sent")) + '"></div>');
+    return langPane(l, i, '<div class="mf mf-titled"><label>Title</label>' + stampToggleHtml(cardCommits(m)) + '<input id="' + id("t") + '" value="' + v("t") + '" autocomplete="off" placeholder="' + esc(t("a short name you will recognise")) + '"><p class="me-stamp-note" data-i18n-skip hidden></p></div><div class="mf"><label>' + esc(t("Macro")) + '</label><div class="me-macro"><textarea id="' + id("body") + '" spellcheck="true" placeholder="' + esc(t("the text the customer receives")) + '">' + v("body") + '</textarea><div class="me-mirror" aria-hidden="true" data-i18n-skip></div></div></div><div class="mf"><label>Note</label><input id="' + id("note") + '" value="' + v("note") + '" autocomplete="off" placeholder="' + esc(t("guidance for you, never sent")) + '"></div>');
   }
   function meSharedFields(m) {
     return '<div class="mf mf-shared"><input id="me_k" value="' + esc(String(m && m.k || "")) + '" autocomplete="off" placeholder="extra words for search"></div>';
@@ -23829,6 +24384,7 @@ What you type stays in this browser only.`;
     wireFolds(modalCard, "details.mf-fold", "details.mf-fold");
     nx.wire();
     wireStampToggle(base);
+    wireCardMargin(base);
     syncMeIntentPick();
     if ($("#meReset")) $("#meReset").onclick = () => {
       delete pack.overrides[id];
@@ -28051,7 +28607,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_margin_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
