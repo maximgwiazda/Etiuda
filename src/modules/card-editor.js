@@ -463,10 +463,11 @@ function openCardEditor(id, presetCat, fromManage){
           +CONTENT_LANGS.map(l=>'<button type="button" data-v="'+esc(l)+'"'
             +((pinned||CONTENT_LANGS[0])===l?' class="on"':'')+'>'+esc(l.toUpperCase())+'</button>').join("")
           +'</div></div>';
-        /* Alternatives, steps and the override (two rows tall) down the left; the two intent boxes and
-           the pin down the right; the override's forms across both, below. */
-        const left=rows.slice(0,3), right=rows.slice(3);
-        const cells=left.concat([body],right,[pin]);
+        /* Alternatives, steps and the pin down the left; the two intent boxes and the override (two rows
+           tall) down the right, so the override is the last of the six; its forms across both, below,
+           straight after it in the markup for .mf-own.on+.mf-own-body (Maxim, 2026-10-07 23:00). */
+        const left=[rows[0],rows[1],pin], right=[rows[3],rows[4],rows[2]];
+        const cells=left.concat(right,[body]);
         return '<div class="mf-cols" style="grid-template-rows:repeat(4,auto)">'+cells.join("")+'</div>';
       })()})
     ,actions:

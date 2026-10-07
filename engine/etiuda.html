@@ -2620,8 +2620,8 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 /* The card editor's flags: one grid, filled column-first (grid-auto-flow:column with an explicit
    row count), so reading down a column keeps related toggles together. Collapses to a single
    column on a narrow dialog, which is the width the modal actually reaches on a small laptop. */
-/* COLUMN flow. Left column: what the text and its {PAX} do. Right column: how the card
-   behaves among intents, with the language pin as its last member. */
+/* COLUMN flow. Left column: what the text does, with the language pin as its last member.
+   Right column: how the card behaves among intents, then the override of {PAX}, the last of the six. */
 .mf-cols{display:grid;grid-auto-flow:column;grid-template-columns:1fr 1fr;gap:8px 18px;
   margin:2px 0 12px}
 @media (max-width:560px){
@@ -24659,8 +24659,8 @@ What you type stays in this browser only.`;
             );
             const pinned2 = CONTENT_LANGS.indexOf(m.lockLang) > -1 ? m.lockLang : "";
             const pin = '<div class="mf-pin' + (pinned2 ? "" : " off") + '" id="meLockRow"><label title="' + esc(t("The card keeps this language whatever the EN|PL toggle says, tokens included")) + '"><input type="checkbox" id="meLockLang"' + (pinned2 ? " checked" : "") + "> " + esc(t("Always one language")) + '</label><div class="seg mf-pin-seg" id="meLockSeg" data-n="' + CONTENT_LANGS.length + '">' + CONTENT_LANGS.map((l) => '<button type="button" data-v="' + esc(l) + '"' + ((pinned2 || CONTENT_LANGS[0]) === l ? ' class="on"' : "") + ">" + esc(l.toUpperCase()) + "</button>").join("") + "</div></div>";
-            const left = rows.slice(0, 3), right = rows.slice(3);
-            const cells = left.concat([body], right, [pin]);
+            const left = [rows[0], rows[1], pin], right = [rows[3], rows[4], rows[2]];
+            const cells = left.concat(right, [body]);
             return '<div class="mf-cols" style="grid-template-rows:repeat(4,auto)">' + cells.join("") + "</div>";
           })()
         })
