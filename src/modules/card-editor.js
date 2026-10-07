@@ -6,7 +6,7 @@ import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { closeModal, edMarkClean, edNavHtml, edWireNav, mfSec, openDialog, refreshDialogChrome, wireFolds } from "./dialog.js";
 import { afterPaint } from "./motion.js";
 import { ICON_PLUS } from "./icons.js";
-import { intentNavName } from "./intent-text.js";
+import { intentNavName, paxOwnExample } from "./intent-text.js";
 import { langTabs, langPane, langFieldId, markMissing, edReportMissing, langFocus, langEndonym } from "./lang-tabs.js";
 import { lySet } from "./storage.js";
 import { drawPills } from "./tabs.js";
@@ -259,13 +259,21 @@ function meAddressName(L,k){
   if(L==="en") return t("Title and surname");
   return k==="titleFirst" ? t("Pani or Pan, with the first name") : t("Pani or Pan, with the surname");
 }
+/* Two placeholder customers, one of each gender. */
+const ME_EXAMPLE_NAMES=["Jan Nowak","Kasia Nowak"];
+/* What form k writes for them in L, with the boxes as m holds them: fill()'s own words, never written here. */
+function meExample(m,L,k){
+  const c=Object.assign({},m); c[PAX_ADDRESS_KEY[L]]=k;
+  return ME_EXAMPLE_NAMES.map(n=>paxOwnExample(c,L,n)).filter(Boolean).join(" \u00b7 ");
+}
 function meAddressHtml(m,L){
   const now=paxAddressOf(m,L), forms=PAX_ADDRESS_FORMS[L];
   const order=forms.filter(k=>k!=="none").concat([""], forms.filter(k=>k==="none"));
   return '<div class="mf-addr" role="radiogroup" aria-label="'+esc(langEndonym(L))+'">'
     +'<span class="mf-addr-l" data-i18n-skip>'+esc(langEndonym(L))+'</span>'
     +order.map(k=>'<label><input type="radio" name="meAddr_'+L+'" value="'+k+'"'+(k===now?" checked":"")+'> '
-      +esc(meAddressName(L,k))+'</label>').join("")+'</div>';
+      +esc(meAddressName(L,k))+'</label>'
+      +'<span class="mf-ex" data-i18n-skip data-l="'+L+'" data-k="'+k+'">'+esc(meExample(m,L,k))+'</span>').join("")+'</div>';
 }
 /* The forms as the dialog holds them; a language with no group on screen keeps what the card had. */
 function readMeAddress(m){
@@ -429,13 +437,12 @@ function openCardEditor(id, presetCat, fromManage){
         box("meVoc",paxVocOn(m),false,
             "Polish only: declines the name into the vocative, the form Polish uses to address someone. Only the first name declines; a surname is left as written.",
             "{PAX} in the vocative");
-        sub.push.apply(sub, rows.splice(at,2));
+        const body='<div class="mf-own-body" id="meOwnBody">'+rows.splice(at,2).concat(sub).join("")+'</div>';
         rows.push('<div class="mf-own'+(own?" on":"")+'" id="meOwnRow">'
           +'<label title="'+esc(t("For a card that sets {PAX} its own way, such as a note that mentions the customer rather than addressing them."))+'">'
           +'<input type="checkbox" class="mf-switch" role="switch" id="meOwn"'+(own?" checked":"")+'> '
           +esc(t("Manual override of {PAX}")).split("{PAX}").join(paxTag)+'</label>'
-          +'<div class="mf-own-off">'+esc(t("{PAX} takes the catalog's address for customers.")).split("{PAX}").join(paxTag)+'</div>'
-          +'<div class="mf-own-on">'+sub.join("")+'</div></div>');
+          +'<div class="mf-own-off">'+esc(t("{PAX} takes the catalog's address for customers.")).split("{PAX}").join(paxTag)+'</div></div>');
         box("meAllIntents",m.allIntents,false,
             "Rings green under every intent - for text that always applies, like an opener.",
             "Linked to every {INT}");
@@ -456,10 +463,11 @@ function openCardEditor(id, presetCat, fromManage){
           +CONTENT_LANGS.map(l=>'<button type="button" data-v="'+esc(l)+'"'
             +((pinned||CONTENT_LANGS[0])===l?' class="on"':'')+'>'+esc(l.toUpperCase())+'</button>').join("")
           +'</div></div>';
-        /* Alternatives, steps and the override (two rows tall) down the left; the two intent boxes and
-           the pin down the right. */
-        const left=rows.slice(0,3), right=rows.slice(3);
-        const cells=left.concat(right,[pin]);
+        /* Alternatives, steps and the pin down the left; the two intent boxes and the override (two rows
+           tall) down the right, so the override is the last of the six; its forms across both, below,
+           straight after it in the markup for .mf-own.on+.mf-own-body. */
+        const left=[rows[0],rows[1],pin], right=[rows[3],rows[4],rows[2]];
+        const cells=left.concat(right,[body]);
         return '<div class="mf-cols" style="grid-template-rows:repeat(4,auto)">'+cells.join("")+'</div>';
       })()})
     ,actions:
@@ -507,6 +515,7 @@ function openCardEditor(id, presetCat, fromManage){
       }
       const a=$("#meAdvSum"); if(a) a.textContent=meAdvSummary(cur);
       const k=$("#meKeysSum"); if(k) k.textContent=meKeysSummary(cur);
+      document.querySelectorAll("#meOwnBody .mf-ex").forEach(e=>{ e.textContent=meExample(cur,e.dataset.l,e.dataset.k); });
     };
     // every language's boxes, so the summary follows whichever tab is being typed in
     document.querySelectorAll(".lang-pane input, .lang-pane textarea")
@@ -525,7 +534,7 @@ function openCardEditor(id, presetCat, fromManage){
       if(fb) fb.disabled=!live.first;
       if(vb) vb.disabled=!live.voc;
     };
-    document.querySelectorAll('#meOwnRow input[type=radio]').forEach(el=>el.addEventListener("change",()=>{ syncNameBoxes(); upd(); }));
+    document.querySelectorAll('#meOwnBody input[type=radio]').forEach(el=>el.addEventListener("change",()=>{ syncNameBoxes(); upd(); }));
     syncNameBoxes();
     const pinBox=$("#meLockLang"), pinRow=$("#meLockRow"), pinSeg=$("#meLockSeg");
     if(pinBox && pinRow){

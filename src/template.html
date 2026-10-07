@@ -2620,8 +2620,8 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 /* The card editor's flags: one grid, filled column-first (grid-auto-flow:column with an explicit
    row count), so reading down a column keeps related toggles together. Collapses to a single
    column on a narrow dialog, which is the width the modal actually reaches on a small laptop. */
-/* COLUMN flow. Left column: what the text and its {PAX} do. Right column: how the card
-   behaves among intents, with the language pin as its last member. */
+/* COLUMN flow. Left column: what the text does, with the language pin as its last member.
+   Right column: how the card behaves among intents, then the override of {PAX}, the last of the six. */
 .mf-cols{display:grid;grid-auto-flow:column;grid-template-columns:1fr 1fr;gap:8px 18px;
   margin:2px 0 12px}
 @media (max-width:560px){
@@ -3135,16 +3135,20 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 /* The language pin, under the Advanced flags. Dimmed rather than hidden while off, for the
    same reason the narrowest-column slider is. */
 .mf-pin{display:flex;align-items:center;gap:10px;margin-top:8px}
-/* The override of {PAX}: off shows where the address comes from, on shows the two boxes, indented
-   under the switch's label. */
+/* The override of {PAX}: off shows where the address comes from; on, its forms take the row below
+   both columns (.mf-own-body). */
 .mf-cols .mf-own{grid-row:span 2;display:flex;flex-direction:column;gap:8px;min-width:0}
 .mf-own .mf-own-off{font:12.5px var(--sans);color:var(--dim);line-height:1.4;padding-left:37px;margin-top:-4px}
-.mf-own .mf-own-on{display:none;flex-direction:column;gap:8px;padding-left:37px}
-.mf-own.on .mf-own-on{display:flex}
 .mf-own.on .mf-own-off{display:none}
-/* A group of forms per language, its name over it in the label tone of the dialog's quiet lines. */
-.mf-own .mf-addr{display:flex;flex-direction:column;gap:6px}
-.mf-own .mf-addr-l{font:12.5px var(--sans);color:var(--dim)}
+/* The two boxes, then a group of forms per language, each form beside what it writes. Subgrids down to
+   the forms, so the examples and the second box stand in the right-hand column of the flags above. */
+.mf-cols .mf-own-body{display:none;grid-column:1/-1;grid-row:5;grid-template-columns:subgrid;row-gap:6px;padding-left:37px}
+.mf-own.on+.mf-own-body{display:grid}
+.mf-own-body .mf-addr{display:grid;grid-column:1/-1;grid-template-columns:subgrid;row-gap:6px;margin-top:4px}
+.mf-own-body .mf-addr-l{grid-column:1/-1;font:12.5px var(--sans);color:var(--dim)}
+.mf-own-body .mf-ex{padding-left:4px;font:13px var(--sans);line-height:1.35;color:var(--dim);white-space:nowrap}
+.mf-own-body label:has(input:checked:not(:disabled))+.mf-ex{color:var(--ink)}
+@media (max-width:560px){ .mf-cols .mf-own-body{grid-row:auto} }
 .mf-switch{appearance:none;-webkit-appearance:none;position:relative;flex:0 0 auto;width:28px;height:16px;
   margin:1px 0 0 3px;border-radius:8px;background:var(--line-strong);outline:none}
 .mf-switch::after{content:"";position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:50%;
