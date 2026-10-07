@@ -130,8 +130,7 @@ function marginSugName(sug){ const m=/^\{([A-Z][A-Z0-9]*)/.exec(String(sug||""))
 function marginTab(l){ return '"'+langEndonym(l)+'"'; }
 function marginHeading(f,known){
   if(f.kind==="lang") return t("{TAB} still has the earlier text").replace("{TAB}",()=>marginTab(f.l));
-  if(f.sug) return t("Perhaps {SUGGESTED}, {WHAT}?").replace("{SUGGESTED}",()=>f.sug)
-    .replace("{WHAT}",()=>marginWhat(marginSugName(f.sug),known));
+  if(f.sug) return t("Perhaps {SUGGESTED}, {WHAT}?").replace(/\{SUGGESTED\}|\{WHAT\}/g,k=>k==="{WHAT}" ? marginWhat(marginSugName(f.sug),known) : f.sug);
   return t("{TOKEN} goes out exactly as typed").replace("{TOKEN}",()=>f.raw);
 }
 function marginLine(f){
@@ -150,8 +149,8 @@ function marginBubbleHtml(f,at,all,known){
     acts='<button type="button" class="btn primary" data-act="open">'
       +esc(t("Open {TAB}").replace("{TAB}",()=>marginTab(f.l)))+'</button>';
   } else if(f.sug){
-    head=marginCode(t("Perhaps {SUGGESTED}, {WHAT}?"),"{SUGGESTED}",f.sug)
-      .split("{WHAT}").join(esc(marginWhat(marginSugName(f.sug),known)));
+    head=esc(t("Perhaps {SUGGESTED}, {WHAT}?")).replace(/\{SUGGESTED\}|\{WHAT\}/g,
+      k=>k==="{WHAT}" ? esc(marginWhat(marginSugName(f.sug),known)) : "<code>"+esc(f.sug)+"</code>");
     line=marginCode(t("{TOKEN} is not a field this catalog fills, so the customer would see it as typed, braces and all."),"{TOKEN}",f.raw);
     acts='<button type="button" class="btn primary" data-act="fix">'
       +esc(t("Change it to {SUGGESTED}").replace("{SUGGESTED}",()=>f.sug))+'</button>';
@@ -427,6 +426,7 @@ export {
   marginReplace,
   marginHtml,
   marginHeading,
+  marginBubbleHtml,
   marginSame,
   marginSay,
   wireCardMargin

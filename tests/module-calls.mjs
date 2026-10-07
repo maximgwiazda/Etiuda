@@ -3308,6 +3308,20 @@ const CARD_B = {
       return eq(en + " || " + pl2, '"Polski" still has the earlier text | Perhaps {PAX}, the customer\'s name?'
         + ' || W zakładce "Polski" jest jeszcze dawny tekst | Może chodzi o {PAX}, czyli imię klienta?');
     });
+  check("card-margin.js", "1007mg11 a catalog's variable named like a place in the sentence is shown as typed: the heading and the bubble fill each place once, in both languages",
+    () => {
+      const own = n => MG.marginKnown({ list: [{ name: n }] });
+      const g = n => ({ kind: "field", raw: "{" + n.slice(0, -1) + "}", sug: "{" + n + "}" });
+      const say = n => [MG.marginHeading(g(n), own(n)), plain(MG.marginBubbleHtml(g(n), 1, 1, own(n)).split("</h3>")[0])].join(" ; ");
+      const en = [say("WHAT"), say("CITY")].join(" | ");
+      const had = UILANG_STORE.lsGet("eUiLang");
+      UILANG_STORE.lsSet("eUiLang", "pl");
+      let pl2 = "";
+      try { pl2 = say("WHAT"); }
+      finally { if (had == null) UILANG_STORE.lsDel("eUiLang"); else UILANG_STORE.lsSet("eUiLang", had); }
+      return eq(en + " || " + pl2, "Perhaps {WHAT}, filled by this catalog? ; Perhaps {WHAT}, filled by this catalog? | Perhaps {CITY}, filled by this catalog? ; Perhaps {CITY}, filled by this catalog?"
+        + " || Może chodzi o {WHAT}, czyli wypełnia je katalog? ; Może chodzi o {WHAT}, czyli wypełnia je katalog?");
+    });
   check("card-margin.js", "1007mg10 two slips in the same words are two findings, each still itself after an edit before it, so F8 walks on",
     () => {
       const [a, b] = one("{PAXX} and {PAXX}", ""), [, b2] = one("Hi, {PAXX} and {PAXX}", "");
