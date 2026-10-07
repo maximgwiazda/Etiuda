@@ -3449,21 +3449,28 @@ function activeStateTests() {
   eq("each tab's name is a tab to a screen reader, selected exactly where the tab is on",
     got, [[false, "tab", "false"], [true, "tab", "true"]]);
 
-  const pillsAt = sel => {
-    const pills = new El("div");
+  /* `ed` is the loaded edition's marks: how many cards still wear one, and whether its pill is pressed. */
+  const pillsAt = (sel, ed) => {
+    const pills = new El("div"), view = !!(ed && ed.view);
     const H = new Function("document", "pills", "cats", "CATS", "intentCats", "searchCounts", "catIconSvg", "esc", "t", "ICON_EDIT",
       "ICON_ALL", "ICON_PLUS", "catSlot", "dragState", "totalMacroCount", "counts", "displayCatOrder", "syncPillsCollapseNow",
-      "schedulePillsCollapse",
-      slice("pills-bar.js", "function drawPillsCore(") + "\nreturn drawPillsCore;")(
+      "schedulePillsCollapse", "editionView", "setEditionView", "editionMarkedCount", "editionMarks",
+      slice("pills-bar.js", "function editionPill(") + "\n" + slice("pills-bar.js", "function drawPillsCore(") + "\nreturn drawPillsCore;")(
       doc, pills, sel, { a: "Alpha", b: "Beta" }, () => ({ specific: [], always: [] }), () => null, () => "", s => s, s => s, "",
-      "", "", () => -1, null, () => 3, { a: 1, b: 2 }, () => ["a", "b"], () => {}, () => {});
+      "", "", () => -1, null, () => 3, { a: 1, b: 2 }, () => ["a", "b"], () => {}, () => {},
+      view, () => {}, () => (ed ? ed.n : 0), () => ({ v: "v7" }));
     H();
-    return pills.kids.map(k => [k.dataset.k === undefined ? "+" : k.dataset.k, k.getAttribute("role"), k.getAttribute("aria-pressed")]);
+    return pills.kids.map(k => [k.cls.has("pill-ed") ? "edition" : k.dataset.k === undefined ? "+" : k.dataset.k,
+      k.getAttribute("role"), k.getAttribute("aria-pressed")]);
   };
   try { got = [pillsAt(["b"]), pillsAt([])]; } catch (e) { got = "drawPillsCore did not run: " + e.message; }
   eq("each category pill is a toggle pressed exactly while it filters, All while nothing does, and the + is neither",
     got, [[["", "button", "false"], ["a", "button", "false"], ["b", "button", "true"], ["+", null, null]],
           [["", "button", "true"], ["a", "button", "false"], ["b", "button", "false"], ["+", null, null]]]);
+  try { got = [pillsAt([], { n: 2, view: true }), pillsAt([], { n: 2, view: false })]; } catch (e) { got = "drawPillsCore did not run: " + e.message; }
+  eq("the pill of a loaded edition's marked cards stands beside All while any wear a mark, a toggle pressed while it filters, and All is not",
+    got, [[["", "button", "false"], ["edition", "button", "true"], ["a", "button", "false"], ["b", "button", "false"], ["+", null, null]],
+          [["", "button", "true"], ["edition", "button", "false"], ["a", "button", "false"], ["b", "button", "false"], ["+", null, null]]]);
 
   try {
     const paint = new Function("catSlot", "railDrag", "railRelNow", "railRelGroup",
@@ -4293,8 +4300,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 973;
-const UI_STRINGS_SHA256 = "4fa7a07daeeaa2a462d1fd29702de194bcc1c4795ce527773b67d242fbd9d840";
+const UI_STRINGS_COUNT = 984;
+const UI_STRINGS_SHA256 = "8bd0b177db4d759d50d89f14df478dabad0dcbf43169ea456340502761a937b7";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

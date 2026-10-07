@@ -652,6 +652,21 @@ body.e-scrolled header{box-shadow:var(--header-shadow-on,0 4px 18px rgba(15,23,4
 .cat-now{flex:0 1 auto;min-width:0;max-width:min(30ch,26vw);align-self:center;
   font:12.5px var(--sans);color:rgba(var(--band-ink-rgb),.78);white-space:nowrap;overflow:hidden}
 .cat-now .cn-name,.cat-now .cn-none{display:block;overflow:hidden}
+/* AN EDITION WAITING TO BE LOADED puts a dot before the name, and the name then opens that offer: a door to
+   it alone, never to the Library (catalog-offer.js, paintCatWaiting). */
+.cat-now.is-waiting{display:flex;align-items:center;gap:7px;color:var(--band-ink)}
+.cat-now .cn-dot{flex:none;width:7px;height:7px;border-radius:50%;
+  background:color-mix(in srgb,var(--accent) 45%,var(--band-ink));
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 35%,transparent)}
+.cat-now.is-waiting .cn-name{min-width:0}
+.cat-now.is-waiting:focus-visible{outline:2px solid var(--band-ink);outline-offset:2px;border-radius:3px}
+/* The file arriving: a sheet that travels onto the name and goes into the dot. */
+.e-ed-sheet{position:fixed;z-index:300;width:22px;height:28px;margin:-14px 0 0 -11px;border-radius:3px;
+  background:var(--panel-raised);pointer-events:none;
+  box-shadow:0 0 0 1.5px var(--accent),0 6px 18px color-mix(in srgb,var(--accent) 35%,transparent)}
+.e-ed-sheet::before,.e-ed-sheet::after{content:"";position:absolute;left:5px;right:5px;height:1.6px;
+  background:var(--accent);top:8px}
+.e-ed-sheet::after{top:14px;right:9px}
 
 /* ---- THE DESKTOP HOST. Every rule here is off in a browser: it hangs on body.e-host, which
    host.js sets only where the shell's preload has put E_HOST on the window. */
@@ -683,6 +698,7 @@ body.e-host.e-max .win-g-max{display:none}
 body.e-host .row{app-region:drag;-webkit-app-region:drag;user-select:none}
 body.e-host .row button,body.e-host .row input,body.e-host .row .tab{
   app-region:no-drag;-webkit-app-region:no-drag}
+body.e-host .row .cat-now.is-waiting{app-region:no-drag;-webkit-app-region:no-drag}
 
 /* ---- THE BACKDROP. A material is composited behind the window and shows only where the
    window leaves pixels unpainted, so under e-backdrop the band's strip is the one place
@@ -1487,6 +1503,11 @@ html.pilldrag, html.pilldrag .pill, html.pilldrag *{cursor:default!important}
 .pill.over{border-color:var(--accent);border-style:dashed}
 /* 8px = the old 4px margin plus the ~4px space glyph the flex pill no longer renders. */
 .pill b{font-weight:600;opacity:.65;margin-left:8px;font-size:11px}
+/* The edition's pill (pills-bar.js, editionPill): the accent's own ground until pressed, the family's
+   pressed look once it is. */
+.pill.pill-ed{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.pill.pill-ed b{opacity:.8}
+.pill.pill-ed.on{background:var(--accent-fill);border-color:var(--accent-fill);color:#fff}
 
 /* shell: single column by default; side intent rail when docked (wide + wanted) */
 /* Padding is added to the max-width so the CONTENT box is --app-max, matching the header
@@ -2405,6 +2426,9 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
 .cbadge{font:10px var(--mono);letter-spacing:.3px;padding:2px 6px;border-radius:999px;
   background:var(--accent-soft);color:var(--accent);text-transform:uppercase}
 .cbadge.ed{background:var(--ed-soft);color:var(--ed);border:1px solid color-mix(in srgb,var(--ed) 42%,transparent)}
+/* What a loaded edition brought, worn until the card is next copied: the family's own accent, with the
+   border the others carry so every badge sits one height. */
+.cbadge.edn{border:1px solid transparent}
 .modal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
 /* A keyframe, not a transition - the element returns from display:none with no previous
    value. The way out is a copy on the dismiss tier (.e-gone), which the next surface to open
@@ -3353,6 +3377,13 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   border-left:3px solid var(--line-strong);border-radius:6px;background:var(--panel)}
 .ed-del{text-decoration:line-through;color:var(--warn)}
 .ed-ins{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;color:var(--ok)}
+/* A changed card under the edition's pill: the words it had, struck, and the words it has, marked. */
+.e-del{color:color-mix(in srgb,var(--warn) 85%,var(--ink));text-decoration:line-through;
+  text-decoration-thickness:1.5px;padding:0 2px}
+.e-ins{background:color-mix(in srgb,var(--ok) 18%,transparent);color:inherit;border-radius:3px;
+  padding:0 2px;text-decoration:none}
+/* Heard and never seen, as #eSay is. */
+.e-vh{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .ed-acts{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin-top:10px}
 /* The choice made wears the ring, as a toggle that is on does; primary belongs to a bar. */
 .ed-acts .btn[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--ink)}
@@ -3715,6 +3746,10 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
   box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ok) 45%,transparent);
   animation:eCopyWash var(--m-wash) ease-out both}
 @keyframes eCopyWash{from{opacity:1}to{opacity:0}}
+/* The cards a loaded edition changed, shown once where they stand. */
+.e-ed-wash{position:fixed;z-index:299;pointer-events:none;border-radius:var(--radius-sm);
+  background:var(--accent);animation:eEdWash var(--m-wash) ease-out both}
+@keyframes eEdWash{from{opacity:0}40%{opacity:.22}to{opacity:0}}
 /* A settled search's words, marked where they stand (search-marks.js): the tint first, the
    underline with it 70ms on. 4px under the baseline clears the Polish ogonek at this size. */
 ::highlight(e-hit-in){background-color:color-mix(in srgb,var(--accent) 8%,transparent)}
@@ -4632,6 +4667,7 @@ What you type stays in this browser only.`;
     cats: () => cats,
     catsDropArmed: () => catsDropArmed,
     dragState: () => dragState,
+    editionView: () => editionView,
     entrySel: () => entrySel,
     intentIdxs: () => intentIdxs,
     intentText: () => intentText,
@@ -4656,6 +4692,7 @@ What you type stays in this browser only.`;
     setCats: () => setCats,
     setCatsDropArmed: () => setCatsDropArmed,
     setDragState: () => setDragState,
+    setEditionView: () => setEditionView,
     setIntentIdxs: () => setIntentIdxs,
     setIntentText: () => setIntentText,
     setPendingScrollHit: () => setPendingScrollHit,
@@ -4690,6 +4727,7 @@ What you type stays in this browser only.`;
   var catOrder = [];
   var cats = [];
   var shown = [];
+  var editionView = false;
   var entrySel = null;
   var pendingScrollHit = false;
   var intentIdxs = [];
@@ -4723,6 +4761,7 @@ What you type stays in this browser only.`;
     dragState = null;
     suppressClick = false;
     swapLock = 0;
+    editionView = false;
   }
   function setRailSel(v) {
     railSel = v;
@@ -4759,6 +4798,10 @@ What you type stays in this browser only.`;
   }
   function setCats(v) {
     cats = v;
+    editionView = false;
+  }
+  function setEditionView(v) {
+    editionView = !!v;
   }
   function wholeThingEmpty() {
     return !cards.length && !cats.length;
@@ -5782,7 +5825,7 @@ What you type stays in this browser only.`;
   function nsDel(name) {
     lsDel(nsKey(name));
   }
-  var LAYER_KEYS = ["Pack", "Stats", "Days", "CatOrder", "IntentOrder", "IntentsAside", "LinksAside", "RequestsAside", "Exported", "LooseId", "Shared", "SharedOwn", "SharedFile"];
+  var LAYER_KEYS = ["Pack", "Stats", "Days", "CatOrder", "IntentOrder", "IntentsAside", "LinksAside", "RequestsAside", "Exported", "LooseId", "Shared", "SharedOwn", "SharedFile", "EditionMarks"];
   function layerNsOf(c) {
     const id = c ? String(c.id || "").trim() : "";
     return id ? eNsFor(id) : E_NS;
@@ -6651,23 +6694,34 @@ What you type stays in this browser only.`;
     "{N} removed": "{N} usunięta",
     "few␟{N} removed": "{N} usunięte",
     "many␟{N} removed": "{N} usuniętych",
-    "changed": "zmiana",
+    "changed": "zmieniona",
     "new": "nowa",
     "restored": "przywrócona",
     "retired": "wycofana",
     "removed": "usunięta",
-    "you have your own version": "masz własną wersję",
+    "you have your own version": "jest własna wersja",
     "the team's new text": "nowa treść zespołu",
-    "It comes back with your star and your edits.": "Wróci z Twoją gwiazdką i zmianami.",
+    "It comes back with your star and your edits.": "Wróci z gwiazdką i własnymi zmianami.",
     "and {N} more": "i {N} więcej",
     "Show the differences": "Pokaż różnice",
     "What is new in edition {V}": "Co nowego w wydaniu {V}",
     "Was": "Było",
     "Becomes": "Będzie",
-    "Your version": "Twoja wersja",
+    "Your version": "Własna wersja",
     "Text": "Treść",
     "Take the team's new text": "Weź nową treść zespołu",
     "Keep mine": "Zostaw moją",
+    "Edition {V} is waiting to be loaded; the offer is under the catalog's name.": "Wydanie {V} czeka na wczytanie; propozycja jest pod nazwą katalogu.",
+    "Show edition {V}, waiting to be loaded": "Pokaż wydanie {V}, które czeka na wczytanie",
+    "This desk carries on as it is until the update is loaded.": "Do wczytania aktualizacji stanowisko działa bez zmian.",
+    "Edition {V} loaded: {COUNTS}": "Wczytano wydanie {V}: {COUNTS}",
+    "Changed in edition {V}": "Zmieniona w wydaniu {V}",
+    "New in edition {V}": "Nowa w wydaniu {V}",
+    "Changes in {V}": "Zmiany w {V}",
+    "Only the cards edition {V} changed or added": "Tylko karty zmienione lub dodane w wydaniu {V}",
+    "Cards edition {V} changed or added: {N}.": "Karty zmienione lub dodane w wydaniu {V}: {N}.",
+    "before:": "wcześniej:",
+    "now:": "teraz:",
     "Load catalog?": "Wczytać katalog?",
     "Replace catalog?": "Zastąpić katalog?",
     "Located as {FILE}.": "Znaleziony jako {FILE}.",
@@ -14947,6 +15001,307 @@ What you type stays in this browser only.`;
     return { terms: terms.slice(), tier: strong ? 0 : 1, score };
   }
 
+  // src/modules/edition-marks.js
+  var edition_marks_exports = {};
+  __export(edition_marks_exports, {
+    EDITION_MARKS: () => EDITION_MARKS,
+    editionDiffHtml: () => editionDiffHtml,
+    editionMarkOf: () => editionMarkOf,
+    editionMarkSig: () => editionMarkSig,
+    editionMarkedCount: () => editionMarkedCount,
+    editionMarks: () => editionMarks,
+    editionMarksFrom: () => editionMarksFrom,
+    editionSay: () => editionSay,
+    editionWasText: () => editionWasText,
+    forgetEditionMarks: () => forgetEditionMarks,
+    keepEditionMarks: () => keepEditionMarks,
+    putEditionMarksBack: () => putEditionMarksBack,
+    useEditionMark: () => useEditionMark
+  });
+
+  // src/modules/edition-changes.js
+  var edition_changes_exports = {};
+  __export(edition_changes_exports, {
+    EDITION_KINDS: () => EDITION_KINDS,
+    editionChanges: () => editionChanges,
+    editionFieldKeys: () => editionFieldKeys,
+    editionNoteText: () => editionNoteText,
+    wordDiff: () => wordDiff
+  });
+  var EDITION_KINDS = ["changed", "new", "restored", "retired", "removed"];
+  function editionFieldKeys(a, b) {
+    const codes = catalogLangs(a).concat(catalogLangs(b)).filter((c, i, all) => all.indexOf(c) === i);
+    const out = [];
+    CARD_TEXT_FIELDS.forEach((field) => codes.forEach((code) => {
+      const key = cardFieldKey(field, code);
+      if (key && !out.some((k) => k.key === key)) out.push({ field, code, key });
+    }));
+    return out;
+  }
+  function editionText(m, key) {
+    return String(m && m[key] != null ? m[key] : "");
+  }
+  function editionChanges(held, offered, layer) {
+    const lay = layer || {}, ov = lay.overrides || {};
+    const gone = new Set(lay.removed || []), stars = new Set(lay.favourites || []);
+    const keys = editionFieldKeys(held, offered);
+    const was = new Map((held && held.cards || []).map((m) => [String(m.id), m]));
+    const now = new Map((offered && offered.cards || []).map((m) => [String(m.id), m]));
+    const items = [];
+    now.forEach((m, id) => {
+      const b = was.get(id);
+      if (!b) {
+        if (!m.retired) items.push({ id, kind: "new", fields: [] });
+        return;
+      }
+      if (gone.has(id) || m.retired && b.retired) return;
+      if (m.retired) {
+        items.push({ id, kind: "retired", fields: [], asleep: stars.has(id) || !!ov[id] });
+        return;
+      }
+      if (b.retired) {
+        items.push({ id, kind: "restored", fields: [] });
+        return;
+      }
+      const fields = keys.filter((k) => editionText(b, k.key) !== editionText(m, k.key));
+      if (!fields.length) return;
+      const mine = ov[id];
+      items.push({
+        id,
+        kind: "changed",
+        fields,
+        own: !!mine && fields.some((k) => mine[k.key] != null && String(mine[k.key]) !== editionText(m, k.key))
+      });
+    });
+    was.forEach((b, id) => {
+      if (!now.has(id) && !gone.has(id) && !b.retired) items.push({ id, kind: "removed", fields: [] });
+    });
+    const at = (k) => EDITION_KINDS.indexOf(k);
+    items.sort((x, y) => at(x.kind) - at(y.kind));
+    const counts2 = {};
+    EDITION_KINDS.forEach((k) => {
+      counts2[k] = 0;
+    });
+    items.forEach((i) => {
+      counts2[i.kind]++;
+    });
+    return { items, counts: counts2 };
+  }
+  function editionNoteText(c, ui) {
+    const n = c && c.notes;
+    if (!n || typeof n !== "object") return "";
+    const pick = [ui].concat(catalogLangs(c), Object.keys(n));
+    for (const code of pick) {
+      const v = Object.prototype.hasOwnProperty.call(n, code) ? n[code] : null;
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+    return "";
+  }
+  var EDITION_DIFF_CAP = 25e4;
+  function wordDiff(a, b) {
+    const A = String(a == null ? "" : a).match(/\s+|\S+/g) || [], B = String(b == null ? "" : b).match(/\s+|\S+/g) || [];
+    let s = 0, ea = A.length, eb = B.length;
+    while (s < ea && s < eb && A[s] === B[s]) s++;
+    while (ea > s && eb > s && A[ea - 1] === B[eb - 1]) {
+      ea--;
+      eb--;
+    }
+    const out = [];
+    const put = (op, text) => {
+      if (!text) return;
+      const l = out[out.length - 1];
+      if (l && l.op === op) l.text += text;
+      else out.push({ op, text });
+    };
+    put("same", A.slice(0, s).join(""));
+    const a2 = A.slice(s, ea), b2 = B.slice(s, eb), n = a2.length, m = b2.length;
+    if (n * m > EDITION_DIFF_CAP) {
+      put("del", a2.join(""));
+      put("ins", b2.join(""));
+    } else {
+      const w = m + 1, L = new Uint32Array((n + 1) * w);
+      for (let i2 = n - 1; i2 >= 0; i2--) for (let j2 = m - 1; j2 >= 0; j2--)
+        L[i2 * w + j2] = a2[i2] === b2[j2] ? L[(i2 + 1) * w + j2 + 1] + 1 : Math.max(L[(i2 + 1) * w + j2], L[i2 * w + j2 + 1]);
+      let i = 0, j = 0;
+      while (i < n && j < m) {
+        if (a2[i] === b2[j]) {
+          put("same", a2[i]);
+          i++;
+          j++;
+        } else if (L[(i + 1) * w + j] >= L[i * w + j + 1]) {
+          put("del", a2[i]);
+          i++;
+        } else {
+          put("ins", b2[j]);
+          j++;
+        }
+      }
+      while (i < n) put("del", a2[i++]);
+      while (j < m) put("ins", b2[j++]);
+    }
+    put("same", A.slice(ea).join(""));
+    return out;
+  }
+
+  // src/modules/edition-marks.js
+  var EDITION_MARKS = "EditionMarks";
+  function editionMarksFrom(held, changes, v) {
+    const was = new Map((held && held.cards || []).map((m) => [String(m.id), m]));
+    const out = { v: String(v || ""), cards: {} };
+    (changes && changes.items || []).forEach((it) => {
+      if (it.kind !== "changed" && it.kind !== "new") return;
+      const mark = { k: it.kind };
+      if (it.kind === "changed") {
+        const b = was.get(it.id), body = {};
+        (it.fields || []).filter((f) => f.field === "body").forEach((f) => {
+          body[f.key] = String(b && b[f.key] != null ? b[f.key] : "");
+        });
+        if (Object.keys(body).length) mark.was = body;
+      }
+      out.cards[it.id] = mark;
+    });
+    return Object.keys(out.cards).length ? out : null;
+  }
+  var marksAt = null;
+  var marksNow = null;
+  function forgetEditionMarks() {
+    marksAt = null;
+    marksNow = null;
+  }
+  function editionMarks() {
+    if (marksAt === eLayer()) return marksNow;
+    marksAt = eLayer();
+    marksNow = null;
+    try {
+      const v = JSON.parse(lyGet(EDITION_MARKS) || "null");
+      if (v && typeof v === "object" && v.cards && typeof v.cards === "object") marksNow = v;
+    } catch (e) {
+    }
+    return marksNow;
+  }
+  function keepEditionMarks(c, marks) {
+    const key = layerNsOf(c) + EDITION_MARKS, was = lsGet(key);
+    if (marks) lsSet(key, JSON.stringify(marks));
+    else lsDel(key);
+    forgetEditionMarks();
+    return was;
+  }
+  function putEditionMarksBack(c, was) {
+    const key = layerNsOf(c) + EDITION_MARKS;
+    if (was == null) lsDel(key);
+    else lsSet(key, was);
+    forgetEditionMarks();
+  }
+  function editionMarkOf(id) {
+    const all = editionMarks(), m = all && all.cards[String(id)];
+    return m ? { k: m.k === "new" ? "new" : "changed", v: all.v } : null;
+  }
+  function editionWasText(id, key) {
+    const all = editionMarks(), m = all && all.cards[String(id)];
+    return m && m.was && Object.prototype.hasOwnProperty.call(m.was, key) ? String(m.was[key]) : null;
+  }
+  function editionMarkSig(id) {
+    const m = editionMarkOf(id);
+    if (!m) return "";
+    return m.k + (editionView && m.k === "changed" ? "+" : "");
+  }
+  function editionMarkedCount() {
+    const all = editionMarks();
+    if (!all) return 0;
+    return (cards || []).filter((m) => m && !m._hidden && all.cards[String(m.id)]).length;
+  }
+  function useEditionMark(id) {
+    const all = editionMarks(), k = String(id);
+    if (!all || !all.cards[k]) return false;
+    delete all.cards[k];
+    if (Object.keys(all.cards).length) lySet(EDITION_MARKS, JSON.stringify(all));
+    else {
+      lyDel(EDITION_MARKS);
+      marksNow = null;
+    }
+    if (typeof document !== "undefined") editionMarkGone(k);
+    return true;
+  }
+  function editionMarkGone(id) {
+    const card = Array.prototype.find.call(document.querySelectorAll("#list .card[data-id]"), (c) => c.getAttribute("data-id") === id);
+    const badge = card && card.querySelector(".chead .cbadge.edn");
+    if (badge) badge.remove();
+    const pill = document.querySelector("#pills .pill-ed");
+    if (!pill) return;
+    const n = editionMarkedCount();
+    if (n) {
+      const b = pill.querySelector("b");
+      if (b) b.textContent = String(n);
+      return;
+    }
+    setEditionView(false);
+    pill.remove();
+    const all = document.querySelector('#pills .pill[data-k=""]');
+    if (all) {
+      all.classList.add("on");
+      all.setAttribute("aria-pressed", "true");
+    }
+  }
+  function editionDiffHtml(was, now, pairs, words) {
+    const marker = new Map(pairs || []);
+    const split = (s) => {
+      let text = "";
+      const at = [];
+      for (const ch of String(s == null ? "" : s)) {
+        if (marker.has(ch)) at.push([text.length, marker.get(ch)]);
+        else text += ch;
+      }
+      return { text, at };
+    };
+    const a = split(was), b = split(now), INS = '<ins class="e-ins">';
+    let pos = 0, k = 0, html = "", marked = false;
+    const markersAt = (p) => {
+      while (k < b.at.length && b.at[k][0] <= p) {
+        html += b.at[k][1];
+        k++;
+      }
+    };
+    const run = (end, inside) => {
+      while (pos < end) {
+        if (k < b.at.length && b.at[k][0] === pos) {
+          if (inside) html += "</ins>";
+          markersAt(pos);
+          if (inside) html += INS;
+        }
+        const next = k < b.at.length && b.at[k][0] < end ? b.at[k][0] : end;
+        html += esc(b.text.slice(pos, next));
+        pos = next;
+      }
+    };
+    wordDiff(a.text, b.text).forEach((o) => {
+      if (o.op === "del") {
+        marked = true;
+        html += '<del class="e-del"><span class="e-vh">' + esc(words.del) + "</span>" + esc(o.text) + "</del>";
+        return;
+      }
+      const end = pos + o.text.length;
+      if (o.op === "same") {
+        run(end, false);
+        return;
+      }
+      marked = true;
+      markersAt(pos);
+      html += INS + '<span class="e-vh">' + esc(words.ins) + "</span>";
+      run(end, true);
+      html += "</ins>";
+    });
+    markersAt(b.text.length);
+    return marked ? html : null;
+  }
+  function editionSay(words) {
+    const out = document.getElementById("eSay");
+    if (!out) return;
+    out.textContent = "";
+    setTimeout(() => {
+      out.textContent = String(words || "");
+    }, 60);
+  }
+
   // src/modules/card-counts.js
   function recountMacros() {
     eSCountsKey = null;
@@ -15026,7 +15381,7 @@ What you type stays in this browser only.`;
     return rank;
   }
   function cardInActiveCats(m, terms) {
-    if (!cats.length) return !(m && m._hidden);
+    if (!cats.length) return !(m && m._hidden) && (!editionView || !!(m && editionMarkOf(m.id)));
     if (m && m._hidden && terms && terms.length) return false;
     return cats.some((k) => m.c === k);
   }
@@ -16578,8 +16933,9 @@ What you type stays in this browser only.`;
       if (String(intentEl.value || "").trim()) {
         setCats([]);
         if (pills) pills.querySelectorAll(".pill").forEach((b) => {
-          b.classList.toggle("on", !b.dataset.k);
-          if (b.dataset.k != null) b.setAttribute("aria-pressed", b.dataset.k ? "false" : "true");
+          const ed = b.classList.contains("pill-ed");
+          b.classList.toggle("on", !b.dataset.k && !ed);
+          if (b.dataset.k != null || ed) b.setAttribute("aria-pressed", b.dataset.k === "" ? "true" : "false");
         });
         scheduleTabSave();
       }
@@ -17159,7 +17515,7 @@ What you type stays in this browser only.`;
     Object.keys(CATS).forEach((k) => {
       if (catOrder.indexOf(k) < 0) catOrder.push(k);
     });
-    setCats(cats.filter((k) => CATS[k]));
+    if (cats.some((k) => !CATS[k])) setCats(cats.filter((k) => CATS[k]));
     drawPills();
     hooks.render();
   }
@@ -17358,7 +17714,7 @@ What you type stays in this browser only.`;
     const mk = (id, label, n, drag) => {
       const b = document.createElement("div");
       let extra = "";
-      const on = id ? cats.indexOf(id) > -1 : cats.length === 0;
+      const on = id ? cats.indexOf(id) > -1 : cats.length === 0 && !editionView;
       if (id) {
         if (hc.specific.indexOf(id) > -1) extra = " hint2";
         else if (hc.always.indexOf(id) > -1) extra = " hint";
@@ -17425,6 +17781,9 @@ What you type stays in this browser only.`;
       setCatOrder(Object.keys(CATS));
       lyDel("CatOrder");
     });
+    const edN = editionMarkedCount();
+    if (editionView && !edN) setEditionView(false);
+    if (edN) pills.appendChild(editionPill(edN));
     displayCatOrder(hc).forEach((k) => {
       if (!CATS[k]) return;
       mk(k, CATS[k], PN(k), true);
@@ -17440,6 +17799,38 @@ What you type stays in this browser only.`;
     if (addHadFocus) add.focus();
     syncPillsCollapseNow();
     schedulePillsCollapse();
+  }
+  function editionPill(n) {
+    const v = (editionMarks() || {}).v || "";
+    const b = document.createElement("div");
+    b.className = "pill pill-ed" + (editionView ? " on" : "");
+    b.innerHTML = '<span class="pill-lab" data-i18n-skip>' + esc(t("Changes in {V}").split("{V}").join(v)) + "</span> <b>" + n + "</b>";
+    const tip = t("Only the cards edition {V} changed or added").split("{V}").join(v);
+    b.title = tip;
+    b.setAttribute("aria-label", tip);
+    b.setAttribute("role", "button");
+    b.setAttribute("aria-pressed", editionView ? "true" : "false");
+    b.onclick = () => {
+      if (suppressClick) {
+        setSuppressClick(false);
+        return;
+      }
+      setCatsDropArmed(false);
+      const railBefore = hooks.captureRail(), relBefore = hooks.railRelKeys();
+      const press = !editionView;
+      setCats([]);
+      setEditionView(press);
+      setPendingScrollHit(!!intentIdxs.length);
+      const cardsBefore = intentIdxs.length ? null : captureSettle();
+      drawPills();
+      hooks.render();
+      glideSettle(cardsBefore, "move");
+      hooks.railEchoRedraw(railBefore, relBefore);
+      scrollRailTop();
+      scheduleTabSave();
+      if (press) editionSay(t("Cards edition {V} changed or added: {N}.").split("{V}").join(v).split("{N}").join(String(editionMarkedCount())));
+    };
+    return b;
   }
   function startPillCatAdd(addEl) {
     if (!pills || pills.querySelector(".pill-new")) return;
@@ -18115,6 +18506,7 @@ What you type stays in this browser only.`;
     const prev = tabPathStep(id);
     if (prev) bumpPair(pack, prev, id);
     saveStats();
+    useEditionMark(id);
   }
 
   // src/modules/card-body.js
@@ -18131,19 +18523,21 @@ What you type stays in this browser only.`;
     if (fav) cardH += '<span class="cbadge fav" title="' + esc(t("In Favourites")) + '">' + esc(t("fav")) + "</span>";
     if (m._custom || m._overridden || movedCardIds().has(m.id))
       cardH += '<span class="cbadge ed" title="' + esc(t("Changed or added by you, not what the catalog shipped")) + '">' + esc(t("mod")) + "</span>";
+    const edMark = editionMarkOf(m.id);
+    if (edMark) cardH += '<span class="cbadge edn" title="' + esc((edMark.k === "new" ? t("New in edition {V}") : t("Changed in edition {V}")).split("{V}").join(edMark.v)) + '">' + esc(edMark.k === "new" ? t("new") : t("changed")) + "</span>";
     const favTip = t(fav ? "Remove from Favourites" : "Add to Favourites");
     const hideTip = t(m._hidden ? "Show this card again" : fav ? "Put this card away: it greys out at the foot of this category and loses its star" : "Put this card away: it greys out at the foot of this category");
     const _note = noteFor(m);
     cardH += '<span class="cacts">' + (_note ? '<button type="button" data-act="note" title="' + esc(t("Internal note")) + '" aria-label="' + esc(t("Internal note")) + '" aria-expanded="false">' + _svg("ic", _NOTE) + "</button>" : "") + '<button type="button" data-act="edit" title="' + esc(t("Edit this card")) + '" aria-label="' + esc(t("Edit this card")) + '">' + ICON_EDIT + '</button><button type="button" class="' + (m._hidden ? "" : "danger") + '" data-act="hide" title="' + esc(hideTip) + '" aria-label="' + esc(hideTip) + '">' + (m._hidden ? ICON_EYE_SHUT : ICON_EYE_OPEN) + '</button><button type="button" class="star-btn' + (fav ? " on" : "") + '" data-act="fav" title="' + esc(favTip) + '" aria-label="' + esc(favTip) + '" aria-pressed="' + (fav ? "true" : "false") + '">' + (fav ? ICON_STAR_ON : ICON_STAR_OFF) + "</button></span></div>";
     const _L = cardLang(m);
-    const ps = parts(m, _L), cls = _L === CONTENT_LANGS[0] ? "" : " plx";
+    const ps = parts(m, _L), cls = _L === CONTENT_LANGS[0] ? "" : " plx", edDiff = editionDiffParts(m, _L, ps);
     if (ps.length) {
       const many = ps.length > 1, word = m.seq ? t("STEP") : _L.toUpperCase();
       cardH += ps.map((p, vi) => {
         const on = entrySel && entrySel.id === m.id && entrySel.vi === vi ? " sel" : "";
         const label = m.seq ? "" : altLabelAt(m, _L, vi);
         const tag = word + (label ? " " + label : many ? " " + (vi + 1) + "/" + ps.length : "");
-        return '<div class="txt' + cls + on + '" role="button" data-v="' + vi + '"' + (many ? ' title="' + esc(t("Click to copy, or drag to reorder these")) + '"' : ' title="' + esc(t("Click to copy")) + '"') + '><span class="tag">' + esc(tag) + "</span>" + (tag.length > 4 ? '<i class="troom" style="--n:' + tag.length + '"></i>' : "") + escFilled(fill(p, m, true)) + "</div>";
+        return '<div class="txt' + cls + on + '" role="button" data-v="' + vi + '"' + (many ? ' title="' + esc(t("Click to copy, or drag to reorder these")) + '"' : ' title="' + esc(t("Click to copy")) + '"') + '><span class="tag">' + esc(tag) + "</span>" + (tag.length > 4 ? '<i class="troom" style="--n:' + tag.length + '"></i>' : "") + (edDiff && edDiff[vi] != null ? edDiff[vi] : escFilled(fill(p, m, true))) + "</div>";
       }).join("");
     } else {
       cardH += '<div class="miss">' + esc(t("No {LANG} version for this card").replace("{LANG}", _L.toUpperCase())) + " - " + esc(t("switch to {LANG} to use it").replace("{LANG}", other.toUpperCase())) + ".</div>";
@@ -18152,6 +18546,16 @@ What you type stays in this browser only.`;
     if (sws && !railActive()) cardH += swapStripHtml(sws);
     cardH += "</div>";
     return { cardH, hitBadge, catBadge };
+  }
+  function editionDiffParts(m, L, ps) {
+    if (!editionView || m._overridden) return null;
+    const key = cardFieldKey("body", L), was = key ? editionWasText(m.id, key) : null;
+    if (was == null) return null;
+    const old = parts(Object.assign({}, m, { [key]: was }), L);
+    if (old.length !== ps.length) return null;
+    const words = { del: t("before:") + " ", ins: t("now:") + " " };
+    const marks = [[FILL_A, '<span class="fillx">'], [FILL_B, "</span>"], [FILL_M_A, '<span class="fillmiss">'], [FILL_M_B, "</span>"]];
+    return ps.map((p, i) => editionDiffHtml(fill(old[i], m, true), fill(p, m, true), marks, words));
   }
   function swapStripHtml(sws) {
     return '<div class="swap" title="' + esc(t("Click to pick, again to clear, and hold Ctrl for several")) + '"><b>' + esc(t("Set {INTENT}")) + "</b> " + intentOrder.filter((si) => !isIntentHiddenIdx(si)).map((si) => {
@@ -18254,7 +18658,7 @@ What you type stays in this browser only.`;
     );
     const fresh = parseCardHtml(b.cardH);
     if (!fresh) return;
-    fresh.__sig = ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1);
+    fresh.__sig = ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1) + "|" + editionMarkSig(m.id);
     const ord = el.getAttribute("data-ord");
     if (ord != null) fresh.setAttribute("data-ord", ord);
     el.replaceWith(fresh);
@@ -19319,7 +19723,7 @@ What you type stays in this browser only.`;
         sepH,
         body,
         id: m.id,
-        sig: ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1),
+        sig: ePackEpoch + "|" + renderKey + "|" + cardFillKey(m) + "|" + (entrySel && entrySel.id === m.id ? entrySel.vi : -1) + "|" + editionMarkSig(m.id),
         hit,
         catHit,
         hidden: !!m._hidden,
@@ -21146,132 +21550,6 @@ What you type stays in this browser only.`;
     takeTeamText: () => takeTeamText,
     teamTextTaken: () => teamTextTaken
   });
-
-  // src/modules/edition-changes.js
-  var edition_changes_exports = {};
-  __export(edition_changes_exports, {
-    EDITION_KINDS: () => EDITION_KINDS,
-    editionChanges: () => editionChanges,
-    editionFieldKeys: () => editionFieldKeys,
-    editionNoteText: () => editionNoteText,
-    wordDiff: () => wordDiff
-  });
-  var EDITION_KINDS = ["changed", "new", "restored", "retired", "removed"];
-  function editionFieldKeys(a, b) {
-    const codes = catalogLangs(a).concat(catalogLangs(b)).filter((c, i, all) => all.indexOf(c) === i);
-    const out = [];
-    CARD_TEXT_FIELDS.forEach((field) => codes.forEach((code) => {
-      const key = cardFieldKey(field, code);
-      if (key && !out.some((k) => k.key === key)) out.push({ field, code, key });
-    }));
-    return out;
-  }
-  function editionText(m, key) {
-    return String(m && m[key] != null ? m[key] : "");
-  }
-  function editionChanges(held, offered, layer) {
-    const lay = layer || {}, ov = lay.overrides || {};
-    const gone = new Set(lay.removed || []), stars = new Set(lay.favourites || []);
-    const keys = editionFieldKeys(held, offered);
-    const was = new Map((held && held.cards || []).map((m) => [String(m.id), m]));
-    const now = new Map((offered && offered.cards || []).map((m) => [String(m.id), m]));
-    const items = [];
-    now.forEach((m, id) => {
-      const b = was.get(id);
-      if (!b) {
-        if (!m.retired) items.push({ id, kind: "new", fields: [] });
-        return;
-      }
-      if (gone.has(id) || m.retired && b.retired) return;
-      if (m.retired) {
-        items.push({ id, kind: "retired", fields: [], asleep: stars.has(id) || !!ov[id] });
-        return;
-      }
-      if (b.retired) {
-        items.push({ id, kind: "restored", fields: [] });
-        return;
-      }
-      const fields = keys.filter((k) => editionText(b, k.key) !== editionText(m, k.key));
-      if (!fields.length) return;
-      const mine = ov[id];
-      items.push({
-        id,
-        kind: "changed",
-        fields,
-        own: !!mine && fields.some((k) => mine[k.key] != null && String(mine[k.key]) !== editionText(m, k.key))
-      });
-    });
-    was.forEach((b, id) => {
-      if (!now.has(id) && !gone.has(id) && !b.retired) items.push({ id, kind: "removed", fields: [] });
-    });
-    const at = (k) => EDITION_KINDS.indexOf(k);
-    items.sort((x, y) => at(x.kind) - at(y.kind));
-    const counts2 = {};
-    EDITION_KINDS.forEach((k) => {
-      counts2[k] = 0;
-    });
-    items.forEach((i) => {
-      counts2[i.kind]++;
-    });
-    return { items, counts: counts2 };
-  }
-  function editionNoteText(c, ui) {
-    const n = c && c.notes;
-    if (!n || typeof n !== "object") return "";
-    const pick = [ui].concat(catalogLangs(c), Object.keys(n));
-    for (const code of pick) {
-      const v = Object.prototype.hasOwnProperty.call(n, code) ? n[code] : null;
-      if (typeof v === "string" && v.trim()) return v.trim();
-    }
-    return "";
-  }
-  var EDITION_DIFF_CAP = 25e4;
-  function wordDiff(a, b) {
-    const A = String(a == null ? "" : a).match(/\s+|\S+/g) || [], B = String(b == null ? "" : b).match(/\s+|\S+/g) || [];
-    let s = 0, ea = A.length, eb = B.length;
-    while (s < ea && s < eb && A[s] === B[s]) s++;
-    while (ea > s && eb > s && A[ea - 1] === B[eb - 1]) {
-      ea--;
-      eb--;
-    }
-    const out = [];
-    const put = (op, text) => {
-      if (!text) return;
-      const l = out[out.length - 1];
-      if (l && l.op === op) l.text += text;
-      else out.push({ op, text });
-    };
-    put("same", A.slice(0, s).join(""));
-    const a2 = A.slice(s, ea), b2 = B.slice(s, eb), n = a2.length, m = b2.length;
-    if (n * m > EDITION_DIFF_CAP) {
-      put("del", a2.join(""));
-      put("ins", b2.join(""));
-    } else {
-      const w = m + 1, L = new Uint32Array((n + 1) * w);
-      for (let i2 = n - 1; i2 >= 0; i2--) for (let j2 = m - 1; j2 >= 0; j2--)
-        L[i2 * w + j2] = a2[i2] === b2[j2] ? L[(i2 + 1) * w + j2 + 1] + 1 : Math.max(L[(i2 + 1) * w + j2], L[i2 * w + j2 + 1]);
-      let i = 0, j = 0;
-      while (i < n && j < m) {
-        if (a2[i] === b2[j]) {
-          put("same", a2[i]);
-          i++;
-          j++;
-        } else if (L[(i + 1) * w + j] >= L[i * w + j + 1]) {
-          put("del", a2[i]);
-          i++;
-        } else {
-          put("ins", b2[j]);
-          j++;
-        }
-      }
-      while (i < n) put("del", a2[i++]);
-      while (j < m) put("ins", b2[j++]);
-    }
-    put("same", A.slice(ea).join(""));
-    return out;
-  }
-
-  // src/modules/card-carry.js
   var ID_LISTS = ["favourites", "hidden", "cardOrder", "removed"];
   var CARRIED = "eCarriedNow";
   var bootStars = 0;
@@ -24005,6 +24283,7 @@ What you type stays in this browser only.`;
     eOfferPickedCatalog: () => eOfferPickedCatalog,
     loadCatalogFromFolder: () => loadCatalogFromFolder,
     paintCatNow: () => paintCatNow,
+    paintCatWaiting: () => paintCatWaiting,
     paintCatalogList: () => paintCatalogList,
     wireHostCatalogWatch: () => wireHostCatalogWatch
   });
@@ -24597,7 +24876,10 @@ What you type stays in this browser only.`;
     const active = storedCatalog();
     if (active && eCatalogSignature(active) === sig) return false;
     if (!src.asked && sharedOwnWrite(c)) return false;
-    if (!src.force && src.refusedKey && nsGet(src.refusedKey) === sig) return false;
+    if (!src.force && src.refusedKey && nsGet(src.refusedKey) === sig) {
+      leaveWaiting(c, src, active);
+      return false;
+    }
     catalogTrust(c);
     if (src.direct && !active) {
       whenTrusted(c).then(() => src.accept(sig));
@@ -24616,6 +24898,7 @@ What you type stays in this browser only.`;
     const older = updating && catalogEditionOlder(c.version, active.version);
     const changes = updating ? editionChanges(active, c, pack) : null;
     const changeHtml = changes ? editionOfferHtml(c, active, changes) : "";
+    const fresh = updating && !older, label = fresh ? editionLabelOf(c) : "";
     const n = (c.cards || []).length, i = catalogIntentCount(c), k = Object.keys(c.categories || {}).length;
     const trustHtml = (line) => line ? '<p class="ec-trust">' + esc(line) + "</p>" : "";
     const wrap = document.createElement("div");
@@ -24633,8 +24916,14 @@ What you type stays in this browser only.`;
       catalogMacroCount(c),
       i,
       k
-    ) + "</div>") + "</div>" + changeHtml + '<p class="ec-sub">' + src.foundHtml + (updating ? " " + esc(t("Your own cards and edits are kept.")) : "") + "</p>" + trustHtml(trustOfferLine(trustSettled(c), updating)) + '<div class="tour-actions"><button type="button" class="btn" id="ecNo">' + esc(t(replacing ? "Keep current" : "Not now")) + '</button><button type="button" class="btn primary" id="ecYes">' + esc(t(older ? "Load it anyway" : updating ? "Load the update" : replacing ? "Load it" : "Load catalog")) + "</button></div>";
+    ) + "</div>") + "</div>" + changeHtml + '<p class="ec-sub">' + src.foundHtml + (updating ? " " + esc(t("Your own cards and edits are kept.")) : "") + "</p>" + trustHtml(trustOfferLine(trustSettled(c), updating)) + (fresh && !src.asked ? '<p class="ec-holds">' + esc(t("This desk carries on as it is until the update is loaded.")) + "</p>" : "") + '<div class="tour-actions"><button type="button" class="btn" id="ecNo">' + esc(t(replacing && !fresh ? "Keep current" : "Not now")) + '</button><button type="button" class="btn primary" id="ecYes">' + esc(t(older ? "Load it anyway" : updating ? "Load the update" : replacing ? "Load it" : "Load catalog")) + "</button></div>";
     cutLeaves();
+    if (fresh) {
+      edWaiting = { c, src };
+      paintCatWaiting();
+    }
+    const arriving = fresh && !src.asked && !src.reopened;
+    if (arriving) arriveAtName(wrap);
     document.body.appendChild(wrap);
     const place = () => {
       const at = document.getElementById("catNow"), r = at && at.getBoundingClientRect();
@@ -24651,7 +24940,7 @@ What you type stays in this browser only.`;
     if (!wrap.querySelector(".ec-trust")) catalogTrust(c).then((state) => {
       const line = trustOfferLine(state, updating);
       if (!line || !wrap.isConnected || wrap.querySelector(".ec-trust")) return;
-      wrap.querySelector(".tour-actions").insertAdjacentHTML("beforebegin", trustHtml(line));
+      (wrap.querySelector(".ec-holds") || wrap.querySelector(".tour-actions")).insertAdjacentHTML("beforebegin", trustHtml(line));
       place();
     });
     const close = () => {
@@ -24673,7 +24962,7 @@ What you type stays in this browser only.`;
       whenTrusted(c).then(() => {
         taking = false;
         close();
-        src.accept(sig);
+        acceptOffer(c, sig, src, fresh ? { held: active, changes, v: label } : null);
       });
     };
     wrap.querySelectorAll("[data-ec-open]").forEach(wireFolderLink);
@@ -24712,11 +25001,126 @@ What you type stays in this browser only.`;
         }
       });
     };
-    if (src.asked) {
+    if (src.asked || src.reopened) {
       const yes = wrap.querySelector("#ecYes");
       if (yes) yes.focus();
     }
+    if (arriving) editionSay(t("Edition {V} is waiting to be loaded; the offer is under the catalog's name.").split("{V}").join(label));
     return true;
+  }
+  function acceptOffer(c, sig, src, ed) {
+    const marks = ed ? editionMarksFrom(ed.held, ed.changes, ed.v) : null;
+    const was = ed ? keepEditionMarks(c, marks) : null;
+    src.accept(sig);
+    const now = storedCatalog(), landed = !!now && eCatalogSignature(now) === sig;
+    if (ed && !landed) putEditionMarksBack(c, was);
+    paintCatWaiting();
+    if (!ed || !landed) return;
+    const counts2 = editionCountWords(ed.changes.counts);
+    if (counts2.length) toast(t("Edition {V} loaded: {COUNTS}").split("{V}").join(ed.v).split("{COUNTS}").join(counts2.join(", ")));
+    if (marks) washEdition(marks);
+  }
+  function washEdition(marks) {
+    if (mgReduceMotion()) return;
+    requestAnimationFrame(() => {
+      document.querySelectorAll("#list .card[data-id]").forEach((card) => {
+        if (!marks.cards[card.getAttribute("data-id")]) return;
+        card.querySelectorAll(".txt").forEach((x) => {
+          const r = x.getBoundingClientRect();
+          if (!r.width || r.bottom < 0 || r.top > innerHeight) return;
+          const d = document.createElement("div");
+          d.className = "e-ed-wash";
+          d.style.left = r.left + "px";
+          d.style.top = r.top + "px";
+          d.style.width = r.width + "px";
+          d.style.height = r.height + "px";
+          document.body.appendChild(d);
+          d.addEventListener("animationend", () => d.remove());
+          setTimeout(() => {
+            if (d.parentNode) d.remove();
+          }, M_MS.wash * 2);
+        });
+      });
+      const pill = document.querySelector("#pills .pill-ed");
+      if (pill) pill.animate([{ opacity: 0, transform: "scale(.8)" }, { opacity: 1, transform: "none" }], { duration: M_MS.move, easing: E_EASE });
+    });
+  }
+  function arriveAtName(wrap) {
+    const name = document.querySelector("#catNow .cn-name"), r = name && name.getBoundingClientRect();
+    if (mgReduceMotion() || !r || !r.width) return;
+    const sheet = document.createElement("div");
+    sheet.className = "e-ed-sheet";
+    sheet.setAttribute("aria-hidden", "true");
+    sheet.style.left = r.left + Math.min(r.width, 96) / 2 + "px";
+    sheet.style.top = r.top + r.height / 2 + "px";
+    document.body.appendChild(sheet);
+    wrap.style.animationDelay = "var(--m-travel)";
+    const gone = () => {
+      if (sheet.parentNode) sheet.remove();
+    };
+    sheet.animate(
+      [{ transform: "translate(60px,-70px) rotate(14deg) scale(1.3)", opacity: 0 }, { opacity: 1, offset: 0.3 }, { transform: "none", opacity: 1 }],
+      { duration: M_MS.travel, easing: E_SPRING }
+    ).onfinish = () => {
+      sheet.animate([{ transform: "none", opacity: 1 }, { transform: "scale(.2)", opacity: 0 }], { duration: M_MS.move, easing: E_EASE, fill: "forwards" }).onfinish = gone;
+    };
+    setTimeout(gone, (M_MS.travel + M_MS.move) * 3);
+    const dot = document.querySelector("#catNow .cn-dot");
+    if (dot) dot.animate(
+      [{ transform: "scale(0)" }, { transform: "scale(1.6)" }, { transform: "none" }],
+      { duration: M_MS.celebrate, delay: M_MS.travel, easing: E_EASE, fill: "backwards" }
+    );
+  }
+  var edWaiting = null;
+  function editionLabelOf(c) {
+    return catalogVersionLabel(c && c.version) || (c && +c.rev ? "v" + +c.rev : "");
+  }
+  function leaveWaiting(c, src, active) {
+    if (!isCatalogUpdate(c, active) || catalogEditionOlder(c.version, active.version)) return;
+    if (!edWaiting || eCatalogSignature(edWaiting.c) !== eCatalogSignature(c)) edWaiting = { c, src };
+    paintCatWaiting();
+  }
+  function paintCatWaiting() {
+    const el = document.getElementById("catNow");
+    if (!el) return;
+    const held = storedCatalog();
+    if (edWaiting && !(isCatalogUpdate(edWaiting.c, held) && eCatalogSignature(edWaiting.c) !== eCatalogSignature(held) && !catalogEditionOlder(edWaiting.c.version, held.version))) edWaiting = null;
+    let dot = el.querySelector(".cn-dot");
+    el.classList.toggle("is-waiting", !!edWaiting);
+    if (!edWaiting) {
+      if (dot) dot.remove();
+      ["role", "tabindex", "title", "aria-label"].forEach((a) => el.removeAttribute(a));
+      el.onclick = el.onkeydown = null;
+      return;
+    }
+    if (!dot) {
+      dot = document.createElement("span");
+      dot.className = "cn-dot";
+      dot.setAttribute("aria-hidden", "true");
+      el.insertBefore(dot, el.firstChild);
+    }
+    const words = t("Show edition {V}, waiting to be loaded").split("{V}").join(editionLabelOf(edWaiting.c));
+    el.setAttribute("role", "button");
+    el.setAttribute("tabindex", "0");
+    el.setAttribute("title", words);
+    el.setAttribute("aria-label", words);
+    el.onclick = reopenWaiting;
+    el.onkeydown = (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      e.stopPropagation();
+      reopenWaiting();
+    };
+  }
+  function reopenWaiting() {
+    const w = edWaiting, up = document.getElementById("eCatalogOffer");
+    if (!w) return;
+    if (up && !up.classList.contains("e-gone")) {
+      const yes = up.querySelector("#ecYes");
+      if (yes) yes.focus();
+      return;
+    }
+    eOfferCatalogDialog(w.c, Object.assign({}, w.src, { force: true, reopened: true }));
   }
   function eOfferPickedCatalog(c, name, accept) {
     const shown2 = eOfferCatalogDialog(c, {
@@ -27871,6 +28275,7 @@ What you type stays in this browser only.`;
     dropCardPool();
     forgetRowNaturals();
     eForgetRecency();
+    forgetEditionMarks();
     forgetLookEdits();
     rearmTrustRecheck();
     putLang(lsGet("eLang") || uiLang());
@@ -27892,6 +28297,7 @@ What you type stays in this browser only.`;
     initTabs();
     syncSampleMark();
     paintCatNow();
+    paintCatWaiting();
     syncRoleWheel();
     applyPrefs();
     translateChrome();
@@ -28051,7 +28457,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports, edition_marks_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
@@ -28107,6 +28513,7 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "semiKind", { get: () => semiKind, set: (v) => setSemiKind(v) });
   Object.defineProperty(globalThis, "catOrder", { get: () => catOrder, set: (v) => setCatOrder(v) });
   Object.defineProperty(globalThis, "cats", { get: () => cats, set: (v) => setCats(v) });
+  Object.defineProperty(globalThis, "editionView", { get: () => editionView, set: (v) => setEditionView(v) });
   Object.defineProperty(globalThis, "shown", { get: () => shown, set: (v) => setShown(v) });
   Object.defineProperty(globalThis, "entrySel", { get: () => entrySel, set: (v) => putEntrySel(v) });
   Object.defineProperty(globalThis, "pendingScrollHit", { get: () => pendingScrollHit, set: (v) => setPendingScrollHit(v) });

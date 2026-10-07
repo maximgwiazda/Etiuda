@@ -32,6 +32,9 @@ let semiKind=null;
 let catOrder=[];
 // Several categories can be active at once (ctrl+click a pill). Empty = All.
 let cats=[], shown=[];
+/* The pill of what a loaded edition changed is pressed: the list shows its marked cards. Choosing
+   categories puts it down, so setCats clears it. */
+let editionView=false;
 // Focused copyable block: { id: cardId, vi: partIndex } or null (↑↓ / Enter target)
 let entrySel=null;
 // After picking an intent (or opening its category), scroll the list to the first
@@ -74,7 +77,7 @@ function resetAppState(){
   cards=[]; railSel=-1; railOrder=[]; railMarkIdx=-1; railMatch=null;
   railSortT=0; railSettled=true; railMarkUsed=false; catsDropArmed=false; pickRun=false; semiKind=null;
   catOrder=[]; cats=[]; shown=[]; entrySel=null; pendingScrollHit=false; intentIdxs=[]; intentText="";
-  cardCounts={}; dragState=null; suppressClick=false; swapLock=0;
+  cardCounts={}; dragState=null; suppressClick=false; swapLock=0; editionView=false;
 }
 function setRailSel(v){ railSel=v; }
 function setRailOrder(v){ railOrder=v; }
@@ -87,7 +90,8 @@ function setCatsDropArmed(v){ catsDropArmed=v; }
 function setPickRun(v){ pickRun=v; }
 function setSemiKind(v){ semiKind=v; }
 function setCatOrder(v){ catOrder=v; }
-function setCats(v){ cats=v; }
+function setCats(v){ cats=v; editionView=false; }
+function setEditionView(v){ editionView=!!v; }
 /* NOTHING OF ANYBODY'S ON THE DESK: no cards at all and no category chosen. The empty
    screen is what this paints, and it is also when the folder's catalog is offered at boot,
    so the two read one definition and cannot drift apart about what empty means. */
@@ -118,6 +122,7 @@ export {
   pickRun,
   semiKind,
   cats,
+  editionView,
   shown,
   entrySel,
   pendingScrollHit,
@@ -142,6 +147,7 @@ export {
   setSemiKind,
   setCatOrder,
   setCats,
+  setEditionView,
   wholeThingEmpty,
   setShown,
   putEntrySel,

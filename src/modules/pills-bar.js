@@ -12,7 +12,9 @@ import { lyDel } from "./storage.js";
 import { rebuildCards } from "./rebuild.js";
 import { mgReduceMotion } from "./motion.js";
 import { schedulePillsCollapse, syncPillsCollapseNow } from "./pills-box.js";
-import { cats, setCatsDropArmed, setCats, setPendingScrollHit, intentIdxs, setCatOrder, dragState, suppressClick, setDragState, setSuppressClick } from "./app-state.js";
+import { cats, setCatsDropArmed, setCats, setPendingScrollHit, intentIdxs, setCatOrder, dragState, suppressClick, setDragState, setSuppressClick,
+  editionView, setEditionView } from "./app-state.js";
+import { editionMarks, editionMarkedCount, editionSay } from "./edition-marks.js";
 import { hooks } from "./hooks.js";
 
 // The category bar itself: the row of pills, the inline add, and the capture half of its FLIP.
@@ -30,7 +32,7 @@ function drawPillsCore(){
   const mk=(id,label,n,drag)=>{
     const b=document.createElement("div");
     let extra="";
-    const on = id ? cats.indexOf(id)>-1 : cats.length===0;   // "All" is on when nothing is
+    const on = id ? cats.indexOf(id)>-1 : (cats.length===0 && !editionView);   // "All" is on when nothing is
     // Keep intent/always hints even when the pill is selected (combined with .on in CSS).
     if(id){
       if(hc.specific.indexOf(id)>-1) extra=" hint2";        // issue-relevant - green ring
@@ -125,6 +127,9 @@ function drawPillsCore(){
     setCatOrder(Object.keys(CATS));
     lyDel("CatOrder");
   });
+  const edN=editionMarkedCount();
+  if(editionView && !edN) setEditionView(false);
+  if(edN) pills.appendChild(editionPill(edN));
   displayCatOrder(hc).forEach(k=>{
     if(!CATS[k]) return;
     mk(k,CATS[k],PN(k),true);          // empty categories included, with a 0 badge
@@ -149,6 +154,37 @@ function drawPillsCore(){
   syncPillsCollapseNow();
   // Two rAFs: wait for layout after DOM rebuild, then measure overflow.
   schedulePillsCollapse();
+}
+/* THE PILL OF WHAT THE LOADED EDITION BROUGHT, beside All while any card still wears its mark: pressed, it is All
+   narrowed to those cards, and pressed again it is All. No data-k, so the arrows' walk, the counts and a drag pass
+   it by, as they pass the + by. */
+function editionPill(n){
+  const v=(editionMarks()||{}).v||"";
+  const b=document.createElement("div");
+  b.className="pill pill-ed"+(editionView?" on":"");
+  b.innerHTML='<span class="pill-lab" data-i18n-skip>'+esc(t("Changes in {V}").split("{V}").join(v))+'</span> <b>'+n+'</b>';
+  const tip=t("Only the cards edition {V} changed or added").split("{V}").join(v);
+  b.title=tip;
+  b.setAttribute("aria-label",tip);
+  b.setAttribute("role","button");
+  b.setAttribute("aria-pressed",editionView?"true":"false");
+  b.onclick=()=>{
+    if(suppressClick){ setSuppressClick(false); return; }
+    setCatsDropArmed(false);
+    const railBefore=hooks.captureRail(), relBefore=hooks.railRelKeys();
+    const press=!editionView;
+    setCats([]);
+    setEditionView(press);
+    setPendingScrollHit(!!intentIdxs.length);
+    const cardsBefore=intentIdxs.length ? null : captureSettle();
+    drawPills(); hooks.render();
+    glideSettle(cardsBefore,"move");
+    hooks.railEchoRedraw(railBefore, relBefore);
+    scrollRailTop();
+    scheduleTabSave();
+    if(press) editionSay(t("Cards edition {V} changed or added: {N}.").split("{V}").join(v).split("{N}").join(String(editionMarkedCount())));
+  };
+  return b;
 }
 /** Inline category creation from the pill strip. Same contract as the Manage chip: type,
  *  Enter to accept, Esc or an empty blur to cancel. */

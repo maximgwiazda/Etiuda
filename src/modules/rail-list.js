@@ -191,8 +191,10 @@ function railSettle(){
     if(String(intentEl.value||"").trim()){
       setCats([]);
       if(pills) pills.querySelectorAll(".pill").forEach(b=>{
-        b.classList.toggle("on", !b.dataset.k);
-        if(b.dataset.k!=null) b.setAttribute("aria-pressed", b.dataset.k?"false":"true");
+        // The edition's pill carries no key either, and setCats has just put it down.
+        const ed=b.classList.contains("pill-ed");
+        b.classList.toggle("on", !b.dataset.k && !ed);
+        if(b.dataset.k!=null || ed) b.setAttribute("aria-pressed", b.dataset.k===""?"true":"false");
       });
       scheduleTabSave();
     }

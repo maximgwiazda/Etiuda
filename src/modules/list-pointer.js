@@ -19,6 +19,7 @@ import { entrySel, putEntrySel, intentIdxs, shown } from "./app-state.js";
 import { hooks } from "./hooks.js";
 import { withAgentName } from "./agent.js";
 import { activeHeard, tabPathStep } from "./tabs.js";
+import { useEditionMark } from "./edition-marks.js";
 
 // ---- card drag-reorder (within same relevance band only) ----------------
 let cardDrag=null, cardSwapLock=0, cardSuppressClick=false;
@@ -461,6 +462,8 @@ function bumpUseCount(id, lang){
   const prev=tabPathStep(id);
   if(prev) bumpPair(pack, prev, id);
   saveStats();
+  // Every copy passes here, so this is where a loaded edition's mark is used up.
+  useEditionMark(id);
 }
 
 export {
