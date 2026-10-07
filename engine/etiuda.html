@@ -26685,7 +26685,7 @@ What you type stays in this browser only.`;
     if (dockEl) dockEl.hidden = true;
   }
   function copyNextReply(k, anchor, other) {
-    const r = dockNow().rows.filter((x) => !lanesShown() || !x.used)[k];
+    const r = dockNow().rows[k];
     if (!r) return false;
     copyCardPart(r.id, 0, anchor || dockFab(), other);
     return true;

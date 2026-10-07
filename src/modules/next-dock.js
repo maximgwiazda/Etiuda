@@ -213,8 +213,7 @@ function foldNextDock(){
  *  shows, or the other one; false when there is none, so the key falls through. A question for its
  *  fields hangs from `anchor`, the button where none is given. */
 function copyNextReply(k, anchor, other){
-  // The lanes show no row offered by use alone, so their keys reach only the rows they show.
-  const r=dockNow().rows.filter(x=>!lanesShown() || !x.used)[k];
+  const r=dockNow().rows[k];
   if(!r) return false;
   copyCardPart(r.id, 0, anchor||dockFab(), other);
   return true;
