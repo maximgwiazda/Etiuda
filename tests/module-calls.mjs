@@ -3023,6 +3023,14 @@ const CARD_B = {
         () => eq([saidFirst === "To choose from next: " + rowsIn(html) + ".", saidNext === "To choose from next: " + rowsIn(after) + ".", rowsIn(html) > 0 && rowsIn(after) > 0,
           /<div class="ln-trail" role="list" aria-label="Sent">/.test(after), crumbs].join("|") + " " + saidFirst + " / " + saidNext,
           "true|true|true|true|1 To choose from next: " + rowsIn(html) + ". / To choose from next: " + rowsIn(after) + "."));
+      /* A step to a card with no list, nothing learnt and nothing used to offer leaves nothing to choose from, and
+         says where a reply is added. It is the desk's only card here, so no row can be offered. */
+      AS.setCards([card("c-ln-solo")]);
+      freshTab(); sayEl.textContent = "";
+      LP.bumpUseCount("c-ln-solo", "en");
+      await new Promise(r => setTimeout(r, 80));
+      check("lanes.js", "863w3 a step to a card with no list, nothing learnt and nothing used says what comes next is chosen with Add a reply",
+        () => eq([rowsIn(lanesBox.innerHTML), sayEl.textContent].join("|"), "0|What comes next is chosen with Add a reply."));
     } finally {
       LN.toggleLanes(false);
       globalThis.Date = RealDate; document.getElementById = hadById; P.pack.custom = hadCustom2;
