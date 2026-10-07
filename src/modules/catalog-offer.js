@@ -16,7 +16,7 @@ import { lsSet, nsGet, nsSet } from "./storage.js";
 import { tourDueAtBoot, afterTour } from "./tour.js";
 import { placeBubble } from "./bubble.js";
 import { markCut } from "./cut-text.js";
-import { cutLeaves, dismissNode } from "./motion.js";
+import { cutLeaves, dismissNode, mgReduceMotion, M_MS, E_EASE, E_SPRING } from "./motion.js";
 import { catalogAwaitingLine, catalogCountsLine, t, toast, toastRefusal } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { cards, wholeThingEmpty } from "./app-state.js";
@@ -28,7 +28,8 @@ import { pack } from "./pack.js";
 import { ICON_AWAITING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT, ICON_DESK, ICON_LOOK } from "./icons.js";
 import { V2_SIG_VALID } from "./catalog-v2.js";
 import { editionChanges } from "./edition-changes.js";
-import { editionOfferHtml, openEditionPanel, repaintEditionRows } from "./edition-panel.js";
+import { editionOfferHtml, openEditionPanel, repaintEditionRows, editionCountWords } from "./edition-panel.js";
+import { editionMarksFrom, keepEditionMarks, putEditionMarksBack, editionSay } from "./edition-marks.js";
 import { closeModal } from "./dialog.js";
 import { deskName, deskKey, deskBase, deskChangeWords, openDeskLook } from "./desk-look.js";
 import { hooks } from "./hooks.js";
@@ -454,7 +455,7 @@ function eOfferCatalogDialog(c,src){
   if(!src.asked && sharedOwnWrite(c)) return false;
   /* A refusal is remembered so boot does not nag, but ASKING outranks it: an explicit check
      that answered "already have it" about a file you declined would simply be untrue. */
-  if(!src.force && src.refusedKey && nsGet(src.refusedKey)===sig) return false;
+  if(!src.force && src.refusedKey && nsGet(src.refusedKey)===sig){ leaveWaiting(c,src,active); return false; }
   catalogTrust(c);
   /* A CATALOG SOMEBODY CHOSE LOADS AT ONCE ON AN EMPTY DESK: nothing is put down, so there is
      nothing to ask. Over a loaded catalog the question stands. */
@@ -477,6 +478,8 @@ function eOfferCatalogDialog(c,src){
   // What the edition changes stands where the counts would, which an update leaves equal so often.
   const changes=updating ? editionChanges(active,c,pack) : null;
   const changeHtml=changes ? editionOfferHtml(c,active,changes) : "";
+  // A NEW EDITION OF THE CATALOG IN USE: it waits at the name, and its load marks what it brought.
+  const fresh=updating && !older, label=fresh ? editionLabelOf(c) : "";
   const n=(c.cards||[]).length,
         i=catalogIntentCount(c),
         k=Object.keys(c.categories||{}).length;
@@ -516,11 +519,16 @@ function eOfferCatalogDialog(c,src){
     +'<p class="ec-sub">'+src.foundHtml
     +(updating?' '+esc(t("Your own cards and edits are kept.")):'')+'</p>'
     +trustHtml(trustOfferLine(trustSettled(c),updating))
+    // Only a file nobody asked for, which may arrive mid-chat: the promise that the chat can go on.
+    +(fresh && !src.asked ? '<p class="ec-holds">'+esc(t("This desk carries on as it is until the update is loaded."))+'</p>' : '')
     +'<div class="tour-actions">'
-    +'<button type="button" class="btn" id="ecNo">'+esc(t(replacing?"Keep current":"Not now"))+'</button>'
+    +'<button type="button" class="btn" id="ecNo">'+esc(t(replacing && !fresh?"Keep current":"Not now"))+'</button>'
     +'<button type="button" class="btn primary" id="ecYes">'+esc(t(older?"Load it anyway":updating?"Load the update":replacing?"Load it":"Load catalog"))+'</button>'
     +'</div>';
   cutLeaves();
+  if(fresh){ edWaiting={c:c, src:src}; paintCatWaiting(); }
+  const arriving=fresh && !src.asked && !src.reopened;
+  if(arriving) arriveAtName(wrap);
   document.body.appendChild(wrap);
   // Placed against the indicator, and again on a resize, since it may outlive one.
   const place=()=>{
@@ -543,7 +551,7 @@ function eOfferCatalogDialog(c,src){
   if(!wrap.querySelector(".ec-trust")) catalogTrust(c).then(state=>{
     const line=trustOfferLine(state,updating);
     if(!line || !wrap.isConnected || wrap.querySelector(".ec-trust")) return;
-    wrap.querySelector(".tour-actions").insertAdjacentHTML("beforebegin",trustHtml(line));
+    (wrap.querySelector(".ec-holds")||wrap.querySelector(".tour-actions")).insertAdjacentHTML("beforebegin",trustHtml(line));
     place();
   });
   const close=()=>{ removeEventListener("resize",place); dismissNode(wrap); if(offerStanding===close) offerStanding=null; };
@@ -562,7 +570,7 @@ function eOfferCatalogDialog(c,src){
   wrap.querySelector("#ecYes").onclick=()=>{
     if(taking) return;
     taking=true;
-    whenTrusted(c).then(()=>{ taking=false; close(); src.accept(sig); });
+    whenTrusted(c).then(()=>{ taking=false; close(); acceptOffer(c,sig,src,fresh ? {held:active, changes:changes, v:label} : null); });
   };
   wrap.querySelectorAll("[data-ec-open]").forEach(wireFolderLink);
   wrap.querySelector("#ecNo").onclick=()=>{
@@ -585,8 +593,108 @@ function eOfferCatalogDialog(c,src){
       back:()=>{ closeModal(); if(library) hooks.openManage(); wrap.hidden=false; place(); diff.focus(); }});
   };
   // Only an act of somebody's takes the keyboard; a file found at boot leaves it in the search.
-  if(src.asked){ const yes=wrap.querySelector("#ecYes"); if(yes) yes.focus(); }
+  if(src.asked || src.reopened){ const yes=wrap.querySelector("#ecYes"); if(yes) yes.focus(); }
+  // The offer takes no focus, so the ear is told where it is.
+  if(arriving) editionSay(t("Edition {V} is waiting to be loaded; the offer is under the catalog's name.").split("{V}").join(label));
   return true;
+}
+/* AN EDITION LOADED: its marks are written into the catalog's layer before the desk starts again, so the first
+   paint wears them, and taken back if the load did not land. What it brought is then said once and shown once.
+   Whether it landed is read once accept has settled: Import's two routes load after a promise and return it. */
+function acceptOffer(c,sig,src,ed){
+  const marks=ed ? editionMarksFrom(ed.held,ed.changes,ed.v) : null;
+  const was=ed ? keepEditionMarks(c,marks) : null;
+  Promise.resolve(src.accept(sig)).then(()=>{
+    const now=storedCatalog(), landed=!!now && eCatalogSignature(now)===sig;
+    if(ed && !landed) putEditionMarksBack(c,was);
+    paintCatWaiting();
+    if(!ed || !landed) return;
+    const counts=editionCountWords(ed.changes.counts);
+    if(counts.length) toast(t("Edition {V} loaded: {COUNTS}").split("{V}").join(ed.v).split("{COUNTS}").join(counts.join(", ")));
+    if(marks) washEdition(marks);
+  });
+}
+/* The cards the edition changed, washed once where they stand on screen, and its pill arriving. */
+function washEdition(marks){
+  if(mgReduceMotion()) return;
+  requestAnimationFrame(()=>{
+    document.querySelectorAll("#list .card[data-id]").forEach(card=>{
+      if(!marks.cards[card.getAttribute("data-id")]) return;
+      card.querySelectorAll(".txt").forEach(x=>{
+        const r=x.getBoundingClientRect();
+        if(!r.width || r.bottom<0 || r.top>innerHeight) return;
+        const d=document.createElement("div");
+        d.className="e-ed-wash";
+        d.style.left=r.left+"px"; d.style.top=r.top+"px"; d.style.width=r.width+"px"; d.style.height=r.height+"px";
+        document.body.appendChild(d);
+        d.addEventListener("animationend",()=>d.remove());
+        setTimeout(()=>{ if(d.parentNode) d.remove(); },M_MS.wash*2);
+      });
+    });
+    const pill=document.querySelector("#pills .pill-ed");
+    if(pill) pill.animate([{opacity:0, transform:"scale(.8)"},{opacity:1, transform:"none"}],{duration:M_MS.move, easing:E_EASE});
+  });
+}
+/* THE FILE ARRIVING, for an edition nobody asked for: a sheet travels onto the name and goes into its dot, and
+   the offer opens once it has landed. Nothing waits on it: the bubble is on the page from the start. */
+function arriveAtName(wrap){
+  const name=document.querySelector("#catNow .cn-name"), r=name && name.getBoundingClientRect();
+  if(mgReduceMotion() || !r || !r.width) return;
+  const sheet=document.createElement("div");
+  sheet.className="e-ed-sheet";
+  sheet.setAttribute("aria-hidden","true");
+  sheet.style.left=(r.left+Math.min(r.width,96)/2)+"px"; sheet.style.top=(r.top+r.height/2)+"px";
+  document.body.appendChild(sheet);
+  wrap.style.animationDelay="var(--m-travel)";
+  const gone=()=>{ if(sheet.parentNode) sheet.remove(); };
+  sheet.animate([{transform:"translate(60px,-70px) rotate(14deg) scale(1.3)", opacity:0},{opacity:1, offset:.3},{transform:"none", opacity:1}],
+    {duration:M_MS.travel, easing:E_SPRING}).onfinish=()=>{
+      sheet.animate([{transform:"none", opacity:1},{transform:"scale(.2)", opacity:0}],{duration:M_MS.move, easing:E_EASE, fill:"forwards"}).onfinish=gone;
+    };
+  setTimeout(gone,(M_MS.travel+M_MS.move)*3);
+  const dot=document.querySelector("#catNow .cn-dot");
+  if(dot) dot.animate([{transform:"scale(0)"},{transform:"scale(1.6)"},{transform:"none"}],
+    {duration:M_MS.celebrate, delay:M_MS.travel, easing:E_EASE, fill:"backwards"});
+}
+/* AN UPDATE LEFT WAITING, by Not now, by Escape, or by a refusal remembered from before: the name on the band wears a
+   dot and opens that offer again, forced past the refusal because opening it is asking. Only while it is still an
+   edition of the catalog in use that is not the one loaded; otherwise the name is inert again. */
+let edWaiting=null;
+function editionLabelOf(c){ return catalogVersionLabel(c && c.version) || (c && +c.rev ? "v"+(+c.rev) : ""); }
+function leaveWaiting(c,src,active){
+  if(!isCatalogUpdate(c,active) || catalogEditionOlder(c.version,active.version)) return;
+  // The same edition already waiting keeps the route it came by.
+  if(!edWaiting || eCatalogSignature(edWaiting.c)!==eCatalogSignature(c)) edWaiting={c:c, src:src};
+  paintCatWaiting();
+}
+function paintCatWaiting(){
+  const el=document.getElementById("catNow");
+  if(!el) return;
+  const held=storedCatalog();
+  if(edWaiting && !(isCatalogUpdate(edWaiting.c,held) && eCatalogSignature(edWaiting.c)!==eCatalogSignature(held)
+    && !catalogEditionOlder(edWaiting.c.version,held.version))) edWaiting=null;
+  let dot=el.querySelector(".cn-dot");
+  el.classList.toggle("is-waiting",!!edWaiting);
+  if(!edWaiting){
+    if(dot) dot.remove();
+    ["role","tabindex","title","aria-label"].forEach(a=>el.removeAttribute(a));
+    el.onclick=el.onkeydown=null;
+    return;
+  }
+  if(!dot){ dot=document.createElement("span"); dot.className="cn-dot"; dot.setAttribute("aria-hidden","true"); el.insertBefore(dot,el.firstChild); }
+  const words=t("Show edition {V}, waiting to be loaded").split("{V}").join(editionLabelOf(edWaiting.c));
+  el.setAttribute("role","button");
+  el.setAttribute("tabindex","0");
+  el.setAttribute("title",words);
+  el.setAttribute("aria-label",words);
+  el.onclick=reopenWaiting;
+  el.onkeydown=e=>{ if(e.key!=="Enter" && e.key!==" ") return; e.preventDefault(); e.stopPropagation(); reopenWaiting(); };
+}
+function reopenWaiting(){
+  const w=edWaiting, up=document.getElementById("eCatalogOffer");
+  if(!w) return;
+  if(up && !up.classList.contains("e-gone")){ const yes=up.querySelector("#ecYes"); if(yes) yes.focus(); return; }
+  eOfferCatalogDialog(w.c,Object.assign({},w.src,{force:true, reopened:true}));
 }
 /* THE FILE DIALOG'S CATALOG, asked about in the same bubble as every other route. */
 function eOfferPickedCatalog(c,name,accept){
@@ -751,6 +859,7 @@ export {
   eOfferCatalogDialog,
   eOfferPickedCatalog,
   paintCatNow,
+  paintCatWaiting,
   loadCatalogFromFolder,
   wireHostCatalogWatch
 };

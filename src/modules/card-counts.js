@@ -4,7 +4,8 @@ import { cardSearchScore } from "./card-score.js";
 import { intentAffinityGroups } from "./affinity.js";
 import { cardSearchTerms, dropCatalogVocab } from "./spell.js";
 import { dropIntentKeywords } from "./intent-text.js";
-import { cardCounts, cards, cats, setCardCounts } from "./app-state.js";
+import { cardCounts, cards, cats, setCardCounts, editionView } from "./app-state.js";
+import { editionMarkOf } from "./edition-marks.js";
 
 function recountMacros(){
   eSCountsKey=null; eSCatRank=null; eSCatRankKey=null;   // cards rebuilding; the memos are stale
@@ -96,7 +97,8 @@ function searchCatRank(){
    this shelf" rather than "find me something". Put-away is not a category of its own: the same
    ruling that took the Favourites pill away, and for the same reason. */
 function cardInActiveCats(m,terms){
-  if(!cats.length) return !(m&&m._hidden);
+  // The edition pill is All narrowed to the cards the loaded edition marked.
+  if(!cats.length) return !(m&&m._hidden) && (!editionView || !!(m && editionMarkOf(m.id)));
   if(m&&m._hidden && terms && terms.length) return false;
   return cats.some(k=>m.c===k);
 }

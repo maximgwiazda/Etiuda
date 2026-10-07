@@ -523,6 +523,90 @@ check("18 control: the plain payload carries none of the new keys through either
   check("52A THE CONTROL: with no catalog stored the same Export hands over null, so 52a is not an answer that is always given",
     fromNothing[0] === "Host.ec" && fromNothing[1] === "[null]", "saved " + fromNothing[0] + ", handed " + fromNothing[1]);
   delete globalThis.window.E_HOST;
+  /* THE EDITION ARRIVES: what a loaded edition marks, where the marks are kept, what the edition's pill shows and what
+     a copy uses up. The marks are made from the comparison the offer already made, written into the layer of the catalog
+     they belong to, and read back by the real modules after the desk lands that catalog as a start does. */
+  const EM = await import(MOD("edition-marks.js"));
+  const CN = await import(MOD("card-counts.js"));
+  const LPM = await import(MOD("list-pointer.js"));
+  const CB = await import(MOD("catalog-boot.js"));
+  const held53 = read(doc()), next53 = read(three);
+  const marks53 = EM.editionMarksFrom(held53, ED.editionChanges(held53, next53, NONE), "v5");
+  const shape53 = marks53 ? Object.keys(marks53.cards).sort().map(id => id + ":" + marks53.cards[id].k
+    + (marks53.cards[id].was ? "<" + JSON.stringify(marks53.cards[id].was) : "")).join(" ") : "none";
+  check("53a an edition that changes a card, adds one and retires one marks the changed card with the words it had and the new card, and not the retired one",
+    !!marks53 && marks53.v === "v5" && shape53 === 'c-a:changed<{"en":"A body."} c-d:new', shape53);
+  check("53A THE CONTROL: the same file offered again marks nothing",
+    EM.editionMarksFrom(held53, ED.editionChanges(held53, read(doc()), NONE), "v5") === null, "nothing marked");
+  const landMarked = () => {
+    PK.resetPack(); land(doc()); CB.applyBootCatalog(); RB.rebuildCards();
+    EM.keepEditionMarks(next53, marks53);
+    land(three); CB.applyBootCatalog(); RB.rebuildCards(); EM.forgetEditionMarks();
+  };
+  landMarked();
+  const viewOf = on => { AP.setCats([]); AP.setEditionView(on); return AP.cards.filter(m => CN.cardInActiveCats(m, [])).map(m => m.id).join(","); };
+  const inView = viewOf(true), allView = viewOf(false);
+  check("53b after the load the marks are read from the catalog's own layer, and the edition's pill shows only the marked cards; All shows every card",
+    EM.editionMarkOf("c-a") && EM.editionMarkOf("c-a").k === "changed" && EM.editionMarkOf("c-d").k === "new" && EM.editionMarkOf("c-b") === null
+      && inView === "c-a,c-d" && allView === "c-a,c-b,c-d" && EM.editionMarkedCount() === 2,
+    "pill " + inView + " | All " + allView + " | counted " + EM.editionMarkedCount());
+  AP.setEditionView(true); AP.setCats(["t-op"]);
+  const bySetCats = AP.editionView;
+  /* And by Ctrl+click, which adds a category to the selection in place: the real bar drawn on a page whose made
+     elements keep what is set on them, and the real handler of the category's pill pressed with Ctrl held. */
+  const PB = await import(MOD("pills-bar.js"));
+  const page = globalThis.document, made = [];
+  const kept = () => { const st = { dataset: {} }; made.push(st);
+    return new Proxy(function () {}, { get: (o, k) => (k in st ? st[k] : k === Symbol.toPrimitive ? () => "" : fake()),
+      set: (o, k, v) => { st[k] = v; return true; }, apply: () => fake(), has: () => true }); };
+  ["captureRail", "railRelKeys", "railEchoRedraw", "scheduleRailGeometry"].forEach(k => { HK.hooks[k] = () => null; });
+  let byCtrl;
+  try {
+    globalThis.document = new Proxy({}, { get: (o, k) => (k === "createElement" ? kept : page[k]), set: () => true });
+    AP.setCats([]); AP.setEditionView(true);
+    PB.drawPillsCore();
+    const pill = made.find(st => st.dataset.k === "t-op");
+    if (!pill || typeof pill.onclick !== "function") throw new Error("no pill drawn for t-op");
+    pill.onclick({ ctrlKey: true, target: { closest: () => null } });
+    byCtrl = JSON.stringify(AP.cats) + " " + AP.editionView;
+  } catch (e) { byCtrl = "not pressed: " + e.message; }
+  finally { globalThis.document = page; }
+  check("53c choosing a category puts the edition's pill down, by a click and by Ctrl+click on its pill",
+    bySetCats === false && byCtrl === '["t-op"] false', "click " + bySetCats + " | Ctrl+click " + byCtrl);
+  AP.setCats([]); AP.setEditionView(true);
+  const sigs = [EM.editionMarkSig("c-a"), EM.editionMarkSig("c-d"), EM.editionMarkSig("c-b")].join("|");
+  LPM.bumpUseCount("c-a", "en");
+  const afterOne = [EM.editionMarkOf("c-a") === null, EM.editionMarkedCount(), AP.editionView].join(",");
+  EM.forgetEditionMarks();
+  const keptOne = !!EM.editionMarkOf("c-d") && EM.editionMarkOf("c-a") === null;
+  LPM.bumpUseCount("c-d", "en");
+  EM.forgetEditionMarks();
+  check("53d a copy uses a card's mark up, the rest stay across a fresh read of the layer, and the last copy ends the record and the pill",
+    sigs === "changed+|new|" && afterOne === "true,1,true" && keptOne && EM.editionMarks() === null && ST.lyGet("EditionMarks") === null,
+    "sigs " + sigs + " | after one " + afterOne + " | kept " + keptOne + " | record " + ST.lyGet("EditionMarks"));
+  landMarked();
+  LPM.bumpUseCount("c-b", "en");
+  check("53D THE CONTROL: copying a card the edition did not mark leaves both marks",
+    EM.editionMarkedCount() === 2, "counted " + EM.editionMarkedCount());
+  /* The words of one block, struck and marked. The fill markers are the engine's own, so a span the edition's marks
+     close round is the span a filled token draws. */
+  const IT = await import(MOD("intent-text.js"));
+  const marks = [[IT.FILL_A, '<span class="fillx">'], [IT.FILL_B, "</span>"], [IT.FILL_M_A, '<span class="fillmiss">'], [IT.FILL_M_B, "</span>"]];
+  const words = { del: "before: ", ins: "now: " };
+  const nests = html => { const st = []; for (const m of html.matchAll(/<(\/?)(span|ins|del)\b[^>]*>/g)) {
+    if (!m[1]) st.push(m[2]); else if (st.pop() !== m[2]) return false; } return st.length === 0; };
+  const d1 = EM.editionDiffHtml("The courier costs 18 a box.", "The courier costs 19 a box.", marks, words);
+  check("53e a changed block strikes the word it lost and marks the word it gained, each after its hidden word",
+    d1 === 'The courier costs <del class="e-del"><span class="e-vh">before: </span>18</del><ins class="e-ins"><span class="e-vh">now: </span>19</ins> a box.',
+    d1);
+  const filled = "Hello " + IT.FILL_A + "Anna Kowal" + IT.FILL_B + ", it comes on Monday.";
+  const d2 = EM.editionDiffHtml("Hello " + IT.FILL_A + "Anna Kowal" + IT.FILL_B + ", it came.", filled, marks, words);
+  const d3 = EM.editionDiffHtml("Hi there.", "Hello " + IT.FILL_A + "Anna Kowal" + IT.FILL_B + " there.", marks, words);
+  check("53f a filled token inside or beside a change keeps every span whole: marked spans close round it",
+    nests(d2) && nests(d3) && d3.indexOf('<span class="fillx"><ins class="e-ins">Anna Kowal</ins></span>') > -1 && d2.indexOf("Monday.") > -1, d3);
+  check("53F THE CONTROL: a block the edition did not change gives nothing to mark", EM.editionDiffHtml(filled, filled, marks, words) === null, "same text");
+  AP.setEditionView(false); AP.setCats([]);
+  EM.keepEditionMarks(next53, null); EM.forgetEditionMarks();
   HK.hooks.syncFavouritesMeta = () => {};
   // The toast's own timer fires after the check, against the stand-in, and is let run its course.
   await new Promise(r => setTimeout(r, 2000));

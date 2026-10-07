@@ -213,8 +213,10 @@ function makeDocument() {
   doc.documentElement = new El("html", doc);
   doc.head = doc.documentElement.appendChild(new El("head", doc));
   doc.body = doc.documentElement.appendChild(new El("body", doc));
+  // The page's toast host, which a load of a new edition speaks through after the desk starts again.
+  doc.body.appendChild(new El("div", doc)).id = "toast";
   doc.activeElement = doc.body;
-  doc.createRange = () => ({});
+  doc.createRange = () => ({ selectNodeContents() {}, getBoundingClientRect: () => ({ top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }) });
   doc.contains = n => doc.documentElement.contains(n);
   doc.getElementById = id => queryAll(doc.documentElement, "#" + id)[0] || null;
   doc.querySelector = sel => queryAll(doc.documentElement, sel)[0] || null;
@@ -265,6 +267,9 @@ async function launch(plan) {
   /* The page's world. window IS the global object, as in a browser, so a bare addEventListener and
      window.addEventListener are one list. */
   const doc = makeDocument();
+  /* The band's catalog name, where an edition left waiting wears its dot: only where a plan asks, since the scenarios
+     before 74l were written against a page without it, and 72b, 72l and 72o go red with it there. */
+  if (plan.band) { const band = doc.body.appendChild(new El("div", doc)); band.id = "catNow"; band.appendChild(new El("span", doc)).className = "cn-name"; }
   const winListeners = {};
   const session = new Map(Object.entries(plan.session || {}));
   Object.assign(globalThis, {
@@ -423,6 +428,14 @@ async function launch(plan) {
     },
     edload: () => { doc.getElementById("edLoad").onclick(); obs.read.afterLoad = { modal: modalUp() }; },
     edkeep: () => { doc.getElementById("edKeep").onclick(); obs.read.afterKeep = { modal: modalUp() }; },
+    no: () => { const n = doc.getElementById("ecNo"); if (!n) throw new Error("no decline on screen"); n.onclick(); },
+    // The band's name as it stands: the dot, the words it says, where the keyboard is, and the offer's decline if one is up.
+    readwait: () => {
+      const at = doc.getElementById("catNow"), no = doc.getElementById("ecNo");
+      (obs.read.wait = obs.read.wait || []).push({ waiting: at.classList.contains("is-waiting"), dot: !!at.querySelector(".cn-dot"),
+        label: at.getAttribute("aria-label"), focus: (doc.activeElement && doc.activeElement.id) || "", offer: standing(),
+        no: no ? no.textContent.trim() : null });
+    },
     edback: () => {
       DLG.dismissModal();
       const b = bubble();
@@ -510,7 +523,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 69;
+  const EXPECTED = 75;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -933,6 +946,54 @@ async function parent() {
       "74i THE CONTROL: the panel's way back closes the panel, brings the bubble back with the differences button focused, and loads nothing: " + JSON.stringify(ab));
     const errs74 = [d74.setup, A74, B74, dKeep.setup, AK, BK, dNo.setup, AN, CN, dBack.setup, AB].flatMap(o => o.errors || []);
     check(!errs74.length, "74j those launches ran their acts without an error" + (errs74.length ? ": " + errs74.length + ", first " + errs74[0] : ""));
+    /* A NEW EDITION'S MARKS, by the route it came: Import accepts after a promise (the watch's handle cleared or put first),
+       the boot's offer at once. Read from the desk file the next launch reads: the edition held and the marks beside it. */
+    const marksAfter = (route) => {
+      const lab = scenario([["catalogs/lamp.ec", ed1()]]);
+      const first = run(lab, ["boot", "settle", "offer", "yes", "settle"]);
+      let second;
+      if (route === "import") {
+        fs.mkdirSync(path.join(lab, "elsewhere"));
+        fs.writeFileSync(path.join(lab, "elsewhere", "lamp-v2.ec"), JSON.stringify(ed2()), "utf8");
+        second = run(lab, ["desk", "import:elsewhere/lamp-v2.ec", "settle", "yes", "settle"]);
+      } else {
+        fs.writeFileSync(path.join(lab, "catalogs", "lamp.ec"), JSON.stringify(ed2()), "utf8");
+        second = run(lab, ASK.concat(["yes", "settle"]));
+      }
+      const keys = JSON.parse(fs.readFileSync(path.join(lab, "userdata", "desk.json"), "utf8")).keys || {};
+      const mk = Object.keys(keys).filter(k => /~EditionMarks$/.test(k)), m = mk.length === 1 ? JSON.parse(keys[mk[0]]) : null;
+      return { rev: (() => { try { return JSON.parse(keys.eCatalog || "{}").rev; } catch { return null; } })(), started: second.reloaded,
+        marks: m && m.cards ? Object.keys(m.cards).sort().map(id => id + ":" + m.cards[id].k).join(" ") : null,
+        errors: [first, second].flatMap(o => o.errors || []) };
+    };
+    const viaImport = marksAfter("import"), viaBoot = marksAfter("boot");
+    check(viaImport.rev === 2 && viaImport.started === true && viaImport.marks === "c-b:changed c-n:new" && !viaImport.errors.length,
+      "74k a new edition loaded by Import keeps its marks: the next launch's desk file holds edition 2 with the changed and the new card marked: " + JSON.stringify(viaImport));
+    check(viaBoot.rev === 2 && viaBoot.started === true && viaBoot.marks === "c-b:changed c-n:new" && !viaBoot.errors.length,
+      "74K THE CONTROL: the same edition through the boot's offer holds the same marks, so 74k reads a desk file that can hold them: " + JSON.stringify(viaBoot));
+    /* THE OFFER OF A NEW EDITION NOBODY ASKED FOR takes no focus and waits at the name: up, after Escape, after Not now,
+       and at the next launch with that refusal remembered. The control is the same desk with nothing newer in the folder. */
+    const BAND = { band: true }, WAIT = /^Show edition \S+, waiting to be loaded$/;
+    const wr = (o, i) => ((o.read && o.read.wait) || [])[i] || {};
+    const dW = editionDesk();
+    const AW = run(dW.lab, ASK.concat(["readwait", "escape", "settle", "readwait"]), false, BAND);
+    const dD = editionDesk();
+    const BW = run(dD.lab, ASK.concat(["no", "settle", "readwait"]), false, BAND);
+    const CW = run(dD.lab, ASK.concat(["readwait"]), false, BAND);
+    const labL = scenario([["catalogs/lamp.ec", ed1()]]);
+    const LW0 = run(labL, ["boot", "settle", "offer", "yes", "settle"]);
+    const LW = run(labL, ASK.concat(["readwait"]), false, BAND);
+    const errsW = [dW.setup, AW, dD.setup, BW, CW, LW0, LW].flatMap(o => o.errors || []);
+    const a0 = wr(AW, 0), a1 = wr(AW, 1), b0 = wr(BW, 0), c0 = wr(CW, 0), l0 = wr(LW, 0);
+    check(a0.offer === 1 && a0.focus !== "ecYes" && a0.waiting && a0.dot && WAIT.test(a0.label || "") && a0.no === "Not now",
+      "74l a new edition found at boot is offered without taking the keyboard, its decline reads Not now, and the name wears its dot and says it waits: " + JSON.stringify(a0));
+    check(a1.offer === 0 && a1.waiting && a1.dot && WAIT.test(a1.label || ""),
+      "74m after Escape the offer is down and the edition still waits at the name: " + JSON.stringify(a1));
+    check(b0.offer === 0 && b0.waiting && b0.dot && c0.offer === 0 && c0.waiting && c0.dot && WAIT.test(c0.label || "") && !errsW.length,
+      "74n after Not now it waits at the name, and at the next launch, the refusal remembered and nothing offered, it still does: "
+      + JSON.stringify({ declined: b0, next: c0, errors: errsW.slice(0, 2) }));
+    check(l0.offer === 0 && l0.waiting === false && l0.dot === false && l0.label === null,
+      "74L THE CONTROL: the same desk with no newer edition in the folder has no dot and no words at the name: " + JSON.stringify(l0));
     /* 75: A COLLEAGUE'S FILE IN THE LIBRARY, LOOK, AND WORK FROM IT. The folder holds the catalog in use (lamp.ec); two
        desks both called Ola, each with a file grown from that edition, the first rewording one card and adding one; Piotr's
        catalog made from nothing; Ala's file claiming the id in use; and this desk's own file, its key the one the desk

@@ -80,7 +80,8 @@ function rebuildCards(){
   Object.keys(CATS).forEach(k=>{
     if(catOrder.indexOf(k)<0) catOrder.push(k);
   });
-  setCats(cats.filter(k=>CATS[k]));
+  // Only where a category went: setCats also puts down the edition pill, which a rebuild must not.
+  if(cats.some(k=>!CATS[k])) setCats(cats.filter(k=>CATS[k]));
   drawPills();
   hooks.render();
 }

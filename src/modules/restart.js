@@ -27,7 +27,8 @@ import { syncPillsCollapse } from "./pills-box.js";
 import { drawIntentRail } from "./rail-list.js";
 import { initTabs } from "./tabs.js";
 import { syncSampleMark } from "./catalog-file.js";
-import { paintCatNow } from "./catalog-offer.js";
+import { paintCatNow, paintCatWaiting } from "./catalog-offer.js";
+import { forgetEditionMarks } from "./edition-marks.js";
 import { syncRoleWheel } from "./agent.js";
 import { applyPrefs } from "./settings.js";
 import { focusFirstEntryOnOpen } from "./on-open.js";
@@ -47,6 +48,7 @@ function restartDesk(){
   dropCardPool();
   forgetRowNaturals();
   eForgetRecency();
+  forgetEditionMarks();
   forgetLookEdits();
   rearmTrustRecheck();
   putLang(lsGet("eLang") || uiLang());
@@ -68,6 +70,7 @@ function restartDesk(){
   initTabs();
   syncSampleMark();
   paintCatNow();
+  paintCatWaiting();
   syncRoleWheel();
   applyPrefs();
   translateChrome();

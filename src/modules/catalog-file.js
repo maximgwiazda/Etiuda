@@ -668,7 +668,7 @@ function catalogFromFileText(text,fileName){
 function importCatalogText(text,fileName){
   const c=catalogFromFileText(String(text||""),fileName);
   if(!c) return false;
-  hooks.offerPickedCatalog(c,fileName,()=>{ eWatchClear().then(()=>activateCatalog(c,{from:fileName})); });
+  hooks.offerPickedCatalog(c,fileName,()=>eWatchClear().then(()=>activateCatalog(c,{from:fileName})));
   return true;
 }
 /* The host's dialog, and the file comes back already read: the engine calls no OS API. No watch
@@ -754,7 +754,7 @@ function importCatalogPicked(){
         nsSet("WatchName",f.name);
         nsSet("WatchSeen",String(f.lastModified||0));
         nsDel("WatchNo");
-        eWatchPut(handle).then(()=>activateCatalog(c,{from:f.name}));
+        return eWatchPut(handle).then(()=>activateCatalog(c,{from:f.name}));
       });
       return null;
     });

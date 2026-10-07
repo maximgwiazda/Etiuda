@@ -6,6 +6,7 @@ import { findCard } from "./card-model.js";
 import { displayBandKey } from "./card-order.js";
 import { isFavourite, ePackEpoch } from "./pack.js";
 import { cardFillKey } from "./rail-list.js";
+import { editionMarkSig } from "./edition-marks.js";
 import { t, uiLang } from "./ui-lang.js";
 import { list, cardTpl } from "./dom.js";
 import { cards, lang, intentIdxs, entrySel } from "./app-state.js";
@@ -74,7 +75,7 @@ function rebuildCardInPlace(id,near){
   const fresh=parseCardHtml(b.cardH);
   if(!fresh) return;
   fresh.__sig=ePackEpoch+"|"+renderKey+"|"+cardFillKey(m)
-    +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1);
+    +"|"+(entrySel&&entrySel.id===m.id?entrySel.vi:-1)+"|"+editionMarkSig(m.id);
   const ord=el.getAttribute("data-ord");
   if(ord!=null) fresh.setAttribute("data-ord",ord);
   el.replaceWith(fresh);

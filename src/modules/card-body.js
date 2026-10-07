@@ -5,12 +5,14 @@ import { cardDrag } from "./list-pointer.js";
 import { altLabelAt, cardCommits, cardLang, cardTitle, noteFor, parts } from "./card-model.js";
 import { catMarkHtml, catSlot } from "./cat-identity.js";
 import { esc } from "./esc.js";
-import { escFilled, fill } from "./intent-text.js";
+import { escFilled, fill, FILL_A, FILL_B, FILL_M_A, FILL_M_B } from "./intent-text.js";
+import { cardFieldKey } from "./card-fields.js";
+import { editionMarkOf, editionWasText, editionDiffHtml } from "./edition-marks.js";
 import { intentOrder, isIntentHiddenIdx } from "./intent-id.js";
 import { movedCardIds } from "./card-order.js";
 import { railActive } from "./rail-panel.js";
 import { t } from "./ui-lang.js";
-import { entrySel, lang, intentIdxs } from "./app-state.js";
+import { entrySel, lang, intentIdxs, editionView } from "./app-state.js";
 
 /* The card body, extracted so a language flip can rebuild one card at a time - the
    render map and the flip's idle chunks must write the same bytes (verifyPool checks).
@@ -40,6 +42,10 @@ function cardBodyHtml(m,i,ctx){
        the catalog shipped, even though its words do not. So does a card of your own. */
     if(m._custom || m._overridden || movedCardIds().has(m.id))
       cardH+='<span class="cbadge ed" title="'+esc(t("Changed or added by you, not what the catalog shipped"))+'">'+esc(t("mod"))+'</span>';
+    // What the loaded edition brought, worn until the card is next copied (edition-marks.js).
+    const edMark=editionMarkOf(m.id);
+    if(edMark) cardH+='<span class="cbadge edn" title="'+esc((edMark.k==="new"?t("New in edition {V}"):t("Changed in edition {V}")).split("{V}").join(edMark.v))+'">'
+      +esc(edMark.k==="new"?t("new"):t("changed"))+'</span>';
     const favTip=t(fav?"Remove from Favourites":"Add to Favourites");
     /* Hide is a toggle now that hidden entries stay on the list - the card itself is where you
        undo it. Delete lives only in Manage, so an irreversible action is never one stray click
@@ -60,7 +66,7 @@ function cardBodyHtml(m,i,ctx){
     /* Spec 2.6: the primary is untinted and every other language shares the secondary tint.
      Written as "is it Polish" while there were two, which tinted nothing at all on a desk
      whose primary is Polish. */
-  const ps=parts(m,_L), cls=_L===CONTENT_LANGS[0]?"":" plx";
+  const ps=parts(m,_L), cls=_L===CONTENT_LANGS[0]?"":" plx", edDiff=editionDiffParts(m,_L,ps);
     if(ps.length){
       // _L, never lang: on a pinned card the badge must name the language actually shown.
       const many=ps.length>1, word=m.seq?t("STEP"):_L.toUpperCase();
@@ -73,7 +79,7 @@ function cardBodyHtml(m,i,ctx){
         return '<div class="txt'+cls+on+'" role="button" data-v="'+vi+'"'+(many?' title="'+esc(t("Click to copy, or drag to reorder these"))+'"':' title="'+esc(t("Click to copy"))+'"')+'>'+
         '<span class="tag">'+esc(tag)+'</span>'+
         (tag.length>4?'<i class="troom" style="--n:'+tag.length+'"></i>':'')+
-        escFilled(fill(p,m,true))+'</div>';
+        (edDiff&&edDiff[vi]!=null?edDiff[vi]:escFilled(fill(p,m,true)))+'</div>';
       }).join("");
     } else {
       // a one-language card, which the maintenance panel counts: the other language's text is all it has
@@ -85,6 +91,19 @@ function cardBodyHtml(m,i,ctx){
     if(sws && !railActive()) cardH+=swapStripHtml(sws);
     cardH+='</div>';
   return {cardH:cardH, hitBadge:hitBadge, catBadge:catBadge};
+}
+/* UNDER THE EDITION PILL a changed card shows, block by block, the words it had struck beside the words it has now:
+   only where the catalog's own text is on screen and splits into as many blocks as before. null where not. */
+function editionDiffParts(m,L,ps){
+  if(!editionView || m._overridden) return null;
+  const key=cardFieldKey("body",L), was=key?editionWasText(m.id,key):null;
+  if(was==null) return null;
+  const old=parts(Object.assign({},m,{[key]:was}),L);
+  if(old.length!==ps.length) return null;
+  const words={del:t("before:")+" ", ins:t("now:")+" "};
+  // The markers escFilled() turns into spans, mapped the same way.
+  const marks=[[FILL_A,'<span class="fillx">'],[FILL_B,"</span>"],[FILL_M_A,'<span class="fillmiss">'],[FILL_M_B,"</span>"]];
+  return ps.map((p,i)=>editionDiffHtml(fill(old[i],m,true),fill(p,m,true),marks,words));
 }
 /* The card list is outside the language sweep, so every word here goes through t() as it is drawn. */
 function swapStripHtml(sws){
