@@ -375,7 +375,7 @@ function cancelPickTail(){
 }
 
 export {
-  wirePumpKick, pillKey, pillLines, flipPills, animateReorder, captureCards, flipCards, captureSettle, glideSettle,
+  wirePumpKick, eKickPump, E_SPRING_OK, pillKey, pillLines, flipPills, animateReorder, captureCards, flipCards, captureSettle, glideSettle,
   wirePillDrag,
   paintRailSelection, paintIntentRings,
   schedulePickTail,

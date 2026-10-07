@@ -3569,7 +3569,8 @@ body.e-lanes #pillsSlot.pills-anim{display:block}
 .ln-cols .cat-ic{flex:none;width:14px;height:14px;margin:0}
 .ln-sent .cstamp{flex:none;display:inline-flex;color:var(--warn)}
 .ln-now{grid-column:2;margin:0}
-.ln-next{grid-column:3;display:grid;gap:16px;align-content:start}
+/* One track no wider than the lane: left to its rows' longest line, Next ran off a narrow window. */
+.ln-next{grid-column:3;display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-content:start}
 .ln-row{margin:0}
 .ln-txt,.ln-blk{padding-right:16px}
 /* The clamp is on the text and not the slab, whose padding would show the start of a fourth line. */
@@ -3597,6 +3598,27 @@ body.e-lanes #pillsSlot.pills-anim{display:block}
 .ln-find input{font:14px var(--sans);padding:8px 10px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
   background:var(--field);color:var(--ink);outline:none}
 .ln-find input:focus{border-color:var(--accent)}
+.ln-ghost{position:absolute;margin:0;pointer-events:none;z-index:1}
+.ln-trail{display:none}
+/* Where three lanes would not fit, Sent folds into a trail above, and Now and Next share the width.
+   The lanes set their rows inline, so the fold's rows win by importance. */
+@media (max-width:999px){
+  .ln-trail{display:flex;align-items:center;min-width:0;margin:-4px 2px 14px}
+  .ln-crumb{display:inline-flex;align-items:center;gap:6px;flex:0 1 auto;min-width:0;padding:3px 10px 3px 8px;border-radius:999px;
+    background:var(--panel-raised);box-shadow:0 0 0 1px var(--line);font-size:12.5px;color:var(--ink)}
+  .ln-crumb .ctitle{font-size:12.5px}
+  .ln-crumb .cat-ic{flex:none;width:13px;height:13px;margin:0}
+  .ln-crumb .cstamp{flex:none;display:inline-flex;color:var(--warn)}
+  .ln-crumb+.ln-crumb,.ln-crumb.ln-older{margin-left:18px;position:relative}
+  .ln-crumb+.ln-crumb::before,.ln-crumb.ln-older::before{content:"";position:absolute;left:-15px;top:50%;width:12px;height:1.6px;background:var(--accent)}
+  .ln-crumb.ln-older::before{background:none;border-top:1.6px dotted var(--dim)}
+  .ln-crumb:last-child{box-shadow:0 0 0 1.6px var(--accent)}
+  .ln-cols{grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);column-gap:28px;grid-template-rows:auto auto 1fr!important}
+  .ln-h1,.ln-sent{display:none}
+  .ln-h2,.ln-now{grid-column:1}
+  .ln-h3,.ln-next{grid-column:2}
+  .ln-now,.ln-next{grid-row:2!important}
+}
 #sampleMark{position:fixed;inset:0;z-index:49;pointer-events:none;overflow:hidden;
   display:flex;align-items:center;justify-content:center}
 #sampleMark b{transform:rotate(-22deg);white-space:nowrap;text-transform:uppercase;
@@ -7196,6 +7218,10 @@ What you type stays in this browser only.`;
     "Sent": "Wysłane",
     "Now": "Teraz",
     "then: {LIST}": "potem: {LIST}",
+    "often": "często",
+    "One of the cards this desk has used most lately": "Jedna z kart ostatnio najczęściej używanych na tym stanowisku",
+    "To choose from next: {N}.": "Dalej do wyboru: {N}.",
+    "What comes next is chosen with Add a reply.": 'Następną odpowiedź wybiera się przyciskiem "Dodaj odpowiedź".',
     "Cards or the conversation's path": "Karty albo ścieżka rozmowy",
     "Switch between the cards and the conversation's path while nothing is being typed": "Przełącza między kartami a ścieżką rozmowy, gdy nic nie jest wpisywane",
     "path": "ścieżka",
@@ -10040,6 +10066,7 @@ What you type stays in this browser only.`;
     initTabs: () => initTabs,
     noteActive: () => noteActive,
     saveTabSession: () => saveTabSession,
+    sayLive: () => sayLive,
     scheduleTabSave: () => scheduleTabSave,
     setTabBeads: () => setTabBeads,
     stepTab: () => stepTab,
@@ -10961,6 +10988,9 @@ What you type stays in this browser only.`;
     if (!activeSaid) return;
     const now = activeNow(), words = activeWords(activeSaid, now);
     activeSaid = now;
+    sayLive(words);
+  }
+  function sayLive(words) {
     const out = document.getElementById("eSay");
     if (!words || !out) return;
     if (out.textContent === words) {
@@ -16104,9 +16134,11 @@ What you type stays in this browser only.`;
   // src/modules/paint.js
   var paint_exports = {};
   __export(paint_exports, {
+    E_SPRING_OK: () => E_SPRING_OK,
     animateReorder: () => animateReorder,
     captureCards: () => captureCards,
     captureSettle: () => captureSettle,
+    eKickPump: () => eKickPump,
     flipCards: () => flipCards,
     flipPills: () => flipPills,
     glideSettle: () => glideSettle,
@@ -26237,8 +26269,8 @@ What you type stays in this browser only.`;
     }
     const k = Math.max(0, Math.min(ps.length - 1, vi | 0));
     withAgentName(ps[k], () => {
-      bumpUseCount(m.id, l);
       copy(fill(ps[k], m, 0, l), copiedToastMsg(m, l, k, ps.length), cardCommits(m));
+      bumpUseCount(m.id, l);
       eNoteRecent(m.id, k);
     }, anchor);
     return true;
@@ -26653,7 +26685,7 @@ What you type stays in this browser only.`;
     if (dockEl) dockEl.hidden = true;
   }
   function copyNextReply(k, anchor, other) {
-    const r = dockNow().rows.filter((x) => !lanesShown() || !x.used)[k];
+    const r = dockNow().rows[k];
     if (!r) return false;
     copyCardPart(r.id, 0, anchor || dockFab(), other);
     return true;
@@ -26784,6 +26816,7 @@ What you type stays in this browser only.`;
       syncPillsCollapse();
     });
     if (!want) {
+      finishWalk();
       el.hidden = true;
       el.innerHTML = "";
       laneRows = [];
@@ -26797,12 +26830,12 @@ What you type stays in this browser only.`;
     const prior = path.slice(0, -1).filter((id) => live.has(id));
     const sent = prior.slice(-SENT_SHOWN);
     const fold = nowCard ? nextFoldState(nowCard, baseCard(nowCard.id), pack.overrides && pack.overrides[nowCard.id], live) : null;
-    const rows = (fold ? fold.rows.map((e) => ({ id: e.to, learnt: false, n: 0 })) : []).concat(now.rows.filter((r) => r.learnt));
+    const rows = (fold ? fold.rows.map((e) => ({ id: e.to, learnt: false, n: 0 })) : []).concat(now.rows.filter((r) => r.learnt || r.used));
     const after = rows.map((r) => dockList(r.id, live, statsLearntAfter(pack, r.id), new Set(path.concat(r.id))));
     const key = [
       now.tab,
       path.join(","),
-      rows.map((r) => r.id + (r.learnt ? "~" : "")).join(","),
+      rows.map((r) => r.id + (r.learnt ? "~" : r.used ? "+" : "")).join(","),
       fold && fold.own ? "own" : "",
       after.map((a) => a.map((x) => x.id).join("+")).join("/"),
       lang,
@@ -26825,9 +26858,10 @@ What you type stays in this browser only.`;
       const n = st.live.get(x.id);
       return n ? cardTitle(n) : "";
     }).filter(Boolean);
-    const grip = r.learnt ? "" : '<button type="button" class="nx-grip" title="' + esc(t("Drag to reorder")) + '" aria-label="' + esc(t("Drag to reorder")) + '"></button>';
-    const act = r.learnt ? '<button type="button" class="ln-keep" title="' + esc(t("Add it to the list")) + '" aria-label="' + esc(t("Add it to the list")) + '">' + ICON_PLUS + "</button>" : '<button type="button" class="nx-x" title="' + esc(t("Take it off the list")) + '" aria-label="' + esc(t("Take it off the list")) + '">' + ICON_X + "</button>";
-    return '<div class="card ln-row' + (i === laneMark ? " on" : "") + '" data-k="' + i + '" data-to="' + esc(r.id) + '"' + (slot >= 0 ? ' data-ec="' + slot + '"' : "") + (r.learnt ? ' data-learnt=""' : "") + '><div class="chead">' + grip + (key && key !== "-" ? '<kbd class="ln-key">' + esc(key) + "</kbd>" : "") + laneTitleHtml(m) + (r.learnt ? '<span class="nd-learnt" title="' + esc(t("Sent after this card {N} times in the last four weeks").replace("{N}", String(r.n))) + '">' + esc(t("learnt")) + "</span>" : "") + '<span class="ln-acts">' + act + '</span></div><div class="txt ln-txt' + (i === laneMark ? " sel" : "") + '" role="button"><span class="ln-clamp">' + esc(laneBody(m, 0).replace(/\s+/g, " ").trim()) + "</span></div>" + (then.length ? '<div class="ln-then">' + esc(t("then: {LIST}").replace("{LIST}", then.join(LN_DOT))) + "</div>" : "") + "</div>";
+    const off = r.learnt || r.used;
+    const grip = off ? "" : '<button type="button" class="nx-grip" title="' + esc(t("Drag to reorder")) + '" aria-label="' + esc(t("Drag to reorder")) + '"></button>';
+    const act = off ? '<button type="button" class="ln-keep" title="' + esc(t("Add it to the list")) + '" aria-label="' + esc(t("Add it to the list")) + '">' + ICON_PLUS + "</button>" : '<button type="button" class="nx-x" title="' + esc(t("Take it off the list")) + '" aria-label="' + esc(t("Take it off the list")) + '">' + ICON_X + "</button>";
+    return '<div class="card ln-row' + (i === laneMark ? " on" : "") + '" data-k="' + i + '" data-to="' + esc(r.id) + '"' + (slot >= 0 ? ' data-ec="' + slot + '"' : "") + (r.learnt ? ' data-learnt=""' : r.used ? ' data-used=""' : "") + '><div class="chead">' + grip + (key && key !== "-" ? '<kbd class="ln-key">' + esc(key) + "</kbd>" : "") + laneTitleHtml(m) + (r.learnt ? '<span class="nd-learnt" title="' + esc(t("Sent after this card {N} times in the last four weeks").replace("{N}", String(r.n))) + '">' + esc(t("learnt")) + "</span>" : r.used ? '<span class="nd-learnt" title="' + esc(t("One of the cards this desk has used most lately")) + '">' + esc(t("often")) + "</span>" : "") + '<span class="ln-acts">' + act + '</span></div><div class="txt ln-txt' + (i === laneMark ? " sel" : "") + '" role="button"><span class="ln-clamp">' + esc(laneBody(m, 0).replace(/\s+/g, " ").trim()) + "</span></div>" + (then.length ? '<div class="ln-then">' + esc(t("then: {LIST}").replace("{LIST}", then.join(LN_DOT))) + "</div>" : "") + "</div>";
   }
   function laneEditHtml(st) {
     const own = st.fold && st.fold.own ? '<div class="ln-src"><span class="nx-who own">' + esc(t("Your list")) + '</span><button type="button" class="btn ln-back">' + esc(t("Back to the catalog's")) + "</button></div>" : "";
@@ -26843,7 +26877,8 @@ What you type stays in this browser only.`;
     let blk = "";
     for (let i = 0; i < blocks; i++) blk += '<div class="txt ln-blk" role="button" data-b="' + i + '">' + esc(laneBody(m, i)) + "</div>";
     const rows = st.rows.map((r, i) => laneRowHtml(st, r, i)).join("");
-    return head + '<div class="ln-cols" style="grid-template-rows:auto repeat(' + k + ',auto) auto 1fr"><div class="ln-h ln-h1">' + esc(t("Sent")) + '</div><div class="ln-h ln-h2">' + esc(t("Now")) + '</div><div class="ln-h ln-h3">' + esc(t("Next")) + "</div>" + st.sent.map((id, i) => {
+    const trail = k ? '<div class="ln-trail" role="list" aria-label="' + esc(t("Sent")) + '">' + st.sent.map((id, i) => '<span class="ln-crumb' + (i === 0 && st.older ? " ln-older" : "") + '" role="listitem">' + laneTitleHtml(st.live.get(id)) + "</span>").join("") + "</div>" : "";
+    return head + trail + '<div class="ln-cols" style="grid-template-rows:auto repeat(' + k + ',auto) auto 1fr"><div class="ln-h ln-h1">' + esc(t("Sent")) + '</div><div class="ln-h ln-h2">' + esc(t("Now")) + '</div><div class="ln-h ln-h3">' + esc(t("Next")) + "</div>" + st.sent.map((id, i) => {
       const s = st.live.get(id);
       return '<div class="ln-sent' + (i === 0 && st.older ? " ln-older" : "") + '" style="grid-row:' + (i + 2) + '">' + laneTitleHtml(s) + "</div>";
     }).join("") + '<div class="card ln-now"' + (slot >= 0 ? ' data-ec="' + slot + '"' : "") + ' style="grid-row:' + (k + 2) + '"><div class="chead">' + laneTitleHtml(m) + "</div>" + blk + '</div><div class="ln-next" style="grid-row:2 / span ' + (k + 2) + '">' + rows + laneEditHtml(st) + '</div><svg class="ln-wires" aria-hidden="true"></svg></div>';
@@ -26856,7 +26891,7 @@ What you type stays in this browser only.`;
     if (!now || !nh) return;
     const n = at(now.getBoundingClientRect()), h = at(nh.getBoundingClientRect()), hy = (h.t + h.b) / 2;
     let d = "", dots = "";
-    const sent = [...cols.querySelectorAll(".ln-sent")].map((e) => at(e.getBoundingClientRect()));
+    const sent = [...cols.querySelectorAll(".ln-sent")].filter((e) => e.getClientRects().length).map((e) => at(e.getBoundingClientRect()));
     if (sent.length) {
       const x = sent[0].l + 4, y0 = (sent[0].t + sent[0].b) / 2;
       d += '<path class="ln-w" d="M' + x + " " + y0 + "V" + hy + "H" + (h.l - 10) + '"/>';
@@ -26873,29 +26908,97 @@ What you type stays in this browser only.`;
       const r = at(rh.getBoundingClientRect()), y1 = (r.t + r.b) / 2, x1 = r.l - 8;
       const y0 = n.t + 18 + i * Math.min(14, Math.max(0, n.b - n.t - 36) / Math.max(1, rows.length - 1)), x0 = n.r;
       const dx = Math.max(12, (x1 - x0) / 2);
-      d += '<path class="ln-w' + (row.hasAttribute("data-learnt") ? " ln-w-learnt" : "") + '" d="M' + x0 + " " + y0 + "C" + (x0 + dx) + " " + y0 + " " + (x1 - dx) + " " + y1 + " " + x1 + " " + y1 + '"/>';
+      d += '<path class="ln-w' + (row.hasAttribute("data-learnt") || row.hasAttribute("data-used") ? " ln-w-learnt" : "") + '" d="M' + x0 + " " + y0 + "C" + (x0 + dx) + " " + y0 + " " + (x1 - dx) + " " + y1 + " " + x1 + " " + y1 + '"/>';
       dots += '<circle class="ln-dot" cx="' + x1 + '" cy="' + y1 + '" r="3.5"/>';
     });
     svg.setAttribute("width", String(cols.scrollWidth));
     svg.setAttribute("height", String(cols.scrollHeight));
     svg.innerHTML = d + dots;
   }
+  var walkRuns = [];
+  var walkGhost = null;
+  var walkT = 0;
+  var WALK_FAN_MS = 50;
+  var WALK_FAN_MAX = 4;
+  function finishWalk() {
+    clearTimeout(walkT);
+    walkT = 0;
+    walkRuns.forEach((a) => {
+      try {
+        a.finish();
+      } catch (_) {
+      }
+    });
+    walkRuns = [];
+    if (walkGhost) {
+      walkGhost.remove();
+      walkGhost = null;
+    }
+  }
+  function walkFrom(el, id) {
+    const now = el.querySelector(".ln-now");
+    if (!now || mgReduceMotion()) return null;
+    const row = el.querySelector('.ln-row[data-to="' + cssEsc(id) + '"]');
+    return { now, at: now.getBoundingClientRect(), row: row ? row.getBoundingClientRect() : null };
+  }
+  function walkTo(el, was, say) {
+    const cols = el.querySelector(".ln-cols"), now = cols && cols.querySelector(".ln-now");
+    if (!now) return false;
+    const sent = [...el.querySelectorAll(".ln-sent, .ln-crumb")].filter((e) => e.getClientRects().length).pop();
+    const o = cols.getBoundingClientRect(), n = now.getBoundingClientRect(), s = sent ? sent.getBoundingClientRect() : null, a = was.at, r = was.row;
+    const fan = [...cols.querySelectorAll(".ln-next > *")], wires = cols.querySelector(".ln-wires");
+    const travel = { duration: M_MS.travel, easing: E_SPRING_OK ? E_SPRING : E_EASE };
+    const run = (e, k, t2) => {
+      walkRuns.push(e.animate(k, t2));
+    };
+    const g = walkGhost = was.now;
+    g.className = g.className.replace(/\bln-now\b/, "ln-ghost");
+    g.setAttribute("style", "left:" + (a.left - o.left) + "px;top:" + (a.top - o.top) + "px;width:" + a.width + "px");
+    g.setAttribute("aria-hidden", "true");
+    g.inert = true;
+    cols.appendChild(g);
+    run(g, s ? [{ transformOrigin: "0 0", transform: "none", opacity: 1 }, { transformOrigin: "0 0", transform: "translate(" + Math.round(s.left - a.left) + "px," + Math.round(s.top - a.top) + "px) scale(" + Math.min(1, s.width / a.width) + "," + s.height / a.height + ")", opacity: 0 }] : [{ opacity: 1 }, { opacity: 0 }], Object.assign({ fill: "forwards" }, travel));
+    if (sent) run(sent, [{ opacity: 0 }, { opacity: 1 }], { duration: M_MS.reveal, delay: M_MS.travel * 0.6, easing: E_EASE, fill: "backwards" });
+    run(now, r ? [{ transformOrigin: "0 0", transform: "translate(" + Math.round(r.left - n.left) + "px," + Math.round(r.top - n.top) + "px) scale(" + r.width / n.width + "," + r.height / n.height + ")" }, { transformOrigin: "0 0", transform: "none" }] : [{ opacity: 0, transform: "translateY(8px) scale(.985)" }, { opacity: 1, transform: "none" }], travel);
+    fan.forEach((e, i) => run(
+      e,
+      [{ opacity: 0, transform: "translateX(-14px)" }, { opacity: 1, transform: "none" }],
+      { duration: M_MS.move, delay: M_MS.travel + WALK_FAN_MS * Math.min(i, WALK_FAN_MAX), easing: E_EASE, fill: "backwards" }
+    ));
+    if (wires) run(wires, [{ opacity: 0 }, { opacity: 1 }], { duration: M_MS.reveal, delay: M_MS.travel, easing: E_EASE, fill: "backwards" });
+    eKickPump();
+    walkT = setTimeout(() => {
+      walkT = 0;
+      finishWalk();
+      say();
+    }, M_MS.travel + WALK_FAN_MS * WALK_FAN_MAX + M_MS.move);
+    return true;
+  }
+  function laneStepWords(n) {
+    return n ? t("To choose from next: {N}.").replace("{N}", String(n)) : t("What comes next is chosen with Add a reply.");
+  }
   function drawLanes(arrived) {
     const el = lanesEl();
     if (!el || !lanesOn) return;
     const st = laneState();
     if (st.key === laneKey && arrived !== true) return;
+    finishWalk();
+    const was = arrived === true && st.nowCard ? walkFrom(el, String(st.nowCard.id)) : null;
     if (st.key !== laneKey) laneMark = -1;
     laneKey = st.key;
     laneRows = st.rows;
     laneFrom = st.nowCard ? String(st.nowCard.id) : null;
-    el.innerHTML = '<div class="ln-wrap' + (laneFresh ? " ln-open" : "") + (arrived === true ? " ln-step" : "") + '">' + lanesHtml(st) + "</div>";
+    el.innerHTML = '<div class="ln-wrap' + (laneFresh ? " ln-open" : "") + (arrived === true && !was ? " ln-step" : "") + '">' + lanesHtml(st) + "</div>";
     laneFresh = false;
     el.hidden = false;
     el.setAttribute("role", "region");
     el.setAttribute("aria-label", t("This conversation"));
     markCutText(el);
     drawWires();
+    if (arrived === true && st.nowCard) {
+      const say = () => sayLive(laneStepWords(st.rows.length));
+      if (!was || !walkTo(el, was, say)) say();
+    }
     if (laneFind) drawLaneHits();
     const f = laneFocus;
     laneFocus = null;
@@ -26948,7 +27051,7 @@ What you type stays in this browser only.`;
     if (/^navPill/.test(id)) return true;
     return void 0;
   }
-  var laneListIds = () => laneRows.filter((r) => !r.learnt).map((r) => r.id);
+  var laneListIds = () => laneRows.filter((r) => !r.learnt && !r.used).map((r) => r.id);
   function writeLaneList(ids, said) {
     const id = lanesOn ? laneFrom : null, card = id != null ? (cards || []).find((m) => m && String(m.id) === id) : null;
     if (!card) return false;
@@ -27100,7 +27203,7 @@ What you type stays in this browser only.`;
         laneDrag.moved = true;
         laneDrag.row.classList.add("ln-drag");
       }
-      const list2 = [...el.querySelectorAll(".ln-row:not([data-learnt])")], others = list2.filter((r) => r !== laneDrag.row);
+      const list2 = [...el.querySelectorAll(".ln-row:not([data-learnt]):not([data-used])")], others = list2.filter((r) => r !== laneDrag.row);
       let to = 0;
       others.forEach((r) => {
         const q = r.getBoundingClientRect();
@@ -27116,7 +27219,7 @@ What you type stays in this browser only.`;
       laneDrag = null;
       if (!d || !d.moved) return;
       d.row.classList.remove("ln-drag");
-      const order = [...el.querySelectorAll(".ln-row:not([data-learnt])")].map((r) => r.dataset.to), ids = laneListIds();
+      const order = [...el.querySelectorAll(".ln-row:not([data-learnt]):not([data-used])")].map((r) => r.dataset.to), ids = laneListIds();
       if (order.join("\n") !== ids.join("\n")) writeLaneList(order);
     };
     ["pointerup", "pointercancel", "lostpointercapture"].forEach((k) => el.addEventListener(k, up));

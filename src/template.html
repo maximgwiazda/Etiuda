@@ -3569,7 +3569,8 @@ body.e-lanes #pillsSlot.pills-anim{display:block}
 .ln-cols .cat-ic{flex:none;width:14px;height:14px;margin:0}
 .ln-sent .cstamp{flex:none;display:inline-flex;color:var(--warn)}
 .ln-now{grid-column:2;margin:0}
-.ln-next{grid-column:3;display:grid;gap:16px;align-content:start}
+/* One track no wider than the lane: left to its rows' longest line, Next ran off a narrow window. */
+.ln-next{grid-column:3;display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-content:start}
 .ln-row{margin:0}
 .ln-txt,.ln-blk{padding-right:16px}
 /* The clamp is on the text and not the slab, whose padding would show the start of a fourth line. */
@@ -3597,6 +3598,27 @@ body.e-lanes #pillsSlot.pills-anim{display:block}
 .ln-find input{font:14px var(--sans);padding:8px 10px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
   background:var(--field);color:var(--ink);outline:none}
 .ln-find input:focus{border-color:var(--accent)}
+.ln-ghost{position:absolute;margin:0;pointer-events:none;z-index:1}
+.ln-trail{display:none}
+/* Where three lanes would not fit, Sent folds into a trail above, and Now and Next share the width.
+   The lanes set their rows inline, so the fold's rows win by importance. */
+@media (max-width:999px){
+  .ln-trail{display:flex;align-items:center;min-width:0;margin:-4px 2px 14px}
+  .ln-crumb{display:inline-flex;align-items:center;gap:6px;flex:0 1 auto;min-width:0;padding:3px 10px 3px 8px;border-radius:999px;
+    background:var(--panel-raised);box-shadow:0 0 0 1px var(--line);font-size:12.5px;color:var(--ink)}
+  .ln-crumb .ctitle{font-size:12.5px}
+  .ln-crumb .cat-ic{flex:none;width:13px;height:13px;margin:0}
+  .ln-crumb .cstamp{flex:none;display:inline-flex;color:var(--warn)}
+  .ln-crumb+.ln-crumb,.ln-crumb.ln-older{margin-left:18px;position:relative}
+  .ln-crumb+.ln-crumb::before,.ln-crumb.ln-older::before{content:"";position:absolute;left:-15px;top:50%;width:12px;height:1.6px;background:var(--accent)}
+  .ln-crumb.ln-older::before{background:none;border-top:1.6px dotted var(--dim)}
+  .ln-crumb:last-child{box-shadow:0 0 0 1.6px var(--accent)}
+  .ln-cols{grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);column-gap:28px;grid-template-rows:auto auto 1fr!important}
+  .ln-h1,.ln-sent{display:none}
+  .ln-h2,.ln-now{grid-column:1}
+  .ln-h3,.ln-next{grid-column:2}
+  .ln-now,.ln-next{grid-row:2!important}
+}
 #sampleMark{position:fixed;inset:0;z-index:49;pointer-events:none;overflow:hidden;
   display:flex;align-items:center;justify-content:center}
 #sampleMark b{transform:rotate(-22deg);white-space:nowrap;text-transform:uppercase;

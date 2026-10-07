@@ -22,7 +22,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 20;
+const EXPECTED = 21;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -282,6 +282,13 @@ try {
         "3b Ctrl+2 copies the second, its toast plain: " + JSON.stringify(b));
       check(c.ret === false && !c.copied && c.last === "c-from8",
         "3c control: Ctrl+3 where nothing waits copies nothing, answers false so the key falls through, and the path stays: " + JSON.stringify(c));
+      /* Board 863: the copy is made at the press, before the step the lanes walk and the button pulses on. */
+      const order = [];
+      navigator.clipboard = { writeText: () => { order.push("copy after " + last()); return { then(ok) { ok(); } }; } };
+      TB.watchTabPath(() => order.push("step to " + last()));
+      try { ND.copyNextReply(1); } finally { TB.watchTabPath(null); }
+      check(order.join(", ") === "copy after c-from8, step to c-plain8",
+        "3j the copy is made before the conversation steps on: " + JSON.stringify(order));
     } finally {
       navigator.clipboard = null;
       fabEl.remove(); delete els["#toast"];
