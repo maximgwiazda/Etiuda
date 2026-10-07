@@ -3242,6 +3242,71 @@ const CARD_B = {
   }
 }
 
+/* ------------------------------------------------------------------ card-editor.js, the override's examples
+   Beside each form of address the override shows what it writes for two placeholder customers. The oracle is fill():
+   a card given that form and those boxes, filled for each customer, whose gender the desk reads from the name. The
+   markup is the real openCardEditor's on a stand-in document; the live pass is the editor's own sync, which runs at
+   open, here against boxes that say something other than the card. An invented card only; every global set is put back. */
+{
+  const Dom = await import(MOD("dom.js"));
+  const AS = await import(MOD("app-state.js"));
+  const CE = await import(MOD("card-editor.js"));
+  const IT = await import(MOD("intent-text.js"));
+  const CF = await import(MOD("card-fields.js"));
+  const hadDoc = globalThis.document, hadCards = AS.cards;
+  const quiet = { toggle() {}, add() {}, remove() {}, contains() { return false; } };
+  const stub = () => ({ hidden: true, style: {}, classList: quiet, dataset: {}, setAttribute() {}, getAttribute() { return null; },
+    removeAttribute() {}, addEventListener() {}, querySelector() { return null; }, querySelectorAll() { return []; }, contains() { return false; },
+    getBoundingClientRect() { return { left: 0, top: 0, width: 0, height: 0 }; }, appendChild() {}, focus() {}, getContext() { return {}; },
+    value: "" });
+  const DOT = " " + String.fromCharCode(0xb7) + " ", NAMES = ["Jan Nowak", "Kasia Nowak"];
+  const ORDER = L => CF.PAX_ADDRESS_FORMS[L].filter(k => k !== "none").concat([""], CF.PAX_ADDRESS_FORMS[L].filter(k => k === "none"));
+  const card = { id: "c-px-a", c: "gen", t: "Invented", en: "Hello, {PAX}.", pl: "Dzień dobry, {PAX}.", paxOwn: 1, firstOnly: 1, paxVoc: 1 };
+  /* What the card itself says in L under form k with these boxes, for each customer, joined as the editor joins them. */
+  const says = (L, k, b) => NAMES.map(n => { Dom.pax.value = n;
+    return IT.fill("{PAX}", Object.assign({}, card, b, { [CF.PAX_ADDRESS_KEY[L]]: k }), false, L); }).filter(Boolean).join(DOT);
+  /* Opens the editor with the two boxes on screen ticked or not, and returns its markup's examples and the live ones. */
+  const open = (ticked) => {
+    let drawn = "";
+    const live = ["pl", "en"].flatMap(L => ORDER(L).map(k => ({ dataset: { l: L, k }, textContent: "unset" })));
+    const els = { "#modalCard": Object.defineProperty(stub(), "innerHTML", { get() { return drawn; }, set(v) { drawn = String(v); } }),
+      "#meFirst": Object.assign(stub(), { checked: ticked }), "#meVoc": Object.assign(stub(), { checked: ticked }), "#pax": { value: "" } };
+    globalThis.document = { querySelector: s => els[s] || (els[s] = stub()), getElementById: id => els["#" + id] || null,
+      querySelectorAll: s => s === "#meOwnBody .mf-ex" ? live : [],
+      createElement: () => stub(), createRange: () => stub(), addEventListener() {}, activeElement: null,
+      body: { classList: quiet }, documentElement: { style: { setProperty() {} }, classList: quiet } };
+    Dom.grabDom();
+    CE.openCardEditor("c-px-a");
+    const marked = {};
+    [...drawn.matchAll(/<span class="mf-ex"[^>]*data-l="([a-z]+)" data-k="([A-Za-z]*)">([^<]*)<\/span>/g)].forEach(m => { marked[m[1] + ":" + m[2]] = m[3]; });
+    return { marked, live: Object.fromEntries(live.map(e => [e.dataset.l + ":" + e.dataset.k, e.textContent])) };
+  };
+  try {
+    AS.setCards([card]);
+    /* Read once, inside the first check, so a throw is a red leg rather than the end of the file. */
+    let got = null;
+    const run = () => { if (got) return got;
+      const want = b => Object.fromEntries(["pl", "en"].flatMap(L => ORDER(L).map(k => [L + ":" + k, says(L, k, b)])));
+      return (got = { off: open(false), on: open(true), ticked: want({ firstOnly: 1, paxVoc: 1 }), unticked: want({ firstOnly: 0, paxVoc: 0 }) }); };
+    const R = run;
+    check("card-editor.js", "1007pl1 each form of the override is drawn beside what the card then says for Jan Nowak and Kasia Nowak, in both languages",
+      () => eq(JSON.stringify(R().off.marked), JSON.stringify(R().ticked)));
+    check("card-editor.js", "1007pl2 the words are fill()'s own: the titled forms follow each name's gender, the name is declined, no name writes nothing",
+      () => { const w = R().ticked;
+        return eq([w["pl:titleFirst"], w["pl:titleSurname"], w["pl:"], w["pl:none"], w["en:titleSurname"], w["en:"]].join("|"),
+          ["Panie Janie", "Pani Kasiu"].join(DOT) + "|" + ["Panie Nowak", "Pani Nowak"].join(DOT) + "|" + ["Janie", "Kasiu"].join(DOT)
+          + "||" + ["Mr Nowak", "Ms Nowak"].join(DOT) + "|" + ["Jan", "Kasia"].join(DOT)); });
+    check("card-editor.js", "1007pl3 the examples follow the two boxes as they stand on screen, not as the card was saved",
+      () => eq(JSON.stringify(R().off.live), JSON.stringify(R().unticked)));
+    check("card-editor.js", "1007pl4 CONTROL: with the boxes as the card holds them, the live pass writes what the markup drew, and the two box states differ",
+      () => eq([JSON.stringify(R().on.live) === JSON.stringify(R().on.marked), JSON.stringify(R().ticked) !== JSON.stringify(R().unticked)].join(","), "true,true"));
+  } finally {
+    AS.setCards(hadCards);
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+    if (hadDoc !== undefined) Dom.grabDom();
+  }
+}
+
 /* ------------------------------------------------------------------ card-margin.js, the card editor's margin
    The fields read as chips and the two things a desk can check alone (Claudette's words of 2026-10-07, section C).
    The oracles: fill() in intent-text.js for which fields are filled, read as text; an unescape written here for the

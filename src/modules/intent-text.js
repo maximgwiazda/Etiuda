@@ -13,7 +13,7 @@ import { pax, roleSel } from "./dom.js";
 import { agentName, agentParts } from "./agent.js";
 import { lang, intentIdxs, intentText, cards } from "./app-state.js";
 import { catalogVariables, catalogVariable, varBuiltin, varResolve, varInlinePick, VAR_TOKEN_RE,
-  VAR_DAYPARTS, varAddressRules } from "./variables.js";
+  VAR_DAYPARTS, varAddressRules, nameGender } from "./variables.js";
 import { custGender } from "./gender-drum.js";
 
 // Resolve {INTENT} for a card: a chip selection is an index (the clause follows the
@@ -163,21 +163,43 @@ const FILL_A="\u0001", FILL_B="\u0002", FILL_M_A="\u0003", FILL_M_B="\u0004",
 const Z_TOKEN=/\{Z\}([ \t]*)/g;
 /* EVERYTHING A RULE CAN ASK AND EVERY WORD IT CAN WRITE, read once per fill and only when a token
    needs it. The time is the copy's, and the gender the glyph's. */
-function varFacts(m,L){
-  const d=new Date(), mo=d.getMonth()+1, da=d.getDate();
-  const full=formatPaxName(pax.value), words=full?full.split(" "):[];
+function paxNameFacts(full,L){
+  const words=full?full.split(" "):[];
   const first=words[0]||"", surname=words.length>1?words[words.length-1]:"";
   const firstVoc=(L==="pl"&&first)?plVocative(first):first;
+  return { name:full, first:first, surname:surname, surnameOr:surname||firstVoc, firstVoc:firstVoc };
+}
+function varFacts(m,L){
+  const d=new Date(), mo=d.getMonth()+1, da=d.getDate();
   const a=agentParts(agentName());
-  return { minutes:d.getHours()*60+d.getMinutes(), weekday:String(d.getDay()||7),
+  return Object.assign(paxNameFacts(formatPaxName(pax.value),L), { minutes:d.getHours()*60+d.getMinutes(), weekday:String(d.getDay()||7),
     date:(mo<10?"0":"")+mo+"-"+(da<10?"0":"")+da, daypart:VAR_DAYPARTS[dayPart()], lang:L,
-    name:full, first:first, surname:surname, surnameOr:surname||firstVoc, firstVoc:firstVoc,
     gender:custGender().v,
     intentIds:intentIdxs.map(i=>String(intentIdAt(i)).replace(/^t:/,"")),
     intentSet:intentIdxs.length>0||!!intentText.trim(), intents:intentIdxs.length,
     intentWords:intentFirst(L), intentsWords:intentFor(L), topic:commentPartTopic(L),
     action:commentPartCmt(L,noActionText(L)), agent:agentName(), agentDisplay:a.display, init:a.init,
-    role:roleSel.value.trim() };
+    role:roleSel.value.trim() });
+}
+/* WHAT A CARD'S OWN ADDRESS WRITES FOR {PAX}: its form, as the rules Studio writes for that choice, else
+   the name shaped by its two boxes. F gives the facts and is asked only by a form. */
+function paxOwnWords(n,m,L,F){
+  const form=paxAddressOf(m,L);
+  if(form) return varResolve({rules:varAddressRules(L==="pl"?form:"first", L==="en"?form:"first")},F(),L,L).text;
+  if(m.firstOnly) n=n.split(" ")[0];
+  if(L==="pl" && paxVocOn(m)){
+    const sp=n.indexOf(" ");
+    n = sp<0 ? plVocative(n) : plVocative(n.slice(0,sp))+n.slice(sp);
+  }
+  return n;
+}
+/* Etiuda's own address, as a card's would be written: the first name, in the vocative. */
+const PAX_ETIUDA={firstOnly:1, paxVoc:1};
+/* The editor's example: what a card's override writes for this name, the gender read from it as the
+   desk reads it before the glyph is turned. */
+function paxOwnExample(m,L,name){
+  const n=formatPaxName(name);
+  return n ? paxOwnWords(n,m,L,()=>Object.assign(paxNameFacts(n,L),{gender:nameGender(n)})) : "";
 }
 function varMark(name){
   switch(name){
@@ -276,16 +298,8 @@ function fill(s,m,mark,inL){
      no-name branch below. */
   let n=formatPaxName(pax.value);
   if(n && m){
-    const own=paxOwnOn(m), def=!own && catalogVariable("PAX"), form=own ? paxAddressOf(m,L) : "";
-    if(def) n=varWritten(def,m,L,facts());
-    else if(form) n=varResolve({rules:varAddressRules(L==="pl"?form:"first", L==="en"?form:"first")},facts(),L,L).text;
-    else{
-      if(own ? m.firstOnly : true) n=n.split(" ")[0];
-      if(L==="pl" && (own ? paxVocOn(m) : true)){
-        const sp=n.indexOf(" ");
-        n = sp<0 ? plVocative(n) : plVocative(n.slice(0,sp))+n.slice(sp);
-      }
-    }
+    const own=paxOwnOn(m), def=!own && catalogVariable("PAX");
+    n = def ? varWritten(def,m,L,facts()) : paxOwnWords(n, own?m:PAX_ETIUDA, L, facts);
   }
   if(n) s=s.replace(/\{PAX\}/g, ()=>M(n,t("PAX")));
   /* No name: drop the token AND the separator that introduced it - "Good morning," not
@@ -455,6 +469,7 @@ export {
   intentPickedLine,
   commentTokensInUse,
   fill,
+  paxOwnExample,
   escFilled,
   expandSearchPlaceholders,
   intentRows,

@@ -3135,16 +3135,20 @@ details.acc[open]>summary .acc-tw{transform:rotate(90deg)}
 /* The language pin, under the Advanced flags. Dimmed rather than hidden while off, for the
    same reason the narrowest-column slider is. */
 .mf-pin{display:flex;align-items:center;gap:10px;margin-top:8px}
-/* The override of {PAX}: off shows where the address comes from, on shows the two boxes, indented
-   under the switch's label. */
+/* The override of {PAX}: off shows where the address comes from; on, its forms take the row below
+   both columns (.mf-own-body). */
 .mf-cols .mf-own{grid-row:span 2;display:flex;flex-direction:column;gap:8px;min-width:0}
 .mf-own .mf-own-off{font:12.5px var(--sans);color:var(--dim);line-height:1.4;padding-left:37px;margin-top:-4px}
-.mf-own .mf-own-on{display:none;flex-direction:column;gap:8px;padding-left:37px}
-.mf-own.on .mf-own-on{display:flex}
 .mf-own.on .mf-own-off{display:none}
-/* A group of forms per language, its name over it in the label tone of the dialog's quiet lines. */
-.mf-own .mf-addr{display:flex;flex-direction:column;gap:6px}
-.mf-own .mf-addr-l{font:12.5px var(--sans);color:var(--dim)}
+/* The two boxes, then a group of forms per language, each form beside what it writes. Subgrids down to
+   the forms, so the examples and the second box stand in the right-hand column of the flags above. */
+.mf-cols .mf-own-body{display:none;grid-column:1/-1;grid-row:5;grid-template-columns:subgrid;row-gap:6px;padding-left:37px}
+.mf-own.on+.mf-own-body{display:grid}
+.mf-own-body .mf-addr{display:grid;grid-column:1/-1;grid-template-columns:subgrid;row-gap:6px;margin-top:4px}
+.mf-own-body .mf-addr-l{grid-column:1/-1;font:12.5px var(--sans);color:var(--dim)}
+.mf-own-body .mf-ex{padding-left:4px;font:13px var(--sans);line-height:1.35;color:var(--dim);white-space:nowrap}
+.mf-own-body label:has(input:checked:not(:disabled))+.mf-ex{color:var(--ink)}
+@media (max-width:560px){ .mf-cols .mf-own-body{grid-row:auto} }
 .mf-switch{appearance:none;-webkit-appearance:none;position:relative;flex:0 0 auto;width:28px;height:16px;
   margin:1px 0 0 3px;border-radius:8px;background:var(--line-strong);outline:none}
 .mf-switch::after{content:"";position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:50%;
@@ -9889,6 +9893,7 @@ What you type stays in this browser only.`;
     intentNavName: () => intentNavName,
     intentPickedLine: () => intentPickedLine,
     intentRows: () => intentRows,
+    paxOwnExample: () => paxOwnExample,
     topicAt: () => topicAt
   });
 
@@ -12106,23 +12111,21 @@ What you type stays in this browser only.`;
   var FILL_M_B = "";
   var FILL_STRIP = /[\u0001\u0002\u0003\u0004]/g;
   var Z_TOKEN = /\{Z\}([ \t]*)/g;
-  function varFacts(m, L) {
-    const d = /* @__PURE__ */ new Date(), mo = d.getMonth() + 1, da = d.getDate();
-    const full = formatPaxName(pax.value), words = full ? full.split(" ") : [];
+  function paxNameFacts(full, L) {
+    const words = full ? full.split(" ") : [];
     const first = words[0] || "", surname = words.length > 1 ? words[words.length - 1] : "";
     const firstVoc = L === "pl" && first ? plVocative(first) : first;
+    return { name: full, first, surname, surnameOr: surname || firstVoc, firstVoc };
+  }
+  function varFacts(m, L) {
+    const d = /* @__PURE__ */ new Date(), mo = d.getMonth() + 1, da = d.getDate();
     const a = agentParts(agentName());
-    return {
+    return Object.assign(paxNameFacts(formatPaxName(pax.value), L), {
       minutes: d.getHours() * 60 + d.getMinutes(),
       weekday: String(d.getDay() || 7),
       date: (mo < 10 ? "0" : "") + mo + "-" + (da < 10 ? "0" : "") + da,
       daypart: VAR_DAYPARTS[dayPart()],
       lang: L,
-      name: full,
-      first,
-      surname,
-      surnameOr: surname || firstVoc,
-      firstVoc,
       gender: custGender().v,
       intentIds: intentIdxs.map((i) => String(intentIdAt(i)).replace(/^t:/, "")),
       intentSet: intentIdxs.length > 0 || !!intentText.trim(),
@@ -12135,7 +12138,22 @@ What you type stays in this browser only.`;
       agentDisplay: a.display,
       init: a.init,
       role: roleSel.value.trim()
-    };
+    });
+  }
+  function paxOwnWords(n, m, L, F) {
+    const form = paxAddressOf(m, L);
+    if (form) return varResolve({ rules: varAddressRules(L === "pl" ? form : "first", L === "en" ? form : "first") }, F(), L, L).text;
+    if (m.firstOnly) n = n.split(" ")[0];
+    if (L === "pl" && paxVocOn(m)) {
+      const sp = n.indexOf(" ");
+      n = sp < 0 ? plVocative(n) : plVocative(n.slice(0, sp)) + n.slice(sp);
+    }
+    return n;
+  }
+  var PAX_ETIUDA = { firstOnly: 1, paxVoc: 1 };
+  function paxOwnExample(m, L, name) {
+    const n = formatPaxName(name);
+    return n ? paxOwnWords(n, m, L, () => Object.assign(paxNameFacts(n, L), { gender: nameGender(n) })) : "";
   }
   function varMark(name) {
     switch (name) {
@@ -12210,16 +12228,8 @@ What you type stays in this browser only.`;
     });
     let n = formatPaxName(pax.value);
     if (n && m) {
-      const own = paxOwnOn(m), def = !own && catalogVariable("PAX"), form = own ? paxAddressOf(m, L) : "";
-      if (def) n = varWritten(def, m, L, facts());
-      else if (form) n = varResolve({ rules: varAddressRules(L === "pl" ? form : "first", L === "en" ? form : "first") }, facts(), L, L).text;
-      else {
-        if (own ? m.firstOnly : true) n = n.split(" ")[0];
-        if (L === "pl" && (own ? paxVocOn(m) : true)) {
-          const sp = n.indexOf(" ");
-          n = sp < 0 ? plVocative(n) : plVocative(n.slice(0, sp)) + n.slice(sp);
-        }
-      }
+      const own = paxOwnOn(m), def = !own && catalogVariable("PAX");
+      n = def ? varWritten(def, m, L, facts()) : paxOwnWords(n, own ? m : PAX_ETIUDA, L, facts);
     }
     if (n) s = s.replace(/\{PAX\}/g, () => M2(n, t("PAX")));
     else s = s.replace(/,?[ \t]*\{PAX\}/g, mark ? " " + MISS(t("PAX")) : "");
@@ -24442,10 +24452,16 @@ What you type stays in this browser only.`;
     if (L === "en") return t("Title and surname");
     return k === "titleFirst" ? t("Pani or Pan, with the first name") : t("Pani or Pan, with the surname");
   }
+  var ME_EXAMPLE_NAMES = ["Jan Nowak", "Kasia Nowak"];
+  function meExample(m, L, k) {
+    const c = Object.assign({}, m);
+    c[PAX_ADDRESS_KEY[L]] = k;
+    return ME_EXAMPLE_NAMES.map((n) => paxOwnExample(c, L, n)).filter(Boolean).join(" · ");
+  }
   function meAddressHtml(m, L) {
     const now = paxAddressOf(m, L), forms = PAX_ADDRESS_FORMS[L];
     const order = forms.filter((k) => k !== "none").concat([""], forms.filter((k) => k === "none"));
-    return '<div class="mf-addr" role="radiogroup" aria-label="' + esc(langEndonym(L)) + '"><span class="mf-addr-l" data-i18n-skip>' + esc(langEndonym(L)) + "</span>" + order.map((k) => '<label><input type="radio" name="meAddr_' + L + '" value="' + k + '"' + (k === now ? " checked" : "") + "> " + esc(meAddressName(L, k)) + "</label>").join("") + "</div>";
+    return '<div class="mf-addr" role="radiogroup" aria-label="' + esc(langEndonym(L)) + '"><span class="mf-addr-l" data-i18n-skip>' + esc(langEndonym(L)) + "</span>" + order.map((k) => '<label><input type="radio" name="meAddr_' + L + '" value="' + k + '"' + (k === now ? " checked" : "") + "> " + esc(meAddressName(L, k)) + '</label><span class="mf-ex" data-i18n-skip data-l="' + L + '" data-k="' + k + '">' + esc(meExample(m, L, k)) + "</span>").join("") + "</div>";
   }
   function readMeAddress(m) {
     const out = {};
@@ -24625,8 +24641,8 @@ What you type stays in this browser only.`;
               "Polish only: declines the name into the vocative, the form Polish uses to address someone. Only the first name declines; a surname is left as written.",
               "{PAX} in the vocative"
             );
-            sub.push.apply(sub, rows.splice(at, 2));
-            rows.push('<div class="mf-own' + (own ? " on" : "") + '" id="meOwnRow"><label title="' + esc(t("For a card that sets {PAX} its own way, such as a note that mentions the customer rather than addressing them.")) + '"><input type="checkbox" class="mf-switch" role="switch" id="meOwn"' + (own ? " checked" : "") + "> " + esc(t("Manual override of {PAX}")).split("{PAX}").join(paxTag) + '</label><div class="mf-own-off">' + esc(t("{PAX} takes the catalog's address for customers.")).split("{PAX}").join(paxTag) + '</div><div class="mf-own-on">' + sub.join("") + "</div></div>");
+            const body = '<div class="mf-own-body" id="meOwnBody">' + rows.splice(at, 2).concat(sub).join("") + "</div>";
+            rows.push('<div class="mf-own' + (own ? " on" : "") + '" id="meOwnRow"><label title="' + esc(t("For a card that sets {PAX} its own way, such as a note that mentions the customer rather than addressing them.")) + '"><input type="checkbox" class="mf-switch" role="switch" id="meOwn"' + (own ? " checked" : "") + "> " + esc(t("Manual override of {PAX}")).split("{PAX}").join(paxTag) + '</label><div class="mf-own-off">' + esc(t("{PAX} takes the catalog's address for customers.")).split("{PAX}").join(paxTag) + "</div></div>");
             box(
               "meAllIntents",
               m.allIntents,
@@ -24644,7 +24660,7 @@ What you type stays in this browser only.`;
             const pinned2 = CONTENT_LANGS.indexOf(m.lockLang) > -1 ? m.lockLang : "";
             const pin = '<div class="mf-pin' + (pinned2 ? "" : " off") + '" id="meLockRow"><label title="' + esc(t("The card keeps this language whatever the EN|PL toggle says, tokens included")) + '"><input type="checkbox" id="meLockLang"' + (pinned2 ? " checked" : "") + "> " + esc(t("Always one language")) + '</label><div class="seg mf-pin-seg" id="meLockSeg" data-n="' + CONTENT_LANGS.length + '">' + CONTENT_LANGS.map((l) => '<button type="button" data-v="' + esc(l) + '"' + ((pinned2 || CONTENT_LANGS[0]) === l ? ' class="on"' : "") + ">" + esc(l.toUpperCase()) + "</button>").join("") + "</div></div>";
             const left = rows.slice(0, 3), right = rows.slice(3);
-            const cells = left.concat(right, [pin]);
+            const cells = left.concat([body], right, [pin]);
             return '<div class="mf-cols" style="grid-template-rows:repeat(4,auto)">' + cells.join("") + "</div>";
           })()
         })
@@ -24699,6 +24715,9 @@ What you type stays in this browser only.`;
         if (a) a.textContent = meAdvSummary(cur);
         const k = $("#meKeysSum");
         if (k) k.textContent = meKeysSummary(cur);
+        document.querySelectorAll("#meOwnBody .mf-ex").forEach((e) => {
+          e.textContent = meExample(cur, e.dataset.l, e.dataset.k);
+        });
       };
       document.querySelectorAll(".lang-pane input, .lang-pane textarea").forEach((el) => el.addEventListener("input", upd));
       (function() {
@@ -24719,7 +24738,7 @@ What you type stays in this browser only.`;
         if (fb) fb.disabled = !live.first;
         if (vb) vb.disabled = !live.voc;
       };
-      document.querySelectorAll("#meOwnRow input[type=radio]").forEach((el) => el.addEventListener("change", () => {
+      document.querySelectorAll("#meOwnBody input[type=radio]").forEach((el) => el.addEventListener("change", () => {
         syncNameBoxes();
         upd();
       }));
