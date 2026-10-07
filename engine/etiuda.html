@@ -15366,12 +15366,7 @@ What you type stays in this browser only.`;
     return marked ? html : null;
   }
   function editionSay(words) {
-    const out = document.getElementById("eSay");
-    if (!out) return;
-    out.textContent = "";
-    setTimeout(() => {
-      out.textContent = String(words || "");
-    }, 60);
+    sayLive(words);
   }
 
   // src/modules/card-counts.js
@@ -23724,6 +23719,7 @@ What you type stays in this browser only.`;
     marginNear: () => marginNear,
     marginReplace: () => marginReplace,
     marginSame: () => marginSame,
+    marginSay: () => marginSay,
     marginTokens: () => marginTokens,
     wireCardMargin: () => wireCardMargin
   });
@@ -23876,12 +23872,7 @@ What you type stays in this browser only.`;
     return "<h3>" + head + "</h3><p>" + line + '</p><div class="tour-actions">' + acts + '<span class="e-margin-at">' + esc(t("{AT} of {ALL} · F8: next").replace("{AT}", at).replace("{ALL}", all)) + "</span></div>";
   }
   function marginSay(words) {
-    const out = document.getElementById("eSay");
-    if (!out) return;
-    out.textContent = "";
-    setTimeout(() => {
-      out.textContent = words;
-    }, 40);
+    sayLive(words);
   }
   var marginSame = (a, b) => !!a && !!b && a.kind === b.kind && (a.kind === "lang" ? a.l === b.l : a.raw === b.raw && a.nth === b.nth);
   var MG = null;

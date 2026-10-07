@@ -2413,6 +2413,35 @@ const CARD_B = {
   }
 }
 
+/* ------------------------------------------------------------------ #eSay, one writer
+   The polite region has four ways in: the mark (sayMark), what is active and the lanes (sayLive), the edition's
+   (editionSay) and the card editor's margin (marginSay). The last two are sayLive's idiom, so words said by two of
+   them close together are heard in the order they were said, and the same words twice are emptied between. The region
+   is the one element faked here, recording every write; the timers are real. */
+{
+  const EM = await import(MOD("edition-marks.js"));
+  const MG = await import(MOD("card-margin.js"));
+  const writes = [];
+  const say = { _t: "", get textContent() { return this._t; }, set textContent(v) { this._t = v; writes.push(v); } };
+  const hadDoc = globalThis.document;
+  globalThis.document = { getElementById: id => (id === "eSay" ? say : null), querySelector: () => null, querySelectorAll: () => [] };
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const run = async go => { say._t = ""; writes.length = 0; await go(); await wait(160); return writes.slice(); };
+  try {
+    const first = await run(async () => { EM.editionSay("Edition 3 is waiting."); await wait(10); MG.marginSay("Finding 1 of 2."); });
+    check("card-margin.js", "1007es1 words said by the edition and then by the margin close together end as the margin's, the words said last",
+      () => eq(say._t === "Finding 1 of 2." && first[first.length - 1] === "Finding 1 of 2.", true));
+    const same = await run(async () => { EM.editionSay("Finding 1 of 2."); await wait(10); MG.marginSay("Finding 1 of 2."); });
+    check("card-margin.js", "1007es2 the same words said by both close together are emptied between, so the region speaks them twice",
+      () => eq(JSON.stringify(same) + "|" + say._t, JSON.stringify(["Finding 1 of 2.", "", "Finding 1 of 2."]) + "|Finding 1 of 2."));
+    const once = await run(async () => { MG.marginSay("Finding 1 of 2."); });
+    check("card-margin.js", "1007es3 control: words said once are written once",
+      () => eq(once.filter(w => w === "Finding 1 of 2.").length + "|" + say._t, "1|Finding 1 of 2."));
+  } finally {
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+  }
+}
+
 /* ------------------------------------------------------------------ tabs.js, the path of a conversation
    Board 814: each conversation tab keeps the replies sent in it (ruled 2026-10-01 10:34), and a
    card copied straight after another in the same tab is what the desk learns from. The tabs are

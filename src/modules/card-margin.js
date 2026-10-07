@@ -6,6 +6,7 @@ import { langFieldId, langEndonym } from "./lang-tabs.js";
 import { E_SPRING, M_MS, mgReduceMotion, dismissNode } from "./motion.js";
 import { t } from "./ui-lang.js";
 import { esc } from "./esc.js";
+import { sayLive } from "./tabs.js";
 import { modalCard } from "./dom.js";
 
 /* THE CARD EDITOR'S MARGIN: in the Macro box the fields read as chips, and the two things a desk can check
@@ -162,12 +163,7 @@ function marginBubbleHtml(f,at,all,known){
   return '<h3>'+head+'</h3><p>'+line+'</p><div class="tour-actions">'+acts
     +'<span class="e-margin-at">'+esc(t("{AT} of {ALL} · F8: next").replace("{AT}",at).replace("{ALL}",all))+'</span></div>';
 }
-function marginSay(words){
-  const out=document.getElementById("eSay");
-  if(!out) return;
-  out.textContent="";
-  setTimeout(()=>{ out.textContent=words; },40);
-}
+function marginSay(words){ sayLive(words); }
 // The same finding across edits: a language by its tab, a field by its words and which of them it is.
 const marginSame=(a,b)=>!!a && !!b && a.kind===b.kind && (a.kind==="lang" ? a.l===b.l : a.raw===b.raw && a.nth===b.nth);
 
@@ -432,5 +428,6 @@ export {
   marginHtml,
   marginHeading,
   marginSame,
+  marginSay,
   wireCardMargin
 };

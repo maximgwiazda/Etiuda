@@ -5,6 +5,7 @@
 import { lsGet, lsSet, lsDel, lyGet, lySet, lyDel, eLayer, layerNsOf } from "./storage.js";
 import { wordDiff } from "./edition-changes.js";
 import { esc } from "./esc.js";
+import { sayLive } from "./tabs.js";
 import { cards, editionView, setEditionView } from "./app-state.js";
 
 const EDITION_MARKS="EditionMarks";
@@ -140,14 +141,8 @@ function editionDiffHtml(was,now,pairs,words){
   markersAt(b.text.length);
   return marked ? html : null;
 }
-/* Heard and never seen, through the polite region the mark speaks in. Emptied first, so the same
-   words said twice are said twice. */
-function editionSay(words){
-  const out=document.getElementById("eSay");
-  if(!out) return;
-  out.textContent="";
-  setTimeout(()=>{ out.textContent=String(words||""); },60);
-}
+// Heard and never seen, through the polite region.
+function editionSay(words){ sayLive(words); }
 
 export {
   EDITION_MARKS,
