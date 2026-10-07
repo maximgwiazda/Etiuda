@@ -551,7 +551,28 @@ check("18 control: the plain payload carries none of the new keys through either
       && inView === "c-a,c-d" && allView === "c-a,c-b,c-d" && EM.editionMarkedCount() === 2,
     "pill " + inView + " | All " + allView + " | counted " + EM.editionMarkedCount());
   AP.setEditionView(true); AP.setCats(["t-op"]);
-  check("53c choosing a category puts the edition's pill down", AP.editionView === false, String(AP.editionView));
+  const bySetCats = AP.editionView;
+  /* And by Ctrl+click, which adds a category to the selection in place: the real bar drawn on a page whose made
+     elements keep what is set on them, and the real handler of the category's pill pressed with Ctrl held. */
+  const PB = await import(MOD("pills-bar.js"));
+  const page = globalThis.document, made = [];
+  const kept = () => { const st = { dataset: {} }; made.push(st);
+    return new Proxy(function () {}, { get: (o, k) => (k in st ? st[k] : k === Symbol.toPrimitive ? () => "" : fake()),
+      set: (o, k, v) => { st[k] = v; return true; }, apply: () => fake(), has: () => true }); };
+  ["captureRail", "railRelKeys", "railEchoRedraw", "scheduleRailGeometry"].forEach(k => { HK.hooks[k] = () => null; });
+  let byCtrl;
+  try {
+    globalThis.document = new Proxy({}, { get: (o, k) => (k === "createElement" ? kept : page[k]), set: () => true });
+    AP.setCats([]); AP.setEditionView(true);
+    PB.drawPillsCore();
+    const pill = made.find(st => st.dataset.k === "t-op");
+    if (!pill || typeof pill.onclick !== "function") throw new Error("no pill drawn for t-op");
+    pill.onclick({ ctrlKey: true, target: { closest: () => null } });
+    byCtrl = JSON.stringify(AP.cats) + " " + AP.editionView;
+  } catch (e) { byCtrl = "not pressed: " + e.message; }
+  finally { globalThis.document = page; }
+  check("53c choosing a category puts the edition's pill down, by a click and by Ctrl+click on its pill",
+    bySetCats === false && byCtrl === '["t-op"] false', "click " + bySetCats + " | Ctrl+click " + byCtrl);
   AP.setCats([]); AP.setEditionView(true);
   const sigs = [EM.editionMarkSig("c-a"), EM.editionMarkSig("c-d"), EM.editionMarkSig("c-b")].join("|");
   LPM.bumpUseCount("c-a", "en");

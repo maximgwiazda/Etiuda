@@ -92,6 +92,7 @@ function drawPillsCore(){
       else if(ev && (ev.ctrlKey||ev.metaKey)){             // ctrl+click adds/removes
         const at=cats.indexOf(id);
         if(at>-1) cats.splice(at,1); else cats.push(id);
+        setEditionView(false);
       }
       else setCats((cats.length===1 && cats[0]===id) ? [] : [id]);
       // Opening a category while an intent is selected → jump to its linked entries

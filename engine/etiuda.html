@@ -17754,6 +17754,7 @@ What you type stays in this browser only.`;
           const at = cats.indexOf(id);
           if (at > -1) cats.splice(at, 1);
           else cats.push(id);
+          setEditionView(false);
         } else setCats(cats.length === 1 && cats[0] === id ? [] : [id]);
         setPendingScrollHit(!!intentIdxs.length);
         const cardsBefore = intentIdxs.length ? null : captureSettle();
