@@ -2686,6 +2686,12 @@ const CARD_B = {
       return eq([carry > -1 && put > carry, ed.indexOf("intentTop,lockLang,commits,intents:intentsStored}") > -1,
         ed.indexOf("lockLang, commits}, nx.fields());") > -1].join(","), "true,true,true");
     });
+  check("card-editor.js", "1007pa1 a save writes the forms the radios hold: read once, into a custom entry and through the override for a catalog card",
+    () => {
+      const ed = src("card-editor.js");
+      return eq([ed.split("const addr=readMeAddress(m);").length - 1, ed.split("},text,addr,").length - 1,
+        ed.split("out[key]=group ? (el?el.value:\"\")").length - 1].join(","), "1,2,1");
+    });
   /* The desk starting again in place is where what Look kept of the agent's earlier edits is let go: a catalog loaded,
      or local memory cleared, must not leave an edit behind for a take to give back. restartDesk is not callable in node. */
   check("desk-look.js", "26b1 the desk starting again in place has Look forget the edits it kept, once, before the catalog is read",
