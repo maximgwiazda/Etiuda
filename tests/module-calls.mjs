@@ -3279,7 +3279,7 @@ const CARD_B = {
     CE.openCardEditor("c-px-a");
     const marked = {};
     [...drawn.matchAll(/<span class="mf-ex"[^>]*data-l="([a-z]+)" data-k="([A-Za-z]*)">([^<]*)<\/span>/g)].forEach(m => { marked[m[1] + ":" + m[2]] = m[3]; });
-    return { marked, live: Object.fromEntries(live.map(e => [e.dataset.l + ":" + e.dataset.k, e.textContent])) };
+    return { drawn, marked, live: Object.fromEntries(live.map(e => [e.dataset.l + ":" + e.dataset.k, e.textContent])) };
   };
   try {
     AS.setCards([card]);
@@ -3300,6 +3300,14 @@ const CARD_B = {
       () => eq(JSON.stringify(R().off.live), JSON.stringify(R().unticked)));
     check("card-editor.js", "1007pl4 CONTROL: with the boxes as the card holds them, the live pass writes what the markup drew, and the two box states differ",
       () => eq([JSON.stringify(R().on.live) === JSON.stringify(R().on.marked), JSON.stringify(R().ticked) !== JSON.stringify(R().unticked)].join(","), "true,true"));
+    /* The flags fill column-first over four rows, the pin and the override each two tall, so this order is the
+       ruled arrangement; the forms must follow the override's row, or .mf-own.on+.mf-own-body never shows them. */
+    check("card-editor.js", "1007pl5 the flags are drawn alternatives, steps and the pin, then the two intent boxes and the override last, its forms straight after it",
+      () => { const h = R().on.drawn, at = id => h.indexOf('id="' + id + '"');
+        const ids = ["meAlt", "meSeq", "meLockRow", "meAllIntents", "meIntentTop", "meOwnRow", "meOwnBody"].map(at);
+        const re = /<\/?div\b/g; re.lastIndex = h.lastIndexOf("<div", at("meOwnRow")); let d = 0, m, end = -1;
+        while ((m = re.exec(h))) { d += m[0] === "<div" ? 1 : -1; if (!d) { end = h.indexOf(">", m.index) + 1; break; } }
+        return eq([ids.every((v, i) => v > -1 && (!i || v > ids[i - 1])), h.startsWith('<div class="mf-own-body"', end)].join(","), "true,true"); });
   } finally {
     AS.setCards(hadCards);
     if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
