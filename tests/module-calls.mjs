@@ -3150,7 +3150,7 @@ const CARD_B = {
   const plain = html => html.replace(/<[^>]*>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
   const known = MG.marginKnown({ list: [{ name: "CITY" }] });
-  const texts = ["", "{GREET}, {PAX}. <b>&amp;</b> \"quoted\" 'it'", "{{PAX}} {PAX {PAXX} {CITY}\n", "line one\n\nline three {X}"];
+  const texts = ["", "{GREET}, <b>&amp;</b> {PAX}. \"quoted\" 'it'", "{{PAX}} {PAX {PAXX} {CITY}\n", "line one\n\nline three {X}"];
   check("card-margin.js", "1007mg2 the mirror holds the box's text character for character, a closing line kept open",
     () => eq(texts.map(s => plain(MG.marginHtml(s, known)) === s + ((s === "" || s.endsWith("\n")) ? ZW : "")).join(","),
       "true,true,true,true"));
@@ -3166,7 +3166,8 @@ const CARD_B = {
       fieldsOf(one("{X} and {ORDERREF}", "")),
       fieldsOf(MG.marginFindings({ text: "{PAZ}", base: "", others: [], known: MG.marginKnown({ list: [{ name: "PAY" }] }) })),
       fieldsOf(one("Mine: {ORDERREF}", "The catalog's: {ORDERREF}")),
-    ].join(" / "), "{PAXX}>{PAX} {GRET}>{GREET} {pax}>{PAX} / {X}>- {ORDERREF}>- / {PAZ}>- / "));
+      fieldsOf(one("{GENDR:a|b} {PXA} {DYPRT:a|b} {GRT}", "")),
+    ].join(" / "), "{PAXX}>{PAX} {GRET}>{GREET} {pax}>{PAX} / {X}>- {ORDERREF}>- / {PAZ}>- /  / {GENDR:a|b}>- {PXA}>{PAX} {DYPRT:a|b}>{DAYPART:a|b} {GRT}>-"));
   const pl = (text, base) => ({ l: "pl", text, base });
   check("card-margin.js", "1007mg5 one language edited and the other not, measured against the catalog's card",
     () => eq([
@@ -3175,7 +3176,7 @@ const CARD_B = {
       fieldsOf(one("Edited.", "Catalog.", { others: [pl("", "")] })),
       fieldsOf(one("Edited.", null, { others: [pl("Katalog.", "Katalog.")] })),
       fieldsOf(one("Catalog.", "Catalog.", { others: [pl("Zmienione.", "Katalog.")] })),
-      fieldsOf(one("Catalog.\r\n", "Catalog.", { others: [pl("Katalog.", "Katalog.")] })),
+      fieldsOf(one("Cata\nlog.", "Cata\r\nlog.", { others: [pl("Katalog.", "Katalog.")] })),
     ].join(" / "), "lang:pl" + " / ".repeat(5)));
   check("card-margin.js", "1007mg6 Leave it as it is silences a finding while what it is about stays as it was",
     () => {
@@ -3211,7 +3212,7 @@ const CARD_B = {
   const ed = fs.readFileSync(join(MODDIR, "card-editor.js"), "utf8");
   check("card-margin.js", "1007mg9 the card editor's Macro box carries the mirror, hidden from the ear and the translation sweep, and wires the margin",
     () => eq([/<div class="me-macro"><textarea id="'\+id\("body"\)\+'"[^\n]*\n[^\n]*<\/textarea><div class="me-mirror" aria-hidden="true" data-i18n-skip><\/div><\/div>/.test(ed),
-      /\bwireCardMargin\(/.test(ed)].join(","), "true,true"));
+      /^[ \t]*wireCardMargin\(base\);[ \t]*$/m.test(ed)].join(","), "true,true"));
 }
 
 /* NOT cardBodyHtml(). It reads the PAX box off the document through fill(), so it cannot be
