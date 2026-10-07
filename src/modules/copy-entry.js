@@ -39,8 +39,9 @@ function copyCardPart(id, vi, anchor, other){
   if(!ps.length){ toast(t("No {LANG} version for this card").replace("{LANG}",l.toUpperCase())); return true; }
   const k=Math.max(0, Math.min(ps.length-1, vi|0));
   withAgentName(ps[k],()=>{
-    bumpUseCount(m.id, l);
+    // The copy is made before the step, which the lanes and the action button answer with motion.
     copy(fill(ps[k],m,0,l), copiedToastMsg(m, l, k, ps.length), cardCommits(m));
+    bumpUseCount(m.id, l);
     eNoteRecent(m.id,k);
   },anchor);
   return true;

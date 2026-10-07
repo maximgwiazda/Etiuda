@@ -4,7 +4,9 @@ import { pack, savePack } from "./pack.js";
 import { cards, lang } from "./app-state.js";
 import { statsLearntAfter } from "./desk-stats.js";
 import { dockList, dockNow, foldNextDock, pathBeads, syncNextDock, watchNextDock } from "./next-dock.js";
-import { tabBeadsHtml } from "./tabs.js";
+import { sayLive, tabBeadsHtml } from "./tabs.js";
+import { E_EASE, E_SPRING, M_MS, mgReduceMotion } from "./motion.js";
+import { E_SPRING_OK, eKickPump } from "./paint.js";
 import { formatActionChord } from "./shortcuts.js";
 import { offerUndo, t, uiLang } from "./ui-lang.js";
 import { esc } from "./esc.js";
@@ -51,7 +53,7 @@ function toggleLanes(on){
   const shell=document.querySelector("#pageScroll > .shell");
   if(shell) shell.inert=want;
   animatePillsBox(()=>{ document.body.classList.toggle("e-lanes", want); syncPillsCollapse(); });
-  if(!want){ el.hidden=true; el.innerHTML=""; laneRows=[]; laneFrom=null; }
+  if(!want){ finishWalk(); el.hidden=true; el.innerHTML=""; laneRows=[]; laneFrom=null; }
   syncNextDock();
 }
 
@@ -64,9 +66,9 @@ function laneState(){
   const prior=path.slice(0,-1).filter(id=>live.has(id));
   const sent=prior.slice(-SENT_SHOWN);
   const fold=nowCard ? nextFoldState(nowCard, baseCard(nowCard.id), pack.overrides && pack.overrides[nowCard.id], live) : null;
-  const rows=(fold ? fold.rows.map(e=>({id:e.to, learnt:false, n:0})) : []).concat(now.rows.filter(r=>r.learnt));
+  const rows=(fold ? fold.rows.map(e=>({id:e.to, learnt:false, n:0})) : []).concat(now.rows.filter(r=>r.learnt||r.used));
   const after=rows.map(r=>dockList(r.id, live, statsLearntAfter(pack, r.id), new Set(path.concat(r.id))));
-  const key=[now.tab, path.join(","), rows.map(r=>r.id+(r.learnt?"~":"")).join(","), fold && fold.own ? "own" : "",
+  const key=[now.tab, path.join(","), rows.map(r=>r.id+(r.learnt?"~":r.used?"+":"")).join(","), fold && fold.own ? "own" : "",
     after.map(a=>a.map(x=>x.id).join("+")).join("/"), lang, uiLang()].join("|");
   return {now:now, live:live, nowCard:nowCard, sent:sent, older:prior.length>sent.length, rows:rows, fold:fold, after:after, key:key};
 }
@@ -82,15 +84,17 @@ function laneRowHtml(st, r, i){
   if(!m) return "";
   const slot=catSlot(m.c), key=i<NEXT_KEYS ? formatActionChord("nextCopy"+(i+1)) : "";
   const then=st.after[i].map(x=>{ const n=st.live.get(x.id); return n ? cardTitle(n) : ""; }).filter(Boolean);
-  const grip=r.learnt ? "" : '<button type="button" class="nx-grip" title="'+esc(t("Drag to reorder"))+'" aria-label="'+esc(t("Drag to reorder"))+'"></button>';
-  const act=r.learnt
+  const off=r.learnt||r.used;
+  const grip=off ? "" : '<button type="button" class="nx-grip" title="'+esc(t("Drag to reorder"))+'" aria-label="'+esc(t("Drag to reorder"))+'"></button>';
+  const act=off
     ? '<button type="button" class="ln-keep" title="'+esc(t("Add it to the list"))+'" aria-label="'+esc(t("Add it to the list"))+'">'+ICON_PLUS+'</button>'
     : '<button type="button" class="nx-x" title="'+esc(t("Take it off the list"))+'" aria-label="'+esc(t("Take it off the list"))+'">'+ICON_X+'</button>';
   return '<div class="card ln-row'+(i===laneMark?" on":"")+'" data-k="'+i+'" data-to="'+esc(r.id)+'"'+(slot>=0 ? ' data-ec="'+slot+'"' : "")
-    +(r.learnt ? ' data-learnt=""' : "")+'><div class="chead">'+grip
+    +(r.learnt ? ' data-learnt=""' : r.used ? ' data-used=""' : "")+'><div class="chead">'+grip
     +(key&&key!=="-" ? '<kbd class="ln-key">'+esc(key)+'</kbd>' : "")+laneTitleHtml(m)
     +(r.learnt ? '<span class="nd-learnt" title="'+esc(t("Sent after this card {N} times in the last four weeks").replace("{N}",String(r.n)))+'">'
-      +esc(t("learnt"))+'</span>' : "")
+      +esc(t("learnt"))+'</span>'
+      : r.used ? '<span class="nd-learnt" title="'+esc(t("One of the cards this desk has used most lately"))+'">'+esc(t("often"))+'</span>' : "")
     +'<span class="ln-acts">'+act+'</span>'
     +'</div><div class="txt ln-txt'+(i===laneMark?" sel":"")+'" role="button"><span class="ln-clamp">'+esc(laneBody(m,0).replace(/\s+/g," ").trim())+'</span></div>'
     +(then.length ? '<div class="ln-then">'+esc(t("then: {LIST}").replace("{LIST}",then.join(LN_DOT)))+'</div>' : "")
@@ -118,7 +122,10 @@ function lanesHtml(st){
   let blk="";
   for(let i=0;i<blocks;i++) blk+='<div class="txt ln-blk" role="button" data-b="'+i+'">'+esc(laneBody(m,i))+'</div>';
   const rows=st.rows.map((r,i)=>laneRowHtml(st,r,i)).join("");
-  return head+'<div class="ln-cols" style="grid-template-rows:auto repeat('+k+',auto) auto 1fr">'
+  // What was sent, again as a trail above Now, which the sheet shows in place of the Sent lane where three lanes would not fit.
+  const trail=k ? '<div class="ln-trail" role="list" aria-label="'+esc(t("Sent"))+'">'+st.sent.map((id,i)=>
+    '<span class="ln-crumb'+(i===0&&st.older?" ln-older":"")+'" role="listitem">'+laneTitleHtml(st.live.get(id))+'</span>').join("")+'</div>' : "";
+  return head+trail+'<div class="ln-cols" style="grid-template-rows:auto repeat('+k+',auto) auto 1fr">'
     +'<div class="ln-h ln-h1">'+esc(t("Sent"))+'</div><div class="ln-h ln-h2">'+esc(t("Now"))+'</div>'
     +'<div class="ln-h ln-h3">'+esc(t("Next"))+'</div>'
     +st.sent.map((id,i)=>{ const s=st.live.get(id);
@@ -137,7 +144,7 @@ function drawWires(){
   if(!now || !nh) return;
   const n=at(now.getBoundingClientRect()), h=at(nh.getBoundingClientRect()), hy=(h.t+h.b)/2;
   let d="", dots="";
-  const sent=[...cols.querySelectorAll(".ln-sent")].map(e=>at(e.getBoundingClientRect()));
+  const sent=[...cols.querySelectorAll(".ln-sent")].filter(e=>e.getClientRects().length).map(e=>at(e.getBoundingClientRect()));
   if(sent.length){
     const x=sent[0].l+4, y0=(sent[0].t+sent[0].b)/2;
     d+='<path class="ln-w" d="M'+x+" "+y0+"V"+hy+"H"+(h.l-10)+'"/>';
@@ -152,27 +159,80 @@ function drawWires(){
     const r=at(rh.getBoundingClientRect()), y1=(r.t+r.b)/2, x1=r.l-8;
     const y0=n.t+18+i*Math.min(14, Math.max(0,(n.b-n.t-36))/Math.max(1,rows.length-1)), x0=n.r;
     const dx=Math.max(12,(x1-x0)/2);
-    d+='<path class="ln-w'+(row.hasAttribute("data-learnt")?" ln-w-learnt":"")+'" d="M'+x0+" "+y0+"C"+(x0+dx)+" "+y0+" "+(x1-dx)+" "+y1+" "+x1+" "+y1+'"/>';
+    d+='<path class="ln-w'+(row.hasAttribute("data-learnt")||row.hasAttribute("data-used")?" ln-w-learnt":"")+'" d="M'+x0+" "+y0+"C"+(x0+dx)+" "+y0+" "+(x1-dx)+" "+y1+" "+x1+" "+y1+'"/>';
     dots+='<circle class="ln-dot" cx="'+x1+'" cy="'+y1+'" r="3.5"/>';
   });
   svg.setAttribute("width", String(cols.scrollWidth));
   svg.setAttribute("height", String(cols.scrollHeight));
   svg.innerHTML=d+dots;
 }
+/* THE WALK, after a step: what was Now travels into Sent, the reply chosen travels from its row into Now, and
+   what can follow fans in once it lands. The copy is already made; the next step or redraw ends it at once. */
+let walkRuns=[], walkGhost=null, walkT=0;
+const WALK_FAN_MS=50, WALK_FAN_MAX=4;
+function finishWalk(){
+  clearTimeout(walkT); walkT=0;
+  walkRuns.forEach(a=>{ try{ a.finish(); }catch(_){} });
+  walkRuns=[];
+  if(walkGhost){ walkGhost.remove(); walkGhost=null; }
+}
+// Read before the redraw: the Now that is leaving, and the row of the reply arriving, or null where nothing walks.
+function walkFrom(el, id){
+  const now=el.querySelector(".ln-now");
+  if(!now || mgReduceMotion()) return null;
+  const row=el.querySelector('.ln-row[data-to="'+cssEsc(id)+'"]');
+  return {now:now, at:now.getBoundingClientRect(), row:row ? row.getBoundingClientRect() : null};
+}
+function walkTo(el, was, say){
+  const cols=el.querySelector(".ln-cols"), now=cols && cols.querySelector(".ln-now");
+  if(!now) return false;
+  // READ every place, then WRITE every animation.
+  const sent=[...el.querySelectorAll(".ln-sent, .ln-crumb")].filter(e=>e.getClientRects().length).pop();
+  const o=cols.getBoundingClientRect(), n=now.getBoundingClientRect(), s=sent ? sent.getBoundingClientRect() : null, a=was.at, r=was.row;
+  const fan=[...cols.querySelectorAll(".ln-next > *")], wires=cols.querySelector(".ln-wires");
+  const travel={duration:M_MS.travel, easing:E_SPRING_OK ? E_SPRING : E_EASE};
+  const run=(e,k,t)=>{ walkRuns.push(e.animate(k,t)); };
+  const g=walkGhost=was.now;
+  g.className=g.className.replace(/\bln-now\b/,"ln-ghost");
+  g.setAttribute("style","left:"+(a.left-o.left)+"px;top:"+(a.top-o.top)+"px;width:"+a.width+"px");
+  g.setAttribute("aria-hidden","true"); g.inert=true;
+  cols.appendChild(g);
+  run(g, s ? [{transformOrigin:"0 0",transform:"none",opacity:1},{transformOrigin:"0 0",transform:"translate("+Math.round(s.left-a.left)+"px,"+Math.round(s.top-a.top)+"px) scale("
+    +Math.min(1,s.width/a.width)+","+(s.height/a.height)+")",opacity:0}] : [{opacity:1},{opacity:0}], Object.assign({fill:"forwards"}, travel));
+  if(sent) run(sent, [{opacity:0},{opacity:1}], {duration:M_MS.reveal, delay:M_MS.travel*.6, easing:E_EASE, fill:"backwards"});
+  run(now, r ? [{transformOrigin:"0 0",transform:"translate("+Math.round(r.left-n.left)+"px,"+Math.round(r.top-n.top)+"px) scale("+(r.width/n.width)+","+(r.height/n.height)+")"},{transformOrigin:"0 0",transform:"none"}]
+    : [{opacity:0,transform:"translateY(8px) scale(.985)"},{opacity:1,transform:"none"}], travel);
+  fan.forEach((e,i)=>run(e, [{opacity:0,transform:"translateX(-14px)"},{opacity:1,transform:"none"}],
+    {duration:M_MS.move, delay:M_MS.travel+WALK_FAN_MS*Math.min(i,WALK_FAN_MAX), easing:E_EASE, fill:"backwards"}));
+  if(wires) run(wires, [{opacity:0},{opacity:1}], {duration:M_MS.reveal, delay:M_MS.travel, easing:E_EASE, fill:"backwards"});
+  eKickPump();
+  walkT=setTimeout(()=>{ walkT=0; finishWalk(); say(); }, M_MS.travel+WALK_FAN_MS*WALK_FAN_MAX+M_MS.move);
+  return true;
+}
+// What the step leaves to choose from, said once it lands; the toast has already named the reply.
+function laneStepWords(n){
+  return n ? t("To choose from next: {N}.").replace("{N}",String(n)) : t("What comes next is chosen with Add a reply.");
+}
 function drawLanes(arrived){
   const el=lanesEl();
   if(!el || !lanesOn) return;
   const st=laneState();
   if(st.key===laneKey && arrived!==true) return;
+  finishWalk();
+  const was=arrived===true && st.nowCard ? walkFrom(el, String(st.nowCard.id)) : null;
   if(st.key!==laneKey) laneMark=-1;
   laneKey=st.key; laneRows=st.rows; laneFrom=st.nowCard ? String(st.nowCard.id) : null;
-  el.innerHTML='<div class="ln-wrap'+(laneFresh?" ln-open":"")+(arrived===true?" ln-step":"")+'">'+lanesHtml(st)+'</div>';
+  el.innerHTML='<div class="ln-wrap'+(laneFresh?" ln-open":"")+(arrived===true&&!was?" ln-step":"")+'">'+lanesHtml(st)+'</div>';
   laneFresh=false;
   el.hidden=false;
   el.setAttribute("role","region");
   el.setAttribute("aria-label", t("This conversation"));
   markCutText(el);
   drawWires();
+  if(arrived===true && st.nowCard){
+    const say=()=>sayLive(laneStepWords(st.rows.length));
+    if(!was || !walkTo(el, was, say)) say();
+  }
   if(laneFind) drawLaneHits();
   const f=laneFocus; laneFocus=null;
   const to=f && (f.sel==="#lnFind" ? el.querySelector("#lnFind")
@@ -209,7 +269,7 @@ function lanesShortcut(id){
 
 /* ---- Editing the list in the lanes: the agent's own layer, written as the editor's Next fold writes it and
    applied at once; taking a reply off offers it back. */
-const laneListIds=()=>laneRows.filter(r=>!r.learnt).map(r=>r.id);
+const laneListIds=()=>laneRows.filter(r=>!r.learnt&&!r.used).map(r=>r.id);
 function writeLaneList(ids, said){
   const id=lanesOn ? laneFrom : null, card=id!=null ? (cards||[]).find(m=>m&&String(m.id)===id) : null;
   if(!card) return false;
@@ -313,7 +373,7 @@ function wireLaneEdits(el){
   el.addEventListener("pointermove", e=>{
     if(!laneDrag) return;
     if(!laneDrag.moved){ if(Math.abs(e.clientY-laneDrag.y)<4) return; laneDrag.moved=true; laneDrag.row.classList.add("ln-drag"); }
-    const list=[...el.querySelectorAll(".ln-row:not([data-learnt])")], others=list.filter(r=>r!==laneDrag.row);
+    const list=[...el.querySelectorAll(".ln-row:not([data-learnt]):not([data-used])")], others=list.filter(r=>r!==laneDrag.row);
     let to=0;
     others.forEach(r=>{ const q=r.getBoundingClientRect(); if(e.clientY>q.top+q.height/2) to++; });
     if(list.indexOf(laneDrag.row)===to) return;
@@ -325,7 +385,7 @@ function wireLaneEdits(el){
     const d=laneDrag; laneDrag=null;
     if(!d || !d.moved) return;
     d.row.classList.remove("ln-drag");
-    const order=[...el.querySelectorAll(".ln-row:not([data-learnt])")].map(r=>r.dataset.to), ids=laneListIds();
+    const order=[...el.querySelectorAll(".ln-row:not([data-learnt]):not([data-used])")].map(r=>r.dataset.to), ids=laneListIds();
     if(order.join("\n")!==ids.join("\n")) writeLaneList(order);
   };
   ["pointerup","pointercancel","lostpointercapture"].forEach(k=>el.addEventListener(k, up));

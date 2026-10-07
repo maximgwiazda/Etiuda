@@ -2984,6 +2984,51 @@ const CARD_B = {
       const at = P.BASE_M.indexOf(base); if (at > -1) P.BASE_M.splice(at, 1);
       P.pack.overrides = hadOv; delete window.E_CATALOG;
     }
+    /* Board 863, the lanes walk: what the action button offers by use alone is offered in the lanes too, marked
+       often and never written into the list; each step says what it leaves to choose from; and what was sent is
+       also a trail, which the sheet shows where three lanes would not fit. The day is moved on so the desk's
+       counts of the day, held once read, are read afresh. */
+    const RealDate = Date, hadById = document.getElementById, hadCustom2 = P.pack.custom, hadContains2 = lanesBox.contains, hadMake2 = document.createElement;
+    const sayEl = { textContent: "" };
+    try {
+      globalThis.Date = class extends RealDate {
+        constructor(...a) { if (a.length) super(...a); else super(RealDate.now() + 3 * 864e5); }
+        static now() { return RealDate.now() + 3 * 864e5; } };
+      document.getElementById = id => (id === "eSay" ? sayEl : null);
+      lanesBox.contains = () => true;
+      document.createElement = () => el({ isConnected: false, remove() {}, removeAttribute() {}, querySelector: s => (s === "#eUndoBtn" ? {} : null) });
+      body.appendChild = () => {};
+      const own = { id: "u:ln-walk", c: "orders", en: "Body of walk", t: "Title walk", next: [{ to: "c-ln-b" }, { to: "c-ln-c" }] };
+      P.pack.custom = [JSON.parse(JSON.stringify(own))];
+      AS.setCards(AS.cards.concat([own]));
+      const freshTab = () => { T.tabs.splice(0, T.tabs.length); ST.ssSet(T.TAB_KEY, "null"); T.initTabs(); };
+      freshTab(); LP.bumpUseCount("c-ln-d", "en");
+      freshTab(); document.activeElement = body; LN.toggleLanes(true);
+      LP.bumpUseCount("u:ln-walk", "en");
+      const html = lanesBox.innerHTML, saidFirst = sayEl.textContent;
+      const rowOf = id => html.split('<div class="card ln-row').find(p => p.indexOf('data-to="' + id + '"') > -1) || "";
+      const d = rowOf("c-ln-d"), b = rowOf("c-ln-b");
+      const offered = [/data-used=""/.test(d), />often</.test(d), /class="ln-keep"/.test(d), /nx-grip/.test(d), /nx-grip/.test(b), /ln-trail/.test(html)].join(",");
+      const rowEl = { dataset: { k: "0", to: "c-ln-b" } }, x = { closest: s => (s === ".nx-x" ? x : s === ".ln-row" ? rowEl : null) };
+      ((lanesBox.heard && lanesBox.heard.click) || []).forEach(fn => fn({ target: x }));
+      const written = JSON.stringify(P.pack.custom[0].next);
+      check("lanes.js", "863w1 a reply offered by use alone is offered in the lanes, marked often, with the way to add it and no grip, and taking a reply off the list never writes it in",
+        () => eq(offered + "|" + written, 'true,true,true,false,true,false|[{"to":"c-ln-c"}]'));
+      LP.bumpUseCount("c-ln-c", "en");
+      await new Promise(r => setTimeout(r, 80));
+      const after = lanesBox.innerHTML, saidNext = sayEl.textContent;
+      const rowsIn = h => (h.match(/<div class="card ln-row/g) || []).length;
+      const crumbs = (after.match(/<span class="ln-crumb[^"]*" role="listitem">/g) || []).length;
+      check("lanes.js", "863w2 each step says what it leaves to choose from, and what was sent stands as a trail named Sent, one crumb a reply",
+        () => eq([saidFirst === "To choose from next: " + rowsIn(html) + ".", saidNext === "To choose from next: " + rowsIn(after) + ".", rowsIn(html) > 0 && rowsIn(after) > 0,
+          /<div class="ln-trail" role="list" aria-label="Sent">/.test(after), crumbs].join("|") + " " + saidFirst + " / " + saidNext,
+          "true|true|true|true|1 To choose from next: " + rowsIn(html) + ". / To choose from next: " + rowsIn(after) + "."));
+    } finally {
+      LN.toggleLanes(false);
+      globalThis.Date = RealDate; document.getElementById = hadById; P.pack.custom = hadCustom2;
+      document.createElement = hadMake2; delete body.appendChild;
+      if (hadContains2 === undefined) delete lanesBox.contains; else lanesBox.contains = hadContains2;
+    }
     await new Promise(r => setTimeout(r, 20));
   } finally {
     LN.toggleLanes(false);

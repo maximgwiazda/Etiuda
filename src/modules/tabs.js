@@ -173,9 +173,12 @@ function sayActive(){
   if(!activeSaid) return;
   const now=activeNow(), words=activeWords(activeSaid,now);
   activeSaid=now;
+  sayLive(words);
+}
+// Words into the polite region. It speaks only a change, and the same words again are still news: two customers of one name.
+function sayLive(words){
   const out=document.getElementById("eSay");
   if(!words||!out) return;
-  // A region speaks only a change, and the same words again are still news: two customers of one name.
   if(out.textContent===words){ out.textContent=""; setTimeout(()=>{ out.textContent=words; },60); }
   else out.textContent=words;
 }
@@ -1146,6 +1149,7 @@ export {
   noteActive,
   activeHeard,
   activeWords,
+  sayLive,
   stepTab,
   addTab,
   closeActiveTab,
