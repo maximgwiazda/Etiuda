@@ -102,10 +102,29 @@ const names = [];
 masked.replace(/^(?:export\s+)?(?:function\s+([A-Za-z_$][\w$]*)\s*\(|const\s+([A-Za-z_$][\w$]*)\s*=)/gm,
   (m, fn, cn, at) => { names.push({ n: fn || cn, kind: fn ? "function" : "const", at: at }); return m; });
 
+/* A NAME AFTER A DOT IS A PROPERTY, EXCEPT IN TWO SHAPES, and both were blind spots that made a
+   live function read as dead: `ns.fn()` where `import * as ns` names the module declaring fn, which
+   is how boot() reaches most of the engine, and a spread, `...fn()`, whose last dot the guard ate.
+   A member counts only through a namespace bound to the declaring file, so `other.fn` still does
+   not. tests/text-scan-selftest.js plants all three. */
+const namespaces = [];
+SRC.replace(/^import\s*\*\s*as\s+([A-Za-z_$][\w$]*)\s+from\s*(["'])([^"'\n]+)\2/gm, (m, ns, q, spec, at) => {
+  const from = fileOf(at);
+  namespaces.push({ ns, file: require("path").posix.join(from.slice(0, from.lastIndexOf("/") + 1), spec) });
+  return m;
+});
+function fileOf(at) { const s = DOC.at(at); return s.slice(0, s.lastIndexOf(":")); }
+const word = n => n.replace(/\$/g, "\\$");
+
 const rows = [];
 names.forEach(({ n, kind, at }) => {
-  const re = new RegExp("(?:^|[^\\w$.])" + n.replace(/\$/g, "\\$") + "(?![\\w$])", "g");
-  const uses = (masked.match(re) || []).length;      // includes the declaration itself
+  const re = new RegExp("(?:^|[^\\w$.]|\\.\\.\\.)" + word(n) + "(?![\\w$])", "g");
+  let uses = (masked.match(re) || []).length;        // includes the declaration itself
+  const home = fileOf(at);
+  namespaces.filter(x => x.file === home).forEach(x => {
+    const member = new RegExp("(?:^|[^\\w$.])" + word(x.ns) + "\\s*\\??\\.\\s*" + word(n) + "(?![\\w$])", "g");
+    uses += (masked.match(member) || []).length;
+  });
   const viaString = stringRefs.has(n);
   rows.push({ n, kind, uses, viaString, at });
 });

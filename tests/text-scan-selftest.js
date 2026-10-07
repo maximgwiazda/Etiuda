@@ -131,7 +131,7 @@ function buildTree(root, phase) {
   ].join("\n"));
   execFileSync(process.execPath, [builder], { cwd: TESTS, stdio: ["ignore", "pipe", "pipe"] });
 
-  for (const f of ["engine.js", "i18n-scan.js", "css-dead.js", "ghosts.js", "storage-keys.js"])
+  for (const f of ["engine.js", "i18n-scan.js", "css-dead.js", "ghosts.js", "storage-keys.js", "deadcode.js"])
     fs.copyFileSync(path.join(TESTS, f), path.join(root, "tests", f));
 }
 
@@ -171,6 +171,80 @@ const ARROW_DOC = [
 ].join("\n");
 PATCH.arrowbody = "const txt = " + JSON.stringify(ARROW_DOC) + ";\n"
   + "E.sourceDoc = () => ({ text: txt, files: ['synthetic'], at: () => 'synthetic:1', atLine: k => 'synthetic:' + k });";
+
+/* A reading of files, for the scans that ask which file a name is declared in. Each part is
+   [file, text]; at() answers the file of an offset, as the real sourceDoc() does. */
+function filesPatch(parts) {
+  return "const parts = " + JSON.stringify(parts) + ";\n"
+    + "let txt = ''; const starts = [];\n"
+    + "parts.forEach(p => { starts.push([txt.length, p[0]]); txt += p[1]; });\n"
+    + "const at = i => { let f = starts[0]; starts.forEach(s => { if (i >= s[0]) f = s; });"
+    + " return f[1] + ':' + txt.slice(f[0], i).split('\\n').length; };\n"
+    + "E.sourceDoc = () => ({ text: txt, files: parts.map(p => p[0]), at: at, atLine: k => 'synthetic:' + k });";
+}
+
+/* css-dead.js: four classes reached only by a prefix written where a class is (a fragment and a
+   value, a hyphen and a value, an interpolation), and three dead ones: a class that only LOOKS
+   like a prefix's (pl-row closes before its ternary adds whole classes), a prefix written where no
+   class is, and a class nobody names. The stylesheet sits past offset 1000, where the scan looks. */
+const CSS_DOC = [
+  "<!-- " + "x".repeat(1000) + " -->",
+  "<style>",
+  ".pq-c1{color:red} .pq-c2{color:red} .ps-on{color:red} .pt-x{color:red}",
+  ".pl-row{color:red} .pl-open{color:red} .pl-row-open{color:red} .pk-gone{color:red} .pd-dead{color:red}",
+  "</style>",
+  "<script>",
+  "function region(el,n,state,k,open,id){",
+  "  el.innerHTML='<div class=\"pq pq-c'+n+'\"></div>';",
+  "  el.classList.add(\"ps-\"+state);",
+  "  el.innerHTML=`<i class=\"pt-${k}\"></i>`;",
+  "  el.innerHTML='<p class=\"pl-row'+(open?\" pl-open\":\"\")+'\"></p>';",
+  "  return \"pk-\"+id;",
+  "}",
+  "</script>",
+  ""
+].join("\n");
+PATCH.cssbuilt = "const txt = " + JSON.stringify(CSS_DOC) + ";\n"
+  + "E.sourceDoc = () => ({ text: txt, files: ['synthetic'], at: () => 'synthetic:1', atLine: k => 'synthetic:' + k });";
+
+/* i18n-scan.js's orphans: one key a sink reads, two no rule reads but the code holds whole (a
+   literal handed on by a variable, an attribute inside a literal), one held only inside a longer
+   string, and one held nowhere but a comment. Invented words throughout. */
+const ORPHAN_DOC = [
+  "UI_STRINGS.pl={",
+  '  "Found":"Jest",',
+  '  "Planted whole":"Cale",',
+  '  "Kept; in an attribute":"Atrybut",',
+  '  "Planted part":"Czesc",',
+  '  "Planted gone":"Brak",',
+  "};",
+  "/* \"Planted gone\" was here once. */",
+  'const L="Planted whole"; toast(t(L)); toast(t("Found"));',
+  "const B='<b title=\"Kept; in an attribute\">'+x+'</b>';",
+  'const P="Planted part, and the rest of it";',
+  ""
+].join("\n");
+PATCH.orphans = "const txt = " + JSON.stringify(ORPHAN_DOC) + ";\n"
+  + "E.sourceDoc = () => ({ text: txt, files: ['synthetic'], at: () => 'synthetic:1', atLine: k => 'synthetic:' + k });";
+
+/* deadcode.js: two live names reached only through a namespace and a spread, and three dead ones
+   that look nearly alike: a member of a namespace bound to another file, a member of an object
+   that is no namespace, and one nobody names. Invented names throughout. */
+PATCH.deadns = filesPatch([
+  ["src/modules/alpha.js", [
+    "export function liveByNs(){ return 1; }",
+    "function liveBySpread(){ return [1]; }",
+    "export function useSpread(){ return Math.max(...liveBySpread()); }",
+    "export function deadHere(){ return 2; }",
+    "export function propOnly(){ return 3; }",
+    ""].join("\n")],
+  ["src/modules/beta.js", "export function shadowNs(){ return 4; }\n"],
+  ["src/main.js", [
+    'import * as alpha from "./modules/alpha.js";',
+    'import * as beta from "./modules/beta.js";',
+    "alpha.liveByNs(); alpha.useSpread(); alpha.shadowNs(); other.propOnly();",
+    ""].join("\n")]
+]);
 
 function scan(root, tool, reading, args) {
   const code = [
@@ -308,6 +382,40 @@ try {
   ok(ab.code === 1 && /PL: 2\/4 /.test(ab.out) && /"Drifted  one":""/.test(abMissing) && /"Named one":""/.test(abMissing)
      && !/"no"/.test(abMissing) && !/Kept/.test(abMissing),
      "i18n-scan.js       reads copy a function returns, arrow or named, and nothing it only compares");
+
+  /* 27. deadcode.js READS A NAMESPACE MEMBER AND A SPREAD AS USES, board 858. At 09fae6f 61 of its
+     78 hits were live, 60 called as `ns.fn()` from boot() and one as `...hitRanges(`. The three
+     dead names are the teeth: a scan that counted every name after a dot would lose them. */
+  const dc = scan(roots.mod, "deadcode.js", "deadns", []);
+  const dcDead = (dc.out.split("=== nothing references these ===")[1] || "").match(/^\s+\w+\s+(\w+)/gm) || [];
+  const dcNames = dcDead.map(s => s.trim().split(/\s+/)[1]).sort().join(",");
+  ok(dc.code === 0 && dcNames === "deadHere,propOnly,shadowNs",
+     "deadcode.js        reads alpha.liveByNs() and ...liveBySpread() as uses, and still reports "
+     + "a member of another namespace, of an object, and a name nobody calls: " + JSON.stringify(dcNames));
+
+  /* 28. css-dead.js LISTS A CLASS BUILT BY CONCATENATION APART, board 858. At 09fae6f 5 of its 7
+     dead classes were built so (`class="ed-c'+cols`, `class="ed-'+mine`). The three that stay dead
+     are the teeth: a rule that took every fragment for a prefix would lose them. */
+  const cs = scan(roots.mod, "css-dead.js", "cssbuilt", []);
+  const section = title => ((cs.out.split(title)[1] || "").split("\n===")[0].match(/^  (\S+)/gm) || [])
+    .map(s => s.trim()).sort().join(",");
+  const csDead = section("=== classes styled but never mentioned outside the stylesheet");
+  const csBuilt = section("=== classes styled and named only by a prefix built at run time");
+  ok(cs.code === 0 && csDead === "pd-dead,pk-gone,pl-row-open" && csBuilt === "pq-c1,pq-c2,ps-on,pt-x",
+     "css-dead.js        lists classes built from a prefix apart (" + csBuilt + ") and still calls "
+     + "dead a look-alike, a prefix written where no class is, and an unnamed class (" + csDead + ")");
+
+  /* 29. i18n-scan.js READS ITS ORPHANS A SECOND TIME, board 858. At 09fae6f it printed 227 in one
+     list; 180 are held whole by the code, and the 42 lines found dead are all among the other 47.
+     The key in a comment is the teeth: a reading that counted comments would call it held whole. */
+  const orp = scan(roots.mod, "i18n-scan.js", "orphans", ["pl"]);
+  const group = title => ((orp.out.split(title)[1] || "").split(/\n  [A-Z]/)[0].match(/^    - (.+)$/gm) || [])
+    .map(s => s.slice(6)).sort().join("|");
+  const orpWhole = group("ORPHANS FOUND WHOLE"), orpIn = group("ORPHANS FOUND INSIDE"), orpNone = group("ORPHANS FOUND NOWHERE");
+  ok(orp.code === 0 && /PL: 1\/1 /.test(orp.out) && orpWhole === "Kept; in an attribute|Planted whole"
+     && orpIn === "Planted part" && orpNone === "Planted gone",
+     "i18n-scan.js       sorts its orphans: whole [" + orpWhole + "], inside a longer string [" + orpIn
+     + "], nowhere but a comment [" + orpNone + "]");
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
 }
