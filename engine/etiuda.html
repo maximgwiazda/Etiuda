@@ -18564,8 +18564,8 @@ What you type stays in this browser only.`;
       txtEl.classList.add("just-picked");
       txtEl.addEventListener("pointerleave", () => txtEl.classList.remove("just-picked"), { once: true });
       withAgentName(ps[vi], () => {
-        bumpUseCount(mid, cl);
         copy(fill(ps[vi], m), copiedToastMsg(m, cl, vi, ps.length), cardCommits(m));
+        bumpUseCount(mid, cl);
       }, txtEl);
     });
   }
@@ -27213,8 +27213,8 @@ What you type stays in this browser only.`;
     const vi = Math.max(0, Math.min(ps.length - 1, entrySel.vi | 0));
     const id = entrySel.id;
     withAgentName(ps[vi], () => {
-      bumpUseCount(id, l);
       copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length), cardCommits(m));
+      bumpUseCount(id, l);
       eCopyFeedback(id, vi);
     }, document.querySelector("#list .txt.sel"));
     return true;
@@ -29086,9 +29086,9 @@ What you type stays in this browser only.`;
     vi = vi | 0;
     if (vi < 0 || vi >= ps.length) return null;
     withAgentName(ps[vi], () => {
+      copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length), cardCommits(m));
       bumpUseCount(m.id, l);
       eNoteRecent(m.id, vi);
-      copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length), cardCommits(m));
     }, null);
     return { asked: true };
   }

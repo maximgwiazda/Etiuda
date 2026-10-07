@@ -114,9 +114,9 @@ function pickAsk(id,vi){
   vi=vi|0;
   if(vi<0 || vi>=ps.length) return null;
   withAgentName(ps[vi],()=>{
+    copy(fill(ps[vi],m,0,l), copiedToastMsg(m,l,vi,ps.length), cardCommits(m));
     bumpUseCount(m.id,l);
     eNoteRecent(m.id,vi);
-    copy(fill(ps[vi],m,0,l), copiedToastMsg(m,l,vi,ps.length), cardCommits(m));
   },null);
   return {asked:true};
 }

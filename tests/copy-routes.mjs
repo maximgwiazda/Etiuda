@@ -22,7 +22,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 21;
+const EXPECTED = 24;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -289,6 +289,25 @@ try {
       try { ND.copyNextReply(1); } finally { TB.watchTabPath(null); }
       check(order.join(", ") === "copy after c-from8, step to c-plain8",
         "3j the copy is made before the conversation steps on: " + JSON.stringify(order));
+      /* The list's own routes, the keyboard, the click and the picker's ask, make the copy before the step too. */
+      const routeOrder = run => {
+        TB.tabs[0].path = ["c-from8"];
+        const o = [];
+        navigator.clipboard = { writeText: () => { o.push("copy"); return { then(ok) { ok(); } }; } };
+        TB.watchTabPath(() => o.push("step"));
+        try { run(); } finally { TB.watchTabPath(null); }
+        return o.join(", ");
+      };
+      const keyedOrder = routeOrder(() => { AS.putEntrySel({ id: "c-plain8", vi: 0 }); CE.copyEntrySel(false); });
+      check(keyedOrder === "copy, step", "3k the keyboard's copy of a block is made before the conversation steps on: " + JSON.stringify(keyedOrder));
+      const listEl = new El("div", { id: "list" });
+      const block = listEl.appendChild(new Hit("div", { class: "card", "data-id": "c-plain8" })).appendChild(new Hit("p", { class: "txt", "data-v": "0" }));
+      els["#list"] = listEl; Dom.grabDom(); LP.wireListPointer();
+      const clickOrder = routeOrder(() => fire(block, "click", { button: 0 }));
+      delete els["#list"]; Dom.grabDom();
+      check(clickOrder === "copy, step", "3l a click on a block is copied before the conversation steps on: " + JSON.stringify(clickOrder));
+      const askOrder = routeOrder(() => PICK.answerPick("ask", JSON.stringify({ id: "c-plain8", vi: 0 })));
+      check(askOrder === "copy, step", "3m the picker's ask is copied before the conversation steps on: " + JSON.stringify(askOrder));
     } finally {
       navigator.clipboard = null;
       fabEl.remove(); delete els["#toast"];

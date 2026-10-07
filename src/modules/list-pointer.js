@@ -434,8 +434,8 @@ function wireListPointer(){
     txtEl.classList.add("just-picked");
     txtEl.addEventListener("pointerleave", ()=>txtEl.classList.remove("just-picked"), {once:true});
     withAgentName(ps[vi],()=>{
-      bumpUseCount(mid, cl);
       copy(fill(ps[vi],m), copiedToastMsg(m, cl, vi, ps.length), cardCommits(m));
+      bumpUseCount(mid, cl);
     },txtEl);
   });
 }

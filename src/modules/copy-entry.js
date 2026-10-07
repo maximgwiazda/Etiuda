@@ -23,8 +23,8 @@ function copyEntrySel(otherLang){
   const vi=Math.max(0, Math.min(ps.length-1, entrySel.vi|0));
   const id=entrySel.id;
   withAgentName(ps[vi],()=>{
-    bumpUseCount(id, l);
     copy(fill(ps[vi],m,0,l), copiedToastMsg(m, l, vi, ps.length), cardCommits(m));
+    bumpUseCount(id, l);
     eCopyFeedback(id,vi);   // wash the selected block + recency trace, same as a click
   },document.querySelector("#list .txt.sel"));
   return true;
