@@ -3174,6 +3174,92 @@ const CARD_B = {
   }
 }
 
+/* ------------------------------------------------------------------ card-margin.js, the card editor's margin
+   The fields read as chips and the two things a desk can check alone (Claudette's words of 2026-10-07, section C).
+   The oracles: fill() in intent-text.js for which fields are filled, read as text; an unescape written here for the
+   mirror; the promises of the words for the findings. Invented text only. */
+{
+  const MG = await import(MOD("card-margin.js"));
+  const fs = await import("node:fs");
+  const fillSrc = fs.readFileSync(join(MODDIR, "intent-text.js"), "utf8");
+  const body = fillSrc.slice(fillSrc.indexOf("function fill("), fillSrc.indexOf("function escFilled("));
+  const zLine = (fillSrc.match(/const Z_TOKEN=.*$/m) || [""])[0];
+  const bare = [...new Set([...(body + zLine).matchAll(/\\\{([A-Z]+)\\\}/g)].map(m => m[1]))].sort().join(",");
+  const inline = (fillSrc.match(/const VAR_INLINE_BUILTIN=\/\^\(([A-Z|]+)\)\$\//) || ["", ""])[1].split("|");
+  const args = [...new Set(inline.concat([...body.matchAll(/\\\{([A-Z]+):/g)].map(m => m[1])))].sort().join(",");
+  check("card-margin.js", "1007mg1 the margin knows exactly the fields fill() writes, bare and with words of their own",
+    () => eq([MG.MARGIN_BARE.slice().sort().join(","), MG.MARGIN_ARGS.slice().sort().join(",")].join("|"),
+      [bare, args].join("|")));
+
+  const ZW = String.fromCharCode(0x200b);
+  const plain = html => html.replace(/<[^>]*>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+  const known = MG.marginKnown({ list: [{ name: "CITY" }] });
+  const texts = ["", "{GREET}, <b>&amp;</b> {PAX}. \"quoted\" 'it'", "{{PAX}} {PAX {PAXX} {CITY}\n", "line one\n\nline three {X}"];
+  check("card-margin.js", "1007mg2 the mirror holds the box's text character for character, a closing line kept open",
+    () => eq(texts.map(s => plain(MG.marginHtml(s, known)) === s + ((s === "" || s.endsWith("\n")) ? ZW : "")).join(","),
+      "true,true,true,true"));
+  check("card-margin.js", "1007mg3 a field the catalog fills is a chip, a catalog's own included, and nothing else is",
+    () => eq([...MG.marginHtml("{GREET}, {PAX} {PAXX} {CITY} {city}", known).matchAll(/class="me-chip"[^>]*>(.*?)<\/span><\/span>/g)]
+      .map(m => plain(m[1])).join("|"), "{GREET}|{PAX}|{CITY}"));
+
+  const fieldsOf = fs2 => fs2.map(f => f.kind === "field" ? f.raw + ">" + (f.sug || "-") : "lang:" + f.l).join(" ");
+  const one = (text, base, more) => MG.marginFindings(Object.assign({ text, base, others: [], known }, more || {}));
+  check("card-margin.js", "1007mg4 a field the catalog does not fill is found, with a near field only where exactly one is near",
+    () => eq([
+      fieldsOf(one("Hi {PAXX}, {GRET} and {pax}.", "Hi {PAX}.")),
+      fieldsOf(one("{X} and {ORDERREF}", "")),
+      fieldsOf(MG.marginFindings({ text: "{PAZ}", base: "", others: [], known: MG.marginKnown({ list: [{ name: "PAY" }] }) })),
+      fieldsOf(one("Mine: {ORDERREF}", "The catalog's: {ORDERREF}")),
+      fieldsOf(one("{GENDR:a|b} {PXA} {DYPRT:a|b} {GRT}", "")),
+    ].join(" / "), "{PAXX}>{PAX} {GRET}>{GREET} {pax}>{PAX} / {X}>- {ORDERREF}>- / {PAZ}>- /  / {GENDR:a|b}>- {PXA}>{PAX} {DYPRT:a|b}>{DAYPART:a|b} {GRT}>-"));
+  const pl = (text, base) => ({ l: "pl", text, base });
+  check("card-margin.js", "1007mg5 one language edited and the other not, measured against the catalog's card",
+    () => eq([
+      fieldsOf(one("Edited.", "Catalog.", { others: [pl("Katalog.", "Katalog.")] })),
+      fieldsOf(one("Edited.", "Catalog.", { others: [pl("Zmienione.", "Katalog.")] })),
+      fieldsOf(one("Edited.", "Catalog.", { others: [pl("", "")] })),
+      fieldsOf(one("Edited.", null, { others: [pl("Katalog.", "Katalog.")] })),
+      fieldsOf(one("Catalog.", "Catalog.", { others: [pl("Zmienione.", "Katalog.")] })),
+      fieldsOf(one("Cata\nlog.", "Cata\r\nlog.", { others: [pl("Katalog.", "Katalog.")] })),
+    ].join(" / "), "lang:pl" + " / ".repeat(5)));
+  check("card-margin.js", "1007mg6 Leave it as it is silences a finding while what it is about stays as it was",
+    () => {
+      const silenced = { fields: { "{PAXX}": 1 }, langs: { pl: "Katalog." } };
+      return eq([
+        fieldsOf(one("Hi {PAXX}.", "", { silenced })),
+        fieldsOf(one("Hi {PAXX} and {PAXX}.", "", { silenced })),
+        fieldsOf(one("Edited.", "Catalog.", { silenced, others: [pl("Katalog.", "Katalog.")] })),
+      ].join(" / "), " / {PAXX}>{PAX} {PAXX}>{PAX} / ");
+    });
+  check("card-margin.js", "1007mg7 Change it replaces that one occurrence and nothing else",
+    () => {
+      const text = "a {PAXX} b {PAXX}", f = one(text, "")[1];
+      return eq(MG.marginReplace(text, f, f.sug), "a {PAXX} b {PAX}");
+    });
+  check("card-margin.js", "1007mg8 the bubble speaks Claudette's words in both languages, a tab named by its label in straight quotes",
+    () => {
+      const f = { kind: "lang", l: "pl" }, g = { kind: "field", raw: "{PAXX}", sug: "{PAX}" };
+      const en = [MG.marginHeading(f), MG.marginHeading(g)].join(" | ");
+      const had = UILANG_STORE.lsGet("eUiLang");
+      UILANG_STORE.lsSet("eUiLang", "pl");
+      let pl2 = "";
+      try { pl2 = [MG.marginHeading(f), MG.marginHeading(g)].join(" | "); }
+      finally { if (had == null) UILANG_STORE.lsDel("eUiLang"); else UILANG_STORE.lsSet("eUiLang", had); }
+      return eq(en + " || " + pl2, '"Polski" still has the earlier text | Perhaps {PAX}, the customer\'s name?'
+        + ' || W zakładce "Polski" jest jeszcze dawny tekst | Może chodzi o {PAX}, czyli imię klienta?');
+    });
+  check("card-margin.js", "1007mg10 two slips in the same words are two findings, each still itself after an edit before it, so F8 walks on",
+    () => {
+      const [a, b] = one("{PAXX} and {PAXX}", ""), [, b2] = one("Hi, {PAXX} and {PAXX}", "");
+      return eq([MG.marginSame(a, b), MG.marginSame(b, b2), MG.marginSame(a, b2)].join(","), "false,true,false");
+    });
+  const ed = fs.readFileSync(join(MODDIR, "card-editor.js"), "utf8");
+  check("card-margin.js", "1007mg9 the card editor's Macro box carries the mirror, hidden from the ear and the translation sweep, and wires the margin",
+    () => eq([/<div class="me-macro"><textarea id="'\+id\("body"\)\+'"[^\n]*\n[^\n]*<\/textarea><div class="me-mirror" aria-hidden="true" data-i18n-skip><\/div><\/div>/.test(ed),
+      /^[ \t]*wireCardMargin\(base\);[ \t]*$/m.test(ed)].join(","), "true,true"));
+}
+
 /* NOT cardBodyHtml(). It reads the PAX box off the document through fill(), so it cannot be
    called without one: it is the browser oracle's, and tests/smoke.js has it. card-body.js is
    called above only for its intent strip, which reads no document. */

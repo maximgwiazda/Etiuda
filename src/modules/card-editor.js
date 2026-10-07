@@ -27,6 +27,7 @@ import { render } from "./render.js";
 import { uid, slugCat } from "./ids.js";
 import { cats, shown, catOrder, cards, cardCounts } from "./app-state.js";
 import { hooks } from "./hooks.js";
+import { wireCardMargin } from "./card-margin.js";
 
 /** The card editor's variant. Two differences from the intent picker, both because a card is
  *  not an intent: it lists EVERY category including supporting ones, since a card genuinely
@@ -207,8 +208,8 @@ function meLangPanel(m,l,i){
       +' autocomplete="off" placeholder="'+esc(t("a short name you will recognise"))+'">'
       +'<p class="me-stamp-note" data-i18n-skip hidden></p></div>'
     +'<div class="mf"><label>'+esc(t("Macro"))+'</label>'
-    +'<textarea id="'+id("body")+'" spellcheck="true"'
-      +' placeholder="'+esc(t("the text the customer receives"))+'">'+v("body")+'</textarea></div>'
+    +'<div class="me-macro"><textarea id="'+id("body")+'" spellcheck="true"'
+      +' placeholder="'+esc(t("the text the customer receives"))+'">'+v("body")+'</textarea><div class="me-mirror" aria-hidden="true" data-i18n-skip></div></div></div>'
     +'<div class="mf"><label>Note</label>'
       +'<input id="'+id("note")+'" value="'+v("note")+'"'
       +' autocomplete="off" placeholder="'+esc(t("guidance for you, never sent"))+'"></div>');
@@ -528,6 +529,7 @@ function openCardEditor(id, presetCat, fromManage){
   wireFolds(modalCard,"details.mf-fold","details.mf-fold");
   nx.wire();
   wireStampToggle(base);
+  wireCardMargin(base);
   syncMeIntentPick();
   if($("#meReset")) $("#meReset").onclick=()=>{
     delete pack.overrides[id];

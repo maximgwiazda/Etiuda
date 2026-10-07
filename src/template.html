@@ -2598,6 +2598,17 @@ details.mf-fold.mf-missing[open]>summary .mf-lab{color:#c44}
 .mf input.is-missing:not([type=checkbox]):not([type=radio]):focus,
 .mf textarea.is-missing,.mf textarea.is-missing:focus{
   border-color:#c44;box-shadow:0 0 0 2px rgba(196,68,68,.16)}
+/* THE MACRO BOX'S FIELDS AS CHIPS (card-margin.js): a mirror over the box draws its words, and the box keeps the
+   caret, the selection and the typing. contain:size lets the box alone size the row, so a long text scrolls it. */
+.me-macro{display:grid;grid-template-columns:minmax(0,1fr)}
+.me-macro>textarea,.me-macro>.me-mirror{grid-area:1/1}
+.me-mirror{contain:size;overflow:hidden;pointer-events:none;visibility:hidden;white-space:pre-wrap;overflow-wrap:break-word;
+  border:1px solid transparent;padding:8px 10px;font:13px/1.45 var(--sans);color:var(--ink)}
+.me-macro>textarea.me-chipped{color:transparent;caret-color:var(--ink)}
+.me-macro>textarea.me-chipped+.me-mirror{visibility:visible}
+.me-chip{color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);border-radius:4px}
+.me-chip>.me-br{color:transparent}
+.me-bad,.lang-tabs button.me-stale{text-decoration:underline wavy var(--accent);text-decoration-skip-ink:none;text-underline-offset:3px}
 /* THE EDITORS' TEXT INPUTS WEAR THEIR CHROME ON A WRAP, as the header fields do: a cut value
    fades under a mask, and a mask over an input takes its fill and border along with the words,
    so the fade showed the panel behind the field. dressDialogInputs() wraps them as a dialog
@@ -3396,6 +3407,10 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
   display:flex;align-items:center;gap:14px}
 .e-undo p{margin:0;color:var(--bub-ink)}
 .e-undo .tour-actions{margin:0;padding:0;border:0;flex:none}
+/* THE CARD EDITOR'S MARGIN (card-margin.js): the acts on the left, where the finding stands on the right. */
+.e-margin .tour-actions{justify-content:flex-start}
+.e-margin .e-margin-at{margin-left:auto;font:12px var(--mono);color:var(--bub-dim)}
+.e-margin .e-margin-said{margin:0;color:var(--bub-ink)}
 /* THE NOTICES THAT OUTLAST A MOMENT: the rescue at a start that failed (the boot guard) and the
    save and desk notices (pack.js), hung under the band and centred by margins, as the Undo is. */
 .e-notice{left:0;right:0;margin:0 auto;width:min(560px,calc(100vw - 24px))}
