@@ -213,8 +213,10 @@ function makeDocument() {
   doc.documentElement = new El("html", doc);
   doc.head = doc.documentElement.appendChild(new El("head", doc));
   doc.body = doc.documentElement.appendChild(new El("body", doc));
+  // The page's toast host, which a load of a new edition speaks through after the desk starts again.
+  doc.body.appendChild(new El("div", doc)).id = "toast";
   doc.activeElement = doc.body;
-  doc.createRange = () => ({});
+  doc.createRange = () => ({ selectNodeContents() {}, getBoundingClientRect: () => ({ top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }) });
   doc.contains = n => doc.documentElement.contains(n);
   doc.getElementById = id => queryAll(doc.documentElement, "#" + id)[0] || null;
   doc.querySelector = sel => queryAll(doc.documentElement, sel)[0] || null;
