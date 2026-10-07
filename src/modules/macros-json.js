@@ -10,7 +10,7 @@ import { catalogLangs, CONTENT_LANGS } from "./content-model.js";
 //   "exported": "ISO date",
 //   "cards": [
 //     { "id","c","t","en","pl", optional: text fields per cardStorageKeys() - today
-//       "k","note","notePl","tPl" - plus "lockLang","alt","seq","firstOnly","paxVoc","paxOwn",
+//       "k","note","notePl","tPl" - plus "lockLang","addressEn","addressPl","alt","seq","firstOnly","paxVoc","paxOwn",
 //       "allIntents","intentTop","intents","retired","commits","next","ext" }
 //   ]
 // }
@@ -114,6 +114,9 @@ function parseMacrosData(data){
     if(truthyFlag(rawM.firstOnly)) entry.firstOnly=1;
     if(rawM.paxVoc!=null) entry.paxVoc=truthyFlag(rawM.paxVoc)?1:0;
     if(rawM.paxOwn!=null) entry.paxOwn=truthyFlag(rawM.paxOwn)?1:0;
+    // A form of address is a word, carried as written: the desk reads only the ones it knows.
+    if(String(rawM.addressEn!=null?rawM.addressEn:"").trim()) entry.addressEn=String(rawM.addressEn).trim();
+    if(String(rawM.addressPl!=null?rawM.addressPl:"").trim()) entry.addressPl=String(rawM.addressPl).trim();
     if(truthyFlag(rawM.allIntents)) entry.allIntents=1;
     if(truthyFlag(rawM.intentTop)) entry.intentTop=1;
     if(Array.isArray(rawM.intents)&&rawM.intents.length){
