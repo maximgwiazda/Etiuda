@@ -2431,6 +2431,9 @@ const CARD_B = {
     const first = await run(async () => { EM.editionSay("Edition 3 is waiting."); await wait(10); MG.marginSay("Finding 1 of 2."); });
     check("card-margin.js", "1007es1 words said by the edition and then by the margin close together end as the margin's, the words said last",
       () => eq(say._t === "Finding 1 of 2." && first[first.length - 1] === "Finding 1 of 2.", true));
+    const back = await run(async () => { MG.marginSay("Finding 1 of 2."); await wait(10); EM.editionSay("Edition 3 is waiting."); });
+    check("card-margin.js", "1007es1b the reverse order: words said by the margin and then by the edition end as the edition's, so either writer reverted alone goes red",
+      () => eq(say._t === "Edition 3 is waiting." && back[back.length - 1] === "Edition 3 is waiting.", true));
     const same = await run(async () => { EM.editionSay("Finding 1 of 2."); await wait(10); MG.marginSay("Finding 1 of 2."); });
     check("card-margin.js", "1007es2 the same words said by both close together are emptied between, so the region speaks them twice",
       () => eq(JSON.stringify(same) + "|" + say._t, JSON.stringify(["Finding 1 of 2.", "", "Finding 1 of 2."]) + "|Finding 1 of 2."));
