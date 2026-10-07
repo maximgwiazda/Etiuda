@@ -22579,9 +22579,7 @@ What you type stays in this browser only.`;
   function importCatalogText(text, fileName) {
     const c = catalogFromFileText(String(text || ""), fileName);
     if (!c) return false;
-    hooks.offerPickedCatalog(c, fileName, () => {
-      eWatchClear().then(() => activateCatalog(c, { from: fileName }));
-    });
+    hooks.offerPickedCatalog(c, fileName, () => eWatchClear().then(() => activateCatalog(c, { from: fileName })));
     return true;
   }
   function importCatalogHosted() {
@@ -22660,7 +22658,7 @@ What you type stays in this browser only.`;
           nsSet("WatchName", f.name);
           nsSet("WatchSeen", String(f.lastModified || 0));
           nsDel("WatchNo");
-          eWatchPut(handle).then(() => activateCatalog(c, { from: f.name }));
+          return eWatchPut(handle).then(() => activateCatalog(c, { from: f.name }));
         });
         return null;
       });
@@ -25011,14 +25009,15 @@ What you type stays in this browser only.`;
   function acceptOffer(c, sig, src, ed) {
     const marks = ed ? editionMarksFrom(ed.held, ed.changes, ed.v) : null;
     const was = ed ? keepEditionMarks(c, marks) : null;
-    src.accept(sig);
-    const now = storedCatalog(), landed = !!now && eCatalogSignature(now) === sig;
-    if (ed && !landed) putEditionMarksBack(c, was);
-    paintCatWaiting();
-    if (!ed || !landed) return;
-    const counts2 = editionCountWords(ed.changes.counts);
-    if (counts2.length) toast(t("Edition {V} loaded: {COUNTS}").split("{V}").join(ed.v).split("{COUNTS}").join(counts2.join(", ")));
-    if (marks) washEdition(marks);
+    Promise.resolve(src.accept(sig)).then(() => {
+      const now = storedCatalog(), landed = !!now && eCatalogSignature(now) === sig;
+      if (ed && !landed) putEditionMarksBack(c, was);
+      paintCatWaiting();
+      if (!ed || !landed) return;
+      const counts2 = editionCountWords(ed.changes.counts);
+      if (counts2.length) toast(t("Edition {V} loaded: {COUNTS}").split("{V}").join(ed.v).split("{COUNTS}").join(counts2.join(", ")));
+      if (marks) washEdition(marks);
+    });
   }
   function washEdition(marks) {
     if (mgReduceMotion()) return;

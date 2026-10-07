@@ -512,7 +512,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 69;
+  const EXPECTED = 71;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -935,6 +935,31 @@ async function parent() {
       "74i THE CONTROL: the panel's way back closes the panel, brings the bubble back with the differences button focused, and loads nothing: " + JSON.stringify(ab));
     const errs74 = [d74.setup, A74, B74, dKeep.setup, AK, BK, dNo.setup, AN, CN, dBack.setup, AB].flatMap(o => o.errors || []);
     check(!errs74.length, "74j those launches ran their acts without an error" + (errs74.length ? ": " + errs74.length + ", first " + errs74[0] : ""));
+    /* A NEW EDITION'S MARKS, by the route it came: Import accepts after a promise (the watch's handle cleared or put first),
+       the boot's offer at once. Read from the desk file the next launch reads: the edition held and the marks beside it. */
+    const marksAfter = (route) => {
+      const lab = scenario([["catalogs/lamp.ec", ed1()]]);
+      const first = run(lab, ["boot", "settle", "offer", "yes", "settle"]);
+      let second;
+      if (route === "import") {
+        fs.mkdirSync(path.join(lab, "elsewhere"));
+        fs.writeFileSync(path.join(lab, "elsewhere", "lamp-v2.ec"), JSON.stringify(ed2()), "utf8");
+        second = run(lab, ["desk", "import:elsewhere/lamp-v2.ec", "settle", "yes", "settle"]);
+      } else {
+        fs.writeFileSync(path.join(lab, "catalogs", "lamp.ec"), JSON.stringify(ed2()), "utf8");
+        second = run(lab, ASK.concat(["yes", "settle"]));
+      }
+      const keys = JSON.parse(fs.readFileSync(path.join(lab, "userdata", "desk.json"), "utf8")).keys || {};
+      const mk = Object.keys(keys).filter(k => /~EditionMarks$/.test(k)), m = mk.length === 1 ? JSON.parse(keys[mk[0]]) : null;
+      return { rev: (() => { try { return JSON.parse(keys.eCatalog || "{}").rev; } catch { return null; } })(), started: second.reloaded,
+        marks: m && m.cards ? Object.keys(m.cards).sort().map(id => id + ":" + m.cards[id].k).join(" ") : null,
+        errors: [first, second].flatMap(o => o.errors || []) };
+    };
+    const viaImport = marksAfter("import"), viaBoot = marksAfter("boot");
+    check(viaImport.rev === 2 && viaImport.started === true && viaImport.marks === "c-b:changed c-n:new" && !viaImport.errors.length,
+      "74k a new edition loaded by Import keeps its marks: the next launch's desk file holds edition 2 with the changed and the new card marked: " + JSON.stringify(viaImport));
+    check(viaBoot.rev === 2 && viaBoot.started === true && viaBoot.marks === "c-b:changed c-n:new" && !viaBoot.errors.length,
+      "74K THE CONTROL: the same edition through the boot's offer holds the same marks, so 74k reads a desk file that can hold them: " + JSON.stringify(viaBoot));
     /* 75: A COLLEAGUE'S FILE IN THE LIBRARY, LOOK, AND WORK FROM IT. The folder holds the catalog in use (lamp.ec); two
        desks both called Ola, each with a file grown from that edition, the first rewording one card and adding one; Piotr's
        catalog made from nothing; Ala's file claiming the id in use; and this desk's own file, its key the one the desk

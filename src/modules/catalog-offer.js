@@ -599,18 +599,20 @@ function eOfferCatalogDialog(c,src){
   return true;
 }
 /* AN EDITION LOADED: its marks are written into the catalog's layer before the desk starts again, so the first
-   paint wears them, and taken back if the load did not land. What it brought is then said once and shown once. */
+   paint wears them, and taken back if the load did not land. What it brought is then said once and shown once.
+   Whether it landed is read once accept has settled: Import's two routes load after a promise and return it. */
 function acceptOffer(c,sig,src,ed){
   const marks=ed ? editionMarksFrom(ed.held,ed.changes,ed.v) : null;
   const was=ed ? keepEditionMarks(c,marks) : null;
-  src.accept(sig);
-  const now=storedCatalog(), landed=!!now && eCatalogSignature(now)===sig;
-  if(ed && !landed) putEditionMarksBack(c,was);
-  paintCatWaiting();
-  if(!ed || !landed) return;
-  const counts=editionCountWords(ed.changes.counts);
-  if(counts.length) toast(t("Edition {V} loaded: {COUNTS}").split("{V}").join(ed.v).split("{COUNTS}").join(counts.join(", ")));
-  if(marks) washEdition(marks);
+  Promise.resolve(src.accept(sig)).then(()=>{
+    const now=storedCatalog(), landed=!!now && eCatalogSignature(now)===sig;
+    if(ed && !landed) putEditionMarksBack(c,was);
+    paintCatWaiting();
+    if(!ed || !landed) return;
+    const counts=editionCountWords(ed.changes.counts);
+    if(counts.length) toast(t("Edition {V} loaded: {COUNTS}").split("{V}").join(ed.v).split("{COUNTS}").join(counts.join(", ")));
+    if(marks) washEdition(marks);
+  });
 }
 /* The cards the edition changed, washed once where they stand on screen, and its pill arriving. */
 function washEdition(marks){
