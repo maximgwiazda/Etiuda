@@ -606,7 +606,7 @@ What it proves, and what fails when it should:
 
 | leg | the claim | the control that reddens it |
 |-----|-----------|------------------------------|
-| 0 | the asar holds the five allowlisted files and the engine inside it is the engine in the tree | a sixth file in the asar, and one byte edited into the artefact |
+| 0 | the asar holds the eight allowlisted files and the engine inside it is the engine in the tree | a ninth file in the asar, and one byte edited into the artefact |
 | 1 | the window is frameless, the band is the top bar at y0, the three controls are drawn | a variant whose `shell/main.js` says `frame: true`, and a variant with the three controls cut out of the served artefact |
 | 2 | the fixture's card count reaches the page and the screen | a launch on an empty user-data folder: no catalog, no offer, no cards |
 | 3 | a key written through Settings lands in `desk.json` and survives a relaunch | the key is read off the disk before the drive as well as after |
@@ -733,9 +733,9 @@ run's first, and a refusal stops the run at gate 9.
 
 `tests/sbom.mjs` holds it without packaging: this tree, a dependency added and everything it pulls
 in, a synthetic tree of frozen expected versions (nested, scoped, dev and optional), a declared
-package that is not installed, the archive held both ways on the desk's own six-file shape, the
+package that is not installed, the archive held both ways on the desk's own eight-file shape, the
 installer's hash against a frozen literal, and the release driven in a throwaway repository with a
-stub package step, once whole and once with a contradiction. 27 checks by the run's own `#counts`
+stub package step, once whole and once with a contradiction. 29 checks by the run's own `#counts`
 line, about 15 s. The desk declares no production dependency today, so the list holds Electron
 alone until one is added.
 

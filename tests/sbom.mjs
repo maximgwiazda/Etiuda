@@ -302,7 +302,7 @@ async function main() {
   put(path.join(declares, 'node_modules', 'electron', 'package.json'), { name: 'electron', version: '9.9.9' });
   const r5f = run(['--root', declares, '--app', sixApp, '--out', path.join(declares, 'bom.json')]);
   check(r5f.status === 1 && /alpha@1\.2\.3/.test(r5f.out) && !fs.existsSync(path.join(declares, 'bom.json')),
-    '5f the same six-file app against a tree that declares alpha refuses, since alpha is listed and would not ship, exit '
+    '5f the same eight-file app against a tree that declares alpha refuses, since alpha is listed and would not ship, exit '
     + r5f.status);
 
   /* ---- 6. THE INSTALLER'S HASH --------------------------------------------------------------- */
@@ -319,7 +319,7 @@ async function main() {
 
   /* ---- 7. THE RELEASE LEAVES ONE BESIDE THE INSTALLER --------------------------------------- */
   /* A throwaway repository with the real release script and its imports, stub npm scripts, and a
-     stub package step that writes a fourteen-byte installer and a real six-file app.asar. Every
+     stub package step that writes a fourteen-byte installer and a real eight-file app.asar. Every
      gate then runs and the last two are the ones after the document is written. */
   const STUB_PACKAGE = [
     "import fs from 'node:fs'; import path from 'node:path'; import { createRequire } from 'node:module';",
@@ -398,7 +398,7 @@ async function main() {
     '7w without the window wall\'s word a release stops before npm test as refused, exit ' + walled.status
     + ' (78 wanted), gate 4 reached and gate 5 not: ' + JSON.stringify((/REFUSED[^\r\n]*/.exec(walled.out) || [''])[0].slice(0, 90)));
 
-  /* The contradiction: alpha is a production dependency the six-file app would not carry, so the
+  /* The contradiction: alpha is a production dependency the eight-file app would not carry, so the
      list is not what ships. The document a run left there earlier goes too, or it would read as
      this build's. */
   const L7b = releaseLab('refused', { alpha: '^1.0.0' });
