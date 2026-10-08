@@ -250,6 +250,7 @@ async function launch(plan) {
   };
   const quiet = { log: noop, error: noop, warn: noop, info: noop };
   const shellSrc = f => fs.readFileSync(path.join(ROOT, "shell", f), "utf8");
+  process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
   /* A file main.js requires from beside itself is the tree's: the lab's shell folder holds its built-in catalogs alone. */
   const beside = n => (path.isAbsolute(n) && path.dirname(n) === SHELL ? path.join(ROOT, "shell", path.basename(n)) : n);
   new Function("require", "__dirname", "__filename", "module", "exports", "console", shellSrc("main.js"))(

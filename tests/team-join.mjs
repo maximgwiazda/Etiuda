@@ -60,6 +60,7 @@ function loadDesk(ud) {
     BrowserWindow: inert, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert, shell: inert,
     screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage,
   };
+  process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
     SRC + "\nreturn { " + EXPOSE.join(", ") + " };")(n => (n === "electron" ? electron : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);

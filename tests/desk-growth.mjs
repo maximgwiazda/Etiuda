@@ -92,6 +92,7 @@ const electron = {
 const said = [];
 const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop };
 const shellSrc = f => fs.readFileSync(path.join(ROOT, "shell", f), "utf8");
+process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
 new Function("require", "__dirname", "__filename", "module", "exports", "console", shellSrc("main.js"))(
   n => (n === "electron" ? electron : nodeRequire(n)), path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"),
   { exports: {} }, {}, quiet);

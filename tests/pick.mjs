@@ -273,6 +273,7 @@ try {
   const shellFs = Object.create(fs);
   shellFs.readdirSync = (p, ...rest) => (listed.push(path.resolve(String(p)).toLowerCase()), fs.readdirSync(p, ...rest));
   const EXPOSE = ["hotkeyRefusal", "pickerPlace", "pickClipText", "PICK_SIZE", "HOTKEY_DEFAULT"];
+  process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
   const SH = new Function("require", "__dirname", "__filename", "module", "exports", "console",
     SRC + "\nreturn { " + EXPOSE.map(n => n + ": " + n).join(", ") + " };")(
     n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? shellFs : nodeRequire(n)), path.join(APP, "shell"), path.join(APP, "shell", "main.js"),
@@ -613,7 +614,10 @@ try {
   const runMentions = (shellBare.match(/\bexecFileSync\b/g) || []).length, runCalls = (shellBare.match(/\bexecFileSync\s*\(/g) || []).length;
   const loaders = shellBare.match(/\bimport\s*\(|\bprocess\s*\.\s*(?:binding|_linkedBinding|dlopen)\b|\bcreateRequire\b|\bmodule\s*\.\s*require\b|\brequire\s*\.\s*(?:cache|main)\b/g) || [];
   check(reqs.length > 0 && strange.length === 0 && cps.length === cpRequires && cps.every(m => m[1].trim() === "execFileSync")
-    && programs.length > 0 && programs.every(p => p === '"reg"' || (p === "REG_TOOL" && regTool))
+    && programs.length > 0 && programs.every(p => p === '"reg"' || (p === "REG_TOOL" && regTool)
+      /* Linux alone: three questions to the session bus about the keyring, none about a window, the screen, the
+         clipboard or a key (tests/shell-office.mjs 14) */
+      || p === '"dbus-send"')
     && cpRequires === 2 && runMentions === runCalls + cpRequires && loaders.length === 0,
     "5c the shell loads no module and runs no program it did not have (every one is read against the must-hold before it joins): "
     + (strange.join(", ") || reqs.length + " requires known") + "; " + (cp ? cp[1].trim() : "no child_process") + " runs " + (programs.join(", ") || "nothing")

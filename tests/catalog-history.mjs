@@ -60,6 +60,7 @@ function boot() {
     BrowserWindow: inert, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert,
     screen: inert, shell: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage: safeStorage,
   };
+  process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
   new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
     fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8")
     + "\n__test.catalogChanged = catalogChanged; __test.teamKeys = teamKeys;"
