@@ -18245,8 +18245,8 @@ What you type stays in this browser only.`;
   }
   function deckSetOpen(card, open, instant) {
     clearTimeout(card._deckT);
-    clearTimeout(card._deckM);
     if (open === card.classList.contains("deck-open")) return;
+    clearTimeout(card._deckM);
     const now = mgReduceMotion() || instant, travel = now ? 0 : M_MS.travel, move = now ? 0 : M_MS.move;
     if (open) {
       card.classList.add("deck-up", "deck-open");

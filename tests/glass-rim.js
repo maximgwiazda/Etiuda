@@ -114,9 +114,10 @@ const styles = (pg, sel) => pg.evaluate(s => [...document.querySelectorAll(s)].m
            bg: a.backgroundImage, shadow: c.boxShadow };
 }), sel);
 
-/* The macro with room: the tallest on the page, brought to the middle of the window. */
+/* The macro with room: the tallest on the page, brought to the middle of the window. Never a reply tucked behind its
+   deck's front, whose layout box is whole while its paint is moved, narrowed and cut. */
 const pickMacro = pg => pg.evaluate(() => {
-  const all = [...document.querySelectorAll(".txt")].filter(e => e.offsetWidth > 300);
+  const all = [...document.querySelectorAll(".txt:not(.deck-back)")].filter(e => e.offsetWidth > 300);
   all.sort((x, y) => y.offsetHeight - x.offsetHeight);
   const el = all[0];
   if (!el) return null;

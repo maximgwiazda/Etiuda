@@ -68,8 +68,10 @@ function deckScan(){
 function deckLater(){ if(!deckRaf) deckRaf=requestAnimationFrame(deckScan); }
 
 function deckSetOpen(card, open, instant){
-  clearTimeout(card._deckT); clearTimeout(card._deckM);
+  clearTimeout(card._deckT);
   if(open===card.classList.contains("deck-open")) return;
+  // Only a change cancels the deal's end: a repeated ask that did would leave deck-moving on, and the click guard holding.
+  clearTimeout(card._deckM);
   const now=mgReduceMotion() || instant, travel=now?0:M_MS.travel, move=now?0:M_MS.move;
   if(open){
     card.classList.add("deck-up","deck-open");

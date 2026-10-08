@@ -3443,12 +3443,13 @@ const CARD_B = {
   const faded = l => l.items.filter(e => e.classList.contains("deck-under")).map(e => e.dataset.id || e.kind).sort().join(",");
   try {
     globalThis.document = { querySelector: () => null, createElement: () => ({ getContext: () => ({}) }), createRange: () => ({}) };
-    check("deck.js", "1008dk1 at rest each tucked reply's bottom edge sits 6px per depth under the front's, the fourth and after behind the third, and the rest box holds three edges and its margin",
+    check("deck.js", "1008dk1 at rest each tucked reply's bottom edge sits 6px per depth under the front's, the fourth and after behind the third, none shows above the front's top (the one taller than the front is cut to 2px under it), and the rest box holds three edges and its margin",
       () => {
-        const tops = [40, 110, 170, 240, 300], hs = [60, 50, 60, 50, 40], L = DK.deckLengths(tops, hs, 300, 360);
+        const tops = [40, 110, 170, 270, 330], hs = [60, 50, 90, 50, 40], L = DK.deckLengths(tops, hs, 300, 380);
         const edges = L.slabs.slice(1).map((v, i) => tops[i + 1] + hs[i + 1] + v.dy - (tops[0] + hs[0]));
-        return eq([edges.join(","), L.rest, L.restBottom, L.extra, L.grow, L.slabs.map(v => v.z).join("")].join("|"),
-          "6,12,18,18|128|104|254|232|65432");
+        const shown = L.slabs.slice(1).map((v, i) => tops[i + 1] + v.dy + v.clip);
+        return eq([edges.join(","), shown.join(","), L.rest, L.restBottom, L.extra, L.grow, L.slabs.map(v => v.z).join("")].join("|"),
+          "6,12,18,18|56,42,68,78|128|104|274|252|65432");
       });
     check("deck.js", "1008dk2 a card is covered when its top lies under the reach in the deck's column: not on the reach's own top, not past its bottom, not in the column beside",
       () => {
@@ -3489,6 +3490,72 @@ const CARD_B = {
     check("deck.js", "1008dk6 an open deck reaches below its rest box by what the deal adds, and a shut one by nothing",
       () => { const c = { classList: cls(new Set(["deck"])), _deckGrow: 75 }, open = DK.deckReach(c);
         c.classList.add("deck-open"); return eq([open, DK.deckReach(c), DK.deckReach(null)].join(","), "0,75,0"); });
+    /* The wiring, not the function: wireDeck() on stand-ins, its list observer's callback fed records by hand. Frames
+       are never run, so only the observer can fade. It leaves the module wired. */
+    check("deck.js", "1008dk7 the list's observer works the fade out afresh on every change: a deck opening fades, a covered card redrawn under it arrives faded, the fade's own marks wake nothing, any other change does, and closing lifts it",
+      () => {
+        const g = globalThis, was = { MO: g.MutationObserver, raf: g.requestAnimationFrame, ael: g.addEventListener };
+        let feed = null;
+        try {
+          g.MutationObserver = class { constructor(f) { feed = f; } observe() {} };
+          g.requestAnimationFrame = () => 1; g.addEventListener = () => {};
+          const s = scene(), l = listOf([s.deck, s.under, s.rule, s.past, s.beside]), at = e => [...e.classList.s].join(" ");
+          l.addEventListener = () => {}; globalThis.document.addEventListener = () => {};
+          l.items.forEach(e => { e.getAttribute = () => at(e); });
+          globalThis.document.querySelector = q => (q === "#list" ? l : null); Dom.grabDom();
+          DK.wireDeck();
+          s.deck.classList.add("deck-open"); feed([{ type: "attributes", target: s.deck, oldValue: "card deck" }]);
+          const opened = faded(l);
+          const redrawn = node("c-under", 200, 0, 120); redrawn.getAttribute = () => at(redrawn); l.items[1] = redrawn;
+          feed([{ type: "childList", target: l }]);
+          const arrived = redrawn.classList.contains("deck-under") + "/" + redrawn.classList.contains("deck-fresh");
+          s.past.rect = { top: 250, left: 0, right: 300, bottom: 340 };
+          feed([{ type: "attributes", target: redrawn, oldValue: "card" }]); const own = faded(l);
+          feed([{ type: "attributes", target: s.beside, oldValue: "card sel" }]); const other = faded(l);
+          s.deck.classList.remove("deck-open"); feed([{ type: "attributes", target: s.deck, oldValue: "card deck deck-open" }]);
+          return eq([opened, arrived, own, other, faded(l)].join("|"), "c-under,list-sep|true/true|c-under,list-sep|c-past,c-under,list-sep|");
+        } finally { for (const [k, v] of [["MutationObserver", was.MO], ["requestAnimationFrame", was.raf], ["addEventListener", was.ael]]) if (v === undefined) delete g[k]; else g[k] = v; }
+      });
+    /* A clock of its own, so the deal's timers run in order without waiting: setTimeout queues, run(t) fires what is due. */
+    check("deck.js", "1008dk8 a deck asked to open again while its replies are still travelling lets them land: a press on a dealt reply after the deal is not held, whether a rescan of the list or the pointer coming back asked",
+      () => {
+        const g = globalThis, was = { st: g.setTimeout, ct: g.clearTimeout, MO: g.MutationObserver, raf: g.requestAnimationFrame, ael: g.addEventListener };
+        let now = 0, seq = 0; const q = new Map();
+        const run = to => { for (;;) { const d = [...q].filter(([, t]) => t.at <= to).sort((a, b) => a[1].at - b[1].at || a[0] - b[0])[0];
+          if (!d) break; q.delete(d[0]); now = d[1].at; d[1].f(); } now = to; };
+        const out = [], stillWas = UILANG_STORE.lsGet("eMotionOff");
+        try {
+          UILANG_STORE.lsDel("eMotionOff");
+          g.setTimeout = (f, ms) => { q.set(++seq, { f, at: now + (ms || 0) }); return seq; }; g.clearTimeout = id => q.delete(id);
+          g.MutationObserver = class { observe() {} }; g.requestAnimationFrame = () => 1;
+          for (const how of ["rescan", "return"]) {
+            const L = {}, on = (t, f) => { (L[t] = L[t] || []).push(f); }, fire = (t, e) => (L[t] || []).forEach(f => f(e));
+            g.addEventListener = on; globalThis.document.addEventListener = on;
+            const card = { dataset: { id: "c-deck" }, classList: cls(new Set(["card"])), style: node().style, offsetHeight: 200, hover: false,
+              matches(s) { return s === ":hover" && this.hover; }, closest(s) { return s === ".card.deck" && this.classList.contains("deck") ? this : null; } };
+            card.style.setProperty = (k, x) => { card.style.v[k] = x; }; card.style.removeProperty = k => { delete card.style.v[k]; };
+            const slab = (top, h) => ({ offsetTop: top, offsetHeight: h, offsetWidth: 300, classList: cls(new Set(["txt"])),
+              style: { setProperty() {}, removeProperty() {} },
+              closest(s) { return s === ".card.deck" ? card.closest(s) : s === ".txt.deck-back" && this.classList.contains("deck-back") ? this : null; } });
+            const s0 = slab(30, 60), s1 = slab(100, 60), away = { closest: () => null };
+            card.querySelectorAll = () => [s0, s1];
+            const l = { querySelectorAll: s => (s.startsWith(".card") ? [card] : []), addEventListener: on };
+            globalThis.document.querySelector = s => (s === "#list" ? l : null); Dom.grabDom();
+            now = 0; q.clear(); DK.wireDeck(); DK.deckScan(); card.hover = true;
+            fire("pointerover", { target: s0, relatedTarget: null }); run(150);
+            const moving = card.classList.contains("deck-moving");
+            if (how === "rescan") DK.deckScan();
+            else { fire("pointerover", { target: away, relatedTarget: s0 }); run(200); fire("pointerover", { target: s0, relatedTarget: away }); }
+            run(1200);
+            let held = false; fire("click", { target: s1, stopPropagation() { held = true; }, preventDefault() {} });
+            out.push(how + ":" + moving + "/" + card.classList.contains("deck-open") + "/" + (held ? "held" : "copies"));
+          }
+        } finally {
+          for (const [k, v] of [["setTimeout", was.st], ["clearTimeout", was.ct], ["MutationObserver", was.MO], ["requestAnimationFrame", was.raf], ["addEventListener", was.ael]]) if (v === undefined) delete g[k]; else g[k] = v;
+          if (stillWas != null) UILANG_STORE.lsSet("eMotionOff", stillWas);
+        }
+        return eq(out.join(","), "rescan:true/true/copies,return:true/true/copies");
+      });
   } finally {
     if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
     if (hadDoc !== undefined) Dom.grabDom();
