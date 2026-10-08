@@ -1,8 +1,7 @@
 /* THE FIFTH, TURNING: x = sin(3s + phi), y = sin(2s). phi starts at the standard figure and advances
    at 2 pi times a 0.007 Hz detune, one step per frame and each step capped, so a window that was
    hidden resumes where it stopped. Under either quiet switch nothing moves and every mark is the
-   standard figure. */
-import { mgReduceMotion } from "./motion.js";
+   standard figure. A SECOND PROGRAM IMPORTS THIS FILE from a pinned commit for its clock, so it imports nothing. */
 
 const FIFTH_PHI0=Math.PI/4, FIFTH_W0=2*Math.PI*0.007, FIFTH_MAX_DT=1/30, FIFTH_PAINT_MS=50;
 const FIFTH_A=96, FIFTH_R=10, FIFTH_SPACING=0.6, FIFTH_FINE=4000, FIFTH_INK=150, FIFTH_BOX=256;
@@ -112,9 +111,10 @@ function fifthRest(){ fifthClock.phi=FIFTH_PHI0; fifthClock.last=null; }
 
 /* THE HEADER'S MARK turns on the page's frames, repainted every FIFTH_PAINT_MS, only while the page
    is shown and no quiet switch is on. The clock ticks on every frame, so the step cap only ever
-   bites on a late one. */
-function wireFifth(){
-  const node=document.querySelector(".brand-tile svg path");
+   bites on a late one. opts: node, the mark's path (the header's by default); still(), the quiet switch. */
+function wireFifth(opts){
+  const o=opts||{}, quiet=o.still||(()=>document.documentElement.classList.contains("e-still"));
+  const node=o.node||document.querySelector(".brand-tile svg path");
   if(!node) return;
   const std=node.getAttribute("d");
   let raf=0, painted=-Infinity, stroked=false;
@@ -132,11 +132,13 @@ function wireFifth(){
     fifthTick(ms);
     if(ms-painted<FIFTH_PAINT_MS) return;
     painted=ms;
+    // asked at each repaint too: a switch that flips with no class on the root sends no word here
+    if(quiet()){ sync(); return; }
     stroke(true);
     node.setAttribute("d", fifthLinePath(fifthPhase()));
   };
   const sync=()=>{
-    const still=mgReduceMotion(), go=!still && !document.hidden;
+    const still=quiet(), go=!still && !document.hidden;
     if(go && !raf){ fifthClock.last=null; raf=requestAnimationFrame(frame); }
     if(!go && raf){ cancelAnimationFrame(raf); raf=0; }
     if(still){ fifthRest(); stroke(false); if(node.getAttribute("d")!==std) node.setAttribute("d",std); }

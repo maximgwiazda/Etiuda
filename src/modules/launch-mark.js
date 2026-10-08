@@ -95,26 +95,33 @@ function launchCurve(F){
     o[2]=dx/sp; o[3]=dy/sp; return o;
   }};
 }
-/* Two riders per lit dot, one on each pass of the landed figure (which retraces itself): each keeps its t and its
-   offset along (a) and across (b) the band there, so at LM_PHI1 its place is its dot by construction. The near
-   one lands with the dot's light and the far one fades. NS samples per pass, offset half a step off the tails. */
+/* Riders for the figure landed at phi (LM_PHI1 unless given). The loop's two halves are the pass, t from T0 to T1,
+   and its mirror, the next half turn of t. A lit dot gets a rider on each half that reaches it, keeping its t and its
+   offset along (a) and across (b) the band there, so at phi its place is its dot by construction; the one lighting
+   the dot lands with its light and the rest fade. At the standard figure the halves lie on one another, so every
+   lit dot has two. NS samples per half, offset half a step off the tails. */
 const LM_NS=2400;
-function launchRiders(F, L, rest, rnd){
-  const C=launchCurve(F), o=[0,0,0,0], lat=L.lat, out=[], random=rnd||Math.random;
-  const px=new Float64Array(LM_NS), py=new Float64Array(LM_NS), pt=new Float64Array(LM_NS);
-  for(let q=0;q<LM_NS;q++){ const t=LM_T0+(LM_T1-LM_T0)*(q+0.5)/LM_NS; C.at(t,LM_PHI1,o); px[q]=o[0]; py[q]=o[1]; pt[q]=t; }
+function launchRiders(F, L, rest, rnd, phi){
+  const C=launchCurve(F), o=[0,0,0,0], lat=L.lat, out=[], random=rnd||Math.random, at=phi==null ? LM_PHI1 : phi;
+  const N=2*LM_NS, px=new Float64Array(N), py=new Float64Array(N), pt=new Float64Array(N), reach=L.rad+LM_FEATHER;
+  for(let q=0;q<N;q++){ const t=LM_T0+(LM_T1-LM_T0)*(q+0.5)/LM_NS; C.at(t,at,o); px[q]=o[0]; py[q]=o[1]; pt[q]=t; }
   for(let j=0;j<lat.ny;j++) for(let i=0;i<lat.nx;i++){
     const n=j*lat.nx+i, lit=rest[n];
     if(!lit) continue;
-    const x=lat.x0+i*LM_STEP, y=lat.y0+j*LM_STEP;
-    let best=0, bd=Infinity;
-    for(let q=0;q<LM_NS;q++){ const d=(px[q]-x)*(px[q]-x)+(py[q]-y)*(py[q]-y); if(d<bd){ bd=d; best=q; } }
-    const t1=pt[best], t2=3.5*Math.PI-t1;
-    [t1,t2].forEach(t=>{
-      C.at(t,LM_PHI1,o);
-      const ox=x-o[0], oy=y-o[1], zEnd=Math.cos(3*t+LM_PHI1);
-      out.push({n:n, t:t, a:ox*o[2]+oy*o[3], b:-ox*o[3]+oy*o[2], hx:x, hy:y, rest:lit,
-        feather:Math.min(1, lit/F.light(Math.abs(zEnd))), near:zEnd>0 || (zEnd===0 && t===t1),
+    const x=lat.x0+i*LM_STEP, y=lat.y0+j*LM_STEP, half=[];
+    for(let h=0;h<2;h++){
+      let best=0, bd=Infinity;
+      for(let q=h*LM_NS;q<(h+1)*LM_NS;q++){ const d=(px[q]-x)*(px[q]-x)+(py[q]-y)*(py[q]-y); if(d<bd){ bd=d; best=q; } }
+      const t=pt[best], d=Math.sqrt(bd), z=Math.cos(3*t+at);
+      half.push({t:t, d:d, z:z, v:Math.max(0,Math.min(1,(L.rad-d)/LM_FEATHER))*F.light(z)});
+    }
+    const lights=half[1].v>half[0].v || (half[1].v===half[0].v && half[1].z>half[0].z) ? 1 : 0;
+    half.forEach((hf, h)=>{
+      if(h!==lights && hf.d>=reach) return;
+      C.at(hf.t,at,o);
+      const ox=x-o[0], oy=y-o[1];
+      out.push({n:n, t:hf.t, a:ox*o[2]+oy*o[3], b:-ox*o[3]+oy*o[2], hx:x, hy:y, rest:lit,
+        feather:Math.min(1, lit/F.light(Math.abs(hf.z))), near:h===lights,
         r:0.8+random()*1.4, ph:0, sp:0, x:0, y:0, cx:0, cy:0});
     });
   }
@@ -146,7 +153,20 @@ function lmLayout(k){
   k.sx=(sr.left-r.left)/k.zoom; k.sy=(sr.top-r.top)/k.zoom;
   k.scale=Math.min(sr.width,sr.height)/k.zoom/LM_PX;
 }
-const lmPhaseAt=ms=>ms<LM_TURN_MS ? LM_PHI0+Math.PI*lmEase(ms/LM_TURN_MS) : ms<LM_LANDED_MS ? LM_PHI1 : LM_PHI1+LM_W0*(ms-LM_LANDED_MS)/1000;
+/* THE CLOCK the mark lands on and turns with: the program's phase() where it passes one, so the mark keeps the corner
+   logo's phase, else the launch's own, landing on the standard figure. The arrival is the half turn ending on it. */
+const lmClock=(k, ms)=>k.phase ? k.phase() : LM_PHI1+LM_W0*Math.max(0, ms-LM_LANDED_MS)/1000;
+const lmPhaseAt=(k, ms)=>lmClock(k, ms)-Math.PI*(1-lmEase(Math.min(1, ms/LM_TURN_MS)));
+// The riders for the phase the arrival lands on, a landing's time on at the clock's rate.
+function lmRide(k){
+  const at=k.phase ? k.phase()+LM_W0*LM_LANDED_MS/1000 : LM_PHI1;
+  if(k.R && k.rode===at) return;
+  k.F.lay(at, k.to, k.rad, LM_FEATHER, k.lat, k.rest);
+  k.R=launchRiders(k.F, k, k.rest, null, at);
+  // a dot twinkles the same before and after it lands
+  k.R.list.forEach(p=>{ p.ph=k.dots[p.n].ph; p.sp=k.dots[p.n].sp; });
+  k.rode=at;
+}
 // The landed figure on the lattice, the desk's own drawing: dots batched by alpha into a few fills a frame.
 function lmPaintLattice(k, quiet, phi, t){
   if(k.laid!==phi){ k.F.lay(phi, k.to, k.rad, LM_FEATHER, k.lat, k.light); k.laid=phi; }
@@ -179,7 +199,7 @@ function lmStamp(core, halo){
    shrinks to the lattice's dot and takes the desk's twinkle, so the landed frame is the lattice drawing. */
 function lmPaintRiders(k, t){
   const e=lmSmooth(k.ms/LM_TURN_MS), w=lmSmooth((k.ms-LM_SETTLE_MS)/(LM_LANDED_MS-LM_SETTLE_MS));
-  const sc=k.scale, ctx=k.ctx, phi=lmPhaseAt(k.ms), RS=k.R.list, bins=[], rDot=LM_DOT*sc;
+  const sc=k.scale, ctx=k.ctx, phi=lmPhaseAt(k, k.ms), RS=k.R.list, bins=[], rDot=LM_DOT*sc;
   const key=k.ink+"|"+k.halo;
   if(k.stampKey!==key){ k.stamp=lmStamp(k.ink,k.halo); k.stampKey=key; }
   ctx.clearRect(0,0,k.W,k.H);
@@ -207,12 +227,12 @@ function lmPaint(k){
   const cs=getComputedStyle(k.cv);
   k.ink=cs.color; k.halo=cs.getPropertyValue("--fifth-halo").trim() || cs.color;
   if(k.still()){ lmPaintLattice(k, true, LM_PHI0, 0); return; }
-  if(k.ms>=LM_LANDED_MS) lmPaintLattice(k, false, lmPhaseAt(k.ms), k.ms/1000);
+  if(k.ms>=LM_LANDED_MS) lmPaintLattice(k, false, lmPhaseAt(k, k.ms), k.ms/1000);
   else lmPaintRiders(k, k.ms/1000);
 }
 // Each rider chases its address on the turning figure, the pull easing in, and folds onto it as it lands.
 function lmStep(k, dt){
-  const phi=lmPhaseAt(Math.min(k.ms, LM_LANDED_MS-1)), o=[0,0,0,0], sc=k.scale;
+  const phi=lmPhaseAt(k, Math.min(k.ms, LM_LANDED_MS-1)), o=[0,0,0,0], sc=k.scale;
   const per=LM_PULL*lmSmooth(k.ms/LM_GATHER_MS), pull=1-Math.pow(1-per, dt/(1000/60));
   const w=lmSmooth((k.ms-LM_SETTLE_MS)/(LM_LANDED_MS-LM_SETTLE_MS)), RS=k.R.list;
   for(let i=0;i<RS.length;i++){
@@ -251,7 +271,7 @@ function lmScatter(k){
 function lmStart(k){
   if(k.still()){ lmPaint(k); lmLanded(); return; }
   if(k.covered()){ k.hold=setTimeout(()=>{ k.hold=0; lmStart(k); }, 150); return; }
-  k.ms=0; k.last=null; lmScatter(k);
+  k.ms=0; k.last=null; lmRide(k); lmScatter(k);
   k.raf=requestAnimationFrame(lmFrame);
 }
 // A drawing a launch stands on is the launch's to stop, unless `all`: a screen's null leaves it alone.
@@ -266,7 +286,7 @@ function stopLaunchMark(all){
 }
 /* host: the block the canvas lies over, holding the .e-fifth-spot the figure stands on; null stops a drawing no
    launch stands on. A drawing already running moves into a new host with its clock and its points, so a repaint
-   or a launch giving way onto the same mark plays one arrival. opts: R, still(), covered(). */
+   or a launch giving way onto the same mark plays one arrival. opts: R, still(), covered(), phase(). */
 function syncLaunchMark(host, opts){
   if(!host){ stopLaunchMark(false); return; }
   const spot=host.querySelector(".e-fifth-spot");
@@ -285,21 +305,18 @@ function syncLaunchMark(host, opts){
     return;
   }
   const o=opts||{}, F=launchFigure(o.R||LAUNCH_R), L=launchLattice(F), rest=new Float32Array(L.lat.nx*L.lat.ny);
-  F.lay(LM_PHI1, L.to, L.rad, LM_FEATHER, L.lat, rest);
   const dots=new Array(rest.length);
   for(let j=0, q=0;j<L.lat.ny;j++) for(let i=0;i<L.lat.nx;i++, q++)
     dots[q]={hx:L.lat.x0+i*LM_STEP, hy:L.lat.y0+j*LM_STEP, ph:Math.random()*LM_TAU, sp:0.6+Math.random()*0.9};
-  const R=launchRiders(F, L, rest);
-  // a dot twinkles the same before and after it lands
-  R.list.forEach(p=>{ p.ph=dots[p.n].ph; p.sp=dots[p.n].sp; });
   const cv=document.createElement("canvas");
   cv.className="e-fifth";
   cv.setAttribute("aria-hidden","true");
   host.insertBefore(cv, host.firstChild);
   const nk=lmK={host:host, spot:spot, cv:cv, ctx:cv.getContext("2d"), F:F, lat:L.lat, to:L.to, rad:L.rad,
-    light:new Float32Array(rest.length), laid:null, dots:dots, R:R, ms:0, last:null, raf:0, hold:0, gapMs:0, launch:false,
+    light:new Float32Array(rest.length), laid:null, dots:dots, rest:rest, R:null, rode:null, phase:o.phase||null,
+    ms:0, last:null, raf:0, hold:0, gapMs:0, launch:false,
     still:o.still||lmStillDefault, covered:o.covered||(()=>false)};
-  lmLayout(nk); lmScatter(nk);
+  lmLayout(nk); lmRide(nk); lmScatter(nk);
   // A resize clears the canvas, so it is painted again at once, moving or held.
   nk.ro=new ResizeObserver(()=>{ lmLayout(nk); lmPaint(nk); });
   nk.ro.observe(host);
@@ -326,8 +343,8 @@ function whenLaunchLanded(fn){
 let lmLast=null;
 /* region: the element whose box the mark stands over, from its top to the window's foot. ready: a promise of the
    work painted. focus(): the field a first key should reach where the program routes no typing of its own, focused
-   when the work is ready and nothing else holds the focus. The body carries e-launch while it stands and
-   e-launch-out while it gives way; the program's sheet says what those hide. */
+   when the work is ready and nothing else holds the focus. phase(): the program's clock, as syncLaunchMark's. The
+   body carries e-launch while it stands and e-launch-out while it gives way; the program's sheet says what those hide. */
 function launchMark(opts){
   const o=opts||{}, body=document.body, t0=performance.now(), still=o.still||lmStillDefault;
   const minMs=o.minMs==null ? LAUNCH_MIN_MS : o.minMs, maxMs=o.maxMs==null ? LAUNCH_MAX_MS : o.maxMs;
@@ -346,7 +363,7 @@ function launchMark(opts){
   body.appendChild(veil);
   body.classList.add("e-launch");
   stopLaunchMark(true);
-  syncLaunchMark(veil, {R:o.R||LAUNCH_R, still:still, covered:o.covered});
+  syncLaunchMark(veil, {R:o.R||LAUNCH_R, still:still, covered:o.covered, phase:o.phase});
   if(lmK && lmK.host===veil) lmK.launch=true;
   const state=lmLast={reason:"", ms:0, veil:veil};
   const off=[];

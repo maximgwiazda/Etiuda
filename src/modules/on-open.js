@@ -10,6 +10,7 @@ import { warmMenu } from "./header-menus.js";
 import { ssGet, ssSet } from "./storage.js";
 import { mgReduceMotion } from "./motion.js";
 import { launchMark, whenLaunchLanded } from "./launch-mark.js";
+import { fifthPhase } from "./fifth.js";
 
 let eReadyDone=false;
 let lastGreet;
@@ -46,7 +47,7 @@ function deskLaunch(){
   ssSet("eLaunched","1");
   const region=document.querySelector("#dotField>div");
   if(!region || document.querySelector(".empty-desk")) return null;
-  return launchMark({app:"desk", region:region, still:mgReduceMotion, covered:dialogStanding,
+  return launchMark({app:"desk", region:region, still:mgReduceMotion, covered:dialogStanding, phase:fifthPhase,
     ready:new Promise(r=>requestAnimationFrame(()=>r()))});
 }
 

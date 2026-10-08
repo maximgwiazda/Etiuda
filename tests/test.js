@@ -2433,7 +2433,8 @@ function launchLab(o) {
     return h;
   };
   if (!o.covered) o.covered = () => false;
-  return { sb, doc, el, timersTo, send, launch, ready: () => open(), frames: () => frames.length, drawn, heard,
+  const frame = t => { timersTo(t); const run = frames; frames = []; run.forEach(x => x.fn(t)); };
+  return { sb, doc, el, timersTo, send, launch, ready: () => open(), frames: () => frames.length, frame, drawn, heard,
     k: () => sb.__k(), now: () => clock };
 }
 function launchMarkTests() {
@@ -2482,6 +2483,48 @@ function launchMarkTests() {
   } catch (e) { got = "the lab threw: " + e.message; }
   eq("at R 7 the landed mark is the lattice: 602 lit dots, two riders each that stand on their dot at the half turn and one of them near, the still frame equal to the landed one, and a mid-turn rider off its dot",
     got, [602, true, true, true, true, true, true]);
+
+  try {
+    // a figure landed at a phase the turn has carried away from the standard one: the corner logo's, at any moment
+    const lm = launchLab().sb, F = lm.launchFigure(7), La = lm.launchLattice(F), n = La.lat.nx * La.lat.ny, o = [0, 0, 0, 0];
+    got = [PHI0 + 1, PHI0 + 2.3].map(phi => {
+      const rest = F.lay(phi, La.to, La.rad, 1.75, La.lat, new Float32Array(n));
+      const Rs = lm.launchRiders(F, La, rest, () => 0.5, phi), nearOf = {}, lit = [];
+      let miss = 0, off = 0, missStd = 0;
+      Rs.list.forEach(r => {
+        lm.launchPlace(Rs.C, r, phi, o); miss = Math.max(miss, Math.hypot(o[0] - r.hx, o[1] - r.hy));
+        Rs.C.at(r.t, phi, o); off = Math.max(off, Math.hypot(o[0] - r.hx, o[1] - r.hy));
+        lm.launchPlace(Rs.C, r, PHI1, o); missStd = Math.max(missStd, Math.hypot(o[0] - r.hx, o[1] - r.hy));
+        if (r.near) nearOf[r.n] = (nearOf[r.n] || 0) + 1;
+      });
+      rest.forEach((v, i) => { if (v) lit.push(i); });
+      return [miss < 1e-9, lit.length > 400 && lit.every(i => nearOf[i] === 1), off < La.rad + 1.75, missStd > 1];
+    });
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("riders for a figure landed at any phase stand on their dot there, one of them lighting each lit dot, every one within the band's reach of its dot; control: at the standard figure they miss",
+    got, [[true, true, true, true], [true, true, true, true]]);
+
+  try {
+    // the program's clock, standing in for the desk's fifthPhase: advanced with the frames at 2 pi times 0.007 a second
+    // from a phase far from the standard figure, then carried round a whole half turn in twelve steps
+    const W0 = 2 * Math.PI * 0.007, P0 = PHI0 + 2.3;
+    let P = P0, t = 0, landed = null, miss = null;
+    const L = launchLab(); L.launch({ phase: () => P }); const k = L.k(), o = [0, 0, 0, 0];
+    while (landed === null && t < 1500) {
+      t += 1000 / 60; P = P0 + W0 * t / 1000; L.frame(t);
+      if (k.ms >= 1000) {
+        landed = k.laid === P; miss = 0;
+        k.R.list.forEach(r => { L.sb.launchPlace(k.R.C, r, P, o); miss = Math.max(miss, Math.hypot(o[0] - r.hx, o[1] - r.hy)); });
+      }
+    }
+    const P1 = P, turn = [];
+    for (let i = 1; i <= 12; i++) { t += 70; P = P1 + i * Math.PI / 12; L.frame(t); turn.push(k.laid === P); }
+    // the control: a launch given no clock lands on its own, the standard figure
+    const M = launchLab(); M.launch(); let u = 0; while (M.k().ms < 1000 && u < 1500) { u += 1000 / 60; M.frame(u); }
+    got = [landed, miss !== null && miss < 0.25, turn.every(Boolean), Math.abs(M.k().laid - PHI1) < 1e-3];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("given the program's clock, the launch lands on the clock's phase at that moment, its riders on their dots there within a quarter pixel, and turns with it frame by frame; control: given none it lands on the standard figure",
+    got, [true, true, true, true]);
 
   try {
     const run = (readyAt, until) => { const L = launchLab(), h = L.launch(); if (readyAt != null) { L.timersTo(readyAt); L.ready(); } L.timersTo(until || 6000); return [h.reason, h.ms]; };
@@ -2589,17 +2632,18 @@ function launchMarkTests() {
     const desk = (seen, empty) => {
       const calls = [], set = [];
       const sb = { ssGet: () => seen, ssSet: (k, v) => set.push([k, v]), mgReduceMotion: () => false, dialogStanding: () => false,
-        requestAnimationFrame: () => 0, Promise,
+        fifthPhase: () => 0, requestAnimationFrame: () => 0, Promise,
         document: { querySelector: s => s === "#dotField>div" ? { id: "field" } : s === ".empty-desk" ? empty : null },
         launchMark: o => { calls.push(o); return {}; } };
       require("vm").runInNewContext(fn + "\nglobalThis.__r = deskLaunch();", sb);
       const o = calls[0];
-      return [calls.length, set, o ? [o.app, o.region.id, o.still === sb.mgReduceMotion, o.covered === sb.dialogStanding, typeof o.ready.then] : null];
+      return [calls.length, set, o ? [o.app, o.region.id, o.still === sb.mgReduceMotion, o.covered === sb.dialogStanding, typeof o.ready.then,
+        o.phase === sb.fifthPhase] : null];
     };
     got = [desk(null, null), desk("1", null), desk(null, { empty: true })];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the desk launches once per window over the dot field, on its own quiet switch and dialogs, and not over the empty desk",
-    got, [[1, [["eLaunched", "1"]], ["desk", "field", true, true, "function"]], [0, [], null], [0, [["eLaunched", "1"]], null]]);
+  eq("the desk launches once per window over the dot field, on its own quiet switch and dialogs and its header's clock, and not over the empty desk",
+    got, [[1, [["eLaunched", "1"]], ["desk", "field", true, true, "function", true]], [0, [], null], [0, [["eLaunched", "1"]], null]]);
 
   try {
     // with a launch arriving, the boot repaint and the menu's warm copy wait for it to land
@@ -2630,7 +2674,9 @@ function fifthLab(still) {
     MutationObserver: class { constructor(cb) { watch = cb; } observe() {} }
   };
   require("vm").runInNewContext(src + "\nglobalThis.__f = { fifthLinePath, fifthRadius, fifthPhase, fifthStep, fifthBand, fifthLay, wireFifth, FIFTH_PHI0 };", sb);
-  const f = sb.__f;
+  const f = sb.__f, wire = f.wireFifth;
+  // with no options, as main.js wires the header on the desk's switch (the leg on the program's own band holds that call)
+  f.wireFifth = o => wire(o || { still: sb.mgReduceMotion });
   return { f, node, std, sb, queued: () => frames.length, flip: v => { sb.still = v; watch(); },
     frame: ms => { const run = frames; frames = []; run.forEach(x => x.fn(ms)); } };
 }
@@ -2721,6 +2767,29 @@ function fifthTests() {
   } catch (e) { got = "the lab threw: " + e.message; }
   eq("under a quiet switch nothing is asked for, the phase and the path stay the standard figure, and switching on mid-turn puts the standard figure back, filled and unstroked",
     got, [[0, true, true, 0, undefined], [0, true, true, "currentColor", "none"]]);
+
+  try {
+    // a second program's corner logo (Studio's band): its own path, its own quiet switch, which the system flips with no class
+    // on the root and no word to the mark
+    const read = f => fs.readFileSync(path.join(E.ROOT, "src", f), "utf8");
+    const mk = () => { const b = { d: "M0 0", sets: 0, attrs: {}, getAttribute: n => (n === "d" ? b.d : b.attrs[n]),
+      setAttribute(n, v) { if (n === "d") { b.d = v; b.sets++; } else b.attrs[n] = v; } }; return b; };
+    const a = fifthLab(false), band = mk();
+    let quiet = false;
+    a.f.wireFifth({ node: band, still: () => quiet });
+    for (let i = 0; i < 30; i++) a.frame(1000 + i * 1000 / 60);
+    const turned = [band.sets > 0, a.node.sets, a.queued()];
+    quiet = true;
+    for (let i = 30; i < 34; i++) a.frame(1000 + i * 1000 / 60);
+    // the control: the same frames with the switch left alone, and the turn goes on
+    const b = fifthLab(false), band2 = mk();
+    b.f.wireFifth({ node: band2, still: () => false });
+    for (let i = 0; i < 34; i++) b.frame(1000 + i * 1000 / 60);
+    got = [turned, [a.queued(), band.d, a.f.fifthPhase() === PHI0, band.attrs.fill, band.attrs.stroke], b.queued(),
+      !/^import /m.test(read("modules/fifth.js")), /\bfifth\.wireFifth\(\{still:motion\.mgReduceMotion\}\);/.test(read("main.js"))];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a program's own corner logo turns on the one clock with its own quiet switch, and stands by its next repaint when the switch flips with no class on the root and no word; fifth.js imports nothing, and the desk wires its header on its own switch; control: left alone it turns on",
+    got, [[true, 0, 1], [0, "M0 0", true, "currentColor", "none"], 1, true, true]);
 
   try {
     const a = fifthLab(false); a.f.wireFifth();
