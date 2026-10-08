@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 101;
+const EXPECTED = 102;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -130,10 +130,10 @@ function loadShell(opts) {
   };
   const ctl = {};
   const fs = wrapFs(ctl);
-  const regCalls = [], busCalls = [];
+  const regCalls = [], busCalls = [], busOpts = [];
   const cp = { execFileSync: (file, args, opt) => {
     /* The session bus as opts.bus answers it (a function of dbus-send's arguments); none, as on Windows, throws. */
-    if (file === "dbus-send") { busCalls.push(args); if (!o.bus) throw new Error("no session bus"); return o.bus(args); }
+    if (file === "dbus-send") { busCalls.push(args); busOpts.push(opt); if (!o.bus) throw new Error("no session bus"); return o.bus(args); }
     if (file !== REG_TOOL) return nodeRequire("node:child_process").execFileSync(file, args, opt);
     regCalls.push([file, args, opt]);
     if (o.reg instanceof Error) throw o.reg;
@@ -163,7 +163,7 @@ function loadShell(opts) {
   const ipc = (ch, ...args) => { const e = { sender: { id: 1, once: noop }, senderFrame: ENGINE, returnValue: undefined };
     if (on[ch]) on[ch](e, ...args); return e.returnValue; };
   const ask = (ch, ...args) => invoke[ch]({ sender: { id: 1 }, senderFrame: ENGINE }, ...args);
-  return { api, ctl, said, ipc, ask, on, invoke, UD, DOCS, deskFile: path.join(UD, "desk.json"), power, sent, win, switches, removed, regCalls, busCalls };
+  return { api, ctl, said, ipc, ask, on, invoke, UD, DOCS, deskFile: path.join(UD, "desk.json"), power, sent, win, switches, removed, regCalls, busCalls, busOpts };
 }
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 /* Invented from nothing, as every fixture here is. The refused one names a shelf that is not
@@ -1109,7 +1109,7 @@ try {
      (SelectBackend, key_storage_util_linux.cc): KDE 3, LXQt and a desktop it cannot name get "basic_text". 14a is the
      naming, case by case as the C++ reads it; 14b the switch where it is wanted and a keyring answers unlocked, 14c none
      where Chromium has a keyring, 14d none where the command line names a store, 14g none where no keyring answers
-     unlocked; 14E the Windows control; 14F the shell without its one append. */
+     unlocked; 14E the Windows control; 14F the shell without its one append; 14h the exception's exact shape. */
   {
     const P = loadShell().api;
     const named = [[{}, "OTHER"], [{ XDG_CURRENT_DESKTOP: "GNOME" }, "GNOME"], [{ XDG_CURRENT_DESKTOP: "ubuntu:GNOME" }, "GNOME"],
@@ -1178,6 +1178,20 @@ try {
     const cut = as("linux", { XDG_CURRENT_DESKTOP: "LXQt" }, { src: SRC.split(APPEND).join("") });
     check(SRC.split(APPEND).length === 2 && store(cut).length === 0,
       "14F CONTROL: the same shell without its one append asks for no store on LXQt, so 14b can fail: " + JSON.stringify(store(cut)));
+    /* The exception that admits dbus-send: on Linux alone, three read-only questions to the session bus, nothing else.
+       Frozen here as read and ruled, so another bus, argument, question, option or platform changes this leg first. */
+    const Q = ["--session", "--print-reply=literal", "--reply-timeout=1500"];
+    const ASKS = JSON.stringify([
+      Q.concat(["--dest=org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus.NameHasOwner", "string:org.freedesktop.secrets"]),
+      Q.concat(["--dest=org.freedesktop.secrets", "/org/freedesktop/secrets", "org.freedesktop.Secret.Service.ReadAlias", "string:default"]),
+      Q.concat(["--dest=org.freedesktop.secrets", "/org/freedesktop/secrets/collection/login", "org.freedesktop.DBus.Properties.Get",
+        "string:org.freedesktop.Secret.Collection", "string:Locked"])]);
+    const OPTS = JSON.stringify({ encoding: "utf8", timeout: 3000, windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
+    const off = ["win32", "darwin", "freebsd", "openbsd", "sunos", "aix"].map(p => as(p, {}));
+    check(asked.every(S => JSON.stringify(S.busCalls) === ASKS && S.busOpts.every(o => JSON.stringify(o) === OPTS))
+      && off.every(S => S.busCalls.length === 0 && store(S).length === 0 && told(S).length === 0),
+      "14h the session bus is asked the three ruled questions, in order, with the ruled options and nothing more, on Linux alone: "
+      + JSON.stringify(asked.map(S => S.busCalls.length)) + " call(s) on Linux, " + JSON.stringify(off.map(S => S.busCalls.length)) + " on six other platforms");
   }
 } catch (e) {
   failed++;
