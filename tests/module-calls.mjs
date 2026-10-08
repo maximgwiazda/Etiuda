@@ -3415,6 +3415,153 @@ const CARD_B = {
       /^[ \t]*wireCardMargin\(base\);[ \t]*$/m.test(ed)].join(","), "true,true"));
 }
 
+/* ------------------------------------------------------------------ deck.js, the Deck
+   A card of two or more replies rests as its first with the rest tucked behind, and what an open deck reaches over
+   fades back (decisions 2026-10-07 21:30 and 22:28: the fade must be consistent, the same card always faded or
+   always not under the same deck). The oracles: the module's written contract (an edge 6px per depth under the
+   front, three at most; a card counts as covered when its top lies under the reach, in the deck's column) computed
+   here independently; and for the fade, the same layout reached by two histories, which must give one answer. The
+   list is a stand-in holding only what deckFade() reads: rects, classes and two lengths. Invented ids. */
+{
+  const DK = await import(MOD("deck.js"));
+  const Dom = await import(MOD("dom.js"));
+  const hadDoc = globalThis.document;
+  const cls = s => ({ s, add(...c) { c.forEach(x => this.s.add(x)); }, remove(...c) { c.forEach(x => this.s.delete(x)); }, contains(c) { return this.s.has(c); } });
+  const node = (id, top, left, height, kind) => ({ dataset: id ? { id } : {}, kind: kind || "card", classList: cls(new Set([kind || "card"])),
+    rect: { top, left, right: left + 300, bottom: top + height }, getBoundingClientRect() { return this.rect; },
+    style: { v: {}, getPropertyValue(k) { return this.v[k] || ""; } } });
+  /* Matches the three selectors deckFade() asks, compound by compound: classes and a bare [data-id]. */
+  const hit = (e, compound) => (compound.match(/\.[\w-]+/g) || []).every(c => e.classList.contains(c.slice(1)))
+    && (!/\[data-id\]/.test(compound) || !!e.dataset.id);
+  const listOf = items => ({ items, querySelectorAll(sel) { return this.items.filter(e => sel.split(",").some(c => hit(e, c.trim()))); } });
+  // Column one: the deck at 100, its rest box 80 high and reaching 150 below it; a card under the reach, a rule, a card past it.
+  const scene = () => {
+    const deck = node("c-deck", 100, 0, 80); deck.classList.add("deck"); deck.style.v = { "--deck-rest-bottom": "60px", "--deck-extra": "168px" };
+    return { deck, under: node("c-under", 200, 0, 120), rule: node(null, 260, 0, 20, "list-sep"), past: node("c-past", 340, 0, 90),
+      beside: node("c-beside", 200, 320, 120) };
+  };
+  const faded = l => l.items.filter(e => e.classList.contains("deck-under")).map(e => e.dataset.id || e.kind).sort().join(",");
+  try {
+    globalThis.document = { querySelector: () => null, createElement: () => ({ getContext: () => ({}) }), createRange: () => ({}) };
+    check("deck.js", "1008dk1 at rest each tucked reply's bottom edge sits 6px per depth under the front's, the fourth and after behind the third, none shows above the front's top (the one taller than the front is cut to 2px under it), and the rest box holds three edges and its margin",
+      () => {
+        const tops = [40, 110, 170, 270, 330], hs = [60, 50, 90, 50, 40], L = DK.deckLengths(tops, hs, 300, 380);
+        const edges = L.slabs.slice(1).map((v, i) => tops[i + 1] + hs[i + 1] + v.dy - (tops[0] + hs[0]));
+        const shown = L.slabs.slice(1).map((v, i) => tops[i + 1] + v.dy + v.clip);
+        return eq([edges.join(","), shown.join(","), L.rest, L.restBottom, L.extra, L.grow, L.slabs.map(v => v.z).join("")].join("|"),
+          "6,12,18,18|56,42,68,78|128|104|274|252|65432");
+      });
+    check("deck.js", "1008dk2 a card is covered when its top lies under the reach in the deck's column: not on the reach's own top, not past its bottom, not in the column beside",
+      () => {
+        const reach = { top: 100, left: 0, right: 300, bottom: 330 }, at = (top, left) => DK.deckCovers(reach, { top, left, right: left + 300 });
+        return eq([at(101, 0), at(329, 0), at(100, 0), at(330, 0), at(200, 297), at(200, 320), at(200, -297)].join(","), "true,true,false,false,false,false,false");
+      });
+    check("deck.js", "1008dk3 the list's observer skips a change the fade made itself, and only that",
+      () => eq([DK.deckOwnChange("card", "card deck-under"), DK.deckOwnChange("card deck-under deck-fresh", "card"),
+        DK.deckOwnChange("card deck", "deck card deck-under"), DK.deckOwnChange("card", "card deck-open"), DK.deckOwnChange("txt", "txt sel")].join(","),
+        "true,true,true,false,false"));
+    check("deck.js", "1008dk4 an open deck fades the card and the rule under its reach and nothing else: not itself, not the card past it, not the column beside; closed, nothing",
+      () => {
+        const s = scene(), l = listOf([s.deck, s.under, s.rule, s.past, s.beside]);
+        globalThis.document.querySelector = q => (q === "#list" ? l : null); Dom.grabDom();
+        DK.deckFade(); const shut = faded(l);
+        s.deck.classList.add("deck-open"); DK.deckFade(); const open = faded(l);
+        s.deck.classList.remove("deck-open"); DK.deckFade();
+        return eq([shut, open, faded(l)].join("|"), "|c-under,list-sep|");
+      });
+    check("deck.js", "1008dk5 the fade is one answer for one layout: a covered card drawn anew arrives faded at once, and the same page reached after a redraw with the deck shut gives the same set",
+      () => {
+        // History one: open, the covered card redrawn while open.
+        const a = scene(), la = listOf([a.deck, a.under, a.rule, a.past, a.beside]);
+        globalThis.document.querySelector = q => (q === "#list" ? la : null); Dom.grabDom();
+        a.deck.classList.add("deck-open"); DK.deckFade();
+        const redrawn = node("c-under", 200, 0, 120); la.items[1] = redrawn; DK.deckFade();
+        const one = faded(la), arrived = redrawn.classList.contains("deck-fresh") + "/" + redrawn.classList.contains("deck-under");
+        // History two: the card redrawn with the deck shut (the press on it), then the deck opened.
+        const b = scene(), lb = listOf([b.deck, b.under, b.rule, b.past, b.beside]);
+        globalThis.document.querySelector = q => (q === "#list" ? lb : null); Dom.grabDom();
+        b.deck.classList.add("deck-open"); DK.deckFade(); b.deck.classList.remove("deck-open"); DK.deckFade();
+        lb.items[1] = node("c-under", 200, 0, 120); DK.deckFade();
+        b.deck.classList.add("deck-open"); DK.deckFade();
+        const two = faded(lb);
+        b.deck.classList.remove("deck-open"); DK.deckFade(); b.deck.classList.add("deck-open"); DK.deckFade();
+        return eq([one, arrived, two, faded(lb)].join("|"), "c-under,list-sep|true/true|c-under,list-sep|c-under,list-sep");
+      });
+    check("deck.js", "1008dk6 an open deck reaches below its rest box by what the deal adds, and a shut one by nothing",
+      () => { const c = { classList: cls(new Set(["deck"])), _deckGrow: 75 }, open = DK.deckReach(c);
+        c.classList.add("deck-open"); return eq([open, DK.deckReach(c), DK.deckReach(null)].join(","), "0,75,0"); });
+    /* The wiring, not the function: wireDeck() on stand-ins, its list observer's callback fed records by hand. Frames
+       are never run, so only the observer can fade. It leaves the module wired. */
+    check("deck.js", "1008dk7 the list's observer works the fade out afresh on every change: a deck opening fades, a covered card redrawn under it arrives faded, the fade's own marks wake nothing, any other change does, and closing lifts it",
+      () => {
+        const g = globalThis, was = { MO: g.MutationObserver, raf: g.requestAnimationFrame, ael: g.addEventListener };
+        let feed = null;
+        try {
+          g.MutationObserver = class { constructor(f) { feed = f; } observe() {} };
+          g.requestAnimationFrame = () => 1; g.addEventListener = () => {};
+          const s = scene(), l = listOf([s.deck, s.under, s.rule, s.past, s.beside]), at = e => [...e.classList.s].join(" ");
+          l.addEventListener = () => {}; globalThis.document.addEventListener = () => {};
+          l.items.forEach(e => { e.getAttribute = () => at(e); });
+          globalThis.document.querySelector = q => (q === "#list" ? l : null); Dom.grabDom();
+          DK.wireDeck();
+          s.deck.classList.add("deck-open"); feed([{ type: "attributes", target: s.deck, oldValue: "card deck" }]);
+          const opened = faded(l);
+          const redrawn = node("c-under", 200, 0, 120); redrawn.getAttribute = () => at(redrawn); l.items[1] = redrawn;
+          feed([{ type: "childList", target: l }]);
+          const arrived = redrawn.classList.contains("deck-under") + "/" + redrawn.classList.contains("deck-fresh");
+          s.past.rect = { top: 250, left: 0, right: 300, bottom: 340 };
+          feed([{ type: "attributes", target: redrawn, oldValue: "card" }]); const own = faded(l);
+          feed([{ type: "attributes", target: s.beside, oldValue: "card sel" }]); const other = faded(l);
+          s.deck.classList.remove("deck-open"); feed([{ type: "attributes", target: s.deck, oldValue: "card deck deck-open" }]);
+          return eq([opened, arrived, own, other, faded(l)].join("|"), "c-under,list-sep|true/true|c-under,list-sep|c-past,c-under,list-sep|");
+        } finally { for (const [k, v] of [["MutationObserver", was.MO], ["requestAnimationFrame", was.raf], ["addEventListener", was.ael]]) if (v === undefined) delete g[k]; else g[k] = v; }
+      });
+    /* A clock of its own, so the deal's timers run in order without waiting: setTimeout queues, run(t) fires what is due. */
+    check("deck.js", "1008dk8 a deck asked to open again while its replies are still travelling lets them land: a press on a dealt reply after the deal is not held, whether a rescan of the list or the pointer coming back asked",
+      () => {
+        const g = globalThis, was = { st: g.setTimeout, ct: g.clearTimeout, MO: g.MutationObserver, raf: g.requestAnimationFrame, ael: g.addEventListener };
+        let now = 0, seq = 0; const q = new Map();
+        const run = to => { for (;;) { const d = [...q].filter(([, t]) => t.at <= to).sort((a, b) => a[1].at - b[1].at || a[0] - b[0])[0];
+          if (!d) break; q.delete(d[0]); now = d[1].at; d[1].f(); } now = to; };
+        const out = [], stillWas = UILANG_STORE.lsGet("eMotionOff");
+        try {
+          UILANG_STORE.lsDel("eMotionOff");
+          g.setTimeout = (f, ms) => { q.set(++seq, { f, at: now + (ms || 0) }); return seq; }; g.clearTimeout = id => q.delete(id);
+          g.MutationObserver = class { observe() {} }; g.requestAnimationFrame = () => 1;
+          for (const how of ["rescan", "return"]) {
+            const L = {}, on = (t, f) => { (L[t] = L[t] || []).push(f); }, fire = (t, e) => (L[t] || []).forEach(f => f(e));
+            g.addEventListener = on; globalThis.document.addEventListener = on;
+            const card = { dataset: { id: "c-deck" }, classList: cls(new Set(["card"])), style: node().style, offsetHeight: 200, hover: false,
+              matches(s) { return s === ":hover" && this.hover; }, closest(s) { return s === ".card.deck" && this.classList.contains("deck") ? this : null; } };
+            card.style.setProperty = (k, x) => { card.style.v[k] = x; }; card.style.removeProperty = k => { delete card.style.v[k]; };
+            const slab = (top, h) => ({ offsetTop: top, offsetHeight: h, offsetWidth: 300, classList: cls(new Set(["txt"])),
+              style: { setProperty() {}, removeProperty() {} },
+              closest(s) { return s === ".card.deck" ? card.closest(s) : s === ".txt.deck-back" && this.classList.contains("deck-back") ? this : null; } });
+            const s0 = slab(30, 60), s1 = slab(100, 60), away = { closest: () => null };
+            card.querySelectorAll = () => [s0, s1];
+            const l = { querySelectorAll: s => (s.startsWith(".card") ? [card] : []), addEventListener: on };
+            globalThis.document.querySelector = s => (s === "#list" ? l : null); Dom.grabDom();
+            now = 0; q.clear(); DK.wireDeck(); DK.deckScan(); card.hover = true;
+            fire("pointerover", { target: s0, relatedTarget: null }); run(150);
+            const moving = card.classList.contains("deck-moving");
+            if (how === "rescan") DK.deckScan();
+            else { fire("pointerover", { target: away, relatedTarget: s0 }); run(200); fire("pointerover", { target: s0, relatedTarget: away }); }
+            run(1200);
+            let held = false; fire("click", { target: s1, stopPropagation() { held = true; }, preventDefault() {} });
+            out.push(how + ":" + moving + "/" + card.classList.contains("deck-open") + "/" + (held ? "held" : "copies"));
+          }
+        } finally {
+          for (const [k, v] of [["setTimeout", was.st], ["clearTimeout", was.ct], ["MutationObserver", was.MO], ["requestAnimationFrame", was.raf], ["addEventListener", was.ael]]) if (v === undefined) delete g[k]; else g[k] = v;
+          if (stillWas != null) UILANG_STORE.lsSet("eMotionOff", stillWas);
+        }
+        return eq(out.join(","), "rescan:true/true/copies,return:true/true/copies");
+      });
+  } finally {
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+    if (hadDoc !== undefined) Dom.grabDom();
+  }
+}
+
 /* NOT cardBodyHtml(). It reads the PAX box off the document through fill(), so it cannot be
    called without one: it is the browser oracle's, and tests/smoke.js has it. card-body.js is
    called above only for its intent strip, which reads no document. */

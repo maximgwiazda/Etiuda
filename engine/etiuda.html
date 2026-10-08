@@ -1895,6 +1895,42 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 .tag{position:absolute;top:8px;right:10px;font:10px var(--mono);color:var(--dim);
   letter-spacing:.5px;pointer-events:none}
 .txt.plx .tag{color:var(--pl)}
+/* THE DECK, the sheet's half; deck.js sets the classes and the --deck-* lengths. At rest each reply
+   behind the front sits with its bottom edge out by its depth, narrower and darker; dealt, they
+   spring into their places one after another, front first, and slide back on the house curve. */
+#list .card.deck{content-visibility:visible;contain-intrinsic-size:none;z-index:0}
+#list .card.deck.deck-up{z-index:6}
+.card.deck>.txt{z-index:var(--deck-z,1);
+  transition:transform var(--m-move) var(--m-ease),clip-path var(--m-move) var(--m-ease),
+             filter var(--m-move) ease,box-shadow var(--m-move) ease,
+             background-color var(--m-tone) ease,border-color var(--m-tone) ease}
+.card.deck:not(.deck-open)>.txt.deck-back{
+  transform:translateY(var(--deck-dy)) scaleX(var(--deck-sx));transform-origin:50% 100%;
+  clip-path:inset(var(--deck-clip) -3px -3px -3px round var(--radius));
+  filter:brightness(var(--deck-dim));pointer-events:none}
+/* On a light desk the edges darken a third as much: grey bars under white read as weight, not depth. */
+:root[data-theme=light] .card.deck:not(.deck-open)>.txt.deck-back{
+  filter:brightness(calc(1 - (1 - var(--deck-dim)) / 3));box-shadow:none}
+.card.deck.deck-open>.txt.deck-back{
+  transform:none;clip-path:inset(-3px -3px -3px -3px round var(--radius));filter:none;
+  box-shadow:0 16px 34px -14px rgba(0,0,0,.75),var(--card-shadow,0 0 #0000);
+  transition:transform var(--m-travel) var(--m-spring) calc(var(--deck-k) * var(--m-travel) / 9),
+             clip-path var(--m-move) var(--m-ease) calc(var(--deck-k) * var(--m-travel) / 9),
+             filter var(--m-move) ease calc(var(--deck-k) * var(--m-travel) / 9),
+             box-shadow var(--m-travel) ease,
+             background-color var(--m-tone) ease,border-color var(--m-tone) ease}
+:root[data-theme=light] .card.deck.deck-open>.txt.deck-back{
+  box-shadow:0 14px 30px -14px rgba(15,23,42,.35),var(--card-shadow,0 0 #0000)}
+/* The open deck's floor paints nothing and holds the pointer over the whole reach from the first
+   frame, so a click aimed where a reply is travelling lands on nothing rather than on the card beneath. */
+.card.deck.deck-open::after{content:"";position:absolute;left:-8px;right:-8px;
+  top:var(--deck-rest-bottom);height:var(--deck-extra);z-index:0}
+/* What an open deck reaches over fades back and softens, so the deck is the one sharp thing there;
+   deck.js marks it. A node drawn new under an open deck wears deck-fresh for two frames and arrives faded. */
+#list .card,#list .list-sep{transition:opacity var(--m-move) ease,filter var(--m-move) ease}
+#list .deck-under{opacity:.22;filter:blur(1.6px)}
+:root[data-theme=light] #list .deck-under{opacity:.3}
+#list .deck-fresh{transition:none!important}
 /* THE GLASS RIM: light catching an edge, drawn as a 1px ring cut from this gradient. A
    line along the top and the bottom edge, brightest at the top's left and the bottom's right and
    fading along the edge, wide and shallow so the sides are all but dark. The two catches are one
@@ -5437,7 +5473,7 @@ What you type stays in this browser only.`;
     eEmbeddedCatalog: () => eEmbeddedCatalog
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-07";
+  var E_BUILT = "2026-10-08";
   function eEmbeddedCatalog() {
     try {
       const el = document.getElementById("eEmbedded");
@@ -18106,6 +18142,244 @@ What you type stays in this browser only.`;
     toggleNotePane: () => toggleNotePane,
     wireNotePane: () => wireNotePane
   });
+
+  // src/modules/deck.js
+  var deck_exports = {};
+  __export(deck_exports, {
+    deckCovers: () => deckCovers,
+    deckFade: () => deckFade,
+    deckLengths: () => deckLengths,
+    deckOwnChange: () => deckOwnChange,
+    deckReach: () => deckReach,
+    deckScan: () => deckScan,
+    wireDeck: () => wireDeck
+  });
+  var DECK_PEEK = 6;
+  var DECK_INSET = 7;
+  var DECK_DEPTH = 3;
+  var DECK_DWELL = 70;
+  var DECK_GRACE = 110;
+  var DECK_DIM = [1, 0.8, 0.64, 0.5];
+  var DECK_SLAB_PROPS = ["--deck-dy", "--deck-sx", "--deck-clip", "--deck-dim", "--deck-z", "--deck-k"];
+  function deckSlabs(card) {
+    return Array.from(card.querySelectorAll(":scope > .txt[data-v]"));
+  }
+  function deckPx(n) {
+    return Math.round(n * 100) / 100 + "px";
+  }
+  function deckLengths(tops, heights, width, natural) {
+    const n = tops.length, t0 = tops[0], h0 = heights[0];
+    const rest = t0 + h0 + Math.min(n - 1, DECK_DEPTH) * DECK_PEEK + 10, restBottom = t0 + h0 + 4;
+    return {
+      rest,
+      restBottom,
+      extra: Math.max(0, natural - restBottom - 2),
+      grow: Math.max(0, natural - rest),
+      slabs: tops.map((top, k) => {
+        if (!k) return { z: n + 1, k: 0 };
+        const d = Math.min(k, DECK_DEPTH);
+        return {
+          z: n - k + 1,
+          k,
+          dy: t0 + h0 + d * DECK_PEEK - (top + heights[k]),
+          sx: 1 - 2 * d * DECK_INSET / width,
+          clip: Math.max(0, heights[k] - h0 - d * DECK_PEEK + 2),
+          dim: DECK_DIM[d]
+        };
+      })
+    };
+  }
+  function deckReset(card) {
+    card.classList.remove("deck", "deck-open", "deck-up", "deck-moving");
+    ["height", "--deck-rest-bottom", "--deck-extra"].forEach((p) => card.style.removeProperty(p));
+    deckSlabs(card).forEach((s) => {
+      s.classList.remove("deck-back");
+      DECK_SLAB_PROPS.forEach((p) => s.style.removeProperty(p));
+    });
+    clearTimeout(card._deckT);
+    card._deckGrow = 0;
+  }
+  var deckRaf = 0;
+  var deckKbdCard = null;
+  function deckScan() {
+    deckRaf = 0;
+    if (!list) return;
+    const todo = [];
+    list.querySelectorAll(".card[data-id]").forEach((c) => {
+      if (deckSlabs(c).length < 2) {
+        if (c.classList.contains("deck")) deckReset(c);
+        return;
+      }
+      c.style.removeProperty("height");
+      c.classList.add("deck");
+      todo.push(c);
+    });
+    const read = todo.map((c) => {
+      const s = deckSlabs(c);
+      return { c, s, L: deckLengths(s.map((e) => e.offsetTop), s.map((e) => e.offsetHeight), s[0].offsetWidth, c.offsetHeight) };
+    });
+    read.forEach(({ c, s, L }) => {
+      c.style.height = deckPx(L.rest);
+      c.style.setProperty("--deck-rest-bottom", deckPx(L.restBottom));
+      c.style.setProperty("--deck-extra", deckPx(L.extra));
+      c._deckGrow = L.grow;
+      s.forEach((e, k) => {
+        const v = L.slabs[k];
+        e.style.setProperty("--deck-z", String(v.z));
+        e.style.setProperty("--deck-k", String(k));
+        if (!k) {
+          e.classList.remove("deck-back");
+          return;
+        }
+        e.classList.add("deck-back");
+        e.style.setProperty("--deck-dy", deckPx(v.dy));
+        e.style.setProperty("--deck-sx", String(v.sx));
+        e.style.setProperty("--deck-clip", deckPx(v.clip));
+        e.style.setProperty("--deck-dim", String(v.dim));
+      });
+      if (c.matches(":hover") || c === deckKbdCard) deckSetOpen(c, true, true);
+    });
+  }
+  function deckLater() {
+    if (!deckRaf) deckRaf = requestAnimationFrame(deckScan);
+  }
+  function deckSetOpen(card, open, instant) {
+    clearTimeout(card._deckT);
+    if (open === card.classList.contains("deck-open")) return;
+    clearTimeout(card._deckM);
+    const now = mgReduceMotion() || instant, travel = now ? 0 : M_MS.travel, move = now ? 0 : M_MS.move;
+    if (open) {
+      card.classList.add("deck-up", "deck-open");
+      if (travel) {
+        const n = deckSlabs(card).length;
+        card.classList.add("deck-moving");
+        card._deckM = setTimeout(() => card.classList.remove("deck-moving"), travel + (n - 1) * travel / 9);
+      }
+    } else {
+      card.classList.remove("deck-open", "deck-moving");
+      card._deckM = setTimeout(() => {
+        if (!card.classList.contains("deck-open")) card.classList.remove("deck-up");
+      }, move + 40);
+    }
+  }
+  function deckWant(card, open, ms) {
+    clearTimeout(card._deckT);
+    if (!ms) {
+      deckSetOpen(card, open);
+      return;
+    }
+    card._deckT = setTimeout(() => deckSetOpen(card, open), ms);
+  }
+  function deckAt(el) {
+    return el && el.closest ? el.closest(".card.deck") : null;
+  }
+  function deckReach(card) {
+    return card && card.classList.contains("deck-open") ? card._deckGrow || 0 : 0;
+  }
+  function deckCovers(reach, r) {
+    return r.top > reach.top && r.top < reach.bottom && r.left < reach.right - 4 && r.right > reach.left + 4;
+  }
+  function deckOwnChange(was, now) {
+    const strip = (s) => String(s || "").replace(/\bdeck-(under|fresh)\b/g, "").trim().split(/\s+/).sort().join(" ");
+    return strip(was) === strip(now);
+  }
+  var deckSeen = /* @__PURE__ */ new WeakSet();
+  var deckFadeRaf = 0;
+  function deckFade() {
+    if (!list) return;
+    const items = Array.from(list.querySelectorAll(".card[data-id], .list-sep")), want = /* @__PURE__ */ new Set();
+    list.querySelectorAll(".card.deck.deck-open").forEach((card) => {
+      const c = card.getBoundingClientRect(), cs = card.style;
+      const reach = {
+        top: c.top,
+        left: c.left,
+        right: c.right,
+        bottom: c.top + (parseFloat(cs.getPropertyValue("--deck-rest-bottom")) || 0) + (parseFloat(cs.getPropertyValue("--deck-extra")) || 0) + 2
+      };
+      items.forEach((e) => {
+        if (e !== card && deckCovers(reach, e.getBoundingClientRect())) want.add(e);
+      });
+    });
+    list.querySelectorAll(".deck-under").forEach((e) => {
+      if (!want.has(e)) e.classList.remove("deck-under");
+    });
+    const fresh = [];
+    want.forEach((e) => {
+      if (e.classList.contains("deck-under")) return;
+      if (!deckSeen.has(e)) {
+        e.classList.add("deck-fresh");
+        fresh.push(e);
+      }
+      e.classList.add("deck-under");
+    });
+    items.forEach((e) => deckSeen.add(e));
+    if (fresh.length) requestAnimationFrame(() => requestAnimationFrame(() => fresh.forEach((e) => e.classList.remove("deck-fresh"))));
+  }
+  function deckFadeLater() {
+    if (!deckFadeRaf) deckFadeRaf = requestAnimationFrame(() => {
+      deckFadeRaf = 0;
+      deckFade();
+    });
+  }
+  function deckKbdSync() {
+    if (!list) return;
+    const sel = document.body.classList.contains("e-kbdnav") ? list.querySelector(".txt.sel") : null;
+    const c = sel ? deckAt(sel) : null;
+    if (deckKbdCard && deckKbdCard !== c && !deckKbdCard.matches(":hover")) deckSetOpen(deckKbdCard, false);
+    deckKbdCard = c;
+    if (!c) return;
+    const was = c.classList.contains("deck-open");
+    deckSetOpen(c, true);
+    if (!was) setTimeout(() => sel.scrollIntoView({ block: "nearest", behavior: mgReduceMotion() ? "auto" : "smooth" }), mgReduceMotion() ? 0 : 200);
+  }
+  function wireDeck() {
+    if (!list) return;
+    new MutationObserver((ms) => {
+      let shape = false, fade = false;
+      for (const r of ms) {
+        if (r.type === "childList") {
+          shape = true;
+          fade = true;
+        } else if (!deckOwnChange(r.oldValue, r.target.getAttribute("class"))) fade = true;
+      }
+      if (shape) deckLater();
+      if (fade) deckFade();
+    }).observe(list, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"], attributeOldValue: true });
+    if (typeof ResizeObserver === "function") new ResizeObserver(() => {
+      deckLater();
+      deckFadeLater();
+    }).observe(list);
+    list.addEventListener("animationend", deckFadeLater);
+    list.addEventListener("transitionend", deckFadeLater);
+    document.addEventListener("scroll", deckFadeLater, { capture: true, passive: true });
+    addEventListener("resize", deckFadeLater);
+    document.addEventListener("pointerover", (e) => {
+      const c = deckAt(e.target), from = deckAt(e.relatedTarget);
+      if (c && c !== from) deckWant(c, true, DECK_DWELL);
+      if (from && from !== c) deckWant(from, false, DECK_GRACE);
+    }, true);
+    document.addEventListener("pointerout", (e) => {
+      const c = deckAt(e.target), to = deckAt(e.relatedTarget);
+      if (c && c !== to && !e.relatedTarget) deckWant(c, false, DECK_GRACE);
+    }, true);
+    addEventListener("keydown", () => setTimeout(deckKbdSync, 0), true);
+    addEventListener("mousemove", () => {
+      if (!deckKbdCard || document.body.classList.contains("e-kbdnav")) return;
+      const c = deckKbdCard;
+      deckKbdCard = null;
+      if (!c.matches(":hover")) deckWant(c, false, DECK_GRACE);
+    }, { passive: true });
+    document.addEventListener("click", (e) => {
+      const t2 = e.target && e.target.closest ? e.target.closest(".txt.deck-back") : null, c = t2 && deckAt(t2);
+      if (c && (c.classList.contains("deck-moving") || !c.classList.contains("deck-open"))) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }, true);
+    deckLater();
+  }
+
+  // src/modules/note-pane.js
   var notePaneEl = null;
   var notePaneBtn = null;
   function notePaneOpen() {
@@ -18140,10 +18414,10 @@ What you type stays in this browser only.`;
     cutLeaves();
     pane.innerHTML = "<h3>" + esc(cardTitle(m)) + "</h3><p>" + esc(note).replace(/\{([A-Z_]+)\}/g, '<span class="fillmiss">$1</span>') + "</p>";
     document.body.appendChild(pane);
-    const pad = 4, cr = card.getBoundingClientRect();
+    const pad = 4, cr = card.getBoundingClientRect(), reach = deckReach(card);
     placeBubble(
       pane,
-      { top: cr.top - pad, left: cr.left - pad, width: cr.width + pad * 2, height: cr.height + pad * 2 },
+      { top: cr.top - pad, left: cr.left - pad, width: cr.width + pad * 2, height: cr.height + reach + pad * 2 },
       { width: 320 }
     );
     notePaneEl = pane;
@@ -29212,7 +29486,7 @@ What you type stays in this browser only.`;
   }
 
   // src/main.js
-  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_margin_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports, edition_marks_exports);
+  Object.assign(globalThis, bubble_exports, icons_exports, stock_exports, polish_exports, content_model_exports, words_exports, greeting_exports, card_fields_exports, cat_roles_exports, env_exports, card_model_exports, card_blocks_exports, storage_exports, columns_exports, spell_exports, scoring_exports, affinity_exports, intent_text_exports, maintenance_exports, shortcuts_exports, card_order_exports, catalog_exports, catalog_v2_exports, collapse_exports, tour_exports, editors_exports, catalog_file_exports, card_carry_exports, lang_tabs_exports, card_editor_exports, card_margin_exports, card_chain_exports, macros_json_exports, tabs_exports, motion_exports, fifth_exports, manage_exports, settings_exports, card_search_exports, list_pointer_exports, facts_exports, ui_lang_exports, rail_list_exports, pack_exports, shed_exports, favourites_exports, rail_panel_exports, paint_exports, search_marks_exports, empty_mark_exports, dialog_exports, header_menus_exports, card_score_exports, search_box_exports, keydown_exports, catalog_offer_exports, catalog_history_exports, catalog_merge_exports, team_join_exports, edition_changes_exports, edition_panel_exports, desk_look_exports, catalog_trust_exports, pops_exports, recency_exports, on_open_exports, local_memory_exports, shortcuts_list_exports, pill_state_exports, cat_identity_exports, cat_relevance_exports, about_exports, pill_nav_peek_exports, card_intent_exports, page_scroll_exports, entry_walk_exports, intent_id_exports, css_esc_exports, pill_walk_exports, catalog_boot_exports, cat_set_exports, esc_exports, copy_entry_exports, card_node_exports, intent_clear_exports, escape_ladder_exports, card_body_exports, card_pool_exports, role_drum_exports, role_turn_exports, variables_exports, gender_drum_exports, gender_turn_exports, field_clear_exports, cut_text_exports, dom_exports, theme_exports, card_counts_exports, rebuild_exports, render_exports, mark_exports, intent_pick_exports, note_pane_exports, deck_exports, pills_bar_exports, lang_seg_exports, repaint_exports, pills_box_exports, agent_exports, ids_exports, browser_suggest_exports, run_shortcut_exports, app_state_exports, host_exports, hooks_exports, restart_exports, pick_exports, next_dock_exports, lanes_exports, edition_marks_exports);
   Object.defineProperty(globalThis, "list", { get: () => list });
   Object.defineProperty(globalThis, "pax", { get: () => pax });
   Object.defineProperty(globalThis, "intentEl", { get: () => intentEl });
@@ -29408,6 +29682,7 @@ What you type stays in this browser only.`;
     wireColWidthWatch();
     wirePillsWidthWatch();
     wireNotePane();
+    wireDeck();
     wireListPointer();
     wireNextDock();
     wireLanes();

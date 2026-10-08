@@ -91,6 +91,8 @@ async function pressAtTag(p) {
     for (const el of document.querySelectorAll("#list .card[data-id] .txt[data-v]")) {
       const tag = el.querySelector(":scope > .tag");
       if (!tag || tag.textContent.length < 5 || !el.getClientRects().length) continue;
+      // A reply tucked behind its deck's front is pressed through the deck, never at rest.
+      if (el.classList.contains("deck-back")) continue;
       const c = el.closest(".card[data-id]"), m = findCard(c.dataset.id);
       if (!m || /{(AGENT|INIT)}/.test(parts(m, cardLang(m))[+el.dataset.v] || "")) continue;
       el.scrollIntoView({ block: "center" });
