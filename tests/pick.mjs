@@ -556,7 +556,9 @@ try {
   const { mask } = await import(pathToFileURL(path.join(ROOT, "tools", "split-guard", "bridge.mjs")).href);
   const blank = s => ESB.transformSync(s, { loader: "js", legalComments: "none", charset: "utf8", minifyWhitespace: true }).code;
   const PRE = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
-  const shellCode = blank(SRC) + "\n" + blank(PRE);
+  /* The shell is main.js, the preload and every file main.js requires from beside itself, read as one text. */
+  const BESIDE = [...SRC.matchAll(/require\(path\.join\(__dirname, "([\w.-]+)"\)\)/g)].map(m => m[1]);
+  const shellCode = [SRC, PRE].concat(BESIDE.map(n => fs.readFileSync(path.join(ROOT, "shell", n), "utf8"))).map(blank).join("\n");
   const shellBare = mask(shellCode);
   const modDir = path.join(ROOT, "src", "modules");
   const engineCode = fs.readdirSync(modDir).filter(f => f.endsWith(".js")).map(f => blank(fs.readFileSync(path.join(modDir, f), "utf8")))
@@ -591,22 +593,28 @@ try {
   check(writes.length === 1 && /clipboard\.writeText\(pickClipText\(v\.text,\s*process\.platform\)\)/.test(shellCode)
     && (shellBare.match(/clipboard\.writeText\(/g) || []).length === 1,
     "5b the shell writes the clipboard at one place, the desk's own text: " + writes.length + " write site(s)");
-  const MODS = ["electron", "node:child_process", "node:path", "node:fs", "node:os", "node:crypto", "node:zlib"];
-  const reqs = (shellCode.match(/\brequire\s*\(\s*[^)]*\)/g) || []).map(r => r.replace(/^require\s*\(\s*|\s*\)$/g, "").replace(/^["']|["']$/g, ""));
+  const MODS = ["electron", "node:child_process", "node:path", "node:fs", "node:os", "node:crypto", "node:zlib",
+    "./win-proxy.cjs", "./page-watch.cjs"];
+  const reqs = (shellCode.match(/\brequire\s*\(\s*[^)]*\)/g) || []).map(r => r.replace(/^require\s*\(\s*|\s*\)$/g, "").replace(/^["']|["']$/g, ""))
+    .map(r => { const m = /^path\.join\(__dirname,"([\w.-]+)$/.exec(r); return m ? "./" + m[1] : r; });
   const strange = reqs.filter(r => MODS.indexOf(r) < 0);
-  const cp = /\{([^}]*)\}\s*=\s*require\(\s*"node:child_process"\s*\)/.exec(shellCode);
+  const cps = [...shellCode.matchAll(/\{([^}]*)\}\s*=\s*require\(\s*"node:child_process"\s*\)/g)];
+  const cp = cps[0] || null;
+  /* The proxy reader names its program by a constant, held here to the fixed path. */
+  const regTool = /\bconst REG_TOOL="C:\\\\Windows\\\\System32\\\\reg\.exe"/.test(shellCode);
   const runs = shellCode.match(/(?<![.\w])(execFileSync|execFile|execSync|exec|spawnSync|spawn|fork)\s*\(\s*("[^"]*"|[^,)]*)/g) || [];
   const programs = runs.map(r => r.replace(/^[^(]*\(\s*/, ""));
   /* ONE HANDLE ON child_process, and the one name it gives is only ever called (board 818): a second
      `require("node:child_process")` held whole and called as `.spawn(...)` passed the call pattern above, which reads
-     a bare name only. So the module is required once, its one name is mentioned once more per call and nowhere else,
-     and no other loader (a dynamic import, createRequire, a binding) is in the shell at all. */
+     a bare name only. So the module is required once in each file that runs a program, its one name is mentioned
+     once more per call and nowhere else, and no other loader (a dynamic import, createRequire, a binding) is in the
+     shell at all. */
   const cpRequires = (shellCode.match(/\brequire\s*\(\s*"(?:node:)?child_process"\s*\)/g) || []).length;
   const runMentions = (shellBare.match(/\bexecFileSync\b/g) || []).length, runCalls = (shellBare.match(/\bexecFileSync\s*\(/g) || []).length;
   const loaders = shellBare.match(/\bimport\s*\(|\bprocess\s*\.\s*(?:binding|_linkedBinding|dlopen)\b|\bcreateRequire\b|\bmodule\s*\.\s*require\b|\brequire\s*\.\s*(?:cache|main)\b/g) || [];
-  check(reqs.length > 0 && strange.length === 0 && !!cp && cp[1].trim() === "execFileSync"
-    && programs.length > 0 && programs.every(p => p === '"reg"' || p === '"C:\\\\Windows\\\\System32\\\\reg.exe"')
-    && cpRequires === 1 && runMentions === runCalls + 1 && loaders.length === 0,
+  check(reqs.length > 0 && strange.length === 0 && cps.length === cpRequires && cps.every(m => m[1].trim() === "execFileSync")
+    && programs.length > 0 && programs.every(p => p === '"reg"' || (p === "REG_TOOL" && regTool))
+    && cpRequires === 2 && runMentions === runCalls + cpRequires && loaders.length === 0,
     "5c the shell loads no module and runs no program it did not have (every one is read against the must-hold before it joins): "
     + (strange.join(", ") || reqs.length + " requires known") + "; " + (cp ? cp[1].trim() : "no child_process") + " runs " + (programs.join(", ") || "nothing")
     + "; child_process required " + cpRequires + " time(s), its name mentioned " + runMentions + " time(s) for " + runCalls + " call(s)"
