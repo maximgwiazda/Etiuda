@@ -26,6 +26,7 @@ import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { intentIdAt, intentOrder } from "./intent-id.js";
 import { pack } from "./pack.js";
 import { ICON_AWAITING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT, ICON_DESK, ICON_LOOK } from "./icons.js";
+import { keyTipHtml } from "./team-join.js";
 import { V2_SIG_VALID } from "./catalog-v2.js";
 import { editionChanges } from "./edition-changes.js";
 import { editionOfferHtml, openEditionPanel, repaintEditionRows, editionCountWords } from "./edition-panel.js";
@@ -200,7 +201,8 @@ function ecDeskRowHtml(f,o){
     +'<span class="ec-name"><b>'+esc(who)+(o.twin?'<span class="ec-fp">'+esc(o.twin)+'</span>':'')+'</b>'
     +'<small class="ec-meta">'+o.meta+'</small>'+(o.extra||'')+'</span>'
     +(o.loaded?loadedTickHtml()+ecExportHtml():'')
-    +'<span class="ec-who" role="img" tabindex="0" aria-label="'+esc(who)+'" data-tip="'+esc(tip)+'">'+ICON_DESK+'</span>'
+    +'<span class="ec-who" role="img" tabindex="0" aria-label="'+esc(who)+'" data-tip="'+esc(tip)+'" data-tip-key="'
+      +esc(String(f.desk.id).slice(2))+'" data-tip-kind="desk">'+ICON_DESK+'</span>'
     +ecActHtml("See what changed",ICON_LOOK,' data-ec-look="'+o.at+'"')
     +(o.loaded?ecActHtml("Eject",ICON_EJECT,' data-ec-eject="1"'):ecActHtml("Work from this file",ICON_LOAD,' data-ec-work="'+o.at+'"'))
     +'</div>';
@@ -229,7 +231,9 @@ function ecKeyBubOpen(key){
   if(!key.isConnected) return;
   const b=document.createElement("div");
   b.className="bub ec-key-bub"; b.setAttribute("role","tooltip");
-  b.textContent=key.getAttribute("data-tip")||"";
+  /* A key in the words wears its sign (team-join.js keySignHtml); the rest of the sentence stays text. */
+  const tip=key.getAttribute("data-tip")||"", html=keyTipHtml(tip,key.getAttribute("data-tip-key")||"",key.getAttribute("data-tip-kind")||"desk");
+  if(html!==null) b.innerHTML=html; else b.textContent=tip;
   document.body.appendChild(b);
   const r=key.getBoundingClientRect();
   placeBubble(b,{top:r.top,left:r.left,width:r.width,height:r.height},{prefer:"above"});

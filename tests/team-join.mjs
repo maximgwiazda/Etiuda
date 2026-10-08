@@ -304,10 +304,12 @@ try {
   const grouped = printOf(LEAD.public).replace(/(.{4})(?=.)/g, "$1 ");
   await buttons.seen.onclick();
   const afterPage = await fresh7.join("state");
-  check(html.indexOf('<div class="e-join-key">' + grouped + "</div>") >= 0 && /data-join="seen"/.test(html) && /data-join="forget"/.test(html)
+  /* The key wears Studio's sign before its groups (team-join.js keySignHtml), and the groups are the shell's print. */
+  const signed = /<div class="e-join-key"><span class="e-ksig"><span class="e-kdisc" role="img" aria-label="[^"]+"><svg[\s\S]*?<\/svg><\/span><span>([0-9a-f ]+)<\/span><\/span><\/div>/.exec(html);
+  check(!!signed && signed[1] === grouped && /data-join="seen"/.test(html) && /data-join="forget"/.test(html)
     && leadsOf(afterPage) === JSON.stringify([{ team: TEAM, print: printOf(LEAD.public), admitted: true, seen: true }])
     && JSON.stringify(TJ.teamLeads()) === JSON.stringify(afterPage.leads),
-    "15aa the page shows the shell's key in four groups of four with the two answers, and the agent's \"it matches\" reaches"
+    "15aa the page shows the shell's key in four groups of four after Studio's sign, with the two answers, and the agent's \"it matches\" reaches"
     + " the shell as seen: " + grouped);
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));

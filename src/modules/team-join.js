@@ -10,7 +10,7 @@ import { agentName } from "./agent.js";
 import { placeBubble } from "./bubble.js";
 import { cutLeaves, dismissNode } from "./motion.js";
 import { hooks } from "./hooks.js";
-import { ICON_LOCK } from "./icons.js";
+import { ICON_LOCK, ICON_KEY, ICON_DESK } from "./icons.js";
 
 let joinNow=null;                 // the shell's last answer: {sealed:{file,team}|null, join:{...}|null, leads:[{team,print,admitted,seen}]}
 let joinShut="";                  // the answer the agent last hid the bubble on
@@ -34,6 +34,19 @@ function leadToShow(){
 function teamLeads(){ return ((joinNow&&joinNow.leads)||[]).slice(); }
 /* The key in four groups of four, as it is read aloud. */
 function leadKeyText(print){ return String(print||"").replace(/(.{4})(?=.)/g,"$1 "); }
+/* THE KEY'S SIGN: the four groups after a small disc that says whose, violet with a key for the lead's Studio key, cobalt
+   with the desk glyph for a desk's, as Studio prints the same keys. */
+function keySignHtml(kind,print){
+  const desk=kind==="desk", word=t(desk?"A desk's key":"Studio's signing key");
+  return '<span class="e-ksig"><span class="e-kdisc'+(desk?' desk':'')+'" role="img" aria-label="'+esc(word)+'">'
+    +(desk?ICON_DESK:ICON_KEY)+'</span><span>'+esc(leadKeyText(print))+'</span></span>';
+}
+/* A sentence that prints a key, as a bubble's html: the words escaped, the key in fours wearing its sign. Null where the
+   sentence does not hold that key, so the caller sets it as text. */
+function keyTipHtml(tip,print,kind){
+  const fours=print?leadKeyText(print):"";
+  return fours && String(tip).indexOf(fours)>=0 ? String(tip).split(fours).map(esc).join(keySignHtml(kind,print)) : null;
+}
 function joinTook(v){
   const s=v&&typeof v==="object"?v:{};
   const was=JSON.stringify(joinNow);
@@ -71,7 +84,7 @@ function joinParts(){
   const j=joinNow&&joinNow.join, s=joinNow&&joinNow.sealed, who=agentName()||t("this desk"), l=leadToShow();
   if(l) return {title:t("You are on the team"),
     line:t("Compare this key with the Signing key in the lead's Studio Settings. Every later edition is checked against it."),
-    body:'<div class="e-join-key">'+esc(leadKeyText(l.print))+'</div>', acts:[["seen",t("It matches")],["forget",t("It does not match")]], lead:l.team};
+    body:'<div class="e-join-key">'+keySignHtml("studio",l.print)+'</div>', acts:[["seen",t("It matches")],["forget",t("It does not match")]], lead:l.team};
   const meta=j?'<div class="e-join-meta">'+esc(t("{NAME}, asked at {TIME}").split("{NAME}").join(j.name||who)
     .split("{TIME}").join(joinTime(j.asked)))+'</div>':'';
   if(j && j.state==="code") return {title:t("Read this code to the team's lead"),
@@ -153,4 +166,4 @@ function forgetTeamLead(team,then){
   return joinAsk("forget",team).then(v=>{ if(typeof then==="function") then(); return v; });
 }
 
-export { wireTeamJoin, teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadKeyText, forgetTeamLead, paintJoin };
+export { wireTeamJoin, teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, paintJoin };

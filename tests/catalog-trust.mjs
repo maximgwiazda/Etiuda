@@ -20,7 +20,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 19;
+const EXPECTED = 20;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -192,6 +192,20 @@ try {
   check(/aria-label="Podpisany" tabindex="0" data-tip="Ten plik zmienił się od czasu podpisania\."/.test(pl[0])
     && /^Ten plik podpisano kluczem/.test(pl[1]) && /aria-label="Niepodpisany" title="Niepodpisany"/.test(pl[2]),
     "2f a desk that reads Polish is told in Polish, on both surfaces");
+
+  /* THE KEY'S SIGN (G1): a keyId Studio derived is printed as the desks compare it, its hex in fours, and its bubble wears
+     Studio's disc; a desk's key in a colleague's tip wears the desk's; a sentence without the key stays text. */
+  const TJ = await import(MOD("team-join.js"));
+  const studioKey = TR.trustKeyHtml(V2.V2_SIG_VALID, "studio-87ad0879ac3e9ff6"), at2 = n => { const m = new RegExp(" " + n + "=\"([^\"]*)\"").exec(studioKey); return m ? m[1] : null; };
+  const tipS = TJ.keyTipHtml(at2("data-tip"), at2("data-tip-key"), at2("data-tip-kind"));
+  const tipD = TJ.keyTipHtml("Signed by Ola's desk, key 3f9a 0c71 b2e4 d856. Only that desk can change this file.", "3f9a0c71b2e4d856", "desk");
+  check(at2("data-tip") === "This file is signed with the key 87ad 0879 ac3e 9ff6." && at2("data-tip-key") === "87ad0879ac3e9ff6"
+    && at2("data-tip-kind") === "studio" && /^This file is signed with the key <span class="e-ksig"><span class="e-kdisc" role="img"/.test(tipS)
+    && /<span>87ad 0879 ac3e 9ff6<\/span><\/span>\.$/.test(tipS) && /^Signed by Ola&#39;s desk, key <span class="e-ksig"><span class="e-kdisc desk"/.test(tipD)
+    && TJ.keyTipHtml("This file has changed since it was signed.", "87ad0879ac3e9ff6", "studio") === null
+    && !/data-tip-key/.test(TR.trustKeyHtml(V2.V2_SIG_VALID, "harness-key")),
+    "2g a key Studio derived is printed in fours and its bubble wears Studio's disc, a desk's key in a colleague's bubble wears"
+    + " the desk's, and a sentence that holds no key stays text: " + JSON.stringify(tipS.slice(0, 60)));
 
   /* A host that never answers must not hold a load: the wait ends and the catalog loads unrecorded. */
   const host = window.E_HOST;
