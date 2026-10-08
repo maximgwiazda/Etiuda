@@ -12,7 +12,7 @@
  *      dependency both absent and installed
  *   4  a declared dependency that is not installed refuses and writes no file
  *   5  given the packaged app, the archive is held against the list both ways, on the desk's own
- *      shape (six files, no node_modules) as well; no folder of the build machine is in the file
+ *      shape (eight files, no node_modules) as well; no folder of the build machine is in the file
  *   6  given the installer, its SHA-256 is carried, against a frozen literal from sha256sum
  *   7  tools/release.mjs --package leaves the document beside the installer, and a refusal leaves
  *      none and stops the package gate
@@ -280,20 +280,21 @@ async function main() {
   const r5d = run(['--root', syn, '--app', appLess, '--out', path.join(syn, 'bom-less.json')]);
   check(r5d.status === 1 && /@sc\/beta@2\.0\.1/.test(r5d.out) && !fs.existsSync(path.join(syn, 'bom-less.json')),
     '5d a listed package the asar lacks refuses and names @sc/beta@2.0.1, exit ' + r5d.status);
-  /* The desk's own shape: six files, no node_modules, and a tree that declares nothing. */
+  /* The desk's own shape: eight files, no node_modules, and a tree that declares nothing. */
   const bare = lab('bare');
   put(path.join(bare, 'package.json'), { name: 'etiuda', version: '0.0.0', devDependencies: { electron: '9.9.9' } });
   put(path.join(bare, 'src', 'modules', 'env.js'), envJs('7.8.9'));
   put(path.join(bare, 'node_modules', 'electron', 'package.json'), { name: 'electron', version: '9.9.9' });
   const six = lab('six-src');
-  for (const f of ['engine/etiuda.csp.json', 'engine/etiuda.html', 'package.json', 'shell/main.js', 'shell/preload.js', 'shell/sample-catalog.ec'])
+  for (const f of ['engine/etiuda.csp.json', 'engine/etiuda.html', 'package.json', 'shell/main.js', 'shell/page-watch.cjs', 'shell/preload.js',
+    'shell/sample-catalog.ec', 'shell/win-proxy.cjs'])
     put(path.join(six, ...f.split('/')), f === 'package.json' ? { name: 'etiuda', version: '0.0.0' } : 'x\n');
   const sixApp = lab('six-win-unpacked');
   fs.mkdirSync(path.join(sixApp, 'resources'), { recursive: true });
   await asar.createPackage(six, path.join(sixApp, 'resources', 'app.asar'));
   const r5e = run(['--root', bare, '--app', sixApp, '--out', path.join(bare, 'bom.json')]);
   check(r5e.status === 0 && npmSet(bomAt(path.join(bare, 'bom.json'))).length === 0,
-    '5e the desk\'s own shape, six files and nothing declared, passes with no npm package listed, exit ' + r5e.status);
+    '5e the desk\'s own shape, eight files and nothing declared, passes with no npm package listed, exit ' + r5e.status);
   const declares = lab('declares');
   put(path.join(declares, 'package.json'), { name: 'etiuda', version: '0.0.0', dependencies: { alpha: '^1.0.0' } });
   put(path.join(declares, 'src', 'modules', 'env.js'), envJs('7.8.9'));
@@ -324,7 +325,8 @@ async function main() {
     "import fs from 'node:fs'; import path from 'node:path'; import { createRequire } from 'node:module';",
     "const asar = createRequire(import.meta.url)(process.env.ETIUDA_TEST_ASAR);",
     "const dist = process.env.ETIUDA_DIST; const src = path.join(dist, '..', 'stage');",
-    "for (const f of ['engine/etiuda.csp.json', 'engine/etiuda.html', 'package.json', 'shell/main.js', 'shell/preload.js', 'shell/sample-catalog.ec']) {",
+    "for (const f of ['engine/etiuda.csp.json', 'engine/etiuda.html', 'package.json', 'shell/main.js', 'shell/page-watch.cjs', 'shell/preload.js',"
+    + " 'shell/sample-catalog.ec', 'shell/win-proxy.cjs']) {",
     "  fs.mkdirSync(path.dirname(path.join(src, f)), { recursive: true }); fs.writeFileSync(path.join(src, f), 'x\\n'); }",
     "fs.mkdirSync(path.join(dist, 'win-unpacked', 'resources'), { recursive: true });",
     "await asar.createPackage(src, path.join(dist, 'win-unpacked', 'resources', 'app.asar'));",

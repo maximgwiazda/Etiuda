@@ -102,7 +102,7 @@ const until = async (fn, ms) => { const t0 = Date.now(); while (Date.now() - t0 
 function buildApp() {
   const dir = path.join(LAB, "app");
   for (const d of ["shell", "engine", "userdata", "catalogs", "documents"]) fs.mkdirSync(path.join(dir, d), { recursive: true });
-  for (const f of ["main.js", "preload.js"]) fs.copyFileSync(path.join(E.ROOT, "shell", f), path.join(dir, "shell", f));
+  for (const f of ["main.js", "preload.js", "win-proxy.cjs", "page-watch.cjs"]) fs.copyFileSync(path.join(E.ROOT, "shell", f), path.join(dir, "shell", f));
   for (const f of ["etiuda.html", "etiuda.csp.json"]) fs.copyFileSync(path.join(E.ROOT, "engine", f), path.join(dir, "engine", f));
   fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "etiuda-pick-probe", version: "0.0.0", main: "shell/main.js" }), "utf8");
   fs.writeFileSync(path.join(dir, "catalogs", "lamps.ec"), JSON.stringify({ format: 2, kind: "etiuda-catalog", id: "lamp-shop", rev: 1,

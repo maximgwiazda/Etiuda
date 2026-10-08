@@ -69,7 +69,7 @@ function buildApp() {
   fs.mkdirSync(path.join(dir, "shell"));
   fs.mkdirSync(path.join(dir, "engine"));
   fs.mkdirSync(path.join(dir, "userdata"), { recursive: true });
-  for (const f of ["main.js", "preload.js"])
+  for (const f of ["main.js", "preload.js", "win-proxy.cjs", "page-watch.cjs"])
     fs.copyFileSync(path.join(E.ROOT, "shell", f), path.join(dir, "shell", f));
   fs.writeFileSync(path.join(dir, "package.json"),
     JSON.stringify({ name: "etiuda-watch-probe", version: "0.0.0", main: "shell/main.js" }), "utf8");

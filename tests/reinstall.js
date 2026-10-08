@@ -817,8 +817,8 @@ let newKey = "", lnkSm = "", lnkDt = "";
   const names = asar.listPackage(path.join(PROG1, "resources", "app.asar"))
     .map(n => n.split(path.sep).join("/").replace(/^\//, "")).filter(n => n.indexOf(".") > -1).sort();
   check(inAsar === E.sha256(E.ENGINE_PATH)
-        && names.join(",") === "engine/etiuda.csp.json,engine/etiuda.html,package.json,shell/main.js,shell/preload.js,shell/sample-catalog.ec",
-    "1c what got installed is what was built: the asar holds the six allowlisted files and the"
+        && names.join(",") === "engine/etiuda.csp.json,engine/etiuda.html,package.json,shell/main.js,shell/page-watch.cjs,shell/preload.js,shell/sample-catalog.ec,shell/win-proxy.cjs",
+    "1c what got installed is what was built: the asar holds the eight allowlisted files and the"
     + " engine inside it is the engine in the tree, sha256 " + inAsar.slice(0, 16));
 
   /* THE CACHE IS NOW TAKEN BACK AT INSTALL TIME, board item 364, and this check was the opposite

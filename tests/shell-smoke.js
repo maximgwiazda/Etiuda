@@ -11,7 +11,7 @@
  * delivery: the customer gets an asar inside an executable. Everything below runs against
  * `win-unpacked/Etiuda.exe` and its `resources/app.asar`.
  *
- * THE LAB. `electron-builder --win --dir` into a temp folder, 8 seconds, and the asar is six
+ * THE LAB. `electron-builder --win --dir` into a temp folder, 8 seconds, and the asar is eight
  * files and 900 KB, so a variant costs a repack rather than a rebuild. The tree is never written
  * to and neither is the desk's own dist folder. Every launch gets its own user-data folder
  * inside the lab, with `--user-data-dir`, so no catalog and no desk of this machine is in reach.
@@ -515,8 +515,8 @@ const placeEc = (dir, from, as, minutesOld) => {
   const inAsar = crypto.createHash("sha256").update(asar.extractFile(ASAR, "engine/etiuda.html")).digest("hex");
   const inTree = E.sha256(E.ENGINE_PATH);
   console.log("       built in " + built + "s into " + LAB);
-  check(names.join(",") === "engine/etiuda.csp.json,engine/etiuda.html,package.json,shell/main.js,shell/preload.js,shell/sample-catalog.ec",
-    "the asar holds the six allowlisted files and nothing else: " + names.join(", "));
+  check(names.join(",") === "engine/etiuda.csp.json,engine/etiuda.html,package.json,shell/main.js,shell/page-watch.cjs,shell/preload.js,shell/sample-catalog.ec,shell/win-proxy.cjs",
+    "the asar holds the eight allowlisted files and nothing else: " + names.join(", "));
   check(inAsar === inTree,
     "the engine inside the asar is the engine in the tree, sha256 " + inAsar.slice(0, 16)
     + (inAsar === inTree ? "" : " against the tree's " + inTree.slice(0, 16)));

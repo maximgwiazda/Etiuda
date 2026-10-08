@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 92;
+const EXPECTED = 94;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -39,7 +39,7 @@ const APP = path.join(LAB, "app");
 /* The shell's own names, handed back by a line added after its source: nothing is exported from
    main.js, and a slice would test a copy of one function rather than the file as it runs. */
 const EXPOSE = ["renamePatiently", "writeReplacing", "saveWindowPlace", "windowFile", "readCatalog", "channelHash",
-  "SAMPLE_EDITIONS", "proxySwitchesFrom", "catalogChanged", "sendListing", "spellingFromPackage"];
+  "SAMPLE_EDITIONS", "catalogChanged", "sendListing", "spellingFromPackage"];
 
 /* node:fs with a hook per call: `ctl.renameSync = (real, ...args) => ...` decides that call,
    and a call without a hook goes to the real one. `ctl.any` sees every synchronous call first,
@@ -136,7 +136,14 @@ function loadShell(opts) {
     return o.reg === undefined ? QUIET : o.reg;
   } };
   const clock = o.clock || { setTimeout: setTimeout, clearTimeout: clearTimeout };
-  const fakeRequire = n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? fs : n === "node:child_process" ? cp : nodeRequire(n));
+  /* A file of the shell's own that main.js requires from beside itself is evaluated here too, so the
+     stand-ins above reach its own requires: the planted reg tool is the proxy reader's. */
+  const own = {};
+  const ownModule = n => { const m = { exports: {} };
+    new Function("require", "module", "exports", "__dirname", "__filename", realFs.readFileSync(n, "utf8"))(fakeRequire, m, m.exports, path.dirname(n), n);
+    return m.exports; };
+  const fakeRequire = n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? fs : n === "node:child_process" ? cp
+    : (path.isAbsolute(n) && /\.cjs$/.test(n)) ? (own[n] || (own[n] = ownModule(n))) : nodeRequire(n));
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console", "setTimeout", "clearTimeout",
     (o.src || SRC) + "\nreturn { " + EXPOSE.map(n => n + ": typeof " + n + " === 'undefined' ? undefined : " + n).join(", ") + " };")(
     fakeRequire, path.join(o.app || APP, "shell"), path.join(o.app || APP, "shell", "main.js"), { exports: {} }, {}, quiet,
@@ -580,7 +587,8 @@ try {
   }
   /* ---- 6. Chromium's proxy is chosen from Windows' own setting, before the app is ready ------
      The key is planted (see REG_TOOL), never read from this machine. 6a to 6h are what a start does
-     with each answer, 6d and 6i the controls that show those can fail, 6j and 6k the reader alone. */
+     with each answer, 6d and 6i the controls that show those can fail, 6j and 6k the reader alone,
+     which is shell/win-proxy.cjs (6m), and 6n the package carrying the files the shell requires. */
   {
     const LINE = "for (const s of windowsProxySwitches()) app.commandLine.appendSwitch(...s);";
     const asked = S => S.switches.map(a => a.join("="));
@@ -627,8 +635,10 @@ try {
         && JSON.stringify(asked(stub)) === '["no-proxy-server"]',
         "6i THE CONTROL: a shell that ignores the reader and always asks for no proxy, handed the planted server, does not"
         + " give the server, so 6e goes red on it: " + JSON.stringify(asked(stub)));
-      const rd = S.api.proxySwitchesFrom;
-      const out = x => JSON.stringify(rd(x));
+      let P = null;
+      try { P = nodeRequire(path.join(ROOT, "shell", "win-proxy.cjs")); } catch (e) { P = null; }
+      const rd = P && P.proxySwitchesFrom;
+      const out = x => (rd ? JSON.stringify(rd(x)) : "no shell/win-proxy.cjs");
       const NONE = '[["no-proxy-server"]]';
       check(out(regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["ProxyServer", "REG_SZ", ""], ["Next", "REG_SZ", "other.example.test:1"]])) === NONE
         && out(regDump([["ProxyEnable", "REG_DWORD", "0x1"], ["AutoConfigURL", "REG_SZ", ""], ["ProxyServer", "REG_SZ", ""]])) === NONE,
@@ -642,6 +652,17 @@ try {
         && out("") === NONE && out(undefined) === NONE,
         "6k the reader on its own: a script outranks a server, a per-scheme server list passes whole, an address that is not http, https"
         + " or file is none, and no text at all is none");
+      const ownReader = /function (?:proxySwitchesFrom|windowsProxySwitches)\(/.test(SRC);
+      check(!!rd && typeof P.windowsProxySwitches === "function" && !ownReader
+        && SRC.split('const { windowsProxySwitches } = require(path.join(__dirname, "win-proxy.cjs"));').length === 2,
+        "6m the shell holds no reader of its own and takes windowsProxySwitches from shell/win-proxy.cjs beside it, the file 6j and 6k"
+        + " read alone: " + (rd ? "found" : "NOT FOUND") + (ownReader ? ", and a reader of its own" : ""));
+      const builder = nodeRequire(path.join(ROOT, "electron-builder.js"));
+      const beside = [...SRC.matchAll(/require\(path\.join\(__dirname, "([^"]+)"\)\)/g)].map(m => "shell/" + m[1]);
+      const notPacked = beside.filter(f => (builder.files || []).indexOf(f) < 0);
+      check(beside.length === 2 && notPacked.length === 0,
+        "6n every file the shell requires from beside itself is in electron-builder.js's files, or the installed desk would not"
+        + " start: " + JSON.stringify(beside) + (notPacked.length ? ", NOT PACKED " + JSON.stringify(notPacked) : ""));
     } finally { Object.defineProperty(process, "platform", platformWas); }
   }
   /* ---- 7. every IPC channel asks who is speaking before it answers ---------------------------
