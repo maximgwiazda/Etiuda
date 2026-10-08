@@ -52,6 +52,7 @@ import * as railPanel from "./modules/rail-panel.js";
 import * as paint from "./modules/paint.js";
 import * as searchMarks from "./modules/search-marks.js";
 import * as emptyMark from "./modules/empty-mark.js";
+import * as launchMarkMod from "./modules/launch-mark.js";
 import * as fifth from "./modules/fifth.js";
 import * as dialog from "./modules/dialog.js";
 import * as headerMenus from "./modules/header-menus.js";
@@ -123,7 +124,7 @@ import * as pick from "./modules/pick.js";
 import * as nextDock from "./modules/next-dock.js";
 import * as lanes from "./modules/lanes.js";
 import * as editionMarksMod from "./modules/edition-marks.js";
-Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, cardCarry, langTabs, cardEditor, cardMargin, cardChain, macrosJson, tabs, motion, fifth, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, catalogHistory, catalogMerge, teamJoin, editionChangesMod, editionPanel, deskLook, catalogTrustMod, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, variables, genderDrum, genderTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, deck, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots, restart, pick, nextDock, lanes, editionMarksMod);
+Object.assign(globalThis, bubble, icons, stock, polish, contentModel, words, greeting, cardFields, catRoles, env, cardModel, cardBlocks, storage, columns, spell, scoring, affinity, intentText, maintenance, shortcuts, cardOrder, catalog, catalogV2, collapse, tour, editors, catalogFile, cardCarry, langTabs, cardEditor, cardMargin, cardChain, macrosJson, tabs, motion, fifth, manage, settings, cardSearch, listPointer, facts, uiLang, railList, personalPack, shed, favourites, railPanel, paint, searchMarks, emptyMark, launchMarkMod, dialog, headerMenus, cardScore, searchBox, keydown, catalogOffer, catalogHistory, catalogMerge, teamJoin, editionChangesMod, editionPanel, deskLook, catalogTrustMod, pops, recency, onOpen, localMemory, shortcutsList, pillState, catIdentity, catRelevance, about, pillNavPeek, cardIntent, pageScroll, entryWalk, intentId, cssEsc, pillWalk, catalogBoot, catSet, esc, copyEntry, cardNode, intentClear, escapeLadder, cardBody, pool, roleDrum, roleTurn, variables, genderDrum, genderTurn, fieldClear, cutText, dom, theme, cardCounts, rebuild, render, mark, intentPick, notePane, deck, pillsBar, langSeg, repaint, pillsBox, agent, ids, browserSuggest, runShortcut, appState, host, hookSlots, restart, pick, nextDock, lanes, editionMarksMod);
 
 /* These are replaced wholesale rather than filled in place, so the monolith has to read the
    binding rather than the copy taken above, before any catalog existed. A name mutated in place

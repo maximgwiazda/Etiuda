@@ -541,6 +541,7 @@ function runUnitTests() {
   arrivalTests();
   markClockTests();
   fifthTests();
+  launchMarkTests();
   emptyBandTests();
   menuWarmTests();
   ecTypeNameTests();
@@ -2174,7 +2175,7 @@ function markLab() {
   const tour = read("tour.js"), open = read("on-open.js");
   const slices = [extractDecl(tour, "const TOUR_AUTO_MS="), extractDecl(tour, "function maybeStartTour("),
     extractDecl(open, "let eReadyDone="), extractDecl(open, "let lastGreet;"), extractDecl(open, "function markEReady("),
-    extractDecl(open, "function wireOnOpen(")];
+    extractDecl(open, "function deskLaunch("), extractDecl(open, "function wireOnOpen(")];
   let clock = 0, seq = 0, frames = [], timers = [], drawnX = null;
   const log = [], warms = [];
   const ctx = { setTransform() {}, clearRect() {}, beginPath() {}, fill() {}, moveTo() {}, arc(x) { drawnX = x; } };
@@ -2190,6 +2191,7 @@ function markLab() {
     MutationObserver: class { observe() {} disconnect() {} },
     document: { querySelector: () => null, documentElement: {},
       createElement: () => ({ setAttribute() {}, getContext: () => ctx, isConnected: true, parentNode: null, remove() { this.parentNode = null; } }) },
+    ssSet: () => {}, dialogStanding: () => false, launchMark: () => null, whenLaunchLanded: fn => fn(),
     ssGet: () => null, TOUR_AT: "eTourAt", TOUR_STEPS: [], tourRunning: false, tourSeen: () => false, tourInviteDismissed: () => false,
     startTour: () => log.push(["tour", Math.round(clock)]),
     applyUiLang: () => log.push(["repaint", Math.round(clock)]),
@@ -2321,6 +2323,266 @@ function markClockTests() {
   } catch (e) { got = "the lab threw: " + e.message; }
   eq("the menu's warm copy is drawn once, 900 ms after the mark has formed, and 900 ms after boot without one",
     got, [[2600], [900]]);
+}
+/* THE LAUNCH MARK: launch-mark.js runs in a VM on a page, a clock, a frame queue and a promise written here (the
+   promise settles in the same task, so a timeline is read without awaiting). Its figure is held to fifth.js's, its
+   landing to the lattice, its give-way to max(the floor, the work ready) and to the first key, click or wheel. */
+class LaunchSyncPromise {
+  constructor(ex) {
+    this.s = 0; this.v = undefined; this.cb = [];
+    try { ex(v => this.settle(1, v), v => this.settle(2, v)); } catch (e) { this.settle(2, e); }
+  }
+  settle(s, v) {
+    if (this.s) return;
+    if (s === 1 && v && typeof v.then === "function") { v.then(x => this.settle(1, x), x => this.settle(2, x)); return; }
+    this.s = s; this.v = v;
+    const cb = this.cb; this.cb = []; cb.forEach(f => f());
+  }
+  then(ok, no) {
+    return new LaunchSyncPromise((res, rej) => {
+      const run = () => {
+        const f = this.s === 1 ? ok : no;
+        if (typeof f !== "function") { (this.s === 1 ? res : rej)(this.v); return; }
+        try { res(f(this.v)); } catch (e) { rej(e); }
+      };
+      if (this.s) run(); else this.cb.push(run);
+    });
+  }
+  static resolve(v) { return v instanceof LaunchSyncPromise ? v : new LaunchSyncPromise(r => r(v)); }
+  static all(a) {
+    return new LaunchSyncPromise((res, rej) => {
+      const out = []; let n = a.length;
+      if (!n) res(out);
+      a.forEach((p, i) => LaunchSyncPromise.resolve(p).then(v => { out[i] = v; if (--n === 0) res(out); }, rej));
+    });
+  }
+}
+function launchLab(o) {
+  o = o || {};
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "launch-mark.js"), "utf8")
+    .replace(/export\s*\{[^}]*\};?\s*$/, "");
+  let clock = 0, seq = 0, frames = [], timers = [];
+  const drawn = { arc: 0, image: 0 }, heard = [];
+  const ctx = new Proxy({}, { get: (t, k) => k === "arc" ? () => { drawn.arc++; } : k === "drawImage" ? () => { drawn.image++; }
+    : k === "createRadialGradient" ? () => ({ addColorStop() {} }) : () => {}, set: () => true });
+  const doc = { activeElement: null };
+  function el(tag, rect) {
+    const e = { tagName: tag, className: "", children: [], parentNode: null, attrs: {}, rect: rect || { left: 0, top: 0, width: 0, height: 0 },
+      style: { setProperty(k, v) { this[k] = v; }, removeProperty(k) { delete this[k]; } },
+      setAttribute(k, v) { this.attrs[k] = v; },
+      get isConnected() { for (let n = this; n; n = n.parentNode) if (n === doc.body) return true; return false; },
+      get offsetWidth() { return this.rect.width; }, get offsetHeight() { return this.rect.height; },
+      getBoundingClientRect() { return this.rect; },
+      appendChild(c) { c.parentNode = this; this.children.push(c); return c; },
+      insertBefore(c) { if (c.parentNode) c.remove(); c.parentNode = this; this.children.unshift(c); return c; },
+      remove() { if (this.parentNode) this.parentNode.children = this.parentNode.children.filter(x => x !== this); this.parentNode = null; },
+      contains(x) { for (; x; x = x.parentNode) if (x === this) return true; return false; },
+      querySelector(s) {
+        const want = s.replace(/^\./, "");
+        for (const c of this.children) { if ((" " + c.className + " ").indexOf(" " + want + " ") >= 0) return c; const d = c.querySelector(s); if (d) return d; }
+        return null;
+      },
+      getContext: () => ctx, focus() { doc.activeElement = e; }
+    };
+    const set = new Set();
+    e.classList = { add: c => set.add(c), remove: c => set.delete(c), contains: c => set.has(c) || (" " + e.className + " ").indexOf(" " + c + " ") >= 0 };
+    return e;
+  }
+  doc.body = el("body"); doc.documentElement = el("html");
+  doc.createElement = t => t === "div" ? el(t, { left: 300, top: 180, width: 980, height: 580 }) : el(t);
+  const sb = {
+    document: doc, Promise: LaunchSyncPromise, devicePixelRatio: 1, innerHeight: 760,
+    performance: { now: () => clock },
+    requestAnimationFrame: fn => { frames.push({ id: ++seq, fn }); return seq; },
+    cancelAnimationFrame: id => { frames = frames.filter(f => f.id !== id); },
+    setTimeout: (fn, ms) => { timers.push({ id: ++seq, at: clock + (ms || 0), fn }); return seq; },
+    clearTimeout: id => { timers = timers.filter(x => x.id !== id); },
+    getComputedStyle: () => ({ color: "#0e67d8", getPropertyValue: () => "" }),
+    ResizeObserver: class { observe() {} disconnect() {} },
+    MutationObserver: class { observe() {} disconnect() {} },
+    addEventListener: (ev, fn) => heard.push({ ev, fn }),
+    removeEventListener: (ev, fn) => { const i = heard.findIndex(h => h.ev === ev && h.fn === fn); if (i >= 0) heard.splice(i, 1); }
+  };
+  sb.window = sb;
+  require("vm").runInNewContext(src + "\nfunction __k(){ return lmK; }\nfunction __R(){ return LAUNCH_R; }\n", sb);
+  // Each lab's spot stands at a fixed place in its veil; the region is the dot field's box.
+  const region = el("div", { left: 300, top: 180, width: 980, height: 580 });
+  const timersTo = t => {
+    for (;;) {
+      const due = timers.filter(x => x.at <= t).sort((a, b) => a.at - b.at || a.id - b.id)[0];
+      if (!due) break;
+      timers = timers.filter(x => x !== due);
+      clock = Math.max(clock, due.at);
+      due.fn();
+    }
+    clock = t;
+  };
+  const send = (ev, target) => {
+    const e = { target: target || doc.body, prevented: false, stopped: false,
+      preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } };
+    heard.filter(h => h.ev === ev).slice().forEach(h => h.fn(e));
+    return e;
+  };
+  let open = null;
+  const ready = new LaunchSyncPromise(r => { open = r; });
+  const launch = extra => {
+    const h = sb.launchMark(Object.assign({ app: "desk", region, ready, still: () => !!o.still, covered: () => !!o.covered() }, extra || {}));
+    const spot = h.veil.querySelector(".e-fifth-spot");
+    if (spot) spot.rect = { left: 650, top: 290, width: 280, height: 280 };
+    return h;
+  };
+  if (!o.covered) o.covered = () => false;
+  return { sb, doc, el, timersTo, send, launch, ready: () => open(), frames: () => frames.length, drawn, heard,
+    k: () => sb.__k(), now: () => clock };
+}
+function launchMarkTests() {
+  const read = f => fs.readFileSync(path.join(E.ROOT, "src", "modules", f), "utf8");
+  const PHI0 = Math.PI / 4, PHI1 = PHI0 + Math.PI;
+  let got;
+
+  try {
+    // fifth.js in a VM of its own, with nothing but its figure called
+    const fifth = { performance: { now: () => 0 }, requestAnimationFrame: () => 0, document: {}, mgReduceMotion: () => true };
+    require("vm").runInNewContext(read("fifth.js").replace(/^import[^\n]*\n/gm, "").replace(/export\s*\{[^}]*\};?\s*$/, "")
+      + "\nglobalThis.__f = { fifthBand, fifthLay, fifthRadius };", fifth);
+    const L = launchLab(), F10 = L.sb.launchFigure(10), F7 = L.sb.launchFigure(7);
+    const lat = { x0: 0.5, y0: 0.5, step: 2, nx: 128, ny: 128 }, to = o => o, lay = (f, phi) => { const out = new Float32Array(lat.nx * lat.ny); f(phi, to, 9, 1, lat, out); return Array.from(out); };
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+    got = [same(F10.band(PHI0), fifth.__f.fifthBand(PHI0)), same(F10.band(PHI0 + 1.3), fifth.__f.fifthBand(PHI0 + 1.3)),
+      F10.radius() === fifth.__f.fifthRadius(),
+      same(lay(F10.lay, PHI0 + 0.7), lay(fifth.__f.fifthLay, PHI0 + 0.7)),
+      // the control: at R 7 the figure is not the header's, so the comparison can tell a width
+      same(F7.band(PHI0), fifth.__f.fifthBand(PHI0)),
+      /<g transform="translate\(-7\.441 -7\.441\) scale\(1\.0581\)">/.test(tpl), L.sb.__R()];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the launch mark's figure is fifth.js's at R 10, band, radius and lay, it stands in the header's group transform, and it launches at R 7",
+    got, [true, true, true, true, false, true, 7]);
+
+  try {
+    const L = launchLab(), lm = L.sb;
+    const at = R => {
+      const F = lm.launchFigure(R), La = lm.launchLattice(F), n = La.lat.nx * La.lat.ny;
+      const rest = F.lay(PHI1, La.to, La.rad, 1.75, La.lat, new Float32Array(n)), std = F.lay(PHI0, La.to, La.rad, 1.75, La.lat, new Float32Array(n));
+      const Rs = lm.launchRiders(F, La, rest, () => 0.5), o = [0, 0, 0, 0];
+      let miss = 0, missMid = 0;
+      Rs.list.forEach(r => {
+        lm.launchPlace(Rs.C, r, PHI1, o); miss = Math.max(miss, Math.hypot(o[0] - r.hx, o[1] - r.hy));
+        lm.launchPlace(Rs.C, r, PHI0 + 1, o); missMid = Math.max(missMid, Math.hypot(o[0] - r.hx, o[1] - r.hy));
+      });
+      const lit = [], nearOf = {};
+      rest.forEach((v, i) => { if (v) lit.push(i); });
+      Rs.list.forEach(r => { if (r.near) nearOf[r.n] = (nearOf[r.n] || 0) + 1; });
+      let dq = 0; for (let i = 0; i < n; i++) dq = Math.max(dq, Math.abs(rest[i] - std[i]));
+      return { lit: lit.length, riders: Rs.list.length, miss, missMid, oneNear: lit.every(i => nearOf[i] === 1), stillIsLanded: dq < 1e-6 };
+    };
+    const d = at(7), ten = at(10);
+    got = [d.lit, d.riders === 2 * d.lit, d.miss < 1e-9, d.oneNear, d.stillIsLanded, d.missMid > 1, ten.lit !== d.lit];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("at R 7 the landed mark is the lattice: 602 lit dots, two riders each that stand on their dot at the half turn and one of them near, the still frame equal to the landed one, and a mid-turn rider off its dot",
+    got, [602, true, true, true, true, true, true]);
+
+  try {
+    const run = (readyAt, until) => { const L = launchLab(), h = L.launch(); if (readyAt != null) { L.timersTo(readyAt); L.ready(); } L.timersTo(until || 6000); return [h.reason, h.ms]; };
+    got = [run(300), run(1500), run(null)];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the launch gives way by itself at max(1.1 s, the work ready), and at 4 s if the work never says it is",
+    got, [["time", 1100], ["time", 1500], ["time", 4000]]);
+
+  try {
+    const at = (ev, onVeil) => {
+      const L = launchLab(), h = L.launch(); L.timersTo(100); L.ready(); L.timersTo(400);
+      const e = L.send(ev, onVeil ? h.veil : L.doc.body);
+      const out = L.doc.body.style["--e-launch-out"], cls = [L.doc.body.classList.contains("e-launch"), L.doc.body.classList.contains("e-launch-out")];
+      L.timersTo(400 + 139); const up = h.veil.isConnected; L.timersTo(400 + 140);
+      return [h.reason, h.ms, e.prevented, e.stopped, out, cls, up, h.veil.isConnected, L.doc.body.classList.contains("e-launch-out"), L.heard.length];
+    };
+    got = [at("keydown"), at("pointerdown", true), at("pointerdown", false), at("wheel")];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a key, a click or a wheel ends the launch at once in 140 ms and stops listening; a key and a click off the mark go on, a click on the mark is eaten",
+    got, [["key", 400, false, false, "140ms", [false, true], true, false, false, 0],
+      ["click", 400, true, true, "140ms", [false, true], true, false, false, 0],
+      ["click", 400, false, false, "140ms", [false, true], true, false, false, 0],
+      ["wheel", 400, false, false, "140ms", [false, true], true, false, false, 0]]);
+
+  try {
+    const L = launchLab(), h = L.launch(); L.timersTo(200); L.ready(); L.timersTo(1100);
+    const out = L.doc.body.style["--e-launch-out"]; L.timersTo(1100 + 259); const up = h.veil.isConnected; L.timersTo(1100 + 260);
+    got = [h.reason, out, up, h.veil.isConnected, !!L.k()];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("given way by itself, the work rises in over 260 ms and the drawing stops with the veil", got, ["time", "260ms", true, false, false]);
+
+  try {
+    const L = launchLab({ still: true }), h = L.launch(); const framesAsked = L.frames(), dots = L.drawn.arc, img = L.drawn.image;
+    L.timersTo(50); L.ready(); L.timersTo(6000);
+    // the control: moving, the same launch asks for frames and draws nothing until one comes
+    const M = launchLab(); M.launch();
+    got = [framesAsked, dots > 0, img, h.reason, h.ms, M.frames(), M.drawn.arc];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("under a quiet switch the mark is drawn once, landed, with no frame asked for, and the launch waits for nothing but the work",
+    got, [0, true, 0, "time", 50, 1, 0]);
+
+  try {
+    let cover = true;
+    const L = launchLab({ covered: () => cover }); L.launch(); L.timersTo(500); const held = L.frames();
+    cover = false; L.timersTo(700);
+    got = [held, L.frames()];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a cover standing at launch holds the arrival until it is gone, so it is seen", got, [0, 1]);
+
+  try {
+    const L = launchLab(), q = L.el("input"); L.launch({ focus: () => q }); const before = L.doc.activeElement; L.timersTo(100); L.ready();
+    const M = launchLab(), q2 = M.el("input"), other = M.el("button"); other.focus(); M.launch({ focus: () => q2 }); M.timersTo(100); M.ready();
+    got = [before === null, L.doc.activeElement === q, M.doc.activeElement === other];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the field a first key should reach takes the focus once the work is ready, and never from another that holds it", got, [true, true, true]);
+
+  try {
+    // a screen painted under the launch takes the same drawing, clock and points, and the launch gives way to it
+    const L = launchLab(), h = L.launch(); L.timersTo(10);
+    const k = L.k(), screen = L.el("div", { left: 300, top: 260, width: 980, height: 500 }), spot = L.el("div", { left: 650, top: 300, width: 280, height: 280 });
+    spot.className = "e-fifth-spot"; screen.appendChild(spot); L.doc.body.appendChild(screen);
+    k.ms = 420; L.sb.syncLaunchMark(screen); const kept = L.k() === k && k.ms === 420 && !k.launch && k.cv.parentNode === screen;
+    L.timersTo(300); L.ready();
+    const reason = h.reason; L.timersTo(700); L.sb.syncLaunchMark(null);
+    got = [kept, reason, h.ms, !!L.k()];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a screen that takes the mark under the launch keeps its clock and points, the launch gives way to it when the work is ready, and the screen's null stops it",
+    got, [true, "moved", 300, false]);
+
+  try {
+    // the screen's null leaves a drawing a launch still stands on
+    const L = launchLab(); L.launch(); L.sb.syncLaunchMark(null);
+    got = [!!L.k(), L.k() && L.k().launch];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a screen with no empty block asks for no mark and leaves the launch's own", got, [true, true]);
+
+  try {
+    // the desk's launch: deskLaunch from on-open.js on stubs
+    const fn = extractDecl(read("on-open.js"), "function deskLaunch(");
+    const desk = (seen, empty) => {
+      const calls = [], set = [];
+      const sb = { ssGet: () => seen, ssSet: (k, v) => set.push([k, v]), mgReduceMotion: () => false, dialogStanding: () => false,
+        requestAnimationFrame: () => 0, Promise,
+        document: { querySelector: s => s === "#dotField>div" ? { id: "field" } : s === ".empty-desk" ? empty : null },
+        launchMark: o => { calls.push(o); return {}; } };
+      require("vm").runInNewContext(fn + "\nglobalThis.__r = deskLaunch();", sb);
+      const o = calls[0];
+      return [calls.length, set, o ? [o.app, o.region.id, o.still === sb.mgReduceMotion, o.covered === sb.dialogStanding, typeof o.ready.then] : null];
+    };
+    got = [desk(null, null), desk("1", null), desk(null, { empty: true })];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the desk launches once per window over the dot field, on its own quiet switch and dialogs, and not over the empty desk",
+    got, [[1, [["eLaunched", "1"]], ["desk", "field", true, true, "function"]], [0, [], null], [0, [["eLaunched", "1"]], null]]);
+
+  try {
+    // with a launch arriving, the boot repaint and the menu's warm copy wait for it to land
+    const held = [], c = markLab(); c.sb.whenLaunchLanded = fn => held.push(fn); c.sb.wireOnOpen();
+    c.frame(10); c.frame(20); c.timersTo(1000); const before = [c.log.length, c.warms.length];
+    held.forEach(f => f()); c.timersTo(4000);
+    got = [before, c.log, c.warms];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("with a launch arriving the boot repaint and the menu's warm copy wait for it to land", got, [[0, 0], [["repaint", 1000]], [1900]]);
 }
 /* THE FIFTH TURNING: fifth.js runs in a VM on a frame queue written here, with a header path node that
    keeps what is written to it. The path the markup ships is held to the line the turn strokes, and

@@ -173,6 +173,7 @@ function syncEmptyMark(host){
 }
 
 export {
+  dialogStanding,
   syncEmptyMark,
   whenMarkFormed
 };

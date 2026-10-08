@@ -2124,6 +2124,20 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
    accent from `color`. */
 .empty:has(>.e-empty-mark)::before{content:none}
 .e-empty-mark{display:block;width:280px;height:280px;margin:0 auto 6px;color:var(--accent)}
+/* THE LAUNCH (launch-mark.js): the mark stands over the dot field while the cards, the panel and the category row
+   are hidden; the search box stays live. --e-launch-out is the give-way's length, shorter after a key or a click. */
+.e-launch-veil{position:fixed;z-index:40;display:flex;align-items:center;justify-content:center;box-sizing:border-box;
+  padding-bottom:48px;transition:opacity var(--e-launch-out,.26s) ease-out}
+.e-launch-veil>.e-fifth-spot{width:280px;height:280px;flex:none;position:relative;z-index:1}
+.e-launch-veil>canvas.e-fifth{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;
+  color:var(--accent);--fifth-halo:#2881ea}
+:root[data-theme=dark] .e-launch-veil>canvas.e-fifth{color:#cfe3ff;--fifth-halo:#409afc}
+.e-launch-veil.e-going{opacity:0;pointer-events:none}
+@keyframes e-launch-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@media (max-height:640px){.e-launch-veil>.e-fifth-spot{width:160px;height:160px}.e-launch-veil{padding-bottom:16px}}
+body.e-launch #pageScroll,body.e-launch #pillsSlot{opacity:0}
+body.e-launch-out #pageScroll,body.e-launch-out #pillsSlot{animation:e-launch-in var(--e-launch-out,.26s) var(--m-ease) both}
+:root.e-still .e-launch-veil{transition:none}
 /* THE ONE PLACE A BUTTON STANDS ON THE DOT FIELD. .btn's ground is 4% of the ink over whatever
    is behind it, which everywhere else is a panel; here it is the field, and the dots read
    THROUGH the control. The same colour mixed against the canvas instead of against transparency
