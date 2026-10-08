@@ -250,8 +250,10 @@ async function launch(plan) {
   };
   const quiet = { log: noop, error: noop, warn: noop, info: noop };
   const shellSrc = f => fs.readFileSync(path.join(ROOT, "shell", f), "utf8");
+  /* A file main.js requires from beside itself is the tree's: the lab's shell folder holds its built-in catalogs alone. */
+  const beside = n => (path.isAbsolute(n) && path.dirname(n) === SHELL ? path.join(ROOT, "shell", path.basename(n)) : n);
   new Function("require", "__dirname", "__filename", "module", "exports", "console", shellSrc("main.js"))(
-    n => (n === "electron" ? electron : nodeRequire(n)), SHELL, path.join(SHELL, "main.js"), { exports: {} }, {}, quiet);
+    n => (n === "electron" ? electron : nodeRequire(beside(n))), SHELL, path.join(SHELL, "main.js"), { exports: {} }, {}, quiet);
 
   const FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
   const ev = () => ({ sender: { id: 1, once: noop, send: noop }, senderFrame: FRAME, returnValue: undefined });
