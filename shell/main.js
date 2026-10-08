@@ -2751,16 +2751,25 @@ function readWindowPlace() {
 }
 /* The normal rectangle, so a window closed maximised comes back maximised over the place it
    will restore to; a snapped one is kept as the rectangle it was snapped to. `maximized` is the
-   last state the caller saw, since a minimised window is neither. Temp file then rename. */
-function saveWindowPlace(win, maximized) {
+   last state the caller saw, since a minimised window is neither; `normal`, where given, is the rectangle the caller
+   holds for a window built maximised. Temp file then rename. */
+function saveWindowPlace(win, maximized, normal) {
   if (!win || win.isDestroyed()) return;
   const snapped = !maximized && !win.isMinimized() && typeof win.isSnapped === "function" && win.isSnapped();
-  const b = snapped ? win.getBounds() : win.getNormalBounds();
+  const b = normal || (snapped ? win.getBounds() : win.getNormalBounds());
   const file = windowFile();
   try {
     writeReplacing(file, JSON.stringify({ x: b.x, y: b.y, width: b.width, height: b.height,
                                           maximized: !!maximized }));
   } catch (e) { console.error("etiuda: the window's place could not be written - " + e.message); }
+}
+
+// The work area a window reopened maximised fills: the display its saved rectangle lies on.
+function maximizedArea(r) {
+  try {
+    const a = screen.getDisplayMatching({ x: r.x, y: r.y, width: r.width, height: r.height }).workArea;
+    return { x: a.x, y: a.y, width: a.width, height: a.height };
+  } catch { return null; }
 }
 
 /* THE SHELL'S OWN WORDS, for the two surfaces the page cannot draw: the context menu, and the
@@ -3187,8 +3196,14 @@ function createWindow() {
      than two: a window that is going to show the refusal is given the system's frame. */
   const framed = !!readPin().why;
   const place = PLACED_ASIDE ? null : readWindowPlace();
+  /* A WINDOW REOPENED MAXIMISED IS BUILT AT ITS MAXIMISED SIZE: maximize() shows a hidden window at once with the frame
+     ready-to-show waited for, and a frame drawn at the restored size leaves the rest of the window clear while the page
+     lays out again. The restored rectangle is held here until the window is first restored. */
+  const full = place && place.maximized ? maximizedArea(place) : null;
+  let restoreTo = full ? { x: place.x, y: place.y, width: place.width, height: place.height } : null;
+  const at = full || (place ? { x: place.x, y: place.y, width: place.width, height: place.height } : null);
   const win = new BrowserWindow({
-    ...(place ? { x: place.x, y: place.y, width: place.width, height: place.height } : OPEN_SIZE),
+    ...(at || OPEN_SIZE),
     minWidth: 546,
     show: false,
     /* frame:false, not titleBarStyle 'hidden' with titleBarOverlay. The overlay is drawn by the
@@ -3220,20 +3235,21 @@ function createWindow() {
   /* THE SAVED SIZE IS THE SIZE REOPENED. At 150 per cent the constructor's came back up to four
      pixels larger and setBounds' one larger than asked (measured), so a window reopened daily grew:
      the difference setBounds makes is measured here and taken off. */
-  if (place) {
-    const want = { x: place.x, y: place.y, width: place.width, height: place.height };
+  if (at) {
+    const want = at;
     win.setBounds(want);
     const got = win.getBounds();
     if (got.width !== want.width || got.height !== want.height)
       win.setBounds(Object.assign({}, want, { width: 2 * want.width - got.width, height: 2 * want.height - got.height }));
   }
+  const built = full ? win.getBounds() : null;
 
   /* showInactive, not show: value 2 wants a window with a rectangle and not the focus of
      whoever is at the desk, and show() takes the focus even from a non-focusable window.
      A NAMED FUNCTION AND A ONE-LINE REGISTRATION, because two checks in the harness insert a
      probe after this statement and match it by its text: a handler whose body is inline makes
      that anchor break every time the body changes. */
-  /* A window closed maximised is SHOWN by maximize(), so its first frame is already maximised. */
+  /* A window closed maximised is SHOWN by maximize(); built at that size, its first frame is already maximised. */
   const showWhenReady = () => {
     if (OFFSCREEN_SHOWN) win.showInactive();
     else if (OFFSCREEN) return;
@@ -3249,13 +3265,22 @@ function createWindow() {
     if (PLACED_ASIDE || win.isDestroyed()) return;
     if (!win.isMinimized()) maximized = win.isMaximized();
     clearTimeout(placeSave);
-    placeSave = setTimeout(() => saveWindowPlace(win, maximized), 500);
+    placeSave = setTimeout(() => saveWindowPlace(win, maximized, restoreTo), 500);
+  };
+  /* Built maximised, the window's first restore lands on the size it was built at, and goes on to the held rectangle;
+     a restore landing anywhere else, a snap or a drag, is the person's own and stays. */
+  const restoreHeld = () => {
+    if (!restoreTo || win.isDestroyed()) return;
+    const to = restoreTo, b = win.getBounds();
+    restoreTo = null;
+    if (b.x === built.x && b.y === built.y && b.width === built.width && b.height === built.height) win.setBounds(to);
   };
   const tellMaximized = () => {
     if (!win.isDestroyed()) win.webContents.send("etiuda:maximized", win.isMaximized());
     keepPlace();
   };
   win.on("maximize", tellMaximized);
+  win.on("unmaximize", restoreHeld);
   win.on("unmaximize", tellMaximized);
   win.on("moved", keepPlace);
   win.on("resized", keepPlace);
@@ -3263,7 +3288,7 @@ function createWindow() {
     if (PLACED_ASIDE) return;
     clearTimeout(placeSave);
     if (!win.isMinimized()) maximized = win.isMaximized();
-    saveWindowPlace(win, maximized);
+    saveWindowPlace(win, maximized, restoreTo);
   });
 
   win.webContents.on("context-menu", (e, p) => {

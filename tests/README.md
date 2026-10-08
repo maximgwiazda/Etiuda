@@ -700,6 +700,17 @@ own proxy key names no server and no script. A net log is complete only at
 a clean close, so the window is closed through the debugging port and the log must parse whole
 and hold events. A control that shows no discovery on the machine is NOT RUN, never ok.
 
+## A window reopened maximised
+
+`maximize()` shows a hidden window at once with the frame `ready-to-show` waited for, so a window
+built at its restored size showed that frame over part of a maximised window, the rest clear, until
+the page laid out again. `tests/shell-office.mjs` leg 15 builds the desk's window on a recording
+stand-in: built at the work area and maximised there (15a, red on the shell before the change), the
+restored rectangle kept when closed maximised (15b), given back at the first restore (15c), and a
+snap left where it lands (15d). 15b to 15d each went red once under a planted fault: the held
+rectangle not passed at close, the restore handler unregistered, the built-size test removed. What
+Windows then paints is the eye's, at the next install.
+
 ## The debugging switches of an installed desk
 
 The fuses do not reach Chromium's `--remote-debugging-port` or `--remote-debugging-pipe`, and

@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 102;
+const EXPECTED = 106;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -97,13 +97,15 @@ const QUIET = regDump([["CertificateRevocation", "REG_DWORD", "0x1"], ["ProxyEna
    on its command line; opts.paths and opts.dialogs: arrays that take the setPath calls and the save dialogs it opens;
    opts.session: the electron session in place of the stand-in; opts.order: an array a window's construction is pushed to;
    opts.bus: the session bus dbus-send meets, a function of its arguments (leg 14); opts.env: variables set while the file loads (null removes one), over XDG_CURRENT_DESKTOP=GNOME, so the keyring switch of
-   leg 14 is asked for only where a leg names a desktop that wants it. */
+   leg 14 is asked for only where a leg names a desktop that wants it. opts.window: a function of the options that builds the desk's
+   window in place of the stand-in; opts.screen: electron's screen; opts.place: window.json's contents (leg 15). */
 function loadShell(opts) {
   const o = opts || {};
   const dir = path.join(LAB, "load" + (++loads));
   const UD = path.join(dir, "user-data"), DOCS = path.join(dir, "documents");
   realFs.mkdirSync(UD, { recursive: true });
   realFs.mkdirSync(DOCS, { recursive: true });
+  if (o.place) realFs.writeFileSync(path.join(UD, "window.json"), JSON.stringify(o.place), "utf8");
   if (o.desk) realFs.writeFileSync(path.join(UD, "desk.json"),
     JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: o.desk }), "utf8");
   const said = [];
@@ -121,11 +123,11 @@ function loadShell(opts) {
                           removeSwitch: k => { if (onLine.delete(k)) removed.push(k); } },
            whenReady: () => (o.ready ? Promise.resolve() : new Promise(noop)) },
     ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
-    BrowserWindow: o.ready ? new Proxy(function () {}, { construct: () => { if (o.order) o.order.push(["window"]); return win; },
+    BrowserWindow: o.ready ? new Proxy(function () {}, { construct: (t, args) => { if (o.order) o.order.push(["window"]); return o.window ? o.window(args[0]) : win; },
       get: (t, k) => (k === "fromWebContents" ? () => win : k === "getAllWindows" ? () => [win] : undefined) }) : inert,
     Menu: inert, dialog: o.dialogs ? { showSaveDialog: async (...a) => { o.dialogs.push(a); return { canceled: true }; } } : inert, net: inert, protocol: o.ready ? anything() : inert,
     session: o.session || (o.ready ? anything() : inert),
-    screen: inert, shell: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },
+    screen: o.screen || inert, shell: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },
     powerMonitor: { on: (ev, fn) => { power[ev] = fn; } },
   };
   const ctl = {};
@@ -1192,6 +1194,56 @@ try {
       && off.every(S => S.busCalls.length === 0 && store(S).length === 0 && told(S).length === 0),
       "14h the session bus is asked the three ruled questions, in order, with the ruled options and nothing more, on Linux alone: "
       + JSON.stringify(asked.map(S => S.busCalls.length)) + " call(s) on Linux, " + JSON.stringify(off.map(S => S.busCalls.length)) + " on six other platforms");
+  }
+
+  /* ---- 15. a window closed maximised is built at its maximised size, so the frame ready-to-show waits for is drawn
+     at the size maximize() shows; its restored rectangle is kept and given back at its first restore ---- */
+  {
+    const WA = { x: 0, y: 0, width: 1920, height: 1040 }, SAVED = { x: 200, y: 100, width: 1000, height: 700 };
+    const screen = { getAllDisplays: () => [{ workArea: WA, bounds: { x: 0, y: 0, width: 1920, height: 1080 } }],
+      getPrimaryDisplay: () => ({ workArea: WA }), getDisplayMatching: () => ({ workArea: WA }) };
+    const open = async maximized => {
+      const calls = [], ev = {};
+      let bounds = null, maxed = false, made = null;
+      const wc = anything({ send: () => {} });
+      const window = o => {
+        bounds = { x: o.x, y: o.y, width: o.width, height: o.height }; calls.push(["new", Object.assign({}, bounds)]);
+        return made = anything({ isDestroyed: () => false, webContents: wc, isMinimized: () => false, isMaximized: () => maxed, isSnapped: () => false,
+          getBounds: () => Object.assign({}, bounds), getNormalBounds: () => Object.assign({}, bounds),
+          setBounds: b => { calls.push(["setBounds", Object.assign({}, b)]); bounds = Object.assign({}, b); },
+          maximize: () => { calls.push(["maximize"]); maxed = true; }, focus: () => calls.push(["focus"]), show: () => calls.push(["show"]),
+          loadFile: () => calls.push(["load"]), on: (k, fn) => { (ev[k] = ev[k] || []).push(fn); }, once: (k, fn) => { (ev[k] = ev[k] || []).push(fn); } });
+      };
+      const S = loadShell({ ready: true, clock: fakeClock(), window, screen, place: Object.assign({ maximized }, SAVED), env: { ETIUDA_TEST_OFFSCREEN: null } });
+      for (let i = 0; i < 4; i++) await new Promise(r => setImmediate(r));
+      await new Promise(r => setTimeout(r, 40));
+      const fire = k => (ev[k] || []).forEach(fn => fn());
+      return { S, calls, fire, set: b => { bounds = b; }, unmax: () => { maxed = false; }, made: () => made,
+        saved: () => { try { return JSON.parse(realFs.readFileSync(S.api.windowFile(), "utf8")); } catch { return null; } } };
+    };
+    const M = await open(true), C = await open(false);
+    const built = (M.calls[0] || [])[1], ctl = (C.calls[0] || [])[1];
+    const before = M.calls.map(c => c[0]).join(","), noShrink = !M.calls.some(c => c[0] === "setBounds" && c[1].width === SAVED.width);
+    M.fire("ready-to-show");
+    const shown = M.calls.map(c => c[0]).slice(before.split(",").length).join(",");
+    check(JSON.stringify(built) === JSON.stringify(WA) && noShrink && shown === "maximize,focus" && JSON.stringify(ctl) === JSON.stringify(SAVED),
+      "15a a window closed maximised is built at its display's work area and maximize() shows it there, never at the restored size first;"
+      + " the control, closed restored, is built at its rectangle: " + JSON.stringify([built, before, shown, ctl]));
+    M.fire("close");
+    const kept = M.saved();
+    check(!!kept && kept.maximized === true && kept.x === SAVED.x && kept.width === SAVED.width && kept.height === SAVED.height,
+      "15b closed again before any restore, it keeps its restored rectangle, not the work area it was built at: " + JSON.stringify(kept));
+    const R = await open(true);
+    R.fire("ready-to-show"); R.unmax(); R.fire("unmaximize");
+    const back = R.calls.filter(c => c[0] === "setBounds").pop();
+    R.fire("close");
+    check(!!back && JSON.stringify(back[1]) === JSON.stringify(SAVED) && JSON.stringify(Object.assign({}, R.saved(), { maximized: undefined })) === JSON.stringify(SAVED),
+      "15c its first restore, landing on the size it was built at, goes on to the restored rectangle, and that is what is kept: " + JSON.stringify([back, R.saved()]));
+    const N = await open(true);
+    N.fire("ready-to-show"); const n0 = N.calls.length;
+    N.set({ x: 0, y: 0, width: 960, height: 1040 }); N.unmax(); N.fire("unmaximize");
+    check(!N.calls.slice(n0).some(c => c[0] === "setBounds"),
+      "15d a restore landing anywhere else, a snap to half the screen, is left where it landed: " + JSON.stringify(N.calls.slice(n0)));
   }
 } catch (e) {
   failed++;
