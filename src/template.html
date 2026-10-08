@@ -2155,6 +2155,18 @@ code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-d
 .e-join-key{font:600 22px var(--mono);color:var(--ink);margin:16px 0 4px;white-space:nowrap}
 .e-join-bub .e-join-key{color:var(--bub-ink);font-size:19px;margin:8px 0 10px}
 .e-lead-key{font:600 13px var(--mono);margin-right:10px;white-space:nowrap}
+/* THE KEY'S SIGN (team-join.js keySignHtml): a disc before the groups, Studio's violet with a key, a desk's cobalt with the
+   desk glyph. On a cobalt bubble the desk's disc turns white so it does not vanish, and each wears a white hairline. */
+.e-ksig{display:inline-flex;align-items:center;gap:10px;white-space:nowrap;vertical-align:middle}
+.e-kdisc{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;flex:0 0 auto;color:#fff;background:#5729a6}
+.e-kdisc.desk{background:var(--accent-fill)}
+.e-kdisc svg{width:15px;height:15px}
+.e-lead-key .e-kdisc{width:20px;height:20px}
+.e-lead-key .e-kdisc svg{width:13px;height:13px}
+.bub .e-kdisc{box-shadow:0 0 0 1.5px rgba(255,255,255,.85)}
+.bub .e-kdisc.desk{background:#fff;color:var(--accent-fill)}
+.ec-key-bub .e-kdisc{width:20px;height:20px;vertical-align:middle}
+.ec-key-bub .e-kdisc svg{width:13px;height:13px}
 
 /* Intent side rail - shown when body.rail-on (user toggle; no min-width gate) */
 .rail-head{display:flex;align-items:center;justify-content:space-between;gap:8px;

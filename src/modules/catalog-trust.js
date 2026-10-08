@@ -8,6 +8,7 @@ import { nsGet, nsSet, nsDel } from "./storage.js";
 import { t } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { ICON_KEY } from "./icons.js";
+import { leadKeyText } from "./team-join.js";
 
 const TRUST_KEY="CatalogTrust";
 const TRUST_WAIT_MS=2000;
@@ -67,11 +68,13 @@ function recheckHeldTrust(found,held,then){
 function trustKeyHtml(state,keyId){
   if(!state) return '<span class="ec-key" aria-hidden="true"></span>';
   const word=esc(t(state===V2_SIG_NONE?"Unsigned":"Signed"));
+  /* A keyId Studio derived is a fixed name and 16 hex: the hex is printed in fours with the key's sign, as the desks compare it. */
+  const lead=/^studio-[0-9a-f]{16}$/.test(String(keyId||"")) ? String(keyId).slice(7) : "";
   const tip=state===V2_SIG_INVALID ? t("This file has changed since it was signed.")
     : state===V2_SIG_UNKNOWN ? t("This file is signed with a key this computer does not know.")
-    : (state===V2_SIG_VALID && keyId) ? t("This file is signed with the key {KEY}.").split("{KEY}").join(keyId) : "";
+    : (state===V2_SIG_VALID && keyId) ? t("This file is signed with the key {KEY}.").split("{KEY}").join(lead?leadKeyText(lead):keyId) : "";
   return '<span class="ec-key'+(state===V2_SIG_VALID?" on":"")+'" role="img" data-trust="'+esc(state)+'" aria-label="'+word+'"'
-    +(tip?' tabindex="0" data-tip="'+esc(tip)+'"':' title="'+word+'"')+'>'+ICON_KEY+'</span>';
+    +(tip?' tabindex="0" data-tip="'+esc(tip)+'"'+(lead?' data-tip-key="'+lead+'" data-tip-kind="studio"':''):' title="'+word+'"')+'>'+ICON_KEY+'</span>';
 }
 /* The offer's line. Unsigned is said there only where it undoes a signature the desk now has. */
 function trustOfferLine(state,updating){

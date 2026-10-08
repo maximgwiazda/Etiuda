@@ -2155,6 +2155,18 @@ code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-d
 .e-join-key{font:600 22px var(--mono);color:var(--ink);margin:16px 0 4px;white-space:nowrap}
 .e-join-bub .e-join-key{color:var(--bub-ink);font-size:19px;margin:8px 0 10px}
 .e-lead-key{font:600 13px var(--mono);margin-right:10px;white-space:nowrap}
+/* THE KEY'S SIGN (team-join.js keySignHtml): a disc before the groups, Studio's violet with a key, a desk's cobalt with the
+   desk glyph. On a cobalt bubble the desk's disc turns white so it does not vanish, and each wears a white hairline. */
+.e-ksig{display:inline-flex;align-items:center;gap:10px;white-space:nowrap;vertical-align:middle}
+.e-kdisc{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;flex:0 0 auto;color:#fff;background:#5729a6}
+.e-kdisc.desk{background:var(--accent-fill)}
+.e-kdisc svg{width:15px;height:15px}
+.e-lead-key .e-kdisc{width:20px;height:20px}
+.e-lead-key .e-kdisc svg{width:13px;height:13px}
+.bub .e-kdisc{box-shadow:0 0 0 1.5px rgba(255,255,255,.85)}
+.bub .e-kdisc.desk{background:#fff;color:var(--accent-fill)}
+.ec-key-bub .e-kdisc{width:20px;height:20px;vertical-align:middle}
+.ec-key-bub .e-kdisc svg{width:13px;height:13px}
 
 /* Intent side rail - shown when body.rail-on (user toggle; no min-width gate) */
 .rail-head{display:flex;align-items:center;justify-content:space-between;gap:8px;
@@ -7370,6 +7382,8 @@ What you type stays in this browser only.`;
     "It does not match": "Nie zgadza się",
     "Team lead's key": "Klucz lidera zespołu",
     "Forget this lead": "Zapomnij tego lidera",
+    "Studio's signing key": "Klucz podpisu Studia",
+    "A desk's key": "Klucz stanowiska",
     "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.": "Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze.",
     "Next replies": "Kolejne odpowiedzi",
     "Commits the firm": "Zobowiązuje firmę",
@@ -13776,6 +13790,214 @@ What you type stays in this browser only.`;
     max.setAttribute("aria-label", label);
   }
 
+  // src/modules/team-join.js
+  var team_join_exports = {};
+  __export(team_join_exports, {
+    closeJoinBubble: () => closeJoinBubble,
+    forgetTeamLead: () => forgetTeamLead,
+    keySignHtml: () => keySignHtml,
+    keyTipHtml: () => keyTipHtml,
+    leadKeyText: () => leadKeyText,
+    paintJoin: () => paintJoin,
+    teamJoinEmptyHtml: () => teamJoinEmptyHtml,
+    teamJoinShown: () => teamJoinShown,
+    teamLeads: () => teamLeads,
+    wireTeamJoin: () => wireTeamJoin,
+    wireTeamJoinEmpty: () => wireTeamJoinEmpty
+  });
+  var joinNow = null;
+  var joinShut = "";
+  function eHasJoin() {
+    const h = eHost();
+    return !!h && typeof h.teamJoin === "function";
+  }
+  function joinAsk(op, file, name) {
+    if (!eHasJoin()) return Promise.resolve(null);
+    try {
+      return Promise.resolve(eHost().teamJoin(op, file || "", name || "")).then(joinTook, () => null);
+    } catch (e) {
+      return Promise.resolve(null);
+    }
+  }
+  function teamJoinShown() {
+    return !!joinNow && (!!leadToShow() || !!joinNow.join || !!joinNow.sealed);
+  }
+  function leadToShow() {
+    return (joinNow && joinNow.leads || []).filter((l) => l.admitted && !l.seen)[0] || null;
+  }
+  function teamLeads() {
+    return (joinNow && joinNow.leads || []).slice();
+  }
+  function leadKeyText(print) {
+    return String(print || "").replace(/(.{4})(?=.)/g, "$1 ");
+  }
+  function keySignHtml(kind, print) {
+    const desk = kind === "desk", word = t(desk ? "A desk's key" : "Studio's signing key");
+    return '<span class="e-ksig"><span class="e-kdisc' + (desk ? " desk" : "") + '" role="img" aria-label="' + esc(word) + '">' + (desk ? ICON_DESK : ICON_KEY) + "</span><span>" + esc(leadKeyText(print)) + "</span></span>";
+  }
+  function keyTipHtml(tip, print, kind) {
+    const fours = print ? leadKeyText(print) : "";
+    return fours && String(tip).indexOf(fours) >= 0 ? String(tip).split(fours).map(esc).join(keySignHtml(kind, print)) : null;
+  }
+  function joinTook(v) {
+    const s = v && typeof v === "object" ? v : {};
+    const was = JSON.stringify(joinNow);
+    joinNow = {
+      sealed: s.sealed && s.sealed.file ? { file: String(s.sealed.file), team: String(s.sealed.team || "") } : null,
+      join: s.join && s.join.file ? {
+        file: String(s.join.file),
+        state: String(s.join.state || ""),
+        code: String(s.join.code || ""),
+        asked: +s.join.asked || 0,
+        name: String(s.join.name || "")
+      } : null,
+      leads: Array.isArray(s.leads) ? s.leads.filter((l) => l && l.team).map((l) => ({
+        team: String(l.team),
+        print: String(l.print || ""),
+        admitted: l.admitted === true,
+        seen: l.seen === true
+      })) : []
+    };
+    if (s.joined && s.joined.file) {
+      closeJoinBubble();
+      hooks.loadCatalogFromFolder(String(s.joined.file), 0);
+    }
+    if (JSON.stringify(joinNow) !== was) paintJoin();
+    return joinNow;
+  }
+  function wireTeamJoin() {
+    if (!eHasJoin()) return;
+    if (typeof eHost().onTeamJoin === "function") eHost().onTeamJoin(joinTook);
+    joinAsk("state");
+  }
+  function paintJoin() {
+    if (wholeThingEmpty()) {
+      closeJoinBubble();
+      hooks.render();
+      return;
+    }
+    if (teamJoinShown() && JSON.stringify(joinNow) !== joinShut) openJoinBubble();
+    else if (!teamJoinShown()) closeJoinBubble();
+  }
+  function joinTime(ms) {
+    const d = new Date(ms || Date.now());
+    return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
+  function joinCodeHtml(code) {
+    return code ? '<div class="e-join-code"><span>' + esc(code.slice(0, 3)) + "</span><span>" + esc(code.slice(3)) + "</span></div>" : '<div class="e-join-code e-join-wait" aria-hidden="true"><span><i></i><i></i><i></i></span><span><i></i><i></i><i></i></span></div>';
+  }
+  function joinParts() {
+    const j = joinNow && joinNow.join, s = joinNow && joinNow.sealed, who = agentName() || t("this desk"), l = leadToShow();
+    if (l) return {
+      title: t("You are on the team"),
+      line: t("Compare this key with the Signing key in the lead's Studio Settings. Every later edition is checked against it."),
+      body: '<div class="e-join-key">' + keySignHtml("studio", l.print) + "</div>",
+      acts: [["seen", t("It matches")], ["forget", t("It does not match")]],
+      lead: l.team
+    };
+    const meta = j ? '<div class="e-join-meta">' + esc(t("{NAME}, asked at {TIME}").split("{NAME}").join(j.name || who).split("{TIME}").join(joinTime(j.asked))) + "</div>" : "";
+    if (j && j.state === "code") return {
+      title: t("Read this code to the team's lead"),
+      line: t("They type it in Studio, and the catalog opens here once they let this desk in."),
+      body: joinCodeHtml(j.code) + meta,
+      acts: [["cancel", t("Cancel the request")]]
+    };
+    if (j && j.state === "refused") return {
+      title: t("The lead turned the request down"),
+      line: t("Asking again sends a new request."),
+      body: meta,
+      acts: [["ask", t("Ask again")], ["load", t("Load another catalog")]]
+    };
+    if (j) return {
+      title: t("Waiting for the lead to open the request"),
+      line: t("The code to read to them appears here as soon as they do."),
+      body: joinCodeHtml("") + meta,
+      acts: [["cancel", t("Cancel the request")]]
+    };
+    return {
+      title: t("{FILE} is sealed for its team").split("{FILE}").join(s ? s.file : ""),
+      line: t("Once the team's lead lets this desk in, the catalog opens here by itself."),
+      body: '<div class="e-join-meta">' + esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who)) + "</div>",
+      acts: [["ask", t("Ask to join")], ["load", t("Load another catalog")]]
+    };
+  }
+  function joinAct(act) {
+    const j = joinNow && joinNow.join, s = joinNow && joinNow.sealed;
+    if (act === "ask") return joinAsk("ask", j && j.file || s && s.file || "", agentName());
+    if (act === "cancel") return joinAsk("cancel");
+    const l = leadToShow();
+    if (act === "seen" && l) return joinAsk("seen", l.team);
+    if (act === "forget" && l) return joinAsk("forget", l.team);
+    if (act === "load") return Promise.resolve(hooks.importCatalogHere());
+    return Promise.resolve(null);
+  }
+  function teamJoinEmptyHtml() {
+    if (!teamJoinShown()) return "";
+    const p = joinParts();
+    return '<div class="empty e-join"><div class="e-join-t">' + ICON_LOCK + esc(p.title) + "</div><p>" + esc(p.line) + "</p>" + p.body + '<div class="e-join-acts">' + p.acts.map((a) => '<button type="button" class="btn" data-join="' + a[0] + '">' + esc(a[1]) + "</button>").join("") + "</div></div>";
+  }
+  function wireTeamJoinEmpty(root) {
+    if (!root) return;
+    root.querySelectorAll("[data-join]").forEach((b) => {
+      b.onclick = () => joinAct(b.getAttribute("data-join"));
+    });
+  }
+  var joinBubbleClose = null;
+  function closeJoinBubble() {
+    if (joinBubbleClose) joinBubbleClose();
+  }
+  function openJoinBubble() {
+    closeJoinBubble();
+    const offer = document.getElementById("eCatalogOffer");
+    if (offer && !offer.classList.contains("e-gone")) return;
+    const p = joinParts();
+    const wrap = document.createElement("div");
+    wrap.className = "bub bub-ask e-offer e-join-bub";
+    wrap.id = "eTeamJoin";
+    wrap.setAttribute("role", "dialog");
+    wrap.setAttribute("aria-labelledby", "ejTitle");
+    wrap.innerHTML = '<h3 id="ejTitle">' + esc(p.title) + '</h3><p class="ec-sub">' + esc(p.line) + "</p>" + p.body + '<div class="tour-actions"><button type="button" class="btn" data-join="hide">' + esc(t("Hide")) + "</button>" + p.acts.map((a, i) => '<button type="button" class="btn' + (i ? "" : " primary") + '" data-join="' + a[0] + '">' + esc(a[1]) + "</button>").join("") + "</div>";
+    cutLeaves();
+    document.body.appendChild(wrap);
+    const place = () => {
+      const at = document.getElementById("catNow"), r = at && at.getBoundingClientRect();
+      placeBubble(wrap, r && r.width ? { top: r.top, left: r.left, width: r.width, height: r.height } : { top: 0, left: innerWidth - 24, width: 0, height: 40 }, { width: 340 });
+    };
+    place();
+    addEventListener("resize", place);
+    const close = () => {
+      removeEventListener("resize", place);
+      dismissNode(wrap);
+      if (joinBubbleClose === close) joinBubbleClose = null;
+    };
+    joinBubbleClose = close;
+    const hide = () => {
+      joinShut = JSON.stringify(joinNow);
+      close();
+      if (p.lead) joinAsk("seen", p.lead);
+    };
+    wrap.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      hide();
+    });
+    wrap.querySelectorAll("[data-join]").forEach((b) => {
+      const act = b.getAttribute("data-join");
+      b.onclick = () => {
+        if (act === "hide") return hide();
+        close();
+        joinAct(act);
+      };
+    });
+  }
+  function forgetTeamLead(team, then) {
+    return joinAsk("forget", team).then((v) => {
+      if (typeof then === "function") then();
+      return v;
+    });
+  }
+
   // src/modules/catalog-trust.js
   var TRUST_KEY = "CatalogTrust";
   var TRUST_WAIT_MS = 2e3;
@@ -13838,8 +14060,9 @@ What you type stays in this browser only.`;
   function trustKeyHtml(state, keyId) {
     if (!state) return '<span class="ec-key" aria-hidden="true"></span>';
     const word = esc(t(state === V2_SIG_NONE ? "Unsigned" : "Signed"));
-    const tip = state === V2_SIG_INVALID ? t("This file has changed since it was signed.") : state === V2_SIG_UNKNOWN ? t("This file is signed with a key this computer does not know.") : state === V2_SIG_VALID && keyId ? t("This file is signed with the key {KEY}.").split("{KEY}").join(keyId) : "";
-    return '<span class="ec-key' + (state === V2_SIG_VALID ? " on" : "") + '" role="img" data-trust="' + esc(state) + '" aria-label="' + word + '"' + (tip ? ' tabindex="0" data-tip="' + esc(tip) + '"' : ' title="' + word + '"') + ">" + ICON_KEY + "</span>";
+    const lead = /^studio-[0-9a-f]{16}$/.test(String(keyId || "")) ? String(keyId).slice(7) : "";
+    const tip = state === V2_SIG_INVALID ? t("This file has changed since it was signed.") : state === V2_SIG_UNKNOWN ? t("This file is signed with a key this computer does not know.") : state === V2_SIG_VALID && keyId ? t("This file is signed with the key {KEY}.").split("{KEY}").join(lead ? leadKeyText(lead) : keyId) : "";
+    return '<span class="ec-key' + (state === V2_SIG_VALID ? " on" : "") + '" role="img" data-trust="' + esc(state) + '" aria-label="' + word + '"' + (tip ? ' tabindex="0" data-tip="' + esc(tip) + '"' + (lead ? ' data-tip-key="' + lead + '" data-tip-kind="studio"' : "") : ' title="' + word + '"') + ">" + ICON_KEY + "</span>";
   }
   function trustOfferLine(state, updating) {
     if (state === V2_SIG_INVALID) return t("This file has changed since it was signed.");
@@ -19866,204 +20089,6 @@ What you type stays in this browser only.`;
     startMark(k);
   }
 
-  // src/modules/team-join.js
-  var team_join_exports = {};
-  __export(team_join_exports, {
-    closeJoinBubble: () => closeJoinBubble,
-    forgetTeamLead: () => forgetTeamLead,
-    leadKeyText: () => leadKeyText,
-    paintJoin: () => paintJoin,
-    teamJoinEmptyHtml: () => teamJoinEmptyHtml,
-    teamJoinShown: () => teamJoinShown,
-    teamLeads: () => teamLeads,
-    wireTeamJoin: () => wireTeamJoin,
-    wireTeamJoinEmpty: () => wireTeamJoinEmpty
-  });
-  var joinNow = null;
-  var joinShut = "";
-  function eHasJoin() {
-    const h = eHost();
-    return !!h && typeof h.teamJoin === "function";
-  }
-  function joinAsk(op, file, name) {
-    if (!eHasJoin()) return Promise.resolve(null);
-    try {
-      return Promise.resolve(eHost().teamJoin(op, file || "", name || "")).then(joinTook, () => null);
-    } catch (e) {
-      return Promise.resolve(null);
-    }
-  }
-  function teamJoinShown() {
-    return !!joinNow && (!!leadToShow() || !!joinNow.join || !!joinNow.sealed);
-  }
-  function leadToShow() {
-    return (joinNow && joinNow.leads || []).filter((l) => l.admitted && !l.seen)[0] || null;
-  }
-  function teamLeads() {
-    return (joinNow && joinNow.leads || []).slice();
-  }
-  function leadKeyText(print) {
-    return String(print || "").replace(/(.{4})(?=.)/g, "$1 ");
-  }
-  function joinTook(v) {
-    const s = v && typeof v === "object" ? v : {};
-    const was = JSON.stringify(joinNow);
-    joinNow = {
-      sealed: s.sealed && s.sealed.file ? { file: String(s.sealed.file), team: String(s.sealed.team || "") } : null,
-      join: s.join && s.join.file ? {
-        file: String(s.join.file),
-        state: String(s.join.state || ""),
-        code: String(s.join.code || ""),
-        asked: +s.join.asked || 0,
-        name: String(s.join.name || "")
-      } : null,
-      leads: Array.isArray(s.leads) ? s.leads.filter((l) => l && l.team).map((l) => ({
-        team: String(l.team),
-        print: String(l.print || ""),
-        admitted: l.admitted === true,
-        seen: l.seen === true
-      })) : []
-    };
-    if (s.joined && s.joined.file) {
-      closeJoinBubble();
-      hooks.loadCatalogFromFolder(String(s.joined.file), 0);
-    }
-    if (JSON.stringify(joinNow) !== was) paintJoin();
-    return joinNow;
-  }
-  function wireTeamJoin() {
-    if (!eHasJoin()) return;
-    if (typeof eHost().onTeamJoin === "function") eHost().onTeamJoin(joinTook);
-    joinAsk("state");
-  }
-  function paintJoin() {
-    if (wholeThingEmpty()) {
-      closeJoinBubble();
-      hooks.render();
-      return;
-    }
-    if (teamJoinShown() && JSON.stringify(joinNow) !== joinShut) openJoinBubble();
-    else if (!teamJoinShown()) closeJoinBubble();
-  }
-  function joinTime(ms) {
-    const d = new Date(ms || Date.now());
-    return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
-  }
-  function joinCodeHtml(code) {
-    return code ? '<div class="e-join-code"><span>' + esc(code.slice(0, 3)) + "</span><span>" + esc(code.slice(3)) + "</span></div>" : '<div class="e-join-code e-join-wait" aria-hidden="true"><span><i></i><i></i><i></i></span><span><i></i><i></i><i></i></span></div>';
-  }
-  function joinParts() {
-    const j = joinNow && joinNow.join, s = joinNow && joinNow.sealed, who = agentName() || t("this desk"), l = leadToShow();
-    if (l) return {
-      title: t("You are on the team"),
-      line: t("Compare this key with the Signing key in the lead's Studio Settings. Every later edition is checked against it."),
-      body: '<div class="e-join-key">' + esc(leadKeyText(l.print)) + "</div>",
-      acts: [["seen", t("It matches")], ["forget", t("It does not match")]],
-      lead: l.team
-    };
-    const meta = j ? '<div class="e-join-meta">' + esc(t("{NAME}, asked at {TIME}").split("{NAME}").join(j.name || who).split("{TIME}").join(joinTime(j.asked))) + "</div>" : "";
-    if (j && j.state === "code") return {
-      title: t("Read this code to the team's lead"),
-      line: t("They type it in Studio, and the catalog opens here once they let this desk in."),
-      body: joinCodeHtml(j.code) + meta,
-      acts: [["cancel", t("Cancel the request")]]
-    };
-    if (j && j.state === "refused") return {
-      title: t("The lead turned the request down"),
-      line: t("Asking again sends a new request."),
-      body: meta,
-      acts: [["ask", t("Ask again")], ["load", t("Load another catalog")]]
-    };
-    if (j) return {
-      title: t("Waiting for the lead to open the request"),
-      line: t("The code to read to them appears here as soon as they do."),
-      body: joinCodeHtml("") + meta,
-      acts: [["cancel", t("Cancel the request")]]
-    };
-    return {
-      title: t("{FILE} is sealed for its team").split("{FILE}").join(s ? s.file : ""),
-      line: t("Once the team's lead lets this desk in, the catalog opens here by itself."),
-      body: '<div class="e-join-meta">' + esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who)) + "</div>",
-      acts: [["ask", t("Ask to join")], ["load", t("Load another catalog")]]
-    };
-  }
-  function joinAct(act) {
-    const j = joinNow && joinNow.join, s = joinNow && joinNow.sealed;
-    if (act === "ask") return joinAsk("ask", j && j.file || s && s.file || "", agentName());
-    if (act === "cancel") return joinAsk("cancel");
-    const l = leadToShow();
-    if (act === "seen" && l) return joinAsk("seen", l.team);
-    if (act === "forget" && l) return joinAsk("forget", l.team);
-    if (act === "load") return Promise.resolve(hooks.importCatalogHere());
-    return Promise.resolve(null);
-  }
-  function teamJoinEmptyHtml() {
-    if (!teamJoinShown()) return "";
-    const p = joinParts();
-    return '<div class="empty e-join"><div class="e-join-t">' + ICON_LOCK + esc(p.title) + "</div><p>" + esc(p.line) + "</p>" + p.body + '<div class="e-join-acts">' + p.acts.map((a) => '<button type="button" class="btn" data-join="' + a[0] + '">' + esc(a[1]) + "</button>").join("") + "</div></div>";
-  }
-  function wireTeamJoinEmpty(root) {
-    if (!root) return;
-    root.querySelectorAll("[data-join]").forEach((b) => {
-      b.onclick = () => joinAct(b.getAttribute("data-join"));
-    });
-  }
-  var joinBubbleClose = null;
-  function closeJoinBubble() {
-    if (joinBubbleClose) joinBubbleClose();
-  }
-  function openJoinBubble() {
-    closeJoinBubble();
-    const offer = document.getElementById("eCatalogOffer");
-    if (offer && !offer.classList.contains("e-gone")) return;
-    const p = joinParts();
-    const wrap = document.createElement("div");
-    wrap.className = "bub bub-ask e-offer e-join-bub";
-    wrap.id = "eTeamJoin";
-    wrap.setAttribute("role", "dialog");
-    wrap.setAttribute("aria-labelledby", "ejTitle");
-    wrap.innerHTML = '<h3 id="ejTitle">' + esc(p.title) + '</h3><p class="ec-sub">' + esc(p.line) + "</p>" + p.body + '<div class="tour-actions"><button type="button" class="btn" data-join="hide">' + esc(t("Hide")) + "</button>" + p.acts.map((a, i) => '<button type="button" class="btn' + (i ? "" : " primary") + '" data-join="' + a[0] + '">' + esc(a[1]) + "</button>").join("") + "</div>";
-    cutLeaves();
-    document.body.appendChild(wrap);
-    const place = () => {
-      const at = document.getElementById("catNow"), r = at && at.getBoundingClientRect();
-      placeBubble(wrap, r && r.width ? { top: r.top, left: r.left, width: r.width, height: r.height } : { top: 0, left: innerWidth - 24, width: 0, height: 40 }, { width: 340 });
-    };
-    place();
-    addEventListener("resize", place);
-    const close = () => {
-      removeEventListener("resize", place);
-      dismissNode(wrap);
-      if (joinBubbleClose === close) joinBubbleClose = null;
-    };
-    joinBubbleClose = close;
-    const hide = () => {
-      joinShut = JSON.stringify(joinNow);
-      close();
-      if (p.lead) joinAsk("seen", p.lead);
-    };
-    wrap.addEventListener("keydown", (e) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      e.stopPropagation();
-      hide();
-    });
-    wrap.querySelectorAll("[data-join]").forEach((b) => {
-      const act = b.getAttribute("data-join");
-      b.onclick = () => {
-        if (act === "hide") return hide();
-        close();
-        joinAct(act);
-      };
-    });
-  }
-  function forgetTeamLead(team, then) {
-    return joinAsk("forget", team).then((v) => {
-      if (typeof then === "function") then();
-      return v;
-    });
-  }
-
   // src/modules/render.js
   function liftByUse(hits, sc) {
     const use = statsRecentUse(pack);
@@ -25935,7 +25960,7 @@ What you type stays in this browser only.`;
   function ecDeskRowHtml(f, o) {
     const who = deskName(f);
     const tip = t("Signed by {DESK}, key {KEY}. Only that desk can change this file; anyone with the folder can read it.").split("{DESK}").join(who).split("{KEY}").join(deskKey(f));
-    return '<div class="ec-row ec-desk' + (o.nested ? "" : " ec-alone") + (o.loaded ? " is-loaded" : "") + '" data-ec-desk="' + o.at + '"><span class="ec-name"><b>' + esc(who) + (o.twin ? '<span class="ec-fp">' + esc(o.twin) + "</span>" : "") + '</b><small class="ec-meta">' + o.meta + "</small>" + (o.extra || "") + "</span>" + (o.loaded ? loadedTickHtml() + ecExportHtml() : "") + '<span class="ec-who" role="img" tabindex="0" aria-label="' + esc(who) + '" data-tip="' + esc(tip) + '">' + ICON_DESK + "</span>" + ecActHtml("See what changed", ICON_LOOK, ' data-ec-look="' + o.at + '"') + (o.loaded ? ecActHtml("Eject", ICON_EJECT, ' data-ec-eject="1"') : ecActHtml("Work from this file", ICON_LOAD, ' data-ec-work="' + o.at + '"')) + "</div>";
+    return '<div class="ec-row ec-desk' + (o.nested ? "" : " ec-alone") + (o.loaded ? " is-loaded" : "") + '" data-ec-desk="' + o.at + '"><span class="ec-name"><b>' + esc(who) + (o.twin ? '<span class="ec-fp">' + esc(o.twin) + "</span>" : "") + '</b><small class="ec-meta">' + o.meta + "</small>" + (o.extra || "") + "</span>" + (o.loaded ? loadedTickHtml() + ecExportHtml() : "") + '<span class="ec-who" role="img" tabindex="0" aria-label="' + esc(who) + '" data-tip="' + esc(tip) + '" data-tip-key="' + esc(String(f.desk.id).slice(2)) + '" data-tip-kind="desk">' + ICON_DESK + "</span>" + ecActHtml("See what changed", ICON_LOOK, ' data-ec-look="' + o.at + '"') + (o.loaded ? ecActHtml("Eject", ICON_EJECT, ' data-ec-eject="1"') : ecActHtml("Work from this file", ICON_LOAD, ' data-ec-work="' + o.at + '"')) + "</div>";
   }
   function ecMineHtml(line, glyph) {
     return '<small class="ec-mine">' + (glyph ? ICON_DESK : "") + "<span>" + esc(line) + "</span></small>";
@@ -25963,7 +25988,9 @@ What you type stays in this browser only.`;
     const b = document.createElement("div");
     b.className = "bub ec-key-bub";
     b.setAttribute("role", "tooltip");
-    b.textContent = key.getAttribute("data-tip") || "";
+    const tip = key.getAttribute("data-tip") || "", html = keyTipHtml(tip, key.getAttribute("data-tip-key") || "", key.getAttribute("data-tip-kind") || "desk");
+    if (html !== null) b.innerHTML = html;
+    else b.textContent = tip;
     document.body.appendChild(b);
     const r = key.getBoundingClientRect();
     placeBubble(b, { top: r.top, left: r.left, width: r.width, height: r.height }, { prefer: "above" });
@@ -27461,7 +27488,7 @@ What you type stays in this browser only.`;
       teamLeads().map((l) => row(
         t("Team lead's key"),
         "",
-        '<span class="e-lead-key">' + esc(leadKeyText(l.print)) + '</span><button type="button" class="btn" data-forget-lead="' + esc(l.team) + '">' + esc(t("Forget this lead")) + "</button>"
+        '<span class="e-lead-key">' + keySignHtml("studio", l.print) + '</span><button type="button" class="btn" data-forget-lead="' + esc(l.team) + '">' + esc(t("Forget this lead")) + "</button>"
       )).join("") + /* Under a host only: a browser has no catalog folder to share. */
       (eHasShared() ? row(
         t("Edit the shared catalog directly"),

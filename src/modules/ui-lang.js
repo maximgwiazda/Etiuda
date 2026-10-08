@@ -978,6 +978,8 @@ UI_STRINGS.pl={
   "It does not match":"Nie zgadza się",
   "Team lead's key":"Klucz lidera zespołu",
   "Forget this lead":"Zapomnij tego lidera",
+  "Studio's signing key":"Klucz podpisu Studia",
+  "A desk's key":"Klucz stanowiska",
   "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.":"Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze.",
   "Next replies":"Kolejne odpowiedzi",
   "Commits the firm":"Zobowiązuje firmę",

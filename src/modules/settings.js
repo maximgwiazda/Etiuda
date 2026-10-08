@@ -20,7 +20,7 @@ import { applyStoredFactsSize } from "./facts.js";
 import { agentName, setAgentName } from "./agent.js";
 import { eHost, eHasShared } from "./host.js";
 import { hooks } from "./hooks.js";
-import { teamLeads, leadKeyText, forgetTeamLead } from "./team-join.js";
+import { teamLeads, keySignHtml, forgetTeamLead } from "./team-join.js";
 
 /* THE SETTINGS SCREEN. One test decides what belongs: would you set it once and
    forget it? Anything touched weekly is a Menu item or a header control; Data stays in
@@ -166,7 +166,7 @@ function settingsBodyHtml(){
         : "")+
       /* One row per team lead this desk trusts: the key the agent compared, and the way out where it was wrong. */
       teamLeads().map(l=>row(t("Team lead's key"), "",
-        '<span class="e-lead-key">'+esc(leadKeyText(l.print))+'</span>'
+        '<span class="e-lead-key">'+keySignHtml("studio",l.print)+'</span>'
         +'<button type="button" class="btn" data-forget-lead="'+esc(l.team)+'">'+esc(t("Forget this lead"))+'</button>')).join("")+
       /* Under a host only: a browser has no catalog folder to share. */
       (eHasShared()
