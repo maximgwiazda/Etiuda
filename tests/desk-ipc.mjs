@@ -53,7 +53,7 @@ const inert = new Proxy(function () {}, { get: () => inert, set: () => true, app
 const onHandlers = {}, invokeHandlers = {};
 const electron = {
   app: { getPath: () => UD, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop, getVersion: () => "0.0.0",
-         whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
+         whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop, hasSwitch: () => false } },
   ipcMain: { on: (ch, fn) => { onHandlers[ch] = fn; }, handle: (ch, fn) => { invokeHandlers[ch] = fn; } },
   BrowserWindow: inert, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert,
   screen: inert, shell: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },
@@ -71,9 +71,13 @@ const fakeRequire = n => (n === "electron" ? electron : nodeRequire(n));
 const shellSrc = f => fs.readFileSync(path.join(ROOT, "shell", f), "utf8");
 /* main.js is evaluated as a function body, so one line appended to it hands the test the retry that Electron's events call. */
 const mainTest = {};
+/* Loaded as a GNOME desktop on any machine, so the keyring switch and its line (tests/shell-office.mjs 14) stay out of this file. */
+const desktopWas = process.env.XDG_CURRENT_DESKTOP;
+process.env.XDG_CURRENT_DESKTOP = "GNOME";
 new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
   shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal;")(
   fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, mainTest);
+if (desktopWas === undefined) delete process.env.XDG_CURRENT_DESKTOP; else process.env.XDG_CURRENT_DESKTOP = desktopWas;
 
 /* ---- the renderer's side of the pipe. The desk's channels go to main's own handlers; the
    catalog and the host are answered here, because this file is about the desk. ------------- */
@@ -419,8 +423,11 @@ try {
   try { edit("Edited A"); await tick(30); plain = await writeBranch(); }
   finally { Object.defineProperty(process, "platform", platformWas); keyring = "gnome_libsecret"; }
   check(plain === false && !fs.existsSync(deskDir) && !("branch" in envelope())
-      && said.some(l => /^ERR etiuda: no keyring answers/.test(l)),
-    "77c2 on Linux with no keyring an edit makes no key and writes no file, and says so (answer " + plain
+      && said.some(l => /^ERR etiuda: no keyring answers/.test(l))
+      && said.some(l => /^ERR etiuda: no keyring answers.*; to have one, install GNOME Keyring \(the gnome-keyring package\) or KDE Wallet, sign in again and open the desk$/.test(l))
+      && said.some(l => /^ERR etiuda: keyring backend [a-z_0-9]+, encryption available (true|false)$/.test(l)),
+    "77c2 on Linux with no keyring an edit makes no key and writes no file, says how to have one, and names the backend and the"
+    + " availability it was given (answer " + plain
     + ", desks folder " + fs.existsSync(deskDir) + ", branch in the envelope " + ("branch" in envelope()) + ")");
 
   await tick(1800);

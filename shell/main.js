@@ -48,6 +48,67 @@ function windowsProxySwitches() {
 }
 for (const s of windowsProxySwitches()) app.commandLine.appendSwitch(...s);
 
+/* ON LINUX THE KEYRING IS ASKED FOR BY NAME WHERE CHROMIUM WOULD NOT ASK FOR ONE (decisions 2026-10-08 12:40). Before
+   ready Chromium names the desktop (base/nix/xdg_util.cc GetDesktopEnvironment, which chromiumDesktop follows line for
+   line) and picks a store from it (SelectBackend, components/os_crypt/sync/key_storage_util_linux.cc, carried by
+   Electron 44's revert_oscrypt_remove_sync_backend.patch): KDE 3, LXQt and a desktop it cannot name get "basic_text",
+   its own built-in password, which sealsForReal refuses, so nothing can have been sealed there. On those alone, and only
+   where a keyring already answers unlocked on the session bus (keyringAnswers), the shell asks for libsecret; elsewhere
+   Chromium keeps basic_text and the refusal says how to get a keyring. A recognised desktop's store and one the command
+   line names are never changed: a key sealed under them would be orphaned. tests/shell-office.mjs 14 holds it. */
+function chromiumDesktop(env) {
+  const session = env.DESKTOP_SESSION || "", has = n => Object.prototype.hasOwnProperty.call(env, n);
+  if (env.XDG_CURRENT_DESKTOP !== undefined) for (const v of String(env.XDG_CURRENT_DESKTOP).split(":").map(s => s.trim()).filter(Boolean)) {
+    if (v === "Unity") return session.indexOf("gnome-fallback") > -1 ? "GNOME" : "UNITY";
+    if (v === "Deepin") return "DEEPIN";
+    if (v === "GNOME") return "GNOME";
+    if (v === "X-Cinnamon") return "CINNAMON";
+    if (v === "KDE") return env.KDE_SESSION_VERSION === "5" ? "KDE5" : env.KDE_SESSION_VERSION === "6" ? "KDE6" : "KDE4";
+    if (v === "Pantheon") return "PANTHEON";
+    if (v === "XFCE") return "XFCE";
+    if (v === "UKUI") return "UKUI";
+    if (v === "LXQt") return "LXQT";
+    if (v === "COSMIC") return "COSMIC";
+  }
+  if (session === "deepin") return "DEEPIN";
+  if (session === "gnome" || session === "mate") return "GNOME";
+  if (session === "kde4" || session === "kde-plasma") return "KDE4";
+  if (session === "kde") return has("KDE_SESSION_VERSION") ? "KDE4" : "KDE3";
+  if (session.indexOf("xfce") > -1 || session === "xubuntu") return "XFCE";
+  if (session === "ukui") return "UKUI";
+  if (has("GNOME_DESKTOP_SESSION_ID")) return "GNOME";
+  if (has("KDE_FULL_SESSION")) return has("KDE_SESSION_VERSION") ? "KDE4" : "KDE3";
+  return "OTHER";
+}
+/* Whether a keyring answers on the session bus without asking anything of the person: a secret service already running
+   (asking whether the name has an owner starts nothing) whose default collection is unlocked. Asking libsecret for one
+   that is not running starts gnome-keyring by D-Bus activation, and with no keyring made yet it raised a prompt for a
+   new password and held the desk (measured on Ubuntu 2026-10-08); a locked one would ask to be unlocked. */
+function keyringAnswers(run) {
+  const ask = (dest, at, method, ...args) => {
+    try {
+      return String(run("dbus-send", ["--session", "--print-reply=literal", "--reply-timeout=1500", "--dest=" + dest, at, method].concat(args),
+        { encoding: "utf8", timeout: 3000, windowsHide: true, stdio: ["ignore", "pipe", "ignore"] }));
+    } catch { return ""; }
+  };
+  if (!/^\s*boolean true\s*$/.test(ask("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus.NameHasOwner", "string:org.freedesktop.secrets"))) return false;
+  const at = ask("org.freedesktop.secrets", "/org/freedesktop/secrets", "org.freedesktop.Secret.Service.ReadAlias", "string:default").trim();
+  if (!/^\/org\/freedesktop\/secrets\/[A-Za-z0-9_/]+$/.test(at)) return false;
+  return /^\s*variant\s+boolean false\s*$/.test(ask("org.freedesktop.secrets", at, "org.freedesktop.DBus.Properties.Get",
+    "string:org.freedesktop.Secret.Collection", "string:Locked"));
+}
+function keyringSwitch(platform, env, line, run) {
+  if (platform !== "linux" || !/^(KDE3|LXQT|OTHER)$/.test(chromiumDesktop(env))) return null;
+  if (line.hasSwitch("password-store") || line.hasSwitch("enable-encryption-selection")) return null;
+  return keyringAnswers(run) ? ["password-store", "gnome-libsecret"] : false;
+}
+const KEYRING_SWITCH = keyringSwitch(process.platform, process.env, app.commandLine, execFileSync);
+if (KEYRING_SWITCH === false) console.error("etiuda: this desktop names no keyring Chromium knows, and none answers unlocked on the session bus, so none is asked for");
+if (KEYRING_SWITCH) {
+  app.commandLine.appendSwitch(...KEYRING_SWITCH);
+  console.error("etiuda: this desktop names no keyring Chromium knows, so the desk asks for one by name: --password-store=gnome-libsecret");
+}
+
 const ENGINE = path.join(__dirname, "..", "engine", "etiuda.html");
 
 /* The container is not the format: `.ec` is the catalog document, and the `.js` beside it is
@@ -957,12 +1018,19 @@ function sealsForReal(storage, platform) {
     return LINUX_KEYRINGS.test(String(storage.getSelectedStorageBackend()));
   } catch { return false; }
 }
-let plainSaid = false;
+let plainSaid = false, keyringSaid = false;
 function branchSealable() {
   const ok = sealsForReal(safeStorage, process.platform);
+  if (!keyringSaid && process.platform === "linux") {
+    keyringSaid = true;
+    const ask = f => { try { return String(f()); } catch (e) { return "threw " + (e && e.message); } };
+    console.error("etiuda: keyring backend " + ask(() => safeStorage.getSelectedStorageBackend())
+      + ", encryption available " + ask(() => safeStorage.isEncryptionAvailable()));
+  }
   if (!ok && !plainSaid && process.platform === "linux") {
     plainSaid = true;
-    console.error("etiuda: no keyring answers on this desk, so no private key is kept and the desk's own file is not written");
+    console.error("etiuda: no keyring answers on this desk, so no private key is kept and the desk's own file is not written;"
+      + " to have one, install GNOME Keyring (the gnome-keyring package) or KDE Wallet, sign in again and open the desk");
   }
   return ok;
 }

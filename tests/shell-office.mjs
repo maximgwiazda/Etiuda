@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 92;
+const EXPECTED = 99;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -39,7 +39,7 @@ const APP = path.join(LAB, "app");
 /* The shell's own names, handed back by a line added after its source: nothing is exported from
    main.js, and a slice would test a copy of one function rather than the file as it runs. */
 const EXPOSE = ["renamePatiently", "writeReplacing", "saveWindowPlace", "windowFile", "readCatalog", "channelHash",
-  "SAMPLE_EDITIONS", "proxySwitchesFrom", "catalogChanged", "sendListing", "spellingFromPackage"];
+  "SAMPLE_EDITIONS", "proxySwitchesFrom", "catalogChanged", "sendListing", "spellingFromPackage", "chromiumDesktop", "keyringSwitch"];
 
 /* node:fs with a hook per call: `ctl.renameSync = (real, ...args) => ...` decides that call,
    and a call without a hook goes to the real one. `ctl.any` sees every synchronous call first,
@@ -95,7 +95,9 @@ const QUIET = regDump([["CertificateRevocation", "REG_DWORD", "0x1"], ["ProxyEna
    fake timers above; opts.desk: keys written into desk.json before the shell reads it; opts.src:
    the source to run in place of main.js; opts.app: the folder it runs from; opts.onLine: switches
    on its command line; opts.paths and opts.dialogs: arrays that take the setPath calls and the save dialogs it opens;
-   opts.session: the electron session in place of the stand-in; opts.order: an array a window's construction is pushed to. */
+   opts.session: the electron session in place of the stand-in; opts.order: an array a window's construction is pushed to;
+   opts.bus: the session bus dbus-send meets, a function of its arguments (leg 14); opts.env: variables set while the file loads (null removes one), over XDG_CURRENT_DESKTOP=GNOME, so the keyring switch of
+   leg 14 is asked for only where a leg names a desktop that wants it. */
 function loadShell(opts) {
   const o = opts || {};
   const dir = path.join(LAB, "load" + (++loads));
@@ -128,8 +130,10 @@ function loadShell(opts) {
   };
   const ctl = {};
   const fs = wrapFs(ctl);
-  const regCalls = [];
+  const regCalls = [], busCalls = [];
   const cp = { execFileSync: (file, args, opt) => {
+    /* The session bus as opts.bus answers it (a function of dbus-send's arguments); none, as on Windows, throws. */
+    if (file === "dbus-send") { busCalls.push(args); if (!o.bus) throw new Error("no session bus"); return o.bus(args); }
     if (file !== REG_TOOL) return nodeRequire("node:child_process").execFileSync(file, args, opt);
     regCalls.push([file, args, opt]);
     if (o.reg instanceof Error) throw o.reg;
@@ -137,15 +141,22 @@ function loadShell(opts) {
   } };
   const clock = o.clock || { setTimeout: setTimeout, clearTimeout: clearTimeout };
   const fakeRequire = n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? fs : n === "node:child_process" ? cp : nodeRequire(n));
-  const api = new Function("require", "__dirname", "__filename", "module", "exports", "console", "setTimeout", "clearTimeout",
+  const env = Object.assign({ XDG_CURRENT_DESKTOP: "GNOME" }, o.env || {}), envWas = {};
+  for (const k of Object.keys(env)) { envWas[k] = process.env[k]; if (env[k] === null) delete process.env[k]; else process.env[k] = env[k]; }
+  let api;
+  try {
+  api = new Function("require", "__dirname", "__filename", "module", "exports", "console", "setTimeout", "clearTimeout",
     (o.src || SRC) + "\nreturn { " + EXPOSE.map(n => n + ": typeof " + n + " === 'undefined' ? undefined : " + n).join(", ") + " };")(
     fakeRequire, path.join(o.app || APP, "shell"), path.join(o.app || APP, "shell", "main.js"), { exports: {} }, {}, quiet,
     clock.setTimeout, clock.clearTimeout);
+  } finally {
+    for (const k of Object.keys(envWas)) { if (envWas[k] === undefined) delete process.env[k]; else process.env[k] = envWas[k]; }
+  }
   const ENGINE = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
   const ipc = (ch, ...args) => { const e = { sender: { id: 1, once: noop }, senderFrame: ENGINE, returnValue: undefined };
     if (on[ch]) on[ch](e, ...args); return e.returnValue; };
   const ask = (ch, ...args) => invoke[ch]({ sender: { id: 1 }, senderFrame: ENGINE }, ...args);
-  return { api, ctl, said, ipc, ask, on, invoke, UD, DOCS, deskFile: path.join(UD, "desk.json"), power, sent, win, switches, removed, regCalls };
+  return { api, ctl, said, ipc, ask, on, invoke, UD, DOCS, deskFile: path.join(UD, "desk.json"), power, sent, win, switches, removed, regCalls, busCalls };
 }
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 /* Invented from nothing, as every fixture here is. The refused one names a shelf that is not
@@ -1070,6 +1081,82 @@ try {
     check(SRC.split('files: ["en-US-10-1.bdic", "pl-PL-3-0.bdic"]').length === 2
       && !(JSON.stringify(lower.copied) === JSON.stringify(NAMES) && NAMES.every(n => same(lower.into, n))),
       "13B CONTROL: the shell copying under the lowercased names, the measured trap, fails 13b: " + JSON.stringify(lower.copied));
+  }
+
+  /* ---- 14. on Linux the keyring is asked for by name where Chromium would choose its own password ----
+     Before ready Chromium names the desktop (base/nix/xdg_util.cc GetDesktopEnvironment) and picks its store from that
+     (SelectBackend, key_storage_util_linux.cc): KDE 3, LXQt and a desktop it cannot name get "basic_text". 14a is the
+     naming, case by case as the C++ reads it; 14b the switch where it is wanted and a keyring answers unlocked, 14c none
+     where Chromium has a keyring, 14d none where the command line names a store, 14g none where no keyring answers
+     unlocked; 14E the Windows control; 14F the shell without its one append. */
+  {
+    const P = loadShell().api;
+    const named = [[{}, "OTHER"], [{ XDG_CURRENT_DESKTOP: "GNOME" }, "GNOME"], [{ XDG_CURRENT_DESKTOP: "ubuntu:GNOME" }, "GNOME"],
+      [{ XDG_CURRENT_DESKTOP: "LXQt" }, "LXQT"], [{ XDG_CURRENT_DESKTOP: "MATE", DESKTOP_SESSION: "mate" }, "GNOME"],
+      [{ XDG_CURRENT_DESKTOP: "MATE" }, "OTHER"], [{ XDG_CURRENT_DESKTOP: "KDE" }, "KDE4"],
+      [{ XDG_CURRENT_DESKTOP: "KDE", KDE_SESSION_VERSION: "5" }, "KDE5"], [{ XDG_CURRENT_DESKTOP: "KDE", KDE_SESSION_VERSION: "6" }, "KDE6"],
+      [{ XDG_CURRENT_DESKTOP: "Unity", DESKTOP_SESSION: "gnome-fallback-compiz" }, "GNOME"], [{ XDG_CURRENT_DESKTOP: "Unity" }, "UNITY"],
+      [{ XDG_CURRENT_DESKTOP: "X-Cinnamon" }, "CINNAMON"], [{ XDG_CURRENT_DESKTOP: " XFCE " }, "XFCE"],
+      [{ XDG_CURRENT_DESKTOP: "LXDE" }, "OTHER"], [{ XDG_CURRENT_DESKTOP: "sway" }, "OTHER"],
+      [{ XDG_CURRENT_DESKTOP: "", DESKTOP_SESSION: "xubuntu" }, "XFCE"], [{ DESKTOP_SESSION: "kde" }, "KDE3"],
+      [{ DESKTOP_SESSION: "kde", KDE_SESSION_VERSION: "5" }, "KDE4"], [{ KDE_FULL_SESSION: "true" }, "KDE3"],
+      [{ GNOME_DESKTOP_SESSION_ID: "this-is-deprecated" }, "GNOME"], [{ XDG_CURRENT_DESKTOP: "COSMIC" }, "COSMIC"]];
+    const wrong = named.filter(([env, want]) => !P.chromiumDesktop || P.chromiumDesktop(env) !== want);
+    check(typeof P.chromiumDesktop === "function" && wrong.length === 0,
+      "14a the shell names " + named.length + " desktops as Chromium's xdg_util.cc does, colon lists, DESKTOP_SESSION and the old"
+      + " variables included: " + (wrong.length ? "wrong " + JSON.stringify(wrong.map(([e, w]) => [e, w, P.chromiumDesktop && P.chromiumDesktop(e)])) : "all right"));
+    const platformWas = Object.getOwnPropertyDescriptor(process, "platform");
+    const CLEAR = { XDG_CURRENT_DESKTOP: null, DESKTOP_SESSION: null, GNOME_DESKTOP_SESSION_ID: null, KDE_FULL_SESSION: null, KDE_SESSION_VERSION: null };
+    const bus = (owner, alias, locked) => args => {
+      if (args.indexOf("org.freedesktop.DBus.NameHasOwner") > -1) return "   boolean " + owner + "\n";
+      if (args.indexOf("org.freedesktop.Secret.Service.ReadAlias") > -1) return "   " + alias + "\n";
+      if (args.indexOf("org.freedesktop.DBus.Properties.Get") > -1) return "   variant       boolean " + locked + "\n";
+      throw new Error("asked " + args.join(" "));
+    };
+    const RING = bus(true, "/org/freedesktop/secrets/collection/login", false);
+    const as = (platform, env, o) => {
+      Object.defineProperty(process, "platform", { value: platform });
+      try { return loadShell(Object.assign({ env: Object.assign({}, CLEAR, env), bus: RING }, o || {})); }
+      finally { Object.defineProperty(process, "platform", platformWas); }
+    };
+    const store = S => S.switches.filter(a => a[0] === "password-store").map(a => a.join("="));
+    const told = S => S.said.filter(l => /keyring/.test(l));
+    const SAID = "ERR etiuda: this desktop names no keyring Chromium knows, so the desk asks for one by name: --password-store=gnome-libsecret";
+    const basic = [{}, { XDG_CURRENT_DESKTOP: "LXQt" }, { XDG_CURRENT_DESKTOP: "sway" }, { DESKTOP_SESSION: "kde" }];
+    const asked = basic.map(env => as("linux", env));
+    check(asked.every(S => JSON.stringify(store(S)) === '["password-store=gnome-libsecret"]' && JSON.stringify(told(S)) === JSON.stringify([SAID])),
+      "14b on Linux where Chromium would pick basic_text (no desktop named, LXQt, one it cannot name, KDE 3), with a keyring answering"
+      + " unlocked, the shell asks for libsecret before ready and says so once: " + JSON.stringify(asked.map(S => [store(S), told(S).length])));
+    const kept = [{ XDG_CURRENT_DESKTOP: "GNOME" }, { XDG_CURRENT_DESKTOP: "ubuntu:GNOME" }, { XDG_CURRENT_DESKTOP: "KDE", KDE_SESSION_VERSION: "6" },
+      { XDG_CURRENT_DESKTOP: "KDE", KDE_SESSION_VERSION: "5" }, { XDG_CURRENT_DESKTOP: "KDE" }, { XDG_CURRENT_DESKTOP: "X-Cinnamon" },
+      { XDG_CURRENT_DESKTOP: "XFCE" }, { XDG_CURRENT_DESKTOP: "MATE", DESKTOP_SESSION: "mate" }, { XDG_CURRENT_DESKTOP: "Unity" },
+      { XDG_CURRENT_DESKTOP: "Pantheon" }, { XDG_CURRENT_DESKTOP: "Deepin" }, { XDG_CURRENT_DESKTOP: "UKUI" }, { XDG_CURRENT_DESKTOP: "COSMIC" }]
+      .map(env => as("linux", env));
+    check(kept.every(S => store(S).length === 0 && told(S).length === 0 && S.busCalls.length === 0),
+      "14c where Chromium names a keyring for the desktop (GNOME, KDE 4 to 6, Cinnamon, XFCE, MATE, Unity, Pantheon, Deepin, UKUI,"
+      + " COSMIC) the shell changes nothing and asks the bus nothing, so a key sealed there stays open: "
+      + JSON.stringify(kept.map(S => [store(S).length, S.busCalls.length])));
+    const NONE = "ERR etiuda: this desktop names no keyring Chromium knows, and none answers unlocked on the session bus, so none is asked for";
+    const deaf = [as("linux", { XDG_CURRENT_DESKTOP: "LXQt" }, { bus: bus(false, "/", true) }),
+      as("linux", { XDG_CURRENT_DESKTOP: "LXQt" }, { bus: bus(true, "/", false) }),
+      as("linux", { XDG_CURRENT_DESKTOP: "LXQt" }, { bus: bus(true, "/org/freedesktop/secrets/collection/login", true) }),
+      as("linux", { XDG_CURRENT_DESKTOP: "LXQt" }, { bus: null })];
+    check(deaf.every(S => store(S).length === 0 && JSON.stringify(told(S)) === JSON.stringify([NONE]))
+      && deaf[0].busCalls.length === 1 && deaf[0].busCalls[0].indexOf("org.freedesktop.DBus.NameHasOwner") > -1,
+      "14g on LXQt where no keyring answers unlocked (none running, where only its name is asked, so none is started; one"
+      + " with no default collection; one locked; no bus at all) nothing is asked for and the shell says so: "
+      + JSON.stringify(deaf.map(S => [store(S).length, S.busCalls.length])));
+    const named2 = [as("linux", { XDG_CURRENT_DESKTOP: "LXQt" }, { onLine: ["password-store"] }),
+      as("linux", { XDG_CURRENT_DESKTOP: "LXQt" }, { onLine: ["enable-encryption-selection"] })];
+    check(named2.every(S => store(S).length === 0 && told(S).length === 0),
+      "14d a store the command line names, or Chromium's own choice asked for, is left as given: " + JSON.stringify(named2.map(S => store(S))));
+    const win = as("win32", {});
+    check(JSON.stringify(win.switches) === '[["no-proxy-server"]]' && told(win).length === 0 && win.busCalls.length === 0,
+      "14E CONTROL: on Windows, with no desktop named, the shell's switches are the proxy's alone, as before: " + JSON.stringify(win.switches));
+    const APPEND = "app.commandLine.appendSwitch(...KEYRING_SWITCH);";
+    const cut = as("linux", { XDG_CURRENT_DESKTOP: "LXQt" }, { src: SRC.split(APPEND).join("") });
+    check(SRC.split(APPEND).length === 2 && store(cut).length === 0,
+      "14F CONTROL: the same shell without its one append asks for no store on LXQt, so 14b can fail: " + JSON.stringify(store(cut)));
   }
 } catch (e) {
   failed++;
