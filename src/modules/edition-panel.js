@@ -76,7 +76,8 @@ function editionSide(ops,mine){
 }
 function editionFieldWord(f){ return f==="t"?t("Title"):f==="note"?t("Note"):t("Text"); }
 /* `desk` is a colleague's desk looked at: its two heads in place of Was and Becomes, and its one act, which takes
-   that desk's text of a changed card into this desk's own edits, in place of the offer's pair. */
+   that desk's text of a changed card into this desk's own edits, in place of the offer's pair; a new card of that
+   desk's gets the place it is taken into (desk-look.js). */
 function editionPaneHtml(it,held,c,desk){
   const was=((held&&held.cards)||[]).find(m=>String(m.id)===it.id)||null;
   const now=((c&&c.cards)||[]).find(m=>String(m.id)===it.id)||null;
@@ -111,6 +112,7 @@ function editionPaneHtml(it,held,c,desk){
     rows=head(desk?(gone?desk.was:desk.now):t(gone?"Was":"Becomes"))+cell(esc(cardText(m,"body",code)));
     const sub=desk?"":editionSubline(it,c);
     if(sub) rows+='<p class="ed-sub">'+esc(sub)+'</p>';
+    if(desk && desk.place && it.kind==="new") rows+=desk.place(it);
   }
   return '<h3>'+esc(cardTitle(now||was||{})||it.id)+'</h3><div class="ed-grid ed-c'+cols+'">'+rows+'</div>';
 }
@@ -139,6 +141,14 @@ function openEditionPanel(o){
       const pane=document.getElementById("edPane"), list=document.querySelector(".ed-list");
       const draw=()=>{
         pane.innerHTML=editionPaneHtml(items[at],o.held,c,desk);
+        // A new card placed or given back: its row and the pane drawn again, and the focus put where the act left it.
+        if(desk && desk.wirePlace) desk.wirePlace(pane, items[at], sel=>{
+          const r=list.querySelector('[data-ed-at="'+at+'"]');
+          if(r) r.innerHTML=editionRowInner(items[at],o.held,c,sub);
+          draw();
+          const f=sel && pane.querySelector(sel);
+          if(f){ f.focus(); if(f.setSelectionRange) f.setSelectionRange(f.value.length,f.value.length); }
+        });
         pane.querySelectorAll("[data-ed-mine]").forEach(b=>{
           b.onclick=()=>{
             desk.toggle(items[at]);

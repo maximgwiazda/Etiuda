@@ -1048,6 +1048,14 @@ UI_STRINGS.pl={
   "Back to the Library":"Wróć do Biblioteki",
   "Take this text":"Przejmij tę treść",
   "Now in your edits":"Już we własnych zmianach",
+  "Now in {CAT}":"Już w kategorii {CAT}",
+  "Give it back":"Oddaj kartę",
+  "Drag it onto one of your categories, or press Enter to choose one":"Przeciągnij kartę na jedną ze swoich kategorii albo naciśnij Enter i wybierz kategorię z listy",
+  "Find a category":"Znajdź kategorię",
+  "a category's name":"nazwa kategorii",
+  "Add {CAT} as a category of this desk":"Dodaj {CAT} jako kategorię tego stanowiska",
+  "Drop it on one of your categories.":"Upuść kartę na jedną ze swoich kategorii.",
+  "Drop it on one of your categories, or on + to add {CAT}.":"Upuść kartę na jedną ze swoich kategorii albo na +, aby dodać kategorię {CAT}.",
   "That desk's cards match the team's edition.":"Karty tego stanowiska są takie same jak w wydaniu zespołu."
 };
 // Is this a language this build carries? The table itself stays private to this file.
