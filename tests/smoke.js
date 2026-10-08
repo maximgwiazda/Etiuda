@@ -2853,24 +2853,36 @@ const t0 = Date.now();
      over the block: no ghost of the words rising off it. Every node the press adds to <body> is
      recorded as it arrives with the box it covers, and those covering the pressed block are
      named. Pressed on the second block of a card of alternatives holding two or more, none of
-     them in the trace, so the trace's legs below can move it. */
-  const cpAt = await p.evaluate(() => {
+     them in the trace, so the trace's legs below can move it. Such a card is a deck, so the pointer
+     rests on its front first and the second block is pressed where it stands dealt. */
+  const cpCard = await p.evaluate(() => {
     const card = [...document.querySelectorAll("#list .card[data-id]")].find(c =>
       c.querySelectorAll(".txt[data-v]").length >= 2 && !c.matches("[data-erec]") && !c.querySelector("[data-erec]")
       && (findCard(c.dataset.id) || {}).alt);
     if (!card) return null;
-    const el = card.querySelectorAll(".txt[data-v]")[1];
-    el.scrollIntoView({ block: "center" });
-    const r = el.getBoundingClientRect();
-    window.__cpOver = [];
-    window.__cpObs = new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => {
-      if (n.nodeType !== 1) return;
-      const q = n.getBoundingClientRect();
-      if (q.right > r.left && q.left < r.right && q.bottom > r.top && q.top < r.bottom) window.__cpOver.push(String(n.className));
-    })));
-    window.__cpObs.observe(document.body, { childList: true });
-    return { id: card.dataset.id, x: Math.round(r.left + Math.min(40, r.width / 2)), y: Math.round(r.top + r.height / 2) };
+    card.querySelectorAll(".txt[data-v]")[1].scrollIntoView({ block: "center" });
+    return card.dataset.id;
   });
+  let cpAt = null;
+  if (cpCard) {
+    await sleep(400);
+    const front = await p.evaluate(i => { const r = document.querySelector('#list .card[data-id="' + CSS.escape(i) + '"] .txt[data-v]').getBoundingClientRect();
+      return { x: Math.round(r.left + Math.min(40, r.width / 2)), y: Math.round(r.top + Math.min(12, r.height / 2)) }; }, cpCard);
+    await p.mouse.move(front.x, front.y); await sleep(900);
+    cpAt = await p.evaluate(i => {
+      const card = document.querySelector('#list .card[data-id="' + CSS.escape(i) + '"]');
+      const el = card.querySelectorAll(".txt[data-v]")[1];
+      const r = el.getBoundingClientRect();
+      window.__cpOver = [];
+      window.__cpObs = new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => {
+        if (n.nodeType !== 1) return;
+        const q = n.getBoundingClientRect();
+        if (q.right > r.left && q.left < r.right && q.bottom > r.top && q.top < r.bottom) window.__cpOver.push(String(n.className));
+      })));
+      window.__cpObs.observe(document.body, { childList: true });
+      return { id: card.dataset.id, x: Math.round(r.left + Math.min(40, r.width / 2)), y: Math.round(r.top + r.height / 2) };
+    }, cpCard);
+  }
   if (!cpAt) check(false, "a card with two copyable blocks and no trace, to press");
   else {
     await p.mouse.click(cpAt.x, cpAt.y); await sleep(900);

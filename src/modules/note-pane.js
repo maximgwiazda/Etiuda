@@ -2,6 +2,7 @@ import { placeBubble } from "./bubble.js";
 import { findCard, noteFor, cardTitle } from "./card-model.js";
 import { esc } from "./esc.js";
 import { cutLeaves, dismissNode } from "./motion.js";
+import { deckReach } from "./deck.js";
 // The note beside a card: the family's bubble, and the hover that opens it.
 
 /* THE NOTE IS A CALLOUT, NOT A BOX ON THE CARD: the family's bubble, placed by the family's
@@ -36,9 +37,10 @@ function openNotePane(card, id, btn){
   cutLeaves();
   pane.innerHTML='<h3>'+esc(cardTitle(m))+'</h3><p>'+esc(note).replace(/\{([A-Z_]+)\}/g,'<span class="fillmiss">$1</span>')+'</p>';
   document.body.appendChild(pane);
-  // A few pixels of air around the card, so the pointer lands off its edge rather than on it.
-  const pad=4, cr=card.getBoundingClientRect();
-  placeBubble(pane, {top:cr.top-pad, left:cr.left-pad, width:cr.width+pad*2, height:cr.height+pad*2},
+  // A few pixels of air around the card, so the pointer lands off its edge rather than on it; an
+  // open deck counts down to its last reply.
+  const pad=4, cr=card.getBoundingClientRect(), reach=deckReach(card);
+  placeBubble(pane, {top:cr.top-pad, left:cr.left-pad, width:cr.width+pad*2, height:cr.height+reach+pad*2},
     {width:320});
   notePaneEl=pane; notePaneBtn=btn||null; if(btn) btn.setAttribute("aria-expanded","true");
   requestAnimationFrame(()=>{ if(notePaneEl===pane) pane.classList.add("in"); });

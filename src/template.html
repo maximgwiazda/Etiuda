@@ -1895,6 +1895,42 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 .tag{position:absolute;top:8px;right:10px;font:10px var(--mono);color:var(--dim);
   letter-spacing:.5px;pointer-events:none}
 .txt.plx .tag{color:var(--pl)}
+/* THE DECK, the sheet's half; deck.js sets the classes and the --deck-* lengths. At rest each reply
+   behind the front sits with its bottom edge out by its depth, narrower and darker; dealt, they
+   spring into their places one after another, front first, and slide back on the house curve. */
+#list .card.deck{content-visibility:visible;contain-intrinsic-size:none;z-index:0}
+#list .card.deck.deck-up{z-index:6}
+.card.deck>.txt{z-index:var(--deck-z,1);
+  transition:transform var(--m-move) var(--m-ease),clip-path var(--m-move) var(--m-ease),
+             filter var(--m-move) ease,box-shadow var(--m-move) ease,
+             background-color var(--m-tone) ease,border-color var(--m-tone) ease}
+.card.deck:not(.deck-open)>.txt.deck-back{
+  transform:translateY(var(--deck-dy)) scaleX(var(--deck-sx));transform-origin:50% 100%;
+  clip-path:inset(var(--deck-clip) -3px -3px -3px round var(--radius));
+  filter:brightness(var(--deck-dim));pointer-events:none}
+/* On a light desk the edges darken a third as much: grey bars under white read as weight, not depth. */
+:root[data-theme=light] .card.deck:not(.deck-open)>.txt.deck-back{
+  filter:brightness(calc(1 - (1 - var(--deck-dim)) / 3));box-shadow:none}
+.card.deck.deck-open>.txt.deck-back{
+  transform:none;clip-path:inset(-3px -3px -3px -3px round var(--radius));filter:none;
+  box-shadow:0 16px 34px -14px rgba(0,0,0,.75),var(--card-shadow,0 0 #0000);
+  transition:transform var(--m-travel) var(--m-spring) calc(var(--deck-k) * var(--m-travel) / 9),
+             clip-path var(--m-move) var(--m-ease) calc(var(--deck-k) * var(--m-travel) / 9),
+             filter var(--m-move) ease calc(var(--deck-k) * var(--m-travel) / 9),
+             box-shadow var(--m-travel) ease,
+             background-color var(--m-tone) ease,border-color var(--m-tone) ease}
+:root[data-theme=light] .card.deck.deck-open>.txt.deck-back{
+  box-shadow:0 14px 30px -14px rgba(15,23,42,.35),var(--card-shadow,0 0 #0000)}
+/* The open deck's floor paints nothing and holds the pointer over the whole reach from the first
+   frame, so a click aimed where a reply is travelling lands on nothing rather than on the card beneath. */
+.card.deck.deck-open::after{content:"";position:absolute;left:-8px;right:-8px;
+  top:var(--deck-rest-bottom);height:var(--deck-extra);z-index:0}
+/* What an open deck reaches over fades back and softens, so the deck is the one sharp thing there;
+   deck.js marks it. A node drawn new under an open deck wears deck-fresh for two frames and arrives faded. */
+#list .card,#list .list-sep{transition:opacity var(--m-move) ease,filter var(--m-move) ease}
+#list .deck-under{opacity:.22;filter:blur(1.6px)}
+:root[data-theme=light] #list .deck-under{opacity:.3}
+#list .deck-fresh{transition:none!important}
 /* THE GLASS RIM: light catching an edge, drawn as a 1px ring cut from this gradient. A
    line along the top and the bottom edge, brightest at the top's left and the bottom's right and
    fading along the edge, wide and shallow so the sides are all but dark. The two catches are one

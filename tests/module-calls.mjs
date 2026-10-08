@@ -3415,6 +3415,86 @@ const CARD_B = {
       /^[ \t]*wireCardMargin\(base\);[ \t]*$/m.test(ed)].join(","), "true,true"));
 }
 
+/* ------------------------------------------------------------------ deck.js, the Deck
+   A card of two or more replies rests as its first with the rest tucked behind, and what an open deck reaches over
+   fades back (decisions 2026-10-07 21:30 and 22:28: the fade must be consistent, the same card always faded or
+   always not under the same deck). The oracles: the module's written contract (an edge 6px per depth under the
+   front, three at most; a card counts as covered when its top lies under the reach, in the deck's column) computed
+   here independently; and for the fade, the same layout reached by two histories, which must give one answer. The
+   list is a stand-in holding only what deckFade() reads: rects, classes and two lengths. Invented ids. */
+{
+  const DK = await import(MOD("deck.js"));
+  const Dom = await import(MOD("dom.js"));
+  const hadDoc = globalThis.document;
+  const cls = s => ({ s, add(...c) { c.forEach(x => this.s.add(x)); }, remove(...c) { c.forEach(x => this.s.delete(x)); }, contains(c) { return this.s.has(c); } });
+  const node = (id, top, left, height, kind) => ({ dataset: id ? { id } : {}, kind: kind || "card", classList: cls(new Set([kind || "card"])),
+    rect: { top, left, right: left + 300, bottom: top + height }, getBoundingClientRect() { return this.rect; },
+    style: { v: {}, getPropertyValue(k) { return this.v[k] || ""; } } });
+  /* Matches the three selectors deckFade() asks, compound by compound: classes and a bare [data-id]. */
+  const hit = (e, compound) => (compound.match(/\.[\w-]+/g) || []).every(c => e.classList.contains(c.slice(1)))
+    && (!/\[data-id\]/.test(compound) || !!e.dataset.id);
+  const listOf = items => ({ items, querySelectorAll(sel) { return this.items.filter(e => sel.split(",").some(c => hit(e, c.trim()))); } });
+  // Column one: the deck at 100, its rest box 80 high and reaching 150 below it; a card under the reach, a rule, a card past it.
+  const scene = () => {
+    const deck = node("c-deck", 100, 0, 80); deck.classList.add("deck"); deck.style.v = { "--deck-rest-bottom": "60px", "--deck-extra": "168px" };
+    return { deck, under: node("c-under", 200, 0, 120), rule: node(null, 260, 0, 20, "list-sep"), past: node("c-past", 340, 0, 90),
+      beside: node("c-beside", 200, 320, 120) };
+  };
+  const faded = l => l.items.filter(e => e.classList.contains("deck-under")).map(e => e.dataset.id || e.kind).sort().join(",");
+  try {
+    globalThis.document = { querySelector: () => null, createElement: () => ({ getContext: () => ({}) }), createRange: () => ({}) };
+    check("deck.js", "1008dk1 at rest each tucked reply's bottom edge sits 6px per depth under the front's, the fourth and after behind the third, and the rest box holds three edges and its margin",
+      () => {
+        const tops = [40, 110, 170, 240, 300], hs = [60, 50, 60, 50, 40], L = DK.deckLengths(tops, hs, 300, 360);
+        const edges = L.slabs.slice(1).map((v, i) => tops[i + 1] + hs[i + 1] + v.dy - (tops[0] + hs[0]));
+        return eq([edges.join(","), L.rest, L.restBottom, L.extra, L.grow, L.slabs.map(v => v.z).join("")].join("|"),
+          "6,12,18,18|128|104|254|232|65432");
+      });
+    check("deck.js", "1008dk2 a card is covered when its top lies under the reach in the deck's column: not on the reach's own top, not past its bottom, not in the column beside",
+      () => {
+        const reach = { top: 100, left: 0, right: 300, bottom: 330 }, at = (top, left) => DK.deckCovers(reach, { top, left, right: left + 300 });
+        return eq([at(101, 0), at(329, 0), at(100, 0), at(330, 0), at(200, 297), at(200, 320), at(200, -297)].join(","), "true,true,false,false,false,false,false");
+      });
+    check("deck.js", "1008dk3 the list's observer skips a change the fade made itself, and only that",
+      () => eq([DK.deckOwnChange("card", "card deck-under"), DK.deckOwnChange("card deck-under deck-fresh", "card"),
+        DK.deckOwnChange("card deck", "deck card deck-under"), DK.deckOwnChange("card", "card deck-open"), DK.deckOwnChange("txt", "txt sel")].join(","),
+        "true,true,true,false,false"));
+    check("deck.js", "1008dk4 an open deck fades the card and the rule under its reach and nothing else: not itself, not the card past it, not the column beside; closed, nothing",
+      () => {
+        const s = scene(), l = listOf([s.deck, s.under, s.rule, s.past, s.beside]);
+        globalThis.document.querySelector = q => (q === "#list" ? l : null); Dom.grabDom();
+        DK.deckFade(); const shut = faded(l);
+        s.deck.classList.add("deck-open"); DK.deckFade(); const open = faded(l);
+        s.deck.classList.remove("deck-open"); DK.deckFade();
+        return eq([shut, open, faded(l)].join("|"), "|c-under,list-sep|");
+      });
+    check("deck.js", "1008dk5 the fade is one answer for one layout: a covered card drawn anew arrives faded at once, and the same page reached after a redraw with the deck shut gives the same set",
+      () => {
+        // History one: open, the covered card redrawn while open.
+        const a = scene(), la = listOf([a.deck, a.under, a.rule, a.past, a.beside]);
+        globalThis.document.querySelector = q => (q === "#list" ? la : null); Dom.grabDom();
+        a.deck.classList.add("deck-open"); DK.deckFade();
+        const redrawn = node("c-under", 200, 0, 120); la.items[1] = redrawn; DK.deckFade();
+        const one = faded(la), arrived = redrawn.classList.contains("deck-fresh") + "/" + redrawn.classList.contains("deck-under");
+        // History two: the card redrawn with the deck shut (the press on it), then the deck opened.
+        const b = scene(), lb = listOf([b.deck, b.under, b.rule, b.past, b.beside]);
+        globalThis.document.querySelector = q => (q === "#list" ? lb : null); Dom.grabDom();
+        b.deck.classList.add("deck-open"); DK.deckFade(); b.deck.classList.remove("deck-open"); DK.deckFade();
+        lb.items[1] = node("c-under", 200, 0, 120); DK.deckFade();
+        b.deck.classList.add("deck-open"); DK.deckFade();
+        const two = faded(lb);
+        b.deck.classList.remove("deck-open"); DK.deckFade(); b.deck.classList.add("deck-open"); DK.deckFade();
+        return eq([one, arrived, two, faded(lb)].join("|"), "c-under,list-sep|true/true|c-under,list-sep|c-under,list-sep");
+      });
+    check("deck.js", "1008dk6 an open deck reaches below its rest box by what the deal adds, and a shut one by nothing",
+      () => { const c = { classList: cls(new Set(["deck"])), _deckGrow: 75 }, open = DK.deckReach(c);
+        c.classList.add("deck-open"); return eq([open, DK.deckReach(c), DK.deckReach(null)].join(","), "0,75,0"); });
+  } finally {
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+    if (hadDoc !== undefined) Dom.grabDom();
+  }
+}
+
 /* NOT cardBodyHtml(). It reads the PAX box off the document through fill(), so it cannot be
    called without one: it is the browser oracle's, and tests/smoke.js has it. card-body.js is
    called above only for its intent strip, which reads no document. */
