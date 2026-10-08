@@ -2135,7 +2135,7 @@ body.ctrl-held .pill:hover .pill-e{visibility:visible}
 .e-launch-veil.e-going{opacity:0;pointer-events:none}
 @keyframes e-launch-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @media (max-height:640px){.e-launch-veil>.e-fifth-spot{width:160px;height:160px}.e-launch-veil{padding-bottom:16px}}
-body.e-launch #pageScroll,body.e-launch #pillsSlot{opacity:0}
+body.e-launch #pageScroll,body.e-launch #pillsSlot{opacity:0;pointer-events:none}
 body.e-launch-out #pageScroll,body.e-launch-out #pillsSlot{animation:e-launch-in var(--e-launch-out,.26s) var(--m-ease) both}
 :root.e-still .e-launch-veil{transition:none}
 /* THE ONE PLACE A BUTTON STANDS ON THE DOT FIELD. .btn's ground is 4% of the ink over whatever
@@ -21383,6 +21383,20 @@ What you type stays in this browser only.`;
         body.style.removeProperty("--e-launch-out");
       }, out);
     }
+    let held = "";
+    const loose = () => {
+      const a = document.activeElement;
+      return !a || a === body || a === document.documentElement;
+    };
+    const hold = (e) => {
+      const k = e.key, gr = !!(e.getModifierState && e.getModifierState("AltGraph"));
+      if (typeof k === "string" && k.length === 1 && (gr || !(e.ctrlKey || e.metaKey || e.altKey)) && !e.isComposing && loose()) {
+        held += k;
+        e.preventDefault();
+      }
+    };
+    const unhold = () => window.removeEventListener("keydown", hold, true);
+    if (o.focus) window.addEventListener("keydown", hold, true);
     on(window, "keydown", () => giveWay("key"), true);
     on(window, "pointerdown", (e) => {
       if (e.target === veil || veil.contains && veil.contains(e.target)) {
@@ -21394,14 +21408,27 @@ What you type stays in this browser only.`;
     on(window, "wheel", () => giveWay("wheel"), { passive: true, capture: true });
     on(window, "resize", place);
     const ready = Promise.resolve(o.ready).then(() => {
+      unhold();
+      const f = typeof o.focus === "function" ? o.focus() : o.focus;
+      if (f && loose()) {
+        f.focus({ preventScroll: true });
+        if (held && typeof f.value === "string") {
+          f.value += held;
+          if (typeof Event === "function") f.dispatchEvent(new Event("input", { bubbles: true }));
+        }
+      }
       if (state.reason) return;
-      const f = typeof o.focus === "function" ? o.focus() : o.focus, a = document.activeElement;
-      if (f && (!a || a === body || a === document.documentElement)) f.focus({ preventScroll: true });
       if (!lmK || lmK.host !== veil) giveWay("moved");
     });
     const wait = still() ? 0 : minMs;
-    Promise.all([ready, new Promise((r) => setTimeout(r, wait))]).then(() => giveWay("time"), () => giveWay("time"));
-    setTimeout(() => giveWay("time"), Math.max(wait, maxMs));
+    Promise.all([ready, new Promise((r) => setTimeout(r, wait))]).then(() => giveWay("time"), () => {
+      unhold();
+      giveWay("time");
+    });
+    setTimeout(() => {
+      unhold();
+      giveWay("time");
+    }, Math.max(wait, maxMs));
     return { giveWay, veil, get reason() {
       return state.reason;
     }, get ms() {

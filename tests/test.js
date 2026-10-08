@@ -2382,7 +2382,7 @@ function launchLab(o) {
         for (const c of this.children) { if ((" " + c.className + " ").indexOf(" " + want + " ") >= 0) return c; const d = c.querySelector(s); if (d) return d; }
         return null;
       },
-      getContext: () => ctx, focus() { doc.activeElement = e; }
+      getContext: () => ctx, focus() { doc.activeElement = e; }, value: "", fired: [], dispatchEvent(ev) { this.fired.push(ev.type); }
     };
     const set = new Set();
     e.classList = { add: c => set.add(c), remove: c => set.delete(c), contains: c => set.has(c) || (" " + e.className + " ").indexOf(" " + c + " ") >= 0 };
@@ -2401,7 +2401,8 @@ function launchLab(o) {
     ResizeObserver: class { observe() {} disconnect() {} },
     MutationObserver: class { observe() {} disconnect() {} },
     addEventListener: (ev, fn) => heard.push({ ev, fn }),
-    removeEventListener: (ev, fn) => { const i = heard.findIndex(h => h.ev === ev && h.fn === fn); if (i >= 0) heard.splice(i, 1); }
+    removeEventListener: (ev, fn) => { const i = heard.findIndex(h => h.ev === ev && h.fn === fn); if (i >= 0) heard.splice(i, 1); },
+    Event: class { constructor(type, o) { this.type = type; Object.assign(this, o || {}); } }
   };
   sb.window = sb;
   require("vm").runInNewContext(src + "\nfunction __k(){ return lmK; }\nfunction __R(){ return LAUNCH_R; }\n", sb);
@@ -2417,9 +2418,9 @@ function launchLab(o) {
     }
     clock = t;
   };
-  const send = (ev, target) => {
-    const e = { target: target || doc.body, prevented: false, stopped: false,
-      preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } };
+  const send = (ev, target, props) => {
+    const e = Object.assign({ target: target || doc.body, prevented: false, stopped: false,
+      preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } }, props || {});
     heard.filter(h => h.ev === ev).slice().forEach(h => h.fn(e));
     return e;
   };
@@ -2536,6 +2537,31 @@ function launchMarkTests() {
     got = [before === null, L.doc.activeElement === q, M.doc.activeElement === other];
   } catch (e) { got = "the lab threw: " + e.message; }
   eq("the field a first key should reach takes the focus once the work is ready, and never from another that holds it", got, [true, true, true]);
+
+  try {
+    // a character typed before the work is ready, where the program routes no typing, reaches its field when it is
+    const L = launchLab(), q = L.el("input"); L.launch({ focus: () => q }); L.timersTo(300);
+    const k1 = L.send("keydown", null, { key: "m" }), k2 = L.send("keydown", null, { key: "Enter" }), k3 = L.send("keydown", null, { key: "s", ctrlKey: true });
+    L.timersTo(600); L.ready(); L.timersTo(700);
+    const field = L.doc.activeElement === q; L.doc.activeElement = null;
+    const late = L.send("keydown", null, { key: "x" });
+    // a key typed into a field that already holds the focus is that field's
+    const N = launchLab(), q3 = N.el("input"), other = N.el("input"); other.focus(); N.launch({ focus: () => q3 }); N.timersTo(300);
+    const into = N.send("keydown", null, { key: "m" });
+    // the control: the desk routes its own typing, so with no field named nothing is held
+    const D = launchLab(); D.launch(); D.timersTo(300); const desk = D.send("keydown", null, { key: "m" });
+    got = [field, q.value, q.fired, k1.prevented, k2.prevented, k3.prevented, late.prevented, into.prevented, desk.prevented];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a character typed before the work is ready is held and handed to the field that takes the focus, and nothing else is held",
+    got, [true, "m", ["input"], true, false, false, false, false, false]);
+
+  try {
+    // the parts the launch hides take no pointer while hidden, so a click on them falls on nothing unseen
+    const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+    const rule = /body\.e-launch #pageScroll,body\.e-launch #pillsSlot\{([^}]*)\}/.exec(tpl);
+    got = [!!rule, !!rule && /opacity:0/.test(rule[1]), !!rule && /pointer-events:none/.test(rule[1])];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("the cards, the intent panel and the category row hidden by the launch take no click", got, [true, true, true]);
 
   try {
     // a screen painted under the launch takes the same drawing, clock and points, and the launch gives way to it

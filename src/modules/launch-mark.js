@@ -367,8 +367,17 @@ function launchMark(opts){
       body.style.removeProperty("--e-launch-out");
     }, out);
   }
-  // A key goes on where it was going: nothing here prevents it. A click on the mark is eaten, since it fell on
-  // the mark rather than on something seen; one anywhere else ends the launch and goes on.
+  // A key goes on where it was going: nothing here prevents it, unless the program routes no typing of its own and
+  // its field is not painted yet; a character typed then is held and handed to the field. A click on the mark is
+  // eaten, since it fell on the mark rather than on something seen; one anywhere else ends the launch and goes on.
+  let held="";
+  const loose=()=>{ const a=document.activeElement; return !a || a===body || a===document.documentElement; };
+  const hold=e=>{
+    const k=e.key, gr=!!(e.getModifierState && e.getModifierState("AltGraph"));
+    if(typeof k==="string" && k.length===1 && (gr || !(e.ctrlKey || e.metaKey || e.altKey)) && !e.isComposing && loose()){ held+=k; e.preventDefault(); }
+  };
+  const unhold=()=>window.removeEventListener("keydown",hold,true);
+  if(o.focus) window.addEventListener("keydown",hold,true);
   on(window,"keydown",()=>giveWay("key"),true);
   on(window,"pointerdown",e=>{
     if(e.target===veil || (veil.contains && veil.contains(e.target))){ e.preventDefault(); e.stopPropagation(); }
@@ -377,15 +386,19 @@ function launchMark(opts){
   on(window,"wheel",()=>giveWay("wheel"),{passive:true, capture:true});
   on(window,"resize",place);
   const ready=Promise.resolve(o.ready).then(()=>{
+    unhold();
+    const f=typeof o.focus==="function" ? o.focus() : o.focus;
+    if(f && loose()){
+      f.focus({preventScroll:true});
+      if(held && typeof f.value==="string"){ f.value+=held; if(typeof Event==="function") f.dispatchEvent(new Event("input",{bubbles:true})); }
+    }
     if(state.reason) return;
-    const f=typeof o.focus==="function" ? o.focus() : o.focus, a=document.activeElement;
-    if(f && (!a || a===body || a===document.documentElement)) f.focus({preventScroll:true});
     // the mark went on to the screen that was ready, so the work comes in with it
     if(!lmK || lmK.host!==veil) giveWay("moved");
   });
   const wait=still() ? 0 : minMs;
-  Promise.all([ready, new Promise(r=>setTimeout(r,wait))]).then(()=>giveWay("time"), ()=>giveWay("time"));
-  setTimeout(()=>giveWay("time"), Math.max(wait, maxMs));
+  Promise.all([ready, new Promise(r=>setTimeout(r,wait))]).then(()=>giveWay("time"), ()=>{ unhold(); giveWay("time"); });
+  setTimeout(()=>{ unhold(); giveWay("time"); }, Math.max(wait, maxMs));
   return {giveWay:giveWay, veil:veil, get reason(){ return state.reason; }, get ms(){ return state.ms; }};
 }
 // The last launch: why and when it gave way, for whoever reads the page.
