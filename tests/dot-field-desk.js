@@ -64,7 +64,7 @@ function electronExe() {
    folder, which the shell offers at boot. The tour and the name prompt are past, as on a desk in use. */
 function buildApp() {
   for (const d of ["shell", "engine", "userdata", "documents"]) fs.mkdirSync(path.join(APP, d), { recursive: true });
-  for (const f of ["main.js", "preload.js"]) fs.copyFileSync(path.join(E.ROOT, "shell", f), path.join(APP, "shell", f));
+  for (const f of ["main.js", "preload.js", "win-proxy.cjs", "page-watch.cjs"]) fs.copyFileSync(path.join(E.ROOT, "shell", f), path.join(APP, "shell", f));
   fs.writeFileSync(path.join(APP, "package.json"),
     JSON.stringify({ name: "etiuda-dot-field-probe", version: "0.0.0", main: "shell/main.js" }), "utf8");
   for (const f of ["etiuda.html", "etiuda.csp.json"])

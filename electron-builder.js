@@ -69,13 +69,13 @@ module.exports = {
   copyright: "Copyright (c) 2026 Maxim Gwiazda",
   extraMetadata: { version },
   directories: { output, buildResources: "shell" },
-  // An allowlist, the same discipline as .gitignore's blocklist in reverse: six files go in
+  // An allowlist, the same discipline as .gitignore's blocklist in reverse: eight files go in
   // and the src tree, the harness and the tools stay out of a customer's machine. The pin
   // travels with the artefact it describes, or the shell serves script-src 'none' and the
-  // packaged app opens on a blank window. The sixth is the sample catalog the shell puts in the
+  // packaged app opens on a blank window. The last is the sample catalog the shell puts in the
   // catalog folder on a first run; it is content, and the only content this app ever ships.
-  files: ["package.json", "shell/main.js", "shell/preload.js", "engine/etiuda.html", "engine/etiuda.csp.json",
-          "shell/sample-catalog.ec"],
+  files: ["package.json", "shell/main.js", "shell/preload.js", "shell/win-proxy.cjs", "shell/page-watch.cjs",
+          "engine/etiuda.html", "engine/etiuda.csp.json", "shell/sample-catalog.ec"],
   asar: true,
   // THE FUSES, flipped in the binary before signing. Off: running the executable as plain Node,
   // NODE_OPTIONS, and --inspect, none of which the shell or the harness uses. On: the app is read

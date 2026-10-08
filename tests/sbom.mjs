@@ -12,7 +12,7 @@
  *      dependency both absent and installed
  *   4  a declared dependency that is not installed refuses and writes no file
  *   5  given the packaged app, the archive is held against the list both ways, on the desk's own
- *      shape (six files, no node_modules) as well; no folder of the build machine is in the file
+ *      shape (eight files, no node_modules) as well; no folder of the build machine is in the file
  *   6  given the installer, its SHA-256 is carried, against a frozen literal from sha256sum
  *   7  tools/release.mjs --package leaves the document beside the installer, and a refusal leaves
  *      none and stops the package gate
@@ -280,20 +280,21 @@ async function main() {
   const r5d = run(['--root', syn, '--app', appLess, '--out', path.join(syn, 'bom-less.json')]);
   check(r5d.status === 1 && /@sc\/beta@2\.0\.1/.test(r5d.out) && !fs.existsSync(path.join(syn, 'bom-less.json')),
     '5d a listed package the asar lacks refuses and names @sc/beta@2.0.1, exit ' + r5d.status);
-  /* The desk's own shape: six files, no node_modules, and a tree that declares nothing. */
+  /* The desk's own shape: eight files, no node_modules, and a tree that declares nothing. */
   const bare = lab('bare');
   put(path.join(bare, 'package.json'), { name: 'etiuda', version: '0.0.0', devDependencies: { electron: '9.9.9' } });
   put(path.join(bare, 'src', 'modules', 'env.js'), envJs('7.8.9'));
   put(path.join(bare, 'node_modules', 'electron', 'package.json'), { name: 'electron', version: '9.9.9' });
   const six = lab('six-src');
-  for (const f of ['engine/etiuda.csp.json', 'engine/etiuda.html', 'package.json', 'shell/main.js', 'shell/preload.js', 'shell/sample-catalog.ec'])
+  for (const f of ['engine/etiuda.csp.json', 'engine/etiuda.html', 'package.json', 'shell/main.js', 'shell/page-watch.cjs', 'shell/preload.js',
+    'shell/sample-catalog.ec', 'shell/win-proxy.cjs'])
     put(path.join(six, ...f.split('/')), f === 'package.json' ? { name: 'etiuda', version: '0.0.0' } : 'x\n');
   const sixApp = lab('six-win-unpacked');
   fs.mkdirSync(path.join(sixApp, 'resources'), { recursive: true });
   await asar.createPackage(six, path.join(sixApp, 'resources', 'app.asar'));
   const r5e = run(['--root', bare, '--app', sixApp, '--out', path.join(bare, 'bom.json')]);
   check(r5e.status === 0 && npmSet(bomAt(path.join(bare, 'bom.json'))).length === 0,
-    '5e the desk\'s own shape, six files and nothing declared, passes with no npm package listed, exit ' + r5e.status);
+    '5e the desk\'s own shape, eight files and nothing declared, passes with no npm package listed, exit ' + r5e.status);
   const declares = lab('declares');
   put(path.join(declares, 'package.json'), { name: 'etiuda', version: '0.0.0', dependencies: { alpha: '^1.0.0' } });
   put(path.join(declares, 'src', 'modules', 'env.js'), envJs('7.8.9'));
@@ -301,7 +302,7 @@ async function main() {
   put(path.join(declares, 'node_modules', 'electron', 'package.json'), { name: 'electron', version: '9.9.9' });
   const r5f = run(['--root', declares, '--app', sixApp, '--out', path.join(declares, 'bom.json')]);
   check(r5f.status === 1 && /alpha@1\.2\.3/.test(r5f.out) && !fs.existsSync(path.join(declares, 'bom.json')),
-    '5f the same six-file app against a tree that declares alpha refuses, since alpha is listed and would not ship, exit '
+    '5f the same eight-file app against a tree that declares alpha refuses, since alpha is listed and would not ship, exit '
     + r5f.status);
 
   /* ---- 6. THE INSTALLER'S HASH --------------------------------------------------------------- */
@@ -318,13 +319,14 @@ async function main() {
 
   /* ---- 7. THE RELEASE LEAVES ONE BESIDE THE INSTALLER --------------------------------------- */
   /* A throwaway repository with the real release script and its imports, stub npm scripts, and a
-     stub package step that writes a fourteen-byte installer and a real six-file app.asar. Every
+     stub package step that writes a fourteen-byte installer and a real eight-file app.asar. Every
      gate then runs and the last two are the ones after the document is written. */
   const STUB_PACKAGE = [
     "import fs from 'node:fs'; import path from 'node:path'; import { createRequire } from 'node:module';",
     "const asar = createRequire(import.meta.url)(process.env.ETIUDA_TEST_ASAR);",
     "const dist = process.env.ETIUDA_DIST; const src = path.join(dist, '..', 'stage');",
-    "for (const f of ['engine/etiuda.csp.json', 'engine/etiuda.html', 'package.json', 'shell/main.js', 'shell/preload.js', 'shell/sample-catalog.ec']) {",
+    "for (const f of ['engine/etiuda.csp.json', 'engine/etiuda.html', 'package.json', 'shell/main.js', 'shell/page-watch.cjs', 'shell/preload.js',"
+    + " 'shell/sample-catalog.ec', 'shell/win-proxy.cjs']) {",
     "  fs.mkdirSync(path.dirname(path.join(src, f)), { recursive: true }); fs.writeFileSync(path.join(src, f), 'x\\n'); }",
     "fs.mkdirSync(path.join(dist, 'win-unpacked', 'resources'), { recursive: true });",
     "await asar.createPackage(src, path.join(dist, 'win-unpacked', 'resources', 'app.asar'));",
@@ -396,7 +398,7 @@ async function main() {
     '7w without the window wall\'s word a release stops before npm test as refused, exit ' + walled.status
     + ' (78 wanted), gate 4 reached and gate 5 not: ' + JSON.stringify((/REFUSED[^\r\n]*/.exec(walled.out) || [''])[0].slice(0, 90)));
 
-  /* The contradiction: alpha is a production dependency the six-file app would not carry, so the
+  /* The contradiction: alpha is a production dependency the eight-file app would not carry, so the
      list is not what ships. The document a run left there earlier goes too, or it would read as
      this build's. */
   const L7b = releaseLab('refused', { alpha: '^1.0.0' });

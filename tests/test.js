@@ -2022,10 +2022,13 @@ function railPlacementTests() {
    run here as it stands in the template, on stubs; the frames are the verifier's capture. */
 function recoveryTests() {
   const shell = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
-  const reloads = shell.match(/\.reload\(\)/g) || [];
-  eq("every reload the shell makes of the page goes through recover(), which marks it first",
-    [reloads.length, /const recover = \(\) => \{ recovering\.add\(win\.webContents\.id\); win\.webContents\.reload\(\); \};/.test(shell)],
-    [1, true]);
+  let watch = "";
+  try { watch = fs.readFileSync(path.join(E.ROOT, "shell", "page-watch.cjs"), "utf8"); } catch (e) { watch = ""; }
+  const reloads = t => (t.match(/\.reload\(\)/g) || []).length;
+  eq("every reload the shell makes of the page goes through the watch's recover(), where the desk marks it first",
+    [reloads(shell), reloads(watch), /const recover = \(\) => \{ if \(o\.reloading\) o\.reloading\(\); win\.webContents\.reload\(\); \};/.test(watch),
+     /reloading: \(\) => \{ recovering\.add\(win\.webContents\.id\); \},/.test(shell)],
+    [0, 1, true, true]);
   eq("the host answer says so once, by taking the mark", /recovering: recovering\.delete\(e\.sender\.id\),/.test(shell), true);
   const preload = fs.readFileSync(path.join(E.ROOT, "shell", "preload.js"), "utf8");
   eq("the preload hands the page that answer", /recovering: !!host\.recovering,/.test(preload), true);
@@ -2951,29 +2954,65 @@ function menuScreenTests(H) {
         .map(s => wire.indexOf(s) > -1), [true, true, true, true]);
   }
 }
+/* THE PAGE WATCH IS shell/page-watch.cjs, evaluated here with a promise that settles at once, so a
+   recovery window that answers as it loads plays the whole round in one synchronous call. `fsUsed`
+   stands in for node:fs, `pid` for the process. */
+class NowPromise {
+  constructor(ex) { this.settled = false; this.cbs = []; ex(v => { if (this.settled) return; this.settled = true; this.value = v; this.cbs.forEach(f => f(v)); }); }
+  then(fn) { if (this.settled) fn(this.value); else this.cbs.push(fn); return this; }
+}
+function pageWatchModule(fsUsed, pid) {
+  const text = fs.readFileSync(path.join(E.ROOT, "shell", "page-watch.cjs"), "utf8");
+  const m = { exports: {} };
+  new Function("require", "module", "exports", "Promise", "process", text)(
+    n => (n === "node:fs" ? (fsUsed || fs) : require(n)), m, m.exports, NowPromise, { pid: pid || 4242 });
+  return m.exports;
+}
+/* What the desk hands the watch, sliced out of the shell as pageWatchFor(win) and run on stand-ins. */
+function deskWatchOptions(shell, win, s) {
+  return new Function("BrowserWindow", "nativeTheme", "shellWords", "PLACED_ASIDE", "OFFSCREEN", "offscreenAt", "os",
+    "console", "recovering", "Date", extractDecl(shell, "function pageWatchFor(") + "\nreturn pageWatchFor;")(
+    s.BrowserWindow, { shouldUseDarkColors: !!s.dark }, () => s.words, !!s.aside, !!s.aside, () => ({ x: 9000, y: 9000 }),
+    { tmpdir: () => s.tmp }, s.console || { error() {} }, s.recovering || new Set(), s.Date || Date)(win);
+}
 /* THE HANG WINDOW'S RESTART (the "not responding" question): the page is ended first and reloaded
-   once it has gone, marked like every reload after a stop. The shell's page watch is sliced and run
-   on a window model whose recovery window answers at once; the recovery itself is the verifier's. */
+   once it has gone, marked like every reload after a stop. The watch runs as the desk wires it, on a
+   window model whose recovery window answers as it loads; the recovery itself is the verifier's. */
 function pageWatchTests() {
   const shell = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
+  let watchText = "";
+  try { watchText = fs.readFileSync(path.join(E.ROOT, "shell", "page-watch.cjs"), "utf8"); } catch (e) { watchText = ""; }
   const recovering = new Set(), log = [], answers = [], wcOn = {}, winOn = {};
+  const tmp = fs.mkdtempSync(path.join(require("os").tmpdir(), "etiuda-watch-legs-"));
   let clock = 1000000;
   const wc = { id: 7, on: (t, fn) => { wcOn[t] = fn; },
     reload() { log.push(recovering.delete(7) ? "reload marked" : "reload unmarked"); },
     forcefullyCrashRenderer() { log.push("kill"); } };
-  const win = { webContents: wc, on: (t, fn) => { winOn[t] = fn; }, isDestroyed: () => false, close() { log.push("close"); } };
-  const askInWindow = (w, message) => { log.push("asks " + message); const r = answers.shift(); return { then: fn => fn({ response: r }) }; };
-  const words = { gone: "gone", hung: "hung", restart: "Restart", close: "Close", wait: "Wait" };
-  // A system box, which the watch must not reach for, is logged as one so a regression reads plainly.
-  const dialog = { showMessageBox: (w, o) => { log.push("system box " + o.message); const r = answers.shift(); return { then: fn => fn({ response: r }) }; } };
-  let watch = null;
+  const win = { webContents: wc, on: (t, fn) => { winOn[t] = fn; }, isDestroyed: () => false, close() { log.push("close"); },
+    getBounds: () => ({ x: 0, y: 0, width: 1200, height: 800 }) };
+  class Box {
+    constructor(o) { const self = this; this.o = o; this.wcOn = {}; this.winOn = {}; this.closed = false;
+      this.webContents = { on: (t, fn) => { self.wcOn[t] = fn; }, setWindowOpenHandler() {} }; }
+    on(t, fn) { this.winOn[t] = fn; }
+    once(t, fn) { this.winOn[t] = fn; }
+    isDestroyed() { return this.closed; }
+    close() { if (this.closed) return; this.closed = true; if (this.winOn.closed) this.winOn.closed(); }
+    show() {} showInactive() {}
+    loadFile() { const r = answers.shift(); if (r != null) this.wcOn["will-navigate"]({ preventDefault() {} }, "file:///x?answer-" + r); }
+  }
+  const words = { lang: "en", gone: "gone", hung: "hung", restart: "Restart", close: "Close", wait: "Wait" };
+  const said = { error: s => { const m = /^etiuda: the recovery window asks: (.*)$/.exec(s); if (m) log.push("asks " + m[1]); } };
+  let W = null, o = null;
   try {
-    watch = new Function("recovering", "askInWindow", "dialog", "PLACED_ASIDE", "shellWords", "console", "Date",
-      extractDecl(shell, "function watchPage(") + "\nreturn watchPage;")(
-      recovering, askInWindow, dialog, false, () => words, { error() {} }, { now: () => clock });
-  } catch (e) { watch = null; }
-  if (!watch) { eq("shell/main.js carries the page watch as watchPage(win)", false, true); return; }
-  watch(win);
+    W = pageWatchModule();
+    o = deskWatchOptions(shell, win, { BrowserWindow: Box, words, tmp, console: said, recovering, Date: { now: () => clock } });
+  } catch (e) { W = null; }
+  if (!W || typeof W.watchPage !== "function" || !o) {
+    eq("shell/page-watch.cjs carries watchPage(win, o), and the shell hands it pageWatchFor(win)", false, true);
+    return;
+  }
+  eq("the shell starts its watch with what pageWatchFor hands it", /\bwatchPage\(win, pageWatchFor\(win\)\);/.test(shell), true);
+  W.watchPage(win, o);
   const step = fn => { log.length = 0; fn(); return log.slice(); };
   const gone = reason => () => wcOn["render-process-gone"]({}, { reason: reason, exitCode: 1 });
   eq("the first loss reloads the page at once, marked", step(gone("crashed")), ["reload marked"]);
@@ -2984,6 +3023,7 @@ function pageWatchTests() {
     step(gone("crashed")), ["asks gone", "reload marked"]);
   clock += 10000; answers.push(1);
   eq("and its Close closes the window", step(gone("crashed")), ["asks gone", "close"]);
+  eq("a page that closed on its own is left alone", step(gone("clean-exit")), []);
   answers.push(0);
   eq("the hang window's Wait leaves the page alone", step(() => winOn.unresponsive()), ["asks hung"]);
   answers.push(1);
@@ -2992,12 +3032,15 @@ function pageWatchTests() {
   eq("the reload comes once the old page has gone, marked, and that loss asks nothing", step(gone("killed")), ["reload marked"]);
   clock += 120000;
   eq("a loss a minute after the last counts as a first again", step(gone("crashed")), ["reload marked"]);
-  eq("the shell asks nothing in a system message box any more", /showMessageBox/.test(shell), false);
+  eq("the shell and its watch ask nothing in a system message box any more",
+    [/showMessageBox/.test(shell), /showMessageBox/.test(watchText)], [false, false]);
+  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) { /* the system cleans its own */ }
 }
 
 /* THE RECOVERY WINDOW IS ETIUDA'S OWN: a small window with a renderer of its own, carrying a page
-   with no script, in the desk's language and theme, whose links answer at will-navigate. Sliced out
-   of the shell and run on a window model over a scratch folder; how it looks is Maxim's to see. */
+   with no script, in the desk's language and theme, whose links answer at will-navigate. Run from
+   shell/page-watch.cjs with what the desk hands it, on a window model over a scratch folder; how it
+   looks is Maxim's to see. */
 function recoveryWindowTests() {
   const shell = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
   const made = [], tmp = fs.mkdtempSync(path.join(require("os").tmpdir(), "etiuda-recovery-legs-"));
@@ -3016,21 +3059,17 @@ function recoveryWindowTests() {
     show() { this.shown = "show"; }
     showInactive() { this.shown = "inactive"; }
   }
-  class NowPromise { constructor(ex) { this.settled = false; ex(v => { if (!this.settled) { this.settled = true; this.value = v; } }); } }
   const EN = { lang: "en", gone: "Etiuda stopped unexpectedly.", restart: "Restart", close: "Close Etiuda" };
   const PL = { lang: "pl", gone: "Etiuda niespodziewanie się zatrzymała.", restart: "Uruchom ponownie", close: "Zamknij Etiudę" };
   const load = (words, dark, aside, fsUsed) => {
     try {
-      return new Function("BrowserWindow", "nativeTheme", "shellWords", "PLACED_ASIDE", "OFFSCREEN", "OFFSCREEN_SHOWN",
-        "offscreenAt", "console", "Promise", "fs", "path", "os", "process",
-        ["function policyFor(", "function recoveryDoc(", "const RECOVERY_SIZE", "function askInWindow("]
-          .map(m => extractDecl(shell, m)).join("\n") + "\nreturn { recoveryDoc, askInWindow };")(
-        FakeWin, { shouldUseDarkColors: dark }, () => words, aside, aside, false, () => ({ x: 9000, y: 9000 }),
-        { error() {} }, NowPromise, fsUsed || fs, path, { tmpdir: () => tmp }, { pid: 4242 });
+      const W = pageWatchModule(fsUsed);
+      const o = deskWatchOptions(shell, { webContents: {} }, { BrowserWindow: FakeWin, words, dark, aside, tmp });
+      return { askInWindow: (parent, message, buttons, signal) => W.askInWindow(parent, o.words(), message, buttons, signal, o) };
     } catch (e) { return null; }
   };
   const R = load(PL, false, false);
-  if (!R) { eq("shell/main.js carries recoveryDoc and askInWindow", false, true); return; }
+  if (!R) { eq("shell/page-watch.cjs carries askInWindow, and the shell pageWatchFor", false, true); return; }
   const parent = { getBounds: () => ({ x: 100, y: 100, width: 1200, height: 800 }) };
   const ask = (Rr, message, buttons, signal) => { made.length = 0; const p = Rr.askInWindow(parent, message, buttons, signal); return { p, w: made[0] }; };
   const doc = w => { try { return fs.readFileSync(w.file, "utf8"); } catch (e) { return ""; } };
@@ -3042,14 +3081,14 @@ function recoveryWindowTests() {
     [1, true, true, false, false, 500, 444, 400, 112, false, true, false]);
   const d = doc(a.w);
   const links = [...d.matchAll(/<a href="\?answer-(\d)"( class="go" autofocus)?>([^<]*)<\/a>/g)].map(m => [+m[1], !!m[2], m[3]]);
-  eq("its page is a file of the desk's language, carries no script under a policy refusing any, and asks in one line with the two choices as links, the leading one filled, focused and last",
+  eq("its page is a file of the desk's language titled Etiuda, carries no script under a policy refusing any, and asks in one line with the two choices as links, the leading one filled, focused and last",
     [a.w && a.w.file === path.join(tmp, "etiuda-recovery-4242.html"), /^<!DOCTYPE html>\n<html lang="pl">\n<meta charset="utf-8">/.test(d),
-     /script-src 'none'/.test(d), /<script/i.test(d), (/<h1>([^<]*)<\/h1>/.exec(d) || [])[1], links],
-    [true, true, true, false, PL.gone, [[1, false, PL.close], [0, true, PL.restart]]]);
-  eq("the page keeps the arrow, cannot be selected, drags by its ground, and has a dark face and a high-contrast ring",
+     (/<title>([^<]*)<\/title>/.exec(d) || [])[1], o.title, /script-src 'none'/.test(d), /<script/i.test(d), (/<h1>([^<]*)<\/h1>/.exec(d) || [])[1], links],
+    [true, true, "Etiuda", "Etiuda", true, false, PL.gone, [[1, false, PL.close], [0, true, PL.restart]]]);
+  eq("the page keeps the arrow, cannot be selected, drags by its ground, has a dark face and a high-contrast ring, and the desk's own blue",
     [/body\{[^}]*cursor:default/.test(d), /a\{[^}]*cursor:default/.test(d), /user-select:none/.test(d), /-webkit-app-region:drag/.test(d),
-     /@media \(prefers-color-scheme:dark\)/.test(d), /@media \(forced-colors:active\)/.test(d)],
-    [true, true, true, true, true, true]);
+     /@media \(prefers-color-scheme:dark\)/.test(d), /@media \(forced-colors:active\)/.test(d), /--fill:#0e67d8;/.test(d), /--fill:#136adc;/.test(d)],
+    [true, true, true, true, true, true, true, true]);
   a.w.winOn["ready-to-show"]();
   const base = "file:///" + a.w.file.split(path.sep).join("/");
   const nav = url => { let prevented = false; a.w.wcOn["will-navigate"]({ preventDefault() { prevented = true; } }, url); return prevented; };

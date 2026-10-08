@@ -23,29 +23,12 @@ const fs = require("node:fs");
 const os = require("node:os");
 const crypto = require("node:crypto");
 const zlib = require("node:zlib");
+const { watchPage } = require(path.join(__dirname, "page-watch.cjs"));
 
 /* THE PROXY IS CHOSEN HERE, BEFORE READY: a setProxy after ready would not stop the first lookup.
    Windows' own setting is followed where it names a setup script or a server; automatic detection
    alone, nothing set or a failed read gives no proxy and no wpad lookup. */
-const PROXY_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
-/* The text is the key's values as reg prints them. A script is read before a server, and a server only
-   while ProxyEnable is 1. */
-function proxySwitchesFrom(text) {
-  const t = String(text || "");
-  const str = n => { const m = new RegExp("^[ \\t]+" + n + "[ \\t]+REG_(?:EXPAND_)?SZ[ \\t]+(.*?)[ \\t\\r]*$", "m").exec(t); return m ? m[1] : ""; };
-  const on = /^[ \t]+ProxyEnable[ \t]+REG_DWORD[ \t]+0x([0-9a-f]+)[ \t\r]*$/im.exec(t);
-  const script = str("AutoConfigURL"), server = str("ProxyServer");
-  if (/^(?:https?|file):\/\/\S+$/i.test(script)) return [["proxy-pac-url", script]];
-  if (on && parseInt(on[1], 16) === 1 && /^\S{1,2048}$/.test(server)) return [["proxy-server", server]];
-  return [["no-proxy-server"]];
-}
-function windowsProxySwitches() {
-  if (process.platform !== "win32") return proxySwitchesFrom("");
-  try {
-    return proxySwitchesFrom(execFileSync("C:\\Windows\\System32\\reg.exe", ["query", PROXY_KEY],
-      { encoding: "utf8", windowsHide: true, timeout: 5000 }));
-  } catch { return proxySwitchesFrom(""); }
-}
+const { windowsProxySwitches } = require(path.join(__dirname, "win-proxy.cjs"));
 for (const s of windowsProxySwitches()) app.commandLine.appendSwitch(...s);
 
 /* ON LINUX THE KEYRING IS ASKED FOR BY NAME WHERE CHROMIUM WOULD NOT ASK FOR ONE (decisions 2026-10-08 12:40). Before
@@ -2832,132 +2815,16 @@ const MENU_TO_LOG = !!process.env.ETIUDA_TEST_CONTEXT_MENU;
 /* The one window, held so a folder change arriving through a desk save can re-arm the watch and
    offer what the new folder holds. There is exactly one; a second would need a list. */
 let theWindow = null;
-/* THE RECOVERY WINDOW'S PAGE, drawn here because the page that would draw it has stopped. It has
-   no script, like the refusal: each choice is a link to a query of its own, which the window
-   hears at will-navigate. The leading choice is filled and last, as in the engine's own dialogs,
-   and colour-scheme follows nativeTheme, which the desk's theme sets. */
-function recoveryDoc(lang, message, buttons) {
-  const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  const order = buttons.map((b, i) => i).filter(i => i > 0).concat([0]);
-  return '<!DOCTYPE html>\n<html lang="' + esc(lang) + '">\n<meta charset="utf-8">\n'
-    + '<meta http-equiv="Content-Security-Policy" content="' + policyFor(["'none'"]) + '">\n'
-    + '<title>Etiuda</title>\n<style>\n'
-    + ':root{color-scheme:light;--bg:#fff;--ink:#0f172a;--soft:color-mix(in srgb,#0f172a 4%,transparent);'
-    + '--over:#dde9fc;--over-ink:#0e67d8;--fill:#0e67d8;--lift:brightness(1.08)}\n'
-    + '@media (prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#1d1f24;--ink:#e3e6ea;'
-    + '--soft:color-mix(in srgb,#e3e6ea 6%,transparent);--over:color-mix(in srgb,#136adc 30%,transparent);--fill:#136adc;'
-    + '--over-ink:#fff;--lift:brightness(.92)}}\n'
-    + 'html,body{height:100%;margin:0}\n'
-    + 'body{box-sizing:border-box;padding:18px 18px 14px;display:flex;flex-direction:column;'
-    + 'justify-content:space-between;background:var(--bg);color:var(--ink);cursor:default;user-select:none;'
-    + '-webkit-app-region:drag;font:15px/1.5 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}\n'
-    + 'h1{margin:0;font:600 16px/1.35 "Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;'
-    + 'letter-spacing:-.2px;text-wrap:balance}\n'
-    + 'nav{display:flex;justify-content:flex-end;gap:8px}\n'
-    + 'a{-webkit-app-region:no-drag;padding:7px 11px;border:1px solid transparent;border-radius:8px;'
-    + 'background:var(--soft);color:var(--ink);font:13px "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;'
-    + 'text-decoration:none;white-space:nowrap;outline:none;cursor:default}\n'
-    + 'a:hover,a:focus-visible{background:var(--over);color:var(--over-ink)}\n'
-    + 'a.go,a.go:hover,a.go:focus-visible{background:var(--fill);border-color:var(--fill);color:#fff;font-weight:600}\n'
-    + 'a.go:hover,a.go:focus-visible{filter:var(--lift)}\n'
-    + '@media (forced-colors:active){a{border-color:ButtonText}a:focus-visible{outline:2px solid Highlight}}\n'
-    + '</style>\n<h1>' + esc(message) + '</h1>\n<nav>'
-    + order.map(i => '<a href="?answer-' + i + '"' + (i === 0 ? ' class="go" autofocus' : '') + '>'
-      + esc(buttons[i]) + '</a>').join("")
-    + '</nav>\n';
-}
-const RECOVERY_SIZE = { width: 400, height: 112 };
-/* A SMALL WINDOW OF ITS OWN, in its own renderer, so it can ask while the desk's page is gone or
-   hung. Answers { response } as the system box did: the chosen index, 0 for Escape or a close, and
-   nothing once the signal aborts it. ITS PAGE IS A FILE: a link followed in a file:// document
-   reaches will-navigate, as the refusal's does, where Chromium stops one in a data: URL unheard
-   (measured). A file that cannot be written takes the first choice at once. */
-function askInWindow(parent, message, buttons, signal) {
-  return new Promise(done => {
-    const w = shellWords(), dark = !!nativeTheme.shouldUseDarkColors;
-    const file = path.join(os.tmpdir(), "etiuda-recovery-" + process.pid + ".html");
-    try { fs.writeFileSync(file, recoveryDoc(w.lang, message, buttons)); }
-    catch (e) {
-      console.error("etiuda: the recovery window could not be drawn, so its first choice is taken - " + e.message);
-      done({ response: 0 });
-      return;
-    }
-    let at = {};
-    try {
-      const b = parent.getBounds();
-      at = { x: Math.round(b.x + (b.width - RECOVERY_SIZE.width) / 2), y: Math.round(b.y + (b.height - RECOVERY_SIZE.height) / 2) };
-    } catch { /* Electron centres it on the screen */ }
-    const box = new BrowserWindow(Object.assign({
-      parent: parent, modal: true, show: false, frame: false, useContentSize: true,
-      resizable: false, minimizable: false, maximizable: false, fullscreenable: false,
-      title: "Etiuda", backgroundColor: dark ? "#1d1f24" : "#ffffff",
-      webPreferences: { javascript: false, sandbox: true, contextIsolation: true, nodeIntegration: false,
-        webviewTag: false, webSecurity: true, spellcheck: false },
-    }, RECOVERY_SIZE, at, PLACED_ASIDE ? Object.assign({ focusable: false }, offscreenAt()) : {}));
-    let answered = false;
-    const answer = r => {
-      if (answered) return;
-      answered = true;
-      if (!box.isDestroyed()) box.close();
-      try { fs.unlinkSync(file); } catch { /* already gone */ }
-      done({ response: r });
-    };
-    box.webContents.on("will-navigate", (e, url) => {
-      e.preventDefault();
-      const m = /\?answer-(\d+)$/.exec(String(url || ""));
-      if (m && +m[1] < buttons.length) answer(+m[1]);
-    });
-    box.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-    box.webContents.on("before-input-event", (e, input) => {
-      if (input.type === "keyDown" && input.key === "Escape") { e.preventDefault(); answer(0); }
-    });
-    box.on("closed", () => answer(0));
-    if (signal) signal.addEventListener("abort", () => answer(-1));
-    box.once("ready-to-show", () => {
-      if (OFFSCREEN_SHOWN) box.showInactive();
-      else if (!OFFSCREEN) box.show();
-    });
-    console.error("etiuda: the recovery window asks: " + message);
-    box.loadFile(file);
-  });
-}
-/* A PAGE THAT STOPS takes the band and its three controls with it, since the window has no frame.
-   The first loss reloads the page; a second within a minute asks in the recovery window above, as
-   a page that stops answering does. */
-function watchPage(win) {
-  let lastGone = 0, restarting = false, hangAsk = null;
-  const recover = () => { recovering.add(win.webContents.id); win.webContents.reload(); };
-  win.webContents.on("render-process-gone", (e, d) => {
-    if (win.isDestroyed() || d.reason === "clean-exit") return;
-    console.error("etiuda: the page stopped (" + d.reason + ", exit code " + d.exitCode + ")");
-    // Kept on the webContents, which outlives the reload, for the host answer to hand on.
-    win.webContents.etiudaLost = { reason: String(d.reason), exitCode: d.exitCode, at: Date.now() };
-    // Restart in the hang window reloads here, once the old page has gone: a reload sent straight
-    // after the kill can land in the dying process and leave the window empty.
-    if (restarting) { restarting = false; recover(); return; }
-    const again = Date.now() - lastGone < 60000;
-    lastGone = Date.now();
-    if (!again) { recover(); return; }
-    const w = shellWords();
-    askInWindow(win, w.gone, [w.restart, w.close]).then(r => {
-      if (win.isDestroyed()) return;
-      if (r.response === 0) recover(); else if (r.response === 1) win.close();
-    });
-  });
-  win.on("unresponsive", () => {
-    if (hangAsk || win.isDestroyed()) return;
-    console.error("etiuda: the page is not responding");
-    const w = shellWords();
-    hangAsk = new AbortController();
-    const signal = hangAsk.signal;
-    askInWindow(win, w.hung, [w.wait, w.restart], signal).then(r => {
-      hangAsk = null;
-      if (signal.aborted || r.response !== 1 || win.isDestroyed()) return;
-      restarting = true;
-      win.webContents.forcefullyCrashRenderer();
-    });
-  });
-  win.on("responsive", () => { if (hangAsk) hangAsk.abort(); });
+/* WHAT THE PAGE WATCH (shell/page-watch.cjs) IS HANDED: the desk's words, theme and harness flags, and the
+   two marks the host answer reads after a reload, the reload's own and the loss's reason. */
+function pageWatchFor(win) {
+  return {
+    BrowserWindow, dark: () => !!nativeTheme.shouldUseDarkColors, words: () => Object.assign({ title: "Etiuda" }, shellWords()),
+    aside: PLACED_ASIDE, hidden: OFFSCREEN, asideAt: offscreenAt, tmpdir: os.tmpdir, now: Date.now,
+    log: line => console.error("etiuda: " + line),
+    lost: d => { win.webContents.etiudaLost = { reason: String(d.reason), exitCode: d.exitCode, at: Date.now() }; },
+    reloading: () => { recovering.add(win.webContents.id); },
+  };
 }
 /* ---- THE PICKER: the desk's replies over the window in use, by a hotkey -------------------------
    The hotkey is REGISTERED with Windows (globalShortcut, which is RegisterHotKey there), never a
@@ -3411,7 +3278,7 @@ function createWindow() {
     Menu.buildFromTemplate(items).popup({ window: win });
   });
 
-  watchPage(win);
+  watchPage(win, pageWatchFor(win));
 
   /* The engine carries links to the open internet. Following one inside the window would
      replace the app with a web page and leave no way back to it. */
