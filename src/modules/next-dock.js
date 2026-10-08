@@ -115,7 +115,7 @@ function dockNow(){
   const now=tabPathNow(), path=now.path, from=path.length ? path[path.length-1] : null;
   const live=new Map((cards||[]).filter(m=>m&&m.id).map(m=>[String(m.id),m]));
   const rows=from==null ? [] : dockList(from, live, statsLearntAfter(pack, from), new Set(path), dockUsed());
-  return {tab:now.tab, from:from, rows:rows, live:live, path:path};
+  return {tab:now.tab, from:from, rows:rows, live:live, path:path, log:now.log||[], name:now.name||""};
 }
 /** The button's digit and its pulse, and the open dock's rows. `arrived` is a step just taken in the tab
  *  in front, which pulses where it brings the card's list or a learnt reply; a row only there by use counts in

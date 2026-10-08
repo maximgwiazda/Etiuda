@@ -3605,6 +3605,7 @@ body.e-lanes #pillsSlot.pills-anim{display:block}
 @keyframes eLanesIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .ln-head{display:flex;align-items:center;gap:12px;min-width:0;padding:0 2px 14px}
 .ln-title{flex:none;font:600 15px var(--sans);color:var(--ink)}
+.ln-since{flex:0 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:13px;color:var(--dim)}
 .ln-hint{margin-left:auto;flex:none;font-size:13px;color:var(--dim);white-space:nowrap}
 .ln-hint kbd,.ln-key{font:12px var(--mono);border:1px solid var(--line-strong);border-radius:4px;padding:1px 5px;
   color:var(--dim);background:var(--panel)}
@@ -3617,8 +3618,15 @@ body.e-lanes #pillsSlot.pills-anim{display:block}
 .ln-h1{grid-column:1}
 .ln-h2{grid-column:2}
 .ln-h3{grid-column:3}
-.ln-sent{grid-column:1;display:flex;align-items:center;gap:7px;min-width:0;padding:7px 0 7px 20px}
+/* A reply sent: its time, card and language on the head line the thread passes through, its first words under it. */
+.ln-sent{grid-column:1;min-width:0;padding:7px 0 9px 20px}
+.ln-sent-h{display:flex;align-items:center;gap:7px;min-width:0}
 .ln-sent .ctitle{min-width:0;overflow:hidden;white-space:nowrap;font-size:14px}
+.ln-at{flex:none;font:12.5px var(--mono);color:var(--dim)}
+.ln-lang{flex:none;margin-left:auto;font:600 10.5px var(--mono);color:var(--dim);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.ln-first{margin-top:3px;font-size:13px;line-height:1.45;color:var(--dim)}
+.ln-clamp2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.ln-when{flex:none;margin-left:auto;font:12px var(--mono);color:var(--dim)}
 .ln-cols .cat-ic{flex:none;width:14px;height:14px;margin:0}
 .ln-sent .cstamp{flex:none;display:inline-flex;color:var(--warn)}
 .ln-now{grid-column:2;margin:0}

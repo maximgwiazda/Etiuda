@@ -39,17 +39,26 @@ function blankTab(){
     cats:[],
     entrySel:null,
     scrollY:0,
-    path:[]
+    path:[],
+    log:[]
   };
 }
 /* THE REPLIES SENT IN THIS CONVERSATION, one card id per step, oldest first, the last TAB_PATH_MAX
    kept. A card copied again straight after itself (another block, the other language) is the same
    step. Answers the card before this one, or null where there is none. */
 const TAB_PATH_MAX=40;
-function tabPathStep(id){
+/* THE CONVERSATION'S HISTORY, the same steps with when each was sent, its language and its block, and never its
+   words, which the lanes read back from the card. The same step copied again moves the last entry. */
+const TAB_LOG_MAX=200;
+function tabLogEntry(e){
+  return !!e && typeof e.id==="string" && !!e.id && Number.isFinite(e.at) && typeof e.l==="string" && Number.isInteger(e.b) && e.b>=0;
+}
+function tabPathStep(id, how){
   const tb=tabs.find(x=>x.id===activeTabId), at=String(id==null?"":id);
   if(!tb||!at) return null;
   const path=Array.isArray(tb.path) ? tb.path : [], prev=path.length ? path[path.length-1] : null;
+  const log=Array.isArray(tb.log) ? tb.log : [], e={id:at, at:Date.now(), l:String(how&&how.l||""), b:Math.max(0,(how&&how.b)|0)};
+  tb.log=(prev===at && log.length && log[log.length-1].id===at ? log.slice(0,-1) : log).concat(e).slice(-TAB_LOG_MAX);
   if(prev===at) return null;
   tb.path=path.concat(at).slice(-TAB_PATH_MAX);
   clearTimeout(tabSaveTimer);
@@ -100,7 +109,8 @@ function syncTabBeads(){
 // The tab in front's path as it stands, read without adding to it.
 function tabPathNow(){
   const tb=tabs.find(x=>x.id===activeTabId);
-  return {tab:tb ? tb.id : "", path:tb&&Array.isArray(tb.path) ? tb.path.slice() : []};
+  return {tab:tb ? tb.id : "", path:tb&&Array.isArray(tb.path) ? tb.path.slice() : [], log:tb&&Array.isArray(tb.log) ? tb.log.slice() : [],
+    name:tb ? String(tb.pax||"").trim().split(/\s+/)[0] : ""};
 }
 function tabLabel(tb, i){
   // tb.title is IGNORED on purpose - renaming is retired, but sessions saved before that
@@ -203,7 +213,7 @@ function scheduleTabSave(){
     const was=tabLabel(tb), named=!!String(tb.pax||"").trim();
     tb.pax=pax?pax.value:"";
     // The customer's name cleared is the conversation over: the tab's next reply is the first of a new path.
-    if(named && !tb.pax.trim() && Array.isArray(tb.path) && tb.path.length){ tb.path=[]; hooks.syncNextDock(); }
+    if(named && !tb.pax.trim() && Array.isArray(tb.path) && tb.path.length){ tb.path=[]; tb.log=[]; hooks.syncNextDock(); }
     if(tabLabel(tb)!==was) drawTabs(); else syncTabAccent();
   }
   clearTimeout(tabSaveTimer);
@@ -230,7 +240,8 @@ function loadTabSession(){
       lang:(t.lang==="pl"||t.lang==="en")?t.lang:lang,
       intentIdxs:Array.isArray(t.intentIdxs)?t.intentIdxs.filter(intentOk):[],
       cats:Array.isArray(t.cats)?t.cats.filter(catOk):[],
-      path:Array.isArray(t.path)?t.path.filter(x=>typeof x==="string"&&x).slice(-TAB_PATH_MAX):[]
+      path:Array.isArray(t.path)?t.path.filter(x=>typeof x==="string"&&x).slice(-TAB_PATH_MAX):[],
+      log:Array.isArray(t.log)?t.log.filter(tabLogEntry).slice(-TAB_LOG_MAX):[]
     }));
     activeTabId=data.activeTabId;
     if(!tabs.some(t=>t.id===activeTabId)) activeTabId=tabs[0].id;

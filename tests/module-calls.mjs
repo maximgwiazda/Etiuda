@@ -3098,6 +3098,55 @@ const CARD_B = {
       if (hadContains2 === undefined) delete lanesBox.contains; else lanesBox.contains = hadContains2;
     }
     await new Promise(r => setTimeout(r, 20));
+    /* A3H1, H1 (decisions 2026-10-07 22:11): the lanes become this conversation's history, each reply sent with its time,
+       its language and its first words, the whole conversation rather than the last six, and how many since when and how
+       long ago the last at the head. The clock is held here; the hours are read as the desk reads them, in local time. */
+    const realNow = Date.now, at = (h, m) => new Date(2026, 9, 8, h, m, 0).getTime(), dot = " " + String.fromCharCode(0xb7) + " ";
+    let clock = at(19, 47);
+    try {
+      Date.now = () => clock;
+      const ids = ["a", "b", "c", "d", "e", "f", "g", "h", "i"].map(x => "c-h1-" + x);
+      AS.setCards(ids.map(id => (id === "c-h1-c" ? { id, c: "orders", alt: 1, t: "Title " + id, en: "First of c.\n\nSecond of c.", pl: "Pierwszy c.\n\nDrugi c." } : card(id))));
+      const freshTab = () => { T.tabs.splice(0, T.tabs.length); ST.ssSet(T.TAB_KEY, "null"); T.initTabs(); };
+      freshTab(); T.tabs[0].pax = "Hannah Nowak";
+      const sent = [["c-h1-a", "en", 0, 19, 47], ["c-h1-b", "pl", 0, 19, 49], ["c-h1-c", "en", 0, 19, 50], ["c-h1-c", "pl", 1, 19, 52]]
+        .concat(["d", "e", "f", "g", "h", "i"].map((x, i) => ["c-h1-" + x, "en", 0, 19, 53 + i]));
+      sent.forEach(([id, l, b, hh, mm]) => { clock = at(hh, mm); LP.bumpUseCount(id, l, b); });
+      const hm = ms => String(new Date(ms).getHours()).padStart(2, "0") + ":" + String(new Date(ms).getMinutes()).padStart(2, "0");
+      const log = (T.tabs[0].log || []).map(e => e.id.slice(5) + ":" + e.l + ":" + e.b + ":" + hm(e.at)).join(",");
+      check("tabs.js", "1008h1a each step of a conversation keeps when it was sent, its language and its block beside the path, and the same card copied again straight after moves its entry rather than adding one",
+        () => eq(log + "|" + T.tabs[0].path.join(",").replace(/c-h1-/g, ""),
+          "a:en:0:19:47,b:pl:0:19:49,c:pl:1:19:52,d:en:0:19:53,e:en:0:19:54,f:en:0:19:55,g:en:0:19:56,h:en:0:19:57,i:en:0:19:58|a,b,c,d,e,f,g,h,i"));
+      clock = at(19, 59) + 5000;
+      document.activeElement = body; LN.toggleLanes(true);
+      const html = lanesBox.innerHTML;
+      const rows = (html.match(/<div class="ln-sent" style="grid-row:\d+">/g) || []).length;
+      const rowOf = id => (html.split('<div class="ln-sent"').slice(1).find(p => p.indexOf("Title " + id + "<") > -1) || "").split('<div class="card ln-now"')[0];
+      const c = rowOf("c-h1-c"), a = rowOf("c-h1-a");
+      check("lanes.js", "1008h1b the lanes show every reply sent before the one now, eight here where six were shown, each with its time, its language and the first words of the block it sent",
+        () => eq([rows, /<span class="ln-at">19:52<\/span>/.test(c), /<span class="ln-lang">PL<\/span>/.test(c), /<span class="ln-clamp2">Drugi c\.<\/span>/.test(c),
+          /<span class="ln-at">19:47<\/span>/.test(a), /<span class="ln-lang">EN<\/span>/.test(a), /<span class="ln-clamp2">Body of c-h1-a<\/span>/.test(a)].join(","), "8,true,true,true,true,true,true"));
+      check("lanes.js", "1008h1c the head names the conversation and says how many replies since when, the last how long ago; the reply now carries its time and language, and Next stands beside the two replies before it",
+        () => eq([/<span class="ln-title" data-i18n-skip>Hannah<\/span>/.test(html), (/<span class="ln-since">([^<]*)<\/span>/.exec(html) || [])[1],
+          (/<span class="ln-when">([^<]*)<\/span>/.exec(html) || [])[1], (/<div class="ln-next" style="([^"]*)"/.exec(html) || [])[1]].join("|"),
+          "true|9 replies since 19:47, the last 1 min ago|19:58" + dot + "EN|grid-row:8 / span 4"));
+      LN.toggleLanes(false);
+      check("lanes.js", "1008h1d how long ago the last went: just now under a minute, minutes under an hour, and its time after; one reply says so",
+        () => eq([LN.laneSince([{ at: at(19, 58) }], at(19, 58) + 59000), LN.laneSince([{ at: at(19, 40) }, { at: at(19, 53) }], at(19, 58) + 1000),
+          LN.laneSince([{ at: at(17, 40) }, { at: at(17, 53) }], at(19, 58)), LN.laneSince([], at(19, 58))].join("|"),
+          "One reply, just now|2 replies since 19:40, the last 5 min ago|2 replies since 17:40, the last at 17:53|"));
+      /* THE CONTROL: a conversation kept before the history was, a path with no times, is read as it was: its replies with no
+         time and no head line, under the old title while the tab has no name. */
+      T.tabs.splice(0, T.tabs.length);
+      ST.ssSet(T.TAB_KEY, JSON.stringify({ v: 1, activeTabId: "mc-h1", tabs: [{ id: "mc-h1", path: ["c-h1-a", "c-h1-b", "c-h1-d"], log: [{ id: "c-h1-a", at: "x" }] }] }));
+      T.initTabs();
+      LN.toggleLanes(true);
+      const old = lanesBox.innerHTML;
+      check("lanes.js", "1008h1E THE CONTROL: a path kept with no history, a stored entry that is no step dropped, shows its replies with no time, no head line and the old title",
+        () => eq([(old.match(/<div class="ln-sent" style/g) || []).length, /ln-at|ln-since|ln-when/.test(old), /<span class="ln-title">This conversation<\/span>/.test(old),
+          JSON.stringify(T.tabs[0].log)].join("|"), "2|false|true|[]"));
+      LN.toggleLanes(false);
+    } finally { Date.now = realNow; LN.toggleLanes(false); }
   } finally {
     LN.toggleLanes(false);
     ND.watchNextDock(null);

@@ -435,7 +435,7 @@ function wireListPointer(){
     txtEl.addEventListener("pointerleave", ()=>txtEl.classList.remove("just-picked"), {once:true});
     withAgentName(ps[vi],()=>{
       copy(fill(ps[vi],m), copiedToastMsg(m, cl, vi, ps.length), cardCommits(m));
-      bumpUseCount(mid, cl);
+      bumpUseCount(mid, cl, vi);
     },txtEl);
   });
 }
@@ -455,11 +455,11 @@ function copiedToastMsg(m, lang, vi, total){
    nothing else can: which phrases earn their place - a count on the Manage rows - and
    how often the tool is actually used, the honest denominator for any time-saved
    estimate. Reset clears it with everything else. The tab's path says which card it followed. */
-function bumpUseCount(id, lang){
+function bumpUseCount(id, lang, vi){
   if(!id) return;
   bumpUse(pack, id);
   bumpLang(pack, lang);
-  const prev=tabPathStep(id);
+  const prev=tabPathStep(id, {l:lang, b:vi});
   if(prev) bumpPair(pack, prev, id);
   saveStats();
   // Every copy passes here, so this is where a loaded edition's mark is used up.
