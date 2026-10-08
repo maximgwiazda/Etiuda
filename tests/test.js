@@ -2520,8 +2520,8 @@ function launchMarkTests() {
     const M = launchLab(); M.launch();
     got = [framesAsked, dots > 0, img, h.reason, h.ms, M.frames(), M.drawn.arc];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("under a quiet switch the mark is drawn once, landed, with no frame asked for, and the launch waits for nothing but the work",
-    got, [0, true, 0, "time", 50, 1, 0]);
+  eq("under a quiet switch the mark is drawn once, landed, with no frame asked for, and stands the launch's full time though the work was ready at once",
+    got, [0, true, 0, "time", 1100, 1, 0]);
 
   try {
     let cover = true;

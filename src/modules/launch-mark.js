@@ -1,7 +1,7 @@
 /* THE LAUNCH MARK: the desk's dotted mark at the band's half-width LAUNCH_R, arriving at each start of the
    program over its work area, and giving way to the work at max(LAUNCH_MIN_MS, the work ready). A key, a click
    or a wheel ends it at once; a key goes on where it was going. Under a quiet switch it is drawn once, landed and
-   still, and waits for nothing but readiness. A SECOND PROGRAM IMPORTS THIS FILE from a pinned commit, so it
+   still, and stands as long as the moving one does. A SECOND PROGRAM IMPORTS THIS FILE from a pinned commit, so it
    imports nothing: the figure below is fifth.js's with R as an input, and test.js holds the two equal at R 10. */
 const LAUNCH_R=7, LAUNCH_MIN_MS=1100, LAUNCH_OUT_MS=260, LAUNCH_QUICK_MS=140, LAUNCH_MAX_MS=4000;
 const LM_TAU=Math.PI*2, LM_PHI0=Math.PI/4, LM_PHI1=LM_PHI0+Math.PI;
@@ -396,7 +396,7 @@ function launchMark(opts){
     // the mark went on to the screen that was ready, so the work comes in with it
     if(!lmK || lmK.host!==veil) giveWay("moved");
   });
-  const wait=still() ? 0 : minMs;
+  const wait=minMs;
   Promise.all([ready, new Promise(r=>setTimeout(r,wait))]).then(()=>giveWay("time"), ()=>{ unhold(); giveWay("time"); });
   setTimeout(()=>{ unhold(); giveWay("time"); }, Math.max(wait, maxMs));
   return {giveWay:giveWay, veil:veil, get reason(){ return state.reason; }, get ms(){ return state.ms; }};

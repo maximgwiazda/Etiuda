@@ -21420,7 +21420,7 @@ What you type stays in this browser only.`;
       if (state.reason) return;
       if (!lmK || lmK.host !== veil) giveWay("moved");
     });
-    const wait = still() ? 0 : minMs;
+    const wait = minMs;
     Promise.all([ready, new Promise((r) => setTimeout(r, wait))]).then(() => giveWay("time"), () => {
       unhold();
       giveWay("time");
