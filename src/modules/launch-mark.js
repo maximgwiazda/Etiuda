@@ -1,5 +1,5 @@
 /* THE LAUNCH MARK: the desk's dotted mark at the band's half-width LAUNCH_R, arriving at each start of the
-   program over its work area, and giving way to the work at max(LAUNCH_MIN_MS, the work ready). A key, a click
+   program over its work area, and giving way to the work at max(LAUNCH_MIN_MS, the work ready, landed). A key, a click
    or a wheel ends it at once; a key goes on where it was going. Under a quiet switch it is drawn once, landed and
    still, and stands as long as the moving one does. A SECOND PROGRAM IMPORTS THIS FILE from a pinned commit, so it
    imports nothing: the figure below is fifth.js's with R as an input, and test.js holds the two equal at R 10. */
@@ -248,21 +248,34 @@ function lmLanded(){
   lmLandWait=[];
   w.forEach(fn=>setTimeout(fn,0));
 }
-/* The arrival runs at the display's rate on its own clock, a late frame moving it by at most a frame and a half;
-   once landed the slow turn asks for frames fifteen times a second. */
+/* The arrival runs on the wall's time from its first frame, so it has landed whenever it is seen, however few frames
+   a busy page gives it; once landed the slow turn asks for frames fifteen times a second. */
 function lmFrame(now){
   const k=lmK;
   if(!k || !k.host.isConnected){ stopLaunchMark(true); return; }
   k.raf=0;
   if(k.still()){ k.ms=0; lmPaint(k); lmLanded(); return; }
   if(k.last==null) k.last=now;
-  const dt=Math.min(k.gapMs+1000/30, Math.max(0, now-k.last));
+  const dt=Math.max(0, now-k.last);
   k.last=now;
   k.ms+=dt;
   if(k.ms<LM_LANDED_MS) lmStep(k, dt); else lmLanded();
   lmPaint(k);
   k.gapMs=k.ms<LM_LANDED_MS+200 ? 0 : 1000/15;
   k.hold=setTimeout(()=>{ k.hold=0; k.raf=requestAnimationFrame(lmFrame); }, k.gapMs);
+}
+/* A resize while the points gather carries each with the area: its offset from its address is stretched as the area
+   is, so the scatter fills the new area and a point already gathered stays on its address. */
+function lmReflow(k){
+  const W=k.W, H=k.H, sx=k.sx, sy=k.sy, sc=k.scale;
+  lmLayout(k);
+  if(!k.R || !W || !H || k.ms>=LM_LANDED_MS || (W===k.W && H===k.H && sx===k.sx && sy===k.sy && sc===k.scale)) return;
+  const fx=k.W/W, fy=k.H/H, phi=lmPhaseAt(k, Math.min(k.ms, LM_LANDED_MS-1)), o=[0,0,0,0];
+  k.R.list.forEach(p=>{
+    launchPlace(k.R.C, p, phi, o);
+    const ax=sx+o[0]*sc, ay=sy+o[1]*sc, bx=k.sx+o[0]*k.scale, by=k.sy+o[1]*k.scale;
+    p.cx=bx+(p.cx-ax)*fx; p.cy=by+(p.cy-ay)*fy; p.x=bx+(p.x-ax)*fx; p.y=by+(p.y-ay)*fy;
+  });
 }
 function lmScatter(k){
   k.R.list.forEach(p=>{ p.cx=p.x=Math.random()*k.W; p.cy=p.y=Math.random()*k.H; });
@@ -318,7 +331,7 @@ function syncLaunchMark(host, opts){
     still:o.still||lmStillDefault, covered:o.covered||(()=>false)};
   lmLayout(nk); lmRide(nk); lmScatter(nk);
   // A resize clears the canvas, so it is painted again at once, moving or held.
-  nk.ro=new ResizeObserver(()=>{ lmLayout(nk); lmPaint(nk); });
+  nk.ro=new ResizeObserver(()=>{ lmReflow(nk); lmPaint(nk); });
   nk.ro.observe(host);
   nk.mo=new MutationObserver(()=>{
     if(nk.still()){ cancelAnimationFrame(nk.raf); clearTimeout(nk.hold); nk.raf=0; nk.hold=0; nk.ms=0; lmPaint(nk); lmLanded(); }
@@ -329,7 +342,7 @@ function syncLaunchMark(host, opts){
   lmStart(nk);
 }
 /* WHAT WAITS FOR THE ARRIVAL: run once the mark has landed or gone, at once where none is arriving, and at
-   LAUNCH_MAX_MS whatever, since frames do not come to a hidden page. */
+   LAUNCH_MAX_MS whatever, since frames do not come to a hidden page. The launch's own give-way is one of these. */
 function whenLaunchLanded(fn){
   const k=lmK;
   if(!k || k.still() || k.ms>=LM_LANDED_MS){ fn(); return; }
@@ -341,9 +354,10 @@ function whenLaunchLanded(fn){
 
 /* ---- the launch ---- */
 let lmLast=null;
-/* region: the element whose box the mark stands over, from its top to the window's foot. ready: a promise of the
-   work painted. focus(): the field a first key should reach where the program routes no typing of its own, focused
-   when the work is ready and nothing else holds the focus. phase(): the program's clock, as syncLaunchMark's. The
+/* region: the element whose box the mark stands over, from its top to the window's foot. It gives way at the latest
+   of minMs, the work ready and the mark landed. ready: a promise of the work painted. focus(): the field a first key
+   should reach where the program routes no typing of its own, focused when the work is ready and nothing else holds
+   the focus. phase(): the program's clock, as syncLaunchMark's. The
    body carries e-launch while it stands and e-launch-out while it gives way; the program's sheet says what those hide. */
 function launchMark(opts){
   const o=opts||{}, body=document.body, t0=performance.now(), still=o.still||lmStillDefault;
@@ -413,8 +427,8 @@ function launchMark(opts){
     // the mark went on to the screen that was ready, so the work comes in with it
     if(!lmK || lmK.host!==veil) giveWay("moved");
   });
-  const wait=minMs;
-  Promise.all([ready, new Promise(r=>setTimeout(r,wait))]).then(()=>giveWay("time"), ()=>{ unhold(); giveWay("time"); });
+  const wait=minMs, landed=new Promise(r=>whenLaunchLanded(r));
+  Promise.all([ready, new Promise(r=>setTimeout(r,wait)), landed]).then(()=>giveWay("time"), ()=>{ unhold(); giveWay("time"); });
   setTimeout(()=>{ unhold(); giveWay("time"); }, Math.max(wait, maxMs));
   return {giveWay:giveWay, veil:veil, get reason(){ return state.reason; }, get ms(){ return state.ms; }};
 }

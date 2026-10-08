@@ -2362,7 +2362,7 @@ function launchLab(o) {
   const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "launch-mark.js"), "utf8")
     .replace(/export\s*\{[^}]*\};?\s*$/, "");
   let clock = 0, seq = 0, frames = [], timers = [];
-  const drawn = { arc: 0, image: 0 }, heard = [];
+  const drawn = { arc: 0, image: 0 }, heard = [], ros = [];
   const ctx = new Proxy({}, { get: (t, k) => k === "arc" ? () => { drawn.arc++; } : k === "drawImage" ? () => { drawn.image++; }
     : k === "createRadialGradient" ? () => ({ addColorStop() {} }) : () => {}, set: () => true });
   const doc = { activeElement: null };
@@ -2398,14 +2398,14 @@ function launchLab(o) {
     setTimeout: (fn, ms) => { timers.push({ id: ++seq, at: clock + (ms || 0), fn }); return seq; },
     clearTimeout: id => { timers = timers.filter(x => x.id !== id); },
     getComputedStyle: () => ({ color: "#0e67d8", getPropertyValue: () => "" }),
-    ResizeObserver: class { observe() {} disconnect() {} },
+    ResizeObserver: class { constructor(fn) { this.fn = fn; ros.push(this); } observe() {} disconnect() {} },
     MutationObserver: class { observe() {} disconnect() {} },
     addEventListener: (ev, fn) => heard.push({ ev, fn }),
     removeEventListener: (ev, fn) => { const i = heard.findIndex(h => h.ev === ev && h.fn === fn); if (i >= 0) heard.splice(i, 1); },
     Event: class { constructor(type, o) { this.type = type; Object.assign(this, o || {}); } }
   };
   sb.window = sb;
-  require("vm").runInNewContext(src + "\nfunction __k(){ return lmK; }\nfunction __R(){ return LAUNCH_R; }\n", sb);
+  require("vm").runInNewContext(src + "\nfunction __k(){ return lmK; }\nfunction __R(){ return LAUNCH_R; }\nfunction __phase(k, ms){ return lmPhaseAt(k, ms); }\n", sb);
   // Each lab's spot stands at a fixed place in its veil; the region is the dot field's box.
   const region = el("div", { left: 300, top: 180, width: 980, height: 580 });
   const timersTo = t => {
@@ -2434,7 +2434,11 @@ function launchLab(o) {
   };
   if (!o.covered) o.covered = () => false;
   const frame = t => { timersTo(t); const run = frames; frames = []; run.forEach(x => x.fn(t)); };
-  return { sb, doc, el, timersTo, send, launch, ready: () => open(), frames: () => frames.length, frame, drawn, heard,
+  // frames every `every` ms (the display's 60 a second unless given) up to `until`, the timers between them
+  const play = (until, every) => { const d = every || 1000 / 60; for (let t = clock + d; t <= until; t += d) frame(t); timersTo(until); };
+  // a resize as the page's observers meet it: every ResizeObserver made so far is called
+  const resize = () => ros.forEach(r => r.fn([]));
+  return { sb, doc, el, timersTo, send, launch, ready: () => open(), frames: () => frames.length, frame, play, resize, drawn, heard,
     k: () => sb.__k(), now: () => clock };
 }
 function launchMarkTests() {
@@ -2527,11 +2531,54 @@ function launchMarkTests() {
     got, [true, true, true, true]);
 
   try {
-    const run = (readyAt, until) => { const L = launchLab(), h = L.launch(); if (readyAt != null) { L.timersTo(readyAt); L.ready(); } L.timersTo(until || 6000); return [h.reason, h.ms]; };
+    const run = (readyAt, until) => { const L = launchLab(), h = L.launch(); if (readyAt != null) { L.play(readyAt); L.ready(); } L.play(until || 6000); return [h.reason, h.ms]; };
     got = [run(300), run(1500), run(null)];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("the launch gives way by itself at max(1.1 s, the work ready), and at 4 s if the work never says it is",
+  eq("at the display's rate the launch gives way by itself at max(1.1 s, the work ready), and at 4 s if the work never says it is",
     got, [["time", 1100], ["time", 1500], ["time", 4000]]);
+
+  try {
+    /* A BUSY PAGE GIVES FEW FRAMES (a large catalog's first second): the arrival runs on the wall's time, so the mark
+       has landed and is drawn landed when the launch gives way. Frames every 300 ms, then every 60th of a second. */
+    const starve = every => {
+      const L = launchLab(), h = L.launch(); L.frame(0); L.timersTo(50); L.ready();
+      let at = null;
+      for (let t = 10; t <= 3000 && !at; t += 10) {
+        if (t % every < 10) L.frame(t); else L.timersTo(t);
+        if (h.reason) { const k = L.k(); at = [h.reason, h.ms, !!k && k.ms >= 1000, !!k && k.laid != null]; }
+      }
+      return at;
+    };
+    got = [starve(300), starve(1000 / 60)];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("with a frame only every 300 ms the mark has landed and is drawn landed before the launch gives way, at the first frame past its second; at the display's rate it gives way at 1.1 s as before",
+    got, [["time", 1200, true, true], ["time", 1100, true, true]]);
+
+  try {
+    /* THE WINDOW GROWS UNDER THE LAUNCH (a maximise): the scatter fills the new area, not the old one, and a point
+       already gathered stays on its address. The veil grows from 980 x 580 to 1600 x 820, its spot to the new centre. */
+    const grow = (L, h) => {
+      const spot = h.veil.querySelector(".e-fifth-spot");
+      h.veil.rect = { left: 0, top: 180, width: 1600, height: 820 }; spot.rect = { left: 660, top: 410, width: 280, height: 280 };
+      L.resize();
+    };
+    // the lab places the spot after the launch has measured it, so each lab measures and scatters again, as a page's first layout does
+    const start = L => { const h = L.launch(), k = L.k(); L.sb.lmLayout(k); L.sb.lmScatter(k); L.frame(0); return h; };
+    const A = launchLab(), ha = start(A); A.frame(16);
+    grow(A, ha);
+    const ka = A.k(), xs = ka.R.list.map(p => p.x / ka.W), ys = ka.R.list.map(p => p.y / ka.H);
+    const fill = [ka.W, Math.min(...xs) < 0.05, Math.max(...xs) > 0.95, Math.min(...ys) < 0.05, Math.max(...ys) > 0.95];
+    const B = launchLab(), hb = start(B); B.ready(); B.play(960);
+    const kb = B.k(), o = [0, 0, 0, 0], off = () => {
+      const phi = B.sb.__phase(kb, Math.min(kb.ms, 999));
+      return Math.max(...kb.R.list.map(p => { B.sb.launchPlace(kb.R.C, p, phi, o); return Math.hypot(p.x - (kb.sx + o[0] * kb.scale), p.y - (kb.sy + o[1] * kb.scale)); }));
+    };
+    const before = off(); grow(B, hb); const after = off();
+    B.play(1500);
+    got = [fill, before < 3, after < 3 * before + 0.5, kb.laid != null, hb.reason];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a window grown under the launch: the gathering points are carried to fill the new area, a point already gathered stays on its address, and the mark lands",
+    got, [[1600, true, true, true, true], true, true, true, "time"]);
 
   try {
     const at = (ev, onVeil) => {
@@ -2550,7 +2597,7 @@ function launchMarkTests() {
       ["wheel", 400, false, false, "140ms", [false, true], true, false, false, 0]]);
 
   try {
-    const L = launchLab(), h = L.launch(); L.timersTo(200); L.ready(); L.timersTo(1100);
+    const L = launchLab(), h = L.launch(); L.play(200); L.ready(); L.play(1100);
     const out = L.doc.body.style["--e-launch-out"]; L.timersTo(1100 + 259); const up = h.veil.isConnected; L.timersTo(1100 + 260);
     got = [h.reason, out, up, h.veil.isConnected, !!L.k()];
   } catch (e) { got = "the lab threw: " + e.message; }

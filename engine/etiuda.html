@@ -21210,7 +21210,7 @@ What you type stays in this browser only.`;
       return;
     }
     if (k.last == null) k.last = now;
-    const dt = Math.min(k.gapMs + 1e3 / 30, Math.max(0, now - k.last));
+    const dt = Math.max(0, now - k.last);
     k.last = now;
     k.ms += dt;
     if (k.ms < LM_LANDED_MS) lmStep(k, dt);
@@ -21221,6 +21221,20 @@ What you type stays in this browser only.`;
       k.hold = 0;
       k.raf = requestAnimationFrame(lmFrame);
     }, k.gapMs);
+  }
+  function lmReflow(k) {
+    const W = k.W, H = k.H, sx = k.sx, sy = k.sy, sc = k.scale;
+    lmLayout(k);
+    if (!k.R || !W || !H || k.ms >= LM_LANDED_MS || W === k.W && H === k.H && sx === k.sx && sy === k.sy && sc === k.scale) return;
+    const fx = k.W / W, fy = k.H / H, phi = lmPhaseAt(k, Math.min(k.ms, LM_LANDED_MS - 1)), o = [0, 0, 0, 0];
+    k.R.list.forEach((p) => {
+      launchPlace(k.R.C, p, phi, o);
+      const ax = sx + o[0] * sc, ay = sy + o[1] * sc, bx = k.sx + o[0] * k.scale, by = k.sy + o[1] * k.scale;
+      p.cx = bx + (p.cx - ax) * fx;
+      p.cy = by + (p.cy - ay) * fy;
+      p.x = bx + (p.x - ax) * fx;
+      p.y = by + (p.y - ay) * fy;
+    });
   }
   function lmScatter(k) {
     k.R.list.forEach((p) => {
@@ -21323,7 +21337,7 @@ What you type stays in this browser only.`;
     lmRide(nk);
     lmScatter(nk);
     nk.ro = new ResizeObserver(() => {
-      lmLayout(nk);
+      lmReflow(nk);
       lmPaint(nk);
     });
     nk.ro.observe(host);
@@ -21441,8 +21455,8 @@ What you type stays in this browser only.`;
       if (state.reason) return;
       if (!lmK || lmK.host !== veil) giveWay("moved");
     });
-    const wait = minMs;
-    Promise.all([ready, new Promise((r) => setTimeout(r, wait))]).then(() => giveWay("time"), () => {
+    const wait = minMs, landed = new Promise((r) => whenLaunchLanded(r));
+    Promise.all([ready, new Promise((r) => setTimeout(r, wait)), landed]).then(() => giveWay("time"), () => {
       unhold();
       giveWay("time");
     });
