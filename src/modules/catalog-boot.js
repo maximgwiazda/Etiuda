@@ -1,5 +1,4 @@
 import { eApplyCatalog, eResetCatalog, eCatalog, eCatalogAccepted, storedCatalog } from "./catalog.js";
-import { eEmbeddedCatalog } from "./env.js";
 import { layerNsOf, orbitOldLayer, setLayer } from "./storage.js";
 
 /* The catalog this start applies, or null for the empty desk. */
@@ -9,11 +8,6 @@ function bootCatalog(){
      but the copy could not be written (storage full), so the user still gets what they chose. */
   const stored=storedCatalog();
   if(stored) return stored;
-  /* An embedded catalog outranks the sibling and loads without being asked - it is part
-     of this file, already consented to. It sits BELOW a stored catalog, which is what
-     makes "import something else" work and lets Reset fall back to the built-in content. */
-  const emb=eEmbeddedCatalog();
-  if(emb) return emb;
   const c=eCatalog();
   return (c && eCatalogAccepted(c)) ? c : null;
 }

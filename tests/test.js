@@ -1773,18 +1773,23 @@ function catalogIdentityTests() {
       I.isCatalogUpdate({ id: "lamp-shop", name: "Lamp Shop" }, { name: "Lamp Shop" })], [false, false]);
 }
 
-/* THE NAMESPACE IS THE CATALOG'S ID ALONE. A name planted in the catalog, the seed an earlier rule
-   fell back to, must seed nothing: the build's namespace stays the shared one and so does the layer. */
+/* THE NAMESPACE IS THE SHARED ONE, and a catalog's layer is its id's alone. A name planted in the
+   catalog, the seed an earlier rule fell back to, must seed nothing. */
 function catalogNsTests() {
   const src = sourceText();
   const decl = m => extractDecl(src, m);
   const nsFor = new Function(decl("function eNsFor(") + "\nreturn eNsFor;")();
-  const nsOf = c => new Function("eEmbeddedCatalog", "eNsFor", decl("const E_NS=") + "\nreturn E_NS;")(() => c, nsFor);
   const layerOf = c => new Function("eNsFor", "E_NS", decl("function layerNsOf(") + "\nreturn layerNsOf;")(nsFor, "e")(c);
-  eq("a build's namespace is its catalog's id's, and a catalog with a name and no id seeds none",
-     [nsOf({ id: "lamp-shop", name: "Lamp Shop" }) === nsFor("lamp-shop"), nsOf({ name: "Lamp Shop" })], [true, "e"]);
+  /* Evaluated with nothing in scope: a declaration that reads the page for a seed throws here. */
+  let ns;
+  try { ns = new Function(decl("const E_NS=") + "\nreturn E_NS;")(); } catch (e) { ns = "did not run: " + e.message; }
+  eq("1008ne3 the engine's namespace is the bare prefix and reads nothing from the page", ns, "e");
   eq("a catalog's layer is its id's, and one with a name and no id is the empty desk's",
      [layerOf({ id: "lamp-shop", name: "Lamp Shop" }) === nsFor("lamp-shop"), layerOf({ name: "Lamp Shop" })], [true, "e"]);
+  /* The planted pair proves the scan can see the slot's id and the reader's name. */
+  const named = t => /eEmbedded/.test(t);
+  eq("1008ne4 no module and no template names a slot for a catalog baked into the page",
+     [named(src), named('<script id="eEmbedded"></script>'), named("function eEmbeddedCatalog(){}")], [false, true, true]);
 }
 
 /* THE ADOPTIONS NEVER CARRY ONE CATALOG'S LAYER INTO ANOTHER'S. A build with a catalog inside it
@@ -3214,11 +3219,11 @@ function shippedFlagTests() {
     try {
       const found = new Function("t", "esc", "E_CATALOG_SCRIPT", "eCatalogFolder", "eCatalogFolderShort",
         extractDecl(offer, "function eFoundHtml(") + "\nreturn eFoundHtml;")(s => s, s => s, "etiuda-catalog.js", () => own, s => s);
-      new Function("eEmbeddedCatalog", "eCatalog", "storedCatalog", "eCatalogAccepted", "eCatalogFile", "eCatalogBuiltIn", "eHost",
+      new Function("eCatalog", "storedCatalog", "eCatalogAccepted", "eCatalogFile", "eCatalogBuiltIn", "eHost",
         "eCatalogIn", "eCatalogFolder", "eOfferCatalogDialog", "eFoundHtml", "lsSet", "E_CATALOG_KEY", "activateCatalog",
         "eCatalogMtime", "eCatalogSignature", "toast",
         extractDecl(offer, "function eOfferCatalog(") + "\nreturn eOfferCatalog;")(
-        () => false, () => ({ cards: [] }), () => null, () => false, () => "sample-catalog.ec", () => builtInHost, () => ({}),
+        () => ({ cards: [] }), () => null, () => false, () => "sample-catalog.ec", () => builtInHost, () => ({}),
         () => inHost, () => own, (c, o) => { seen.said = o.foundHtml; o.accept("sig"); return true; }, found, () => {}, "k",
         (c, o) => { seen.file = o.file; }, () => 5, () => "sig", () => {})(given, file, where, true, false, builtIn);
     } catch (e) { return "eOfferCatalog did not run: " + e.message; }
@@ -3913,7 +3918,7 @@ function checkEngineSyntax() {
   let m, n = 0;
   while ((m = re.exec(src))) {
     if (/\bsrc\s*=/.test(m[1])) continue;                 // external - nothing inline to parse
-    if (/application\/json/.test(m[1])) continue;         // the embedded-catalog slot is data
+    if (/application\/json/.test(m[1])) continue;         // a JSON block is data, not script
     new Function(m[2]);                                   // throws on a syntax error
     n++;
   }
@@ -4300,8 +4305,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1035;
-const UI_STRINGS_SHA256 = "798c1339050685fb2d546925d38a8e38f4098d944f3970d197a839432e11a55d";
+const UI_STRINGS_COUNT = 1033;
+const UI_STRINGS_SHA256 = "d49c28c9d9bb503e791a420d7e15de7e977c45a0a32bb912c82eb05b277d47b5";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
@@ -4379,42 +4384,25 @@ function checkFrozenContracts() {
      sides COMPUTE: nsKey carries an identity ternary that a text search reads straight past. */
   let ns = null;
   try {
-    ns = new Function("eEmbeddedCatalog",
+    ns = new Function(
       extractDecl(src, "function eNsFor(") + "\n"
       + extractDecl(src, "const E_NS=") + "\n"
       + extractDecl(src, "function nsKey(") + "\n"
       + "return { E_NS: E_NS, nsKey: nsKey };");
   } catch (e) { problems.push("the storage namespace no longer extracts: " + e.message); }
-  let bare = null, named = null, withId = null;
+  let bare = null, layer = null;
   if (ns) {
-    bare = ns(() => null);
-    named = ns(() => ({ name: "a catalog with a name" }));
-    withId = ns(() => ({ id: "lamp-shop", name: "Lamp Shop" }));
-    const renamed = ns(() => ({ id: "lamp-shop", name: "Lamp Shop renamed" }));
-    const otherId = ns(() => ({ id: "other-shop", name: "Lamp Shop" }));
+    bare = ns();
     if (bare.E_NS !== "e")
-      problems.push("E_NS answers " + JSON.stringify(bare.E_NS) + " with no catalog, wanted \"e\" - "
+      problems.push("E_NS answers " + JSON.stringify(bare.E_NS) + ", wanted \"e\" - "
         + "D4 moved every stored key to that prefix and the boot migration copies the old ones under it");
     if (bare.nsKey("Cards") !== "e" + "Cards")
-      problems.push("nsKey gives " + JSON.stringify(bare.nsKey("Cards")) + " with no catalog, wanted \"eCards\"");
-    if (!/^e[0-9a-z]+~$/.test(withId.E_NS))
-      problems.push("E_NS answers " + JSON.stringify(withId.E_NS) + " for a catalog with an id, which is not "
+      problems.push("nsKey gives " + JSON.stringify(bare.nsKey("Cards")) + ", wanted \"eCards\"");
+    /* A catalog's layer is a hash of its id, and a sweep built on the key shape must find its keys. */
+    layer = new Function(extractDecl(src, "function eNsFor(") + "\nreturn eNsFor;")()("lamp-shop");
+    if (!/^e[0-9a-z]+~$/.test(layer))
+      problems.push("a catalog layer's prefix is " + JSON.stringify(layer) + ", which is not "
         + "\"e\" plus a base36 hash and a tilde, so no sweep built on the key shape would find its keys");
-    if (named.E_NS !== "e")
-      problems.push("E_NS answers " + JSON.stringify(named.E_NS) + " for a catalog with a name and no id, wanted \"e\": "
-        + "the id is the namespace and a name seeds none");
-    /* Identity is the file's own id: a rename keeps the namespace, two ids under one name do not
-       share one. */
-    if (withId.E_NS !== renamed.E_NS)
-      problems.push("E_NS for a renamed catalog carrying an id is " + JSON.stringify(renamed.E_NS)
-        + " against the original " + JSON.stringify(withId.E_NS)
-        + " - the id is the namespace, so a rename keeps it");
-    if (withId.E_NS === otherId.E_NS)
-      problems.push("E_NS for two catalogs with different ids and the same name is "
-        + JSON.stringify(withId.E_NS) + ", wanted two namespaces");
-    if (!/^e[0-9a-z]+~$/.test(withId.E_NS))
-      problems.push("E_NS answers " + JSON.stringify(withId.E_NS) + " for a catalog with an id, which is not "
-        + "\"e\" plus a base36 hash and a tilde");
   }
   /* The shape, in the two copies that cannot be one: the app's, and the boot script's, which is
      a separate <script> in the template and shares nothing with the app at all. Compared as
@@ -4440,8 +4428,8 @@ function checkFrozenContracts() {
       + appShape + " - one of the two has moved without the other");
   if (appShape && bootShape && bare) {
     const re = new RegExp(appShape.slice(1, -1));
-    const mine = [bare.nsKey("Cards"), "eTheme", "eTourDone_v1", named.nsKey("Pack")]
-      .concat(withId ? [withId.nsKey("Pack")] : []);
+    const mine = [bare.nsKey("Cards"), "eTheme", "eTourDone_v1", bare.nsKey("Pack")]
+      .concat(layer ? [layer + "Pack"] : []);
     const theirs = ["e", "etc", "editorDraft", "pbTheme", bare.nsKey("Cards").toLowerCase()];
     mine.filter(k => !re.test(k)).forEach(k => problems.push("the key shape " + appShape
       + " does not match " + JSON.stringify(k) + ", which this engine writes, so Reset would leave it behind"));

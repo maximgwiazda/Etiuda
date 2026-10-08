@@ -292,6 +292,16 @@ const eq = (got, want) => got === want ? true
     () => { S.nsSet("GateN", "v"); return eq(S.nsGet("GateN"), "v"); });
   check("storage.js", "a namespaced key still wears the shape every sweep matches",
     () => eq(S.E_KEY_RE.test(S.nsKey("Pack")), true));
+  /* NOTHING A DESK HAS STORED MOVES. The names are a desk's own keys, and the answers are written
+     out here rather than read back from the module: the bare prefix and each name after it. */
+  check("storage.js", "1008ne2 a desk with no catalog baked into its page keeps the bare namespace: every key it stores sits under e, written and read back",
+    () => {
+      const names = ["Pack", "CatOrder", "Cols", "Floor", "Stats", "Days", "Catalog", "IntentOrder", "Theme"];
+      names.forEach(n => S.nsSet("Gate" + n, "v" + n));
+      const out = [S.E_NS, S.nsKey("Pack"), S.layerNsOf(null)].concat(names.map(n => S.lsGet("eGate" + n)));
+      names.forEach(n => S.nsDel("Gate" + n));
+      return eq(out.join("|"), ["e", "ePack", "e"].concat(names.map(n => "v" + n)).join("|"));
+    });
   /* THE ORBIT. The empty desk's layer is the build's namespace; a catalog's is a hash of its own id,
      and a name planted in it seeds nothing. */
   check("storage.js", "the empty desk's layer is the build's own namespace, a catalog's is its id's",
@@ -841,8 +851,8 @@ const CARD_B = {
   const E = await import(MOD("env.js"));
   check("env.js", "the engine version is a semantic version",
     () => eq(/^\d+\.\d+\.\d+/.test(String(E.E_VERSION)), true));
-  check("env.js", "no embedded catalog outside a build, and asking does not throw",
-    () => eq(E.eEmbeddedCatalog(), null));
+  check("env.js", "1008ne1 the engine holds no reader for a catalog baked into the page",
+    () => eq(typeof E.eEmbeddedCatalog, "undefined"));
 }
 
 /* ------------------------------------------------------------------ pills-box.js

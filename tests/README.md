@@ -180,8 +180,8 @@ invisible to every other instrument here:
   inside the declaration that carries it, with comments blanked and strings kept. They were
   `PB_` until 2026-09-14, when the clean break on the catalog format took the old names with
   it: nothing here reads format 1 at all.
-- **The storage prefix, and the shape it makes.** `E_NS` is evaluated with `eEmbeddedCatalog`
-  stubbed both ways and must answer `"e"` with no catalog and `"e<hash>~"` with one. The sweep
+- **The storage prefix, and the shape it makes.** `E_NS` is evaluated with nothing in
+  scope and must answer `"e"`; a catalog's layer prefix is `"e<hash>~"`. The sweep
   is then checked as a shape rather than a letter, in the two copies that cannot be one:
   `E_KEY_RE` in `storage.js` and the literal in the boot script, which imports nothing. They
   must be the same text, and the shape is RUN over four keys this engine writes and five it does

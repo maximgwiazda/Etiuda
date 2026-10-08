@@ -8,7 +8,7 @@ import { catalogLoaded } from "./catalog-boot.js";
 import { remPx, colMode, colFloor, colCount, COL_GAP } from "./columns.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { dismissModal, openDialog } from "./dialog.js";
-import { eEmbeddedCatalog, E_VERSION } from "./env.js";
+import { E_VERSION } from "./env.js";
 import { eHost, eCatalogFile, eCatalogIn, eCatalogBuiltIn, eCatalogFolder, E_CATALOG_FOLDER_KEY, E_CATALOG_SCRIPT } from "./host.js";
 import { lsGet, lsSet, lsDel, lsKeys, nsGet, E_NS, E_LS_OK, E_SS_OK, eDeskFileShown, eSaveTrouble, eLastSaved, eHomeless, eDeskHome,
   eDeskRefused } from "./storage.js";
@@ -129,7 +129,7 @@ function mtReadings(){
     row("copy",at.copy);
     row("folder",at.folder);
   }
-  row("id",S(()=>{ const c=storedCatalog()||eEmbeddedCatalog(); return (c&&c.id)?c.id:"none"; }));
+  row("id",S(()=>{ const c=storedCatalog(); return (c&&c.id)?c.id:"none"; }));
   row("signature",S(()=>mtSignature()));
   /* The silent update channel: when a desk stops being offered new editions, this says whether
      it was ever watching a file and whether this browser can watch one at all. The NAME is not
@@ -217,12 +217,6 @@ function mtReadings(){
     return Math.max(1,Math.round(n/1024))+" KB in "+ks.length+" keys";
   }));
   row("namespace",S(()=>E_NS));
-  /* The counts used to be in this seed and are deliberately gone: an edition that added a card
-     moved everyone to a new namespace and took their work with it. What the seed is made OF. */
-  row("namespace seed",S(()=>{
-    const c=eEmbeddedCatalog();
-    return (c && String(c.id||"").trim()) ? "catalog id" : "none (shared)";
-  }));
   sec("Desk");
   row("catalog folder",S(()=>eHost()?eHomeless(eCatalogFolder(),eDeskHome()):""));
   row("tour",S(()=>tourActive()?"under way":tourDueAtBoot()?"offered at the next start":"seen or declined"));

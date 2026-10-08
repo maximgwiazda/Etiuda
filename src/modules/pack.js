@@ -252,7 +252,7 @@ function adoptStrandedPack(){
 /* ---- positions, then tag ids ---------------------------------------------------------------
    Everything in the layer that names an intent named it by its POSITION before 2.0.0, and this
    build reads those names as tag ids. The re-key runs once, against the catalog applied at this
-   boot, which is the one the layer was made against: a stored catalog, or the build's own. */
+   boot, which is the one the layer was made against. */
 const TAG_KEYED="tag";
 const ASIDE="IntentsAside";
 const INTENT_LISTS=["intentHidden","intentFavourites","intentRemoved"];

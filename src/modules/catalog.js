@@ -421,9 +421,8 @@ function eApplyCatalog(c){
 
   if(typeof c.facts==="string" && c.facts) setCatalogFacts(c.facts);
   if(Array.isArray(c.who)) setCatalogWho(normWhoList(c.who));
-  /* Captured from whichever catalog actually APPLIED - stored, embedded or sibling.
-     Reading storedCatalog() looked equivalent and was not: an integrated build has no
-     stored catalog, so an export from a build silently dropped its edition number. */
+  /* Captured from whichever catalog actually APPLIED - stored or sibling. Reading
+     storedCatalog() is not equivalent: a sibling that could not be written is applied unstored. */
   E_CATALOG_VERSION=(c.version!=null)?String(c.version):null;
   return true;
 }

@@ -1,13 +1,9 @@
-import { eEmbeddedCatalog } from "./env.js";
 import { hooks } from "./hooks.js";
 
-/* ---- storage namespace: Chrome gives EVERY file:// page one localStorage, so a build
-   and a plain engine share an origin - without this a standalone quietly shows another
-   copy's stored catalog. Content is namespaced per build; PREFERENCES stay shared (a
-   machine-wide theme is wanted, a machine-wide catalog is not). Plain engine keeps the bare
-   prefix; a build appends a hash of the catalog id. */
+/* ---- storage namespace: Chrome gives EVERY file:// page one localStorage. The engine keeps
+   the bare prefix; a catalog's layer appends a hash of its id. */
 /* THE SHAPE IS THE FILTER, NEVER THE LETTER. Every key is "e" plus a capitalised name, or
-   "e<hash>~" plus one for a build, and every sweep matches THAT: on file:// a bare "e" would
+   "e<hash>~" plus one for a catalog's layer, and every sweep matches THAT: on file:// a bare "e" would
    take a neighbouring page's keys with it. The boot script in the template carries the same
    shape as a literal, because it shares nothing with this file. */
 const E_KEY_RE=/^e(?:[A-Z]|[0-9a-z]+~)/;
@@ -16,18 +12,14 @@ const E_KEY_RE=/^e(?:[A-Z]|[0-9a-z]+~)/;
    to a fresh namespace, and their own cards, stars and ordering went with it - invisibly,
    because preferences are NOT namespaced and so looked untouched. Two different catalogs
    still separate; successive editions of one stop looking like strangers to each other. */
-/* One function for the build's namespace and a catalog's layer, so the two cannot hash apart. */
+/* One function for a catalog's layer prefix. */
 function eNsFor(seed){
   const s=String(seed);
   let h=5381;
   for(let i=0;i<s.length;i++) h=(((h<<5)+h)^s.charCodeAt(i))>>>0;
   return "e"+h.toString(36)+"~";         // base36, so E_KEY_RE's second arm finds it
 }
-const E_NS=(function(){
-  const c=eEmbeddedCatalog();
-  const id=String((c&&c.id)||"").trim();
-  return id ? eNsFor(id) : "e";
-})();
+const E_NS="e";
 /* ---- storage that cannot brick the app -----------------------------------------------------
    Firefox can leave a file:// origin's localStorage database corrupt, and then EVERY access
    throws NS_ERROR_FILE_CORRUPTED - reads, writes and deletes alike. A single bare

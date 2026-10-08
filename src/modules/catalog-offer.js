@@ -7,7 +7,6 @@ import { catalogLoaded } from "./catalog-boot.js";
 import { E_CATALOG_KEY, E_CATALOG_VERSION, catalogStamp, catalogVersionLabel,
   eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
   eWatchClear, parseCatalogFile, catalogDocOf, eWatchName, eCatalogRefusedNames, eRefuseCatalogFile } from "./catalog.js";
-import { eEmbeddedCatalog } from "./env.js";
 import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
   eCatalogIn, eCatalogBuiltIn, eCatalogMtime, eHost, eLoadedCatalogFile, wireFolderLink, eOpenedWith,
   eOpenedRefused, eReadCatalogFile, eOnCatalogListing, eBranchIdentity } from "./host.js";
@@ -65,8 +64,6 @@ function eFoundHtml(name,where,builtIn){
    buys two things a found file does not get: the offer outranks a remembered refusal, and an
    explicit act is answered even when there is nothing to offer. Silence was the whole bug. */
 function eOfferCatalog(given,name,where,force,asked,builtIn){
-  // An integrated build carries its own content; a sibling file is not its business
-  if(eEmbeddedCatalog()) return false;
   const c=given||eCatalog();
   if(!c) return false;
   if(!force && !storedCatalog() && eCatalogAccepted(c)) return false;
@@ -781,7 +778,6 @@ function onCatalogListing(all){
     const same=files.filter(f=>f.id===held.id && f.sha===held.pin);
     if(same.length===1 && followRenamedFile(mine,same[0].name,same[0].mtime)){ paintCatNow(); paintCatalogList(); }
   }
-  if(eEmbeddedCatalog()) return;
   const go=()=>offerFromListing(files,held);
   if(tourDueAtBoot()) afterTour(go); else go();
 }
@@ -812,7 +808,7 @@ function offerFromListing(files,held){
    from this desk's own file of it, which is how the lead's import of the file reaches its author. */
 function offerToLooseAuthor(all){
   const origin=looseOrigin(false), grown=all.filter(f=>!f.desk && !f.builtIn && f.grew);
-  if(!origin || !grown.length || eEmbeddedCatalog()) return;
+  if(!origin || !grown.length) return;
   const go=()=>eBranchIdentity(false).then(who=>{
     const own=who ? branchFileId(who,origin) : "";
     const next=grown.filter(f=>own && f.grew.id===own).sort((a,b)=>b.mtime-a.mtime);

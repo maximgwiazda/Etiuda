@@ -160,8 +160,6 @@ UI_STRINGS.pl={
   "top":"góra",
   "{L} only":"tylko {L}",
   "nothing set":"nic nie ustawiono",
-  "none (shared)":"brak (wspólna)",
-  "catalog id":"identyfikator katalogu",
   "Unnamed catalog":"Katalog bez nazwy",
   "Collapse":"Zwiń",
   "Expand":"Rozwiń",

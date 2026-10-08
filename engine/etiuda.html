@@ -4096,10 +4096,6 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
      customer's name - any other file comes in via Import. A configurable name must be
      discovered first; one fixed name is what makes the sibling work with no configuration. -->
 <script src="etiuda-catalog.js"></script>
-<!-- Embedded catalog slot. Empty in the plain engine; Export HTML fills it to produce a
-     self-contained build that opens with its content already loaded and needs no sibling file.
-     type="application/json" so the browser stores it as inert text rather than running it. -->
-<script type="application/json" id="eEmbedded"></script>
 <script>
 (() => {
   var __defProp = Object.defineProperty;
@@ -5518,27 +5514,6 @@ What you type stays in this browser only.`;
     ssSet: () => ssSet
   });
 
-  // src/modules/env.js
-  var env_exports = {};
-  __export(env_exports, {
-    E_BUILT: () => E_BUILT,
-    E_VERSION: () => E_VERSION,
-    eEmbeddedCatalog: () => eEmbeddedCatalog
-  });
-  var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-08";
-  function eEmbeddedCatalog() {
-    try {
-      const el = document.getElementById("eEmbedded");
-      const t2 = el ? (el.textContent || "").trim() : "";
-      if (!t2) return null;
-      const c = JSON.parse(t2);
-      return c && typeof c === "object" && Array.isArray(c.cards) ? c : null;
-    } catch (e) {
-      return null;
-    }
-  }
-
   // src/modules/hooks.js
   var hooks_exports = {};
   __export(hooks_exports, {
@@ -5623,11 +5598,7 @@ What you type stays in this browser only.`;
     for (let i = 0; i < s.length; i++) h = ((h << 5) + h ^ s.charCodeAt(i)) >>> 0;
     return "e" + h.toString(36) + "~";
   }
-  var E_NS = (function() {
-    const c = eEmbeddedCatalog();
-    const id = String(c && c.id || "").trim();
-    return id ? eNsFor(id) : "e";
-  })();
+  var E_NS = "e";
   var E_MEM = /* @__PURE__ */ Object.create(null);
   var E_MEM_S = /* @__PURE__ */ Object.create(null);
   function probeStore(get) {
@@ -6566,8 +6537,6 @@ What you type stays in this browser only.`;
     "top": "góra",
     "{L} only": "tylko {L}",
     "nothing set": "nic nie ustawiono",
-    "none (shared)": "brak (wspólna)",
-    "catalog id": "identyfikator katalogu",
     "Unnamed catalog": "Katalog bez nazwy",
     "Collapse": "Zwiń",
     "Expand": "Rozwiń",
@@ -8597,6 +8566,15 @@ What you type stays in this browser only.`;
       console.info("Etiuda: this catalog declares an opener category. That role was removed - a card marks itself as linked to every intent instead, so the declaration is ignored.");
     refreshCatRoles();
   }
+
+  // src/modules/env.js
+  var env_exports = {};
+  __export(env_exports, {
+    E_BUILT: () => E_BUILT,
+    E_VERSION: () => E_VERSION
+  });
+  var E_VERSION = "2.0.0-dev";
+  var E_BUILT = "2026-10-08";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -21722,8 +21700,6 @@ What you type stays in this browser only.`;
   function bootCatalog() {
     const stored = storedCatalog();
     if (stored) return stored;
-    const emb = eEmbeddedCatalog();
-    if (emb) return emb;
     const c = eCatalog();
     return c && eCatalogAccepted(c) ? c : null;
   }
@@ -23514,7 +23490,7 @@ What you type stays in this browser only.`;
       row("folder", at.folder);
     }
     row("id", S(() => {
-      const c = storedCatalog() || eEmbeddedCatalog();
+      const c = storedCatalog();
       return c && c.id ? c.id : "none";
     }));
     row("signature", S(() => mtSignature()));
@@ -23592,10 +23568,6 @@ What you type stays in this browser only.`;
       return Math.max(1, Math.round(n / 1024)) + " KB in " + ks.length + " keys";
     }));
     row("namespace", S(() => E_NS));
-    row("namespace seed", S(() => {
-      const c = eEmbeddedCatalog();
-      return c && String(c.id || "").trim() ? "catalog id" : "none (shared)";
-    }));
     sec("Desk");
     row("catalog folder", S(() => eHost() ? eHomeless(eCatalogFolder(), eDeskHome()) : ""));
     row("tour", S(() => tourActive() ? "under way" : tourDueAtBoot() ? "offered at the next start" : "seen or declined"));
@@ -25875,7 +25847,6 @@ What you type stays in this browser only.`;
     return t(where ? "Located as {FILE} in {FOLDER}." : "Located as {FILE}.").split("{FILE}").join("<code>" + esc(shown2) + "</code>").split("{FOLDER}").join("<code" + (home ? ' class="open-folder" data-ec-open="1" role="button" tabindex="0"' : "") + ' title="' + esc(dir) + '">' + esc(eCatalogFolderShort(dir)) + "</code>");
   }
   function eOfferCatalog(given, name, where, force, asked, builtIn) {
-    if (eEmbeddedCatalog()) return false;
     const c = given || eCatalog();
     if (!c) return false;
     if (!force && !storedCatalog() && eCatalogAccepted(c)) return false;
@@ -26533,7 +26504,6 @@ What you type stays in this browser only.`;
         paintCatalogList();
       }
     }
-    if (eEmbeddedCatalog()) return;
     const go = () => offerFromListing(files, held);
     if (tourDueAtBoot()) afterTour(go);
     else go();
@@ -26572,7 +26542,7 @@ What you type stays in this browser only.`;
   }
   function offerToLooseAuthor(all) {
     const origin = looseOrigin(false), grown = all.filter((f) => !f.desk && !f.builtIn && f.grew);
-    if (!origin || !grown.length || eEmbeddedCatalog()) return;
+    if (!origin || !grown.length) return;
     const go = () => eBranchIdentity(false).then((who) => {
       const own = who ? branchFileId(who, origin) : "";
       const next = grown.filter((f) => own && f.grew.id === own).sort((a, b) => b.mtime - a.mtime);

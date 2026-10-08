@@ -36,8 +36,7 @@ const sha256 = s => createHash('sha256').update(s, 'utf8').digest('hex');
 // inline scripts by hash. Hashing at SERVE time would hash whatever the file then held, so a
 // script edited into the artifact would be hashed along with the rest and would run. Hashing
 // here pins the list to what the build produced, and a later edit is a script the policy does
-// not name. The embedded catalog slot is skipped: application/json is data the browser never
-// runs, and a catalog changing it must not invalidate the pin.
+// not name. A JSON block is skipped: application/json is data the browser never runs.
 export function scriptHashes(html) {
   const re = /<script(?![^>]*\ssrc=)([^>]*)>([\s\S]*?)<\/script>/gi;
   const out = [];
