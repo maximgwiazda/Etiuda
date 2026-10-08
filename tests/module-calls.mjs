@@ -2701,6 +2701,83 @@ const CARD_B = {
     });
 }
 
+/* ------------------------------------------------------------------ desk-look.js, a colleague's new card taken
+   A3H1, A3 (decisions 2026-10-07 22:11): a colleague's new card is taken by putting it on a category of this desk's,
+   or on + to add hers where this desk lacks it, and given back. Driven through the module's own take and give-back,
+   which the drag and its keyboard list both call; her file is invented here, and the pack is put back. */
+{
+  const DL = await import(MOD("desk-look.js"));
+  const CE = await import(MOD("card-editor.js"));
+  const CM = await import(MOD("content-model.js"));
+  const AS = await import(MOD("app-state.js"));
+  const P = await import(MOD("pack.js"));
+  const HK = await import(MOD("hooks.js"));
+  const CS = await import(MOD("cat-set.js"));
+  const own = ["ensureCustomCat", "rebuildCards", "syncSampleMark"].map(k => [k, Object.prototype.hasOwnProperty.call(HK.hooks, k), HK.hooks[k]]);
+  const BAGS = ["customCats", "catLabels", "catLabelsPl", "catIcons", "catColors"], hadBags = BAGS.map(b => JSON.stringify(P.pack[b] || {}));
+  const hadCustom = P.pack.custom, hadCats = hadBags[0], hadOrder = AS.catOrder.slice(), base = { id: "c-a3-live", c: "orders", en: "Live." };
+  let rebuilt = 0;
+  HK.hooks.ensureCustomCat = CE.ensureCustomCat; HK.hooks.rebuildCards = () => { rebuilt++; CS.applyCatsToGlobal(); }; HK.hooks.syncSampleMark = () => {};
+  const mine = Object.keys(CM.CATS)[0];
+  const hers = { langs: ["en", "pl"], categories: { "t-sec": "Invented Seconds" }, categoriesPl: { "t-sec": "Wymyslony gatunek" },
+    icons: { "t-sec": "tag" }, colors: { "t-sec": 4 },
+    cards: [{ id: "c-a3-one", c: "t-sec", t: "One title", en: "One body.", pl: "Jeden.", k: "kw", intents: [3], next: [{ to: "c-a3-live" }, { to: "c-a3-gone" }] },
+      { id: "c-a3-two", c: "t-sec", t: "Two title", en: "Two body." }, { id: "c-a3-ch", c: mine, t: "Changed", en: "Changed." }] };
+  // Called through these, so a tree without them reads as these legs failing rather than this file stopping.
+  const take = typeof DL.deskTakeNew === "function" ? DL.deskTakeNew : () => "no deskTakeNew";
+  const give = typeof DL.deskGiveNew === "function" ? DL.deskGiveNew : () => "no deskGiveNew";
+  const one = { id: "c-a3-one", kind: "new", fields: [] }, two = { id: "c-a3-two", kind: "new", fields: [] }, ch = { id: "c-a3-ch", kind: "changed", fields: [] };
+  const custom = () => (P.pack.custom || []).map(m => m.c + ":" + m.t).join(",");
+  try {
+    P.pack.custom = []; P.BASE_M.push(base);
+    const took = take(one, hers, mine), m = P.pack.custom[0] || {};
+    const again = take(one, hers, mine), changed = take(ch, hers, mine);
+    check("desk-look.js", "1008a1 her new card put on one of this desk's categories is this desk's own card there, her words, keywords and the replies after it that live here, her intents left behind; taken once, and a changed card is no new card to take",
+      () => eq([took, m.c === mine, m.en + "/" + m.pl + "/" + m.k, "intents" in m, JSON.stringify(m.next), /^u:/.test(m.id), again, changed, P.pack.custom.length, rebuilt].join("|"),
+        'true|true|One body./Jeden./kw|false|[{"to":"c-a3-live"}]|true|false|false|1|1'));
+    const gave = give(one, hers);
+    check("desk-look.js", "1008a2 given back, the card goes and nothing else of the desk moves; given back again, nothing is",
+      () => eq([gave, custom(), give(one, hers), JSON.stringify(P.pack.customCats) === hadCats].join("|"), "true||false|true"));
+    const t1 = take(one, hers, null), key = (P.pack.custom[0] || {}).c, t2 = take(two, hers, null);
+    const added = [t1, t2, CM.CATS[key], P.pack.catLabelsPl[key], P.pack.catIcons[key], P.pack.catColors[key], AS.catOrder.indexOf(key) > -1, custom() === key + ":One title," + key + ":Two title"].join("|");
+    give(one, hers);
+    const kept = [!!CM.CATS[key], custom()].join("|");
+    give(two, hers);
+    check("desk-look.js", "1008a3 put on + where this desk lacks hers, her category is added with her names, icon and colour and the next of hers joins it; it stays while a card of hers stands in it, and goes with the last given back",
+      () => eq(added + "|" + kept + "|" + [!!CM.CATS[key], key in P.pack.customCats, AS.catOrder.indexOf(key)].join("|"),
+        "true|true|Invented Seconds|Wymyslony gatunek|tag|4|true|true|true|" + key + ":Two title|false|false|-1"));
+    /* The category Look added goes as removeCategory takes one: out of the categories the list is narrowed to as well. */
+    take(one, hers, null);
+    const kLook = (P.pack.custom[0] || {}).c, hadSel = AS.cats.slice();
+    AS.setCats([kLook]);
+    give(one, hers);
+    const sel = AS.cats.slice();
+    AS.setCats(hadSel);
+    check("desk-look.js", "1008a6 a category Look added and given back with its last card leaves the list narrowed to none of it",
+      () => eq([!!kLook, sel.indexOf(kLook)].join("|"), "true|-1"));
+    /* THE CONTROL: where this desk already holds a category of her name, + puts the card there, adds nothing, and the
+       give-back leaves this desk's category as it found it. */
+    const kOwn = CE.ensureCustomCat("Invented Seconds"), cats = Object.keys(CM.CATS).length;
+    const t3 = take(one, hers, null), at3 = (P.pack.custom[0] || {}).c;
+    give(one, hers);
+    check("desk-look.js", "1008A4 THE CONTROL: + with a category of her name already on this desk puts the card in it, adds none, and giving back leaves it",
+      () => eq([t3, at3 === kOwn, Object.keys(CM.CATS).length === cats, !!CM.CATS[kOwn]].join("|"), "true|true|true|true"));
+    /* An own card of her words is what taken means, so the desk starting again in place still knows it, and one the agent
+       has rewritten since is the agent's own and hers can be taken again. */
+    take(two, hers, mine);
+    DL.forgetLookEdits();
+    const still = take(two, hers, mine);
+    if (P.pack.custom[0]) P.pack.custom[0].en = "Rewritten by the agent.";
+    const anew = take(two, hers, mine);
+    check("desk-look.js", "1008a5 taken is this desk holding her words: after the desk starts again it is still taken, and once the agent rewrites the card hers can be taken again",
+      () => eq([still, anew, P.pack.custom.length].join("|"), "false|true|2"));
+  } finally {
+    P.pack.custom = hadCustom; BAGS.forEach((b, i) => { P.pack[b] = JSON.parse(hadBags[i]); }); AS.setCatOrder(hadOrder); CS.applyCatsToGlobal();
+    const b = P.BASE_M.indexOf(base); if (b > -1) P.BASE_M.splice(b, 1);
+    own.forEach(([k, had, v]) => { if (had) HK.hooks[k] = v; else delete HK.hooks[k]; });
+  }
+}
+
 /* ------------------------------------------------------------------ next-dock.js, the action button
    Board 814, S5: after a reply is sent, the card's own list (the catalog's, or the agent's in its place)
    is offered first in its order, then what this desk learnt follows that card, most often first, up to
@@ -3098,6 +3175,61 @@ const CARD_B = {
       if (hadContains2 === undefined) delete lanesBox.contains; else lanesBox.contains = hadContains2;
     }
     await new Promise(r => setTimeout(r, 20));
+    /* A3H1, H1 (decisions 2026-10-07 22:11): the lanes become this conversation's history, each reply sent with its time,
+       its language and its first words, the whole conversation rather than the last six, and how many since when and how
+       long ago the last at the head. The clock is held here; the hours are read as the desk reads them, in local time. */
+    const realNow = Date.now, at = (h, m) => new Date(2026, 9, 8, h, m, 0).getTime(), dot = " " + String.fromCharCode(0xb7) + " ";
+    let clock = at(19, 47);
+    try {
+      Date.now = () => clock;
+      const ids = ["a", "b", "c", "d", "e", "f", "g", "h", "i"].map(x => "c-h1-" + x);
+      AS.setCards(ids.map(id => (id === "c-h1-c" ? { id, c: "orders", alt: 1, t: "Title " + id, en: "First of c.\n\nSecond of c.", pl: "Pierwszy c.\n\nDrugi c." } : card(id))));
+      const freshTab = () => { T.tabs.splice(0, T.tabs.length); ST.ssSet(T.TAB_KEY, "null"); T.initTabs(); };
+      freshTab(); T.tabs[0].pax = "Hannah Nowak";
+      const sent = [["c-h1-a", "en", 0, 19, 47], ["c-h1-b", "pl", 0, 19, 49], ["c-h1-c", "en", 0, 19, 50], ["c-h1-c", "pl", 1, 19, 52]]
+        .concat(["d", "e", "f", "g", "h", "i"].map((x, i) => ["c-h1-" + x, "en", 0, 19, 53 + i]));
+      sent.forEach(([id, l, b, hh, mm]) => { clock = at(hh, mm); LP.bumpUseCount(id, l, b); });
+      const hm = ms => String(new Date(ms).getHours()).padStart(2, "0") + ":" + String(new Date(ms).getMinutes()).padStart(2, "0");
+      const log = (T.tabs[0].log || []).map(e => e.id.slice(5) + ":" + e.l + ":" + e.b + ":" + hm(e.at)).join(",");
+      check("tabs.js", "1008h1 each step of a conversation keeps when it was sent, its language and its block beside the path, and the same card copied again straight after moves its entry rather than adding one",
+        () => eq(log + "|" + T.tabs[0].path.join(",").replace(/c-h1-/g, ""),
+          "a:en:0:19:47,b:pl:0:19:49,c:pl:1:19:52,d:en:0:19:53,e:en:0:19:54,f:en:0:19:55,g:en:0:19:56,h:en:0:19:57,i:en:0:19:58|a,b,c,d,e,f,g,h,i"));
+      clock = at(19, 59) + 5000;
+      document.activeElement = body; LN.toggleLanes(true);
+      const html = lanesBox.innerHTML;
+      const rows = (html.match(/<div class="ln-sent" style="grid-row:\d+">/g) || []).length;
+      const rowOf = id => (html.split('<div class="ln-sent"').slice(1).find(p => p.indexOf("Title " + id + "<") > -1) || "").split('<div class="card ln-now"')[0];
+      const c = rowOf("c-h1-c"), a = rowOf("c-h1-a");
+      check("lanes.js", "1008h2 the lanes show every reply sent before the one now, eight here where six were shown, each with its time, its language and the first words of the block it sent",
+        () => eq([rows, /<span class="ln-at">19:52<\/span>/.test(c), /<span class="ln-lang">PL<\/span>/.test(c), /<span class="ln-clamp2">Drugi c\.<\/span>/.test(c),
+          /<span class="ln-at">19:47<\/span>/.test(a), /<span class="ln-lang">EN<\/span>/.test(a), /<span class="ln-clamp2">Body of c-h1-a<\/span>/.test(a)].join(","), "8,true,true,true,true,true,true"));
+      check("lanes.js", "1008h3 the head names the conversation and says how many replies since when, the last how long ago; the reply now carries its time and language, and Next stands beside the two replies before it",
+        () => eq([/<span class="ln-title" data-i18n-skip>Hannah<\/span>/.test(html), (/<span class="ln-since">([^<]*)<\/span>/.exec(html) || [])[1],
+          (/<span class="ln-when">([^<]*)<\/span>/.exec(html) || [])[1], (/<div class="ln-next" style="([^"]*)"/.exec(html) || [])[1]].join("|"),
+          "true|9 replies since 19:47, the last 1 min ago|19:58" + dot + "EN|grid-row:8 / span 4"));
+      clock = at(20, 5);
+      LP.bumpUseCount("c-h1-i", "pl", 1);
+      const again = lanesBox.innerHTML;
+      check("lanes.js", "1008h6 the reply now copied again, another block in the other language, is drawn at once: Now carries its new time and language, and the head says the last went just now",
+        () => eq([(/<span class="ln-when">([^<]*)<\/span>/.exec(again) || [])[1], (/<span class="ln-since">([^<]*)<\/span>/.exec(again) || [])[1]].join("|"),
+          "20:05" + dot + "PL|9 replies since 19:47, the last just now"));
+      LN.toggleLanes(false);
+      check("lanes.js", "1008h4 how long ago the last went: just now under a minute, minutes under an hour, and its time after; one reply says so",
+        () => eq([LN.laneSince([{ at: at(19, 58) }], at(19, 58) + 59000), LN.laneSince([{ at: at(19, 40) }, { at: at(19, 53) }], at(19, 58) + 1000),
+          LN.laneSince([{ at: at(17, 40) }, { at: at(17, 53) }], at(19, 58)), LN.laneSince([], at(19, 58))].join("|"),
+          "One reply, just now|2 replies since 19:40, the last 5 min ago|2 replies since 17:40, the last at 17:53|"));
+      /* THE CONTROL: a conversation kept before the history was, a path with no times, is read as it was: its replies with no
+         time and no head line, under the old title while the tab has no name. */
+      T.tabs.splice(0, T.tabs.length);
+      ST.ssSet(T.TAB_KEY, JSON.stringify({ v: 1, activeTabId: "mc-h1", tabs: [{ id: "mc-h1", path: ["c-h1-a", "c-h1-b", "c-h1-d"], log: [{ id: "c-h1-a", at: "x" }] }] }));
+      T.initTabs();
+      LN.toggleLanes(true);
+      const old = lanesBox.innerHTML;
+      check("lanes.js", "1008H5 THE CONTROL: a path kept with no history, a stored entry that is no step dropped, shows its replies with no time, no head line and the old title",
+        () => eq([(old.match(/<div class="ln-sent" style/g) || []).length, /ln-at|ln-since|ln-when/.test(old), /<span class="ln-title">This conversation<\/span>/.test(old),
+          JSON.stringify(T.tabs[0].log)].join("|"), "2|false|true|[]"));
+      LN.toggleLanes(false);
+    } finally { Date.now = realNow; LN.toggleLanes(false); }
   } finally {
     LN.toggleLanes(false);
     ND.watchNextDock(null);

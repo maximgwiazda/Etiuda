@@ -24,7 +24,7 @@ function copyEntrySel(otherLang){
   const id=entrySel.id;
   withAgentName(ps[vi],()=>{
     copy(fill(ps[vi],m,0,l), copiedToastMsg(m, l, vi, ps.length), cardCommits(m));
-    bumpUseCount(id, l);
+    bumpUseCount(id, l, vi);
     eCopyFeedback(id,vi);   // wash the selected block + recency trace, same as a click
   },document.querySelector("#list .txt.sel"));
   return true;
@@ -41,7 +41,7 @@ function copyCardPart(id, vi, anchor, other){
   withAgentName(ps[k],()=>{
     // The copy is made before the step, which the lanes and the action button answer with motion.
     copy(fill(ps[k],m,0,l), copiedToastMsg(m, l, k, ps.length), cardCommits(m));
-    bumpUseCount(m.id, l);
+    bumpUseCount(m.id, l, k);
     eNoteRecent(m.id,k);
   },anchor);
   return true;

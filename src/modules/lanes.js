@@ -25,9 +25,12 @@ import { $, intentEl } from "./dom.js";
 /* ---- The lanes: the conversation in front given the whole window. What it sent, the reply it sent last
    whole, and what can follow it, each with the batch after it. The list keeps its place and its scroll
    underneath, unseen; the header gives up only the category bar. */
-const SENT_SHOWN=6;
+const TRAIL_SHOWN=6;
 const LN_DOT=" "+String.fromCharCode(0xb7)+" ";
 let lanesOn=false, laneFresh=false, laneMark=-1, laneKey="", laneRO=null;
+// How often the head says again how long ago the last reply went.
+const LANE_TICK_MS=20000;
+let laneTick=0;
 let laneRows=[], laneFrom=null, laneFind=false, laneHits=[], laneHit=0, laneFocus=null, laneDrag=null;
 const lanesEl=()=>$("#lanes");
 
@@ -54,6 +57,10 @@ function toggleLanes(on){
   if(shell) shell.inert=want;
   animatePillsBox(()=>{ document.body.classList.toggle("e-lanes", want); syncPillsCollapse(); });
   if(!want){ finishWalk(); el.hidden=true; el.innerHTML=""; laneRows=[]; laneFrom=null; }
+  clearInterval(laneTick); laneTick=0;
+  if(want) laneTick=setInterval(()=>{ const s=lanesEl() && lanesEl().querySelector(".ln-since"); if(s) s.textContent=laneSince(laneState().log); }, LANE_TICK_MS);
+  // Let go where a timer can be, so a test in bare node that leaves the lanes up still ends.
+  if(laneTick && laneTick.unref) laneTick.unref();
   syncNextDock();
 }
 
@@ -63,14 +70,39 @@ function toggleLanes(on){
 function laneState(){
   const now=dockNow(), live=now.live, path=now.path.map(String);
   const nowCard=now.from!=null ? live.get(String(now.from)) || null : null;
-  const prior=path.slice(0,-1).filter(id=>live.has(id));
-  const sent=prior.slice(-SENT_SHOWN);
+  // The whole conversation, from the tab's history; a path kept without one is read without its times.
+  const log=now.log.length && String(now.log[now.log.length-1].id)===String(now.from) ? now.log : path.map(id=>({id:id}));
+  const sent=log.slice(0,-1).filter(e=>live.has(String(e.id))), last=log.length ? log[log.length-1] : null;
   const fold=nowCard ? nextFoldState(nowCard, baseCard(nowCard.id), pack.overrides && pack.overrides[nowCard.id], live) : null;
   const rows=(fold ? fold.rows.map(e=>({id:e.to, learnt:false, n:0})) : []).concat(now.rows.filter(r=>r.learnt||r.used));
   const after=rows.map(r=>dockList(r.id, live, statsLearntAfter(pack, r.id), new Set(path.concat(r.id))));
-  const key=[now.tab, path.join(","), rows.map(r=>r.id+(r.learnt?"~":r.used?"+":"")).join(","), fold && fold.own ? "own" : "",
-    after.map(a=>a.map(x=>x.id).join("+")).join("/"), lang, uiLang()].join("|");
-  return {now:now, live:live, nowCard:nowCard, sent:sent, older:prior.length>sent.length, rows:rows, fold:fold, after:after, key:key};
+  const key=[now.tab, now.name, log.map(e=>e.id+"@"+(e.at||"")+(e.l||"")+(e.b|0)).join(","), rows.map(r=>r.id+(r.learnt?"~":r.used?"+":"")).join(","),
+    fold && fold.own ? "own" : "", after.map(a=>a.map(x=>x.id).join("+")).join("/"), lang, uiLang()].join("|");
+  return {now:now, live:live, nowCard:nowCard, log:log, last:last, sent:sent, rows:rows, fold:fold, after:after, key:key};
+}
+const laneClock=ms=>{ const d=new Date(ms); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); };
+/** The head of the history: how many replies, since when, and how long ago the last. "" where a reply has no time. */
+function laneSince(log, now){
+  const n=(log||[]).length;
+  if(!n || !log.every(e=>Number.isFinite(e.at))) return "";
+  const last=log[n-1].at, min=Math.floor(Math.max(0,(now||Date.now())-last)/60000);
+  const ago=min<1 ? t("just now") : min<60 ? t("{N} min ago").replace("{N}",String(min)) : t("at {TIME}").replace("{TIME}",laneClock(last));
+  return n===1 ? t("One reply, {AGO}").replace("{AGO}",ago)
+    : t("{N} replies since {TIME}, the last {AGO}").replace("{N}",String(n)).replace("{TIME}",laneClock(log[0].at)).replace("{AGO}",ago);
+}
+// When the reply now went and in which language, at the right of its card's head.
+function laneWhen(e){
+  const w=[Number.isFinite(e && e.at) ? laneClock(e.at) : "", e && e.l ? String(e.l).toUpperCase() : ""].filter(Boolean).join(LN_DOT);
+  return w ? '<span class="ln-when">'+esc(w)+'</span>' : "";
+}
+// A reply sent: its time, its card, its language, and the first words of the block it sent as they went.
+function laneSentHtml(st, e, i){
+  const m=st.live.get(String(e.id)), l=e.l && parts(m,e.l).length ? e.l : cardLang(m), ps=parts(m,l);
+  const words=String(ps.length ? fill(ps[Math.min(ps.length-1, e.b|0)],m,0,l)||"" : "").replace(/\s+/g," ").trim();
+  return '<div class="ln-sent" style="grid-row:'+(i+2)+'"><div class="ln-sent-h">'
+    +(Number.isFinite(e.at) ? '<span class="ln-at">'+esc(laneClock(e.at))+'</span>' : "")+laneTitleHtml(m)
+    +(e.l ? '<span class="ln-lang">'+esc(String(e.l).toUpperCase())+'</span>' : "")+'</div>'
+    +(words ? '<div class="ln-first"><span class="ln-clamp2">'+esc(words)+'</span></div>' : "")+'</div>';
 }
 function laneTitleHtml(m){
   return catIconSvg(m.c,"cat-ic")+'<span class="ctitle">'+esc(cardTitle(m))+'</span>'+(cardCommits(m) ? stampHtml("cstamp") : "");
@@ -113,7 +145,10 @@ function laneEditHtml(st){
 }
 function lanesHtml(st){
   const back=String(t("{KEY} back to the cards")).split("{KEY}");
-  const head='<div class="ln-head"><span class="ln-title">'+esc(t("This conversation"))+'</span>'
+  const since=laneSince(st.log);
+  const head='<div class="ln-head">'+(st.now.name ? '<span class="ln-title" data-i18n-skip>'+esc(st.now.name)+'</span>'
+      : '<span class="ln-title">'+esc(t("This conversation"))+'</span>')
+    +(since ? '<span class="ln-since">'+esc(since)+'</span>' : "")
     +'<span class="tab-beads" aria-hidden="true">'+tabBeadsHtml(pathBeads(st.now.path))+'</span>'
     +'<span class="ln-hint">'+esc(back[0]||"")+'<kbd>'+esc(formatActionChord("lanes"))+'</kbd>'+esc(back.slice(1).join("{KEY}"))+'</span></div>';
   const m=st.nowCard;
@@ -122,16 +157,19 @@ function lanesHtml(st){
   let blk="";
   for(let i=0;i<blocks;i++) blk+='<div class="txt ln-blk" role="button" data-b="'+i+'">'+esc(laneBody(m,i))+'</div>';
   const rows=st.rows.map((r,i)=>laneRowHtml(st,r,i)).join("");
-  // What was sent, again as a trail above Now, which the sheet shows in place of the Sent lane where three lanes would not fit.
-  const trail=k ? '<div class="ln-trail" role="list" aria-label="'+esc(t("Sent"))+'">'+st.sent.map((id,i)=>
-    '<span class="ln-crumb'+(i===0&&st.older?" ln-older":"")+'" role="listitem">'+laneTitleHtml(st.live.get(id))+'</span>').join("")+'</div>' : "";
+  /* What was sent, again as a trail above Now, which the sheet shows in place of the Sent lane where three lanes would
+     not fit: the last few, led in by a dotted line where there were more. */
+  const crumbs=st.sent.slice(-TRAIL_SHOWN), older=st.sent.length>crumbs.length;
+  const trail=k ? '<div class="ln-trail" role="list" aria-label="'+esc(t("Sent"))+'">'+crumbs.map((e,i)=>
+    '<span class="ln-crumb'+(i===0&&older?" ln-older":"")+'" role="listitem">'+laneTitleHtml(st.live.get(String(e.id)))+'</span>').join("")+'</div>' : "";
+  // Next starts beside the two replies before Now, so a long conversation keeps it beside the reply it follows.
+  const nextAt=Math.max(2,k);
   return head+trail+'<div class="ln-cols" style="grid-template-rows:auto repeat('+k+',auto) auto 1fr">'
     +'<div class="ln-h ln-h1">'+esc(t("Sent"))+'</div><div class="ln-h ln-h2">'+esc(t("Now"))+'</div>'
     +'<div class="ln-h ln-h3">'+esc(t("Next"))+'</div>'
-    +st.sent.map((id,i)=>{ const s=st.live.get(id);
-      return '<div class="ln-sent'+(i===0&&st.older?" ln-older":"")+'" style="grid-row:'+(i+2)+'">'+laneTitleHtml(s)+'</div>'; }).join("")
-    +'<div class="card ln-now"'+(slot>=0 ? ' data-ec="'+slot+'"' : "")+' style="grid-row:'+(k+2)+'"><div class="chead">'+laneTitleHtml(m)+'</div>'+blk+'</div>'
-    +'<div class="ln-next" style="grid-row:2 / span '+(k+2)+'">'+rows+laneEditHtml(st)+'</div>'
+    +st.sent.map((e,i)=>laneSentHtml(st,e,i)).join("")
+    +'<div class="card ln-now"'+(slot>=0 ? ' data-ec="'+slot+'"' : "")+' style="grid-row:'+(k+2)+'"><div class="chead">'+laneTitleHtml(m)+laneWhen(st.last)+'</div>'+blk+'</div>'
+    +'<div class="ln-next" style="grid-row:'+nextAt+' / span '+(k+4-nextAt)+'">'+rows+laneEditHtml(st)+'</div>'
     +'<svg class="ln-wires" aria-hidden="true"></svg></div>';
 }
 /* The threads, drawn once the lanes are laid out: down through what was sent and into the reply now, then
@@ -144,7 +182,9 @@ function drawWires(){
   if(!now || !nh) return;
   const n=at(now.getBoundingClientRect()), h=at(nh.getBoundingClientRect()), hy=(h.t+h.b)/2;
   let d="", dots="";
-  const sent=[...cols.querySelectorAll(".ln-sent")].filter(e=>e.getClientRects().length).map(e=>at(e.getBoundingClientRect()));
+  // A reply sent is threaded at its head line, the time and the title, not the middle of its words.
+  const sent=[...cols.querySelectorAll(".ln-sent")].filter(e=>e.getClientRects().length)
+    .map(e=>{ const r=at(e.getBoundingClientRect()), h=at((e.firstElementChild||e).getBoundingClientRect()); return {l:r.l, t:h.t, b:h.b}; });
   if(sent.length){
     const x=sent[0].l+4, y0=(sent[0].t+sent[0].b)/2;
     d+='<path class="ln-w" d="M'+x+" "+y0+"V"+hy+"H"+(h.l-10)+'"/>';
@@ -222,6 +262,7 @@ function drawLanes(arrived){
   const was=arrived===true && st.nowCard ? walkFrom(el, String(st.nowCard.id)) : null;
   if(st.key!==laneKey) laneMark=-1;
   laneKey=st.key; laneRows=st.rows; laneFrom=st.nowCard ? String(st.nowCard.id) : null;
+  const opening=laneFresh;
   el.innerHTML='<div class="ln-wrap'+(laneFresh?" ln-open":"")+(arrived===true&&!was?" ln-step":"")+'">'+lanesHtml(st)+'</div>';
   laneFresh=false;
   el.hidden=false;
@@ -233,6 +274,9 @@ function drawLanes(arrived){
     const say=()=>sayLive(laneStepWords(st.rows.length));
     if(!was || !walkTo(el, was, say)) say();
   }
+  // Opened, or a step taken, the reply now is brought into view where a long conversation left it below.
+  const nowEl=(opening || arrived===true) && el.querySelector(".ln-now");
+  if(nowEl && nowEl.scrollIntoView) try{ nowEl.scrollIntoView({block:"nearest"}); }catch(_){}
   if(laneFind) drawLaneHits();
   const f=laneFocus; laneFocus=null;
   const to=f && (f.sel==="#lnFind" ? el.querySelector("#lnFind")
@@ -408,7 +452,8 @@ function wireLanes(){
 }
 
 export {
-  SENT_SHOWN,
+  TRAIL_SHOWN,
+  laneSince,
   lanesOpen,
   lanesPageScroller,
   lanesKeyFree,

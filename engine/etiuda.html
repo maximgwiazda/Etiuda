@@ -1434,6 +1434,7 @@ html.e-pills-off .pills-slot{display:none}
              background-color var(--m-reveal) var(--m-ease),
              box-shadow var(--m-reveal) var(--m-ease)}
 body.pills-lines-expand .pills-slot.pills-overflow .pills,
+body.e-take-drag .pills-slot.pills-overflow .pills,
 .pills-slot.pills-overflow:hover .pills,
 .pills-slot.pills-overflow.pills-navpeek .pills,
 .pills-slot.pills-overflow.pills-expand .pills{
@@ -3444,6 +3445,38 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 /* A colleague's desk's one act stands under that desk's own column. */
 .ed-acts-desk{grid-column:2}
 .ed-sub{margin:6px 0 0;font-size:12.5px;font-style:italic;color:var(--dim)}
+/* A COLLEAGUE'S NEW CARD, to be put somewhere: a chip to drag onto the category bar, pressed for the same choice as a list. */
+.lk-place{margin-top:12px;display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.lk-took{flex-direction:row;align-items:center;flex-wrap:wrap}
+.lk-in{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;color:var(--ink)}
+.lk-in .cat-ic{width:14px;height:14px}
+.lk-chip{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:7px 12px 7px 8px;border:1.5px dashed var(--accent);
+  border-radius:var(--radius-sm);background:transparent;color:var(--ink);font:13.5px var(--sans);cursor:default;touch-action:none}
+.lk-chip:hover,.lk-chip:focus-visible,.lk-chip[aria-expanded="true"]{background:var(--accent-soft)}
+.lk-t{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.lk-pick{width:min(440px,100%);display:grid}
+.lk-pick input{font:14px var(--sans);padding:8px 10px;border:1px solid var(--field-line);border-radius:var(--radius-sm);
+  background:var(--field);color:var(--ink);outline:none}
+.lk-pick input:focus{border-color:var(--accent)}
+.lk-hits{max-height:240px;overflow-y:auto}
+.lk-hits .cat-ic,.lk-hits .ic{flex:none;width:14px;height:14px;margin:0}
+/* WHILE IT IS DRAGGED the panel steps down and the category bar comes up sharp above the scrim, ringed, with the
+   rest of the header left under it; translate composes with the card's entrance, which holds transform. */
+body.e-take-drag header{z-index:210;background:transparent;border-bottom-color:transparent;box-shadow:none}
+body.e-take-drag header>:not(#pillsSlot){filter:blur(3px);opacity:.45}
+body.e-take-drag header #pillsSlot{display:block}
+body.e-take-drag #pillsSlot .pills{border-radius:14px;background-color:var(--panel-raised);-webkit-backdrop-filter:none;backdrop-filter:none;
+  box-shadow:0 0 0 8px var(--panel-raised),0 0 0 9.5px var(--accent),0 12px 32px rgba(0,0,0,.18)}
+.modal-card.ed-modal{transition:translate var(--m-move) var(--m-ease),scale var(--m-move) var(--m-ease)}
+body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
+.pill.lk-over{box-shadow:0 0 0 2px var(--accent);background:var(--accent-soft)}
+.pill-add.lk-over{border-style:solid;border-color:var(--accent);color:var(--accent)}
+.lk-ghost{position:fixed;left:0;top:0;z-index:212;pointer-events:none;display:inline-flex;align-items:center;gap:6px;max-width:320px;
+  padding:7px 12px 7px 8px;border:1.5px dashed var(--accent);border-radius:var(--radius-sm);background:var(--panel-raised);color:var(--ink);
+  font:13.5px var(--sans);white-space:nowrap;overflow:hidden;box-shadow:0 8px 22px rgba(0,0,0,.2)}
+.lk-hint{position:fixed;left:50%;top:120px;z-index:211;translate:-50% 0;max-width:calc(100vw - 48px);pointer-events:none;
+  padding:8px 16px;border-radius:999px;background:var(--bub);color:var(--bub-ink);font:600 13.5px var(--sans);
+  filter:drop-shadow(0 8px 18px var(--bub-shadow));animation:eDropIn var(--m-reveal) var(--m-ease) both}
 /* THE UNDO, one line and its button at the foot of the window, where a toast speaks. Centred by
    its margins, since the family's entrance animates transform. */
 .e-undo{left:0;right:0;bottom:24px;margin:0 auto;width:fit-content;max-width:calc(100vw - 24px);
@@ -3641,6 +3674,7 @@ body.e-lanes #pillsSlot.pills-anim{display:block}
 @keyframes eLanesIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .ln-head{display:flex;align-items:center;gap:12px;min-width:0;padding:0 2px 14px}
 .ln-title{flex:none;font:600 15px var(--sans);color:var(--ink)}
+.ln-since{flex:0 1 auto;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:13px;color:var(--dim)}
 .ln-hint{margin-left:auto;flex:none;font-size:13px;color:var(--dim);white-space:nowrap}
 .ln-hint kbd,.ln-key{font:12px var(--mono);border:1px solid var(--line-strong);border-radius:4px;padding:1px 5px;
   color:var(--dim);background:var(--panel)}
@@ -3653,8 +3687,15 @@ body.e-lanes #pillsSlot.pills-anim{display:block}
 .ln-h1{grid-column:1}
 .ln-h2{grid-column:2}
 .ln-h3{grid-column:3}
-.ln-sent{grid-column:1;display:flex;align-items:center;gap:7px;min-width:0;padding:7px 0 7px 20px}
+/* A reply sent: its time, card and language on the head line the thread passes through, its first words under it. */
+.ln-sent{grid-column:1;min-width:0;padding:7px 0 9px 20px}
+.ln-sent-h{display:flex;align-items:center;gap:7px;min-width:0}
 .ln-sent .ctitle{min-width:0;overflow:hidden;white-space:nowrap;font-size:14px}
+.ln-at{flex:none;font:12.5px var(--mono);color:var(--dim)}
+.ln-lang{flex:none;margin-left:auto;font:600 10.5px var(--mono);color:var(--dim);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.ln-first{margin-top:3px;font-size:13px;line-height:1.45;color:var(--dim)}
+.ln-clamp2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.ln-when{flex:none;margin-left:auto;font:12px var(--mono);color:var(--dim)}
 .ln-cols .cat-ic{flex:none;width:14px;height:14px;margin:0}
 .ln-sent .cstamp{flex:none;display:inline-flex;color:var(--warn)}
 .ln-now{grid-column:2;margin:0}
@@ -7371,6 +7412,11 @@ What you type stays in this browser only.`;
     "Each reply you send appears here, with what can follow it.": "Tu pojawi się każda wysłana odpowiedź, a obok to, co może po niej nastąpić.",
     "Sent": "Wysłane",
     "Now": "Teraz",
+    "One reply, {AGO}": "Jedna odpowiedź, {AGO}",
+    "{N} replies since {TIME}, the last {AGO}": "{N} odpowiedzi od {TIME}, ostatnia {AGO}",
+    "just now": "przed chwilą",
+    "{N} min ago": "{N} min temu",
+    "at {TIME}": "o {TIME}",
     "then: {LIST}": "potem: {LIST}",
     "often": "często",
     "One of the cards this desk has used most lately": "Jedna z kart ostatnio najczęściej używanych na tym stanowisku",
@@ -7394,6 +7440,14 @@ What you type stays in this browser only.`;
     "Back to the Library": "Wróć do Biblioteki",
     "Take this text": "Przejmij tę treść",
     "Now in your edits": "Już we własnych zmianach",
+    "Now in {CAT}": "Już w kategorii {CAT}",
+    "Give it back": "Oddaj kartę",
+    "Drag it onto one of your categories, or press Enter to choose one": "Przeciągnij kartę na jedną ze swoich kategorii albo naciśnij Enter i wybierz kategorię z listy",
+    "Find a category": "Znajdź kategorię",
+    "a category's name": "nazwa kategorii",
+    "Add {CAT} as a category of this desk": "Dodaj {CAT} jako kategorię tego stanowiska",
+    "Drop it on one of your categories.": "Upuść kartę na jedną ze swoich kategorii.",
+    "Drop it on one of your categories, or on + to add {CAT}.": "Upuść kartę na jedną ze swoich kategorii albo na +, aby dodać kategorię {CAT}.",
     "That desk's cards match the team's edition.": "Karty tego stanowiska są takie same jak w wydaniu zespołu."
   };
   function uiLangKnown(l) {
@@ -11040,15 +11094,27 @@ What you type stays in this browser only.`;
       cats: [],
       entrySel: null,
       scrollY: 0,
-      path: []
+      path: [],
+      log: []
     };
   }
   var TAB_PATH_MAX = 40;
-  function tabPathStep(id) {
+  var TAB_LOG_MAX = 200;
+  function tabLogEntry(e) {
+    return !!e && typeof e.id === "string" && !!e.id && Number.isFinite(e.at) && typeof e.l === "string" && Number.isInteger(e.b) && e.b >= 0;
+  }
+  function tabPathStep(id, how) {
     const tb = tabs.find((x) => x.id === activeTabId), at = String(id == null ? "" : id);
     if (!tb || !at) return null;
     const path = Array.isArray(tb.path) ? tb.path : [], prev = path.length ? path[path.length - 1] : null;
-    if (prev === at) return null;
+    const log = Array.isArray(tb.log) ? tb.log : [], e = { id: at, at: Date.now(), l: String(how && how.l || ""), b: Math.max(0, (how && how.b) | 0) };
+    tb.log = (prev === at && log.length && log[log.length - 1].id === at ? log.slice(0, -1) : log).concat(e).slice(-TAB_LOG_MAX);
+    if (prev === at) {
+      clearTimeout(tabSaveTimer);
+      tabSaveTimer = setTimeout(saveTabSession, 250);
+      if (tabPathWatch) tabPathWatch(false);
+      return null;
+    }
     tb.path = path.concat(at).slice(-TAB_PATH_MAX);
     clearTimeout(tabSaveTimer);
     tabSaveTimer = setTimeout(saveTabSession, 250);
@@ -11095,7 +11161,12 @@ What you type stays in this browser only.`;
   }
   function tabPathNow() {
     const tb = tabs.find((x) => x.id === activeTabId);
-    return { tab: tb ? tb.id : "", path: tb && Array.isArray(tb.path) ? tb.path.slice() : [] };
+    return {
+      tab: tb ? tb.id : "",
+      path: tb && Array.isArray(tb.path) ? tb.path.slice() : [],
+      log: tb && Array.isArray(tb.log) ? tb.log.slice() : [],
+      name: tb ? String(tb.pax || "").trim().split(/\s+/)[0] : ""
+    };
   }
   function tabLabel(tb, i) {
     if (tb && tb.pax && String(tb.pax).trim()) {
@@ -11187,6 +11258,7 @@ What you type stays in this browser only.`;
       tb.pax = pax ? pax.value : "";
       if (named && !tb.pax.trim() && Array.isArray(tb.path) && tb.path.length) {
         tb.path = [];
+        tb.log = [];
         hooks.syncNextDock();
       }
       if (tabLabel(tb) !== was) drawTabs();
@@ -11208,7 +11280,8 @@ What you type stays in this browser only.`;
         lang: t2.lang === "pl" || t2.lang === "en" ? t2.lang : lang,
         intentIdxs: Array.isArray(t2.intentIdxs) ? t2.intentIdxs.filter(intentOk) : [],
         cats: Array.isArray(t2.cats) ? t2.cats.filter(catOk) : [],
-        path: Array.isArray(t2.path) ? t2.path.filter((x) => typeof x === "string" && x).slice(-TAB_PATH_MAX) : []
+        path: Array.isArray(t2.path) ? t2.path.filter((x) => typeof x === "string" && x).slice(-TAB_PATH_MAX) : [],
+        log: Array.isArray(t2.log) ? t2.log.filter(tabLogEntry).slice(-TAB_LOG_MAX) : []
       }));
       activeTabId = data.activeTabId;
       if (!tabs.some((t2) => t2.id === activeTabId)) activeTabId = tabs[0].id;
@@ -18880,7 +18953,7 @@ What you type stays in this browser only.`;
       txtEl.addEventListener("pointerleave", () => txtEl.classList.remove("just-picked"), { once: true });
       withAgentName(ps[vi], () => {
         copy(fill(ps[vi], m), copiedToastMsg(m, cl, vi, ps.length), cardCommits(m));
-        bumpUseCount(mid, cl);
+        bumpUseCount(mid, cl, vi);
       }, txtEl);
     });
   }
@@ -18889,11 +18962,11 @@ What you type stays in this browser only.`;
     const where = m && m.seq ? code + " " + t("step") + " " + (vi + 1) + "/" + total : code + (total > 1 ? " " + (vi + 1) + "/" + total : "");
     return (cardCommits(m) ? t("A commitment, ready to paste: {TITLE}, {WHAT}") : t("Ready to paste: {TITLE}, {WHAT}")).replace("{WHAT}", where).replace("{TITLE}", cardTitle(m));
   }
-  function bumpUseCount(id, lang2) {
+  function bumpUseCount(id, lang2, vi) {
     if (!id) return;
     bumpUse(pack, id);
     bumpLang(pack, lang2);
-    const prev = tabPathStep(id);
+    const prev = tabPathStep(id, { l: lang2, b: vi });
     if (prev) bumpPair(pack, prev, id);
     saveStats();
     useEditionMark(id);
@@ -25329,6 +25402,7 @@ What you type stays in this browser only.`;
       rows = head(desk ? gone ? desk.was : desk.now : t(gone ? "Was" : "Becomes")) + cell(esc(cardText(m, "body", code)));
       const sub = desk ? "" : editionSubline(it, c);
       if (sub) rows += '<p class="ed-sub">' + esc(sub) + "</p>";
+      if (desk && desk.place && it.kind === "new") rows += desk.place(it);
     }
     return "<h3>" + esc(cardTitle(now || was || {}) || it.id) + '</h3><div class="ed-grid ed-c' + cols + '">' + rows + "</div>";
   }
@@ -25348,6 +25422,16 @@ What you type stays in this browser only.`;
         const pane = document.getElementById("edPane"), list2 = document.querySelector(".ed-list");
         const draw = () => {
           pane.innerHTML = editionPaneHtml(items[at], o.held, c, desk);
+          if (desk && desk.wirePlace) desk.wirePlace(pane, items[at], (sel) => {
+            const r = list2.querySelector('[data-ed-at="' + at + '"]');
+            if (r) r.innerHTML = editionRowInner(items[at], o.held, c, sub);
+            draw();
+            const f = sel && pane.querySelector(sel);
+            if (f) {
+              f.focus();
+              if (f.setSelectionRange) f.setSelectionRange(f.value.length, f.value.length);
+            }
+          });
           pane.querySelectorAll("[data-ed-mine]").forEach((b) => {
             b.onclick = () => {
               desk.toggle(items[at]);
@@ -25393,8 +25477,10 @@ What you type stays in this browser only.`;
   __export(desk_look_exports, {
     deskBase: () => deskBase,
     deskChangeWords: () => deskChangeWords,
+    deskGiveNew: () => deskGiveNew,
     deskKey: () => deskKey,
     deskName: () => deskName,
+    deskTakeNew: () => deskTakeNew,
     forgetLookEdits: () => forgetLookEdits,
     openDeskLook: () => openDeskLook
   });
@@ -25451,6 +25537,7 @@ What you type stays in this browser only.`;
   var lookEdits = /* @__PURE__ */ new Map();
   function forgetLookEdits() {
     lookEdits.clear();
+    lookCats.clear();
   }
   function deskToggle(it, hers) {
     const base = baseCard(it.id), now = deskCardNow(it.id), h = cardIn(hers, it.id);
@@ -25474,6 +25561,245 @@ What you type stays in this browser only.`;
     hooks.rebuildCards();
     return true;
   }
+  var lookCats = /* @__PURE__ */ new Set();
+  var TAKE_LEFT = ["id", "c", "intents", "next", "nextWas", "retired"];
+  function deskNewTaken(it, hers) {
+    const h = cardIn(hers, it.id);
+    if (!h || it.kind !== "new") return null;
+    const keys = editionFieldKeys(hers, hers).map((k) => k.key);
+    const m = (pack.custom || []).find((o) => o && keys.every((k) => deskText(o[k]) === deskText(h[k])));
+    return m ? { own: m.id, cat: m.c } : null;
+  }
+  function herCat(hers, c) {
+    const prim = catalogLangs(hers)[0], first = String((hers && hers.categories || {})[c] || c);
+    const pl = prim === "pl" ? first : String((hers && hers[v2CatKey("pl", prim)] || {})[c] || "");
+    return { key: c, first, pl, name: uiLang() === "pl" && pl || first };
+  }
+  function herCatHere(hc) {
+    if (CATS[hc.key]) return hc.key;
+    const names = [hc.first, hc.pl].filter(Boolean).map((n) => n.toLowerCase());
+    return Object.keys(CATS).find((k) => names.indexOf(String(CATS[k]).toLowerCase()) > -1) || "";
+  }
+  var deskCatName = (k) => String(CATS[k] || k);
+  function deskTakeNew(it, hers, to) {
+    const h = cardIn(hers, it.id);
+    if (!h || it.kind !== "new" || deskNewTaken(it, hers)) return false;
+    let key = to;
+    if (to == null) {
+      const hc = herCat(hers, h.c);
+      key = herCatHere(hc);
+      if (!key) {
+        key = hooks.ensureCustomCat(hc.first);
+        lookCats.add(key);
+        const icon = (hers.icons || {})[h.c], hue = (hers.colors || {})[h.c];
+        if (hc.pl && hc.pl !== hc.first) pack.catLabelsPl[key] = hc.pl;
+        if (icon) pack.catIcons[key] = icon;
+        if (hue != null) pack.catColors[key] = hue;
+      }
+    }
+    if (!key || !CATS[key]) return false;
+    const own = {}, live = new Set(BASE_M.map((m) => String(m.id)).concat((pack.custom || []).map((m) => String(m && m.id))));
+    Object.keys(h).forEach((k) => {
+      if (k.charAt(0) !== "_" && TAKE_LEFT.indexOf(k) < 0) own[k] = h[k];
+    });
+    own.id = uid("u:");
+    own.c = key;
+    const next = (Array.isArray(h.next) ? h.next : []).filter((e) => e && live.has(String(e.to)));
+    if (next.length) own.next = next;
+    if (!Array.isArray(pack.custom)) pack.custom = [];
+    pack.custom.push(own);
+    savePack();
+    hooks.rebuildCards();
+    return true;
+  }
+  function deskGiveNew(it, hers) {
+    const h = deskNewTaken(it, hers);
+    if (!h) return false;
+    pack.custom = (pack.custom || []).filter((m) => !(m && m.id === h.own));
+    const k = h.cat;
+    if (lookCats.has(k) && !pack.custom.some((m) => m && m.c === k) && !BASE_M.some((m) => m.c === k) && pack.customCats[k] != null) {
+      ["customCats", "catLabels", "catLabelsPl", "catRoles", "catIcons", "catColors"].forEach((f) => {
+        if (pack[f]) delete pack[f][k];
+      });
+      lookCats.delete(k);
+      setCatOrder(catOrder.filter((x) => x !== k));
+      if (cats.indexOf(k) > -1) setCats(cats.filter((x) => x !== k));
+      lySet("CatOrder", JSON.stringify(catOrder));
+    }
+    savePack();
+    hooks.rebuildCards();
+    return true;
+  }
+  function deskNewSub(it, hers) {
+    const h = deskNewTaken(it, hers);
+    return h ? t("Now in {CAT}").split("{CAT}").join(deskCatName(h.cat)) : "";
+  }
+  var lkPick = null;
+  var lkDrag = null;
+  var lkDragged = false;
+  function lkOptions(hers, it, q) {
+    const h = cardIn(hers, it.id), hc = herCat(hers, h ? h.c : ""), want = String(q || "").trim().toLowerCase();
+    const fits = (n) => !want || String(n).toLowerCase().indexOf(want) > -1;
+    const mine = catOrder.filter((k) => CATS[k] && fits(CATS[k])).map((k) => ({ to: k, name: deskCatName(k) }));
+    return herCatHere(hc) ? mine : mine.concat(fits(hc.name) ? [{ to: "", name: hc.name, add: true }] : []);
+  }
+  function deskPlaceHtml(it, hers) {
+    const h = deskNewTaken(it, hers);
+    if (h) return '<div class="lk-place lk-took"><span class="lk-in">' + catIconSvg(h.cat, "cat-ic") + esc(deskNewSub(it, hers)) + '</span><button type="button" class="btn" data-lk-back="1">' + esc(t("Give it back")) + "</button></div>";
+    const m = cardIn(hers, it.id), tip = t("Drag it onto one of your categories, or press Enter to choose one");
+    const open = !!lkPick && lkPick.id === it.id;
+    let pick = "";
+    if (open) {
+      const opts = lkOptions(hers, it, lkPick.q);
+      lkPick.at = Math.max(0, Math.min(opts.length - 1, lkPick.at | 0));
+      pick = '<div class="lk-pick"><input type="text" id="lkFind" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="lkHits" aria-label="' + esc(t("Find a category")) + '" placeholder="' + esc(t("a category's name")) + '"' + (opts.length ? ' aria-activedescendant="lkHit' + lkPick.at + '"' : "") + ' value="' + esc(lkPick.q || "") + '"><div class="nx-hits lk-hits" id="lkHits" role="listbox">' + opts.map((o, i) => '<div class="nx-hit' + (i === lkPick.at ? " on" : "") + '" role="option" id="lkHit' + i + '" aria-selected="' + (i === lkPick.at) + '" data-lk-to="' + esc(o.to) + '">' + (o.add ? ICON_PLUS : catIconSvg(o.to, "cat-ic")) + "<span>" + esc(o.add ? t("Add {CAT} as a category of this desk").split("{CAT}").join(o.name) : o.name) + "</span></div>").join("") + "</div></div>";
+    }
+    return '<div class="lk-place"><button type="button" class="lk-chip" data-lk-chip="1" title="' + esc(tip) + '" aria-label="' + esc(tip) + '" aria-expanded="' + open + '"><span class="nx-grip" aria-hidden="true"></span><span class="lk-t">' + esc(cardTitle(m || {}) || it.id) + "</span></button>" + pick + "</div>";
+  }
+  function lkTargetAt(x, y) {
+    const u = document.elementFromPoint(x, y), p = u && u.closest ? u.closest(".pill-add, .pill[data-k]") : null;
+    if (!p || !pills || !pills.contains(p)) return null;
+    return p.classList.contains("pill-add") ? { el: p, to: null } : p.dataset.k ? { el: p, to: p.dataset.k } : null;
+  }
+  function lkDragEnd() {
+    const d = lkDrag;
+    lkDrag = null;
+    if (!d) return null;
+    document.body.classList.remove("e-take-drag");
+    if (d.ghost) d.ghost.remove();
+    if (d.hint) d.hint.remove();
+    if (d.over) d.over.el.classList.remove("lk-over");
+    removeEventListener("keydown", d.key, true);
+    return d;
+  }
+  function lkDragStart(d, hers, it) {
+    const h = cardIn(hers, it.id), hc = herCat(hers, h ? h.c : "");
+    document.body.classList.add("e-take-drag");
+    d.ghost = document.createElement("div");
+    d.ghost.className = "lk-ghost";
+    d.ghost.innerHTML = '<span class="nx-grip" aria-hidden="true"></span><span>' + esc(cardTitle(h || {}) || it.id) + "</span>";
+    d.hint = document.createElement("div");
+    d.hint.className = "lk-hint";
+    d.hint.setAttribute("data-i18n-skip", "");
+    d.hint.textContent = herCatHere(hc) ? t("Drop it on one of your categories.") : t("Drop it on one of your categories, or on + to add {CAT}.").split("{CAT}").join(hc.name);
+    document.body.appendChild(d.ghost);
+    document.body.appendChild(d.hint);
+    const slot = document.getElementById("pillsSlot"), r = pills ? pills.getBoundingClientRect() : null;
+    const full = slot ? parseFloat(getComputedStyle(slot).getPropertyValue("--pills-full")) : NaN;
+    if (r) d.hint.style.top = Math.round(r.top + Math.max(r.height, full || 0) + 22) + "px";
+    d.key = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        lkDragEnd();
+        lkDragged = true;
+      }
+    };
+    addEventListener("keydown", d.key, true);
+  }
+  function wireDeskPlace(pane, it, hers, done) {
+    const chip = pane.querySelector("[data-lk-chip]"), back = pane.querySelector("[data-lk-back]"), q = pane.querySelector("#lkFind");
+    const take = (to) => {
+      lkPick = null;
+      if (deskTakeNew(it, hers, to)) done();
+    };
+    if (back) back.onclick = () => {
+      deskGiveNew(it, hers);
+      done();
+    };
+    if (!chip) return;
+    const pick = () => {
+      if (!lkPick || lkPick.id !== it.id) lkPick = { id: it.id, q: "", at: 0 };
+      done("#lkFind");
+    };
+    chip.onclick = () => {
+      if (lkDragged) {
+        lkDragged = false;
+        return;
+      }
+      pick();
+    };
+    chip.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " " && e.key !== "ArrowDown") return;
+      e.preventDefault();
+      e.stopPropagation();
+      pick();
+    });
+    chip.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || e.pointerType === "touch") return;
+      lkDragged = false;
+      lkDrag = { x: e.clientX, y: e.clientY, moved: false, over: null };
+      try {
+        chip.setPointerCapture(e.pointerId);
+      } catch (_) {
+      }
+    });
+    chip.addEventListener("pointermove", (e) => {
+      const d = lkDrag;
+      if (!d) return;
+      if (!d.moved) {
+        if (Math.abs(e.clientX - d.x) + Math.abs(e.clientY - d.y) < 6) return;
+        d.moved = true;
+        lkDragStart(d, hers, it);
+      }
+      d.ghost.style.transform = "translate(" + Math.round(e.clientX + 10) + "px," + Math.round(e.clientY - 14) + "px)";
+      const o = lkTargetAt(e.clientX, e.clientY);
+      if ((o && o.el) !== (d.over && d.over.el)) {
+        if (d.over) d.over.el.classList.remove("lk-over");
+        if (o) o.el.classList.add("lk-over");
+      }
+      d.over = o;
+    });
+    const up = (e) => {
+      const d = lkDragEnd();
+      if (!d || !d.moved) {
+        if (lkDragged) setTimeout(() => {
+          lkDragged = false;
+        }, 0);
+        return;
+      }
+      lkDragged = true;
+      setTimeout(() => {
+        lkDragged = false;
+      }, 0);
+      if (e && e.type === "pointerup" && d.over) take(d.over.to);
+    };
+    ["pointerup", "pointercancel", "lostpointercapture"].forEach((k) => chip.addEventListener(k, up));
+    if (!q) return;
+    q.addEventListener("input", () => {
+      lkPick.q = q.value;
+      lkPick.at = 0;
+      done("#lkFind");
+    });
+    q.addEventListener("keydown", (e) => {
+      const opts = lkOptions(hers, it, lkPick.q);
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (opts.length) {
+          lkPick.at = (lkPick.at + (e.key === "ArrowDown" ? 1 : opts.length - 1)) % opts.length;
+          done("#lkFind");
+        }
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        const o = opts[lkPick.at];
+        if (o) take(o.add ? null : o.to);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        lkPick = null;
+        done("[data-lk-chip]");
+      }
+    });
+    pane.querySelectorAll("[data-lk-to]").forEach((o) => {
+      o.addEventListener("pointerdown", (e) => e.preventDefault());
+      o.onclick = () => {
+        const to = o.getAttribute("data-lk-to");
+        take(to ? to : null);
+      };
+    });
+  }
   function openDeskLook(f, base, name, work, back) {
     return deskSides(f, base).then((s) => {
       if (!s) {
@@ -25486,6 +25812,7 @@ What you type stays in this browser only.`;
         return false;
       }
       const who = deskName(f);
+      lkPick = null;
       openEditionPanel({
         c: s.hers,
         held: s.team,
@@ -25506,7 +25833,9 @@ What you type stays in this browser only.`;
           take: inUse ? t("Take this text").split("{DESK}").join(who) : "",
           taken: (it) => deskTaken(it, s.hers),
           toggle: (it) => deskToggle(it, s.hers),
-          sub: (it) => it.kind === "changed" && inUse && deskTaken(it, s.hers) ? t("Now in your edits") : it.own ? t("you have your own version") : ""
+          place: inUse ? (it) => deskPlaceHtml(it, s.hers) : null,
+          wirePlace: inUse ? (pane, it, done) => wireDeskPlace(pane, it, s.hers, done) : null,
+          sub: (it) => it.kind === "changed" && inUse && deskTaken(it, s.hers) ? t("Now in your edits") : it.kind === "new" && inUse ? deskNewSub(it, s.hers) : it.own ? t("you have your own version") : ""
         }
       });
       return true;
@@ -27584,7 +27913,7 @@ What you type stays in this browser only.`;
     const id = entrySel.id;
     withAgentName(ps[vi], () => {
       copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length), cardCommits(m));
-      bumpUseCount(id, l);
+      bumpUseCount(id, l, vi);
       eCopyFeedback(id, vi);
     }, document.querySelector("#list .txt.sel"));
     return true;
@@ -27600,7 +27929,7 @@ What you type stays in this browser only.`;
     const k = Math.max(0, Math.min(ps.length - 1, vi | 0));
     withAgentName(ps[k], () => {
       copy(fill(ps[k], m, 0, l), copiedToastMsg(m, l, k, ps.length), cardCommits(m));
-      bumpUseCount(m.id, l);
+      bumpUseCount(m.id, l, k);
       eNoteRecent(m.id, k);
     }, anchor);
     return true;
@@ -27803,7 +28132,8 @@ What you type stays in this browser only.`;
   // src/modules/lanes.js
   var lanes_exports = {};
   __export(lanes_exports, {
-    SENT_SHOWN: () => SENT_SHOWN,
+    TRAIL_SHOWN: () => TRAIL_SHOWN,
+    laneSince: () => laneSince,
     lanesKey: () => lanesKey,
     lanesKeyFree: () => lanesKeyFree,
     lanesOpen: () => lanesOpen,
@@ -27920,7 +28250,7 @@ What you type stays in this browser only.`;
     const now = tabPathNow(), path = now.path, from = path.length ? path[path.length - 1] : null;
     const live = new Map((cards || []).filter((m) => m && m.id).map((m) => [String(m.id), m]));
     const rows = from == null ? [] : dockList(from, live, statsLearntAfter(pack, from), new Set(path), dockUsed());
-    return { tab: now.tab, from, rows, live, path };
+    return { tab: now.tab, from, rows, live, path, log: now.log || [], name: now.name || "" };
   }
   function syncNextDock(arrived) {
     const fab = dockFab();
@@ -28059,7 +28389,7 @@ What you type stays in this browser only.`;
   function wireNextDock() {
     const fab = dockFab();
     if (!fab) return;
-    watchTabPath(() => syncNextDock(true));
+    watchTabPath((step) => syncNextDock(step !== false));
     setTabBeads(tabBeadsOf);
     fab.addEventListener("pointerenter", () => {
       clearTimeout(dockLeaveT);
@@ -28100,13 +28430,15 @@ What you type stays in this browser only.`;
   }
 
   // src/modules/lanes.js
-  var SENT_SHOWN = 6;
+  var TRAIL_SHOWN = 6;
   var LN_DOT = " " + String.fromCharCode(183) + " ";
   var lanesOn = false;
   var laneFresh = false;
   var laneMark = -1;
   var laneKey = "";
   var laneRO = null;
+  var LANE_TICK_MS = 2e4;
+  var laneTick = 0;
   var laneRows = [];
   var laneFrom = null;
   var laneFind = false;
@@ -28152,26 +28484,54 @@ What you type stays in this browser only.`;
       laneRows = [];
       laneFrom = null;
     }
+    clearInterval(laneTick);
+    laneTick = 0;
+    if (want) laneTick = setInterval(() => {
+      const s = lanesEl() && lanesEl().querySelector(".ln-since");
+      if (s) s.textContent = laneSince(laneState().log);
+    }, LANE_TICK_MS);
+    if (laneTick && laneTick.unref) laneTick.unref();
     syncNextDock();
   }
   function laneState() {
     const now = dockNow(), live = now.live, path = now.path.map(String);
     const nowCard = now.from != null ? live.get(String(now.from)) || null : null;
-    const prior = path.slice(0, -1).filter((id) => live.has(id));
-    const sent = prior.slice(-SENT_SHOWN);
+    const log = now.log.length && String(now.log[now.log.length - 1].id) === String(now.from) ? now.log : path.map((id) => ({ id }));
+    const sent = log.slice(0, -1).filter((e) => live.has(String(e.id))), last = log.length ? log[log.length - 1] : null;
     const fold = nowCard ? nextFoldState(nowCard, baseCard(nowCard.id), pack.overrides && pack.overrides[nowCard.id], live) : null;
     const rows = (fold ? fold.rows.map((e) => ({ id: e.to, learnt: false, n: 0 })) : []).concat(now.rows.filter((r) => r.learnt || r.used));
     const after = rows.map((r) => dockList(r.id, live, statsLearntAfter(pack, r.id), new Set(path.concat(r.id))));
     const key = [
       now.tab,
-      path.join(","),
+      now.name,
+      log.map((e) => e.id + "@" + (e.at || "") + (e.l || "") + (e.b | 0)).join(","),
       rows.map((r) => r.id + (r.learnt ? "~" : r.used ? "+" : "")).join(","),
       fold && fold.own ? "own" : "",
       after.map((a) => a.map((x) => x.id).join("+")).join("/"),
       lang,
       uiLang()
     ].join("|");
-    return { now, live, nowCard, sent, older: prior.length > sent.length, rows, fold, after, key };
+    return { now, live, nowCard, log, last, sent, rows, fold, after, key };
+  }
+  var laneClock = (ms) => {
+    const d = new Date(ms);
+    return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  };
+  function laneSince(log, now) {
+    const n = (log || []).length;
+    if (!n || !log.every((e) => Number.isFinite(e.at))) return "";
+    const last = log[n - 1].at, min = Math.floor(Math.max(0, (now || Date.now()) - last) / 6e4);
+    const ago = min < 1 ? t("just now") : min < 60 ? t("{N} min ago").replace("{N}", String(min)) : t("at {TIME}").replace("{TIME}", laneClock(last));
+    return n === 1 ? t("One reply, {AGO}").replace("{AGO}", ago) : t("{N} replies since {TIME}, the last {AGO}").replace("{N}", String(n)).replace("{TIME}", laneClock(log[0].at)).replace("{AGO}", ago);
+  }
+  function laneWhen(e) {
+    const w = [Number.isFinite(e && e.at) ? laneClock(e.at) : "", e && e.l ? String(e.l).toUpperCase() : ""].filter(Boolean).join(LN_DOT);
+    return w ? '<span class="ln-when">' + esc(w) + "</span>" : "";
+  }
+  function laneSentHtml(st, e, i) {
+    const m = st.live.get(String(e.id)), l = e.l && parts(m, e.l).length ? e.l : cardLang(m), ps = parts(m, l);
+    const words = String(ps.length ? fill(ps[Math.min(ps.length - 1, e.b | 0)], m, 0, l) || "" : "").replace(/\s+/g, " ").trim();
+    return '<div class="ln-sent" style="grid-row:' + (i + 2) + '"><div class="ln-sent-h">' + (Number.isFinite(e.at) ? '<span class="ln-at">' + esc(laneClock(e.at)) + "</span>" : "") + laneTitleHtml(m) + (e.l ? '<span class="ln-lang">' + esc(String(e.l).toUpperCase()) + "</span>" : "") + "</div>" + (words ? '<div class="ln-first"><span class="ln-clamp2">' + esc(words) + "</span></div>" : "") + "</div>";
   }
   function laneTitleHtml(m) {
     return catIconSvg(m.c, "cat-ic") + '<span class="ctitle">' + esc(cardTitle(m)) + "</span>" + (cardCommits(m) ? stampHtml("cstamp") : "");
@@ -28200,18 +28560,18 @@ What you type stays in this browser only.`;
   }
   function lanesHtml(st) {
     const back = String(t("{KEY} back to the cards")).split("{KEY}");
-    const head = '<div class="ln-head"><span class="ln-title">' + esc(t("This conversation")) + '</span><span class="tab-beads" aria-hidden="true">' + tabBeadsHtml(pathBeads(st.now.path)) + '</span><span class="ln-hint">' + esc(back[0] || "") + "<kbd>" + esc(formatActionChord("lanes")) + "</kbd>" + esc(back.slice(1).join("{KEY}")) + "</span></div>";
+    const since = laneSince(st.log);
+    const head = '<div class="ln-head">' + (st.now.name ? '<span class="ln-title" data-i18n-skip>' + esc(st.now.name) + "</span>" : '<span class="ln-title">' + esc(t("This conversation")) + "</span>") + (since ? '<span class="ln-since">' + esc(since) + "</span>" : "") + '<span class="tab-beads" aria-hidden="true">' + tabBeadsHtml(pathBeads(st.now.path)) + '</span><span class="ln-hint">' + esc(back[0] || "") + "<kbd>" + esc(formatActionChord("lanes")) + "</kbd>" + esc(back.slice(1).join("{KEY}")) + "</span></div>";
     const m = st.nowCard;
     if (!m) return head + '<p class="ln-empty">' + esc(t("Each reply you send appears here, with what can follow it.")) + "</p>";
     const k = st.sent.length, slot = catSlot(m.c), l = cardLang(m), blocks = parts(m, l).length;
     let blk = "";
     for (let i = 0; i < blocks; i++) blk += '<div class="txt ln-blk" role="button" data-b="' + i + '">' + esc(laneBody(m, i)) + "</div>";
     const rows = st.rows.map((r, i) => laneRowHtml(st, r, i)).join("");
-    const trail = k ? '<div class="ln-trail" role="list" aria-label="' + esc(t("Sent")) + '">' + st.sent.map((id, i) => '<span class="ln-crumb' + (i === 0 && st.older ? " ln-older" : "") + '" role="listitem">' + laneTitleHtml(st.live.get(id)) + "</span>").join("") + "</div>" : "";
-    return head + trail + '<div class="ln-cols" style="grid-template-rows:auto repeat(' + k + ',auto) auto 1fr"><div class="ln-h ln-h1">' + esc(t("Sent")) + '</div><div class="ln-h ln-h2">' + esc(t("Now")) + '</div><div class="ln-h ln-h3">' + esc(t("Next")) + "</div>" + st.sent.map((id, i) => {
-      const s = st.live.get(id);
-      return '<div class="ln-sent' + (i === 0 && st.older ? " ln-older" : "") + '" style="grid-row:' + (i + 2) + '">' + laneTitleHtml(s) + "</div>";
-    }).join("") + '<div class="card ln-now"' + (slot >= 0 ? ' data-ec="' + slot + '"' : "") + ' style="grid-row:' + (k + 2) + '"><div class="chead">' + laneTitleHtml(m) + "</div>" + blk + '</div><div class="ln-next" style="grid-row:2 / span ' + (k + 2) + '">' + rows + laneEditHtml(st) + '</div><svg class="ln-wires" aria-hidden="true"></svg></div>';
+    const crumbs = st.sent.slice(-TRAIL_SHOWN), older = st.sent.length > crumbs.length;
+    const trail = k ? '<div class="ln-trail" role="list" aria-label="' + esc(t("Sent")) + '">' + crumbs.map((e, i) => '<span class="ln-crumb' + (i === 0 && older ? " ln-older" : "") + '" role="listitem">' + laneTitleHtml(st.live.get(String(e.id))) + "</span>").join("") + "</div>" : "";
+    const nextAt = Math.max(2, k);
+    return head + trail + '<div class="ln-cols" style="grid-template-rows:auto repeat(' + k + ',auto) auto 1fr"><div class="ln-h ln-h1">' + esc(t("Sent")) + '</div><div class="ln-h ln-h2">' + esc(t("Now")) + '</div><div class="ln-h ln-h3">' + esc(t("Next")) + "</div>" + st.sent.map((e, i) => laneSentHtml(st, e, i)).join("") + '<div class="card ln-now"' + (slot >= 0 ? ' data-ec="' + slot + '"' : "") + ' style="grid-row:' + (k + 2) + '"><div class="chead">' + laneTitleHtml(m) + laneWhen(st.last) + "</div>" + blk + '</div><div class="ln-next" style="grid-row:' + nextAt + " / span " + (k + 4 - nextAt) + '">' + rows + laneEditHtml(st) + '</div><svg class="ln-wires" aria-hidden="true"></svg></div>';
   }
   function drawWires() {
     const el = lanesEl(), cols = el && el.querySelector(".ln-cols"), svg = cols && cols.querySelector(".ln-wires");
@@ -28221,7 +28581,10 @@ What you type stays in this browser only.`;
     if (!now || !nh) return;
     const n = at(now.getBoundingClientRect()), h = at(nh.getBoundingClientRect()), hy = (h.t + h.b) / 2;
     let d = "", dots = "";
-    const sent = [...cols.querySelectorAll(".ln-sent")].filter((e) => e.getClientRects().length).map((e) => at(e.getBoundingClientRect()));
+    const sent = [...cols.querySelectorAll(".ln-sent")].filter((e) => e.getClientRects().length).map((e) => {
+      const r = at(e.getBoundingClientRect()), h2 = at((e.firstElementChild || e).getBoundingClientRect());
+      return { l: r.l, t: h2.t, b: h2.b };
+    });
     if (sent.length) {
       const x = sent[0].l + 4, y0 = (sent[0].t + sent[0].b) / 2;
       d += '<path class="ln-w" d="M' + x + " " + y0 + "V" + hy + "H" + (h.l - 10) + '"/>';
@@ -28318,6 +28681,7 @@ What you type stays in this browser only.`;
     laneKey = st.key;
     laneRows = st.rows;
     laneFrom = st.nowCard ? String(st.nowCard.id) : null;
+    const opening = laneFresh;
     el.innerHTML = '<div class="ln-wrap' + (laneFresh ? " ln-open" : "") + (arrived === true && !was ? " ln-step" : "") + '">' + lanesHtml(st) + "</div>";
     laneFresh = false;
     el.hidden = false;
@@ -28328,6 +28692,11 @@ What you type stays in this browser only.`;
     if (arrived === true && st.nowCard) {
       const say = () => sayLive(laneStepWords(st.rows.length));
       if (!was || !walkTo(el, was, say)) say();
+    }
+    const nowEl = (opening || arrived === true) && el.querySelector(".ln-now");
+    if (nowEl && nowEl.scrollIntoView) try {
+      nowEl.scrollIntoView({ block: "nearest" });
+    } catch (_) {
     }
     if (laneFind) drawLaneHits();
     const f = laneFocus;
@@ -29442,7 +29811,7 @@ What you type stays in this browser only.`;
     if (wantsAgentName(ps[vi])) return { ask: { id: String(m.id), vi } };
     let text = null;
     withAgentName(ps[vi], () => {
-      bumpUseCount(m.id, l);
+      bumpUseCount(m.id, l, vi);
       eNoteRecent(m.id, vi);
       noteCopy();
       text = fill(ps[vi], m, 0, l);
@@ -29457,7 +29826,7 @@ What you type stays in this browser only.`;
     if (vi < 0 || vi >= ps.length) return null;
     withAgentName(ps[vi], () => {
       copy(fill(ps[vi], m, 0, l), copiedToastMsg(m, l, vi, ps.length), cardCommits(m));
-      bumpUseCount(m.id, l);
+      bumpUseCount(m.id, l, vi);
       eNoteRecent(m.id, vi);
     }, null);
     return { asked: true };

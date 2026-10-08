@@ -99,7 +99,7 @@ function pickCopy(id,vi){
   if(wantsAgentName(ps[vi])) return {ask:{id:String(m.id), vi:vi}};
   let text=null;
   withAgentName(ps[vi],()=>{
-    bumpUseCount(m.id,l);
+    bumpUseCount(m.id,l,vi);
     eNoteRecent(m.id,vi);
     noteCopy();
     text=fill(ps[vi],m,0,l);
@@ -115,7 +115,7 @@ function pickAsk(id,vi){
   if(vi<0 || vi>=ps.length) return null;
   withAgentName(ps[vi],()=>{
     copy(fill(ps[vi],m,0,l), copiedToastMsg(m,l,vi,ps.length), cardCommits(m));
-    bumpUseCount(m.id,l);
+    bumpUseCount(m.id,l,vi);
     eNoteRecent(m.id,vi);
   },null);
   return {asked:true};
