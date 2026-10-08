@@ -59,7 +59,13 @@ function tabPathStep(id, how){
   const path=Array.isArray(tb.path) ? tb.path : [], prev=path.length ? path[path.length-1] : null;
   const log=Array.isArray(tb.log) ? tb.log : [], e={id:at, at:Date.now(), l:String(how&&how.l||""), b:Math.max(0,(how&&how.b)|0)};
   tb.log=(prev===at && log.length && log[log.length-1].id===at ? log.slice(0,-1) : log).concat(e).slice(-TAB_LOG_MAX);
-  if(prev===at) return null;
+  if(prev===at){
+    // The same step copied again moved its entry: kept and drawn as a step is, and told as no step.
+    clearTimeout(tabSaveTimer);
+    tabSaveTimer=setTimeout(saveTabSession, 250);
+    if(tabPathWatch) tabPathWatch(false);
+    return null;
+  }
   tb.path=path.concat(at).slice(-TAB_PATH_MAX);
   clearTimeout(tabSaveTimer);
   tabSaveTimer=setTimeout(saveTabSession, 250);
@@ -67,7 +73,7 @@ function tabPathStep(id, how){
   return prev;
 }
 /* One listener, the dock: told when the tab in front takes a step, which is what a new batch of next
-   replies is. A switch of tab is a render, never a step. */
+   replies is, and told false when it copies its last step again. A switch of tab is a render, never a step. */
 let tabPathWatch=null;
 function watchTabPath(fn){ tabPathWatch=fn||null; }
 /* THE PATH'S BEADS are drawn here and decided by the action button (next-dock.js), which knows what a chain is:

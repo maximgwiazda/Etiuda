@@ -14,7 +14,7 @@ import { CATS, catalogLangs } from "./content-model.js";
 import { v2CatKey } from "./catalog-v2.js";
 import { catIconSvg } from "./cat-identity.js";
 import { BASE_M } from "./pack.js";
-import { catOrder, setCatOrder } from "./app-state.js";
+import { catOrder, setCatOrder, cats, setCats } from "./app-state.js";
 import { lySet } from "./storage.js";
 import { uid } from "./ids.js";
 import { esc } from "./esc.js";
@@ -154,9 +154,11 @@ function deskGiveNew(it,hers){
   pack.custom=(pack.custom||[]).filter(m=>!(m && m.id===h.own));
   const k=h.cat;
   if(lookCats.has(k) && !pack.custom.some(m=>m && m.c===k) && !BASE_M.some(m=>m.c===k) && pack.customCats[k]!=null){
-    ["customCats","catLabels","catLabelsPl","catIcons","catColors"].forEach(f=>{ if(pack[f]) delete pack[f][k]; });
+    // What removeCategory clears (cat-set.js), without its toast and Undo.
+    ["customCats","catLabels","catLabelsPl","catRoles","catIcons","catColors"].forEach(f=>{ if(pack[f]) delete pack[f][k]; });
     lookCats.delete(k);
     setCatOrder(catOrder.filter(x=>x!==k));
+    if(cats.indexOf(k)>-1) setCats(cats.filter(x=>x!==k));
     lySet("CatOrder",JSON.stringify(catOrder));
   }
   savePack();
@@ -230,8 +232,8 @@ function lkDragStart(d,hers,it){
   const slot=document.getElementById("pillsSlot"), r=pills ? pills.getBoundingClientRect() : null;
   const full=slot ? parseFloat(getComputedStyle(slot).getPropertyValue("--pills-full")) : NaN;
   if(r) d.hint.style.top=Math.round(r.top+Math.max(r.height, full||0)+22)+"px";
-  // Escape while dragging puts the card down where it was, and leaves the panel open.
-  d.key=e=>{ if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); lkDragEnd(); } };
+  // Escape while dragging puts the card down where it was, and leaves the panel open; the release that follows is no press.
+  d.key=e=>{ if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); lkDragEnd(); lkDragged=true; } };
   addEventListener("keydown", d.key, true);
 }
 function wireDeskPlace(pane,it,hers,done){
@@ -264,7 +266,7 @@ function wireDeskPlace(pane,it,hers,done){
   });
   const up=e=>{
     const d=lkDragEnd();
-    if(!d || !d.moved) return;
+    if(!d || !d.moved){ if(lkDragged) setTimeout(()=>{ lkDragged=false; },0); return; }
     // The click this gesture ends with is not a press of the chip; it lands before a timer can run.
     lkDragged=true; setTimeout(()=>{ lkDragged=false; },0);
     if(e && e.type==="pointerup" && d.over) take(d.over.to);

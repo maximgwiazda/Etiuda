@@ -828,7 +828,7 @@ function openManage(){
   });
   /* One deletion path for categories everywhere: removeCategory() owns the empty-only rule,
      the built-in / custom split, so the pill and this button cannot
-     disagree about what is deletable. */
+     disagree about what is deletable. Look's Give it back removes only a category Look added (desk-look.js). */
   modalCard.querySelectorAll("[data-delcat]").forEach(btn=>{
     btn.onclick=e=>{
       e.preventDefault(); e.stopPropagation();

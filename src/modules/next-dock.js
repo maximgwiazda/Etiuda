@@ -246,7 +246,7 @@ function onDockKey(e){
 function wireNextDock(){
   const fab=dockFab();
   if(!fab) return;
-  watchTabPath(()=>syncNextDock(true));
+  watchTabPath(step=>syncNextDock(step!==false));
   setTabBeads(tabBeadsOf);
   fab.addEventListener("pointerenter", ()=>{
     clearTimeout(dockLeaveT); dockLeaveT=0;

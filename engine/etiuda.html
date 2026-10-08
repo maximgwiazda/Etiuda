@@ -11073,7 +11073,12 @@ What you type stays in this browser only.`;
     const path = Array.isArray(tb.path) ? tb.path : [], prev = path.length ? path[path.length - 1] : null;
     const log = Array.isArray(tb.log) ? tb.log : [], e = { id: at, at: Date.now(), l: String(how && how.l || ""), b: Math.max(0, (how && how.b) | 0) };
     tb.log = (prev === at && log.length && log[log.length - 1].id === at ? log.slice(0, -1) : log).concat(e).slice(-TAB_LOG_MAX);
-    if (prev === at) return null;
+    if (prev === at) {
+      clearTimeout(tabSaveTimer);
+      tabSaveTimer = setTimeout(saveTabSession, 250);
+      if (tabPathWatch) tabPathWatch(false);
+      return null;
+    }
     tb.path = path.concat(at).slice(-TAB_PATH_MAX);
     clearTimeout(tabSaveTimer);
     tabSaveTimer = setTimeout(saveTabSession, 250);
@@ -25339,11 +25344,12 @@ What you type stays in this browser only.`;
     pack.custom = (pack.custom || []).filter((m) => !(m && m.id === h.own));
     const k = h.cat;
     if (lookCats.has(k) && !pack.custom.some((m) => m && m.c === k) && !BASE_M.some((m) => m.c === k) && pack.customCats[k] != null) {
-      ["customCats", "catLabels", "catLabelsPl", "catIcons", "catColors"].forEach((f) => {
+      ["customCats", "catLabels", "catLabelsPl", "catRoles", "catIcons", "catColors"].forEach((f) => {
         if (pack[f]) delete pack[f][k];
       });
       lookCats.delete(k);
       setCatOrder(catOrder.filter((x) => x !== k));
+      if (cats.indexOf(k) > -1) setCats(cats.filter((x) => x !== k));
       lySet("CatOrder", JSON.stringify(catOrder));
     }
     savePack();
@@ -25412,6 +25418,7 @@ What you type stays in this browser only.`;
         e.preventDefault();
         e.stopPropagation();
         lkDragEnd();
+        lkDragged = true;
       }
     };
     addEventListener("keydown", d.key, true);
@@ -25471,7 +25478,12 @@ What you type stays in this browser only.`;
     });
     const up = (e) => {
       const d = lkDragEnd();
-      if (!d || !d.moved) return;
+      if (!d || !d.moved) {
+        if (lkDragged) setTimeout(() => {
+          lkDragged = false;
+        }, 0);
+        return;
+      }
       lkDragged = true;
       setTimeout(() => {
         lkDragged = false;
@@ -28103,7 +28115,7 @@ What you type stays in this browser only.`;
   function wireNextDock() {
     const fab = dockFab();
     if (!fab) return;
-    watchTabPath(() => syncNextDock(true));
+    watchTabPath((step) => syncNextDock(step !== false));
     setTabBeads(tabBeadsOf);
     fab.addEventListener("pointerenter", () => {
       clearTimeout(dockLeaveT);
