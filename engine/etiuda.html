@@ -19745,6 +19745,7 @@ What you type stays in this browser only.`;
     clearTimeout(pills._eWT);
     pills._eWT = 0;
     const clearScale = (el) => {
+      el.style.removeProperty("translate");
       el.style.removeProperty("scale");
       el.style.removeProperty("--pill-sx");
       el.querySelectorAll(":scope > *").forEach((ch) => {
@@ -19812,9 +19813,7 @@ What you type stays in this browser only.`;
       m.el.style.transition = "none";
       m.el.style.willChange = "transform";
       m.el.style.transformOrigin = "left center";
-      const part = [];
-      if (m.dx) part.push("translateX(" + m.dx + "px)");
-      m.el.style.transform = part.join(" ");
+      if (m.dx) m.el.style.translate = m.dx + "px 0";
       if (Math.abs(m.sx - 1) > 1e-3) {
         m.el.style.setProperty("--pill-sx", String(m.sx));
         m.el.style.setProperty("scale", "var(--pill-sx) 1");
@@ -19826,8 +19825,8 @@ What you type stays in this browser only.`;
     });
     void pills.offsetHeight;
     moves.forEach((m) => {
-      m.el.style.transition = Math.abs(m.sx - 1) > 1e-3 ? "transform " + ease + ", --pill-sx " + ease : "transform " + ease;
-      m.el.style.transform = "";
+      m.el.style.transition = Math.abs(m.sx - 1) > 1e-3 ? "translate " + ease + ", --pill-sx " + ease : "translate " + ease;
+      if (m.dx) m.el.style.translate = "0px 0";
       if (Math.abs(m.sx - 1) > 1e-3) m.el.style.setProperty("--pill-sx", "1");
     });
     pills._eWN = moves.map((m) => m.el);

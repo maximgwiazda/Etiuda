@@ -67,6 +67,7 @@ function tweenPillWidths(els, w0, before){
   const drop=pills._eWN||[];
   clearTimeout(pills._eWT); pills._eWT=0;
   const clearScale=el=>{
+    el.style.removeProperty("translate");
     el.style.removeProperty("scale");
     el.style.removeProperty("--pill-sx");
     el.querySelectorAll(":scope > *").forEach(ch=>{
@@ -125,9 +126,8 @@ function tweenPillWidths(els, w0, before){
     m.el.style.transition="none";
     m.el.style.willChange="transform";
     m.el.style.transformOrigin="left center";
-    const part=[];
-    if(m.dx) part.push("translateX("+m.dx+"px)");
-    m.el.style.transform=part.join(" ");
+    // The shift is the translate property, applied outside scale: in transform, scale would shrink it.
+    if(m.dx) m.el.style.translate=m.dx+"px 0";
     if(Math.abs(m.sx-1)>0.001){
       m.el.style.setProperty("--pill-sx", String(m.sx));
       m.el.style.setProperty("scale", "var(--pill-sx) 1");
@@ -141,9 +141,9 @@ function tweenPillWidths(els, w0, before){
   void pills.offsetHeight;
   moves.forEach(m=>{
     m.el.style.transition=Math.abs(m.sx-1)>0.001
-      ? "transform "+ease+", --pill-sx "+ease
-      : "transform "+ease;
-    m.el.style.transform="";
+      ? "translate "+ease+", --pill-sx "+ease
+      : "translate "+ease;
+    if(m.dx) m.el.style.translate="0px 0";
     if(Math.abs(m.sx-1)>0.001) m.el.style.setProperty("--pill-sx", "1");
   });
   pills._eWN=moves.map(m=>m.el);

@@ -4065,7 +4065,7 @@ function pillScaleTests() {
   } catch (e) { got = "tweenPillWidths threw: " + e.message; }
   eq("1009eb a wider count keeps the letters their size while the pill's width glides", got, {
     sx: ["0.8", "1"], scale: ["var(--pill-sx) 1"], child: ["calc(1 / var(--pill-sx)) 1"],
-    origin: "left center", transition: "transform var(--m-move) ease, --pill-sx var(--m-move) ease", transform: ""
+    origin: "left center", transition: "translate var(--m-move) ease, --pill-sx var(--m-move) ease", transform: ""
   });
 }
 /* THE CLIP FOLLOWS A NEW WIDTH IN THE FRAME THAT PAINTS IT (797 F4), AND MOVES NOTHING ABOVE THE BAR.
