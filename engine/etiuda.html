@@ -1456,6 +1456,9 @@ body.e-take-drag .pills-slot.pills-overflow .pills,
    rests on the pill keeping its height. Flex centres the dot; its symmetric negative
    margins keep the text as the height-giver. Flex-item whitespace does not render - the
    count's space lives in its own margin-left. */
+/* Registered so the width glide can interpolate it, and so a pill's children
+   counter-scale by the same value the pill scales by. */
+@property --pill-sx{syntax:"<number>";inherits:true;initial-value:1}
 .pill{display:inline-flex;align-items:center;
   padding:5px 11px;border:1px solid transparent;border-radius:999px;
   background:color-mix(in srgb,var(--ink) 5%,transparent);
@@ -19741,11 +19744,20 @@ What you type stays in this browser only.`;
     const drop = pills._eWN || [];
     clearTimeout(pills._eWT);
     pills._eWT = 0;
+    const clearScale = (el) => {
+      el.style.removeProperty("scale");
+      el.style.removeProperty("--pill-sx");
+      el.querySelectorAll(":scope > *").forEach((ch) => {
+        ch.style.removeProperty("scale");
+        ch.style.removeProperty("transform-origin");
+      });
+    };
     drop.forEach((el) => {
       el.style.transition = "none";
       el.style.transform = "";
       el.style.willChange = "";
       el.style.transformOrigin = "";
+      clearScale(el);
       if (el.style.width) el.style.width = "";
       el.style.transition = "";
     });
@@ -19802,13 +19814,21 @@ What you type stays in this browser only.`;
       m.el.style.transformOrigin = "left center";
       const part = [];
       if (m.dx) part.push("translateX(" + m.dx + "px)");
-      if (Math.abs(m.sx - 1) > 1e-3) part.push("scaleX(" + m.sx + ")");
       m.el.style.transform = part.join(" ");
+      if (Math.abs(m.sx - 1) > 1e-3) {
+        m.el.style.setProperty("--pill-sx", String(m.sx));
+        m.el.style.setProperty("scale", "var(--pill-sx) 1");
+        m.el.querySelectorAll(":scope > *").forEach((ch) => {
+          ch.style.transformOrigin = "left center";
+          ch.style.setProperty("scale", "calc(1 / var(--pill-sx)) 1");
+        });
+      }
     });
     void pills.offsetHeight;
     moves.forEach((m) => {
-      m.el.style.transition = "transform " + ease;
+      m.el.style.transition = Math.abs(m.sx - 1) > 1e-3 ? "transform " + ease + ", --pill-sx " + ease : "transform " + ease;
       m.el.style.transform = "";
+      if (Math.abs(m.sx - 1) > 1e-3) m.el.style.setProperty("--pill-sx", "1");
     });
     pills._eWN = moves.map((m) => m.el);
     const timer = setTimeout(() => {
@@ -19819,6 +19839,7 @@ What you type stays in this browser only.`;
         el.style.transform = "";
         el.style.willChange = "";
         el.style.transformOrigin = "";
+        clearScale(el);
         el.style.width = "";
       });
     }, 220);

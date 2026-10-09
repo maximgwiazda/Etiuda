@@ -553,6 +553,7 @@ function runUnitTests() {
   activeStateTests();
   highContrastStateTests();
   pillWrapTests();
+  pillScaleTests();
   pillsWidthWatchTests();
   pillsResizeCostTests();
   pillsFollowTests();
@@ -3808,6 +3809,12 @@ function pillRow(W, spec) {
       set: v => { if (/margin-left/.test(tr) && v !== ml) p.anim.ml = [px(ml) || 0, px(v) || 0]; ml = v; } });
     Object.defineProperty(p.style, "marginRight", { get: () => mr,
       set: v => { if (/margin-right/.test(tr) && v !== mr) p.anim.mr = [px(mr) || 0, px(v) || 0]; mr = v; } });
+    const props = {};
+    p.props = props;
+    p.kids = [];
+    p.querySelectorAll = () => p.kids;
+    p.style.setProperty = (name, value) => { (props[name] = props[name] || []).push(String(value)); };
+    p.style.removeProperty = () => {};
     p.w = () => px(wd) || p.nat;
     p.m = () => [px(ml) || 0, px(mr) || 0];
     Object.defineProperty(p, "offsetTop", { get: () => lay().at.get(p).y });
@@ -4028,6 +4035,38 @@ function pillWrapTests() {
   try { flip(now, el => el === now ? Object.assign(now.style(el), { columnGap: "30px" }) : now.style(el))(before); got = pillGlideFaults(before, now); }
   catch (e) { got = "flipPills threw: " + e.message; }
   eq("where the pin cannot hold the row, the widths snap and no pill changes line mid-glide", got, ["All past 0 step 0 start 6"]);
+}
+/* THE PILL'S LETTERS KEEP THEIR SIZE WHILE ITS WIDTH GLIDES. The width is a scale on a
+   registered property, and each child counter-scales by the inverse, so the text is not
+   squashed for the glide. A neighbour's shift stays a transform. */
+function pillScaleTests() {
+  const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
+  eq("1009eb the pill's width scale is a registered number its children inherit",
+    /@property --pill-sx\{syntax:"<number>";inherits:true;initial-value:1\}/.test(tpl), true);
+  const paint = fs.readFileSync(path.join(E.ROOT, "src", "modules", "paint.js"), "utf8");
+  const state = fs.readFileSync(path.join(E.ROOT, "src", "modules", "pill-state.js"), "utf8");
+  const lines = extractDecl(paint, "function pillLines(");
+  const row = pillRow(1000, [["a", 100]]);
+  const pill = row.children[0];
+  const child = { style: { transformOrigin: "" } };
+  const cprops = {};
+  child.style.setProperty = (name, value) => { (cprops[name] = cprops[name] || []).push(String(value)); };
+  child.style.removeProperty = () => {};
+  pill.kids.push(child);
+  const tween = new Function("pills", "E_EASE", "mgReduceMotion", "requestAnimationFrame", "setTimeout", "clearTimeout", "getComputedStyle",
+    extractDecl(paint, "function pillKey(") + "\n" + lines + "\n" + extractDecl(paint, "function pinPillLines(") + "\n"
+    + extractDecl(paint, "function flipPills(") + "\n" + extractDecl(state, "function tweenPillWidths(") + "\nreturn tweenPillWidths;")(
+    row, "ease", () => false, f => f(), () => 0, () => {}, row.style);
+  let got;
+  try {
+    tween([pill], [80], new Map());
+    got = { sx: pill.props["--pill-sx"] || [], scale: pill.props.scale || [], child: cprops.scale || [],
+      origin: child.style.transformOrigin, transition: pill.style.transition, transform: pill.style.transform };
+  } catch (e) { got = "tweenPillWidths threw: " + e.message; }
+  eq("1009eb a wider count keeps the letters their size while the pill's width glides", got, {
+    sx: ["0.8", "1"], scale: ["var(--pill-sx) 1"], child: ["calc(1 / var(--pill-sx)) 1"],
+    origin: "left center", transition: "transform var(--m-move) ease, --pill-sx var(--m-move) ease", transform: ""
+  });
 }
 /* THE CLIP FOLLOWS A NEW WIDTH IN THE FRAME THAT PAINTS IT (797 F4), AND MOVES NOTHING ABOVE THE BAR.
    One frame is modelled from the real syncPillsCollapse and width watch and the sheet's own cap on the

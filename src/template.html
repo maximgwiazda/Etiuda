@@ -1456,6 +1456,9 @@ body.e-take-drag .pills-slot.pills-overflow .pills,
    rests on the pill keeping its height. Flex centres the dot; its symmetric negative
    margins keep the text as the height-giver. Flex-item whitespace does not render - the
    count's space lives in its own margin-left. */
+/* Registered so the width glide can interpolate it, and so a pill's children
+   counter-scale by the same value the pill scales by. */
+@property --pill-sx{syntax:"<number>";inherits:true;initial-value:1}
 .pill{display:inline-flex;align-items:center;
   padding:5px 11px;border:1px solid transparent;border-radius:999px;
   background:color-mix(in srgb,var(--ink) 5%,transparent);

@@ -56,20 +56,30 @@ function writePillCounts(){
   tweenPillWidths(els, w0, before);
 }
 /* Width is layout, so the glide is a scale from the left edge and a translate for whoever
-   that shifts. Reads land before the old widths go back. The 1.5px floor is fractional DPRs.
-   If those old widths move a line, flipPills holds the row. This function is sliced out and
-   replayed, and that replay records a width only while a transition names one: the name is
-   written and taken off before the reflow, and the frame that paints carries the transform. */
+   that shifts. The scale is a registered property and the children counter-scale by it,
+   so the letters keep their size. Reads land before the old widths go back. The 1.5px
+   floor is fractional DPRs. If those old widths move a line, flipPills holds the row.
+   The replay records a width only while a transition names one: the name is written and
+   taken off before the reflow, and the frame that paints carries the transform. */
 function tweenPillWidths(els, w0, before){
   if(mgReduceMotion()) return;
   // A second count must not read the scaled boxes of a glide still on the compositor.
   const drop=pills._eWN||[];
   clearTimeout(pills._eWT); pills._eWT=0;
+  const clearScale=el=>{
+    el.style.removeProperty("scale");
+    el.style.removeProperty("--pill-sx");
+    el.querySelectorAll(":scope > *").forEach(ch=>{
+      ch.style.removeProperty("scale");
+      ch.style.removeProperty("transform-origin");
+    });
+  };
   drop.forEach(el=>{
     el.style.transition="none";
     el.style.transform="";
     el.style.willChange="";
     el.style.transformOrigin="";
+    clearScale(el);
     if(el.style.width) el.style.width="";
     el.style.transition="";
   });
@@ -117,14 +127,24 @@ function tweenPillWidths(els, w0, before){
     m.el.style.transformOrigin="left center";
     const part=[];
     if(m.dx) part.push("translateX("+m.dx+"px)");
-    if(Math.abs(m.sx-1)>0.001) part.push("scaleX("+m.sx+")");
     m.el.style.transform=part.join(" ");
+    if(Math.abs(m.sx-1)>0.001){
+      m.el.style.setProperty("--pill-sx", String(m.sx));
+      m.el.style.setProperty("scale", "var(--pill-sx) 1");
+      m.el.querySelectorAll(":scope > *").forEach(ch=>{
+        ch.style.transformOrigin="left center";
+        ch.style.setProperty("scale", "calc(1 / var(--pill-sx)) 1");
+      });
+    }
   });
   // One reflow commits the inverted transform. A frame is not a commitment: see flipPills.
   void pills.offsetHeight;
   moves.forEach(m=>{
-    m.el.style.transition="transform "+ease;
+    m.el.style.transition=Math.abs(m.sx-1)>0.001
+      ? "transform "+ease+", --pill-sx "+ease
+      : "transform "+ease;
     m.el.style.transform="";
+    if(Math.abs(m.sx-1)>0.001) m.el.style.setProperty("--pill-sx", "1");
   });
   pills._eWN=moves.map(m=>m.el);
   const timer=setTimeout(()=>{
@@ -135,6 +155,7 @@ function tweenPillWidths(els, w0, before){
       el.style.transform="";
       el.style.willChange="";
       el.style.transformOrigin="";
+      clearScale(el);
       el.style.width="";
     });
   },220);
