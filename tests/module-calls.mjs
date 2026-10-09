@@ -2941,18 +2941,23 @@ const CARD_B = {
     } finally { AS.setCards(hadCards2); SC.loadShortcuts(); }
   }
   /* THE TWO BUBBLES IN ONE CORNER (ledger, the night of 4 October): the catalog's offer hangs from the name
-     at the top and its list scrolls, so it ends above the round buttons' row; the action button keeps the
-     corner, one step left of the clear door. Numbers read from the sheet and from bubble.js. */
-  check("catalog-offer.js", "814h a long catalog offer ends above the round buttons with the bubble's gap to spare, and the action button sits one step left of the clear door",
+     at the top and its list scrolls, so it ends above the round buttons' row. The buttons pack from the
+     right edge, and a hidden one takes no slot. Numbers read from the sheet and from bubble.js. */
+  check("catalog-offer.js", "814h a long catalog offer ends above the round buttons with the bubble's gap to spare, and the buttons pack from the right with a hidden one taking no slot",
     () => {
       const off = fs.readFileSync(join(MODDIR, "catalog-offer.js"), "utf8"), bub = fs.readFileSync(join(MODDIR, "bubble.js"), "utf8");
       const sheet = fs.readFileSync(join(MODDIR, "..", "template.html"), "utf8");
       const cap = +((/innerHeight-Math\.ceil\(r\.bottom\)-(\d+)\)/.exec(off) || [])[1]), gap = +((/gap:(\d+),/.exec(bub) || [])[1]);
-      const fabRule = /\.fab\{position:fixed;right:(\d+)px;bottom:(\d+)px;z-index:\d+;width:(\d+)px;height:(\d+)px/.exec(sheet) || [];
-      const right = sel => +((new RegExp("\\." + sel + "\\{right:(\\d+)px").exec(sheet) || [])[1]);
-      const row = +fabRule[2] + +fabRule[4], step = right("fab-clear") - +fabRule[1];
+      const stack = (/\.fab-stack\{([^}]+)\}/.exec(sheet) || [])[1] || "";
+      const fab = (/\.fab\{([^}]+)\}/.exec(sheet) || [])[1] || "";
+      const bottom = +((/bottom:(\d+)px/.exec(stack) || [])[1]), height = +((/height:(\d+)px/.exec(fab) || [])[1]);
+      const row = bottom + height;
+      const clearOff = (/\.fab-clear:not\(\.on\)\{([^}]+)\}/.exec(sheet) || [])[1] || "";
+      const next = (/\.fab-next\{([^}]+)\}/.exec(sheet) || [])[1] || "";
+      const packed = /position:fixed/.test(stack) && /flex-direction:row-reverse/.test(stack)
+        && /position:absolute/.test(clearOff) && !/right:\d+px/.test(next);
       // The bubble's foot is the name's foot, the gap, and the list at its cap: vh - (cap - gap) from the top.
-      return eq([cap - gap > row + gap, right("fab-next") - right("fab-clear") === step, step > +fabRule[3]].join(","), "true,true,true");
+      return eq([cap - gap > row + gap, packed].join(","), "true,true");
     });
   } finally {
     T.watchTabPath(null);
@@ -3697,6 +3702,22 @@ const CARD_B = {
           if (stillWas != null) UILANG_STORE.lsSet("eMotionOff", stillWas);
         }
         return eq(out.join(","), "rescan:true/true/copies,return:true/true/copies");
+      });
+    /* The tuck is painted, not played. A transition on the resting slab runs from the flat layout every time the
+       list is drawn again, which is the unfold-and-fold on a tab, an intent and a tour step. */
+    const fs = await import("node:fs");
+    check("deck.js", "1009dk1 a folded deck is tucked without a transition: the resting slab does not move, clip or dim itself, and only a return slides it back",
+      () => {
+        const sheet = fs.readFileSync(join(MODDIR, "..", "template.html"), "utf8");
+        const src = fs.readFileSync(join(MODDIR, "deck.js"), "utf8");
+        const body = sel => { const m = sheet.match(new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\{([^}]*)\\}")); return m ? m[1] : ""; };
+        const props = block => { const m = block.match(/transition:([^;}]+)/); return m ? m[1].split(",").map(p => p.trim().split(/\s+/)[0]) : []; };
+        const tuck = ["transform", "clip-path", "filter"];
+        const rest = props(body(".card.deck>.txt")), back = props(body(".card.deck.deck-return>.txt.deck-back"));
+        const open = props(body(".card.deck.deck-open>.txt.deck-back"));
+        return eq([tuck.every(p => !rest.includes(p)), tuck.every(p => back.includes(p)), open.includes("transform"),
+          /classList\.remove\([^)]*"deck-return"/.test(src), /classList\.add\("deck-return"\)/.test(src),
+          /classList\.remove\("deck-return"\)/.test(src)].join(","), "true,true,true,true,true,true");
       });
   } finally {
     if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
