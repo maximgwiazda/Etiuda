@@ -19637,12 +19637,12 @@ What you type stays in this browser only.`;
     });
     tweenPillWidths(els, w0, before);
   }
-  var pillWidthT = 0;
-  var pillWidthNodes = [];
-  function clearPillWidthMotion() {
-    clearTimeout(pillWidthT);
-    pillWidthT = 0;
-    pillWidthNodes.forEach((el) => {
+  function tweenPillWidths(els, w0, before) {
+    if (mgReduceMotion()) return;
+    const drop = pills._eWN || [];
+    clearTimeout(pills._eWT);
+    pills._eWT = 0;
+    drop.forEach((el) => {
       el.style.transition = "none";
       el.style.transform = "";
       el.style.willChange = "";
@@ -19650,16 +19650,7 @@ What you type stays in this browser only.`;
       if (el.style.width) el.style.width = "";
       el.style.transition = "";
     });
-    pillWidthNodes = [];
-  }
-  function armPillWidthMotion(nodes) {
-    pillWidthNodes = nodes.slice();
-    pillWidthT = setTimeout(clearPillWidthMotion, 220);
-    if (pillWidthT && pillWidthT.unref) pillWidthT.unref();
-  }
-  function tweenPillWidths(els, w0, before) {
-    if (mgReduceMotion()) return;
-    clearPillWidthMotion();
+    pills._eWN = [];
     const lines = pillLines();
     const kids = Array.prototype.slice.call(pills.children);
     const end = /* @__PURE__ */ new Map();
@@ -19686,7 +19677,14 @@ What you type stays in this browser only.`;
     }
     const startLeft = /* @__PURE__ */ new Map();
     kids.forEach((el) => startLeft.set(el, el.getBoundingClientRect().left));
+    const ease = "var(--m-move) " + E_EASE;
+    const named = ["width", ease].join(" ");
     grew.forEach((g, el) => {
+      el.style.transition = named;
+      el.style.width = g.w1 + "px";
+    });
+    grew.forEach((g, el) => {
+      el.style.transition = "none";
       el.style.width = "";
     });
     const moves = [];
@@ -19698,13 +19696,7 @@ What you type stays in this browser only.`;
       if (!dx && !g) return;
       moves.push({ el, dx, sx: g ? g.w0 / g.w1 : 1 });
     });
-    if (!moves.length) {
-      grew.forEach((g, el) => {
-        el.style.transition = "";
-        el.style.width = "";
-      });
-      return;
-    }
+    if (!moves.length) return;
     moves.forEach((m) => {
       m.el.style.transition = "none";
       m.el.style.willChange = "transform";
@@ -19715,12 +19707,24 @@ What you type stays in this browser only.`;
       m.el.style.transform = part.join(" ");
     });
     void pills.offsetHeight;
-    const ease = "var(--m-move) " + E_EASE;
     moves.forEach((m) => {
       m.el.style.transition = "transform " + ease;
       m.el.style.transform = "";
     });
-    armPillWidthMotion(moves.map((m) => m.el));
+    pills._eWN = moves.map((m) => m.el);
+    const timer = setTimeout(() => {
+      const nodes = pills._eWN || [];
+      pills._eWN = [];
+      nodes.forEach((el) => {
+        el.style.transition = "";
+        el.style.transform = "";
+        el.style.willChange = "";
+        el.style.transformOrigin = "";
+        el.style.width = "";
+      });
+    }, 220);
+    pills._eWT = timer;
+    if (timer && timer.unref) timer.unref();
   }
   var ePillOrderT = 0;
   function schedulePillOrder() {

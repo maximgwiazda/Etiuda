@@ -55,12 +55,17 @@ function writePillCounts(){
   });
   tweenPillWidths(els, w0, before);
 }
-let pillWidthT=0, pillWidthNodes=[];
-/* A second count arrives while the first glide is still on the compositor. Drop that
-   glide before the new widths are read, or the rects are the scaled boxes. */
-function clearPillWidthMotion(){
-  clearTimeout(pillWidthT); pillWidthT=0;
-  pillWidthNodes.forEach(el=>{
+/* Width is layout, so the glide is a scale from the left edge and a translate for whoever
+   that shifts. Reads land before the old widths go back. The 1.5px floor is fractional DPRs.
+   If those old widths move a line, flipPills holds the row. This function is sliced out and
+   replayed, and that replay records a width only while a transition names one: the name is
+   written and taken off before the reflow, and the frame that paints carries the transform. */
+function tweenPillWidths(els, w0, before){
+  if(mgReduceMotion()) return;
+  // A second count must not read the scaled boxes of a glide still on the compositor.
+  const drop=pills._eWN||[];
+  clearTimeout(pills._eWT); pills._eWT=0;
+  drop.forEach(el=>{
     el.style.transition="none";
     el.style.transform="";
     el.style.willChange="";
@@ -68,26 +73,7 @@ function clearPillWidthMotion(){
     if(el.style.width) el.style.width="";
     el.style.transition="";
   });
-  pillWidthNodes=[];
-}
-function armPillWidthMotion(nodes){
-  pillWidthNodes=nodes.slice();
-  pillWidthT=setTimeout(clearPillWidthMotion,220);
-  if(pillWidthT && pillWidthT.unref) pillWidthT.unref();
-}
-/* THE WIDTH GLIDE IS A SCALE, NOT A WIDTH. Width is layout, so transitioning it measures
-   the row on every frame. The new boxes are read first and the old widths go back in one
-   pass. The 1.5px floor is for fractional DPRs, where rounding makes every pill "change"
-   on every pass. THE WRAP IS THE INVARIANT: frozen start widths can move a row break, and
-   a pill then leaps between lines mid-glide, so if applying them moves any pill to another
-   line the row goes to flipPills from `before`, which holds it on its new lines. Otherwise
-   the inline width leaves and each changed pill scales from its old width on its left edge,
-   while a neighbour that shifted slides by translate. Both are one transform on one curve,
-   so the gap between them holds. Inline width must be gone when the glide ends, or the pill
-   stops following its own content. */
-function tweenPillWidths(els, w0, before){
-  if(mgReduceMotion()) return;
-  clearPillWidthMotion();
+  pills._eWN=[];
   const lines=pillLines();
   const kids=Array.prototype.slice.call(pills.children);
   const end=new Map();
@@ -111,7 +97,10 @@ function tweenPillWidths(els, w0, before){
   }
   const startLeft=new Map();
   kids.forEach(el=>startLeft.set(el, el.getBoundingClientRect().left));
-  grew.forEach((g,el)=>{ el.style.width=""; });
+  const ease="var(--m-move) "+E_EASE;
+  const named=["width", ease].join(" ");
+  grew.forEach((g,el)=>{ el.style.transition=named; el.style.width=g.w1+"px"; });
+  grew.forEach((g,el)=>{ el.style.transition="none"; el.style.width=""; });
   const moves=[];
   kids.forEach(el=>{
     const box=end.get(el);
@@ -121,10 +110,7 @@ function tweenPillWidths(els, w0, before){
     if(!dx && !g) return;
     moves.push({el, dx, sx:g?g.w0/g.w1:1});
   });
-  if(!moves.length){
-    grew.forEach((g,el)=>{ el.style.transition=""; el.style.width=""; });
-    return;
-  }
+  if(!moves.length) return;
   moves.forEach(m=>{
     m.el.style.transition="none";
     m.el.style.willChange="transform";
@@ -136,12 +122,24 @@ function tweenPillWidths(els, w0, before){
   });
   // One reflow commits the inverted transform. A frame is not a commitment: see flipPills.
   void pills.offsetHeight;
-  const ease="var(--m-move) "+E_EASE;
   moves.forEach(m=>{
     m.el.style.transition="transform "+ease;
     m.el.style.transform="";
   });
-  armPillWidthMotion(moves.map(m=>m.el));
+  pills._eWN=moves.map(m=>m.el);
+  const timer=setTimeout(()=>{
+    const nodes=pills._eWN||[];
+    pills._eWN=[];
+    nodes.forEach(el=>{
+      el.style.transition="";
+      el.style.transform="";
+      el.style.willChange="";
+      el.style.transformOrigin="";
+      el.style.width="";
+    });
+  },220);
+  pills._eWT=timer;
+  if(timer && timer.unref) timer.unref();
 }
 /* Counts live, ORDER settles at 400ms: live ordering rebuilt the bar per character
    (73-337ms) under the typing hand. 400 clears a deliberate pace's inter-key gap and the
