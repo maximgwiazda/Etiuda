@@ -2532,6 +2532,9 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
    and blurred: a dialog here is modal, so the way out is the dialog itself, Alt+F4 or the
    taskbar. Cutting a notch over those buttons is what reaching them costs - clip-path carries
    hit-testing with it, so the hole is real - and that corner then reads sharp and undimmed. */
+/* Registered so the resize glide can interpolate it, and so a child counter-scales by the
+   same value the card is scaling by. */
+@property --mg-s{syntax:"<number>";inherits:true;initial-value:1}
 .modal-card{position:relative;z-index:1;width:100%;max-width:560px;max-height:min(92vh,820px);
   display:flex;flex-direction:column;overflow:hidden;
   background:var(--panel-raised);color:var(--ink);border:1px solid var(--line);

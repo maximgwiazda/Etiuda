@@ -2532,6 +2532,9 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
    and blurred: a dialog here is modal, so the way out is the dialog itself, Alt+F4 or the
    taskbar. Cutting a notch over those buttons is what reaching them costs - clip-path carries
    hit-testing with it, so the hole is real - and that corner then reads sharp and undimmed. */
+/* Registered so the resize glide can interpolate it, and so a child counter-scales by the
+   same value the card is scaling by. */
+@property --mg-s{syntax:"<number>";inherits:true;initial-value:1}
 .modal-card{position:relative;z-index:1;width:100%;max-width:560px;max-height:min(92vh,820px);
   display:flex;flex-direction:column;overflow:hidden;
   background:var(--panel-raised);color:var(--ink);border:1px solid var(--line);
@@ -6185,6 +6188,7 @@ What you type stays in this browser only.`;
     const card = modalCard;
     if (card == null || mgReduceMotion()) return null;
     const h = card.getBoundingClientRect().height;
+    mgClearGlideLooks(card);
     mgPendingH = h;
     card.style.transition = "none";
     card.style.overflow = "hidden";
@@ -6207,7 +6211,7 @@ What you type stays in this browser only.`;
     mgStopHeightRun();
     const card = modalCard;
     if (!card) return;
-    card.style.transition = "";
+    mgClearGlideLooks(card);
     card.style.height = "";
     card.style.overflow = "";
     mgPendingH = null;
@@ -6221,6 +6225,47 @@ What you type stays in this browser only.`;
       d._accordion = false;
     });
   }
+  function mgPx(n) {
+    const v = Math.round((n + Number.EPSILON) * 100) / 100;
+    return (v === 0 ? 0 : v) + "px";
+  }
+  function mgClearGlideLooks(card) {
+    card.style.removeProperty("scale");
+    card.style.removeProperty("--mg-s");
+    card.style.transition = "";
+    for (const el of card.children) {
+      el.style.removeProperty("scale");
+      el.style.removeProperty("translate");
+      el.style.removeProperty("transform-origin");
+      el.style.removeProperty("clip-path");
+    }
+  }
+  function mgGlideArm(card) {
+    const head = card.querySelector(":scope > h2");
+    const body = card.querySelector(":scope > .modal-body");
+    const foot = card.querySelector(":scope > .modal-actions");
+    const inv = "1 calc(1 / var(--mg-s))";
+    if (head && body && foot) {
+      const box = card.getBoundingClientRect();
+      const hy = head.getBoundingClientRect(), by = body.getBoundingClientRect(), fy = foot.getBoundingClientRect();
+      const Hh = hy.height, Ha = fy.height, Hb = by.height;
+      const Bt = by.top - box.top, Fb = fy.top - box.top + Ha;
+      const span = Fb - Bt + Hh;
+      head.style.transformOrigin = "center top";
+      foot.style.transformOrigin = "center bottom";
+      body.style.transformOrigin = "center top";
+      head.style.setProperty("scale", inv);
+      foot.style.setProperty("scale", inv);
+      body.style.setProperty("scale", inv);
+      body.style.setProperty("translate", "0 calc(" + mgPx(Hh) + " * (1 / var(--mg-s) - 1))");
+      body.style.setProperty("clip-path", "inset(0 0 max(0px, " + mgPx(Hb + Ha + Hh) + " - var(--mg-s) * " + mgPx(span) + ") 0)");
+      return;
+    }
+    for (const el of card.children) {
+      el.style.transformOrigin = "center " + -el.offsetTop + "px";
+      el.style.setProperty("scale", inv);
+    }
+  }
   function animateModalHeightFrom(before) {
     const card = modalCard;
     if (card == null || before == null || mgReduceMotion()) {
@@ -6229,15 +6274,23 @@ What you type stays in this browser only.`;
     }
     clearTimeout(mgPinTimer);
     mgStopHeightRun();
+    mgClearGlideLooks(card);
     const scroller = card.querySelector(".modal-body");
     const keepScroll = scroller ? scroller.scrollTop : 0;
     card.style.height = "auto";
     const after = card.getBoundingClientRect().height;
-    card.style.height = before + "px";
-    if (Math.abs(after - before) < 2) {
+    if (!(after > 0) || !(before > 0) || Math.abs(after - before) < 2) {
       mgReleaseCard();
       return;
     }
+    const s0 = before / after;
+    card.style.transition = "none";
+    card.style.overflow = "hidden";
+    card.style.height = after + "px";
+    card.style.setProperty("--mg-s", String(s0));
+    mgGlideArm(card);
+    card.style.setProperty("scale", "1 var(--mg-s)");
+    if (scroller) scroller.scrollTop = keepScroll;
     void card.offsetHeight;
     const run = { dead: false, timer: null, card, onEnd: null };
     mgHeightRun = run;
@@ -6247,14 +6300,14 @@ What you type stays in this browser only.`;
       if (scroller) scroller.scrollTop = keepScroll;
     };
     run.onEnd = (e) => {
-      if (e.target === card && e.propertyName === "height") done();
+      if (e.target === card && e.propertyName === "--mg-s") done();
     };
     let started = false;
     const start = () => {
       if (started || run.dead) return;
       started = true;
-      card.style.transition = "height var(--m-resize) var(--m-ease)";
-      card.style.height = after + "px";
+      card.style.transition = "--mg-s var(--m-resize) var(--m-ease)";
+      card.style.setProperty("--mg-s", "1");
       card.addEventListener("transitionend", run.onEnd);
       run.timer = setTimeout(done, 320);
     };
@@ -8588,7 +8641,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-08";
+  var E_BUILT = "2026-10-09";
 
   // src/modules/card-model.js
   var card_model_exports = {};
