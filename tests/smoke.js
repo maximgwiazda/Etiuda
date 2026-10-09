@@ -918,7 +918,7 @@ const t0 = Date.now();
 
   /* THE CROSSFADE, read in pixels: the window outside the theme button, whose icon turns only
      with motion. Reduced motion is the reference, instant, so the pair are each other's control.
-     The fade (--m-celebrate, 420 ms) is held at 200 ms for one shot. captureBeyondViewport stays
+     The fade (--m-surface, 180 ms) is held at 90 ms for one shot. captureBeyondViewport stays
      false: the default resizes the page to capture it, and in the shell that once shed the wordmark.
      THE HEADER MARK TURNS since the fifth (b0075b8, 140 s a turn, repainted every 50 ms), so a
      settled shot taken under motion and the target shot taken under reduced motion differ inside
@@ -960,7 +960,7 @@ const t0 = Date.now();
     await p.waitForFunction(f => document.getAnimations().some(new Function("return " + f)()),
       { timeout: 3000, polling: "raf" }, isVt.toString()).catch(() => {});
     const held = await p.evaluate(f => { const a = document.getAnimations().filter(new Function("return " + f)());
-      a.forEach(x => { x.pause(); x.currentTime = 200; });
+      a.forEach(x => { x.pause(); x.currentTime = 90; });
       return a.filter(x => /-(old|new)\(root\)$/.test(x.effect.pseudoElement)).map(x => x.effect.getComputedTiming().duration); }, isVt.toString());
     const mid = held.length ? await shot() : from;
     await p.evaluate(f => document.getAnimations().filter(new Function("return " + f)()).forEach(x => x.finish()), isVt.toString());
@@ -970,9 +970,9 @@ const t0 = Date.now();
     await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "no-preference" }]);
     await p.evaluate(k => { const h = document.getElementById("__markHold"); if (h) h.remove();
       if (k === null) localStorage.removeItem("eTheme"); else localStorage.setItem("eTheme", k); }, th0.key);
-    check(held.length > 0 && held.every(d => d === 420) && mid !== from && mid !== to && settled === to && left === 0 && from !== to,
+    check(held.length > 0 && held.every(d => d === 180) && mid !== from && mid !== to && settled === to && left === 0 && from !== to,
       "the theme crossfades the whole window and settles in its final colours: " + held.length
-      + " old and new layer animation(s) of " + held.join("/") + " ms, the frame held at 200 ms is "
+      + " old and new layer animation(s) of " + held.join("/") + " ms, the frame held at 90 ms is "
       + (mid !== from && mid !== to ? "neither end" : "one of the ends") + ", and at rest the window is "
       + (settled === to ? "pixel-identical to" : "NOT identical to") + " the same theme reached instantly");
     check(instant.anims === 0 && instant.first === to,

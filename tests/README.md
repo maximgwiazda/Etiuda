@@ -16,6 +16,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/deadcode.js                           no fixtures
     node tests/css-layers.js                         no fixtures, the cascade layers
     node tests/motion-tokens.js                      no fixtures, the motion tiers and the quiet switch
+    node tests/theme-switch.mjs                      no fixtures, the theme switch settles within 300ms and a press during the fade turns it back
     node tests/kin-contrast.mjs                      no fixtures, the desk's blue in the four token blocks as drawn (kc1), the ratios it keeps (kc2), the bubbles' fill (kc3) and no retired blue in shell/*.js (kc4)
     node tests/build-fresh.mjs                       no fixtures, builds once
     node tests/catalog-routes.mjs                     no fixtures, the two catalog routes
@@ -57,7 +58,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/reinstall.js     install, use, uninstall, install again
 
 `npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `module-calls.mjs`, `desk-ipc.mjs`, `catalog-history.mjs`, `catalog-shared.mjs`, `desk-growth.mjs`, `shell-office.mjs`, `hpke.mjs`, `team-desk.mjs`, `team-join.mjs`, `pick.mjs`, `copy-routes.mjs`, `about.mjs`, `catalog-trust.mjs`, `catalog-trust-desk.mjs`, `token-canary.mjs`, `variables.mjs`, `test.js`, `i18n-scan.js`,
-`pl-diacritics.js`, `css-layers.js`, `motion-tokens.js` and `kin-contrast.mjs`, none of which needs a fixture or a browser. `npm run smoke` needs both.
+`pl-diacritics.js`, `css-layers.js`, `motion-tokens.js`, `theme-switch.mjs` and `kin-contrast.mjs`, none of which needs a fixture or a browser. `npm run smoke` needs both.
 
 `css-dead.js`, `ghosts.js` and `storage-keys.js` are reports rather than gates: they print and
 exit 0, and a human reads the list. `i18n-scan.js` is a gate and exits non-zero when a language

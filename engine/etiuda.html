@@ -3836,7 +3836,7 @@ body.e-lanes #pillsSlot.pills-anim{display:block}
 /* The crossfade paintTheme() opens around that flip: one picture, so the ground, the cards, the
    rail and the band cannot turn at different moments. While it runs every pointer event goes to
    <html>, whatever pointer-events says on the pseudo-elements; the keyboard is unaffected. */
-::view-transition-old(root),::view-transition-new(root){animation-duration:var(--m-celebrate);animation-timing-function:ease}
+::view-transition-old(root),::view-transition-new(root){animation-duration:var(--m-surface);animation-timing-function:ease}
 /* A FADE HOLDS EVERY CARD REAL. Chrome's renderer dies starting a view transition while cards a
    glide has moved rest at content-visibility:auto: a category switch, then the theme, lost the page
    on the first press. Held visible from before the capture to the fade's end, it lives. */
@@ -24050,6 +24050,10 @@ What you type stays in this browser only.`;
   var themeWant = null;
   var fadeHolds = 0;
   var fadeLast = 0;
+  var fadeVt = null;
+  var swapHeld = false;
+  var rollsDue = 0;
+  var themePtr = false;
   var TRACE_KEY = "eTrace";
   var TRACE_MAX = 30;
   function themeTrace() {
@@ -24063,8 +24067,49 @@ What you type stays in this browser only.`;
   function traceNote(row, now) {
     lsSet(TRACE_KEY, JSON.stringify(themeTrace().concat([[Date.now()].concat(row)]).slice(-TRACE_MAX)), !!now);
   }
+  function noteRoll() {
+    if (mgReduceMotion()) return;
+    rollsDue++;
+    if (!swapHeld) flushRoll();
+  }
+  function flushRoll() {
+    if (!rollsDue || mgReduceMotion()) {
+      rollsDue = 0;
+      return;
+    }
+    const ic = document.querySelector("#theme svg");
+    const n = rollsDue;
+    rollsDue = 0;
+    if (!ic) return;
+    const turns = (+ic.dataset.eTurns || 0) + n;
+    ic.dataset.eTurns = turns;
+    ic.style.transform = "rotate(" + turns * 180 + "deg)";
+  }
+  function turnBack(next, after) {
+    const r = document.documentElement;
+    themeWant = next;
+    fading = next;
+    r.classList.add("theme-swap");
+    r.dataset.theme = next;
+    try {
+      document.getAnimations().forEach((a) => {
+        try {
+          if (a.effect && /^::view-transition/.test(a.effect.pseudoElement || "")) a.reverse();
+        } catch (e) {
+        }
+      });
+    } catch (e) {
+    }
+    void r.offsetHeight;
+    r.classList.remove("theme-swap");
+    if (after) after();
+  }
   function paintTheme(next, after) {
     const r = document.documentElement, from = r.dataset.theme;
+    if (fadeVt) {
+      if ((fading || from) !== next) turnBack(next, after);
+      return;
+    }
     themeWant = next;
     if (!from || from === next && !fading || typeof document.startViewTransition !== "function" || document.visibilityState !== "visible" || mgReduceMotion()) {
       landTheme(next);
@@ -24089,10 +24134,16 @@ What you type stays in this browser only.`;
       return;
     }
     fading = next;
+    fadeVt = vt;
+    swapHeld = true;
     const done = () => {
       if (fading === next) fading = null;
       r.classList.remove("theme-swap");
-      if (after) after();
+      if (swapHeld) {
+        swapHeld = false;
+        flushRoll();
+      }
+      if (themeWant === next && after) after();
     };
     vt.ready.then(() => {
       traceNote(["fade", n, "ready"]);
@@ -24103,6 +24154,10 @@ What you type stays in this browser only.`;
     });
     const end = () => {
       traceNote(["fade", n, "finish"]);
+      if (fadeVt === vt) {
+        fadeVt = null;
+        fading = null;
+      }
       if (!--fadeHolds) r.classList.remove("theme-fade", "theme-swap");
     };
     vt.finished.then(end, end);
@@ -24131,14 +24186,18 @@ What you type stays in this browser only.`;
       const nx = shownTheme() === "dark" ? "light" : "dark";
       paintTheme(nx, () => {
         lsSet("eTheme", nx);
-        const ic = document.querySelector("#theme svg");
-        if (ic && !mgReduceMotion()) {
-          const turns = (+ic.dataset.eTurns || 0) + 1;
-          ic.dataset.eTurns = turns;
-          ic.style.transform = "rotate(" + turns * 180 + "deg)";
-        }
       });
+      noteRoll();
     };
+    if (themePtr) return;
+    themePtr = true;
+    document.addEventListener("click", (ev) => {
+      if (!fadeVt || ev.button) return;
+      const b = document.querySelector("#theme");
+      if (!b || ev.target === b || b.contains && b.contains(ev.target)) return;
+      const box = b.getBoundingClientRect();
+      if (ev.clientX >= box.left && ev.clientX <= box.right && ev.clientY >= box.top && ev.clientY <= box.bottom && b.onclick) b.onclick();
+    }, true);
   }
 
   // src/modules/maintenance.js
