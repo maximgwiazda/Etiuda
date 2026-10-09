@@ -28,7 +28,7 @@ function deckLengths(tops, heights, width, natural){
 }
 
 function deckReset(card){
-  card.classList.remove("deck","deck-open","deck-up","deck-moving");
+  card.classList.remove("deck","deck-open","deck-up","deck-moving","deck-return");
   ["height","--deck-rest-bottom","--deck-extra"].forEach(p=>card.style.removeProperty(p));
   deckSlabs(card).forEach(s=>{ s.classList.remove("deck-back"); DECK_SLAB_PROPS.forEach(p=>s.style.removeProperty(p)); });
   clearTimeout(card._deckT); card._deckGrow=0;
@@ -74,6 +74,7 @@ function deckSetOpen(card, open, instant){
   clearTimeout(card._deckM);
   const now=mgReduceMotion() || instant, travel=now?0:M_MS.travel, move=now?0:M_MS.move;
   if(open){
+    card.classList.remove("deck-return");
     card.classList.add("deck-up","deck-open");
     if(travel){
       const n=deckSlabs(card).length;
@@ -81,8 +82,11 @@ function deckSetOpen(card, open, instant){
       card._deckM=setTimeout(()=>card.classList.remove("deck-moving"), travel+(n-1)*travel/9);
     }
   } else {
+    // deck-return slides the tuck back and leaves with deck-up. The tuck itself has no transition: see the sheet.
+    if(now) card.classList.remove("deck-return");
+    else card.classList.add("deck-return");
     card.classList.remove("deck-open","deck-moving");
-    card._deckM=setTimeout(()=>{ if(!card.classList.contains("deck-open")) card.classList.remove("deck-up"); }, move+40);
+    card._deckM=setTimeout(()=>{ if(!card.classList.contains("deck-open")) card.classList.remove("deck-up","deck-return"); }, move+40);
   }
 }
 function deckWant(card, open, ms){

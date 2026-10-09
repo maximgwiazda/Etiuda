@@ -30,10 +30,13 @@ const CARD_MOVE_MAX=40;
    `interpolate-size`, which Firefox does not have. The card is one element whose before and
    after heights can simply be measured, which works the same everywhere.
 
-   `overflow:hidden` for the duration stops a scrollbar flickering in and out while the height
-   passes through the max-height threshold; scrollTop is preserved because setting an explicit
-   height on a scrolled container would otherwise reset it. Cleanup runs from a plain setTimeout
-   as well as transitionend - rAF is paused in a background tab, and a card left with an inline
+   What moves is a scale about the card's centre, not `height`: the height is set to the
+   finished size once and --mg-s runs from the start fraction to 1 on the resize tier. The
+   header, the body and the actions counter-scale so the type stays its size, and the body is
+   clipped to the gap the shrinking card leaves. `overflow:hidden` for the duration stops a
+   scrollbar flickering in and out; scrollTop is preserved because setting an explicit height
+   on a scrolled container would otherwise reset it. Cleanup runs from a plain setTimeout as
+   well as transitionend - rAF is paused in a background tab, and a card left with an inline
    height would then never resize again. */
 let mgPendingH=null, mgPinTimer=null;
 const M_STILL_Q="(prefers-reduced-motion: reduce)";
@@ -70,6 +73,10 @@ function mgPinCard(){
   const card=modalCard;
   if(card==null || mgReduceMotion()) return null;
   const h=card.getBoundingClientRect().height;
+  /* A glide still running is a scale, so the rect above is the size on screen. Drop that
+     scale in this same task, then pin the size, or the next paint draws the layout height
+     through the old scale and the card jumps. */
+  mgClearGlideLooks(card);
   mgPendingH=h;
   card.style.transition="none";
   card.style.overflow="hidden";
@@ -100,7 +107,8 @@ function mgReleaseCard(){
   mgStopHeightRun();
   const card=modalCard;
   if(!card) return;
-  card.style.transition=""; card.style.height=""; card.style.overflow="";
+  mgClearGlideLooks(card);
+  card.style.height=""; card.style.overflow="";
   mgPendingH=null;
 }
 /** Accordion: opening one section shuts its siblings - with two or three open, the one
@@ -117,22 +125,77 @@ function mgAccordion(opened, selector, scope){
     d._accordion=false;
   });
 }
+function mgPx(n){
+  const v=Math.round((n+Number.EPSILON)*100)/100;
+  return (v===0?0:v)+"px";
+}
+/* Drop the glide's scale and the children's counter-scale. Height and overflow stay: a pin
+   has already written the size on screen, and the next measure reads layout only once the
+   scale is gone. */
+function mgClearGlideLooks(card){
+  card.style.removeProperty("scale");
+  card.style.removeProperty("--mg-s");
+  card.style.transition="";
+  for(const el of card.children){
+    el.style.removeProperty("scale");
+    el.style.removeProperty("translate");
+    el.style.removeProperty("transform-origin");
+    el.style.removeProperty("clip-path");
+  }
+}
+/* Counter-scale whatever the card's scale would squash. A dialog with a scrolling middle keeps
+   its header and its actions at their own size and clips the body to the gap between them; any
+   other card counter-scales each child about the card's top and lets overflow hide the rest. */
+function mgGlideArm(card){
+  const head=card.querySelector(":scope > h2");
+  const body=card.querySelector(":scope > .modal-body");
+  const foot=card.querySelector(":scope > .modal-actions");
+  const inv="1 calc(1 / var(--mg-s))";
+  if(head && body && foot){
+    const box=card.getBoundingClientRect();
+    const hy=head.getBoundingClientRect(), by=body.getBoundingClientRect(), fy=foot.getBoundingClientRect();
+    const Hh=hy.height, Ha=fy.height, Hb=by.height;
+    const Bt=by.top-box.top, Fb=fy.top-box.top+Ha;
+    const span=Fb-Bt+Hh;
+    head.style.transformOrigin="center top";
+    foot.style.transformOrigin="center bottom";
+    body.style.transformOrigin="center top";
+    head.style.setProperty("scale", inv);
+    foot.style.setProperty("scale", inv);
+    body.style.setProperty("scale", inv);
+    body.style.setProperty("translate", "0 calc("+mgPx(Hh)+" * (1 / var(--mg-s) - 1))");
+    body.style.setProperty("clip-path", "inset(0 0 max(0px, "+mgPx(Hb+Ha+Hh)+" - var(--mg-s) * "+mgPx(span)+") 0)");
+    return;
+  }
+  for(const el of card.children){
+    el.style.transformOrigin="center "+(-el.offsetTop)+"px";
+    el.style.setProperty("scale", inv);
+  }
+}
 function animateModalHeightFrom(before){
   const card=modalCard;
   if(card==null || before==null || mgReduceMotion()){ mgPendingH=null; return; }
   clearTimeout(mgPinTimer);
   mgStopHeightRun();                            // whatever was in flight is not this run
+  mgClearGlideLooks(card);                      // a scale still on would poison the measure
   // The card itself no longer scrolls - its middle section does. See mountModalBody().
   const scroller=card.querySelector(".modal-body");
   const keepScroll=scroller?scroller.scrollTop:0;
-  /* Measure the target while pinned: release to auto, read, put the start height straight back.
-     All three happen in one task with no yield, so nothing is painted in between - max-height
-     still applies during the read, so `after` is the clamped height the card will really take. */
+  /* Measure the target while pinned: release to auto, read, then put the finished height on
+     before anything paints. max-height still applies during the read, so `after` is the clamped
+     height the card will really take. */
   card.style.height="auto";
   const after=card.getBoundingClientRect().height;
-  card.style.height=before+"px";
-  if(Math.abs(after-before)<2){ mgReleaseCard(); return; }
-  void card.offsetHeight;                       // commit the start height before transitioning
+  if(!(after>0) || !(before>0) || Math.abs(after-before)<2){ mgReleaseCard(); return; }
+  const s0=before/after;
+  card.style.transition="none";
+  card.style.overflow="hidden";
+  card.style.height=after+"px";
+  card.style.setProperty("--mg-s", String(s0));
+  mgGlideArm(card);                             // measured unscaled; the scale goes on after
+  card.style.setProperty("scale", "1 var(--mg-s)");
+  if(scroller) scroller.scrollTop=keepScroll;
+  void card.offsetHeight;                       // commit the scaled-down start before the glide
   const run={dead:false, timer:null, card:card, onEnd:null};
   mgHeightRun=run;
   const done=()=>{
@@ -140,21 +203,21 @@ function animateModalHeightFrom(before){
     mgReleaseCard();                            // which stops this run, listener and timer both
     if(scroller) scroller.scrollTop=keepScroll;
   };
-  /* THE CARD'S OWN HEIGHT, nothing else. transitionend BUBBLES, and the twisty rotating on
+  /* THE CARD'S OWN --mg-s, nothing else. transitionend BUBBLES, and the twisty rotating on
      an accordion row inside this card otherwise ends the run early - unnoticed, because the
      easing is front-loaded, but it leaves the failsafe armed with nothing left to guard. */
-  run.onEnd=e=>{ if(e.target===card && e.propertyName==="height") done(); };
+  run.onEnd=e=>{ if(e.target===card && e.propertyName==="--mg-s") done(); };
   /* Start on the NEXT frame: a shut <details>' content has never been laid out, so the
-     first expand pays for all of it exactly where the transition should begin - the
-     first frame lands late and the motion hitches. A frame's wait moves that work before
-     the height starts changing; the card is pinned throughout. rAF pauses in a background
-     tab, so a timeout runs the same guarded start. */
+     first expand pays for all of it exactly where the glide should begin - the first
+     frame lands late and the motion hitches. A frame's wait moves that work before --mg-s
+     starts changing; the card is already at its finished height, scaled down. rAF pauses
+     in a background tab, so a timeout runs the same guarded start. */
   let started=false;
   const start=()=>{
     if(started||run.dead) return;
     started=true;
-    card.style.transition="height var(--m-resize) var(--m-ease)";
-    card.style.height=after+"px";
+    card.style.transition="--mg-s var(--m-resize) var(--m-ease)";
+    card.style.setProperty("--mg-s", "1");
     card.addEventListener("transitionend",run.onEnd);
     run.timer=setTimeout(done,320);             // counts from the real start, not from the pin
   };
