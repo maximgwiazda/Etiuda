@@ -456,35 +456,6 @@ function tourTargetRect(el){
   const cx=r.left+r.width/2-m.e, cy=r.top+r.height/2-m.f;
   return {top:cy-h/2, left:cx-w/2, width:w, height:h};
 }
-/* The hole's layout box is these pixels on a side. The scale is the size it shows, so the
-   spring can move the ring without laying it out. One number with the sheet's width and height. */
-const RING_BOX=100;
-function ringWrite(hole, rect){
-  hole.style.setProperty("--ring-x", rect.left+"px");
-  hole.style.setProperty("--ring-y", rect.top+"px");
-  hole.style.setProperty("--ring-sx", String(rect.width/RING_BOX));
-  hole.style.setProperty("--ring-sy", String(rect.height/RING_BOX));
-}
-function placeTourRing(hole, rect){
-  if(!(rect.width>0) || !(rect.height>0)) return;
-  const wasHidden=hole.style.display==="none";
-  hole.style.display="block";
-  /* The first place, and a place after the hole was hidden, must not fly in from the corner.
-     A reflow with the transition off commits the start; the next write is what travels. */
-  if(!hole._ring){
-    hole.style.transition="none";
-    ringWrite(hole, rect);
-    void hole.offsetWidth;
-    hole.style.transition="";
-  }else if(wasHidden){
-    hole.style.transition="none";
-    ringWrite(hole, hole._ring);
-    void hole.offsetWidth;
-    hole.style.transition="";
-    ringWrite(hole, rect);
-  }else ringWrite(hole, rect);
-  hole._ring={left:rect.left, top:rect.top, width:rect.width, height:rect.height};
-}
 function placeTourUI(){
   if(!tourRunning) return;
   const step=TOUR_STEPS[tourIdx];
@@ -523,10 +494,15 @@ function placeTourUI(){
     if(holeRect.top+holeRect.height>vh) holeRect.height=Math.max(32, vh-holeRect.top);
   }
 
-  /* The hole's layout box is 100px and the scale is the visual size over that, so this
-     writes variables rather than top, left, width and height. */
-  if(holeRect && els.hole) placeTourRing(els.hole, holeRect);
-  else if(els.hole) els.hole.style.display="none";
+  if(holeRect && els.hole){
+    els.hole.style.display="block";
+    els.hole.style.top=holeRect.top+"px";
+    els.hole.style.left=holeRect.left+"px";
+    els.hole.style.width=holeRect.width+"px";
+    els.hole.style.height=holeRect.height+"px";
+  } else if(els.hole){
+    els.hole.style.display="none";
+  }
 
   /* THE BUBBLE GOES BELOW ITS TARGET WHERE IT CAN, and the routine decides the rest. A notice
      under a control leaves the control readable, which is the point of pointing at it; a dialog
