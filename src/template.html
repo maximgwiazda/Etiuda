@@ -1395,6 +1395,7 @@ body.role-waits #roleDrum{display:none}
    inherited: a pill that inherits a variable is restyled whenever it changes. */
 @property --pills-vw{syntax:"*";inherits:false}
 @property --pills-vw-now{syntax:"<length>";inherits:false;initial-value:0px}
+@property --pills-show{syntax:"<length>";inherits:false;initial-value:0px}
 .pills-slot{--pills-vw-now:100vw}
 html.e-pills-off .pills-slot{display:none}
 /* The slot's width in a box no clip resizes, for wirePillsWidthWatch: the slot's own width rule. */
@@ -1402,22 +1403,25 @@ html.e-pills-off .pills-slot{display:none}
 .pills{display:flex;gap:6px;flex-wrap:wrap;width:100%;box-sizing:border-box;position:relative}
 /* Overflow: reserve 2 lines in the slot; pills are absolutely positioned so expand overlays */
 .pills-slot.pills-overflow{height:var(--pills-2line,4.2em)}
-/* The extra rows SLIDE. max-height:none cannot be transitioned, so the open height is
-   MEASURED: syncPillsCollapse writes --pills-full at rest and unclipped. Both states
-   differ by VALUES only - the border exists transparent when closed, the radius is
-   constant, overflow stays hidden in both. */
+/* The extra rows are revealed, not grown. The box stays at the measured open height, so a
+   hover changes no layout length: --pills-show feeds only the clip. syncPillsCollapse writes
+   --pills-full at rest, unclipped. The border is transparent when closed, the radius constant. */
 .pills-slot.pills-overflow .pills{
   position:absolute;left:0;right:0;top:0;z-index:41;
-  max-height:var(--pills-2line,4.2em);overflow:hidden;
+  max-height:var(--pills-full, var(--pills-2line, 4.2em));overflow:hidden;
   /* NO background while closed - transparent matches whatever the header paints, by
      construction, in either theme. It takes a real surface only OPEN, when it hangs below
-     the header over the cards and has to hide them. */
-  background:transparent;padding:0 0 2px;
+     the header over the cards and has to hide them. The open padding is on both states, so
+     the hover does not change it; closed, it sits below the clip. */
+  background:transparent;padding:0 0 10px;
+  --pills-show:var(--pills-2line, 4.2em);
+  clip-path:inset(0 0 calc(100% - var(--pills-show)) 0);
   /* The fade at the clip line is a MASK, not a gradient painted on top. A painted fade has to
      grade into an assumed colour, and there is no colour to assume over a gradient; masking fades
-     the pills themselves and lets whatever is behind show through untouched. */
-  -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 14px),transparent 100%);
-  mask-image:linear-gradient(to bottom,#000 calc(100% - 14px),transparent 100%);
+     the pills themselves and lets whatever is behind show through untouched. Anchored on the
+     clip: the box is already the open height, so 100% would fade the wrong edge. */
+  -webkit-mask-image:linear-gradient(to bottom,#000 calc(var(--pills-show) - 14px),transparent var(--pills-show));
+  mask-image:linear-gradient(to bottom,#000 calc(var(--pills-show) - 14px),transparent var(--pills-show));
   /* All four sides at a constant 1px (transparent while closed), so becoming a popover never
      insets the pills mid-animation; the radius is constant too, and invisible while closed. */
   border:1px solid transparent;border-radius:12px;
@@ -1428,8 +1432,7 @@ html.e-pills-off .pills-slot{display:none}
   /* The reveal tier, not the move tier the panel and the card column use. This bar
      opens on HOVER: the pointer is already on its way to a pill, so the reveal has to be over
      before the hand arrives. The slower tier is for things you deliberately toggle. */
-  transition:max-height var(--m-reveal) var(--m-ease),
-             padding-bottom var(--m-reveal) var(--m-ease),
+  transition:--pills-show var(--m-reveal) var(--m-ease),
              border-color var(--m-reveal) var(--m-ease),
              background-color var(--m-reveal) var(--m-ease),
              box-shadow var(--m-reveal) var(--m-ease)}
@@ -1438,9 +1441,11 @@ body.e-take-drag .pills-slot.pills-overflow .pills,
 .pills-slot.pills-overflow:hover .pills,
 .pills-slot.pills-overflow.pills-navpeek .pills,
 .pills-slot.pills-overflow.pills-expand .pills{
-  max-height:var(--pills-full,none);
+  /* none only while --pills-full is unset, the moment the open height is measured. Once
+     set, the used length matches the closed rule, and max-height is not transitioned. */
+  max-height:var(--pills-full, none);
+  --pills-show:var(--pills-full, 10000px);
   box-shadow:var(--bevel),var(--shadow-pop);
-  padding:0 0 10px;
   /* Glass at the facts panel's weight, with its bevel, on its argument: open, it hangs over
      the cards. Open state ONLY - closed it is transparent by construction, and a
      backdrop-filter would blur the header beneath it for nothing. */

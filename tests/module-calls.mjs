@@ -3788,6 +3788,25 @@ const CARD_B = {
         return eq([baseBody.indexOf("content-visibility") === -1, /content-visibility:\s*visible/.test(nearBody),
           /filter:\s*blur\(1\.6px\)/.test(underBody)].join(","), "true,true,true");
       });
+    /* The bar opens on hover. max-height lays the row out on every frame of that reveal, so the
+       opening has to ride a length that only the clip reads, on the same tier, with the blur kept. */
+    check("template.html", "1010pv1 the category bar opens on a clip, not on max-height, and the open state still blurs",
+      () => {
+        const sheet = fs.readFileSync(join(MODDIR, "..", "template.html"), "utf8");
+        const base = /\.pills-slot\.pills-overflow \.pills\{([^}]*)\}/.exec(sheet);
+        const open = /\.pills-slot\.pills-overflow\.pills-expand \.pills\{([^}]*)\}/.exec(sheet);
+        const prop = /@property --pills-show\{([^}]*)\}/.exec(sheet);
+        const baseBody = base ? base[1] : "", openBody = open ? open[1] : "", propBody = prop ? prop[1] : "";
+        const trans = /transition:([^;}]+)/.exec(baseBody);
+        const parts = trans ? trans[1].split(",").map(s => s.trim()) : [];
+        const show = parts.find(p => p.startsWith("--pills-show"));
+        const layout = parts.some(p => /^(max-height|height|padding|padding-bottom|margin|top)\b/.test(p));
+        const clip = /clip-path:[^;]*var\(--pills-show\)/.test(baseBody);
+        const registered = /syntax:\s*"<length>"/.test(propBody) && /inherits:\s*false/.test(propBody);
+        const blur = /backdrop-filter:\s*var\(--glass-mid-filter\)/.test(openBody);
+        return eq([!!show, !!(show && show.includes("var(--m-reveal)") && show.includes("var(--m-ease)")),
+          !layout, clip, registered, blur].join(","), "true,true,true,true,true,true");
+      });
   } finally {
     if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
     if (hadDoc !== undefined) Dom.grabDom();
