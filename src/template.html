@@ -1176,11 +1176,9 @@ body.shed-segfold #seg::before{width:100%;transform:none}
 .menu button:hover,.menu button:focus-visible{background:var(--accent-soft);color:var(--accent)}
 .menu .menu-sep{height:1px;margin:4px 6px;background:var(--line);border:0;padding:0;pointer-events:none}
 body.pills-off .pills-slot{display:none}
-/* Worn only for the length of a hide/show glide (see animatePillsBox): keeps the
-   departing slot on screen (display:none cannot animate) and clips the pills while the box
-   closes. Nothing outside that ~180ms should ever see this class. */
+/* The retreat is a fixed clone (see animatePillsBox). This class must not put the slot
+   back into flow: the snap has already taken its final display. */
 .pills-slot.pills-anim{overflow:hidden}
-body.pills-off .pills-slot.pills-anim{display:block}
 /* Ctrl/Cmd peeks the hidden pills. ONE declaration, because the peeked bar must be a
    plain flat bar BY CONSTRUCTION: syncPillsCollapse() clears pills-overflow whenever the
    bar is off, so no clipped-bar or popover rule can match a bar that is not on screen. */
@@ -1463,6 +1461,9 @@ body.e-take-drag .pills-slot.pills-overflow .pills,
    rests on the pill keeping its height. Flex centres the dot; its symmetric negative
    margins keep the text as the height-giver. Flex-item whitespace does not render - the
    count's space lives in its own margin-left. */
+/* Registered so the width glide can interpolate it, and so a pill's children
+   counter-scale by the same value the pill scales by. */
+@property --pill-sx{syntax:"<number>";inherits:true;initial-value:1}
 .pill{display:inline-flex;align-items:center;
   padding:5px 11px;border:1px solid transparent;border-radius:999px;
   background:color-mix(in srgb,var(--ink) 5%,transparent);
@@ -3712,7 +3713,6 @@ body.e-lanes #pageScroll::-webkit-scrollbar-thumb{background-color:transparent}
 body.e-lanes #railHit{display:none}
 body.e-lanes #addCardFab,body.e-lanes #clearIntentsFab{visibility:hidden;pointer-events:none;position:absolute}
 body.e-lanes #pillsSlot{display:none}
-body.e-lanes #pillsSlot.pills-anim{display:block}
 .fab-next[aria-pressed=true]{border-style:solid;border-color:var(--accent);color:var(--accent)}
 .ln-wrap{max-width:var(--app-max);margin:0 auto;padding:14px var(--app-pad) 96px}
 .ln-wrap.ln-open{animation:eLanesIn var(--m-move) var(--m-ease) both}

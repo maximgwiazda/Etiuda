@@ -32,7 +32,11 @@ function installers(dir) {
 }
 
 const before = new Set(installers(DIST));
-const env = { ...process.env, PATH: join(ROOT, 'node_modules', '.bin') + delimiter + (process.env.PATH || '') };
+// cmd looks in its working directory before PATH unless NoDefaultCurrentDirectoryInExePath is set, and this tree's
+// root holds electron-builder.js: with .JS in PATHEXT, a shell that leaves the variable unset (a Grok seat's, a
+// WMI-started one) runs the config file instead of the tool, and the desk shows "Select an app to open this .js file"
+// (Maxim's screen, 2026-10-09 22:35; the test architect's diagnosis the same afternoon). Set it for the chain.
+const env = { ...process.env, NoDefaultCurrentDirectoryInExePath: '1', PATH: join(ROOT, 'node_modules', '.bin') + delimiter + (process.env.PATH || '') };
 const r = spawnSync('cmd.exe', ['/d', '/s', '/c', 'npm run build && electron-builder --win'], {
   cwd: ROOT,
   stdio: 'inherit',
