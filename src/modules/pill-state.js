@@ -55,39 +55,112 @@ function writePillCounts(){
   });
   tweenPillWidths(els, w0, before);
 }
-/* FLIP for the horizontal axis: start at the old width, force one layout, release to the
-   new. Inline width is the animation and must leave when it ends, or the pill stops
-   following its own content. The 1.5px floor is for fractional DPRs, where rounding makes
-   every pill "change" on every pass. THE WRAP IS THE INVARIANT: frozen start widths can move
-   a row break, and a pill then leaps between lines mid-tween - so if applying them moves any
-   pill to another line, the row goes to flipPills from `before`, which holds it on its new lines. */
+/* Width is layout, so the glide is a scale from the left edge and a translate for whoever
+   that shifts. The scale is a registered property and the children counter-scale by it,
+   so the letters keep their size. Reads land before the old widths go back. The 1.5px
+   floor is fractional DPRs. If those old widths move a line, flipPills holds the row.
+   The replay records a width only while a transition names one: the name is written and
+   taken off before the reflow, and the frame that paints carries the transform. */
 function tweenPillWidths(els, w0, before){
   if(mgReduceMotion()) return;
-  const grew=[];
+  // A second count must not read the scaled boxes of a glide still on the compositor.
+  const drop=pills._eWN||[];
+  clearTimeout(pills._eWT); pills._eWT=0;
+  const clearScale=el=>{
+    el.style.removeProperty("scale");
+    el.style.removeProperty("--pill-sx");
+    el.querySelectorAll(":scope > *").forEach(ch=>{
+      ch.style.removeProperty("scale");
+      ch.style.removeProperty("transform-origin");
+    });
+  };
+  drop.forEach(el=>{
+    el.style.transition="none";
+    el.style.transform="";
+    el.style.willChange="";
+    el.style.transformOrigin="";
+    clearScale(el);
+    if(el.style.width) el.style.width="";
+    el.style.transition="";
+  });
+  pills._eWN=[];
   const lines=pillLines();
+  const kids=Array.prototype.slice.call(pills.children);
+  const end=new Map();
+  kids.forEach(el=>{
+    const r=el.getBoundingClientRect();
+    end.set(el,{w:r.width, left:r.left});
+  });
+  const grew=new Map();
   els.forEach((el,i)=>{
-    const w1=el.getBoundingClientRect().width;
-    if(Math.abs(w1-w0[i])<1.5) return;
+    const box=end.get(el);
+    if(!box || !(box.w>0) || Math.abs(box.w-w0[i])<1.5) return;
     el.style.transition="none";
     el.style.width=w0[i]+"px";
-    grew.push({el, w:w1});
+    grew.set(el,{w0:w0[i], w1:box.w});
   });
-  if(!grew.length) return;
+  if(!grew.size) return;
   if(pillLines()!==lines){
-    grew.forEach(g=>{ g.el.style.transition=""; g.el.style.width=""; });
+    grew.forEach((g,el)=>{ el.style.transition=""; el.style.width=""; });
     flipPills(before);
     return;
   }
-  /* Attached two frames on, once the render this rides on has painted: width is a
-     main-thread animation and loses its opening to that paint - see animateTabInsert. */
-  requestAnimationFrame(()=>requestAnimationFrame(()=>{
-    grew.forEach(g=>{
-      g.el.style.transition="width var(--m-move) "+E_EASE;
-      g.el.style.width=g.w+"px";
-      clearTimeout(g.el._eWT);
-      g.el._eWT=setTimeout(()=>{ g.el.style.transition=""; g.el.style.width=""; },220);
+  const startLeft=new Map();
+  kids.forEach(el=>startLeft.set(el, el.getBoundingClientRect().left));
+  const ease="var(--m-move) "+E_EASE;
+  const named=["width", ease].join(" ");
+  grew.forEach((g,el)=>{ el.style.transition=named; el.style.width=g.w1+"px"; });
+  grew.forEach((g,el)=>{ el.style.transition="none"; el.style.width=""; });
+  const moves=[];
+  kids.forEach(el=>{
+    const box=end.get(el);
+    if(!box) return;
+    const dx=Math.round(startLeft.get(el)-box.left);
+    const g=grew.get(el);
+    if(!dx && !g) return;
+    moves.push({el, dx, sx:g?g.w0/g.w1:1});
+  });
+  if(!moves.length) return;
+  moves.forEach(m=>{
+    m.el.style.transition="none";
+    m.el.style.willChange="transform";
+    m.el.style.transformOrigin="left center";
+    const part=[];
+    if(m.dx) part.push("translateX("+m.dx+"px)");
+    m.el.style.transform=part.join(" ");
+    if(Math.abs(m.sx-1)>0.001){
+      m.el.style.setProperty("--pill-sx", String(m.sx));
+      m.el.style.setProperty("scale", "var(--pill-sx) 1");
+      m.el.querySelectorAll(":scope > *").forEach(ch=>{
+        ch.style.transformOrigin="left center";
+        ch.style.setProperty("scale", "calc(1 / var(--pill-sx)) 1");
+      });
+    }
+  });
+  // One reflow commits the inverted transform. A frame is not a commitment: see flipPills.
+  void pills.offsetHeight;
+  moves.forEach(m=>{
+    m.el.style.transition=Math.abs(m.sx-1)>0.001
+      ? "transform "+ease+", --pill-sx "+ease
+      : "transform "+ease;
+    m.el.style.transform="";
+    if(Math.abs(m.sx-1)>0.001) m.el.style.setProperty("--pill-sx", "1");
+  });
+  pills._eWN=moves.map(m=>m.el);
+  const timer=setTimeout(()=>{
+    const nodes=pills._eWN||[];
+    pills._eWN=[];
+    nodes.forEach(el=>{
+      el.style.transition="";
+      el.style.transform="";
+      el.style.willChange="";
+      el.style.transformOrigin="";
+      clearScale(el);
+      el.style.width="";
     });
-  }));
+  },220);
+  pills._eWT=timer;
+  if(timer && timer.unref) timer.unref();
 }
 /* Counts live, ORDER settles at 400ms: live ordering rebuilt the bar per character
    (73-337ms) under the typing hand. 400 clears a deliberate pace's inter-key gap and the
