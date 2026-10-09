@@ -2532,6 +2532,9 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
    and blurred: a dialog here is modal, so the way out is the dialog itself, Alt+F4 or the
    taskbar. Cutting a notch over those buttons is what reaching them costs - clip-path carries
    hit-testing with it, so the hole is real - and that corner then reads sharp and undimmed. */
+/* Registered so the resize glide can interpolate it, and so a child counter-scales by the
+   same value the card is scaling by. */
+@property --mg-s{syntax:"<number>";inherits:true;initial-value:1}
 .modal-card{position:relative;z-index:1;width:100%;max-width:560px;max-height:min(92vh,820px);
   display:flex;flex-direction:column;overflow:hidden;
   background:var(--panel-raised);color:var(--ink);border:1px solid var(--line);
@@ -3387,14 +3390,26 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 /* The tour travels on the family's one spring, --m-travel on --m-spring. `.still` is set by
    tour.js under either quiet switch. */
 /* NOTHING IS DARKENED AND NOTHING IS HELD: the page under the tour stays usable, and only the
-   bubble takes a click. The ring says where a step points, in the bubble's own colour. */
-.tour-hole{position:fixed;z-index:1;border-radius:12px;pointer-events:none;
-  box-shadow:0 0 0 2.5px var(--bub);
-  transition:top var(--m-travel) var(--m-spring),left var(--m-travel) var(--m-spring),
-    width var(--m-travel) var(--m-spring),height var(--m-travel) var(--m-spring),
-    border-radius var(--m-resize) ease,opacity var(--m-resize) ease;opacity:0}
+   bubble takes a click. The ring says where a step points, in the bubble's own colour.
+   Its layout box stays 100px and a transform moves and sizes it. The stroke does not scale
+   with the box; the path sits half a stroke outside, so the 2.5px line frames the spotlight. */
+@property --ring-x{syntax:"<length>";inherits:true;initial-value:0px}
+@property --ring-y{syntax:"<length>";inherits:true;initial-value:0px}
+@property --ring-sx{syntax:"<number>";inherits:true;initial-value:1}
+@property --ring-sy{syntax:"<number>";inherits:true;initial-value:1}
+.tour-hole{position:fixed;left:0;top:0;width:100px;height:100px;z-index:1;pointer-events:none;
+  overflow:visible;transform-origin:0 0;
+  transform:translate(var(--ring-x), var(--ring-y)) scale(var(--ring-sx), var(--ring-sy));
+  transition:--ring-x var(--m-travel) var(--m-spring),--ring-y var(--m-travel) var(--m-spring),
+    --ring-sx var(--m-travel) var(--m-spring),--ring-sy var(--m-travel) var(--m-spring),
+    opacity var(--m-resize) ease;opacity:0}
+.tour-hole svg{display:block;width:100%;height:100%;overflow:visible;pointer-events:none}
+.tour-hole rect{fill:none;stroke:var(--bub);stroke-width:2.5px;vector-effect:non-scaling-stroke;
+  x:calc(-1.25px / var(--ring-sx));y:calc(-1.25px / var(--ring-sy));
+  width:calc(100px + 2.5px / var(--ring-sx));height:calc(100px + 2.5px / var(--ring-sy));
+  rx:calc(13.25px / var(--ring-sx));ry:calc(13.25px / var(--ring-sy))}
 #tourRoot.on .tour-hole{opacity:1}
-#tourRoot.still .tour-hole{transition:border-radius var(--m-resize) ease,opacity var(--m-resize) ease}
+#tourRoot.still .tour-hole{transition:opacity var(--m-resize) ease}
 /* The long steps scroll in the BODY, never the panel, which also keeps the buttons on screen
    where the old max-height scrolled them away. The shape itself is the family's, above. */
 .tour-card{z-index:3;width:min(360px,calc(100vw - 28px));
@@ -4090,7 +4105,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 </div>
 
 <div id="tourRoot" hidden aria-hidden="true">
-  <div class="tour-hole" id="tourHole" aria-hidden="true"></div>
+  <div class="tour-hole" id="tourHole" aria-hidden="true"><svg aria-hidden="true"><rect></rect></svg></div>
   <div class="tour-card bub" id="tourCard" role="dialog" aria-modal="false" aria-labelledby="tourTitle">
     <h3 id="tourTitle">Welcome</h3>
     <p id="tourBody"></p>
@@ -6185,6 +6200,7 @@ What you type stays in this browser only.`;
     const card = modalCard;
     if (card == null || mgReduceMotion()) return null;
     const h = card.getBoundingClientRect().height;
+    mgClearGlideLooks(card);
     mgPendingH = h;
     card.style.transition = "none";
     card.style.overflow = "hidden";
@@ -6207,7 +6223,7 @@ What you type stays in this browser only.`;
     mgStopHeightRun();
     const card = modalCard;
     if (!card) return;
-    card.style.transition = "";
+    mgClearGlideLooks(card);
     card.style.height = "";
     card.style.overflow = "";
     mgPendingH = null;
@@ -6221,6 +6237,47 @@ What you type stays in this browser only.`;
       d._accordion = false;
     });
   }
+  function mgPx(n) {
+    const v = Math.round((n + Number.EPSILON) * 100) / 100;
+    return (v === 0 ? 0 : v) + "px";
+  }
+  function mgClearGlideLooks(card) {
+    card.style.removeProperty("scale");
+    card.style.removeProperty("--mg-s");
+    card.style.transition = "";
+    for (const el of card.children) {
+      el.style.removeProperty("scale");
+      el.style.removeProperty("translate");
+      el.style.removeProperty("transform-origin");
+      el.style.removeProperty("clip-path");
+    }
+  }
+  function mgGlideArm(card) {
+    const head = card.querySelector(":scope > h2");
+    const body = card.querySelector(":scope > .modal-body");
+    const foot = card.querySelector(":scope > .modal-actions");
+    const inv = "1 calc(1 / var(--mg-s))";
+    if (head && body && foot) {
+      const box = card.getBoundingClientRect();
+      const hy = head.getBoundingClientRect(), by = body.getBoundingClientRect(), fy = foot.getBoundingClientRect();
+      const Hh = hy.height, Ha = fy.height, Hb = by.height;
+      const Bt = by.top - box.top, Fb = fy.top - box.top + Ha;
+      const span = Fb - Bt + Hh;
+      head.style.transformOrigin = "center top";
+      foot.style.transformOrigin = "center bottom";
+      body.style.transformOrigin = "center top";
+      head.style.setProperty("scale", inv);
+      foot.style.setProperty("scale", inv);
+      body.style.setProperty("scale", inv);
+      body.style.setProperty("translate", "0 calc(" + mgPx(Hh) + " * (1 / var(--mg-s) - 1))");
+      body.style.setProperty("clip-path", "inset(0 0 max(0px, " + mgPx(Hb + Ha + Hh) + " - var(--mg-s) * " + mgPx(span) + ") 0)");
+      return;
+    }
+    for (const el of card.children) {
+      el.style.transformOrigin = "center " + -el.offsetTop + "px";
+      el.style.setProperty("scale", inv);
+    }
+  }
   function animateModalHeightFrom(before) {
     const card = modalCard;
     if (card == null || before == null || mgReduceMotion()) {
@@ -6229,15 +6286,23 @@ What you type stays in this browser only.`;
     }
     clearTimeout(mgPinTimer);
     mgStopHeightRun();
+    mgClearGlideLooks(card);
     const scroller = card.querySelector(".modal-body");
     const keepScroll = scroller ? scroller.scrollTop : 0;
     card.style.height = "auto";
     const after = card.getBoundingClientRect().height;
-    card.style.height = before + "px";
-    if (Math.abs(after - before) < 2) {
+    if (!(after > 0) || !(before > 0) || Math.abs(after - before) < 2) {
       mgReleaseCard();
       return;
     }
+    const s0 = before / after;
+    card.style.transition = "none";
+    card.style.overflow = "hidden";
+    card.style.height = after + "px";
+    card.style.setProperty("--mg-s", String(s0));
+    mgGlideArm(card);
+    card.style.setProperty("scale", "1 var(--mg-s)");
+    if (scroller) scroller.scrollTop = keepScroll;
     void card.offsetHeight;
     const run = { dead: false, timer: null, card, onEnd: null };
     mgHeightRun = run;
@@ -6247,14 +6312,14 @@ What you type stays in this browser only.`;
       if (scroller) scroller.scrollTop = keepScroll;
     };
     run.onEnd = (e) => {
-      if (e.target === card && e.propertyName === "height") done();
+      if (e.target === card && e.propertyName === "--mg-s") done();
     };
     let started = false;
     const start = () => {
       if (started || run.dead) return;
       started = true;
-      card.style.transition = "height var(--m-resize) var(--m-ease)";
-      card.style.height = after + "px";
+      card.style.transition = "--mg-s var(--m-resize) var(--m-ease)";
+      card.style.setProperty("--mg-s", "1");
       card.addEventListener("transitionend", run.onEnd);
       run.timer = setTimeout(done, 320);
     };
@@ -8588,7 +8653,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-08";
+  var E_BUILT = "2026-10-09";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -21962,6 +22027,31 @@ What you type stays in this browser only.`;
     const cx = r.left + r.width / 2 - m.e, cy = r.top + r.height / 2 - m.f;
     return { top: cy - h / 2, left: cx - w / 2, width: w, height: h };
   }
+  var RING_BOX = 100;
+  function ringWrite(hole, rect) {
+    hole.style.setProperty("--ring-x", rect.left + "px");
+    hole.style.setProperty("--ring-y", rect.top + "px");
+    hole.style.setProperty("--ring-sx", String(rect.width / RING_BOX));
+    hole.style.setProperty("--ring-sy", String(rect.height / RING_BOX));
+  }
+  function placeTourRing(hole, rect) {
+    if (!(rect.width > 0) || !(rect.height > 0)) return;
+    const wasHidden = hole.style.display === "none";
+    hole.style.display = "block";
+    if (!hole._ring) {
+      hole.style.transition = "none";
+      ringWrite(hole, rect);
+      void hole.offsetWidth;
+      hole.style.transition = "";
+    } else if (wasHidden) {
+      hole.style.transition = "none";
+      ringWrite(hole, hole._ring);
+      void hole.offsetWidth;
+      hole.style.transition = "";
+      ringWrite(hole, rect);
+    } else ringWrite(hole, rect);
+    hole._ring = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+  }
   function placeTourUI() {
     if (!tourRunning) return;
     const step = TOUR_STEPS[tourIdx];
@@ -21990,15 +22080,8 @@ What you type stays in this browser only.`;
       if (holeRect.left + holeRect.width > vw) holeRect.width = Math.max(40, vw - holeRect.left);
       if (holeRect.top + holeRect.height > vh) holeRect.height = Math.max(32, vh - holeRect.top);
     }
-    if (holeRect && els.hole) {
-      els.hole.style.display = "block";
-      els.hole.style.top = holeRect.top + "px";
-      els.hole.style.left = holeRect.left + "px";
-      els.hole.style.width = holeRect.width + "px";
-      els.hole.style.height = holeRect.height + "px";
-    } else if (els.hole) {
-      els.hole.style.display = "none";
-    }
+    if (holeRect && els.hole) placeTourRing(els.hole, holeRect);
+    else if (els.hole) els.hole.style.display = "none";
     if (holeRect) {
       const side = typeof step.side === "function" ? step.side() : step.side;
       placeBubble(els.card, holeRect, { width: cardW, gap: 12, prefer: side || void 0 });

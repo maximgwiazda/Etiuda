@@ -2532,6 +2532,9 @@ html.e-arrived #pillsSlot{transition:opacity var(--m-surface) var(--m-ease)}
    and blurred: a dialog here is modal, so the way out is the dialog itself, Alt+F4 or the
    taskbar. Cutting a notch over those buttons is what reaching them costs - clip-path carries
    hit-testing with it, so the hole is real - and that corner then reads sharp and undimmed. */
+/* Registered so the resize glide can interpolate it, and so a child counter-scales by the
+   same value the card is scaling by. */
+@property --mg-s{syntax:"<number>";inherits:true;initial-value:1}
 .modal-card{position:relative;z-index:1;width:100%;max-width:560px;max-height:min(92vh,820px);
   display:flex;flex-direction:column;overflow:hidden;
   background:var(--panel-raised);color:var(--ink);border:1px solid var(--line);
@@ -3387,14 +3390,26 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 /* The tour travels on the family's one spring, --m-travel on --m-spring. `.still` is set by
    tour.js under either quiet switch. */
 /* NOTHING IS DARKENED AND NOTHING IS HELD: the page under the tour stays usable, and only the
-   bubble takes a click. The ring says where a step points, in the bubble's own colour. */
-.tour-hole{position:fixed;z-index:1;border-radius:12px;pointer-events:none;
-  box-shadow:0 0 0 2.5px var(--bub);
-  transition:top var(--m-travel) var(--m-spring),left var(--m-travel) var(--m-spring),
-    width var(--m-travel) var(--m-spring),height var(--m-travel) var(--m-spring),
-    border-radius var(--m-resize) ease,opacity var(--m-resize) ease;opacity:0}
+   bubble takes a click. The ring says where a step points, in the bubble's own colour.
+   Its layout box stays 100px and a transform moves and sizes it. The stroke does not scale
+   with the box; the path sits half a stroke outside, so the 2.5px line frames the spotlight. */
+@property --ring-x{syntax:"<length>";inherits:true;initial-value:0px}
+@property --ring-y{syntax:"<length>";inherits:true;initial-value:0px}
+@property --ring-sx{syntax:"<number>";inherits:true;initial-value:1}
+@property --ring-sy{syntax:"<number>";inherits:true;initial-value:1}
+.tour-hole{position:fixed;left:0;top:0;width:100px;height:100px;z-index:1;pointer-events:none;
+  overflow:visible;transform-origin:0 0;
+  transform:translate(var(--ring-x), var(--ring-y)) scale(var(--ring-sx), var(--ring-sy));
+  transition:--ring-x var(--m-travel) var(--m-spring),--ring-y var(--m-travel) var(--m-spring),
+    --ring-sx var(--m-travel) var(--m-spring),--ring-sy var(--m-travel) var(--m-spring),
+    opacity var(--m-resize) ease;opacity:0}
+.tour-hole svg{display:block;width:100%;height:100%;overflow:visible;pointer-events:none}
+.tour-hole rect{fill:none;stroke:var(--bub);stroke-width:2.5px;vector-effect:non-scaling-stroke;
+  x:calc(-1.25px / var(--ring-sx));y:calc(-1.25px / var(--ring-sy));
+  width:calc(100px + 2.5px / var(--ring-sx));height:calc(100px + 2.5px / var(--ring-sy));
+  rx:calc(13.25px / var(--ring-sx));ry:calc(13.25px / var(--ring-sy))}
 #tourRoot.on .tour-hole{opacity:1}
-#tourRoot.still .tour-hole{transition:border-radius var(--m-resize) ease,opacity var(--m-resize) ease}
+#tourRoot.still .tour-hole{transition:opacity var(--m-resize) ease}
 /* The long steps scroll in the BODY, never the panel, which also keeps the buttons on screen
    where the old max-height scrolled them away. The shape itself is the family's, above. */
 .tour-card{z-index:3;width:min(360px,calc(100vw - 28px));
@@ -4090,7 +4105,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
 </div>
 
 <div id="tourRoot" hidden aria-hidden="true">
-  <div class="tour-hole" id="tourHole" aria-hidden="true"></div>
+  <div class="tour-hole" id="tourHole" aria-hidden="true"><svg aria-hidden="true"><rect></rect></svg></div>
   <div class="tour-card bub" id="tourCard" role="dialog" aria-modal="false" aria-labelledby="tourTitle">
     <h3 id="tourTitle">Welcome</h3>
     <p id="tourBody"></p>
