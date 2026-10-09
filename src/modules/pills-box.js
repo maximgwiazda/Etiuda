@@ -15,55 +15,122 @@ function syncLayoutPrefs(){
      failed to parse), never a preference set on purpose. */
   hooks.syncSettingsMenu();
 }
-let pillsBoxTimer=null;
-/* THE SLOT'S HEIGHT IS THE ANIMATION - it sits in the sticky header, so gliding it
-   carries the whole page. Measured, not declared: the ends are display:none and auto,
-   which CSS cannot interpolate. Same FLIP discipline as flipPills, forced reflow included.
-   `mutate` must land FINAL geometry synchronously - an intermediate layout glides to the
-   wrong height. The transition is NOT in the sheet: a standing one would animate every
-   step of a resize drag. */
+let pillsBoxTimer=null, pillsGhost=null;
+/* LAYOUT SNAPS IN THIS TURN. Height is not a transition: gliding it lays the page out on
+   every frame, and the lanes' top is that height. A fixed clone at the old rect carries
+   the retreat on transform and opacity. The rail is written once, after the snap.
+   `mutate` must land final geometry synchronously. The transition is not in the sheet. */
+function slotBox(slot){
+  const cs=getComputedStyle(slot);
+  // A hidden slot is not a short slot: it reserves nothing, margin included.
+  if(cs.display==="none") return {h:0,m:0,left:0,top:0,width:0};
+  const r=slot.getBoundingClientRect();
+  return {h:r.height, m:parseFloat(cs.marginTop)||0, left:r.left, top:r.top, width:r.width};
+}
+function clearPillsMotion(){
+  clearTimeout(pillsBoxTimer); pillsBoxTimer=null;
+  if(pillsGhost){ pillsGhost.remove(); pillsGhost=null; }
+  const slot=pillsSlot();
+  if(slot){
+    slot.style.transition="none";
+    slot.style.transform=""; slot.style.opacity=""; slot.style.clipPath="";
+    // An inline height would pin the next show at the snapped value.
+    if(slot.style.height) slot.style.height="";
+    if(slot.style.marginTop) slot.style.marginTop="";
+    slot.style.transition="";
+  }
+  document.body.classList.remove("e-pills-retreat");
+}
+function endPillsMotion(){ clearPillsMotion(); }
+function armPillsRetreat(ms){
+  document.body.classList.add("e-pills-retreat");
+  clearTimeout(pillsBoxTimer);
+  pillsBoxTimer=setTimeout(endPillsMotion, ms+20);
+  if(pillsBoxTimer && pillsBoxTimer.unref) pillsBoxTimer.unref();
+}
+/* `shot` was cloned before mutate, so it still wears the bar the eye is leaving.
+   Ids go, or the live slot stops being the one a query finds. Inline display, or a
+   pills-off rule hides the clone along with the slot. */
+function mountPillsGhost(shot, from){
+  const g=shot;
+  g.removeAttribute("id");
+  g.querySelectorAll("[id]").forEach(n=>n.removeAttribute("id"));
+  g.setAttribute("aria-hidden","true"); g.inert=true;
+  g.style.display="block"; g.style.maxHeight="none"; g.style.overflow="hidden";
+  g.style.position="fixed";
+  g.style.left=from.left+"px"; g.style.top=from.top+"px";
+  g.style.width=from.width+"px"; g.style.height=from.h+"px";
+  g.style.margin="0"; g.style.zIndex="48"; g.style.pointerEvents="none";
+  g.style.transform="none"; g.style.opacity="1"; g.style.transition="none";
+  g.style.willChange="transform, opacity";
+  document.body.appendChild(g);
+  pillsGhost=g;
+  return g;
+}
 function animatePillsBox(mutate,ms){
   ms=ms||M_MS.move;
   const slot=pillsSlot();
   if(!slot || mgReduceMotion()){
     // No ride, but the header still changed height and the fixed panel is pinned to it.
+    clearPillsMotion();
     mutate();
     hooks.syncRailGeometry();
     return;
   }
-  const box=()=>{
-    const cs=getComputedStyle(slot);
-    // A hidden slot is not a short slot: it reserves nothing, margin included.
-    return cs.display==="none" ? {h:0,m:0}
-      : {h:slot.getBoundingClientRect().height, m:parseFloat(cs.marginTop)||0};
-  };
-  const from=box();
+  clearPillsMotion();
+  const from=slotBox(slot);
+  const leaving=from.h>=1;
+  const shot=leaving ? slot.cloneNode(true) : null;
+  slot.style.transition="none";
   mutate();
-  // Any override from a toggle still in flight has to go before the natural height can be read.
-  slot.style.transition="none"; slot.style.height=""; slot.style.marginTop="";
-  const to=box();
-  const done=()=>{
-    slot.classList.remove("pills-anim");
-    slot.style.transition=""; slot.style.height=""; slot.style.marginTop="";
-    hooks.syncRailGeometry();
-  };
-  clearTimeout(pillsBoxTimer);
-  if(Math.abs(to.h-from.h)<1 && Math.abs(to.m-from.m)<1){ done(); return; }
-  slot.classList.add("pills-anim");
-  slot.style.height=from.h+"px"; slot.style.marginTop=from.m+"px";
-  void slot.offsetHeight;                    // commit the start - see the note in flipPills
-  slot.style.transition="height "+ms+"ms "+E_EASE+",margin-top "+ms+"ms "+E_EASE;
-  slot.style.height=to.h+"px"; slot.style.marginTop=to.m+"px";
-  /* The panel is fixed and positioned from the header's bottom edge - precisely the thing
-     that is moving - so it is told every frame of the ride, not once. rAF stalls in a
-     background tab, which is why the timer below has the last word either way. */
-  const until=performance.now()+ms+20;
-  const follow=()=>{
-    hooks.syncRailGeometry();
-    if(performance.now()<until) requestAnimationFrame(follow);
-  };
-  requestAnimationFrame(follow);
-  pillsBoxTimer=setTimeout(done,ms+20);
+  const hidden=getComputedStyle(slot).display==="none";
+  // One height write, the snap. A pinned zero has to leave before a shown bar can be measured.
+  let to;
+  if(hidden){ to={h:0,m:0,left:from.left,top:from.top,width:from.width}; slot.style.height="0px"; }
+  else {
+    if(slot.style.height) slot.style.height="";
+    to=slotBox(slot);
+  }
+  hooks.syncRailGeometry();
+  if(Math.abs(to.h-from.h)<1 && Math.abs(to.m-from.m)<1) return;
+  const travel=Math.round(Math.abs((from.h+from.m)-(to.h+to.m)));
+  const ease=ms+"ms "+E_EASE;
+  if(hidden && leaving){
+    const g=mountPillsGhost(shot, from);
+    void g.offsetHeight;
+    g.style.transition="transform "+ease+",opacity "+ease;
+    g.style.transform="translateY(-"+Math.round(from.h+from.m)+"px)";
+    g.style.opacity="0";
+  } else if(!hidden && from.h<1){
+    slot.style.transform="translateY(-"+Math.round(to.h+to.m)+"px)";
+    slot.style.opacity="0";
+    void slot.offsetHeight;
+    slot.style.transition="transform "+ease+",opacity "+ease;
+    slot.style.transform=""; slot.style.opacity="";
+  } else if(to.h+1<from.h && leaving){
+    const g=mountPillsGhost(shot, from);
+    const cut=Math.max(0, Math.round(from.h-to.h));
+    slot.style.opacity="0";
+    g.style.clipPath="inset(0 0 0 0)";
+    void g.offsetHeight;
+    g.style.transition="clip-path "+ease;
+    g.style.clipPath="inset(0 0 "+cut+"px 0)";
+  } else if(to.h>from.h+1){
+    const cut=Math.max(0, Math.round(to.h-from.h));
+    slot.style.clipPath="inset(0 0 "+cut+"px 0)";
+    void slot.offsetHeight;
+    slot.style.transition="clip-path "+ease;
+    slot.style.clipPath="inset(0 0 0px 0)";
+  } else if(travel){
+    const g=leaving ? mountPillsGhost(shot, from) : null;
+    if(g){
+      void g.offsetHeight;
+      g.style.transition="transform "+ease+",opacity "+ease;
+      g.style.transform="translateY(-"+travel+"px)";
+      g.style.opacity="0";
+    }
+  }
+  armPillsRetreat(ms);
 }
 function togglePills(){
   animatePillsBox(()=>{

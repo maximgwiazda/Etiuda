@@ -27,7 +27,7 @@ import { $, intentEl } from "./dom.js";
    underneath, unseen; the header gives up only the category bar. */
 const TRAIL_SHOWN=6;
 const LN_DOT=" "+String.fromCharCode(0xb7)+" ";
-let lanesOn=false, laneFresh=false, laneMark=-1, laneKey="", laneRO=null;
+let lanesOn=false, laneFresh=false, laneMark=-1, laneKey="", laneRO=null, laneBuildT=0;
 // How often the head says again how long ago the last reply went.
 const LANE_TICK_MS=20000;
 let laneTick=0;
@@ -61,7 +61,14 @@ function toggleLanes(on){
   if(want) laneTick=setInterval(()=>{ const s=lanesEl() && lanesEl().querySelector(".ln-since"); if(s) s.textContent=laneSince(laneState().log); }, LANE_TICK_MS);
   // Let go where a timer can be, so a test in bare node that leaves the lanes up still ends.
   if(laneTick && laneTick.unref) laneTick.unref();
-  syncNextDock();
+  // One frame on, so this frame is only the bar and the wires read the final top.
+  // rAF does not run in a hidden tab, so the same build is owed to a timer too.
+  if(want){
+    requestAnimationFrame(()=>{ if(lanesOn) syncNextDock(); });
+    clearTimeout(laneBuildT);
+    laneBuildT=setTimeout(()=>{ laneBuildT=0; const box=lanesEl(); if(lanesOn && box && !box.querySelector(".ln-wrap")) syncNextDock(); }, 60);
+    if(laneBuildT && laneBuildT.unref) laneBuildT.unref();
+  } else { clearTimeout(laneBuildT); laneBuildT=0; syncNextDock(); }
 }
 
 /* What the lanes show for the tab in front, and a key that changes whenever any of it would. Next is the
@@ -448,7 +455,8 @@ function wireLanes(){
   wireLaneEdits(el);
   // Typing in the search box is a search of the whole catalog, which the cards show.
   if(intentEl) intentEl.addEventListener("input", ()=>{ if(lanesOn && String(intentEl.value||"")) toggleLanes(false); });
-  if(typeof ResizeObserver==="function"){ laneRO=new ResizeObserver(()=>{ if(lanesOn) drawWires(); }); laneRO.observe(el); }
+  // drawWires once the retreat class has gone: drawLanes already drew at the final top.
+  if(typeof ResizeObserver==="function"){ laneRO=new ResizeObserver(()=>{ if(lanesOn && !document.body.classList.contains("e-pills-retreat")) drawWires(); }); laneRO.observe(el); }
 }
 
 export {
