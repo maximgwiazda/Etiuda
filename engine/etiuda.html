@@ -1452,9 +1452,37 @@ body.e-take-drag .pills-slot.pills-overflow .pills,
   backdrop-filter:var(--glass-mid-filter);
   -webkit-mask-image:none;mask-image:none;
   border-color:var(--line)}
+/* clip-path on .pills also clips that box's own shadow. This one sits outside the clip and
+   is sized by the same --pills-show. The mask is a hole, so the shadow stays and the bar's
+   interior, blur included, gains nothing. */
+.pills-slot.pills-overflow::before{
+  content:"";position:absolute;z-index:0;left:0;right:0;top:0;box-sizing:border-box;
+  height:var(--pills-show);border:1px solid transparent;border-radius:12px;pointer-events:none;
+  --pills-show:var(--pills-2line, 4.2em);
+  box-shadow:var(--shadow-pop-off);
+  -webkit-mask-image:linear-gradient(#000,#000),linear-gradient(#000,#000);
+  -webkit-mask-size:calc(100% + 240px) calc(100% + 240px),100% 100%;
+  -webkit-mask-position:center,center;-webkit-mask-repeat:no-repeat,no-repeat;
+  -webkit-mask-clip:no-clip,no-clip;-webkit-mask-origin:border-box,border-box;
+  -webkit-mask-composite:xor;
+  mask-image:linear-gradient(#000,#000),linear-gradient(#000,#000);
+  mask-size:calc(100% + 240px) calc(100% + 240px),100% 100%;
+  mask-position:center,center;mask-repeat:no-repeat,no-repeat;
+  mask-clip:no-clip,no-clip;mask-origin:border-box,border-box;
+  mask-composite:exclude;
+  transition:--pills-show var(--m-reveal) var(--m-ease),
+             box-shadow var(--m-reveal) var(--m-ease)}
+body.pills-lines-expand .pills-slot.pills-overflow::before,
+body.e-take-drag .pills-slot.pills-overflow::before,
+.pills-slot.pills-overflow:hover::before,
+.pills-slot.pills-overflow.pills-navpeek::before,
+.pills-slot.pills-overflow.pills-expand::before{
+  --pills-show:var(--pills-full, var(--pills-2line, 4.2em));
+  box-shadow:var(--shadow-pop)}
 /* Measured, not animated: --pills-full is read with the open styles applied, and the transition
    must not be running while that happens. */
-.pills-slot.pills-measuring .pills{transition:none!important}
+.pills-slot.pills-measuring .pills,
+.pills-slot.pills-measuring::before{transition:none!important}
 /* Tonal, not outlined: an idle pill is a soft fill with no border of its own, so the coloured
    hint rings below are the only outlines in the row and read from across the desk. */
 /* Flex, not inline: a 21px inline-block dot stretches the line box, and the wrap math

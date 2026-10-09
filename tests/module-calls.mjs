@@ -3807,6 +3807,33 @@ const CARD_B = {
         return eq([!!show, !!(show && show.includes("var(--m-reveal)") && show.includes("var(--m-ease)")),
           !layout, clip, registered, blur].join(","), "true,true,true,true,true,true");
       });
+    /* The clip that opens the bar also clips that element's own drop shadow. The shadow is a
+       box outside the clip, sized by the same length, with a hole so it adds nothing inside. */
+    check("template.html", "1010pv2 the open category bar casts its drop shadow from outside the clip",
+      () => {
+        const sheet = fs.readFileSync(join(MODDIR, "..", "template.html"), "utf8");
+        const base = /\.pills-slot\.pills-overflow \.pills\{([^}]*)\}/.exec(sheet);
+        const shadow = /\.pills-slot\.pills-overflow::before\{([^}]*)\}/.exec(sheet);
+        const openShadow = /\.pills-slot\.pills-overflow\.pills-expand::before\{([^}]*)\}/.exec(sheet);
+        const slot = /\.pills-slot\.pills-overflow\{([^}]*)\}/.exec(sheet);
+        const baseBody = base ? base[1] : "", shadowBody = shadow ? shadow[1] : "";
+        const openBody = openShadow ? openShadow[1] : "", slotBody = slot ? slot[1] : "";
+        const clip = /clip-path:[^;]*var\(--pills-show\)/.test(baseBody);
+        const sized = /height:\s*var\(--pills-show\)/.test(shadowBody);
+        const hole = /mask-composite:\s*exclude/.test(shadowBody) && /mask-clip:\s*no-clip/.test(shadowBody);
+        const off = /box-shadow:\s*var\(--shadow-pop-off\)/.test(shadowBody);
+        const on = /box-shadow:\s*var\(--shadow-pop\)/.test(openBody) && !/--shadow-pop-off/.test(openBody);
+        const trans = /transition:([^;}]+)/.exec(shadowBody);
+        const parts = trans ? trans[1].split(",").map(s => s.trim()) : [];
+        const show = parts.find(p => p.startsWith("--pills-show"));
+        const layout = parts.some(p => /^(max-height|height|padding|padding-bottom|margin|top)\b/.test(p));
+        const notClipped = !/clip-path:/.test(shadowBody);
+        const reserved = /height:\s*var\(--pills-2line/.test(slotBody);
+        return eq([clip, sized, hole, off, on, !!show,
+          !!(show && show.includes("var(--m-reveal)") && show.includes("var(--m-ease)")),
+          !layout, notClipped, reserved].join(","),
+          "true,true,true,true,true,true,true,true,true,true");
+      });
   } finally {
     if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
     if (hadDoc !== undefined) Dom.grabDom();
