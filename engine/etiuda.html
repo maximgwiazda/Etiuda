@@ -29296,7 +29296,7 @@ What you type stays in this browser only.`;
       if (s) s.textContent = laneSince(laneState().log);
     }, LANE_TICK_MS);
     if (laneTick && laneTick.unref) laneTick.unref();
-    if (want) {
+    if (want && document.body.classList.contains("e-pills-retreat")) {
       requestAnimationFrame(() => {
         if (lanesOn) syncNextDock();
       });

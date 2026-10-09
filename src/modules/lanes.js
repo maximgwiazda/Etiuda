@@ -61,9 +61,10 @@ function toggleLanes(on){
   if(want) laneTick=setInterval(()=>{ const s=lanesEl() && lanesEl().querySelector(".ln-since"); if(s) s.textContent=laneSince(laneState().log); }, LANE_TICK_MS);
   // Let go where a timer can be, so a test in bare node that leaves the lanes up still ends.
   if(laneTick && laneTick.unref) laneTick.unref();
-  // One frame on, so this frame is only the bar and the wires read the final top.
+  // One frame on while the bar is still retreating, so this frame is only the bar and the
+  // wires read the final top. No retreat (a reduced-motion snap, or no height change): build now.
   // rAF does not run in a hidden tab, so the same build is owed to a timer too.
-  if(want){
+  if(want && document.body.classList.contains("e-pills-retreat")){
     requestAnimationFrame(()=>{ if(lanesOn) syncNextDock(); });
     clearTimeout(laneBuildT);
     laneBuildT=setTimeout(()=>{ laneBuildT=0; const box=lanesEl(); if(lanesOn && box && !box.querySelector(".ln-wrap")) syncNextDock(); }, 60);
