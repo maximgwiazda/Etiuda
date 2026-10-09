@@ -3719,6 +3719,75 @@ const CARD_B = {
           /classList\.remove\([^)]*"deck-return"/.test(src), /classList\.add\("deck-return"\)/.test(src),
           /classList\.remove\("deck-return"\)/.test(src)].join(","), "true,true,true,true,true,true");
       });
+    /* One open deck, two columns. The fade's answer is the same set as the geometry in 1008dk4. What changes is
+       how many boxes are read to reach it: the other column is never measured, and the walk stops at the first
+       card in this column whose top is past the reach. */
+    check("deck.js", "1010dk9 an open deck marks what it covers without reading every box: nothing above it, nothing past the reach, and nothing in the other column",
+      () => {
+        const tally = {};
+        const placed = (id, top, left) => {
+          const e = node(id, top, left, 70);
+          tally[id] = 0;
+          const own = e.getBoundingClientRect.bind(e);
+          e.getBoundingClientRect = () => { tally[id]++; return own(); };
+          return e;
+        };
+        const deck = placed("c-deck", 100, 0);
+        deck.classList.add("deck", "deck-open");
+        deck.style.v = { "--deck-rest-bottom": "60px", "--deck-extra": "168px" };
+        const above = placed("c-above", 20, 0), c1 = placed("c1", 200, 0), c2 = placed("c2", 280, 0);
+        const c3 = placed("c3", 400, 0), c4 = placed("c4", 520, 0);
+        const b1 = placed("b1", 200, 400), b2 = placed("b2", 280, 400), b3 = placed("b3", 400, 400);
+        const colA = [above, deck, c1, c2, c3, c4], colB = [b1, b2, b3];
+        const asCol = cards => {
+          const col = { classList: cls(new Set(["col"])),
+            querySelectorAll: sel => cards.filter(e => sel.split(",").some(c => hit(e, c.trim()))),
+            getBoundingClientRect: () => ({ top: cards[0].rect.top, bottom: cards[cards.length - 1].rect.bottom + 70,
+              left: cards[0].rect.left, right: cards[0].rect.right }) };
+          cards.forEach(e => { e.closest = s => (s === ".col" ? col : null); });
+          return col;
+        };
+        const a = asCol(colA), b = asCol(colB);
+        a.nextElementSibling = b; b.nextElementSibling = null;
+        const l = listOf([...colA, ...colB]);
+        globalThis.document.querySelector = q => (q === "#list" ? l : null); Dom.grabDom();
+        DK.deckFade();
+        const got = [faded(l), tally["c-above"], tally.c4, tally.b1, tally.b2, tally.b3, tally.c1 > 0, tally.c3 > 0].join(",");
+        return eq(got, "c1,c2,0,0,0,0,0,true,true");
+      });
+    /* The band is one viewport above and below the screen. A deck outside it is not laid out; one inside it is. */
+    check("deck.js", "1010dk10 a deck more than a viewport away is not measured, and one on the page is",
+      () => {
+        const had = globalThis.innerHeight;
+        globalThis.innerHeight = 800;
+        const bag = () => ({ n: 0 });
+        const nearBag = bag(), farBag = bag();
+        const slab = b => ({ offsetTop: 10, classList: cls(new Set(["txt"])), style: { setProperty() {}, removeProperty() {} },
+          get offsetHeight() { b.n++; return 40; }, get offsetWidth() { b.n++; return 200; } });
+        const card = (top, b) => ({ dataset: { id: top < 1000 ? "near" : "far" }, classList: cls(new Set(["card"])),
+          style: { v: {}, removeProperty() {}, setProperty(k, x) { this.v[k] = x; }, getPropertyValue(k) { return this.v[k] || ""; } },
+          getBoundingClientRect() { return { top, bottom: top + 100, left: 0, right: 200 }; },
+          querySelectorAll() { return [slab(b), slab(b)]; }, matches() { return false; },
+          get offsetHeight() { b.n++; return 100; } });
+        const near = card(100, nearBag), far = card(5000, farBag);
+        const l = { querySelectorAll: s => (String(s).startsWith(".card") ? [near, far] : []) };
+        try {
+          globalThis.document.querySelector = q => (q === "#list" ? l : null); Dom.grabDom();
+          DK.deckScan();
+          return eq([nearBag.n > 0, farBag.n, near.classList.contains("deck-near"), far.classList.contains("deck-near")].join(","),
+            "true,0,true,false");
+        } finally { if (had === undefined) delete globalThis.innerHeight; else globalThis.innerHeight = had; }
+      });
+    check("deck.js", "1010dk11 a deck keeps the list's content-visibility until it is near or open, and a covered card still blurs",
+      () => {
+        const sheet = fs.readFileSync(join(MODDIR, "..", "template.html"), "utf8");
+        const base = /#list \.card\.deck\{([^}]*)\}/.exec(sheet);
+        const near = /#list \.card\.deck\.deck-near,\s*#list \.card\.deck\.deck-up\{([^}]*)\}/.exec(sheet);
+        const under = /#list \.deck-under\{([^}]*)\}/.exec(sheet);
+        const baseBody = base ? base[1] : "", nearBody = near ? near[1] : "", underBody = under ? under[1] : "";
+        return eq([baseBody.indexOf("content-visibility") === -1, /content-visibility:\s*visible/.test(nearBody),
+          /filter:\s*blur\(1\.6px\)/.test(underBody)].join(","), "true,true,true");
+      });
   } finally {
     if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
     if (hadDoc !== undefined) Dom.grabDom();

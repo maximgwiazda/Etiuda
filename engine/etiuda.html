@@ -1899,7 +1899,11 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 /* THE DECK, the sheet's half; deck.js sets the classes and the --deck-* lengths. At rest each reply
    behind the front sits with its bottom edge out by its depth, narrower and darker; dealt, they
    spring into their places one after another, front first, and slide back on the house curve. */
-#list .card.deck{content-visibility:visible;contain-intrinsic-size:none;z-index:0}
+/* Off the approach band a deck keeps #list .card's content-visibility. deck-near, and a deck
+   that is open, are laid out so the tuck can be measured and can paint past the card. */
+#list .card.deck{z-index:0}
+#list .card.deck.deck-near,
+#list .card.deck.deck-up{content-visibility:visible;contain-intrinsic-size:none}
 #list .card.deck.deck-up{z-index:6}
 .card.deck>.txt{z-index:var(--deck-z,1);
   transition:box-shadow var(--m-move) ease,background-color var(--m-tone) ease,border-color var(--m-tone) ease}
@@ -18541,7 +18545,7 @@ What you type stays in this browser only.`;
     };
   }
   function deckReset(card) {
-    card.classList.remove("deck", "deck-open", "deck-up", "deck-moving", "deck-return");
+    card.classList.remove("deck", "deck-open", "deck-up", "deck-moving", "deck-return", "deck-near");
     ["height", "--deck-rest-bottom", "--deck-extra"].forEach((p) => card.style.removeProperty(p));
     deckSlabs(card).forEach((s) => {
       s.classList.remove("deck-back");
@@ -18552,18 +18556,23 @@ What you type stays in this browser only.`;
   }
   var deckRaf = 0;
   var deckKbdCard = null;
-  function deckScan() {
-    deckRaf = 0;
-    if (!list) return;
-    const todo = [];
-    list.querySelectorAll(".card[data-id]").forEach((c) => {
-      if (deckSlabs(c).length < 2) {
-        if (c.classList.contains("deck")) deckReset(c);
-        return;
-      }
+  function deckView() {
+    const h = globalThis.innerHeight;
+    return typeof h === "number" && h > 0 ? h : 800;
+  }
+  function deckInRange(c) {
+    if (typeof c.getBoundingClientRect !== "function") return true;
+    const r = c.getBoundingClientRect(), h = deckView();
+    return r.bottom >= -h && r.top <= h + h;
+  }
+  function deckLive(c) {
+    return c.classList.contains("deck-open") || c.classList.contains("deck-up") || deckInRange(c);
+  }
+  function deckMeasure(todo) {
+    if (!todo.length) return;
+    todo.forEach((c) => {
       c.style.removeProperty("height");
-      c.classList.add("deck");
-      todo.push(c);
+      c.classList.add("deck", "deck-near");
     });
     const read = todo.map((c) => {
       const s = deckSlabs(c);
@@ -18591,8 +18600,45 @@ What you type stays in this browser only.`;
       if (c.matches(":hover") || c === deckKbdCard) deckSetOpen(c, true, true);
     });
   }
+  function deckScan() {
+    deckRaf = 0;
+    if (!list) return;
+    const todo = [];
+    list.querySelectorAll(".card[data-id]").forEach((c) => {
+      if (deckSlabs(c).length < 2) {
+        if (c.classList.contains("deck")) deckReset(c);
+        return;
+      }
+      if (!deckLive(c)) {
+        c.classList.remove("deck-near");
+        return;
+      }
+      todo.push(c);
+    });
+    deckMeasure(todo);
+  }
   function deckLater() {
     if (!deckRaf) deckRaf = requestAnimationFrame(deckScan);
+  }
+  var deckApproachRaf = 0;
+  function deckApproach() {
+    if (!list) return;
+    const todo = [];
+    list.querySelectorAll(".card[data-id]").forEach((c) => {
+      if (c.classList.contains("deck-near") || c.classList.contains("deck-open") || c.classList.contains("deck-up")) {
+        if (!c.classList.contains("deck-open") && !c.classList.contains("deck-up") && !deckInRange(c)) c.classList.remove("deck-near");
+        return;
+      }
+      if (deckSlabs(c).length < 2 || !deckInRange(c)) return;
+      todo.push(c);
+    });
+    deckMeasure(todo);
+  }
+  function deckLaterApproach() {
+    if (!deckApproachRaf) deckApproachRaf = requestAnimationFrame(() => {
+      deckApproachRaf = 0;
+      deckApproach();
+    });
   }
   function deckSetOpen(card, open, instant) {
     clearTimeout(card._deckT);
@@ -18639,6 +18685,44 @@ What you type stays in this browser only.`;
   }
   var deckSeen = /* @__PURE__ */ new WeakSet();
   var deckFadeRaf = 0;
+  function deckSeqAfter(card, items) {
+    const col = typeof card.closest === "function" ? card.closest(".col") : null;
+    if (col && typeof col.querySelectorAll === "function") {
+      const nodes = Array.from(col.querySelectorAll(".card[data-id], .list-sep"));
+      const i2 = nodes.indexOf(card);
+      return i2 < 0 ? [] : nodes.slice(i2 + 1);
+    }
+    const i = items.indexOf(card);
+    return i < 0 ? [] : items.slice(i + 1);
+  }
+  function deckTake(seq, reach, want) {
+    for (const e of seq) {
+      const r = e.getBoundingClientRect();
+      const inline = r.left < reach.right - 4 && r.right > reach.left + 4;
+      if (inline && r.top >= reach.bottom) return;
+      if (deckCovers(reach, r)) want.add(e);
+    }
+  }
+  function deckPastColumn(card, reach, want) {
+    const col = typeof card.closest === "function" ? card.closest(".col") : null;
+    if (!col || typeof col.getBoundingClientRect !== "function") return;
+    if (reach.bottom <= col.getBoundingClientRect().bottom + 0.5) return;
+    let n = col.nextElementSibling;
+    while (n) {
+      if (n.classList && n.classList.contains("col")) {
+        const cr = typeof n.getBoundingClientRect === "function" ? n.getBoundingClientRect() : null;
+        const inline = !!(cr && cr.left < reach.right - 4 && cr.right > reach.left + 4);
+        if (inline && cr.top >= reach.bottom) return;
+        if (inline && typeof n.querySelectorAll === "function")
+          deckTake(Array.from(n.querySelectorAll(".card[data-id], .list-sep")), reach, want);
+      } else if (typeof n.getBoundingClientRect === "function" && n.matches && n.matches(".card[data-id], .list-sep")) {
+        const r = n.getBoundingClientRect();
+        if (r.left < reach.right - 4 && r.right > reach.left + 4 && r.top >= reach.bottom) return;
+        if (deckCovers(reach, r)) want.add(n);
+      }
+      n = n.nextElementSibling;
+    }
+  }
   function deckFade() {
     if (!list) return;
     const items = Array.from(list.querySelectorAll(".card[data-id], .list-sep")), want = /* @__PURE__ */ new Set();
@@ -18650,9 +18734,8 @@ What you type stays in this browser only.`;
         right: c.right,
         bottom: c.top + (parseFloat(cs.getPropertyValue("--deck-rest-bottom")) || 0) + (parseFloat(cs.getPropertyValue("--deck-extra")) || 0) + 2
       };
-      items.forEach((e) => {
-        if (e !== card && deckCovers(reach, e.getBoundingClientRect())) want.add(e);
-      });
+      deckTake(deckSeqAfter(card, items), reach, want);
+      deckPastColumn(card, reach, want);
     });
     list.querySelectorAll(".deck-under").forEach((e) => {
       if (!want.has(e)) e.classList.remove("deck-under");
@@ -18705,8 +18788,14 @@ What you type stays in this browser only.`;
     }).observe(list);
     list.addEventListener("animationend", deckFadeLater);
     list.addEventListener("transitionend", deckFadeLater);
-    document.addEventListener("scroll", deckFadeLater, { capture: true, passive: true });
-    addEventListener("resize", deckFadeLater);
+    document.addEventListener("scroll", () => {
+      deckLaterApproach();
+      deckFadeLater();
+    }, { capture: true, passive: true });
+    addEventListener("resize", () => {
+      deckLater();
+      deckFadeLater();
+    });
     document.addEventListener("pointerover", (e) => {
       const c = deckAt(e.target), from = deckAt(e.relatedTarget);
       if (c && c !== from) deckWant(c, true, DECK_DWELL);

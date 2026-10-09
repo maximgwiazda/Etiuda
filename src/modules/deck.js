@@ -28,23 +28,32 @@ function deckLengths(tops, heights, width, natural){
 }
 
 function deckReset(card){
-  card.classList.remove("deck","deck-open","deck-up","deck-moving","deck-return");
+  card.classList.remove("deck","deck-open","deck-up","deck-moving","deck-return","deck-near");
   ["height","--deck-rest-bottom","--deck-extra"].forEach(p=>card.style.removeProperty(p));
   deckSlabs(card).forEach(s=>{ s.classList.remove("deck-back"); DECK_SLAB_PROPS.forEach(p=>s.style.removeProperty(p)); });
   clearTimeout(card._deckT); card._deckGrow=0;
 }
 let deckRaf=0, deckKbdCard=null;
-/* Every card is measured afresh after any change in the list. A card's height is let go for all
-   of them first, then every slab is read, then every length written, so the list costs one
-   layout rather than one per card. */
-function deckScan(){
-  deckRaf=0;
-  if(!list) return;
-  const todo=[];
-  list.querySelectorAll(".card[data-id]").forEach(c=>{
-    if(deckSlabs(c).length<2){ if(c.classList.contains("deck")) deckReset(c); return; }
-    c.style.removeProperty("height"); c.classList.add("deck"); todo.push(c);
-  });
+/* A deck whose own box sits more than one viewport outside the screen keeps the list's
+   content-visibility. Inside that band it is measured, which is what deck-near records. */
+function deckView(){
+  const h=globalThis.innerHeight;
+  return (typeof h==="number"&&h>0)?h:800;
+}
+function deckInRange(c){
+  if(typeof c.getBoundingClientRect!=="function") return true;
+  const r=c.getBoundingClientRect(), h=deckView();
+  return r.bottom>=-h && r.top<=h+h;
+}
+function deckLive(c){
+  return c.classList.contains("deck-open")||c.classList.contains("deck-up")||deckInRange(c);
+}
+/* Every card in the band is measured afresh after any change in the list. A card's height is
+   let go for all of them first, then every slab is read, then every length written, so the
+   list costs one layout rather than one per card. A deck outside the band is not read. */
+function deckMeasure(todo){
+  if(!todo.length) return;
+  todo.forEach(c=>{ c.style.removeProperty("height"); c.classList.add("deck","deck-near"); });
   const read=todo.map(c=>{
     const s=deckSlabs(c);
     return {c, s, L:deckLengths(s.map(e=>e.offsetTop), s.map(e=>e.offsetHeight), s[0].offsetWidth, c.offsetHeight)};
@@ -65,7 +74,34 @@ function deckScan(){
     if(c.matches(":hover") || c===deckKbdCard) deckSetOpen(c,true,true);
   });
 }
+function deckScan(){
+  deckRaf=0;
+  if(!list) return;
+  const todo=[];
+  list.querySelectorAll(".card[data-id]").forEach(c=>{
+    if(deckSlabs(c).length<2){ if(c.classList.contains("deck")) deckReset(c); return; }
+    if(!deckLive(c)){ c.classList.remove("deck-near"); return; }
+    todo.push(c);
+  });
+  deckMeasure(todo);
+}
 function deckLater(){ if(!deckRaf) deckRaf=requestAnimationFrame(deckScan); }
+/* Scroll only picks up a deck that has just entered the band. One already measured stays as it is. */
+let deckApproachRaf=0;
+function deckApproach(){
+  if(!list) return;
+  const todo=[];
+  list.querySelectorAll(".card[data-id]").forEach(c=>{
+    if(c.classList.contains("deck-near")||c.classList.contains("deck-open")||c.classList.contains("deck-up")){
+      if(!c.classList.contains("deck-open")&&!c.classList.contains("deck-up")&&!deckInRange(c)) c.classList.remove("deck-near");
+      return;
+    }
+    if(deckSlabs(c).length<2||!deckInRange(c)) return;
+    todo.push(c);
+  });
+  deckMeasure(todo);
+}
+function deckLaterApproach(){ if(!deckApproachRaf) deckApproachRaf=requestAnimationFrame(()=>{ deckApproachRaf=0; deckApproach(); }); }
 
 function deckSetOpen(card, open, instant){
   clearTimeout(card._deckT);
@@ -120,6 +156,48 @@ function deckOwnChange(was, now){
    an open deck arrives faded rather than fading in. */
 const deckSeen=new WeakSet();
 let deckFadeRaf=0;
+/* The cards after this deck in its own column, document order. A list with no columns, which is
+   also the stand-in, walks the flat list from the deck on. */
+function deckSeqAfter(card, items){
+  const col=typeof card.closest==="function"?card.closest(".col"):null;
+  if(col&&typeof col.querySelectorAll==="function"){
+    const nodes=Array.from(col.querySelectorAll(".card[data-id], .list-sep"));
+    const i=nodes.indexOf(card);
+    return i<0?[]:nodes.slice(i+1);
+  }
+  const i=items.indexOf(card);
+  return i<0?[]:items.slice(i+1);
+}
+function deckTake(seq, reach, want){
+  for(const e of seq){
+    const r=e.getBoundingClientRect();
+    const inline=r.left<reach.right-4 && r.right>reach.left+4;
+    if(inline && r.top>=reach.bottom) return;
+    if(deckCovers(reach, r)) want.add(e);
+  }
+}
+/* Only when the dealt replies hang below the column: a sibling column beside this one is skipped
+   after its own box, and a band below is walked until the reach ends. */
+function deckPastColumn(card, reach, want){
+  const col=typeof card.closest==="function"?card.closest(".col"):null;
+  if(!col||typeof col.getBoundingClientRect!=="function") return;
+  if(reach.bottom<=col.getBoundingClientRect().bottom+0.5) return;
+  let n=col.nextElementSibling;
+  while(n){
+    if(n.classList&&n.classList.contains("col")){
+      const cr=typeof n.getBoundingClientRect==="function"?n.getBoundingClientRect():null;
+      const inline=!!(cr&&cr.left<reach.right-4&&cr.right>reach.left+4);
+      if(inline&&cr.top>=reach.bottom) return;
+      if(inline&&typeof n.querySelectorAll==="function")
+        deckTake(Array.from(n.querySelectorAll(".card[data-id], .list-sep")), reach, want);
+    }else if(typeof n.getBoundingClientRect==="function"&&n.matches&&n.matches(".card[data-id], .list-sep")){
+      const r=n.getBoundingClientRect();
+      if(r.left<reach.right-4&&r.right>reach.left+4&&r.top>=reach.bottom) return;
+      if(deckCovers(reach, r)) want.add(n);
+    }
+    n=n.nextElementSibling;
+  }
+}
 function deckFade(){
   if(!list) return;
   const items=Array.from(list.querySelectorAll(".card[data-id], .list-sep")), want=new Set();
@@ -127,7 +205,8 @@ function deckFade(){
     const c=card.getBoundingClientRect(), cs=card.style;
     const reach={top:c.top, left:c.left, right:c.right,
       bottom:c.top+(parseFloat(cs.getPropertyValue("--deck-rest-bottom"))||0)+(parseFloat(cs.getPropertyValue("--deck-extra"))||0)+2};
-    items.forEach(e=>{ if(e!==card && deckCovers(reach, e.getBoundingClientRect())) want.add(e); });
+    deckTake(deckSeqAfter(card, items), reach, want);
+    deckPastColumn(card, reach, want);
   });
   list.querySelectorAll(".deck-under").forEach(e=>{ if(!want.has(e)) e.classList.remove("deck-under"); });
   const fresh=[];
@@ -169,8 +248,8 @@ function wireDeck(){
   if(typeof ResizeObserver==="function") new ResizeObserver(()=>{ deckLater(); deckFadeLater(); }).observe(list);
   // A card caught mid-move, a fresh card's unfold or a slab still travelling, is read again once it lands.
   list.addEventListener("animationend",deckFadeLater); list.addEventListener("transitionend",deckFadeLater);
-  document.addEventListener("scroll",deckFadeLater,{capture:true, passive:true});
-  addEventListener("resize",deckFadeLater);
+  document.addEventListener("scroll",()=>{ deckLaterApproach(); deckFadeLater(); },{capture:true, passive:true});
+  addEventListener("resize",()=>{ deckLater(); deckFadeLater(); });
 
   // The pointer deals after a short rest, so a sweep across the desk deals nothing, and leaves
   // after a grace that covers the gap between two slabs.

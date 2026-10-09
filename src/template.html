@@ -1899,7 +1899,11 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 /* THE DECK, the sheet's half; deck.js sets the classes and the --deck-* lengths. At rest each reply
    behind the front sits with its bottom edge out by its depth, narrower and darker; dealt, they
    spring into their places one after another, front first, and slide back on the house curve. */
-#list .card.deck{content-visibility:visible;contain-intrinsic-size:none;z-index:0}
+/* Off the approach band a deck keeps #list .card's content-visibility. deck-near, and a deck
+   that is open, are laid out so the tuck can be measured and can paint past the card. */
+#list .card.deck{z-index:0}
+#list .card.deck.deck-near,
+#list .card.deck.deck-up{content-visibility:visible;contain-intrinsic-size:none}
 #list .card.deck.deck-up{z-index:6}
 .card.deck>.txt{z-index:var(--deck-z,1);
   transition:box-shadow var(--m-move) ease,background-color var(--m-tone) ease,border-color var(--m-tone) ease}
