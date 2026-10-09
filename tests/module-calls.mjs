@@ -3698,6 +3698,22 @@ const CARD_B = {
         }
         return eq(out.join(","), "rescan:true/true/copies,return:true/true/copies");
       });
+    /* The tuck is painted, not played. A transition on the resting slab runs from the flat layout every time the
+       list is drawn again, which is the unfold-and-fold on a tab, an intent and a tour step. */
+    const fs = await import("node:fs");
+    check("deck.js", "1009dk1 a folded deck is tucked without a transition: the resting slab does not move, clip or dim itself, and only a return slides it back",
+      () => {
+        const sheet = fs.readFileSync(join(MODDIR, "..", "template.html"), "utf8");
+        const src = fs.readFileSync(join(MODDIR, "deck.js"), "utf8");
+        const body = sel => { const m = sheet.match(new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\{([^}]*)\\}")); return m ? m[1] : ""; };
+        const props = block => { const m = block.match(/transition:([^;}]+)/); return m ? m[1].split(",").map(p => p.trim().split(/\s+/)[0]) : []; };
+        const tuck = ["transform", "clip-path", "filter"];
+        const rest = props(body(".card.deck>.txt")), back = props(body(".card.deck.deck-return>.txt.deck-back"));
+        const open = props(body(".card.deck.deck-open>.txt.deck-back"));
+        return eq([tuck.every(p => !rest.includes(p)), tuck.every(p => back.includes(p)), open.includes("transform"),
+          /classList\.remove\([^)]*"deck-return"/.test(src), /classList\.add\("deck-return"\)/.test(src),
+          /classList\.remove\("deck-return"\)/.test(src)].join(","), "true,true,true,true,true,true");
+      });
   } finally {
     if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
     if (hadDoc !== undefined) Dom.grabDom();

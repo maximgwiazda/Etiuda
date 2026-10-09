@@ -1902,9 +1902,7 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 #list .card.deck{content-visibility:visible;contain-intrinsic-size:none;z-index:0}
 #list .card.deck.deck-up{z-index:6}
 .card.deck>.txt{z-index:var(--deck-z,1);
-  transition:transform var(--m-move) var(--m-ease),clip-path var(--m-move) var(--m-ease),
-             filter var(--m-move) ease,box-shadow var(--m-move) ease,
-             background-color var(--m-tone) ease,border-color var(--m-tone) ease}
+  transition:box-shadow var(--m-move) ease,background-color var(--m-tone) ease,border-color var(--m-tone) ease}
 .card.deck:not(.deck-open)>.txt.deck-back{
   transform:translateY(var(--deck-dy)) scaleX(var(--deck-sx));transform-origin:50% 100%;
   clip-path:inset(var(--deck-clip) -3px -3px -3px round var(--radius));
@@ -1912,6 +1910,12 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
 /* On a light desk the edges darken a third as much: grey bars under white read as weight, not depth. */
 :root[data-theme=light] .card.deck:not(.deck-open)>.txt.deck-back{
   filter:brightness(calc(1 - (1 - var(--deck-dim)) / 3));box-shadow:none}
+/* The tuck is not a transition: one on the resting slab plays every redraw as an unfold
+   and a fold. This class slides a dealt deck back; the open rule below deals it. */
+.card.deck.deck-return>.txt.deck-back{
+  transition:transform var(--m-move) var(--m-ease),clip-path var(--m-move) var(--m-ease),
+             filter var(--m-move) ease,box-shadow var(--m-move) ease,
+             background-color var(--m-tone) ease,border-color var(--m-tone) ease}
 .card.deck.deck-open>.txt.deck-back{
   transform:none;clip-path:inset(-3px -3px -3px -3px round var(--radius));filter:none;
   box-shadow:0 16px 34px -14px rgba(0,0,0,.75),var(--card-shadow,0 0 #0000);
@@ -8588,7 +8592,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-08";
+  var E_BUILT = "2026-10-09";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -18478,7 +18482,7 @@ What you type stays in this browser only.`;
     };
   }
   function deckReset(card) {
-    card.classList.remove("deck", "deck-open", "deck-up", "deck-moving");
+    card.classList.remove("deck", "deck-open", "deck-up", "deck-moving", "deck-return");
     ["height", "--deck-rest-bottom", "--deck-extra"].forEach((p) => card.style.removeProperty(p));
     deckSlabs(card).forEach((s) => {
       s.classList.remove("deck-back");
@@ -18537,6 +18541,7 @@ What you type stays in this browser only.`;
     clearTimeout(card._deckM);
     const now = mgReduceMotion() || instant, travel = now ? 0 : M_MS.travel, move = now ? 0 : M_MS.move;
     if (open) {
+      card.classList.remove("deck-return");
       card.classList.add("deck-up", "deck-open");
       if (travel) {
         const n = deckSlabs(card).length;
@@ -18544,9 +18549,11 @@ What you type stays in this browser only.`;
         card._deckM = setTimeout(() => card.classList.remove("deck-moving"), travel + (n - 1) * travel / 9);
       }
     } else {
+      if (now) card.classList.remove("deck-return");
+      else card.classList.add("deck-return");
       card.classList.remove("deck-open", "deck-moving");
       card._deckM = setTimeout(() => {
-        if (!card.classList.contains("deck-open")) card.classList.remove("deck-up");
+        if (!card.classList.contains("deck-open")) card.classList.remove("deck-up", "deck-return");
       }, move + 40);
     }
   }
