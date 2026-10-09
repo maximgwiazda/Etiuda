@@ -19637,37 +19637,90 @@ What you type stays in this browser only.`;
     });
     tweenPillWidths(els, w0, before);
   }
+  var pillWidthT = 0;
+  var pillWidthNodes = [];
+  function clearPillWidthMotion() {
+    clearTimeout(pillWidthT);
+    pillWidthT = 0;
+    pillWidthNodes.forEach((el) => {
+      el.style.transition = "none";
+      el.style.transform = "";
+      el.style.willChange = "";
+      el.style.transformOrigin = "";
+      if (el.style.width) el.style.width = "";
+      el.style.transition = "";
+    });
+    pillWidthNodes = [];
+  }
+  function armPillWidthMotion(nodes) {
+    pillWidthNodes = nodes.slice();
+    pillWidthT = setTimeout(clearPillWidthMotion, 220);
+    if (pillWidthT && pillWidthT.unref) pillWidthT.unref();
+  }
   function tweenPillWidths(els, w0, before) {
     if (mgReduceMotion()) return;
-    const grew = [];
+    clearPillWidthMotion();
     const lines = pillLines();
+    const kids = Array.prototype.slice.call(pills.children);
+    const end = /* @__PURE__ */ new Map();
+    kids.forEach((el) => {
+      const r = el.getBoundingClientRect();
+      end.set(el, { w: r.width, left: r.left });
+    });
+    const grew = /* @__PURE__ */ new Map();
     els.forEach((el, i) => {
-      const w1 = el.getBoundingClientRect().width;
-      if (Math.abs(w1 - w0[i]) < 1.5) return;
+      const box = end.get(el);
+      if (!box || !(box.w > 0) || Math.abs(box.w - w0[i]) < 1.5) return;
       el.style.transition = "none";
       el.style.width = w0[i] + "px";
-      grew.push({ el, w: w1 });
+      grew.set(el, { w0: w0[i], w1: box.w });
     });
-    if (!grew.length) return;
+    if (!grew.size) return;
     if (pillLines() !== lines) {
-      grew.forEach((g) => {
-        g.el.style.transition = "";
-        g.el.style.width = "";
+      grew.forEach((g, el) => {
+        el.style.transition = "";
+        el.style.width = "";
       });
       flipPills(before);
       return;
     }
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      grew.forEach((g) => {
-        g.el.style.transition = "width var(--m-move) " + E_EASE;
-        g.el.style.width = g.w + "px";
-        clearTimeout(g.el._eWT);
-        g.el._eWT = setTimeout(() => {
-          g.el.style.transition = "";
-          g.el.style.width = "";
-        }, 220);
+    const startLeft = /* @__PURE__ */ new Map();
+    kids.forEach((el) => startLeft.set(el, el.getBoundingClientRect().left));
+    grew.forEach((g, el) => {
+      el.style.width = "";
+    });
+    const moves = [];
+    kids.forEach((el) => {
+      const box = end.get(el);
+      if (!box) return;
+      const dx = Math.round(startLeft.get(el) - box.left);
+      const g = grew.get(el);
+      if (!dx && !g) return;
+      moves.push({ el, dx, sx: g ? g.w0 / g.w1 : 1 });
+    });
+    if (!moves.length) {
+      grew.forEach((g, el) => {
+        el.style.transition = "";
+        el.style.width = "";
       });
-    }));
+      return;
+    }
+    moves.forEach((m) => {
+      m.el.style.transition = "none";
+      m.el.style.willChange = "transform";
+      m.el.style.transformOrigin = "left center";
+      const part = [];
+      if (m.dx) part.push("translateX(" + m.dx + "px)");
+      if (Math.abs(m.sx - 1) > 1e-3) part.push("scaleX(" + m.sx + ")");
+      m.el.style.transform = part.join(" ");
+    });
+    void pills.offsetHeight;
+    const ease = "var(--m-move) " + E_EASE;
+    moves.forEach((m) => {
+      m.el.style.transition = "transform " + ease;
+      m.el.style.transform = "";
+    });
+    armPillWidthMotion(moves.map((m) => m.el));
   }
   var ePillOrderT = 0;
   function schedulePillOrder() {
