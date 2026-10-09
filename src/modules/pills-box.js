@@ -17,9 +17,9 @@ function syncLayoutPrefs(){
 }
 let pillsBoxTimer=null, pillsGhost=null;
 /* LAYOUT SNAPS IN THIS TURN. Height is not a transition: gliding it lays the page out on
-   every frame, and the lanes' top is that height. A fixed clone at the old rect carries
-   the retreat on transform and opacity. The rail is written once, after the snap.
-   `mutate` must land final geometry synchronously. The transition is not in the sheet. */
+   every frame. A fixed clone carries the bar. Outside paths mode, what that height moved
+   rides back on a translate for the same time; paths mode leaves it, the list already
+   invisible. `mutate` must land final geometry synchronously. The transition is not in the sheet. */
 function slotBox(slot){
   const cs=getComputedStyle(slot);
   // A hidden slot is not a short slot: it reserves nothing, margin included.
@@ -29,6 +29,7 @@ function slotBox(slot){
 }
 function clearPillsMotion(){
   clearTimeout(pillsBoxTimer); pillsBoxTimer=null;
+  clearPageGlide();
   if(pillsGhost){ pillsGhost.remove(); pillsGhost=null; }
   const slot=pillsSlot();
   if(slot){
@@ -67,6 +68,39 @@ function mountPillsGhost(shot, from){
   pillsGhost=g;
   return g;
 }
+/* What the header's height moved: the card list, the intent panel and the dot ground.
+   The rail keeps its transform for the horizontal slide, so this ride is the translate
+   property, which composes with it. A transformed ancestor would trap that fixed panel. */
+function pageFollowers(){
+  const main=document.querySelector("main");
+  const rail=document.getElementById("intentRail");
+  const dots=document.getElementById("dotField");
+  return [main, rail, dots].filter(Boolean);
+}
+function clearPageGlide(){
+  pageFollowers().forEach(el=>{
+    el.style.transition="none";
+    el.style.removeProperty("translate");
+    el.style.willChange="";
+    el.style.transition="";
+  });
+}
+function glidePage(dy, ms){
+  if(!dy) return;
+  const els=pageFollowers();
+  if(!els.length) return;
+  const ease="translate "+ms+"ms "+E_EASE;
+  els.forEach(el=>{
+    el.style.transition="none";
+    el.style.willChange="translate";
+    el.style.translate="0 "+dy+"px";
+  });
+  void els[0].offsetHeight;
+  els.forEach(el=>{
+    el.style.transition=ease;
+    el.style.translate="0 0px";
+  });
+}
 function animatePillsBox(mutate,ms){
   ms=ms||M_MS.move;
   const slot=pillsSlot();
@@ -94,6 +128,7 @@ function animatePillsBox(mutate,ms){
   hooks.syncRailGeometry();
   if(Math.abs(to.h-from.h)<1 && Math.abs(to.m-from.m)<1) return;
   const travel=Math.round(Math.abs((from.h+from.m)-(to.h+to.m)));
+  const dy=Math.round((from.h+from.m)-(to.h+to.m));
   const ease=ms+"ms "+E_EASE;
   if(hidden && leaving){
     const g=mountPillsGhost(shot, from);
@@ -130,6 +165,9 @@ function animatePillsBox(mutate,ms){
       g.style.opacity="0";
     }
   }
+  /* Paths mode only: the list under the lanes is already invisible, so it may snap.
+     Every other caller keeps the glide the height used to give it. */
+  if(!document.body.classList.contains("e-lanes")) glidePage(dy, ms);
   armPillsRetreat(ms);
 }
 function togglePills(){

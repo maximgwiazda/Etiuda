@@ -555,6 +555,7 @@ function runUnitTests() {
   pillWrapTests();
   pillsWidthWatchTests();
   pillsResizeCostTests();
+  pillsFollowTests();
   railLeaveTests();
   grownCardTests();
   motionJudgeTests();
@@ -4183,6 +4184,96 @@ function pillsResizeCostTests() {
     got = [step(2), step(3)];
   } catch (e) { got = "threw: " + e.message; }
   eq("one step of a drag costs the pill bar, as [layouts, bar restyles], two lines then clipped", got, [[1, 0], [4, 2]]);
+}
+/* THE LIST KEEPS THE GLIDE THE HEADER'S HEIGHT USED TO GIVE IT. Layout takes its final height
+   in one frame. Outside paths mode the card list, the intent panel and the dot ground ride
+   back on a translate, for the time the call asked and on its curve. Paths mode does not:
+   the list under the lanes is already invisible. The slot's height is not what moves. */
+function pillsFollowTests() {
+  const src = fs.readFileSync(path.join(E.ROOT, "src", "modules", "pills-box.js"), "utf8");
+  const EASE = "cubic-bezier(.2,.7,.3,1)";
+  const markers = ["let pillsBoxTimer=", "function slotBox(", "function clearPillsMotion(", "function endPillsMotion(",
+    "function armPillsRetreat(", "function mountPillsGhost(", "function pageFollowers(", "function clearPageGlide(",
+    "function glidePage(", "function animatePillsBox("];
+  const play = (kind, ms, lanes) => {
+    const writes = { main: [], rail: [], dots: [] };
+    const styled = (key) => {
+      const s = { transition: "", willChange: "" };
+      let tr = "";
+      Object.defineProperty(s, "translate", { get() { return tr; }, set(v) { tr = String(v); writes[key].push(tr); } });
+      s.removeProperty = (k) => { if (k === "translate") tr = ""; };
+      return s;
+    };
+    const followers = {
+      main: { style: styled("main"), offsetHeight: 400 },
+      intentRail: { style: styled("rail"), offsetHeight: 500 },
+      dotField: { style: styled("dots"), offsetHeight: 400 }
+    };
+    const cls = new Set();
+    let ghost = null;
+    const body = {
+      classList: {
+        add(c) { cls.add(c); }, remove(c) { cls.delete(c); }, contains(c) { return cls.has(c); }
+      },
+      appendChild(g) { ghost = g; }
+    };
+    const doc = {
+      body: body,
+      getElementById(id) { return followers[id] || null; },
+      querySelector(sel) { return sel === "main" ? followers.main : null; }
+    };
+    let display = kind === "show" ? "none" : "block";
+    let height = kind === "shrink" ? 100 : 48;
+    const slot = {
+      style: { transition: "", height: "", marginTop: "", opacity: "", transform: "", clipPath: "" },
+      offsetHeight: 48,
+      classList: { add() {}, remove() {}, contains() { return false; } },
+      cloneNode() { return { style: {}, inert: false, setAttribute() {}, removeAttribute() {}, querySelectorAll() { return []; } }; },
+      getBoundingClientRect() { return { height: height, left: 12, top: 80, width: 640 }; }
+    };
+    const timers = [];
+    const decls = markers.map(m => extractDecl(src, m)).join("\n");
+    const run = new Function("document", "pillsSlot", "hooks", "mgReduceMotion", "getComputedStyle",
+      "setTimeout", "clearTimeout", "M_MS", "E_EASE",
+      decls + "\nreturn animatePillsBox;")(
+      doc, () => slot, { syncRailGeometry() {} }, () => false,
+      (el) => el === slot ? { display: display, marginTop: display === "none" ? "0px" : "8px" } : { display: "block", marginTop: "0px" },
+      (fn, delay) => { timers.push(delay); return { unref() {} }; }, () => {}, { move: 180 }, EASE);
+    run(() => {
+      if (lanes) body.classList.add("e-lanes");
+      if (kind === "hide" || lanes) display = "none";
+      else if (kind === "show") { display = "block"; height = 64; }
+      else if (kind === "shrink") height = 40;
+    }, ms);
+    return {
+      translate: writes.main.slice(), transition: followers.main.style.transition,
+      rail: writes.rail.slice(), dots: writes.dots.slice(),
+      height: /height/.test(slot.style.transition || ""),
+      ghost: ghost && ghost.style ? (ghost.style.transform || "") : "",
+      timers: timers.slice()
+    };
+  };
+  const ease = ms => "translate " + ms + "ms " + EASE;
+  let got;
+  try { got = play("hide"); } catch (e) { got = "threw: " + e.message; }
+  eq("1009e2a hiding the bar glides the list, the panel and the ground on the move, and the slot's height does not",
+    got, { translate: ["0 56px", "0 0px"], transition: ease(180), rail: ["0 56px", "0 0px"], dots: ["0 56px", "0 0px"],
+      height: false, ghost: "translateY(-56px)", timers: [200] });
+  try { got = play("hide", undefined, true); } catch (e) { got = "threw: " + e.message; }
+  eq("1009e2a paths mode takes the new height in one frame, and the bar still leaves on a translate",
+    got, { translate: [], transition: "", rail: [], dots: [], height: false, ghost: "translateY(-56px)", timers: [200] });
+  try { got = play("show"); } catch (e) { got = "threw: " + e.message; }
+  eq("1009e2a showing the bar glides what lies below it down from where it was",
+    got, { translate: ["0 -72px", "0 0px"], transition: ease(180), rail: ["0 -72px", "0 0px"], dots: ["0 -72px", "0 0px"],
+      height: false, ghost: "", timers: [200] });
+  try { got = play("shrink"); } catch (e) { got = "threw: " + e.message; }
+  eq("1009e2a a shorter bar glides what lies below it by the height it lost",
+    got, { translate: ["0 60px", "0 0px"], transition: ease(180), rail: ["0 60px", "0 0px"], dots: ["0 60px", "0 0px"],
+      height: false, ghost: "none", timers: [200] });
+  try { got = play("hide", 120); } catch (e) { got = "threw: " + e.message; }
+  eq("1009e2a the glide takes the time the call passed, on the same curve",
+    got, { translate: ["0 56px", "0 0px"], transition: ease(120), rail: ["0 56px", "0 0px"], dots: ["0 56px", "0 0px"],
+      height: false, ghost: "translateY(-56px)", timers: [140] });
 }
 /* A RAIL ROW ON SCREEN THAT LEAVES THE WINDOW GLIDES TO ITS EDGE (797 F6): past the travel cap it
    used to be left where it landed, out of sight, which is a vanish. flipRail is sliced and run on a
