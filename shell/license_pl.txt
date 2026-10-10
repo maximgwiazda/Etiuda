@@ -12,7 +12,7 @@ Okres próbny. Organizacja może korzystać z pełnej Etiudy przez czternaście 
 
 Aktualizacje. Licencja obejmuje wersje wydane w ciągu dwunastu miesięcy od zakupu, a ostatnia z nich zostaje do używania bez ograniczenia w czasie. Etiuda nie aktualizuje się sama.
 
-Prywatność. Etiuda działa na tym komputerze, na którym została zainstalowana, nie zakłada konta, nie nawiązuje połączeń i nic do nas nie wysyła, więc katalog zostaje u swojego autora. Zestawienia, które Studio zbiera z komputerów organizacji, idą przez jej własny zasób sieciowy i docierają do nas tylko wtedy, gdy organizacja sama je prześle.
+Prywatność. Katalogi organizacji i wszystko, co piszą jej pracownicy i klienci, nie opuszczają organizacji: ani Etiuda, ani Etiuda Studio nie wysyłają ich do nas ani do nikogo innego. Kiedy i po co programy łączą się z nami, opisuje polityka prywatności na etiuda.dev.
 
 Przeniesienie. Licencja zostaje przy osobie, na którą została wystawiona, i nie podlega sprzedaży, najmowi, użyczeniu ani dalszemu licencjonowaniu. Gdy ta osoba odchodzi, organizacja może wskazać na jej miejsce kogoś innego.
 

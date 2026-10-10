@@ -12,7 +12,7 @@ Trial. An organisation may use Etiuda in full for fourteen days to see whether i
 
 Updates. A licence carries the versions released in the twelve months after purchase, and the last of those stays in use without limit of time. Etiuda does not update itself.
 
-Privacy. Etiuda runs on the desk it is installed on, asks for no account, opens no connection and sends us nothing, so a catalog stays with its author. Figures Studio gathers from an organisation's desks travel over its own share and reach us only if it sends them.
+Privacy. An organisation's catalogs, and everything its people and its customers write, stay within the organisation: neither Etiuda nor Etiuda Studio sends them to us or to anyone else. When and why the programs connect to us is set out in the privacy notice on etiuda.dev.
 
 Transfer. A licence stays with the person named on it and may not be sold, rented, lent or sublicensed. When that person leaves, an organisation may name a colleague instead.
 
