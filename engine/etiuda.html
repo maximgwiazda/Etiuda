@@ -6941,6 +6941,9 @@ What you type stays in this browser only.`;
     "removed": "usunięta",
     "you have your own version": "jest własna wersja",
     "the team's new text": "nowa treść zespołu",
+    "now commits the firm": "teraz zobowiązuje firmę",
+    "no longer commits the firm": "już nie zobowiązuje firmy",
+    "a commitment, in new words": "zobowiązanie w nowym brzmieniu",
     "It comes back with your star and your edits.": "Wróci z gwiazdką i własnymi zmianami.",
     "and {N} more": "i {N} więcej",
     "Show the differences": "Pokaż różnice",
@@ -7500,6 +7503,7 @@ What you type stays in this browser only.`;
     "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.": "Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze.",
     "Next replies": "Kolejne odpowiedzi",
     "Commits the firm": "Zobowiązuje firmę",
+    "Does not commit the firm": "Nie zobowiązuje firmy",
     "Commitment": "Zobowiązanie",
     "Commitment: the customer can hold the firm to this.": "Zobowiązanie: klient może trzymać firmę za słowo.",
     "the catalog's": "z katalogu",
@@ -8718,7 +8722,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-12";
+  var E_BUILT = "2026-10-13";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -15728,10 +15732,10 @@ What you type stays in this browser only.`;
   function editionText(m, key) {
     return String(m && m[key] != null ? m[key] : "");
   }
-  function editionChanges(held, offered, layer) {
+  function editionChanges(held, offered, layer, textOnly) {
     const lay = layer || {}, ov = lay.overrides || {};
     const gone = new Set(lay.removed || []), stars = new Set(lay.favourites || []);
-    const keys = editionFieldKeys(held, offered);
+    const keys = editionFieldKeys(held, offered), replies = keys.filter((k) => k.field === "body");
     const was = new Map((held && held.cards || []).map((m) => [String(m.id), m]));
     const now = new Map((offered && offered.cards || []).map((m) => [String(m.id), m]));
     const items = [];
@@ -15751,20 +15755,24 @@ What you type stays in this browser only.`;
         return;
       }
       const fields = keys.filter((k) => editionText(b, k.key) !== editionText(m, k.key));
-      if (!fields.length) return;
-      const mine = ov[id];
+      const stamp = textOnly || cardCommits(b) === cardCommits(m) ? "" : cardCommits(m) ? "on" : "off";
+      if (!fields.length && !stamp) return;
+      const mine = ov[id], mineStands = (k) => !!mine && mine[k.key] != null && String(mine[k.key]) !== editionText(m, k.key);
+      const commitment = !!stamp || !textOnly && cardCommits(m) && fields.some((k) => k.field === "body");
       items.push({
         id,
         kind: "changed",
         fields,
-        own: !!mine && fields.some((k) => mine[k.key] != null && String(mine[k.key]) !== editionText(m, k.key))
+        stamp,
+        commitment,
+        own: fields.some(mineStands) || commitment && replies.some(mineStands)
       });
     });
     was.forEach((b, id) => {
       if (!now.has(id) && !gone.has(id) && !b.retired) items.push({ id, kind: "removed", fields: [] });
     });
     const at = (k) => EDITION_KINDS.indexOf(k);
-    items.sort((x, y) => at(x.kind) - at(y.kind));
+    items.sort((x, y) => at(x.kind) - at(y.kind) || (y.commitment ? 1 : 0) - (x.commitment ? 1 : 0));
     const counts2 = {};
     EDITION_KINDS.forEach((k) => {
       counts2[k] = 0;
@@ -26614,10 +26622,14 @@ What you type stays in this browser only.`;
   __export(edition_panel_exports, {
     editionCountWords: () => editionCountWords,
     editionOfferHtml: () => editionOfferHtml,
+    editionPaneHtml: () => editionPaneHtml,
     openEditionPanel: () => openEditionPanel,
     repaintEditionRows: () => repaintEditionRows
   });
   var EDITION_SHOWN = 8;
+  function editionShown(items) {
+    return Math.max(EDITION_SHOWN, items.filter((it) => it.commitment).length);
+  }
   function editionKindWord(k) {
     if (k === "changed") return t("changed");
     if (k === "new") return t("new");
@@ -26644,26 +26656,33 @@ What you type stays in this browser only.`;
     const find = (c) => (c && c.cards || []).find((m) => String(m.id) === it.id);
     return find(it.kind === "removed" ? held : offered) || find(held) || { id: it.id };
   }
+  function editionPledgeLine(it) {
+    if (!it.commitment) return "";
+    return t(it.stamp === "on" ? "now commits the firm" : it.stamp === "off" ? "no longer commits the firm" : "a commitment, in new words");
+  }
   function editionSubline(it, c) {
     if (it.kind === "changed" && it.own) return t(teamTextTaken(c, it.id) ? "the team's new text" : "you have your own version");
     if (it.kind === "retired" && it.asleep) return t("It comes back with your star and your edits.");
     return "";
   }
   function editionRowInner(it, held, c, own) {
-    const sub = own ? own(it) : editionSubline(it, c);
-    return '<span class="ec-kind">' + esc(editionKindWord(it.kind)) + '</span><span class="ec-t">' + esc(cardTitle(editionCard(it, held, c)) || it.id) + (sub ? "<small>" + esc(sub) + "</small>" : "") + "</span>";
+    const sub = own ? own(it) : editionSubline(it, c), pledge = editionPledgeLine(it);
+    return '<span class="ec-kind">' + esc(editionKindWord(it.kind)) + '</span><span class="ec-t">' + esc(cardTitle(editionCard(it, held, c)) || it.id) + (pledge ? "<small>" + esc(pledge) + "</small>" : "") + (sub ? "<small>" + esc(sub) + "</small>" : "") + "</span>";
   }
   function editionOfferHtml(c, held, changes) {
     const note = editionNoteText(c, uiLang()), items = changes.items;
     if (!items.length && !note) return "";
-    const more = items.length - EDITION_SHOWN;
-    return '<div class="ec-change">' + (note ? editionNoteHtml(note, "ec-note") : "") + (items.length ? editionCountsHtml(changes.counts) : "") + (items.length ? '<ul class="ec-list">' + items.slice(0, EDITION_SHOWN).map((it) => '<li data-ec-id="' + esc(it.id) + '">' + editionRowInner(it, held, c) + "</li>").join("") + "</ul>" : "") + (more > 0 ? '<div class="ec-more">' + esc(t("and {N} more").split("{N}").join(String(more))) + "</div>" : "") + "</div>" + (items.length ? '<button type="button" class="ec-diff" id="ecDiff">' + esc(t("Show the differences")) + "</button>" : "");
+    const shown2 = editionShown(items), more = items.length - shown2;
+    return '<div class="ec-change">' + (note ? editionNoteHtml(note, "ec-note") : "") + (items.length ? editionCountsHtml(changes.counts) : "") + (items.length ? '<ul class="ec-list">' + items.slice(0, shown2).map((it) => '<li data-ec-id="' + esc(it.id) + '">' + editionRowInner(it, held, c) + "</li>").join("") + "</ul>" : "") + (more > 0 ? '<div class="ec-more">' + esc(t("and {N} more").split("{N}").join(String(more))) + "</div>" : "") + "</div>" + (items.length ? '<button type="button" class="ec-diff" id="ecDiff">' + esc(t("Show the differences")) + "</button>" : "");
   }
   function editionSide(ops, mine) {
     return ops.filter((o) => o.op === "same" || o.op === mine).map((o) => o.op === "same" ? esc(o.text) : '<span class="ed-' + mine + '">' + esc(o.text) + "</span>").join("");
   }
   function editionFieldWord(f) {
     return f === "t" ? t("Title") : f === "note" ? t("Note") : t("Text");
+  }
+  function editionStampWord(on) {
+    return t(on ? "Commits the firm" : "Does not commit the firm");
   }
   function editionPaneHtml(it, held, c, desk) {
     const was = (held && held.cards || []).find((m) => String(m.id) === it.id) || null;
@@ -26677,13 +26696,25 @@ What you type stays in this browser only.`;
         const all = it.fields.filter((f) => f.field === field), pref = field === "body" ? lang : uiLang();
         return all.find((f) => f.code === pref) || all[0];
       }).filter(Boolean);
-      const own = blocks.map((f) => it.own && mine && mine[f.key] != null && String(mine[f.key]) !== cardText(now, f.field, f.code) ? String(mine[f.key]) : null);
+      const ownOf = (f) => it.own && mine && mine[f.key] != null && String(mine[f.key]) !== cardText(now, f.field, f.code) ? String(mine[f.key]) : null;
+      if (it.commitment && !blocks.some((f) => f.field === "body" && ownOf(f) != null)) {
+        const keep = [lang].concat(CONTENT_LANGS).map((l) => ({ field: "body", code: l, key: cardFieldKey("body", l) })).find((f) => ownOf(f) != null);
+        if (keep) {
+          keep.kept = !it.fields.some((x) => x.key === keep.key);
+          blocks.splice(blocks.filter((f) => f.field !== "note").length, 0, keep);
+        }
+      }
+      const own = blocks.map(ownOf);
       cols = own.some((v) => v != null) ? 3 : 2;
       rows = head(desk ? desk.was : t("Was")) + head(desk ? desk.now : t("Becomes")) + (cols > 2 ? head(t("Your version")) : "");
-      const last = own.map((v, i) => v != null ? i : -1).reduce((a, b) => Math.max(a, b), -1), took = teamTextTaken(c, it.id);
+      if (it.stamp) {
+        const ops = [{ op: "del", text: editionStampWord(it.stamp !== "on") }, { op: "ins", text: editionStampWord(it.stamp === "on") }];
+        rows += '<div class="ed-field">' + esc(t("Commitment")) + "</div>" + cell(editionSide(ops, "del")) + cell(editionSide(ops, "ins")) + (cols > 2 ? '<div class="ed-own"></div>' : "");
+      }
+      const last = own.map((v, i) => v != null && !blocks[i].kept ? i : -1).reduce((a, b) => Math.max(a, b), -1), took = teamTextTaken(c, it.id);
       const acts = '<div class="ed-acts"><button type="button" class="btn" data-ed-take="1" aria-pressed="' + took + '">' + esc(t("Take the team's new text")) + '</button><button type="button" class="btn" data-ed-take="0" aria-pressed="' + !took + '">' + esc(t("Keep mine")) + "</button></div>";
       blocks.forEach((f, i) => {
-        if (blocks.length > 1 || f.field !== "body") rows += '<div class="ed-field">' + esc(editionFieldWord(f.field) + (many ? " · " + f.code.toUpperCase() : "")) + "</div>";
+        if (blocks.length > 1 || f.field !== "body" || it.stamp) rows += '<div class="ed-field">' + esc(editionFieldWord(f.field) + (many ? " · " + f.code.toUpperCase() : "")) + "</div>";
         const ops = wordDiff(cardText(was, f.field, f.code), cardText(now, f.field, f.code));
         rows += cell(editionSide(ops, "del")) + cell(editionSide(ops, "ins")) + (cols > 2 ? '<div class="ed-own">' + (own[i] != null ? cell(esc(own[i])) : "") + (i === last && !desk ? acts : "") + "</div>" : "");
       });
@@ -26757,7 +26788,7 @@ What you type stays in this browser only.`;
     });
   }
   function repaintEditionRows(wrap, c, held, changes) {
-    changes.items.slice(0, EDITION_SHOWN).forEach((it) => {
+    changes.items.slice(0, editionShown(changes.items)).forEach((it) => {
       const li = Array.from(wrap.querySelectorAll("[data-ec-id]")).find((x) => x.getAttribute("data-ec-id") === it.id);
       if (li) li.innerHTML = editionRowInner(it, held, c);
     });
@@ -26813,7 +26844,7 @@ What you type stays in this browser only.`;
     });
   }
   function deskChangeWords(f, base) {
-    return deskSides(f, base).then((s) => s ? editionCountWords(editionChanges(s.team, s.hers, base && base.held ? pack : null).counts) : null);
+    return deskSides(f, base).then((s) => s ? editionCountWords(editionChanges(s.team, s.hers, base && base.held ? pack : null, true).counts) : null);
   }
   var cardIn = (c, id) => (c && c.cards || []).find((m) => String(m.id) === id) || null;
   var deskText = (v) => String(v == null ? "" : v);
@@ -27097,7 +27128,7 @@ What you type stays in this browser only.`;
         toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(String(f.name || "")));
         return false;
       }
-      const inUse = !!(base && base.held), changes = editionChanges(s.team, s.hers, inUse ? pack : null);
+      const inUse = !!(base && base.held), changes = editionChanges(s.team, s.hers, inUse ? pack : null, true);
       if (!changes.items.length) {
         toast(t("That desk's cards match the team's edition."));
         return false;

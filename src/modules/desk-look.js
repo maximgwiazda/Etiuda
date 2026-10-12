@@ -59,9 +59,10 @@ function deskSides(f,base){
     return {hers:hers, team:team||{cards:[], langs:hers.langs}};
   });
 }
-/* What that desk changed against the edition it is compared with, as the offer counts an edition's changes. */
+/* What that desk changed against the edition it is compared with, as the offer counts an edition's changes: its text
+   alone, since its one act takes text alone (deskToggle). */
 function deskChangeWords(f,base){
-  return deskSides(f,base).then(s=>s ? editionCountWords(editionChanges(s.team,s.hers,base&&base.held?pack:null).counts) : null);
+  return deskSides(f,base).then(s=>s ? editionCountWords(editionChanges(s.team,s.hers,base&&base.held?pack:null,true).counts) : null);
 }
 const cardIn=(c,id)=>((c&&c.cards)||[]).find(m=>String(m.id)===id)||null;
 const deskText=v=>String(v==null?"":v);
@@ -299,7 +300,7 @@ function wireDeskPlace(pane,it,hers,done){
 function openDeskLook(f,base,name,work,back){
   return deskSides(f,base).then(s=>{
     if(!s){ toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(String(f.name||""))); return false; }
-    const inUse=!!(base && base.held), changes=editionChanges(s.team,s.hers,inUse?pack:null);
+    const inUse=!!(base && base.held), changes=editionChanges(s.team,s.hers,inUse?pack:null,true);
     if(!changes.items.length){ toast(t("That desk's cards match the team's edition.")); return false; }
     const who=deskName(f);
     lkPick=null;

@@ -3,6 +3,7 @@
    the same comparison. Pure: no page, no storage, nothing but the two catalogs and the layer handed in. */
 import { CARD_TEXT_FIELDS, cardFieldKey } from "./card-fields.js";
 import { catalogLangs } from "./content-model.js";
+import { cardCommits } from "./card-model.js";
 
 // The order the offer lists the kinds in.
 const EDITION_KINDS=["changed","new","restored","retired","removed"];
@@ -21,11 +22,13 @@ function editionFieldKeys(a,b){
 function editionText(m,key){ return String(m && m[key]!=null ? m[key] : ""); }
 /** `held` is the catalog loaded now and `offered` the one asked about, both as the runtime keeps them;
  *  `layer` is this desk's own: overrides, removed and favourites. A card the desk removed is nobody's
- *  news. `own` marks a changed card where a field the lead changed is one the agent wrote otherwise. */
-function editionChanges(held,offered,layer){
+ *  news. `own` marks a changed card where a field the lead changed is one the agent wrote otherwise.
+ *  `commitment` marks a stamp put on or taken off (`stamp` "on" or "off") or a stamped card's new reply,
+ *  listed first and `own` wherever the agent's own reply stands over it. `textOnly` compares text alone. */
+function editionChanges(held,offered,layer,textOnly){
   const lay=layer||{}, ov=lay.overrides||{};
   const gone=new Set(lay.removed||[]), stars=new Set(lay.favourites||[]);
-  const keys=editionFieldKeys(held,offered);
+  const keys=editionFieldKeys(held,offered), replies=keys.filter(k=>k.field==="body");
   const was=new Map(((held&&held.cards)||[]).map(m=>[String(m.id),m]));
   const now=new Map(((offered&&offered.cards)||[]).map(m=>[String(m.id),m]));
   const items=[];
@@ -36,14 +39,16 @@ function editionChanges(held,offered,layer){
     if(m.retired){ items.push({id:id, kind:"retired", fields:[], asleep:stars.has(id)||!!ov[id]}); return; }
     if(b.retired){ items.push({id:id, kind:"restored", fields:[]}); return; }
     const fields=keys.filter(k=>editionText(b,k.key)!==editionText(m,k.key));
-    if(!fields.length) return;
-    const mine=ov[id];
-    items.push({id:id, kind:"changed", fields:fields,
-      own:!!mine && fields.some(k=>mine[k.key]!=null && String(mine[k.key])!==editionText(m,k.key))});
+    const stamp=(textOnly || cardCommits(b)===cardCommits(m)) ? "" : cardCommits(m) ? "on" : "off";
+    if(!fields.length && !stamp) return;
+    const mine=ov[id], mineStands=k=>!!mine && mine[k.key]!=null && String(mine[k.key])!==editionText(m,k.key);
+    const commitment=!!stamp || (!textOnly && cardCommits(m) && fields.some(k=>k.field==="body"));
+    items.push({id:id, kind:"changed", fields:fields, stamp:stamp, commitment:commitment,
+      own:fields.some(mineStands) || (commitment && replies.some(mineStands))});
   });
   was.forEach((b,id)=>{ if(!now.has(id) && !gone.has(id) && !b.retired) items.push({id:id, kind:"removed", fields:[]}); });
   const at=k=>EDITION_KINDS.indexOf(k);
-  items.sort((x,y)=>at(x.kind)-at(y.kind));
+  items.sort((x,y)=>at(x.kind)-at(y.kind) || (y.commitment?1:0)-(x.commitment?1:0));
   const counts={};
   EDITION_KINDS.forEach(k=>{ counts[k]=0; });
   items.forEach(i=>{ counts[i.kind]++; });

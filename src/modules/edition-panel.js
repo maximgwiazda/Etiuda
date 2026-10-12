@@ -10,9 +10,11 @@ import { esc } from "./esc.js";
 import { pack } from "./pack.js";
 import { lang } from "./app-state.js";
 import { CONTENT_LANGS } from "./content-model.js";
+import { cardFieldKey } from "./card-fields.js";
 
-// The bubble names this many cards and counts the rest; the panel lists them all.
+// The bubble names this many cards and counts the rest, but never a commitment, listed first; the panel lists them all.
 const EDITION_SHOWN=8;
+function editionShown(items){ return Math.max(EDITION_SHOWN, items.filter(it=>it.commitment).length); }
 function editionKindWord(k){
   if(k==="changed") return t("changed");
   if(k==="new") return t("new");
@@ -41,6 +43,11 @@ function editionCard(it,held,offered){
   const find=c=>((c&&c.cards)||[]).find(m=>String(m.id)===it.id);
   return find(it.kind==="removed"?held:offered)||find(held)||{id:it.id};
 }
+// What the edition does to a commitment, said on its row before anything else the row says.
+function editionPledgeLine(it){
+  if(!it.commitment) return "";
+  return t(it.stamp==="on"?"now commits the firm":it.stamp==="off"?"no longer commits the firm":"a commitment, in new words");
+}
 function editionSubline(it,c){
   if(it.kind==="changed" && it.own) return t(teamTextTaken(c,it.id)?"the team's new text":"you have your own version");
   if(it.kind==="retired" && it.asleep) return t("It comes back with your star and your edits.");
@@ -48,9 +55,10 @@ function editionSubline(it,c){
 }
 // `own` answers a row's small line in place of the offer's, for a colleague's desk.
 function editionRowInner(it,held,c,own){
-  const sub=own?own(it):editionSubline(it,c);
+  const sub=own?own(it):editionSubline(it,c), pledge=editionPledgeLine(it);
   return '<span class="ec-kind">'+esc(editionKindWord(it.kind))+'</span>'
     +'<span class="ec-t">'+esc(cardTitle(editionCard(it,held,c))||it.id)
+    +(pledge?'<small>'+esc(pledge)+'</small>':'')
     +(sub?'<small>'+esc(sub)+'</small>':'')+'</span>';
 }
 /** The offer's half: the lead's note, the counts and the first titles, then the way to the panel.
@@ -58,11 +66,11 @@ function editionRowInner(it,held,c,own){
 function editionOfferHtml(c,held,changes){
   const note=editionNoteText(c,uiLang()), items=changes.items;
   if(!items.length && !note) return "";
-  const more=items.length-EDITION_SHOWN;
+  const shown=editionShown(items), more=items.length-shown;
   return '<div class="ec-change">'
     +(note?editionNoteHtml(note,"ec-note"):'')
     +(items.length?editionCountsHtml(changes.counts):'')
-    +(items.length?'<ul class="ec-list">'+items.slice(0,EDITION_SHOWN)
+    +(items.length?'<ul class="ec-list">'+items.slice(0,shown)
         .map(it=>'<li data-ec-id="'+esc(it.id)+'">'+editionRowInner(it,held,c)+'</li>').join("")+'</ul>':'')
     +(more>0?'<div class="ec-more">'+esc(t("and {N} more").split("{N}").join(String(more)))+'</div>':'')
     +'</div>'
@@ -75,6 +83,7 @@ function editionSide(ops,mine){
     .map(o=>o.op==="same"?esc(o.text):'<span class="ed-'+mine+'">'+esc(o.text)+'</span>').join("");
 }
 function editionFieldWord(f){ return f==="t"?t("Title"):f==="note"?t("Note"):t("Text"); }
+function editionStampWord(on){ return t(on?"Commits the firm":"Does not commit the firm"); }
 /* `desk` is a colleague's desk looked at: its two heads in place of Was and Becomes, and its one act, which takes
    that desk's text of a changed card into this desk's own edits, in place of the offer's pair; a new card of that
    desk's gets the place it is taken into (desk-look.js). */
@@ -90,17 +99,29 @@ function editionPaneHtml(it,held,c,desk){
       const all=it.fields.filter(f=>f.field===field), pref=field==="body"?lang:uiLang();
       return all.find(f=>f.code===pref)||all[0];
     }).filter(Boolean);
-    const own=blocks.map(f=>(it.own && mine && mine[f.key]!=null && String(mine[f.key])!==cardText(now,f.field,f.code))
-      ? String(mine[f.key]) : null);
+    const ownOf=f=>(it.own && mine && mine[f.key]!=null && String(mine[f.key])!==cardText(now,f.field,f.code))
+      ? String(mine[f.key]) : null;
+    /* A commitment's reply where the agent's own stands over it is shown, in the first language it does; one the lead
+       left as it was never holds the choice, since the take carries only what the lead changed (card-carry.js settleEdits). */
+    if(it.commitment && !blocks.some(f=>f.field==="body" && ownOf(f)!=null)){
+      const keep=[lang].concat(CONTENT_LANGS).map(l=>({field:"body", code:l, key:cardFieldKey("body",l)})).find(f=>ownOf(f)!=null);
+      if(keep){ keep.kept=!it.fields.some(x=>x.key===keep.key); blocks.splice(blocks.filter(f=>f.field!=="note").length,0,keep); }
+    }
+    const own=blocks.map(ownOf);
     cols=own.some(v=>v!=null)?3:2;
     rows=head(desk?desk.was:t("Was"))+head(desk?desk.now:t("Becomes"))+(cols>2?head(t("Your version")):"");
+    if(it.stamp){
+      const ops=[{op:"del", text:editionStampWord(it.stamp!=="on")}, {op:"ins", text:editionStampWord(it.stamp==="on")}];
+      rows+='<div class="ed-field">'+esc(t("Commitment"))+'</div>'+cell(editionSide(ops,"del"))+cell(editionSide(ops,"ins"))
+        +(cols>2?'<div class="ed-own"></div>':"");
+    }
     // The choice sits under the last of the agent's own versions, and the pressed one is the choice made.
-    const last=own.map((v,i)=>v!=null?i:-1).reduce((a,b)=>Math.max(a,b),-1), took=teamTextTaken(c,it.id);
+    const last=own.map((v,i)=>v!=null && !blocks[i].kept?i:-1).reduce((a,b)=>Math.max(a,b),-1), took=teamTextTaken(c,it.id);
     const acts='<div class="ed-acts">'
       +'<button type="button" class="btn" data-ed-take="1" aria-pressed="'+took+'">'+esc(t("Take the team's new text"))+'</button>'
       +'<button type="button" class="btn" data-ed-take="0" aria-pressed="'+!took+'">'+esc(t("Keep mine"))+'</button></div>';
     blocks.forEach((f,i)=>{
-      if(blocks.length>1 || f.field!=="body") rows+='<div class="ed-field">'+esc(editionFieldWord(f.field)+(many?" · "+f.code.toUpperCase():""))+'</div>';
+      if(blocks.length>1 || f.field!=="body" || it.stamp) rows+='<div class="ed-field">'+esc(editionFieldWord(f.field)+(many?" · "+f.code.toUpperCase():""))+'</div>';
       const ops=wordDiff(cardText(was,f.field,f.code),cardText(now,f.field,f.code));
       rows+=cell(editionSide(ops,"del"))+cell(editionSide(ops,"ins"))
         +(cols>2?'<div class="ed-own">'+(own[i]!=null?cell(esc(own[i])):"")+(i===last&&!desk?acts:"")+'</div>':"");
@@ -183,7 +204,7 @@ function openEditionPanel(o){
 }
 /* The bubble's rows follow a choice made in the panel. */
 function repaintEditionRows(wrap,c,held,changes){
-  changes.items.slice(0,EDITION_SHOWN).forEach(it=>{
+  changes.items.slice(0,editionShown(changes.items)).forEach(it=>{
     const li=Array.from(wrap.querySelectorAll("[data-ec-id]")).find(x=>x.getAttribute("data-ec-id")===it.id);
     if(li) li.innerHTML=editionRowInner(it,held,c);
   });
@@ -192,6 +213,7 @@ function repaintEditionRows(wrap,c,held,changes){
 export {
   editionCountWords,
   editionOfferHtml,
+  editionPaneHtml,
   openEditionPanel,
   repaintEditionRows
 };
