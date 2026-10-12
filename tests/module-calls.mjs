@@ -3862,7 +3862,9 @@ const CARD_B = {
    Escape neither asks nor wipes, while a press still asks and a second press still closes (the ladder stays, decisions
    2026-09-16 15:18); Ctrl+C copies the marked reply, from the page and from the search box, and nothing else; the
    window's close asks the conversations, and the Menu's Close Etiuda stands under the desktop host only; and each
-   object's own menu (context-menu.js) names what its controls do and presses them, gestures included. Driven
+   object's own menu (context-menu.js) names what its controls do and presses them, gestures included. Close this
+   tab on a tab that is not in front leaves the one in front; selected text keeps the shell's menu and a target
+   with no rows stays silent; the arrows walk an open menu, and a pointerdown outside closes it. Driven
    through the desk's own routes and its two key doors against stand-ins that keep what is written; every card is
    invented, and every global and hook set here is put back. */
 {
@@ -4142,11 +4144,18 @@ const CARD_B = {
     run(tabRows, "Close the other tabs");
     const onlyB = [strip(), pax.value, said()].join("/");
     press();
-    check("context-menu.js", "1012x5 a tab's menu opens a new tab, closes this one or every other, and reopens the last closed; the others closed come back by Undo, each in its place, the kept one still in front",
-      () => eq([tabNames, onlyB, strip(), pax.value].join("|"),
+    const restoredStrip = strip(), restoredPax = pax.value;
+    start([["dp-a", "Anna"], ["dp-b", "Bartek"], ["dp-c", "Celina"]], "dp-a");
+    const behind = node({}, { dataset: { tid: "dp-b" } }); behind.up["#tabsBar .tab[data-tid]"] = behind;
+    run(CX.ctxRowsFor(behind), "Close this tab");
+    const closedBehind = [strip(), pax.value].join("/");
+    check("context-menu.js", "1012x5 a tab's menu opens a new tab, closes this one or every other, and reopens the last closed; the others closed come back by Undo, each in its place, the kept one still in front, and Close this tab on a tab behind leaves that one gone and the one in front still in front",
+      () => eq([tabNames, onlyB, restoredStrip, restoredPax, closedBehind].join("|"),
         "New tab|-|Close this tab|Close the other tabs" + (back0 ? "|Reopen the last closed tab" : "")
-        + "|dp-b:Bartek/Bartek/Other tabs closed|dp-a:Anna,dp-b:Bartek,dp-c:Celina|Bartek"));
+        + "|dp-b:Bartek/Bartek/Other tabs closed|dp-a:Anna,dp-b:Bartek,dp-c:Celina|Bartek|dp-a:Anna,dp-c:Celina/Anna"));
 
+    const pageListen = {};
+    globalThis.addEventListener = (k, fn) => { (pageListen[k] = pageListen[k] || []).push(fn); };
     globalThis.document.activeElement = body;
     CX.wireContextMenus();
     const menus = () => made.filter(n => n.attrs && n.attrs.role === "menu" && !n.gone);
@@ -4163,9 +4172,28 @@ const CARD_B = {
     listStub.querySelector = s => (s === '.card[data-id="c-cx"] .txt[data-v="0"]' ? block : null);
     block.getBoundingClientRect = () => ({ left: 100, right: 300, top: 200, bottom: 220, width: 200, height: 20 });
     const byKey = [menuAsk(body, 0), menus().length, !!rowsOf(menus()[0])[0] && globalThis.document.activeElement === rowsOf(menus()[0])[0]].join("/");
+    const stepKey = (name) => {
+      const m = menus()[0];
+      if (!m) return "none";
+      ((m.heard && m.heard.keydown) || []).forEach(fn => fn({ key: name, preventDefault() {}, stopPropagation() {} }));
+      return String(rowsOf(m).indexOf(globalThis.document.activeElement));
+    };
+    const arrows = stepKey("ArrowDown") + "/" + stepKey("ArrowUp");
     (((menus()[0] || {}).heard || {}).keydown || []).forEach(fn => fn({ key: "Escape", preventDefault() {}, stopPropagation() {} }));
-    check("context-menu.js", "1012x6 the page's right-click: a field keeps the shell's menu; a reply opens its own, and a row pressed closes it and acts; the Menu key with nothing focused opens the marked reply's, its first row focused, and Escape closes it",
-      () => eq([inField, onReply, afterRow, byKey, menus().length].join("|"), "false/0|true/1/6|0/3|true/1/true|0"));
+    const afterEsc = menus().length;
+    const hadPick = globalThis.window.getSelection;
+    globalThis.window.getSelection = () => ({ isCollapsed: false, toString() { return "chosen words"; },
+      containsNode(n, partial) { return partial === true && n === block; } });
+    const overSel = [menuAsk(block, 2), menus().length].join("/");
+    globalThis.window.getSelection = hadPick;
+    const quiet = node({});
+    const silent = [menuAsk(quiet, 2), menus().length].join("/");
+    const opened = (menuAsk(block, 2) && menus().length) ? 1 : 0;
+    (pageListen.pointerdown || []).forEach(fn => fn({ target: body }));
+    const outside = opened + "/" + menus().length;
+    check("context-menu.js", "1012x6 the page's right-click: a field keeps the shell's menu; a reply opens its own, and a row pressed closes it and acts; the Menu key with nothing focused opens the marked reply's, its first row focused; the arrows walk its rows, and Escape closes it; selected text keeps the shell's menu; a target with no rows stays silent; a pointerdown outside closes the menu",
+      () => eq([inField, onReply, afterRow, byKey, arrows, afterEsc, overSel, silent, outside].join("|"),
+        "false/0|true/1/6|0/3|true/1/true|1/0|0|false/0|false/0|1/0"));
     CM2.setContentLangs(wasLangs2);
   } catch (e) {
     check("tabs.js", "1012 the section ran to its end", () => "threw " + String(e && e.stack || e).split(/\r?\n/).slice(0, 2).join(" "));
