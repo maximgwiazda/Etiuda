@@ -460,38 +460,68 @@ check("18 control: the plain payload carries none of the new keys through either
   const offerRow = (c, held, r, id) => { const h = EP.editionOfferHtml(c, held, r), at = h.indexOf('data-ec-id="' + id + '"');
     return at < 0 ? null : h.slice(at, h.indexOf("</li>", at)); };
   const says = (row, words) => !!row && row.indexOf("<small>" + ESC(T(words)) + "</small>") > -1;
+  const smalls = (row, words) => { const needle = "<small>" + ESC(T(words)) + "</small>"; let n = 0, at = 0;
+    if (!row) return 0; while ((at = row.indexOf(needle, at)) > -1) { n++; at += needle.length; } return n; };
+  const once = (row, words) => smalls(row, words) === 1;
   const heldS = read(stampOn(doc(), "c-b")), rewordS = read(stampOn(next(d => bodyIs(d, "c-b", "lead text")), "c-b"));
   const stampB = read(stampOn(doc(), "c-b"));
   const r43a = ED.editionChanges(heldS, rewordS, NONE), row43a = offerRow(rewordS, heldS, r43a, "c-b");
   check("43a a stamped card the lead rewords is named in the offer as a commitment in new words, on a desk that never touched it",
-    pledged(r43a) === "changed:c-b!words" && says(row43a, "commits the firm in new words") && !says(row43a, "you have your own version"),
+    pledged(r43a) === "changed:c-b!words" && once(row43a, "commits the firm in new words") && !says(row43a, "you have your own version"),
     pledged(r43a) + " | " + (row43a ? "a row" : "no row"));
   const r43b1 = ED.editionChanges(heldS, rewordS, mineOn("c-b")), r43b2 = ED.editionChanges(read(doc()), stampB, mineOn("c-b"));
   const row43b1 = offerRow(rewordS, heldS, r43b1, "c-b"), row43b2 = offerRow(stampB, read(doc()), r43b2, "c-b");
-  check("43b and on a desk holding its own reply of that card it is named and says the desk has its own version, reworded or newly stamped",
+  const bi = () => { const d = doc(); d.langs = d.langs.concat([{ code: "pl", label: "PL" }]);
+    d.cards.forEach(c => { c.body.pl = "PL " + c.id; }); return d; };
+  const minePl = id => ({ overrides: { [id]: { pl: "my polish reply" } }, removed: [], favourites: [] });
+  const heldPl = read(stampOn(bi(), "c-b"));
+  const rewordPl = read(stampOn(bi(), "c-b")); rewordPl.cards.find(c => c.id === "c-b").en = "lead text";
+  const stampPl = read(stampOn(bi(), "c-b"));
+  const r43b3 = ED.editionChanges(heldPl, rewordPl, minePl("c-b")), r43b4 = ED.editionChanges(read(bi()), stampPl, minePl("c-b"));
+  const row43b3 = offerRow(rewordPl, heldPl, r43b3, "c-b"), row43b4 = offerRow(stampPl, read(bi()), r43b4, "c-b");
+  check("43b and on a desk holding its own reply of that card it is named and says the desk has its own version, reworded or newly stamped, and a reply the desk holds only in Polish does the same",
     pledged(r43b1) === "changed:c-b!words*" && pledged(r43b2) === "changed:c-b!on*"
-      && says(row43b1, "commits the firm in new words") && says(row43b1, "you have your own version")
-      && says(row43b2, "now commits the firm") && says(row43b2, "you have your own version"),
-    pledged(r43b1) + " | " + pledged(r43b2));
+      && once(row43b1, "commits the firm in new words") && says(row43b1, "you have your own version")
+      && once(row43b2, "now commits the firm") && says(row43b2, "you have your own version")
+      && pledged(r43b3) === "changed:c-b!words*" && pledged(r43b4) === "changed:c-b!on*"
+      && once(row43b3, "commits the firm in new words") && says(row43b3, "you have your own version")
+      && once(row43b4, "now commits the firm") && says(row43b4, "you have your own version"),
+    [pledged(r43b1), pledged(r43b2), pledged(r43b3), pledged(r43b4)].join(" | "));
   const r43B = ED.editionChanges(read(doc()), stampB, { overrides: { "c-b": { t: "My B" } }, removed: [], favourites: [] });
   check("43B THE CONTROL: a desk whose own edit of that card is its title alone has no version of its reply to say",
     pledged(r43B) === "changed:c-b!on" && !says(offerRow(stampB, read(doc()), r43B, "c-b"), "you have your own version"), pledged(r43B));
   const r43c1 = ED.editionChanges(read(doc()), stampB, NONE), r43c2 = ED.editionChanges(heldS, read(doc()), NONE);
   check("43c a stamp put on or taken off with no word changed is named, a changed card in the counts, committing the firm now or no longer",
     pledged(r43c1) === "changed:c-b!on" && pledged(r43c2) === "changed:c-b!off" && kinds(r43c1) === "1,0,0,0,0"
-      && says(offerRow(stampB, read(doc()), r43c1, "c-b"), "now commits the firm")
-      && says(offerRow(read(doc()), heldS, r43c2, "c-b"), "no longer commits the firm"),
+      && once(offerRow(stampB, read(doc()), r43c1, "c-b"), "now commits the firm")
+      && once(offerRow(read(doc()), heldS, r43c2, "c-b"), "no longer commits the firm"),
     pledged(r43c1) + " | " + pledged(r43c2));
   const titleB = read(stampOn(next(d => { d.cards[1].title.en = "B, retitled"; }), "c-b"));
+  const noteB = read(stampOn(next(d => { d.cards[1].note = { en: "A note, added." }; }), "c-b"));
   const r43d1 = ED.editionChanges(read(doc()), read(three), NONE), r43d2 = ED.editionChanges(heldS, titleB, NONE);
+  const r43d3 = ED.editionChanges(heldS, noteB, NONE);
   const row43d1 = offerRow(read(three), read(doc()), r43d1, "c-a"), row43d2 = offerRow(titleB, heldS, r43d2, "c-b");
-  check("43d a text change is said as before: an unstamped card reworded and a stamped card retitled are changed cards with no line of a commitment",
-    pledged(r43d1) === "changed:c-a new:c-d retired:c-c" && pledged(r43d2) === "changed:c-b"
-      && !!row43d1 && row43d1.indexOf("<small>") < 0 && !!row43d2 && row43d2.indexOf("<small>") < 0,
-    pledged(r43d1) + " | " + pledged(r43d2));
+  const row43d3 = offerRow(noteB, heldS, r43d3, "c-b");
+  check("43d a text change is said as before: an unstamped card reworded, a stamped card retitled and a stamped card whose only change is its note are changed cards with no line of a commitment",
+    pledged(r43d1) === "changed:c-a new:c-d retired:c-c" && pledged(r43d2) === "changed:c-b" && pledged(r43d3) === "changed:c-b"
+      && !!row43d1 && row43d1.indexOf("<small>") < 0 && !!row43d2 && row43d2.indexOf("<small>") < 0
+      && !!row43d3 && row43d3.indexOf("<small>") < 0,
+    pledged(r43d1) + " | " + pledged(r43d2) + " | " + pledged(r43d3));
   const r43e = ED.editionChanges(heldS, stampB, mineOn("c-b"));
   check("43e a stamped card the edition leaves as it was says nothing, on a desk with its own reply of it too, and the offer adds nothing",
     !r43e.items.length && EP.editionOfferHtml(stampB, heldS, r43e) === "", pledged(r43e) || "nothing");
+  /* Spacing is not new words. The commitment compares a reply trimmed, with a run of whitespace read as
+     one space. The card is still changed, stamped or not, because the diff of the fields is the raw text. */
+  const gapB = read(stampOn(next(d => { d.cards[1].body.en = " \tB  body.\n"; }), "c-b"));
+  const trailA = read(next(d => { bodyIs(d, "c-a", "A body. "); }));
+  const spacedLead = read(stampOn(next(d => { d.cards[1].body.en = "lead   text"; }), "c-b"));
+  const r43i1 = ED.editionChanges(heldS, gapB, NONE), r43i2 = ED.editionChanges(read(doc()), trailA, NONE);
+  const r43i3 = ED.editionChanges(heldS, spacedLead, NONE);
+  const row43i1 = offerRow(gapB, heldS, r43i1, "c-b"), row43i3 = offerRow(spacedLead, heldS, r43i3, "c-b");
+  check("43i a stamped reply that moves only by spacing is still a changed card and is not in new words, and the same spacing on a card with no stamp is still a changed card",
+    pledged(r43i1) === "changed:c-b" && pledged(r43i2) === "changed:c-a" && pledged(r43i3) === "changed:c-b!words"
+      && !!row43i1 && smalls(row43i1, "commits the firm in new words") === 0 && once(row43i3, "commits the firm in new words"),
+    pledged(r43i1) + " | " + pledged(r43i2) + " | " + pledged(r43i3));
   const shelfOf = touch => next(d => { for (let i = 0; i < 11; i++) {
     const c = { id: "c-x" + i, shelf: "t-op", bodyShape: "plain", title: { en: "X" + i }, body: { en: "X body." } };
     touch(c, i); d.cards.push(c); } });
@@ -513,8 +543,10 @@ check("18 control: the plain payload carries none of the new keys through either
   check("43g a colleague's desk is compared by its text alone, as before: Look counts a stamp alone as no change, and a reworded stamped card as no commitment",
     !r43g.items.length && pledged(r43g2) === "changed:c-b" && JSON.stringify(lookWords) === "[]",
     (pledged(r43g) || "nothing") + " | " + pledged(r43g2) + " | Look counts " + JSON.stringify(lookWords));
-  const paneOf = (r, held, c, ov) => { const was = PK.pack.overrides; PK.pack.overrides = ov;
-    try { return EP.editionPaneHtml(r.items[0], held, c); } finally { PK.pack.overrides = was; } };
+  /* A missing item fails the check that asked for it. The pane on no card throws, and the legs after this one would not run. */
+  const paneOf = (r, held, c, ov) => { const it = r && r.items && r.items[0]; if (!it) return "";
+    const was = PK.pack.overrides; PK.pack.overrides = ov;
+    try { return EP.editionPaneHtml(it, held, c); } finally { PK.pack.overrides = was; } };
   const pane1 = paneOf(r43c1, read(doc()), stampB, {});
   const pane2 = paneOf(r43b2, read(doc()), stampB, { "c-b": { en: "my edit" } });
   const pane3 = paneOf(r43b1, heldS, rewordS, { "c-b": { en: "my edit" } });

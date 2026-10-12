@@ -20,11 +20,16 @@ function editionFieldKeys(a,b){
   return out;
 }
 function editionText(m,key){ return String(m && m[key]!=null ? m[key] : ""); }
+/* THE REPLY, FOR A COMMITMENT ONLY. Trimmed, and a run of whitespace read as one space, so a
+   stamped card whose reply moved only by spacing is not in new words. The diff of the fields
+   stays the raw text: that spacing is still a change of the card, on a stamp or off one. */
+function editionReplyWords(m,key){ return editionText(m,key).trim().replace(/\s+/g," "); }
 /** `held` is the catalog loaded now and `offered` the one asked about, both as the runtime keeps them;
  *  `layer` is this desk's own: overrides, removed and favourites. A card the desk removed is nobody's
  *  news. `own` marks a changed card where a field the lead changed is one the agent wrote otherwise.
- *  `commitment` marks a stamp put on or taken off (`stamp` "on" or "off") or a stamped card's new reply,
- *  listed first and `own` wherever the agent's own reply stands over it. `textOnly` compares text alone. */
+ *  `commitment` marks a stamp put on or taken off (`stamp` "on" or "off") or a stamped card's reply
+ *  in new words, spacing alone not being new words, listed first and `own` wherever the agent's own
+ *  reply stands over it. `textOnly` compares text alone. */
 function editionChanges(held,offered,layer,textOnly){
   const lay=layer||{}, ov=lay.overrides||{};
   const gone=new Set(lay.removed||[]), stars=new Set(lay.favourites||[]);
@@ -42,7 +47,7 @@ function editionChanges(held,offered,layer,textOnly){
     const stamp=(textOnly || cardCommits(b)===cardCommits(m)) ? "" : cardCommits(m) ? "on" : "off";
     if(!fields.length && !stamp) return;
     const mine=ov[id], mineStands=k=>!!mine && mine[k.key]!=null && String(mine[k.key])!==editionText(m,k.key);
-    const commitment=!!stamp || (!textOnly && cardCommits(m) && fields.some(k=>k.field==="body"));
+    const commitment=!!stamp || (!textOnly && cardCommits(m) && fields.some(k=>k.field==="body" && editionReplyWords(b,k.key)!==editionReplyWords(m,k.key)));
     items.push({id:id, kind:"changed", fields:fields, stamp:stamp, commitment:commitment,
       own:fields.some(mineStands) || (commitment && replies.some(mineStands))});
   });

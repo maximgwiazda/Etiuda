@@ -15732,6 +15732,9 @@ What you type stays in this browser only.`;
   function editionText(m, key) {
     return String(m && m[key] != null ? m[key] : "");
   }
+  function editionReplyWords(m, key) {
+    return editionText(m, key).trim().replace(/\s+/g, " ");
+  }
   function editionChanges(held, offered, layer, textOnly) {
     const lay = layer || {}, ov = lay.overrides || {};
     const gone = new Set(lay.removed || []), stars = new Set(lay.favourites || []);
@@ -15758,7 +15761,7 @@ What you type stays in this browser only.`;
       const stamp = textOnly || cardCommits(b) === cardCommits(m) ? "" : cardCommits(m) ? "on" : "off";
       if (!fields.length && !stamp) return;
       const mine = ov[id], mineStands = (k) => !!mine && mine[k.key] != null && String(mine[k.key]) !== editionText(m, k.key);
-      const commitment = !!stamp || !textOnly && cardCommits(m) && fields.some((k) => k.field === "body");
+      const commitment = !!stamp || !textOnly && cardCommits(m) && fields.some((k) => k.field === "body" && editionReplyWords(b, k.key) !== editionReplyWords(m, k.key));
       items.push({
         id,
         kind: "changed",
