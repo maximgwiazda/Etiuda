@@ -2251,8 +2251,9 @@ function closeHeld(win, e) {
    session lets it go. The refusal page's Close (CLOSE_MARK) lets it go before it closes. */
 function wireHold(win, onClose) {
   win.on("close", (e) => { if (closeHeld(win, e)) return; onClose(e); });
-  /* Windows is ending the session: nothing may hold the window then. */
-  win.on("session-end", () => { win.etiudaCloseOk = true; });
+  /* Windows is ending the session: nothing may hold the window then, a close already held and asking included, which
+     is let go at once (Clément's read of desk-polish-1). */
+  win.on("session-end", () => { win.etiudaCloseOk = true; if (win.etiudaCloseAsking) closeNow(win); });
 }
 function closeFromRefusal(win) {
   win.etiudaCloseOk = true;

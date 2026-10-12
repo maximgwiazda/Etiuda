@@ -1080,6 +1080,17 @@ try {
   refusalWin.close = function () { this.closes++; const e = closeEv(); heardRef.close(e); this.lastPrevented = e.prevented; };
   mainTest.closeFromRefusal(refusalWin);
   const fromRefusal = [refusalWin.closes, refusalWin.lastPrevented, refusalWin.sent.length].join("/");
+  /* a close already held, asking, or answered "asked", is let go when the session ends */
+  const askingEnd = [];
+  for (const answered of [null, "asked"]) {
+    const w = winFor(), on = {};
+    w.on = (k, fn) => { on[k] = fn; };
+    mainTest.wireHold(w, noop);
+    on.close(closeEv());
+    if (answered) mainTest.closeAnswered(w, answered);
+    (on["session-end"] || noop)();
+    askingEnd.push(w.closes);
+  }
   const back = winFor();
   back.webContents.etiudaLost = { reason: "crashed", back: true };
   const backHeld = H(back);
@@ -1087,10 +1098,11 @@ try {
   const inCreate = MAIN_CODE.slice(MAIN_CODE.indexOf("function createWindow("), MAIN_CODE.indexOf("function createWindow(") + 20000);
   const textWired = /wireHold\(win, /.test(inCreate) && /closeFromRefusal\(win\)/.test(inCreate) && /lost\.back = true/.test(inCreate);
   check(already === "free/0" && first === "true/etiuda:ask-close/0" && afterEnd === "false/1" && fromRefusal === "1/false/0"
-        && backHeld === "held!" && textWired,
+        && backHeld === "held!" && textWired && askingEnd.join() === "1,1",
     "1012d4 a window already let go is let go with nothing asked; the hold's wiring holds the window's close and asks, and"
     + " lets it go at the end of the Windows session; the refusal page's Close is never held; a page loaded again after it"
-    + " was lost holds again; and createWindow wires all three (" + [already, first, afterEnd, fromRefusal, backHeld, textWired].join(" ") + ")");
+    + " was lost holds again; a close held and asking, or answered asked, is let go when the session ends; and createWindow"
+    + " wires all three (" + [already, first, afterEnd, fromRefusal, backHeld, textWired, askingEnd.join(",")].join(" ") + ")");
 
   const wb = winFor(), wc = winFor(), wd = winFor(), we = winFor();
   const b = [H(wb), H(wb)].join("/");
