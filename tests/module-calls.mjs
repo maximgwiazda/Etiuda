@@ -3855,6 +3855,249 @@ const CARD_B = {
    called without one: it is the browser oracle's, and tests/smoke.js has it. card-body.js is
    called above only for its intent strip, which reads no document. */
 
+/* ------------------------------------------------------------------ tabs.js, run-shortcut.js, keydown.js and
+   search-box.js, a closed conversation comes back. The desk's first polish batch (2026-10-12: desk-chrome-tab-close-no-undo,
+   desk-core-esc-wipes-tabs, desk-core-no-ctrl-c). Closing a conversation offers Undo and Ctrl+Shift+T brings back the
+   last closed; a cleared last tab comes back into itself; Escape's wipe of every conversation offers Undo too; a held
+   Escape neither asks nor wipes, while a press still asks and a second press still closes (the ladder stays, decisions
+   2026-09-16 15:18); Ctrl+C copies the marked reply, from the page and from the search box, and nothing else; the
+   window's close asks the conversations, and the Menu's Close Etiuda stands under the desktop host only. Driven
+   through the desk's own routes and its two key doors against stand-ins that keep what is written; every card is
+   invented, and every global and hook set here is put back. */
+{
+  const T = await import(MOD("tabs.js"));
+  const H = await import(MOD("hooks.js"));
+  const AS = await import(MOD("app-state.js"));
+  const Dom = await import(MOD("dom.js"));
+  const ST = await import(MOD("storage.js"));
+  const hadDoc = globalThis.document, hadAdd = globalThis.addEventListener, hadCs = globalThis.getComputedStyle;
+  const hadSel = globalThis.window.getSelection, hadHost = globalThis.window.E_HOST, hadCards = AS.cards, hadLang = AS.lang;
+  const STUBS = ["applyLangUI", "updateIntentPlaceholder", "drawPillsCore", "drawIntentRail", "render", "scheduleRailGeometry",
+    "segFolded", "syncRailGeometry", "rebuildCards", "syncSampleMark", "markEntrySel", "railDecorate"];
+  const hadHooks = STUBS.concat(["runShortcut"]).map(k => [k, Object.prototype.hasOwnProperty.call(H.hooks, k), H.hooks[k]]);
+  const on = o => ({ add: c => o.add(c), remove: c => o.delete(c), contains: c => o.has(c),
+    toggle: (c, f) => { const w = f === undefined ? !o.has(c) : !!f; if (w) o.add(c); else o.delete(c); return w; } });
+  const el = extra => Object.assign({ hidden: false, attrs: {}, innerHTML: "", textContent: "", value: "", style: {}, tagName: "DIV",
+    classList: on(new Set()), setAttribute(k, v) { this.attrs[k] = String(v); }, getAttribute(k) { return this.attrs[k]; },
+    removeAttribute(k) { delete this.attrs[k]; }, querySelector: () => null, querySelectorAll: () => [], remove() { this.gone = true; },
+    contains: () => false,
+    select() {}, getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }),
+    addEventListener(k, fn) { (this.heard = this.heard || {})[k] = (this.heard[k] || []).concat(fn); } }, extra || {});
+  const toastEl = el(), pax = el({ tagName: "INPUT" });
+  const box = el({ tagName: "INPUT", selectionStart: 0, selectionEnd: 0, blur() { this.blurred = true; }, focus() {} });
+  const byId = { "#toast": toastEl, "#pax": pax, "#roleSel": el({ tagName: "SELECT" }), "#intent": box, "#modal": el({ hidden: true }) };
+  const made = [], copied = [];
+  const body = { classList: on(new Set()), appendChild: n => { made.push(n); } };
+  globalThis.document = {
+    querySelector: s => (s === "#eUndo" ? made.filter(n => n.id === "eUndo" && !n.gone).pop() || null : byId[s] || null),
+    getElementById: id => made.filter(n => n.id === id && !n.gone).pop() || null, querySelectorAll: () => [], addEventListener() {}, activeElement: body, body,
+    createElement: () => { const btns = {}, btn = btns["#eUndoBtn"] = { focus() {} };
+      return el({ isConnected: false, btn, btns, getContext: () => ({}),
+        querySelector: s => (s.charAt(0) === "#" ? (btns[s] = btns[s] || { focus() { globalThis.document.activeElement = this; } }) : null) }); },
+    createRange: () => ({}), execCommand: k => { const ta = made[made.length - 1]; copied.push(k + ":" + (ta && ta.value)); return true; },
+    documentElement: { style: { setProperty() {}, removeProperty() {} }, classList: on(new Set()), addEventListener() {} } };
+  let pageKeys = null, selection = "";
+  globalThis.addEventListener = (k, fn) => { if (k === "keydown") pageKeys = fn; };
+  globalThis.getComputedStyle = () => ({ borderLeftWidth: "0", paddingLeft: "0", borderRightWidth: "0", paddingRight: "0" });
+  globalThis.window.getSelection = () => selection;
+  STUBS.forEach(k => { if (typeof H.hooks[k] !== "function") H.hooks[k] = () => {}; });
+  Dom.grabDom();
+  const RS = await import(MOD("run-shortcut.js"));
+  const KD = await import(MOD("keydown.js"));
+  const SB = await import(MOD("search-box.js"));
+  const bubble = () => made.filter(n => n.id === "eUndo" && !n.gone).pop() || null;
+  const said = () => { const b = bubble(); return b ? (/<p>([^<]*)<\/p>/.exec(b.innerHTML) || [])[1] : null; };
+  const press = () => { const b = bubble(); if (b && b.btn.onclick) b.btn.onclick(); };
+  const tab = (id, who) => ({ id, pax: who, title: "", lang: AS.lang, intentIdxs: [], intentText: "", intentBox: "", who: "", cats: [] });
+  const strip = () => T.tabs.map(x => x.id + ":" + (x.pax || "")).join(",");
+  const start = (list, active) => {
+    T.tabs.splice(0, T.tabs.length);
+    ST.ssSet(T.TAB_KEY, JSON.stringify({ v: 1, activeTabId: active, tabs: list.map(x => tab(x[0], x[1])) }));
+    T.initTabs();
+  };
+  const key = o => Object.assign({ key: "", code: "", ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, repeat: false,
+    prevented: false, stopped: false, target: body, preventDefault() { this.prevented = true; },
+    stopPropagation() {}, stopImmediatePropagation() { this.stopped = true; } }, o);
+  try {
+    AS.putLang("en");
+    start([["dp-a", "Anna"], ["dp-b", "Bartek"]], "dp-b");
+    pax.value = "Bartek Nowak";
+    T.closeActiveTab();
+    const offered = said(), closed = strip();
+    press();
+    check("tabs.js", "1012t1 a conversation closed offers Undo, and Undo brings it back where it was, in front, with what it held, what was typed just before the close included",
+      () => eq([offered, closed, strip(), pax.value].join("|"), "Tab closed|dp-a:Anna|dp-a:Anna,dp-b:Bartek Nowak|Bartek Nowak"));
+
+    start([["dp-a", "Anna"], ["dp-b", "Bartek"], ["dp-c", "Celina"]], "dp-b");
+    T.closeActiveTab(); T.stepTab(1); T.closeActiveTab();
+    const stale = bubble();
+    const keyed = [RS.runShortcut("tabReopen"), strip()];
+    if (stale && stale.btn.onclick) stale.btn.onclick();
+    const afterStale = strip();
+    RS.runShortcut("tabReopen");
+    const both = strip();
+    check("run-shortcut.js", "1012t2 Ctrl+Shift+T brings back the last closed first, each in its place; a bubble whose close the key already undid brings back nothing more",
+      () => eq([keyed.join("/"), afterStale, both, T.reopenClosedTab()].join("|"),
+        "true/dp-a:Anna,dp-c:Celina|dp-a:Anna,dp-c:Celina|dp-a:Anna,dp-b:Bartek,dp-c:Celina|false"));
+
+    start([["dp-a", "Anna"]], "dp-a");
+    T.closeActiveTab();
+    const cleared = [said(), strip()];
+    press();
+    check("tabs.js", "1012t3 the last conversation closed is cleared and offers Undo, which brings it back into itself",
+      () => eq(cleared.join("|") + "|" + strip(), "Tab cleared|dp-a:|dp-a:Anna"));
+
+    start([["dp-a", "Anna"], ["dp-b", "Bartek"]], "dp-b");
+    const toasts = () => String(toastEl.textContent || toastEl.innerHTML);
+    toastEl.textContent = ""; toastEl.innerHTML = ""; toastEl.classList.remove("show");
+    RS.runShortcut("escapeHeld"); RS.runShortcut("escapeHeld"); RS.runShortcut("escapeHeld");
+    const held = [toasts(), strip()].join("/");
+    RS.runShortcut("escape");
+    const asked = toasts();
+    RS.runShortcut("escapeHeld");
+    const heldArmed = strip();
+    RS.runShortcut("escape");
+    const wiped = [strip(), said()].join("/");
+    pax.value = "Celina";
+    press();
+    const restored = strip().split(","), begun = restored[2] || "";
+    check("tabs.js", "1012t4 a held Escape neither asks nor closes every conversation, armed or not; a press asks, a second closes them and offers Undo, which brings back every one with the one in front, and keeps the conversation begun since after them",
+      () => eq([held, asked, heldArmed, wiped, restored.slice(0, 2).join(","), restored.length, /:Celina$/.test(begun) && !/^dp-a:/.test(begun), pax.value].join("|"),
+        "/dp-a:Anna,dp-b:Bartek|Press Esc again to close all tabs|dp-a:Anna,dp-b:Bartek|dp-a:/All tabs closed|dp-a:Anna,dp-b:Bartek|3|true|Bartek"));
+
+    const heard = [];
+    const answer = { copyMarked: true };
+    const realRun = H.hooks.runShortcut;
+    H.hooks.runShortcut = id => { heard.push(id); return id in answer ? answer[id] : true; };
+    KD.wireGlobalKeydown();
+    const send = o => { const e = key(o); heard.length = 0; pageKeys(e); return heard.join(",") + (e.prevented ? "!" : ""); };
+    const runs = [
+      send({ key: "Escape", code: "Escape", repeat: true }), send({ key: "Escape", code: "Escape" }),
+      send({ key: "T", code: "KeyT", ctrlKey: true, shiftKey: true })];
+    globalThis.window.E_HOST = {};
+    runs.push(send({ key: "T", code: "KeyT", ctrlKey: true, shiftKey: true }));
+    runs.push(send({ key: "c", code: "KeyC", ctrlKey: true }));
+    selection = "a line someone selected";
+    runs.push(send({ key: "c", code: "KeyC", ctrlKey: true }));
+    selection = ""; answer.copyMarked = false;
+    runs.push(send({ key: "c", code: "KeyC", ctrlKey: true }));
+    H.hooks.runShortcut = realRun;
+    check("keydown.js", "1012k1 the page's keys: a held Escape is told apart, Ctrl+Shift+T reopens under the desktop host only, and Ctrl+C copies the mark where nothing is selected, its own meaning kept where something is or no reply is marked",
+      () => eq(runs.join("|"), "escapeHeld!|escape!||tabReopen!|copyMarked!||copyMarked"));
+
+    const CARD = { id: "c-dp-copy", c: "gen", t: "Lost parcel", en: "Your parcel is on its way back to us." };
+    AS.setCards([CARD]);
+    AS.putEntrySel(null);
+    const none = [RS.runShortcut("copyMarked"), copied.length].join("/");
+    /* Where Enter would take a marked intent, Ctrl+C leaves it marked and declines. */
+    const wasRail = [AS.semiKind, AS.railOrder, AS.railSel, AS.railMarkIdx, AS.railMarkUsed];
+    AS.setSemiKind("intent"); AS.setRailOrder([0]); AS.setRailSel(0); AS.setRailMarkIdx(0); AS.setRailMarkUsed(false);
+    let onIntent;
+    try { onIntent = RS.runShortcut("copyMarked"); } catch (e) { onIntent = "threw"; }
+    onIntent = [onIntent, AS.semiKind, copied.length].join("/");
+    AS.setSemiKind(wasRail[0]); AS.setRailOrder(wasRail[1]); AS.setRailSel(wasRail[2]); AS.setRailMarkIdx(wasRail[3]); AS.setRailMarkUsed(wasRail[4]);
+    AS.putEntrySel({ id: "c-dp-copy", vi: 0 });
+    toastEl.textContent = ""; toastEl.innerHTML = ""; toastEl.classList.remove("show");
+    const marked = [RS.runShortcut("copyMarked"), copied.join(";"), toasts()].join("/");
+    check("run-shortcut.js", "1012k2 Ctrl+C's copy takes the marked reply, with the usual toast; with no reply marked it copies nothing and declines, and a marked intent stays marked rather than picked",
+      () => eq([none, onIntent, marked].join("|"), "false/0|false/intent/0|true/copy:Your parcel is on its way back to us./Ready to paste: Lost parcel, EN"));
+
+    copied.length = 0;
+    SB.wireSearchBox();
+    const boxKeys = (box.heard && box.heard.keydown) || [];
+    const inBox = o => { const e = key(o); boxKeys.forEach(fn => fn(e)); return (e.prevented ? "!" : "") + (e.stopped ? "s" : "") + copied.length; };
+    box.value = "parcel"; box.selectionStart = 2; box.selectionEnd = 5;
+    const sel = inBox({ key: "c", code: "KeyC", ctrlKey: true });
+    box.selectionStart = box.selectionEnd = 6; box.blurred = false;
+    const caret = inBox({ key: "c", code: "KeyC", ctrlKey: true }), blurred = box.blurred;
+    AS.putEntrySel(null);
+    const unmarked = inBox({ key: "c", code: "KeyC", ctrlKey: true });
+    check("search-box.js", "1012k3 Ctrl+C in the search box copies the marked reply where nothing in the box is selected, as Enter does; a selection, or no reply marked, keeps the key's own meaning",
+      () => eq([sel, caret, blurred, unmarked].join("|"), "0|!s1|true|1"));
+
+    /* 1012k4: the search box's own door to the ladder tells a held Escape apart too (Clément's read, hole 4) */
+    box.value = "";
+    start([["dp-a", "Anna"], ["dp-b", "Bartek"]], "dp-b");
+    toastEl.textContent = ""; toastEl.innerHTML = ""; toastEl.classList.remove("show");
+    for (let i = 0; i < 4; i++) inBox({ key: "Escape", code: "Escape", repeat: true });
+    const boxHeld = [strip(), String(toastEl.textContent || toastEl.innerHTML)].join("/");
+    check("search-box.js", "1012k4 four held Escapes in the search box neither ask nor close a conversation",
+      () => eq(boxHeld, "dp-a:Anna,dp-b:Bartek/"));
+
+    /* The window's close: the shell asks, and the conversations answer. */
+    const answers = [], ask = () => T.askClose(a => answers.push(a));
+    const asking = () => made.filter(n => n.id === "eCloseAsk" && !n.gone);
+    start([["dp-a", ""]], "dp-a");
+    ask();
+    const nothing = answers.join() + "/" + asking().length;
+    answers.length = 0;
+    /* a blank tab whose only work is typed in the search box, not yet kept, is a conversation in progress (hole 1) */
+    box.value = "where is my parcel";
+    ask();
+    const typedOnly = answers.join();
+    const typedAsk = asking()[0];
+    if (typedAsk) (typedAsk.btns["#eCloseStay"].onclick || (() => {}))();
+    box.value = "";
+    answers.length = 0;
+    start([["dp-a", "Anna"], ["dp-b", "Bartek"], ["dp-c", "Celina"]], "dp-c");
+    T.closeActiveTab();
+    const undoBub = bubble();
+    ask(); ask();
+    const one = asking(), q = one[0] || el(), stayFocused = globalThis.document.activeElement === q.btns["#eCloseStay"];
+    const shown = [one.length, q.attrs.role, (/<p>([^<]*)<\/p>/.exec(q.innerHTML) || [])[1], !!(undoBub && undoBub.hidden)].join("/");
+    (q.btns["#eCloseStay"].onclick || (() => {}))();
+    const back = [asking().length, !!(undoBub && undoBub.hidden)].join("/");
+    ask(); (asking()[0].btns["#eCloseGo"].onclick || (() => {}))();
+    ask(); ((asking()[0].heard || {}).keydown || []).forEach(fn => fn({ key: "Escape", preventDefault() {}, stopPropagation() {} }));
+    check("tabs.js", "1012c1 the window's close asks the conversations: nothing in progress answers at once; else one question names how many, over the Undo bubble, and Cancel, Escape or Close Etiuda answer for the person",
+      () => eq([nothing, typedOnly, shown, stayFocused, back, answers.join(), asking().length].join("|"),
+        "none/0|asked|1/alertdialog/Close Etiuda? 2 conversations are still in progress, and closing forgets them./true|true|0/false|asked,asked,stay,asked,close,asked,stay|0"));
+
+    /* 1012c2: host.js wires the shell's question to the conversations and their answer back (hole 3, the page's half) */
+    const HO = await import(MOD("host.js"));
+    const hostWas = globalThis.window.E_HOST, heardAsk = [], toShell = [];
+    globalThis.window.E_HOST = { onAskClose: (fn) => heardAsk.push(fn), closeAnswer: (a) => toShell.push(a) };
+    start([["dp-a", ""]], "dp-a");
+    HO.wireHost();
+    heardAsk.forEach((fn) => fn());
+    if (hostWas === undefined) delete globalThis.window.E_HOST; else globalThis.window.E_HOST = hostWas;
+    check("host.js", "1012c2 the desktop host's question reaches the conversations, and their answer goes back to the shell",
+      () => eq([heardAsk.length, toShell.join()].join("|"), "1|none"));
+
+    /* The Menu's Close Etiuda: hidden without a window to close, shown and pressed under the desktop host. */
+    const HM = await import(MOD("header-menus.js"));
+    const menu = el({ hidden: true }), quit = el({ hidden: true }), sep = el({ hidden: true });
+    Object.assign(byId, { "#settingsBtn": el(), "#settingsMenu": menu, "#moreBtn": el(), "#moreMenu": el({ hidden: true }),
+      "#menuQuit": quit, "#menuQuitSep": sep });
+    globalThis.addEventListener = () => {};
+    delete globalThis.window.E_HOST;
+    HM.wireHeaderMenus();
+    const browser = [quit.hidden, sep.hidden].join("/");
+    let quitPressed = 0;
+    globalThis.window.E_HOST = { close() { quitPressed++; } };
+    HM.wireHeaderMenus();
+    const desk = [quit.hidden, sep.hidden].join("/");
+    menu.hidden = false;
+    menu.onclick({ target: { closest: () => ({ dataset: { act: "quit" } }) } });
+    check("header-menus.js", "1012m1 the Menu's Close Etiuda is hidden in a browser, and under the desktop host it shows, closes the Menu and closes the window as the band's button does",
+      () => eq([browser, desk, menu.hidden, quitPressed].join("|"), "true/true|false/false|true|1"));
+  } catch (e) {
+    check("tabs.js", "1012 the section ran to its end", () => "threw " + String(e && e.stack || e).split(/\r?\n/).slice(0, 2).join(" "));
+  } finally {
+    const b = bubble(); if (b) (b.heard && b.heard.keydown || []).forEach(fn => fn({ key: "Escape", preventDefault() {}, stopPropagation() {} }));
+    T.tabs.splice(0, T.tabs.length);
+    ST.ssSet(T.TAB_KEY, "null");
+    AS.putEntrySel(null); AS.setCards(hadCards); AS.putLang(hadLang);
+    hadHooks.forEach(([k, own, v]) => { if (own) H.hooks[k] = v; else delete H.hooks[k]; });
+    if (hadSel === undefined) delete globalThis.window.getSelection; else globalThis.window.getSelection = hadSel;
+    if (hadHost === undefined) delete globalThis.window.E_HOST; else globalThis.window.E_HOST = hadHost;
+    if (hadCs === undefined) delete globalThis.getComputedStyle; else globalThis.getComputedStyle = hadCs;
+    if (hadAdd === undefined) delete globalThis.addEventListener; else globalThis.addEventListener = hadAdd;
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+    if (hadDoc !== undefined) Dom.grabDom();
+  }
+}
+
 /* ------------------------------------------------------------------ the count, and this
    gate's own liveness. A gate whose covered set silently fell to a handful would still print
    a green line, so the floor is frozen here and a drop reddens the file. */

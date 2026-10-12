@@ -188,6 +188,18 @@ function wireGlobalKeydown(){
       hooks.runShortcut("tabClose");
       return;
     }
+    /* Ctrl+Shift+T brings the last closed conversation back, under the desktop host for Ctrl+W's reason. */
+    if(eHost() && e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && (e.code==="KeyT" || e.key==="t" || e.key==="T")){
+      e.preventDefault();
+      hooks.runShortcut("tabReopen");
+      return;
+    }
+    /* CTRL+C COPIES THE MARKED REPLY, as Enter does, where nothing is selected and nothing is being typed; a selection or
+       a field keeps the key's own meaning, and with no reply marked the key is left alone. The search box has its own. */
+    if(!inField && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.code==="KeyC" || e.key==="c" || e.key==="C")
+       && !String((window.getSelection && window.getSelection()) || "")){
+      if(hooks.runShortcut("copyMarked")!==false){ e.preventDefault(); return; }
+    }
 
     /* After the rebindable pass, so a binding placed on one of these still wins. Page up and
        down run from inside the search box too - a caret in a single-line field has no use for
@@ -217,7 +229,7 @@ function wireGlobalKeydown(){
     if(eventMatchesAction(e,"navPillRight")){ e.preventDefault(); hooks.runShortcut("navPillRight"); return; }
     if(eventMatchesAction(e,"copyOther")){ e.preventDefault(); hooks.runShortcut("copyOther"); return; }
     if(eventMatchesAction(e,"copy")){ e.preventDefault(); hooks.runShortcut("copy"); return; }
-    if(eventMatchesAction(e,"escape")){ e.preventDefault(); hooks.runShortcut("escape"); return; }
+    if(eventMatchesAction(e,"escape")){ e.preventDefault(); hooks.runShortcut(e.repeat ? "escapeHeld" : "escape"); return; }
 
     // Nothing focused (e.g. clicked empty space): printable keys go straight into INTENT.
     // First character is inserted manually because focus alone would swallow this keydown.

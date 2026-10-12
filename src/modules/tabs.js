@@ -2,10 +2,11 @@ import { CATS, CONTENT_LANGS, intentCount } from "./content-model.js";
 import { intentIdAt } from "./intent-id.js";
 import { applyCut, cutSides } from "./cut-text.js";
 import { ICON_TAB_X, ICON_TAB_ADD } from "./icons.js";
-import { mgReduceMotion, E_EASE } from "./motion.js";
+import { mgReduceMotion, E_EASE, dismissNode } from "./motion.js";
+import { esc } from "./esc.js";
 import { formatActionChord, tabAddTitle } from "./shortcuts.js";
 import { lsGet, ssGet, ssSet } from "./storage.js";
-import { t, toast, TOAST_MS, toastSerial } from "./ui-lang.js";
+import { t, toast, TOAST_MS, toastSerial, offerUndo } from "./ui-lang.js";
 import { catSlot } from "./cat-identity.js";
 import { pageScrollY, pageScroller, scrollPageTop } from "./page-scroll.js";
 import { cssEsc } from "./css-esc.js";
@@ -434,19 +435,54 @@ function addTab(){
   toast("The new tab starts with cleared fields and your settings kept.");
   activeHeard();
 }
+/* A CLOSED CONVERSATION COMES BACK: the Undo bubble right after, and Ctrl+Shift+T for the last few while the window is
+   open, the way a browser reopens a tab. Kept in memory and nowhere else. A cleared last tab comes back into itself,
+   and every conversation Escape closed comes back at once, with anything begun since kept after them. Each bubble
+   reopens its own close, so the key and the bubble never bring back two. */
+const closedTabs=[], CLOSED_KEEP=10;
+function keepClosed(entry){
+  closedTabs.push(JSON.parse(JSON.stringify(entry)));
+  if(closedTabs.length>CLOSED_KEEP) closedTabs.shift();
+  return closedTabs[closedTabs.length-1];
+}
+function reopenClosedTab(entry){
+  const at=entry ? closedTabs.lastIndexOf(entry) : closedTabs.length-1;
+  if(at<0) return false;
+  const last=closedTabs.splice(at,1)[0];
+  snapshotActiveTab();
+  const free=tb=>{ if(tabs.some(x=>x.id===tb.id)) tb.id=blankTab().id; return tb; };
+  if(last.all){
+    const begun=tabs.filter(tabHasWork);
+    tabs=last.all.slice();
+    begun.forEach(tb=>tabs.push(free(tb)));
+    applyTab(tabs.find(x=>x.id===last.active)||tabs[0]);
+  } else if(last.cleared && tabs.length===1 && !tabHasWork(tabs[0])){
+    tabs[0]=Object.assign(last.tab,{id:tabs[0].id});
+    applyTab(tabs[0]);
+  } else {
+    const tb=free(last.tab);
+    tabs.splice(Math.min(Math.max(last.idx,0), tabs.length),0,tb);
+    applyTab(tb);
+  }
+  saveTabSession();
+  activeHeard();
+  return true;
+}
 function closeTab(id, ev){
   if(ev){ ev.preventDefault(); ev.stopPropagation(); }
   const idx=tabs.findIndex(x=>x.id===id);
   if(idx<0) return;
+  if(id===activeTabId) snapshotActiveTab();
   if(tabs.length===1){
-    const keepId=tabs[0].id;
+    const keepId=tabs[0].id, kept=tabHasWork(tabs[0]) ? keepClosed({ tab:tabs[0], idx:0, cleared:true }) : null;
     tabs[0]=Object.assign(blankTab(),{id:keepId});
     applyTab(tabs[0]);
     saveTabSession();
-    toast("Tab cleared");
+    if(kept) offerUndo("Tab cleared", ()=>reopenClosedTab(kept)); else toast("Tab cleared");
     activeHeard();
     return;
   }
+  const kept=keepClosed({ tab:tabs[idx], idx, cleared:false });
   const wasActive=id===activeTabId;
   tabs.splice(idx,1);
   if(wasActive){
@@ -455,6 +491,7 @@ function closeTab(id, ev){
     drawTabs();
   }
   saveTabSession();
+  offerUndo("Tab closed", ()=>reopenClosedTab(kept));
 }
 /* What the tab's own x does, for the key that means the same thing everywhere else. The last
    tab is cleared rather than removed, which is closeTab's rule and not a second one. */
@@ -463,7 +500,7 @@ function closeActiveTab(){
 }
 /* THE LAST THING ESCAPE CAN SHED IS THE DESK, AND IT ASKS FIRST. Every rung above this one
    gives back something a keystroke rebuilds - a panel, a mode, a selection. This one drops
-   every open conversation's PAX, ROLE, filter and box at once and nothing brings them back,
+   every open conversation's PAX, ROLE, filter and box at once and only its Undo brings them back,
    so a stray press must not reach it. The second press has to land while the toast that
    asked for it is still up, so the window is the toast's own life. */
 let tabWipeArmedAt=0, tabWipeToast=-1;
@@ -476,16 +513,54 @@ function tabHasWork(tb){
 /* One blank tab is what "all closed" means - the same end state closing the last tab
    already produces, and it keeps that tab's id so the strip does not blink. */
 function closeAllTabs(){
+  snapshotActiveTab();
+  const kept=tabs.some(tabHasWork) ? keepClosed({ all:tabs, active:activeTabId }) : null;
   const keepId=tabs[0]?tabs[0].id:null;
   tabs=[keepId?Object.assign(blankTab(),{id:keepId}):blankTab()];
   applyTab(tabs[0]);
   saveTabSession();
-  toast("All tabs closed");
+  if(kept) offerUndo("All tabs closed", ()=>reopenClosedTab(kept)); else toast("All tabs closed");
   activeHeard();
 }
+/* CLOSING THE WINDOW ASKS ONCE WHILE A CONVERSATION IS IN PROGRESS (desk-chrome-close-quits-forgets): the X, Alt+F4 and
+   the taskbar closed at once and forgot every conversation. The shell holds the close and asks here, and the answer
+   goes back at once: "none" where nothing would be lost, else "asked", then the person's "close" or "stay". Cancel is
+   the focused button, so Enter and Escape both keep the window; an Undo bubble in the same place waits under it. */
+function askClose(answer){
+  snapshotActiveTab();
+  const n=tabs.filter(tabHasWork).length;
+  if(!n){ answer("none"); return; }
+  answer("asked");
+  if(document.getElementById("eCloseAsk")) return;
+  const undo=$("#eUndo");
+  if(undo) undo.hidden=true;
+  const el=document.createElement("div");
+  el.className="bub bub-ask e-undo e-close-ask";
+  el.id="eCloseAsk";
+  el.setAttribute("role","alertdialog");
+  el.setAttribute("data-side","none");
+  el.innerHTML='<p>'+esc(n===1 ? t("Close Etiuda? A conversation is still in progress, and closing forgets it.")
+      : t("Close Etiuda? {N} conversations are still in progress, and closing forgets them.").replace("{N}",String(n)))+'</p>'
+    +'<div class="tour-actions"><button type="button" class="btn" id="eCloseGo">'+esc(t("Close Etiuda"))+'</button>'
+    +'<button type="button" class="btn primary" id="eCloseStay">'+esc(t("Cancel"))+'</button></div>';
+  document.body.appendChild(el);
+  const done=a=>{ dismissNode(el); if(undo && a==="stay") undo.hidden=false; answer(a); };
+  el.querySelector("#eCloseGo").onclick=()=>done("close");
+  el.querySelector("#eCloseStay").onclick=()=>done("stay");
+  el.addEventListener("keydown",e=>{
+    if(e.key!=="Escape") return;
+    e.preventDefault(); e.stopPropagation(); done("stay");
+  });
+  try{ el.querySelector("#eCloseStay").focus({preventScroll:true}); }catch(_){}
+}
+/* A HELD ESCAPE NEITHER ASKS NOR WIPES: key repeat climbed from the first rung to every conversation gone in under a
+   second. The two doors to the ladder say whether the press is a repeat (escapeHeld) before they climb. */
+let escHeldNow=false;
+function escapeHeld(on){ escHeldNow=!!on; }
 function escCloseAllTabsStep(){
   snapshotActiveTab();
   if(tabs.length<=1 && !tabHasWork(tabs[0])){ tabWipeArmedAt=0; return false; }
+  if(escHeldNow) return false;
   const now=Date.now();
   /* THE ASKING TOAST IS THE WINDOW. Time alone let a second Escape land on a message that
      had already been replaced by another, wiping every tab with nothing on screen asking. */
@@ -1188,5 +1263,5 @@ export {
   tabs,
   tabSaveTimer,
   tabInsertAnimating,
-  TAB_FLOOR_W
+  TAB_FLOOR_W, reopenClosedTab, escapeHeld, askClose
 };

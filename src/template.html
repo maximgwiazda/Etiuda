@@ -2535,6 +2535,9 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
    border the others carry so every badge sits one height. */
 .cbadge.edn{border:1px solid transparent}
 .modal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
+/* A dialog's and a bubble's words do not select like a page's; what a field holds and a path a person copies still do. */
+.modal,.bub{user-select:none;-webkit-user-select:none}
+.modal :is(input,textarea,select,[contenteditable="true"],.mono,code),.bub :is(input,textarea,.mono,code){user-select:text;-webkit-user-select:text}
 /* A keyframe, not a transition - the element returns from display:none with no previous
    value. The way out is a copy on the dismiss tier (.e-gone), which the next surface to open
    ends, so a flow that closes one dialog and opens another never cross-fades the two.
@@ -4076,6 +4079,9 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-act="tour" title="The tour of Etiuda's controls, one at a time">Show tour…</button>
           <button type="button" role="menuitem" data-act="about" title="This version of Etiuda, what is new in it, and its licence">About Etiuda</button>
+          <!-- Only where there is a window to close: under the desktop host (header-menus.js). -->
+          <div class="menu-sep" id="menuQuitSep" hidden></div>
+          <button type="button" role="menuitem" data-act="quit" id="menuQuit" hidden title="Close Etiuda; it asks first while a conversation is in progress">Close Etiuda</button>
         </div>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { setLang } from "./lang-seg.js";
-import { stepTab, addTab, closeActiveTab, drawPills, escapeLadderStep, activeHeard } from "./tabs.js";
+import { stepTab, addTab, closeActiveTab, drawPills, escapeLadderStep, activeHeard, reopenClosedTab, escapeHeld } from "./tabs.js";
 import { closeLooseOverlays } from "./keydown.js";
 import { openMaintenance } from "./maintenance.js";
 import { toggleFactsPanel, factsPanelOpen, closeFactsPanel } from "./facts.js";
@@ -43,6 +43,9 @@ function runShortcut(id){
   /* No SC_DEFS row: keydown.js matches this one itself, for the reason written there. It is
      dispatched here all the same, so every bound key still leaves the app through one door. */
   if(id==="tabClose"){ closeActiveTab(); return true; }
+  if(id==="tabReopen"){ reopenClosedTab(); return true; }
+  /* A held Escape climbs as a press does, but neither asks to close every conversation nor closes them (tabs.js). */
+  if(id==="escapeHeld"){ escapeHeld(true); try { return runShortcut("escape"); } finally { escapeHeld(false); } }
   if(id==="maintenance"){ closeLooseOverlays(); openMaintenance(); return true; }
   if(id==="quickFacts"){ toggleFactsPanel(); return true; }
   if(id==="openMenu"){
@@ -118,6 +121,12 @@ function runShortcut(id){
   }
   // Declined when the action button offers no reply at that place, so the key falls through.
   if(/^nextCopy[1-4]$/.test(id)) return copyNextReply(+id.slice(8)-1);
+  /* Ctrl+C's: the marked reply, and nothing else. It never picks an intent or marks a first reply, as Enter may. */
+  if(id==="copyMarked"){
+    if(!entrySel) return false;
+    kbdNav(true);
+    return copyEntrySel(false);
+  }
   if(id==="copy"||id==="copyOther"){
     kbdNav(true);
     // The mark's surface decides what Enter means: an intent mark is picked, a card copied.

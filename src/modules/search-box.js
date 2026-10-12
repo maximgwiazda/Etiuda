@@ -3,7 +3,7 @@
 import { flushPillState } from "./pill-state.js";
 import { drawIntentRail, railDecorate, railScheduleSort, railSettle } from "./rail-list.js";
 import { syncShortcutTitles } from "./shortcuts.js";
-import { escapeLadderStep, scheduleTabSave } from "./tabs.js";
+import { escapeLadderStep, scheduleTabSave, escapeHeld } from "./tabs.js";
 import { markEntrySel, navEntry } from "./entry-walk.js";
 import { syncIntentClearBtns, syncIntentInput } from "./intent-clear.js";
 import { intentEl, $ } from "./dom.js";
@@ -86,7 +86,7 @@ function wireSearchBox(){
   intentEl.addEventListener("keydown",e=>{
     if(e.altKey || e.metaKey) return;
     // The box's door onto the escape ladder.
-    if(e.key==="Escape"){ e.preventDefault(); e.stopImmediatePropagation(); escapeLadderStep(); return; }
+    if(e.key==="Escape"){ e.preventDefault(); e.stopImmediatePropagation(); escapeHeld(e.repeat); escapeLadderStep(); escapeHeld(false); return; }
     /* THE BOX HAS NO CARET KEYS - a query is a probe, not a document, so ←/→ steer the
        categories from inside it exactly as they do from outside, and focus stops mattering
        to the arrows at all. Repair is the clear button, Esc, or Ctrl+A and retyping. The
@@ -135,6 +135,16 @@ function wireSearchBox(){
       if(to<0){ setSemiKind("card"); navEntry(step); return; }   // every row is picked: the cards are the only answer
       setRailSel(to);
       railDecorate(true);
+      return;
+    }
+    /* CTRL+C COPIES THE MARKED REPLY from here too, where the arrows walk the cards; a selection in the box keeps the
+       key's own meaning, and so does a box with no reply marked. */
+    if(e.ctrlKey && !e.shiftKey && (e.code==="KeyC" || e.key==="c" || e.key==="C") && entrySel && markSurface()==="card"
+       && intentEl.selectionStart===intentEl.selectionEnd){
+      e.preventDefault(); e.stopImmediatePropagation();
+      kbdNav(true);
+      try{ intentEl.blur(); }catch(_){}
+      copyEntrySel(false);
       return;
     }
     if(e.key==="Enter"){
