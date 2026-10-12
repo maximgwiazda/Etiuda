@@ -28,7 +28,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 83;
+const EXPECTED = 84;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -77,7 +77,7 @@ const mainTest = {};
 const desktopWas = process.env.XDG_CURRENT_DESKTOP;
 process.env.XDG_CURRENT_DESKTOP = "GNOME";
 new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
-  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered;")(
+  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal;")(
   fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, mainTest);
 if (desktopWas === undefined) delete process.env.XDG_CURRENT_DESKTOP; else process.env.XDG_CURRENT_DESKTOP = desktopWas;
 
@@ -1057,14 +1057,51 @@ try {
   check(a1 === "held!" && sentA === "etiuda:ask-close" && quietA === 0 && a2 === "held!" && a3 === "1/free",
     "1012d1 a close is held and the page asked; once it has asked, nothing closes the window but the person's answer: Cancel leaves the next close held again, Close Etiuda closes it, and that close is let go ("
     + [a1, sentA, quietA, a2, a3].join(" ") + ")");
+  /* 1012d4, before d2's quit, which leaves the shell quitting for the rest of this file (Clément's read, hole 2): a window
+     already let go is let go again with nothing asked; the hold's own wiring, driven on a window that keeps its listeners
+     (hole 3); a page loaded again after it was lost holds again (note a); and createWindow wires the hold, read from its
+     text with the comments taken out. */
+  const wf = winFor();
+  wf.etiudaCloseOk = true;
+  const already = [H(wf), wf.sent.length].join("/");
+  const wired = winFor(), heardWin = {};
+  wired.on = (k, fn) => { heardWin[k] = fn; };
+  let placeKept = 0;
+  mainTest.wireHold(wired, () => { placeKept++; });
+  const e1 = closeEv(); heardWin.close(e1);
+  const first = [e1.prevented, wired.sent.join(), placeKept].join("/");
+  mainTest.closeAnswered(wired, "stay");
+  (heardWin["session-end"] || noop)();
+  const e2 = closeEv(); heardWin.close(e2);
+  const afterEnd = [e2.prevented, placeKept].join("/");
+  const refusalWin = winFor(), heardRef = {};
+  refusalWin.on = (k, fn) => { heardRef[k] = fn; };
+  mainTest.wireHold(refusalWin, noop);
+  refusalWin.close = function () { this.closes++; const e = closeEv(); heardRef.close(e); this.lastPrevented = e.prevented; };
+  mainTest.closeFromRefusal(refusalWin);
+  const fromRefusal = [refusalWin.closes, refusalWin.lastPrevented, refusalWin.sent.length].join("/");
+  const back = winFor();
+  back.webContents.etiudaLost = { reason: "crashed", back: true };
+  const backHeld = H(back);
+  const MAIN_CODE = shellSrc("main.js").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const inCreate = MAIN_CODE.slice(MAIN_CODE.indexOf("function createWindow("), MAIN_CODE.indexOf("function createWindow(") + 20000);
+  const textWired = /wireHold\(win, /.test(inCreate) && /closeFromRefusal\(win\)/.test(inCreate) && /lost\.back = true/.test(inCreate);
+  check(already === "free/0" && first === "true/etiuda:ask-close/0" && afterEnd === "false/1" && fromRefusal === "1/false/0"
+        && backHeld === "held!" && textWired,
+    "1012d4 a window already let go is let go with nothing asked; the hold's wiring holds the window's close and asks, and"
+    + " lets it go at the end of the Windows session; the refusal page's Close is never held; a page loaded again after it"
+    + " was lost holds again; and createWindow wires all three (" + [already, first, afterEnd, fromRefusal, backHeld, textWired].join(" ") + ")");
+
   const wb = winFor(), wc = winFor(), wd = winFor(), we = winFor();
   const b = [H(wb), H(wb)].join("/");
   H(wc); mainTest.closeAnswered(wc, "none");
   const noneAtOnce = wc.closes;
   H(wd);
-  await tick(1700);
+  await tick(1600);
   we.webContents.etiudaLost = { reason: "crashed" };
   const lost = H(we);
+  /* THE QUIT STAYS LAST among the close legs: it leaves this shell quitting, so a close leg after it would see every
+     window let go and prove nothing. */
   (appOn["before-quit"] || noop)();
   const quit = H(winFor());
   check(b === "held!/free" && noneAtOnce === 1 && wd.closes === 1 && lost === "free" && quit === "free",

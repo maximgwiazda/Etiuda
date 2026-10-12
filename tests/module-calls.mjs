@@ -3899,7 +3899,7 @@ const CARD_B = {
     addEventListener(k, fn) { if (k === "contextmenu") docMenu = fn; }, contains: () => true,
     createElement: () => { const btns = {}, btn = btns["#eUndoBtn"] = { focus() {} };
       return el({ isConnected: false, btn, btns, getContext: () => ({}),
-        querySelector: s => (s.charAt(0) === "#" ? (btns[s] = btns[s] || { focus() {} }) : null) }); },
+        querySelector: s => (s.charAt(0) === "#" ? (btns[s] = btns[s] || { focus() { globalThis.document.activeElement = this; } }) : null) }); },
     createRange: () => ({}), execCommand: k => { const ta = made[made.length - 1]; copied.push(k + ":" + (ta && ta.value)); return true; },
     documentElement: { style: { setProperty() {}, removeProperty() {} }, classList: on(new Set()), addEventListener() {} } };
   let pageKeys = null, selection = "", docMenu = null;
@@ -3929,11 +3929,12 @@ const CARD_B = {
   try {
     AS.putLang("en");
     start([["dp-a", "Anna"], ["dp-b", "Bartek"]], "dp-b");
+    pax.value = "Bartek Nowak";
     T.closeActiveTab();
     const offered = said(), closed = strip();
     press();
-    check("tabs.js", "1012t1 a conversation closed offers Undo, and Undo brings it back where it was, in front, with what it held",
-      () => eq([offered, closed, strip(), pax.value].join("|"), "Tab closed|dp-a:Anna|dp-a:Anna,dp-b:Bartek|Bartek"));
+    check("tabs.js", "1012t1 a conversation closed offers Undo, and Undo brings it back where it was, in front, with what it held, what was typed just before the close included",
+      () => eq([offered, closed, strip(), pax.value].join("|"), "Tab closed|dp-a:Anna|dp-a:Anna,dp-b:Bartek Nowak|Bartek Nowak"));
 
     start([["dp-a", "Anna"], ["dp-b", "Bartek"], ["dp-c", "Celina"]], "dp-b");
     T.closeActiveTab(); T.stepTab(1); T.closeActiveTab();
@@ -3965,10 +3966,12 @@ const CARD_B = {
     const heldArmed = strip();
     RS.runShortcut("escape");
     const wiped = [strip(), said()].join("/");
+    pax.value = "Celina";
     press();
-    check("tabs.js", "1012t4 a held Escape neither asks nor closes every conversation, armed or not; a press asks, a second closes them and offers Undo, which brings back every one with the one in front",
-      () => eq([held, asked, heldArmed, wiped, strip(), pax.value].join("|"),
-        "/dp-a:Anna,dp-b:Bartek|Press Esc again to close all tabs|dp-a:Anna,dp-b:Bartek|dp-a:/All tabs closed|dp-a:Anna,dp-b:Bartek|Bartek"));
+    const restored = strip().split(","), begun = restored[2] || "";
+    check("tabs.js", "1012t4 a held Escape neither asks nor closes every conversation, armed or not; a press asks, a second closes them and offers Undo, which brings back every one with the one in front, and keeps the conversation begun since after them",
+      () => eq([held, asked, heldArmed, wiped, restored.slice(0, 2).join(","), restored.length, /:Celina$/.test(begun) && !/^dp-a:/.test(begun), pax.value].join("|"),
+        "/dp-a:Anna,dp-b:Bartek|Press Esc again to close all tabs|dp-a:Anna,dp-b:Bartek|dp-a:/All tabs closed|dp-a:Anna,dp-b:Bartek|3|true|Bartek"));
 
     const heard = [];
     const answer = { copyMarked: true };
@@ -4020,6 +4023,15 @@ const CARD_B = {
     check("search-box.js", "1012k3 Ctrl+C in the search box copies the marked reply where nothing in the box is selected, as Enter does; a selection, or no reply marked, keeps the key's own meaning",
       () => eq([sel, caret, blurred, unmarked].join("|"), "0|!s1|true|1"));
 
+    /* 1012k4: the search box's own door to the ladder tells a held Escape apart too (Clément's read, hole 4) */
+    box.value = "";
+    start([["dp-a", "Anna"], ["dp-b", "Bartek"]], "dp-b");
+    toastEl.textContent = ""; toastEl.innerHTML = ""; toastEl.classList.remove("show");
+    for (let i = 0; i < 4; i++) inBox({ key: "Escape", code: "Escape", repeat: true });
+    const boxHeld = [strip(), String(toastEl.textContent || toastEl.innerHTML)].join("/");
+    check("search-box.js", "1012k4 four held Escapes in the search box neither ask nor close a conversation",
+      () => eq(boxHeld, "dp-a:Anna,dp-b:Bartek/"));
+
     /* The window's close: the shell asks, and the conversations answer. */
     const answers = [], ask = () => T.askClose(a => answers.push(a));
     const asking = () => made.filter(n => n.id === "eCloseAsk" && !n.gone);
@@ -4027,19 +4039,38 @@ const CARD_B = {
     ask();
     const nothing = answers.join() + "/" + asking().length;
     answers.length = 0;
+    /* a blank tab whose only work is typed in the search box, not yet kept, is a conversation in progress (hole 1) */
+    box.value = "where is my parcel";
+    ask();
+    const typedOnly = answers.join();
+    const typedAsk = asking()[0];
+    if (typedAsk) (typedAsk.btns["#eCloseStay"].onclick || (() => {}))();
+    box.value = "";
+    answers.length = 0;
     start([["dp-a", "Anna"], ["dp-b", "Bartek"], ["dp-c", "Celina"]], "dp-c");
     T.closeActiveTab();
     const undoBub = bubble();
     ask(); ask();
-    const one = asking(), q = one[0] || el();
+    const one = asking(), q = one[0] || el(), stayFocused = globalThis.document.activeElement === q.btns["#eCloseStay"];
     const shown = [one.length, q.attrs.role, (/<p>([^<]*)<\/p>/.exec(q.innerHTML) || [])[1], !!(undoBub && undoBub.hidden)].join("/");
     (q.btns["#eCloseStay"].onclick || (() => {}))();
     const back = [asking().length, !!(undoBub && undoBub.hidden)].join("/");
     ask(); (asking()[0].btns["#eCloseGo"].onclick || (() => {}))();
     ask(); ((asking()[0].heard || {}).keydown || []).forEach(fn => fn({ key: "Escape", preventDefault() {}, stopPropagation() {} }));
     check("tabs.js", "1012c1 the window's close asks the conversations: nothing in progress answers at once; else one question names how many, over the Undo bubble, and Cancel, Escape or Close Etiuda answer for the person",
-      () => eq([nothing, shown, back, answers.join(), asking().length].join("|"),
-        "none/0|1/alertdialog/Close Etiuda? 2 conversations are still in progress, and closing forgets them./true|0/false|asked,asked,stay,asked,close,asked,stay|0"));
+      () => eq([nothing, typedOnly, shown, stayFocused, back, answers.join(), asking().length].join("|"),
+        "none/0|asked|1/alertdialog/Close Etiuda? 2 conversations are still in progress, and closing forgets them./true|true|0/false|asked,asked,stay,asked,close,asked,stay|0"));
+
+    /* 1012c2: host.js wires the shell's question to the conversations and their answer back (hole 3, the page's half) */
+    const HO = await import(MOD("host.js"));
+    const hostWas = globalThis.window.E_HOST, heardAsk = [], toShell = [];
+    globalThis.window.E_HOST = { onAskClose: (fn) => heardAsk.push(fn), closeAnswer: (a) => toShell.push(a) };
+    start([["dp-a", ""]], "dp-a");
+    HO.wireHost();
+    heardAsk.forEach((fn) => fn());
+    if (hostWas === undefined) delete globalThis.window.E_HOST; else globalThis.window.E_HOST = hostWas;
+    check("host.js", "1012c2 the desktop host's question reaches the conversations, and their answer goes back to the shell",
+      () => eq([heardAsk.length, toShell.join()].join("|"), "1|none"));
 
     /* The Menu's Close Etiuda: hidden without a window to close, shown and pressed under the desktop host. */
     const HM = await import(MOD("header-menus.js"));
