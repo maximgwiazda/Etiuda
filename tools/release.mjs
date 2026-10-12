@@ -158,18 +158,18 @@ gate('the version, read where the rulebook keeps it, and whether the build is a 
 /* --tree, and the flag is the whole gate. Without it the hook reads the STAGED diff, which gate
    1 has just guaranteed is empty, so this gate passed on nothing every time it has ever run. */
 /* NEITHER PATH IS SPELLED, because in a git worktree .git is a FILE and neither of them is under
-   it. `git rev-parse --git-dir` answers the worktree's private directory, which is where
-   tools/pre-commit looks for its list, and `--git-common-dir` answers the shared one, which is
-   where the installed hooks are and where git itself would find them. In an ordinary checkout
-   both answer `.git` and this is the same gate it always was. Either answer can come back
+   it. `--git-common-dir` answers the shared directory, which is where the installed hooks are,
+   where git itself would find them, and since 2026-10-12 where tools/pre-commit reads its list
+   (until then it read the worktree's private `--git-dir`, so each worktree needed a copy). In an
+   ordinary checkout both answer `.git` and this is the same gate it always was. Either answer can come back
    relative to the current directory, so resolve() rather than join(): join(ROOT, 'C:/x') is
    ROOT + '/C:/x', which is the shape the old line failed in - it reported the list absent from a
    worktree where the list was in fact present in both directories, and stopped the release at
    gate 3. Measured 2026-09-15, exit 3 before this change and green after. */
 gate('the name and quote scans over the tracked tree', () => {
-  const gitDir = resolve(ROOT, sh('git rev-parse --git-dir'));
-  const hook = join(resolve(ROOT, sh('git rev-parse --git-common-dir')), 'hooks', 'pre-commit');
-  const names = join(gitDir, 'etiuda-names');
+  const commonDir = resolve(ROOT, sh('git rev-parse --git-common-dir'));
+  const hook = join(commonDir, 'hooks', 'pre-commit');
+  const names = join(commonDir, 'etiuda-names');
   if (!existsSync(names))
     return 'NOT RUN: ' + names + ' is absent, so the scan has nothing to look for. See tools/pre-commit.';
   if (!existsSync(hook))

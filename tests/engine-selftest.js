@@ -1880,6 +1880,80 @@ Module.prototype._compile = function (content, filename) {
        && /against 1 held-back catalog\(s\): toy-catalog\.js;/.test(old.say),
        "34d control: with no published tree to read the copy counts again (exit " + old.code
        + "), and 34a's reader refuses that run");
+
+    /* 34e and 34f: THE LIST IS THE REPOSITORY'S (2026-10-12). The scan reads the name list from
+       git's common directory, so a worktree needs no copy, and a stale copy in a worktree's private
+       directory cannot stand in for the real list. The lab gains a worktree whose private directory
+       holds a stale list without the planted name; a message naming it is run from inside the
+       worktree. 34e: the current script refuses it, naming a listed name. 34f is the old reading
+       as a control, the list from --git-dir: the stale copy answers, and the name goes through. */
+    const OLD_NAMES = 'names="$git_dir/etiuda-names"';
+    const NEW_NAMES = 'names="$(git rev-parse --git-common-dir)/etiuda-names"';
+    const wt = path.join(tmp, "scan-767-wt");
+    git("worktree", "add", "-q", "--detach", wt, "HEAD");
+    const wtDir = cp.execFileSync("git", ["rev-parse", "--git-dir"], { cwd: wt, encoding: "utf8" }).trim();
+    fs.writeFileSync(path.resolve(wt, wtDir, "etiuda-names"), "otherword\n");
+    /* No catalog sits beside the worktree, so it declares none, staged and never committed, and the
+       name half is the whole scan: a refusal then can only be the name's. */
+    fs.writeFileSync(path.join(wt, ".etiuda-scan-mode"), "no-catalog\n");
+    cp.execFileSync("git", ["add", ".etiuda-scan-mode"], { cwd: wt, stdio: ["ignore", "pipe", "pipe"] });
+    const scanIn = (text, body) => {
+      const file = path.join(wt, "scan.sh"), m = path.join(wt, "msg.txt");
+      fs.writeFileSync(file, text);
+      fs.writeFileSync(m, body);
+      const r = cp.spawnSync(bash, ["scan.sh", "msg.txt"], { cwd: wt, encoding: "utf8" });
+      return { code: r.status, say: String(r.stderr || "") };
+    };
+    const NAMED = "Subject\nwe met the zqxwvnames on Tuesday\n";
+    const fromWt = scanIn(script, NAMED);
+    ok(script.split(NEW_NAMES).length === 2 && fromWt.code === 1 && /a listed name appears/.test(fromWt.say),
+       "34e from a worktree with a stale list of its own, a listed name is refused from the repository's"
+       + " list: exit " + fromWt.code);
+    const oldRead = scanIn(script.split(NEW_NAMES).join(OLD_NAMES), NAMED);
+    ok(oldRead.code === 0 && !/a listed name appears/.test(oldRead.say),
+       "34f control: reading the worktree's own list, the stale copy lets the name through (exit "
+       + oldRead.code + "), which 34e's reader refuses");
+
+    /* 34g: THE REPOSITORY'S LIST OR NONE (Clément ο's read). With the repository's list taken
+       away, a worktree holding a correct copy of its own is refused for want of the list rather
+       than judged by the copy, so no fallback to a private copy can creep back; and with no list
+       anywhere the scan refuses, never passes. */
+    const commonList = path.join(lab, ".git", "etiuda-names"), parked = path.join(tmp, "etiuda-names.parked");
+    const wtList = path.resolve(wt, wtDir, "etiuda-names");
+    fs.writeFileSync(wtList, "zqxwvname\n");
+    fs.renameSync(commonList, parked);
+    const noCommon = scanIn(script, NAMED);
+    fs.renameSync(wtList, wtList + ".parked");
+    const noList = scanIn(script, NAMED);
+    fs.renameSync(parked, commonList);
+    ok(noCommon.code === 1 && /needs its list/.test(noCommon.say) && !/a listed name appears/.test(noCommon.say)
+       && noList.code === 1 && /needs its list/.test(noList.say),
+       "34g with the repository's list gone, a worktree's own copy is not used (exit " + noCommon.code
+       + ", refused for want of the list) and with no list anywhere the scan refuses (exit " + noList.code + ")");
+
+    /* 34h: A LIST THE SCAN CANNOT READ IS NO LIST (Clément ο's read). The list's path reaches awk
+       by the environment, so a GIT_DIR given in the platform's own spelling (backslashes on
+       Windows) still finds it and the planted name is refused; and a list that reads as no entries
+       refuses as a missing one does, instead of judging every line clean. Run from the lab's own
+       checkout. */
+    const scanEnv = (text, body, env) => {
+      const file = path.join(lab, "scan.sh"), m = path.join(lab, "msg.txt");
+      fs.writeFileSync(file, text);
+      fs.writeFileSync(m, body);
+      const r = cp.spawnSync(bash, ["scan.sh", "msg.txt"], { cwd: lab, encoding: "utf8", env: { ...process.env, ...env } });
+      return { code: r.status, say: String(r.stderr || "") };
+    };
+    const native = scanEnv(script, NAMED, { GIT_DIR: path.join(lab, ".git") });
+    /* The empty list is judged from the worktree, which declares no catalog, so its refusal can
+       only be the name half's own: from the lab's checkout the quote half refuses every run, and a
+       scan that printed the warning but passed would still exit 1 there (Clément ο's delta read). */
+    fs.writeFileSync(commonList, "# a list with no entries\n");
+    const empty = scanIn(script, NAMED);
+    fs.writeFileSync(commonList, "zqxwvname\n");
+    ok(native.code === 1 && /a listed name appears/.test(native.say)
+       && empty.code === 1 && /reads as no entries/.test(empty.say) && !/a listed name appears/.test(empty.say),
+       "34h with GIT_DIR in the platform's spelling the listed name is still refused (exit " + native.code
+       + "), and a list of no entries refuses rather than passing (exit " + empty.code + ")");
   }
 }
 

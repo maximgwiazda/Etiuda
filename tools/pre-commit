@@ -17,7 +17,12 @@
 set -u
 
 git_dir="$(git rev-parse --git-dir)"
-names="$git_dir/etiuda-names"
+# THE LIST IS THE REPOSITORY'S, NOT THE WORKTREE'S (2026-10-12). It is read from git's common
+# directory, the main checkout's .git, so every worktree reads the one list and none needs a copy.
+# Until this date it was read from --git-dir, a worktree's private directory: each worktree needed
+# a copy of its own (31 in the engine and 43 in Studio that evening), and a copy goes stale in
+# silence the day the list gains a name. In an ordinary checkout both answer .git.
+names="$(git rev-parse --git-common-dir)/etiuda-names"
 tmp="$git_dir/etiuda-scan.$$"
 trap 'rm -f "$tmp"' EXIT INT TERM
 today="$(date +%F)"
@@ -120,23 +125,29 @@ rm -f "$tmp.mark"
 #    inflected or suffixed as it is to stand alone. NO PUBLISHED-CONTENT EXEMPTION HERE, on
 #    purpose: see the head of this file. A listed name under v1/ is refused like any other.
 if [ "$have_names" = 1 ]; then
-  awk -F'\t' -v LIST="$names" '
+  # THE PATH GOES BY THE ENVIRONMENT, NOT BY -v (2026-10-12). awk -v reads escapes, so a path
+  # given with Windows backslashes (GIT_DIR=C:\x\.git) lost them, the list read as nothing, and a
+  # listed name passed with exit 0 and only an awk warning (Clément ο's read). A list that reads
+  # as no entries at all now refuses, as a missing one does: a scan that cannot look never says clean.
+  LIST="$names" awk -F'\t' '
     function word(w) {
       if (w == "" || (w in safe)) return 0
       if (w in exact) return 1
       return (rx != "" && w ~ rx)
     }
     BEGIN {
+      LIST = ENVIRON["LIST"]
       while ((getline l < LIST) > 0) {
         sub(/#.*/, "", l); gsub(/^[ \t]+|[ \t]+$/, "", l)
         if (l == "") continue
         l = tolower(l); c = substr(l, 1, 1)
         if (c == "-") { safe[substr(l, 2)] = 1; continue }
-        if (c == "=") { exact[substr(l, 2)] = 1; continue }
+        if (c == "=") { exact[substr(l, 2)] = 1; ne++; continue }
         if (index(l, " ")) { phrase[++np] = l; continue }
         pre[++npre] = l
       }
       close(LIST)
+      if (ne + np + npre == 0) exit 3
       for (i = 1; i <= npre; i++) rx = rx (i > 1 ? "|" : "^(") pre[i]
       if (rx != "") rx = rx ")"
     }
@@ -170,6 +181,10 @@ if [ "$have_names" = 1 ]; then
       if (hit) print $1 ":" $2
     }
   ' "$tmp" > "$tmp.names"
+  if [ $? -ne 0 ]; then
+    say "the name list at $names reads as no entries, or awk could not read it, so the name scan cannot look; nothing was judged clean."
+    fail=1
+  fi
   if [ -s "$tmp.names" ]; then
     report "a listed name appears in $what, at:" "$tmp.names"
   fi
