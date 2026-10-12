@@ -17,7 +17,7 @@ if (!TEST_DOOR) {
   for (const v of ["ETIUDA_TEST_DOCUMENTS", "ETIUDA_TEST_SAVE_AS"])
     if (process.env[v]) console.error("etiuda: " + v + " is not taken by an installed desk");
 }
-const { execFileSync } = require("node:child_process");
+const { execFile, execFileSync } = require("node:child_process");
 const path = require("node:path");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -2835,10 +2835,10 @@ function pageWatchFor(win) {
 }
 /* ---- THE PICKER: the desk's replies over the window in use, by a hotkey -------------------------
    The hotkey is REGISTERED with Windows (globalShortcut, which is RegisterHotKey there), never a
-   keyboard hook: nothing here sees a key but its own combination. Nothing here reads another
-   window either, its text, its caret or its pixels, and nothing types into one: the reply goes to
-   the clipboard and the agent pastes. The picker is placed by the pointer, the one position that
-   belongs to nobody else's window. */
+   keyboard hook: nothing here sees a key but its own combination. Nothing reads another window's
+   text, caret or pixels. The reply goes to the clipboard, and on Windows the caret helper presses
+   Ctrl+V in the window that was in front at the press; where it cannot, the agent pastes. The
+   picker is placed by the pointer, the one position that belongs to nobody else's window. */
 const HOTKEY_KEY = "eHotkey";
 const HOTKEY_DEFAULT = "Control+Shift+Space";
 /* WHY A COMBINATION IS REFUSED, or "" for one that may be registered: "shape" for anything but
@@ -3052,6 +3052,34 @@ function pickerDoc() {
 }
 
 let pickWin = null, pickLoaded = null, pickOpening = false, pickShown = null;
+/* THE CARET HELPER (shell/caret.cs): beside the asar, or in build/ from the tree; null where there is
+   none, which is every platform but Windows, and then the agent pastes as before. */
+const CARET_WHICH_MS = 1500, CARET_WAIT_MS = 150, CARET_PASTE_MS = 4000;
+let pickTarget = null, pickPress = 0;           // the window in front at this press, if somebody else's
+function caretTool() {
+  if (process.platform !== "win32") return null;
+  const at = app.isPackaged ? path.join(process.resourcesPath, "caret.exe") : path.join(__dirname, "..", "build", "caret.exe");
+  return fs.existsSync(at) ? at : null;
+}
+/* Which window is in front, as the helper numbers it, or null where it is one of this program's own. */
+function caretWhich() {
+  const tool = caretTool();
+  if (!tool) return Promise.resolve(null);
+  return new Promise(done => execFile(tool, ["which"], { windowsHide: true, timeout: CARET_WHICH_MS }, (err, out) => {
+    const m = /^(\d+) (\d+)$/.exec(String(out || "").trim());
+    done(!err && m && +m[2] !== process.pid ? m[1] : null);
+  }));
+}
+/* Started while the picker is still in front: Windows lets a program started by the window in front
+   hand the front to another, and to nothing else. The reply is on the clipboard whatever it answers. */
+function caretPaste(target) {
+  const tool = caretTool();
+  if (!tool || !target) return;
+  execFile(tool, ["paste", target], { windowsHide: true, timeout: CARET_PASTE_MS }, err => {
+    if (err) console.error("etiuda: the caret helper answered " + (err.code != null ? err.code : err.message)
+      + ", so the reply waits on the clipboard");
+  });
+}
 const PICK_ASK_MS = 1500;
 const pickAsks = new Map();
 let pickAskN = 0;
@@ -3115,6 +3143,11 @@ function pickToggle() {
   if (pickWin && !pickWin.isDestroyed() && pickWin.isVisible()) { hidePicker(true); return; }
   if (pickOpening || !theWindow || theWindow.isDestroyed()) return;
   pickOpening = true;
+  /* Asked at once, before anything of this program comes forward; the opening waits for the answer
+     only briefly, and an answer that comes later names the picker itself, which is no target. */
+  const press = ++pickPress;
+  pickTarget = null;
+  const which = caretWhich().then(t => { if (press === pickPress) pickTarget = t; });
   askDesk("open").then(open => {
     if (!open) { focusDesk(); return null; }
     if (open.look) open.look.glass = !!open.look.glass && hostBackdrop() === "acrylic";
@@ -3130,7 +3163,8 @@ function pickToggle() {
       const win = pickWin;
       const drawn = new Promise(done => { pickShown = done; setTimeout(done, 300); });
       win.webContents.send("etiuda:pick-open", JSON.stringify(open));
-      return drawn.then(() => { pickShown = null; if (!win.isDestroyed()) { win.show(); win.focus(); } });
+      const asked = Promise.race([which, new Promise(done => setTimeout(done, CARET_WAIT_MS))]);
+      return Promise.all([drawn, asked]).then(() => { pickShown = null; if (!win.isDestroyed()) { win.show(); win.focus(); } });
     });
   }).catch(e => console.error("etiuda: the picker could not open - " + e.message))
     .then(() => { pickOpening = false; });
@@ -3148,7 +3182,7 @@ ipcMain.handle("etiuda:pick-find", (e, q) => {
   return askDesk("find", { q: String(q || "").slice(0, 200) }).then(v => JSON.stringify(v));
 });
 /* THE COPY. The desk's page makes the text by its own route and counts it; this writes it to the
-   clipboard and steps aside, and Windows gives the focus back to the window the agent came from.
+   clipboard, has the caret helper press Ctrl+V in the window the agent came from, and steps aside.
    A reply that signs with a name nobody has given yet is asked in the desk's own window instead. */
 ipcMain.handle("etiuda:pick-copy", (e, what) => {
   if (!fromPicker(e)) return false;
@@ -3158,6 +3192,7 @@ ipcMain.handle("etiuda:pick-copy", (e, what) => {
   return askDesk("copy", arg).then(v => {
     if (v && typeof v.text === "string") {
       clipboard.writeText(pickClipText(v.text, process.platform));
+      caretPaste(pickTarget);
       hidePicker(true);
       return true;
     }

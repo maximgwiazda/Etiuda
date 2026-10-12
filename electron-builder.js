@@ -40,6 +40,16 @@ function linuxIcons() {
   }
 }
 
+// THE CARET HELPER (shell/caret.cs) is compiled for every Windows pack by the C# compiler Windows
+// carries, so no route ships an older one, and goes beside the asar where the shell finds it.
+const CARET = path.resolve(__dirname, "build", "caret.exe");
+function caretHelper() {
+  const csc = path.join(process.env.WINDIR || "C:/Windows", "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe");
+  fs.mkdirSync(path.dirname(CARET), { recursive: true });
+  require("node:child_process").execFileSync(csc, ["-nologo", "-optimize", "-target:winexe", "-platform:anycpu",
+    "-out:" + CARET, path.resolve(__dirname, "shell", "caret.cs")], { stdio: "inherit" });
+}
+
 // THE SIGNING HOOK: one route or none, chosen by which variables are set. With none the block is
 // absent and electron-builder packages unsigned, which SmartScreen warns about (spec 11.5). No route
 // holds a secret here: a .pfx's password is WIN_CSC_KEY_PASSWORD, read by electron-builder itself so
@@ -107,6 +117,7 @@ module.exports = {
     // entry from the vector at its own size. The bare mark on transparent rather than the tile,
     // because a tile suits a phone and this is a desktop icon. Copied in, never edited in place.
     icon: "shell/etiuda.ico",
+    extraResources: [{ from: CARET, to: "caret.exe" }],
     ...signing,
   },
   // THE LICENCE PAGE IS FOUND BY NAME rather than named here: electron-builder shows one when
@@ -134,7 +145,10 @@ module.exports = {
     // Linux only: Windows checks spelling with its own checker and fetches nothing (shell/main.js).
     extraResources: [{ from: LINUX_DICTIONARIES, to: "dictionaries" }],
   },
-  beforePack: context => { if (context.electronPlatformName === "linux") linuxIcons(); },
+  beforePack: context => {
+    if (context.electronPlatformName === "linux") linuxIcons();
+    if (context.electronPlatformName === "win32") caretHelper();
+  },
   deb: { artifactName: "etiuda_${version}_amd64.${ext}" },
   appImage: { artifactName: "etiuda-${version}-x86_64.${ext}" },
   nsis: {

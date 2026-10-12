@@ -130,9 +130,10 @@ try {
   /* ---- 5. the spelling dictionaries ---- */
   const DIST = path.join(LAB, 'dist');
   check(J(fresh.linux.extraResources) === J([{ from: path.join(DIST, '.dictionaries'), to: 'dictionaries' }])
-      && cfg.extraResources === undefined && cfg.win.extraResources === undefined && cfg.nsis.extraResources === undefined,
-    '5a the Linux block copies the output folder\'s .dictionaries into resources/dictionaries, and nothing above it or in the'
-    + ' Windows blocks copies a resource: ' + J(fresh.linux.extraResources));
+      && cfg.extraResources === undefined && cfg.nsis.extraResources === undefined
+      && J(cfg.win.extraResources) === J([{ from: path.resolve(ROOT, 'build', 'caret.exe'), to: 'caret.exe' }]),
+    '5a the Linux block copies the output folder\'s .dictionaries into resources/dictionaries, the Windows block the caret'
+    + ' helper alone, and nothing above them copies a resource: ' + J(fresh.linux.extraResources) + ' ' + J(cfg.win.extraResources));
   const shellFiles = (/files: (\[[^\]]*\])/.exec(fs.readFileSync(path.join(ROOT, 'shell', 'main.js'), 'utf8')) || [])[1] || '';
   check(real.dictionaries === FILES && J(FILES.map(f => f.name)) === J(['en-US-10-1.bdic', 'pl-PL-3-0.bdic', 'README_en_US.txt', 'README_pl_PL.txt', 'COPYING.MPL'])
       && shellFiles === '["en-US-10-1.bdic", "pl-PL-3-0.bdic"]'

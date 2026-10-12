@@ -16,8 +16,9 @@
  * Before 2026-09-29 it was only read, and five faults planted in its keys all left this file green.
  *
  * WHAT THE SHELL MAY NOT DO (section 5) is read from its text with the comments blanked: no API that
- * reads another window, the screen or the clipboard, or presses keys; no key bound to the clipboard; one
- * clipboard write; no module or program it did not have. Those are the brief's "must hold", and a scan is the only node form of
+ * reads another window, the screen or the clipboard, or presses keys itself; no key bound to the clipboard;
+ * one clipboard write; no module or program it did not have. Its one program that presses a key, the
+ * caret helper, is read too (5f): Ctrl+V into the window in front at the press, and nothing it reads. Those are the brief's "must hold", and a scan is the only node form of
  * an absence. Strings are NOT blanked, so a name in a command line counts.
  *
  * NO CONTENT. The cards below are invented here and hold nobody's words.
@@ -35,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 83;
+const EXPECTED = 88;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -247,6 +248,14 @@ try {
     get: (t, k) => k === "fromWebContents" ? (wc => { const w = wins.find(x => x.webContents === wc); return w ? w.self : null; })
       : k === "getAllWindows" ? () => wins.filter(x => !x.destroyed).map(x => x.self) : undefined });
   const held = new Map(), taken = new Set(["Control+Shift+F9"]), clip = [];
+  /* THE CARET HELPER is never run here: its calls are recorded, with how many calls the picker had seen
+     at the time, and answered as the helper would. Only Windows has one; elsewhere none is asked. */
+  const caret = { there: true, front: "4242 1", runs: [], pickerCalls: () => -1 };
+  const cpReal = nodeRequire("node:child_process");
+  const cpStub = Object.assign({}, cpReal, { execFile: (file, args, opts, done) => {
+    caret.runs.push({ file: String(file), args: (args || []).map(String), at: caret.pickerCalls() });
+    setImmediate(() => done(null, args && args[0] === "which" ? caret.front : "", ""));
+  } });
   let suspended = null, clipReads = 0;
   const onH = {}, invH = {};
   const area = { x: 0, y: 0, width: 1920, height: 1040 };
@@ -272,11 +281,13 @@ try {
   const listed = [];
   const shellFs = Object.create(fs);
   shellFs.readdirSync = (p, ...rest) => (listed.push(path.resolve(String(p)).toLowerCase()), fs.readdirSync(p, ...rest));
+  shellFs.existsSync = p => /[\\/]caret\.exe$/i.test(String(p)) ? caret.there : fs.existsSync(p);
   const EXPOSE = ["hotkeyRefusal", "pickerPlace", "pickClipText", "PICK_SIZE", "HOTKEY_DEFAULT"];
   process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
   const SH = new Function("require", "__dirname", "__filename", "module", "exports", "console",
     SRC + "\nreturn { " + EXPOSE.map(n => n + ": " + n).join(", ") + " };")(
-    n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? shellFs : nodeRequire(n)), path.join(APP, "shell"), path.join(APP, "shell", "main.js"),
+    n => (n === "electron" ? electron : (n === "node:fs" || n === "fs") ? shellFs : n === "node:child_process" ? cpStub : nodeRequire(n)),
+    path.join(APP, "shell"), path.join(APP, "shell", "main.js"),
     { exports: {} }, {}, quiet);
 
   const refusals = {
@@ -427,6 +438,57 @@ try {
     "2t a copy the desk cannot answer writes nothing and leaves the picker standing: " + (clip.length - clipsNow) + " written");
   held.get("Control+Shift+Space")();
   await until(() => !pw.visible);
+
+  /* THE CARET. On Windows the press asks the helper which window is in front before the picker shows, and a pick
+     has it press Ctrl+V there, started before the picker gives the front up; the reply is on the clipboard either way.
+     Elsewhere nothing is run and the agent pastes. */
+  const WIN = process.platform === "win32";
+  const J = JSON.stringify;
+  caret.pickerCalls = () => pw.calls.length;
+  const pressHotkey = async () => { held.get("Control+Shift+Space")(); await until(() => pw.visible); };
+  const runsOf = (from, verb) => caret.runs.slice(from).filter(r => r.args[0] === verb);
+  caret.there = true; caret.front = "4242 " + (process.pid + 1);
+  let from = caret.runs.length;
+  await pressHotkey();
+  const showAt = pw.calls.lastIndexOf("show");
+  const whichRuns = runsOf(from, "which");
+  const clipsCaret = clip.length;
+  const put = await pickerPage.E_PICK.copy(JSON.stringify({ id: "c-lamp", vi: 0 }));
+  const pastes = runsOf(from, "paste"), blurAt2 = pw.calls.lastIndexOf("blur");
+  check(put === true && clip.length === clipsCaret + 1 && !pw.visible && (WIN
+      ? whichRuns.length === 1 && whichRuns[0].at <= showAt && pastes.length === 1 && J(pastes[0].args) === J(["paste", "4242"])
+        && pastes[0].at <= blurAt2 && /caret\.exe$/i.test(pastes[0].file)
+      : caret.runs.length - from === 0),
+    "2w " + (WIN ? "the press asks the caret helper which window is in front before the picker shows, and the pick puts the reply"
+      + " on the clipboard and has the helper press Ctrl+V in that window before the picker gives the front up: " + J(caret.runs.slice(from).map(r => r.args))
+      : "not Windows: no helper is asked, and the pick puts the reply on the clipboard for the agent to paste"));
+
+  caret.front = "4343 " + process.pid;
+  from = caret.runs.length;
+  await pressHotkey();
+  await pickerPage.E_PICK.copy(JSON.stringify({ id: "c-lamp", vi: 0 }));
+  check(runsOf(from, "paste").length === 0 && (!WIN || runsOf(from, "which").length === 1),
+    "2x a window of this program's own in front at the press is no target, so nothing is pressed: " + J(caret.runs.slice(from).map(r => r.args)));
+
+  caret.front = "4242 " + (process.pid + 1);
+  from = caret.runs.length;
+  await pressHotkey();
+  held.get("Control+Shift+Space")();
+  await until(() => !pw.visible);
+  await pressHotkey();
+  (pw.on.blur || []).forEach(fn => fn());
+  await until(() => !pw.visible);
+  check(runsOf(from, "paste").length === 0,
+    "2y a picker closed by a second press or by clicking away presses nothing: " + J(caret.runs.slice(from).map(r => r.args)));
+
+  caret.there = false;
+  from = caret.runs.length;
+  const clipsGone = clip.length;
+  await pressHotkey();
+  const putGone = await pickerPage.E_PICK.copy(JSON.stringify({ id: "c-lamp", vi: 0 }));
+  check(putGone === true && clip.length === clipsGone + 1 && caret.runs.length === from,
+    "2z with no helper beside the program nothing is run, and the reply waits on the clipboard as before: " + (caret.runs.length - from) + " run(s)");
+  caret.there = true;
 
   /* NO KEY READS THE CLIPBOARD. Alt+V is pressed on both windows as Electron delivers a key: nothing is read,
      no channel the shell opens is the clipboard's, and neither page's bridge offers a read. */
@@ -588,7 +650,7 @@ try {
       && /^clipboard(&&|\.writeText\()/.test(engineCode.slice(i, i + 21)))).map(i => engineCode.slice(Math.max(0, i - 10), i + 24)))
     .concat(at(engineBare, /\bnavigator\b(?!\s*\.\s*[A-Za-z_$])/g).map(i => engineCode.slice(Math.max(0, i - 10), i + 24)));
   check(reach.length === 0 && oddHandles.length === 0 && /clipboard/.test(shellCode) && /writeText/.test(shellCode),
-    "5a no API in the shell or the engine reads another window, the screen or the clipboard, or presses a key, and the clipboard is"
+    "5a no API in the shell or the engine reads another window, the screen or the clipboard, or presses a key itself, and the clipboard is"
     + " reached through no other name: " + (reach.concat(oddHandles).join(", ") || "none"));
   const writes = shellCode.match(/clipboard\s*\.\s*write\w*\s*\(/g) || [];
   check(writes.length === 1 && /clipboard\.writeText\(pickClipText\(v\.text,\s*process\.platform\)\)/.test(shellCode)
@@ -612,9 +674,18 @@ try {
      shell at all. */
   const cpRequires = (shellCode.match(/\brequire\s*\(\s*"(?:node:)?child_process"\s*\)/g) || []).length;
   const runMentions = (shellBare.match(/\bexecFileSync\b/g) || []).length, runCalls = (shellBare.match(/\bexecFileSync\s*\(/g) || []).length;
+  /* THE CARET HELPER'S CALLS, execFile in main.js alone: its program is `tool`, bound only to caretTool(), whose two
+     places are caret.exe beside the asar and in build/, and its name is mentioned once in the require and once per call. */
+  const asyncMentions = (shellBare.match(/\bexecFile\b/g) || []).length, asyncCalls = (shellBare.match(/\bexecFile\s*\(/g) || []).length;
+  const toolBinds = shellCode.match(/\bconst tool=caretTool\(\)/g) || [], toolNames = (shellBare.match(/\btool\b/g) || []).length;
+  const caretPlaces = /function caretTool\(\)\{if\(process\.platform!=="win32"\)return null;const at=app\.isPackaged\?path\.join\(process\.resourcesPath,"caret\.exe"\):path\.join\(__dirname,"\.\.","build","caret\.exe"\);return fs\.existsSync\(at\)\?at:null\}/.test(shellCode);
   const loaders = shellBare.match(/\bimport\s*\(|\bprocess\s*\.\s*(?:binding|_linkedBinding|dlopen)\b|\bcreateRequire\b|\bmodule\s*\.\s*require\b|\brequire\s*\.\s*(?:cache|main)\b/g) || [];
-  check(reqs.length > 0 && strange.length === 0 && cps.length === cpRequires && cps.every(m => m[1].trim() === "execFileSync")
-    && programs.length > 0 && programs.every(p => p === '"reg"' || (p === "REG_TOOL" && regTool)
+  const cpNames = cps.map(m => m[1].split(",").map(x => x.trim()).sort().join(","));
+  check(reqs.length > 0 && strange.length === 0 && cps.length === cpRequires
+    && cpNames.every(n => n === "execFileSync" || n === "execFile,execFileSync") && cpNames.filter(n => n !== "execFileSync").length === 1
+    && asyncCalls === 2 && asyncMentions === asyncCalls + 1 && toolBinds.length === 2 && caretPlaces
+    && toolNames === toolBinds.length * 3
+    && programs.length > 0 && programs.every(p => p === '"reg"' || (p === "REG_TOOL" && regTool) || p === "tool"
       /* Linux alone: three questions to the session bus about the keyring, none about a window, the screen, the
          clipboard or a key (tests/shell-office.mjs 14) */
       || p === '"dbus-send"')
@@ -646,6 +717,20 @@ try {
   check(keyV.length === 0 && keysSeen > 0 && /Digit/.test(shellCode),
     "5e no handler in the shell, the picker's page or the engine is bound to the V key: " + keyV.length + " named, where the"
     + " same reading finds " + keysSeen + " other letter keys in the engine and the picker's digits in the shell");
+
+  /* THE CARET HELPER, the one program that presses a key, read as source: the C# electron-builder.js compiles. It calls
+     seven Windows functions, none of which reads a window's text or the clipboard, and the presses it makes are the
+     Control key's and the V key's alone. */
+  const CS = fs.readFileSync(path.join(ROOT, "shell", "caret.cs"), "utf8").replace(/\/\/[^\n]*/g, "");
+  const imports = [...CS.matchAll(/\[DllImport\("user32\.dll"[^\]]*\]\s*static extern \w+ (\w+)\(/g)].map(m => m[1]).sort();
+  const dllCount = (CS.match(/DllImport/g) || []).length;
+  const csForbid = CS.match(/Clipboard|GetWindowText|SendMessage|PostMessage|SetWindowsHookEx|ReadProcessMemory|keybd_event|mouse_event|AttachThreadInput|Process\.Start|File\.|Registry|WebClient|Socket/g) || [];
+  const pressed = [...new Set([...CS.matchAll(/\bKey\((\w+),/g)].map(m => m[1]))].sort();
+  const builds = /path\.resolve\(__dirname, "shell", "caret\.cs"\)/.test(fs.readFileSync(path.join(ROOT, "electron-builder.js"), "utf8"));
+  check(J(imports) === J(["GetAsyncKeyState", "GetForegroundWindow", "GetWindowThreadProcessId", "IsWindow", "MapVirtualKey", "SendInput",
+      "SetForegroundWindow"]) && dllCount === imports.length && csForbid.length === 0 && J(pressed) === J(["VK_CONTROL", "VK_V"]) && builds,
+    "5f the caret helper electron-builder.js compiles calls " + imports.length + " Windows functions of its own, reads no window's text"
+    + " and no clipboard, and presses " + (pressed.join(" and ") || "nothing") + (csForbid.length ? "; also names " + csForbid.join(", ") : ""));
 
   /* ---- 6. the most used replies first, on this desk's own last 28 days ------------------- */
   console.log("\n[6/6] the most used replies first: the picker at rest, a search, and what stays as it was");
