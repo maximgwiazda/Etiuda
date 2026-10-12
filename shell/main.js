@@ -2229,6 +2229,38 @@ ipcMain.on("etiuda:window", (e, act) => {
   else if (act === "close") win.close();
 });
 
+/* CLOSING ASKS ONCE WHILE A CONVERSATION IS IN PROGRESS (desk-chrome-close-quits-forgets, 2026-10-12): the X, Alt+F4
+   and the taskbar closed at once and forgot every conversation. A close is held and the page asked; it answers "none"
+   where nothing would be lost, or asks and answers with the person's choice. Never held: a second close while it asks,
+   a page that has not answered within CLOSE_WAIT_MS (hung, or not yet loaded), a page that is gone, a quit, the end of
+   the Windows session, the refusal page's own Close, and the harness's placed windows. */
+const CLOSE_WAIT_MS = 1500;
+let quitting = false;
+app.on("before-quit", () => { quitting = true; });
+function closeHeld(win, e) {
+  if (win.etiudaCloseOk || win.etiudaCloseAsking || quitting || PLACED_ASIDE || win.webContents.etiudaLost) return false;
+  e.preventDefault();
+  win.etiudaCloseAsking = true;
+  win.etiudaCloseWait = setTimeout(() => closeNow(win), CLOSE_WAIT_MS);
+  win.webContents.send("etiuda:ask-close");
+  return true;
+}
+function closeNow(win) {
+  clearTimeout(win.etiudaCloseWait);
+  win.etiudaCloseOk = true;
+  if (!win.isDestroyed()) win.close();
+}
+function closeAnswered(win, a) {
+  if (!win || !win.etiudaCloseAsking) return;
+  if (a === "asked") { clearTimeout(win.etiudaCloseWait); return; }
+  if (a === "stay") { clearTimeout(win.etiudaCloseWait); win.etiudaCloseAsking = false; return; }
+  if (a === "none" || a === "close") closeNow(win);
+}
+ipcMain.on("etiuda:close-answer", (e, a) => {
+  if (!fromEngine(e)) return;
+  closeAnswered(BrowserWindow.fromWebContents(e.sender), String(a || ""));
+});
+
 ipcMain.on("etiuda:host", (e) => {
   if (!fromEngine(e)) {
     e.returnValue = { platform: process.platform, backdrop: null, maximized: false,
@@ -3319,7 +3351,10 @@ function createWindow() {
   win.on("unmaximize", tellMaximized);
   win.on("moved", keepPlace);
   win.on("resized", keepPlace);
-  win.on("close", () => {
+  /* Windows is ending the session: nothing may hold the window then. */
+  win.on("session-end", () => { win.etiudaCloseOk = true; });
+  win.on("close", (e) => {
+    if (closeHeld(win, e)) return;
     if (PLACED_ASIDE) return;
     clearTimeout(placeSave);
     if (!win.isMinimized()) maximized = win.isMaximized();
@@ -3344,7 +3379,7 @@ function createWindow() {
   win.webContents.on("will-navigate", (e, url) => {
     if (url === win.webContents.getURL()) return;
     e.preventDefault();
-    if (url.indexOf(CLOSE_MARK) > -1) { win.close(); return; }
+    if (url.indexOf(CLOSE_MARK) > -1) { win.etiudaCloseOk = true; win.close(); return; }
     openExternally(url);
   });
 

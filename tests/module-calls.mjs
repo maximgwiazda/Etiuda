@@ -3860,7 +3860,8 @@ const CARD_B = {
    desk-core-esc-wipes-tabs, desk-core-no-ctrl-c). Closing a conversation offers Undo and Ctrl+Shift+T brings back the
    last closed; a cleared last tab comes back into itself; Escape's wipe of every conversation offers Undo too; a held
    Escape neither asks nor wipes, while a press still asks and a second press still closes (the ladder stays, decisions
-   2026-09-16 15:18); Ctrl+C copies the marked reply, from the page and from the search box, and nothing else. Driven
+   2026-09-16 15:18); Ctrl+C copies the marked reply, from the page and from the search box, and nothing else; the
+   window's close asks the conversations, and the Menu's Close Etiuda stands under the desktop host only. Driven
    through the desk's own routes and its two key doors against stand-ins that keep what is written; every card is
    invented, and every global and hook set here is put back. */
 {
@@ -3879,6 +3880,7 @@ const CARD_B = {
   const el = extra => Object.assign({ hidden: false, attrs: {}, innerHTML: "", textContent: "", value: "", style: {}, tagName: "DIV",
     classList: on(new Set()), setAttribute(k, v) { this.attrs[k] = String(v); }, getAttribute(k) { return this.attrs[k]; },
     removeAttribute(k) { delete this.attrs[k]; }, querySelector: () => null, querySelectorAll: () => [], remove() { this.gone = true; },
+    contains: () => false,
     select() {}, getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }),
     addEventListener(k, fn) { (this.heard = this.heard || {})[k] = (this.heard[k] || []).concat(fn); } }, extra || {});
   const toastEl = el(), pax = el({ tagName: "INPUT" });
@@ -3888,9 +3890,10 @@ const CARD_B = {
   const body = { classList: on(new Set()), appendChild: n => { made.push(n); } };
   globalThis.document = {
     querySelector: s => (s === "#eUndo" ? made.filter(n => n.id === "eUndo" && !n.gone).pop() || null : byId[s] || null),
-    getElementById: () => null, querySelectorAll: () => [], addEventListener() {}, activeElement: body, body,
-    createElement: () => { const btn = {}; return el({ isConnected: false, btn, getContext: () => ({}),
-      querySelector: s => (s === "#eUndoBtn" ? btn : null) }); },
+    getElementById: id => made.filter(n => n.id === id && !n.gone).pop() || null, querySelectorAll: () => [], addEventListener() {}, activeElement: body, body,
+    createElement: () => { const btns = {}, btn = btns["#eUndoBtn"] = { focus() {} };
+      return el({ isConnected: false, btn, btns, getContext: () => ({}),
+        querySelector: s => (s.charAt(0) === "#" ? (btns[s] = btns[s] || { focus() {} }) : null) }); },
     createRange: () => ({}), execCommand: k => { const ta = made[made.length - 1]; copied.push(k + ":" + (ta && ta.value)); return true; },
     documentElement: { style: { setProperty() {}, removeProperty() {} }, classList: on(new Set()), addEventListener() {} } };
   let pageKeys = null, selection = "";
@@ -4008,6 +4011,45 @@ const CARD_B = {
     const unmarked = inBox({ key: "c", code: "KeyC", ctrlKey: true });
     check("search-box.js", "1012k3 Ctrl+C in the search box copies the marked reply where nothing in the box is selected, as Enter does; a selection, or no reply marked, keeps the key's own meaning",
       () => eq([sel, caret, blurred, unmarked].join("|"), "0|!s1|true|1"));
+
+    /* The window's close: the shell asks, and the conversations answer. */
+    const answers = [], ask = () => T.askClose(a => answers.push(a));
+    const asking = () => made.filter(n => n.id === "eCloseAsk" && !n.gone);
+    start([["dp-a", ""]], "dp-a");
+    ask();
+    const nothing = answers.join() + "/" + asking().length;
+    answers.length = 0;
+    start([["dp-a", "Anna"], ["dp-b", "Bartek"], ["dp-c", "Celina"]], "dp-c");
+    T.closeActiveTab();
+    const undoBub = bubble();
+    ask(); ask();
+    const one = asking(), q = one[0] || el();
+    const shown = [one.length, q.attrs.role, (/<p>([^<]*)<\/p>/.exec(q.innerHTML) || [])[1], !!(undoBub && undoBub.hidden)].join("/");
+    (q.btns["#eCloseStay"].onclick || (() => {}))();
+    const back = [asking().length, !!(undoBub && undoBub.hidden)].join("/");
+    ask(); (asking()[0].btns["#eCloseGo"].onclick || (() => {}))();
+    ask(); ((asking()[0].heard || {}).keydown || []).forEach(fn => fn({ key: "Escape", preventDefault() {}, stopPropagation() {} }));
+    check("tabs.js", "1012c1 the window's close asks the conversations: nothing in progress answers at once; else one question names how many, over the Undo bubble, and Cancel, Escape or Close Etiuda answer for the person",
+      () => eq([nothing, shown, back, answers.join(), asking().length].join("|"),
+        "none/0|1/alertdialog/Close Etiuda? 2 conversations are still in progress, and closing forgets them./true|0/false|asked,asked,stay,asked,close,asked,stay|0"));
+
+    /* The Menu's Close Etiuda: hidden without a window to close, shown and pressed under the desktop host. */
+    const HM = await import(MOD("header-menus.js"));
+    const menu = el({ hidden: true }), quit = el({ hidden: true }), sep = el({ hidden: true });
+    Object.assign(byId, { "#settingsBtn": el(), "#settingsMenu": menu, "#moreBtn": el(), "#moreMenu": el({ hidden: true }),
+      "#menuQuit": quit, "#menuQuitSep": sep });
+    globalThis.addEventListener = () => {};
+    delete globalThis.window.E_HOST;
+    HM.wireHeaderMenus();
+    const browser = [quit.hidden, sep.hidden].join("/");
+    let quitPressed = 0;
+    globalThis.window.E_HOST = { close() { quitPressed++; } };
+    HM.wireHeaderMenus();
+    const desk = [quit.hidden, sep.hidden].join("/");
+    menu.hidden = false;
+    menu.onclick({ target: { closest: () => ({ dataset: { act: "quit" } }) } });
+    check("header-menus.js", "1012m1 the Menu's Close Etiuda is hidden in a browser, and under the desktop host it shows, closes the Menu and closes the window as the band's button does",
+      () => eq([browser, desk, menu.hidden, quitPressed].join("|"), "true/true|false/false|true|1"));
   } catch (e) {
     check("tabs.js", "1012 the section ran to its end", () => "threw " + String(e && e.stack || e).split(/\r?\n/).slice(0, 2).join(" "));
   } finally {

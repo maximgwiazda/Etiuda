@@ -13,8 +13,12 @@ import { t } from "./ui-lang.js";
 import { CONTENT_LANGS, nextContentLang } from "./content-model.js";
 import { scReady, formatActionChord } from "./shortcuts.js";
 import { hooks } from "./hooks.js";
+import { eHost } from "./host.js";
 
 function wireHeaderMenus(){
+  /* Close Etiuda stands in the Menu where there is a window to close, and closes it as the band's own button does. */
+  const host=eHost(), canClose=!!(host && typeof host.close==="function");
+  ["#menuQuit","#menuQuitSep"].forEach(s=>{ const el=$(s); if(el) el.hidden=!canClose; });
   $("#settingsBtn").onclick=e=>{
     e.stopPropagation();
     const menu=$("#settingsMenu");
@@ -35,6 +39,7 @@ function wireHeaderMenus(){
     else if(act==="about") menuScreen(openAbout);
     else if(act==="rail"){ toggleRail(); }
     else if(act==="pills"){ togglePills(); }
+    else if(act==="quit"){ closeSettingsMenu(); const h=eHost(); if(h && typeof h.close==="function") h.close(); }
   };
   $("#moreBtn").onclick=e=>{
     e.stopPropagation();

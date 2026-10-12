@@ -6,6 +6,8 @@
  * page and in main, and the preload sends a link's address to main for a primary or middle click only.
  * The last section is the desk's own file in the catalog folder: its key pair behind a stand-in for
  * safeStorage, a signed catalog under desks/<branch id>/ after an edit, and nothing else touched.
+ * And the window's close (closing asks once while a conversation is in progress, 2026-10-12): held and the page asked,
+ * let go by the page's answer, a second close, silence, a lost page or a quit, and the preload's two ends of the pipe.
  *
  *   node tests/desk-ipc.mjs            exit code is the number of failed checks, capped at 63
  */
@@ -26,7 +28,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 80;
+const EXPECTED = 83;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -50,9 +52,9 @@ const said = [];
 const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: () => {} };
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
-const onHandlers = {}, invokeHandlers = {};
+const onHandlers = {}, invokeHandlers = {}, appOn = {};
 const electron = {
-  app: { getPath: () => UD, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop, getVersion: () => "0.0.0",
+  app: { getPath: () => UD, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: (k, fn) => { appOn[k] = fn; }, getVersion: () => "0.0.0",
          whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop, hasSwitch: () => false } },
   ipcMain: { on: (ch, fn) => { onHandlers[ch] = fn; }, handle: (ch, fn) => { invokeHandlers[ch] = fn; } },
   BrowserWindow: inert, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert,
@@ -75,7 +77,7 @@ const mainTest = {};
 const desktopWas = process.env.XDG_CURRENT_DESKTOP;
 process.env.XDG_CURRENT_DESKTOP = "GNOME";
 new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
-  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal;")(
+  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered;")(
   fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, mainTest);
 if (desktopWas === undefined) delete process.env.XDG_CURRENT_DESKTOP; else process.env.XDG_CURRENT_DESKTOP = desktopWas;
 
@@ -1034,6 +1036,52 @@ try {
       && newRO.length === 1 && newRO[0] === "Etiuda catalog-" + sha(Buffer.from(idRO)).slice(0, 8) + ".ec",
     "82h where the minted id cannot be saved the desk makes no file and keeps no id, and once it can, the next write makes one file named by the id kept (answer "
     + rRO + ", ids " + idsRO + ", then " + rBackRO + ", new files " + JSON.stringify(newRO) + ")");
+  /* ---- THE WINDOW'S CLOSE. A window as far as the hold asks of it: what it sends, and how often it is closed. */
+  const winFor = () => {
+    const w = { sent: [], closes: 0, webContents: { send: ch => w.sent.push(ch), etiudaLost: null },
+      isDestroyed: () => false, close() { w.closes++; } };
+    return w;
+  };
+  const closeEv = () => ({ prevented: false, preventDefault() { this.prevented = true; } });
+  const H = (w) => { const e = closeEv(); const held = mainTest.closeHeld(w, e); return (held ? "held" : "free") + (e.prevented ? "!" : ""); };
+  const wa = winFor();
+  const a1 = H(wa), sentA = wa.sent.join();
+  mainTest.closeAnswered(wa, "asked");
+  await tick(1700);
+  const quietA = wa.closes;
+  mainTest.closeAnswered(wa, "stay");
+  const a2 = H(wa);
+  mainTest.closeAnswered(wa, "asked");
+  mainTest.closeAnswered(wa, "close");
+  const a3 = [wa.closes, H(wa)].join("/");
+  check(a1 === "held!" && sentA === "etiuda:ask-close" && quietA === 0 && a2 === "held!" && a3 === "1/free",
+    "1012d1 a close is held and the page asked; once it has asked, nothing closes the window but the person's answer: Cancel leaves the next close held again, Close Etiuda closes it, and that close is let go ("
+    + [a1, sentA, quietA, a2, a3].join(" ") + ")");
+  const wb = winFor(), wc = winFor(), wd = winFor(), we = winFor();
+  const b = [H(wb), H(wb)].join("/");
+  H(wc); mainTest.closeAnswered(wc, "none");
+  const noneAtOnce = wc.closes;
+  H(wd);
+  await tick(1700);
+  we.webContents.etiudaLost = { reason: "crashed" };
+  const lost = H(we);
+  (appOn["before-quit"] || noop)();
+  const quit = H(winFor());
+  check(b === "held!/free" && noneAtOnce === 1 && wd.closes === 1 && lost === "free" && quit === "free",
+    "1012d2 never held: a second close while the page asks, a page with nothing in progress, a page silent past the wait, a page that is gone, and a quit ("
+    + [b, noneAtOnce, wd.closes, lost, quit].join(" ") + ")");
+  const heardOn = {}, wasOn = ipcRenderer.on, wasSend = ipcRenderer.send, answered = [];
+  ipcRenderer.on = (ch, fn) => { heardOn[ch] = fn; };
+  ipcRenderer.send = (ch, ...args) => { answered.push(ch + ":" + args.join()); };
+  let askedHere = 0;
+  try {
+    REAL_HOST.onAskClose(() => { askedHere++; });
+    if (heardOn["etiuda:ask-close"]) heardOn["etiuda:ask-close"]({}, "ignored");
+    REAL_HOST.closeAnswer("stay");
+  } finally { ipcRenderer.on = wasOn; ipcRenderer.send = wasSend; }
+  check(askedHere === 1 && answered.join() === "etiuda:close-answer:stay" && typeof onHandlers["etiuda:close-answer"] === "function",
+    "1012d3 the preload hands the page the shell's question and sends its answer on the channel main listens to ("
+    + askedHere + ", " + JSON.stringify(answered) + ")");
 } catch (e) {
   failed++;
   console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

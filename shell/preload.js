@@ -45,6 +45,9 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   minimize: () => ipcRenderer.send("etiuda:window", "minimize"),
   maximize: () => ipcRenderer.send("etiuda:window", "maximize"),
   close: () => ipcRenderer.send("etiuda:window", "close"),
+  /* The shell asks before the window closes, and the page answers: "none", "asked", then "close" or "stay". */
+  onAskClose: (fn) => ipcRenderer.on("etiuda:ask-close", () => fn()),
+  closeAnswer: (a) => ipcRenderer.send("etiuda:close-answer", String(a || "")),
   onMaximized: (fn) => ipcRenderer.on("etiuda:maximized", (_e, v) => fn(!!v)),
   /* The Windows accent, or "" where the desk does not ask for accented title bars. Both the
      value at boot and the changes after it, since either can move while Etiuda is open. */

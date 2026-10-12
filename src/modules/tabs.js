@@ -2,7 +2,8 @@ import { CATS, CONTENT_LANGS, intentCount } from "./content-model.js";
 import { intentIdAt } from "./intent-id.js";
 import { applyCut, cutSides } from "./cut-text.js";
 import { ICON_TAB_X, ICON_TAB_ADD } from "./icons.js";
-import { mgReduceMotion, E_EASE } from "./motion.js";
+import { mgReduceMotion, E_EASE, dismissNode } from "./motion.js";
+import { esc } from "./esc.js";
 import { formatActionChord, tabAddTitle } from "./shortcuts.js";
 import { lsGet, ssGet, ssSet } from "./storage.js";
 import { t, toast, TOAST_MS, toastSerial, offerUndo } from "./ui-lang.js";
@@ -520,6 +521,37 @@ function closeAllTabs(){
   saveTabSession();
   if(kept) offerUndo("All tabs closed", ()=>reopenClosedTab(kept)); else toast("All tabs closed");
   activeHeard();
+}
+/* CLOSING THE WINDOW ASKS ONCE WHILE A CONVERSATION IS IN PROGRESS (desk-chrome-close-quits-forgets): the X, Alt+F4 and
+   the taskbar closed at once and forgot every conversation. The shell holds the close and asks here, and the answer
+   goes back at once: "none" where nothing would be lost, else "asked", then the person's "close" or "stay". Cancel is
+   the focused button, so Enter and Escape both keep the window; an Undo bubble in the same place waits under it. */
+function askClose(answer){
+  snapshotActiveTab();
+  const n=tabs.filter(tabHasWork).length;
+  if(!n){ answer("none"); return; }
+  answer("asked");
+  if(document.getElementById("eCloseAsk")) return;
+  const undo=$("#eUndo");
+  if(undo) undo.hidden=true;
+  const el=document.createElement("div");
+  el.className="bub bub-ask e-undo e-close-ask";
+  el.id="eCloseAsk";
+  el.setAttribute("role","alertdialog");
+  el.setAttribute("data-side","none");
+  el.innerHTML='<p>'+esc(n===1 ? t("Close Etiuda? A conversation is still in progress, and closing forgets it.")
+      : t("Close Etiuda? {N} conversations are still in progress, and closing forgets them.").replace("{N}",String(n)))+'</p>'
+    +'<div class="tour-actions"><button type="button" class="btn" id="eCloseGo">'+esc(t("Close Etiuda"))+'</button>'
+    +'<button type="button" class="btn primary" id="eCloseStay">'+esc(t("Cancel"))+'</button></div>';
+  document.body.appendChild(el);
+  const done=a=>{ dismissNode(el); if(undo && a==="stay") undo.hidden=false; answer(a); };
+  el.querySelector("#eCloseGo").onclick=()=>done("close");
+  el.querySelector("#eCloseStay").onclick=()=>done("stay");
+  el.addEventListener("keydown",e=>{
+    if(e.key!=="Escape") return;
+    e.preventDefault(); e.stopPropagation(); done("stay");
+  });
+  try{ el.querySelector("#eCloseStay").focus({preventScroll:true}); }catch(_){}
 }
 /* A HELD ESCAPE NEITHER ASKS NOR WIPES: key repeat climbed from the first rung to every conversation gone in under a
    second. The two doors to the ladder say whether the press is a repeat (escapeHeld) before they climb. */
@@ -1231,5 +1263,5 @@ export {
   tabs,
   tabSaveTimer,
   tabInsertAnimating,
-  TAB_FLOOR_W, reopenClosedTab, escapeHeld
+  TAB_FLOOR_W, reopenClosedTab, escapeHeld, askClose
 };

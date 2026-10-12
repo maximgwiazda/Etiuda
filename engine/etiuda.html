@@ -4079,6 +4079,9 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-act="tour" title="The tour of Etiuda's controls, one at a time">Show tour…</button>
           <button type="button" role="menuitem" data-act="about" title="This version of Etiuda, what is new in it, and its licence">About Etiuda</button>
+          <!-- Only where there is a window to close: under the desktop host (header-menus.js). -->
+          <div class="menu-sep" id="menuQuitSep" hidden></div>
+          <button type="button" role="menuitem" data-act="quit" id="menuQuit" hidden title="Close Etiuda; it asks first while a conversation is in progress">Close Etiuda</button>
         </div>
       </div>
     </div>
@@ -7182,6 +7185,10 @@ What you type stays in this browser only.`;
     "Shown again": "Pokazano ponownie",
     "Tab cleared": "Wyczyszczono rozmowę",
     "Tab closed": "Zamknięto rozmowę",
+    "Close Etiuda": "Zamknij Etiudę",
+    "Close Etiuda? A conversation is still in progress, and closing forgets it.": "Zamknąć Etiudę? Rozmowa jest jeszcze w toku, a zamknięcie ją usunie.",
+    "Close Etiuda? {N} conversations are still in progress, and closing forgets them.": "Zamknąć Etiudę? Rozmów w toku: {N}. Zamknięcie je usunie.",
+    "Close Etiuda; it asks first while a conversation is in progress": "Zamyka Etiudę; gdy jakaś rozmowa jest w toku, najpierw pyta",
     "no text yet": "jeszcze bez tekstu",
     "Copy the report: counts and environment only, never your content": "Skopiuj raport: tylko liczby i dane o środowisku, nigdy treść kart",
     "All tabs closed": "Zamknięto wszystkie rozmowy",
@@ -10391,6 +10398,7 @@ What you type stays in this browser only.`;
     activeWords: () => activeWords,
     addTab: () => addTab,
     applyTabWidths: () => applyTabWidths,
+    askClose: () => askClose,
     closeActiveTab: () => closeActiveTab,
     drawPills: () => drawPills,
     drawTabs: () => drawTabs,
@@ -11644,6 +11652,42 @@ What you type stays in this browser only.`;
     if (kept) offerUndo("All tabs closed", () => reopenClosedTab(kept));
     else toast("All tabs closed");
     activeHeard();
+  }
+  function askClose(answer) {
+    snapshotActiveTab();
+    const n = tabs.filter(tabHasWork).length;
+    if (!n) {
+      answer("none");
+      return;
+    }
+    answer("asked");
+    if (document.getElementById("eCloseAsk")) return;
+    const undo = $("#eUndo");
+    if (undo) undo.hidden = true;
+    const el = document.createElement("div");
+    el.className = "bub bub-ask e-undo e-close-ask";
+    el.id = "eCloseAsk";
+    el.setAttribute("role", "alertdialog");
+    el.setAttribute("data-side", "none");
+    el.innerHTML = "<p>" + esc(n === 1 ? t("Close Etiuda? A conversation is still in progress, and closing forgets it.") : t("Close Etiuda? {N} conversations are still in progress, and closing forgets them.").replace("{N}", String(n))) + '</p><div class="tour-actions"><button type="button" class="btn" id="eCloseGo">' + esc(t("Close Etiuda")) + '</button><button type="button" class="btn primary" id="eCloseStay">' + esc(t("Cancel")) + "</button></div>";
+    document.body.appendChild(el);
+    const done = (a) => {
+      dismissNode(el);
+      if (undo && a === "stay") undo.hidden = false;
+      answer(a);
+    };
+    el.querySelector("#eCloseGo").onclick = () => done("close");
+    el.querySelector("#eCloseStay").onclick = () => done("stay");
+    el.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      done("stay");
+    });
+    try {
+      el.querySelector("#eCloseStay").focus({ preventScroll: true });
+    } catch (_) {
+    }
   }
   var escHeldNow = false;
   function escapeHeld(on) {
@@ -13894,6 +13938,13 @@ What you type stays in this browser only.`;
     if (typeof h.onMaximized === "function") h.onMaximized(eSetMaximized);
     eSetAccent(h.accent);
     if (typeof h.onAccent === "function") h.onAccent(eSetAccent);
+    if (typeof h.onAskClose === "function" && typeof h.closeAnswer === "function")
+      h.onAskClose(() => askClose((a) => {
+        try {
+          h.closeAnswer(a);
+        } catch (e) {
+        }
+      }));
     const min = $("#winMin"), max = $("#winMax"), close = $("#winClose");
     if (min) min.onclick = () => {
       try {
@@ -20989,6 +21040,11 @@ What you type stays in this browser only.`;
 
   // src/modules/header-menus.js
   function wireHeaderMenus() {
+    const host = eHost(), canClose = !!(host && typeof host.close === "function");
+    ["#menuQuit", "#menuQuitSep"].forEach((s) => {
+      const el = $(s);
+      if (el) el.hidden = !canClose;
+    });
     $("#settingsBtn").onclick = (e) => {
       e.stopPropagation();
       const menu = $("#settingsMenu");
@@ -21009,6 +21065,10 @@ What you type stays in this browser only.`;
         toggleRail();
       } else if (act === "pills") {
         togglePills();
+      } else if (act === "quit") {
+        closeSettingsMenu();
+        const h = eHost();
+        if (h && typeof h.close === "function") h.close();
       }
     };
     $("#moreBtn").onclick = (e) => {

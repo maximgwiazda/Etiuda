@@ -5,6 +5,7 @@ import { eCatalog, eCatalogAccepted, eCatalogHanded, storedCatalog } from "./cat
 import { pack } from "./pack.js";
 import { statsDoc } from "./desk-stats.js";
 import { E_VERSION } from "./env.js";
+import { askClose } from "./tabs.js";
 
 /* The desktop host, and the engine's whole knowledge of it: window.E_HOST is put there by the
    shell's preload and is absent in a browser, so nothing further down the tree asks what it is
@@ -310,6 +311,9 @@ function wireHost(){
   if(typeof h.onMaximized==="function") h.onMaximized(eSetMaximized);
   eSetAccent(h.accent);
   if(typeof h.onAccent==="function") h.onAccent(eSetAccent);
+  /* The shell asks before the window closes; the conversations answer (tabs.js). */
+  if(typeof h.onAskClose==="function" && typeof h.closeAnswer==="function")
+    h.onAskClose(()=>askClose(a=>{ try{ h.closeAnswer(a); }catch(e){} }));
   const min=$("#winMin"), max=$("#winMax"), close=$("#winClose");
   if(min) min.onclick=()=>{ try{ h.minimize(); }catch(e){} };
   if(max) max.onclick=()=>{ try{ h.maximize(); }catch(e){} };

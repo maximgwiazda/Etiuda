@@ -4079,6 +4079,9 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
           <div class="menu-sep"></div>
           <button type="button" role="menuitem" data-act="tour" title="The tour of Etiuda's controls, one at a time">Show tour…</button>
           <button type="button" role="menuitem" data-act="about" title="This version of Etiuda, what is new in it, and its licence">About Etiuda</button>
+          <!-- Only where there is a window to close: under the desktop host (header-menus.js). -->
+          <div class="menu-sep" id="menuQuitSep" hidden></div>
+          <button type="button" role="menuitem" data-act="quit" id="menuQuit" hidden title="Close Etiuda; it asks first while a conversation is in progress">Close Etiuda</button>
         </div>
       </div>
     </div>
