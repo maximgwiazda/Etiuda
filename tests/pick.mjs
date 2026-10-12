@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 88;
+const EXPECTED = 89;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -457,7 +457,7 @@ try {
   const pastes = runsOf(from, "paste"), blurAt2 = pw.calls.lastIndexOf("blur");
   check(put === true && clip.length === clipsCaret + 1 && !pw.visible && (WIN
       ? whichRuns.length === 1 && whichRuns[0].at <= showAt && pastes.length === 1 && J(pastes[0].args) === J(["paste", "4242"])
-        && pastes[0].at <= blurAt2 && /caret\.exe$/i.test(pastes[0].file)
+        && pastes[0].at <= blurAt2 && /caret\.exe$/i.test(pastes[0].file) && whichRuns[0].file === pastes[0].file
       : caret.runs.length - from === 0),
     "2w " + (WIN ? "the press asks the caret helper which window is in front before the picker shows, and the pick puts the reply"
       + " on the clipboard and has the helper press Ctrl+V in that window before the picker gives the front up: " + J(caret.runs.slice(from).map(r => r.args))
@@ -677,13 +677,14 @@ try {
   /* THE CARET HELPER'S CALLS, execFile in main.js alone: its program is `tool`, bound only to caretTool(), whose two
      places are caret.exe beside the asar and in build/, and its name is mentioned once in the require and once per call. */
   const asyncMentions = (shellBare.match(/\bexecFile\b/g) || []).length, asyncCalls = (shellBare.match(/\bexecFile\s*\(/g) || []).length;
-  const toolBinds = shellCode.match(/\bconst tool=caretTool\(\)/g) || [], toolNames = (shellBare.match(/\btool\b/g) || []).length;
-  const caretPlaces = /function caretTool\(\)\{if\(process\.platform!=="win32"\)return null;const at=app\.isPackaged\?path\.join\(process\.resourcesPath,"caret\.exe"\):path\.join\(__dirname,"\.\.","build","caret\.exe"\);return fs\.existsSync\(at\)\?at:null\}/.test(shellCode);
+  const toolBinds = shellCode.match(/\bconst tool=caretTool\(\);/g) || [], toolNames = (shellBare.match(/\btool\b/g) || []).length;
+  const caretToolNames = (shellBare.match(/\bcaretTool\b/g) || []).length;
+  const caretPlaces = /function caretTool\(\)\{if\(process\.platform!=="win32"\)return null;const at=app\.isPackaged\?path\.join\(process\.resourcesPath,"caret\.exe"\):path\.join\(__dirname,"\.\.","dist","\.caret","caret\.exe"\);return fs\.existsSync\(at\)\?at:null\}/.test(shellCode);
   const loaders = shellBare.match(/\bimport\s*\(|\bprocess\s*\.\s*(?:binding|_linkedBinding|dlopen)\b|\bcreateRequire\b|\bmodule\s*\.\s*require\b|\brequire\s*\.\s*(?:cache|main)\b/g) || [];
   const cpNames = cps.map(m => m[1].split(",").map(x => x.trim()).sort().join(","));
   check(reqs.length > 0 && strange.length === 0 && cps.length === cpRequires
     && cpNames.every(n => n === "execFileSync" || n === "execFile,execFileSync") && cpNames.filter(n => n !== "execFileSync").length === 1
-    && asyncCalls === 2 && asyncMentions === asyncCalls + 1 && toolBinds.length === 2 && caretPlaces
+    && asyncCalls === 2 && asyncMentions === asyncCalls + 1 && toolBinds.length === 2 && caretPlaces && caretToolNames === 3
     && toolNames === toolBinds.length * 3
     && programs.length > 0 && programs.every(p => p === '"reg"' || (p === "REG_TOOL" && regTool) || p === "tool"
       /* Linux alone: three questions to the session bus about the keyring, none about a window, the screen, the
@@ -721,16 +722,38 @@ try {
   /* THE CARET HELPER, the one program that presses a key, read as source: the C# electron-builder.js compiles. It calls
      seven Windows functions, none of which reads a window's text or the clipboard, and the presses it makes are the
      Control key's and the V key's alone. */
-  const CS = fs.readFileSync(path.join(ROOT, "shell", "caret.cs"), "utf8").replace(/\/\/[^\n]*/g, "");
-  const imports = [...CS.matchAll(/\[DllImport\("user32\.dll"[^\]]*\]\s*static extern \w+ (\w+)\(/g)].map(m => m[1]).sort();
+  /* The C# is read with its strings blanked before its comments are taken out, so "a//b" hides nothing. Every import is
+     user32's own function under its own name; the keys pressed are read by their values, Control and V; and the text
+     names no library beyond its four usings, which -noconfig in electron-builder.js makes true at the compile too. */
+  const CS_RAW = fs.readFileSync(path.join(ROOT, "shell", "caret.cs"), "utf8");
+  const CS = CS_RAW.replace(/"(?:[^"\\\n]|\\.)*"/g, '""').replace(/\/\/[^\n]*/g, "");
+  const attrs = CS_RAW.match(/\[[^\]\n]*DllImport[^\]\n]*\]/g) || [];
+  const attrsOk = attrs.every(a => a === '[DllImport("user32.dll")]' || a === '[DllImport("user32.dll", SetLastError = true)]');
+  const imports = [...CS.matchAll(/\[DllImport\(""(?:, SetLastError = true)?\)\]\s*static extern \w+ (\w+)\(/g)].map(m => m[1]).sort();
   const dllCount = (CS.match(/DllImport/g) || []).length;
-  const csForbid = CS.match(/Clipboard|GetWindowText|SendMessage|PostMessage|SetWindowsHookEx|ReadProcessMemory|keybd_event|mouse_event|AttachThreadInput|Process\.Start|File\.|Registry|WebClient|Socket/g) || [];
-  const pressed = [...new Set([...CS.matchAll(/\bKey\((\w+),/g)].map(m => m[1]))].sort();
-  const builds = /path\.resolve\(__dirname, "shell", "caret\.cs"\)/.test(fs.readFileSync(path.join(ROOT, "electron-builder.js"), "utf8"));
+  const usings = (CS.match(/^using [\w.]+;/gm) || []).sort();
+  const csForbid = CS.replace(/^using [\w.]+;/gm, "").match(/\bSystem\.|\bProcess\b|SendKeys|Clipboard|Activator|GetTypeFromProgID|\bAssembly\b|GetDelegateForFunctionPointer|EntryPoint|GetWindowText|SendMessage|PostMessage|SetWindowsHookEx|keybd_event|mouse_event|AttachThreadInput/g) || [];
+  const vk = {};
+  for (const m of CS.matchAll(/\b(VK_\w+) = (0x[0-9A-Fa-f]+)/g)) vk[m[1]] = parseInt(m[2], 16);
+  const keyCalls = [...CS.matchAll(/\bKey\(([^,()]*),/g)].map(m => m[1].trim());
+  const pressed = keyCalls.filter(k => k !== "int vk");
+  const pressedValues = [...new Set(pressed.map(k => /^VK_\w+$/.test(k) ? vk[k] : NaN))].sort((a, b) => a - b);
+  const builder = fs.readFileSync(path.join(ROOT, "electron-builder.js"), "utf8");
+  const builds = /path\.resolve\(__dirname, "shell", "caret\.cs"\)/.test(builder) && /"-noconfig"/.test(builder) && /"-r:System\.dll"/.test(builder);
   check(J(imports) === J(["GetAsyncKeyState", "GetForegroundWindow", "GetWindowThreadProcessId", "IsWindow", "MapVirtualKey", "SendInput",
-      "SetForegroundWindow"]) && dllCount === imports.length && csForbid.length === 0 && J(pressed) === J(["VK_CONTROL", "VK_V"]) && builds,
-    "5f the caret helper electron-builder.js compiles calls " + imports.length + " Windows functions of its own, reads no window's text"
-    + " and no clipboard, and presses " + (pressed.join(" and ") || "nothing") + (csForbid.length ? "; also names " + csForbid.join(", ") : ""));
+      "SetForegroundWindow"]) && dllCount === imports.length && attrs.length === imports.length && attrsOk
+    && J(usings) === J(["using System.Diagnostics;", "using System.Runtime.InteropServices;", "using System.Threading;", "using System;"].sort())
+    && csForbid.length === 0 && keyCalls.length === 5 && (CS.match(/\bKey\(/g) || []).length === 5 && pressed.length === 4 && pressed.every(k => /^VK_\w+$/.test(k))
+    && J(pressedValues) === J([0x11, 0x56]) && builds,
+    "5f the caret helper electron-builder.js compiles, with -noconfig, calls " + imports.length + " user32 functions by their own names,"
+    + " uses no library beyond its four usings, and presses the keys 0x" + pressedValues.map(v => (v || 0).toString(16)).join(" and 0x")
+    + " (Control, V) in " + pressed.length + " presses" + (csForbid.length ? "; also names " + csForbid.join(", ") : ""));
+  /* THE PASTE IS STARTED FROM ONE PLACE: the copy, right after its clipboard write, so no other handler presses a key. */
+  const pasteNames = (shellBare.match(/\bcaretPaste\b/g) || []).length;
+  const pasteAfterWrite = /clipboard\.writeText\(pickClipText\(v\.text,process\.platform\)\);caretPaste\(pickTarget\);hidePicker\(true\);/.test(shellCode);
+  check(pasteNames === 2 && pasteAfterWrite,
+    "5g the caret helper's paste is started from one place, the copy, right after its clipboard write and before the picker hides: "
+    + pasteNames + " mention(s) of caretPaste, " + (pasteAfterWrite ? "after the write" : "NOT after the write"));
 
   /* ---- 6. the most used replies first, on this desk's own last 28 days ------------------- */
   console.log("\n[6/6] the most used replies first: the picker at rest, a search, and what stays as it was");

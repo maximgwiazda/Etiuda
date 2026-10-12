@@ -3052,13 +3052,13 @@ function pickerDoc() {
 }
 
 let pickWin = null, pickLoaded = null, pickOpening = false, pickShown = null;
-/* THE CARET HELPER (shell/caret.cs): beside the asar, or in build/ from the tree; null where there is
-   none, which is every platform but Windows, and then the agent pastes as before. */
+/* THE CARET HELPER (shell/caret.cs): beside the asar, or in dist/.caret from the tree; null where there
+   is none, which is every platform but Windows, and then the agent pastes as before. */
 const CARET_WHICH_MS = 1500, CARET_WAIT_MS = 150, CARET_PASTE_MS = 4000;
 let pickTarget = null, pickPress = 0;           // the window in front at this press, if somebody else's
 function caretTool() {
   if (process.platform !== "win32") return null;
-  const at = app.isPackaged ? path.join(process.resourcesPath, "caret.exe") : path.join(__dirname, "..", "build", "caret.exe");
+  const at = app.isPackaged ? path.join(process.resourcesPath, "caret.exe") : path.join(__dirname, "..", "dist", ".caret", "caret.exe");
   return fs.existsSync(at) ? at : null;
 }
 /* Which window is in front, as the helper numbers it, or null where it is one of this program's own. */

@@ -57,8 +57,16 @@ try {
   const fresh = require('../electron-builder.js');
   if (was === undefined) delete process.env.ETIUDA_DIST; else process.env.ETIUDA_DIST = was;
   const iconDir = fresh.linux.icon;
+  /* Packing for Windows writes the caret helper alone, into the lab's output folder, and only where the C# compiler is;
+     elsewhere it writes nothing and says so. */
+  const caretOut = path.join(LAB, 'dist', '.caret'), compiler = path.join(process.env.WINDIR || 'C:/Windows', 'Microsoft.NET',
+    'Framework64', 'v4.0.30319', 'csc.exe');
+  const canCompile = process.platform === 'win32' && fs.existsSync(compiler);
   fresh.beforePack({ electronPlatformName: 'win32' });
-  check(!fs.existsSync(iconDir), '2a before packing for Windows nothing is written: ' + fs.existsSync(iconDir));
+  const caretWritten = fs.existsSync(caretOut) ? fs.readdirSync(caretOut) : [];
+  check(!fs.existsSync(iconDir) && J(caretWritten) === J(canCompile ? ['caret.exe'] : []),
+    '2a before packing for Windows the icons are not written, and the caret helper is ' + (canCompile ? 'compiled into the lab\'s output'
+      : 'not built, there being no C# compiler') + ': ' + J({ icons: fs.existsSync(iconDir), caret: caretWritten }));
   fresh.beforePack({ electronPlatformName: 'linux' });
   const ico = fs.readFileSync(path.join(ROOT, 'shell', 'etiuda.ico'));
   const entries = [];
@@ -131,9 +139,9 @@ try {
   const DIST = path.join(LAB, 'dist');
   check(J(fresh.linux.extraResources) === J([{ from: path.join(DIST, '.dictionaries'), to: 'dictionaries' }])
       && cfg.extraResources === undefined && cfg.nsis.extraResources === undefined
-      && J(cfg.win.extraResources) === J([{ from: path.resolve(ROOT, 'build', 'caret.exe'), to: 'caret.exe' }]),
+      && J(fresh.win.extraResources) === J([{ from: path.join(DIST, '.caret', 'caret.exe'), to: 'caret.exe' }]),
     '5a the Linux block copies the output folder\'s .dictionaries into resources/dictionaries, the Windows block the caret'
-    + ' helper alone, and nothing above them copies a resource: ' + J(fresh.linux.extraResources) + ' ' + J(cfg.win.extraResources));
+    + ' helper alone, and nothing above them copies a resource: ' + J(fresh.linux.extraResources) + ' ' + J(fresh.win.extraResources));
   const shellFiles = (/files: (\[[^\]]*\])/.exec(fs.readFileSync(path.join(ROOT, 'shell', 'main.js'), 'utf8')) || [])[1] || '';
   check(real.dictionaries === FILES && J(FILES.map(f => f.name)) === J(['en-US-10-1.bdic', 'pl-PL-3-0.bdic', 'README_en_US.txt', 'README_pl_PL.txt', 'COPYING.MPL'])
       && shellFiles === '["en-US-10-1.bdic", "pl-PL-3-0.bdic"]'

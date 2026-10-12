@@ -60,5 +60,11 @@ if (r.status === 0) {
   }
   console.log('npm run package: ' + Object.keys(wantedFuses()).length + ' fuse(s) read back from '
     + join(DIST, 'win-unpacked', 'Etiuda.exe') + ' as asked');
+  /* The caret helper is skipped where the C# compiler is missing, so an installer is refused without it. */
+  const caret = join(DIST, 'win-unpacked', 'resources', 'caret.exe');
+  if (!existsSync(caret)) {
+    console.error('npm run package: ' + caret + ' is missing, so the picker would only copy');
+    process.exit(1);
+  }
 }
 process.exit(r.status == null ? 1 : r.status);

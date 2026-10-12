@@ -29,7 +29,7 @@ import { wantedFuses, fuseProblems, packagedFuseProblems } from '../tools/fuses.
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 14;
+const EXPECTED = 15;
 
 let asserted = 0, failed = 0;
 const notRun = [];
@@ -133,7 +133,7 @@ try {
   /* ---- 5. tools/package.mjs, driven. A lab holding the tree's own copy of the step, its config
      and a package.json whose build does nothing; node_modules/.bin, which the step puts first on
      PATH, holds an electron-builder that plants the given program and writes a fresh installer. */
-  if (process.platform !== 'win32') skip('5a to 5c: tools/package.mjs runs its build through cmd.exe', 3);
+  if (process.platform !== 'win32') skip('5a to 5d: tools/package.mjs runs its build through cmd.exe', 4);
   else {
     const LAB = path.join(TMP, 'lab');
     for (const d of ['tools', 'src/modules', 'node_modules/.bin']) fs.mkdirSync(path.join(LAB, d), { recursive: true });
@@ -148,23 +148,30 @@ try {
       'const fs = require("fs"), p = require("path"), d = p.resolve(process.env.ETIUDA_DIST);',
       'fs.mkdirSync(p.join(d, "win-unpacked"), { recursive: true });',
       'if (process.env.FUSES_LAB_PROGRAM) fs.copyFileSync(process.env.FUSES_LAB_PROGRAM, p.join(d, "win-unpacked", "Etiuda.exe"));',
+      'fs.mkdirSync(p.join(d, "win-unpacked", "resources"), { recursive: true });',
+      'if (!process.env.FUSES_LAB_NO_CARET) fs.writeFileSync(p.join(d, "win-unpacked", "resources", "caret.exe"), "a stub helper");',
       'fs.writeFileSync(p.join(d, "etiuda-lab-setup.exe"), "a stub installer");'].join('\n'));
     fs.writeFileSync(path.join(LAB, 'node_modules', '.bin', 'electron-builder.cmd'), '@node "%~dp0..\\..\\stub.cjs" %*\r\n');
-    const pack = (name, file) => {
+    const pack = (name, file, noCaret) => {
       const env = { ...process.env, ETIUDA_DIST: path.join(TMP, 'out-' + name) };
       delete env.FUSES_LAB_PROGRAM;
+      delete env.FUSES_LAB_NO_CARET;
       if (file) env.FUSES_LAB_PROGRAM = file;
+      if (noCaret) env.FUSES_LAB_NO_CARET = '1';
       const r = spawnSync(process.execPath, [path.join(LAB, 'tools', 'package.mjs')],
         { cwd: LAB, env, encoding: 'utf8', windowsHide: true, timeout: 60000 });
       return { status: r.status, out: (r.stdout || '') + (r.stderr || '') };
     };
-    const a = pack('good', good), b = pack('flipped', flipped), c = pack('missing', null);
+    const a = pack('good', good), b = pack('flipped', flipped), c = pack('missing', null), e = pack('no-caret', good, true);
     check(a.status === 0 && /6 fuse\(s\) read back from .*Etiuda\.exe as asked/.test(a.out),
       '5a the step passes a program carrying the six as asked, and says so, exit ' + a.status);
     check(b.status === 1 && /runAsNode is on where electron-builder\.js asks for it off/.test(b.out),
       '5b the step refuses a program with node turned back on, naming the fuse, exit ' + b.status);
     check(c.status === 1 && /is not there, so no fuse was read/.test(c.out),
       '5c the step refuses a build that left no program to read, exit ' + c.status);
+    /* The caret helper is skipped where the C# compiler is missing (electron-builder.js), so the installer is refused. */
+    check(e.status === 1 && /caret\.exe is missing, so the picker would only copy/.test(e.out),
+      '5d the step refuses a build whose fuses are as asked but which carries no caret helper, exit ' + e.status);
   }
 } catch (e) {
   failed++;

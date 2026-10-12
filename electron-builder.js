@@ -41,13 +41,19 @@ function linuxIcons() {
 }
 
 // THE CARET HELPER (shell/caret.cs) is compiled for every Windows pack by the C# compiler Windows
-// carries, so no route ships an older one, and goes beside the asar where the shell finds it.
-const CARET = path.resolve(__dirname, "build", "caret.exe");
+// carries, into the output folder like the Linux icons, and goes beside the asar where the shell finds
+// it. Without the compiler nothing is written and the pack carries no helper, which tools/package.mjs
+// refuses for an installer. -noconfig keeps csc's default libraries out, Windows Forms among them.
+const CARET = path.resolve(output, ".caret", "caret.exe");
 function caretHelper() {
   const csc = path.join(process.env.WINDIR || "C:/Windows", "Microsoft.NET", "Framework64", "v4.0.30319", "csc.exe");
+  if (process.platform !== "win32" || !fs.existsSync(csc)) {
+    console.log("caret helper: no C# compiler at " + csc + ", so none is built and the picker only copies");
+    return;
+  }
   fs.mkdirSync(path.dirname(CARET), { recursive: true });
-  require("node:child_process").execFileSync(csc, ["-nologo", "-optimize", "-target:winexe", "-platform:anycpu",
-    "-out:" + CARET, path.resolve(__dirname, "shell", "caret.cs")], { stdio: "inherit" });
+  require("node:child_process").execFileSync(csc, ["-noconfig", "-nologo", "-optimize", "-target:winexe", "-platform:anycpu",
+    "-r:System.dll", "-out:" + CARET, path.resolve(__dirname, "shell", "caret.cs")], { stdio: "inherit" });
 }
 
 // THE SIGNING HOOK: one route or none, chosen by which variables are set. With none the block is
