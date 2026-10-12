@@ -3011,10 +3011,20 @@ const CARD_B = {
   const card = (id, next) => (next ? { id, c: "orders", en: "Body of " + id, t: "Title " + id, next: next.map(to => ({ to })) }
     : { id, c: "orders", en: "Body of " + id, t: "Title " + id });
   const pax = el({ value: "Anna" }), full = el({ value: "x", tagName: "INPUT" });
-  check("lanes.js", "814ln1 the lanes key is free with nothing focused or the search box focused and empty, and kept by a box holding text, another field or a button",
+  /* SPACE SWITCHES WHEREVER THE FOCUS SITS (Maxim, 2026-10-12 12:33: "the space key does not always correctly switch
+     between normal mode and paths mode in Desk, instead it starts toggling different UI elements"): a focused button or
+     pill gives the key up, while a field being typed in, and a dialog, bubble or menu, keep it. */
+  const inside = sel => el({ tagName: "BUTTON", closest: q => (q.split(",").indexOf(sel) > -1 ? {} : null) });
+  check("lanes.js", "814ln1 the lanes key is free with nothing focused, the search box empty, or a button, a pill or a checkbox focused,"
+    + " and kept by a box holding text, another text field, a text area, an editable block, and anything in a dialog, a bubble or a menu",
     () => eq([LN.lanesKeyFree(null, box, body), LN.lanesKeyFree(body, box, body), LN.lanesKeyFree(box, box, body),
-      LN.lanesKeyFree(full, full, body), LN.lanesKeyFree(pax, box, body), LN.lanesKeyFree(el({ tagName: "BUTTON" }), box, body)].join(","),
-      "true,true,true,false,false,false"));
+      LN.lanesKeyFree(el({ tagName: "BUTTON", closest: () => null }), box, body),
+      LN.lanesKeyFree(el({ tagName: "INPUT", type: "checkbox", closest: () => null }), box, body),
+      LN.lanesKeyFree(full, full, body), LN.lanesKeyFree(el({ tagName: "INPUT", value: "Anna" }), box, body),
+      LN.lanesKeyFree(el({ tagName: "TEXTAREA" }), box, body), LN.lanesKeyFree(el({ tagName: "DIV", isContentEditable: true }), box, body),
+      LN.lanesKeyFree(inside(".modal"), box, body), LN.lanesKeyFree(inside(".bub"), box, body),
+      LN.lanesKeyFree(inside("[role=menu]"), box, body)].join(","),
+      "true,true,true,true,true,false,false,false,false,false,false,false"));
   check("shortcuts.js", "814ln2 Space is the lanes' row, rebindable and live in a field; the dispatcher asks the lanes first, and Escape sheds them before the dock and the search",
     () => {
       const d = SC.SC_DEFS.find(x => x.id === "lanes"), rs = fs.readFileSync(join(MODDIR, "run-shortcut.js"), "utf8");

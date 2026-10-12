@@ -8688,7 +8688,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-10";
+  var E_BUILT = "2026-10-12";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -10595,8 +10595,8 @@ What you type stays in this browser only.`;
       def: { code: "Digit4", key: "4", ctrl: 1, alt: 0, shift: 0, meta: 0 },
       inField: 1
     },
-    /* inField so an empty search box still switches; run-shortcut declines it wherever something is being
-       typed or a control is focused, and the press then types or presses as before. */
+    /* inField so an empty search box still switches; the lanes decline it where something is being typed
+       or a dialog, bubble or menu holds the focus (lanesKeyFree), and the press then does what it did. */
     {
       id: "lanes",
       label: "Cards or the conversation's path",
@@ -29558,9 +29558,15 @@ What you type stays in this browser only.`;
   function lanesPageScroller() {
     return lanesOn ? lanesEl() : null;
   }
+  var LANES_KEEP = ".modal,.bub,[role=dialog],[role=alertdialog],[role=menu],[role=listbox]";
   function lanesKeyFree(active, box, body) {
     if (!active || active === body) return true;
-    return !!box && active === box && !String(box.value || "");
+    if (box && active === box) return !String(box.value || "");
+    if (active.isContentEditable) return false;
+    const tag = String(active.tagName || "").toUpperCase();
+    if (tag === "TEXTAREA") return false;
+    if (tag === "INPUT" && !/^(button|checkbox|radio|range|color|file|submit|reset|image)$/i.test(String(active.type || "text"))) return false;
+    return !(typeof active.closest === "function" && active.closest(LANES_KEEP));
   }
   function lanesKey() {
     if (!lanesKeyFree(document.activeElement, intentEl, document.body)) return false;

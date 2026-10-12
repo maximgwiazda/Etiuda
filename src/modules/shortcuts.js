@@ -67,8 +67,8 @@ const SC_DEFS=[
     def:{code:"Digit3",key:"3",ctrl:1,alt:0,shift:0,meta:0},inField:1},
   {id:"nextCopy4",label:"Next reply 4",hint:"Copy the fourth of the replies offered after the last one sent",
     def:{code:"Digit4",key:"4",ctrl:1,alt:0,shift:0,meta:0},inField:1},
-  /* inField so an empty search box still switches; run-shortcut declines it wherever something is being
-     typed or a control is focused, and the press then types or presses as before. */
+  /* inField so an empty search box still switches; the lanes decline it where something is being typed
+     or a dialog, bubble or menu holds the focus (lanesKeyFree), and the press then does what it did. */
   {id:"lanes",label:"Cards or the conversation's path",hint:"Switch between the cards and the conversation's path while nothing is being typed",
     def:{code:"Space",key:" ",ctrl:0,alt:0,shift:0,meta:0},inField:1},
   {id:"expandPills",label:"Reveal / expand categories",

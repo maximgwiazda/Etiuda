@@ -36,11 +36,18 @@ const lanesEl=()=>$("#lanes");
 
 function lanesOpen(){ return lanesOn; }
 function lanesPageScroller(){ return lanesOn ? lanesEl() : null; }
-/** Whether the lanes key may switch views: with nothing focused, or with the search box focused and
- *  empty. Anything else focused keeps the key: a field types it, a button is pressed by it. */
+/** Whether the lanes key may switch views: wherever the focus sits, a button or a pill included, except
+ *  in a field being typed into, where it types a space, and inside a dialog, a bubble or a menu, which
+ *  keep their own keys. The search box switches while it is empty. */
+const LANES_KEEP=".modal,.bub,[role=dialog],[role=alertdialog],[role=menu],[role=listbox]";
 function lanesKeyFree(active, box, body){
   if(!active || active===body) return true;
-  return !!box && active===box && !String(box.value||"");
+  if(box && active===box) return !String(box.value||"");
+  if(active.isContentEditable) return false;
+  const tag=String(active.tagName||"").toUpperCase();
+  if(tag==="TEXTAREA") return false;
+  if(tag==="INPUT" && !/^(button|checkbox|radio|range|color|file|submit|reset|image)$/i.test(String(active.type||"text"))) return false;
+  return !(typeof active.closest==="function" && active.closest(LANES_KEEP));
 }
 // The lanes key: declined while something is being typed, so the press reaches what is focused.
 function lanesKey(){
