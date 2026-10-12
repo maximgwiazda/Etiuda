@@ -2238,12 +2238,25 @@ const CLOSE_WAIT_MS = 1500;
 let quitting = false;
 app.on("before-quit", () => { quitting = true; });
 function closeHeld(win, e) {
-  if (win.etiudaCloseOk || win.etiudaCloseAsking || quitting || PLACED_ASIDE || win.webContents.etiudaLost) return false;
+  const lost = win.webContents.etiudaLost;
+  if (win.etiudaCloseOk || win.etiudaCloseAsking || quitting || PLACED_ASIDE || (lost && !lost.back)) return false;
   e.preventDefault();
   win.etiudaCloseAsking = true;
   win.etiudaCloseWait = setTimeout(() => closeNow(win), CLOSE_WAIT_MS);
   win.webContents.send("etiuda:ask-close");
   return true;
+}
+/* THE HOLD'S WIRING ON A WINDOW, apart from createWindow so that a node leg can drive it (Clément's read, hole 3): the
+   window's close goes through closeHeld before `onClose`, the window's own place-keeping, and the end of the Windows
+   session lets it go. The refusal page's Close (CLOSE_MARK) lets it go before it closes. */
+function wireHold(win, onClose) {
+  win.on("close", (e) => { if (closeHeld(win, e)) return; onClose(e); });
+  /* Windows is ending the session: nothing may hold the window then. */
+  win.on("session-end", () => { win.etiudaCloseOk = true; });
+}
+function closeFromRefusal(win) {
+  win.etiudaCloseOk = true;
+  win.close();
 }
 function closeNow(win) {
   clearTimeout(win.etiudaCloseWait);
@@ -3351,10 +3364,7 @@ function createWindow() {
   win.on("unmaximize", tellMaximized);
   win.on("moved", keepPlace);
   win.on("resized", keepPlace);
-  /* Windows is ending the session: nothing may hold the window then. */
-  win.on("session-end", () => { win.etiudaCloseOk = true; });
-  win.on("close", (e) => {
-    if (closeHeld(win, e)) return;
+  wireHold(win, () => {
     if (PLACED_ASIDE) return;
     clearTimeout(placeSave);
     if (!win.isMinimized()) maximized = win.isMaximized();
@@ -3379,7 +3389,7 @@ function createWindow() {
   win.webContents.on("will-navigate", (e, url) => {
     if (url === win.webContents.getURL()) return;
     e.preventDefault();
-    if (url.indexOf(CLOSE_MARK) > -1) { win.etiudaCloseOk = true; win.close(); return; }
+    if (url.indexOf(CLOSE_MARK) > -1) { closeFromRefusal(win); return; }
     openExternally(url);
   });
 
@@ -3404,6 +3414,9 @@ function createWindow() {
   });
   win.loadFile(ENGINE);
   watchCatalog(win);
+  /* A page loaded again after it was lost asks before closing again (Clément's read, note a): the loss is kept for the
+     host answer that reports it, and marked as over, so closeHeld holds again from here. */
+  win.webContents.on("did-finish-load", () => { const lost = win.webContents.etiudaLost; if (lost) lost.back = true; });
   win.webContents.on("did-finish-load", () => { setTimeout(() => { tryAnswerRequest(win); tryHeldBranches(); sendListing(win, true); }, 0); });
 }
 
