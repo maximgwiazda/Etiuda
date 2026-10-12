@@ -1175,6 +1175,9 @@ body.shed-segfold #seg::before{width:100%;transform:none}
   background:transparent;color:var(--ink);font:13.5px var(--sans);cursor:default}
 .menu button:hover,.menu button:focus-visible{background:var(--accent-soft);color:var(--accent)}
 .menu .menu-sep{height:1px;margin:4px 6px;background:var(--line);border:0;padding:0;pointer-events:none}
+/* An object's own menu (context-menu.js) stands where it was asked for, over the page and under a dialog. */
+.menu.e-ctx{position:fixed;right:auto;top:0;left:0;z-index:150;max-width:min(320px,calc(100vw - 8px))}
+.menu.e-ctx:focus{outline:none}
 body.pills-off .pills-slot{display:none}
 /* The retreat is a fixed clone (see animatePillsBox). This class must not put the slot
    back into flow: the snap has already taken its final display. */

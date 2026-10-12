@@ -1175,6 +1175,9 @@ body.shed-segfold #seg::before{width:100%;transform:none}
   background:transparent;color:var(--ink);font:13.5px var(--sans);cursor:default}
 .menu button:hover,.menu button:focus-visible{background:var(--accent-soft);color:var(--accent)}
 .menu .menu-sep{height:1px;margin:4px 6px;background:var(--line);border:0;padding:0;pointer-events:none}
+/* An object's own menu (context-menu.js) stands where it was asked for, over the page and under a dialog. */
+.menu.e-ctx{position:fixed;right:auto;top:0;left:0;z-index:150;max-width:min(320px,calc(100vw - 8px))}
+.menu.e-ctx:focus{outline:none}
 body.pills-off .pills-slot{display:none}
 /* The retreat is a fixed clone (see animatePillsBox). This class must not put the slot
    back into flow: the snap has already taken its final display. */
@@ -7185,6 +7188,22 @@ What you type stays in this browser only.`;
     "Shown again": "Pokazano ponownie",
     "Tab cleared": "Wyczyszczono rozmowę",
     "Tab closed": "Zamknięto rozmowę",
+    "Other tabs closed": "Zamknięto pozostałe rozmowy",
+    "Copy": "Kopiuj",
+    "Copy the {LANG} version": "Kopiuj wersję {LANG}",
+    "Show the note": "Pokaż notatkę",
+    "Fold every group": "Zwiń wszystkie grupy",
+    "Unfold every group": "Rozwiń wszystkie grupy",
+    "Pick this intent": "Wybierz tę intencję",
+    "Drop this intent": "Odznacz tę intencję",
+    "Pick it with the others": "Dodaj ją do wybranych",
+    "Show only this category": "Pokaż tylko tę kategorię",
+    "Show every category": "Pokaż wszystkie kategorie",
+    "Add it to the filter": "Dodaj ją do filtra",
+    "Take it out of the filter": "Usuń ją z filtra",
+    "Close this tab": "Zamknij tę rozmowę",
+    "Close the other tabs": "Zamknij pozostałe rozmowy",
+    "Reopen the last closed tab": "Przywróć ostatnio zamkniętą rozmowę",
     "Close Etiuda": "Zamknij Etiudę",
     "Close Etiuda? A conversation is still in progress, and closing forgets it.": "Zamknąć Etiudę? Rozmowa jest jeszcze w toku, a zamknięcie ją usunie.",
     "Close Etiuda? {N} conversations are still in progress, and closing forgets them.": "Zamknąć Etiudę? Rozmów w toku: {N}. Zamknięcie je usunie.",
@@ -8851,10 +8870,10 @@ What you type stays in this browser only.`;
   }
   function v2Unmark(text) {
     const out = [];
-    let cur = [], label = "", started = false;
+    let cur = [], label2 = "", started = false;
     const close = () => {
       const body = cur.join("\n").trim();
-      out.push(label ? body ? label + "\n" + body : label : body);
+      out.push(label2 ? body ? label2 + "\n" + body : label2 : body);
     };
     v2Str(text).split("\n").forEach((line) => {
       const mark = V2_MARKER_RE.exec(line.trim());
@@ -8862,7 +8881,7 @@ What you type stays in this browser only.`;
         if (started) close();
         cur = [];
         started = true;
-        label = mark[1] === "alt" && mark[2] ? line.trim() : "";
+        label2 = mark[1] === "alt" && mark[2] ? line.trim() : "";
         return;
       }
       cur.push(line);
@@ -9486,12 +9505,12 @@ What you type stays in this browser only.`;
     const cats2 = c.categories || {};
     const always = new Set((c.roles || {}).always || []);
     const tags = Object.keys(cats2).map((k) => {
-      const label = {};
+      const label2 = {};
       codes.forEach((code, ci) => {
         const v = v2Str(ci ? (c[v2CatKey(code, codes[0])] || {})[k] : cats2[k]);
-        if (v) label[code] = v;
+        if (v) label2[code] = v;
       });
-      const tag = { id: k, kind: "shelf", label };
+      const tag = { id: k, kind: "shelf", label: label2 };
       const ic = v2Str((c.icons || {})[k]);
       if (ic) tag.icon = ic;
       const hue = parseInt((c.colors || {})[k], 10);
@@ -10400,6 +10419,9 @@ What you type stays in this browser only.`;
     applyTabWidths: () => applyTabWidths,
     askClose: () => askClose,
     closeActiveTab: () => closeActiveTab,
+    closeOtherTabs: () => closeOtherTabs,
+    closeTabById: () => closeTabById,
+    closedTabCount: () => closedTabCount,
     drawPills: () => drawPills,
     drawTabs: () => drawTabs,
     escCloseAllTabsStep: () => escCloseAllTabsStep,
@@ -11055,9 +11077,9 @@ What you type stays in this browser only.`;
     if (ov && CAT_ICONS[ov]) return ov;
     const dec = CAT_ICONS_CATALOG[id];
     if (dec && CAT_ICONS[dec]) return dec;
-    const label = String(pack && pack.catLabels && pack.catLabels[id] || BASE_CATS[id] || pack && pack.customCats && pack.customCats[id] || id);
+    const label2 = String(pack && pack.catLabels && pack.catLabels[id] || BASE_CATS[id] || pack && pack.customCats && pack.customCats[id] || id);
     for (let i = 0; i < CAT_ICON_HINTS.length; i++) {
-      if (CAT_ICON_HINTS[i][0].test(label)) return CAT_ICON_HINTS[i][1];
+      if (CAT_ICON_HINTS[i][0].test(label2)) return CAT_ICON_HINTS[i][1];
     }
     return CAT_ICON_MUSIC[catHash(id) % CAT_ICON_MUSIC.length];
   }
@@ -11592,6 +11614,9 @@ What you type stays in this browser only.`;
       tabs = last.all.slice();
       begun.forEach((tb) => tabs.push(free(tb)));
       applyTab(tabs.find((x) => x.id === last.active) || tabs[0]);
+    } else if (last.many) {
+      last.many.forEach((x) => tabs.splice(Math.min(Math.max(x.idx, 0), tabs.length), 0, free(x.tab)));
+      drawTabs();
     } else if (last.cleared && tabs.length === 1 && !tabHasWork(tabs[0])) {
       tabs[0] = Object.assign(last.tab, { id: tabs[0].id });
       applyTab(tabs[0]);
@@ -11632,6 +11657,23 @@ What you type stays in this browser only.`;
     }
     saveTabSession();
     offerUndo("Tab closed", () => reopenClosedTab(kept));
+  }
+  function closeTabById(id) {
+    closeTab(id);
+  }
+  function closeOtherTabs(id) {
+    const keep = tabs.find((x) => x.id === id);
+    if (!keep || tabs.length < 2) return;
+    snapshotActiveTab();
+    const kept = keepClosed({ many: tabs.map((tab, idx) => ({ tab, idx })).filter((x) => x.tab.id !== id) });
+    tabs = [keep];
+    applyTab(keep);
+    saveTabSession();
+    offerUndo("Other tabs closed", () => reopenClosedTab(kept));
+    activeHeard();
+  }
+  function closedTabCount() {
+    return closedTabs.length;
   }
   function closeActiveTab() {
     if (activeTabId) closeTab(activeTabId);
@@ -12681,13 +12723,13 @@ What you type stays in this browser only.`;
     }
     return hay;
   }
-  function cardSearchFields(m, st, live, label) {
+  function cardSearchFields(m, st, live, label2) {
     if (!m) return { title: "", keys: "", meta: "", body: "" };
     return {
       title: st.title,
       keys: st.keys,
       /* Live, not cached: a category rename changes this without changing the card object. */
-      meta: normHay([label]),
+      meta: normHay([label2]),
       /* Each group is already folded, collapsed and trimmed, so joining with single spaces
          reproduces the one-pass normHay byte for byte; filter(Boolean) keeps an empty group
          from introducing a double space. Verified against the pre-cache implementation. */
@@ -12695,14 +12737,14 @@ What you type stays in this browser only.`;
     };
   }
   function cardSearchIndex(m) {
-    let st = null, live = "", label = "";
+    let st = null, live = "", label2 = "";
     if (m) {
       st = cardStaticHay(m);
       live = cardLiveHay(m, st);
-      label = CATS[m.c] || m.c || "";
-      if (st.idx && st.idxLive === live && st.idxLabel === label) return st.idx;
+      label2 = CATS[m.c] || m.c || "";
+      if (st.idx && st.idxLive === live && st.idxLabel === label2) return st.idx;
     }
-    const fields = cardSearchFields(m, st, live, label);
+    const fields = cardSearchFields(m, st, live, label2);
     const hay = [fields.title, fields.keys, fields.meta, fields.body].filter(Boolean).join(" ");
     const idx = { hay, fields, words: {}, allWords: splitWords(hay), uniq: null, mTerms: null, match: false, sq: null };
     SEARCH_FIELDS.forEach((f) => {
@@ -12711,7 +12753,7 @@ What you type stays in this browser only.`;
     if (st) {
       st.idx = idx;
       st.idxLive = live;
-      st.idxLabel = label;
+      st.idxLabel = label2;
     }
     return idx;
   }
@@ -13013,9 +13055,9 @@ What you type stays in this browser only.`;
         const a = intentArr("clause", l);
         return [l, a ? a[i] : ""];
       }).forEach((pair) => {
-        const lang2 = pair[0], label = pair[1];
+        const lang2 = pair[0], label2 = pair[1];
         const seen = {}, terms = [], stop = affinityStop(lang2);
-        splitWords(label || "").forEach((w) => {
+        splitWords(label2 || "").forEach((w) => {
           if (w.length < AFFINITY_MIN_LEN || stop[w] || seen[w]) return;
           seen[w] = 1;
           if (!affinityWordWeight(w, lang2)) return;
@@ -13820,10 +13862,10 @@ What you type stays in this browser only.`;
     const h = eHost();
     return !!h && typeof h.pickCatalogFile === "function";
   }
-  function ePickCatalogFile(title, label) {
+  function ePickCatalogFile(title, label2) {
     if (!eHasCatalogPicker()) return Promise.resolve(null);
     try {
-      return Promise.resolve(eHost().pickCatalogFile(String(title || ""), String(label || ""))).then((v) => v && typeof v === "object" ? { name: String(v.name || ""), text: String(v.text || "") } : null).catch(() => null);
+      return Promise.resolve(eHost().pickCatalogFile(String(title || ""), String(label2 || ""))).then((v) => v && typeof v === "object" ? { name: String(v.name || ""), text: String(v.text || "") } : null).catch(() => null);
     } catch (e) {
       return Promise.resolve(null);
     }
@@ -13832,12 +13874,12 @@ What you type stays in this browser only.`;
     const h = eHost();
     return !!h && typeof h.chooseCatalogSave === "function" && typeof h.writeCatalogSave === "function";
   }
-  function eSaveCatalogFile(title, name, label, build, from) {
+  function eSaveCatalogFile(title, name, label2, build, from) {
     if (!eHasCatalogSaver()) return Promise.resolve(null);
     const failed = (n) => ({ name: String(n || name || ""), ok: false, sealed: false });
     const of = from && typeof from === "object" ? { id: String(from.id || ""), sha: String(from.sha || "") } : null;
     try {
-      return Promise.resolve(eHost().chooseCatalogSave(String(title || ""), String(name || ""), String(label || ""))).then((v) => {
+      return Promise.resolve(eHost().chooseCatalogSave(String(title || ""), String(name || ""), String(label2 || ""))).then((v) => {
         if (!(v && typeof v === "object" && v.name)) return null;
         const chosen = String(v.name);
         return Promise.resolve(eHost().writeCatalogSave(String(build() || ""), of)).then((w) => w && typeof w === "object" ? { name: String(w.name || chosen), ok: w.ok === true, sealed: w.sealed === true } : failed(chosen));
@@ -13979,9 +14021,9 @@ What you type stays in this browser only.`;
     document.body.classList.toggle("e-max", !!on);
     const max = $("#winMax");
     if (!max) return;
-    const label = t(on ? "Restore" : "Maximise");
-    max.title = label;
-    max.setAttribute("aria-label", label);
+    const label2 = t(on ? "Restore" : "Maximise");
+    max.title = label2;
+    max.setAttribute("aria-label", label2);
   }
 
   // src/modules/team-join.js
@@ -15551,6 +15593,7 @@ What you type stays in this browser only.`;
   // src/modules/list-pointer.js
   var list_pointer_exports = {};
   __export(list_pointer_exports, {
+    animateFoldAll: () => animateFoldAll,
     bumpUseCount: () => bumpUseCount,
     cardDrag: () => cardDrag,
     copiedToastMsg: () => copiedToastMsg,
@@ -18466,7 +18509,7 @@ What you type stays in this browser only.`;
     const addHadFocus = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("pill-add");
     pills.innerHTML = "";
     const hc = intentCats();
-    const mk = (id, label, n, drag) => {
+    const mk = (id, label2, n, drag) => {
       const b = document.createElement("div");
       let extra = "";
       const on = id ? cats.indexOf(id) > -1 : cats.length === 0 && !editionView;
@@ -18475,7 +18518,7 @@ What you type stays in this browser only.`;
         else if (hc.always.indexOf(id) > -1) extra = " hint";
       }
       b.className = "pill" + (on ? " on" : "") + extra + (searchCounts() && id && !n ? " pill-nohit" : "");
-      b.innerHTML = (id ? catIconSvg(id) : '<svg class="e-pillall" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + ICON_ALL + "</svg>") + '<span class="pill-lab" data-i18n-skip>' + esc(label) + "</span>" + (id ? '<span class="pill-r">' + (n || n === 0 ? "<b>" + n + "</b>" : "") + '<span class="pill-e" data-editcat="' + esc(id) + '" title="' + esc(t("Edit this category's names, icon and colour")) + '" aria-label="' + esc(t("Edit this category")) + '">' + ICON_EDIT + "</span></span>" : n || n === 0 ? " <b>" + n + "</b>" : "");
+      b.innerHTML = (id ? catIconSvg(id) : '<svg class="e-pillall" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + ICON_ALL + "</svg>") + '<span class="pill-lab" data-i18n-skip>' + esc(label2) + "</span>" + (id ? '<span class="pill-r">' + (n || n === 0 ? "<b>" + n + "</b>" : "") + '<span class="pill-e" data-editcat="' + esc(id) + '" title="' + esc(t("Edit this category's names, icon and colour")) + '" aria-label="' + esc(t("Edit this category")) + '">' + ICON_EDIT + "</span></span>" : n || n === 0 ? " <b>" + n + "</b>" : "");
       b.dataset.k = id;
       b.setAttribute("role", "button");
       b.setAttribute("aria-pressed", on ? "true" : "false");
@@ -18573,9 +18616,9 @@ What you type stays in this browser only.`;
       }
       setCatsDropArmed(false);
       const railBefore = hooks.captureRail(), relBefore = hooks.railRelKeys();
-      const press = !editionView;
+      const press2 = !editionView;
       setCats([]);
-      setEditionView(press);
+      setEditionView(press2);
       setPendingScrollHit(!!intentIdxs.length);
       const cardsBefore = intentIdxs.length ? null : captureSettle();
       drawPills();
@@ -18584,7 +18627,7 @@ What you type stays in this browser only.`;
       hooks.railEchoRedraw(railBefore, relBefore);
       scrollRailTop();
       scheduleTabSave();
-      if (press) editionSay(t("Cards edition {V} changed or added: {N}.").split("{V}").join(v).split("{N}").join(String(editionMarkedCount())));
+      if (press2) editionSay(t("Cards edition {V} changed or added: {N}.").split("{V}").join(v).split("{N}").join(String(editionMarkedCount())));
     };
     return b;
   }
@@ -19316,6 +19359,15 @@ What you type stays in this browser only.`;
     fresh.forEach((el) => el.classList.add("e-unfolding"));
     setTimeout(() => fresh.forEach((el) => el.classList.remove("e-unfolding")), 260);
   }
+  function animateFoldAll(shut) {
+    const keys = list ? Array.prototype.map.call(list.querySelectorAll(".sep-fold[data-fold-key]"), (b) => b.getAttribute("data-fold-key")) : [];
+    const flip = keys.filter((k) => isCollapsed(k) !== !!shut);
+    if (!flip.length) return;
+    flipCardsAround(() => {
+      flip.forEach((k) => toggleCollapsed(k));
+      hooks.render();
+    }, { clampTravel: 180 });
+  }
   function animateCardReorder(fromId, toId) {
     if (!moveCardOrder(fromId, toId)) return;
     if (!list || mgReduceMotion()) {
@@ -19617,8 +19669,8 @@ What you type stays in this browser only.`;
       const many = ps.length > 1, word = m.seq ? t("STEP") : _L.toUpperCase();
       cardH += ps.map((p, vi) => {
         const on = entrySel && entrySel.id === m.id && entrySel.vi === vi ? " sel" : "";
-        const label = m.seq ? "" : altLabelAt(m, _L, vi);
-        const tag = word + (label ? " " + label : many ? " " + (vi + 1) + "/" + ps.length : "");
+        const label2 = m.seq ? "" : altLabelAt(m, _L, vi);
+        const tag = word + (label2 ? " " + label2 : many ? " " + (vi + 1) + "/" + ps.length : "");
         return '<div class="txt' + cls + on + '" role="button" data-v="' + vi + '"' + (many ? ' title="' + esc(t("Click to copy, or drag to reorder these")) + '"' : ' title="' + esc(t("Click to copy")) + '"') + '><span class="tag">' + esc(tag) + "</span>" + (tag.length > 4 ? '<i class="troom" style="--n:' + tag.length + '"></i>' : "") + (edDiff && edDiff[vi] != null ? edDiff[vi] : escFilled(fill(p, m, true))) + "</div>";
       }).join("");
     } else {
@@ -25925,9 +25977,9 @@ What you type stays in this browser only.`;
     const rows = order.map((i) => {
       const id = intentIdAt(i);
       const on = sel.has(id);
-      const label = intentNavName(i) || "(empty)";
+      const label2 = intentNavName(i) || "(empty)";
       const cats2 = primaryCatLabel(i);
-      return '<label class="' + (on ? "on" : "") + '"><input type="checkbox" value="' + esc(id) + '"' + (on ? " checked" : "") + '><span class="ip-body"><span class="ip-t">' + esc(label) + '</span><span class="ip-cat">' + esc(cats2) + "</span></span></label>";
+      return '<label class="' + (on ? "on" : "") + '"><input type="checkbox" value="' + esc(id) + '"' + (on ? " checked" : "") + '><span class="ip-body"><span class="ip-t">' + esc(label2) + '</span><span class="ip-cat">' + esc(cats2) + "</span></span></label>";
     }).join("");
     return rows || '<div class="manage-empty">' + esc(t("No intents available.")) + "</div>";
   }
@@ -26172,7 +26224,7 @@ What you type stays in this browser only.`;
             const rows = [];
             const paxTag = '<span class="fillmiss">PAX</span>';
             const intTag = '<span class="cbadge hit" title="' + esc(t("Intent")) + '">' + esc(t("int")) + "</span>";
-            const box = (id2, on, dis, tip, label) => rows.push('<label title="' + esc(t(tip)) + '"><input type="checkbox" id="' + id2 + '"' + (on ? " checked" : "") + (dis ? " disabled" : "") + "> " + esc(t(label)).split("{PAX}").join(paxTag).split("{INT}").join(intTag) + "</label>");
+            const box = (id2, on, dis, tip, label2) => rows.push('<label title="' + esc(t(tip)) + '"><input type="checkbox" id="' + id2 + '"' + (on ? " checked" : "") + (dis ? " disabled" : "") + "> " + esc(t(label2)).split("{PAX}").join(paxTag).split("{INT}").join(intTag) + "</label>");
             box(
               "meAlt",
               m.alt,
@@ -27400,7 +27452,7 @@ What you type stays in this browser only.`;
     const older = updating && catalogEditionOlder(c.version, active.version);
     const changes = updating ? editionChanges(active, c, pack) : null;
     const changeHtml = changes ? editionOfferHtml(c, active, changes) : "";
-    const fresh = updating && !older, label = fresh ? editionLabelOf(c) : "";
+    const fresh = updating && !older, label2 = fresh ? editionLabelOf(c) : "";
     const n = (c.cards || []).length, i = catalogIntentCount(c), k = Object.keys(c.categories || {}).length;
     const trustHtml = (line) => line ? '<p class="ec-trust">' + esc(line) + "</p>" : "";
     const wrap = document.createElement("div");
@@ -27464,7 +27516,7 @@ What you type stays in this browser only.`;
       whenTrusted(c).then(() => {
         taking = false;
         close();
-        acceptOffer(c, sig, src, fresh ? { held: active, changes, v: label } : null);
+        acceptOffer(c, sig, src, fresh ? { held: active, changes, v: label2 } : null);
       });
     };
     wrap.querySelectorAll("[data-ec-open]").forEach(wireFolderLink);
@@ -27507,7 +27559,7 @@ What you type stays in this browser only.`;
       const yes = wrap.querySelector("#ecYes");
       if (yes) yes.focus();
     }
-    if (arriving) editionSay(t("Edition {V} is waiting to be loaded; the offer is under the catalog's name.").split("{V}").join(label));
+    if (arriving) editionSay(t("Edition {V} is waiting to be loaded; the offer is under the catalog's name.").split("{V}").join(label2));
     return true;
   }
   function acceptOffer(c, sig, src, ed) {
@@ -27976,21 +28028,21 @@ What you type stays in this browser only.`;
       else orphans.push(row);
     });
     const order = (list2) => list2.sort(mgCardCmp).map((o) => mgCardRow(o.m)).join("");
-    const group = (k, rows, fixed, label) => {
+    const group = (k, rows, fixed, label2) => {
       const n = rows.length;
       const nMac = rows.reduce((sum, o) => sum + macroBlockCount(o.m), 0);
       const key = "cat:" + k;
       const op = mgOpen.has(key);
-      const name = '<span class="mg-cat-fixed">' + esc(label) + "</span>";
+      const name = '<span class="mg-cat-fixed">' + esc(label2) + "</span>";
       const x = !n && k !== "__orphan" ? '<button type="button" class="mg-cat-x2 icbtn" data-delcat="' + esc(k) + '" title="Delete this empty category" aria-label="Delete category">' + ICON_TRASH + "</button>" : "";
       const add = k === "__orphan" ? "" : (function() {
-        const tip = esc(t("Add a card to {CAT}").replace("{CAT}", label));
+        const tip = esc(t("Add a card to {CAT}").replace("{CAT}", label2));
         return '<button type="button" class="mg-cat-add2 icbtn" data-add-card="' + esc(k) + '" title="' + tip + '" aria-label="' + tip + '">' + ICON_PLUS + "</button>";
       })();
       const editc = k === "__orphan" ? "" : '<button type="button" class="mg-cat-edit2 icbtn" data-editcat="' + esc(k) + '" title="' + esc(t("Edit this category's names, icon and colour")) + '" aria-label="Edit category">' + ICON_EDIT + "</button>";
       const alwaysOn = isAlwaysCat(k);
       const roles = k === "__orphan" ? "" : '<button type="button" class="mg-role' + (alwaysOn ? " on" : "") + '" data-role-always="' + esc(k) + '" aria-pressed="' + (alwaysOn ? "true" : "false") + '" title="' + (alwaysOn ? t("Supporting category, relevant regardless of the intent") : t("Make this a supporting category, relevant regardless of the intent")) + '" aria-label="' + esc(t("Supporting category")) + '">' + ICON_ROLE_ALWAYS + "</button>";
-      return '<div class="mg-cat' + (op ? " is-open" : "") + '" data-cat="' + esc(k) + '"><div class="mg-cat-row"' + (k === "__orphan" ? "" : ' data-crow="' + esc(k) + '" title="Drag to reorder"') + '><button type="button" class="mg-tw" data-toggle="' + esc(key) + '" aria-expanded="' + (op ? "true" : "false") + '" title="' + esc(t(op ? "Collapse" : "Expand")) + '" aria-label="' + esc(t(op ? "Collapse" : "Expand")) + " " + esc(label) + '">' + ICON_CHEVRON_R + "</button>" + name + '<span class="mg-cat-n">' + nMac + '</span><span class="mg-cat-acts">' + editc + roles + add + x + '</span></div><div class="mg-cat-body"' + (op ? "" : " hidden") + ">" + (n ? order(rows) : '<div class="manage-empty">' + esc(t("Empty.")) + "</div>") + "</div></div>";
+      return '<div class="mg-cat' + (op ? " is-open" : "") + '" data-cat="' + esc(k) + '"><div class="mg-cat-row"' + (k === "__orphan" ? "" : ' data-crow="' + esc(k) + '" title="Drag to reorder"') + '><button type="button" class="mg-tw" data-toggle="' + esc(key) + '" aria-expanded="' + (op ? "true" : "false") + '" title="' + esc(t(op ? "Collapse" : "Expand")) + '" aria-label="' + esc(t(op ? "Collapse" : "Expand")) + " " + esc(label2) + '">' + ICON_CHEVRON_R + "</button>" + name + '<span class="mg-cat-n">' + nMac + '</span><span class="mg-cat-acts">' + editc + roles + add + x + '</span></div><div class="mg-cat-body"' + (op ? "" : " hidden") + ">" + (n ? order(rows) : '<div class="manage-empty">' + esc(t("Empty.")) + "</div>") + "</div></div>";
     };
     const groups = known.map((k) => group(k, byCat[k], false, CATS[k])).join("");
     const stray = orphans.length ? group("__orphan", orphans, true, t("Uncategorised")) : "";
@@ -28653,7 +28705,7 @@ What you type stays in this browser only.`;
   }
   function settingsBodyHtml() {
     const seg2 = (name, opts, cur) => '<div class="seg set-seg" data-seg="' + name + '" data-n="' + opts.length + '">' + opts.map((o) => '<button type="button" data-val="' + esc(o.v) + '"' + (o.tip ? ' title="' + esc(o.tip) + '"' : "") + (o.v === cur ? ' class="on"' : "") + ">" + esc(o.t) + "</button>").join("") + "</div>";
-    const row = (label, hint, control) => '<div class="set-row"><div class="set-label">' + esc(label) + (hint ? "<small>" + esc(hint) + "</small>" : "") + '</div><div class="set-ctl">' + control + "</div></div>";
+    const row = (label2, hint, control) => '<div class="set-row"><div class="set-label">' + esc(label2) + (hint ? "<small>" + esc(hint) + "</small>" : "") + '</div><div class="set-ctl">' + control + "</div></div>";
     const onoff = (name, on, tipOn, tipOff) => seg2(name, [
       { v: "off", t: t("Off"), tip: tipOff },
       { v: "on", t: t("On"), tip: tipOn }
@@ -30464,6 +30516,204 @@ What you type stays in this browser only.`;
     });
   }
 
+  // src/modules/context-menu.js
+  var ctxEl = null;
+  var ctxBack = null;
+  function press(el, mods) {
+    if (!el) return;
+    const o = Object.assign({ bubbles: true, cancelable: true }, mods || {});
+    el.dispatchEvent(new MouseEvent("click", o));
+  }
+  var label = (el, fallback2) => el && el.getAttribute("aria-label") || fallback2;
+  function ctxRowsFor(target) {
+    if (!target || !target.closest) return null;
+    const card = target.closest("#list .card[data-id]");
+    if (card) return replyRows(card, target);
+    const sep = target.closest("#list .list-sep");
+    if (sep) return headingRows(sep);
+    const row = target.closest("#intentRail .rail-item[data-si]");
+    if (row) return intentRows2(row);
+    const pill = target.closest("#pills .pill[data-k]");
+    if (pill) return pill.dataset.k ? pillRows(pill) : null;
+    const tab = target.closest("#tabsBar .tab[data-tid]");
+    if (tab) return tabRows(tab);
+    return null;
+  }
+  function replyRows(card, target) {
+    const id = card.dataset.id, m = findCard(id);
+    if (!m) return null;
+    const block = target.closest(".txt[data-v]");
+    const vi = block ? +block.dataset.v : entrySel && entrySel.id === id ? entrySel.vi | 0 : 0;
+    const anchor = block || card.querySelector('.txt[data-v="' + vi + '"]') || card;
+    const rows = [{ label: t("Copy"), act: () => {
+      setEntrySel(id, vi);
+      copyCardPart(id, vi, anchor, false);
+    } }];
+    if (CONTENT_LANGS.length > 1) {
+      const other = nextContentLang(cardLang(m));
+      rows.push({
+        label: t("Copy the {LANG} version").replace("{LANG}", String(other).toUpperCase()),
+        act: () => {
+          setEntrySel(id, vi);
+          copyCardPart(id, vi, anchor, true);
+        }
+      });
+    }
+    const btn = (a) => card.querySelector('.cacts [data-act="' + a + '"]');
+    const note = btn("note"), edit = btn("edit"), fav = btn("fav"), hide = btn("hide");
+    rows.push("-");
+    if (edit) rows.push({ label: label(edit, t("Edit this card")), act: () => press(edit) });
+    if (fav) rows.push({ label: label(fav, t("Add to Favourites")), act: () => press(fav) });
+    if (note) rows.push({ label: t("Show the note"), act: () => press(note) });
+    if (hide) rows.push({ label: t(card.classList.contains("is-hidden") ? "Show this card again" : "Put this card away"), act: () => press(hide) });
+    return rows;
+  }
+  function headingRows(sep) {
+    const fold = sep.querySelector(".sep-fold[data-fold-key]");
+    if (!fold) return null;
+    const keys = list ? Array.prototype.map.call(list.querySelectorAll(".sep-fold[data-fold-key]"), (b) => b.getAttribute("data-fold-key")) : [];
+    const shut = isCollapsed(fold.getAttribute("data-fold-key"));
+    const rows = [{ label: t(shut ? "Show these cards" : "Fold this group away"), act: () => press(fold) }];
+    const anyOpen = keys.some((k) => !isCollapsed(k)), anyShut = keys.some((k) => isCollapsed(k));
+    if (anyOpen || anyShut) rows.push("-");
+    if (anyOpen) rows.push({ label: t("Fold every group"), act: () => animateFoldAll(true) });
+    if (anyShut) rows.push({ label: t("Unfold every group"), act: () => animateFoldAll(false) });
+    return rows;
+  }
+  function intentRows2(row) {
+    const si = +row.dataset.si, picked = intentIdxs.indexOf(si) > -1;
+    const rows = [{ label: t(picked ? "Drop this intent" : "Pick this intent"), act: () => press(row) }];
+    if (!picked && intentIdxs.length) rows.push({ label: t("Pick it with the others"), act: () => press(row, { ctrlKey: true }) });
+    const show = row.querySelector("[data-show-intent]");
+    rows.push("-");
+    if (show) {
+      rows.push({ label: label(show, t("Show this intent again")), act: () => press(show) });
+      return rows;
+    }
+    const fav = row.querySelector("[data-fav-intent]"), edit = row.querySelector("[data-edit-intent]"), hide = row.querySelector("[data-hide-intent]");
+    if (fav) rows.push({ label: label(fav, t("Add to Favourites")), act: () => press(fav) });
+    if (edit) rows.push({ label: label(edit, t("Edit this intent")), act: () => press(edit, { ctrlKey: true }) });
+    if (hide) rows.push({ label: label(hide, t("Hide this intent")), act: () => press(hide, { shiftKey: true }) });
+    return rows;
+  }
+  function pillRows(pill) {
+    const k = pill.dataset.k, only = cats.length === 1 && cats[0] === k, inFilter = cats.indexOf(k) > -1;
+    const rows = [{ label: t(only ? "Show every category" : "Show only this category"), act: () => press(pill) }];
+    if (cats.length && !only) rows.push({ label: t(inFilter ? "Take it out of the filter" : "Add it to the filter"), act: () => press(pill, { ctrlKey: true }) });
+    const ed = pill.querySelector("[data-editcat]");
+    if (ed) {
+      rows.push("-");
+      rows.push({ label: t("Edit this category"), act: () => press(ed) });
+    }
+    return rows;
+  }
+  function tabRows(tab) {
+    const id = tab.dataset.tid;
+    const rows = [{ label: t("New tab"), act: () => addTab() }, "-", { label: t("Close this tab"), act: () => closeTabById(id) }];
+    if (tabs.length > 1) rows.push({ label: t("Close the other tabs"), act: () => closeOtherTabs(id) });
+    if (closedTabCount()) rows.push({ label: t("Reopen the last closed tab"), act: () => reopenClosedTab() });
+    return rows;
+  }
+  function closeCtxMenu(giveBack) {
+    const el = ctxEl;
+    ctxEl = null;
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+    const to = ctxBack;
+    ctxBack = null;
+    if (giveBack && to && typeof to.focus === "function" && document.contains(to)) try {
+      to.focus({ preventScroll: true });
+    } catch (_) {
+    }
+  }
+  function openCtxMenu(rows, x, y, byKey) {
+    closeCtxMenu(false);
+    const a = document.activeElement;
+    ctxBack = a && a !== document.body ? a : null;
+    const m = document.createElement("div");
+    m.className = "menu e-ctx";
+    m.setAttribute("role", "menu");
+    m.tabIndex = -1;
+    const items = [];
+    rows.forEach((r, i) => {
+      if (r === "-") {
+        if (i && i < rows.length - 1 && rows[i - 1] !== "-") {
+          const s = document.createElement("div");
+          s.className = "menu-sep";
+          m.appendChild(s);
+        }
+        return;
+      }
+      const b = document.createElement("button");
+      b.type = "button";
+      b.setAttribute("role", "menuitem");
+      b.textContent = r.label;
+      b.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeCtxMenu(false);
+        r.act();
+      };
+      m.appendChild(b);
+      items.push(b);
+    });
+    m.addEventListener("keydown", (e) => {
+      const n = items.length, at = items.indexOf(document.activeElement);
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        closeCtxMenu(true);
+        return;
+      }
+      if (["ArrowDown", "ArrowUp", "Home", "End", "Tab"].indexOf(e.key) < 0 || !n) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const back = e.key === "ArrowUp" || e.key === "Tab" && e.shiftKey;
+      const to = e.key === "Home" ? 0 : e.key === "End" ? n - 1 : ((at < 0 ? back ? 0 : -1 : at) + (back ? -1 : 1) + n) % n;
+      items[to].focus();
+    });
+    document.body.appendChild(m);
+    const w = m.offsetWidth || 220, h = m.offsetHeight || 200;
+    const vw = window.innerWidth || 1280, vh = window.innerHeight || 800;
+    m.style.left = Math.max(4, Math.min(x, vw - w - 4)) + "px";
+    m.style.top = Math.max(4, y + h > vh - 4 ? y - h : y) + "px";
+    ctxEl = m;
+    try {
+      (byKey && items[0] ? items[0] : m).focus({ preventScroll: true });
+    } catch (_) {
+    }
+  }
+  function wireContextMenus() {
+    document.addEventListener("contextmenu", (e) => {
+      if (e.defaultPrevented) return;
+      let target = e.target;
+      if (target && target.closest && target.closest("input,textarea,select,[contenteditable='true'],[contenteditable='']")) return;
+      const sel = window.getSelection ? window.getSelection() : null;
+      if (sel && !sel.isCollapsed && String(sel) && sel.containsNode && sel.containsNode(target, true)) return;
+      const byKey = e.button !== 2;
+      if (byKey && (!target || target === document.body || target === document.documentElement) && entrySel && list) {
+        target = list.querySelector('.card[data-id="' + cssEsc(String(entrySel.id)) + '"] .txt[data-v="' + (entrySel.vi | 0) + '"]') || target;
+      }
+      const rows = ctxRowsFor(target);
+      if (!rows) return;
+      e.preventDefault();
+      let x = e.clientX, y = e.clientY;
+      if (byKey && target && target.getBoundingClientRect) {
+        const r = target.getBoundingClientRect();
+        x = r.left + 8;
+        y = r.bottom;
+      }
+      openCtxMenu(rows, x, y, byKey);
+    });
+    addEventListener("pointerdown", (e) => {
+      if (ctxEl && !ctxEl.contains(e.target)) closeCtxMenu(false);
+    }, true);
+    addEventListener("blur", () => closeCtxMenu(false));
+    addEventListener("resize", () => closeCtxMenu(false));
+    addEventListener("wheel", (e) => {
+      if (ctxEl && !ctxEl.contains(e.target)) closeCtxMenu(false);
+    }, { passive: true, capture: true });
+  }
+
   // src/modules/role-turn.js
   var role_turn_exports = {};
   __export(role_turn_exports, {
@@ -31351,6 +31601,7 @@ What you type stays in this browser only.`;
     wireCaptureKeydown();
     loadShortcuts();
     wireGlobalKeydown();
+    wireContextMenus();
     wireLangTabs();
     wireManageDrag();
     wireTabDrag();

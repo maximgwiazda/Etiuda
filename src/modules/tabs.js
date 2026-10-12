@@ -456,6 +456,10 @@ function reopenClosedTab(entry){
     tabs=last.all.slice();
     begun.forEach(tb=>tabs.push(free(tb)));
     applyTab(tabs.find(x=>x.id===last.active)||tabs[0]);
+  } else if(last.many){
+    /* The others, each back in its place around the one kept; the one in front stays in front. */
+    last.many.forEach(x=>tabs.splice(Math.min(Math.max(x.idx,0), tabs.length),0,free(x.tab)));
+    drawTabs();
   } else if(last.cleared && tabs.length===1 && !tabHasWork(tabs[0])){
     tabs[0]=Object.assign(last.tab,{id:tabs[0].id});
     applyTab(tabs[0]);
@@ -493,6 +497,20 @@ function closeTab(id, ev){
   saveTabSession();
   offerUndo("Tab closed", ()=>reopenClosedTab(kept));
 }
+/* A tab's menu (context-menu.js): close one by its id, close every other, and how many can come back. */
+function closeTabById(id){ closeTab(id); }
+function closeOtherTabs(id){
+  const keep=tabs.find(x=>x.id===id);
+  if(!keep || tabs.length<2) return;
+  snapshotActiveTab();
+  const kept=keepClosed({ many:tabs.map((tab,idx)=>({ tab, idx })).filter(x=>x.tab.id!==id) });
+  tabs=[keep];
+  applyTab(keep);
+  saveTabSession();
+  offerUndo("Other tabs closed", ()=>reopenClosedTab(kept));
+  activeHeard();
+}
+function closedTabCount(){ return closedTabs.length; }
 /* What the tab's own x does, for the key that means the same thing everywhere else. The last
    tab is cleared rather than removed, which is closeTab's rule and not a second one. */
 function closeActiveTab(){
@@ -1263,5 +1281,5 @@ export {
   tabs,
   tabSaveTimer,
   tabInsertAnimating,
-  TAB_FLOOR_W, reopenClosedTab, escapeHeld, askClose
+  TAB_FLOOR_W, reopenClosedTab, escapeHeld, askClose, closeTabById, closeOtherTabs, closedTabCount
 };

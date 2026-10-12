@@ -59,6 +59,7 @@ import * as headerMenus from "./modules/header-menus.js";
 import * as cardScore from "./modules/card-score.js";
 import * as searchBox from "./modules/search-box.js";
 import * as keydown from "./modules/keydown.js";
+import * as contextMenu from "./modules/context-menu.js";
 import * as catalogOffer from "./modules/catalog-offer.js";
 import * as catalogHistory from "./modules/catalog-history.js";
 import * as catalogMerge from "./modules/catalog-merge.js";
@@ -411,6 +412,8 @@ function boot(){
   keydown.wireCaptureKeydown();
   shortcuts.loadShortcuts();
   keydown.wireGlobalKeydown();
+  // Each object's own menu, on a right-click, the Menu key and Shift+F10
+  contextMenu.wireContextMenus();
 
   // The one listener behind every editor's language strip
   langTabs.wireLangTabs();

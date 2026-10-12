@@ -169,6 +169,14 @@ function animateFoldToggle(key){
   fresh.forEach(el=>el.classList.add("e-unfolding"));
   setTimeout(()=>fresh.forEach(el=>el.classList.remove("e-unfolding")),260);
 }
+/* Every group at once, from a heading's menu (context-menu.js): the groups the list shows that are not already as asked,
+   in the one glide a single fold makes. */
+function animateFoldAll(shut){
+  const keys=list ? Array.prototype.map.call(list.querySelectorAll(".sep-fold[data-fold-key]"), b=>b.getAttribute("data-fold-key")) : [];
+  const flip=keys.filter(k=>isCollapsed(k)!==!!shut);
+  if(!flip.length) return;
+  flipCardsAround(()=>{ flip.forEach(k=>toggleCollapsed(k)); hooks.render(); },{clampTravel:180});
+}
 /* A swap during a drag no longer re-renders the list. Two bugs shared that root -
    "cards far from the drag wobble, and on Firefox nothing animates at all": render()
    replaces every node, and content-visibility:auto resolves relevancy a frame AFTER
@@ -470,5 +478,6 @@ export {
   bumpUseCount,
   cardDrag,
   copiedToastMsg,
-  wireListPointer
+  wireListPointer,
+  animateFoldAll
 };
