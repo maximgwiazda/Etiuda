@@ -4180,10 +4180,16 @@ const CARD_B = {
     const behind = node({}, { dataset: { tid: "dp-b" } }); behind.up["#tabsBar .tab[data-tid]"] = behind;
     run(CX.ctxRowsFor(behind), "Close this tab");
     const closedBehind = [strip(), pax.value].join("/");
+    /* a tab BEFORE the one in front, whose typing is not yet kept (Clément's verdict on c0ecc74, his XIp1 and XIp2) */
+    start([["dp-a", "Anna"], ["dp-b", "Bartek"], ["dp-c", "Celina"]], "dp-c");
+    pax.value = "Celina Nowak";
+    const before = node({}, { dataset: { tid: "dp-a" } }); before.up["#tabsBar .tab[data-tid]"] = before;
+    run(CX.ctxRowsFor(before), "Close this tab");
+    const closedBefore = [strip().split(",").map((t) => t.split(":")[0]).join(","), pax.value].join("/");
     check("context-menu.js", "1012x5 a tab's menu opens a new tab, closes this one or every other, and reopens the last closed; the others closed come back by Undo, each in its place, the kept one still in front, and Close this tab on a tab behind leaves that one gone and the one in front still in front",
-      () => eq([tabNames, onlyB, restoredStrip, restoredPax, closedBehind].join("|"),
+      () => eq([tabNames, onlyB, restoredStrip, restoredPax, closedBehind, closedBefore].join("|"),
         "New tab|-|Close this tab|Close the other tabs" + (back0 ? "|Reopen the last closed tab" : "")
-        + "|dp-b:Bartek/Bartek/Other tabs closed|dp-a:Anna,dp-b:Bartek,dp-c:Celina|Bartek|dp-a:Anna,dp-c:Celina/Anna"));
+        + "|dp-b:Bartek/Bartek/Other tabs closed|dp-a:Anna,dp-b:Bartek,dp-c:Celina|Bartek|dp-a:Anna,dp-c:Celina/Anna|dp-b,dp-c/Celina Nowak"));
 
     const pageListen = {};
     globalThis.addEventListener = (k, fn) => { (pageListen[k] = pageListen[k] || []).push(fn); };
