@@ -2435,7 +2435,8 @@ function launchLab(o) {
     return h;
   };
   if (!o.covered) o.covered = () => false;
-  const frame = t => { timersTo(t); const run = frames; frames = []; run.forEach(x => x.fn(t)); };
+  // a frame run at t, stamped `stamp` where the page began it before a long task, else at t
+  const frame = (t, stamp) => { timersTo(t); const run = frames; frames = []; run.forEach(x => x.fn(stamp == null ? t : stamp)); };
   // frames every `every` ms (the display's 60 a second unless given) up to `until`, the timers between them
   const play = (until, every) => { const d = every || 1000 / 60; for (let t = clock + d; t <= until; t += d) frame(t); timersTo(until); };
   // a resize as the page's observers meet it: every ResizeObserver made so far is called
@@ -2540,21 +2541,96 @@ function launchMarkTests() {
     got, [["time", 1100], ["time", 1500], ["time", 4000]]);
 
   try {
-    /* A BUSY PAGE GIVES FEW FRAMES (a large catalog's first second): the arrival runs on the wall's time, so the mark
-       has landed and is drawn landed when the launch gives way. Frames every 300 ms, then every 60th of a second. */
+    /* A BUSY PAGE GIVES FEW FRAMES: each moves the arrival on by at most two display frames, so the arrival is seen in
+       every frame the page gives. Frames only every 300 ms reach the ceiling, which gives way with the mark drawn
+       landed. The last item is the largest move one frame gave the arrival, within two display frames. */
     const starve = every => {
       const L = launchLab(), h = L.launch(); L.frame(0); L.timersTo(50); L.ready();
-      let at = null;
-      for (let t = 10; t <= 3000 && !at; t += 10) {
+      let at = null, most = 0;
+      for (let t = 10; t <= 5000 && !at; t += 10) {
+        const was = L.k() ? L.k().ms : 0;
         if (t % every < 10) L.frame(t); else L.timersTo(t);
-        if (h.reason) { const k = L.k(); at = [h.reason, h.ms, !!k && k.ms >= 1000, !!k && k.laid != null]; }
+        if (h.reason) { const k = L.k(); at = [h.reason, h.ms, !!k && k.ms >= 1000, !!k && k.laid != null, most <= 2000 / 60 + 1e-9]; }
+        else if (was < 1000) most = Math.max(most, L.k().ms - was);
       }
       return at;
     };
     got = [starve(300), starve(1000 / 60)];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("with a frame only every 300 ms the mark has landed and is drawn landed before the launch gives way, at the first frame past its second; at the display's rate it gives way at 1.1 s as before",
-    got, [["time", 1200, true, true], ["time", 1100, true, true]]);
+  eq("with a frame only every 300 ms each frame moves the arrival on by at most two display frames, and the ceiling gives way with the mark drawn landed; at the display's rate it gives way at 1.1 s as before",
+    got, [["time", 4000, true, true, true], ["time", 1100, true, true, true]]);
+
+  try {
+    /* THE DESK'S OWN START, as measured on its build in headless Chrome with the shell's sample catalog: boot calls the
+       launch inside a long task, the first frame after it is stamped before that task began, and the next is stamped
+       400 ms after it at full speed (800 ms at half, 1.9 s at a quarter), the first layout between. Neither may carry
+       the arrival on: it is drawn moving at the display's rate after the stall, and the work rises at the arrival's
+       1.1 s, a tenth of a second after it landed. Launched at 300 ms, first frame run at 400 stamped 30. */
+    const desk = stall => {
+      const L = launchLab(); L.timersTo(300);
+      const h = L.launch(), k = L.k();
+      L.frame(400, 30); L.ready();
+      const first = k.ms;
+      L.frame(400 + stall);
+      const after = k.ms;
+      let moving = 2, landedAt = null;
+      for (let t = 400 + stall + 1000 / 60; t <= 8000 && !h.reason; t += 1000 / 60) {
+        const was = k.ms;
+        L.frame(t);
+        if (!h.reason && was < 1000) moving++;
+        if (landedAt === null && k.ms >= 1000) landedAt = t;
+      }
+      const gaveAt = 300 + h.ms;
+      return [first, after <= 2000 / 60 + 1e-9, moving >= 55, h.reason, Math.abs(h.ms - (stall + 1167)) <= 17,
+        landedAt !== null && Math.abs(gaveAt - landedAt - 100) <= 17];
+    };
+    // the control: a first frame 5 ms after the launch is no frame interval, so the display's rate after it lands the mark at 1 s
+    const soon = () => {
+      const L = launchLab();
+      L.launch();
+      const k = L.k();
+      L.frame(5); L.ready();
+      for (let t = 5 + 1000 / 60; t <= 3000; t += 1000 / 60) { L.frame(t); if (k.ms >= 1000) return t <= 1030; }
+      return false;
+    };
+    // and a stall after the landing does not hold the work back: no frame comes from just past 1 s, and it rises at 1.1 s
+    const rise = () => {
+      const L = launchLab(), h = L.launch(), k = L.k();
+      let t = 0;
+      while (k.ms < 1000) { t += 1000 / 60; L.frame(t); if (t === 1000 / 60) L.ready(); }
+      L.timersTo(2000);
+      return [h.reason, h.ms];
+    };
+    got = [desk(400), desk(900), desk(1900), soon(), rise()];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a first frame stamped before the launch and a stall behind it carry the arrival no further than two display frames; it is drawn moving in at least 55 frames after, and the work rises at its 1.1 s, a tenth of a second after it landed; controls: a first frame soon after the launch lands it at 1 s, and a stall after the landing does not hold the rise",
+    got, [[0, true, true, "time", true, true], [0, true, true, "time", true, true], [0, true, true, "time", true, true], true, ["time", 1100]]);
+
+  try {
+    /* A FRAME 400 MS LATE IN THE MIDDLE OF THE GATHERING carries the points home no further than two display frames
+       would: the pull is taken over the arrival's step, not the wall's. Each item is the fraction of a far point's way
+       to its address closed by one frame; the first a display frame's, the second the late frame's. */
+    const L = launchLab(), h = L.launch(), k = L.k(), o = [0, 0, 0, 0];
+    L.ready();
+    let t = 0;
+    while (t + 1000 / 60 < 480) { t += 1000 / 60; L.frame(t); }
+    const pullAt = at => {
+      const was = k.R.list.map(p => p.cx);
+      L.frame(at);
+      const phi = L.sb.__phase(k, Math.min(k.ms, 999));
+      let far = 0, part = null;
+      k.R.list.forEach((p, i) => {
+        L.sb.launchPlace(k.R.C, p, phi, o);
+        const d = k.sx + o[0] * k.scale - was[i];
+        if (Math.abs(d) > far) { far = Math.abs(d); part = (p.cx - was[i]) / d; }
+      });
+      return part;
+    };
+    const one = pullAt(t += 1000 / 60), late = pullAt(t += 400);
+    got = [one > 0.05, late <= 1 - Math.pow(1 - one, 2.5), h.reason];
+  } catch (e) { got = "the lab threw: " + e.message; }
+  eq("a frame 400 ms late mid-gathering closes no more of the points' way home than two display frames would",
+    got, [true, true, ""]);
 
   try {
     /* THE WINDOW GROWS UNDER THE LAUNCH (a maximise): the scatter fills the new area, not the old one, and a point

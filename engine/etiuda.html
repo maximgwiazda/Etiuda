@@ -21585,11 +21585,14 @@ What you type stays in this browser only.`;
       lmLanded();
       return;
     }
-    if (k.last == null) k.last = now;
     const dt = Math.max(0, now - k.last);
-    k.last = now;
-    k.ms += dt;
-    if (k.ms < LM_LANDED_MS) lmStep(k, dt);
+    if (k.framed && dt > 0) k.gap = Math.max(2, Math.min(k.gap, dt));
+    const step = k.ms < LM_LANDED_MS ? Math.min(dt, 2 * k.gap) : dt;
+    k.framed = true;
+    k.last = Math.max(k.last, now);
+    k.ms += step;
+    k.lost += dt - step;
+    if (k.ms < LM_LANDED_MS) lmStep(k, step);
     else lmLanded();
     lmPaint(k);
     k.gapMs = k.ms < LM_LANDED_MS + 200 ? 0 : 1e3 / 15;
@@ -21619,6 +21622,8 @@ What you type stays in this browser only.`;
     });
   }
   function lmStart(k) {
+    k.start = performance.now();
+    k.lost = 0;
     if (k.still()) {
       lmPaint(k);
       lmLanded();
@@ -21632,7 +21637,9 @@ What you type stays in this browser only.`;
       return;
     }
     k.ms = 0;
-    k.last = null;
+    k.last = k.start;
+    k.framed = false;
+    k.gap = 1e3 / 60;
     lmRide(k);
     lmScatter(k);
     k.raf = requestAnimationFrame(lmFrame);
@@ -21701,7 +21708,11 @@ What you type stays in this browser only.`;
       rode: null,
       phase: o.phase || null,
       ms: 0,
-      last: null,
+      last: 0,
+      start: null,
+      lost: 0,
+      gap: 1e3 / 60,
+      framed: false,
       raf: 0,
       hold: 0,
       gapMs: 0,
@@ -21782,6 +21793,12 @@ What you type stays in this browser only.`;
       state.reason = reason;
       state.ms = Math.round(performance.now() - t0);
       off.forEach((f) => f());
+      const k = lmK;
+      if (reason === "time" && k && k.host === veil && k.ms < LM_LANDED_MS && !still()) {
+        k.ms = LM_LANDED_MS;
+        lmPaint(k);
+        lmLanded();
+      }
       const quick = reason === "key" || reason === "click" || reason === "wheel" || still(), out = quick ? LAUNCH_QUICK_MS : LAUNCH_OUT_MS;
       body.style.setProperty("--e-launch-out", out + "ms");
       body.classList.add("e-launch-out");
@@ -21832,7 +21849,14 @@ What you type stays in this browser only.`;
       if (!lmK || lmK.host !== veil) giveWay("moved");
     });
     const wait = minMs, landed = new Promise((r) => whenLaunchLanded(r));
-    Promise.all([ready, new Promise((r) => setTimeout(r, wait)), landed]).then(() => giveWay("time"), () => {
+    const floor = (r) => {
+      const k = lmK, own = !!k && k.host === veil && k.start != null, now = performance.now();
+      const standing = own && !still() && k.ms < LM_LANDED_MS ? Math.max(0, now - k.last - 2 * k.gap) : 0;
+      const due = (own ? k.start + k.lost + standing : t0) + wait - now;
+      if (due > 0) setTimeout(() => floor(r), due);
+      else r();
+    };
+    Promise.all([ready, new Promise(floor), landed]).then(() => giveWay("time"), () => {
       unhold();
       giveWay("time");
     });

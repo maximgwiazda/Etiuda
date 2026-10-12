@@ -1,5 +1,5 @@
 /* THE LAUNCH MARK: the desk's dotted mark at the band's half-width LAUNCH_R, arriving at each start of the
-   program over its work area, and giving way to the work at max(LAUNCH_MIN_MS, the work ready, landed). A key, a click
+   program over its work area, and giving way to the work at max(the arrival's LAUNCH_MIN_MS, the work ready). A key, a click
    or a wheel ends it at once; a key goes on where it was going. Under a quiet switch it is drawn once, landed and
    still, and stands as long as the moving one does. A SECOND PROGRAM IMPORTS THIS FILE from a pinned commit, so it
    imports nothing: the figure below is fifth.js's with R as an input, and test.js holds the two equal at R 10. */
@@ -248,18 +248,21 @@ function lmLanded(){
   lmLandWait=[];
   w.forEach(fn=>setTimeout(fn,0));
 }
-/* The arrival runs on the wall's time from its first frame, so it has landed whenever it is seen, however few frames
-   a busy page gives it; once landed the slow turn asks for frames fifteen times a second. */
+/* THE ARRIVAL'S CLOCK starts with the drawing, and a frame moves it on by at most two of the shortest frame intervals
+   seen (60 Hz's until one is), as the empty mark's gather does: a frame stamped before the start counts nothing, and
+   a stall (boot's work, the first layout) holds the points rather than jumping them, so the arrival is seen
+   whole. What a stall held back is kept in `lost` for the launch's floor. Once landed the slow turn runs on
+   the wall's time and asks for frames fifteen times a second. */
 function lmFrame(now){
   const k=lmK;
   if(!k || !k.host.isConnected){ stopLaunchMark(true); return; }
   k.raf=0;
   if(k.still()){ k.ms=0; lmPaint(k); lmLanded(); return; }
-  if(k.last==null) k.last=now;
   const dt=Math.max(0, now-k.last);
-  k.last=now;
-  k.ms+=dt;
-  if(k.ms<LM_LANDED_MS) lmStep(k, dt); else lmLanded();
+  if(k.framed && dt>0) k.gap=Math.max(2, Math.min(k.gap, dt));
+  const step=k.ms<LM_LANDED_MS ? Math.min(dt, 2*k.gap) : dt;
+  k.framed=true; k.last=Math.max(k.last, now); k.ms+=step; k.lost+=dt-step;
+  if(k.ms<LM_LANDED_MS) lmStep(k, step); else lmLanded();
   lmPaint(k);
   k.gapMs=k.ms<LM_LANDED_MS+200 ? 0 : 1000/15;
   k.hold=setTimeout(()=>{ k.hold=0; k.raf=requestAnimationFrame(lmFrame); }, k.gapMs);
@@ -282,9 +285,10 @@ function lmScatter(k){
 }
 // A cover standing when the arrival would start holds it until the cover is gone, so it is seen.
 function lmStart(k){
+  k.start=performance.now(); k.lost=0;
   if(k.still()){ lmPaint(k); lmLanded(); return; }
   if(k.covered()){ k.hold=setTimeout(()=>{ k.hold=0; lmStart(k); }, 150); return; }
-  k.ms=0; k.last=null; lmRide(k); lmScatter(k);
+  k.ms=0; k.last=k.start; k.framed=false; k.gap=1000/60; lmRide(k); lmScatter(k);
   k.raf=requestAnimationFrame(lmFrame);
 }
 // A drawing a launch stands on is the launch's to stop, unless `all`: a screen's null leaves it alone.
@@ -327,7 +331,7 @@ function syncLaunchMark(host, opts){
   host.insertBefore(cv, host.firstChild);
   const nk=lmK={host:host, spot:spot, cv:cv, ctx:cv.getContext("2d"), F:F, lat:L.lat, to:L.to, rad:L.rad,
     light:new Float32Array(rest.length), laid:null, dots:dots, rest:rest, R:null, rode:null, phase:o.phase||null,
-    ms:0, last:null, raf:0, hold:0, gapMs:0, launch:false,
+    ms:0, last:0, start:null, lost:0, gap:1000/60, framed:false, raf:0, hold:0, gapMs:0, launch:false,
     still:o.still||lmStillDefault, covered:o.covered||(()=>false)};
   lmLayout(nk); lmRide(nk); lmScatter(nk);
   // A resize clears the canvas, so it is painted again at once, moving or held.
@@ -355,9 +359,9 @@ function whenLaunchLanded(fn){
 /* ---- the launch ---- */
 let lmLast=null;
 /* region: the element whose box the mark stands over, from its top to the window's foot. It gives way at the latest
-   of minMs, the work ready and the mark landed. ready: a promise of the work painted. focus(): the field a first key
-   should reach where the program routes no typing of its own, focused when the work is ready and nothing else holds
-   the focus. phase(): the program's clock, as syncLaunchMark's. The
+   of minMs on the arrival's clock, the work ready and the mark landed. ready: a promise of the work painted. focus():
+   the field a first key should reach where the program routes no typing of its own, focused when the work is ready
+   and nothing else holds the focus. phase(): the program's clock, as syncLaunchMark's. The
    body carries e-launch while it stands and e-launch-out while it gives way; the program's sheet says what those hide. */
 function launchMark(opts){
   const o=opts||{}, body=document.body, t0=performance.now(), still=o.still||lmStillDefault;
@@ -386,6 +390,11 @@ function launchMark(opts){
     if(state.reason) return;
     state.reason=reason; state.ms=Math.round(performance.now()-t0);
     off.forEach(f=>f());
+    // the ceiling reached before the mark landed, on a page too busy to show the arrival: the mark goes out landed
+    const k=lmK;
+    if(reason==="time" && k && k.host===veil && k.ms<LM_LANDED_MS && !still()){
+      k.ms=LM_LANDED_MS; lmPaint(k); lmLanded();
+    }
     const quick=reason==="key" || reason==="click" || reason==="wheel" || still(), out=quick ? LAUNCH_QUICK_MS : LAUNCH_OUT_MS;
     body.style.setProperty("--e-launch-out", out+"ms");
     body.classList.add("e-launch-out");
@@ -427,8 +436,17 @@ function launchMark(opts){
     // the mark went on to the screen that was ready, so the work comes in with it
     if(!lmK || lmK.host!==veil) giveWay("moved");
   });
+  /* The floor is minMs on the arrival's clock: from the drawing's start, moved on by what a stall held the arrival
+     back, a stall standing before it lands included, so the mark stands landed as long before the work rises however
+     late its frames came. */
   const wait=minMs, landed=new Promise(r=>whenLaunchLanded(r));
-  Promise.all([ready, new Promise(r=>setTimeout(r,wait)), landed]).then(()=>giveWay("time"), ()=>{ unhold(); giveWay("time"); });
+  const floor=r=>{
+    const k=lmK, own=!!k && k.host===veil && k.start!=null, now=performance.now();
+    const standing=own && !still() && k.ms<LM_LANDED_MS ? Math.max(0, now-k.last-2*k.gap) : 0;
+    const due=(own ? k.start+k.lost+standing : t0)+wait-now;
+    if(due>0) setTimeout(()=>floor(r), due); else r();
+  };
+  Promise.all([ready, new Promise(floor), landed]).then(()=>giveWay("time"), ()=>{ unhold(); giveWay("time"); });
   setTimeout(()=>{ unhold(); giveWay("time"); }, Math.max(wait, maxMs));
   return {giveWay:giveWay, veil:veil, get reason(){ return state.reason; }, get ms(){ return state.ms; }};
 }
