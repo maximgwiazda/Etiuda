@@ -434,8 +434,9 @@ check("18 control: the plain payload carries none of the new keys through either
   const r40 = ED.editionChanges(read(doc()), read(next(d => d.cards.reverse())), NONE);
   check("40 a change in the order of the cards alone counts nothing", kinds(r40) === "0,0,0,0,0", kinds(r40));
   const r40a = ED.editionChanges(read(doc()),
-    read(next(d => { d.cards[0].firstOnly = true; d.cards[1].k = "lamp, bulb"; d.cards[2].commits = true; })), NONE);
-  check("40a a card whose only change is a flag or its keywords counts nothing", kinds(r40a) === "0,0,0,0,0" && !r40a.items.length,
+    read(next(d => { d.cards[0].firstOnly = true; d.cards[1].k = "lamp, bulb"; })), NONE);
+  check("40a a card whose only change is a flag other than the stamp, or its keywords, counts nothing (the stamp is 43c)",
+    kinds(r40a) === "0,0,0,0,0" && !r40a.items.length,
     kinds(r40a) + " | " + said(r40a));
   const asleepDoc = next(d => { d.cards[1].retired = true; });
   const r41 = ED.editionChanges(read(asleepDoc), read(next(d => { d.cards.splice(2, 1); })), NONE);
@@ -451,6 +452,80 @@ check("18 control: the plain payload carries none of the new keys through either
     [said(r42a), said(r42b), said(r42c)].join(" | "));
   const r43 = ED.editionChanges(read(doc()), leadB, { overrides: {}, removed: ["c-b"], favourites: [] });
   check("43 a card this desk removed is nobody's news when the lead changes it", !r43.items.length, said(r43) || "nothing");
+  /* A CHANGE TO A COMMITMENT (board 885, E5): the stamp put on or taken off, or a stamped card's reply in new words, is
+     named in the offer itself, listed first and never counted away, and says so where the agent's own reply stands. */
+  const T = (await import(MOD("ui-lang.js"))).t, ESC = (await import(MOD("esc.js"))).esc;
+  const stampOn = (d, id) => { d.cards.find(c => c.id === id).commits = true; return d; };
+  const pledged = r => r.items.map(i => i.kind + ":" + i.id + (i.commitment ? "!" + (i.stamp || "words") : "") + (i.own ? "*" : "")).join(" ");
+  const offerRow = (c, held, r, id) => { const h = EP.editionOfferHtml(c, held, r), at = h.indexOf('data-ec-id="' + id + '"');
+    return at < 0 ? null : h.slice(at, h.indexOf("</li>", at)); };
+  const says = (row, words) => !!row && row.indexOf("<small>" + ESC(T(words)) + "</small>") > -1;
+  const heldS = read(stampOn(doc(), "c-b")), rewordS = read(stampOn(next(d => bodyIs(d, "c-b", "lead text")), "c-b"));
+  const stampB = read(stampOn(doc(), "c-b"));
+  const r43a = ED.editionChanges(heldS, rewordS, NONE), row43a = offerRow(rewordS, heldS, r43a, "c-b");
+  check("43a a stamped card the lead rewords is named in the offer as a commitment in new words, on a desk that never touched it",
+    pledged(r43a) === "changed:c-b!words" && says(row43a, "commits the firm in new words") && !says(row43a, "you have your own version"),
+    pledged(r43a) + " | " + (row43a ? "a row" : "no row"));
+  const r43b1 = ED.editionChanges(heldS, rewordS, mineOn("c-b")), r43b2 = ED.editionChanges(read(doc()), stampB, mineOn("c-b"));
+  const row43b1 = offerRow(rewordS, heldS, r43b1, "c-b"), row43b2 = offerRow(stampB, read(doc()), r43b2, "c-b");
+  check("43b and on a desk holding its own reply of that card it is named and says the desk has its own version, reworded or newly stamped",
+    pledged(r43b1) === "changed:c-b!words*" && pledged(r43b2) === "changed:c-b!on*"
+      && says(row43b1, "commits the firm in new words") && says(row43b1, "you have your own version")
+      && says(row43b2, "now commits the firm") && says(row43b2, "you have your own version"),
+    pledged(r43b1) + " | " + pledged(r43b2));
+  const r43B = ED.editionChanges(read(doc()), stampB, { overrides: { "c-b": { t: "My B" } }, removed: [], favourites: [] });
+  check("43B THE CONTROL: a desk whose own edit of that card is its title alone has no version of its reply to say",
+    pledged(r43B) === "changed:c-b!on" && !says(offerRow(stampB, read(doc()), r43B, "c-b"), "you have your own version"), pledged(r43B));
+  const r43c1 = ED.editionChanges(read(doc()), stampB, NONE), r43c2 = ED.editionChanges(heldS, read(doc()), NONE);
+  check("43c a stamp put on or taken off with no word changed is named, a changed card in the counts, committing the firm now or no longer",
+    pledged(r43c1) === "changed:c-b!on" && pledged(r43c2) === "changed:c-b!off" && kinds(r43c1) === "1,0,0,0,0"
+      && says(offerRow(stampB, read(doc()), r43c1, "c-b"), "now commits the firm")
+      && says(offerRow(read(doc()), heldS, r43c2, "c-b"), "no longer commits the firm"),
+    pledged(r43c1) + " | " + pledged(r43c2));
+  const titleB = read(stampOn(next(d => { d.cards[1].title.en = "B, retitled"; }), "c-b"));
+  const r43d1 = ED.editionChanges(read(doc()), read(three), NONE), r43d2 = ED.editionChanges(heldS, titleB, NONE);
+  const row43d1 = offerRow(read(three), read(doc()), r43d1, "c-a"), row43d2 = offerRow(titleB, heldS, r43d2, "c-b");
+  check("43d a text change is said as before: an unstamped card reworded and a stamped card retitled are changed cards with no line of a commitment",
+    pledged(r43d1) === "changed:c-a new:c-d retired:c-c" && pledged(r43d2) === "changed:c-b"
+      && !!row43d1 && row43d1.indexOf("<small>") < 0 && !!row43d2 && row43d2.indexOf("<small>") < 0,
+    pledged(r43d1) + " | " + pledged(r43d2));
+  const r43e = ED.editionChanges(heldS, stampB, mineOn("c-b"));
+  check("43e a stamped card the edition leaves as it was says nothing, on a desk with its own reply of it too, and the offer adds nothing",
+    !r43e.items.length && EP.editionOfferHtml(stampB, heldS, r43e) === "", pledged(r43e) || "nothing");
+  const shelfOf = touch => next(d => { for (let i = 0; i < 11; i++) {
+    const c = { id: "c-x" + i, shelf: "t-op", bodyShape: "plain", title: { en: "X" + i }, body: { en: "X body." } };
+    touch(c, i); d.cards.push(c); } });
+  const heldX = read(shelfOf(() => {}));
+  const oneX = read(shelfOf((c, i) => { if (i < 10) c.body.en = "X body, changed."; else c.commits = true; }));
+  const allX = read(shelfOf(c => { c.commits = true; }));
+  const named = (c, r) => Array.from(EP.editionOfferHtml(c, heldX, r).matchAll(/data-ec-id="([^"]+)"/g)).map(x => x[1]);
+  const r43f1 = ED.editionChanges(heldX, oneX, NONE), r43f2 = ED.editionChanges(heldX, allX, NONE);
+  const shown1 = named(oneX, r43f1), shown2 = named(allX, r43f2);
+  check("43f a commitment is listed first and the offer's eight never cut one: one stamped among ten reworded heads the list, and eleven stamped are all named",
+    shown1.length === 8 && shown1[0] === "c-x10" && shown2.length === 11 && EP.editionOfferHtml(allX, heldX, r43f2).indexOf('class="ec-more"') < 0,
+    shown1.length + " named, first " + shown1[0] + " | " + shown2.length + " named of 11");
+  const r43g = ED.editionChanges(read(doc()), stampB, NONE, true), r43g2 = ED.editionChanges(heldS, rewordS, NONE, true);
+  const DL = await import(MOD("desk-look.js"));
+  const lookFiles = { "e5-team.ec": JSON.stringify(doc()), "e5-hers.ec": JSON.stringify(stampOn(doc(), "c-b")) };
+  globalThis.window.E_HOST = { readCatalogFile: async name => ({ name: name, text: lookFiles[name] }) };
+  const lookWords = await DL.deskChangeWords({ name: "e5-hers.ec", desk: { id: "k-e5" }, mtime: 1 }, { file: { name: "e5-team.ec", mtime: 1 } });
+  delete globalThis.window.E_HOST;
+  check("43g a colleague's desk is compared by its text alone, as before: Look counts a stamp alone as no change, and a reworded stamped card as no commitment",
+    !r43g.items.length && pledged(r43g2) === "changed:c-b" && JSON.stringify(lookWords) === "[]",
+    (pledged(r43g) || "nothing") + " | " + pledged(r43g2) + " | Look counts " + JSON.stringify(lookWords));
+  const paneOf = (r, held, c, ov) => { const was = PK.pack.overrides; PK.pack.overrides = ov;
+    try { return EP.editionPaneHtml(r.items[0], held, c); } finally { PK.pack.overrides = was; } };
+  const pane1 = paneOf(r43c1, read(doc()), stampB, {});
+  const pane2 = paneOf(r43b2, read(doc()), stampB, { "c-b": { en: "my edit" } });
+  const pane3 = paneOf(r43b1, heldS, rewordS, { "c-b": { en: "my edit" } });
+  check("43h the panel shows the stamp as a Commitment row, as it was and as it becomes; beside a newly stamped card the agent's own reply, with no take; and the take where the lead reworded it",
+    pane1.indexOf('<div class="ed-field">' + ESC(T("Commitment")) + "</div>") > -1
+      && pane1.indexOf('<span class="ed-del">' + ESC(T("Does not commit the firm")) + "</span>") > -1
+      && pane1.indexOf('<span class="ed-ins">' + ESC(T("Commits the firm")) + "</span>") > -1 && pane1.indexOf("data-ed-take") < 0
+      && pane2.indexOf(ESC(T("Your version"))) > -1 && pane2.indexOf(">my edit<") > -1 && pane2.indexOf("data-ed-take") < 0
+      && pane3.indexOf("data-ed-take") > -1,
+    ["Commitment row " + (pane1.indexOf(ESC(T("Commitment"))) > -1), "own reply " + (pane2.indexOf(">my edit<") > -1),
+      "take " + (pane2.indexOf("data-ed-take") > -1) + "/" + (pane3.indexOf("data-ed-take") > -1)].join(", "));
   const noted = n => Object.assign(doc(), { langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }], notes: n });
   check("44 the lead's note: none gives none, English alone shows on a Polish desk, Polish shows there when written",
     ED.editionNoteText(read(doc()), "pl") === "" && ED.editionNoteText(read(noted({ en: "Why." })), "pl") === "Why."
@@ -488,6 +563,17 @@ check("18 control: the plain payload carries none of the new keys through either
   check("49a and a field of the agent's edit the lead never changed stays: the title the agent wrote, beside the team's text",
     ovB() === JSON.stringify({ t: "My title" }) && bodyOf("c-b") === "lead text" && titleOf("c-b") === "My title",
     ovB() + " | " + bodyOf("c-b") + " | " + titleOf("c-b"));
+  fresh(); land(next(d => stampOn(d, "c-b")));
+  const stampedB = CMD.cardCommits(AP.cards.find(c => c.id === "c-b"));
+  check("49b the load keeps a desk's own reply under the stamp the lead put on, as the offer said: the stamp arrives and the reply stays the agent's",
+    stampedB && bodyOf("c-b") === "my edit" && ovB() === JSON.stringify({ en: "my edit" }), stampedB + " | " + bodyOf("c-b") + " | " + ovB());
+  fresh();
+  { const taken = read(stampOn(next(d => bodyIs(d, "c-b", "lead text")), "c-b"));
+    CC.takeTeamText(taken, "c-b", true);
+    CC.carryCardLayer(taken); ST.lsSet(CT.E_CATALOG_STORE, JSON.stringify(taken), true); CT.eApplyCatalog(taken);
+    PK.pack.baseCards = null; RB.rebuildCards(); }
+  check("49c and the team's new text taken in the offer carries a commitment's new words: after the load the reply is the edition's, under its stamp",
+    ovB() === "null" && bodyOf("c-b") === "lead text" && CMD.cardCommits(AP.cards.find(c => c.id === "c-b")), ovB() + " | " + bodyOf("c-b"));
   const own = (body) => { fresh(); PK.pack.custom = [{ id: "u:own1", c: "t-op", t: "Mine", en: body }];
     PK.pack.favourites.push("u:own1"); RB.rebuildCards(); };
   const adopting = next(d => d.cards.push({ id: "u:own1", shelf: "t-op", bodyShape: "plain", title: { en: "Mine" }, body: { en: "Mine body." } }));
