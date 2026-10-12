@@ -2535,6 +2535,9 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
    border the others carry so every badge sits one height. */
 .cbadge.edn{border:1px solid transparent}
 .modal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:16px}
+/* A dialog's and a bubble's words do not select like a page's; what a field holds and a path a person copies still do. */
+.modal,.bub{user-select:none;-webkit-user-select:none}
+.modal :is(input,textarea,select,[contenteditable="true"],.mono,code),.bub :is(input,textarea,.mono,code){user-select:text;-webkit-user-select:text}
 /* A keyframe, not a transition - the element returns from display:none with no previous
    value. The way out is a copy on the dismiss tier (.e-gone), which the next surface to open
    ends, so a flow that closes one dialog and opens another never cross-fades the two.
@@ -7178,6 +7181,7 @@ What you type stays in this browser only.`;
     "Removed from Favourites": "Usunięto z Ulubionych",
     "Shown again": "Pokazano ponownie",
     "Tab cleared": "Wyczyszczono rozmowę",
+    "Tab closed": "Zamknięto rozmowę",
     "no text yet": "jeszcze bez tekstu",
     "Copy the report: counts and environment only, never your content": "Skopiuj raport: tylko liczby i dane o środowisku, nigdy treść kart",
     "All tabs closed": "Zamknięto wszystkie rozmowy",
@@ -10391,10 +10395,12 @@ What you type stays in this browser only.`;
     drawPills: () => drawPills,
     drawTabs: () => drawTabs,
     escCloseAllTabsStep: () => escCloseAllTabsStep,
+    escapeHeld: () => escapeHeld,
     escapeLadderStep: () => escapeLadderStep,
     fitTabLabels: () => fitTabLabels,
     initTabs: () => initTabs,
     noteActive: () => noteActive,
+    reopenClosedTab: () => reopenClosedTab,
     saveTabSession: () => saveTabSession,
     sayLive: () => sayLive,
     scheduleTabSave: () => scheduleTabSave,
@@ -11557,6 +11563,39 @@ What you type stays in this browser only.`;
     toast("The new tab starts with cleared fields and your settings kept.");
     activeHeard();
   }
+  var closedTabs = [];
+  var CLOSED_KEEP = 10;
+  function keepClosed(entry) {
+    closedTabs.push(JSON.parse(JSON.stringify(entry)));
+    if (closedTabs.length > CLOSED_KEEP) closedTabs.shift();
+    return closedTabs[closedTabs.length - 1];
+  }
+  function reopenClosedTab(entry) {
+    const at = entry ? closedTabs.lastIndexOf(entry) : closedTabs.length - 1;
+    if (at < 0) return false;
+    const last = closedTabs.splice(at, 1)[0];
+    snapshotActiveTab();
+    const free = (tb) => {
+      if (tabs.some((x) => x.id === tb.id)) tb.id = blankTab().id;
+      return tb;
+    };
+    if (last.all) {
+      const begun = tabs.filter(tabHasWork);
+      tabs = last.all.slice();
+      begun.forEach((tb) => tabs.push(free(tb)));
+      applyTab(tabs.find((x) => x.id === last.active) || tabs[0]);
+    } else if (last.cleared && tabs.length === 1 && !tabHasWork(tabs[0])) {
+      tabs[0] = Object.assign(last.tab, { id: tabs[0].id });
+      applyTab(tabs[0]);
+    } else {
+      const tb = free(last.tab);
+      tabs.splice(Math.min(Math.max(last.idx, 0), tabs.length), 0, tb);
+      applyTab(tb);
+    }
+    saveTabSession();
+    activeHeard();
+    return true;
+  }
   function closeTab(id, ev) {
     if (ev) {
       ev.preventDefault();
@@ -11564,15 +11603,18 @@ What you type stays in this browser only.`;
     }
     const idx = tabs.findIndex((x) => x.id === id);
     if (idx < 0) return;
+    if (id === activeTabId) snapshotActiveTab();
     if (tabs.length === 1) {
-      const keepId = tabs[0].id;
+      const keepId = tabs[0].id, kept2 = tabHasWork(tabs[0]) ? keepClosed({ tab: tabs[0], idx: 0, cleared: true }) : null;
       tabs[0] = Object.assign(blankTab(), { id: keepId });
       applyTab(tabs[0]);
       saveTabSession();
-      toast("Tab cleared");
+      if (kept2) offerUndo("Tab cleared", () => reopenClosedTab(kept2));
+      else toast("Tab cleared");
       activeHeard();
       return;
     }
+    const kept = keepClosed({ tab: tabs[idx], idx, cleared: false });
     const wasActive = id === activeTabId;
     tabs.splice(idx, 1);
     if (wasActive) {
@@ -11581,6 +11623,7 @@ What you type stays in this browser only.`;
       drawTabs();
     }
     saveTabSession();
+    offerUndo("Tab closed", () => reopenClosedTab(kept));
   }
   function closeActiveTab() {
     if (activeTabId) closeTab(activeTabId);
@@ -11592,12 +11635,19 @@ What you type stays in this browser only.`;
     return !!(String(tb.pax || "").trim() || String(tb.intentBox || "").trim() || String(tb.who || "").trim() || String(tb.intentText || "").trim() || tb.cats && tb.cats.length || tb.intentIdxs && tb.intentIdxs.length);
   }
   function closeAllTabs() {
+    snapshotActiveTab();
+    const kept = tabs.some(tabHasWork) ? keepClosed({ all: tabs, active: activeTabId }) : null;
     const keepId = tabs[0] ? tabs[0].id : null;
     tabs = [keepId ? Object.assign(blankTab(), { id: keepId }) : blankTab()];
     applyTab(tabs[0]);
     saveTabSession();
-    toast("All tabs closed");
+    if (kept) offerUndo("All tabs closed", () => reopenClosedTab(kept));
+    else toast("All tabs closed");
     activeHeard();
+  }
+  var escHeldNow = false;
+  function escapeHeld(on) {
+    escHeldNow = !!on;
   }
   function escCloseAllTabsStep() {
     snapshotActiveTab();
@@ -11605,6 +11655,7 @@ What you type stays in this browser only.`;
       tabWipeArmedAt = 0;
       return false;
     }
+    if (escHeldNow) return false;
     const now = Date.now();
     if (now - tabWipeArmedAt > TOAST_MS || toastSerial !== tabWipeToast) {
       toast("Press Esc again to close all tabs");
@@ -29100,7 +29151,9 @@ What you type stays in this browser only.`;
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopImmediatePropagation();
+        escapeHeld(e.repeat);
         escapeLadderStep();
+        escapeHeld(false);
         return;
       }
       if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
@@ -29167,6 +29220,17 @@ What you type stays in this browser only.`;
         }
         setRailSel(to);
         railDecorate(true);
+        return;
+      }
+      if (e.ctrlKey && !e.shiftKey && (e.code === "KeyC" || e.key === "c" || e.key === "C") && entrySel && markSurface() === "card" && intentEl.selectionStart === intentEl.selectionEnd) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        kbdNav(true);
+        try {
+          intentEl.blur();
+        } catch (_) {
+        }
+        copyEntrySel(false);
         return;
       }
       if (e.key === "Enter") {
@@ -30236,6 +30300,17 @@ What you type stays in this browser only.`;
         hooks.runShortcut("tabClose");
         return;
       }
+      if (eHost() && e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && (e.code === "KeyT" || e.key === "t" || e.key === "T")) {
+        e.preventDefault();
+        hooks.runShortcut("tabReopen");
+        return;
+      }
+      if (!inField && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.code === "KeyC" || e.key === "c" || e.key === "C") && !String(window.getSelection && window.getSelection() || "")) {
+        if (hooks.runShortcut("copyMarked") !== false) {
+          e.preventDefault();
+          return;
+        }
+      }
       const plain = !e.ctrlKey && !e.altKey && !e.metaKey;
       if (plain && (e.key === "PageDown" || e.key === "PageUp") && pageKeyScroll(e.key, lanesPageScroller())) {
         e.preventDefault();
@@ -30300,7 +30375,7 @@ What you type stays in this browser only.`;
       }
       if (eventMatchesAction(e, "escape")) {
         e.preventDefault();
-        hooks.runShortcut("escape");
+        hooks.runShortcut(e.repeat ? "escapeHeld" : "escape");
         return;
       }
       if (e.ctrlKey || e.altKey || e.metaKey) return;
@@ -30625,6 +30700,18 @@ What you type stays in this browser only.`;
       closeActiveTab();
       return true;
     }
+    if (id === "tabReopen") {
+      reopenClosedTab();
+      return true;
+    }
+    if (id === "escapeHeld") {
+      escapeHeld(true);
+      try {
+        return runShortcut("escape");
+      } finally {
+        escapeHeld(false);
+      }
+    }
     if (id === "maintenance") {
       closeLooseOverlays();
       openMaintenance();
@@ -30739,6 +30826,11 @@ What you type stays in this browser only.`;
       return navPillEnd(id === "navPillLast" ? 1 : -1);
     }
     if (/^nextCopy[1-4]$/.test(id)) return copyNextReply(+id.slice(8) - 1);
+    if (id === "copyMarked") {
+      if (!entrySel) return false;
+      kbdNav(true);
+      return copyEntrySel(false);
+    }
     if (id === "copy" || id === "copyOther") {
       kbdNav(true);
       if (id === "copy" && semiKind === "intent" && railMarkIdx >= 0 && !railMarkUsed) {

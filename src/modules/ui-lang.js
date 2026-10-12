@@ -687,6 +687,7 @@ UI_STRINGS.pl={
   "Removed from Favourites":"Usunięto z Ulubionych",
   "Shown again":"Pokazano ponownie",
   "Tab cleared":"Wyczyszczono rozmowę",
+  "Tab closed":"Zamknięto rozmowę",
   "no text yet":"jeszcze bez tekstu",
   "Copy the report: counts and environment only, never your content":"Skopiuj raport: tylko liczby i dane o środowisku, nigdy treść kart",
   "All tabs closed":"Zamknięto wszystkie rozmowy",
