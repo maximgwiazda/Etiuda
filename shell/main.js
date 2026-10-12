@@ -1272,27 +1272,85 @@ function teamWhole(doc) {
         format: "der", type: "spki" }), Buffer.from(sig.value, "hex"));
   } catch { return false; }
 }
-/* Whether the ring beside the catalogs lists the team's lead key for a catalog the team covers, read as v2RingRead reads it. */
-function ringVouches(doc) {
-  let ring = null;
-  try {
-    const file = path.join(catalogFolder(), RING_NAME);
-    if (fs.statSync(file).size <= 65536) ring = JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch { return false; }
+/* Whether a ring document lists this team's lead key for a catalog the team covers, read as v2RingRead reads a ring.
+   The file itself is the shell's to read. */
+function memberRingVouches(doc, ring) {
   const covers = Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [];
   return !!ring && typeof ring === "object" && +ring.format === 1 && ring.kind === "etiuda-ring" && Array.isArray(ring.keys)
     && ring.keys.some(e => !!e && typeof e === "object" && covers.indexOf(String(e.catalog)) >= 0 && e.keyId === doc.lead.keyId
       && e.alg === "Ed25519" && e.public === doc.lead.public);
 }
-/* The team key this desk's own roster entry wraps for the file's epoch, or null; false where the desk's own box would
-   not open, which a later read may yet do. HPKE binds the box and the aad the id. */
-function ownTeamKey(doc) {
-  if (!deskBranch) return null;
-  const id = branchIdOf(deskBranch.sign.pub);
-  const e = doc.roster.find(x => !!x && !!x.desk && x.desk.id === id);
-  if (!e || !e.wrap) return null;
-  const sk = openPrivate(deskBranch.box.priv);
-  return sk ? unwrapTeamKey(sk, e.wrap, doc.id, doc.epoch, id) : false;
+/* A copy of the membership a heed is given, so the caller's pins, keys and barred list stay as they were. */
+function memberStateCopy(state) {
+  const pins = Object.assign({}, state && state.pins);
+  const keys = {}, src = (state && state.keys) || {};
+  Object.keys(src).forEach(t => { keys[t] = Object.assign({}, src[t]); });
+  return { pins: pins, keys: keys, barred: Array.isArray(state && state.barred) ? state.barred.slice() : [],
+    join: (state && state.join) || null };
+}
+/* What heeding one team file changes for one member. `doc` is the parsed file, or null. `state` is
+   {pins, keys, barred, join}: pins is a team id to {keyId, public}, keys is a team id to the epochs
+   already kept, barred is the team ids with no first admission, and join is the one request or null.
+   `seen` is {file, member, ring}: file is the path the words name, member is null or {id, sk} where sk
+   is the opened box key, false where that box would not open, or null where it has not been opened yet,
+   and ring is the parsed ring, null where there is none, or absent where it has not been read.
+   Returns the new state, the key (a buffer, null, or false where the box would not open) and the lines
+   to say. A new epoch's key is returned for the caller to seal; it is not written into state, because
+   a seal can fail. Where needKey or needRing is set, nothing was decided and the caller calls again.
+   Pure: only these declarations, crypto, Buffer and the arguments. */
+function memberHeed(doc, state, seen) {
+  const file = seen && typeof seen.file === "string" ? seen.file : "";
+  const look = seen || {};
+  const out = memberStateCopy(state);
+  const said = [];
+  const ret = (extra) => Object.assign({ state: out, key: null, said: said, stampClear: false, changed: false,
+    stop: false, needKey: false, needRing: false, team: "", epoch: 0, keep: false, unbar: false, pinned: false }, extra);
+  if (!teamWhole(doc)) {
+    said.push(file + " is not a team file whole under its lead's key, so nothing in it is used");
+    return ret({ stop: true });
+  }
+  const lead = { keyId: doc.lead.keyId, public: doc.lead.public }, pin = out.pins[doc.id], hadPin = !!pin;
+  const handed = hadPin && (pin.keyId !== lead.keyId || pin.public !== lead.public);
+  if (handed && !handedTo(doc, pin)) {
+    said.push(file + " is signed by a key other than the lead's this desk trusts for team " + doc.id + ", so nothing in it is used");
+    return ret({ stop: true, team: doc.id });
+  }
+  const join = out.join;
+  const asked = !hadPin && join && join.team === doc.id ? (join.opened ? join.opened.lead : { keyId: "", public: "" })
+    : !hadPin && out.barred.indexOf(doc.id) >= 0 ? { keyId: "", public: "" } : null;
+  if (asked && (asked.keyId !== lead.keyId || asked.public !== lead.public)) {
+    if (asked.public)
+      said.push(file + " is signed by a key other than the lead this desk asked to join team " + doc.id + ", so nothing in it is used");
+    return ret({ stop: true, team: doc.id });
+  }
+  const member = look.member;
+  let entry = null;
+  if (member && Array.isArray(doc.roster)) entry = doc.roster.find(x => !!x && !!x.desk && x.desk.id === member.id) || null;
+  const hasWrap = !!(entry && entry.wrap);
+  if (hasWrap && (member.sk === null || member.sk === undefined)) return ret({ needKey: true, team: doc.id });
+  let key = null;
+  if (hasWrap) key = member.sk ? unwrapTeamKey(member.sk, entry.wrap, doc.id, doc.epoch, member.id) : false;
+  if (!hadPin && !key && look.ring === undefined) return ret({ needRing: true, key: key, stampClear: key === false, team: doc.id });
+  if (!hadPin && !key && !memberRingVouches(doc, look.ring)) return ret({ stop: true, key: key, stampClear: key === false, team: doc.id });
+  let changed = false, pinned = false, unbar = false;
+  if (!hadPin || handed) { out.pins[doc.id] = lead; pinned = true; changed = true; }
+  if (!hadPin) {
+    const at = out.barred.indexOf(doc.id);
+    if (at >= 0) out.barred.splice(at, 1);
+    unbar = true;
+  }
+  if (handed) said.push(file + " hands team " + doc.id + " from the lead key this desk trusted to " + lead.public + ", which it now trusts instead");
+  const kept = out.keys[doc.id] || {};
+  return ret({ key: key, stampClear: key === false, changed: changed, team: doc.id, epoch: doc.epoch,
+    keep: !!(key && !kept[doc.epoch]), unbar: unbar, pinned: pinned });
+}
+/* The ring beside the catalogs, or null where it is missing, larger than the reader allows, or not JSON. */
+function readRing() {
+  try {
+    const ringFile = path.join(catalogFolder(), RING_NAME);
+    if (fs.statSync(ringFile).size <= 65536) return JSON.parse(fs.readFileSync(ringFile, "utf8"));
+  } catch { /* a missing ring vouches for nothing */ }
+  return null;
 }
 function teamSay(line) {
   if (teamSaid.has(line)) return;
@@ -1320,37 +1378,35 @@ function heedTeam() {
   teamStamp = stamp;
   let doc = null;
   try { if (text !== null) doc = JSON.parse(text.replace(/^\uFEFF/, "")); } catch { return; }
-  if (!teamWhole(doc)) { teamSay(file + " is not a team file whole under its lead's key, so nothing in it is used"); return; }
-  const lead = { keyId: doc.lead.keyId, public: doc.lead.public }, pin = teamPins[doc.id];
-  const handed = !!pin && (pin.keyId !== lead.keyId || pin.public !== lead.public);
-  if (handed && !handedTo(doc, pin)) {
-    teamSay(file + " is signed by a key other than the lead's this desk trusts for team " + doc.id + ", so nothing in it is used");
-    return;
-  }
   // A forgotten lead is held like a request still waiting: no lead is known until an answered request names one.
-  const asked = !pin && teamJoin && teamJoin.team === doc.id ? (teamJoin.opened ? teamJoin.opened.lead : { keyId: "", public: "" })
-    : !pin && teamBarred.has(doc.id) ? { keyId: "", public: "" } : null;
-  if (asked && (asked.keyId !== lead.keyId || asked.public !== lead.public)) {
-    if (asked.public)
-      teamSay(file + " is signed by a key other than the lead this desk asked to join team " + doc.id + ", so nothing in it is used");
-    return;
+  const state = { pins: teamPins, keys: teamKeys, barred: Array.from(teamBarred), join: teamJoin };
+  const member = deskBranch ? { id: branchIdOf(deskBranch.sign.pub), sk: null } : null;
+  let seen = { file: file, member: member, ring: undefined };
+  let r = memberHeed(doc, state, seen);
+  if (r.needKey) {
+    const sk = openPrivate(deskBranch.box.priv);
+    seen = { file: file, member: { id: member.id, sk: sk || false }, ring: undefined };
+    r = memberHeed(doc, state, seen);
   }
-  const key = ownTeamKey(doc);
-  if (key === false) teamStamp = "";
-  if (!pin && !key && !ringVouches(doc)) return;
-  let changed = false;
-  if (!pin || handed) { teamPins[doc.id] = lead; changed = true; }
-  if (!pin) teamBarred.delete(doc.id);
-  if (handed) teamSay(file + " hands team " + doc.id + " from the lead key this desk trusted to " + lead.public + ", which it now trusts instead");
-  const kept = teamKeys[doc.id] || {};
-  if (key && !kept[doc.epoch]) {
+  if (r.needRing) {
+    seen = { file: file, member: seen.member, ring: readRing() };
+    r = memberHeed(doc, state, seen);
+  }
+  r.said.forEach(teamSay);
+  if (r.stampClear) teamStamp = "";
+  if (r.stop || r.needKey || r.needRing) return;
+  if (r.pinned) teamPins[r.team] = r.state.pins[r.team];
+  if (r.unbar) teamBarred.delete(r.team);
+  let changed = r.changed;
+  if (r.keep) {
     try {
       if (!branchSealable()) throw new Error("safeStorage is not available");
-      kept[doc.epoch] = safeStorage.encryptString(key.toString("base64")).toString("base64");
-      teamKeys[doc.id] = kept;
+      const kept = teamKeys[r.team] || {};
+      kept[r.epoch] = safeStorage.encryptString(r.key.toString("base64")).toString("base64");
+      teamKeys[r.team] = kept;
       ecFactsRead.clear();
       changed = true;
-    } catch (e) { teamStamp = ""; teamSay("the team key for " + doc.id + " could not be kept - " + e.message); }
+    } catch (e) { teamStamp = ""; teamSay("the team key for " + r.team + " could not be kept - " + e.message); }
   }
   if (changed) persistDeskEnvelope();
 }
@@ -1401,12 +1457,17 @@ function writeJoin(doc) {
   }
   writeReplacing(file, JSON.stringify(doc, null, 1) + "\n");
 }
-function joinRequestDoc(j, reveal) {
-  const me = branchIdentity(false), desk = { id: me.id, key: me.key, box: me.box };
+/* The request a member writes. `me` is {id, key, box}, `j` the join this desk keeps, `reveal` the lead's
+   opening or null. The same bytes joinRequestDoc has always written. Pure, like the join declarations above. */
+function memberRequestDoc(j, reveal, me) {
+  const desk = { id: me.id, key: me.key, box: me.box };
   if (j.name) desk.name = j.name;
   const doc = { format: 1, kind: JOIN_KIND, team: j.team, desk: desk, date: new Date(j.asked).toISOString(), commit: j.commit };
   if (reveal) { doc.reveal = j.nonce; doc.opened = reveal; }
   return doc;
+}
+function joinRequestDoc(j, reveal) {
+  return memberRequestDoc(j, reveal, branchIdentity(false));
 }
 function askJoin(file, name) {
   if (deskKeys === undefined) deskKeys = readDesk();
