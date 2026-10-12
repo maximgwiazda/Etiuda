@@ -522,6 +522,24 @@ check("18 control: the plain payload carries none of the new keys through either
     pledged(r43i1) === "changed:c-b" && pledged(r43i2) === "changed:c-a" && pledged(r43i3) === "changed:c-b!words"
       && !!row43i1 && smalls(row43i1, "commits the firm in new words") === 0 && once(row43i3, "commits the firm in new words"),
     pledged(r43i1) + " | " + pledged(r43i2) + " | " + pledged(r43i3));
+  /* A card met for the first time, or again, that commits the firm says so beside new or restored, the agent's own reply
+     coming back over a restored one being the agent's own version; one the edition retires leaves sight and is not named. */
+  const newD = read(next(d => { d.cards.push({ id: "c-d", shelf: "t-op", bodyShape: "plain", title: { en: "D" }, body: { en: "D body." }, commits: true }); }));
+  const plainD = read(next(d => { d.cards.push({ id: "c-d", shelf: "t-op", bodyShape: "plain", title: { en: "D" }, body: { en: "D body." } }); }));
+  const sleepS = read(stampOn(next(d => { d.cards[1].retired = true; }), "c-b"));
+  const r43j1 = ED.editionChanges(read(doc()), newD, NONE), r43j2 = ED.editionChanges(read(doc()), plainD, NONE);
+  const r43j3 = ED.editionChanges(sleepS, heldS, NONE), r43j4 = ED.editionChanges(sleepS, heldS, mineOn("c-b"));
+  const r43j5 = ED.editionChanges(heldS, sleepS, NONE), r43j6 = ED.editionChanges(read(doc()), newD, NONE, true);
+  const row43j1 = offerRow(newD, read(doc()), r43j1, "c-d"), row43j2 = offerRow(plainD, read(doc()), r43j2, "c-d");
+  const row43j3 = offerRow(heldS, sleepS, r43j3, "c-b"), row43j4 = offerRow(heldS, sleepS, r43j4, "c-b");
+  const row43j5 = offerRow(sleepS, heldS, r43j5, "c-b");
+  check("43j a new card and a restored one that commit the firm say so beside new or restored, the agent's own reply over a restored one is the agent's own version, and a retired one, an unstamped new one and Look's text-only compare say nothing of it",
+    pledged(r43j1) === "new:c-d!carries" && once(row43j1, "commits the firm") && pledged(r43j2) === "new:c-d" && !!row43j2 && row43j2.indexOf("<small>") < 0
+      && pledged(r43j3) === "restored:c-b!carries" && once(row43j3, "commits the firm") && !says(row43j3, "you have your own version")
+      && pledged(r43j4) === "restored:c-b!carries*" && once(row43j4, "commits the firm") && once(row43j4, "you have your own version")
+      && pledged(r43j5) === "retired:c-b" && !!row43j5 && smalls(row43j5, "commits the firm") === 0
+      && pledged(r43j6) === "new:c-d",
+    [pledged(r43j1), pledged(r43j2), pledged(r43j3), pledged(r43j4), pledged(r43j5), pledged(r43j6)].join(" | "));
   const shelfOf = touch => next(d => { for (let i = 0; i < 11; i++) {
     const c = { id: "c-x" + i, shelf: "t-op", bodyShape: "plain", title: { en: "X" + i }, body: { en: "X body." } };
     touch(c, i); d.cards.push(c); } });

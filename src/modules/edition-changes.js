@@ -28,21 +28,28 @@ function editionReplyWords(m,key){ return editionText(m,key).trim().replace(/\s+
  *  `layer` is this desk's own: overrides, removed and favourites. A card the desk removed is nobody's
  *  news. `own` marks a changed card where a field the lead changed is one the agent wrote otherwise.
  *  `commitment` marks a stamp put on or taken off (`stamp` "on" or "off") or a stamped card's reply
- *  in new words, spacing alone not being new words, listed first and `own` wherever the agent's own
- *  reply stands over it. `textOnly` compares text alone. */
+ *  in new words, spacing alone not being new words, or a new or restored card that commits the firm
+ *  (`stamp` "carries"), listed first and `own` wherever the agent's own reply stands over it. */
 function editionChanges(held,offered,layer,textOnly){
   const lay=layer||{}, ov=lay.overrides||{};
   const gone=new Set(lay.removed||[]), stars=new Set(lay.favourites||[]);
   const keys=editionFieldKeys(held,offered), replies=keys.filter(k=>k.field==="body");
   const was=new Map(((held&&held.cards)||[]).map(m=>[String(m.id),m]));
   const now=new Map(((offered&&offered.cards)||[]).map(m=>[String(m.id),m]));
+  // Met for the first time, or again, a card that commits the firm says so; a retired one leaves sight. `textOnly` is text alone.
+  const standing=(m,id)=>{
+    if(textOnly || !cardCommits(m)) return {};
+    const mine=ov[id];
+    return {stamp:"carries", commitment:true,
+      own:replies.some(k=>!!mine && mine[k.key]!=null && String(mine[k.key])!==editionText(m,k.key))};
+  };
   const items=[];
   now.forEach((m,id)=>{
     const b=was.get(id);
-    if(!b){ if(!m.retired) items.push({id:id, kind:"new", fields:[]}); return; }
+    if(!b){ if(!m.retired) items.push(Object.assign({id:id, kind:"new", fields:[]}, standing(m,id))); return; }
     if(gone.has(id) || (m.retired && b.retired)) return;
     if(m.retired){ items.push({id:id, kind:"retired", fields:[], asleep:stars.has(id)||!!ov[id]}); return; }
-    if(b.retired){ items.push({id:id, kind:"restored", fields:[]}); return; }
+    if(b.retired){ items.push(Object.assign({id:id, kind:"restored", fields:[]}, standing(m,id))); return; }
     const fields=keys.filter(k=>editionText(b,k.key)!==editionText(m,k.key));
     const stamp=(textOnly || cardCommits(b)===cardCommits(m)) ? "" : cardCommits(m) ? "on" : "off";
     if(!fields.length && !stamp) return;
