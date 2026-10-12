@@ -3016,15 +3016,16 @@ const CARD_B = {
      pill gives the key up, while a field being typed in, and a dialog, bubble or menu, keep it. */
   const inside = sel => el({ tagName: "BUTTON", closest: q => (q.split(",").indexOf(sel) > -1 ? {} : null) });
   check("lanes.js", "814ln1 the lanes key is free with nothing focused, the search box empty, or a button, a pill or a checkbox focused,"
-    + " and kept by a box holding text, another text field, a text area, an editable block, and anything in a dialog, a bubble or a menu",
+    + " and kept by a box holding text, another text field, a text area, an editable block, and anything in a dialog (the quick-facts panel"
+    + " is one by its role alone), a bubble or a menu",
     () => eq([LN.lanesKeyFree(null, box, body), LN.lanesKeyFree(body, box, body), LN.lanesKeyFree(box, box, body),
       LN.lanesKeyFree(el({ tagName: "BUTTON", closest: () => null }), box, body),
       LN.lanesKeyFree(el({ tagName: "INPUT", type: "checkbox", closest: () => null }), box, body),
       LN.lanesKeyFree(full, full, body), LN.lanesKeyFree(el({ tagName: "INPUT", value: "Anna" }), box, body),
       LN.lanesKeyFree(el({ tagName: "TEXTAREA" }), box, body), LN.lanesKeyFree(el({ tagName: "DIV", isContentEditable: true }), box, body),
-      LN.lanesKeyFree(inside(".modal"), box, body), LN.lanesKeyFree(inside(".bub"), box, body),
+      LN.lanesKeyFree(inside(".modal"), box, body), LN.lanesKeyFree(inside("[role=dialog]"), box, body), LN.lanesKeyFree(inside(".bub"), box, body),
       LN.lanesKeyFree(inside("[role=menu]"), box, body)].join(","),
-      "true,true,true,true,true,false,false,false,false,false,false,false"));
+      "true,true,true,true,true,false,false,false,false,false,false,false,false"));
   check("shortcuts.js", "814ln2 Space is the lanes' row, rebindable and live in a field; the dispatcher asks the lanes first, and Escape sheds them before the dock and the search",
     () => {
       const d = SC.SC_DEFS.find(x => x.id === "lanes"), rs = fs.readFileSync(join(MODDIR, "run-shortcut.js"), "utf8");
