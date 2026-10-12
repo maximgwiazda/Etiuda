@@ -443,7 +443,7 @@ UI_STRINGS.pl={
   "the team's new text":"nowa treść zespołu",
   "now commits the firm":"teraz zobowiązuje firmę",
   "no longer commits the firm":"już nie zobowiązuje firmy",
-  "a commitment, in new words":"zobowiązanie w nowym brzmieniu",
+  "commits the firm in new words":"zobowiązuje firmę w nowym brzmieniu",
   "It comes back with your star and your edits.":"Wróci z gwiazdką i własnymi zmianami.",
   "and {N} more":"i {N} więcej",
   "Show the differences":"Pokaż różnice",

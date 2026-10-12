@@ -464,13 +464,13 @@ check("18 control: the plain payload carries none of the new keys through either
   const stampB = read(stampOn(doc(), "c-b"));
   const r43a = ED.editionChanges(heldS, rewordS, NONE), row43a = offerRow(rewordS, heldS, r43a, "c-b");
   check("43a a stamped card the lead rewords is named in the offer as a commitment in new words, on a desk that never touched it",
-    pledged(r43a) === "changed:c-b!words" && says(row43a, "a commitment, in new words") && !says(row43a, "you have your own version"),
+    pledged(r43a) === "changed:c-b!words" && says(row43a, "commits the firm in new words") && !says(row43a, "you have your own version"),
     pledged(r43a) + " | " + (row43a ? "a row" : "no row"));
   const r43b1 = ED.editionChanges(heldS, rewordS, mineOn("c-b")), r43b2 = ED.editionChanges(read(doc()), stampB, mineOn("c-b"));
   const row43b1 = offerRow(rewordS, heldS, r43b1, "c-b"), row43b2 = offerRow(stampB, read(doc()), r43b2, "c-b");
   check("43b and on a desk holding its own reply of that card it is named and says the desk has its own version, reworded or newly stamped",
     pledged(r43b1) === "changed:c-b!words*" && pledged(r43b2) === "changed:c-b!on*"
-      && says(row43b1, "a commitment, in new words") && says(row43b1, "you have your own version")
+      && says(row43b1, "commits the firm in new words") && says(row43b1, "you have your own version")
       && says(row43b2, "now commits the firm") && says(row43b2, "you have your own version"),
     pledged(r43b1) + " | " + pledged(r43b2));
   const r43B = ED.editionChanges(read(doc()), stampB, { overrides: { "c-b": { t: "My B" } }, removed: [], favourites: [] });
