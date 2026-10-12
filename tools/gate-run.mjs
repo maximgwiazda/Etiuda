@@ -48,6 +48,14 @@
  *     fingerprint of the tree the gate ran over, and whether it moved while the gate ran.
  *     A step whose tree moved has no verdict and the chain stops. Board item 645, and the
  *     long note is beside the code.
+ *   - `gitTree`, beside them: git's own tree id for the commit the step ran over
+ *     (`git rev-parse HEAD^{tree}`), read after the gate, or "uncommitted changes" where the
+ *     working tree differed from HEAD then (`git status --porcelain` not empty: an edit, a staged
+ *     change, an untracked file git would show, an unresolved merge), or "no git" in a lab without
+ *     one. `treeHash` is this file's own fingerprint and can never equal a git tree id, so this is
+ *     the key that ties a record to a commit (charter section 6, "an identical tree needs no
+ *     rerun"). Added 2026-10-12 after a merge's 59/59 was named by its fingerprint and read
+ *     against the commit's tree id, which could not match.
  *   - `unmerged`, beside them: the number of paths in conflict in the index when the step ended,
  *     0 for every run outside a merge in progress and for a lab with no git. Where it is not 0,
  *     `treeHash` is the working tree's bytes, each path once, and no commit holds them yet.
@@ -140,6 +148,24 @@ function git(args) {
 }
 const COMMIT = git(["rev-parse", "--short", "HEAD"]);
 const DIRTY = git(["status", "--porcelain"]).length > 0;
+/* GIT'S TREE ID, OR WHY THERE IS NONE. Read after every gate, never once at the start, for the
+   reason `dirty` above cannot be trusted past the first gate. A working tree that differs from
+   HEAD has no tree id of its own, so it says so in words rather than lending HEAD's. */
+/* Three ways git can be asked and answer about the wrong files, each closed (Clément δ's same-seat
+   read, 2026-10-12): a folder with no git of its own inside another repository's tree (an ignored
+   scratch copy) would be lent that repository's HEAD, so the top of the work tree must be ROOT
+   itself, as mainTree asks; a repository setting can hide untracked files or a submodule from
+   `status`, so the options are named here; and a path flagged assume-unchanged or skip-worktree
+   (lowercase or `S` in `ls-files -v`, sparse checkouts included) is one `status` will not look at,
+   so its presence alone reads as uncommitted changes, erring towards a rerun. */
+function gitTree() {
+  const top = git(["rev-parse", "--path-format=absolute", "--show-toplevel"]);
+  if (!top || path.relative(path.resolve(top), ROOT) !== "") return "no git";
+  if (git(["--no-optional-locks", "status", "--porcelain", "--untracked-files=normal",
+           "--ignore-submodules=none"]).length) return "uncommitted changes";
+  if (git(["ls-files", "-v"]).split(/\r?\n/).some(l => /^(S|[a-z]) /.test(l))) return "uncommitted changes";
+  return git(["rev-parse", "HEAD^{tree}"]) || "no commit";
+}
 
 /* ------------------------------------------------------------------------------------------- *
  * THE TREE MUST NOT MOVE UNDER A GATE. Board item 645.
@@ -334,13 +360,15 @@ let worst = 0, written = 0, treeMoved = false, refusedAt = null;
 /* The tree as it stood before the first gate. Every step is judged against the step before it,
    so the record says WHICH gate the tree moved under and not merely that it moved. */
 let before = fingerprint();
+let tree = gitTree();
 console.log("gate-run: tree " + before.hash + ", " + before.count + " file(s), " + before.bytes
-            + " byte(s), by " + before.how);
+            + " byte(s), by " + before.how + "; git tree " + tree);
 for (const step of steps) {
   const now = new Date();
   console.log("\n> " + step.cmd);
   const res = await runStep(step);
   const after = fingerprint();
+  tree = gitTree();
   const moved = after.hash === before.hash ? [] : movedFiles(before, after);
   /* THE VERDICT THE RECORD CARRIES IS NO_VERDICT WHERE THE TREE MOVED, and the gate's own exit
      goes beside it as `gateExit`. A reader reads `counts`, so this is the only place the
@@ -369,6 +397,7 @@ for (const step of steps) {
     treeHow: after.how,
     treeChanged: moved.length,
     unmerged: after.unmerged,
+    gitTree: tree,
     wallMs: res.wallMs,
     commit: COMMIT,
     dirty: DIRTY,
@@ -378,7 +407,8 @@ for (const step of steps) {
   fs.writeFileSync(file, JSON.stringify(line) + "\n", "utf8");
   written++;
   console.log("  gate-run: " + path.basename(file) + " " + JSON.stringify(line.counts)
-              + " exit " + line.exit + (refused ? " REFUSED by the " + refused : "") + " in " + line.wallMs + " ms");
+              + " exit " + line.exit + (refused ? " REFUSED by the " + refused : "") + " in " + line.wallMs + " ms"
+              + ", tree " + line.treeHash + ", git tree " + line.gitTree);
   if (line.unmerged) console.log("  note: run over an UNMERGED index (" + line.unmerged + " path(s) in conflict), so treeHash is"
     + " the working tree's bytes, each path once, and no commit holds them until the resolution is committed");
   if (moved.length) {
@@ -403,7 +433,7 @@ for (const step of steps) {
 
 console.log("\ngate-run: " + written + " of " + steps.length + " gate(s) run from "
             + asked.length + " npm script(s), " + written + " line(s) in " + RUNS
-            + ", tree " + before.hash
+            + ", tree " + before.hash + ", git tree " + tree
             + (treeMoved ? ", NO VERDICT: the tree moved under a gate"
                : refusedAt ? ", stopped at " + refusedAt.gate + ", REFUSED by the " + refusedAt.refused
                  + " and not failed: nothing was opened or measured, and its own lines above say what lets it run"

@@ -37,7 +37,7 @@ const TOOL = path.join(ROOT, "tools", "gate-run.mjs");
 const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
    with half of itself skipped by an early return. */
-const EXPECTED = 40;
+const EXPECTED = 42;
 
 let asserted = 0, failed = 0;
 function check(cond, line) {
@@ -158,8 +158,8 @@ function main() {
     && typeof dBase.wallMs === "number" && typeof dBase.time === "string"
     && "commit" in dBase && "dirty" in dBase && dBase.refused === ""
     && Object.keys(dBase).sort().join(",")
-       === "clash,cmd,commit,counts,countsFrom,dirty,exit,gate,gateExit,refused,script,time,treeChanged,treeFiles,treeHash,treeHow,unmerged,wallMs",
-    "1d the line's shape is the eighteen keys the record reads, `refused` empty on a gate that refused nothing, gate named from the step's path: "
+       === "clash,cmd,commit,counts,countsFrom,dirty,exit,gate,gateExit,gitTree,refused,script,time,treeChanged,treeFiles,treeHash,treeHow,unmerged,wallMs",
+    "1d the line's shape is the nineteen keys the record reads, `refused` empty on a gate that refused nothing, gate named from the step's path: "
     + Object.keys(dBase).sort().join(","));
 
   /* ---- 2. THE DECLARED CHANNEL ------------------------------------------------------------ */
@@ -570,7 +570,7 @@ function main() {
      two-branch conflict on one file, resolved on disk and not staged, and the gate runs over it;
      then the resolution is committed and the gate runs again. The first record must carry the
      second's hash and file count and say how many paths were unmerged; the second says none. */
-  const trMerge = makeLab("tree-unmerged", { quiet: trStub(2) },
+  const trMerge = makeLab("tree-unmerged", { quiet: trStub(2), edits: trStub(1, trWrites("src/both.js", "export const v = 4;\n")) },
     { files: Object.assign({ "src/both.js": "export const v = 0;\n" }, TR_FILES), git: true });
   const mgEnv = Object.assign({}, process.env, { GIT_EDITOR: "true", GIT_MERGE_AUTOEDIT: "no" });
   const mg = args => spawnSync("git", args, { cwd: trMerge.lab, encoding: "utf8", timeout: 30000, env: mgEnv });
@@ -608,6 +608,75 @@ function main() {
     "9l the run over the unmerged index says so on its own line and the committed run does not; a tree"
     + " with nothing unmerged records 0 by git (9a: " + (trQuietOne && trQuietOne.unmerged) + ") and by the walk (9g: "
     + (trWalkQuiet && trWalkQuiet.unmerged) + ")");
+
+  /* 9m GIT'S TREE ID IN THE RECORD (2026-10-12). `treeHash` is this tool's own fingerprint and
+     never equals `git rev-parse <commit>^{tree}`, which is what section 6's identical-tree rule
+     names, so a merge's gate record could not be tied to its commit without recomputing the
+     fingerprint by hand. The record now carries `gitTree`. Three arms already built above: the
+     committed merge must carry exactly the lab's HEAD^{tree}; the run over the unresolved merge,
+     whose working tree differs from HEAD, must say "uncommitted changes" and never lend HEAD's id;
+     the lab with no git must say "no git". A fourth arm runs, over the committed merge, a gate
+     that edits a tracked file: its record must say "uncommitted changes", because the id is read
+     AFTER the gate. A tool that printed HEAD's id whatever the working tree held fails the second
+     arm; one that read the id once at the start fails the fourth. */
+  const mgHeadTree = mgCommitted ? String(mg(["rev-parse", "HEAD^{tree}"]).stdout || "").trim() : "";
+  const mgEdit = mgCommitted ? run(trMerge, ["edits"]) : { exit: null, out: "", byGate: {} };
+  const mgEditLine = mgEdit.byGate["tests-edits"];
+  check(/^[0-9a-f]{40}$/.test(mgHeadTree) && !!mgShutLine && mgShutLine.gitTree === mgHeadTree
+    && !!mgOpenLine && mgOpenLine.gitTree === "uncommitted changes"
+    && !!trWalkQuiet && trWalkQuiet.gitTree === "no git"
+    && !!mgEditLine && mgEditLine.treeChanged === 1 && mgEditLine.gitTree === "uncommitted changes"
+    && /git tree uncommitted changes/.test(mgOpen.out)
+    && mgShut.out.split(/\r?\n/).some(l => l.includes("gate-run: tests-quiet-")
+      && l.includes(", tree " + mgShutLine.treeHash + ", git tree " + mgHeadTree))
+    && mgShut.out.split(/\r?\n/).some(l => l.startsWith("gate-run: tree ") && l.endsWith("; git tree " + mgHeadTree))
+    && mgShut.out.split(/\r?\n/).some(l => / gate\(s\) run from /.test(l) && l.includes(", git tree " + mgHeadTree + ", ")),
+    "9m each record carries git's tree id or why it has none: committed " + (mgShutLine && mgShutLine.gitTree)
+    + " against HEAD^{tree} " + (mgHeadTree || "(not read)") + ", over the unresolved merge "
+    + JSON.stringify(mgOpenLine && mgOpenLine.gitTree) + ", with no git " + JSON.stringify(trWalkQuiet && trWalkQuiet.gitTree)
+    + ", after a gate that edited a tracked file " + JSON.stringify(mgEditLine && mgEditLine.gitTree)
+    + "; the opening, step and closing lines each carry the git tree");
+
+  /* 9n WHERE GIT ANSWERS ABOUT OTHER FILES (Clément δ's same-seat read, 2026-10-12). Three states
+     in which a plain `git status --porcelain` is empty while the files the gate read differ from
+     HEAD, each of which once lent HEAD's tree id: a tracked file edited under assume-unchanged; an
+     untracked file under `status.showUntrackedFiles=no`; and a lab with no git of its own sitting
+     in a repository's ignored folder, which must say "no git" as its walk does. A clean run of the
+     same repository first must carry HEAD's id, so the three cannot pass by a tool that always
+     says "uncommitted changes". */
+  const hid = makeLab("tree-hidden", { h0: trStub(1), h1: trStub(1), h2: trStub(1) },
+    { files: Object.assign({}, TR_FILES, { ".gitignore": "junk/\nscratch/\n" }), git: true });
+  const hg = args => spawnSync("git", args, { cwd: hid.lab, encoding: "utf8", timeout: 30000 });
+  const hgOk = args => hg(args).status === 0;
+  const hidBuilt = hgOk(["config", "core.autocrlf", "false"]) && hgOk(["config", "user.name", "lab"])
+    && hgOk(["config", "user.email", "lab@example.invalid"]) && hgOk(["config", "commit.gpgsign", "false"])
+    && hgOk(["add", "-A"]) && hgOk(["commit", "-q", "-m", "base"]);
+  const hidHead = hidBuilt ? String(hg(["rev-parse", "HEAD^{tree}"]).stdout || "").trim() : "";
+  const hidClean = hidBuilt ? run(hid, ["h0"]).byGate["tests-h0"] : null;
+  const hidThing = path.join(hid.lab, "src", "thing.js");
+  const hidAssumed = hidBuilt && hgOk(["update-index", "--assume-unchanged", "src/thing.js"])
+    && (fs.writeFileSync(hidThing, "export const a = 9;\n"), String(hg(["status", "--porcelain"]).stdout || "") === "");
+  const hidOne = hidAssumed ? run(hid, ["h1"]).byGate["tests-h1"] : null;
+  const hidReset = hidBuilt && hgOk(["update-index", "--no-assume-unchanged", "src/thing.js"])
+    && hgOk(["checkout", "--", "src/thing.js"]) && hgOk(["config", "status.showUntrackedFiles", "no"]);
+  const hidHidden = hidReset && (fs.writeFileSync(path.join(hid.lab, "src", "new.js"), "export const b = 1;\n"),
+    String(hg(["status", "--porcelain"]).stdout || "") === "");
+  const hidTwo = hidHidden ? run(hid, ["h2"]).byGate["tests-h2"] : null;
+  const inner = makeLab("tree-hidden-inner", { h3: trStub(1) }, { files: { "src/thing.js": "export const a = 1;\n" } });
+  const innerAt = path.join(hid.lab, "scratch", "inner");
+  fs.mkdirSync(path.join(hid.lab, "scratch"), { recursive: true });
+  fs.renameSync(inner.lab, innerAt);
+  const innerLine = run({ lab: innerAt, runs: inner.runs }, ["h3"]).byGate["tests-h3"];
+  check(/^[0-9a-f]{40}$/.test(hidHead) && !!hidClean && hidClean.gitTree === hidHead
+    && hidAssumed && !!hidOne && hidOne.gitTree === "uncommitted changes"
+    && hidHidden && !!hidTwo && hidTwo.gitTree === "uncommitted changes"
+    && !!innerLine && innerLine.treeHow === TR_WALK_HOW && innerLine.gitTree === "no git",
+    "9n where a plain status sees nothing, the record still lends no id: clean " + (hidClean && hidClean.gitTree)
+    + " against HEAD^{tree} " + (hidHead || "(not read)") + "; assume-unchanged edit "
+    + JSON.stringify(hidOne && hidOne.gitTree) + (hidAssumed ? "" : " (state not made)") + "; untracked under"
+    + " showUntrackedFiles=no " + JSON.stringify(hidTwo && hidTwo.gitTree) + (hidHidden ? "" : " (state not made)")
+    + "; a lab with no git in an ignored folder " + JSON.stringify(innerLine && innerLine.gitTree) + " by "
+    + JSON.stringify(innerLine && innerLine.treeHow));
 
   /* ---- 10. THE DEFAULT RUNS FOLDER -------------------------------------------------------------- */
   /* Every leg above names ETIUDA_RUNS, so none of them ever saw the default, which until
