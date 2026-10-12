@@ -25,7 +25,13 @@ git_dir="$(git rev-parse --git-dir)"
 names="$(git rev-parse --git-common-dir)/etiuda-names"
 tmp="$git_dir/etiuda-scan.$$"
 trap 'rm -f "$tmp"' EXIT INT TERM
-today="$(date +%F)"
+today="$(date +%F 2>/dev/null)"
+# A DATE THE SHELL CANNOT GIVE IS NO DATE (2026-10-13). ETIUDA_SCAN_OFF stands a half of the scan
+# down only when it equals today. Where `date` printed nothing, an unset ETIUDA_SCAN_OFF equalled
+# the empty "today", so a missing list or a missing catalog stood down with exit 0 and no one had
+# asked (Clément ρ's read). Anything not shaped like a date is now no date, and no stand-down is
+# possible without one.
+case "$today" in [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;; *) today="" ;; esac
 fail=0
 say() { echo "etiuda scan: $*" >&2; }
 
@@ -49,12 +55,13 @@ published() { case "$1" in "$pub_dir"*) return 0 ;; *) return 1 ;; esac; }
 
 have_names=1
 if [ ! -f "$names" ]; then
-  if [ "${ETIUDA_SCAN_OFF:-}" = "$today" ]; then
+  if [ -n "$today" ] && [ "${ETIUDA_SCAN_OFF:-}" = "$today" ]; then
     have_names=0
     say "no list at $names; the name scan stands down for this one command."
   else
     say "the name scan needs its list at $names, and there is none."
-    say "install the list, or run this one command with ETIUDA_SCAN_OFF=$today."
+    if [ -n "$today" ]; then say "install the list, or run this one command with ETIUDA_SCAN_OFF=$today."
+    else say "install the list: this shell gives no date, so nothing can stand the name scan down."; fi
     exit 1
   fi
 fi
@@ -296,11 +303,12 @@ if [ "$declared" = "no-catalog" ]; then no_catalog=1; fi
 if [ -z "$cats" ]; then
   if [ "$no_catalog" = 1 ]; then
     say "$mode_file declares no-catalog: the quote scan has nothing to hold back and the name scan is the whole scan."
-  elif [ "${ETIUDA_SCAN_OFF:-}" = "$today" ]; then
+  elif [ -n "$today" ] && [ "${ETIUDA_SCAN_OFF:-}" = "$today" ]; then
     say "no catalog beside the engine; the quote scan stands down for this one command."
   else
     say "the quote scan needs a catalog this repository holds back, and none sits beside the engine."
-    say "put one there, or run this one command with ETIUDA_SCAN_OFF=$today."
+    if [ -n "$today" ]; then say "put one there, or run this one command with ETIUDA_SCAN_OFF=$today."
+    else say "put one there: this shell gives no date, so nothing can stand the quote scan down."; fi
     fail=1
   fi
 fi

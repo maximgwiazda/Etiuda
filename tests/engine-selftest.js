@@ -1852,11 +1852,15 @@ Module.prototype._compile = function (content, filename) {
     fs.writeFileSync(path.join(lab, ".git", "etiuda-names"), "zqxwvname\n");
     const script = fs.readFileSync(path.join(E.ROOT, "tools", "pre-commit"), "utf8");
     const REF = 'pub_ref="refs/remotes/origin/main"';
+    /* The section's runs never inherit ETIUDA_SCAN_OFF from whoever runs the selftest, which would
+       stand a half down and turn the refusals below green or red for the wrong reason (Clément τ). */
+    const quiet = { ...process.env };
+    delete quiet.ETIUDA_SCAN_OFF;
     const scan = (text, msg, body) => {
       const file = path.join(lab, "scan.sh"), m = path.join(lab, "msg.txt");
       fs.writeFileSync(file, text);
       fs.writeFileSync(m, body || "A plain message.\n");
-      const r = cp.spawnSync(bash, ["scan.sh", "msg.txt"], { cwd: lab, encoding: "utf8" });
+      const r = cp.spawnSync(bash, ["scan.sh", "msg.txt"], { cwd: lab, encoding: "utf8", env: quiet });
       return { code: r.status, say: String(r.stderr || "") };
     };
     const put = (name, body) => fs.writeFileSync(path.join(lab, name), body);
@@ -1901,7 +1905,7 @@ Module.prototype._compile = function (content, filename) {
       const file = path.join(wt, "scan.sh"), m = path.join(wt, "msg.txt");
       fs.writeFileSync(file, text);
       fs.writeFileSync(m, body);
-      const r = cp.spawnSync(bash, ["scan.sh", "msg.txt"], { cwd: wt, encoding: "utf8" });
+      const r = cp.spawnSync(bash, ["scan.sh", "msg.txt"], { cwd: wt, encoding: "utf8", env: quiet });
       return { code: r.status, say: String(r.stderr || "") };
     };
     const NAMED = "Subject\nwe met the zqxwvnames on Tuesday\n";
@@ -1940,7 +1944,7 @@ Module.prototype._compile = function (content, filename) {
       const file = path.join(lab, "scan.sh"), m = path.join(lab, "msg.txt");
       fs.writeFileSync(file, text);
       fs.writeFileSync(m, body);
-      const r = cp.spawnSync(bash, ["scan.sh", "msg.txt"], { cwd: lab, encoding: "utf8", env: { ...process.env, ...env } });
+      const r = cp.spawnSync(bash, ["scan.sh", "msg.txt"], { cwd: lab, encoding: "utf8", env: { ...quiet, ...env } });
       return { code: r.status, say: String(r.stderr || "") };
     };
     const native = scanEnv(script, NAMED, { GIT_DIR: path.join(lab, ".git") });
@@ -1954,6 +1958,75 @@ Module.prototype._compile = function (content, filename) {
        && empty.code === 1 && /reads as no entries/.test(empty.say) && !/a listed name appears/.test(empty.say),
        "34h with GIT_DIR in the platform's spelling the listed name is still refused (exit " + native.code
        + "), and a list of no entries refuses rather than passing (exit " + empty.code + ")");
+
+    /* 34i: NO DATE, NO STAND-DOWN (2026-10-13, Clément ρ's read). The scan runs with a `date` that
+       prints nothing. Then a missing list (from the worktree, which declares no catalog) and a
+       missing catalog (from the lab's checkout) must each refuse, with ETIUDA_SCAN_OFF unset: an
+       empty "today" equalled the unset variable, and both halves stood down with exit 0. The control
+       is the same script with the "-n" guards taken out, which stands down again. The empty `date`
+       is a function given by BASH_ENV, which a non-interactive bash reads before the script: a
+       PATH shim cannot do it, because Git's bash.exe puts /mingw64/bin and /usr/bin ahead of any
+       PATH it inherits (measured 2026-10-13). */
+    const noDateFile = path.join(tmp, "no-date.sh");
+    fs.writeFileSync(noDateFile, "date() { return 0; }\n");
+    const noDate = { ...process.env, BASH_ENV: noDateFile.split(path.sep).join("/") };
+    delete noDate.ETIUDA_SCAN_OFF;
+    const shimDate = String(cp.spawnSync(bash, ["-c", "date +%F"], { encoding: "utf8", env: noDate }).stdout || "");
+    const scanInEnv = (text, body, env) => {
+      const file = path.join(wt, "scan.sh"), m = path.join(wt, "msg.txt");
+      fs.writeFileSync(file, text);
+      fs.writeFileSync(m, body);
+      const r = cp.spawnSync(bash, ["scan.sh", "msg.txt"], { cwd: wt, encoding: "utf8", env });
+      return { code: r.status, say: String(r.stderr || "") };
+    };
+    const CLEAN = "Subject\nA plain message.\n";
+    const GUARD = '[ -n "$today" ] && ';
+    const unguarded = script.split(GUARD).join("");
+    /* And a `date` that answers with something not shaped like a date (here its own format, as a
+       broken one might), met by an ETIUDA_SCAN_OFF that a tool asking the same shell would send:
+       it is no date, so no stand-down. The control drops the line that says so. */
+    const oddFile = path.join(tmp, "odd-date.sh");
+    fs.writeFileSync(oddFile, "date() { echo '+%F'; }\n");
+    const oddDate = { ...process.env, BASH_ENV: oddFile.split(path.sep).join("/"), ETIUDA_SCAN_OFF: "+%F" };
+    const SHAPE = 'case "$today" in [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;; *) today="" ;; esac\n';
+    const unshaped = script.split(SHAPE).join("");
+    fs.renameSync(commonList, parked);
+    const listGone = scanInEnv(script, CLEAN, noDate);
+    const listGoneOld = scanInEnv(unguarded, CLEAN, noDate);
+    const oddGone = scanInEnv(script, CLEAN, oddDate);
+    const oddGoneOld = scanInEnv(unshaped, CLEAN, oddDate);
+    fs.renameSync(parked, commonList);
+    const catGone = scanEnv(script, CLEAN, noDate);
+    const catGoneOld = scanEnv(unguarded, CLEAN, noDate);
+    ok(shimDate.trim() === "" && script.split(GUARD).length === 3 && script.split(SHAPE).length === 2
+       && listGone.code === 1 && /needs its list/.test(listGone.say)
+       && catGone.code === 1 && !/stands down/.test(catGone.say)
+       && oddGone.code === 1 && /needs its list/.test(oddGone.say),
+       "34i with a date that prints nothing and ETIUDA_SCAN_OFF unset, a missing list refuses (exit " + listGone.code
+       + ") and a missing catalog refuses (exit " + catGone.code + "); with a date that answers its own format and"
+       + " ETIUDA_SCAN_OFF the same, a missing list still refuses (exit " + oddGone.code + ")");
+    ok(listGoneOld.code === 0 && /stands down/.test(listGoneOld.say) && /stands down/.test(catGoneOld.say)
+       && oddGoneOld.code === 0 && /stands down/.test(oddGoneOld.say),
+       "34j control: without the guards the empty date stands both halves down (exit " + listGoneOld.code
+       + " and " + catGoneOld.code + "), and without the date's shape the odd answer stands the name half down (exit "
+       + oddGoneOld.code + "), which 34i's reader refuses");
+
+    /* 34k: A REAL DATE STILL STANDS A HALF DOWN (Clément τ's read). With the shell's own date and
+       ETIUDA_SCAN_OFF set to it, a missing list stands the name half down (the worktree, which
+       declares no catalog, then passes), and a missing catalog stands the quote half down (the lab's
+       checkout, its list present, then passes). Without this, a hook that read the date in another
+       shape (`date +%D`) refused every stand-down, and nothing said so. */
+    const realToday = String(cp.spawnSync(bash, ["-c", "date +%F"], { encoding: "utf8", env: quiet }).stdout || "").trim();
+    const offToday = { ...quiet, ETIUDA_SCAN_OFF: realToday };
+    fs.renameSync(commonList, parked);
+    const listOff = scanInEnv(script, CLEAN, offToday);
+    fs.renameSync(parked, commonList);
+    const catOff = scanEnv(script, CLEAN, { ETIUDA_SCAN_OFF: realToday });
+    ok(/^\d{4}-\d\d-\d\d$/.test(realToday)
+       && listOff.code === 0 && /name scan stands down/.test(listOff.say)
+       && catOff.code === 0 && /quote scan stands down/.test(catOff.say),
+       "34k with the shell's date " + realToday + " and ETIUDA_SCAN_OFF set to it, a missing list stands the name half down"
+       + " (exit " + listOff.code + ") and a missing catalog stands the quote half down (exit " + catOff.code + ")");
   }
 }
 
