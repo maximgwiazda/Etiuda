@@ -142,15 +142,23 @@ function eChooseCatalogFolder(title){
   });
 }
 /* One file out of that folder, by name. {name,text} or null; an empty text is a file that would
-   not read, which is the caller's to speak about. */
-function eReadCatalogFile(name,desk){
+   not read, which is the caller's to speak about. `asked` is a Load the person chose: the shell
+   then hands a lower rev, and the page decides whether it is offered. `offer` is a read meant to be
+   offered unasked, which the shell hands only where a lead this desk pinned signed it. */
+function eReadCatalogFile(name,desk,asked,offer){
   const h=eHost();
   if(!h || typeof h.readCatalogFile!=="function") return Promise.resolve(null);
   try{
-    return Promise.resolve(desk?h.readCatalogFile(String(name||""),String(desk)):h.readCatalogFile(String(name||"")))
+    return Promise.resolve(h.readCatalogFile(String(name||""),desk?String(desk):"",!!asked,!!offer))
       .then(v=>(v&&typeof v==="object")?{name:String(v.name||""),text:String(v.text||"")}:null)
       .catch(()=>null);
   }catch(e){ return Promise.resolve(null); }
+}
+/* The pin of the catalog the agent took, told to the shell, which raises a mark only for bytes it handed on purpose. */
+function eCatalogTaken(pin){
+  const h=eHost();
+  if(!pin || !h || typeof h.catalogTaken!=="function") return;
+  try{ h.catalogTaken(String(pin)); }catch(e){}
 }
 /* Resolves to the chosen folder, or "" for a dialog the person closed. The caption is passed in
    already translated: the shell has no t(). */
@@ -375,6 +383,7 @@ export {
   ePickCatalogFile,
   ePickCatalogFolder,
   eReadCatalogFile,
+  eCatalogTaken,
   eSaveCatalogFile,
   wireHost,
   dispatchTabChord,

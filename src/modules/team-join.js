@@ -65,6 +65,12 @@ function leadToShow(){
 }
 /* The leads this desk trusts, as the shell last said them. */
 function teamLeads(){ return ((joinNow&&joinNow.leads)||[]).slice(); }
+/* The same, asked of the shell now: a page that never showed the join has no answer to read. [] where there is none. */
+function leadsNow(){
+  if(!eHasJoin()) return Promise.resolve([]);
+  try{ return Promise.resolve(eHost().teamJoin("leads")).then(v=>(v&&Array.isArray(v.leads))?v.leads:[],()=>[]); }
+  catch(e){ return Promise.resolve([]); }
+}
 /* The key in four groups of four, as it is read aloud. */
 function leadKeyText(print){ return String(print||"").replace(/(.{4})(?=.)/g,"$1 "); }
 /* THE KEY'S SIGN: the four groups after a small disc that says whose, violet with a key for the lead's Studio key, cobalt
@@ -316,4 +322,4 @@ function forgetTeamLead(team,then){
   return joinAsk("forget",team).then(v=>{ if(typeof then==="function") then(); return v; });
 }
 
-export { wireTeamJoin, teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, paintJoin, openJoinPaste, teamCanJoin, inviteHeld };
+export { wireTeamJoin, teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, paintJoin, openJoinPaste, teamCanJoin, inviteHeld };

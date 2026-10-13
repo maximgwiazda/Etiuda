@@ -8,7 +8,7 @@ import { E_CATALOG_KEY, E_CATALOG_VERSION, catalogStamp, catalogVersionLabel,
   eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
   eWatchClear, parseCatalogFile, catalogDocOf, eWatchName, eCatalogRefusedNames, eRefuseCatalogFile } from "./catalog.js";
 import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
-  eCatalogIn, eCatalogBuiltIn, eCatalogMtime, eHost, eLoadedCatalogFile, wireFolderLink, eOpenedWith,
+  eCatalogIn, eCatalogBuiltIn, eCatalogMtime, eCatalogRing, eHost, eLoadedCatalogFile, wireFolderLink, eOpenedWith,
   eOpenedRefused, eReadCatalogFile, eOnCatalogListing, eBranchIdentity } from "./host.js";
 import { ejectCatalog } from "./local-memory.js";
 import { lsSet, nsGet, nsSet } from "./storage.js";
@@ -25,15 +25,15 @@ import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { intentIdAt, intentOrder } from "./intent-id.js";
 import { pack } from "./pack.js";
 import { ICON_AWAITING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT, ICON_DESK, ICON_LOOK } from "./icons.js";
-import { keyTipHtml } from "./team-join.js";
-import { V2_SIG_VALID } from "./catalog-v2.js";
+import { keyTipHtml, leadKeyText, leadsNow } from "./team-join.js";
+import { V2_SIG_VALID, v2RingRead } from "./catalog-v2.js";
 import { editionChanges } from "./edition-changes.js";
 import { editionOfferHtml, openEditionPanel, repaintEditionRows, editionCountWords } from "./edition-panel.js";
 import { editionMarksFrom, keepEditionMarks, putEditionMarksBack, editionSay } from "./edition-marks.js";
 import { closeModal } from "./dialog.js";
 import { deskName, deskKey, deskBase, deskChangeWords, openDeskLook } from "./desk-look.js";
 import { hooks } from "./hooks.js";
-import { catalogTrust, whenTrusted, heldCatalogTrust, recheckHeldTrust, trustKeyHtml, trustOfferLine,
+import { catalogTrust, whenTrusted, heldCatalogTrust, heldCatalogSigner, recheckHeldTrust, trustKeyHtml, trustOfferLine,
   trustSettled } from "./catalog-trust.js";
 
 /* A catalog sitting beside Etiuda is offered, never forced. Asked once per signature:
@@ -83,9 +83,7 @@ function eOfferCatalog(given,name,where,force,asked,builtIn){
       return activateCatalog(c,{file:mine?file:"", from:file||(eHost()?"":E_CATALOG_SCRIPT),
                                 fileAt:(mine&&!given)?eCatalogMtime():0}); }
   });
-  const active=asked&&!shown?storedCatalog():null;
-  if(active && eCatalogSignature(active)===eCatalogSignature(c))
-    toast(t("That file matches the catalog you already have."));
+  if(asked && !shown) toastIfSameCatalog(c);
   return shown;
 }
 /* THE BOOT CHANNEL, and the two things it does differently: a refusal was said about the file as
@@ -112,8 +110,15 @@ function eOfferCatalogAtBoot(){
    bubble, which loads at once only where nothing is loaded. The date arrives from the row that was clicked: the
    host read it with the listing, and asking again would be asking for a second answer. */
 /* `desk` is a colleague's folder under desks/, whose file is worked from: no file of the catalog folder is then in use. */
+/* The matches line is true only when the two are the same catalog. A refusal for any other
+   reason has already spoken, or has stayed quiet on purpose. */
+function toastIfSameCatalog(c){
+  const active=storedCatalog();
+  if(active && eCatalogSignature(active)===eCatalogSignature(c))
+    toast(t("That file matches the catalog you already have."));
+}
 function loadCatalogFromFolder(name,mtime,desk){
-  eReadCatalogFile(name,desk).then(got=>{
+  eReadCatalogFile(name,desk,true).then(got=>{
     if(!got) return;
     if(!got.text){ toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(String(name||""))); return; }
     let c=null;
@@ -128,7 +133,7 @@ function loadCatalogFromFolder(name,mtime,desk){
       accept:sig=>{ lsSet(E_CATALOG_KEY,sig);
         return activateCatalog(c,desk?{file:"", from:got.name}:{file:got.name, fileAt:+mtime||0}); }
     });
-    if(!shown) toast(t("That file matches the catalog you already have."));
+    if(!shown) toastIfSameCatalog(c);
   });
 }
 function deskFolderOf(id){
@@ -439,6 +444,58 @@ function lookAtDesk(f,files,held){
     ()=>{ closeModal(); loadCatalogFromFolder(f.name,f.mtime,f.desk.id); },
     ()=>{ closeModal(); hooks.openManage(); });
 }
+/* The first 16 hex of the SHA-256 of the raw public, the print the shell gives a lead (leadPrint). */
+function leadPrintOf(pubHex){
+  const subtle=globalThis.crypto&&globalThis.crypto.subtle;
+  if(!subtle || !/^[0-9a-f]{64}$/.test(pubHex)) return Promise.resolve("");
+  const raw=new Uint8Array(32);
+  for(let i=0;i<32;i++) raw[i]=parseInt(pubHex.slice(i*2,i*2+2),16);
+  return subtle.digest("SHA-256", raw).then(buf=>{
+    const b=new Uint8Array(buf);
+    let hex="";
+    for(let i=0;i<8;i++) hex+=b[i].toString(16).padStart(2,"0");
+    return hex;
+  }).catch(()=>"");
+}
+/* A CATALOG SIGNED BY A KEY OTHER THAN THE TEAM LEAD'S says whose key it is, once its signature has
+   verified: the key is named by the print of the public the ring holds for it, never by the file's keyId,
+   which any writer of the share chooses. A desk with no lead pinned has nobody to compare it with. */
+function noteForeignSigner(c,wrap,place){
+  const doc=catalogDocOf(c), sig=doc&&doc.sig, kid=sig&&sig.keyId ? String(sig.keyId) : "";
+  if(!kid) return;
+  Promise.all([catalogTrust(c), eCatalogRing().then(text=>v2RingRead(text).ring).catch(()=>null), leadsNow()])
+    .then(([state,ring,leads])=>{
+      const prints=leads.map(x=>x&&x.print).filter(Boolean);
+      const forCat=ring&&ring[String(c.id||"")];
+      const pub=forCat&&typeof forCat==="object" ? String(forCat[kid]||"") : "";
+      if(state!==V2_SIG_VALID || !prints.length || !/^[0-9a-f]{64}$/.test(pub)) return;
+      return leadPrintOf(pub).then(print=>{
+        if(!print || prints.indexOf(print)>=0 || !wrap.isConnected || wrap.querySelector(".ec-signer")) return;
+        const line=t("This file is signed with the key {KEY}, which is not the team lead's.").split("{KEY}").join(leadKeyText(print));
+        (wrap.querySelector(".ec-holds")||wrap.querySelector(".tour-actions")).insertAdjacentHTML("beforebegin",
+          '<p class="ec-signer">'+esc(line)+'</p>');
+        if(place) place();
+      });
+    }).catch(()=>{});
+}
+/* Whether the floor kept under the stored catalog's signing key reaches this catalog: the same key id, or either unrecorded. */
+function heldKeyCovers(c){
+  const doc=catalogDocOf(c), kid=doc&&doc.sig&&doc.sig.keyId ? String(doc.sig.keyId) : "", held=heldCatalogSigner();
+  return !held || !kid || held===kid;
+}
+/* Whether this catalog is under the key the held catalog verified under: the held answer valid, and the same key id. */
+function underHeldKey(c){
+  const doc=catalogDocOf(c), kid=doc&&doc.sig&&doc.sig.keyId ? String(doc.sig.keyId) : "", held=heldCatalogSigner();
+  return heldCatalogTrust()===V2_SIG_VALID && !!held && kid===held;
+}
+/* An offer that said "older" for a file whose own signature then failed says it plainly instead. */
+function offerPlainly(wrap){
+  const warn=wrap.querySelector(".ec-warn"), title=wrap.querySelector("#ecTitle"), no=wrap.querySelector("#ecNo"), yes=wrap.querySelector("#ecYes");
+  if(warn) warn.remove();
+  if(title) title.textContent=t("Replace catalog?");
+  if(no) no.textContent=t("Keep current");
+  if(yes) yes.textContent=t("Load it");
+}
 /* Every channel ends here: same guards, same wording, same promise about what is kept.
    Returns whether anything was actually put on screen, which is how an explicit check
    knows to say the file matched. */
@@ -452,6 +509,13 @@ function eOfferCatalogDialog(c,src){
      catalog, both surface here rather than being applied behind the user's back. */
   const active=storedCatalog();
   if(active && eCatalogSignature(active)===sig) return false;
+  /* A stored catalog is a floor for its own id under its own signing key, while this desk has
+     verified it or has not yet recorded an answer: a lower rev of it is not offered unless the agent
+     asked, and a file the agent opened is offered whatever its rev, the warning below saying when it is older. Another
+     key, or a catalog that did not verify, is no floor, so accepting one catalog never locks out the
+     next. An equal rev with other content is still offered, and the file's date does not decide. */
+  const revOlder=!!active && String(c&&c.id||"")!=="" && String(c.id)===String(active.id||"") && (+c.rev<(+active.rev||0));
+  if(revOlder && !src.asked && heldKeyCovers(c) && (heldCatalogTrust()==="" || heldCatalogTrust()===V2_SIG_VALID)) return false;
   // What this desk wrote into the shared catalog is what it shows already, so only somebody asking is offered it.
   if(!src.asked && sharedOwnWrite(c)) return false;
   /* A refusal is remembered so boot does not nag, but ASKING outranks it: an explicit check
@@ -475,12 +539,18 @@ function eOfferCatalogDialog(c,src){
   }
   const replacing=!!active;
   const updating=isCatalogUpdate(c,active);
-  const older=updating && catalogEditionOlder(c.version, active.version);
+  /* OLDER IS A LOWER REV UNDER THE KEY THE HELD CATALOG VERIFIED UNDER, and only then do the title, the warning and the
+     answers say so. A lower rev or an earlier date across keys, or over a catalog that did not verify, is offered plainly,
+     as a replacement. An earlier date under that same key keeps its own sentence. */
+  const sameKey=updating && underHeldKey(c), settled=trustSettled(c);
+  const olderSure=revOlder && sameKey && (settled==="" || settled===V2_SIG_VALID);
+  const plain=updating && !olderSure && (revOlder || !sameKey) && (revOlder || catalogEditionOlder(c.version, active.version));
+  const older=updating && !olderSure && !plain && catalogEditionOlder(c.version, active.version);
   // What the edition changes stands where the counts would, which an update leaves equal so often.
   const changes=updating ? editionChanges(active,c,pack) : null;
   const changeHtml=changes ? editionOfferHtml(c,active,changes) : "";
   // A NEW EDITION OF THE CATALOG IN USE: it waits at the name, and its load marks what it brought.
-  const fresh=updating && !older, label=fresh ? editionLabelOf(c) : "";
+  const fresh=updating && !older && !olderSure && !plain, label=fresh ? editionLabelOf(c) : "";
   const n=(c.cards||[]).length,
         i=catalogIntentCount(c),
         k=Object.keys(c.categories||{}).length;
@@ -495,9 +565,12 @@ function eOfferCatalogDialog(c,src){
        another taken up, which the question asks and no sentence beneath it can improve on. The
        two editions of ONE catalog keep their sentence: what is at stake there is what happens to
        this desk's own work, which the screen cannot show. */
-    '<h3 id="ecTitle">'+esc(t(older?"Older catalog found":updating?"Updated catalog found"
+    '<h3 id="ecTitle">'+esc(t(olderSure||older?"Older catalog found":updating && !plain?"Updated catalog found"
         :replacing?"Replace catalog?":"Load catalog?"))+'</h3>'
-    +(updating
+    +(olderSure
+        ? '<p class="ec-warn">'+esc(t("This edition is older than the one in use on this desk, so some of its replies may be out of date."))+'</p>'
+        : '')
+    +(updating && !olderSure && !plain
         ? '<p class="ec-sub">'+esc(t(older
             ? "This file is an earlier edition than the one loaded now."
             : "This catalog has changed since it was loaded."))+'</p>'
@@ -523,8 +596,8 @@ function eOfferCatalogDialog(c,src){
     // Only a file nobody asked for, which may arrive mid-chat: the promise that the chat can go on.
     +(fresh && !src.asked ? '<p class="ec-holds">'+esc(t("This desk carries on as it is until the update is loaded."))+'</p>' : '')
     +'<div class="tour-actions">'
-    +'<button type="button" class="btn" id="ecNo">'+esc(t(replacing && !fresh?"Keep current":"Not now"))+'</button>'
-    +'<button type="button" class="btn primary" id="ecYes">'+esc(t(older?"Load it anyway":updating?"Load the update":replacing?"Load it":"Load catalog"))+'</button>'
+    +'<button type="button" class="btn" id="ecNo">'+esc(t(olderSure?"Keep the newer one":replacing && !fresh?"Keep current":"Not now"))+'</button>'
+    +'<button type="button" class="btn primary" id="ecYes">'+esc(t(olderSure?"Open the older edition":older?"Load it anyway":updating && !plain?"Load the update":replacing?"Load it":"Load catalog"))+'</button>'
     +'</div>';
   cutLeaves();
   if(fresh){ edWaiting={c:c, src:src}; paintCatWaiting(); }
@@ -555,6 +628,8 @@ function eOfferCatalogDialog(c,src){
     (wrap.querySelector(".ec-holds")||wrap.querySelector(".tour-actions")).insertAdjacentHTML("beforebegin",trustHtml(line));
     place();
   });
+  noteForeignSigner(c,wrap,place);
+  if(olderSure && !settled) catalogTrust(c).then(state=>{ if(state!==V2_SIG_VALID && wrap.isConnected){ offerPlainly(wrap); place(); } });
   const close=()=>{ removeEventListener("resize",place); dismissNode(wrap); if(offerStanding===close) offerStanding=null; };
   offerStanding=close;
   /* Escape answers nothing and records no refusal, so a stray press only postpones the question
@@ -701,7 +776,7 @@ function reopenWaiting(){
 function eOfferPickedCatalog(c,name,accept){
   const shown=eOfferCatalogDialog(c,{file:name, foundHtml:eFoundHtml(name,""), force:true, asked:true,
     direct:true, accept:()=>accept()});
-  if(!shown) toast(t("That file matches the catalog you already have."));
+  if(!shown) toastIfSameCatalog(c);
 }
 /* A catalog no route named a file for is unnamed, in the interface's language. */
 function shownCatalogName(n){ return n || t("Unnamed catalog"); }
@@ -749,7 +824,7 @@ function eCheckWatchedFile(interactive){
             refusedKey:"WatchNo", force:!!interactive, asked:!!interactive,
             accept:()=>activateCatalog(c,{from:eWatchName()||f.name})
           });
-          if(!shown && interactive) toast(t("That file matches the catalog you already have."));
+          if(!shown && interactive) toastIfSameCatalog(c);
           return null;
         });
       });
@@ -782,7 +857,7 @@ function onCatalogListing(all){
   if(tourDueAtBoot()) afterTour(go); else go();
 }
 function offerListed(f,mustBeValid){
-  return eReadCatalogFile(f.name).then(got=>{
+  return eReadCatalogFile(f.name,"",false,true).then(got=>{
     if(!got || !got.text) return false;
     let c=null;
     try{ c=parseCatalogFile(got.text); }catch(e){ return false; }
@@ -857,6 +932,7 @@ export {
   eOfferCatalog,
   eOfferCatalogAtBoot,
   eOfferCatalogDialog,
+  toastIfSameCatalog,
   eOfferPickedCatalog,
   paintCatNow,
   paintCatWaiting,

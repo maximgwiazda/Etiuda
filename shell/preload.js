@@ -81,7 +81,12 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   onCatalogListing: (fn) => ipcRenderer.on("etiuda:catalog-listing", (_e, rows) => fn(Array.isArray(rows) ? rows : [])),
   /* The ring beside the catalogs as text, read afresh each time the page verifies a signature. */
   catalogRing: () => ipcRenderer.invoke("etiuda:catalog-ring"),
-  readCatalogFile: (name, desk) => ipcRenderer.invoke("etiuda:catalog-read", String(name || ""), desk ? String(desk) : ""),
+  /* `asked` is a Load the person chose. The shell then hands the bytes of a lower rev, and the page decides.
+     `offer` is a read the page means to offer nobody having asked, which a pinned lead must have signed. */
+  readCatalogFile: (name, desk, asked, offer) => ipcRenderer.invoke("etiuda:catalog-read", String(name || ""), desk ? String(desk) : "",
+    !!asked, !!offer),
+  /* The pin of the catalog the agent just took, so the shell raises the mark for what it handed on purpose. */
+  catalogTaken: (pin) => ipcRenderer.send("etiuda:catalog-taken", String(pin || "")),
   /* The caption is the page's, because the shell has no t(). Async, unlike the desk: a modal
      the person is standing in front of must not hold the renderer's thread. */
   pickCatalogFolder: (title) => ipcRenderer.invoke("etiuda:pick-catalog-folder", String(title || "")),
