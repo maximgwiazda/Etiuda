@@ -522,6 +522,21 @@ check("18 control: the plain payload carries none of the new keys through either
     pledged(r43i1) === "changed:c-b" && pledged(r43i2) === "changed:c-a" && pledged(r43i3) === "changed:c-b!words"
       && !!row43i1 && smalls(row43i1, "commits the firm in new words") === 0 && once(row43i3, "commits the firm in new words"),
     pledged(r43i1) + " | " + pledged(r43i2) + " | " + pledged(r43i3));
+  /* Within a reply spacing is spacing, of every kind, both sides read alike; a reply boundary is not spacing. */
+  const bodyB = v => read(stampOn(next(d => { d.cards[1].body.en = v; }), "c-b"));
+  const altsB = v => read(stampOn(next(d => { d.cards[1].bodyShape = "alts"; d.cards[1].body.en = v; }), "c-b"));
+  const r43k = [
+    ED.editionChanges(heldS, bodyB("Bbody."), NONE),
+    ED.editionChanges(bodyB(" B  body. "), bodyB("B body."), NONE),
+    ED.editionChanges(heldS, bodyB("B\n\t body."), NONE),
+    ED.editionChanges(heldS, bodyB("B\u00a0body."), NONE),
+    ED.editionChanges(altsB("[alt]\nX.\n\n[alt]\nY."), altsB("[alt]\nX.\nY."), NONE),
+    ED.editionChanges(altsB("[alt]\nX.\nY."), altsB("[alt]\nX.\n\n[alt]\nY."), NONE),
+    ED.editionChanges(altsB("[alt]\nX. Z.\n\n[alt]\nY."), altsB("[alt]\nX.  Z.\n\n[alt]\nY."), NONE),
+  ].map(pledged);
+  check("43k a stamped reply's words joined are new words; spacing on one side or both, a tab after a line break and a non-breaking space are spacing; two replies made one, or one split, are new words, and a part's own spacing is not",
+    r43k.join(" | ") === ["changed:c-b!words", "changed:c-b", "changed:c-b", "changed:c-b", "changed:c-b!words", "changed:c-b!words", "changed:c-b"].join(" | "),
+    r43k.join(" | "));
   /* A card met for the first time, or again, that commits the firm says so beside new or restored, the agent's own reply
      coming back over a restored one being the agent's own version; one the edition retires leaves sight and is not named. */
   const newD = read(next(d => { d.cards.push({ id: "c-d", shelf: "t-op", bodyShape: "plain", title: { en: "D" }, body: { en: "D body." }, commits: true }); }));

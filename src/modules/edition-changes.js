@@ -3,7 +3,7 @@
    the same comparison. Pure: no page, no storage, nothing but the two catalogs and the layer handed in. */
 import { CARD_TEXT_FIELDS, cardFieldKey } from "./card-fields.js";
 import { catalogLangs } from "./content-model.js";
-import { cardCommits } from "./card-model.js";
+import { cardCommits, splitPartsRaw } from "./card-model.js";
 
 // The order the offer lists the kinds in.
 const EDITION_KINDS=["changed","new","restored","retired","removed"];
@@ -20,10 +20,13 @@ function editionFieldKeys(a,b){
   return out;
 }
 function editionText(m,key){ return String(m && m[key]!=null ? m[key] : ""); }
-/* THE REPLY, FOR A COMMITMENT ONLY. Trimmed, and a run of whitespace read as one space, so a
-   stamped card whose reply moved only by spacing is not in new words. The diff of the fields
-   stays the raw text: that spacing is still a change of the card, on a stamp or off one. */
-function editionReplyWords(m,key){ return editionText(m,key).trim().replace(/\s+/g," "); }
+/* THE REPLY, FOR A COMMITMENT ONLY, part by part where the card has several: each trimmed, a run of
+   whitespace (a non-breaking space among it) read as one space. Spacing alone is not new words, but
+   two replies made one, or one split, is what the agent sends, so it is. The field diff stays raw. */
+function editionReplyWords(m,key){
+  const t=editionText(m,key);
+  return (m && +m.alt ? splitPartsRaw(t) : [t]).map(s=>s.trim().replace(/\s+/g," ")).filter(Boolean).join("\n");
+}
 /** `held` is the catalog loaded now and `offered` the one asked about, both as the runtime keeps them;
  *  `layer` is this desk's own: overrides, removed and favourites. A card the desk removed is nobody's
  *  news. `own` marks a changed card where a field the lead changed is one the agent wrote otherwise.

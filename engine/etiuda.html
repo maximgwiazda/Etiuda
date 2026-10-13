@@ -15734,7 +15734,8 @@ What you type stays in this browser only.`;
     return String(m && m[key] != null ? m[key] : "");
   }
   function editionReplyWords(m, key) {
-    return editionText(m, key).trim().replace(/\s+/g, " ");
+    const t2 = editionText(m, key);
+    return (m && +m.alt ? splitPartsRaw(t2) : [t2]).map((s) => s.trim().replace(/\s+/g, " ")).filter(Boolean).join("\n");
   }
   function editionChanges(held, offered, layer, textOnly) {
     const lay = layer || {}, ov = lay.overrides || {};
