@@ -1570,7 +1570,7 @@ function catalogLangFns() {
     "const SW_STORE=", "function langColumn(", "function intentFieldKey(",
     "function intentArr(", "function setContentLangs(",
     "let COMMENT_LANG=", "function setCommentLang(", "function commentLang(",
-    "function intentStoreKeys(", "function intentFieldAt(",
+    "function intentStoreKeys(", "function intentFieldAt(", "function intentClause(",
     /* The table and the clock's hours are variables.js's, which greeting.js reads. */
     "const VAR_GREETINGS=", "const VAR_DAYPARTS=", "const VAR_HOURS=", "function varMinutes(",
     "let VAR_CATALOG=", "function varHours(", "function varDayPart(",
@@ -1588,7 +1588,7 @@ function catalogLangFns() {
     const FOLD_RE=new RegExp("["+Object.keys(FOLD).join("")+"]","g");
     let lang="en";
     return {CONTENT_LANGS,SW_STORE,setContentLangs,setCommentLang,commentLang,intentStoreKeys,
-            intentFieldAt,SW_TOPIC,SW_TOPIC_PL,SW_CMT,SW_CMT_PL,
+            intentFieldAt,intentClause,SW_TOPIC,SW_TOPIC_PL,SW_CMT,SW_CMT_PL,
             dayPart,greeting,setCatalogGreet,
             greetWords:()=>GREET_WORDS,setCatalogStop,affinityStop};`;
   return new Function(decls + glue)();
@@ -1683,6 +1683,7 @@ function catalogLangTests() {
   V.setCommentLang("pl");
   eq("a missing clause does not fall back to the comment language",
      V.intentFieldAt(0, "clause", "en"), "");
+  eq("and the sentence's own reader carries no clause either", V.intentClause(0, "en"), "");
   V.SW_STORE.en[0] = "alpha-clause"; V.SW_STORE.pl[0] = "";
   V.setCommentLang("en");
   eq("and a missing clause stays missing the other way",
