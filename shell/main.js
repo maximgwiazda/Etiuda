@@ -2572,10 +2572,11 @@ function readDesk() {
       branchRevs = {};
       Object.keys(doc.branchRevs).forEach(k => { if (Number.isInteger(doc.branchRevs[k]) && doc.branchRevs[k] > 0) branchRevs[k] = doc.branchRevs[k]; });
     }
+    /* Do not replace the map. A key this run already holds stays, and a number already held is not lowered. */
     if (doc && doc.readRevs && typeof doc.readRevs === "object" && !Array.isArray(doc.readRevs)) {
-      readRevs = {};
       Object.keys(doc.readRevs).forEach(k => {
-        if (/^k-[0-9a-f]{16}-[0-9a-f]{8}$/.test(k) && Number.isInteger(doc.readRevs[k]) && doc.readRevs[k] > 0) readRevs[k] = doc.readRevs[k];
+        const n = doc.readRevs[k];
+        if (/^k-[0-9a-f]{16}-[0-9a-f]{8}$/.test(k) && Number.isInteger(n) && n > (readRevs[k] || 0)) readRevs[k] = n;
       });
     }
     const table = v => !!v && typeof v === "object" && !Array.isArray(v);
@@ -2593,9 +2594,10 @@ function readDesk() {
       if (!SEALED_TEAM_RE.test(t) || !table(k)) return;
       Object.keys(k).forEach(n => { if (/^[1-9][0-9]*$/.test(n) && typeof k[n] === "string" && k[n]) (teamKeys[t] = teamKeys[t] || {})[n] = k[n]; });
     });
+    /* A number already held is not replaced by a lower one. Equal is not a raise. */
     if (doc && table(doc.teamEpochSeen)) Object.keys(doc.teamEpochSeen).forEach(t => {
       const n = doc.teamEpochSeen[t];
-      if (SEALED_TEAM_RE.test(t) && Number.isInteger(n) && n >= 1) teamEpochSeen[t] = n;
+      if (SEALED_TEAM_RE.test(t) && Number.isInteger(n) && n > (teamEpochSeen[t] || 0)) teamEpochSeen[t] = n;
     });
     if (doc && Array.isArray(doc.teamOpened)) doc.teamOpened.forEach(c => { if (typeof c === "string" && c) teamOpened.add(c); });
     [["teamSeen", teamSeen], ["teamBarred", teamBarred]].forEach(([k, set]) => {
@@ -3127,6 +3129,12 @@ function sendListing(win, force) {
   listingSent = key;
   win.webContents.send("etiuda:catalog-listing", rows);
 }
+/* A rev already handed on for one desk file is not replaced by a lower one. Equal is not a raise. */
+function keepReadRev(id, rev) {
+  if (!(rev > (readRevs[id] || 0))) return;
+  readRevs[id] = rev;
+  persistDeskEnvelope();
+}
 /* `desk` names a colleague's folder under desks/, and its file is handed only where the listing would list it.
    A rev below the highest already handed on for that file's id is not handed on. A file of the folder itself,
    below a rev already handed to the page, is not handed on either, and this read does not move that mark. */
@@ -3139,7 +3147,7 @@ function readRevFloor(text) {
   if (!/^k-[0-9a-f]{16}-[0-9a-f]{8}$/.test(id) || !Number.isInteger(rev) || rev < 1) return "";
   const had = readRevs[id] || 0;
   if (rev < had) return "below";
-  if (rev > had) { readRevs[id] = rev; persistDeskEnvelope(); }
+  keepReadRev(id, rev);
   return "kept";
 }
 ipcMain.handle("etiuda:catalog-read", (e, name, desk) => {

@@ -1,7 +1,8 @@
 /* A floor against going backwards, driven in bare node. Red today where the floor is missing,
  * green once a lower edition, an older team file, or a restored desk file is refused, with the
  * controls that a newer edition still lands. A fresh folder opens the highest rev the ring
- * verifies, and each mark kept in the desk file is never lowered. Throwaway keys and catalogs only.
+ * verifies, and each mark kept in the desk file is never lowered. A second read of an older
+ * desk file in the same process keeps the higher number. Throwaway keys and catalogs only.
  *
  *     node tests/rollback-floor.mjs        exit code is the number of failed checks, capped at 63
  *
@@ -22,7 +23,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 26;
+const EXPECTED = 31;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -35,7 +36,7 @@ const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-rollback-floor-"));
 const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
-const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "offerFile"];
+const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "offerFile", "keepCatalogRev", "keepReadRev"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -391,6 +392,16 @@ try {
     delete saved.teamKeys;
     fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(saved));
   };
+  const rewriteDesk = (D, edit) => {
+    const file = path.join(D.ud, "desk.json");
+    const saved = JSON.parse(fs.readFileSync(file, "utf8"));
+    edit(saved);
+    fs.writeFileSync(file, JSON.stringify(saved));
+  };
+  const rereadDesk = (D) => {
+    D.sync("etiuda:desk");
+    D.sync("etiuda:desk-refused-seen");
+  };
   {
     const SHARE = folder("fresh");
     put(SHARE, "etiuda-ring.json", RING);
@@ -550,6 +561,82 @@ try {
       + before.rev + ", mark " + marked + ", after " + after.rev + " / " + markedAfter
       + ", emptied " + (stayed ? "kept the mark" : "lost the mark")
       + ", restarted " + again.rev + " / " + marked2);
+  }
+
+  /* ---- a second read of an older desk file, in the same process, then the mark written again ---- */
+  {
+    const SHARE = folder("epoch-reread");
+    put(SHARE, "etiuda-ring.json", RING);
+    const D = newDesk("epoch-reread", SHARE);
+    const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    const seen = () => (D.envelope().teamEpochSeen || {})[TEAM];
+    put(SHARE, "etiuda-team.json", teamFile(TEAM, 4, []));
+    D.api.readCatalog();
+    const high = seen();
+    rewriteDesk(D, saved => { (saved.teamEpochSeen = saved.teamEpochSeen || {})[TEAM] = 1; });
+    rereadDesk(D);
+    const heldEpoch = seen();
+    rewriteDesk(D, saved => { (saved.teamEpochSeen = saved.teamEpochSeen || {})[TEAM] = 6; });
+    rereadDesk(D);
+    const raised = seen();
+    check(high === 4 && heldEpoch === 4 && raised === 6,
+      "888aa a second read of an older desk file does not lower the epoch mark, and a higher one still raises it: "
+      + high + ", then " + heldEpoch + ", then " + raised);
+  }
+  {
+    const SHARE = folder("revs-reread");
+    const D = newDesk("revs-reread", SHARE);
+    const id = "k-0123456789abcdef-0123abcd";
+    D.api.keepReadRev(id, 2);
+    const high = (D.envelope().readRevs || {})[id];
+    rewriteDesk(D, saved => { (saved.readRevs = saved.readRevs || {})[id] = 1; });
+    rereadDesk(D);
+    const heldRev = (D.envelope().readRevs || {})[id];
+    rewriteDesk(D, saved => { (saved.readRevs = saved.readRevs || {})[id] = 3; });
+    rereadDesk(D);
+    const raised = (D.envelope().readRevs || {})[id];
+    check(high === 2 && heldRev === 2 && raised === 3,
+      "888ab a second read of an older desk file does not lower a desk file's rev mark, and a higher one still raises it: "
+      + high + ", then " + heldRev + ", then " + raised);
+  }
+  {
+    const SHARE = folder("cat-direct");
+    put(SHARE, "etiuda-ring.json", RING);
+    const D = newDesk("cat-direct", SHARE);
+    staged(SHARE);
+    const booted = facts(D.sync("etiuda:catalog") || "");
+    D.api.keepCatalogRev(CAT1);
+    const held = markOf(D);
+    check(booted.rev === 2 && held === 2,
+      "888ac a lower rev handed straight to the catalog mark is not kept: boot " + booted.rev + ", mark " + held);
+  }
+  {
+    const SHARE = folder("rev-direct");
+    const D = newDesk("rev-direct", SHARE);
+    const id = "k-fedcba9876543210-abcd0123";
+    D.api.keepReadRev(id, 2);
+    const high = (D.envelope().readRevs || {})[id];
+    D.api.keepReadRev(id, 1);
+    const held = (D.envelope().readRevs || {})[id];
+    check(high === 2 && held === 2,
+      "888ad a lower rev handed straight to a desk file's rev mark is not kept: " + high + ", then " + held);
+  }
+  {
+    const SHARE = folder("cat-reread");
+    put(SHARE, "etiuda-ring.json", RING);
+    const D = newDesk("cat-reread", SHARE);
+    staged(SHARE);
+    const booted = facts(D.sync("etiuda:catalog") || "");
+    const high = markOf(D);
+    rewriteDesk(D, saved => { (saved.catalogRevs = saved.catalogRevs || {})["quay-board"] = 1; });
+    rereadDesk(D);
+    const held = markOf(D);
+    rewriteDesk(D, saved => { (saved.catalogRevs = saved.catalogRevs || {})["quay-board"] = 5; });
+    rereadDesk(D);
+    const raised = markOf(D);
+    check(booted.rev === 2 && high === 2 && held === 2 && raised === 5,
+      "888ae a second read of an older desk file does not lower the catalog mark, and a higher one still raises it: "
+      + high + ", then " + held + ", then " + raised);
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
