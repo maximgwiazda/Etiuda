@@ -1667,6 +1667,20 @@ function catalogLangTests() {
   V.setCommentLang("en");
   eq("even when the comment language is not the primary",
      V.intentFieldAt(0, "topic", "pl"), "alpha");
+  /* The clause is the sentence, so a missing one stays missing. Action and topic above still
+     fall back to the comment language; the clause does not, in either direction. */
+  V.SW_STORE.en.length = 0; V.SW_STORE.pl.length = 0;
+  V.SW_STORE.en.push(""); V.SW_STORE.pl.push("beta-clause");
+  V.setCommentLang("pl");
+  eq("a missing clause does not fall back to the comment language",
+     V.intentFieldAt(0, "clause", "en"), "");
+  V.SW_STORE.en[0] = "alpha-clause"; V.SW_STORE.pl[0] = "";
+  V.setCommentLang("en");
+  eq("and a missing clause stays missing the other way",
+     V.intentFieldAt(0, "clause", "pl"), "");
+  V.SW_STORE.pl[0] = "beta-clause";
+  eq("a clause the card language carries stays in that language",
+     V.intentFieldAt(0, "clause", "pl"), "beta-clause");
   eq("eApplyCatalog hands the catalog's commentLang to that table",
      /setCommentLang\(c\.commentLang\)/.test(extractDecl(sourceText(), "function eApplyCatalog(")),
      true);
