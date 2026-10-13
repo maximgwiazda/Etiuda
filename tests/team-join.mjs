@@ -313,16 +313,16 @@ try {
   const secretU = crypto.randomBytes(16).toString("hex");
   SECRETS.push(secretU);
   const lampLead = { keyId: LEAD.keyId, public: LEAD.public, name: "Lamp lead" };
-  /* The four digits the agent types on the confirm, as the lead reads them from Studio: HMAC-SHA256 under the invitation's
-     secret over the lead's 32-byte public key, its first six bytes read big-endian, modulo 10000. Made here from the
+  /* The five digits the agent types on the confirm, as the lead reads them from Studio: HMAC-SHA256 under the invitation's
+     secret over the lead's 32-byte public key, its first six bytes read big-endian, modulo 100000. Made here from the
      invitation's own text, never by the shell; wrongFor is the next code round, so never the right one. */
   const secretOf = blob => JSON.parse(Buffer.from(blob.slice(12), "base64url").toString("utf8")).secret;
   const codeFor = blob => {
     const o = JSON.parse(Buffer.from(blob.slice(12), "base64url").toString("utf8"));
     const mac = crypto.createHmac("sha256", Buffer.from(o.secret, "hex")).update(Buffer.from(o.lead.public, "hex")).digest();
-    return String(mac.readUIntBE(0, 6) % 10000).padStart(4, "0");
+    return String(mac.readUIntBE(0, 6) % 100000).padStart(5, "0");
   };
-  const wrongFor = blob => String((+codeFor(blob) + 1) % 10000).padStart(4, "0");
+  const wrongFor = blob => String((+codeFor(blob) + 1) % 100000).padStart(5, "0");
   const WIN = process.platform === "win32";
   const beforeQuiet = fs.readdirSync(quiet).slice().sort().join("|");
   const badPreview = await Du.join("read", "etiuda-join:not-valid");
@@ -571,7 +571,7 @@ try {
   const confirmHtml = TJ.teamJoinEmptyHtml();
   const groups = printOf(LEAD.public).match(/.{4}/g);
   check(/<textarea /.test(pasteHtml) && confirmHtml.indexOf(pageYard) >= 0 && confirmHtml.indexOf(pageYard + path.sep) < 0
-      && confirmHtml.indexOf("Lamp lead") >= 0 && /data-join-check/.test(confirmHtml) && confirmHtml.indexOf("e-join-key") < 0
+      && confirmHtml.indexOf("Lamp lead") >= 0 && /<input[^>]*data-join-check[^>]*maxlength="5"/.test(confirmHtml) && confirmHtml.indexOf("e-join-key") < 0
       && groups.every(g => confirmHtml.indexOf(g) < 0) && / disabled/.test(yesOf(confirmHtml))
       && !new RegExp("(^|[^0-9])" + codeFor(blobA) + "([^0-9]|$)").test(confirmHtml.replace(/<svg[\s\S]*?<\/svg>/g, "")),
     "15ah the confirm names the folder as the desk will use it and the lead, asks for the code the lead reads out, shows neither"
@@ -582,12 +582,15 @@ try {
   const before = calls.length;
   await press("invite");
   const sentWhileShut = calls.length - before;
+  typeFour(codeFor(blobA).slice(0, 4));
+  const partHtml = TJ.teamJoinEmptyHtml();
   typeFour(codeFor(blobA));
   const rightHtml = TJ.teamJoinEmptyHtml();
   check(/ disabled/.test(yesOf(wrongHtml)) && !!missOf(wrongHtml) && !/ hidden/.test(missOf(wrongHtml)) && sentWhileShut === 0
+      && / disabled/.test(yesOf(partHtml)) && / hidden/.test(missOf(partHtml))
       && !!yesOf(rightHtml) && !/ disabled/.test(yesOf(rightHtml)) && / hidden/.test(missOf(rightHtml)),
-    "15ap the yes opens only once the four characters typed are this invitation's check code; another four are said not to"
-    + " match, and the shut yes sends nothing: sent " + sentWhileShut);
+    "15ap the yes opens only once the code typed is this invitation's check code, all five digits; another code is said not to"
+    + " match, four of the five are not yet said wrong, and the shut yes sends nothing: sent " + sentWhileShut);
   await press("back");
   const heldAfterBack = held();
 
@@ -726,7 +729,7 @@ try {
     + " that code, is taken: " + (forgedTakeReal && forgedTakeReal.refused) + ", " + (forgedTakePrint && forgedTakePrint.refused)
     + ", then " + (envW.teamJoin ? "taken" : "not taken"));
 
-  /* The code is four digits, so it is sought as a whole token, never inside a longer run of letters and digits; an
+  /* The code is five digits, so it is sought as a whole token, never inside a longer run of letters and digits; an
      invitation whose code the desk's file already holds as a token, or that is this year, is not the one used. */
   const asToken = code => new RegExp("(^|[^0-9A-Za-z])" + code + "([^0-9A-Za-z]|$)");
   const Dx = await deskWith("code-unwritten", folder("code-unwritten-own"));

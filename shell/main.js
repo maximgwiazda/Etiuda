@@ -1473,13 +1473,13 @@ function memberProof(secret, commit) {
   return crypto.createHmac("sha256", Buffer.from(sec, "hex")).update(com, "utf8").digest("hex");
 }
 /* The check code the lead reads out and the agent types before yes: HMAC-SHA256 under the invitation's 128-bit secret
-   over the lead's 32-byte public key (the bytes, not their hex), its first six bytes read big-endian modulo 10000, as
-   four digits. "" where either is not the shape an invitation carries. Only the invitation that was issued gives it. */
+   over the lead's 32-byte public key (the bytes, not their hex), its first six bytes read big-endian modulo 100000, as
+   five digits. "" where either is not the shape an invitation carries. Only the invitation that was issued gives it. */
 function inviteCode(secret, leadPublic) {
   const sec = String(secret || ""), pub = String(leadPublic || "");
   if (!/^[0-9a-f]{32}$/.test(sec) || !/^[0-9a-f]{64}$/.test(pub)) return "";
   const mac = crypto.createHmac("sha256", Buffer.from(sec, "hex")).update(Buffer.from(pub, "hex")).digest();
-  return String(mac.readUIntBE(0, 6) % 10000).padStart(4, "0");
+  return String(mac.readUIntBE(0, 6) % 100000).padStart(5, "0");
 }
 /* The first 16 hex of the secret's own SHA-256, which is all of it a request carries. */
 function inviteIdOf(secret) {

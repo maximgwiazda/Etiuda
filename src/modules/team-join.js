@@ -46,9 +46,9 @@ function dropInvite(){
 /* Whether the agent typed this invitation's check code, which the shell made at read and checks again at yes. */
 function typedOk(){
   const want=joinOffer?joinOffer.code:"";
-  return /^[0-9]{4}$/.test(want) && joinTyped.replace(/\s+/g,"")===want;
+  return /^[0-9]{5}$/.test(want) && joinTyped.replace(/\s+/g,"")===want;
 }
-function typedWrong(){ return joinTyped.replace(/\s+/g,"").length>=4 && !typedOk(); }
+function typedWrong(){ return joinTyped.replace(/\s+/g,"").length>=5 && !typedOk(); }
 /* What the page still holds of an invitation, for the legs that check it lets go. */
 function inviteHeld(){
   return {mode:joinMode, draft:joinBlob, read:joinRead, typed:joinTyped, offer:joinOffer?Object.assign({},joinOffer):null};
@@ -175,16 +175,16 @@ function joinInviteParts(){
     acts:[["read",t("Continue")],["back",t("Cancel")]]};
   /* Neither the key nor the code is shown here: a code on the screen proves only that it was read off it. */
   if(joinMode==="confirm" && joinOffer){
-    const o=joinOffer, ask=t("Ask the team's lead for this invitation's check code, and type its four characters here.");
+    const o=joinOffer, ask=t("Ask the team's lead for this invitation's check code, and type its five digits here.");
     return {title:t("Join this team?"), line:joinWhere(o),
       body:'<div class="e-join-meta">'+esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder))+'</div>'
         +'<div class="e-join-meta">'+esc(t("Lead: {NAME}").split("{NAME}").join(o.lead))+'</div>'
         +'<div class="e-join-ask">'+esc(ask)+'</div>'
         +'<div class="e-join-why">'+esc(t("Only the real invitation gives this code, so it confirms the invitation comes from the team's own lead."))+'</div>'
-        +'<input type="text" class="e-join-check" data-join-check maxlength="4" inputmode="numeric" spellcheck="false" autocomplete="off" aria-label="'
+        +'<input type="text" class="e-join-check" data-join-check maxlength="5" inputmode="numeric" spellcheck="false" autocomplete="off" aria-label="'
         +esc(t("Check"))+'" value="'+esc(joinTyped)+'">'
         +'<div class="e-join-ask e-join-miss" data-join-miss'+(typedWrong()?'':' hidden')+'>'
-        +esc(t("These four characters do not match this invitation. Ask the lead again before joining."))+'</div>',
+        +esc(t("This code does not match this invitation. Ask the lead again before joining."))+'</div>',
       acts:[["invite",t("Join this team"),!typedOk()],["back",t("Cancel")]]};
   }
   if(joinMode==="refused") return {title:t("Join a team"),
@@ -192,7 +192,7 @@ function joinInviteParts(){
       :joinWhy==="pinned"?t("This invitation names a team this desk already knows, but with a different lead's key. It was not used, and nothing changed. Tell the team's lead about it.")
       :joinWhy==="barred"?t("This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. To join, ask from the team's catalog instead.")
       :joinWhy==="foreign"?t("This folder holds another team, or the same team under a different lead's key, so nothing was written. Tell the team's lead about it.")
-      :joinWhy==="check"?t("These four characters do not match this invitation. Ask the lead again before joining.")
+      :joinWhy==="check"?t("This code does not match this invitation. Ask the lead again before joining.")
       :t("This invitation cannot be read, so nothing was changed."),
     body:"", acts:[["back",t("Cancel")]]};
   return null;
