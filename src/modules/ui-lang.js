@@ -1005,6 +1005,7 @@ UI_STRINGS.pl={
   "This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. To join, ask from the team's catalog instead.":"To zaproszenie wskazuje zespół, którego lider został na tym stanowisku zapomniany. Nie zostało użyte i nic się nie zmieniło. Aby dołączyć, proszę poprosić o to z katalogu zespołu.",
   "This folder holds another team, or the same team under a different lead's key, so nothing was written. Tell the team's lead about it.":"W tym folderze jest inny zespół albo ten sam zespół z innym kluczem lidera, więc nic nie zapisano. Proszę powiedzieć o tym liderowi zespołu.",
   "The organisation's IT sets this desk's team, so invitations are turned off.":"Zespół tego stanowiska ustawia dział IT organizacji, więc zaproszenia są wyłączone.",
+  "The team file in this folder could not be read, so this desk did not join and nothing was written. Let the team's lead know, so they can check the folder.":"Nie udało się odczytać pliku zespołu w tym folderze, więc stanowisko nie dołączyło i nic nie zapisano. Proszę dać znać liderowi zespołu: może sprawdzić ten folder.",
   "Load another catalog":"Wczytaj inny katalog",
   "Waiting for the lead to open the request":"Prośba czeka, aż lider ją otworzy",
   "The code to read to them appears here as soon as they do.":"Gdy to zrobi, pojawi się tu kod do podania.",

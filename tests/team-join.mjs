@@ -511,17 +511,20 @@ try {
     + " another keyId takes no request, and the"
     + " folder is put back as it was; THE CONTROL, a team file whole under the invited lead, takes it: " + JSON.stringify(foreign));
 
-  /* A team file the desk cannot read is not taken for no team file: here a folder stands where the file would. */
+  /* A team file the desk cannot read is taken neither for no team file nor for another team's: a folder standing where the
+     file would, and a file that is not JSON. The page's sentence for it is read with the page's legs, where 15be is. */
   const De = await deskWith("unreadable", folder("unreadable-own"));
-  const unreadableTeam = folder("files-unreadable");
+  const unreadableTeam = folder("files-unreadable"), notJsonTeam = folder("files-not-json");
   fs.mkdirSync(path.join(unreadableTeam, "etiuda-team.json"));
+  put(notJsonTeam, "etiuda-team.json", "{ not a team file");
   const trustE = trustOf(De);
-  const unreadableBlob = inviteBlob({ team: TEAM, folder: unreadableTeam, lead: lampLead, secret: newSecret() });
-  const tookE = await De.join("invite", unreadableBlob, "Ola", codeFor(unreadableBlob));
-  check(tookE && typeof tookE.refused === "string" && tookE.refused !== "" && !tookE.join && trustOf(De) === trustE
-      && !fs.existsSync(path.join(unreadableTeam, "desks")),
-    "15be a folder whose team file cannot be read takes no request, as one holding another team does, and the desk's folder is put"
-    + " back: " + (tookE && (tookE.refused || (tookE.join && tookE.join.state))));
+  const tookE = [];
+  for (const f of [unreadableTeam, notJsonTeam]) {
+    const b = inviteBlob({ team: TEAM, folder: f, lead: lampLead, secret: newSecret() });
+    const r = await De.join("invite", b, "Ola", codeFor(b));
+    tookE.push((r && (r.refused || (r.join ? r.join.state : "nothing"))) + (fs.existsSync(path.join(f, "desks")) ? " wrote" : ""));
+  }
+  const keptE = trustOf(De) === trustE;
 
   /* The folder the invitation names is one nothing has made. */
   const never = path.join(LAB, "never-" + crypto.randomBytes(4).toString("hex"));
@@ -948,6 +951,28 @@ try {
   const escHtml = s => s.replace(/&/g, "&amp;").replace(/'/g, "&#39;");
   check(pageSaid("en") === escHtml(POLICY_LINE.en) && pageSaid("pl") === escHtml(POLICY_LINE.pl) && policyPage.en.indexOf(secretOf(controlBlob)) < 0,
     "15ba the policy's refusal reaches the page as its own sentence, in English and in Polish: " + pageSaid("en") + " / " + pageSaid("pl"));
+
+  const UNREADABLE_LINE = { en: "The team file in this folder could not be read, so this desk did not join and nothing was written. Let the team's lead know, so they can check the folder.",
+    pl: "Nie udało się odczytać pliku zespołu w tym folderze, więc stanowisko nie dołączyło i nic nie zapisano. Proszę dać znać liderowi zespołu: może sprawdzić ten folder." };
+  window.E_HOST = { onTeamJoin: noop, teamJoin: op => Promise.resolve(op === "read" || op === "invite"
+    ? { sealed: null, join: null, leads: [], refused: "unreadable" } : { sealed: null, join: null, leads: [] }) };
+  TJ.wireTeamJoin();
+  await new Promise(r => setTimeout(r, 30));
+  const unreadableSaid = {};
+  for (const lang of ["en", "pl"]) {
+    ST.lsSet("eUiLang", lang);
+    TJ.openJoinPaste();
+    pasted = elOf({ "data-join-paste": "" }, controlBlob);
+    await press("read");
+    unreadableSaid[lang] = (/<p>([^<]*)<\/p>/.exec(TJ.teamJoinEmptyHtml()) || ["", ""])[1];
+    await press("back");
+  }
+  if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+  check(tookE.every(x => x === "unreadable") && keptE
+      && unreadableSaid.en === escHtml(UNREADABLE_LINE.en) && unreadableSaid.pl === escHtml(UNREADABLE_LINE.pl),
+    "15be a folder whose team file cannot be read, a folder standing where the file would or a file that is not JSON, takes no"
+    + " request and puts the desk's folder back, refused with a word of its own that the page says in its own sentence, in"
+    + " English and in Polish: " + JSON.stringify(tookE) + ", " + unreadableSaid.en);
 
   /* A read the page has let go is answered to nobody: one left by Cancel, and one landing while another paste box is open. */
   const Dst = await deskWith("stale", folder("stale-own"));

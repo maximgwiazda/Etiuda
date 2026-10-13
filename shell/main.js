@@ -1897,17 +1897,19 @@ function inviteSettled(team, lead) {
   const pin = teamPins[team];
   return pin && (pin.keyId !== lead.keyId || pin.public !== lead.public) ? "pinned" : "";
 }
-/* Whether the folder an invitation names may take its request: it holds no team file, or one whole under the
-   invited lead and for the invited team. */
+/* "" where the folder an invitation names may take its request: it holds no team file, or one whole under the invited
+   lead and for the invited team. "unreadable" where its team file cannot be read, is larger than a team file, or is not
+   JSON; "foreign" for any other. */
 function inviteFolderTeam(parsed) {
   const file = path.join(parsed.folder, TEAM_NAME);
   let text = null;
   try { if (fs.statSync(file).size <= TEAM_MAX) text = fs.readFileSync(file, "utf8"); }
-  catch (e) { return e.code === "ENOENT"; }
-  if (text === null) return false;
+  catch (e) { return e.code === "ENOENT" ? "" : "unreadable"; }
+  if (text === null) return "unreadable";
   let doc = null;
-  try { doc = JSON.parse(text.replace(/^\ufeff/, "")); } catch { return false; }
-  return teamWhole(doc) && doc.id === parsed.team && doc.lead.keyId === parsed.lead.keyId && doc.lead.public === parsed.lead.public;
+  try { doc = JSON.parse(text.replace(/^\ufeff/, "")); } catch { return "unreadable"; }
+  return teamWhole(doc) && doc.id === parsed.team && doc.lead.keyId === parsed.lead.keyId && doc.lead.public === parsed.lead.public
+    ? "" : "foreign";
 }
 /* What an invitation says, and nothing written: the folder it names is not opened, stated or watched. */
 function readInvite(text) {
@@ -1950,7 +1952,7 @@ async function takeInvite(text, name, check) {
     return Object.assign({}, joinView(), { refused: "silent" });
   }
   settleFolder(parsed.folder, true);
-  const late = inviteFolderTeam(parsed) ? inviteSettled(parsed.team, parsed.lead) : "foreign";
+  const late = inviteFolderTeam(parsed) || inviteSettled(parsed.team, parsed.lead);
   if (late) {
     if (catalogFolder() !== previous) deskSetOwn(CATALOG_FOLDER_KEY, previous);
     return Object.assign({}, joinView(), { refused: late });
