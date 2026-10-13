@@ -6946,6 +6946,7 @@ What you type stays in this browser only.`;
     "now commits the firm": "teraz zobowiązuje firmę",
     "no longer commits the firm": "już nie zobowiązuje firmy",
     "commits the firm in new words": "zobowiązuje firmę w nowym brzmieniu",
+    "commits the firm": "zobowiązuje firmę",
     "It comes back with your star and your edits.": "Wróci z gwiazdką i własnymi zmianami.",
     "and {N} more": "i {N} więcej",
     "Show the differences": "Pokaż różnice",
@@ -15860,17 +15861,31 @@ What you type stays in this browser only.`;
   function editionText(m, key) {
     return String(m && m[key] != null ? m[key] : "");
   }
+  function editionReplyWords(m, key) {
+    const t2 = editionText(m, key);
+    return (m && +m.alt ? splitPartsRaw(t2) : [t2]).map((s) => s.trim().replace(/\s+/g, " ")).filter(Boolean).join("\n");
+  }
   function editionChanges(held, offered, layer, textOnly) {
     const lay = layer || {}, ov = lay.overrides || {};
     const gone = new Set(lay.removed || []), stars = new Set(lay.favourites || []);
     const keys = editionFieldKeys(held, offered), replies = keys.filter((k) => k.field === "body");
     const was = new Map((held && held.cards || []).map((m) => [String(m.id), m]));
     const now = new Map((offered && offered.cards || []).map((m) => [String(m.id), m]));
+    const standing = (m, id, b) => {
+      if (textOnly) return {};
+      if (!cardCommits(m)) return b && cardCommits(b) ? { stamp: "off", commitment: true } : {};
+      const mine = ov[id];
+      return {
+        stamp: "carries",
+        commitment: true,
+        own: replies.some((k) => !!mine && mine[k.key] != null && String(mine[k.key]) !== editionText(m, k.key))
+      };
+    };
     const items = [];
     now.forEach((m, id) => {
       const b = was.get(id);
       if (!b) {
-        if (!m.retired) items.push({ id, kind: "new", fields: [] });
+        if (!m.retired) items.push(Object.assign({ id, kind: "new", fields: [] }, standing(m, id)));
         return;
       }
       if (gone.has(id) || m.retired && b.retired) return;
@@ -15879,14 +15894,14 @@ What you type stays in this browser only.`;
         return;
       }
       if (b.retired) {
-        items.push({ id, kind: "restored", fields: [] });
+        items.push(Object.assign({ id, kind: "restored", fields: [] }, standing(m, id, b)));
         return;
       }
       const fields = keys.filter((k) => editionText(b, k.key) !== editionText(m, k.key));
       const stamp = textOnly || cardCommits(b) === cardCommits(m) ? "" : cardCommits(m) ? "on" : "off";
       if (!fields.length && !stamp) return;
       const mine = ov[id], mineStands = (k) => !!mine && mine[k.key] != null && String(mine[k.key]) !== editionText(m, k.key);
-      const commitment = !!stamp || !textOnly && cardCommits(m) && fields.some((k) => k.field === "body");
+      const commitment = !!stamp || !textOnly && cardCommits(m) && fields.some((k) => k.field === "body" && editionReplyWords(b, k.key) !== editionReplyWords(m, k.key));
       items.push({
         id,
         kind: "changed",
@@ -15900,7 +15915,7 @@ What you type stays in this browser only.`;
       if (!now.has(id) && !gone.has(id) && !b.retired) items.push({ id, kind: "removed", fields: [] });
     });
     const at = (k) => EDITION_KINDS.indexOf(k);
-    items.sort((x, y) => at(x.kind) - at(y.kind) || (y.commitment ? 1 : 0) - (x.commitment ? 1 : 0));
+    items.sort((x, y) => (y.commitment ? 1 : 0) - (x.commitment ? 1 : 0) || at(x.kind) - at(y.kind));
     const counts2 = {};
     EDITION_KINDS.forEach((k) => {
       counts2[k] = 0;
@@ -26788,10 +26803,11 @@ What you type stays in this browser only.`;
   }
   function editionPledgeLine(it) {
     if (!it.commitment) return "";
-    return t(it.stamp === "on" ? "now commits the firm" : it.stamp === "off" ? "no longer commits the firm" : "commits the firm in new words");
+    return t(it.stamp === "carries" ? "commits the firm" : it.stamp === "on" ? "now commits the firm" : it.stamp === "off" ? "no longer commits the firm" : "commits the firm in new words");
   }
   function editionSubline(it, c) {
     if (it.kind === "changed" && it.own) return t(teamTextTaken(c, it.id) ? "the team's new text" : "you have your own version");
+    if (it.kind === "restored" && it.own) return t("you have your own version");
     if (it.kind === "retired" && it.asleep) return t("It comes back with your star and your edits.");
     return "";
   }
@@ -26852,6 +26868,7 @@ What you type stays in this browser only.`;
     } else {
       const gone = it.kind === "retired" || it.kind === "removed", m = gone ? was : now, code = cardText(m, "body", lang) ? lang : CONTENT_LANGS[0];
       rows = head(desk ? gone ? desk.was : desk.now : t(gone ? "Was" : "Becomes")) + cell(esc(cardText(m, "body", code)));
+      if (it.stamp) rows += '<div class="ed-field">' + esc(t("Commitment")) + "</div>" + cell(esc(editionStampWord(it.stamp !== "off")));
       const sub = desk ? "" : editionSubline(it, c);
       if (sub) rows += '<p class="ed-sub">' + esc(sub) + "</p>";
       if (desk && desk.place && it.kind === "new") rows += desk.place(it);

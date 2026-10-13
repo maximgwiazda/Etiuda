@@ -444,6 +444,7 @@ UI_STRINGS.pl={
   "now commits the firm":"teraz zobowiązuje firmę",
   "no longer commits the firm":"już nie zobowiązuje firmy",
   "commits the firm in new words":"zobowiązuje firmę w nowym brzmieniu",
+  "commits the firm":"zobowiązuje firmę",
   "It comes back with your star and your edits.":"Wróci z gwiazdką i własnymi zmianami.",
   "and {N} more":"i {N} więcej",
   "Show the differences":"Pokaż różnice",
