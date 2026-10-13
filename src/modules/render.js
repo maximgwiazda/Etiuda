@@ -24,6 +24,7 @@ import { cardBodyHtml } from "./card-body.js";
 import { cardFillKey } from "./rail-list.js";
 import { cardDrag } from "./list-pointer.js";
 import { eApplyRecency } from "./recency.js";
+import { deckSettle } from "./deck.js";
 import { cssEsc } from "./css-esc.js";
 import { markEntrySel } from "./entry-walk.js";
 import { scrollPageTop } from "./page-scroll.js";
@@ -178,6 +179,7 @@ function render(){
     hooks.syncAddFab();
     hooks.syncNextDock();
     applyCardColumns();
+    deckSettle();
     setPendingScrollHit(false);
     putEntrySel(null);
     markSearchHits(terms);
@@ -293,6 +295,8 @@ function render(){
      sequence, and this is the only step that knows about columns. */
   applyCardColumns();
   settleFreshCards();
+  // Every caller that measures after a render reads the decks at rest: see deckSettle.
+  deckSettle();
   eApplyRecency();
 
   // Drop focus if that block disappeared after filter/reorder

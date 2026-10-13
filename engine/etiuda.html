@@ -19072,6 +19072,7 @@ What you type stays in this browser only.`;
     deckOwnChange: () => deckOwnChange,
     deckReach: () => deckReach,
     deckScan: () => deckScan,
+    deckSettle: () => deckSettle,
     wireDeck: () => wireDeck
   });
   var DECK_PEEK = 6;
@@ -19121,6 +19122,8 @@ What you type stays in this browser only.`;
   }
   var deckRaf = 0;
   var deckKbdCard = null;
+  var deckObs = null;
+  var deckListW = -1;
   function deckView() {
     const h = globalThis.innerHeight;
     return typeof h === "number" && h > 0 ? h : 800;
@@ -19184,6 +19187,41 @@ What you type stays in this browser only.`;
   }
   function deckLater() {
     if (!deckRaf) deckRaf = requestAnimationFrame(deckScan);
+  }
+  function deckHeard(ms) {
+    let shape = false, fade = false;
+    for (const r of ms) {
+      if (r.type === "childList") {
+        shape = true;
+        fade = true;
+      } else if (!deckOwnChange(r.oldValue, r.target.getAttribute("class"))) fade = true;
+    }
+    return { shape, fade };
+  }
+  function deckHoldsCard(n) {
+    return n.nodeType === 1 && (n.matches(".card[data-id]") || !!n.querySelector(".card[data-id]"));
+  }
+  function deckDrawnBy(r, drawn) {
+    const added = Array.from(r.addedNodes);
+    if (added.length && added.every((n) => drawn.indexOf(n) > -1)) return true;
+    if (drawn.some((c) => c.contains(r.target))) return true;
+    const t2 = r.target, inCard = !!(t2.closest && t2.closest(".card[data-id]"));
+    return !inCard && !added.some(deckHoldsCard) && !Array.from(r.removedNodes).some(deckHoldsCard);
+  }
+  function deckSettle(drawn) {
+    if (!list) return;
+    const ms = deckObs ? deckObs.takeRecords() : [];
+    if (!drawn) {
+      if (deckRaf) {
+        cancelAnimationFrame(deckRaf);
+        deckRaf = 0;
+      }
+      deckScan();
+    } else {
+      deckMeasure(drawn.filter((c) => deckSlabs(c).length > 1));
+      if (ms.some((r) => r.type === "childList" && !deckDrawnBy(r, drawn))) deckLater();
+    }
+    if (deckHeard(ms).fade) deckFade();
   }
   var deckApproachRaf = 0;
   function deckApproach() {
@@ -19336,19 +19374,18 @@ What you type stays in this browser only.`;
   }
   function wireDeck() {
     if (!list) return;
-    new MutationObserver((ms) => {
-      let shape = false, fade = false;
-      for (const r of ms) {
-        if (r.type === "childList") {
-          shape = true;
-          fade = true;
-        } else if (!deckOwnChange(r.oldValue, r.target.getAttribute("class"))) fade = true;
+    deckObs = new MutationObserver((ms) => {
+      const h = deckHeard(ms);
+      if (h.shape) deckLater();
+      if (h.fade) deckFade();
+    });
+    deckObs.observe(list, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"], attributeOldValue: true });
+    if (typeof ResizeObserver === "function") new ResizeObserver((es) => {
+      const w = es.length ? es[es.length - 1].contentRect.width : -1;
+      if (w !== deckListW) {
+        deckListW = w;
+        deckLater();
       }
-      if (shape) deckLater();
-      if (fade) deckFade();
-    }).observe(list, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"], attributeOldValue: true });
-    if (typeof ResizeObserver === "function") new ResizeObserver(() => {
-      deckLater();
       deckFadeLater();
     }).observe(list);
     list.addEventListener("animationend", deckFadeLater);
@@ -20071,6 +20108,7 @@ What you type stays in this browser only.`;
     el.replaceWith(fresh);
     if (near) holdFresh(fresh);
     cardPool.set(id, fresh);
+    return fresh;
   }
   function cardsNear(ids) {
     const vh = window.innerHeight;
@@ -20082,8 +20120,12 @@ What you type stays in this browser only.`;
     });
   }
   function rebuildCardsInPlace(ids) {
-    const near = cardsNear(ids);
-    ids.forEach((id, i) => rebuildCardInPlace(id, near[i]));
+    const near = cardsNear(ids), drawn = [];
+    ids.forEach((id, i) => {
+      const el = rebuildCardInPlace(id, near[i]);
+      if (el && near[i]) drawn.push(el);
+    });
+    deckSettle(drawn);
   }
   function runLangChunks(ids) {
     const step = () => {
@@ -20959,6 +21001,7 @@ What you type stays in this browser only.`;
       hooks.syncAddFab();
       hooks.syncNextDock();
       applyCardColumns();
+      deckSettle();
       setPendingScrollHit(false);
       putEntrySel(null);
       markSearchHits(terms);
@@ -21029,6 +21072,7 @@ What you type stays in this browser only.`;
     hooks.syncNextDock();
     applyCardColumns();
     settleFreshCards();
+    deckSettle();
     eApplyRecency();
     if (entrySel && !list.querySelector('.card[data-id="' + cssEsc(entrySel.id) + '"] .txt[data-v="' + entrySel.vi + '"]')) {
       putEntrySel(null);

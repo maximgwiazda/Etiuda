@@ -3799,6 +3799,109 @@ const CARD_B = {
         return eq([baseBody.indexOf("content-visibility") === -1, /content-visibility:\s*visible/.test(nearBody),
           /filter:\s*blur\(1\.6px\)/.test(underBody)].join(","), "true,true,true");
       });
+    /* THE DECKS AT REST BEFORE ANYTHING READS THE LIST. A glide reads every card's place in the task that drew the
+       list; a tuck written a frame later moves the cards under a deck while they glide. The stand-ins: an observer
+       whose undelivered records are `held` and taken by takeRecords(), a size observer fed by hand, and frames that
+       are queued, never run unless asked, and counted as scans when their callback is deckScan itself. */
+    const deckRig = () => {
+      const g = globalThis, keys = ["MutationObserver", "ResizeObserver", "requestAnimationFrame", "cancelAnimationFrame", "addEventListener", "innerHeight"];
+      const was = keys.map(k => [k, Object.prototype.hasOwnProperty.call(g, k), g[k]]);
+      const rig = { held: [], feed: null, size: null, frames: [],
+        scans() { return this.frames.filter(f => f.fn === DK.deckScan && f.state === "queued").length; },
+        run() { this.frames.filter(f => f.state === "queued").forEach(f => { f.state = "ran"; f.fn(); }); },
+        // A frame left queued would hold the module's own and swallow the next leg's ask, so the queue is run out first.
+        restore() { try { this.run(); } finally { was.forEach(([k, had, v]) => { if (had) g[k] = v; else delete g[k]; }); } } };
+      g.MutationObserver = class { constructor(f) { rig.feed = f; } observe() {} takeRecords() { const r = rig.held; rig.held = []; return r; } };
+      g.ResizeObserver = class { constructor(f) { rig.size = f; } observe() {} };
+      g.requestAnimationFrame = fn => { rig.frames.push({ id: rig.frames.length + 1, fn, state: "queued" }); return rig.frames.length; };
+      g.cancelAnimationFrame = id => { const f = rig.frames[id - 1]; if (f && f.state === "queued") f.state = "cancelled"; };
+      g.addEventListener = () => {}; globalThis.document.addEventListener = () => {};
+      g.innerHeight = 800;
+      return rig;
+    };
+    /* A card of two replies, 110 high laid flat: at rest 10 + 40 + one edge of 6 + 10 = 66. Its box reads are counted. */
+    const deckCard = (id, top, o = {}) => {
+      const slab = t => ({ nodeType: 1, offsetTop: t, offsetHeight: 40, offsetWidth: 300, classList: cls(new Set(["txt"])), style: { setProperty() {}, removeProperty() {} } });
+      const slabs = o.one ? [slab(10)] : [slab(10), slab(60)];
+      const c = { nodeType: 1, dataset: { id }, classList: cls(new Set(["card"])), rects: 0, hover: !!o.hover, offsetHeight: 110,
+        style: { v: {}, setProperty(k, x) { this.v[k] = x; }, removeProperty(k) { delete this.v[k]; if (k === "height") delete this.height; },
+          getPropertyValue(k) { return this.v[k] || ""; } },
+        getBoundingClientRect() { this.rects++; return { top, bottom: top + 110, left: 0, right: 300, width: 300, height: 110 }; },
+        querySelectorAll() { return slabs; }, querySelector() { return null; }, closest() { return null; },
+        matches(s) { return s === ":hover" ? this.hover : s === ".card[data-id]"; },
+        contains(n) { return n === this || slabs.includes(n); }, getAttribute() { return [...this.classList.s].join(" "); } };
+      return c;
+    };
+    const wired = items => {
+      const l = listOf(items);
+      l.nodeType = 1; l.addEventListener = () => {}; l.closest = () => null; l.contains = n => l.items.includes(n);
+      globalThis.document.querySelector = q => (q === "#list" ? l : null); Dom.grabDom();
+      DK.wireDeck();
+      return l;
+    };
+    const at = c => [...c.classList.s].filter(k => k.startsWith("deck")).sort().join("+") || "none";
+    check("deck.js", "1013dk1 a list just drawn is settled before anything reads it: a deck the drawing brought into the band is tucked at once, one beyond it is left alone, the frame the drawing asked for is cancelled, the observer's record of the drawing is taken so no frame comes back for it, and the fade it owed is worked out",
+      () => {
+        const rig = deckRig();
+        try {
+          const near = deckCard("c-near", 100, { hover: true }), far = deckCard("c-far", 5000), under = node("c-under", 180, 0, 90);
+          under.querySelectorAll = () => [{ classList: cls(new Set(["txt"])) }];
+          const l = wired([near, under, far]);
+          const asked = rig.scans();
+          rig.held = [{ type: "childList", target: l, addedNodes: [near, under, far], removedNodes: [] }];
+          DK.deckSettle();
+          const got = [asked, near.style.height, at(near), far.style.height || "none", at(far), rig.held.length, rig.scans(),
+            under.classList.contains("deck-under")];
+          if (rig.held.length) rig.feed(rig.held);
+          got.push(rig.scans());
+          return eq(got.join("|"), "1|66px|deck+deck-near+deck-open+deck-up|none|none|0|0|true|0");
+        } finally { rig.restore(); }
+      });
+    check("deck.js", "1013dk2 cards rebuilt in place are settled in the same pass: the decks among them are tucked without a box read to place them, a deck not rebuilt is left as it stands, and no frame is asked for their own drawing nor for a change outside every card, but one is for a card drawn by someone else",
+      () => {
+        const rig = deckRig();
+        try {
+          const a0 = deckCard("c-a", 100), b = deckCard("c-b", 300), c0 = deckCard("c-c", 500, { one: true });
+          const l = wired([a0, b, c0]);
+          rig.run();
+          const a = deckCard("c-a", 100), c = deckCard("c-c", 500, { one: true }), col = { nodeType: 1, closest: () => null };
+          l.items.splice(0, 3, a, b, c);
+          b.style.height = "77px"; b.rects = 0;
+          const span = { nodeType: 1, closest: () => null }, text = { nodeType: 3 };
+          rig.held = [{ type: "childList", target: col, addedNodes: [a], removedNodes: [a0] },
+            { type: "childList", target: col, addedNodes: [c], removedNodes: [c0] },
+            { type: "childList", target: span, addedNodes: [text], removedNodes: [{ nodeType: 3 }] }];
+          DK.deckSettle([a, c]);
+          const own = [a.style.height, at(a), b.style.height, at(c), a.rects + b.rects + c.rects, rig.held.length, rig.scans()].join(",");
+          rig.held = [{ type: "childList", target: col, addedNodes: [deckCard("c-x", 700)], removedNodes: [] }];
+          DK.deckSettle([]);
+          return eq(own + "|" + rig.scans(), "66px,deck+deck-near,77px,none,0,0,0|1");
+        } finally { rig.restore(); }
+      });
+    check("deck.js", "1013dk3 the list's size asks for a scan when its width changes and not when only its height does, which every drawing and the tuck itself change",
+      () => {
+        const rig = deckRig();
+        try {
+          wired([deckCard("c-w", 100)]);
+          rig.run();
+          const sized = (w, h) => { rig.size([{ contentRect: { width: w, height: h } }]); const n = rig.scans(); rig.run(); return n; };
+          return eq([sized(913, 4000), sized(913, 4600), sized(913, 3900), sized(705, 3900)].join(","), "1,0,0,1");
+        } finally { rig.restore(); }
+      });
+    check("render.js", "1013dk4 a render settles the decks before it returns, on both of its ends, right after the columns are dealt and the fresh cards held; a rebuild in place settles the near cards it drew in the same call",
+      () => {
+        const flat = s => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "").replace(/\s+/g, "");
+        const fn = (src, name) => { const s = src.indexOf("\nfunction " + name + "("); if (s < 0) return "";
+          const e = [src.indexOf("\nfunction ", s + 1), src.indexOf("\nexport ", s + 1)].filter(i => i > 0);
+          return flat(src.slice(s, e.length ? Math.min(...e) : src.length)); };
+        const rs = fs.readFileSync(join(MODDIR, "render.js"), "utf8"), ps = fs.readFileSync(join(MODDIR, "card-pool.js"), "utf8");
+        const r = fn(rs, "render"), one = fn(ps, "rebuildCardInPlace"), many = fn(ps, "rebuildCardsInPlace");
+        const imported = src => /import\{[^}]*\bdeckSettle\b[^}]*\}from"\.\/deck\.js"/.test(flat(src));
+        const empty = r.slice(0, r.indexOf("return;"));
+        return eq([imported(rs), empty.includes("applyCardColumns();deckSettle();"), r.includes("applyCardColumns();settleFreshCards();deckSettle();"),
+          imported(ps), /returnfresh;\}$/.test(one), /drawn\.push\(el\)/.test(many) && many.indexOf("ids.forEach(") < many.indexOf("deckSettle(drawn);")].join(","),
+          "true,true,true,true,true,true");
+      });
     /* The bar opens on hover. max-height lays the row out on every frame of that reveal, so the
        opening has to ride a length that only the clip reads, on the same tier, with the blur kept. */
     check("template.html", "1010pv1 the category bar opens on a clip, not on max-height, and the open state still blurs",
