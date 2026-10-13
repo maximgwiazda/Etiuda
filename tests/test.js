@@ -183,6 +183,7 @@ function pureFns() {
     "function isVowelPL(",
     "function zForm(",
     "const PL_VOC_PAIRS",
+    "const PL_VOC_EXEMPT",
     "function plVocative(",
     "function agentParts(",
     "function formatPaxName(",
@@ -469,6 +470,14 @@ function runUnitTests() {
   eq("plVocative Emma (-a, origin aside)", F.plVocative("Emma"), "Emmo");
   eq("plVocative Brzeczyszczykiewicz (soft cz, -u)", F.plVocative("Brzeczyszczykiewicz"), "Brzeczyszczykiewiczu");
   eq("plVocative Kasia (a diminutive the table carries)", F.plVocative("Kasia"), "Kasiu");
+  /* Every title and placeholder the name box should not decline, as typed, then three other
+     casings of words the rule would decline, then a real name that still declines. */
+  const EXEMPT = ["Mr", "Mrs", "Ms", "Miss", "Mx", "Dr", "Sir", "Madam", "Madame",
+    "Guest", "Customer", "Client", "Visitor", "Anonymous", "User",
+    "Gość", "Klient", "Klientka", "Anonim", "Użytkownik"];
+  eq("a title or a placeholder in the name box is left as typed, and a name is still declined",
+     EXEMPT.concat(["mrs", "GUEST", "GOŚĆ", "Anna"]).map(w => F.plVocative(w)),
+     EXEMPT.concat(["mrs", "GUEST", "GOŚĆ", "Anno"]));
 
   // Diacritic folding
   eq("fold bagaż", F.foldDiacritics("bagaż"), "bagaz");

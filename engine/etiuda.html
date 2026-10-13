@@ -4593,9 +4593,11 @@ What you type stays in this browser only.`;
     const i = p.indexOf(":");
     if (i > 0) PL_VOC[p.slice(0, i).toLowerCase()] = p.slice(i + 1);
   });
+  var PL_VOC_EXEMPT = new Set("mr mrs ms miss mx dr sir madam madame guest customer client visitor anonymous user gość klient klientka anonim użytkownik".split(" "));
   function plVocative(name) {
     const n = String(name || "").trim();
     if (!n) return n;
+    if (PL_VOC_EXEMPT.has(n.toLowerCase())) return n;
     const hit = PL_VOC[n.toLowerCase()];
     if (hit) return hit;
     if (/ek$/i.test(n) && n.length > 3) {
