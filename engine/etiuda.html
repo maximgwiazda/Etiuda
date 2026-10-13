@@ -12163,7 +12163,7 @@ What you type stays in this browser only.`;
       lab.setAttribute("aria-label", name);
       lab.onkeydown = (e) => {
         if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
-        if (e.key !== "Enter" && e.key !== " ") return;
+        if (e.key !== "Enter") return;
         e.preventDefault();
         e.stopPropagation();
         switchTab(tb.id);
@@ -30053,7 +30053,6 @@ What you type stays in this browser only.`;
     if (box && active === box) return !String(box.value || "");
     if (active.isContentEditable) return false;
     const tag = String(active.tagName || "").toUpperCase();
-    if (tag === "BUTTON") return false;
     if (tag === "TEXTAREA") return false;
     if (tag === "INPUT" && !/^(button|checkbox|radio|range|color|file|submit|reset|image)$/i.test(String(active.type || "text"))) return false;
     return !(typeof active.closest === "function" && active.closest(LANES_KEEP));

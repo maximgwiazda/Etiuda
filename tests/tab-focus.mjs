@@ -283,7 +283,8 @@ check("shortcuts-list.js", "810tf5 the shortcuts list shows Ctrl+Tab, Ctrl+Shift
       "Next tab=Ctrl+Tab | Previous tab=Ctrl+Shift+Tab | New tab=Ctrl+T | Poprzednia rozmowa=Ctrl+Shift+Tab | Nowa rozmowa=Ctrl+T");
   });
 
-check("tabs.js", "810tf6 each conversation's name is a tab stop, named as it reads, and Enter or Space switches to it",
+check("tabs.js", "810tf6 each conversation's name is a tab stop, named as it reads, and Enter switches to it; Space is left alone"
+  + " and passes on, as it is the lanes' key wherever the focus sits (board 883)",
   () => {
     const tabsSrc = read("src/modules/tabs.js");
     const labelOf = new Function("t", "tabs", extractDecl(tabsSrc, "function tabLabel(") + "\nreturn tabLabel;");
@@ -319,9 +320,9 @@ check("tabs.js", "810tf6 each conversation's name is a tab stop, named as it rea
         ev.key = "Enter"; name.onkeydown(ev);
         const entered = switched; switched = null;
         ev.key = " "; ev.prevented = false; ev.stopped = false; name.onkeydown(ev);
-        const spaced = switched;
+        const spaced = switched, spaceKept = ev.prevented || ev.stopped;
         ev.key = "Enter"; ev.ctrlKey = true; ev.prevented = false; switched = null; name.onkeydown(ev);
-        return [name.tabIndex, name.getAttribute("role"), name.getAttribute("aria-label"), shown, entered, spaced, switched, ev.prevented].join("/");
+        return [name.tabIndex, name.getAttribute("role"), name.getAttribute("aria-label"), shown, entered, spaced, spaceKept, switched, ev.prevented].join("/");
       };
       return [row(bar.kids[0]), row(bar.kids[1]), wrap.kids.length].join(" || ");
     };
@@ -331,8 +332,8 @@ check("tabs.js", "810tf6 each conversation's name is a tab stop, named as it rea
     const en = draw("en"), pl = draw("pl");
     ST.lsDel("eUiLang");
     return eq([en, pl, face].join(" ## "),
-      ["0/tab/Marta/Marta/a/a//false || 0/tab/Tab 2/Tab 2/b/b//false || 1",
-        "0/tab/Marta/Marta/a/a//false || 0/tab/Rozmowa 2/Rozmowa 2/b/b//false || 1",
+      ["0/tab/Marta/Marta/a//false//false || 0/tab/Tab 2/Tab 2/b//false//false || 1",
+        "0/tab/Marta/Marta/a//false//false || 0/tab/Rozmowa 2/Rozmowa 2/b//false//false || 1",
         true].join(" ## "));
   });
 
