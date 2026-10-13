@@ -645,8 +645,10 @@ function deskEnvelopeBody(keysText) {
     + (deskBranch ? ',"branch":' + JSON.stringify(deskBranch) : "")
     + (deskBranchOld.length ? ',"branchOld":' + JSON.stringify(deskBranchOld) : "")
     + (Object.keys(branchRevs).length ? ',"branchRevs":' + JSON.stringify(branchRevs) : "")
+    + (Object.keys(readRevs).length ? ',"readRevs":' + JSON.stringify(readRevs) : "")
     + (Object.keys(teamPins).length ? ',"teamPins":' + JSON.stringify(teamPins) : "")
     + (Object.keys(teamKeys).length ? ',"teamKeys":' + JSON.stringify(teamKeys) : "")
+    + (Object.keys(teamEpochSeen).length ? ',"teamEpochSeen":' + JSON.stringify(teamEpochSeen) : "")
     + (teamOpened.size ? ',"teamOpened":' + JSON.stringify(Array.from(teamOpened)) : "")
     + (teamSeen.size ? ',"teamSeen":' + JSON.stringify(Array.from(teamSeen)) : "")
     + (teamBarred.size ? ',"teamBarred":' + JSON.stringify(Array.from(teamBarred)) : "")
@@ -986,6 +988,7 @@ const SPKI_ED25519 = Buffer.from("302a300506032b6570032100", "hex");
 let deskBranch = null;                         // {sign:{pub,priv}, box:{pub,priv}}: hex publics, sealed privates
 let deskBranchOld = [];                        // pairs the envelope could never open again, kept aside and never deleted
 let branchRevs = {};                           // desk file id -> the last edition written, kept when the file is removed
+let readRevs = {};                             // desk file id -> the highest rev this desk has handed on
 const heldBranch = new Map();                  // stem -> the text a folder that did not answer is still owed
 function branchPairOk(b) {
   const half = h => !!h && typeof h === "object" && /^[0-9a-f]{64}$/.test(String(h.pub)) && typeof h.priv === "string" && h.priv !== "";
@@ -1155,8 +1158,9 @@ function teamCovering(root, catalogId) {
 }
 /* The newest key this desk keeps, as {team, epoch, key, plain}, for the one team whose envelope held the edition a file grew from
    (`pin`), where that team also covers the catalog at the folder written to; else null. An edition not opened in this run
-   is looked for among the folder's catalogs first. A desk the covering file leaves off its roster at an epoch newer than
-   any key it keeps is out of the team, and gets null too. `plain` is the covering file's exportsSealed set false. */
+   is looked for among the folder's catalogs first. A desk the covering file leaves off its roster is out, at any epoch.
+   A covering file older than the newest key kept is out too, so that key is not used to write under the older file.
+   A key already kept stays, and a seal made with it still opens. `plain` is the covering file's exportsSealed set false. */
 function sealFor(catalogId, pin, root) {
   heedTeam();
   if (!editionTeam.has(pin)) ecFilesIn(root).forEach(f => ecFacts(f, ""));
@@ -1166,7 +1170,8 @@ function sealFor(catalogId, pin, root) {
   const epoch = Object.keys(kept).map(Number).filter(n => Number.isInteger(n) && n >= 1).sort((a, b) => b - a)[0];
   if (!epoch) return null;
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "";
-  if (cover.epoch > epoch && !cover.roster.some(x => !!x && !!x.desk && x.desk.id === me)) return null;
+  const listed = !!me && Array.isArray(cover.roster) && cover.roster.some(x => !!x && !!x.desk && x.desk.id === me);
+  if (!listed || cover.epoch < epoch) return null;
   try {
     const key = Buffer.from(safeStorage.decryptString(Buffer.from(kept[epoch], "base64")), "base64");
     return key.length === 32 ? { team: team, epoch: epoch, key: key, plain: cover.exportsSealed === false } : null;
@@ -1261,6 +1266,7 @@ function tryHeldBranches() {
 const TEAM_MAX = 1024 * 1024;
 let teamPins = {};                             // team id -> {keyId, public}: the lead's key, once trusted
 let teamKeys = {};                             // team id -> {epoch: the team key sealed by safeStorage, base64}
+let teamEpochSeen = {};                        // team id -> the highest epoch heeded, kept when teamKeys is empty
 const teamOpened = new Set();                  // catalog ids this desk has opened from an envelope, kept in the desk envelope
 const teamSeen = new Set();                    // teams whose pinned lead key the agent has been shown, kept in the desk envelope
 const teamBarred = new Set();                  // teams whose lead the agent forgot: no first admission but by an answered request
@@ -1303,7 +1309,7 @@ function memberStateCopy(state) {
    Returns the new state, the key (a buffer, null, or false where the box would not open) and the lines
    to say. A new epoch's key is returned for the caller to seal; it is not written into state, because
    a seal can fail. Where needKey or needRing is set, nothing was decided and the caller calls again.
-   Pure: only these declarations, crypto, Buffer and the arguments. */
+   A key below state.epochSeen for that team is not kept. Pure: only these declarations, crypto, Buffer and the arguments. */
 function memberHeed(doc, state, seen) {
   const file = seen && typeof seen.file === "string" ? seen.file : "";
   const look = seen || {};
@@ -1355,8 +1361,10 @@ function memberHeed(doc, state, seen) {
   }
   if (handed) said.push(file + " hands team " + doc.id + " from the lead key this desk trusted to " + lead.public + ", which it now trusts instead");
   const kept = out.keys[doc.id] || {};
+  const seenMap = state && state.epochSeen && typeof state.epochSeen === "object" && !Array.isArray(state.epochSeen) ? state.epochSeen : null;
+  const seenAt = seenMap && Number.isInteger(seenMap[doc.id]) ? seenMap[doc.id] : 0;
   return ret({ key: key, stampClear: key === false, changed: changed, team: doc.id, epoch: doc.epoch,
-    keep: !!(key && !kept[doc.epoch]), unbar: unbar, pinned: pinned });
+    keep: !!(key && !kept[doc.epoch] && !(seenAt > 0 && doc.epoch < seenAt)), unbar: unbar, pinned: pinned });
 }
 /* AN ADMINISTRATOR NAMES THE TEAM IN MACHINE POLICY. The desk reads the Etiuda pair; Studio's pair
    is in the same template and is not read here. A value that is not the form below is said and
@@ -1588,7 +1596,7 @@ function heedTeam() {
   let doc = null;
   try { if (text !== null) doc = JSON.parse(text.replace(/^\uFEFF/, "")); } catch { return; }
   // A forgotten lead is held like a request still waiting: no lead is known until an answered request names one.
-  const state = { pins: teamPins, keys: teamKeys, barred: Array.from(teamBarred), join: teamJoin };
+  const state = { pins: teamPins, keys: teamKeys, barred: Array.from(teamBarred), join: teamJoin, epochSeen: teamEpochSeen };
   const member = deskBranch ? { id: branchIdOf(deskBranch.sign.pub), sk: null } : null;
   const policyLead = sayJoinPolicy().lead;
   let seen = { file: file, member: member, ring: undefined };
@@ -1608,6 +1616,10 @@ function heedTeam() {
   if (r.pinned) teamPins[r.team] = r.state.pins[r.team];
   if (r.unbar) teamBarred.delete(r.team);
   let changed = r.changed;
+  if (r.team && Number.isInteger(r.epoch) && r.epoch >= 1 && r.epoch > (teamEpochSeen[r.team] || 0)) {
+    teamEpochSeen[r.team] = r.epoch;
+    changed = true;
+  }
   if (r.keep) {
     try {
       if (!branchSealable()) throw new Error("safeStorage is not available");
@@ -2443,6 +2455,12 @@ function readDesk() {
       branchRevs = {};
       Object.keys(doc.branchRevs).forEach(k => { if (Number.isInteger(doc.branchRevs[k]) && doc.branchRevs[k] > 0) branchRevs[k] = doc.branchRevs[k]; });
     }
+    if (doc && doc.readRevs && typeof doc.readRevs === "object" && !Array.isArray(doc.readRevs)) {
+      readRevs = {};
+      Object.keys(doc.readRevs).forEach(k => {
+        if (/^k-[0-9a-f]{16}-[0-9a-f]{8}$/.test(k) && Number.isInteger(doc.readRevs[k]) && doc.readRevs[k] > 0) readRevs[k] = doc.readRevs[k];
+      });
+    }
     const table = v => !!v && typeof v === "object" && !Array.isArray(v);
     if (doc && table(doc.teamPins)) Object.keys(doc.teamPins).forEach(t => {
       const p = doc.teamPins[t];
@@ -2453,6 +2471,10 @@ function readDesk() {
       const k = doc.teamKeys[t];
       if (!SEALED_TEAM_RE.test(t) || !table(k)) return;
       Object.keys(k).forEach(n => { if (/^[1-9][0-9]*$/.test(n) && typeof k[n] === "string" && k[n]) (teamKeys[t] = teamKeys[t] || {})[n] = k[n]; });
+    });
+    if (doc && table(doc.teamEpochSeen)) Object.keys(doc.teamEpochSeen).forEach(t => {
+      const n = doc.teamEpochSeen[t];
+      if (SEALED_TEAM_RE.test(t) && Number.isInteger(n) && n >= 1) teamEpochSeen[t] = n;
     });
     if (doc && Array.isArray(doc.teamOpened)) doc.teamOpened.forEach(c => { if (typeof c === "string" && c) teamOpened.add(c); });
     [["teamSeen", teamSeen], ["teamBarred", teamBarred]].forEach(([k, set]) => {
@@ -2984,7 +3006,20 @@ function sendListing(win, force) {
   listingSent = key;
   win.webContents.send("etiuda:catalog-listing", rows);
 }
-/* `desk` names a colleague's folder under desks/, and its file is handed only where the listing would list it. */
+/* `desk` names a colleague's folder under desks/, and its file is handed only where the listing would list it.
+   A rev below the highest already handed on for that file's id is not handed on. */
+function readRevFloor(text) {
+  let doc = null;
+  try { doc = JSON.parse(String(text || "")); } catch { return ""; }
+  if (!doc || typeof doc !== "object" || doc.kind !== "etiuda-catalog") return "";
+  const id = typeof doc.id === "string" ? doc.id : "";
+  const rev = +doc.rev;
+  if (!/^k-[0-9a-f]{16}-[0-9a-f]{8}$/.test(id) || !Number.isInteger(rev) || rev < 1) return "";
+  const had = readRevs[id] || 0;
+  if (rev < had) return "below";
+  if (rev > had) { readRevs[id] = rev; persistDeskEnvelope(); }
+  return "kept";
+}
 ipcMain.handle("etiuda:catalog-read", (e, name, desk) => {
   if (!fromEngine(e)) return null;
   const base = String(name || ""), who = desk == null ? "" : String(desk);
@@ -2994,7 +3029,9 @@ ipcMain.handle("etiuda:catalog-read", (e, name, desk) => {
   try {
     if (!fileAnswers(file) || (who && !folderAnswers(catalogFolder()))) throw new Error("the catalog folder is not answering");
     if (who && !(ecFacts(file, who) || {}).deskOk) throw new Error("not a desk's own file");
-    return { name: base, text: catalogTextOf(fs.readFileSync(file, "utf8")) };
+    const text = catalogTextOf(fs.readFileSync(file, "utf8"));
+    if (who && readRevFloor(text) === "below") return { name: base, text: "" };
+    return { name: base, text: text };
   }
   catch (err) {
     console.error("etiuda: " + file + " could not be read - " + err.message);
