@@ -338,10 +338,11 @@ function catalogPeek(text) {
   if (opened.data && opened.data.kind === SEALED_KIND) throw new Error("an envelope sealed inside another");
   return opened;
 }
-/* A signature the ring verifies for this catalog's own id. Unsigned, and a key the ring does not list, are not that. */
+/* The ring entry's public, when the signature verifies for this catalog's own id. "" when it does not:
+   unsigned, a key the ring does not list, and a signature that fails are all "". A caller may test it as a yes or no. */
 function catalogSigValid(data) {
   const sig = data && data.sig;
-  if (!data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-f]{128}$/.test(String(sig.value || ""))) return false;
+  if (!data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-f]{128}$/.test(String(sig.value || ""))) return "";
   const ring = readRing();
   const keys = ring && Array.isArray(ring.keys) ? ring.keys : [];
   const id = String(data.id || ""), kid = String(sig.keyId || "");
@@ -351,27 +352,54 @@ function catalogSigValid(data) {
     if (e && e.alg === "Ed25519" && String(e.catalog) === id && String(e.keyId) === kid
       && /^[0-9a-f]{64}$/.test(String(e.public || ""))) pub = String(e.public);
   }
-  if (!pub) return false;
+  if (!pub) return "";
   try {
     const key = crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(pub, "hex")]), format: "der", type: "spki" });
-    return crypto.verify(null, signedBytesOf(data), key, Buffer.from(String(sig.value), "hex"));
-  } catch { return false; }
+    return crypto.verify(null, signedBytesOf(data), key, Buffer.from(String(sig.value), "hex")) ? pub : "";
+  } catch { return ""; }
+}
+/* The lead publics this desk has pinned, one per team it joined. Empty until a team file or the envelope names one. */
+function pinnedLeadPubs() {
+  const out = [];
+  Object.keys(teamPins).forEach(t => {
+    const p = teamPins[t] && String(teamPins[t].public || "");
+    if (SEALED_TEAM_RE.test(t) && /^[0-9a-f]{64}$/.test(p) && out.indexOf(p) < 0) out.push(p);
+  });
+  return out;
+}
+/* The public a catalog may be chosen under without the agent asking: with no lead pinned, any key the ring verifies;
+   with one pinned, only a pinned lead's, verified against the pin itself, since the ring is the share's to write. */
+function catalogLeadOk(data) {
+  const pins = pinnedLeadPubs();
+  if (!pins.length) return catalogSigValid(data);
+  const sig = data && data.sig;
+  if (!data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-f]{128}$/.test(String(sig.value || ""))) return "";
+  for (const pub of pins) {
+    try {
+      const key = crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(pub, "hex")]), format: "der", type: "spki" });
+      if (crypto.verify(null, signedBytesOf(data), key, Buffer.from(String(sig.value), "hex"))) return pub;
+    } catch { /* not this lead's */ }
+  }
+  return "";
 }
 function editionRev(data) {
   const n = data && +data.rev;
   return Number.isFinite(n) ? n : -1;
 }
-/* The file this launch was opened with, else the highest rev of each catalog id that the ring verifies.
-   A newer file time does not choose between those, and a file the ring does not verify does not take one's place.
-   An id with no verified signature keeps every file of it, in the order ecFilesIn gave. */
+/* The file this launch was opened with, else the highest rev of each catalog id that may be chosen
+   without the agent asking. With no lead pinned, that is a signature the ring verifies. With a lead
+   pinned, only a file that lead signed, and a file signed by any other key is dropped even when it
+   is the only file of its id. A newer file time does not choose between those. An id with no
+   verified signature keeps every file of it, in the order ecFilesIn gave, only while no lead is pinned. */
 function pickEdition(found) {
   if (openedWith) {
     const asked = found.filter(item => item.file === openedWith)[0];
     if (asked) return asked;
   }
+  const pins = pinnedLeadPubs();
   const best = new Map();
   found.forEach((item, i) => {
-    if (!catalogSigValid(item.data)) return;
+    if (!(pins.length ? catalogLeadOk(item.data) : catalogSigValid(item.data))) return;
     const id = String(item.data.id || "");
     if (!id) return;
     const had = best.get(id);
@@ -380,7 +408,8 @@ function pickEdition(found) {
   const drop = new Set();
   found.forEach((item, i) => {
     const id = String(item.data && item.data.id || "");
-    if (best.has(id) && best.get(id) !== i) drop.add(i);
+    if (pins.length && !catalogLeadOk(item.data)) drop.add(i);
+    else if (best.has(id) && best.get(id) !== i) drop.add(i);
   });
   return found.filter((item, i) => !drop.has(i))[0] || null;
 }
@@ -405,7 +434,8 @@ function readCatalog() {
   }
   const chosen = pickEdition(found);
   if (!chosen) {
-    console.log("etiuda: no catalog found, so Etiuda starts as a clean slate");
+    console.log(found.length ? "etiuda: no catalog here is signed by this desk's lead, so none is chosen without being asked for"
+      : "etiuda: no catalog found, so Etiuda starts as a clean slate");
     catalogFrom = "";
     return null;
   }
@@ -600,10 +630,8 @@ function offerFile(win, file) {
   try {
     const { json, data } = catalogRead(text);
     if (!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
-    if (belowCatalogRev(json)) {
-      console.log("etiuda: " + file + " is an earlier edition than one this desk has already read, so it is not offered");
-      return;
-    }
+    /* The agent opened this file. Whatever its rev, its signer or its signature, it is offered.
+       The mark moves only where the file is a higher rev of the key that signed it. */
     openedWith = file;
     catalogJson = json;
     keepCatalogRev(json);
@@ -627,7 +655,8 @@ let catalogJson;
 ipcMain.on("etiuda:catalog", (e) => {
   if (!fromEngine(e)) { e.returnValue = null; return; }
   if (catalogJson === undefined) catalogJson = readCatalog();
-  if (belowCatalogRev(catalogJson)) { e.returnValue = null; return; }
+  /* A file this launch was opened with is the agent asking, so a lower rev of it is still handed over. */
+  if (!(openedWith && catalogFrom === openedWith) && belowCatalogRev(catalogJson)) { e.returnValue = null; return; }
   keepCatalogRev(catalogJson);
   e.returnValue = catalogJson;
 });
@@ -1084,33 +1113,49 @@ let deskBranch = null;                         // {sign:{pub,priv}, box:{pub,pri
 let deskBranchOld = [];                        // pairs the envelope could never open again, kept aside and never deleted
 let branchRevs = {};                           // desk file id -> the last edition written, kept when the file is removed
 let readRevs = {};                             // desk file id -> the highest rev this desk has handed on
-let catalogRevs = {};                          // catalog id -> the highest rev handed to the page, kept when teamKeys is empty
+let catalogRevs = {};                          // catalog id -> {signing public -> the highest rev handed to the page under it}, kept when teamKeys is empty
 const CATALOG_ID_RE = /^[a-z0-9][a-z0-9-]{2,63}$/;
+const CATALOG_PUB_RE = /^[0-9a-f]{64}$/;
+/* The catalog document in a text a route hands on, in either form the reader takes, or null. */
+function catalogDocIn(text) {
+  try { const d = catalogPayload(text).data; return d && typeof d === "object" ? d : null; } catch { return null; }
+}
 function catalogMarkOf(json) {
   if (deskKeys === undefined) deskKeys = readDesk();
-  let doc = null;
-  try { doc = JSON.parse(String(json || "")); } catch { return null; }
-  if (!doc || typeof doc !== "object" || doc.kind !== "etiuda-catalog") return null;
+  const doc = catalogDocIn(json);
+  if (!doc || doc.kind !== "etiuda-catalog") return null;
   const id = typeof doc.id === "string" ? doc.id : "";
   const rev = +doc.rev;
   if (!CATALOG_ID_RE.test(id) || !Number.isInteger(rev) || rev < 0) return null;
   return { id: id, rev: rev };
 }
-/* A rev already held is not replaced by a lower one. Equal is not a raise.
-   Only a signature the ring verifies for this catalog raises the mark. An unsigned file,
-   whoever wrote it into the share, does not. */
+/* The rev held for one signing public of one catalog, or 0 where there is none. */
+function catalogRevSlot(id, pub) {
+  const slot = catalogRevs[id];
+  if (!slot || typeof slot !== "object" || Array.isArray(slot)) return 0;
+  const n = slot[pub];
+  return Number.isInteger(n) ? n : 0;
+}
+/* A rev already held for this signing public is not replaced by a lower one. Equal is not a raise.
+   Only the public catalogSigValid just verified is written, so one key's mark never moves another's.
+   An unsigned file, whoever wrote it into the share, does not. */
 function keepCatalogRev(json) {
   const x = catalogMarkOf(json);
-  if (!x || !(x.rev > (catalogRevs[x.id] || 0))) return;
-  let doc = null;
-  try { doc = JSON.parse(String(json || "")); } catch { return; }
-  if (!catalogSigValid(doc)) return;
-  catalogRevs[x.id] = x.rev;
+  if (!x) return;
+  const pub = catalogSigValid(catalogDocIn(json));
+  if (!pub || !(x.rev > catalogRevSlot(x.id, pub))) return;
+  if (!catalogRevs[x.id] || typeof catalogRevs[x.id] !== "object" || Array.isArray(catalogRevs[x.id])) catalogRevs[x.id] = {};
+  catalogRevs[x.id][pub] = x.rev;
   persistDeskEnvelope();
 }
+/* Below the rev already held for the key that signed this file. Another key's mark does not count,
+   and a file that does not verify is not below any mark. */
 function belowCatalogRev(json) {
   const x = catalogMarkOf(json);
-  return !!(x && x.rev < (catalogRevs[x.id] || 0));
+  if (!x) return false;
+  const pub = catalogSigValid(catalogDocIn(json));
+  if (!pub) return false;
+  return x.rev < catalogRevSlot(x.id, pub);
 }
 const heldBranch = new Map();                  // stem -> the text a folder that did not answer is still owed
 function branchPairOk(b) {
@@ -2589,9 +2634,16 @@ function readDesk() {
       });
     }
     const table = v => !!v && typeof v === "object" && !Array.isArray(v);
+    // Only a table of signing publics is a mark; a bare number under a catalog id is no mark at all.
     if (doc && table(doc.catalogRevs)) Object.keys(doc.catalogRevs).forEach(id => {
-      const n = doc.catalogRevs[id];
-      if (CATALOG_ID_RE.test(id) && Number.isInteger(n) && n > (catalogRevs[id] || 0)) catalogRevs[id] = n;
+      const slot = doc.catalogRevs[id];
+      if (!CATALOG_ID_RE.test(id) || !table(slot)) return;
+      Object.keys(slot).forEach(pub => {
+        const n = slot[pub];
+        if (!CATALOG_PUB_RE.test(pub) || !Number.isInteger(n) || !(n > catalogRevSlot(id, pub))) return;
+        if (!catalogRevs[id] || typeof catalogRevs[id] !== "object" || Array.isArray(catalogRevs[id])) catalogRevs[id] = {};
+        catalogRevs[id][pub] = n;
+      });
     });
     if (doc && table(doc.teamPins)) Object.keys(doc.teamPins).forEach(t => {
       const p = doc.teamPins[t];
@@ -3145,11 +3197,11 @@ function keepReadRev(id, rev) {
   persistDeskEnvelope();
 }
 /* `desk` names a colleague's folder under desks/, and its file is handed only where the listing would list it.
-   A rev below the highest already handed on for that file's id is not handed on. A file whose id does not
-   begin with that folder's desk id sets no mark, so one desk's signed file cannot raise another's.
-   A file of the folder itself, below a rev already handed to the page, is not handed on either, unless the
-   person asked to read that file: the page then decides, and only a catalog it has verified is a floor.
-   This read does not move that mark. */
+   A rev below the highest already handed on for that file's id is not handed on unless the agent asked for
+   that file, and an asked read below it moves no mark. A file whose id does not begin with that folder's desk
+   id sets no mark, so one desk's signed file cannot raise another's. A file of the folder itself is held to
+   the catalog mark where nobody asked, and to the lead's key where the page means to offer it unasked; this
+   read does not move the catalog mark. */
 function readRevFloor(text, who) {
   let doc = null;
   try { doc = JSON.parse(String(text || "")); } catch { return ""; }
@@ -3163,7 +3215,14 @@ function readRevFloor(text, who) {
   keepReadRev(id, rev);
   return "kept";
 }
-ipcMain.handle("etiuda:catalog-read", (e, name, desk, asked) => {
+/* A read the page means to offer unasked hands on, once a lead is pinned, only a file that lead signed. */
+function unsolicitedLeadText(text) {
+  if (!pinnedLeadPubs().length) return true;
+  const doc = catalogDocIn(text);
+  if (!doc || doc.kind !== "etiuda-catalog") return true;
+  return !!catalogLeadOk(doc);
+}
+ipcMain.handle("etiuda:catalog-read", (e, name, desk, asked, offer) => {
   if (!fromEngine(e)) return null;
   const base = String(name || ""), who = desk == null ? "" : String(desk);
   if (!base || base !== path.basename(base) || !/\.ec$/i.test(base)) return null;
@@ -3174,8 +3233,8 @@ ipcMain.handle("etiuda:catalog-read", (e, name, desk, asked) => {
     if (who && !(ecFacts(file, who) || {}).deskOk) throw new Error("not a desk's own file");
     const text = catalogTextOf(fs.readFileSync(file, "utf8"));
     if (who) {
-      if (readRevFloor(text, who) === "below") return { name: base, text: "" };
-    } else if (!asked && belowCatalogRev(text)) return { name: base, text: "" };
+      if (readRevFloor(text, who) === "below" && !asked) return { name: base, text: "" };
+    } else if (!asked && (belowCatalogRev(text) || (offer && !unsolicitedLeadText(text)))) return { name: base, text: "" };
     return { name: base, text: text };
   }
   catch (err) {
@@ -3213,8 +3272,9 @@ ipcMain.handle("etiuda:shared-read", (e, name, pin) => (fromEngine(e) ? sharedRe
 ipcMain.handle("etiuda:shared-write", (e, name, text, sha, create) =>
   (fromEngine(e) ? sharedWrite(name, text, sha, create === true) : { ok: false }));
 // "seen" and "forget" name a team, "read" and "invite" carry an invitation's text, and the others name a file; "invite"
-// adds the check code the agent typed.
+// adds the check code the agent typed, and "leads" answers the pinned leads alone.
 ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e) ? null
+  : op === "leads" ? { leads: leadsView() }
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
   : op === "forget" ? forgetLead(file) : op === "read" ? readInvite(file) : op === "invite" ? takeInvite(file, name, check) : joinView()));
 

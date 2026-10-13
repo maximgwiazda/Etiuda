@@ -3,7 +3,9 @@
  * controls that a newer edition still lands. A fresh folder opens the highest rev the ring
  * verifies, and each mark kept in the desk file is never lowered. A second read of an older
  * desk file in the same process keeps the higher number. A key added to the share's ring does
- * not raise the catalog mark. Throwaway keys and catalogs only.
+ * not raise the catalog mark. A desk with its lead pinned chooses only that lead's editions
+ * unasked, and a file the agent opens is offered whatever its rev, signer or signature.
+ * Throwaway keys and catalogs only.
  *
  *     node tests/rollback-floor.mjs        exit code is the number of failed checks, capped at 63
  *
@@ -24,7 +26,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 40;
+const EXPECTED = 47;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -385,7 +387,12 @@ try {
     touch(path.join(dir, "loud.ec"), base + 120000);
   };
   const fileSends = (D) => D.sent.filter(a => a[0] === "etiuda:catalog-file");
-  const markOf = (D) => (D.envelope().catalogRevs || {})["quay-board"];
+  /* The lead's own slot, once the mark is one rev per signing public. A bare number is the shape this branch never stored. */
+  const markOf = (D) => {
+    const v = (D.envelope().catalogRevs || {})["quay-board"];
+    if (v && typeof v === "object") return v[LEAD.public];
+    return v;
+  };
   const emptyKeys = (ud) => {
     const saved = JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
     saved.teamKeys = { "t-aabbccddeeff0011": { "1": "bm90LWEga2V5" } };
@@ -477,10 +484,10 @@ try {
     const booted = facts(D.sync("etiuda:catalog") || "");
     D.sent.length = 0;
     D.api.offerFile(D.win, path.join(SHARE, "newer.ec"));
-    const sentAfter = fileSends(D).length;
-    check(booted.rev === 2 && sentAfter === 0 && markOf(D) === 2,
-      "888x a file asked for by name, of an earlier rev, is not offered: boot " + booted.rev
-      + ", sends " + sentAfter + ", mark " + markOf(D));
+    const sentAfter = fileSends(D).map(a => facts(a[1]).rev);
+    check(booted.rev === 2 && sentAfter.length === 1 && sentAfter[0] === 1 && markOf(D) === 2,
+      "888x a file asked for by name, of an earlier rev, is offered, and the mark stays: boot " + booted.rev
+      + ", sends " + (sentAfter.join(",") || "-") + ", mark " + markOf(D));
   }
   {
     const SHARE = folder("refused");
@@ -629,10 +636,10 @@ try {
     staged(SHARE);
     const booted = facts(D.sync("etiuda:catalog") || "");
     const high = markOf(D);
-    rewriteDesk(D, saved => { (saved.catalogRevs = saved.catalogRevs || {})["quay-board"] = 1; });
+    rewriteDesk(D, saved => { (saved.catalogRevs = saved.catalogRevs || {})["quay-board"] = { [LEAD.public]: 1 }; });
     rereadDesk(D);
     const held = markOf(D);
-    rewriteDesk(D, saved => { (saved.catalogRevs = saved.catalogRevs || {})["quay-board"] = 5; });
+    rewriteDesk(D, saved => { (saved.catalogRevs = saved.catalogRevs || {})["quay-board"] = { [LEAD.public]: 5 }; });
     rereadDesk(D);
     const raised = markOf(D);
     check(booted.rev === 2 && high === 2 && held === 2 && raised === 5,
@@ -990,6 +997,247 @@ try {
       + "boot " + booted.rev + ", watch sent " + (watchSent.join(",") || "-") + " mark " + markWatch
       + ", ring " + (before === after ? "unchanged" : "rewritten")
       + ", next " + (watchNext.join(",") || "-") + " mark " + markOf(D) + ", library " + readThird);
+  }
+
+  /* ---- a lead is pinned: another key in the ring does not choose, and an open still offers it ---- */
+  {
+    const SHARE = folder("per-key");
+    const ringBoth = {
+      format: 1, kind: "etiuda-ring",
+      keys: RING.keys.concat([{ catalog: "quay-board", keyId: INTR.keyId, alg: "Ed25519", public: INTR.public }]),
+    };
+    put(SHARE, "etiuda-ring.json", ringBoth);
+    const ud = path.join(LAB, "per-key");
+    fs.mkdirSync(ud, { recursive: true });
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({
+      kind: "etiuda-desk", schema: 1,
+      keys: { eCatalogFolder: SHARE, eUiLang: "en" },
+      teamPins: { "t-aabbccddeeff0011": { keyId: LEAD.keyId, public: LEAD.public } },
+    }), "utf8");
+    const D = loadDesk(ud);
+    put(SHARE, "board.ec", CAT2);
+    const booted = facts(D.sync("etiuda:catalog") || "");
+    const markBoot = markOf(D);
+    put(SHARE, "planted.ec", POISON);
+    touch(path.join(SHARE, "planted.ec"), Date.UTC(2026, 7, 1));
+    D.sent.length = 0;
+    D.api.catalogChanged(D.win);
+    const watchSent = sentRevs(D);
+    const markWatch = markOf(D);
+    D.api.keepCatalogRev(POISON);
+    const slots = (D.envelope().catalogRevs || {})["quay-board"] || {};
+    put(SHARE, "low-intr.ec", intruderCat(1, "2026-08-02"));
+    touch(path.join(SHARE, "low-intr.ec"), Date.UTC(2026, 7, 3));
+    D.sent.length = 0;
+    D.api.catalogChanged(D.win);
+    const lowWatch = sentRevs(D);
+    put(SHARE, "third.ec", CAT3);
+    touch(path.join(SHARE, "third.ec"), Date.UTC(2026, 7, 4));
+    D.sent.length = 0;
+    D.api.catalogChanged(D.win);
+    const highWatch = sentRevs(D);
+    fs.unlinkSync(path.join(SHARE, "third.ec"));
+    put(SHARE, "back.ec", CAT1);
+    touch(path.join(SHARE, "back.ec"), Date.UTC(2026, 7, 5));
+    D.sent.length = 0;
+    D.api.catalogChanged(D.win);
+    const putBack = sentRevs(D);
+    const markBack = markOf(D);
+    D.sent.length = 0;
+    D.api.offerFile(D.win, path.join(SHARE, "planted.ec"));
+    const asked = sentRevs(D);
+    const afterAsk = (D.envelope().catalogRevs || {})["quay-board"] || {};
+    D.sent.length = 0;
+    D.api.offerFile(D.win, path.join(SHARE, "low-intr.ec"));
+    const lowAsked = sentRevs(D);
+    const slotsEnd = (D.envelope().catalogRevs || {})["quay-board"] || {};
+    const askedRead = facts(((await D.ask("etiuda:catalog-read", "planted.ec", null, true)) || {}).text || "").rev;
+    const quietRead = ((await D.ask("etiuda:catalog-read", "planted.ec", null, false, true)) || {}).text || "";
+    check(booted.rev === 2 && markBoot === 2 && watchSent.length === 0 && markWatch === 2
+      && slots[INTR.public] === 1e15 && slots[LEAD.public] === 2 && lowWatch.length === 0
+      && highWatch.length === 1 && highWatch[0] === 3 && putBack.length === 0 && markBack === 3
+      && asked.length === 1 && asked[0] === 1e15 && afterAsk[LEAD.public] === 3
+      && lowAsked.length === 1 && lowAsked[0] === 1 && slotsEnd[LEAD.public] === 3 && slotsEnd[INTR.public] === 1e15
+      && askedRead === 1e15 && quietRead === "",
+      "888ao a lead is pinned, so another key's catalog is not chosen and does not move the lead's mark, and opening it still offers it: "
+      + "boot " + booted.rev + " mark " + markBoot
+      + ", watch " + (watchSent.join(",") || "-") + " mark " + markWatch
+      + ", intruder slot " + slots[INTR.public] + ", lead slot " + slots[LEAD.public]
+      + ", lower intruder watch " + (lowWatch.join(",") || "-")
+      + ", genuine next " + (highWatch.join(",") || "-")
+      + ", put back " + (putBack.join(",") || "-") + " mark " + markBack
+      + ", opened " + (asked.join(",") || "-") + " lead " + afterAsk[LEAD.public]
+      + ", lower opened " + (lowAsked.join(",") || "-")
+      + ", asked read " + askedRead + ", read to offer unasked " + (quietRead ? "handed" : "nothing"));
+  }
+  {
+    const SHARE = folder("open-any");
+    put(SHARE, "etiuda-ring.json", RING);
+    const ud = path.join(LAB, "open-any");
+    fs.mkdirSync(ud, { recursive: true });
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({
+      kind: "etiuda-desk", schema: 1,
+      keys: { eCatalogFolder: SHARE, eUiLang: "en" },
+      teamPins: { "t-aabbccddeeff0011": { keyId: LEAD.keyId, public: LEAD.public } },
+    }), "utf8");
+    const D = loadDesk(ud);
+    put(SHARE, "board.ec", CAT2);
+    const booted = facts(D.sync("etiuda:catalog") || "");
+    const bareDoc = catalog(4, "2026-08-03");
+    delete bareDoc.sig;
+    put(SHARE, "own.ec", textOf(bareDoc));
+    touch(path.join(SHARE, "own.ec"), Date.UTC(2026, 7, 6));
+    D.sent.length = 0;
+    D.api.catalogChanged(D.win);
+    const watchBare = sentRevs(D);
+    const other = sign({
+      format: 2, kind: "etiuda-catalog", id: "other-board", rev: 1, name: "Other Board", date: "2026-08-04",
+      langs: [{ code: "en", label: "EN" }],
+      tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
+      cards: [{ id: "c-warm", shelf: "t-op", bodyShape: "plain", title: { en: "Warm opening" },
+        body: { en: "Good day, other board." } }],
+    });
+    put(SHARE, "other.ec", textOf(other));
+    touch(path.join(SHARE, "other.ec"), Date.UTC(2026, 7, 7));
+    D.sent.length = 0;
+    D.api.catalogChanged(D.win);
+    const watchOther = sentRevs(D);
+    const markHeld = markOf(D);
+    D.sent.length = 0;
+    D.api.offerFile(D.win, path.join(SHARE, "own.ec"));
+    const askedBare = sentRevs(D);
+    D.sent.length = 0;
+    D.api.offerFile(D.win, path.join(SHARE, "other.ec"));
+    const askedOther = sentRevs(D);
+    check(booted.rev === 2 && watchBare.length === 0 && watchOther.length === 0 && markHeld === 2
+      && askedBare.length === 1 && askedBare[0] === 4
+      && askedOther.length === 1 && askedOther[0] === 1 && markOf(D) === 2,
+      "888ap an unsigned variant, and a catalog with another id, are not chosen on their own and are offered when opened: "
+      + "boot " + booted.rev
+      + ", unsigned watch " + (watchBare.join(",") || "-") + ", opened " + (askedBare.join(",") || "-")
+      + ", other watch " + (watchOther.join(",") || "-") + ", opened " + (askedOther.join(",") || "-")
+      + ", mark " + markOf(D));
+  }
+
+  /* ---- a lead is pinned: the boot chooses that lead's edition, and an unasked read hands nothing else ---- */
+  {
+    const SHARE = folder("pinned-boot");
+    put(SHARE, "etiuda-ring.json", {
+      format: 1, kind: "etiuda-ring",
+      keys: RING.keys.concat([{ catalog: "quay-board", keyId: INTR.keyId, alg: "Ed25519", public: INTR.public }]),
+    });
+    put(SHARE, "board.ec", CAT2);
+    put(SHARE, "planted.ec", POISON);
+    const bare = catalog(7, "2026-03-07");
+    delete bare.sig;
+    put(SHARE, "own.ec", textOf(bare));
+    put(SHARE, "wrapped.ec", "window.E_CATALOG = " + POISON.trim() + ";");
+    const deskIn = (name, pins) => {
+      const ud = path.join(LAB, name);
+      fs.mkdirSync(ud, { recursive: true });
+      fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(Object.assign({
+        kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: SHARE, eUiLang: "en" } }, pins ? { teamPins: pins } : {})), "utf8");
+      return loadDesk(ud);
+    };
+    const P = deskIn("pinned-boot-desk", { "t-aabbccddeeff0011": { keyId: LEAD.keyId, public: LEAD.public } });
+    const booted = facts(P.sync("etiuda:catalog") || "");
+    const slots = (P.envelope().catalogRevs || {})["quay-board"] || {};
+    const quiet = {}, shown = {};
+    for (const n of ["planted.ec", "own.ec", "wrapped.ec"]) {
+      quiet[n] = ((await P.ask("etiuda:catalog-read", n, null, false, true)) || {}).text || "";
+      shown[n] = ((await P.ask("etiuda:catalog-read", n)) || {}).text || "";
+    }
+    const askedText = ((await P.ask("etiuda:catalog-read", "wrapped.ec", null, true)) || {}).text || "";
+    const asked = facts(askedText.slice(askedText.indexOf("{"), askedText.lastIndexOf("}") + 1)).rev;
+    const U = deskIn("unpinned-boot-desk", null);
+    const free = facts(U.sync("etiuda:catalog") || "");
+    check(booted.rev === 2 && slots[LEAD.public] === 2 && slots[INTR.public] === undefined
+      && !quiet["planted.ec"] && !quiet["own.ec"] && !quiet["wrapped.ec"] && Object.keys(shown).every(n => !!shown[n])
+      && asked === 1e15 && free.rev === 1e15,
+      "888aq a desk with its lead pinned boots the lead's edition, not another key's higher rev or an unsigned one, and a read meant to offer them unasked hands neither: "
+      + "boot " + booted.rev + ", lead slot " + slots[LEAD.public] + ", other slot " + (slots[INTR.public] === undefined ? "none" : slots[INTR.public])
+      + ", to offer " + Object.keys(quiet).map(n => n + " " + (quiet[n] ? "handed" : "nothing")).join(", ")
+      + ", to show " + Object.keys(shown).filter(n => shown[n]).length + " of 3 handed"
+      + ", asked wrapped " + asked + "; the same folder unpinned boots " + free.rev);
+  }
+
+  /* ---- a colleague's desk file below the mark, opened on purpose ---------------------------------- */
+  {
+    const SHARE = folder("own-asked");
+    put(SHARE, "etiuda-ring.json", RING);
+    const A = newDesk("owner-asked", SHARE);
+    const B = newDesk("colleague-asked", SHARE);
+    const me = await A.ask("etiuda:branch-identity", true);
+    const other = await B.ask("etiuda:branch-identity", true);
+    const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    const K1 = crypto.randomBytes(32);
+    put(SHARE, "etiuda-team.json", teamFile(TEAM, 1, [entry(A, me, K1, TEAM, 1), entry(A, other, K1, TEAM, 1)]));
+    put(SHARE, "board.ec", JSON.stringify(A.api.sealCatalog(K1, TEAM, 1, CAT2)));
+    const g = grown(A, me, await readText(A, "board.ec"));
+    g.doc.name = "first";
+    await A.ask("etiuda:branch-write", g.stem, JSON.stringify(g.doc));
+    const file = path.join(SHARE, "desks", me.id, g.stem + ".ec");
+    const firstBytes = fs.readFileSync(file);
+    g.doc.name = "second";
+    await A.ask("etiuda:branch-write", g.stem, JSON.stringify(g.doc));
+    const before = facts(await readText(B, g.stem + ".ec", me.id));
+    fs.writeFileSync(file, firstBytes);
+    touch(file, Date.now());
+    const quietText = await readText(B, g.stem + ".ec", me.id);
+    const asked = facts(((await B.ask("etiuda:catalog-read", g.stem + ".ec", me.id, true)) || {}).text || "");
+    const markAfter = (B.envelope().readRevs || {})[g.doc.id];
+    const quietAgain = await readText(B, g.stem + ".ec", me.id);
+    check(before.rev === 2 && !quietText && asked.rev === 1 && asked.name === "first" && markAfter === 2 && !quietAgain,
+      "888ar a colleague's file below the mark is handed when the agent opens it, the mark stays, and an unasked read still gets nothing: "
+      + "read " + before.rev + ", unasked " + (quietText ? "handed" : "nothing") + ", asked rev " + asked.rev + " " + (asked.name || "-")
+      + ", mark " + markAfter + ", unasked again " + (quietAgain ? "handed" : "nothing"));
+  }
+
+  /* ---- an older edition opened on purpose, then the page asks again, as a reload does ----------------- */
+  {
+    const SHARE = folder("reopened");
+    put(SHARE, "etiuda-ring.json", RING);
+    const D = newDesk("reopened", SHARE);
+    put(SHARE, "board.ec", CAT2);
+    put(SHARE, "back.ec", CAT1);
+    touch(path.join(SHARE, "back.ec"), Date.UTC(2026, 0, 2));
+    const booted = facts(D.sync("etiuda:catalog") || "");
+    D.api.offerFile(D.win, path.join(SHARE, "back.ec"));
+    const again = facts(D.sync("etiuda:catalog") || "");
+    check(booted.rev === 2 && again.rev === 1 && markOf(D) === 2,
+      "888as an older edition the agent opened is handed again when the page asks again, and the mark stays: boot " + booted.rev
+      + ", asked again " + (again.rev == null ? "nothing" : again.rev) + ", mark " + markOf(D));
+  }
+  {
+    const SHARE = folder("script-form");
+    put(SHARE, "etiuda-ring.json", RING);
+    const D = newDesk("script-form", SHARE);
+    put(SHARE, "board.ec", CAT2);
+    const booted = facts(D.sync("etiuda:catalog") || "");
+    put(SHARE, "wrapped-low.ec", "window.E_CATALOG = " + CAT1.trim() + ";");
+    const quiet = ((await D.ask("etiuda:catalog-read", "wrapped-low.ec")) || {}).text || "";
+    const askedText = ((await D.ask("etiuda:catalog-read", "wrapped-low.ec", null, true)) || {}).text || "";
+    check(booted.rev === 2 && !quiet && askedText.indexOf("E_CATALOG") >= 0 && markOf(D) === 2,
+      "888at a lower rev written as a script is below the mark as its document form is: boot " + booted.rev
+      + ", unasked " + (quiet ? "handed" : "nothing") + ", asked " + (askedText ? "handed" : "nothing") + ", mark " + markOf(D));
+  }
+  {
+    /* The ring in the share rewritten to list another key and not the lead's: the pin, not the ring, says whose edition it is. */
+    const SHARE = folder("ring-swapped");
+    put(SHARE, "etiuda-ring.json", { format: 1, kind: "etiuda-ring",
+      keys: [{ catalog: "quay-board", keyId: INTR.keyId, alg: "Ed25519", public: INTR.public }] });
+    put(SHARE, "board.ec", CAT2);
+    put(SHARE, "planted.ec", POISON);
+    const ud = path.join(LAB, "ring-swapped");
+    fs.mkdirSync(ud, { recursive: true });
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
+      keys: { eCatalogFolder: SHARE, eUiLang: "en" }, teamPins: { "t-aabbccddeeff0011": { keyId: LEAD.keyId, public: LEAD.public } } }), "utf8");
+    const D = loadDesk(ud);
+    const booted = facts(D.sync("etiuda:catalog") || "");
+    const toOffer = ((await D.ask("etiuda:catalog-read", "planted.ec", null, false, true)) || {}).text || "";
+    check(booted.rev === 2 && !toOffer,
+      "888au with the ring listing another key and not the lead's, a desk with its lead pinned still boots the lead's edition and does not offer the other: boot "
+      + (booted.rev == null ? "nothing" : booted.rev) + ", other key to offer " + (toOffer ? "handed" : "nothing"));
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));

@@ -11,6 +11,7 @@ import { ICON_KEY } from "./icons.js";
 import { leadKeyText } from "./team-join.js";
 
 const TRUST_KEY="CatalogTrust";
+const SIGNER_KEY="CatalogSigner";
 const TRUST_WAIT_MS=2000;
 const TRUST_OF=(typeof WeakMap==="function")?new WeakMap():null;
 /* Begun once per catalog object, and "" for one with no document behind it. The document is
@@ -40,13 +41,22 @@ function whenTrusted(c){
     catalogTrust(c).then(s=>{ clearTimeout(late); done(s); });
   });
 }
+/* The signing key's id is kept only while the state is valid, so the floor held under one key is not one for another. */
+function rememberSigner(c,state){
+  const doc=catalogDocOf(c);
+  const sig=doc&&doc.sig;
+  const kid=state===V2_SIG_VALID && sig && sig.keyId ? String(sig.keyId) : "";
+  if(kid) nsSet(SIGNER_KEY,kid); else nsDel(SIGNER_KEY);
+}
 /* Every activation writes the state of what it stores, or clears it, so the key never speaks for
    a catalog it was not read from. */
 function recordCatalogTrust(c){
   const s=trustSettled(c);
   if(s) nsSet(TRUST_KEY,s); else nsDel(TRUST_KEY);
+  rememberSigner(c,s);
 }
 function heldCatalogTrust(){ return nsGet(TRUST_KEY)||""; }
+function heldCatalogSigner(){ return nsGet(SIGNER_KEY)||""; }
 /* THE RING MAY ARRIVE AFTER THE CATALOG. Where the file this load was handed is the catalog in
    use, it is read again once a load, and a changed answer replaces the held one. */
 let trustRechecked=false;
@@ -58,6 +68,7 @@ function recheckHeldTrust(found,held,then){
   catalogTrust(found).then(s=>{
     if(!s || s===heldCatalogTrust()) return;
     nsSet(TRUST_KEY,s);
+    rememberSigner(found,s);
     if(typeof then==="function") then();
   });
 }
@@ -91,6 +102,7 @@ export {
   whenTrusted,
   recordCatalogTrust,
   heldCatalogTrust,
+  heldCatalogSigner,
   recheckHeldTrust,
   rearmTrustRecheck,
   trustKeyHtml,

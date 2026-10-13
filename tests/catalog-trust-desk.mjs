@@ -329,7 +329,10 @@ async function launch(plan) {
   const texts = (root, sel) => root.querySelectorAll(sel).map(n => n.textContent.trim());
   const readOffer = () => {
     const b = doc.getElementById("eCatalogOffer");
-    return b ? { shown: true, trust: texts(b, ".ec-trust"), files: texts(b, ".ec-sub code") } : { shown: false, trust: [], files: [] };
+    return b ? { shown: true, trust: texts(b, ".ec-trust"), files: texts(b, ".ec-sub code"),
+      warn: texts(b, ".ec-warn"), signer: texts(b, ".ec-signer"),
+      yes: texts(b, "#ecYes")[0] || "", no: texts(b, "#ecNo")[0] || "" }
+      : { shown: false, trust: [], files: [], warn: [], signer: [], yes: "", no: "" };
   };
   const readLibrary = () => {
     const box = doc.getElementById("mgCatList");
@@ -530,6 +533,9 @@ async function launch(plan) {
   obs.fileAtEnd = ST.nsGet("CatalogFile") || ""; obs.fromAtEnd = ST.nsGet("CatalogFrom") || "";
   obs.pinAtEnd = (() => { try { return JSON.parse(ST.lsGet("eCatalog") || "{}").pin || ""; } catch { return ""; } })();
   obs.heldRev = (() => { try { const d = JSON.parse(ST.lsGet("eCatalog") || "{}"); return d && d.rev != null ? d.rev : null; } catch { return null; } })();
+  obs.heldId = (() => { try { return String(JSON.parse(ST.lsGet("eCatalog") || "{}").id || ""); } catch { return ""; } })();
+  // The marks a loaded edition leaves on the cards it brought (edition-marks.js), counted by key.
+  obs.editionMarks = ST.lsKeys().filter(k => /EditionMarks$/.test(k) && ST.lsGet(k)).length;
   obs.toast = (doc.getElementById("toast") && doc.getElementById("toast").textContent) || "";
   obs.session = Object.fromEntries(session);
   process.stdout.write("#launch " + JSON.stringify(obs) + "\n", () => process.exit(0));
@@ -545,7 +551,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 78;
+  const EXPECTED = 85;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -1135,11 +1141,16 @@ async function parent() {
     const errs75 = [r75, L2, L3, L4, L5, L6, L7, L8, L9, G1, G2, G3].flatMap(o => o.errors || []);
     check(!errs75.length, "75j those launches ran their acts without an error" + (errs75.length ? ": " + errs75.length + ", first " + errs75[0] : ""));
 
-    /* 76: THE PAGE'S FLOOR. It holds only where the catalog loaded now verified. An unsigned file
-       accepted at a huge rev must not keep the genuine edition out, a Load of an earlier genuine
-       edition is refused in words that are true, and the watch still does not offer an earlier
-       signed file over a signed catalog. */
+    /* 76: THE PAGE'S FLOOR. It holds only where the catalog loaded now verified, and only for the
+       key that signed it. An unsigned file accepted at a huge rev must not keep the genuine edition
+       out. A Load or a double-click of an earlier genuine edition is offered, with the warning that it
+       is older, and it loads on yes. The watch still does not offer an earlier signed file over a
+       signed catalog. What the agent opens is offered whoever signed it, and a key other than the
+       lead's is named. */
     const EARLIER = "This file is an earlier edition than the catalog loaded now.";
+    const OLDER_WARN = "This edition is older than the one in use on this desk, so some of its replies may be out of date.";
+    const OPEN_OLDER = "Open the older edition";
+    const KEEP_NEWER = "Keep the newer one";
     const atRev = (rev, date) => Object.assign(payload(date), { rev: rev });
     const lab76 = scenario([["catalogs/lamp-2.ec", sign(atRev(2, "2026-09-01"))], ["catalogs/etiuda-ring.json", ring],
       ["huge.ec", atRev(1e15, "2026-08-01")]]);
@@ -1160,7 +1171,7 @@ async function parent() {
       ["catalogs/etiuda-ring.json", ring]]);
     const boot76b = run(lab76b, ["boot", "settle", "offer", "yes", "settle"]);
     const ctrl76 = run(lab76b, ["wire", "watch:catalogs/lamp-1.ec", "settle", "offer"], true);
-    const load76 = run(lab76b, ["dom", "library", "load:lamp-1.ec", "settle", "said"], true);
+    const load76 = run(lab76b, ["dom", "library", "load:lamp-1.ec", "settle", "said", "yes", "settle"], true);
     const watchedOlder = ctrl76.offers[0] || {}, loadedOlder = load76.offers[load76.offers.length - 1] || {};
     const errs76c = [boot76b, ctrl76].flatMap(o => o.errors || []);
     const errs76b = (load76.errors || []);
@@ -1168,9 +1179,127 @@ async function parent() {
       && ctrl76.heldRev === 2 && ctrl76.toast !== EARLIER && (ctrl76.toast || "").indexOf("matches the catalog") < 0 && !errs76c.length,
       "76c a put-back older signed file is not offered by the watch over a signed held catalog: "
       + JSON.stringify({ held: ctrl76.heldAtStart, rev: ctrl76.heldRev, shown: watchedOlder.shown, toast: ctrl76.toast || "", errors: errs76c.slice(0, 2) }));
-    check(load76.reloaded === false && load76.heldRev === 2 && loadedOlder.shown === false && load76.toast === EARLIER && !errs76b.length,
-      "76b the Library's Load of an older genuine edition is refused, and the refusal says it is an earlier edition: "
-      + JSON.stringify({ shown: loadedOlder.shown, toast: load76.toast || "", rev: load76.heldRev, errors: errs76b.slice(0, 2) }));
+    check(loadedOlder.shown === true && (loadedOlder.warn || []).indexOf(OLDER_WARN) >= 0
+      && loadedOlder.yes === OPEN_OLDER && loadedOlder.no === KEEP_NEWER
+      && load76.toast !== EARLIER && load76.reloaded === true && load76.heldRev === 1 && !errs76b.length,
+      "76b the Library's Load of an older genuine edition is offered with the warning, and yes loads it: "
+      + JSON.stringify({ shown: loadedOlder.shown, warn: loadedOlder.warn || null, yes: loadedOlder.yes || "", no: loadedOlder.no || "",
+        toast: load76.toast || "", rev: load76.heldRev, errors: errs76b.slice(0, 2) }));
+
+    /* A desk that joined a team, its lead pinned in desk.json. In 76d the lead is somebody else; in 76e and 76f the
+       lead is the key that signs the lamp catalog, so the folder's signed edition is the team's own. */
+    const pinLead = (lab, pub) => {
+      const at = path.join(lab, "userdata", "desk.json"), desk = JSON.parse(fs.readFileSync(at, "utf8"));
+      desk.teamPins = { "t-aabbccddeeff0011": { keyId: "quay-lead", public: pub } };
+      fs.writeFileSync(at, JSON.stringify(desk));
+    };
+    const leadPair = crypto.generateKeyPairSync("ed25519");
+    const lab76d = scenario([["catalogs/lamp.ec", sign(payload("2026-09-01"))], ["catalogs/etiuda-ring.json", ring]]);
+    pinLead(lab76d, pubHex(leadPair.publicKey));
+    const open76d = run(lab76d, ["wire", "click:catalogs/lamp.ec", "settle", "offer", "yes", "settle"]);
+    const named76 = open76d.offers[0] || {};
+    const fours = crypto.createHash("sha256").update(Buffer.from(pubHex(pair.publicKey), "hex")).digest("hex").slice(0, 16)
+      .replace(/(.{4})(?=.)/g, "$1 ");
+    const signerLine = "This file is signed with the key " + fours + ", which is not the team lead's.";
+    check(named76.shown === true && (named76.signer || []).length === 1 && named76.signer[0] === signerLine
+      && open76d.reloaded === true && open76d.heldRev === 1 && open76d.heldId === ID && !(open76d.errors || []).length,
+      "76d the same catalog, opened on purpose, is offered and names the key that signed it, and yes loads it: "
+      + JSON.stringify({ shown: named76.shown, signer: named76.signer || null, rev: open76d.heldRev, id: open76d.heldId,
+        errors: (open76d.errors || []).slice(0, 2) }));
+    const lab76i = scenario([["catalogs/lamp.ec", bend(sign(payload("2026-09-01")))], ["catalogs/etiuda-ring.json", ring]]);
+    pinLead(lab76i, pubHex(leadPair.publicKey));
+    const open76i = run(lab76i, ["wire", "click:catalogs/lamp.ec", "settle", "offer"]);
+    const bent76 = open76i.offers[0] || {};
+    check(bent76.shown === true && (bent76.trust || []).some(l => CHANGED.test(l)) && !(bent76.signer || []).length
+      && !(open76i.errors || []).length,
+      "76i a file changed since it was signed, opened on a desk with its lead pinned, is offered and is not said to be signed by any key: "
+      + JSON.stringify({ shown: bent76.shown, trust: bent76.trust || null, signer: bent76.signer || null, errors: (open76i.errors || []).slice(0, 2) }));
+
+    const lab76e = scenario([["catalogs/lamp-own.ec", atRev(1, "2026-07-01")], ["catalogs/lamp-2.ec", sign(atRev(2, "2026-09-01"))],
+      ["catalogs/etiuda-ring.json", ring]]);
+    pinLead(lab76e, pubHex(pair.publicKey));
+    const boot76e = run(lab76e, ["boot", "settle", "offer", "yes", "settle"]);
+    const load76e = run(lab76e, ["dom", "library", "load:lamp-own.ec", "settle", "said", "yes", "settle"], true);
+    const bootOffer = boot76e.offers[0] || {}, ownOffer = load76e.offers[load76e.offers.length - 1] || {};
+    check(boot76e.heldRev === 2 && boot76e.heldAtEnd === V2.V2_SIG_VALID && bootOffer.shown === true && !(bootOffer.signer || []).length
+      && ownOffer.shown === true && (ownOffer.warn || []).indexOf(OLDER_WARN) >= 0
+      && load76e.reloaded === true && load76e.heldRev === 1 && load76e.heldId === ID && load76e.heldAtEnd === V2.V2_SIG_NONE
+      && !(boot76e.errors || []).length && !(load76e.errors || []).length,
+      "76e on a desk whose lead signs the catalog, the lead's edition boots naming no other key, and an unsigned variant of it, opened on purpose, is offered and loads: "
+      + JSON.stringify({ boot: boot76e.heldRev, bootSigner: bootOffer.signer || null, shown: ownOffer.shown, warn: (ownOffer.warn || []).length,
+        rev: load76e.heldRev, trust: load76e.heldAtEnd, errors: (boot76e.errors || []).concat(load76e.errors || []).slice(0, 2) }));
+
+    const lab76f = scenario([["catalogs/lamp-2.ec", sign(atRev(2, "2026-09-01"))], ["catalogs/etiuda-ring.json", ring]]);
+    pinLead(lab76f, pubHex(pair.publicKey));
+    const boot76f = run(lab76f, ["boot", "settle", "offer", "yes", "settle"]);
+    const otherDoc = atRev(1, "2026-09-02");
+    otherDoc.id = "other-shop";
+    otherDoc.name = "Other Shop";
+    fs.writeFileSync(path.join(lab76f, "catalogs", "other.ec"), JSON.stringify(otherDoc), "utf8");
+    const load76f = run(lab76f, ["dom", "library", "load:other.ec", "settle", "said", "yes", "settle"], true);
+    const otherOffer = load76f.offers[load76f.offers.length - 1] || {};
+    check(boot76f.heldId === ID && otherOffer.shown === true && load76f.reloaded === true
+      && load76f.heldId === "other-shop" && load76f.heldRev === 1 && !(load76f.errors || []).length,
+      "76f a catalog with another id, opened on purpose, is offered and loads: "
+      + JSON.stringify({ boot: boot76f.heldId, shown: otherOffer.shown, id: load76f.heldId, rev: load76f.heldRev,
+        errors: (load76f.errors || []).slice(0, 2) }));
+
+    /* The older edition words one card differently, so an edition's own marks would have something to count, and
+       carries a later date than the held one, so only its rev says it is older. */
+    const older76g = atRev(1, "2026-09-05");
+    older76g.cards[0].body.en = "Good morning.";
+    const lab76g = scenario([["catalogs/lamp-1.ec", sign(older76g)], ["catalogs/lamp-2.ec", sign(atRev(2, "2026-09-01"))],
+      ["catalogs/etiuda-ring.json", ring]]);
+    const boot76g = run(lab76g, ["boot", "settle", "offer", "yes", "settle"]);
+    const click76g = run(lab76g, ["wire", "click:catalogs/lamp-1.ec", "settle", "offer", "yes", "settle"], true);
+    const clicked = click76g.offers[0] || {};
+    check(boot76g.heldRev === 2 && clicked.shown === true && (clicked.warn || []).indexOf(OLDER_WARN) >= 0
+      && clicked.yes === OPEN_OLDER && clicked.no === KEEP_NEWER && click76g.reloaded === true && click76g.heldRev === 1
+      && click76g.heldAtEnd === V2.V2_SIG_VALID && !/loaded:/.test(click76g.toast || "") && click76g.editionMarks === 0
+      && !(boot76g.errors || []).length && !(click76g.errors || []).length,
+      "76g an older genuine edition, double-clicked, is offered with the warning, yes loads it, and it is not announced as a new edition: "
+      + JSON.stringify({ boot: boot76g.heldRev, shown: clicked.shown, warn: clicked.warn || null, yes: clicked.yes || "", no: clicked.no || "",
+        rev: click76g.heldRev, trust: click76g.heldAtEnd, toast: click76g.toast || "", marks: click76g.editionMarks,
+        errors: (boot76g.errors || []).concat(click76g.errors || []).slice(0, 2) }));
+
+    /* A second key the ring lists for the same catalog: its lower rev is no edition of the held key's, so the page's floor
+       does not hold it back, and the offer still says it is older. */
+    const pair2 = crypto.generateKeyPairSync("ed25519");
+    const sign2 = doc => { const o = JSON.parse(JSON.stringify(doc)); delete o.hash;
+      o.sig = { alg: V2.V2_SIG_ALG, keyId: "trust-desk-second" };
+      o.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(o)), pair2.privateKey).toString("hex"); return o; };
+    const ring2 = JSON.stringify({ format: V2.V2_RING_FORMAT, kind: V2.V2_RING_KIND,
+      keys: [{ catalog: ID, keyId: KEY_ID, alg: V2.V2_SIG_ALG, public: pubHex(pair.publicKey) },
+             { catalog: ID, keyId: "trust-desk-second", alg: V2.V2_SIG_ALG, public: pubHex(pair2.publicKey) }] });
+    const lab76h = scenario([["catalogs/lamp-2.ec", sign(atRev(2, "2026-09-01"))], ["catalogs/etiuda-ring.json", ring2],
+      ["second-1.ec", sign2(atRev(1, "2026-08-01"))], ["first-1.ec", sign(atRev(1, "2026-08-02"))]]);
+    const boot76h = run(lab76h, ["boot", "settle", "offer", "yes", "settle"]);
+    const same76h = run(lab76h, ["wire", "watch:first-1.ec", "settle", "offer"], true);
+    const other76h = run(lab76h, ["wire", "watch:second-1.ec", "settle", "offer"], true);
+    const sameOffer = same76h.offers[0] || {}, otherOffer76 = other76h.offers[0] || {};
+    check(boot76h.heldRev === 2 && boot76h.heldAtEnd === V2.V2_SIG_VALID && sameOffer.shown === false
+      && otherOffer76.shown === true && (otherOffer76.warn || []).indexOf(OLDER_WARN) >= 0 && other76h.heldRev === 2
+      && ![boot76h, same76h, other76h].some(o => (o.errors || []).length),
+      "76h the page's floor holds a lower rev under the held key and not one under another key the ring lists, which is offered as older: "
+      + JSON.stringify({ boot: boot76h.heldRev, sameKey: sameOffer.shown, otherKey: otherOffer76.shown, warn: (otherOffer76.warn || []).length,
+        still: other76h.heldRev, errors: [boot76h, same76h, other76h].flatMap(o => o.errors || []).slice(0, 2) }));
+
+    /* The listing's own offer of a higher edition, on a desk whose lead signs the catalog: another key's higher rev
+       is not offered, and the lead's next one is. */
+    const lab76j = scenario([["catalogs/lamp-2.ec", sign(atRev(2, "2026-09-01"))], ["catalogs/etiuda-ring.json", ring2]]);
+    pinLead(lab76j, pubHex(pair.publicKey));
+    const boot76j = run(lab76j, ["boot", "settle", "offer", "yes", "settle"]);
+    fs.writeFileSync(path.join(lab76j, "catalogs", "lamp-9.ec"), JSON.stringify(sign2(atRev(9, "2026-09-09"))), "utf8");
+    const foreign76j = run(lab76j, ["wire", "listing", "settle", "offer"], true);
+    fs.renameSync(path.join(lab76j, "catalogs", "lamp-9.ec"), path.join(lab76j, "lamp-9.ec"));
+    fs.writeFileSync(path.join(lab76j, "catalogs", "lamp-3.ec"), JSON.stringify(sign(atRev(3, "2026-09-10"))), "utf8");
+    const lead76j = run(lab76j, ["wire", "listing", "settle", "offer"], true);
+    const foreignOffer = foreign76j.offers[0] || {}, leadOffer = lead76j.offers[0] || {};
+    check(boot76j.heldRev === 2 && foreignOffer.shown === false && leadOffer.shown === true && (leadOffer.files || []).includes("lamp-3.ec")
+      && ![boot76j, foreign76j, lead76j].some(o => (o.errors || []).length),
+      "76j on a desk whose lead signs the catalog, the listing offers the lead's higher edition and not another key's: "
+      + JSON.stringify({ boot: boot76j.heldRev, otherKey: foreignOffer.shown, lead: leadOffer.shown, files: leadOffer.files || null,
+        errors: [boot76j, foreign76j, lead76j].flatMap(o => o.errors || []).slice(0, 2) }));
   } catch (e) {
     failed++;
     console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));
