@@ -65,10 +65,11 @@ function chromiumDesktop(env) {
    (asking whether the name has an owner starts nothing) whose default collection is unlocked. Asking libsecret for one
    that is not running starts gnome-keyring by D-Bus activation, and with no keyring made yet it raised a prompt for a
    new password and held the desk (measured on Ubuntu); a locked one would ask to be unlocked. */
+const BUS_TOOL = "/usr/bin/dbus-send";
 function keyringAnswers() {
   const ask = (dest, at, method, ...args) => {
     try {
-      return String(execFileSync("dbus-send", ["--session", "--print-reply=literal", "--reply-timeout=1500", "--dest=" + dest, at, method].concat(args),
+      return String(execFileSync(BUS_TOOL, ["--session", "--print-reply=literal", "--reply-timeout=1500", "--dest=" + dest, at, method].concat(args),
         { encoding: "utf8", timeout: 3000, windowsHide: true, stdio: ["ignore", "pipe", "ignore"] }));
     } catch { return ""; }
   };
@@ -2693,7 +2694,7 @@ function applyThemeSource() {
 function accentOnTitleBars() {
   if (process.platform !== "win32") return false;
   try {
-    const out = execFileSync("reg",
+    const out = execFileSync(REG_TOOL,
       ["query", "HKCU\\Software\\Microsoft\\Windows\\DWM", "/v", "ColorPrevalence"],
       { encoding: "utf8", windowsHide: true });
     const m = out.match(/ColorPrevalence\s+REG_DWORD\s+0x([0-9a-fA-F]+)/);
