@@ -94,6 +94,7 @@ try {
       });
     });
     await c.goto(url, { waitUntil: "load", timeout: 60000 });
+    await require("./launch-wait.js").waitLaunchGone(c, { who: "tests/theme-fade.mjs tf0" });
     await settled(c);
     const off = await c.evaluate(() => {
       const r = document.documentElement; r.classList.add("theme-fade");
@@ -136,6 +137,7 @@ try {
     if (typeof vt === "function") document.startViewTransition = function () { window.__fades++; return vt.apply(this, arguments); };
   });
   await q.goto(url, { waitUntil: "load", timeout: 60000 });
+  await require("./launch-wait.js").waitLaunchGone(q, { who: "tests/theme-fade.mjs tf1" });
   await settled(q);
 
   const centre = sel => centreOf(q, sel);
@@ -246,6 +248,7 @@ try {
     });
     await h.bringToFront();
     await h.goto(url, { waitUntil: "load", timeout: 60000 });
+    await require("./launch-wait.js").waitLaunchGone(h, { who: "tests/theme-fade.mjs tf6" });
     await settled(h);
     const TRIALS = 40;
     let seed = 20261006;

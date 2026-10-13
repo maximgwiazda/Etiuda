@@ -49,6 +49,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   onAskClose: (fn) => ipcRenderer.on("etiuda:ask-close", () => fn()),
   closeAnswer: (a) => ipcRenderer.send("etiuda:close-answer", String(a || "")),
   onMaximized: (fn) => ipcRenderer.on("etiuda:maximized", (_e, v) => fn(!!v)),
+  /* Ctrl+Tab, forwarded by the shell because the page keydown may not see it. shift is the previous tab. */
+  onTabChord: (fn) => ipcRenderer.on("etiuda:tab-chord", (_e, v) => fn(!!(v && v.shift))),
   /* The Windows accent, or "" where the desk does not ask for accented title bars. Both the
      value at boot and the changes after it, since either can move while Etiuda is open. */
   accent: host.accent,

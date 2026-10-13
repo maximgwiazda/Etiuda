@@ -139,6 +139,8 @@ function openCtxMenu(rows, x, y, byKey){
   m.addEventListener("keydown",e=>{
     const n=items.length, at=items.indexOf(document.activeElement);
     if(e.key==="Escape"){ e.preventDefault(); e.stopPropagation(); closeCtxMenu(true); return; }
+    /* Ctrl+Tab is the next conversation, not another step of this menu, as a header menu already ignores it. */
+    if(e.ctrlKey||e.altKey||e.metaKey) return;
     if(["ArrowDown","ArrowUp","Home","End","Tab"].indexOf(e.key)<0 || !n) return;
     e.preventDefault(); e.stopPropagation();
     const back=e.key==="ArrowUp"||(e.key==="Tab"&&e.shiftKey);

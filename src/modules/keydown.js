@@ -115,7 +115,9 @@ function wireGlobalKeydown(){
        and Enter are its own, captured before this listener runs. */
     const cover=openCover();
     if(cover){
-      if(e.key==="Tab"){
+      /* A modified Tab is not this walk. Ctrl+Tab still means the next conversation, and a
+         cover holds the screen, so the chord is swallowed here rather than switching underneath. */
+      if(e.key==="Tab" && !e.ctrlKey && !e.altKey && !e.metaKey){
         const to=tabTargetIn(cover.querySelector(".modal-card"), e.shiftKey);
         if(to){ e.preventDefault(); try{ to.focus({preventScroll:true}); }catch(x){ to.focus(); } }
       }
@@ -146,7 +148,7 @@ function wireGlobalKeydown(){
          has nothing to do, and letting it through would be the browser leaving the editor. */
       else if(eventMatchesAction(e,"edPrevLang")){ e.preventDefault(); hooks.runShortcut("edPrevLang"); }
       else if(eventMatchesAction(e,"edNextLang")){ e.preventDefault(); hooks.runShortcut("edNextLang"); }
-      else if(e.key==="Tab"){
+      else if(e.key==="Tab" && !e.ctrlKey && !e.altKey && !e.metaKey){
         const to=modalTabTarget(e.shiftKey);
         if(to){ e.preventDefault(); try{ to.focus({preventScroll:true}); }catch(x){ to.focus(); } }
       }

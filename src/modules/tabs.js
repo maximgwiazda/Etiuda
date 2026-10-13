@@ -1113,10 +1113,22 @@ function drawTabsCore(){
     const lab=document.createElement("span");
     lab.className="tab-label";
     /* The name is the tab to a screen reader, not the box: a tab role hides its children, and the
-       box holds the close button. */
+       box holds the close button. The label is the tab stop, and its accessible name is the full
+       name even where the strip fades it. Enter switches, as a click on the tab does. Space is not
+       taken here: it is the lanes' key wherever the focus sits (board 883), so it passes on. */
     lab.setAttribute("role","tab");
     lab.setAttribute("aria-selected",on?"true":"false");
     const name=tabLabel(tb,i);
+    lab.tabIndex=0;
+    lab.setAttribute("aria-label",name);
+    lab.onkeydown=e=>{
+      if(e.ctrlKey||e.altKey||e.metaKey||e.shiftKey) return;
+      if(e.key!=="Enter") return;
+      e.preventDefault();
+      e.stopPropagation();
+      switchTab(tb.id);
+    };
+    lab.onfocus=()=>scrollTabIntoView(tb.id);
     const labViz=document.createElement("span");
     labViz.textContent=name;
     lab.appendChild(labViz);

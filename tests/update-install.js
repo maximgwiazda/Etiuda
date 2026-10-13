@@ -202,6 +202,7 @@ async function launch(exeDir) {
   }
   if (!b) { E.killTree(child.pid); live.delete(child.pid); throw new Error("the installed app did not answer on port " + port + ": " + said.join(" | ")); }
   const p = (await b.pages())[0];
+  await require("./launch-wait.js").waitLaunchGone(p, { who: "tests/update-install.js launch", ready: "typeof window.E_VERSION === \"string\"" });
   await sleep(3500);
   if (!offscreenAsked) { offscreenAsked = true; E.offscreenCheck(child.pid, WHO, check, notRun); }
   return { b, p, said, page: async () => (await b.pages())[0],

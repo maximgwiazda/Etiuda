@@ -895,16 +895,16 @@ span[data-icon]{line-height:0}
    flanked by seams. The first tab starts the strip and needs no divider. */
 .tab::before{content:"";position:absolute;left:0;top:50%;height:16px;width:1px;
   transform:translateY(-50%);background:var(--tab-edge);transition:opacity var(--m-tone)}
-.tab:first-child::before,.tab:hover::before,.tab:focus-visible::before,
+.tab:first-child::before,.tab:hover::before,.tab:focus-visible::before,.tab:focus-within::before,
 .tab.on::before,.tab.dragging::before,
-.tab:hover+.tab::before,.tab:focus-visible+.tab::before,.tab.on+.tab::before,.tab.dragging+.tab::before{opacity:0}
+.tab:hover+.tab::before,.tab:focus-visible+.tab::before,.tab:focus-within+.tab::before,.tab.on+.tab::before,.tab.dragging+.tab::before{opacity:0}
 /* Hover on an UNSELECTED tab is a pill on a pseudo-element: the tab's box sits ON the
    shelf line and a pill must float clear of it - the inset lifts it off the line and both
    neighbours with no reflow. Rounded on all four corners: pill unselected, tab selected. */
 /* ONE HOVER VALUE PER THEME, worn by the whole strip. A hovered tab and the chip behind the +
    or an arrow are the same gesture at two sizes, so they take the same value and cannot drift.
    Hover is WHITE, not accent - it stands on the band, where accent-on-blue would vanish. */
-.tab:hover,.tab:focus-visible{color:var(--band-ink);--tab-face:var(--strip-hover)}
+.tab:hover,.tab:focus-visible,.tab:focus-within{color:var(--band-ink);--tab-face:var(--strip-hover)}
 :root{--strip-hover:rgba(255,255,255,.18)}
 /* Charcoal cannot use the same alpha. White is not part of this design, so an alpha over it
    says nothing about either band: .18 reaches 1.676:1 on the dark band, louder than the
@@ -922,7 +922,7 @@ span[data-icon]{line-height:0}
 .tab.on{background:var(--header-bg);color:var(--ink);font-weight:600;/* 600 not 700 - avoids glyph jump */
   z-index:2;
   box-shadow:0 2px 0 0 var(--header-bg)}
-.tab.on:hover,.tab.on:focus-visible{background:var(--header-bg);color:var(--ink)}
+.tab.on:hover,.tab.on:focus-visible,.tab.on:focus-within{background:var(--header-bg);color:var(--ink)}
 /* THE ACTIVE TAB'S BAR, dark only: the selected face clears the band by 1.129:1 and needs
    saying twice. Not in light: on cobalt the category colours do not read, and a white tab
    needs no help. Coloured by this tab's categories through the dot's own plumbing. The
@@ -988,7 +988,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
   border-radius:4px;flex:0 0 auto;opacity:.75;
   display:inline-flex;align-items:center;justify-content:center}
 .tab-x .ic,.tab-add-mark .ic,.tabs-nav-mark .ic{width:16px;height:16px;stroke-width:1.5}
-.tab:hover .tab-x,.tab:focus-visible .tab-x,.tab-x:focus-visible{opacity:1}
+.tab:hover .tab-x,.tab:focus-visible .tab-x,.tab:focus-within .tab-x,.tab-x:focus-visible{opacity:1}
 .tab-x:hover,.tab-x:focus-visible{color:#c44;background:rgba(196,68,68,.14);opacity:1}
 /* No hairline between the last tab and + - if the strip's end ever needs marking again,
    the aperture edges by the arrows (.tabs-nav) are the vocabulary. */
@@ -1012,6 +1012,7 @@ html.tabdrag, html.tabdrag .tab, html.tabdrag *{cursor:default!important}
 .tabs-wrap.tabs-over .tab-add::before,
 .tabs-wrap:has(.tab:last-child:hover) .tab-add::before,
 .tabs-wrap:has(.tab:last-child:focus-visible) .tab-add::before,
+.tabs-wrap:has(.tab:last-child:focus-within) .tab-add::before,
 .tabs-wrap:has(.tab:last-child.on) .tab-add::before,
 .tabs-wrap:has(.tab:last-child.dragging) .tab-add::before{opacity:0}
 /* Identical box to .tab-x above, so the two marks share a centre line and their hover chips are
@@ -1858,7 +1859,18 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .intent-pick .ip-t{line-height:1.3;word-break:break-word}
 .intent-pick .ip-cat{font:10px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.3px}
 .cacts button[aria-expanded=true]{color:var(--accent)}
-@media (hover:hover){ body.note-hover .cacts [data-act=note]{display:none} }
+/* THE NOTE STAYS IN THE TAB WALK when notes open on hover. display:none would drop the
+   button on a desk with a mouse, which is the default, so the button collapses to an empty
+   box and keeps its place. Keyboard focus gives the box back, and Enter opens the note.
+   A pointer still opens the note by resting on the card and does not see this control. */
+@media (hover:hover){
+  body.note-hover .cacts [data-act=note]{
+    position:absolute;width:0;min-width:0;height:0;margin:0;padding:0;border:0;overflow:hidden;
+    pointer-events:none}
+  body.note-hover .cacts [data-act=note]:is(:focus,:focus-visible){
+    position:static;width:auto;min-width:1.4em;height:auto;margin:0;padding:6px;overflow:visible;
+    pointer-events:auto}
+}
 /* One panel per content language in the card editor. .seg carries the tab strip so the thumb
    stays the same CSS-only control the header uses, generalised by data-n. */
 .lang-tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:0 0 12px}
@@ -2540,6 +2552,11 @@ footer .nw{display:inline-block;max-width:100%;overflow:hidden;vertical-align:bo
    in the row without a tile under the cursor read as the one that had stopped working. */
 .cacts button.star-btn.on{color:var(--fav);background:transparent;box-shadow:none}
 .cacts button.star-btn.on:hover,.cacts button.star-btn.on:focus-visible{background:var(--fav-soft)}
+/* A tint alone is too faint once Tab lands here. The edge is the dialog button's, and it
+   belongs to focus only: hover already has its tile. */
+.cacts button:focus-visible{box-shadow:inset 0 0 0 1px var(--accent)}
+.cacts button.danger:focus-visible{box-shadow:inset 0 0 0 1px #c44}
+.cacts button.star-btn:focus-visible{box-shadow:inset 0 0 0 1px var(--fav)}
 .cbadge{font:10px var(--mono);letter-spacing:.3px;padding:2px 6px;border-radius:999px;
   background:var(--accent-soft);color:var(--accent);text-transform:uppercase}
 .cbadge.ed{background:var(--ed-soft);color:var(--ed);border:1px solid color-mix(in srgb,var(--ed) 42%,transparent)}
@@ -3933,7 +3950,7 @@ body.e-lanes #pillsSlot{display:none}
    hover rule for :focus-visible, so one declaration serves both states and they cannot drift.
    The browser's own ring is named here as well - it returns the moment a rule stops saying so -
    and a text field keeps whatever it has, which is a different cue for a different thing. */
-.btn:focus-visible,.tab:focus-visible,.tab-x:focus-visible,.tab-add:focus-visible,
+.btn:focus-visible,.tab:focus-visible,.tab-label:focus-visible,.tab-x:focus-visible,.tab-add:focus-visible,
 .seg button:focus-visible,.field-clear:focus-visible,.combo-clear:focus-visible,
 .rail-item:focus-visible,.rail-add:focus-visible,.rail-lock:focus-visible,
 button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:none}

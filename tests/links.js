@@ -110,6 +110,7 @@ function buildApp() {
   const t = E.lowerTree(child.pid);
   console.log("       the window: " + (t.asked ? t.below + " of " + t.n + " Electron process(es) at below-normal priority" : "priority not lowered"));
   await p.waitForFunction(() => typeof window.E_VERSION === "string" && !!document.body, { timeout: 20000 });
+  await require("./launch-wait.js").waitLaunchGone(p, { who: "tests/links.js" });
   await sleep(1500);
 
   const U = k => "https://links.invalid/" + k;

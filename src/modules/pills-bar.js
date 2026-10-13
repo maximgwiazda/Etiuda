@@ -136,11 +136,10 @@ function drawPillsCore(){
     mk(k,CATS[k],PN(k),true);          // empty categories included, with a 0 badge
   });
   /* "+" sits after the last category, mirroring Manage's. Appended outside catOrder and
-     not draggable - a control, not a category. A real <button>, the bar's only focus
-     stop: pills are drag-and-toggle surfaces, this one ACTS, and a button is what a click,
-     a screen reader and Enter expect of it. Focus is not walked on this screen - Tab and
-     Shift+Tab are bound, the owner's call - so a click is its way in. The drag logic keys
-     off dataset.k, which this never carries. */
+     not draggable: a control, not a category. A real <button>, so Tab reaches it and Enter
+     presses it. The pills themselves stay out of the tab order: arrows already select them,
+     and a stop on every one would swamp the walk. The drag logic keys off dataset.k, which
+     this never carries. */
   const add=document.createElement("button");
   add.type="button";
   add.className="pill pill-add";

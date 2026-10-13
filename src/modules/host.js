@@ -298,6 +298,16 @@ function answerStats(req){
   }).catch(()=>{});
 }
 
+/* The shell's Ctrl+Tab, as a keydown the shortcut table already matches. KeyboardEvent is
+   absent where this file is loaded under plain node and the callback is never what asks. */
+function dispatchTabChord(shift){
+  try{
+    window.dispatchEvent(new KeyboardEvent("keydown",{
+      key:"Tab",code:"Tab",ctrlKey:true,shiftKey:!!shift,bubbles:true,cancelable:true
+    }));
+  }catch(e){}
+}
+
 function wireHost(){
   const h=eHost(); if(!h) return;
   document.body.classList.add("e-host");
@@ -309,6 +319,7 @@ function wireHost(){
      not do it anyway: a draggable region swallows click and dblclick (Electron 1354, 37789).
      So the glyph follows the window rather than the button, and the window is what is asked. */
   if(typeof h.onMaximized==="function") h.onMaximized(eSetMaximized);
+  if(typeof h.onTabChord==="function") h.onTabChord(dispatchTabChord);
   eSetAccent(h.accent);
   if(typeof h.onAccent==="function") h.onAccent(eSetAccent);
   /* The shell asks before the window closes; the conversations answer (tabs.js). */
@@ -366,6 +377,7 @@ export {
   eReadCatalogFile,
   eSaveCatalogFile,
   wireHost,
+  dispatchTabChord,
   eSetAccent,
   eSetMaximized,
   syncBandHeight

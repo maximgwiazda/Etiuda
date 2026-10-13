@@ -223,8 +223,8 @@ const TOUR_STEPS=[
     id:"tabs",
     sel:"#tabsWrap",
     title:"Conversations",
-    body:()=>t("Each customer on the chat gets a tab of their own here, with their name, intent and language, so a reply never carries the wrong name. <b>+</b> or {NEW} opens another conversation, and {KEY} moves between them.")
-            .replace("{KEY}",chordChips("tabNext")).replace("{NEW}",chordChips("tabNew")),
+    body:()=>t("Each customer on the chat gets a tab of their own here, with their name, intent and language, so a reply never carries the wrong name. <b>+</b> or {NEW} opens another conversation, {KEY} moves to the next and {PREV} to the one before.")
+            .replace("{KEY}",chordChips("tabNext")).replace("{NEW}",chordChips("tabNew")).replace("{PREV}",chordChips("tabPrev")),
     pad:6
   },
   {

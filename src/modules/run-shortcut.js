@@ -39,6 +39,7 @@ function runShortcut(id){
     return true;
   }
   if(id==="tabNext"){ stepTab(1); return true; }
+  if(id==="tabPrev"){ stepTab(-1); return true; }
   if(id==="tabNew"){ addTab(); return true; }
   /* No SC_DEFS row: keydown.js matches this one itself, for the reason written there. It is
      dispatched here all the same, so every bound key still leaves the app through one door. */

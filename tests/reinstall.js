@@ -583,6 +583,7 @@ async function launch(dir, env) {
   }
   if (!b) { killPid(child.pid); throw new Error("the installed app did not answer on the debugging port within 20 s: " + said.join(" | ")); }
   const p = (await b.pages())[0];
+  await require("./launch-wait.js").waitLaunchGone(p, { who: "tests/reinstall.js launch", ready: "typeof window.E_VERSION === \"string\"" });
   await sleep(3500);
   /* Asked once, of this file's own first launch, and asked of the machine rather than of the
      variable: what the environment carried is not evidence that a window stayed off the screen.

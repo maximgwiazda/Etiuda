@@ -135,6 +135,7 @@ const pickerPage = async () => (await b.pages()).find(p => /^data:text\/html/.te
   }
   if (!b) throw new Error("Electron did not answer on the debugging port within 20 s");
   let desk = (await b.pages())[0];
+  await require("./launch-wait.js").waitLaunchGone(desk, { who: "tests/pick-desk.js", ready: "typeof window.E_VERSION === \"string\"" });
   await sleep(2500);
   await desk.evaluate(() => { const y = document.querySelector("#ecYes"); if (y) y.click(); });
   await sleep(3000);

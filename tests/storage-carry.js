@@ -151,6 +151,7 @@ const t0 = Date.now();
   console.log("  engine/etiuda.html sha256 " + RUN.engineSha + (RUN.engineSha === RUN.copySha ? "" : "  COPY DIFFERS: " + RUN.copySha));
 
   await p.goto(RUN.url, { waitUntil: "load", timeout: 90000 });
+  await require("./launch-wait.js").waitLaunchGone(p, { who: "tests/storage-carry.js" });
   await sleep(2000);
   const dump = () => p.evaluate(() => {
     const out = {};
@@ -233,6 +234,7 @@ const t0 = Date.now();
       try { localStorage.clear(); for (const k of Object.keys(sown)) localStorage.setItem(k, sown[k]); } catch (x) {}
     }, Object.assign({ [CATALOG_KEY]: JSON.stringify(catalog) }, seed));
     await pg.goto(RUN.url, { waitUntil: "load", timeout: 90000 });
+    await require("./launch-wait.js").waitLaunchGone(pg, { who: "tests/storage-carry.js wake" });
     await sleep(2400);
     const got = await readStore(pg);
     return { pg, bad, store: got.store, toast: got.toast, ns: got.ns };

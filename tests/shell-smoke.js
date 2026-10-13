@@ -62,6 +62,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const E = require("./engine.js");
+const LW = require("./launch-wait.js");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const KEEP = process.argv.indexOf("--keep") > -1;
@@ -79,6 +80,7 @@ E.windowWall("tests/shell-smoke.js");
 const LEASED = E.takeLeases(["ports:" + PORT_BASE, "desk:installed-app"], 45, "shell-smoke");
 let port = PORT_BASE;
 let fails = 0, checks = 0, reachedEnd = false;
+const notRun = [];
 const t0 = Date.now();
 const live = new Set();                       // every pid this run has started
 const check = (ok, what) => { checks++; console.log((ok ? "  ok   " : "  FAIL ") + what); if (!ok) fails++; };
@@ -167,6 +169,12 @@ const step = async (label, body, opts) => {
  */
 const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7"];
 const EXPECTED = KEEP ? null : 129;
+/* 1g3 may record NOT RUN instead of calling its check (board 655). NOT RUN only when an early
+   sample, taken straight after connect, was on a display and not iconic, and the late sample
+   is iconic. iconic is the window pickWindow chose. Already iconic at the early sample is a
+   FAIL, and so is every other wrong window. The verdict below subtracts notRun.length from
+   this declaration and repeats NOT RUN 1g3 on its own lines. The anchored count stays 129:
+   the call is still in the file and still runs whenever the reading is not not-run. */
 /* COUNTS:PREDICATES
    Members that must be there, in order where the order is the claim.
    One more member still passes. A missing member is named. A floor stays
@@ -401,9 +409,17 @@ async function launch(ud, args, env, assocExe, realCatalogFolder) {
   const errs = [];
   p.on("console", m => { if (m.type() === "error") errs.push(m.text()); });
   p.on("pageerror", e => errs.push("pageerror " + String(e && e.message || e)));
+  /* 1g3's early sample: straight after connect, before the wait and the sleep. The other
+     launches are placed aside and do not ask this question. */
+  let earlyFacts = null;
+  if (env && env.ETIUDA_TEST_OFFSCREEN === "") earlyFacts = windowFacts(child.pid);
+  await LW.waitLaunchGone(p, {
+    who: "tests/shell-smoke.js launch",
+    ready: "typeof window.E_VERSION === \"string\"",
+  });
   await sleep(3500);
   return {
-    b, p, said, errs, pid: child.pid,
+    b, p, said, errs, pid: child.pid, earlyFacts,
     inline: () => errs.filter(t => /inline script/i.test(t)),
     stop: async () => { try { b.disconnect(); } catch (x) {} killPid(child.pid); await sleep(1000); },
   };
@@ -720,6 +736,8 @@ const placeEc = (dir, from, as, minutesOld) => {
   const udQ = newUserData("onscreen");
   s = await launch(udQ, [], { ETIUDA_TEST_OFFSCREEN: "" });
   const shownFacts = windowFacts(s.pid);
+  /* Early sample from inside launch, before the wait. iconic is the window pickWindow chose. */
+  const shownReading = LW.shownWindowReading(s.earlyFacts, shownFacts);
   await s.stop();
   check(hiddenFacts.measured === true && hiddenFacts.windows === 0 && hiddenSeen.booted,
     "1g a launch taking this driver's own default leaves " + hiddenFacts.windows
@@ -732,12 +750,20 @@ const placeEc = (dir, from, as, minutesOld) => {
     + ", of which " + asideFacts.windowsOnDisplay + " are on a display ("
     + asideFacts.displays.join("; ") + "). So a leg whose subject IS the window has a rectangle"
     + " to read and takes nobody's screen");
-  check(shownFacts.measured === true && shownFacts.windows >= 1
-        && shownFacts.windowsOnDisplay >= 1 && shownFacts.winW > 0,
-    "1g3 THE CONTROL: the same app with the variable cleared puts " + shownFacts.windows
-    + " visible window(s) up at " + shownFacts.left + "," + shownFacts.top + ", "
-    + shownFacts.windowsOnDisplay + " of them on a display. So 1g2 is the placement and not a"
-    + " shell that stopped showing windows, and EnumWindows can see one when there is one");
+  if (shownReading.reading === "not-run") {
+    notRun.push("1g3");
+    console.log("  NOT RUN 1g3 " + shownReading.reason + ": " + shownFacts.windows
+      + " visible window(s) at " + shownFacts.left + "," + shownFacts.top
+      + ", iconic " + JSON.stringify(shownFacts.iconic) + ", " + shownFacts.windowsOnDisplay
+      + " on a display");
+  } else {
+    check(shownReading.reading === "ok",
+      "1g3 THE CONTROL: the same app with the variable cleared puts " + shownFacts.windows
+      + " visible window(s) up at " + shownFacts.left + "," + shownFacts.top + ", "
+      + shownFacts.windowsOnDisplay + " of them on a display. So 1g2 is the placement and not a"
+      + " shell that stopped showing windows, and EnumWindows can see one when there is one"
+      + (shownReading.reading === "ok" ? "" : " — " + shownReading.reason));
+  }
 
   /* ---- 1w to 1y: the window's floor, board 469 ----------------------------------------------
      Electron's getMinimumSize and setSize live in the main process, so this launch is a variant
@@ -3318,15 +3344,18 @@ const placeEc = (dir, from, as, minutesOld) => {
      the floor the phase labels give, and `phasesMissed` the same reading from the other side.
      Before the tally and before the verdict lines, which tools/gate-run.mjs reads as the last
      word. */
+  const declared = EXPECTED === null ? null : EXPECTED - notRun.length;
   console.log("#counts checks=" + checks + " failed=" + fails
-    + " expected=" + (EXPECTED === null ? -1 : EXPECTED)
+    + " expected=" + (declared === null ? -1 : declared)
     + " phases=" + phasesSeen.size + " phasesMissed=" + missed.length
     + " phasesThrew=" + phasesThrew
-    + " ports=" + (port - PORT_BASE + 1));
+    + " ports=" + (port - PORT_BASE + 1)
+    + " notRun=" + notRun.length);
   console.log("\n" + (reachedEnd ? "" : "  INCOMPLETE - ") + checks + " check(s), " + fails
     + " failed, " + Math.round((Date.now() - t0) / 1000) + "s");
-  const v = E.suiteVerdict({ checks, fails, expected: EXPECTED,
+  const v = E.suiteVerdict({ checks, fails, expected: declared,
                              reachedEnd: reachedEnd && missed.length === 0 });
+  LW.notRunVerdictLines(notRun).forEach(l => v.lines.push(l));
   v.lines.forEach(l => console.log("  " + l));
   process.exit(v.exit);
 });

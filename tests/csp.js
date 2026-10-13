@@ -188,6 +188,7 @@ async function launch(dir, port) {
   /* Attaching happens after the first load, so the refusals Chromium logged while parsing are
      already gone. One reload with the listener in place is what puts them in reach. */
   await p.reload({ waitUntil: "load" });
+  await require("./launch-wait.js").waitLaunchGone(p, { who: "tests/csp.js launch" });
   await sleep(3500);
   /* Asked once, of this file's own first launch, and asked of the machine rather than of the
      variable: what the environment carried is not evidence that a window stayed off the screen.

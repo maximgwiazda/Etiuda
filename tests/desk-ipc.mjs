@@ -28,7 +28,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 84;
+const EXPECTED = 85;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -52,12 +52,46 @@ const said = [];
 const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: () => {} };
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
+/* A window the hold can be driven on. fromWebContents stays the inert stand-in the other legs
+   already talk to; only a window this file builds records the close createWindow registers. */
+const madeWins = [];
+function RecWin(opts) {
+  this.opts = opts || {};
+  this.listeners = {};
+  this.sent = [];
+  this.closes = 0;
+  this.bounds = { x: this.opts.x || 0, y: this.opts.y || 0, width: this.opts.width || 0, height: this.opts.height || 0 };
+  const self = this;
+  this.webContents = {
+    id: madeWins.length + 1, etiudaLost: null,
+    send: (ch) => { self.sent.push(ch); },
+    on: (k, fn) => { (self.wc[k] = self.wc[k] || []).push(fn); },
+    once: (k, fn) => { self.webContents.on(k, fn); },
+    setWindowOpenHandler: () => {}, getURL: () => "", getZoomLevel: () => 0, setZoomLevel: () => {}, reload: () => {},
+  };
+  this.wc = {};
+  madeWins.push(this);
+}
+RecWin.prototype.on = function (k, fn) { (this.listeners[k] = this.listeners[k] || []).push(fn); };
+RecWin.prototype.once = function (k, fn) { this.on(k, fn); };
+RecWin.prototype.close = function () { this.closes++; };
+RecWin.prototype.isDestroyed = function () { return false; };
+RecWin.prototype.isMaximized = function () { return false; };
+RecWin.prototype.isMinimized = function () { return false; };
+RecWin.prototype.getBounds = function () { return Object.assign({}, this.bounds); };
+RecWin.prototype.getNormalBounds = function () { return this.getBounds(); };
+RecWin.prototype.setBounds = function (b) { if (b) Object.assign(this.bounds, b); };
+["show", "showInactive", "focus", "hide", "maximize", "unmaximize", "minimize", "restore", "loadFile", "destroy"].forEach(n => {
+  RecWin.prototype[n] = function () {};
+});
+RecWin.fromWebContents = () => inert;
+RecWin.getAllWindows = () => inert;
 const onHandlers = {}, invokeHandlers = {}, appOn = {};
 const electron = {
   app: { getPath: () => UD, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: (k, fn) => { appOn[k] = fn; }, getVersion: () => "0.0.0",
          whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop, hasSwitch: () => false } },
   ipcMain: { on: (ch, fn) => { onHandlers[ch] = fn; }, handle: (ch, fn) => { invokeHandlers[ch] = fn; } },
-  BrowserWindow: inert, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert,
+  BrowserWindow: RecWin, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert,
   screen: inert, shell: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },
 };
 /* safeStorage as far as main.js asks of it: a reversible sealing that shows nothing of what it holds. */
@@ -77,7 +111,7 @@ const mainTest = {};
 const desktopWas = process.env.XDG_CURRENT_DESKTOP;
 process.env.XDG_CURRENT_DESKTOP = "GNOME";
 new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
-  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal;")(
+  shellSrc("main.js") + "\n__test.tryHeldBranches = tryHeldBranches; __test.catalogChanged = catalogChanged; __test.sealsForReal = sealsForReal; __test.closeHeld = closeHeld; __test.closeAnswered = closeAnswered; __test.wireHold = wireHold; __test.closeFromRefusal = closeFromRefusal; __test.createWindow = createWindow; __test.CLOSE_WAIT_MS = CLOSE_WAIT_MS;")(
   fakeRequire, path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"), { exports: {} }, {}, quiet, mainTest);
 if (desktopWas === undefined) delete process.env.XDG_CURRENT_DESKTOP; else process.env.XDG_CURRENT_DESKTOP = desktopWas;
 
@@ -1096,13 +1130,51 @@ try {
   const backHeld = H(back);
   const MAIN_CODE = shellSrc("main.js").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   const inCreate = MAIN_CODE.slice(MAIN_CODE.indexOf("function createWindow("), MAIN_CODE.indexOf("function createWindow(") + 20000);
-  const textWired = /wireHold\(win, /.test(inCreate) && /closeFromRefusal\(win\)/.test(inCreate) && /lost\.back = true/.test(inCreate);
+  /* The hold is driven, not matched. A dead `if (false) wireHold(win, ` still matches the old
+     regex and registers nothing; the window this stand-in built has no close that asks. The
+     watch is stood in for the call only, so the drive does not arm a watch on the tree. */
+  const realWatch = fs.watch;
+  fs.watch = () => ({ on() { return this; }, close() {} });
+  let drivenHold = false, driveWhy = "";
+  try {
+    const before = madeWins.length;
+    mainTest.createWindow();
+    const heldWin = madeWins.slice(before).reverse().find(w => (w.listeners.close || []).length);
+    const ev = closeEv();
+    if (heldWin) heldWin.listeners.close.forEach(fn => fn(ev));
+    drivenHold = !!(heldWin && ev.prevented && heldWin.sent.indexOf("etiuda:ask-close") >= 0);
+  } catch (e) {
+    driveWhy = String(e && e.stack || e).split("\n")[0];
+  } finally {
+    fs.watch = realWatch;
+  }
+  const textWired = drivenHold && /closeFromRefusal\(win\)/.test(inCreate) && /lost\.back = true/.test(inCreate);
   check(already === "free/0" && first === "true/etiuda:ask-close/0" && afterEnd === "false/1" && fromRefusal === "1/false/0"
         && backHeld === "held!" && textWired && askingEnd.join() === "1,1",
     "1012d4 a window already let go is let go with nothing asked; the hold's wiring holds the window's close and asks, and"
     + " lets it go at the end of the Windows session; the refusal page's Close is never held; a page loaded again after it"
     + " was lost holds again; a close held and asking, or answered asked, is let go when the session ends; and createWindow"
-    + " wires all three (" + [already, first, afterEnd, fromRefusal, backHeld, textWired, askingEnd.join(",")].join(" ") + ")");
+    + " drives the hold (" + [already, first, afterEnd, fromRefusal, backHeld, textWired, askingEnd.join(","), driveWhy].join(" ") + ")");
+  /* The constant's name is not the timer. closeHeld is driven with setTimeout stood in, and the
+     delay it records has to be 1500. A literal 1600 at that call leaves the constant at 1500 and
+     still fails here. */
+  const realSetTimeout = globalThis.setTimeout;
+  const delays = [];
+  globalThis.setTimeout = (fn, ms, ...rest) => {
+    delays.push(ms);
+    return realSetTimeout(fn, ms, ...rest);
+  };
+  let delaySeen = null;
+  try {
+    const wt = winFor();
+    H(wt);
+    delaySeen = delays.length === 1 ? delays[0] : delays.join(",");
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+  }
+  check(mainTest.CLOSE_WAIT_MS === 1500 && delaySeen === 1500,
+    "1012d5 a silent page is let go at 1500 ms, so a wait written as 1600 is already past the hold (constant "
+    + mainTest.CLOSE_WAIT_MS + ", timer " + delaySeen + ")");
 
   const wb = winFor(), wc = winFor(), wd = winFor(), we = winFor();
   const b = [H(wb), H(wb)].join("/");

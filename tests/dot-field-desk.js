@@ -108,6 +108,7 @@ const ROWS_OF = async (d, strip) => {
   const t = E.lowerTree(child.pid);
   console.log("       the window: " + (t.asked ? t.below + " of " + t.n + " Electron process(es) at below-normal priority" : "priority not lowered"));
   await p.waitForFunction(() => typeof window.E_VERSION === "string" && !!document.body, { timeout: 20000 });
+  await require("./launch-wait.js").waitLaunchGone(p, { who: "tests/dot-field-desk.js" });
   await p.waitForSelector("#ecYes", { timeout: 15000 });
   await p.click("#ecYes");
   await p.waitForFunction(() => document.querySelectorAll("#list .card").length > 0, { timeout: 15000 });

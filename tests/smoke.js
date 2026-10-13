@@ -291,6 +291,7 @@ const BOOT_SKIP = /skip|not now|close|pomi/;
 async function bootAndDismiss(pg, url, label) {
   const late = [];
   await pg.goto(url, { waitUntil: "load", timeout: 90000 });
+  await require("./launch-wait.js").waitLaunchGone(pg, { who: "tests/smoke.js bootAndDismiss " + label });
   /* The page is up when it has drawn something: the cards, the offer to load the sibling
      catalog, or a first run's tour, which the offer waits behind. Whichever comes first ends the
      wait. */
@@ -2117,24 +2118,30 @@ const t0 = Date.now();
   check(await p.evaluate(() => !document.getElementById("notePane") && !document.querySelector(".note-pane .bub-tip")), "Escape closes the bubble and takes its pointer with it");
   clean(e, "the internal note");
 
-  /* Tabs: add one, then the keys - Tab round the strip with the box's text travelling with its
-     tab and focus staying put, slash for the language with nothing typed, Shift+Tab for a new tab -
-     then back to where the strip started. */
+  /* Tabs: add one, then the chords. Ctrl+Tab steps the strip, the box's text travels with its
+     tab and focus stays put. Slash toggles the language with nothing typed. Ctrl+T opens a tab.
+     Chrome never delivers Ctrl+Tab or Ctrl+T to a page, so these are events the page listens
+     for, the same shape the shell forwards. Then back to where the strip started. */
   e = since();
   const n0 = await p.evaluate(() => document.querySelectorAll(".tab").length);
   await p.evaluate(() => document.querySelector(".tab-add").click()); await sleep(900);
   const n1 = await p.evaluate(() => document.querySelectorAll(".tab").length);
   const onIdx = () => p.evaluate(() => [...document.querySelectorAll(".tab")].findIndex(t => t.classList.contains("on")));
+  const chord = (code, key, shift) => p.evaluate((c) => {
+    window.dispatchEvent(new KeyboardEvent("keydown", {
+      key: c.key, code: c.code, ctrlKey: true, shiftKey: !!c.shift, bubbles: true, cancelable: true
+    }));
+  }, { code, key, shift: !!shift });
   await p.click("#intent"); await p.keyboard.type("probe", { delay: 20 }); await sleep(600);
   const i0 = await onIdx();
-  await p.keyboard.press("Tab"); await sleep(700);
+  await chord("Tab", "Tab", false); await sleep(700);
   const i1 = await onIdx();
   const away = await p.evaluate(() => ({ v: document.querySelector("#intent").value, focus: document.activeElement && document.activeElement.id }));
-  await p.keyboard.press("Tab"); await sleep(700);
+  await chord("Tab", "Tab", false); await sleep(700);
   const i2 = await onIdx();
   const back = await p.evaluate(() => document.querySelector("#intent").value);
   check(i0 === n1 - 1 && i1 === 0 && i2 === i0 && away.v === "" && away.focus === "intent" && back === "probe",
-    "Tab steps round the strip (" + i0 + " > " + i1 + " > " + i2 + "), the query travels with its tab and focus stays in the box");
+    "Ctrl+Tab steps round the strip (" + i0 + " > " + i1 + " > " + i2 + "), the query travels with its tab and focus stays in the box");
   const l0 = await p.evaluate(() => lang);
   await p.keyboard.press("Slash"); await sleep(500);
   const l1 = await p.evaluate(() => ({ l: lang, v: document.querySelector("#intent").value }));
@@ -2147,7 +2154,7 @@ const t0 = Date.now();
   const l4 = await p.evaluate(() => lang);
   const keyRows = await p.evaluate(() => { openSettings("keys"); return new Promise(r => setTimeout(() => { const altN =document.querySelectorAll("#setBody .sc-row .sc-bind.sc-alt").length, fixedN = document.querySelectorAll("#setBody .sc-row .sc-bind.fixed").length, tilde = [...document.querySelectorAll('#setBody .sc-row[data-sc="langToggle"] .sc-bind')].map(b => b.textContent.trim()); dismissModal(); r({ alt: altN, fixed: fixedN, tilde }); }, 400)); });
   check(l3.l !== l0 && l4 === l0 && l3.v === "probe" && keyRows.alt > 10 && keyRows.tilde.join(" ") === "/ ~", "the tilde is the language toggle's alternative, every rebindable row has an alternative slot (" + keyRows.alt + "), fixed rows none (" + keyRows.fixed + " fixed, " + JSON.stringify(keyRows.tilde) + ")");
-  await p.keyboard.down("Shift"); await p.keyboard.press("Tab"); await p.keyboard.up("Shift"); await sleep(900);
+  await chord("KeyT", "t", false); await sleep(900);
   const n2 = await p.evaluate(() => document.querySelectorAll(".tab").length);
   await p.evaluate(() => openSettings("keys")); await sleep(600);
   const grab = await p.evaluate(() => {
@@ -2169,7 +2176,7 @@ const t0 = Date.now();
   } else check(false, "the shortcuts list offered no capture to arm");
   await p.evaluate(() => dismissModal()); await sleep(500);
 
-  check(n2 === n1 + 1, "Shift+Tab opens a tab (" + n1 + " > " + n2 + ")");
+  check(n2 === n1 + 1, "Ctrl+T opens a tab (" + n1 + " > " + n2 + ")");
   for (let k = n2; k > n0; k--) {
     await p.evaluate(() => document.querySelectorAll(".tab")[0].click()); await sleep(300);
     await p.evaluate(() => { const tabs = document.querySelectorAll(".tab"); const x = tabs[tabs.length - 1].querySelector(".tab-x"); if (x) x.click(); }); await sleep(700);
@@ -3200,6 +3207,7 @@ const t0 = Date.now();
     q.on("requestfailed", r => missing.push(r.url().split("/").pop()));
     step("loading the public copy");
     await q.goto("file:///" + path.join(pub, "etiuda.html").replace(/\\/g, "/"), { waitUntil: "load", timeout: 90000 });
+    await require("./launch-wait.js").waitLaunchGone(q, { who: "tests/smoke.js public first run" });
     await sleep(2400);
     const offer = await q.evaluate(() => ({ cards: document.querySelectorAll(".card").length, real: typeof E_CATALOG !== "undefined",
       sampleRead: typeof window.E_SAMPLE !== "undefined", load: !!document.getElementById("emptyLoad"),
@@ -3401,6 +3409,7 @@ const t0 = Date.now();
     if (done) await q.evaluateOnNewDocument(() => { try { localStorage.setItem("eTourDone_v3", "1"); localStorage.setItem("eTourInvite_v3", "1"); } catch (x) {} });
     if (pre) await pre(q);
     await q.goto(huntUrl(dir), { waitUntil: "load", timeout: 90000 });
+    await require("./launch-wait.js").waitLaunchGone(q, { who: "tests/smoke.js huntPage" });
     return q;
   };
   const upFor = (q, fn, ms) => q.waitForFunction(fn, { timeout: ms || 20000, polling: 100 }).then(() => true, () => false);
@@ -3612,6 +3621,7 @@ const t0 = Date.now();
           Object.defineProperty(Navigator.prototype, "language", { get: () => l[0], configurable: true });
         }, list);
         await s.goto(RUN.url, { waitUntil: "load", timeout: 60000 });
+        await require("./launch-wait.js").waitLaunchGone(s, { who: "tests/smoke.js bySystem" });
         await sleep(1800);
         return await s.evaluate(() => ({ ui: document.documentElement.lang, reply: lang, langs: CONTENT_LANGS.join(","),
           menu: ((document.querySelector('#settingsMenu [data-act="settings"]') || {}).textContent || "").trim() }));
@@ -3654,6 +3664,7 @@ const t0 = Date.now();
     await hookInstall(o);
     o.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
     await o.goto(RUN.url, { waitUntil: "load", timeout: 90000 });
+    await require("./launch-wait.js").waitLaunchGone(o, { who: "tests/smoke.js comment language" });
     const base = {
       format: 2, kind: "etiuda-catalog", rev: 1,
       tags: [{ id: "t-shelf", kind: "shelf", label: { pl: "Polka", en: "Shelf" } }],
