@@ -416,6 +416,7 @@ UI_STRINGS.pl={
   "Etiuda needs permission to read that file again.":"Etiuda potrzebuje ponownej zgody na odczyt tego pliku.",
   "That file is not a catalog Etiuda can read.":"Tego pliku Etiuda nie potrafi odczytać jako katalogu.",
   "That file matches the catalog you already have.":"Ten plik jest taki sam jak wczytany katalog.",
+  "This file is an earlier edition than the catalog loaded now.":"Ten plik jest wcześniejszym wydaniem niż katalog wczytany teraz.",
   "Could not read the watched file.":"Nie udało się odczytać obserwowanego pliku.",
   "Your own cards and edits are kept.":"Własne karty i zmiany zostają.",
   "Load the update":"Wczytaj aktualizację",

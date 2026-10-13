@@ -3,12 +3,12 @@
    folder, with an Undo. */
 import { eHost, eCatalogFolderShort } from "./host.js";
 import { openDialog } from "./dialog.js";
-import { t, toast, toastRefusal, offerUndo, fileStamp, catalogCountsLine } from "./ui-lang.js";
+import { t, toastRefusal, offerUndo, fileStamp, catalogCountsLine } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { hooks } from "./hooks.js";
 import { parseCatalogFile, catalogVersionLabel, E_CATALOG_KEY } from "./catalog.js";
 import { activateCatalog } from "./catalog-file.js";
-import { eOfferCatalogDialog } from "./catalog-offer.js";
+import { eOfferCatalogDialog, toastIfSameCatalog } from "./catalog-offer.js";
 import { lsSet } from "./storage.js";
 import { ICON_LOAD } from "./icons.js";
 
@@ -80,7 +80,7 @@ function historyOpen(v){
       foundHtml:esc(t("{FILE} as it was on {WHEN}, kept on this desk.")).split("{FILE}").join('<code>'+esc(name)+'</code>')
         .split("{WHEN}").join(esc(fileStamp(v.first))),
       accept:sig=>{ lsSet(E_CATALOG_KEY,sig); return activateCatalog(c,{from:name}); } });
-    if(!shown) toast(t("That file matches the catalog you already have."));
+    if(!shown) toastIfSameCatalog(c);
   }).catch(()=>{});
 }
 function historyPutBack(v){

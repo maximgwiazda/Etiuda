@@ -23,7 +23,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 35;
+const EXPECTED = 37;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -795,6 +795,82 @@ try {
     check(second && second.rev === 2 && plantedRev === 1e15 && third && third.rev === 3 && kept === 3,
       "888ai a file this desk did not sign, sitting in its folder at a huge rev, does not raise the next write: "
       + "had rev " + (second && second.rev) + ", planted " + plantedRev
+      + ", wrote " + (third && third.rev) + ", kept " + kept);
+  }
+
+  /* ---- a well-formed signature that does not verify, at a huge rev -------------------------------- */
+  {
+    const SHARE = folder("forged-mark");
+    put(SHARE, "etiuda-ring.json", RING);
+    const D = newDesk("forged-mark", SHARE);
+    staged(SHARE);
+    const booted = facts(D.sync("etiuda:catalog") || "");
+    const forged = catalog(1e15, "2026-08-01");
+    forged.sig = { alg: "Ed25519", keyId: LEAD.keyId, value: "ab".repeat(64) };
+    put(SHARE, "forged.ec", textOf(forged));
+    D.api.offerFile(D.win, path.join(SHARE, "forged.ec"));
+    const afterForge = markOf(D);
+    put(SHARE, "third.ec", CAT3);
+    touch(path.join(SHARE, "third.ec"), Date.UTC(2026, 6, 2));
+    const D2 = loadDesk(D.ud);
+    const again = facts(D2.sync("etiuda:catalog") || "");
+    const mark3 = markOf(D2);
+    put(SHARE, "fourth.ec", textOf(catalog(4, "2026-03-04")));
+    touch(path.join(SHARE, "fourth.ec"), Date.UTC(2026, 7, 1));
+    D2.sent.length = 0;
+    D2.api.catalogChanged(D2.win);
+    const sent = fileSends(D2).map(a => facts(a[1]).rev);
+    check(forged.sig.value.length === 128 && booted.rev === 2 && afterForge === 2 && again.rev === 3 && mark3 === 3
+      && sent.length === 1 && sent[0] === 4 && markOf(D2) === 4,
+      "888aj a file whose signature is well formed and does not verify, double-clicked at a huge rev, does not raise the catalog mark: "
+      + "boot " + booted.rev + ", after the click " + afterForge
+      + ", next boot " + again.rev + " mark " + mark3
+      + ", watch " + (sent.join(",") || "-") + ", mark " + markOf(D2));
+  }
+
+  /* ---- a file in this desk's folder, signed by some other key, at a huge rev ---------------------- */
+  {
+    const SHARE = folder("other-key");
+    put(SHARE, "etiuda-ring.json", RING);
+    const A = newDesk("other-key", SHARE);
+    const me = await A.ask("etiuda:branch-identity", true);
+    const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    const K1 = crypto.randomBytes(32);
+    put(SHARE, "etiuda-team.json", teamFile(TEAM, 1, [entry(A, me, K1, TEAM, 1)]));
+    put(SHARE, "board.ec", JSON.stringify(A.api.sealCatalog(K1, TEAM, 1, CAT2)));
+    const g = grown(A, me, await readText(A, "board.ec"));
+    g.doc.name = "first";
+    await A.ask("etiuda:branch-write", g.stem, JSON.stringify(g.doc));
+    g.doc.name = "second";
+    const second = await A.ask("etiuda:branch-write", g.stem, JSON.stringify(g.doc));
+    const ownerFileId = g.doc.id;
+    const savedPath = path.join(A.ud, "desk.json");
+    const saved = JSON.parse(fs.readFileSync(savedPath, "utf8"));
+    saved.branchRevs[ownerFileId] = 1;
+    fs.writeFileSync(savedPath, JSON.stringify(saved));
+    const A2 = loadDesk(A.ud);
+    const poison = JSON.parse(JSON.stringify(g.doc));
+    poison.rev = 1e15;
+    poison.name = "planted by another key";
+    delete poison.hash;
+    delete poison.sig;
+    const pair = crypto.generateKeyPairSync("ed25519");
+    const pub = pubHex(pair.publicKey);
+    const strangerId = "k-" + crypto.createHash("sha256").update(Buffer.from(pub, "hex")).digest("hex").slice(0, 16);
+    poison.sig = { alg: "Ed25519", keyId: strangerId };
+    poison.sig.value = crypto.sign(null, Buffer.concat([
+      Buffer.from("etiuda-desk-branch\n", "utf8"), Buffer.from(V2.v2SignedBytes(poison)),
+    ]), pair.privateKey).toString("hex");
+    const planted = path.join(SHARE, "desks", me.id, "planted-other.ec");
+    fs.writeFileSync(planted, JSON.stringify(poison) + "\n");
+    const plantedDoc = JSON.parse(fs.readFileSync(planted, "utf8"));
+    g.doc.name = "third";
+    const third = await A2.ask("etiuda:branch-write", g.stem, JSON.stringify(g.doc));
+    const kept = (A2.envelope().branchRevs || {})[ownerFileId];
+    check(second && second.rev === 2 && plantedDoc.rev === 1e15 && strangerId !== me.id
+      && plantedDoc.sig && plantedDoc.sig.value.length === 128 && third && third.rev === 3 && kept === 3,
+      "888ak a file signed by a key other than this desk's, sitting in its folder at a huge rev, does not raise the next write: "
+      + "had rev " + (second && second.rev) + ", planted " + plantedDoc.rev
       + ", wrote " + (third && third.rev) + ", kept " + kept);
   }
 } catch (e) {

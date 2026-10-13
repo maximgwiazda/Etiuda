@@ -384,6 +384,23 @@ async function launch(plan) {
     },
     watch: file => { const text = fs.readFileSync(path.join(LAB, file), "utf8");
       (rendererOn["etiuda:catalog-file"] || []).forEach(fn => fn({}, text, path.basename(file), path.join(LAB, "catalogs"), false, "", false)); },
+    /* A double-click, as offerFile sends it: the page is asked, and it answers. */
+    click: file => {
+      const text = fs.readFileSync(path.join(LAB, file), "utf8");
+      const at = path.join(LAB, file);
+      (rendererOn["etiuda:catalog-file"] || []).forEach(fn => fn({}, text, path.basename(at), path.dirname(at), true, "", false));
+    },
+    /* The catalog-file listener, without the boot's offer. */
+    wire: () => { OFFER.wireHostCatalogWatch(); },
+    /* The cut pass needs the range grabDom takes. A refusal toast marks the toast host. */
+    dom: () => { DOMM.grabDom(); },
+    /* Wait until a Load's read has landed on a toast or an offer, then read the offer. */
+    said: async () => {
+      const host = doc.getElementById("toast");
+      for (let i = 0; i < 500 && !(host && host.textContent) && !doc.getElementById("eCatalogOffer"); i++)
+        await new Promise(r => setImmediate(r));
+      obs.offers.push(readOffer());
+    },
   };
   /* THE OFFER'S PANEL, driven as the desk drives it. `desk` is the page's own start in order, as restart.js runs it
      (the catalog applied, then the layer read), with the modal window the page has and this stub has not; the acts
@@ -512,6 +529,8 @@ async function launch(plan) {
   obs.heldAtEnd = TR.heldCatalogTrust();
   obs.fileAtEnd = ST.nsGet("CatalogFile") || ""; obs.fromAtEnd = ST.nsGet("CatalogFrom") || "";
   obs.pinAtEnd = (() => { try { return JSON.parse(ST.lsGet("eCatalog") || "{}").pin || ""; } catch { return ""; } })();
+  obs.heldRev = (() => { try { const d = JSON.parse(ST.lsGet("eCatalog") || "{}"); return d && d.rev != null ? d.rev : null; } catch { return null; } })();
+  obs.toast = (doc.getElementById("toast") && doc.getElementById("toast").textContent) || "";
   obs.session = Object.fromEntries(session);
   process.stdout.write("#launch " + JSON.stringify(obs) + "\n", () => process.exit(0));
 }
@@ -526,7 +545,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 75;
+  const EXPECTED = 78;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -1115,6 +1134,43 @@ async function parent() {
       "75k a colleague's file written while the Library is open appears in it once the shell's listing arrives, with no other paint (" + JSON.stringify([cyBefore, cyAfter]) + ")");
     const errs75 = [r75, L2, L3, L4, L5, L6, L7, L8, L9, G1, G2, G3].flatMap(o => o.errors || []);
     check(!errs75.length, "75j those launches ran their acts without an error" + (errs75.length ? ": " + errs75.length + ", first " + errs75[0] : ""));
+
+    /* 76: THE PAGE'S FLOOR. It holds only where the catalog loaded now verified. An unsigned file
+       accepted at a huge rev must not keep the genuine edition out, a Load of an earlier genuine
+       edition is refused in words that are true, and the watch still does not offer an earlier
+       signed file over a signed catalog. */
+    const EARLIER = "This file is an earlier edition than the catalog loaded now.";
+    const atRev = (rev, date) => Object.assign(payload(date), { rev: rev });
+    const lab76 = scenario([["catalogs/lamp-2.ec", sign(atRev(2, "2026-09-01"))], ["catalogs/etiuda-ring.json", ring],
+      ["huge.ec", atRev(1e15, "2026-08-01")]]);
+    const boot76 = run(lab76, ["boot", "settle", "offer", "yes", "settle"]);
+    const click76 = run(lab76, ["wire", "click:huge.ec", "settle", "offer", "yes", "settle"], true);
+    fs.writeFileSync(path.join(lab76, "catalogs", "lamp-3.ec"), JSON.stringify(sign(atRev(3, "2026-09-20"))), "utf8");
+    const watch76 = run(lab76, ["wire", "watch:catalogs/lamp-3.ec", "settle", "offer"], true);
+    const offer76 = watch76.offers[0] || {};
+    const errs76a = [boot76, click76, watch76].flatMap(o => o.errors || []);
+    check(boot76.reloaded && boot76.heldAtEnd === V2.V2_SIG_VALID && click76.reloaded && click76.heldRev === 1e15
+      && click76.heldAtEnd === V2.V2_SIG_NONE && offer76.shown === true && (offer76.files || []).includes("lamp-3.ec")
+      && watch76.heldRev === 1e15 && watch76.reloaded === false && !errs76a.length,
+      "76a an unsigned file at rev 1e15, double-clicked and accepted, does not keep the genuine rev 3 from being offered by the watch: "
+      + JSON.stringify({ boot: boot76.heldAtEnd, accepted: click76.heldRev, trust: click76.heldAtEnd, offered: offer76.files || null,
+        shown: offer76.shown, still: watch76.heldRev, errors: errs76a.slice(0, 2) }));
+
+    const lab76b = scenario([["catalogs/lamp-1.ec", sign(atRev(1, "2026-08-01"))], ["catalogs/lamp-2.ec", sign(atRev(2, "2026-09-01"))],
+      ["catalogs/etiuda-ring.json", ring]]);
+    const boot76b = run(lab76b, ["boot", "settle", "offer", "yes", "settle"]);
+    const ctrl76 = run(lab76b, ["wire", "watch:catalogs/lamp-1.ec", "settle", "offer"], true);
+    const load76 = run(lab76b, ["dom", "library", "load:lamp-1.ec", "settle", "said"], true);
+    const watchedOlder = ctrl76.offers[0] || {}, loadedOlder = load76.offers[load76.offers.length - 1] || {};
+    const errs76c = [boot76b, ctrl76].flatMap(o => o.errors || []);
+    const errs76b = (load76.errors || []);
+    check(boot76b.heldAtEnd === V2.V2_SIG_VALID && ctrl76.heldAtStart === V2.V2_SIG_VALID && watchedOlder.shown === false
+      && ctrl76.heldRev === 2 && ctrl76.toast !== EARLIER && (ctrl76.toast || "").indexOf("matches the catalog") < 0 && !errs76c.length,
+      "76c a put-back older signed file is not offered by the watch over a signed held catalog: "
+      + JSON.stringify({ held: ctrl76.heldAtStart, rev: ctrl76.heldRev, shown: watchedOlder.shown, toast: ctrl76.toast || "", errors: errs76c.slice(0, 2) }));
+    check(load76.reloaded === false && load76.heldRev === 2 && loadedOlder.shown === false && load76.toast === EARLIER && !errs76b.length,
+      "76b the Library's Load of an older genuine edition is refused, and the refusal says it is an earlier edition: "
+      + JSON.stringify({ shown: loadedOlder.shown, toast: load76.toast || "", rev: load76.heldRev, errors: errs76b.slice(0, 2) }));
   } catch (e) {
     failed++;
     console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

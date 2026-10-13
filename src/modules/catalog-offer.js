@@ -36,6 +36,11 @@ import { hooks } from "./hooks.js";
 import { catalogTrust, whenTrusted, heldCatalogTrust, recheckHeldTrust, trustKeyHtml, trustOfferLine,
   trustSettled } from "./catalog-trust.js";
 
+/* Whether a Load the person asked for may take an earlier edition of a catalog this desk has
+   verified. False until the desk's owner says so: the file is refused, and the refusal says it
+   is earlier. True offers that Load. The watch is never this switch. */
+const LOAD_OLDER_ON_PURPOSE=false;
+
 /* A catalog sitting beside Etiuda is offered, never forced. Asked once per signature:
    accept it and it loads silently from then on, change it and you are asked again, so what
    you are running is always something you agreed to. Declining is remembered too, so the
@@ -83,9 +88,7 @@ function eOfferCatalog(given,name,where,force,asked,builtIn){
       return activateCatalog(c,{file:mine?file:"", from:file||(eHost()?"":E_CATALOG_SCRIPT),
                                 fileAt:(mine&&!given)?eCatalogMtime():0}); }
   });
-  const active=asked&&!shown?storedCatalog():null;
-  if(active && eCatalogSignature(active)===eCatalogSignature(c))
-    toast(t("That file matches the catalog you already have."));
+  if(asked && !shown) toastIfSameCatalog(c);
   return shown;
 }
 /* THE BOOT CHANNEL, and the two things it does differently: a refusal was said about the file as
@@ -112,8 +115,15 @@ function eOfferCatalogAtBoot(){
    bubble, which loads at once only where nothing is loaded. The date arrives from the row that was clicked: the
    host read it with the listing, and asking again would be asking for a second answer. */
 /* `desk` is a colleague's folder under desks/, whose file is worked from: no file of the catalog folder is then in use. */
+/* The matches line is true only when the two are the same catalog. A refusal for any other
+   reason has already spoken, or has stayed quiet on purpose. */
+function toastIfSameCatalog(c){
+  const active=storedCatalog();
+  if(active && eCatalogSignature(active)===eCatalogSignature(c))
+    toast(t("That file matches the catalog you already have."));
+}
 function loadCatalogFromFolder(name,mtime,desk){
-  eReadCatalogFile(name,desk).then(got=>{
+  eReadCatalogFile(name,desk,true).then(got=>{
     if(!got) return;
     if(!got.text){ toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(String(name||""))); return; }
     let c=null;
@@ -128,7 +138,7 @@ function loadCatalogFromFolder(name,mtime,desk){
       accept:sig=>{ lsSet(E_CATALOG_KEY,sig);
         return activateCatalog(c,desk?{file:"", from:got.name}:{file:got.name, fileAt:+mtime||0}); }
     });
-    if(!shown) toast(t("That file matches the catalog you already have."));
+    if(!shown) toastIfSameCatalog(c);
   });
 }
 function deskFolderOf(id){
@@ -452,9 +462,16 @@ function eOfferCatalogDialog(c,src){
      catalog, both surface here rather than being applied behind the user's back. */
   const active=storedCatalog();
   if(active && eCatalogSignature(active)===sig) return false;
-  /* A stored catalog is the floor for its own id. A lower rev of that id is not offered.
-     An equal rev with other content still is, which is the shell's own rule, and the file's date does not decide. */
-  if(active && String(c&&c.id||"") && String(c.id)===String(active.id||"") && (+c.rev<(+active.rev||0))) return false;
+  /* A stored catalog is the floor for its own id while this desk has verified it, or has not
+     yet recorded an answer. A lower rev of that id is not offered. Once the answer is that
+     the catalog did not verify, it is no floor, so an unsigned file taken at a high rev
+     cannot keep a genuine edition out. A Load the person asked for follows
+     LOAD_OLDER_ON_PURPOSE, and says why when it is refused. An equal rev with other content
+     still is offered, which is the shell's own rule, and the file's date does not decide. */
+  if(active && String(c&&c.id||"") && String(c.id)===String(active.id||"") && (+c.rev<(+active.rev||0)) && (heldCatalogTrust()==="" || heldCatalogTrust()===V2_SIG_VALID) && !(src.asked && LOAD_OLDER_ON_PURPOSE)){
+    if(src.asked) toast(t("This file is an earlier edition than the catalog loaded now."));
+    return false;
+  }
   // What this desk wrote into the shared catalog is what it shows already, so only somebody asking is offered it.
   if(!src.asked && sharedOwnWrite(c)) return false;
   /* A refusal is remembered so boot does not nag, but ASKING outranks it: an explicit check
@@ -704,7 +721,7 @@ function reopenWaiting(){
 function eOfferPickedCatalog(c,name,accept){
   const shown=eOfferCatalogDialog(c,{file:name, foundHtml:eFoundHtml(name,""), force:true, asked:true,
     direct:true, accept:()=>accept()});
-  if(!shown) toast(t("That file matches the catalog you already have."));
+  if(!shown) toastIfSameCatalog(c);
 }
 /* A catalog no route named a file for is unnamed, in the interface's language. */
 function shownCatalogName(n){ return n || t("Unnamed catalog"); }
@@ -752,7 +769,7 @@ function eCheckWatchedFile(interactive){
             refusedKey:"WatchNo", force:!!interactive, asked:!!interactive,
             accept:()=>activateCatalog(c,{from:eWatchName()||f.name})
           });
-          if(!shown && interactive) toast(t("That file matches the catalog you already have."));
+          if(!shown && interactive) toastIfSameCatalog(c);
           return null;
         });
       });
@@ -860,6 +877,7 @@ export {
   eOfferCatalog,
   eOfferCatalogAtBoot,
   eOfferCatalogDialog,
+  toastIfSameCatalog,
   eOfferPickedCatalog,
   paintCatNow,
   paintCatWaiting,

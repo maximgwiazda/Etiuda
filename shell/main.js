@@ -3147,8 +3147,9 @@ function keepReadRev(id, rev) {
 /* `desk` names a colleague's folder under desks/, and its file is handed only where the listing would list it.
    A rev below the highest already handed on for that file's id is not handed on. A file whose id does not
    begin with that folder's desk id sets no mark, so one desk's signed file cannot raise another's.
-   A file of the folder itself, below a rev already handed to the page, is not handed on either, and this
-   read does not move that mark. */
+   A file of the folder itself, below a rev already handed to the page, is not handed on either, unless the
+   person asked to read that file: the page then decides, and only a catalog it has verified is a floor.
+   This read does not move that mark. */
 function readRevFloor(text, who) {
   let doc = null;
   try { doc = JSON.parse(String(text || "")); } catch { return ""; }
@@ -3162,7 +3163,7 @@ function readRevFloor(text, who) {
   keepReadRev(id, rev);
   return "kept";
 }
-ipcMain.handle("etiuda:catalog-read", (e, name, desk) => {
+ipcMain.handle("etiuda:catalog-read", (e, name, desk, asked) => {
   if (!fromEngine(e)) return null;
   const base = String(name || ""), who = desk == null ? "" : String(desk);
   if (!base || base !== path.basename(base) || !/\.ec$/i.test(base)) return null;
@@ -3174,7 +3175,7 @@ ipcMain.handle("etiuda:catalog-read", (e, name, desk) => {
     const text = catalogTextOf(fs.readFileSync(file, "utf8"));
     if (who) {
       if (readRevFloor(text, who) === "below") return { name: base, text: "" };
-    } else if (belowCatalogRev(text)) return { name: base, text: "" };
+    } else if (!asked && belowCatalogRev(text)) return { name: base, text: "" };
     return { name: base, text: text };
   }
   catch (err) {

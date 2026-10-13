@@ -6944,6 +6944,7 @@ What you type stays in this browser only.`;
     "Etiuda needs permission to read that file again.": "Etiuda potrzebuje ponownej zgody na odczyt tego pliku.",
     "That file is not a catalog Etiuda can read.": "Tego pliku Etiuda nie potrafi odczytać jako katalogu.",
     "That file matches the catalog you already have.": "Ten plik jest taki sam jak wczytany katalog.",
+    "This file is an earlier edition than the catalog loaded now.": "Ten plik jest wcześniejszym wydaniem niż katalog wczytany teraz.",
     "Could not read the watched file.": "Nie udało się odczytać obserwowanego pliku.",
     "Your own cards and edits are kept.": "Własne karty i zmiany zostają.",
     "Load the update": "Wczytaj aktualizację",
@@ -13918,11 +13919,11 @@ What you type stays in this browser only.`;
       return dir;
     });
   }
-  function eReadCatalogFile(name, desk) {
+  function eReadCatalogFile(name, desk, asked) {
     const h = eHost();
     if (!h || typeof h.readCatalogFile !== "function") return Promise.resolve(null);
     try {
-      return Promise.resolve(desk ? h.readCatalogFile(String(name || ""), String(desk)) : h.readCatalogFile(String(name || ""))).then((v) => v && typeof v === "object" ? { name: String(v.name || ""), text: String(v.text || "") } : null).catch(() => null);
+      return Promise.resolve(h.readCatalogFile(String(name || ""), desk ? String(desk) : "", !!asked)).then((v) => v && typeof v === "object" ? { name: String(v.name || ""), text: String(v.text || "") } : null).catch(() => null);
     } catch (e) {
       return Promise.resolve(null);
     }
@@ -26881,6 +26882,7 @@ What you type stays in this browser only.`;
     paintCatNow: () => paintCatNow,
     paintCatWaiting: () => paintCatWaiting,
     paintCatalogList: () => paintCatalogList,
+    toastIfSameCatalog: () => toastIfSameCatalog,
     wireHostCatalogWatch: () => wireHostCatalogWatch
   });
 
@@ -27434,6 +27436,7 @@ What you type stays in this browser only.`;
   }
 
   // src/modules/catalog-offer.js
+  var LOAD_OLDER_ON_PURPOSE = false;
   function eFoundHtml(name, where, builtIn) {
     const shown2 = String(name || "") || E_CATALOG_SCRIPT;
     if (builtIn) return t("{FILE} comes with Etiuda.").split("{FILE}").join("<code>" + esc(shown2) + "</code>");
@@ -27463,9 +27466,7 @@ What you type stays in this browser only.`;
         });
       }
     });
-    const active = asked && !shown2 ? storedCatalog() : null;
-    if (active && eCatalogSignature(active) === eCatalogSignature(c))
-      toast(t("That file matches the catalog you already have."));
+    if (asked && !shown2) toastIfSameCatalog(c);
     return shown2;
   }
   function eOfferCatalogAtBoot() {
@@ -27479,8 +27480,13 @@ What you type stays in this browser only.`;
     if (!asked && found && found.sample && held && !isCatalogUpdate(found, held)) return;
     eOfferCatalog(null, "", "", asked || wholeThingEmpty() || !!(at && mt && mt > at), asked);
   }
+  function toastIfSameCatalog(c) {
+    const active = storedCatalog();
+    if (active && eCatalogSignature(active) === eCatalogSignature(c))
+      toast(t("That file matches the catalog you already have."));
+  }
   function loadCatalogFromFolder(name, mtime, desk) {
-    eReadCatalogFile(name, desk).then((got) => {
+    eReadCatalogFile(name, desk, true).then((got) => {
       if (!got) return;
       if (!got.text) {
         toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(String(name || "")));
@@ -27505,7 +27511,7 @@ What you type stays in this browser only.`;
           return activateCatalog(c, desk ? { file: "", from: got.name } : { file: got.name, fileAt: +mtime || 0 });
         }
       });
-      if (!shown2) toast(t("That file matches the catalog you already have."));
+      if (!shown2) toastIfSameCatalog(c);
     });
   }
   function deskFolderOf(id) {
@@ -27753,7 +27759,10 @@ What you type stays in this browser only.`;
     const sig = eCatalogSignature(c);
     const active = storedCatalog();
     if (active && eCatalogSignature(active) === sig) return false;
-    if (active && String(c && c.id || "") && String(c.id) === String(active.id || "") && +c.rev < (+active.rev || 0)) return false;
+    if (active && String(c && c.id || "") && String(c.id) === String(active.id || "") && +c.rev < (+active.rev || 0) && (heldCatalogTrust() === "" || heldCatalogTrust() === V2_SIG_VALID) && !(src.asked && LOAD_OLDER_ON_PURPOSE)) {
+      if (src.asked) toast(t("This file is an earlier edition than the catalog loaded now."));
+      return false;
+    }
     if (!src.asked && sharedOwnWrite(c)) return false;
     if (!src.force && src.refusedKey && nsGet(src.refusedKey) === sig) {
       leaveWaiting(c, src, active);
@@ -28011,7 +28020,7 @@ What you type stays in this browser only.`;
       direct: true,
       accept: () => accept()
     });
-    if (!shown2) toast(t("That file matches the catalog you already have."));
+    if (!shown2) toastIfSameCatalog(c);
   }
   function shownCatalogName(n) {
     return n || t("Unnamed catalog");
@@ -28073,7 +28082,7 @@ What you type stays in this browser only.`;
               asked: !!interactive,
               accept: () => activateCatalog(c, { from: eWatchName() || f.name })
             });
-            if (!shown2 && interactive) toast(t("That file matches the catalog you already have."));
+            if (!shown2 && interactive) toastIfSameCatalog(c);
             return null;
           });
         });
@@ -28269,7 +28278,7 @@ What you type stays in this browser only.`;
           return activateCatalog(c, { from: name });
         }
       });
-      if (!shown2) toast(t("That file matches the catalog you already have."));
+      if (!shown2) toastIfSameCatalog(c);
     }).catch(() => {
     });
   }
