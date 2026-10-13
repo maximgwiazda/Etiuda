@@ -1137,7 +1137,8 @@ function ownFilesWithId(dir, id) {
   }
   return out;
 }
-/* The team file at `root` where it is whole under the lead this desk pinned and lists the catalog, else null. */
+/* The team file at `root` where it is whole under the lead this desk pinned, and under the lead policy names where it
+   names one, whatever pin was kept, and lists the catalog, else null. */
 function teamCovering(root, catalogId) {
   let doc = null;
   try {
@@ -1145,6 +1146,8 @@ function teamCovering(root, catalogId) {
     if (fs.statSync(file).size <= TEAM_MAX) doc = JSON.parse(fs.readFileSync(file, "utf8").trim());
   } catch { return null; }
   if (!teamWhole(doc)) return null;
+  const policy = sayJoinPolicy().lead;
+  if (policy && doc.lead.public !== policy) return null;
   const pin = teamPins[doc.id];
   return !!pin && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public && Array.isArray(doc.catalogs)
     && doc.catalogs.map(String).indexOf(catalogId) >= 0 ? doc : null;
@@ -1364,18 +1367,53 @@ const POLICY_WORDS = {
     beside: "Druga wartość ustawiona obok też nie zostanie użyta: obie są przyjmowane razem albo wcale.",
   },
 };
-/* One named value as reg prints it, or unset where the line is absent or the string is empty.
-   One run of whitespace after the type is the column gap; the rest is the value, and a trailing
-   space stays part of it so a path is never trimmed into use. */
-function policyRegSz(text, name) {
-  const m = new RegExp("^[ \\t]+" + name + "[ \\t]+(REG_\\w+)(.*)$", "m").exec(String(text || "").replace(/\r/g, ""));
-  if (!m) return { set: false, type: "", value: "" };
-  const gap = /^[ \t]+/.exec(m[2]);
-  const value = gap ? m[2].slice(gap[0].length) : "";
-  if (m[1] === "REG_SZ" && value === "") return { set: false, type: "", value: "" };
-  return { set: true, type: m[1], value: value };
+/* The key as reg export heads its section, the hive written out and the rest as asked. */
+const POLICY_HEAD = "HKEY_LOCAL_MACHINE" + POLICY_KEY.slice(4);
+const POLICY_EXPORT_LINE = "Windows Registry Editor Version 5.00\r\n";
+/* The key's own values in the text of reg export's file, by lower-case name as {type, value}: a string as
+   the registry holds it, its two escapes undone and nothing trimmed, line breaks included, and an expandable
+   or multiple string as its UTF-16 text. Null where anything in the text is not what reg writes, a subkey's
+   values aside, so no part of a read in doubt is used. */
+function policyValues(text) {
+  const t = String(text), own = Object.create(null);
+  const HEAD = /\[([^\r\n]*)\]\r\n/y;
+  const VALUE = /(?:@|"((?:[^"\\]|\\[\\"])*)")=(?:"((?:[^"\\]|\\[\\"])*)"|(dword):[0-9a-f]{8}|(hex(?:\([0-9a-f]{1,8}\))?):((?:[0-9a-f]{2}(?:,[0-9a-f]{2})*,?)?(?:\\\r\n {2}[0-9a-f]{2}(?:,[0-9a-f]{2})*,?)*))\r\n/y;
+  const plain = s => s.replace(/\\([\\"])/g, "$1");
+  const WIDE = { "hex(2)": "REG_EXPAND_SZ", "hex(7)": "REG_MULTI_SZ" };
+  const wide = hex => { const b = Buffer.from(hex.replace(/[^0-9a-f]/g, ""), "hex"); return b.length % 2 ? "" : b.toString("utf16le").replace(/\u0000+$/, ""); };
+  if (!t.startsWith(POLICY_EXPORT_LINE)) return null;
+  let at = POLICY_EXPORT_LINE.length, section = "";
+  while (at < t.length) {
+    if (t.startsWith("\r\n", at)) { at += 2; continue; }
+    HEAD.lastIndex = at;
+    VALUE.lastIndex = at;
+    let m = HEAD.exec(t);
+    if (m) {
+      if (!section && m[1] === POLICY_HEAD) section = "own";
+      else if (section && m[1].startsWith(POLICY_HEAD + "\\")) section = "sub";
+      else return null;
+      at = HEAD.lastIndex;
+      continue;
+    }
+    m = section ? VALUE.exec(t) : null;
+    if (!m) return null;
+    if (section === "own" && m[1] !== undefined) {
+      const name = plain(m[1]).toLowerCase();
+      if (name in own) return null;
+      own[name] = m[2] !== undefined ? { type: "REG_SZ", value: plain(m[2]) }
+        : WIDE[m[4]] ? { type: WIDE[m[4]], value: wide(m[5]) } : { type: m[3] || m[4], value: "" };
+    }
+    at = VALUE.lastIndex;
+  }
+  return section ? own : null;
 }
-/* A Windows absolute path: a drive or a share, no segment that walks out of it, and no space at either end. */
+/* One named value, or unset where it is absent or an empty string. */
+function policyRegSz(values, name) {
+  const v = values ? values[name.toLowerCase()] : undefined;
+  if (!v || (v.type === "REG_SZ" && v.value === "")) return { set: false, type: "", value: "" };
+  return { set: true, type: v.type, value: v.value };
+}
+/* A Windows absolute path: a drive or a share, no segment that walks out of it or names a stream, and no space at either end. */
 function policyFolderOk(s) {
   if (typeof s !== "string" || s.length < 3 || s.length > 1024) return false;
   if (s !== s.trim()) return false;
@@ -1386,55 +1424,69 @@ function policyFolderOk(s) {
   if (!drive && !unc) return false;
   const trimmed = /[\\/]$/.test(s) ? s.slice(0, -1) : s;
   const parts = trimmed.split(/[\\/]/);
+  const segment = p => p.length > 0 && p !== "." && p !== ".." && p.indexOf(":") < 0;
   if (drive) {
     if (!/^[A-Za-z]:$/.test(parts[0])) return false;
-    return parts.slice(1).every(p => p.length > 0 && p !== "." && p !== "..");
+    return parts.slice(1).every(segment);
   }
   if (parts.length < 4 || parts[0] !== "" || parts[1] !== "") return false;
-  return parts.slice(2).every(p => p.length > 0 && p !== "." && p !== "..");
+  return parts.slice(2).every(segment);
 }
 function policyLeadOk(s) { return typeof s === "string" && POLICY_LEAD_RE.test(s); }
-/* `text` is reg's printing of the policy key. `lang` is "pl" or anything else for English.
-   Returns {folder, lead, said}. folder and lead are empty where unused. */
-function joinPolicyFrom(text, lang) {
-  const words = POLICY_WORDS[lang === "pl" ? "pl" : "en"];
-  const folder = policyRegSz(text, "TeamFolder");
-  const lead = policyRegSz(text, "LeadKey");
-  const said = [];
+/* `text` is the text of reg export's file for the policy key, or empty where there is none.
+   Returns {folder, lead, bad}: folder and lead empty where unused, bad the names of the words to say. */
+function joinPolicyFacts(text) {
+  const values = text ? policyValues(text) : null;
+  const folder = policyRegSz(values, "TeamFolder");
+  const lead = policyRegSz(values, "LeadKey");
+  const bad = [];
   let folderOk = !folder.set, leadOk = !lead.set, folderValue = "", leadValue = "";
   if (folder.set) {
     if (folder.type === "REG_SZ" && policyFolderOk(folder.value)) { folderOk = true; folderValue = folder.value; }
-    else said.push(words.folder);
+    else bad.push("folder");
   }
   if (lead.set) {
     if (lead.type === "REG_SZ" && policyLeadOk(lead.value)) { leadOk = true; leadValue = lead.value; }
-    else said.push(words.lead);
+    else bad.push("lead");
   }
   if ((folder.set || lead.set) && (!folderOk || !leadOk)) {
-    if (folder.set && folderOk && !leadOk) said.push(words.beside);
-    if (lead.set && leadOk && !folderOk) said.push(words.beside);
-    return { folder: "", lead: "", said: said };
+    if (folder.set && folderOk && !leadOk) bad.push("beside");
+    if (lead.set && leadOk && !folderOk) bad.push("beside");
+    return { folder: "", lead: "", bad: bad };
   }
-  return { folder: folderValue, lead: leadValue, said: said };
+  return { folder: folderValue, lead: leadValue, bad: bad };
 }
-let joinPolicyCache = null;
-/* The one program this reader starts is reg.exe at its fixed path, for this one key. A failure,
-   and any system but Windows, is no policy. reg's own error text is discarded, so a key that is
-   not there adds no line. */
+/* The facts with their sentences in `lang`, "pl" or anything else for English: {folder, lead, said}. */
+function policyWords(facts, lang) {
+  const words = POLICY_WORDS[lang === "pl" ? "pl" : "en"];
+  return { folder: facts.folder, lead: facts.lead, said: facts.bad.map(k => words[k]) };
+}
+function joinPolicyFrom(text, lang) { return policyWords(joinPolicyFacts(text), lang); }
+let joinPolicyRead = null;
+/* Read once a run, whatever the language. The one program started is reg.exe at its fixed path, exporting
+   this one key to a scratch file, which holds the registry's own UTF-16 where reg's printing would be in the
+   console's code page. A failure, and any system but Windows, is no policy. The scratch file and its folder
+   go whatever happens, and nothing of them is logged. */
 function readJoinPolicy(lang) {
-  const which = lang === "pl" ? "pl" : "en";
-  if (joinPolicyCache && joinPolicyCache.lang === which) return joinPolicyCache;
-  let text = "";
-  if (process.platform === "win32") {
-    try {
-      text = String(execFileSync(REG_TOOL, ["query", POLICY_KEY],
-        { encoding: "utf8", windowsHide: true, timeout: 5000, stdio: ["ignore", "pipe", "ignore"] }));
-    } catch { text = ""; }
+  if (joinPolicyRead === null) {
+    let text = "";
+    if (process.platform === "win32") {
+      let dir = "", file = "";
+      try {
+        dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-policy-"));
+        file = path.join(dir, "policy.reg");
+        execFileSync(REG_TOOL, ["export", POLICY_KEY, file, "/y"], { windowsHide: true, timeout: 5000, stdio: "ignore" });
+        const bytes = fs.readFileSync(file);
+        if (bytes.length % 2 === 0 && bytes[0] === 0xff && bytes[1] === 0xfe) text = bytes.subarray(2).toString("utf16le");
+      } catch { text = ""; }
+      finally {
+        if (file) { try { fs.unlinkSync(file); } catch { /* never written */ } }
+        if (dir) { try { fs.rmdirSync(dir); } catch { /* never made */ } }
+      }
+    }
+    joinPolicyRead = joinPolicyFacts(text);
   }
-  const got = joinPolicyFrom(text, which);
-  got.lang = which;
-  joinPolicyCache = got;
-  return got;
+  return policyWords(joinPolicyRead, lang);
 }
 let joinPolicySaid = false;
 function sayJoinPolicy() {
