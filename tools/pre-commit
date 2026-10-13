@@ -74,18 +74,23 @@ fi
 # tree by its own first gate - so a staged diff at that moment is empty and the gate passed on
 # nothing, every time. The empty tree as the left-hand side turns the whole of HEAD into added
 # lines, so one awk serves all three.
-if [ -n "${1:-}" ] && [ -f "${1:-}" ]; then
+# --tree first: an untracked file named --tree was taken for a commit message (the Grok verdict on 251).
+if [ "${1:-}" != "--tree" ] && [ -n "${1:-}" ] && [ -f "${1:-}" ]; then
   what="the commit message"
   awk '!/^#/ { print "(message)\t" FNR "\t" $0 }' "$1" > "$tmp"
 else
   if [ "${1:-}" = "--tree" ]; then
     what="the tracked tree"
     diff_of="git diff -U0 --no-color --no-ext-diff $(git hash-object -t tree /dev/null) HEAD"
-    paths_of="git ls-files"
+    paths_of="git -c core.quotePath=false ls-files"
+    bins_of="git diff --numstat --no-renames $(git hash-object -t tree /dev/null) HEAD"
+    blob_at="HEAD:"
   else
     what="the staged diff"
-    diff_of="git diff --cached -U0 --no-color --no-ext-diff"
-    paths_of="git diff --cached --name-only --diff-filter=ACMR"
+    diff_of="git diff --cached -U0 --no-color --no-ext-diff --no-renames"
+    paths_of="git -c core.quotePath=false diff --cached --name-only --no-renames --diff-filter=ACMR"
+    bins_of="git diff --cached --numstat --no-renames --diff-filter=ACMR"
+    blob_at=":"
   fi
   $diff_of | awk '
     /^\+\+\+ /  { f = substr($0, 7); next }
@@ -93,6 +98,28 @@ else
     /^@@ /      { split($0, a, "+"); split(a[2], b, /[, ]/); ln = b[1] + 0; next }
     /^\+/       { print f "\t" ln "\t" substr($0, 2); ln++ }
   ' > "$tmp"
+  # A NUL BYTE IS NO DISGUISE (board 251, 2026-10-13). git shows no lines for a blob it calls binary,
+  # and one NUL makes it so: a listed name with a NUL beside it, or written in UTF-16, passed with exit
+  # 0. So each blob git calls binary is read with its NULs dropped, whole, as added lines, when what is
+  # left is text: at least three quarters tab, line break or printable ASCII. A true binary is not read
+  # (compressed data is near 38 per cent printable), because read as text its bytes spell short words
+  # by chance: Studio's icon spelled a listed one inside its image data. What stays unread is a name
+  # compressed, encrypted or carried in a true binary.
+  # Text in disguise is also any blob that is valid UTF-8 once its NULs are dropped: Polish text with a NUL beside
+  # a listed name is near 70 per cent ASCII and slipped under the line (the Grok verdict on 251). numstat is read
+  # NUL-delimited, so a path with letters outside ASCII is not quoted into a name git show cannot find.
+  command -v iconv >/dev/null 2>&1 || say "iconv is not on PATH, so a binary file is read only where three quarters of it is printable."
+  $bins_of -z | tr '\000' '\n' | awk -F'\t' '$1 == "-" && $2 == "-" { sub(/^-\t-\t/, ""); print }' | while IFS= read -r bf; do
+    git show "$blob_at$bf" 2>/dev/null | tr -d '\000' > "$tmp.blob"
+    all="$(wc -c < "$tmp.blob" | tr -d ' ')"
+    txt="$(tr -cd '\011\012\015\040-\176' < "$tmp.blob" | wc -c | tr -d ' ')"
+    utf8=0
+    if command -v iconv >/dev/null 2>&1 && iconv -f UTF-8 -t UTF-8 "$tmp.blob" >/dev/null 2>&1; then utf8=1; fi
+    if [ "${all:-0}" -gt 0 ] && { [ "$utf8" = 1 ] || [ $((${txt:-0} * 4)) -ge $((all * 3)) ]; }; then
+      F="$bf" awk '{ print ENVIRON["F"] "\t" NR "\t" $0 }' < "$tmp.blob" >> "$tmp"
+    fi
+  done
+  rm -f "$tmp.blob"
 
   # A catalog is ignored by name, and `git add -f` walks straight past an ignore rule.
   $paths_of | grep -E '(^|/)[^/]*-catalog\.(js|json)$|(^|/)catalogs/' > "$tmp.named" 2>/dev/null

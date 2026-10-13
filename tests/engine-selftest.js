@@ -1885,6 +1885,48 @@ Module.prototype._compile = function (content, filename) {
     const quoted = scan(script, null, "Subject\nwe said violet harbour lanterns guide weary silver, once\n");
     ok(quoted.code === 1 && /content held back by this repository is quoted/.test(quoted.say),
        "34c a quote of the held-back catalog in a message is still refused: exit " + quoted.code);
+    /* 34n and 34o: A NUL BYTE IS NO DISGUISE (board 251, 2026-10-13). git shows no lines for a blob it calls
+       binary, and one NUL makes it so: a listed name staged with a NUL beside it passed. A binary blob that is
+       text once its NULs are dropped is now read, which also reads UTF-16; a true binary is not, so its bytes
+       cannot spell a name by chance. 34n: the NUL file and the UTF-16 file are refused, a binary holding no name
+       passes, and so does random binary carrying the name among its bytes. 34o is the old reading as a control:
+       the NUL file passes. */
+    const stagedScan = (text, name, bytes) => {
+      fs.writeFileSync(path.join(lab, name), bytes);
+      git("add", name);
+      fs.writeFileSync(path.join(lab, "scan.sh"), text);
+      const r = cp.spawnSync(bash, ["scan.sh"], { cwd: lab, encoding: "utf8", env: quiet });
+      git("rm", "-q", "--cached", name);
+      fs.unlinkSync(path.join(lab, name));
+      return { code: r.status, say: String(r.stderr || "") };
+    };
+    const NAME_LINE = "we met the zqxwvnames on Tuesday\n";
+    /* Image-like bytes, a fixed xorshift so every run plants the same ones (about 38 per cent printable). */
+    let seed = 2463534242;
+    const noise = n => Buffer.from(Array.from({ length: n }, () => {
+      seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return (seed >>> 0) & 255; }));
+    const withNul = stagedScan(script, "named-zero.txt", Buffer.concat([Buffer.from(NAME_LINE), Buffer.from([0])]));
+    const wide = stagedScan(script, "wide.txt", Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(NAME_LINE, "utf16le")]));
+    const blob = stagedScan(script, "plain.bin", Buffer.from([0, 1, 2, 3, 0, 65, 66, 10]));
+    const image = stagedScan(script, "image.bin", Buffer.concat([noise(2000), Buffer.from([0, 32]), Buffer.from("zqxwvname"), Buffer.from([32, 0]), noise(2000)]));
+    /* The line pinned from both sides and UTF-8 read (the Grok verdict on 251): Polish text with a NUL is read
+       however little of it is ASCII; a blob that is not UTF-8 is read at 85 per cent printable and not at 60. */
+    const POLISH = Buffer.from("Za\u017c\u00f3\u0142\u0107 g\u0119\u015bl\u0105 ja\u017a\u0144. ".repeat(3));
+    const polish = stagedScan(script, "polish.txt", Buffer.concat([Buffer.from(NAME_LINE), POLISH, Buffer.from([0])]));
+    const mixed = (pct) => { const p = Buffer.from(NAME_LINE + "x".repeat(200)); const m = Math.round(p.length * (100 - pct) / pct);
+      return Buffer.concat([p, Buffer.alloc(m, 0x80), Buffer.from([0])]); };
+    const at85 = stagedScan(script, "at85.bin", mixed(85)), at60 = stagedScan(script, "at60.bin", mixed(60));
+    ok(withNul.code === 1 && /a listed name appears/.test(withNul.say) && wide.code === 1 && /a listed name appears/.test(wide.say)
+       && blob.code === 0 && image.code === 0 && polish.code === 1 && at85.code === 1 && at60.code === 0,
+       "34n a listed name staged with a NUL byte beside it is refused (exit " + withNul.code + "), and in UTF-16 (exit "
+       + wide.code + "); a binary holding no name passes (exit " + blob.code + "), and so does random binary carrying it"
+       + " among its bytes, which is not read as text (exit " + image.code + "); UTF-8 Polish with a NUL is read (exit "
+       + polish.code + "), and a blob that is not UTF-8 at 85 per cent printable is read (exit " + at85.code + ") and at 60 is not (exit " + at60.code + ")");
+    const BINS = "  $bins_of -z |";
+    const unread = script.split(BINS).join("  : |");
+    const oldNul = stagedScan(unread, "named-zero.txt", Buffer.concat([Buffer.from(NAME_LINE), Buffer.from([0])]));
+    ok(script.split(BINS).length === 2 && oldNul.code === 0 && !/a listed name appears/.test(oldNul.say),
+       "34o control: reading the diff as git shows it, the NUL file passes (exit " + oldNul.code + "), which 34n's reader refuses");
     fs.renameSync(path.join(lab, "real-catalog.js"), path.join(tmp, "real-catalog.js"));
     const old = scan(script.split(REF).join('pub_ref="refs/remotes/origin/none"'));
     ok(script.split(REF).length === 2 && !setAside(old) && old.code === 0
