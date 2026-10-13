@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<policyDefinitionResources revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+  <displayName>Etiuda</displayName>
+  <description>Team folder and team lead's key</description>
+  <resources>
+    <stringTable>
+      <string id="SUPPORTED_Etiuda">Etiuda</string>
+      <string id="EtiudaCat">Etiuda</string>
+      <string id="EtiudaStudioCat">Etiuda Studio</string>
+      <string id="TeamFolder">Set the team folder</string>
+      <string id="TeamFolder_Explain">This policy setting specifies the folder from which Etiuda reads the team file on this computer.
+
+If you enable this policy setting, enter a full path, such as D:\Team\share or \\server\team. Etiuda reads the team file from this folder. A value that is not a full path is ignored, and Etiuda keeps the folder it already uses.
+
+If you disable or do not configure this policy setting, the folder is chosen on the desk when it joins the team.
+
+If both this setting and "Set the team lead's key" are configured and either value is not valid, Etiuda uses neither.</string>
+      <string id="LeadKey">Set the team lead's key</string>
+      <string id="LeadKey_Explain">This policy setting specifies the public key of the team lead whose team file Etiuda trusts on this computer.
+
+If you enable this policy setting, enter the lead's public key as 64 lowercase hexadecimal characters, as it appears in the team file. Etiuda then trusts that key only: a team file signed with any other key is not used, including one handed over to a new lead. A value in any other form is ignored.
+
+If you disable or do not configure this policy setting, Etiuda trusts the lead of the team the desk joined.
+
+If both this setting and "Set the team folder" are configured and either value is not valid, Etiuda uses neither.</string>
+      <string id="TeamAboveFolder">Set the folder of the team Etiuda Studio has joined</string>
+      <string id="TeamAboveFolder_Explain">This policy setting specifies the folder from which Etiuda Studio reads the team it has joined, on this computer. Only Etiuda Studio reads this setting; the desk does not.
+
+If you enable this policy setting, enter a full path, such as D:\Team\share or \\server\team.
+
+If you disable or do not configure this policy setting, the folder is chosen in Etiuda Studio when it joins the team.</string>
+      <string id="LeadKeyAbove">Set the lead's key of the team Etiuda Studio has joined</string>
+      <string id="LeadKeyAbove_Explain">This policy setting specifies the public key of the lead of the team Etiuda Studio has joined, on this computer. Only Etiuda Studio reads this setting; the desk does not.
+
+If you enable this policy setting, enter the lead's public key as 64 lowercase hexadecimal characters, as it appears in the team file.
+
+If you disable or do not configure this policy setting, Etiuda Studio trusts the lead of the team it joined.</string>
+    </stringTable>
+    <presentationTable>
+      <presentation id="TeamFolder">
+        <textBox refId="TeamFolderBox">
+          <label>Full path:</label>
+        </textBox>
+      </presentation>
+      <presentation id="LeadKey">
+        <textBox refId="LeadKeyBox">
+          <label>Public key (64 lowercase hexadecimal characters):</label>
+        </textBox>
+      </presentation>
+      <presentation id="TeamAboveFolder">
+        <textBox refId="TeamAboveFolderBox">
+          <label>Full path:</label>
+        </textBox>
+      </presentation>
+      <presentation id="LeadKeyAbove">
+        <textBox refId="LeadKeyAboveBox">
+          <label>Public key (64 lowercase hexadecimal characters):</label>
+        </textBox>
+      </presentation>
+    </presentationTable>
+  </resources>
+</policyDefinitionResources>

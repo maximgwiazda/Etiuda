@@ -116,6 +116,8 @@ if (TEST_DOOR && process.env.ETIUDA_TEST_DOCUMENTS) {
 function defaultCatalogFolder() { return path.join(app.getPath("documents"), "Etiuda"); }
 function catalogFolder() {
   if (deskKeys === undefined) deskKeys = readDesk();
+  const named = sayJoinPolicy().folder;
+  if (named) return named;
   const set = deskKeys[CATALOG_FOLDER_KEY];
   return (typeof set === "string" && set.trim()) ? set.trim() : defaultCatalogFolder();
 }
@@ -1135,7 +1137,8 @@ function ownFilesWithId(dir, id) {
   }
   return out;
 }
-/* The team file at `root` where it is whole under the lead this desk pinned and lists the catalog, else null. */
+/* The team file at `root` where it is whole under the lead this desk pinned, and under the lead policy names where it
+   names one, whatever pin was kept, and lists the catalog, else null. */
 function teamCovering(root, catalogId) {
   let doc = null;
   try {
@@ -1143,6 +1146,8 @@ function teamCovering(root, catalogId) {
     if (fs.statSync(file).size <= TEAM_MAX) doc = JSON.parse(fs.readFileSync(file, "utf8").trim());
   } catch { return null; }
   if (!teamWhole(doc)) return null;
+  const policy = sayJoinPolicy().lead;
+  if (policy && doc.lead.public !== policy) return null;
   const pin = teamPins[doc.id];
   return !!pin && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public && Array.isArray(doc.catalogs)
     && doc.catalogs.map(String).indexOf(catalogId) >= 0 ? doc : null;
@@ -1344,6 +1349,181 @@ function memberHeed(doc, state, seen) {
   return ret({ key: key, stampClear: key === false, changed: changed, team: doc.id, epoch: doc.epoch,
     keep: !!(key && !kept[doc.epoch]), unbar: unbar, pinned: pinned });
 }
+/* AN ADMINISTRATOR NAMES THE TEAM IN MACHINE POLICY. The desk reads the Etiuda pair; Studio's pair
+   is in the same template and is not read here. A value that is not the form below is said and
+   ignored, and one bad value of a pair leaves the other unused. Nothing set leaves heeding as it was. */
+const REG_TOOL = "C:\\Windows\\System32\\reg.exe";
+const POLICY_KEY = "HKLM\\SOFTWARE\\Policies\\Etiuda";
+const POLICY_LEAD_RE = /^[0-9a-f]{64}$/;
+const POLICY_WORDS = {
+  en: {
+    folder: "The team folder set in Group Policy is not a full path, so this desk keeps the folder it already uses.",
+    lead: "The team lead's key set in Group Policy is not written as 64 lowercase hexadecimal characters, so this desk does not trust it.",
+    beside: "The other value set beside it is not used either: the two are taken together or not at all.",
+  },
+  pl: {
+    folder: "Folder zespołu ustawiony w zasadach grupy nie jest pełną ścieżką, więc stanowisko zostaje przy folderze, którego już używa.",
+    lead: "Klucz lidera zespołu ustawiony w zasadach grupy nie ma postaci 64 małych znaków szesnastkowych, więc stanowisko go nie przyjmuje.",
+    beside: "Druga wartość ustawiona obok też nie zostanie użyta: obie są przyjmowane razem albo wcale.",
+  },
+};
+/* The key as reg export heads its section, the hive written out and the rest as asked. */
+const POLICY_HEAD = "HKEY_LOCAL_MACHINE" + POLICY_KEY.slice(4);
+const POLICY_EXPORT_LINE = "Windows Registry Editor Version 5.00\r\n";
+/* The key's own values in the text of reg export's file, by lower-case name as {type, value}: a string as
+   the registry holds it, its two escapes undone and nothing trimmed, line breaks included, and an expandable
+   or multiple string as its UTF-16 text. Null where anything in the text is not what reg writes, a subkey's
+   values aside, so no part of a read in doubt is used. */
+function policyValues(text) {
+  const t = String(text), own = Object.create(null);
+  const HEAD = /\[([^\r\n]*)\]\r\n/y;
+  const VALUE = /(?:@|"((?:[^"\\]|\\[\\"])*)")=(?:"((?:[^"\\]|\\[\\"])*)"|(dword):[0-9a-f]{8}|(hex(?:\([0-9a-f]{1,8}\))?):((?:[0-9a-f]{2}(?:,[0-9a-f]{2})*,?)?(?:\\\r\n {2}[0-9a-f]{2}(?:,[0-9a-f]{2})*,?)*))\r\n/y;
+  const plain = s => s.replace(/\\([\\"])/g, "$1");
+  const WIDE = { "hex(2)": "REG_EXPAND_SZ", "hex(7)": "REG_MULTI_SZ" };
+  const wide = hex => { const b = Buffer.from(hex.replace(/[^0-9a-f]/g, ""), "hex"); return b.length % 2 ? "" : b.toString("utf16le").replace(/\u0000+$/, ""); };
+  if (!t.startsWith(POLICY_EXPORT_LINE)) return null;
+  let at = POLICY_EXPORT_LINE.length, section = "";
+  while (at < t.length) {
+    if (t.startsWith("\r\n", at)) { at += 2; continue; }
+    HEAD.lastIndex = at;
+    VALUE.lastIndex = at;
+    let m = HEAD.exec(t);
+    if (m) {
+      if (!section && m[1] === POLICY_HEAD) section = "own";
+      else if (section && m[1].startsWith(POLICY_HEAD + "\\")) section = "sub";
+      else return null;
+      at = HEAD.lastIndex;
+      continue;
+    }
+    m = section ? VALUE.exec(t) : null;
+    if (!m) return null;
+    if (section === "own" && m[1] !== undefined) {
+      const name = plain(m[1]).toLowerCase();
+      if (name in own) return null;
+      own[name] = m[2] !== undefined ? { type: "REG_SZ", value: plain(m[2]) }
+        : WIDE[m[4]] ? { type: WIDE[m[4]], value: wide(m[5]) } : { type: m[3] || m[4], value: "" };
+    }
+    at = VALUE.lastIndex;
+  }
+  return section ? own : null;
+}
+/* One named value, or unset where it is absent or an empty string. */
+function policyRegSz(values, name) {
+  const v = values ? values[name.toLowerCase()] : undefined;
+  if (!v || (v.type === "REG_SZ" && v.value === "")) return { set: false, type: "", value: "" };
+  return { set: true, type: v.type, value: v.value };
+}
+/* A Windows absolute path: a drive or a share, no segment that walks out of it or names a stream, and no space at either end. */
+function policyFolderOk(s) {
+  if (typeof s !== "string" || s.length < 3 || s.length > 1024) return false;
+  if (s !== s.trim()) return false;
+  if (/[\u0000-\u001f\u007f]/.test(s)) return false;
+  if (/[*?"<>|]/.test(s)) return false;
+  const drive = /^[A-Za-z]:[\\/]/.test(s);
+  const unc = /^\\\\[^\\]+\\[^\\]+/.test(s);
+  if (!drive && !unc) return false;
+  const trimmed = /[\\/]$/.test(s) ? s.slice(0, -1) : s;
+  const parts = trimmed.split(/[\\/]/);
+  const segment = p => p.length > 0 && p !== "." && p !== ".." && p.indexOf(":") < 0;
+  if (drive) {
+    if (!/^[A-Za-z]:$/.test(parts[0])) return false;
+    return parts.slice(1).every(segment);
+  }
+  if (parts.length < 4 || parts[0] !== "" || parts[1] !== "") return false;
+  return parts.slice(2).every(segment);
+}
+function policyLeadOk(s) { return typeof s === "string" && POLICY_LEAD_RE.test(s); }
+/* `text` is the text of reg export's file for the policy key, or empty where there is none.
+   Returns {folder, lead, bad}: folder and lead empty where unused, bad the names of the words to say. */
+function joinPolicyFacts(text) {
+  const values = text ? policyValues(text) : null;
+  const folder = policyRegSz(values, "TeamFolder");
+  const lead = policyRegSz(values, "LeadKey");
+  const bad = [];
+  let folderOk = !folder.set, leadOk = !lead.set, folderValue = "", leadValue = "";
+  if (folder.set) {
+    if (folder.type === "REG_SZ" && policyFolderOk(folder.value)) { folderOk = true; folderValue = folder.value; }
+    else bad.push("folder");
+  }
+  if (lead.set) {
+    if (lead.type === "REG_SZ" && policyLeadOk(lead.value)) { leadOk = true; leadValue = lead.value; }
+    else bad.push("lead");
+  }
+  if ((folder.set || lead.set) && (!folderOk || !leadOk)) {
+    if (folder.set && folderOk && !leadOk) bad.push("beside");
+    if (lead.set && leadOk && !folderOk) bad.push("beside");
+    return { folder: "", lead: "", bad: bad };
+  }
+  return { folder: folderValue, lead: leadValue, bad: bad };
+}
+/* The facts with their sentences in `lang`, "pl" or anything else for English: {folder, lead, said}. */
+function policyWords(facts, lang) {
+  const words = POLICY_WORDS[lang === "pl" ? "pl" : "en"];
+  return { folder: facts.folder, lead: facts.lead, said: facts.bad.map(k => words[k]) };
+}
+function joinPolicyFrom(text, lang) { return policyWords(joinPolicyFacts(text), lang); }
+let joinPolicyRead = null;
+/* Read once a run, whatever the language. The one program started is reg.exe at its fixed path, exporting
+   this one key to a scratch file, which holds the registry's own UTF-16 where reg's printing would be in the
+   console's code page. A failure, and any system but Windows, is no policy. The scratch file and its folder
+   go whatever happens, and nothing of them is logged. */
+function readJoinPolicy(lang) {
+  if (joinPolicyRead === null) {
+    let text = "";
+    if (process.platform === "win32") {
+      let dir = "", file = "";
+      try {
+        dir = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-policy-"));
+        file = path.join(dir, "policy.reg");
+        execFileSync(REG_TOOL, ["export", POLICY_KEY, file, "/y"], { windowsHide: true, timeout: 5000, stdio: "ignore" });
+        const bytes = fs.readFileSync(file);
+        if (bytes.length % 2 === 0 && bytes[0] === 0xff && bytes[1] === 0xfe) text = bytes.subarray(2).toString("utf16le");
+      } catch { text = ""; }
+      finally {
+        if (file) { try { fs.unlinkSync(file); } catch { /* never written */ } }
+        if (dir) { try { fs.rmdirSync(dir); } catch { /* never made */ } }
+      }
+    }
+    joinPolicyRead = joinPolicyFacts(text);
+  }
+  return policyWords(joinPolicyRead, lang);
+}
+let joinPolicySaid = false;
+function sayJoinPolicy() {
+  let lang = "en";
+  try { if (shellWords().lang === "pl") lang = "pl"; } catch { lang = "en"; }
+  const got = readJoinPolicy(lang);
+  if (!joinPolicySaid) { joinPolicySaid = true; got.said.forEach(teamSay); }
+  return got;
+}
+/* `policy` is the lead's public key, or empty where no policy names one. Empty returns memberHeed's
+   own answer. Any other public key is refused in the words an unpinned key already gets, handover
+   included, and a file signed by this key is heeded without the ring. */
+function memberHeedUnderPolicy(doc, state, seen, policy) {
+  if (!policy) return memberHeed(doc, state, seen);
+  if (!teamWhole(doc)) return memberHeed(doc, state, seen);
+  const lead = { keyId: String(doc.lead.keyId), public: String(doc.lead.public) };
+  if (lead.public !== policy) {
+    const file = seen && typeof seen.file === "string" ? seen.file : "";
+    const out = memberStateCopy(state);
+    const said = [file + " is signed by a key other than the lead's this desk trusts for team " + doc.id + ", so nothing in it is used"];
+    return { state: out, key: null, said: said, stampClear: false, changed: false, stop: true,
+      needKey: false, needRing: false, team: String(doc.id), epoch: 0, keep: false, unbar: false, pinned: false };
+  }
+  const prior = state && state.pins ? state.pins[doc.id] : null;
+  const already = !!prior && prior.public === lead.public && prior.keyId === lead.keyId;
+  if (already) return memberHeed(doc, state, seen);
+  const seeded = memberStateCopy(state);
+  seeded.pins[doc.id] = { keyId: lead.keyId, public: lead.public };
+  const barred = seeded.barred.indexOf(doc.id);
+  if (barred >= 0) seeded.barred.splice(barred, 1);
+  const r = memberHeed(doc, seeded, seen);
+  if (r.stop || r.needKey || r.needRing) return r;
+  r.pinned = true;
+  r.changed = true;
+  if (barred >= 0) r.unbar = true;
+  return r;
+}
 /* The ring beside the catalogs, or null where it is missing, larger than the reader allows, or not JSON. */
 function readRing() {
   try {
@@ -1381,16 +1561,17 @@ function heedTeam() {
   // A forgotten lead is held like a request still waiting: no lead is known until an answered request names one.
   const state = { pins: teamPins, keys: teamKeys, barred: Array.from(teamBarred), join: teamJoin };
   const member = deskBranch ? { id: branchIdOf(deskBranch.sign.pub), sk: null } : null;
+  const policyLead = sayJoinPolicy().lead;
   let seen = { file: file, member: member, ring: undefined };
-  let r = memberHeed(doc, state, seen);
+  let r = memberHeedUnderPolicy(doc, state, seen, policyLead);
   if (r.needKey) {
     const sk = openPrivate(deskBranch.box.priv);
     seen = { file: file, member: { id: member.id, sk: sk || false }, ring: undefined };
-    r = memberHeed(doc, state, seen);
+    r = memberHeedUnderPolicy(doc, state, seen, policyLead);
   }
   if (r.needRing) {
     seen = { file: file, member: seen.member, ring: readRing() };
-    r = memberHeed(doc, state, seen);
+    r = memberHeedUnderPolicy(doc, state, seen, policyLead);
   }
   r.said.forEach(teamSay);
   if (r.stampClear) teamStamp = "";
