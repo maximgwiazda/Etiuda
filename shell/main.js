@@ -1472,6 +1472,15 @@ function memberProof(secret, commit) {
   if (!/^[0-9a-f]{32}$/.test(sec) || !/^[0-9a-f]{64}$/.test(com)) return "";
   return crypto.createHmac("sha256", Buffer.from(sec, "hex")).update(com, "utf8").digest("hex");
 }
+/* The check code the lead reads out and the agent types before yes: HMAC-SHA256 under the invitation's 128-bit secret
+   over the lead's 32-byte public key (the bytes, not their hex), its first six bytes read big-endian modulo 10000, as
+   four digits. "" where either is not the shape an invitation carries. Only the invitation that was issued gives it. */
+function inviteCode(secret, leadPublic) {
+  const sec = String(secret || ""), pub = String(leadPublic || "");
+  if (!/^[0-9a-f]{32}$/.test(sec) || !/^[0-9a-f]{64}$/.test(pub)) return "";
+  const mac = crypto.createHmac("sha256", Buffer.from(sec, "hex")).update(Buffer.from(pub, "hex")).digest();
+  return String(mac.readUIntBE(0, 6) % 10000).padStart(4, "0");
+}
 /* The first 16 hex of the secret's own SHA-256, which is all of it a request carries. */
 function inviteIdOf(secret) {
   const sec = String(secret || "");
@@ -1683,10 +1692,6 @@ function inviteSettled(team, lead) {
   const pin = teamPins[team];
   return pin && (pin.keyId !== lead.keyId || pin.public !== lead.public) ? "pinned" : "";
 }
-/* The four characters the agent types before yes, as the lead reads them out: the first group of the key's print. */
-function inviteCheck(publicHex) {
-  return leadPrint(publicHex).slice(0, 4);
-}
 /* Whether the folder an invitation names may take its request: it holds no team file, or one whole under the
    invited lead and for the invited team. */
 function inviteFolderTeam(parsed) {
@@ -1709,10 +1714,10 @@ function readInvite(text) {
   const settled = inviteSettled(parsed.team, parsed.lead);
   if (settled) return Object.assign({}, view, { refused: settled });
   const where = folderHost(parsed.folder, process.env);
-  return Object.assign({}, view, { offer: { folder: parsed.folder, lead: parsed.lead.name, print: leadPrint(parsed.lead.public),
+  return Object.assign({}, view, { offer: { folder: parsed.folder, lead: parsed.lead.name, code: inviteCode(parsed.secret, parsed.lead.public),
     host: where.host, cloud: where.cloud, local: where.local } });
 }
-/* The person's yes, with the four characters they typed. The folder is asked before anything is written, and one that
+/* The person's yes, with the check code they typed. The folder is asked before anything is written, and one that
    does not answer, or whose team file is not the invited team's, is put back as it was. A pin the invitation sets is
    a key not yet shown; the request carries the proof, never the secret. */
 async function takeInvite(text, name, check) {
@@ -1723,8 +1728,8 @@ async function takeInvite(text, name, check) {
   if (!parsed) return Object.assign({}, joinView(), { refused: "unread" });
   const settled = inviteSettled(parsed.team, parsed.lead);
   if (settled) return Object.assign({}, joinView(), { refused: settled });
-  if (String(check || "").replace(/\s+/g, "").toLowerCase() !== inviteCheck(parsed.lead.public))
-    return Object.assign({}, joinView(), { refused: "check" });
+  const code = inviteCode(parsed.secret, parsed.lead.public);
+  if (!code || String(check || "").replace(/\s+/g, "") !== code) return Object.assign({}, joinView(), { refused: "check" });
   const me = branchIdentity();
   if (!me) return Object.assign({}, joinView(), { refused: "unread" });
   const previous = catalogFolder();
@@ -2812,7 +2817,7 @@ ipcMain.handle("etiuda:shared-read", (e, name, pin) => (fromEngine(e) ? sharedRe
 ipcMain.handle("etiuda:shared-write", (e, name, text, sha, create) =>
   (fromEngine(e) ? sharedWrite(name, text, sha, create === true) : { ok: false }));
 // "seen" and "forget" name a team, "read" and "invite" carry an invitation's text, and the others name a file; "invite"
-// adds the four characters the agent typed.
+// adds the check code the agent typed.
 ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e) ? null
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
   : op === "forget" ? forgetLead(file) : op === "read" ? readInvite(file) : op === "invite" ? takeInvite(file, name, check) : joinView()));

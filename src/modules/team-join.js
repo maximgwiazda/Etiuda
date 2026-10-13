@@ -15,10 +15,10 @@ import { ICON_LOCK, ICON_KEY, ICON_DESK } from "./icons.js";
 let joinNow=null;                 // the shell's last answer: {sealed:{file,team}|null, join:{...}|null, leads:[{team,print,admitted,seen}]}
 let joinShut="";                  // the answer the agent last hid the bubble on
 let joinMode="";                  // "" | "paste" | "confirm" | "refused": the invitation, held on the page until it is answered
-let joinOffer=null;               // {folder, lead, print, host, cloud, local} the shell read from joinRead
+let joinOffer=null;               // {folder, lead, code, host, cloud, local} the shell read from joinRead
 let joinBlob="";                  // the paste box's text while it is open, so a repaint keeps it
 let joinRead="";                  // the text the shell read for the confirm on screen: yes sends this, never the box
-let joinTyped="";                 // the four characters the agent typed on the confirm
+let joinTyped="";                 // the check code the agent typed on the confirm
 let joinWhy="";                   // the refusal's word, as the shell said it
 let joinReads=0;                  // which read an answer belongs to: only the last one asked is shown
 function eHasJoin(){
@@ -43,12 +43,10 @@ function joinAsk(op,file,name,check,before){
 function dropInvite(){
   joinMode=""; joinOffer=null; joinBlob=""; joinRead=""; joinTyped=""; joinWhy=""; joinReads++;
 }
-/* The four characters the confirm asks for: the first group of the key as the desk and Studio print it, which the
-   shell checks again at yes. */
-function inviteCheck(print){ return String(print||"").slice(0,4).toLowerCase(); }
+/* Whether the agent typed this invitation's check code, which the shell made at read and checks again at yes. */
 function typedOk(){
-  const want=joinOffer?inviteCheck(joinOffer.print):"";
-  return want.length===4 && joinTyped.replace(/\s+/g,"").toLowerCase()===want;
+  const want=joinOffer?joinOffer.code:"";
+  return /^[0-9]{4}$/.test(want) && joinTyped.replace(/\s+/g,"")===want;
 }
 function typedWrong(){ return joinTyped.replace(/\s+/g,"").length>=4 && !typedOk(); }
 /* What the page still holds of an invitation, for the legs that check it lets go. */
@@ -88,7 +86,7 @@ function readTook(v,n,sent){
   if(n!==joinReads || joinMode!=="paste") return false;
   const o=v&&typeof v==="object"?v.offer:null;
   if(o && typeof o.folder==="string"){
-    joinOffer={folder:String(o.folder),lead:String(o.lead||""),print:String(o.print||""),
+    joinOffer={folder:String(o.folder),lead:String(o.lead||""),code:String(o.code||""),
       host:String(o.host||""),cloud:String(o.cloud||""),local:o.local===true};
     joinRead=sent; joinBlob=""; joinTyped=""; joinWhy=""; joinMode="confirm";
   }else refuseInvite(v);
@@ -175,27 +173,26 @@ function joinInviteParts(){
     body:'<textarea class="e-join-paste" data-join-paste spellcheck="false" autocomplete="off" aria-label="'
       +esc(t("Paste the invitation from the team's lead."))+'">'+esc(joinBlob)+'</textarea>',
     acts:[["read",t("Continue")],["back",t("Cancel")]]};
-  /* The key itself is not shown here: the four characters asked for would be on the screen, and typing them proves
-     only that they were read off it. */
+  /* Neither the key nor the code is shown here: a code on the screen proves only that it was read off it. */
   if(joinMode==="confirm" && joinOffer){
-    const o=joinOffer, ask=t("Ask the team's lead for the check shown in their Studio, and type its four characters here.");
+    const o=joinOffer, ask=t("Ask the team's lead for this invitation's check code, and type its four characters here.");
     return {title:t("Join this team?"), line:joinWhere(o),
       body:'<div class="e-join-meta">'+esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder))+'</div>'
         +'<div class="e-join-meta">'+esc(t("Lead: {NAME}").split("{NAME}").join(o.lead))+'</div>'
         +'<div class="e-join-ask">'+esc(ask)+'</div>'
-        +'<div class="e-join-why">'+esc(t("This confirms the invitation comes from the team's own lead."))+'</div>'
-        +'<input type="text" class="e-join-check" data-join-check maxlength="4" spellcheck="false" autocomplete="off" aria-label="'
+        +'<div class="e-join-why">'+esc(t("Only the real invitation gives this code, so it confirms the invitation comes from the team's own lead."))+'</div>'
+        +'<input type="text" class="e-join-check" data-join-check maxlength="4" inputmode="numeric" spellcheck="false" autocomplete="off" aria-label="'
         +esc(t("Check"))+'" value="'+esc(joinTyped)+'">'
         +'<div class="e-join-ask e-join-miss" data-join-miss'+(typedWrong()?'':' hidden')+'>'
-        +esc(t("These four characters do not match the lead's key. Ask the lead again before joining."))+'</div>',
+        +esc(t("These four characters do not match this invitation. Ask the lead again before joining."))+'</div>',
       acts:[["invite",t("Join this team"),!typedOk()],["back",t("Cancel")]]};
   }
   if(joinMode==="refused") return {title:t("Join a team"),
     line:joinWhy==="silent"?t("This folder could not be reached, so nothing was written.")
       :joinWhy==="pinned"?t("This invitation names a team this desk already knows, but with a different lead's key. It was not used, and nothing changed. Tell the team's lead about it.")
-      :joinWhy==="barred"?t("This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. Ask to join from the team's catalog instead.")
-      :joinWhy==="foreign"?t("This folder holds another team, or the same team under another lead's key, so nothing was written. Tell the team's lead about it.")
-      :joinWhy==="check"?t("These four characters do not match the lead's key. Ask the lead again before joining.")
+      :joinWhy==="barred"?t("This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. To join, ask from the team's catalog instead.")
+      :joinWhy==="foreign"?t("This folder holds another team, or the same team under a different lead's key, so nothing was written. Tell the team's lead about it.")
+      :joinWhy==="check"?t("These four characters do not match this invitation. Ask the lead again before joining.")
       :t("This invitation cannot be read, so nothing was changed."),
     body:"", acts:[["back",t("Cancel")]]};
   return null;

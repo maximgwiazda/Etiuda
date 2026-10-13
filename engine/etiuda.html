@@ -7504,13 +7504,13 @@ What you type stays in this browser only.`;
     "This folder is a SharePoint library that OneDrive keeps in sync.": "Ten folder to biblioteka SharePoint synchronizowana przez OneDrive.",
     "Dropbox keeps this folder in sync.": "Ten folder jest synchronizowany przez Dropbox.",
     "Google Drive keeps this folder in sync.": "Ten folder jest synchronizowany przez Dysk Google.",
-    "Ask the team's lead for the check shown in their Studio, and type its four characters here.": "Proszę zapytać lidera zespołu o kod kontrolny widoczny w Studiu i wpisać tu jego cztery znaki.",
-    "This confirms the invitation comes from the team's own lead.": "To potwierdza, że zaproszenie pochodzi od lidera tego zespołu.",
+    "Ask the team's lead for this invitation's check code, and type its four characters here.": "Proszę zapytać lidera zespołu o kod kontrolny tego zaproszenia i wpisać tu jego cztery znaki.",
+    "Only the real invitation gives this code, so it confirms the invitation comes from the team's own lead.": "Taki kod daje tylko prawdziwe zaproszenie, więc potwierdza, że pochodzi ono od lidera tego zespołu.",
     "Check": "Kod kontrolny",
-    "These four characters do not match the lead's key. Ask the lead again before joining.": "Te cztery znaki nie zgadzają się z kluczem lidera. Proszę jeszcze raz zapytać lidera przed dołączeniem.",
+    "These four characters do not match this invitation. Ask the lead again before joining.": "Te cztery znaki nie pasują do tego zaproszenia. Proszę jeszcze raz zapytać lidera przed dołączeniem.",
     "This invitation names a team this desk already knows, but with a different lead's key. It was not used, and nothing changed. Tell the team's lead about it.": "To zaproszenie wskazuje zespół, który to stanowisko już zna, ale z innym kluczem lidera. Nie zostało użyte i nic się nie zmieniło. Proszę powiedzieć o tym liderowi zespołu.",
-    "This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. Ask to join from the team's catalog instead.": "To zaproszenie wskazuje zespół, którego lider został na tym stanowisku zapomniany. Nie zostało użyte i nic się nie zmieniło. Proszę zamiast tego poprosić o dołączenie z katalogu zespołu.",
-    "This folder holds another team, or the same team under another lead's key, so nothing was written. Tell the team's lead about it.": "W tym folderze jest inny zespół albo ten sam zespół z innym kluczem lidera, więc nic nie zapisano. Proszę powiedzieć o tym liderowi zespołu.",
+    "This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. To join, ask from the team's catalog instead.": "To zaproszenie wskazuje zespół, którego lider został na tym stanowisku zapomniany. Nie zostało użyte i nic się nie zmieniło. Aby dołączyć, proszę poprosić o to z katalogu zespołu.",
+    "This folder holds another team, or the same team under a different lead's key, so nothing was written. Tell the team's lead about it.": "W tym folderze jest inny zespół albo ten sam zespół z innym kluczem lidera, więc nic nie zapisano. Proszę powiedzieć o tym liderowi zespołu.",
     "Load another catalog": "Wczytaj inny katalog",
     "Waiting for the lead to open the request": "Prośba czeka, aż lider ją otworzy",
     "The code to read to them appears here as soon as they do.": "Gdy to zrobi, pojawi się tu kod do podania.",
@@ -14117,12 +14117,9 @@ What you type stays in this browser only.`;
     joinWhy = "";
     joinReads++;
   }
-  function inviteCheck(print) {
-    return String(print || "").slice(0, 4).toLowerCase();
-  }
   function typedOk() {
-    const want = joinOffer ? inviteCheck(joinOffer.print) : "";
-    return want.length === 4 && joinTyped.replace(/\s+/g, "").toLowerCase() === want;
+    const want = joinOffer ? joinOffer.code : "";
+    return /^[0-9]{4}$/.test(want) && joinTyped.replace(/\s+/g, "") === want;
   }
   function typedWrong() {
     return joinTyped.replace(/\s+/g, "").length >= 4 && !typedOk();
@@ -14160,7 +14157,7 @@ What you type stays in this browser only.`;
       joinOffer = {
         folder: String(o.folder),
         lead: String(o.lead || ""),
-        print: String(o.print || ""),
+        code: String(o.code || ""),
         host: String(o.host || ""),
         cloud: String(o.cloud || ""),
         local: o.local === true
@@ -14272,17 +14269,17 @@ What you type stays in this browser only.`;
       acts: [["read", t("Continue")], ["back", t("Cancel")]]
     };
     if (joinMode === "confirm" && joinOffer) {
-      const o = joinOffer, ask = t("Ask the team's lead for the check shown in their Studio, and type its four characters here.");
+      const o = joinOffer, ask = t("Ask the team's lead for this invitation's check code, and type its four characters here.");
       return {
         title: t("Join this team?"),
         line: joinWhere(o),
-        body: '<div class="e-join-meta">' + esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder)) + '</div><div class="e-join-meta">' + esc(t("Lead: {NAME}").split("{NAME}").join(o.lead)) + '</div><div class="e-join-ask">' + esc(ask) + '</div><div class="e-join-why">' + esc(t("This confirms the invitation comes from the team's own lead.")) + '</div><input type="text" class="e-join-check" data-join-check maxlength="4" spellcheck="false" autocomplete="off" aria-label="' + esc(t("Check")) + '" value="' + esc(joinTyped) + '"><div class="e-join-ask e-join-miss" data-join-miss' + (typedWrong() ? "" : " hidden") + ">" + esc(t("These four characters do not match the lead's key. Ask the lead again before joining.")) + "</div>",
+        body: '<div class="e-join-meta">' + esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder)) + '</div><div class="e-join-meta">' + esc(t("Lead: {NAME}").split("{NAME}").join(o.lead)) + '</div><div class="e-join-ask">' + esc(ask) + '</div><div class="e-join-why">' + esc(t("Only the real invitation gives this code, so it confirms the invitation comes from the team's own lead.")) + '</div><input type="text" class="e-join-check" data-join-check maxlength="4" inputmode="numeric" spellcheck="false" autocomplete="off" aria-label="' + esc(t("Check")) + '" value="' + esc(joinTyped) + '"><div class="e-join-ask e-join-miss" data-join-miss' + (typedWrong() ? "" : " hidden") + ">" + esc(t("These four characters do not match this invitation. Ask the lead again before joining.")) + "</div>",
         acts: [["invite", t("Join this team"), !typedOk()], ["back", t("Cancel")]]
       };
     }
     if (joinMode === "refused") return {
       title: t("Join a team"),
-      line: joinWhy === "silent" ? t("This folder could not be reached, so nothing was written.") : joinWhy === "pinned" ? t("This invitation names a team this desk already knows, but with a different lead's key. It was not used, and nothing changed. Tell the team's lead about it.") : joinWhy === "barred" ? t("This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. Ask to join from the team's catalog instead.") : joinWhy === "foreign" ? t("This folder holds another team, or the same team under another lead's key, so nothing was written. Tell the team's lead about it.") : joinWhy === "check" ? t("These four characters do not match the lead's key. Ask the lead again before joining.") : t("This invitation cannot be read, so nothing was changed."),
+      line: joinWhy === "silent" ? t("This folder could not be reached, so nothing was written.") : joinWhy === "pinned" ? t("This invitation names a team this desk already knows, but with a different lead's key. It was not used, and nothing changed. Tell the team's lead about it.") : joinWhy === "barred" ? t("This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. To join, ask from the team's catalog instead.") : joinWhy === "foreign" ? t("This folder holds another team, or the same team under a different lead's key, so nothing was written. Tell the team's lead about it.") : joinWhy === "check" ? t("These four characters do not match this invitation. Ask the lead again before joining.") : t("This invitation cannot be read, so nothing was changed."),
       body: "",
       acts: [["back", t("Cancel")]]
     };

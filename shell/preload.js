@@ -147,7 +147,7 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
     String(sha || ""), create === true),
   /* Asking to join the team a sealed catalog in the folder belongs to: "state", "ask" with the file's name and the
      agent's, or "cancel", each answered {sealed, join, joined}; and that answer again whenever it changes. "read" and
-     "invite" carry an invitation's text where the file's name goes, and "invite" the four characters the agent typed. */
+     "invite" carry an invitation's text where the file's name goes, and "invite" the check code the agent typed. */
   teamJoin: (op, file, name, check) => ipcRenderer.invoke("etiuda:team-join", String(op || ""), String(file || ""), String(name || ""),
     String(check || "")),
   onTeamJoin: (fn) => ipcRenderer.on("etiuda:team-join", (_e, v) => fn(v && typeof v === "object" ? v : {})),

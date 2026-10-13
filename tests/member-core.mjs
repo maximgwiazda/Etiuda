@@ -56,7 +56,7 @@ const MEMBER_DECLS = ["const HPKE_KEM =", "const HPKE_SUITE =", "const SPKI_X255
   "function unwrapTeamKey(", "const JOIN_KIND =", "const HANDOVER_PREFIX =", "const HANDOVER_KIND =",
   "function handoverSignedBytes(", "function handoverGenuine(", "function handedTo(", "const SPKI_ED25519 =",
   "function canonJson(", "function signedBytesOf(", "function teamWhole(", "function memberRingVouches(",
-  "function memberStateCopy(", "function memberProof(", "function inviteIdOf(", "const INVITE_HIDDEN_RE =", "function inviteFolder(",
+  "function memberStateCopy(", "function memberProof(", "function inviteCode(", "function inviteIdOf(", "const INVITE_HIDDEN_RE =", "function inviteFolder(",
   "function inviteRead(", "function folderHost(",
   "function memberRequestDoc(", "function memberHeed("];
 const BUILD_DECLS = ["function hpkeSeal(", "function wrapTeamKey(", "function branchIdOf("];
@@ -68,7 +68,7 @@ const SRC = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 let M = null, J = null;
 try {
   M = load(SRC, MEMBER_DECLS.concat(BUILD_DECLS),
-    ["memberRequestDoc", "memberHeed", "memberProof", "inviteIdOf", "inviteRead", "folderHost", "wrapTeamKey", "branchIdOf", "signedBytesOf", "teamWhole"]);
+    ["memberRequestDoc", "memberHeed", "memberProof", "inviteCode", "inviteIdOf", "inviteRead", "folderHost", "wrapTeamKey", "branchIdOf", "signedBytesOf", "teamWhole"]);
   J = load(SRC, JOIN_DECLS, ["joinCommit", "joinCode", "joinSignedBytes", "joinGenuine"]);
   check(true,
     "16a the " + MEMBER_DECLS.length + " member declarations slice out of shell/main.js and evaluate with crypto and Buffer alone,"
