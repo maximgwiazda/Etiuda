@@ -320,7 +320,8 @@ function refuseOpened(file, why) {
 }
 /* FILES THE ENGINE REFUSED, by path and the edit time it refused: isV2 above is the format's
    pair and the engine's reader is the whole of v2Problems, so a file can pass here and fail
-   there. Passed over until it is saved again, so an older sound edition opens in its place. */
+   there. Passed over until it is saved again. The next file opens in its place only when it
+   is not a lower rev than one already handed on. */
 const engineRefused = new Map();
 function refusedByEngine(file) {
   if (!engineRefused.has(file)) return false;
@@ -1095,10 +1096,15 @@ function catalogMarkOf(json) {
   if (!CATALOG_ID_RE.test(id) || !Number.isInteger(rev) || rev < 0) return null;
   return { id: id, rev: rev };
 }
-/* A rev already held is not replaced by a lower one. Equal is not a raise. */
+/* A rev already held is not replaced by a lower one. Equal is not a raise.
+   Only a signature the ring verifies for this catalog raises the mark. An unsigned file,
+   whoever wrote it into the share, does not. */
 function keepCatalogRev(json) {
   const x = catalogMarkOf(json);
   if (!x || !(x.rev > (catalogRevs[x.id] || 0))) return;
+  let doc = null;
+  try { doc = JSON.parse(String(json || "")); } catch { return; }
+  if (!catalogSigValid(doc)) return;
   catalogRevs[x.id] = x.rev;
   persistDeskEnvelope();
 }
@@ -1276,7 +1282,7 @@ function teamCovering(root, catalogId) {
 /* The newest key this desk keeps, as {team, epoch, key, plain}, for the one team whose envelope held the edition a file grew from
    (`pin`), where that team also covers the catalog at the folder written to; else null. An edition not opened in this run
    is looked for among the folder's catalogs first. A desk the covering file leaves off its roster is out, at any epoch.
-   A covering file older than the newest key kept is out too, so that key is not used to write under the older file.
+   A covering file older than the newest key kept, or older than an epoch already heeded, is out too, so that key is not used to write under the older file.
    A key already kept stays, and a seal made with it still opens. `plain` is the covering file's exportsSealed set false. */
 function sealFor(catalogId, pin, root) {
   heedTeam();
@@ -1288,7 +1294,7 @@ function sealFor(catalogId, pin, root) {
   if (!epoch) return null;
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "";
   const listed = !!me && Array.isArray(cover.roster) && cover.roster.some(x => !!x && !!x.desk && x.desk.id === me);
-  if (!listed || cover.epoch < epoch) return null;
+  if (!listed || cover.epoch < Math.max(epoch, teamEpochSeen[team] || 0)) return null;
   try {
     const key = Buffer.from(safeStorage.decryptString(Buffer.from(kept[epoch], "base64")), "base64");
     return key.length === 32 ? { team: team, epoch: epoch, key: key, plain: cover.exportsSealed === false } : null;
@@ -1326,7 +1332,8 @@ function writeBranch(stem, text) {
       if (!seal) return branchHold(stem, text);
     }
     const same = ownFilesWithId(at.dir, id);
-    const lastRev = same.reduce((hi, e) => Math.max(hi, +e.doc.rev || 0), branchRevs[id] || 0);
+    /* A file this desk did not sign does not raise the rev. The share is anybody's to write. */
+    const lastRev = same.reduce((hi, e) => (branchGenuine(e.doc) ? Math.max(hi, +e.doc.rev || 0) : hi), branchRevs[id] || 0);
     const tidy = () => same.forEach(e => { if (e.file !== at.dest) fs.unlinkSync(e.file); });
     if (!doc) {
       if (lastRev > (branchRevs[id] || 0)) { branchRevs[id] = lastRev; persistDeskEnvelope(); }
@@ -3136,15 +3143,18 @@ function keepReadRev(id, rev) {
   persistDeskEnvelope();
 }
 /* `desk` names a colleague's folder under desks/, and its file is handed only where the listing would list it.
-   A rev below the highest already handed on for that file's id is not handed on. A file of the folder itself,
-   below a rev already handed to the page, is not handed on either, and this read does not move that mark. */
-function readRevFloor(text) {
+   A rev below the highest already handed on for that file's id is not handed on. A file whose id does not
+   begin with that folder's desk id sets no mark, so one desk's signed file cannot raise another's.
+   A file of the folder itself, below a rev already handed to the page, is not handed on either, and this
+   read does not move that mark. */
+function readRevFloor(text, who) {
   let doc = null;
   try { doc = JSON.parse(String(text || "")); } catch { return ""; }
   if (!doc || typeof doc !== "object" || doc.kind !== "etiuda-catalog") return "";
   const id = typeof doc.id === "string" ? doc.id : "";
   const rev = +doc.rev;
   if (!/^k-[0-9a-f]{16}-[0-9a-f]{8}$/.test(id) || !Number.isInteger(rev) || rev < 1) return "";
+  if (typeof who !== "string" || !who || !id.startsWith(who + "-")) return "";
   const had = readRevs[id] || 0;
   if (rev < had) return "below";
   keepReadRev(id, rev);
@@ -3161,7 +3171,7 @@ ipcMain.handle("etiuda:catalog-read", (e, name, desk) => {
     if (who && !(ecFacts(file, who) || {}).deskOk) throw new Error("not a desk's own file");
     const text = catalogTextOf(fs.readFileSync(file, "utf8"));
     if (who) {
-      if (readRevFloor(text) === "below") return { name: base, text: "" };
+      if (readRevFloor(text, who) === "below") return { name: base, text: "" };
     } else if (belowCatalogRev(text)) return { name: base, text: "" };
     return { name: base, text: text };
   }

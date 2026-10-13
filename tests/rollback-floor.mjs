@@ -23,7 +23,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 31;
+const EXPECTED = 35;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -637,6 +637,165 @@ try {
     check(booted.rev === 2 && high === 2 && held === 2 && raised === 5,
       "888ae a second read of an older desk file does not lower the catalog mark, and a higher one still raises it: "
       + high + ", then " + held + ", then " + raised);
+  }
+
+  /* ---- removed at epoch 2 with no wrap, then the epoch 1 file put back --------------------------- */
+  {
+    const SHARE = folder("plain-back");
+    put(SHARE, "etiuda-ring.json", RING);
+    const A = newDesk("plain-writer", SHARE);
+    const B = newDesk("plain-reader", SHARE);
+    const me = await A.ask("etiuda:branch-identity", true);
+    const other = await B.ask("etiuda:branch-identity", true);
+    const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    const K1 = crypto.randomBytes(32);
+    const listed = teamFile(TEAM, 1, [entry(A, me, K1, TEAM, 1), entry(A, other, K1, TEAM, 1)]);
+    put(SHARE, "board.ec", JSON.stringify(A.api.sealCatalog(K1, TEAM, 1, CAT2)));
+    put(SHARE, "etiuda-team.json", listed);
+    const g = grown(A, me, await readText(A, "board.ec"));
+    const wrote = await A.ask("etiuda:branch-write", g.stem, g.text);
+    const file = path.join(SHARE, "desks", me.id, g.stem + ".ec");
+    const seen = facts(await readText(B, g.stem + ".ec", me.id));
+    put(SHARE, "etiuda-team.json", teamFile(TEAM, 2, []));
+    touch(path.join(SHARE, "etiuda-team.json"), Date.now());
+    B.api.readCatalog();
+    const heldEpoch = (B.envelope().teamEpochSeen || {})[TEAM];
+    g.doc.name = "while removed";
+    const removed = await A.ask("etiuda:branch-write", g.stem, JSON.stringify(g.doc));
+    put(SHARE, "etiuda-team.json", listed);
+    touch(path.join(SHARE, "etiuda-team.json"), Date.now() + 2000);
+    g.doc.name = "epoch 1 put back";
+    const back = await A.ask("etiuda:branch-write", g.stem, JSON.stringify(g.doc));
+    const again = facts(await readText(B, g.stem + ".ec", me.id));
+    const outer = JSON.parse(fs.readFileSync(file, "utf8"));
+    const onDisk = facts(outer.kind === "etiuda-sealed" ? (A.api.openSealed(K1, outer) || "") : JSON.stringify(outer));
+    check(wrote && wrote.ok === true && wrote.rev === 1 && seen.rev === 1 && heldEpoch === 2
+      && held(removed) && held(back) && again.rev === 1 && onDisk.rev === 1,
+      "888af removed at epoch 2 with no key, then the epoch 1 file put back, the next write holds: "
+      + (wrote && wrote.ok ? "wrote rev " + wrote.rev : "no first write")
+      + ", colleague saw " + seen.rev + ", epoch mark " + heldEpoch
+      + ", removal " + (held(removed) ? "held" : "wrote")
+      + ", put back " + (held(back) ? "held" : "wrote rev " + (back && back.rev))
+      + ", colleague then " + again.rev + ", on disk " + onDisk.rev);
+  }
+
+  /* ---- a stranger's signed file names another desk's file id at a huge rev ----------------------- */
+  {
+    const SHARE = folder("stranger-mark");
+    put(SHARE, "etiuda-ring.json", RING);
+    const A = newDesk("mark-owner", SHARE);
+    const B = newDesk("mark-reader", SHARE);
+    const me = await A.ask("etiuda:branch-identity", true);
+    const other = await B.ask("etiuda:branch-identity", true);
+    const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    const K1 = crypto.randomBytes(32);
+    put(SHARE, "etiuda-team.json", teamFile(TEAM, 1, [entry(A, me, K1, TEAM, 1), entry(A, other, K1, TEAM, 1)]));
+    put(SHARE, "board.ec", JSON.stringify(A.api.sealCatalog(K1, TEAM, 1, CAT2)));
+    const g = grown(A, me, await readText(A, "board.ec"));
+    g.doc.name = "first";
+    await A.ask("etiuda:branch-write", g.stem, JSON.stringify(g.doc));
+    const first = facts(await readText(B, g.stem + ".ec", me.id));
+    const ownerFileId = g.doc.id;
+    const marked = (B.envelope().readRevs || {})[ownerFileId];
+    g.doc.name = "second";
+    await A.ask("etiuda:branch-write", g.stem, JSON.stringify(g.doc));
+    const pair = crypto.generateKeyPairSync("ed25519");
+    const pub = pubHex(pair.publicKey);
+    const strangerId = "k-" + crypto.createHash("sha256").update(Buffer.from(pub, "hex")).digest("hex").slice(0, 16);
+    const lure = {
+      format: 2, kind: "etiuda-catalog", id: ownerFileId, rev: 1e15, name: "Planted quay",
+      date: "2026-08-01",
+      langs: [{ code: "en", label: "EN" }],
+      tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
+      cards: [{ id: "c-warm", shelf: "t-op", bodyShape: "plain", title: { en: "Warm opening" },
+        body: { en: "A file signed in the wrong folder." } }],
+      desk: { id: strangerId, key: pub, box: "ab".repeat(32) },
+    };
+    lure.sig = { alg: "Ed25519", keyId: strangerId };
+    lure.sig.value = crypto.sign(null, Buffer.concat([
+      Buffer.from("etiuda-desk-branch\n", "utf8"), Buffer.from(V2.v2SignedBytes(lure)),
+    ]), pair.privateKey).toString("hex");
+    const lureDir = path.join(SHARE, "desks", strangerId);
+    fs.mkdirSync(lureDir, { recursive: true });
+    put(lureDir, "planted.ec", textOf(lure));
+    const opened = facts(await readText(B, "planted.ec", strangerId));
+    const afterLure = (B.envelope().readRevs || {})[ownerFileId];
+    const real = facts(await readText(B, g.stem + ".ec", me.id));
+    const afterReal = (B.envelope().readRevs || {})[ownerFileId];
+    check(first.rev === 1 && marked === 1 && opened.rev === 1e15 && afterLure === 1
+      && real.rev === 2 && afterReal === 2,
+      "888ag a signed file in another desk's folder, naming this file at a huge rev, sets no mark: "
+      + "first " + first.rev + " mark " + marked
+      + ", lure rev " + opened.rev + " mark " + afterLure
+      + ", then the real file " + real.rev + " mark " + afterReal);
+  }
+
+  /* ---- an unsigned file of the same catalog id, double-clicked at a huge rev --------------------- */
+  {
+    const SHARE = folder("unsigned-mark");
+    put(SHARE, "etiuda-ring.json", RING);
+    const D = newDesk("unsigned-mark", SHARE);
+    staged(SHARE);
+    const booted = facts(D.sync("etiuda:catalog") || "");
+    const huge = catalog(1e15, "2026-08-01");
+    delete huge.sig;
+    put(SHARE, "planted.ec", textOf(huge));
+    D.api.offerFile(D.win, path.join(SHARE, "planted.ec"));
+    const afterClick = markOf(D);
+    put(SHARE, "third.ec", CAT3);
+    touch(path.join(SHARE, "third.ec"), Date.UTC(2026, 6, 2));
+    const D2 = loadDesk(D.ud);
+    const again = facts(D2.sync("etiuda:catalog") || "");
+    const mark3 = markOf(D2);
+    put(SHARE, "fourth.ec", textOf(catalog(4, "2026-03-04")));
+    touch(path.join(SHARE, "fourth.ec"), Date.UTC(2026, 7, 1));
+    D2.sent.length = 0;
+    D2.api.catalogChanged(D2.win);
+    const sent = fileSends(D2).map(a => facts(a[1]).rev);
+    check(booted.rev === 2 && afterClick === 2 && again.rev === 3 && mark3 === 3
+      && sent.length === 1 && sent[0] === 4 && markOf(D2) === 4,
+      "888ah an unsigned file of the same id at a huge rev, double-clicked, does not raise the catalog mark: "
+      + "boot " + booted.rev + ", after the click " + afterClick
+      + ", next boot " + again.rev + " mark " + mark3
+      + ", watch " + (sent.join(",") || "-") + ", mark " + markOf(D2));
+  }
+
+  /* ---- an unsigned file in this desk's own folder at a huge rev ---------------------------------- */
+  {
+    const SHARE = folder("unsigned-rev");
+    put(SHARE, "etiuda-ring.json", RING);
+    const A = newDesk("rev-owner", SHARE);
+    const me = await A.ask("etiuda:branch-identity", true);
+    const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    const K1 = crypto.randomBytes(32);
+    put(SHARE, "etiuda-team.json", teamFile(TEAM, 1, [entry(A, me, K1, TEAM, 1)]));
+    put(SHARE, "board.ec", JSON.stringify(A.api.sealCatalog(K1, TEAM, 1, CAT2)));
+    const g = grown(A, me, await readText(A, "board.ec"));
+    g.doc.name = "first";
+    await A.ask("etiuda:branch-write", g.stem, JSON.stringify(g.doc));
+    g.doc.name = "second";
+    const second = await A.ask("etiuda:branch-write", g.stem, JSON.stringify(g.doc));
+    const ownerFileId = g.doc.id;
+    const savedPath = path.join(A.ud, "desk.json");
+    const saved = JSON.parse(fs.readFileSync(savedPath, "utf8"));
+    saved.branchRevs[ownerFileId] = 1;
+    fs.writeFileSync(savedPath, JSON.stringify(saved));
+    const A2 = loadDesk(A.ud);
+    const poison = JSON.parse(JSON.stringify(g.doc));
+    poison.rev = 1e15;
+    poison.name = "planted high";
+    delete poison.sig;
+    delete poison.hash;
+    const planted = path.join(SHARE, "desks", me.id, "planted.ec");
+    fs.writeFileSync(planted, JSON.stringify(poison) + "\n");
+    const plantedRev = JSON.parse(fs.readFileSync(planted, "utf8")).rev;
+    g.doc.name = "third";
+    const third = await A2.ask("etiuda:branch-write", g.stem, JSON.stringify(g.doc));
+    const kept = (A2.envelope().branchRevs || {})[ownerFileId];
+    check(second && second.rev === 2 && plantedRev === 1e15 && third && third.rev === 3 && kept === 3,
+      "888ai a file this desk did not sign, sitting in its folder at a huge rev, does not raise the next write: "
+      + "had rev " + (second && second.rev) + ", planted " + plantedRev
+      + ", wrote " + (third && third.rev) + ", kept " + kept);
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
