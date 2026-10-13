@@ -801,6 +801,19 @@ with a `--no-sandbox` launch as the control; the hotkey registers and shows the 
 class is the installed entry's `StartupWMClass`; and the net log names no web address. 11 checks,
 about 20 s. Where the kernel runs no AppArmor it says the profile was NOT RUN.
 
+## The mark's path
+
+    node tests/mark-path.mjs                  no fixtures, no browser
+
+The header tile, the tab icon and the About tile each carry the mark's path. `tests/mark-path.mjs`
+holds those three, and any other path of 500 characters or more in `src/` or `shell/`, to the path
+in `tests/mark-path.json`. That file names the commit the path was taken from. `ETIUDA_MARK_SET`,
+when it names a checkout, is read at that commit and a fixture that disagrees is refused. With the
+variable unset the checkout is not read. Four checks, well under a second, in `npm test`.
+
+`tests/test.js` `[2c/5]` holds `shell/etiuda.ico` to the hash and the frame list of the icon.
+The frames are 16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 128 and 256.
+
 ## The reinstall-survival loop, which is the only thing here that installs anything
 
     ETIUDA_FIXTURES=<folder> npm run reinstall

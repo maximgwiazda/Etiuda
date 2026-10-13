@@ -6456,7 +6456,7 @@ if (require.main === module) {
        pixels: the other product that shares this mark reads its own icon pixel by pixel and takes
        this file as its control, so a second decoder here would be a second implementation of a
        claim nobody disputes. ETIUDA_ICON_SOURCE, where set, is the file it was copied from. */
-    const want = "ee6221554249010827c096678d7b110b2ddbd47aa3c4a269f57cc450e8628901";
+    const want = "26d95153b2182a16ebecdd6fc0087684d64fcab0634799950059082973d4e853";
     if (got !== want) { hardFail++;
       console.error("  ERROR: shell/etiuda.ico is sha256 " + got.slice(0, 16) + ", not the mark"
         + " this build ships (" + want.slice(0, 16) + ") - if the mark was rebuilt, move this hash"
@@ -6465,7 +6465,7 @@ if (require.main === module) {
       + ", " + fs.statSync(ico).size + " bytes");
     /* The frames the set's app icon carries; a size Windows asks for that is not among them is
        drawn from the next larger frame scaled down. */
-    const icoBuf = fs.readFileSync(ico), wantSizes = [16, 24, 32, 48, 64, 128, 256];
+    const icoBuf = fs.readFileSync(ico), wantSizes = [16, 20, 24, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 128, 256];
     const sizes = [];
     for (let i = 0; i < icoBuf.readUInt16LE(4); i++) sizes.push(icoBuf.readUInt8(6 + 16 * i) || 256);
     if (sizes.join() !== wantSizes.join()) { hardFail++;
