@@ -1859,7 +1859,18 @@ html.carddrag, html.carddrag .card, html.carddrag *{cursor:default!important;use
 .intent-pick .ip-t{line-height:1.3;word-break:break-word}
 .intent-pick .ip-cat{font:10px var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.3px}
 .cacts button[aria-expanded=true]{color:var(--accent)}
-@media (hover:hover){ body.note-hover .cacts [data-act=note]{display:none} }
+/* THE NOTE STAYS IN THE TAB WALK when notes open on hover. display:none would drop the
+   button on a desk with a mouse, which is the default, so the button collapses to an empty
+   box and keeps its place. Keyboard focus gives the box back, and Enter opens the note.
+   A pointer still opens the note by resting on the card and does not see this control. */
+@media (hover:hover){
+  body.note-hover .cacts [data-act=note]{
+    position:absolute;width:0;min-width:0;height:0;margin:0;padding:0;border:0;overflow:hidden;
+    pointer-events:none}
+  body.note-hover .cacts [data-act=note]:is(:focus,:focus-visible){
+    position:static;width:auto;min-width:1.4em;height:auto;margin:0;padding:6px;overflow:visible;
+    pointer-events:auto}
+}
 /* One panel per content language in the card editor. .seg carries the tab strip so the thumb
    stays the same CSS-only control the header uses, generalised by data-n. */
 .lang-tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:0 0 12px}
@@ -10685,9 +10696,9 @@ What you type stays in this browser only.`;
       def: { code: "Digit4", key: "4", ctrl: 1, alt: 0, shift: 0, meta: 0 },
       inField: 1
     },
-    /* inField so an empty search box still switches. The lanes decline Space on a button, where it
-       is that button's click, and where something is being typed or a dialog, bubble or menu holds
-       the focus (lanesKeyFree). The press then does what it did. */
+    /* inField so an empty search box still switches. Space is the lanes' key wherever the focus
+       sits, a button included. A field being typed in, a dialog, a bubble or a menu keep it
+       (lanesKeyFree). */
     {
       id: "lanes",
       label: "Cards or the conversation's path",
