@@ -2,6 +2,7 @@ import { nextContentLang } from "./content-model.js";
 import { cardBodyHtml } from "./card-body.js";
 import { cardHitsAlwaysCat, cardHitsSelectedIntent } from "./card-intent.js";
 import { holdFresh, parseCardHtml } from "./card-node.js";
+import { deckSettle } from "./deck.js";
 import { findCard } from "./card-model.js";
 import { displayBandKey } from "./card-order.js";
 import { isFavourite, ePackEpoch } from "./pack.js";
@@ -81,6 +82,7 @@ function rebuildCardInPlace(id,near){
   el.replaceWith(fresh);
   if(near) holdFresh(fresh);   // see the note at holdFresh()
   cardPool.set(id,fresh);
+  return fresh;
 }
 // Within a viewport of the screen, as rebuildCardInPlace() holds a fresh card real.
 function cardsNear(ids){
@@ -92,9 +94,18 @@ function cardsNear(ids){
     return r.bottom>-vh && r.top<2*vh;
   });
 }
+/* The decks among the cards near the screen are tucked in this same pass, so a batch costs one
+   layout for them, and the whole batch is what the list's records are held against, so the list is
+   not scanned again for it: see deckSettle. */
 function rebuildCardsInPlace(ids){
-  const near=cardsNear(ids);
-  ids.forEach((id,i)=>rebuildCardInPlace(id,near[i]));
+  const near=cardsNear(ids), made=[], drawn=[];
+  ids.forEach((id,i)=>{
+    const el=rebuildCardInPlace(id,near[i]);
+    if(!el) return;
+    made.push(el);
+    if(near[i]) drawn.push(el);
+  });
+  deckSettle(drawn, made);
 }
 function runLangChunks(ids){
   const step=()=>{

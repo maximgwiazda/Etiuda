@@ -33,7 +33,7 @@ function deckReset(card){
   deckSlabs(card).forEach(s=>{ s.classList.remove("deck-back"); DECK_SLAB_PROPS.forEach(p=>s.style.removeProperty(p)); });
   clearTimeout(card._deckT); card._deckGrow=0;
 }
-let deckRaf=0, deckKbdCard=null;
+let deckRaf=0, deckKbdCard=null, deckObs=null, deckListW=-1;
 /* A deck whose own box sits more than one viewport outside the screen keeps the list's
    content-visibility. Inside that band it is measured, which is what deck-near records. */
 function deckView(){
@@ -86,6 +86,48 @@ function deckScan(){
   deckMeasure(todo);
 }
 function deckLater(){ if(!deckRaf) deckRaf=requestAnimationFrame(deckScan); }
+// A put-away card's leaving copy, coming or going, changes no card's shape.
+function deckLeaving(r){
+  const nodes=Array.from(r.addedNodes).concat(Array.from(r.removedNodes));
+  return nodes.length>0 && nodes.every(n=>n.nodeType===1 && n.matches(".card[data-leave]"));
+}
+/* What the list's records ask for: a scan when its shape changed, and the fade on any change but the fade's own. */
+function deckHeard(ms){
+  let shape=false, fade=false;
+  for(const r of ms){
+    if(r.type==="childList"){ if(!deckLeaving(r)) shape=true; fade=true; }
+    else if(!deckOwnChange(r.oldValue, r.target.getAttribute("class"))) fade=true;
+  }
+  return {shape, fade};
+}
+function deckHoldsCard(n){
+  return n.nodeType===1 && (n.matches(".card[data-id]") || !!n.querySelector(".card[data-id]"));
+}
+/* A record the cards just made account for: it adds only them, or changes inside one of them, or
+   touches no card at all, which leaves every deck's measure as it was. */
+function deckDrawnBy(r, made){
+  const added=Array.from(r.addedNodes);
+  if(added.length && added.every(n=>made.indexOf(n)>-1)) return true;
+  if(made.some(c=>c.contains(r.target))) return true;
+  const t=r.target, inCard=!!(t.closest && t.closest(".card[data-id]"));
+  return !inCard && !added.some(deckHoldsCard) && !Array.from(r.removedNodes).some(deckHoldsCard);
+}
+/* THE DECKS AT REST BEFORE ANYTHING READS THE LIST, for a caller that has just drawn into it: the
+   observer's record of the drawing is taken, so no frame scans for it again. No `drawn`: the whole
+   list. `drawn`: cards just drawn that the caller read as in the band, measured with no box read;
+   `made`, every card it drew, is what the records are held against, `drawn` where it is left out. */
+function deckSettle(drawn, made){
+  if(!list) return;
+  const ms=deckObs ? deckObs.takeRecords() : [];
+  if(!drawn){
+    if(deckRaf){ cancelAnimationFrame(deckRaf); deckRaf=0; }
+    deckScan();
+  }else{
+    deckMeasure(drawn.filter(c=>deckSlabs(c).length>1));
+    if(ms.some(r=>r.type==="childList" && !deckDrawnBy(r, made||drawn))) deckLater();
+  }
+  if(deckHeard(ms).fade) deckFade();
+}
 /* Scroll only picks up a deck that has just entered the band. One already measured stays as it is. */
 let deckApproachRaf=0;
 function deckApproach(){
@@ -236,16 +278,19 @@ function deckKbdSync(){
 /* A module may not register a listener at load: boot calls this after the note pane's. */
 function wireDeck(){
   if(!list) return;
-  new MutationObserver(ms=>{
-    let shape=false, fade=false;
-    for(const r of ms){
-      if(r.type==="childList"){ shape=true; fade=true; }
-      else if(!deckOwnChange(r.oldValue, r.target.getAttribute("class"))) fade=true;
-    }
-    if(shape) deckLater();
-    if(fade) deckFade();
-  }).observe(list,{childList:true, subtree:true, attributes:true, attributeFilter:["class"], attributeOldValue:true});
-  if(typeof ResizeObserver==="function") new ResizeObserver(()=>{ deckLater(); deckFadeLater(); }).observe(list);
+  deckObs=new MutationObserver(ms=>{
+    const h=deckHeard(ms);
+    if(h.shape) deckLater();
+    if(h.fade) deckFade();
+  });
+  deckObs.observe(list,{childList:true, subtree:true, attributes:true, attributeFilter:["class"], attributeOldValue:true});
+  /* Only the width changes what a deck measures. The list grows taller on every drawing and on the
+     tuck itself; a scan for that would come a frame later, under whatever glide is running. */
+  if(typeof ResizeObserver==="function") new ResizeObserver(es=>{
+    const w=es.length ? es[es.length-1].contentRect.width : -1;
+    if(w!==deckListW){ deckListW=w; deckLater(); }
+    deckFadeLater();
+  }).observe(list);
   // A card caught mid-move, a fresh card's unfold or a slab still travelling, is read again once it lands.
   list.addEventListener("animationend",deckFadeLater); list.addEventListener("transitionend",deckFadeLater);
   document.addEventListener("scroll",()=>{ deckLaterApproach(); deckFadeLater(); },{capture:true, passive:true});
@@ -283,5 +328,6 @@ export {
   deckReach,
   deckFade,
   deckScan,
+  deckSettle,
   wireDeck,
 };

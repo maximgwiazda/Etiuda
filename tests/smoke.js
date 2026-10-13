@@ -2906,6 +2906,11 @@ const t0 = Date.now();
       return card ? [...card.querySelectorAll(".txt[data-v]")].map(b => getComputedStyle(b, "::before").backgroundColor === ok) : null;
     }, id);
     const only = (g, at) => !!g && g.every((x, i) => x === (i === at));
+    // Read out, not judged: a spine that fails with the trace missing here is a lost attribute, with it present a wrong paint.
+    console.log("  spine trace before g0, each block's data-erec: " + JSON.stringify(await p.evaluate(i => {
+      const card = document.querySelector('#list .card[data-id="' + CSS.escape(i) + '"]');
+      return card ? [...card.querySelectorAll(".txt[data-v]")].map(b => b.getAttribute("data-erec")) : null;
+    }, cpAt.id)));
     const g0 = await spines(cpAt.id);
     await p.evaluate(i => reorderMacroBlocks(i, 1, 0), cpAt.id); await sleep(600);
     const g1 = await spines(cpAt.id);
