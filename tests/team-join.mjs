@@ -23,8 +23,11 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
+/* Every reg call answers from a stand-in, never from this machine's registry (tests/reg-stand.cjs): until 2026-10-13
+   this leg passed only because no machine policy and no proxy were set on the machine that ran it. Before the shell loads. */
+const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 50;
+const EXPECTED = 51;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -759,6 +762,7 @@ try {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
 }
 
+check(regStand.held(), "rs1 every reg call was answered by the stand-in, the policy key's at least once and no other key of the machine's hive (Windows), none off it (" + regStand.said() + ")");
 console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
 if (asserted < EXPECTED) {
   console.log("SUITE DID NOT COMPLETE: " + asserted + " of " + EXPECTED + " checks ran");

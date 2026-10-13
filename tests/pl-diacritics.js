@@ -90,9 +90,11 @@ function decode(text) {
    prints the words in the tree that this list does not guard. */
 /* "wersje" left the list on 2026-10-05: it is a word in its own right, the plural ("Tu zostają wersje"),
    so it fails the rule above as "intencje" does. */
+/* "druga" left the list on 2026-10-13: it is a word in its own right, the nominative ("Druga wartość
+   ustawiona obok"), so it fails the rule above as "wersje" does. */
 const REFUSED = new Set([
   "agentow angielska bedzie bezplatnie blekitu blokuja byc cala calkowicie calosc chipow chowac",
-  "chowal czolo czynnosc czysci dokladnie dol domyslne domyslny dostepnych dowolna druga duzo",
+  "chowal czolo czynnosc czysci dokladnie dol domyslne domyslny dostepnych dowolna duzo",
   "dwoch dziala dziela edytowac etiude faktow filtrowac filtruja glowne glownych gora gore",
   "gorze grupe gwiazdke ida ikone imie inicjalami inicjaly inna jednoczesnie jesli",
   "jezyk jezykach jezyki jezyku juz karte katalogow kazda kazde kazdej kazdy klikniecie",
