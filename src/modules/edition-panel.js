@@ -46,10 +46,11 @@ function editionCard(it,held,offered){
 // What the edition does to a commitment, said on its row before anything else the row says.
 function editionPledgeLine(it){
   if(!it.commitment) return "";
-  return t(it.stamp==="on"?"now commits the firm":it.stamp==="off"?"no longer commits the firm":"commits the firm in new words");
+  return t(it.stamp==="carries"?"commits the firm":it.stamp==="on"?"now commits the firm":it.stamp==="off"?"no longer commits the firm":"commits the firm in new words");
 }
 function editionSubline(it,c){
   if(it.kind==="changed" && it.own) return t(teamTextTaken(c,it.id)?"the team's new text":"you have your own version");
+  if(it.kind==="restored" && it.own) return t("you have your own version");
   if(it.kind==="retired" && it.asleep) return t("It comes back with your star and your edits.");
   return "";
 }
