@@ -476,8 +476,8 @@ function runUnitTests() {
     "Guest", "Customer", "Client", "Visitor", "Anonymous", "User",
     "Gość", "Klient", "Klientka", "Anonim", "Użytkownik"];
   eq("a title or a placeholder in the name box is left as typed, and a name is still declined",
-     EXEMPT.concat(["mrs", "GUEST", "GOŚĆ", "Anna"]).map(w => F.plVocative(w)),
-     EXEMPT.concat(["mrs", "GUEST", "GOŚĆ", "Anno"]));
+     EXEMPT.concat(["mrs", "GUEST", "GOŚĆ", "Anna", "Mrozek", "Sirena"]).map(w => F.plVocative(w)),
+     EXEMPT.concat(["mrs", "GUEST", "GOŚĆ", "Anno", "Mrozku", "Sireno"]));
 
   // Diacritic folding
   eq("fold bagaż", F.foldDiacritics("bagaż"), "bagaz");
