@@ -15,7 +15,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXPECTED = 13;
+const EXPECTED = 18;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -56,7 +56,8 @@ const MEMBER_DECLS = ["const HPKE_KEM =", "const HPKE_SUITE =", "const SPKI_X255
   "function unwrapTeamKey(", "const JOIN_KIND =", "const HANDOVER_PREFIX =", "const HANDOVER_KIND =",
   "function handoverSignedBytes(", "function handoverGenuine(", "function handedTo(", "const SPKI_ED25519 =",
   "function canonJson(", "function signedBytesOf(", "function teamWhole(", "function memberRingVouches(",
-  "function memberStateCopy(", "function memberProof(", "function inviteIdOf(", "function inviteRead(", "function folderHost(",
+  "function memberStateCopy(", "function memberProof(", "function inviteIdOf(", "const INVITE_HIDDEN_RE =", "function inviteFolder(",
+  "function inviteRead(", "function folderHost(",
   "function memberRequestDoc(", "function memberHeed("];
 const BUILD_DECLS = ["function hpkeSeal(", "function wrapTeamKey(", "function branchIdOf("];
 const JOIN_DECLS = ["const SPKI_ED25519 =", "function branchIdOf(", "function canonJson(", "function signedBytesOf(",
@@ -257,7 +258,7 @@ if (M && J) {
   const onDisk = M.folderHost("C:/quay/catalogs", { SystemDrive: "C:" });
   const otherDisk = M.folderHost("D:/quay/catalogs", { SystemDrive: "C:" });
   check(!!goodBlob && goodBlob.team === TEAM && goodBlob.secret === secret && goodBlob.lead.name === "Quay lead"
-      && goodBlob.folder === "C:/quay/catalogs" && badBlobs.every(b => M.inviteRead(b) === null) && M.inviteRead(tampered) === null
+      && goodBlob.folder === "C:\\quay\\catalogs" && badBlobs.every(b => M.inviteRead(b) === null) && M.inviteRead(tampered) === null
       && where.host === "quay-host" && where.local === false && onDisk.local === true && onDisk.host === ""
       && otherDisk.local === false && otherDisk.host === "" && otherDisk.cloud === "",
     "16l a malformed or tampered invitation is refused, a well shaped one is read, and a path on another computer is named from its text: "
@@ -277,6 +278,77 @@ if (M && J) {
       && stillAsks.needRing === true && stillAsks.pinned === false,
     "16m a team file under the invitation's lead is pinned with no ring, a file under another lead is refused, and a request with no invitation still asks for the ring: "
     + "pinned " + byInvite.pinned + ", other stopped " + otherFile.stop + ", no invitation needRing " + stillAsks.needRing);
+
+  /* ---- what an invitation may name, and what the confirm is then given ----------------------------------------- */
+  const BS = "\\";
+  const folderOf = (f, posix) => { const r = M.inviteRead(blobOf({ team: TEAM, folder: f, lead: leadBlob, secret: secret }), posix); return r ? r.folder : null; };
+  // Each is [as pasted, as the system reaches it]: separators made the system's, one trailing separator dropped.
+  const winTaken = [["C:/quay/catalogs", "C:\\quay\\catalogs"], ["C:\\quay\\catalogs\\", "C:\\quay\\catalogs"], ["D:\\", "D:\\"],
+    ["\\\\quay-host\\catalogs", "\\\\quay-host\\catalogs"], ["\\\\quay-host\\catalogs\\team\\", "\\\\quay-host\\catalogs\\team"]];
+  // A path whose text is not where Windows goes: the host it reaches hidden by mixed or forward separators, a device
+  // prefix, a dot segment, an empty segment, a segment Windows renames, a stream, a drive-relative or relative path.
+  const winRefused = ["/\\quay-host\\catalogs", "\\/quay-host/catalogs", "//quay-host/catalogs", "\\\\quay-host/catalogs", "\\\\quay-host\\catalogs/team",
+    "\\\\?\\UNC\\quay-host\\catalogs", "\\\\.\\UNC\\quay-host\\catalogs", "\\\\?\\C:\\quay", "\\\\quay-host",
+    "C:\\OneDrive\\..\\Windows\\Temp\\team", "C:\\quay\\.\\catalogs", "C:\\quay\\\\catalogs", "C:\\quay\\catalogs.",
+    "C:\\quay\\catalogs ", " C:\\quay", "C:\\quay\\catalogs:held", "C:quay", "quay\\catalogs", "/srv/quay/catalogs"];
+  const posixTaken = [["/srv/quay/catalogs/", "/srv/quay/catalogs"], ["/srv/quay", "/srv/quay"]];
+  const posixRefused = ["C:\\quay\\catalogs", "\\\\quay-host\\catalogs", "//quay-host/catalogs", "/srv/../etc/quay",
+    "/srv/./quay", "/srv//quay", "/srv/quay" + BS + "catalogs", "srv/quay"];
+  const winWrong = winTaken.filter(([f, w]) => folderOf(f) !== w).map(x => x[0])
+    .concat(winRefused.filter(f => folderOf(f) !== null));
+  const posixWrong = posixTaken.filter(([f, w]) => folderOf(f, true) !== w).map(x => x[0])
+    .concat(posixRefused.filter(f => folderOf(f, true) !== null));
+  const named = [M.folderHost("\\\\quay-host\\catalogs", {}).host, M.folderHost("//quay-host/catalogs", {}).host];
+  check(winWrong.length === 0 && posixWrong.length === 0 && named.every(h => h === "quay-host"),
+    "16n an invitation's folder is read as the place the system reaches, or refused where its text is not that place, on Windows ("
+    + winTaken.length + " taken, " + winRefused.length + " refused) and elsewhere (" + posixTaken.length + " taken, " + posixRefused.length
+    + " refused), and the host is named from either spelling of a share: wrong " + JSON.stringify(winWrong.concat(posixWrong))
+    + ", hosts " + JSON.stringify(named));
+
+  // Built from their code points, so this file holds none of them: the bidirectional marks, overrides and isolates,
+  // the zero widths, the separators, the joiners and the byte-order mark, each range by both of its ends.
+  const hidden = [0x061c, 0x200b, 0x200f, 0x2028, 0x202e, 0x2060, 0x2069, 0xfeff].map(c => String.fromCharCode(c));
+  const withChar = (field, ch) => {
+    const l = Object.assign({}, leadBlob);
+    let f = "C:\\quay\\catalogs";
+    if (field === "name") l.name = "Quay" + ch + " lead";
+    else if (field === "keyId") l.keyId = lead.keyId + ch;
+    else f = "C:\\quay" + ch + "x\\catalogs";
+    return blobOf({ team: TEAM, folder: f, lead: l, secret: secret });
+  };
+  const slipped = [];
+  for (const field of ["name", "keyId", "folder"]) for (const ch of hidden) {
+    if (M.inviteRead(withChar(field, ch)) !== null) slipped.push(field + " U+" + ch.charCodeAt(0).toString(16).padStart(4, "0"));
+  }
+  const plainRead = ["name", "keyId", "folder"].every(field => M.inviteRead(withChar(field, "e")) !== null);
+  check(slipped.length === 0 && plainRead,
+    "16o a character that turns or hides text is refused in the lead's name, its keyId and the folder, every range by both its ends ("
+    + (hidden.length * 3) + " cases), while the same invitation with a plain letter there is read: slipped " + JSON.stringify(slipped));
+
+  const bell = String.fromCharCode(7);
+  const longName = n => blobOf({ team: TEAM, folder: "C:\\quay", lead: Object.assign({}, leadBlob, { name: "n".repeat(n) }), secret: secret });
+  const longKeyId = n => blobOf({ team: TEAM, folder: "C:\\quay", lead: Object.assign({}, leadBlob, { keyId: "k".repeat(n) }), secret: secret });
+  check(M.inviteRead(blobOf({ team: TEAM, folder: "C:\\quay" + bell + "\\catalogs", lead: leadBlob, secret: secret })) === null
+      && M.inviteRead(longName(120)) !== null && M.inviteRead(longName(121)) === null
+      && M.inviteRead(longKeyId(80)) !== null && M.inviteRead(longKeyId(81)) === null,
+    "16p a control character in the folder is refused, and the lead's name is read up to 120 characters and its keyId up to 80, one more refused");
+
+  const TEAM2 = "t-" + hex(8);
+  const fileB = signTeam({ format: 1, kind: "etiuda-team", id: TEAM2, catalogs: ["quay-board"], lead: otherLead,
+    sealed: true, exportsSealed: false, epoch: 1, roster: [] }, otherKey.privateKey);
+  const forTeamA = M.memberHeed(fileB, { pins: {}, keys: {}, barred: [], join: inviteJoin }, noRing);
+  const forBNamed = M.memberHeed(fileB, { pins: {}, keys: {}, barred: [],
+    join: { team: TEAM2, invite: { id: id, proof: proof, lead: { keyId: otherLead.keyId, public: otherLead.public, name: "Other" } } } }, noRing);
+  check(forTeamA.needRing === true && forTeamA.pinned === false && Object.keys(forTeamA.state.pins).length === 0
+      && forBNamed.pinned === true && forBNamed.state.pins[TEAM2].public === otherLead.public,
+    "16q an invitation for one team lifts the ring for that team's lead alone: another team's file still asks for the ring, and the"
+    + " same file pins with no ring once the invitation names its team: needRing " + forTeamA.needRing + ", named " + forBNamed.pinned);
+
+  const barredInvite = M.memberHeed(bareFile, { pins: {}, keys: {}, barred: [TEAM], join: inviteJoin }, noRing);
+  check(barredInvite.stop === true && barredInvite.pinned === false && barredInvite.unbar === false
+      && Object.keys(barredInvite.state.pins).length === 0 && barredInvite.state.barred.indexOf(TEAM) >= 0 && barredInvite.said.length === 0,
+    "16r a team whose lead this member forgot takes no first admission from a waiting invitation, even under the lead it names:"
+    + " only an answered request lifts the bar: stopped " + barredInvite.stop + ", pinned " + barredInvite.pinned);
 }
 
 console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);

@@ -2210,6 +2210,13 @@ code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-d
 .e-join-acts{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:16px}
 .e-join-paste{display:block;width:min(520px,100%);box-sizing:border-box;margin:14px auto 0;min-height:4.5em;padding:8px 10px;border:1px solid var(--line-strong);border-radius:8px;background:transparent;color:var(--ink);font:13px/1.45 var(--mono);resize:vertical}
 .e-join-bub .e-join-paste{width:100%;color:var(--bub-ink)}
+.e-join-ask{margin:12px auto 0;max-width:520px}
+.e-join-why{margin:4px auto 0;max-width:520px;font-size:12px;opacity:.75}
+.e-join-check{display:block;width:6.5em;box-sizing:border-box;margin:8px auto 0;padding:6px 8px;border:1px solid var(--line-strong);border-radius:8px;background:transparent;color:var(--ink);font:600 18px var(--mono);letter-spacing:.2em;text-align:center}
+.e-join .btn:disabled,.e-join-bub .btn:disabled{opacity:.45}
+.e-join-bub .e-join-ask{margin:8px 0 0;color:var(--bub-ink)}
+.e-join-bub .e-join-why{margin:2px 0 0;color:var(--bub-dim)}
+.e-join-bub .e-join-check{margin:6px 0 0;color:var(--bub-ink)}
 .e-join-bub .e-join-code{color:var(--bub-ink);font-size:28px;justify-content:flex-start;margin:8px 0 2px}
 .e-join-bub .e-join-wait i{background:var(--bub-dim)}
 .e-join-bub .e-join-meta{color:var(--bub-dim);margin:0 0 8px}
@@ -7483,20 +7490,27 @@ What you type stays in this browser only.`;
     "this desk": "to stanowisko",
     "Ask to join": "Poproś o dołączenie",
     "Join a team": "Dołącz do zespołu",
-    "Paste the invitation from the team's lead.": "Wklej zaproszenie od lidera zespołu.",
+    "Paste the invitation from the team's lead.": "Proszę wkleić zaproszenie od lidera zespołu.",
     "Continue": "Dalej",
     "Join this team?": "Dołączyć do tego zespołu?",
     "Join this team": "Dołącz do tego zespołu",
-    "The folder is {FOLDER}.": "Folder to {FOLDER}.",
-    "The lead is {NAME}.": "Lider zespołu to {NAME}.",
-    "This invitation does not read. Nothing was changed.": "To zaproszenie nie daje się odczytać. Nic nie zostało zmienione.",
-    "This folder is on {HOST}.": "Ten folder jest na {HOST}.",
-    "This folder did not answer, so nothing was written.": "Ten folder nie odpowiedział, więc nic nie zapisano.",
-    "Desks on other computers read this folder only if it is shared with them.": "Stanowiska na innych komputerach czytają ten folder tylko wtedy, gdy jest im udostępniony.",
-    "OneDrive keeps this folder in sync.": "OneDrive synchronizuje ten folder.",
-    "This folder is a SharePoint library that OneDrive keeps in sync.": "Ten folder to biblioteka SharePoint, którą OneDrive synchronizuje.",
-    "Dropbox keeps this folder in sync.": "Dropbox synchronizuje ten folder.",
-    "Google Drive keeps this folder in sync.": "Dysk Google synchronizuje ten folder.",
+    "Folder: {FOLDER}": "Folder: {FOLDER}",
+    "Lead: {NAME}": "Lider zespołu: {NAME}",
+    "This invitation cannot be read, so nothing was changed.": "Tego zaproszenia nie da się odczytać, więc nic nie zostało zmienione.",
+    "This folder is on the computer {HOST}.": "Ten folder znajduje się na komputerze {HOST}.",
+    "This folder could not be reached, so nothing was written.": "Ten folder jest teraz niedostępny, więc nic nie zapisano.",
+    "Desks on other computers read this folder only if it is shared with them.": "Stanowiska na innych komputerach odczytają ten folder tylko wtedy, gdy zostanie im udostępniony.",
+    "OneDrive keeps this folder in sync.": "Ten folder jest synchronizowany przez OneDrive.",
+    "This folder is a SharePoint library that OneDrive keeps in sync.": "Ten folder to biblioteka SharePoint synchronizowana przez OneDrive.",
+    "Dropbox keeps this folder in sync.": "Ten folder jest synchronizowany przez Dropbox.",
+    "Google Drive keeps this folder in sync.": "Ten folder jest synchronizowany przez Dysk Google.",
+    "Ask the team's lead for the check shown in their Studio, and type its four characters here.": "Proszę zapytać lidera zespołu o kod kontrolny widoczny w Studiu i wpisać tu jego cztery znaki.",
+    "This confirms the invitation comes from the team's own lead.": "To potwierdza, że zaproszenie pochodzi od lidera tego zespołu.",
+    "Check": "Kod kontrolny",
+    "These four characters do not match the lead's key. Ask the lead again before joining.": "Te cztery znaki nie zgadzają się z kluczem lidera. Proszę jeszcze raz zapytać lidera przed dołączeniem.",
+    "This invitation names a team this desk already knows, but with a different lead's key. It was not used, and nothing changed. Tell the team's lead about it.": "To zaproszenie wskazuje zespół, który to stanowisko już zna, ale z innym kluczem lidera. Nie zostało użyte i nic się nie zmieniło. Proszę powiedzieć o tym liderowi zespołu.",
+    "This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. Ask to join from the team's catalog instead.": "To zaproszenie wskazuje zespół, którego lider został na tym stanowisku zapomniany. Nie zostało użyte i nic się nie zmieniło. Proszę zamiast tego poprosić o dołączenie z katalogu zespołu.",
+    "This folder holds another team, or the same team under another lead's key, so nothing was written. Tell the team's lead about it.": "W tym folderze jest inny zespół albo ten sam zespół z innym kluczem lidera, więc nic nie zapisano. Proszę powiedzieć o tym liderowi zespołu.",
     "Load another catalog": "Wczytaj inny katalog",
     "Waiting for the lead to open the request": "Prośba czeka, aż lider ją otworzy",
     "The code to read to them appears here as soon as they do.": "Gdy to zrobi, pojawi się tu kod do podania.",
@@ -14053,6 +14067,7 @@ What you type stays in this browser only.`;
   __export(team_join_exports, {
     closeJoinBubble: () => closeJoinBubble,
     forgetTeamLead: () => forgetTeamLead,
+    inviteHeld: () => inviteHeld,
     keySignHtml: () => keySignHtml,
     keyTipHtml: () => keyTipHtml,
     leadKeyText: () => leadKeyText,
@@ -14070,18 +14085,50 @@ What you type stays in this browser only.`;
   var joinMode = "";
   var joinOffer = null;
   var joinBlob = "";
+  var joinRead = "";
+  var joinTyped = "";
   var joinWhy = "";
+  var joinReads = 0;
   function eHasJoin() {
     const h = eHost();
     return !!h && typeof h.teamJoin === "function";
   }
-  function joinAsk(op, file, name) {
+  function joinAsk(op, file, name, check, before) {
     if (!eHasJoin()) return Promise.resolve(null);
+    let asked;
     try {
-      return Promise.resolve(eHost().teamJoin(op, file || "", name || "")).then(joinTook, () => null);
+      asked = Promise.resolve(eHost().teamJoin(op, file || "", name || "", check || ""));
     } catch (e) {
-      return Promise.resolve(null);
+      asked = Promise.reject(e);
     }
+    return asked.then((v) => joinTook(v, typeof before === "function" && before(v)), () => {
+      const shown2 = joinMode !== "";
+      dropInvite();
+      if (shown2) repaintJoin();
+      return null;
+    });
+  }
+  function dropInvite() {
+    joinMode = "";
+    joinOffer = null;
+    joinBlob = "";
+    joinRead = "";
+    joinTyped = "";
+    joinWhy = "";
+    joinReads++;
+  }
+  function inviteCheck(print) {
+    return String(print || "").slice(0, 4).toLowerCase();
+  }
+  function typedOk() {
+    const want = joinOffer ? inviteCheck(joinOffer.print) : "";
+    return want.length === 4 && joinTyped.replace(/\s+/g, "").toLowerCase() === want;
+  }
+  function typedWrong() {
+    return joinTyped.replace(/\s+/g, "").length >= 4 && !typedOk();
+  }
+  function inviteHeld() {
+    return { mode: joinMode, draft: joinBlob, read: joinRead, typed: joinTyped, offer: joinOffer ? Object.assign({}, joinOffer) : null };
   }
   function teamJoinShown() {
     return joinMode !== "" || !!joinNow && (!!leadToShow() || !!joinNow.join || !!joinNow.sealed);
@@ -14106,29 +14153,40 @@ What you type stays in this browser only.`;
     const fours = print ? leadKeyText(print) : "";
     return fours && String(tip).indexOf(fours) >= 0 ? String(tip).split(fours).map(esc).join(keySignHtml(kind, print)) : null;
   }
-  function joinTook(v) {
-    const s = v && typeof v === "object" ? v : {};
-    if (s.offer && typeof s.offer.folder === "string") {
+  function readTook(v, n, sent) {
+    if (n !== joinReads || joinMode !== "paste") return false;
+    const o = v && typeof v === "object" ? v.offer : null;
+    if (o && typeof o.folder === "string") {
       joinOffer = {
-        folder: String(s.offer.folder),
-        lead: String(s.offer.lead || ""),
-        print: String(s.offer.print || ""),
-        host: String(s.offer.host || ""),
-        cloud: String(s.offer.cloud || ""),
-        local: s.offer.local === true
+        folder: String(o.folder),
+        lead: String(o.lead || ""),
+        print: String(o.print || ""),
+        host: String(o.host || ""),
+        cloud: String(o.cloud || ""),
+        local: o.local === true
       };
+      joinRead = sent;
+      joinBlob = "";
+      joinTyped = "";
       joinWhy = "";
       joinMode = "confirm";
-    } else if (s.refused === "unread" || s.refused === "silent") {
-      joinWhy = s.refused;
-      joinOffer = null;
-      joinMode = "refused";
-      joinBlob = "";
-    } else if ((joinMode === "confirm" || joinMode === "paste") && s.join) {
-      joinMode = "";
-      joinOffer = null;
-      joinBlob = "";
-    }
+    } else refuseInvite(v);
+    return true;
+  }
+  function yesTook(v, sent) {
+    if (joinRead !== sent) return false;
+    if (v && typeof v === "object" && v.refused) refuseInvite(v);
+    else dropInvite();
+    return true;
+  }
+  function refuseInvite(v) {
+    const why = v && typeof v === "object" && typeof v.refused === "string" && v.refused ? v.refused : "unread";
+    dropInvite();
+    joinWhy = why;
+    joinMode = "refused";
+  }
+  function joinTook(v, changed) {
+    const s = v && typeof v === "object" ? v : {};
     const was = JSON.stringify(joinNow);
     joinNow = {
       sealed: s.sealed && s.sealed.file ? { file: String(s.sealed.file), team: String(s.sealed.team || "") } : null,
@@ -14150,7 +14208,7 @@ What you type stays in this browser only.`;
       closeJoinBubble();
       hooks.loadCatalogFromFolder(String(s.joined.file), 0);
     }
-    if (JSON.stringify(joinNow) !== was) paintJoin();
+    if (changed === true || JSON.stringify(joinNow) !== was) paintJoin();
     return joinNow;
   }
   function wireTeamJoin() {
@@ -14182,34 +14240,27 @@ What you type stays in this browser only.`;
     }
     return joinBlob;
   }
-  function clearJoinAsk() {
-    joinMode = "";
-    joinOffer = null;
-    joinWhy = "";
-    joinBlob = "";
+  function repaintJoin() {
     if (wholeThingEmpty()) {
       closeJoinBubble();
       hooks.render();
       return;
     }
     paintJoin();
+  }
+  function clearJoinAsk() {
+    dropInvite();
+    repaintJoin();
   }
   function openJoinPaste() {
     if (!teamCanJoin()) return;
+    dropInvite();
     joinMode = "paste";
-    joinOffer = null;
-    joinWhy = "";
-    joinBlob = "";
-    if (wholeThingEmpty()) {
-      closeJoinBubble();
-      hooks.render();
-      return;
-    }
-    paintJoin();
+    repaintJoin();
   }
   function joinWhere(o) {
     if (!o) return "";
-    const host = o.host ? t("This folder is on {HOST}.").split("{HOST}").join(o.host) : "";
+    const host = o.host ? t("This folder is on the computer {HOST}.").split("{HOST}").join(o.host) : "";
     const cloud = o.cloud === "sharepoint" ? t("This folder is a SharePoint library that OneDrive keeps in sync.") : o.cloud === "onedrive" ? t("OneDrive keeps this folder in sync.") : o.cloud === "dropbox" ? t("Dropbox keeps this folder in sync.") : o.cloud === "gdrive" ? t("Google Drive keeps this folder in sync.") : o.local ? t("Desks on other computers read this folder only if it is shared with them.") : "";
     return [host, cloud].filter(Boolean).join(" ");
   }
@@ -14221,17 +14272,17 @@ What you type stays in this browser only.`;
       acts: [["read", t("Continue")], ["back", t("Cancel")]]
     };
     if (joinMode === "confirm" && joinOffer) {
-      const o = joinOffer;
+      const o = joinOffer, ask = t("Ask the team's lead for the check shown in their Studio, and type its four characters here.");
       return {
         title: t("Join this team?"),
         line: joinWhere(o),
-        body: '<div class="e-join-meta">' + esc(t("The folder is {FOLDER}.").split("{FOLDER}").join(o.folder)) + '</div><div class="e-join-meta">' + esc(t("The lead is {NAME}.").split("{NAME}").join(o.lead)) + '</div><div class="e-join-key">' + keySignHtml("studio", o.print) + "</div>",
-        acts: [["invite", t("Join this team")], ["back", t("Cancel")]]
+        body: '<div class="e-join-meta">' + esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder)) + '</div><div class="e-join-meta">' + esc(t("Lead: {NAME}").split("{NAME}").join(o.lead)) + '</div><div class="e-join-ask">' + esc(ask) + '</div><div class="e-join-why">' + esc(t("This confirms the invitation comes from the team's own lead.")) + '</div><input type="text" class="e-join-check" data-join-check maxlength="4" spellcheck="false" autocomplete="off" aria-label="' + esc(t("Check")) + '" value="' + esc(joinTyped) + '"><div class="e-join-ask e-join-miss" data-join-miss' + (typedWrong() ? "" : " hidden") + ">" + esc(t("These four characters do not match the lead's key. Ask the lead again before joining.")) + "</div>",
+        acts: [["invite", t("Join this team"), !typedOk()], ["back", t("Cancel")]]
       };
     }
     if (joinMode === "refused") return {
       title: t("Join a team"),
-      line: joinWhy === "silent" ? t("This folder did not answer, so nothing was written.") : t("This invitation does not read. Nothing was changed."),
+      line: joinWhy === "silent" ? t("This folder could not be reached, so nothing was written.") : joinWhy === "pinned" ? t("This invitation names a team this desk already knows, but with a different lead's key. It was not used, and nothing changed. Tell the team's lead about it.") : joinWhy === "barred" ? t("This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. Ask to join from the team's catalog instead.") : joinWhy === "foreign" ? t("This folder holds another team, or the same team under another lead's key, so nothing was written. Tell the team's lead about it.") : joinWhy === "check" ? t("These four characters do not match the lead's key. Ask the lead again before joining.") : t("This invitation cannot be read, so nothing was changed."),
       body: "",
       acts: [["back", t("Cancel")]]
     };
@@ -14279,10 +14330,15 @@ What you type stays in this browser only.`;
     if (act === "join") return Promise.resolve(openJoinPaste());
     if (act === "back") return Promise.resolve(clearJoinAsk());
     if (act === "read") {
-      joinBlob = pastedText();
-      return joinAsk("read", joinBlob);
+      const sent = pastedText(), n = ++joinReads;
+      joinBlob = sent;
+      return joinAsk("read", sent, "", "", (v) => readTook(v, n, sent));
     }
-    if (act === "invite") return joinAsk("invite", joinBlob, agentName());
+    if (act === "invite") {
+      if (joinMode !== "confirm" || !joinRead || !typedOk()) return Promise.resolve(null);
+      const sent = joinRead;
+      return joinAsk("invite", sent, agentName(), joinTyped, (v) => yesTook(v, sent));
+    }
     if (act === "ask") return joinAsk("ask", j && j.file || s && s.file || "", agentName());
     if (act === "cancel") return joinAsk("cancel");
     const l = leadToShow();
@@ -14294,14 +14350,22 @@ What you type stays in this browser only.`;
   function teamJoinEmptyHtml() {
     if (!teamJoinShown()) return "";
     const p = joinParts();
-    return '<div class="empty e-join"><div class="e-join-t">' + ICON_LOCK + esc(p.title) + "</div><p>" + esc(p.line) + "</p>" + p.body + '<div class="e-join-acts">' + p.acts.map((a) => '<button type="button" class="btn" data-join="' + a[0] + '">' + esc(a[1]) + "</button>").join("") + "</div></div>";
+    return '<div class="empty e-join"><div class="e-join-t">' + ICON_LOCK + esc(p.title) + "</div><p>" + esc(p.line) + "</p>" + p.body + '<div class="e-join-acts">' + p.acts.map((a) => '<button type="button" class="btn" data-join="' + a[0] + '"' + (a[2] ? " disabled" : "") + ">" + esc(a[1]) + "</button>").join("") + "</div></div>";
+  }
+  function followCheck(root, el) {
+    joinTyped = String(el.value || "");
+    if (!root || typeof root.querySelector !== "function") return;
+    const yes = root.querySelector('[data-join="invite"]'), miss = root.querySelector("[data-join-miss]");
+    if (yes) yes.disabled = !typedOk();
+    if (miss) miss.hidden = !typedWrong();
   }
   function wireTeamJoinEmpty(root) {
     if (!root) return;
-    root.querySelectorAll("[data-join], [data-join-paste]").forEach((el) => {
+    root.querySelectorAll("[data-join], [data-join-paste], [data-join-check]").forEach((el) => {
       if (el.hasAttribute && el.hasAttribute("data-join-paste")) el.oninput = () => {
         joinBlob = String(el.value || "");
       };
+      else if (el.hasAttribute && el.hasAttribute("data-join-check")) el.oninput = () => followCheck(root, el);
       else if (el.getAttribute && el.getAttribute("data-join")) el.onclick = () => joinAct(el.getAttribute("data-join"));
     });
   }
@@ -14319,7 +14383,7 @@ What you type stays in this browser only.`;
     wrap.id = "eTeamJoin";
     wrap.setAttribute("role", "dialog");
     wrap.setAttribute("aria-labelledby", "ejTitle");
-    wrap.innerHTML = '<h3 id="ejTitle">' + esc(p.title) + '</h3><p class="ec-sub">' + esc(p.line) + "</p>" + p.body + '<div class="tour-actions"><button type="button" class="btn" data-join="hide">' + esc(t("Hide")) + "</button>" + p.acts.map((a, i) => '<button type="button" class="btn' + (i ? "" : " primary") + '" data-join="' + a[0] + '">' + esc(a[1]) + "</button>").join("") + "</div>";
+    wrap.innerHTML = '<h3 id="ejTitle">' + esc(p.title) + '</h3><p class="ec-sub">' + esc(p.line) + "</p>" + p.body + '<div class="tour-actions"><button type="button" class="btn" data-join="hide">' + esc(t("Hide")) + "</button>" + p.acts.map((a, i) => '<button type="button" class="btn' + (i ? "" : " primary") + '" data-join="' + a[0] + '"' + (a[2] ? " disabled" : "") + ">" + esc(a[1]) + "</button>").join("") + "</div>";
     cutLeaves();
     document.body.appendChild(wrap);
     const place = () => {
@@ -14336,6 +14400,7 @@ What you type stays in this browser only.`;
     joinBubbleClose = close;
     const hide = () => {
       joinShut = JSON.stringify(joinNow);
+      dropInvite();
       close();
       if (p.lead) joinAsk("seen", p.lead);
     };
@@ -14345,11 +14410,15 @@ What you type stays in this browser only.`;
       e.stopPropagation();
       hide();
     });
-    wrap.querySelectorAll("[data-join], [data-join-paste]").forEach((el) => {
+    wrap.querySelectorAll("[data-join], [data-join-paste], [data-join-check]").forEach((el) => {
       if (el.hasAttribute("data-join-paste")) {
         el.oninput = () => {
           joinBlob = String(el.value || "");
         };
+        return;
+      }
+      if (el.hasAttribute("data-join-check")) {
+        el.oninput = () => followCheck(wrap, el);
         return;
       }
       const act = el.getAttribute("data-join");

@@ -24,7 +24,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 34;
+const EXPECTED = 48;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -48,7 +48,9 @@ const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRA
 /* One desk over its own user-data folder, the shell evaluated afresh; the safeStorage stand-in is reversible. */
 function loadDesk(ud) {
   const said = [], invoke = {};
-  const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop };
+  // Every way the shell can log is kept, so a leg can say what reached the log and what did not.
+  const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: s => said.push("WARN " + String(s)),
+    info: s => said.push("INFO " + String(s)), debug: s => said.push("DEBUG " + String(s)) };
   const safeStorage = {
     isEncryptionAvailable: () => true,
     encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
@@ -70,8 +72,11 @@ function loadDesk(ud) {
   /* A window that only listens: what the shell sends it, by channel. */
   const sent = [];
   const win = { isDestroyed: () => false, webContents: { send: (ch, ...a) => sent.push([ch].concat(a)), once: noop, on: noop } };
-  return { api, ask, said, ud, envelope, win, sent, join: (op, file, name) => ask("etiuda:team-join", op, file, name) };
+  const desk = { api, ask, said, ud, envelope, win, sent, join: (op, file, name, check) => ask("etiuda:team-join", op, file, name, check) };
+  DESKS.push(desk);
+  return desk;
 }
+const DESKS = [], SECRETS = [];
 function newDesk(name, folder) {
   const ud = path.join(LAB, name);
   fs.mkdirSync(ud, { recursive: true });
@@ -306,22 +311,30 @@ try {
   const quiet = folder("quiet");
   const Du = newDesk("unc", quiet);
   const secretU = crypto.randomBytes(16).toString("hex");
+  SECRETS.push(secretU);
   const lampLead = { keyId: LEAD.keyId, public: LEAD.public, name: "Lamp lead" };
+  /* The four characters the agent types on the confirm, as the lead reads them from Studio: the first group of the key
+     Studio's Settings print, made here from the public half. */
+  const fourOf = pub => printOf(pub).slice(0, 4);
+  const WIN = process.platform === "win32";
   const beforeQuiet = fs.readdirSync(quiet).slice().sort().join("|");
   const badPreview = await Du.join("read", "etiuda-join:not-valid");
   check(badPreview && badPreview.refused === "unread" && !badPreview.offer
       && fs.readdirSync(quiet).slice().sort().join("|") === beforeQuiet
       && !Du.envelope().teamJoin && !Du.envelope().teamPins,
     "15ab a malformed invitation is refused and nothing is written: " + (badPreview && badPreview.refused));
-  const uncBlob = inviteBlob({ team: TEAM, folder: "\\\\quay-host\\catalogs", lead: lampLead, secret: secretU });
+  /* A share's path is a place on Windows alone; elsewhere the same text is no place at all, and is refused. */
+  const uncBlob = inviteBlob({ team: TEAM, folder: "\\\\quay-host\\catalogs\\", lead: lampLead, secret: secretU });
   const uncAt = Date.now();
   const uncPreview = await Du.join("read", uncBlob);
   const uncMs = Date.now() - uncAt;
-  check(uncPreview && uncPreview.offer && uncPreview.offer.host === "quay-host" && uncPreview.offer.lead === "Lamp lead"
-      && uncPreview.offer.folder === "\\\\quay-host\\catalogs" && uncPreview.refused === undefined && uncMs < 1000
-      && fs.readdirSync(quiet).slice().sort().join("|") === beforeQuiet,
-    "15ac an invitation for a folder on another computer names that computer before anything is opened, and writes nothing: "
-    + uncMs + "ms, host " + (uncPreview && uncPreview.offer && uncPreview.offer.host));
+  check((WIN ? uncPreview && uncPreview.offer && uncPreview.offer.host === "quay-host" && uncPreview.offer.lead === "Lamp lead"
+        && uncPreview.offer.folder === "\\\\quay-host\\catalogs" && uncPreview.refused === undefined
+      : uncPreview && uncPreview.refused === "unread" && !uncPreview.offer)
+      && uncMs < 1000 && fs.readdirSync(quiet).slice().sort().join("|") === beforeQuiet,
+    "15ac an invitation for a folder on another computer names that computer and the folder as Windows reaches it before anything"
+    + " is opened, or is refused where that path is no place, and writes nothing: " + uncMs + "ms, "
+    + (WIN ? "host " + (uncPreview && uncPreview.offer && uncPreview.offer.host) : "refused " + (uncPreview && uncPreview.refused)));
   check(r1 && r1.invite === undefined && r1.desk.kind === undefined && bytes1.indexOf('"invite"') < 0 && bytes1.indexOf('"kind": "desk"') < 0,
     "15ad a request made with no invitation is unchanged: no invite and no kind on the member");
 
@@ -329,8 +342,9 @@ try {
   const Dy = newDesk("yard", folder("yard-old"));
   const mey = await Dy.ask("etiuda:branch-identity", true);
   const secretY = crypto.randomBytes(16).toString("hex");
+  SECRETS.push(secretY);
   const yardBlob = inviteBlob({ team: TEAM, folder: yard, lead: lampLead, secret: secretY });
-  const took = await Dy.join("invite", yardBlob, "Nia");
+  const took = await Dy.join("invite", yardBlob, "Nia", fourOf(LEAD.public));
   const ry = JSON.parse(fs.readFileSync(path.join(yard, "desks", mey.id, "join.json"), "utf8"));
   const envY = Dy.envelope();
   check(took && took.join && took.join.state === "waiting" && ry.desk.kind === "desk" && ry.desk.name === "Nia"
@@ -353,33 +367,298 @@ try {
       && P.memberProof(secretY, otherCommit) !== ry.invite.proof && otherCommit !== ry.commit,
     "15ag a proof made under another secret or another commitment does not match the request");
 
+  /* ---- what an invitation may not move: a lead this desk already trusts, or one it was told does not match ------- */
+  const deskWith = async (name, own, extra) => {
+    const ud = path.join(LAB, name);
+    fs.mkdirSync(ud, { recursive: true });
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(Object.assign({ kind: "etiuda-desk", schema: 1,
+      keys: { eCatalogFolder: own, eUiLang: "en" } }, extra || {})), "utf8");
+    const D = loadDesk(ud);
+    await D.ask("etiuda:branch-identity", true);
+    await D.join("state");
+    return D;
+  };
+  const newSecret = () => { const s = crypto.randomBytes(16).toString("hex"); SECRETS.push(s); return s; };
+  /* What trust and place a desk keeps: the pins, the kept keys, the keys already shown, the bars, the request, the folder. */
+  const trustOf = D => { const e = D.envelope();
+    return JSON.stringify([e.teamPins || null, e.teamKeys || null, e.teamSeen || null, e.teamBarred || null, e.teamJoin || null, e.keys.eCatalogFolder]); };
+  /* Every call that could reach a path is watched for `dir` while `run` runs: which of them named it. A stat of a share
+     is a connection to the computer it names, so "nothing changes" includes nothing asked there. */
+  const watching = async (dir, run) => {
+    const touched = [], untap = [];
+    const tap = (obj, names, as) => names.forEach(n => {
+      const real = obj[n];
+      if (typeof real !== "function") return;
+      obj[n] = function (p, ...rest) { if (String(p).indexOf(dir) >= 0) touched.push(as + n); return real.call(this, p, ...rest); };
+      untap.push(() => { obj[n] = real; });
+    });
+    tap(fs, ["statSync", "lstatSync", "existsSync", "readdirSync", "readFileSync", "accessSync", "openSync", "mkdirSync", "writeFileSync",
+      "watch", "stat", "lstat", "access", "readdir", "opendirSync"], "");
+    tap(fs.promises, ["stat", "lstat", "access", "readdir", "readFile", "open", "opendir"], "promises.");
+    try { await run(); await new Promise(r => setTimeout(r, 50)); }
+    finally { untap.forEach(u => u()); }
+    return touched;
+  };
+  const hostile = folder("hostile");
+  const forgedLead = { keyId: FORGED.keyId, public: FORGED.public, name: "Lamp lead" };
+  const Dp = await deskWith("pinned", folder("pinned-own"),
+    { teamPins: { [TEAM]: LEAD }, teamSeen: [TEAM], teamKeys: { [TEAM]: { "1": Buffer.from("kept").toString("base64") } } });
+  const secretP = newSecret();
+  const forgedBlob = inviteBlob({ team: TEAM, folder: hostile, lead: forgedLead, secret: secretP });
+  const relabelled = inviteBlob({ team: TEAM, folder: hostile, lead: { keyId: "lamp-other", public: LEAD.public, name: "Lamp lead" }, secret: secretP });
+  const trustP = trustOf(Dp);
+  let readP = null, takeP = null, readRelabelled = null, takeRelabelled = null;
+  const touchedP = await watching(hostile, async () => {
+    readP = await Dp.join("read", forgedBlob);
+    takeP = await Dp.join("invite", forgedBlob, "Ola", fourOf(FORGED.public));
+    readRelabelled = await Dp.join("read", relabelled);
+    takeRelabelled = await Dp.join("invite", relabelled, "Ola", fourOf(LEAD.public));
+  });
+  const keptP = trustOf(Dp) === trustP && filesUnder(hostile).length === 0 && touchedP.length === 0;
+  const sameLead = await Dp.join("read", inviteBlob({ team: TEAM, folder: hostile, lead: lampLead, secret: secretP }));
+  check(readP && readP.refused === "pinned" && !readP.offer && takeP && takeP.refused === "pinned" && readRelabelled
+      && readRelabelled.refused === "pinned" && takeRelabelled && takeRelabelled.refused === "pinned" && keptP
+      && sameLead && !!sameLead.offer && sameLead.refused === undefined,
+    "15ai an invitation for a team this desk already pins under another key, or under the same key with another keyId, is refused at"
+    + " read and at yes, and nothing changes: the pin, the kept keys, the key already shown, the folder, and nothing asked or written"
+    + " where it points; THE CONTROL, the lead it pins, is offered: " + (readP && readP.refused) + ", " + (takeP && takeP.refused)
+    + ", touched " + JSON.stringify(touchedP));
+
+  const Db = await deskWith("barred", folder("barred-own"), { teamBarred: [TEAM] });
+  const secretB = newSecret();
+  const barredBlob = inviteBlob({ team: TEAM, folder: hostile, lead: lampLead, secret: secretB });
+  const trustB = trustOf(Db);
+  let readB = null, takeB = null;
+  const touchedB = await watching(hostile, async () => {
+    readB = await Db.join("read", barredBlob);
+    takeB = await Db.join("invite", barredBlob, "Ola", fourOf(LEAD.public));
+  });
+  check(readB && readB.refused === "barred" && !readB.offer && takeB && takeB.refused === "barred"
+      && trustOf(Db) === trustB && filesUnder(hostile).length === 0 && touchedB.length === 0,
+    "15aj an invitation for a team whose lead this desk was told does not match is refused at read and at yes, under any lead, and"
+    + " nothing changes or is asked: the bar lifts only by an answered request: " + (readB && readB.refused) + ", " + (takeB && takeB.refused)
+    + ", touched " + JSON.stringify(touchedB));
+
+  const Ds = await deskWith("shown", folder("shown-own"), { teamSeen: [TEAM] });
+  const takeS = await Ds.join("invite", inviteBlob({ team: TEAM, folder: folder("shown-yard"), lead: lampLead, secret: newSecret() }),
+    "Ola", fourOf(LEAD.public));
+  const envS = Ds.envelope();
+  check(takeS && takeS.join && envS.teamPins && envS.teamPins[TEAM].public === LEAD.public && (envS.teamSeen || []).indexOf(TEAM) < 0
+      && leadsOf(takeS) === JSON.stringify([{ team: TEAM, print: printOf(LEAD.public), admitted: false, seen: false }]),
+    "15ak a pin an invitation sets is a key not yet shown, so the comparison after admission comes, whatever the desk held: "
+    + leadsOf(takeS));
+
+  const Dc = await deskWith("four", folder("four-own"));
+  const fourYard = folder("four-yard");
+  const fourBlob = inviteBlob({ team: TEAM, folder: fourYard, lead: lampLead, secret: newSecret() });
+  const trustC = trustOf(Dc);
+  const otherFour = fourOf(FORGED.public) === fourOf(LEAD.public) ? "zzzz" : fourOf(FORGED.public);
+  let noFour = null, wrongFour = null;
+  const touchedC = await watching(fourYard, async () => {
+    noFour = await Dc.join("invite", fourBlob, "Ola", "");
+    wrongFour = await Dc.join("invite", fourBlob, "Ola", otherFour);
+  });
+  const keptC = trustOf(Dc) === trustC && filesUnder(fourYard).length === 0 && touchedC.length === 0;
+  const rightFour = await Dc.join("invite", fourBlob, "Ola", " " + fourOf(LEAD.public).toUpperCase() + " ");
+  check(noFour && noFour.refused === "check" && wrongFour && wrongFour.refused === "check" && keptC
+      && rightFour && rightFour.join && rightFour.join.state === "waiting" && Dc.envelope().teamPins[TEAM].public === LEAD.public,
+    "15al yes is taken only with the first four characters of the invitation's key, as the lead reads them, in either case: none,"
+    + " or another key's four, change nothing and ask or write nothing: " + (noFour && noFour.refused) + ", " + (wrongFour && wrongFour.refused)
+    + ", then " + (rightFour && rightFour.join && rightFour.join.state));
+
+  const Dr = await deskWith("files", folder("files-own"));
+  const underForger = folder("files-forger"), otherTeam = folder("files-other"), broken = folder("files-broken"), genuineFolder = folder("files-real");
+  put(underForger, "etiuda-team.json", teamFile([], { lead: FORGED, signer: forger.privateKey }));
+  put(otherTeam, "etiuda-team.json", sign({ format: 1, kind: "etiuda-team", id: "t-" + crypto.randomBytes(8).toString("hex"),
+    catalogs: ["lamp-shop"], lead: LEAD, sealed: true, exportsSealed: false, epoch: 1, roster: [] }, lead.privateKey, LEAD.keyId));
+  const cracked = teamFile([]);
+  cracked.sig.value = (cracked.sig.value[0] === "a" ? "b" : "a") + cracked.sig.value.slice(1);
+  put(broken, "etiuda-team.json", cracked);
+  put(genuineFolder, "etiuda-team.json", teamFile([]));
+  const trustR = trustOf(Dr);
+  const foreign = [];
+  for (const f of [underForger, otherTeam, broken]) {
+    const r = await Dr.join("invite", inviteBlob({ team: TEAM, folder: f, lead: lampLead, secret: newSecret() }), "Ola", fourOf(LEAD.public));
+    foreign.push((r && r.refused) + (fs.existsSync(path.join(f, "desks")) ? " wrote" : ""));
+  }
+  const keptR = trustOf(Dr) === trustR;
+  const intoGenuine = await Dr.join("invite", inviteBlob({ team: TEAM, folder: genuineFolder, lead: lampLead, secret: newSecret() }),
+    "Ola", fourOf(LEAD.public));
+  check(foreign.every(x => x === "foreign") && keptR && intoGenuine && intoGenuine.join && intoGenuine.join.state === "waiting",
+    "15am a folder whose team file is under another lead, for another team, or not whole under its lead takes no request, and the"
+    + " folder is put back as it was; THE CONTROL, a team file whole under the invited lead, takes it: " + JSON.stringify(foreign));
+
+  /* The folder the invitation names is one nothing has made. */
+  const never = path.join(LAB, "never-" + crypto.randomBytes(4).toString("hex"));
+  const Dn = await deskWith("untouched", folder("untouched-own"));
+  const folderN = Dn.envelope().keys.eCatalogFolder;
+  let readN = null;
+  const touched = await watching(never, async () => {
+    readN = await Dn.join("read", inviteBlob({ team: TEAM, folder: never, lead: lampLead, secret: newSecret() }));
+  });
+  check(readN && readN.offer && readN.offer.folder === never && touched.length === 0 && Dn.envelope().keys.eCatalogFolder === folderN,
+    "15an reading an invitation states, opens and watches nothing at the folder it names, and the desk's own folder stays as it was:"
+    + " touched " + JSON.stringify(touched));
+
+  /* A folder that does not answer: here one whose parent is missing too, so the ask finds neither. */
+  const silentFolder = path.join(LAB, "gone-" + crypto.randomBytes(4).toString("hex"), "team");
+  const Dv = await deskWith("silent", folder("silent-own"));
+  const trustV = trustOf(Dv);
+  let tookV = null;
+  const touchedV = await watching(silentFolder, async () => {
+    tookV = await Dv.join("invite", inviteBlob({ team: TEAM, folder: silentFolder, lead: lampLead, secret: newSecret() }), "Ola", fourOf(LEAD.public));
+  });
+  check(tookV && tookV.refused === "silent" && trustOf(Dv) === trustV && !fs.existsSync(silentFolder)
+      && touchedV.length > 0 && touchedV.every(n => n.indexOf("promises.") === 0),
+    "15av at yes, a folder that does not answer is asked and nothing more: no call that could wait on it with the window behind it, the"
+    + " desk's folder put back, nothing pinned or written: " + (tookV && tookV.refused) + ", touched " + JSON.stringify(touchedV));
+
+  const Dk = await deskWith("kept", folder("kept-own"));
+  const secretK = newSecret();
+  await Dk.join("invite", inviteBlob({ team: TEAM, folder: folder("kept-yard"), lead: lampLead, secret: secretK }), "Ola", fourOf(LEAD.public));
+  const envK = Dk.envelope();
+  const hadK = !!(envK.teamJoin && envK.teamJoin.invite);
+  if (hadK) envK.teamJoin.invite.secret = secretK;
+  fs.writeFileSync(path.join(Dk.ud, "desk.json"), JSON.stringify(envK), "utf8");
+  const viewK = await loadDesk(Dk.ud).join("state");
+  check(hadK && viewK && viewK.join === null,
+    "15ao a kept request whose invitation holds a secret is not read back: the desk drops the request rather than carry it");
+
   /* ---- the page: the engine's own team-join.js over this desk's shell ------------------------------------------- */
   globalThis.window = { addEventListener: noop, removeEventListener: noop };
   globalThis.document = { addEventListener: noop, removeEventListener: noop, getElementById: () => null, querySelector: () => null, querySelectorAll: () => [] };
-  window.E_HOST = { teamJoin: (op, file, name) => Du.join(op, file, name), onTeamJoin: noop };
+  const calls = [];
+  let failOp = "", slowRead = false;
+  /* The page over one desk's shell, every call it makes kept; a call named by failOp is refused, and a read can be slowed. */
+  const hostOver = D => ({ onTeamJoin: noop, teamJoin: (op, file, name, four) => {
+    calls.push([op, file, name, four]);
+    if (op === failOp) return Promise.reject(new Error("the channel closed"));
+    if (op === "read" && slowRead) return new Promise(r => setTimeout(() => r(D.join(op, file, name, four)), 40));
+    return D.join(op, file, name, four);
+  } });
+  window.E_HOST = hostOver(Du);
   const HK = await import(MOD("hooks.js"));
   HK.hooks.render = noop;
   const TJ = await import(MOD("team-join.js"));
+  const T = await import(MOD("ui-lang.js"));
+  const pageOn = async D => { window.E_HOST = hostOver(D); TJ.wireTeamJoin(); await new Promise(r => setTimeout(r, 30)); };
   TJ.wireTeamJoin();
   await new Promise(r => setTimeout(r, 30));
-  let pasted = { value: uncBlob };
+  const elOf = (attrs, value) => ({ value: value || "", hasAttribute: a => Object.prototype.hasOwnProperty.call(attrs, a),
+    getAttribute: a => (Object.prototype.hasOwnProperty.call(attrs, a) ? attrs[a] : null) });
+  const press = act => { const b = elOf({ "data-join": act }); TJ.wireTeamJoinEmpty({ querySelectorAll: () => [b] }); return Promise.resolve(b.onclick && b.onclick()); };
+  const typeFour = value => { const c = elOf({ "data-join-check": "" }, value); TJ.wireTeamJoinEmpty({ querySelectorAll: () => [c] }); if (c.oninput) c.oninput(); };
+  const held = () => (typeof TJ.inviteHeld === "function" ? TJ.inviteHeld() : null);
+  const yesOf = html => (/<button[^>]*data-join="invite"[^>]*>/.exec(html) || [""])[0];
+  const missOf = html => (/<div[^>]*data-join-miss[^>]*>/.exec(html) || [""])[0];
+  const pageYard = folder("page-yard");
+  const blobA = inviteBlob({ team: TEAM, folder: pageYard + path.sep, lead: lampLead, secret: newSecret() });
+  let pasted = elOf({ "data-join-paste": "" }, blobA);
   document.querySelector = (sel) => sel === "[data-join-paste]" ? pasted : null;
   TJ.openJoinPaste();
   const pasteHtml = TJ.teamJoinEmptyHtml();
-  const readButtons = {};
-  TJ.wireTeamJoinEmpty({ querySelectorAll: (sel) => sel === "[data-join-paste]" ? []
-    : ["read"].map(a => (readButtons[a] = { getAttribute: () => a })) });
-  await readButtons.read.onclick();
+  await press("read");
   const confirmHtml = TJ.teamJoinEmptyHtml();
-  const groupedLead = printOf(LEAD.public).replace(/(.{4})(?=.)/g, "$1 ");
-  check(/<textarea /.test(pasteHtml) && confirmHtml.indexOf("\\\\quay-host\\catalogs") >= 0 && confirmHtml.indexOf("Lamp lead") >= 0
-      && confirmHtml.indexOf(groupedLead) >= 0 && /data-join="invite"/.test(confirmHtml),
-    "15ah the confirm names the folder, the lead and the lead key's fingerprint: " + groupedLead);
-  const backButtons = {};
-  TJ.wireTeamJoinEmpty({ querySelectorAll: (sel) => sel === "[data-join-paste]" ? []
-    : ["back"].map(a => (backButtons[a] = { getAttribute: () => a })) });
-  await backButtons.back.onclick();
-  window.E_HOST = { teamJoin: (op, file, name) => fresh7.join(op, file, name), onTeamJoin: noop };
+  const groups = printOf(LEAD.public).match(/.{4}/g);
+  check(/<textarea /.test(pasteHtml) && confirmHtml.indexOf(pageYard) >= 0 && confirmHtml.indexOf(pageYard + path.sep) < 0
+      && confirmHtml.indexOf("Lamp lead") >= 0 && /data-join-check/.test(confirmHtml) && confirmHtml.indexOf("e-join-key") < 0
+      && groups.every(g => confirmHtml.indexOf(g) < 0) && / disabled/.test(yesOf(confirmHtml)),
+    "15ah the confirm names the folder as the desk will use it and the lead, asks for the four characters the lead reads out, shows"
+    + " no group of the key it asks about, and its yes waits for them");
+
+  typeFour(otherFour);
+  const wrongHtml = TJ.teamJoinEmptyHtml();
+  const before = calls.length;
+  await press("invite");
+  const sentWhileShut = calls.length - before;
+  typeFour(fourOf(LEAD.public).toUpperCase());
+  const rightHtml = TJ.teamJoinEmptyHtml();
+  check(/ disabled/.test(yesOf(wrongHtml)) && !!missOf(wrongHtml) && !/ hidden/.test(missOf(wrongHtml)) && sentWhileShut === 0
+      && !!yesOf(rightHtml) && !/ disabled/.test(yesOf(rightHtml)) && / hidden/.test(missOf(rightHtml)),
+    "15ap the yes opens only once the four characters typed are the first four of the invitation's key, in either case; another four"
+    + " are said not to be them, and the shut yes sends nothing: sent " + sentWhileShut);
+  await press("back");
+  const heldAfterBack = held();
+
+  const Dq = await deskWith("race", folder("race-own"));
+  await pageOn(Dq);
+  const raceB = folder("race-b");
+  const blobB = inviteBlob({ team: TEAM, folder: raceB, lead: forgedLead, secret: newSecret() });
+  TJ.openJoinPaste();
+  const boxA = elOf({ "data-join-paste": "" }, blobA), readA = elOf({ "data-join": "read" });
+  pasted = boxA;
+  TJ.wireTeamJoinEmpty({ querySelectorAll: () => [boxA, readA] });
+  slowRead = true;
+  const reading = Promise.resolve(readA.onclick && readA.onclick());
+  boxA.value = blobB;
+  if (boxA.oninput) boxA.oninput();
+  await reading;
+  slowRead = false;
+  const raceHtml = TJ.teamJoinEmptyHtml();
+  typeFour(fourOf(LEAD.public));
+  await press("invite");
+  const heldAfterYes = held();
+  const sentYes = calls.filter(c => c[0] === "invite").pop();
+  check(raceHtml.indexOf(pageYard) >= 0 && raceHtml.indexOf(raceB) < 0 && !!sentYes && sentYes[1] === blobA
+      && fs.existsSync(path.join(pageYard, "desks")) && !fs.existsSync(path.join(raceB, "desks")),
+    "15aq a second paste while the first is read changes nothing: the confirm shows the first, and yes sends the very text that was"
+    + " read, never the box: " + (sentYes ? (sentYes[1] === blobA ? "the first" : sentYes[1] === blobB ? "the second" : "another") : "nothing"));
+
+  const Dz = await deskWith("refused", folder("refused-own"));
+  await pageOn(Dz);
+  TJ.openJoinPaste();
+  pasted = elOf({ "data-join-paste": "" }, blobA);
+  failOp = "read";
+  await press("read");
+  const afterReadFail = held(), readFailHtml = TJ.teamJoinEmptyHtml();
+  failOp = "";
+  TJ.openJoinPaste();
+  pasted = elOf({ "data-join-paste": "" }, blobA);
+  await press("read");
+  typeFour(fourOf(LEAD.public));
+  failOp = "invite";
+  await press("invite");
+  const afterYesFail = held(), yesFailHtml = TJ.teamJoinEmptyHtml();
+  failOp = "";
+  const letGo = h => !!h && h.mode === "" && h.draft === "" && h.read === "" && h.typed === "" && h.offer === null;
+  check(letGo(afterReadFail) && letGo(afterYesFail) && !/<textarea /.test(readFailHtml) && !/data-join-check/.test(yesFailHtml),
+    "15ar a call to the shell that fails lets the invitation go, the paste box or the confirm with it, after a read and after a yes");
+
+  TJ.openJoinPaste();
+  const boxC = elOf({ "data-join-paste": "" }, "");
+  pasted = boxC;
+  TJ.wireTeamJoinEmpty({ querySelectorAll: () => [boxC] });
+  boxC.value = blobA;
+  if (boxC.oninput) boxC.oninput();
+  await press("back");
+  const heldAfterPasteBack = held();
+  TJ.openJoinPaste();
+  const unreadable = "etiuda-join:" + Buffer.from("{}").toString("base64url") + "x" + secretK;
+  pasted = elOf({ "data-join-paste": "" }, unreadable);
+  await press("read");
+  const heldAfterRefusal = held(), refusedHtml = TJ.teamJoinEmptyHtml();
+  await press("back");
+  check(letGo(heldAfterYes) && letGo(heldAfterBack) && letGo(heldAfterPasteBack) && !!heldAfterRefusal && heldAfterRefusal.mode === "refused"
+      && heldAfterRefusal.draft === "" && heldAfterRefusal.read === "" && heldAfterRefusal.offer === null && refusedHtml.indexOf(secretK) < 0,
+    "15as the page lets an invitation go once it is answered: after a yes that took, after Cancel on the confirm and on the paste box,"
+    + " and after a refusal, which keeps only its sentence");
+
+  window.E_HOST = { onTeamJoin: noop, teamJoin: op => Promise.resolve(op === "read"
+    ? { sealed: null, join: null, leads: [], offer: { folder: "\\\\quay-host\\catalogs", lead: "Lamp lead", print: printOf(LEAD.public),
+      host: "quay-host", cloud: "", local: false } }
+    : { sealed: null, join: null, leads: [] }) };
+  TJ.wireTeamJoin();
+  await new Promise(r => setTimeout(r, 30));
+  TJ.openJoinPaste();
+  pasted = elOf({ "data-join-paste": "" }, "etiuda-join:as-the-shell-read-it");
+  await press("read");
+  const hostHtml = TJ.teamJoinEmptyHtml();
+  const hostLine = T.t("This folder is on the computer {HOST}.").split("{HOST}").join("quay-host");
+  await press("back");
+  check(hostHtml.indexOf("<p>" + hostLine + "</p>") >= 0,
+    "15at the confirm says which computer the folder is on, in the line under its title: " + hostLine);
+
+  window.E_HOST = hostOver(fresh7);
   TJ.wireTeamJoin();
   await new Promise(r => setTimeout(r, 30));
   const html = TJ.teamJoinEmptyHtml(), buttons = {};
@@ -394,6 +673,13 @@ try {
     && JSON.stringify(TJ.teamLeads()) === JSON.stringify(afterPage.leads),
     "15aa the page shows the shell's key in four groups of four after Studio's sign, with the two answers, and the agent's \"it matches\" reaches"
     + " the shell as seen: " + grouped);
+
+  /* Last, over every desk above: the log of each holds none of the secrets any invitation carried. */
+  const leaked = [];
+  DESKS.forEach(D => D.said.forEach(line => SECRETS.forEach(s => { if (line.indexOf(s) >= 0) leaked.push(line.slice(0, 48)); })));
+  check(SECRETS.length >= 10 && leaked.length === 0,
+    "15au no invitation's secret reaches the shell's log, through every read, yes and refusal above (" + SECRETS.length + " secrets, "
+    + DESKS.length + " desks): leaked " + leaked.length);
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
 }
