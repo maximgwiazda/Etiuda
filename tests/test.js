@@ -183,6 +183,7 @@ function pureFns() {
     "function isVowelPL(",
     "function zForm(",
     "const PL_VOC_PAIRS",
+    "const PL_VOC_EXEMPT",
     "function plVocative(",
     "function agentParts(",
     "function formatPaxName(",
@@ -469,6 +470,14 @@ function runUnitTests() {
   eq("plVocative Emma (-a, origin aside)", F.plVocative("Emma"), "Emmo");
   eq("plVocative Brzeczyszczykiewicz (soft cz, -u)", F.plVocative("Brzeczyszczykiewicz"), "Brzeczyszczykiewiczu");
   eq("plVocative Kasia (a diminutive the table carries)", F.plVocative("Kasia"), "Kasiu");
+  /* Every title and placeholder the name box should not decline, as typed, then three other
+     casings of words the rule would decline, then a real name that still declines. */
+  const EXEMPT = ["Mr", "Mrs", "Ms", "Miss", "Mx", "Dr", "Sir", "Madam", "Madame",
+    "Guest", "Customer", "Client", "Visitor", "Anonymous", "User",
+    "Gość", "Klient", "Klientka", "Anonim", "Użytkownik"];
+  eq("a title or a placeholder in the name box is left as typed, and a name is still declined",
+     EXEMPT.concat(["mrs", "GUEST", "GOŚĆ", "Anna"]).map(w => F.plVocative(w)),
+     EXEMPT.concat(["mrs", "GUEST", "GOŚĆ", "Anno"]));
 
   // Diacritic folding
   eq("fold bagaż", F.foldDiacritics("bagaż"), "bagaz");
@@ -1667,6 +1676,20 @@ function catalogLangTests() {
   V.setCommentLang("en");
   eq("even when the comment language is not the primary",
      V.intentFieldAt(0, "topic", "pl"), "alpha");
+  /* The clause is the sentence, so a missing one stays missing. Action and topic above still
+     fall back to the comment language; the clause does not, in either direction. */
+  V.SW_STORE.en.length = 0; V.SW_STORE.pl.length = 0;
+  V.SW_STORE.en.push(""); V.SW_STORE.pl.push("beta-clause");
+  V.setCommentLang("pl");
+  eq("a missing clause does not fall back to the comment language",
+     V.intentFieldAt(0, "clause", "en"), "");
+  V.SW_STORE.en[0] = "alpha-clause"; V.SW_STORE.pl[0] = "";
+  V.setCommentLang("en");
+  eq("and a missing clause stays missing the other way",
+     V.intentFieldAt(0, "clause", "pl"), "");
+  V.SW_STORE.pl[0] = "beta-clause";
+  eq("a clause the card language carries stays in that language",
+     V.intentFieldAt(0, "clause", "pl"), "beta-clause");
   eq("eApplyCatalog hands the catalog's commentLang to that table",
      /setCommentLang\(c\.commentLang\)/.test(extractDecl(sourceText(), "function eApplyCatalog(")),
      true);

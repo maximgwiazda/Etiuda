@@ -48,9 +48,13 @@ const PL_VOC={};
 PL_VOC_PAIRS.split(/\s+/).forEach(p=>{
   const i=p.indexOf(":"); if(i>0) PL_VOC[p.slice(0,i).toLowerCase()]=p.slice(i+1);
 });
+/* Titles and placeholders typed in place of a name. Whole word, case aside. A surname is not
+   here, and neither are Pan and Pani. */
+const PL_VOC_EXEMPT=new Set("mr mrs ms miss mx dr sir madam madame guest customer client visitor anonymous user gość klient klientka anonim użytkownik".split(" "));
 function plVocative(name){
   const n=String(name||"").trim();
   if(!n) return n;
+  if(PL_VOC_EXEMPT.has(n.toLowerCase())) return n;
   const hit=PL_VOC[n.toLowerCase()];
   if(hit) return hit;
 

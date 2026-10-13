@@ -41,6 +41,9 @@ function joinIntents(list,lg){
 function intentFieldAt(i,field,l){
   const own=intentArr(field,l), v=own?own[i]:null;
   if(v!=null && v!=="") return v;
+  /* Action and topic fall back to the comment language. The clause is the sentence a customer
+     reads, so a missing one stays missing rather than arriving in that other language. */
+  if(field==="clause") return "";
   const base=intentArr(field,commentLang());
   return (base && base[i]) || "";
 }
