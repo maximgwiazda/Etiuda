@@ -630,11 +630,11 @@ function offerFile(win, file) {
   try {
     const { json, data } = catalogRead(text);
     if (!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
-    /* The agent opened this file. Whatever its rev, its signer or its signature, it is offered.
-       The mark moves only where the file is a higher rev of the key that signed it. */
+    /* The agent opened this file. Whatever its rev, its signer or its signature, it is offered,
+       and no mark moves until the page says the agent took it (etiuda:catalog-taken). */
     openedWith = file;
     catalogJson = json;
-    keepCatalogRev(json);
+    handAsked(json, "");
     catalogFrom = file;
     historySoon(file, text);
     const cards = Array.isArray(data.cards) ? data.cards.length : 0;
@@ -655,10 +655,32 @@ let catalogJson;
 ipcMain.on("etiuda:catalog", (e) => {
   if (!fromEngine(e)) { e.returnValue = null; return; }
   if (catalogJson === undefined) catalogJson = readCatalog();
-  /* A file this launch was opened with is the agent asking, so a lower rev of it is still handed over. */
-  if (!(openedWith && catalogFrom === openedWith) && belowCatalogRev(catalogJson)) { e.returnValue = null; return; }
+  /* A file this launch was opened with is the agent asking: a lower rev of it is still handed over, and its mark waits for the yes. */
+  if (openedWith && catalogFrom === openedWith) { handAsked(catalogJson, ""); e.returnValue = catalogJson; return; }
+  if (belowCatalogRev(catalogJson)) { e.returnValue = null; return; }
   keepCatalogRev(catalogJson);
   e.returnValue = catalogJson;
+});
+/* WHAT THE AGENT OPENED ON PURPOSE, handed and not yet taken, by the signed hash the page pins a catalog by. Its mark, the
+   catalog's or a colleague's file's (`who`), rises only when the page says the agent took those bytes, and only to them;
+   a pin this shell never handed so raises nothing. The oldest goes past HANDED_ASKED_MAX. */
+const handedAsked = new Map(), HANDED_ASKED_MAX = 32;
+function handAsked(text, who) {
+  const doc = catalogDocIn(text);
+  if (!doc || doc.kind !== "etiuda-catalog") return;
+  let pin = "";
+  try { pin = signedSha(doc); } catch { return; }
+  handedAsked.delete(pin);
+  handedAsked.set(pin, { text: String(text), who: who || "" });
+  while (handedAsked.size > HANDED_ASKED_MAX) handedAsked.delete(handedAsked.keys().next().value);
+}
+ipcMain.on("etiuda:catalog-taken", (e, pin) => {
+  if (!fromEngine(e)) return;
+  const got = handedAsked.get(String(pin || ""));
+  if (!got) return;
+  handedAsked.delete(String(pin));
+  if (got.who) readRevFloor(got.text, got.who, false);
+  else keepCatalogRev(got.text);
 });
 /* THE ENGINE REFUSED THE FILE IT WAS HANDED, and names it. Answered with the next file this
    would read, in the shape the host answer gives the first, or null where there is none. */
@@ -3198,11 +3220,10 @@ function keepReadRev(id, rev) {
 }
 /* `desk` names a colleague's folder under desks/, and its file is handed only where the listing would list it.
    A rev below the highest already handed on for that file's id is not handed on unless the agent asked for
-   that file, and an asked read below it moves no mark. A file whose id does not begin with that folder's desk
-   id sets no mark, so one desk's signed file cannot raise another's. A file of the folder itself is held to
-   the catalog mark where nobody asked, and to the lead's key where the page means to offer it unasked; this
-   read does not move the catalog mark. */
-function readRevFloor(text, who) {
+   that file; an asked read moves no mark (`look`), which waits for the yes. A file whose id does not begin with
+   that folder's desk id sets no mark, so one desk's signed file cannot raise another's. A file of the folder itself
+   is held to the catalog mark where nobody asked, and to the lead's key where the page means to offer it unasked. */
+function readRevFloor(text, who, look) {
   let doc = null;
   try { doc = JSON.parse(String(text || "")); } catch { return ""; }
   if (!doc || typeof doc !== "object" || doc.kind !== "etiuda-catalog") return "";
@@ -3212,6 +3233,7 @@ function readRevFloor(text, who) {
   if (typeof who !== "string" || !who || !id.startsWith(who + "-")) return "";
   const had = readRevs[id] || 0;
   if (rev < had) return "below";
+  if (look) return "above";
   keepReadRev(id, rev);
   return "kept";
 }
@@ -3233,8 +3255,9 @@ ipcMain.handle("etiuda:catalog-read", (e, name, desk, asked, offer) => {
     if (who && !(ecFacts(file, who) || {}).deskOk) throw new Error("not a desk's own file");
     const text = catalogTextOf(fs.readFileSync(file, "utf8"));
     if (who) {
-      if (readRevFloor(text, who) === "below" && !asked) return { name: base, text: "" };
+      if (readRevFloor(text, who, !!asked) === "below" && !asked) return { name: base, text: "" };
     } else if (!asked && (belowCatalogRev(text) || (offer && !unsolicitedLeadText(text)))) return { name: base, text: "" };
+    if (asked) handAsked(text, who);
     return { name: base, text: text };
   }
   catch (err) {

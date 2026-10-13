@@ -154,6 +154,12 @@ function eReadCatalogFile(name,desk,asked,offer){
       .catch(()=>null);
   }catch(e){ return Promise.resolve(null); }
 }
+/* The pin of the catalog the agent took, told to the shell, which raises a mark only for bytes it handed on purpose. */
+function eCatalogTaken(pin){
+  const h=eHost();
+  if(!pin || !h || typeof h.catalogTaken!=="function") return;
+  try{ h.catalogTaken(String(pin)); }catch(e){}
+}
 /* Resolves to the chosen folder, or "" for a dialog the person closed. The caption is passed in
    already translated: the shell has no t(). */
 function ePickCatalogFolder(title){
@@ -377,6 +383,7 @@ export {
   ePickCatalogFile,
   ePickCatalogFolder,
   eReadCatalogFile,
+  eCatalogTaken,
   eSaveCatalogFile,
   wireHost,
   dispatchTabChord,

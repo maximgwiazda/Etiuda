@@ -4,7 +4,8 @@
  * verifies, and each mark kept in the desk file is never lowered. A second read of an older
  * desk file in the same process keeps the higher number. A key added to the share's ring does
  * not raise the catalog mark. A desk with its lead pinned chooses only that lead's editions
- * unasked, and a file the agent opens is offered whatever its rev, signer or signature.
+ * unasked, and a file the agent opens is offered whatever its rev, signer or signature, and
+ * raises a mark only once the page says the agent took it.
  * Throwaway keys and catalogs only.
  *
  *     node tests/rollback-floor.mjs        exit code is the number of failed checks, capped at 63
@@ -26,7 +27,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 47;
+const EXPECTED = 51;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1238,6 +1239,100 @@ try {
     check(booted.rev === 2 && !toOffer,
       "888au with the ring listing another key and not the lead's, a desk with its lead pinned still boots the lead's edition and does not offer the other: boot "
       + (booted.rev == null ? "nothing" : booted.rev) + ", other key to offer " + (toOffer ? "handed" : "nothing"));
+  }
+
+  /* ---- what the agent opened raises a mark only when the page says it was taken (etiuda:catalog-taken) ---- */
+  const pinOf = text => "sha256:" + crypto.createHash("sha256").update(Buffer.from(V2.v2SignedBytes(JSON.parse(text)))).digest("hex");
+  const marks = D => { const v = D.envelope(); return JSON.stringify([v.catalogRevs || {}, v.readRevs || {}, v.branchRevs || {}, v.teamEpochSeen || {}]); };
+  {
+    const SHARE = folder("declined"), AWAY = folder("declined-away");
+    put(SHARE, "etiuda-ring.json", RING);
+    put(AWAY, "next.ec", CAT3);
+    const D = newDesk("declined", SHARE);
+    put(SHARE, "board.ec", CAT2);
+    const booted = facts(D.sync("etiuda:catalog") || "");
+    const before = marks(D);
+    D.sent.length = 0;
+    D.api.offerFile(D.win, path.join(AWAY, "next.ec"));
+    const offered = sentRevs(D);
+    const again = facts(D.sync("etiuda:catalog") || "");
+    const after = marks(D);
+    const next = facts(loadDesk(D.ud).sync("etiuda:catalog") || "");
+    check(booted.rev === 2 && offered.length === 1 && offered[0] === 3 && again.rev === 3 && after === before && next.rev === 2,
+      "888av a higher edition opened on purpose and never taken leaves every mark as it was, and the next boot still chooses the folder's edition: boot "
+      + booted.rev + ", offered " + (offered.join(",") || "-") + ", asked again " + again.rev
+      + ", marks " + (after === before ? "unchanged" : "moved") + ", next boot " + (next.rev == null ? "nothing" : next.rev));
+  }
+  {
+    const SHARE = folder("taken"), AWAY = folder("taken-away");
+    put(SHARE, "etiuda-ring.json", RING);
+    put(AWAY, "next.ec", CAT3);
+    const D = newDesk("taken", SHARE);
+    put(SHARE, "board.ec", CAT2);
+    const booted = facts(D.sync("etiuda:catalog") || "");
+    D.api.offerFile(D.win, path.join(AWAY, "next.ec"));
+    const handed = markOf(D);
+    D.sync("etiuda:catalog-taken", pinOf(CAT3));
+    const took = markOf(D);
+    const CAT4 = textOf(catalog(4, "2026-03-04"));
+    put(SHARE, "four.ec", CAT4);
+    const read4 = facts(((await D.ask("etiuda:catalog-read", "four.ec", null, true)) || {}).text || "").rev;
+    const read = markOf(D);
+    D.sync("etiuda:catalog-taken", pinOf(CAT4));
+    const took4 = markOf(D);
+    fs.unlinkSync(path.join(SHARE, "four.ec"));
+    const next = facts(loadDesk(D.ud).sync("etiuda:catalog") || "");
+    check(booted.rev === 2 && handed === 2 && took === 3 && read4 === 4 && read === 3 && took4 === 4 && next.rev == null,
+      "888aw an edition opened on purpose and taken raises the mark to that rev, from a double-click and from the Library's Load alike: boot "
+      + booted.rev + ", handed " + handed + ", taken " + took + ", Load read " + read4 + " mark " + read + ", taken " + took4
+      + "; the folder's older edition at the next boot " + (next.rev == null ? "not chosen" : next.rev));
+  }
+  {
+    const SHARE = folder("forged"), AWAY = folder("forged-away");
+    put(SHARE, "etiuda-ring.json", RING);
+    put(AWAY, "next.ec", CAT3);
+    const D = newDesk("forged", SHARE);
+    put(SHARE, "board.ec", CAT2);
+    const booted = facts(D.sync("etiuda:catalog") || "");
+    D.api.offerFile(D.win, path.join(AWAY, "next.ec"));
+    const before = marks(D);
+    const CAT5 = textOf(catalog(5, "2026-03-05")), CAT9 = textOf(catalog(9, "2026-03-09"));
+    put(SHARE, "five.ec", CAT5);
+    const shown = facts(((await D.ask("etiuda:catalog-read", "five.ec")) || {}).text || "").rev;
+    for (const pin of [pinOf(CAT9), pinOf(CAT5), "sha256:" + "0".repeat(64), "", "not a pin"]) D.sync("etiuda:catalog-taken", pin);
+    const after = marks(D);
+    D.sync("etiuda:catalog-taken", pinOf(CAT3));
+    const real = markOf(D);
+    check(booted.rev === 2 && shown === 5 && after === before && markOf(loadDesk(D.ud)) === 3 && real === 3,
+      "888ax a taken the shell never handed on purpose raises nothing, never-handed bytes and bytes only shown alike, and the edition it did hand still can be: boot "
+      + booted.rev + ", shown " + shown + ", marks after five forged " + (after === before ? "unchanged" : "moved") + ", the handed one taken " + real);
+  }
+  {
+    const SHARE = folder("colleague-taken");
+    put(SHARE, "etiuda-ring.json", RING);
+    const A = newDesk("owner-taken", SHARE), B = newDesk("colleague-taken", SHARE);
+    const me = await A.ask("etiuda:branch-identity", true), other = await B.ask("etiuda:branch-identity", true);
+    const TEAM = "t-" + crypto.randomBytes(8).toString("hex"), K1 = crypto.randomBytes(32);
+    put(SHARE, "etiuda-team.json", teamFile(TEAM, 1, [entry(A, me, K1, TEAM, 1), entry(A, other, K1, TEAM, 1)]));
+    put(SHARE, "board.ec", JSON.stringify(A.api.sealCatalog(K1, TEAM, 1, CAT2)));
+    const g = grown(A, me, await readText(A, "board.ec"));
+    g.doc.name = "first";
+    await A.ask("etiuda:branch-write", g.stem, JSON.stringify(g.doc));
+    const askRead = async () => ((await B.ask("etiuda:catalog-read", g.stem + ".ec", me.id, true)) || {}).text || "";
+    const first = await askRead();
+    const markFirst = (B.envelope().readRevs || {})[g.doc.id];
+    g.doc.name = "second";
+    await A.ask("etiuda:branch-write", g.stem, JSON.stringify(g.doc));
+    const second = await askRead();
+    const markSecond = (B.envelope().readRevs || {})[g.doc.id];
+    B.sync("etiuda:catalog-taken", pinOf(second));
+    const took = (B.envelope().readRevs || {})[g.doc.id];
+    B.sync("etiuda:catalog-taken", pinOf(first));
+    const tookFirst = (B.envelope().readRevs || {})[g.doc.id];
+    check(facts(first).rev === 1 && facts(second).rev === 2 && markFirst === undefined && markSecond === undefined && took === 2 && tookFirst === 2,
+      "888ay a colleague's file opened on purpose raises its mark only when taken, and an older one taken after does not lower it: reads "
+      + facts(first).rev + "," + facts(second).rev + ", mark after the reads " + (markSecond === undefined ? "none" : markSecond)
+      + ", taken " + took + ", the first taken after " + tookFirst);
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));

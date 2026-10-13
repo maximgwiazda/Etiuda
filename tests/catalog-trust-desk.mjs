@@ -551,7 +551,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 85;
+  const EXPECTED = 86;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -1300,6 +1300,34 @@ async function parent() {
       "76j on a desk whose lead signs the catalog, the listing offers the lead's higher edition and not another key's: "
       + JSON.stringify({ boot: boot76j.heldRev, otherKey: foreignOffer.shown, lead: leadOffer.shown, files: leadOffer.files || null,
         errors: [boot76j, foreign76j, lead76j].flatMap(o => o.errors || []).slice(0, 2) }));
+
+    /* The yes is what raises the mark for a file the agent opened: the shell's mark in desk.json, read after a Load declined
+       and after the same Load taken. The file is a second catalog of the same key, dated before the first, so no boot chooses it
+       and only the Load hands it over. */
+    const ANNEX = "lamp-annex";
+    const ringK = JSON.stringify({ format: V2.V2_RING_FORMAT, kind: V2.V2_RING_KIND,
+      keys: [ID, ANNEX].map(c => ({ catalog: c, keyId: KEY_ID, alg: V2.V2_SIG_ALG, public: pubHex(pair.publicKey) })) });
+    const lab76k = scenario([["catalogs/lamp-2.ec", sign(atRev(2, "2026-09-01"))], ["catalogs/etiuda-ring.json", ringK]]);
+    const markIn = (lab, id) => { const d = JSON.parse(fs.readFileSync(path.join(lab, "userdata", "desk.json"), "utf8"));
+      return ((d.catalogRevs || {})[id] || {})[pubHex(pair.publicKey)]; };
+    const boot76k = run(lab76k, ["boot", "settle", "offer", "yes", "settle"]);
+    const k0 = [markIn(lab76k, ID), markIn(lab76k, ANNEX)];
+    const annex = Object.assign(atRev(3, "2026-09-10"), { id: ANNEX, name: "Lamp Annex" });
+    const annexAt = path.join(lab76k, "catalogs", "annex.ec");
+    fs.writeFileSync(annexAt, JSON.stringify(sign(annex)), "utf8");
+    const long = Date.now() / 1000 - 86400;
+    fs.utimesSync(annexAt, long, long);
+    const no76k = run(lab76k, ["dom", "library", "load:annex.ec", "settle", "said", "no", "settle"], true);
+    const k1 = [markIn(lab76k, ID), markIn(lab76k, ANNEX)];
+    const yes76k = run(lab76k, ["dom", "library", "load:annex.ec", "settle", "said", "yes", "settle"], true);
+    const k2 = [markIn(lab76k, ID), markIn(lab76k, ANNEX)];
+    const declined = no76k.offers[no76k.offers.length - 1] || {};
+    check(boot76k.heldRev === 2 && k0[0] === 2 && k0[1] === undefined && declined.shown === true && no76k.heldId === ID
+      && k1[0] === 2 && k1[1] === undefined && yes76k.reloaded === true && yes76k.heldId === ANNEX && k2[0] === 2 && k2[1] === 3
+      && ![boot76k, no76k, yes76k].some(o => (o.errors || []).length),
+      "76k a Load the agent declines leaves the shell's marks where they were, and the same Load taken raises that catalog's to its rev: "
+      + JSON.stringify({ boot: k0, offered: declined.shown, declined: k1, taken: k2, held: yes76k.heldId,
+        errors: [boot76k, no76k, yes76k].flatMap(o => o.errors || []).slice(0, 2) }));
   } catch (e) {
     failed++;
     console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

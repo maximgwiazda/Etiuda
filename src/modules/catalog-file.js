@@ -8,7 +8,7 @@ import { agentName } from "./agent.js";
 import { catalogToV2, v2SignedBytes, v2Problems, v2ContentHash } from "./catalog-v2.js";
 import { directWrite } from "./catalog-merge.js";
 import { CATS, intentArr, intentFieldKey, intentCount, catalogLangs, CONTENT_LANGS } from "./content-model.js";
-import { eHost, eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile, eLoadedCatalogFile, eHasBranch, eBranchIdentity, eWriteBranch, eHasShared, eSharedRead, eSharedWrite } from "./host.js";
+import { eHost, eCatalogTaken, eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile, eLoadedCatalogFile, eHasBranch, eBranchIdentity, eWriteBranch, eHasShared, eSharedRead, eSharedWrite } from "./host.js";
 import { CAT_LABELS_PL, CAT_LABELS_BY_LANG } from "./icons.js";
 import { fill } from "./intent-text.js";
 import { cardToExportPlain } from "./macros-json.js";
@@ -551,7 +551,9 @@ function takeCatalog(c,opts){
   flushLayer();
   /* THE CATALOG LANDS BEFORE ANYTHING IS PRUNED FOR IT: a catalog that could not be written must
      leave the one loaded standing over its own stars, hides and order. */
-  if(!storeCatalog(pinned(c))) return false;
+  const kept=pinned(c);
+  if(!storeCatalog(kept)) return false;
+  eCatalogTaken(kept&&kept.pin);
   if(same){
     const alive=carryCardLayer(c);
     pack.baseCards=null;

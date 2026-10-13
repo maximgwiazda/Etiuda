@@ -13772,6 +13772,7 @@ What you type stays in this browser only.`;
     eCatalogIn: () => eCatalogIn,
     eCatalogMtime: () => eCatalogMtime,
     eCatalogRing: () => eCatalogRing,
+    eCatalogTaken: () => eCatalogTaken,
     eChooseCatalogFolder: () => eChooseCatalogFolder,
     eHasBranch: () => eHasBranch,
     eHasCatalogPicker: () => eHasCatalogPicker,
@@ -13932,6 +13933,14 @@ What you type stays in this browser only.`;
       return Promise.resolve(h.readCatalogFile(String(name || ""), desk ? String(desk) : "", !!asked, !!offer)).then((v) => v && typeof v === "object" ? { name: String(v.name || ""), text: String(v.text || "") } : null).catch(() => null);
     } catch (e) {
       return Promise.resolve(null);
+    }
+  }
+  function eCatalogTaken(pin) {
+    const h = eHost();
+    if (!pin || !h || typeof h.catalogTaken !== "function") return;
+    try {
+      h.catalogTaken(String(pin));
+    } catch (e) {
     }
   }
   function ePickCatalogFolder(title) {
@@ -24496,7 +24505,9 @@ What you type stays in this browser only.`;
     const same = catalogLoaded() && layerNsOf(c) === eLayer();
     const loose = !catalogLoaded();
     flushLayer();
-    if (!storeCatalog(pinned(c))) return false;
+    const kept = pinned(c);
+    if (!storeCatalog(kept)) return false;
+    eCatalogTaken(kept && kept.pin);
     if (same) {
       const alive = carryCardLayer(c);
       pack.baseCards = null;
