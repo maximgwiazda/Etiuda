@@ -43,9 +43,11 @@ const ASK = 'require("./engine.js").fixtures("catalog","sample");console.log("RE
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-selftest-"));
 const good = path.join(tmp, "good"), bare = path.join(tmp, "bare"), afile = path.join(tmp, "afile");
+/* A run stopped before its finally leaves this folder behind, and a plain mkdir then died on EEXIST at the next run
+   (2026-10-13). A leftover is removed first, so every run starts from an empty folder and reads nothing it did not write. */
 const insideRepo = path.join(E.ROOT, "tests", "selftest-tmp-fixtures");
 try {
-  fs.mkdirSync(good); fs.mkdirSync(bare); fs.mkdirSync(insideRepo);
+  fs.mkdirSync(good); fs.mkdirSync(bare); fs.rmSync(insideRepo, { recursive: true, force: true }); fs.mkdirSync(insideRepo);
   fs.writeFileSync(afile, "not a folder");
   for (const k of ["catalog", "searchEval"])
     fs.writeFileSync(path.join(good, E.FIXTURE_FILE[k]), "/* invented, empty, and never read by this file */\n");

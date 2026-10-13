@@ -59,8 +59,11 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
     ETIUDA_FIXTURES=<folder> node tests/reinstall.js     install, use, uninstall, install again
 
-`npm test` runs the two self-tests, `build-fresh.mjs`, `catalog-routes.mjs`, `module-calls.mjs`, `desk-ipc.mjs`, `catalog-history.mjs`, `catalog-shared.mjs`, `desk-growth.mjs`, `shell-office.mjs`, `hpke.mjs`, `team-desk.mjs`, `team-join.mjs`, `pick.mjs`, `copy-routes.mjs`, `about.mjs`, `catalog-trust.mjs`, `catalog-trust-desk.mjs`, `token-canary.mjs`, `variables.mjs`, `test.js`, `i18n-scan.js`,
-`pl-diacritics.js`, `css-layers.js`, `motion-tokens.js`, `theme-switch.mjs` and `kin-contrast.mjs`, none of which needs a fixture or a browser. `npm run smoke` needs both.
+`npm test` runs every command in `package.json`'s `test` script, in order, and stops at the first that fails;
+`npm pkg get scripts.test` prints them (48 at e994d95). This file does not repeat the list, which went stale here
+once (23 commands unnamed by 2026-10-13): the script is the source. None of them needs a fixture or a browser.
+`test.js` runs without `ETIUDA_FIXTURES` and reports the sections that need one as NOT RUN, so its exit 0 there is
+not the whole suite. `npm run smoke` needs both.
 
 `css-dead.js`, `ghosts.js` and `storage-keys.js` are reports rather than gates: they print and
 exit 0, and a human reads the list. `i18n-scan.js` is a gate and exits non-zero when a language
