@@ -34,7 +34,7 @@ import { closeNotePane } from "./note-pane.js";
 import { E_CATALOG_SCRIPT, eCatalogFolder, eCatalogFolderShort, wireFolderLink } from "./host.js";
 import { cards, intentIdxs, setShown, shown, cats, setPendingScrollHit, putEntrySel, lang, entrySel, pendingScrollHit, semiKind, cardCounts, wholeThingEmpty } from "./app-state.js";
 import { hooks } from "./hooks.js";
-import { teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty } from "./team-join.js";
+import { teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, openJoinPaste, teamCanJoin } from "./team-join.js";
 // The render pass: filter, order, group, and hand the list the items it should hold. Every
 // surface that changes what is shown ends here, and this is the only writer of `shown`.
 
@@ -133,6 +133,11 @@ function render(){
           /* The sentence closes on words: one ending on a button chip reads as unfinished, and a
              bare full stop after one reads as a stray mark. */
           +afterBtn(t("you already have."))
+          /* The invitation door, beside Load: the shell is what can take one, and a sealed catalog
+             already offers the same act from its own panel. */
+          +(teamCanJoin()
+            ? '<br><br><button type="button" class="btn" id="emptyJoin">'+esc(t("Join a team"))+'</button>'
+            : '')
           /* Said here because here is where it goes wrong - and WHICH answer is right depends on
              where the copy runs. An installed desk has a catalog folder of its own, so the answer
              is its path; on a disk the usual fault is a catalog beside Etiuda under the wrong
@@ -166,6 +171,8 @@ function render(){
     wireTeamJoinEmpty(list.querySelector(".e-join"));
     const ei=$("#emptyLoad");
     if(ei) ei.onclick=hooks.importCatalogHere;
+    const ej=$("#emptyJoin");
+    if(ej) ej.onclick=openJoinPaste;
     const ef=$("#emptyCatFolder");
     if(ef) wireFolderLink(ef);
     hooks.syncAddFab();
