@@ -132,10 +132,10 @@ function loadShell(opts) {
   };
   const ctl = {};
   const fs = wrapFs(ctl);
-  const regCalls = [], busCalls = [], busOpts = [];
+  const regCalls = [], busCalls = [], busOpts = [], busFiles = [];
   const cp = { execFileSync: (file, args, opt) => {
     /* The session bus as opts.bus answers it (a function of dbus-send's arguments); none, as on Windows, throws. */
-    if (file === "dbus-send") { busCalls.push(args); busOpts.push(opt); if (!o.bus) throw new Error("no session bus"); return o.bus(args); }
+    if (path.posix.basename(String(file)) === "dbus-send") { busFiles.push(file); busCalls.push(args); busOpts.push(opt); if (!o.bus) throw new Error("no session bus"); return o.bus(args); }
     if (file !== REG_TOOL) return nodeRequire("node:child_process").execFileSync(file, args, opt);
     regCalls.push([file, args, opt]);
     if (o.reg instanceof Error) throw o.reg;
@@ -165,7 +165,7 @@ function loadShell(opts) {
   const ipc = (ch, ...args) => { const e = { sender: { id: 1, once: noop }, senderFrame: ENGINE, returnValue: undefined };
     if (on[ch]) on[ch](e, ...args); return e.returnValue; };
   const ask = (ch, ...args) => invoke[ch]({ sender: { id: 1 }, senderFrame: ENGINE }, ...args);
-  return { api, ctl, said, ipc, ask, on, invoke, UD, DOCS, deskFile: path.join(UD, "desk.json"), power, sent, win, switches, removed, regCalls, busCalls, busOpts };
+  return { api, ctl, said, ipc, ask, on, invoke, UD, DOCS, deskFile: path.join(UD, "desk.json"), power, sent, win, switches, removed, regCalls, busCalls, busOpts, busFiles };
 }
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 /* Invented from nothing, as every fixture here is. The refused one names a shelf that is not
@@ -1190,9 +1190,11 @@ try {
         "string:org.freedesktop.Secret.Collection", "string:Locked"])]);
     const OPTS = JSON.stringify({ encoding: "utf8", timeout: 3000, windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
     const off = ["win32", "darwin", "freebsd", "openbsd", "sunos", "aix"].map(p => as(p, {}));
-    check(asked.every(S => JSON.stringify(S.busCalls) === ASKS && S.busOpts.every(o => JSON.stringify(o) === OPTS))
+    check(asked.every(S => JSON.stringify(S.busCalls) === ASKS && S.busOpts.every(o => JSON.stringify(o) === OPTS)
+        && S.busFiles.every(f => f === "/usr/bin/dbus-send"))
       && off.every(S => S.busCalls.length === 0 && store(S).length === 0 && told(S).length === 0),
-      "14h the session bus is asked the three ruled questions, in order, with the ruled options and nothing more, on Linux alone: "
+      "14h the session bus is asked the three ruled questions, in order, with the ruled options and nothing more, by dbus-send at its"
+      + " fixed path /usr/bin/dbus-send and never by a PATH search, on Linux alone: " + JSON.stringify([...new Set(asked.flatMap(S => S.busFiles))]) + ", "
       + JSON.stringify(asked.map(S => S.busCalls.length)) + " call(s) on Linux, " + JSON.stringify(off.map(S => S.busCalls.length)) + " on six other platforms");
   }
 

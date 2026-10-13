@@ -663,8 +663,11 @@ try {
   const strange = reqs.filter(r => MODS.indexOf(r) < 0);
   const cps = [...shellCode.matchAll(/\{([^}]*)\}\s*=\s*require\(\s*"node:child_process"\s*\)/g)];
   const cp = cps[0] || null;
-  /* The proxy reader names its program by a constant, held here to the fixed path. */
+  /* EVERY PROGRAM BY A CONSTANT HELD HERE TO ITS FIXED PATH, never a bare name a PATH search resolves (board 880, 2026-10-13):
+     the registry tool for the proxy, policy and theme reads, and dbus-send on Linux, which Studio already runs at its fixed
+     path. A bare "reg" or "dbus-send" runs whatever a directory earlier in PATH holds under that name. */
   const regTool = /\bconst REG_TOOL="C:\\\\Windows\\\\System32\\\\reg\.exe"/.test(shellCode);
+  const busTool = /\bconst BUS_TOOL="\/usr\/bin\/dbus-send"/.test(shellCode);
   const runs = shellCode.match(/(?<![.\w])(execFileSync|execFile|execSync|exec|spawnSync|spawn|fork)\s*\(\s*("[^"]*"|[^,)]*)/g) || [];
   const programs = runs.map(r => r.replace(/^[^(]*\(\s*/, ""));
   /* ONE HANDLE ON child_process, and the one name it gives is only ever called (board 818): a second
@@ -686,10 +689,10 @@ try {
     && cpNames.every(n => n === "execFileSync" || n === "execFile,execFileSync") && cpNames.filter(n => n !== "execFileSync").length === 1
     && asyncCalls === 2 && asyncMentions === asyncCalls + 1 && toolBinds.length === 2 && caretPlaces && caretToolNames === 3
     && toolNames === toolBinds.length * 3
-    && programs.length > 0 && programs.every(p => p === '"reg"' || (p === "REG_TOOL" && regTool) || p === "tool"
+    && programs.length > 0 && programs.every(p => (p === "REG_TOOL" && regTool) || p === "tool"
       /* Linux alone: three questions to the session bus about the keyring, none about a window, the screen, the
          clipboard or a key (tests/shell-office.mjs 14) */
-      || p === '"dbus-send"')
+      || (p === "BUS_TOOL" && busTool))
     && cpRequires === 2 && runMentions === runCalls + cpRequires && loaders.length === 0,
     "5c the shell loads no module and runs no program it did not have (every one is read against the must-hold before it joins): "
     + (strange.join(", ") || reqs.length + " requires known") + "; " + (cp ? cp[1].trim() : "no child_process") + " runs " + (programs.join(", ") || "nothing")
