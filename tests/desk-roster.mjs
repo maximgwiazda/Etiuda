@@ -21,7 +21,7 @@
  * for (etiuda:catalog-read with a desk, as src/modules/desk-look.js makes it), the read the agent asked for (the
  * Library's Load, src/modules/catalog-offer.js loadCatalogFromFolder), and the bridge that read crosses to the page.
  *
- * Red until the fix lands, which is why tests/engine-selftest.js 31a names this file instead of a chain. The shell runs
+ * Chained in npm test after tests/rollback-floor.mjs. The shell runs
  * from a copy of shell/ in a temp folder. Throwaway keys, teams and catalogs only. No window variable is set. Machine
  * policy is the stand-in in tests/reg-stand.cjs.
  */
