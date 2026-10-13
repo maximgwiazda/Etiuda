@@ -127,9 +127,11 @@ function loadCatalogFromFolder(name,mtime,desk){
       toastRefusal(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(got.name));
       return;
     }
+    // A file whose desk is off the team's roster is asked about even on an empty desk, so its note is read first.
+    const offTeam=!!got.notOnTeam;
     const shown=eOfferCatalogDialog(c,{
       file:got.name, foundHtml:eFoundHtml(got.name,desk?deskFolderOf(desk):eCatalogFolder()),
-      refusedKey:"CatalogNo", force:true, asked:true, direct:true,
+      refusedKey:"CatalogNo", force:true, asked:true, direct:!offTeam, offTeam:offTeam,
       accept:sig=>{ lsSet(E_CATALOG_KEY,sig);
         return activateCatalog(c,desk?{file:"", from:got.name}:{file:got.name, fileAt:+mtime||0}); }
     });
@@ -592,6 +594,7 @@ function eOfferCatalogDialog(c,src){
        it - each half is translated where it is written, and the <code> stays between them. */
     +'<p class="ec-sub">'+src.foundHtml
     +(updating?' '+esc(t("Your own cards and edits are kept.")):'')+'</p>'
+    +(src.offTeam?'<p class="ec-roster">'+esc(t("This file comes from a desk outside the team."))+'</p>':'')
     +trustHtml(trustOfferLine(trustSettled(c),updating))
     // Only a file nobody asked for, which may arrive mid-chat: the promise that the chat can go on.
     +(fresh && !src.asked ? '<p class="ec-holds">'+esc(t("This desk carries on as it is until the update is loaded."))+'</p>' : '')

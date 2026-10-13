@@ -797,6 +797,7 @@ function deskEnvelopeBody(keysText) {
     + (Object.keys(teamPins).length ? ',"teamPins":' + JSON.stringify(teamPins) : "")
     + (Object.keys(teamKeys).length ? ',"teamKeys":' + JSON.stringify(teamKeys) : "")
     + (Object.keys(teamEpochSeen).length ? ',"teamEpochSeen":' + JSON.stringify(teamEpochSeen) : "")
+    + (Object.keys(teamRoster).length ? ',"teamRoster":' + JSON.stringify(teamRoster) : "")
     + (teamOpened.size ? ',"teamOpened":' + JSON.stringify(Array.from(teamOpened)) : "")
     + (teamSeen.size ? ',"teamSeen":' + JSON.stringify(Array.from(teamSeen)) : "")
     + (teamBarred.size ? ',"teamBarred":' + JSON.stringify(Array.from(teamBarred)) : "")
@@ -1460,6 +1461,7 @@ const TEAM_MAX = 1024 * 1024;
 let teamPins = {};                             // team id -> {keyId, public}: the lead's key, once trusted
 let teamKeys = {};                             // team id -> {epoch: the team key sealed by safeStorage, base64}
 let teamEpochSeen = {};                        // team id -> the highest epoch heeded, kept when teamKeys is empty
+let teamRoster = {};                           // team id -> {epoch, desks}: the desk ids of the file heeded at that epoch
 const teamOpened = new Set();                  // catalog ids this desk has opened from an envelope, kept in the desk envelope
 const teamSeen = new Set();                    // teams whose pinned lead key the agent has been shown, kept in the desk envelope
 const teamBarred = new Set();                  // teams whose lead the agent forgot: no first admission but by an answered request
@@ -1476,6 +1478,14 @@ function teamWhole(doc) {
       && crypto.verify(null, signedBytesOf(doc), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(lead.public, "hex")]),
         format: "der", type: "spki" }), Buffer.from(sig.value, "hex"));
   } catch { return false; }
+}
+/* The desk ids a whole team file's roster lists, sorted and once each. */
+function rosterIdsOf(doc) {
+  const roster = Array.isArray(doc && doc.roster) ? doc.roster : [];
+  return deskIdsOnce(roster.map(x => (x && x.desk && typeof x.desk === "object" ? x.desk.id : "")));
+}
+function deskIdsOnce(list) {
+  return Array.from(new Set(list.map(String).filter(id => /^k-[0-9a-f]{16}$/.test(id)))).sort();
 }
 /* Whether a ring document lists this team's lead key for a catalog the team covers, read as v2RingRead reads a ring.
    The file itself is the shell's to read. */
@@ -1812,6 +1822,14 @@ function heedTeam() {
   if (r.team && Number.isInteger(r.epoch) && r.epoch >= 1 && r.epoch > (teamEpochSeen[r.team] || 0)) {
     teamEpochSeen[r.team] = r.epoch;
     changed = true;
+  }
+  // The roster of the epoch accepted: a file at that epoch replaces it, and one below it put back changes nothing.
+  if (r.team && Number.isInteger(r.epoch) && r.epoch >= 1 && r.epoch >= (teamEpochSeen[r.team] || 0)) {
+    const ids = rosterIdsOf(doc), had = teamRoster[r.team];
+    if (!had || had.epoch !== r.epoch || had.desks.join(",") !== ids.join(",")) {
+      teamRoster[r.team] = { epoch: r.epoch, desks: ids };
+      changed = true;
+    }
   }
   if (r.keep) {
     try {
@@ -2684,6 +2702,12 @@ function readDesk() {
       const n = doc.teamEpochSeen[t];
       if (SEALED_TEAM_RE.test(t) && Number.isInteger(n) && n > (teamEpochSeen[t] || 0)) teamEpochSeen[t] = n;
     });
+    // The same for a roster: one kept at a lower epoch is replaced, and one at the same epoch stays.
+    if (doc && table(doc.teamRoster)) Object.keys(doc.teamRoster).forEach(t => {
+      const v = doc.teamRoster[t];
+      if (!SEALED_TEAM_RE.test(t) || !table(v) || !Number.isInteger(v.epoch) || v.epoch < 1 || !Array.isArray(v.desks)) return;
+      if (v.epoch > (teamRoster[t] ? teamRoster[t].epoch : 0)) teamRoster[t] = { epoch: v.epoch, desks: deskIdsOnce(v.desks) };
+    });
     if (doc && Array.isArray(doc.teamOpened)) doc.teamOpened.forEach(c => { if (typeof c === "string" && c) teamOpened.add(c); });
     [["teamSeen", teamSeen], ["teamBarred", teamBarred]].forEach(([k, set]) => {
       if (doc && Array.isArray(doc[k])) doc[k].forEach(t => { if (SEALED_TEAM_RE.test(String(t))) set.add(String(t)); });
@@ -3140,6 +3164,15 @@ function deskFileGenuine(data, folder) {
         format: "der", type: "spki" }), Buffer.from(sig.value, "hex"));
   } catch { return false; }
 }
+/* A COLLEAGUE'S FILE IS HANDED ON UNASKED ONLY WHERE ITS DESK IS ON THE TEAM: on the roster this desk kept for a team whose
+   lead it pins, at the epoch it accepted, never the team file now in the folder. Where it keeps no such roster, every desk
+   is; so is this desk itself. Returns the test for a desk id, read once a listing. */
+function deskRoster() {
+  heedTeam();
+  const kept = Object.keys(teamPins).filter(t => teamRoster[t]).map(t => teamRoster[t].desks);
+  const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "";
+  return id => !kept.length || id === me || kept.some(ids => ids.indexOf(id) >= 0);
+}
 /* What a listing says about a catalog file, or null where it is not one. `deskFolder` is the folder a desk's file
    sits in, and then `deskOk` says whether the file is genuine. */
 function ecFacts(file, deskFolder) {
@@ -3180,7 +3213,8 @@ function deskRows() {
   if (!folderAnswers(root)) return [];
   let ids = [];
   try { ids = fs.readdirSync(path.join(root, "desks")); } catch { return []; }
-  return ids.filter(n => /^k-[0-9a-f]{16}$/.test(n)).sort().reduce((out, n) =>
+  const onTeam = deskRoster();
+  return ids.filter(n => /^k-[0-9a-f]{16}$/.test(n) && onTeam(n)).sort().reduce((out, n) =>
     out.concat(ecFilesIn(path.join(root, "desks", n)).map(f => deskRowOf(f, n)).filter(Boolean)), []);
 }
 /* What a file says it grew from, or null: the three fields and nothing else. */
@@ -3220,7 +3254,8 @@ function keepReadRev(id, rev) {
   readRevs[id] = rev;
   persistDeskEnvelope();
 }
-/* `desk` names a colleague's folder under desks/, and its file is handed only where the listing would list it.
+/* `desk` names a colleague's folder under desks/, and its file is handed where nobody asked only where the listing would
+   list it; asked for, a genuine file whose desk is off the team's roster is handed with `notOnTeam` set.
    A rev below the highest already handed on for that file's id is not handed on unless the agent asked for
    that file; an asked read moves no mark (`look`), which waits for the yes. A file whose id does not begin with
    that folder's desk id sets no mark, so one desk's signed file cannot raise another's. A file of the folder itself
@@ -3255,12 +3290,14 @@ ipcMain.handle("etiuda:catalog-read", (e, name, desk, asked, offer) => {
   try {
     if (!fileAnswers(file) || (who && !folderAnswers(catalogFolder()))) throw new Error("the catalog folder is not answering");
     if (who && !(ecFacts(file, who) || {}).deskOk) throw new Error("not a desk's own file");
+    const offTeam = !!who && !deskRoster()(who);
+    if (offTeam && !asked) throw new Error("its desk is not on the team's roster");
     const text = catalogTextOf(fs.readFileSync(file, "utf8"));
     if (who) {
       if (readRevFloor(text, who, !!asked) === "below" && !asked) return { name: base, text: "" };
     } else if (!asked && (belowCatalogRev(text) || (offer && !unsolicitedLeadText(text)))) return { name: base, text: "" };
     if (asked) handAsked(text, who);
-    return { name: base, text: text };
+    return offTeam ? { name: base, text: text, notOnTeam: "off-roster" } : { name: base, text: text };
   }
   catch (err) {
     console.error("etiuda: " + file + " could not be read - " + err.message);

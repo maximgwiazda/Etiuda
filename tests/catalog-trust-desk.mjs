@@ -330,9 +330,9 @@ async function launch(plan) {
   const readOffer = () => {
     const b = doc.getElementById("eCatalogOffer");
     return b ? { shown: true, trust: texts(b, ".ec-trust"), files: texts(b, ".ec-sub code"),
-      warn: texts(b, ".ec-warn"), signer: texts(b, ".ec-signer"), title: texts(b, "#ecTitle")[0] || "",
+      warn: texts(b, ".ec-warn"), signer: texts(b, ".ec-signer"), roster: texts(b, ".ec-roster"), title: texts(b, "#ecTitle")[0] || "",
       yes: texts(b, "#ecYes")[0] || "", no: texts(b, "#ecNo")[0] || "" }
-      : { shown: false, trust: [], files: [], warn: [], signer: [], yes: "", no: "" };
+      : { shown: false, trust: [], files: [], warn: [], signer: [], roster: [], yes: "", no: "" };
   };
   const readLibrary = () => {
     const box = doc.getElementById("mgCatList");
@@ -371,6 +371,8 @@ async function launch(plan) {
     // The file picker's reading half, over a file anywhere: importCatalogText is where both import routes end.
     import: file => { CF.importCatalogText(fs.readFileSync(path.join(LAB, file), "utf8"), path.basename(file)); },
     load: name => { const b = doc.querySelector("button[data-ec-load=\"" + name + "\"]"); if (!b) throw new Error("no Load for " + name); b.onclick(); },
+    // A colleague's file asked for by name and desk ("name,desk"), as Work from it asks once its row has been drawn.
+    deskload: arg => { const [n, id] = String(arg).split(","); OFFER.loadCatalogFromFolder(n, 0, id); },
     /* THE TOP BAR'S NAME is catalogFileName(), which paintCatNow writes into the bar; the stub page has no bar to draw in. */
     bar: () => { obs.bars.push(CF.catalogFileName()); },
     /* THE SHELL'S SEND OF THE LISTING, as it reaches the page: the shell's own answer to the listing, handed to the listener the preload registered. */
@@ -551,7 +553,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 90;
+  const EXPECTED = 95;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -1372,6 +1374,69 @@ async function parent() {
       "76k a Load the agent declines leaves the shell's marks where they were, and the same Load taken raises that catalog's to its rev: "
       + JSON.stringify({ boot: k0, offered: declined.shown, declined: k1, taken: k2, held: yes76k.heldId,
         errors: [boot76k, no76k, yes76k].flatMap(o => o.errors || []).slice(0, 2) }));
+
+    /* 77: A COLLEAGUE'S FILE WHOSE DESK IS OFF THE TEAM'S ROSTER (board 889). The desk pins a team's lead and keeps the roster
+       it accepted, written into desk.json as the shell writes them, with no team file in the folder. Asked for by name, as
+       Work from it asks once a row was drawn before the roster changed, the file is offered with the note, and on an empty
+       desk the offer stands where it would have loaded at once. In the Library only the roster's desks are drawn, and this
+       desk's own file still says its edits are in the folder. */
+    const lead77 = crypto.generateKeyPairSync("ed25519");
+    const TEAM77 = "t-" + "7a".repeat(8), LEAD77 = { keyId: "roster-lead", public: pubHex(lead77.publicKey) };
+    const onRoster = (lab, ids, branch, unpinned) => {
+      const at = path.join(lab, "userdata", "desk.json"), env = JSON.parse(fs.readFileSync(at, "utf8"));
+      env.teamPins = unpinned ? {} : { [TEAM77]: LEAD77 };
+      env.teamEpochSeen = { [TEAM77]: 1 };
+      env.teamRoster = { [TEAM77]: { epoch: 1, desks: ids } };
+      if (branch) env.branch = { sign: { pub: branch.raw.toString("hex"), priv: "sealed" }, box: { pub: "ef".repeat(32), priv: "sealed" } };
+      fs.writeFileSync(at, JSON.stringify(env), "utf8");
+    };
+    const alone77 = id => Object.assign(JSON.parse(JSON.stringify(wanted)), { id: id, name: "Kiosk " + id });
+    const lab77 = scenario([]);
+    const bo77 = deskOf(alone77("bo-kiosk"), "Bo", null, lab77), bo77File = "lamp-" + sha8("bo-kiosk") + ".ec";
+    onRoster(lab77, ["k-" + "0".repeat(16)]);
+    const off77 = run(lab77, ["deskload:" + bo77File + "," + bo77.id, "said", "settle"]);
+    const o77 = off77.offers[0] || {};
+    check(o77.shown === true && same(o77.roster, ["This file comes from a desk outside the team."]) && o77.yes === "Load catalog"
+      && !off77.reloaded && off77.heldId === "" && !(off77.errors || []).length,
+      "77a on an empty desk, a file asked for whose desk is off the team's roster is offered with the note rather than loaded at once: "
+      + JSON.stringify({ shown: o77.shown, roster: o77.roster, yes: o77.yes, loaded: off77.reloaded, held: off77.heldId, errors: (off77.errors || []).slice(0, 2) }));
+    const lab77A = scenario([]), bo77A = deskOf(alone77("bo-kiosk"), "Bo", null, lab77A);
+    onRoster(lab77A, [bo77A.id]);
+    const on77 = run(lab77A, ["deskload:" + bo77File + "," + bo77A.id, "said", "settle"]);
+    check(on77.reloaded === true && on77.heldId === bo77A.doc.id && !(on77.offers[0] || {}).shown && !(on77.errors || []).length,
+      "77A THE CONTROL: the same file, its desk on the roster, loads at once on the empty desk as before, with no offer and no note: "
+      + JSON.stringify({ loaded: on77.reloaded, held: on77.heldId, offer: (on77.offers[0] || {}).shown, errors: (on77.errors || []).slice(0, 2) }));
+    const lab77b = accepted();
+    const pin77 = JSON.parse(JSON.parse(fs.readFileSync(path.join(lab77b, "userdata", "desk.json"), "utf8")).keys.eCatalog).pin;
+    const grown77 = body => { const d = JSON.parse(JSON.stringify(wanted)); d.grew = { id: ID, rev: 1, sha: pin77 }; d.cards[0].body.en = body; return d; };
+    const own77 = deskOf(grown77("Hello there."), "Max", crypto.generateKeyPairSync("ed25519"), lab77b);
+    const ola77 = deskOf(grown77("Good day to you."), "Ola", null, lab77b), cy77 = deskOf(grown77("Good day, from Cy."), "Cy", null, lab77b);
+    onRoster(lab77b, [ola77.id], own77);
+    const r77 = run(lab77b, ["desk", "rows"], true), rows77 = r77.rows[0] || [];
+    check(same(rows77.map(r => r.name), ["lamp.ec", "Ola's desk"]) && same((rows77[0] || {}).mine, ["Your edits are in the folder, for the team to see"])
+      && rows77.every(r => r.fp !== cy77.four) && !(r77.errors || []).length,
+      "77b the Library draws the roster's desk and not the one off it, and this desk's own file, though the roster does not list it, still says its edits are in the folder: "
+      + JSON.stringify({ rows: rows77.map(r => [r.name, r.fp, r.mine]), errors: (r77.errors || []).slice(0, 2) }));
+    /* The lead adds a desk at the epoch already accepted: the team file says so, under the pinned lead, and the roster kept
+       at that epoch follows it. The file lands while the desk runs, after its boot has read the folder, so the listing
+       itself heeds it. It lists desks only, with no key for anybody, so nothing is sealed or opened. */
+    const team77 = { format: 1, kind: "etiuda-team", id: TEAM77, catalogs: [ID], lead: LEAD77, sealed: false, exportsSealed: false, epoch: 1,
+      roster: [ola77, cy77].map(d => ({ desk: { id: d.id, key: d.raw.toString("hex"), box: "ef".repeat(32) } })) };
+    team77.sig = { alg: "Ed25519", keyId: LEAD77.keyId };
+    team77.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(team77)), lead77.privateKey).toString("hex");
+    const r77c = run(lab77b, ["desk", "drop", "rows"], true, { drop: { rel: "etiuda-team.json", text: JSON.stringify(team77) } });
+    const rows77c = r77c.rows[0] || [];
+    check(same(rows77c.map(r => r.name).sort(), ["Cy's desk", "Ola's desk", "lamp.ec"]) && !(r77c.errors || []).length,
+      "77c a desk the lead adds to the roster at the epoch already accepted is drawn at the next listing once the team file says so: "
+      + JSON.stringify({ rows: rows77c.map(r => r.name), errors: (r77c.errors || []).slice(0, 2) }));
+    fs.unlinkSync(path.join(lab77b, "catalogs", "etiuda-team.json"));
+    const lab77d = accepted();
+    const ola77d = deskOf(grown77("Good day to you."), "Ola", null, lab77d), cy77d = deskOf(grown77("Good day, from Cy."), "Cy", null, lab77d);
+    onRoster(lab77d, [ola77d.id], null, true);
+    const r77d = run(lab77d, ["desk", "rows"], true), rows77d = r77d.rows[0] || [];
+    check(same(rows77d.map(r => r.name).sort(), ["Cy's desk", "Ola's desk", "lamp.ec"]) && cy77d.id !== ola77d.id && !(r77d.errors || []).length,
+      "77d a roster kept for a team whose lead this desk no longer pins, as after the lead is forgotten, draws every desk as a desk with no team does: "
+      + JSON.stringify({ rows: rows77d.map(r => r.name), errors: (r77d.errors || []).slice(0, 2) }));
   } catch (e) {
     failed++;
     console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));
