@@ -198,9 +198,9 @@ const SAMPLE_EDITIONS = [
 ];
 /* NEVER COUNTED AHEAD OF ANOTHER CATALOG, the second half of the ruling above: the sample goes to
    the end of every list of candidates, so a folder holding one real catalog opens that one and a
-   folder holding nothing else opens the sample. The Library's list is ordered through here too,
-   so the top row is the file a restart would open. A file somebody double-clicked is not on this
-   list at all - asking for one outranks every rule about which is newest. */
+   folder holding nothing else opens the sample. The Library's list is ordered through here too.
+   Which file a restart opens is readCatalog's: for one catalog, the highest rev the ring verifies.
+   A file somebody double-clicked is not on this list at all, and that ask is read ahead of the rest. */
 function sampleLast(files) {
   const rest = [], last = [];
   files.forEach(f => (isTheSample(f) ? last : rest).push(f));
@@ -209,7 +209,8 @@ function sampleLast(files) {
 
 /* Newest first, and the name breaks a tie so two files saved in the same millisecond do not
    swap places between launches. A file that cannot be stat'd is one that has just been renamed
-   away underneath the listing, and is simply not a candidate. */
+   away underneath the listing, and is simply not a candidate. This order is the list. It does not
+   choose between editions of one catalog: readCatalog keeps the highest rev the ring verifies. */
 function ecFilesIn(dir) {
   if (!folderAnswers(dir)) return [];
   let names = [];
@@ -325,28 +326,107 @@ function refusedByEngine(file) {
   if (!engineRefused.has(file)) return false;
   try { return Math.round(fs.statSync(file).mtimeMs) === engineRefused.get(file); } catch { return false; }
 }
+/* The catalog inside a sealed file, or the text parsed as it stands, without recording the open.
+   The walk below peeks every candidate, and only the one it keeps is recorded. */
+function catalogPeek(text) {
+  const got = catalogPayload(text);
+  if (!got.data || typeof got.data !== "object" || got.data.kind !== SEALED_KIND) return got;
+  const inner = teamOpen(got.data);
+  if (inner === null) throw new Error("sealed for team " + String(got.data.team) + ", which this desk holds no key for");
+  const opened = catalogPayload(inner);
+  if (opened.data && opened.data.kind === SEALED_KIND) throw new Error("an envelope sealed inside another");
+  return opened;
+}
+/* A signature the ring verifies for this catalog's own id. Unsigned, and a key the ring does not list, are not that. */
+function catalogSigValid(data) {
+  const sig = data && data.sig;
+  if (!data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-f]{128}$/.test(String(sig.value || ""))) return false;
+  const ring = readRing();
+  const keys = ring && Array.isArray(ring.keys) ? ring.keys : [];
+  const id = String(data.id || ""), kid = String(sig.keyId || "");
+  let pub = "";
+  for (let i = 0; i < keys.length && !pub; i++) {
+    const e = keys[i];
+    if (e && e.alg === "Ed25519" && String(e.catalog) === id && String(e.keyId) === kid
+      && /^[0-9a-f]{64}$/.test(String(e.public || ""))) pub = String(e.public);
+  }
+  if (!pub) return false;
+  try {
+    const key = crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(pub, "hex")]), format: "der", type: "spki" });
+    return crypto.verify(null, signedBytesOf(data), key, Buffer.from(String(sig.value), "hex"));
+  } catch { return false; }
+}
+function editionRev(data) {
+  const n = data && +data.rev;
+  return Number.isFinite(n) ? n : -1;
+}
+/* The file this launch was opened with, else the highest rev of each catalog id that the ring verifies.
+   A newer file time does not choose between those, and a file the ring does not verify does not take one's place.
+   An id with no verified signature keeps every file of it, in the order ecFilesIn gave. */
+function pickEdition(found) {
+  if (openedWith) {
+    const asked = found.filter(item => item.file === openedWith)[0];
+    if (asked) return asked;
+  }
+  const best = new Map();
+  found.forEach((item, i) => {
+    if (!catalogSigValid(item.data)) return;
+    const id = String(item.data.id || "");
+    if (!id) return;
+    const had = best.get(id);
+    if (had === undefined || editionRev(item.data) > editionRev(found[had].data)) best.set(id, i);
+  });
+  const drop = new Set();
+  found.forEach((item, i) => {
+    const id = String(item.data && item.data.id || "");
+    if (best.has(id) && best.get(id) !== i) drop.add(i);
+  });
+  return found.filter((item, i) => !drop.has(i))[0] || null;
+}
 function readCatalog() {
   heedTeam();
+  const found = [];
+  let seenOk = false;
   for (const file of catalogPlaces()) {
     if (refusedByEngine(file)) continue;
     let text;
     try { text = fs.readFileSync(file, "utf8"); } catch { refuseOpened(file, "read"); continue; }
     try {
-      const { json, data } = catalogRead(text);
-      if (!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
-      const cards = Array.isArray(data.cards) ? data.cards.length : 0;
-      console.log("etiuda: catalog read from " + file + ", " + cards + " cards");
-      catalogFrom = file;
-      historySoon(file, text);
-      return json;
+      const peeked = catalogPeek(text);
+      if (!isV2(peeked.data)) throw new Error("not an Etiuda catalog (format 2)");
+      found.push({ file: file, text: text, data: peeked.data });
+      seenOk = true;
     } catch (e) {
+      if (seenOk) continue;
       console.error("etiuda: " + file + " did not parse as a catalog - " + e.message);
       refuseOpened(file, "parse");
     }
   }
-  console.log("etiuda: no catalog found, so Etiuda starts as a clean slate");
-  catalogFrom = "";
-  return null;
+  const chosen = pickEdition(found);
+  if (!chosen) {
+    console.log("etiuda: no catalog found, so Etiuda starts as a clean slate");
+    catalogFrom = "";
+    return null;
+  }
+  let opened;
+  try { opened = catalogRead(chosen.text); }
+  catch (e) {
+    console.error("etiuda: " + chosen.file + " did not parse as a catalog - " + e.message);
+    refuseOpened(chosen.file, "parse");
+    catalogFrom = "";
+    return null;
+  }
+  if (!isV2(opened.data)) {
+    console.error("etiuda: " + chosen.file + " did not parse as a catalog - not an Etiuda catalog (format 2)");
+    refuseOpened(chosen.file, "parse");
+    catalogFrom = "";
+    return null;
+  }
+  catalogFrom = chosen.file;
+  historySoon(chosen.file, chosen.text);
+  const cards = Array.isArray(opened.data.cards) ? opened.data.cards.length : 0;
+  console.log("etiuda: catalog read from " + chosen.file + ", " + cards + " cards");
+  return opened.json;
 }
 
 /* Spec 11.5's watch, so an edit beside the app reaches a running Etiuda without a restart. The
@@ -492,7 +572,10 @@ function catalogChanged(win) {
   sendListing(win, false);
   sendJoin(win);
   if (now === catalogJson) return;
+  /* Below a rev already handed to the page: not offered, and it does not replace the one in memory. */
+  if (belowCatalogRev(now)) return;
   catalogJson = now;
+  keepCatalogRev(now);
   if (!now || !win || win.isDestroyed()) return;
   console.log("etiuda: the catalog file changed, and the window has been offered it");
   win.webContents.send("etiuda:catalog-file", now, path.basename(catalogFrom), folderShown(catalogFrom),
@@ -516,8 +599,13 @@ function offerFile(win, file) {
   try {
     const { json, data } = catalogRead(text);
     if (!isV2(data)) throw new Error("not an Etiuda catalog (format 2)");
+    if (belowCatalogRev(json)) {
+      console.log("etiuda: " + file + " is an earlier edition than one this desk has already read, so it is not offered");
+      return;
+    }
     openedWith = file;
     catalogJson = json;
+    keepCatalogRev(json);
     catalogFrom = file;
     historySoon(file, text);
     const cards = Array.isArray(data.cards) ? data.cards.length : 0;
@@ -538,6 +626,8 @@ let catalogJson;
 ipcMain.on("etiuda:catalog", (e) => {
   if (!fromEngine(e)) { e.returnValue = null; return; }
   if (catalogJson === undefined) catalogJson = readCatalog();
+  if (belowCatalogRev(catalogJson)) { e.returnValue = null; return; }
+  keepCatalogRev(catalogJson);
   e.returnValue = catalogJson;
 });
 /* THE ENGINE REFUSED THE FILE IT WAS HANDED, and names it. Answered with the next file this
@@ -550,7 +640,10 @@ ipcMain.on("etiuda:catalog-refused", (e, name) => {
   console.error("etiuda: the engine refused " + catalogFrom + ", so it is passed over until it is saved again");
   engineRefused.set(catalogFrom, catalogMtime());
   if (openedWith === catalogFrom) openedWith = "";
-  catalogJson = readCatalog();
+  const next = readCatalog();
+  if (belowCatalogRev(next)) { e.returnValue = null; return; }
+  catalogJson = next;
+  keepCatalogRev(catalogJson);
   e.returnValue = catalogJson ? { json: catalogJson, file: path.basename(catalogFrom), in: folderShown(catalogFrom),
                                   builtIn: isBuiltIn(catalogFrom), mtime: catalogMtime() } : null;
 });
@@ -646,6 +739,7 @@ function deskEnvelopeBody(keysText) {
     + (deskBranchOld.length ? ',"branchOld":' + JSON.stringify(deskBranchOld) : "")
     + (Object.keys(branchRevs).length ? ',"branchRevs":' + JSON.stringify(branchRevs) : "")
     + (Object.keys(readRevs).length ? ',"readRevs":' + JSON.stringify(readRevs) : "")
+    + (Object.keys(catalogRevs).length ? ',"catalogRevs":' + JSON.stringify(catalogRevs) : "")
     + (Object.keys(teamPins).length ? ',"teamPins":' + JSON.stringify(teamPins) : "")
     + (Object.keys(teamKeys).length ? ',"teamKeys":' + JSON.stringify(teamKeys) : "")
     + (Object.keys(teamEpochSeen).length ? ',"teamEpochSeen":' + JSON.stringify(teamEpochSeen) : "")
@@ -989,6 +1083,29 @@ let deskBranch = null;                         // {sign:{pub,priv}, box:{pub,pri
 let deskBranchOld = [];                        // pairs the envelope could never open again, kept aside and never deleted
 let branchRevs = {};                           // desk file id -> the last edition written, kept when the file is removed
 let readRevs = {};                             // desk file id -> the highest rev this desk has handed on
+let catalogRevs = {};                          // catalog id -> the highest rev handed to the page, kept when teamKeys is empty
+const CATALOG_ID_RE = /^[a-z0-9][a-z0-9-]{2,63}$/;
+function catalogMarkOf(json) {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  let doc = null;
+  try { doc = JSON.parse(String(json || "")); } catch { return null; }
+  if (!doc || typeof doc !== "object" || doc.kind !== "etiuda-catalog") return null;
+  const id = typeof doc.id === "string" ? doc.id : "";
+  const rev = +doc.rev;
+  if (!CATALOG_ID_RE.test(id) || !Number.isInteger(rev) || rev < 0) return null;
+  return { id: id, rev: rev };
+}
+/* A rev already held is not replaced by a lower one. Equal is not a raise. */
+function keepCatalogRev(json) {
+  const x = catalogMarkOf(json);
+  if (!x || !(x.rev > (catalogRevs[x.id] || 0))) return;
+  catalogRevs[x.id] = x.rev;
+  persistDeskEnvelope();
+}
+function belowCatalogRev(json) {
+  const x = catalogMarkOf(json);
+  return !!(x && x.rev < (catalogRevs[x.id] || 0));
+}
 const heldBranch = new Map();                  // stem -> the text a folder that did not answer is still owed
 function branchPairOk(b) {
   const half = h => !!h && typeof h === "object" && /^[0-9a-f]{64}$/.test(String(h.pub)) && typeof h.priv === "string" && h.priv !== "";
@@ -2462,6 +2579,10 @@ function readDesk() {
       });
     }
     const table = v => !!v && typeof v === "object" && !Array.isArray(v);
+    if (doc && table(doc.catalogRevs)) Object.keys(doc.catalogRevs).forEach(id => {
+      const n = doc.catalogRevs[id];
+      if (CATALOG_ID_RE.test(id) && Number.isInteger(n) && n > (catalogRevs[id] || 0)) catalogRevs[id] = n;
+    });
     if (doc && table(doc.teamPins)) Object.keys(doc.teamPins).forEach(t => {
       const p = doc.teamPins[t];
       if (SEALED_TEAM_RE.test(t) && table(p) && typeof p.keyId === "string" && /^[0-9a-f]{64}$/.test(String(p.public)))
@@ -3007,7 +3128,8 @@ function sendListing(win, force) {
   win.webContents.send("etiuda:catalog-listing", rows);
 }
 /* `desk` names a colleague's folder under desks/, and its file is handed only where the listing would list it.
-   A rev below the highest already handed on for that file's id is not handed on. */
+   A rev below the highest already handed on for that file's id is not handed on. A file of the folder itself,
+   below a rev already handed to the page, is not handed on either, and this read does not move that mark. */
 function readRevFloor(text) {
   let doc = null;
   try { doc = JSON.parse(String(text || "")); } catch { return ""; }
@@ -3030,7 +3152,9 @@ ipcMain.handle("etiuda:catalog-read", (e, name, desk) => {
     if (!fileAnswers(file) || (who && !folderAnswers(catalogFolder()))) throw new Error("the catalog folder is not answering");
     if (who && !(ecFacts(file, who) || {}).deskOk) throw new Error("not a desk's own file");
     const text = catalogTextOf(fs.readFileSync(file, "utf8"));
-    if (who && readRevFloor(text) === "below") return { name: base, text: "" };
+    if (who) {
+      if (readRevFloor(text) === "below") return { name: base, text: "" };
+    } else if (belowCatalogRev(text)) return { name: base, text: "" };
     return { name: base, text: text };
   }
   catch (err) {

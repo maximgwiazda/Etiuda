@@ -1,6 +1,7 @@
 /* A floor against going backwards, driven in bare node. Red today where the floor is missing,
  * green once a lower edition, an older team file, or a restored desk file is refused, with the
- * controls that a newer edition still lands. Throwaway keys and catalogs only.
+ * controls that a newer edition still lands. A fresh folder opens the highest rev the ring
+ * verifies, and each mark kept in the desk file is never lowered. Throwaway keys and catalogs only.
  *
  *     node tests/rollback-floor.mjs        exit code is the number of failed checks, capped at 63
  *
@@ -21,7 +22,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 17;
+const EXPECTED = 26;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -34,7 +35,7 @@ const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-rollback-floor-"));
 const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
-const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged"];
+const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "readCatalog", "catalogChanged", "offerFile"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -61,10 +62,11 @@ function loadDesk(ud) {
     n => (n === "electron" ? electron : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
+  const sync = (ch, ...args) => { const ev = eventFor(); if (on[ch]) on[ch](ev, ...args); return ev.returnValue; };
   const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
   const sent = [];
   const win = { isDestroyed: () => false, webContents: { send: (...a) => sent.push(a) } };
-  return { api, ask, said, ud, envelope, sent, win };
+  return { api, ask, said, ud, envelope, sent, win, sync };
 }
 function newDesk(name, folder) {
   const ud = path.join(LAB, name);
@@ -366,6 +368,188 @@ try {
       + ", held rev " + heldNow.rev + ", reads " + (lowCalls.join(",") || "-"));
     check(calls.indexOf("high.ec") >= 0,
       "888o a listing row above the held rev is still read: reads " + (calls.join(",") || "-"));
+  }
+
+  /* ---- a fresh folder: the highest rev the ring verifies, then the offer, then a second process ---- */
+  const staged = (dir) => {
+    const base = Date.UTC(2026, 0, 15);
+    put(dir, "older.ec", CAT2);
+    put(dir, "newer.ec", CAT1);
+    const loud = catalog(9, "2026-05-01");
+    delete loud.sig;
+    put(dir, "loud.ec", textOf(loud));
+    touch(path.join(dir, "older.ec"), base);
+    touch(path.join(dir, "newer.ec"), base + 60000);
+    touch(path.join(dir, "loud.ec"), base + 120000);
+  };
+  const fileSends = (D) => D.sent.filter(a => a[0] === "etiuda:catalog-file");
+  const markOf = (D) => (D.envelope().catalogRevs || {})["quay-board"];
+  const emptyKeys = (ud) => {
+    const saved = JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
+    saved.teamKeys = { "t-aabbccddeeff0011": { "1": "bm90LWEga2V5" } };
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(saved));
+    delete saved.teamKeys;
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(saved));
+  };
+  {
+    const SHARE = folder("fresh");
+    put(SHARE, "etiuda-ring.json", RING);
+    const D = newDesk("fresh", SHARE);
+    staged(SHARE);
+    const opened = facts(D.api.readCatalog() || "");
+    const noted = "catalogRevs" in D.envelope();
+    check(opened.rev === 2 && !noted,
+      "888r a fresh desk opens the highest rev the ring verifies, not the newest file, and does not note it yet: rev "
+      + opened.rev + (noted ? ", noted" : ""));
+  }
+  {
+    const SHARE = folder("offer");
+    put(SHARE, "etiuda-ring.json", RING);
+    const D = newDesk("offer", SHARE);
+    staged(SHARE);
+    D.api.catalogChanged(D.win);
+    const first = fileSends(D).map(a => facts(a[1]).rev);
+    fs.unlinkSync(path.join(SHARE, "older.ec"));
+    fs.unlinkSync(path.join(SHARE, "loud.ec"));
+    touch(path.join(SHARE, "newer.ec"), Date.UTC(2026, 5, 1));
+    D.sent.length = 0;
+    D.api.catalogChanged(D.win);
+    const held = facts(D.sync("etiuda:catalog") || "");
+    const sentAfter = fileSends(D).length;
+    check(first.length === 1 && first[0] === 2 && sentAfter === 0 && markOf(D) === 2 && held.rev === 2,
+      "888s once that rev was handed on, a later file of an earlier rev is not offered and does not replace it: first "
+      + (first.join(",") || "-") + ", then sends " + sentAfter + ", held rev " + held.rev + ", mark " + markOf(D));
+    put(SHARE, "third.ec", CAT3);
+    touch(path.join(SHARE, "third.ec"), Date.UTC(2026, 6, 1));
+    D.sent.length = 0;
+    D.api.catalogChanged(D.win);
+    const higher = fileSends(D).map(a => facts(a[1]).rev);
+    check(higher.length === 1 && higher[0] === 3 && markOf(D) === 3,
+      "888y a higher rev is still offered, and the mark rises to it: sent " + (higher.join(",") || "-") + ", mark " + markOf(D));
+  }
+  {
+    const SHARE = folder("second");
+    put(SHARE, "etiuda-ring.json", RING);
+    const D = newDesk("second", SHARE);
+    staged(SHARE);
+    const first = facts(D.sync("etiuda:catalog") || "");
+    fs.unlinkSync(path.join(SHARE, "older.ec"));
+    touch(path.join(SHARE, "newer.ec"), Date.UTC(2026, 5, 2));
+    emptyKeys(D.ud);
+    const D2 = loadDesk(D.ud);
+    const again = D2.sync("etiuda:catalog");
+    const keysGone = !("teamKeys" in D2.envelope());
+    check(first.rev === 2 && markOf(D2) === 2 && again == null && keysGone,
+      "888t a second process, with teamKeys emptied, is not handed a lower rev than the one already read: first "
+      + first.rev + ", then " + (again == null ? "nothing" : "rev " + facts(again).rev) + ", mark " + markOf(D2)
+      + (keysGone ? "" : ", keys kept"));
+  }
+  {
+    const SHARE = folder("named");
+    put(SHARE, "etiuda-ring.json", RING);
+    const D = newDesk("named", SHARE);
+    staged(SHARE);
+    const booted = facts(D.sync("etiuda:catalog") || "");
+    const got = await D.ask("etiuda:catalog-read", "newer.ec");
+    const onDisk = facts(fs.readFileSync(path.join(SHARE, "newer.ec"), "utf8"));
+    check(booted.rev === 2 && onDisk.rev === 1 && !!got && got.text === "" && markOf(D) === 2,
+      "888u a named read of an earlier edition is not handed on once a higher rev was, and the mark stays: boot "
+      + booted.rev + ", file rev " + onDisk.rev + ", handed "
+      + ((got && got.text) ? "rev " + facts(got.text).rev : "nothing") + ", mark " + markOf(D));
+  }
+  {
+    const SHARE = folder("asked");
+    put(SHARE, "etiuda-ring.json", RING);
+    const D = newDesk("asked", SHARE);
+    staged(SHARE);
+    const booted = facts(D.sync("etiuda:catalog") || "");
+    D.sent.length = 0;
+    D.api.offerFile(D.win, path.join(SHARE, "newer.ec"));
+    const sentAfter = fileSends(D).length;
+    check(booted.rev === 2 && sentAfter === 0 && markOf(D) === 2,
+      "888x a file asked for by name, of an earlier rev, is not offered: boot " + booted.rev
+      + ", sends " + sentAfter + ", mark " + markOf(D));
+  }
+  {
+    const SHARE = folder("refused");
+    put(SHARE, "etiuda-ring.json", RING);
+    const D = newDesk("refused", SHARE);
+    staged(SHARE);
+    const booted = facts(D.sync("etiuda:catalog") || "");
+    fs.unlinkSync(path.join(SHARE, "older.ec"));
+    touch(path.join(SHARE, "newer.ec"), Date.UTC(2026, 5, 3));
+    const next = D.sync("etiuda:catalog-refused", "older.ec");
+    const nextRev = next && next.json ? facts(next.json).rev : null;
+    check(booted.rev === 2 && next == null && markOf(D) === 2,
+      "888z refusing the file just handed does not adopt an earlier rev in its place: boot "
+      + booted.rev + ", next " + (next == null ? "nothing" : "rev " + nextRev) + ", mark " + markOf(D));
+  }
+
+  /* ---- the epoch mark and the desk-file mark: a write never lowers either, and emptying teamKeys does not ---- */
+  {
+    const SHARE = folder("epoch-mark");
+    put(SHARE, "etiuda-ring.json", RING);
+    const D = newDesk("epoch-mark", SHARE);
+    const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    const seen = (desk) => (desk.envelope().teamEpochSeen || {})[TEAM];
+    put(SHARE, "etiuda-team.json", teamFile(TEAM, 4, []));
+    D.api.readCatalog();
+    const high = seen(D);
+    put(SHARE, "etiuda-team.json", teamFile(TEAM, 1, []));
+    touch(path.join(SHARE, "etiuda-team.json"), Date.now() + 5000);
+    D.api.readCatalog();
+    const heldEpoch = seen(D);
+    emptyKeys(D.ud);
+    const D2 = loadDesk(D.ud);
+    put(SHARE, "etiuda-team.json", teamFile(TEAM, 1, []));
+    touch(path.join(SHARE, "etiuda-team.json"), Date.now() + 9000);
+    D2.api.readCatalog();
+    const keysGone = !("teamKeys" in D2.envelope());
+    check(high === 4 && heldEpoch === 4 && seen(D2) === 4 && keysGone,
+      "888v the epoch mark is never lowered, and it survives a restart with teamKeys emptied: "
+      + high + ", then " + heldEpoch + ", then " + seen(D2) + (keysGone ? "" : ", keys kept"));
+  }
+  {
+    const SHARE = folder("revs-mark");
+    put(SHARE, "etiuda-ring.json", RING);
+    const A = newDesk("revs-owner", SHARE);
+    const B = newDesk("revs-reader", SHARE);
+    const me = await A.ask("etiuda:branch-identity", true);
+    const other = await B.ask("etiuda:branch-identity", true);
+    const TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+    const K1 = crypto.randomBytes(32);
+    put(SHARE, "etiuda-team.json", teamFile(TEAM, 1, [entry(A, me, K1, TEAM, 1), entry(A, other, K1, TEAM, 1)]));
+    put(SHARE, "board.ec", JSON.stringify(A.api.sealCatalog(K1, TEAM, 1, CAT2)));
+    const g = grown(A, me, await readText(A, "board.ec"));
+    g.doc.name = "first";
+    await A.ask("etiuda:branch-write", g.stem, JSON.stringify(g.doc));
+    const file = path.join(SHARE, "desks", me.id, g.stem + ".ec");
+    const firstBytes = fs.readFileSync(file);
+    g.doc.name = "second";
+    await A.ask("etiuda:branch-write", g.stem, JSON.stringify(g.doc));
+    const handed = await B.ask("etiuda:catalog-read", g.stem + ".ec", me.id);
+    const before = facts((handed && handed.text) || "");
+    let id = "";
+    try { id = JSON.parse(handed.text).id; } catch { id = ""; }
+    const marked = (B.envelope().readRevs || {})[id];
+    fs.writeFileSync(file, firstBytes);
+    touch(file, Date.now());
+    const after = facts(await readText(B, g.stem + ".ec", me.id));
+    const markedAfter = (B.envelope().readRevs || {})[id];
+    emptyKeys(B.ud);
+    const emptied = JSON.parse(fs.readFileSync(path.join(B.ud, "desk.json"), "utf8"));
+    const B2 = loadDesk(B.ud);
+    const loaded = B2.envelope();
+    const again = facts(await readText(B2, g.stem + ".ec", me.id));
+    const marked2 = (B2.envelope().readRevs || {})[id];
+    const stayed = !!(emptied.readRevs && emptied.readRevs[id] === 2 && !("teamKeys" in emptied)
+      && loaded.readRevs && loaded.readRevs[id] === 2 && !("teamKeys" in loaded));
+    check(before.rev === 2 && marked === 2 && (after.rev == null || after.rev >= 2) && markedAfter === 2
+      && stayed && (again.rev == null || again.rev >= 2) && marked2 === 2,
+      "888w a desk file's rev mark is never lowered, and it survives a restart with teamKeys emptied: read "
+      + before.rev + ", mark " + marked + ", after " + after.rev + " / " + markedAfter
+      + ", emptied " + (stayed ? "kept the mark" : "lost the mark")
+      + ", restarted " + again.rev + " / " + marked2);
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
