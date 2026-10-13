@@ -72,6 +72,7 @@ const errs = [];
 
 async function bootAndDismiss(pg, url) {
   await pg.goto(url, { waitUntil: "load", timeout: 90000 });
+  await require("./launch-wait.js").waitLaunchGone(pg, { who: "tests/glass-rim.js bootAndDismiss" });
   const press = (rx, sc) => pg.evaluate((r, s) => {
     const el = [...document.querySelectorAll(s + " button")].filter(x => x.offsetWidth > 0)
       .find(x => new RegExp(r, "i").test(x.textContent));

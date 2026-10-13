@@ -225,6 +225,7 @@ async function startShell(appDir, ud) {
   if (!b) throw new Error("Electron did not answer on the debugging port within 20 s");
   const p = (await b.pages())[0];
   lowered("the window", child.pid);
+  await require("./launch-wait.js").waitLaunchGone(p, { who: "tests/desk.js startShell", ready: "typeof window.E_VERSION === \"string\"" });
   await sleep(3000);
   /* Asked once, of this file's own first launch, and asked of the machine rather than of the
      variable: what the environment carried is not evidence that a window stayed off the screen.

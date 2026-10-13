@@ -291,6 +291,7 @@ const BOOT_SKIP = /skip|not now|close|pomi/;
 async function bootAndDismiss(pg, url, label) {
   const late = [];
   await pg.goto(url, { waitUntil: "load", timeout: 90000 });
+  await require("./launch-wait.js").waitLaunchGone(pg, { who: "tests/smoke.js bootAndDismiss " + label });
   /* The page is up when it has drawn something: the cards, the offer to load the sibling
      catalog, or a first run's tour, which the offer waits behind. Whichever comes first ends the
      wait. */
@@ -3200,6 +3201,7 @@ const t0 = Date.now();
     q.on("requestfailed", r => missing.push(r.url().split("/").pop()));
     step("loading the public copy");
     await q.goto("file:///" + path.join(pub, "etiuda.html").replace(/\\/g, "/"), { waitUntil: "load", timeout: 90000 });
+    await require("./launch-wait.js").waitLaunchGone(q, { who: "tests/smoke.js public first run" });
     await sleep(2400);
     const offer = await q.evaluate(() => ({ cards: document.querySelectorAll(".card").length, real: typeof E_CATALOG !== "undefined",
       sampleRead: typeof window.E_SAMPLE !== "undefined", load: !!document.getElementById("emptyLoad"),
@@ -3401,6 +3403,7 @@ const t0 = Date.now();
     if (done) await q.evaluateOnNewDocument(() => { try { localStorage.setItem("eTourDone_v3", "1"); localStorage.setItem("eTourInvite_v3", "1"); } catch (x) {} });
     if (pre) await pre(q);
     await q.goto(huntUrl(dir), { waitUntil: "load", timeout: 90000 });
+    await require("./launch-wait.js").waitLaunchGone(q, { who: "tests/smoke.js huntPage" });
     return q;
   };
   const upFor = (q, fn, ms) => q.waitForFunction(fn, { timeout: ms || 20000, polling: 100 }).then(() => true, () => false);
@@ -3612,6 +3615,7 @@ const t0 = Date.now();
           Object.defineProperty(Navigator.prototype, "language", { get: () => l[0], configurable: true });
         }, list);
         await s.goto(RUN.url, { waitUntil: "load", timeout: 60000 });
+        await require("./launch-wait.js").waitLaunchGone(s, { who: "tests/smoke.js bySystem" });
         await sleep(1800);
         return await s.evaluate(() => ({ ui: document.documentElement.lang, reply: lang, langs: CONTENT_LANGS.join(","),
           menu: ((document.querySelector('#settingsMenu [data-act="settings"]') || {}).textContent || "").trim() }));
@@ -3654,6 +3658,7 @@ const t0 = Date.now();
     await hookInstall(o);
     o.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
     await o.goto(RUN.url, { waitUntil: "load", timeout: 90000 });
+    await require("./launch-wait.js").waitLaunchGone(o, { who: "tests/smoke.js comment language" });
     const base = {
       format: 2, kind: "etiuda-catalog", rev: 1,
       tags: [{ id: "t-shelf", kind: "shelf", label: { pl: "Polka", en: "Shelf" } }],

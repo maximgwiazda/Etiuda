@@ -112,7 +112,10 @@ async function launchOnce(lab, prog, env, seen) {
         let p = null;
         for (let i = 0; i < 40 && !p; i++) { p = (await b.pages()).find(x => /etiuda\.html/.test(x.url())) || null; if (!p) await sleep(250); }
         if (!p) why = "no page of etiuda.html";
-        else id = await p.evaluate(() => window.E_HOST && window.E_HOST.branchIdentity(true));
+        else {
+          await require("./launch-wait.js").waitLaunchGone(p, { who: "tests/linux-keyring.js", ready: "typeof window.E_VERSION === \"string\"" });
+          id = await p.evaluate(() => window.E_HOST && window.E_HOST.branchIdentity(true));
+        }
       } finally { await b.disconnect(); }
     }
   } catch (e) { why = String(e && e.message || e).slice(0, 200); }

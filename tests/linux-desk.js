@@ -165,6 +165,7 @@ async function spellingMenus(run, words) {
   try {
     const p = (await b.pages()).find(x => /etiuda\.html/.test(x.url()));
     if (!p) return { why: "no page of etiuda.html" };
+    await require("./launch-wait.js").waitLaunchGone(p, { who: "tests/linux-desk.js spellingMenus", ready: "typeof window.E_VERSION === \"string\"" });
     const cdp = await p.target().createCDPSession();
     const menus = {};
     for (const w of words) {

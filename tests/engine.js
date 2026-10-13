@@ -1207,6 +1207,7 @@ const WIN_FACTS_PS1 = [
   '  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);',
   '  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);',
   '  [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr h);',
+  '  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);',
   '  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out R r);',
   '  [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out R r);',
   '  [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref P p);',
@@ -1252,6 +1253,7 @@ const WIN_FACTS_PS1 = [
   "      left = $wr.left; top = $wr.top",
   "      onDisplay = $on",
   "      zoomed = [W]::IsZoomed($h)",
+  "      iconic = [W]::IsIconic($h)",
   "    })",
   "  }",
   "  return $true",
@@ -1350,6 +1352,8 @@ function windowFacts(pid, want) {
       facts.measured = false;
       facts.why = chosen.how;
     }
+    /* The window pickWindow chose. Another window of this pid being iconic is not this one. */
+    facts.iconic = !!(chosen.picked && chosen.picked.iconic === true);
     return facts;
   } catch (e) {
     return { measured: false, why: String(e && e.message || e).split(/\r?\n/)[0] };

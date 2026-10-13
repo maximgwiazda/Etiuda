@@ -109,6 +109,7 @@ async function startShell() {
     try { b = await puppeteer.connect({ browserURL: "http://127.0.0.1:" + PORT, defaultViewport: null }); } catch (x) {}
   }
   if (!b) throw new Error("Electron did not answer on the debugging port within 20 s: " + said.join(" | "));
+  await require("./launch-wait.js").waitLaunchGone((await b.pages())[0], { who: "tests/catalog-watch.js startShell", ready: "typeof window.E_VERSION === \"string\"" });
   await sleep(3000);
   /* Asked once, of this file's own first launch, and asked of the machine rather than of the
      variable: what the environment carried is not evidence that a window stayed off the screen.
