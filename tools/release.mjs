@@ -174,12 +174,11 @@ gate('the name and quote scans over the tracked tree', () => {
     return 'NOT RUN: ' + names + ' is absent, so the scan has nothing to look for. See tools/pre-commit.';
   if (!existsSync(hook))
     return 'NOT RUN: no installed hook at ' + hook + ', so this gate would judge nothing. See the head of tools/pre-commit.';
-  /* QUOTED ONLY WHERE A SHELL WILL EAT THE QUOTES, board item 613. run() sets shell:true on
-     Windows, where a path holding a space would otherwise be two arguments; off Windows there is
-     no shell, so the quotation marks become part of the file name and bash reports a path that
-     does not exist. The condition is the same one run() uses, read from the same place. */
-  const quoted = process.platform === 'win32' ? '"' + hook + '"' : hook;
-  return run('bash', [quoted, '--tree']) ? true : 'the scan refused the tree';
+  /* RUN AS GIT RUNS IT, board 871 (2026-10-13): `git hook run` starts the installed hook with git's own sh, as a
+     commit does, so the gate no longer takes whichever bash comes first on PATH. From PowerShell that was WSL's,
+     which could not run the hook, and every release stopped here at 3. No path is passed, so nothing needs quoting
+     (board 613's reason for the old quotes). The hook takes --tree after git's separator. */
+  return run('git', ['hook', 'run', 'pre-commit', '--', '--tree']) ? true : 'the scan refused the tree';
 });
 
 gate('line endings and dashes', () => {

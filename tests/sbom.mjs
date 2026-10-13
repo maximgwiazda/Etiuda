@@ -35,7 +35,7 @@ const KEEP = process.argv.indexOf('--keep') > -1;
 const require = createRequire(import.meta.url);
 const E = require('./engine.js');
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 29;
+const EXPECTED = 31;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -358,12 +358,13 @@ async function main() {
     put(path.join(gitDir, 'hooks', 'pre-commit'), '#!/bin/sh\nexit 0\n');
     return { root, dir, dist: path.join(root, 'dist') };
   }
-  function release(l, word) {
+  function release(l, word, extra) {
     const env = { ...process.env, ETIUDA_RELEASE_HOME_ROOT: l.root, ETIUDA_DIST: l.dist, ETIUDA_FIXTURES: 'stub',
       ETIUDA_TEST_ASAR: path.join(ROOT, 'node_modules', '@electron', 'asar'),
       /* The lab's window gates are `node -e 0`, so it carries the window wall's word and opens nothing. */
       [E.WINDOWS_VAR]: E.WINDOWS_DAY };
     if (word === null) delete env[E.WINDOWS_VAR];
+    Object.assign(env, extra || {});
     for (const k of SIGNING_VARS) delete env[k];
     const res = spawnSync(process.execPath, ['tools/release.mjs', '--package'], { cwd: l.dir, env, encoding: 'utf8', timeout: 400000 });
     return { status: res.status, out: String(res.stdout || '') + String(res.stderr || '') };
@@ -397,6 +398,24 @@ async function main() {
     && /\n\[4\] /.test(walled.out) && !/\n\[5\] /.test(walled.out),
     '7w without the window wall\'s word a release stops before npm test as refused, exit ' + walled.status
     + ' (78 wanted), gate 4 reached and gate 5 not: ' + JSON.stringify((/REFUSED[^\r\n]*/.exec(walled.out) || [''])[0].slice(0, 90)));
+
+  /* 7p and 7q, GATE 3 BY GIT'S OWN HOOK RUNNER (board 871, 2026-10-13). From PowerShell the first bash on PATH is
+     WSL's, and a gate that ran `bash <hook>` stopped every release at 3. So a lab whose PATH starts with a bash of its
+     own that exits 9 still passes the scan, and the scan's own refusal still stops the release there. */
+  const shim = lab('release-path-bash-shim');
+  fs.writeFileSync(path.join(shim, 'bash.cmd'), '@exit /b 9\r\n');
+  fs.writeFileSync(path.join(shim, 'bash'), '#!/bin/sh\nexit 9\n', { mode: 0o755 });
+  const pathKey = Object.keys(process.env).find(k => k.toUpperCase() === 'PATH') || 'PATH';
+  const shimmed = release(releaseLab('path-bash', null), undefined, { [pathKey]: shim + path.delimiter + process.env[pathKey] });
+  check(shimmed.status === 0 && /\n\[4\] /.test(shimmed.out),
+    '7p a bash first on PATH that is not git\'s is never what runs the scan: a release past gate 3, exit ' + shimmed.status
+    + ' (0 wanted)' + (shimmed.status === 3 ? ', stopped at the scan: ' + JSON.stringify((/STOP[^\r\n]*/.exec(shimmed.out) || [''])[0].slice(0, 90)) : ''));
+  const L7q = releaseLab('hook-refuses', null);
+  put(path.join(L7q.dir, '.git', 'hooks', 'pre-commit'), '#!/bin/sh\nexit 1\n');
+  const stopped = release(L7q);
+  check(stopped.status === 3 && /the scan refused the tree/.test(stopped.out) && !/\n\[4\] /.test(stopped.out),
+    '7q and a scan that refuses the tree stops the release at gate 3, exit ' + stopped.status + ' (3 wanted), gate 4 not reached: '
+    + !/\n\[4\] /.test(stopped.out));
 
   /* The contradiction: alpha is a production dependency the eight-file app would not carry, so the
      list is not what ships. The document a run left there earlier goes too, or it would read as
