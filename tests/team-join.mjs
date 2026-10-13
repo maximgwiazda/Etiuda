@@ -30,7 +30,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 58;
+const EXPECTED = 59;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -836,6 +836,58 @@ try {
     "15az a policy naming only the lead's key closes the door too: an invitation from that very lead, or from another, is refused"
     + " at read and at yes with the same word and nothing changes; off Windows no machine policy is read and the door stands as"
     + " before: " + byLead.join("; "));
+
+  /* A join kept from an invitation is let go when machine policy arrives in a later run: the pin it set and the folder it
+     set go, and what the desk held before stays. The same desk restarted with no policy keeps it all. */
+  const restartUnder = async (rows, ud) => {
+    const before = regStand.calls.export;
+    REG.policy = rows ? regText(rows) : null;
+    try { const D = loadDesk(ud); await D.join("state"); D.policyRead = regStand.calls.export > before; return D; }
+    finally { REG.policy = null; }
+  };
+  const T2 = "t-" + crypto.randomBytes(8).toString("hex");
+  const keptT2 = { [T2]: { "1": Buffer.from("kept").toString("base64") } };
+  const letGoOutcome = [];
+  const bothNamed = f => [["TeamFolder", f], ["LeadKey", LEAD.public]];
+  for (const [label, priorPins, rows] of [["folder and lead, no pin before", { [T2]: LEAD }, bothNamed],
+    ["folder and lead, the invited lead pinned before", { [T2]: LEAD, [TEAM]: FORGED }, bothNamed],
+    ["lead alone, no pin before", { [T2]: LEAD }, null]]) {
+    const n = letGoOutcome.length, priorFolder = folder("letgo-own-" + n), invitedYard = folder("letgo-yard-" + n);
+    const policyFolder = folder("letgo-policy-" + n);
+    const Di = await deskWith("letgo-" + n, priorFolder, { teamPins: priorPins, teamSeen: [T2], teamKeys: keptT2 });
+    const meI = await Di.ask("etiuda:branch-identity", true);
+    const inviteI = inviteBlob({ team: TEAM, folder: invitedYard, lead: forgedLead, secret: newSecret() });
+    const tookI = await Di.join("invite", inviteI, "Ola", codeFor(inviteI));
+    const afterYes = Di.envelope();
+    const Dn = await restartUnder(null, Di.ud);
+    const plain = Dn.envelope();
+    const keptPlain = !!plain.teamJoin && !!plain.teamJoin.invite && plain.teamPins[TEAM].public === FORGED.public
+      && plain.keys.eCatalogFolder === invitedYard;
+    /* The invited lead's file, the desk on its roster, in the folder the desk reads under the policy: its own where the policy
+       names only the lead. Under the policy it is not trusted. */
+    put(rows ? policyFolder : priorFolder, "etiuda-team.json", teamFile([entry(meI, K1, 1)], { lead: FORGED, signer: forger.privateKey }));
+    const Dq = await restartUnder(rows ? rows(policyFolder) : [["LeadKey", LEAD.public]], Di.ud);
+    const env = Dq.envelope(), pins = env.teamPins || {};
+    const refusedFile = Dq.said.some(l => l.indexOf("is signed by a key other than the lead's this desk trusts for team " + TEAM) >= 0);
+    const priorStays = pins[T2] && pins[T2].public === LEAD.public && (env.teamSeen || []).indexOf(T2) >= 0
+      && JSON.stringify((env.teamKeys || {})[T2]) === JSON.stringify(keptT2[T2]);
+    const invitedPin = priorPins[TEAM] ? !!pins[TEAM] && pins[TEAM].public === FORGED.public : !pins[TEAM];
+    const ok = WIN
+      ? Dq.policyRead && !env.teamJoin && invitedPin && env.keys.eCatalogFolder === priorFolder && priorStays && refusedFile
+        && !(env.teamKeys || {})[TEAM] && fs.existsSync(path.join(invitedYard, "desks", meI.id, "join.json"))
+      : !!env.teamJoin && env.keys.eCatalogFolder === invitedYard && priorStays;
+    letGoOutcome.push(label + ": " + (tookI && tookI.join && afterYes.keys.eCatalogFolder === invitedYard && keptPlain && ok ? "ok"
+      : "yes " + (tookI && (tookI.refused || (tookI.join && tookI.join.state))) + ", kept with no policy " + keptPlain
+        + ", under policy: join " + (env.teamJoin ? "kept" : "gone") + ", invited pin " + (pins[TEAM] ? pins[TEAM].keyId + (pins[TEAM].public === FORGED.public ? " (the invitation's)" : "") : "none")
+        + ", folder " + (env.keys.eCatalogFolder === priorFolder ? "the desk's own" : env.keys.eCatalogFolder === invitedYard ? "the invitation's" : "other")
+        + ", earlier trust " + (priorStays ? "kept" : "lost") + ", the invited lead's file " + (refusedFile ? "refused" : "not refused")));
+  }
+  check(letGoOutcome.every(x => / ok$/.test(x)),
+    "15bf a join kept from an invitation is let go once machine policy arrives in a later run: the pin the invitation set and"
+    + " the folder it set go, the desk's own folder comes back, its request stays where it was written, and the invited lead's"
+    + " file is refused under the policy, while a pin, a key and a key shown that the desk held before stay; THE CONTROL, the same"
+    + " desk restarted with no policy, keeps the join, the pin and the folder; off Windows no machine policy is read and all of it"
+    + " stays: " + letGoOutcome.join("; "));
 
   /* ---- the confirm's host line comes only from a folder the reader returned ----------------------------------- */
   /* The shell evaluated with folderHost wrapped, so every folder it is asked of is kept here. */

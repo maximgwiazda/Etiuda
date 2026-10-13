@@ -1501,8 +1501,28 @@ function sayJoinPolicy() {
   let lang = "en";
   try { if (shellWords().lang === "pl") lang = "pl"; } catch { lang = "en"; }
   const got = readJoinPolicy(lang);
-  if (!joinPolicySaid) { joinPolicySaid = true; got.said.forEach(teamSay); }
+  if (!joinPolicySaid) { joinPolicySaid = true; got.said.forEach(teamSay); policyLetsInviteGo(got); }
   return got;
+}
+/* Once a run, where machine policy names a folder or a lead: a join this desk keeps from an invitation is let go, with the
+   pin that invitation set where it still stands, and the desk's own folder setting where the invitation's is still there,
+   put back as it was before. A pin, a key or a folder the desk held before stays, and the request stays where it was
+   written: that folder is not asked again. */
+function policyLetsInviteGo(named) {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  const j = teamJoin, inv = j && j.invite;
+  if (!inv || !(named.folder || named.lead)) return;
+  teamJoin = null;
+  const pin = teamPins[j.team];
+  if (inv.pinned === true && pin && pin.keyId === inv.lead.keyId && pin.public === inv.lead.public) {
+    delete teamPins[j.team];
+    teamSeen.delete(j.team);
+  }
+  if (typeof inv.folder === "string" && deskKeys[CATALOG_FOLDER_KEY] === inv.folder)
+    deskSetOwn(CATALOG_FOLDER_KEY, typeof inv.was === "string" && inv.was ? inv.was : undefined);
+  teamStamp = "";
+  persistDeskEnvelope();
+  teamSay("the request to join team " + j.team + " made from an invitation is let go, since machine policy names this desk's team");
 }
 /* `policy` is the lead's public key, or empty where no policy names one. Empty returns memberHeed's
    own answer. Any other public key is refused in the words an unpinned key already gets, handover
@@ -1855,7 +1875,9 @@ function joinKept(j) {
   const inviteOk = !!inv && typeof inv === "object" && /^[0-9a-f]{16}$/.test(String(inv.id)) && JOIN_HEX_RE.test(String(inv.proof))
     && !Object.prototype.hasOwnProperty.call(inv, "secret")
     && !!who && typeof who === "object" && typeof who.keyId === "string" && who.keyId.length > 0 && who.keyId.length <= 80
-    && JOIN_HEX_RE.test(String(who.public)) && typeof who.name === "string" && who.name.length <= 120;
+    && JOIN_HEX_RE.test(String(who.public)) && typeof who.name === "string" && who.name.length <= 120
+    && (inv.folder === undefined || typeof inv.folder === "string") && (inv.was === undefined || typeof inv.was === "string")
+    && (inv.pinned === undefined || typeof inv.pinned === "boolean");
   return inviteOk ? j : null;
 }
 /* Whether this desk takes invitations: "" where it does, else the refusal every invitation gets, at read and at yes.
@@ -1917,6 +1939,10 @@ async function takeInvite(text, name, check) {
   if (!me) return Object.assign({}, joinView(), { refused: "unread" });
   const previous = catalogFolder();
   const keptJoin = teamJoin;
+  /* The desk's own folder setting before any invitation still kept here moved it, for policyLetsInviteGo. */
+  const earlier = keptJoin && keptJoin.invite ? keptJoin.invite : null;
+  const ownBefore = typeof deskKeys[CATALOG_FOLDER_KEY] === "string" ? deskKeys[CATALOG_FOLDER_KEY] : "";
+  const was = earlier && typeof earlier.was === "string" && ownBefore === earlier.folder ? earlier.was : ownBefore;
   if (previous !== parsed.folder) deskSetOwn(CATALOG_FOLDER_KEY, parsed.folder);
   const answers = await askFolder(parsed.folder);
   if (!answers) {
@@ -1939,9 +1965,11 @@ async function takeInvite(text, name, check) {
   }
   const seen = sealedOutside();
   const file = seen && seen.team === parsed.team ? seen.file : "";
+  const pinned = !teamPins[parsed.team] || (!!earlier && keptJoin.team === parsed.team && earlier.pinned === true);
   const j = { team: parsed.team, file: file, nonce: nonce, commit: commit, asked: Date.now(), held: newestEpoch(parsed.team),
     name: String(name || "").trim().slice(0, 120),
-    invite: { id: incomingId, proof: proof, lead: { keyId: parsed.lead.keyId, public: parsed.lead.public, name: parsed.lead.name } } };
+    invite: { id: incomingId, proof: proof, lead: { keyId: parsed.lead.keyId, public: parsed.lead.public, name: parsed.lead.name },
+      folder: parsed.folder, was: was, pinned: pinned } };
   try { writeJoin(memberRequestDoc(j, null, me, { id: incomingId, proof: proof })); }
   catch (e) {
     console.error("etiuda: the request to join could not be written - " + e.message);
