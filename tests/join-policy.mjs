@@ -240,6 +240,9 @@ const goodRows = [
       problems.push("lead alone " + JSON.stringify(onlyLead));
     const blank = alone([["TeamFolder", "REG_SZ", ""], ["LeadKey", "REG_SZ", "   "]]);
     if (blank.folder !== "" || blank.lead !== "" || saidOf(blank) !== EN.lead) problems.push("blank " + JSON.stringify(blank));
+    const spacedFolder = alone([["TeamFolder", "REG_SZ", "   "], ["LeadKey", "REG_SZ", HEX]]);
+    if (spacedFolder.folder !== "" || spacedFolder.lead !== "" || saidOf(spacedFolder) !== EN.folder + "|" + EN.beside)
+      problems.push("spaces for a folder beside a good lead " + JSON.stringify(spacedFolder));
     const cased = alone([["teamfolder", "REG_SZ", "D:\\Quay\\team"], ["LEADKEY", "REG_SZ", HEX]]);
     if (cased.folder !== "D:\\Quay\\team" || cased.lead !== HEX) problems.push("names in another case " + JSON.stringify(cased));
     const others = alone([["@", "REG_SZ", "D:\\Elsewhere"], ["Other", "REG_DWORD", 1], ["TeamFolder", "REG_SZ", "D:\\Quay\\team"]]);
@@ -503,10 +506,19 @@ function shape(r) {
         || !quiet(c.opt.stdio) || got.some(g => g.folder !== "D:\\First" || g.lead !== HEX))
       problems.push("read once " + JSON.stringify(calls.map(x => [x.file, x.args, x.opt])) + " " + JSON.stringify(got.map(g => g.folder)));
     if (scratch && (fs.existsSync(scratch) || fs.existsSync(path.dirname(scratch)))) problems.push("the scratch file stayed");
-    let asked = 0;
-    const badLead = reader2((file, args) => { asked++; fs.writeFileSync(args[2], exportBytes([["LeadKey", "REG_SZ", "NO"]])); return null; });
+    let asked = 0, badScratch = "";
+    const badLead = reader2((file, args) => {
+      asked++;
+      badScratch = String(args[2]);
+      fs.writeFileSync(args[2], exportBytes([["LeadKey", "REG_SZ", "NO"]]));
+      return null;
+    });
     const en = badLead.readJoinPolicy("en"), pl = badLead.readJoinPolicy("pl");
     if (asked !== 1 || saidOf(en) !== EN.lead || saidOf(pl) !== PL.lead) problems.push("words " + asked + " " + JSON.stringify([en.said, pl.said]));
+    /* Two loads, two reads, two folders: a name made afresh at each read, never one fixed name in the temp folder. */
+    const folderName = f => (f ? path.basename(path.dirname(f)) : "");
+    if (!scratch || !badScratch || folderName(scratch) === folderName(badScratch))
+      problems.push("one scratch folder for two reads " + JSON.stringify([folderName(scratch), folderName(badScratch)]));
     let threw = 0, thrownAt = "";
     const broken = reader2((file, args) => { threw++; thrownAt = String(args[2]); throw new Error("missing"); });
     const none = broken.readJoinPolicy("en");
@@ -518,14 +530,19 @@ function shape(r) {
       return null;
     }).readJoinPolicy("en");
     if (unmarked.folder !== "" || unmarked.lead !== "") problems.push("a file that is not UTF-16 was read " + JSON.stringify(unmarked));
+    /* The old door's input, another key's console print, is no export of this key: no policy, and nothing said. */
+    const dump = "\r\nHKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\r\n    ProxyEnable    REG_DWORD    0x0\r\n    ProxyServer    REG_SZ    http://127.0.0.1:9\r\n";
+    const proxy = P.joinPolicyFrom(dump, "pl");
+    if (proxy.folder !== "" || proxy.lead !== "" || proxy.said.length !== 0) problems.push("proxy dump " + JSON.stringify(proxy));
     let linuxCalls = 0, made = 0;
     const counting = Object.assign(Object.create(fs), { mkdtempSync: (...a) => { made++; return fs.mkdtempSync(...a); } });
     const off = reader2(() => { linuxCalls++; return null; }, "linux", counting).readJoinPolicy("en");
     if (linuxCalls !== 0 || made !== 0 || off.folder !== "" || off.lead !== "") problems.push("linux calls " + linuxCalls + " folders " + made);
   }
   check(problems.length === 0,
-    "19e the reader starts reg.exe at its fixed path, exporting this one key to a scratch file in the temp folder that is"
-    + " gone after, once whatever the language, and no other program: " + (problems.join("; ") || "one call"));
+    "19e the reader starts reg.exe at its fixed path, exporting this one key to a scratch file in a folder of the temp folder"
+    + " made afresh at each read and gone after, once whatever the language, and no other program; another key's print is"
+    + " no policy: " + (problems.join("; ") || "one call"));
 }
 
 /* A strict reader for the template's XML: elements, attributes, text, comments and the declaration, which is all
