@@ -39,9 +39,11 @@ function editionChanges(held,offered,layer,textOnly){
   const keys=editionFieldKeys(held,offered), replies=keys.filter(k=>k.field==="body");
   const was=new Map(((held&&held.cards)||[]).map(m=>[String(m.id),m]));
   const now=new Map(((offered&&offered.cards)||[]).map(m=>[String(m.id),m]));
-  // Met for the first time, or again, a card that commits the firm says so; a retired one leaves sight. `textOnly` is text alone.
-  const standing=(m,id)=>{
-    if(textOnly || !cardCommits(m)) return {};
+  // Met for the first time, or again, a card that commits the firm says so, and one back without the stamp it left with
+  // says it no longer does; a retired one leaves sight. `textOnly` is text alone.
+  const standing=(m,id,b)=>{
+    if(textOnly) return {};
+    if(!cardCommits(m)) return b && cardCommits(b) ? {stamp:"off", commitment:true} : {};
     const mine=ov[id];
     return {stamp:"carries", commitment:true,
       own:replies.some(k=>!!mine && mine[k.key]!=null && String(mine[k.key])!==editionText(m,k.key))};
@@ -52,7 +54,7 @@ function editionChanges(held,offered,layer,textOnly){
     if(!b){ if(!m.retired) items.push(Object.assign({id:id, kind:"new", fields:[]}, standing(m,id))); return; }
     if(gone.has(id) || (m.retired && b.retired)) return;
     if(m.retired){ items.push({id:id, kind:"retired", fields:[], asleep:stars.has(id)||!!ov[id]}); return; }
-    if(b.retired){ items.push(Object.assign({id:id, kind:"restored", fields:[]}, standing(m,id))); return; }
+    if(b.retired){ items.push(Object.assign({id:id, kind:"restored", fields:[]}, standing(m,id,b))); return; }
     const fields=keys.filter(k=>editionText(b,k.key)!==editionText(m,k.key));
     const stamp=(textOnly || cardCommits(b)===cardCommits(m)) ? "" : cardCommits(m) ? "on" : "off";
     if(!fields.length && !stamp) return;
@@ -63,7 +65,7 @@ function editionChanges(held,offered,layer,textOnly){
   });
   was.forEach((b,id)=>{ if(!now.has(id) && !gone.has(id) && !b.retired) items.push({id:id, kind:"removed", fields:[]}); });
   const at=k=>EDITION_KINDS.indexOf(k);
-  items.sort((x,y)=>at(x.kind)-at(y.kind) || (y.commitment?1:0)-(x.commitment?1:0));
+  items.sort((x,y)=>(y.commitment?1:0)-(x.commitment?1:0) || at(x.kind)-at(y.kind));
   const counts={};
   EDITION_KINDS.forEach(k=>{ counts[k]=0; });
   items.forEach(i=>{ counts[i.kind]++; });
