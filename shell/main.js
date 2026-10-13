@@ -3904,9 +3904,19 @@ function createWindow() {
     openExternally(url);
   });
 
-  /* THE ZOOM KEYS, which left with the application menu: Ctrl with plus, minus or nought, the
-     keypad's as well, in the menu roles' half steps, before the page ever sees the key. */
+  /* Ctrl+Tab is taken before the page keydown (Electron's before-input-event: preventDefault
+     stops that keydown and the menu shortcuts). Hand the chord to the page instead, so it does
+     not depend on the key arriving. Alt+Tab stays with the system. Key repeat is a hold. */
   win.webContents.on("before-input-event", (e, input) => {
+    const tab = routeTabChord(input);
+    if (tab) {
+      e.preventDefault();
+      if (win.webContents && typeof win.webContents.send === "function")
+        win.webContents.send("etiuda:tab-chord", tab);
+      return;
+    }
+    /* THE ZOOM KEYS, which left with the application menu: Ctrl with plus, minus or nought, the
+       keypad's as well, in the menu roles' half steps, before the page ever sees the key. */
     if (input.type !== "keyDown" || !input.control || input.alt || input.meta) return;
     const wc = win.webContents, c = input.code;
     const to = (c === "Equal" || c === "NumpadAdd") ? wc.getZoomLevel() + 0.5
@@ -3929,6 +3939,14 @@ function createWindow() {
      host answer that reports it, and marked as over, so closeHeld holds again from here. */
   win.webContents.on("did-finish-load", () => { const lost = win.webContents.etiudaLost; if (lost) lost.back = true; });
   win.webContents.on("did-finish-load", () => { setTimeout(() => { tryAnswerRequest(win); tryHeldBranches(); sendListing(win, true); }, 0); });
+}
+
+/* Ctrl+Tab and Ctrl+Shift+Tab, and nothing else. Null when the key is not that chord, so zoom
+   and every other key stay on their own path. Alt is the system's. */
+function routeTabChord(input) {
+  if (!input || input.type !== "keyDown" || !input.control || input.alt || input.meta) return null;
+  if (input.key !== "Tab" && input.code !== "Tab") return null;
+  return { shift: !!input.shift };
 }
 
 /* No File / Edit / View / Window bar: the band is the top bar and the window has no other

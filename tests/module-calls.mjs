@@ -3037,8 +3037,8 @@ const CARD_B = {
         "Space:true:0:0:0:1:0|true|true|true");
     });
   check("lanes.js", "814ln3 while the lanes show, the keys that walk and copy cards stay in the lanes and the category keys do nothing; tabs, language and Escape pass",
-    () => eq(["navDown", "navUp", "markTop", "markBottom", "copy", "copyOther", "navPillLeft", "navPillLast", "tabNext", "langToggle", "escape", "clearIntent"]
-      .map(id => String(LN.lanesShortcut(id))).join(","), "true,true,true,true,true,true,true,true,undefined,undefined,undefined,undefined"));
+    () => eq(["navDown", "navUp", "markTop", "markBottom", "copy", "copyOther", "navPillLeft", "navPillLast", "tabNext", "tabPrev", "langToggle", "escape", "clearIntent"]
+      .map(id => String(LN.lanesShortcut(id))).join(","), "true,true,true,true,true,true,true,true,undefined,undefined,undefined,undefined,undefined"));
   try {
     ST.lsSet("eMotionOff", "1");
     SC.loadShortcuts();
