@@ -2,7 +2,8 @@
  * green once a lower edition, an older team file, or a restored desk file is refused, with the
  * controls that a newer edition still lands. A fresh folder opens the highest rev the ring
  * verifies, and each mark kept in the desk file is never lowered. A second read of an older
- * desk file in the same process keeps the higher number. Throwaway keys and catalogs only.
+ * desk file in the same process keeps the higher number. A key added to the share's ring does
+ * not raise the catalog mark. Throwaway keys and catalogs only.
  *
  *     node tests/rollback-floor.mjs        exit code is the number of failed checks, capped at 63
  *
@@ -23,7 +24,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 37;
+const EXPECTED = 40;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -872,6 +873,123 @@ try {
       "888ak a file signed by a key other than this desk's, sitting in its folder at a huge rev, does not raise the next write: "
       + "had rev " + (second && second.rev) + ", planted " + plantedDoc.rev
       + ", wrote " + (third && third.rev) + ", kept " + kept);
+  }
+
+  /* ---- a second key added to the ring signs this catalog at a huge rev --------------------------- */
+  const intrPair = crypto.generateKeyPairSync("ed25519");
+  const INTR = { keyId: "quay-intruder", public: pubHex(intrPair.publicKey) };
+  const intruderCat = (rev, date) => {
+    const o = {
+      format: 2, kind: "etiuda-catalog", id: "quay-board", rev, name: "Quay Board", date,
+      langs: [{ code: "en", label: "EN" }],
+      tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
+      cards: [{ id: "c-warm", shelf: "t-op", bodyShape: "plain", title: { en: "Warm opening" },
+        body: { en: "Good day, edition " + rev + "." } }],
+    };
+    o.sig = { alg: "Ed25519", keyId: INTR.keyId };
+    o.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(o)), intrPair.privateKey).toString("hex");
+    return textOf(o);
+  };
+  const POISON = intruderCat(1e15, "2026-08-01");
+  const ringAdded = {
+    format: 1, kind: "etiuda-ring",
+    keys: RING.keys.concat([{ catalog: "quay-board", keyId: INTR.keyId, alg: "Ed25519", public: INTR.public }]),
+  };
+  const sentRevs = (D) => fileSends(D).map(a => facts(a[1]).rev);
+  {
+    const SHARE = folder("ring-added");
+    put(SHARE, "etiuda-ring.json", RING);
+    const D = newDesk("ring-added", SHARE);
+    put(SHARE, "board.ec", CAT2);
+    const booted = facts(D.sync("etiuda:catalog") || "");
+    const markBoot = markOf(D);
+    put(SHARE, "etiuda-ring.json", ringAdded);
+    put(SHARE, "planted.ec", POISON);
+    touch(path.join(SHARE, "planted.ec"), Date.UTC(2026, 7, 1));
+    D.sent.length = 0;
+    D.api.catalogChanged(D.win);
+    const watchSent = sentRevs(D);
+    const markWatch = markOf(D);
+    put(SHARE, "third.ec", CAT3);
+    touch(path.join(SHARE, "third.ec"), Date.UTC(2026, 7, 2));
+    const readThird = facts(((await D.ask("etiuda:catalog-read", "third.ec")) || {}).text || "").rev;
+    D.sent.length = 0;
+    D.api.offerFile(D.win, path.join(SHARE, "third.ec"));
+    const offerThird = sentRevs(D);
+    fs.unlinkSync(path.join(SHARE, "planted.ec"));
+    const D2 = loadDesk(D.ud);
+    D2.sent.length = 0;
+    D2.api.catalogChanged(D2.win);
+    const watchAgain = sentRevs(D2);
+    const again = facts(D2.sync("etiuda:catalog") || "");
+    const readAgain = facts(((await D2.ask("etiuda:catalog-read", "third.ec")) || {}).text || "").rev;
+    D2.sent.length = 0;
+    D2.api.offerFile(D2.win, path.join(SHARE, "third.ec"));
+    const offerAgain = sentRevs(D2);
+    check(booted.rev === 2 && markBoot === 2 && markWatch === 2
+      && readThird === 3 && offerThird.length === 1 && offerThird[0] === 3
+      && watchAgain.length === 1 && watchAgain[0] === 3 && again.rev === 3 && readAgain === 3
+      && offerAgain.length === 1 && offerAgain[0] === 3,
+      "888al a key added to the share's ring, signing the same catalog at a huge rev, does not raise the mark, and the genuine next rev still arrives: "
+      + "boot " + booted.rev + " mark " + markBoot
+      + ", watch sent " + (watchSent.join(",") || "-") + " mark " + markWatch
+      + ", library " + readThird + ", asked " + (offerThird.join(",") || "-")
+      + "; planted file removed, watch " + (watchAgain.join(",") || "-")
+      + ", boot " + (again.rev == null ? "nothing" : again.rev)
+      + ", library " + readAgain + ", asked " + (offerAgain.join(",") || "-"));
+  }
+  {
+    const SHARE = folder("ring-absent");
+    put(SHARE, "etiuda-ring.json", RING);
+    const D = newDesk("ring-absent", SHARE);
+    put(SHARE, "board.ec", CAT2);
+    const booted = facts(D.sync("etiuda:catalog") || "");
+    put(SHARE, "etiuda-ring.json", RING);
+    put(SHARE, "planted.ec", POISON);
+    touch(path.join(SHARE, "planted.ec"), Date.UTC(2026, 7, 1));
+    D.sent.length = 0;
+    D.api.catalogChanged(D.win);
+    const watchSent = sentRevs(D);
+    const markWatch = markOf(D);
+    put(SHARE, "third.ec", CAT3);
+    touch(path.join(SHARE, "third.ec"), Date.UTC(2026, 7, 2));
+    D.sent.length = 0;
+    D.api.catalogChanged(D.win);
+    const watchNext = sentRevs(D);
+    const readThird = facts(((await D.ask("etiuda:catalog-read", "third.ec")) || {}).text || "").rev;
+    check(booted.rev === 2 && markWatch === 2 && watchSent.length === 0
+      && watchNext.length === 1 && watchNext[0] === 3 && markOf(D) === 3 && readThird === 3,
+      "888am the same planted file, its key absent from the ring, does not raise the mark, and the genuine next rev is offered: "
+      + "boot " + booted.rev + ", watch sent " + (watchSent.join(",") || "-") + " mark " + markWatch
+      + ", next " + (watchNext.join(",") || "-") + " mark " + markOf(D) + ", library " + readThird);
+  }
+  {
+    const SHARE = folder("ring-untouched");
+    put(SHARE, "etiuda-ring.json", RING);
+    const D = newDesk("ring-untouched", SHARE);
+    put(SHARE, "board.ec", CAT2);
+    const booted = facts(D.sync("etiuda:catalog") || "");
+    const ringFile = path.join(SHARE, "etiuda-ring.json");
+    const before = crypto.createHash("sha256").update(fs.readFileSync(ringFile)).digest("hex");
+    put(SHARE, "planted.ec", POISON);
+    touch(path.join(SHARE, "planted.ec"), Date.UTC(2026, 7, 1));
+    D.sent.length = 0;
+    D.api.catalogChanged(D.win);
+    const watchSent = sentRevs(D);
+    const markWatch = markOf(D);
+    put(SHARE, "third.ec", CAT3);
+    touch(path.join(SHARE, "third.ec"), Date.UTC(2026, 7, 2));
+    D.sent.length = 0;
+    D.api.catalogChanged(D.win);
+    const watchNext = sentRevs(D);
+    const readThird = facts(((await D.ask("etiuda:catalog-read", "third.ec")) || {}).text || "").rev;
+    const after = crypto.createHash("sha256").update(fs.readFileSync(ringFile)).digest("hex");
+    check(booted.rev === 2 && markWatch === 2 && watchSent.length === 0 && before === after
+      && watchNext.length === 1 && watchNext[0] === 3 && markOf(D) === 3 && readThird === 3,
+      "888an the same planted file, the ring file left byte for byte, does not raise the mark, and the genuine next rev is offered: "
+      + "boot " + booted.rev + ", watch sent " + (watchSent.join(",") || "-") + " mark " + markWatch
+      + ", ring " + (before === after ? "unchanged" : "rewritten")
+      + ", next " + (watchNext.join(",") || "-") + " mark " + markOf(D) + ", library " + readThird);
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
