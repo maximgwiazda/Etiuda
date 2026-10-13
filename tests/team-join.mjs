@@ -30,7 +30,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 59;
+const EXPECTED = 61;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -852,6 +852,7 @@ try {
   const keptT2 = { [T2]: { "1": Buffer.from("kept").toString("base64") } };
   const letGoOutcome = [];
   const bothNamed = f => [["TeamFolder", f], ["LeadKey", LEAD.public]];
+  const LET_GO_LINE = "the request to join team " + TEAM + " made from an invitation is let go, since machine policy names this desk's team";
   for (const [label, priorPins, rows] of [["folder and lead, no pin before", { [T2]: LEAD }, bothNamed],
     ["folder and lead, the invited lead pinned before", { [T2]: LEAD, [TEAM]: FORGED }, bothNamed],
     ["lead alone, no pin before", { [T2]: LEAD }, null]]) {
@@ -875,12 +876,22 @@ try {
     const priorStays = pins[T2] && pins[T2].public === LEAD.public && (env.teamSeen || []).indexOf(T2) >= 0
       && JSON.stringify((env.teamKeys || {})[T2]) === JSON.stringify(keptT2[T2]);
     const invitedPin = priorPins[TEAM] ? !!pins[TEAM] && pins[TEAM].public === FORGED.public : !pins[TEAM];
+    /* The let-go is said once, in these words, and neither it, the rest of that run's log nor the desk's file after it holds
+       the invitation's secret, the proof its request carried or its check code. */
+    const proofI = afterYes.teamJoin && afterYes.teamJoin.invite ? String(afterYes.teamJoin.invite.proof) : "";
+    const letGoSaid = Dq.said.filter(l => l === "ERR etiuda: " + LET_GO_LINE).length;
+    const holding = [Dq.said.join("\n"), fs.readFileSync(path.join(Di.ud, "desk.json"), "latin1")]
+      .filter(text => text.indexOf(secretOf(inviteI)) >= 0 || (!!proofI && text.indexOf(proofI) >= 0) || asToken(codeFor(inviteI)).test(text)).length;
+    const quietPlain = !Dn.said.some(l => l.indexOf(LET_GO_LINE) >= 0);
     const ok = WIN
       ? Dq.policyRead && !env.teamJoin && invitedPin && env.keys.eCatalogFolder === priorFolder && priorStays && refusedFile
         && !(env.teamKeys || {})[TEAM] && fs.existsSync(path.join(invitedYard, "desks", meI.id, "join.json"))
-      : !!env.teamJoin && env.keys.eCatalogFolder === invitedYard && priorStays;
+        && letGoSaid === 1 && /^[0-9a-f]{64}$/.test(proofI) && holding === 0 && quietPlain
+      : !!env.teamJoin && env.keys.eCatalogFolder === invitedYard && priorStays && letGoSaid === 0 && quietPlain;
     letGoOutcome.push(label + ": " + (tookI && tookI.join && afterYes.keys.eCatalogFolder === invitedYard && keptPlain && ok ? "ok"
       : "yes " + (tookI && (tookI.refused || (tookI.join && tookI.join.state))) + ", kept with no policy " + keptPlain
+        + ", the let-go said " + letGoSaid + " time(s) under policy and " + (quietPlain ? "not" : "also") + " with none, "
+        + holding + " text(s) holding the secret, the proof or the code"
         + ", under policy: join " + (env.teamJoin ? "kept" : "gone") + ", invited pin " + (pins[TEAM] ? pins[TEAM].keyId + (pins[TEAM].public === FORGED.public ? " (the invitation's)" : "") : "none")
         + ", folder " + (env.keys.eCatalogFolder === priorFolder ? "the desk's own" : env.keys.eCatalogFolder === invitedYard ? "the invitation's" : "other")
         + ", earlier trust " + (priorStays ? "kept" : "lost") + ", the invited lead's file " + (refusedFile ? "refused" : "not refused")));
@@ -888,9 +899,48 @@ try {
   check(letGoOutcome.every(x => / ok$/.test(x)),
     "15bf a join kept from an invitation is let go once machine policy arrives in a later run: the pin the invitation set and"
     + " the folder it set go, the desk's own folder comes back, its request stays where it was written, and the invited lead's"
-    + " file is refused under the policy, while a pin, a key and a key shown that the desk held before stay; THE CONTROL, the same"
-    + " desk restarted with no policy, keeps the join, the pin and the folder; off Windows no machine policy is read and all of it"
-    + " stays: " + letGoOutcome.join("; "));
+    + " file is refused under the policy, and the desk says once that the request is let go, with no secret, proof or check code in"
+    + " that sentence, the rest of its log or its file, while a pin, a key and a key shown that the desk held before stay; THE"
+    + " CONTROL, the same desk restarted with no policy, keeps the join, the pin and the folder and says no let-go; off Windows no"
+    + " machine policy is read and all of it stays: " + letGoOutcome.join("; "));
+
+  /* A join made from the folder's own request, with no invitation, is not policy's to let go: restarted under each policy, the
+     request, its code and what the desk held before stay, and no let-go is said. In the same run an invitation is refused with
+     the policy's word, so the policy was in force. */
+  const plainShare = folder("plain-share");
+  put(plainShare, "etiuda-team.json", teamFile([]));
+  put(plainShare, "lamps.ec", P.sealCatalog(K1, TEAM, 1, A1));
+  const Dg = await deskWith("plain-join", plainShare, { teamPins: { [T2]: LEAD }, teamSeen: [T2], teamKeys: keptT2 });
+  const meG = await Dg.ask("etiuda:branch-identity", true);
+  await Dg.join("ask", "lamps.ec", "Ola");
+  const reqG = path.join(plainShare, "desks", meG.id, "join.json");
+  const commitG = fs.existsSync(reqG) ? JSON.parse(fs.readFileSync(reqG, "utf8")).commit : "";
+  put(plainShare, P.JOINS_NAME, joins([{ desk: meG.id, commit: commitG, nonce: nonce() }]));
+  const viewG = v => (v && v.join ? v.join.state + " " + v.join.code : "no join");
+  const codeG = viewG(await Dg.join("state"));
+  const joinG = JSON.stringify(Dg.envelope().teamJoin || null), bytesG = fs.existsSync(reqG) ? fs.readFileSync(reqG, "utf8") : "";
+  const plainBlob = inviteBlob({ team: TEAM, folder: folder("plain-yard"), lead: lampLead, secret: newSecret() });
+  const plainKept = [];
+  for (const [label, rows] of [["no policy", null], ["folder and lead", bothNamed(plainShare)], ["folder alone", [["TeamFolder", plainShare]]],
+    ["lead alone", [["LeadKey", LEAD.public]]]]) {
+    const Dgr = await restartUnder(rows, Dg.ud);
+    const v = await Dgr.join("state"), door = await Dgr.join("read", plainBlob);
+    const env = Dgr.envelope(), pins = env.teamPins || {};
+    const stays = JSON.stringify(env.teamJoin || null) === joinG && !(env.teamJoin || {}).invite && viewG(v) === codeG
+      && fs.readFileSync(reqG, "utf8") === bytesG && env.keys.eCatalogFolder === plainShare
+      && !!pins[T2] && pins[T2].public === LEAD.public && (env.teamSeen || []).indexOf(T2) >= 0
+      && JSON.stringify((env.teamKeys || {})[T2]) === JSON.stringify(keptT2[T2]);
+    const unsaid = !Dgr.said.some(l => l.indexOf("made from an invitation is let go") >= 0);
+    const inForce = rows && WIN ? Dgr.policyRead && door && door.refused === "policy" : door && !!door.offer && door.refused === undefined;
+    plainKept.push(label + ": " + (stays && unsaid && inForce ? "ok" : (stays ? "kept" : "join " + viewG(v) + (env.teamJoin ? "" : ", gone from the file"))
+      + (unsaid ? "" : ", let-go said") + ", the invitation " + (door && (door.refused || (door.offer ? "offered" : "nothing")))));
+  }
+  check(/^code [0-9]{6}$/.test(codeG) && plainKept.every(x => / ok$/.test(x)),
+    "15bg a join made from the folder's own request, with no invitation, is kept when machine policy arrives in a later run, under a"
+    + " policy naming the folder and the lead, the folder alone or the lead alone: the request in the desk's file and on the share,"
+    + " its six-digit code, the folder and what the desk held before all stay, and no let-go is said, while in that same run an"
+    + " invitation is refused with the policy's word; THE CONTROL, a restart with no policy, keeps it too and the invitation is"
+    + " offered; off Windows no machine policy is read and all of it stays: " + codeG.split(" ")[0] + "; " + plainKept.join("; "));
 
   /* ---- the confirm's host line comes only from a folder the reader returned ----------------------------------- */
   /* The shell evaluated with folderHost wrapped, so every folder it is asked of is kept here. */
@@ -973,6 +1023,46 @@ try {
     "15be a folder whose team file cannot be read, a folder standing where the file would or a file that is not JSON, takes no"
     + " request and puts the desk's folder back, refused with a word of its own that the page says in its own sentence, in"
     + " English and in Polish: " + JSON.stringify(tookE) + ", " + unreadableSaid.en);
+
+  /* A team file larger than the shell reads (TEAM_MAX in shell/main.js, 1 MiB) is one it cannot read, however whole: refused
+     at yes with that word, and the page over this desk's own shell says that sentence. THE CONTROL is the same file at
+     exactly 1 MiB, read and taken. */
+  const MIB = 1024 * 1024;
+  const padTeam = (dir, size) => {
+    const text = JSON.stringify(teamFile([])), at = path.join(dir, "etiuda-team.json");
+    fs.writeFileSync(at, text + " ".repeat(size - Buffer.byteLength(text)), "utf8");
+    return fs.statSync(at).size;
+  };
+  const overYard = folder("files-oversized"), atYard = folder("files-at-limit");
+  const sizes = [padTeam(overYard, MIB + 1), padTeam(atYard, MIB)];
+  const Do = await deskWith("oversized", folder("oversized-own"));
+  const trustO = trustOf(Do);
+  const overBlob = inviteBlob({ team: TEAM, folder: overYard, lead: lampLead, secret: newSecret() });
+  const overWord = await Do.join("invite", overBlob, "Ola", codeFor(overBlob));
+  await pageOn(Do);
+  const overSaid = {};
+  for (const lang of ["en", "pl"]) {
+    ST.lsSet("eUiLang", lang);
+    TJ.openJoinPaste();
+    pasted = elOf({ "data-join-paste": "" }, overBlob);
+    await press("read");
+    typeFour(codeFor(overBlob));
+    await press("invite");
+    overSaid[lang] = (/<p>([^<]*)<\/p>/.exec(TJ.teamJoinEmptyHtml()) || ["", ""])[1];
+    await press("back");
+  }
+  if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+  const keptO = trustOf(Do) === trustO && writtenUnder(overYard) === 0;
+  const atBlob = inviteBlob({ team: TEAM, folder: atYard, lead: lampLead, secret: newSecret() });
+  const atWord = await Do.join("invite", atBlob, "Ola", codeFor(atBlob));
+  check(sizes[0] === MIB + 1 && sizes[1] === MIB && overWord && overWord.refused === "unreadable" && keptO
+      && overSaid.en === escHtml(UNREADABLE_LINE.en) && overSaid.pl === escHtml(UNREADABLE_LINE.pl)
+      && atWord && atWord.join && atWord.join.state === "waiting" && writtenUnder(atYard) === 1,
+    "15bh a team file one byte larger than 1 MiB, whole under the invited lead otherwise, is one the desk cannot read: refused at"
+    + " yes as unreadable, nothing written or pinned and the desk's folder put back, and the page over this desk's shell says the"
+    + " team file could not be read, in English and in Polish; THE CONTROL, the same file at exactly 1 MiB, is read and taken: "
+    + sizes.join(" and ") + " bytes, " + (overWord && (overWord.refused || (overWord.join ? overWord.join.state : "nothing"))) + ", then "
+    + (atWord && (atWord.refused || (atWord.join ? atWord.join.state : "nothing"))) + "; " + overSaid.en);
 
   /* A read the page has let go is answered to nobody: one left by Cancel, and one landing while another paste box is open. */
   const Dst = await deskWith("stale", folder("stale-own"));
