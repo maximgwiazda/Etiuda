@@ -1788,8 +1788,10 @@ function memberRequestDoc(j, reveal, me, invite) {
   if (reveal) { doc.reveal = j.nonce; doc.opened = reveal; }
   return doc;
 }
+/* A reveal rewrites the whole request. The invitation's id and proof stay as yes wrote them, and the
+   member's kind with them. With no invitation the request is the one this desk has always written. */
 function joinRequestDoc(j, reveal) {
-  return memberRequestDoc(j, reveal, branchIdentity(false));
+  return memberRequestDoc(j, reveal, branchIdentity(false), j && j.invite);
 }
 function askJoin(file, name) {
   if (deskKeys === undefined) deskKeys = readDesk();

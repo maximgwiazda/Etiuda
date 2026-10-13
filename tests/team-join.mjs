@@ -7,6 +7,8 @@
  * COMMIT THEN REVEAL. The request commits to the desk's nonce; the lead's opening names a nonce of its own; the desk
  * reveals only against the first opening it reads for its commitment, and the code covers both nonces, both desk keys
  * and the lead's key. So the oracle for a code is the pure joinCode over what each side holds, never the shell's word.
+ * A reveal keeps an invitation's id, proof and kind as yes wrote them. A request with no invitation gains only the
+ * opening.
  *
  * The shell runs from a copy of shell/ in a temp folder, so the folder above it holds no catalog of the checkout's.
  */
@@ -30,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 61;
+const EXPECTED = 62;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1137,6 +1139,67 @@ try {
   check(!!heldShown && heldShown.mode === "confirm" && heldShown.read !== "" && escaped && letGo(heldHidden),
     "15bd Hide on the bubble, pressed while it holds an invitation's confirm, lets the invitation go as Cancel does: "
     + (heldShown && heldShown.mode) + ", then " + (heldHidden && (heldHidden.mode || "nothing held")) + ", " + bubbles.length + " bubble(s) drawn");
+
+  /* A lead may open an invitation's request for the six-digit code. The reveal rewrites the file. The bytes written
+     at yes stay, and only the reveal and the opening are added. A request that never carried an invitation gains the
+     same two fields and nothing else, which is the file this desk has always written on a reveal. */
+  const codeYard = folder("code-yard");
+  put(codeYard, "etiuda-team.json", teamFile([entry(me2, K1, 1)]));
+  put(codeYard, "lamps.ec", P.sealCatalog(K1, TEAM, 1, A1));
+  const Dplain = newDesk("code-plain", codeYard);
+  const mePlain = await Dplain.ask("etiuda:branch-identity", true);
+  const askedPlain = await Dplain.join("ask", "lamps.ec", "Bram");
+  const plainPath = path.join(codeYard, "desks", mePlain.id, "join.json");
+  const plainWait = fs.existsSync(plainPath) ? fs.readFileSync(plainPath, "utf8") : "";
+  const Dinv = newDesk("code-inv", folder("code-old"));
+  const meInv = await Dinv.ask("etiuda:branch-identity", true);
+  const secretBi = newSecret();
+  const biBlob = inviteBlob({ team: TEAM, folder: codeYard, lead: lampLead, secret: secretBi });
+  const tookBi = await Dinv.join("invite", biBlob, "Nils", codeFor(biBlob));
+  const invPath = path.join(codeYard, "desks", meInv.id, "join.json");
+  const invWait = fs.existsSync(invPath) ? fs.readFileSync(invPath, "utf8") : "";
+  const readReq = (text) => { try { return JSON.parse(text); } catch { return null; } };
+  const plainDoc = readReq(plainWait), invDoc = readReq(invWait);
+  const nPlain = nonce(), nInv = nonce();
+  const joinPlain = Dplain.envelope().teamJoin || {}, joinInv = Dinv.envelope().teamJoin || {};
+  put(codeYard, P.JOINS_NAME, joins([
+    { desk: mePlain.id, commit: plainDoc && plainDoc.commit, nonce: nPlain },
+    { desk: meInv.id, commit: invDoc && invDoc.commit, nonce: nInv },
+  ]));
+  const seenPlain = await Dplain.join("state");
+  const seenInv = await Dinv.join("state");
+  const plainNow = fs.existsSync(plainPath) ? fs.readFileSync(plainPath, "utf8") : "";
+  const invNow = fs.existsSync(invPath) ? fs.readFileSync(invPath, "utf8") : "";
+  const plainGot = readReq(plainNow), invGot = readReq(invNow);
+  const beforeSig = (text) => { const at = text.indexOf("\n \"sig\":"); return at < 0 ? "" : text.slice(0, at); };
+  /* The bytes a reveal adds, built by the same stringify the shell uses, so a drifted field or a drifted order fails. */
+  const revealTail = (deskNonce, leadNonce) => {
+    const text = JSON.stringify({ reveal: deskNonce,
+      opened: { lead: { keyId: LEAD.keyId, public: LEAD.public }, nonce: leadNonce }, sig: 0 }, null, 1);
+    const at = text.indexOf("\n \"sig\":");
+    return at < 0 ? "" : text.slice(1, at);
+  };
+  const plainHead = beforeSig(plainWait), invHead = beforeSig(invWait);
+  const plainGrew = beforeSig(plainNow) === plainHead + revealTail(joinPlain.nonce, nPlain);
+  const invGrew = beforeSig(invNow) === invHead + revealTail(joinInv.nonce, nInv);
+  const codePlain = P.joinCode(TEAM, mePlain.key, mePlain.box, LEAD.public, joinPlain.nonce, nPlain);
+  const codeInv = P.joinCode(TEAM, meInv.key, meInv.box, LEAD.public, joinInv.nonce, nInv);
+  const codeShown = (seen) => !!(seen && seen.join && seen.join.state === "code" && seen.join.code);
+  const plainOk = !!(askedPlain && askedPlain.join && askedPlain.join.state === "waiting" && plainDoc && plainGot
+    && plainDoc.invite === undefined && plainDoc.desk && plainDoc.desk.kind === undefined
+    && plainGrew && plainGot.invite === undefined && plainGot.desk && plainGot.desk.kind === undefined
+    && plainGot.commit === plainDoc.commit && plainGot.reveal === joinPlain.nonce
+    && codeShown(seenPlain) && seenPlain.join.code === codePlain && P.joinGenuine(plainGot, mePlain.id));
+  const invOk = !!(tookBi && tookBi.join && tookBi.join.state === "waiting" && invDoc && invGot
+    && invDoc.desk && invDoc.desk.kind === "desk" && invDoc.invite && invGrew
+    && invGot.desk && invGot.desk.kind === invDoc.desk.kind
+    && JSON.stringify(invGot.invite) === JSON.stringify(invDoc.invite)
+    && invGot.commit === invDoc.commit && invGot.reveal === joinInv.nonce
+    && codeShown(seenInv) && seenInv.join.code === codeInv && P.joinGenuine(invGot, meInv.id));
+  check(plainOk && invOk,
+    "15bi a desk that took an invitation, opened afterwards for the code, reveals with that invitation and its kind intact,"
+    + " and a request with no invitation reveals with only the opening added: invite " + (invOk ? "kept" : "dropped")
+    + ", plain " + (plainOk ? "unchanged" : "moved"));
 
   /* Last, over every desk above: the log of each holds none of the secrets any invitation carried. */
   const leaked = [];
