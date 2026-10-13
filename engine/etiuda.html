@@ -15743,8 +15743,9 @@ What you type stays in this browser only.`;
     const keys = editionFieldKeys(held, offered), replies = keys.filter((k) => k.field === "body");
     const was = new Map((held && held.cards || []).map((m) => [String(m.id), m]));
     const now = new Map((offered && offered.cards || []).map((m) => [String(m.id), m]));
-    const standing = (m, id) => {
-      if (textOnly || !cardCommits(m)) return {};
+    const standing = (m, id, b) => {
+      if (textOnly) return {};
+      if (!cardCommits(m)) return b && cardCommits(b) ? { stamp: "off", commitment: true } : {};
       const mine = ov[id];
       return {
         stamp: "carries",
@@ -15765,7 +15766,7 @@ What you type stays in this browser only.`;
         return;
       }
       if (b.retired) {
-        items.push(Object.assign({ id, kind: "restored", fields: [] }, standing(m, id)));
+        items.push(Object.assign({ id, kind: "restored", fields: [] }, standing(m, id, b)));
         return;
       }
       const fields = keys.filter((k) => editionText(b, k.key) !== editionText(m, k.key));
@@ -15786,7 +15787,7 @@ What you type stays in this browser only.`;
       if (!now.has(id) && !gone.has(id) && !b.retired) items.push({ id, kind: "removed", fields: [] });
     });
     const at = (k) => EDITION_KINDS.indexOf(k);
-    items.sort((x, y) => at(x.kind) - at(y.kind) || (y.commitment ? 1 : 0) - (x.commitment ? 1 : 0));
+    items.sort((x, y) => (y.commitment ? 1 : 0) - (x.commitment ? 1 : 0) || at(x.kind) - at(y.kind));
     const counts2 = {};
     EDITION_KINDS.forEach((k) => {
       counts2[k] = 0;
@@ -26737,6 +26738,7 @@ What you type stays in this browser only.`;
     } else {
       const gone = it.kind === "retired" || it.kind === "removed", m = gone ? was : now, code = cardText(m, "body", lang) ? lang : CONTENT_LANGS[0];
       rows = head(desk ? gone ? desk.was : desk.now : t(gone ? "Was" : "Becomes")) + cell(esc(cardText(m, "body", code)));
+      if (it.stamp) rows += '<div class="ed-field">' + esc(t("Commitment")) + "</div>" + cell(esc(editionStampWord(it.stamp !== "off")));
       const sub = desk ? "" : editionSubline(it, c);
       if (sub) rows += '<p class="ed-sub">' + esc(sub) + "</p>";
       if (desk && desk.place && it.kind === "new") rows += desk.place(it);

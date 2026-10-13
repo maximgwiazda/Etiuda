@@ -132,6 +132,7 @@ function editionPaneHtml(it,held,c,desk){
   } else {
     const gone=it.kind==="retired"||it.kind==="removed", m=gone?was:now, code=cardText(m,"body",lang)?lang:CONTENT_LANGS[0];
     rows=head(desk?(gone?desk.was:desk.now):t(gone?"Was":"Becomes"))+cell(esc(cardText(m,"body",code)));
+    if(it.stamp) rows+='<div class="ed-field">'+esc(t("Commitment"))+'</div>'+cell(esc(editionStampWord(it.stamp!=="off")));
     const sub=desk?"":editionSubline(it,c);
     if(sub) rows+='<p class="ed-sub">'+esc(sub)+'</p>';
     if(desk && desk.place && it.kind==="new") rows+=desk.place(it);

@@ -567,6 +567,13 @@ check("18 control: the plain payload carries none of the new keys through either
   check("43f a commitment is listed first and the offer's eight never cut one: one stamped among ten reworded heads the list, and eleven stamped are all named",
     shown1.length === 8 && shown1[0] === "c-x10" && shown2.length === 11 && EP.editionOfferHtml(allX, heldX, r43f2).indexOf('class="ec-more"') < 0,
     shown1.length + " named, first " + shown1[0] + " | " + shown2.length + " named of 11");
+  /* The cut never falls on a commitment, whatever its kind: eight reworded cards and one new card that commits the firm. */
+  const eightDoc = shelfOf((c, i) => { if (i < 8) c.body.en = "X body, changed."; });
+  eightDoc.cards.push({ id: "c-y", shelf: "t-op", bodyShape: "plain", title: { en: "Y" }, body: { en: "Y body." }, commits: true });
+  const eightY = read(eightDoc), r43l = ED.editionChanges(heldX, eightY, NONE), shownL = named(eightY, r43l);
+  check("43l a new card that commits the firm is named in the offer beside eight reworded cards, first, with one line of its commitment",
+    shownL[0] === "c-y" && shownL.length === 8 && once(offerRow(eightY, heldX, r43l, "c-y"), "commits the firm"),
+    shownL.length + " named, first " + shownL[0]);
   const r43g = ED.editionChanges(read(doc()), stampB, NONE, true), r43g2 = ED.editionChanges(heldS, rewordS, NONE, true);
   const DL = await import(MOD("desk-look.js"));
   const lookFiles = { "e5-team.ec": JSON.stringify(doc()), "e5-hers.ec": JSON.stringify(stampOn(doc(), "c-b")) };
@@ -591,6 +598,29 @@ check("18 control: the plain payload carries none of the new keys through either
       && pane3.indexOf("data-ed-take") > -1,
     ["Commitment row " + (pane1.indexOf(ESC(T("Commitment"))) > -1), "own reply " + (pane2.indexOf(">my edit<") > -1),
       "take " + (pane2.indexOf("data-ed-take") > -1) + "/" + (pane3.indexOf("data-ed-take") > -1)].join(", "));
+  /* A card back from retirement: named only where it commits the firm or has stopped, once, Look's compare aside. */
+  const sleepPl = read(stampOn(next(d => { d.langs = d.langs.concat([{ code: "pl", label: "PL" }]);
+    d.cards.forEach(c => { c.body.pl = "PL " + c.id; }); d.cards[1].retired = true; }), "c-b"));
+  const r43m = [
+    ED.editionChanges(read(asleepDoc), read(doc()), NONE),
+    ED.editionChanges(sleepPl, heldPl, minePl("c-b")),
+    ED.editionChanges(sleepS, heldS, NONE, true),
+    ED.editionChanges(sleepS, rewordS, NONE),
+    ED.editionChanges(sleepS, read(doc()), NONE),
+  ];
+  const rows43m = [offerRow(read(doc()), read(asleepDoc), r43m[0], "c-b"), offerRow(heldPl, sleepPl, r43m[1], "c-b"),
+    offerRow(heldS, sleepS, r43m[2], "c-b"), offerRow(rewordS, sleepS, r43m[3], "c-b"), offerRow(read(doc()), sleepS, r43m[4], "c-b")];
+  const paneNew = paneOf(r43j1, read(doc()), newD, {}), paneOff = paneOf(r43m[4], sleepS, read(doc()), {});
+  const stampRow = (pane, words) => pane.indexOf('<div class="ed-field">' + ESC(T("Commitment")) + '</div><div class="ed-cell">' + ESC(T(words)) + '</div>') > -1;
+  check("43m a restored card: an unstamped one says nothing; a Polish-only reply of the agent's is its own version; Look's text-only compare says nothing; a reworded stamped one is one item with one line; one back without its stamp no longer commits the firm; and the pane of a new committing card, and of that one, shows its Commitment row",
+    r43m.map(pledged).join(" | ") === "restored:c-b | restored:c-b!carries* | restored:c-b | restored:c-b!carries | restored:c-b!off"
+      && !!rows43m[0] && rows43m[0].indexOf("<small>") < 0
+      && once(rows43m[1], "commits the firm") && once(rows43m[1], "you have your own version")
+      && !!rows43m[2] && rows43m[2].indexOf("<small>") < 0
+      && r43m[3].items.length === 1 && once(rows43m[3], "commits the firm")
+      && once(rows43m[4], "no longer commits the firm")
+      && stampRow(paneNew, "Commits the firm") && stampRow(paneOff, "Does not commit the firm"),
+    r43m.map(pledged).join(" | ") + " | pane rows " + stampRow(paneNew, "Commits the firm") + "/" + stampRow(paneOff, "Does not commit the firm"));
   const noted = n => Object.assign(doc(), { langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }], notes: n });
   check("44 the lead's note: none gives none, English alone shows on a Polish desk, Polish shows there when written",
     ED.editionNoteText(read(doc()), "pl") === "" && ED.editionNoteText(read(noted({ en: "Why." })), "pl") === "Why."
