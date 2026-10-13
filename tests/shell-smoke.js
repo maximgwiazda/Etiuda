@@ -167,6 +167,44 @@ const step = async (label, body, opts) => {
  */
 const PHASE_MAJORS = ["0", "1", "2", "3", "4", "5", "6", "7"];
 const EXPECTED = KEEP ? null : 129;
+/* COUNTS:PREDICATES
+   Members that must be there, in order where the order is the claim.
+   One more member still passes. A missing member is named. A floor stays
+   where a scanner that saw nothing would otherwise pass. */
+function missingMembers(seen, required, ordered) {
+  const have = (seen || []).map(s => String(s));
+  if (!ordered) return required.filter(name => have.indexOf(String(name)) < 0);
+  let from = 0;
+  const missing = [];
+  for (const name of required) {
+    const at = have.indexOf(String(name), from);
+    if (at < 0) missing.push(name);
+    else from = at + 1;
+  }
+  return missing;
+}
+
+const MENU_ITEMS = ["Cofnij", "Wytnij", "Kopiuj", "Wklej", "Zaznacz wszystko"];
+const SHELL_EN = ["Undo", "Cut", "Copy", "Paste", "Select all", "Add to dictionary", "Restart", "Close Etiuda", "Wait"];
+function menuItemsHeld(items) {
+  const missing = missingMembers(items, MENU_ITEMS, true);
+  if ((items || []).length < MENU_ITEMS.length) missing.push("items under " + MENU_ITEMS.length);
+  const untranslated = (items || []).filter(t => SHELL_EN.indexOf(String(t)) >= 0);
+  untranslated.forEach(t => missing.push("untranslated " + t));
+  return { ok: missing.length === 0, missing, untranslated };
+}
+const RECOVERY_LINKS = [["?answer-1", "Zamknij Etiudę"], ["?answer-0", "Uruchom ponownie"]];
+function recoveryLinksHeld(links) {
+  const seen = (links || []).map(pair => pair[0] + " " + pair[1]);
+  const required = RECOVERY_LINKS.map(pair => pair[0] + " " + pair[1]);
+  const missing = missingMembers(seen, required, true);
+  if ((links || []).length < RECOVERY_LINKS.length) missing.push("links under " + RECOVERY_LINKS.length);
+  const untranslated = (links || []).map(pair => String(pair[1])).filter(t => SHELL_EN.indexOf(t) >= 0);
+  untranslated.forEach(t => missing.push("untranslated " + t));
+  return { ok: missing.length === 0, missing, untranslated };
+}
+/* COUNTS:END */
+
 const phasesSeen = new Set();
 const phase = what => {
   const m = /^\[(\d+)[a-z]*\/\d+\]/.exec(String(what).trim());
@@ -880,9 +918,12 @@ const placeEc = (dir, from, as, minutesOld) => {
   const menuLine = s.said.join("\n").split("\n").filter(l => /etiuda: context menu /.test(l));
   let items = null;
   try { items = JSON.parse(menuLine[0].replace(/^.*etiuda: context menu /, "")).map(i => i[0]); } catch (x) { /* none */ }
-  check(menuLine.length === 1 && JSON.stringify(items) === JSON.stringify(["Cofnij", "Wytnij", "Kopiuj", "Wklej", "Zaznacz wszystko"]),
-    "1h a right-click in the search box of a Polish desk opens the shell's menu with the five edit"
-    + " commands in Polish: " + JSON.stringify(items) + " from " + menuLine.length + " menu line(s)");
+  const menu1 = menuItemsHeld(items);
+  check(menuLine.length === 1 && menu1.ok,
+    "1h a right-click in the search box of a Polish desk opens the shell's menu with the edit"
+    + " commands in Polish"
+    + (menu1.missing.length ? ", missing " + menu1.missing.join(", ") : "")
+    + ": " + JSON.stringify(items) + " from " + menuLine.length + " menu line(s)");
   await cdp.detach().catch(() => {});
 
   const booted = pg => Promise.race([pg.evaluate(() => typeof window.E_VERSION === "string").catch(() => false), sleep(4000).then(() => false)]);
@@ -919,11 +960,14 @@ const placeEc = (dir, from, as, minutesOld) => {
     } catch (x) { seen = Object.assign(seen || {}, { err: x.message }); }
     await c.detach().catch(() => {});
   }
+  const links1 = recoveryLinksHeld(seen && seen.links);
   check(asks.length === 1 && asks[0].endsWith("Etiuda niespodziewanie się zatrzymała.") && !!seen && seen.lang === "pl"
         && seen.h1 === "Etiuda niespodziewanie się zatrzymała." && seen.scripts === 0
-        && JSON.stringify(seen.links) === JSON.stringify([["?answer-1", "Zamknij Etiudę"], ["?answer-0", "Uruchom ponownie"]]),
+        && links1.ok,
     "1h3 a second crash inside the minute asks, in Polish, in a recovery window of Etiuda's own rather than reloading"
-    + " again: " + asks.length + " question(s) logged, and the window's page reads " + JSON.stringify(seen));
+    + " again"
+    + (links1.missing.length ? ", missing " + links1.missing.join(", ") : "")
+    + ": " + asks.length + " question(s) logged, and the window's page reads " + JSON.stringify(seen));
   await sleep(5000);
   const after = await s.b.pages();
   const again = after.find(x => /etiuda\.html/.test(x.url()));
