@@ -86,11 +86,16 @@ function deckScan(){
   deckMeasure(todo);
 }
 function deckLater(){ if(!deckRaf) deckRaf=requestAnimationFrame(deckScan); }
+// A put-away card's leaving copy, coming or going, changes no card's shape.
+function deckLeaving(r){
+  const nodes=Array.from(r.addedNodes).concat(Array.from(r.removedNodes));
+  return nodes.length>0 && nodes.every(n=>n.nodeType===1 && n.matches(".card[data-leave]"));
+}
 /* What the list's records ask for: a scan when its shape changed, and the fade on any change but the fade's own. */
 function deckHeard(ms){
   let shape=false, fade=false;
   for(const r of ms){
-    if(r.type==="childList"){ shape=true; fade=true; }
+    if(r.type==="childList"){ if(!deckLeaving(r)) shape=true; fade=true; }
     else if(!deckOwnChange(r.oldValue, r.target.getAttribute("class"))) fade=true;
   }
   return {shape, fade};
@@ -98,19 +103,20 @@ function deckHeard(ms){
 function deckHoldsCard(n){
   return n.nodeType===1 && (n.matches(".card[data-id]") || !!n.querySelector(".card[data-id]"));
 }
-/* A record the cards just drawn account for: it adds only them, or changes inside one of them, or
+/* A record the cards just made account for: it adds only them, or changes inside one of them, or
    touches no card at all, which leaves every deck's measure as it was. */
-function deckDrawnBy(r, drawn){
+function deckDrawnBy(r, made){
   const added=Array.from(r.addedNodes);
-  if(added.length && added.every(n=>drawn.indexOf(n)>-1)) return true;
-  if(drawn.some(c=>c.contains(r.target))) return true;
+  if(added.length && added.every(n=>made.indexOf(n)>-1)) return true;
+  if(made.some(c=>c.contains(r.target))) return true;
   const t=r.target, inCard=!!(t.closest && t.closest(".card[data-id]"));
   return !inCard && !added.some(deckHoldsCard) && !Array.from(r.removedNodes).some(deckHoldsCard);
 }
 /* THE DECKS AT REST BEFORE ANYTHING READS THE LIST, for a caller that has just drawn into it: the
    observer's record of the drawing is taken, so no frame scans for it again. No `drawn`: the whole
-   list. `drawn`: cards just drawn that the caller read as in the band, measured with no box read. */
-function deckSettle(drawn){
+   list. `drawn`: cards just drawn that the caller read as in the band, measured with no box read;
+   `made`, every card it drew, is what the records are held against, `drawn` where it is left out. */
+function deckSettle(drawn, made){
   if(!list) return;
   const ms=deckObs ? deckObs.takeRecords() : [];
   if(!drawn){
@@ -118,7 +124,7 @@ function deckSettle(drawn){
     deckScan();
   }else{
     deckMeasure(drawn.filter(c=>deckSlabs(c).length>1));
-    if(ms.some(r=>r.type==="childList" && !deckDrawnBy(r, drawn))) deckLater();
+    if(ms.some(r=>r.type==="childList" && !deckDrawnBy(r, made||drawn))) deckLater();
   }
   if(deckHeard(ms).fade) deckFade();
 }

@@ -1,6 +1,7 @@
 import { nsGet } from "./storage.js";
 import { list } from "./dom.js";
 import { hooks } from "./hooks.js";
+import { deckSettle } from "./deck.js";
 
 /* ---- Card columns -------------------------------------------------------------------------
    THE RULE: the first group goes in the first column, the second in the second, the
@@ -158,7 +159,7 @@ function applyCardColumns(){
   list.style.removeProperty("grid-template-rows");
   if(colMode()==="auto" && !colBoxWidth() && colTries<6){
     colTries++;
-    requestAnimationFrame(applyCardColumns);
+    requestAnimationFrame(applyCardColumnsLate);
     return;
   }
   colTries=0;
@@ -293,6 +294,9 @@ function applyCardColumns(){
     }
   }
 }
+/* A deal put off to a later frame moves the cards after render() has settled the decks, so once it
+   is dealt it settles them again: see deckSettle. */
+function applyCardColumnsLate(){ applyCardColumns(); if(!colTries) deckSettle(); }
 
 export {
   colSetLastN,

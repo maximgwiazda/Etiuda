@@ -3665,7 +3665,7 @@ const CARD_B = {
           s.deck.classList.add("deck-open"); feed([{ type: "attributes", target: s.deck, oldValue: "card deck" }]);
           const opened = faded(l);
           const redrawn = node("c-under", 200, 0, 120); redrawn.getAttribute = () => at(redrawn); l.items[1] = redrawn;
-          feed([{ type: "childList", target: l }]);
+          feed([{ type: "childList", target: l, addedNodes: [], removedNodes: [] }]);
           const arrived = redrawn.classList.contains("deck-under") + "/" + redrawn.classList.contains("deck-fresh");
           s.past.rect = { top: 250, left: 0, right: 300, bottom: 340 };
           feed([{ type: "attributes", target: redrawn, oldValue: "card" }]); const own = faded(l);
@@ -3857,25 +3857,27 @@ const CARD_B = {
           return eq(got.join("|"), "1|66px|deck+deck-near+deck-open+deck-up|none|none|0|0|true|0");
         } finally { rig.restore(); }
       });
-    check("deck.js", "1013dk2 cards rebuilt in place are settled in the same pass: the decks among them are tucked without a box read to place them, a deck not rebuilt is left as it stands, and no frame is asked for their own drawing nor for a change outside every card, but one is for a card drawn by someone else",
+    check("deck.js", "1013dk2 cards rebuilt in place are settled in the same pass: the decks among them near the screen are tucked without a box read to place them, a far one of the same batch and a deck not rebuilt are left as they stand, and no frame is asked for the batch's own drawing, its far cards included, nor for a change outside every card, but one is for a card drawn by someone else",
       () => {
         const rig = deckRig();
         try {
-          const a0 = deckCard("c-a", 100), b = deckCard("c-b", 300), c0 = deckCard("c-c", 500, { one: true });
-          const l = wired([a0, b, c0]);
+          const a0 = deckCard("c-a", 100), b = deckCard("c-b", 300), c0 = deckCard("c-c", 500, { one: true }), f0 = deckCard("c-f", 5000);
+          const l = wired([a0, b, c0, f0]);
           rig.run();
-          const a = deckCard("c-a", 100), c = deckCard("c-c", 500, { one: true }), col = { nodeType: 1, closest: () => null };
-          l.items.splice(0, 3, a, b, c);
+          const a = deckCard("c-a", 100), c = deckCard("c-c", 500, { one: true }), f = deckCard("c-f", 5000), col = { nodeType: 1, closest: () => null };
+          l.items.splice(0, 4, a, b, c, f);
           b.style.height = "77px"; b.rects = 0;
           const span = { nodeType: 1, closest: () => null }, text = { nodeType: 3 };
           rig.held = [{ type: "childList", target: col, addedNodes: [a], removedNodes: [a0] },
             { type: "childList", target: col, addedNodes: [c], removedNodes: [c0] },
+            { type: "childList", target: col, addedNodes: [f], removedNodes: [f0] },
             { type: "childList", target: span, addedNodes: [text], removedNodes: [{ nodeType: 3 }] }];
-          DK.deckSettle([a, c]);
-          const own = [a.style.height, at(a), b.style.height, at(c), a.rects + b.rects + c.rects, rig.held.length, rig.scans()].join(",");
+          DK.deckSettle([a, c], [a, c, f]);
+          const own = [a.style.height, at(a), b.style.height, at(c), f.style.height || "none", at(f), a.rects + b.rects + c.rects + f.rects,
+            rig.held.length, rig.scans()].join(",");
           rig.held = [{ type: "childList", target: col, addedNodes: [deckCard("c-x", 700)], removedNodes: [] }];
-          DK.deckSettle([]);
-          return eq(own + "|" + rig.scans(), "66px,deck+deck-near,77px,none,0,0,0|1");
+          DK.deckSettle([], []);
+          return eq(own + "|" + rig.scans(), "66px,deck+deck-near,77px,none,none,none,0,0,0|1");
         } finally { rig.restore(); }
       });
     check("deck.js", "1013dk3 the list's size asks for a scan when its width changes and not when only its height does, which every drawing and the tuck itself change",
@@ -3888,7 +3890,7 @@ const CARD_B = {
           return eq([sized(913, 4000), sized(913, 4600), sized(913, 3900), sized(705, 3900)].join(","), "1,0,0,1");
         } finally { rig.restore(); }
       });
-    check("render.js", "1013dk4 a render settles the decks before it returns, on both of its ends, right after the columns are dealt and the fresh cards held; a rebuild in place settles the near cards it drew in the same call",
+    check("render.js", "1013dk4 a render settles the decks before it returns, on both of its ends, right after the columns are dealt and the fresh cards held; a rebuild in place settles the near cards it drew in the same call, held against every card it drew",
       () => {
         const flat = s => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "").replace(/\s+/g, "");
         const fn = (src, name) => { const s = src.indexOf("\nfunction " + name + "("); if (s < 0) return "";
@@ -3899,8 +3901,55 @@ const CARD_B = {
         const imported = src => /import\{[^}]*\bdeckSettle\b[^}]*\}from"\.\/deck\.js"/.test(flat(src));
         const empty = r.slice(0, r.indexOf("return;"));
         return eq([imported(rs), empty.includes("applyCardColumns();deckSettle();"), r.includes("applyCardColumns();settleFreshCards();deckSettle();"),
-          imported(ps), /returnfresh;\}$/.test(one), /drawn\.push\(el\)/.test(many) && many.indexOf("ids.forEach(") < many.indexOf("deckSettle(drawn);")].join(","),
+          imported(ps), /returnfresh;\}$/.test(one), /made\.push\(el\);if\(near\[i\]\)drawn\.push\(el\);/.test(many)
+            && many.indexOf("ids.forEach(") > -1 && many.indexOf("ids.forEach(") < many.indexOf("deckSettle(drawn,made);")].join(","),
           "true,true,true,true,true,true");
+      });
+    check("deck.js", "1013dk5 a put-away card's leaving copy, arriving or removed, asks the list for no scan, and a card drawn there still does",
+      () => {
+        const rig = deckRig();
+        try {
+          const l = wired([deckCard("c-l", 100)]);
+          rig.run();
+          const copy = { nodeType: 1, matches: s => s === ".card[data-leave]" };
+          const heard = rec => { rig.feed([Object.assign({ type: "childList", target: l, addedNodes: [], removedNodes: [] }, rec)]); const n = rig.scans(); rig.run(); return n; };
+          return eq([heard({ addedNodes: [copy] }), heard({ removedNodes: [copy] }), heard({ addedNodes: [deckCard("c-m", 300)] })].join(","), "0,0,1");
+        } finally { rig.restore(); }
+      });
+    /* The first render can find the list's box without a width; the dealer then waits a frame and deals there, after the
+       render has settled the decks. A dealt card here is narrower, so its replies stand taller: 10 + 60 + 6 + 10 = 86
+       against the undealt 66. */
+    const CL = await import(MOD("columns.js"));
+    check("columns.js", "1013dk6 a deal put off to a later frame settles the decks once it has dealt them, measured at the column's width; while the deal is still put off they keep the measure of the undealt list",
+      () => {
+        const rig = deckRig(), doc = globalThis.document, had = { make: doc.createElement, root: doc.documentElement, gcs: globalThis.getComputedStyle };
+        try {
+          const narrowing = c => { const [s0, s1] = c.querySelectorAll();
+            [s0, s1].forEach(s => Object.defineProperty(s, "offsetHeight", { configurable: true, get: () => (c.col ? 60 : 40) }));
+            Object.defineProperty(s1, "offsetTop", { configurable: true, get: () => (c.col ? 80 : 60) });
+            Object.defineProperty(c, "offsetHeight", { configurable: true, get: () => (c.col ? 150 : 110) }); return c; };
+          const a = narrowing(deckCard("c-da", 100)), b = narrowing(deckCard("c-db", 300));
+          const box = { clientWidth: 0, getBoundingClientRect() { return { width: this.clientWidth }; }, removeChild() {}, insertBefore() {} };
+          const l = wired([a, b]);
+          rig.run();
+          Object.assign(l, { classList: cls(new Set()), style: { removeProperty() {}, setProperty() {} }, children: [a, b], parentNode: box,
+            nextSibling: null, appendChild() {}, insertBefore() {} });
+          doc.createElement = () => ({ className: "", style: {}, appendChild(n) { n.col = this; } });
+          doc.documentElement = {}; globalThis.getComputedStyle = () => ({ fontSize: "16px" });
+          CL.applyCardColumns();
+          const waiting = [rig.frames.filter(f => f.state === "queued" && f.fn !== DK.deckScan).length > 0, a.style.height || "none"];
+          rig.run();
+          waiting.push(a.style.height || "none");
+          box.clientWidth = 1200;
+          rig.run();
+          return eq([...waiting, l.classList.contains("cols"), !!a.col && !!b.col, a.style.height, b.style.height].join(","),
+            "true,66px,66px,true,true,86px,86px");
+        } finally {
+          rig.restore();
+          doc.createElement = had.make;
+          if (had.root === undefined) delete doc.documentElement; else doc.documentElement = had.root;
+          if (had.gcs === undefined) delete globalThis.getComputedStyle; else globalThis.getComputedStyle = had.gcs;
+        }
       });
     /* The bar opens on hover. max-height lays the row out on every frame of that reveal, so the
        opening has to ride a length that only the clip reads, on the same tier, with the blur kept. */

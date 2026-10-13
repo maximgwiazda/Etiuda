@@ -95,11 +95,17 @@ function cardsNear(ids){
   });
 }
 /* The decks among the cards near the screen are tucked in this same pass, so a batch costs one
-   layout for them and the list is not scanned again for it: see deckSettle. */
+   layout for them, and the whole batch is what the list's records are held against, so the list is
+   not scanned again for it: see deckSettle. */
 function rebuildCardsInPlace(ids){
-  const near=cardsNear(ids), drawn=[];
-  ids.forEach((id,i)=>{ const el=rebuildCardInPlace(id,near[i]); if(el && near[i]) drawn.push(el); });
-  deckSettle(drawn);
+  const near=cardsNear(ids), made=[], drawn=[];
+  ids.forEach((id,i)=>{
+    const el=rebuildCardInPlace(id,near[i]);
+    if(!el) return;
+    made.push(el);
+    if(near[i]) drawn.push(el);
+  });
+  deckSettle(drawn, made);
 }
 function runLangChunks(ids){
   const step=()=>{
