@@ -116,17 +116,22 @@ function strings(){
      what depth cannot: whose argument is this? Ternaries, concatenations, single quotes and
      nested sinks all fall out of it for free. */
   const IDENT=/[\w$.]/;
-  const stack=[]; let inSink=false;
+  /* offerUndo(said, undo) shows t(said) (ui-lang.js), so its FIRST argument is a sink too, and only the first:
+     the second is a function, whose own literals are code. Until 2026-10-13 a typo in one of its fifteen
+     sentences showed English on a Polish desk and nothing said so (board 801 e). */
+  const stack=[], firsts=[]; let inSink=false, firstOnly=false;
   for(let i=0;i<SRC.length;i++){
     const c=SRC[i];
     if(c==="("){
       let j=i-1; while(j>=0 && /\s/.test(SRC[j])) j--;
       let name=""; while(j>=0 && IDENT.test(SRC[j])){ name=SRC[j]+name; j--; }
-      stack.push(inSink);
-      inSink = (name==="t"||name==="ask"||name==="toast");
+      stack.push(inSink); firsts.push(firstOnly);
+      firstOnly = name==="offerUndo";
+      inSink = (name==="t"||name==="ask"||name==="toast"||firstOnly);
       continue;
     }
-    if(c===")"){ if(stack.length) inSink=stack.pop(); else inSink=false; continue; }
+    if(c===")"){ if(stack.length){ inSink=stack.pop(); firstOnly=firsts.pop(); } else { inSink=false; firstOnly=false; } continue; }
+    if(c==="," && firstOnly){ inSink=false; firstOnly=false; continue; }
     if(c===String.fromCharCode(47) && (SRC[i+1]===String.fromCharCode(47))){        // line comment
       while(i<SRC.length && SRC[i]!==NL) i++;
       continue;

@@ -172,6 +172,19 @@ const ARROW_DOC = [
 PATCH.arrowbody = "const txt = " + JSON.stringify(ARROW_DOC) + ";\n"
   + "E.sourceDoc = () => ({ text: txt, files: ['synthetic'], at: () => 'synthetic:1', atLine: k => 'synthetic:' + k });";
 
+/* A fourth, for offerUndo's first argument (board 801 e): one sentence the table holds, one it does not, and
+   literals in the second argument, a function's own code, which no rule may read as copy. Invented words. */
+const UNDO_DOC = [
+  "UI_STRINGS.pl={",
+  '  "Kept undo":"Cofnij",',
+  "};",
+  'offerUndo("Kept undo", ()=>{ const q="Code here"; });',
+  'offerUndo("Drifted undo", ()=>{ go("Also code"); });',
+  ""
+].join("\n");
+PATCH.undo = "const txt = " + JSON.stringify(UNDO_DOC) + ";\n"
+  + "E.sourceDoc = () => ({ text: txt, files: ['synthetic'], at: () => 'synthetic:1', atLine: k => 'synthetic:' + k });";
+
 /* A reading of files, for the scans that ask which file a name is declared in. Each part is
    [file, text]; at() answers the file of an offset, as the real sourceDoc() does. */
 function filesPatch(parts) {
@@ -382,6 +395,11 @@ try {
   ok(ab.code === 1 && /PL: 2\/4 /.test(ab.out) && /"Drifted  one":""/.test(abMissing) && /"Named one":""/.test(abMissing)
      && !/"no"/.test(abMissing) && !/Kept/.test(abMissing),
      "i18n-scan.js       reads copy a function returns, arrow or named, and nothing it only compares");
+  const un = scan(roots.mod, "i18n-scan.js", "undo", ["pl"]);
+  const unMissing = un.out.split("MISSING")[1] || "";
+  ok(un.code === 1 && /PL: 1\/2 /.test(un.out) && /"Drifted undo":""/.test(unMissing)
+     && !/Code here|Also code|Kept undo/.test(unMissing),
+     "i18n-scan.js       reads offerUndo's first argument as copy, and nothing of its second (board 801 e)");
 
   /* 27. deadcode.js READS A NAMESPACE MEMBER AND A SPREAD AS USES, board 858. At 09fae6f 61 of its
      78 hits were live, 60 called as `ns.fn()` from boot() and one as `...hitRanges(`. The three
