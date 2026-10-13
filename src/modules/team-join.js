@@ -14,6 +14,10 @@ import { ICON_LOCK, ICON_KEY, ICON_DESK } from "./icons.js";
 
 let joinNow=null;                 // the shell's last answer: {sealed:{file,team}|null, join:{...}|null, leads:[{team,print,admitted,seen}]}
 let joinShut="";                  // the answer the agent last hid the bubble on
+let joinMode="";                  // "" | "paste" | "confirm" | "refused": the invitation, held on the page until it is answered
+let joinOffer=null;               // {folder, lead, print, host, cloud, local} the shell showed for a confirm
+let joinBlob="";                  // the invitation text, sent again on yes; the shell does not keep it
+let joinWhy="";                   // "unread" | "silent"
 function eHasJoin(){
   const h=eHost();
   return !!h && typeof h.teamJoin==="function";
@@ -25,7 +29,10 @@ function joinAsk(op,file,name){
 }
 /* What the empty desk and the bubble show: a lead's key not yet shown, a sealed catalog, or a request under way. */
 function teamJoinShown(){
-  return !!joinNow && (!!leadToShow() || !!joinNow.join || !!joinNow.sealed);
+  return joinMode!=="" || (!!joinNow && (!!leadToShow() || !!joinNow.join || !!joinNow.sealed));
+}
+function teamCanJoin(){
+  return eHasJoin() && !(joinNow && (joinNow.join || leadToShow()));
 }
 function leadToShow(){
   return ((joinNow&&joinNow.leads)||[]).filter(l=>l.admitted && !l.seen)[0]||null;
@@ -49,9 +56,18 @@ function keyTipHtml(tip,print,kind){
 }
 function joinTook(v){
   const s=v&&typeof v==="object"?v:{};
+  if(s.offer && typeof s.offer.folder==="string"){
+    joinOffer={folder:String(s.offer.folder),lead:String(s.offer.lead||""),print:String(s.offer.print||""),
+      host:String(s.offer.host||""),cloud:String(s.offer.cloud||""),local:s.offer.local===true};
+    joinWhy=""; joinMode="confirm";
+  }else if(s.refused==="unread"||s.refused==="silent"){
+    joinWhy=s.refused; joinOffer=null; joinMode="refused"; joinBlob="";
+  }else if((joinMode==="confirm"||joinMode==="paste") && s.join){
+    joinMode=""; joinOffer=null; joinBlob="";
+  }
   const was=JSON.stringify(joinNow);
   joinNow={sealed:s.sealed&&s.sealed.file?{file:String(s.sealed.file),team:String(s.sealed.team||"")}:null,
-           join:s.join&&s.join.file?{file:String(s.join.file),state:String(s.join.state||""),code:String(s.join.code||""),
+           join:s.join&&(s.join.file||s.join.state)?{file:String(s.join.file||""),state:String(s.join.state||""),code:String(s.join.code||""),
                                       asked:+s.join.asked||0,name:String(s.join.name||"")}:null,
            leads:Array.isArray(s.leads)?s.leads.filter(l=>l&&l.team).map(l=>({team:String(l.team),print:String(l.print||""),
                                       admitted:l.admitted===true,seen:l.seen===true})):[]};
@@ -79,12 +95,61 @@ function joinCodeHtml(code){
   return code?'<div class="e-join-code"><span>'+esc(code.slice(0,3))+'</span><span>'+esc(code.slice(3))+'</span></div>'
     :'<div class="e-join-code e-join-wait" aria-hidden="true"><span><i></i><i></i><i></i></span><span><i></i><i></i><i></i></span></div>';
 }
+function pastedText(){
+  try{
+    const el=document.querySelector("[data-join-paste]");
+    if(el && typeof el.value==="string") return el.value;
+  }catch(e){}
+  return joinBlob;
+}
+function clearJoinAsk(){
+  joinMode=""; joinOffer=null; joinWhy=""; joinBlob="";
+  if(wholeThingEmpty()){ closeJoinBubble(); hooks.render(); return; }
+  paintJoin();
+}
+/* One door, from the empty desk and from a sealed catalog: the invitation is pasted here. */
+function openJoinPaste(){
+  if(!teamCanJoin()) return;
+  joinMode="paste"; joinOffer=null; joinWhy=""; joinBlob="";
+  if(wholeThingEmpty()){ closeJoinBubble(); hooks.render(); return; }
+  paintJoin();
+}
+function joinWhere(o){
+  if(!o) return "";
+  const host=o.host?t("This folder is on {HOST}.").split("{HOST}").join(o.host):"";
+  const cloud=o.cloud==="sharepoint"?t("This folder is a SharePoint library that OneDrive keeps in sync.")
+    :o.cloud==="onedrive"?t("OneDrive keeps this folder in sync.")
+    :o.cloud==="dropbox"?t("Dropbox keeps this folder in sync.")
+    :o.cloud==="gdrive"?t("Google Drive keeps this folder in sync.")
+    :o.local?t("Desks on other computers read this folder only if it is shared with them."):"";
+  return [host,cloud].filter(Boolean).join(" ");
+}
+function joinInviteParts(){
+  if(joinMode==="paste") return {title:t("Join a team"), line:t("Paste the invitation from the team's lead."),
+    body:'<textarea class="e-join-paste" data-join-paste spellcheck="false" autocomplete="off" aria-label="'
+      +esc(t("Paste the invitation from the team's lead."))+'">'+esc(joinBlob)+'</textarea>',
+    acts:[["read",t("Continue")],["back",t("Cancel")]]};
+  if(joinMode==="confirm" && joinOffer){
+    const o=joinOffer;
+    return {title:t("Join this team?"), line:joinWhere(o),
+      body:'<div class="e-join-meta">'+esc(t("The folder is {FOLDER}.").split("{FOLDER}").join(o.folder))+'</div>'
+        +'<div class="e-join-meta">'+esc(t("The lead is {NAME}.").split("{NAME}").join(o.lead))+'</div>'
+        +'<div class="e-join-key">'+keySignHtml("studio",o.print)+'</div>',
+      acts:[["invite",t("Join this team")],["back",t("Cancel")]]};
+  }
+  if(joinMode==="refused") return {title:t("Join a team"),
+    line:joinWhy==="silent"?t("This folder did not answer, so nothing was written."):t("This invitation does not read. Nothing was changed."),
+    body:"", acts:[["back",t("Cancel")]]};
+  return null;
+}
 /* The title, the line under it, and the acts, for whichever state the request is in. */
 function joinParts(){
   const j=joinNow&&joinNow.join, s=joinNow&&joinNow.sealed, who=agentName()||t("this desk"), l=leadToShow();
   if(l) return {title:t("You are on the team"),
     line:t("Compare this key with the Signing key in the lead's Studio Settings. Every later edition is checked against it."),
     body:'<div class="e-join-key">'+keySignHtml("studio",l.print)+'</div>', acts:[["seen",t("It matches")],["forget",t("It does not match")]], lead:l.team};
+  const invited=joinInviteParts();
+  if(invited) return invited;
   const meta=j?'<div class="e-join-meta">'+esc(t("{NAME}, asked at {TIME}").split("{NAME}").join(j.name||who)
     .split("{TIME}").join(joinTime(j.asked)))+'</div>':'';
   if(j && j.state==="code") return {title:t("Read this code to the team's lead"),
@@ -98,10 +163,14 @@ function joinParts(){
   return {title:t("{FILE} is sealed for its team").split("{FILE}").join(s?s.file:""),
     line:t("Once the team's lead lets this desk in, the catalog opens here by itself."),
     body:'<div class="e-join-meta">'+esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who))+'</div>',
-    acts:[["ask",t("Ask to join")],["load",t("Load another catalog")]]};
+    acts:[["ask",t("Ask to join")],["join",t("Join a team")],["load",t("Load another catalog")]]};
 }
 function joinAct(act){
   const j=joinNow&&joinNow.join, s=joinNow&&joinNow.sealed;
+  if(act==="join") return Promise.resolve(openJoinPaste());
+  if(act==="back") return Promise.resolve(clearJoinAsk());
+  if(act==="read"){ joinBlob=pastedText(); return joinAsk("read", joinBlob); }
+  if(act==="invite") return joinAsk("invite", joinBlob, agentName());
   if(act==="ask") return joinAsk("ask",(j&&j.file)||(s&&s.file)||"",agentName());
   if(act==="cancel") return joinAsk("cancel");
   const l=leadToShow();
@@ -121,7 +190,10 @@ function teamJoinEmptyHtml(){
 }
 function wireTeamJoinEmpty(root){
   if(!root) return;
-  root.querySelectorAll("[data-join]").forEach(b=>{ b.onclick=()=>joinAct(b.getAttribute("data-join")); });
+  root.querySelectorAll("[data-join], [data-join-paste]").forEach(el=>{
+    if(el.hasAttribute && el.hasAttribute("data-join-paste")) el.oninput=()=>{ joinBlob=String(el.value||""); };
+    else if(el.getAttribute && el.getAttribute("data-join")) el.onclick=()=>joinAct(el.getAttribute("data-join"));
+  });
 }
 /* THE BUBBLE, where a catalog is already open: hung from the catalog's name as the offer is, one at a time, and back
    only when the answer it was hidden on changes. */
@@ -155,9 +227,10 @@ function openJoinBubble(){
   // Hiding the lead's key counts as having been shown it; the key stays in Settings.
   const hide=()=>{ joinShut=JSON.stringify(joinNow); close(); if(p.lead) joinAsk("seen",p.lead); };
   wrap.addEventListener("keydown",e=>{ if(e.key!=="Escape") return; e.preventDefault(); e.stopPropagation(); hide(); });
-  wrap.querySelectorAll("[data-join]").forEach(b=>{
-    const act=b.getAttribute("data-join");
-    b.onclick=()=>{ if(act==="hide") return hide(); close(); joinAct(act); };
+  wrap.querySelectorAll("[data-join], [data-join-paste]").forEach(el=>{
+    if(el.hasAttribute("data-join-paste")){ el.oninput=()=>{ joinBlob=String(el.value||""); }; return; }
+    const act=el.getAttribute("data-join");
+    el.onclick=()=>{ if(act==="hide") return hide(); close(); joinAct(act); };
   });
 }
 
@@ -166,4 +239,4 @@ function forgetTeamLead(team,then){
   return joinAsk("forget",team).then(v=>{ if(typeof then==="function") then(); return v; });
 }
 
-export { wireTeamJoin, teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, paintJoin };
+export { wireTeamJoin, teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, paintJoin, openJoinPaste, teamCanJoin };

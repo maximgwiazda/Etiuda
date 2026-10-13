@@ -1316,13 +1316,20 @@ function memberHeed(doc, state, seen) {
     return ret({ stop: true, team: doc.id });
   }
   const join = out.join;
-  const asked = !hadPin && join && join.team === doc.id ? (join.opened ? join.opened.lead : { keyId: "", public: "" })
+  /* An invitation already names its lead, so that lead is the one a first admission must carry. With no
+     invitation the waiting request still names nobody, and a file under any lead stops without a word. */
+  const carried = join && join.invite && join.invite.lead;
+  const inviteLead = carried && /^[0-9a-f]{64}$/.test(String(carried.public))
+    ? { keyId: String(carried.keyId || ""), public: String(carried.public) } : null;
+  const asked = !hadPin && join && join.team === doc.id
+    ? (inviteLead || (join.opened ? join.opened.lead : { keyId: "", public: "" }))
     : !hadPin && out.barred.indexOf(doc.id) >= 0 ? { keyId: "", public: "" } : null;
   if (asked && (asked.keyId !== lead.keyId || asked.public !== lead.public)) {
     if (asked.public)
       said.push(file + " is signed by a key other than the lead this desk asked to join team " + doc.id + ", so nothing in it is used");
     return ret({ stop: true, team: doc.id });
   }
+  const invited = !!(inviteLead && join && join.team === doc.id && inviteLead.keyId === lead.keyId && inviteLead.public === lead.public);
   const member = look.member;
   let entry = null;
   if (member && Array.isArray(doc.roster)) entry = doc.roster.find(x => !!x && !!x.desk && x.desk.id === member.id) || null;
@@ -1330,8 +1337,8 @@ function memberHeed(doc, state, seen) {
   if (hasWrap && (member.sk === null || member.sk === undefined)) return ret({ needKey: true, team: doc.id });
   let key = null;
   if (hasWrap) key = member.sk ? unwrapTeamKey(member.sk, entry.wrap, doc.id, doc.epoch, member.id) : false;
-  if (!hadPin && !key && look.ring === undefined) return ret({ needRing: true, key: key, stampClear: key === false, team: doc.id });
-  if (!hadPin && !key && !memberRingVouches(doc, look.ring)) return ret({ stop: true, key: key, stampClear: key === false, team: doc.id });
+  if (!hadPin && !key && !invited && look.ring === undefined) return ret({ needRing: true, key: key, stampClear: key === false, team: doc.id });
+  if (!hadPin && !key && !invited && !memberRingVouches(doc, look.ring)) return ret({ stop: true, key: key, stampClear: key === false, team: doc.id });
   let changed = false, pinned = false, unbar = false;
   if (!hadPin || handed) { out.pins[doc.id] = lead; pinned = true; changed = true; }
   if (!hadPin) {
@@ -1426,7 +1433,7 @@ function teamOpen(data) {
    lead's opening for that very commitment is read, and is then revealed against that opening alone, which
    is kept: a later opening is never answered, and the lead it names is the one a first admission must carry. While the
    request waits or stands refused, no first admission is taken for its team. */
-let teamJoin = null;                            // {team, file, nonce, commit, asked, held, name, opened?, refused?}
+let teamJoin = null;                            // {team, file, nonce, commit, asked, held, name, opened?, refused?, invite?}
 let joinSent = "";
 function newestEpoch(team) {
   return Object.keys(teamKeys[team] || {}).reduce((hi, n) => Math.max(hi, +n || 0), 0);
@@ -1457,12 +1464,87 @@ function writeJoin(doc) {
   }
   writeReplacing(file, JSON.stringify(doc, null, 1) + "\n");
 }
+/* HMAC-SHA256 of the commitment under the invitation's secret, in hex, or "" where either is not the
+   shape a request carries. The secret is 128 bits, the commitment the hex joinCommit already made. */
+function memberProof(secret, commit) {
+  const sec = String(secret || ""), com = String(commit || "");
+  if (!/^[0-9a-f]{32}$/.test(sec) || !/^[0-9a-f]{64}$/.test(com)) return "";
+  return crypto.createHmac("sha256", Buffer.from(sec, "hex")).update(com, "utf8").digest("hex");
+}
+/* The first 16 hex of the secret's own SHA-256, which is all of it a request carries. */
+function inviteIdOf(secret) {
+  const sec = String(secret || "");
+  if (!/^[0-9a-f]{32}$/.test(sec)) return "";
+  return crypto.createHash("sha256").update(Buffer.from(sec, "hex")).digest("hex").slice(0, 16);
+}
+/* The invitation a lead hands over: "etiuda-join:" and base64url of the team, the folder, the lead and a
+   128-bit secret. Null where it is not that shape. Nothing is read from the folder: a path on another
+   computer answers a stat by connecting, and the confirm exists so that connection is a choice. */
+function inviteRead(text) {
+  const raw = String(text == null ? "" : text).trim();
+  if (raw.length < 16 || raw.length > 8192 || raw.slice(0, 12) !== "etiuda-join:") return null;
+  let b64 = raw.slice(12).replace(/-/g, "+").replace(/_/g, "/");
+  if (!/^[A-Za-z0-9+/]+=*$/.test(b64)) return null;
+  while (b64.length % 4) b64 += "=";
+  let doc = null;
+  try { doc = JSON.parse(Buffer.from(b64, "base64").toString("utf8")); } catch (e) { return null; }
+  if (!doc || typeof doc !== "object" || Array.isArray(doc)) return null;
+  const lead = doc.lead;
+  const folder = typeof doc.folder === "string" ? doc.folder : "";
+  const secret = String(doc.secret || "").toLowerCase();
+  const pub = lead && typeof lead.public === "string" ? lead.public.toLowerCase() : "";
+  const keyId = lead && typeof lead.keyId === "string" ? lead.keyId : "";
+  const name = lead && typeof lead.name === "string" ? lead.name : null;
+  const pathOk = folder.length >= 3 && folder.length <= 1024 && !/[\u0000-\u001f\u007f]/.test(folder)
+    && (/^[a-zA-Z]:[\\/]/.test(folder) || /^[\\/]{2}[^\\/]+[\\/][^\\/]+/.test(folder) || /^\/[^/]/.test(folder));
+  const nameOk = name !== null && name.length <= 120 && !/[\u0000-\u001f\u007f]/.test(name);
+  const keyOk = keyId.length >= 1 && keyId.length <= 80 && !/[\u0000-\u001f\u007f]/.test(keyId);
+  if (!SEALED_TEAM_RE.test(String(doc.team)) || !pathOk || !/^[0-9a-f]{32}$/.test(secret) || !/^[0-9a-f]{64}$/.test(pub) || !keyOk || !nameOk) return null;
+  return { team: String(doc.team), folder: folder, lead: { keyId: keyId, public: pub, name: name }, secret: secret };
+}
+/* Where a folder sits, from its text alone: a UNC host, a cloud client named by the path, or this
+   computer's system drive. Another drive letter may be a mapped share, so it is none of those. */
+function folderHost(folder, env) {
+  const raw = String(folder || "");
+  const e = env && typeof env === "object" ? env : {};
+  let host = "";
+  if (raw.charAt(0) === "\\" && raw.charAt(1) === "\\" || raw.charAt(0) === "/" && raw.charAt(1) === "/") {
+    const rest = raw.slice(2);
+    const cut = rest.search(/[\\/]/);
+    host = cut < 0 ? rest : rest.slice(0, cut);
+  }
+  const slash = raw.replace(/\//g, "\\");
+  const low = slash.toLowerCase();
+  let cloud = "";
+  if (low.indexOf("\\onedrive\\") >= 0 || low.indexOf("\\onedrive - ") >= 0 || low.endsWith("\\onedrive")) cloud = "onedrive";
+  else if (low.indexOf("\\dropbox\\") >= 0 || low.indexOf("\\dropbox ") >= 0 || low.endsWith("\\dropbox")) cloud = "dropbox";
+  else if (low.indexOf("\\google drive\\") >= 0 || low.endsWith("\\google drive") || low.indexOf(":\\my drive") >= 0
+      || low.indexOf(":\\shared drives") >= 0 || low.indexOf(":\\mój dysk") >= 0 || low.indexOf(":\\dyski współdzielone") >= 0) cloud = "gdrive";
+  else if (typeof e.USERPROFILE === "string" && typeof e.OneDriveCommercial === "string" && e.OneDriveCommercial) {
+    const home = e.USERPROFILE.replace(/\//g, "\\").replace(/\\+$/, "");
+    if (home && slash.toLowerCase().indexOf(home.toLowerCase() + "\\") === 0) {
+      const rel = slash.slice(home.length + 1).split("\\");
+      const tenant = rel[0] || "";
+      const bizName = e.OneDriveCommercial.replace(/^.*[\\/]/, "").replace(/^OneDrive - /i, "");
+      if (rel.length >= 2 && tenant && bizName && tenant.toLowerCase() === bizName.toLowerCase() && rel[1].indexOf(" - ") >= 0) cloud = "sharepoint";
+    }
+  }
+  const sys = String(e.SystemDrive || "C:").slice(0, 2).toLowerCase();
+  const drive = /^[a-zA-Z]:/.test(raw) ? raw.slice(0, 2).toLowerCase() : "";
+  const local = !host && !cloud && drive !== "" && drive === sys;
+  return { host: host, local: local, cloud: cloud };
+}
 /* The request a member writes. `me` is {id, key, box}, `j` the join this desk keeps, `reveal` the lead's
-   opening or null. The same bytes joinRequestDoc has always written. Pure, like the join declarations above. */
-function memberRequestDoc(j, reveal, me) {
+   opening or null. `invite` is {id, proof} from an invitation, or absent, and absent is the document this
+   desk has always written: no kind on the member and no invite field. A secret on `invite` is not copied. */
+function memberRequestDoc(j, reveal, me, invite) {
   const desk = { id: me.id, key: me.key, box: me.box };
   if (j.name) desk.name = j.name;
+  const got = invite && typeof invite === "object" && /^[0-9a-f]{16}$/.test(String(invite.id)) && /^[0-9a-f]{64}$/.test(String(invite.proof))
+    ? { id: String(invite.id), proof: String(invite.proof) } : null;
+  if (got) desk.kind = "desk";
   const doc = { format: 1, kind: JOIN_KIND, team: j.team, desk: desk, date: new Date(j.asked).toISOString(), commit: j.commit };
+  if (got) doc.invite = got;
   if (reveal) { doc.reveal = j.nonce; doc.opened = reveal; }
   return doc;
 }
@@ -1510,6 +1592,10 @@ function joinView() {
     persistDeskEnvelope();
     view.joined = { team: j.team, file: j.file };
   } else if (j && me) {
+    if (!j.file) {
+      const named = sealedOutside();
+      if (named && named.team === j.team) { j.file = named.file; persistDeskEnvelope(); }
+    }
     if (!j.opened && !j.refused) {
       let joins = null;
       try { joins = JSON.parse(fs.readFileSync(path.join(root, JOINS_NAME), "utf8")); } catch { /* none yet */ }
@@ -1544,7 +1630,70 @@ function joinKept(j) {
     && (o === undefined || (!!o && !!o.lead && typeof o.lead.keyId === "string" && JOIN_HEX_RE.test(String(o.lead.public))
       && JOIN_HEX_RE.test(String(o.nonce))))
     && (j.refused === undefined || j.refused === true);
-  return ok ? j : null;
+  if (!ok) return null;
+  if (j.invite === undefined) return j;
+  const inv = j.invite, who = inv && inv.lead;
+  const inviteOk = !!inv && typeof inv === "object" && /^[0-9a-f]{16}$/.test(String(inv.id)) && JOIN_HEX_RE.test(String(inv.proof))
+    && !Object.prototype.hasOwnProperty.call(inv, "secret")
+    && !!who && typeof who === "object" && typeof who.keyId === "string" && who.keyId.length > 0 && who.keyId.length <= 80
+    && JOIN_HEX_RE.test(String(who.public)) && typeof who.name === "string" && who.name.length <= 120;
+  return inviteOk ? j : null;
+}
+/* What an invitation says, and nothing written: the folder it names is not opened, stated or watched. */
+function readInvite(text) {
+  const parsed = inviteRead(text);
+  const view = joinView();
+  if (!parsed) return Object.assign({}, view, { refused: "unread" });
+  const where = folderHost(parsed.folder, process.env);
+  return Object.assign({}, view, { offer: { folder: parsed.folder, lead: parsed.lead.name, print: leadPrint(parsed.lead.public),
+    host: where.host, cloud: where.cloud, local: where.local } });
+}
+/* The person's yes. The folder is asked before anything is written; a folder that does not answer is put
+   back as it was. The lead is pinned from the invitation, and the request carries the proof, never the secret. */
+async function takeInvite(text, name) {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  const parsed = inviteRead(text);
+  if (!parsed) return Object.assign({}, joinView(), { refused: "unread" });
+  const me = branchIdentity();
+  if (!me) return Object.assign({}, joinView(), { refused: "unread" });
+  const previous = catalogFolder();
+  const keptJoin = teamJoin;
+  if (previous !== parsed.folder) deskSetOwn(CATALOG_FOLDER_KEY, parsed.folder);
+  const answers = await askFolder(parsed.folder);
+  if (!answers) {
+    if (catalogFolder() !== previous) deskSetOwn(CATALOG_FOLDER_KEY, previous);
+    return Object.assign({}, joinView(), { refused: "silent" });
+  }
+  settleFolder(parsed.folder, true);
+  const nonce = crypto.randomBytes(32).toString("hex");
+  const commit = joinCommit(parsed.team, me.key, me.box, nonce);
+  const proof = memberProof(parsed.secret, commit);
+  const incomingId = inviteIdOf(parsed.secret);
+  if (!proof || !incomingId) {
+    if (catalogFolder() !== previous) deskSetOwn(CATALOG_FOLDER_KEY, previous);
+    return Object.assign({}, joinView(), { refused: "unread" });
+  }
+  const seen = sealedOutside();
+  const file = seen && seen.team === parsed.team ? seen.file : "";
+  const j = { team: parsed.team, file: file, nonce: nonce, commit: commit, asked: Date.now(), held: newestEpoch(parsed.team),
+    name: String(name || "").trim().slice(0, 120),
+    invite: { id: incomingId, proof: proof, lead: { keyId: parsed.lead.keyId, public: parsed.lead.public, name: parsed.lead.name } } };
+  try { writeJoin(memberRequestDoc(j, null, me, { id: incomingId, proof: proof })); }
+  catch (e) {
+    console.error("etiuda: the request to join could not be written - " + e.message);
+    if (catalogFolder() !== previous) deskSetOwn(CATALOG_FOLDER_KEY, previous);
+    return Object.assign({}, joinView(), { refused: "silent" });
+  }
+  if (keptJoin && previous !== parsed.folder && deskBranch && folderAnswers(previous)) {
+    try { fs.unlinkSync(path.join(previous, "desks", branchIdOf(deskBranch.sign.pub), "join.json")); } catch (e) { /* already gone */ }
+  }
+  teamJoin = j;
+  teamPins[parsed.team] = { keyId: parsed.lead.keyId, public: parsed.lead.public };
+  teamBarred.delete(parsed.team);
+  teamStamp = "";
+  persistDeskEnvelope();
+  catalogFolderChanged();
+  return joinView();
 }
 /* The lead key as Studio's Settings show it, the 16 hex after "studio-" (sign.mjs keyIdFor), made from the public half and
    never from the file's keyId, which any writer of the share chooses. */
@@ -2587,7 +2736,7 @@ ipcMain.handle("etiuda:shared-write", (e, name, text, sha, create) =>
 // "seen" and "forget" name a team where the others name a file.
 ipcMain.handle("etiuda:team-join", (e, op, file, name) => (!fromEngine(e) ? null
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
-  : op === "forget" ? forgetLead(file) : joinView()));
+  : op === "forget" ? forgetLead(file) : op === "read" ? readInvite(file) : op === "invite" ? takeInvite(file, name) : joinView()));
 
 /* The engine calls no OS API, so the folder picker is the shell's. The CAPTION comes from the
    page: the shell has no t(), and a dialog captioned in two languages at once is captioned in

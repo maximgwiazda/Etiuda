@@ -15,7 +15,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXPECTED = 9;
+const EXPECTED = 13;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -56,7 +56,8 @@ const MEMBER_DECLS = ["const HPKE_KEM =", "const HPKE_SUITE =", "const SPKI_X255
   "function unwrapTeamKey(", "const JOIN_KIND =", "const HANDOVER_PREFIX =", "const HANDOVER_KIND =",
   "function handoverSignedBytes(", "function handoverGenuine(", "function handedTo(", "const SPKI_ED25519 =",
   "function canonJson(", "function signedBytesOf(", "function teamWhole(", "function memberRingVouches(",
-  "function memberStateCopy(", "function memberRequestDoc(", "function memberHeed("];
+  "function memberStateCopy(", "function memberProof(", "function inviteIdOf(", "function inviteRead(", "function folderHost(",
+  "function memberRequestDoc(", "function memberHeed("];
 const BUILD_DECLS = ["function hpkeSeal(", "function wrapTeamKey(", "function branchIdOf("];
 const JOIN_DECLS = ["const SPKI_ED25519 =", "function branchIdOf(", "function canonJson(", "function signedBytesOf(",
   "const SEALED_TEAM_RE =", "const JOIN_PREFIX =", "const JOIN_KIND =", "const JOIN_HEX_RE =", "function joinHash(",
@@ -66,7 +67,7 @@ const SRC = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
 let M = null, J = null;
 try {
   M = load(SRC, MEMBER_DECLS.concat(BUILD_DECLS),
-    ["memberRequestDoc", "memberHeed", "wrapTeamKey", "branchIdOf", "signedBytesOf", "teamWhole"]);
+    ["memberRequestDoc", "memberHeed", "memberProof", "inviteIdOf", "inviteRead", "folderHost", "wrapTeamKey", "branchIdOf", "signedBytesOf", "teamWhole"]);
   J = load(SRC, JOIN_DECLS, ["joinCommit", "joinCode", "joinSignedBytes", "joinGenuine"]);
   check(true,
     "16a the " + MEMBER_DECLS.length + " member declarations slice out of shell/main.js and evaluate with crypto and Buffer alone,"
@@ -210,6 +211,72 @@ if (M && J) {
   check(/^[0-9a-f]{64}$/.test(J.joinCommit(TEAM, me.key, me.box, nonce))
       && J.joinCommit(TEAM, me.key, me.box, nonce) === commit && /^[0-9]{6}$/.test(code),
     "16i the join declarations still reckon a commitment of 64 hex and a code of six digits");
+
+  const secret = hex(16);
+  const proof = M.memberProof(secret, commit);
+  const wantProof = crypto.createHmac("sha256", Buffer.from(secret, "hex")).update(commit, "utf8").digest("hex");
+  const otherSecret = hex(16);
+  const otherBox = hex(32);
+  const otherCommit = J.joinCommit(TEAM, me.key, otherBox, nonce);
+  const id = M.inviteIdOf(secret);
+  const wantId = crypto.createHash("sha256").update(Buffer.from(secret, "hex")).digest("hex").slice(0, 16);
+  check(proof === wantProof && proof.length === 64 && otherCommit !== commit
+      && M.memberProof(otherSecret, commit) !== proof && M.memberProof(secret, otherCommit) !== proof
+      && M.memberProof("zz", commit) === "" && M.memberProof(secret, "abcd") === ""
+      && id === wantId && id.length === 16 && M.inviteIdOf("nope") === "",
+    "16j a proof holds for its secret and commitment, and fails for another secret or for a commitment made with another box: "
+    + (proof === wantProof) + ", other secret differs " + (M.memberProof(otherSecret, commit) !== proof)
+    + ", other commitment differs " + (M.memberProof(secret, otherCommit) !== proof));
+
+  const withInvite = M.memberRequestDoc(j, null, me, { id: id, proof: proof, secret: secret });
+  const plain = M.memberRequestDoc(j, null, me);
+  const invitedText = JSON.stringify(withInvite);
+  const invitedSigned = JSON.parse(JSON.stringify(withInvite));
+  invitedSigned.sig = { alg: "Ed25519", keyId: me.id };
+  invitedSigned.sig.value = crypto.sign(null, J.joinSignedBytes(invitedSigned), sign.privateKey).toString("hex");
+  const carried = withInvite && withInvite.invite;
+  check(JSON.stringify(plain) === JSON.stringify(want) && withInvite.desk.kind === "desk"
+      && !!carried && carried.id === id && carried.proof === proof
+      && !!carried && !Object.prototype.hasOwnProperty.call(carried, "secret") && invitedText.indexOf(secret) < 0
+      && J.joinGenuine(invitedSigned, me.id) === true,
+    "16k a request that carries an invitation names kind desk and the proof, the same request without one is unchanged, and the secret is not in it: "
+    + withInvite.desk.kind + ", secret absent " + (invitedText.indexOf(secret) < 0));
+
+  const blobOf = (o) => "etiuda-join:" + Buffer.from(JSON.stringify(o)).toString("base64url");
+  const leadBlob = { keyId: lead.keyId, public: lead.public, name: "Quay lead" };
+  const goodBlob = M.inviteRead(blobOf({ team: TEAM, folder: "C:/quay/catalogs", lead: leadBlob, secret: secret, v: 1 }));
+  const badBlobs = ["", "etiuda-join:", "not-an-invitation",
+    blobOf({ team: TEAM, folder: "quay", lead: leadBlob, secret: secret }),
+    blobOf({ team: "nope", folder: "C:/quay", lead: leadBlob, secret: secret }),
+    blobOf({ team: TEAM, folder: "C:/quay", lead: { keyId: "a", public: "abcd", name: "Quay lead" }, secret: secret }),
+    blobOf({ team: TEAM, folder: "C:/quay", lead: leadBlob, secret: "abcd" }),
+    "etiuda-join:" + Buffer.from("{").toString("base64url")];
+  const wholeBlob = blobOf({ team: TEAM, folder: "C:/quay/catalogs", lead: leadBlob, secret: secret });
+  const tampered = wholeBlob.slice(0, 20) + (wholeBlob[20] === "A" ? "B" : "A") + wholeBlob.slice(21);
+  const where = M.folderHost("\\\\quay-host\\catalogs", { SystemDrive: "C:" });
+  const onDisk = M.folderHost("C:/quay/catalogs", { SystemDrive: "C:" });
+  const otherDisk = M.folderHost("D:/quay/catalogs", { SystemDrive: "C:" });
+  check(!!goodBlob && goodBlob.team === TEAM && goodBlob.secret === secret && goodBlob.lead.name === "Quay lead"
+      && goodBlob.folder === "C:/quay/catalogs" && badBlobs.every(b => M.inviteRead(b) === null) && M.inviteRead(tampered) === null
+      && where.host === "quay-host" && where.local === false && onDisk.local === true && onDisk.host === ""
+      && otherDisk.local === false && otherDisk.host === "" && otherDisk.cloud === "",
+    "16l a malformed or tampered invitation is refused, a well shaped one is read, and a path on another computer is named from its text: "
+    + "refused " + badBlobs.filter(b => M.inviteRead(b) === null).length + " of " + badBlobs.length
+    + ", host " + where.host);
+
+  const inviteJoin = { team: TEAM, invite: { id: id, proof: proof, lead: { keyId: lead.keyId, public: lead.public, name: "Quay lead" } } };
+  const bareFile = teamDoc(lead, 1, [], leadKey.privateKey);
+  const noRing = { file: FILE, member: { id: me.id, sk: box.privateKey } };
+  const byInvite = M.memberHeed(bareFile, { pins: {}, keys: {}, barred: [], join: inviteJoin }, noRing);
+  const otherJoin = { team: TEAM, invite: { id: id, proof: proof, lead: { keyId: otherLead.keyId, public: otherLead.public, name: "Other" } } };
+  const otherFile = M.memberHeed(genuine, { pins: {}, keys: {}, barred: [], join: otherJoin }, seen);
+  const stillAsks = M.memberHeed(noWrap, { pins: {}, keys: {}, barred: [], join: null }, noRing);
+  check(byInvite.stop === false && byInvite.pinned === true && byInvite.keep === false && byInvite.state.pins[TEAM].public === lead.public
+      && otherFile.stop === true && otherFile.pinned === false && Object.keys(otherFile.state.pins).length === 0
+      && otherFile.said.length === 1 && otherFile.said[0].indexOf("asked to join") >= 0
+      && stillAsks.needRing === true && stillAsks.pinned === false,
+    "16m a team file under the invitation's lead is pinned with no ring, a file under another lead is refused, and a request with no invitation still asks for the ring: "
+    + "pinned " + byInvite.pinned + ", other stopped " + otherFile.stop + ", no invitation needRing " + stillAsks.needRing);
 }
 
 console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);

@@ -2207,7 +2207,9 @@ code.open-folder:hover,code.open-folder:focus-visible{color:var(--accent);text-d
 .e-join-code{font:600 34px var(--mono);color:var(--ink);margin:18px 0 6px;display:flex;justify-content:center;gap:.6em}
 .e-join-wait i{display:inline-block;width:.62em;height:3px;margin:0 .1em;vertical-align:middle;border-radius:2px;background:var(--dim);opacity:.6}
 .e-join-meta{font:12px var(--mono);opacity:.75;margin-top:8px}
-.e-join-acts{display:flex;justify-content:center;gap:8px;margin-top:16px}
+.e-join-acts{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:16px}
+.e-join-paste{display:block;width:min(520px,100%);box-sizing:border-box;margin:14px auto 0;min-height:4.5em;padding:8px 10px;border:1px solid var(--line-strong);border-radius:8px;background:transparent;color:var(--ink);font:13px/1.45 var(--mono);resize:vertical}
+.e-join-bub .e-join-paste{width:100%;color:var(--bub-ink)}
 .e-join-bub .e-join-code{color:var(--bub-ink);font-size:28px;justify-content:flex-start;margin:8px 0 2px}
 .e-join-bub .e-join-wait i{background:var(--bub-dim)}
 .e-join-bub .e-join-meta{color:var(--bub-dim);margin:0 0 8px}
@@ -7479,6 +7481,21 @@ What you type stays in this browser only.`;
     "Asks as {NAME}, the name in Settings.": "Prośba pójdzie jako {NAME}, pod nazwą z Ustawień.",
     "this desk": "to stanowisko",
     "Ask to join": "Poproś o dołączenie",
+    "Join a team": "Dołącz do zespołu",
+    "Paste the invitation from the team's lead.": "Wklej zaproszenie od lidera zespołu.",
+    "Continue": "Dalej",
+    "Join this team?": "Dołączyć do tego zespołu?",
+    "Join this team": "Dołącz do tego zespołu",
+    "The folder is {FOLDER}.": "Folder to {FOLDER}.",
+    "The lead is {NAME}.": "Lider zespołu to {NAME}.",
+    "This invitation does not read. Nothing was changed.": "To zaproszenie nie daje się odczytać. Nic nie zostało zmienione.",
+    "This folder is on {HOST}.": "Ten folder jest na {HOST}.",
+    "This folder did not answer, so nothing was written.": "Ten folder nie odpowiedział, więc nic nie zapisano.",
+    "Desks on other computers read this folder only if it is shared with them.": "Stanowiska na innych komputerach czytają ten folder tylko wtedy, gdy jest im udostępniony.",
+    "OneDrive keeps this folder in sync.": "OneDrive synchronizuje ten folder.",
+    "This folder is a SharePoint library that OneDrive keeps in sync.": "Ten folder to biblioteka SharePoint, którą OneDrive synchronizuje.",
+    "Dropbox keeps this folder in sync.": "Dropbox synchronizuje ten folder.",
+    "Google Drive keeps this folder in sync.": "Dysk Google synchronizuje ten folder.",
     "Load another catalog": "Wczytaj inny katalog",
     "Waiting for the lead to open the request": "Prośba czeka, aż lider ją otworzy",
     "The code to read to them appears here as soon as they do.": "Gdy to zrobi, pojawi się tu kod do podania.",
@@ -14038,7 +14055,9 @@ What you type stays in this browser only.`;
     keySignHtml: () => keySignHtml,
     keyTipHtml: () => keyTipHtml,
     leadKeyText: () => leadKeyText,
+    openJoinPaste: () => openJoinPaste,
     paintJoin: () => paintJoin,
+    teamCanJoin: () => teamCanJoin,
     teamJoinEmptyHtml: () => teamJoinEmptyHtml,
     teamJoinShown: () => teamJoinShown,
     teamLeads: () => teamLeads,
@@ -14047,6 +14066,10 @@ What you type stays in this browser only.`;
   });
   var joinNow = null;
   var joinShut = "";
+  var joinMode = "";
+  var joinOffer = null;
+  var joinBlob = "";
+  var joinWhy = "";
   function eHasJoin() {
     const h = eHost();
     return !!h && typeof h.teamJoin === "function";
@@ -14060,7 +14083,10 @@ What you type stays in this browser only.`;
     }
   }
   function teamJoinShown() {
-    return !!joinNow && (!!leadToShow() || !!joinNow.join || !!joinNow.sealed);
+    return joinMode !== "" || !!joinNow && (!!leadToShow() || !!joinNow.join || !!joinNow.sealed);
+  }
+  function teamCanJoin() {
+    return eHasJoin() && !(joinNow && (joinNow.join || leadToShow()));
   }
   function leadToShow() {
     return (joinNow && joinNow.leads || []).filter((l) => l.admitted && !l.seen)[0] || null;
@@ -14081,11 +14107,32 @@ What you type stays in this browser only.`;
   }
   function joinTook(v) {
     const s = v && typeof v === "object" ? v : {};
+    if (s.offer && typeof s.offer.folder === "string") {
+      joinOffer = {
+        folder: String(s.offer.folder),
+        lead: String(s.offer.lead || ""),
+        print: String(s.offer.print || ""),
+        host: String(s.offer.host || ""),
+        cloud: String(s.offer.cloud || ""),
+        local: s.offer.local === true
+      };
+      joinWhy = "";
+      joinMode = "confirm";
+    } else if (s.refused === "unread" || s.refused === "silent") {
+      joinWhy = s.refused;
+      joinOffer = null;
+      joinMode = "refused";
+      joinBlob = "";
+    } else if ((joinMode === "confirm" || joinMode === "paste") && s.join) {
+      joinMode = "";
+      joinOffer = null;
+      joinBlob = "";
+    }
     const was = JSON.stringify(joinNow);
     joinNow = {
       sealed: s.sealed && s.sealed.file ? { file: String(s.sealed.file), team: String(s.sealed.team || "") } : null,
-      join: s.join && s.join.file ? {
-        file: String(s.join.file),
+      join: s.join && (s.join.file || s.join.state) ? {
+        file: String(s.join.file || ""),
         state: String(s.join.state || ""),
         code: String(s.join.code || ""),
         asked: +s.join.asked || 0,
@@ -14126,6 +14173,69 @@ What you type stays in this browser only.`;
   function joinCodeHtml(code) {
     return code ? '<div class="e-join-code"><span>' + esc(code.slice(0, 3)) + "</span><span>" + esc(code.slice(3)) + "</span></div>" : '<div class="e-join-code e-join-wait" aria-hidden="true"><span><i></i><i></i><i></i></span><span><i></i><i></i><i></i></span></div>';
   }
+  function pastedText() {
+    try {
+      const el = document.querySelector("[data-join-paste]");
+      if (el && typeof el.value === "string") return el.value;
+    } catch (e) {
+    }
+    return joinBlob;
+  }
+  function clearJoinAsk() {
+    joinMode = "";
+    joinOffer = null;
+    joinWhy = "";
+    joinBlob = "";
+    if (wholeThingEmpty()) {
+      closeJoinBubble();
+      hooks.render();
+      return;
+    }
+    paintJoin();
+  }
+  function openJoinPaste() {
+    if (!teamCanJoin()) return;
+    joinMode = "paste";
+    joinOffer = null;
+    joinWhy = "";
+    joinBlob = "";
+    if (wholeThingEmpty()) {
+      closeJoinBubble();
+      hooks.render();
+      return;
+    }
+    paintJoin();
+  }
+  function joinWhere(o) {
+    if (!o) return "";
+    const host = o.host ? t("This folder is on {HOST}.").split("{HOST}").join(o.host) : "";
+    const cloud = o.cloud === "sharepoint" ? t("This folder is a SharePoint library that OneDrive keeps in sync.") : o.cloud === "onedrive" ? t("OneDrive keeps this folder in sync.") : o.cloud === "dropbox" ? t("Dropbox keeps this folder in sync.") : o.cloud === "gdrive" ? t("Google Drive keeps this folder in sync.") : o.local ? t("Desks on other computers read this folder only if it is shared with them.") : "";
+    return [host, cloud].filter(Boolean).join(" ");
+  }
+  function joinInviteParts() {
+    if (joinMode === "paste") return {
+      title: t("Join a team"),
+      line: t("Paste the invitation from the team's lead."),
+      body: '<textarea class="e-join-paste" data-join-paste spellcheck="false" autocomplete="off" aria-label="' + esc(t("Paste the invitation from the team's lead.")) + '">' + esc(joinBlob) + "</textarea>",
+      acts: [["read", t("Continue")], ["back", t("Cancel")]]
+    };
+    if (joinMode === "confirm" && joinOffer) {
+      const o = joinOffer;
+      return {
+        title: t("Join this team?"),
+        line: joinWhere(o),
+        body: '<div class="e-join-meta">' + esc(t("The folder is {FOLDER}.").split("{FOLDER}").join(o.folder)) + '</div><div class="e-join-meta">' + esc(t("The lead is {NAME}.").split("{NAME}").join(o.lead)) + '</div><div class="e-join-key">' + keySignHtml("studio", o.print) + "</div>",
+        acts: [["invite", t("Join this team")], ["back", t("Cancel")]]
+      };
+    }
+    if (joinMode === "refused") return {
+      title: t("Join a team"),
+      line: joinWhy === "silent" ? t("This folder did not answer, so nothing was written.") : t("This invitation does not read. Nothing was changed."),
+      body: "",
+      acts: [["back", t("Cancel")]]
+    };
+    return null;
+  }
   function joinParts() {
     const j = joinNow && joinNow.join, s = joinNow && joinNow.sealed, who = agentName() || t("this desk"), l = leadToShow();
     if (l) return {
@@ -14135,6 +14245,8 @@ What you type stays in this browser only.`;
       acts: [["seen", t("It matches")], ["forget", t("It does not match")]],
       lead: l.team
     };
+    const invited = joinInviteParts();
+    if (invited) return invited;
     const meta = j ? '<div class="e-join-meta">' + esc(t("{NAME}, asked at {TIME}").split("{NAME}").join(j.name || who).split("{TIME}").join(joinTime(j.asked))) + "</div>" : "";
     if (j && j.state === "code") return {
       title: t("Read this code to the team's lead"),
@@ -14158,11 +14270,18 @@ What you type stays in this browser only.`;
       title: t("{FILE} is sealed for its team").split("{FILE}").join(s ? s.file : ""),
       line: t("Once the team's lead lets this desk in, the catalog opens here by itself."),
       body: '<div class="e-join-meta">' + esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who)) + "</div>",
-      acts: [["ask", t("Ask to join")], ["load", t("Load another catalog")]]
+      acts: [["ask", t("Ask to join")], ["join", t("Join a team")], ["load", t("Load another catalog")]]
     };
   }
   function joinAct(act) {
     const j = joinNow && joinNow.join, s = joinNow && joinNow.sealed;
+    if (act === "join") return Promise.resolve(openJoinPaste());
+    if (act === "back") return Promise.resolve(clearJoinAsk());
+    if (act === "read") {
+      joinBlob = pastedText();
+      return joinAsk("read", joinBlob);
+    }
+    if (act === "invite") return joinAsk("invite", joinBlob, agentName());
     if (act === "ask") return joinAsk("ask", j && j.file || s && s.file || "", agentName());
     if (act === "cancel") return joinAsk("cancel");
     const l = leadToShow();
@@ -14178,8 +14297,11 @@ What you type stays in this browser only.`;
   }
   function wireTeamJoinEmpty(root) {
     if (!root) return;
-    root.querySelectorAll("[data-join]").forEach((b) => {
-      b.onclick = () => joinAct(b.getAttribute("data-join"));
+    root.querySelectorAll("[data-join], [data-join-paste]").forEach((el) => {
+      if (el.hasAttribute && el.hasAttribute("data-join-paste")) el.oninput = () => {
+        joinBlob = String(el.value || "");
+      };
+      else if (el.getAttribute && el.getAttribute("data-join")) el.onclick = () => joinAct(el.getAttribute("data-join"));
     });
   }
   var joinBubbleClose = null;
@@ -14222,9 +14344,15 @@ What you type stays in this browser only.`;
       e.stopPropagation();
       hide();
     });
-    wrap.querySelectorAll("[data-join]").forEach((b) => {
-      const act = b.getAttribute("data-join");
-      b.onclick = () => {
+    wrap.querySelectorAll("[data-join], [data-join-paste]").forEach((el) => {
+      if (el.hasAttribute("data-join-paste")) {
+        el.oninput = () => {
+          joinBlob = String(el.value || "");
+        };
+        return;
+      }
+      const act = el.getAttribute("data-join");
+      el.onclick = () => {
         if (act === "hide") return hide();
         close();
         joinAct(act);
@@ -20683,10 +20811,12 @@ What you type stays in this browser only.`;
     if (!shown.length) {
       const oneCat = cats.length === 1 ? cats[0] : null;
       const afterBtn = (c) => (/^[,.;:!?]/.test(c) ? "" : " ") + esc(c);
-      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>" : wholeThingEmpty() && teamJoinShown() ? teamJoinEmptyHtml() : wholeThingEmpty() ? '<div class="empty empty-desk">' + esc(t("Etiuda is ready for its first replies.")) + "<br><br>" + esc(t("Add a card to a category, or")) + ' <button type="button" class="btn" id="emptyLoad">' + esc(t("load a catalog")) + "</button>" + afterBtn(t("you already have.")) + '<br><br><span style="font-size:12.5px;opacity:.75">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with the button above.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with the button above.")) : esc(t("The catalog you load stays in this browser, ready whenever you come back."))) + "</span></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
+      list.innerHTML = terms.length ? '<div class="empty">' + esc(t("A different word may do better.")) + "<br><br>" + esc(t("{KEY} clears the search and the intents and shows every card.")).replace("{KEY}", "<kbd>Esc</kbd>") + "</div>" : wholeThingEmpty() && teamJoinShown() ? teamJoinEmptyHtml() : wholeThingEmpty() ? '<div class="empty empty-desk">' + esc(t("Etiuda is ready for its first replies.")) + "<br><br>" + esc(t("Add a card to a category, or")) + ' <button type="button" class="btn" id="emptyLoad">' + esc(t("load a catalog")) + "</button>" + afterBtn(t("you already have.")) + (teamCanJoin() ? '<br><br><button type="button" class="btn" id="emptyJoin">' + esc(t("Join a team")) + "</button>" : "") + '<br><br><span style="font-size:12.5px;opacity:.75">' + (eCatalogFolder() ? t("Etiuda offers you the newest catalog from {FOLDER}; a catalog kept anywhere else loads with the button above.").split("{FOLDER}").join('<code class="open-folder" id="emptyCatFolder" role="button" tabindex="0" title="' + esc(eCatalogFolder()) + '">' + esc(eCatalogFolderShort()) + "</code>") : location.protocol === "file:" ? esc(t("A catalog file next to Etiuda loads by itself when it is called")) + " <code>" + esc(E_CATALOG_SCRIPT) + "</code>. " + esc(t("Under any other name, bring it in with the button above.")) : esc(t("The catalog you load stays in this browser, ready whenever you come back."))) + "</span></div>" : oneCat ? cardCounts[oneCat] ? "" : '<div class="empty empty-cat">' + catIconSvg(oneCat, "cat-ic empty-ic") + esc(t("This category is empty.")) + "<br><br>" + esc(t("Press")) + " " + chordChips("newCard") + " " + esc(t("to create a card here.")) + "</div>" : '<div class="empty">' + esc(t("Nothing here yet.")) + "</div>";
       wireTeamJoinEmpty(list.querySelector(".e-join"));
       const ei = $("#emptyLoad");
       if (ei) ei.onclick = hooks.importCatalogHere;
+      const ej = $("#emptyJoin");
+      if (ej) ej.onclick = openJoinPaste;
       const ef = $("#emptyCatFolder");
       if (ef) wireFolderLink(ef);
       hooks.syncAddFab();

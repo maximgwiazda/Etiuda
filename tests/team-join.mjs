@@ -24,7 +24,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 27;
+const EXPECTED = 34;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -38,7 +38,8 @@ const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "wrapTeamKey", "joinCommit", "joinCode", "joinGenuine", "joinOpening", "joinSignedBytes",
-  "branchSignedBytes", "deskFileGenuine", "readCatalog", "catalogChanged", "isCatalogName", "JOINS_NAME"];
+  "branchSignedBytes", "deskFileGenuine", "readCatalog", "catalogChanged", "isCatalogName", "JOINS_NAME",
+  "memberProof", "inviteIdOf", "inviteRead", "folderHost"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -291,13 +292,94 @@ try {
     "15z THE CONTROL: after forgetting, a request answered by the real lead admits the desk, pins that lead, lifts the bar and"
     + " shows the new key once: " + leadsOf(rejoined));
 
+  /* ---- an invitation: paste, confirm, and a request that proves the secret without carrying it ------------------- */
+  const inviteBlob = (o) => "etiuda-join:" + Buffer.from(JSON.stringify(o)).toString("base64url");
+  const filesUnder = (dir) => {
+    const out = [];
+    for (const name of fs.readdirSync(dir)) {
+      const at = path.join(dir, name);
+      if (fs.statSync(at).isDirectory()) out.push(...filesUnder(at));
+      else out.push(at);
+    }
+    return out;
+  };
+  const quiet = folder("quiet");
+  const Du = newDesk("unc", quiet);
+  const secretU = crypto.randomBytes(16).toString("hex");
+  const lampLead = { keyId: LEAD.keyId, public: LEAD.public, name: "Lamp lead" };
+  const beforeQuiet = fs.readdirSync(quiet).slice().sort().join("|");
+  const badPreview = await Du.join("read", "etiuda-join:not-valid");
+  check(badPreview && badPreview.refused === "unread" && !badPreview.offer
+      && fs.readdirSync(quiet).slice().sort().join("|") === beforeQuiet
+      && !Du.envelope().teamJoin && !Du.envelope().teamPins,
+    "15ab a malformed invitation is refused and nothing is written: " + (badPreview && badPreview.refused));
+  const uncBlob = inviteBlob({ team: TEAM, folder: "\\\\quay-host\\catalogs", lead: lampLead, secret: secretU });
+  const uncAt = Date.now();
+  const uncPreview = await Du.join("read", uncBlob);
+  const uncMs = Date.now() - uncAt;
+  check(uncPreview && uncPreview.offer && uncPreview.offer.host === "quay-host" && uncPreview.offer.lead === "Lamp lead"
+      && uncPreview.offer.folder === "\\\\quay-host\\catalogs" && uncPreview.refused === undefined && uncMs < 1000
+      && fs.readdirSync(quiet).slice().sort().join("|") === beforeQuiet,
+    "15ac an invitation for a folder on another computer names that computer before anything is opened, and writes nothing: "
+    + uncMs + "ms, host " + (uncPreview && uncPreview.offer && uncPreview.offer.host));
+  check(r1 && r1.invite === undefined && r1.desk.kind === undefined && bytes1.indexOf('"invite"') < 0 && bytes1.indexOf('"kind": "desk"') < 0,
+    "15ad a request made with no invitation is unchanged: no invite and no kind on the member");
+
+  const yard = folder("yard");
+  const Dy = newDesk("yard", folder("yard-old"));
+  const mey = await Dy.ask("etiuda:branch-identity", true);
+  const secretY = crypto.randomBytes(16).toString("hex");
+  const yardBlob = inviteBlob({ team: TEAM, folder: yard, lead: lampLead, secret: secretY });
+  const took = await Dy.join("invite", yardBlob, "Nia");
+  const ry = JSON.parse(fs.readFileSync(path.join(yard, "desks", mey.id, "join.json"), "utf8"));
+  const envY = Dy.envelope();
+  check(took && took.join && took.join.state === "waiting" && ry.desk.kind === "desk" && ry.desk.name === "Nia"
+      && ry.invite.id === P.inviteIdOf(secretY) && ry.invite.proof === P.memberProof(secretY, ry.commit)
+      && envY.teamJoin && ry.commit === P.joinCommit(TEAM, mey.key, mey.box, envY.teamJoin.nonce)
+      && envY.teamPins && envY.teamPins[TEAM].public === LEAD.public && envY.teamPins[TEAM].keyId === LEAD.keyId
+      && envY.keys.eCatalogFolder === yard,
+    "15ae yes pins the lead from the invitation and writes a desk request whose proof is that commitment's: "
+    + (took && took.join && took.join.state));
+  const yardText = filesUnder(yard).map(p => fs.readFileSync(p, "utf8")).join("\n");
+  const restarted = loadDesk(Dy.ud);
+  const envR = restarted.envelope();
+  check(JSON.stringify(envY).indexOf(secretY) < 0 && yardText.indexOf(secretY) < 0 && JSON.stringify(envR).indexOf(secretY) < 0
+      && envR.teamJoin && envR.teamJoin.invite && envR.teamJoin.invite.id === ry.invite.id
+      && envR.teamJoin.invite.proof === ry.invite.proof && envR.teamJoin.invite.secret === undefined
+      && envR.teamPins[TEAM].public === LEAD.public,
+    "15af the secret is in nothing written to the share or the desk, and a restart still has the proof and the pin");
+  const otherCommit = P.joinCommit(TEAM, mey.key, crypto.randomBytes(32).toString("hex"), envY.teamJoin.nonce);
+  check(P.memberProof(crypto.randomBytes(16).toString("hex"), ry.commit) !== ry.invite.proof
+      && P.memberProof(secretY, otherCommit) !== ry.invite.proof && otherCommit !== ry.commit,
+    "15ag a proof made under another secret or another commitment does not match the request");
+
   /* ---- the page: the engine's own team-join.js over this desk's shell ------------------------------------------- */
   globalThis.window = { addEventListener: noop, removeEventListener: noop };
-  globalThis.document = { addEventListener: noop, removeEventListener: noop, getElementById: () => null, querySelectorAll: () => [] };
-  window.E_HOST = { teamJoin: (op, file, name) => fresh7.join(op, file, name), onTeamJoin: noop };
+  globalThis.document = { addEventListener: noop, removeEventListener: noop, getElementById: () => null, querySelector: () => null, querySelectorAll: () => [] };
+  window.E_HOST = { teamJoin: (op, file, name) => Du.join(op, file, name), onTeamJoin: noop };
   const HK = await import(MOD("hooks.js"));
   HK.hooks.render = noop;
   const TJ = await import(MOD("team-join.js"));
+  TJ.wireTeamJoin();
+  await new Promise(r => setTimeout(r, 30));
+  let pasted = { value: uncBlob };
+  document.querySelector = (sel) => sel === "[data-join-paste]" ? pasted : null;
+  TJ.openJoinPaste();
+  const pasteHtml = TJ.teamJoinEmptyHtml();
+  const readButtons = {};
+  TJ.wireTeamJoinEmpty({ querySelectorAll: (sel) => sel === "[data-join-paste]" ? []
+    : ["read"].map(a => (readButtons[a] = { getAttribute: () => a })) });
+  await readButtons.read.onclick();
+  const confirmHtml = TJ.teamJoinEmptyHtml();
+  const groupedLead = printOf(LEAD.public).replace(/(.{4})(?=.)/g, "$1 ");
+  check(/<textarea /.test(pasteHtml) && confirmHtml.indexOf("\\\\quay-host\\catalogs") >= 0 && confirmHtml.indexOf("Lamp lead") >= 0
+      && confirmHtml.indexOf(groupedLead) >= 0 && /data-join="invite"/.test(confirmHtml),
+    "15ah the confirm names the folder, the lead and the lead key's fingerprint: " + groupedLead);
+  const backButtons = {};
+  TJ.wireTeamJoinEmpty({ querySelectorAll: (sel) => sel === "[data-join-paste]" ? []
+    : ["back"].map(a => (backButtons[a] = { getAttribute: () => a })) });
+  await backButtons.back.onclick();
+  window.E_HOST = { teamJoin: (op, file, name) => fresh7.join(op, file, name), onTeamJoin: noop };
   TJ.wireTeamJoin();
   await new Promise(r => setTimeout(r, 30));
   const html = TJ.teamJoinEmptyHtml(), buttons = {};
