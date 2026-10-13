@@ -36,8 +36,7 @@ function joinIntents(list,lg){
    the Polish clause is written in the instrumental so {Z} can agree - an English clause
    in a Polish sentence is ungrammatical as well as wrong. The box says WHICH intent; the
    card shows the sentence, with the agreement already made. */
-/* A VALUE THE CATALOG DOES NOT CARRY IN THIS LANGUAGE FALLS BACK TO THE COMMENT LANGUAGE,
-   never to empty - spec 2.1. commentLang() is the primary when the file omits the field. */
+/* AN ACTION OR A TOPIC THE CATALOG DOES NOT CARRY IN THIS LANGUAGE FALLS BACK TO THE COMMENT LANGUAGE; A CLAUSE STAYS EMPTY (board 533) */
 function intentFieldAt(i,field,l){
   const own=intentArr(field,l), v=own?own[i]:null;
   if(v!=null && v!=="") return v;
