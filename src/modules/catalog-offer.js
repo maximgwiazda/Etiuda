@@ -452,6 +452,9 @@ function eOfferCatalogDialog(c,src){
      catalog, both surface here rather than being applied behind the user's back. */
   const active=storedCatalog();
   if(active && eCatalogSignature(active)===sig) return false;
+  /* A stored catalog is the floor for its own id. The same id at a rev that is not greater is not offered,
+     and the file's date does not decide. */
+  if(active && String(c&&c.id||"") && String(c.id)===String(active.id||"") && !(+c.rev>(+active.rev||0))) return false;
   // What this desk wrote into the shared catalog is what it shows already, so only somebody asking is offered it.
   if(!src.asked && sharedOwnWrite(c)) return false;
   /* A refusal is remembered so boot does not nag, but ASKING outranks it: an explicit check

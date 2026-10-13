@@ -27702,6 +27702,7 @@ What you type stays in this browser only.`;
     const sig = eCatalogSignature(c);
     const active = storedCatalog();
     if (active && eCatalogSignature(active) === sig) return false;
+    if (active && String(c && c.id || "") && String(c.id) === String(active.id || "") && !(+c.rev > (+active.rev || 0))) return false;
     if (!src.asked && sharedOwnWrite(c)) return false;
     if (!src.force && src.refusedKey && nsGet(src.refusedKey) === sig) {
       leaveWaiting(c, src, active);
