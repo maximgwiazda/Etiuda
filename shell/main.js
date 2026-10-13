@@ -1858,9 +1858,11 @@ function joinKept(j) {
     && JOIN_HEX_RE.test(String(who.public)) && typeof who.name === "string" && who.name.length <= 120;
   return inviteOk ? j : null;
 }
-/* Whether this desk takes invitations: "" where it does, else the refusal every invitation gets, at read and at yes. */
+/* Whether this desk takes invitations: "" where it does, else the refusal every invitation gets, at read and at yes.
+   "policy" while machine policy names a team folder, which catalogFolder answers over any folder a yes would set; a
+   policy naming only the lead leaves the door open. */
 function inviteDoor() {
-  return "";
+  return sayJoinPolicy().folder ? "policy" : "";
 }
 /* An invitation, its folder read as this system reaches it. */
 function inviteParse(text) {

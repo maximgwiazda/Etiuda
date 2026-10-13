@@ -25,9 +25,12 @@ const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* Every reg call answers from a stand-in, never from this machine's registry (tests/reg-stand.cjs): until 2026-10-13
    this leg passed only because no machine policy and no proxy were set on the machine that ran it. Before the shell loads. */
-const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
+/* The stand-in reads REG.policy at each reg call, and a desk's shell reads the policy once, at its first ask: so a desk
+   loaded and asked while REG.policy is set keeps that policy for its run (15ay, 15az). */
+const REG = { policy: null };
+const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 51;
+const EXPECTED = 54;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -751,6 +754,85 @@ try {
   check(tookX && tookX.join && tookX.join.state === "waiting" && written.length >= 4 && holding === 0,
     "15ax the check code is written nowhere: not in the share, not in the desk's file or its envelope, not in the log, across a read,"
     + " a yes and a restart (" + written.length + " texts read): holding " + holding);
+
+  /* ---- machine policy names the team's folder: the invitation door is closed ---------------------------------- */
+  /* The policy key as reg export writes it, each value a string with its two escapes. Off Windows the shell reads no
+     machine policy at all, so there the door stands as it does with none. */
+  const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
+    + rows.map(([k, v]) => '"' + k + '"="' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n').join("") + "\n";
+  const underPolicy = async (rows, name, own) => {
+    const before = regStand.calls.export;
+    REG.policy = regText(rows);
+    try { const D = await deskWith(name, own); D.policyRead = regStand.calls.export > before; return D; }
+    finally { REG.policy = null; }
+  };
+  const writtenUnder = dir => filesUnder(dir).filter(f => f.indexOf(path.join(dir, "desks")) === 0).length;
+  const policyOutcome = [];
+  for (const [label, rows] of [["folder and lead", f => [["TeamFolder", f], ["LeadKey", LEAD.public]]], ["folder alone", f => [["TeamFolder", f]]]]) {
+    const named = folder("policy-" + policyOutcome.length), invited = folder("policy-invited-" + policyOutcome.length);
+    put(named, "etiuda-team.json", teamFile([]));
+    const Dm = await underPolicy(rows(named), "policy-desk-" + policyOutcome.length, folder("policy-own-" + policyOutcome.length));
+    const blob = inviteBlob({ team: TEAM, folder: invited, lead: lampLead, secret: newSecret() });
+    const trust = trustOf(Dm);
+    let readM = null, takeM = null;
+    const touchedM = await watching(invited, async () => {
+      readM = await Dm.join("read", blob);
+      takeM = await Dm.join("invite", blob, "Ola", codeFor(blob));
+    });
+    const kept = trustOf(Dm) === trust, inNamed = writtenUnder(named), inInvited = writtenUnder(invited);
+    const still = kept && inNamed === 0 && inInvited === 0 && touchedM.length === 0;
+    const ok = WIN ? Dm.policyRead && readM && readM.refused === "policy" && !readM.offer && takeM && takeM.refused === "policy" && still
+      : !Dm.policyRead && readM && !!readM.offer && readM.refused === undefined;
+    policyOutcome.push(label + ": " + (ok ? "ok" : "read " + (readM && (readM.refused || (readM.offer ? "offered" : "nothing")))
+      + ", yes " + (takeM && (takeM.refused || (takeM.join ? takeM.join.state : "nothing"))) + (kept ? "" : ", trust or folder moved")
+      + ", requests " + inNamed + " in the policy's folder and " + inInvited + " in the invitation's, touched " + touchedM.length));
+  }
+  const Dnp = await deskWith("policy-control", folder("policy-control-own"));
+  const controlBlob = inviteBlob({ team: TEAM, folder: folder("policy-control-yard"), lead: lampLead, secret: newSecret() });
+  const readNp = await Dnp.join("read", controlBlob);
+  check(policyOutcome.every(s => / ok$/.test(s)) && readNp && !!readNp.offer && readNp.refused === undefined,
+    "15ay while machine policy names the team's folder, a valid invitation with its right check code is refused at read and at yes"
+    + " with the policy's word, the lead named or not, and nothing changes: no pin, key or request, in the policy's folder or the"
+    + " invitation's, the desk's folder setting as it was, and nothing asked where the invitation points; THE CONTROL, a desk with"
+    + " no policy, is offered it; off Windows no machine policy is read and the door stands as before: " + policyOutcome.join("; "));
+
+  /* A policy naming only the lead's key: an invitation from that lead is offered and taken as with no policy. */
+  const leadYard = folder("policy-lead-yard");
+  const Dl = await underPolicy([["LeadKey", LEAD.public]], "policy-lead", folder("policy-lead-own"));
+  const meL = await Dl.ask("etiuda:branch-identity", true);
+  const leadBlob = inviteBlob({ team: TEAM, folder: leadYard, lead: lampLead, secret: newSecret() });
+  const readL = await Dl.join("read", leadBlob);
+  const takeL = await Dl.join("invite", leadBlob, "Ola", codeFor(leadBlob));
+  const envL = Dl.envelope();
+  check(Dl.policyRead === WIN && readL && !!readL.offer && readL.refused === undefined && takeL && takeL.join && takeL.join.state === "waiting"
+      && fs.existsSync(path.join(leadYard, "desks", meL.id, "join.json")) && envL.keys.eCatalogFolder === leadYard
+      && envL.teamPins && envL.teamPins[TEAM].public === LEAD.public,
+    "15az a policy naming only the lead's key leaves the door open: an invitation from that lead is offered and taken, its request"
+    + " in the folder it names: " + (readL && (readL.refused || "offered")) + ", then " + (takeL && (takeL.refused || (takeL.join && takeL.join.state))));
+
+  /* The page shows the policy's refusal in its own sentence, in either language. */
+  const ST = await import(MOD("storage.js"));
+  const langWas = ST.lsGet("eUiLang");
+  window.E_HOST = { onTeamJoin: noop, teamJoin: op => Promise.resolve(op === "read" || op === "invite"
+    ? { sealed: null, join: null, leads: [], refused: "policy" } : { sealed: null, join: null, leads: [] }) };
+  TJ.wireTeamJoin();
+  await new Promise(r => setTimeout(r, 30));
+  const policyPage = {};
+  for (const lang of ["en", "pl"]) {
+    ST.lsSet("eUiLang", lang);
+    TJ.openJoinPaste();
+    pasted = elOf({ "data-join-paste": "" }, controlBlob);
+    await press("read");
+    policyPage[lang] = TJ.teamJoinEmptyHtml();
+    await press("back");
+  }
+  if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+  const POLICY_LINE = { en: "The organisation's IT sets this desk's team, so invitations are turned off.",
+    pl: "Zespół tego stanowiska ustawia dział IT organizacji, więc zaproszenia są wyłączone." };
+  const pageSaid = lang => (/<p>([^<]*)<\/p>/.exec(policyPage[lang] || "") || ["", ""])[1];
+  const escHtml = s => s.replace(/&/g, "&amp;").replace(/'/g, "&#39;");
+  check(pageSaid("en") === escHtml(POLICY_LINE.en) && pageSaid("pl") === escHtml(POLICY_LINE.pl) && policyPage.en.indexOf(secretOf(controlBlob)) < 0,
+    "15ba the policy's refusal reaches the page as its own sentence, in English and in Polish: " + pageSaid("en") + " / " + pageSaid("pl"));
 
   /* Last, over every desk above: the log of each holds none of the secrets any invitation carried. */
   const leaked = [];

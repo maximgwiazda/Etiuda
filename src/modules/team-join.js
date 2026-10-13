@@ -193,6 +193,7 @@ function joinInviteParts(){
       :joinWhy==="barred"?t("This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. To join, ask from the team's catalog instead.")
       :joinWhy==="foreign"?t("This folder holds another team, or the same team under a different lead's key, so nothing was written. Tell the team's lead about it.")
       :joinWhy==="check"?t("This code does not match this invitation. Ask the lead again before joining.")
+      :joinWhy==="policy"?t("The organisation's IT sets this desk's team, so invitations are turned off.")
       :t("This invitation cannot be read, so nothing was changed."),
     body:"", acts:[["back",t("Cancel")]]};
   return null;
