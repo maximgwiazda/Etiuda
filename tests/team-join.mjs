@@ -30,7 +30,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 54;
+const EXPECTED = 58;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -51,8 +51,9 @@ const inert = new Proxy(function () {}, { get: () => inert, set: () => true, app
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
 const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
 
-/* One desk over its own user-data folder, the shell evaluated afresh; the safeStorage stand-in is reversible. */
-function loadDesk(ud) {
+/* One desk over its own user-data folder, the shell evaluated afresh, from `src` where a leg gives one; the safeStorage
+   stand-in is reversible. */
+function loadDesk(ud, src) {
   const said = [], invoke = {};
   // Every way the shell can log is kept, so a leg can say what reached the log and what did not.
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: s => said.push("WARN " + String(s)),
@@ -71,7 +72,7 @@ function loadDesk(ud) {
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-    SRC + "\nreturn { " + EXPOSE.join(", ") + " };")(n => (n === "electron" ? electron : nodeRequire(n)),
+    (src || SRC) + "\nreturn { " + EXPOSE.join(", ") + " };")(n => (n === "electron" ? electron : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
   const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
@@ -358,7 +359,9 @@ try {
   SECRETS.push(secretY);
   const yardBlob = inviteBlob({ team: TEAM, folder: yard, lead: lampLead, secret: secretY });
   const took = await Dy.join("invite", yardBlob, "Nia", codeFor(yardBlob));
-  const ry = JSON.parse(fs.readFileSync(path.join(yard, "desks", mey.id, "join.json"), "utf8"));
+  /* Read only where the yes took, so a yes refused fails here and the legs after it still run. */
+  const yardFile = path.join(yard, "desks", mey.id, "join.json");
+  const ry = took && took.join && fs.existsSync(yardFile) ? JSON.parse(fs.readFileSync(yardFile, "utf8")) : {};
   const envY = Dy.envelope();
   check(took && took.join && took.join.state === "waiting" && ry.desk.kind === "desk" && ry.desk.name === "Nia"
       && ry.invite.id === P.inviteIdOf(secretY) && ry.invite.proof === P.memberProof(secretY, ry.commit)
@@ -375,9 +378,10 @@ try {
       && envR.teamJoin.invite.proof === ry.invite.proof && envR.teamJoin.invite.secret === undefined
       && envR.teamPins[TEAM].public === LEAD.public,
     "15af the secret is in nothing written to the share or the desk, and a restart still has the proof and the pin");
-  const otherCommit = P.joinCommit(TEAM, mey.key, crypto.randomBytes(32).toString("hex"), envY.teamJoin.nonce);
-  check(P.memberProof(crypto.randomBytes(16).toString("hex"), ry.commit) !== ry.invite.proof
-      && P.memberProof(secretY, otherCommit) !== ry.invite.proof && otherCommit !== ry.commit,
+  const otherCommit = P.joinCommit(TEAM, mey.key, crypto.randomBytes(32).toString("hex"), envY.teamJoin ? envY.teamJoin.nonce : "");
+  const proofY = ry.invite ? ry.invite.proof : undefined;
+  check(!!proofY && P.memberProof(crypto.randomBytes(16).toString("hex"), ry.commit) !== proofY
+      && P.memberProof(secretY, otherCommit) !== proofY && otherCommit !== ry.commit,
     "15ag a proof made under another secret or another commitment does not match the request");
 
   /* ---- what an invitation may not move: a lead this desk already trusts, or one it was told does not match ------- */
@@ -488,9 +492,13 @@ try {
   cracked.sig.value = (cracked.sig.value[0] === "a" ? "b" : "a") + cracked.sig.value.slice(1);
   put(broken, "etiuda-team.json", cracked);
   put(genuineFolder, "etiuda-team.json", teamFile([]));
+  /* Whole under the invited lead's own public key, labelled with another keyId, as a pin is compared (15ai). */
+  const relabelledTeam = folder("files-relabelled");
+  put(relabelledTeam, "etiuda-team.json", sign({ format: 1, kind: "etiuda-team", id: TEAM, catalogs: ["lamp-shop"],
+    lead: { keyId: "lamp-other", public: LEAD.public }, sealed: true, exportsSealed: false, epoch: 1, roster: [] }, lead.privateKey, "lamp-other"));
   const trustR = trustOf(Dr);
   const foreign = [];
-  for (const f of [underForger, otherTeam, broken]) {
+  for (const f of [underForger, otherTeam, broken, relabelledTeam]) {
     const b = inviteBlob({ team: TEAM, folder: f, lead: lampLead, secret: newSecret() });
     const r = await Dr.join("invite", b, "Ola", codeFor(b));
     foreign.push((r && r.refused) + (fs.existsSync(path.join(f, "desks")) ? " wrote" : ""));
@@ -499,8 +507,21 @@ try {
   const genuineBlob = inviteBlob({ team: TEAM, folder: genuineFolder, lead: lampLead, secret: newSecret() });
   const intoGenuine = await Dr.join("invite", genuineBlob, "Ola", codeFor(genuineBlob));
   check(foreign.every(x => x === "foreign") && keptR && intoGenuine && intoGenuine.join && intoGenuine.join.state === "waiting",
-    "15am a folder whose team file is under another lead, for another team, or not whole under its lead takes no request, and the"
+    "15am a folder whose team file is under another lead, for another team, not whole under its lead, or under the lead's key with"
+    + " another keyId takes no request, and the"
     + " folder is put back as it was; THE CONTROL, a team file whole under the invited lead, takes it: " + JSON.stringify(foreign));
+
+  /* A team file the desk cannot read is not taken for no team file: here a folder stands where the file would. */
+  const De = await deskWith("unreadable", folder("unreadable-own"));
+  const unreadableTeam = folder("files-unreadable");
+  fs.mkdirSync(path.join(unreadableTeam, "etiuda-team.json"));
+  const trustE = trustOf(De);
+  const unreadableBlob = inviteBlob({ team: TEAM, folder: unreadableTeam, lead: lampLead, secret: newSecret() });
+  const tookE = await De.join("invite", unreadableBlob, "Ola", codeFor(unreadableBlob));
+  check(tookE && typeof tookE.refused === "string" && tookE.refused !== "" && !tookE.join && trustOf(De) === trustE
+      && !fs.existsSync(path.join(unreadableTeam, "desks")),
+    "15be a folder whose team file cannot be read takes no request, as one holding another team does, and the desk's folder is put"
+    + " back: " + (tookE && (tookE.refused || (tookE.join && tookE.join.state))));
 
   /* The folder the invitation names is one nothing has made. */
   const never = path.join(LAB, "never-" + crypto.randomBytes(4).toString("hex"));
@@ -749,13 +770,14 @@ try {
   const tookX = await Dx.join("invite", unwritten, "Ola", codeX);
   const Dx2 = loadDesk(Dx.ud);
   await Dx2.join("state");
-  const written = filesUnder(unwrittenYard).concat(filesUnder(Dx.ud)).map(f => fs.readFileSync(f, "latin1")).concat(Dx.said, Dx2.said);
+  /* The yes reply is scanned too; the read reply carries offer.code for the confirm, and is not. */
+  const written = filesUnder(unwrittenYard).concat(filesUnder(Dx.ud)).map(f => fs.readFileSync(f, "latin1")).concat(Dx.said, Dx2.said, [JSON.stringify(tookX)]);
   const holding = written.filter(text => asToken(codeX).test(text)).length;
-  check(tookX && tookX.join && tookX.join.state === "waiting" && written.length >= 4 && holding === 0,
-    "15ax the check code is written nowhere: not in the share, not in the desk's file or its envelope, not in the log, across a read,"
-    + " a yes and a restart (" + written.length + " texts read): holding " + holding);
+  check(tookX && tookX.join && tookX.join.state === "waiting" && written.length >= 5 && holding === 0,
+    "15ax the check code is written nowhere: not in the share, not in the desk's file or its envelope, not in the log, not in the"
+    + " yes reply, across a read, a yes and a restart (" + written.length + " texts read): holding " + holding);
 
-  /* ---- machine policy names the team's folder: the invitation door is closed ---------------------------------- */
+  /* ---- machine policy names the team's folder or its lead: the invitation door is closed --------------------- */
   /* The policy key as reg export writes it, each value a string with its two escapes. Off Windows the shell reads no
      machine policy at all, so there the door stands as it does with none. */
   const regText = rows => "Windows Registry Editor Version 5.00\n\n[HKEY_LOCAL_MACHINE\\SOFTWARE\\Policies\\Etiuda]\n"
@@ -767,48 +789,89 @@ try {
     finally { REG.policy = null; }
   };
   const writtenUnder = dir => filesUnder(dir).filter(f => f.indexOf(path.join(dir, "desks")) === 0).length;
-  const policyOutcome = [];
-  for (const [label, rows] of [["folder and lead", f => [["TeamFolder", f], ["LeadKey", LEAD.public]]], ["folder alone", f => [["TeamFolder", f]]]]) {
-    const named = folder("policy-" + policyOutcome.length), invited = folder("policy-invited-" + policyOutcome.length);
+  /* One desk under the policy `rows` makes of its named folder, which holds the team's file, and a valid invitation from
+     `from` into a folder of its own, or into the named folder where `intoNamed`: read, then yes with its right code. */
+  let policyCases = 0;
+  const policyCase = async (label, rows, from, intoNamed) => {
+    const n = policyCases++;
+    const named = folder("policy-" + n), invited = intoNamed ? named : folder("policy-invited-" + n);
     put(named, "etiuda-team.json", teamFile([]));
-    const Dm = await underPolicy(rows(named), "policy-desk-" + policyOutcome.length, folder("policy-own-" + policyOutcome.length));
-    const blob = inviteBlob({ team: TEAM, folder: invited, lead: lampLead, secret: newSecret() });
+    const Dm = await underPolicy(rows(named), "policy-desk-" + n, folder("policy-own-" + n));
+    const blob = inviteBlob({ team: TEAM, folder: invited, lead: from, secret: newSecret() });
     const trust = trustOf(Dm);
     let readM = null, takeM = null;
-    const touchedM = await watching(invited, async () => {
-      readM = await Dm.join("read", blob);
-      takeM = await Dm.join("invite", blob, "Ola", codeFor(blob));
-    });
-    const kept = trustOf(Dm) === trust, inNamed = writtenUnder(named), inInvited = writtenUnder(invited);
+    const asks = async () => { readM = await Dm.join("read", blob); takeM = await Dm.join("invite", blob, "Ola", codeFor(blob)); };
+    /* The named folder is this desk's catalog folder, so its own reads of it are not the invitation's doing. */
+    const touchedM = intoNamed ? (await asks(), []) : await watching(invited, asks);
+    const kept = trustOf(Dm) === trust, inNamed = writtenUnder(named), inInvited = intoNamed ? 0 : writtenUnder(invited);
     const still = kept && inNamed === 0 && inInvited === 0 && touchedM.length === 0;
     const ok = WIN ? Dm.policyRead && readM && readM.refused === "policy" && !readM.offer && takeM && takeM.refused === "policy" && still
       : !Dm.policyRead && readM && !!readM.offer && readM.refused === undefined;
-    policyOutcome.push(label + ": " + (ok ? "ok" : "read " + (readM && (readM.refused || (readM.offer ? "offered" : "nothing")))
+    return label + ": " + (ok ? "ok" : "read " + (readM && (readM.refused || (readM.offer ? "offered" : "nothing")))
       + ", yes " + (takeM && (takeM.refused || (takeM.join ? takeM.join.state : "nothing"))) + (kept ? "" : ", trust or folder moved")
-      + ", requests " + inNamed + " in the policy's folder and " + inInvited + " in the invitation's, touched " + touchedM.length));
-  }
+      + ", requests " + inNamed + " in the policy's folder and " + inInvited + " in the invitation's, touched " + touchedM.length);
+  };
+  const folderLead = f => [["TeamFolder", f], ["LeadKey", LEAD.public]];
+  const byFolder = [
+    await policyCase("folder and lead", folderLead, lampLead, false),
+    await policyCase("folder alone", f => [["TeamFolder", f]], lampLead, false),
+    await policyCase("folder and lead, the invitation naming both", folderLead, lampLead, true),
+  ];
   const Dnp = await deskWith("policy-control", folder("policy-control-own"));
   const controlBlob = inviteBlob({ team: TEAM, folder: folder("policy-control-yard"), lead: lampLead, secret: newSecret() });
   const readNp = await Dnp.join("read", controlBlob);
-  check(policyOutcome.every(s => / ok$/.test(s)) && readNp && !!readNp.offer && readNp.refused === undefined,
-    "15ay while machine policy names the team's folder, a valid invitation with its right check code is refused at read and at yes"
-    + " with the policy's word, the lead named or not, and nothing changes: no pin, key or request, in the policy's folder or the"
-    + " invitation's, the desk's folder setting as it was, and nothing asked where the invitation points; THE CONTROL, a desk with"
-    + " no policy, is offered it; off Windows no machine policy is read and the door stands as before: " + policyOutcome.join("; "));
+  check(byFolder.every(x => / ok$/.test(x)) && readNp && !!readNp.offer && readNp.refused === undefined,
+    "15ay while machine policy names the team's folder, with the lead or without, a valid invitation with its right check code is"
+    + " refused at read and at yes with the policy's word, one naming the policy's own folder and lead included, and nothing"
+    + " changes: no pin, key or request, in the policy's folder or the invitation's, the desk's folder setting as it was, and"
+    + " nothing asked where the invitation points; THE CONTROL, a desk with no policy, is offered it; off Windows no machine"
+    + " policy is read and the door stands as before: " + byFolder.join("; "));
 
-  /* A policy naming only the lead's key: an invitation from that lead is offered and taken as with no policy. */
-  const leadYard = folder("policy-lead-yard");
-  const Dl = await underPolicy([["LeadKey", LEAD.public]], "policy-lead", folder("policy-lead-own"));
-  const meL = await Dl.ask("etiuda:branch-identity", true);
-  const leadBlob = inviteBlob({ team: TEAM, folder: leadYard, lead: lampLead, secret: newSecret() });
-  const readL = await Dl.join("read", leadBlob);
-  const takeL = await Dl.join("invite", leadBlob, "Ola", codeFor(leadBlob));
-  const envL = Dl.envelope();
-  check(Dl.policyRead === WIN && readL && !!readL.offer && readL.refused === undefined && takeL && takeL.join && takeL.join.state === "waiting"
-      && fs.existsSync(path.join(leadYard, "desks", meL.id, "join.json")) && envL.keys.eCatalogFolder === leadYard
-      && envL.teamPins && envL.teamPins[TEAM].public === LEAD.public,
-    "15az a policy naming only the lead's key leaves the door open: an invitation from that lead is offered and taken, its request"
-    + " in the folder it names: " + (readL && (readL.refused || "offered")) + ", then " + (takeL && (takeL.refused || (takeL.join && takeL.join.state))));
+  const leadAlone = () => [["LeadKey", LEAD.public]];
+  const byLead = [
+    await policyCase("lead alone, the invitation from that lead", leadAlone, lampLead, false),
+    await policyCase("lead alone, the invitation from another", leadAlone, forgedLead, false),
+  ];
+  check(byLead.every(x => / ok$/.test(x)),
+    "15az a policy naming only the lead's key closes the door too: an invitation from that very lead, or from another, is refused"
+    + " at read and at yes with the same word and nothing changes; off Windows no machine policy is read and the door stands as"
+    + " before: " + byLead.join("; "));
+
+  /* ---- the confirm's host line comes only from a folder the reader returned ----------------------------------- */
+  /* The shell evaluated with folderHost wrapped, so every folder it is asked of is kept here. */
+  const HOST_SRC = SRC.split("function folderHost(").length === 2
+    ? SRC.replace("function folderHost(", "function folderHostAsked(")
+      + "\nfunction folderHost(f, e) { globalThis.etiudaHostAsked.push(String(f)); return folderHostAsked(f, e); }"
+    : "";
+  const hostForms = ["/\\evil.example\\share\\team", "\\/evil.example/share/team", "/\\evil.example\\share\\OneDrive\\team",
+    "\\\\?\\UNC\\evil.example\\share\\team", "C:\\OneDrive\\..\\Windows\\Temp\\team", "\\\\quay-host\\catalogs\\",
+    "C:/OneDrive/team/", folder("host-yard") + path.sep];
+  const hostWrong = [];
+  let hostTaken = 0;
+  if (!HOST_SRC) hostWrong.push("shell/main.js does not hold exactly one folderHost declaration");
+  else {
+    const udH = path.join(LAB, "host-asked");
+    fs.mkdirSync(udH, { recursive: true });
+    fs.writeFileSync(path.join(udH, "desk.json"),
+      JSON.stringify({ kind: "etiuda-desk", schema: 1, keys: { eCatalogFolder: folder("host-own"), eUiLang: "en" } }), "utf8");
+    const Dh = loadDesk(udH, HOST_SRC);
+    await Dh.ask("etiuda:branch-identity", true);
+    for (const form of hostForms) {
+      const blob = inviteBlob({ team: TEAM, folder: form, lead: lampLead, secret: newSecret() });
+      const want = P.inviteRead(blob, !WIN);
+      globalThis.etiudaHostAsked = [];
+      const got = await Dh.join("read", blob);
+      await Dh.join("invite", blob, "Ola", wrongFor(blob));
+      const asked = globalThis.etiudaHostAsked;
+      if (want) hostTaken++;
+      if (JSON.stringify(asked) !== JSON.stringify(want ? [want.folder] : []) || (got && got.offer ? got.offer.folder : null) !== (want ? want.folder : null))
+        hostWrong.push(JSON.stringify(form) + " asked of " + JSON.stringify(asked));
+    }
+    delete globalThis.etiudaHostAsked;
+  }
+  check(hostWrong.length === 0 && hostTaken >= 1,
+    "15bb where a folder sits is asked only of the folder the invitation reader returned, once at read, never at yes, and never of"
+    + " a text it refused (" + hostForms.length + " forms, " + hostTaken + " taken): " + JSON.stringify(hostWrong));
 
   /* The page shows the policy's refusal in its own sentence, in either language. */
   const ST = await import(MOD("storage.js"));
@@ -833,6 +896,80 @@ try {
   const escHtml = s => s.replace(/&/g, "&amp;").replace(/'/g, "&#39;");
   check(pageSaid("en") === escHtml(POLICY_LINE.en) && pageSaid("pl") === escHtml(POLICY_LINE.pl) && policyPage.en.indexOf(secretOf(controlBlob)) < 0,
     "15ba the policy's refusal reaches the page as its own sentence, in English and in Polish: " + pageSaid("en") + " / " + pageSaid("pl"));
+
+  /* A read the page has let go is answered to nobody: one left by Cancel, and one landing while another paste box is open. */
+  const Dst = await deskWith("stale", folder("stale-own"));
+  const staleAt = folder("stale-a");
+  const staleA = inviteBlob({ team: TEAM, folder: staleAt, lead: lampLead, secret: newSecret() });
+  const staleB = inviteBlob({ team: TEAM, folder: folder("stale-b"), lead: lampLead, secret: newSecret() });
+  let slowText = "";
+  window.E_HOST = { onTeamJoin: noop, teamJoin: (op, file, name, four) => (op === "read" && file === slowText
+    ? new Promise(r => setTimeout(() => r(Dst.join(op, file, name, four)), 60)) : Dst.join(op, file, name, four)) };
+  TJ.wireTeamJoin();
+  await new Promise(r => setTimeout(r, 30));
+  slowText = staleA;
+  TJ.openJoinPaste();
+  pasted = elOf({ "data-join-paste": "" }, staleA);
+  const lateA = press("read");
+  await press("back");
+  TJ.openJoinPaste();
+  pasted = elOf({ "data-join-paste": "" }, staleB);
+  await lateA;
+  const whileB = held(), whileBHtml = TJ.teamJoinEmptyHtml();
+  await press("read");
+  const shownB = held();
+  await press("back");
+  TJ.openJoinPaste();
+  pasted = elOf({ "data-join-paste": "" }, staleA);
+  const lateA2 = press("read");
+  await press("back");
+  await lateA2;
+  const abandoned = held(), abandonedHtml = TJ.teamJoinEmptyHtml();
+  slowText = "";
+  check(!!whileB && whileB.mode === "paste" && whileB.offer === null && whileBHtml.indexOf(staleAt) < 0
+      && !!shownB && shownB.mode === "confirm" && shownB.read === staleB && letGo(abandoned) && abandonedHtml.indexOf(staleAt) < 0,
+    "15bc a read the page let go is answered to nobody: one landing while another invitation's paste box is open leaves that box as"
+    + " it was and the next read shows its own, and one left by Cancel shows nothing when it lands: "
+    + (whileB && whileB.mode) + ", then " + (shownB && shownB.mode) + ", then " + (abandoned && (abandoned.mode || "nothing")));
+
+  /* Hide on the bubble, where a catalog is open, lets the invitation go as Cancel does. The bubble is drawn on stand-ins. */
+  const AS = await import(MOD("app-state.js"));
+  const bubbles = [];
+  const stubNode = () => ({ className: "", id: "", style: {}, attrs: {}, listeners: {}, isConnected: false, innerHTML: "",
+    offsetWidth: 340, offsetHeight: 200, classList: { contains: () => false, add: noop, remove: noop },
+    setAttribute(k, v) { this.attrs[k] = String(v); }, removeAttribute(k) { delete this.attrs[k]; }, appendChild(c) { return c; },
+    addEventListener(t, fn) { (this.listeners[t] = this.listeners[t] || []).push(fn); }, removeEventListener: noop,
+    querySelector: () => null, querySelectorAll: () => [], remove() { this.removed = true; } });
+  const docWas = { createElement: document.createElement, body: document.body };
+  const globalsWas = {};
+  for (const k of ["innerWidth", "innerHeight", "addEventListener", "removeEventListener"]) globalsWas[k] = globalThis[k];
+  let heldShown = null, heldHidden = null, escaped = false;
+  try {
+    document.createElement = () => stubNode();
+    document.body = { appendChild: el => { bubbles.push(el); return el; } };
+    Object.assign(globalThis, { innerWidth: 1280, innerHeight: 800, addEventListener: noop, removeEventListener: noop });
+    const Dhd = await deskWith("hide", folder("hide-own"));
+    window.E_HOST = hostOver(Dhd);
+    TJ.wireTeamJoin();
+    await new Promise(r => setTimeout(r, 30));
+    AS.setCards([{ id: "c-hide" }]);
+    TJ.openJoinPaste();
+    pasted = elOf({ "data-join-paste": "" }, inviteBlob({ team: TEAM, folder: folder("hide-yard"), lead: lampLead, secret: newSecret() }));
+    await press("read");
+    heldShown = held();
+    const top = bubbles[bubbles.length - 1];
+    const onKey = top && (top.listeners.keydown || [])[0];
+    if (onKey) { onKey({ key: "Escape", preventDefault: noop, stopPropagation: noop }); escaped = true; }
+    heldHidden = held();
+  } finally {
+    AS.setCards([]);
+    document.createElement = docWas.createElement;
+    document.body = docWas.body;
+    for (const k of Object.keys(globalsWas)) { if (globalsWas[k] === undefined) delete globalThis[k]; else globalThis[k] = globalsWas[k]; }
+  }
+  check(!!heldShown && heldShown.mode === "confirm" && heldShown.read !== "" && escaped && letGo(heldHidden),
+    "15bd Hide on the bubble, pressed while it holds an invitation's confirm, lets the invitation go as Cancel does: "
+    + (heldShown && heldShown.mode) + ", then " + (heldHidden && (heldHidden.mode || "nothing held")) + ", " + bubbles.length + " bubble(s) drawn");
 
   /* Last, over every desk above: the log of each holds none of the secrets any invitation carried. */
   const leaked = [];

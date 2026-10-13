@@ -253,7 +253,7 @@ function teamJoinEmptyHtml(){
       +esc(a[1])+'</button>').join("")
     +'</div></div>';
 }
-/* The confirm's yes and its line for a wrong four follow the typing, with no repaint to take the caret away. */
+/* The confirm's yes and its line for a wrong code follow the typing, with no repaint to take the caret away. */
 function followCheck(root,el){
   joinTyped=String(el.value||"");
   if(!root || typeof root.querySelector!=="function") return;

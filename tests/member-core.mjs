@@ -15,7 +15,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXPECTED = 18;
+const EXPECTED = 19;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -306,8 +306,9 @@ if (M && J) {
     + ", hosts " + JSON.stringify(named));
 
   // Built from their code points, so this file holds none of them: the bidirectional marks, overrides and isolates,
-  // the zero widths, the separators, the joiners and the byte-order mark, each range by both of its ends.
-  const hidden = [0x061c, 0x200b, 0x200f, 0x2028, 0x202e, 0x2060, 0x2069, 0xfeff].map(c => String.fromCharCode(c));
+  // the zero widths, the separators, the joiners and the byte-order mark, each range by both of its ends, and a point inside
+  // each of the three ranges, which a range split in two would let through.
+  const hidden = [0x061c, 0x200b, 0x200c, 0x200f, 0x2028, 0x202a, 0x202e, 0x2060, 0x2066, 0x2069, 0xfeff].map(c => String.fromCharCode(c));
   const withChar = (field, ch) => {
     const l = Object.assign({}, leadBlob);
     let f = "C:\\quay\\catalogs";
@@ -322,7 +323,7 @@ if (M && J) {
   }
   const plainRead = ["name", "keyId", "folder"].every(field => M.inviteRead(withChar(field, "e")) !== null);
   check(slipped.length === 0 && plainRead,
-    "16o a character that turns or hides text is refused in the lead's name, its keyId and the folder, every range by both its ends ("
+    "16o a character that turns or hides text is refused in the lead's name, its keyId and the folder, every range by both its ends and a point between ("
     + (hidden.length * 3) + " cases), while the same invitation with a plain letter there is read: slipped " + JSON.stringify(slipped));
 
   const bell = String.fromCharCode(7);
@@ -349,6 +350,20 @@ if (M && J) {
       && Object.keys(barredInvite.state.pins).length === 0 && barredInvite.state.barred.indexOf(TEAM) >= 0 && barredInvite.said.length === 0,
     "16r a team whose lead this member forgot takes no first admission from a waiting invitation, even under the lead it names:"
     + " only an answered request lifts the bar: stopped " + barredInvite.stop + ", pinned " + barredInvite.pinned);
+
+  /* The check code against an HMAC made here: keyed by the secret's 16 bytes, over the lead's 32 raw key bytes, the first six
+     bytes big-endian modulo 100000, as five digits. The fixed vectors are for any other maker of the code to share; the first
+     reads 990, so a code left unpadded is three digits there. */
+  const codeOf = (sec, pub) => String(crypto.createHmac("sha256", Buffer.from(sec, "hex")).update(Buffer.from(pub, "hex")).digest()
+    .readUIntBE(0, 6) % 100000).padStart(5, "0");
+  const VECTORS = [["11".repeat(15) + "0b", "22".repeat(32), "00990"], ["11".repeat(16), "22".repeat(32), "97467"]];
+  const vectorsHeld = VECTORS.map(([sec, pub, want]) => M.inviteCode(sec, pub) === want && codeOf(sec, pub) === want);
+  const wantInvite = codeOf(secret, lead.public);
+  check(vectorsHeld.every(Boolean) && /^[0-9]{5}$/.test(wantInvite) && M.inviteCode(secret, lead.public) === wantInvite
+      && M.inviteCode(otherSecret, lead.public) !== wantInvite && M.inviteCode(secret, otherLead.public) !== wantInvite,
+    "16s the check code is HMAC-SHA256 keyed by the secret's bytes over the lead's raw public key, five digits from the first six"
+    + " bytes, zeros kept in front, and another secret or another lead gives another: vectors " + JSON.stringify(vectorsHeld)
+    + ", " + (M.inviteCode(secret, lead.public) === wantInvite ? "this invitation's code" : "another code"));
 }
 
 console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);

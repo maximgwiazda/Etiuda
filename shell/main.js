@@ -1859,10 +1859,10 @@ function joinKept(j) {
   return inviteOk ? j : null;
 }
 /* Whether this desk takes invitations: "" where it does, else the refusal every invitation gets, at read and at yes.
-   "policy" while machine policy names a team folder, which catalogFolder answers over any folder a yes would set; a
-   policy naming only the lead leaves the door open. */
+   "policy" while machine policy names a team folder or a lead, an invitation naming those very ones included. */
 function inviteDoor() {
-  return sayJoinPolicy().folder ? "policy" : "";
+  const named = sayJoinPolicy();
+  return named.folder || named.lead ? "policy" : "";
 }
 /* An invitation, its folder read as this system reaches it. */
 function inviteParse(text) {
