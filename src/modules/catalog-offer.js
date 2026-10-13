@@ -483,6 +483,19 @@ function heldKeyCovers(c){
   const doc=catalogDocOf(c), kid=doc&&doc.sig&&doc.sig.keyId ? String(doc.sig.keyId) : "", held=heldCatalogSigner();
   return !held || !kid || held===kid;
 }
+/* Whether this catalog is under the key the held catalog verified under: the held answer valid, and the same key id. */
+function underHeldKey(c){
+  const doc=catalogDocOf(c), kid=doc&&doc.sig&&doc.sig.keyId ? String(doc.sig.keyId) : "", held=heldCatalogSigner();
+  return heldCatalogTrust()===V2_SIG_VALID && !!held && kid===held;
+}
+/* An offer that said "older" for a file whose own signature then failed says it plainly instead. */
+function offerPlainly(wrap){
+  const warn=wrap.querySelector(".ec-warn"), title=wrap.querySelector("#ecTitle"), no=wrap.querySelector("#ecNo"), yes=wrap.querySelector("#ecYes");
+  if(warn) warn.remove();
+  if(title) title.textContent=t("Replace catalog?");
+  if(no) no.textContent=t("Keep current");
+  if(yes) yes.textContent=t("Load it");
+}
 /* Every channel ends here: same guards, same wording, same promise about what is kept.
    Returns whether anything was actually put on screen, which is how an explicit check
    knows to say the file matched. */
@@ -498,7 +511,7 @@ function eOfferCatalogDialog(c,src){
   if(active && eCatalogSignature(active)===sig) return false;
   /* A stored catalog is a floor for its own id under its own signing key, while this desk has
      verified it or has not yet recorded an answer: a lower rev of it is not offered unless the agent
-     asked, and a file the agent opened is offered whatever its rev, with the warning below. Another
+     asked, and a file the agent opened is offered whatever its rev, the warning below saying when it is older. Another
      key, or a catalog that did not verify, is no floor, so accepting one catalog never locks out the
      next. An equal rev with other content is still offered, and the file's date does not decide. */
   const revOlder=!!active && String(c&&c.id||"")!=="" && String(c.id)===String(active.id||"") && (+c.rev<(+active.rev||0));
@@ -526,12 +539,18 @@ function eOfferCatalogDialog(c,src){
   }
   const replacing=!!active;
   const updating=isCatalogUpdate(c,active);
-  const older=updating && catalogEditionOlder(c.version, active.version);
+  /* OLDER IS A LOWER REV UNDER THE KEY THE HELD CATALOG VERIFIED UNDER, and only then do the title, the warning and the
+     answers say so. A lower rev or an earlier date across keys, or over a catalog that did not verify, is offered plainly,
+     as a replacement. An earlier date under that same key keeps its own sentence. */
+  const sameKey=updating && underHeldKey(c), settled=trustSettled(c);
+  const olderSure=revOlder && sameKey && (settled==="" || settled===V2_SIG_VALID);
+  const plain=updating && !olderSure && (revOlder || !sameKey) && (revOlder || catalogEditionOlder(c.version, active.version));
+  const older=updating && !olderSure && !plain && catalogEditionOlder(c.version, active.version);
   // What the edition changes stands where the counts would, which an update leaves equal so often.
   const changes=updating ? editionChanges(active,c,pack) : null;
   const changeHtml=changes ? editionOfferHtml(c,active,changes) : "";
   // A NEW EDITION OF THE CATALOG IN USE: it waits at the name, and its load marks what it brought.
-  const fresh=updating && !older && !revOlder, label=fresh ? editionLabelOf(c) : "";
+  const fresh=updating && !older && !olderSure && !plain, label=fresh ? editionLabelOf(c) : "";
   const n=(c.cards||[]).length,
         i=catalogIntentCount(c),
         k=Object.keys(c.categories||{}).length;
@@ -546,12 +565,12 @@ function eOfferCatalogDialog(c,src){
        another taken up, which the question asks and no sentence beneath it can improve on. The
        two editions of ONE catalog keep their sentence: what is at stake there is what happens to
        this desk's own work, which the screen cannot show. */
-    '<h3 id="ecTitle">'+esc(t(revOlder||older?"Older catalog found":updating?"Updated catalog found"
+    '<h3 id="ecTitle">'+esc(t(olderSure||older?"Older catalog found":updating && !plain?"Updated catalog found"
         :replacing?"Replace catalog?":"Load catalog?"))+'</h3>'
-    +(revOlder
+    +(olderSure
         ? '<p class="ec-warn">'+esc(t("This edition is older than the one in use on this desk, so some of its replies may be out of date."))+'</p>'
         : '')
-    +(updating && !revOlder
+    +(updating && !olderSure && !plain
         ? '<p class="ec-sub">'+esc(t(older
             ? "This file is an earlier edition than the one loaded now."
             : "This catalog has changed since it was loaded."))+'</p>'
@@ -577,8 +596,8 @@ function eOfferCatalogDialog(c,src){
     // Only a file nobody asked for, which may arrive mid-chat: the promise that the chat can go on.
     +(fresh && !src.asked ? '<p class="ec-holds">'+esc(t("This desk carries on as it is until the update is loaded."))+'</p>' : '')
     +'<div class="tour-actions">'
-    +'<button type="button" class="btn" id="ecNo">'+esc(t(revOlder?"Keep the newer one":replacing && !fresh?"Keep current":"Not now"))+'</button>'
-    +'<button type="button" class="btn primary" id="ecYes">'+esc(t(revOlder?"Open the older edition":older?"Load it anyway":updating?"Load the update":replacing?"Load it":"Load catalog"))+'</button>'
+    +'<button type="button" class="btn" id="ecNo">'+esc(t(olderSure?"Keep the newer one":replacing && !fresh?"Keep current":"Not now"))+'</button>'
+    +'<button type="button" class="btn primary" id="ecYes">'+esc(t(olderSure?"Open the older edition":older?"Load it anyway":updating && !plain?"Load the update":replacing?"Load it":"Load catalog"))+'</button>'
     +'</div>';
   cutLeaves();
   if(fresh){ edWaiting={c:c, src:src}; paintCatWaiting(); }
@@ -610,6 +629,7 @@ function eOfferCatalogDialog(c,src){
     place();
   });
   noteForeignSigner(c,wrap,place);
+  if(olderSure && !settled) catalogTrust(c).then(state=>{ if(state!==V2_SIG_VALID && wrap.isConnected){ offerPlainly(wrap); place(); } });
   const close=()=>{ removeEventListener("resize",place); dismissNode(wrap); if(offerStanding===close) offerStanding=null; };
   offerStanding=close;
   /* Escape answers nothing and records no refusal, so a stray press only postpones the question

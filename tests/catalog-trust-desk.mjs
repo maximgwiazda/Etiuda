@@ -330,7 +330,7 @@ async function launch(plan) {
   const readOffer = () => {
     const b = doc.getElementById("eCatalogOffer");
     return b ? { shown: true, trust: texts(b, ".ec-trust"), files: texts(b, ".ec-sub code"),
-      warn: texts(b, ".ec-warn"), signer: texts(b, ".ec-signer"),
+      warn: texts(b, ".ec-warn"), signer: texts(b, ".ec-signer"), title: texts(b, "#ecTitle")[0] || "",
       yes: texts(b, "#ecYes")[0] || "", no: texts(b, "#ecNo")[0] || "" }
       : { shown: false, trust: [], files: [], warn: [], signer: [], yes: "", no: "" };
   };
@@ -551,7 +551,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 86;
+  const EXPECTED = 90;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -1222,11 +1222,11 @@ async function parent() {
     const load76e = run(lab76e, ["dom", "library", "load:lamp-own.ec", "settle", "said", "yes", "settle"], true);
     const bootOffer = boot76e.offers[0] || {}, ownOffer = load76e.offers[load76e.offers.length - 1] || {};
     check(boot76e.heldRev === 2 && boot76e.heldAtEnd === V2.V2_SIG_VALID && bootOffer.shown === true && !(bootOffer.signer || []).length
-      && ownOffer.shown === true && (ownOffer.warn || []).indexOf(OLDER_WARN) >= 0
+      && ownOffer.shown === true && !(ownOffer.warn || []).length && ownOffer.title === "Replace catalog?"
       && load76e.reloaded === true && load76e.heldRev === 1 && load76e.heldId === ID && load76e.heldAtEnd === V2.V2_SIG_NONE
       && !(boot76e.errors || []).length && !(load76e.errors || []).length,
-      "76e on a desk whose lead signs the catalog, the lead's edition boots naming no other key, and an unsigned variant of it, opened on purpose, is offered and loads: "
-      + JSON.stringify({ boot: boot76e.heldRev, bootSigner: bootOffer.signer || null, shown: ownOffer.shown, warn: (ownOffer.warn || []).length,
+      "76e on a desk whose lead signs the catalog, the lead's edition boots naming no other key, and an unsigned variant of it, opened on purpose, is offered plainly and loads: "
+      + JSON.stringify({ boot: boot76e.heldRev, bootSigner: bootOffer.signer || null, shown: ownOffer.shown, warn: (ownOffer.warn || []).length, title: ownOffer.title || "",
         rev: load76e.heldRev, trust: load76e.heldAtEnd, errors: (boot76e.errors || []).concat(load76e.errors || []).slice(0, 2) }));
 
     const lab76f = scenario([["catalogs/lamp-2.ec", sign(atRev(2, "2026-09-01"))], ["catalogs/etiuda-ring.json", ring]]);
@@ -1278,10 +1278,12 @@ async function parent() {
     const other76h = run(lab76h, ["wire", "watch:second-1.ec", "settle", "offer"], true);
     const sameOffer = same76h.offers[0] || {}, otherOffer76 = other76h.offers[0] || {};
     check(boot76h.heldRev === 2 && boot76h.heldAtEnd === V2.V2_SIG_VALID && sameOffer.shown === false
-      && otherOffer76.shown === true && (otherOffer76.warn || []).indexOf(OLDER_WARN) >= 0 && other76h.heldRev === 2
+      && otherOffer76.shown === true && !(otherOffer76.warn || []).length && otherOffer76.title === "Replace catalog?"
+      && otherOffer76.yes === "Load it" && other76h.heldRev === 2
       && ![boot76h, same76h, other76h].some(o => (o.errors || []).length),
-      "76h the page's floor holds a lower rev under the held key and not one under another key the ring lists, which is offered as older: "
+      "76h the page's floor holds a lower rev under the held key and not one under another key the ring lists, which is offered plainly, not as older: "
       + JSON.stringify({ boot: boot76h.heldRev, sameKey: sameOffer.shown, otherKey: otherOffer76.shown, warn: (otherOffer76.warn || []).length,
+        title: otherOffer76.title || "", yes: otherOffer76.yes || "",
         still: other76h.heldRev, errors: [boot76h, same76h, other76h].flatMap(o => o.errors || []).slice(0, 2) }));
 
     /* The listing's own offer of a higher edition, on a desk whose lead signs the catalog: another key's higher rev
@@ -1300,6 +1302,48 @@ async function parent() {
       "76j on a desk whose lead signs the catalog, the listing offers the lead's higher edition and not another key's: "
       + JSON.stringify({ boot: boot76j.heldRev, otherKey: foreignOffer.shown, lead: leadOffer.shown, files: leadOffer.files || null,
         errors: [boot76j, foreign76j, lead76j].flatMap(o => o.errors || []).slice(0, 2) }));
+
+    /* OLDER IS A LOWER REV UNDER THE KEY THE HELD CATALOG VERIFIED UNDER. A Load of a lower rev of the held catalog's id, with
+       what is held unverified, held under another key, held under the same key, and the same key id on a file that does not
+       verify: only the third is called older. */
+    const plainly = o => o.shown === true && !(o.warn || []).length && o.title === "Replace catalog?" && o.yes === "Load it";
+    const said76 = o => JSON.stringify({ shown: o.shown, title: o.title || "", warn: (o.warn || []).length, yes: o.yes || "", trust: o.trust || null });
+    const lab76l = scenario([["catalogs/lamp-2.ec", sign(atRev(2, "2026-09-01"))], ["catalogs/etiuda-ring.json", ring],
+      ["huge.ec", atRev(1e15, "2026-08-01")]]);
+    const boot76l = run(lab76l, ["boot", "settle", "offer", "yes", "settle"]);
+    const take76l = run(lab76l, ["wire", "click:huge.ec", "settle", "offer", "yes", "settle"], true);
+    const load76l = run(lab76l, ["wire", "click:catalogs/lamp-2.ec", "settle", "offer"], true);
+    const o76l = load76l.offers[load76l.offers.length - 1] || {};
+    check(take76l.heldAtEnd === V2.V2_SIG_NONE && take76l.heldRev === 1e15 && plainly(o76l)
+      && ![boot76l, take76l, load76l].some(o => (o.errors || []).length),
+      "76l with an unsigned catalog held at a higher rev, the genuine edition opened on purpose is offered plainly, not as older: " + said76(o76l) + ", errors " + JSON.stringify([boot76l, take76l, load76l].flatMap(o => o.errors || []).slice(0, 2)));
+
+    const lab76m = scenario([["catalogs/lamp-1.ec", sign(atRev(1, "2026-08-01"))], ["catalogs/lamp-2.ec", sign2(atRev(2, "2026-09-01"))],
+      ["catalogs/etiuda-ring.json", ring2]]);
+    const boot76m = run(lab76m, ["boot", "settle", "offer", "yes", "settle"]);
+    const load76m = run(lab76m, ["dom", "library", "load:lamp-1.ec", "settle", "said", "settle", "offer"], true);
+    const o76m = load76m.offers[load76m.offers.length - 1] || {};
+    check(boot76m.heldRev === 2 && boot76m.heldAtEnd === V2.V2_SIG_VALID && plainly(o76m)
+      && ![boot76m, load76m].some(o => (o.errors || []).length),
+      "76m with a catalog held verified under another key, a lower rev under this key, opened on purpose, is offered plainly, not as older: " + said76(o76m));
+
+    const lab76n = scenario([["catalogs/lamp-1.ec", sign(atRev(1, "2026-08-01"))], ["catalogs/lamp-2.ec", sign(atRev(2, "2026-09-01"))],
+      ["catalogs/etiuda-ring.json", ring]]);
+    const boot76n = run(lab76n, ["boot", "settle", "offer", "yes", "settle"]);
+    const load76n = run(lab76n, ["dom", "library", "load:lamp-1.ec", "settle", "said", "settle", "offer"], true);
+    const o76n = load76n.offers[load76n.offers.length - 1] || {};
+    check(boot76n.heldRev === 2 && o76n.shown === true && (o76n.warn || []).indexOf(OLDER_WARN) >= 0 && o76n.title === "Older catalog found"
+      && o76n.yes === OPEN_OLDER && o76n.no === KEEP_NEWER && ![boot76n, load76n].some(o => (o.errors || []).length),
+      "76n with a catalog held verified under the same key, a lower rev of it opened on purpose is offered as older, with the warning: " + said76(o76n));
+
+    const lab76o = scenario([["catalogs/lamp-1.ec", bend(sign(atRev(1, "2026-08-01")))], ["catalogs/lamp-2.ec", sign(atRev(2, "2026-09-01"))],
+      ["catalogs/etiuda-ring.json", ring]]);
+    const boot76o = run(lab76o, ["boot", "settle", "offer", "yes", "settle"]);
+    const load76o = run(lab76o, ["dom", "library", "load:lamp-1.ec", "settle", "said", "settle", "offer"], true);
+    const o76o = load76o.offers[load76o.offers.length - 1] || {};
+    check(boot76o.heldRev === 2 && plainly(o76o) && (o76o.trust || []).some(l => CHANGED.test(l))
+      && ![boot76o, load76o].some(o => (o.errors || []).length),
+      "76o a lower rev naming the held catalog's key id, whose signature then fails, is offered plainly once that is known: " + said76(o76o));
 
     /* The yes is what raises the mark for a file the agent opened: the shell's mark in desk.json, read after a Load declined
        and after the same Load taken. The file is a second catalog of the same key, dated before the first, so no boot chooses it

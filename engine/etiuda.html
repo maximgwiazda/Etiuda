@@ -3492,9 +3492,9 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 /* WHAT AN EDITION CHANGES, in the offer (edition-panel.js): the lead's note, the counts, the titles by kind.
    The block scrolls on its own where the window is short, so the answers stay where they are. */
 .e-offer .ec-change{overflow:auto;overscroll-behavior:contain;margin:0 0 8px}
-.e-offer .ec-note,.ed-note{margin:0 0 8px;padding:6px 10px;border-radius:8px;border-left:3px solid}
+.e-offer .ec-note,.e-offer .ec-warn,.ed-note{margin:0 0 8px;padding:6px 10px;border-radius:8px;border-left:3px solid}
 .e-offer .ec-note{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.7)}
-.e-offer .ec-warn{margin:0 0 8px;padding:6px 10px;border-radius:8px;border-left:3px solid var(--warn);background:var(--warn-bg);color:var(--ink)}
+.e-offer .ec-warn{background:rgba(255,176,102,.15);border-left-color:#ffb066;color:var(--bub-ink)}
 .e-offer .ec-signer{margin:0 0 8px;font-size:13px;color:var(--bub-ink)}
 .ec-note small,.ed-note small{display:block;font:600 10.5px var(--sans);letter-spacing:.6px;text-transform:uppercase}
 .e-offer .ec-note p{margin:2px 0 0;color:var(--bub-ink)}
@@ -27828,6 +27828,17 @@ What you type stays in this browser only.`;
     const doc = catalogDocOf(c), kid = doc && doc.sig && doc.sig.keyId ? String(doc.sig.keyId) : "", held = heldCatalogSigner();
     return !held || !kid || held === kid;
   }
+  function underHeldKey(c) {
+    const doc = catalogDocOf(c), kid = doc && doc.sig && doc.sig.keyId ? String(doc.sig.keyId) : "", held = heldCatalogSigner();
+    return heldCatalogTrust() === V2_SIG_VALID && !!held && kid === held;
+  }
+  function offerPlainly(wrap) {
+    const warn = wrap.querySelector(".ec-warn"), title = wrap.querySelector("#ecTitle"), no = wrap.querySelector("#ecNo"), yes = wrap.querySelector("#ecYes");
+    if (warn) warn.remove();
+    if (title) title.textContent = t("Replace catalog?");
+    if (no) no.textContent = t("Keep current");
+    if (yes) yes.textContent = t("Load it");
+  }
   var offerStanding = null;
   function eOfferCatalogDialog(c, src) {
     const sig = eCatalogSignature(c);
@@ -27855,10 +27866,13 @@ What you type stays in this browser only.`;
     }
     const replacing = !!active;
     const updating = isCatalogUpdate(c, active);
-    const older = updating && catalogEditionOlder(c.version, active.version);
+    const sameKey = updating && underHeldKey(c), settled = trustSettled(c);
+    const olderSure = revOlder && sameKey && (settled === "" || settled === V2_SIG_VALID);
+    const plain = updating && !olderSure && (revOlder || !sameKey) && (revOlder || catalogEditionOlder(c.version, active.version));
+    const older = updating && !olderSure && !plain && catalogEditionOlder(c.version, active.version);
     const changes = updating ? editionChanges(active, c, pack) : null;
     const changeHtml = changes ? editionOfferHtml(c, active, changes) : "";
-    const fresh = updating && !older && !revOlder, label2 = fresh ? editionLabelOf(c) : "";
+    const fresh = updating && !older && !olderSure && !plain, label2 = fresh ? editionLabelOf(c) : "";
     const n = (c.cards || []).length, i = catalogIntentCount(c), k = Object.keys(c.categories || {}).length;
     const trustHtml = (line) => line ? '<p class="ec-trust">' + esc(line) + "</p>" : "";
     const wrap = document.createElement("div");
@@ -27870,13 +27884,13 @@ What you type stays in this browser only.`;
        another taken up, which the question asks and no sentence beneath it can improve on. The
        two editions of ONE catalog keep their sentence: what is at stake there is what happens to
        this desk's own work, which the screen cannot show. */
-    '<h3 id="ecTitle">' + esc(t(revOlder || older ? "Older catalog found" : updating ? "Updated catalog found" : replacing ? "Replace catalog?" : "Load catalog?")) + "</h3>" + (revOlder ? '<p class="ec-warn">' + esc(t("This edition is older than the one in use on this desk, so some of its replies may be out of date.")) + "</p>" : "") + (updating && !revOlder ? '<p class="ec-sub">' + esc(t(older ? "This file is an earlier edition than the one loaded now." : "This catalog has changed since it was loaded.")) + "</p>" : "") + '<div class="ec-what"><b>' + esc(catalogNameOfFile(String(src.file || "") || E_CATALOG_SCRIPT)) + "</b>" + (c.version != null ? " · " + esc(catalogVersionLabel(c.version)) : "") + (updating && active.version != null && String(active.version) !== String(c.version) ? '<div class="ec-counts">' + esc(t("You have {V}.")).replace("{V}", esc(catalogVersionLabel(active.version))) + "</div>" : "") + (changeHtml ? "" : '<div class="ec-counts">' + catalogCountsLine(
+    '<h3 id="ecTitle">' + esc(t(olderSure || older ? "Older catalog found" : updating && !plain ? "Updated catalog found" : replacing ? "Replace catalog?" : "Load catalog?")) + "</h3>" + (olderSure ? '<p class="ec-warn">' + esc(t("This edition is older than the one in use on this desk, so some of its replies may be out of date.")) + "</p>" : "") + (updating && !olderSure && !plain ? '<p class="ec-sub">' + esc(t(older ? "This file is an earlier edition than the one loaded now." : "This catalog has changed since it was loaded.")) + "</p>" : "") + '<div class="ec-what"><b>' + esc(catalogNameOfFile(String(src.file || "") || E_CATALOG_SCRIPT)) + "</b>" + (c.version != null ? " · " + esc(catalogVersionLabel(c.version)) : "") + (updating && active.version != null && String(active.version) !== String(c.version) ? '<div class="ec-counts">' + esc(t("You have {V}.")).replace("{V}", esc(catalogVersionLabel(active.version))) + "</div>" : "") + (changeHtml ? "" : '<div class="ec-counts">' + catalogCountsLine(
       "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
       n,
       catalogMacroCount(c),
       i,
       k
-    ) + "</div>") + "</div>" + changeHtml + '<p class="ec-sub">' + src.foundHtml + (updating ? " " + esc(t("Your own cards and edits are kept.")) : "") + "</p>" + trustHtml(trustOfferLine(trustSettled(c), updating)) + (fresh && !src.asked ? '<p class="ec-holds">' + esc(t("This desk carries on as it is until the update is loaded.")) + "</p>" : "") + '<div class="tour-actions"><button type="button" class="btn" id="ecNo">' + esc(t(revOlder ? "Keep the newer one" : replacing && !fresh ? "Keep current" : "Not now")) + '</button><button type="button" class="btn primary" id="ecYes">' + esc(t(revOlder ? "Open the older edition" : older ? "Load it anyway" : updating ? "Load the update" : replacing ? "Load it" : "Load catalog")) + "</button></div>";
+    ) + "</div>") + "</div>" + changeHtml + '<p class="ec-sub">' + src.foundHtml + (updating ? " " + esc(t("Your own cards and edits are kept.")) : "") + "</p>" + trustHtml(trustOfferLine(trustSettled(c), updating)) + (fresh && !src.asked ? '<p class="ec-holds">' + esc(t("This desk carries on as it is until the update is loaded.")) + "</p>" : "") + '<div class="tour-actions"><button type="button" class="btn" id="ecNo">' + esc(t(olderSure ? "Keep the newer one" : replacing && !fresh ? "Keep current" : "Not now")) + '</button><button type="button" class="btn primary" id="ecYes">' + esc(t(olderSure ? "Open the older edition" : older ? "Load it anyway" : updating && !plain ? "Load the update" : replacing ? "Load it" : "Load catalog")) + "</button></div>";
     cutLeaves();
     if (fresh) {
       edWaiting = { c, src };
@@ -27904,6 +27918,12 @@ What you type stays in this browser only.`;
       place();
     });
     noteForeignSigner(c, wrap, place);
+    if (olderSure && !settled) catalogTrust(c).then((state) => {
+      if (state !== V2_SIG_VALID && wrap.isConnected) {
+        offerPlainly(wrap);
+        place();
+      }
+    });
     const close = () => {
       removeEventListener("resize", place);
       dismissNode(wrap);

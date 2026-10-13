@@ -605,6 +605,8 @@ function catalogChanged(win) {
   if (now === catalogJson) return;
   /* Below a rev already handed to the page: not offered, and it does not replace the one in memory. */
   if (belowCatalogRev(now)) return;
+  // Nor, with a lead pinned, bytes that lead did not sign: this send is unasked, the file this launch was opened with included.
+  if (now && !unsolicitedLeadText(now)) return;
   catalogJson = now;
   keepCatalogRev(now);
   if (!now || !win || win.isDestroyed()) return;

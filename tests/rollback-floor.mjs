@@ -27,7 +27,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 51;
+const EXPECTED = 53;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1333,6 +1333,50 @@ try {
       "888ay a colleague's file opened on purpose raises its mark only when taken, and an older one taken after does not lower it: reads "
       + facts(first).rev + "," + facts(second).rev + ", mark after the reads " + (markSecond === undefined ? "none" : markSecond)
       + ", taken " + took + ", the first taken after " + tookFirst);
+  }
+
+  /* ---- a file the agent opened, its bytes then rewritten, and the watch ---------------- */
+  {
+    const SHARE = folder("nu-opened-rewritten");
+    put(SHARE, "etiuda-ring.json", RING);
+    put(SHARE, "board.ec", CAT2);
+    const ud = path.join(LAB, "nu-opened-desk");
+    fs.mkdirSync(ud, { recursive: true });
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
+      keys: { eCatalogFolder: SHARE, eUiLang: "en" }, teamPins: { "t-aabbccddeeff0011": { keyId: LEAD.keyId, public: LEAD.public } } }), "utf8");
+    const D = loadDesk(ud);
+    const booted = facts(D.sync("etiuda:catalog") || "").rev;
+    put(SHARE, "opened.ec", CAT3);
+    D.sent.length = 0;
+    D.api.offerFile(D.win, path.join(SHARE, "opened.ec"));
+    const handed = D.sent.filter(a => a[0] === "etiuda:catalog-file").map(a => facts(a[1]).rev);
+    const variant = catalog(9, "2026-03-09");
+    delete variant.sig;
+    put(SHARE, "opened.ec", textOf(variant));
+    D.sent.length = 0;
+    D.api.catalogChanged(D.win);
+    const unasked = D.sent.filter(a => a[0] === "etiuda:catalog-file").map(a => facts(a[1]).rev + (a[4] ? " asked" : " unasked"));
+    const slot = ((D.envelope().catalogRevs || {})["quay-board"] || {})[LEAD.public];
+    check(unasked.length === 0,
+      "888az a file the agent opened, rewritten unsigned after the hand-over, is not offered unasked to a desk with its lead pinned: "
+      + "boot " + booted + ", opened " + handed.join(",") + ", watch then sent " + (unasked.join(",") || "nothing") + ", lead slot " + slot);
+  }
+
+  /* ---- a bare number where the catalog mark is a table of signing keys ----------------------------- */
+  {
+    const SHARE = folder("bare-mark");
+    put(SHARE, "etiuda-ring.json", RING);
+    put(SHARE, "board.ec", CAT2);
+    const ud = path.join(LAB, "bare-mark");
+    fs.mkdirSync(ud, { recursive: true });
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
+      keys: { eCatalogFolder: SHARE, eUiLang: "en" }, catalogRevs: { "quay-board": 5, "other-board": 7 } }), "utf8");
+    const D = loadDesk(ud);
+    const booted = facts(D.sync("etiuda:catalog") || "");
+    const kept = JSON.stringify(D.envelope().catalogRevs || {});
+    check(booted.rev === 2 && kept === JSON.stringify({ "quay-board": { [LEAD.public]: 2 } }),
+      "888ba a bare number under a catalog id in desk.json is no mark: it floors nothing and is not carried into the envelope: boot "
+      + (booted.rev == null ? "nothing" : booted.rev) + ", marks " + kept.replace(LEAD.public, "<lead>"));
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
