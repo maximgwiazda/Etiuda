@@ -222,8 +222,9 @@ have_pub=0
 if git rev-parse -q --verify "$pub_ref^{tree}" >/dev/null 2>&1; then have_pub=1; fi
 [ "$have_pub" = 1 ] || say "no $pub_ref to tell a public copy from a held-back catalog, so every ignored catalog counts."
 quotes_of() {
-  git grep -I -h -e "" "$pub_ref" 2>/dev/null | awk -v CAT="$1" '
+  git grep -I -h -e "" "$pub_ref" 2>/dev/null | CAT="$1" awk '
     BEGIN {
+      CAT = ENVIRON["CAT"]
       while ((getline l < CAT) > 0) {
         n = split(l, q, "\"")
         for (i = 2; i <= n; i += 2) {
@@ -249,29 +250,43 @@ quotes_of() {
   '
 }
 held=""
-for f in *-catalog.js *-catalog.json catalogs/*; do
-  [ -f "$f" ] || continue
-  git check-ignore -q "$f" || continue
+# One file, counted or set aside. $2 is the folder whose ignore rules it is read under.
+consider() {
+  [ -f "$1" ] || return 0
+  git -C "$2" check-ignore -q "$1" || return 0
   if [ "$have_pub" = 1 ]; then
-    r="$(quotes_of "$f")"
+    r="$(quotes_of "$1")"
     nq="${r%% *}"; np="${r##* }"
     case "$nq" in ''|*[!0-9]*) nq=0 ;; esac
     case "$np" in ''|*[!0-9]*) np=0 ;; esac
     if [ "$nq" = 0 ]; then
-      say "$f is not counted as a held-back catalog: it holds no quote the scan can match."
-      continue
+      say "$1 is not counted as a held-back catalog: it holds no quote the scan can match."
+      return 0
     fi
     if [ "$np" = "$nq" ]; then
-      say "$f is not counted as a held-back catalog: all $nq of its quotes are already published in $pub_ref."
-      continue
+      say "$1 is not counted as a held-back catalog: all $nq of its quotes are already published in $pub_ref."
+      return 0
     fi
-    held="$held, $f ($nq quotes, $np published)"
+    held="$held, $1 ($nq quotes, $np published)"
   else
-    held="$held, $f"
+    held="$held, $1"
   fi
-  cats="$cats $f"
+  # One path a line, never a space: a catalog under a folder whose name holds a space was split in two by the
+  # matcher, which then opened neither, matched nothing, and passed a quote (the Grok verdict on 878).
+  cats="${cats:+$cats
+}$1"
   ncats=$((ncats + 1))
-done
+}
+for f in *-catalog.js *-catalog.json catalogs/*; do consider "$f" .; done
+# A WORKTREE READS THE CATALOG BESIDE THE REPOSITORY (board 878, 2026-10-13), as it reads the list
+# from git's common directory. A linked worktree holds no copy of the held-back catalog, which is
+# ignored and never committed, so the main tree's root is read as well as its own: the folder that
+# holds the common directory. Both, so a stale copy left in a worktree cannot stand in for the
+# current one. In the main checkout that folder is this one, so nothing changes there.
+main_root="$(cd "$(git rev-parse --git-common-dir)/.." 2>/dev/null && pwd)"
+if [ -n "$main_root" ] && [ "$main_root" != "$(pwd)" ]; then
+  for f in "$main_root"/*-catalog.js "$main_root"/*-catalog.json "$main_root"/catalogs/*; do consider "$f" "$main_root"; done
+fi
 # A REPOSITORY THAT NEVER HOLDS A CATALOG SAYS SO IN A FILE OF ITS OWN, board item 435. This
 # script is installed in more than one repository now, and one of them - the Studio - has no
 # engine and no catalog beside it and never will. The rule above is right for a clone of THIS
@@ -321,9 +336,10 @@ if [ -n "$cats" ] && [ "$no_catalog" = 1 ]; then
   fail=1
 fi
 if [ -n "$cats" ]; then
-  awk -F'\t' -v CATS="$cats" '
+  CATS="$cats" awk -F'\t' '
     BEGIN {
-      nc = split(CATS, cat, " ")
+      CATS = ENVIRON["CATS"]
+      nc = split(CATS, cat, "\n")
       for (k = 1; k <= nc; k++) {
         if (cat[k] == "") continue
         while ((getline l < cat[k]) > 0) {

@@ -1834,7 +1834,10 @@ Module.prototype._compile = function (content, filename) {
   let bash = "bash";
   if (process.platform === "win32") {
     const ex = cp.execFileSync("git", ["--exec-path"], { encoding: "utf8" }).trim();
-    bash = path.join(ex, "..", "..", "..", "bin", "bash.exe");
+    /* Git for Windows keeps bash.exe in bin/; a git that ships only usr/bin/sh.exe (one Grok runs with) has git's
+       own shell there, which runs the hook as git itself does. */
+    bash = [["bin", "bash.exe"], ["usr", "bin", "bash.exe"], ["usr", "bin", "sh.exe"]]
+      .map(p => path.join(ex, "..", "..", "..", ...p)).find(p => fs.existsSync(p)) || path.join(ex, "..", "..", "..", "bin", "bash.exe");
   }
   const lab = path.join(tmp, "scan-767");
   fs.mkdirSync(lab);
@@ -1842,7 +1845,8 @@ Module.prototype._compile = function (content, filename) {
     "user.email=selftest@invalid", "-c", "core.autocrlf=false", ...a],
     { cwd: lab, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   const hasBash = cp.spawnSync(bash, ["-c", "exit 0"]).status === 0;
-  if (!hasBash) skip("34 needs Git's bash, and none answers at " + bash);
+  /* A section that cannot run is not a pass: 150 of 150 with section 34 skipped had not run the scan's cases. */
+  if (!hasBash) ok(false, "34 needs git's own shell, and none answers at " + bash);
   else {
     const PUB = 'var s = "amber falcon drifts over quiet copper meadows every morning";\n';
     const HELD = 'var s = "violet harbour lanterns guide weary silver tugboats safely home";\n';
@@ -2030,6 +2034,62 @@ Module.prototype._compile = function (content, filename) {
        && catOff.code === 0 && /quote scan stands down/.test(catOff.say),
        "34k with the shell's date " + realToday + " and ETIUDA_SCAN_OFF set to it, a missing list stands the name half down"
        + " (exit " + listOff.code + ") and a missing catalog stands the quote half down (exit " + catOff.code + ")");
+
+    /* 34l and 34m: A WORKTREE READS THE CATALOG BESIDE THE REPOSITORY (board 878, 2026-10-13), as it reads the
+       list. The held-back catalog goes back into the lab's own root, and the worktree, holding none, stops
+       declaring no-catalog. 34l: from the worktree a plain message passes against the main tree's catalog, by
+       name, and a quote of it is refused. 34m is the old reading as a control, the worktree's own root alone:
+       the quote is refused only for want of a catalog, which 34l's reader refuses. */
+    fs.renameSync(path.join(tmp, "real-catalog.js"), path.join(lab, "real-catalog.js"));
+    cp.execFileSync("git", ["rm", "-q", "--cached", ".etiuda-scan-mode"], { cwd: wt, stdio: ["ignore", "pipe", "pipe"] });
+    fs.unlinkSync(path.join(wt, ".etiuda-scan-mode"));
+    const QUOTE = "Subject\nwe said violet harbour lanterns guide weary silver, once\n";
+    const besidePlain = scanInEnv(script, CLEAN, quiet), besideQuote = scanInEnv(script, QUOTE, quiet);
+    ok(besidePlain.code === 0 && /against 1 held-back catalog\(s\): [^;]*real-catalog\.js \(1 quotes, 0 published\);/.test(besidePlain.say)
+       && besideQuote.code === 1 && /content held back by this repository is quoted/.test(besideQuote.say),
+       "34l from a worktree holding no catalog, the main tree's is read: a plain message passes against it (exit "
+       + besidePlain.code + ") and a quote of it is refused (exit " + besideQuote.code + ")");
+    const MAIN_READ = 'if [ -n "$main_root" ] && [ "$main_root" != "$(pwd)" ]; then';
+    const ownOnly = script.split(MAIN_READ).join('if false; then');
+    const oldQuote = scanInEnv(ownOnly, QUOTE, quiet);
+    ok(script.split(MAIN_READ).length === 2 && oldQuote.code === 1 && /against 0 held-back catalog\(s\)/.test(oldQuote.say)
+       && !/content held back by this repository is quoted/.test(oldQuote.say),
+       "34m control: reading the worktree's own root alone, the quote is refused only for want of a catalog (exit "
+       + oldQuote.code + "), which 34l's reader refuses");
+
+    /* 34p and 34q: A SPACE IN THE CATALOG'S PATH IS NO SPLIT (the Grok verdict on 878). A second lab under a folder
+       whose name holds a space, its catalog in the main tree, and a quote of it from a worktree. 34p: refused.
+       34q is the old join as a control: the path splits at the space, nothing is matched, and the quote passes. */
+    const spaced = path.join(tmp, "scan 878 space"), spacedWt = path.join(tmp, "scan 878 space wt");
+    fs.mkdirSync(spaced);
+    const sgit = (...a) => cp.execFileSync("git", ["-c", "user.name=selftest", "-c", "user.email=selftest@invalid",
+      "-c", "core.autocrlf=false", ...a], { cwd: spaced, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    sgit("init", "-q");
+    fs.writeFileSync(path.join(spaced, ".gitignore"), "*-catalog.js\n");
+    fs.writeFileSync(path.join(spaced, "sample.js"), PUB);
+    sgit("add", ".gitignore", "sample.js");
+    sgit("commit", "-q", "--no-verify", "-m", "published");
+    sgit("update-ref", "refs/remotes/origin/main", "HEAD");
+    fs.writeFileSync(path.join(spaced, ".git", "etiuda-names"), "zqxwvname\n");
+    fs.writeFileSync(path.join(spaced, "real-catalog.js"), HELD);
+    sgit("worktree", "add", "-q", "--detach", spacedWt, "HEAD");
+    const scanSpaced = (text, body) => {
+      fs.writeFileSync(path.join(spacedWt, "scan.sh"), text);
+      fs.writeFileSync(path.join(spacedWt, "msg.txt"), body);
+      const r = cp.spawnSync(bash, ["scan.sh", "msg.txt"], { cwd: spacedWt, encoding: "utf8", env: quiet });
+      return { code: r.status, say: String(r.stderr || "") };
+    };
+    const spacedQuote = scanSpaced(script, QUOTE), spacedPlain = scanSpaced(script, CLEAN);
+    ok(spacedQuote.code === 1 && /content held back by this repository is quoted/.test(spacedQuote.say)
+       && spacedPlain.code === 0 && /against 1 held-back catalog\(s\)/.test(spacedPlain.say),
+       "34p from a worktree whose main tree's path holds a space, a quote of its catalog is refused (exit "
+       + spacedQuote.code + ") and a plain message passes against it (exit " + spacedPlain.code + ")");
+    const JOIN = 'cats="${cats:+$cats\n}$1"';
+    const spaceJoin = script.split(JOIN).join('cats="$cats $1"').split('nc = split(CATS, cat, "\\n")').join('nc = split(CATS, cat, " ")');
+    const oldSpaced = scanSpaced(spaceJoin, QUOTE);
+    ok(script.split(JOIN).length === 2 && oldSpaced.code === 0 && /against 1 held-back catalog\(s\)/.test(oldSpaced.say),
+       "34q control: with the paths joined by a space the quote passes against 1 catalog (exit " + oldSpaced.code
+       + "), which 34p's reader refuses");
   }
 }
 
