@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<policyDefinitionResources revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+  <displayName>Etiuda</displayName>
+  <description>Folder zespołu i klucz lidera</description>
+  <resources>
+    <stringTable>
+      <string id="SUPPORTED_Etiuda">Etiuda</string>
+      <string id="EtiudaCat">Etiuda</string>
+      <string id="EtiudaStudioCat">Etiuda Studio</string>
+      <string id="TeamFolder">Folder zespołu</string>
+      <string id="TeamFolder_Explain">Folder, z którego to stanowisko czyta plik zespołu. Podaj pełną ścieżkę, na przykład D:\Zespol\udzial albo \\serwer\zespol. Ścieżka, która nie jest pełna, jest pomijana, a stanowisko zostaje przy folderze, którego już używa. Gdy podane są i ten folder, i klucz lidera, a któreś z nich nie nadaje się do użycia, stanowisko nie używa żadnego.</string>
+      <string id="LeadKey">Klucz lidera</string>
+      <string id="LeadKey_Explain">Klucz publiczny lidera, któremu to stanowisko ufa w pliku zespołu. Podaj 64 małe znaki szesnastkowe tego klucza, te same znaki, które podaje sam plik zespołu. Inny zapis jest pomijany, a plik podpisany innym kluczem nie jest brany. Gdy podane są i ten klucz, i folder zespołu, a któreś z nich nie nadaje się do użycia, stanowisko nie używa żadnego.</string>
+      <string id="TeamAboveFolder">Folder zespołu powyżej</string>
+      <string id="TeamAboveFolder_Explain">Folder, w którym Etiuda Studio czyta zespół, do którego dołączyło. Podaj pełną ścieżkę. Czyta tę wartość Etiuda Studio. Stanowisko jej nie czyta.</string>
+      <string id="LeadKeyAbove">Klucz lidera zespołu powyżej</string>
+      <string id="LeadKeyAbove_Explain">Klucz publiczny lidera zespołu, do którego dołączyło Etiuda Studio. Podaj 64 małe znaki szesnastkowe. Czyta tę wartość Etiuda Studio. Stanowisko jej nie czyta.</string>
+    </stringTable>
+    <presentationTable>
+      <presentation id="TeamFolder">
+        <textBox refId="TeamFolderBox">
+          <label>Pełna ścieżka</label>
+        </textBox>
+      </presentation>
+      <presentation id="LeadKey">
+        <textBox refId="LeadKeyBox">
+          <label>64 małe znaki szesnastkowe</label>
+        </textBox>
+      </presentation>
+      <presentation id="TeamAboveFolder">
+        <textBox refId="TeamAboveFolderBox">
+          <label>Pełna ścieżka</label>
+        </textBox>
+      </presentation>
+      <presentation id="LeadKeyAbove">
+        <textBox refId="LeadKeyAboveBox">
+          <label>64 małe znaki szesnastkowe</label>
+        </textBox>
+      </presentation>
+    </presentationTable>
+  </resources>
+</policyDefinitionResources>

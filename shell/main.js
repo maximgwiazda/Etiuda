@@ -116,6 +116,8 @@ if (TEST_DOOR && process.env.ETIUDA_TEST_DOCUMENTS) {
 function defaultCatalogFolder() { return path.join(app.getPath("documents"), "Etiuda"); }
 function catalogFolder() {
   if (deskKeys === undefined) deskKeys = readDesk();
+  const named = sayJoinPolicy().folder;
+  if (named) return named;
   const set = deskKeys[CATALOG_FOLDER_KEY];
   return (typeof set === "string" && set.trim()) ? set.trim() : defaultCatalogFolder();
 }
@@ -1344,6 +1346,132 @@ function memberHeed(doc, state, seen) {
   return ret({ key: key, stampClear: key === false, changed: changed, team: doc.id, epoch: doc.epoch,
     keep: !!(key && !kept[doc.epoch]), unbar: unbar, pinned: pinned });
 }
+/* AN ADMINISTRATOR NAMES THE TEAM IN MACHINE POLICY. The desk reads the Etiuda pair; Studio's pair
+   is in the same template and is not read here. A value that is not the form below is said and
+   ignored, and one bad value of a pair leaves the other unused. Nothing set leaves heeding as it was. */
+const REG_TOOL = "C:\\Windows\\System32\\reg.exe";
+const POLICY_KEY = "HKLM\\SOFTWARE\\Policies\\Etiuda";
+const POLICY_LEAD_RE = /^[0-9a-f]{64}$/;
+const POLICY_WORDS = {
+  en: {
+    folder: "The team folder in policy is not a full path this desk can use, so this desk keeps the folder it already uses.",
+    lead: "The lead key in policy is not the 64 lower-case hex characters of the public key in the team file, so this desk does not take it as the lead.",
+    beside: "The value set beside it stays unused, so this desk takes the policy as a whole.",
+  },
+  pl: {
+    folder: "Folder zespołu w zasadach grupy nie jest pełną ścieżką, z której to stanowisko może korzystać, więc zostaje przy folderze, którego już używa.",
+    lead: "Klucz lidera w zasadach grupy nie składa się z 64 małych znaków szesnastkowych klucza publicznego w pliku zespołu, więc stanowisko nie przyjmuje go jako klucza lidera.",
+    beside: "Wartość podana obok pozostaje nieużyta, więc stanowisko przyjmuje zasady grupy w całości.",
+  },
+};
+/* One named value as reg prints it, or unset where the line is absent or the string is empty.
+   One run of whitespace after the type is the column gap; the rest is the value, and a trailing
+   space stays part of it so a path is never trimmed into use. */
+function policyRegSz(text, name) {
+  const m = new RegExp("^[ \\t]+" + name + "[ \\t]+(REG_\\w+)(.*)$", "m").exec(String(text || "").replace(/\r/g, ""));
+  if (!m) return { set: false, type: "", value: "" };
+  const gap = /^[ \t]+/.exec(m[2]);
+  const value = gap ? m[2].slice(gap[0].length) : "";
+  if (m[1] === "REG_SZ" && value === "") return { set: false, type: "", value: "" };
+  return { set: true, type: m[1], value: value };
+}
+/* A Windows absolute path: a drive or a share, no segment that walks out of it, and no space at either end. */
+function policyFolderOk(s) {
+  if (typeof s !== "string" || s.length < 3 || s.length > 1024) return false;
+  if (s !== s.trim()) return false;
+  if (/[\u0000-\u001f\u007f]/.test(s)) return false;
+  if (/[*?"<>|]/.test(s)) return false;
+  const drive = /^[A-Za-z]:[\\/]/.test(s);
+  const unc = /^\\\\[^\\]+\\[^\\]+/.test(s);
+  if (!drive && !unc) return false;
+  const trimmed = /[\\/]$/.test(s) ? s.slice(0, -1) : s;
+  const parts = trimmed.split(/[\\/]/);
+  if (drive) {
+    if (!/^[A-Za-z]:$/.test(parts[0])) return false;
+    return parts.slice(1).every(p => p.length > 0 && p !== "." && p !== "..");
+  }
+  if (parts.length < 4 || parts[0] !== "" || parts[1] !== "") return false;
+  return parts.slice(2).every(p => p.length > 0 && p !== "." && p !== "..");
+}
+function policyLeadOk(s) { return typeof s === "string" && POLICY_LEAD_RE.test(s); }
+/* `text` is reg's printing of the policy key. `lang` is "pl" or anything else for English.
+   Returns {folder, lead, said}. folder and lead are empty where unused. */
+function joinPolicyFrom(text, lang) {
+  const words = POLICY_WORDS[lang === "pl" ? "pl" : "en"];
+  const folder = policyRegSz(text, "TeamFolder");
+  const lead = policyRegSz(text, "LeadKey");
+  const said = [];
+  let folderOk = !folder.set, leadOk = !lead.set, folderValue = "", leadValue = "";
+  if (folder.set) {
+    if (folder.type === "REG_SZ" && policyFolderOk(folder.value)) { folderOk = true; folderValue = folder.value; }
+    else said.push(words.folder);
+  }
+  if (lead.set) {
+    if (lead.type === "REG_SZ" && policyLeadOk(lead.value)) { leadOk = true; leadValue = lead.value; }
+    else said.push(words.lead);
+  }
+  if ((folder.set || lead.set) && (!folderOk || !leadOk)) {
+    if (folder.set && folderOk && !leadOk) said.push(words.beside);
+    if (lead.set && leadOk && !folderOk) said.push(words.beside);
+    return { folder: "", lead: "", said: said };
+  }
+  return { folder: folderValue, lead: leadValue, said: said };
+}
+let joinPolicyCache = null;
+/* The one program this reader starts is reg.exe at its fixed path, for this one key. A failure,
+   and any system but Windows, is no policy. reg's own error text is discarded, so a key that is
+   not there adds no line. */
+function readJoinPolicy(lang) {
+  const which = lang === "pl" ? "pl" : "en";
+  if (joinPolicyCache && joinPolicyCache.lang === which) return joinPolicyCache;
+  let text = "";
+  if (process.platform === "win32") {
+    try {
+      text = String(execFileSync(REG_TOOL, ["query", POLICY_KEY],
+        { encoding: "utf8", windowsHide: true, timeout: 5000, stdio: ["ignore", "pipe", "ignore"] }));
+    } catch { text = ""; }
+  }
+  const got = joinPolicyFrom(text, which);
+  got.lang = which;
+  joinPolicyCache = got;
+  return got;
+}
+let joinPolicySaid = false;
+function sayJoinPolicy() {
+  let lang = "en";
+  try { if (shellWords().lang === "pl") lang = "pl"; } catch { lang = "en"; }
+  const got = readJoinPolicy(lang);
+  if (!joinPolicySaid) { joinPolicySaid = true; got.said.forEach(teamSay); }
+  return got;
+}
+/* `policy` is the lead's public key, or empty where no policy names one. Empty returns memberHeed's
+   own answer. Any other public key is refused in the words an unpinned key already gets, handover
+   included, and a file signed by this key is heeded without the ring. */
+function memberHeedUnderPolicy(doc, state, seen, policy) {
+  if (!policy) return memberHeed(doc, state, seen);
+  if (!teamWhole(doc)) return memberHeed(doc, state, seen);
+  const lead = { keyId: String(doc.lead.keyId), public: String(doc.lead.public) };
+  if (lead.public !== policy) {
+    const file = seen && typeof seen.file === "string" ? seen.file : "";
+    const out = memberStateCopy(state);
+    const said = [file + " is signed by a key other than the lead's this desk trusts for team " + doc.id + ", so nothing in it is used"];
+    return { state: out, key: null, said: said, stampClear: false, changed: false, stop: true,
+      needKey: false, needRing: false, team: String(doc.id), epoch: 0, keep: false, unbar: false, pinned: false };
+  }
+  const prior = state && state.pins ? state.pins[doc.id] : null;
+  const already = !!prior && prior.public === lead.public && prior.keyId === lead.keyId;
+  if (already) return memberHeed(doc, state, seen);
+  const seeded = memberStateCopy(state);
+  seeded.pins[doc.id] = { keyId: lead.keyId, public: lead.public };
+  const barred = seeded.barred.indexOf(doc.id);
+  if (barred >= 0) seeded.barred.splice(barred, 1);
+  const r = memberHeed(doc, seeded, seen);
+  if (r.stop || r.needKey || r.needRing) return r;
+  r.pinned = true;
+  r.changed = true;
+  if (barred >= 0) r.unbar = true;
+  return r;
+}
 /* The ring beside the catalogs, or null where it is missing, larger than the reader allows, or not JSON. */
 function readRing() {
   try {
@@ -1381,16 +1509,17 @@ function heedTeam() {
   // A forgotten lead is held like a request still waiting: no lead is known until an answered request names one.
   const state = { pins: teamPins, keys: teamKeys, barred: Array.from(teamBarred), join: teamJoin };
   const member = deskBranch ? { id: branchIdOf(deskBranch.sign.pub), sk: null } : null;
+  const policyLead = sayJoinPolicy().lead;
   let seen = { file: file, member: member, ring: undefined };
-  let r = memberHeed(doc, state, seen);
+  let r = memberHeedUnderPolicy(doc, state, seen, policyLead);
   if (r.needKey) {
     const sk = openPrivate(deskBranch.box.priv);
     seen = { file: file, member: { id: member.id, sk: sk || false }, ring: undefined };
-    r = memberHeed(doc, state, seen);
+    r = memberHeedUnderPolicy(doc, state, seen, policyLead);
   }
   if (r.needRing) {
     seen = { file: file, member: seen.member, ring: readRing() };
-    r = memberHeed(doc, state, seen);
+    r = memberHeedUnderPolicy(doc, state, seen, policyLead);
   }
   r.said.forEach(teamSay);
   if (r.stampClear) teamStamp = "";

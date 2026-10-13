@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<policyDefinitionResources revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+  <displayName>Etiuda</displayName>
+  <description>Team folder and lead key</description>
+  <resources>
+    <stringTable>
+      <string id="SUPPORTED_Etiuda">Etiuda</string>
+      <string id="EtiudaCat">Etiuda</string>
+      <string id="EtiudaStudioCat">Etiuda Studio</string>
+      <string id="TeamFolder">Team folder</string>
+      <string id="TeamFolder_Explain">The folder this desk reads the team file from. Write a full path, such as D:\Team\share or \\server\team. A path that is not a full path is ignored, and this desk keeps the folder it already uses. Where this value and the lead key are both set and either one is not usable, this desk uses neither.</string>
+      <string id="LeadKey">Lead key</string>
+      <string id="LeadKey_Explain">The public key of the lead this desk trusts for the team file. Write the 64 lower-case hex characters of that key, the characters the team file itself gives. Any other writing is ignored, and a team file signed by another key is not used. Where this value and the team folder are both set and either one is not usable, this desk uses neither.</string>
+      <string id="TeamAboveFolder">Folder of the team above</string>
+      <string id="TeamAboveFolder_Explain">The folder where Etiuda Studio reads the team it has joined. Write a full path. Etiuda Studio reads this value. The desk does not.</string>
+      <string id="LeadKeyAbove">Lead key of the team above</string>
+      <string id="LeadKeyAbove_Explain">The public key of the lead of the team Etiuda Studio has joined. Write the 64 lower-case hex characters of that key. Etiuda Studio reads this value. The desk does not.</string>
+    </stringTable>
+    <presentationTable>
+      <presentation id="TeamFolder">
+        <textBox refId="TeamFolderBox">
+          <label>Full path</label>
+        </textBox>
+      </presentation>
+      <presentation id="LeadKey">
+        <textBox refId="LeadKeyBox">
+          <label>64 lower-case hex characters</label>
+        </textBox>
+      </presentation>
+      <presentation id="TeamAboveFolder">
+        <textBox refId="TeamAboveFolderBox">
+          <label>Full path</label>
+        </textBox>
+      </presentation>
+      <presentation id="LeadKeyAbove">
+        <textBox refId="LeadKeyAboveBox">
+          <label>64 lower-case hex characters</label>
+        </textBox>
+      </presentation>
+    </presentationTable>
+  </resources>
+</policyDefinitionResources>
