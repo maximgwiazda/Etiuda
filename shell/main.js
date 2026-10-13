@@ -1354,14 +1354,14 @@ const POLICY_KEY = "HKLM\\SOFTWARE\\Policies\\Etiuda";
 const POLICY_LEAD_RE = /^[0-9a-f]{64}$/;
 const POLICY_WORDS = {
   en: {
-    folder: "The team folder in policy is not a full path this desk can use, so this desk keeps the folder it already uses.",
-    lead: "The lead key in policy is not the 64 lower-case hex characters of the public key in the team file, so this desk does not take it as the lead.",
-    beside: "The value set beside it stays unused, so this desk takes the policy as a whole.",
+    folder: "The team folder set in Group Policy is not a full path, so this desk keeps the folder it already uses.",
+    lead: "The team lead's key set in Group Policy is not written as 64 lowercase hexadecimal characters, so this desk does not trust it.",
+    beside: "The other value set beside it is not used either: the two are taken together or not at all.",
   },
   pl: {
-    folder: "Folder zespołu w zasadach grupy nie jest pełną ścieżką, z której to stanowisko może korzystać, więc zostaje przy folderze, którego już używa.",
-    lead: "Klucz lidera w zasadach grupy nie składa się z 64 małych znaków szesnastkowych klucza publicznego w pliku zespołu, więc stanowisko nie przyjmuje go jako klucza lidera.",
-    beside: "Wartość podana obok pozostaje nieużyta, więc stanowisko przyjmuje zasady grupy w całości.",
+    folder: "Folder zespołu ustawiony w zasadach grupy nie jest pełną ścieżką, więc stanowisko zostaje przy folderze, którego już używa.",
+    lead: "Klucz lidera zespołu ustawiony w zasadach grupy nie ma postaci 64 małych znaków szesnastkowych, więc stanowisko go nie przyjmuje.",
+    beside: "Druga wartość ustawiona obok też nie zostanie użyta: obie są przyjmowane razem albo wcale.",
   },
 };
 /* One named value as reg prints it, or unset where the line is absent or the string is empty.

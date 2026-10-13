@@ -1,40 +1,60 @@
 <?xml version="1.0" encoding="utf-8"?>
 <policyDefinitionResources revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
   <displayName>Etiuda</displayName>
-  <description>Folder zespołu i klucz lidera</description>
+  <description>Folder zespołu i klucz lidera zespołu</description>
   <resources>
     <stringTable>
       <string id="SUPPORTED_Etiuda">Etiuda</string>
       <string id="EtiudaCat">Etiuda</string>
       <string id="EtiudaStudioCat">Etiuda Studio</string>
-      <string id="TeamFolder">Folder zespołu</string>
-      <string id="TeamFolder_Explain">Folder, z którego to stanowisko czyta plik zespołu. Podaj pełną ścieżkę, na przykład D:\Zespol\udzial albo \\serwer\zespol. Ścieżka, która nie jest pełna, jest pomijana, a stanowisko zostaje przy folderze, którego już używa. Gdy podane są i ten folder, i klucz lidera, a któreś z nich nie nadaje się do użycia, stanowisko nie używa żadnego.</string>
-      <string id="LeadKey">Klucz lidera</string>
-      <string id="LeadKey_Explain">Klucz publiczny lidera, któremu to stanowisko ufa w pliku zespołu. Podaj 64 małe znaki szesnastkowe tego klucza, te same znaki, które podaje sam plik zespołu. Inny zapis jest pomijany, a plik podpisany innym kluczem nie jest brany. Gdy podane są i ten klucz, i folder zespołu, a któreś z nich nie nadaje się do użycia, stanowisko nie używa żadnego.</string>
-      <string id="TeamAboveFolder">Folder zespołu powyżej</string>
-      <string id="TeamAboveFolder_Explain">Folder, w którym Etiuda Studio czyta zespół, do którego dołączyło. Podaj pełną ścieżkę. Czyta tę wartość Etiuda Studio. Stanowisko jej nie czyta.</string>
-      <string id="LeadKeyAbove">Klucz lidera zespołu powyżej</string>
-      <string id="LeadKeyAbove_Explain">Klucz publiczny lidera zespołu, do którego dołączyło Etiuda Studio. Podaj 64 małe znaki szesnastkowe. Czyta tę wartość Etiuda Studio. Stanowisko jej nie czyta.</string>
+      <string id="TeamFolder">Ustaw folder zespołu</string>
+      <string id="TeamFolder_Explain">To ustawienie zasad określa folder, z którego Etiuda odczytuje plik zespołu na tym komputerze.
+
+Jeśli to ustawienie zasad zostanie włączone, należy podać pełną ścieżkę, na przykład D:\Team\share lub \\server\team. Etiuda odczytuje wtedy plik zespołu z tego folderu. Wartość, która nie jest pełną ścieżką, jest ignorowana, a Etiuda zostaje przy folderze, którego już używa.
+
+Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, folder wybiera się na stanowisku przy dołączaniu do zespołu.
+
+Jeśli skonfigurowane jest zarówno to ustawienie, jak i „Ustaw klucz lidera zespołu”, a którakolwiek z wartości jest nieprawidłowa, Etiuda nie używa żadnej z nich.</string>
+      <string id="LeadKey">Ustaw klucz lidera zespołu</string>
+      <string id="LeadKey_Explain">To ustawienie zasad określa klucz publiczny lidera zespołu, którego plikowi zespołu Etiuda ufa na tym komputerze.
+
+Jeśli to ustawienie zasad zostanie włączone, należy podać klucz publiczny lidera jako 64 małe znaki szesnastkowe, tak jak zapisano go w pliku zespołu. Etiuda ufa wtedy wyłącznie temu kluczowi: plik zespołu podpisany innym kluczem nie jest używany, także po przekazaniu zespołu nowemu liderowi. Wartość w innej postaci jest ignorowana.
+
+Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, Etiuda ufa liderowi zespołu, do którego dołączyło stanowisko.
+
+Jeśli skonfigurowane jest zarówno to ustawienie, jak i „Ustaw folder zespołu”, a którakolwiek z wartości jest nieprawidłowa, Etiuda nie używa żadnej z nich.</string>
+      <string id="TeamAboveFolder">Ustaw folder zespołu, do którego dołączyło Etiuda Studio</string>
+      <string id="TeamAboveFolder_Explain">To ustawienie zasad określa folder, z którego Etiuda Studio odczytuje zespół, do którego dołączyło, na tym komputerze. Odczytuje je tylko Etiuda Studio; stanowisko go nie odczytuje.
+
+Jeśli to ustawienie zasad zostanie włączone, należy podać pełną ścieżkę, na przykład D:\Team\share lub \\server\team.
+
+Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, folder wybiera się w Etiuda Studio przy dołączaniu do zespołu.</string>
+      <string id="LeadKeyAbove">Ustaw klucz lidera zespołu, do którego dołączyło Etiuda Studio</string>
+      <string id="LeadKeyAbove_Explain">To ustawienie zasad określa klucz publiczny lidera zespołu, do którego dołączyło Etiuda Studio na tym komputerze. Odczytuje je tylko Etiuda Studio; stanowisko go nie odczytuje.
+
+Jeśli to ustawienie zasad zostanie włączone, należy podać klucz publiczny lidera jako 64 małe znaki szesnastkowe, tak jak zapisano go w pliku zespołu.
+
+Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, Etiuda Studio ufa liderowi zespołu, do którego dołączyło.</string>
     </stringTable>
     <presentationTable>
       <presentation id="TeamFolder">
         <textBox refId="TeamFolderBox">
-          <label>Pełna ścieżka</label>
+          <label>Pełna ścieżka:</label>
         </textBox>
       </presentation>
       <presentation id="LeadKey">
         <textBox refId="LeadKeyBox">
-          <label>64 małe znaki szesnastkowe</label>
+          <label>Klucz publiczny (64 małe znaki szesnastkowe):</label>
         </textBox>
       </presentation>
       <presentation id="TeamAboveFolder">
         <textBox refId="TeamAboveFolderBox">
-          <label>Pełna ścieżka</label>
+          <label>Pełna ścieżka:</label>
         </textBox>
       </presentation>
       <presentation id="LeadKeyAbove">
         <textBox refId="LeadKeyAboveBox">
-          <label>64 małe znaki szesnastkowe</label>
+          <label>Klucz publiczny (64 małe znaki szesnastkowe):</label>
         </textBox>
       </presentation>
     </presentationTable>
