@@ -21,7 +21,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 35;
+const EXPECTED = 36;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -440,6 +440,24 @@ try {
     const openedPrev = openSealedDoc(spin.D, spun, spin.key);
     check(openedNew && openedNew.catalog.sha256 === pinOf(spin.D, bootedS || "") && !openedPrev,
       "890ah when the team epoch moves, the catalog already loaded is sealed again, with no take");
+
+    const late = await arm("asklate");
+    put(late.share, "board.ec", textOf(catalog(2)));
+    join(late, 1, [entry(late.D, late.me, late.key, late.team, 1)]);
+    const bootedL = late.D.sync("etiuda:catalog");
+    const pinL = pinOf(late.D, bootedL || "");
+    take(late.D, pinL);
+    const keyL = crypto.randomBytes(32);
+    join(late, 2, [entry(late.D, late.me, keyL, late.team, 2)]);
+    touch(path.join(late.share, "etiuda-team.json"), Date.now() + 5500);
+    putAsk(late, "Asklate1", pinL);
+    late.D.api.tryCatalogAsk(late.D.win);
+    const lateUse = inUsePath(late.share, late.me.id);
+    const lateNew = openSealedDoc(late.D, lateUse, keyL);
+    const lateAns = openSealedDoc(late.D, answerPath(late.share, late.me.id), keyL);
+    check(pinL && lateNew && lateNew.catalog.sha256 === pinL && !openSealedDoc(late.D, lateUse, late.key)
+        && lateAns && lateAns.kind === "etiuda-catalog-answer",
+      "890aj an ask that arrives before any folder change after the epoch moves finds the loaded catalog sealed again");
 
     const miss = await arm("mismatch");
     put(miss.share, "board.ec", textOf(catalog(2)));
