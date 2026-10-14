@@ -2914,6 +2914,7 @@ const t0 = Date.now();
   await p.mouse.move(4, 4); await sleep(50); await p.mouse.move(6, 6);
   const kbdHanded = await p.waitForFunction(() => !document.querySelector("#list .card.deck.deck-open"),
     { timeout: 3000, polling: 50 }).then(() => true, () => false);
+  check(kbdHanded, "a pointer move off the list hands the keyboard's deck back within 3 s");
   const cpCard = await p.evaluate(() => {
     const card = [...document.querySelectorAll("#list .card[data-id]")].find(c =>
       c.querySelectorAll(".txt[data-v]").length >= 2 && !c.matches("[data-erec]") && !c.querySelector("[data-erec]")
@@ -3861,9 +3862,11 @@ const t0 = Date.now();
     async function holdStill(q, id, sel) {
       await q.evaluate(() => { window.__still870 = null; });
       return q.waitForFunction((cardId, s) => {
-        const card = document.querySelector('#list .card[data-id="' + CSS.escape(cardId) + '"]');
+        const card = cardId ? document.querySelector('#list .card[data-id="' + CSS.escape(cardId) + '"]') : document;
         if (!card) return true;
-        const el = (s && card.querySelector(s)) || card, r = el.getBoundingClientRect();
+        const el = (s && card.querySelector(s)) || (cardId ? card : null);
+        if (!el) return true;
+        const r = el.getBoundingClientRect();
         const key = [Math.round(r.top), Math.round(r.left), Math.round(r.width)].join(",");
         const w = window.__still870 || (window.__still870 = { key: null, n: 0 });
         if (key === w.key) w.n++; else { w.key = key; w.n = 0; }
@@ -3897,6 +3900,7 @@ const t0 = Date.now();
       }
       const pt = await q.evaluate(cardId => {
         const card = document.querySelector('#list .card[data-id="' + CSS.escape(cardId) + '"]');
+        if (!card) return null;
         const body = card.querySelector(".chead") || card;
         const r = body.getBoundingClientRect();
         const x = Math.round(r.left + Math.min(48, Math.max(8, r.width / 2)));
@@ -3904,6 +3908,7 @@ const t0 = Date.now();
         const top = document.elementFromPoint(x, y);
         return { x: x, y: y, on: !!(top && card.contains(top)) };
       }, id);
+      if (!pt) return { on: false, gone: true, still: still, scrolls: scrolls };
       await q.mouse.move(pt.x, pt.y);
       await sleep(60);
       return { on: pt.on, still: still, scrolls: scrolls, y: pt.y };
@@ -3920,24 +3925,29 @@ const t0 = Date.now();
           top: top ? top.tagName + "." + String(top.className && top.className.baseVal != null ? top.className.baseVal : top.className).slice(0, 40) : null };
       }, id);
     }
+    /* Only a miss is tried again: no pencil, a pencil not hit, or one that would not hold still. A
+       click that hits the pencil is judged once, and if the editor does not open it is a failure
+       a person would meet, not a second click. The tries print whenever the first did not open it. */
     async function openEditor(q, id) {
       const tries = [];
+      let opened = false;
       for (let attempt = 1; attempt <= 2; attempt++) {
         const at = await hoverCard(q, id);
         const pencilStill = at.on ? await holdStill(q, id, '[data-act="edit"]') : false;
         const box = at.on ? await editBox(q, id) : null;
         const said = { attempt: attempt, at: at, pencilStill: pencilStill, box: box };
         tries.push(said);
-        if (!box || !box.hit) continue;
+        if (!box || !box.hit || !pencilStill) continue;
         await q.mouse.click(Math.round(box.x), Math.round(box.y));
         said.opened = await arrived(q, () => {
           const m = document.getElementById("modal");
           return !!(m && !m.hidden && document.getElementById("meSave"));
         }, 8000);
-        if (said.opened) return true;
+        opened = said.opened;
+        break;
       }
-      console.log("  870 the editor's open step, each try: " + JSON.stringify(tries));
-      return false;
+      if (!opened || tries.length > 1) console.log("  870 the editor's open step, each try: " + JSON.stringify(tries));
+      return opened;
     }
     async function glyphOf(q) {
       return q.evaluate(() => {
@@ -4111,12 +4121,14 @@ const t0 = Date.now();
             const el = document.querySelector('input[name="meAddr_pl"][value="titleFirst"]');
             return !!(el && el.checked);
           };
+          /* The radio is held still before the press, as a hand waits out the editor's open glide, and a
+             press that does not take then fails with where it landed: no second press, which would let a
+             radio that moved under the pointer pass on a retry (the test architect's H1). */
+          await q.evaluate(s => { const el = document.querySelector(s); if (el) el.scrollIntoView({ block: "center", inline: "nearest" }); }, PL_FORM);
+          const formStill = await holdStill(q, null, PL_FORM);
           if (!await pointerClick(q, PL_FORM)) {
             note(shown, "the pl form was not under the pointer");
           } else {
-            /* A press that does not take is said, with where it landed, and the radio is pressed once more where
-               puppeteer measures it at the moment of the press: if that takes, the first press was aimed at a
-               place the radio had left (the harness), and if it does not, something on the page stops it. */
             if (!await arrived(q, formSet, 3000)) {
               shown.pressMissed = await q.evaluate(s => {
                 const el = document.querySelector(s);
@@ -4126,10 +4138,9 @@ const t0 = Date.now();
                 return { found: true, checked: el.checked, rect: [r.left, r.top, r.width, r.height].map(Math.round),
                   top: top ? top.tagName + (top.id ? "#" + top.id : "") + (top.className ? "." + String(top.className).trim().replace(/\s+/g, ".") : "") : null };
               }, PL_FORM);
-              const handle = await q.$(PL_FORM);
-              if (handle) { await handle.click(); shown.pressRetried = await arrived(q, formSet, 3000); }
               console.log("  870 the first press on the pl form did not take: "
-                + JSON.stringify({ missed: shown.pressMissed, retried: !!shown.pressRetried }));
+                + JSON.stringify({ missed: shown.pressMissed, still: formStill }));
+              note(shown, "the press on the pl form did not take");
             }
             const dlg = await readDialog(q);
             shown.dialog = {
