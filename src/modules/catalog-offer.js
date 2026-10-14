@@ -63,7 +63,7 @@ function eFoundHtml(name,where,builtIn){
 /* `asked` means a person pointed at this file - the double-click channels of board 393 - and it
    buys two things a found file does not get: the offer outranks a remembered refusal, and an
    explicit act is answered even when there is nothing to offer. Silence was the whole bug. */
-function eOfferCatalog(given,name,where,force,asked,builtIn){
+function eOfferCatalog(given,name,where,force,asked,builtIn,offTeam){
   const c=given||eCatalog();
   if(!c) return false;
   if(!force && !storedCatalog() && eCatalogAccepted(c)) return false;
@@ -79,6 +79,9 @@ function eOfferCatalog(given,name,where,force,asked,builtIn){
   const shown=eOfferCatalogDialog(c,{
     file:file, foundHtml:eFoundHtml(file,dir,shipped),
     refusedKey:"CatalogNo", force:!!force, asked:!!asked,
+    /* Only an off-roster note changes this offer: it is asked about, even on an empty desk. A file
+       with no note keeps the direct the caller omitted, so a folder watch does not load at once. */
+    ...(offTeam ? { direct:false, offTeam:true } : {}),
     accept:sig=>{ lsSet(E_CATALOG_KEY,sig);
       return activateCatalog(c,{file:mine?file:"", from:file||(eHost()?"":E_CATALOG_SCRIPT),
                                 fileAt:(mine&&!given)?eCatalogMtime():0}); }
@@ -127,9 +130,11 @@ function loadCatalogFromFolder(name,mtime,desk){
       toastRefusal(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(got.name));
       return;
     }
+    // A file whose desk is off the team's roster is asked about even on an empty desk, so its note is read first.
+    const offTeam=!!got.notOnTeam;
     const shown=eOfferCatalogDialog(c,{
       file:got.name, foundHtml:eFoundHtml(got.name,desk?deskFolderOf(desk):eCatalogFolder()),
-      refusedKey:"CatalogNo", force:true, asked:true, direct:true,
+      refusedKey:"CatalogNo", force:true, asked:true, direct:!offTeam, offTeam:offTeam,
       accept:sig=>{ lsSet(E_CATALOG_KEY,sig);
         return activateCatalog(c,desk?{file:"", from:got.name}:{file:got.name, fileAt:+mtime||0}); }
     });
@@ -592,6 +597,7 @@ function eOfferCatalogDialog(c,src){
        it - each half is translated where it is written, and the <code> stays between them. */
     +'<p class="ec-sub">'+src.foundHtml
     +(updating?' '+esc(t("Your own cards and edits are kept.")):'')+'</p>'
+    +(src.offTeam?'<p class="ec-roster">'+esc(t("This file comes from a desk outside the team."))+'</p>':'')
     +trustHtml(trustOfferLine(trustSettled(c),updating))
     // Only a file nobody asked for, which may arrive mid-chat: the promise that the chat can go on.
     +(fresh && !src.asked ? '<p class="ec-holds">'+esc(t("This desk carries on as it is until the update is loaded."))+'</p>' : '')
@@ -773,9 +779,9 @@ function reopenWaiting(){
   eOfferCatalogDialog(w.c,Object.assign({},w.src,{force:true, reopened:true}));
 }
 /* THE FILE DIALOG'S CATALOG, asked about in the same bubble as every other route. */
-function eOfferPickedCatalog(c,name,accept){
+function eOfferPickedCatalog(c,name,accept,offTeam){
   const shown=eOfferCatalogDialog(c,{file:name, foundHtml:eFoundHtml(name,""), force:true, asked:true,
-    direct:true, accept:()=>accept()});
+    direct:!offTeam, offTeam:!!offTeam, accept:()=>accept()});
   if(!shown) toastIfSameCatalog(c);
 }
 /* A catalog no route named a file for is unnamed, in the interface's language. */
@@ -908,7 +914,7 @@ function wireHostCatalogWatch(){
   // Deferred with the same hand as the boot's other toasts: no toast host exists this early.
   if(cold) setTimeout(()=>{ try{ refuseAskedFile(cold.name,cold.why); }catch(e){} },1400);
   eOnCatalogListing(onCatalogListing);
-  h.onCatalogFile((text,name,where,asked,why,builtIn)=>{
+  h.onCatalogFile((text,name,where,asked,why,builtIn,notOnTeam)=>{
     /* The list first, and whatever this text turns out to be: the folder has changed, so a
        Library standing open is out of date whether or not the file is one it can offer. */
     paintCatalogList();
@@ -923,7 +929,7 @@ function wireHostCatalogWatch(){
       return;
     }
     if(!c){ if(asked) refuseAskedFile(name,why||"parse"); return; }
-    eOfferCatalog(c,name,where,!!asked,!!asked,builtIn);
+    eOfferCatalog(c,name,where,!!asked,!!asked,builtIn,notOnTeam==="off-roster");
   });
 }
 export {
