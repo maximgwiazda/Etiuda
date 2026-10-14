@@ -160,6 +160,12 @@ function eCatalogTaken(pin){
   if(!pin || !h || typeof h.catalogTaken!=="function") return;
   try{ h.catalogTaken(String(pin)); }catch(e){}
 }
+/* The shell says a copy of the catalog in use was sent to the team's lead. The page speaks; the desk does not ask. */
+function eOnCatalogCopy(fn){
+  const h=eHost();
+  if(!h || typeof h.onCatalogCopy!=="function" || typeof fn!=="function") return;
+  try{ h.onCatalogCopy(()=>{ try{ fn(); }catch(e){} }); }catch(e){}
+}
 /* Resolves to the chosen folder, or "" for a dialog the person closed. The caption is passed in
    already translated: the shell has no t(). */
 function ePickCatalogFolder(title){
@@ -384,6 +390,7 @@ export {
   ePickCatalogFolder,
   eReadCatalogFile,
   eCatalogTaken,
+  eOnCatalogCopy,
   eSaveCatalogFile,
   wireHost,
   dispatchTabChord,

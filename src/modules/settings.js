@@ -165,7 +165,7 @@ function settingsBodyHtml(){
         ? row(t("Last sync"), "", '<span>'+esc(lastSyncStamp)+'</span>')
         : "")+
       /* One row per team lead this desk trusts: the key the agent compared, and the way out where it was wrong. */
-      teamLeads().map(l=>row(t("Team lead's key"), "",
+      teamLeads().map((l,i)=>row(t("Team lead's key"), i===0?t("The team's lead can see which catalog this desk uses, by name and edition, and can ask for a copy of it. The desk's use counts only in the team's totals, never on its own."):"",
         '<span class="e-lead-key">'+keySignHtml("studio",l.print)+'</span>'
         +'<button type="button" class="btn" data-forget-lead="'+esc(l.team)+'">'+esc(t("Forget this lead"))+'</button>')).join("")+
       /* Under a host only: a browser has no catalog folder to share. */
