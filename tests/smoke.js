@@ -73,14 +73,16 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-/* 299 since a macro's text keeps out from under its badge (four checks and its clean) and the
+/* 303 since a pointer move off the list is judged to hand the keyboard's deck back (one check);
+   302 since an address form picked through the override is shown, saved and read back after
+   a reload (three checks); 299 since a macro's text keeps out from under its badge (four checks and its clean) and the
    dot field's extent (two checks and its clean); 291 since About closes on the trademark notice
    (two checks and its clean); 288 since the theme
    crossfades (two checks and its clean); 285 since a copy lays only the wash over its block and
    greens only that block's spine, a card's title has the row while its controls wait, the
    scrollbar's thumb is opaque, every theme has one blue, an idle tab's dot is the band's ink, and
    Maintenance fits its window unscrolled; 278 was the tour's walk by its acts. */
-const EXPECTED = { chrome: 299 };
+const EXPECTED = { chrome: 303 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
@@ -346,6 +348,47 @@ async function bootAndDismiss(pg, url, label) {
     label + ": the cards", late, 30000);
   return late;
 }
+
+/* The choice one card kept, read from the pack text the desk stores. `found` is false when
+   that card has no override. A switch stored off is returned as it was stored. */
+function addressKept(packText, cardId) {
+  let pack = null;
+  try { pack = JSON.parse(String(packText == null ? "" : packText)); }
+  catch (e) { return { read: false, found: false, why: "unreadable", addressPl: "", addressEn: "", paxOwn: null }; }
+  const ov = pack && pack.overrides && typeof pack.overrides === "object" ? pack.overrides[cardId] : null;
+  if (!ov || typeof ov !== "object") {
+    return { read: true, found: false, why: "no override", addressPl: "", addressEn: "", paxOwn: null };
+  }
+  return {
+    read: true, found: true, why: "",
+    addressPl: ov.addressPl == null ? "" : String(ov.addressPl),
+    addressEn: ov.addressEn == null ? "" : String(ov.addressEn),
+    paxOwn: ov.paxOwn == null ? null : ov.paxOwn
+  };
+}
+/* The form this leg picks: Pani or Pan with the first name, and nothing in the other language.
+   A switch stored off keeps that form from applying, so it is not held. */
+function addressChoiceHeld(kept) {
+  return !!(kept && kept.found && kept.addressPl === "titleFirst" && kept.addressEn === ""
+    && !(kept.paxOwn != null && !+kept.paxOwn));
+}
+/* Which of the three the leg reports, in the order a person meets them. */
+function addressLegBroke(shown, saved, back) {
+  const broke = [];
+  if (!shown) broke.push("picking a form does not change what the desk shows");
+  if (!saved) broke.push("the choice is not saved where the desk keeps it");
+  if (!back) broke.push("it is not read back after a reload");
+  return broke;
+}
+/* Where {PAX} sits among the marks of one block: how many tokens stand before it, or -1. */
+function paxMarkIndex(block) {
+  const text = String(block == null ? "" : block);
+  const at = text.indexOf("{PAX}");
+  if (at < 0) return -1;
+  const before = text.slice(0, at).match(/\{[A-Z][A-Z0-9]*/g);
+  return before ? before.length : 0;
+}
+/* address-kept:end */
 
 let b; let fails = 0; let checks = 0; let reachedEnd = false;
 const errs = [];
@@ -2861,7 +2904,18 @@ const t0 = Date.now();
      recorded as it arrives with the box it covers, and those covering the pressed block are
      named. Pressed on the second block of a card of alternatives holding two or more, none of
      them in the trace, so the trace's legs below can move it. Such a card is a deck, so the pointer
-     rests on its front first and the second block is pressed where it stands dealt. */
+     rests on its front first and the second block is pressed where it stands dealt.
+     THE KEYBOARD'S DECK IS HANDED BACK FIRST. The mark leg above leaves the keyboard's mark on the
+     head card, and a deck holding it stands dealt over the cards below until a pointer move hands
+     it back, unless the pointer rests on it (deck.js deckKbdSync). Pointed at a lower card's front,
+     the pointer met that deck's dealt reply and held it open, and the press copied the head card's
+     reply: the trace below read [null,null,null] in the run of 2026-10-14, as a headless replay of
+     the legs before this one showed. So the pointer leaves the list and the press waits until no
+     deck stands open, as a person's hand on the mouse would find the desk. */
+  await p.mouse.move(4, 4); await sleep(50); await p.mouse.move(6, 6);
+  const kbdHanded = await p.waitForFunction(() => !document.querySelector("#list .card.deck.deck-open"),
+    { timeout: 3000, polling: 50 }).then(() => true, () => false);
+  check(kbdHanded, "a pointer move off the list hands the keyboard's deck back within 3 s");
   const cpCard = await p.evaluate(() => {
     const card = [...document.querySelectorAll("#list .card[data-id]")].find(c =>
       c.querySelectorAll(".txt[data-v]").length >= 2 && !c.matches("[data-erec]") && !c.querySelector("[data-erec]")
@@ -2907,7 +2961,7 @@ const t0 = Date.now();
     }, id);
     const only = (g, at) => !!g && g.every((x, i) => x === (i === at));
     // Read out, not judged: a spine that fails with the trace missing here is a lost attribute, with it present a wrong paint.
-    console.log("  spine trace before g0, each block's data-erec: " + JSON.stringify(await p.evaluate(i => {
+    console.log("  spine trace before g0, the keyboard's deck handed back " + kbdHanded + ", each block's data-erec: " + JSON.stringify(await p.evaluate(i => {
       const card = document.querySelector('#list .card[data-id="' + CSS.escape(i) + '"]');
       return card ? [...card.querySelectorAll(".txt[data-v]")].map(b => b.getAttribute("data-erec")) : null;
     }, cpAt.id)));
@@ -3066,11 +3120,13 @@ const t0 = Date.now();
     + JSON.stringify([tg0, tg1, tg2]) + ")");
   clean(e, "the routes through the valve");
 
-  /* BOARD 411: THE MENU FROM THE KEYBOARD. Enter was the copy key and Space an ordinary
-     character typed into the search box, so both were taken before the browser could act on the
-     control the keyboard had just walked to, and the Menu could be reached with Tab and not
-     opened. EVERY PRESS HERE IS A REAL ONE through the protocol: a synthesised el.click() says
-     nothing about what a key does, which is the whole subject. */
+  /* BOARD 411: THE MENU FROM THE KEYBOARD. Enter was the copy key, so it was taken before the
+     browser could act on the control the keyboard had just walked to, and the Menu could be
+     reached with Tab and not opened. Enter now acts on the focused button. Space does not: board
+     883 (Maxim, 2026-10-12 12:33) makes Space the key that switches the desk between normal and
+     paths mode wherever focus sits, a focused button included, so Space on the Menu button goes to
+     the lanes and leaves the Menu shut. EVERY PRESS HERE IS A REAL ONE through the protocol: a
+     synthesised el.click() says nothing about what a key does, which is the whole subject. */
   e = since();
   const menuOpen = () => p.evaluate(() => {
     const m = document.getElementById("settingsMenu");
@@ -3085,13 +3141,18 @@ const t0 = Date.now();
   await p.keyboard.press("Enter"); await sleep(450);
   const byEnter = await menuOpen();
   await menuShut();
+  const lanesUp = () => p.evaluate(() => document.body.classList.contains("e-lanes"));
   await p.evaluate(() => document.getElementById("settingsBtn").focus());
-  await p.keyboard.press("Space"); await sleep(450);
-  const bySpace = await menuOpen();
-  await menuShut();
-  check(byEnter && bySpace,
-    "411 Enter and Space act on the Menu button the keyboard is on, instead of copying a card"
-    + " and typing a space into the search box (Enter " + byEnter + ", Space " + bySpace + ")");
+  await p.keyboard.press("Space"); await sleep(700);
+  const bySpace = { menu: await menuOpen(), lanes: await lanesUp() };
+  /* And Space again takes the desk back, so the legs after this one find it in normal mode. */
+  await p.keyboard.press("Space"); await sleep(700);
+  bySpace.back = !(await lanesUp());
+  if (bySpace.menu) await menuShut();
+  check(byEnter && !bySpace.menu && bySpace.lanes && bySpace.back,
+    "411 Enter acts on the Menu button the keyboard is on instead of copying a card, and Space there goes to"
+    + " the lanes as board 883 rules, leaving the Menu shut, and back again (Enter " + byEnter + ", Space "
+    + JSON.stringify(bySpace) + ")");
   /* From the search box, which is where the caret spends the day and where a menu key has to
      work or it is not a menu key. */
   await p.evaluate(() => document.getElementById("intent").focus());
@@ -3105,7 +3166,7 @@ const t0 = Date.now();
   check(byF10 && byF10Anywhere,
     "411b F10 opens the Menu from the search box and with nothing focused (" + byF10 + ", "
     + byF10Anywhere + ")");
-  /* THE CONTROL. Only those two keys moved: an ordinary printable one still leaves a focused
+  /* THE CONTROL. Only Enter and Space moved: an ordinary printable key still leaves a focused
      button and lands in the search box, which is the behaviour the two are carved out of. */
   await p.evaluate(() => { const i = document.getElementById("intent"); i.value = "";
     i.dispatchEvent(new Event("input", { bubbles: true })); });
@@ -3121,7 +3182,7 @@ const t0 = Date.now();
   await sleep(600);
   check(sunk.v === "z" && sunk.focused === "intent" && !sunk.open,
     "411c control: an ordinary printable key still leaves the focused button for the search box,"
-    + " so 411 is two keys carved out rather than the sink switched off: " + JSON.stringify(sunk));
+    + " so Enter and Space are carved out rather than the sink switched off: " + JSON.stringify(sunk));
   clean(e, "the Menu from the keyboard");
 
   /* BOARD 369: THE LADDER'S LAST RUNG. Escape sheds one thing per press, and once there is
@@ -3715,6 +3776,510 @@ const t0 = Date.now();
     if (orderCtx) await orderCtx.close().catch(() => {});
   }
   clean(e, "the comment language's wiring");
+
+  /* AN ADDRESS FORM THROUGH THE OVERRIDE, board 870. One card that fills {PAX} with the first
+     name. The glyph is turned by a click and by ArrowUp and ArrowDown, which is what the desk
+     offers, both before the pick and after the save. The pick is a click on the pl radio
+     titleFirst; en stays by name, so the pack holds that one field. A reload in the same tab
+     is not a launch, and the mark is not waited on again. Each of the three checks names the
+     clause that failed. The block keeps these names off the ones the legs above already use. */
+  {
+  const shown = { ok: false, why: "not driven" };
+  const saved = { ok: false, why: "not driven" };
+  const back = { ok: false, why: "not driven" };
+  let addrCtx = null;
+  const addrErrAt = errs.length;
+  try {
+    const note = (part, why) => { if (part.why === "not driven") part.why = why; };
+    const arrived = async (q, fn, ms, arg) => {
+      try { await q.waitForFunction(fn, { timeout: ms || 8000, polling: 50 }, arg); return true; }
+      catch (x) { return false; }
+    };
+    async function pointerClick(q, sel) {
+      const box = await q.evaluate(s => {
+        const el = document.querySelector(s);
+        if (!el) return null;
+        el.scrollIntoView({ block: "center", inline: "nearest" });
+        const nodes = [el];
+        if (el.closest) { const lab = el.closest("label"); if (lab) nodes.push(lab); }
+        for (let i = 0; i < nodes.length; i++) {
+          const r = nodes[i].getBoundingClientRect();
+          if (r.width < 1 || r.height < 1) continue;
+          const x = r.left + r.width / 2, y = r.top + r.height / 2;
+          const top = document.elementFromPoint(x, y);
+          const lab = el.closest ? el.closest("label") : null;
+          if (top && (top === el || el.contains(top) || (lab && lab.contains(top)))) {
+            return { x: x, y: y, hit: true };
+          }
+        }
+        return { x: 0, y: 0, hit: false };
+      }, sel);
+      if (!box || !box.hit) return false;
+      await q.mouse.click(Math.round(box.x), Math.round(box.y));
+      return true;
+    }
+    async function readPaxWord(q, id) {
+      const body = [
+        "const paxMarkIndex = " + paxMarkIndex.toString() + ";",
+        "const m = findCard(id);",
+        "if (!m) return '';",
+        "const ps = parts(m, cardLang(m));",
+        "const card = document.querySelector('#list .card[data-id=\"' + CSS.escape(id) + '\"]');",
+        "if (!card) return '';",
+        "const blocks = card.querySelectorAll('.txt');",
+        "for (let i = 0; i < ps.length; i++) {",
+        "  const n = paxMarkIndex(ps[i]);",
+        "  if (n < 0 || !blocks[i]) continue;",
+        "  const marks = blocks[i].querySelectorAll('.fillx, .fillmiss');",
+        "  const el = marks[n];",
+        "  if (!el || el.classList.contains('fillmiss')) continue;",
+        "  const word = el.textContent || '';",
+        "  if (word && word !== 'PAX') return word;",
+        "}",
+        "return '';"
+      ].join("\n");
+      try { return await q.evaluate(new Function("id", body), id); }
+      catch (x) { return ""; }
+    }
+    async function waitWord(q, id, ms) {
+      const deadline = Date.now() + (ms || 5000);
+      let word = "";
+      while (Date.now() < deadline) {
+        word = await readPaxWord(q, id);
+        if (word) return word;
+        await sleep(80);
+      }
+      return "";
+    }
+    /* THE CARD IS READ ONLY ONCE IT HOLDS STILL. The list's cards are content-visibility:auto, so a
+       card centred by scrollIntoView goes on moving for some frames while the cards around it are
+       drawn at their real heights, and a box read at once is stale. In the run of 2026-10-14, 870a to
+       870c read "the editor did not open" before and after a retry that centred the pencil: a
+       headless replay of this page saw a card centred for 475 settle with its top at 91, the pencil
+       under the sticky header's pills, and on the retry at 592. So nothing is read until the card has
+       held still for five frames; the pencil is brought into the middle band by an explicit scroll
+       and held still again; the pointer rests on the card's head, and the pencil is read once it too
+       holds still under the pointer. A miss prints each try, so it names its step. */
+    async function holdStill(q, id, sel) {
+      await q.evaluate(() => { window.__still870 = null; });
+      return q.waitForFunction((cardId, s) => {
+        const card = cardId ? document.querySelector('#list .card[data-id="' + CSS.escape(cardId) + '"]') : document;
+        if (!card) return true;
+        const el = (s && card.querySelector(s)) || (cardId ? card : null);
+        if (!el) return true;
+        const r = el.getBoundingClientRect();
+        const key = [Math.round(r.top), Math.round(r.left), Math.round(r.width)].join(",");
+        const w = window.__still870 || (window.__still870 = { key: null, n: 0 });
+        if (key === w.key) w.n++; else { w.key = key; w.n = 0; }
+        return w.n >= 5;
+      }, { polling: "raf", timeout: 4000 }, id, sel || "").then(() => true, () => false);
+    }
+    async function hoverCard(q, id) {
+      const there = await q.evaluate(cardId => {
+        const card = document.querySelector('#list .card[data-id="' + CSS.escape(cardId) + '"]');
+        if (!card) return false;
+        card.scrollIntoView({ block: "center", inline: "nearest" });
+        return true;
+      }, id);
+      if (!there) return { on: false, still: false, scrolls: 0 };
+      let still = await holdStill(q, id), scrolls = 0;
+      for (let i = 0; i < 3; i++) {
+        const off = await q.evaluate(cardId => {
+          const card = document.querySelector('#list .card[data-id="' + CSS.escape(cardId) + '"]');
+          const el = card && card.querySelector('[data-act="edit"]');
+          if (!el) return 0;
+          const r = el.getBoundingClientRect(), h = innerHeight;
+          return (r.top >= h * 0.3 && r.bottom <= h * 0.6) ? 0 : Math.round(r.top - h * 0.45);
+        }, id);
+        if (!off) break;
+        await q.evaluate(d => {
+          const sc = document.getElementById("pageScroll") || document.scrollingElement;
+          if (sc) sc.scrollTop += d;
+        }, off);
+        scrolls++;
+        still = await holdStill(q, id);
+      }
+      const pt = await q.evaluate(cardId => {
+        const card = document.querySelector('#list .card[data-id="' + CSS.escape(cardId) + '"]');
+        if (!card) return null;
+        const body = card.querySelector(".chead") || card;
+        const r = body.getBoundingClientRect();
+        const x = Math.round(r.left + Math.min(48, Math.max(8, r.width / 2)));
+        const y = Math.round(r.top + Math.min(36, Math.max(8, r.height / 2)));
+        const top = document.elementFromPoint(x, y);
+        return { x: x, y: y, on: !!(top && card.contains(top)) };
+      }, id);
+      if (!pt) return { on: false, gone: true, still: still, scrolls: scrolls };
+      await q.mouse.move(pt.x, pt.y);
+      await sleep(60);
+      return { on: pt.on, still: still, scrolls: scrolls, y: pt.y };
+    }
+    async function editBox(q, id) {
+      return q.evaluate(cardId => {
+        const card = document.querySelector('#list .card[data-id="' + CSS.escape(cardId) + '"]');
+        const el = card && card.querySelector('[data-act="edit"]');
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        const x = r.left + r.width / 2, y = r.top + r.height / 2;
+        const top = (r.width > 0 && r.height > 0) ? document.elementFromPoint(x, y) : null;
+        return { x: x, y: y, w: r.width, hit: !!(top && (top === el || el.contains(top))),
+          top: top ? top.tagName + "." + String(top.className && top.className.baseVal != null ? top.className.baseVal : top.className).slice(0, 40) : null };
+      }, id);
+    }
+    /* Only a miss is tried again: no pencil, a pencil not hit, or one that would not hold still. A
+       click that hits the pencil is judged once, and if the editor does not open it is a failure
+       a person would meet, not a second click. The tries print whenever the first did not open it. */
+    async function openEditor(q, id) {
+      const tries = [];
+      let opened = false;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const at = await hoverCard(q, id);
+        const pencilStill = at.on ? await holdStill(q, id, '[data-act="edit"]') : false;
+        const box = at.on ? await editBox(q, id) : null;
+        const said = { attempt: attempt, at: at, pencilStill: pencilStill, box: box };
+        tries.push(said);
+        if (!box || !box.hit || !pencilStill) continue;
+        await q.mouse.click(Math.round(box.x), Math.round(box.y));
+        said.opened = await arrived(q, () => {
+          const m = document.getElementById("modal");
+          return !!(m && !m.hidden && document.getElementById("meSave"));
+        }, 8000);
+        opened = said.opened;
+        break;
+      }
+      if (!opened || tries.length > 1) console.log("  870 the editor's open step, each try: " + JSON.stringify(tries));
+      return opened;
+    }
+    async function glyphOf(q) {
+      return q.evaluate(() => {
+        const d = document.getElementById("genderDrum");
+        return d ? String(d.dataset.g || "") : "";
+      });
+    }
+    async function turnGlyph(q, how) {
+      const was = await glyphOf(q);
+      let acted = false;
+      if (how === "click") acted = await pointerClick(q, "#genderDrum");
+      else {
+        await q.focus("#genderDrum");
+        await q.keyboard.press(how);
+        acted = true;
+      }
+      const moved = await arrived(q, g0 => {
+        const d = document.getElementById("genderDrum");
+        return !!(d && d.dataset.g && d.dataset.g !== g0);
+      }, 2000, was);
+      return { was: was, now: await glyphOf(q), acted: acted, moved: moved };
+    }
+    async function readDialog(q) {
+      return q.evaluate(() => {
+        const checked = name => {
+          const el = document.querySelector('input[name="' + name + '"]:checked');
+          return el ? el.value : null;
+        };
+        const ex = (L, k) => {
+          const el = document.querySelector('#meOwnBody .mf-ex[data-l="' + L + '"][data-k="' + k + '"]');
+          return el ? String(el.textContent || "") : "";
+        };
+        const voc = document.getElementById("meVoc");
+        const first = document.getElementById("meFirst");
+        const sum = document.getElementById("meAdvSum");
+        const own = document.getElementById("meOwn");
+        return {
+          pl: checked("meAddr_pl"), en: checked("meAddr_en"),
+          exTitle: ex("pl", "titleFirst"), exName: ex("pl", ""),
+          sum: sum ? String(sum.textContent || "") : "",
+          vocOff: !!(voc && voc.disabled), firstOn: !!(first && !first.disabled),
+          own: !!(own && own.checked)
+        };
+      });
+    }
+    async function readKept(q, id) {
+      const text = await q.evaluate(() => {
+        const ns = (typeof eLayer === "function") ? eLayer() : "";
+        return (typeof lsGet === "function") ? (lsGet(ns + "Pack") || "") : "";
+      });
+      const kept = addressKept(text, id);
+      let keys = [];
+      try {
+        const pack = JSON.parse(text);
+        const ov = pack && pack.overrides && pack.overrides[id];
+        if (ov && typeof ov === "object") keys = Object.keys(ov);
+      } catch (x) { keys = []; }
+      return { kept: kept, held: addressChoiceHeld(kept), keys: keys };
+    }
+
+    addrCtx = b.createBrowserContext ? await b.createBrowserContext() : await b.createIncognitoBrowserContext();
+    const q = await addrCtx.newPage();
+    await q.setViewport({ width: 1500, height: 950 });
+    q.on("dialog", d => d.accept());
+    q.on("pageerror", x => errs.push("pageerror: " + String(x.message || x)));
+    await hookInstall(q);
+    const bootLate = await bootAndDismiss(q, RUN.url, "the address form");
+    await q.evaluate(() => { const x = document.getElementById("eAgentModal"); if (x) x.remove(); });
+    shown.bootLate = bootLate.length;
+    const cardId = await q.evaluate(() => {
+      const list = (typeof cards !== "undefined" && cards) ? cards : [];
+      for (let i = 0; i < list.length; i++) {
+        const m = list[i];
+        if (!m || !m.id || m._custom || m._hidden || m.lockLang) continue;
+        if (!m.firstOnly) continue;
+        if (m.addressPl || m.addressEn || m.paxOwn != null) continue;
+        const pl = String(m.pl == null ? "" : m.pl);
+        if (pl.split("{PAX}").length - 1 !== 1) continue;
+        const el = document.querySelector('#list .card[data-id="' + CSS.escape(m.id) + '"]');
+        if (!el || el.classList.contains("is-hidden")) continue;
+        return m.id;
+      }
+      return "";
+    });
+    shown.card = cardId;
+    if (!cardId) {
+      note(shown, "no card addresses by the first name");
+      note(saved, "no card addresses by the first name");
+      note(back, "no card addresses by the first name");
+    } else {
+      const langOk = await (async () => {
+        const already = await q.evaluate(() => {
+          const btn = document.querySelector('#seg button[data-l="pl"]');
+          return typeof lang === "string" && lang === "pl" && !!(btn && btn.classList.contains("on"));
+        });
+        if (already) return true;
+        if (!await pointerClick(q, '#seg button[data-l="pl"]')) return false;
+        return arrived(q, () => {
+          const btn = document.querySelector('#seg button[data-l="pl"]');
+          return typeof lang === "string" && lang === "pl" && !!(btn && btn.classList.contains("on"));
+        }, 8000);
+      })();
+      /* setLang paints the thumb at once and rebuilds the cards a fifth of a second later. */
+      if (langOk) await sleep(450);
+      shown.lang = langOk ? "pl" : await q.evaluate(() => (typeof lang === "string" ? lang : ""));
+      if (!langOk) note(shown, "the desk did not show Polish");
+      if (!await pointerClick(q, "#pax")) note(shown, "the name box was not under the pointer");
+      else {
+        await q.keyboard.down("Control");
+        await q.keyboard.press("KeyA");
+        await q.keyboard.up("Control");
+        await q.keyboard.press("Backspace");
+        await q.keyboard.type("Anna Nowak", { delay: 8 });
+      }
+      const named = await arrived(q, () => {
+        const box = document.getElementById("pax");
+        const d = document.getElementById("genderDrum");
+        return !!(box && box.value === "Anna Nowak" && d && d.dataset.g === "f");
+      }, 5000);
+      if (!named) note(shown, "the name did not read as female");
+      const wordBefore = named ? await waitWord(q, cardId, 5000) : "";
+      shown.wordBefore = wordBefore;
+      if (named && !wordBefore) note(shown, "the card did not show the name");
+      const g0 = await glyphOf(q);
+      const idleClick = wordBefore ? await turnGlyph(q, "click") : { moved: false, now: g0 };
+      const wordIdleClick = wordBefore ? await readPaxWord(q, cardId) : "";
+      const idleKey = (wordBefore && idleClick.moved) ? await turnGlyph(q, "ArrowDown") : { moved: false, now: idleClick.now };
+      const wordIdleKey = wordBefore ? await readPaxWord(q, cardId) : "";
+      const idleOk = !!(wordBefore && idleClick.moved && idleKey.moved && idleClick.now !== g0
+        && idleKey.now !== idleClick.now && wordIdleClick === wordBefore && wordIdleKey === wordBefore);
+      shown.idle = { g0: g0, click: idleClick.now, key: idleKey.now, wordsSame: wordIdleClick === wordBefore && wordIdleKey === wordBefore };
+      if (wordBefore && !idleOk) {
+        note(shown, (idleClick.moved && idleKey.moved)
+          ? "the glyph moved the card before a form was picked"
+          : "the glyph did not turn");
+      }
+      const editor = await openEditor(q, cardId);
+      let dialogOk = false;
+      let sumBefore = "";
+      if (!editor) {
+        note(shown, "the editor did not open");
+        note(saved, "the editor did not open");
+        note(back, "the editor did not open");
+      }
+      else {
+        const advOpen = await q.evaluate(() => {
+          const d = document.querySelector('details.mf-fold[data-fold="adv"]');
+          return !!(d && d.open);
+        });
+        if (!advOpen && !await pointerClick(q, 'details.mf-fold[data-fold="adv"] > summary')) {
+          note(shown, "Advanced did not open");
+        }
+        const ownOn = await q.evaluate(() => {
+          const el = document.getElementById("meOwn");
+          return !!(el && el.checked);
+        });
+        if (!ownOn && !await pointerClick(q, "#meOwn")) note(shown, "the override switch was not under the pointer");
+        const forms = await arrived(q, () => {
+          const row = document.getElementById("meOwnRow");
+          const radio = document.querySelector('input[name="meAddr_pl"][value="titleFirst"]');
+          return !!(row && row.classList.contains("on") && radio && radio.offsetWidth > 0);
+        }, 5000);
+        if (!forms) note(shown, "the address forms stayed hidden");
+        else {
+          sumBefore = await q.evaluate(() => {
+            const s = document.getElementById("meAdvSum");
+            return s ? String(s.textContent || "") : "";
+          });
+          const PL_FORM = 'input[name="meAddr_pl"][value="titleFirst"]';
+          const formSet = () => {
+            const el = document.querySelector('input[name="meAddr_pl"][value="titleFirst"]');
+            return !!(el && el.checked);
+          };
+          /* The radio is held still before the press, as a hand waits out the editor's open glide, and a
+             press that does not take then fails with where it landed: no second press, which would let a
+             radio that moved under the pointer pass on a retry (the test architect's H1). */
+          await q.evaluate(s => { const el = document.querySelector(s); if (el) el.scrollIntoView({ block: "center", inline: "nearest" }); }, PL_FORM);
+          const formStill = await holdStill(q, null, PL_FORM);
+          if (!await pointerClick(q, PL_FORM)) {
+            note(shown, "the pl form was not under the pointer");
+          } else {
+            if (!await arrived(q, formSet, 3000)) {
+              shown.pressMissed = await q.evaluate(s => {
+                const el = document.querySelector(s);
+                if (!el) return { found: false };
+                const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+                const top = document.elementFromPoint(x, y);
+                return { found: true, checked: el.checked, rect: [r.left, r.top, r.width, r.height].map(Math.round),
+                  top: top ? top.tagName + (top.id ? "#" + top.id : "") + (top.className ? "." + String(top.className).trim().replace(/\s+/g, ".") : "") : null };
+              }, PL_FORM);
+              console.log("  870 the first press on the pl form did not take: "
+                + JSON.stringify({ missed: shown.pressMissed, still: formStill }));
+              note(shown, "the press on the pl form did not take");
+            }
+            const dlg = await readDialog(q);
+            shown.dialog = {
+              pl: dlg.pl, en: dlg.en, vocOff: dlg.vocOff, firstOn: dlg.firstOn,
+              examplesDiffer: !!(dlg.exTitle && dlg.exName && dlg.exTitle !== dlg.exName),
+              sumHasPl: dlg.sum.indexOf("PL ") >= 0, sumMoved: dlg.sum !== sumBefore
+            };
+            dialogOk = !shown.pressMissed && dlg.pl === "titleFirst" && dlg.en === "" && dlg.vocOff && dlg.firstOn
+              && shown.dialog.examplesDiffer && shown.dialog.sumHasPl && shown.dialog.sumMoved;
+            if (!dialogOk) note(shown, "picking a form did not change the editor");
+          }
+        }
+        if (!await pointerClick(q, "#meSave")) note(saved, "Save was not under the pointer");
+        else {
+          const wrote = await arrived(q, card => {
+            try {
+              const text = lsGet(eLayer() + "Pack") || "";
+              const pack = JSON.parse(text);
+              const ov = pack.overrides && pack.overrides[card];
+              return !!(ov && ov.addressPl === "titleFirst" && !ov.addressEn
+                && !(ov.paxOwn != null && !+ov.paxOwn));
+            } catch (e) { return false; }
+          }, 8000, cardId);
+          const pack = await readKept(q, cardId);
+          saved.kept = pack.kept;
+          saved.keys = pack.keys;
+          saved.ok = !!(wrote && pack.held);
+          if (saved.ok) saved.why = "";
+          else note(saved, pack.kept && pack.kept.why ? pack.kept.why : "the pack does not hold the form");
+        }
+        const wordAfter = await waitWord(q, cardId, 5000);
+        shown.wordAfter = wordAfter;
+        const cardMoved = !!(wordBefore && wordAfter && wordAfter !== wordBefore);
+        if (saved.ok && !cardMoved) note(shown, "the card did not change after the save");
+        await q.keyboard.press("Escape");
+        await arrived(q, () => {
+          const m = document.getElementById("modal");
+          return !m || m.hidden;
+        }, 4000);
+        const seen = [];
+        if (cardMoved) seen.push(wordAfter);
+        let glyphOk = false;
+        if (cardMoved) {
+          const click = await turnGlyph(q, "click");
+          const wClick = await readPaxWord(q, cardId);
+          const down = await turnGlyph(q, "ArrowDown");
+          const wDown = await readPaxWord(q, cardId);
+          const up = await turnGlyph(q, "ArrowUp");
+          const wUp = await readPaxWord(q, cardId);
+          if (wClick && seen.indexOf(wClick) < 0) seen.push(wClick);
+          if (wDown && seen.indexOf(wDown) < 0) seen.push(wDown);
+          if (wUp && seen.indexOf(wUp) < 0) seen.push(wUp);
+          glyphOk = !!(click.moved && down.moved && up.moved && wClick && wDown && wUp
+            && wClick !== wordAfter && wDown !== wClick && wUp !== wDown
+            && wClick !== wordBefore && wDown !== wordBefore && wUp !== wordBefore
+            && seen.length === 3);
+          shown.glyph = { click: click.now, down: down.now, up: up.now, words: seen.length };
+          if (!glyphOk) note(shown, "the glyph did not move the saved form");
+        }
+        shown.seen = seen;
+        shown.ok = !!(idleOk && dialogOk && cardMoved && glyphOk);
+        if (shown.ok) shown.why = "";
+        const sessionOk = await arrived(q, () => {
+          let data = null;
+          try { data = JSON.parse(sessionStorage.getItem("eSessionTabs") || "null"); }
+          catch (e) { return false; }
+          if (!data || !Array.isArray(data.tabs)) return false;
+          const tb = data.tabs.find(t => t && t.id === data.activeTabId) || data.tabs[0];
+          const d = document.getElementById("genderDrum");
+          if (!tb || tb.pax !== "Anna Nowak" || tb.lang !== "pl" || !d) return false;
+          if (!d.classList.contains("gd-hand")) return true;
+          return !!(tb.gender && tb.gender.v === d.dataset.g);
+        }, 5000);
+        if (!sessionOk) {
+          const hasName = await q.evaluate(() => (sessionStorage.getItem("eSessionTabs") || "").indexOf("Anna Nowak") >= 0);
+          if (!hasName) note(back, "the tab did not keep the name");
+        }
+        await q.reload({ waitUntil: "load", timeout: 90000 });
+        const restored = await arrived(q, () => {
+          const box = document.getElementById("pax");
+          const body = document.body;
+          return document.querySelectorAll("#list .card").length > 0
+            && !!(box && box.value === "Anna Nowak")
+            && typeof lang === "string" && lang === "pl"
+            && !(body && (body.classList.contains("e-launch") || body.classList.contains("e-launch-out")));
+        }, 30000);
+        if (!restored) note(back, "the desk did not return the name");
+        else {
+          const again = await readKept(q, cardId);
+          const wordBack = await waitWord(q, cardId, 5000);
+          const reopened = await openEditor(q, cardId);
+          let dlg = null;
+          if (reopened) {
+            const advOpen = await q.evaluate(() => {
+              const d = document.querySelector('details.mf-fold[data-fold="adv"]');
+              return !!(d && d.open);
+            });
+            if (!advOpen) await pointerClick(q, 'details.mf-fold[data-fold="adv"] > summary');
+            await arrived(q, () => {
+              const el = document.querySelector('input[name="meAddr_pl"]');
+              return !!(el && el.offsetWidth > 0);
+            }, 5000);
+            dlg = await readDialog(q);
+            await q.keyboard.press("Escape");
+          } else note(back, "the editor did not open after the reload");
+          back.kept = again.kept;
+          back.keys = again.keys;
+          back.word = wordBack;
+          back.dialog = dlg ? { pl: dlg.pl, en: dlg.en, own: dlg.own } : null;
+          const screen = !!(dlg && dlg.pl === "titleFirst" && dlg.en === "" && dlg.own
+            && wordBack && seen.indexOf(wordBack) >= 0);
+          back.ok = !!(again.held && screen);
+          if (back.ok) back.why = "";
+          else if (!again.held) note(back, "the pack did not keep the form");
+          else if (!screen) note(back, "the screen did not show the form");
+        }
+      }
+    }
+  } catch (x) {
+    const msg = String(x && x.message || x);
+    [shown, saved, back].forEach(part => {
+      if (part.why === "not driven") part.why = msg;
+      else part.err = msg;
+    });
+  } finally {
+    if (addrCtx) await addrCtx.close().catch(() => {});
+  }
+  const addrErrs = errs.slice(addrErrAt);
+  if (addrErrs.length) {
+    [shown, saved, back].forEach(part => {
+      part.errors = addrErrs;
+      if (part.ok) { part.ok = false; if (!part.why) part.why = "a page error"; }
+    });
+  }
+  check(shown.ok, "870a " + (shown.ok ? "picking an address form changes what the desk shows, and the glyph moves it by a click and by the keys" : addressLegBroke(false, true, true)[0]) + ": " + JSON.stringify(shown));
+  check(saved.ok, "870b " + (saved.ok ? "the choice is saved where the desk keeps it" : addressLegBroke(true, false, true)[0]) + ": " + JSON.stringify(saved));
+  check(back.ok, "870c " + (back.ok ? "the choice is read back after a reload, on the card and in the editor" : addressLegBroke(true, true, false)[0]) + ": " + JSON.stringify(back));
+  }
 
   /* THE MOTION LEGS, tests/motion.js, which says how a frame is read. A context of their own, so
      nothing the run above starred, hid or reordered is under them. One line per leg whatever

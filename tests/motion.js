@@ -10,7 +10,8 @@
  *
  * HOW A LEG READS MOTION. Before the act, in the same task, every tracked element's box is read
  * and keyed (a card by its id, a pill by its category key, a rail row by its intent). The act
- * runs, then a requestAnimationFrame loop reads every box again once per frame. A card's top is
+ * runs, then each frame is read once, after that frame's requestAnimationFrame callbacks and
+ * before paint. A card's top is
  * taken in page coordinates (the scroller's offset added), so a scroll is not read as the card
  * moving. The first frame an element carries a running animation, its animations are seeked to
  * their start for one read and put back: that read is where the glide begins, which is the
@@ -81,30 +82,51 @@ function instrument() {
     });
     return out;
   };
+  /* A read queued as a rAF in this task runs before a rAF that the act's microtasks queue, and
+     so sees a layout the frame never paints. The sentinel is resized once in that rAF. Its
+     ResizeObserver runs after every rAF callback of the frame and before paint, the slot m9
+     uses, and the read is done there. */
+  const sentinel = document.createElement("div");
+  sentinel.style.cssText = "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none";
+  document.documentElement.appendChild(sentinel);
+  let grow = false;
+  let pending = null;
+  new ResizeObserver(() => {
+    const arm = pending;
+    pending = null;
+    if (arm) arm();
+  }).observe(sentinel);
+  const armFrame = arm => {
+    pending = arm;
+    grow = !grow;
+    sentinel.style.width = (grow ? 2 : 1) + "px";
+  };
+  const follow = (ms, t0, sample, finish) => {
+    const f = () => armFrame(() => {
+      sample();
+      if (performance.now() - t0 < ms) requestAnimationFrame(f);
+      else finish();
+    });
+    requestAnimationFrame(f);
+  };
   window.__mt = {
-    /* One value per frame from window.__mtRead, the act run between the first read and the rest. */
+    /* One value per frame from window.__mtRead, the act run between the first read and the rest.
+       Taken after that frame's rAF callbacks, before paint. */
     series: ms => new Promise(res => {
       const out = [window.__mtRead()];
       const t0 = performance.now();
       window.__mtAct();
-      const f = () => {
-        out.push(window.__mtRead());
-        if (performance.now() - t0 < ms) requestAnimationFrame(f); else res(out);
-      };
-      requestAnimationFrame(f);
+      follow(ms, t0, () => { out.push(window.__mtRead()); }, () => res(out));
     }),
-    /* Snapshot, act, then one read per frame for `ms`. */
+    /* Snapshot, act, then one read per frame for `ms`, after that frame's rAF callbacks. */
     run: (kind, ms) => new Promise(res => {
       const seen = new Set();
       const before = read(kind, seen, false);
       const t0 = performance.now();
       window.__mtAct();
       const frames = [];
-      const f = () => {
-        frames.push(read(kind, seen, true));
-        if (performance.now() - t0 < ms) requestAnimationFrame(f); else res({ before, frames, vh: innerHeight });
-      };
-      requestAnimationFrame(f);
+      follow(ms, t0, () => { frames.push(read(kind, seen, true)); },
+        () => res({ before, frames, vh: innerHeight }));
     })
   };
 }
