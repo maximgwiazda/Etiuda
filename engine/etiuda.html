@@ -27942,11 +27942,11 @@ What you type stays in this browser only.`;
     const revHigher = !!active && String(c && c.id || "") !== "" && String(c.id) === String(active.id || "") && +c.rev > (+active.rev || 0);
     const olderSure = revOlder && sameKey && verifiedHere;
     const updateSure = revHigher && sameKey && verifiedHere && !datedEarlier;
-    const plain = updating && !olderSure && !updateSure && ((revOlder || !sameKey) && (revOlder || datedEarlier) || revHigher && !sameKey || revHigher && !verifiedHere && !datedEarlier);
+    const plain = updating && !olderSure && !updateSure && ((revOlder || !sameKey) && (revOlder || datedEarlier) || revHigher && !sameKey || revHigher && !verifiedHere && !datedEarlier || !revHigher && !(sameKey && verifiedHere) && !datedEarlier);
     const older = updating && !olderSure && !plain && datedEarlier;
     const changes = updating ? editionChanges(active, c, pack) : null;
     const changeHtml = changes ? editionOfferHtml(c, active, changes) : "";
-    const fresh = updating && !older && !olderSure && !plain, label2 = fresh ? editionLabelOf(c) : "";
+    let fresh = updating && !older && !olderSure && !plain, label2 = fresh ? editionLabelOf(c) : "";
     const n = (c.cards || []).length, i = catalogIntentCount(c), k = Object.keys(c.categories || {}).length;
     const trustHtml = (line) => line ? '<p class="ec-trust">' + esc(line) + "</p>" : "";
     const wrap = document.createElement("div");
@@ -27992,9 +27992,17 @@ What you type stays in this browser only.`;
       place();
     });
     noteForeignSigner(c, wrap, place);
-    if ((olderSure || updateSure) && !settled) catalogTrust(c).then((state) => {
+    const latePlain = olderSure || updateSure || sameKey && verifiedHere && !revHigher && !older && !plain;
+    if (latePlain && !settled) catalogTrust(c).then((state) => {
       if (state !== V2_SIG_VALID && wrap.isConnected) {
         offerPlainly(wrap);
+        const holdsLine = wrap.querySelector(".ec-holds");
+        if (holdsLine) holdsLine.remove();
+        fresh = false;
+        if (edWaiting && edWaiting.c === c) {
+          edWaiting = null;
+          paintCatWaiting();
+        }
         place();
       }
     });

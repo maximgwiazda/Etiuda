@@ -545,9 +545,9 @@ function eOfferCatalogDialog(c,src){
   const replacing=!!active;
   const updating=isCatalogUpdate(c,active);
   /* OLDER IS A LOWER REV UNDER THE KEY THE HELD CATALOG VERIFIED UNDER, and only then do the title, the warning and the
-     answers say so. AN UPDATE IS A HIGHER REV UNDER THAT SAME KEY, and only then do the title and the answers say so.
-     A lower or higher rev across keys, unsigned, or over a catalog that did not verify, is offered plainly, as a
-     replacement: the offer is still made. An earlier date under that same key keeps its own sentence. */
+     answers say so. THE UPDATE'S WORDS ARE FOR A FILE VERIFIED UNDER THAT SAME KEY, a higher rev or the same one.
+     Unsigned or unverified is offered plainly at any rev, and the offer is still made. An earlier date under that
+     same key keeps its own sentence. */
   const sameKey=updating && underHeldKey(c), settled=trustSettled(c);
   const verifiedHere=settled==="" || settled===V2_SIG_VALID;
   const datedEarlier=!!active && catalogEditionOlder(c.version, active.version);
@@ -555,13 +555,14 @@ function eOfferCatalogDialog(c,src){
   const olderSure=revOlder && sameKey && verifiedHere;
   const updateSure=revHigher && sameKey && verifiedHere && !datedEarlier;
   const plain=updating && !olderSure && !updateSure && (
-    (revOlder || !sameKey) && (revOlder || datedEarlier) || revHigher && !sameKey || revHigher && !verifiedHere && !datedEarlier);
+    (revOlder || !sameKey) && (revOlder || datedEarlier) || revHigher && !sameKey || revHigher && !verifiedHere && !datedEarlier
+    || !revHigher && !(sameKey && verifiedHere) && !datedEarlier);
   const older=updating && !olderSure && !plain && datedEarlier;
   // What the edition changes stands where the counts would, which an update leaves equal so often.
   const changes=updating ? editionChanges(active,c,pack) : null;
   const changeHtml=changes ? editionOfferHtml(c,active,changes) : "";
   // A NEW EDITION OF THE CATALOG IN USE: it waits at the name, and its load marks what it brought.
-  const fresh=updating && !older && !olderSure && !plain, label=fresh ? editionLabelOf(c) : "";
+  let fresh=updating && !older && !olderSure && !plain, label=fresh ? editionLabelOf(c) : "";
   const n=(c.cards||[]).length,
         i=catalogIntentCount(c),
         k=Object.keys(c.categories||{}).length;
@@ -641,7 +642,19 @@ function eOfferCatalogDialog(c,src){
     place();
   });
   noteForeignSigner(c,wrap,place);
-  if((olderSure || updateSure) && !settled) catalogTrust(c).then(state=>{ if(state!==V2_SIG_VALID && wrap.isConnected){ offerPlainly(wrap); place(); } });
+  /* A signature still unread is taken on trust. When it fails, the offer becomes a replacement:
+     the words, the waiting dot and the edition load all drop, and the file is still offered. */
+  const latePlain=olderSure || updateSure || (sameKey && verifiedHere && !revHigher && !older && !plain);
+  if(latePlain && !settled) catalogTrust(c).then(state=>{
+    if(state!==V2_SIG_VALID && wrap.isConnected){
+      offerPlainly(wrap);
+      const holdsLine=wrap.querySelector(".ec-holds");
+      if(holdsLine) holdsLine.remove();
+      fresh=false;
+      if(edWaiting && edWaiting.c===c){ edWaiting=null; paintCatWaiting(); }
+      place();
+    }
+  });
   const close=()=>{ removeEventListener("resize",place); dismissNode(wrap); if(offerStanding===close) offerStanding=null; };
   offerStanding=close;
   /* Escape answers nothing and records no refusal, so a stray press only postpones the question
