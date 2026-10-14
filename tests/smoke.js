@@ -3849,28 +3849,64 @@ const t0 = Date.now();
       }
       return "";
     }
-    /* The retry centres the pencil, not the card, and rests on the card's head. A tall card centred
-       puts its head, and the pencil in it, under the sticky header's pills; centring the card again
-       put it there again, and 870a to 870c read "the editor did not open" in the run of 2026-10-14.
-       A headless replay of this page measured the pencil's centre under SPAN.pill-lab on the first
-       try, and hit on a retry that centred the pencil itself. */
-    async function hoverCard(q, id, onPencil) {
-      const pt = await q.evaluate((cardId, pencil) => {
+    /* THE CARD IS READ ONLY ONCE IT HOLDS STILL. The list's cards are content-visibility:auto, so a
+       card centred by scrollIntoView goes on moving for some frames while the cards around it are
+       drawn at their real heights, and a box read at once is stale. In the run of 2026-10-14, 870a to
+       870c read "the editor did not open" before and after a retry that centred the pencil: a
+       headless replay of this page saw a card centred for 475 settle with its top at 91, the pencil
+       under the sticky header's pills, and on the retry at 592. So nothing is read until the card has
+       held still for five frames; the pencil is brought into the middle band by an explicit scroll
+       and held still again; the pointer rests on the card's head, and the pencil is read once it too
+       holds still under the pointer. A miss prints each try, so it names its step. */
+    async function holdStill(q, id, sel) {
+      await q.evaluate(() => { window.__still870 = null; });
+      return q.waitForFunction((cardId, s) => {
         const card = document.querySelector('#list .card[data-id="' + CSS.escape(cardId) + '"]');
-        if (!card) return null;
-        const ed = pencil ? card.querySelector('[data-act="edit"]') : null;
-        (ed || card).scrollIntoView({ block: "center", inline: "nearest" });
-        const body = ed ? (card.querySelector(".chead") || card) : (card.querySelector(".txt") || card);
+        if (!card) return true;
+        const el = (s && card.querySelector(s)) || card, r = el.getBoundingClientRect();
+        const key = [Math.round(r.top), Math.round(r.left), Math.round(r.width)].join(",");
+        const w = window.__still870 || (window.__still870 = { key: null, n: 0 });
+        if (key === w.key) w.n++; else { w.key = key; w.n = 0; }
+        return w.n >= 5;
+      }, { polling: "raf", timeout: 4000 }, id, sel || "").then(() => true, () => false);
+    }
+    async function hoverCard(q, id) {
+      const there = await q.evaluate(cardId => {
+        const card = document.querySelector('#list .card[data-id="' + CSS.escape(cardId) + '"]');
+        if (!card) return false;
+        card.scrollIntoView({ block: "center", inline: "nearest" });
+        return true;
+      }, id);
+      if (!there) return { on: false, still: false, scrolls: 0 };
+      let still = await holdStill(q, id), scrolls = 0;
+      for (let i = 0; i < 3; i++) {
+        const off = await q.evaluate(cardId => {
+          const card = document.querySelector('#list .card[data-id="' + CSS.escape(cardId) + '"]');
+          const el = card && card.querySelector('[data-act="edit"]');
+          if (!el) return 0;
+          const r = el.getBoundingClientRect(), h = innerHeight;
+          return (r.top >= h * 0.3 && r.bottom <= h * 0.6) ? 0 : Math.round(r.top - h * 0.45);
+        }, id);
+        if (!off) break;
+        await q.evaluate(d => {
+          const sc = document.getElementById("pageScroll") || document.scrollingElement;
+          if (sc) sc.scrollTop += d;
+        }, off);
+        scrolls++;
+        still = await holdStill(q, id);
+      }
+      const pt = await q.evaluate(cardId => {
+        const card = document.querySelector('#list .card[data-id="' + CSS.escape(cardId) + '"]');
+        const body = card.querySelector(".chead") || card;
         const r = body.getBoundingClientRect();
         const x = Math.round(r.left + Math.min(48, Math.max(8, r.width / 2)));
         const y = Math.round(r.top + Math.min(36, Math.max(8, r.height / 2)));
         const top = document.elementFromPoint(x, y);
         return { x: x, y: y, on: !!(top && card.contains(top)) };
-      }, id, !!onPencil);
-      if (!pt) return false;
+      }, id);
       await q.mouse.move(pt.x, pt.y);
       await sleep(60);
-      return pt.on;
+      return { on: pt.on, still: still, scrolls: scrolls, y: pt.y };
     }
     async function editBox(q, id) {
       return q.evaluate(cardId => {
@@ -3880,22 +3916,28 @@ const t0 = Date.now();
         const r = el.getBoundingClientRect();
         const x = r.left + r.width / 2, y = r.top + r.height / 2;
         const top = (r.width > 0 && r.height > 0) ? document.elementFromPoint(x, y) : null;
-        return { x: x, y: y, w: r.width, hit: !!(top && (top === el || el.contains(top))) };
+        return { x: x, y: y, w: r.width, hit: !!(top && (top === el || el.contains(top))),
+          top: top ? top.tagName + "." + String(top.className && top.className.baseVal != null ? top.className.baseVal : top.className).slice(0, 40) : null };
       }, id);
     }
     async function openEditor(q, id) {
-      let onCard = await hoverCard(q, id);
-      let box = onCard ? await editBox(q, id) : null;
-      if (!box || !box.hit) {
-        onCard = await hoverCard(q, id, true);
-        box = onCard ? await editBox(q, id) : null;
+      const tries = [];
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const at = await hoverCard(q, id);
+        const pencilStill = at.on ? await holdStill(q, id, '[data-act="edit"]') : false;
+        const box = at.on ? await editBox(q, id) : null;
+        const said = { attempt: attempt, at: at, pencilStill: pencilStill, box: box };
+        tries.push(said);
+        if (!box || !box.hit) continue;
+        await q.mouse.click(Math.round(box.x), Math.round(box.y));
+        said.opened = await arrived(q, () => {
+          const m = document.getElementById("modal");
+          return !!(m && !m.hidden && document.getElementById("meSave"));
+        }, 8000);
+        if (said.opened) return true;
       }
-      if (!box || !box.hit) return false;
-      await q.mouse.click(Math.round(box.x), Math.round(box.y));
-      return arrived(q, () => {
-        const m = document.getElementById("modal");
-        return !!(m && !m.hidden && document.getElementById("meSave"));
-      }, 8000);
+      console.log("  870 the editor's open step, each try: " + JSON.stringify(tries));
+      return false;
     }
     async function glyphOf(q) {
       return q.evaluate(() => {
