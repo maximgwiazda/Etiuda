@@ -160,11 +160,12 @@ function eReadCatalogFile(name,desk,asked,offer){
       .catch(()=>null);
   }catch(e){ return Promise.resolve(null); }
 }
-/* The pin of the catalog the agent took, told to the shell, which raises a mark only for bytes it handed on purpose. */
-function eCatalogTaken(pin){
+/* The pin of the catalog the agent took, and the catalog's own text when the page holds it.
+   The shell raises a mark only for bytes it handed on purpose, unless that text is the same catalog. */
+function eCatalogTaken(pin, text){
   const h=eHost();
   if(!pin || !h || typeof h.catalogTaken!=="function") return;
-  try{ h.catalogTaken(String(pin)); }catch(e){}
+  try{ h.catalogTaken(String(pin), text==null?"":String(text)); }catch(e){}
 }
 /* The shell says a copy of the catalog in use was sent to the team's lead. The page speaks; the desk does not ask. */
 function eOnCatalogCopy(fn){

@@ -85,8 +85,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
      `offer` is a read the page means to offer nobody having asked, which a pinned lead must have signed. */
   readCatalogFile: (name, desk, asked, offer) => ipcRenderer.invoke("etiuda:catalog-read", String(name || ""), desk ? String(desk) : "",
     !!asked, !!offer),
-  /* The pin of the catalog the agent just took, so the shell raises the mark for what it handed on purpose. */
-  catalogTaken: (pin) => ipcRenderer.send("etiuda:catalog-taken", String(pin || "")),
+  /* The pin of the catalog the agent just took, and the catalog text when the page sends it with the pin. */
+  catalogTaken: (pin, text) => ipcRenderer.send("etiuda:catalog-taken", String(pin || ""), text == null ? "" : String(text)),
   /* The caption is the page's, because the shell has no t(). Async, unlike the desk: a modal
      the person is standing in front of must not hold the renderer's thread. */
   pickCatalogFolder: (title) => ipcRenderer.invoke("etiuda:pick-catalog-folder", String(title || "")),

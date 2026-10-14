@@ -602,6 +602,7 @@ function catalogFolderChanged() {
 function catalogChanged(win) {
   releaseInUse();
   tryHeldUse();
+  resealHeld(win);
   const now = readCatalog();
   tryAnswerRequest(win);
   tryHeldBranches();
@@ -723,7 +724,7 @@ function handOpenedOffRoster(win) {
   openedOfferSent.add(pin);
   win.webContents.send("etiuda:catalog-file", catalogJson, path.basename(catalogFrom), folderShown(catalogFrom), true, "", false, note);
 }
-ipcMain.on("etiuda:catalog-taken", (e, pin) => {
+ipcMain.on("etiuda:catalog-taken", (e, pin, text) => {
   if (!fromEngine(e)) return;
   const key = String(pin || "");
   const got = handedAsked.get(key);
@@ -731,6 +732,19 @@ ipcMain.on("etiuda:catalog-taken", (e, pin) => {
     handedAsked.delete(key);
     if (got.who) readRevFloor(got.text, got.who, false);
     else keepCatalogRev(got.text);
+  }
+  /* The page sends the catalog it holds with the pin. The two have to be the same catalog, and
+     then those bytes are a hand even where this shell never offered them. A pin the text does not
+     back writes nothing. A pin with no text is still only a hand this shell already made. */
+  const backed = text == null ? "" : String(text);
+  if (backed) {
+    let hashed = "";
+    try {
+      const doc = catalogDocIn(backed);
+      hashed = doc && doc.kind === "etiuda-catalog" ? signedSha(doc) : "";
+    } catch { hashed = ""; }
+    if (hashed !== key) return;
+    if (!handedUse.has(key)) noteHanded(backed, sourceForText(backed));
   }
   let win = null;
   try { win = BrowserWindow.fromWebContents(e.sender); } catch { win = null; }
@@ -1525,6 +1539,17 @@ function noteHanded(text, source) {
   handedUse.set(pin, { text: String(text), source: source === "folder" || source === "desk-file" ? source : "opened" });
   while (handedUse.size > HANDED_ASKED_MAX) handedUse.delete(handedUse.keys().next().value);
 }
+/* A catalog the page backed itself is the folder's when it is the file the folder holds now, and opened otherwise. */
+function sourceForText(text) {
+  try {
+    const doc = catalogDocIn(text);
+    if (!doc || doc.kind !== "etiuda-catalog") return "opened";
+    const pin = signedSha(doc);
+    const cur = catalogJson ? catalogDocIn(catalogJson) : null;
+    if (cur && signedSha(cur) === pin && sourceOfFile(catalogFrom) === "folder") return "folder";
+  } catch { /* opened */ }
+  return "opened";
+}
 function catalogTitleClean(name) {
   if (typeof name !== "string") return "";
   return name.replace(INVITE_HIDDEN_RE, "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 120);
@@ -1537,7 +1562,8 @@ function deskTitle() {
   return n;
 }
 /* The newest team key this desk can seal with. The catalog in use need not be one the team file names.
-   stale: the team file is older than the newest key kept, so nothing new is sealed under it. */
+   stale: the team file's epoch is not that key, or the key is behind an epoch already seen, so nothing
+   new is sealed under an older key. */
 function teamUse() {
   heedTeam();
   const me = branchIdentity(false);
@@ -1564,7 +1590,7 @@ function teamUse() {
   let key = null;
   try { key = Buffer.from(safeStorage.decryptString(Buffer.from(kept[epoch], "base64")), "base64"); } catch { key = null; }
   if (!key || key.length !== 32) return { member: false };
-  const stale = doc.epoch < Math.max(epoch, teamEpochSeen[team] || 0);
+  const stale = doc.epoch !== epoch || epoch < (teamEpochSeen[team] || 0);
   return { member: true, stale: stale, seal: { team: team, epoch: epoch, key: key, lead: pin } };
 }
 function inUseFile() {
@@ -1662,6 +1688,25 @@ function writeInUse(pin, win) {
     heldInUse = { text: got.text, source: got.source };
   }
 }
+/* The team epoch moved, or this desk has only just become a member, and the page is not asked again.
+   The catalog already loaded is sealed under the key held now. A stale file seals nothing. */
+let resealing = false;
+function resealHeld(win) {
+  if (resealing || !loadedText) return;
+  let pin = "";
+  try {
+    const doc = catalogDocIn(loadedText);
+    pin = doc ? signedSha(doc) : "";
+  } catch { return; }
+  if (!PIN_RE.test(pin)) return;
+  const use = teamUse();
+  if (!use.member || use.stale || !use.seal) return;
+  if (inUseKept && inUseKept.sha === pin && inUseKept.epoch === use.seal.epoch && inUseKept.team === use.seal.team) return;
+  if (!handedUse.has(pin)) noteHanded(loadedText, sourceForText(loadedText));
+  resealing = true;
+  try { writeInUse(pin, win); }
+  finally { resealing = false; }
+}
 function askSignedBytes(doc) { return Buffer.concat([Buffer.from(ASK_PREFIX, "utf8"), signedBytesOf(doc)]); }
 function readAskFile() {
   const me = branchIdentity(false);
@@ -1724,6 +1769,7 @@ function writeAnswer(seal, pin, catalogDoc) {
 function tryCatalogAsk(win) {
   try {
     if (!folderAnswers(catalogFolder())) return;
+    resealHeld(win);
     const got = readAskFile();
     if (got.away) return;
     if (got.gone) { removeAnswer(); return; }

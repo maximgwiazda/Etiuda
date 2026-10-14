@@ -2,7 +2,7 @@ import { splitPartsRaw } from "./card-model.js";
 import { cardFieldKey } from "./card-fields.js";
 import { cardOrderTouched, cardOrderIsBase, cardOrderIdx } from "./card-order.js";
 import { ALWAYS_CATS } from "./cat-roles.js";
-import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, parseCatalogFile, catalogDocOf, eCatalogSignature } from "./catalog.js";
+import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, parseCatalogFile, catalogDocOf, eCatalogSignature, eCatalog } from "./catalog.js";
 import { catalogLoaded } from "./catalog-boot.js";
 import { agentName } from "./agent.js";
 import { catalogToV2, v2SignedBytes, v2Problems, v2ContentHash } from "./catalog-v2.js";
@@ -314,6 +314,32 @@ function pinned(c){
   try{ return Object.assign({},c,{pin:"sha256:"+sha256Hex(v2SignedBytes(doc))}); }
   catch(e){ return c; }
 }
+/* The catalog just taken, named to the shell with the document that backs the pin. A catalog
+   with no document still sends the pin alone, which only a hand this shell already made can use. */
+function tellTaken(c){
+  const doc=catalogDocOf(c);
+  let pin="";
+  try{ pin=String((pinned(c)||{}).pin||(c&&c.pin)||""); }catch(e){ pin=String(c&&c.pin||""); }
+  if(!pin) return false;
+  if(!doc){ eCatalogTaken(pin); return false; }
+  let text="";
+  try{ text=JSON.stringify(doc); }catch(e){ eCatalogTaken(pin); return false; }
+  eCatalogTaken(pin, text);
+  return true;
+}
+/* At boot the catalog in use is already stored, and the offer stays quiet when the folder still
+   holds that same catalog. The pin and the document go to the shell, so a restart can name it. */
+function nameHeldCatalog(){
+  const held=storedCatalog(), found=eCatalog();
+  if(!held || !held.pin || !found) return false;
+  if(eCatalogSignature(held)!==eCatalogSignature(found)) return false;
+  const doc=catalogDocOf(found);
+  if(!doc) return false;
+  let text="";
+  try{ text=JSON.stringify(doc); }catch(e){ return false; }
+  eCatalogTaken(held.pin, text);
+  return true;
+}
 /* A CATALOG STORED BEFORE THE PIN EXISTED is pinned from `found`, the file the boot read, where that file is the stored
    catalog unchanged: the same id and the same signature, which is the whole of what the desk calls unchanged. */
 function pinStoredFrom(found){
@@ -553,7 +579,7 @@ function takeCatalog(c,opts){
      leave the one loaded standing over its own stars, hides and order. */
   const kept=pinned(c);
   if(!storeCatalog(kept)) return false;
-  eCatalogTaken(kept&&kept.pin);
+  tellTaken(c);
   if(same){
     const alive=carryCardLayer(c);
     pack.baseCards=null;
@@ -786,6 +812,8 @@ export {
   importCatalogText,
   sha256Hex,
   pinStoredFrom,
+  tellTaken,
+  nameHeldCatalog,
   followRenamedFile,
   branchFileId,
   looseOrigin,

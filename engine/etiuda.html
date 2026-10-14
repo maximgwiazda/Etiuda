@@ -14316,11 +14316,11 @@ What you type stays in this browser only.`;
       return Promise.resolve(null);
     }
   }
-  function eCatalogTaken(pin) {
+  function eCatalogTaken(pin, text) {
     const h = eHost();
     if (!pin || !h || typeof h.catalogTaken !== "function") return;
     try {
-      h.catalogTaken(String(pin));
+      h.catalogTaken(String(pin), text == null ? "" : String(text));
     } catch (e) {
     }
   }
@@ -23318,12 +23318,14 @@ What you type stays in this browser only.`;
     importCatalogText: () => importCatalogText,
     isCatalogUpdate: () => isCatalogUpdate,
     looseOrigin: () => looseOrigin,
+    nameHeldCatalog: () => nameHeldCatalog,
     pinStoredFrom: () => pinStoredFrom,
     sampleUntouched: () => sampleUntouched,
     sha256Hex: () => sha256Hex,
     sharedOwnPin: () => sharedOwnPin,
     sharedOwnWrite: () => sharedOwnWrite,
     syncSampleMark: () => syncSampleMark,
+    tellTaken: () => tellTaken,
     todayEdition: () => todayEdition,
     wireCatalogDrop: () => wireCatalogDrop,
     writeDeskBranch: () => writeDeskBranch
@@ -24332,6 +24334,44 @@ What you type stays in this browser only.`;
       return c;
     }
   }
+  function tellTaken(c) {
+    const doc = catalogDocOf(c);
+    let pin = "";
+    try {
+      pin = String((pinned(c) || {}).pin || c && c.pin || "");
+    } catch (e) {
+      pin = String(c && c.pin || "");
+    }
+    if (!pin) return false;
+    if (!doc) {
+      eCatalogTaken(pin);
+      return false;
+    }
+    let text = "";
+    try {
+      text = JSON.stringify(doc);
+    } catch (e) {
+      eCatalogTaken(pin);
+      return false;
+    }
+    eCatalogTaken(pin, text);
+    return true;
+  }
+  function nameHeldCatalog() {
+    const held = storedCatalog(), found = eCatalog();
+    if (!held || !held.pin || !found) return false;
+    if (eCatalogSignature(held) !== eCatalogSignature(found)) return false;
+    const doc = catalogDocOf(found);
+    if (!doc) return false;
+    let text = "";
+    try {
+      text = JSON.stringify(doc);
+    } catch (e) {
+      return false;
+    }
+    eCatalogTaken(held.pin, text);
+    return true;
+  }
   function pinStoredFrom(found) {
     const held = storedCatalog();
     if (!held || held.pin || !found || !isCatalogUpdate(found, held) || eCatalogSignature(found) !== eCatalogSignature(held)) return false;
@@ -24597,7 +24637,7 @@ What you type stays in this browser only.`;
     flushLayer();
     const kept = pinned(c);
     if (!storeCatalog(kept)) return false;
-    eCatalogTaken(kept && kept.pin);
+    tellTaken(c);
     if (same) {
       const alive = carryCardLayer(c);
       pack.baseCards = null;
@@ -27602,6 +27642,7 @@ What you type stays in this browser only.`;
   }
   function eOfferCatalogAtBoot() {
     pinStoredFrom(eCatalog());
+    nameHeldCatalog();
     const at = +(nsGet("CatalogNoAt") || 0), mt = eCatalogMtime(), asked = eOpenedWith();
     if (!asked && tourDueAtBoot()) {
       afterTour(eOfferCatalogAtBoot);

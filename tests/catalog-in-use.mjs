@@ -21,7 +21,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 28;
+const EXPECTED = 35;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and can ask for a copy of it. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), i może poprosić o jego kopię. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -38,14 +38,12 @@ function check(ok, line) {
   else { failed++; console.log("  FAIL " + line); }
 }
 
-const LAB_PARENT = "C:\\Users\\maxim\\AppData\\Local\\Temp\\etiuda-catalog-in-use-890b";
-fs.mkdirSync(LAB_PARENT, { recursive: true });
-const LAB = fs.mkdtempSync(path.join(LAB_PARENT, "lab-"));
+const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-catalog-in-use-"));
 const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "offerFile", "catalogChanged", "readCatalog",
-  "tryCatalogAsk", "asksWatching", "catalogCopyNote", "watchCatalog", "askSignedBytes", "deskFileGenuine", "signedSha"];
+  "tryCatalogAsk", "asksWatching", "catalogCopyNote", "watchCatalog", "askSignedBytes", "deskFileGenuine", "signedSha", "teamUse"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -130,7 +128,17 @@ try {
     wrap: D.api.wrapTeamKey(key, who.box, team, epoch, who.id),
   });
   const pinOf = (D, text) => { try { return D.api.signedSha(JSON.parse(text)); } catch { return ""; } };
-  const take = (D, pin) => D.sync("etiuda:catalog-taken", pin);
+  const take = (D, pin, text) => text == null ? D.sync("etiuda:catalog-taken", pin) : D.sync("etiuda:catalog-taken", pin, text);
+  const fileSha = text => crypto.createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex");
+  const tick = () => new Promise(r => setTimeout(r, 30));
+  const expAt = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const putAsk = (box, id, sha) => {
+    const doc = { format: 1, kind: "etiuda-catalog-ask", id: id, desk: box.me.id, sha256: sha, expires: expAt(),
+      sig: { alg: "Ed25519", keyId: LEAD.keyId } };
+    doc.sig.value = crypto.sign(null, box.D.api.askSignedBytes(doc), lead.privateKey).toString("hex");
+    fs.mkdirSync(path.join(box.share, "catalog-asks"), { recursive: true });
+    put(box.share, path.join("catalog-asks", box.me.id + ".json"), JSON.stringify(doc));
+  };
   const openSealedDoc = (D, file, key) => {
     try { return JSON.parse(D.api.openSealed(key, JSON.parse(fs.readFileSync(file, "utf8")))); }
     catch { return null; }
@@ -378,8 +386,93 @@ try {
       "890w a team file that drops this desk removes in-use.ec");
   }
 
-  /* ---- what the person at the desk reads ----------------------------------------------------------- */
+  /* ---- a key this desk cannot open, and a catalog already loaded ------------------------------------ */
   {
+    const box = await arm("stalekey");
+    const body = textOf(catalog(2));
+    put(box.share, "board.ec", body);
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)]);
+    const booted = box.D.sync("etiuda:catalog");
+    const pin = pinOf(box.D, booted || "");
+    take(box.D, pin);
+    const file = inUsePath(box.share, box.me.id);
+    const before = fs.readFileSync(file);
+    const stranger = crypto.generateKeyPairSync("x25519");
+    const strangerBox = stranger.publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
+    const key2 = crypto.randomBytes(32);
+    join(box, 2, [entry(box.D, { id: box.me.id, key: box.me.key, box: strangerBox }, key2, box.team, 2)]);
+    touch(path.join(box.share, "etiuda-team.json"), Date.now() + 3500);
+    const use = box.D.api.teamUse();
+    putAsk(box, "Askstale", pin);
+    box.D.api.tryCatalogAsk(box.D.win);
+    const ans = answerPath(box.share, box.me.id);
+    const openedOld = openSealedDoc(box.D, ans, box.key);
+    check(use.member === true && use.stale === true && use.seal && use.seal.epoch === 1
+        && !fs.existsSync(ans) && !openedOld && Buffer.compare(before, fs.readFileSync(file)) === 0,
+      "890ac a team file whose new key this desk cannot open seals nothing under the older key");
+
+    const held = await arm("joinheld");
+    put(held.share, "board.ec", textOf(catalog(2)));
+    const bootedH = held.D.sync("etiuda:catalog");
+    const pinH = pinOf(held.D, bootedH || "");
+    take(held.D, pinH);
+    const missing = !fs.existsSync(inUsePath(held.share, held.me.id));
+    join(held, 1, [entry(held.D, held.me, held.key, held.team, 1)]);
+    putAsk(held, "Askjoin1", pinH);
+    held.D.api.catalogChanged(held.D.win);
+    const joined = openSealedDoc(held.D, inUsePath(held.share, held.me.id), held.key);
+    const joinedAns = openSealedDoc(held.D, answerPath(held.share, held.me.id), held.key);
+    check(missing && pinH && joined && joined.catalog.source === "folder" && joined.catalog.rev === 2
+        && joinedAns && joinedAns.kind === "etiuda-catalog-answer" && JSON.stringify(joinedAns).indexOf(CARD) >= 0,
+      "890ae a desk that joins with its catalog already loaded names that catalog and answers the ask, with no second take");
+
+    const spin = await arm("rotate");
+    put(spin.share, "board.ec", textOf(catalog(2)));
+    join(spin, 1, [entry(spin.D, spin.me, spin.key, spin.team, 1)]);
+    const bootedS = spin.D.sync("etiuda:catalog");
+    take(spin.D, pinOf(spin.D, bootedS || ""));
+    const keyS = crypto.randomBytes(32);
+    join(spin, 2, [entry(spin.D, spin.me, keyS, spin.team, 2)]);
+    touch(path.join(spin.share, "etiuda-team.json"), Date.now() + 4500);
+    spin.D.api.catalogChanged(spin.D.win);
+    const spun = inUsePath(spin.share, spin.me.id);
+    const openedNew = openSealedDoc(spin.D, spun, keyS);
+    const openedPrev = openSealedDoc(spin.D, spun, spin.key);
+    check(openedNew && openedNew.catalog.sha256 === pinOf(spin.D, bootedS || "") && !openedPrev,
+      "890ah when the team epoch moves, the catalog already loaded is sealed again, with no take");
+
+    const miss = await arm("mismatch");
+    put(miss.share, "board.ec", textOf(catalog(2)));
+    join(miss, 1, [entry(miss.D, miss.me, miss.key, miss.team, 1)]);
+    const bootedM = miss.D.sync("etiuda:catalog");
+    const pinM = pinOf(miss.D, bootedM || "");
+    const other = textOf(catalog(1, { id: "side-lamps", name: "Side lamps", card: "A side lamp sits in the crate." }));
+    take(miss.D, pinM, other);
+    check(pinM && pinOf(miss.D, other) !== pinM && !fs.existsSync(inUsePath(miss.share, miss.me.id)),
+      "890ai a pin the catalog text does not back writes nothing");
+  }
+
+  /* ---- what the person at the desk reads, and a catalog the page already holds --------------------- */
+  {
+    const boot = await arm("pageboot");
+    put(boot.share, "board.ec", textOf(catalog(2, { date: "2026-04-02" })));
+    join(boot, 1, [entry(boot.D, boot.me, boot.key, boot.team, 1)]);
+    const firstBoot = boot.D.sync("etiuda:catalog");
+    const bootPin = pinOf(boot.D, firstBoot || "");
+    take(boot.D, bootPin);
+    const bootFile = inUsePath(boot.share, boot.me.id);
+    const bootStable = fs.readFileSync(bootFile);
+    const again = loadDesk(boot.D.ud);
+    const bootedAgain = again.sync("etiuda:catalog");
+    const againPin = pinOf(again, bootedAgain || "");
+    const askBoot = { format: 1, kind: "etiuda-catalog-ask", id: "Askboot1", desk: boot.me.id, sha256: againPin,
+      expires: expAt(), sig: { alg: "Ed25519", keyId: LEAD.keyId } };
+    askBoot.sig.value = crypto.sign(null, again.api.askSignedBytes(askBoot), lead.privateKey).toString("hex");
+    fs.mkdirSync(path.join(boot.share, "catalog-asks"), { recursive: true });
+    put(boot.share, path.join("catalog-asks", boot.me.id + ".json"), JSON.stringify(askBoot));
+    let takenCalls = 0;
+    let takenDesk = again;
+
     const mem = Object.create(null);
     mem.eUiLang = "en";
     /* The language store probes window.localStorage once, at the moment its module loads. */
@@ -407,7 +500,8 @@ try {
       getBoundingClientRect: () => ({ left: 0, right: 0, top: 0, bottom: 0, width: 0, height: 0 }) };
     let pasted = { value: "north-invite" };
     let showSealed = false;
-    globalThis.window = { addEventListener: noop, removeEventListener: noop, localStorage: store, E_HOST: {
+    globalThis.window = { addEventListener: noop, removeEventListener: noop, localStorage: store,
+      E_CATALOG: JSON.parse(bootedAgain), E_HOST: {
       teamJoin: (op) => {
         if (op === "read") return Promise.resolve({ offer: { folder: "C:\\lab\\north", lead: "North lead", code: "12345", local: true } });
         if (op === "state" || op === "leads") return Promise.resolve({
@@ -416,6 +510,9 @@ try {
       },
       onTeamJoin: noop,
       onCatalogCopy: fn => { globalThis.window.__copy = fn; },
+      catalogMtime: 0,
+      openedWith: false,
+      catalogTaken: (p, text) => { takenCalls++; takenDesk.sync("etiuda:catalog-taken", p, text); },
     } };
     globalThis.document = {
       addEventListener: noop, removeEventListener: noop, getElementById: () => null,
@@ -426,6 +523,90 @@ try {
     const HK = await import(MOD("hooks.js"));
     HK.hooks.render = noop;
     HK.hooks.loadCatalogFromFolder = noop;
+    HK.hooks.flushPillState = noop;
+    HK.hooks.restartDesk = noop;
+    const Cat = await import(MOD("catalog.js"));
+    const File = await import(MOD("catalog-file.js"));
+    const Offer = await import(MOD("catalog-offer.js"));
+    const heldRuntime = Cat.parseCatalogFile(bootedAgain);
+    const storedOk = Cat.storeCatalog(Object.assign({}, heldRuntime, { pin: againPin }));
+    let bootErr = "";
+    try { Offer.eOfferCatalogAtBoot(); }
+    catch (e) { bootErr = e && e.message ? e.message : String(e); }
+    const bootAns = openSealedDoc(again, answerPath(boot.share, boot.me.id), boot.key);
+    const offerSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "catalog-offer.js"), "utf8");
+    const bootAt = offerSrc.indexOf("function eOfferCatalogAtBoot");
+    const bootFn = offerSrc.slice(bootAt, offerSrc.indexOf("function toastIfSameCatalog", bootAt));
+    check(againPin === bootPin && storedOk === true && takenCalls === 1 && !bootErr
+        && Buffer.compare(bootStable, fs.readFileSync(bootFile)) === 0
+        && bootAns && bootAns.kind === "etiuda-catalog-answer" && JSON.stringify(bootAns).indexOf(CARD) >= 0
+        && bootFn.indexOf("nameHeldCatalog()") > bootFn.indexOf("pinStoredFrom(eCatalog())"),
+      "890ad a desk that starts again names the catalog it already holds, without a take, and answers the ask"
+        + (bootErr ? " (" + bootErr + ", sends " + takenCalls + ")" : ""));
+
+    const hist = await arm("history");
+    const olderText = textOf(catalog(1, { date: "2026-01-01", name: "North lamps old", card: "An older lamp waits." }));
+    const newerText = textOf(catalog(3, { name: "North lamps new" }));
+    const histFile = path.join(hist.share, "board.ec");
+    put(hist.share, "board.ec", olderText);
+    join(hist, 1, [entry(hist.D, hist.me, hist.key, hist.team, 1)]);
+    await hist.D.ask("etiuda:catalog-files");
+    await tick();
+    put(hist.share, "board.ec", newerText);
+    await hist.D.ask("etiuda:catalog-files");
+    await tick();
+    const histBoot = hist.D.sync("etiuda:catalog");
+    const histPin = pinOf(hist.D, histBoot || "");
+    take(hist.D, histPin);
+    const histUse = inUsePath(hist.share, hist.me.id);
+    const current = openSealedDoc(hist.D, histUse, hist.key);
+    const openedOld = await hist.D.ask("etiuda:history-read", fileSha(olderText), histFile);
+    const afterRead = openSealedDoc(hist.D, histUse, hist.key);
+    const olderPin = pinOf(hist.D, (openedOld && openedOld.text) || "");
+    take(hist.D, olderPin);
+    const afterPin = openSealedDoc(hist.D, histUse, hist.key);
+    takenDesk = hist.D;
+    const beforeTell = takenCalls;
+    const olderCat = Cat.parseCatalogFile((openedOld && openedOld.text) || "");
+    const told = File.tellTaken(olderCat);
+    const named = openSealedDoc(hist.D, histUse, hist.key);
+    const fileSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "catalog-file.js"), "utf8");
+    const histSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "catalog-history.js"), "utf8");
+    const takeAt = fileSrc.indexOf("function takeCatalog(");
+    const takeFn = fileSrc.slice(takeAt, fileSrc.indexOf("function sampleUntouched(", takeAt));
+    const openAt = histSrc.indexOf("function historyOpen(");
+    const openFn = histSrc.slice(openAt, histSrc.indexOf("function historyPutBack(", openAt));
+    check(current && current.catalog.rev === 3 && afterRead && afterRead.catalog.rev === 3
+        && afterPin && afterPin.catalog.rev === 3 && told === true && takenCalls === beforeTell + 1
+        && named && named.catalog.source === "opened" && named.catalog.rev === 1 && named.catalog.title === "North lamps old"
+        && takeFn.indexOf("tellTaken(c)") >= 0 && openFn.indexOf("activateCatalog(") >= 0,
+      "890af an earlier edition opened from history is named, source opened, and the read alone is not a hand");
+
+    const drop = await arm("jsdrop");
+    put(drop.share, "board.ec", textOf(catalog(2)));
+    join(drop, 1, [entry(drop.D, drop.me, drop.key, drop.team, 1)]);
+    const dropBoot = drop.D.sync("etiuda:catalog");
+    take(drop.D, pinOf(drop.D, dropBoot || ""));
+    const dropUse = inUsePath(drop.share, drop.me.id);
+    const dropBefore = openSealedDoc(drop.D, dropUse, drop.key);
+    const dropped = textOf(catalog(4, { id: "drop-lamps", name: "Dropped lamps", card: "A lamp from the drop." }));
+    const droppedPin = pinOf(drop.D, dropped);
+    take(drop.D, droppedPin);
+    const afterBare = openSealedDoc(drop.D, dropUse, drop.key);
+    takenDesk = drop.D;
+    const beforeDrop = takenCalls;
+    const droppedCat = Cat.parseCatalogFile(dropped);
+    const dropTold = File.tellTaken(droppedCat);
+    const dropNamed = openSealedDoc(drop.D, dropUse, drop.key);
+    const dropFn = fileSrc.slice(fileSrc.indexOf("function wireCatalogDrop("), fileSrc.indexOf("function importCatalogPicked("));
+    const importFn = fileSrc.slice(fileSrc.indexOf("function importCatalogText("), fileSrc.indexOf("function importCatalogHosted("));
+    check(dropBefore && dropBefore.catalog.rev === 2 && afterBare && afterBare.catalog.rev === 2
+        && dropTold === true && takenCalls === beforeDrop + 1
+        && dropNamed && dropNamed.catalog.source === "opened" && dropNamed.catalog.rev === 4
+        && dropNamed.catalog.title === "Dropped lamps" && JSON.stringify(dropNamed).indexOf("A lamp from the drop.") < 0
+        && dropFn.indexOf("importCatalogText(") >= 0 && importFn.indexOf("activateCatalog(") >= 0,
+      "890ag a catalog dropped as text the shell never handed is named, source opened");
+
     const TJ = await import(MOD("team-join.js"));
     TJ.wireTeamJoin();
     await new Promise(r => setTimeout(r, 20));
@@ -475,6 +656,8 @@ try {
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
+} finally {
+  try { fs.rmSync(LAB, { recursive: true, force: true }); } catch { /* the temp folder's own to clear */ }
 }
 
 check(regStand.held(), "890ab every reg call was answered by the stand-in (" + regStand.said() + ")");
