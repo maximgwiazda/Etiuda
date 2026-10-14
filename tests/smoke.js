@@ -4149,7 +4149,7 @@ const t0 = Date.now();
               examplesDiffer: !!(dlg.exTitle && dlg.exName && dlg.exTitle !== dlg.exName),
               sumHasPl: dlg.sum.indexOf("PL ") >= 0, sumMoved: dlg.sum !== sumBefore
             };
-            dialogOk = dlg.pl === "titleFirst" && dlg.en === "" && dlg.vocOff && dlg.firstOn
+            dialogOk = !shown.pressMissed && dlg.pl === "titleFirst" && dlg.en === "" && dlg.vocOff && dlg.firstOn
               && shown.dialog.examplesDiffer && shown.dialog.sumHasPl && shown.dialog.sumMoved;
             if (!dialogOk) note(shown, "picking a form did not change the editor");
           }
