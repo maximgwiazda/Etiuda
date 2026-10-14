@@ -641,9 +641,6 @@ function offerFile(win, file) {
     historySoon(file, text);
     const cards = Array.isArray(data.cards) ? data.cards.length : 0;
     const note = rosterNoteOf(data);
-    if (note) {
-      try { openedOfferSent.add(signedSha(catalogDocIn(json))); } catch { /* the offer still goes */ }
-    }
     console.log("etiuda: opened with " + file + ", " + cards + " cards");
     /* The fourth argument says somebody ASKED for this file, which the watch's own send does
        not: a double-click outranks a remembered refusal and is answered either way. The eighth,
