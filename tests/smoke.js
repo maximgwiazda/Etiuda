@@ -73,7 +73,8 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    for a legitimate change is this one line, written deliberately.
    Chrome only. Firefox has never been counted here and a number nobody measured is worse than
    no number, so that run says out loud that it has none. */
-/* 302 since an address form picked through the override is shown, saved and read back after
+/* 303 since a pointer move off the list is judged to hand the keyboard's deck back (one check);
+   302 since an address form picked through the override is shown, saved and read back after
    a reload (three checks); 299 since a macro's text keeps out from under its badge (four checks and its clean) and the
    dot field's extent (two checks and its clean); 291 since About closes on the trademark notice
    (two checks and its clean); 288 since the theme
@@ -81,7 +82,7 @@ const WHICH = (process.argv[2] || "chrome").toLowerCase();
    greens only that block's spine, a card's title has the row while its controls wait, the
    scrollbar's thumb is opaque, every theme has one blue, an idle tab's dot is the band's ink, and
    Maintenance fits its window unscrolled; 278 was the tour's walk by its acts. */
-const EXPECTED = { chrome: 302 };
+const EXPECTED = { chrome: 303 };
 /* Hook coverage, board 341, opt-in and inert without the variable. The one-way valve's slots are
    CALLED and never imported, so no graph of import statements can say one was ever exercised.
    wireHooks freezes the object as its last act, so a driver that stands in front of
