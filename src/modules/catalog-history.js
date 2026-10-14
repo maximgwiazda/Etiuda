@@ -76,7 +76,8 @@ function historyOpen(v){
     let c=null;
     try{ c=parseCatalogFile(String(got.text)); }
     catch(e){ toastRefusal(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(name)); return; }
-    const shown=eOfferCatalogDialog(c,{ file:name, force:true, asked:true, direct:true,
+    const offTeam=!!(got && got.notOnTeam);
+    const shown=eOfferCatalogDialog(c,{ file:name, force:true, asked:true, direct:!offTeam, offTeam:offTeam,
       foundHtml:esc(t("{FILE} as it was on {WHEN}, kept on this desk.")).split("{FILE}").join('<code>'+esc(name)+'</code>')
         .split("{WHEN}").join(esc(fileStamp(v.first))),
       accept:sig=>{ lsSet(E_CATALOG_KEY,sig); return activateCatalog(c,{from:name}); } });

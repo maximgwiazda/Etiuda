@@ -238,14 +238,22 @@ async function launch(plan) {
   process.on("uncaughtException", e => obs.errors.push("uncaught " + String(e && e.message || e).slice(0, 160)));
   const noop = () => {};
   const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
-  const onHandlers = {}, invokeHandlers = {};
+  const onHandlers = {}, invokeHandlers = {}, rendererOn = {};
+  const pickBox = { answer: null };
+  const pageWin = {
+    isDestroyed: () => false, isMaximized: () => false,
+    webContents: { id: 1, once: noop, send: (ch, ...args) => { (rendererOn[ch] || []).forEach(fn => fn({}, ...args)); } },
+  };
   const electron = {
     app: { getPath: () => UD, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
            getVersion: () => "0.0.0", whenReady: () => new Promise(noop), isPackaged: false,
            commandLine: { appendSwitch: noop } },
     ipcMain: { on: (ch, fn) => { onHandlers[ch] = fn; }, handle: (ch, fn) => { invokeHandlers[ch] = fn; } },
     shell: { openPath: async () => "" },
-    BrowserWindow: inert, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert,
+    BrowserWindow: { fromWebContents: () => pageWin, getAllWindows: () => [] },
+    Menu: inert,
+    dialog: { showOpenDialog: async () => pickBox.answer || { canceled: true, filePaths: [] }, showSaveDialog: async () => ({ canceled: true }) },
+    net: inert, protocol: inert, session: inert,
     screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" },
   };
   const quiet = { log: noop, error: noop, warn: noop, info: noop };
@@ -258,7 +266,6 @@ async function launch(plan) {
 
   const FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
   const ev = () => ({ sender: { id: 1, once: noop, send: noop }, senderFrame: FRAME, returnValue: undefined });
-  const rendererOn = {};
   const ipcRenderer = {
     sendSync: (ch, ...args) => { const e = ev(); if (onHandlers[ch]) onHandlers[ch](e, ...args); return e.returnValue; },
     send: (ch, ...args) => { if (onHandlers[ch]) onHandlers[ch](ev(), ...args); },
@@ -397,6 +404,30 @@ async function launch(plan) {
     },
     /* The catalog-file listener, without the boot's offer. */
     wire: () => { OFFER.wireHostCatalogWatch(); },
+    /* A double-click or a drop, through the shell's own offerFile, so the roster note is the shell's. */
+    openpath: file => { ipcRenderer.send("etiuda:offer-dropped", path.resolve(path.join(LAB, file))); },
+    /* Import's dialog, the shell's, pointed at one file. The offer or the load lands on a later turn. */
+    pickpath: file => {
+      pickBox.answer = { canceled: false, filePaths: [path.resolve(path.join(LAB, file))] };
+      CF.importCatalogHere();
+    },
+    /* A kept version, opened from the history list the shell already holds. */
+    hist: async () => {
+      if (!doc.getElementById("modal")) {
+        const m = doc.createElement("div"), card = doc.createElement("div");
+        m.id = "modal"; m.hidden = true; card.id = "modalCard"; m.appendChild(card); doc.body.appendChild(m);
+        DOMM.grabDom();
+        const ask = card.querySelectorAll.bind(card);
+        card.querySelectorAll = sel => (/^(\.mf input|\.ctitle,)/.test(sel) ? [] : ask(sel));
+      }
+      HOOKS.openManage = noop;
+      const HIST = await import(MOD("catalog-history.js"));
+      HIST.openHistory();
+      for (let i = 0; i < 500 && !doc.querySelector("[data-eh-open]"); i++) await new Promise(r => setImmediate(r));
+      const b = doc.querySelector("[data-eh-open]");
+      if (!b) throw new Error("no version to open");
+      b.onclick();
+    },
     /* The cut pass needs the range grabDom takes. A refusal toast marks the toast host. */
     dom: () => { DOMM.grabDom(); },
     /* Wait until a Load's read has landed on a toast or an offer, then read the offer. */
@@ -553,7 +584,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 95;
+  const EXPECTED = 100;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -1437,6 +1468,53 @@ async function parent() {
     check(same(rows77d.map(r => r.name).sort(), ["Cy's desk", "Ola's desk", "lamp.ec"]) && cy77d.id !== ola77d.id && !(r77d.errors || []).length,
       "77d a roster kept for a team whose lead this desk no longer pins, as after the lead is forgotten, draws every desk as a desk with no team does: "
       + JSON.stringify({ rows: rows77d.map(r => r.name), errors: (r77d.errors || []).slice(0, 2) }));
+
+    /* A file opened on purpose, through the shell: a drop and Import. The shell's one note is the sentence. An empty
+       desk asks when the writer is off the roster, and a member's drop still asks, as a double-click does today. */
+    const offPath = (who, file) => "catalogs/desks/" + who.id + "/" + file;
+    const lab77e = scenario([]);
+    const bo77e = deskOf(alone77("bo-kiosk"), "Bo", null, lab77e);
+    onRoster(lab77e, ["k-" + "0".repeat(16)]);
+    const dropOff = run(lab77e, ["wire", "openpath:" + offPath(bo77e, bo77File), "said"]);
+    const dOff = dropOff.offers[0] || {};
+    check(dOff.shown === true && same(dOff.roster, ["This file comes from a desk outside the team."]) && !dropOff.reloaded
+      && dropOff.heldId === "" && !(dropOff.errors || []).length,
+      "77e a drop of a file whose desk is off the roster is offered with the note, and an empty desk does not load it: "
+      + JSON.stringify({ shown: dOff.shown, roster: dOff.roster, loaded: dropOff.reloaded, held: dropOff.heldId, errors: (dropOff.errors || []).slice(0, 2) }));
+    const lab77f = scenario([]);
+    const bo77f = deskOf(alone77("bo-kiosk"), "Bo", null, lab77f);
+    onRoster(lab77f, [bo77f.id]);
+    const dropOn = run(lab77f, ["wire", "openpath:" + offPath(bo77f, bo77File), "said"]);
+    const dOn = dropOn.offers[0] || {};
+    check(dOn.shown === true && same(dOn.roster, []) && !dropOn.reloaded && !(dropOn.errors || []).length,
+      "77f THE CONTROL: a drop of a member's file is offered as a double-click is, with no note, and is not loaded at once: "
+      + JSON.stringify({ shown: dOn.shown, roster: dOn.roster, loaded: dropOn.reloaded, errors: (dropOn.errors || []).slice(0, 2) }));
+    const lab77g = scenario([]);
+    const bo77g = deskOf(alone77("bo-kiosk"), "Bo", null, lab77g);
+    onRoster(lab77g, ["k-" + "0".repeat(16)]);
+    const impOff = run(lab77g, ["pickpath:" + offPath(bo77g, bo77File), "said"]);
+    const iOff = impOff.offers[0] || {};
+    check(iOff.shown === true && same(iOff.roster, ["This file comes from a desk outside the team."]) && !impOff.reloaded
+      && impOff.heldId === "" && !(impOff.errors || []).length,
+      "77g Import of a file whose desk is off the roster asks, with the note, and an empty desk does not load it: "
+      + JSON.stringify({ shown: iOff.shown, roster: iOff.roster, loaded: impOff.reloaded, held: impOff.heldId, errors: (impOff.errors || []).slice(0, 2) }));
+    const lab77h = scenario([]);
+    const bo77h = deskOf(alone77("bo-kiosk"), "Bo", null, lab77h);
+    onRoster(lab77h, [bo77h.id]);
+    const impOn = run(lab77h, ["pickpath:" + offPath(bo77h, bo77File), "said"]);
+    check(impOn.reloaded === true && impOn.heldId === bo77h.doc.id && !(impOn.offers[0] || {}).shown && !(impOn.errors || []).length,
+      "77h THE CONTROL: Import of a member's file loads at once on the empty desk, with no offer and no note: "
+      + JSON.stringify({ loaded: impOn.reloaded, held: impOn.heldId, offer: (impOn.offers[0] || {}).shown, errors: (impOn.errors || []).slice(0, 2) }));
+    const lab77i = scenario([]);
+    const bo77i = deskOf(alone77("bo-kiosk"), "Bo", null, lab77i);
+    onRoster(lab77i, ["k-" + "0".repeat(16)]);
+    run(lab77i, ["pickpath:" + offPath(bo77i, bo77File), "said", "settle"]);
+    const histOff = run(lab77i, ["hist", "said"]);
+    const hOff = histOff.offers[0] || {};
+    check(hOff.shown === true && same(hOff.roster, ["This file comes from a desk outside the team."]) && !histOff.reloaded
+      && !(histOff.errors || []).length,
+      "77i a kept version of a file whose desk is off the roster is offered with the note, and an empty desk does not load it: "
+      + JSON.stringify({ shown: hOff.shown, roster: hOff.roster, loaded: histOff.reloaded, errors: (histOff.errors || []).slice(0, 2) }));
   } catch (e) {
     failed++;
     console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

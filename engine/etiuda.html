@@ -8784,7 +8784,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-13";
+  var E_BUILT = "2026-10-14";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -14336,7 +14336,12 @@ What you type stays in this browser only.`;
   function ePickCatalogFile(title, label2) {
     if (!eHasCatalogPicker()) return Promise.resolve(null);
     try {
-      return Promise.resolve(eHost().pickCatalogFile(String(title || ""), String(label2 || ""))).then((v) => v && typeof v === "object" ? { name: String(v.name || ""), text: String(v.text || "") } : null).catch(() => null);
+      return Promise.resolve(eHost().pickCatalogFile(String(title || ""), String(label2 || ""))).then((v) => {
+        if (!v || typeof v !== "object") return null;
+        const got = { name: String(v.name || ""), text: String(v.text || "") };
+        if (typeof v.notOnTeam === "string" && v.notOnTeam) got.notOnTeam = v.notOnTeam;
+        return got;
+      }).catch(() => null);
     } catch (e) {
       return Promise.resolve(null);
     }
@@ -24650,10 +24655,10 @@ What you type stays in this browser only.`;
       return null;
     }
   }
-  function importCatalogText(text, fileName) {
+  function importCatalogText(text, fileName, offTeam) {
     const c = catalogFromFileText(String(text || ""), fileName);
     if (!c) return false;
-    hooks.offerPickedCatalog(c, fileName, () => eWatchClear().then(() => activateCatalog(c, { from: fileName })));
+    hooks.offerPickedCatalog(c, fileName, () => eWatchClear().then(() => activateCatalog(c, { from: fileName })), !!offTeam);
     return true;
   }
   function importCatalogHosted() {
@@ -24663,7 +24668,7 @@ What you type stays in this browser only.`;
         toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(got.name));
         return;
       }
-      importCatalogText(got.text, got.name);
+      importCatalogText(got.text, got.name, !!got.notOnTeam);
     });
   }
   function importCatalogHere() {
@@ -27541,7 +27546,7 @@ What you type stays in this browser only.`;
     const dir = String(where || ""), home = !!dir && dir === eCatalogFolder();
     return t(where ? "Located as {FILE} in {FOLDER}." : "Located as {FILE}.").split("{FILE}").join("<code>" + esc(shown2) + "</code>").split("{FOLDER}").join("<code" + (home ? ' class="open-folder" data-ec-open="1" role="button" tabindex="0"' : "") + ' title="' + esc(dir) + '">' + esc(eCatalogFolderShort(dir)) + "</code>");
   }
-  function eOfferCatalog(given, name, where, force, asked, builtIn) {
+  function eOfferCatalog(given, name, where, force, asked, builtIn, offTeam) {
     const c = given || eCatalog();
     if (!c) return false;
     if (!force && !storedCatalog() && eCatalogAccepted(c)) return false;
@@ -27555,6 +27560,9 @@ What you type stays in this browser only.`;
       refusedKey: "CatalogNo",
       force: !!force,
       asked: !!asked,
+      /* Only an off-roster note changes this offer: it is asked about, even on an empty desk. A file
+         with no note keeps the direct the caller omitted, so a folder watch does not load at once. */
+      ...offTeam ? { direct: false, offTeam: true } : {},
       accept: (sig) => {
         lsSet(E_CATALOG_KEY, sig);
         return activateCatalog(c, {
@@ -28166,13 +28174,14 @@ What you type stays in this browser only.`;
     }
     eOfferCatalogDialog(w.c, Object.assign({}, w.src, { force: true, reopened: true }));
   }
-  function eOfferPickedCatalog(c, name, accept) {
+  function eOfferPickedCatalog(c, name, accept, offTeam) {
     const shown2 = eOfferCatalogDialog(c, {
       file: name,
       foundHtml: eFoundHtml(name, ""),
       force: true,
       asked: true,
-      direct: true,
+      direct: !offTeam,
+      offTeam: !!offTeam,
       accept: () => accept()
     });
     if (!shown2) toastIfSameCatalog(c);
@@ -28325,7 +28334,7 @@ What you type stays in this browser only.`;
       }
     }, 1400);
     eOnCatalogListing(onCatalogListing);
-    h.onCatalogFile((text, name, where, asked, why, builtIn) => {
+    h.onCatalogFile((text, name, where, asked, why, builtIn, notOnTeam) => {
       paintCatalogList();
       let c = null;
       try {
@@ -28349,7 +28358,7 @@ What you type stays in this browser only.`;
         if (asked) refuseAskedFile(name, why || "parse");
         return;
       }
-      eOfferCatalog(c, name, where, !!asked, !!asked, builtIn);
+      eOfferCatalog(c, name, where, !!asked, !!asked, builtIn, notOnTeam === "off-roster");
     });
   }
 
@@ -28422,11 +28431,13 @@ What you type stays in this browser only.`;
         toastRefusal(t("{FILE} is not a catalog Etiuda can read.").split("{FILE}").join(name));
         return;
       }
+      const offTeam = !!(got && got.notOnTeam);
       const shown2 = eOfferCatalogDialog(c, {
         file: name,
         force: true,
         asked: true,
-        direct: true,
+        direct: !offTeam,
+        offTeam,
         foundHtml: esc(t("{FILE} as it was on {WHEN}, kept on this desk.")).split("{FILE}").join("<code>" + esc(name) + "</code>").split("{WHEN}").join(esc(fileStamp(v.first))),
         accept: (sig) => {
           lsSet(E_CATALOG_KEY, sig);

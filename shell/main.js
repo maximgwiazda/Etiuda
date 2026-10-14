@@ -640,11 +640,21 @@ function offerFile(win, file) {
     catalogFrom = file;
     historySoon(file, text);
     const cards = Array.isArray(data.cards) ? data.cards.length : 0;
+    const note = rosterNoteOf(data);
+    if (note) {
+      try { openedOfferSent.add(signedSha(catalogDocIn(json))); } catch { /* the offer still goes */ }
+    }
     console.log("etiuda: opened with " + file + ", " + cards + " cards");
     /* The fourth argument says somebody ASKED for this file, which the watch's own send does
-       not: a double-click outranks a remembered refusal and is answered either way. */
-    if (win && !win.isDestroyed())
-      win.webContents.send("etiuda:catalog-file", json, path.basename(file), path.dirname(file), true);
+       not: a double-click outranks a remembered refusal and is answered either way. The eighth,
+       where the file's desk is off the roster, is the note. It follows the reason and the shipped
+       flag, so a refusal's reason stays the fifth argument. */
+    if (win && !win.isDestroyed()) {
+      if (note)
+        win.webContents.send("etiuda:catalog-file", json, path.basename(file), path.dirname(file), true, "", false, note);
+      else
+        win.webContents.send("etiuda:catalog-file", json, path.basename(file), path.dirname(file), true);
+    }
   } catch (e) {
     console.error("etiuda: " + file + " did not parse as a catalog - " + e.message);
     refuse("parse");
@@ -657,8 +667,13 @@ let catalogJson;
 ipcMain.on("etiuda:catalog", (e) => {
   if (!fromEngine(e)) { e.returnValue = null; return; }
   if (catalogJson === undefined) catalogJson = readCatalog();
-  /* A file this launch was opened with is the agent asking: a lower rev of it is still handed over, and its mark waits for the yes. */
-  if (openedWith && catalogFrom === openedWith) { handAsked(catalogJson, ""); e.returnValue = catalogJson; return; }
+  /* A file this launch was opened with is the agent asking: a lower rev of it is still handed over, and its mark waits for the yes.
+     One whose desk is off the roster is not handed back here. The offer, which carries the note, is the hand. */
+  if (openedWith && catalogFrom === openedWith) {
+    handAsked(catalogJson, "");
+    e.returnValue = rosterNoteText(catalogJson) ? null : catalogJson;
+    return;
+  }
   if (belowCatalogRev(catalogJson)) { e.returnValue = null; return; }
   keepCatalogRev(catalogJson);
   e.returnValue = catalogJson;
@@ -667,6 +682,8 @@ ipcMain.on("etiuda:catalog", (e) => {
    catalog's or a colleague's file's (`who`), rises only when the page says the agent took those bytes, and only to them;
    a pin this shell never handed so raises nothing. The oldest goes past HANDED_ASKED_MAX. */
 const handedAsked = new Map(), HANDED_ASKED_MAX = 32;
+/* An off-roster file this launch opened, already offered, so a later load of the page does not offer it again. */
+const openedOfferSent = new Set();
 function handAsked(text, who) {
   const doc = catalogDocIn(text);
   if (!doc || doc.kind !== "etiuda-catalog") return;
@@ -675,6 +692,19 @@ function handAsked(text, who) {
   handedAsked.delete(pin);
   handedAsked.set(pin, { text: String(text), who: who || "" });
   while (handedAsked.size > HANDED_ASKED_MAX) handedAsked.delete(handedAsked.keys().next().value);
+}
+/* The file this launch was opened with, offered once the page can hear it, and only when its desk is off the roster.
+   The boot handed nothing back for that file; this send is the hand, and it carries the note. A second call, or one
+   after the agent has taken the file, sends nothing. */
+function handOpenedOffRoster(win) {
+  if (!win || win.isDestroyed() || !openedWith || catalogFrom !== openedWith || !catalogJson) return;
+  const note = rosterNoteText(catalogJson);
+  if (!note) return;
+  let pin = "";
+  try { pin = signedSha(catalogDocIn(catalogJson)); } catch { return; }
+  if (!handedAsked.has(pin) || openedOfferSent.has(pin)) return;
+  openedOfferSent.add(pin);
+  win.webContents.send("etiuda:catalog-file", catalogJson, path.basename(catalogFrom), folderShown(catalogFrom), true, "", false, note);
 }
 ipcMain.on("etiuda:catalog-taken", (e, pin) => {
   if (!fromEngine(e)) return;
@@ -2445,7 +2475,11 @@ function historyOpen(sha, file) {
   const v = historyFind(sha, file);
   if (!v) return null;
   const name = v.path ? path.basename(v.path) : "";
-  try { return { name: name, text: catalogRead(historyText(v.sha)).json }; }
+  try {
+    const opened = catalogRead(historyText(v.sha));
+    const note = rosterNoteOf(opened.data);
+    return note ? { name: name, text: opened.json, notOnTeam: note } : { name: name, text: opened.json };
+  }
   catch (e) { console.error("etiuda: an earlier version of " + (v.path || v.sha) + " could not be opened - " + e.message); return { name: name, text: "" }; }
 }
 /* Writes a kept version back over its file in the catalog folder, by the rule at historyFree and only after the bytes it
@@ -3165,13 +3199,27 @@ function deskFileGenuine(data, folder) {
   } catch { return false; }
 }
 /* A COLLEAGUE'S FILE IS HANDED ON UNASKED ONLY WHERE ITS DESK IS ON THE TEAM: on the roster this desk kept for a team whose
-   lead it pins, at the epoch it accepted, never the team file now in the folder. Where it keeps no such roster, every desk
-   is; so is this desk itself. Returns the test for a desk id, read once a listing. */
+   lead it pins, at the epoch it accepted, never the team file now in the folder. Where no lead is pinned, every desk is.
+   Where a lead is pinned and no roster is kept, only this desk is. This desk itself always is. Returns the test for a
+   desk id, read once a listing. */
 function deskRoster() {
   heedTeam();
   const kept = Object.keys(teamPins).filter(t => teamRoster[t]).map(t => teamRoster[t].desks);
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "";
-  return id => !kept.length || id === me || kept.some(ids => ids.indexOf(id) >= 0);
+  if (!Object.keys(teamPins).length) return () => true;
+  return id => id === me || kept.some(ids => ids.indexOf(id) >= 0);
+}
+/* The note an asked desk file carries when its writer is not on that roster, and "" where the file is not a desk's or
+   the writer is. One value: the desk cannot know "never" for sure. */
+function rosterNoteOf(data) {
+  const desk = data && data.desk;
+  const id = desk && typeof desk === "object" ? String(desk.id || "") : "";
+  if (!id || deskRoster()(id)) return "";
+  return "off-roster";
+}
+function rosterNoteText(text) {
+  try { return rosterNoteOf(catalogRead(String(text || "")).data); }
+  catch { return ""; }
 }
 /* What a listing says about a catalog file, or null where it is not one. `deskFolder` is the folder a desk's file
    sits in, and then `deskOk` says whether the file is genuine. */
@@ -3379,7 +3427,9 @@ ipcMain.handle("etiuda:pick-catalog-file", async (e, title, label) => {
   try {
     const text = fs.readFileSync(file, "utf8");
     historySoon(file, text);
-    return { name: name, text: catalogTextOf(text) };
+    const json = catalogTextOf(text);
+    const note = rosterNoteText(json);
+    return note ? { name: name, text: json, notOnTeam: note } : { name: name, text: json };
   }
   catch (err) {
     console.error("etiuda: " + file + " could not be read - " + err.message);
@@ -4240,7 +4290,7 @@ function createWindow() {
   /* A page loaded again after it was lost asks before closing again (Clément's read, note a): the loss is kept for the
      host answer that reports it, and marked as over, so closeHeld holds again from here. */
   win.webContents.on("did-finish-load", () => { const lost = win.webContents.etiudaLost; if (lost) lost.back = true; });
-  win.webContents.on("did-finish-load", () => { setTimeout(() => { tryAnswerRequest(win); tryHeldBranches(); sendListing(win, true); }, 0); });
+  win.webContents.on("did-finish-load", () => { setTimeout(() => { tryAnswerRequest(win); tryHeldBranches(); sendListing(win, true); handOpenedOffRoster(win); }, 0); });
 }
 
 /* Ctrl+Tab and Ctrl+Shift+Tab, and nothing else. Null when the key is not that chord, so zoom

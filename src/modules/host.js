@@ -182,12 +182,18 @@ function eHasCatalogPicker(){
   return !!h && typeof h.pickCatalogFile==="function";
 }
 /* {name,text} for a file chosen, null for a dialog closed. An empty text is a file that would
-   not read, which is the caller's to say something about. */
+   not read, which is the caller's to say something about. A desk file whose writer is off the
+   team's roster also carries notOnTeam, as eReadCatalogFile does. */
 function ePickCatalogFile(title,label){
   if(!eHasCatalogPicker()) return Promise.resolve(null);
   try{
     return Promise.resolve(eHost().pickCatalogFile(String(title||""),String(label||"")))
-      .then(v=>(v&&typeof v==="object")?{name:String(v.name||""),text:String(v.text||"")}:null)
+      .then(v=>{
+        if(!v || typeof v!=="object") return null;
+        const got={name:String(v.name||""),text:String(v.text||"")};
+        if(typeof v.notOnTeam==="string" && v.notOnTeam) got.notOnTeam=v.notOnTeam;
+        return got;
+      })
       .catch(()=>null);
   }catch(e){ return Promise.resolve(null); }
 }

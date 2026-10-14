@@ -21,6 +21,11 @@
  * for (etiuda:catalog-read with a desk, as src/modules/desk-look.js makes it), the read the agent asked for (the
  * Library's Load, src/modules/catalog-offer.js loadCatalogFromFolder), and the bridge that read crosses to the page.
  *
+ * AND WHERE THE AGENT OPENS A DESK FILE ON PURPOSE BY ANY OTHER ROUTE: a double-click or a drop (offerFile), the file
+ * this launch was opened with (the boot hands it back only when its desk is on the team; the offer carries the note),
+ * Import's dialog, and a kept version. The note is the one value "off-roster". A lead pinned with no roster kept admits
+ * only this desk.
+ *
  * Chained in npm test after tests/rollback-floor.mjs. The shell runs
  * from a copy of shell/ in a temp folder. Throwaway keys, teams and catalogs only. No window variable is set. Machine
  * policy is the stand-in in tests/reg-stand.cjs.
@@ -39,7 +44,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 18;
+const EXPECTED = 26;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -52,13 +57,13 @@ const LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-desk-roster-"));
 const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
-const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "catalogChanged", "branchSignedBytes", "branchIdOf", "branchSign", "channelHash"];
+const EXPOSE = ["sealCatalog", "openSealed", "wrapTeamKey", "catalogChanged", "branchSignedBytes", "branchIdOf", "branchSign", "channelHash", "offerFile", "handOpenedOffRoster"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
 const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRAME, returnValue: undefined });
 
-function loadDesk(ud) {
+function loadDesk(ud, opened) {
   const said = [], on = {}, invoke = {};
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: noop, info: noop };
   const safeStorage = {
@@ -66,23 +71,37 @@ function loadDesk(ud) {
     encryptString: s => Buffer.from(Buffer.from(String(s), "utf8").map(b => b ^ 0x5a)),
     decryptString: b => Buffer.from(Buffer.from(b).map(x => x ^ 0x5a)).toString("utf8"),
   };
+  const pickBox = { answer: { canceled: true, filePaths: [] } };
+  const holder = { win: null };
   const electron = {
-    app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop,
+    app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => !!opened, quit: noop, on: noop,
       getVersion: () => "0.0.0", whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
     ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
-    BrowserWindow: inert, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert, shell: inert,
+    BrowserWindow: { fromWebContents: () => holder.win, getAllWindows: () => [] },
+    Menu: inert, dialog: {
+      showOpenDialog: async () => pickBox.answer,
+      showSaveDialog: async () => ({ canceled: true }),
+    },
+    net: inert, protocol: inert, session: inert, shell: inert,
     screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage, powerMonitor: inert,
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME";
-  const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-    SRC + "\nreturn { " + EXPOSE.join(", ") + " };")(
-    n => (n === "electron" ? electron : nodeRequire(n)),
-    path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
+  const argv = process.argv;
+  if (opened) process.argv = ["node", "etiuda", opened];
+  let api;
+  try {
+    api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
+      SRC + "\nreturn { " + EXPOSE.join(", ") + " };")(
+      n => (n === "electron" ? electron : nodeRequire(n)),
+      path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
+  } finally { if (opened) process.argv = argv; }
   const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
   const sent = [];
-  const win = { isDestroyed: () => false, webContents: { send: (...a) => sent.push(a) } };
+  const win = { isDestroyed: () => false, isMaximized: () => false, webContents: { send: (...a) => sent.push(a), id: 1 } };
+  holder.win = win;
   const envFile = path.join(ud, "desk.json");
-  return { api, ask, on, invoke, said, ud, envFile, sent, win };
+  const pick = file => { pickBox.answer = { canceled: false, filePaths: [file] }; };
+  return { api, ask, on, invoke, said, ud, envFile, sent, win, pick };
 }
 function newDesk(name, dir) {
   const ud = path.join(LAB, name);
@@ -298,6 +317,172 @@ try {
     check(nl.length === 1 && facts(nu.text || "").name === "a stranger" && exactly(nu) && !!na.text && exactly(na),
       "889q THE CONTROL: a desk with no team lists and hands any desk's genuine file as today, answered {name, text}: listed "
       + nl.length + ", unasked keys " + Object.keys(nu).sort().join(",") + ", asked keys " + Object.keys(na).sort().join(","));
+  }
+
+  /* A plain genuine desk file, signed by the desk that holds the key. offerFile and Import read data.desk.id; a listing
+     also requires the file to sit in desks/<id>/. */
+  const plainOf = (api, who, name) => {
+    const d = JSON.parse(JSON.stringify(ga.doc));
+    d.id = who.id + "-" + hex8; d.rev = 1; d.name = name;
+    d.desk = { id: who.id, key: who.key, box: who.box };
+    delete d.sig;
+    d.hash = api.channelHash(d);
+    d.sig = { alg: "Ed25519", keyId: who.id };
+    d.sig.value = api.branchSign(d);
+    return JSON.stringify(d, null, 1) + "\n";
+  };
+  const bootOf = D => { const e = eventFor(); D.on["etiuda:catalog"](e); return e.returnValue; };
+  const offerSend = (D, file) => {
+    D.sent.length = 0;
+    D.api.offerFile(D.win, file);
+    return D.sent.filter(s => s[0] === "etiuda:catalog-file").pop() || [];
+  };
+  const noteArg = s => (s.length > 7 ? s[7] : "");
+  const tick = () => new Promise(r => setImmediate(r));
+
+  /* ---- a lead pinned, the roster field absent, the older epoch's file on disk ------------------------------ */
+  {
+    const H1 = folder("h1");
+    put(H1, "etiuda-ring.json", RING);
+    put(H1, "etiuda-team.json", team1);
+    const plain = "plain.ec";
+    const writePlain = (who, api, name) => {
+      fs.mkdirSync(path.join(H1, "desks", who.id), { recursive: true });
+      put(path.join(H1, "desks", who.id), plain, plainOf(api.api, who, name));
+    };
+    writePlain(r, R, "removed plain");
+    writePlain(a, A, "author plain");
+    writePlain(c, C, "colleague plain");
+    const ud = path.join(LAB, "h1-desk");
+    fs.mkdirSync(ud, { recursive: true });
+    const env = JSON.parse(fs.readFileSync(C.envFile, "utf8"));
+    delete env.teamRoster;
+    env.teamEpochSeen = Object.assign({}, env.teamEpochSeen, { [TEAM]: 2 });
+    env.keys = Object.assign({}, env.keys, { eCatalogFolder: H1 });
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env));
+    const H = loadDesk(ud);
+    const removedRows = await lists(H, r.id), authorRows = await lists(H, a.id), ownRows = await lists(H, c.id);
+    const removedRead = await unasked(H, r.id, plain), ownRead = await unasked(H, c.id, plain);
+    const disk = JSON.parse(fs.readFileSync(H.envFile, "utf8"));
+    const diskRoster = disk.teamRoster ? "kept" : "none";
+    const diskSeen = disk.teamEpochSeen ? disk.teamEpochSeen[TEAM] : 0;
+    check(removedRows.length === 0 && !removedRead.text && authorRows.length === 0 && ownRows.length === 1
+      && exactly(ownRead) && facts(ownRead.text).name === "colleague plain" && diskRoster === "none" && diskSeen === 2,
+      "889s a lead pinned with no roster kept, and the older epoch's file on disk, lists and hands only this desk: removed "
+      + (removedRows.join(",") || "not listed") + " unasked rev " + facts(removedRead.text || "").rev + ", author "
+      + (authorRows.join(",") || "not listed") + ", this desk " + (ownRows.join(",") || "not listed")
+      + " keys " + Object.keys(ownRead).sort().join(",") + " name " + (facts(ownRead.text).name || "-")
+      + ", diskRoster " + diskRoster + ", diskSeen " + diskSeen);
+  }
+
+  /* ---- open on purpose: double-click, the boot's return, a drop, Import, a kept version -------------------- */
+  {
+    const ROUTE = folder("route");
+    put(ROUTE, "etiuda-ring.json", RING);
+    put(ROUTE, "etiuda-team.json", team2);
+    const OPEN = folder("opened");
+    const memberFile = path.join(OPEN, "member.ec"), removedFile = path.join(OPEN, "removed.ec"),
+      neverFile = path.join(OPEN, "never.ec"), looseFile = path.join(OPEN, "loose.ec");
+    put(OPEN, "member.ec", plainOf(A.api, a, "author plain"));
+    put(OPEN, "removed.ec", plainOf(R.api, r, "removed plain"));
+    put(OPEN, "never.ec", strangerText);
+    put(OPEN, "loose.ec", CAT);
+    const ud = path.join(LAB, "route-desk");
+    fs.mkdirSync(ud, { recursive: true });
+    const env = JSON.parse(fs.readFileSync(C.envFile, "utf8"));
+    env.keys = Object.assign({}, env.keys, { eCatalogFolder: ROUTE });
+    env.teamEpochSeen = Object.assign({}, env.teamEpochSeen, { [TEAM]: 2 });
+    env.teamRoster = { [TEAM]: { epoch: 2, desks: [a.id, c.id] } };
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify(env));
+    const P = loadDesk(ud);
+    const memberSend = offerSend(P, memberFile), removedSend = offerSend(P, removedFile), neverSend = offerSend(P, neverFile);
+    const looseSend = offerSend(P, looseFile);
+    check(noteArg(memberSend) === "" && memberSend[4] === true && String(memberSend[1] || "").indexOf("author plain") > 0
+      && noteArg(removedSend) === "off-roster" && String(removedSend[1] || "").indexOf("removed plain") > 0
+      && noteArg(neverSend) === "off-roster" && noteArg(looseSend) === "" && String(looseSend[1] || "").indexOf("Roster Board") > 0,
+      "889t a double-click offers a member's file and a folder file with no note, and a removed member's and a never-member's with off-roster: "
+      + JSON.stringify({ member: noteArg(memberSend), removed: noteArg(removedSend), never: noteArg(neverSend), loose: noteArg(looseSend) }));
+    const memberBoot = bootOf(P);
+    offerSend(P, removedFile);
+    const removedBoot = bootOf(P), removedBootAgain = bootOf(P);
+    offerSend(P, neverFile);
+    const neverBoot = bootOf(P);
+    offerSend(P, memberFile);
+    const memberBootAgain = bootOf(P);
+    check(typeof memberBoot === "string" && memberBoot.indexOf("Roster Board") > 0 && removedBoot === null && removedBootAgain === null
+      && neverBoot === null && typeof memberBootAgain === "string" && memberBootAgain.indexOf("author plain") > 0,
+      "889u the boot hands back a file this launch opened only when its desk is on the team; an off-roster file stays null, and the offer is the hand: "
+      + JSON.stringify({ loose: typeof memberBoot, removed: removedBoot, removedAgain: removedBootAgain, never: neverBoot, member: typeof memberBootAgain }));
+
+    const coldOff = loadDesk(ud, removedFile);
+    const coldOffBoot = bootOf(coldOff);
+    coldOff.api.handOpenedOffRoster(coldOff.win);
+    const coldOffSend = coldOff.sent.filter(s => s[0] === "etiuda:catalog-file").pop() || [];
+    const coldOffCount = coldOff.sent.filter(s => s[0] === "etiuda:catalog-file").length;
+    coldOff.api.handOpenedOffRoster(coldOff.win);
+    const coldOffTwice = coldOff.sent.filter(s => s[0] === "etiuda:catalog-file").length;
+    const coldOn = loadDesk(ud, memberFile);
+    const coldOnBoot = bootOf(coldOn);
+    coldOn.api.handOpenedOffRoster(coldOn.win);
+    const coldOnCount = coldOn.sent.filter(s => s[0] === "etiuda:catalog-file").length;
+    check(coldOffBoot === null && noteArg(coldOffSend) === "off-roster" && coldOffCount === 1 && coldOffTwice === 1
+      && typeof coldOnBoot === "string" && coldOnBoot.indexOf("author plain") > 0 && coldOnCount === 0,
+      "889v a launch opened with an off-roster file returns nothing and offers it once with the note; a member's file is handed back and not offered again: "
+      + JSON.stringify({ offBoot: coldOffBoot, offNote: noteArg(coldOffSend), offSends: coldOffTwice, onBoot: typeof coldOnBoot, onSends: coldOnCount }));
+
+    const drop = file => {
+      P.sent.length = 0;
+      P.on["etiuda:offer-dropped"](eventFor(), file);
+      return P.sent.filter(s => s[0] === "etiuda:catalog-file").pop() || [];
+    };
+    const dropMember = drop(memberFile), dropRemoved = drop(removedFile), dropNever = drop(neverFile);
+    check(noteArg(dropMember) === "" && noteArg(dropRemoved) === "off-roster" && noteArg(dropNever) === "off-roster",
+      "889w a drop takes the double-click's route: a member's file has no note, a removed member's and a never-member's carry off-roster: "
+      + JSON.stringify({ member: noteArg(dropMember), removed: noteArg(dropRemoved), never: noteArg(dropNever) }));
+
+    const picked = async file => { P.pick(file); return (await P.ask("etiuda:pick-catalog-file", "Load catalog", "Catalogs")) || {}; };
+    const pickMember = await picked(memberFile), pickRemoved = await picked(removedFile),
+      pickNever = await picked(neverFile), pickLoose = await picked(looseFile);
+    check(exactly(pickMember) && pickMember.text.indexOf("author plain") > 0
+      && pickRemoved.notOnTeam === "off-roster" && pickRemoved.text.indexOf("removed plain") > 0
+      && pickNever.notOnTeam === "off-roster" && exactly(pickLoose) && pickLoose.text.indexOf("Roster Board") > 0,
+      "889x Import answers a member and a folder file as {name, text}, and a removed member's and a never-member's with off-roster: "
+      + JSON.stringify({ member: Object.keys(pickMember).sort(), removed: pickRemoved.notOnTeam || null,
+        never: pickNever.notOnTeam || null, loose: Object.keys(pickLoose).sort() }));
+
+    const ipcRenderer = {
+      sendSync: (ch) => (ch === "etiuda:host" ? { platform: "win32", backdrop: null, deskFile: P.envFile, home: P.ud } : null),
+      send: noop,
+      invoke: (ch, ...args) => new Promise(res => setImmediate(() => res(P.invoke[ch] ? P.invoke[ch](eventFor(), ...args) : undefined))),
+      on: noop,
+    };
+    globalThis.window = { addEventListener: noop, removeEventListener: noop };
+    globalThis.document = { visibilityState: "visible", addEventListener: noop, removeEventListener: noop };
+    const contextBridge = { exposeInMainWorld: (k, v) => { window[k] = v; }, executeInMainWorld: noop };
+    new Function("require", fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8"))(
+      n => (n === "electron" ? { contextBridge, ipcRenderer } : nodeRequire(n)));
+    const H = await import(MOD("host.js"));
+    P.pick(removedFile);
+    const viaRemoved = (await H.ePickCatalogFile("Load catalog", "Catalogs")) || {};
+    P.pick(memberFile);
+    const viaMember = (await H.ePickCatalogFile("Load catalog", "Catalogs")) || {};
+    check(viaRemoved.notOnTeam === "off-roster" && !!viaRemoved.text && exactly(viaMember),
+      "889y the note reaches the page through Import: ePickCatalogFile answers the removed desk's file with off-roster and a member's as {name, text}: "
+      + JSON.stringify({ removed: viaRemoved.notOnTeam || null, member: Object.keys(viaMember).sort() }));
+
+    await tick();
+    const history = await P.ask("etiuda:history-list");
+    const keptOf = file => (history || []).find(v => v.path === path.resolve(file));
+    const readKept = async file => {
+      const v = keptOf(file);
+      return v ? ((await P.ask("etiuda:history-read", v.sha, v.path)) || {}) : {};
+    };
+    const histRemoved = await readKept(removedFile), histMember = await readKept(memberFile), histLoose = await readKept(looseFile);
+    check(histRemoved.notOnTeam === "off-roster" && histRemoved.text.indexOf("removed plain") > 0
+      && exactly(histMember) && exactly(histLoose),
+      "889z a kept version of an off-roster desk file carries the note, and a member's and a folder file do not: "
+      + JSON.stringify({ removed: histRemoved.notOnTeam || null, member: Object.keys(histMember).sort(), loose: Object.keys(histLoose).sort(),
+        kept: [removedFile, memberFile, looseFile].map(f => !!keptOf(f)) }));
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
