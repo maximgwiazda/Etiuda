@@ -85,8 +85,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
      `offer` is a read the page means to offer nobody having asked, which a pinned lead must have signed. */
   readCatalogFile: (name, desk, asked, offer) => ipcRenderer.invoke("etiuda:catalog-read", String(name || ""), desk ? String(desk) : "",
     !!asked, !!offer),
-  /* The pin of the catalog the agent just took, so the shell raises the mark for what it handed on purpose. */
-  catalogTaken: (pin) => ipcRenderer.send("etiuda:catalog-taken", String(pin || "")),
+  /* The pin of the catalog the agent just took, and the catalog text when the page sends it with the pin. */
+  catalogTaken: (pin, text) => ipcRenderer.send("etiuda:catalog-taken", String(pin || ""), text == null ? "" : String(text)),
   /* The caption is the page's, because the shell has no t(). Async, unlike the desk: a modal
      the person is standing in front of must not hold the renderer's thread. */
   pickCatalogFolder: (title) => ipcRenderer.invoke("etiuda:pick-catalog-folder", String(title || "")),
@@ -160,6 +160,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   teamJoin: (op, file, name, check) => ipcRenderer.invoke("etiuda:team-join", String(op || ""), String(file || ""), String(name || ""),
     String(check || "")),
   onTeamJoin: (fn) => ipcRenderer.on("etiuda:team-join", (_e, v) => fn(v && typeof v === "object" ? v : {})),
+  /* The shell has sent the lead a copy of the catalog in use. The page says so; nothing here asks the agent. */
+  onCatalogCopy: (fn) => ipcRenderer.on("etiuda:catalog-copy", () => { try { fn(); } catch { /* the page has gone */ } }),
   onStatsAsk: (fn) => ipcRenderer.on("etiuda:stats-ask", (_e, req) => fn(req && typeof req === "object" ? req : {})),
   /* The picker's questions, answered by the page as JSON text: what to show, what a query finds, and
      the text a copy puts on the clipboard, which the shell writes. */

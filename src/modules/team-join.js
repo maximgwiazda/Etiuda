@@ -2,8 +2,8 @@
    and in a bubble from the catalog's name where a catalog is open. The shell keeps the request and says where it
    stands; this paints that answer and sends the agent's acts back. Once admitted, the same place shows the pinned
    lead's key once, to compare with the lead's, and Settings lists every such key with a way to forget it. */
-import { eHost } from "./host.js";
-import { t } from "./ui-lang.js";
+import { eHost, eOnCatalogCopy } from "./host.js";
+import { t, toast } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { wholeThingEmpty } from "./app-state.js";
 import { agentName } from "./agent.js";
@@ -123,9 +123,13 @@ function joinTook(v,changed){
   if(changed===true || JSON.stringify(joinNow)!==was) paintJoin();
   return joinNow;
 }
+function noteCatalogCopy(){
+  toast("At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.");
+}
 function wireTeamJoin(){
   if(!eHasJoin()) return;
   if(typeof eHost().onTeamJoin==="function") eHost().onTeamJoin(joinTook);
+  if(typeof eHost().onCatalogCopy==="function") eOnCatalogCopy(noteCatalogCopy);
   joinAsk("state");
 }
 function paintJoin(){
@@ -164,6 +168,9 @@ function openJoinPaste(){
   joinMode="paste";
   repaintJoin();
 }
+function joinDisclosure(){
+  return '<div class="e-join-meta">'+esc(t("Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own."))+'</div>';
+}
 function joinWhere(o){
   if(!o) return "";
   const host=o.host?t("This folder is on the computer {HOST}.").split("{HOST}").join(o.host):"";
@@ -177,7 +184,7 @@ function joinWhere(o){
 function joinInviteParts(){
   if(joinMode==="paste") return {title:t("Join a team"), line:t("Paste the invitation from the team's lead."),
     body:'<textarea class="e-join-paste" data-join-paste spellcheck="false" autocomplete="off" aria-label="'
-      +esc(t("Paste the invitation from the team's lead."))+'">'+esc(joinBlob)+'</textarea>',
+      +esc(t("Paste the invitation from the team's lead."))+'">'+esc(joinBlob)+'</textarea>'+joinDisclosure(),
     acts:[["read",t("Continue")],["back",t("Cancel")]]};
   /* Neither the key nor the code is shown here: a code on the screen proves only that it was read off it. */
   if(joinMode==="confirm" && joinOffer){
@@ -190,7 +197,8 @@ function joinInviteParts(){
         +'<input type="text" class="e-join-check" data-join-check maxlength="5" inputmode="numeric" spellcheck="false" autocomplete="off" aria-label="'
         +esc(t("Check"))+'" value="'+esc(joinTyped)+'">'
         +'<div class="e-join-ask e-join-miss" data-join-miss'+(typedWrong()?'':' hidden')+'>'
-        +esc(t("This code does not match this invitation. Ask the lead again before joining."))+'</div>',
+        +esc(t("This code does not match this invitation. Ask the lead again before joining."))+'</div>'
+        +joinDisclosure(),
       acts:[["invite",t("Join this team"),!typedOk()],["back",t("Cancel")]]};
   }
   if(joinMode==="refused") return {title:t("Join a team"),
@@ -225,7 +233,7 @@ function joinParts(){
     acts:[["cancel",t("Cancel the request")]]};
   return {title:t("{FILE} is sealed for its team").split("{FILE}").join(s?s.file:""),
     line:t("Once the team's lead lets this desk in, the catalog opens here by itself."),
-    body:'<div class="e-join-meta">'+esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who))+'</div>',
+    body:'<div class="e-join-meta">'+esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who))+'</div>'+joinDisclosure(),
     acts:[["ask",t("Ask to join")],["join",t("Join a team")],["load",t("Load another catalog")]]};
 }
 function joinAct(act){
@@ -322,4 +330,4 @@ function forgetTeamLead(team,then){
   return joinAsk("forget",team).then(v=>{ if(typeof then==="function") then(); return v; });
 }
 
-export { wireTeamJoin, teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, paintJoin, openJoinPaste, teamCanJoin, inviteHeld };
+export { wireTeamJoin, teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, paintJoin, openJoinPaste, teamCanJoin, inviteHeld, noteCatalogCopy };

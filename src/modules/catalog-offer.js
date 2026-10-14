@@ -2,7 +2,7 @@
    offers the same way, and the dialog all three channels end in. */
 import { activateCatalog, catalogEdited, catalogEditionOlder, catalogMacroCount,
   catalogIntentCount, exportCatalog, isCatalogUpdate, catalogFileName, catalogNameOfFile, pinStoredFrom,
-  followRenamedFile, branchFileId, looseOrigin, sharedOwnPin, sharedOwnWrite } from "./catalog-file.js";
+  followRenamedFile, branchFileId, looseOrigin, sharedOwnPin, sharedOwnWrite, nameHeldCatalog } from "./catalog-file.js";
 import { catalogLoaded } from "./catalog-boot.js";
 import { E_CATALOG_KEY, E_CATALOG_VERSION, catalogStamp, catalogVersionLabel,
   eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
@@ -95,6 +95,7 @@ function eOfferCatalog(given,name,where,force,asked,builtIn,offTeam){
    rather than a find. Only a host can date a file or hand one over, so a browser never forces. */
 function eOfferCatalogAtBoot(){
   pinStoredFrom(eCatalog());
+  nameHeldCatalog();
   const at=+(nsGet("CatalogNoAt")||0), mt=eCatalogMtime(), asked=eOpenedWith();
   // A first run's tour asks for a catalog in its own step, so a found file waits for it to end.
   if(!asked && tourDueAtBoot()){ afterTour(eOfferCatalogAtBoot); return; }

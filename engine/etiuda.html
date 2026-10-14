@@ -7560,6 +7560,9 @@ What you type stays in this browser only.`;
     "It does not match": "Nie zgadza się",
     "Team lead's key": "Klucz lidera zespołu",
     "Forget this lead": "Zapomnij tego lidera",
+    "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.": "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
+    "The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.": "Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
+    "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.": "Na prośbę Studia lidera zespołu przesłano zespołowi kopię katalogu używanego na tym stanowisku.",
     "Studio's signing key": "Klucz podpisu Studia",
     "A desk's key": "Klucz stanowiska",
     "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.": "Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze.",
@@ -14152,6 +14155,7 @@ What you type stays in this browser only.`;
     eHasShared: () => eHasShared,
     eHost: () => eHost,
     eLoadedCatalogFile: () => eLoadedCatalogFile,
+    eOnCatalogCopy: () => eOnCatalogCopy,
     eOnCatalogListing: () => eOnCatalogListing,
     eOpenCatalogFolder: () => eOpenCatalogFolder,
     eOpenedRefused: () => eOpenedRefused,
@@ -14312,11 +14316,24 @@ What you type stays in this browser only.`;
       return Promise.resolve(null);
     }
   }
-  function eCatalogTaken(pin) {
+  function eCatalogTaken(pin, text) {
     const h = eHost();
     if (!pin || !h || typeof h.catalogTaken !== "function") return;
     try {
-      h.catalogTaken(String(pin));
+      h.catalogTaken(String(pin), text == null ? "" : String(text));
+    } catch (e) {
+    }
+  }
+  function eOnCatalogCopy(fn) {
+    const h = eHost();
+    if (!h || typeof h.onCatalogCopy !== "function" || typeof fn !== "function") return;
+    try {
+      h.onCatalogCopy(() => {
+        try {
+          fn();
+        } catch (e) {
+        }
+      });
     } catch (e) {
     }
   }
@@ -14526,6 +14543,7 @@ What you type stays in this browser only.`;
     keyTipHtml: () => keyTipHtml,
     leadKeyText: () => leadKeyText,
     leadsNow: () => leadsNow,
+    noteCatalogCopy: () => noteCatalogCopy,
     openJoinPaste: () => openJoinPaste,
     paintJoin: () => paintJoin,
     teamCanJoin: () => teamCanJoin,
@@ -14671,9 +14689,13 @@ What you type stays in this browser only.`;
     if (changed === true || JSON.stringify(joinNow) !== was) paintJoin();
     return joinNow;
   }
+  function noteCatalogCopy() {
+    toast("At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.");
+  }
   function wireTeamJoin() {
     if (!eHasJoin()) return;
     if (typeof eHost().onTeamJoin === "function") eHost().onTeamJoin(joinTook);
+    if (typeof eHost().onCatalogCopy === "function") eOnCatalogCopy(noteCatalogCopy);
     joinAsk("state");
   }
   function paintJoin() {
@@ -14718,6 +14740,9 @@ What you type stays in this browser only.`;
     joinMode = "paste";
     repaintJoin();
   }
+  function joinDisclosure() {
+    return '<div class="e-join-meta">' + esc(t("Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.")) + "</div>";
+  }
   function joinWhere(o) {
     if (!o) return "";
     const host = o.host ? t("This folder is on the computer {HOST}.").split("{HOST}").join(o.host) : "";
@@ -14728,7 +14753,7 @@ What you type stays in this browser only.`;
     if (joinMode === "paste") return {
       title: t("Join a team"),
       line: t("Paste the invitation from the team's lead."),
-      body: '<textarea class="e-join-paste" data-join-paste spellcheck="false" autocomplete="off" aria-label="' + esc(t("Paste the invitation from the team's lead.")) + '">' + esc(joinBlob) + "</textarea>",
+      body: '<textarea class="e-join-paste" data-join-paste spellcheck="false" autocomplete="off" aria-label="' + esc(t("Paste the invitation from the team's lead.")) + '">' + esc(joinBlob) + "</textarea>" + joinDisclosure(),
       acts: [["read", t("Continue")], ["back", t("Cancel")]]
     };
     if (joinMode === "confirm" && joinOffer) {
@@ -14736,7 +14761,7 @@ What you type stays in this browser only.`;
       return {
         title: t("Join this team?"),
         line: joinWhere(o),
-        body: '<div class="e-join-meta">' + esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder)) + '</div><div class="e-join-meta">' + esc(t("Lead: {NAME}").split("{NAME}").join(o.lead)) + '</div><div class="e-join-ask">' + esc(ask) + '</div><div class="e-join-why">' + esc(t("Only the real invitation gives this code, so it confirms the invitation comes from the team's own lead.")) + '</div><input type="text" class="e-join-check" data-join-check maxlength="5" inputmode="numeric" spellcheck="false" autocomplete="off" aria-label="' + esc(t("Check")) + '" value="' + esc(joinTyped) + '"><div class="e-join-ask e-join-miss" data-join-miss' + (typedWrong() ? "" : " hidden") + ">" + esc(t("This code does not match this invitation. Ask the lead again before joining.")) + "</div>",
+        body: '<div class="e-join-meta">' + esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder)) + '</div><div class="e-join-meta">' + esc(t("Lead: {NAME}").split("{NAME}").join(o.lead)) + '</div><div class="e-join-ask">' + esc(ask) + '</div><div class="e-join-why">' + esc(t("Only the real invitation gives this code, so it confirms the invitation comes from the team's own lead.")) + '</div><input type="text" class="e-join-check" data-join-check maxlength="5" inputmode="numeric" spellcheck="false" autocomplete="off" aria-label="' + esc(t("Check")) + '" value="' + esc(joinTyped) + '"><div class="e-join-ask e-join-miss" data-join-miss' + (typedWrong() ? "" : " hidden") + ">" + esc(t("This code does not match this invitation. Ask the lead again before joining.")) + "</div>" + joinDisclosure(),
         acts: [["invite", t("Join this team"), !typedOk()], ["back", t("Cancel")]]
       };
     }
@@ -14781,7 +14806,7 @@ What you type stays in this browser only.`;
     return {
       title: t("{FILE} is sealed for its team").split("{FILE}").join(s ? s.file : ""),
       line: t("Once the team's lead lets this desk in, the catalog opens here by itself."),
-      body: '<div class="e-join-meta">' + esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who)) + "</div>",
+      body: '<div class="e-join-meta">' + esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who)) + "</div>" + joinDisclosure(),
       acts: [["ask", t("Ask to join")], ["join", t("Join a team")], ["load", t("Load another catalog")]]
     };
   }
@@ -23293,12 +23318,14 @@ What you type stays in this browser only.`;
     importCatalogText: () => importCatalogText,
     isCatalogUpdate: () => isCatalogUpdate,
     looseOrigin: () => looseOrigin,
+    nameHeldCatalog: () => nameHeldCatalog,
     pinStoredFrom: () => pinStoredFrom,
     sampleUntouched: () => sampleUntouched,
     sha256Hex: () => sha256Hex,
     sharedOwnPin: () => sharedOwnPin,
     sharedOwnWrite: () => sharedOwnWrite,
     syncSampleMark: () => syncSampleMark,
+    tellTaken: () => tellTaken,
     todayEdition: () => todayEdition,
     wireCatalogDrop: () => wireCatalogDrop,
     writeDeskBranch: () => writeDeskBranch
@@ -24307,6 +24334,44 @@ What you type stays in this browser only.`;
       return c;
     }
   }
+  function tellTaken(c) {
+    const doc = catalogDocOf(c);
+    let pin = "";
+    try {
+      pin = String((pinned(c) || {}).pin || c && c.pin || "");
+    } catch (e) {
+      pin = String(c && c.pin || "");
+    }
+    if (!pin) return false;
+    if (!doc) {
+      eCatalogTaken(pin);
+      return false;
+    }
+    let text = "";
+    try {
+      text = JSON.stringify(doc);
+    } catch (e) {
+      eCatalogTaken(pin);
+      return false;
+    }
+    eCatalogTaken(pin, text);
+    return true;
+  }
+  function nameHeldCatalog() {
+    const held = storedCatalog(), found = eCatalog();
+    if (!held || !held.pin || !found) return false;
+    if (eCatalogSignature(held) !== eCatalogSignature(found)) return false;
+    const doc = catalogDocOf(found);
+    if (!doc) return false;
+    let text = "";
+    try {
+      text = JSON.stringify(doc);
+    } catch (e) {
+      return false;
+    }
+    eCatalogTaken(held.pin, text);
+    return true;
+  }
   function pinStoredFrom(found) {
     const held = storedCatalog();
     if (!held || held.pin || !found || !isCatalogUpdate(found, held) || eCatalogSignature(found) !== eCatalogSignature(held)) return false;
@@ -24572,7 +24637,7 @@ What you type stays in this browser only.`;
     flushLayer();
     const kept = pinned(c);
     if (!storeCatalog(kept)) return false;
-    eCatalogTaken(kept && kept.pin);
+    tellTaken(c);
     if (same) {
       const alive = carryCardLayer(c);
       pack.baseCards = null;
@@ -27577,6 +27642,7 @@ What you type stays in this browser only.`;
   }
   function eOfferCatalogAtBoot() {
     pinStoredFrom(eCatalog());
+    nameHeldCatalog();
     const at = +(nsGet("CatalogNoAt") || 0), mt = eCatalogMtime(), asked = eOpenedWith();
     if (!asked && tourDueAtBoot()) {
       afterTour(eOfferCatalogAtBoot);
@@ -29225,9 +29291,9 @@ What you type stays in this browser only.`;
         t("The language of the buttons and menus, not of the macros: those follow EN|PL in the header"),
         langSel
       ) + (lastSyncStamp ? row(t("Last sync"), "", "<span>" + esc(lastSyncStamp) + "</span>") : "") + /* One row per team lead this desk trusts: the key the agent compared, and the way out where it was wrong. */
-      teamLeads().map((l) => row(
+      teamLeads().map((l, i) => row(
         t("Team lead's key"),
-        "",
+        i === 0 ? t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.") : "",
         '<span class="e-lead-key">' + keySignHtml("studio", l.print) + '</span><button type="button" class="btn" data-forget-lead="' + esc(l.team) + '">' + esc(t("Forget this lead")) + "</button>"
       )).join("") + /* Under a host only: a browser has no catalog folder to share. */
       (eHasShared() ? row(

@@ -482,6 +482,7 @@ function watchCatalog(win) {
     try {
       const w = fs.watch(dir, (ev, name) => {
         if (name && String(name) === "desks" && dir === watchedFolder && !desksWatcher) watchDesks(win);
+        if (name && String(name) === ASK_DIR && dir === watchedFolder && !asksWatcher) watchAsks(win);
         if (name && !isCatalogName(path.basename(String(name)))) return;
         clearTimeout(catalogSettle);
         catalogSettle = setTimeout(() => catalogChanged(win), 300);
@@ -500,6 +501,8 @@ function watchCatalog(win) {
     }
   }
   watchDesks(win);
+  watchAsks(win);
+  tryCatalogAsk(win);
 }
 /* A COLLEAGUE'S FILE CHANGES ONE FOLDER DOWN, in desks/<id>/, where the folder's own watch does not reach, so desks/ has a
    watch of its own over its subfolders alone. With no desks/ yet there is none, and the folder's watch arms it when one appears. */
@@ -597,6 +600,9 @@ function catalogFolderChanged() {
    rather than the moment it lands. Seeding happens before there is a window, so the case is a
    copy made by hand under an open Library. */
 function catalogChanged(win) {
+  releaseInUse();
+  tryHeldUse();
+  resealHeld(win);
   const now = readCatalog();
   tryAnswerRequest(win);
   tryHeldBranches();
@@ -610,6 +616,7 @@ function catalogChanged(win) {
   catalogJson = now;
   keepCatalogRev(now);
   if (!now || !win || win.isDestroyed()) return;
+  noteHanded(now, sourceOfFile(catalogFrom));
   console.log("etiuda: the catalog file changed, and the window has been offered it");
   win.webContents.send("etiuda:catalog-file", now, path.basename(catalogFrom), folderShown(catalogFrom),
     false, "", isBuiltIn(catalogFrom));
@@ -637,6 +644,7 @@ function offerFile(win, file) {
     openedWith = file;
     catalogJson = json;
     handAsked(json, "");
+    noteHanded(json, "opened");
     catalogFrom = file;
     historySoon(file, text);
     const cards = Array.isArray(data.cards) ? data.cards.length : 0;
@@ -668,17 +676,30 @@ ipcMain.on("etiuda:catalog", (e) => {
      One whose desk is off the roster is not handed back here. The offer, which carries the note, is the hand. */
   if (openedWith && catalogFrom === openedWith) {
     handAsked(catalogJson, "");
+    noteHanded(catalogJson, "opened");
     e.returnValue = rosterNoteText(catalogJson) ? null : catalogJson;
     return;
   }
   if (belowCatalogRev(catalogJson)) { e.returnValue = null; return; }
   keepCatalogRev(catalogJson);
+  if (catalogJson) noteHanded(catalogJson, sourceOfFile(catalogFrom));
   e.returnValue = catalogJson;
 });
 /* WHAT THE AGENT OPENED ON PURPOSE, handed and not yet taken, by the signed hash the page pins a catalog by. Its mark, the
    catalog's or a colleague's file's (`who`), rises only when the page says the agent took those bytes, and only to them;
    a pin this shell never handed so raises nothing. The oldest goes past HANDED_ASKED_MAX. */
 const handedAsked = new Map(), HANDED_ASKED_MAX = 32;
+/* Bytes handed to the page for the catalog in use, kept after the take so a later ask can still seal them.
+   Separate from handedAsked: a boot or a watch raises its mark at once, and must not be treated as an ask. */
+const handedUse = new Map();
+let inUseKept = null, catalogAskIds = [], heldInUse = null, heldAnswer = null;
+let loadedText = "", asksWatcher = null, askSettle = null, lastCatalogCopy = "";
+const IN_USE_KIND = "etiuda-in-use", IN_USE_STEM = "in-use";
+const ASK_DIR = "catalog-asks", ASK_KIND = "etiuda-catalog-ask", ASK_PREFIX = "etiuda-catalog-ask\n";
+const ANSWER_KIND = "etiuda-catalog-answer", ANSWER_NAME = "catalog-answer.ec";
+const ASK_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
+const PIN_RE = /^sha256:[0-9a-f]{64}$/;
+const ASK_TIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 /* An off-roster file this launch opened, already offered, so a later load of the page does not offer it again. */
 const openedOfferSent = new Set();
 function handAsked(text, who) {
@@ -703,13 +724,31 @@ function handOpenedOffRoster(win) {
   openedOfferSent.add(pin);
   win.webContents.send("etiuda:catalog-file", catalogJson, path.basename(catalogFrom), folderShown(catalogFrom), true, "", false, note);
 }
-ipcMain.on("etiuda:catalog-taken", (e, pin) => {
+ipcMain.on("etiuda:catalog-taken", (e, pin, text) => {
   if (!fromEngine(e)) return;
-  const got = handedAsked.get(String(pin || ""));
-  if (!got) return;
-  handedAsked.delete(String(pin));
-  if (got.who) readRevFloor(got.text, got.who, false);
-  else keepCatalogRev(got.text);
+  const key = String(pin || "");
+  const got = handedAsked.get(key);
+  if (got) {
+    handedAsked.delete(key);
+    if (got.who) readRevFloor(got.text, got.who, false);
+    else keepCatalogRev(got.text);
+  }
+  /* The page sends the catalog it holds with the pin. The two have to be the same catalog, and
+     then those bytes are a hand even where this shell never offered them. A pin the text does not
+     back writes nothing. A pin with no text is still only a hand this shell already made. */
+  const backed = text == null ? "" : String(text);
+  if (backed) {
+    let hashed = "";
+    try {
+      const doc = catalogDocIn(backed);
+      hashed = doc && doc.kind === "etiuda-catalog" ? signedSha(doc) : "";
+    } catch { hashed = ""; }
+    if (hashed !== key) return;
+    if (!handedUse.has(key)) noteHanded(backed, sourceForText(backed));
+  }
+  let win = null;
+  try { win = BrowserWindow.fromWebContents(e.sender); } catch { win = null; }
+  writeInUse(key, win);
 });
 /* THE ENGINE REFUSED THE FILE IT WAS HANDED, and names it. Answered with the next file this
    would read, in the shape the host answer gives the first, or null where there is none. */
@@ -725,6 +764,7 @@ ipcMain.on("etiuda:catalog-refused", (e, name) => {
   if (belowCatalogRev(next)) { e.returnValue = null; return; }
   catalogJson = next;
   keepCatalogRev(catalogJson);
+  if (catalogJson) noteHanded(catalogJson, sourceOfFile(catalogFrom));
   e.returnValue = catalogJson ? { json: catalogJson, file: path.basename(catalogFrom), in: folderShown(catalogFrom),
                                   builtIn: isBuiltIn(catalogFrom), mtime: catalogMtime() } : null;
 });
@@ -829,6 +869,8 @@ function deskEnvelopeBody(keysText) {
     + (teamSeen.size ? ',"teamSeen":' + JSON.stringify(Array.from(teamSeen)) : "")
     + (teamBarred.size ? ',"teamBarred":' + JSON.stringify(Array.from(teamBarred)) : "")
     + (teamJoin ? ',"teamJoin":' + JSON.stringify(teamJoin) : "")
+    + (inUseKept ? ',"inUse":' + JSON.stringify(inUseKept) : "")
+    + (catalogAskIds.length ? ',"catalogAsks":' + JSON.stringify(catalogAskIds) : "")
     + (deskRefused.length ? ',"refused":' + JSON.stringify(deskRefused) : "")
     + ',"keys":' + keysText + "}";
 }
@@ -1471,11 +1513,313 @@ function writeBranch(stem, text) {
 /* What a folder that did not answer is still owed, asked again when it may have come back: the catalog
    folder changing and the page finishing a load both call this. */
 function tryHeldBranches() {
+  tryHeldUse();
   if (!heldBranch.size || !folderAnswers(catalogFolder())) return;
   for (const [stem, text] of Array.from(heldBranch)) {
     const r = writeBranch(stem, text);
     if (!r.ok && !r.held) heldBranch.delete(stem);
   }
+}
+
+/* ---- the catalog this desk has loaded, named for the team, and a copy when the lead asks ------------------
+   in-use.ec names the catalog (never a card) and is signed as a desk file, then sealed under the team key.
+   A desk with no team key writes nothing. catalog-answer.ec is the catalog itself, sealed the same way, and
+   only for an ask that names this desk and verifies under the lead key it joined with. One answer per ask id. */
+function sourceOfFile(file) {
+  if (!file || isBuiltIn(file)) return "opened";
+  try { if (path.resolve(path.dirname(file)) === path.resolve(catalogFolder())) return "folder"; } catch { /* opened */ }
+  return "opened";
+}
+function noteHanded(text, source) {
+  const doc = catalogDocIn(text);
+  if (!doc || doc.kind !== "etiuda-catalog") return;
+  let pin = "";
+  try { pin = signedSha(doc); } catch { return; }
+  handedUse.delete(pin);
+  handedUse.set(pin, { text: String(text), source: source === "folder" || source === "desk-file" ? source : "opened" });
+  while (handedUse.size > HANDED_ASKED_MAX) handedUse.delete(handedUse.keys().next().value);
+}
+/* A catalog the page backed itself is the folder's when it is the file the folder holds now, and opened otherwise. */
+function sourceForText(text) {
+  try {
+    const doc = catalogDocIn(text);
+    if (!doc || doc.kind !== "etiuda-catalog") return "opened";
+    const pin = signedSha(doc);
+    const cur = catalogJson ? catalogDocIn(catalogJson) : null;
+    if (cur && signedSha(cur) === pin && sourceOfFile(catalogFrom) === "folder") return "folder";
+  } catch { /* opened */ }
+  return "opened";
+}
+function catalogTitleClean(name) {
+  if (typeof name !== "string") return "";
+  return name.replace(INVITE_HIDDEN_RE, "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 120);
+}
+function catalogSignerOf(doc) {
+  return catalogSigValid(doc) && doc.sig && typeof doc.sig.keyId === "string" ? String(doc.sig.keyId) : "";
+}
+function deskTitle() {
+  const n = deskKeys && typeof deskKeys.eAgent === "string" ? deskKeys.eAgent.trim().slice(0, 120) : "";
+  return n;
+}
+/* The newest team key this desk can seal with. The catalog in use need not be one the team file names.
+   stale: the team file's epoch is not that key, or the key is behind an epoch already seen, so nothing
+   new is sealed under an older key. */
+function teamUse() {
+  heedTeam();
+  const me = branchIdentity(false);
+  if (!me) return { member: false };
+  const root = catalogFolder();
+  if (!folderAnswers(root)) return { away: true };
+  let doc = null;
+  try {
+    const file = path.join(root, TEAM_NAME);
+    if (fs.statSync(file).size > TEAM_MAX) return { member: false };
+    doc = JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "").trim());
+  } catch { return { member: false }; }
+  if (!teamWhole(doc)) return { member: false };
+  const policy = sayJoinPolicy().lead;
+  if (policy && doc.lead.public !== policy) return { member: false };
+  const pin = teamPins[doc.id];
+  if (!pin || pin.keyId !== doc.lead.keyId || pin.public !== doc.lead.public) return { member: false };
+  const team = String(doc.id);
+  const kept = teamKeys[team] || {};
+  const epoch = Object.keys(kept).map(Number).filter(n => Number.isInteger(n) && n >= 1).sort((a, b) => b - a)[0];
+  if (!epoch) return { member: false };
+  const listed = Array.isArray(doc.roster) && doc.roster.some(x => !!x && !!x.desk && x.desk.id === me.id);
+  if (!listed) return { member: false };
+  let key = null;
+  try { key = Buffer.from(safeStorage.decryptString(Buffer.from(kept[epoch], "base64")), "base64"); } catch { key = null; }
+  if (!key || key.length !== 32) return { member: false };
+  const stale = doc.epoch !== epoch || epoch < (teamEpochSeen[team] || 0);
+  return { member: true, stale: stale, seal: { team: team, epoch: epoch, key: key, lead: pin } };
+}
+function inUseFile() {
+  const me = branchIdentity(false);
+  return me ? path.join(catalogFolder(), "desks", me.id, IN_USE_STEM + ".ec") : "";
+}
+function clearInUseFile() {
+  const dest = inUseFile();
+  if (!dest || !folderAnswers(catalogFolder())) { heldInUse = { remove: true }; return; }
+  try { fs.unlinkSync(dest); }
+  catch (e) { if (e.code !== "ENOENT") { heldInUse = { remove: true }; return; } }
+  inUseKept = null;
+  if (heldInUse && heldInUse.remove) heldInUse = null;
+  persistDeskEnvelope();
+}
+function releaseInUse() {
+  if (!inUseKept) return;
+  if (!folderAnswers(catalogFolder())) { heldInUse = { remove: true }; return; }
+  const use = teamUse();
+  if (use.away) { heldInUse = { remove: true }; return; }
+  if (use.member) { if (heldInUse && heldInUse.remove) heldInUse = null; return; }
+  clearInUseFile();
+}
+function rememberAsk(id) {
+  if (catalogAskIds.indexOf(id) >= 0) return;
+  catalogAskIds.push(id);
+  while (catalogAskIds.length > 64) catalogAskIds.shift();
+  persistDeskEnvelope();
+}
+function liveWin(win) {
+  try {
+    if (win && typeof win.isDestroyed === "function" && !win.isDestroyed() && win.webContents && typeof win.webContents.send === "function")
+      return win;
+  } catch { /* not a window */ }
+  try {
+    if (theWindow && typeof theWindow.isDestroyed === "function" && !theWindow.isDestroyed()) return theWindow;
+  } catch { /* gone */ }
+  return null;
+}
+function tellCopy(win, id) {
+  lastCatalogCopy = String(id || "");
+  const live = liveWin(win);
+  if (!live) return;
+  try { live.webContents.send("etiuda:catalog-copy", { id: lastCatalogCopy }); } catch { /* the page has gone */ }
+}
+function catalogCopyNote() { return lastCatalogCopy; }
+function asksWatching() { return !!asksWatcher; }
+function writeInUse(pin, win) {
+  const got = handedUse.get(String(pin || ""));
+  /* A pin this shell did not hand on is not a catalog this desk has loaded. */
+  if (!got) return;
+  loadedText = got.text;
+  const root = catalogFolder();
+  if (!folderAnswers(root)) { heldInUse = { text: got.text, source: got.source }; return; }
+  let isDir = false;
+  try { isDir = fs.statSync(root).isDirectory(); } catch { isDir = false; }
+  if (!isDir) { heldInUse = { text: got.text, source: got.source }; return; }
+  try {
+    const use = teamUse();
+    if (use.away) { heldInUse = { text: got.text, source: got.source }; return; }
+    if (!use.member) { releaseInUse(); tryCatalogAsk(win); return; }
+    if (use.stale) { tryCatalogAsk(win); return; }
+    const seal = use.seal;
+    const me = branchIdentity(true);
+    if (!me) return;
+    const doc = catalogDocIn(got.text);
+    if (!doc || doc.kind !== "etiuda-catalog") return;
+    if (inUseKept && inUseKept.sha === pin && inUseKept.epoch === seal.epoch && inUseKept.team === seal.team) {
+      tryCatalogAsk(win);
+      return;
+    }
+    const cat = { id: typeof doc.id === "string" ? doc.id : "", rev: Number.isInteger(+doc.rev) ? +doc.rev : 0,
+      sha256: pin, signer: catalogSignerOf(doc), source: got.source };
+    const title = catalogTitleClean(doc.name);
+    if (title) cat.title = title;
+    const desk = { id: me.id, key: me.key, box: me.box };
+    const who = deskTitle();
+    if (who) desk.name = who;
+    const out = { format: 1, kind: IN_USE_KIND, desk: desk, at: new Date().toISOString(), catalog: cat,
+      sig: { alg: "Ed25519", keyId: me.id } };
+    out.sig.value = branchSign(out);
+    if (!out.sig.value) return;
+    const at = branchDest(IN_USE_STEM);
+    if (!at) return;
+    for (const dir of [path.join(at.root, "desks"), at.dir]) {
+      try { fs.mkdirSync(dir); } catch (e) { if (e.code !== "EEXIST") throw e; }
+    }
+    writeReplacing(at.dest, JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, JSON.stringify(out)), null, 1) + "\n");
+    inUseKept = { sha: pin, epoch: seal.epoch, team: seal.team };
+    heldInUse = null;
+    persistDeskEnvelope();
+    tryCatalogAsk(win);
+  } catch (e) {
+    console.error("etiuda: the catalog in use could not be written - " + e.message);
+    heldInUse = { text: got.text, source: got.source };
+  }
+}
+/* The team epoch moved, or this desk has only just become a member, and the page is not asked again.
+   The catalog already loaded is sealed under the key held now. A stale file seals nothing. */
+let resealing = false;
+function resealHeld(win) {
+  if (resealing || !loadedText) return;
+  let pin = "";
+  try {
+    const doc = catalogDocIn(loadedText);
+    pin = doc ? signedSha(doc) : "";
+  } catch { return; }
+  if (!PIN_RE.test(pin)) return;
+  const use = teamUse();
+  if (!use.member || use.stale || !use.seal) return;
+  if (inUseKept && inUseKept.sha === pin && inUseKept.epoch === use.seal.epoch && inUseKept.team === use.seal.team) return;
+  if (!handedUse.has(pin)) noteHanded(loadedText, sourceForText(loadedText));
+  resealing = true;
+  try { writeInUse(pin, win); }
+  finally { resealing = false; }
+}
+function askSignedBytes(doc) { return Buffer.concat([Buffer.from(ASK_PREFIX, "utf8"), signedBytesOf(doc)]); }
+function readAskFile() {
+  const me = branchIdentity(false);
+  if (!me) return { away: true };
+  const root = catalogFolder();
+  if (!folderAnswers(root)) return { away: true };
+  const file = path.join(root, ASK_DIR, me.id + ".json");
+  let text = "";
+  try {
+    if (fs.statSync(file).size > 65536) return { bad: true };
+    text = fs.readFileSync(file, "utf8");
+  } catch (e) {
+    if (e && e.code === "ENOENT") return { gone: true };
+    return { away: true };
+  }
+  try { return { doc: JSON.parse(String(text).replace(/^\uFEFF/, "")) }; }
+  catch { return { bad: true }; }
+}
+function askFresh(doc, me, lead) {
+  if (!doc || typeof doc !== "object" || Array.isArray(doc) || !me || !lead) return null;
+  if (+doc.format !== 1 || doc.kind !== ASK_KIND) return null;
+  const id = String(doc.id || "");
+  if (!ASK_ID_RE.test(id) || String(doc.desk || "") !== me.id || !PIN_RE.test(String(doc.sha256 || ""))) return null;
+  if (!ASK_TIME_RE.test(String(doc.expires || ""))) return null;
+  const when = Date.parse(doc.expires);
+  if (!Number.isFinite(when) || !(when > Date.now())) return null;
+  const sig = doc.sig;
+  if (!sig || sig.alg !== "Ed25519" || String(sig.keyId || "") !== String(lead.keyId || "")) return null;
+  if (!/^[0-9a-f]{128}$/.test(String(sig.value || ""))) return null;
+  try {
+    const pub = crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(String(lead.public), "hex")]),
+      format: "der", type: "spki" });
+    if (!crypto.verify(null, askSignedBytes(doc), pub, Buffer.from(String(sig.value), "hex"))) return null;
+  } catch { return null; }
+  return { id: id };
+}
+function removeAnswer() {
+  const me = branchIdentity(false);
+  const root = catalogFolder();
+  if (!me || !folderAnswers(root)) { heldAnswer = { remove: true }; return; }
+  try { fs.unlinkSync(path.join(root, "desks", me.id, ANSWER_NAME)); }
+  catch (e) { if (e.code !== "ENOENT") { heldAnswer = { remove: true }; return; } }
+  if (heldAnswer && heldAnswer.remove) heldAnswer = null;
+}
+function writeAnswer(seal, pin, catalogDoc) {
+  const me = branchIdentity(true);
+  if (!me || !seal) return false;
+  const root = catalogFolder();
+  if (!folderAnswers(root)) return false;
+  const inner = JSON.stringify({ format: 1, kind: ANSWER_KIND, sha256: pin, catalog: catalogDoc });
+  const at = branchDest("catalog-answer");
+  if (!at) return false;
+  for (const dir of [path.join(at.root, "desks"), at.dir]) {
+    try { fs.mkdirSync(dir); } catch (e) { if (e.code !== "EEXIST") throw e; }
+  }
+  writeReplacing(at.dest, JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, inner), null, 1) + "\n");
+  return true;
+}
+/* An ask is answered once, and the answer is taken away when the ask is gone, unsigned, or expired. */
+function tryCatalogAsk(win) {
+  try {
+    if (!folderAnswers(catalogFolder())) return;
+    resealHeld(win);
+    const got = readAskFile();
+    if (got.away) return;
+    if (got.gone) { removeAnswer(); return; }
+    const use = teamUse();
+    if (use.away || !use.member) return;
+    const me = branchIdentity(false);
+    const ask = got.bad ? null : askFresh(got.doc, me, use.seal.lead);
+    if (!ask) { removeAnswer(); return; }
+    if (use.stale || !loadedText || catalogAskIds.indexOf(ask.id) >= 0) return;
+    const doc = catalogDocIn(loadedText);
+    if (!doc || doc.kind !== "etiuda-catalog") return;
+    let pin = "";
+    try { pin = signedSha(doc); } catch { return; }
+    if (!PIN_RE.test(pin)) return;
+    if (!writeAnswer(use.seal, pin, doc)) { heldAnswer = { id: ask.id }; return; }
+    rememberAsk(ask.id);
+    heldAnswer = null;
+    tellCopy(win, ask.id);
+  } catch (e) {
+    console.error("etiuda: the catalog ask could not be answered - " + e.message);
+  }
+}
+function watchAsks(win) {
+  if (asksWatcher) { try { asksWatcher.close(); } catch { /* already gone */ } asksWatcher = null; }
+  const root = catalogFolder();
+  if (!folderAnswers(root)) return;
+  try {
+    const w = fs.watch(path.join(root, ASK_DIR), () => {
+      clearTimeout(askSettle);
+      askSettle = setTimeout(() => tryCatalogAsk(win), 300);
+    });
+    w.on("error", () => { try { w.close(); } catch { /* already gone */ } if (asksWatcher === w) asksWatcher = null; });
+    asksWatcher = w;
+  } catch { asksWatcher = null; }
+}
+function tryHeldUse() {
+  if (!heldInUse && !heldAnswer) return;
+  if (!folderAnswers(catalogFolder())) return;
+  const use = heldInUse, ans = heldAnswer;
+  heldInUse = null;
+  heldAnswer = null;
+  if (use && use.remove) releaseInUse();
+  else if (use && use.text) {
+    noteHanded(use.text, use.source || "opened");
+    let pin = "";
+    try { const d = catalogDocIn(use.text); pin = d ? signedSha(d) : ""; } catch { pin = ""; }
+    if (pin) writeInUse(pin, theWindow);
+  }
+  if (ans && ans.remove) removeAnswer();
+  else if (ans) tryCatalogAsk(theWindow);
 }
 
 /* ---- the team: its file beside the catalogs, its lead's key pinned, and this desk's team keys -----------
@@ -2273,6 +2617,7 @@ function forgetLead(team) {
   ecFactsRead.clear();
   teamStamp = "";
   persistDeskEnvelope();
+  releaseInUse();
   console.error("etiuda: the lead of team " + team + " is forgotten, with the keys this desk kept for it");
   return joinView();
 }
@@ -2744,6 +3089,16 @@ function readDesk() {
       if (doc && Array.isArray(doc[k])) doc[k].forEach(t => { if (SEALED_TEAM_RE.test(String(t))) set.add(String(t)); });
     });
     teamJoin = joinKept(doc && doc.teamJoin);
+    if (doc && doc.inUse && typeof doc.inUse === "object" && !Array.isArray(doc.inUse)) {
+      const u = doc.inUse;
+      if (PIN_RE.test(String(u.sha || "")) && Number.isInteger(u.epoch) && u.epoch >= 1 && SEALED_TEAM_RE.test(String(u.team || "")))
+        inUseKept = { sha: String(u.sha), epoch: u.epoch, team: String(u.team) };
+    }
+    if (doc && Array.isArray(doc.catalogAsks)) doc.catalogAsks.forEach(id => {
+      const s = String(id || "");
+      if (ASK_ID_RE.test(s) && catalogAskIds.indexOf(s) < 0) catalogAskIds.push(s);
+    });
+    while (catalogAskIds.length > 64) catalogAskIds.shift();
     ensureDeskId();
     console.log("etiuda: desk read from " + file + ", " + Object.keys(keys).length + " keys");
     return keys;
@@ -3342,6 +3697,7 @@ ipcMain.handle("etiuda:catalog-read", (e, name, desk, asked, offer) => {
       if (readRevFloor(text, who, !!asked) === "below" && !asked) return { name: base, text: "" };
     } else if (!asked && (belowCatalogRev(text) || (offer && !unsolicitedLeadText(text)))) return { name: base, text: "" };
     if (asked) handAsked(text, who);
+    if (text && (asked || offer)) noteHanded(text, who ? "desk-file" : (asked ? "opened" : "folder"));
     return offTeam ? { name: base, text: text, notOnTeam: "off-roster" } : { name: base, text: text };
   }
   catch (err) {
@@ -3422,9 +3778,10 @@ ipcMain.handle("etiuda:pick-catalog-file", async (e, title, label) => {
   if (!file) return null;
   const name = path.basename(file);
   try {
-    const text = fs.readFileSync(file, "utf8");
+    const text = catalogTextOf(fs.readFileSync(file, "utf8"));
     historySoon(file, text);
     const json = catalogTextOf(text);
+    if (json) noteHanded(json, "opened");
     const note = rosterNoteText(json);
     return note ? { name: name, text: json, notOnTeam: note } : { name: name, text: json };
   }
