@@ -3108,11 +3108,13 @@ const t0 = Date.now();
     + JSON.stringify([tg0, tg1, tg2]) + ")");
   clean(e, "the routes through the valve");
 
-  /* BOARD 411: THE MENU FROM THE KEYBOARD. Enter was the copy key and Space an ordinary
-     character typed into the search box, so both were taken before the browser could act on the
-     control the keyboard had just walked to, and the Menu could be reached with Tab and not
-     opened. EVERY PRESS HERE IS A REAL ONE through the protocol: a synthesised el.click() says
-     nothing about what a key does, which is the whole subject. */
+  /* BOARD 411: THE MENU FROM THE KEYBOARD. Enter was the copy key, so it was taken before the
+     browser could act on the control the keyboard had just walked to, and the Menu could be
+     reached with Tab and not opened. Enter now acts on the focused button. Space does not: board
+     883 (Maxim, 2026-10-12 12:33) makes Space the key that switches the desk between normal and
+     paths mode wherever focus sits, a focused button included, so Space on the Menu button goes to
+     the lanes and leaves the Menu shut. EVERY PRESS HERE IS A REAL ONE through the protocol: a
+     synthesised el.click() says nothing about what a key does, which is the whole subject. */
   e = since();
   const menuOpen = () => p.evaluate(() => {
     const m = document.getElementById("settingsMenu");
@@ -3127,13 +3129,18 @@ const t0 = Date.now();
   await p.keyboard.press("Enter"); await sleep(450);
   const byEnter = await menuOpen();
   await menuShut();
+  const lanesUp = () => p.evaluate(() => document.body.classList.contains("e-lanes"));
   await p.evaluate(() => document.getElementById("settingsBtn").focus());
-  await p.keyboard.press("Space"); await sleep(450);
-  const bySpace = await menuOpen();
-  await menuShut();
-  check(byEnter && bySpace,
-    "411 Enter and Space act on the Menu button the keyboard is on, instead of copying a card"
-    + " and typing a space into the search box (Enter " + byEnter + ", Space " + bySpace + ")");
+  await p.keyboard.press("Space"); await sleep(700);
+  const bySpace = { menu: await menuOpen(), lanes: await lanesUp() };
+  /* And Space again takes the desk back, so the legs after this one find it in normal mode. */
+  await p.keyboard.press("Space"); await sleep(700);
+  bySpace.back = !(await lanesUp());
+  if (bySpace.menu) await menuShut();
+  check(byEnter && !bySpace.menu && bySpace.lanes && bySpace.back,
+    "411 Enter acts on the Menu button the keyboard is on instead of copying a card, and Space there goes to"
+    + " the lanes as board 883 rules, leaving the Menu shut, and back again (Enter " + byEnter + ", Space "
+    + JSON.stringify(bySpace) + ")");
   /* From the search box, which is where the caret spends the day and where a menu key has to
      work or it is not a menu key. */
   await p.evaluate(() => document.getElementById("intent").focus());
@@ -3147,7 +3154,7 @@ const t0 = Date.now();
   check(byF10 && byF10Anywhere,
     "411b F10 opens the Menu from the search box and with nothing focused (" + byF10 + ", "
     + byF10Anywhere + ")");
-  /* THE CONTROL. Only those two keys moved: an ordinary printable one still leaves a focused
+  /* THE CONTROL. Only Enter and Space moved: an ordinary printable key still leaves a focused
      button and lands in the search box, which is the behaviour the two are carved out of. */
   await p.evaluate(() => { const i = document.getElementById("intent"); i.value = "";
     i.dispatchEvent(new Event("input", { bubbles: true })); });
@@ -3163,7 +3170,7 @@ const t0 = Date.now();
   await sleep(600);
   check(sunk.v === "z" && sunk.focused === "intent" && !sunk.open,
     "411c control: an ordinary printable key still leaves the focused button for the search box,"
-    + " so 411 is two keys carved out rather than the sink switched off: " + JSON.stringify(sunk));
+    + " so Enter and Space are carved out rather than the sink switched off: " + JSON.stringify(sunk));
   clean(e, "the Menu from the keyboard");
 
   /* BOARD 369: THE LADDER'S LAST RUNG. Escape sheds one thing per press, and once there is
