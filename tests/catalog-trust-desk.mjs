@@ -337,9 +337,10 @@ async function launch(plan) {
   const readOffer = () => {
     const b = doc.getElementById("eCatalogOffer");
     return b ? { shown: true, trust: texts(b, ".ec-trust"), files: texts(b, ".ec-sub code"),
-      warn: texts(b, ".ec-warn"), signer: texts(b, ".ec-signer"), roster: texts(b, ".ec-roster"), title: texts(b, "#ecTitle")[0] || "",
+      warn: texts(b, ".ec-warn"), signer: texts(b, ".ec-signer"), roster: texts(b, ".ec-roster"), holds: texts(b, ".ec-holds"),
+      title: texts(b, "#ecTitle")[0] || "",
       yes: texts(b, "#ecYes")[0] || "", no: texts(b, "#ecNo")[0] || "" }
-      : { shown: false, trust: [], files: [], warn: [], signer: [], roster: [], yes: "", no: "" };
+      : { shown: false, trust: [], files: [], warn: [], signer: [], roster: [], holds: [], yes: "", no: "" };
   };
   const readLibrary = () => {
     const box = doc.getElementById("mgCatList");
@@ -492,6 +493,12 @@ async function launch(plan) {
         label: at.getAttribute("aria-label"), focus: (doc.activeElement && doc.activeElement.id) || "", offer: standing(),
         no: no ? no.textContent.trim() : null });
     },
+    // The name's own handler: a waiting edition opened again, which is how a settled failure is offered a second time.
+    reopen: () => {
+      const at = doc.getElementById("catNow");
+      if (!at || typeof at.onclick !== "function") throw new Error("the name is not waiting");
+      at.onclick();
+    },
     edback: () => {
       DLG.dismissModal();
       const b = bubble();
@@ -584,7 +591,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 100;
+  const EXPECTED = 109;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -947,7 +954,7 @@ async function parent() {
        from a variable: a Take keyed to a copy of the catalog, or a Load handed a re-parsed one, shows nowhere before the
        desk starts again, and then the lead's text is gone from the agent's desk or the agent's own words are. The desk
        holds edition 1 with an edit of this agent's on one card, two text fields of it (title and text). The folder holds
-       edition 2: the lead changed that card's text, added one card, retired one, and left a note. */
+       edition 2, signed under the same key as edition 1: the lead changed that card's text, added one card, retired one, and left a note. */
     const BODY1 = "Good day, how can I help?", BODY2 = "Good day, how may I help you today?";
     const ed1 = () => { const d = payload("2026-09-01");
       d.cards = [{ id: "c-a", shelf: "t-op", bodyShape: "plain", title: { en: "Opening" }, body: { en: "Hello." } },
@@ -961,10 +968,10 @@ async function parent() {
     const AGENT = { t: "My greeting", en: "Good day, how can I be of use?" };
     /* A desk that holds edition 1 and carries the agent's edit, the edit made by the page's own save, and edition 2 in the folder. */
     const editionDesk = () => {
-      const lab = scenario([["catalogs/lamp.ec", ed1()]]);
+      const lab = scenario([["catalogs/lamp.ec", sign(ed1())], ["catalogs/etiuda-ring.json", ring]]);
       run(lab, ["boot", "settle", "offer", "yes", "settle"]);
       const s74 = run(lab, ["desk", "override", "settle"], false, { override: AGENT });
-      fs.writeFileSync(path.join(lab, "catalogs", "lamp.ec"), JSON.stringify(ed2()), "utf8");
+      fs.writeFileSync(path.join(lab, "catalogs", "lamp.ec"), JSON.stringify(sign(ed2())), "utf8");
       return { lab: lab, setup: s74 };
     };
     const rd = (o, k) => (o && o.read && o.read[k]) || {};
@@ -1010,15 +1017,15 @@ async function parent() {
     /* A NEW EDITION'S MARKS, by the route it came: Import accepts after a promise (the watch's handle cleared or put first),
        the boot's offer at once. Read from the desk file the next launch reads: the edition held and the marks beside it. */
     const marksAfter = (route) => {
-      const lab = scenario([["catalogs/lamp.ec", ed1()]]);
+      const lab = scenario([["catalogs/lamp.ec", sign(ed1())], ["catalogs/etiuda-ring.json", ring]]);
       const first = run(lab, ["boot", "settle", "offer", "yes", "settle"]);
       let second;
       if (route === "import") {
         fs.mkdirSync(path.join(lab, "elsewhere"));
-        fs.writeFileSync(path.join(lab, "elsewhere", "lamp-v2.ec"), JSON.stringify(ed2()), "utf8");
+        fs.writeFileSync(path.join(lab, "elsewhere", "lamp-v2.ec"), JSON.stringify(sign(ed2())), "utf8");
         second = run(lab, ["desk", "import:elsewhere/lamp-v2.ec", "settle", "yes", "settle"]);
       } else {
-        fs.writeFileSync(path.join(lab, "catalogs", "lamp.ec"), JSON.stringify(ed2()), "utf8");
+        fs.writeFileSync(path.join(lab, "catalogs", "lamp.ec"), JSON.stringify(sign(ed2())), "utf8");
         second = run(lab, ASK.concat(["yes", "settle"]));
       }
       const keys = JSON.parse(fs.readFileSync(path.join(lab, "userdata", "desk.json"), "utf8")).keys || {};
@@ -1041,7 +1048,7 @@ async function parent() {
     const dD = editionDesk();
     const BW = run(dD.lab, ASK.concat(["no", "settle", "readwait"]), false, BAND);
     const CW = run(dD.lab, ASK.concat(["readwait"]), false, BAND);
-    const labL = scenario([["catalogs/lamp.ec", ed1()]]);
+    const labL = scenario([["catalogs/lamp.ec", sign(ed1())], ["catalogs/etiuda-ring.json", ring]]);
     const LW0 = run(labL, ["boot", "settle", "offer", "yes", "settle"]);
     const LW = run(labL, ASK.concat(["readwait"]), false, BAND);
     const errsW = [dW.setup, AW, dD.setup, BW, CW, LW0, LW].flatMap(o => o.errors || []);
@@ -1377,6 +1384,122 @@ async function parent() {
     check(boot76o.heldRev === 2 && plainly(o76o) && (o76o.trust || []).some(l => CHANGED.test(l))
       && ![boot76o, load76o].some(o => (o.errors || []).length),
       "76o a lower rev naming the held catalog's key id, whose signature then fails, is offered plainly once that is known: " + said76(o76o));
+
+    /* AN UPDATE IS A HIGHER REV UNDER THE KEY THE HELD CATALOG VERIFIED UNDER. The higher file sits in a folder the
+       shell does not scan, so the boot holds rev 2 and only a double-click offers rev 3. Unsigned, another key, an
+       unverified catalog in use, and a file whose signature then fails are each offered plainly. The offer is still
+       made, and the unsigned one still loads. */
+    const UPDATE_FOUND = "Updated catalog found", LOAD_UPDATE = "Load the update", KEEP_CURRENT = "Keep current";
+    const asUpdate = o => o.shown === true && !(o.warn || []).length && o.title === UPDATE_FOUND && o.yes === LOAD_UPDATE && o.no === "Not now";
+    const plainKept = o => plainly(o) && o.no === KEEP_CURRENT;
+    const higherLab = (file, ringText) => {
+      const lab = scenario([["catalogs/lamp-2.ec", sign(atRev(2, "2026-09-01"))], ["catalogs/etiuda-ring.json", ringText]]);
+      fs.mkdirSync(path.join(lab, "elsewhere"));
+      fs.writeFileSync(path.join(lab, "elsewhere", "lamp-3.ec"), JSON.stringify(file), "utf8");
+      return lab;
+    };
+    const lab76p = higherLab(sign(atRev(3, "2026-09-20")), ring);
+    const boot76p = run(lab76p, ["boot", "settle", "offer", "yes", "settle"]);
+    const open76p = run(lab76p, ["wire", "click:elsewhere/lamp-3.ec", "settle", "offer"], true);
+    const o76p = open76p.offers[open76p.offers.length - 1] || {};
+    check(boot76p.heldRev === 2 && boot76p.heldAtEnd === V2.V2_SIG_VALID && asUpdate(o76p)
+      && ![boot76p, open76p].some(o => (o.errors || []).length),
+      "76p with a catalog held verified under the same key, a higher rev of it opened on purpose is offered as an update: " + said76(o76p)
+      + ", errors " + JSON.stringify([boot76p, open76p].flatMap(o => o.errors || []).slice(0, 2)));
+
+    const lab76q = higherLab(atRev(3, "2026-09-20"), ring);
+    const boot76q = run(lab76q, ["boot", "settle", "offer", "yes", "settle"]);
+    const open76q = run(lab76q, ["wire", "click:elsewhere/lamp-3.ec", "settle", "offer", "yes", "settle"], true);
+    const o76q = open76q.offers[0] || {};
+    check(boot76q.heldRev === 2 && boot76q.heldAtEnd === V2.V2_SIG_VALID && plainKept(o76q)
+      && open76q.reloaded === true && open76q.heldRev === 3 && open76q.editionMarks === 0
+      && ![boot76q, open76q].some(o => (o.errors || []).length),
+      "76q a higher rev unsigned, over a catalog held verified, is offered plainly and loads, and is not announced as a new edition: "
+      + said76(o76q) + ", rev " + open76q.heldRev + ", marks " + open76q.editionMarks);
+
+    const lab76r = higherLab(sign2(atRev(3, "2026-09-20")), ring2);
+    const boot76r = run(lab76r, ["boot", "settle", "offer", "yes", "settle"]);
+    const open76r = run(lab76r, ["wire", "click:elsewhere/lamp-3.ec", "settle", "offer"], true);
+    const o76r = open76r.offers[open76r.offers.length - 1] || {};
+    check(boot76r.heldRev === 2 && boot76r.heldAtEnd === V2.V2_SIG_VALID && plainKept(o76r)
+      && ![boot76r, open76r].some(o => (o.errors || []).length),
+      "76r a higher rev under another key, over a catalog held verified, is offered plainly: " + said76(o76r)
+      + ", errors " + JSON.stringify([boot76r, open76r].flatMap(o => o.errors || []).slice(0, 2)));
+
+    const lab76s = scenario([["catalogs/lamp-1.ec", atRev(1, "2026-09-01")], ["catalogs/etiuda-ring.json", ring]]);
+    fs.mkdirSync(path.join(lab76s, "elsewhere"));
+    fs.writeFileSync(path.join(lab76s, "elsewhere", "lamp-3.ec"), JSON.stringify(sign(atRev(3, "2026-09-20"))), "utf8");
+    const boot76s = run(lab76s, ["boot", "settle", "offer", "yes", "settle"]);
+    const open76s = run(lab76s, ["wire", "click:elsewhere/lamp-3.ec", "settle", "offer"], true);
+    const o76s = open76s.offers[open76s.offers.length - 1] || {};
+    check(boot76s.heldRev === 1 && boot76s.heldAtEnd === V2.V2_SIG_NONE && plainKept(o76s)
+      && ![boot76s, open76s].some(o => (o.errors || []).length),
+      "76s a higher rev opened over a catalog that did not verify is offered plainly: " + said76(o76s)
+      + ", errors " + JSON.stringify([boot76s, open76s].flatMap(o => o.errors || []).slice(0, 2)));
+
+    const lab76t = higherLab(bend(sign(atRev(3, "2026-09-20"))), ring);
+    const boot76t = run(lab76t, ["boot", "settle", "offer", "yes", "settle"]);
+    const open76t = run(lab76t, ["wire", "click:elsewhere/lamp-3.ec", "settle", "offer"], true);
+    const o76t = open76t.offers[open76t.offers.length - 1] || {};
+    check(boot76t.heldRev === 2 && plainKept(o76t) && (o76t.trust || []).some(l => CHANGED.test(l))
+      && ![boot76t, open76t].some(o => (o.errors || []).length),
+      "76t a higher rev naming the held catalog's key id, whose signature then fails, is offered plainly once that is known: " + said76(o76t));
+
+    /* THE LATE CHECK TURNS A SAME-KEY UPDATE INTO A REPLACEMENT. Rev 2 is held verified, then the file in the
+       folder is that catalog's next rev with the signature bent and one card's text changed, so a load that still
+       thinks it is an edition writes a mark and a load that does not writes none. */
+    const lab76u = scenario([["catalogs/lamp-2.ec", sign(atRev(2, "2026-09-01"))], ["catalogs/etiuda-ring.json", ring]]);
+    const boot76u = run(lab76u, ["boot", "settle", "offer", "yes", "settle"]);
+    const broken76u = bend(sign(atRev(3, "2026-09-20")));
+    broken76u.cards.forEach(card => { if (card.id === "c-warm") card.body = { en: "Good day, later." }; });
+    fs.writeFileSync(path.join(lab76u, "catalogs", "lamp-2.ec"), JSON.stringify(broken76u), "utf8");
+    const found76u = run(lab76u, ["desk", "boot", "settle", "settle", "offer", "readwait", "yes", "settle"], true, { band: true });
+    const o76u = found76u.offers[0] || {}, w76u = ((found76u.read && found76u.read.wait) || [])[0] || {};
+    check(boot76u.heldRev === 2 && boot76u.heldAtEnd === V2.V2_SIG_VALID && plainKept(o76u)
+      && !(o76u.holds || []).length && (o76u.trust || []).some(l => CHANGED.test(l))
+      && w76u.waiting === false && w76u.dot === false
+      && found76u.reloaded === true && found76u.heldRev === 3 && found76u.editionMarks === 0
+      && ![boot76u, found76u].some(o => (o.errors || []).length),
+      "76u a higher rev whose signature fails after the offer opened drops the carries-on line and the waiting dot, and Yes loads it as a replacement: "
+      + said76(o76u) + ", holds " + JSON.stringify(o76u.holds || null) + ", wait " + JSON.stringify(w76u)
+      + ", rev " + found76u.heldRev + ", marks " + found76u.editionMarks
+      + ", errors " + JSON.stringify([boot76u, found76u].flatMap(o => o.errors || []).slice(0, 2)));
+
+    /* THE SIGNATURE ALREADY FAILED when this offer was built. The first bubble is declined before the check
+       returns, so the name still waits, and opening it again is the offer of that same file. */
+    const lab76v = scenario([["catalogs/lamp-2.ec", sign(atRev(2, "2026-09-01"))], ["catalogs/etiuda-ring.json", ring]]);
+    const boot76v = run(lab76v, ["boot", "settle", "offer", "yes", "settle"]);
+    fs.writeFileSync(path.join(lab76v, "catalogs", "lamp-2.ec"), JSON.stringify(bend(sign(atRev(3, "2026-09-20")))), "utf8");
+    const again76v = run(lab76v, ["desk", "boot", "escape", "settle", "settle", "reopen", "offer"], true, { band: true });
+    const o76v = again76v.offers[0] || {};
+    check(boot76v.heldRev === 2 && boot76v.heldAtEnd === V2.V2_SIG_VALID && plainKept(o76v)
+      && (o76v.trust || []).some(l => CHANGED.test(l))
+      && ![boot76v, again76v].some(o => (o.errors || []).length),
+      "76v a higher rev whose signature has already failed when the offer opens is offered plainly: " + said76(o76v)
+      + ", errors " + JSON.stringify([boot76v, again76v].flatMap(o => o.errors || []).slice(0, 2)));
+
+    /* AN EQUAL REV IS NOT AN UPDATE UNLESS IT VERIFIED UNDER THE HELD KEY. Unsigned, with a later date, keeps
+       the trust line and is offered as a replacement. The same key id, once its signature has failed, likewise. */
+    const UNSIGNED_EDITION = /is signed, and this edition is not/;
+    const lab76w = higherLab(atRev(2, "2026-10-01"), ring);
+    const boot76w = run(lab76w, ["boot", "settle", "offer", "yes", "settle"]);
+    const open76w = run(lab76w, ["wire", "click:elsewhere/lamp-3.ec", "settle", "offer", "readwait"], true, { band: true });
+    const o76w = open76w.offers[0] || {}, w76w = ((open76w.read && open76w.read.wait) || [])[0] || {};
+    check(boot76w.heldRev === 2 && boot76w.heldAtEnd === V2.V2_SIG_VALID && plainKept(o76w)
+      && (o76w.trust || []).some(l => UNSIGNED_EDITION.test(l))
+      && w76w.waiting === false && w76w.dot === false
+      && ![boot76w, open76w].some(o => (o.errors || []).length),
+      "76w an unsigned equal rev with a later date, over a catalog held verified, is offered plainly: " + said76(o76w)
+      + ", trust " + JSON.stringify(o76w.trust || null) + ", wait " + JSON.stringify({ waiting: w76w.waiting, dot: w76w.dot })
+      + ", errors " + JSON.stringify([boot76w, open76w].flatMap(o => o.errors || []).slice(0, 2)));
+
+    const lab76x = higherLab(bend(sign(atRev(2, "2026-10-01"))), ring);
+    const boot76x = run(lab76x, ["boot", "settle", "offer", "yes", "settle"]);
+    const open76x = run(lab76x, ["wire", "click:elsewhere/lamp-3.ec", "settle", "offer"], true);
+    const o76x = open76x.offers[open76x.offers.length - 1] || {};
+    check(boot76x.heldRev === 2 && plainKept(o76x) && (o76x.trust || []).some(l => CHANGED.test(l))
+      && ![boot76x, open76x].some(o => (o.errors || []).length),
+      "76x an equal rev naming the held catalog's key id, whose signature then fails, is offered plainly once that is known: " + said76(o76x));
 
     /* The yes is what raises the mark for a file the agent opened: the shell's mark in desk.json, read after a Load declined
        and after the same Load taken. The file is a second catalog of the same key, dated before the first, so no boot chooses it
