@@ -410,6 +410,7 @@ UI_STRINGS.pl={
   "Open the older edition":"Otwórz starsze wydanie",
   "Keep the newer one":"Zostaw nowsze",
   "This file is signed with the key {KEY}, which is not the team lead's.":"Ten plik jest podpisany kluczem {KEY}, który nie jest kluczem lidera zespołu.",
+  "This file comes from a desk outside the team.":"Ten plik pochodzi ze stanowiska spoza zespołu.",
   "Updated catalog found":"Jest nowsza wersja katalogu",
   "Watching":"Obserwowany:",
   "Check for updates":"Sprawdź aktualizacje",

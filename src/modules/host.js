@@ -144,13 +144,19 @@ function eChooseCatalogFolder(title){
 /* One file out of that folder, by name. {name,text} or null; an empty text is a file that would
    not read, which is the caller's to speak about. `asked` is a Load the person chose: the shell
    then hands a lower rev, and the page decides whether it is offered. `offer` is a read meant to be
-   offered unasked, which the shell hands only where a lead this desk pinned signed it. */
+   offered unasked, which the shell hands only where a lead this desk pinned signed it. An asked
+   colleague's file whose desk is off the team's roster also carries `notOnTeam`, the shell's reason. */
 function eReadCatalogFile(name,desk,asked,offer){
   const h=eHost();
   if(!h || typeof h.readCatalogFile!=="function") return Promise.resolve(null);
   try{
     return Promise.resolve(h.readCatalogFile(String(name||""),desk?String(desk):"",!!asked,!!offer))
-      .then(v=>(v&&typeof v==="object")?{name:String(v.name||""),text:String(v.text||"")}:null)
+      .then(v=>{
+        if(!v || typeof v!=="object") return null;
+        const got={name:String(v.name||""),text:String(v.text||"")};
+        if(typeof v.notOnTeam==="string" && v.notOnTeam) got.notOnTeam=v.notOnTeam;
+        return got;
+      })
       .catch(()=>null);
   }catch(e){ return Promise.resolve(null); }
 }
@@ -176,12 +182,18 @@ function eHasCatalogPicker(){
   return !!h && typeof h.pickCatalogFile==="function";
 }
 /* {name,text} for a file chosen, null for a dialog closed. An empty text is a file that would
-   not read, which is the caller's to say something about. */
+   not read, which is the caller's to say something about. A desk file whose writer is off the
+   team's roster also carries notOnTeam, as eReadCatalogFile does. */
 function ePickCatalogFile(title,label){
   if(!eHasCatalogPicker()) return Promise.resolve(null);
   try{
     return Promise.resolve(eHost().pickCatalogFile(String(title||""),String(label||"")))
-      .then(v=>(v&&typeof v==="object")?{name:String(v.name||""),text:String(v.text||"")}:null)
+      .then(v=>{
+        if(!v || typeof v!=="object") return null;
+        const got={name:String(v.name||""),text:String(v.text||"")};
+        if(typeof v.notOnTeam==="string" && v.notOnTeam) got.notOnTeam=v.notOnTeam;
+        return got;
+      })
       .catch(()=>null);
   }catch(e){ return Promise.resolve(null); }
 }

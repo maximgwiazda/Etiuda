@@ -92,7 +92,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   pickCatalogFolder: (title) => ipcRenderer.invoke("etiuda:pick-catalog-folder", String(title || "")),
   /* Import catalog's dialog. Answers {name,text} for a file the person chose, null for a
      dialog they closed, and an empty text for one that would not read: the page decides what
-     to say about each, because the caption and every message are the page's. */
+     to say about each, because the caption and every message are the page's. A desk file whose
+     writer is off the roster also carries notOnTeam, as an asked catalog-read does. */
   pickCatalogFile: (title, label) =>
     ipcRenderer.invoke("etiuda:pick-catalog-file", String(title || ""), String(label || "")),
   /* The desk, as text in both directions. An object across the bridge would arrive as a proxy,
@@ -126,8 +127,9 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
      engine's own reader: the shell has already refused anything that is not a format 2 catalog,
      and two parsers agreeing is what keeps a file the shell accepts a file the engine accepts. */
   onCatalogFile: (fn) => ipcRenderer.on("etiuda:catalog-file",
-    (_e, text, name, where, asked, why, builtIn) =>
-      fn(String(text), String(name || ""), String(where || ""), !!asked, String(why || ""), !!builtIn)),
+    (_e, text, name, where, asked, why, builtIn, notOnTeam) =>
+      fn(String(text), String(name || ""), String(where || ""), !!asked, String(why || ""), !!builtIn,
+        notOnTeam === "off-roster" ? "off-roster" : "")),
   /* A catalog dropped on the window, handed over by the path its File has on disk and offered as
      a double-clicked file is. False where the File has no path, and the page reads it instead. */
   offerDropped: (file) => {
