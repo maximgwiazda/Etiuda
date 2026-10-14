@@ -4046,13 +4046,31 @@ const t0 = Date.now();
             const s = document.getElementById("meAdvSum");
             return s ? String(s.textContent || "") : "";
           });
-          if (!await pointerClick(q, 'input[name="meAddr_pl"][value="titleFirst"]')) {
+          const PL_FORM = 'input[name="meAddr_pl"][value="titleFirst"]';
+          const formSet = () => {
+            const el = document.querySelector('input[name="meAddr_pl"][value="titleFirst"]');
+            return !!(el && el.checked);
+          };
+          if (!await pointerClick(q, PL_FORM)) {
             note(shown, "the pl form was not under the pointer");
           } else {
-            await arrived(q, () => {
-              const el = document.querySelector('input[name="meAddr_pl"][value="titleFirst"]');
-              return !!(el && el.checked);
-            }, 3000);
+            /* A press that does not take is said, with where it landed, and the radio is pressed once more where
+               puppeteer measures it at the moment of the press: if that takes, the first press was aimed at a
+               place the radio had left (the harness), and if it does not, something on the page stops it. */
+            if (!await arrived(q, formSet, 3000)) {
+              shown.pressMissed = await q.evaluate(s => {
+                const el = document.querySelector(s);
+                if (!el) return { found: false };
+                const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+                const top = document.elementFromPoint(x, y);
+                return { found: true, checked: el.checked, rect: [r.left, r.top, r.width, r.height].map(Math.round),
+                  top: top ? top.tagName + (top.id ? "#" + top.id : "") + (top.className ? "." + String(top.className).trim().replace(/\s+/g, ".") : "") : null };
+              }, PL_FORM);
+              const handle = await q.$(PL_FORM);
+              if (handle) { await handle.click(); shown.pressRetried = await arrived(q, formSet, 3000); }
+              console.log("  870 the first press on the pl form did not take: "
+                + JSON.stringify({ missed: shown.pressMissed, retried: !!shown.pressRetried }));
+            }
             const dlg = await readDialog(q);
             shown.dialog = {
               pl: dlg.pl, en: dlg.en, vocOff: dlg.vocOff, firstOn: dlg.firstOn,
