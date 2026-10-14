@@ -7560,9 +7560,9 @@ What you type stays in this browser only.`;
     "It does not match": "Nie zgadza się",
     "Team lead's key": "Klucz lidera zespołu",
     "Forget this lead": "Zapomnij tego lidera",
-    "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and can ask for a copy of it. The desk's use counts only in the team's totals, never on its own.": "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), i może poprosić o jego kopię. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
-    "The team's lead can see which catalog this desk uses, by name and edition, and can ask for a copy of it. The desk's use counts only in the team's totals, never on its own.": "Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), i może poprosić o jego kopię. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
-    "At the team lead's request, a copy of the catalog in use here was sent to them.": "Na prośbę lidera zespołu przesłano kopię katalogu używanego na tym stanowisku.",
+    "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.": "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
+    "The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.": "Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
+    "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.": "Na prośbę Studia lidera zespołu przesłano zespołowi kopię katalogu używanego na tym stanowisku.",
     "Studio's signing key": "Klucz podpisu Studia",
     "A desk's key": "Klucz stanowiska",
     "Catalogs in {FOLDER} appear here: load one from anywhere else, or put its file in the folder.": "Tu pojawią się katalogi z {FOLDER}: wystarczy wczytać katalog z innego miejsca albo umieścić plik w tym folderze.",
@@ -14690,7 +14690,7 @@ What you type stays in this browser only.`;
     return joinNow;
   }
   function noteCatalogCopy() {
-    toast("At the team lead's request, a copy of the catalog in use here was sent to them.");
+    toast("At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.");
   }
   function wireTeamJoin() {
     if (!eHasJoin()) return;
@@ -14741,7 +14741,7 @@ What you type stays in this browser only.`;
     repaintJoin();
   }
   function joinDisclosure() {
-    return '<div class="e-join-meta">' + esc(t("Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and can ask for a copy of it. The desk's use counts only in the team's totals, never on its own.")) + "</div>";
+    return '<div class="e-join-meta">' + esc(t("Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.")) + "</div>";
   }
   function joinWhere(o) {
     if (!o) return "";
@@ -29293,7 +29293,7 @@ What you type stays in this browser only.`;
       ) + (lastSyncStamp ? row(t("Last sync"), "", "<span>" + esc(lastSyncStamp) + "</span>") : "") + /* One row per team lead this desk trusts: the key the agent compared, and the way out where it was wrong. */
       teamLeads().map((l, i) => row(
         t("Team lead's key"),
-        i === 0 ? t("The team's lead can see which catalog this desk uses, by name and edition, and can ask for a copy of it. The desk's use counts only in the team's totals, never on its own.") : "",
+        i === 0 ? t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.") : "",
         '<span class="e-lead-key">' + keySignHtml("studio", l.print) + '</span><button type="button" class="btn" data-forget-lead="' + esc(l.team) + '">' + esc(t("Forget this lead")) + "</button>"
       )).join("") + /* Under a host only: a browser has no catalog folder to share. */
       (eHasShared() ? row(

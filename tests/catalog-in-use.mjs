@@ -23,12 +23,12 @@ const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 const EXPECTED = 35;
 
-const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and can ask for a copy of it. The desk's use counts only in the team's totals, never on its own.";
-const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), i może poprosić o jego kopię. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
-const STATUS_EN = "The team's lead can see which catalog this desk uses, by name and edition, and can ask for a copy of it. The desk's use counts only in the team's totals, never on its own.";
-const STATUS_PL = "Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), i może poprosić o jego kopię. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
-const SENT_EN = "At the team lead's request, a copy of the catalog in use here was sent to them.";
-const SENT_PL = "Na prośbę lidera zespołu przesłano kopię katalogu używanego na tym stanowisku.";
+const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.";
+const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
+const STATUS_EN = "The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.";
+const STATUS_PL = "Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
+const SENT_EN = "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.";
+const SENT_PL = "Na prośbę Studia lidera zespołu przesłano zespołowi kopię katalogu używanego na tym stanowisku.";
 const CARD = "The quay lamp is wrapped for the crossing.";
 
 let asserted = 0, failed = 0;

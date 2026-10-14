@@ -124,7 +124,7 @@ function joinTook(v,changed){
   return joinNow;
 }
 function noteCatalogCopy(){
-  toast("At the team lead's request, a copy of the catalog in use here was sent to them.");
+  toast("At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.");
 }
 function wireTeamJoin(){
   if(!eHasJoin()) return;
@@ -169,7 +169,7 @@ function openJoinPaste(){
   repaintJoin();
 }
 function joinDisclosure(){
-  return '<div class="e-join-meta">'+esc(t("Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and can ask for a copy of it. The desk's use counts only in the team's totals, never on its own."))+'</div>';
+  return '<div class="e-join-meta">'+esc(t("Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own."))+'</div>';
 }
 function joinWhere(o){
   if(!o) return "";
