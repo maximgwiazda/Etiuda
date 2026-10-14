@@ -2903,7 +2903,17 @@ const t0 = Date.now();
      recorded as it arrives with the box it covers, and those covering the pressed block are
      named. Pressed on the second block of a card of alternatives holding two or more, none of
      them in the trace, so the trace's legs below can move it. Such a card is a deck, so the pointer
-     rests on its front first and the second block is pressed where it stands dealt. */
+     rests on its front first and the second block is pressed where it stands dealt.
+     THE KEYBOARD'S DECK IS HANDED BACK FIRST. The mark leg above leaves the keyboard's mark on the
+     head card, and a deck holding it stands dealt over the cards below until a pointer move hands
+     it back, unless the pointer rests on it (deck.js deckKbdSync). Pointed at a lower card's front,
+     the pointer met that deck's dealt reply and held it open, and the press copied the head card's
+     reply: the trace below read [null,null,null] in the run of 2026-10-14, as a headless replay of
+     the legs before this one showed. So the pointer leaves the list and the press waits until no
+     deck stands open, as a person's hand on the mouse would find the desk. */
+  await p.mouse.move(4, 4); await sleep(50); await p.mouse.move(6, 6);
+  const kbdHanded = await p.waitForFunction(() => !document.querySelector("#list .card.deck.deck-open"),
+    { timeout: 3000, polling: 50 }).then(() => true, () => false);
   const cpCard = await p.evaluate(() => {
     const card = [...document.querySelectorAll("#list .card[data-id]")].find(c =>
       c.querySelectorAll(".txt[data-v]").length >= 2 && !c.matches("[data-erec]") && !c.querySelector("[data-erec]")
@@ -2949,7 +2959,7 @@ const t0 = Date.now();
     }, id);
     const only = (g, at) => !!g && g.every((x, i) => x === (i === at));
     // Read out, not judged: a spine that fails with the trace missing here is a lost attribute, with it present a wrong paint.
-    console.log("  spine trace before g0, each block's data-erec: " + JSON.stringify(await p.evaluate(i => {
+    console.log("  spine trace before g0, the keyboard's deck handed back " + kbdHanded + ", each block's data-erec: " + JSON.stringify(await p.evaluate(i => {
       const card = document.querySelector('#list .card[data-id="' + CSS.escape(i) + '"]');
       return card ? [...card.querySelectorAll(".txt[data-v]")].map(b => b.getAttribute("data-erec")) : null;
     }, cpAt.id)));
