@@ -667,10 +667,10 @@ function catalogFromFileText(text,fileName){
 /* THE READING HALF OF IMPORT, wherever the bytes came from - a browser's file input, the
    shell's dialog - so that a file the folder scan accepts is a file this accepts. The picker
    route below keeps its own tail, because it has a handle to store before the reload. */
-function importCatalogText(text,fileName){
+function importCatalogText(text,fileName,offTeam){
   const c=catalogFromFileText(String(text||""),fileName);
   if(!c) return false;
-  hooks.offerPickedCatalog(c,fileName,()=>eWatchClear().then(()=>activateCatalog(c,{from:fileName})));
+  hooks.offerPickedCatalog(c,fileName,()=>eWatchClear().then(()=>activateCatalog(c,{from:fileName})),!!offTeam);
   return true;
 }
 /* The host's dialog, and the file comes back already read: the engine calls no OS API. No watch
@@ -680,7 +680,7 @@ function importCatalogHosted(){
   ePickCatalogFile(t("Load catalog"),t("Catalogs")).then(got=>{
     if(!got) return;
     if(!got.text){ toastRefusal(t("{FILE} could not be read.").split("{FILE}").join(got.name)); return; }
-    importCatalogText(got.text,got.name);
+    importCatalogText(got.text,got.name,!!got.notOnTeam);
   });
 }
 /* The plain input, which is all Firefox has. It also puts down any watch: the file being

@@ -676,19 +676,22 @@ try {
     g.doc.name = "epoch 1 put back";
     const back = await A.ask("etiuda:branch-write", g.stem, JSON.stringify(g.doc));
     const again = facts(await readText(B, g.stem + ".ec", me.id));
+    const askedBack = (await B.ask("etiuda:catalog-read", g.stem + ".ec", me.id, true)) || {};
+    const asked = facts(askedBack.text || "");
     const outer = JSON.parse(fs.readFileSync(file, "utf8"));
     const onDisk = facts(outer.kind === "etiuda-sealed" ? (A.api.openSealed(K1, outer) || "") : JSON.stringify(outer));
     check(wrote && wrote.ok === true && wrote.rev === 1 && seen.rev === 1 && heldEpoch === 2
-      && held(removed) && held(back) && again.rev === 1 && onDisk.rev === 1,
+      && held(removed) && held(back) && again.rev === null && asked.rev === 1 && !!askedBack.notOnTeam && onDisk.rev === 1,
       "888af removed at epoch 2 with no key, then the epoch 1 file put back, the next write holds: "
       + (wrote && wrote.ok ? "wrote rev " + wrote.rev : "no first write")
       + ", colleague saw " + seen.rev + ", epoch mark " + heldEpoch
       + ", removal " + (held(removed) ? "held" : "wrote")
       + ", put back " + (held(back) ? "held" : "wrote rev " + (back && back.rev))
-      + ", colleague then " + again.rev + ", on disk " + onDisk.rev);
+      + ", colleague then " + again.rev + " unasked and " + asked.rev + " asked (note " + JSON.stringify(askedBack.notOnTeam || null) + ")"
+      + ", on disk " + onDisk.rev);
   }
 
-  /* ---- a stranger's signed file names another desk's file id at a huge rev ----------------------- */
+  /* ---- a colleague's signed file names another desk's file id at a huge rev ---------------------- */
   {
     const SHARE = folder("stranger-mark");
     put(SHARE, "etiuda-ring.json", RING);
@@ -711,6 +714,9 @@ try {
     const pair = crypto.generateKeyPairSync("ed25519");
     const pub = pubHex(pair.publicKey);
     const strangerId = "k-" + crypto.createHash("sha256").update(Buffer.from(pub, "hex")).digest("hex").slice(0, 16);
+    // A desk on the roster, so the read reaches the mark rule and not the refusal of a desk off the roster (board 889).
+    put(SHARE, "etiuda-team.json", teamFile(TEAM, 1, [entry(A, me, K1, TEAM, 1), entry(A, other, K1, TEAM, 1),
+      { desk: { id: strangerId, key: pub, box: "ab".repeat(32) } }]));
     const lure = {
       format: 2, kind: "etiuda-catalog", id: ownerFileId, rev: 1e15, name: "Planted quay",
       date: "2026-08-01",
