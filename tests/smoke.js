@@ -3839,18 +3839,24 @@ const t0 = Date.now();
       }
       return "";
     }
-    async function hoverCard(q, id) {
-      const pt = await q.evaluate(cardId => {
+    /* The retry centres the pencil, not the card, and rests on the card's head. A tall card centred
+       puts its head, and the pencil in it, under the sticky header's pills; centring the card again
+       put it there again, and 870a to 870c read "the editor did not open" in the run of 2026-10-14.
+       A headless replay of this page measured the pencil's centre under SPAN.pill-lab on the first
+       try, and hit on a retry that centred the pencil itself. */
+    async function hoverCard(q, id, onPencil) {
+      const pt = await q.evaluate((cardId, pencil) => {
         const card = document.querySelector('#list .card[data-id="' + CSS.escape(cardId) + '"]');
         if (!card) return null;
-        card.scrollIntoView({ block: "center", inline: "nearest" });
-        const body = card.querySelector(".txt") || card;
+        const ed = pencil ? card.querySelector('[data-act="edit"]') : null;
+        (ed || card).scrollIntoView({ block: "center", inline: "nearest" });
+        const body = ed ? (card.querySelector(".chead") || card) : (card.querySelector(".txt") || card);
         const r = body.getBoundingClientRect();
         const x = Math.round(r.left + Math.min(48, Math.max(8, r.width / 2)));
         const y = Math.round(r.top + Math.min(36, Math.max(8, r.height / 2)));
         const top = document.elementFromPoint(x, y);
         return { x: x, y: y, on: !!(top && card.contains(top)) };
-      }, id);
+      }, id, !!onPencil);
       if (!pt) return false;
       await q.mouse.move(pt.x, pt.y);
       await sleep(60);
@@ -3871,12 +3877,7 @@ const t0 = Date.now();
       let onCard = await hoverCard(q, id);
       let box = onCard ? await editBox(q, id) : null;
       if (!box || !box.hit) {
-        await q.evaluate(() => {
-          const sc = document.getElementById("pageScroll") || document.scrollingElement;
-          if (sc) sc.scrollTop = Math.max(0, sc.scrollTop - 80);
-        });
-        await sleep(80);
-        onCard = await hoverCard(q, id);
+        onCard = await hoverCard(q, id, true);
         box = onCard ? await editBox(q, id) : null;
       }
       if (!box || !box.hit) return false;
