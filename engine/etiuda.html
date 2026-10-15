@@ -5571,6 +5571,7 @@ What you type stays in this browser only.`;
     retiredCards: () => retiredCards,
     savePack: () => savePack,
     saveStats: () => saveStats,
+    setStatsFlush: () => setStatsFlush,
     showDeskNotices: () => showDeskNotices,
     showPackMigrationWarning: () => showPackMigrationWarning,
     syncSaveNotice: () => syncSaveNotice,
@@ -8660,6 +8661,10 @@ What you type stays in this browser only.`;
   var STATS_SAVE_MS = 1500;
   var eStatsT = 0;
   var eStatsWired = false;
+  var statsFlush = null;
+  function setStatsFlush(fn) {
+    statsFlush = typeof fn === "function" ? fn : null;
+  }
   function saveStats() {
     if (eStatsT) return;
     eStatsT = setTimeout(flushStats, STATS_SAVE_MS);
@@ -8672,7 +8677,14 @@ What you type stays in this browser only.`;
     if (!eStatsT) return false;
     clearTimeout(eStatsT);
     eStatsT = 0;
-    return writePack(true);
+    const ok = writePack(true);
+    if (statsFlush) {
+      try {
+        statsFlush();
+      } catch (e) {
+      }
+    }
+    return ok;
   }
   function writePack(countsOnly) {
     const layer = {}, stats = {}, days = pack.days || {}, open = {}, closed = {};
@@ -8787,7 +8799,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-14";
+  var E_BUILT = "2026-10-15";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -14448,20 +14460,37 @@ What you type stays in this browser only.`;
     document.body.classList.toggle("e-band-pale", pale);
     document.body.classList.toggle("e-band-deep", ok && !pale);
   }
-  function answerStats(req) {
-    const h = eHost();
-    if (!h || typeof h.writeStats !== "function") return;
+  var statsAsk = null;
+  function statsInfo() {
     const cat = storedCatalog();
-    const doc = statsDoc(pack, {
+    return {
       engine: E_VERSION,
-      period: { from: req && req.from, to: req && req.to },
+      period: statsAsk ? { from: statsAsk.from, to: statsAsk.to } : null,
       catalog: cat && cat.id ? { id: cat.id, rev: cat.rev } : null
-    });
-    Promise.resolve(h.writeStats(JSON.stringify(doc))).then((r) => {
-      if (r && r.ok && r.syncMs) lsSet("eLastSync", String(r.syncMs));
-    }).catch(() => {
+    };
+  }
+  function noteSync(r) {
+    if (r && r.ok && r.syncMs) lsSet("eLastSync", String(r.syncMs));
+  }
+  function sendStats(close) {
+    const h = eHost();
+    if (!h || !statsAsk) return;
+    const fn = close && typeof h.closeStats === "function" ? h.closeStats : h.writeStats;
+    if (typeof fn !== "function") return;
+    let doc;
+    try {
+      doc = statsDoc(pack, statsInfo());
+    } catch (e) {
+      return;
+    }
+    Promise.resolve(fn(JSON.stringify(doc))).then(noteSync).catch(() => {
     });
   }
+  function answerStats(req) {
+    if (req && req.from && req.to) statsAsk = { from: String(req.from), to: String(req.to) };
+    sendStats(false);
+  }
+  setStatsFlush(() => sendStats(false));
   function dispatchTabChord(shift) {
     try {
       window.dispatchEvent(new KeyboardEvent("keydown", {
@@ -14489,6 +14518,7 @@ What you type stays in this browser only.`;
     if (typeof h.onAccent === "function") h.onAccent(eSetAccent);
     if (typeof h.onAskClose === "function" && typeof h.closeAnswer === "function")
       h.onAskClose(() => askClose((a) => {
+        if (a === "none" || a === "close") sendStats(true);
         try {
           h.closeAnswer(a);
         } catch (e) {

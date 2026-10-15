@@ -140,6 +140,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
     return true;
   },
   writeStats: (text) => ipcRenderer.invoke("etiuda:stats-write", String(text || "")),
+  /* Closing sends the counts past the two-minute pace. The ordinary flush stays on writeStats. */
+  closeStats: (text) => ipcRenderer.invoke("etiuda:stats-close", String(text || "")),
   /* The desk's branch: {id, key, box}, the public halves only, or null where no key can be kept; and the
      desk's own catalog file by its stem, an empty text taking it away. Nothing here hands out a key. */
   branchIdentity: (make) => ipcRenderer.invoke("etiuda:branch-identity", make === false ? false : true),

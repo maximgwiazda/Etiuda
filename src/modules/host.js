@@ -2,7 +2,7 @@ import { $ } from "./dom.js";
 import { t, toastRefusal } from "./ui-lang.js";
 import { lsGet, lsSet, nsGet } from "./storage.js";
 import { eCatalog, eCatalogAccepted, eCatalogHanded, storedCatalog } from "./catalog.js";
-import { pack } from "./pack.js";
+import { pack, setStatsFlush } from "./pack.js";
 import { statsDoc } from "./desk-stats.js";
 import { E_VERSION } from "./env.js";
 import { askClose } from "./tabs.js";
@@ -311,19 +311,33 @@ function eSetAccent(hex){
   document.body.classList.toggle("e-band-deep",ok&&!pale);
 }
 
-function answerStats(req){
-  const h=eHost();
-  if(!h || typeof h.writeStats!=="function") return;
+/* The span the shell last asked for. Counts flushed later use it, and Last sync moves only when a write says it did. */
+let statsAsk=null;
+function statsInfo(){
   const cat=storedCatalog();
-  const doc=statsDoc(pack,{
+  return {
     engine:E_VERSION,
-    period:{from:req&&req.from,to:req&&req.to},
+    period:statsAsk?{from:statsAsk.from,to:statsAsk.to}:null,
     catalog:cat&&cat.id?{id:cat.id,rev:cat.rev}:null
-  });
-  Promise.resolve(h.writeStats(JSON.stringify(doc))).then(r=>{
-    if(r&&r.ok&&r.syncMs) lsSet("eLastSync",String(r.syncMs));
-  }).catch(()=>{});
+  };
 }
+function noteSync(r){
+  if(r&&r.ok&&r.syncMs) lsSet("eLastSync",String(r.syncMs));
+}
+function sendStats(close){
+  const h=eHost();
+  if(!h || !statsAsk) return;
+  const fn=close && typeof h.closeStats==="function" ? h.closeStats : h.writeStats;
+  if(typeof fn!=="function") return;
+  let doc;
+  try{ doc=statsDoc(pack, statsInfo()); }catch(e){ return; }
+  Promise.resolve(fn(JSON.stringify(doc))).then(noteSync).catch(()=>{});
+}
+function answerStats(req){
+  if(req && req.from && req.to) statsAsk={from:String(req.from),to:String(req.to)};
+  sendStats(false);
+}
+setStatsFlush(()=>sendStats(false));
 
 /* The shell's Ctrl+Tab, as a keydown the shortcut table already matches. KeyboardEvent is
    absent where this file is loaded under plain node and the callback is never what asks. */
@@ -351,7 +365,10 @@ function wireHost(){
   if(typeof h.onAccent==="function") h.onAccent(eSetAccent);
   /* The shell asks before the window closes; the conversations answer (tabs.js). */
   if(typeof h.onAskClose==="function" && typeof h.closeAnswer==="function")
-    h.onAskClose(()=>askClose(a=>{ try{ h.closeAnswer(a); }catch(e){} }));
+    h.onAskClose(()=>askClose(a=>{
+      if(a==="none"||a==="close") sendStats(true);
+      try{ h.closeAnswer(a); }catch(e){}
+    }));
   const min=$("#winMin"), max=$("#winMax"), close=$("#winClose");
   if(min) min.onclick=()=>{ try{ h.minimize(); }catch(e){} };
   if(max) max.onclick=()=>{ try{ h.maximize(); }catch(e){} };
