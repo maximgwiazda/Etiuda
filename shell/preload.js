@@ -139,7 +139,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
     ipcRenderer.send("etiuda:offer-dropped", at);
     return true;
   },
-  writeStats: (text) => ipcRenderer.invoke("etiuda:stats-write", String(text || "")),
+  writeStats: (text, askId) => ipcRenderer.invoke("etiuda:stats-write", String(text || ""),
+    typeof askId === "string" ? askId : ""),
   /* Closing sends the counts past the two-minute pace. The ordinary flush stays on writeStats. */
   closeStats: (text) => ipcRenderer.invoke("etiuda:stats-close", String(text || "")),
   /* The desk's branch: {id, key, box}, the public halves only, or null where no key can be kept; and the

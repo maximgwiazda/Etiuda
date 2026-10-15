@@ -20,7 +20,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 12;
+const EXPECTED = 17;
 const WORK = path.join(ROOT, "shell", "main.js");
 const GOOD = fs.readFileSync(WORK);
 const GOOD_HASH = crypto.createHash("sha256").update(GOOD).digest("hex");
@@ -38,7 +38,7 @@ const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), APP, { recursive: true });
 const COPY = path.join(APP, "main.js");
 const EXPOSE = ["spanSignedBytes", "spanDocument", "setStatsClock", "statsPulse", "flushHeldStats",
-  "openSealed", "sealCatalog", "wrapTeamKey", "signedSha", "catalogChanged", "channelHash", "isCatalogName"];
+  "openSealed", "sealCatalog", "openStatsSealed", "teamWhole", "wrapTeamKey", "signedSha", "catalogChanged", "channelHash", "isCatalogName"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -72,7 +72,7 @@ function loadDesk(ud) {
   let page = () => "{}";
   const win = { isDestroyed: () => false, webContents: { send: (ch, payload) => {
     sent.push([ch, payload]);
-    if (ch === "etiuda:stats-ask") invoke["etiuda:stats-write"](eventFor(), page());
+    if (ch === "etiuda:stats-ask") invoke["etiuda:stats-write"](eventFor(), page(), payload && payload.id);
   } } };
   api.setStatsClock(CLOCK);
   return { api, ask, said, ud, sent, win, setPage: fn => { page = fn; }, invoke };
@@ -107,8 +107,9 @@ try {
   const V2 = await import(MOD("catalog-v2.js"));
   const pubHex = k => k.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
   const lead = crypto.generateKeyPairSync("ed25519");
+  const leadBox = crypto.generateKeyPairSync("x25519");
   const other = crypto.generateKeyPairSync("ed25519");
-  const LEAD = { keyId: "quay-lead", public: pubHex(lead.publicKey) };
+  const LEAD = { keyId: "quay-lead", public: pubHex(lead.publicKey), box: pubHex(leadBox.publicKey) };
   const OTHER = { keyId: "other-lead", public: pubHex(other.publicKey) };
   const signTeam = (doc) => {
     const o = JSON.parse(JSON.stringify(doc));
@@ -139,10 +140,14 @@ try {
     desk: { id: who.id, key: who.key, box: who.box },
     wrap: D.api.wrapTeamKey(key, who.box, team, epoch, deskForWrap || who.id),
   });
-  const teamText = (id, epoch, roster) => signTeam({
-    format: 1, kind: "etiuda-team", id: id, catalogs: ["north-lamps"], lead: LEAD,
-    sealed: true, exportsSealed: false, epoch: epoch, roster: roster,
-  });
+  const teamText = (id, epoch, roster, withBox) => {
+    const leadRec = { keyId: LEAD.keyId, public: LEAD.public };
+    if (withBox !== false) leadRec.box = LEAD.box;
+    return signTeam({
+      format: 1, kind: "etiuda-team", id: id, catalogs: ["north-lamps"], lead: leadRec,
+      sealed: true, exportsSealed: false, epoch: epoch, roster: roster,
+    });
+  };
   async function joined(badWrap) {
     const share = folder();
     put(share, "etiuda-ring.json", RING);
@@ -160,9 +165,12 @@ try {
     box.D.api.catalogChanged(box.D.win);
   }
   const statsAt = box => path.join(box.share, "desks", box.me.id, "stats.estat");
-  const openStats = (box, key) => {
-    try { return JSON.parse(box.D.api.openSealed(key || box.key, JSON.parse(fs.readFileSync(statsAt(box), "utf8")))); }
-    catch { return null; }
+  const openStats = (box) => {
+    try {
+      const raw = JSON.parse(fs.readFileSync(statsAt(box), "utf8"));
+      const text = box.D.api.openStatsSealed(leadBox.privateKey, raw, box.me.id);
+      return text ? JSON.parse(text) : null;
+    } catch { return null; }
   };
   const ruled = "cards,catalog,desk,engine,format,hash,intents,kind,langs,misses,pairs,period,since,sync";
 
@@ -275,7 +283,7 @@ try {
         return !!(wrote && wrote.ok && wrote.syncMs) && !!(same && same.unchanged && !same.syncMs)
           && Buffer.compare(bytes, fs.readFileSync(statsAt(box))) === 0;
       });
-    check(g.ok, "891d the same figures are not sealed again, and Last sync is not given a new time"
+    check(g.ok, "891d the same figures are not sealed again, and an unchanged answer carries no new sync time"
       + (g.why ? ": " + g.why.split("\n")[0] : ""));
   }
 
@@ -288,7 +296,7 @@ try {
         const box = await joined(false);
         adopt(box, "rolling-30", lead.privateKey, LEAD, 2);
         const raw = JSON.parse(fs.readFileSync(statsAt(box), "utf8"));
-        const text = box.D.api.openSealed(box.key, raw);
+        const text = box.D.api.openStatsSealed(leadBox.privateKey, raw, box.me.id);
         const inner = JSON.parse(text);
         const day = ymd(new Date(CLOCK));
         const copy = JSON.parse(text);
@@ -296,8 +304,8 @@ try {
         delete copy.hash;
         const hashOk = box.D.api.channelHash(copy) === hash;
         const keys = Object.keys(inner).sort().join(",");
-        return raw.format === 2 && raw.kind === "etiuda-sealed" && raw.team === box.team && raw.epoch === 1
-          && box.D.api.openSealed(crypto.randomBytes(32), raw) === null
+        return raw.format === 1 && raw.kind === "etiuda-stats-sealed" && raw.team === box.team && raw.keyId === LEAD.keyId
+          && raw.epoch === undefined && box.D.api.openSealed(box.key, raw) === null
           && keys === ruled && hashOk && JSON.stringify(inner).indexOf("smuggled") < 0
           && JSON.stringify(inner.pairs) === JSON.stringify([{ from: "c-lamp", to: "c-wick", n: 4 }])
           && inner.catalog.id === "north-lamps" && inner.catalog.rev === 3 && Object.keys(inner.catalog).length === 2
@@ -305,7 +313,7 @@ try {
           && inner.period.from === shift(day, -29) && inner.period.to === day
           && inner.sync === day + " 12:00" && path.basename(path.dirname(statsAt(box))) === box.me.id;
       });
-    check(g.ok, "891e the answer is sealed under the team key and opens to exactly the ruled fields, pairs rebuilt, nothing smuggled"
+    check(g.ok, "891e the answer opens to exactly the ruled fields, pairs rebuilt, nothing smuggled"
       + (g.why ? ": " + g.why.split("\n")[0] : ""));
   }
 
@@ -313,7 +321,7 @@ try {
   {
     const g = await prove("891f",
       "if (!got || !got.seal) return { ok: false };",
-      "if (!got || !got.seal) { got = { seal: { team: \"t-0000000000000000\", epoch: 1, key: Buffer.alloc(32, 7) } }; }",
+      "if (!got || !got.seal) { got = { seal: { box: \"3948cfe0ad1ddb695d780e59077195da6c56506b027329794ab02bca80815c4d\", team: \"t-aaaaaaaaaaaaaaaa\", epoch: 1, key: Buffer.alloc(32, 7), keyId: \"plant\", desk: \"k-abababababababab\" } }; }",
       async () => {
         const box = await joined(true);
         adopt(box, "rolling-30", lead.privateKey, LEAD, 2);
@@ -458,6 +466,154 @@ try {
       });
     check(g.ok, "894a an export after the epoch moves, while the old key is still the newest this desk holds, is not sealed, and the previous file still opens under that key"
       + (g.why ? ": " + g.why.split("\n")[0] : ""));
+  }
+
+  /* ---- 891l: the lead's box opens the file, and the team key does not ----------------------------------------- */
+  {
+    const g = await prove("891l",
+      "const env = sealStatsLead(got.seal.box, got.seal.team, got.seal.keyId, got.seal.desk, JSON.stringify(out));",
+      "const env = sealCatalog(got.seal.key, got.seal.team, got.seal.epoch, JSON.stringify(out));",
+      async () => {
+        const box = await joined(false);
+        adopt(box, "rolling-30", lead.privateKey, LEAD, 2);
+        const raw = JSON.parse(fs.readFileSync(statsAt(box), "utf8"));
+        const stranger = crypto.generateKeyPairSync("x25519").privateKey;
+        const text = box.D.api.openStatsSealed(leadBox.privateKey, raw, box.me.id);
+        const moved = Object.assign({}, raw, { team: "t-" + "cd".repeat(8) });
+        const extra = Object.assign({ note: "smuggled" }, raw);
+        const keys = Object.keys(raw).join(",");
+        return keys === "format,kind,team,keyId,enc,ct"
+          && !!text && JSON.parse(text).cards[0].n === 2
+          && box.D.api.openSealed(box.key, raw) === null
+          && box.D.api.openStatsSealed(stranger, raw, box.me.id) === null
+          && box.D.api.openStatsSealed(leadBox.privateKey, raw, "k-" + "cd".repeat(8)) === null
+          && box.D.api.openStatsSealed(leadBox.privateKey, moved, box.me.id) === null
+          && box.D.api.openStatsSealed(leadBox.privateKey, extra, box.me.id) === null;
+      });
+    check(g.ok, "891l the file opens with the lead's private key and with no team key, and the team key does not open it"
+      + (g.why ? ": " + g.why.split("\n")[0] : ""));
+  }
+
+  /* ---- 891m: no lead.box writes nothing, and it is said once --------------------------------------------------- */
+  {
+    const g = await prove("891m",
+      "console.log(\"etiuda: statistics are not sealed: the team file names no box for the lead\");\n    }\n    return null;",
+      "console.log(\"etiuda: statistics are not sealed: the team file names no box for the lead\");\n    }\n    return { seal: { box: \"3948cfe0ad1ddb695d780e59077195da6c56506b027329794ab02bca80815c4d\", team: use.seal.team, epoch: use.seal.epoch, key: use.seal.key, keyId: String(use.seal.lead.keyId), desk: me.id } };",
+      async () => {
+        const box = await joined(false);
+        put(box.share, "etiuda-team.json", teamText(box.team, 1, [entry(box.D, box.me, box.key, box.team, 1)], false));
+        adopt(box, "rolling-30", lead.privateKey, LEAD, 2);
+        const again = await box.D.ask("etiuda:stats-write", pageBody(5));
+        const lines = box.D.said.filter(l => l.indexOf("names no box for the lead") >= 0).length;
+        return !fs.existsSync(statsAt(box)) && estat(box.share).length === 0 && !(again && again.ok) && lines === 1;
+      });
+    check(g.ok, "891m a team file with no lead.box writes nothing, and the desk says so once"
+      + (g.why ? ": " + g.why.split("\n")[0] : ""));
+  }
+
+  /* ---- 891n: a lead.box changed outside the signature is not a team file -------------------------------------- */
+  {
+    const g = await prove("891n",
+      "const teamCovered = doc;",
+      "const teamCovered = doc && doc.lead ? Object.assign({}, doc, { lead: Object.assign({}, doc.lead) }) : doc;\n  if (teamCovered && teamCovered.lead) delete teamCovered.lead.box;",
+      async () => {
+        const box = await joined(false);
+        const whole = JSON.parse(fs.readFileSync(path.join(box.share, "etiuda-team.json"), "utf8"));
+        const changed = JSON.parse(JSON.stringify(whole));
+        changed.lead.box = "ab".repeat(32);
+        const bare = JSON.parse(JSON.stringify(whole));
+        delete bare.lead.box;
+        bare.sig = { alg: "Ed25519", keyId: LEAD.keyId };
+        bare.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(bare)), lead.privateKey).toString("hex");
+        const added = JSON.parse(JSON.stringify(bare));
+        added.lead.box = LEAD.box;
+        const badShape = JSON.parse(JSON.stringify(whole));
+        badShape.lead.box = "ZZ";
+        badShape.sig = { alg: "Ed25519", keyId: LEAD.keyId };
+        badShape.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(badShape)), lead.privateKey).toString("hex");
+        return box.D.api.teamWhole(whole) === true
+          && box.D.api.teamWhole(bare) === true
+          && box.D.api.teamWhole(changed) === false
+          && box.D.api.teamWhole(added) === false
+          && box.D.api.teamWhole(badShape) === false;
+      });
+    check(g.ok, "891n a lead.box changed outside the signature is refused, and the team file fails its check"
+      + (g.why ? ": " + g.why.split("\n")[0] : ""));
+  }
+
+  /* ---- 891o: an answer keeps the reason of the ask it answers -------------------------------------------------- */
+  {
+    const g = await prove("891o",
+      "const statsAsks = new Map();\nlet statsAskSeq = 0;\nfunction rememberStatsWhy(id, why) {\n  statsAsks.set(String(id), why || \"counts\");\n}\nfunction reasonForAsk(askId, forced) {\n  if (forced) return forced;\n  const id = typeof askId === \"string\" ? askId : \"\";\n  if (!id || !statsAsks.has(id)) return \"counts\";\n  const why = statsAsks.get(id);\n  statsAsks.delete(id);\n  return why || \"counts\";\n}",
+      "let statsWhy = \"counts\";\nlet statsAskSeq = 0;\nfunction rememberStatsWhy(id, why) {\n  statsWhy = why || \"counts\";\n}\nfunction reasonForAsk(askId, forced) {\n  if (forced) return forced;\n  const why = statsWhy;\n  statsWhy = \"counts\";\n  return why || \"counts\";\n}",
+      async () => {
+        const start = new Date(2026, 3, 15, 23, 59, 0, 0).getTime();
+        const box = await joined(false);
+        box.D.api.setStatsClock(start);
+        adopt(box, "rolling-30", lead.privateKey, LEAD, 2);
+        const first = fs.readFileSync(statsAt(box));
+        const queue = [];
+        box.D.win.webContents.send = (ch, payload) => {
+          box.D.sent.push([ch, payload]);
+          if (ch === "etiuda:stats-ask") queue.push(payload);
+        };
+        put(box.share, "stats-span.json", spanDoc(box.D, "this-month", lead.privateKey, LEAD));
+        box.D.api.catalogChanged(box.D.win);
+        box.D.api.setStatsClock(start + 90000);
+        box.D.api.statsPulse();
+        if (queue.length !== 2 || !queue[0].id || queue[0].id === queue[1].id) return false;
+        const flush = await box.D.ask("etiuda:stats-write", pageBody(9));
+        if (!(flush && flush.paced && flush.why === "counts")) return false;
+        if (Buffer.compare(first, fs.readFileSync(statsAt(box))) !== 0) return false;
+        const deliver = (payload, n) => Promise.resolve(
+          box.D.invoke["etiuda:stats-write"](eventFor(), pageBody(n), payload.id));
+        const midRes = await deliver(queue[1], 4);
+        const afterMid = openStats(box);
+        const spanRes = await deliver(queue[0], 3);
+        const afterSpan = openStats(box);
+        const hostSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "host.js"), "utf8");
+        const preload = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
+        const pageOk = hostSrc.indexOf('sendStats(false, req && typeof req.id==="string" ? req.id : "")') >= 0
+          && hostSrc.indexOf("setStatsFlush(()=>sendStats(false))") >= 0
+          && hostSrc.indexOf("eLastSync") < 0
+          && preload.indexOf("typeof askId === \"string\" ? askId : \"\"") >= 0;
+        return pageOk && !!(midRes && midRes.why === "midnight" && midRes.syncMs)
+          && !!(spanRes && spanRes.why === "span" && spanRes.syncMs)
+          && !!afterMid && afterMid.cards[0].n === 4
+          && !!afterSpan && afterSpan.cards[0].n === 3;
+      });
+    check(g.ok, "891o an answer is written for its own ask when delivery is late and reversed, and a flush in between takes nothing"
+      + (g.why ? ": " + g.why.split("\n")[0] : ""));
+  }
+
+  /* ---- 891p: the Settings row is gone -------------------------------------------------------------------------- */
+  {
+    const settingsFile = path.join(ROOT, "src", "modules", "settings.js");
+    const settingsGood = fs.readFileSync(settingsFile);
+    const settingsHash = crypto.createHash("sha256").update(settingsGood).digest("hex");
+    const settingsCopy = path.join(LAB, "settings-plant.js");
+    fs.writeFileSync(settingsCopy, settingsGood);
+    const rowGone = (settingsSrc) => {
+      const hostSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "host.js"), "utf8");
+      const langSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
+      return settingsSrc.indexOf('t("Last sync")') < 0 && settingsSrc.indexOf("eLastSync") < 0
+        && settingsSrc.indexOf("lastSyncStamp") < 0
+        && hostSrc.indexOf("eLastSync") < 0
+        && langSrc.indexOf('"Last sync"') < 0;
+    };
+    const needle = 'row(t("Your name"), "",';
+    const planted = settingsGood.toString("utf8").replace(needle,
+      'row(t("Last sync"), "", \'<span>1970-01-01</span>\')+\n      ' + needle);
+    if (planted === settingsGood.toString("utf8")) throw new Error("plant missed: 891p");
+    fs.writeFileSync(settingsCopy, planted);
+    const red = !rowGone(fs.readFileSync(settingsCopy, "utf8"));
+    fs.writeFileSync(settingsCopy, settingsGood);
+    const back = crypto.createHash("sha256").update(fs.readFileSync(settingsCopy)).digest("hex");
+    const treeSettings = crypto.createHash("sha256").update(fs.readFileSync(settingsFile)).digest("hex");
+    const green = rowGone(fs.readFileSync(settingsFile, "utf8"));
+    console.log("  red  891p " + (red ? "failed under the plant" : "STILL PASSED under the plant"));
+    check(red && green && back === settingsHash && treeSettings === settingsHash,
+      "891p the Settings row is gone, and so are the stored stamp and the string");
   }
 
   const tree = crypto.createHash("sha256").update(fs.readFileSync(WORK)).digest("hex");

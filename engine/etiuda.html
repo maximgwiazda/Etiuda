@@ -6841,7 +6841,6 @@ What you type stays in this browser only.`;
     "Open the Menu": "Otwórz Menu",
     "Your name": "Nazwa agenta",
     "Personal": "Osobiste",
-    "Last sync": "Ostatnia synchronizacja",
     "Later": "Później",
     "Focus {PAX}": "Kursor w {PAX}",
     "Focus ROLE": "Kursor w ROLE",
@@ -14469,10 +14468,7 @@ What you type stays in this browser only.`;
       catalog: cat && cat.id ? { id: cat.id, rev: cat.rev } : null
     };
   }
-  function noteSync(r) {
-    if (r && r.ok && r.syncMs) lsSet("eLastSync", String(r.syncMs));
-  }
-  function sendStats(close) {
+  function sendStats(close, askId) {
     const h = eHost();
     if (!h || !statsAsk) return;
     const fn = close && typeof h.closeStats === "function" ? h.closeStats : h.writeStats;
@@ -14483,12 +14479,14 @@ What you type stays in this browser only.`;
     } catch (e) {
       return;
     }
-    Promise.resolve(fn(JSON.stringify(doc))).then(noteSync).catch(() => {
+    const text = JSON.stringify(doc);
+    const sent = askId && !close ? fn(text, String(askId)) : fn(text);
+    Promise.resolve(sent).catch(() => {
     });
   }
   function answerStats(req) {
     if (req && req.from && req.to) statsAsk = { from: String(req.from), to: String(req.to) };
-    sendStats(false);
+    sendStats(false, req && typeof req.id === "string" ? req.id : "");
   }
   setStatsFlush(() => sendStats(false));
   function dispatchTabChord(shift) {
@@ -29320,7 +29318,6 @@ What you type stays in this browser only.`;
     ], on ? "on" : "off");
     const themeCur = themeChoice() || "system";
     const langSel = '<select id="setUiLang" aria-label="' + esc(t("Interface language")) + '" title="' + esc(t("Changes every label in Etiuda, never the cards themselves")) + '">' + UI_LANGS.map((l) => '<option value="' + esc(l.code) + '"' + (l.code === uiLang() ? " selected" : "") + ">" + esc(l.label) + "</option>").join("") + "</select>";
-    const lastSyncStamp = fileStamp(+lsGet("eLastSync"));
     const personalSection = accHtml(
       "personal",
       t("Personal"),
@@ -29332,7 +29329,7 @@ What you type stays in this browser only.`;
         t("Interface language"),
         t("The language of the buttons and menus, not of the macros: those follow EN|PL in the header"),
         langSel
-      ) + (lastSyncStamp ? row(t("Last sync"), "", "<span>" + esc(lastSyncStamp) + "</span>") : "") + /* One row per team lead this desk trusts: the key the agent compared, and the way out where it was wrong. */
+      ) + /* One row per team lead this desk trusts: the key the agent compared, and the way out where it was wrong. */
       teamLeads().map((l, i) => row(
         t("Team lead's key"),
         i === 0 ? t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.") : "",

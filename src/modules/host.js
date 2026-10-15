@@ -311,7 +311,7 @@ function eSetAccent(hex){
   document.body.classList.toggle("e-band-deep",ok&&!pale);
 }
 
-/* The span the shell last asked for. Counts flushed later use it, and Last sync moves only when a write says it did. */
+/* The span the shell last asked for. A flush sends the counts with no ask id, so it cannot take that ask's reason. */
 let statsAsk=null;
 function statsInfo(){
   const cat=storedCatalog();
@@ -321,21 +321,20 @@ function statsInfo(){
     catalog:cat&&cat.id?{id:cat.id,rev:cat.rev}:null
   };
 }
-function noteSync(r){
-  if(r&&r.ok&&r.syncMs) lsSet("eLastSync",String(r.syncMs));
-}
-function sendStats(close){
+function sendStats(close, askId){
   const h=eHost();
   if(!h || !statsAsk) return;
   const fn=close && typeof h.closeStats==="function" ? h.closeStats : h.writeStats;
   if(typeof fn!=="function") return;
   let doc;
   try{ doc=statsDoc(pack, statsInfo()); }catch(e){ return; }
-  Promise.resolve(fn(JSON.stringify(doc))).then(noteSync).catch(()=>{});
+  const text=JSON.stringify(doc);
+  const sent=(askId && !close) ? fn(text, String(askId)) : fn(text);
+  Promise.resolve(sent).catch(()=>{});
 }
 function answerStats(req){
   if(req && req.from && req.to) statsAsk={from:String(req.from),to:String(req.to)};
-  sendStats(false);
+  sendStats(false, req && typeof req.id==="string" ? req.id : "");
 }
 setStatsFlush(()=>sendStats(false));
 

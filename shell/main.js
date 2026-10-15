@@ -795,8 +795,8 @@ let theDeskId = "";
 const STATS_PACE_MS = 120000;
 let statsSpan = "";
 let statsPeriod = null;
-let statsWhy = "counts";
 let statsHeld = null;
+let statsNoBoxSaid = "";
 let statsWroteKey = "";
 let statsLastWrite = 0;
 let statsClock = null;
@@ -984,12 +984,25 @@ function statsFile() {
   if (path.dirname(dest) !== dir || path.basename(dest) !== "stats.estat") return null;
   return { root: root, dir: dir, dest: dest };
 }
-/* The newest team key, or null where this desk cannot seal. A stale epoch seals nothing, which is teamUse's own rule. */
+/* The lead's box from the team file this desk already verified, or null where statistics are not sealed.
+   A stale epoch seals nothing, which is teamUse's own rule. No box is said once, and the team key is not a fallback. */
 function statsSeal() {
   const use = teamUse();
   if (use.away) return { away: true };
   if (!use.member || use.stale || !use.seal) return null;
-  return { seal: use.seal };
+  const me = branchIdentity(false);
+  if (!me || !/^k-[0-9a-f]{16}$/.test(me.id)) return null;
+  const box = typeof use.seal.box === "string" ? use.seal.box : "";
+  if (!/^[0-9a-f]{64}$/.test(box)) {
+    if (statsNoBoxSaid !== use.seal.team) {
+      statsNoBoxSaid = use.seal.team;
+      console.log("etiuda: statistics are not sealed: the team file names no box for the lead");
+    }
+    return null;
+  }
+  if (statsNoBoxSaid === use.seal.team) statsNoBoxSaid = "";
+  return { seal: { box: box, team: use.seal.team, epoch: use.seal.epoch, key: use.seal.key,
+    keyId: String(use.seal.lead && use.seal.lead.keyId), desk: me.id } };
 }
 function armMidnight() {
   if (statsMidnightTimer) { clearTimeout(statsMidnightTimer); statsMidnightTimer = null; }
@@ -999,13 +1012,29 @@ function armMidnight() {
   const wait = Math.max(next.getTime() - now.getTime(), 1000);
   statsMidnightTimer = setTimeout(() => { statsMidnightTimer = null; statsPulse(); armMidnight(); }, wait);
 }
+/* One reason per ask. webContents.send delivers later, so a flush that lands between the ask and its answer
+   must not take the reason, and two answers may arrive in either order. */
+const statsAsks = new Map();
+let statsAskSeq = 0;
+function rememberStatsWhy(id, why) {
+  statsAsks.set(String(id), why || "counts");
+}
+function reasonForAsk(askId, forced) {
+  if (forced) return forced;
+  const id = typeof askId === "string" ? askId : "";
+  if (!id || !statsAsks.has(id)) return "counts";
+  const why = statsAsks.get(id);
+  statsAsks.delete(id);
+  return why || "counts";
+}
 function askStats(win, why) {
   if (!statsPeriod) return;
-  statsWhy = why || "counts";
   const live = liveWin(win);
   if (!live) return;
   statsWin = live;
-  try { live.webContents.send("etiuda:stats-ask", { from: statsPeriod.from, to: statsPeriod.to }); }
+  const id = "a" + (statsAskSeq += 1).toString(16);
+  rememberStatsWhy(id, why || "counts");
+  try { live.webContents.send("etiuda:stats-ask", { id: id, from: statsPeriod.from, to: statsPeriod.to }); }
   catch { /* the page has gone */ }
 }
 /* Moves the rolling span on when the driven or real clock has crossed midnight, and otherwise writes a held answer
@@ -1023,12 +1052,10 @@ function statsPulse() {
 }
 function flushHeldStats() {
   if (!statsHeld) return;
-  statsWhy = "close";
-  writeStatsAnswer(statsHeld);
+  writeStatsAnswer(statsHeld, "", "close");
 }
-function writeStatsAnswer(text) {
-  const why = statsWhy;
-  statsWhy = "counts";
+function writeStatsAnswer(text, askId, forced) {
+  const why = reasonForAsk(askId, forced);
   if (!statsSpan || !statsPeriod) return { ok: false };
   const id = ensureDeskId();
   if (!isSafeDeskId(id)) return { ok: false };
@@ -1072,7 +1099,7 @@ function writeStatsAnswer(text) {
   const bypass = why === "span" || why === "midnight" || why === "close";
   if (!bypass && statsLastWrite && (now.getTime() - statsLastWrite) < STATS_PACE_MS) {
     statsHeld = String(text || "");
-    return { ok: true, paced: true };
+    return { ok: true, paced: true, why: why };
   }
   let got = statsSeal();
   if (got && got.away) { statsHeld = String(text || ""); return { ok: false }; }
@@ -1085,8 +1112,8 @@ function writeStatsAnswer(text) {
     for (const dir of [path.join(at.root, "desks"), at.dir, path.dirname(at.dest)]) {
       try { fs.mkdirSync(dir); } catch (e) { if (e.code !== "EEXIST") throw e; }
     }
-    const seal = got.seal;
-    writeReplacing(at.dest, JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, JSON.stringify(out)), null, 1) + "\n");
+    const env = sealStatsLead(got.seal.box, got.seal.team, got.seal.keyId, got.seal.desk, JSON.stringify(out));
+    writeReplacing(at.dest, JSON.stringify(env, null, 1) + "\n");
   } catch {
     statsHeld = String(text || "");
     return { ok: false };
@@ -1094,7 +1121,7 @@ function writeStatsAnswer(text) {
   statsHeld = null;
   statsWroteKey = key;
   statsLastWrite = now.getTime();
-  return { ok: true, sync: out.sync, syncMs: now.getTime() };
+  return { ok: true, sync: out.sync, syncMs: now.getTime(), why: why };
 }
 /* The span file, if it verifies. Anything else is left unadopted: a bad replacement does not write and does not
    delete the answer already sealed. A missing file is not a new span either. */
@@ -1259,6 +1286,41 @@ function unwrapTeamKey(skR, wrap, teamId, epoch, deskId) {
   const key = hpkeOpen(skR, Buffer.from(enc, "hex"), teamWrapInfo(String(teamId), epoch), Buffer.from(String(deskId), "utf8"),
     Buffer.from(ct, "hex"));
   return key && key.length === 32 ? key : null;
+}
+
+/* ---- statistics sealed to the lead's box alone: HPKE base mode, not the team key -----------------
+   info binds the team and this desk's branch id. The envelope carries the encapsulated key, the
+   ciphertext, the team id and the lead's key id, and nothing else. A private key is a KeyObject. */
+const STATS_SEAL_KIND = "etiuda-stats-sealed";
+const STATS_SEAL_LABEL = "etiuda-stats-lead\n";
+function statsSealInfo(teamId, deskId) {
+  return Buffer.from(STATS_SEAL_LABEL + teamId + "\n" + deskId, "utf8");
+}
+function sealStatsLead(box, teamId, keyId, deskId, text) {
+  if (!/^[0-9a-f]{64}$/.test(String(box))) throw new Error("stats: the lead's box is 64 lower-case hex characters");
+  if (!SEALED_TEAM_RE.test(String(teamId))) throw new Error("stats: a team id is t- and 16 lower-case hex characters");
+  if (typeof keyId !== "string" || !keyId) throw new Error("stats: the lead's key id is a non-empty string");
+  if (!/^k-[0-9a-f]{16}$/.test(String(deskId))) throw new Error("stats: a desk id is k- and 16 lower-case hex characters");
+  if (typeof text !== "string") throw new Error("stats: the answer is sealed as its text");
+  const w = hpkeSeal(Buffer.from(String(box), "hex"), statsSealInfo(teamId, deskId), Buffer.alloc(0), Buffer.from(text, "utf8"));
+  return { format: 1, kind: STATS_SEAL_KIND, team: String(teamId), keyId: keyId,
+    enc: w.enc.toString("hex"), ct: w.ct.toString("hex") };
+}
+function openStatsSealed(skR, doc, deskId) {
+  try {
+    if (!doc || typeof doc !== "object" || Array.isArray(doc)) return null;
+    const keys = Object.keys(doc);
+    if (keys.length !== 6 || keys[0] !== "format" || keys[1] !== "kind" || keys[2] !== "team"
+      || keys[3] !== "keyId" || keys[4] !== "enc" || keys[5] !== "ct") return null;
+    if (+doc.format !== 1 || doc.kind !== STATS_SEAL_KIND) return null;
+    if (!SEALED_TEAM_RE.test(String(doc.team)) || typeof doc.keyId !== "string" || !doc.keyId) return null;
+    if (!/^k-[0-9a-f]{16}$/.test(String(deskId))) return null;
+    const enc = String(doc.enc), ct = String(doc.ct);
+    if (!/^[0-9a-f]{64}$/.test(enc) || !/^[0-9a-f]+$/.test(ct) || (ct.length % 2) !== 0 || ct.length < 32) return null;
+    const pt = hpkeOpen(skR, Buffer.from(enc, "hex"), statsSealInfo(String(doc.team), String(deskId)),
+      Buffer.alloc(0), Buffer.from(ct, "hex"));
+    return pt ? pt.toString("utf8") : null;
+  } catch { return null; }
 }
 
 /* ---- joining a team: the desk's request, the lead's opening, and the code both sides read --------
@@ -1738,7 +1800,8 @@ function teamUse() {
   try { key = Buffer.from(safeStorage.decryptString(Buffer.from(kept[epoch], "base64")), "base64"); } catch { key = null; }
   if (!key || key.length !== 32) return { member: false };
   const stale = doc.epoch !== epoch || epoch < (teamEpochSeen[team] || 0);
-  return { member: true, stale: stale, seal: { team: team, epoch: epoch, key: key, lead: pin } };
+  const box = typeof doc.lead.box === "string" ? doc.lead.box : "";
+  return { member: true, stale: stale, seal: { team: team, epoch: epoch, key: key, lead: pin, box: box } };
 }
 function inUseFile() {
   const me = branchIdentity(false);
@@ -1989,11 +2052,13 @@ const teamSaid = new Set();
 /* Whether a team file is whole under the lead key it names, which is what the engine's v2TeamSigState says. */
 function teamWhole(doc) {
   const lead = doc && doc.lead, sig = doc && doc.sig;
+  const teamCovered = doc;
   try {
     return +doc.format === 1 && doc.kind === "etiuda-team" && SEALED_TEAM_RE.test(String(doc.id)) && Number.isInteger(doc.epoch)
       && doc.epoch >= 1 && Array.isArray(doc.roster) && !!lead && typeof lead === "object" && typeof lead.keyId === "string"
-      && /^[0-9a-f]{64}$/.test(String(lead.public)) && !!sig && sig.keyId === lead.keyId && /^[0-9a-f]{128}$/.test(String(sig.value))
-      && crypto.verify(null, signedBytesOf(doc), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(lead.public, "hex")]),
+      && /^[0-9a-f]{64}$/.test(String(lead.public)) && (lead.box === undefined || /^[0-9a-f]{64}$/.test(lead.box))
+      && !!sig && sig.keyId === lead.keyId && /^[0-9a-f]{128}$/.test(String(sig.value))
+      && crypto.verify(null, signedBytesOf(teamCovered), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(lead.public, "hex")]),
         format: "der", type: "spki" }), Buffer.from(sig.value, "hex"));
   } catch { return false; }
 }
@@ -3864,15 +3929,15 @@ ipcMain.handle("etiuda:catalog-ring", (e) => {
   } catch { /* no ring, which is the ordinary case */ }
   return text;
 });
-ipcMain.handle("etiuda:stats-write", (e, text) => {
+ipcMain.handle("etiuda:stats-write", (e, text, askId) => {
   if (!fromEngine(e)) return { ok: false };
-  return writeStatsAnswer(String(text || ""));
+  return writeStatsAnswer(String(text || ""), typeof askId === "string" ? askId : "");
 });
-/* Closing flushes the counts the page still holds, past the two-minute pace. A stranger is refused. */
+/* Closing flushes the counts the page still holds, past the two-minute pace. A stranger is refused.
+   The close reason is its own, and it does not take an ask that is still waiting. */
 ipcMain.handle("etiuda:stats-close", (e, text) => {
   if (!fromEngine(e)) return { ok: false };
-  statsWhy = "close";
-  return writeStatsAnswer(String(text || ""));
+  return writeStatsAnswer(String(text || ""), "", "close");
 });
 /* The desk's branch: its public identity, and the write of its own file. See writeBranch. */
 ipcMain.handle("etiuda:branch-identity", (e, make) => (fromEngine(e) ? branchIdentity(make === false ? false : true) : null));

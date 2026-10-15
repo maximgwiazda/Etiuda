@@ -4,7 +4,7 @@ import { loadShortcuts } from "./shortcuts.js";
 import { scStopCapture, wireShortcutsList } from "./shortcuts-list.js";
 import { lsGet, lsSet, lsDel, nsGet, nsSet, nsDel, nsKey } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { UI_LANGS, uiLang, offerUndo, t, toast, fileStamp } from "./ui-lang.js";
+import { UI_LANGS, uiLang, offerUndo, t, toast } from "./ui-lang.js";
 import { setUiLang } from "./repaint.js";
 import { applyDefaultRailWidth, applyStoredRailWidth, railLocked, rebuildRailMQ, syncRailLayout, toggleRailLock } from "./rail-panel.js";
 import { esc } from "./esc.js";
@@ -149,7 +149,6 @@ function settingsBodyHtml(){
     ' title="'+esc(t("Changes every label in Etiuda, never the cards themselves"))+'">'+
     UI_LANGS.map(l=>'<option value="'+esc(l.code)+'"'+(l.code===uiLang()?" selected":"")+'>'+esc(l.label)+'</option>').join("")+
     '</select>';
-  const lastSyncStamp=fileStamp(+lsGet("eLastSync"));
   /* WHO IS AT THE DESK, AND IN WHICH LANGUAGE: two rows of the same kind, the name first
      because it is the one that leaves the machine. NO LINE UNDER THE NAME - the placeholder
      names the field and the cards show what the name does, and a sentence here would be the
@@ -161,9 +160,6 @@ function settingsBodyHtml(){
       row(t("Interface language"),
           t("The language of the buttons and menus, not of the macros: those follow EN|PL in the header"),
           langSel)+
-      (lastSyncStamp
-        ? row(t("Last sync"), "", '<span>'+esc(lastSyncStamp)+'</span>')
-        : "")+
       /* One row per team lead this desk trusts: the key the agent compared, and the way out where it was wrong. */
       teamLeads().map((l,i)=>row(t("Team lead's key"), i===0?t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own."):"",
         '<span class="e-lead-key">'+keySignHtml("studio",l.print)+'</span>'
