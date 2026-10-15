@@ -34,7 +34,7 @@ import { closeModal } from "./dialog.js";
 import { deskName, deskKey, deskBase, deskChangeWords, openDeskLook } from "./desk-look.js";
 import { hooks } from "./hooks.js";
 import { catalogTrust, whenTrusted, heldCatalogTrust, heldCatalogSigner, recheckHeldTrust, trustKeyHtml, trustOfferLine,
-  trustSettled } from "./catalog-trust.js";
+  trustSettled, trustPrint, keyPrintOf, heldCatalogPrint, settleHeldTrust } from "./catalog-trust.js";
 
 /* A catalog sitting beside Etiuda is offered, never forced. Asked once per signature:
    accept it and it loads silently from then on, change it and you are asked again, so what
@@ -96,6 +96,9 @@ function eOfferCatalog(given,name,where,force,asked,builtIn,offTeam){
 function eOfferCatalogAtBoot(){
   pinStoredFrom(eCatalog());
   nameHeldCatalog();
+  /* The held signature starts answering to a pinned lead now, so every offer after this one reads it settled. This one is
+     built in the same turn, as the tour's place behind a standing question needs it to be. */
+  settleHeldTrust(eCatalog(),storedCatalog());
   const at=+(nsGet("CatalogNoAt")||0), mt=eCatalogMtime(), asked=eOpenedWith();
   // A first run's tour asks for a catalog in its own step, so a found file waits for it to end.
   if(!asked && tourDueAtBoot()){ afterTour(eOfferCatalogAtBoot); return; }
@@ -224,10 +227,10 @@ const ecTrustOf=new Map();
 function ecFileTrust(f){
   const at=f.name+"|"+f.mtime;
   if(!ecTrustOf.has(at)) ecTrustOf.set(at, eReadCatalogFile(f.name).then(got=>{
-    if(!got) return {state:"",keyId:""};
-    const c=parseCatalogFile(got.text), sig=(catalogDocOf(c)||{}).sig;
-    return whenTrusted(c).then(s=>({state:s, keyId:String(sig&&sig.keyId||"")}));
-  }).catch(()=>({state:"",keyId:""})));
+    if(!got) return {state:"",print:""};
+    const c=parseCatalogFile(got.text);
+    return whenTrusted(c).then(s=>({state:s, print:trustPrint(c)}));
+  }).catch(()=>({state:"",print:""})));
   return ecTrustOf.get(at);
 }
 /* THE KEY'S BUBBLE, the family's shape pointing at the key: opened by hover or focus on a key
@@ -341,8 +344,9 @@ function paintCatalogList(){
   const mine=eLoadedCatalogFile();
   recheckHeldTrust(eCatalog(),held,paintCatalogList);
   /* A COLLEAGUE'S FILE HAS A ROW where it is the shape a desk writes, its id that desk's own followed by eight hex of
-     what it grew from, so a file claiming any other id has none. This desk's own file is a line, not a row. */
-  Promise.all([eCatalogFiles(),eBranchIdentity(false)]).then(([all,me])=>{
+     what it grew from, so a file claiming any other id has none. This desk's own file is a line, not a row. The rows
+     wait for the held signature to answer to a pinned lead, so the loaded row never draws a key this load has not vouched for. */
+  Promise.all([eCatalogFiles(),eBranchIdentity(false),settleHeldTrust(eCatalog(),held)]).then(([all,me])=>{
     if(!box.isConnected) return;
     const files=all.filter(f=>!f.desk);
     const shaped=f=>!!f.desk && f.id.indexOf(f.desk.id+"-")===0;
@@ -416,7 +420,7 @@ function paintCatalogList(){
       const row=Array.from(box.querySelectorAll(".ec-row")).find(x=>x.getAttribute("data-ec-file")===f.name);
       const key=row && row.querySelector(".ec-key");
       if(!key) return;
-      key.insertAdjacentHTML("beforebegin",trustKeyHtml(i===onAt?heldCatalogTrust():r.state,r.keyId));
+      key.insertAdjacentHTML("beforebegin",trustKeyHtml(i===onAt?heldCatalogTrust():r.state,i===onAt?heldCatalogPrint():r.print));
       key.remove();
       wireEcKeys(row);
     }));
@@ -450,19 +454,6 @@ function lookAtDesk(f,files,held){
     ()=>{ closeModal(); loadCatalogFromFolder(f.name,f.mtime,f.desk.id); },
     ()=>{ closeModal(); hooks.openManage(); });
 }
-/* The first 16 hex of the SHA-256 of the raw public, the print the shell gives a lead (leadPrint). */
-function leadPrintOf(pubHex){
-  const subtle=globalThis.crypto&&globalThis.crypto.subtle;
-  if(!subtle || !/^[0-9a-f]{64}$/.test(pubHex)) return Promise.resolve("");
-  const raw=new Uint8Array(32);
-  for(let i=0;i<32;i++) raw[i]=parseInt(pubHex.slice(i*2,i*2+2),16);
-  return subtle.digest("SHA-256", raw).then(buf=>{
-    const b=new Uint8Array(buf);
-    let hex="";
-    for(let i=0;i<8;i++) hex+=b[i].toString(16).padStart(2,"0");
-    return hex;
-  }).catch(()=>"");
-}
 /* A CATALOG SIGNED BY A KEY OTHER THAN THE TEAM LEAD'S says whose key it is, once its signature has
    verified under the key the ring names for it: the key is named by the print of that public, never by the
    file's keyId, which any writer of the share chooses. The ring only names the key here and trusts nothing,
@@ -477,7 +468,7 @@ function noteForeignSigner(c,wrap,place){
       const forCat=ring&&ring[String(c.id||"")];
       const pub=forCat&&typeof forCat==="object" ? String(forCat[kid]||"") : "";
       if(state===V2_SIG_VALID || !prints.length || !/^[0-9a-f]{64}$/.test(pub)) return;
-      return v2SigState(doc,ring).then(named=>named===V2_SIG_VALID ? leadPrintOf(pub) : "").then(print=>{
+      return v2SigState(doc,ring).then(named=>named===V2_SIG_VALID ? keyPrintOf(pub) : "").then(print=>{
         if(!print || prints.indexOf(print)>=0 || !wrap.isConnected || wrap.querySelector(".ec-signer")) return;
         const line=t("This file is signed with the key {KEY}, which is not the team lead's.").split("{KEY}").join(leadKeyText(print));
         wrap.querySelectorAll(".ec-trust").forEach(n=>n.remove());
