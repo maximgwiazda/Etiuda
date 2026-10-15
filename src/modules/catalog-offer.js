@@ -563,7 +563,7 @@ function eOfferCatalogDialog(c,src){
   const changes=updating ? editionChanges(active,c,pack) : null;
   const changeHtml=changes ? editionOfferHtml(c,active,changes) : "";
   // A NEW EDITION OF THE CATALOG IN USE: it waits at the name, and its load marks what it brought.
-  let fresh=updating && !older && !olderSure && !plain, label=fresh ? editionLabelOf(c) : "";
+  let fresh=updating && !older && !olderSure && !plain, ed=fresh ? editionNameOf(c) : null;
   const n=(c.cards||[]).length,
         i=catalogIntentCount(c),
         k=Object.keys(c.categories||{}).length;
@@ -672,7 +672,7 @@ function eOfferCatalogDialog(c,src){
   wrap.querySelector("#ecYes").onclick=()=>{
     if(taking) return;
     taking=true;
-    whenTrusted(c).then(()=>{ taking=false; close(); acceptOffer(c,sig,src,fresh ? {held:active, changes:changes, v:label} : null); });
+    whenTrusted(c).then(()=>{ taking=false; close(); acceptOffer(c,sig,src,fresh ? {held:active, changes:changes, name:ed} : null); });
   };
   wrap.querySelectorAll("[data-ec-open]").forEach(wireFolderLink);
   wrap.querySelector("#ecNo").onclick=()=>{
@@ -689,7 +689,7 @@ function eOfferCatalogDialog(c,src){
     const answer=id=>()=>{ closeModal(); if(library && id==="#ecNo") hooks.openManage(); wrap.hidden=false; wrap.querySelector(id).click(); };
     wrap.hidden=true;
     openEditionPanel({c:c, held:active, changes:changes,
-      version:catalogVersionLabel(c.version), name:catalogNameOfFile(String(src.file||"")||E_CATALOG_SCRIPT),
+      ed:editionNameOf(c), name:catalogNameOfFile(String(src.file||"")||E_CATALOG_SCRIPT),
       keep:answer("#ecNo"), load:answer("#ecYes"),
       taken:()=>repaintEditionRows(wrap,c,active,changes),
       back:()=>{ closeModal(); if(library) hooks.openManage(); wrap.hidden=false; place(); diff.focus(); }});
@@ -697,14 +697,15 @@ function eOfferCatalogDialog(c,src){
   // Only an act of somebody's takes the keyboard; a file found at boot leaves it in the search.
   if(src.asked || src.reopened){ const yes=wrap.querySelector("#ecYes"); if(yes) yes.focus(); }
   // The offer takes no focus, so the ear is told where it is.
-  if(arriving) editionSay(t("Edition {V} is waiting to be loaded; the offer is under the catalog's name.").split("{V}").join(label));
+  if(arriving) editionSay(ed.r!=null ? t("Rev {R} is waiting to be loaded; the offer is under the catalog's name.").split("{R}").join(String(ed.r))
+    : t("Edition {E} is waiting to be loaded; the offer is under the catalog's name.").split("{E}").join(ed.e));
   return true;
 }
 /* AN EDITION LOADED: its marks are written into the catalog's layer before the desk starts again, so the first
    paint wears them, and taken back if the load did not land. What it brought is then said once and shown once.
    Whether it landed is read once accept has settled: Import's two routes load after a promise and return it. */
 function acceptOffer(c,sig,src,ed){
-  const marks=ed ? editionMarksFrom(ed.held,ed.changes,ed.v) : null;
+  const marks=ed ? editionMarksFrom(ed.held,ed.changes,ed.name) : null;
   const was=ed ? keepEditionMarks(c,marks) : null;
   Promise.resolve(src.accept(sig)).then(()=>{
     const now=storedCatalog(), landed=!!now && eCatalogSignature(now)===sig;
@@ -712,7 +713,8 @@ function acceptOffer(c,sig,src,ed){
     paintCatWaiting();
     if(!ed || !landed) return;
     const counts=editionCountWords(ed.changes.counts);
-    if(counts.length) toast(t("Edition {V} loaded: {COUNTS}").split("{V}").join(ed.v).split("{COUNTS}").join(counts.join(", ")));
+    if(counts.length) toast((ed.name.r!=null ? t("Rev {R} loaded: {COUNTS}").split("{R}").join(String(ed.name.r))
+      : t("Edition {E} loaded: {COUNTS}").split("{E}").join(ed.name.e)).split("{COUNTS}").join(counts.join(", ")));
     if(marks) washEdition(marks);
   });
 }
@@ -762,7 +764,13 @@ function arriveAtName(wrap){
    dot and opens that offer again, forced past the refusal because opening it is asking. Only while it is still an
    edition of the catalog in use that is not the one loaded; otherwise the name is inert again. */
 let edWaiting=null;
-function editionLabelOf(c){ return catalogVersionLabel(c && c.version) || (c && +c.rev ? "v"+(+c.rev) : ""); }
+/* A CATALOG'S EDITION AS THE DESK NAMES IT: {e} its dated edition where it has one, otherwise {r} its rev. A bare
+   number is never called an edition, so a label that is only a number gives way to the rev. */
+function editionNameOf(c){
+  const e=catalogVersionLabel(c && c.version);
+  if(e && !/^v?[0-9][0-9.]*$/.test(e)) return {e:e};
+  return (c && c.rev!=null && c.rev!=="" && Number.isFinite(+c.rev)) ? {r:+c.rev} : {e:""};
+}
 function leaveWaiting(c,src,active){
   if(!isCatalogUpdate(c,active) || catalogEditionOlder(c.version,active.version)) return;
   // The same edition already waiting keeps the route it came by.
@@ -784,7 +792,8 @@ function paintCatWaiting(){
     return;
   }
   if(!dot){ dot=document.createElement("span"); dot.className="cn-dot"; dot.setAttribute("aria-hidden","true"); el.insertBefore(dot,el.firstChild); }
-  const words=t("Show edition {V}, waiting to be loaded").split("{V}").join(editionLabelOf(edWaiting.c));
+  const ed=editionNameOf(edWaiting.c), words=ed.r!=null ? t("Show rev {R}, waiting to be loaded").split("{R}").join(String(ed.r))
+    : t("Show edition {E}, waiting to be loaded").split("{E}").join(ed.e);
   el.setAttribute("role","button");
   el.setAttribute("tabindex","0");
   el.setAttribute("title",words);

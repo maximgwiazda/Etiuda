@@ -6986,22 +6986,31 @@ What you type stays in this browser only.`;
     "It comes back with your star and your edits.": "Wróci z gwiazdką i własnymi zmianami.",
     "and {N} more": "i {N} więcej",
     "Show the differences": "Pokaż różnice",
-    "What is new in edition {V}": "Co nowego w wydaniu {V}",
+    "What is new in edition {E}": "Co nowego w wydaniu {E}",
+    "What is new in rev {R}": "Co nowego w wersji {R}",
     "Was": "Było",
     "Becomes": "Będzie",
     "Your version": "Własna wersja",
     "Text": "Treść",
     "Take the team's new text": "Weź nową treść zespołu",
     "Keep mine": "Zostaw moją",
-    "Edition {V} is waiting to be loaded; the offer is under the catalog's name.": "Wydanie {V} czeka na wczytanie; propozycja jest pod nazwą katalogu.",
-    "Show edition {V}, waiting to be loaded": "Pokaż wydanie {V}, które czeka na wczytanie",
+    "Edition {E} is waiting to be loaded; the offer is under the catalog's name.": "Wydanie {E} czeka na wczytanie; propozycja jest pod nazwą katalogu.",
+    "Rev {R} is waiting to be loaded; the offer is under the catalog's name.": "Wersja {R} czeka na wczytanie; propozycja jest pod nazwą katalogu.",
+    "Show edition {E}, waiting to be loaded": "Pokaż wydanie {E}, które czeka na wczytanie",
+    "Show rev {R}, waiting to be loaded": "Pokaż wersję {R}, która czeka na wczytanie",
     "This desk carries on as it is until the update is loaded.": "Do wczytania aktualizacji stanowisko działa bez zmian.",
-    "Edition {V} loaded: {COUNTS}": "Wczytano wydanie {V}: {COUNTS}",
-    "Changed in edition {V}": "Zmieniona w wydaniu {V}",
-    "New in edition {V}": "Nowa w wydaniu {V}",
-    "Changes in {V}": "Zmiany w {V}",
-    "Only the cards edition {V} changed or added": "Tylko karty zmienione lub dodane w wydaniu {V}",
-    "Cards edition {V} changed or added: {N}.": "Karty zmienione lub dodane w wydaniu {V}: {N}.",
+    "Edition {E} loaded: {COUNTS}": "Wczytano wydanie {E}: {COUNTS}",
+    "Rev {R} loaded: {COUNTS}": "Wczytano wersję {R}: {COUNTS}",
+    "Changed in edition {E}": "Zmieniona w wydaniu {E}",
+    "Changed in rev {R}": "Zmieniona w wersji {R}",
+    "New in edition {E}": "Nowa w wydaniu {E}",
+    "New in rev {R}": "Nowa w wersji {R}",
+    "Changes in {E}": "Zmiany w {E}",
+    "Changes in rev {R}": "Zmiany w wersji {R}",
+    "Only the cards edition {E} changed or added": "Tylko karty zmienione lub dodane w wydaniu {E}",
+    "Only the cards rev {R} changed or added": "Tylko karty zmienione lub dodane w wersji {R}",
+    "Cards edition {E} changed or added: {N}.": "Karty zmienione lub dodane w wydaniu {E}: {N}.",
+    "Cards rev {R} changed or added: {N}.": "Karty zmienione lub dodane w wersji {R}: {N}.",
     "before:": "wcześniej:",
     "now:": "teraz:",
     "Load catalog?": "Wczytać katalog?",
@@ -9152,7 +9161,7 @@ What you type stays in this browser only.`;
     ["sealed", "exportsSealed"].forEach((f) => {
       if (typeof doc[f] !== "boolean") bad.push(f + ": wanted true or false");
     });
-    if (!Number.isInteger(doc.epoch) || doc.epoch < 1) bad.push("epoch: wanted a whole number from 1");
+    if (!Number.isInteger(doc.epoch) || doc.epoch < 1) bad.push("key number: wanted a whole number from 1");
     if (!Array.isArray(doc.catalogs)) bad.push("catalogs: wanted the list of catalog ids");
     if (!Array.isArray(doc.roster)) bad.push("roster: wanted the list of desks");
     if (bad.length) {
@@ -9180,7 +9189,7 @@ What you type stays in this browser only.`;
       }
       seen[d.id] = 1;
       if (e.wrap !== void 0 && !(e.wrap && typeof e.wrap === "object" && e.wrap.epoch === doc.epoch && hex64.test(v2Str(e.wrap.enc)) && /^[0-9a-f]{96}$/.test(v2Str(e.wrap.ct)))) {
-        problems.push(where + "a wrap that is not the team key for epoch " + doc.epoch + ", the desk stands without it");
+        problems.push(where + "a wrap that is not the team's current key, the desk stands without it");
         e = Object.assign({}, e);
         delete e.wrap;
       }
@@ -9188,7 +9197,7 @@ What you type stays in this browser only.`;
     });
     const rc = doc.recovery;
     if (rc !== void 0 && !(rc && typeof rc === "object" && rc.epoch === doc.epoch && rc.kdf === "scrypt" && rc.cipher === "aes-256-gcm" && [rc.N, rc.r, rc.p].every((x) => Number.isInteger(x) && x > 0) && /^[0-9a-f]{32}$/.test(v2Str(rc.salt)) && /^[0-9a-f]{24}$/.test(v2Str(rc.iv)) && /^[0-9a-f]{96}$/.test(v2Str(rc.ct)))) {
-      problems.push("team recovery: wanted the team key for epoch " + doc.epoch + " under a passphrase, the team stands without it");
+      problems.push("team recovery: wanted the team's current key under a passphrase, the team stands without it");
       delete team.recovery;
     }
     out.team = team;
@@ -9321,7 +9330,7 @@ What you type stays in this browser only.`;
     const g = entry("grew", data.grew);
     if (g) {
       if (!V2_ID_RE.test(v2Str(g.id))) out.push("grew.id: " + v2Missing(g.id) + ", wanted the id of the catalog it grew from");
-      if (typeof g.rev !== "number" || !Number.isFinite(g.rev) || g.rev < 0) out.push("grew.rev: " + v2Missing(g.rev) + ", wanted the edition number it grew from");
+      if (typeof g.rev !== "number" || !Number.isFinite(g.rev) || g.rev < 0) out.push("grew.rev: " + v2Missing(g.rev) + ", wanted the rev it grew from");
       if (!V2_SHA_RE.test(v2Str(g.sha))) out.push("grew.sha: " + v2Missing(g.sha) + ", wanted sha256: and 64 lower-case hex characters");
     }
     const d = entry("desk", data.desk);
@@ -9412,7 +9421,7 @@ What you type stays in this browser only.`;
     if (!V2_ID_RE.test(v2Str(data.id)))
       out.push("id: " + (data.id == null ? "absent" : "malformed") + ", wanted 3 to 64 of a-z, 0-9 and the hyphen");
     if (!(Number.isFinite(+data.rev) && +data.rev >= 0))
-      out.push("rev: " + (data.rev == null ? "absent" : "not a number") + ", wanted the edition counter");
+      out.push("rev: " + (data.rev == null ? "absent" : "not a number") + ", wanted the catalog's rev, a number from 0");
     const codes = v2Codes(data);
     const primary = codes[0] || "en";
     v2LangProblems(data, codes, out);
@@ -16584,9 +16593,9 @@ What you type stays in this browser only.`;
 
   // src/modules/edition-marks.js
   var EDITION_MARKS = "EditionMarks";
-  function editionMarksFrom(held, changes, v) {
+  function editionMarksFrom(held, changes, name) {
     const was = new Map((held && held.cards || []).map((m) => [String(m.id), m]));
-    const out = { v: String(v || ""), cards: {} };
+    const out = name && name.r != null ? { r: +name.r, cards: {} } : { e: String(name && name.e || ""), cards: {} };
     (changes && changes.items || []).forEach((it) => {
       if (it.kind !== "changed" && it.kind !== "new") return;
       const mark = { k: it.kind };
@@ -16633,7 +16642,7 @@ What you type stays in this browser only.`;
   }
   function editionMarkOf(id) {
     const all = editionMarks(), m = all && all.cards[String(id)];
-    return m ? { k: m.k === "new" ? "new" : "changed", v: all.v } : null;
+    return m ? { k: m.k === "new" ? "new" : "changed", e: String(all.e || ""), r: all.r != null ? all.r : null } : null;
   }
   function editionWasText(id, key) {
     const all = editionMarks(), m = all && all.cards[String(id)];
@@ -19352,11 +19361,12 @@ What you type stays in this browser only.`;
     schedulePillsCollapse();
   }
   function editionPill(n) {
-    const v = (editionMarks() || {}).v || "";
+    const ed = editionMarks() || {}, rev = ed.r != null;
+    const said = (dated, byRev) => rev ? byRev.split("{R}").join(String(ed.r)) : dated.split("{E}").join(String(ed.e || ""));
     const b = document.createElement("div");
     b.className = "pill pill-ed" + (editionView ? " on" : "");
-    b.innerHTML = '<span class="pill-lab" data-i18n-skip>' + esc(t("Changes in {V}").split("{V}").join(v)) + "</span> <b>" + n + "</b>";
-    const tip = t("Only the cards edition {V} changed or added").split("{V}").join(v);
+    b.innerHTML = '<span class="pill-lab" data-i18n-skip>' + esc(said(t("Changes in {E}"), t("Changes in rev {R}"))) + "</span> <b>" + n + "</b>";
+    const tip = said(t("Only the cards edition {E} changed or added"), t("Only the cards rev {R} changed or added"));
     b.title = tip;
     b.setAttribute("aria-label", tip);
     b.setAttribute("role", "button");
@@ -19379,7 +19389,7 @@ What you type stays in this browser only.`;
       hooks.railEchoRedraw(railBefore, relBefore);
       scrollRailTop();
       scheduleTabSave();
-      if (press2) editionSay(t("Cards edition {V} changed or added: {N}.").split("{V}").join(v).split("{N}").join(String(editionMarkedCount())));
+      if (press2) editionSay(said(t("Cards edition {E} changed or added: {N}."), t("Cards rev {R} changed or added: {N}.")).split("{N}").join(String(editionMarkedCount())));
     };
     return b;
   }
@@ -20084,7 +20094,7 @@ What you type stays in this browser only.`;
     if (m._custom || m._overridden || movedCardIds().has(m.id))
       cardH += '<span class="cbadge ed" title="' + esc(t("Changed or added by you, not what the catalog shipped")) + '">' + esc(t("mod")) + "</span>";
     const edMark = editionMarkOf(m.id);
-    if (edMark) cardH += '<span class="cbadge edn" title="' + esc((edMark.k === "new" ? t("New in edition {V}") : t("Changed in edition {V}")).split("{V}").join(edMark.v)) + '">' + esc(edMark.k === "new" ? t("new") : t("changed")) + "</span>";
+    if (edMark) cardH += '<span class="cbadge edn" title="' + esc(edMark.r != null ? (edMark.k === "new" ? t("New in rev {R}") : t("Changed in rev {R}")).split("{R}").join(String(edMark.r)) : (edMark.k === "new" ? t("New in edition {E}") : t("Changed in edition {E}")).split("{E}").join(edMark.e)) + '">' + esc(edMark.k === "new" ? t("new") : t("changed")) + "</span>";
     const favTip = t(fav ? "Remove from Favourites" : "Add to Favourites");
     const hideTip = t(m._hidden ? "Show this card again" : fav ? "Put this card away: it greys out at the foot of this category and loses its star" : "Put this card away: it greys out at the foot of this category");
     const _note = noteFor(m);
@@ -27211,7 +27221,7 @@ What you type stays in this browser only.`;
     const row = (it, i) => '<button type="button" class="ed-row" data-ed-at="' + i + '"' + (i === at ? ' aria-current="true"' : "") + ">" + editionRowInner(it, o.held, c, sub) + "</button>";
     openDialog({
       cls: "ed-modal",
-      title: desk ? desk.title : t("What is new in edition {V}").split("{V}").join(o.version),
+      title: desk ? desk.title : o.ed && o.ed.r != null ? t("What is new in rev {R}").split("{R}").join(String(o.ed.r)) : t("What is new in edition {E}").split("{E}").join(o.ed && o.ed.e || ""),
       name: o.name,
       back: o.back,
       body: '<div class="ed-panel" data-i18n-skip><div class="ed-left">' + (note ? editionNoteHtml(note, "ed-note") : "") + editionCountsHtml(o.changes.counts) + '<div class="ed-list">' + items.map(row).join("") + '</div></div><div class="ed-pane" id="edPane" aria-live="polite"></div></div>',
@@ -27615,7 +27625,6 @@ What you type stays in this browser only.`;
         c: s.hers,
         held: s.team,
         changes,
-        version: "",
         name,
         keep: back,
         load: work,
@@ -28048,7 +28057,7 @@ What you type stays in this browser only.`;
     const older = updating && !olderSure && !plain && datedEarlier;
     const changes = updating ? editionChanges(active, c, pack) : null;
     const changeHtml = changes ? editionOfferHtml(c, active, changes) : "";
-    let fresh = updating && !older && !olderSure && !plain, label2 = fresh ? editionLabelOf(c) : "";
+    let fresh = updating && !older && !olderSure && !plain, ed = fresh ? editionNameOf(c) : null;
     const n = (c.cards || []).length, i = catalogIntentCount(c), k = Object.keys(c.categories || {}).length;
     const trustHtml = (line) => line ? '<p class="ec-trust">' + esc(line) + "</p>" : "";
     const wrap = document.createElement("div");
@@ -28127,7 +28136,7 @@ What you type stays in this browser only.`;
       whenTrusted(c).then(() => {
         taking = false;
         close();
-        acceptOffer(c, sig, src, fresh ? { held: active, changes, v: label2 } : null);
+        acceptOffer(c, sig, src, fresh ? { held: active, changes, name: ed } : null);
       });
     };
     wrap.querySelectorAll("[data-ec-open]").forEach(wireFolderLink);
@@ -28152,7 +28161,7 @@ What you type stays in this browser only.`;
         c,
         held: active,
         changes,
-        version: catalogVersionLabel(c.version),
+        ed: editionNameOf(c),
         name: catalogNameOfFile(String(src.file || "") || E_CATALOG_SCRIPT),
         keep: answer("#ecNo"),
         load: answer("#ecYes"),
@@ -28170,11 +28179,11 @@ What you type stays in this browser only.`;
       const yes = wrap.querySelector("#ecYes");
       if (yes) yes.focus();
     }
-    if (arriving) editionSay(t("Edition {V} is waiting to be loaded; the offer is under the catalog's name.").split("{V}").join(label2));
+    if (arriving) editionSay(ed.r != null ? t("Rev {R} is waiting to be loaded; the offer is under the catalog's name.").split("{R}").join(String(ed.r)) : t("Edition {E} is waiting to be loaded; the offer is under the catalog's name.").split("{E}").join(ed.e));
     return true;
   }
   function acceptOffer(c, sig, src, ed) {
-    const marks = ed ? editionMarksFrom(ed.held, ed.changes, ed.v) : null;
+    const marks = ed ? editionMarksFrom(ed.held, ed.changes, ed.name) : null;
     const was = ed ? keepEditionMarks(c, marks) : null;
     Promise.resolve(src.accept(sig)).then(() => {
       const now = storedCatalog(), landed = !!now && eCatalogSignature(now) === sig;
@@ -28182,7 +28191,7 @@ What you type stays in this browser only.`;
       paintCatWaiting();
       if (!ed || !landed) return;
       const counts2 = editionCountWords(ed.changes.counts);
-      if (counts2.length) toast(t("Edition {V} loaded: {COUNTS}").split("{V}").join(ed.v).split("{COUNTS}").join(counts2.join(", ")));
+      if (counts2.length) toast((ed.name.r != null ? t("Rev {R} loaded: {COUNTS}").split("{R}").join(String(ed.name.r)) : t("Edition {E} loaded: {COUNTS}").split("{E}").join(ed.name.e)).split("{COUNTS}").join(counts2.join(", ")));
       if (marks) washEdition(marks);
     });
   }
@@ -28238,8 +28247,10 @@ What you type stays in this browser only.`;
     );
   }
   var edWaiting = null;
-  function editionLabelOf(c) {
-    return catalogVersionLabel(c && c.version) || (c && +c.rev ? "v" + +c.rev : "");
+  function editionNameOf(c) {
+    const e = catalogVersionLabel(c && c.version);
+    if (e && !/^v?[0-9][0-9.]*$/.test(e)) return { e };
+    return c && c.rev != null && c.rev !== "" && Number.isFinite(+c.rev) ? { r: +c.rev } : { e: "" };
   }
   function leaveWaiting(c, src, active) {
     if (!isCatalogUpdate(c, active) || catalogEditionOlder(c.version, active.version)) return;
@@ -28265,7 +28276,7 @@ What you type stays in this browser only.`;
       dot.setAttribute("aria-hidden", "true");
       el.insertBefore(dot, el.firstChild);
     }
-    const words = t("Show edition {V}, waiting to be loaded").split("{V}").join(editionLabelOf(edWaiting.c));
+    const ed = editionNameOf(edWaiting.c), words = ed.r != null ? t("Show rev {R}, waiting to be loaded").split("{R}").join(String(ed.r)) : t("Show edition {E}, waiting to be loaded").split("{E}").join(ed.e);
     el.setAttribute("role", "button");
     el.setAttribute("tabindex", "0");
     el.setAttribute("title", words);

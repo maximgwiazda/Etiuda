@@ -305,7 +305,7 @@ async function main() {
 
   const teamBroken = Object.assign({}, teamDoc, { lead: { keyId: keyId }, epoch: 0, sealed: "no", roster: {} });
   const t4 = v2.v2TeamRead(teamBroken);
-  ok(t4.team === null && t4.problems.length === 4,
+  ok(t4.team === null && t4.problems.length === 4 && t4.problems.indexOf("team key number: wanted a whole number from 1") > -1,
      "88d a team file with no lead key, epoch 0, sealed not true or false and a roster that is not a list is no team,"
      + " with a line for each: " + JSON.stringify(t4.problems));
 
@@ -352,7 +352,8 @@ async function main() {
     { roster: badWraps.map((w, i) => ({ desk: deskOf(10 + i), wrap: w })).concat([{ desk: deskOf(20), wrap: wrapOf(20) }]) }));
   ok(t7.team && t7.team.roster.length === 6 && t7.team.roster.filter(e => "wrap" in e).length === 1
      && t7.team.roster[5].wrap.enc === wrapOf(20).enc && t7.problems.length === badWraps.length
-     && t7.problems.every(p => /wrap/.test(p)),
+     && t7.problems.every(p => /wrap/.test(p))
+     && t7.problems[2] === "team roster[2]: a wrap that is not the team's current key, the desk stands without it",
      "88j THE CONTROL: a wrap with a short enc or ct, of another epoch, or not an object is dropped with a line and its desk"
      + " stands, and the good neighbour keeps its own (" + t7.problems.length + " lines, "
      + (t7.team ? t7.team.roster.filter(e => "wrap" in e).length : 0) + " wrap kept)");
@@ -361,7 +362,8 @@ async function main() {
     { iv: hexOf("i", 22) }, { ct: hexOf("c", 64) }].map(over => Object.assign({}, recovery, over)).concat(["a recovery"]);
   const t8 = badRecoveries.map(rc => v2.v2TeamRead(Object.assign({}, wrappedDoc, { recovery: rc })));
   ok(t8.every(r => r.team && !("recovery" in r.team) && r.team.roster.length === 2 && r.problems.length === 1
-     && /recovery/.test(r.problems[0])),
+     && /recovery/.test(r.problems[0]))
+     && t8[1].problems[0] === "team recovery: wanted the team's current key under a passphrase, the team stands without it",
      "88k THE CONTROL: a recovery copy of another kdf, epoch, cost, cipher, salt, iv or ct length, or not an object, is"
      + " dropped with one line and the team stands: " + t8.map(r => r.problems.length).join(","));
 

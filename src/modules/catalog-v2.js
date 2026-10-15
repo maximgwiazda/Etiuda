@@ -303,7 +303,7 @@ function v2TeamRead(src){
   if(!lead||typeof lead!=="object"||Array.isArray(lead)||!V2_ID_RE.test(v2Str(lead.keyId))||!hex64.test(v2Str(lead.public)))
     bad.push("lead: wanted a keyId and a public key of 64 lower-case hex characters");
   ["sealed","exportsSealed"].forEach(f=>{ if(typeof doc[f]!=="boolean") bad.push(f+": wanted true or false"); });
-  if(!Number.isInteger(doc.epoch)||doc.epoch<1) bad.push("epoch: wanted a whole number from 1");
+  if(!Number.isInteger(doc.epoch)||doc.epoch<1) bad.push("key number: wanted a whole number from 1");
   if(!Array.isArray(doc.catalogs)) bad.push("catalogs: wanted the list of catalog ids");
   if(!Array.isArray(doc.roster)) bad.push("roster: wanted the list of desks");
   if(bad.length){ bad.forEach(b=>problems.push("team "+b)); return out; }
@@ -323,7 +323,7 @@ function v2TeamRead(src){
     /* A wrap is the team key sealed to this desk's box for the team's own epoch (shell/main.js wrapTeamKey). */
     if(e.wrap!==undefined&&!(e.wrap&&typeof e.wrap==="object"&&e.wrap.epoch===doc.epoch&&hex64.test(v2Str(e.wrap.enc))
       &&/^[0-9a-f]{96}$/.test(v2Str(e.wrap.ct)))){
-      problems.push(where+"a wrap that is not the team key for epoch "+doc.epoch+", the desk stands without it");
+      problems.push(where+"a wrap that is not the team's current key, the desk stands without it");
       e=Object.assign({},e); delete e.wrap;
     }
     team.roster.push(e);
@@ -333,7 +333,7 @@ function v2TeamRead(src){
   if(rc!==undefined&&!(rc&&typeof rc==="object"&&rc.epoch===doc.epoch&&rc.kdf==="scrypt"&&rc.cipher==="aes-256-gcm"
     &&[rc.N,rc.r,rc.p].every(x=>Number.isInteger(x)&&x>0)&&/^[0-9a-f]{32}$/.test(v2Str(rc.salt))
     &&/^[0-9a-f]{24}$/.test(v2Str(rc.iv))&&/^[0-9a-f]{96}$/.test(v2Str(rc.ct)))){
-    problems.push("team recovery: wanted the team key for epoch "+doc.epoch+" under a passphrase, the team stands without it");
+    problems.push("team recovery: wanted the team's current key under a passphrase, the team stands without it");
     delete team.recovery;
   }
   out.team=team;
@@ -477,7 +477,7 @@ function v2HeaderProblems(data,codes,out){
   const g=entry("grew",data.grew);
   if(g){
     if(!V2_ID_RE.test(v2Str(g.id))) out.push("grew.id: "+v2Missing(g.id)+", wanted the id of the catalog it grew from");
-    if(typeof g.rev!=="number"||!Number.isFinite(g.rev)||g.rev<0) out.push("grew.rev: "+v2Missing(g.rev)+", wanted the edition number it grew from");
+    if(typeof g.rev!=="number"||!Number.isFinite(g.rev)||g.rev<0) out.push("grew.rev: "+v2Missing(g.rev)+", wanted the rev it grew from");
     if(!V2_SHA_RE.test(v2Str(g.sha))) out.push("grew.sha: "+v2Missing(g.sha)+", wanted sha256: and 64 lower-case hex characters");
   }
   const d=entry("desk",data.desk);
@@ -547,7 +547,7 @@ function v2Problems(data){
   if(!V2_ID_RE.test(v2Str(data.id)))
     out.push("id: "+(data.id==null?"absent":"malformed")+", wanted 3 to 64 of a-z, 0-9 and the hyphen");
   if(!(Number.isFinite(+data.rev)&&+data.rev>=0))
-    out.push("rev: "+(data.rev==null?"absent":"not a number")+", wanted the edition counter");
+    out.push("rev: "+(data.rev==null?"absent":"not a number")+", wanted the catalog's rev, a number from 0");
   const codes=v2Codes(data);
   const primary=codes[0]||"en";
   v2LangProblems(data,codes,out);

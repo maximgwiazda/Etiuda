@@ -1079,7 +1079,7 @@ function v2ValidationTests() {
   eq("v2 a sound catalog has nothing to report", V.v2Problems(base()), []);
   eq("v2 a missing id is named", first(c => { delete c.id; }).slice(0, 11), "id: absent,");
   eq("v2 a malformed id is named", first(c => { c.id = "A"; }).slice(0, 14), "id: malformed,");
-  eq("v2 a missing rev is named", first(c => { delete c.rev; }).slice(0, 12), "rev: absent,");
+  eq("v2 a missing rev is named", first(c => { delete c.rev; }), "rev: absent, wanted the catalog's rev, a number from 0");
   eq("v2 a twice-claimed tag id is named",
      first(c => c.tags.push({ id: "t-open", kind: "shelf", label: { en: "Again" } })),
      "tag t-open: the id is claimed twice");
@@ -1396,12 +1396,12 @@ function formatPassTests() {
       first(c => { c.grew = { id: "toy-shop", rev: -1, sha: "sha256:" + HEX("a") }; }),
       first(c => { c.grew = { id: "toy-shop", rev: JSON.parse("1e400"), sha: "sha256:" + HEX("a") }; })],
      ["grew.id: malformed, wanted the id of the catalog it grew from",
-      "grew.rev: malformed, wanted the edition number it grew from",
+      "grew.rev: malformed, wanted the rev it grew from",
       "grew.sha: malformed, wanted sha256: and 64 lower-case hex characters",
       "grew.sha: malformed, wanted sha256: and 64 lower-case hex characters",
       "grew: not an entry",
-      "grew.rev: malformed, wanted the edition number it grew from",
-      "grew.rev: malformed, wanted the edition number it grew from"]);
+      "grew.rev: malformed, wanted the rev it grew from",
+      "grew.rev: malformed, wanted the rev it grew from"]);
   eq("834o grew: a part left out is absent, not malformed",
      first(c => { c.grew = { rev: 1, sha: "sha256:" + HEX("a") }; }),
      "grew.id: absent, wanted the id of the catalog it grew from");
@@ -4005,7 +4005,8 @@ function activeStateTests() {
   eq("each tab's name is a tab to a screen reader, selected exactly where the tab is on",
     got, [[false, "tab", "false"], [true, "tab", "true"]]);
 
-  /* `ed` is the loaded edition's marks: how many cards still wear one, and whether its pill is pressed. */
+  /* `ed` is the loaded edition's marks: how many cards still wear one, whether its pill is pressed, and the edition's name
+     as the marks keep it; with `words` the edition's pill comes back as its label, its title and its aria-label. */
   const pillsAt = (sel, ed) => {
     const pills = new El("div"), view = !!(ed && ed.view);
     const H = new Function("document", "pills", "cats", "CATS", "intentCats", "searchCounts", "catIconSvg", "esc", "t", "ICON_EDIT",
@@ -4014,8 +4015,10 @@ function activeStateTests() {
       slice("pills-bar.js", "function editionPill(") + "\n" + slice("pills-bar.js", "function drawPillsCore(") + "\nreturn drawPillsCore;")(
       doc, pills, sel, { a: "Alpha", b: "Beta" }, () => ({ specific: [], always: [] }), () => null, () => "", s => s, s => s, "",
       "", "", () => -1, null, () => 3, { a: 1, b: 2 }, () => ["a", "b"], () => {}, () => {},
-      view, () => {}, () => (ed ? ed.n : 0), () => ({ v: "v7" }));
+      view, () => {}, () => (ed ? ed.n : 0), () => (ed && ed.marks) || { r: 7 });
     H();
+    if (ed && ed.words) { const p = pills.kids.find(k => k.cls.has("pill-ed"));
+      return p ? [p.innerHTML.replace(/<[^>]+>/g, ""), p.title, p.getAttribute("aria-label")] : null; }
     return pills.kids.map(k => [k.cls.has("pill-ed") ? "edition" : k.dataset.k === undefined ? "+" : k.dataset.k,
       k.getAttribute("role"), k.getAttribute("aria-pressed")]);
   };
@@ -4027,6 +4030,19 @@ function activeStateTests() {
   eq("the pill of a loaded edition's marked cards stands beside All while any wear a mark, a toggle pressed while it filters, and All is not",
     got, [[["", "button", "false"], ["edition", "button", "true"], ["a", "button", "false"], ["b", "button", "false"], ["+", null, null]],
           [["", "button", "true"], ["edition", "button", "false"], ["a", "button", "false"], ["b", "button", "false"], ["+", null, null]]]);
+  try { got = [pillsAt([], { n: 2, words: true, marks: { r: 7 } }), pillsAt([], { n: 2, words: true, marks: { e: "2026-09-20" } })]; }
+  catch (e) { got = "drawPillsCore did not run: " + e.message; }
+  eq("the edition's pill names it by its rev, or by its dated edition where the marks keep that, never a number as an edition",
+    got, [["Changes in rev 7 2", "Only the cards rev 7 changed or added", "Only the cards rev 7 changed or added"],
+          ["Changes in 2026-09-20 2", "Only the cards edition 2026-09-20 changed or added", "Only the cards edition 2026-09-20 changed or added"]]);
+  try {
+    const nameOf = new Function(slice("catalog.js", "function catalogVersionLabel(") + "\n" + slice("catalog-offer.js", "function editionNameOf(")
+      + "\nreturn editionNameOf;")();
+    got = [{ version: "2026-09-20a", rev: 4 }, { rev: 15 }, { version: "3", rev: 15 }, { version: "v1.2", rev: 15 }, { version: "Spring", rev: 15 },
+      { rev: 0 }].map(c => JSON.stringify(nameOf(c)));
+  } catch (e) { got = "editionNameOf did not run: " + e.message; }
+  eq("a catalog's edition is named by its dated edition where it has one, otherwise by its rev, and a bare number is never an edition",
+    got, ['{"e":"2026-09-20a"}', '{"r":15}', '{"r":15}', '{"r":15}', '{"e":"Spring"}', '{"r":0}']);
 
   try {
     const paint = new Function("catSlot", "railDrag", "railRelNow", "railRelGroup",
@@ -4872,6 +4888,57 @@ function checkTypeableChars() {
   out.ran = ran;
   return out;
 }
+/* WHAT A PERSON IS TOLD A CATALOG'S NUMBER IS: its rev ("wersja" in Polish). "Edition" names a catalog only by its
+   dated edition, {E}, and the team key's generation is no word anybody reads. Read over every string literal of the
+   engine's source and the shell, the strings table's two halves among them, so a sentence built at its call site
+   ("... edition " + rev) is read as well as a key. */
+const REV_WORD_RULES = [
+  [/\bepo[ck]/i, "says epoch"],
+  [/\b(?:edition|wydani[a-z]*)\s+(?:$|numbers?\b|counter\b|v?[0-9]|\{(?!E\})[A-Z]+\})|\bnumer[a-z]*\s+wydani/i,
+    "names a number as an edition"]
+];
+function revWordFaults(s) { return REV_WORD_RULES.filter(r => r[0].test(s)).map(r => r[1]); }
+/* Every string literal of a JS text, comments and regular expressions left out, as maskJsInto reads them. */
+function jsLiterals(js) {
+  const mask = keep => { const out = js.split("").map(c => (c === "\n" ? "\n" : " ")); maskJsInto(js, 0, js.length, out, keep); return out; };
+  const kept = mask(true), plain = mask(false), out = [];
+  for (let i = 0; i < js.length; i++) {
+    const q = kept[i];
+    if ((q !== '"' && q !== "'" && q !== "`") || plain[i] !== " ") continue;
+    let j = i + 1, depth = 0;
+    while (j < js.length) {
+      if (js[j] === "\\") { j += 2; continue; }
+      if (depth === 0 && js[j] === q) break;
+      if (q === "`" && js[j] === "$" && js[j + 1] === "{") { depth++; j += 2; continue; }
+      if (depth > 0 && js[j] === "{") depth++;
+      else if (depth > 0 && js[j] === "}") depth--;
+      j++;
+    }
+    out.push(js.slice(i + 1, j)); i = j;
+  }
+  return out;
+}
+function checkRevWords() {
+  const problems = [], read = {};
+  const files = ["src/main.js"].concat(fs.readdirSync(path.join(E.ROOT, "src", "modules")).filter(f => f.endsWith(".js")).sort()
+    .map(f => "src/modules/" + f), ["shell/main.js", "shell/preload.js"]);
+  let n = 0;
+  files.forEach(rel => {
+    const lits = jsLiterals(fs.readFileSync(path.join(E.ROOT, rel), "utf8"));
+    read[rel] = lits.length; n += lits.length;
+    lits.forEach(s => revWordFaults(s).forEach(why => problems.push(rel + ": " + JSON.stringify(s.slice(0, 100)) + " " + why)));
+  });
+  // Shown reading: every pair of the strings table is among the literals read, and planted faults are found.
+  const pairs = uiPairs(fs.readFileSync(path.join(E.ROOT, "src", "modules", "ui-lang.js"), "utf8")).length;
+  if (!pairs || !(read["src/modules/ui-lang.js"] >= 2 * pairs))
+    problems.push("read " + read["src/modules/ui-lang.js"] + " literals of ui-lang.js against its " + pairs + " pairs");
+  const planted = jsLiterals('a("Edition {V} loaded"); b("for epoch " + n); c("changes, edition " + rev); d(`Wczytano wydanie {N} ${x}`);\n'
+    + 'e("wanted the edition number"); f("numer wydania");\n// edition 4, epoch 2\ng("Edition {E} loaded", "Rev {R} loaded", "edition", /epoch/);');
+  const flagged = planted.map(s => revWordFaults(s).length > 0).join("");
+  if (flagged !== "truetruetruetruetruetruefalsefalsefalse")
+    problems.push("the planted literals read " + JSON.stringify(planted) + " and flagged " + flagged + ", so a silence here means nothing");
+  return { problems: problems, literals: n, files: files.length, pairs: pairs };
+}
 /* Export writes an object literal; import copies a WHITELIST. A field added to one and not
    the other is lost in silence, and the file says so in a comment that has now failed twice
    - the Polish intent topics, then the Polish category names. Comparing the two lists beats
@@ -4978,8 +5045,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1097;
-const UI_STRINGS_SHA256 = "d0c895bdec7442bab2a1cd8f465f92b6425be184286e1ce279365c2cbb31c285";
+const UI_STRINGS_COUNT = 1106;
+const UI_STRINGS_SHA256 = "080a044b41f972602c7fcdf0b30e416912591ceef45136c3a4c2ff25cb32c6e3";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
@@ -6760,6 +6827,15 @@ if (require.main === module) {
     else console.log("  no untypeable character in the engine's interface"
       + (p.ran.catalog ? ", nor in anything a passenger receives" : "; the catalog half was NOT RUN"));
     if (!p.ran.catalog) notRun.push("3d's catalog half");
+  } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
+
+  section("[3h/5] a catalog's number is its rev, and no epoch");
+  try {
+    const r = checkRevWords();
+    r.problems.forEach(x => console.error("  ERROR: " + x));
+    if (r.problems.length) hardFail++;
+    else console.log("  no string the desk can show says epoch or names a number as an edition (" + r.literals
+      + " literals in " + r.files + " files, the table's " + r.pairs + " pairs among them)");
   } catch (e) { hardFail++; console.error("  FAIL: " + e.message); }
 
   section("[3e/5] card list shapes");

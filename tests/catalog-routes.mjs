@@ -712,13 +712,13 @@ check("18 control: the plain payload carries none of the new keys through either
   const LPM = await import(MOD("list-pointer.js"));
   const CB = await import(MOD("catalog-boot.js"));
   const held53 = read(doc()), next53 = read(three);
-  const marks53 = EM.editionMarksFrom(held53, ED.editionChanges(held53, next53, NONE), "v5");
+  const marks53 = EM.editionMarksFrom(held53, ED.editionChanges(held53, next53, NONE), { r: 5 });
   const shape53 = marks53 ? Object.keys(marks53.cards).sort().map(id => id + ":" + marks53.cards[id].k
     + (marks53.cards[id].was ? "<" + JSON.stringify(marks53.cards[id].was) : "")).join(" ") : "none";
   check("53a an edition that changes a card, adds one and retires one marks the changed card with the words it had and the new card, and not the retired one",
-    !!marks53 && marks53.v === "v5" && shape53 === 'c-a:changed<{"en":"A body."} c-d:new', shape53);
+    !!marks53 && marks53.r === 5 && !("e" in marks53) && shape53 === 'c-a:changed<{"en":"A body."} c-d:new', shape53);
   check("53A THE CONTROL: the same file offered again marks nothing",
-    EM.editionMarksFrom(held53, ED.editionChanges(held53, read(doc()), NONE), "v5") === null, "nothing marked");
+    EM.editionMarksFrom(held53, ED.editionChanges(held53, read(doc()), NONE), { r: 5 }) === null, "nothing marked");
   const landMarked = () => {
     PK.resetPack(); land(doc()); CB.applyBootCatalog(); RB.rebuildCards();
     EM.keepEditionMarks(next53, marks53);
@@ -728,7 +728,7 @@ check("18 control: the plain payload carries none of the new keys through either
   const viewOf = on => { AP.setCats([]); AP.setEditionView(on); return AP.cards.filter(m => CN.cardInActiveCats(m, [])).map(m => m.id).join(","); };
   const inView = viewOf(true), allView = viewOf(false);
   check("53b after the load the marks are read from the catalog's own layer, and the edition's pill shows only the marked cards; All shows every card",
-    EM.editionMarkOf("c-a") && EM.editionMarkOf("c-a").k === "changed" && EM.editionMarkOf("c-d").k === "new" && EM.editionMarkOf("c-b") === null
+    EM.editionMarkOf("c-a") && EM.editionMarkOf("c-a").k === "changed" && EM.editionMarkOf("c-a").r === 5 && EM.editionMarkOf("c-d").k === "new" && EM.editionMarkOf("c-b") === null
       && inView === "c-a,c-d" && allView === "c-a,c-b,c-d" && EM.editionMarkedCount() === 2,
     "pill " + inView + " | All " + allView + " | counted " + EM.editionMarkedCount());
   AP.setEditionView(true); AP.setCats(["t-op"]);
