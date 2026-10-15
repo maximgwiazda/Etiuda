@@ -20,7 +20,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 17;
+const EXPECTED = 18;
 const WORK = path.join(ROOT, "shell", "main.js");
 const GOOD = fs.readFileSync(WORK);
 const GOOD_HASH = crypto.createHash("sha256").update(GOOD).digest("hex");
@@ -38,7 +38,9 @@ const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), APP, { recursive: true });
 const COPY = path.join(APP, "main.js");
 const EXPOSE = ["spanSignedBytes", "spanDocument", "setStatsClock", "statsPulse", "flushHeldStats",
-  "openSealed", "sealCatalog", "openStatsSealed", "teamWhole", "wrapTeamKey", "signedSha", "catalogChanged", "channelHash", "isCatalogName"];
+  "openSealed", "sealCatalog", "openStatsSealed", "sealStatsLead", "statsAnswerSignedBytes", "statsAnswerGenuine",
+  "signedBytesOf", "branchSign", "branchIdOf", "deskFileGenuine", "teamWhole", "wrapTeamKey", "signedSha",
+  "catalogChanged", "channelHash", "isCatalogName"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -172,7 +174,7 @@ try {
       return text ? JSON.parse(text) : null;
     } catch { return null; }
   };
-  const ruled = "cards,catalog,desk,engine,format,hash,intents,kind,langs,misses,pairs,period,since,sync";
+  const ruled = "cards,catalog,desk,engine,format,hash,intents,kind,langs,misses,pairs,period,sig,since,sync";
 
   async function prove(name, needle, repl, run) {
     const planted = GOOD.toString("utf8").replace(needle, repl);
@@ -616,6 +618,72 @@ try {
       "891p the Settings row is gone, and so are the stored stamp and the string");
   }
 
+  /* ---- 891q: the desk signs the answer, and a seal alone does not --------------------------------------------- */
+  {
+    const g = await prove("891q",
+      "    out.sig = { alg: \"Ed25519\", keyId: got.seal.desk };\n    out.sig.value = branchSign(out, statsAnswerSignedBytes);\n    if (!/^[0-9a-f]{128}$/.test(out.sig.value)) return { ok: false };",
+      "    /* the signature is not written */",
+      async () => {
+        const box = await joined(false);
+        adopt(box, "rolling-30", lead.privateKey, LEAD, 2);
+        const inner = openStats(box);
+        if (!inner || !inner.sig) return false;
+        const folder = box.me.id;
+        const key = box.me.key;
+        const bytes = box.D.api.statsAnswerSignedBytes(inner);
+        const canonical = box.D.api.signedBytesOf(inner);
+        const prefix = Buffer.from("etiuda-stats-answer\n", "utf8");
+        if (Buffer.compare(bytes, Buffer.concat([prefix, canonical])) !== 0) return false;
+        if (canonical.toString("utf8").indexOf(inner.sig.value) >= 0) return false;
+        if (box.D.api.statsAnswerGenuine(inner, folder, key) !== true) return false;
+        if (box.D.api.deskFileGenuine(inner, folder) !== false) return false;
+        const fake = JSON.parse(JSON.stringify(inner));
+        fake.cards = [{ id: "c-lamp", n: 9999 }];
+        delete fake.sig;
+        const env = box.D.api.sealStatsLead(LEAD.box, box.team, LEAD.keyId, folder, JSON.stringify(fake));
+        const opened = box.D.api.openStatsSealed(leadBox.privateKey, env, folder);
+        if (!opened) return false;
+        const forged = JSON.parse(opened);
+        if (forged.cards[0].n !== 9999 || box.D.api.statsAnswerGenuine(forged, folder, key) !== false) return false;
+        const other = crypto.generateKeyPairSync("ed25519");
+        const otherBox = crypto.generateKeyPairSync("x25519");
+        const otherPub = pubHex(other.publicKey);
+        const otherId = box.D.api.branchIdOf(otherPub);
+        if (!otherId || otherId === folder) return false;
+        const otherWho = { id: otherId, key: otherPub, box: pubHex(otherBox.publicKey) };
+        put(box.share, "etiuda-team.json", teamText(box.team, 1, [
+          entry(box.D, box.me, box.key, box.team, 1),
+          entry(box.D, otherWho, box.key, box.team, 1),
+        ]));
+        const teamDoc = JSON.parse(fs.readFileSync(path.join(box.share, "etiuda-team.json"), "utf8"));
+        const listed = Array.isArray(teamDoc.roster) && teamDoc.roster.some(x => x && x.desk && x.desk.id === otherId && x.desk.key === otherPub);
+        if (!listed || box.D.api.teamWhole(teamDoc) !== true) return false;
+        const signAs = (keyId, priv) => {
+          const doc = JSON.parse(JSON.stringify(inner));
+          doc.sig = { alg: "Ed25519", keyId: keyId };
+          doc.sig.value = crypto.sign(null, box.D.api.statsAnswerSignedBytes(doc), priv).toString("hex");
+          return doc;
+        };
+        const impersonated = signAs(folder, other.privateKey);
+        if (box.D.api.statsAnswerGenuine(impersonated, folder, key) !== false) return false;
+        if (box.D.api.statsAnswerGenuine(impersonated, folder, otherPub) !== false) return false;
+        const theirs = signAs(otherId, other.privateKey);
+        if (box.D.api.statsAnswerGenuine(theirs, otherId, otherPub) !== true) return false;
+        if (box.D.api.statsAnswerGenuine(theirs, folder, key) !== false) return false;
+        if (box.D.api.statsAnswerGenuine(theirs, folder, otherPub) !== false) return false;
+        const asDesk = JSON.parse(JSON.stringify(inner));
+        asDesk.sig = { alg: "Ed25519", keyId: folder };
+        asDesk.sig.value = box.D.api.branchSign(asDesk);
+        if (!/^[0-9a-f]{128}$/.test(String(asDesk.sig.value))) return false;
+        if (box.D.api.statsAnswerGenuine(asDesk, folder, key) !== false) return false;
+        const tampered = JSON.parse(JSON.stringify(inner));
+        tampered.cards[0].n = 9999;
+        return box.D.api.statsAnswerGenuine(tampered, folder, key) === false;
+      });
+    check(g.ok, "891q the desk signs the answer inside the seal, a forged seal opens and fails that check, and another desk's key does not pass for this folder"
+      + (g.why ? ": " + g.why.split("\n")[0] : ""));
+  }
+
   const tree = crypto.createHash("sha256").update(fs.readFileSync(WORK)).digest("hex");
   const copy = crypto.createHash("sha256").update(fs.readFileSync(COPY)).digest("hex");
   check(tree === GOOD_HASH && copy === GOOD_HASH,
@@ -624,6 +692,8 @@ try {
   console.log("  FAIL the leg did not finish: " + (e && e.stack || e));
   try { fs.writeFileSync(COPY, GOOD); } catch { /* the copy is disposable */ }
   failed++;
+} finally {
+  try { fs.rmSync(LAB, { recursive: true, force: true }); } catch { /* the temp folder's own to clear */ }
 }
 console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
 if (asserted < EXPECTED) {

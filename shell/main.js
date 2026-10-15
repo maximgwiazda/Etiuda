@@ -1112,6 +1112,9 @@ function writeStatsAnswer(text, askId, forced) {
     for (const dir of [path.join(at.root, "desks"), at.dir, path.dirname(at.dest)]) {
       try { fs.mkdirSync(dir); } catch (e) { if (e.code !== "EEXIST") throw e; }
     }
+    out.sig = { alg: "Ed25519", keyId: got.seal.desk };
+    out.sig.value = branchSign(out, statsAnswerSignedBytes);
+    if (!/^[0-9a-f]{128}$/.test(out.sig.value)) return { ok: false };
     const env = sealStatsLead(got.seal.box, got.seal.team, got.seal.keyId, got.seal.desk, JSON.stringify(out));
     writeReplacing(at.dest, JSON.stringify(env, null, 1) + "\n");
   } catch {
@@ -1321,6 +1324,23 @@ function openStatsSealed(skR, doc, deskId) {
       Buffer.alloc(0), Buffer.from(ct, "hex"));
     return pt ? pt.toString("utf8") : null;
   } catch { return null; }
+}
+/* The answer's own prefix, so this signature is not a desk file, a span or a request. */
+const STATS_ANSWER_PREFIX = "etiuda-stats-answer\n";
+function statsAnswerSignedBytes(doc) {
+  return Buffer.concat([Buffer.from(STATS_ANSWER_PREFIX, "utf8"), signedBytesOf(doc)]);
+}
+/* Whether an opened answer is that folder's own. `keyHex` is the roster's desk.key for the folder's branch id.
+   That id, the id the key makes, and sig.keyId are one id, or the answer is not genuine. */
+function statsAnswerGenuine(doc, folder, keyHex) {
+  const sig = doc && doc.sig;
+  try {
+    return !!folder && /^k-[0-9a-f]{16}$/.test(String(folder))
+      && /^[0-9a-f]{64}$/.test(String(keyHex)) && branchIdOf(String(keyHex)) === folder
+      && !!sig && sig.alg === "Ed25519" && sig.keyId === folder && /^[0-9a-f]{128}$/.test(String(sig.value))
+      && crypto.verify(null, statsAnswerSignedBytes(doc), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(String(keyHex), "hex")]),
+        format: "der", type: "spki" }), Buffer.from(String(sig.value), "hex"));
+  } catch { return false; }
 }
 
 /* ---- joining a team: the desk's request, the lead's opening, and the code both sides read --------
@@ -1556,9 +1576,11 @@ function signedBytesOf(doc) {
   return Buffer.from(canonJson(copy), "utf8");
 }
 function branchSignedBytes(doc) { return Buffer.concat([Buffer.from(BRANCH_PREFIX, "utf8"), signedBytesOf(doc)]); }
-function branchSign(doc) {
+/* `bytesOf`, where the caller names one, is the prefix that signature covers. A desk file names none. */
+function branchSign(doc, bytesOf) {
   const key = openPrivate(deskBranch.sign.priv);
-  return key ? crypto.sign(null, branchSignedBytes(doc), key).toString("hex") : "";
+  const bytes = typeof bytesOf === "function" ? bytesOf(doc) : branchSignedBytes(doc);
+  return key ? crypto.sign(null, bytes, key).toString("hex") : "";
 }
 function branchGenuine(doc) {
   try {
