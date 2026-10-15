@@ -865,6 +865,7 @@ function deskEnvelopeBody(keysText) {
     + (Object.keys(teamKeys).length ? ',"teamKeys":' + JSON.stringify(teamKeys) : "")
     + (Object.keys(teamEpochSeen).length ? ',"teamEpochSeen":' + JSON.stringify(teamEpochSeen) : "")
     + (Object.keys(teamRoster).length ? ',"teamRoster":' + JSON.stringify(teamRoster) : "")
+    + (Object.keys(teamShown).length ? ',"teamShown":' + JSON.stringify(teamShown) : "")
     + (teamOpened.size ? ',"teamOpened":' + JSON.stringify(Array.from(teamOpened)) : "")
     + (teamSeen.size ? ',"teamSeen":' + JSON.stringify(Array.from(teamSeen)) : "")
     + (teamBarred.size ? ',"teamBarred":' + JSON.stringify(Array.from(teamBarred)) : "")
@@ -1833,6 +1834,7 @@ let teamPins = {};                             // team id -> {keyId, public}: th
 let teamKeys = {};                             // team id -> {epoch: the team key sealed by safeStorage, base64}
 let teamEpochSeen = {};                        // team id -> the highest epoch heeded, kept when teamKeys is empty
 let teamRoster = {};                           // team id -> {epoch, desks}: the desk ids of the file heeded at that epoch
+let teamShown = {};                            // team id -> {lead?, folder?}: the lead's name an invitation gave, the folder its file was heeded in
 const teamOpened = new Set();                  // catalog ids this desk has opened from an envelope, kept in the desk envelope
 const teamSeen = new Set();                    // teams whose pinned lead key the agent has been shown, kept in the desk envelope
 const teamBarred = new Set();                  // teams whose lead the agent forgot: no first admission but by an answered request
@@ -2099,6 +2101,7 @@ function policyLetsInviteGo(named) {
   const pin = teamPins[j.team];
   if (inv.pinned === true && pin && pin.keyId === inv.lead.keyId && pin.public === inv.lead.public) {
     delete teamPins[j.team];
+    delete teamShown[j.team];
     teamSeen.delete(j.team);
   }
   if (typeof inv.folder === "string" && deskKeys[CATALOG_FOLDER_KEY] === inv.folder)
@@ -2190,6 +2193,10 @@ function heedTeam() {
   if (r.pinned) teamPins[r.team] = r.state.pins[r.team];
   if (r.unbar) teamBarred.delete(r.team);
   let changed = r.changed;
+  if (r.team && teamPins[r.team] && (teamShown[r.team] || {}).folder !== root) {
+    teamShown[r.team] = Object.assign({}, teamShown[r.team], { folder: root });
+    changed = true;
+  }
   if (r.team && Number.isInteger(r.epoch) && r.epoch >= 1 && r.epoch > (teamEpochSeen[r.team] || 0)) {
     teamEpochSeen[r.team] = r.epoch;
     changed = true;
@@ -2585,6 +2592,7 @@ async function takeInvite(text, name, check) {
     teamPins[parsed.team] = { keyId: parsed.lead.keyId, public: parsed.lead.public };
     teamSeen.delete(parsed.team);
   }
+  teamShown[parsed.team] = Object.assign({ folder: parsed.folder }, shownName(parsed.lead.name) ? { lead: parsed.lead.name } : {});
   teamStamp = "";
   persistDeskEnvelope();
   catalogFolderChanged();
@@ -2595,10 +2603,22 @@ async function takeInvite(text, name, check) {
 function leadPrint(publicHex) {
   return crypto.createHash("sha256").update(Buffer.from(String(publicHex), "hex")).digest("hex").slice(0, 16);
 }
-/* Every lead this desk trusts, for the agent to compare once after admission and to forget at any time. */
+/* Every lead this desk trusts, for the agent to compare once after admission and to leave at any time: the team by its lead's
+   name and folder where known; `removed` where the roster of the epoch accepted leaves out this desk, which once held a key;
+   `policy` where machine policy names this lead, which pins it again after any leave. */
 function leadsView() {
-  return Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t)).map(t => ({ team: t, print: leadPrint(teamPins[t].public),
-    admitted: newestEpoch(t) > 0, seen: teamSeen.has(t) }));
+  const teams = Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t));
+  const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en").lead : "";
+  return teams.map(t => {
+    const shown = teamShown[t] || {}, admitted = newestEpoch(t) > 0, roster = teamRoster[t];
+    return { team: t, print: leadPrint(teamPins[t].public), admitted: admitted, seen: teamSeen.has(t),
+      lead: shown.lead || "", folder: shown.folder || "", removed: admitted && !!me && !!roster && roster.desks.indexOf(me) < 0,
+      policy: !!named && named === teamPins[t].public };
+  });
+}
+/* A lead's name as an invitation carries it, as inviteRead takes one: text, at most 120 characters, nothing hidden. */
+function shownName(name) {
+  return typeof name === "string" && name.length > 0 && name.length <= 120 && !/[\u0000-\u001f\u007f]/.test(name) && !INVITE_HIDDEN_RE.test(name);
 }
 function leadSeen(team) {
   team = String(team || "");
@@ -2613,6 +2633,7 @@ function forgetLead(team) {
   if (!SEALED_TEAM_RE.test(team) || !teamPins[team]) return joinView();
   delete teamPins[team];
   delete teamKeys[team];
+  delete teamShown[team];
   teamSeen.delete(team);
   teamBarred.add(team);
   for (const [pin, t] of Array.from(editionTeam)) if (t === team) editionTeam.delete(pin);
@@ -3085,6 +3106,14 @@ function readDesk() {
       const v = doc.teamRoster[t];
       if (!SEALED_TEAM_RE.test(t) || !table(v) || !Number.isInteger(v.epoch) || v.epoch < 1 || !Array.isArray(v.desks)) return;
       if (v.epoch > (teamRoster[t] ? teamRoster[t].epoch : 0)) teamRoster[t] = { epoch: v.epoch, desks: deskIdsOnce(v.desks) };
+    });
+    if (doc && table(doc.teamShown)) Object.keys(doc.teamShown).forEach(t => {
+      const v = doc.teamShown[t];
+      if (!SEALED_TEAM_RE.test(t) || !table(v)) return;
+      const o = {};
+      if (shownName(v.lead)) o.lead = v.lead;
+      if (typeof v.folder === "string" && v.folder && v.folder.length <= 1024 && !/[\u0000-\u001f\u007f]/.test(v.folder)) o.folder = v.folder;
+      teamShown[t] = o;
     });
     if (doc && Array.isArray(doc.teamOpened)) doc.teamOpened.forEach(c => { if (typeof c === "string" && c) teamOpened.add(c); });
     [["teamSeen", teamSeen], ["teamBarred", teamBarred]].forEach(([k, set]) => {

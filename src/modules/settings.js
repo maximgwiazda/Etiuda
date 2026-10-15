@@ -133,6 +133,24 @@ function wireHotkeyRow(box){
     hotkeyTry(box,accel,t("Saved {KEY}").replace("{KEY}",hotkeyLabel(accel)));
   });
 }
+/* A team as Settings shows it: the lead's name and the folder, the key the agent compared, and Leave this team, which machine
+   policy would undo and so is not offered where it names the lead. */
+function teamRowHtml(l,status){
+  const notes=[l.folder?t("Folder: {FOLDER}").split("{FOLDER}").join(l.folder):"",
+    l.removed?t("This team no longer includes this desk."):status,
+    l.policy?t("The organisation's IT sets this desk's team."):""].filter(Boolean);
+  return '<div class="set-row"><div class="set-label">'+esc(l.lead?t("{LEAD}'s team").split("{LEAD}").join(l.lead):t("Team"))
+    +notes.map(n=>'<small>'+esc(n)+'</small>').join("")+'</div><div class="set-ctl">'
+    +'<span class="e-lead-key">'+keySignHtml("studio",l.print)+'</span>'
+    +(l.policy?'':'<button type="button" class="btn" data-leave-team="'+esc(l.team)+'">'+esc(t("Leave this team"))+'</button>')
+    +'</div></div>';
+}
+/* Leave this team: the shell forgets the team and its keys, and the screen is drawn again where it is open. */
+function wireTeamRows(box){
+  box.querySelectorAll("[data-leave-team]").forEach(b=>{
+    b.onclick=()=>forgetTeamLead(b.getAttribute("data-leave-team"),()=>paintSettings());
+  });
+}
 function settingsBodyHtml(){
   /* The row hint says what the setting IS; the option tip says what THIS choice DOES, which
      is the half a two-word button cannot carry. Optional - a seg without tips renders as before. */
@@ -165,10 +183,8 @@ function settingsBodyHtml(){
       (lastSyncStamp
         ? row(t("Last sync"), "", '<span>'+esc(lastSyncStamp)+'</span>')
         : "")+
-      /* One row per team lead this desk trusts: the key the agent compared, and the way out where it was wrong. */
-      teamLeads().map((l,i)=>row(t("Team lead's key"), i===0?t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own."):"",
-        '<span class="e-lead-key">'+keySignHtml("studio",l.print)+'</span>'
-        +'<button type="button" class="btn" data-forget-lead="'+esc(l.team)+'">'+esc(t("Forget this lead"))+'</button>')).join("")+
+      /* One row per team this desk trusts a lead for; what the lead sees is said once, on the first team that still lists it. */
+      teamLeads().map((l,i,all)=>teamRowHtml(l, i===all.findIndex(x=>!x.removed)?t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own."):"")).join("")+
       (joinDoor?row(t("Team"), "", joinDoor):"")+
       /* Under a host only: a browser has no catalog folder to share. */
       (eHasShared()
@@ -241,7 +257,7 @@ function settingsBodyHtml(){
       t("Rebind any key combo. The keys the app itself needs are listed as fixed."));
 }
 function paintSettings(){
-  const box=modalCard.querySelector("#setBody");
+  const box=modalCard&&modalCard.querySelector("#setBody");
   if(!box) return;
   box.innerHTML=settingsBodyHtml();
   wireAcc(box, id=>{ if(id==="keys") paintKeysInline(); });
@@ -265,9 +281,7 @@ function paintSettings(){
   /* Stored on the keystroke, like every other row here: there is no Save on this screen. The
      summary beside the section title is the same value, so it follows the box rather than
      waiting for the next repaint to agree with it. */
-  box.querySelectorAll("[data-forget-lead]").forEach(b=>{
-    b.onclick=()=>forgetTeamLead(b.getAttribute("data-forget-lead"),()=>paintSettings());
-  });
+  wireTeamRows(box);
   const joinBtn=box.querySelector("#setJoinTeam");
   if(joinBtn) joinBtn.onclick=()=>{ dismissModal(); openJoinPaste(); };
   const nameBox=box.querySelector("#setAgentName");
@@ -432,5 +446,6 @@ export {
   openSettings,
   applyPrefs,
   hotkeyFromEvent,
-  settingsBodyHtml
+  settingsBodyHtml,
+  wireTeamRows
 };

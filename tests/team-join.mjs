@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 66;
+const EXPECTED = 72;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -270,7 +270,8 @@ try {
   /* ---- the pinned lead's key, shown once to compare, and forgotten where it is not the lead's ------------------- */
   // Studio's Settings show its key as "studio-" and these 16 hex (src/sign.mjs keyIdFor): made here from the public half.
   const printOf = pub => crypto.createHash("sha256").update(Buffer.from(pub, "hex")).digest("hex").slice(0, 16);
-  const leadsOf = v => JSON.stringify((v && v.leads) || null);
+  /* The key's four facts. The team's name, folder, removal and policy beside them are 15bn to 15bs's. */
+  const leadsOf = v => JSON.stringify((v && v.leads) ? v.leads.map(l => ({ team: l.team, print: l.print, admitted: l.admitted, seen: l.seen })) : null);
   const shown = await D1r.join("state");
   const seenNow = await D1r.join("seen", TEAM);
   const seenLater = await loadDesk(D1r.ud).join("state");
@@ -1296,7 +1297,7 @@ try {
     const libraryOn = MG.libraryActionsHtml();
     const shown = settingsOn.indexOf('id="setJoinTeam"') >= 0 && settingsOn.indexOf('<div class="set-label">Team</div>') >= 0
       && settingsOn.indexOf("Join a team") >= 0
-      && settingsOn.indexOf("data-forget-lead") >= 0 && settingsOn.indexOf("data-forget-lead") < settingsOn.indexOf('id="setJoinTeam"')
+      && settingsOn.indexOf("data-leave-team") >= 0 && settingsOn.indexOf("data-leave-team") < settingsOn.indexOf('id="setJoinTeam"')
       && libraryOn.indexOf('id="mgImportCatalog"') >= 0 && libraryOn.indexOf('id="mgImportCatalog"') < libraryOn.indexOf('id="mgJoinTeam"')
       && menuJoin.hidden === false;
     const settingsBtn = { classList: { add: noop, remove: noop, contains: () => false }, setAttribute: noop, hidden: false };
@@ -1468,6 +1469,172 @@ try {
   check(menuItem && settingsOpened && libraryOpened,
     "15bm the Menu item Join a team is in the template, and the Settings and Library buttons' clicks open the paste: "
     + [menuItem, settingsOpened, libraryOpened].join("/") + (doorErr ? " " + doorErr : ""));
+
+  /* ---- leaving, and being left off the roster ---------------------------------------------------------------------- */
+  /* A desk let in by an invitation, then left off the team's roster at a newer epoch with the newest edition sealed again
+     under the new key, as Studio's removal does. The shell names each team it trusts by the lead's name the invitation
+     gave and the folder its file was read in, and says where the roster of the epoch accepted no longer lists a desk that
+     once held a key; the page says so in place of the sealed catalog's ask. Settings shows the team by that name and folder
+     with Leave this team, which forgets the team and its keys here, keeps the catalog in use and writes nothing to the
+     folder. A leg whose code is missing is a red leg, not a stopped file. */
+  const legTry = async (id, fn) => {
+    try { await fn(); }
+    catch (e) { check(false, id + " threw: " + (e && e.stack ? e.stack.split("\n").slice(0, 3).join(" | ") : e)); }
+  };
+  const teamAt = (epoch, roster) => sign({ format: 1, kind: "etiuda-team", id: TEAM, catalogs: ["lamp-shop"], lead: LEAD,
+    sealed: true, exportsSealed: false, epoch: epoch, roster: roster }, lead.privateKey, LEAD.keyId);
+  const leadIn = v => ((v && v.leads) || []).filter(l => l.team === TEAM)[0] || null;
+  /* Every call that writes, renames or removes under `dir` while `run` runs, by name. */
+  const writesUnder = async (dir, run) => {
+    const hits = [], untap = [];
+    for (const n of ["writeFileSync", "appendFileSync", "renameSync", "unlinkSync", "rmSync", "rmdirSync", "mkdirSync", "copyFileSync", "openSync"]) {
+      const real = fs[n];
+      fs[n] = function (p, ...rest) {
+        const flag = n === "openSync" ? String(rest[0] || "r") : "w";
+        if (/[wa+]/.test(flag) && [p, rest[0]].some(x => String(x).indexOf(dir) >= 0)) hits.push(n);
+        return real.call(this, p, ...rest);
+      };
+      untap.push(() => { fs[n] = real; });
+    }
+    try { await run(); await new Promise(r => setTimeout(r, 50)); }
+    finally { untap.forEach(u => u()); }
+    return hits;
+  };
+  const snapshot = dir => filesUnder(dir).map(f => path.relative(dir, f) + "="
+    + crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex")).sort().join("|");
+  const settingsAt = async (D, lang) => {
+    await pageOn(D);
+    ST.lsSet("eUiLang", lang || "en");
+    try { return (await import(MOD("settings.js"))).settingsBodyHtml(); }
+    finally { ST.lsSet("eUiLang", "en"); }
+  };
+  const bodyWas = document.body, langBefore = ST.lsGet("eUiLang");
+  ST.lsSet("eUiLang", "en");
+  document.body = { classList: { contains: () => false, toggle: noop, add: noop, remove: noop }, appendChild: el => el };
+  try { await press("back"); } catch { /* nothing held */ }
+
+  const leaveYard = folder("leave-yard");
+  const Dl = await deskWith("leave", folder("leave-own"));
+  const meL = await Dl.ask("etiuda:branch-identity", true);
+  const leaveBlob = inviteBlob({ team: TEAM, folder: leaveYard, lead: lampLead, secret: newSecret() });
+  const tookL = await Dl.join("invite", leaveBlob, "Nia", codeFor(leaveBlob));
+  const KL1 = crypto.randomBytes(32), KL2 = crypto.randomBytes(32), KL3 = crypto.randomBytes(32);
+  put(leaveYard, "etiuda-team.json", teamAt(1, [entry(me2, KL1, 1), entry(meL, KL1, 1)]));
+  put(leaveYard, "lamps.ec", P.sealCatalog(KL1, TEAM, 1, A1));
+  const inL = await Dl.join("state");
+  const onPage = async D => { await pageOn(D); return TJ.teamJoinEmptyHtml(); };
+  const NO_LONGER = "Lamp lead&#39;s team no longer includes this desk";
+
+  await legTry("15bn", async () => {
+    const l = leadIn(inL), again = leadIn(await loadDesk(Dl.ud).join("state"));
+    const want = JSON.stringify({ team: TEAM, print: printOf(LEAD.public), admitted: true, seen: false, lead: "Lamp lead",
+      folder: leaveYard, removed: false, policy: false });
+    check(!!tookL && !!tookL.join && !!inL.joined && JSON.stringify(l) === want && JSON.stringify(again) === want,
+      "15bn a desk let in by an invitation names its team by the lead's name the invitation gave and the folder the team's file"
+      + " is read in, on the roster and not removed, in a fresh run too: " + JSON.stringify(l));
+  });
+
+  /* Epoch 2 leaves this desk off, and the newest edition is sealed again under the new key. */
+  const htmlOnTeam = await onPage(Dl);
+  put(leaveYard, "etiuda-team.json", teamAt(2, [entry(me2, KL2, 2)]));
+  put(leaveYard, "lamps.ec", P.sealCatalog(KL2, TEAM, 2, A1));
+  const outL = await Dl.join("state");
+  await legTry("15bo", async () => {
+    const shell = leadIn(outL), restarted = leadIn(await loadDesk(Dl.ud).join("state"));
+    const en = await onPage(Dl);
+    ST.lsSet("eUiLang", "pl");
+    const pl = TJ.teamJoinEmptyHtml();
+    ST.lsSet("eUiLang", "en");
+    const Dn = await deskWith("leave-never", leaveYard);
+    const never = await onPage(Dn);
+    const f = { shell: !!shell && shell.removed === true && shell.admitted === true && !!outL.sealed && outL.sealed.file === "lamps.ec",
+      restarted: !!restarted && restarted.removed === true,
+      told: en.indexOf(NO_LONGER) >= 0 && en.indexOf("is sealed for its team") < 0 && /data-join="ask"/.test(en)
+        && en.indexOf("Once the team&#39;s lead lets this desk in again, the catalog opens here by itself.") >= 0,
+      polish: pl.indexOf("To stanowisko nie należy już do zespołu osoby Lamp lead") >= 0 && pl.indexOf("no longer includes") < 0,
+      onTeam: htmlOnTeam.indexOf("no longer includes") < 0,
+      never: never.indexOf("lamps.ec is sealed for its team") >= 0 && never.indexOf("no longer includes") < 0 };
+    check(Object.keys(f).every(k => f[k]),
+      "15bo left off the roster at a newer epoch, the desk is told \"Lamp lead's team no longer includes this desk\" in place of the"
+      + " sealed catalog's ask, in English and in Polish and after a restart; while it is on the roster nothing says so, and a desk"
+      + " never on the team over the same folder still sees the ask: " + JSON.stringify(f)
+      + (f.never ? "" : " (that desk's page: " + JSON.stringify(never.replace(/<svg[\s\S]*?<\/svg>/g, "").slice(0, 160)) + ")"));
+  });
+
+  /* Let in again at epoch 3: the roster lists it, and nothing says otherwise. */
+  put(leaveYard, "etiuda-team.json", teamAt(3, [entry(me2, KL3, 3), entry(meL, KL3, 3)]));
+  put(leaveYard, "lamps.ec", P.sealCatalog(KL3, TEAM, 3, A1));
+  const backL = await Dl.join("state");
+  await legTry("15bp", async () => {
+    const l = leadIn(backL), html = await onPage(Dl);
+    check(!!l && l.removed === false && backL.sealed === null && html.indexOf("no longer includes") < 0,
+      "15bp THE CONTROL: let in again at a newer epoch, the desk is on the roster and no longer told it is off it: "
+      + JSON.stringify(l));
+  });
+
+  await legTry("15bq", async () => {
+    const en = await settingsAt(Dl, "en"), pl = await settingsAt(Dl, "pl");
+    const groups = printOf(LEAD.public).replace(/(.{4})(?=.)/g, "$1 ");
+    const f = { name: en.indexOf("Lamp lead&#39;s team") >= 0, folder: en.indexOf("Folder: " + escHtml(leaveYard)) >= 0,
+      key: en.indexOf(groups) >= 0, leave: new RegExp('data-leave-team="' + TEAM + '"[^>]*>Leave this team<').test(en),
+      noForget: en.indexOf("Forget this lead") < 0 && en.indexOf("data-forget-lead") < 0 && en.indexOf("Team lead&#39;s key") < 0,
+      polish: pl.indexOf("Zespół osoby Lamp lead") >= 0 && />Opuść ten zespół</.test(pl) && pl.indexOf("Leave this team") < 0 };
+    check(Object.keys(f).every(k => f[k]),
+      "15bq Settings shows the team by the lead's name and the folder, the key beside them, with Leave this team and no Forget"
+      + " this lead, in English and in Polish: " + JSON.stringify(f));
+  });
+
+  await legTry("15br", async () => {
+    await pageOn(Dl);
+    const CAT = await import(MOD("catalog.js")), SET = await import(MOD("settings.js"));
+    const stored = JSON.stringify({ cards: [{ id: "c-leave" }] });
+    ST.lsSet(CAT.E_CATALOG_STORE, stored);
+    AS.setCards([{ id: "c-leave" }]);
+    const createWas = document.createElement;
+    document.createElement = () => stubNode();
+    const folderBefore = snapshot(leaveYard), keysBefore = JSON.stringify(Dl.envelope().keys);
+    /* The button Settings draws, pressed as its screen wires it. */
+    const drawn = /<button[^>]*data-leave-team="([^"]+)"[^>]*>Leave this team</.exec(SET.settingsBodyHtml());
+    const btn = { getAttribute: a => (a === "data-leave-team" && drawn ? drawn[1] : null) };
+    let wired = false;
+    const hits = await writesUnder(leaveYard, async () => {
+      SET.wireTeamRows({ querySelectorAll: sel => (sel === "[data-leave-team]" && drawn ? [btn] : []) });
+      wired = typeof btn.onclick === "function";
+      if (wired) await btn.onclick();
+    });
+    const env = Dl.envelope(), after = await Dl.join("state"), settingsAfter = SET.settingsBodyHtml();
+    const f = { wired: wired && drawn[1] === TEAM, forgot: !(env.teamPins && env.teamPins[TEAM]) && !(env.teamKeys && env.teamKeys[TEAM])
+        && !(env.teamShown && env.teamShown[TEAM]) && (env.teamBarred || []).indexOf(TEAM) >= 0 && leadIn(after) === null,
+      page: !TJ.teamLeads().some(l => l.team === TEAM) && settingsAfter.indexOf("data-leave-team") < 0,
+      catalog: AS.cards.length === 1 && AS.cards[0].id === "c-leave" && ST.lsGet(CAT.E_CATALOG_STORE) === stored
+        && JSON.stringify(Dl.envelope().keys) === keysBefore,
+      folder: snapshot(leaveYard) === folderBefore && hits.length === 0 };
+    document.createElement = createWas;
+    AS.setCards([]);
+    ST.lsDel(CAT.E_CATALOG_STORE);
+    check(Object.keys(f).every(k => f[k]),
+      "15br Leave this team, pressed in Settings, forgets the team here, its lead's pin, its keys, its name and folder, and bars a"
+      + " first admission as Forget did; Settings lists it no more; the catalog in use stays loaded and stored; and nothing under"
+      + " the team's folder is written, renamed or removed: " + JSON.stringify(f) + (hits.length ? " " + hits.join(",") : ""));
+  });
+
+  await legTry("15bs", async () => {
+    const PF = folder("leave-policy");
+    const Dpol = await underPolicy(folderLead(PF), "leave-policy-desk", PF);
+    const mePol = await Dpol.ask("etiuda:branch-identity", true), KP = crypto.randomBytes(32);
+    put(PF, "etiuda-team.json", teamAt(1, [entry(mePol, KP, 1)]));
+    put(PF, "lamps.ec", P.sealCatalog(KP, TEAM, 1, A1));
+    const l = leadIn(await Dpol.join("state"));
+    const html = await settingsAt(Dpol, "en");
+    const said = html.indexOf("The organisation&#39;s IT sets this desk&#39;s team.") >= 0;
+    const ok = WIN ? !!l && l.policy === true && html.indexOf("data-leave-team") < 0 && said
+      : !!l && l.policy === false && html.indexOf("data-leave-team") >= 0 && !said;
+    check(ok,
+      "15bs a team machine policy names offers no Leave this team, since the policy would pin it again, and says the"
+      + " organisation's IT sets it; off Windows no policy is read and Leave stands: " + JSON.stringify(l));
+  });
+  document.body = bodyWas;
+  if (langBefore == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langBefore);
 
   /* Last, over every desk above: the log of each holds none of the secrets any invitation carried. */
   const leaked = [];

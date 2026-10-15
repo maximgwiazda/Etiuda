@@ -7563,8 +7563,13 @@ What you type stays in this browser only.`;
     "Compare this key with the Signing key in the lead's Studio Settings. Every later edition is checked against it.": "Ten klucz powinien być taki sam jak Klucz podpisu w Ustawieniach Studia lidera. Według niego sprawdzane jest każde kolejne wydanie.",
     "It matches": "Zgadza się",
     "It does not match": "Nie zgadza się",
-    "Team lead's key": "Klucz lidera zespołu",
-    "Forget this lead": "Zapomnij tego lidera",
+    "{LEAD}'s team": "Zespół osoby {LEAD}",
+    "Leave this team": "Opuść ten zespół",
+    "This team no longer includes this desk.": "To stanowisko nie należy już do tego zespołu.",
+    "The organisation's IT sets this desk's team.": "Zespół tego stanowiska ustawia dział IT organizacji.",
+    "{LEAD}'s team no longer includes this desk": "To stanowisko nie należy już do zespołu osoby {LEAD}",
+    "The team no longer includes this desk": "To stanowisko nie należy już do zespołu",
+    "Once the team's lead lets this desk in again, the catalog opens here by itself.": "Gdy lider zespołu ponownie wpuści to stanowisko, katalog otworzy się tutaj sam.",
     "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.": "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
     "The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.": "Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
     "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.": "Na prośbę Studia lidera zespołu przesłano zespołowi kopię katalogu używanego na tym stanowisku.",
@@ -14614,7 +14619,7 @@ What you type stays in this browser only.`;
     return eHasJoin() && !(joinNow && (joinNow.join || leadToShow()));
   }
   function leadToShow() {
-    return (joinNow && joinNow.leads || []).filter((l) => l.admitted && !l.seen)[0] || null;
+    return (joinNow && joinNow.leads || []).filter((l) => l.admitted && !l.seen && !l.removed)[0] || null;
   }
   function teamLeads() {
     return (joinNow && joinNow.leads || []).slice();
@@ -14699,7 +14704,11 @@ What you type stays in this browser only.`;
         team: String(l.team),
         print: String(l.print || ""),
         admitted: l.admitted === true,
-        seen: l.seen === true
+        seen: l.seen === true,
+        lead: String(l.lead || ""),
+        folder: String(l.folder || ""),
+        removed: l.removed === true,
+        policy: l.policy === true
       })) : []
     };
     if (s.joined && s.joined.file) {
@@ -14837,11 +14846,20 @@ What you type stays in this browser only.`;
       body: joinCodeHtml("") + meta,
       acts: [["cancel", t("Cancel the request")]]
     };
+    const ask = '<div class="e-join-meta">' + esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who)) + "</div>" + joinDisclosure();
+    const acts = [["ask", t("Ask to join")], ["join", t("Join a team")], ["load", t("Load another catalog")]];
+    const gone = s ? (joinNow && joinNow.leads || []).filter((x) => x.team === s.team && x.removed)[0] : null;
+    if (gone) return {
+      title: gone.lead ? t("{LEAD}'s team no longer includes this desk").split("{LEAD}").join(gone.lead) : t("The team no longer includes this desk"),
+      line: t("Once the team's lead lets this desk in again, the catalog opens here by itself."),
+      body: ask,
+      acts
+    };
     return {
       title: t("{FILE} is sealed for its team").split("{FILE}").join(s ? s.file : ""),
       line: t("Once the team's lead lets this desk in, the catalog opens here by itself."),
-      body: '<div class="e-join-meta">' + esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who)) + "</div>" + joinDisclosure(),
-      acts: [["ask", t("Ask to join")], ["join", t("Join a team")], ["load", t("Load another catalog")]]
+      body: ask,
+      acts
     };
   }
   function joinAct(act) {
@@ -29219,7 +29237,8 @@ What you type stays in this browser only.`;
     applyPrefs: () => applyPrefs,
     hotkeyFromEvent: () => hotkeyFromEvent,
     openSettings: () => openSettings,
-    settingsBodyHtml: () => settingsBodyHtml
+    settingsBodyHtml: () => settingsBodyHtml,
+    wireTeamRows: () => wireTeamRows
   });
   function curLangLabel() {
     return (UI_LANGS.filter((l) => l.code === uiLang())[0] || UI_LANGS[0]).label;
@@ -29326,6 +29345,19 @@ What you type stays in this browser only.`;
       hotkeyTry(box, accel, t("Saved {KEY}").replace("{KEY}", hotkeyLabel(accel)));
     });
   }
+  function teamRowHtml(l, status) {
+    const notes = [
+      l.folder ? t("Folder: {FOLDER}").split("{FOLDER}").join(l.folder) : "",
+      l.removed ? t("This team no longer includes this desk.") : status,
+      l.policy ? t("The organisation's IT sets this desk's team.") : ""
+    ].filter(Boolean);
+    return '<div class="set-row"><div class="set-label">' + esc(l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team")) + notes.map((n) => "<small>" + esc(n) + "</small>").join("") + '</div><div class="set-ctl"><span class="e-lead-key">' + keySignHtml("studio", l.print) + "</span>" + (l.policy ? "" : '<button type="button" class="btn" data-leave-team="' + esc(l.team) + '">' + esc(t("Leave this team")) + "</button>") + "</div></div>";
+  }
+  function wireTeamRows(box) {
+    box.querySelectorAll("[data-leave-team]").forEach((b) => {
+      b.onclick = () => forgetTeamLead(b.getAttribute("data-leave-team"), () => paintSettings());
+    });
+  }
   function settingsBodyHtml() {
     const seg2 = (name, opts, cur) => '<div class="seg set-seg" data-seg="' + name + '" data-n="' + opts.length + '">' + opts.map((o) => '<button type="button" data-val="' + esc(o.v) + '"' + (o.tip ? ' title="' + esc(o.tip) + '"' : "") + (o.v === cur ? ' class="on"' : "") + ">" + esc(o.t) + "</button>").join("") + "</div>";
     const row = (label2, hint, control) => '<div class="set-row"><div class="set-label">' + esc(label2) + (hint ? "<small>" + esc(hint) + "</small>" : "") + '</div><div class="set-ctl">' + control + "</div></div>";
@@ -29348,12 +29380,8 @@ What you type stays in this browser only.`;
         t("Interface language"),
         t("The language of the buttons and menus, not of the macros: those follow EN|PL in the header"),
         langSel
-      ) + (lastSyncStamp ? row(t("Last sync"), "", "<span>" + esc(lastSyncStamp) + "</span>") : "") + /* One row per team lead this desk trusts: the key the agent compared, and the way out where it was wrong. */
-      teamLeads().map((l, i) => row(
-        t("Team lead's key"),
-        i === 0 ? t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.") : "",
-        '<span class="e-lead-key">' + keySignHtml("studio", l.print) + '</span><button type="button" class="btn" data-forget-lead="' + esc(l.team) + '">' + esc(t("Forget this lead")) + "</button>"
-      )).join("") + (joinDoor ? row(t("Team"), "", joinDoor) : "") + /* Under a host only: a browser has no catalog folder to share. */
+      ) + (lastSyncStamp ? row(t("Last sync"), "", "<span>" + esc(lastSyncStamp) + "</span>") : "") + /* One row per team this desk trusts a lead for; what the lead sees is said once, on the first team that still lists it. */
+      teamLeads().map((l, i, all) => teamRowHtml(l, i === all.findIndex((x) => !x.removed) ? t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.") : "")).join("") + (joinDoor ? row(t("Team"), "", joinDoor) : "") + /* Under a host only: a browser has no catalog folder to share. */
       (eHasShared() ? row(
         t("Edit the shared catalog directly"),
         t("For a team that keeps its catalog without Studio: each change is written into the catalog in the shared folder. A catalog the team's lead signed is never touched."),
@@ -29473,7 +29501,7 @@ What you type stays in this browser only.`;
     );
   }
   function paintSettings() {
-    const box = modalCard.querySelector("#setBody");
+    const box = modalCard && modalCard.querySelector("#setBody");
     if (!box) return;
     box.innerHTML = settingsBodyHtml();
     wireAcc(box, (id) => {
@@ -29493,9 +29521,7 @@ What you type stays in this browser only.`;
         render();
       };
     }
-    box.querySelectorAll("[data-forget-lead]").forEach((b) => {
-      b.onclick = () => forgetTeamLead(b.getAttribute("data-forget-lead"), () => paintSettings());
-    });
+    wireTeamRows(box);
     const joinBtn = box.querySelector("#setJoinTeam");
     if (joinBtn) joinBtn.onclick = () => {
       dismissModal();
