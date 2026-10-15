@@ -8,6 +8,9 @@
  * heed under a policy pin is cut out beside the member declarations, with crypto and Buffer alone.
  * A free name fails here as it would in the shell.
  *
+ * THE TEMPLATE IS READ AS A FILE AND AS A SHIPMENT (19f, 19i): the ADMX and its two ADMLs parse and agree, offer the
+ * desk's two values and nothing else, and electron-builder.js copies that folder beside the Windows installer's files.
+ *
  * THE GLUE IS DRIVEN WHOLE (19g, 19h). The real shell/main.js runs under stubbed electron, as tests/team-desk.mjs
  * runs it, beside a stand-in for reg.exe that answers its export and its console print from one invented key,
  * the print in the console's code page as reg gives it, so a shell reading either is judged on what it takes.
@@ -24,7 +27,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
-const EXPECTED = 8;
+const EXPECTED = 9;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -626,9 +629,11 @@ const under = (el, name) => el.kids.reduce((out, k) => out.concat(k.name === nam
       doc[k] = parseXml(raw[k], k);
     } catch (e) { problems.push((e && e.message) || String(e)); }
   }
-  /* The keys the desk and Studio read, as the template must write them; the registry compares them without case. */
-  const DESK_KEY = "software\\policies\\etiuda", STUDIO_KEY = "software\\policies\\etiudastudio";
-  const WANT = { TeamFolder: [DESK_KEY, "1024"], LeadKey: [DESK_KEY, "64"], TeamAboveFolder: [STUDIO_KEY, "1024"], LeadKeyAbove: [STUDIO_KEY, "64"] };
+  /* The key the desk reads, as the template must write it; the registry compares keys without case. Etiuda Studio's pair
+     (TeamAboveFolder, LeadKeyAbove) left the template on 2026-10-15, sense pass finding 17: nothing reads it, so it is
+     offered again only when Studio does. */
+  const DESK_KEY = "software\\policies\\etiuda";
+  const WANT = { TeamFolder: [DESK_KEY, "1024"], LeadKey: [DESK_KEY, "64"] };
   const refs = { string: [], presentation: [] }, boxOf = {};
   if (doc.admx) {
     if (doc.admx.name !== "policyDefinitions") problems.push("admx root " + doc.admx.name);
@@ -651,7 +656,7 @@ const under = (el, name) => el.kids.reduce((out, k) => out.concat(k.name === nam
       if (shown && boxes[0]) boxOf[shown[1]] = boxes[0].attrs.id;
     }
     const cats = under(doc.admx, "category").map(c => c.attrs.name).join(",");
-    if (cats !== "Etiuda,EtiudaStudio") problems.push("categories " + cats);
+    if (cats !== "Etiuda") problems.push("categories " + cats);
   }
   const order = {};
   for (const lang of ["en", "pl"]) {
@@ -671,14 +676,43 @@ const under = (el, name) => el.kids.reduce((out, k) => out.concat(k.name === nam
       if (boxes.length !== 1 || boxes[0].attrs.refId !== boxOf[p.attrs.id]) problems.push(lang + " presentation " + p.attrs.id);
     }
     const text = id => (strings.find(s => s.attrs.id === id) || { text: "" }).text;
-    if (text("EtiudaCat") !== "Etiuda" || text("EtiudaStudioCat") !== "Etiuda Studio") problems.push(lang + " category names");
+    if (text("EtiudaCat") !== "Etiuda") problems.push(lang + " category name");
   }
   if (order.en && order.pl && order.en.join() !== order.pl.join()) problems.push("en and pl ids in another order");
   if (raw.pl && (!raw.pl.includes("stanowisko") || !/[ąćęłńóśźż]/i.test(raw.pl))) problems.push("polish copy");
   if (raw.en && !raw.en.includes("full path") && !raw.en.includes("Full path")) problems.push("english copy");
+  for (const [k, t] of Object.entries(raw)) if (/Studio|Above/.test(t)) problems.push(k + " still offers a setting for Etiuda Studio");
   check(problems.length === 0,
-    "19f the template parses, its strings and presentations match the ADMX one for one in English and in Polish, and each"
-    + " policy writes its own value under the key the desk or Studio reads: " + (problems.join("; ") || "shell/policy"));
+    "19f the template parses, its strings and presentations match the ADMX one for one in English and in Polish, each"
+    + " policy writes its own value under the key the desk reads, and none is a setting nothing reads: "
+    + (problems.join("; ") || "shell/policy"));
+}
+
+/* 19i: THE TEMPLATE REACHES AN ADMINISTRATOR WITH THE PROGRAM (sense pass finding 17). Read from the build config rather
+   than from a built installer: the Windows build copies shell/policy, whole, to resources/policy beside the program, and
+   that folder holds the ADMX and its two ADMLs and nothing else. The Linux packages carry none, since only Windows reads
+   Group Policy. */
+{
+  const problems = [];
+  const POLICY = path.join(ROOT, "shell", "policy");
+  const copies = s => !!s && typeof s === "object" && path.resolve(ROOT, String(s.from || "")) === POLICY;
+  try {
+    const cfg = nodeRequire(path.join(ROOT, "electron-builder.js"));
+    const policy = [].concat((cfg.win && cfg.win.extraResources) || []).filter(copies);
+    if (policy.length !== 1) problems.push(policy.length + " Windows extraResources entries copy shell/policy");
+    else {
+      if (policy[0].to !== "policy") problems.push("copied to " + JSON.stringify(policy[0].to));
+      if (policy[0].filter !== undefined) problems.push("filtered " + JSON.stringify(policy[0].filter));
+    }
+    const walk = (dir, rel) => fs.readdirSync(dir, { withFileTypes: true }).flatMap(d => d.isDirectory()
+      ? walk(path.join(dir, d.name), rel + d.name + "/") : [rel + d.name]);
+    const held = walk(POLICY, "").sort().join(",");
+    if (held !== "en-US/etiuda.adml,etiuda.admx,pl-PL/etiuda.adml") problems.push("shell/policy holds " + held);
+    if ([].concat((cfg.linux && cfg.linux.extraResources) || [], cfg.extraResources || []).some(copies)) problems.push("a Linux package carries it");
+  } catch (e) { problems.push("electron-builder.js: " + ((e && e.message) || e)); }
+  check(problems.length === 0,
+    "19i the Windows installer carries the template beside the program, shell/policy copied whole to resources/policy, and"
+    + " that folder is the ADMX and its English and Polish ADML: " + (problems.join("; ") || "resources/policy"));
 }
 
 /* ---- the whole shell, beside a stand-in reg.exe ------------------------------------------------------------- */

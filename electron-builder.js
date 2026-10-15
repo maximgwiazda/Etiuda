@@ -123,7 +123,10 @@ module.exports = {
     // entry from the vector at its own size. The bare mark on transparent rather than the tile,
     // because a tile suits a phone and this is a desktop icon. Copied in, never edited in place.
     icon: "shell/etiuda.ico",
-    extraResources: [{ from: CARET, to: "caret.exe" }],
+    // THE GROUP POLICY TEMPLATE goes beside the program as it stands, resources/policy holding etiuda.admx and its
+    // en-US and pl-PL etiuda.adml, so an administrator who installs a desk has the template that pins its team folder
+    // and its lead's key (sense pass finding 17; tests/join-policy.mjs 19i). Windows only: no other system reads it.
+    extraResources: [{ from: CARET, to: "caret.exe" }, { from: "shell/policy", to: "policy" }],
     ...signing,
   },
   // THE LICENCE PAGE IS FOUND BY NAME rather than named here: electron-builder shows one when

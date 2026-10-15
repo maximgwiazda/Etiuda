@@ -139,9 +139,10 @@ try {
   const DIST = path.join(LAB, 'dist');
   check(J(fresh.linux.extraResources) === J([{ from: path.join(DIST, '.dictionaries'), to: 'dictionaries' }])
       && cfg.extraResources === undefined && cfg.nsis.extraResources === undefined
-      && J(fresh.win.extraResources) === J([{ from: path.join(DIST, '.caret', 'caret.exe'), to: 'caret.exe' }]),
+      && J(fresh.win.extraResources) === J([{ from: path.join(DIST, '.caret', 'caret.exe'), to: 'caret.exe' }, { from: 'shell/policy', to: 'policy' }]),
     '5a the Linux block copies the output folder\'s .dictionaries into resources/dictionaries, the Windows block the caret'
-    + ' helper alone, and nothing above them copies a resource: ' + J(fresh.linux.extraResources) + ' ' + J(fresh.win.extraResources));
+    + ' helper and the Group Policy template alone (tests/join-policy.mjs 19i), and nothing above them copies a resource: '
+    + J(fresh.linux.extraResources) + ' ' + J(fresh.win.extraResources));
   const shellFiles = (/files: (\[[^\]]*\])/.exec(fs.readFileSync(path.join(ROOT, 'shell', 'main.js'), 'utf8')) || [])[1] || '';
   check(real.dictionaries === FILES && J(FILES.map(f => f.name)) === J(['en-US-10-1.bdic', 'pl-PL-3-0.bdic', 'README_en_US.txt', 'README_pl_PL.txt', 'COPYING.MPL'])
       && shellFiles === '["en-US-10-1.bdic", "pl-PL-3-0.bdic"]'
