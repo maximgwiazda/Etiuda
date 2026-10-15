@@ -14150,6 +14150,7 @@ What you type stays in this browser only.`;
     eCatalogFolder: () => eCatalogFolder,
     eCatalogFolderShort: () => eCatalogFolderShort,
     eCatalogIn: () => eCatalogIn,
+    eCatalogLeads: () => eCatalogLeads,
     eCatalogMtime: () => eCatalogMtime,
     eCatalogRing: () => eCatalogRing,
     eCatalogTaken: () => eCatalogTaken,
@@ -14223,6 +14224,16 @@ What you type stays in this browser only.`;
       return Promise.resolve(h.catalogRing()).then((v) => typeof v === "string" ? v : "").catch(() => "");
     } catch (e) {
       return Promise.resolve("");
+    }
+  }
+  function eCatalogLeads() {
+    const h = eHost();
+    if (!h || typeof h.catalogLeads !== "function") return Promise.resolve([]);
+    const ok = (l) => !!l && typeof l === "object" && typeof l.keyId === "string" && /^[0-9a-f]{64}$/.test(String(l.public || ""));
+    try {
+      return Promise.resolve(h.catalogLeads()).then((v) => Array.isArray(v) ? v.filter(ok).map((l) => ({ keyId: l.keyId, public: String(l.public) })) : []).catch(() => []);
+    } catch (e) {
+      return Promise.resolve([]);
     }
   }
   function eHanded() {
@@ -14960,6 +14971,16 @@ What you type stays in this browser only.`;
   var SIGNER_KEY = "CatalogSigner";
   var TRUST_WAIT_MS = 2e3;
   var TRUST_OF = typeof WeakMap === "function" ? /* @__PURE__ */ new WeakMap() : null;
+  function deskSigState(doc, leads) {
+    const byRing = () => eCatalogRing().then((text) => v2SigState(doc, v2RingRead(text).ring));
+    if (!leads.length) return byRing();
+    const sig = doc.sig;
+    if (!sig || typeof sig !== "object" || sig.value == null || String(sig.value) === "") return Promise.resolve(V2_SIG_NONE);
+    const kid = String(sig.keyId == null ? "" : sig.keyId), id = String(doc.id == null ? "" : doc.id);
+    const formed = sig.alg === V2_SIG_ALG && /^[0-9a-f]{128}$/.test(String(sig.value));
+    const byLead = (l) => formed ? v2SigState(doc, { [id]: { [kid]: l.public } }) : Promise.resolve("");
+    return leads.reduce((was, l) => was.then((s) => s === V2_SIG_VALID ? s : byLead(l)), Promise.resolve("")).then((s) => s === V2_SIG_VALID ? s : byRing().then((r) => r === V2_SIG_INVALID || r === V2_SIG_UNKNOWN && leads.some((l) => l.keyId === kid) ? V2_SIG_INVALID : V2_SIG_UNKNOWN));
+  }
   function catalogTrust(c) {
     const doc = catalogDocOf(c);
     if (!doc || !TRUST_OF) return Promise.resolve("");
@@ -14972,7 +14993,7 @@ What you type stays in this browser only.`;
       snap = null;
     }
     const entry = { done: false, state: "" };
-    entry.wait = (snap ? eCatalogRing().then((text) => v2SigState(snap, v2RingRead(text).ring)) : Promise.resolve("")).catch(() => "").then((s) => {
+    entry.wait = (snap ? eCatalogLeads().then((leads) => deskSigState(snap, leads)) : Promise.resolve("")).catch(() => "").then((s) => {
       entry.done = true;
       entry.state = String(s || "");
       return entry.state;
@@ -27983,10 +28004,11 @@ What you type stays in this browser only.`;
       const prints = leads.map((x) => x && x.print).filter(Boolean);
       const forCat = ring && ring[String(c.id || "")];
       const pub = forCat && typeof forCat === "object" ? String(forCat[kid] || "") : "";
-      if (state !== V2_SIG_VALID || !prints.length || !/^[0-9a-f]{64}$/.test(pub)) return;
-      return leadPrintOf(pub).then((print) => {
+      if (state === V2_SIG_VALID || !prints.length || !/^[0-9a-f]{64}$/.test(pub)) return;
+      return v2SigState(doc, ring).then((named) => named === V2_SIG_VALID ? leadPrintOf(pub) : "").then((print) => {
         if (!print || prints.indexOf(print) >= 0 || !wrap.isConnected || wrap.querySelector(".ec-signer")) return;
         const line = t("This file is signed with the key {KEY}, which is not the team lead's.").split("{KEY}").join(leadKeyText(print));
+        wrap.querySelectorAll(".ec-trust").forEach((n) => n.remove());
         (wrap.querySelector(".ec-holds") || wrap.querySelector(".tour-actions")).insertAdjacentHTML(
           "beforebegin",
           '<p class="ec-signer">' + esc(line) + "</p>"
@@ -28089,7 +28111,7 @@ What you type stays in this browser only.`;
     addEventListener("resize", place);
     if (!wrap.querySelector(".ec-trust")) catalogTrust(c).then((state) => {
       const line = trustOfferLine(state, updating);
-      if (!line || !wrap.isConnected || wrap.querySelector(".ec-trust")) return;
+      if (!line || !wrap.isConnected || wrap.querySelector(".ec-trust") || wrap.querySelector(".ec-signer")) return;
       (wrap.querySelector(".ec-holds") || wrap.querySelector(".tour-actions")).insertAdjacentHTML("beforebegin", trustHtml(line));
       place();
     });
