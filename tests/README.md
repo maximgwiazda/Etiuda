@@ -21,7 +21,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/build-fresh.mjs                       no fixtures, builds once
     node tests/catalog-routes.mjs                     no fixtures, the two catalog routes
     node tests/module-calls.mjs                       no fixtures, the modules CALLED
-    node tests/tab-focus.mjs                          no fixtures, Tab walks the main screen, Ctrl+Tab and Ctrl+T move the conversations, covers and dialogs keep their own Tab
+    node tests/tab-focus.mjs                          no fixtures, Tab walks the main screen, Ctrl+Tab and Ctrl+T move the conversations, the middle button closes one, covers and dialogs keep their own Tab
     node tests/desk-ipc.mjs                           no fixtures, the desk's write path, shell stubbed
     node tests/desk-ipc.mjs, legs 77a to 82h          no fixtures, the desk's own signed file under desks/<branch id>/: key pair, name, retry of a held write, a replaced pair, the edition kept past a removal, the category fields, a catalog taken while the identity is asked (78k), a catalog made from nothing on the empty desk (82)
     node tests/catalog-history.mjs                    no fixtures, the desk's hidden backups: a catalog it reads or writes kept once per content beside desk.json and never in the catalog folder, a colleague's file not kept, 30 days from last seen with the newest of each file kept longer, the list, the open and the putting back, never for a signed or sealed catalog nor over one, and an index that will not read losing nothing; the page's grouping imported from src/modules/catalog-history.js

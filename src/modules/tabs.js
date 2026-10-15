@@ -1153,6 +1153,10 @@ function drawTabsCore(){
       if(e.target.closest(".tab-x")) return;
       switchTab(tb.id);
     };
+    /* The middle button closes the conversation as its x does, Undo included; its press is kept from starting the
+       page's own scrolling by drag. */
+    b.onmousedown=e=>{ if(e.button===1) e.preventDefault(); };
+    b.onauxclick=e=>{ if(e.button===1) closeTab(tb.id,e); };
     bar.appendChild(b);
   });
   const wrap=$("#tabsWrap")||bar.parentElement;
