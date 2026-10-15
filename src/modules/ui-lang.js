@@ -310,7 +310,6 @@ UI_STRINGS.pl={
   "Open the Menu":"Otwórz Menu",
   "Your name":"Nazwa agenta",
   "Personal":"Osobiste",
-  "Last sync":"Ostatnia synchronizacja",
   "Later":"Później",
   "Focus {PAX}":"Kursor w {PAX}",
   "Focus ROLE":"Kursor w ROLE",

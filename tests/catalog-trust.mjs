@@ -168,15 +168,17 @@ try {
     const h = TR.trustKeyHtml(s, id), at = n => { const m = new RegExp(" " + n + "=\"([^\"]*)\"").exec(h); return m ? m[1] : null; };
     return [/class="ec-key on"/.test(h), at("aria-label"), at("title"), at("data-tip")];
   };
-  const keys = [keyAt(V2.V2_SIG_VALID), keyAt(V2.V2_SIG_VALID, "harness-key"), keyAt(V2.V2_SIG_NONE),
-    keyAt(V2.V2_SIG_INVALID), keyAt(V2.V2_SIG_UNKNOWN)];
+  const keys = [keyAt(V2.V2_SIG_VALID), keyAt(V2.V2_SIG_VALID, "87ad0879ac3e9ff6"), keyAt(V2.V2_SIG_VALID, "harness-key"),
+    keyAt(V2.V2_SIG_NONE), keyAt(V2.V2_SIG_INVALID), keyAt(V2.V2_SIG_UNKNOWN)];
   check(JSON.stringify(keys) === JSON.stringify([[true, "Signed", "Signed", null],
-      [true, "Signed", null, "This file is signed with the key harness-key."], [false, "Unsigned", "Unsigned", null],
+      [true, "Signed", null, "This file is signed with the key 87ad 0879 ac3e 9ff6."], [true, "Signed", "Signed", null],
+      [false, "Unsigned", "Unsigned", null],
       [false, "Signed", null, "This file has changed since it was signed."],
       [false, "Signed", null, "This file is signed with a key this computer does not know."]])
     && TR.trustKeyHtml("") === '<span class="ec-key" aria-hidden="true"></span>',
     "2b the Library's row wears its signature as a key, gold only where it holds and named Signed or Unsigned,"
-    + " with anything more in its bubble rather than its tooltip, and an empty slot while nothing is known: " + JSON.stringify(keys));
+    + " with anything more in its bubble rather than its tooltip, a valid key named only by a print, never by a key id,"
+    + " and an empty slot while nothing is known: " + JSON.stringify(keys));
 
   ST.nsSet("CatalogTrust", V2.V2_SIG_VALID);
   const downgrade = TR.trustOfferLine(V2.V2_SIG_NONE, true), fresh = TR.trustOfferLine(V2.V2_SIG_NONE, false);
@@ -194,10 +196,10 @@ try {
     && /^Ten plik podpisano kluczem/.test(pl[1]) && /aria-label="Niepodpisany" title="Niepodpisany"/.test(pl[2]),
     "2f a desk that reads Polish is told in Polish, on both surfaces");
 
-  /* THE KEY'S SIGN (G1): a keyId Studio derived is printed as the desks compare it, its hex in fours, and its bubble wears
-     Studio's disc; a desk's key in a colleague's tip wears the desk's; a sentence without the key stays text. */
+  /* THE KEY'S SIGN (G1): the print of the public that verified a file is printed as the desks compare it, its hex in fours,
+     and its bubble wears Studio's disc; a desk's key in a colleague's tip wears the desk's; a sentence without the key stays text. */
   const TJ = await import(MOD("team-join.js"));
-  const studioKey = TR.trustKeyHtml(V2.V2_SIG_VALID, "studio-87ad0879ac3e9ff6"), at2 = n => { const m = new RegExp(" " + n + "=\"([^\"]*)\"").exec(studioKey); return m ? m[1] : null; };
+  const studioKey = TR.trustKeyHtml(V2.V2_SIG_VALID, "87ad0879ac3e9ff6"), at2 = n => { const m = new RegExp(" " + n + "=\"([^\"]*)\"").exec(studioKey); return m ? m[1] : null; };
   const tipS = TJ.keyTipHtml(at2("data-tip"), at2("data-tip-key"), at2("data-tip-kind"));
   const tipD = TJ.keyTipHtml("Signed by Ola's desk, key 3f9a 0c71 b2e4 d856. Only that desk can change this file.", "3f9a0c71b2e4d856", "desk");
   check(at2("data-tip") === "This file is signed with the key 87ad 0879 ac3e 9ff6." && at2("data-tip-key") === "87ad0879ac3e9ff6"
@@ -205,7 +207,7 @@ try {
     && /<span>87ad 0879 ac3e 9ff6<\/span><\/span>\.$/.test(tipS) && /^Signed by Ola&#39;s desk, key <span class="e-ksig"><span class="e-kdisc desk"/.test(tipD)
     && TJ.keyTipHtml("This file has changed since it was signed.", "87ad0879ac3e9ff6", "studio") === null
     && !/data-tip-key/.test(TR.trustKeyHtml(V2.V2_SIG_VALID, "harness-key")),
-    "2g a key Studio derived is printed in fours and its bubble wears Studio's disc, a desk's key in a colleague's bubble wears"
+    "2g a key's print is printed in fours and its bubble wears Studio's disc, a desk's key in a colleague's bubble wears"
     + " the desk's, and a sentence that holds no key stays text: " + JSON.stringify(tipS.slice(0, 60)));
 
   /* A host that never answers must not hold a load: the wait ends and the catalog loads unrecorded. */

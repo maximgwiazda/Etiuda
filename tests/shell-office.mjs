@@ -384,57 +384,69 @@ try {
 
     d.st.back();
     await settle();
-    const req = { format: 1, kind: "etiuda-request", id: "req-office", issued: "2026-09-01",
-      from: "2026-09-01", to: "2026-09-27", expires: "2099-01-01" };
-    req.hash = d.S.api.channelHash(req);
-    realFs.writeFileSync(path.join(d.share, "etiuda-request.ereq"), JSON.stringify(req), "utf8");
+    realFs.writeFileSync(path.join(d.share, "etiuda-request.ereq"), JSON.stringify({
+      format: 1, kind: "etiuda-request", id: "req-office", issued: "2026-09-01",
+      from: "2026-09-01", to: "2026-09-27", expires: "2099-01-01"
+    }), "utf8");
     d.clock.fire(30000);
     await settle();
     const offered = d.S.sent.filter(a => a[0] === "etiuda:catalog-file").map(a => named(a[1]));
-    const asked = d.S.sent.filter(a => a[0] === "etiuda:stats-ask").map(a => a[1] && a[1].id);
-    check(d.onShare().length === 1 && offered.join() === goodCatalog().name && asked.join() === "req-office",
-      "4e when it answers again it is watched, what it holds is offered, and the statistics request is answered: watch "
-      + d.onShare().length + ", offered " + offered.length + ", asked " + asked.join());
+    const asked = d.S.sent.filter(a => a[0] === "etiuda:stats-ask");
+    let oldStats = 0;
+    try { oldStats = realFs.readdirSync(path.join(d.share, "stats")).filter(n => /\.estat$/.test(n)).length; } catch { oldStats = 0; }
+    check(d.onShare().length === 1 && offered.join() === goodCatalog().name && asked.length === 0 && oldStats === 0,
+      "4e when it answers again it is watched and what it holds is offered, and a request file asks for nothing and writes no statistics file: watch "
+      + d.onShare().length + ", offered " + offered.length + ", asked " + asked.length + ", stats " + oldStats);
 
-    /* The file the desk writes for a request, from a text the page sends (board 814, S2): the shell
-       rebuilds it field by field, so what the page's statsDoc carries reaches the file only where
-       the shell copies it. Each case is a desk of its own, asked and answered as 4e's was. */
-    const answerWith = async (sent) => {
+    /* The old request and the old stats/ path are gone. A write with no span, an unsigned span, and a
+       request left on the share each write nothing. The sealed answer is proved in tests/stats-live.mjs. */
+    const countEstat = (share) => {
+      const walk = (dir) => {
+        let names = [];
+        try { names = realFs.readdirSync(dir, { withFileTypes: true }); } catch { return []; }
+        return names.reduce((out, ent) => out.concat(ent.isDirectory() ? walk(path.join(dir, ent.name)) : [path.join(dir, ent.name)]), []);
+      };
+      return walk(share).filter(f => /\.estat$/.test(f));
+    };
+    const quietDesk = async () => {
       const a = boot(true);
       await settle();
       a.clock.fire(3000);
       await settle();
       a.st.back();
       await settle();
-      const rq = { format: 1, kind: "etiuda-request", id: "req-pairs", issued: "2026-09-01",
-        from: "2026-09-01", to: "2026-09-27", expires: "2099-01-01" };
-      rq.hash = a.S.api.channelHash(rq);
-      realFs.writeFileSync(path.join(a.share, "etiuda-request.ereq"), JSON.stringify(rq), "utf8");
-      realFs.mkdirSync(path.join(a.share, "stats"), { recursive: true });
       a.clock.fire(30000);
       await settle();
-      const res = await a.S.ask("etiuda:stats-write", JSON.stringify(Object.assign(
-        { engine: "2.0.0", cards: [{ id: "c-a", n: 2, at: "2026-09-02" }], intents: [], misses: 0, langs: { en: 2 } }, sent)));
-      const names = realFs.readdirSync(path.join(a.share, "stats")).filter(n => /\.estat$/.test(n));
-      let doc = null;
-      try { doc = JSON.parse(realFs.readFileSync(path.join(a.share, "stats", names[0]), "utf8")); } catch { doc = null; }
-      const rehash = doc ? a.S.api.channelHash(doc) : "";
-      return { ok: !!(res && res.ok), files: names.length, doc, hashOk: !!doc && doc.hash === rehash };
+      return a;
     };
-    const withPair = await answerWith({ pairs: [{ from: "c-a", to: "c-m", n: 3, name: "smuggled" }] });
-    check(withPair.ok && withPair.files === 1 && withPair.hashOk
-      && JSON.stringify(withPair.doc && withPair.doc.pairs) === JSON.stringify([{ from: "c-a", to: "c-m", n: 3 }]),
-      "4v the statistics answer carries the pairs the page counted into the file, each row rebuilt as from, to and n, under the file's hash: "
-      + (withPair.doc ? "pairs " + JSON.stringify(withPair.doc.pairs) : "no file") + ", hash " + withPair.hashOk);
-    const noPairs = await answerWith({});
-    check(noPairs.ok && noPairs.files === 1 && noPairs.hashOk && !("pairs" in noPairs.doc)
-      && Object.keys(noPairs.doc).sort().join() === "cards,desk,engine,format,hash,intents,kind,langs,misses,period,sync",
-      "4w THE TWIN: a desk with no pairs writes the file it always wrote, with no pairs key: "
-      + (noPairs.doc ? Object.keys(noPairs.doc).sort().join() : "no file"));
-    const emptyPairs = await answerWith({ pairs: [{ from: "c-a", to: "", n: 1 }, { from: "c-a", to: "c-b", n: 0 }, { from: 5, to: "c-b", n: 1 }, null] });
-    check(emptyPairs.ok && emptyPairs.files === 1 && !("pairs" in emptyPairs.doc),
-      "4x a pairs list with no row that survives writes no key, not an empty one: "
-      + (emptyPairs.doc ? "pairs " + JSON.stringify(emptyPairs.doc.pairs) : "no file"));
+    const withPair = await quietDesk();
+    const pairRes = await withPair.S.ask("etiuda:stats-write", JSON.stringify({
+      engine: "2.0.0", cards: [{ id: "c-a", n: 2, at: "2026-09-02" }], intents: [], misses: 0, langs: { en: 2 },
+      pairs: [{ from: "c-a", to: "c-m", n: 3, name: "smuggled" }]
+    }));
+    check(!(pairRes && pairRes.ok) && countEstat(withPair.share).length === 0,
+      "4v a statistics write with no span and no team key writes nothing, in stats/ or under desks/: ok "
+      + !!(pairRes && pairRes.ok) + ", files " + countEstat(withPair.share).length);
+    const unsigned = await quietDesk();
+    const beforeAsk = unsigned.S.sent.filter(x => x[0] === "etiuda:stats-ask").length;
+    realFs.writeFileSync(path.join(unsigned.share, "stats-span.json"),
+      "{\"format\":1,\"kind\":\"etiuda-stats-span\",\"span\":\"rolling-30\"}", "utf8");
+    unsigned.S.api.catalogChanged(unsigned.S.win);
+    const askedNow = unsigned.S.sent.filter(x => x[0] === "etiuda:stats-ask").length - beforeAsk;
+    check(askedNow === 0 && countEstat(unsigned.share).length === 0,
+      "4w an unsigned span file writes nothing and asks for nothing: asked " + askedNow + ", files " + countEstat(unsigned.share).length);
+    const oldReq = await quietDesk();
+    realFs.writeFileSync(path.join(oldReq.share, "etiuda-request.ereq"), JSON.stringify({
+      format: 1, kind: "etiuda-request", id: "req-pairs", from: "2026-09-01", to: "2026-09-27"
+    }), "utf8");
+    oldReq.S.api.catalogChanged(oldReq.S.win);
+    const oldRes = await oldReq.S.ask("etiuda:stats-write", JSON.stringify({
+      engine: "2.0.0", cards: [], intents: [], misses: 0, langs: {}
+    }));
+    const oldAsked = oldReq.S.sent.filter(x => x[0] === "etiuda:stats-ask").length;
+    check(!(oldRes && oldRes.ok) && oldAsked === 0 && countEstat(oldReq.share).length === 0,
+      "4x the old request path still writes nothing and asks for nothing: ok " + !!(oldRes && oldRes.ok)
+      + ", asked " + oldAsked + ", files " + countEstat(oldReq.share).length);
 
     const armed = d.onShare().length;
     const first = d.onShare()[0];
@@ -934,7 +946,7 @@ try {
 
     /* The boot's send is the page finishing a load, which no node model fires: the handler's line is read, with its comments off. */
     const bare = t => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-    const loadLine = SRC.split("\n").filter(l => l.indexOf("on(\"did-finish-load\"") >= 0 && l.indexOf("tryAnswerRequest") >= 0)[0] || "";
+    const loadLine = SRC.split("\n").filter(l => l.indexOf("on(\"did-finish-load\"") >= 0 && l.indexOf("tryLiveStats") >= 0)[0] || "";
     const sends = l => /\bsendListing\(win, true\)/.test(bare(l));
     check(sends(loadLine) && !sends(loadLine.replace("sendListing(win, true);", "/* sendListing(win, true); */")),
       "80h the page finishing a load sends the listing, forced: the line is read in code, and a call kept in a comment does not count");

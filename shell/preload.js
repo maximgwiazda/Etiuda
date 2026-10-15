@@ -81,6 +81,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   onCatalogListing: (fn) => ipcRenderer.on("etiuda:catalog-listing", (_e, rows) => fn(Array.isArray(rows) ? rows : [])),
   /* The ring beside the catalogs as text, read afresh each time the page verifies a signature. */
   catalogRing: () => ipcRenderer.invoke("etiuda:catalog-ring"),
+  /* The leads this desk has pinned, [{keyId, public}], which decide the page's key where there are any. */
+  catalogLeads: () => ipcRenderer.invoke("etiuda:catalog-leads"),
   /* `asked` is a Load the person chose. The shell then hands the bytes of a lower rev, and the page decides.
      `offer` is a read the page means to offer nobody having asked, which a pinned lead must have signed. */
   readCatalogFile: (name, desk, asked, offer) => ipcRenderer.invoke("etiuda:catalog-read", String(name || ""), desk ? String(desk) : "",
@@ -139,7 +141,10 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
     ipcRenderer.send("etiuda:offer-dropped", at);
     return true;
   },
-  writeStats: (text) => ipcRenderer.invoke("etiuda:stats-write", String(text || "")),
+  writeStats: (text, askId) => ipcRenderer.invoke("etiuda:stats-write", String(text || ""),
+    typeof askId === "string" ? askId : ""),
+  /* Closing sends the counts past the two-minute pace. The ordinary flush stays on writeStats. */
+  closeStats: (text) => ipcRenderer.invoke("etiuda:stats-close", String(text || "")),
   /* The desk's branch: {id, key, box}, the public halves only, or null where no key can be kept; and the
      desk's own catalog file by its stem, an empty text taking it away. Nothing here hands out a key. */
   branchIdentity: (make) => ipcRenderer.invoke("etiuda:branch-identity", make === false ? false : true),
