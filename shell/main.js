@@ -358,13 +358,21 @@ function catalogSigValid(data) {
     return crypto.verify(null, signedBytesOf(data), key, Buffer.from(String(sig.value), "hex")) ? pub : "";
   } catch { return ""; }
 }
-/* The lead publics this desk has pinned, one per team it joined. Empty until a team file or the envelope names one. */
-function pinnedLeadPubs() {
+/* The leads this desk has pinned, {keyId, public} once each, one per team it joined. Empty until a team file or the
+   envelope names one. The page's key reads from these too (etiuda:catalog-leads), so what it shows is what is chosen here. */
+function pinnedLeadKeys() {
   const out = [];
   Object.keys(teamPins).forEach(t => {
-    const p = teamPins[t] && String(teamPins[t].public || "");
-    if (SEALED_TEAM_RE.test(t) && /^[0-9a-f]{64}$/.test(p) && out.indexOf(p) < 0) out.push(p);
+    const pin = teamPins[t], p = pin && String(pin.public || ""), kid = pin && typeof pin.keyId === "string" ? pin.keyId : "";
+    if (SEALED_TEAM_RE.test(t) && /^[0-9a-f]{64}$/.test(p) && !out.some(k => k.public === p && k.keyId === kid))
+      out.push({ keyId: kid, public: p });
   });
+  return out;
+}
+/* The lead publics alone, once each. */
+function pinnedLeadPubs() {
+  const out = [];
+  pinnedLeadKeys().forEach(k => { if (out.indexOf(k.public) < 0) out.push(k.public); });
   return out;
 }
 /* The public a catalog may be chosen under without the agent asking: with no lead pinned, any key the ring verifies;
@@ -3709,7 +3717,8 @@ ipcMain.handle("etiuda:catalog-read", (e, name, desk, asked, offer) => {
 });
 /* THE RING, the text of V2_RING_FILE in the catalog folder or "" where there is none: the page
    reads it with the engine's own v2RingRead, and a ring only adds trust, so absent is not a
-   fault. Bounded like a request, since the share is anybody's to write. */
+   fault. On a desk with a lead pinned it adds none: the page's key there is the pin's (etiuda:catalog-leads),
+   and the ring only names another key. Bounded like a request, since the share is anybody's to write. */
 const RING_NAME = "etiuda-ring.json";
 ipcMain.handle("etiuda:catalog-ring", (e) => {
   if (!fromEngine(e) || !folderAnswers(catalogFolder())) return "";
@@ -3720,6 +3729,14 @@ ipcMain.handle("etiuda:catalog-ring", (e) => {
     text = fs.readFileSync(file, "utf8");
   } catch { /* no ring, which is the ordinary case */ }
   return text;
+});
+/* THE LEADS THIS DESK HAS PINNED, as catalogLeadOk verifies a catalog against them, the team file heeded first as a read
+   heeds it. Where there is one, the page's key comes from these and the ring above is not read for it, since the ring is the
+   share's to write; [] for a desk outside any team, whose key the ring still decides. */
+ipcMain.handle("etiuda:catalog-leads", (e) => {
+  if (!fromEngine(e)) return [];
+  heedTeam();
+  return pinnedLeadKeys();
 });
 ipcMain.handle("etiuda:stats-write", (e, text) => {
   if (!fromEngine(e)) return { ok: false };
