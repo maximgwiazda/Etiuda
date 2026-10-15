@@ -33,6 +33,7 @@ import { paintCatalogList } from "./catalog-offer.js";
 import { eHasHistory, openHistory } from "./catalog-history.js";
 import { eCatalogFolder, eCatalogFolderShort, eChooseCatalogFolder, eHost, eOpenCatalogFolder } from "./host.js";
 import { cards, catOrder, mgOpen, cardCounts } from "./app-state.js";
+import { joinDoorButton, openJoinPaste } from "./team-join.js";
 
 
 /** One collapsible Manage section. `body` is trusted markup; `title` is not. */
@@ -676,15 +677,7 @@ function openManage(){
     /* Wipe sits at the bar's LEFT EDGE, with Close at the far right: same as Settings' Reset,
        and .mf-left is the group that carries it there. Danger kept, because this one forgets
        personal state. */
-    actions: '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe">'+esc(t("Clear local memory"))+'</button>'+
-      /* A hairline rather than a gap: two buttons at the same edge with space between them read
-         as one group loosely spaced, and one of these forgets your work while the other brings
-         a file in. Plain, not primary: a filled button beside a destructive one is a contest. */
-      '<span class="mf-sep" aria-hidden="true"></span>'+
-      '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog…</button>'+
-      (eHasHistory()?'<button type="button" class="btn" id="mgHistory">'+esc(t("Earlier versions…"))+'</button>':'')+
-      '</div>'+
-      '<button type="button" class="btn" id="mgClose">'+esc(t("Close"))+'</button>',
+    actions: libraryActionsHtml(),
     wire: wireManage
   });
   function wireManage(){
@@ -702,6 +695,9 @@ function openManage(){
     syncRoleDrum();   // the drum turns over the new list
   };
   $("#mgImportCatalog").onclick=importCatalogHere;
+  /* Join sits beside Load. It does not replace the catalog this desk has open. */
+  const joinBtn=$("#mgJoinTeam");
+  if(joinBtn) joinBtn.onclick=()=>{ closeModal(); openJoinPaste(); };
   if($("#mgHistory")) $("#mgHistory").onclick=openHistory;
   paintCatalogList();
   /* BOTH LIVE INSIDE A SUMMARY, where a click is the browser's own way of folding the section:
@@ -840,10 +836,25 @@ function openManage(){
   }
 }
 
+/* Join sits beside Load. It does not replace the catalog this desk has open. */
+function libraryActionsHtml(){
+  return '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe">'+esc(t("Clear local memory"))+'</button>'+
+    /* A hairline rather than a gap: two buttons at the same edge with space between them read
+       as one group loosely spaced, and one of these forgets your work while the other brings
+       a file in. Plain, not primary: a filled button beside a destructive one is a contest. */
+    '<span class="mf-sep" aria-hidden="true"></span>'+
+    '<button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog…</button>'+
+    joinDoorButton("mgJoinTeam")+
+    (eHasHistory()?'<button type="button" class="btn" id="mgHistory">'+esc(t("Earlier versions…"))+'</button>':'')+
+    '</div>'+
+    '<button type="button" class="btn" id="mgClose">'+esc(t("Close"))+'</button>';
+}
+
 export {
   mgCardRow,
   mgCardsIn,
   mgUsesTip,
   openManage,
-  wireManageDrag
+  wireManageDrag,
+  libraryActionsHtml
 };

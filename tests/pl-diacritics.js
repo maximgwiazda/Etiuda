@@ -37,6 +37,9 @@
  * over the same tree reports 0 words and passes. Its list was three folds LONGER and "etiude" was
  * not one of them.
  *
+ * TAKEN OFF SINCE: "zwykle" (2026-10-15), "usually", a word in its own right beside "zwykłe", which the
+ * third cut only kept because no Polish string used it until the copywriter's waiting line on joining.
+ *
  * So the list is data, and it goes stale in the safe direction: a new Polish word is not guarded
  * until somebody adds it. The census line every run prints says how far behind it is, and
  * --census names the words, so the staleness is visible rather than silent.
@@ -130,7 +133,7 @@ const REFUSED = new Set([
   "zachowac zachowuja zaden zadnej zakoncz zamknac zamkniecia zamkniete zamknieto zapamietany",
   "zapelniona zapisac zastapi zastepuje zastosowac zawieraja zaznaczona zbudowac zerknac",
   "zintegrowana zlota zmien zmieniac zmienic zmienil zmiesci znow zobaczyc zostaja zostal",
-  "zostalo zostana zrodla zwezania zwijac zwijal zwin zwiniete zwykla zwykle zywo",
+  "zostalo zostana zrodla zwezania zwijac zwijal zwin zwiniete zwykla zywo",
 ].join(" ").split(/\s+/).filter(Boolean));
 
 /* ---- the scan ------------------------------------------------------------------------------- */

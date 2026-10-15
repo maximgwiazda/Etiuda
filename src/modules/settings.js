@@ -20,7 +20,7 @@ import { applyStoredFactsSize } from "./facts.js";
 import { agentName, setAgentName } from "./agent.js";
 import { eHost, eHasShared } from "./host.js";
 import { hooks } from "./hooks.js";
-import { teamLeads, keySignHtml, forgetTeamLead } from "./team-join.js";
+import { teamLeads, keySignHtml, forgetTeamLead, joinDoorButton, openJoinPaste } from "./team-join.js";
 
 /* THE SETTINGS SCREEN. One test decides what belongs: would you set it once and
    forget it? Anything touched weekly is a Menu item or a header control; Data stays in
@@ -150,6 +150,7 @@ function settingsBodyHtml(){
     UI_LANGS.map(l=>'<option value="'+esc(l.code)+'"'+(l.code===uiLang()?" selected":"")+'>'+esc(l.label)+'</option>').join("")+
     '</select>';
   const lastSyncStamp=fileStamp(+lsGet("eLastSync"));
+  const joinDoor=joinDoorButton("setJoinTeam");
   /* WHO IS AT THE DESK, AND IN WHICH LANGUAGE: two rows of the same kind, the name first
      because it is the one that leaves the machine. NO LINE UNDER THE NAME - the placeholder
      names the field and the cards show what the name does, and a sentence here would be the
@@ -168,6 +169,7 @@ function settingsBodyHtml(){
       teamLeads().map((l,i)=>row(t("Team lead's key"), i===0?t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own."):"",
         '<span class="e-lead-key">'+keySignHtml("studio",l.print)+'</span>'
         +'<button type="button" class="btn" data-forget-lead="'+esc(l.team)+'">'+esc(t("Forget this lead"))+'</button>')).join("")+
+      (joinDoor?row(t("Team"), "", joinDoor):"")+
       /* Under a host only: a browser has no catalog folder to share. */
       (eHasShared()
         ? row(t("Edit the shared catalog directly"),
@@ -266,6 +268,8 @@ function paintSettings(){
   box.querySelectorAll("[data-forget-lead]").forEach(b=>{
     b.onclick=()=>forgetTeamLead(b.getAttribute("data-forget-lead"),()=>paintSettings());
   });
+  const joinBtn=box.querySelector("#setJoinTeam");
+  if(joinBtn) joinBtn.onclick=()=>{ dismissModal(); openJoinPaste(); };
   const nameBox=box.querySelector("#setAgentName");
   if(nameBox) nameBox.oninput=()=>{
     setAgentName(nameBox.value);
@@ -427,5 +431,6 @@ function openSettings(section){
 export {
   openSettings,
   applyPrefs,
-  hotkeyFromEvent
+  hotkeyFromEvent,
+  settingsBodyHtml
 };
