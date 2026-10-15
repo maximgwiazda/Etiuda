@@ -59,6 +59,15 @@ function eCatalogRing(){
   try{ return Promise.resolve(h.catalogRing()).then(v=>typeof v==="string"?v:"").catch(()=>""); }
   catch(e){ return Promise.resolve(""); }
 }
+/* The leads this desk has pinned, [{keyId, public}] each well formed, [] in a browser, wherever the host has none, and on a
+   desk outside any team. */
+function eCatalogLeads(){
+  const h=eHost();
+  if(!h || typeof h.catalogLeads!=="function") return Promise.resolve([]);
+  const ok=l=>!!l && typeof l==="object" && typeof l.keyId==="string" && /^[0-9a-f]{64}$/.test(String(l.public||""));
+  try{ return Promise.resolve(h.catalogLeads()).then(v=>Array.isArray(v)?v.filter(ok).map(l=>({keyId:l.keyId, public:String(l.public)})):[]).catch(()=>[]); }
+  catch(e){ return Promise.resolve([]); }
+}
 /* The file this load is running, and the folder it was found in - which is not always the folder
    above: a catalog beside the installation still loads when the folder holds none. Where the
    engine refused the file the host named at boot, the file handed in its place answers, and the
@@ -403,6 +412,7 @@ export {
   eCatalogFiles,
   eOnCatalogListing,
   eCatalogRing,
+  eCatalogLeads,
   eChooseCatalogFolder,
   eLoadedCatalogFile,
   eCatalogIn,

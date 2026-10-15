@@ -4100,6 +4100,7 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
         <div class="menu" id="settingsMenu" hidden role="menu">
           <button type="button" role="menuitem" data-act="manage" title="Edit, hide or restore every card, intent and category">Library…</button>
           <button type="button" role="menuitem" data-act="settings" title="Interface language, appearance and keyboard shortcuts">Settings…</button>
+          <button type="button" role="menuitem" data-act="join" id="menuJoin" hidden title="Paste the invitation from the team's lead.">Join a team</button>
           <!-- Maintenance has NO menu entry: F2 opens it, and the Keyboard shortcuts screen is
                where that is discovered. -->
           <!-- Locks live in Settings - standing decisions about how the app may behave; hide and
@@ -7544,6 +7545,10 @@ What you type stays in this browser only.`;
     "Load another catalog": "Wczytaj inny katalog",
     "Waiting for the lead to open the request": "Prośba czeka, aż lider ją otworzy",
     "The code to read to them appears here as soon as they do.": "Gdy to zrobi, pojawi się tu kod do podania.",
+    "Joining {LEAD}'s team": "Dołączanie do zespołu osoby {LEAD}",
+    "Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead.": "Stanowisko czeka, aż lider zespołu je wpuści. Zwykle dzieje się to samo; jeśli pojawi się tu kod, proszę odczytać go liderowi.",
+    "Team": "Zespół",
+    "the lead": "lidera",
     "Read this code to the team's lead": "Podaj ten kod liderowi zespołu",
     "They type it in Studio, and the catalog opens here once they let this desk in.": "Lider wpisze go w Studio, a po wpuszczeniu stanowiska katalog otworzy się tutaj.",
     "{NAME}, asked at {TIME}": "{NAME}, prośba z {TIME}",
@@ -14156,6 +14161,7 @@ What you type stays in this browser only.`;
     eCatalogFolder: () => eCatalogFolder,
     eCatalogFolderShort: () => eCatalogFolderShort,
     eCatalogIn: () => eCatalogIn,
+    eCatalogLeads: () => eCatalogLeads,
     eCatalogMtime: () => eCatalogMtime,
     eCatalogRing: () => eCatalogRing,
     eCatalogTaken: () => eCatalogTaken,
@@ -14229,6 +14235,16 @@ What you type stays in this browser only.`;
       return Promise.resolve(h.catalogRing()).then((v) => typeof v === "string" ? v : "").catch(() => "");
     } catch (e) {
       return Promise.resolve("");
+    }
+  }
+  function eCatalogLeads() {
+    const h = eHost();
+    if (!h || typeof h.catalogLeads !== "function") return Promise.resolve([]);
+    const ok = (l) => !!l && typeof l === "object" && typeof l.keyId === "string" && /^[0-9a-f]{64}$/.test(String(l.public || ""));
+    try {
+      return Promise.resolve(h.catalogLeads()).then((v) => Array.isArray(v) ? v.filter(ok).map((l) => ({ keyId: l.keyId, public: String(l.public) })) : []).catch(() => []);
+    } catch (e) {
+      return Promise.resolve([]);
     }
   }
   function eHanded() {
@@ -14567,6 +14583,7 @@ What you type stays in this browser only.`;
     closeJoinBubble: () => closeJoinBubble,
     forgetTeamLead: () => forgetTeamLead,
     inviteHeld: () => inviteHeld,
+    joinDoorButton: () => joinDoorButton,
     keySignHtml: () => keySignHtml,
     keyTipHtml: () => keyTipHtml,
     leadKeyText: () => leadKeyText,
@@ -14605,6 +14622,7 @@ What you type stays in this browser only.`;
     return asked.then((v) => joinTook(v, typeof before === "function" && before(v)), () => {
       const shown2 = joinMode !== "";
       dropInvite();
+      syncJoinDoor();
       if (shown2) repaintJoin();
       return null;
     });
@@ -14691,18 +14709,31 @@ What you type stays in this browser only.`;
     joinWhy = why;
     joinMode = "refused";
   }
+  function joinShown(j) {
+    if (!j || !(j.file || j.state)) return null;
+    const row = {
+      file: String(j.file || ""),
+      state: String(j.state || ""),
+      code: String(j.code || ""),
+      asked: +j.asked || 0,
+      name: String(j.name || "")
+    };
+    if (j.invite && typeof j.invite === "object") row.invite = { lead: String(j.invite.lead || "") };
+    return row;
+  }
+  function syncJoinDoor() {
+    try {
+      const el = document.getElementById("menuJoin");
+      if (el) el.hidden = !teamCanJoin();
+    } catch (e) {
+    }
+  }
   function joinTook(v, changed) {
     const s = v && typeof v === "object" ? v : {};
     const was = JSON.stringify(joinNow);
     joinNow = {
       sealed: s.sealed && s.sealed.file ? { file: String(s.sealed.file), team: String(s.sealed.team || "") } : null,
-      join: s.join && (s.join.file || s.join.state) ? {
-        file: String(s.join.file || ""),
-        state: String(s.join.state || ""),
-        code: String(s.join.code || ""),
-        asked: +s.join.asked || 0,
-        name: String(s.join.name || "")
-      } : null,
+      join: joinShown(s.join),
       leads: Array.isArray(s.leads) ? s.leads.filter((l) => l && l.team).map((l) => ({
         team: String(l.team),
         print: String(l.print || ""),
@@ -14712,8 +14743,9 @@ What you type stays in this browser only.`;
     };
     if (s.joined && s.joined.file) {
       closeJoinBubble();
-      hooks.loadCatalogFromFolder(String(s.joined.file), 0);
+      if (wholeThingEmpty()) hooks.loadCatalogFromFolder(String(s.joined.file), 0);
     }
+    syncJoinDoor();
     if (changed === true || JSON.stringify(joinNow) !== was) paintJoin();
     return joinNow;
   }
@@ -14768,6 +14800,10 @@ What you type stays in this browser only.`;
     joinMode = "paste";
     repaintJoin();
   }
+  function joinDoorButton(id) {
+    if (!teamCanJoin()) return "";
+    return '<button type="button" class="btn" id="' + esc(id) + '" title="' + esc(t("Paste the invitation from the team's lead.")) + '">' + esc(t("Join a team")) + "</button>";
+  }
   function joinDisclosure() {
     return '<div class="e-join-meta">' + esc(t("Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.")) + "</div>";
   }
@@ -14813,6 +14849,15 @@ What you type stays in this browser only.`;
     const invited = joinInviteParts();
     if (invited) return invited;
     const meta = j ? '<div class="e-join-meta">' + esc(t("{NAME}, asked at {TIME}").split("{NAME}").join(j.name || who).split("{TIME}").join(joinTime(j.asked))) + "</div>" : "";
+    if (j && j.invite && j.state === "waiting") {
+      const lead = String(j.invite.lead || "").trim() || t("the lead");
+      return {
+        title: t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
+        line: t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
+        body: meta,
+        acts: [["cancel", t("Cancel the request")]]
+      };
+    }
     if (j && j.state === "code") return {
       title: t("Read this code to the team's lead"),
       line: t("They type it in Studio, and the catalog opens here once they let this desk in."),
@@ -14954,6 +14999,16 @@ What you type stays in this browser only.`;
   var SIGNER_KEY = "CatalogSigner";
   var TRUST_WAIT_MS = 2e3;
   var TRUST_OF = typeof WeakMap === "function" ? /* @__PURE__ */ new WeakMap() : null;
+  function deskSigState(doc, leads) {
+    const byRing = () => eCatalogRing().then((text) => v2SigState(doc, v2RingRead(text).ring));
+    if (!leads.length) return byRing();
+    const sig = doc.sig;
+    if (!sig || typeof sig !== "object" || sig.value == null || String(sig.value) === "") return Promise.resolve(V2_SIG_NONE);
+    const kid = String(sig.keyId == null ? "" : sig.keyId), id = String(doc.id == null ? "" : doc.id);
+    const formed = sig.alg === V2_SIG_ALG && /^[0-9a-f]{128}$/.test(String(sig.value));
+    const byLead = (l) => formed ? v2SigState(doc, { [id]: { [kid]: l.public } }) : Promise.resolve("");
+    return leads.reduce((was, l) => was.then((s) => s === V2_SIG_VALID ? s : byLead(l)), Promise.resolve("")).then((s) => s === V2_SIG_VALID ? s : byRing().then((r) => r === V2_SIG_INVALID || r === V2_SIG_UNKNOWN && leads.some((l) => l.keyId === kid) ? V2_SIG_INVALID : V2_SIG_UNKNOWN));
+  }
   function catalogTrust(c) {
     const doc = catalogDocOf(c);
     if (!doc || !TRUST_OF) return Promise.resolve("");
@@ -14966,7 +15021,7 @@ What you type stays in this browser only.`;
       snap = null;
     }
     const entry = { done: false, state: "" };
-    entry.wait = (snap ? eCatalogRing().then((text) => v2SigState(snap, v2RingRead(text).ring)) : Promise.resolve("")).catch(() => "").then((s) => {
+    entry.wait = (snap ? eCatalogLeads().then((leads) => deskSigState(snap, leads)) : Promise.resolve("")).catch(() => "").then((s) => {
       entry.done = true;
       entry.state = String(s || "");
       return entry.state;
@@ -21539,11 +21594,12 @@ What you type stays in this browser only.`;
       const b = e.target.closest("button[data-act]");
       if (!b) return;
       const act = b.dataset.act;
-      if (act === "settings" || act === "manage" || act === "tour" || act === "about") menuReturn = null;
+      if (act === "settings" || act === "manage" || act === "tour" || act === "about" || act === "join") menuReturn = null;
       if (act === "settings") menuScreen(hooks.openSettings);
       else if (act === "manage") menuScreen(hooks.openManage);
       else if (act === "tour") menuScreen(hooks.startTour);
       else if (act === "about") menuScreen(openAbout);
+      else if (act === "join") menuScreen(openJoinPaste);
       else if (act === "rail") {
         toggleRail();
       } else if (act === "pills") {
@@ -27060,6 +27116,7 @@ What you type stays in this browser only.`;
   // src/modules/manage.js
   var manage_exports = {};
   __export(manage_exports, {
+    libraryActionsHtml: () => libraryActionsHtml,
     mgCardRow: () => mgCardRow,
     mgCardsIn: () => mgCardsIn,
     mgUsesTip: () => mgUsesTip,
@@ -27975,10 +28032,11 @@ What you type stays in this browser only.`;
       const prints = leads.map((x) => x && x.print).filter(Boolean);
       const forCat = ring && ring[String(c.id || "")];
       const pub = forCat && typeof forCat === "object" ? String(forCat[kid] || "") : "";
-      if (state !== V2_SIG_VALID || !prints.length || !/^[0-9a-f]{64}$/.test(pub)) return;
-      return leadPrintOf(pub).then((print) => {
+      if (state === V2_SIG_VALID || !prints.length || !/^[0-9a-f]{64}$/.test(pub)) return;
+      return v2SigState(doc, ring).then((named) => named === V2_SIG_VALID ? leadPrintOf(pub) : "").then((print) => {
         if (!print || prints.indexOf(print) >= 0 || !wrap.isConnected || wrap.querySelector(".ec-signer")) return;
         const line = t("This file is signed with the key {KEY}, which is not the team lead's.").split("{KEY}").join(leadKeyText(print));
+        wrap.querySelectorAll(".ec-trust").forEach((n) => n.remove());
         (wrap.querySelector(".ec-holds") || wrap.querySelector(".tour-actions")).insertAdjacentHTML(
           "beforebegin",
           '<p class="ec-signer">' + esc(line) + "</p>"
@@ -28081,7 +28139,7 @@ What you type stays in this browser only.`;
     addEventListener("resize", place);
     if (!wrap.querySelector(".ec-trust")) catalogTrust(c).then((state) => {
       const line = trustOfferLine(state, updating);
-      if (!line || !wrap.isConnected || wrap.querySelector(".ec-trust")) return;
+      if (!line || !wrap.isConnected || wrap.querySelector(".ec-trust") || wrap.querySelector(".ec-signer")) return;
       (wrap.querySelector(".ec-holds") || wrap.querySelector(".tour-actions")).insertAdjacentHTML("beforebegin", trustHtml(line));
       place();
     });
@@ -29050,7 +29108,7 @@ What you type stays in this browser only.`;
       /* Wipe sits at the bar's LEFT EDGE, with Close at the far right: same as Settings' Reset,
          and .mf-left is the group that carries it there. Danger kept, because this one forgets
          personal state. */
-      actions: '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe">' + esc(t("Clear local memory")) + '</button><span class="mf-sep" aria-hidden="true"></span><button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog…</button>' + (eHasHistory() ? '<button type="button" class="btn" id="mgHistory">' + esc(t("Earlier versions…")) + "</button>" : "") + '</div><button type="button" class="btn" id="mgClose">' + esc(t("Close")) + "</button>",
+      actions: libraryActionsHtml(),
       wire: wireManage
     });
     function wireManage() {
@@ -29065,6 +29123,11 @@ What you type stays in this browser only.`;
         syncRoleDrum();
       };
       $("#mgImportCatalog").onclick = importCatalogHere;
+      const joinBtn = $("#mgJoinTeam");
+      if (joinBtn) joinBtn.onclick = () => {
+        closeModal();
+        openJoinPaste();
+      };
       if ($("#mgHistory")) $("#mgHistory").onclick = openHistory;
       paintCatalogList();
       const fpath = $("#mgCatFolderPath");
@@ -29196,13 +29259,17 @@ What you type stays in this browser only.`;
       });
     }
   }
+  function libraryActionsHtml() {
+    return '<div class="mf-left"><button type="button" class="btn danger" id="mgWipe">' + esc(t("Clear local memory")) + '</button><span class="mf-sep" aria-hidden="true"></span><button type="button" class="btn" id="mgImportCatalog" title="Load a catalog file from disk: it is read as data, never executed. It replaces what is loaded now, and nothing on disk changes.">Load catalog…</button>' + joinDoorButton("mgJoinTeam") + (eHasHistory() ? '<button type="button" class="btn" id="mgHistory">' + esc(t("Earlier versions…")) + "</button>" : "") + '</div><button type="button" class="btn" id="mgClose">' + esc(t("Close")) + "</button>";
+  }
 
   // src/modules/settings.js
   var settings_exports = {};
   __export(settings_exports, {
     applyPrefs: () => applyPrefs,
     hotkeyFromEvent: () => hotkeyFromEvent,
-    openSettings: () => openSettings
+    openSettings: () => openSettings,
+    settingsBodyHtml: () => settingsBodyHtml
   });
   function curLangLabel() {
     return (UI_LANGS.filter((l) => l.code === uiLang())[0] || UI_LANGS[0]).label;
@@ -29318,6 +29385,7 @@ What you type stays in this browser only.`;
     ], on ? "on" : "off");
     const themeCur = themeChoice() || "system";
     const langSel = '<select id="setUiLang" aria-label="' + esc(t("Interface language")) + '" title="' + esc(t("Changes every label in Etiuda, never the cards themselves")) + '">' + UI_LANGS.map((l) => '<option value="' + esc(l.code) + '"' + (l.code === uiLang() ? " selected" : "") + ">" + esc(l.label) + "</option>").join("") + "</select>";
+    const joinDoor = joinDoorButton("setJoinTeam");
     const personalSection = accHtml(
       "personal",
       t("Personal"),
@@ -29334,7 +29402,7 @@ What you type stays in this browser only.`;
         t("Team lead's key"),
         i === 0 ? t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.") : "",
         '<span class="e-lead-key">' + keySignHtml("studio", l.print) + '</span><button type="button" class="btn" data-forget-lead="' + esc(l.team) + '">' + esc(t("Forget this lead")) + "</button>"
-      )).join("") + /* Under a host only: a browser has no catalog folder to share. */
+      )).join("") + (joinDoor ? row(t("Team"), "", joinDoor) : "") + /* Under a host only: a browser has no catalog folder to share. */
       (eHasShared() ? row(
         t("Edit the shared catalog directly"),
         t("For a team that keeps its catalog without Studio: each change is written into the catalog in the shared folder. A catalog the team's lead signed is never touched."),
@@ -29477,6 +29545,11 @@ What you type stays in this browser only.`;
     box.querySelectorAll("[data-forget-lead]").forEach((b) => {
       b.onclick = () => forgetTeamLead(b.getAttribute("data-forget-lead"), () => paintSettings());
     });
+    const joinBtn = box.querySelector("#setJoinTeam");
+    if (joinBtn) joinBtn.onclick = () => {
+      dismissModal();
+      openJoinPaste();
+    };
     const nameBox = box.querySelector("#setAgentName");
     if (nameBox) nameBox.oninput = () => {
       setAgentName(nameBox.value);

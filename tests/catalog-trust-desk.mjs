@@ -591,7 +591,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 109;
+  const EXPECTED = 114;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -1638,6 +1638,73 @@ async function parent() {
       && !(histOff.errors || []).length,
       "77i a kept version of a file whose desk is off the roster is offered with the note, and an empty desk does not load it: "
       + JSON.stringify({ shown: hOff.shown, roster: hOff.roster, loaded: histOff.reloaded, errors: (histOff.errors || []).slice(0, 2) }));
+
+    /* 78: A JOINED DESK'S KEY IS ITS PINNED LEAD'S (sense pass finding 5). The shell chooses an edition by the pin alone
+       (catalogLeadOk), so the key the page draws says the same: gold for a file the pinned lead signed with no ring beside
+       it, and not gold for a file and a ring both put on the share under another key, however well that ring vouches for
+       it. A desk outside any team reads the ring alone, as before. The pin carries the lead's own key id, as a team file or
+       an invitation writes it, and the other key borrows that id, as anyone writing the share could. */
+    const pinAs = (lab, pub, keyId) => {
+      const at = path.join(lab, "userdata", "desk.json"), desk = JSON.parse(fs.readFileSync(at, "utf8"));
+      desk.teamPins = { ["t-" + "78".repeat(7) + "ab"]: { keyId: keyId, public: pub } };
+      fs.writeFileSync(at, JSON.stringify(desk));
+    };
+    const forger = crypto.generateKeyPairSync("ed25519");
+    const forge = doc => { const o = JSON.parse(JSON.stringify(doc)); delete o.hash;
+      o.sig = { alg: V2.V2_SIG_ALG, keyId: KEY_ID }; o.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(o)), forger.privateKey).toString("hex"); return o; };
+    const forgedRing = JSON.stringify({ format: V2.V2_RING_FORMAT, kind: V2.V2_RING_KIND,
+      keys: [{ catalog: ID, keyId: KEY_ID, alg: V2.V2_SIG_ALG, public: pubHex(forger.publicKey) }] });
+    const errs78 = (...os) => os.flatMap(o => o.errors || []).slice(0, 2);
+
+    const lab78a = scenario([["catalogs/lamp.ec", sign(payload("2026-09-01"))]]);
+    pinAs(lab78a, pubHex(pair.publicKey), KEY_ID);
+    const boot78a = run(lab78a, ["boot", "settle", "offer", "yes", "settle"]);
+    const lib78a = run(lab78a, ["library"], true);
+    const o78a = boot78a.offers[0] || {}, r78a = row(lib78a, "lamp.ec");
+    check(o78a.shown === true && same(o78a.trust, []) && boot78a.reloaded && boot78a.heldAtEnd === V2.V2_SIG_VALID
+      && !!r78a && r78a.loaded && !!r78a.key && r78a.key.state === V2.V2_SIG_VALID && r78a.key.gold && r78a.key.word === "Signed"
+      && !errs78(boot78a, lib78a).length,
+      "78a on a desk whose pinned lead signed the catalog, with no ring beside it, the boot's offer says nothing against it, the desk holds it as signed and its row's key is gold: "
+      + JSON.stringify({ trust: o78a.trust || null, held: boot78a.heldAtEnd, row: said(r78a), errors: errs78(boot78a, lib78a) }));
+
+    const folder78 = () => scenario([["catalogs/lamp-lead.ec", sign(payload("2026-09-01"))], ["catalogs/lamp.ec", forge(atRev(2, "2026-09-02"))],
+      ["catalogs/etiuda-ring.json", forgedRing]]);
+    const lab78b = folder78();
+    pinAs(lab78b, pubHex(pair.publicKey), KEY_ID);
+    const lib78b = run(lab78b, ["library"]);
+    const lead78b = row(lib78b, "lamp-lead.ec"), swap78b = row(lib78b, "lamp.ec");
+    check(!!lead78b && !!lead78b.key && lead78b.key.state === V2.V2_SIG_VALID && lead78b.key.gold
+      && !!swap78b && !!swap78b.key && swap78b.key.state === V2.V2_SIG_UNKNOWN && !swap78b.key.gold && UNKNOWN_KEY.test(swap78b.key.tip)
+      && !errs78(lib78b).length,
+      "78b on that desk, with a file and a ring both put on the share under another key, the lead's file is gold and the other is not, whatever the ring says: "
+      + said(lead78b) + " / " + said(swap78b) + ", errors " + JSON.stringify(errs78(lib78b)));
+    const lab78B = folder78();
+    const lib78B = run(lab78B, ["library"]);
+    const lead78B = row(lib78B, "lamp-lead.ec"), swap78B = row(lib78B, "lamp.ec");
+    check(!!lead78B && !!lead78B.key && lead78B.key.state === V2.V2_SIG_INVALID && !lead78B.key.gold
+      && !!swap78B && !!swap78B.key && swap78B.key.state === V2.V2_SIG_VALID && swap78B.key.gold && !errs78(lib78B).length,
+      "78B THE CONTROL: the same folder on a desk outside any team reads the ring alone, as before: the file it vouches for is gold, and the lead's, under the key id the ring gives the other key, reads changed: "
+      + said(lead78B) + " / " + said(swap78B) + ", errors " + JSON.stringify(errs78(lib78B)));
+
+    const forgerFours = crypto.createHash("sha256").update(Buffer.from(pubHex(forger.publicKey), "hex")).digest("hex").slice(0, 16)
+      .replace(/(.{4})(?=.)/g, "$1 ");
+    const open78c = run(lab78b, ["wire", "click:catalogs/lamp.ec", "settle", "offer", "yes", "settle"]);
+    const o78c = open78c.offers[0] || {};
+    check(o78c.shown === true && same(o78c.signer, ["This file is signed with the key " + forgerFours + ", which is not the team lead's."])
+      && same(o78c.trust, []) && open78c.reloaded === true && open78c.heldId === ID && open78c.heldAtEnd === V2.V2_SIG_UNKNOWN
+      && !errs78(open78c).length,
+      "78c that file, opened on purpose, is offered naming the key that signed it as not the lead's and saying nothing else of its signature, loads on yes, and is held as a key this desk does not know: "
+      + JSON.stringify({ shown: o78c.shown, signer: o78c.signer || null, trust: o78c.trust || null, loaded: open78c.reloaded,
+        held: open78c.heldAtEnd, errors: errs78(open78c) }));
+
+    const lab78d = scenario([["catalogs/lamp.ec", bend(sign(payload("2026-09-01")))]]);
+    pinAs(lab78d, pubHex(pair.publicKey), KEY_ID);
+    const open78d = run(lab78d, ["wire", "click:catalogs/lamp.ec", "settle", "offer"]);
+    const o78d = open78d.offers[0] || {};
+    check(o78d.shown === true && (o78d.trust || []).length === 1 && CHANGED.test(o78d.trust[0]) && !(o78d.signer || []).length
+      && !errs78(open78d).length,
+      "78d a file naming the pinned lead's key that the lead's key does not verify, with no ring beside it, is offered as changed since it was signed: "
+      + JSON.stringify({ shown: o78d.shown, trust: o78d.trust || null, signer: o78d.signer || null, errors: errs78(open78d) }));
   } catch (e) {
     failed++;
     console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

@@ -1,9 +1,10 @@
-/* THE SIGNATURE A CATALOG ARRIVED WITH, read by the engine's own verifier against the ring the
+/* THE SIGNATURE A CATALOG ARRIVED WITH, read by the engine's own verifier against the key this desk
+   trusts for it: on a desk that joined a team, its pinned lead's, and on any other desk the ring the
    host finds beside the catalogs (board 605). A warning and never a refusal: every state still
    loads. */
-import { v2SigState, v2RingRead, V2_SIG_VALID, V2_SIG_NONE, V2_SIG_INVALID, V2_SIG_UNKNOWN } from "./catalog-v2.js";
+import { v2SigState, v2RingRead, V2_SIG_VALID, V2_SIG_NONE, V2_SIG_INVALID, V2_SIG_UNKNOWN, V2_SIG_ALG } from "./catalog-v2.js";
 import { catalogDocOf, eCatalogSignature } from "./catalog.js";
-import { eCatalogRing } from "./host.js";
+import { eCatalogRing, eCatalogLeads } from "./host.js";
 import { nsGet, nsSet, nsDel } from "./storage.js";
 import { t } from "./ui-lang.js";
 import { esc } from "./esc.js";
@@ -14,8 +15,27 @@ const TRUST_KEY="CatalogTrust";
 const SIGNER_KEY="CatalogSigner";
 const TRUST_WAIT_MS=2000;
 const TRUST_OF=(typeof WeakMap==="function")?new WeakMap():null;
+/* THE KEY THIS DESK TRUSTS. A desk that joined a team trusts its pinned lead's key alone, as the shell does when it
+   chooses an edition (shell/main.js catalogLeadOk): valid only where a pinned lead's key verifies the file, with a ring
+   beside it or none, and never valid otherwise, whatever the ring says, since the ring is the share's to write. The ring
+   may still say what is wrong: a file changed since it was signed. A file naming a pinned lead's key id that the lead's
+   key does not verify has changed since it was signed too, and any other signature is a key this desk does not know.
+   A desk outside any team reads the ring alone, as before. */
+function deskSigState(doc,leads){
+  const byRing=()=>eCatalogRing().then(text=>v2SigState(doc,v2RingRead(text).ring));
+  if(!leads.length) return byRing();
+  const sig=doc.sig;
+  if(!sig || typeof sig!=="object" || sig.value==null || String(sig.value)==="") return Promise.resolve(V2_SIG_NONE);
+  const kid=String(sig.keyId==null?"":sig.keyId), id=String(doc.id==null?"":doc.id);
+  // The shell's own test of the signature's form, so a value it would not verify is not verified here.
+  const formed=sig.alg===V2_SIG_ALG && /^[0-9a-f]{128}$/.test(String(sig.value));
+  const byLead=l=>formed ? v2SigState(doc,{[id]:{[kid]:l.public}}) : Promise.resolve("");
+  return leads.reduce((was,l)=>was.then(s=>s===V2_SIG_VALID ? s : byLead(l)),Promise.resolve(""))
+    .then(s=>s===V2_SIG_VALID ? s : byRing().then(r=>
+      r===V2_SIG_INVALID || (r===V2_SIG_UNKNOWN && leads.some(l=>l.keyId===kid)) ? V2_SIG_INVALID : V2_SIG_UNKNOWN));
+}
 /* Begun once per catalog object, and "" for one with no document behind it. The document is
-   copied before the ring is awaited, so the bytes verified are the file as it was read. */
+   copied before the leads and the ring are awaited, so the bytes verified are the file as it was read. */
 function catalogTrust(c){
   const doc=catalogDocOf(c);
   if(!doc || !TRUST_OF) return Promise.resolve("");
@@ -24,7 +44,7 @@ function catalogTrust(c){
   let snap=null;
   try{ snap=JSON.parse(JSON.stringify(doc)); }catch(e){ snap=null; }
   const entry={done:false, state:""};
-  entry.wait=(snap ? eCatalogRing().then(text=>v2SigState(snap,v2RingRead(text).ring)) : Promise.resolve(""))
+  entry.wait=(snap ? eCatalogLeads().then(leads=>deskSigState(snap,leads)) : Promise.resolve(""))
     .catch(()=>"")
     .then(s=>{ entry.done=true; entry.state=String(s||""); return entry.state; });
   TRUST_OF.set(c,entry);

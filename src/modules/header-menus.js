@@ -14,6 +14,7 @@ import { CONTENT_LANGS, nextContentLang } from "./content-model.js";
 import { scReady, formatActionChord } from "./shortcuts.js";
 import { hooks } from "./hooks.js";
 import { eHost } from "./host.js";
+import { openJoinPaste } from "./team-join.js";
 
 function wireHeaderMenus(){
   /* Close Etiuda stands in the Menu where there is a window to close, and closes it as the band's own button does. */
@@ -31,12 +32,13 @@ function wireHeaderMenus(){
     if(!b) return;
     const act=b.dataset.act;
     // What opens a screen takes the keyboard with it, so nothing is handed back underneath.
-    if(act==="settings"||act==="manage"||act==="tour"||act==="about") menuReturn=null;
+    if(act==="settings"||act==="manage"||act==="tour"||act==="about"||act==="join") menuReturn=null;
     // Add actions sit with the things they create, so this menu carries none of them.
     if(act==="settings") menuScreen(hooks.openSettings);
     else if(act==="manage") menuScreen(hooks.openManage);
     else if(act==="tour") menuScreen(hooks.startTour);
     else if(act==="about") menuScreen(openAbout);
+    else if(act==="join") menuScreen(openJoinPaste);
     else if(act==="rail"){ toggleRail(); }
     else if(act==="pills"){ togglePills(); }
     else if(act==="quit"){ closeSettingsMenu(); const h=eHost(); if(h && typeof h.close==="function") h.close(); }

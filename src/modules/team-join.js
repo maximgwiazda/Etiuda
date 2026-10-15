@@ -1,7 +1,8 @@
-/* Asking to join the team a sealed catalog in the folder belongs to: on the empty desk where nothing is loaded,
-   and in a bubble from the catalog's name where a catalog is open. The shell keeps the request and says where it
-   stands; this paints that answer and sends the agent's acts back. Once admitted, the same place shows the pinned
-   lead's key once, to compare with the lead's, and Settings lists every such key with a way to forget it. */
+/* Asking to join: the empty desk, a bubble where a catalog is open, and Join a team in Settings, the Library and
+   the Menu. The shell keeps the request and says where it stands; this paints that answer and sends the agent's
+   acts back. Joining leaves a catalog the desk already has loaded. Once admitted, the same place shows the pinned
+   lead's key once, to compare with the lead's, and Settings lists every such key with a way to forget it. An
+   invitation's wait names the lead and draws no code until the opening is read; the code then shows. */
 import { eHost, eOnCatalogCopy } from "./host.js";
 import { t, toast } from "./ui-lang.js";
 import { esc } from "./esc.js";
@@ -35,6 +36,7 @@ function joinAsk(op,file,name,check,before){
   return asked.then(v=>joinTook(v,typeof before==="function"&&before(v)),()=>{
     const shown=joinMode!=="";
     dropInvite();
+    syncJoinDoor();
     if(shown) repaintJoin();
     return null;
   });
@@ -110,16 +112,34 @@ function refuseInvite(v){
   dropInvite();
   joinWhy=why; joinMode="refused";
 }
+/* The request as the page shows it. An invitation names its lead and keeps the code the shell sent. */
+function joinShown(j){
+  if(!j || !(j.file||j.state)) return null;
+  const row={file:String(j.file||""),state:String(j.state||""),code:String(j.code||""),
+    asked:+j.asked||0,name:String(j.name||"")};
+  if(j.invite && typeof j.invite==="object") row.invite={lead:String(j.invite.lead||"")};
+  return row;
+}
+/* The Menu's Join a team follows the same rule as the other two doors: hidden while a request is in flight or a new key is still to be compared. */
+function syncJoinDoor(){
+  try{
+    const el=document.getElementById("menuJoin");
+    if(el) el.hidden=!teamCanJoin();
+  }catch(e){}
+}
 function joinTook(v,changed){
   const s=v&&typeof v==="object"?v:{};
   const was=JSON.stringify(joinNow);
   joinNow={sealed:s.sealed&&s.sealed.file?{file:String(s.sealed.file),team:String(s.sealed.team||"")}:null,
-           join:s.join&&(s.join.file||s.join.state)?{file:String(s.join.file||""),state:String(s.join.state||""),code:String(s.join.code||""),
-                                      asked:+s.join.asked||0,name:String(s.join.name||"")}:null,
+           join:joinShown(s.join),
            leads:Array.isArray(s.leads)?s.leads.filter(l=>l&&l.team).map(l=>({team:String(l.team),print:String(l.print||""),
                                       admitted:l.admitted===true,seen:l.seen===true})):[]};
-  /* Admitted, the catalog is loaded the way a Library row loads one: at once on an empty desk, asked over a loaded one. */
-  if(s.joined && s.joined.file){ closeJoinBubble(); hooks.loadCatalogFromFolder(String(s.joined.file),0); }
+  /* Admitted: an empty desk loads the catalog the invitation named. A desk that already has one keeps it. */
+  if(s.joined && s.joined.file){
+    closeJoinBubble();
+    if(wholeThingEmpty()) hooks.loadCatalogFromFolder(String(s.joined.file),0);
+  }
+  syncJoinDoor();
   if(changed===true || JSON.stringify(joinNow)!==was) paintJoin();
   return joinNow;
 }
@@ -161,12 +181,17 @@ function clearJoinAsk(){
   dropInvite();
   repaintJoin();
 }
-/* One door, from the empty desk and from a sealed catalog: the invitation is pasted here. */
+/* One door, from the empty desk, from a sealed catalog, and from Settings, the Library and the Menu. */
 function openJoinPaste(){
   if(!teamCanJoin()) return;
   dropInvite();
   joinMode="paste";
   repaintJoin();
+}
+/* Settings, the Library and the Menu share this door. It is the same paste, and it is there only while the desk can take an invitation. */
+function joinDoorButton(id){
+  if(!teamCanJoin()) return "";
+  return '<button type="button" class="btn" id="'+esc(id)+'" title="'+esc(t("Paste the invitation from the team's lead."))+'">'+esc(t("Join a team"))+'</button>';
 }
 function joinDisclosure(){
   return '<div class="e-join-meta">'+esc(t("Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own."))+'</div>';
@@ -223,6 +248,13 @@ function joinParts(){
   if(invited) return invited;
   const meta=j?'<div class="e-join-meta">'+esc(t("{NAME}, asked at {TIME}").split("{NAME}").join(j.name||who)
     .split("{TIME}").join(joinTime(j.asked)))+'</div>':'';
+  /* An invitation waits under its lead's name only until the opening is read. The code then follows the request's own door. */
+  if(j && j.invite && j.state==="waiting"){
+    const lead=String(j.invite.lead||"").trim()||t("the lead");
+    return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
+      line:t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
+      body:meta, acts:[["cancel",t("Cancel the request")]]};
+  }
   if(j && j.state==="code") return {title:t("Read this code to the team's lead"),
     line:t("They type it in Studio, and the catalog opens here once they let this desk in."),
     body:joinCodeHtml(j.code)+meta, acts:[["cancel",t("Cancel the request")]]};
@@ -330,4 +362,4 @@ function forgetTeamLead(team,then){
   return joinAsk("forget",team).then(v=>{ if(typeof then==="function") then(); return v; });
 }
 
-export { wireTeamJoin, teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, paintJoin, openJoinPaste, teamCanJoin, inviteHeld, noteCatalogCopy };
+export { wireTeamJoin, teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy };

@@ -26,7 +26,7 @@ import { intentIdAt, intentOrder } from "./intent-id.js";
 import { pack } from "./pack.js";
 import { ICON_AWAITING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT, ICON_DESK, ICON_LOOK } from "./icons.js";
 import { keyTipHtml, leadKeyText, leadsNow } from "./team-join.js";
-import { V2_SIG_VALID, v2RingRead } from "./catalog-v2.js";
+import { V2_SIG_VALID, v2RingRead, v2SigState } from "./catalog-v2.js";
 import { editionChanges } from "./edition-changes.js";
 import { editionOfferHtml, openEditionPanel, repaintEditionRows, editionCountWords } from "./edition-panel.js";
 import { editionMarksFrom, keepEditionMarks, putEditionMarksBack, editionSay } from "./edition-marks.js";
@@ -464,8 +464,10 @@ function leadPrintOf(pubHex){
   }).catch(()=>"");
 }
 /* A CATALOG SIGNED BY A KEY OTHER THAN THE TEAM LEAD'S says whose key it is, once its signature has
-   verified: the key is named by the print of the public the ring holds for it, never by the file's keyId,
-   which any writer of the share chooses. A desk with no lead pinned has nobody to compare it with. */
+   verified under the key the ring names for it: the key is named by the print of that public, never by the
+   file's keyId, which any writer of the share chooses. The ring only names the key here and trusts nothing,
+   the desk's state being the pinned lead's (catalog-trust.js), so the line takes the place of the state's own,
+   which could only say less. A desk with no lead pinned has nobody to compare it with. */
 function noteForeignSigner(c,wrap,place){
   const doc=catalogDocOf(c), sig=doc&&doc.sig, kid=sig&&sig.keyId ? String(sig.keyId) : "";
   if(!kid) return;
@@ -474,10 +476,11 @@ function noteForeignSigner(c,wrap,place){
       const prints=leads.map(x=>x&&x.print).filter(Boolean);
       const forCat=ring&&ring[String(c.id||"")];
       const pub=forCat&&typeof forCat==="object" ? String(forCat[kid]||"") : "";
-      if(state!==V2_SIG_VALID || !prints.length || !/^[0-9a-f]{64}$/.test(pub)) return;
-      return leadPrintOf(pub).then(print=>{
+      if(state===V2_SIG_VALID || !prints.length || !/^[0-9a-f]{64}$/.test(pub)) return;
+      return v2SigState(doc,ring).then(named=>named===V2_SIG_VALID ? leadPrintOf(pub) : "").then(print=>{
         if(!print || prints.indexOf(print)>=0 || !wrap.isConnected || wrap.querySelector(".ec-signer")) return;
         const line=t("This file is signed with the key {KEY}, which is not the team lead's.").split("{KEY}").join(leadKeyText(print));
+        wrap.querySelectorAll(".ec-trust").forEach(n=>n.remove());
         (wrap.querySelector(".ec-holds")||wrap.querySelector(".tour-actions")).insertAdjacentHTML("beforebegin",
           '<p class="ec-signer">'+esc(line)+'</p>');
         if(place) place();
@@ -638,7 +641,7 @@ function eOfferCatalogDialog(c,src){
   // A verification still running when the bubble opened adds its line once it has an answer.
   if(!wrap.querySelector(".ec-trust")) catalogTrust(c).then(state=>{
     const line=trustOfferLine(state,updating);
-    if(!line || !wrap.isConnected || wrap.querySelector(".ec-trust")) return;
+    if(!line || !wrap.isConnected || wrap.querySelector(".ec-trust") || wrap.querySelector(".ec-signer")) return;
     (wrap.querySelector(".ec-holds")||wrap.querySelector(".tour-actions")).insertAdjacentHTML("beforebegin",trustHtml(line));
     place();
   });

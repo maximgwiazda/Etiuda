@@ -37,6 +37,11 @@
  * over the same tree reports 0 words and passes. Its list was three folds LONGER and "etiude" was
  * not one of them.
  *
+ * ALLOWED IN ONE STRING, NOT TAKEN OFF: "zwykle" (2026-10-15) is "usually", a word in its own right beside
+ * "zwykłe", and the copywriter's waiting line on joining uses it. Taking it off the list would let a bare
+ * "zwykle" written for "zwykłe" pass anywhere, so it stays on the list and ALLOWED_IN lets it stand inside that
+ * one string alone (the test architect's note on 958776b). A new allowance is a new entry, dated.
+ *
  * So the list is data, and it goes stale in the safe direction: a new Polish word is not guarded
  * until somebody adds it. The census line every run prints says how far behind it is, and
  * --census names the words, so the staleness is visible rather than silent.
@@ -135,6 +140,20 @@ const REFUSED = new Set([
 
 /* ---- the scan ------------------------------------------------------------------------------- */
 
+/* A fold allowed only inside one exact string, each entry dated: a hit there is the other word. */
+const ALLOWED_IN = [
+  { fold: "zwykle", since: "2026-10-15",
+    within: "Stanowisko czeka, aż lider zespołu je wpuści. Zwykle dzieje się to samo; jeśli pojawi się tu kod, proszę odczytać go liderowi." },
+];
+function allowedAt(line, k, at) {
+  return ALLOWED_IN.some(a => {
+    if (a.fold !== k) return false;
+    for (let i = line.indexOf(a.within); i >= 0; i = line.indexOf(a.within, i + 1))
+      if (at >= i && at < i + a.within.length) return true;
+    return false;
+  });
+}
+
 /* Every hit, and the spelling the tree itself uses where it has one, so a failure says what to
    write rather than only what is wrong. */
 function scan(text, where, spellings) {
@@ -154,7 +173,7 @@ function scan(text, where, spellings) {
         continue;
       }
       const k = w.toLowerCase();
-      if (REFUSED.has(k)) out.push({ where: where, line: i + 1, word: w, fold: k });
+      if (REFUSED.has(k) && !allowedAt(line, k, m.index)) out.push({ where: where, line: i + 1, word: w, fold: k });
     }
   });
   return out;
@@ -227,6 +246,14 @@ const ambiguous = scan("intencja karta nazwa stale male", "a case");
 ok(ambiguous.length === 0,
    "a bare spelling that is a word in its own right is NOT refused: " + ambiguous.length
    + " hit(s) over five of the 27 the list drops for that reason");
+
+/* AN ALLOWANCE IS ONE STRING WIDE: the copywriter's sentence passes whole, and the same bare word anywhere
+   else, even in the same line, is still refused. */
+const allowedHere = scan('  "waiting":"' + ALLOWED_IN[0].within + '",', "a case");
+const allowedNot = scan('  "Ustawienia zwykle":"x", "' + ALLOWED_IN[0].within + '"', "a case");
+ok(allowedHere.length === 0 && allowedNot.length === 1 && allowedNot[0].fold === "zwykle" && REFUSED.has("zwykle"),
+   "an allowed fold stands inside its one string and nowhere else: " + allowedHere.length + " hit(s) inside, "
+   + allowedNot.length + " outside it on the same line");
 
 const english = scan("Close Etiuda. The list of scripts it is allowed to run.", "a case");
 ok(english.length === 0, "and English is not Polish with the tails missing: " + english.length + " hit(s)");
