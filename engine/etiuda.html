@@ -14137,13 +14137,17 @@ What you type stays in this browser only.`;
   var catalog_trust_exports = {};
   __export(catalog_trust_exports, {
     catalogTrust: () => catalogTrust,
+    heldCatalogPrint: () => heldCatalogPrint,
     heldCatalogSigner: () => heldCatalogSigner,
     heldCatalogTrust: () => heldCatalogTrust,
+    keyPrintOf: () => keyPrintOf,
     rearmTrustRecheck: () => rearmTrustRecheck,
     recheckHeldTrust: () => recheckHeldTrust,
     recordCatalogTrust: () => recordCatalogTrust,
+    settleHeldTrust: () => settleHeldTrust,
     trustKeyHtml: () => trustKeyHtml,
     trustOfferLine: () => trustOfferLine,
+    trustPrint: () => trustPrint,
     trustSettled: () => trustSettled,
     whenTrusted: () => whenTrusted
   });
@@ -14997,17 +15001,33 @@ What you type stays in this browser only.`;
   // src/modules/catalog-trust.js
   var TRUST_KEY = "CatalogTrust";
   var SIGNER_KEY = "CatalogSigner";
+  var SIGNER_PUB_KEY = "CatalogSignerPub";
   var TRUST_WAIT_MS = 2e3;
   var TRUST_OF = typeof WeakMap === "function" ? /* @__PURE__ */ new WeakMap() : null;
+  function keyPrintOf(pubHex) {
+    const subtle = globalThis.crypto && globalThis.crypto.subtle;
+    if (!subtle || !/^[0-9a-f]{64}$/.test(String(pubHex || ""))) return Promise.resolve("");
+    const raw = new Uint8Array(32);
+    for (let i = 0; i < 32; i++) raw[i] = parseInt(pubHex.slice(i * 2, i * 2 + 2), 16);
+    return subtle.digest("SHA-256", raw).then((buf) => {
+      const b = new Uint8Array(buf);
+      let hex = "";
+      for (let i = 0; i < 8; i++) hex += b[i].toString(16).padStart(2, "0");
+      return hex;
+    }).catch(() => "");
+  }
   function deskSigState(doc, leads) {
-    const byRing = () => eCatalogRing().then((text) => v2SigState(doc, v2RingRead(text).ring));
-    if (!leads.length) return byRing();
     const sig = doc.sig;
-    if (!sig || typeof sig !== "object" || sig.value == null || String(sig.value) === "") return Promise.resolve(V2_SIG_NONE);
-    const kid = String(sig.keyId == null ? "" : sig.keyId), id = String(doc.id == null ? "" : doc.id);
+    const kid = String(sig && sig.keyId != null ? sig.keyId : ""), id = String(doc.id == null ? "" : doc.id);
+    const byRing = () => eCatalogRing().then((text) => {
+      const ring = v2RingRead(text).ring;
+      return v2SigState(doc, ring).then((s) => ({ state: s, pub: s === V2_SIG_VALID ? String(ring[id][kid]) : "" }));
+    });
+    if (!leads.length) return byRing();
+    if (!sig || typeof sig !== "object" || sig.value == null || String(sig.value) === "") return Promise.resolve({ state: V2_SIG_NONE, pub: "" });
     const formed = sig.alg === V2_SIG_ALG && /^[0-9a-f]{128}$/.test(String(sig.value));
-    const byLead = (l) => formed ? v2SigState(doc, { [id]: { [kid]: l.public } }) : Promise.resolve("");
-    return leads.reduce((was, l) => was.then((s) => s === V2_SIG_VALID ? s : byLead(l)), Promise.resolve("")).then((s) => s === V2_SIG_VALID ? s : byRing().then((r) => r === V2_SIG_INVALID || r === V2_SIG_UNKNOWN && leads.some((l) => l.keyId === kid) ? V2_SIG_INVALID : V2_SIG_UNKNOWN));
+    const byLead = (l) => formed ? v2SigState(doc, { [id]: { [kid]: l.public } }).then((s) => s === V2_SIG_VALID ? l.public : "") : Promise.resolve("");
+    return leads.reduce((was, l) => was.then((pub) => pub || byLead(l)), Promise.resolve("")).then((pub) => pub ? { state: V2_SIG_VALID, pub } : byRing().then((r) => ({ pub: "", state: r.state === V2_SIG_INVALID || r.state === V2_SIG_UNKNOWN && leads.some((l) => l.keyId === kid) ? V2_SIG_INVALID : V2_SIG_UNKNOWN })));
   }
   function catalogTrust(c) {
     const doc = catalogDocOf(c);
@@ -15020,18 +15040,28 @@ What you type stays in this browser only.`;
     } catch (e) {
       snap = null;
     }
-    const entry = { done: false, state: "" };
-    entry.wait = (snap ? eCatalogLeads().then((leads) => deskSigState(snap, leads)) : Promise.resolve("")).catch(() => "").then((s) => {
+    const entry = { done: false, state: "", pub: "", print: "" };
+    entry.wait = (snap ? eCatalogLeads().then((leads) => deskSigState(snap, leads)) : Promise.resolve({ state: "", pub: "" })).then((r) => keyPrintOf(r.pub).then((print) => ({ state: r.state, pub: r.pub, print }))).catch(() => ({ state: "", pub: "", print: "" })).then((r) => {
       entry.done = true;
-      entry.state = String(s || "");
+      entry.state = String(r.state || "");
+      entry.pub = entry.state === V2_SIG_VALID ? String(r.pub || "") : "";
+      entry.print = entry.pub ? String(r.print || "") : "";
       return entry.state;
     });
     TRUST_OF.set(c, entry);
     return entry.wait;
   }
-  function trustSettled(c) {
+  function trustEntry(c) {
     const e = TRUST_OF && c && typeof c === "object" ? TRUST_OF.get(c) : null;
-    return e && e.done ? e.state : "";
+    return e && e.done ? e : null;
+  }
+  function trustSettled(c) {
+    const e = trustEntry(c);
+    return e ? e.state : "";
+  }
+  function trustPrint(c) {
+    const e = trustEntry(c);
+    return e ? e.print : "";
   }
   function whenTrusted(c) {
     return new Promise((done) => {
@@ -15049,17 +15079,27 @@ What you type stays in this browser only.`;
     if (kid) nsSet(SIGNER_KEY, kid);
     else nsDel(SIGNER_KEY);
   }
-  function recordCatalogTrust(c) {
-    const s = trustSettled(c);
-    if (s) nsSet(TRUST_KEY, s);
+  var heldPrint = "";
+  function holdTrust(c, state) {
+    if (state) nsSet(TRUST_KEY, state);
     else nsDel(TRUST_KEY);
-    rememberSigner(c, s);
+    rememberSigner(c, state);
+    const e = trustEntry(c), pub = state === V2_SIG_VALID && e ? e.pub : "";
+    if (pub) nsSet(SIGNER_PUB_KEY, pub);
+    else nsDel(SIGNER_PUB_KEY);
+    heldPrint = pub ? e.print : "";
+  }
+  function recordCatalogTrust(c) {
+    holdTrust(c, trustSettled(c));
   }
   function heldCatalogTrust() {
     return nsGet(TRUST_KEY) || "";
   }
   function heldCatalogSigner() {
     return nsGet(SIGNER_KEY) || "";
+  }
+  function heldCatalogPrint() {
+    return heldCatalogTrust() === V2_SIG_VALID ? heldPrint : "";
   }
   var trustRechecked = false;
   function rearmTrustRecheck() {
@@ -15070,17 +15110,39 @@ What you type stays in this browser only.`;
     trustRechecked = true;
     if (eCatalogSignature(found) !== eCatalogSignature(held)) return;
     catalogTrust(found).then((s) => {
-      if (!s || s === heldCatalogTrust()) return;
-      nsSet(TRUST_KEY, s);
-      rememberSigner(found, s);
+      const e = trustEntry(found);
+      if (!s || s === heldCatalogTrust() && (e ? e.pub : "") === (nsGet(SIGNER_PUB_KEY) || "")) return;
+      holdTrust(found, s);
       if (typeof then === "function") then();
     });
   }
-  function trustKeyHtml(state, keyId) {
+  function settleHeldTrust(found, held) {
+    return eCatalogLeads().then((leads) => {
+      const pub = nsGet(SIGNER_PUB_KEY) || "";
+      if (!leads.length || heldCatalogTrust() !== V2_SIG_VALID || leads.some((l) => l.public === pub)) return;
+      const unconfirmed = () => {
+        nsSet(TRUST_KEY, V2_SIG_UNKNOWN);
+        nsDel(SIGNER_KEY);
+        nsDel(SIGNER_PUB_KEY);
+      };
+      if (!found || !held || eCatalogSignature(found) !== eCatalogSignature(held)) {
+        unconfirmed();
+        return;
+      }
+      return catalogTrust(found).then((s) => {
+        if (s) holdTrust(found, s);
+        else unconfirmed();
+      });
+    }).then(() => keyPrintOf(nsGet(SIGNER_PUB_KEY) || "")).then((p) => {
+      heldPrint = p;
+    }).catch(() => {
+    });
+  }
+  function trustKeyHtml(state, print) {
     if (!state) return '<span class="ec-key" aria-hidden="true"></span>';
     const word = esc(t(state === V2_SIG_NONE ? "Unsigned" : "Signed"));
-    const lead = /^studio-[0-9a-f]{16}$/.test(String(keyId || "")) ? String(keyId).slice(7) : "";
-    const tip = state === V2_SIG_INVALID ? t("This file has changed since it was signed.") : state === V2_SIG_UNKNOWN ? t("This file is signed with a key this computer does not know.") : state === V2_SIG_VALID && keyId ? t("This file is signed with the key {KEY}.").split("{KEY}").join(lead ? leadKeyText(lead) : keyId) : "";
+    const lead = state === V2_SIG_VALID && /^[0-9a-f]{16}$/.test(String(print || "")) ? String(print) : "";
+    const tip = state === V2_SIG_INVALID ? t("This file has changed since it was signed.") : state === V2_SIG_UNKNOWN ? t("This file is signed with a key this computer does not know.") : lead ? t("This file is signed with the key {KEY}.").split("{KEY}").join(leadKeyText(lead)) : "";
     return '<span class="ec-key' + (state === V2_SIG_VALID ? " on" : "") + '" role="img" data-trust="' + esc(state) + '" aria-label="' + word + '"' + (tip ? ' tabindex="0" data-tip="' + esc(tip) + '"' + (lead ? ' data-tip-key="' + lead + '" data-tip-kind="studio"' : "") : ' title="' + word + '"') + ">" + ICON_KEY + "</span>";
   }
   function trustOfferLine(state, updating) {
@@ -24903,7 +24965,7 @@ What you type stays in this browser only.`;
     ejectCatalog: () => ejectCatalog
   });
   function catalogKeep() {
-    return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample"), nsKey("CatalogTrust"), nsKey("CatalogSigner"), nsKey("CatalogFrom")];
+    return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample"), nsKey("CatalogTrust"), nsKey("CatalogSigner"), nsKey("CatalogSignerPub"), nsKey("CatalogFrom")];
   }
   var E_WIPE_KEEP = ["eCatalogFolder"];
   var SHARE_KEEP = ["eAgent", "eLayers"];
@@ -27728,6 +27790,7 @@ What you type stays in this browser only.`;
   function eOfferCatalogAtBoot() {
     pinStoredFrom(eCatalog());
     nameHeldCatalog();
+    settleHeldTrust(eCatalog(), storedCatalog());
     const at = +(nsGet("CatalogNoAt") || 0), mt = eCatalogMtime(), asked = eOpenedWith();
     if (!asked && tourDueAtBoot()) {
       afterTour(eOfferCatalogAtBoot);
@@ -27799,10 +27862,10 @@ What you type stays in this browser only.`;
   function ecFileTrust(f) {
     const at = f.name + "|" + f.mtime;
     if (!ecTrustOf.has(at)) ecTrustOf.set(at, eReadCatalogFile(f.name).then((got) => {
-      if (!got) return { state: "", keyId: "" };
-      const c = parseCatalogFile(got.text), sig = (catalogDocOf(c) || {}).sig;
-      return whenTrusted(c).then((s) => ({ state: s, keyId: String(sig && sig.keyId || "") }));
-    }).catch(() => ({ state: "", keyId: "" })));
+      if (!got) return { state: "", print: "" };
+      const c = parseCatalogFile(got.text);
+      return whenTrusted(c).then((s) => ({ state: s, print: trustPrint(c) }));
+    }).catch(() => ({ state: "", print: "" })));
     return ecTrustOf.get(at);
   }
   var ecKeyBub = null;
@@ -27893,7 +27956,7 @@ What you type stays in this browser only.`;
     const held = storedCatalog();
     const mine = eLoadedCatalogFile();
     recheckHeldTrust(eCatalog(), held, paintCatalogList);
-    Promise.all([eCatalogFiles(), eBranchIdentity(false)]).then(([all, me]) => {
+    Promise.all([eCatalogFiles(), eBranchIdentity(false), settleHeldTrust(eCatalog(), held)]).then(([all, me]) => {
       if (!box.isConnected) return;
       const files = all.filter((f) => !f.desk);
       const shaped = (f) => !!f.desk && f.id.indexOf(f.desk.id + "-") === 0;
@@ -27971,7 +28034,7 @@ What you type stays in this browser only.`;
         const row = Array.from(box.querySelectorAll(".ec-row")).find((x) => x.getAttribute("data-ec-file") === f.name);
         const key = row && row.querySelector(".ec-key");
         if (!key) return;
-        key.insertAdjacentHTML("beforebegin", trustKeyHtml(i === onAt ? heldCatalogTrust() : r.state, r.keyId));
+        key.insertAdjacentHTML("beforebegin", trustKeyHtml(i === onAt ? heldCatalogTrust() : r.state, i === onAt ? heldCatalogPrint() : r.print));
         key.remove();
         wireEcKeys(row);
       }));
@@ -28013,18 +28076,6 @@ What you type stays in this browser only.`;
       }
     );
   }
-  function leadPrintOf(pubHex) {
-    const subtle = globalThis.crypto && globalThis.crypto.subtle;
-    if (!subtle || !/^[0-9a-f]{64}$/.test(pubHex)) return Promise.resolve("");
-    const raw = new Uint8Array(32);
-    for (let i = 0; i < 32; i++) raw[i] = parseInt(pubHex.slice(i * 2, i * 2 + 2), 16);
-    return subtle.digest("SHA-256", raw).then((buf) => {
-      const b = new Uint8Array(buf);
-      let hex = "";
-      for (let i = 0; i < 8; i++) hex += b[i].toString(16).padStart(2, "0");
-      return hex;
-    }).catch(() => "");
-  }
   function noteForeignSigner(c, wrap, place) {
     const doc = catalogDocOf(c), sig = doc && doc.sig, kid = sig && sig.keyId ? String(sig.keyId) : "";
     if (!kid) return;
@@ -28033,7 +28084,7 @@ What you type stays in this browser only.`;
       const forCat = ring && ring[String(c.id || "")];
       const pub = forCat && typeof forCat === "object" ? String(forCat[kid] || "") : "";
       if (state === V2_SIG_VALID || !prints.length || !/^[0-9a-f]{64}$/.test(pub)) return;
-      return v2SigState(doc, ring).then((named) => named === V2_SIG_VALID ? leadPrintOf(pub) : "").then((print) => {
+      return v2SigState(doc, ring).then((named) => named === V2_SIG_VALID ? keyPrintOf(pub) : "").then((print) => {
         if (!print || prints.indexOf(print) >= 0 || !wrap.isConnected || wrap.querySelector(".ec-signer")) return;
         const line = t("This file is signed with the key {KEY}, which is not the team lead's.").split("{KEY}").join(leadKeyText(print));
         wrap.querySelectorAll(".ec-trust").forEach((n) => n.remove());
