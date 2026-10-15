@@ -5572,6 +5572,7 @@ What you type stays in this browser only.`;
     retiredCards: () => retiredCards,
     savePack: () => savePack,
     saveStats: () => saveStats,
+    setStatsFlush: () => setStatsFlush,
     showDeskNotices: () => showDeskNotices,
     showPackMigrationWarning: () => showPackMigrationWarning,
     syncSaveNotice: () => syncSaveNotice,
@@ -6841,7 +6842,6 @@ What you type stays in this browser only.`;
     "Open the Menu": "Otwórz Menu",
     "Your name": "Nazwa agenta",
     "Personal": "Osobiste",
-    "Last sync": "Ostatnia synchronizacja",
     "Later": "Później",
     "Focus {PAX}": "Kursor w {PAX}",
     "Focus ROLE": "Kursor w ROLE",
@@ -8665,6 +8665,10 @@ What you type stays in this browser only.`;
   var STATS_SAVE_MS = 1500;
   var eStatsT = 0;
   var eStatsWired = false;
+  var statsFlush = null;
+  function setStatsFlush(fn) {
+    statsFlush = typeof fn === "function" ? fn : null;
+  }
   function saveStats() {
     if (eStatsT) return;
     eStatsT = setTimeout(flushStats, STATS_SAVE_MS);
@@ -8677,7 +8681,14 @@ What you type stays in this browser only.`;
     if (!eStatsT) return false;
     clearTimeout(eStatsT);
     eStatsT = 0;
-    return writePack(true);
+    const ok = writePack(true);
+    if (statsFlush) {
+      try {
+        statsFlush();
+      } catch (e) {
+      }
+    }
+    return ok;
   }
   function writePack(countsOnly) {
     const layer = {}, stats = {}, days = pack.days || {}, open = {}, closed = {};
@@ -14468,20 +14479,36 @@ What you type stays in this browser only.`;
     document.body.classList.toggle("e-band-pale", pale);
     document.body.classList.toggle("e-band-deep", ok && !pale);
   }
-  function answerStats(req) {
-    const h = eHost();
-    if (!h || typeof h.writeStats !== "function") return;
+  var statsAsk = null;
+  function statsInfo() {
     const cat = storedCatalog();
-    const doc = statsDoc(pack, {
+    return {
       engine: E_VERSION,
-      period: { from: req && req.from, to: req && req.to },
+      period: statsAsk ? { from: statsAsk.from, to: statsAsk.to } : null,
       catalog: cat && cat.id ? { id: cat.id, rev: cat.rev } : null
-    });
-    Promise.resolve(h.writeStats(JSON.stringify(doc))).then((r) => {
-      if (r && r.ok && r.syncMs) lsSet("eLastSync", String(r.syncMs));
-    }).catch(() => {
+    };
+  }
+  function sendStats(close, askId) {
+    const h = eHost();
+    if (!h || !statsAsk) return;
+    const fn = close && typeof h.closeStats === "function" ? h.closeStats : h.writeStats;
+    if (typeof fn !== "function") return;
+    let doc;
+    try {
+      doc = statsDoc(pack, statsInfo());
+    } catch (e) {
+      return;
+    }
+    const text = JSON.stringify(doc);
+    const sent = askId && !close ? fn(text, String(askId)) : fn(text);
+    Promise.resolve(sent).catch(() => {
     });
   }
+  function answerStats(req) {
+    if (req && req.from && req.to) statsAsk = { from: String(req.from), to: String(req.to) };
+    sendStats(false, req && typeof req.id === "string" ? req.id : "");
+  }
+  setStatsFlush(() => sendStats(false));
   function dispatchTabChord(shift) {
     try {
       window.dispatchEvent(new KeyboardEvent("keydown", {
@@ -14509,6 +14536,7 @@ What you type stays in this browser only.`;
     if (typeof h.onAccent === "function") h.onAccent(eSetAccent);
     if (typeof h.onAskClose === "function" && typeof h.closeAnswer === "function")
       h.onAskClose(() => askClose((a) => {
+        if (a === "none" || a === "close") sendStats(true);
         try {
           h.closeAnswer(a);
         } catch (e) {
@@ -29408,7 +29436,6 @@ What you type stays in this browser only.`;
     ], on ? "on" : "off");
     const themeCur = themeChoice() || "system";
     const langSel = '<select id="setUiLang" aria-label="' + esc(t("Interface language")) + '" title="' + esc(t("Changes every label in Etiuda, never the cards themselves")) + '">' + UI_LANGS.map((l) => '<option value="' + esc(l.code) + '"' + (l.code === uiLang() ? " selected" : "") + ">" + esc(l.label) + "</option>").join("") + "</select>";
-    const lastSyncStamp = fileStamp(+lsGet("eLastSync"));
     const joinDoor = joinDoorButton("setJoinTeam");
     const personalSection = accHtml(
       "personal",
@@ -29421,7 +29448,7 @@ What you type stays in this browser only.`;
         t("Interface language"),
         t("The language of the buttons and menus, not of the macros: those follow EN|PL in the header"),
         langSel
-      ) + (lastSyncStamp ? row(t("Last sync"), "", "<span>" + esc(lastSyncStamp) + "</span>") : "") + /* One row per team lead this desk trusts: the key the agent compared, and the way out where it was wrong. */
+      ) + /* One row per team lead this desk trusts: the key the agent compared, and the way out where it was wrong. */
       teamLeads().map((l, i) => row(
         t("Team lead's key"),
         i === 0 ? t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.") : "",
