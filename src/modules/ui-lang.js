@@ -1017,7 +1017,7 @@ UI_STRINGS.pl={
   "Waiting for the lead to open the request":"Prośba czeka, aż lider ją otworzy",
   "The code to read to them appears here as soon as they do.":"Gdy to zrobi, pojawi się tu kod do podania.",
   "Joining {LEAD}'s team":"Dołączanie do zespołu osoby {LEAD}",
-  "The lead's Studio lets this desk in by itself; nothing to do here.":"Studio lidera samo wpuszcza to stanowisko; tutaj nie trzeba nic robić.",
+  "Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead.":"Stanowisko czeka, aż lider zespołu je wpuści. Zwykle dzieje się to samo; jeśli pojawi się tu kod, proszę odczytać go liderowi.",
   "Team":"Zespół",
   "the lead":"lidera",
   "Read this code to the team's lead":"Podaj ten kod liderowi zespołu",

@@ -252,7 +252,7 @@ function joinParts(){
   if(j && j.invite && j.state==="waiting"){
     const lead=String(j.invite.lead||"").trim()||t("the lead");
     return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
-      line:t("The lead's Studio lets this desk in by itself; nothing to do here."),
+      line:t("Waiting for the team's lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead."),
       body:meta, acts:[["cancel",t("Cancel the request")]]};
   }
   if(j && j.state==="code") return {title:t("Read this code to the team's lead"),

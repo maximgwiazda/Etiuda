@@ -1221,7 +1221,7 @@ try {
   const quietInvite = !!(shellWait && shellWait.join && shellWait.join.code === "" && shellWait.join.state === "waiting"
     && shellWait.join.invite && shellWait.join.invite.lead === "Lamp lead");
   const enInvite = waitHtml.indexOf("Joining Lamp lead&#39;s team") >= 0
-    && waitHtml.indexOf("The lead&#39;s Studio lets this desk in by itself; nothing to do here.") >= 0
+    && waitHtml.indexOf("Waiting for the team&#39;s lead to let this desk in. Usually this happens by itself; if a code appears here, read it to the lead.") >= 0
     && waitHtml.indexOf("asked at") >= 0
     && waitHtml.indexOf("e-join-code") < 0 && waitHtml.indexOf("e-join-wait") < 0
     && waitHtml.indexOf("Waiting for the lead to open the request") < 0
@@ -1241,7 +1241,7 @@ try {
   ST.lsSet("eUiLang", "pl");
   const plHtml = paint({ join: { file: "a.ec", state: "waiting", code: "", asked: 1, name: "Nia", invite: { lead: "Lamp lead" } }, leads: [] });
   const plInvite = plHtml.indexOf("Dołączanie do zespołu osoby Lamp lead") >= 0
-    && plHtml.indexOf("Studio lidera samo wpuszcza to stanowisko; tutaj nie trzeba nic robić.") >= 0
+    && plHtml.indexOf("Stanowisko czeka, aż lider zespołu je wpuści. Zwykle dzieje się to samo; jeśli pojawi się tu kod, proszę odczytać go liderowi.") >= 0
     && plHtml.indexOf("e-join-code") < 0;
   if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
   check(!!tookFn && quietInvite && enInvite && armedDigits && namedLead && requestDoor && plInvite,
