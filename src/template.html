@@ -1176,6 +1176,9 @@ body.shed-segfold #seg::before{width:100%;transform:none}
   background:transparent;color:var(--ink);font:13.5px var(--sans);cursor:default}
 .menu button:hover,.menu button:focus-visible{background:var(--accent-soft);color:var(--accent)}
 .menu .menu-sep{height:1px;margin:4px 6px;background:var(--line);border:0;padding:0;pointer-events:none}
+/* A row's key at its right edge, in the row's quieter ink. */
+#menuPicker{display:flex;align-items:center;gap:18px}
+#menuPicker kbd{margin-left:auto;font:11.5px var(--mono);color:var(--dim)}
 /* An object's own menu (context-menu.js) stands where it was asked for, over the page and under a dialog. */
 .menu.e-ctx{position:fixed;right:auto;top:0;left:0;z-index:150;max-width:min(320px,calc(100vw - 8px))}
 .menu.e-ctx:focus{outline:none}
@@ -4104,6 +4107,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
           <button type="button" role="menuitem" data-act="manage" title="Edit, hide or restore every card, intent and category">Library…</button>
           <button type="button" role="menuitem" data-act="settings" title="Interface language, appearance and keyboard shortcuts">Settings…</button>
           <button type="button" role="menuitem" data-act="join" id="menuJoin" hidden title="Paste the invitation from the team's lead.">Join a team</button>
+          <!-- Only where the host has a picker, its words and combination drawn in header-menus.js. -->
+          <button type="button" role="menuitem" data-act="picker" id="menuPicker" hidden></button>
           <!-- Maintenance has NO menu entry: F2 opens it, and the Keyboard shortcuts screen is
                where that is discovered. -->
           <!-- Locks live in Settings - standing decisions about how the app may behave; hide and

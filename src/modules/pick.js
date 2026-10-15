@@ -1,5 +1,5 @@
-import { eHost } from "./host.js";
-import { wholeThingEmpty } from "./app-state.js";
+import { eHost, eHotkey, eHotkeyLabel } from "./host.js";
+import { lang, wholeThingEmpty } from "./app-state.js";
 import { cardSearchTerms } from "./spell.js";
 import { rankedCards } from "./render.js";
 import { pack } from "./pack.js";
@@ -11,11 +11,17 @@ import { bumpUseCount, copiedToastMsg } from "./list-pointer.js";
 import { eLastRecent, eNoteRecent } from "./recency.js";
 import { wantsAgentName, withAgentName } from "./agent.js";
 import { copy, noteCopy } from "./mark.js";
-import { t, uiLang } from "./ui-lang.js";
+import { counted, t, uiLang } from "./ui-lang.js";
+import { CONTENT_LANGS, nextContentLang } from "./content-model.js";
+import { activeTabName } from "./tabs.js";
+import { eNotice } from "./pack.js";
+import { tourHeardPick } from "./tour.js";
+import { hooks } from "./hooks.js";
 // The picker's answers: the desk's replies as a short list for the window the shell draws over the
 // chat, found by the desk's own search and copied by the desk's own route.
 
-const PICK_ROWS=9;
+/* The rows one answer carries, a scrolling list's worth; the page gives the first nine Ctrl and a digit. */
+const PICK_ROWS=50;
 /* The desk's colours as its sheet computed them, sent at every opening so the picker wears the
    theme on screen now. */
 const PICK_LOOK=["--panel","--panel-raised","--ink","--dim","--line","--line-strong","--accent",
@@ -50,19 +56,30 @@ function pickByUse(hits){
   if(!use.size) return hits;
   return hits.map((m,i)=>({m,i,n:use.get(String(m.id))|0})).sort((a,b)=>b.n-a.n||a.i-b.i).map(o=>o.m);
 }
-/** The first rows the desk's list would show for `q`: every copyable block of each card in turn. */
-function pickRows(q){
+/** What the desk's list would show for `q`: every copyable block of each card in turn as a row, PICK_ROWS at most,
+ *  and how many blocks it holds in all. */
+function pickList(q){
   const terms=cardSearchTerms(String(q==null?"":q));
   const rows=[];
+  let total=0;
   const hits=rankedCards(terms,pickKeep(terms)).hits;
   for(const m of terms.length ? hits : pickByUse(hits)){
     const l=cardLang(m), ps=parts(m,l);
-    for(let vi=0;vi<ps.length;vi++){
-      rows.push(pickRow(m,l,ps,vi));
-      if(rows.length>=PICK_ROWS) return rows;
-    }
+    total+=ps.length;
+    for(let vi=0;vi<ps.length && rows.length<PICK_ROWS;vi++) rows.push(pickRow(m,l,ps,vi));
   }
-  return rows;
+  return {rows:rows, total:total};
+}
+function pickRows(q){ return pickList(q).rows; }
+/* The count under the list, in replies as the desk counts them: all of them, or how many of them the list holds. */
+function pickCount(shown,total){
+  if(!total) return "";
+  const all=counted(total,"{N} reply","{N} replies");
+  return shown<total ? t("{SHOWN} of {COUNT}").split("{SHOWN}").join(String(shown)).split("{COUNT}").join(all) : all;
+}
+function pickFound(q){
+  const f=pickList(q);
+  return {rows:f.rows, count:pickCount(f.rows.length,f.total)};
 }
 /* The block copied last, by any route, as a row; null where there is none or it has gone. */
 function pickLastRow(){
@@ -82,21 +99,32 @@ function pickLook(){
   }catch(e){}
   return out;
 }
+/* The page's words. A legend line holds {KEY} where its key goes; the other language is named only where there is one. */
 function pickWords(){
+  const other=CONTENT_LANGS.length>1 ? String(nextContentLang(lang)).toUpperCase() : "";
   return {lang:uiLang(), search:t("search replies"), list:t("Replies"), again:t("The reply copied last"),
           none:t("A different word may do better."), stamp:t("Commits the firm"),
-          empty:wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet.")};
+          empty:wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet."),
+          who:t("The reply is filled in for this conversation"),
+          keyCopy:t("{KEY} copies"), keyOther:other ? t("{KEY} in {LANG}").split("{LANG}").join(other) : "",
+          keyClose:t("{KEY} closes"), pasted:t("Pasted"), copied:t("Copied, press Ctrl+V")};
 }
 /* THE TEXT THE DESK'S OWN COPY WOULD MAKE, counted as the desk counts a copy: the fill of the block
    in the card's language, for the chat tab in front. The shell writes it to the clipboard. A reply
-   signing with a name never given is handed back as `ask`, since the question needs the desk. */
-function pickCopy(id,vi){
+   signing with a name never given is handed back as `ask`, since the question needs the desk. `other` is the desk's
+   Shift+Enter: the next language, at the same block or its last where that language has fewer (copyEntrySel). */
+function pickBlocks(m,other){
+  const l=other ? nextContentLang(cardLang(m)) : cardLang(m);
+  return {l:l, ps:parts(m,l)};
+}
+function pickCopy(id,vi,other){
   const m=findCard(String(id||""));
   if(!m) return null;
-  const l=cardLang(m), ps=parts(m,l);
+  const {l,ps}=pickBlocks(m,other);
   vi=vi|0;
+  if(other && ps.length) vi=Math.min(vi,ps.length-1);
   if(vi<0 || vi>=ps.length) return null;
-  if(wantsAgentName(ps[vi])) return {ask:{id:String(m.id), vi:vi}};
+  if(wantsAgentName(ps[vi])) return {ask:other ? {id:String(m.id), vi:vi, other:1} : {id:String(m.id), vi:vi}};
   let text=null;
   withAgentName(ps[vi],()=>{
     bumpUseCount(m.id,l,vi);
@@ -107,10 +135,10 @@ function pickCopy(id,vi){
   return text==null ? null : {text:text};
 }
 /* In the desk's window, which the shell has just focused: the desk's own question, then its own copy. */
-function pickAsk(id,vi){
+function pickAsk(id,vi,other){
   const m=findCard(String(id||""));
   if(!m) return null;
-  const l=cardLang(m), ps=parts(m,l);
+  const {l,ps}=pickBlocks(m,other);
   vi=vi|0;
   if(vi<0 || vi>=ps.length) return null;
   withAgentName(ps[vi],()=>{
@@ -123,15 +151,27 @@ function pickAsk(id,vi){
 function answerPick(op,argText){
   let a={};
   try{ a=JSON.parse(String(argText||"{}"))||{}; }catch(e){ a={}; }
-  if(op==="open") return {look:pickLook(), words:pickWords(), rows:pickRows(""), last:pickLastRow()};
-  if(op==="find") return {rows:pickRows(a.q)};
-  if(op==="copy"){
-    if(!a.last) return pickCopy(a.id,a.vi);
-    const r=eLastRecent();
-    return r ? pickCopy(r.id,r.vi) : null;
+  if(op==="open"){
+    try{ tourHeardPick(); }catch(e){}
+    return Object.assign({look:pickLook(), words:pickWords(), last:pickLastRow(), who:activeTabName()}, pickFound(""));
   }
-  if(op==="ask") return pickAsk(a.id,a.vi);
+  if(op==="find") return pickFound(a.q);
+  if(op==="copy"){
+    if(!a.last) return pickCopy(a.id,a.vi,a.other);
+    const r=eLastRecent();
+    return r ? pickCopy(r.id,r.vi,a.other) : null;
+  }
+  if(op==="ask") return pickAsk(a.id,a.vi,a.other);
   return null;
+}
+/* A COMBINATION ANOTHER PROGRAM HOLDS IS SAID, at each launch it is, with the way to choose another: the picker
+   cannot come over other windows until then. */
+function hotkeyNotice(){
+  const hk=eHotkey();
+  if(!hk || !hk.accel || !hk.taken || document.getElementById("eHotkeyNote")) return;
+  eNotice("eHotkeyNote", t("{KEYS} belongs to another program just now.").split("{KEYS}").join(eHotkeyLabel(hk.accel)),
+    t("A combination of Etiuda's own, chosen in Settings, brings the replies over any window."), null,
+    {label:t("Choose a combination"), run:()=>hooks.openSettings("keys")});
 }
 function wirePick(){
   const h=eHost();
@@ -141,6 +181,7 @@ function wirePick(){
 
 export {
   answerPick,
+  hotkeyNotice,
   pickExcerpt,
   pickRows,
   wirePick

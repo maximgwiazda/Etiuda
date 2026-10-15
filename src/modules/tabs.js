@@ -132,6 +132,12 @@ function tabLabel(tb, i){
      leaves, so a full Polish strip fades its numbered tabs like any other name. */
   return t("Tab")+" "+((i!=null?i:tabs.indexOf(tb))+1);
 }
+/* The conversation in front as its tab is named, from the name typed in it now. */
+function activeTabName(){
+  const i=tabs.findIndex(x=>x.id===activeTabId);
+  if(i<0) return "";
+  return tabLabel(Object.assign({}, tabs[i], {pax:pax ? pax.value : tabs[i].pax}), i);
+}
 function snapshotActiveTab(){
   if(!activeTabId) return;
   const t=tabs.find(x=>x.id===activeTabId);
@@ -1297,5 +1303,5 @@ export {
   tabs,
   tabSaveTimer,
   tabInsertAnimating,
-  TAB_FLOOR_W, reopenClosedTab, escapeHeld, askClose, closeTabById, closeOtherTabs, closedTabCount
+  TAB_FLOOR_W, reopenClosedTab, escapeHeld, askClose, closeTabById, closeOtherTabs, closedTabCount, activeTabName
 };

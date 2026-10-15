@@ -29,6 +29,8 @@
  *   back     Back is pressed inside the window: the tour must return to the step that opens it.
  *   again    the row taken on the walk's second visit to the step, which a `back` makes.
  *   reload   the step is done by loading a catalog, which reloads the page; its caller does it.
+ *   host     the step stands only under the desktop host, where the shell holds the picker's hotkey, so a
+ *            walk in a browser passes over it.
  *
  * Words typed are invented, never catalog wording, and nothing the page shows is printed. */
 "use strict";
@@ -54,6 +56,7 @@ const PLAN = [
   { id: "factsIn", inside: true, next: true },
   { id: "theme", next: true, aim: "#theme" },
   { id: "menu", next: true, aim: "#settingsBtn" },
+  { id: "picker", host: true, next: true, aim: '#settingsMenu [data-act="picker"]' },
   { id: "library", click: ['#settingsMenu [data-act="manage"]'], into: "libraryIn", again: { next: true } },
   { id: "libraryIn", inside: true, back: true, again: { close: "#modalX" } },
   { id: "settings", click: ["#settingsBtn", '#settingsMenu [data-act="settings"]'], into: "settingsIn" },
@@ -69,26 +72,27 @@ function rowOf(id, visit) {
 }
 
 /** Where the tour should stand once the row is done: the step before it for a `back`, the window
- *  it opens, else the next row, passing over the load step on a desk that already holds a catalog.
- *  Null after the last. */
-function after(id, loaded, visit) {
+ *  it opens, else the next row, passing over the load step on a desk that already holds a catalog
+ *  and over a host's step where the walk has no host. Null after the last. */
+function after(id, loaded, visit, host) {
   const i = PLAN.findIndex(r => r.id === id), r = rowOf(id, visit);
   if (i < 0) return undefined;
-  const on = j => !(loaded && PLAN[j].reload) && !PLAN[j].inside;
+  const passed = j => (loaded && PLAN[j].reload) || (!host && PLAN[j].host);
+  const on = j => !passed(j) && !PLAN[j].inside;
   if (r.back) { for (let j = i - 1; j >= 0; j--) if (on(j)) return PLAN[j].id; return null; }
   if (r.into) return r.into;
-  for (let j = i + 1; j < PLAN.length; j++) if (!(loaded && PLAN[j].reload)) return PLAN[j].id;
+  for (let j = i + 1; j < PLAN.length; j++) if (!passed(j)) return PLAN[j].id;
   return null;
 }
 
 /** The steps the walk stands on, in order, visits included, from the first to the end. */
-function route(loaded) {
+function route(loaded, host) {
   const seen = {}, out = [];
   let id = PLAN[0].id;
   while (id && out.length < PLAN.length * 2) {
     seen[id] = (seen[id] || 0) + 1;
     out.push(id);
-    id = after(id, loaded, seen[id]);
+    id = after(id, loaded, seen[id], host);
   }
   return out;
 }
@@ -114,6 +118,7 @@ function planProblems(steps, held, actMs) {
       if (s.inside && !r.close && !r.next && !r.back) out.push(at + ": no way out of its window in the walk");
       if (r.back && !s.inside) out.push(at + ": goes back from a step that stands in no window");
       if (s.name && !(r.type && r.type.sel === "#tourName")) out.push(at + ": holds the name field and the walk does not type into it");
+      if (r.host && !s.when) out.push(at + ": a host's step in the walk and a step of every host in the table");
     });
   });
   if (ACT_MS !== actMs) out.push("the walk's ACT_MS is " + ACT_MS + " and tour.js's TOUR_ACT_MS " + actMs);
@@ -199,7 +204,7 @@ async function walkStep(pg, id, opts) {
   const o = opts || {}, visit = o.visit || 1, r = rowOf(id, visit);
   if (!r) throw new Error("tour-walk: no row for step " + id);
   if (r.reload) throw new Error("tour-walk: the load step reloads the page, and its caller does it");
-  const rec = { id, visit, want: after(id, o.loaded !== false, visit), to: undefined, aims: [], look: null, asked: false, ms: 0 };
+  const rec = { id, visit, want: after(id, o.loaded !== false, visit, o.host === true), to: undefined, aims: [], look: null, asked: false, ms: 0 };
   const t0 = Date.now();
   await pause(450); // the step places its bubble on the next frame and again at 300 ms
   rec.look = await pg.evaluate(LOOK);

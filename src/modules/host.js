@@ -325,6 +325,24 @@ function answerStats(req){
   }).catch(()=>{});
 }
 
+/* THE PICKER'S HOTKEY AS THE SHELL HOLDS IT NOW, {accel, held, taken}, or null where the host has no picker. Read
+   afresh at each ask, since Settings or the desk file may move it. */
+function eHotkey(){
+  const h=eHost();
+  if(!h || typeof h.hotkeyState!=="function") return null;
+  let st=null;
+  try{ st=h.hotkeyState(); }catch(e){ st=null; }
+  return st && typeof st==="object" ? {accel:String(st.accel||""), held:!!st.held, taken:!!st.taken} : null;
+}
+// A combination in the host's spelling as the desk names keys: Control reads Ctrl.
+function eHotkeyLabel(accel){ return String(accel||"").split("+").map(k=>k==="Control"?"Ctrl":k).join("+"); }
+// The picker brought forward from the desk itself, by the pointer: false where the host has none.
+function eOpenPicker(){
+  const h=eHost();
+  if(!h || typeof h.openPicker!=="function") return false;
+  try{ h.openPicker(); return true; }catch(e){ return false; }
+}
+
 /* The shell's Ctrl+Tab, as a keydown the shortcut table already matches. KeyboardEvent is
    absent where this file is loaded under plain node and the callback is never what asks. */
 function dispatchTabChord(shift){
@@ -395,6 +413,9 @@ export {
   eHasCatalogPicker,
   eHasCatalogSaver,
   eHost,
+  eHotkey,
+  eHotkeyLabel,
+  eOpenPicker,
   eOpenCatalogFolder,
   wireFolderLink,
   eOpenedWith,

@@ -4235,6 +4235,24 @@ const CARD_B = {
         () => eq([overDialog, hiddenB].join(" | "), "true/dp-a:Anna,dp-b:Bartek | false/dp-a:Anna"));
     }
 
+    /* 901p: THE PICKER NAMES THE CONVERSATION IT FILLS FOR (board 901, desk-core-picker-list), as its tab is named,
+       from the name typed in it now, through the picker's own answer. */
+    {
+      const PICKM = await import(MOD("pick.js"));
+      const who = () => (PICKM.answerPick("open", "{}") || {}).who;
+      start([["dp-a", "Anna Nowak"], ["dp-b", ""]], "dp-a");
+      const named = who();
+      pax.value = "Celina Lis";
+      const typed = who();
+      T.stepTab(1);
+      const nameless = who();
+      UILANG_STORE.lsSet("eUiLang", "pl");
+      const plNameless = who();
+      UILANG_STORE.lsDel("eUiLang");
+      check("pick.js", "901p1 the picker is told which conversation fills the reply, by its tab's name: the first name typed in it now, else its number",
+        () => eq([named, typed, nameless, plNameless].join("|"), "Anna|Celina|Tab 2|Rozmowa 2"));
+    }
+
     /* The window's close: the shell asks, and the conversations answer. */
     const answers = [], ask = () => T.askClose(a => answers.push(a));
     const asking = () => made.filter(n => n.id === "eCloseAsk" && !n.gone);

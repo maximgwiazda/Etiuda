@@ -506,6 +506,7 @@ function boot(){
   // After boot, so the warning sits over a working Etiuda rather than an empty frame.
   try{ personalPack.showPackMigrationWarning(); }catch(e){}
   try{ personalPack.showDeskNotices(); }catch(e){}
+  try{ pick.hotkeyNotice(); }catch(e){}
 }
 /* The cycle gate loads this file in bare node to see whether anything reads across an import
    cycle while it loads, and there is no document there. In a browser this is the last line of

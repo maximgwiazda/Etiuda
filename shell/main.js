@@ -4184,32 +4184,69 @@ function pickClipText(text, platform) {
 function pickPage() {
   const P = window.E_PICK, q = document.getElementById("q"), box = document.getElementById("rows");
   if (!P || !q || !box) return;
-  let rows = [], last = null, words = {}, at = 0, asked = 0;
+  const who = document.getElementById("who"), count = document.getElementById("count"), keys = document.getElementById("keys");
+  let rows = [], last = null, words = {}, at = 0, asked = 0, said = "";
   const esc = s => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const ICON_AGAIN = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor"'
     + ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.6-3.7"/><path d="M13 2.5v3h-3"/></svg>';
   const ICON_STAMP = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor"'
     + ' stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.2 12.5l.6-4.2a2.6 2.6 0 1 1 3.4 0l.6 4.2"/>'
     + '<path d="M5 17v-2.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2V17z" fill="currentColor"/><path d="M6 20.5h13"/></svg>';
+  const ICON_WHO = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor"'
+    + ' stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.5" r="2.5"/><path d="M3 13.5a5 5 0 0 1 10 0"/></svg>';
+  const stamp = () => '<span class="st" title="' + esc(words.stamp) + '">' + ICON_STAMP + '</span>';
   const list = () => (!q.value.trim() && last)
     ? [Object.assign({ again: true }, last)].concat(rows.filter(r => r.id !== last.id || r.vi !== last.vi)) : rows;
-  const paint = () => {
+  /* A CARD OF SEVERAL REPLIES IS ONE GROUP: its title once, over its replies, each named by its tag. The first nine
+     rows after the reply copied last carry Ctrl and their digit, and that one Ctrl+0. */
+  const same = (a, b) => !!a && !!b && !a.again && !b.again && a.id === b.id;
+  const paint = keyed => {
     const all = list();
     if (at >= all.length) at = all.length ? all.length - 1 : 0;
     let n = 0;
-    box.innerHTML = all.length ? all.map((r, i) => '<li role="option" id="r' + i + '" data-i="' + i + '"'
-        + (i === at ? ' class="on" aria-selected="true"' : ' aria-selected="false"')
+    const html = all.map((r, i) => {
+      const grouped = same(all[i - 1], r) || same(r, all[i + 1]);
+      const head = grouped && !same(all[i - 1], r)
+        ? '<li class="grp" role="presentation"><span class="t">' + esc(r.t) + '</span>' + (r.commits ? stamp() : '') + '</li>' : '';
+      const key = r.again ? "Ctrl+0" : (++n <= 9 ? "Ctrl+" + n : "");
+      const cls = (grouped ? ["in"] : []).concat(i === at ? ["on"] : []);
+      return head + '<li role="option" id="r' + i + '" data-i="' + i + '"' + (cls.length ? ' class="' + cls.join(" ") + '"' : '')
+        + (i === at ? ' aria-selected="true"' : ' aria-selected="false"')
         + (r.again ? ' title="' + esc(words.again) + '"' : '') + '>'
-        + '<span class="n">' + (r.again ? ICON_AGAIN : (++n <= 9 ? String(n) : "")) + '</span>'
-        + '<span class="t">' + esc(r.t) + '</span>'
-        + (r.commits ? '<span class="st" title="' + esc(words.stamp) + '">' + ICON_STAMP + '</span>' : '')
-        + '<span class="x">' + esc(r.x) + '</span>'
-        + (r.tag ? '<span class="g">' + esc(r.tag) + '</span>' : '') + '</li>').join("")
+        + '<span class="n">' + (key ? '<kbd>' + key + '</kbd>' : '') + '</span>'
+        + (grouped ? (r.tag ? '<span class="g">' + esc(r.tag) + '</span>' : '') + '<span class="x">' + esc(r.x) + '</span>'
+          : '<span class="t">' + (r.again ? ICON_AGAIN : '') + esc(r.t) + '</span>' + (r.commits ? stamp() : '')
+            + '<span class="x">' + esc(r.x) + '</span>' + (r.tag ? '<span class="g">' + esc(r.tag) + '</span>' : ''))
+        + '</li>';
+    }).join("");
+    const keep = box.scrollTop;
+    box.innerHTML = all.length ? html
       : '<li class="none" role="presentation">' + esc(q.value.trim() ? words.none : words.empty) + '</li>';
+    box.scrollTop = keep;
     q.setAttribute("aria-activedescendant", all.length ? "r" + at : "");
     box.querySelectorAll(".t,.x").forEach(el => el.classList.toggle("cut", el.scrollWidth > el.clientWidth + 1));
+    if (count) count.textContent = all.length ? said : "";
+    /* A key that moved the mark brings it into view, and its group's title with it at the top; the pointer's mark
+       scrolls nothing. */
+    const on = keyed && box.querySelector ? box.querySelector("li.on") : null;
+    if (on && on.scrollIntoView) {
+      on.scrollIntoView({ block: "nearest" });
+      const above = on.previousElementSibling;
+      if (above && above.classList.contains("grp") && above.getBoundingClientRect().top < box.getBoundingClientRect().top)
+        above.scrollIntoView({ block: "nearest" });
+    }
   };
-  const take = r => { if (r) P.copy(JSON.stringify(r.again ? { last: true } : { id: r.id, vi: r.vi })); };
+  const take = (r, other) => {
+    if (!r) return;
+    const what = r.again ? { last: true } : { id: r.id, vi: r.vi };
+    P.copy(JSON.stringify(other ? Object.assign(what, { other: 1 }) : what));
+  };
+  /* The keys as they work, under the list: each line holds {KEY} where its key is drawn. */
+  const legend = () => {
+    if (!keys) return;
+    keys.innerHTML = [["Enter", words.keyCopy], ["Shift+Enter", words.keyOther], ["Esc", words.keyClose]]
+      .filter(k => k[1]).map(k => '<span>' + esc(k[1]).split("{KEY}").join('<kbd>' + k[0] + '</kbd>') + '</span>').join("");
+  };
   P.onOpen(text => {
     let o = {};
     try { o = JSON.parse(text) || {}; } catch (e) { o = {}; }
@@ -4222,10 +4259,18 @@ function pickPage() {
     root.lang = words.lang || "en";
     q.placeholder = words.search || "";
     box.setAttribute("aria-label", words.list || "");
+    if (who) {
+      who.hidden = !o.who;
+      who.title = words.who || "";
+      who.innerHTML = ICON_WHO + '<span>' + esc(o.who) + '</span>';
+    }
+    legend();
     rows = Array.isArray(o.rows) ? o.rows : [];
+    said = o.count || "";
     last = o.last || null;
     q.value = ""; at = 0; asked++;
-    paint();
+    box.scrollTop = 0;
+    paint(false);
     q.focus();
     P.ready();
   });
@@ -4236,37 +4281,41 @@ function pickPage() {
       let o = {};
       try { o = JSON.parse(text) || {}; } catch (e) { o = {}; }
       rows = Array.isArray(o.rows) ? o.rows : [];
+      said = o.count || "";
       at = 0;
-      paint();
+      box.scrollTop = 0;
+      paint(false);
     });
   });
   q.addEventListener("keydown", e => {
     const all = list();
     if (e.key === "Escape") { e.preventDefault(); P.close(); return; }
     if (e.key === "Tab") { e.preventDefault(); return; }
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    const step = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : e.key === "PageDown" ? 8 : e.key === "PageUp" ? -8 : 0;
+    if (step) {
       e.preventDefault();
       if (!all.length) return;
-      at = (at + (e.key === "ArrowDown" ? 1 : -1) + all.length) % all.length;
-      paint();
+      /* The arrows go round; a page stops at either end. */
+      at = Math.abs(step) === 1 ? (at + step + all.length) % all.length : Math.min(Math.max(at + step, 0), all.length - 1);
+      paint(true);
       return;
     }
-    if (e.key === "Enter") { e.preventDefault(); take(all[at]); return; }
+    if (e.key === "Enter") { e.preventDefault(); take(all[at], e.shiftKey); return; }
     const d = /^(Digit|Numpad)([0-9])$/.exec(e.code || "");
     if (d && e.ctrlKey && !e.altKey && !e.metaKey) {
       e.preventDefault();
-      if (d[2] === "0") { P.copy(JSON.stringify({ last: true })); return; }
-      take(all.filter(r => !r.again)[+d[2] - 1]);
+      if (d[2] === "0") { take({ again: true }, e.shiftKey); return; }
+      take(all.filter(r => !r.again)[+d[2] - 1], e.shiftKey);
     }
   });
   box.addEventListener("mousemove", e => {
     const li = e.target.closest && e.target.closest("li[data-i]");
-    if (li && +li.dataset.i !== at) { at = +li.dataset.i; paint(); }
+    if (li && +li.dataset.i !== at) { at = +li.dataset.i; paint(false); }
   });
   box.addEventListener("mousedown", e => e.preventDefault());
   box.addEventListener("click", e => {
     const li = e.target.closest && e.target.closest("li[data-i]");
-    if (li) take(list()[+li.dataset.i]);
+    if (li) take(list()[+li.dataset.i], e.shiftKey);
   });
 }
 const PICK_SCRIPT = "(" + pickPage.toString() + ")();";
@@ -4277,7 +4326,7 @@ function pickerDoc() {
   return '<!DOCTYPE html>\n<html lang="en">\n<meta charset="utf-8">\n'
     + '<meta http-equiv="Content-Security-Policy" content="' + policyFor([PICK_HASH]) + '">\n'
     + '<title>Etiuda</title>\n<style>\n'
-    + ':root{color-scheme:light;--panel:#fff;--panel-raised:#fff;--ink:#0f172a;--dim:#475569;--line:#e4e8ee;'
+    + ':root{color-scheme:light;--panel:#fff;--panel-raised:#fff;--ink:#0f172a;--dim:#475569;--line:#e4e8ee;--line-strong:#cbd2dc;'
     + '--accent:#0e67d8;--field:#fdfdfd;--field-line:#e0e4ea;--field-edge:#aab3c0;--radius-sm:8px;'
     + '--intent-type:16.5px;--warn:#c2410c;--mono:ui-monospace,Consolas,monospace;'
     + '--sans:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}\n'
@@ -4287,32 +4336,101 @@ function pickerDoc() {
     + ':root.glass body{background:color-mix(in srgb,var(--panel-raised) 78%,transparent)}\n'
     + 'body{box-sizing:border-box;padding:8px;display:flex;flex-direction:column;gap:6px;color:var(--ink);'
     + 'font:14px/1.35 var(--sans);cursor:default;user-select:none}\n'
-    + '#q{box-sizing:border-box;flex:0 0 40px;width:100%;padding:0 12px;border:1px solid var(--field-line);'
+    + '#top{flex:0 0 40px;display:flex;gap:6px;min-width:0}\n'
+    + '#q{box-sizing:border-box;flex:1 1 auto;min-width:0;padding:0 12px;border:1px solid var(--field-line);'
     + 'border-bottom-color:var(--field-edge);border-radius:var(--radius-sm);background:var(--field);color:var(--ink);'
     + 'font:var(--intent-type) var(--sans);outline:none}\n'
     + '#q:focus{border-bottom-color:var(--accent);box-shadow:inset 0 -1px 0 var(--accent)}\n'
-    + '#rows{flex:1 1 auto;min-height:0;margin:0;padding:0;list-style:none;overflow:hidden}\n'
+    + '#who{flex:0 1 auto;max-width:34%;display:flex;align-items:center;gap:6px;padding:0 10px;border:1px solid var(--line);'
+    + 'border-radius:var(--radius-sm);color:var(--dim);font-size:13px;white-space:nowrap;overflow:hidden}\n'
+    + '#who[hidden]{display:none}\n#who svg{flex:0 0 auto}\n#who span{overflow:hidden;text-overflow:clip}\n'
+    + '#rows{flex:1 1 auto;min-height:0;margin:0;padding:0;list-style:none;overflow-x:hidden;overflow-y:auto;'
+    + 'overscroll-behavior:contain;scrollbar-width:thin}\n'
     + '#rows li{display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:var(--radius-sm);'
     + 'white-space:nowrap;transition:background-color .1s}\n'
     + '#rows li.on{background:color-mix(in srgb,var(--accent) 20%,transparent)}\n'
-    + '#rows li.on .t,#rows li.on .n{color:var(--accent)}\n'
-    + '.n{flex:0 0 18px;display:flex;justify-content:center;font:11px var(--mono);color:var(--dim)}\n'
-    + '.t{flex:0 1 auto;max-width:45%;overflow:hidden;font-weight:600}\n'
+    + '#rows li.on .t,#rows li.on .n,#rows li.on .g{color:var(--accent)}\n'
+    + '#rows li.grp{height:24px;align-items:flex-end;padding-bottom:2px;font-size:12.5px}\n'
+    + '#rows li.grp .t{max-width:none;color:var(--dim)}\n'
+    + '#rows li.in{padding-left:24px}\n'
+    + '.n{flex:0 0 50px;display:flex;font:10.5px var(--mono);color:var(--dim)}\n'
+    + 'kbd{font:10.5px var(--mono);padding:0 4px;border:1px solid var(--line-strong);border-radius:4px}\n'
+    + '.t{flex:0 1 auto;max-width:45%;display:flex;align-items:center;gap:6px;overflow:hidden;font-weight:600}\n'
+    + '.t svg{flex:0 0 auto}\n'
     + '.x{flex:1 1 0;min-width:0;overflow:hidden;color:var(--dim);font-size:13px}\n'
     + '.cut{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent);'
     + 'mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent)}\n'
     + '.st{flex:0 0 auto;display:flex;color:var(--warn)}\n'
     + '.g{flex:0 0 auto;font:10px var(--mono);color:var(--dim)}\n'
     + '#rows li.none{height:auto;padding:14px 12px;color:var(--dim);white-space:normal}\n'
+    + 'footer{flex:0 0 auto;display:flex;align-items:center;gap:14px;padding:6px 10px 0;border-top:1px solid var(--line);'
+    + 'color:var(--dim);font-size:12px;white-space:nowrap;overflow:hidden}\n'
+    + '#count{margin-right:auto}\n#keys{display:flex;gap:14px}\n#keys kbd{margin-right:5px}\n'
     + ':root.still #rows li{transition:none}\n'
     + '@media (prefers-reduced-motion:reduce){#rows li{transition:none}}\n'
     + '@media (forced-colors:active){#rows li.on{outline:2px solid Highlight;outline-offset:-2px}'
     + '#q:focus{outline:2px solid Highlight}}\n'
     + '</style>\n'
-    + '<input id="q" type="text" role="combobox" aria-expanded="true" aria-controls="rows" aria-autocomplete="list"'
-    + ' autocomplete="off" spellcheck="false">\n'
+    + '<div id="top"><input id="q" type="text" role="combobox" aria-expanded="true" aria-controls="rows" aria-autocomplete="list"'
+    + ' autocomplete="off" spellcheck="false"><span id="who" hidden></span></div>\n'
     + '<ul id="rows" role="listbox"></ul>\n'
+    + '<footer><span id="count" aria-live="polite"></span><span id="keys"></span></footer>\n'
     + '<script>' + PICK_SCRIPT + '</script>\n';
+}
+
+/* THE WORD AFTER A PICK, where the picker stood: "Pasted" once the caret helper has pressed Ctrl+V in the window the
+   agent came from, else that the reply waits on the clipboard, which stays up as long as the desk's own toast that asks
+   for an act. A window of its own that takes neither the focus nor a click, so the chat keeps both. */
+const PICK_NOTE = { width: 300, height: 40 }, PICK_NOTE_MS = 1700, PICK_NOTE_HAND_MS = 6000;
+let pickNoteWin = null, pickNoteTimer = null, pickSaid = null;
+function pickNoteDoc(text, pasted, said) {
+  const look = (said && said.look) || {}, vars = look.vars || {};
+  const tokens = Object.keys(vars).filter(k => /^--[\w-]+$/.test(k) && !/[<>{};]/.test(String(vars[k])))
+    .map(k => k + ":" + vars[k] + ";").join("");
+  const html = String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const icon = pasted ? '<path d="M3.5 8.5l3 3 6-7"/>' : '<rect x="4" y="3" width="8" height="11" rx="1.5"/><path d="M6.5 3V2h3v1"/>';
+  return '<!DOCTYPE html>\n<html lang="' + (/^[a-z]{2,3}$/.test(String(said && said.lang)) ? said.lang : "en") + '">\n<meta charset="utf-8">\n'
+    + '<meta http-equiv="Content-Security-Policy" content="' + policyFor(["'none'"]) + '">\n'
+    + '<title>Etiuda</title>\n<style>\n'
+    + ':root{color-scheme:' + (look.theme === "dark" ? "dark" : "light") + ';--panel-raised:#fff;--ink:#0f172a;--line:#e4e8ee;'
+    + '--accent:#0e67d8;--radius-sm:8px;--sans:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;' + tokens + '}\n'
+    + 'html{height:100%;background:transparent}\n'
+    + 'body{box-sizing:border-box;height:100%;margin:0;display:flex;align-items:center;gap:8px;padding:0 14px;'
+    + 'border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--panel-raised);color:var(--ink);'
+    + 'font:600 13.5px var(--sans);white-space:nowrap;overflow:hidden;cursor:default;user-select:none}\n'
+    + 'svg{flex:0 0 auto;color:var(--accent)}\n'
+    + '</style>\n<body role="status"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none"'
+    + ' stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + icon + '</svg>' + html + '</body>\n';
+}
+function hidePickNote() {
+  clearTimeout(pickNoteTimer);
+  if (pickNoteWin && !pickNoteWin.isDestroyed() && pickNoteWin.isVisible()) pickNoteWin.hide();
+}
+/* Called with what the caret helper answered: true where it pressed Ctrl+V. */
+function showPickNote(pasted) {
+  const said = pickSaid || {}, text = pasted ? said.pasted : said.copied;
+  if (!text || !pickWin || pickWin.isDestroyed()) return;
+  const at = pickWin.getBounds();
+  if (!pickNoteWin || pickNoteWin.isDestroyed()) {
+    pickNoteWin = new BrowserWindow({
+      width: PICK_NOTE.width, height: PICK_NOTE.height, show: false, frame: false, resizable: false, focusable: false,
+      transparent: true, alwaysOnTop: true, skipTaskbar: true, minimizable: false, maximizable: false, fullscreenable: false,
+      title: "Etiuda", webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, webviewTag: false,
+        webSecurity: true, spellcheck: false },
+    });
+    pickNoteWin.setIgnoreMouseEvents(true);
+    pickNoteWin.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    pickNoteWin.webContents.on("will-navigate", e => e.preventDefault());
+  }
+  const win = pickNoteWin;
+  clearTimeout(pickNoteTimer);
+  win.setBounds({ x: at.x, y: at.y, width: Math.min(PICK_NOTE.width, at.width), height: PICK_NOTE.height });
+  win.webContents.once("did-finish-load", () => {
+    if (win.isDestroyed()) return;
+    win.showInactive();
+    pickNoteTimer = setTimeout(hidePickNote, pasted ? PICK_NOTE_MS : PICK_NOTE_HAND_MS);
+  });
+  win.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(pickNoteDoc(text, pasted, said)));
 }
 
 let pickWin = null, pickLoaded = null, pickOpening = false, pickShown = null;
@@ -4335,13 +4453,15 @@ function caretWhich() {
   }));
 }
 /* Started while the picker is still in front: Windows lets a program started by the window in front
-   hand the front to another, and to nothing else. The reply is on the clipboard whatever it answers. */
-function caretPaste(target) {
+   hand the front to another, and to nothing else. The reply is on the clipboard whatever it answers, and `done` hears
+   whether Ctrl+V was pressed. */
+function caretPaste(target, done) {
   const tool = caretTool();
-  if (!tool || !target) return;
+  if (!tool || !target) { setImmediate(() => done(false)); return; }
   execFile(tool, ["paste", target], { windowsHide: true, timeout: CARET_PASTE_MS }, err => {
     if (err) console.error("etiuda: the caret helper answered " + (err.code != null ? err.code : err.message)
       + ", so the reply waits on the clipboard");
+    done(!err);
   });
 }
 const PICK_ASK_MS = 1500;
@@ -4407,6 +4527,7 @@ function pickToggle() {
   if (pickWin && !pickWin.isDestroyed() && pickWin.isVisible()) { hidePicker(true); return; }
   if (pickOpening || !theWindow || theWindow.isDestroyed()) return;
   pickOpening = true;
+  hidePickNote();
   /* Asked at once, before anything of this program comes forward; the opening waits for the answer
      only briefly, and an answer that comes later names the picker itself, which is no target. */
   const press = ++pickPress;
@@ -4415,6 +4536,7 @@ function pickToggle() {
   askDesk("open").then(open => {
     if (!open) { focusDesk(); return null; }
     if (open.look) open.look.glass = !!open.look.glass && hostBackdrop() === "acrylic";
+    pickSaid = Object.assign({}, open.words || {}, { look: open.look || {} });
     return ensurePicker().then(() => {
       if (!pickWin || pickWin.isDestroyed()) return null;
       let at = null;
@@ -4441,22 +4563,28 @@ ipcMain.on("etiuda:pick-answer", (e, n, text) => {
 });
 ipcMain.on("etiuda:pick-ready", (e) => { if (fromPicker(e) && pickShown) pickShown(); });
 ipcMain.on("etiuda:pick-close", (e) => { if (fromPicker(e)) hidePicker(true); });
+/* The desk's own door to the picker, its Menu row and its tour, opening it by the pointer as the hotkey does. */
+ipcMain.on("etiuda:pick-show", (e) => {
+  if (fromEngine(e) && !(pickWin && !pickWin.isDestroyed() && pickWin.isVisible())) pickToggle();
+});
 ipcMain.handle("etiuda:pick-find", (e, q) => {
   if (!fromPicker(e)) return "null";
   return askDesk("find", { q: String(q || "").slice(0, 200) }).then(v => JSON.stringify(v));
 });
-/* THE COPY. The desk's page makes the text by its own route and counts it; this writes it to the
-   clipboard, has the caret helper press Ctrl+V in the window the agent came from, and steps aside.
+/* THE COPY. The desk's page makes the text by its own route and counts it, in the other language for `other`; this
+   writes it to the clipboard, has the caret helper press Ctrl+V in the window the agent came from, steps aside, and
+   says which it was.
    A reply that signs with a name nobody has given yet is asked in the desk's own window instead. */
 ipcMain.handle("etiuda:pick-copy", (e, what) => {
   if (!fromPicker(e)) return false;
   let pick = {};
   try { pick = JSON.parse(String(what || "")) || {}; } catch { pick = {}; }
   const arg = pick.last ? { last: true } : { id: String(pick.id || ""), vi: pick.vi | 0 };
+  if (pick.other) arg.other = 1;
   return askDesk("copy", arg).then(v => {
     if (v && typeof v.text === "string") {
       clipboard.writeText(pickClipText(v.text, process.platform));
-      caretPaste(pickTarget);
+      caretPaste(pickTarget, showPickNote);
       hidePicker(true);
       return true;
     }
@@ -4640,6 +4768,7 @@ function createWindow() {
   win.on("closed", () => {
     if (theWindow === win) theWindow = null;
     if (pickWin && !pickWin.isDestroyed()) pickWin.destroy();
+    if (pickNoteWin && !pickNoteWin.isDestroyed()) pickNoteWin.destroy();
   });
   win.loadFile(ENGINE);
   watchCatalog(win);

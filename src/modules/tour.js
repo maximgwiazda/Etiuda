@@ -16,7 +16,7 @@ import { syncLayoutPrefs, pillsWanted, schedulePillsCollapse } from "./pills-box
 import { closeSettingsMenu, openSettingsMenu } from "./header-menus.js";
 import { wholeThingEmpty } from "./app-state.js";
 import { placeBubble } from "./bubble.js";
-import { eHost, eCatalogFolderShort } from "./host.js";
+import { eHost, eCatalogFolderShort, eHotkey, eHotkeyLabel, eOpenPicker } from "./host.js";
 import { agentName, setAgentName, keepAgentName, keepTypedName, nameAnswered, nameFieldHtml, wireNameField } from "./agent.js";
 import { esc } from "./esc.js";
 import { cutLeaves, dismissCopy, mgReduceMotion } from "./motion.js";
@@ -155,6 +155,12 @@ function tourPress(el, sel){ if(el && el.matches && el.matches(sel) && el.getCli
 function tourPressRow(act){ if(!menuOpen()) openSettingsMenu(); tourPress(menuTarget(act), '[data-act="'+act+'"]'); }
 // The window an inside step stands in, closed as the person would close it.
 function shutTourWindow(){ if(modalOpen()) closeModal(); if(factsPanelOpen()) closeFactsPanel(); }
+/* THE PICKER'S STEP, where the shell holds a combination: done once the picker opens after the step began (pick.js
+   says when it does), and Next opens it by the pointer. */
+let tourPicks=0, tourStepPicks=0;
+function tourHeardPick(){ tourPicks++; tourActSoon(); }
+function hotkeyHeld(){ const hk=eHotkey(); return hk && hk.held ? hk.accel : ""; }
+function hotkeyChips(){ return eHotkeyLabel(hotkeyHeld()).split("+").map(k=>'<kbd>'+esc(k)+'</kbd>').join("+"); }
 // The wheel waits on the sample until a reply names somebody (agent.js), and the step says so.
 function wheelShown(){ return !document.body.classList.contains("role-waits"); }
 const TOUR_STEPS=[
@@ -321,6 +327,19 @@ const TOUR_STEPS=[
     body:"Click <b>Menu</b>: the rest of Etiuda opens from there.",
     done:()=>menuOpen(),
     open:()=>openSettingsMenu(),
+    pad:8
+  },
+  {
+    id:"picker",
+    sel:()=>menuTarget("picker"),
+    side:menuSide,
+    title:"Replies over any window",
+    body:()=>t("{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.")
+      .split("{KEY}").join(hotkeyChips()),
+    when:()=>!!hotkeyHeld(),
+    done:()=>tourPicks>tourStepPicks,
+    open:()=>eOpenPicker(),
+    menu:true,
     pad:8
   },
   {
@@ -535,6 +554,7 @@ function showTourStep(i){
   // Whether the keyboard is driving the tour: only then does a new step take the focus.
   const keyed=tourHasFocus();
   tourIdx=i;
+  tourStepPicks=tourPicks;
   const step=TOUR_STEPS[i];
   const els=tourEls();
   // Where the tour stands survives a reload, the shell's recovery of a stopped page included.
@@ -820,6 +840,7 @@ function wireTourUi(){
 }
 export {
   tourAfterRestart,
+  tourHeardPick,
   tourActive,
   scheduleTourPlace,
   startTour,

@@ -1176,6 +1176,9 @@ body.shed-segfold #seg::before{width:100%;transform:none}
   background:transparent;color:var(--ink);font:13.5px var(--sans);cursor:default}
 .menu button:hover,.menu button:focus-visible{background:var(--accent-soft);color:var(--accent)}
 .menu .menu-sep{height:1px;margin:4px 6px;background:var(--line);border:0;padding:0;pointer-events:none}
+/* A row's key at its right edge, in the row's quieter ink. */
+#menuPicker{display:flex;align-items:center;gap:18px}
+#menuPicker kbd{margin-left:auto;font:11.5px var(--mono);color:var(--dim)}
 /* An object's own menu (context-menu.js) stands where it was asked for, over the page and under a dialog. */
 .menu.e-ctx{position:fixed;right:auto;top:0;left:0;z-index:150;max-width:min(320px,calc(100vw - 8px))}
 .menu.e-ctx:focus{outline:none}
@@ -4104,6 +4107,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
           <button type="button" role="menuitem" data-act="manage" title="Edit, hide or restore every card, intent and category">Library…</button>
           <button type="button" role="menuitem" data-act="settings" title="Interface language, appearance and keyboard shortcuts">Settings…</button>
           <button type="button" role="menuitem" data-act="join" id="menuJoin" hidden title="Paste the invitation from the team's lead.">Join a team</button>
+          <!-- Only where the host has a picker, its words and combination drawn in header-menus.js. -->
+          <button type="button" role="menuitem" data-act="picker" id="menuPicker" hidden></button>
           <!-- Maintenance has NO menu entry: F2 opens it, and the Keyboard shortcuts screen is
                where that is discovered. -->
           <!-- Locks live in Settings - standing decisions about how the app may behave; hide and
@@ -5562,6 +5567,7 @@ What you type stays in this browser only.`;
     BASE_CATS: () => BASE_CATS,
     BASE_M: () => BASE_M,
     catalogCardId: () => catalogCardId,
+    eNotice: () => eNotice,
     ePackEpoch: () => ePackEpoch,
     flushStats: () => flushStats,
     isFavourite: () => isFavourite,
@@ -7415,6 +7421,23 @@ What you type stays in this browser only.`;
     "search replies": "szukaj odpowiedzi",
     "Replies": "Odpowiedzi",
     "The reply copied last": "Ostatnio skopiowana odpowiedź",
+    "{N} reply": "{N} odpowiedź",
+    "{N} replies": "{N} odpowiedzi",
+    "few␟{N} replies": "{N} odpowiedzi",
+    "many␟{N} replies": "{N} odpowiedzi",
+    "{SHOWN} of {COUNT}": "{SHOWN} z {COUNT}",
+    "The reply is filled in for this conversation": "Odpowiedź jest uzupełniana dla tej rozmowy",
+    "{KEY} copies": "{KEY} kopiuje",
+    "{KEY} in {LANG}": "{KEY} w wersji {LANG}",
+    "{KEY} closes": "{KEY} zamyka",
+    "Pasted": "Wklejono",
+    "Copied, press Ctrl+V": "Skopiowano, naciśnij Ctrl+V",
+    "{KEYS} belongs to another program just now.": "{KEYS} należy teraz do innego programu.",
+    "A combination of Etiuda's own, chosen in Settings, brings the replies over any window.": "Własna kombinacja Etiudy, wybrana w Ustawieniach, przywoła odpowiedzi nad dowolne okno.",
+    "Choose a combination": "Wybierz kombinację",
+    "The replies beside the pointer, over any program; the combination is changed in Settings": "Odpowiedzi obok wskaźnika, nad każdym programem; kombinację zmienia się w Ustawieniach",
+    "Replies over any window": "Odpowiedzi nad dowolnym oknem",
+    "{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.": "{KEY} przywołuje te odpowiedzi obok wskaźnika, nad każdym programem: wystarczy wpisać słowo, a Enter skopiuje odpowiedź i wróci do poprzedniego okna. Naciśnij {KEY}, żeby spróbować; Esc zamyka listę.",
     "Bring the replies over any window": "Przywołaj odpowiedzi nad dowolne okno",
     "Works from any program; Enter copies a reply and goes back to the window you were in.": "Działa w każdym programie; Enter kopiuje odpowiedź i wraca do poprzedniego okna.",
     "Another program uses this combination just now; a different one will do.": "Tej kombinacji używa teraz inny program; wybór innej to rozwiąże.",
@@ -8284,7 +8307,7 @@ What you type stays in this browser only.`;
       removeEventListener("resize", placeNotices);
     }
   }
-  function eNotice(id, lead, body, onDismiss) {
+  function eNotice(id, lead, body, onDismiss, act) {
     let box = document.getElementById("eNotices");
     if (!box) {
       box = document.createElement("div");
@@ -8314,6 +8337,17 @@ What you type stays in this browser only.`;
     d.appendChild(say);
     const row = document.createElement("div");
     row.className = "tour-actions";
+    if (act) {
+      const go = document.createElement("button");
+      go.type = "button";
+      go.className = "btn primary";
+      go.textContent = act.label;
+      go.onclick = () => {
+        dropNotice(d);
+        act.run();
+      };
+      row.appendChild(go);
+    }
     const x = document.createElement("button");
     x.type = "button";
     x.className = "btn";
@@ -10881,6 +10915,7 @@ What you type stays in this browser only.`;
     TAB_FLOOR_W: () => TAB_FLOOR_W,
     TAB_KEY: () => TAB_KEY,
     activeHeard: () => activeHeard,
+    activeTabName: () => activeTabName,
     activeWords: () => activeWords,
     addTab: () => addTab,
     applyTabWidths: () => applyTabWidths,
@@ -11799,6 +11834,11 @@ What you type stays in this browser only.`;
       return String(tb.pax).trim().split(/\s+/)[0];
     }
     return t("Tab") + " " + ((i != null ? i : tabs.indexOf(tb)) + 1);
+  }
+  function activeTabName() {
+    const i = tabs.findIndex((x) => x.id === activeTabId);
+    if (i < 0) return "";
+    return tabLabel(Object.assign({}, tabs[i], { pax: pax ? pax.value : tabs[i].pax }), i);
   }
   function snapshotActiveTab() {
     if (!activeTabId) return;
@@ -14197,10 +14237,13 @@ What you type stays in this browser only.`;
     eHasCatalogSaver: () => eHasCatalogSaver,
     eHasShared: () => eHasShared,
     eHost: () => eHost,
+    eHotkey: () => eHotkey,
+    eHotkeyLabel: () => eHotkeyLabel,
     eLoadedCatalogFile: () => eLoadedCatalogFile,
     eOnCatalogCopy: () => eOnCatalogCopy,
     eOnCatalogListing: () => eOnCatalogListing,
     eOpenCatalogFolder: () => eOpenCatalogFolder,
+    eOpenPicker: () => eOpenPicker,
     eOpenedRefused: () => eOpenedRefused,
     eOpenedWith: () => eOpenedWith,
     ePickCatalogFile: () => ePickCatalogFile,
@@ -14504,6 +14547,30 @@ What you type stays in this browser only.`;
       if (r && r.ok && r.syncMs) lsSet("eLastSync", String(r.syncMs));
     }).catch(() => {
     });
+  }
+  function eHotkey() {
+    const h = eHost();
+    if (!h || typeof h.hotkeyState !== "function") return null;
+    let st = null;
+    try {
+      st = h.hotkeyState();
+    } catch (e) {
+      st = null;
+    }
+    return st && typeof st === "object" ? { accel: String(st.accel || ""), held: !!st.held, taken: !!st.taken } : null;
+  }
+  function eHotkeyLabel(accel) {
+    return String(accel || "").split("+").map((k) => k === "Control" ? "Ctrl" : k).join("+");
+  }
+  function eOpenPicker() {
+    const h = eHost();
+    if (!h || typeof h.openPicker !== "function") return false;
+    try {
+      h.openPicker();
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
   function dispatchTabChord(shift) {
     try {
@@ -15094,6 +15161,7 @@ What you type stays in this browser only.`;
     tourAfterRestart: () => tourAfterRestart,
     tourDueAtBoot: () => tourDueAtBoot,
     tourHasFocus: () => tourHasFocus,
+    tourHeardPick: () => tourHeardPick,
     wireTourUi: () => wireTourUi
   });
 
@@ -21583,7 +21651,7 @@ What you type stays in this browser only.`;
       const b = e.target.closest("button[data-act]");
       if (!b) return;
       const act = b.dataset.act;
-      if (act === "settings" || act === "manage" || act === "tour" || act === "about" || act === "join") menuReturn = null;
+      if (act === "settings" || act === "manage" || act === "tour" || act === "about" || act === "join" || act === "picker") menuReturn = null;
       if (act === "settings") menuScreen(hooks.openSettings);
       else if (act === "manage") menuScreen(hooks.openManage);
       else if (act === "tour") menuScreen(hooks.startTour);
@@ -21593,6 +21661,9 @@ What you type stays in this browser only.`;
         toggleRail();
       } else if (act === "pills") {
         togglePills();
+      } else if (act === "picker") {
+        closeSettingsMenu();
+        eOpenPicker();
       } else if (act === "quit") {
         closeSettingsMenu();
         const h = eHost();
@@ -21692,7 +21763,17 @@ What you type stays in this browser only.`;
     }
     run();
   }
+  function syncPickerRow() {
+    const row = $("#menuPicker"), h = eHost(), hk = eHotkey();
+    if (!row) return;
+    row.hidden = !hk || !h || typeof h.openPicker !== "function";
+    if (row.hidden) return;
+    const keys = hk.held ? eHotkeyLabel(hk.accel) : "";
+    row.innerHTML = "<span>" + esc(t("Bring the replies over any window")) + "</span>" + (keys ? "<kbd data-i18n-skip>" + esc(keys) + "</kbd>" : "");
+    row.title = t("The replies beside the pointer, over any program; the combination is changed in Settings");
+  }
   function syncSettingsMenu() {
+    syncPickerRow();
     const pillsBtn = $("#menuPills");
     const railBtn = $("#menuRail");
     if (pillsBtn) {
@@ -22705,6 +22786,19 @@ What you type stays in this browser only.`;
     if (modalOpen()) closeModal();
     if (factsPanelOpen()) closeFactsPanel();
   }
+  var tourPicks = 0;
+  var tourStepPicks = 0;
+  function tourHeardPick() {
+    tourPicks++;
+    tourActSoon();
+  }
+  function hotkeyHeld() {
+    const hk = eHotkey();
+    return hk && hk.held ? hk.accel : "";
+  }
+  function hotkeyChips() {
+    return eHotkeyLabel(hotkeyHeld()).split("+").map((k) => "<kbd>" + esc(k) + "</kbd>").join("+");
+  }
   function wheelShown() {
     return !document.body.classList.contains("role-waits");
   }
@@ -22865,6 +22959,18 @@ What you type stays in this browser only.`;
       body: "Click <b>Menu</b>: the rest of Etiuda opens from there.",
       done: () => menuOpen(),
       open: () => openSettingsMenu(),
+      pad: 8
+    },
+    {
+      id: "picker",
+      sel: () => menuTarget("picker"),
+      side: menuSide,
+      title: "Replies over any window",
+      body: () => t("{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.").split("{KEY}").join(hotkeyChips()),
+      when: () => !!hotkeyHeld(),
+      done: () => tourPicks > tourStepPicks,
+      open: () => eOpenPicker(),
+      menu: true,
       pad: 8
     },
     {
@@ -23064,6 +23170,7 @@ What you type stays in this browser only.`;
     }
     const keyed = tourHasFocus();
     tourIdx = i;
+    tourStepPicks = tourPicks;
     const step = TOUR_STEPS[i];
     const els = tourEls();
     ssSet(TOUR_AT, step.id);
@@ -31920,11 +32027,12 @@ What you type stays in this browser only.`;
   var pick_exports = {};
   __export(pick_exports, {
     answerPick: () => answerPick,
+    hotkeyNotice: () => hotkeyNotice,
     pickExcerpt: () => pickExcerpt,
     pickRows: () => pickRows,
     wirePick: () => wirePick
   });
-  var PICK_ROWS = 9;
+  var PICK_ROWS = 50;
   var PICK_LOOK = [
     "--panel",
     "--panel-raised",
@@ -31965,18 +32073,29 @@ What you type stays in this browser only.`;
     if (!use.size) return hits;
     return hits.map((m, i) => ({ m, i, n: use.get(String(m.id)) | 0 })).sort((a, b) => b.n - a.n || a.i - b.i).map((o) => o.m);
   }
-  function pickRows(q) {
+  function pickList(q) {
     const terms = cardSearchTerms(String(q == null ? "" : q));
     const rows = [];
+    let total = 0;
     const hits = rankedCards(terms, pickKeep(terms)).hits;
     for (const m of terms.length ? hits : pickByUse(hits)) {
       const l = cardLang(m), ps = parts(m, l);
-      for (let vi = 0; vi < ps.length; vi++) {
-        rows.push(pickRow(m, l, ps, vi));
-        if (rows.length >= PICK_ROWS) return rows;
-      }
+      total += ps.length;
+      for (let vi = 0; vi < ps.length && rows.length < PICK_ROWS; vi++) rows.push(pickRow(m, l, ps, vi));
     }
-    return rows;
+    return { rows, total };
+  }
+  function pickRows(q) {
+    return pickList(q).rows;
+  }
+  function pickCount(shown2, total) {
+    if (!total) return "";
+    const all = counted(total, "{N} reply", "{N} replies");
+    return shown2 < total ? t("{SHOWN} of {COUNT}").split("{SHOWN}").join(String(shown2)).split("{COUNT}").join(all) : all;
+  }
+  function pickFound(q) {
+    const f = pickList(q);
+    return { rows: f.rows, count: pickCount(f.rows.length, f.total) };
   }
   function pickLastRow() {
     const r = eLastRecent(), m = r && findCard(r.id);
@@ -32000,6 +32119,7 @@ What you type stays in this browser only.`;
     return out;
   }
   function pickWords() {
+    const other = CONTENT_LANGS.length > 1 ? String(nextContentLang(lang)).toUpperCase() : "";
     return {
       lang: uiLang(),
       search: t("search replies"),
@@ -32007,16 +32127,27 @@ What you type stays in this browser only.`;
       again: t("The reply copied last"),
       none: t("A different word may do better."),
       stamp: t("Commits the firm"),
-      empty: wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet.")
+      empty: wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet."),
+      who: t("The reply is filled in for this conversation"),
+      keyCopy: t("{KEY} copies"),
+      keyOther: other ? t("{KEY} in {LANG}").split("{LANG}").join(other) : "",
+      keyClose: t("{KEY} closes"),
+      pasted: t("Pasted"),
+      copied: t("Copied, press Ctrl+V")
     };
   }
-  function pickCopy(id, vi) {
+  function pickBlocks(m, other) {
+    const l = other ? nextContentLang(cardLang(m)) : cardLang(m);
+    return { l, ps: parts(m, l) };
+  }
+  function pickCopy(id, vi, other) {
     const m = findCard(String(id || ""));
     if (!m) return null;
-    const l = cardLang(m), ps = parts(m, l);
+    const { l, ps } = pickBlocks(m, other);
     vi = vi | 0;
+    if (other && ps.length) vi = Math.min(vi, ps.length - 1);
     if (vi < 0 || vi >= ps.length) return null;
-    if (wantsAgentName(ps[vi])) return { ask: { id: String(m.id), vi } };
+    if (wantsAgentName(ps[vi])) return { ask: other ? { id: String(m.id), vi, other: 1 } : { id: String(m.id), vi } };
     let text = null;
     withAgentName(ps[vi], () => {
       bumpUseCount(m.id, l, vi);
@@ -32026,10 +32157,10 @@ What you type stays in this browser only.`;
     }, null);
     return text == null ? null : { text };
   }
-  function pickAsk(id, vi) {
+  function pickAsk(id, vi, other) {
     const m = findCard(String(id || ""));
     if (!m) return null;
-    const l = cardLang(m), ps = parts(m, l);
+    const { l, ps } = pickBlocks(m, other);
     vi = vi | 0;
     if (vi < 0 || vi >= ps.length) return null;
     withAgentName(ps[vi], () => {
@@ -32046,15 +32177,32 @@ What you type stays in this browser only.`;
     } catch (e) {
       a = {};
     }
-    if (op === "open") return { look: pickLook(), words: pickWords(), rows: pickRows(""), last: pickLastRow() };
-    if (op === "find") return { rows: pickRows(a.q) };
-    if (op === "copy") {
-      if (!a.last) return pickCopy(a.id, a.vi);
-      const r = eLastRecent();
-      return r ? pickCopy(r.id, r.vi) : null;
+    if (op === "open") {
+      try {
+        tourHeardPick();
+      } catch (e) {
+      }
+      return Object.assign({ look: pickLook(), words: pickWords(), last: pickLastRow(), who: activeTabName() }, pickFound(""));
     }
-    if (op === "ask") return pickAsk(a.id, a.vi);
+    if (op === "find") return pickFound(a.q);
+    if (op === "copy") {
+      if (!a.last) return pickCopy(a.id, a.vi, a.other);
+      const r = eLastRecent();
+      return r ? pickCopy(r.id, r.vi, a.other) : null;
+    }
+    if (op === "ask") return pickAsk(a.id, a.vi, a.other);
     return null;
+  }
+  function hotkeyNotice() {
+    const hk = eHotkey();
+    if (!hk || !hk.accel || !hk.taken || document.getElementById("eHotkeyNote")) return;
+    eNotice(
+      "eHotkeyNote",
+      t("{KEYS} belongs to another program just now.").split("{KEYS}").join(eHotkeyLabel(hk.accel)),
+      t("A combination of Etiuda's own, chosen in Settings, brings the replies over any window."),
+      null,
+      { label: t("Choose a combination"), run: () => hooks.openSettings("keys") }
+    );
   }
   function wirePick() {
     const h = eHost();
@@ -32333,6 +32481,10 @@ What you type stays in this browser only.`;
     }
     try {
       showDeskNotices();
+    } catch (e) {
+    }
+    try {
+      hotkeyNotice();
     } catch (e) {
     }
   }
