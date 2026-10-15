@@ -683,6 +683,7 @@ UI_STRINGS.pl={
   "Exported {FILE} with {MACROS} in {CARDS}":"Wyeksportowano {FILE}: {MACROS}, {CARDS}",
   "Card deleted":"Usunięto kartę",
   "Undo":"Cofnij",
+  "Take back what was just done, while its Undo button is on screen":"Cofa to, co przed chwilą zrobiono, dopóki widać przycisk Cofnij",
   "Moved on without saving the changes":"Opuszczono wpis bez zapisania zmian",
   "Category added":"Dodano kategorię",
   "Category deleted":"Usunięto kategorię",
@@ -1155,7 +1156,11 @@ function t(en){
 /* AN ACT THAT CAN BE UNDONE HAPPENS AT ONCE, and this bubble at the foot of the window offers the
    way back: over any dialog, until another act replaces it or UNDO_MS passes. */
 const UNDO_MS=10000;
-let undoTimer=0;
+/* The key the button names, the fixed "undo" row of SC_DEFS as formatActionChord spells it. */
+const UNDO_KEY="Ctrl+Z";
+let undoTimer=0, undoTake=null, undoTyped=false;
+/* A field typed in since the bubble came (keydown.js reports it): its Ctrl+Z is then its own typing's. */
+function noteUndoTyping(){ undoTyped=true; }
 function offerUndo(said, undo){
   const was=$("#eUndo"); if(was) was.remove();
   clearTimeout(undoTimer);
@@ -1165,16 +1170,27 @@ function offerUndo(said, undo){
   el.setAttribute("role","status");
   el.setAttribute("data-side","none");
   el.innerHTML='<p>'+esc(t(said))+'</p>'
-    +'<div class="tour-actions"><button type="button" class="btn primary" id="eUndoBtn">'+esc(t("Undo"))+'</button></div>';
+    +'<div class="tour-actions"><button type="button" class="btn primary" id="eUndoBtn" aria-label="'+esc(t("Undo"))
+    +'" aria-keyshortcuts="Control+Z">'+esc(t("Undo"))+'<kbd>'+esc(UNDO_KEY)+'</kbd></button></div>';
   cutLeaves();
   document.body.appendChild(el);
-  const close=()=>{ clearTimeout(undoTimer); dismissNode(el); };
-  el.querySelector("#eUndoBtn").onclick=()=>{ close(); undo(); };
+  const close=()=>{ clearTimeout(undoTimer); if(undoTake===take) undoTake=null; dismissNode(el); };
+  const take=()=>{ close(); undo(); };
+  undoTake=take; undoTyped=false;
+  el.querySelector("#eUndoBtn").onclick=take;
   el.addEventListener("keydown",e=>{
     if(e.key!=="Escape") return;
     e.preventDefault(); e.stopPropagation(); close();
   });
   undoTimer=setTimeout(close,UNDO_MS);
+}
+/* CTRL+Z TAKES THE STANDING UNDO: true where it did. Nothing where none stands or a question hides it, and nothing
+   from a field typed in since the bubble came, whose key it then is. */
+function takeStandingUndo(inField){
+  const el=document.getElementById("eUndo");
+  if(!undoTake || !el || el.hidden || (inField && undoTyped)) return false;
+  undoTake();
+  return true;
 }
 let tt;
 const TOAST_MS=1700;
@@ -1339,6 +1355,8 @@ export {
   systemUiLang,
   t,
   offerUndo,
+  takeStandingUndo,
+  noteUndoTyping,
   tc,
   counted,
   catalogCountsLine,

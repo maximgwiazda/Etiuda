@@ -3588,6 +3588,9 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
   display:flex;align-items:center;gap:14px}
 .e-undo p{margin:0;color:var(--bub-ink)}
 .e-undo .tour-actions{margin:0;padding:0;border:0;flex:none}
+/* The key that takes it, on the button in the button's own ink. */
+.e-undo .btn kbd{margin-left:8px;padding:0 5px;border:1px solid color-mix(in srgb,currentColor 40%,transparent);
+  border-radius:4px;font:11px var(--mono);font-weight:400}
 /* THE CARD EDITOR'S MARGIN (card-margin.js): the acts on the left, where the finding stands on the right. */
 .e-margin .tour-actions{justify-content:flex-start}
 .e-margin .e-margin-at{margin-left:auto;font:12px var(--mono);color:var(--bub-dim)}
@@ -6126,9 +6129,11 @@ What you type stays in this browser only.`;
     catalogCountsLine: () => catalogCountsLine,
     counted: () => counted,
     fileStamp: () => fileStamp,
+    noteUndoTyping: () => noteUndoTyping,
     offerUndo: () => offerUndo,
     systemUiLang: () => systemUiLang,
     t: () => t,
+    takeStandingUndo: () => takeStandingUndo,
     tc: () => tc,
     toast: () => toast,
     toastHtml: () => toastHtml,
@@ -7214,6 +7219,7 @@ What you type stays in this browser only.`;
     "Exported {FILE} with {MACROS} in {CARDS}": "Wyeksportowano {FILE}: {MACROS}, {CARDS}",
     "Card deleted": "Usunięto kartę",
     "Undo": "Cofnij",
+    "Take back what was just done, while its Undo button is on screen": "Cofa to, co przed chwilą zrobiono, dopóki widać przycisk Cofnij",
     "Moved on without saving the changes": "Opuszczono wpis bez zapisania zmian",
     "Category added": "Dodano kategorię",
     "Category deleted": "Usunięto kategorię",
@@ -7676,7 +7682,13 @@ What you type stays in this browser only.`;
     return tab && tab[en] != null ? tab[en] : en;
   }
   var UNDO_MS = 1e4;
+  var UNDO_KEY = "Ctrl+Z";
   var undoTimer = 0;
+  var undoTake = null;
+  var undoTyped = false;
+  function noteUndoTyping() {
+    undoTyped = true;
+  }
   function offerUndo(said, undo) {
     const was = $("#eUndo");
     if (was) was.remove();
@@ -7686,17 +7698,21 @@ What you type stays in this browser only.`;
     el.id = "eUndo";
     el.setAttribute("role", "status");
     el.setAttribute("data-side", "none");
-    el.innerHTML = "<p>" + esc(t(said)) + '</p><div class="tour-actions"><button type="button" class="btn primary" id="eUndoBtn">' + esc(t("Undo")) + "</button></div>";
+    el.innerHTML = "<p>" + esc(t(said)) + '</p><div class="tour-actions"><button type="button" class="btn primary" id="eUndoBtn" aria-label="' + esc(t("Undo")) + '" aria-keyshortcuts="Control+Z">' + esc(t("Undo")) + "<kbd>" + esc(UNDO_KEY) + "</kbd></button></div>";
     cutLeaves();
     document.body.appendChild(el);
     const close = () => {
       clearTimeout(undoTimer);
+      if (undoTake === take) undoTake = null;
       dismissNode(el);
     };
-    el.querySelector("#eUndoBtn").onclick = () => {
+    const take = () => {
       close();
       undo();
     };
+    undoTake = take;
+    undoTyped = false;
+    el.querySelector("#eUndoBtn").onclick = take;
     el.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       e.preventDefault();
@@ -7704,6 +7720,12 @@ What you type stays in this browser only.`;
       close();
     });
     undoTimer = setTimeout(close, UNDO_MS);
+  }
+  function takeStandingUndo(inField) {
+    const el = document.getElementById("eUndo");
+    if (!undoTake || !el || el.hidden || inField && undoTyped) return false;
+    undoTake();
+    return true;
   }
   var tt;
   var TOAST_MS = 1700;
@@ -11199,6 +11221,16 @@ What you type stays in this browser only.`;
       hint: "Copy the focused macro in the other language",
       def: { code: "Enter", key: "Enter", ctrl: 0, alt: 0, shift: 1, meta: 0 },
       inField: 0,
+      fixed: 1
+    },
+    /* The platform's own undo, so fixed: the Undo bubble's while one stands (keydown.js), a field's own otherwise.
+       The bubble's button names it as ui-lang.js UNDO_KEY. */
+    {
+      id: "undo",
+      label: "Undo",
+      hint: "Take back what was just done, while its Undo button is on screen",
+      def: { code: "KeyZ", key: "z", ctrl: 1, alt: 0, shift: 0, meta: 0 },
+      inField: 1,
       fixed: 1
     },
     {
@@ -30940,6 +30972,9 @@ What you type stays in this browser only.`;
     }, true);
   }
   function wireGlobalKeydown() {
+    addEventListener("input", (e) => {
+      if (e.isTrusted) noteUndoTyping();
+    }, true);
     addEventListener("keydown", (e) => {
       if (scCaptureId) return;
       if (tourActive() && tourHasFocus()) {
@@ -30958,6 +30993,10 @@ What you type stays in this browser only.`;
           e.preventDefault();
           activateTourFocus();
         }
+        return;
+      }
+      if (eventMatchesAction(e, "undo") && !e.repeat && takeStandingUndo(typingInField())) {
+        e.preventDefault();
         return;
       }
       const cover = openCover();
@@ -31135,6 +31174,7 @@ What you type stays in this browser only.`;
       const v = String(intentEl.value || "");
       const start = intentEl.selectionStart == null ? v.length : intentEl.selectionStart;
       const end = intentEl.selectionEnd == null ? v.length : intentEl.selectionEnd;
+      noteUndoTyping();
       intentEl.value = v.slice(0, start) + e.key + v.slice(end);
       const caret = start + e.key.length;
       try {
