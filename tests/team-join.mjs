@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 65;
+const EXPECTED = 66;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1183,9 +1183,9 @@ try {
   const plainGrew = beforeSig(plainNow) === plainHead + revealTail(joinPlain.nonce, nPlain);
   const invGrew = beforeSig(invNow) === invHead + revealTail(joinInv.nonce, nInv);
   const codePlain = P.joinCode(TEAM, mePlain.key, mePlain.box, LEAD.public, joinPlain.nonce, nPlain);
+  const codeInv = P.joinCode(TEAM, meInv.key, meInv.box, LEAD.public, joinInv.nonce, nInv);
   const codeShown = (seen) => !!(seen && seen.join && seen.join.state === "code" && seen.join.code);
-  const invViewQuiet = !!(seenInv && seenInv.join && seenInv.join.code === "" && seenInv.join.state === "waiting"
-    && seenInv.join.invite && seenInv.join.invite.lead === "Lamp lead");
+  const invLead = !!(seenInv && seenInv.join && seenInv.join.invite && seenInv.join.invite.lead === "Lamp lead");
   const plainOk = !!(askedPlain && askedPlain.join && askedPlain.join.state === "waiting" && plainDoc && plainGot
     && plainDoc.invite === undefined && plainDoc.desk && plainDoc.desk.kind === undefined
     && plainGrew && plainGot.invite === undefined && plainGot.desk && plainGot.desk.kind === undefined
@@ -1196,9 +1196,9 @@ try {
     && invGot.desk && invGot.desk.kind === invDoc.desk.kind
     && JSON.stringify(invGot.invite) === JSON.stringify(invDoc.invite)
     && invGot.commit === invDoc.commit && invGot.reveal === joinInv.nonce
-    && invViewQuiet && P.joinGenuine(invGot, meInv.id));
+    && codeShown(seenInv) && seenInv.join.code === codeInv && invLead && P.joinGenuine(invGot, meInv.id));
   check(plainOk && invOk,
-    "15bi a desk that took an invitation, opened afterwards, reveals with that invitation and its kind intact, and its view names the lead and carries no code,"
+    "15bi a desk that took an invitation, opened afterwards, reveals with that invitation and its kind intact, and its view names the lead and shows its code,"
     + " while a request with no invitation reveals with only the opening added and shows its code: invite " + (invOk ? "kept" : "dropped")
     + ", plain " + (plainOk ? "unchanged" : "moved"));
 
@@ -1222,15 +1222,17 @@ try {
     && shellWait.join.invite && shellWait.join.invite.lead === "Lamp lead");
   const enInvite = waitHtml.indexOf("Joining Lamp lead&#39;s team") >= 0
     && waitHtml.indexOf("The lead&#39;s Studio lets this desk in by itself; nothing to do here.") >= 0
+    && waitHtml.indexOf("asked at") >= 0
     && waitHtml.indexOf("e-join-code") < 0 && waitHtml.indexOf("e-join-wait") < 0
     && waitHtml.indexOf("Waiting for the lead to open the request") < 0
     && waitHtml.indexOf('data-join="cancel"') >= 0;
   const paint = view => { if (tookFn) tookFn(view); return TJ.teamJoinEmptyHtml(); };
   const armed = paint({ join: { file: "a.ec", state: "code", code: "483920", asked: 1, name: "Nia", invite: { lead: "Lamp lead" } }, leads: [] });
-  const noDigits = armed.indexOf("483") < 0 && armed.indexOf("920") < 0 && armed.indexOf("e-join-code") < 0
-    && armed.indexOf("Joining Lamp lead&#39;s team") >= 0;
+  const armedDigits = armed.indexOf(">483<") >= 0 && armed.indexOf(">920<") >= 0 && armed.indexOf("e-join-code") >= 0
+    && armed.indexOf("Read this code to the team&#39;s lead") >= 0;
   const blank = paint({ join: { file: "a.ec", state: "waiting", code: "", asked: 1, name: "Nia", invite: { lead: "" } }, leads: [] });
-  const namedLead = blank.indexOf("the lead") >= 0 && blank.indexOf("Joining &#39;s") < 0 && blank.indexOf("e-join-code") < 0;
+  const namedLead = blank.indexOf("the lead") >= 0 && blank.indexOf("Joining &#39;s") < 0 && blank.indexOf("e-join-code") < 0
+    && blank.indexOf("asked at") >= 0 && blank.indexOf("Nia") >= 0;
   const requestWait = paint({ join: { file: "a.ec", state: "waiting", code: "", asked: 1, name: "Nia" }, leads: [] });
   const requestCode = paint({ join: { file: "a.ec", state: "code", code: "120034", asked: 1, name: "Nia" }, leads: [] });
   const requestDoor = requestWait.indexOf("Waiting for the lead to open the request") >= 0 && requestWait.indexOf("e-join-wait") >= 0
@@ -1242,10 +1244,12 @@ try {
     && plHtml.indexOf("Studio lidera samo wpuszcza to stanowisko; tutaj nie trzeba nic robić.") >= 0
     && plHtml.indexOf("e-join-code") < 0;
   if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
-  check(!!tookFn && quietInvite && enInvite && noDigits && namedLead && requestDoor && plInvite,
+  check(!!tookFn && quietInvite && enInvite && armedDigits && namedLead && requestDoor && plInvite,
     "15bk an invitation's wait names the lead and says the lead's Studio admits the desk, with no code places and no digits, in English and in Polish;"
+    + " once the lead has opened it the same invitation shows its digits;"
     + " a request still waits with empty places and then shows its code: view " + (shellWait && shellWait.join ? shellWait.join.state + "/" + shellWait.join.code : "none")
-    + (quietInvite ? " lead named" : " lead missing"));
+    + (quietInvite ? " lead named" : " lead missing")
+    + " parts " + [!!quietInvite, !!enInvite, !!armedDigits, !!namedLead, !!requestDoor, !!plInvite].join("/"));
 
   /* Joining loads a catalog only on an empty desk. A desk that already has one keeps it. */
   const loads = [];
@@ -1339,6 +1343,131 @@ try {
     if (doorWas.innerHeight === undefined) delete globalThis.innerHeight; else globalThis.innerHeight = doorWas.innerHeight;
     if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
   }
+
+  /* The Menu item is the one in the template, and the Settings and Library clicks are the buttons those screens wire. */
+  const doorDoc = globalThis.document, doorHost = window.E_HOST, motionWas = ST.lsGet("eMotionOff");
+  let doorErr = "";
+  const menuTag = (fs.readFileSync(path.join(ROOT, "src", "template.html"), "utf8").match(/<button\b[^>]*\bid="menuJoin"[^>]*>/) || [""])[0];
+  const menuItem = /\bdata-act="join"/.test(menuTag) && /\brole="menuitem"/.test(menuTag);
+  let settingsOpened = false, libraryOpened = false, leftPaste = false;
+  try {
+    class DoorEl {
+      constructor(tag, attrs) {
+        this.tagName = String(tag || "div").toUpperCase(); this.nodeType = 1;
+        this.attrs = Object.assign({}, attrs || {});
+        this.kids = []; this.parent = null; this.style = { cssText: "" }; this.listeners = {};
+        this._text = ""; this._html = ""; this.hidden = false; this.connected = false; this.value = "";
+        const self = this;
+        this.classList = {
+          contains: c => (" " + (self.attrs.class || "") + " ").indexOf(" " + c + " ") > -1,
+          add: c => { if (!self.classList.contains(c)) self.attrs.class = ((self.attrs.class || "") + " " + c).trim(); },
+          remove: c => { self.attrs.class = (" " + (self.attrs.class || "") + " ").replace(" " + c + " ", " ").trim(); },
+          toggle: (c, on) => { const want = on === undefined ? !self.classList.contains(c) : !!on; want ? self.classList.add(c) : self.classList.remove(c); return want; },
+        };
+      }
+      get id() { return this.attrs.id || ""; } set id(v) { this.attrs.id = String(v); }
+      get className() { return this.attrs.class || ""; } set className(v) { this.attrs.class = String(v); }
+      setAttribute(k, v) { this.attrs[k] = String(v); } getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
+      removeAttribute(k) { delete this.attrs[k]; } hasAttribute(k) { return k in this.attrs; }
+      get children() { return this.kids; }
+      get firstElementChild() { return this.kids[0] || null; }
+      get firstChild() { return this.kids[0] || null; }
+      get textContent() { return this._text; }
+      set textContent(v) { this._text = String(v); this.kids = []; }
+      get innerHTML() { return this._html; }
+      set innerHTML(h) {
+        this._html = String(h); this.kids = [];
+        const re = /<(input|p|button|span|label|h2|h3|div|i|details|summary|small|select|option|textarea|code|output|pre|b)\b([^>]*)>([^<]*)/g;
+        let m;
+        while ((m = re.exec(this._html))) {
+          const attrs = {}; let a; const ar = /([\w:-]+)(?:="([^"]*)")?/g;
+          while ((a = ar.exec(m[2]))) attrs[a[1]] = a[2] == null ? "" : a[2];
+          const k = new DoorEl(m[1], attrs); k._text = m[3]; k.parent = this; k.connected = this.connected; this.kids.push(k);
+        }
+      }
+      all() { return this.kids.reduce((o, k) => o.concat([k], k.all()), []); }
+      matches(sel) {
+        if (sel === "*") return true;
+        if (sel.startsWith("#")) return this.attrs.id === sel.slice(1);
+        if (sel.startsWith(".")) return sel.slice(1).split(".").every(c => this.classList.contains(c));
+        const at = /^\[([\w:-]+)\]$/.exec(sel); if (at) return at[1] in this.attrs;
+        return this.tagName === String(sel).toUpperCase();
+      }
+      querySelectorAll(sel) {
+        if (String(sel).startsWith(":scope > ")) return this.kids.filter(k => k.matches(sel.slice(9)));
+        const parts = String(sel).split(",").map(s => s.trim());
+        return this.all().filter(e => parts.some(s => { try { return e.matches(s); } catch { return false; } }));
+      }
+      querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
+      closest(sel) { let e = this; while (e && e.matches) { if (e.matches(sel)) return e; e = e.parent; } return null; }
+      contains(n) { let e = n; while (e) { if (e === this) return true; e = e.parent; } return false; }
+      appendChild(c) { c.parent = this; this.kids.push(c); c.connected = this.connected || c === this; c.all().forEach(x => { x.connected = c.connected; }); return c; }
+      insertBefore(c, before) { c.parent = this; const i = this.kids.indexOf(before); if (i < 0) this.kids.push(c); else this.kids.splice(i, 0, c); c.connected = this.connected; return c; }
+      remove() { if (this.parent) this.parent.kids = this.parent.kids.filter(k => k !== this); this.connected = false; }
+      get isConnected() { return this.connected; }
+      addEventListener(t, fn) { (this.listeners[t] = this.listeners[t] || []).push(fn); }
+      removeEventListener() {}
+      focus() {}
+      get offsetWidth() { return 340; } get offsetHeight() { return 220; }
+      getBoundingClientRect() { return { top: 10, left: 10, right: 350, bottom: 50, width: 340, height: 40 }; }
+      getContext() { return { font: "" }; }
+    }
+    const doc = {
+      activeElement: null, visibilityState: "visible",
+      getElementById: id => doc.body.all().find(e => e.attrs.id === id) || null,
+      querySelector: s => doc.body.querySelector(s), querySelectorAll: s => doc.body.querySelectorAll(s),
+      createElement: tag => new DoorEl(tag),
+      createRange: () => ({ selectNodeContents() {}, getBoundingClientRect: () => ({ left: 0, right: 0, width: 0, height: 0 }) }),
+      addEventListener() {}, removeEventListener() {},
+      contains(n) { return doc.body.contains(n); },
+    };
+    doc.body = new DoorEl("body"); doc.body.connected = true;
+    doc.documentElement = new DoorEl("html");
+    const modal = new DoorEl("div"); modal.id = "modal"; modal.hidden = true;
+    const card = new DoorEl("div"); card.id = "modalCard";
+    modal.appendChild(card); doc.body.appendChild(modal);
+    globalThis.document = doc;
+    globalThis.innerWidth = 1280; globalThis.innerHeight = 800;
+    globalThis.addEventListener = () => {}; globalThis.removeEventListener = () => {};
+    globalThis.getComputedStyle = () => ({ fontSize: "16px", borderLeftWidth: "0", borderRightWidth: "0", paddingLeft: "0", paddingRight: "0" });
+    globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+    const DM = await import(MOD("dom.js"));
+    DM.grabDom();
+    ST.lsSet("eMotionOff", "1");
+    ST.lsSet("eUiLang", "en");
+    AS.setCards([{ id: "c-door" }]);
+    const seenLead = { team: TEAM, print: "abcdabcdabcdabcd", admitted: true, seen: true };
+    window.E_HOST = { teamJoin: () => Promise.resolve({ sealed: null, join: null, leads: [seenLead] }) };
+    if (tookFn) tookFn({ sealed: null, join: null, leads: [seenLead] });
+    const SET = await import(MOD("settings.js"));
+    const MG = await import(MOD("manage.js"));
+    const click = btn => { try { if (btn && btn.onclick) btn.onclick(); } catch (e) { doorErr = String(e && e.message || e); } };
+    /* A paste left open by an earlier leg must not count as this click opening it. */
+    try { await press("back"); } catch (e) { doorErr = doorErr || String(e && e.message || e); }
+    const settingsClosed = TJ.inviteHeld().mode !== "paste";
+    SET.openSettings();
+    click(doc.getElementById("setJoinTeam"));
+    settingsOpened = settingsClosed && TJ.inviteHeld().mode === "paste";
+    try { await press("back"); leftPaste = TJ.inviteHeld().mode !== "paste"; }
+    catch (e) { doorErr = doorErr || String(e && e.message || e); }
+    MG.openManage();
+    click(doc.getElementById("mgJoinTeam"));
+    libraryOpened = leftPaste && TJ.inviteHeld().mode === "paste";
+  } catch (e) {
+    doorErr = e && e.stack ? e.stack.split("\n").slice(0, 4).join(" | ") : String(e);
+  } finally {
+    globalThis.document = doorDoc;
+    window.E_HOST = doorHost;
+    AS.setCards([]);
+    if (motionWas == null) ST.lsDel("eMotionOff"); else ST.lsSet("eMotionOff", motionWas);
+    if (langWas == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langWas);
+    if (typeof globalThis.document.createElement !== "function") globalThis.document.createElement = () => ({ getContext() { return {}; } });
+    if (typeof globalThis.document.createRange !== "function") globalThis.document.createRange = () => ({});
+    try { const DM = await import(MOD("dom.js")); DM.grabDom(); } catch { /* the page document has no modal; the handles go back to empty */ }
+  }
+  check(menuItem && settingsOpened && libraryOpened,
+    "15bm the Menu item Join a team is in the template, and the Settings and Library buttons' clicks open the paste: "
+    + [menuItem, settingsOpened, libraryOpened].join("/") + (doorErr ? " " + doorErr : ""));
 
   /* Last, over every desk above: the log of each holds none of the secrets any invitation carried. */
   const leaked = [];

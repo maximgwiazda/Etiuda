@@ -2442,12 +2442,11 @@ function joinView() {
         catch (e) { console.error("etiuda: the request to join could not be answered - " + e.message); }
       }
     }
-    /* An invitation's view names the lead and never carries a code. The request door is unchanged. */
-    const invited = !!j.invite;
+    /* The code is the lead's opening, whether or not the request came by invitation. The invite field names that lead. */
     view.join = { team: j.team, file: j.file, asked: j.asked, name: j.name,
-                  state: j.refused ? "refused" : invited ? "waiting" : (j.opened ? "code" : "waiting"),
-                  code: (!invited && j.opened) ? joinCode(j.team, me.key, me.box, j.opened.lead.public, j.nonce, j.opened.nonce) : "" };
-    if (invited) view.join.invite = { lead: String(j.invite.lead && j.invite.lead.name || "") };
+                  state: j.refused ? "refused" : j.opened ? "code" : "waiting",
+                  code: j.opened ? joinCode(j.team, me.key, me.box, j.opened.lead.public, j.nonce, j.opened.nonce) : "" };
+    if (j.invite) view.join.invite = { lead: String(j.invite.lead && j.invite.lead.name || "") };
   }
   view.sealed = sealedOutside();
   view.leads = leadsView();

@@ -2,7 +2,7 @@
    the Menu. The shell keeps the request and says where it stands; this paints that answer and sends the agent's
    acts back. Joining leaves a catalog the desk already has loaded. Once admitted, the same place shows the pinned
    lead's key once, to compare with the lead's, and Settings lists every such key with a way to forget it. An
-   invitation's wait names the lead and never a code; a request still shows one. */
+   invitation's wait names the lead and draws no code until the opening is read; the code then shows. */
 import { eHost, eOnCatalogCopy } from "./host.js";
 import { t, toast } from "./ui-lang.js";
 import { esc } from "./esc.js";
@@ -112,16 +112,12 @@ function refuseInvite(v){
   dropInvite();
   joinWhy=why; joinMode="refused";
 }
-/* The request as the page shows it. An invitation names its lead and never keeps a code; a request keeps both. */
+/* The request as the page shows it. An invitation names its lead and keeps the code the shell sent. */
 function joinShown(j){
   if(!j || !(j.file||j.state)) return null;
   const row={file:String(j.file||""),state:String(j.state||""),code:String(j.code||""),
     asked:+j.asked||0,name:String(j.name||"")};
-  if(j.invite && typeof j.invite==="object"){
-    row.invite={lead:String(j.invite.lead||"")};
-    row.code="";
-    if(row.state!=="refused") row.state="waiting";
-  }
+  if(j.invite && typeof j.invite==="object") row.invite={lead:String(j.invite.lead||"")};
   return row;
 }
 /* The Menu's Join a team follows the same rule as the other two doors: hidden while a request is in flight or a new key is still to be compared. */
@@ -250,15 +246,15 @@ function joinParts(){
     body:'<div class="e-join-key">'+keySignHtml("studio",l.print)+'</div>', acts:[["seen",t("It matches")],["forget",t("It does not match")]], lead:l.team};
   const invited=joinInviteParts();
   if(invited) return invited;
-  /* An invitation is admitted by the lead's Studio. Its wait names that lead and draws no code, even if a view arrives carrying one. */
-  if(j && j.invite && j.state!=="refused"){
+  const meta=j?'<div class="e-join-meta">'+esc(t("{NAME}, asked at {TIME}").split("{NAME}").join(j.name||who)
+    .split("{TIME}").join(joinTime(j.asked)))+'</div>':'';
+  /* An invitation waits under its lead's name only until the opening is read. The code then follows the request's own door. */
+  if(j && j.invite && j.state==="waiting"){
     const lead=String(j.invite.lead||"").trim()||t("the lead");
     return {title:t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
       line:t("The lead's Studio lets this desk in by itself; nothing to do here."),
-      body:"", acts:[["cancel",t("Cancel the request")]]};
+      body:meta, acts:[["cancel",t("Cancel the request")]]};
   }
-  const meta=j?'<div class="e-join-meta">'+esc(t("{NAME}, asked at {TIME}").split("{NAME}").join(j.name||who)
-    .split("{TIME}").join(joinTime(j.asked)))+'</div>':'';
   if(j && j.state==="code") return {title:t("Read this code to the team's lead"),
     line:t("They type it in Studio, and the catalog opens here once they let this desk in."),
     body:joinCodeHtml(j.code)+meta, acts:[["cancel",t("Cancel the request")]]};

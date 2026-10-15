@@ -14679,11 +14679,7 @@ What you type stays in this browser only.`;
       asked: +j.asked || 0,
       name: String(j.name || "")
     };
-    if (j.invite && typeof j.invite === "object") {
-      row.invite = { lead: String(j.invite.lead || "") };
-      row.code = "";
-      if (row.state !== "refused") row.state = "waiting";
-    }
+    if (j.invite && typeof j.invite === "object") row.invite = { lead: String(j.invite.lead || "") };
     return row;
   }
   function syncJoinDoor() {
@@ -14813,16 +14809,16 @@ What you type stays in this browser only.`;
     };
     const invited = joinInviteParts();
     if (invited) return invited;
-    if (j && j.invite && j.state !== "refused") {
+    const meta = j ? '<div class="e-join-meta">' + esc(t("{NAME}, asked at {TIME}").split("{NAME}").join(j.name || who).split("{TIME}").join(joinTime(j.asked))) + "</div>" : "";
+    if (j && j.invite && j.state === "waiting") {
       const lead = String(j.invite.lead || "").trim() || t("the lead");
       return {
         title: t("Joining {LEAD}'s team").split("{LEAD}").join(lead),
         line: t("The lead's Studio lets this desk in by itself; nothing to do here."),
-        body: "",
+        body: meta,
         acts: [["cancel", t("Cancel the request")]]
       };
     }
-    const meta = j ? '<div class="e-join-meta">' + esc(t("{NAME}, asked at {TIME}").split("{NAME}").join(j.name || who).split("{TIME}").join(joinTime(j.asked))) + "</div>" : "";
     if (j && j.state === "code") return {
       title: t("Read this code to the team's lead"),
       line: t("They type it in Studio, and the catalog opens here once they let this desk in."),
