@@ -617,7 +617,7 @@ function eOfferCatalogDialog(c,src){
     +(fresh && !src.asked ? '<p class="ec-holds">'+esc(t("This desk carries on as it is until the update is loaded."))+'</p>' : '')
     +'<div class="tour-actions">'
     +'<button type="button" class="btn" id="ecNo">'+esc(t(olderSure?"Keep the newer one":replacing && !fresh?"Keep current":"Not now"))+'</button>'
-    +'<button type="button" class="btn primary" id="ecYes">'+esc(t(olderSure?"Open the older edition":older?"Load it anyway":updating && !plain?"Load the update":replacing?"Load it":"Load catalog"))+'</button>'
+    +'<button type="button" class="btn primary" id="ecYes">'+esc(t(olderSure?"Open the older edition":older?"Load it anyway":updating && !plain?"Load the new edition":replacing?"Load it":"Load catalog"))+'</button>'
     +'</div>';
   cutLeaves();
   if(fresh){ edWaiting={c:c, src:src}; paintCatWaiting(); }

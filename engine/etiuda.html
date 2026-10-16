@@ -6874,7 +6874,7 @@ What you type stays in this browser only.`;
     "Notes open on hover": "Notatki otwierają się po najechaniu",
     "Notes open from the i": "Notatki otwiera litera i",
     "Stack a card's replies": "Odpowiedzi karty w stosie",
-    "A card holding several replies shows the first, with the others behind it until the pointer rests on the card or the arrow keys reach it.": "Karta z kilkoma odpowiedziami pokazuje pierwszą, a pozostałe chowa za nią, aż spocznie na niej kursor albo dojdą do niej strzałki klawiatury.",
+    "A card holding several replies shows the first, with the others behind it until the pointer rests on the card or the arrow keys reach it.": "Karta z kilkoma odpowiedziami pokazuje pierwszą, a pozostałe trzyma pod spodem, dopóki nie spocznie na niej wskaźnik albo nie dotrze się do niej strzałkami.",
     "The first reply in front, the others laid out under the pointer": "Pierwsza odpowiedź z przodu, pozostałe rozkładają się pod kursorem",
     "Every reply laid out on the card, one below the other": "Każda odpowiedź leży na karcie, jedna pod drugą",
     "Replies stack behind the first": "Odpowiedzi chowają się za pierwszą",
@@ -6973,11 +6973,11 @@ What you type stays in this browser only.`;
     "That file matches the catalog you already have.": "Ten plik jest taki sam jak wczytany katalog.",
     "Could not read the watched file.": "Nie udało się odczytać obserwowanego pliku.",
     "Your own cards and edits are kept.": "Własne karty i zmiany zostają.",
-    "Load the update": "Wczytaj aktualizację",
+    "Load the new edition": "Wczytaj nowe wydanie",
     "You have {E}.": "Wczytane: {E}.",
     "You have rev {R}.": "Wczytane: wersja {R}.",
     "rev {R}": "wersja {R}",
-    "Note for this edition": "Notatka do wydania",
+    "Note for this edition": "Notatka do tego wydania",
     "{N} changed": "{N} zmieniona",
     "few␟{N} changed": "{N} zmienione",
     "many␟{N} changed": "{N} zmienionych",
@@ -7445,18 +7445,18 @@ What you type stays in this browser only.`;
     "few␟{N} replies": "{N} odpowiedzi",
     "many␟{N} replies": "{N} odpowiedzi",
     "{SHOWN} of {COUNT}": "{SHOWN} z {COUNT}",
-    "The reply is filled in for this conversation": "Odpowiedź jest uzupełniana dla tej rozmowy",
+    "Etiuda fills the reply in for this conversation": "Etiuda dopasuje odpowiedź do tej rozmowy",
     "{KEY} copies": "{KEY} kopiuje",
-    "{KEY} in {LANG}": "{KEY} w wersji {LANG}",
+    "{KEY} in {LANG}": "{KEY} w języku {LANG}",
     "{KEY} closes": "{KEY} zamyka",
     "Pasted": "Wklejono",
-    "Copied, press Ctrl+V": "Skopiowano, naciśnij Ctrl+V",
+    "Copied, press Ctrl+V": "Skopiowano: Ctrl+V wklei odpowiedź",
     "{KEYS} belongs to another program just now.": "{KEYS} należy teraz do innego programu.",
     "A combination of Etiuda's own, chosen in Settings, brings the replies over any window.": "Własna kombinacja Etiudy, wybrana w Ustawieniach, przywoła odpowiedzi nad dowolne okno.",
     "Choose a combination": "Wybierz kombinację",
     "The replies beside the pointer, over any program; the combination is changed in Settings": "Odpowiedzi obok wskaźnika, nad każdym programem; kombinację zmienia się w Ustawieniach",
     "Replies over any window": "Odpowiedzi nad dowolnym oknem",
-    "{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.": "{KEY} przywołuje te odpowiedzi obok wskaźnika, nad każdym programem: wystarczy wpisać słowo, a Enter skopiuje odpowiedź i wróci do poprzedniego okna. Naciśnij {KEY}, żeby spróbować; Esc zamyka listę.",
+    "{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.": "{KEY} przywołuje te odpowiedzi obok wskaźnika, nad każdym programem: wystarczy wpisać słowo, a Enter skopiuje odpowiedź i wróci do poprzedniego okna. Można spróbować od razu, naciskając {KEY}; Esc zamyka listę.",
     "Bring the replies over any window": "Przywołaj odpowiedzi nad dowolne okno",
     "Works from any program; Enter copies a reply and goes back to the window you were in.": "Działa w każdym programie; Enter kopiuje odpowiedź i wraca do poprzedniego okna.",
     "Another program uses this combination just now; a different one will do.": "Tej kombinacji używa teraz inny program; wybór innej to rozwiąże.",
@@ -7613,7 +7613,7 @@ What you type stays in this browser only.`;
     "It does not match": "Nie zgadza się",
     "{LEAD}'s team": "Zespół osoby {LEAD}",
     "Leave this team": "Opuść ten zespół",
-    "After leaving a team, this desk joins it again with a new invitation from its lead.": "Po opuszczeniu zespołu to stanowisko może do niego wrócić dzięki nowemu zaproszeniu od lidera.",
+    "After leaving a team, this desk can join it again with a new invitation from its lead.": "Po opuszczeniu zespołu to stanowisko może do niego wrócić z nowym zaproszeniem od lidera.",
     "This desk left this team on {DATE}. Join it again?": "To stanowisko opuściło ten zespół {DATE}. Dołączyć do niego ponownie?",
     "This team no longer includes this desk.": "To stanowisko nie należy już do tego zespołu.",
     "The organisation's IT sets this desk's team.": "Zespół tego stanowiska ustawia dział IT organizacji.",
@@ -27619,7 +27619,7 @@ What you type stays in this browser only.`;
       name: o.name,
       back: o.back,
       body: '<div class="ed-panel" data-i18n-skip><div class="ed-left">' + (note ? editionNoteHtml(note, "ed-note") : "") + editionCountsHtml(o.changes.counts) + '<div class="ed-list">' + items.map(row).join("") + '</div></div><div class="ed-pane" id="edPane" aria-live="polite"></div></div>',
-      actions: '<button type="button" class="btn" id="edKeep">' + esc(desk ? desk.keep : t("Keep current")) + '</button><button type="button" class="btn primary" id="edLoad">' + esc(desk ? desk.load : t("Load the update")) + "</button>",
+      actions: '<button type="button" class="btn" id="edKeep">' + esc(desk ? desk.keep : t("Keep current")) + '</button><button type="button" class="btn primary" id="edLoad">' + esc(desk ? desk.load : t("Load the new edition")) + "</button>",
       wire: () => {
         const pane = document.getElementById("edPane"), list2 = document.querySelector(".ed-list");
         const draw = () => {
@@ -28471,7 +28471,7 @@ What you type stays in this browser only.`;
       catalogMacroCount(c),
       i,
       k
-    ) + "</div>") + "</div>" + changeHtml + '<p class="ec-sub">' + src.foundHtml + (updating ? " " + esc(t("Your own cards and edits are kept.")) : "") + "</p>" + (src.offTeam ? '<p class="ec-roster">' + esc(t("This file comes from a desk outside the team.")) + "</p>" : "") + trustHtml(trustOfferLine(trustSettled(c), updating)) + (fresh && !src.asked ? '<p class="ec-holds">' + esc(t("This desk carries on as it is until the update is loaded.")) + "</p>" : "") + '<div class="tour-actions"><button type="button" class="btn" id="ecNo">' + esc(t(olderSure ? "Keep the newer one" : replacing && !fresh ? "Keep current" : "Not now")) + '</button><button type="button" class="btn primary" id="ecYes">' + esc(t(olderSure ? "Open the older edition" : older ? "Load it anyway" : updating && !plain ? "Load the update" : replacing ? "Load it" : "Load catalog")) + "</button></div>";
+    ) + "</div>") + "</div>" + changeHtml + '<p class="ec-sub">' + src.foundHtml + (updating ? " " + esc(t("Your own cards and edits are kept.")) : "") + "</p>" + (src.offTeam ? '<p class="ec-roster">' + esc(t("This file comes from a desk outside the team.")) + "</p>" : "") + trustHtml(trustOfferLine(trustSettled(c), updating)) + (fresh && !src.asked ? '<p class="ec-holds">' + esc(t("This desk carries on as it is until the update is loaded.")) + "</p>" : "") + '<div class="tour-actions"><button type="button" class="btn" id="ecNo">' + esc(t(olderSure ? "Keep the newer one" : replacing && !fresh ? "Keep current" : "Not now")) + '</button><button type="button" class="btn primary" id="ecYes">' + esc(t(olderSure ? "Open the older edition" : older ? "Load it anyway" : updating && !plain ? "Load the new edition" : replacing ? "Load it" : "Load catalog")) + "</button></div>";
     cutLeaves();
     if (fresh) {
       edWaiting = { c, src };
@@ -29738,7 +29738,7 @@ What you type stays in this browser only.`;
     const notes = [
       l.folder ? t("Folder: {FOLDER}").split("{FOLDER}").join(l.folder) : "",
       l.removed ? t("This team no longer includes this desk.") : status,
-      l.policy ? t("The organisation's IT sets this desk's team.") : bar ? t("After leaving a team, this desk joins it again with a new invitation from its lead.") : ""
+      l.policy ? t("The organisation's IT sets this desk's team.") : bar ? t("After leaving a team, this desk can join it again with a new invitation from its lead.") : ""
     ].filter(Boolean);
     return '<div class="set-row"><div class="set-label">' + esc(l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team")) + notes.map((n) => "<small>" + esc(n) + "</small>").join("") + '</div><div class="set-ctl"><span class="e-lead-key">' + keySignHtml("studio", l.print) + "</span>" + (l.policy ? "" : '<button type="button" class="btn" data-leave-team="' + esc(l.team) + '">' + esc(t("Leave this team")) + "</button>") + "</div></div>";
   }
@@ -32417,7 +32417,7 @@ What you type stays in this browser only.`;
       none: t("A different word may do better."),
       stamp: t("Commits the firm"),
       empty: wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet."),
-      who: t("The reply is filled in for this conversation"),
+      who: t("Etiuda fills the reply in for this conversation"),
       keyCopy: t("{KEY} copies"),
       keyOther: other ? t("{KEY} in {LANG}").split("{LANG}").join(other) : "",
       keyClose: t("{KEY} closes"),

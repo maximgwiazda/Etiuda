@@ -1433,7 +1433,7 @@ async function parent() {
        shell does not scan, so the boot holds rev 2 and only a double-click offers rev 3. Unsigned, another key, an
        unverified catalog in use, and a file whose signature then fails are each offered plainly. The offer is still
        made, and the unsigned one still loads. */
-    const UPDATE_FOUND = "Updated catalog found", LOAD_UPDATE = "Load the update", KEEP_CURRENT = "Keep current";
+    const UPDATE_FOUND = "Updated catalog found", LOAD_UPDATE = "Load the new edition", KEEP_CURRENT = "Keep current";
     const asUpdate = o => o.shown === true && !(o.warn || []).length && o.title === UPDATE_FOUND && o.yes === LOAD_UPDATE && o.no === "Not now";
     const plainKept = o => plainly(o) && o.no === KEEP_CURRENT;
     const higherLab = (file, ringText) => {

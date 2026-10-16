@@ -160,7 +160,7 @@ function openEditionPanel(o){
       +'<div class="ed-list">'+items.map(row).join("")+'</div></div>'
       +'<div class="ed-pane" id="edPane" aria-live="polite"></div></div>',
     actions:'<button type="button" class="btn" id="edKeep">'+esc(desk?desk.keep:t("Keep current"))+'</button>'
-      +'<button type="button" class="btn primary" id="edLoad">'+esc(desk?desk.load:t("Load the update"))+'</button>',
+      +'<button type="button" class="btn primary" id="edLoad">'+esc(desk?desk.load:t("Load the new edition"))+'</button>',
     wire:()=>{
       const pane=document.getElementById("edPane"), list=document.querySelector(".ed-list");
       const draw=()=>{

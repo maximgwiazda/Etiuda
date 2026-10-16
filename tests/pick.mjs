@@ -987,7 +987,7 @@ try {
   const wOne = pickAnswer("open").words.keyOther;
   CM.setContentLangs(langsWere);
   check(w7.keyCopy === "{KEY} copies" && w7.keyOther === "{KEY} in PL" && wPl === "{KEY} in EN" && wOne === "" && w7.keyClose === "{KEY} closes"
-    && w7.pasted === "Pasted" && w7.copied === "Copied, press Ctrl+V" && w7.who === "The reply is filled in for this conversation",
+    && w7.pasted === "Pasted" && w7.copied === "Copied, press Ctrl+V" && w7.who === "Etiuda fills the reply in for this conversation",
     "7c the page is given the words for its keys and its note, the other language named by its code, and none where there is one: "
     + JSON.stringify([w7.keyCopy, w7.keyOther, wPl, wOne, w7.keyClose, w7.pasted, w7.copied]));
 

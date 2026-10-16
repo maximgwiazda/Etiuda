@@ -105,7 +105,7 @@ function pickWords(){
   return {lang:uiLang(), search:t("search replies"), list:t("Replies"), again:t("The reply copied last"),
           none:t("A different word may do better."), stamp:t("Commits the firm"),
           empty:wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet."),
-          who:t("The reply is filled in for this conversation"),
+          who:t("Etiuda fills the reply in for this conversation"),
           keyCopy:t("{KEY} copies"), keyOther:other ? t("{KEY} in {LANG}").split("{LANG}").join(other) : "",
           keyClose:t("{KEY} closes"), pasted:t("Pasted"), copied:t("Copied, press Ctrl+V")};
 }

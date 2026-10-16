@@ -139,7 +139,7 @@ function wireHotkeyRow(box){
 function teamRowHtml(l,status,bar){
   const notes=[l.folder?t("Folder: {FOLDER}").split("{FOLDER}").join(l.folder):"",
     l.removed?t("This team no longer includes this desk."):status,
-    l.policy?t("The organisation's IT sets this desk's team."):bar?t("After leaving a team, this desk joins it again with a new invitation from its lead."):""].filter(Boolean);
+    l.policy?t("The organisation's IT sets this desk's team."):bar?t("After leaving a team, this desk can join it again with a new invitation from its lead."):""].filter(Boolean);
   return '<div class="set-row"><div class="set-label">'+esc(l.lead?t("{LEAD}'s team").split("{LEAD}").join(l.lead):t("Team"))
     +notes.map(n=>'<small>'+esc(n)+'</small>').join("")+'</div><div class="set-ctl">'
     +'<span class="e-lead-key">'+keySignHtml("studio",l.print)+'</span>'

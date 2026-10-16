@@ -1633,8 +1633,8 @@ try {
   });
 
   await legTry("15bw", async () => {
-    const BACK_EN = "After leaving a team, this desk joins it again with a new invitation from its lead.";
-    const BACK_PL = "Po opuszczeniu zespołu to stanowisko może do niego wrócić dzięki nowemu zaproszeniu od lidera.";
+    const BACK_EN = "After leaving a team, this desk can join it again with a new invitation from its lead.";
+    const BACK_PL = "Po opuszczeniu zespołu to stanowisko może do niego wrócić z nowym zaproszeniem od lidera.";
     /* A desk that trusts two leads draws two Leave rows, and the way back is said once, of any team. */
     const hostWas = window.E_HOST, two = [{ team: TEAM, print: "abcdabcdabcdabcd", admitted: true, seen: true },
       { team: "t-" + "1".repeat(16), print: "1234123412341234", admitted: true, seen: true, lead: "Quay lead" }];
