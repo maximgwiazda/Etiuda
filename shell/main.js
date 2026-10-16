@@ -3986,7 +3986,10 @@ ipcMain.handle("etiuda:catalog-read", (e, name, desk, asked, offer) => {
     } else if (!asked && (belowCatalogRev(text) || (offer && !unsolicitedLeadText(text)))) return { name: base, text: "" };
     if (asked) handAsked(text, who);
     if (text && (asked || offer)) noteHanded(text, who ? "desk-file" : (asked ? "opened" : "folder"));
-    return offTeam ? { name: base, text: text, notOnTeam: "off-roster" } : { name: base, text: text };
+    /* A desk file copied into the folder root is read as a folder file, so the note comes from the file's own desk
+       field there, as a double-click, a drop and Import take it: an asked read of a removed member's file says so. */
+    const note = offTeam ? "off-roster" : (!who && asked ? rosterNoteText(text) : "");
+    return note ? { name: base, text: text, notOnTeam: note } : { name: base, text: text };
   }
   catch (err) {
     console.error("etiuda: " + file + " could not be read - " + err.message);

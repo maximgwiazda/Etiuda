@@ -44,7 +44,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 26;
+const EXPECTED = 27;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -483,6 +483,19 @@ try {
       "889z a kept version of an off-roster desk file carries the note, and a member's and a folder file do not: "
       + JSON.stringify({ removed: histRemoved.notOnTeam || null, member: Object.keys(histMember).sort(), loose: Object.keys(histLoose).sort(),
         kept: [removedFile, memberFile, looseFile].map(f => !!keptOf(f)) }));
+
+    /* The Library's asked read of a desk file copied into the folder root: the folder is the only thing the read keyed
+       its note on, so a removed member's file there came back with none (board 896, the test architect's PI3). */
+    put(ROUTE, "removed-copy.ec", fs.readFileSync(removedFile, "utf8"));
+    put(ROUTE, "member-copy.ec", fs.readFileSync(memberFile, "utf8"));
+    put(ROUTE, "loose-copy.ec", fs.readFileSync(looseFile, "utf8"));
+    const readAsked = async name => (await P.ask("etiuda:catalog-read", name, null, true)) || {};
+    const rootRemoved = await readAsked("removed-copy.ec"), rootMember = await readAsked("member-copy.ec"),
+      rootLoose = await readAsked("loose-copy.ec");
+    check(rootRemoved.notOnTeam === "off-roster" && String(rootRemoved.text || "").indexOf("removed plain") > 0
+      && exactly(rootMember) && String(rootMember.text || "").indexOf("author plain") > 0 && exactly(rootLoose),
+      "889za the Library's asked read of a removed member's file in the folder root carries off-roster, as every other deliberate open does; a member's and a folder file read as {name, text}: "
+      + JSON.stringify({ removed: rootRemoved.notOnTeam || null, member: Object.keys(rootMember).sort(), loose: Object.keys(rootLoose).sort() }));
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
