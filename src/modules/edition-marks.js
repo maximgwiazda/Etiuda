@@ -7,13 +7,14 @@ import { wordDiff } from "./edition-changes.js";
 import { esc } from "./esc.js";
 import { sayLive } from "./tabs.js";
 import { cards, editionView, setEditionView } from "./app-state.js";
+import { editionNameOf } from "./catalog.js";
 
 const EDITION_MARKS="EditionMarks";
-/** The marks an edition leaves: `v` the edition as the desk names it, and per card its kind and, for a
- *  changed one, the text of each body field it changed as it read before. Pure. */
-function editionMarksFrom(held,changes,v){
+/** The marks an edition leaves: the edition as the desk names it, `e` its dated edition or `r` its rev (catalog.js
+ *  editionNameOf), and per card its kind and, for a changed one, the text of each body field it changed as it read before. Pure. */
+function editionMarksFrom(held,changes,name){
   const was=new Map(((held&&held.cards)||[]).map(m=>[String(m.id),m]));
-  const out={v:String(v||""), cards:{}};
+  const out=(name && name.r!=null) ? {r:name.r, cards:{}} : {e:String((name && name.e)||""), cards:{}};
   ((changes&&changes.items)||[]).forEach(it=>{
     if(it.kind!=="changed" && it.kind!=="new") return;
     const mark={k:it.kind};
@@ -35,6 +36,8 @@ function editionMarks(){
   try{
     const v=JSON.parse(lyGet(EDITION_MARKS)||"null");
     if(v && typeof v==="object" && v.cards && typeof v.cards==="object") marksNow=v;
+    // Marks kept before the name was split hold it as `v`, a label: named as a catalog with that label and no rev is.
+    if(marksNow && marksNow.v!=null && marksNow.e==null && marksNow.r==null) Object.assign(marksNow,editionNameOf({version:marksNow.v}));
   }catch(e){}
   return marksNow;
 }
@@ -51,10 +54,10 @@ function putEditionMarksBack(c,was){
   if(was==null) lsDel(key); else lsSet(key,was);
   forgetEditionMarks();
 }
-/** {k, v} for a card the edition marked, or null. */
+/** {k, e, r} for a card the edition marked, or null: its kind, and the edition's name as the marks keep it. */
 function editionMarkOf(id){
   const all=editionMarks(), m=all && all.cards[String(id)];
-  return m ? {k:m.k==="new"?"new":"changed", v:all.v} : null;
+  return m ? {k:m.k==="new"?"new":"changed", e:String(all.e||""), r:all.r!=null ? all.r : null} : null;
 }
 function editionWasText(id,key){
   const all=editionMarks(), m=all && all.cards[String(id)];

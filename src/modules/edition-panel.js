@@ -140,7 +140,7 @@ function editionPaneHtml(it,held,c,desk){
   return '<h3>'+esc(cardTitle(now||was||{})||it.id)+'</h3><div class="ed-grid ed-c'+cols+'">'+rows+'</div>';
 }
 /** The panel behind the offer: every card the edition changes at the left, the chosen one at the right.
- *  `o` carries the catalog offered and the one held, the changes, the version and the name to head it,
+ *  `o` carries the catalog offered and the one held, the changes, the edition's name (`ed`) and the catalog's to head it,
  *  and the offer's own three ways out: keep, load and back to the bubble. A colleague's desk comes as `o.desk`, its
  *  title, heads, words for the two ways out and its take (editionPaneHtml); its file carries no note of its own. */
 function openEditionPanel(o){
@@ -151,7 +151,8 @@ function openEditionPanel(o){
     +editionRowInner(it,o.held,c,sub)+'</button>';
   openDialog({
     cls:"ed-modal",
-    title:desk?desk.title:t("What is new in edition {V}").split("{V}").join(o.version),
+    title:desk?desk.title:(o.ed && o.ed.r!=null) ? t("What is new in rev {R}").split("{R}").join(String(o.ed.r))
+      : t("What is new in edition {E}").split("{E}").join((o.ed && o.ed.e)||""),
     name:o.name,
     back:o.back,
     body:'<div class="ed-panel" data-i18n-skip><div class="ed-left">'

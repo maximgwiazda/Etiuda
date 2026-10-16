@@ -470,14 +470,14 @@ async function launch(plan) {
       const b = bubble();
       obs.read.bubble = !b ? null : { hidden: b.hidden, change: b.querySelectorAll(".ec-change").length,
         counts: b.querySelectorAll(".ec-counts").map(n => ({ text: n.textContent.trim(), n: n.querySelectorAll(".ec-n").length })),
-        n: texts(b, ".ec-n"), ids: b.querySelectorAll("[data-ec-id]").map(n => n.getAttribute("data-ec-id")),
+        n: texts(b, ".ec-n"), ids: b.querySelectorAll("[data-ec-id]").map(n => n.getAttribute("data-ec-id")), what: texts(b, ".ec-what")[0] || "",
         diff: b.querySelectorAll("#ecDiff").length, own: cardRow("c-b") };
     },
     panel: () => {
       doc.getElementById("ecDiff").onclick();
       const card = doc.getElementById("modalCard"), g = card.querySelector("#edPane .ed-grid");
       obs.read.panel = { bubbleHidden: bubble().hidden, modal: modalUp(), cls: card.className, rows: card.querySelectorAll(".ed-row").length,
-        current: texts(card, ".ed-row[aria-current=\"true\"]"), grid: g ? g.className : null, take: takes() };
+        current: texts(card, ".ed-row[aria-current=\"true\"]"), grid: g ? g.className : null, take: takes(), title: texts(card, ".modal-t")[0] || "" };
     },
     take: arg => {
       doc.querySelector("[data-ed-take=\"" + arg + "\"]").onclick();
@@ -576,6 +576,8 @@ async function launch(plan) {
   obs.heldId = (() => { try { return String(JSON.parse(ST.lsGet("eCatalog") || "{}").id || ""); } catch { return ""; } })();
   // The marks a loaded edition leaves on the cards it brought (edition-marks.js), counted by key.
   obs.editionMarks = ST.lsKeys().filter(k => /EditionMarks$/.test(k) && ST.lsGet(k)).length;
+  obs.editionName = (() => { const k = ST.lsKeys().find(k => /EditionMarks$/.test(k) && ST.lsGet(k));
+    try { const m = k ? JSON.parse(ST.lsGet(k)) : null; return m ? { e: m.e, r: m.r } : null; } catch { return null; } })();
   obs.toast = (doc.getElementById("toast") && doc.getElementById("toast").textContent) || "";
   obs.session = Object.fromEntries(session);
   process.stdout.write("#launch " + JSON.stringify(obs) + "\n", () => process.exit(0));
@@ -591,7 +593,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 118;
+  const EXPECTED = 120;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -969,11 +971,11 @@ async function parent() {
       return d; };
     const AGENT = { t: "My greeting", en: "Good day, how can I be of use?" };
     /* A desk that holds edition 1 and carries the agent's edit, the edit made by the page's own save, and edition 2 in the folder. */
-    const editionDesk = () => {
-      const lab = scenario([["catalogs/lamp.ec", sign(ed1())], ["catalogs/etiuda-ring.json", ring]]);
+    const editionDesk = (next, first) => {
+      const lab = scenario([["catalogs/lamp.ec", sign((first || ed1)())], ["catalogs/etiuda-ring.json", ring]]);
       run(lab, ["boot", "settle", "offer", "yes", "settle"]);
       const s74 = run(lab, ["desk", "override", "settle"], false, { override: AGENT });
-      fs.writeFileSync(path.join(lab, "catalogs", "lamp.ec"), JSON.stringify(sign(ed2())), "utf8");
+      fs.writeFileSync(path.join(lab, "catalogs", "lamp.ec"), JSON.stringify(sign((next || ed2)())), "utf8");
       return { lab: lab, setup: s74 };
     };
     const rd = (o, k) => (o && o.read && o.read[k]) || {};
@@ -1062,6 +1064,30 @@ async function parent() {
     check(b0.offer === 0 && b0.waiting && b0.dot && c0.offer === 0 && c0.waiting && c0.dot && WAIT.test(c0.label || "") && !errsW.length,
       "74n after Not now it waits at the name, and at the next launch, the refusal remembered and nothing offered, it still does: "
       + JSON.stringify({ declined: b0, next: c0, errors: errsW.slice(0, 2) }));
+    /* THE SAME EDITION WITH NO DATED EDITION OF ITS OWN: the name, the panel, the load's toast and the marks call it by its
+       rev, where the dated one above reads its date. */
+    const dR = editionDesk(() => { const d = ed2(); delete d.date; return d; });
+    const RV = run(dR.lab, ASK.concat(["readwait", "panel", "edload", "settle"]), false, BAND), r0 = wr(RV, 0);
+    check(r0.label === "Show rev 2, waiting to be loaded" && a0.label === "Show edition 2026-09-20, waiting to be loaded"
+      && rd(RV, "panel").title === "What is new in rev 2" && /^Rev 2 loaded: /.test(RV.toast || "")
+      && JSON.stringify(RV.editionName) === '{"r":2}' && RV.reloaded === true && ![dR.setup, RV].flatMap(o => o.errors || []).length,
+      "74r a new edition with no date is named by its rev at the name, on the panel, in the load's toast and in its marks, and the dated one by its date: "
+      + JSON.stringify({ rev: r0.label, dated: a0.label, panel: rd(RV, "panel").title, toast: RV.toast, marks: RV.editionName,
+        errors: [dR.setup, RV].flatMap(o => o.errors || []).slice(0, 2) }));
+    /* THE SAME TWO WITH A BARE NUMBER WHERE THE DATE GOES: the offer's name line, its "You have" and the Library's rows,
+       the one in use and another catalog's file in the folder, name each by its rev. */
+    const dB = editionDesk(() => Object.assign(ed2(), { date: "2" }), () => Object.assign(ed1(), { date: "1" }));
+    const BN = run(dB.lab, ASK.concat(["readchange"]), false, BAND);
+    // The other catalog lands after the offer was read, so the boot offers lamp's update and not a replacement.
+    fs.writeFileSync(path.join(dB.lab, "catalogs", "pine.ec"), JSON.stringify(sign(Object.assign(ed1(), { id: "pine-shop", rev: 7, date: "7" }))), "utf8");
+    const BL = run(dB.lab, ["desk", "rows"], true);
+    BN.rows = BL.rows; BN.errors = (BN.errors || []).concat(BL.errors || []);
+    const bnRows = (BN.rows[0] || []).map(r => (r.loaded ? "in use: " : "file: ") + r.meta);
+    const bnHave = ((rd(BN, "bubble").counts || []).find(c => /^You have /.test(c.text)) || {}).text || "";
+    check(/ · rev 2(?!\d)/.test(rd(BN, "bubble").what || "") && bnHave === "You have rev 1." && bnRows.some(r => /^in use: (.* · )?rev 1( · |$)/.test(r))
+      && bnRows.some(r => /^file: (.* · )?rev 7( · |$)/.test(r)) && !/\bv[127]\b/.test(JSON.stringify([rd(BN, "bubble"), BN.rows])) && ![dB.setup, BN].flatMap(o => o.errors || []).length,
+      "74s a catalog whose edition is a bare number is named by its rev on the offer's name line, in its You have and on the Library's rows, never v1, v2 or v7: "
+      + JSON.stringify({ what: rd(BN, "bubble").what, have: bnHave, rows: bnRows, errors: [dB.setup, BN].flatMap(o => o.errors || []).slice(0, 2) }));
     check(l0.offer === 0 && l0.waiting === false && l0.dot === false && l0.label === null,
       "74L THE CONTROL: the same desk with no newer edition in the folder has no dot and no words at the name: " + JSON.stringify(l0));
     /* 75: A COLLEAGUE'S FILE IN THE LIBRARY, LOOK, AND WORK FROM IT. The folder holds the catalog in use (lamp.ec); two

@@ -304,7 +304,7 @@ function openDeskLook(f,base,name,work,back){
     if(!changes.items.length){ toast(t("That desk's cards match the team's edition.")); return false; }
     const who=deskName(f);
     lkPick=null;
-    openEditionPanel({c:s.hers, held:s.team, changes:changes, version:"", name:name, keep:back, load:work, back:back, taken:()=>{},
+    openEditionPanel({c:s.hers, held:s.team, changes:changes, name:name, keep:back, load:work, back:back, taken:()=>{},
       desk:{title:who, was:t("In the team's edition"), now:t("At {DESK}").split("{DESK}").join(who),
         keep:t("Back to the Library"), load:t("Work from this file").split("{DESK}").join(who),
         take:inUse ? t("Take this text").split("{DESK}").join(who) : "",

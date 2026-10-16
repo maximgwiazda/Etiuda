@@ -1248,7 +1248,7 @@ function sealedAad(team, epoch) {
 function sealCatalog(teamKey, teamId, epoch, text) {
   if (!Buffer.isBuffer(teamKey) || teamKey.length !== 32) throw new Error("seal: a team key is 32 bytes");
   if (!SEALED_TEAM_RE.test(String(teamId))) throw new Error("seal: a team id is t- and 16 lower-case hex characters");
-  if (!Number.isInteger(epoch) || epoch < 1) throw new Error("seal: an epoch is a whole number from 1");
+  if (!Number.isInteger(epoch) || epoch < 1) throw new Error("seal: the team key's number is a whole number from 1");
   if (typeof text !== "string") throw new Error("seal: the catalog is sealed as its text");
   const nonce = crypto.randomBytes(12);
   const c = crypto.createCipheriv("aes-256-gcm", teamKey, nonce);
@@ -1284,7 +1284,7 @@ function wrapTeamKey(teamKey, box, teamId, epoch, deskId) {
   if (!Buffer.isBuffer(teamKey) || teamKey.length !== 32) throw new Error("wrap: a team key is 32 bytes");
   if (!/^[0-9a-f]{64}$/.test(String(box))) throw new Error("wrap: a desk's box is 64 lower-case hex characters");
   if (!SEALED_TEAM_RE.test(String(teamId))) throw new Error("wrap: a team id is t- and 16 lower-case hex characters");
-  if (!Number.isInteger(epoch) || epoch < 1) throw new Error("wrap: an epoch is a whole number from 1");
+  if (!Number.isInteger(epoch) || epoch < 1) throw new Error("wrap: the team key's number is a whole number from 1");
   if (!/^k-[0-9a-f]{16}$/.test(String(deskId))) throw new Error("wrap: a desk id is k- and 16 lower-case hex characters");
   const w = hpkeSeal(Buffer.from(box, "hex"), teamWrapInfo(teamId, epoch), Buffer.from(deskId, "utf8"), teamKey);
   return { epoch: epoch, enc: w.enc.toString("hex"), ct: w.ct.toString("hex") };
@@ -3181,7 +3181,7 @@ function sharedWrite(name, text, sha, create) {
     if (!sharedHolds(held)) return { ok: false, changed: true };
     writeReplacing(file, text);
     historyKeep(file, text, true);
-    console.log("etiuda: " + file + " now holds this desk's changes, edition " + (+data.rev || 0));
+    console.log("etiuda: " + file + " now holds this desk's changes, rev " + (+data.rev || 0));
     return { ok: true, rev: +data.rev || 0 };
   } catch (e) {
     console.error("etiuda: " + file + " could not be written - " + e.message);
