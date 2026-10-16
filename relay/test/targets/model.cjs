@@ -95,6 +95,11 @@ function createTarget(limits) {
     return null;
   }
 
+  function keyGone(relayTeamId, keyId) {
+    const k = enrolKey(relayTeamId, keyId);
+    return wasEnrolled.has(k) && !enrolled.has(k);
+  }
+
   function sessionLive(session, relayTeamId) {
     const s = sessions.get(session);
     if (!s) return false;
@@ -372,10 +377,14 @@ function createTarget(limits) {
     let caller = false;
     if (input.publicKey) { keyHex = input.publicKey; caller = true; }
     if (caller) keyHex = enrolledPublic(input.relayTeamId, input.keyId); /* plant:P1 */
-    const gone = withdrawn(input.relayTeamId, input.keyId);
-    if (gone) return gone;
-    if (!keyHex) return refuse("not-enrolled"); /* plant:F1-unenrolled */
     const msg = helloMessage(input.relayTeamId, input.nonce, input.keyId);
+    if (keyGone(input.relayTeamId, input.keyId)) {
+      let signed = true;
+      signed = wire.verify(input.keyId, msg, input.signature); /* plant:N6 */
+      if (!signed) return refuse("bad-signature");
+      return refuse("removed");
+    }
+    if (!keyHex) return refuse("not-enrolled"); /* plant:F1-unenrolled */
     if (!wire.verify(keyHex, msg, input.signature)) return refuse("bad-signature");
     return issueSession(input.relayTeamId, input.keyId, nonceKey);
   }
@@ -405,9 +414,23 @@ function createTarget(limits) {
     const rec = findRecord(relayTeamId, id);
     if (!rec) return refuse("missing");
     if (rec.superseded) return refuse("superseded");
-    let bytes = Buffer.alloc(0);
-    bytes = rec.ciphertext; /* plant:P17 */
-    return { ok: true, served: true, id: rec.id, ciphertext: bytes };
+    const material = sealed.get(relayTeamId + ":" + id);
+    if (!material) return refuse("missing");
+    const out = {
+      ok: true,
+      served: true,
+      id: rec.id,
+      ciphertext: rec.ciphertext,
+      nonce: material.nonce,
+      signature: material.signature,
+      epoch: material.epoch,
+      supersedes: material.supersedes,
+      writerKeyId: material.writerKeyId,
+      counter: material.counter,
+      plain: "leak",
+    };
+    delete out.plain; /* plant:P17 */
+    return out;
   }
 
   function subscribe({ relayTeamId, session }) {
@@ -626,27 +649,27 @@ function createTarget(limits) {
     };
   }
 
-  function bringIn(relayTeamId, id, teamKey, teamDoc) {
+  function bringIn(relayTeamId, session, id, teamKey, teamDoc) {
     let seen = false;
     ingested.forEach(function (row) {
       if (row.relayTeamId === relayTeamId && row.id === id) seen = true;
     });
     if (seen) return;
-    const material = sealed.get(relayTeamId + ":" + id);
-    if (!material || material.deletion) return;
+    const got = fetch({ relayTeamId: relayTeamId, session: session, id: id });
+    if (!got || got.ok !== true) return;
     acceptBlob({
       teamKey: teamKey,
       teamDoc: teamDoc,
       blob: {
-        id: material.id,
-        relayTeamId: material.relayTeamId,
-        epoch: material.epoch,
-        supersedes: material.supersedes,
-        writerKeyId: material.writerKeyId,
-        counter: material.counter,
-        nonce: material.nonce,
-        ciphertext: material.ciphertext,
-        signature: material.signature,
+        id: got.id,
+        relayTeamId: relayTeamId,
+        epoch: got.epoch,
+        supersedes: got.supersedes,
+        writerKeyId: got.writerKeyId,
+        counter: got.counter,
+        nonce: got.nonce,
+        ciphertext: got.ciphertext,
+        signature: got.signature,
         deletion: false,
       },
     });
@@ -663,7 +686,7 @@ function createTarget(limits) {
       if (!reconcile && absent) mirror.delete(row.path);
     });
     if (reconcile && teamKey && teamDoc && ids) {
-      ids.forEach(function (id) { bringIn(relayTeamId, id, teamKey, teamDoc); });
+      ids.forEach(function (id) { bringIn(relayTeamId, session, id, teamKey, teamDoc); });
     }
     return { ok: true };
   }

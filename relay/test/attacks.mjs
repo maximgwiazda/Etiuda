@@ -515,6 +515,11 @@ function attacks() {
       const incoming = seal(w, w.lead, "notes.ec", 2, { body: "from-lead" });
       const up = upload(w, incoming);
       if (!up.ok) return false;
+      const got = t.fetch({ relayTeamId: w.relayTeamId, session: session.session, id: up.id });
+      if (!got || got.ok !== true || !sameBytes(got.ciphertext, incoming.ciphertext)) return false;
+      if (got.nonce !== incoming.nonce || got.signature !== incoming.signature) return false;
+      if (got.epoch !== incoming.epoch || got.writerKeyId !== incoming.writerKeyId) return false;
+      if (got.counter !== incoming.counter || got.supersedes !== incoming.supersedes) return false;
       const synced = t.syncMirror({
         relayTeamId: w.relayTeamId,
         session: session.session,
@@ -1063,7 +1068,7 @@ function attacks() {
       const fresh = signHello(t, w.relayTeamId, w.desk, c3.nonce);
       return refused(stale, "nonce-stale") && fresh.ok === true;
     }, true],
-    ["P17", "under a live session the list holds the uploaded id and the fetch returns its ciphertext", function (create) {
+    ["P17", "under a live session the list holds the uploaded id and the fetch returns the ciphertext, not a plaintext", function (create) {
       const t = create();
       const w = world(t);
       if (!w) return false;
@@ -1075,7 +1080,11 @@ function attacks() {
       const listed = t.list({ relayTeamId: w.relayTeamId, session: session.session });
       const got = t.fetch({ relayTeamId: w.relayTeamId, session: session.session, id: up.id });
       return listed.ok === true && Array.isArray(listed.ids) && listed.ids.indexOf(up.id) !== -1
-        && got.ok === true && sameBytes(got.ciphertext, blob.ciphertext);
+        && got.ok === true && got.plain == null
+        && got.nonce === blob.nonce && got.signature === blob.signature
+        && got.epoch === blob.epoch && got.writerKeyId === blob.writerKeyId
+        && got.counter === blob.counter && got.supersedes === blob.supersedes
+        && sameBytes(got.ciphertext, blob.ciphertext);
     }, true],
     ["P25", "a forged upload at a high counter is refused, and the lead's counter 1 is then accepted", function (create) {
       const t = create();
@@ -1172,6 +1181,44 @@ function attacks() {
       return refused(bad, "epoch") && good.ok === true
         && t.readMirror(deskFile(w, "join.json")) === "kept"
         && t.readMirror(deskFile(w, "in-use.ec")) == null;
+    }, true],
+    ["N6", "a hello for a removed key with a bad signature is refused like any bad signature, and a genuine one is removed", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      t.removeDesk({ relayTeamId: w.relayTeamId, deskId: w.deskId });
+      const ch1 = t.challenge({ relayTeamId: w.relayTeamId });
+      const unsigned = t.hello({
+        relayTeamId: w.relayTeamId, nonce: ch1.nonce, keyId: w.desk.keyId, signature: "",
+      });
+      const ch2 = t.challenge({ relayTeamId: w.relayTeamId });
+      const msg2 = t.helloMessage(w.relayTeamId, ch2.nonce, w.desk.keyId);
+      const forged = t.hello({
+        relayTeamId: w.relayTeamId,
+        nonce: ch2.nonce,
+        keyId: w.desk.keyId,
+        signature: wire.sign(w.other.privateKey, msg2),
+      });
+      const ch3 = t.challenge({ relayTeamId: w.relayTeamId });
+      const zeros = t.hello({
+        relayTeamId: w.relayTeamId,
+        nonce: ch3.nonce,
+        keyId: w.desk.keyId,
+        signature: "00".repeat(64),
+      });
+      const ch4 = t.challenge({ relayTeamId: w.relayTeamId });
+      const msg4 = t.helloMessage(w.relayTeamId, ch4.nonce, w.desk.keyId);
+      const named = t.hello({
+        relayTeamId: w.relayTeamId,
+        nonce: ch4.nonce,
+        keyId: w.desk.keyId,
+        publicKey: w.other.publicKey,
+        signature: wire.sign(w.other.privateKey, msg4),
+      });
+      const genuine = helloAs(t, w.relayTeamId, w.desk);
+      return refused(unsigned, "bad-signature") && refused(forged, "bad-signature")
+        && refused(zeros, "bad-signature") && refused(named, "bad-signature")
+        && refused(genuine, "removed");
     }, true],
   ];
 }
