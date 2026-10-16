@@ -124,7 +124,8 @@ function dropNotice(d){
     removeEventListener("resize",placeNotices);
   }
 }
-function eNotice(id,lead,body,onDismiss){
+/* `act`, where given, is {label, run}: a button before Dismiss that takes the notice down and does its act. */
+function eNotice(id,lead,body,onDismiss,act){
   let box=document.getElementById("eNotices");
   if(!box){
     box=document.createElement("div");
@@ -148,6 +149,14 @@ function eNotice(id,lead,body,onDismiss){
   d.appendChild(say);
   const row=document.createElement("div");
   row.className="tour-actions";
+  if(act){
+    const go=document.createElement("button");
+    go.type="button";
+    go.className="btn primary";
+    go.textContent=act.label;
+    go.onclick=()=>{ dropNotice(d); act.run(); };
+    row.appendChild(go);
+  }
   const x=document.createElement("button");
   x.type="button";
   x.className="btn";
@@ -582,5 +591,5 @@ export {
   packSnapshot,
   packUndoFor,
   BASE_CATS, BASE_M, catalogCardId, rebuildBaseCards, retiredCards, pack, loadPack, resetPack,
-  showPackMigrationWarning, syncSaveNotice, showDeskNotices, whoOptions, isFavourite, isIntentFavourite,
+  showPackMigrationWarning, syncSaveNotice, showDeskNotices, eNotice, whoOptions, isFavourite, isIntentFavourite,
 };

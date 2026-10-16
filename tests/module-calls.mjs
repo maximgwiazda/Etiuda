@@ -4054,10 +4054,10 @@ const CARD_B = {
         querySelector: s => (s.charAt(0) === "#" ? (btns[s] = btns[s] || { focus() { globalThis.document.activeElement = this; } }) : null) }); },
     createRange: () => ({}), execCommand: k => { const ta = made[made.length - 1]; copied.push(k + ":" + (ta && ta.value)); return true; },
     documentElement: { style: { setProperty() {}, removeProperty() {} }, classList: on(new Set()), addEventListener() {} } };
-  let pageKeys = null, selection = "", docMenu = null;
+  let pageKeys = null, pageInput = null, selection = "", docMenu = null;
   const hadMouse = globalThis.MouseEvent;
   globalThis.MouseEvent = class { constructor(type, o) { Object.assign(this, o || {}); this.type = type; } };
-  globalThis.addEventListener = (k, fn) => { if (k === "keydown") pageKeys = fn; };
+  globalThis.addEventListener = (k, fn) => { if (k === "keydown") pageKeys = fn; if (k === "input") pageInput = fn; };
   globalThis.getComputedStyle = () => ({ borderLeftWidth: "0", paddingLeft: "0", borderRightWidth: "0", paddingRight: "0" });
   globalThis.window.getSelection = () => selection;
   STUBS.forEach(k => { if (typeof H.hooks[k] !== "function") H.hooks[k] = () => {}; });
@@ -4183,6 +4183,75 @@ const CARD_B = {
     const boxHeld = [strip(), String(toastEl.textContent || toastEl.innerHTML)].join("/");
     check("search-box.js", "1012k4 four held Escapes in the search box neither ask nor close a conversation",
       () => eq(boxHeld, "dp-a:Anna,dp-b:Bartek/"));
+
+    /* 901u: CTRL+Z TAKES THE STANDING UNDO (board 901, desk-chrome-undo-key), through the page's own keydown and the
+       real bubble; a field typed in since the bubble came keeps the key, as does a held key and a bubble a question hides. */
+    {
+      const SCU = await import(MOD("shortcuts.js"));
+      KD.wireGlobalKeydown();
+      const ctrlZ = o => { const e = key(Object.assign({ key: "z", code: "KeyZ", ctrlKey: true }, o || {})); pageKeys(e); return e.prevented; };
+      const closeB = () => { start([["dp-a", "Anna"], ["dp-b", "Bartek"]], "dp-b"); globalThis.document.activeElement = body; T.closeActiveTab(); };
+      closeB();
+      const btnHtml = (bubble() || {}).innerHTML || "";
+      const taken = [ctrlZ(), strip(), !!bubble()].join("/");
+      const none = [ctrlZ(), strip()].join("/");
+      closeB();
+      const held = [ctrlZ({ repeat: true }), strip()].join("/");
+      ctrlZ();
+      check("keydown.js", "901u1 Ctrl+Z takes the standing Undo once, as its button does, and with none standing it is left alone; a held key takes nothing",
+        () => eq([taken, none, held].join(" | "), "true/dp-a:Anna,dp-b:Bartek/false | false/dp-a:Anna,dp-b:Bartek | false/dp-a:Anna"));
+      check("ui-lang.js", "901u2 the Undo button names its key, the fixed undo row's own chord, with the key for a screen reader",
+        () => eq([/<kbd>([^<]*)<\/kbd>/.exec(btnHtml) ? /<kbd>([^<]*)<\/kbd>/.exec(btnHtml)[1] : "no key", SCU.formatActionChord("undo"),
+          (SCU.SC_DEFS.find(d => d.id === "undo") || {}).fixed, /aria-keyshortcuts="Control\+Z"/.test(btnHtml), /aria-label="Undo"/.test(btnHtml)].join("|"),
+          "Ctrl+Z|Ctrl+Z|1|true|true"));
+      closeB();
+      globalThis.document.activeElement = box;
+      const fresh = [ctrlZ(), strip()].join("/");
+      closeB();
+      globalThis.document.activeElement = box;
+      if (pageInput) pageInput({ isTrusted: true, target: box });
+      const typed = [ctrlZ(), strip(), !!bubble()].join("/");
+      press();
+      const byButton = strip();
+      closeB();
+      globalThis.document.activeElement = box;
+      if (pageInput) pageInput({ isTrusted: false, target: box });
+      const scripted = [ctrlZ(), strip()].join("/");
+      globalThis.document.activeElement = body;
+      check("keydown.js", "901u3 in a field the key takes the Undo while nothing has been typed there since, and is the field's own once something has; a scripted input is no typing",
+        () => eq([fresh, typed, byButton, scripted].join(" | "),
+          "true/dp-a:Anna,dp-b:Bartek | false/dp-a:Anna/true | dp-a:Anna,dp-b:Bartek | true/dp-a:Anna,dp-b:Bartek"));
+      closeB();
+      byId["#modal"].hidden = false;
+      const overDialog = [ctrlZ(), strip()].join("/");
+      byId["#modal"].hidden = true;
+      closeB();
+      const asked = bubble();
+      if (asked) asked.hidden = true;
+      const hiddenB = [ctrlZ(), strip()].join("/");
+      if (asked) asked.hidden = false;
+      ctrlZ();
+      check("keydown.js", "901u4 over a dialog the key still takes the Undo, which stands above it; a bubble hidden under a question is not taken",
+        () => eq([overDialog, hiddenB].join(" | "), "true/dp-a:Anna,dp-b:Bartek | false/dp-a:Anna"));
+    }
+
+    /* 901p: THE PICKER NAMES THE CONVERSATION IT FILLS FOR (board 901, desk-core-picker-list), as its tab is named,
+       from the name typed in it now, through the picker's own answer. */
+    {
+      const PICKM = await import(MOD("pick.js"));
+      const who = () => (PICKM.answerPick("open", "{}") || {}).who;
+      start([["dp-a", "Anna Nowak"], ["dp-b", ""]], "dp-a");
+      const named = who();
+      pax.value = "Celina Lis";
+      const typed = who();
+      T.stepTab(1);
+      const nameless = who();
+      UILANG_STORE.lsSet("eUiLang", "pl");
+      const plNameless = who();
+      UILANG_STORE.lsDel("eUiLang");
+      check("pick.js", "901p1 the picker is told which conversation fills the reply, by its tab's name: the first name typed in it now, else its number",
+        () => eq([named, typed, nameless, plNameless].join("|"), "Anna|Celina|Tab 2|Rozmowa 2"));
+    }
 
     /* The window's close: the shell asks, and the conversations answer. */
     const answers = [], ask = () => T.askClose(a => answers.push(a));

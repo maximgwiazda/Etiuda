@@ -802,7 +802,7 @@ function tourActTests() {
      + " window steps only describes, waiting for no act",
     [ids.join(","), T.TOUR_STEPS.filter(s => s.name).map(s => s.id), T.TOUR_STEPS.filter(s => !waitsOn(s) && !s.name).map(s => s.id),
      T.TOUR_STEPS.filter(s => "does" in s).map(s => s.id)],
-    ["name,load,pax,search,rail,cards,pills,tabs,seg,buttons,editor,add,addIn,facts,factsIn,theme,menu,library,libraryIn,settings,settingsIn,done",
+    ["name,load,pax,search,rail,cards,pills,tabs,seg,buttons,editor,add,addIn,facts,factsIn,theme,menu,picker,library,libraryIn,settings,settingsIn,done",
      ["name"], ["pax", "search", "rail", "cards", "pills", "tabs", "seg", "theme", "done"], []]);
 
   /* The person's act: on a step that describes, nothing they do moves the tour; the Menu step moves on once the
@@ -5049,8 +5049,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1108;
-const UI_STRINGS_SHA256 = "6cc4a47169a8f1da8da7b30887b7af99478e475e4c29162c2c233500318b3b7e";
+const UI_STRINGS_COUNT = 1126;
+const UI_STRINGS_SHA256 = "0cf5df03edcf869a22257f906c104847626972ce505a834e6b36cfc0bbf30e23";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,

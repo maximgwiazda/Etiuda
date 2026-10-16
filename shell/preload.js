@@ -180,6 +180,8 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
   hotkeyState: () => ipcRenderer.sendSync("etiuda:hotkey-state"),
   setHotkey: (accel) => ipcRenderer.invoke("etiuda:hotkey-set", String(accel || "")),
   pauseHotkey: (on) => ipcRenderer.send("etiuda:hotkey-hold", !!on),
+  /* The picker opened from the desk itself, by the pointer, as the hotkey opens it. */
+  openPicker: () => ipcRenderer.send("etiuda:pick-show"),
 });
 
 if (json) {

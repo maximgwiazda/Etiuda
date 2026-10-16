@@ -111,6 +111,10 @@ const SC_DEFS=[
     def:{code:"Enter",key:"Enter",ctrl:0,alt:0,shift:0,meta:0},inField:0,fixed:1},
   {id:"copyOther",label:"Copy other language",hint:"Copy the focused macro in the other language",
     def:{code:"Enter",key:"Enter",ctrl:0,alt:0,shift:1,meta:0},inField:0,fixed:1},
+  /* The platform's own undo, so fixed: the Undo bubble's while one stands (keydown.js), a field's own otherwise.
+     The bubble's button names it as ui-lang.js UNDO_KEY. */
+  {id:"undo",label:"Undo",hint:"Take back what was just done, while its Undo button is on screen",
+    def:{code:"KeyZ",key:"z",ctrl:1,alt:0,shift:0,meta:0},inField:1,fixed:1},
   {id:"escape",label:"Escape / clear",
     hint:"Sheds one thing per press: panels, then search, then intents, then all tabs",
     def:{code:"Escape",key:"Escape",ctrl:0,alt:0,shift:0,meta:0},inField:1,fixed:1}

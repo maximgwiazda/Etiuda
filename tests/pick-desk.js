@@ -120,7 +120,8 @@ function buildApp() {
   return { dir, UD, docs: path.join(dir, "documents") };
 }
 
-const pickerPage = async () => (await b.pages()).find(p => /^data:text\/html/.test(p.url())) || null;
+/* The picker's page is the data: page holding the box; the word after a pick is a data: page of its own. */
+const pickerPage = async () => (await b.pages()).find(p => /^data:text\/html/.test(p.url()) && /id%3D%22q%22/.test(p.url())) || null;
 
 (async () => {
   const app = buildApp();

@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 89;
+const EXPECTED = 104;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -100,11 +100,20 @@ function deskCopy(id, vi) {
   navigator.clipboard = null;
   return got;
 }
+/* And its Shift+Enter, the other language's copy of the same block. */
+function deskCopyOther(id, vi) {
+  let got = null;
+  navigator.clipboard = { writeText: t => { got = t; return { then() {} }; } };
+  AS.putEntrySel({ id: id, vi: vi });
+  CE.copyEntrySel(true);
+  navigator.clipboard = null;
+  return got;
+}
 let LAB = null;
 const pickAnswer = (op, arg) => PICK.answerPick(op, JSON.stringify(arg || {}));
 
 try {
-  console.log("[1/6] the desk's side: what the picker is shown and what its copy makes");
+  console.log("[1/7] the desk's side: what the picker is shown and what its copy makes");
   ST.lsSet("eNameAsked", "1");
   ST.lsSet("eAgent", "Kate");
 
@@ -148,7 +157,9 @@ try {
   const many = [];
   for (let i = 0; i < 12; i++) many.push({ id: "c-m" + i, c: "orders", t: "Brass note " + i, en: "Brass note " + i + "." });
   AS.setCards(CARDS.map(c => Object.assign({}, c)).concat(many));
-  check(pickAnswer("find", { q: "brass" }).rows.length === 9, "1l the list holds nine rows, one for each number key");
+  const brass = pickAnswer("find", { q: "brass" });
+  check(brass.rows.length === 13 && brass.count === "13 replies",
+    "1l the list holds every reply found, past the nine number keys, and says how many: " + brass.rows.length + " row(s), \"" + brass.count + "\"");
   AS.setCards(CARDS.map(c => Object.assign({}, c)));
 
   ST.lsDel("eNameAsked"); ST.lsDel("eAgent");
@@ -199,7 +210,7 @@ try {
     "1s control: the row of a reply that does not commit carries no mark and no key it did not: " + Object.keys(lampRow).join(","));
 
   /* ---- 2. the shell --------------------------------------------------------------------- */
-  console.log("\n[2/6] the shell: the hotkey, the relay and the clipboard");
+  console.log("\n[2/7] the shell: the hotkey, the relay and the clipboard");
   LAB = fs.mkdtempSync(path.join(os.tmpdir(), "etiuda-pick-"));
   const UD = path.join(LAB, "user-data"), DOCS = path.join(LAB, "documents");
   fs.mkdirSync(UD, { recursive: true }); fs.mkdirSync(DOCS, { recursive: true });
@@ -230,6 +241,7 @@ try {
       on: (ev, fn) => { (w.on[ev] = w.on[ev] || []).push(fn); }, once: (ev, fn) => { (w.on[ev] = w.on[ev] || []).push(fn); },
       isDestroyed: () => w.destroyed, isVisible: () => w.visible, isMinimized: () => false, isMaximized: () => false,
       show: note("show", () => { w.visible = true; }), focus: note("focus", () => { w.focused = true; }),
+      showInactive: note("showInactive", () => { w.visible = true; }), setIgnoreMouseEvents: v => { w.ignore = !!v; },
       hide: note("hide", () => { w.visible = false; w.focused = false; }),
       blur: note("blur", () => { w.focused = false; (w.on.blur || []).forEach(fn => fn()); }),
       destroy: note("destroy", () => { w.destroyed = true; }), restore: note("restore"), center: note("center"),
@@ -250,11 +262,12 @@ try {
   const held = new Map(), taken = new Set(["Control+Shift+F9"]), clip = [];
   /* THE CARET HELPER is never run here: its calls are recorded, with how many calls the picker had seen
      at the time, and answered as the helper would. Only Windows has one; elsewhere none is asked. */
-  const caret = { there: true, front: "4242 1", runs: [], pickerCalls: () => -1 };
+  const caret = { there: true, front: "4242 1", runs: [], pickerCalls: () => -1, fail: false };
   const cpReal = nodeRequire("node:child_process");
   const cpStub = Object.assign({}, cpReal, { execFile: (file, args, opts, done) => {
     caret.runs.push({ file: String(file), args: (args || []).map(String), at: caret.pickerCalls() });
-    setImmediate(() => done(null, args && args[0] === "which" ? caret.front : "", ""));
+    setImmediate(() => done(caret.fail && args && args[0] === "paste" ? Object.assign(new Error("refused"), { code: 3 }) : null,
+      args && args[0] === "which" ? caret.front : "", ""));
   } });
   let suspended = null, clipReads = 0;
   const onH = {}, invH = {};
@@ -505,6 +518,74 @@ try {
     "2v Alt+V on the desk's window and in the picker reads nothing, no channel is the clipboard's, and neither page is given a read: "
     + JSON.stringify({ reads: clipReads, channels: clipDoors, verbs: clipVerbs }));
 
+  /* ---- 7, THE SHELL'S HALF (board 901), run here while the shell stands: the word after a pick, said where the
+     picker stood in a window that takes neither the focus nor a click; the desk's own door; and Shift+Enter. ---- */
+  {
+    const notes = () => wins.filter(w => w.opts && w.opts.focusable === false && !w.destroyed);
+    const noteDoc = w => decodeURIComponent(String(w.url || "").replace(/^data:text\/html;charset=utf-8,/, ""));
+    const said = pickAnswer("open").words;
+    const noteSays = w => (/<\/svg>([^<]*)<\/body>/.exec(noteDoc(w)) || [])[1] || "";
+    /* 2v called every handler with nothing, which turned the hotkey off; it is held again. */
+    await deskPage.E_HOST.setHotkey("Control+Shift+Space");
+    caret.there = true; caret.front = "4242 " + (process.pid + 1); caret.fail = false;
+    await pressHotkey();
+    const placed = Object.assign({}, pw.bounds);
+    await pickerPage.E_PICK.copy(JSON.stringify({ id: "c-lamp", vi: 0 }));
+    await until(() => notes().length === 1 && notes()[0].visible);
+    const nw = notes()[0] || { opts: {}, calls: [] };
+    const first = noteSays(nw), doc = noteDoc(nw);
+    const policy = (/Content-Security-Policy" content="([^"]*)"/.exec(doc) || [])[1] || "";
+    check(nw.visible && nw.opts.focusable === false && nw.opts.transparent === true && nw.opts.alwaysOnTop === true && nw.ignore === true
+      && nw.calls.indexOf("showInactive") > -1 && nw.calls.indexOf("show") < 0 && nw.calls.indexOf("focus") < 0 && !nw.focused
+      && !!nw.bounds && nw.bounds.x === placed.x && nw.bounds.y === placed.y && first === (WIN ? said.pasted : said.copied)
+      && /default-src 'none'/.test(policy) && /script-src 'none'/.test(policy) && !/<script/.test(doc),
+      "7i a pick says what it did where the picker stood, in a window that takes neither the focus nor a click and runs no script: \""
+      + first + "\" at " + JSON.stringify(nw.bounds && { x: nw.bounds.x, y: nw.bounds.y }) + (WIN ? ", the helper having pressed Ctrl+V" : ", no helper here"));
+
+    caret.fail = true;
+    await pressHotkey();
+    const hidAtPress = !nw.visible;
+    await pickerPage.E_PICK.copy(JSON.stringify({ id: "c-lamp", vi: 0 }));
+    await until(() => nw.visible);
+    const refused = noteSays(nw);
+    caret.fail = false; caret.there = false;
+    await pressHotkey();
+    await pickerPage.E_PICK.copy(JSON.stringify({ id: "c-lamp", vi: 0 }));
+    await until(() => nw.visible);
+    const absent = noteSays(nw);
+    caret.there = true;
+    check(hidAtPress && refused === said.copied && absent === said.copied && said.copied === "Copied, press Ctrl+V" && notes().length === 1,
+      "7j where the helper could not press Ctrl+V, or there is none, the word is that the reply waits for Ctrl+V; a new press takes"
+      + " the last word down first, and one window says them all: " + JSON.stringify([refused, absent, hidAtPress, notes().length]));
+
+    if (pw.visible) { held.get("Control+Shift+Space")(); await until(() => !pw.visible); }
+    const opensBefore = opened.length;
+    onH["etiuda:pick-show"](pickerEvent());
+    await tick(20);
+    const fromPickerSelf = pw.visible;
+    onH["etiuda:pick-show"](deskEvent());
+    await until(() => pw.visible && pw.focused);
+    const fromDesk = pw.visible && opened.length === opensBefore + 1;
+    onH["etiuda:pick-show"](deskEvent());
+    await tick(20);
+    check(!fromPickerSelf && fromDesk && pw.visible && opened.length === opensBefore + 1 && typeof deskPage.E_HOST.openPicker === "function"
+      && !pickerPage.E_PICK.openPicker,
+      "7k the desk's own door opens the picker by the pointer as the hotkey does, and a second knock leaves it standing; the picker's"
+      + " page cannot knock: " + JSON.stringify([fromPickerSelf, fromDesk, pw.visible, opened.length - opensBefore]));
+
+    AS.setCards(CARDS.map(c => Object.assign({}, c)).concat([{ id: "c-kettle", c: "orders", t: "Kettle", alt: 1,
+      en: "{GREET} {PAX},\nThe kettle leaves on Monday.\n\nThe kettle leaves on Friday.", pl: "Kettle words in the second language." }]));
+    const wantOther = deskCopyOther("c-kettle", 0);
+    const sentAt = desk.sent.length, clipAt = clip.length;
+    const tookOther = await pickerPage.E_PICK.copy(JSON.stringify({ id: "c-kettle", vi: 0, other: 1 }));
+    const askedOther = desk.sent.slice(sentAt).filter(a => a[0] === "etiuda:pick-ask" && a[2] === "copy").map(a => a[3]);
+    check(tookOther === true && clip.length === clipAt + 1 && clip[clip.length - 1] === SH.pickClipText(wantOther, process.platform)
+      && /second language/.test(wantOther) && askedOther.join() === JSON.stringify({ id: "c-kettle", vi: 0, other: 1 }),
+      "7l Shift+Enter in the picker puts the desk's own Shift+Enter copy on the clipboard, the shell asking the desk for the other"
+      + " language: " + askedOther.join());
+    AS.setCards(CARDS.map(c => Object.assign({}, c)));
+  }
+
   cursor = { x: 1900, y: 1000 };
   const edge = SH.pickerPlace(cursor, area, SH.PICK_SIZE), small = SH.pickerPlace({ x: 10, y: 10 }, { x: 0, y: 0, width: 400, height: 300 }, SH.PICK_SIZE);
   check(edge.x + edge.width <= 1920 && edge.y + edge.height <= 1000 - 18 && edge.y >= 0 && small.width === 400 && small.height === 300,
@@ -524,7 +605,7 @@ try {
   check(pw.destroyed, "2q the picker goes with the desk's window, so the app can quit");
 
   /* ---- 3. what the page is ---------------------------------------------------------------- */
-  console.log("\n[3/6] the picker's page");
+  console.log("\n[3/7] the picker's page");
   const doc = decodeURIComponent(String(pw.url || "").replace(/^data:text\/html;charset=utf-8,/, ""));
   const script = (/<script>([\s\S]*?)<\/script>/.exec(doc) || [])[1] || "";
   const hash = "'sha256-" + nodeRequire("node:crypto").createHash("sha256").update(script, "utf8").digest("base64") + "'";
@@ -536,9 +617,15 @@ try {
   check(/\.on\{background:color-mix\(in srgb,var\(--accent\) 20%,transparent\)\}/.test(doc) && /forced-colors:active/.test(doc)
     && /prefers-reduced-motion/.test(doc),
     "3c the marked row wears the desk's mark, and high contrast and reduced motion are answered");
+  /* The list scrolls inside the picker rather than growing past it or cutting its last rows off: the first #rows rule, the
+     list itself, shrinks in its column and scrolls up and down, and no shorthand in it hides the overflow. */
+  const rowsRule = (/#rows\{([^}]*)\}/.exec(doc) || [])[1] || "";
+  check(/(^|;)min-height:0(;|$)/.test(rowsRule) && /(^|;)overflow-y:auto(;|$)/.test(rowsRule) && !/(^|;)overflow:/.test(rowsRule),
+    "3d the list scrolls inside the picker, its rule shrinking in the column and scrolling up and down with no overflow"
+    + " shorthand to hide it: " + JSON.stringify(rowsRule));
 
   /* ---- 4. the page's own script, run ---------------------------------------------------- */
-  console.log("\n[4/6] the picker's page, its script run over a stand-in of its two elements");
+  console.log("\n[4/7] the picker's page, its script run over a stand-in of its two elements");
   const pageL = {};
   const qEl = { value: "", placeholder: "", focus() {}, setAttribute() {}, addEventListener: (t, fn) => { pageL["q:" + t] = fn; } };
   let boxHtml = "";
@@ -608,7 +695,7 @@ try {
     "4p control: the row beside it, not marked, wears none: " + lis.length + " row(s), " + (lis[1] || "").indexOf('class="st"'));
 
   /* ---- 5. what the shell may not do -------------------------------------------------------- */
-  console.log("\n[5/6] what the shell may not do, read from its text with the comments taken out");
+  console.log("\n[5/7] what the shell may not do, read from its text with the comments taken out");
   /* THE COMMENTS ARE TAKEN OUT BY A PARSER, esbuild's own, which reprints the program without them and with its
      whitespace squeezed (a plain reprint keeps some comments it attaches to a property). The pattern used before took
      "/*" inside a string for a comment's start, so a read written between a "/*" string and a "*\/" string was blanked
@@ -753,13 +840,13 @@ try {
     + " (Control, V) in " + pressed.length + " presses" + (csForbid.length ? "; also names " + csForbid.join(", ") : ""));
   /* THE PASTE IS STARTED FROM ONE PLACE: the copy, right after its clipboard write, so no other handler presses a key. */
   const pasteNames = (shellBare.match(/\bcaretPaste\b/g) || []).length;
-  const pasteAfterWrite = /clipboard\.writeText\(pickClipText\(v\.text,process\.platform\)\);caretPaste\(pickTarget\);hidePicker\(true\);/.test(shellCode);
+  const pasteAfterWrite = /clipboard\.writeText\(pickClipText\(v\.text,process\.platform\)\);caretPaste\(pickTarget,showPickNote\);hidePicker\(true\);/.test(shellCode);
   check(pasteNames === 2 && pasteAfterWrite,
     "5g the caret helper's paste is started from one place, the copy, right after its clipboard write and before the picker hides: "
     + pasteNames + " mention(s) of caretPaste, " + (pasteAfterWrite ? "after the write" : "NOT after the write"));
 
   /* ---- 6. the most used replies first, on this desk's own last 28 days ------------------- */
-  console.log("\n[6/6] the most used replies first: the picker at rest, a search, and what stays as it was");
+  console.log("\n[6/7] the most used replies first: the picker at rest, a search, and what stays as it was");
   /* Each scenario is a desk of its own: a fresh pack, so the day's count is made afresh for it. */
   const ago = n => { const d = new Date(); return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - n * 864e5).toISOString().slice(0, 10); };
   const fillers = n => Array.from({ length: n }, (_, i) => ({ id: "c-f" + i, c: "orders", t: "Filler " + i, en: "Filler reply " + i + "." }));
@@ -767,13 +854,13 @@ try {
   const A = { id: "c-a", c: "orders", t: "Alpha", en: "Alpha reply." }, B = { id: "c-b", c: "orders", t: "Bravo", en: "Bravo reply." };
   const GONE = { id: "c-gone", c: "orders", t: "Gone", _hidden: true, en: "Gone reply." };
   const copies = (id, n, day) => { for (let i = 0; i < n; i++) DS.bumpUse(PK.pack, id, day || ago(0)); };
-  const rest = () => ids(PICK.pickRows(""));
+  const rest = () => ids(PICK.pickRows("").slice(0, 9));
   const first9 = Array.from({ length: 9 }, (_, i) => "c-f" + i + "/0").join(" ");
   const fRows = (from, to) => Array.from({ length: to - from }, (_, i) => "c-f" + (from + i) + "/0").join(" ");
 
   deskOf([A, B, GONE]);
   check(rest() === first9,
-    "6a with no copy counted the picker at rest is the desk's list, nine rows in catalog order: " + rest());
+    "6a with no copy counted the picker at rest is the desk's list, its first nine rows in catalog order: " + rest());
   deskOf([A, B, GONE]); copies("c-a", 3); copies("c-b", 1);
   check(rest() === "c-a/0 c-b/0 " + fRows(0, 7),
     "6b copies counted for two replies below the first nine bring them to the top, most copied first, the rest after in their order: " + rest());
@@ -850,6 +937,244 @@ try {
   deskOf([A, B]); copies("c-b", 40); copies("c-a", 9);
   check(RD.rankedCards([], () => true).hits.map(m => m.id).join(" ") === resting && resting.split(" ").slice(-2).join(" ") === "c-a c-b",
     "6m the desk's resting list is the same order with copies counted as without: " + resting.split(" ").slice(-3).join(" "));
+
+  /* ---- 7. the after-batch (board 901) ------------------------------------------------------- */
+  console.log("\n[7/7] the list grouped and counted, the keys as they work, the conversation named, the hotkey made known");
+  {
+  /* A list that scrolls: every reply found, PICK_ROWS of them at most, counted in replies as the desk counts them. */
+  deskOf([]);
+  AS.setCards(Array.from({ length: 60 }, (_, i) => ({ id: "c-k" + i, c: "orders", t: "Kettle " + i, en: "Kettle reply " + i + "." })));
+  const capped = pickAnswer("find", { q: "kettle" }), resting = pickAnswer("open");
+  AS.setCards([{ id: "c-solo", c: "orders", t: "Solo", en: "Solo reply." },
+    { id: "c-trio", c: "orders", t: "Trio", alt: 1, en: "Trio one.\n\nTrio two.\n\nTrio three." }]);
+  const solo = pickAnswer("find", { q: "solo" }).count, trio = pickAnswer("find", { q: "trio" }).count, nothing = pickAnswer("find", { q: "zzqx" }).count;
+  ST.lsSet("eUiLang", "pl");
+  const plCounts = [pickAnswer("find", { q: "solo" }).count, pickAnswer("find", { q: "trio" }).count];
+  AS.setCards(Array.from({ length: 60 }, (_, i) => ({ id: "c-k" + i, c: "orders", t: "Kettle " + i, en: "Kettle reply " + i + "." })));
+  plCounts.push(pickAnswer("find", { q: "kettle" }).count);
+  ST.lsDel("eUiLang");
+  check(capped.rows.length === 50 && capped.count === "50 of 60 replies" && resting.rows.length === 50 && resting.count === "50 of 60 replies"
+    && solo === "1 reply" && trio === "3 replies" && nothing === "" && plCounts.join("|") === "1 odpowiedź|3 odpowiedzi|50 z 60 odpowiedzi",
+    "7a the list carries every reply up to fifty, past the nine number keys, and its count says how many of how many, in Polish too: "
+    + JSON.stringify([capped.rows.length, capped.count, solo, trio, nothing, plCounts]));
+
+  /* Shift+Enter is the desk's own Shift+Enter (copyEntrySel(true)): the next language, the same block or its last. */
+  const KETTLE = { id: "c-kettle", c: "orders", t: "Kettle", alt: 1,
+    en: "{GREET} {PAX},\nThe kettle leaves on Monday.\n\nThe kettle leaves on Friday.", pl: "Kettle words in the second language." };
+  deskOf([KETTLE]);
+  const txt = v => (v && typeof v.text === "string") ? v.text : null;
+  const o0 = txt(pickAnswer("copy", { id: "c-kettle", vi: 0, other: 1 })), d0 = deskCopyOther("c-kettle", 0);
+  const o1 = txt(pickAnswer("copy", { id: "c-kettle", vi: 1, other: 1 })), d1 = deskCopyOther("c-kettle", 1);
+  const s1 = txt(pickAnswer("copy", { id: "c-kettle", vi: 1 })), e1 = deskCopy("c-kettle", 1);
+  pickAnswer("copy", { id: "c-kettle", vi: 1 });
+  const lastOther = txt(pickAnswer("copy", { last: true, other: 1 }));
+  const plUses = ((PK.pack.useCounts || {})["c-kettle"] | 0);
+  /* The desk's own key copies nothing there either, and says so in a toast this stand-in has no room for. */
+  const noOther = [txt(pickAnswer("copy", { id: "c-f0", vi: 0, other: 1 })), null];
+  check(o0 === d0 && /second language/.test(o0 || "") && o1 === d1 && o1 === o0 && s1 === e1 && /Friday/.test(s1 || "") && lastOther === o0
+    && plUses > 0 && noOther[0] === noOther[1],
+    "7b Shift+Enter copies what the desk's own Shift+Enter copies: the other language, at the same block or its last, the reply copied"
+    + " last included, and nothing where the desk has nothing: " + JSON.stringify([o0 === d0, o1 === d1, s1 === e1, lastOther === o0, noOther]));
+
+  /* The page's words for its keys and its note, each line holding {KEY} where its key goes; the other language by code. */
+  const w7 = pickAnswer("open").words;
+  AS.putLang("pl");
+  const wPl = pickAnswer("open").words.keyOther;
+  AS.putLang("en");
+  const CM = await import(MOD("content-model.js"));
+  const langsWere = CM.CONTENT_LANGS.slice();
+  CM.setContentLangs(["en"]);
+  const wOne = pickAnswer("open").words.keyOther;
+  CM.setContentLangs(langsWere);
+  check(w7.keyCopy === "{KEY} copies" && w7.keyOther === "{KEY} in PL" && wPl === "{KEY} in EN" && wOne === "" && w7.keyClose === "{KEY} closes"
+    && w7.pasted === "Pasted" && w7.copied === "Copied, press Ctrl+V" && w7.who === "The reply is filled in for this conversation",
+    "7c the page is given the words for its keys and its note, the other language named by its code, and none where there is one: "
+    + JSON.stringify([w7.keyCopy, w7.keyOther, wPl, wOne, w7.keyClose, w7.pasted, w7.copied]));
+
+  /* THE PAGE, run again over a stand-in that holds the chip, the count and the legend too. */
+  const pg = {};
+  const mk = () => ({ value: "", placeholder: "", hidden: false, title: "", textContent: "", innerHTML: "", attrs: {}, focus() {},
+    setAttribute(k, v) { this.attrs[k] = String(v); }, querySelectorAll: () => [], addEventListener: (t, fn) => { pg[t] = fn; } });
+  const els7 = { q: mk(), rows: mk(), who: mk(), count: mk(), keys: mk() };
+  els7.q.addEventListener = (t, fn) => { pg["q:" + t] = fn; };
+  els7.rows.addEventListener = (t, fn) => { pg["box:" + t] = fn; };
+  const sent7 = [];
+  let open7 = null, found7 = { rows: [], count: "" };
+  new Function("window", "document", script)({ E_PICK: { find: () => Promise.resolve(JSON.stringify(found7)),
+    copy: s => { sent7.push(s); }, close: () => {}, ready: () => {}, onOpen: fn => { open7 = fn; } } },
+    { getElementById: id => els7[id] || null, documentElement: { style: { setProperty() {} }, dataset: {}, classList: { toggle() {} }, lang: "" } });
+  const row = (id, vi, extra) => Object.assign({ id: id, vi: vi, t: "T " + id, x: "x " + id + vi, tag: "" }, extra || {});
+  const W7 = { again: "again", stamp: "Commits the firm", who: "Filled for", keyCopy: "{KEY} copies", keyOther: "{KEY} in PL", keyClose: "{KEY} closes" };
+  const openWith = (rows, extra) => { sent7.length = 0; els7.q.value = ""; open7(JSON.stringify(Object.assign({ rows: rows, words: W7 }, extra || {}))); };
+  const key7 = (k, code, mods) => { pg["q:keydown"](Object.assign({ key: k, code: code || k, ctrlKey: false, altKey: false, metaKey: false, shiftKey: false,
+    preventDefault() {} }, mods || {})); return sent7[sent7.length - 1] || "nothing"; };
+  const grp = [row("a", 0), row("g", 0, { tag: "1/3", commits: 1 }), row("g", 1, { tag: "2/3", commits: 1 }), row("g", 2, { tag: "3/3", commits: 1 }), row("c", 0)];
+  openWith(grp, { last: row("a", 0), count: "5 replies", who: "Marta" });
+  const h7 = els7.rows.innerHTML, lis7 = h7.split("</li>").filter(x => x.indexOf("<li") > -1);
+  const shape = lis7.map(li => (/class="grp"/.test(li) ? "head:" + ((/<span class="t">([^<]*)</.exec(li) || [])[1]) + (/class="st"/.test(li) ? "+st" : "")
+    : ((/<kbd>([^<]*)<\/kbd>/.exec(li) || [])[1] || "-") + (/class="in/.test(li) ? " in " + ((/<span class="g">([^<]*)</.exec(li) || [])[1]) : "")
+      + (/class="in[^"]*"/.test(li) && /<span class="t">/.test(li) ? " TITLE-AGAIN" : ""))).join(" | ");
+  const ctrl2 = key7("2", "Digit2", { ctrlKey: true });
+  check(shape === "Ctrl+0 | head:T g+st | Ctrl+1 in 1/3 | Ctrl+2 in 2/3 | Ctrl+3 in 3/3 | Ctrl+4" && ctrl2 === '{"id":"g","vi":1}',
+    "7d a card of several replies is one group, its title and stamp once over its replies, each by its tag; every row shows its key as Ctrl"
+    + " and its digit, the reply copied last Ctrl+0, and Ctrl+2 takes the row that shows it: " + shape + " / " + ctrl2);
+
+  openWith(grp, { last: row("a", 0), count: "5 replies", who: "Marta" });
+  const sEnterRest = key7("Enter", "Enter", { shiftKey: true });
+  openWith(grp, { last: row("a", 0) });
+  key7("ArrowDown", "ArrowDown");
+  const sEnter = key7("Enter", "Enter", { shiftKey: true });
+  openWith(grp, { last: row("a", 0) });
+  const sDigit = key7("3", "Digit3", { ctrlKey: true, shiftKey: true });
+  openWith(grp, { last: row("a", 0) });
+  pg["box:click"]({ shiftKey: true, target: { closest: () => ({ dataset: { i: "4" } }) } });
+  const sClick = sent7[sent7.length - 1];
+  openWith(grp, { last: row("a", 0) });
+  const plain = key7("Enter", "Enter");
+  check(sEnterRest === '{"last":true,"other":1}' && sEnter === '{"id":"g","vi":0,"other":1}' && sDigit === '{"id":"g","vi":2,"other":1}'
+    && sClick === '{"id":"c","vi":0,"other":1}' && plain === '{"last":true}',
+    "7e Shift with Enter, with Ctrl and a digit, or with a click takes the row in the other language; without Shift nothing changes: "
+    + [sEnterRest, sEnter, sDigit, sClick, plain].join(" "));
+
+  openWith(grp, { last: row("a", 0), count: "5 replies", who: "Marta" });
+  const foot = [els7.count.textContent, els7.keys.innerHTML, els7.who.hidden, els7.who.title, /<span>Marta<\/span>/.test(els7.who.innerHTML)];
+  found7 = { rows: [row("c", 0)], count: "1 reply" };
+  els7.q.value = "c"; pg["q:input"]();
+  await tick(5);
+  const afterFind = els7.count.textContent;
+  found7 = { rows: [], count: "" };
+  els7.q.value = "zz"; pg["q:input"]();
+  await tick(5);
+  const afterNone = els7.count.textContent;
+  open7(JSON.stringify({ rows: grp, words: Object.assign({}, W7, { keyOther: "" }), count: "5 replies", who: "" }));
+  const lone = [els7.keys.innerHTML, els7.who.hidden];
+  check(foot[0] === "5 replies" && foot[1] === "<span><kbd>Enter</kbd> copies</span><span><kbd>Shift+Enter</kbd> in PL</span><span><kbd>Esc</kbd> closes</span>"
+    && foot[2] === false && foot[3] === "Filled for" && foot[4] && afterFind === "1 reply" && afterNone === ""
+    && lone[0] === "<span><kbd>Enter</kbd> copies</span><span><kbd>Esc</kbd> closes</span>" && lone[1] === true,
+    "7f under the list the count follows what is found and the keys are shown as they work, Shift+Enter only where there is another"
+    + " language; the chip names the conversation the reply is filled for, and hides where there is none: " + JSON.stringify([foot, afterFind, afterNone, lone]));
+
+  const twenty = Array.from({ length: 20 }, (_, i) => row("p" + i, 0));
+  openWith(twenty);
+  const pages = [];
+  for (let i = 0; i < 3; i++) { key7("PageDown", "PageDown"); pages.push((/id="r(\d+)"[^>]*class="on"/.exec(els7.rows.innerHTML) || [])[1]); }
+  const bottom = key7("Enter", "Enter");
+  for (let i = 0; i < 3; i++) { key7("PageUp", "PageUp"); pages.push((/id="r(\d+)"[^>]*class="on"/.exec(els7.rows.innerHTML) || [])[1]); }
+  const chips = (els7.rows.innerHTML.match(/<kbd>Ctrl\+\d<\/kbd>/g) || []).length;
+  check(pages.join(",") === "8,16,19,11,3,0" && bottom === '{"id":"p19","vi":0}' && chips === 9,
+    "7g Page Down and Page Up move the mark eight rows and stop at either end, and only the first nine rows carry a key: "
+    + pages.join(",") + ", " + bottom + ", " + chips + " key(s)");
+
+  /* THE HOTKEY MADE KNOWN: a combination another program holds is said when the desk is up, with the way to another. */
+  const H7 = await import(MOD("host.js"));
+  const HKS = await import(MOD("hooks.js"));
+  const madeEls = [], byIdEls = {};
+  const el7 = tag => { const e = { tagName: tag, children: [], className: "", textContent: "", attrs: {}, style: {},
+    setAttribute(k, v) { this.attrs[k] = v; }, appendChild(c) { this.children.push(c); c.parentNode = this; if (c.id) byIdEls[c.id] = c; return c; },
+    remove() { this.gone = true; if (this.id && byIdEls[this.id] === this) delete byIdEls[this.id]; }, get firstChild() { return this.children.filter(c => !c.gone)[0] || null; },
+    getBoundingClientRect: () => ({ bottom: 40 }) }; madeEls.push(e); return e; };
+  const docWas = globalThis.document, addWas = globalThis.addEventListener, hostWas = globalThis.window.E_HOST, openWas = HKS.hooks.openSettings;
+  let settingsAt = null;
+  const host7 = st => { globalThis.window.E_HOST = { hotkeyState: () => st, openPicker: () => {} }; };
+  const textOf = n => (n.textContent || "") + n.children.map(textOf).join("");
+  const notice7 = st => {
+    Object.keys(byIdEls).forEach(k => delete byIdEls[k]);
+    host7(st);
+    PICK.hotkeyNotice();
+    const box = byIdEls.eNotices, d = box && box.children.find(c => c.id === "eHotkeyNote");
+    return d || null;
+  };
+  let taken7, held7, none7, acted = "";
+  try {
+    globalThis.addEventListener = () => {};
+    globalThis.removeEventListener = () => {};
+    globalThis.document = Object.assign({}, docWas, { createElement: el7, createTextNode: s => ({ textContent: s, children: [] }),
+      getElementById: id => byIdEls[id] || null,
+      querySelector: s => (s === ".row" ? { getBoundingClientRect: () => ({ bottom: 40 }) } : null),
+      body: Object.assign({}, docWas.body, { appendChild: c => { if (c.id) byIdEls[c.id] = c; return c; } }) });
+    HKS.hooks.openSettings = at => { settingsAt = at; };
+    const d = notice7({ accel: "Control+Shift+Space", held: false, taken: true });
+    taken7 = d ? textOf(d) : "none";
+    const acts = d ? d.children.find(c => c.className === "tour-actions") : null, go = acts ? acts.children[0] : null;
+    if (go && go.onclick) { go.onclick(); acted = (d.gone ? "gone" : "standing") + "/" + settingsAt; }
+    held7 = notice7({ accel: "Control+Shift+Space", held: true, taken: false });
+    globalThis.window.E_HOST = undefined;
+    Object.keys(byIdEls).forEach(k => delete byIdEls[k]);
+    PICK.hotkeyNotice();
+    none7 = byIdEls.eNotices || null;
+  } finally {
+    globalThis.document = docWas; globalThis.addEventListener = addWas; delete globalThis.removeEventListener; HKS.hooks.openSettings = openWas;
+    if (hostWas === undefined) delete globalThis.window.E_HOST; else globalThis.window.E_HOST = hostWas;
+  }
+  check(taken7 === "Ctrl+Shift+Space belongs to another program just now. A combination of Etiuda's own, chosen in Settings, brings the replies over any window.Choose a combinationDismiss"
+    && acted === "gone/keys" && held7 === null && none7 === null && H7.eHotkeyLabel("Control+Alt+F9") === "Ctrl+Alt+F9",
+    "7h a combination another program holds is said when the desk is up, naming it, with a button to Settings' keys that takes the"
+    + " notice down; one held, or no host, says nothing: " + JSON.stringify([taken7, acted, !!held7, !!none7]));
+
+  /* THE MENU'S ROW, where the host has a picker: its name and the combination held, and a click that opens it. */
+  const HM = await import(MOD("header-menus.js"));
+  const mrow = { hidden: true, innerHTML: "", title: "" };
+  const menuEl = { hidden: false, contains: () => false, querySelectorAll: () => [] };
+  const btnEl = { classList: { add() {}, remove() {} }, setAttribute() {} };
+  const elsWere = Object.assign({}, els), hostWas2 = globalThis.window.E_HOST, addWas2 = globalThis.addEventListener;
+  let pickerOpened = 0;
+  const rowFor = st => { globalThis.window.E_HOST = st === undefined ? undefined : Object.assign({ hotkeyState: () => st },
+    st && st.noDoor ? {} : { openPicker: () => { pickerOpened++; } }); HM.syncSettingsMenu(); return mrow.hidden ? "hidden" : mrow.innerHTML; };
+  let rows7 = [], clicked = "";
+  try {
+    Object.assign(els, { "#menuPicker": mrow, "#settingsMenu": menuEl, "#settingsBtn": btnEl, "#moreBtn": {}, "#moreMenu": { hidden: true } });
+    globalThis.addEventListener = () => {};
+    rows7 = [rowFor({ accel: "Control+Shift+Space", held: true, taken: false }), rowFor({ accel: "Control+Shift+Space", held: false, taken: true }),
+      rowFor({ accel: "", held: false, taken: false, noDoor: true }), rowFor(undefined)];
+    rowFor({ accel: "Control+Shift+Space", held: true, taken: false });
+    HM.wireHeaderMenus();
+    menuEl.hidden = false;
+    menuEl.onclick({ target: { closest: () => ({ dataset: { act: "picker" } }) } });
+    clicked = pickerOpened + "/" + (menuEl.hidden ? "shut" : "open");
+  } finally {
+    Object.keys(els).forEach(k => { if (!(k in elsWere)) delete els[k]; });
+    globalThis.addEventListener = addWas2;
+    if (hostWas2 === undefined) delete globalThis.window.E_HOST; else globalThis.window.E_HOST = hostWas2;
+  }
+  check(rows7.join(" | ") === "<span>Bring the replies over any window</span><kbd data-i18n-skip>Ctrl+Shift+Space</kbd> | "
+    + "<span>Bring the replies over any window</span> | hidden | hidden" && clicked === "1/shut" && /Settings/.test(mrow.title),
+    "7m the Menu has a row for the picker where the host has one, showing the combination while it is held; a click shuts the Menu and"
+    + " opens the picker: " + rows7.join(" | ") + " / " + clicked);
+
+  /* THE TOUR'S STEP, the table and its helpers sliced out of tour.js and run over a scope of stand-ins, as tests/test.js runs it. */
+  const TSRC = fs.readFileSync(path.join(ROOT, "src", "modules", "tour.js"), "utf8");
+  const between = (src, a, b) => { const i = src.indexOf(a), j = i < 0 ? -1 : src.indexOf(b, i); return i < 0 || j < 0 ? "" : src.slice(i, j); };
+  let hk7 = null, actsHeard = 0, doorKnocks = 0;
+  const own7 = { eHotkey: () => hk7, eHotkeyLabel: H7.eHotkeyLabel, esc: s => String(s), t: s => s, tourActSoon: () => { actsHeard++; },
+    eOpenPicker: () => { doorKnocks++; return true; }, menuTarget: () => ({}), menuSide: () => "left" };
+  const scope7 = new Proxy({}, { has: (o, k) => typeof k === "string",
+    get: (o, k) => k === Symbol.unscopables ? undefined : k in own7 ? own7[k] : k in globalThis ? globalThis[k] : () => undefined,
+    set: (o, k, v) => { own7[k] = v; return true; } });
+  let TT = null;
+  try {
+    TT = new Function("scope", "with(scope){\n" + between(TSRC, "let tourPicks=", "// The wheel waits") + "\n"
+      + between(TSRC, "const TOUR_STEPS=[", "\n];\n") + "\n];\nreturn { TOUR_STEPS, tourHeardPick };\n}")(scope7);
+  } catch (e) { TT = null; }
+  const tids = TT ? TT.TOUR_STEPS.map(s => s.id) : [], ps = TT ? TT.TOUR_STEPS.find(s => s.id === "picker") : null;
+  let tourSays = "no step";
+  if (ps) {
+    const whens = [null, { accel: "Control+Shift+Space", held: false, taken: true }, { accel: "Control+Shift+Space", held: true, taken: false }]
+      .map(h => { hk7 = h; return ps.when(); });
+    const chipsSeen = (ps.body().match(/<kbd>Ctrl<\/kbd>\+<kbd>Shift<\/kbd>\+<kbd>Space<\/kbd>/g) || []).length;
+    const doneBefore = ps.done();
+    TT.tourHeardPick();
+    const doneAfter = ps.done();
+    ps.open();
+    tourSays = JSON.stringify([tids.indexOf("picker") - tids.indexOf("menu"), whens, chipsSeen, doneBefore, doneAfter, actsHeard, doorKnocks,
+      ps.title, ps.menu, ps.side === own7.menuSide]);
+  }
+  const resets = /function showTourStep\(i\)\{[\s\S]*?tourStepPicks=tourPicks;[\s\S]*?\n\}/.test(TSRC);
+  const heard = /if\(op==="open"\)\{\s*try\{ tourHeardPick\(\); \}catch\(e\)\{\}/.test(fs.readFileSync(path.join(ROOT, "src", "modules", "pick.js"), "utf8"));
+  check(tourSays === JSON.stringify([1, [false, false, true], 2, false, true, 1, 1, "Replies over any window", true, true]) && resets && heard,
+    "7n the tour has a step for the picker straight after the Menu's, on only while a combination is held, naming it as keys; it is done"
+    + " once the picker opens after the step began, and its Next opens it: " + tourSays + (resets ? "" : ", NO reset at each step")
+    + (heard ? "" : ", the picker's opening NOT heard"));
+  }
 } catch (e) {
   failed++;
   console.log("  FAIL the run threw: " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

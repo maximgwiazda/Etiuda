@@ -9,7 +9,7 @@ import { SC_DEFS, chordFromEvent, chordsEqual, cloneChord, emptyChord, eventMatc
   formatChord, saveShortcuts, scMap2, scTake } from "./shortcuts.js";
 import { scCaptureId, scCaptureSlot, scRepaint, scStopCapture } from "./shortcuts-list.js";
 import { activateTourFocus, endTour, moveTourFocus, tourActive, tourHasFocus } from "./tour.js";
-import { t, toast } from "./ui-lang.js";
+import { noteUndoTyping, t, takeStandingUndo, toast } from "./ui-lang.js";
 import { pageKeyScroll } from "./page-scroll.js";
 import { lanesPageScroller } from "./lanes.js";
 import { $, intentEl } from "./dom.js";
@@ -83,6 +83,8 @@ function wireCaptureKeydown(){
 }
 
 function wireGlobalKeydown(){
+  // Typing a person did, for the Undo key's rule.
+  addEventListener("input",e=>{ if(e.isTrusted) noteUndoTyping(); },true);
   addEventListener("keydown",e=>{
     if(scCaptureId) return;
 
@@ -109,6 +111,10 @@ function wireGlobalKeydown(){
       }
       return;
     }
+
+    /* CTRL+Z TAKES THE STANDING UNDO, over a dialog or a cover too, since the bubble stands above them; a field typed
+       in since it came keeps the key (ui-lang.js). A held key takes it once. */
+    if(eventMatchesAction(e,"undo") && !e.repeat && takeStandingUndo(typingInField())){ e.preventDefault(); return; }
 
     /* A COVER HOLDS THE KEYBOARD: Tab walks its own controls and a focused one's Enter and Space
        reach it, as the browser gives them; nothing reaches the screen underneath. Its Escape
@@ -248,6 +254,7 @@ function wireGlobalKeydown(){
     const v=String(intentEl.value||"");
     const start=intentEl.selectionStart==null?v.length:intentEl.selectionStart;
     const end=intentEl.selectionEnd==null?v.length:intentEl.selectionEnd;
+    noteUndoTyping();
     intentEl.value=v.slice(0,start)+e.key+v.slice(end);
     const caret=start+e.key.length;
     try{ intentEl.setSelectionRange(caret,caret); }catch(_){}

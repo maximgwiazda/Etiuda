@@ -694,6 +694,7 @@ UI_STRINGS.pl={
   "Exported {FILE} with {MACROS} in {CARDS}":"Wyeksportowano {FILE}: {MACROS}, {CARDS}",
   "Card deleted":"Usunięto kartę",
   "Undo":"Cofnij",
+  "Take back what was just done, while its Undo button is on screen":"Cofa to, co przed chwilą zrobiono, dopóki widać przycisk Cofnij",
   "Moved on without saving the changes":"Opuszczono wpis bez zapisania zmian",
   "Category added":"Dodano kategorię",
   "Category deleted":"Usunięto kategorię",
@@ -891,6 +892,23 @@ UI_STRINGS.pl={
   "search replies":"szukaj odpowiedzi",
   "Replies":"Odpowiedzi",
   "The reply copied last":"Ostatnio skopiowana odpowiedź",
+  "{N} reply":"{N} odpowiedź",
+  "{N} replies":"{N} odpowiedzi",
+  "few␟{N} replies":"{N} odpowiedzi",
+  "many␟{N} replies":"{N} odpowiedzi",
+  "{SHOWN} of {COUNT}":"{SHOWN} z {COUNT}",
+  "The reply is filled in for this conversation":"Odpowiedź jest uzupełniana dla tej rozmowy",
+  "{KEY} copies":"{KEY} kopiuje",
+  "{KEY} in {LANG}":"{KEY} w wersji {LANG}",
+  "{KEY} closes":"{KEY} zamyka",
+  "Pasted":"Wklejono",
+  "Copied, press Ctrl+V":"Skopiowano, naciśnij Ctrl+V",
+  "{KEYS} belongs to another program just now.":"{KEYS} należy teraz do innego programu.",
+  "A combination of Etiuda's own, chosen in Settings, brings the replies over any window.":"Własna kombinacja Etiudy, wybrana w Ustawieniach, przywoła odpowiedzi nad dowolne okno.",
+  "Choose a combination":"Wybierz kombinację",
+  "The replies beside the pointer, over any program; the combination is changed in Settings":"Odpowiedzi obok wskaźnika, nad każdym programem; kombinację zmienia się w Ustawieniach",
+  "Replies over any window":"Odpowiedzi nad dowolnym oknem",
+  "{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.":"{KEY} przywołuje te odpowiedzi obok wskaźnika, nad każdym programem: wystarczy wpisać słowo, a Enter skopiuje odpowiedź i wróci do poprzedniego okna. Naciśnij {KEY}, żeby spróbować; Esc zamyka listę.",
   "Bring the replies over any window":"Przywołaj odpowiedzi nad dowolne okno",
   "Works from any program; Enter copies a reply and goes back to the window you were in.":"Działa w każdym programie; Enter kopiuje odpowiedź i wraca do poprzedniego okna.",
   "Another program uses this combination just now; a different one will do.":"Tej kombinacji używa teraz inny program; wybór innej to rozwiąże.",
@@ -1166,7 +1184,11 @@ function t(en){
 /* AN ACT THAT CAN BE UNDONE HAPPENS AT ONCE, and this bubble at the foot of the window offers the
    way back: over any dialog, until another act replaces it or UNDO_MS passes. */
 const UNDO_MS=10000;
-let undoTimer=0;
+/* The key the button names, the fixed "undo" row of SC_DEFS as formatActionChord spells it. */
+const UNDO_KEY="Ctrl+Z";
+let undoTimer=0, undoTake=null, undoTyped=false;
+/* A field typed in since the bubble came (keydown.js reports it): its Ctrl+Z is then its own typing's. */
+function noteUndoTyping(){ undoTyped=true; }
 function offerUndo(said, undo){
   const was=$("#eUndo"); if(was) was.remove();
   clearTimeout(undoTimer);
@@ -1176,16 +1198,27 @@ function offerUndo(said, undo){
   el.setAttribute("role","status");
   el.setAttribute("data-side","none");
   el.innerHTML='<p>'+esc(t(said))+'</p>'
-    +'<div class="tour-actions"><button type="button" class="btn primary" id="eUndoBtn">'+esc(t("Undo"))+'</button></div>';
+    +'<div class="tour-actions"><button type="button" class="btn primary" id="eUndoBtn" aria-label="'+esc(t("Undo"))
+    +'" aria-keyshortcuts="Control+Z">'+esc(t("Undo"))+'<kbd>'+esc(UNDO_KEY)+'</kbd></button></div>';
   cutLeaves();
   document.body.appendChild(el);
-  const close=()=>{ clearTimeout(undoTimer); dismissNode(el); };
-  el.querySelector("#eUndoBtn").onclick=()=>{ close(); undo(); };
+  const close=()=>{ clearTimeout(undoTimer); if(undoTake===take) undoTake=null; dismissNode(el); };
+  const take=()=>{ close(); undo(); };
+  undoTake=take; undoTyped=false;
+  el.querySelector("#eUndoBtn").onclick=take;
   el.addEventListener("keydown",e=>{
     if(e.key!=="Escape") return;
     e.preventDefault(); e.stopPropagation(); close();
   });
   undoTimer=setTimeout(close,UNDO_MS);
+}
+/* CTRL+Z TAKES THE STANDING UNDO: true where it did. Nothing where none stands or a question hides it, and nothing
+   from a field typed in since the bubble came, whose key it then is. */
+function takeStandingUndo(inField){
+  const el=document.getElementById("eUndo");
+  if(!undoTake || !el || el.hidden || (inField && undoTyped)) return false;
+  undoTake();
+  return true;
 }
 let tt;
 const TOAST_MS=1700;
@@ -1350,6 +1383,8 @@ export {
   systemUiLang,
   t,
   offerUndo,
+  takeStandingUndo,
+  noteUndoTyping,
   tc,
   counted,
   catalogCountsLine,
