@@ -4057,6 +4057,26 @@ function activeStateTests() {
       "rev 15 (2026-09-20a)", "rev 15", "2026-09-20a", "rev 3", "rev 3 (2026-09-20a)", "rev 3", "rev 2", "the file's date",
       "Rev 4 (2026-09-20a) loaded", "Rev 4 loaded", "Edition 2026-09-20a loaded"]);
 
+  /* THE TWO ROWS THAT NAME A CATALOG FROM ITS OWN FIELDS (the test architect's eighth edit on b807bc7): a version in the
+     catalog's history and the Library's row for the catalog in use, each with a rev and a date and with a rev alone. */
+  try {
+    const naming = ["function catalogVersionLabel(", "function editionNameOf(", "function editionRevText(", "function editionLabel("]
+      .map(m => slice("catalog.js", m)).join("\n");
+    const plainEsc = s => String(s == null ? "" : s), noCounts = () => "";
+    const historyRowHtml = new Function("t", "esc", "fileStamp", "catalogCountsLine", "historyActs", "ICON_LOAD",
+      naming + "\n" + slice("catalog-history.js", "function historyRowHtml(") + "\nreturn historyRowHtml;")(
+      s => s, plainEsc, () => "the day it came", noCounts, () => ["open"], "");
+    const metaOf = html => ((/<small class="ec-meta">([^<]*)<\/small>/.exec(html) || [])[1] || "");
+    const loadedAt = (version, rev) => new Function("t", "esc", "catalogCountsLine", "E_CATALOG_VERSION", "E_CATALOG_REV", "cards",
+      "totalMacroCount", "liveIntentCount", "CATS", "ecAwaitingHtml", "liveAwaiting",
+      naming + "\n" + slice("catalog-offer.js", "function loadedMeta(") + "\nreturn loadedMeta;")(
+      s => s, plainEsc, noCounts, version, rev, [], () => 0, () => 0, {}, () => [], () => [])("the file's date");
+    got = [metaOf(historyRowHtml({ date: "2026-09-20a", rev: 15, first: 0 }, "k")), metaOf(historyRowHtml({ rev: 15, first: 0 }, "k")),
+      loadedAt("2026-09-20a", 15), loadedAt(null, 15)];
+  } catch (e) { got = "the rows did not run: " + e.message; }
+  eq("a version in the catalog's history and the Library's row for the catalog in use are named by the rev with the dated edition after it, and by the rev alone where there is no date",
+    got, ["rev 15 (2026-09-20a)", "rev 15", "rev 15 (2026-09-20a)", "rev 15"]);
+
   try {
     const paint = new Function("catSlot", "railDrag", "railRelNow", "railRelGroup",
       slice("rail-list.js", "function railPaintRow(") + "\nreturn railPaintRow;")(() => -1, null, {}, {});
