@@ -40,7 +40,7 @@ function packFileHalf(raw){
    matching by prefix therefore also matched every OTHER copy's "e<hash>~" keys, and a Reset
    run in one build was deleting a neighbouring copy's catalog, pack, stars and order. The
    layers this desk has written are its own by the list storage.js keeps of them. */
-const E_PREF_KEYS=["eTheme","eGlassOff","eMotionOff","eUiLang","eLang","eAgent","ePax","eNoteHover",
+const E_PREF_KEYS=["eTheme","eGlassOff","eMotionOff","eUiLang","eLang","eAgent","ePax","eNoteHover","eDeckOff",
   "eWho","ePills","ePillsLock","eRail","eRailLock","eRailW","eCollapsed","eFactsW",
   "eFactsH","eShortcuts","eHdrPills"];
 function eKeyIsPref(k){ return E_PREF_KEYS.indexOf(k)>-1 || k.indexOf("eTour")===0; }

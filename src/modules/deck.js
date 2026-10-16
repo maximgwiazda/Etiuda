@@ -1,5 +1,6 @@
 import { list } from "./dom.js";
 import { mgReduceMotion, M_MS } from "./motion.js";
+import { lsGet } from "./storage.js";
 /* THE DECK: a card holding two or more replies rests as its first, the others tucked behind it
    with one bottom edge showing for each, three at most. The pointer resting on it, or the
    keyboard's mark on any of its replies, deals them down into the places they hold in the flat
@@ -7,6 +8,9 @@ import { mgReduceMotion, M_MS } from "./motion.js";
    travels, so a click on it copies at once. */
 const DECK_PEEK=6, DECK_INSET=7, DECK_DEPTH=3, DECK_DWELL=70, DECK_GRACE=110, DECK_DIM=[1,.8,.64,.5];
 const DECK_SLAB_PROPS=["--deck-dy","--deck-sx","--deck-clip","--deck-dim","--deck-z","--deck-k"];
+/* THE SWITCH, a Layout row and the desk's own, on unless eDeckOff holds "1". Off, a card lays out every reply as it
+   draws them: nothing below measures, deals, holds or fades, and the list's two watchers let go (syncDeck). */
+function deckOn(){ return lsGet("eDeckOff")!=="1"; }
 
 function deckSlabs(card){ return Array.from(card.querySelectorAll(":scope > .txt[data-v]")); }
 function deckPx(n){ return Math.round(n*100)/100+"px"; }
@@ -76,7 +80,7 @@ function deckMeasure(todo){
 }
 function deckScan(){
   deckRaf=0;
-  if(!list) return;
+  if(!list||!deckOn()) return;
   const todo=[];
   list.querySelectorAll(".card[data-id]").forEach(c=>{
     if(deckSlabs(c).length<2){ if(c.classList.contains("deck")) deckReset(c); return; }
@@ -85,7 +89,7 @@ function deckScan(){
   });
   deckMeasure(todo);
 }
-function deckLater(){ if(!deckRaf) deckRaf=requestAnimationFrame(deckScan); }
+function deckLater(){ if(!deckRaf&&deckOn()) deckRaf=requestAnimationFrame(deckScan); }
 // A put-away card's leaving copy, coming or going, changes no card's shape.
 function deckLeaving(r){
   const nodes=Array.from(r.addedNodes).concat(Array.from(r.removedNodes));
@@ -117,7 +121,7 @@ function deckDrawnBy(r, made){
    list. `drawn`: cards just drawn that the caller read as in the band, measured with no box read;
    `made`, every card it drew, is what the records are held against, `drawn` where it is left out. */
 function deckSettle(drawn, made){
-  if(!list) return;
+  if(!list||!deckOn()) return;
   const ms=deckObs ? deckObs.takeRecords() : [];
   if(!drawn){
     if(deckRaf){ cancelAnimationFrame(deckRaf); deckRaf=0; }
@@ -131,7 +135,7 @@ function deckSettle(drawn, made){
 /* Scroll only picks up a deck that has just entered the band. One already measured stays as it is. */
 let deckApproachRaf=0;
 function deckApproach(){
-  if(!list) return;
+  if(!list||!deckOn()) return;
   const todo=[];
   list.querySelectorAll(".card[data-id]").forEach(c=>{
     if(c.classList.contains("deck-near")||c.classList.contains("deck-open")||c.classList.contains("deck-up")){
@@ -143,7 +147,7 @@ function deckApproach(){
   });
   deckMeasure(todo);
 }
-function deckLaterApproach(){ if(!deckApproachRaf) deckApproachRaf=requestAnimationFrame(()=>{ deckApproachRaf=0; deckApproach(); }); }
+function deckLaterApproach(){ if(!deckApproachRaf&&deckOn()) deckApproachRaf=requestAnimationFrame(()=>{ deckApproachRaf=0; deckApproach(); }); }
 
 function deckSetOpen(card, open, instant){
   clearTimeout(card._deckT);
@@ -172,7 +176,7 @@ function deckWant(card, open, ms){
   if(!ms){ deckSetOpen(card,open); return; }
   card._deckT=setTimeout(()=>deckSetOpen(card,open), ms);
 }
-function deckAt(el){ return el && el.closest ? el.closest(".card.deck") : null; }
+function deckAt(el){ return deckOn() && el && el.closest ? el.closest(".card.deck") : null; }
 
 /* How far below its resting box an open deck reaches; nothing for a closed one. The note pane
    is placed by it, so a note opened on a dealt deck sits under the last reply. */
@@ -241,7 +245,7 @@ function deckPastColumn(card, reach, want){
   }
 }
 function deckFade(){
-  if(!list) return;
+  if(!list||!deckOn()) return;
   const items=Array.from(list.querySelectorAll(".card[data-id], .list-sep")), want=new Set();
   list.querySelectorAll(".card.deck.deck-open").forEach(card=>{
     const c=card.getBoundingClientRect(), cs=card.style;
@@ -260,11 +264,11 @@ function deckFade(){
   items.forEach(e=>deckSeen.add(e));
   if(fresh.length) requestAnimationFrame(()=>requestAnimationFrame(()=>fresh.forEach(e=>e.classList.remove("deck-fresh"))));
 }
-function deckFadeLater(){ if(!deckFadeRaf) deckFadeRaf=requestAnimationFrame(()=>{ deckFadeRaf=0; deckFade(); }); }
+function deckFadeLater(){ if(!deckFadeRaf&&deckOn()) deckFadeRaf=requestAnimationFrame(()=>{ deckFadeRaf=0; deckFade(); }); }
 
 // The keyboard's mark on any of a deck's replies opens it; the first pointer move hands it back.
 function deckKbdSync(){
-  if(!list) return;
+  if(!list||!deckOn()) return;
   const sel=document.body.classList.contains("e-kbdnav") ? list.querySelector(".txt.sel") : null;
   const c=sel ? deckAt(sel) : null;
   if(deckKbdCard && deckKbdCard!==c && !deckKbdCard.matches(":hover")) deckSetOpen(deckKbdCard,false);
@@ -283,14 +287,16 @@ function wireDeck(){
     if(h.shape) deckLater();
     if(h.fade) deckFade();
   });
-  deckObs.observe(list,{childList:true, subtree:true, attributes:true, attributeFilter:["class"], attributeOldValue:true});
   /* Only the width changes what a deck measures. The list grows taller on every drawing and on the
      tuck itself; a scan for that would come a frame later, under whatever glide is running. */
-  if(typeof ResizeObserver==="function") new ResizeObserver(es=>{
+  deckSizeObs=typeof ResizeObserver==="function" ? new ResizeObserver(es=>{
     const w=es.length ? es[es.length-1].contentRect.width : -1;
     if(w!==deckListW){ deckListW=w; deckLater(); }
     deckFadeLater();
-  }).observe(list);
+  }) : null;
+  deckWatching=false;
+  deckClass(deckOn());
+  deckWatch(deckOn());
   // A card caught mid-move, a fresh card's unfold or a slab still travelling, is read again once it lands.
   list.addEventListener("animationend",deckFadeLater); list.addEventListener("transitionend",deckFadeLater);
   document.addEventListener("scroll",()=>{ deckLaterApproach(); deckFadeLater(); },{capture:true, passive:true});
@@ -321,6 +327,37 @@ function wireDeck(){
   deckLater();
 }
 
+let deckSizeObs=null, deckWatching=false;
+// The sheet's half of the switch: body.deck-off takes the fade's transition off every card.
+function deckClass(on){ try{ document.body.classList.toggle("deck-off",!on); }catch(e){} }
+function deckWatch(on){
+  if(on===deckWatching) return;
+  deckWatching=on;
+  if(on){
+    if(deckObs) deckObs.observe(list,{childList:true, subtree:true, attributes:true, attributeFilter:["class"], attributeOldValue:true});
+    if(deckSizeObs) deckSizeObs.observe(list);
+  }else{
+    if(deckObs) deckObs.disconnect();
+    if(deckSizeObs) deckSizeObs.disconnect();
+  }
+}
+// Every deck laid flat and every faded card given back at once, with the frames and timers that would redraw them.
+function deckFlat(){
+  [deckRaf,deckFadeRaf,deckApproachRaf].forEach(id=>{ if(id) cancelAnimationFrame(id); });
+  deckRaf=0; deckFadeRaf=0; deckApproachRaf=0; deckKbdCard=null;
+  list.querySelectorAll(".card.deck").forEach(c=>{ clearTimeout(c._deckM); deckReset(c); });
+  list.querySelectorAll(".deck-under, .deck-fresh").forEach(e=>e.classList.remove("deck-under","deck-fresh"));
+}
+/* The switch read again from the store, for Settings, Reset and its Undo, and a desk started again in place: on, every
+   deck is tucked afresh without a reload; off, laid flat. */
+function syncDeck(){
+  const on=deckOn();
+  deckClass(on);
+  if(!list) return;
+  deckWatch(on);
+  if(on) deckSettle(); else deckFlat();
+}
+
 export {
   deckLengths,
   deckCovers,
@@ -329,5 +366,7 @@ export {
   deckFade,
   deckScan,
   deckSettle,
+  deckOn,
+  syncDeck,
   wireDeck,
 };

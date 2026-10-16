@@ -3806,13 +3806,14 @@ const CARD_B = {
     const deckRig = () => {
       const g = globalThis, keys = ["MutationObserver", "ResizeObserver", "requestAnimationFrame", "cancelAnimationFrame", "addEventListener", "innerHeight"];
       const was = keys.map(k => [k, Object.prototype.hasOwnProperty.call(g, k), g[k]]);
-      const rig = { held: [], feed: null, size: null, frames: [],
+      const rig = { held: [], feed: null, size: null, frames: [], mo: false, ro: false,
         scans() { return this.frames.filter(f => f.fn === DK.deckScan && f.state === "queued").length; },
         run() { this.frames.filter(f => f.state === "queued").forEach(f => { f.state = "ran"; f.fn(); }); },
         // A frame left queued would hold the module's own and swallow the next leg's ask, so the queue is run out first.
         restore() { try { this.run(); } finally { was.forEach(([k, had, v]) => { if (had) g[k] = v; else delete g[k]; }); } } };
-      g.MutationObserver = class { constructor(f) { rig.feed = f; } observe() {} takeRecords() { const r = rig.held; rig.held = []; return r; } };
-      g.ResizeObserver = class { constructor(f) { rig.size = f; } observe() {} };
+      g.MutationObserver = class { constructor(f) { rig.feed = f; } observe() { rig.mo = true; } disconnect() { rig.mo = false; }
+        takeRecords() { const r = rig.held; rig.held = []; return r; } };
+      g.ResizeObserver = class { constructor(f) { rig.size = f; } observe() { rig.ro = true; } disconnect() { rig.ro = false; } };
       g.requestAnimationFrame = fn => { rig.frames.push({ id: rig.frames.length + 1, fn, state: "queued" }); return rig.frames.length; };
       g.cancelAnimationFrame = id => { const f = rig.frames[id - 1]; if (f && f.state === "queued") f.state = "cancelled"; };
       g.addEventListener = () => {}; globalThis.document.addEventListener = () => {};
@@ -3950,6 +3951,213 @@ const CARD_B = {
           if (had.root === undefined) delete doc.documentElement; else doc.documentElement = had.root;
           if (had.gcs === undefined) delete globalThis.getComputedStyle; else globalThis.getComputedStyle = had.gcs;
         }
+      });
+    /* THE SWITCH (board 903): Layout's row turns the deck off, and off is a card laid out as it was before the deck, every
+       reply in its place and nothing of the deck acting. The cards are drawn by the card body itself, one of alternatives
+       and one of steps, and stand here as their replies laid one below the other, 50 apart; the switch is the stored
+       eDeckOff, which Settings' own row writes when its button is pressed. Every global and key set here is put back. */
+    const CB = await import(MOD("card-body.js")), SET = await import(MOD("settings.js")), DLG = await import(MOD("dialog.js"));
+    const AS = await import(MOD("app-state.js")), ST = UILANG_STORE;
+    const flip = s => Object.assign(cls(s), { toggle(c, f) { const w = f === undefined ? !s.has(c) : !!f; if (w) s.add(c); else s.delete(c); return w; } });
+    const part = (o = {}) => Object.assign({ attrs: {}, style: {}, classList: flip(new Set()), textContent: "", hidden: true, value: "",
+      querySelector: () => null, querySelectorAll: () => [], getAttribute(k) { return this.attrs[k]; }, setAttribute(k, v) { this.attrs[k] = String(v); },
+      removeAttribute(k) { delete this.attrs[k]; }, addEventListener() {}, removeEventListener() {}, contains: () => false, focus() {},
+      remove() { this.gone = true; }, getBoundingClientRect: () => ({ top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }) }, o);
+    const GAP = String.fromCharCode(10).repeat(2);
+    const ALT = { id: "c-shade", c: "orders", t: "Shade colours", alt: 1, en: ["The shade comes in linen.", "The shade comes in paper."].join(GAP) };
+    const SEQ = { id: "c-fit", c: "orders", t: "Fitting a shade", alt: 1, seq: 1,
+      en: ["Loosen the ring.", "Set the shade on the holder.", "Tighten the ring."].join(GAP) };
+    const TAG = new RegExp('<div class="txt[^"]*"[^>]*data-v="([0-9]+)"[^>]*><span class="tag">([^<]*)</span>', "g");
+    const SEG = new RegExp('<div class="seg set-seg" data-seg="([^"]+)"[^>]*>([^]*?)</div>', "g");
+    const BTN = new RegExp('<button type="button" data-val="([^"]+)"([^>]*)>', "g");
+    /* One page: the deck's frames and observers from deckRig, a clock of its own as 1008dk8's, the listeners kept by
+       name, the card list, the Settings card whose body reads its rows back out of the markup it is given, and a toast. */
+    const world = () => {
+      const rig = deckRig(), g = globalThis, doc = g.document;
+      const had = { st: g.setTimeout, ct: g.clearTimeout, add: doc.addEventListener, body: doc.body, q: doc.querySelector, gid: doc.getElementById,
+        make: doc.createElement, all: doc.querySelectorAll, active: doc.activeElement, gcs: g.getComputedStyle, lang: AS.lang, acc: [...DLG.accOpen],
+        motion: ST.lsGet("eMotionOff"), deck: ST.lsGet("eDeckOff") };
+      let now = 0, seq = 0; const q = new Map();
+      g.setTimeout = (f, ms) => { q.set(++seq, { f, at: now + (ms || 0) }); return seq; }; g.clearTimeout = id => q.delete(id);
+      const run = to => { for (;;) { const d = [...q].filter(([, x]) => x.at <= to).sort((a, b) => a[1].at - b[1].at || a[0] - b[0])[0];
+        if (!d) break; q.delete(d[0]); now = d[1].at; d[1].f(); } now = Math.max(now, to); };
+      const heard = {}, on = (k, f) => { (heard[k] = heard[k] || []).push(f); }, fire = (k, e) => (heard[k] || []).forEach(f => f(e || {}));
+      g.addEventListener = on; doc.addEventListener = on;
+      const body = part({ hidden: false, appendChild: n => { made.push(n); return n; } }), made = [], toastEl = part(), segs = [];
+      const setBody = part({ querySelectorAll: s => (s === ".set-seg" ? segs : []) });
+      Object.defineProperty(setBody, "innerHTML", { get() { return this.h || ""; }, set(h) { this.h = h; segs.length = 0;
+        for (const m of h.matchAll(SEG)) {
+          const btns = [...m[2].matchAll(BTN)].map(b => { const n = part({ attrs: { "data-val": b[1] } }); if (/class="on"/.test(b[2])) n.classList.add("on"); return n; });
+          segs.push(part({ attrs: { "data-seg": m[1] }, btns, querySelectorAll: s => (s === "button" ? btns : []) }));
+        } } });
+      const byId = { "#pax": part(), "#roleSel": part(), "#intent": part(), "#toast": toastEl, "#modal": part(), "#setReset": part(),
+        "#modalCard": part({ querySelector: s => (s === "#setBody" ? setBody : null) }) };
+      doc.body = body; doc.activeElement = body; doc.querySelector = s => byId[s] || null; doc.querySelectorAll = () => []; doc.getElementById = id => byId["#" + id] || null;
+      doc.createElement = () => { const btn = part(); return part({ btn, getContext: () => ({}), querySelector: s => (s === "#eUndoBtn" ? btn : null) }); };
+      g.getComputedStyle = () => ({ borderLeftWidth: "0", paddingLeft: "0", borderRightWidth: "0", paddingRight: "0" });
+      ST.lsSet("eMotionOff", "1"); AS.putLang("en");
+      Dom.grabDom();
+      const drawn = (m, top) => {
+        const tags = [...CB.cardBodyHtml(m, 0, { hit: false, catHit: false, fav: false, band: "", other: "pl", dragTip: "" }).cardH.matchAll(TAG)].map(x => x[2]);
+        const box = () => ({ v: {}, setProperty(k, x) { this.v[k] = x; }, removeProperty(k) { delete this.v[k]; if (k === "height") delete this.height; },
+          getPropertyValue(k) { return this.v[k] || ""; } });
+        const high = 10 + 50 * tags.length;
+        const c = { nodeType: 1, dataset: { id: m.id }, classList: flip(new Set(["card"])), style: box(), hover: false, tags, offsetHeight: high,
+          getBoundingClientRect: () => ({ top, bottom: top + high, left: 0, right: 300, width: 300, height: high }),
+          querySelectorAll: () => c.slabs, querySelector: () => null, closest: s => (s === ".card.deck" && c.classList.contains("deck") ? c : null),
+          matches: s => (s === ":hover" ? c.hover : s === ".card[data-id]"), contains: n => n === c || c.slabs.includes(n),
+          getAttribute: () => [...c.classList.s].join(" ") };
+        c.slabs = tags.map((tag, k) => ({ nodeType: 1, tag, offsetTop: 10 + 50 * k, offsetHeight: 40, offsetWidth: 300, classList: flip(new Set(["txt"])),
+          style: box(), scrolled: 0, scrollIntoView() { this.scrolled++; },
+          closest(s) { return s === ".card.deck" ? c.closest(s) : s === ".txt.deck-back" && this.classList.contains("deck-back") ? this : null; } }));
+        return c;
+      };
+      const alt = drawn(ALT, 100), under = node("c-under", 190, 0, 90), steps = drawn(SEQ, 400), cards = [alt, under, steps];
+      under.querySelectorAll = () => [{ classList: flip(new Set(["txt"])) }];
+      const l = listOf(cards), each = l.querySelectorAll.bind(l);
+      l.querySelectorAll = sel => sel.split(",").map(x => x.trim())
+        .flatMap(c => (c.startsWith(".txt") ? cards.flatMap(k => k.slabs || []).filter(e => hit(e, c)) : each(c)));
+      l.querySelector = sel => l.querySelectorAll(sel)[0] || null;
+      Object.assign(l, { nodeType: 1, addEventListener: on, closest: () => null, contains: n => cards.includes(n) });
+      byId["#list"] = l;
+      Dom.grabDom();
+      /* What a card shows: flat, every reply in its place with no deck class and no length on it or its replies; tucked,
+         a deck with its height and every reply but the first behind it. */
+      const says = c => {
+        const kind = c.tags.length + (c.tags.every(x => x.startsWith("STEP")) ? " steps" : c.tags.some(x => x.startsWith("STEP")) ? " mixed" : " alternatives");
+        const own = [...c.classList.s].filter(k => k.startsWith("deck")), lengths = Object.keys(c.style.v).concat(c.style.height ? ["height"] : []);
+        const marks = c.slabs.map(e => [...e.classList.s].filter(k => k.startsWith("deck")).concat(Object.keys(e.style.v)));
+        if (!own.length && !lengths.length && marks.every(x => !x.length)) return kind + ":flat";
+        const tucked = own.includes("deck") && !!c.style.height && marks.every((x, k) => x.includes("deck-back") === k > 0);
+        return kind + ":" + (tucked ? "tucked" : JSON.stringify([own, lengths, marks]));
+      };
+      const settings = () => {
+        SET.openSettings("layout");
+        const seg = name => segs.find(x => x.attrs["data-seg"] === name);
+        return { names: () => segs.map(x => x.attrs["data-seg"]).join(","),
+          shown: name => { const b = seg(name) && seg(name).btns.find(x => x.classList.contains("on")); return b ? b.attrs["data-val"] : "none"; },
+          press: (name, val) => { const b = seg(name) && seg(name).btns.find(x => x.attrs["data-val"] === val);
+            if (!b || typeof b.onclick !== "function") throw new Error("no " + name + " " + val + " among " + segs.map(x => x.attrs["data-seg"]).join(","));
+            b.onclick(); return String(toastEl.textContent || toastEl.innerHTML || ""); } };
+      };
+      return { rig, run, fire, alt, under, steps, l, body, says, settings, made, byId, away: { closest: () => null }, now: () => now,
+        wire: () => DK.wireDeck(), cls: () => [...body.classList.s].filter(k => k.startsWith("deck")).join("+"),
+        watched: () => rig.mo + "/" + rig.ro,
+        restore() {
+          try { rig.restore(); } finally {
+            g.setTimeout = had.st; g.clearTimeout = had.ct; doc.addEventListener = had.add; doc.querySelector = had.q; doc.createElement = had.make;
+            for (const [k, v] of [["body", had.body], ["getElementById", had.gid], ["querySelectorAll", had.all], ["activeElement", had.active]]) if (v === undefined) delete doc[k]; else doc[k] = v;
+            if (had.gcs === undefined) delete g.getComputedStyle; else g.getComputedStyle = had.gcs;
+            for (const [k, v] of [["eMotionOff", had.motion], ["eDeckOff", had.deck]]) if (v == null) ST.lsDel(k); else ST.lsSet(k, v);
+            AS.putLang(had.lang); DLG.accOpen.clear(); had.acc.forEach(k => DLG.accOpen.add(k));
+            Dom.grabDom();
+          }
+        } };
+    };
+    check("deck.js", "1016dk1 with Layout's switch off, a card of alternatives and a card of steps drawn by the card body lay out every reply in its place: no deck class and no length on the card or any reply, whatever asks (a render's settle, a batch's, a scan, a fade, the list's records and size, a scroll, a resize, an animation's end), no frame is asked and the list is not watched; on, the control, the same two cards rest as decks and the list is watched",
+      () => {
+        const w = world();
+        try {
+          ST.lsSet("eDeckOff", "1");
+          w.wire();
+          DK.deckSettle(); DK.deckSettle([w.alt, w.steps], [w.alt, w.steps]); DK.deckScan(); DK.deckFade();
+          w.rig.feed([{ type: "childList", target: w.l, addedNodes: [w.alt], removedNodes: [] }]);
+          w.rig.size([{ contentRect: { width: 640, height: 900 } }]);
+          ["scroll", "resize", "animationend", "transitionend"].forEach(k => w.fire(k));
+          const asked = w.rig.frames.filter(f => f.state === "queued").length;
+          w.rig.run(); w.run(1000);
+          const off = [w.says(w.alt), w.says(w.steps), asked, w.watched(), w.cls()].join("|");
+          ST.lsDel("eDeckOff"); DK.syncDeck(); w.rig.run();
+          const on = [w.says(w.alt), w.says(w.steps), w.watched(), w.cls() || "none"].join("|");
+          return eq(off + " || " + on, "2 alternatives:flat|3 steps:flat|0|false/false|deck-off || 2 alternatives:tucked|3 steps:tucked|true/true|none");
+        } finally { w.restore(); }
+      });
+    check("deck.js", "1016dk2 with the switch off nothing of the deck answers the hand or the keys: a click on a second reply is not held, a rest of the pointer deals nothing and fades nothing and the note pane is given no reach, the keyboard's mark on a reply opens nothing and scrolls nothing; on, the control, the click on a tucked reply is held, the rest deals and fades the card it reaches, and the mark opens its deck and brings the reply into view",
+      () => {
+        const w = world();
+        try {
+          ST.lsSet("eDeckOff", "1"); w.wire(); DK.deckSettle();
+          const act = () => {
+            let held = false;
+            w.fire("click", { target: w.alt.slabs[1], stopPropagation() { held = true; }, preventDefault() {} });
+            w.alt.hover = true; w.fire("pointerover", { target: w.alt.slabs[0], relatedTarget: null }); w.run(w.now() + 400);
+            w.rig.feed([{ type: "attributes", target: w.alt, oldValue: "card" }]);
+            const dealt = [w.alt.classList.contains("deck-open"), w.under.classList.contains("deck-under"), DK.deckReach(w.alt) > 0];
+            w.alt.hover = false; w.fire("pointerover", { target: w.away, relatedTarget: w.alt.slabs[0] }); w.run(w.now() + 400);
+            w.body.classList.add("e-kbdnav"); w.steps.slabs[2].classList.add("sel"); w.fire("keydown", { key: "ArrowDown" }); w.run(w.now() + 400);
+            const marked = [w.steps.classList.contains("deck-open"), w.steps.slabs[2].scrolled];
+            w.body.classList.remove("e-kbdnav"); w.steps.slabs[2].classList.remove("sel"); w.fire("keydown", { key: "ArrowUp" }); w.run(w.now() + 400);
+            return [held].concat(dealt, marked).join(",");
+          };
+          const off = [act(), w.says(w.alt), w.says(w.steps)].join("/");
+          ST.lsDel("eDeckOff"); DK.syncDeck(); w.rig.run();
+          return eq(off + " || " + act(), "false,false,false,false,false,0/2 alternatives:flat/3 steps:flat || true,true,true,true,true,1");
+        } finally { w.restore(); }
+      });
+    check("settings.js", "1016dk3 Layout's switch pressed off in Settings lays an open deck flat at once: its classes, height and lengths gone, the card it faded given back, the scan it owed let go and the list no longer watched, with eDeckOff stored and a toast that says so; pressed on, every deck is tucked anew without a reload, the list watched again and the key forgotten",
+      () => {
+        const w = world();
+        try {
+          ST.lsDel("eDeckOff"); w.wire(); DK.deckSettle();
+          w.alt.hover = true; w.fire("pointerover", { target: w.alt.slabs[0], relatedTarget: null }); w.run(w.now() + 400);
+          w.rig.feed([{ type: "attributes", target: w.alt, oldValue: "card" }]);
+          w.rig.size([{ contentRect: { width: 520, height: 900 } }]);
+          const before = [w.alt.classList.contains("deck-open"), w.under.classList.contains("deck-under"), w.rig.scans()].join(",");
+          const row = w.settings(), was = row.shown("deck");
+          const saidOff = row.press("deck", "off");
+          const off = [w.says(w.alt), w.says(w.steps), w.under.classList.contains("deck-under"), w.rig.scans(), w.watched(), w.cls(), ST.lsGet("eDeckOff"), saidOff].join("|");
+          w.alt.hover = false;
+          const saidOn = row.press("deck", "on");
+          const on = [w.says(w.alt), w.says(w.steps), w.watched(), w.cls() || "none", String(ST.lsGet("eDeckOff")), saidOn].join("|");
+          return eq([before, was, off, on].join(" || "), "true,true,1 || on || 2 alternatives:flat|3 steps:flat|false|0|false/false|deck-off|1|Replies laid out one below the other"
+            + " || 2 alternatives:tucked|3 steps:tucked|true/true|none|null|Replies stack behind the first");
+        } finally { w.restore(); }
+      });
+    check("settings.js", "1016dk4 the switch is the desk's own and outlives the page: the last row of Layout, on where nothing is stored and off where eDeckOff holds 1; Reset defaults forgets the key and tucks the decks again, its Undo puts both back; a page started over the same store reads it before anything is drawn, the body's class and the list's watch with it; and boot wires the deck before the first render",
+      () => {
+        let w = world(), fresh = null;
+        try {
+          ST.lsDel("eDeckOff"); w.wire(); DK.deckSettle();
+          const row = w.settings(), rows = [row.names(), row.shown("deck")];
+          row.press("deck", "off");
+          rows.push(w.settings().shown("deck"));
+          w.byId["#setReset"].onclick();
+          const reset = [String(ST.lsGet("eDeckOff")), w.says(w.alt), w.cls() || "none", w.watched()];
+          const bubble = w.made.filter(n => n.btn && typeof n.btn.onclick === "function").pop();
+          if (bubble) bubble.btn.onclick();
+          const undone = [ST.lsGet("eDeckOff"), w.says(w.alt), w.cls(), w.watched()];
+          w.restore(); w = null;
+          // A page started again: a fresh body and list over a store holding the switch or not, and boot's wiring before any drawing.
+          const start = key => {
+            fresh = world();
+            if (key) ST.lsSet("eDeckOff", key); else ST.lsDel("eDeckOff");
+            fresh.wire();
+            const first = [fresh.cls() || "none", fresh.watched()];
+            DK.deckSettle();
+            const out = first.concat([fresh.says(fresh.alt), fresh.says(fresh.steps)]).join(",");
+            fresh.restore(); fresh = null;
+            return out;
+          };
+          const main = fs.readFileSync(join(MODDIR, "..", "main.js"), "utf8"), boot = main.slice(main.indexOf("function boot("));
+          const order = boot.indexOf("deck.wireDeck();") > -1 && boot.indexOf("deck.wireDeck();") < boot.indexOf("rebuild.rebuildCards();");
+          return eq([rows.join("/"), reset.join(","), undone.join(","), start("1"), start(null), order].join(" || "),
+            "theme,glass,motion,cols,raillock,pillslock,notehover,deck/on/off || null,2 alternatives:tucked,none,true/true || 1,2 alternatives:flat,deck-off,false/false"
+            + " || deck-off,false/false,2 alternatives:flat,3 steps:flat || none,true/true,2 alternatives:tucked,3 steps:tucked || true");
+        } finally { if (fresh) fresh.restore(); if (w) w.restore(); }
+      });
+    /* The sheet's half. With the switch off no deck class is on any card or reply (1016dk1 to dk3), so a deck rule is
+       off with it if it asks for one; the fade's transition on every card and rule asks for none, so it asks for a body
+       without the switch's class instead. */
+    check("template.html", "1016dk5 with the switch off no rule of the deck's applies: the fade's transition on the list's cards and rules is scoped to a body without deck-off, and every other rule naming a deck class asks for one the switch takes away",
+      () => {
+        const css = fs.readFileSync(join(MODDIR, "..", "template.html"), "utf8").replace(new RegExp("/[*][^]*?[*]/", "g"), "");
+        const rules = [...css.matchAll(new RegExp("([^{}]+)[{]([^{}]*)[}]", "g"))].map(m => ({ sel: m[1].trim().split(",").map(x => x.trim()), body: m[2] }));
+        const fading = rules.filter(r => r.sel.some(x => /#list [.](card|list-sep)$/.test(x)) && /transition:/.test(r.body));
+        const scoped = fading.length > 0 && fading.every(r => r.sel.every(x => x.startsWith("body:not(.deck-off) ")));
+        const away = new RegExp("[.]deck(-(near|up|open|back|return|moving|under|fresh))?(?![-a-z])");
+        const naming = rules.flatMap(r => r.sel).filter(x => /[.]deck/.test(x.replace(/:not[(][.]deck-off[)]/g, "")));
+        const loose = naming.filter(x => !away.test(x.replace(/:not[(][.]deck-off[)]/g, "")));
+        return eq([fading.length, scoped, naming.length > 10, loose.join(";") || "none"].join(","), "1,true,true,none");
       });
     /* The bar opens on hover. max-height lays the row out on every frame of that reveal, so the
        opening has to ride a length that only the clip reads, on the same tier, with the blur kept. */

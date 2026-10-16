@@ -1988,7 +1988,7 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
   top:var(--deck-rest-bottom);height:var(--deck-extra);z-index:0}
 /* What an open deck reaches over fades back and softens, so the deck is the one sharp thing there;
    deck.js marks it. A node drawn new under an open deck wears deck-fresh for two frames and arrives faded. */
-#list .card,#list .list-sep{transition:opacity var(--m-move) ease,filter var(--m-move) ease}
+body:not(.deck-off) #list .card,body:not(.deck-off) #list .list-sep{transition:opacity var(--m-move) ease,filter var(--m-move) ease}
 #list .deck-under{opacity:.22;filter:blur(1.6px)}
 :root[data-theme=light] #list .deck-under{opacity:.3}
 #list .deck-fresh{transition:none!important}
@@ -6873,6 +6873,12 @@ What you type stays in this browser only.`;
     "The i on the card opens the note": "Litera i na karcie otwiera notatkę",
     "Notes open on hover": "Notatki otwierają się po najechaniu",
     "Notes open from the i": "Notatki otwiera litera i",
+    "Stack a card's replies": "Odpowiedzi karty w stosie",
+    "A card holding several replies shows the first, with the others behind it until the pointer rests on the card or the arrow keys reach it.": "Karta z kilkoma odpowiedziami pokazuje pierwszą, a pozostałe chowa za nią, aż spocznie na niej kursor albo dojdą do niej strzałki klawiatury.",
+    "The first reply in front, the others laid out under the pointer": "Pierwsza odpowiedź z przodu, pozostałe rozkładają się pod kursorem",
+    "Every reply laid out on the card, one below the other": "Każda odpowiedź leży na karcie, jedna pod drugą",
+    "Replies stack behind the first": "Odpowiedzi chowają się za pierwszą",
+    "Replies laid out one below the other": "Odpowiedzi leżą jedna pod drugą",
     "Clear the chosen intents ({N})": "Wyczyść wybrane intencje ({N})",
     "Reveal / expand categories": "Pokaż / rozwiń kategorie",
     "Maintenance panel": "Panel konserwacji",
@@ -10031,10 +10037,12 @@ What you type stays in this browser only.`;
     deckCovers: () => deckCovers,
     deckFade: () => deckFade,
     deckLengths: () => deckLengths,
+    deckOn: () => deckOn,
     deckOwnChange: () => deckOwnChange,
     deckReach: () => deckReach,
     deckScan: () => deckScan,
     deckSettle: () => deckSettle,
+    syncDeck: () => syncDeck,
     wireDeck: () => wireDeck
   });
   var DECK_PEEK = 6;
@@ -10044,6 +10052,9 @@ What you type stays in this browser only.`;
   var DECK_GRACE = 110;
   var DECK_DIM = [1, 0.8, 0.64, 0.5];
   var DECK_SLAB_PROPS = ["--deck-dy", "--deck-sx", "--deck-clip", "--deck-dim", "--deck-z", "--deck-k"];
+  function deckOn() {
+    return lsGet("eDeckOff") !== "1";
+  }
   function deckSlabs(card) {
     return Array.from(card.querySelectorAll(":scope > .txt[data-v]"));
   }
@@ -10132,7 +10143,7 @@ What you type stays in this browser only.`;
   }
   function deckScan() {
     deckRaf = 0;
-    if (!list) return;
+    if (!list || !deckOn()) return;
     const todo = [];
     list.querySelectorAll(".card[data-id]").forEach((c) => {
       if (deckSlabs(c).length < 2) {
@@ -10148,7 +10159,7 @@ What you type stays in this browser only.`;
     deckMeasure(todo);
   }
   function deckLater() {
-    if (!deckRaf) deckRaf = requestAnimationFrame(deckScan);
+    if (!deckRaf && deckOn()) deckRaf = requestAnimationFrame(deckScan);
   }
   function deckLeaving(r) {
     const nodes = Array.from(r.addedNodes).concat(Array.from(r.removedNodes));
@@ -10175,7 +10186,7 @@ What you type stays in this browser only.`;
     return !inCard && !added.some(deckHoldsCard) && !Array.from(r.removedNodes).some(deckHoldsCard);
   }
   function deckSettle(drawn, made) {
-    if (!list) return;
+    if (!list || !deckOn()) return;
     const ms = deckObs ? deckObs.takeRecords() : [];
     if (!drawn) {
       if (deckRaf) {
@@ -10191,7 +10202,7 @@ What you type stays in this browser only.`;
   }
   var deckApproachRaf = 0;
   function deckApproach() {
-    if (!list) return;
+    if (!list || !deckOn()) return;
     const todo = [];
     list.querySelectorAll(".card[data-id]").forEach((c) => {
       if (c.classList.contains("deck-near") || c.classList.contains("deck-open") || c.classList.contains("deck-up")) {
@@ -10204,7 +10215,7 @@ What you type stays in this browser only.`;
     deckMeasure(todo);
   }
   function deckLaterApproach() {
-    if (!deckApproachRaf) deckApproachRaf = requestAnimationFrame(() => {
+    if (!deckApproachRaf && deckOn()) deckApproachRaf = requestAnimationFrame(() => {
       deckApproachRaf = 0;
       deckApproach();
     });
@@ -10240,7 +10251,7 @@ What you type stays in this browser only.`;
     card._deckT = setTimeout(() => deckSetOpen(card, open), ms);
   }
   function deckAt(el) {
-    return el && el.closest ? el.closest(".card.deck") : null;
+    return deckOn() && el && el.closest ? el.closest(".card.deck") : null;
   }
   function deckReach(card) {
     return card && card.classList.contains("deck-open") ? card._deckGrow || 0 : 0;
@@ -10293,7 +10304,7 @@ What you type stays in this browser only.`;
     }
   }
   function deckFade() {
-    if (!list) return;
+    if (!list || !deckOn()) return;
     const items = Array.from(list.querySelectorAll(".card[data-id], .list-sep")), want = /* @__PURE__ */ new Set();
     list.querySelectorAll(".card.deck.deck-open").forEach((card) => {
       const c = card.getBoundingClientRect(), cs = card.style;
@@ -10322,13 +10333,13 @@ What you type stays in this browser only.`;
     if (fresh.length) requestAnimationFrame(() => requestAnimationFrame(() => fresh.forEach((e) => e.classList.remove("deck-fresh"))));
   }
   function deckFadeLater() {
-    if (!deckFadeRaf) deckFadeRaf = requestAnimationFrame(() => {
+    if (!deckFadeRaf && deckOn()) deckFadeRaf = requestAnimationFrame(() => {
       deckFadeRaf = 0;
       deckFade();
     });
   }
   function deckKbdSync() {
-    if (!list) return;
+    if (!list || !deckOn()) return;
     const sel = document.body.classList.contains("e-kbdnav") ? list.querySelector(".txt.sel") : null;
     const c = sel ? deckAt(sel) : null;
     if (deckKbdCard && deckKbdCard !== c && !deckKbdCard.matches(":hover")) deckSetOpen(deckKbdCard, false);
@@ -10345,15 +10356,17 @@ What you type stays in this browser only.`;
       if (h.shape) deckLater();
       if (h.fade) deckFade();
     });
-    deckObs.observe(list, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"], attributeOldValue: true });
-    if (typeof ResizeObserver === "function") new ResizeObserver((es) => {
+    deckSizeObs = typeof ResizeObserver === "function" ? new ResizeObserver((es) => {
       const w = es.length ? es[es.length - 1].contentRect.width : -1;
       if (w !== deckListW) {
         deckListW = w;
         deckLater();
       }
       deckFadeLater();
-    }).observe(list);
+    }) : null;
+    deckWatching = false;
+    deckClass(deckOn());
+    deckWatch(deckOn());
     list.addEventListener("animationend", deckFadeLater);
     list.addEventListener("transitionend", deckFadeLater);
     document.addEventListener("scroll", () => {
@@ -10388,6 +10401,47 @@ What you type stays in this browser only.`;
       }
     }, true);
     deckLater();
+  }
+  var deckSizeObs = null;
+  var deckWatching = false;
+  function deckClass(on) {
+    try {
+      document.body.classList.toggle("deck-off", !on);
+    } catch (e) {
+    }
+  }
+  function deckWatch(on) {
+    if (on === deckWatching) return;
+    deckWatching = on;
+    if (on) {
+      if (deckObs) deckObs.observe(list, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"], attributeOldValue: true });
+      if (deckSizeObs) deckSizeObs.observe(list);
+    } else {
+      if (deckObs) deckObs.disconnect();
+      if (deckSizeObs) deckSizeObs.disconnect();
+    }
+  }
+  function deckFlat() {
+    [deckRaf, deckFadeRaf, deckApproachRaf].forEach((id) => {
+      if (id) cancelAnimationFrame(id);
+    });
+    deckRaf = 0;
+    deckFadeRaf = 0;
+    deckApproachRaf = 0;
+    deckKbdCard = null;
+    list.querySelectorAll(".card.deck").forEach((c) => {
+      clearTimeout(c._deckM);
+      deckReset(c);
+    });
+    list.querySelectorAll(".deck-under, .deck-fresh").forEach((e) => e.classList.remove("deck-under", "deck-fresh"));
+  }
+  function syncDeck() {
+    const on = deckOn();
+    deckClass(on);
+    if (!list) return;
+    deckWatch(on);
+    if (on) deckSettle();
+    else deckFlat();
   }
 
   // src/modules/columns.js
@@ -25224,6 +25278,7 @@ What you type stays in this browser only.`;
     "eAgent",
     "ePax",
     "eNoteHover",
+    "eDeckOff",
     "eWho",
     "ePills",
     "ePillsLock",
@@ -29821,6 +29876,15 @@ What you type stays in this browser only.`;
           t("The note opens by itself, and the card shows no i"),
           t("The i on the card opens the note")
         )
+      ) + row(
+        t("Stack a card's replies"),
+        t("A card holding several replies shows the first, with the others behind it until the pointer rests on the card or the arrow keys reach it."),
+        onoff(
+          "deck",
+          deckOn(),
+          t("The first reply in front, the others laid out under the pointer"),
+          t("Every reply laid out on the card, one below the other")
+        )
       ),
       null,
       t("What stays docked, and what may hide itself when space is short")
@@ -29902,6 +29966,11 @@ What you type stays in this browser only.`;
             else lsSet("eNoteHover", "0");
             closeNotePane();
             toast(on ? t("Notes open on hover") : t("Notes open from the i"));
+          } else if (seg2 === "deck") {
+            if (on) lsDel("eDeckOff");
+            else lsSet("eDeckOff", "1");
+            syncDeck();
+            toast(on ? t("Replies stack behind the first") : t("Replies laid out one below the other"));
           } else if (seg2 === "sharededit") {
             if (on) lsSet("eSharedEdit", "1");
             else lsDel("eSharedEdit");
@@ -29949,6 +30018,7 @@ What you type stays in this browser only.`;
       "eShortcuts",
       "eHdrPills",
       "eNoteHover",
+      "eDeckOff",
       "eRailW",
       "eFactsW",
       "eFactsH",
@@ -29995,6 +30065,10 @@ What you type stays in this browser only.`;
     document.body.classList.toggle("note-hover", lsGet("eNoteHover") !== "0");
     document.body.classList.toggle("glass-off", lsGet("eGlassOff") === "1");
     syncStill();
+    try {
+      syncDeck();
+    } catch (e) {
+    }
     try {
       loadShortcuts();
     } catch (e) {
