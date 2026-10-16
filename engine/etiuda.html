@@ -14250,6 +14250,7 @@ What you type stays in this browser only.`;
     recheckHeldTrust: () => recheckHeldTrust,
     recordCatalogTrust: () => recordCatalogTrust,
     settleHeldTrust: () => settleHeldTrust,
+    settleHeldTrustWithin: () => settleHeldTrustWithin,
     trustKeyHtml: () => trustKeyHtml,
     trustOfferLine: () => trustOfferLine,
     trustPrint: () => trustPrint,
@@ -15249,6 +15250,7 @@ What you type stays in this browser only.`;
     });
   }
   function settleHeldTrust(found, held) {
+    let lowered = false;
     return eCatalogLeads().then((leads) => {
       const pub = nsGet(SIGNER_PUB_KEY) || "";
       if (!leads.length || heldCatalogTrust() !== V2_SIG_VALID || leads.some((l) => l.public === pub)) return;
@@ -15256,18 +15258,32 @@ What you type stays in this browser only.`;
         nsSet(TRUST_KEY, V2_SIG_UNKNOWN);
         nsDel(SIGNER_KEY);
         nsDel(SIGNER_PUB_KEY);
+        lowered = true;
       };
       if (!found || !held || eCatalogSignature(found) !== eCatalogSignature(held)) {
         unconfirmed();
         return;
       }
       return catalogTrust(found).then((s) => {
-        if (s) holdTrust(found, s);
-        else unconfirmed();
+        if (!s) {
+          unconfirmed();
+          return;
+        }
+        holdTrust(found, s);
+        lowered = s !== V2_SIG_VALID;
       });
     }).then(() => keyPrintOf(nsGet(SIGNER_PUB_KEY) || "")).then((p) => {
       heldPrint = p;
     }).catch(() => {
+    }).then(() => lowered);
+  }
+  function settleHeldTrustWithin(found, held) {
+    return new Promise((done) => {
+      const late = setTimeout(() => done(false), TRUST_WAIT_MS);
+      settleHeldTrust(found, held).then((lowered) => {
+        clearTimeout(late);
+        done(lowered);
+      });
     });
   }
   function trustKeyHtml(state, print) {
@@ -27971,15 +27987,21 @@ What you type stays in this browser only.`;
   function eOfferCatalogAtBoot() {
     pinStoredFrom(eCatalog());
     nameHeldCatalog();
-    settleHeldTrust(eCatalog(), storedCatalog());
+    const settled = settleHeldTrust(eCatalog(), storedCatalog());
+    if (offerAtBoot()) settled.then((lowered) => {
+      if (lowered) offerAtBoot();
+    });
+  }
+  function offerAtBoot() {
     const at = +(nsGet("CatalogNoAt") || 0), mt = eCatalogMtime(), asked = eOpenedWith();
     if (!asked && tourDueAtBoot()) {
       afterTour(eOfferCatalogAtBoot);
-      return;
+      return false;
     }
     const found = eCatalog(), held = storedCatalog();
-    if (!asked && found && found.sample && held && !isCatalogUpdate(found, held)) return;
+    if (!asked && found && found.sample && held && !isCatalogUpdate(found, held)) return true;
     eOfferCatalog(null, "", "", asked || wholeThingEmpty() || !!(at && mt && mt > at), asked);
+    return true;
   }
   function toastIfSameCatalog(c) {
     const active = storedCatalog();
@@ -28026,7 +28048,7 @@ What you type stays in this browser only.`;
     return '<small class="ec-watch">' + esc(t("Watching")) + " <code>" + esc(eWatchName()) + '</code> · <span class="acts"><button type="button" class="act" data-ec-check="1" title="' + esc(t("Read that file again and offer it if it has changed")) + '">' + esc(t("Check for updates")) + '</button><span class="sep" aria-hidden="true">·</span><button type="button" class="act" data-ec-unwatch="1">' + esc(t("Stop watching")) + "</button></span></small>";
   }
   function ecRowHtml(o) {
-    return '<div class="ec-row' + (o.loaded ? " is-loaded" : "") + '"' + (o.file ? ' data-ec-file="' + esc(o.file) + '"' : "") + '><span class="ec-name"><b>' + esc(o.name) + "</b>" + (o.meta ? '<small class="ec-meta">' + o.meta + "</small>" : "") + (o.loaded ? ecWatchHtml() : "") + (o.extra || "") + "</span>" + (o.loaded ? loadedTickHtml() : "") + (o.newer && !o.sample ? '<span class="ec-tag" title="' + esc(t("Written after the catalog you have")) + '">' + esc(t("Newer")) + "</span>" : "") + (o.loaded && catalogEdited() ? '<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="' + esc(t("Save everything loaded now as a catalog file, your edits merged in")) + '">' + esc(t("Export…")) + "</button>" : "") + trustKeyHtml(o.trust || "", o.keyId || "") + (o.loaded ? ecActHtml("Eject", ICON_EJECT, ' data-ec-eject="1"') : ecActHtml("Load", ICON_LOAD, ' data-ec-load="' + esc(o.name) + '" data-ec-at="' + (+o.mtime || 0) + '"')) + "</div>";
+    return '<div class="ec-row' + (o.loaded ? " is-loaded" : "") + '"' + (o.file ? ' data-ec-file="' + esc(o.file) + '"' : "") + '><span class="ec-name"><b>' + esc(o.name) + "</b>" + (o.meta ? '<small class="ec-meta">' + o.meta + "</small>" : "") + (o.loaded ? ecWatchHtml() : "") + (o.extra || "") + "</span>" + (o.loaded ? loadedTickHtml() : "") + (o.newer && !o.sample ? '<span class="ec-tag" title="' + esc(t("Written after the catalog you have")) + '">' + esc(t("Newer")) + "</span>" : "") + (o.loaded && catalogEdited() ? '<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="' + esc(t("Save everything loaded now as a catalog file, your edits merged in")) + '">' + esc(t("Export…")) + "</button>" : "") + trustKeyHtml(o.trust || "", o.print || "") + (o.loaded ? ecActHtml("Eject", ICON_EJECT, ' data-ec-eject="1"') : ecActHtml("Load", ICON_LOAD, ' data-ec-load="' + esc(o.name) + '" data-ec-at="' + (+o.mtime || 0) + '"')) + "</div>";
   }
   function ecExportHtml() {
     return catalogEdited() ? '<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="' + esc(t("Save everything loaded now as a catalog file, your edits merged in")) + '">' + esc(t("Export…")) + "</button>" : "";
@@ -28137,7 +28159,7 @@ What you type stays in this browser only.`;
     const held = storedCatalog();
     const mine = eLoadedCatalogFile();
     recheckHeldTrust(eCatalog(), held, paintCatalogList);
-    Promise.all([eCatalogFiles(), eBranchIdentity(false), settleHeldTrust(eCatalog(), held)]).then(([all, me]) => {
+    Promise.all([eCatalogFiles(), eBranchIdentity(false), settleHeldTrustWithin(eCatalog(), held)]).then(([all, me]) => {
       if (!box.isConnected) return;
       const files = all.filter((f) => !f.desk);
       const shaped = (f) => !!f.desk && f.id.indexOf(f.desk.id + "-") === 0;
@@ -28163,6 +28185,7 @@ What you type stays in this browser only.`;
           sample: !!f.sample,
           meta: copy2 && meta ? copy2 + " · " + meta : copy2 || meta,
           trust: on ? heldCatalogTrust() : "",
+          print: on ? heldCatalogPrint() : "",
           extra: extraFor(f.id, on)
         }) };
       });
@@ -28173,6 +28196,7 @@ What you type stays in this browser only.`;
           newer: false,
           meta: loadedMeta(""),
           trust: heldCatalogTrust(),
+          print: heldCatalogPrint(),
           extra: mineLine
         }) });
       const under = tops.map(() => []), alone = [], named = /* @__PURE__ */ new Map(), nested = [];

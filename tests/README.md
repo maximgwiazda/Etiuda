@@ -42,6 +42,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     node tests/catalog-trust-desk.mjs, legs 73a to 73e no fixtures, an empty desk that made a catalog from nothing offered the lead's import of it by its lineage
     node tests/catalog-trust-desk.mjs, legs 78a to 78d no fixtures, a joined desk's key read from its pinned lead: gold for the lead's file with no ring beside it, not gold for a file and a ring put on the share under another key, and a desk outside any team reading the ring as before
     node tests/catalog-trust-desk.mjs, legs 79c to 79g no fixtures, the catalog in use answering to the pinned lead at every load, a signature the shell would not verify never gold, and a gold key named by the print of the public that verified it
+    node tests/catalog-trust-desk.mjs, legs 80a and 81a no fixtures, the boot's offer made again where the held signature is lowered on the first launch after a pin, and the Library drawn when the host never answers
     node tests/token-canary.mjs                       no fixtures, TOKEN_CANARY held to fill()
     node tests/variables.mjs                          no fixtures, a catalog's variables, the gender glyph, the override of {PAX}, {NAME}; git for leg 9
     node tests/linux-package.mjs                      no fixtures, the Ubuntu desk's .deb as tools/package-linux.mjs judges it, on planted trees

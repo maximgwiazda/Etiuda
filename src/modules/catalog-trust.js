@@ -131,16 +131,25 @@ function recheckHeldTrust(found,held,then){
    catalog keeps no document, so beside its state the desk keeps the public that verified it when it was stored. With a
    lead pinned, valid stands where that public is a pinned lead's. Otherwise the file handed this load decides, where it is
    the catalog held, checked as any file is; and where no check this load can confirm it, the held catalog is a key this
-   desk does not know, drawn grey. A desk outside any team keeps what it holds, as before. Settles once its answer is
-   written, with the held key's print read for the Library, and never rejects. */
+   desk does not know, drawn grey. A desk outside any team keeps what it holds, as before. Settles with whether it lowered
+   a held valid once its answer is written, with the held key's print read for the Library, and never rejects. */
 function settleHeldTrust(found,held){
+  let lowered=false;
   return eCatalogLeads().then(leads=>{
     const pub=nsGet(SIGNER_PUB_KEY)||"";
     if(!leads.length || heldCatalogTrust()!==V2_SIG_VALID || leads.some(l=>l.public===pub)) return;
-    const unconfirmed=()=>{ nsSet(TRUST_KEY,V2_SIG_UNKNOWN); nsDel(SIGNER_KEY); nsDel(SIGNER_PUB_KEY); };
+    const unconfirmed=()=>{ nsSet(TRUST_KEY,V2_SIG_UNKNOWN); nsDel(SIGNER_KEY); nsDel(SIGNER_PUB_KEY); lowered=true; };
     if(!found || !held || eCatalogSignature(found)!==eCatalogSignature(held)){ unconfirmed(); return; }
-    return catalogTrust(found).then(s=>{ if(s) holdTrust(found,s); else unconfirmed(); });
-  }).then(()=>keyPrintOf(nsGet(SIGNER_PUB_KEY)||"")).then(p=>{ heldPrint=p; }).catch(()=>{});
+    return catalogTrust(found).then(s=>{ if(!s){ unconfirmed(); return; } holdTrust(found,s); lowered=s!==V2_SIG_VALID; });
+  }).then(()=>keyPrintOf(nsGet(SIGNER_PUB_KEY)||"")).then(p=>{ heldPrint=p; }).catch(()=>{}).then(()=>lowered);
+}
+/* The same answer for a list being drawn, or false once TRUST_WAIT_MS is over, as whenTrusted caps a row's wait: a host
+   that never answers cannot hold the Library unpainted. */
+function settleHeldTrustWithin(found,held){
+  return new Promise(done=>{
+    const late=setTimeout(()=>done(false),TRUST_WAIT_MS);
+    settleHeldTrust(found,held).then(lowered=>{ clearTimeout(late); done(lowered); });
+  });
 }
 /* A ROW'S SIGNATURE IS A KEY beside its act, never a line: gold where the signature holds, grey
    otherwise, its word the name. What more can be said rides data-tip, for a bubble on hover or
@@ -179,6 +188,7 @@ export {
   heldCatalogPrint,
   recheckHeldTrust,
   settleHeldTrust,
+  settleHeldTrustWithin,
   rearmTrustRecheck,
   trustKeyHtml,
   trustOfferLine

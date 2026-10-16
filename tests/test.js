@@ -3808,9 +3808,9 @@ function shippedFlagTests() {
   eq("a Library row's glyphs, the loaded mark, the key and Load or Eject, share one size above a toolbar icon's 15px",
     [+glyph > 15, sized], [true, [true, true, true]]);
   const keyThenAct = html => ((/<key ([^>]*)><button[^>]*data-ec-(load|eject)/.exec(String(html)) || []).slice(1).join(" ")) || String(html).slice(0, 120);
-  eq("a Library row's signature is a key beside its Load or Eject, carrying the state and the key's name the list hands it", [
-    keyThenAct(rowOf({ name: "team.ec", mtime: 5, trust: "valid", keyId: "k1" }, s => s)),
-    keyThenAct(rowOf({ name: "team.ec", loaded: true, trust: "none" }, s => s))], ["valid|k1 load", "none| eject"]);
+  eq("a Library row's signature is a key beside its Load or Eject, carrying the state and the print of the key the list hands it", [
+    keyThenAct(rowOf({ name: "team.ec", mtime: 5, trust: "valid", print: "87ad0879ac3e9ff6" }, s => s)),
+    keyThenAct(rowOf({ name: "team.ec", loaded: true, trust: "none" }, s => s))], ["valid|87ad0879ac3e9ff6 load", "none| eject"]);
   const acts = html => (String(html).match(/<button[^>]*>[\s\S]*?<\/button>/g) || []).map(b => {
     const at = n => ((new RegExp(" " + n + "=\"([^\"]*)\"")).exec(b) || [])[1] || "";
     return [at("aria-label"), at("title"), b.replace(/^<button[^>]*>|<\/button>$/g, "")];
