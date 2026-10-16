@@ -29,7 +29,7 @@
     "dot-field-desk": "node tests/dot-field-desk.js",
     "glass-rim": "node tests/glass-rim.js",
     "catalog-watch": "node tests/catalog-watch.js",
-    "gates": "node tools/gate-run.mjs test split-guard desk links",
+    "gates": "node tools/gate-run.mjs test split-guard desk links swap",
     "release": "node tools/release.mjs",
     "package": "node tools/package.mjs",
     "package:dir": "npm run build && electron-builder --win --dir",

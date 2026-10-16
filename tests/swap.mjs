@@ -19,7 +19,8 @@
  *   dom      document.body's markup, scripts and the passing surfaces removed (the toast, the Undo
  *            bubble, a leaving copy), style attributes kept
  * Tab ids are minted from the clock, so each part has them replaced by their place in the tab
- * list first. What else is volatile is named in VOLATILE with its reason, and nothing else is.
+ * list first. What else is volatile is named in VOLATILE, or for the markup in VOLATILE_MARKUP,
+ * with its reason, and nothing else is.
  *
  * THE MARKER. Every word catalog A brings starts "Qalpha" and every own card "Qown"; after the swap
  * to B the marker may appear only under A's own layer in storage, which is where the orbit keeps it.
@@ -96,6 +97,16 @@ const VOLATILE = {
   eDeskSeen: "the moment of the last start",
   tabSaveTimer: "a timer's handle, a number the browser picks",
 };
+/* WHAT IN THE MARKUP IS VOLATILE AND WHY: one attribute of one node, and only while the condition
+   holds. Everything else on that node, and the node itself, is compared as it stands. */
+const VOLATILE_MARKUP = [{
+  sel: ".brand-tile svg path", attr: "d", while: { fill: "none", stroke: "currentColor" },
+  why: "the header's mark turns on the page's own clock from boot (fifth.js wireFifth, called once by main.js and"
+    + " never by restartDesk), so while it turns its centreline is the phase of the time since the page opened, and"
+    + " a fresh start reads an earlier phase than the desk it is held to. Turning is what fill none and stroke"
+    + " currentColor say, and those stay compared, so a mark standing on one side and turning on the other is a"
+    + " difference; standing, its d is the markup's own outline and is compared too",
+}];
 
 /* EVERY WINDOW OR QUESTION STANDING OVER THE DESK, read by what can put one up rather than by the
    name of one that once did: a window not hidden, a bubble that asks, an alert. The Undo bubble is
@@ -104,7 +115,7 @@ const STANDING = () => [...document.querySelectorAll(".modal:not([hidden]), .bub
   .filter(n => n.id !== "eUndo" && !n.closest(".e-gone")).map(n => n.id || n.className).sort().join("|");
 
 async function fingerprint(q) {
-  return q.evaluate(vol => {
+  return q.evaluate((vol, volMarkup) => {
     const tabIds = (typeof tabs !== "undefined" && Array.isArray(tabs)) ? tabs.map(t => t.id) : [];
     const mask = s => { let o = String(s); tabIds.forEach((id, i) => { o = o.split(id).join("TAB" + i); }); return o; };
     const store = {};
@@ -147,12 +158,14 @@ async function fingerprint(q) {
       if (tag === "script" || n.id === "toast" || n.id === "eUndo" || (n.classList && n.classList.contains("e-gone"))) return "";
       // A tour put away keeps its last step's placement on hidden markup until it next runs.
       if (n.id === "tourRoot" && n.hidden) return "<tourroot hidden>";
+      const masked = volMarkup.filter(v => n.matches(v.sel)
+        && Object.keys(v.while).every(k => n.getAttribute(k) === v.while[k])).map(v => v.attr);
       const at = [...n.attributes].filter(a => !((a.name === "style" || a.name === "class") && !a.value.trim()))
-        .map(a => a.name + "=" + JSON.stringify(a.value)).sort().join(" ");
+        .map(a => a.name + "=" + (masked.indexOf(a.name) > -1 ? "[volatile]" : JSON.stringify(a.value))).sort().join(" ");
       return "<" + tag + (at ? " " + at : "") + ">" + [...n.childNodes].map(canon).join("") + "</" + tag + ">";
     };
     return { store, state, dom: mask(canon(document.body)) };
-  }, VOLATILE);
+  }, VOLATILE, VOLATILE_MARKUP);
 }
 function diff(a, b) {
   const out = [];

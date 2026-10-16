@@ -57,7 +57,7 @@ Everything here runs against `engine/etiuda.html` and `src/`. Nothing here runs 
     ETIUDA_FIXTURES=<folder> node tests/glass-rim.js  the glass rim on a macro, the panels, the menus, Quick facts, the pill bar and a dialog: painted in dark, absent in light, a quiet line along the top and bottom, Chrome
     ETIUDA_FIXTURES=<folder> node tests/catalog-watch.js  the watched catalog, one app run
     node tests/pick-desk.js                          the picker over a real window: it takes the foreground and presses keys, so by hand, nobody at the keyboard
-    node tests/swap.mjs                              the desk changed in place held to a fresh start, Chrome, no fixtures
+    node tests/swap.mjs                              the desk changed in place held to a fresh start, Chrome, no fixtures; npm run swap, in npm run gates and the release
     node tests/theme-fade.mjs                        every category, then the theme's fade: the page lives, the hold is let go, the record Maintenance shows across a reload, a control that the fault still kills the page without the hold, and a fade skipped by the page's hiding leaving nothing on the root (tf6, tf7), Chrome, no fixtures
     ETIUDA_FIXTURES=<folder> node tests/shell-smoke.js   the PACKAGED app, Windows only
     ETIUDA_FIXTURES=<folder> node tests/reinstall.js     install, use, uninstall, install again
