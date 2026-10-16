@@ -3492,6 +3492,7 @@ body.glass-off{--glass:var(--panel-raised);--glass-filter:none;
 .bub-ask code{font:12px var(--mono);color:var(--bub-ink);overflow-wrap:anywhere}
 .e-offer .ec-what{margin:0 0 8px;font-size:13.5px;color:var(--bub-ink)}
 .e-offer .ec-counts{font:12px var(--mono);color:var(--bub-dim);margin-top:2px}
+.e-offer .ec-ed{font-size:12px;color:var(--bub-dim)}
 /* WHAT AN EDITION CHANGES, in the offer (edition-panel.js): the lead's note, the counts, the titles by kind.
    The block scrolls on its own where the window is short, so the answers stay where they are. */
 .e-offer .ec-change{overflow:auto;overscroll-behavior:contain;margin:0 0 8px}
@@ -13697,6 +13698,7 @@ What you type stays in this browser only.`;
     eWatchSupported: () => eWatchSupported,
     editionLabel: () => editionLabel,
     editionNameOf: () => editionNameOf,
+    editionSaid: () => editionSaid,
     normaliseCatalog: () => normaliseCatalog,
     parseCatalogFile: () => parseCatalogFile,
     storeCatalog: () => storeCatalog,
@@ -14137,16 +14139,24 @@ What you type stays in this browser only.`;
     return /^[0-9][0-9.]*$/.test(s) ? "v" + s : s;
   }
   function catalogStamp(edition, mtime, rev) {
-    return String(edition == null ? "" : edition).trim() ? editionLabel(editionNameOf({ version: edition, rev })) : fileStamp(mtime);
+    const n = editionNameOf({ version: edition, rev });
+    return n.r != null || n.e ? editionLabel(n) : fileStamp(mtime);
   }
   function editionNameOf(c) {
-    const e = catalogVersionLabel(c && c.version), n = /^v?([0-9][0-9.]*)$/.exec(e);
-    if (e && !n) return { e };
-    if (c && c.rev != null && c.rev !== "" && Number.isFinite(+c.rev)) return { r: +c.rev };
-    return n ? { r: /^[0-9]+$/.test(n[1]) ? +n[1] : n[1] } : { e: "" };
+    const l = catalogVersionLabel(c && c.version), n = /^v?([0-9][0-9.]*)$/.exec(l), e = l && !n ? l : "";
+    if (c && c.rev != null && c.rev !== "" && Number.isFinite(+c.rev)) return { r: +c.rev, e };
+    if (n) return { r: /^[0-9]+$/.test(n[1]) ? +n[1] : n[1], e: "" };
+    return { r: null, e };
+  }
+  function editionRevText(name) {
+    return String(name.r) + (name.e ? " (" + name.e + ")" : "");
   }
   function editionLabel(name) {
-    return name && name.r != null ? t("rev {R}").split("{R}").join(String(name.r)) : String(name && name.e || "");
+    return name && name.r != null ? t("rev {R}").split("{R}").join(editionRevText(name)) : String(name && name.e || "");
+  }
+  function editionSaid(name, revWords, datedWords) {
+    const n = name || {};
+    return n.r != null ? revWords.split("{R}").join(editionRevText(n)) : datedWords.split("{E}").join(String(n.e || ""));
   }
   function eCatalogAccepted(c) {
     try {
@@ -16877,7 +16887,7 @@ What you type stays in this browser only.`;
   var EDITION_MARKS = "EditionMarks";
   function editionMarksFrom(held, changes, name) {
     const was = new Map((held && held.cards || []).map((m) => [String(m.id), m]));
-    const out = name && name.r != null ? { r: name.r, cards: {} } : { e: String(name && name.e || ""), cards: {} };
+    const out = { r: name && name.r != null ? name.r : null, e: String(name && name.e || ""), cards: {} };
     (changes && changes.items || []).forEach((it) => {
       if (it.kind !== "changed" && it.kind !== "new") return;
       const mark = { k: it.kind };
@@ -19644,12 +19654,11 @@ What you type stays in this browser only.`;
     schedulePillsCollapse();
   }
   function editionPill(n) {
-    const ed = editionMarks() || {}, rev = ed.r != null;
-    const said = (dated, byRev) => rev ? byRev.split("{R}").join(String(ed.r)) : dated.split("{E}").join(String(ed.e || ""));
+    const ed = editionMarks() || {};
     const b = document.createElement("div");
     b.className = "pill pill-ed" + (editionView ? " on" : "");
-    b.innerHTML = '<span class="pill-lab" data-i18n-skip>' + esc(said(t("Changes in {E}"), t("Changes in rev {R}"))) + "</span> <b>" + n + "</b>";
-    const tip = said(t("Only the cards edition {E} changed or added"), t("Only the cards rev {R} changed or added"));
+    b.innerHTML = '<span class="pill-lab" data-i18n-skip>' + esc(ed.r != null ? t("Changes in rev {R}").split("{R}").join(String(ed.r)) : t("Changes in {E}").split("{E}").join(String(ed.e || ""))) + "</span> <b>" + n + "</b>";
+    const tip = editionSaid(ed, t("Only the cards rev {R} changed or added"), t("Only the cards edition {E} changed or added"));
     b.title = tip;
     b.setAttribute("aria-label", tip);
     b.setAttribute("role", "button");
@@ -19672,7 +19681,7 @@ What you type stays in this browser only.`;
       hooks.railEchoRedraw(railBefore, relBefore);
       scrollRailTop();
       scheduleTabSave();
-      if (press2) editionSay(said(t("Cards edition {E} changed or added: {N}."), t("Cards rev {R} changed or added: {N}.")).split("{N}").join(String(editionMarkedCount())));
+      if (press2) editionSay(editionSaid(ed, t("Cards rev {R} changed or added: {N}."), t("Cards edition {E} changed or added: {N}.")).split("{N}").join(String(editionMarkedCount())));
     };
     return b;
   }
@@ -20377,7 +20386,7 @@ What you type stays in this browser only.`;
     if (m._custom || m._overridden || movedCardIds().has(m.id))
       cardH += '<span class="cbadge ed" title="' + esc(t("Changed or added by you, not what the catalog shipped")) + '">' + esc(t("mod")) + "</span>";
     const edMark = editionMarkOf(m.id);
-    if (edMark) cardH += '<span class="cbadge edn" title="' + esc(edMark.r != null ? (edMark.k === "new" ? t("New in rev {R}") : t("Changed in rev {R}")).split("{R}").join(String(edMark.r)) : (edMark.k === "new" ? t("New in edition {E}") : t("Changed in edition {E}")).split("{E}").join(edMark.e)) + '">' + esc(edMark.k === "new" ? t("new") : t("changed")) + "</span>";
+    if (edMark) cardH += '<span class="cbadge edn" title="' + esc(edMark.k === "new" ? editionSaid(edMark, t("New in rev {R}"), t("New in edition {E}")) : editionSaid(edMark, t("Changed in rev {R}"), t("Changed in edition {E}"))) + '">' + esc(edMark.k === "new" ? t("new") : t("changed")) + "</span>";
     const favTip = t(fav ? "Remove from Favourites" : "Add to Favourites");
     const hideTip = t(m._hidden ? "Show this card again" : fav ? "Put this card away: it greys out at the foot of this category and loses its star" : "Put this card away: it greys out at the foot of this category");
     const _note = noteFor(m);
@@ -25577,13 +25586,13 @@ What you type stays in this browser only.`;
     sec("Catalog");
     const edName = (() => {
       try {
-        return E_CATALOG_VERSION != null ? editionNameOf({ version: E_CATALOG_VERSION, rev: E_CATALOG_REV }) : null;
+        return editionNameOf({ version: E_CATALOG_VERSION, rev: E_CATALOG_REV });
       } catch (e) {
         return void 0;
       }
     })();
     if (edName && edName.r != null) row("rev", String(edName.r));
-    else row("edition", edName === void 0 ? "unavailable" : edName && edName.e || "-");
+    if (!edName || edName.e || edName.r == null) row("edition", edName === void 0 ? "unavailable" : edName && edName.e || "-");
     row("cards / macros", S(() => cards.length + " / " + catalogMacroCount({ cards })));
     row("intents / categories", S(() => intentOrder.length + " / " + Object.keys(CATS).length));
     row("content languages", S(() => CONTENT_LANGS.join(", ") + " (primary " + CONTENT_LANGS[0] + ")"));
@@ -27551,7 +27560,7 @@ What you type stays in this browser only.`;
     const row = (it, i) => '<button type="button" class="ed-row" data-ed-at="' + i + '"' + (i === at ? ' aria-current="true"' : "") + ">" + editionRowInner(it, o.held, c, sub) + "</button>";
     openDialog({
       cls: "ed-modal",
-      title: desk ? desk.title : o.ed && o.ed.r != null ? t("What is new in rev {R}").split("{R}").join(String(o.ed.r)) : t("What is new in edition {E}").split("{E}").join(o.ed && o.ed.e || ""),
+      title: desk ? desk.title : editionSaid(o.ed, t("What is new in rev {R}"), t("What is new in edition {E}")),
       name: o.name,
       back: o.back,
       body: '<div class="ed-panel" data-i18n-skip><div class="ed-left">' + (note ? editionNoteHtml(note, "ed-note") : "") + editionCountsHtml(o.changes.counts) + '<div class="ed-list">' + items.map(row).join("") + '</div></div><div class="ed-pane" id="edPane" aria-live="polite"></div></div>',
@@ -28168,7 +28177,7 @@ What you type stays in this browser only.`;
     return intentOrder.filter((i) => !gone.has(intentIdAt(i))).length;
   }
   function loadedMeta(stamp) {
-    const ver = E_CATALOG_VERSION != null ? editionLabel(editionNameOf({ version: E_CATALOG_VERSION, rev: E_CATALOG_REV })) : "";
+    const held = editionNameOf({ version: E_CATALOG_VERSION, rev: E_CATALOG_REV }), ver = held.r != null || held.e ? editionLabel(held) : "";
     const parts2 = [
       ver || stamp,
       catalogCountsLine(
@@ -28348,6 +28357,10 @@ What you type stays in this browser only.`;
     if (no) no.textContent = t("Keep current");
     if (yes) yes.textContent = t("Load it");
   }
+  function offerEditionHtml(name) {
+    if (name.r == null) return name.e ? " · " + esc(name.e) : "";
+    return " · " + esc(t("rev {R}").split("{R}").join(String(name.r))) + (name.e ? ' <span class="ec-ed">' + esc(name.e) + "</span>" : "");
+  }
   var offerStanding = null;
   function eOfferCatalogDialog(c, src) {
     const sig = eCatalogSignature(c);
@@ -28397,7 +28410,7 @@ What you type stays in this browser only.`;
        another taken up, which the question asks and no sentence beneath it can improve on. The
        two editions of ONE catalog keep their sentence: what is at stake there is what happens to
        this desk's own work, which the screen cannot show. */
-    '<h3 id="ecTitle">' + esc(t(olderSure || older ? "Older catalog found" : updating && !plain ? "Updated catalog found" : replacing ? "Replace catalog?" : "Load catalog?")) + "</h3>" + (olderSure ? '<p class="ec-warn">' + esc(t("This edition is older than the one in use on this desk, so some of its replies may be out of date.")) + "</p>" : "") + (updating && !olderSure && !plain ? '<p class="ec-sub">' + esc(t(older ? "This file is an earlier edition than the one loaded now." : "This catalog has changed since it was loaded.")) + "</p>" : "") + '<div class="ec-what"><b>' + esc(catalogNameOfFile(String(src.file || "") || E_CATALOG_SCRIPT)) + "</b>" + (c.version != null ? " · " + esc(editionLabel(editionNameOf(c))) : "") + (updating && active.version != null && String(active.version) !== String(c.version) ? '<div class="ec-counts">' + esc(editionNameOf(active).r != null ? t("You have rev {R}.").split("{R}").join(String(editionNameOf(active).r)) : t("You have {E}.").split("{E}").join(editionNameOf(active).e)) + "</div>" : "") + (changeHtml ? "" : '<div class="ec-counts">' + catalogCountsLine(
+    '<h3 id="ecTitle">' + esc(t(olderSure || older ? "Older catalog found" : updating && !plain ? "Updated catalog found" : replacing ? "Replace catalog?" : "Load catalog?")) + "</h3>" + (olderSure ? '<p class="ec-warn">' + esc(t("This edition is older than the one in use on this desk, so some of its replies may be out of date.")) + "</p>" : "") + (updating && !olderSure && !plain ? '<p class="ec-sub">' + esc(t(older ? "This file is an earlier edition than the one loaded now." : "This catalog has changed since it was loaded.")) + "</p>" : "") + '<div class="ec-what"><b>' + esc(catalogNameOfFile(String(src.file || "") || E_CATALOG_SCRIPT)) + "</b>" + offerEditionHtml(editionNameOf(c)) + (updating && editionLabel(editionNameOf(active)) && editionLabel(editionNameOf(active)) !== editionLabel(editionNameOf(c)) ? '<div class="ec-counts">' + esc(editionSaid(editionNameOf(active), t("You have rev {R}."), t("You have {E}."))) + "</div>" : "") + (changeHtml ? "" : '<div class="ec-counts">' + catalogCountsLine(
       "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
       n,
       catalogMacroCount(c),
@@ -28507,7 +28520,11 @@ What you type stays in this browser only.`;
       const yes = wrap.querySelector("#ecYes");
       if (yes) yes.focus();
     }
-    if (arriving) editionSay(ed.r != null ? t("Rev {R} is waiting to be loaded; the offer is under the catalog's name.").split("{R}").join(String(ed.r)) : t("Edition {E} is waiting to be loaded; the offer is under the catalog's name.").split("{E}").join(ed.e));
+    if (arriving) editionSay(editionSaid(
+      ed,
+      t("Rev {R} is waiting to be loaded; the offer is under the catalog's name."),
+      t("Edition {E} is waiting to be loaded; the offer is under the catalog's name.")
+    ));
     return true;
   }
   function acceptOffer(c, sig, src, ed) {
@@ -28519,7 +28536,7 @@ What you type stays in this browser only.`;
       paintCatWaiting();
       if (!ed || !landed) return;
       const counts2 = editionCountWords(ed.changes.counts);
-      if (counts2.length) toast((ed.name.r != null ? t("Rev {R} loaded: {COUNTS}").split("{R}").join(String(ed.name.r)) : t("Edition {E} loaded: {COUNTS}").split("{E}").join(ed.name.e)).split("{COUNTS}").join(counts2.join(", ")));
+      if (counts2.length) toast(editionSaid(ed.name, t("Rev {R} loaded: {COUNTS}"), t("Edition {E} loaded: {COUNTS}")).split("{COUNTS}").join(counts2.join(", ")));
       if (marks) washEdition(marks);
     });
   }
@@ -28599,7 +28616,7 @@ What you type stays in this browser only.`;
       dot.setAttribute("aria-hidden", "true");
       el.insertBefore(dot, el.firstChild);
     }
-    const ed = editionNameOf(edWaiting.c), words = ed.r != null ? t("Show rev {R}, waiting to be loaded").split("{R}").join(String(ed.r)) : t("Show edition {E}, waiting to be loaded").split("{E}").join(ed.e);
+    const words = editionSaid(editionNameOf(edWaiting.c), t("Show rev {R}, waiting to be loaded"), t("Show edition {E}, waiting to be loaded"));
     el.setAttribute("role", "button");
     el.setAttribute("tabindex", "0");
     el.setAttribute("title", words);
@@ -28850,8 +28867,9 @@ What you type stays in this browser only.`;
     return '<div class="eh-head"><b data-i18n-skip>' + esc(historyFileName(g)) + "</b>" + where + "</div>";
   }
   function historyRowHtml(v, key) {
+    const ed = editionNameOf({ version: v.date, rev: v.rev });
     const meta = [
-      String(v.date || "").trim() ? editionLabel(editionNameOf({ version: v.date, rev: v.rev })) : "",
+      ed.r != null || ed.e ? editionLabel(ed) : "",
       +v.cards >= 0 ? catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}", +v.cards, +v.macros, +v.intents, +v.cats) : ""
     ].filter(Boolean).map(esc).join(" · ");
     const acts = historyActs(v), open = t("Open this version");

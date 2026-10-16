@@ -107,11 +107,10 @@ function mtReadings(){
   row("theme",S(()=>(document.documentElement.getAttribute("data-theme")||systemTheme())
     +(themeChoice()?" (chosen)":" (system)")));
   sec("Catalog");
-  // A rev is its own row, so no number stands under the word edition.
-  const edName=(()=>{ try{ return E_CATALOG_VERSION!=null ? editionNameOf({version:E_CATALOG_VERSION, rev:E_CATALOG_REV}) : null; }
-    catch(e){ return undefined; } })();
+  // The rev first, on a row of its own so no number stands under the word edition, and the dated edition after it.
+  const edName=(()=>{ try{ return editionNameOf({version:E_CATALOG_VERSION, rev:E_CATALOG_REV}); }catch(e){ return undefined; } })();
   if(edName && edName.r!=null) row("rev",String(edName.r));
-  else row("edition",edName===undefined ? "unavailable" : (edName && edName.e) || "-");
+  if(!edName || edName.e || edName.r==null) row("edition",edName===undefined ? "unavailable" : (edName && edName.e) || "-");
   row("cards / macros",S(()=>cards.length+" / "+catalogMacroCount({cards:cards})));
   row("intents / categories",S(()=>intentOrder.length+" / "+Object.keys(CATS).length));
   row("content languages",S(()=>CONTENT_LANGS.join(", ")+" (primary "+CONTENT_LANGS[0]+")"));

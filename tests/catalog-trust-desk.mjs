@@ -479,7 +479,7 @@ async function launch(plan) {
       const b = bubble();
       obs.read.bubble = !b ? null : { hidden: b.hidden, change: b.querySelectorAll(".ec-change").length,
         counts: b.querySelectorAll(".ec-counts").map(n => ({ text: n.textContent.trim(), n: n.querySelectorAll(".ec-n").length })),
-        n: texts(b, ".ec-n"), ids: b.querySelectorAll("[data-ec-id]").map(n => n.getAttribute("data-ec-id")), what: texts(b, ".ec-what")[0] || "",
+        n: texts(b, ".ec-n"), ids: b.querySelectorAll("[data-ec-id]").map(n => n.getAttribute("data-ec-id")), what: texts(b, ".ec-what")[0] || "", ed: texts(b, ".ec-ed"),
         diff: b.querySelectorAll("#ecDiff").length, own: cardRow("c-b") };
     },
     panel: () => {
@@ -602,7 +602,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 122;
+  const EXPECTED = 123;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -1054,7 +1054,7 @@ async function parent() {
       "74K THE CONTROL: the same edition through the boot's offer holds the same marks, so 74k reads a desk file that can hold them: " + JSON.stringify(viaBoot));
     /* THE OFFER OF A NEW EDITION NOBODY ASKED FOR takes no focus and waits at the name: up, after Escape, after Not now,
        and at the next launch with that refusal remembered. The control is the same desk with nothing newer in the folder. */
-    const BAND = { band: true }, WAIT = /^Show edition \S+, waiting to be loaded$/;
+    const BAND = { band: true }, WAIT = /^Show rev 2 \(2026-09-20\), waiting to be loaded$/;
     const wr = (o, i) => ((o.read && o.read.wait) || [])[i] || {};
     const dW = editionDesk();
     const AW = run(dW.lab, ASK.concat(["readwait", "escape", "settle", "readwait"]), false, BAND);
@@ -1077,12 +1077,19 @@ async function parent() {
        rev, where the dated one above reads its date. */
     const dR = editionDesk(() => { const d = ed2(); delete d.date; return d; });
     const RV = run(dR.lab, ASK.concat(["readwait", "panel", "edload", "settle"]), false, BAND), r0 = wr(RV, 0);
-    check(r0.label === "Show rev 2, waiting to be loaded" && a0.label === "Show edition 2026-09-20, waiting to be loaded"
+    check(r0.label === "Show rev 2, waiting to be loaded" && a0.label === "Show rev 2 (2026-09-20), waiting to be loaded"
       && rd(RV, "panel").title === "What is new in rev 2" && /^Rev 2 loaded: /.test(RV.toast || "")
-      && JSON.stringify(RV.editionName) === '{"r":2}' && RV.reloaded === true && ![dR.setup, RV].flatMap(o => o.errors || []).length,
+      && JSON.stringify(RV.editionName) === '{"e":"","r":2}' && RV.reloaded === true && ![dR.setup, RV].flatMap(o => o.errors || []).length,
       "74r a new edition with no date is named by its rev at the name, on the panel, in the load's toast and in its marks, and the dated one by its date: "
       + JSON.stringify({ rev: r0.label, dated: a0.label, panel: rd(RV, "panel").title, toast: RV.toast, marks: RV.editionName,
         errors: [dR.setup, RV].flatMap(o => o.errors || []).slice(0, 2) }));
+    /* AN EDITION WITH A REV AND A DATE, 74's own: the rev first and the date after it, in the bubble's dim smaller type beside
+       the name, in parentheses where the words are plain: the held one's You have, the panel's title and the load's toast. */
+    const bubA = rd(A74, "bubble"), haveA = ((bubA.counts || []).find(c => /^You have /.test(c.text)) || {}).text || "";
+    check(/ · rev 2 2026-09-20/.test(bubA.what || "") && JSON.stringify(bubA.ed) === '["2026-09-20"]' && haveA === "You have rev 1 (2026-09-01)."
+      && pan.title === "What is new in rev 2 (2026-09-20)" && /^Rev 2 \(2026-09-20\) loaded: /.test(A74.toast || ""),
+      "74t an edition with a rev and a date is named by both, the rev first: beside the name the date in the dim smaller type, elsewhere in parentheses: "
+      + JSON.stringify({ what: bubA.what, ed: bubA.ed, have: haveA, panel: pan.title, toast: A74.toast }));
     /* THE SAME TWO WITH A BARE NUMBER WHERE THE DATE GOES: the offer's name line, its "You have" and the Library's rows,
        the one in use and another catalog's file in the folder, name each by its rev. */
     const dB = editionDesk(() => Object.assign(ed2(), { date: "2" }), () => Object.assign(ed1(), { date: "1" }));

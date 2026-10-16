@@ -10,6 +10,7 @@ import { esc } from "./esc.js";
 import { pack } from "./pack.js";
 import { lang } from "./app-state.js";
 import { CONTENT_LANGS } from "./content-model.js";
+import { editionSaid } from "./catalog.js";
 import { cardFieldKey } from "./card-fields.js";
 
 // The bubble names this many cards and counts the rest, but never a commitment, listed first; the panel lists them all.
@@ -151,8 +152,7 @@ function openEditionPanel(o){
     +editionRowInner(it,o.held,c,sub)+'</button>';
   openDialog({
     cls:"ed-modal",
-    title:desk?desk.title:(o.ed && o.ed.r!=null) ? t("What is new in rev {R}").split("{R}").join(String(o.ed.r))
-      : t("What is new in edition {E}").split("{E}").join((o.ed && o.ed.e)||""),
+    title:desk?desk.title:editionSaid(o.ed,t("What is new in rev {R}"),t("What is new in edition {E}")),
     name:o.name,
     back:o.back,
     body:'<div class="ed-panel" data-i18n-skip><div class="ed-left">'

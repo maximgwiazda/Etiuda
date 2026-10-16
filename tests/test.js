@@ -4014,10 +4014,11 @@ function activeStateTests() {
     const H = new Function("document", "pills", "cats", "CATS", "intentCats", "searchCounts", "catIconSvg", "esc", "t", "ICON_EDIT",
       "ICON_ALL", "ICON_PLUS", "catSlot", "dragState", "totalMacroCount", "counts", "displayCatOrder", "syncPillsCollapseNow",
       "schedulePillsCollapse", "editionView", "setEditionView", "editionMarkedCount", "editionMarks",
-      slice("pills-bar.js", "function editionPill(") + "\n" + slice("pills-bar.js", "function drawPillsCore(") + "\nreturn drawPillsCore;")(
+      slice("catalog.js", "function editionRevText(") + "\n" + slice("catalog.js", "function editionSaid(") + "\n"
+      + slice("pills-bar.js", "function editionPill(") + "\n" + slice("pills-bar.js", "function drawPillsCore(") + "\nreturn drawPillsCore;")(
       doc, pills, sel, { a: "Alpha", b: "Beta" }, () => ({ specific: [], always: [] }), () => null, () => "", s => s, s => s, "",
       "", "", () => -1, null, () => 3, { a: 1, b: 2 }, () => ["a", "b"], () => {}, () => {},
-      view, () => {}, () => (ed ? ed.n : 0), () => (ed && ed.marks) || { r: 7 });
+      view, () => {}, () => (ed ? ed.n : 0), () => (ed && ed.marks) || { r: 7, e: "" });
     H();
     if (ed && ed.words) { const p = pills.kids.find(k => k.cls.has("pill-ed"));
       return p ? [p.innerHTML.replace(/<[^>]+>/g, ""), p.title, p.getAttribute("aria-label")] : null; }
@@ -4032,22 +4033,49 @@ function activeStateTests() {
   eq("the pill of a loaded edition's marked cards stands beside All while any wear a mark, a toggle pressed while it filters, and All is not",
     got, [[["", "button", "false"], ["edition", "button", "true"], ["a", "button", "false"], ["b", "button", "false"], ["+", null, null]],
           [["", "button", "true"], ["edition", "button", "false"], ["a", "button", "false"], ["b", "button", "false"], ["+", null, null]]]);
-  try { got = [pillsAt([], { n: 2, words: true, marks: { r: 7 } }), pillsAt([], { n: 2, words: true, marks: { e: "2026-09-20" } })]; }
+  try { got = [pillsAt([], { n: 2, words: true, marks: { r: 7, e: "2026-09-20" } }), pillsAt([], { n: 2, words: true, marks: { r: 7, e: "" } }),
+    pillsAt([], { n: 2, words: true, marks: { r: null, e: "2026-09-20" } })]; }
   catch (e) { got = "drawPillsCore did not run: " + e.message; }
-  eq("the edition's pill names it by its rev, or by its dated edition where the marks keep that, never a number as an edition",
-    got, [["Changes in rev 7 2", "Only the cards rev 7 changed or added", "Only the cards rev 7 changed or added"],
+  eq("the edition's pill is labelled by its rev, its title and its read-aloud label carrying the dated edition after it; with no date the rev alone, with no rev the date",
+    got, [["Changes in rev 7 2", "Only the cards rev 7 (2026-09-20) changed or added", "Only the cards rev 7 (2026-09-20) changed or added"],
+          ["Changes in rev 7 2", "Only the cards rev 7 changed or added", "Only the cards rev 7 changed or added"],
           ["Changes in 2026-09-20 2", "Only the cards edition 2026-09-20 changed or added", "Only the cards edition 2026-09-20 changed or added"]]);
   try {
-    const [nameOf, label, stamp] = new Function("t", "fileStamp", ["function catalogVersionLabel(", "function editionNameOf(",
-      "function editionLabel(", "function catalogStamp("].map(m => slice("catalog.js", m)).join("\n")
-      + "\nreturn [editionNameOf, editionLabel, catalogStamp];")(s => s, () => "the file's date");
+    const [nameOf, label, stamp, said] = new Function("t", "fileStamp", ["function catalogVersionLabel(", "function editionNameOf(",
+      "function editionRevText(", "function editionLabel(", "function editionSaid(", "function catalogStamp("].map(m => slice("catalog.js", m)).join("\n")
+      + "\nreturn [editionNameOf, editionLabel, catalogStamp, editionSaid];")(s => s, () => "the file's date");
+    const R = "Rev {R} loaded", D = "Edition {E} loaded";
     got = [{ version: "2026-09-20a", rev: 4 }, { rev: 15 }, { version: "3", rev: 15 }, { version: "v1.2", rev: 15 }, { version: "Spring", rev: 15 },
-      { rev: 0 }, { version: "15" }, { version: 15 }, { version: "1.2" }].map(c => JSON.stringify(nameOf(c)))
-      .concat([label({ r: 15 }), label({ e: "2026-09-20a" }), stamp("15", 0, 3), stamp("2026-09-20a", 0, 3), stamp("", 0, 3), stamp("v2", 0)]);
+      { rev: 0 }, { version: "15" }, { version: 15 }, { version: "1.2" }, { version: "2026-09-20a" }, {}].map(c => JSON.stringify(nameOf(c)))
+      .concat([label({ r: 15, e: "2026-09-20a" }), label({ r: 15, e: "" }), label({ r: null, e: "2026-09-20a" }),
+        stamp("15", 0, 3), stamp("2026-09-20a", 0, 3), stamp("", 0, 3), stamp("v2", 0), stamp("", 0),
+        said(nameOf({ version: "2026-09-20a", rev: 4 }), R, D), said(nameOf({ rev: 4 }), R, D), said(nameOf({ version: "2026-09-20a" }), R, D)]);
   } catch (e) { got = "editionNameOf did not run: " + e.message; }
-  eq("a catalog's edition is named by its dated edition where it has one, otherwise by its rev, a bare number with no rev being that rev, never an edition and never a blank; a list labels it the same way",
-    got, ['{"e":"2026-09-20a"}', '{"r":15}', '{"r":15}', '{"r":15}', '{"e":"Spring"}', '{"r":0}', '{"r":15}', '{"r":15}', '{"r":"1.2"}',
-      "rev 15", "2026-09-20a", "rev 3", "2026-09-20a", "the file's date", "rev 2"]);
+  eq("a catalog is named by its rev and its dated edition, the rev first and the date after it in parentheses; the rev alone with no date, the date alone with no rev, a bare number with no rev being that rev, never blank where it has either",
+    got, ['{"r":4,"e":"2026-09-20a"}', '{"r":15,"e":""}', '{"r":15,"e":""}', '{"r":15,"e":""}', '{"r":15,"e":"Spring"}', '{"r":0,"e":""}',
+      '{"r":15,"e":""}', '{"r":15,"e":""}', '{"r":"1.2","e":""}', '{"r":null,"e":"2026-09-20a"}', '{"r":null,"e":""}',
+      "rev 15 (2026-09-20a)", "rev 15", "2026-09-20a", "rev 3", "rev 3 (2026-09-20a)", "rev 3", "rev 2", "the file's date",
+      "Rev 4 (2026-09-20a) loaded", "Rev 4 loaded", "Edition 2026-09-20a loaded"]);
+
+  /* THE TWO ROWS THAT NAME A CATALOG FROM ITS OWN FIELDS (the test architect's eighth edit on b807bc7): a version in the
+     catalog's history and the Library's row for the catalog in use, each with a rev and a date and with a rev alone. */
+  try {
+    const naming = ["function catalogVersionLabel(", "function editionNameOf(", "function editionRevText(", "function editionLabel("]
+      .map(m => slice("catalog.js", m)).join("\n");
+    const plainEsc = s => String(s == null ? "" : s), noCounts = () => "";
+    const historyRowHtml = new Function("t", "esc", "fileStamp", "catalogCountsLine", "historyActs", "ICON_LOAD",
+      naming + "\n" + slice("catalog-history.js", "function historyRowHtml(") + "\nreturn historyRowHtml;")(
+      s => s, plainEsc, () => "the day it came", noCounts, () => ["open"], "");
+    const metaOf = html => ((/<small class="ec-meta">([^<]*)<\/small>/.exec(html) || [])[1] || "");
+    const loadedAt = (version, rev) => new Function("t", "esc", "catalogCountsLine", "E_CATALOG_VERSION", "E_CATALOG_REV", "cards",
+      "totalMacroCount", "liveIntentCount", "CATS", "ecAwaitingHtml", "liveAwaiting",
+      naming + "\n" + slice("catalog-offer.js", "function loadedMeta(") + "\nreturn loadedMeta;")(
+      s => s, plainEsc, noCounts, version, rev, [], () => 0, () => 0, {}, () => [], () => [])("the file's date");
+    got = [metaOf(historyRowHtml({ date: "2026-09-20a", rev: 15, first: 0 }, "k")), metaOf(historyRowHtml({ rev: 15, first: 0 }, "k")),
+      loadedAt("2026-09-20a", 15), loadedAt(null, 15)];
+  } catch (e) { got = "the rows did not run: " + e.message; }
+  eq("a version in the catalog's history and the Library's row for the catalog in use are named by the rev with the dated edition after it, and by the rev alone where there is no date",
+    got, ["rev 15 (2026-09-20a)", "rev 15", "rev 15 (2026-09-20a)", "rev 15"]);
 
   try {
     const paint = new Function("catSlot", "railDrag", "railRelNow", "railRelGroup",
@@ -5979,10 +6007,10 @@ function libraryRowsTests() {
       extractDecl(mt, "function mtSafe(") + "\n" + extractDecl(mt, "function mtReadings(") + "\nreturn mtReadings;")(
       () => ({ file: "team.ec", copy: "Documents", folder: "-" }), () => null, {}, () => [], ver, rev, named)()
       .filter(x => x.k === "rev" || x.k === "edition").map(x => x.k + ": " + x.v).join(" | ");
-    mtEdition = [at("15", 3), at("2026-09-20a", 3), at(null, 3)];
+    mtEdition = [at("15", 3), at("2026-09-20a", 3), at(null, 3), at("2026-09-20a", null), at(null, null)];
   } catch (e) { mtEdition = "mtReadings did not run: " + e.message; }
-  eq("Maintenance gives a catalog's rev a row of its own, and the word edition stands only over a dated edition",
-    mtEdition, ["rev: 3", "edition: 2026-09-20a", "edition: -"]);
+  eq("Maintenance gives a catalog's rev a row of its own and its dated edition the row after it, and the word edition stands only over a dated edition",
+    mtEdition, ["rev: 3", "rev: 3 | edition: 2026-09-20a", "rev: 3", "edition: 2026-09-20a", "edition: -"]);
   const lists = extractDecl(manageSrc, "function openManage(");
   eq("the copied report carries where the catalog lies and never its file's own name, which the panel alone shows",
     [/\nfile: /.test(report), /\ncopy: Documents\n/.test(report), /team\.ec/.test(wired), /\ncopy: Documents\n/.test(wired),
