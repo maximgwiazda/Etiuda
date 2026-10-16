@@ -13,6 +13,7 @@ import { themeChoice, applyTheme } from "./theme.js";
 import { syncStill } from "./motion.js";
 import { render } from "./render.js";
 import { closeNotePane } from "./note-pane.js";
+import { deckOn, syncDeck } from "./deck.js";
 import { applyUiLang } from "./repaint.js";
 import { pillsLocked, togglePillsLock, syncLayoutPrefs } from "./pills-box.js";
 import { rereadCollapsed } from "./collapse.js";
@@ -243,7 +244,12 @@ function settingsBodyHtml(){
           t("Open a card's internal note when the pointer rests on the card."),
           onoff("notehover", document.body.classList.contains("note-hover"),
                 t("The note opens by itself, and the card shows no i"),
-                t("The i on the card opens the note"))),
+                t("The i on the card opens the note")))+
+      row(t("Stack a card's replies"),
+          t("A card holding several replies shows the first, with the others behind it until the pointer rests on the card or the arrow keys reach it."),
+          onoff("deck", deckOn(),
+                t("The first reply in front, the others laid out under the pointer"),
+                t("Every reply laid out on the card, one below the other"))),
       null,
       t("What stays docked, and what may hide itself when space is short"))+
     accHtml("keys", t("Keyboard shortcuts"),
@@ -332,6 +338,11 @@ function paintSettings(){
           closeNotePane();
           toast(on?t("Notes open on hover"):t("Notes open from the i"));
         }
+        else if(seg==="deck"){
+          if(on) lsDel("eDeckOff"); else lsSet("eDeckOff","1");
+          syncDeck();
+          toast(on?t("Replies stack behind the first"):t("Replies laid out one below the other"));
+        }
         else if(seg==="sharededit"){
           if(on) lsSet("eSharedEdit","1"); else lsDel("eSharedEdit");
           // The desk writes at once, as after an edit, so what it holds already goes where the setting now says.
@@ -384,7 +395,7 @@ function syncColFloorRow(){
 function resetAllSettings(){
   const was={};
   ["eTheme","eGlassOff","eMotionOff","eUiLang","ePillsLock","eRailLock","ePills","eRail",
-   "eShortcuts","eHdrPills","eNoteHover","eRailW","eFactsW","eFactsH","eCollapsed","eSharedEdit",E_HOTKEY_KEY]
+   "eShortcuts","eHdrPills","eNoteHover","eDeckOff","eRailW","eFactsW","eFactsH","eCollapsed","eSharedEdit",E_HOTKEY_KEY]
     .forEach(k=>{ was[k]=lsGet(k); try{ lsDel(k); }catch(e){} });
   was[nsKey("Cols")]=nsGet("Cols"); was[nsKey("Floor")]=nsGet("Floor");
   nsDel("Cols"); nsDel("Floor");
@@ -405,6 +416,7 @@ function applyPrefs(){
   document.body.classList.toggle("note-hover", lsGet("eNoteHover")!=="0");
   document.body.classList.toggle("glass-off", lsGet("eGlassOff")==="1");
   syncStill();
+  try{ syncDeck(); }catch(e){}
   try{ loadShortcuts(); }catch(e){}
   try{ applyTheme(); }catch(e){}
   try{ applyUiLang(); }catch(e){}

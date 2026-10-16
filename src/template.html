@@ -1988,7 +1988,7 @@ html.txtdrag, html.txtdrag .txt, html.txtdrag *{cursor:default!important;user-se
   top:var(--deck-rest-bottom);height:var(--deck-extra);z-index:0}
 /* What an open deck reaches over fades back and softens, so the deck is the one sharp thing there;
    deck.js marks it. A node drawn new under an open deck wears deck-fresh for two frames and arrives faded. */
-#list .card,#list .list-sep{transition:opacity var(--m-move) ease,filter var(--m-move) ease}
+body:not(.deck-off) #list .card,body:not(.deck-off) #list .list-sep{transition:opacity var(--m-move) ease,filter var(--m-move) ease}
 #list .deck-under{opacity:.22;filter:blur(1.6px)}
 :root[data-theme=light] #list .deck-under{opacity:.3}
 #list .deck-fresh{transition:none!important}
