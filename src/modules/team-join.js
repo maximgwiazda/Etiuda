@@ -1,10 +1,10 @@
 /* Asking to join: the empty desk, a bubble where a catalog is open, and Join a team in Settings, the Library and
    the Menu. The shell keeps the request and says where it stands; this paints that answer and sends the agent's
    acts back. Joining leaves a catalog the desk already has loaded. Once admitted, the same place shows the pinned
-   lead's key once, to compare with the lead's, and Settings lists every such key with a way to forget it. An
+   lead's key once, to compare with the lead's, and Settings lists every such team with a way to leave it. An
    invitation's wait names the lead and draws no code until the opening is read; the code then shows. */
 import { eHost, eOnCatalogCopy } from "./host.js";
-import { t, toast } from "./ui-lang.js";
+import { t, toast, uiLang } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { wholeThingEmpty } from "./app-state.js";
 import { agentName } from "./agent.js";
@@ -13,10 +13,10 @@ import { cutLeaves, dismissNode } from "./motion.js";
 import { hooks } from "./hooks.js";
 import { ICON_LOCK, ICON_KEY, ICON_DESK } from "./icons.js";
 
-let joinNow=null;                 // the shell's last answer: {sealed:{file,team}|null, join:{...}|null, leads:[{team,print,admitted,seen}]}
+let joinNow=null;                 // the shell's last answer: {sealed:{file,team}|null, join:{...}|null, leads:[{team,print,admitted,seen,lead,folder,removed,policy}]}
 let joinShut="";                  // the answer the agent last hid the bubble on
 let joinMode="";                  // "" | "paste" | "confirm" | "refused": the invitation, held on the page until it is answered
-let joinOffer=null;               // {folder, lead, code, host, cloud, local} the shell read from joinRead
+let joinOffer=null;               // {folder, lead, code, host, cloud, local, left} the shell read from joinRead
 let joinBlob="";                  // the paste box's text while it is open, so a repaint keeps it
 let joinRead="";                  // the text the shell read for the confirm on screen: yes sends this, never the box
 let joinTyped="";                 // the check code the agent typed on the confirm
@@ -63,7 +63,7 @@ function teamCanJoin(){
   return eHasJoin() && !(joinNow && (joinNow.join || leadToShow()));
 }
 function leadToShow(){
-  return ((joinNow&&joinNow.leads)||[]).filter(l=>l.admitted && !l.seen)[0]||null;
+  return ((joinNow&&joinNow.leads)||[]).filter(l=>l.admitted && !l.seen && !l.removed)[0]||null;
 }
 /* The leads this desk trusts, as the shell last said them. */
 function teamLeads(){ return ((joinNow&&joinNow.leads)||[]).slice(); }
@@ -95,7 +95,7 @@ function readTook(v,n,sent){
   const o=v&&typeof v==="object"?v.offer:null;
   if(o && typeof o.folder==="string"){
     joinOffer={folder:String(o.folder),lead:String(o.lead||""),code:String(o.code||""),
-      host:String(o.host||""),cloud:String(o.cloud||""),local:o.local===true};
+      host:String(o.host||""),cloud:String(o.cloud||""),local:o.local===true,left:String(o.left||"")};
     joinRead=sent; joinBlob=""; joinTyped=""; joinWhy=""; joinMode="confirm";
   }else refuseInvite(v);
   return true;
@@ -133,7 +133,8 @@ function joinTook(v,changed){
   joinNow={sealed:s.sealed&&s.sealed.file?{file:String(s.sealed.file),team:String(s.sealed.team||"")}:null,
            join:joinShown(s.join),
            leads:Array.isArray(s.leads)?s.leads.filter(l=>l&&l.team).map(l=>({team:String(l.team),print:String(l.print||""),
-                                      admitted:l.admitted===true,seen:l.seen===true})):[]};
+                                      admitted:l.admitted===true,seen:l.seen===true,lead:String(l.lead||""),folder:String(l.folder||""),
+                                      removed:l.removed===true,policy:l.policy===true})):[]};
   /* Admitted: an empty desk loads the catalog the invitation named. A desk that already has one keeps it. */
   if(s.joined && s.joined.file){
     closeJoinBubble();
@@ -214,7 +215,8 @@ function joinInviteParts(){
   /* Neither the key nor the code is shown here: a code on the screen proves only that it was read off it. */
   if(joinMode==="confirm" && joinOffer){
     const o=joinOffer, ask=t("Ask the team's lead for this invitation's check code, and type its five digits here.");
-    return {title:t("Join this team?"), line:joinWhere(o),
+    const title=o.left?t("This desk left this team on {DATE}. Join it again?").split("{DATE}").join(leftDay(o.left)):t("Join this team?");
+    return {title:title, line:joinWhere(o),
       body:'<div class="e-join-meta">'+esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder))+'</div>'
         +'<div class="e-join-meta">'+esc(t("Lead: {NAME}").split("{NAME}").join(o.lead))+'</div>'
         +'<div class="e-join-ask">'+esc(ask)+'</div>'
@@ -237,6 +239,13 @@ function joinInviteParts(){
       :t("This invitation cannot be read, so nothing was changed."),
     body:"", acts:[["back",t("Cancel")]]};
   return null;
+}
+/* The day a desk left a team, in the interface's language, as About writes a day; the shell's ISO text where that fails. */
+function leftDay(iso){
+  const d=new Date(String(iso||"")), lang=uiLang();
+  if(isNaN(d.getTime())) return String(iso||"");
+  try{ return new Intl.DateTimeFormat(lang==="en"?"en-GB":lang,{day:"numeric",month:"long",year:"numeric"}).format(d); }
+  catch(e){ return String(iso).slice(0,10); }
 }
 /* The title, the line under it, and the acts, for whichever state the request is in. */
 function joinParts(){
@@ -263,10 +272,14 @@ function joinParts(){
   if(j) return {title:t("Waiting for the lead to open the request"),
     line:t("The code to read to them appears here as soon as they do."), body:joinCodeHtml("")+meta,
     acts:[["cancel",t("Cancel the request")]]};
+  const ask='<div class="e-join-meta">'+esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who))+'</div>'+joinDisclosure();
+  const acts=[["ask",t("Ask to join")],["join",t("Join a team")],["load",t("Load another catalog")]];
+  /* A team whose roster no longer lists this desk says so in place of the ask a desk never on it gets. */
+  const gone=s?((joinNow&&joinNow.leads)||[]).filter(x=>x.team===s.team && x.removed)[0]:null;
+  if(gone) return {title:gone.lead?t("{LEAD}'s team no longer includes this desk").split("{LEAD}").join(gone.lead):t("The team no longer includes this desk"),
+    line:t("Once the team's lead lets this desk in again, the catalog opens here by itself."), body:ask, acts:acts};
   return {title:t("{FILE} is sealed for its team").split("{FILE}").join(s?s.file:""),
-    line:t("Once the team's lead lets this desk in, the catalog opens here by itself."),
-    body:'<div class="e-join-meta">'+esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who))+'</div>'+joinDisclosure(),
-    acts:[["ask",t("Ask to join")],["join",t("Join a team")],["load",t("Load another catalog")]]};
+    line:t("Once the team's lead lets this desk in, the catalog opens here by itself."), body:ask, acts:acts};
 }
 function joinAct(act){
   const j=joinNow&&joinNow.join, s=joinNow&&joinNow.sealed;
@@ -357,9 +370,11 @@ function openJoinBubble(){
   });
 }
 
-/* Forgets a lead from Settings, then `then()` once the shell has answered. */
+/* Leaves a team from Settings: the shell forgets its lead and every key kept under it, as "It does not match" does, and
+   remembers when it left, so a later invitation asks rather than refuses; the catalog in use stays. `then()` runs once the
+   shell has answered. */
 function forgetTeamLead(team,then){
-  return joinAsk("forget",team).then(v=>{ if(typeof then==="function") then(); return v; });
+  return joinAsk("leave",team).then(v=>{ if(typeof then==="function") then(); return v; });
 }
 
 export { wireTeamJoin, teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy };

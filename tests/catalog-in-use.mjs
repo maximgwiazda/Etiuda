@@ -655,12 +655,12 @@ try {
 
     const settings = fs.readFileSync(path.join(ROOT, "src", "modules", "settings.js"), "utf8");
     const lang = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
-    const statusLine = settings.split(/\r?\n/).filter(l => l.indexOf("Team lead's key") >= 0).join("\n");
-    check(statusLine.indexOf("i===0?t(\"" + STATUS_EN + "\")") >= 0
+    const statusLine = settings.split(/\r?\n/).filter(l => l.indexOf("teamRowHtml(l,") >= 0).join("\n");
+    check(statusLine.indexOf("i===all.findIndex(x=>!x.removed)?t(\"" + STATUS_EN + "\")") >= 0
         && lang.indexOf("\"" + STATUS_EN + "\":\"" + STATUS_PL + "\"") >= 0
         && lang.indexOf("\"" + JOIN_EN + "\":\"" + JOIN_PL + "\"") >= 0
         && lang.indexOf("\"" + SENT_EN + "\":\"" + SENT_PL + "\"") >= 0,
-      "890z the team's status sentence is the first lead row's hint, and both languages are in the string table");
+      "890z the team's status sentence is the hint of the first team row whose roster still lists this desk, and both languages are in the string table");
 
     mem.eUiLang = "en";
     toastEl.classList.remove("show");
