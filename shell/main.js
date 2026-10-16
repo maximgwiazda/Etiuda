@@ -886,6 +886,8 @@ function deskEnvelopeBody(keysText) {
     + (Object.keys(teamKeys).length ? ',"teamKeys":' + JSON.stringify(teamKeys) : "")
     + (Object.keys(teamEpochSeen).length ? ',"teamEpochSeen":' + JSON.stringify(teamEpochSeen) : "")
     + (Object.keys(teamRoster).length ? ',"teamRoster":' + JSON.stringify(teamRoster) : "")
+    + (Object.keys(teamRevSeen).length ? ',"teamRevSeen":' + JSON.stringify(teamRevSeen) : "")
+    + (Object.keys(teamChannel).length ? ',"teamChannel":' + JSON.stringify(teamChannel) : "")
     + (Object.keys(teamShown).length ? ',"teamShown":' + JSON.stringify(teamShown) : "")
     + (teamOpened.size ? ',"teamOpened":' + JSON.stringify(Array.from(teamOpened)) : "")
     + (teamSeen.size ? ',"teamSeen":' + JSON.stringify(Array.from(teamSeen)) : "")
@@ -2075,6 +2077,9 @@ let teamPins = {};                             // team id -> {keyId, public}: th
 let teamKeys = {};                             // team id -> {epoch: the team key sealed by safeStorage, base64}
 let teamEpochSeen = {};                        // team id -> the highest epoch heeded, kept when teamKeys is empty
 let teamRoster = {};                           // team id -> {epoch, desks}: the desk ids of the file heeded at that epoch
+let teamRevSeen = {};                          // team id -> {lead public -> {epoch, rev}}: the highest rev heeded at that key's highest epoch, above 0
+let teamChannel = {};                          // team id -> {kind: "relay", rt, url}: the channel of the file heeded; none is the folder
+let teamRingAt = null;                         // {root, relay, ring}: the channel and signed ring of the file last heeded at root; this run only
 let teamShown = {};                            // team id -> {lead?, folder?}: the lead's name an invitation gave, the folder its file was heeded in
 const teamOpened = new Set();                  // catalog ids this desk has opened from an envelope, kept in the desk envelope
 const teamSeen = new Set();                    // teams whose pinned lead key the agent has been shown, kept in the desk envelope
@@ -2095,6 +2100,31 @@ function teamWhole(doc) {
       && crypto.verify(null, signedBytesOf(teamCovered), crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(lead.public, "hex")]),
         format: "der", type: "spki" }), Buffer.from(sig.value, "hex"));
   } catch { return false; }
+}
+/* A whole team file's revision: absent is 0, and anything but a whole number from 0 is null, which nothing heeds. */
+function teamRevOf(doc) {
+  if (doc.rev === undefined) return 0;
+  return Number.isSafeInteger(doc.rev) && doc.rev >= 0 ? doc.rev : null;
+}
+/* A whole team file's channel: absent is the folder; null where it is neither the folder nor a relay named by its relay
+   team id and an https address, which nothing heeds. */
+function teamChannelOf(doc) {
+  const c = doc.channel;
+  if (c === undefined) return { kind: "folder" };
+  if (!c || typeof c !== "object" || Array.isArray(c)) return null;
+  if (c.kind === "folder") return { kind: "folder" };
+  if (c.kind !== "relay" || typeof c.rt !== "string" || !/^[0-9a-f]{32}$/.test(c.rt) || typeof c.url !== "string"
+    || c.url.length > 512 || !/^https:\/\/[a-z0-9.-]+(?::[0-9]{1,5})?(?:\/[A-Za-z0-9._~-]+)*\/?$/.test(c.url)) return null;
+  return { kind: "relay", rt: c.rt, url: c.url };
+}
+/* On the relay the ring is the signed file's own `ring`, or none. */
+function teamRingIn(doc) {
+  const g = doc.ring;
+  return !!g && typeof g === "object" && !Array.isArray(g) ? g : null;
+}
+/* Whether the floor kept for a file's team and lead key refuses it: the same epoch and a lower rev. */
+function teamRevRefused(floor, epoch, rev) {
+  return !!floor && floor.epoch === epoch && rev < floor.rev;
 }
 /* The desk ids a whole team file's roster lists, sorted and once each. */
 function rosterIdsOf(doc) {
@@ -2382,13 +2412,29 @@ function memberHeedUnderPolicy(doc, state, seen, policy) {
   if (barred >= 0) r.unbar = true;
   return r;
 }
-/* The ring beside the catalogs, or null where it is missing, larger than the reader allows, or not JSON. */
-function readRing() {
+/* The ring file beside the catalogs in `root`, or null where it is missing, larger than the reader allows, or not JSON. */
+function readRingFile(root) {
   try {
-    const ringFile = path.join(catalogFolder(), RING_NAME);
+    const ringFile = path.join(root, RING_NAME);
     if (fs.statSync(ringFile).size <= 65536) return JSON.parse(fs.readFileSync(ringFile, "utf8"));
   } catch { /* a missing ring vouches for nothing */ }
   return null;
+}
+/* The ring believed at `root` where its team is on the relay: the one inside the signed team file heeded there, or null.
+   Undefined on the folder channel. Before this run has heeded a file there, a pinned team kept as on the relay is no ring. */
+function relayRingAt(root) {
+  if (teamRingAt && teamRingAt.root === root) return teamRingAt.relay ? teamRingAt.ring : undefined;
+  return Object.keys(teamChannel).some(t => !!teamPins[t] && (teamShown[t] || {}).folder === root) ? null : undefined;
+}
+/* The ring a catalog's signature is read against. */
+function readRing() {
+  const root = catalogFolder(), relay = relayRingAt(root);
+  return relay === undefined ? readRingFile(root) : relay;
+}
+/* The ring a team file is heeded with: on the relay its own, and on the folder the ring file. */
+function ringHeeded(doc, root) {
+  const channel = teamChannelOf(doc);
+  return !channel ? null : channel.kind === "relay" ? teamRingIn(doc) : readRingFile(root);
 }
 function teamSay(line) {
   if (teamSaid.has(line)) return;
@@ -2428,12 +2474,25 @@ function heedTeam() {
     r = memberHeedUnderPolicy(doc, state, seen, policyLead);
   }
   if (r.needRing) {
-    seen = { file: file, member: seen.member, ring: readRing() };
+    seen = { file: file, member: seen.member, ring: ringHeeded(doc, root) };
     r = memberHeedUnderPolicy(doc, state, seen, policyLead);
   }
   r.said.forEach(teamSay);
   if (r.stampClear) teamStamp = "";
   if (r.stop || r.needKey || r.needRing) return;
+  /* A whole file is heeded only where its rev and channel read, and where its rev is not below the floor kept for its team
+     and lead key at its epoch. */
+  const rev = teamRevOf(doc), channel = teamChannelOf(doc);
+  if (rev === null || channel === null) {
+    teamSay(file + " names a rev or a channel this desk does not read, so nothing in it is used");
+    return;
+  }
+  const floors = teamRevSeen[r.team] || {}, floor = floors[doc.lead.public];
+  if (teamRevRefused(floor, r.epoch, rev)) {
+    teamSay(file + " is an older file of team " + r.team + " than one this desk has heeded (rev " + rev + ", below "
+      + floor.rev + " at key number " + r.epoch + "), so nothing in it is used");
+    return;
+  }
   // A pin moved by a handover is another lead's: the name an invitation gave for the one before is not theirs.
   if (r.pinned && teamPins[r.team] && teamShown[r.team] && teamShown[r.team].lead) {
     teamShown[r.team] = Object.assign({}, teamShown[r.team]);
@@ -2455,6 +2514,19 @@ function heedTeam() {
     const ids = rosterIdsOf(doc), had = teamRoster[r.team];
     if (!had || had.epoch !== r.epoch || had.desks.join(",") !== ids.join(",")) {
       teamRoster[r.team] = { epoch: r.epoch, desks: ids };
+      changed = true;
+    }
+    const was = JSON.stringify(teamChannel[r.team] || null);
+    if (channel.kind === "relay") teamChannel[r.team] = channel; else delete teamChannel[r.team];
+    if (JSON.stringify(teamChannel[r.team] || null) !== was) changed = true;
+    teamRingAt = { root: root, relay: channel.kind === "relay", ring: channel.kind === "relay" ? teamRingIn(doc) : null };
+  }
+  // The floor rises with a newer epoch or a higher rev at its own; a floor of 0 refuses nothing and is not kept.
+  if (!floor || r.epoch > floor.epoch || (r.epoch === floor.epoch && rev > floor.rev)) {
+    const kept = Object.assign({}, floors);
+    if (rev > 0) kept[doc.lead.public] = { epoch: r.epoch, rev: rev }; else delete kept[doc.lead.public];
+    if (JSON.stringify(kept) !== JSON.stringify(floors)) {
+      if (Object.keys(kept).length) teamRevSeen[r.team] = kept; else delete teamRevSeen[r.team];
       changed = true;
     }
   }
@@ -2888,6 +2960,8 @@ function forgetLead(team, left) {
   delete teamPins[team];
   delete teamKeys[team];
   delete teamShown[team];
+  delete teamChannel[team];
+  teamRingAt = null;
   teamSeen.delete(team);
   teamBarred.add(team);
   if (left === true) teamLeft[team] = new Date().toISOString(); else delete teamLeft[team];
@@ -3358,6 +3432,21 @@ function readDesk() {
       const v = doc.teamRoster[t];
       if (!SEALED_TEAM_RE.test(t) || !table(v) || !Number.isInteger(v.epoch) || v.epoch < 1 || !Array.isArray(v.desks)) return;
       if (v.epoch > (teamRoster[t] ? teamRoster[t].epoch : 0)) teamRoster[t] = { epoch: v.epoch, desks: deskIdsOnce(v.desks) };
+    });
+    // A floor is taken where it is higher, by epoch and then by rev, and never lowered.
+    if (doc && table(doc.teamRevSeen)) Object.keys(doc.teamRevSeen).forEach(t => {
+      const byKey = doc.teamRevSeen[t];
+      if (!SEALED_TEAM_RE.test(t) || !table(byKey)) return;
+      Object.keys(byKey).forEach(pub => {
+        const v = byKey[pub], had = (teamRevSeen[t] || {})[pub];
+        if (!/^[0-9a-f]{64}$/.test(pub) || !table(v) || !Number.isInteger(v.epoch) || v.epoch < 1 || !Number.isSafeInteger(v.rev) || v.rev < 1) return;
+        if (had && (v.epoch < had.epoch || (v.epoch === had.epoch && v.rev <= had.rev))) return;
+        (teamRevSeen[t] = teamRevSeen[t] || {})[pub] = { epoch: v.epoch, rev: v.rev };
+      });
+    });
+    if (doc && table(doc.teamChannel)) Object.keys(doc.teamChannel).forEach(t => {
+      const c = SEALED_TEAM_RE.test(t) && table(doc.teamChannel[t]) ? teamChannelOf({ channel: doc.teamChannel[t] }) : null;
+      if (c && c.kind === "relay") teamChannel[t] = c;
     });
     if (doc && table(doc.teamShown)) Object.keys(doc.teamShown).forEach(t => {
       const v = doc.teamShown[t];
@@ -3996,10 +4085,14 @@ ipcMain.handle("etiuda:catalog-read", (e, name, desk, asked, offer) => {
 /* THE RING, the text of V2_RING_FILE in the catalog folder or "" where there is none: the page
    reads it with the engine's own v2RingRead, and a ring only adds trust, so absent is not a
    fault. On a desk with a lead pinned it adds none: the page's key there is the pin's (etiuda:catalog-leads),
-   and the ring only names another key. Bounded like a request, since the share is anybody's to write. */
+   and the ring only names another key. Bounded like a request, since the share is anybody's to write. On the relay
+   it is the ring inside the signed team file, and the file is not read (relayRingAt). */
 const RING_NAME = "etiuda-ring.json";
 ipcMain.handle("etiuda:catalog-ring", (e) => {
   if (!fromEngine(e) || !folderAnswers(catalogFolder())) return "";
+  heedTeam();
+  const relay = relayRingAt(catalogFolder());
+  if (relay !== undefined) return relay ? JSON.stringify(relay) : "";
   let text = "";
   try {
     const file = path.join(catalogFolder(), RING_NAME);
