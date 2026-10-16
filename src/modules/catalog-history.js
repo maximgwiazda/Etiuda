@@ -6,7 +6,7 @@ import { openDialog } from "./dialog.js";
 import { t, toastRefusal, offerUndo, fileStamp, catalogCountsLine } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { hooks } from "./hooks.js";
-import { parseCatalogFile, catalogVersionLabel, E_CATALOG_KEY } from "./catalog.js";
+import { parseCatalogFile, editionNameOf, editionLabel, E_CATALOG_KEY } from "./catalog.js";
 import { activateCatalog } from "./catalog-file.js";
 import { eOfferCatalogDialog, toastIfSameCatalog } from "./catalog-offer.js";
 import { lsSet } from "./storage.js";
@@ -45,7 +45,7 @@ function historyHeadHtml(g){
   return '<div class="eh-head"><b data-i18n-skip>'+esc(historyFileName(g))+'</b>'+where+'</div>';
 }
 function historyRowHtml(v,key){
-  const meta=[catalogVersionLabel(v.date),
+  const meta=[String(v.date||"").trim() ? editionLabel(editionNameOf({version:v.date, rev:v.rev})) : "",
     +v.cards>=0 ? catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",+v.cards,+v.macros,+v.intents,+v.cats) : ""]
     .filter(Boolean).map(esc).join(" · ");
   const acts=historyActs(v), open=t("Open this version");

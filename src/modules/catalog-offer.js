@@ -4,7 +4,7 @@ import { activateCatalog, catalogEdited, catalogEditionOlder, catalogMacroCount,
   catalogIntentCount, exportCatalog, isCatalogUpdate, catalogFileName, catalogNameOfFile, pinStoredFrom,
   followRenamedFile, branchFileId, looseOrigin, sharedOwnPin, sharedOwnWrite, nameHeldCatalog } from "./catalog-file.js";
 import { catalogLoaded } from "./catalog-boot.js";
-import { E_CATALOG_KEY, E_CATALOG_VERSION, catalogStamp, catalogVersionLabel,
+import { E_CATALOG_KEY, E_CATALOG_VERSION, E_CATALOG_REV, catalogStamp, editionNameOf, editionLabel,
   eCatalog, eCatalogAccepted, eCatalogSignature, storedCatalog, eWatchSupported, eWatchGet,
   eWatchClear, parseCatalogFile, catalogDocOf, eWatchName, eCatalogRefusedNames, eRefuseCatalogFile } from "./catalog.js";
 import { E_CATALOG_SCRIPT, eCatalogFile, eCatalogFiles, eCatalogFolder, eCatalogFolderShort,
@@ -26,7 +26,7 @@ import { intentIdAt, intentOrder } from "./intent-id.js";
 import { pack } from "./pack.js";
 import { ICON_AWAITING, ICON_SUCCESS, ICON_LOAD, ICON_EJECT, ICON_DESK, ICON_LOOK } from "./icons.js";
 import { keyTipHtml, leadKeyText, leadsNow } from "./team-join.js";
-import { V2_SIG_VALID, v2RingRead } from "./catalog-v2.js";
+import { V2_SIG_VALID, v2RingRead, v2SigState } from "./catalog-v2.js";
 import { editionChanges } from "./edition-changes.js";
 import { editionOfferHtml, openEditionPanel, repaintEditionRows, editionCountWords } from "./edition-panel.js";
 import { editionMarksFrom, keepEditionMarks, putEditionMarksBack, editionSay } from "./edition-marks.js";
@@ -34,7 +34,7 @@ import { closeModal } from "./dialog.js";
 import { deskName, deskKey, deskBase, deskChangeWords, openDeskLook } from "./desk-look.js";
 import { hooks } from "./hooks.js";
 import { catalogTrust, whenTrusted, heldCatalogTrust, heldCatalogSigner, recheckHeldTrust, trustKeyHtml, trustOfferLine,
-  trustSettled } from "./catalog-trust.js";
+  trustSettled, trustPrint, keyPrintOf, heldCatalogPrint, settleHeldTrust, settleHeldTrustWithin } from "./catalog-trust.js";
 
 /* A catalog sitting beside Etiuda is offered, never forced. Asked once per signature:
    accept it and it loads silently from then on, change it and you are asked again, so what
@@ -96,17 +96,26 @@ function eOfferCatalog(given,name,where,force,asked,builtIn,offTeam){
 function eOfferCatalogAtBoot(){
   pinStoredFrom(eCatalog());
   nameHeldCatalog();
+  /* The held signature starts answering to a pinned lead now. This offer is built in the same turn, as the tour's place
+     behind a standing question needs it to be; where the answer lowers a held "valid", the offer is made once more, so
+     what the old state held back or said is put again under the true one. */
+  const settled=settleHeldTrust(eCatalog(),storedCatalog());
+  if(offerAtBoot()) settled.then(lowered=>{ if(lowered) offerAtBoot(); });
+}
+/* The boot's offer itself; false where it waits for the tour instead. */
+function offerAtBoot(){
   const at=+(nsGet("CatalogNoAt")||0), mt=eCatalogMtime(), asked=eOpenedWith();
   // A first run's tour asks for a catalog in its own step, so a found file waits for it to end.
-  if(!asked && tourDueAtBoot()){ afterTour(eOfferCatalogAtBoot); return; }
+  if(!asked && tourDueAtBoot()){ afterTour(eOfferCatalogAtBoot); return false; }
   /* THE SAMPLE NEVER ASKS TO REPLACE A CATALOG THE PERSON CHOSE: it is found at every launch where
      Etiuda is installed and waits in the Library. Only an edition of the sample itself asks. */
   const found=eCatalog(), held=storedCatalog();
-  if(!asked && found && found.sample && held && !isCatalogUpdate(found,held)) return;
+  if(!asked && found && found.sample && held && !isCatalogUpdate(found,held)) return true;
   /* AN EMPTY DESK IS ASKED EVERY TIME, board 399's rule and 424's shape for it: a refusal was
      said to one launch, and somebody looking at nothing with a catalog in the folder is the
      fault the whole item answers. A desk with anything on it keeps the remembered no. */
   eOfferCatalog(null,"","",asked||wholeThingEmpty()||!!(at && mt && mt>at),asked);
+  return true;
 }
 /* THE WAY BACK FROM A DECLINE: the Load button beside each file in the Library's list, and the
    one on the empty state's own offer, both end here. Forced past the remembered refusal, because
@@ -186,7 +195,7 @@ function ecRowHtml(o){
       ?'<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="'
         +esc(t("Save everything loaded now as a catalog file, your edits merged in"))+'">'
         +esc(t("Export…"))+'</button>':'')
-    +trustKeyHtml(o.trust||"",o.keyId||"")
+    +trustKeyHtml(o.trust||"",o.print||"")
     +(o.loaded
       ?ecActHtml("Eject",ICON_EJECT,' data-ec-eject="1"')
       :ecActHtml("Load",ICON_LOAD,' data-ec-load="'+esc(o.name)+'" data-ec-at="'+(+o.mtime||0)+'"'))
@@ -224,10 +233,10 @@ const ecTrustOf=new Map();
 function ecFileTrust(f){
   const at=f.name+"|"+f.mtime;
   if(!ecTrustOf.has(at)) ecTrustOf.set(at, eReadCatalogFile(f.name).then(got=>{
-    if(!got) return {state:"",keyId:""};
-    const c=parseCatalogFile(got.text), sig=(catalogDocOf(c)||{}).sig;
-    return whenTrusted(c).then(s=>({state:s, keyId:String(sig&&sig.keyId||"")}));
-  }).catch(()=>({state:"",keyId:""})));
+    if(!got) return {state:"",print:""};
+    const c=parseCatalogFile(got.text);
+    return whenTrusted(c).then(s=>({state:s, print:trustPrint(c)}));
+  }).catch(()=>({state:"",print:""})));
   return ecTrustOf.get(at);
 }
 /* THE KEY'S BUBBLE, the family's shape pointing at the key: opened by hover or focus on a key
@@ -323,7 +332,7 @@ function liveIntentCount(){
    is about the catalog in use and every other row is about a file on disk. `stamp` is what the
    file has to offer where the applied catalog names no edition. */
 function loadedMeta(stamp){
-  const ver=(E_CATALOG_VERSION!=null)?catalogVersionLabel(E_CATALOG_VERSION):"";
+  const ver=(E_CATALOG_VERSION!=null)?editionLabel(editionNameOf({version:E_CATALOG_VERSION, rev:E_CATALOG_REV})):"";
   const parts=[ver||stamp,
     catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
       (cards||[]).length, totalMacroCount(), liveIntentCount(), Object.keys(CATS).length)]
@@ -341,8 +350,9 @@ function paintCatalogList(){
   const mine=eLoadedCatalogFile();
   recheckHeldTrust(eCatalog(),held,paintCatalogList);
   /* A COLLEAGUE'S FILE HAS A ROW where it is the shape a desk writes, its id that desk's own followed by eight hex of
-     what it grew from, so a file claiming any other id has none. This desk's own file is a line, not a row. */
-  Promise.all([eCatalogFiles(),eBranchIdentity(false)]).then(([all,me])=>{
+     what it grew from, so a file claiming any other id has none. This desk's own file is a line, not a row. The rows
+     wait for the held signature to answer to a pinned lead, so the loaded row never draws a key this load has not vouched for. */
+  Promise.all([eCatalogFiles(),eBranchIdentity(false),settleHeldTrustWithin(eCatalog(),held)]).then(([all,me])=>{
     if(!box.isConnected) return;
     const files=all.filter(f=>!f.desk);
     const shaped=f=>!!f.desk && f.id.indexOf(f.desk.id+"-")===0;
@@ -368,10 +378,10 @@ function paintCatalogList(){
     const extraFor=(id,on)=>on ? mineLine : (id && id!==heldId && ownOf(id)) ? ecMineHtml(t("Your edits to it come back when it is loaded again"),false) : "";
     const tops=files.map((f,i)=>{
       const on=i===onAt;
-      const stamp=catalogStamp(f.edition,f.mtime);
+      const stamp=catalogStamp(f.edition,f.mtime,f.rev);
       const copy=ecCopyHtml(f), meta=on?loadedMeta(stamp):ecMeta(stamp,f);
       return {id:f.id, sha:f.sha, on:on, html:ecRowHtml({ name:f.name, file:f.name, mtime:f.mtime, loaded:on, newer:at>0 && f.mtime>at,
-        sample:!!f.sample, meta:copy&&meta ? copy+" · "+meta : copy||meta, trust:on?heldCatalogTrust():"", extra:extraFor(f.id,on) })};
+        sample:!!f.sample, meta:copy&&meta ? copy+" · "+meta : copy||meta, trust:on?heldCatalogTrust():"", print:on?heldCatalogPrint():"", extra:extraFor(f.id,on) })};
     });
     /* THE CATALOG IN USE ALWAYS HAS A ROW, even where no file in the folder is it: a browser's
        import, a copy loaded from elsewhere, or a desk whose catalog was applied before the store
@@ -379,13 +389,13 @@ function paintCatalogList(){
        hundred visible cards is worse than useless. A colleague's file worked from is its own row. */
     if((held||catalogLoaded()||(cards||[]).length) && onAt<0 && deskOn<0)
       tops.unshift({id:heldId, sha:String(held&&held.pin||""), on:true, html:ecRowHtml({ name:shownCatalogName(catalogFileName()),
-        loaded:true, newer:false, meta:loadedMeta(""), trust:heldCatalogTrust(), extra:mineLine })});
+        loaded:true, newer:false, meta:loadedMeta(""), trust:heldCatalogTrust(), print:heldCatalogPrint(), extra:mineLine })});
     /* Under the catalog each grew from: the row in use, else the edition it grew from, else the newest of that catalog.
        The rest stand at the foot. */
     const under=tops.map(()=>[]), alone=[], named=new Map(), nested=[];
     desks.forEach(f=>{ const n=deskName(f); named.set(n,(named.get(n)||0)+1); });
     desks.forEach((f,i)=>{
-      const g=f.grew, on=i===deskOn, stamp=catalogStamp(f.edition,f.mtime);
+      const g=f.grew, on=i===deskOn, stamp=catalogStamp(f.edition,f.mtime,f.rev);
       const of=g ? tops.map((x,k)=>k).filter(k=>!!tops[k].id && tops[k].id===g.id) : [];
       const p=[of.find(k=>tops[k].on), of.find(k=>tops[k].sha===g.sha), of[0]].find(k=>k!=null);
       const meta=on ? loadedMeta(stamp) : p!=null ? esc(stamp) : g ? ecMeta(stamp,f) : esc(t("A catalog of its own"))+" · "+ecMeta(stamp,f);
@@ -400,7 +410,7 @@ function paintCatalogList(){
     // A hanging row's line says what that desk changed, once both files have been read.
     nested.forEach(i=>deskChangeWords(desks[i],deskBase(desks[i],files,held)).then(words=>{
       const row=box.querySelector('[data-ec-desk="'+i+'"]'), meta=row && row.querySelector(".ec-meta");
-      if(meta && words && words.length) meta.textContent=words.concat([catalogStamp(desks[i].edition,desks[i].mtime)]).join(" · ");
+      if(meta && words && words.length) meta.textContent=words.concat([catalogStamp(desks[i].edition,desks[i].mtime,desks[i].rev)]).join(" · ");
     }));
     box.querySelectorAll("button[data-ec-look]").forEach(b=>{
       const f=desks[+b.getAttribute("data-ec-look")];
@@ -416,7 +426,7 @@ function paintCatalogList(){
       const row=Array.from(box.querySelectorAll(".ec-row")).find(x=>x.getAttribute("data-ec-file")===f.name);
       const key=row && row.querySelector(".ec-key");
       if(!key) return;
-      key.insertAdjacentHTML("beforebegin",trustKeyHtml(i===onAt?heldCatalogTrust():r.state,r.keyId));
+      key.insertAdjacentHTML("beforebegin",trustKeyHtml(i===onAt?heldCatalogTrust():r.state,i===onAt?heldCatalogPrint():r.print));
       key.remove();
       wireEcKeys(row);
     }));
@@ -450,22 +460,11 @@ function lookAtDesk(f,files,held){
     ()=>{ closeModal(); loadCatalogFromFolder(f.name,f.mtime,f.desk.id); },
     ()=>{ closeModal(); hooks.openManage(); });
 }
-/* The first 16 hex of the SHA-256 of the raw public, the print the shell gives a lead (leadPrint). */
-function leadPrintOf(pubHex){
-  const subtle=globalThis.crypto&&globalThis.crypto.subtle;
-  if(!subtle || !/^[0-9a-f]{64}$/.test(pubHex)) return Promise.resolve("");
-  const raw=new Uint8Array(32);
-  for(let i=0;i<32;i++) raw[i]=parseInt(pubHex.slice(i*2,i*2+2),16);
-  return subtle.digest("SHA-256", raw).then(buf=>{
-    const b=new Uint8Array(buf);
-    let hex="";
-    for(let i=0;i<8;i++) hex+=b[i].toString(16).padStart(2,"0");
-    return hex;
-  }).catch(()=>"");
-}
 /* A CATALOG SIGNED BY A KEY OTHER THAN THE TEAM LEAD'S says whose key it is, once its signature has
-   verified: the key is named by the print of the public the ring holds for it, never by the file's keyId,
-   which any writer of the share chooses. A desk with no lead pinned has nobody to compare it with. */
+   verified under the key the ring names for it: the key is named by the print of that public, never by the
+   file's keyId, which any writer of the share chooses. The ring only names the key here and trusts nothing,
+   the desk's state being the pinned lead's (catalog-trust.js), so the line takes the place of the state's own,
+   which could only say less. A desk with no lead pinned has nobody to compare it with. */
 function noteForeignSigner(c,wrap,place){
   const doc=catalogDocOf(c), sig=doc&&doc.sig, kid=sig&&sig.keyId ? String(sig.keyId) : "";
   if(!kid) return;
@@ -474,10 +473,11 @@ function noteForeignSigner(c,wrap,place){
       const prints=leads.map(x=>x&&x.print).filter(Boolean);
       const forCat=ring&&ring[String(c.id||"")];
       const pub=forCat&&typeof forCat==="object" ? String(forCat[kid]||"") : "";
-      if(state!==V2_SIG_VALID || !prints.length || !/^[0-9a-f]{64}$/.test(pub)) return;
-      return leadPrintOf(pub).then(print=>{
+      if(state===V2_SIG_VALID || !prints.length || !/^[0-9a-f]{64}$/.test(pub)) return;
+      return v2SigState(doc,ring).then(named=>named===V2_SIG_VALID ? keyPrintOf(pub) : "").then(print=>{
         if(!print || prints.indexOf(print)>=0 || !wrap.isConnected || wrap.querySelector(".ec-signer")) return;
         const line=t("This file is signed with the key {KEY}, which is not the team lead's.").split("{KEY}").join(leadKeyText(print));
+        wrap.querySelectorAll(".ec-trust").forEach(n=>n.remove());
         (wrap.querySelector(".ec-holds")||wrap.querySelector(".tour-actions")).insertAdjacentHTML("beforebegin",
           '<p class="ec-signer">'+esc(line)+'</p>');
         if(place) place();
@@ -563,7 +563,7 @@ function eOfferCatalogDialog(c,src){
   const changes=updating ? editionChanges(active,c,pack) : null;
   const changeHtml=changes ? editionOfferHtml(c,active,changes) : "";
   // A NEW EDITION OF THE CATALOG IN USE: it waits at the name, and its load marks what it brought.
-  let fresh=updating && !older && !olderSure && !plain, label=fresh ? editionLabelOf(c) : "";
+  let fresh=updating && !older && !olderSure && !plain, ed=fresh ? editionNameOf(c) : null;
   const n=(c.cards||[]).length,
         i=catalogIntentCount(c),
         k=Object.keys(c.categories||{}).length;
@@ -590,9 +590,10 @@ function eOfferCatalogDialog(c,src){
         : '')
     // Name and edition on one line, counts on the next: WHICH catalog, then how big it is.
     +'<div class="ec-what"><b>'+esc(catalogNameOfFile(String(src.file||"")||E_CATALOG_SCRIPT))+'</b>'
-    +(c.version!=null?' · '+esc(catalogVersionLabel(c.version)):'')
+    +(c.version!=null?' · '+esc(editionLabel(editionNameOf(c))):'')
     +(updating && active.version!=null && String(active.version)!==String(c.version)
-        ? '<div class="ec-counts">'+esc(t("You have {V}.")).replace("{V}",esc(catalogVersionLabel(active.version)))+'</div>'
+        ? '<div class="ec-counts">'+esc(editionNameOf(active).r!=null ? t("You have rev {R}.").split("{R}").join(String(editionNameOf(active).r))
+          : t("You have {E}.").split("{E}").join(editionNameOf(active).e))+'</div>'
         : '')
     /* A single text node, which the sweep cannot reach inside: the line is built from counted
        noun phrases and the key carries only their order. */
@@ -638,7 +639,7 @@ function eOfferCatalogDialog(c,src){
   // A verification still running when the bubble opened adds its line once it has an answer.
   if(!wrap.querySelector(".ec-trust")) catalogTrust(c).then(state=>{
     const line=trustOfferLine(state,updating);
-    if(!line || !wrap.isConnected || wrap.querySelector(".ec-trust")) return;
+    if(!line || !wrap.isConnected || wrap.querySelector(".ec-trust") || wrap.querySelector(".ec-signer")) return;
     (wrap.querySelector(".ec-holds")||wrap.querySelector(".tour-actions")).insertAdjacentHTML("beforebegin",trustHtml(line));
     place();
   });
@@ -672,7 +673,7 @@ function eOfferCatalogDialog(c,src){
   wrap.querySelector("#ecYes").onclick=()=>{
     if(taking) return;
     taking=true;
-    whenTrusted(c).then(()=>{ taking=false; close(); acceptOffer(c,sig,src,fresh ? {held:active, changes:changes, v:label} : null); });
+    whenTrusted(c).then(()=>{ taking=false; close(); acceptOffer(c,sig,src,fresh ? {held:active, changes:changes, name:ed} : null); });
   };
   wrap.querySelectorAll("[data-ec-open]").forEach(wireFolderLink);
   wrap.querySelector("#ecNo").onclick=()=>{
@@ -689,7 +690,7 @@ function eOfferCatalogDialog(c,src){
     const answer=id=>()=>{ closeModal(); if(library && id==="#ecNo") hooks.openManage(); wrap.hidden=false; wrap.querySelector(id).click(); };
     wrap.hidden=true;
     openEditionPanel({c:c, held:active, changes:changes,
-      version:catalogVersionLabel(c.version), name:catalogNameOfFile(String(src.file||"")||E_CATALOG_SCRIPT),
+      ed:editionNameOf(c), name:catalogNameOfFile(String(src.file||"")||E_CATALOG_SCRIPT),
       keep:answer("#ecNo"), load:answer("#ecYes"),
       taken:()=>repaintEditionRows(wrap,c,active,changes),
       back:()=>{ closeModal(); if(library) hooks.openManage(); wrap.hidden=false; place(); diff.focus(); }});
@@ -697,14 +698,15 @@ function eOfferCatalogDialog(c,src){
   // Only an act of somebody's takes the keyboard; a file found at boot leaves it in the search.
   if(src.asked || src.reopened){ const yes=wrap.querySelector("#ecYes"); if(yes) yes.focus(); }
   // The offer takes no focus, so the ear is told where it is.
-  if(arriving) editionSay(t("Edition {V} is waiting to be loaded; the offer is under the catalog's name.").split("{V}").join(label));
+  if(arriving) editionSay(ed.r!=null ? t("Rev {R} is waiting to be loaded; the offer is under the catalog's name.").split("{R}").join(String(ed.r))
+    : t("Edition {E} is waiting to be loaded; the offer is under the catalog's name.").split("{E}").join(ed.e));
   return true;
 }
 /* AN EDITION LOADED: its marks are written into the catalog's layer before the desk starts again, so the first
    paint wears them, and taken back if the load did not land. What it brought is then said once and shown once.
    Whether it landed is read once accept has settled: Import's two routes load after a promise and return it. */
 function acceptOffer(c,sig,src,ed){
-  const marks=ed ? editionMarksFrom(ed.held,ed.changes,ed.v) : null;
+  const marks=ed ? editionMarksFrom(ed.held,ed.changes,ed.name) : null;
   const was=ed ? keepEditionMarks(c,marks) : null;
   Promise.resolve(src.accept(sig)).then(()=>{
     const now=storedCatalog(), landed=!!now && eCatalogSignature(now)===sig;
@@ -712,7 +714,8 @@ function acceptOffer(c,sig,src,ed){
     paintCatWaiting();
     if(!ed || !landed) return;
     const counts=editionCountWords(ed.changes.counts);
-    if(counts.length) toast(t("Edition {V} loaded: {COUNTS}").split("{V}").join(ed.v).split("{COUNTS}").join(counts.join(", ")));
+    if(counts.length) toast((ed.name.r!=null ? t("Rev {R} loaded: {COUNTS}").split("{R}").join(String(ed.name.r))
+      : t("Edition {E} loaded: {COUNTS}").split("{E}").join(ed.name.e)).split("{COUNTS}").join(counts.join(", ")));
     if(marks) washEdition(marks);
   });
 }
@@ -762,7 +765,6 @@ function arriveAtName(wrap){
    dot and opens that offer again, forced past the refusal because opening it is asking. Only while it is still an
    edition of the catalog in use that is not the one loaded; otherwise the name is inert again. */
 let edWaiting=null;
-function editionLabelOf(c){ return catalogVersionLabel(c && c.version) || (c && +c.rev ? "v"+(+c.rev) : ""); }
 function leaveWaiting(c,src,active){
   if(!isCatalogUpdate(c,active) || catalogEditionOlder(c.version,active.version)) return;
   // The same edition already waiting keeps the route it came by.
@@ -784,7 +786,8 @@ function paintCatWaiting(){
     return;
   }
   if(!dot){ dot=document.createElement("span"); dot.className="cn-dot"; dot.setAttribute("aria-hidden","true"); el.insertBefore(dot,el.firstChild); }
-  const words=t("Show edition {V}, waiting to be loaded").split("{V}").join(editionLabelOf(edWaiting.c));
+  const ed=editionNameOf(edWaiting.c), words=ed.r!=null ? t("Show rev {R}, waiting to be loaded").split("{R}").join(String(ed.r))
+    : t("Show edition {E}, waiting to be loaded").split("{E}").join(ed.e);
   el.setAttribute("role","button");
   el.setAttribute("tabindex","0");
   el.setAttribute("title",words);

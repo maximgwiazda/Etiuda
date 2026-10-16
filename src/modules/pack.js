@@ -124,7 +124,8 @@ function dropNotice(d){
     removeEventListener("resize",placeNotices);
   }
 }
-function eNotice(id,lead,body,onDismiss){
+/* `act`, where given, is {label, run}: a button before Dismiss that takes the notice down and does its act. */
+function eNotice(id,lead,body,onDismiss,act){
   let box=document.getElementById("eNotices");
   if(!box){
     box=document.createElement("div");
@@ -148,6 +149,14 @@ function eNotice(id,lead,body,onDismiss){
   d.appendChild(say);
   const row=document.createElement("div");
   row.className="tour-actions";
+  if(act){
+    const go=document.createElement("button");
+    go.type="button";
+    go.className="btn primary";
+    go.textContent=act.label;
+    go.onclick=()=>{ dropNotice(d); act.run(); };
+    row.appendChild(go);
+  }
   const x=document.createElement("button");
   x.type="button";
   x.className="btn";
@@ -501,7 +510,9 @@ function savePack(){
    saved through savePack rebuilt every shown card on the next render. Counts are written here,
    after the act that counted them; a savePack in between carries them. */
 const STATS_SAVE_MS=1500;
-let eStatsT=0, eStatsWired=false;
+let eStatsT=0, eStatsWired=false, statsFlush=null;
+/* The shell hears a count when the debounced save lands. host.js registers the callback; this file does not import it. */
+function setStatsFlush(fn){ statsFlush=typeof fn==="function"?fn:null; }
 function saveStats(){
   if(eStatsT) return;
   eStatsT=setTimeout(flushStats, STATS_SAVE_MS);
@@ -513,7 +524,9 @@ function saveStats(){
 function flushStats(){
   if(!eStatsT) return false;
   clearTimeout(eStatsT); eStatsT=0;
-  return writePack(true);
+  const ok=writePack(true);
+  if(statsFlush){ try{ statsFlush(); }catch(e){} }
+  return ok;
 }
 /* THE COUNTS ARE KEPT BESIDE THE PACK, NOT IN IT: Stats holds the tallies and the newest day,
    Days every day before it. A count rewrites Stats alone, and Days only once a day has closed, so
@@ -574,9 +587,9 @@ function packUndoFor(was){
 }
 export {
   ePackEpoch,
-  savePack, saveStats, flushStats,
+  savePack, saveStats, flushStats, setStatsFlush,
   packSnapshot,
   packUndoFor,
   BASE_CATS, BASE_M, catalogCardId, rebuildBaseCards, retiredCards, pack, loadPack, resetPack,
-  showPackMigrationWarning, syncSaveNotice, showDeskNotices, whoOptions, isFavourite, isIntentFavourite,
+  showPackMigrationWarning, syncSaveNotice, showDeskNotices, eNotice, whoOptions, isFavourite, isIntentFavourite,
 };

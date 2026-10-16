@@ -44,7 +44,9 @@ function cardBodyHtml(m,i,ctx){
       cardH+='<span class="cbadge ed" title="'+esc(t("Changed or added by you, not what the catalog shipped"))+'">'+esc(t("mod"))+'</span>';
     // What the loaded edition brought, worn until the card is next copied (edition-marks.js).
     const edMark=editionMarkOf(m.id);
-    if(edMark) cardH+='<span class="cbadge edn" title="'+esc((edMark.k==="new"?t("New in edition {V}"):t("Changed in edition {V}")).split("{V}").join(edMark.v))+'">'
+    if(edMark) cardH+='<span class="cbadge edn" title="'+esc(edMark.r!=null
+        ? (edMark.k==="new"?t("New in rev {R}"):t("Changed in rev {R}")).split("{R}").join(String(edMark.r))
+        : (edMark.k==="new"?t("New in edition {E}"):t("Changed in edition {E}")).split("{E}").join(edMark.e))+'">'
       +esc(edMark.k==="new"?t("new"):t("changed"))+'</span>';
     const favTip=t(fav?"Remove from Favourites":"Add to Favourites");
     /* Hide is a toggle now that hidden entries stay on the list - the card itself is where you

@@ -159,11 +159,12 @@ function drawPillsCore(){
    narrowed to those cards, and pressed again it is All. No data-k, so the arrows' walk, the counts and a drag pass
    it by, as they pass the + by. */
 function editionPill(n){
-  const v=(editionMarks()||{}).v||"";
+  const ed=editionMarks()||{}, rev=ed.r!=null;
+  const said=(dated,byRev)=>rev ? byRev.split("{R}").join(String(ed.r)) : dated.split("{E}").join(String(ed.e||""));
   const b=document.createElement("div");
   b.className="pill pill-ed"+(editionView?" on":"");
-  b.innerHTML='<span class="pill-lab" data-i18n-skip>'+esc(t("Changes in {V}").split("{V}").join(v))+'</span> <b>'+n+'</b>';
-  const tip=t("Only the cards edition {V} changed or added").split("{V}").join(v);
+  b.innerHTML='<span class="pill-lab" data-i18n-skip>'+esc(said(t("Changes in {E}"),t("Changes in rev {R}")))+'</span> <b>'+n+'</b>';
+  const tip=said(t("Only the cards edition {E} changed or added"),t("Only the cards rev {R} changed or added"));
   b.title=tip;
   b.setAttribute("aria-label",tip);
   b.setAttribute("role","button");
@@ -182,7 +183,8 @@ function editionPill(n){
     hooks.railEchoRedraw(railBefore, relBefore);
     scrollRailTop();
     scheduleTabSave();
-    if(press) editionSay(t("Cards edition {V} changed or added: {N}.").split("{V}").join(v).split("{N}").join(String(editionMarkedCount())));
+    if(press) editionSay(said(t("Cards edition {E} changed or added: {N}."),t("Cards rev {R} changed or added: {N}."))
+      .split("{N}").join(String(editionMarkedCount())));
   };
   return b;
 }

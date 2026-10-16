@@ -13,7 +13,8 @@ import { t } from "./ui-lang.js";
 import { CONTENT_LANGS, nextContentLang } from "./content-model.js";
 import { scReady, formatActionChord } from "./shortcuts.js";
 import { hooks } from "./hooks.js";
-import { eHost } from "./host.js";
+import { eHost, eHotkey, eHotkeyLabel, eOpenPicker } from "./host.js";
+import { esc } from "./esc.js";
 import { openJoinPaste } from "./team-join.js";
 
 function wireHeaderMenus(){
@@ -32,7 +33,7 @@ function wireHeaderMenus(){
     if(!b) return;
     const act=b.dataset.act;
     // What opens a screen takes the keyboard with it, so nothing is handed back underneath.
-    if(act==="settings"||act==="manage"||act==="tour"||act==="about"||act==="join") menuReturn=null;
+    if(act==="settings"||act==="manage"||act==="tour"||act==="about"||act==="join"||act==="picker") menuReturn=null;
     // Add actions sit with the things they create, so this menu carries none of them.
     if(act==="settings") menuScreen(hooks.openSettings);
     else if(act==="manage") menuScreen(hooks.openManage);
@@ -41,6 +42,7 @@ function wireHeaderMenus(){
     else if(act==="join") menuScreen(openJoinPaste);
     else if(act==="rail"){ toggleRail(); }
     else if(act==="pills"){ togglePills(); }
+    else if(act==="picker"){ closeSettingsMenu(); eOpenPicker(); }
     else if(act==="quit"){ closeSettingsMenu(); const h=eHost(); if(h && typeof h.close==="function") h.close(); }
   };
   $("#moreBtn").onclick=e=>{
@@ -144,7 +146,18 @@ function wireHeaderShedSync(){
      use on its opening pass. */
   run();
 }
+/* THE PICKER'S ROW, where the host has a picker: its name, and the combination that brings it while one is held. */
+function syncPickerRow(){
+  const row=$("#menuPicker"), h=eHost(), hk=eHotkey();
+  if(!row) return;
+  row.hidden=!hk || !h || typeof h.openPicker!=="function";
+  if(row.hidden) return;
+  const keys=hk.held ? eHotkeyLabel(hk.accel) : "";
+  row.innerHTML='<span>'+esc(t("Bring the replies over any window"))+'</span>'+(keys ? '<kbd data-i18n-skip>'+esc(keys)+'</kbd>' : "");
+  row.title=t("The replies beside the pointer, over any program; the combination is changed in Settings");
+}
 function syncSettingsMenu(){
+  syncPickerRow();
   const pillsBtn=$("#menuPills");
   const railBtn=$("#menuRail");
   if(pillsBtn){

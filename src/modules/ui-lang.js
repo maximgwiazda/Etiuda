@@ -183,6 +183,7 @@ UI_STRINGS.pl={
   "local memory used":"użyta pamięć lokalna",
   "theme":"motyw",
   "edition":"wydanie",
+  "rev":"wersja",
   "cards / macros":"karty / makra",
   "intents / categories":"intencje / kategorie",
   "layout rungs":"szczeble układu",
@@ -310,7 +311,6 @@ UI_STRINGS.pl={
   "Open the Menu":"Otwórz Menu",
   "Your name":"Nazwa agenta",
   "Personal":"Osobiste",
-  "Last sync":"Ostatnia synchronizacja",
   "Later":"Później",
   "Focus {PAX}":"Kursor w {PAX}",
   "Focus ROLE":"Kursor w ROLE",
@@ -424,7 +424,9 @@ UI_STRINGS.pl={
   "Could not read the watched file.":"Nie udało się odczytać obserwowanego pliku.",
   "Your own cards and edits are kept.":"Własne karty i zmiany zostają.",
   "Load the update":"Wczytaj aktualizację",
-  "You have {V}.":"Wczytane: {V}.",
+  "You have {E}.":"Wczytane: {E}.",
+  "You have rev {R}.":"Wczytane: wersja {R}.",
+  "rev {R}":"wersja {R}",
   "Note for this edition":"Notatka do wydania",
   "{N} changed":"{N} zmieniona",
   "few␟{N} changed":"{N} zmienione",
@@ -455,22 +457,31 @@ UI_STRINGS.pl={
   "It comes back with your star and your edits.":"Wróci z gwiazdką i własnymi zmianami.",
   "and {N} more":"i {N} więcej",
   "Show the differences":"Pokaż różnice",
-  "What is new in edition {V}":"Co nowego w wydaniu {V}",
+  "What is new in edition {E}":"Co nowego w wydaniu {E}",
+  "What is new in rev {R}":"Co nowego w wersji {R}",
   "Was":"Było",
   "Becomes":"Będzie",
   "Your version":"Własna wersja",
   "Text":"Treść",
   "Take the team's new text":"Weź nową treść zespołu",
   "Keep mine":"Zostaw moją",
-  "Edition {V} is waiting to be loaded; the offer is under the catalog's name.":"Wydanie {V} czeka na wczytanie; propozycja jest pod nazwą katalogu.",
-  "Show edition {V}, waiting to be loaded":"Pokaż wydanie {V}, które czeka na wczytanie",
+  "Edition {E} is waiting to be loaded; the offer is under the catalog's name.":"Wydanie {E} czeka na wczytanie; propozycja jest pod nazwą katalogu.",
+  "Rev {R} is waiting to be loaded; the offer is under the catalog's name.":"Wersja {R} czeka na wczytanie; propozycja jest pod nazwą katalogu.",
+  "Show edition {E}, waiting to be loaded":"Pokaż wydanie {E}, które czeka na wczytanie",
+  "Show rev {R}, waiting to be loaded":"Pokaż wersję {R}, która czeka na wczytanie",
   "This desk carries on as it is until the update is loaded.":"Do wczytania aktualizacji stanowisko działa bez zmian.",
-  "Edition {V} loaded: {COUNTS}":"Wczytano wydanie {V}: {COUNTS}",
-  "Changed in edition {V}":"Zmieniona w wydaniu {V}",
-  "New in edition {V}":"Nowa w wydaniu {V}",
-  "Changes in {V}":"Zmiany w {V}",
-  "Only the cards edition {V} changed or added":"Tylko karty zmienione lub dodane w wydaniu {V}",
-  "Cards edition {V} changed or added: {N}.":"Karty zmienione lub dodane w wydaniu {V}: {N}.",
+  "Edition {E} loaded: {COUNTS}":"Wczytano wydanie {E}: {COUNTS}",
+  "Rev {R} loaded: {COUNTS}":"Wczytano wersję {R}: {COUNTS}",
+  "Changed in edition {E}":"Zmieniona w wydaniu {E}",
+  "Changed in rev {R}":"Zmieniona w wersji {R}",
+  "New in edition {E}":"Nowa w wydaniu {E}",
+  "New in rev {R}":"Nowa w wersji {R}",
+  "Changes in {E}":"Zmiany w {E}",
+  "Changes in rev {R}":"Zmiany w wersji {R}",
+  "Only the cards edition {E} changed or added":"Tylko karty zmienione lub dodane w wydaniu {E}",
+  "Only the cards rev {R} changed or added":"Tylko karty zmienione lub dodane w wersji {R}",
+  "Cards edition {E} changed or added: {N}.":"Karty zmienione lub dodane w wydaniu {E}: {N}.",
+  "Cards rev {R} changed or added: {N}.":"Karty zmienione lub dodane w wersji {R}: {N}.",
   "before:":"wcześniej:",
   "now:":"teraz:",
   "Load catalog?":"Wczytać katalog?",
@@ -683,6 +694,7 @@ UI_STRINGS.pl={
   "Exported {FILE} with {MACROS} in {CARDS}":"Wyeksportowano {FILE}: {MACROS}, {CARDS}",
   "Card deleted":"Usunięto kartę",
   "Undo":"Cofnij",
+  "Take back what was just done, while its Undo button is on screen":"Cofa to, co przed chwilą zrobiono, dopóki widać przycisk Cofnij",
   "Moved on without saving the changes":"Opuszczono wpis bez zapisania zmian",
   "Category added":"Dodano kategorię",
   "Category deleted":"Usunięto kategorię",
@@ -880,6 +892,23 @@ UI_STRINGS.pl={
   "search replies":"szukaj odpowiedzi",
   "Replies":"Odpowiedzi",
   "The reply copied last":"Ostatnio skopiowana odpowiedź",
+  "{N} reply":"{N} odpowiedź",
+  "{N} replies":"{N} odpowiedzi",
+  "few␟{N} replies":"{N} odpowiedzi",
+  "many␟{N} replies":"{N} odpowiedzi",
+  "{SHOWN} of {COUNT}":"{SHOWN} z {COUNT}",
+  "The reply is filled in for this conversation":"Odpowiedź jest uzupełniana dla tej rozmowy",
+  "{KEY} copies":"{KEY} kopiuje",
+  "{KEY} in {LANG}":"{KEY} w wersji {LANG}",
+  "{KEY} closes":"{KEY} zamyka",
+  "Pasted":"Wklejono",
+  "Copied, press Ctrl+V":"Skopiowano, naciśnij Ctrl+V",
+  "{KEYS} belongs to another program just now.":"{KEYS} należy teraz do innego programu.",
+  "A combination of Etiuda's own, chosen in Settings, brings the replies over any window.":"Własna kombinacja Etiudy, wybrana w Ustawieniach, przywoła odpowiedzi nad dowolne okno.",
+  "Choose a combination":"Wybierz kombinację",
+  "The replies beside the pointer, over any program; the combination is changed in Settings":"Odpowiedzi obok wskaźnika, nad każdym programem; kombinację zmienia się w Ustawieniach",
+  "Replies over any window":"Odpowiedzi nad dowolnym oknem",
+  "{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.":"{KEY} przywołuje te odpowiedzi obok wskaźnika, nad każdym programem: wystarczy wpisać słowo, a Enter skopiuje odpowiedź i wróci do poprzedniego okna. Naciśnij {KEY}, żeby spróbować; Esc zamyka listę.",
   "Bring the replies over any window":"Przywołaj odpowiedzi nad dowolne okno",
   "Works from any program; Enter copies a reply and goes back to the window you were in.":"Działa w każdym programie; Enter kopiuje odpowiedź i wraca do poprzedniego okna.",
   "Another program uses this combination just now; a different one will do.":"Tej kombinacji używa teraz inny program; wybór innej to rozwiąże.",
@@ -1034,8 +1063,15 @@ UI_STRINGS.pl={
   "Compare this key with the Signing key in the lead's Studio Settings. Every later edition is checked against it.":"Ten klucz powinien być taki sam jak Klucz podpisu w Ustawieniach Studia lidera. Według niego sprawdzane jest każde kolejne wydanie.",
   "It matches":"Zgadza się",
   "It does not match":"Nie zgadza się",
-  "Team lead's key":"Klucz lidera zespołu",
-  "Forget this lead":"Zapomnij tego lidera",
+  "{LEAD}'s team":"Zespół osoby {LEAD}",
+  "Leave this team":"Opuść ten zespół",
+  "After leaving a team, this desk joins it again with a new invitation from its lead.":"Po opuszczeniu zespołu to stanowisko może do niego wrócić dzięki nowemu zaproszeniu od lidera.",
+  "This desk left this team on {DATE}. Join it again?":"To stanowisko opuściło ten zespół {DATE}. Dołączyć do niego ponownie?",
+  "This team no longer includes this desk.":"To stanowisko nie należy już do tego zespołu.",
+  "The organisation's IT sets this desk's team.":"Zespół tego stanowiska ustawia dział IT organizacji.",
+  "{LEAD}'s team no longer includes this desk":"To stanowisko nie należy już do zespołu osoby {LEAD}",
+  "The team no longer includes this desk":"To stanowisko nie należy już do zespołu",
+  "Once the team's lead lets this desk in again, the catalog opens here by itself.":"Gdy lider zespołu ponownie wpuści to stanowisko, katalog otworzy się tutaj sam.",
   "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.":"Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
   "The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.":"Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
   "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.":"Na prośbę Studia lidera zespołu przesłano zespołowi kopię katalogu używanego na tym stanowisku.",
@@ -1155,7 +1191,11 @@ function t(en){
 /* AN ACT THAT CAN BE UNDONE HAPPENS AT ONCE, and this bubble at the foot of the window offers the
    way back: over any dialog, until another act replaces it or UNDO_MS passes. */
 const UNDO_MS=10000;
-let undoTimer=0;
+/* The key the button names, the fixed "undo" row of SC_DEFS as formatActionChord spells it. */
+const UNDO_KEY="Ctrl+Z";
+let undoTimer=0, undoTake=null, undoTyped=false;
+/* A field typed in since the bubble came (keydown.js reports it): its Ctrl+Z is then its own typing's. */
+function noteUndoTyping(){ undoTyped=true; }
 function offerUndo(said, undo){
   const was=$("#eUndo"); if(was) was.remove();
   clearTimeout(undoTimer);
@@ -1165,16 +1205,27 @@ function offerUndo(said, undo){
   el.setAttribute("role","status");
   el.setAttribute("data-side","none");
   el.innerHTML='<p>'+esc(t(said))+'</p>'
-    +'<div class="tour-actions"><button type="button" class="btn primary" id="eUndoBtn">'+esc(t("Undo"))+'</button></div>';
+    +'<div class="tour-actions"><button type="button" class="btn primary" id="eUndoBtn" aria-label="'+esc(t("Undo"))
+    +'" aria-keyshortcuts="Control+Z">'+esc(t("Undo"))+'<kbd>'+esc(UNDO_KEY)+'</kbd></button></div>';
   cutLeaves();
   document.body.appendChild(el);
-  const close=()=>{ clearTimeout(undoTimer); dismissNode(el); };
-  el.querySelector("#eUndoBtn").onclick=()=>{ close(); undo(); };
+  const close=()=>{ clearTimeout(undoTimer); if(undoTake===take) undoTake=null; dismissNode(el); };
+  const take=()=>{ close(); undo(); };
+  undoTake=take; undoTyped=false;
+  el.querySelector("#eUndoBtn").onclick=take;
   el.addEventListener("keydown",e=>{
     if(e.key!=="Escape") return;
     e.preventDefault(); e.stopPropagation(); close();
   });
   undoTimer=setTimeout(close,UNDO_MS);
+}
+/* CTRL+Z TAKES THE STANDING UNDO: true where it did. Nothing where none stands or a question hides it, and nothing
+   from a field typed in since the bubble came, whose key it then is. */
+function takeStandingUndo(inField){
+  const el=document.getElementById("eUndo");
+  if(!undoTake || !el || el.hidden || (inField && undoTyped)) return false;
+  undoTake();
+  return true;
 }
 let tt;
 const TOAST_MS=1700;
@@ -1339,6 +1390,8 @@ export {
   systemUiLang,
   t,
   offerUndo,
+  takeStandingUndo,
+  noteUndoTyping,
   tc,
   counted,
   catalogCountsLine,

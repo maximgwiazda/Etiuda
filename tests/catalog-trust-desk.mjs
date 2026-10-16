@@ -376,6 +376,15 @@ async function launch(plan) {
       await settle();
       obs.library.push(readLibrary());
     },
+    /* A host whose answer about the pinned leads never comes, as a shell that hangs would leave it. */
+    hangleads: () => { globalThis.E_HOST.catalogLeads = () => new Promise(() => {}); },
+    // The Library read once a row's own wait for its check (2 s) is over, and a little more.
+    librarylate: async () => {
+      if (!doc.getElementById("mgCatList")) { const l = doc.createElement("div"); l.id = "mgCatList"; doc.body.appendChild(l); }
+      OFFER.paintCatalogList();
+      await settle(2600);
+      obs.library.push(readLibrary());
+    },
     // The file picker's reading half, over a file anywhere: importCatalogText is where both import routes end.
     import: file => { CF.importCatalogText(fs.readFileSync(path.join(LAB, file), "utf8"), path.basename(file)); },
     load: name => { const b = doc.querySelector("button[data-ec-load=\"" + name + "\"]"); if (!b) throw new Error("no Load for " + name); b.onclick(); },
@@ -470,14 +479,14 @@ async function launch(plan) {
       const b = bubble();
       obs.read.bubble = !b ? null : { hidden: b.hidden, change: b.querySelectorAll(".ec-change").length,
         counts: b.querySelectorAll(".ec-counts").map(n => ({ text: n.textContent.trim(), n: n.querySelectorAll(".ec-n").length })),
-        n: texts(b, ".ec-n"), ids: b.querySelectorAll("[data-ec-id]").map(n => n.getAttribute("data-ec-id")),
+        n: texts(b, ".ec-n"), ids: b.querySelectorAll("[data-ec-id]").map(n => n.getAttribute("data-ec-id")), what: texts(b, ".ec-what")[0] || "",
         diff: b.querySelectorAll("#ecDiff").length, own: cardRow("c-b") };
     },
     panel: () => {
       doc.getElementById("ecDiff").onclick();
       const card = doc.getElementById("modalCard"), g = card.querySelector("#edPane .ed-grid");
       obs.read.panel = { bubbleHidden: bubble().hidden, modal: modalUp(), cls: card.className, rows: card.querySelectorAll(".ed-row").length,
-        current: texts(card, ".ed-row[aria-current=\"true\"]"), grid: g ? g.className : null, take: takes() };
+        current: texts(card, ".ed-row[aria-current=\"true\"]"), grid: g ? g.className : null, take: takes(), title: texts(card, ".modal-t")[0] || "" };
     },
     take: arg => {
       doc.querySelector("[data-ed-take=\"" + arg + "\"]").onclick();
@@ -576,6 +585,8 @@ async function launch(plan) {
   obs.heldId = (() => { try { return String(JSON.parse(ST.lsGet("eCatalog") || "{}").id || ""); } catch { return ""; } })();
   // The marks a loaded edition leaves on the cards it brought (edition-marks.js), counted by key.
   obs.editionMarks = ST.lsKeys().filter(k => /EditionMarks$/.test(k) && ST.lsGet(k)).length;
+  obs.editionName = (() => { const k = ST.lsKeys().find(k => /EditionMarks$/.test(k) && ST.lsGet(k));
+    try { const m = k ? JSON.parse(ST.lsGet(k)) : null; return m ? { e: m.e, r: m.r } : null; } catch { return null; } })();
   obs.toast = (doc.getElementById("toast") && doc.getElementById("toast").textContent) || "";
   obs.session = Object.fromEntries(session);
   process.stdout.write("#launch " + JSON.stringify(obs) + "\n", () => process.exit(0));
@@ -591,7 +602,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 109;
+  const EXPECTED = 122;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -599,6 +610,8 @@ async function parent() {
   const pair = crypto.generateKeyPairSync("ed25519");
   const KEY_ID = "trust-desk-harness", ID = "lamp-shop";
   const pubHex = k => k.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
+  /* A public key as the desk names it: the first 16 hex of the SHA-256 of the raw key, in fours. */
+  const foursOf = hex => crypto.createHash("sha256").update(Buffer.from(hex, "hex")).digest("hex").slice(0, 16).replace(/(.{4})(?=.)/g, "$1 ");
   const NL = String.fromCharCode(10);
   /* Invented, and nothing of a real catalog: two shelves and three cards. */
   const payload = (date, name) => ({
@@ -705,9 +718,9 @@ async function parent() {
       "3a a file loaded at once from the Library on an empty desk wears a grey key named Unsigned on its row: " + said(r3));
     const r3a = row(d3b, "lamp-a.ec");
     check(!!r3a && !r3a.loaded && r3a.key && r3a.key.state === V2.V2_SIG_VALID && r3a.key.gold && r3a.key.word === "Signed"
-      && r3a.key.tip.indexOf(KEY_ID) > -1,
+      && r3a.key.tip === "This file is signed with the key " + foursOf(pubHex(pair.publicKey)) + ".",
       "3b a folder file nobody has loaded is checked as a load would check it: its row wears a gold key named Signed,"
-      + " whose bubble names the key that signed it: " + said(r3a));
+      + " whose bubble names the key that signed it by the print of its public: " + said(r3a));
 
     /* 4: A RING PLACED AFTER LOADING. The key is unknown until the ring is there, and the next
        launch's Library reads it again. */
@@ -967,11 +980,11 @@ async function parent() {
       return d; };
     const AGENT = { t: "My greeting", en: "Good day, how can I be of use?" };
     /* A desk that holds edition 1 and carries the agent's edit, the edit made by the page's own save, and edition 2 in the folder. */
-    const editionDesk = () => {
-      const lab = scenario([["catalogs/lamp.ec", sign(ed1())], ["catalogs/etiuda-ring.json", ring]]);
+    const editionDesk = (next, first) => {
+      const lab = scenario([["catalogs/lamp.ec", sign((first || ed1)())], ["catalogs/etiuda-ring.json", ring]]);
       run(lab, ["boot", "settle", "offer", "yes", "settle"]);
       const s74 = run(lab, ["desk", "override", "settle"], false, { override: AGENT });
-      fs.writeFileSync(path.join(lab, "catalogs", "lamp.ec"), JSON.stringify(sign(ed2())), "utf8");
+      fs.writeFileSync(path.join(lab, "catalogs", "lamp.ec"), JSON.stringify(sign((next || ed2)())), "utf8");
       return { lab: lab, setup: s74 };
     };
     const rd = (o, k) => (o && o.read && o.read[k]) || {};
@@ -1060,6 +1073,30 @@ async function parent() {
     check(b0.offer === 0 && b0.waiting && b0.dot && c0.offer === 0 && c0.waiting && c0.dot && WAIT.test(c0.label || "") && !errsW.length,
       "74n after Not now it waits at the name, and at the next launch, the refusal remembered and nothing offered, it still does: "
       + JSON.stringify({ declined: b0, next: c0, errors: errsW.slice(0, 2) }));
+    /* THE SAME EDITION WITH NO DATED EDITION OF ITS OWN: the name, the panel, the load's toast and the marks call it by its
+       rev, where the dated one above reads its date. */
+    const dR = editionDesk(() => { const d = ed2(); delete d.date; return d; });
+    const RV = run(dR.lab, ASK.concat(["readwait", "panel", "edload", "settle"]), false, BAND), r0 = wr(RV, 0);
+    check(r0.label === "Show rev 2, waiting to be loaded" && a0.label === "Show edition 2026-09-20, waiting to be loaded"
+      && rd(RV, "panel").title === "What is new in rev 2" && /^Rev 2 loaded: /.test(RV.toast || "")
+      && JSON.stringify(RV.editionName) === '{"r":2}' && RV.reloaded === true && ![dR.setup, RV].flatMap(o => o.errors || []).length,
+      "74r a new edition with no date is named by its rev at the name, on the panel, in the load's toast and in its marks, and the dated one by its date: "
+      + JSON.stringify({ rev: r0.label, dated: a0.label, panel: rd(RV, "panel").title, toast: RV.toast, marks: RV.editionName,
+        errors: [dR.setup, RV].flatMap(o => o.errors || []).slice(0, 2) }));
+    /* THE SAME TWO WITH A BARE NUMBER WHERE THE DATE GOES: the offer's name line, its "You have" and the Library's rows,
+       the one in use and another catalog's file in the folder, name each by its rev. */
+    const dB = editionDesk(() => Object.assign(ed2(), { date: "2" }), () => Object.assign(ed1(), { date: "1" }));
+    const BN = run(dB.lab, ASK.concat(["readchange"]), false, BAND);
+    // The other catalog lands after the offer was read, so the boot offers lamp's update and not a replacement.
+    fs.writeFileSync(path.join(dB.lab, "catalogs", "pine.ec"), JSON.stringify(sign(Object.assign(ed1(), { id: "pine-shop", rev: 7, date: "7" }))), "utf8");
+    const BL = run(dB.lab, ["desk", "rows"], true);
+    BN.rows = BL.rows; BN.errors = (BN.errors || []).concat(BL.errors || []);
+    const bnRows = (BN.rows[0] || []).map(r => (r.loaded ? "in use: " : "file: ") + r.meta);
+    const bnHave = ((rd(BN, "bubble").counts || []).find(c => /^You have /.test(c.text)) || {}).text || "";
+    check(/ · rev 2(?!\d)/.test(rd(BN, "bubble").what || "") && bnHave === "You have rev 1." && bnRows.some(r => /^in use: (.* · )?rev 1( · |$)/.test(r))
+      && bnRows.some(r => /^file: (.* · )?rev 7( · |$)/.test(r)) && !/\bv[127]\b/.test(JSON.stringify([rd(BN, "bubble"), BN.rows])) && ![dB.setup, BN].flatMap(o => o.errors || []).length,
+      "74s a catalog whose edition is a bare number is named by its rev on the offer's name line, in its You have and on the Library's rows, never v1, v2 or v7: "
+      + JSON.stringify({ what: rd(BN, "bubble").what, have: bnHave, rows: bnRows, errors: [dB.setup, BN].flatMap(o => o.errors || []).slice(0, 2) }));
     check(l0.offer === 0 && l0.waiting === false && l0.dot === false && l0.label === null,
       "74L THE CONTROL: the same desk with no newer edition in the folder has no dot and no words at the name: " + JSON.stringify(l0));
     /* 75: A COLLEAGUE'S FILE IN THE LIBRARY, LOOK, AND WORK FROM IT. The folder holds the catalog in use (lamp.ec); two
@@ -1638,6 +1675,137 @@ async function parent() {
       && !(histOff.errors || []).length,
       "77i a kept version of a file whose desk is off the roster is offered with the note, and an empty desk does not load it: "
       + JSON.stringify({ shown: hOff.shown, roster: hOff.roster, loaded: histOff.reloaded, errors: (histOff.errors || []).slice(0, 2) }));
+
+    /* 78: A JOINED DESK'S KEY IS ITS PINNED LEAD'S (sense pass finding 5). The shell chooses an edition by the pin alone
+       (catalogLeadOk), so the key the page draws says the same: gold for a file the pinned lead signed with no ring beside
+       it, and not gold for a file and a ring both put on the share under another key, however well that ring vouches for
+       it. A desk outside any team reads the ring alone, as before. The pin carries the lead's own key id, as a team file or
+       an invitation writes it, and the other key borrows that id, as anyone writing the share could. */
+    const pinAs = (lab, pub, keyId) => {
+      const at = path.join(lab, "userdata", "desk.json"), desk = JSON.parse(fs.readFileSync(at, "utf8"));
+      desk.teamPins = { ["t-" + "78".repeat(7) + "ab"]: { keyId: keyId, public: pub } };
+      fs.writeFileSync(at, JSON.stringify(desk));
+    };
+    const forger = crypto.generateKeyPairSync("ed25519");
+    const forge = doc => { const o = JSON.parse(JSON.stringify(doc)); delete o.hash;
+      o.sig = { alg: V2.V2_SIG_ALG, keyId: KEY_ID }; o.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(o)), forger.privateKey).toString("hex"); return o; };
+    const forgedRing = JSON.stringify({ format: V2.V2_RING_FORMAT, kind: V2.V2_RING_KIND,
+      keys: [{ catalog: ID, keyId: KEY_ID, alg: V2.V2_SIG_ALG, public: pubHex(forger.publicKey) }] });
+    const errs78 = (...os) => os.flatMap(o => o.errors || []).slice(0, 2);
+
+    const lab78a = scenario([["catalogs/lamp.ec", sign(payload("2026-09-01"))]]);
+    pinAs(lab78a, pubHex(pair.publicKey), KEY_ID);
+    const boot78a = run(lab78a, ["boot", "settle", "offer", "yes", "settle"]);
+    const lib78a = run(lab78a, ["library"], true);
+    const o78a = boot78a.offers[0] || {}, r78a = row(lib78a, "lamp.ec");
+    check(o78a.shown === true && same(o78a.trust, []) && boot78a.reloaded && boot78a.heldAtEnd === V2.V2_SIG_VALID
+      && !!r78a && r78a.loaded && !!r78a.key && r78a.key.state === V2.V2_SIG_VALID && r78a.key.gold && r78a.key.word === "Signed"
+      && !errs78(boot78a, lib78a).length,
+      "78a on a desk whose pinned lead signed the catalog, with no ring beside it, the boot's offer says nothing against it, the desk holds it as signed and its row's key is gold: "
+      + JSON.stringify({ trust: o78a.trust || null, held: boot78a.heldAtEnd, row: said(r78a), errors: errs78(boot78a, lib78a) }));
+
+    const folder78 = () => scenario([["catalogs/lamp-lead.ec", sign(payload("2026-09-01"))], ["catalogs/lamp.ec", forge(atRev(2, "2026-09-02"))],
+      ["catalogs/etiuda-ring.json", forgedRing]]);
+    const lab78b = folder78();
+    pinAs(lab78b, pubHex(pair.publicKey), KEY_ID);
+    const lib78b = run(lab78b, ["library"]);
+    const lead78b = row(lib78b, "lamp-lead.ec"), swap78b = row(lib78b, "lamp.ec");
+    check(!!lead78b && !!lead78b.key && lead78b.key.state === V2.V2_SIG_VALID && lead78b.key.gold
+      && !!swap78b && !!swap78b.key && swap78b.key.state === V2.V2_SIG_UNKNOWN && !swap78b.key.gold && UNKNOWN_KEY.test(swap78b.key.tip)
+      && !errs78(lib78b).length,
+      "78b on that desk, with a file and a ring both put on the share under another key, the lead's file is gold and the other is not, whatever the ring says: "
+      + said(lead78b) + " / " + said(swap78b) + ", errors " + JSON.stringify(errs78(lib78b)));
+    const lab78B = folder78();
+    const lib78B = run(lab78B, ["library"]);
+    const lead78B = row(lib78B, "lamp-lead.ec"), swap78B = row(lib78B, "lamp.ec");
+    check(!!lead78B && !!lead78B.key && lead78B.key.state === V2.V2_SIG_INVALID && !lead78B.key.gold
+      && !!swap78B && !!swap78B.key && swap78B.key.state === V2.V2_SIG_VALID && swap78B.key.gold && !errs78(lib78B).length,
+      "78B THE CONTROL: the same folder on a desk outside any team reads the ring alone, as before: the file it vouches for is gold, and the lead's, under the key id the ring gives the other key, reads changed: "
+      + said(lead78B) + " / " + said(swap78B) + ", errors " + JSON.stringify(errs78(lib78B)));
+
+    const forgerFours = crypto.createHash("sha256").update(Buffer.from(pubHex(forger.publicKey), "hex")).digest("hex").slice(0, 16)
+      .replace(/(.{4})(?=.)/g, "$1 ");
+    const open78c = run(lab78b, ["wire", "click:catalogs/lamp.ec", "settle", "offer", "yes", "settle"]);
+    const o78c = open78c.offers[0] || {};
+    check(o78c.shown === true && same(o78c.signer, ["This file is signed with the key " + forgerFours + ", which is not the team lead's."])
+      && same(o78c.trust, []) && open78c.reloaded === true && open78c.heldId === ID && open78c.heldAtEnd === V2.V2_SIG_UNKNOWN
+      && !errs78(open78c).length,
+      "78c that file, opened on purpose, is offered naming the key that signed it as not the lead's and saying nothing else of its signature, loads on yes, and is held as a key this desk does not know: "
+      + JSON.stringify({ shown: o78c.shown, signer: o78c.signer || null, trust: o78c.trust || null, loaded: open78c.reloaded,
+        held: open78c.heldAtEnd, errors: errs78(open78c) }));
+
+    const lab78d = scenario([["catalogs/lamp.ec", bend(sign(payload("2026-09-01")))]]);
+    pinAs(lab78d, pubHex(pair.publicKey), KEY_ID);
+    const open78d = run(lab78d, ["wire", "click:catalogs/lamp.ec", "settle", "offer"]);
+    const o78d = open78d.offers[0] || {};
+    check(o78d.shown === true && (o78d.trust || []).length === 1 && CHANGED.test(o78d.trust[0]) && !(o78d.signer || []).length
+      && !errs78(open78d).length,
+      "78d a file naming the pinned lead's key that the lead's key does not verify, with no ring beside it, is offered as changed since it was signed: "
+      + JSON.stringify({ shown: o78d.shown, trust: o78d.trust || null, signer: o78d.signer || null, errors: errs78(open78d) }));
+
+    /* 79: THE CATALOG IN USE ANSWERS TO THE PINNED LEAD TOO, and a gold key is named by the public that verified it (the
+       test architect's legs 79c, 79d and 79f from his verdict on e408e76, and 79g). A desk outside any team that took a file
+       and a ring from the share holds that catalog as signed; once the desk pins a lead who did not sign it, the row of the
+       catalog in use is not gold, whether the shell hands its file this load or not. */
+    const keyOf = r => r && r.key ? { state: r.key.state, gold: !!r.key.gold, word: r.key.word } : null;
+    const signAs = (doc, priv, kid, alg) => { const o = JSON.parse(JSON.stringify(doc)); delete o.hash;
+      o.sig = { alg: alg || V2.V2_SIG_ALG, keyId: kid }; o.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(o)), priv).toString("hex"); return o; };
+    // 79c the lead's key signs, but under an alg the shell would not verify: not gold, as the shell would not choose it
+    const lab79c = scenario([["catalogs/lamp.ec", signAs(atRev(2, "2026-09-02"), pair.privateKey, KEY_ID, "ed25519")]]);
+    pinAs(lab79c, pubHex(pair.publicKey), KEY_ID);
+    const lib79c = run(lab79c, ["library"]);
+    const a79 = row(lib79c, "lamp.ec");
+    check(!!a79 && !!a79.key && !a79.key.gold,
+      "79c a lead-signed file under an alg the shell refuses is not gold: " + JSON.stringify({ k: keyOf(a79), errors: errs78(lib79c) }));
+    // 79d a desk that held a file as signed under a ring, then joined a team whose lead did not sign it: not gold after relaunch
+    const lab79d = scenario([["catalogs/lamp.ec", forge(atRev(2, "2026-09-02"))], ["catalogs/etiuda-ring.json", forgedRing]]);
+    const boot79d = run(lab79d, ["boot", "settle", "offer", "yes", "settle"]);
+    const held79d = boot79d.heldAtEnd;
+    pinAs(lab79d, pubHex(pair.publicKey), KEY_ID);
+    const lib79d = run(lab79d, ["library"]);
+    const d79 = row(lib79d, "lamp.ec");
+    check(held79d === V2.V2_SIG_VALID && !!d79 && !!d79.key && !d79.key.gold,
+      "79d held as signed under the ring before the pin, not gold once the lead is pinned: " + JSON.stringify({ held: held79d, loaded: d79 && d79.loaded, k: keyOf(d79), errors: errs78(boot79d, lib79d) }));
+    // 79f as 79d, the relaunch booting first, as a real launch does
+    const lab79f = scenario([["catalogs/lamp.ec", forge(atRev(2, "2026-09-02"))], ["catalogs/etiuda-ring.json", forgedRing]]);
+    const boot79f = run(lab79f, ["boot", "settle", "offer", "yes", "settle"]);
+    pinAs(lab79f, pubHex(pair.publicKey), KEY_ID);
+    const lib79f = run(lab79f, ["boot", "settle", "offer", "library"]);
+    const f79 = row(lib79f, "lamp.ec");
+    check(boot79f.heldAtEnd === V2.V2_SIG_VALID && !!f79 && !!f79.key && !f79.key.gold,
+      "79f held as signed under the ring before the pin, booted again with the lead pinned, not gold: " + JSON.stringify({ held0: boot79f.heldAtEnd, held1: lib79f.heldAtEnd, offer: lib79f.offers[0] || null, loaded: f79 && f79.loaded, k: keyOf(f79), errors: errs78(boot79f, lib79f) }));
+    // 79g, read off launches above: the other key's file on 78B's desk outside any team, and 78a's lead catalog in use
+    const forgerTip = "This file is signed with the key " + foursOf(pubHex(forger.publicKey)) + ".";
+    const leadTip = "This file is signed with the key " + foursOf(pubHex(pair.publicKey)) + ".";
+    check(!!swap78B && !!swap78B.key && swap78B.key.tip === forgerTip && !!r78a && r78a.loaded && !!r78a.key && r78a.key.tip === leadTip,
+      "79g a gold key is named by the print of the public that verified the file, never the key id the file gives itself: the other key's file names that key though it borrowed the lead's id, and the pinned lead's catalog in use names the lead's: "
+      + JSON.stringify([swap78B && swap78B.key && swap78B.key.tip, r78a && r78a.key && r78a.key.tip]));
+
+    /* 80a, the test architect's leg from his verdict on d39a5f8 (Clement psi, 2026-10-15): the boot's offer on the first
+       launch after the pin. The held catalog is another key's rev 3 under the lead's borrowed key id, held valid under a
+       ring before the pin, and the lead's own rev 2 is beside it, which the shell hands this launch. The old valid made the
+       floor hold the lead's edition back at that boot; once the held state answers to the pin, the offer is made again. */
+    const lab80a = scenario([["catalogs/lamp.ec", forge(atRev(3, "2026-09-03"))], ["catalogs/lamp-lead.ec", sign(atRev(2, "2026-09-02"))],
+      ["catalogs/etiuda-ring.json", forgedRing]]);
+    const b80a0 = run(lab80a, ["boot", "settle", "offer", "yes", "settle"]);
+    pinAs(lab80a, pubHex(pair.publicKey), KEY_ID);
+    const b80a1 = run(lab80a, ["boot", "settle", "offer"]);
+    const o80a = b80a1.offers[0] || {};
+    check(b80a0.heldAtEnd === V2.V2_SIG_VALID && b80a0.heldRev === 3 && o80a.shown === true && (o80a.files || []).includes("lamp-lead.ec")
+      && b80a1.heldAtEnd === V2.V2_SIG_UNKNOWN && !errs78(b80a0, b80a1).length,
+      "80a on the first launch after the pin, the lead's own lower edition is offered at boot, the held state lowered from valid: "
+      + JSON.stringify({ held0: b80a0.heldAtEnd, rev0: b80a0.heldRev, shown: o80a.shown, files: o80a.files || null, title: o80a.title || "",
+        held1: b80a1.heldAtEnd, errors: errs78(b80a0, b80a1) }));
+
+    /* 81a: THE LIBRARY DOES NOT WAIT ON A HOST THAT NEVER ANSWERS. The held signature's answer to a pinned lead is waited
+       for as long as a row's own check is (2 s), and the list is drawn after that whatever the host says. */
+    const lab81a = scenario([["catalogs/lamp.ec", sign(payload("2026-09-01"))], ["catalogs/etiuda-ring.json", ring]]);
+    run(lab81a, ["boot", "settle", "offer", "yes", "settle"]);
+    const hung81a = run(lab81a, ["hangleads", "librarylate"]);
+    const r81a = row(hung81a, "lamp.ec");
+    check(!!r81a && r81a.loaded && !errs78(hung81a).length,
+      "81a with the host never answering about the pinned leads, the Library is still drawn once a row's wait is over, its catalog in use loaded: "
+      + JSON.stringify({ rows: (hung81a.library[0] || []).map(r => [r.name, r.loaded]), errors: errs78(hung81a) }));
   } catch (e) {
     failed++;
     console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));

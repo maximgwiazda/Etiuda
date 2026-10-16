@@ -1176,6 +1176,9 @@ body.shed-segfold #seg::before{width:100%;transform:none}
   background:transparent;color:var(--ink);font:13.5px var(--sans);cursor:default}
 .menu button:hover,.menu button:focus-visible{background:var(--accent-soft);color:var(--accent)}
 .menu .menu-sep{height:1px;margin:4px 6px;background:var(--line);border:0;padding:0;pointer-events:none}
+/* A row's key at its right edge, in the row's quieter ink. */
+#menuPicker{display:flex;align-items:center;gap:18px}
+#menuPicker kbd{margin-left:auto;font:11.5px var(--mono);color:var(--dim)}
 /* An object's own menu (context-menu.js) stands where it was asked for, over the page and under a dialog. */
 .menu.e-ctx{position:fixed;right:auto;top:0;left:0;z-index:150;max-width:min(320px,calc(100vw - 8px))}
 .menu.e-ctx:focus{outline:none}
@@ -3588,6 +3591,9 @@ body.e-take-drag .modal-card.ed-modal{translate:0 28px;scale:.985}
   display:flex;align-items:center;gap:14px}
 .e-undo p{margin:0;color:var(--bub-ink)}
 .e-undo .tour-actions{margin:0;padding:0;border:0;flex:none}
+/* The key that takes it, on the button in the button's own ink. */
+.e-undo .btn kbd{margin-left:8px;padding:0 5px;border:1px solid color-mix(in srgb,currentColor 40%,transparent);
+  border-radius:4px;font:11px var(--mono);font-weight:400}
 /* THE CARD EDITOR'S MARGIN (card-margin.js): the acts on the left, where the finding stands on the right. */
 .e-margin .tour-actions{justify-content:flex-start}
 .e-margin .e-margin-at{margin-left:auto;font:12px var(--mono);color:var(--bub-dim)}
@@ -4101,6 +4107,8 @@ button:focus-visible,summary:focus-visible,[role=button]:focus-visible{outline:n
           <button type="button" role="menuitem" data-act="manage" title="Edit, hide or restore every card, intent and category">Library…</button>
           <button type="button" role="menuitem" data-act="settings" title="Interface language, appearance and keyboard shortcuts">Settings…</button>
           <button type="button" role="menuitem" data-act="join" id="menuJoin" hidden title="Paste the invitation from the team's lead.">Join a team</button>
+          <!-- Only where the host has a picker, its words and combination drawn in header-menus.js. -->
+          <button type="button" role="menuitem" data-act="picker" id="menuPicker" hidden></button>
           <!-- Maintenance has NO menu entry: F2 opens it, and the Keyboard shortcuts screen is
                where that is discovered. -->
           <!-- Locks live in Settings - standing decisions about how the app may behave; hide and
@@ -5559,6 +5567,7 @@ What you type stays in this browser only.`;
     BASE_CATS: () => BASE_CATS,
     BASE_M: () => BASE_M,
     catalogCardId: () => catalogCardId,
+    eNotice: () => eNotice,
     ePackEpoch: () => ePackEpoch,
     flushStats: () => flushStats,
     isFavourite: () => isFavourite,
@@ -5572,6 +5581,7 @@ What you type stays in this browser only.`;
     retiredCards: () => retiredCards,
     savePack: () => savePack,
     saveStats: () => saveStats,
+    setStatsFlush: () => setStatsFlush,
     showDeskNotices: () => showDeskNotices,
     showPackMigrationWarning: () => showPackMigrationWarning,
     syncSaveNotice: () => syncSaveNotice,
@@ -6126,9 +6136,11 @@ What you type stays in this browser only.`;
     catalogCountsLine: () => catalogCountsLine,
     counted: () => counted,
     fileStamp: () => fileStamp,
+    noteUndoTyping: () => noteUndoTyping,
     offerUndo: () => offerUndo,
     systemUiLang: () => systemUiLang,
     t: () => t,
+    takeStandingUndo: () => takeStandingUndo,
     tc: () => tc,
     toast: () => toast,
     toastHtml: () => toastHtml,
@@ -6714,6 +6726,7 @@ What you type stays in this browser only.`;
     "local memory used": "użyta pamięć lokalna",
     "theme": "motyw",
     "edition": "wydanie",
+    "rev": "wersja",
     "cards / macros": "karty / makra",
     "intents / categories": "intencje / kategorie",
     "layout rungs": "szczeble układu",
@@ -6841,7 +6854,6 @@ What you type stays in this browser only.`;
     "Open the Menu": "Otwórz Menu",
     "Your name": "Nazwa agenta",
     "Personal": "Osobiste",
-    "Last sync": "Ostatnia synchronizacja",
     "Later": "Później",
     "Focus {PAX}": "Kursor w {PAX}",
     "Focus ROLE": "Kursor w ROLE",
@@ -6955,7 +6967,9 @@ What you type stays in this browser only.`;
     "Could not read the watched file.": "Nie udało się odczytać obserwowanego pliku.",
     "Your own cards and edits are kept.": "Własne karty i zmiany zostają.",
     "Load the update": "Wczytaj aktualizację",
-    "You have {V}.": "Wczytane: {V}.",
+    "You have {E}.": "Wczytane: {E}.",
+    "You have rev {R}.": "Wczytane: wersja {R}.",
+    "rev {R}": "wersja {R}",
     "Note for this edition": "Notatka do wydania",
     "{N} changed": "{N} zmieniona",
     "few␟{N} changed": "{N} zmienione",
@@ -6986,22 +7000,31 @@ What you type stays in this browser only.`;
     "It comes back with your star and your edits.": "Wróci z gwiazdką i własnymi zmianami.",
     "and {N} more": "i {N} więcej",
     "Show the differences": "Pokaż różnice",
-    "What is new in edition {V}": "Co nowego w wydaniu {V}",
+    "What is new in edition {E}": "Co nowego w wydaniu {E}",
+    "What is new in rev {R}": "Co nowego w wersji {R}",
     "Was": "Było",
     "Becomes": "Będzie",
     "Your version": "Własna wersja",
     "Text": "Treść",
     "Take the team's new text": "Weź nową treść zespołu",
     "Keep mine": "Zostaw moją",
-    "Edition {V} is waiting to be loaded; the offer is under the catalog's name.": "Wydanie {V} czeka na wczytanie; propozycja jest pod nazwą katalogu.",
-    "Show edition {V}, waiting to be loaded": "Pokaż wydanie {V}, które czeka na wczytanie",
+    "Edition {E} is waiting to be loaded; the offer is under the catalog's name.": "Wydanie {E} czeka na wczytanie; propozycja jest pod nazwą katalogu.",
+    "Rev {R} is waiting to be loaded; the offer is under the catalog's name.": "Wersja {R} czeka na wczytanie; propozycja jest pod nazwą katalogu.",
+    "Show edition {E}, waiting to be loaded": "Pokaż wydanie {E}, które czeka na wczytanie",
+    "Show rev {R}, waiting to be loaded": "Pokaż wersję {R}, która czeka na wczytanie",
     "This desk carries on as it is until the update is loaded.": "Do wczytania aktualizacji stanowisko działa bez zmian.",
-    "Edition {V} loaded: {COUNTS}": "Wczytano wydanie {V}: {COUNTS}",
-    "Changed in edition {V}": "Zmieniona w wydaniu {V}",
-    "New in edition {V}": "Nowa w wydaniu {V}",
-    "Changes in {V}": "Zmiany w {V}",
-    "Only the cards edition {V} changed or added": "Tylko karty zmienione lub dodane w wydaniu {V}",
-    "Cards edition {V} changed or added: {N}.": "Karty zmienione lub dodane w wydaniu {V}: {N}.",
+    "Edition {E} loaded: {COUNTS}": "Wczytano wydanie {E}: {COUNTS}",
+    "Rev {R} loaded: {COUNTS}": "Wczytano wersję {R}: {COUNTS}",
+    "Changed in edition {E}": "Zmieniona w wydaniu {E}",
+    "Changed in rev {R}": "Zmieniona w wersji {R}",
+    "New in edition {E}": "Nowa w wydaniu {E}",
+    "New in rev {R}": "Nowa w wersji {R}",
+    "Changes in {E}": "Zmiany w {E}",
+    "Changes in rev {R}": "Zmiany w wersji {R}",
+    "Only the cards edition {E} changed or added": "Tylko karty zmienione lub dodane w wydaniu {E}",
+    "Only the cards rev {R} changed or added": "Tylko karty zmienione lub dodane w wersji {R}",
+    "Cards edition {E} changed or added: {N}.": "Karty zmienione lub dodane w wydaniu {E}: {N}.",
+    "Cards rev {R} changed or added: {N}.": "Karty zmienione lub dodane w wersji {R}: {N}.",
     "before:": "wcześniej:",
     "now:": "teraz:",
     "Load catalog?": "Wczytać katalog?",
@@ -7214,6 +7237,7 @@ What you type stays in this browser only.`;
     "Exported {FILE} with {MACROS} in {CARDS}": "Wyeksportowano {FILE}: {MACROS}, {CARDS}",
     "Card deleted": "Usunięto kartę",
     "Undo": "Cofnij",
+    "Take back what was just done, while its Undo button is on screen": "Cofa to, co przed chwilą zrobiono, dopóki widać przycisk Cofnij",
     "Moved on without saving the changes": "Opuszczono wpis bez zapisania zmian",
     "Category added": "Dodano kategorię",
     "Category deleted": "Usunięto kategorię",
@@ -7409,6 +7433,23 @@ What you type stays in this browser only.`;
     "search replies": "szukaj odpowiedzi",
     "Replies": "Odpowiedzi",
     "The reply copied last": "Ostatnio skopiowana odpowiedź",
+    "{N} reply": "{N} odpowiedź",
+    "{N} replies": "{N} odpowiedzi",
+    "few␟{N} replies": "{N} odpowiedzi",
+    "many␟{N} replies": "{N} odpowiedzi",
+    "{SHOWN} of {COUNT}": "{SHOWN} z {COUNT}",
+    "The reply is filled in for this conversation": "Odpowiedź jest uzupełniana dla tej rozmowy",
+    "{KEY} copies": "{KEY} kopiuje",
+    "{KEY} in {LANG}": "{KEY} w wersji {LANG}",
+    "{KEY} closes": "{KEY} zamyka",
+    "Pasted": "Wklejono",
+    "Copied, press Ctrl+V": "Skopiowano, naciśnij Ctrl+V",
+    "{KEYS} belongs to another program just now.": "{KEYS} należy teraz do innego programu.",
+    "A combination of Etiuda's own, chosen in Settings, brings the replies over any window.": "Własna kombinacja Etiudy, wybrana w Ustawieniach, przywoła odpowiedzi nad dowolne okno.",
+    "Choose a combination": "Wybierz kombinację",
+    "The replies beside the pointer, over any program; the combination is changed in Settings": "Odpowiedzi obok wskaźnika, nad każdym programem; kombinację zmienia się w Ustawieniach",
+    "Replies over any window": "Odpowiedzi nad dowolnym oknem",
+    "{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.": "{KEY} przywołuje te odpowiedzi obok wskaźnika, nad każdym programem: wystarczy wpisać słowo, a Enter skopiuje odpowiedź i wróci do poprzedniego okna. Naciśnij {KEY}, żeby spróbować; Esc zamyka listę.",
     "Bring the replies over any window": "Przywołaj odpowiedzi nad dowolne okno",
     "Works from any program; Enter copies a reply and goes back to the window you were in.": "Działa w każdym programie; Enter kopiuje odpowiedź i wraca do poprzedniego okna.",
     "Another program uses this combination just now; a different one will do.": "Tej kombinacji używa teraz inny program; wybór innej to rozwiąże.",
@@ -7563,8 +7604,15 @@ What you type stays in this browser only.`;
     "Compare this key with the Signing key in the lead's Studio Settings. Every later edition is checked against it.": "Ten klucz powinien być taki sam jak Klucz podpisu w Ustawieniach Studia lidera. Według niego sprawdzane jest każde kolejne wydanie.",
     "It matches": "Zgadza się",
     "It does not match": "Nie zgadza się",
-    "Team lead's key": "Klucz lidera zespołu",
-    "Forget this lead": "Zapomnij tego lidera",
+    "{LEAD}'s team": "Zespół osoby {LEAD}",
+    "Leave this team": "Opuść ten zespół",
+    "After leaving a team, this desk joins it again with a new invitation from its lead.": "Po opuszczeniu zespołu to stanowisko może do niego wrócić dzięki nowemu zaproszeniu od lidera.",
+    "This desk left this team on {DATE}. Join it again?": "To stanowisko opuściło ten zespół {DATE}. Dołączyć do niego ponownie?",
+    "This team no longer includes this desk.": "To stanowisko nie należy już do tego zespołu.",
+    "The organisation's IT sets this desk's team.": "Zespół tego stanowiska ustawia dział IT organizacji.",
+    "{LEAD}'s team no longer includes this desk": "To stanowisko nie należy już do zespołu osoby {LEAD}",
+    "The team no longer includes this desk": "To stanowisko nie należy już do zespołu",
+    "Once the team's lead lets this desk in again, the catalog opens here by itself.": "Gdy lider zespołu ponownie wpuści to stanowisko, katalog otworzy się tutaj sam.",
     "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.": "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
     "The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.": "Lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.",
     "At the request of the team lead's Studio, a copy of the catalog in use here was sent to the team.": "Na prośbę Studia lidera zespołu przesłano zespołowi kopię katalogu używanego na tym stanowisku.",
@@ -7676,7 +7724,13 @@ What you type stays in this browser only.`;
     return tab && tab[en] != null ? tab[en] : en;
   }
   var UNDO_MS = 1e4;
+  var UNDO_KEY = "Ctrl+Z";
   var undoTimer = 0;
+  var undoTake = null;
+  var undoTyped = false;
+  function noteUndoTyping() {
+    undoTyped = true;
+  }
   function offerUndo(said, undo) {
     const was = $("#eUndo");
     if (was) was.remove();
@@ -7686,17 +7740,21 @@ What you type stays in this browser only.`;
     el.id = "eUndo";
     el.setAttribute("role", "status");
     el.setAttribute("data-side", "none");
-    el.innerHTML = "<p>" + esc(t(said)) + '</p><div class="tour-actions"><button type="button" class="btn primary" id="eUndoBtn">' + esc(t("Undo")) + "</button></div>";
+    el.innerHTML = "<p>" + esc(t(said)) + '</p><div class="tour-actions"><button type="button" class="btn primary" id="eUndoBtn" aria-label="' + esc(t("Undo")) + '" aria-keyshortcuts="Control+Z">' + esc(t("Undo")) + "<kbd>" + esc(UNDO_KEY) + "</kbd></button></div>";
     cutLeaves();
     document.body.appendChild(el);
     const close = () => {
       clearTimeout(undoTimer);
+      if (undoTake === take) undoTake = null;
       dismissNode(el);
     };
-    el.querySelector("#eUndoBtn").onclick = () => {
+    const take = () => {
       close();
       undo();
     };
+    undoTake = take;
+    undoTyped = false;
+    el.querySelector("#eUndoBtn").onclick = take;
     el.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       e.preventDefault();
@@ -7704,6 +7762,12 @@ What you type stays in this browser only.`;
       close();
     });
     undoTimer = setTimeout(close, UNDO_MS);
+  }
+  function takeStandingUndo(inField) {
+    const el = document.getElementById("eUndo");
+    if (!undoTake || !el || el.hidden || inField && undoTyped) return false;
+    undoTake();
+    return true;
   }
   var tt;
   var TOAST_MS = 1700;
@@ -8262,7 +8326,7 @@ What you type stays in this browser only.`;
       removeEventListener("resize", placeNotices);
     }
   }
-  function eNotice(id, lead, body, onDismiss) {
+  function eNotice(id, lead, body, onDismiss, act) {
     let box = document.getElementById("eNotices");
     if (!box) {
       box = document.createElement("div");
@@ -8292,6 +8356,17 @@ What you type stays in this browser only.`;
     d.appendChild(say);
     const row = document.createElement("div");
     row.className = "tour-actions";
+    if (act) {
+      const go = document.createElement("button");
+      go.type = "button";
+      go.className = "btn primary";
+      go.textContent = act.label;
+      go.onclick = () => {
+        dropNotice(d);
+        act.run();
+      };
+      row.appendChild(go);
+    }
     const x = document.createElement("button");
     x.type = "button";
     x.className = "btn";
@@ -8665,6 +8740,10 @@ What you type stays in this browser only.`;
   var STATS_SAVE_MS = 1500;
   var eStatsT = 0;
   var eStatsWired = false;
+  var statsFlush = null;
+  function setStatsFlush(fn) {
+    statsFlush = typeof fn === "function" ? fn : null;
+  }
   function saveStats() {
     if (eStatsT) return;
     eStatsT = setTimeout(flushStats, STATS_SAVE_MS);
@@ -8677,7 +8756,14 @@ What you type stays in this browser only.`;
     if (!eStatsT) return false;
     clearTimeout(eStatsT);
     eStatsT = 0;
-    return writePack(true);
+    const ok = writePack(true);
+    if (statsFlush) {
+      try {
+        statsFlush();
+      } catch (e) {
+      }
+    }
+    return ok;
   }
   function writePack(countsOnly) {
     const layer = {}, stats = {}, days = pack.days || {}, open = {}, closed = {};
@@ -8792,7 +8878,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-15";
+  var E_BUILT = "2026-10-16";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -9152,7 +9238,7 @@ What you type stays in this browser only.`;
     ["sealed", "exportsSealed"].forEach((f) => {
       if (typeof doc[f] !== "boolean") bad.push(f + ": wanted true or false");
     });
-    if (!Number.isInteger(doc.epoch) || doc.epoch < 1) bad.push("epoch: wanted a whole number from 1");
+    if (!Number.isInteger(doc.epoch) || doc.epoch < 1) bad.push("key number: wanted a whole number from 1");
     if (!Array.isArray(doc.catalogs)) bad.push("catalogs: wanted the list of catalog ids");
     if (!Array.isArray(doc.roster)) bad.push("roster: wanted the list of desks");
     if (bad.length) {
@@ -9180,7 +9266,7 @@ What you type stays in this browser only.`;
       }
       seen[d.id] = 1;
       if (e.wrap !== void 0 && !(e.wrap && typeof e.wrap === "object" && e.wrap.epoch === doc.epoch && hex64.test(v2Str(e.wrap.enc)) && /^[0-9a-f]{96}$/.test(v2Str(e.wrap.ct)))) {
-        problems.push(where + "a wrap that is not the team key for epoch " + doc.epoch + ", the desk stands without it");
+        problems.push(where + "a wrap that is not the team's current key, the desk stands without it");
         e = Object.assign({}, e);
         delete e.wrap;
       }
@@ -9188,7 +9274,7 @@ What you type stays in this browser only.`;
     });
     const rc = doc.recovery;
     if (rc !== void 0 && !(rc && typeof rc === "object" && rc.epoch === doc.epoch && rc.kdf === "scrypt" && rc.cipher === "aes-256-gcm" && [rc.N, rc.r, rc.p].every((x) => Number.isInteger(x) && x > 0) && /^[0-9a-f]{32}$/.test(v2Str(rc.salt)) && /^[0-9a-f]{24}$/.test(v2Str(rc.iv)) && /^[0-9a-f]{96}$/.test(v2Str(rc.ct)))) {
-      problems.push("team recovery: wanted the team key for epoch " + doc.epoch + " under a passphrase, the team stands without it");
+      problems.push("team recovery: wanted the team's current key under a passphrase, the team stands without it");
       delete team.recovery;
     }
     out.team = team;
@@ -9321,7 +9407,7 @@ What you type stays in this browser only.`;
     const g = entry("grew", data.grew);
     if (g) {
       if (!V2_ID_RE.test(v2Str(g.id))) out.push("grew.id: " + v2Missing(g.id) + ", wanted the id of the catalog it grew from");
-      if (typeof g.rev !== "number" || !Number.isFinite(g.rev) || g.rev < 0) out.push("grew.rev: " + v2Missing(g.rev) + ", wanted the edition number it grew from");
+      if (typeof g.rev !== "number" || !Number.isFinite(g.rev) || g.rev < 0) out.push("grew.rev: " + v2Missing(g.rev) + ", wanted the rev it grew from");
       if (!V2_SHA_RE.test(v2Str(g.sha))) out.push("grew.sha: " + v2Missing(g.sha) + ", wanted sha256: and 64 lower-case hex characters");
     }
     const d = entry("desk", data.desk);
@@ -9412,7 +9498,7 @@ What you type stays in this browser only.`;
     if (!V2_ID_RE.test(v2Str(data.id)))
       out.push("id: " + (data.id == null ? "absent" : "malformed") + ", wanted 3 to 64 of a-z, 0-9 and the hyphen");
     if (!(Number.isFinite(+data.rev) && +data.rev >= 0))
-      out.push("rev: " + (data.rev == null ? "absent" : "not a number") + ", wanted the edition counter");
+      out.push("rev: " + (data.rev == null ? "absent" : "not a number") + ", wanted the catalog's rev, a number from 0");
     const codes = v2Codes(data);
     const primary = codes[0] || "en";
     v2LangProblems(data, codes, out);
@@ -10859,6 +10945,7 @@ What you type stays in this browser only.`;
     TAB_FLOOR_W: () => TAB_FLOOR_W,
     TAB_KEY: () => TAB_KEY,
     activeHeard: () => activeHeard,
+    activeTabName: () => activeTabName,
     activeWords: () => activeWords,
     addTab: () => addTab,
     applyTabWidths: () => applyTabWidths,
@@ -11199,6 +11286,16 @@ What you type stays in this browser only.`;
       hint: "Copy the focused macro in the other language",
       def: { code: "Enter", key: "Enter", ctrl: 0, alt: 0, shift: 1, meta: 0 },
       inField: 0,
+      fixed: 1
+    },
+    /* The platform's own undo, so fixed: the Undo bubble's while one stands (keydown.js), a field's own otherwise.
+       The bubble's button names it as ui-lang.js UNDO_KEY. */
+    {
+      id: "undo",
+      label: "Undo",
+      hint: "Take back what was just done, while its Undo button is on screen",
+      def: { code: "KeyZ", key: "z", ctrl: 1, alt: 0, shift: 0, meta: 0 },
+      inField: 1,
       fixed: 1
     },
     {
@@ -11767,6 +11864,11 @@ What you type stays in this browser only.`;
       return String(tb.pax).trim().split(/\s+/)[0];
     }
     return t("Tab") + " " + ((i != null ? i : tabs.indexOf(tb)) + 1);
+  }
+  function activeTabName() {
+    const i = tabs.findIndex((x) => x.id === activeTabId);
+    if (i < 0) return "";
+    return tabLabel(Object.assign({}, tabs[i], { pax: pax ? pax.value : tabs[i].pax }), i);
   }
   function snapshotActiveTab() {
     if (!activeTabId) return;
@@ -12592,6 +12694,12 @@ What you type stays in this browser only.`;
         }
         if (e.target.closest(".tab-x")) return;
         switchTab(tb.id);
+      };
+      b.onmousedown = (e) => {
+        if (e.button === 1) e.preventDefault();
+      };
+      b.onauxclick = (e) => {
+        if (e.button === 1) closeTab(tb.id, e);
       };
       bar.appendChild(b);
     });
@@ -13567,6 +13675,7 @@ What you type stays in this browser only.`;
   var catalog_exports = {};
   __export(catalog_exports, {
     E_CATALOG_KEY: () => E_CATALOG_KEY,
+    E_CATALOG_REV: () => E_CATALOG_REV,
     E_CATALOG_STORE: () => E_CATALOG_STORE,
     E_CATALOG_VERSION: () => E_CATALOG_VERSION,
     catalogDocOf: () => catalogDocOf,
@@ -13586,6 +13695,8 @@ What you type stays in this browser only.`;
     eWatchName: () => eWatchName,
     eWatchPut: () => eWatchPut,
     eWatchSupported: () => eWatchSupported,
+    editionLabel: () => editionLabel,
+    editionNameOf: () => editionNameOf,
     normaliseCatalog: () => normaliseCatalog,
     parseCatalogFile: () => parseCatalogFile,
     storeCatalog: () => storeCatalog,
@@ -14025,8 +14136,17 @@ What you type stays in this browser only.`;
     if (!s) return "";
     return /^[0-9][0-9.]*$/.test(s) ? "v" + s : s;
   }
-  function catalogStamp(edition, mtime) {
-    return catalogVersionLabel(edition) || fileStamp(mtime);
+  function catalogStamp(edition, mtime, rev) {
+    return String(edition == null ? "" : edition).trim() ? editionLabel(editionNameOf({ version: edition, rev })) : fileStamp(mtime);
+  }
+  function editionNameOf(c) {
+    const e = catalogVersionLabel(c && c.version), n = /^v?([0-9][0-9.]*)$/.exec(e);
+    if (e && !n) return { e };
+    if (c && c.rev != null && c.rev !== "" && Number.isFinite(+c.rev)) return { r: +c.rev };
+    return n ? { r: /^[0-9]+$/.test(n[1]) ? +n[1] : n[1] } : { e: "" };
+  }
+  function editionLabel(name) {
+    return name && name.r != null ? t("rev {R}").split("{R}").join(String(name.r)) : String(name && name.e || "");
   }
   function eCatalogAccepted(c) {
     try {
@@ -14104,9 +14224,11 @@ What you type stays in this browser only.`;
     if (typeof c.facts === "string" && c.facts) setCatalogFacts(c.facts);
     if (Array.isArray(c.who)) setCatalogWho(normWhoList(c.who));
     E_CATALOG_VERSION = c.version != null ? String(c.version) : null;
+    E_CATALOG_REV = c.rev != null && Number.isFinite(+c.rev) ? +c.rev : null;
     return true;
   }
   var E_CATALOG_VERSION = null;
+  var E_CATALOG_REV = null;
   function eResetCatalog() {
     resetContent();
     Object.keys(BASE_CATS).forEach((k) => {
@@ -14120,19 +14242,25 @@ What you type stays in this browser only.`;
     eApplyRoles(null);
     resetStock();
     E_CATALOG_VERSION = null;
+    E_CATALOG_REV = null;
   }
 
   // src/modules/catalog-trust.js
   var catalog_trust_exports = {};
   __export(catalog_trust_exports, {
     catalogTrust: () => catalogTrust,
+    heldCatalogPrint: () => heldCatalogPrint,
     heldCatalogSigner: () => heldCatalogSigner,
     heldCatalogTrust: () => heldCatalogTrust,
+    keyPrintOf: () => keyPrintOf,
     rearmTrustRecheck: () => rearmTrustRecheck,
     recheckHeldTrust: () => recheckHeldTrust,
     recordCatalogTrust: () => recordCatalogTrust,
+    settleHeldTrust: () => settleHeldTrust,
+    settleHeldTrustWithin: () => settleHeldTrustWithin,
     trustKeyHtml: () => trustKeyHtml,
     trustOfferLine: () => trustOfferLine,
+    trustPrint: () => trustPrint,
     trustSettled: () => trustSettled,
     whenTrusted: () => whenTrusted
   });
@@ -14150,6 +14278,7 @@ What you type stays in this browser only.`;
     eCatalogFolder: () => eCatalogFolder,
     eCatalogFolderShort: () => eCatalogFolderShort,
     eCatalogIn: () => eCatalogIn,
+    eCatalogLeads: () => eCatalogLeads,
     eCatalogMtime: () => eCatalogMtime,
     eCatalogRing: () => eCatalogRing,
     eCatalogTaken: () => eCatalogTaken,
@@ -14159,10 +14288,13 @@ What you type stays in this browser only.`;
     eHasCatalogSaver: () => eHasCatalogSaver,
     eHasShared: () => eHasShared,
     eHost: () => eHost,
+    eHotkey: () => eHotkey,
+    eHotkeyLabel: () => eHotkeyLabel,
     eLoadedCatalogFile: () => eLoadedCatalogFile,
     eOnCatalogCopy: () => eOnCatalogCopy,
     eOnCatalogListing: () => eOnCatalogListing,
     eOpenCatalogFolder: () => eOpenCatalogFolder,
+    eOpenPicker: () => eOpenPicker,
     eOpenedRefused: () => eOpenedRefused,
     eOpenedWith: () => eOpenedWith,
     ePickCatalogFile: () => ePickCatalogFile,
@@ -14223,6 +14355,16 @@ What you type stays in this browser only.`;
       return Promise.resolve(h.catalogRing()).then((v) => typeof v === "string" ? v : "").catch(() => "");
     } catch (e) {
       return Promise.resolve("");
+    }
+  }
+  function eCatalogLeads() {
+    const h = eHost();
+    if (!h || typeof h.catalogLeads !== "function") return Promise.resolve([]);
+    const ok = (l) => !!l && typeof l === "object" && typeof l.keyId === "string" && /^[0-9a-f]{64}$/.test(String(l.public || ""));
+    try {
+      return Promise.resolve(h.catalogLeads()).then((v) => Array.isArray(v) ? v.filter(ok).map((l) => ({ keyId: l.keyId, public: String(l.public) })) : []).catch(() => []);
+    } catch (e) {
+      return Promise.resolve([]);
     }
   }
   function eHanded() {
@@ -14453,19 +14595,59 @@ What you type stays in this browser only.`;
     document.body.classList.toggle("e-band-pale", pale);
     document.body.classList.toggle("e-band-deep", ok && !pale);
   }
-  function answerStats(req) {
-    const h = eHost();
-    if (!h || typeof h.writeStats !== "function") return;
+  var statsAsk = null;
+  function statsInfo() {
     const cat = storedCatalog();
-    const doc = statsDoc(pack, {
+    return {
       engine: E_VERSION,
-      period: { from: req && req.from, to: req && req.to },
+      period: statsAsk ? { from: statsAsk.from, to: statsAsk.to } : null,
       catalog: cat && cat.id ? { id: cat.id, rev: cat.rev } : null
+    };
+  }
+  function sendStats(close, askId) {
+    const h = eHost();
+    if (!h || !statsAsk) return;
+    const fn = close && typeof h.closeStats === "function" ? h.closeStats : h.writeStats;
+    if (typeof fn !== "function") return;
+    let doc;
+    try {
+      doc = statsDoc(pack, statsInfo());
+    } catch (e) {
+      return;
+    }
+    const text = JSON.stringify(doc);
+    const sent = askId && !close ? fn(text, String(askId)) : fn(text);
+    Promise.resolve(sent).catch(() => {
     });
-    Promise.resolve(h.writeStats(JSON.stringify(doc))).then((r) => {
-      if (r && r.ok && r.syncMs) lsSet("eLastSync", String(r.syncMs));
-    }).catch(() => {
-    });
+  }
+  function answerStats(req) {
+    if (req && req.from && req.to) statsAsk = { from: String(req.from), to: String(req.to) };
+    sendStats(false, req && typeof req.id === "string" ? req.id : "");
+  }
+  setStatsFlush(() => sendStats(false));
+  function eHotkey() {
+    const h = eHost();
+    if (!h || typeof h.hotkeyState !== "function") return null;
+    let st = null;
+    try {
+      st = h.hotkeyState();
+    } catch (e) {
+      st = null;
+    }
+    return st && typeof st === "object" ? { accel: String(st.accel || ""), held: !!st.held, taken: !!st.taken } : null;
+  }
+  function eHotkeyLabel(accel) {
+    return String(accel || "").split("+").map((k) => k === "Control" ? "Ctrl" : k).join("+");
+  }
+  function eOpenPicker() {
+    const h = eHost();
+    if (!h || typeof h.openPicker !== "function") return false;
+    try {
+      h.openPicker();
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
   function dispatchTabChord(shift) {
     try {
@@ -14494,6 +14676,7 @@ What you type stays in this browser only.`;
     if (typeof h.onAccent === "function") h.onAccent(eSetAccent);
     if (typeof h.onAskClose === "function" && typeof h.closeAnswer === "function")
       h.onAskClose(() => askClose((a) => {
+        if (a === "none" || a === "close") sendStats(true);
         try {
           h.closeAnswer(a);
         } catch (e) {
@@ -14614,7 +14797,7 @@ What you type stays in this browser only.`;
     return eHasJoin() && !(joinNow && (joinNow.join || leadToShow()));
   }
   function leadToShow() {
-    return (joinNow && joinNow.leads || []).filter((l) => l.admitted && !l.seen)[0] || null;
+    return (joinNow && joinNow.leads || []).filter((l) => l.admitted && !l.seen && !l.removed)[0] || null;
   }
   function teamLeads() {
     return (joinNow && joinNow.leads || []).slice();
@@ -14648,7 +14831,8 @@ What you type stays in this browser only.`;
         code: String(o.code || ""),
         host: String(o.host || ""),
         cloud: String(o.cloud || ""),
-        local: o.local === true
+        local: o.local === true,
+        left: String(o.left || "")
       };
       joinRead = sent;
       joinBlob = "";
@@ -14699,7 +14883,11 @@ What you type stays in this browser only.`;
         team: String(l.team),
         print: String(l.print || ""),
         admitted: l.admitted === true,
-        seen: l.seen === true
+        seen: l.seen === true,
+        lead: String(l.lead || ""),
+        folder: String(l.folder || ""),
+        removed: l.removed === true,
+        policy: l.policy === true
       })) : []
     };
     if (s.joined && s.joined.file) {
@@ -14783,8 +14971,9 @@ What you type stays in this browser only.`;
     };
     if (joinMode === "confirm" && joinOffer) {
       const o = joinOffer, ask = t("Ask the team's lead for this invitation's check code, and type its five digits here.");
+      const title = o.left ? t("This desk left this team on {DATE}. Join it again?").split("{DATE}").join(leftDay(o.left)) : t("Join this team?");
       return {
-        title: t("Join this team?"),
+        title,
         line: joinWhere(o),
         body: '<div class="e-join-meta">' + esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder)) + '</div><div class="e-join-meta">' + esc(t("Lead: {NAME}").split("{NAME}").join(o.lead)) + '</div><div class="e-join-ask">' + esc(ask) + '</div><div class="e-join-why">' + esc(t("Only the real invitation gives this code, so it confirms the invitation comes from the team's own lead.")) + '</div><input type="text" class="e-join-check" data-join-check maxlength="5" inputmode="numeric" spellcheck="false" autocomplete="off" aria-label="' + esc(t("Check")) + '" value="' + esc(joinTyped) + '"><div class="e-join-ask e-join-miss" data-join-miss' + (typedWrong() ? "" : " hidden") + ">" + esc(t("This code does not match this invitation. Ask the lead again before joining.")) + "</div>" + joinDisclosure(),
         acts: [["invite", t("Join this team"), !typedOk()], ["back", t("Cancel")]]
@@ -14797,6 +14986,15 @@ What you type stays in this browser only.`;
       acts: [["back", t("Cancel")]]
     };
     return null;
+  }
+  function leftDay(iso) {
+    const d = new Date(String(iso || "")), lang2 = uiLang();
+    if (isNaN(d.getTime())) return String(iso || "");
+    try {
+      return new Intl.DateTimeFormat(lang2 === "en" ? "en-GB" : lang2, { day: "numeric", month: "long", year: "numeric" }).format(d);
+    } catch (e) {
+      return String(iso).slice(0, 10);
+    }
   }
   function joinParts() {
     const j = joinNow && joinNow.join, s = joinNow && joinNow.sealed, who = agentName() || t("this desk"), l = leadToShow();
@@ -14837,11 +15035,20 @@ What you type stays in this browser only.`;
       body: joinCodeHtml("") + meta,
       acts: [["cancel", t("Cancel the request")]]
     };
+    const ask = '<div class="e-join-meta">' + esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who)) + "</div>" + joinDisclosure();
+    const acts = [["ask", t("Ask to join")], ["join", t("Join a team")], ["load", t("Load another catalog")]];
+    const gone = s ? (joinNow && joinNow.leads || []).filter((x) => x.team === s.team && x.removed)[0] : null;
+    if (gone) return {
+      title: gone.lead ? t("{LEAD}'s team no longer includes this desk").split("{LEAD}").join(gone.lead) : t("The team no longer includes this desk"),
+      line: t("Once the team's lead lets this desk in again, the catalog opens here by itself."),
+      body: ask,
+      acts
+    };
     return {
       title: t("{FILE} is sealed for its team").split("{FILE}").join(s ? s.file : ""),
       line: t("Once the team's lead lets this desk in, the catalog opens here by itself."),
-      body: '<div class="e-join-meta">' + esc(t("Asks as {NAME}, the name in Settings.").split("{NAME}").join(who)) + "</div>" + joinDisclosure(),
-      acts: [["ask", t("Ask to join")], ["join", t("Join a team")], ["load", t("Load another catalog")]]
+      body: ask,
+      acts
     };
   }
   function joinAct(act) {
@@ -14949,7 +15156,7 @@ What you type stays in this browser only.`;
     });
   }
   function forgetTeamLead(team, then) {
-    return joinAsk("forget", team).then((v) => {
+    return joinAsk("leave", team).then((v) => {
       if (typeof then === "function") then();
       return v;
     });
@@ -14958,8 +15165,34 @@ What you type stays in this browser only.`;
   // src/modules/catalog-trust.js
   var TRUST_KEY = "CatalogTrust";
   var SIGNER_KEY = "CatalogSigner";
+  var SIGNER_PUB_KEY = "CatalogSignerPub";
   var TRUST_WAIT_MS = 2e3;
   var TRUST_OF = typeof WeakMap === "function" ? /* @__PURE__ */ new WeakMap() : null;
+  function keyPrintOf(pubHex) {
+    const subtle = globalThis.crypto && globalThis.crypto.subtle;
+    if (!subtle || !/^[0-9a-f]{64}$/.test(String(pubHex || ""))) return Promise.resolve("");
+    const raw = new Uint8Array(32);
+    for (let i = 0; i < 32; i++) raw[i] = parseInt(pubHex.slice(i * 2, i * 2 + 2), 16);
+    return subtle.digest("SHA-256", raw).then((buf) => {
+      const b = new Uint8Array(buf);
+      let hex = "";
+      for (let i = 0; i < 8; i++) hex += b[i].toString(16).padStart(2, "0");
+      return hex;
+    }).catch(() => "");
+  }
+  function deskSigState(doc, leads) {
+    const sig = doc.sig;
+    const kid = String(sig && sig.keyId != null ? sig.keyId : ""), id = String(doc.id == null ? "" : doc.id);
+    const byRing = () => eCatalogRing().then((text) => {
+      const ring = v2RingRead(text).ring;
+      return v2SigState(doc, ring).then((s) => ({ state: s, pub: s === V2_SIG_VALID ? String(ring[id][kid]) : "" }));
+    });
+    if (!leads.length) return byRing();
+    if (!sig || typeof sig !== "object" || sig.value == null || String(sig.value) === "") return Promise.resolve({ state: V2_SIG_NONE, pub: "" });
+    const formed = sig.alg === V2_SIG_ALG && /^[0-9a-f]{128}$/.test(String(sig.value));
+    const byLead = (l) => formed ? v2SigState(doc, { [id]: { [kid]: l.public } }).then((s) => s === V2_SIG_VALID ? l.public : "") : Promise.resolve("");
+    return leads.reduce((was, l) => was.then((pub) => pub || byLead(l)), Promise.resolve("")).then((pub) => pub ? { state: V2_SIG_VALID, pub } : byRing().then((r) => ({ pub: "", state: r.state === V2_SIG_INVALID || r.state === V2_SIG_UNKNOWN && leads.some((l) => l.keyId === kid) ? V2_SIG_INVALID : V2_SIG_UNKNOWN })));
+  }
   function catalogTrust(c) {
     const doc = catalogDocOf(c);
     if (!doc || !TRUST_OF) return Promise.resolve("");
@@ -14971,18 +15204,28 @@ What you type stays in this browser only.`;
     } catch (e) {
       snap = null;
     }
-    const entry = { done: false, state: "" };
-    entry.wait = (snap ? eCatalogRing().then((text) => v2SigState(snap, v2RingRead(text).ring)) : Promise.resolve("")).catch(() => "").then((s) => {
+    const entry = { done: false, state: "", pub: "", print: "" };
+    entry.wait = (snap ? eCatalogLeads().then((leads) => deskSigState(snap, leads)) : Promise.resolve({ state: "", pub: "" })).then((r) => keyPrintOf(r.pub).then((print) => ({ state: r.state, pub: r.pub, print }))).catch(() => ({ state: "", pub: "", print: "" })).then((r) => {
       entry.done = true;
-      entry.state = String(s || "");
+      entry.state = String(r.state || "");
+      entry.pub = entry.state === V2_SIG_VALID ? String(r.pub || "") : "";
+      entry.print = entry.pub ? String(r.print || "") : "";
       return entry.state;
     });
     TRUST_OF.set(c, entry);
     return entry.wait;
   }
-  function trustSettled(c) {
+  function trustEntry(c) {
     const e = TRUST_OF && c && typeof c === "object" ? TRUST_OF.get(c) : null;
-    return e && e.done ? e.state : "";
+    return e && e.done ? e : null;
+  }
+  function trustSettled(c) {
+    const e = trustEntry(c);
+    return e ? e.state : "";
+  }
+  function trustPrint(c) {
+    const e = trustEntry(c);
+    return e ? e.print : "";
   }
   function whenTrusted(c) {
     return new Promise((done) => {
@@ -15000,17 +15243,27 @@ What you type stays in this browser only.`;
     if (kid) nsSet(SIGNER_KEY, kid);
     else nsDel(SIGNER_KEY);
   }
-  function recordCatalogTrust(c) {
-    const s = trustSettled(c);
-    if (s) nsSet(TRUST_KEY, s);
+  var heldPrint = "";
+  function holdTrust(c, state) {
+    if (state) nsSet(TRUST_KEY, state);
     else nsDel(TRUST_KEY);
-    rememberSigner(c, s);
+    rememberSigner(c, state);
+    const e = trustEntry(c), pub = state === V2_SIG_VALID && e ? e.pub : "";
+    if (pub) nsSet(SIGNER_PUB_KEY, pub);
+    else nsDel(SIGNER_PUB_KEY);
+    heldPrint = pub ? e.print : "";
+  }
+  function recordCatalogTrust(c) {
+    holdTrust(c, trustSettled(c));
   }
   function heldCatalogTrust() {
     return nsGet(TRUST_KEY) || "";
   }
   function heldCatalogSigner() {
     return nsGet(SIGNER_KEY) || "";
+  }
+  function heldCatalogPrint() {
+    return heldCatalogTrust() === V2_SIG_VALID ? heldPrint : "";
   }
   var trustRechecked = false;
   function rearmTrustRecheck() {
@@ -15021,17 +15274,54 @@ What you type stays in this browser only.`;
     trustRechecked = true;
     if (eCatalogSignature(found) !== eCatalogSignature(held)) return;
     catalogTrust(found).then((s) => {
-      if (!s || s === heldCatalogTrust()) return;
-      nsSet(TRUST_KEY, s);
-      rememberSigner(found, s);
+      const e = trustEntry(found);
+      if (!s || s === heldCatalogTrust() && (e ? e.pub : "") === (nsGet(SIGNER_PUB_KEY) || "")) return;
+      holdTrust(found, s);
       if (typeof then === "function") then();
     });
   }
-  function trustKeyHtml(state, keyId) {
+  function settleHeldTrust(found, held) {
+    let lowered = false;
+    return eCatalogLeads().then((leads) => {
+      const pub = nsGet(SIGNER_PUB_KEY) || "";
+      if (!leads.length || heldCatalogTrust() !== V2_SIG_VALID || leads.some((l) => l.public === pub)) return;
+      const unconfirmed = () => {
+        nsSet(TRUST_KEY, V2_SIG_UNKNOWN);
+        nsDel(SIGNER_KEY);
+        nsDel(SIGNER_PUB_KEY);
+        lowered = true;
+      };
+      if (!found || !held || eCatalogSignature(found) !== eCatalogSignature(held)) {
+        unconfirmed();
+        return;
+      }
+      return catalogTrust(found).then((s) => {
+        if (!s) {
+          unconfirmed();
+          return;
+        }
+        holdTrust(found, s);
+        lowered = s !== V2_SIG_VALID;
+      });
+    }).then(() => keyPrintOf(nsGet(SIGNER_PUB_KEY) || "")).then((p) => {
+      heldPrint = p;
+    }).catch(() => {
+    }).then(() => lowered);
+  }
+  function settleHeldTrustWithin(found, held) {
+    return new Promise((done) => {
+      const late = setTimeout(() => done(false), TRUST_WAIT_MS);
+      settleHeldTrust(found, held).then((lowered) => {
+        clearTimeout(late);
+        done(lowered);
+      });
+    });
+  }
+  function trustKeyHtml(state, print) {
     if (!state) return '<span class="ec-key" aria-hidden="true"></span>';
     const word = esc(t(state === V2_SIG_NONE ? "Unsigned" : "Signed"));
-    const lead = /^studio-[0-9a-f]{16}$/.test(String(keyId || "")) ? String(keyId).slice(7) : "";
-    const tip = state === V2_SIG_INVALID ? t("This file has changed since it was signed.") : state === V2_SIG_UNKNOWN ? t("This file is signed with a key this computer does not know.") : state === V2_SIG_VALID && keyId ? t("This file is signed with the key {KEY}.").split("{KEY}").join(lead ? leadKeyText(lead) : keyId) : "";
+    const lead = state === V2_SIG_VALID && /^[0-9a-f]{16}$/.test(String(print || "")) ? String(print) : "";
+    const tip = state === V2_SIG_INVALID ? t("This file has changed since it was signed.") : state === V2_SIG_UNKNOWN ? t("This file is signed with a key this computer does not know.") : lead ? t("This file is signed with the key {KEY}.").split("{KEY}").join(leadKeyText(lead)) : "";
     return '<span class="ec-key' + (state === V2_SIG_VALID ? " on" : "") + '" role="img" data-trust="' + esc(state) + '" aria-label="' + word + '"' + (tip ? ' tabindex="0" data-tip="' + esc(tip) + '"' + (lead ? ' data-tip-key="' + lead + '" data-tip-kind="studio"' : "") : ' title="' + word + '"') + ">" + ICON_KEY + "</span>";
   }
   function trustOfferLine(state, updating) {
@@ -15056,6 +15346,7 @@ What you type stays in this browser only.`;
     tourAfterRestart: () => tourAfterRestart,
     tourDueAtBoot: () => tourDueAtBoot,
     tourHasFocus: () => tourHasFocus,
+    tourHeardPick: () => tourHeardPick,
     wireTourUi: () => wireTourUi
   });
 
@@ -16584,9 +16875,9 @@ What you type stays in this browser only.`;
 
   // src/modules/edition-marks.js
   var EDITION_MARKS = "EditionMarks";
-  function editionMarksFrom(held, changes, v) {
+  function editionMarksFrom(held, changes, name) {
     const was = new Map((held && held.cards || []).map((m) => [String(m.id), m]));
-    const out = { v: String(v || ""), cards: {} };
+    const out = name && name.r != null ? { r: name.r, cards: {} } : { e: String(name && name.e || ""), cards: {} };
     (changes && changes.items || []).forEach((it) => {
       if (it.kind !== "changed" && it.kind !== "new") return;
       const mark = { k: it.kind };
@@ -16614,6 +16905,7 @@ What you type stays in this browser only.`;
     try {
       const v = JSON.parse(lyGet(EDITION_MARKS) || "null");
       if (v && typeof v === "object" && v.cards && typeof v.cards === "object") marksNow = v;
+      if (marksNow && marksNow.v != null && marksNow.e == null && marksNow.r == null) Object.assign(marksNow, editionNameOf({ version: marksNow.v }));
     } catch (e) {
     }
     return marksNow;
@@ -16633,7 +16925,7 @@ What you type stays in this browser only.`;
   }
   function editionMarkOf(id) {
     const all = editionMarks(), m = all && all.cards[String(id)];
-    return m ? { k: m.k === "new" ? "new" : "changed", v: all.v } : null;
+    return m ? { k: m.k === "new" ? "new" : "changed", e: String(all.e || ""), r: all.r != null ? all.r : null } : null;
   }
   function editionWasText(id, key) {
     const all = editionMarks(), m = all && all.cards[String(id)];
@@ -19352,11 +19644,12 @@ What you type stays in this browser only.`;
     schedulePillsCollapse();
   }
   function editionPill(n) {
-    const v = (editionMarks() || {}).v || "";
+    const ed = editionMarks() || {}, rev = ed.r != null;
+    const said = (dated, byRev) => rev ? byRev.split("{R}").join(String(ed.r)) : dated.split("{E}").join(String(ed.e || ""));
     const b = document.createElement("div");
     b.className = "pill pill-ed" + (editionView ? " on" : "");
-    b.innerHTML = '<span class="pill-lab" data-i18n-skip>' + esc(t("Changes in {V}").split("{V}").join(v)) + "</span> <b>" + n + "</b>";
-    const tip = t("Only the cards edition {V} changed or added").split("{V}").join(v);
+    b.innerHTML = '<span class="pill-lab" data-i18n-skip>' + esc(said(t("Changes in {E}"), t("Changes in rev {R}"))) + "</span> <b>" + n + "</b>";
+    const tip = said(t("Only the cards edition {E} changed or added"), t("Only the cards rev {R} changed or added"));
     b.title = tip;
     b.setAttribute("aria-label", tip);
     b.setAttribute("role", "button");
@@ -19379,7 +19672,7 @@ What you type stays in this browser only.`;
       hooks.railEchoRedraw(railBefore, relBefore);
       scrollRailTop();
       scheduleTabSave();
-      if (press2) editionSay(t("Cards edition {V} changed or added: {N}.").split("{V}").join(v).split("{N}").join(String(editionMarkedCount())));
+      if (press2) editionSay(said(t("Cards edition {E} changed or added: {N}."), t("Cards rev {R} changed or added: {N}.")).split("{N}").join(String(editionMarkedCount())));
     };
     return b;
   }
@@ -20084,7 +20377,7 @@ What you type stays in this browser only.`;
     if (m._custom || m._overridden || movedCardIds().has(m.id))
       cardH += '<span class="cbadge ed" title="' + esc(t("Changed or added by you, not what the catalog shipped")) + '">' + esc(t("mod")) + "</span>";
     const edMark = editionMarkOf(m.id);
-    if (edMark) cardH += '<span class="cbadge edn" title="' + esc((edMark.k === "new" ? t("New in edition {V}") : t("Changed in edition {V}")).split("{V}").join(edMark.v)) + '">' + esc(edMark.k === "new" ? t("new") : t("changed")) + "</span>";
+    if (edMark) cardH += '<span class="cbadge edn" title="' + esc(edMark.r != null ? (edMark.k === "new" ? t("New in rev {R}") : t("Changed in rev {R}")).split("{R}").join(String(edMark.r)) : (edMark.k === "new" ? t("New in edition {E}") : t("Changed in edition {E}")).split("{E}").join(edMark.e)) + '">' + esc(edMark.k === "new" ? t("new") : t("changed")) + "</span>";
     const favTip = t(fav ? "Remove from Favourites" : "Add to Favourites");
     const hideTip = t(m._hidden ? "Show this card again" : fav ? "Put this card away: it greys out at the foot of this category and loses its star" : "Put this card away: it greys out at the foot of this category");
     const _note = noteFor(m);
@@ -21545,7 +21838,7 @@ What you type stays in this browser only.`;
       const b = e.target.closest("button[data-act]");
       if (!b) return;
       const act = b.dataset.act;
-      if (act === "settings" || act === "manage" || act === "tour" || act === "about" || act === "join") menuReturn = null;
+      if (act === "settings" || act === "manage" || act === "tour" || act === "about" || act === "join" || act === "picker") menuReturn = null;
       if (act === "settings") menuScreen(hooks.openSettings);
       else if (act === "manage") menuScreen(hooks.openManage);
       else if (act === "tour") menuScreen(hooks.startTour);
@@ -21555,6 +21848,9 @@ What you type stays in this browser only.`;
         toggleRail();
       } else if (act === "pills") {
         togglePills();
+      } else if (act === "picker") {
+        closeSettingsMenu();
+        eOpenPicker();
       } else if (act === "quit") {
         closeSettingsMenu();
         const h = eHost();
@@ -21654,7 +21950,17 @@ What you type stays in this browser only.`;
     }
     run();
   }
+  function syncPickerRow() {
+    const row = $("#menuPicker"), h = eHost(), hk = eHotkey();
+    if (!row) return;
+    row.hidden = !hk || !h || typeof h.openPicker !== "function";
+    if (row.hidden) return;
+    const keys = hk.held ? eHotkeyLabel(hk.accel) : "";
+    row.innerHTML = "<span>" + esc(t("Bring the replies over any window")) + "</span>" + (keys ? "<kbd data-i18n-skip>" + esc(keys) + "</kbd>" : "");
+    row.title = t("The replies beside the pointer, over any program; the combination is changed in Settings");
+  }
   function syncSettingsMenu() {
+    syncPickerRow();
     const pillsBtn = $("#menuPills");
     const railBtn = $("#menuRail");
     if (pillsBtn) {
@@ -22667,6 +22973,19 @@ What you type stays in this browser only.`;
     if (modalOpen()) closeModal();
     if (factsPanelOpen()) closeFactsPanel();
   }
+  var tourPicks = 0;
+  var tourStepPicks = 0;
+  function tourHeardPick() {
+    tourPicks++;
+    tourActSoon();
+  }
+  function hotkeyHeld() {
+    const hk = eHotkey();
+    return hk && hk.held ? hk.accel : "";
+  }
+  function hotkeyChips() {
+    return eHotkeyLabel(hotkeyHeld()).split("+").map((k) => "<kbd>" + esc(k) + "</kbd>").join("+");
+  }
   function wheelShown() {
     return !document.body.classList.contains("role-waits");
   }
@@ -22827,6 +23146,18 @@ What you type stays in this browser only.`;
       body: "Click <b>Menu</b>: the rest of Etiuda opens from there.",
       done: () => menuOpen(),
       open: () => openSettingsMenu(),
+      pad: 8
+    },
+    {
+      id: "picker",
+      sel: () => menuTarget("picker"),
+      side: menuSide,
+      title: "Replies over any window",
+      body: () => t("{KEY} brings these replies over any program, beside the pointer: a word finds the reply, and Enter copies it and goes back to the window you were in. Press {KEY} to try it; Esc closes it.").split("{KEY}").join(hotkeyChips()),
+      when: () => !!hotkeyHeld(),
+      done: () => tourPicks > tourStepPicks,
+      open: () => eOpenPicker(),
+      menu: true,
       pad: 8
     },
     {
@@ -23026,6 +23357,7 @@ What you type stays in this browser only.`;
     }
     const keyed = tourHasFocus();
     tourIdx = i;
+    tourStepPicks = tourPicks;
     const step = TOUR_STEPS[i];
     const els = tourEls();
     ssSet(TOUR_AT, step.id);
@@ -24854,7 +25186,7 @@ What you type stays in this browser only.`;
     ejectCatalog: () => ejectCatalog
   });
   function catalogKeep() {
-    return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample"), nsKey("CatalogTrust"), nsKey("CatalogSigner"), nsKey("CatalogFrom")];
+    return [E_CATALOG_STORE, E_CATALOG_KEY, nsKey("Sample"), nsKey("CatalogTrust"), nsKey("CatalogSigner"), nsKey("CatalogSignerPub"), nsKey("CatalogFrom")];
   }
   var E_WIPE_KEEP = ["eCatalogFolder"];
   var SHARE_KEEP = ["eAgent", "eLayers"];
@@ -25243,7 +25575,15 @@ What you type stays in this browser only.`;
     row("host", S(() => eHost() ? "desktop app" : "browser"));
     row("theme", S(() => (document.documentElement.getAttribute("data-theme") || systemTheme()) + (themeChoice() ? " (chosen)" : " (system)")));
     sec("Catalog");
-    row("edition", S(() => E_CATALOG_VERSION != null ? catalogVersionLabel(E_CATALOG_VERSION) : "-"));
+    const edName = (() => {
+      try {
+        return E_CATALOG_VERSION != null ? editionNameOf({ version: E_CATALOG_VERSION, rev: E_CATALOG_REV }) : null;
+      } catch (e) {
+        return void 0;
+      }
+    })();
+    if (edName && edName.r != null) row("rev", String(edName.r));
+    else row("edition", edName === void 0 ? "unavailable" : edName && edName.e || "-");
     row("cards / macros", S(() => cards.length + " / " + catalogMacroCount({ cards })));
     row("intents / categories", S(() => intentOrder.length + " / " + Object.keys(CATS).length));
     row("content languages", S(() => CONTENT_LANGS.join(", ") + " (primary " + CONTENT_LANGS[0] + ")"));
@@ -27211,7 +27551,7 @@ What you type stays in this browser only.`;
     const row = (it, i) => '<button type="button" class="ed-row" data-ed-at="' + i + '"' + (i === at ? ' aria-current="true"' : "") + ">" + editionRowInner(it, o.held, c, sub) + "</button>";
     openDialog({
       cls: "ed-modal",
-      title: desk ? desk.title : t("What is new in edition {V}").split("{V}").join(o.version),
+      title: desk ? desk.title : o.ed && o.ed.r != null ? t("What is new in rev {R}").split("{R}").join(String(o.ed.r)) : t("What is new in edition {E}").split("{E}").join(o.ed && o.ed.e || ""),
       name: o.name,
       back: o.back,
       body: '<div class="ed-panel" data-i18n-skip><div class="ed-left">' + (note ? editionNoteHtml(note, "ed-note") : "") + editionCountsHtml(o.changes.counts) + '<div class="ed-list">' + items.map(row).join("") + '</div></div><div class="ed-pane" id="edPane" aria-live="polite"></div></div>',
@@ -27615,7 +27955,6 @@ What you type stays in this browser only.`;
         c: s.hers,
         held: s.team,
         changes,
-        version: "",
         name,
         keep: back,
         load: work,
@@ -27679,14 +28018,21 @@ What you type stays in this browser only.`;
   function eOfferCatalogAtBoot() {
     pinStoredFrom(eCatalog());
     nameHeldCatalog();
+    const settled = settleHeldTrust(eCatalog(), storedCatalog());
+    if (offerAtBoot()) settled.then((lowered) => {
+      if (lowered) offerAtBoot();
+    });
+  }
+  function offerAtBoot() {
     const at = +(nsGet("CatalogNoAt") || 0), mt = eCatalogMtime(), asked = eOpenedWith();
     if (!asked && tourDueAtBoot()) {
       afterTour(eOfferCatalogAtBoot);
-      return;
+      return false;
     }
     const found = eCatalog(), held = storedCatalog();
-    if (!asked && found && found.sample && held && !isCatalogUpdate(found, held)) return;
+    if (!asked && found && found.sample && held && !isCatalogUpdate(found, held)) return true;
     eOfferCatalog(null, "", "", asked || wholeThingEmpty() || !!(at && mt && mt > at), asked);
+    return true;
   }
   function toastIfSameCatalog(c) {
     const active = storedCatalog();
@@ -27733,7 +28079,7 @@ What you type stays in this browser only.`;
     return '<small class="ec-watch">' + esc(t("Watching")) + " <code>" + esc(eWatchName()) + '</code> · <span class="acts"><button type="button" class="act" data-ec-check="1" title="' + esc(t("Read that file again and offer it if it has changed")) + '">' + esc(t("Check for updates")) + '</button><span class="sep" aria-hidden="true">·</span><button type="button" class="act" data-ec-unwatch="1">' + esc(t("Stop watching")) + "</button></span></small>";
   }
   function ecRowHtml(o) {
-    return '<div class="ec-row' + (o.loaded ? " is-loaded" : "") + '"' + (o.file ? ' data-ec-file="' + esc(o.file) + '"' : "") + '><span class="ec-name"><b>' + esc(o.name) + "</b>" + (o.meta ? '<small class="ec-meta">' + o.meta + "</small>" : "") + (o.loaded ? ecWatchHtml() : "") + (o.extra || "") + "</span>" + (o.loaded ? loadedTickHtml() : "") + (o.newer && !o.sample ? '<span class="ec-tag" title="' + esc(t("Written after the catalog you have")) + '">' + esc(t("Newer")) + "</span>" : "") + (o.loaded && catalogEdited() ? '<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="' + esc(t("Save everything loaded now as a catalog file, your edits merged in")) + '">' + esc(t("Export…")) + "</button>" : "") + trustKeyHtml(o.trust || "", o.keyId || "") + (o.loaded ? ecActHtml("Eject", ICON_EJECT, ' data-ec-eject="1"') : ecActHtml("Load", ICON_LOAD, ' data-ec-load="' + esc(o.name) + '" data-ec-at="' + (+o.mtime || 0) + '"')) + "</div>";
+    return '<div class="ec-row' + (o.loaded ? " is-loaded" : "") + '"' + (o.file ? ' data-ec-file="' + esc(o.file) + '"' : "") + '><span class="ec-name"><b>' + esc(o.name) + "</b>" + (o.meta ? '<small class="ec-meta">' + o.meta + "</small>" : "") + (o.loaded ? ecWatchHtml() : "") + (o.extra || "") + "</span>" + (o.loaded ? loadedTickHtml() : "") + (o.newer && !o.sample ? '<span class="ec-tag" title="' + esc(t("Written after the catalog you have")) + '">' + esc(t("Newer")) + "</span>" : "") + (o.loaded && catalogEdited() ? '<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="' + esc(t("Save everything loaded now as a catalog file, your edits merged in")) + '">' + esc(t("Export…")) + "</button>" : "") + trustKeyHtml(o.trust || "", o.print || "") + (o.loaded ? ecActHtml("Eject", ICON_EJECT, ' data-ec-eject="1"') : ecActHtml("Load", ICON_LOAD, ' data-ec-load="' + esc(o.name) + '" data-ec-at="' + (+o.mtime || 0) + '"')) + "</div>";
   }
   function ecExportHtml() {
     return catalogEdited() ? '<button type="button" class="btn" id="mgExportCatalog" data-ec-export="1" title="' + esc(t("Save everything loaded now as a catalog file, your edits merged in")) + '">' + esc(t("Export…")) + "</button>" : "";
@@ -27750,10 +28096,10 @@ What you type stays in this browser only.`;
   function ecFileTrust(f) {
     const at = f.name + "|" + f.mtime;
     if (!ecTrustOf.has(at)) ecTrustOf.set(at, eReadCatalogFile(f.name).then((got) => {
-      if (!got) return { state: "", keyId: "" };
-      const c = parseCatalogFile(got.text), sig = (catalogDocOf(c) || {}).sig;
-      return whenTrusted(c).then((s) => ({ state: s, keyId: String(sig && sig.keyId || "") }));
-    }).catch(() => ({ state: "", keyId: "" })));
+      if (!got) return { state: "", print: "" };
+      const c = parseCatalogFile(got.text);
+      return whenTrusted(c).then((s) => ({ state: s, print: trustPrint(c) }));
+    }).catch(() => ({ state: "", print: "" })));
     return ecTrustOf.get(at);
   }
   var ecKeyBub = null;
@@ -27822,7 +28168,7 @@ What you type stays in this browser only.`;
     return intentOrder.filter((i) => !gone.has(intentIdAt(i))).length;
   }
   function loadedMeta(stamp) {
-    const ver = E_CATALOG_VERSION != null ? catalogVersionLabel(E_CATALOG_VERSION) : "";
+    const ver = E_CATALOG_VERSION != null ? editionLabel(editionNameOf({ version: E_CATALOG_VERSION, rev: E_CATALOG_REV })) : "";
     const parts2 = [
       ver || stamp,
       catalogCountsLine(
@@ -27844,7 +28190,7 @@ What you type stays in this browser only.`;
     const held = storedCatalog();
     const mine = eLoadedCatalogFile();
     recheckHeldTrust(eCatalog(), held, paintCatalogList);
-    Promise.all([eCatalogFiles(), eBranchIdentity(false)]).then(([all, me]) => {
+    Promise.all([eCatalogFiles(), eBranchIdentity(false), settleHeldTrustWithin(eCatalog(), held)]).then(([all, me]) => {
       if (!box.isConnected) return;
       const files = all.filter((f) => !f.desk);
       const shaped = (f) => !!f.desk && f.id.indexOf(f.desk.id + "-") === 0;
@@ -27859,7 +28205,7 @@ What you type stays in this browser only.`;
       const extraFor = (id, on) => on ? mineLine : id && id !== heldId && ownOf(id) ? ecMineHtml(t("Your edits to it come back when it is loaded again"), false) : "";
       const tops = files.map((f, i) => {
         const on = i === onAt;
-        const stamp = catalogStamp(f.edition, f.mtime);
+        const stamp = catalogStamp(f.edition, f.mtime, f.rev);
         const copy2 = ecCopyHtml(f), meta = on ? loadedMeta(stamp) : ecMeta(stamp, f);
         return { id: f.id, sha: f.sha, on, html: ecRowHtml({
           name: f.name,
@@ -27870,6 +28216,7 @@ What you type stays in this browser only.`;
           sample: !!f.sample,
           meta: copy2 && meta ? copy2 + " · " + meta : copy2 || meta,
           trust: on ? heldCatalogTrust() : "",
+          print: on ? heldCatalogPrint() : "",
           extra: extraFor(f.id, on)
         }) };
       });
@@ -27880,6 +28227,7 @@ What you type stays in this browser only.`;
           newer: false,
           meta: loadedMeta(""),
           trust: heldCatalogTrust(),
+          print: heldCatalogPrint(),
           extra: mineLine
         }) });
       const under = tops.map(() => []), alone = [], named = /* @__PURE__ */ new Map(), nested = [];
@@ -27888,7 +28236,7 @@ What you type stays in this browser only.`;
         named.set(n, (named.get(n) || 0) + 1);
       });
       desks.forEach((f, i) => {
-        const g = f.grew, on = i === deskOn, stamp = catalogStamp(f.edition, f.mtime);
+        const g = f.grew, on = i === deskOn, stamp = catalogStamp(f.edition, f.mtime, f.rev);
         const of = g ? tops.map((x, k) => k).filter((k) => !!tops[k].id && tops[k].id === g.id) : [];
         const p = [of.find((k) => tops[k].on), of.find((k) => tops[k].sha === g.sha), of[0]].find((k) => k != null);
         const meta = on ? loadedMeta(stamp) : p != null ? esc(stamp) : g ? ecMeta(stamp, f) : esc(t("A catalog of its own")) + " · " + ecMeta(stamp, f);
@@ -27908,7 +28256,7 @@ What you type stays in this browser only.`;
       wireEcKeys(box);
       nested.forEach((i) => deskChangeWords(desks[i], deskBase(desks[i], files, held)).then((words) => {
         const row = box.querySelector('[data-ec-desk="' + i + '"]'), meta = row && row.querySelector(".ec-meta");
-        if (meta && words && words.length) meta.textContent = words.concat([catalogStamp(desks[i].edition, desks[i].mtime)]).join(" · ");
+        if (meta && words && words.length) meta.textContent = words.concat([catalogStamp(desks[i].edition, desks[i].mtime, desks[i].rev)]).join(" · ");
       }));
       box.querySelectorAll("button[data-ec-look]").forEach((b) => {
         const f = desks[+b.getAttribute("data-ec-look")];
@@ -27922,7 +28270,7 @@ What you type stays in this browser only.`;
         const row = Array.from(box.querySelectorAll(".ec-row")).find((x) => x.getAttribute("data-ec-file") === f.name);
         const key = row && row.querySelector(".ec-key");
         if (!key) return;
-        key.insertAdjacentHTML("beforebegin", trustKeyHtml(i === onAt ? heldCatalogTrust() : r.state, r.keyId));
+        key.insertAdjacentHTML("beforebegin", trustKeyHtml(i === onAt ? heldCatalogTrust() : r.state, i === onAt ? heldCatalogPrint() : r.print));
         key.remove();
         wireEcKeys(row);
       }));
@@ -27964,18 +28312,6 @@ What you type stays in this browser only.`;
       }
     );
   }
-  function leadPrintOf(pubHex) {
-    const subtle = globalThis.crypto && globalThis.crypto.subtle;
-    if (!subtle || !/^[0-9a-f]{64}$/.test(pubHex)) return Promise.resolve("");
-    const raw = new Uint8Array(32);
-    for (let i = 0; i < 32; i++) raw[i] = parseInt(pubHex.slice(i * 2, i * 2 + 2), 16);
-    return subtle.digest("SHA-256", raw).then((buf) => {
-      const b = new Uint8Array(buf);
-      let hex = "";
-      for (let i = 0; i < 8; i++) hex += b[i].toString(16).padStart(2, "0");
-      return hex;
-    }).catch(() => "");
-  }
   function noteForeignSigner(c, wrap, place) {
     const doc = catalogDocOf(c), sig = doc && doc.sig, kid = sig && sig.keyId ? String(sig.keyId) : "";
     if (!kid) return;
@@ -27983,10 +28319,11 @@ What you type stays in this browser only.`;
       const prints = leads.map((x) => x && x.print).filter(Boolean);
       const forCat = ring && ring[String(c.id || "")];
       const pub = forCat && typeof forCat === "object" ? String(forCat[kid] || "") : "";
-      if (state !== V2_SIG_VALID || !prints.length || !/^[0-9a-f]{64}$/.test(pub)) return;
-      return leadPrintOf(pub).then((print) => {
+      if (state === V2_SIG_VALID || !prints.length || !/^[0-9a-f]{64}$/.test(pub)) return;
+      return v2SigState(doc, ring).then((named) => named === V2_SIG_VALID ? keyPrintOf(pub) : "").then((print) => {
         if (!print || prints.indexOf(print) >= 0 || !wrap.isConnected || wrap.querySelector(".ec-signer")) return;
         const line = t("This file is signed with the key {KEY}, which is not the team lead's.").split("{KEY}").join(leadKeyText(print));
+        wrap.querySelectorAll(".ec-trust").forEach((n) => n.remove());
         (wrap.querySelector(".ec-holds") || wrap.querySelector(".tour-actions")).insertAdjacentHTML(
           "beforebegin",
           '<p class="ec-signer">' + esc(line) + "</p>"
@@ -28048,7 +28385,7 @@ What you type stays in this browser only.`;
     const older = updating && !olderSure && !plain && datedEarlier;
     const changes = updating ? editionChanges(active, c, pack) : null;
     const changeHtml = changes ? editionOfferHtml(c, active, changes) : "";
-    let fresh = updating && !older && !olderSure && !plain, label2 = fresh ? editionLabelOf(c) : "";
+    let fresh = updating && !older && !olderSure && !plain, ed = fresh ? editionNameOf(c) : null;
     const n = (c.cards || []).length, i = catalogIntentCount(c), k = Object.keys(c.categories || {}).length;
     const trustHtml = (line) => line ? '<p class="ec-trust">' + esc(line) + "</p>" : "";
     const wrap = document.createElement("div");
@@ -28060,7 +28397,7 @@ What you type stays in this browser only.`;
        another taken up, which the question asks and no sentence beneath it can improve on. The
        two editions of ONE catalog keep their sentence: what is at stake there is what happens to
        this desk's own work, which the screen cannot show. */
-    '<h3 id="ecTitle">' + esc(t(olderSure || older ? "Older catalog found" : updating && !plain ? "Updated catalog found" : replacing ? "Replace catalog?" : "Load catalog?")) + "</h3>" + (olderSure ? '<p class="ec-warn">' + esc(t("This edition is older than the one in use on this desk, so some of its replies may be out of date.")) + "</p>" : "") + (updating && !olderSure && !plain ? '<p class="ec-sub">' + esc(t(older ? "This file is an earlier edition than the one loaded now." : "This catalog has changed since it was loaded.")) + "</p>" : "") + '<div class="ec-what"><b>' + esc(catalogNameOfFile(String(src.file || "") || E_CATALOG_SCRIPT)) + "</b>" + (c.version != null ? " · " + esc(catalogVersionLabel(c.version)) : "") + (updating && active.version != null && String(active.version) !== String(c.version) ? '<div class="ec-counts">' + esc(t("You have {V}.")).replace("{V}", esc(catalogVersionLabel(active.version))) + "</div>" : "") + (changeHtml ? "" : '<div class="ec-counts">' + catalogCountsLine(
+    '<h3 id="ecTitle">' + esc(t(olderSure || older ? "Older catalog found" : updating && !plain ? "Updated catalog found" : replacing ? "Replace catalog?" : "Load catalog?")) + "</h3>" + (olderSure ? '<p class="ec-warn">' + esc(t("This edition is older than the one in use on this desk, so some of its replies may be out of date.")) + "</p>" : "") + (updating && !olderSure && !plain ? '<p class="ec-sub">' + esc(t(older ? "This file is an earlier edition than the one loaded now." : "This catalog has changed since it was loaded.")) + "</p>" : "") + '<div class="ec-what"><b>' + esc(catalogNameOfFile(String(src.file || "") || E_CATALOG_SCRIPT)) + "</b>" + (c.version != null ? " · " + esc(editionLabel(editionNameOf(c))) : "") + (updating && active.version != null && String(active.version) !== String(c.version) ? '<div class="ec-counts">' + esc(editionNameOf(active).r != null ? t("You have rev {R}.").split("{R}").join(String(editionNameOf(active).r)) : t("You have {E}.").split("{E}").join(editionNameOf(active).e)) + "</div>" : "") + (changeHtml ? "" : '<div class="ec-counts">' + catalogCountsLine(
       "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
       n,
       catalogMacroCount(c),
@@ -28089,7 +28426,7 @@ What you type stays in this browser only.`;
     addEventListener("resize", place);
     if (!wrap.querySelector(".ec-trust")) catalogTrust(c).then((state) => {
       const line = trustOfferLine(state, updating);
-      if (!line || !wrap.isConnected || wrap.querySelector(".ec-trust")) return;
+      if (!line || !wrap.isConnected || wrap.querySelector(".ec-trust") || wrap.querySelector(".ec-signer")) return;
       (wrap.querySelector(".ec-holds") || wrap.querySelector(".tour-actions")).insertAdjacentHTML("beforebegin", trustHtml(line));
       place();
     });
@@ -28127,7 +28464,7 @@ What you type stays in this browser only.`;
       whenTrusted(c).then(() => {
         taking = false;
         close();
-        acceptOffer(c, sig, src, fresh ? { held: active, changes, v: label2 } : null);
+        acceptOffer(c, sig, src, fresh ? { held: active, changes, name: ed } : null);
       });
     };
     wrap.querySelectorAll("[data-ec-open]").forEach(wireFolderLink);
@@ -28152,7 +28489,7 @@ What you type stays in this browser only.`;
         c,
         held: active,
         changes,
-        version: catalogVersionLabel(c.version),
+        ed: editionNameOf(c),
         name: catalogNameOfFile(String(src.file || "") || E_CATALOG_SCRIPT),
         keep: answer("#ecNo"),
         load: answer("#ecYes"),
@@ -28170,11 +28507,11 @@ What you type stays in this browser only.`;
       const yes = wrap.querySelector("#ecYes");
       if (yes) yes.focus();
     }
-    if (arriving) editionSay(t("Edition {V} is waiting to be loaded; the offer is under the catalog's name.").split("{V}").join(label2));
+    if (arriving) editionSay(ed.r != null ? t("Rev {R} is waiting to be loaded; the offer is under the catalog's name.").split("{R}").join(String(ed.r)) : t("Edition {E} is waiting to be loaded; the offer is under the catalog's name.").split("{E}").join(ed.e));
     return true;
   }
   function acceptOffer(c, sig, src, ed) {
-    const marks = ed ? editionMarksFrom(ed.held, ed.changes, ed.v) : null;
+    const marks = ed ? editionMarksFrom(ed.held, ed.changes, ed.name) : null;
     const was = ed ? keepEditionMarks(c, marks) : null;
     Promise.resolve(src.accept(sig)).then(() => {
       const now = storedCatalog(), landed = !!now && eCatalogSignature(now) === sig;
@@ -28182,7 +28519,7 @@ What you type stays in this browser only.`;
       paintCatWaiting();
       if (!ed || !landed) return;
       const counts2 = editionCountWords(ed.changes.counts);
-      if (counts2.length) toast(t("Edition {V} loaded: {COUNTS}").split("{V}").join(ed.v).split("{COUNTS}").join(counts2.join(", ")));
+      if (counts2.length) toast((ed.name.r != null ? t("Rev {R} loaded: {COUNTS}").split("{R}").join(String(ed.name.r)) : t("Edition {E} loaded: {COUNTS}").split("{E}").join(ed.name.e)).split("{COUNTS}").join(counts2.join(", ")));
       if (marks) washEdition(marks);
     });
   }
@@ -28238,9 +28575,6 @@ What you type stays in this browser only.`;
     );
   }
   var edWaiting = null;
-  function editionLabelOf(c) {
-    return catalogVersionLabel(c && c.version) || (c && +c.rev ? "v" + +c.rev : "");
-  }
   function leaveWaiting(c, src, active) {
     if (!isCatalogUpdate(c, active) || catalogEditionOlder(c.version, active.version)) return;
     if (!edWaiting || eCatalogSignature(edWaiting.c) !== eCatalogSignature(c)) edWaiting = { c, src };
@@ -28265,7 +28599,7 @@ What you type stays in this browser only.`;
       dot.setAttribute("aria-hidden", "true");
       el.insertBefore(dot, el.firstChild);
     }
-    const words = t("Show edition {V}, waiting to be loaded").split("{V}").join(editionLabelOf(edWaiting.c));
+    const ed = editionNameOf(edWaiting.c), words = ed.r != null ? t("Show rev {R}, waiting to be loaded").split("{R}").join(String(ed.r)) : t("Show edition {E}, waiting to be loaded").split("{E}").join(ed.e);
     el.setAttribute("role", "button");
     el.setAttribute("tabindex", "0");
     el.setAttribute("title", words);
@@ -28517,7 +28851,7 @@ What you type stays in this browser only.`;
   }
   function historyRowHtml(v, key) {
     const meta = [
-      catalogVersionLabel(v.date),
+      String(v.date || "").trim() ? editionLabel(editionNameOf({ version: v.date, rev: v.rev })) : "",
       +v.cards >= 0 ? catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}", +v.cards, +v.macros, +v.intents, +v.cats) : ""
     ].filter(Boolean).map(esc).join(" · ");
     const acts = historyActs(v), open = t("Open this version");
@@ -29219,7 +29553,8 @@ What you type stays in this browser only.`;
     applyPrefs: () => applyPrefs,
     hotkeyFromEvent: () => hotkeyFromEvent,
     openSettings: () => openSettings,
-    settingsBodyHtml: () => settingsBodyHtml
+    settingsBodyHtml: () => settingsBodyHtml,
+    wireTeamRows: () => wireTeamRows
   });
   function curLangLabel() {
     return (UI_LANGS.filter((l) => l.code === uiLang())[0] || UI_LANGS[0]).label;
@@ -29326,6 +29661,19 @@ What you type stays in this browser only.`;
       hotkeyTry(box, accel, t("Saved {KEY}").replace("{KEY}", hotkeyLabel(accel)));
     });
   }
+  function teamRowHtml(l, status, bar) {
+    const notes = [
+      l.folder ? t("Folder: {FOLDER}").split("{FOLDER}").join(l.folder) : "",
+      l.removed ? t("This team no longer includes this desk.") : status,
+      l.policy ? t("The organisation's IT sets this desk's team.") : bar ? t("After leaving a team, this desk joins it again with a new invitation from its lead.") : ""
+    ].filter(Boolean);
+    return '<div class="set-row"><div class="set-label">' + esc(l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team")) + notes.map((n) => "<small>" + esc(n) + "</small>").join("") + '</div><div class="set-ctl"><span class="e-lead-key">' + keySignHtml("studio", l.print) + "</span>" + (l.policy ? "" : '<button type="button" class="btn" data-leave-team="' + esc(l.team) + '">' + esc(t("Leave this team")) + "</button>") + "</div></div>";
+  }
+  function wireTeamRows(box) {
+    box.querySelectorAll("[data-leave-team]").forEach((b) => {
+      b.onclick = () => forgetTeamLead(b.getAttribute("data-leave-team"), () => paintSettings());
+    });
+  }
   function settingsBodyHtml() {
     const seg2 = (name, opts, cur) => '<div class="seg set-seg" data-seg="' + name + '" data-n="' + opts.length + '">' + opts.map((o) => '<button type="button" data-val="' + esc(o.v) + '"' + (o.tip ? ' title="' + esc(o.tip) + '"' : "") + (o.v === cur ? ' class="on"' : "") + ">" + esc(o.t) + "</button>").join("") + "</div>";
     const row = (label2, hint, control) => '<div class="set-row"><div class="set-label">' + esc(label2) + (hint ? "<small>" + esc(hint) + "</small>" : "") + '</div><div class="set-ctl">' + control + "</div></div>";
@@ -29335,7 +29683,6 @@ What you type stays in this browser only.`;
     ], on ? "on" : "off");
     const themeCur = themeChoice() || "system";
     const langSel = '<select id="setUiLang" aria-label="' + esc(t("Interface language")) + '" title="' + esc(t("Changes every label in Etiuda, never the cards themselves")) + '">' + UI_LANGS.map((l) => '<option value="' + esc(l.code) + '"' + (l.code === uiLang() ? " selected" : "") + ">" + esc(l.label) + "</option>").join("") + "</select>";
-    const lastSyncStamp = fileStamp(+lsGet("eLastSync"));
     const joinDoor = joinDoorButton("setJoinTeam");
     const personalSection = accHtml(
       "personal",
@@ -29348,12 +29695,9 @@ What you type stays in this browser only.`;
         t("Interface language"),
         t("The language of the buttons and menus, not of the macros: those follow EN|PL in the header"),
         langSel
-      ) + (lastSyncStamp ? row(t("Last sync"), "", "<span>" + esc(lastSyncStamp) + "</span>") : "") + /* One row per team lead this desk trusts: the key the agent compared, and the way out where it was wrong. */
-      teamLeads().map((l, i) => row(
-        t("Team lead's key"),
-        i === 0 ? t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.") : "",
-        '<span class="e-lead-key">' + keySignHtml("studio", l.print) + '</span><button type="button" class="btn" data-forget-lead="' + esc(l.team) + '">' + esc(t("Forget this lead")) + "</button>"
-      )).join("") + (joinDoor ? row(t("Team"), "", joinDoor) : "") + /* Under a host only: a browser has no catalog folder to share. */
+      ) + /* One row per team this desk trusts a lead for; what the lead sees is said once, on the first team that still lists it,
+         and the way back after leaving once, on the first row that offers Leave. */
+      teamLeads().map((l, i, all) => teamRowHtml(l, i === all.findIndex((x) => !x.removed) ? t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.") : "", i === all.findIndex((x) => !x.policy))).join("") + (joinDoor ? row(t("Team"), "", joinDoor) : "") + /* Under a host only: a browser has no catalog folder to share. */
       (eHasShared() ? row(
         t("Edit the shared catalog directly"),
         t("For a team that keeps its catalog without Studio: each change is written into the catalog in the shared folder. A catalog the team's lead signed is never touched."),
@@ -29473,7 +29817,7 @@ What you type stays in this browser only.`;
     );
   }
   function paintSettings() {
-    const box = modalCard.querySelector("#setBody");
+    const box = modalCard && modalCard.querySelector("#setBody");
     if (!box) return;
     box.innerHTML = settingsBodyHtml();
     wireAcc(box, (id) => {
@@ -29493,9 +29837,7 @@ What you type stays in this browser only.`;
         render();
       };
     }
-    box.querySelectorAll("[data-forget-lead]").forEach((b) => {
-      b.onclick = () => forgetTeamLead(b.getAttribute("data-forget-lead"), () => paintSettings());
-    });
+    wireTeamRows(box);
     const joinBtn = box.querySelector("#setJoinTeam");
     if (joinBtn) joinBtn.onclick = () => {
       dismissModal();
@@ -30940,6 +31282,9 @@ What you type stays in this browser only.`;
     }, true);
   }
   function wireGlobalKeydown() {
+    addEventListener("input", (e) => {
+      if (e.isTrusted) noteUndoTyping();
+    }, true);
     addEventListener("keydown", (e) => {
       if (scCaptureId) return;
       if (tourActive() && tourHasFocus()) {
@@ -30958,6 +31303,10 @@ What you type stays in this browser only.`;
           e.preventDefault();
           activateTourFocus();
         }
+        return;
+      }
+      if (eventMatchesAction(e, "undo") && !e.repeat && takeStandingUndo(typingInField())) {
+        e.preventDefault();
         return;
       }
       const cover = openCover();
@@ -31135,6 +31484,7 @@ What you type stays in this browser only.`;
       const v = String(intentEl.value || "");
       const start = intentEl.selectionStart == null ? v.length : intentEl.selectionStart;
       const end = intentEl.selectionEnd == null ? v.length : intentEl.selectionEnd;
+      noteUndoTyping();
       intentEl.value = v.slice(0, start) + e.key + v.slice(end);
       const caret = start + e.key.length;
       try {
@@ -31874,11 +32224,12 @@ What you type stays in this browser only.`;
   var pick_exports = {};
   __export(pick_exports, {
     answerPick: () => answerPick,
+    hotkeyNotice: () => hotkeyNotice,
     pickExcerpt: () => pickExcerpt,
     pickRows: () => pickRows,
     wirePick: () => wirePick
   });
-  var PICK_ROWS = 9;
+  var PICK_ROWS = 50;
   var PICK_LOOK = [
     "--panel",
     "--panel-raised",
@@ -31919,18 +32270,29 @@ What you type stays in this browser only.`;
     if (!use.size) return hits;
     return hits.map((m, i) => ({ m, i, n: use.get(String(m.id)) | 0 })).sort((a, b) => b.n - a.n || a.i - b.i).map((o) => o.m);
   }
-  function pickRows(q) {
+  function pickList(q) {
     const terms = cardSearchTerms(String(q == null ? "" : q));
     const rows = [];
+    let total = 0;
     const hits = rankedCards(terms, pickKeep(terms)).hits;
     for (const m of terms.length ? hits : pickByUse(hits)) {
       const l = cardLang(m), ps = parts(m, l);
-      for (let vi = 0; vi < ps.length; vi++) {
-        rows.push(pickRow(m, l, ps, vi));
-        if (rows.length >= PICK_ROWS) return rows;
-      }
+      total += ps.length;
+      for (let vi = 0; vi < ps.length && rows.length < PICK_ROWS; vi++) rows.push(pickRow(m, l, ps, vi));
     }
-    return rows;
+    return { rows, total };
+  }
+  function pickRows(q) {
+    return pickList(q).rows;
+  }
+  function pickCount(shown2, total) {
+    if (!total) return "";
+    const all = counted(total, "{N} reply", "{N} replies");
+    return shown2 < total ? t("{SHOWN} of {COUNT}").split("{SHOWN}").join(String(shown2)).split("{COUNT}").join(all) : all;
+  }
+  function pickFound(q) {
+    const f = pickList(q);
+    return { rows: f.rows, count: pickCount(f.rows.length, f.total) };
   }
   function pickLastRow() {
     const r = eLastRecent(), m = r && findCard(r.id);
@@ -31954,6 +32316,7 @@ What you type stays in this browser only.`;
     return out;
   }
   function pickWords() {
+    const other = CONTENT_LANGS.length > 1 ? String(nextContentLang(lang)).toUpperCase() : "";
     return {
       lang: uiLang(),
       search: t("search replies"),
@@ -31961,16 +32324,27 @@ What you type stays in this browser only.`;
       again: t("The reply copied last"),
       none: t("A different word may do better."),
       stamp: t("Commits the firm"),
-      empty: wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet.")
+      empty: wholeThingEmpty() ? t("Etiuda is ready for its first replies.") : t("Nothing here yet."),
+      who: t("The reply is filled in for this conversation"),
+      keyCopy: t("{KEY} copies"),
+      keyOther: other ? t("{KEY} in {LANG}").split("{LANG}").join(other) : "",
+      keyClose: t("{KEY} closes"),
+      pasted: t("Pasted"),
+      copied: t("Copied, press Ctrl+V")
     };
   }
-  function pickCopy(id, vi) {
+  function pickBlocks(m, other) {
+    const l = other ? nextContentLang(cardLang(m)) : cardLang(m);
+    return { l, ps: parts(m, l) };
+  }
+  function pickCopy(id, vi, other) {
     const m = findCard(String(id || ""));
     if (!m) return null;
-    const l = cardLang(m), ps = parts(m, l);
+    const { l, ps } = pickBlocks(m, other);
     vi = vi | 0;
+    if (other && ps.length) vi = Math.min(vi, ps.length - 1);
     if (vi < 0 || vi >= ps.length) return null;
-    if (wantsAgentName(ps[vi])) return { ask: { id: String(m.id), vi } };
+    if (wantsAgentName(ps[vi])) return { ask: other ? { id: String(m.id), vi, other: 1 } : { id: String(m.id), vi } };
     let text = null;
     withAgentName(ps[vi], () => {
       bumpUseCount(m.id, l, vi);
@@ -31980,10 +32354,10 @@ What you type stays in this browser only.`;
     }, null);
     return text == null ? null : { text };
   }
-  function pickAsk(id, vi) {
+  function pickAsk(id, vi, other) {
     const m = findCard(String(id || ""));
     if (!m) return null;
-    const l = cardLang(m), ps = parts(m, l);
+    const { l, ps } = pickBlocks(m, other);
     vi = vi | 0;
     if (vi < 0 || vi >= ps.length) return null;
     withAgentName(ps[vi], () => {
@@ -32000,15 +32374,32 @@ What you type stays in this browser only.`;
     } catch (e) {
       a = {};
     }
-    if (op === "open") return { look: pickLook(), words: pickWords(), rows: pickRows(""), last: pickLastRow() };
-    if (op === "find") return { rows: pickRows(a.q) };
-    if (op === "copy") {
-      if (!a.last) return pickCopy(a.id, a.vi);
-      const r = eLastRecent();
-      return r ? pickCopy(r.id, r.vi) : null;
+    if (op === "open") {
+      try {
+        tourHeardPick();
+      } catch (e) {
+      }
+      return Object.assign({ look: pickLook(), words: pickWords(), last: pickLastRow(), who: activeTabName() }, pickFound(""));
     }
-    if (op === "ask") return pickAsk(a.id, a.vi);
+    if (op === "find") return pickFound(a.q);
+    if (op === "copy") {
+      if (!a.last) return pickCopy(a.id, a.vi, a.other);
+      const r = eLastRecent();
+      return r ? pickCopy(r.id, r.vi, a.other) : null;
+    }
+    if (op === "ask") return pickAsk(a.id, a.vi, a.other);
     return null;
+  }
+  function hotkeyNotice() {
+    const hk = eHotkey();
+    if (!hk || !hk.accel || !hk.taken || document.getElementById("eHotkeyNote")) return;
+    eNotice(
+      "eHotkeyNote",
+      t("{KEYS} belongs to another program just now.").split("{KEYS}").join(eHotkeyLabel(hk.accel)),
+      t("A combination of Etiuda's own, chosen in Settings, brings the replies over any window."),
+      null,
+      { label: t("Choose a combination"), run: () => hooks.openSettings("keys") }
+    );
   }
   function wirePick() {
     const h = eHost();
@@ -32049,6 +32440,7 @@ What you type stays in this browser only.`;
   Object.defineProperty(globalThis, "scCaptureSlot", { get: () => scCaptureSlot });
   Object.defineProperty(globalThis, "scRepaint", { get: () => scRepaint });
   Object.defineProperty(globalThis, "E_CATALOG_VERSION", { get: () => E_CATALOG_VERSION });
+  Object.defineProperty(globalThis, "E_CATALOG_REV", { get: () => E_CATALOG_REV });
   Object.defineProperty(globalThis, "tabs", { get: () => tabs });
   Object.defineProperty(globalThis, "tabSaveTimer", { get: () => tabSaveTimer });
   Object.defineProperty(globalThis, "tabInsertAnimating", { get: () => tabInsertAnimating });
@@ -32287,6 +32679,10 @@ What you type stays in this browser only.`;
     }
     try {
       showDeskNotices();
+    } catch (e) {
+    }
+    try {
+      hotkeyNotice();
     } catch (e) {
     }
   }

@@ -669,7 +669,7 @@ try {
        && slow.every(f => siteFiles.indexOf(f.replace(/^tests\//, "")) > -1),
        "22d none of the " + fast.length + " steps of npm test and split-guard opens a window"
        + (fastWindows.length ? ", but these would: " + fastWindows.join(", ") : "")
-       + ", where " + slow.join(" and ") + " (npm run gates' other two scripts) are both launch-site files");
+       + ", where " + slow.join(" and ") + " (npm run gates' two window scripts) are both launch-site files");
 
     /* 22e. NO GATE GIVES ITSELF THE WORD. The variable is named in tests/ and tools/ by engine.js
        alone, and an environment is keyed by it only in this file's probes and in sbom.mjs's release

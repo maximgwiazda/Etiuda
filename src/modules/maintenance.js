@@ -1,5 +1,5 @@
 import { cardText } from "./card-model.js";
-import { eWatchSupported, eWatchName, catalogVersionLabel, E_CATALOG_VERSION, storedCatalog, eCatalog,
+import { eWatchSupported, eWatchName, editionNameOf, E_CATALOG_VERSION, E_CATALOG_REV, storedCatalog, eCatalog,
   eCatalogAccepted, catalogDocOf, eCatalogSignature } from "./catalog.js";
 import { heldCatalogTrust } from "./catalog-trust.js";
 import { tourActive, tourDueAtBoot } from "./tour.js";
@@ -107,7 +107,11 @@ function mtReadings(){
   row("theme",S(()=>(document.documentElement.getAttribute("data-theme")||systemTheme())
     +(themeChoice()?" (chosen)":" (system)")));
   sec("Catalog");
-  row("edition",S(()=>E_CATALOG_VERSION!=null?catalogVersionLabel(E_CATALOG_VERSION):"-"));
+  // A rev is its own row, so no number stands under the word edition.
+  const edName=(()=>{ try{ return E_CATALOG_VERSION!=null ? editionNameOf({version:E_CATALOG_VERSION, rev:E_CATALOG_REV}) : null; }
+    catch(e){ return undefined; } })();
+  if(edName && edName.r!=null) row("rev",String(edName.r));
+  else row("edition",edName===undefined ? "unavailable" : (edName && edName.e) || "-");
   row("cards / macros",S(()=>cards.length+" / "+catalogMacroCount({cards:cards})));
   row("intents / categories",S(()=>intentOrder.length+" / "+Object.keys(CATS).length));
   row("content languages",S(()=>CONTENT_LANGS.join(", ")+" (primary "+CONTENT_LANGS[0]+")"));

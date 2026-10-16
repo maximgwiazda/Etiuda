@@ -397,6 +397,37 @@ check("tabs.js", "810tf6 each conversation's name is a tab stop, named as it rea
         true].join(" ## "));
   });
 
+/* 901t: the middle button on a conversation's tab closes it, through the same closeTab its x calls, and only the middle
+   one: a right press is the tab's menu's, and a left one switches or drags. */
+check("tabs.js", "901t1 a middle click on a conversation's tab closes that conversation as its x does, its press kept from"
+  + " starting a scroll; a right or left press closes nothing",
+  () => {
+    const tabsSrc = read("src/modules/tabs.js");
+    const labelOf = new Function("t", "tabs", extractDecl(tabsSrc, "function tabLabel(") + "\nreturn tabLabel;");
+    class El {
+      constructor() { this.attrs = {}; this.kids = []; this.dataset = {}; this.style = {}; this.className = ""; }
+      setAttribute(k, v) { this.attrs[k] = String(v); }
+      appendChild(c) { this.kids.push(c); return c; }
+      set innerHTML(v) { if (v === "") this.kids = []; }
+      querySelectorAll() { return []; }
+    }
+    const tabs = [{ id: "a", pax: "Marta Lind" }, { id: "b", pax: "Olek" }];
+    const bar = new El(), wrap = new El();
+    bar.parentElement = wrap;
+    const closed = [];
+    const fn = new Function("document", "$", "tabs", "activeTabId", "t", "tabLabel", "drawTabs", "bindTabScroll",
+      "fitTabLabels", "requestAnimationFrame", "tabAddTitle", "ICON_TAB_X", "ICON_TAB_ADD", "tabDrag", "switchTab", "scrollTabIntoView", "closeTab",
+      extractDecl(tabsSrc, "function drawTabsCore(") + "\nreturn drawTabsCore;");
+    fn({ createElement: () => new El() }, s => (s === "#tabsBar" ? bar : s === "#tabsWrap" ? wrap : null),
+      tabs, "a", UL.t, labelOf(UL.t, tabs), {}, () => {}, () => {}, () => {}, () => "", "", "", null,
+      () => {}, () => {}, (id, ev) => { closed.push(id + (ev ? "+ev" : "")); })();
+    const tab = bar.kids[1];
+    const ev = button => ({ button, prevented: false, preventDefault() { this.prevented = true; }, stopPropagation() {} });
+    const down = [0, 1, 2].map(b => { const e = ev(b); if (typeof tab.onmousedown === "function") tab.onmousedown(e); return e.prevented; });
+    [2, 0, 1].forEach(b => { if (typeof tab.onauxclick === "function") tab.onauxclick(ev(b)); });
+    return eq([down.join(","), closed.join(",")].join(" | "), "false,true,false | b+ev");
+  });
+
 check("shell/main.js", "810tf7 the shell forwards Ctrl+Tab and Ctrl+Shift+Tab to the page and leaves every other chord alone",
   () => {
     const src = read("shell/main.js");
