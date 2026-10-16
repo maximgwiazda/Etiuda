@@ -7565,6 +7565,8 @@ What you type stays in this browser only.`;
     "It does not match": "Nie zgadza się",
     "{LEAD}'s team": "Zespół osoby {LEAD}",
     "Leave this team": "Opuść ten zespół",
+    "Once it leaves, this desk takes no invitation to this team and rejoins only by asking from the team's sealed catalog.": "Po opuszczeniu zespołu to stanowisko nie przyjmie już do niego zaproszenia; wrócić może tylko przez prośbę z zaszyfrowanego katalogu zespołu.",
+    "This invitation names a team this desk left. It was not used, and nothing changed. To join again, ask from the team's catalog.": "To zaproszenie wskazuje zespół, który to stanowisko opuściło. Nie zostało użyte i nic się nie zmieniło. Aby dołączyć ponownie, proszę poprosić o to z katalogu zespołu.",
     "This team no longer includes this desk.": "To stanowisko nie należy już do tego zespołu.",
     "The organisation's IT sets this desk's team.": "Zespół tego stanowiska ustawia dział IT organizacji.",
     "{LEAD}'s team no longer includes this desk": "To stanowisko nie należy już do zespołu osoby {LEAD}",
@@ -8797,7 +8799,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-15";
+  var E_BUILT = "2026-10-16";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -14801,7 +14803,7 @@ What you type stays in this browser only.`;
     }
     if (joinMode === "refused") return {
       title: t("Join a team"),
-      line: joinWhy === "silent" ? t("This folder could not be reached, so nothing was written.") : joinWhy === "pinned" ? t("This invitation names a team this desk already knows, but with a different lead's key. It was not used, and nothing changed. Tell the team's lead about it.") : joinWhy === "barred" ? t("This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. To join, ask from the team's catalog instead.") : joinWhy === "foreign" ? t("This folder holds another team, or the same team under a different lead's key, so nothing was written. Tell the team's lead about it.") : joinWhy === "unreadable" ? t("The team file in this folder could not be read, so this desk did not join and nothing was written. Let the team's lead know, so they can check the folder.") : joinWhy === "check" ? t("This code does not match this invitation. Ask the lead again before joining.") : joinWhy === "policy" ? t("The organisation's IT sets this desk's team, so invitations are turned off.") : t("This invitation cannot be read, so nothing was changed."),
+      line: joinWhy === "silent" ? t("This folder could not be reached, so nothing was written.") : joinWhy === "pinned" ? t("This invitation names a team this desk already knows, but with a different lead's key. It was not used, and nothing changed. Tell the team's lead about it.") : joinWhy === "barred" ? t("This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. To join, ask from the team's catalog instead.") : joinWhy === "left" ? t("This invitation names a team this desk left. It was not used, and nothing changed. To join again, ask from the team's catalog.") : joinWhy === "foreign" ? t("This folder holds another team, or the same team under a different lead's key, so nothing was written. Tell the team's lead about it.") : joinWhy === "unreadable" ? t("The team file in this folder could not be read, so this desk did not join and nothing was written. Let the team's lead know, so they can check the folder.") : joinWhy === "check" ? t("This code does not match this invitation. Ask the lead again before joining.") : joinWhy === "policy" ? t("The organisation's IT sets this desk's team, so invitations are turned off.") : t("This invitation cannot be read, so nothing was changed."),
       body: "",
       acts: [["back", t("Cancel")]]
     };
@@ -14967,7 +14969,7 @@ What you type stays in this browser only.`;
     });
   }
   function forgetTeamLead(team, then) {
-    return joinAsk("forget", team).then((v) => {
+    return joinAsk("leave", team).then((v) => {
       if (typeof then === "function") then();
       return v;
     });
@@ -29345,11 +29347,11 @@ What you type stays in this browser only.`;
       hotkeyTry(box, accel, t("Saved {KEY}").replace("{KEY}", hotkeyLabel(accel)));
     });
   }
-  function teamRowHtml(l, status) {
+  function teamRowHtml(l, status, bar) {
     const notes = [
       l.folder ? t("Folder: {FOLDER}").split("{FOLDER}").join(l.folder) : "",
       l.removed ? t("This team no longer includes this desk.") : status,
-      l.policy ? t("The organisation's IT sets this desk's team.") : ""
+      l.policy ? t("The organisation's IT sets this desk's team.") : bar ? t("Once it leaves, this desk takes no invitation to this team and rejoins only by asking from the team's sealed catalog.") : ""
     ].filter(Boolean);
     return '<div class="set-row"><div class="set-label">' + esc(l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team")) + notes.map((n) => "<small>" + esc(n) + "</small>").join("") + '</div><div class="set-ctl"><span class="e-lead-key">' + keySignHtml("studio", l.print) + "</span>" + (l.policy ? "" : '<button type="button" class="btn" data-leave-team="' + esc(l.team) + '">' + esc(t("Leave this team")) + "</button>") + "</div></div>";
   }
@@ -29380,8 +29382,9 @@ What you type stays in this browser only.`;
         t("Interface language"),
         t("The language of the buttons and menus, not of the macros: those follow EN|PL in the header"),
         langSel
-      ) + (lastSyncStamp ? row(t("Last sync"), "", "<span>" + esc(lastSyncStamp) + "</span>") : "") + /* One row per team this desk trusts a lead for; what the lead sees is said once, on the first team that still lists it. */
-      teamLeads().map((l, i, all) => teamRowHtml(l, i === all.findIndex((x) => !x.removed) ? t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.") : "")).join("") + (joinDoor ? row(t("Team"), "", joinDoor) : "") + /* Under a host only: a browser has no catalog folder to share. */
+      ) + (lastSyncStamp ? row(t("Last sync"), "", "<span>" + esc(lastSyncStamp) + "</span>") : "") + /* One row per team this desk trusts a lead for; what the lead sees is said once, on the first team that still lists it,
+         and what leaving closes once, on the first row that offers Leave. */
+      teamLeads().map((l, i, all) => teamRowHtml(l, i === all.findIndex((x) => !x.removed) ? t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.") : "", i === all.findIndex((x) => !x.policy))).join("") + (joinDoor ? row(t("Team"), "", joinDoor) : "") + /* Under a host only: a browser has no catalog folder to share. */
       (eHasShared() ? row(
         t("Edit the shared catalog directly"),
         t("For a team that keeps its catalog without Studio: each change is written into the catalog in the shared folder. A catalog the team's lead signed is never touched."),

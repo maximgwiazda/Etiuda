@@ -869,6 +869,7 @@ function deskEnvelopeBody(keysText) {
     + (teamOpened.size ? ',"teamOpened":' + JSON.stringify(Array.from(teamOpened)) : "")
     + (teamSeen.size ? ',"teamSeen":' + JSON.stringify(Array.from(teamSeen)) : "")
     + (teamBarred.size ? ',"teamBarred":' + JSON.stringify(Array.from(teamBarred)) : "")
+    + (teamLeft.size ? ',"teamLeft":' + JSON.stringify(Array.from(teamLeft)) : "")
     + (teamJoin ? ',"teamJoin":' + JSON.stringify(teamJoin) : "")
     + (inUseKept ? ',"inUse":' + JSON.stringify(inUseKept) : "")
     + (catalogAskIds.length ? ',"catalogAsks":' + JSON.stringify(catalogAskIds) : "")
@@ -1838,6 +1839,7 @@ let teamShown = {};                            // team id -> {lead?, folder?}: t
 const teamOpened = new Set();                  // catalog ids this desk has opened from an envelope, kept in the desk envelope
 const teamSeen = new Set();                    // teams whose pinned lead key the agent has been shown, kept in the desk envelope
 const teamBarred = new Set();                  // teams whose lead the agent forgot: no first admission but by an answered request
+const teamLeft = new Set();                    // of those, the teams the agent left with Leave this team, so a refusal says so
 const editionTeam = new Map();                 // an opened edition's pin -> the team whose envelope held it, "" if two did; this run only
 let teamStamp = "";                            // what the team file, the ring and the box were when last heeded
 const teamSaid = new Set();
@@ -2190,8 +2192,13 @@ function heedTeam() {
   r.said.forEach(teamSay);
   if (r.stampClear) teamStamp = "";
   if (r.stop || r.needKey || r.needRing) return;
+  // A pin moved by a handover is another lead's: the name an invitation gave for the one before is not theirs.
+  if (r.pinned && teamPins[r.team] && teamShown[r.team] && teamShown[r.team].lead) {
+    teamShown[r.team] = Object.assign({}, teamShown[r.team]);
+    delete teamShown[r.team].lead;
+  }
   if (r.pinned) teamPins[r.team] = r.state.pins[r.team];
-  if (r.unbar) teamBarred.delete(r.team);
+  if (r.unbar) { teamBarred.delete(r.team); teamLeft.delete(r.team); }
   let changed = r.changed;
   if (r.team && teamPins[r.team] && (teamShown[r.team] || {}).folder !== root) {
     teamShown[r.team] = Object.assign({}, teamShown[r.team], { folder: root });
@@ -2499,7 +2506,7 @@ function inviteParse(text) {
 /* Why an invitation for `team` under `lead` is not taken here, or "": the team's lead was forgotten, which only an
    answered request undoes, or the team is pinned under another key, which only a signed handover moves. */
 function inviteSettled(team, lead) {
-  if (teamBarred.has(team)) return "barred";
+  if (teamBarred.has(team)) return teamLeft.has(team) ? "left" : "barred";
   const pin = teamPins[team];
   return pin && (pin.keyId !== lead.keyId || pin.public !== lead.public) ? "pinned" : "";
 }
@@ -2626,8 +2633,9 @@ function leadSeen(team) {
   return joinView();
 }
 /* Forgetting a lead takes its pin and every key kept under it, and bars a first admission for its team until a request the
-   agent makes is answered: the file that pinned it is likely still on the share. What this desk opened stays held back. */
-function forgetLead(team) {
+   agent makes is answered: the file that pinned it is likely still on the share. What this desk opened stays held back.
+   `left` is Leave this team, which is the same act, remembered as a leave so a later invitation's refusal says so. */
+function forgetLead(team, left) {
   team = String(team || "");
   if (deskKeys === undefined) deskKeys = readDesk();
   if (!SEALED_TEAM_RE.test(team) || !teamPins[team]) return joinView();
@@ -2636,6 +2644,7 @@ function forgetLead(team) {
   delete teamShown[team];
   teamSeen.delete(team);
   teamBarred.add(team);
+  if (left === true) teamLeft.add(team); else teamLeft.delete(team);
   for (const [pin, t] of Array.from(editionTeam)) if (t === team) editionTeam.delete(pin);
   ecFactsRead.clear();
   teamStamp = "";
@@ -3116,7 +3125,7 @@ function readDesk() {
       teamShown[t] = o;
     });
     if (doc && Array.isArray(doc.teamOpened)) doc.teamOpened.forEach(c => { if (typeof c === "string" && c) teamOpened.add(c); });
-    [["teamSeen", teamSeen], ["teamBarred", teamBarred]].forEach(([k, set]) => {
+    [["teamSeen", teamSeen], ["teamBarred", teamBarred], ["teamLeft", teamLeft]].forEach(([k, set]) => {
       if (doc && Array.isArray(doc[k])) doc[k].forEach(t => { if (SEALED_TEAM_RE.test(String(t))) set.add(String(t)); });
     });
     teamJoin = joinKept(doc && doc.teamJoin);
@@ -3765,12 +3774,12 @@ ipcMain.handle("etiuda:history-put", (e, sha, file) => (fromEngine(e) ? historyP
 ipcMain.handle("etiuda:shared-read", (e, name, pin) => (fromEngine(e) ? sharedRead(name, pin) : null));
 ipcMain.handle("etiuda:shared-write", (e, name, text, sha, create) =>
   (fromEngine(e) ? sharedWrite(name, text, sha, create === true) : { ok: false }));
-// "seen" and "forget" name a team, "read" and "invite" carry an invitation's text, and the others name a file; "invite"
+// "seen", "forget" and "leave" name a team, "read" and "invite" carry an invitation's text, and the others name a file; "invite"
 // adds the check code the agent typed, and "leads" answers the pinned leads alone.
 ipcMain.handle("etiuda:team-join", (e, op, file, name, check) => (!fromEngine(e) ? null
   : op === "leads" ? { leads: leadsView() }
   : op === "ask" ? askJoin(file, name) : op === "cancel" ? cancelJoin() : op === "seen" ? leadSeen(file)
-  : op === "forget" ? forgetLead(file) : op === "read" ? readInvite(file) : op === "invite" ? takeInvite(file, name, check) : joinView()));
+  : op === "forget" ? forgetLead(file) : op === "leave" ? forgetLead(file, true) : op === "read" ? readInvite(file) : op === "invite" ? takeInvite(file, name, check) : joinView()));
 
 /* The engine calls no OS API, so the folder picker is the shell's. The CAPTION comes from the
    page: the shell has no t(), and a dialog captioned in two languages at once is captioned in

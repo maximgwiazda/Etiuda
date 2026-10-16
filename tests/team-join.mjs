@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 72;
+const EXPECTED = 76;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -47,7 +47,7 @@ fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true }
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "wrapTeamKey", "joinCommit", "joinCode", "joinGenuine", "joinOpening", "joinSignedBytes",
   "branchSignedBytes", "deskFileGenuine", "readCatalog", "catalogChanged", "isCatalogName", "JOINS_NAME",
-  "memberProof", "inviteCode", "inviteIdOf", "inviteRead", "folderHost"];
+  "memberProof", "inviteCode", "inviteIdOf", "inviteRead", "folderHost", "signedSha"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
 const ENGINE_FRAME = { parent: null, url: "file:///C:/lab/engine/etiuda.html" };
@@ -56,7 +56,7 @@ const eventFor = () => ({ sender: { id: 1, once: noop }, senderFrame: ENGINE_FRA
 /* One desk over its own user-data folder, the shell evaluated afresh, from `src` where a leg gives one; the safeStorage
    stand-in is reversible. */
 function loadDesk(ud, src) {
-  const said = [], invoke = {};
+  const said = [], invoke = {}, on = {};
   // Every way the shell can log is kept, so a leg can say what reached the log and what did not.
   const quiet = { log: s => said.push(String(s)), error: s => said.push("ERR " + String(s)), warn: s => said.push("WARN " + String(s)),
     info: s => said.push("INFO " + String(s)), debug: s => said.push("DEBUG " + String(s)) };
@@ -68,7 +68,7 @@ function loadDesk(ud, src) {
   const electron = {
     app: { getPath: () => ud, setPath: noop, requestSingleInstanceLock: () => false, quit: noop, on: noop, getVersion: () => "0.0.0",
            whenReady: () => new Promise(noop), commandLine: { appendSwitch: noop } },
-    ipcMain: { on: noop, handle: (ch, fn) => { invoke[ch] = fn; } },
+    ipcMain: { on: (ch, fn) => { on[ch] = fn; }, handle: (ch, fn) => { invoke[ch] = fn; } },
     BrowserWindow: inert, Menu: inert, dialog: inert, net: inert, protocol: inert, session: inert, shell: inert,
     screen: inert, systemPreferences: inert, nativeTheme: { themeSource: "system" }, safeStorage,
   };
@@ -81,7 +81,9 @@ function loadDesk(ud, src) {
   /* A window that only listens: what the shell sends it, by channel. */
   const sent = [];
   const win = { isDestroyed: () => false, webContents: { send: (ch, ...a) => sent.push([ch].concat(a)), once: noop, on: noop } };
-  const desk = { api, ask, said, ud, envelope, win, sent, join: (op, file, name, check) => ask("etiuda:team-join", op, file, name, check) };
+  /* A channel the page sends on and may wait for, as tests/catalog-in-use.mjs asks it: the answer is the event's returnValue. */
+  const sync = (ch, ...args) => { const ev = eventFor(); if (on[ch]) on[ch](ev, ...args); return ev.returnValue; };
+  const desk = { api, ask, said, ud, envelope, win, sent, sync, join: (op, file, name, check) => ask("etiuda:team-join", op, file, name, check) };
   DESKS.push(desk);
   return desk;
 }
@@ -1491,7 +1493,7 @@ try {
       const real = fs[n];
       fs[n] = function (p, ...rest) {
         const flag = n === "openSync" ? String(rest[0] || "r") : "w";
-        if (/[wa+]/.test(flag) && [p, rest[0]].some(x => String(x).indexOf(dir) >= 0)) hits.push(n);
+        if (/[wa+]/.test(flag) && [p, rest[0]].some(x => String(x).indexOf(dir) >= 0)) hits.push(n + " " + path.relative(dir, String(p)));
         return real.call(this, p, ...rest);
       };
       untap.push(() => { fs[n] = real; });
@@ -1584,15 +1586,25 @@ try {
       + " this lead, in English and in Polish: " + JSON.stringify(f));
   });
 
+  const barBefore = { en: "", pl: "" };
   await legTry("15br", async () => {
     await pageOn(Dl);
+    /* The desk names its catalog to the team, as a desk that has taken it does, so Leave has a note of its own to take back. */
+    const booted = Dl.sync("etiuda:catalog") || "";
+    let bootPin = "";
+    try { bootPin = Dl.api.signedSha(JSON.parse(booted)); } catch { bootPin = ""; }
+    Dl.sync("etiuda:catalog-taken", bootPin);
+    const note = path.join("desks", meL.id, "in-use.ec"), noteKept = fs.existsSync(path.join(leaveYard, note));
+    const folderBefore = snapshot(leaveYard), keysBefore = JSON.stringify(Dl.envelope().keys);
+    const withoutNote = folderBefore.split("|").filter(x => x.indexOf(note + "=") !== 0).join("|");
+    barBefore.en = await settingsAt(Dl, "en");
+    barBefore.pl = await settingsAt(Dl, "pl");
     const CAT = await import(MOD("catalog.js")), SET = await import(MOD("settings.js"));
     const stored = JSON.stringify({ cards: [{ id: "c-leave" }] });
     ST.lsSet(CAT.E_CATALOG_STORE, stored);
     AS.setCards([{ id: "c-leave" }]);
     const createWas = document.createElement;
     document.createElement = () => stubNode();
-    const folderBefore = snapshot(leaveYard), keysBefore = JSON.stringify(Dl.envelope().keys);
     /* The button Settings draws, pressed as its screen wires it. */
     const drawn = /<button[^>]*data-leave-team="([^"]+)"[^>]*>Leave this team</.exec(SET.settingsBodyHtml());
     const btn = { getAttribute: a => (a === "data-leave-team" && drawn ? drawn[1] : null) };
@@ -1608,14 +1620,38 @@ try {
       page: !TJ.teamLeads().some(l => l.team === TEAM) && settingsAfter.indexOf("data-leave-team") < 0,
       catalog: AS.cards.length === 1 && AS.cards[0].id === "c-leave" && ST.lsGet(CAT.E_CATALOG_STORE) === stored
         && JSON.stringify(Dl.envelope().keys) === keysBefore,
-      folder: snapshot(leaveYard) === folderBefore && hits.length === 0 };
+      folder: noteKept && snapshot(leaveYard) === withoutNote && JSON.stringify(hits) === JSON.stringify(["unlinkSync " + note]) };
     document.createElement = createWas;
     AS.setCards([]);
     ST.lsDel(CAT.E_CATALOG_STORE);
     check(Object.keys(f).every(k => f[k]),
       "15br Leave this team, pressed in Settings, forgets the team here, its lead's pin, its keys, its name and folder, and bars a"
-      + " first admission as Forget did; Settings lists it no more; the catalog in use stays loaded and stored; and nothing under"
-      + " the team's folder is written, renamed or removed: " + JSON.stringify(f) + (hits.length ? " " + hits.join(",") : ""));
+      + " first admission as Forget did; Settings lists it no more; the catalog in use stays loaded and stored; and under the"
+      + " team's folder it removes only this desk's own in-use note and writes nothing else: " + JSON.stringify(f) + " " + hits.join(","));
+  });
+
+  await legTry("15bw", async () => {
+    const BAR_EN = "Once it leaves, this desk takes no invitation to this team and rejoins only by asking from the team&#39;s sealed catalog.";
+    const BAR_PL = "Po opuszczeniu zespołu to stanowisko nie przyjmie już do niego zaproszenia; wrócić może tylko przez prośbę z zaszyfrowanego katalogu zespołu.";
+    const LEFT_EN = "This invitation names a team this desk left. It was not used, and nothing changed. To join again, ask from the team&#39;s catalog.";
+    const again = inviteBlob({ team: TEAM, folder: leaveYard, lead: lampLead, secret: newSecret() });
+    const readL = await Dl.join("read", again), takeL = await Dl.join("invite", again, "Nia", codeFor(again));
+    await pageOn(Dl);
+    TJ.openJoinPaste();
+    pasted = elOf({ "data-join-paste": "" }, again);
+    await press("read");
+    const page = TJ.teamJoinEmptyHtml();
+    await press("back");
+    const readB2 = await Db.join("read", inviteBlob({ team: TEAM, folder: folder("bar-forgot-yard"), lead: lampLead, secret: newSecret() }));
+    const f = { before: barBefore.en.indexOf(BAR_EN) >= 0 && barBefore.en.indexOf(BAR_EN) < barBefore.en.indexOf("data-leave-team"),
+      polish: barBefore.pl.indexOf(BAR_PL) >= 0,
+      left: !!readL && readL.refused === "left" && !readL.offer && !!takeL && takeL.refused === "left" && (Dl.envelope().teamLeft || []).indexOf(TEAM) >= 0,
+      page: page.indexOf(LEFT_EN) >= 0 && page.indexOf("lead was forgotten") < 0,
+      forgot: !!readB2 && readB2.refused === "barred" };
+    check(Object.keys(f).every(k => f[k]),
+      "15bw Leave's row says before the press that the desk then takes no invitation to the team and rejoins only by asking from"
+      + " its sealed catalog, in English and in Polish; after Leave the same lead's invitation is refused as a team this desk left,"
+      + " on the page too, while a lead forgotten as not matching keeps its own words: " + JSON.stringify(f));
   });
 
   await legTry("15bs", async () => {
@@ -1632,6 +1668,68 @@ try {
     check(ok,
       "15bs a team machine policy names offers no Leave this team, since the policy would pin it again, and says the"
       + " organisation's IT sets it; off Windows no policy is read and Leave stands: " + JSON.stringify(l));
+  });
+  /* The test architect's kx3: a desk an invitation pinned and nobody let in is not "removed" by a roster that never listed it. */
+  await legTry("15bt", async () => {
+    const yard = folder("never-in-yard"), K = crypto.randomBytes(32);
+    put(yard, "etiuda-team.json", teamAt(1, [entry(me2, K, 1)]));
+    put(yard, "lamps.ec", P.sealCatalog(K, TEAM, 1, A1));
+    const Dn3 = await deskWith("never-in", folder("never-in-own"));
+    const blob = inviteBlob({ team: TEAM, folder: yard, lead: lampLead, secret: newSecret() });
+    const took = await Dn3.join("invite", blob, "Ola", codeFor(blob));
+    const l = leadIn(await Dn3.join("state")), html = await onPage(Dn3);
+    check(!!took && !!took.join && !!l && l.admitted === false && l.removed === false && html.indexOf("no longer includes") < 0,
+      "15bt (the test architect's kx3) a desk an invitation pinned and nobody let in, under a roster that does not list it, is not"
+      + " told it is off the team: " + JSON.stringify(l));
+  });
+
+  /* The test architect's kx2: a newer roster that does not hold is no removal. */
+  await legTry("15bu", async () => {
+    const yard = folder("forged-out-yard"), K1x = crypto.randomBytes(32);
+    const Dk = await deskWith("forged-out", folder("forged-out-own"));
+    const meK = await Dk.ask("etiuda:branch-identity", true);
+    const blob = inviteBlob({ team: TEAM, folder: yard, lead: lampLead, secret: newSecret() });
+    await Dk.join("invite", blob, "Ola", codeFor(blob));
+    put(yard, "etiuda-team.json", teamAt(1, [entry(me2, K1x, 1), entry(meK, K1x, 1)]));
+    put(yard, "lamps.ec", P.sealCatalog(K1x, TEAM, 1, A1));
+    const inK = leadIn(await Dk.join("state"));
+    const roster2 = [entry(me2, crypto.randomBytes(32), 2)];
+    const forgedLead = sign({ format: 1, kind: "etiuda-team", id: TEAM, catalogs: ["lamp-shop"], lead: FORGED, sealed: true,
+      exportsSealed: false, epoch: 2, roster: roster2 }, forger.privateKey, FORGED.keyId);
+    put(yard, "etiuda-team.json", forgedLead);
+    const a = leadIn(await Dk.join("state")), htmlA = await onPage(Dk);
+    const forgedSig = sign({ format: 1, kind: "etiuda-team", id: TEAM, catalogs: ["lamp-shop"], lead: LEAD, sealed: true,
+      exportsSealed: false, epoch: 3, roster: [entry(me2, crypto.randomBytes(32), 3)] }, forger.privateKey, LEAD.keyId);
+    put(yard, "etiuda-team.json", forgedSig);
+    const b = leadIn(await Dk.join("state"));
+    check(!!inK && inK.removed === false && inK.admitted === true && !!a && a.removed === false && !!b && b.removed === false
+        && htmlA.indexOf("no longer includes") < 0,
+      "15bu (the test architect's kx2) a newer roster leaving the desk off, under a lead key other than the pinned one or signed by"
+      + " a key that is not the lead's it names, does not tell the desk it is off the team: " + JSON.stringify([a && a.removed, b && b.removed]));
+  });
+
+  /* A handover moves the pin to another lead, whose name no invitation gave: Settings says "Team", not the former lead's name. */
+  await legTry("15bv", async () => {
+    const yard = folder("handed-yard"), KH = crypto.randomBytes(32), KH2 = crypto.randomBytes(32);
+    const Dh = await deskWith("handed", folder("handed-own"));
+    const meH = await Dh.ask("etiuda:branch-identity", true);
+    const blob = inviteBlob({ team: TEAM, folder: yard, lead: lampLead, secret: newSecret() });
+    await Dh.join("invite", blob, "Ola", codeFor(blob));
+    put(yard, "etiuda-team.json", teamAt(1, [entry(meH, KH, 1)]));
+    put(yard, "lamps.ec", P.sealCatalog(KH, TEAM, 1, A1));
+    const before = leadIn(await Dh.join("state"));
+    const next = crypto.generateKeyPairSync("ed25519"), NEXT = { keyId: "lamp-next", public: pubHex(next.publicKey) };
+    const step = { format: 1, kind: "etiuda-team-handover", team: TEAM, from: { keyId: LEAD.keyId, public: LEAD.public }, to: NEXT,
+      sig: { alg: "Ed25519", keyId: LEAD.keyId } };
+    step.sig.value = crypto.sign(null, Buffer.concat([Buffer.from("etiuda-team-handover\n", "utf8"), Buffer.from(V2.v2SignedBytes(step))]),
+      lead.privateKey).toString("hex");
+    put(yard, "etiuda-team.json", sign({ format: 1, kind: "etiuda-team", id: TEAM, catalogs: ["lamp-shop"], lead: NEXT, sealed: true,
+      exportsSealed: false, epoch: 2, roster: [entry(meH, KH2, 2)], handover: [step] }, next.privateKey, NEXT.keyId));
+    const after = leadIn(await Dh.join("state")), html = await settingsAt(Dh, "en");
+    check(!!before && before.lead === "Lamp lead" && !!after && after.print === printOf(NEXT.public) && after.lead === ""
+        && after.folder === yard && html.indexOf("Lamp lead&#39;s team") < 0 && html.indexOf('<div class="set-label">Team<small>') >= 0,
+      "15bv a handover moves the pin to another lead, and the name the invitation gave the former lead goes with it, so Settings"
+      + " says Team: " + JSON.stringify([before && before.lead, after && after.lead, after && after.print]));
   });
   document.body = bodyWas;
   if (langBefore == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langBefore);

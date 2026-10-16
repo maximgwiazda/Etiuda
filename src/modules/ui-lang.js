@@ -1036,6 +1036,8 @@ UI_STRINGS.pl={
   "It does not match":"Nie zgadza się",
   "{LEAD}'s team":"Zespół osoby {LEAD}",
   "Leave this team":"Opuść ten zespół",
+  "Once it leaves, this desk takes no invitation to this team and rejoins only by asking from the team's sealed catalog.":"Po opuszczeniu zespołu to stanowisko nie przyjmie już do niego zaproszenia; wrócić może tylko przez prośbę z zaszyfrowanego katalogu zespołu.",
+  "This invitation names a team this desk left. It was not used, and nothing changed. To join again, ask from the team's catalog.":"To zaproszenie wskazuje zespół, który to stanowisko opuściło. Nie zostało użyte i nic się nie zmieniło. Aby dołączyć ponownie, proszę poprosić o to z katalogu zespołu.",
   "This team no longer includes this desk.":"To stanowisko nie należy już do tego zespołu.",
   "The organisation's IT sets this desk's team.":"Zespół tego stanowiska ustawia dział IT organizacji.",
   "{LEAD}'s team no longer includes this desk":"To stanowisko nie należy już do zespołu osoby {LEAD}",

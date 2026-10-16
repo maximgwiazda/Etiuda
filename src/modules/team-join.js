@@ -231,6 +231,7 @@ function joinInviteParts(){
     line:joinWhy==="silent"?t("This folder could not be reached, so nothing was written.")
       :joinWhy==="pinned"?t("This invitation names a team this desk already knows, but with a different lead's key. It was not used, and nothing changed. Tell the team's lead about it.")
       :joinWhy==="barred"?t("This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. To join, ask from the team's catalog instead.")
+      :joinWhy==="left"?t("This invitation names a team this desk left. It was not used, and nothing changed. To join again, ask from the team's catalog.")
       :joinWhy==="foreign"?t("This folder holds another team, or the same team under a different lead's key, so nothing was written. Tell the team's lead about it.")
       :joinWhy==="unreadable"?t("The team file in this folder could not be read, so this desk did not join and nothing was written. Let the team's lead know, so they can check the folder.")
       :joinWhy==="check"?t("This code does not match this invitation. Ask the lead again before joining.")
@@ -362,10 +363,10 @@ function openJoinBubble(){
   });
 }
 
-/* Leaves a team from Settings: the shell forgets its lead and every key kept under it, and the catalog in use stays. `then()`
-   runs once the shell has answered. */
+/* Leaves a team from Settings: the shell forgets its lead and every key kept under it, as "It does not match" does, and
+   remembers it as a leave; the catalog in use stays. `then()` runs once the shell has answered. */
 function forgetTeamLead(team,then){
-  return joinAsk("forget",team).then(v=>{ if(typeof then==="function") then(); return v; });
+  return joinAsk("leave",team).then(v=>{ if(typeof then==="function") then(); return v; });
 }
 
 export { wireTeamJoin, teamJoinShown, teamJoinEmptyHtml, wireTeamJoinEmpty, closeJoinBubble, teamLeads, leadsNow, leadKeyText, keySignHtml, keyTipHtml, forgetTeamLead, paintJoin, openJoinPaste, joinDoorButton, teamCanJoin, inviteHeld, noteCatalogCopy };
