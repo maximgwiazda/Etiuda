@@ -9,10 +9,8 @@
       <definition name="SUPPORTED_Etiuda" displayName="$(string.SUPPORTED_Etiuda)" />
     </definitions>
   </supportedOn>
-  <!-- The Etiuda Studio category is for the other program. This desk reads only the Etiuda values. -->
   <categories>
     <category name="Etiuda" displayName="$(string.EtiudaCat)" />
-    <category name="EtiudaStudio" displayName="$(string.EtiudaStudioCat)" />
   </categories>
   <policies>
     <policy name="TeamFolder" class="Machine" displayName="$(string.TeamFolder)" explainText="$(string.TeamFolder_Explain)" key="Software\Policies\Etiuda" presentation="$(presentation.TeamFolder)">
@@ -27,20 +25,6 @@
       <supportedOn ref="SUPPORTED_Etiuda" />
       <elements>
         <text id="LeadKeyBox" valueName="LeadKey" required="true" maxLength="64" />
-      </elements>
-    </policy>
-    <policy name="TeamAboveFolder" class="Machine" displayName="$(string.TeamAboveFolder)" explainText="$(string.TeamAboveFolder_Explain)" key="Software\Policies\EtiudaStudio" presentation="$(presentation.TeamAboveFolder)">
-      <parentCategory ref="EtiudaStudio" />
-      <supportedOn ref="SUPPORTED_Etiuda" />
-      <elements>
-        <text id="TeamAboveFolderBox" valueName="TeamAboveFolder" required="true" maxLength="1024" />
-      </elements>
-    </policy>
-    <policy name="LeadKeyAbove" class="Machine" displayName="$(string.LeadKeyAbove)" explainText="$(string.LeadKeyAbove_Explain)" key="Software\Policies\EtiudaStudio" presentation="$(presentation.LeadKeyAbove)">
-      <parentCategory ref="EtiudaStudio" />
-      <supportedOn ref="SUPPORTED_Etiuda" />
-      <elements>
-        <text id="LeadKeyAboveBox" valueName="LeadKeyAbove" required="true" maxLength="64" />
       </elements>
     </policy>
   </policies>

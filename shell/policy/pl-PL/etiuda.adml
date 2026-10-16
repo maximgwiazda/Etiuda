@@ -6,7 +6,6 @@
     <stringTable>
       <string id="SUPPORTED_Etiuda">Etiuda</string>
       <string id="EtiudaCat">Etiuda</string>
-      <string id="EtiudaStudioCat">Etiuda Studio</string>
       <string id="TeamFolder">Ustaw folder zespołu</string>
       <string id="TeamFolder_Explain">To ustawienie zasad określa folder, z którego Etiuda odczytuje plik zespołu na tym komputerze.
 
@@ -23,18 +22,6 @@ Jeśli to ustawienie zasad zostanie włączone, należy podać klucz publiczny l
 Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, Etiuda ufa liderowi zespołu, do którego dołączyło stanowisko.
 
 Jeśli skonfigurowane jest zarówno to ustawienie, jak i „Ustaw folder zespołu”, a którakolwiek z wartości jest nieprawidłowa, Etiuda nie używa żadnej z nich.</string>
-      <string id="TeamAboveFolder">Ustaw folder zespołu, do którego dołączyło Etiuda Studio</string>
-      <string id="TeamAboveFolder_Explain">To ustawienie zasad określa folder, z którego Etiuda Studio odczytuje zespół, do którego dołączyło, na tym komputerze. Odczytuje je tylko Etiuda Studio; stanowisko go nie odczytuje.
-
-Jeśli to ustawienie zasad zostanie włączone, należy podać pełną ścieżkę, na przykład D:\Team\share lub \\server\team.
-
-Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, folder wybiera się w Etiuda Studio przy dołączaniu do zespołu.</string>
-      <string id="LeadKeyAbove">Ustaw klucz lidera zespołu, do którego dołączyło Etiuda Studio</string>
-      <string id="LeadKeyAbove_Explain">To ustawienie zasad określa klucz publiczny lidera zespołu, do którego dołączyło Etiuda Studio na tym komputerze. Odczytuje je tylko Etiuda Studio; stanowisko go nie odczytuje.
-
-Jeśli to ustawienie zasad zostanie włączone, należy podać klucz publiczny lidera jako 64 małe znaki szesnastkowe, tak jak zapisano go w pliku zespołu.
-
-Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane, Etiuda Studio ufa liderowi zespołu, do którego dołączyło.</string>
     </stringTable>
     <presentationTable>
       <presentation id="TeamFolder">
@@ -44,16 +31,6 @@ Jeśli to ustawienie zasad zostanie wyłączone lub nie zostanie skonfigurowane,
       </presentation>
       <presentation id="LeadKey">
         <textBox refId="LeadKeyBox">
-          <label>Klucz publiczny (64 małe znaki szesnastkowe):</label>
-        </textBox>
-      </presentation>
-      <presentation id="TeamAboveFolder">
-        <textBox refId="TeamAboveFolderBox">
-          <label>Pełna ścieżka:</label>
-        </textBox>
-      </presentation>
-      <presentation id="LeadKeyAbove">
-        <textBox refId="LeadKeyAboveBox">
           <label>Klucz publiczny (64 małe znaki szesnastkowe):</label>
         </textBox>
       </presentation>
