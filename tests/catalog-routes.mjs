@@ -786,6 +786,35 @@ check("18 control: the plain payload carries none of the new keys through either
   check("53f a filled token inside or beside a change keeps every span whole: marked spans close round it",
     nests(d2) && nests(d3) && d3.indexOf('<span class="fillx"><ins class="e-ins">Anna Kowal</ins></span>') > -1 && d2.indexOf("Monday.") > -1, d3);
   check("53F THE CONTROL: a block the edition did not change gives nothing to mark", EM.editionDiffHtml(filled, filled, marks, words) === null, "same text");
+  /* A MARK KEPT BEFORE THE EDITION'S NAME WAS SPLIT holds it as `v`: read back as the name it would be given now, on the
+     changed card's badge and on the edition's pill, both drawn by their own modules. */
+  const CBD = await import(MOD("card-body.js"));
+  const oldMark = v => {
+    PK.resetPack(); land(doc()); CB.applyBootCatalog(); RB.rebuildCards();
+    EM.keepEditionMarks(next53, { v: v, cards: { "c-a": { k: "changed" } } });
+    land(three); CB.applyBootCatalog(); RB.rebuildCards(); EM.forgetEditionMarks();
+    let badge, pill;
+    try {
+      const html = CBD.cardBodyHtml(AP.cards.find(m => m.id === "c-a"), 0, { hit: false, catHit: false, fav: false, band: "0", other: "pl", dragTip: "" }).cardH;
+      badge = (/class="cbadge edn" title="([^"]*)"/.exec(html) || [])[1] || "no badge";
+    } catch (e) { badge = "not drawn: " + e.message; }
+    made.length = 0;
+    try {
+      globalThis.document = new Proxy({}, { get: (o, k) => (k === "createElement" ? kept : page[k]), set: () => true });
+      AP.setCats([]); AP.setEditionView(false);
+      PB.drawPillsCore();
+      const p = made.find(st => /\bpill-ed\b/.test(String(st.className || "")));
+      pill = p ? p.title : "no pill";
+    } catch (e) { pill = "not drawn: " + e.message; }
+    finally { globalThis.document = page; }
+    return JSON.stringify(EM.editionMarkOf("c-a")) + " | " + badge + " | " + pill;
+  };
+  const old15 = oldMark("v15"), oldDated = oldMark("2026-09-20");
+  check("53g a mark kept as {v} before the split reads its rev as a rev, \"v15\" on the badge and the pill as rev 15, and a dated one by its date, in the language on screen",
+    old15 === '{"k":"changed","e":"","r":15} | ' + T("Changed in rev {R}").split("{R}").join("15") + " | " + T("Only the cards rev {R} changed or added").split("{R}").join("15")
+    && oldDated === '{"k":"changed","e":"2026-09-20","r":null} | ' + T("Changed in edition {E}").split("{E}").join("2026-09-20") + " | "
+      + T("Only the cards edition {E} changed or added").split("{E}").join("2026-09-20"),
+    old15 + " || " + oldDated);
   AP.setEditionView(false); AP.setCats([]);
   EM.keepEditionMarks(next53, null); EM.forgetEditionMarks();
   HK.hooks.syncFavouritesMeta = () => {};

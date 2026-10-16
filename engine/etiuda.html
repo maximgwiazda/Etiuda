@@ -6715,6 +6715,7 @@ What you type stays in this browser only.`;
     "local memory used": "użyta pamięć lokalna",
     "theme": "motyw",
     "edition": "wydanie",
+    "rev": "wersja",
     "cards / macros": "karty / makra",
     "intents / categories": "intencje / kategorie",
     "layout rungs": "szczeble układu",
@@ -6955,7 +6956,9 @@ What you type stays in this browser only.`;
     "Could not read the watched file.": "Nie udało się odczytać obserwowanego pliku.",
     "Your own cards and edits are kept.": "Własne karty i zmiany zostają.",
     "Load the update": "Wczytaj aktualizację",
-    "You have {V}.": "Wczytane: {V}.",
+    "You have {E}.": "Wczytane: {E}.",
+    "You have rev {R}.": "Wczytane: wersja {R}.",
+    "rev {R}": "wersja {R}",
     "Note for this edition": "Notatka do wydania",
     "{N} changed": "{N} zmieniona",
     "few␟{N} changed": "{N} zmienione",
@@ -8812,7 +8815,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-15";
+  var E_BUILT = "2026-10-16";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -13587,6 +13590,7 @@ What you type stays in this browser only.`;
   var catalog_exports = {};
   __export(catalog_exports, {
     E_CATALOG_KEY: () => E_CATALOG_KEY,
+    E_CATALOG_REV: () => E_CATALOG_REV,
     E_CATALOG_STORE: () => E_CATALOG_STORE,
     E_CATALOG_VERSION: () => E_CATALOG_VERSION,
     catalogDocOf: () => catalogDocOf,
@@ -13606,6 +13610,8 @@ What you type stays in this browser only.`;
     eWatchName: () => eWatchName,
     eWatchPut: () => eWatchPut,
     eWatchSupported: () => eWatchSupported,
+    editionLabel: () => editionLabel,
+    editionNameOf: () => editionNameOf,
     normaliseCatalog: () => normaliseCatalog,
     parseCatalogFile: () => parseCatalogFile,
     storeCatalog: () => storeCatalog,
@@ -14045,8 +14051,17 @@ What you type stays in this browser only.`;
     if (!s) return "";
     return /^[0-9][0-9.]*$/.test(s) ? "v" + s : s;
   }
-  function catalogStamp(edition, mtime) {
-    return catalogVersionLabel(edition) || fileStamp(mtime);
+  function catalogStamp(edition, mtime, rev) {
+    return String(edition == null ? "" : edition).trim() ? editionLabel(editionNameOf({ version: edition, rev })) : fileStamp(mtime);
+  }
+  function editionNameOf(c) {
+    const e = catalogVersionLabel(c && c.version), n = /^v?([0-9][0-9.]*)$/.exec(e);
+    if (e && !n) return { e };
+    if (c && c.rev != null && c.rev !== "" && Number.isFinite(+c.rev)) return { r: +c.rev };
+    return n ? { r: /^[0-9]+$/.test(n[1]) ? +n[1] : n[1] } : { e: "" };
+  }
+  function editionLabel(name) {
+    return name && name.r != null ? t("rev {R}").split("{R}").join(String(name.r)) : String(name && name.e || "");
   }
   function eCatalogAccepted(c) {
     try {
@@ -14124,9 +14139,11 @@ What you type stays in this browser only.`;
     if (typeof c.facts === "string" && c.facts) setCatalogFacts(c.facts);
     if (Array.isArray(c.who)) setCatalogWho(normWhoList(c.who));
     E_CATALOG_VERSION = c.version != null ? String(c.version) : null;
+    E_CATALOG_REV = c.rev != null && Number.isFinite(+c.rev) ? +c.rev : null;
     return true;
   }
   var E_CATALOG_VERSION = null;
+  var E_CATALOG_REV = null;
   function eResetCatalog() {
     resetContent();
     Object.keys(BASE_CATS).forEach((k) => {
@@ -14140,6 +14157,7 @@ What you type stays in this browser only.`;
     eApplyRoles(null);
     resetStock();
     E_CATALOG_VERSION = null;
+    E_CATALOG_REV = null;
   }
 
   // src/modules/catalog-trust.js
@@ -16706,7 +16724,7 @@ What you type stays in this browser only.`;
   var EDITION_MARKS = "EditionMarks";
   function editionMarksFrom(held, changes, name) {
     const was = new Map((held && held.cards || []).map((m) => [String(m.id), m]));
-    const out = name && name.r != null ? { r: +name.r, cards: {} } : { e: String(name && name.e || ""), cards: {} };
+    const out = name && name.r != null ? { r: name.r, cards: {} } : { e: String(name && name.e || ""), cards: {} };
     (changes && changes.items || []).forEach((it) => {
       if (it.kind !== "changed" && it.kind !== "new") return;
       const mark = { k: it.kind };
@@ -16734,6 +16752,7 @@ What you type stays in this browser only.`;
     try {
       const v = JSON.parse(lyGet(EDITION_MARKS) || "null");
       if (v && typeof v === "object" && v.cards && typeof v.cards === "object") marksNow = v;
+      if (marksNow && marksNow.v != null && marksNow.e == null && marksNow.r == null) Object.assign(marksNow, editionNameOf({ version: marksNow.v }));
     } catch (e) {
     }
     return marksNow;
@@ -25364,7 +25383,15 @@ What you type stays in this browser only.`;
     row("host", S(() => eHost() ? "desktop app" : "browser"));
     row("theme", S(() => (document.documentElement.getAttribute("data-theme") || systemTheme()) + (themeChoice() ? " (chosen)" : " (system)")));
     sec("Catalog");
-    row("edition", S(() => E_CATALOG_VERSION != null ? catalogVersionLabel(E_CATALOG_VERSION) : "-"));
+    const edName = (() => {
+      try {
+        return E_CATALOG_VERSION != null ? editionNameOf({ version: E_CATALOG_VERSION, rev: E_CATALOG_REV }) : null;
+      } catch (e) {
+        return void 0;
+      }
+    })();
+    if (edName && edName.r != null) row("rev", String(edName.r));
+    else row("edition", edName === void 0 ? "unavailable" : edName && edName.e || "-");
     row("cards / macros", S(() => cards.length + " / " + catalogMacroCount({ cards })));
     row("intents / categories", S(() => intentOrder.length + " / " + Object.keys(CATS).length));
     row("content languages", S(() => CONTENT_LANGS.join(", ") + " (primary " + CONTENT_LANGS[0] + ")"));
@@ -27943,7 +27970,7 @@ What you type stays in this browser only.`;
     return intentOrder.filter((i) => !gone.has(intentIdAt(i))).length;
   }
   function loadedMeta(stamp) {
-    const ver = E_CATALOG_VERSION != null ? catalogVersionLabel(E_CATALOG_VERSION) : "";
+    const ver = E_CATALOG_VERSION != null ? editionLabel(editionNameOf({ version: E_CATALOG_VERSION, rev: E_CATALOG_REV })) : "";
     const parts2 = [
       ver || stamp,
       catalogCountsLine(
@@ -27980,7 +28007,7 @@ What you type stays in this browser only.`;
       const extraFor = (id, on) => on ? mineLine : id && id !== heldId && ownOf(id) ? ecMineHtml(t("Your edits to it come back when it is loaded again"), false) : "";
       const tops = files.map((f, i) => {
         const on = i === onAt;
-        const stamp = catalogStamp(f.edition, f.mtime);
+        const stamp = catalogStamp(f.edition, f.mtime, f.rev);
         const copy2 = ecCopyHtml(f), meta = on ? loadedMeta(stamp) : ecMeta(stamp, f);
         return { id: f.id, sha: f.sha, on, html: ecRowHtml({
           name: f.name,
@@ -28009,7 +28036,7 @@ What you type stays in this browser only.`;
         named.set(n, (named.get(n) || 0) + 1);
       });
       desks.forEach((f, i) => {
-        const g = f.grew, on = i === deskOn, stamp = catalogStamp(f.edition, f.mtime);
+        const g = f.grew, on = i === deskOn, stamp = catalogStamp(f.edition, f.mtime, f.rev);
         const of = g ? tops.map((x, k) => k).filter((k) => !!tops[k].id && tops[k].id === g.id) : [];
         const p = [of.find((k) => tops[k].on), of.find((k) => tops[k].sha === g.sha), of[0]].find((k) => k != null);
         const meta = on ? loadedMeta(stamp) : p != null ? esc(stamp) : g ? ecMeta(stamp, f) : esc(t("A catalog of its own")) + " · " + ecMeta(stamp, f);
@@ -28029,7 +28056,7 @@ What you type stays in this browser only.`;
       wireEcKeys(box);
       nested.forEach((i) => deskChangeWords(desks[i], deskBase(desks[i], files, held)).then((words) => {
         const row = box.querySelector('[data-ec-desk="' + i + '"]'), meta = row && row.querySelector(".ec-meta");
-        if (meta && words && words.length) meta.textContent = words.concat([catalogStamp(desks[i].edition, desks[i].mtime)]).join(" · ");
+        if (meta && words && words.length) meta.textContent = words.concat([catalogStamp(desks[i].edition, desks[i].mtime, desks[i].rev)]).join(" · ");
       }));
       box.querySelectorAll("button[data-ec-look]").forEach((b) => {
         const f = desks[+b.getAttribute("data-ec-look")];
@@ -28170,7 +28197,7 @@ What you type stays in this browser only.`;
        another taken up, which the question asks and no sentence beneath it can improve on. The
        two editions of ONE catalog keep their sentence: what is at stake there is what happens to
        this desk's own work, which the screen cannot show. */
-    '<h3 id="ecTitle">' + esc(t(olderSure || older ? "Older catalog found" : updating && !plain ? "Updated catalog found" : replacing ? "Replace catalog?" : "Load catalog?")) + "</h3>" + (olderSure ? '<p class="ec-warn">' + esc(t("This edition is older than the one in use on this desk, so some of its replies may be out of date.")) + "</p>" : "") + (updating && !olderSure && !plain ? '<p class="ec-sub">' + esc(t(older ? "This file is an earlier edition than the one loaded now." : "This catalog has changed since it was loaded.")) + "</p>" : "") + '<div class="ec-what"><b>' + esc(catalogNameOfFile(String(src.file || "") || E_CATALOG_SCRIPT)) + "</b>" + (c.version != null ? " · " + esc(catalogVersionLabel(c.version)) : "") + (updating && active.version != null && String(active.version) !== String(c.version) ? '<div class="ec-counts">' + esc(t("You have {V}.")).replace("{V}", esc(catalogVersionLabel(active.version))) + "</div>" : "") + (changeHtml ? "" : '<div class="ec-counts">' + catalogCountsLine(
+    '<h3 id="ecTitle">' + esc(t(olderSure || older ? "Older catalog found" : updating && !plain ? "Updated catalog found" : replacing ? "Replace catalog?" : "Load catalog?")) + "</h3>" + (olderSure ? '<p class="ec-warn">' + esc(t("This edition is older than the one in use on this desk, so some of its replies may be out of date.")) + "</p>" : "") + (updating && !olderSure && !plain ? '<p class="ec-sub">' + esc(t(older ? "This file is an earlier edition than the one loaded now." : "This catalog has changed since it was loaded.")) + "</p>" : "") + '<div class="ec-what"><b>' + esc(catalogNameOfFile(String(src.file || "") || E_CATALOG_SCRIPT)) + "</b>" + (c.version != null ? " · " + esc(editionLabel(editionNameOf(c))) : "") + (updating && active.version != null && String(active.version) !== String(c.version) ? '<div class="ec-counts">' + esc(editionNameOf(active).r != null ? t("You have rev {R}.").split("{R}").join(String(editionNameOf(active).r)) : t("You have {E}.").split("{E}").join(editionNameOf(active).e)) + "</div>" : "") + (changeHtml ? "" : '<div class="ec-counts">' + catalogCountsLine(
       "{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",
       n,
       catalogMacroCount(c),
@@ -28348,11 +28375,6 @@ What you type stays in this browser only.`;
     );
   }
   var edWaiting = null;
-  function editionNameOf(c) {
-    const e = catalogVersionLabel(c && c.version);
-    if (e && !/^v?[0-9][0-9.]*$/.test(e)) return { e };
-    return c && c.rev != null && c.rev !== "" && Number.isFinite(+c.rev) ? { r: +c.rev } : { e: "" };
-  }
   function leaveWaiting(c, src, active) {
     if (!isCatalogUpdate(c, active) || catalogEditionOlder(c.version, active.version)) return;
     if (!edWaiting || eCatalogSignature(edWaiting.c) !== eCatalogSignature(c)) edWaiting = { c, src };
@@ -28629,7 +28651,7 @@ What you type stays in this browser only.`;
   }
   function historyRowHtml(v, key) {
     const meta = [
-      catalogVersionLabel(v.date),
+      String(v.date || "").trim() ? editionLabel(editionNameOf({ version: v.date, rev: v.rev })) : "",
       +v.cards >= 0 ? catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}", +v.cards, +v.macros, +v.intents, +v.cats) : ""
     ].filter(Boolean).map(esc).join(" · ");
     const acts = historyActs(v), open = t("Open this version");

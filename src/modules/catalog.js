@@ -323,9 +323,9 @@ function eCatalogSignature(c){
   if(E_SIG_CACHE && typeof c==="object"){ try{ E_SIG_CACHE.set(c,out); }catch(e){} }
   return out;
 }
-/* A bare number wants a "v" ("v3"); anything else is already a label. Free-form on
+/* A bare number comes back with a "v" ("v3"); anything else is already a label. Free-form on
    purpose - the author picks whatever answers "is this current?" for their desk - so this
-   formats what it is given rather than imposing a scheme. */
+   formats what it is given rather than imposing a scheme. editionNameOf is what a screen shows. */
 function catalogVersionLabel(v){
   const s=String(v==null?"":v).trim();
   if(!s) return "";
@@ -336,8 +336,20 @@ function catalogVersionLabel(v){
    in only where there is no edition to read - it answers a different question, since copying a
    file rewrites it, and two dates for one catalog on one screen is item 406. The write time is
    still measured: the Newer tag is that and nothing else. */
-function catalogStamp(edition,mtime){
-  return catalogVersionLabel(edition)||fileStamp(mtime);
+function catalogStamp(edition,mtime,rev){
+  return String(edition==null?"":edition).trim() ? editionLabel(editionNameOf({version:edition, rev:rev})) : fileStamp(mtime);
+}
+/* A CATALOG'S EDITION AS THE DESK NAMES IT: {e} its dated edition, otherwise {r} its rev, and where a label that is only a
+   number stands with no rev, that number as the rev. A number is never called an edition. */
+function editionNameOf(c){
+  const e=catalogVersionLabel(c && c.version), n=/^v?([0-9][0-9.]*)$/.exec(e);
+  if(e && !n) return {e:e};
+  if(c && c.rev!=null && c.rev!=="" && Number.isFinite(+c.rev)) return {r:+c.rev};
+  return n ? {r:/^[0-9]+$/.test(n[1]) ? +n[1] : n[1]} : {e:""};
+}
+/* That name as a label beside a catalog's name or in a list: the dated edition as it is, a rev as "rev {R}". */
+function editionLabel(name){
+  return name && name.r!=null ? t("rev {R}").split("{R}").join(String(name.r)) : String((name && name.e)||"");
 }
 function eCatalogAccepted(c){
   try{ return lsGet(E_CATALOG_KEY)===eCatalogSignature(c); }catch(e){ return false; }
@@ -424,9 +436,10 @@ function eApplyCatalog(c){
   /* Captured from whichever catalog actually APPLIED - stored or sibling. Reading
      storedCatalog() is not equivalent: a sibling that could not be written is applied unstored. */
   E_CATALOG_VERSION=(c.version!=null)?String(c.version):null;
+  E_CATALOG_REV=(c.rev!=null && Number.isFinite(+c.rev))?+c.rev:null;
   return true;
 }
-let E_CATALOG_VERSION=null;
+let E_CATALOG_VERSION=null, E_CATALOG_REV=null;
 /* THE EMPTY DESK, which every restart applies before its catalog: a catalog that leaves a field
    out then leaves the default, never the field of the catalog before it. */
 function eResetCatalog(){
@@ -440,6 +453,7 @@ function eResetCatalog(){
   eApplyRoles(null);
   resetStock();
   E_CATALOG_VERSION=null;
+  E_CATALOG_REV=null;
 }
 
 export {
@@ -461,10 +475,13 @@ export {
   eCatalogSignature,
   catalogVersionLabel,
   catalogStamp,
+  editionNameOf,
+  editionLabel,
   eCatalogAccepted,
   eApplyCatalog,
   eResetCatalog,
   E_CATALOG_KEY,
   E_CATALOG_STORE,
-  E_CATALOG_VERSION
+  E_CATALOG_VERSION,
+  E_CATALOG_REV
 };

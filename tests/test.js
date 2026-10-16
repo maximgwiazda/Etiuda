@@ -4038,13 +4038,16 @@ function activeStateTests() {
     got, [["Changes in rev 7 2", "Only the cards rev 7 changed or added", "Only the cards rev 7 changed or added"],
           ["Changes in 2026-09-20 2", "Only the cards edition 2026-09-20 changed or added", "Only the cards edition 2026-09-20 changed or added"]]);
   try {
-    const nameOf = new Function(slice("catalog.js", "function catalogVersionLabel(") + "\n" + slice("catalog-offer.js", "function editionNameOf(")
-      + "\nreturn editionNameOf;")();
+    const [nameOf, label, stamp] = new Function("t", "fileStamp", ["function catalogVersionLabel(", "function editionNameOf(",
+      "function editionLabel(", "function catalogStamp("].map(m => slice("catalog.js", m)).join("\n")
+      + "\nreturn [editionNameOf, editionLabel, catalogStamp];")(s => s, () => "the file's date");
     got = [{ version: "2026-09-20a", rev: 4 }, { rev: 15 }, { version: "3", rev: 15 }, { version: "v1.2", rev: 15 }, { version: "Spring", rev: 15 },
-      { rev: 0 }].map(c => JSON.stringify(nameOf(c)));
+      { rev: 0 }, { version: "15" }, { version: 15 }, { version: "1.2" }].map(c => JSON.stringify(nameOf(c)))
+      .concat([label({ r: 15 }), label({ e: "2026-09-20a" }), stamp("15", 0, 3), stamp("2026-09-20a", 0, 3), stamp("", 0, 3), stamp("v2", 0)]);
   } catch (e) { got = "editionNameOf did not run: " + e.message; }
-  eq("a catalog's edition is named by its dated edition where it has one, otherwise by its rev, and a bare number is never an edition",
-    got, ['{"e":"2026-09-20a"}', '{"r":15}', '{"r":15}', '{"r":15}', '{"e":"Spring"}', '{"r":0}']);
+  eq("a catalog's edition is named by its dated edition where it has one, otherwise by its rev, a bare number with no rev being that rev, never an edition and never a blank; a list labels it the same way",
+    got, ['{"e":"2026-09-20a"}', '{"r":15}', '{"r":15}', '{"r":15}', '{"e":"Spring"}', '{"r":0}', '{"r":15}', '{"r":15}', '{"r":"1.2"}',
+      "rev 15", "2026-09-20a", "rev 3", "2026-09-20a", "the file's date", "rev 2"]);
 
   try {
     const paint = new Function("catSlot", "railDrag", "railRelNow", "railRelGroup",
@@ -5046,8 +5049,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1105;
-const UI_STRINGS_SHA256 = "772334e40072d05bccd2ea451d3ac0f33e265bee1cce2003f4414aad666b1d74";
+const UI_STRINGS_COUNT = 1108;
+const UI_STRINGS_SHA256 = "6cc4a47169a8f1da8da7b30887b7af99478e475e4c29162c2c233500318b3b7e";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
@@ -5967,6 +5970,19 @@ function libraryRowsTests() {
       () => ({ file: "team.ec", copy: "Documents", folder: "-" }), () => null, {}, () => []);
     wired = new Function("mtReadings", "navigator", extractDecl(mt, "function mtReportText(") + "\nreturn mtReportText;")(readings, { userAgent: "UA" })();
   } catch (e) { wired = "mtReadings did not run: " + e.message; }
+  let mtEdition;
+  try {
+    const catSrc = fs.readFileSync(path.join(E.ROOT, "src", "modules", "catalog.js"), "utf8");
+    const named = new Function(extractDecl(catSrc, "function catalogVersionLabel(") + "\n" + extractDecl(catSrc, "function editionNameOf(")
+      + "\nreturn editionNameOf;")();
+    const at = (ver, rev) => new Function("mtCatalogPlace", "eSaveTrouble", "pack", "eDeskRefused", "E_CATALOG_VERSION", "E_CATALOG_REV", "editionNameOf",
+      extractDecl(mt, "function mtSafe(") + "\n" + extractDecl(mt, "function mtReadings(") + "\nreturn mtReadings;")(
+      () => ({ file: "team.ec", copy: "Documents", folder: "-" }), () => null, {}, () => [], ver, rev, named)()
+      .filter(x => x.k === "rev" || x.k === "edition").map(x => x.k + ": " + x.v).join(" | ");
+    mtEdition = [at("15", 3), at("2026-09-20a", 3), at(null, 3)];
+  } catch (e) { mtEdition = "mtReadings did not run: " + e.message; }
+  eq("Maintenance gives a catalog's rev a row of its own, and the word edition stands only over a dated edition",
+    mtEdition, ["rev: 3", "edition: 2026-09-20a", "edition: -"]);
   const lists = extractDecl(manageSrc, "function openManage(");
   eq("the copied report carries where the catalog lies and never its file's own name, which the panel alone shows",
     [/\nfile: /.test(report), /\ncopy: Documents\n/.test(report), /team\.ec/.test(wired), /\ncopy: Documents\n/.test(wired),
