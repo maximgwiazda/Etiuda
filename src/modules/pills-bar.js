@@ -15,6 +15,7 @@ import { schedulePillsCollapse, syncPillsCollapseNow } from "./pills-box.js";
 import { cats, setCatsDropArmed, setCats, setPendingScrollHit, intentIdxs, setCatOrder, dragState, suppressClick, setDragState, setSuppressClick,
   editionView, setEditionView } from "./app-state.js";
 import { editionMarks, editionMarkedCount, editionSay } from "./edition-marks.js";
+import { editionSaid } from "./catalog.js";
 import { hooks } from "./hooks.js";
 
 // The category bar itself: the row of pills, the inline add, and the capture half of its FLIP.
@@ -159,12 +160,12 @@ function drawPillsCore(){
    narrowed to those cards, and pressed again it is All. No data-k, so the arrows' walk, the counts and a drag pass
    it by, as they pass the + by. */
 function editionPill(n){
-  const ed=editionMarks()||{}, rev=ed.r!=null;
-  const said=(dated,byRev)=>rev ? byRev.split("{R}").join(String(ed.r)) : dated.split("{E}").join(String(ed.e||""));
+  const ed=editionMarks()||{};
   const b=document.createElement("div");
   b.className="pill pill-ed"+(editionView?" on":"");
-  b.innerHTML='<span class="pill-lab" data-i18n-skip>'+esc(said(t("Changes in {E}"),t("Changes in rev {R}")))+'</span> <b>'+n+'</b>';
-  const tip=said(t("Only the cards edition {E} changed or added"),t("Only the cards rev {R} changed or added"));
+  b.innerHTML='<span class="pill-lab" data-i18n-skip>'+esc(ed.r!=null ? t("Changes in rev {R}").split("{R}").join(String(ed.r)) : t("Changes in {E}").split("{E}").join(String(ed.e||"")))+'</span> <b>'+n+'</b>';
+  // The label is the rev alone; the title, the label read aloud and the words said carry the dated edition too.
+  const tip=editionSaid(ed,t("Only the cards rev {R} changed or added"),t("Only the cards edition {E} changed or added"));
   b.title=tip;
   b.setAttribute("aria-label",tip);
   b.setAttribute("role","button");
@@ -183,7 +184,7 @@ function editionPill(n){
     hooks.railEchoRedraw(railBefore, relBefore);
     scrollRailTop();
     scheduleTabSave();
-    if(press) editionSay(said(t("Cards edition {E} changed or added: {N}."),t("Cards rev {R} changed or added: {N}."))
+    if(press) editionSay(editionSaid(ed,t("Cards rev {R} changed or added: {N}."),t("Cards edition {E} changed or added: {N}."))
       .split("{N}").join(String(editionMarkedCount())));
   };
   return b;

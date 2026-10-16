@@ -716,7 +716,7 @@ check("18 control: the plain payload carries none of the new keys through either
   const shape53 = marks53 ? Object.keys(marks53.cards).sort().map(id => id + ":" + marks53.cards[id].k
     + (marks53.cards[id].was ? "<" + JSON.stringify(marks53.cards[id].was) : "")).join(" ") : "none";
   check("53a an edition that changes a card, adds one and retires one marks the changed card with the words it had and the new card, and not the retired one",
-    !!marks53 && marks53.r === 5 && !("e" in marks53) && shape53 === 'c-a:changed<{"en":"A body."} c-d:new', shape53);
+    !!marks53 && marks53.r === 5 && marks53.e === "" && shape53 === 'c-a:changed<{"en":"A body."} c-d:new', shape53);
   check("53A THE CONTROL: the same file offered again marks nothing",
     EM.editionMarksFrom(held53, ED.editionChanges(held53, read(doc()), NONE), { r: 5 }) === null, "nothing marked");
   const landMarked = () => {
@@ -791,7 +791,7 @@ check("18 control: the plain payload carries none of the new keys through either
   const CBD = await import(MOD("card-body.js"));
   const oldMark = v => {
     PK.resetPack(); land(doc()); CB.applyBootCatalog(); RB.rebuildCards();
-    EM.keepEditionMarks(next53, { v: v, cards: { "c-a": { k: "changed" } } });
+    EM.keepEditionMarks(next53, Object.assign({ cards: { "c-a": { k: "changed" } } }, typeof v === "string" ? { v: v } : v));
     land(three); CB.applyBootCatalog(); RB.rebuildCards(); EM.forgetEditionMarks();
     let badge, pill;
     try {
@@ -809,12 +809,15 @@ check("18 control: the plain payload carries none of the new keys through either
     finally { globalThis.document = page; }
     return JSON.stringify(EM.editionMarkOf("c-a")) + " | " + badge + " | " + pill;
   };
-  const old15 = oldMark("v15"), oldDated = oldMark("2026-09-20");
+  const old15 = oldMark("v15"), oldDated = oldMark("2026-09-20"), both = oldMark({ r: 5, e: "2026-09-20" });
   check("53g a mark kept as {v} before the split reads its rev as a rev, \"v15\" on the badge and the pill as rev 15, and a dated one by its date, in the language on screen",
     old15 === '{"k":"changed","e":"","r":15} | ' + T("Changed in rev {R}").split("{R}").join("15") + " | " + T("Only the cards rev {R} changed or added").split("{R}").join("15")
     && oldDated === '{"k":"changed","e":"2026-09-20","r":null} | ' + T("Changed in edition {E}").split("{E}").join("2026-09-20") + " | "
       + T("Only the cards edition {E} changed or added").split("{E}").join("2026-09-20"),
     old15 + " || " + oldDated);
+  check("53h a mark of an edition with a rev and a date names both on the badge and the pill's title, the rev first and the date after it",
+    both === '{"k":"changed","e":"2026-09-20","r":5} | ' + T("Changed in rev {R}").split("{R}").join("5 (2026-09-20)") + " | "
+      + T("Only the cards rev {R} changed or added").split("{R}").join("5 (2026-09-20)"), both);
   AP.setEditionView(false); AP.setCats([]);
   EM.keepEditionMarks(next53, null); EM.forgetEditionMarks();
   HK.hooks.syncFavouritesMeta = () => {};

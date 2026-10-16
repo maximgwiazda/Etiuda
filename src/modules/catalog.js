@@ -331,25 +331,34 @@ function catalogVersionLabel(v){
   if(!s) return "";
   return /^[0-9][0-9.]*$/.test(s) ? "v"+s : s;
 }
-/* THE ONE DATE A CATALOG SHOWS: its own edition, the string its author stamped, which is what the
-   offer dialog, the Library and the empty screen's offer all name. The file's write time stands
-   in only where there is no edition to read - it answers a different question, since copying a
-   file rewrites it, and two dates for one catalog on one screen is item 406. The write time is
-   still measured: the Newer tag is that and nothing else. */
+/* WHAT A CATALOG IS CALLED IN A LIST: its rev and its dated edition, which is what the offer dialog, the Library and the
+   empty screen's offer all name. The file's write time stands in only where the catalog has neither - it answers a
+   different question, since copying a file rewrites it, and two dates for one catalog on one screen is item 406. The
+   write time is still measured: the Newer tag is that and nothing else. */
 function catalogStamp(edition,mtime,rev){
-  return String(edition==null?"":edition).trim() ? editionLabel(editionNameOf({version:edition, rev:rev})) : fileStamp(mtime);
+  const n=editionNameOf({version:edition, rev:rev});
+  return (n.r!=null || n.e) ? editionLabel(n) : fileStamp(mtime);
 }
-/* A CATALOG'S EDITION AS THE DESK NAMES IT: {e} its dated edition, otherwise {r} its rev, and where a label that is only a
-   number stands with no rev, that number as the rev. A number is never called an edition. */
+/* A CATALOG'S EDITION AS THE DESK NAMES IT: {r} its rev and {e} its dated edition, the rev first and the date beside it
+   and less so. A label that is only a number is no date: with no rev it is that number as the rev, so
+   a number is never called an edition and a name is never blank where the catalog has either. */
 function editionNameOf(c){
-  const e=catalogVersionLabel(c && c.version), n=/^v?([0-9][0-9.]*)$/.exec(e);
-  if(e && !n) return {e:e};
-  if(c && c.rev!=null && c.rev!=="" && Number.isFinite(+c.rev)) return {r:+c.rev};
-  return n ? {r:/^[0-9]+$/.test(n[1]) ? +n[1] : n[1]} : {e:""};
+  const l=catalogVersionLabel(c && c.version), n=/^v?([0-9][0-9.]*)$/.exec(l), e=(l && !n) ? l : "";
+  if(c && c.rev!=null && c.rev!=="" && Number.isFinite(+c.rev)) return {r:+c.rev, e:e};
+  if(n) return {r:/^[0-9]+$/.test(n[1]) ? +n[1] : n[1], e:""};
+  return {r:null, e:e};
 }
-/* That name as a label beside a catalog's name or in a list: the dated edition as it is, a rev as "rev {R}". */
+/* The rev as a sentence or a list says it: the number, and the dated edition after it in parentheses. */
+function editionRevText(name){ return String(name.r)+(name.e ? " ("+name.e+")" : ""); }
+/* That name in a list or beside a catalog's name: "rev {R}" with the date after it, or the dated edition alone. */
 function editionLabel(name){
-  return name && name.r!=null ? t("rev {R}").split("{R}").join(String(name.r)) : String((name && name.e)||"");
+  return name && name.r!=null ? t("rev {R}").split("{R}").join(editionRevText(name)) : String((name && name.e)||"");
+}
+/* A sentence naming an edition, both forms already translated: the rev's, {R} carrying the date after it, or, for a
+   catalog with no rev, the dated edition's, {E}. */
+function editionSaid(name,revWords,datedWords){
+  const n=name||{};
+  return n.r!=null ? revWords.split("{R}").join(editionRevText(n)) : datedWords.split("{E}").join(String(n.e||""));
 }
 function eCatalogAccepted(c){
   try{ return lsGet(E_CATALOG_KEY)===eCatalogSignature(c); }catch(e){ return false; }
@@ -477,6 +486,7 @@ export {
   catalogStamp,
   editionNameOf,
   editionLabel,
+  editionSaid,
   eCatalogAccepted,
   eApplyCatalog,
   eResetCatalog,

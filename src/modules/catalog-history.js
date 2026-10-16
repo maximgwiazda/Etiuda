@@ -45,7 +45,8 @@ function historyHeadHtml(g){
   return '<div class="eh-head"><b data-i18n-skip>'+esc(historyFileName(g))+'</b>'+where+'</div>';
 }
 function historyRowHtml(v,key){
-  const meta=[String(v.date||"").trim() ? editionLabel(editionNameOf({version:v.date, rev:v.rev})) : "",
+  const ed=editionNameOf({version:v.date, rev:v.rev});
+  const meta=[(ed.r!=null || ed.e) ? editionLabel(ed) : "",
     +v.cards>=0 ? catalogCountsLine("{CARDS} · {MACROS} · {INTENTS} · {CATEGORIES}",+v.cards,+v.macros,+v.intents,+v.cats) : ""]
     .filter(Boolean).map(esc).join(" · ");
   const acts=historyActs(v), open=t("Open this version");

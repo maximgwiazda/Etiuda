@@ -8,6 +8,7 @@ import { esc } from "./esc.js";
 import { escFilled, fill, FILL_A, FILL_B, FILL_M_A, FILL_M_B } from "./intent-text.js";
 import { cardFieldKey } from "./card-fields.js";
 import { editionMarkOf, editionWasText, editionDiffHtml } from "./edition-marks.js";
+import { editionSaid } from "./catalog.js";
 import { intentOrder, isIntentHiddenIdx } from "./intent-id.js";
 import { movedCardIds } from "./card-order.js";
 import { railActive } from "./rail-panel.js";
@@ -44,9 +45,8 @@ function cardBodyHtml(m,i,ctx){
       cardH+='<span class="cbadge ed" title="'+esc(t("Changed or added by you, not what the catalog shipped"))+'">'+esc(t("mod"))+'</span>';
     // What the loaded edition brought, worn until the card is next copied (edition-marks.js).
     const edMark=editionMarkOf(m.id);
-    if(edMark) cardH+='<span class="cbadge edn" title="'+esc(edMark.r!=null
-        ? (edMark.k==="new"?t("New in rev {R}"):t("Changed in rev {R}")).split("{R}").join(String(edMark.r))
-        : (edMark.k==="new"?t("New in edition {E}"):t("Changed in edition {E}")).split("{E}").join(edMark.e))+'">'
+    if(edMark) cardH+='<span class="cbadge edn" title="'+esc(edMark.k==="new" ? editionSaid(edMark,t("New in rev {R}"),t("New in edition {E}"))
+        : editionSaid(edMark,t("Changed in rev {R}"),t("Changed in edition {E}")))+'">'
       +esc(edMark.k==="new"?t("new"):t("changed"))+'</span>';
     const favTip=t(fav?"Remove from Favourites":"Add to Favourites");
     /* Hide is a toggle now that hidden entries stay on the list - the card itself is where you

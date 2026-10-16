@@ -10,11 +10,11 @@ import { cards, editionView, setEditionView } from "./app-state.js";
 import { editionNameOf } from "./catalog.js";
 
 const EDITION_MARKS="EditionMarks";
-/** The marks an edition leaves: the edition as the desk names it, `e` its dated edition or `r` its rev (catalog.js
+/** The marks an edition leaves: the edition as the desk names it, `r` its rev and `e` its dated edition (catalog.js
  *  editionNameOf), and per card its kind and, for a changed one, the text of each body field it changed as it read before. Pure. */
 function editionMarksFrom(held,changes,name){
   const was=new Map(((held&&held.cards)||[]).map(m=>[String(m.id),m]));
-  const out=(name && name.r!=null) ? {r:name.r, cards:{}} : {e:String((name && name.e)||""), cards:{}};
+  const out={r:(name && name.r!=null) ? name.r : null, e:String((name && name.e)||""), cards:{}};
   ((changes&&changes.items)||[]).forEach(it=>{
     if(it.kind!=="changed" && it.kind!=="new") return;
     const mark={k:it.kind};
