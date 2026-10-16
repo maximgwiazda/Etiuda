@@ -36,7 +36,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every check below runs, or the file says it did not complete. */
-const EXPECTED = 103;
+const EXPECTED = 104;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -617,6 +617,12 @@ try {
   check(/\.on\{background:color-mix\(in srgb,var\(--accent\) 20%,transparent\)\}/.test(doc) && /forced-colors:active/.test(doc)
     && /prefers-reduced-motion/.test(doc),
     "3c the marked row wears the desk's mark, and high contrast and reduced motion are answered");
+  /* The list scrolls inside the picker rather than growing past it or cutting its last rows off: the first #rows rule, the
+     list itself, shrinks in its column and scrolls up and down, and no shorthand in it hides the overflow. */
+  const rowsRule = (/#rows\{([^}]*)\}/.exec(doc) || [])[1] || "";
+  check(/(^|;)min-height:0(;|$)/.test(rowsRule) && /(^|;)overflow-y:auto(;|$)/.test(rowsRule) && !/(^|;)overflow:/.test(rowsRule),
+    "3d the list scrolls inside the picker, its rule shrinking in the column and scrolling up and down with no overflow"
+    + " shorthand to hide it: " + JSON.stringify(rowsRule));
 
   /* ---- 4. the page's own script, run ---------------------------------------------------- */
   console.log("\n[4/7] the picker's page, its script run over a stand-in of its two elements");
