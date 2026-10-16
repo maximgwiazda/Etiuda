@@ -1930,6 +1930,9 @@ function writeInUse(pin, win) {
   /* A pin this shell did not hand on is not a catalog this desk has loaded. */
   if (!got) return;
   loadedText = got.text;
+  /* A pin other than the one already recorded drops the kept file before the returns below,
+     so a take the share has not recorded cannot leave the previous catalog to be reloaded. */
+  if (!inUseKept || inUseKept.sha !== String(pin || "")) dropLoadedCatalog();
   const root = catalogFolder();
   if (!folderAnswers(root)) { heldInUse = { text: got.text, source: got.source }; return; }
   let isDir = false;

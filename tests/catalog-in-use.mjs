@@ -21,7 +21,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 38;
+const EXPECTED = 42;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -67,7 +67,7 @@ function loadDesk(ud) {
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME";
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-    SRC + "\nreturn { " + EXPOSE.join(", ") + " };")(
+    SRC + "\nreturn { setDown: d => { folderDown = d; }, " + EXPOSE.join(", ") + " };")(
     n => (n === "electron" ? electron : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
@@ -536,6 +536,75 @@ try {
     check(strayPin && strayPin !== outsidePin && still && still.catalog.sha256 === outsidePin
         && !fs.existsSync(ans) && !strayAns && !strayInShare,
       "895b a kept text whose pin does not match in-use.ec answers nothing");
+  }
+
+  /* ---- the kept copy follows the catalog the desk still holds -------------------------------------- */
+  {
+    const keptOf = D => path.join(D.ud, "catalog-loaded.txt");
+    const box = await arm("forget-kept");
+    put(box.share, "board.ec", textOf(catalog(2)));
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)]);
+    const b = box.D.sync("etiuda:catalog");
+    take(box.D, pinOf(box.D, b || ""));
+    const had = fs.existsSync(keptOf(box.D));
+    await box.D.ask("etiuda:team-join", "forget", box.team);
+    const gone = !fs.existsSync(keptOf(box.D));
+    check(had && gone, "895c forgetting the lead drops the kept copy (had=" + had + " gone=" + gone + ")");
+  }
+
+  {
+    const box = await arm("edition-held");
+    const r2 = textOf(catalog(2, { card: "Rev two lamp." }));
+    put(box.share, "board.ec", r2);
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)]);
+    const b = box.D.sync("etiuda:catalog");
+    const pin2 = pinOf(box.D, b || "");
+    take(box.D, pin2);
+    put(box.share, "board.ec", textOf(catalog(3, { card: "Rev three lamp." })));
+    const again = loadDesk(box.D.ud);
+    const b3 = again.sync("etiuda:catalog");
+    const pin3 = pinOf(again, b3 || "");
+    putAsk({ share: box.share, D: again, me: box.me }, "Askq3a", pin2);
+    again.api.tryCatalogAsk(again.win);
+    const ans = openSealedDoc(again, answerPath(box.share, box.me.id), box.key);
+    check(pin3 && pin3 !== pin2 && ans && ans.sha256 === pin2,
+      "895d a folder that has moved on to a newer edition leaves a restarted desk answering the edition it holds (answered "
+      + (ans ? ans.sha256.slice(7, 15) : "none") + ")");
+    const key2 = crypto.randomBytes(32);
+    join(box, 2, [entry(again, box.me, key2, box.team, 2)]);
+    touch(path.join(box.share, "etiuda-team.json"), Date.now() + 1500);
+    again.api.tryCatalogAsk(again.win);
+    const use2 = openSealedDoc(again, inUsePath(box.share, box.me.id), key2);
+    check(use2 && use2.catalog.sha256 === pin2 && use2.catalog.source === "folder",
+      "895e after that restart, a newer team epoch reseals the held edition with source folder (got "
+      + (use2 ? use2.catalog.source + " " + use2.catalog.sha256.slice(7, 15) : "none") + ")");
+  }
+
+  {
+    const box = await arm("held-down");
+    put(box.share, "board.ec", textOf(catalog(2)));
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)]);
+    const b = box.D.sync("etiuda:catalog");
+    const pinA = pinOf(box.D, b || "");
+    take(box.D, pinA);
+    const outDir = folder("held-down-out");
+    put(outDir, "b.ec", textOf(catalog(6, { id: "b-lamps", name: "B lamps", card: "B lamp." })));
+    box.D.api.offerFile(box.D.win, path.join(outDir, "b.ec"));
+    const off = box.D.sent.filter(a => a[0] === "etiuda:catalog-file").pop();
+    const pinB = pinOf(box.D, off ? off[1] : "");
+    box.D.api.setDown(box.share);
+    take(box.D, pinB);
+    const keptFile = path.join(box.D.ud, "catalog-loaded.txt");
+    const keptPin = fs.existsSync(keptFile) ? pinOf(box.D, fs.readFileSync(keptFile, "utf8")) : "";
+    const useNow = openSealedDoc(box.D, inUsePath(box.share, box.me.id), box.key);
+    const again = loadDesk(box.D.ud);
+    putAsk({ share: box.share, D: again, me: box.me }, "Askq7a", pinA);
+    again.api.tryCatalogAsk(again.win);
+    const ans = openSealedDoc(again, answerPath(box.share, box.me.id), box.key);
+    check(!ans || ans.sha256 === pinB,
+      "895f a take held while the share is down does not leave the previous catalog to be answered after a restart (answered "
+      + (ans ? ans.sha256.slice(7, 15) : "none") + ", kept " + (keptPin ? keptPin.slice(7, 15) : "none")
+      + ", in use " + (useNow && useNow.catalog ? useNow.catalog.sha256.slice(7, 15) : "none") + ")");
   }
 
   /* ---- what the person at the desk reads, and a catalog the page already holds --------------------- */
