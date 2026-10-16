@@ -2,7 +2,7 @@ import { $ } from "./dom.js";
 import { t, toastRefusal } from "./ui-lang.js";
 import { lsGet, lsSet, nsGet } from "./storage.js";
 import { eCatalog, eCatalogAccepted, eCatalogHanded, storedCatalog } from "./catalog.js";
-import { pack } from "./pack.js";
+import { pack, setStatsFlush } from "./pack.js";
 import { statsDoc } from "./desk-stats.js";
 import { E_VERSION } from "./env.js";
 import { askClose } from "./tabs.js";
@@ -58,6 +58,15 @@ function eCatalogRing(){
   if(!h || typeof h.catalogRing!=="function") return Promise.resolve("");
   try{ return Promise.resolve(h.catalogRing()).then(v=>typeof v==="string"?v:"").catch(()=>""); }
   catch(e){ return Promise.resolve(""); }
+}
+/* The leads this desk has pinned, [{keyId, public}] each well formed, [] in a browser, wherever the host has none, and on a
+   desk outside any team. */
+function eCatalogLeads(){
+  const h=eHost();
+  if(!h || typeof h.catalogLeads!=="function") return Promise.resolve([]);
+  const ok=l=>!!l && typeof l==="object" && typeof l.keyId==="string" && /^[0-9a-f]{64}$/.test(String(l.public||""));
+  try{ return Promise.resolve(h.catalogLeads()).then(v=>Array.isArray(v)?v.filter(ok).map(l=>({keyId:l.keyId, public:String(l.public)})):[]).catch(()=>[]); }
+  catch(e){ return Promise.resolve([]); }
 }
 /* The file this load is running, and the folder it was found in - which is not always the folder
    above: a catalog beside the installation still loads when the folder holds none. Where the
@@ -311,19 +320,32 @@ function eSetAccent(hex){
   document.body.classList.toggle("e-band-deep",ok&&!pale);
 }
 
-function answerStats(req){
-  const h=eHost();
-  if(!h || typeof h.writeStats!=="function") return;
+/* The span the shell last asked for. A flush sends the counts with no ask id, so it cannot take that ask's reason. */
+let statsAsk=null;
+function statsInfo(){
   const cat=storedCatalog();
-  const doc=statsDoc(pack,{
+  return {
     engine:E_VERSION,
-    period:{from:req&&req.from,to:req&&req.to},
+    period:statsAsk?{from:statsAsk.from,to:statsAsk.to}:null,
     catalog:cat&&cat.id?{id:cat.id,rev:cat.rev}:null
-  });
-  Promise.resolve(h.writeStats(JSON.stringify(doc))).then(r=>{
-    if(r&&r.ok&&r.syncMs) lsSet("eLastSync",String(r.syncMs));
-  }).catch(()=>{});
+  };
 }
+function sendStats(close, askId){
+  const h=eHost();
+  if(!h || !statsAsk) return;
+  const fn=close && typeof h.closeStats==="function" ? h.closeStats : h.writeStats;
+  if(typeof fn!=="function") return;
+  let doc;
+  try{ doc=statsDoc(pack, statsInfo()); }catch(e){ return; }
+  const text=JSON.stringify(doc);
+  const sent=(askId && !close) ? fn(text, String(askId)) : fn(text);
+  Promise.resolve(sent).catch(()=>{});
+}
+function answerStats(req){
+  if(req && req.from && req.to) statsAsk={from:String(req.from),to:String(req.to)};
+  sendStats(false, req && typeof req.id==="string" ? req.id : "");
+}
+setStatsFlush(()=>sendStats(false));
 
 /* The shell's Ctrl+Tab, as a keydown the shortcut table already matches. KeyboardEvent is
    absent where this file is loaded under plain node and the callback is never what asks. */
@@ -351,7 +373,10 @@ function wireHost(){
   if(typeof h.onAccent==="function") h.onAccent(eSetAccent);
   /* The shell asks before the window closes; the conversations answer (tabs.js). */
   if(typeof h.onAskClose==="function" && typeof h.closeAnswer==="function")
-    h.onAskClose(()=>askClose(a=>{ try{ h.closeAnswer(a); }catch(e){} }));
+    h.onAskClose(()=>askClose(a=>{
+      if(a==="none"||a==="close") sendStats(true);
+      try{ h.closeAnswer(a); }catch(e){}
+    }));
   const min=$("#winMin"), max=$("#winMax"), close=$("#winClose");
   if(min) min.onclick=()=>{ try{ h.minimize(); }catch(e){} };
   if(max) max.onclick=()=>{ try{ h.maximize(); }catch(e){} };
@@ -387,6 +412,7 @@ export {
   eCatalogFiles,
   eOnCatalogListing,
   eCatalogRing,
+  eCatalogLeads,
   eChooseCatalogFolder,
   eLoadedCatalogFile,
   eCatalogIn,

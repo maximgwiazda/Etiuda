@@ -4,7 +4,7 @@ import { loadShortcuts } from "./shortcuts.js";
 import { scStopCapture, wireShortcutsList } from "./shortcuts-list.js";
 import { lsGet, lsSet, lsDel, nsGet, nsSet, nsDel, nsKey } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { UI_LANGS, uiLang, offerUndo, t, toast, fileStamp } from "./ui-lang.js";
+import { UI_LANGS, uiLang, offerUndo, t, toast } from "./ui-lang.js";
 import { setUiLang } from "./repaint.js";
 import { applyDefaultRailWidth, applyStoredRailWidth, railLocked, rebuildRailMQ, syncRailLayout, toggleRailLock } from "./rail-panel.js";
 import { esc } from "./esc.js";
@@ -167,7 +167,6 @@ function settingsBodyHtml(){
     ' title="'+esc(t("Changes every label in Etiuda, never the cards themselves"))+'">'+
     UI_LANGS.map(l=>'<option value="'+esc(l.code)+'"'+(l.code===uiLang()?" selected":"")+'>'+esc(l.label)+'</option>').join("")+
     '</select>';
-  const lastSyncStamp=fileStamp(+lsGet("eLastSync"));
   const joinDoor=joinDoorButton("setJoinTeam");
   /* WHO IS AT THE DESK, AND IN WHICH LANGUAGE: two rows of the same kind, the name first
      because it is the one that leaves the machine. NO LINE UNDER THE NAME - the placeholder
@@ -180,9 +179,6 @@ function settingsBodyHtml(){
       row(t("Interface language"),
           t("The language of the buttons and menus, not of the macros: those follow EN|PL in the header"),
           langSel)+
-      (lastSyncStamp
-        ? row(t("Last sync"), "", '<span>'+esc(lastSyncStamp)+'</span>')
-        : "")+
       /* One row per team this desk trusts a lead for; what the lead sees is said once, on the first team that still lists it,
          and what leaving closes once, on the first row that offers Leave. */
       teamLeads().map((l,i,all)=>teamRowHtml(l, i===all.findIndex(x=>!x.removed)?t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own."):"", i===all.findIndex(x=>!x.policy))).join("")+

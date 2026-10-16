@@ -652,7 +652,7 @@ try {
   };
   const noComments = t => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
   const callsRetry = body => /\btryHeldBranches\(\)/.test(noComments(body));
-  const loadLine = mainText.split("\n").filter(l => l.indexOf("on(\"did-finish-load\"") >= 0 && l.indexOf("tryAnswerRequest") >= 0)[0] || "";
+  const loadLine = mainText.split("\n").filter(l => l.indexOf("on(\"did-finish-load\"") >= 0 && l.indexOf("tryLiveStats") >= 0)[0] || "";
   edit("Held for the folder event");
   await writeBranch();
   fs.renameSync(FOLDER, FOLDER + ".away");

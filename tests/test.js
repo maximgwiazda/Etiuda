@@ -1934,19 +1934,21 @@ function shellBridgeTests() {
     cards: [{ id: "c1", en: "set window.E_CATALOG = something" }, { id: "c2", en: "two" }] });
   eq("shell parses a document that mentions the global", took(mentions), 2);
 
-  /* A REQUEST FILE ON THE SHARE IS READ BEFORE ITS HASH IS CHECKED, and the hash recurses: one
-     nested 5,000 deep threw RangeError in the main process (sense pass 3, item 10). */
+  /* A SPAN FILE ON THE SHARE IS READ BEFORE ITS SIGNATURE IS CHECKED, and a walk of it recurses:
+     one nested 5,000 deep must come back null, and say so, without throwing. */
   const R = requestFns();
-  const req = { format: 1, kind: "etiuda-request", id: "req-one", issued: "2026-09-24",
-    from: "2026-09-01", to: "2026-09-24", expires: "2099-01-01" };
-  const good = R.parseRequest(JSON.stringify(Object.assign({ hash: R.channelHash(req) }, req)));
-  eq("parseRequest takes a request whose hash is its own", good && good.id, "req-one");
-  const deep = JSON.stringify(Object.assign({ hash: "djb2:0" }, req))
-    .replace(/\}$/, ',"pad":' + "[".repeat(5000) + "]".repeat(5000) + "}");
+  const sig = { alg: "Ed25519", keyId: "quay-lead", value: "ab".repeat(64) };
+  const rolling = { format: 1, kind: "etiuda-stats-span", span: "rolling-30", sig: sig };
+  const month = { format: 1, kind: "etiuda-stats-span", span: "this-month", sig: sig };
+  const other = { format: 1, kind: "etiuda-stats-span", span: "last-year", sig: sig };
+  eq("spanDocument takes a rolling span", R.spanDocument(JSON.stringify(rolling)) && R.spanDocument(JSON.stringify(rolling)).span, "rolling-30");
+  eq("spanDocument takes this month", R.spanDocument(JSON.stringify(month)) && R.spanDocument(JSON.stringify(month)).span, "this-month");
+  eq("spanDocument refuses a span it does not know", R.spanDocument(JSON.stringify(other)), null);
+  const deep = JSON.stringify(rolling).replace(/\}$/, ',"pad":' + "[".repeat(5000) + "]".repeat(5000) + "}");
   let deepGot;
-  try { deepGot = R.parseRequest(deep); } catch (e) { deepGot = "threw " + e.name; }
-  eq("parseRequest refuses a request nested 5,000 deep, and says so, without throwing",
-     [deepGot, R.said.length === 1 && /nests deeper/.test(R.said[0])], [null, true]);
+  try { deepGot = R.spanDocument(deep); } catch (e) { deepGot = "threw " + e.name; }
+  eq("spanDocument refuses a span nested 5,000 deep, and says so, without throwing",
+     [deepGot, R.said.length === 1 && /nests deeper than any span/.test(R.said[0])], [null, true]);
 }
 /* WHERE THE WINDOW OPENS (feel pass native-2), on the pure half: the rectangle a launch is given
    from what the last run saved and the displays there are now. The round trip through a real
@@ -4530,12 +4532,11 @@ function motionJudgeTests() {
 }
 function requestFns() {
   const src = fs.readFileSync(path.join(E.ROOT, "shell", "main.js"), "utf8");
-  const decls = ["const DESK_ID_RE =", "function canonJson(", "function channelHash(", "function ymdOk(",
-                 "function parseRequest("].map(m => extractDecl(src, m)).join("\n");
+  const decls = ["function spanDocument("].map(m => extractDecl(src, m)).join("\n");
   const said = [];
   const quiet = { log: (s) => said.push(String(s)), error: (s) => said.push(String(s)) };
   return Object.assign(new Function("console", decls
-    + "\nreturn {parseRequest, channelHash};")(quiet), { said });
+    + "\nreturn {spanDocument};")(quiet), { said });
 }
 
 /* The shell's content security policy, in node. tests/csp.js drives the real thing in Electron
@@ -4978,8 +4979,8 @@ function checkCatalogRoundTrip() {
 
    What this section is not: a claim that "e" is right. It is a claim that every place still
    agrees, so that a later move of the prefix moves them together or fails here. */
-const UI_STRINGS_COUNT = 1104;
-const UI_STRINGS_SHA256 = "4beb988eefc5c0dd8c53ae769b0dde85013d75b08e4c2d57f56603905c8d5eab";
+const UI_STRINGS_COUNT = 1103;
+const UI_STRINGS_SHA256 = "0fdea1c35ec08f6cfd67fd8dec6d91e62862141b70ccb499a0af15217ea0a2c0";
 
 /* The same line rule as checkDuplicateStrings: the translation table is one quoted pair to a
    line. Sorted, so reordering the table is not a change to what anybody reads; both halves,
