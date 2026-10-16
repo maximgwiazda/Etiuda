@@ -376,6 +376,15 @@ async function launch(plan) {
       await settle();
       obs.library.push(readLibrary());
     },
+    /* A host whose answer about the pinned leads never comes, as a shell that hangs would leave it. */
+    hangleads: () => { globalThis.E_HOST.catalogLeads = () => new Promise(() => {}); },
+    // The Library read once a row's own wait for its check (2 s) is over, and a little more.
+    librarylate: async () => {
+      if (!doc.getElementById("mgCatList")) { const l = doc.createElement("div"); l.id = "mgCatList"; doc.body.appendChild(l); }
+      OFFER.paintCatalogList();
+      await settle(2600);
+      obs.library.push(readLibrary());
+    },
     // The file picker's reading half, over a file anywhere: importCatalogText is where both import routes end.
     import: file => { CF.importCatalogText(fs.readFileSync(path.join(LAB, file), "utf8"), path.basename(file)); },
     load: name => { const b = doc.querySelector("button[data-ec-load=\"" + name + "\"]"); if (!b) throw new Error("no Load for " + name); b.onclick(); },
@@ -593,7 +602,7 @@ if (process.argv[2] === "--launch") {
    THE CHECKS: each scenario a temp folder of its own, a desk file, a catalog folder and launches.
    ================================================================================================ */
 async function parent() {
-  const EXPECTED = 120;
+  const EXPECTED = 122;
   let asserted = 0, failed = 0;
   const check = (ok, line) => { asserted++; if (ok) console.log("  ok   " + line); else { failed++; console.log("  FAIL " + line); } };
 
@@ -1771,6 +1780,32 @@ async function parent() {
     check(!!swap78B && !!swap78B.key && swap78B.key.tip === forgerTip && !!r78a && r78a.loaded && !!r78a.key && r78a.key.tip === leadTip,
       "79g a gold key is named by the print of the public that verified the file, never the key id the file gives itself: the other key's file names that key though it borrowed the lead's id, and the pinned lead's catalog in use names the lead's: "
       + JSON.stringify([swap78B && swap78B.key && swap78B.key.tip, r78a && r78a.key && r78a.key.tip]));
+
+    /* 80a, the test architect's leg from his verdict on d39a5f8 (Clement psi, 2026-10-15): the boot's offer on the first
+       launch after the pin. The held catalog is another key's rev 3 under the lead's borrowed key id, held valid under a
+       ring before the pin, and the lead's own rev 2 is beside it, which the shell hands this launch. The old valid made the
+       floor hold the lead's edition back at that boot; once the held state answers to the pin, the offer is made again. */
+    const lab80a = scenario([["catalogs/lamp.ec", forge(atRev(3, "2026-09-03"))], ["catalogs/lamp-lead.ec", sign(atRev(2, "2026-09-02"))],
+      ["catalogs/etiuda-ring.json", forgedRing]]);
+    const b80a0 = run(lab80a, ["boot", "settle", "offer", "yes", "settle"]);
+    pinAs(lab80a, pubHex(pair.publicKey), KEY_ID);
+    const b80a1 = run(lab80a, ["boot", "settle", "offer"]);
+    const o80a = b80a1.offers[0] || {};
+    check(b80a0.heldAtEnd === V2.V2_SIG_VALID && b80a0.heldRev === 3 && o80a.shown === true && (o80a.files || []).includes("lamp-lead.ec")
+      && b80a1.heldAtEnd === V2.V2_SIG_UNKNOWN && !errs78(b80a0, b80a1).length,
+      "80a on the first launch after the pin, the lead's own lower edition is offered at boot, the held state lowered from valid: "
+      + JSON.stringify({ held0: b80a0.heldAtEnd, rev0: b80a0.heldRev, shown: o80a.shown, files: o80a.files || null, title: o80a.title || "",
+        held1: b80a1.heldAtEnd, errors: errs78(b80a0, b80a1) }));
+
+    /* 81a: THE LIBRARY DOES NOT WAIT ON A HOST THAT NEVER ANSWERS. The held signature's answer to a pinned lead is waited
+       for as long as a row's own check is (2 s), and the list is drawn after that whatever the host says. */
+    const lab81a = scenario([["catalogs/lamp.ec", sign(payload("2026-09-01"))], ["catalogs/etiuda-ring.json", ring]]);
+    run(lab81a, ["boot", "settle", "offer", "yes", "settle"]);
+    const hung81a = run(lab81a, ["hangleads", "librarylate"]);
+    const r81a = row(hung81a, "lamp.ec");
+    check(!!r81a && r81a.loaded && !errs78(hung81a).length,
+      "81a with the host never answering about the pinned leads, the Library is still drawn once a row's wait is over, its catalog in use loaded: "
+      + JSON.stringify({ rows: (hung81a.library[0] || []).map(r => [r.name, r.loaded]), errors: errs78(hung81a) }));
   } catch (e) {
     failed++;
     console.log("  FAIL " + String(e && e.stack || e).split("\n").slice(0, 3).join(" | "));
