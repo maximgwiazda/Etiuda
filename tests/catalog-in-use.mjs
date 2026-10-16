@@ -21,7 +21,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 36;
+const EXPECTED = 38;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -468,6 +468,74 @@ try {
     take(miss.D, pinM, other);
     check(pinM && pinOf(miss.D, other) !== pinM && !fs.existsSync(inUsePath(miss.share, miss.me.id)),
       "890ai a pin the catalog text does not back writes nothing");
+  }
+
+  /* ---- a restart holding a catalog that is not the folder's file ------------------------------------ */
+  {
+    const FERRY = "A ferry lamp hangs over the deck.";
+    const STRAY = "A stray lamp was left on the pier.";
+    const box = await arm("outside");
+    put(box.share, "board.ec", textOf(catalog(2, { date: "2026-04-02" })));
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)]);
+    const folderBoot = box.D.sync("etiuda:catalog");
+    const folderPin = pinOf(box.D, folderBoot || "");
+    take(box.D, folderPin);
+    const outsideDir = folder("ferry-opened");
+    const ferryBody = textOf(catalog(5, { id: "ferry-lamps", name: "Ferry lamps", date: "2026-03-11", card: FERRY }));
+    put(outsideDir, "ferry.ec", ferryBody);
+    const outsideFile = path.join(outsideDir, "ferry.ec");
+    box.D.api.offerFile(box.D.win, outsideFile);
+    const offered = box.D.sent.filter(a => a[0] === "etiuda:catalog-file").pop();
+    const outsidePin = pinOf(box.D, offered ? offered[1] : "");
+    take(box.D, outsidePin);
+    const useFile = inUsePath(box.share, box.me.id);
+    const named = openSealedDoc(box.D, useFile, box.key);
+    const kept = path.join(box.D.ud, "catalog-loaded.txt");
+    const keptPin = fs.existsSync(kept) ? pinOf(box.D, fs.readFileSync(kept, "utf8")) : "";
+    const keptInShare = path.relative(box.share, kept);
+    const outsideShare = keptInShare !== "" && !keptInShare.startsWith("..") && !path.isAbsolute(keptInShare);
+    const again = loadDesk(box.D.ud);
+    putAsk({ share: box.share, D: again, me: box.me }, "Askferry1", outsidePin);
+    again.api.tryCatalogAsk(again.win);
+    const ans = answerPath(box.share, box.me.id);
+    const answered = openSealedDoc(again, ans, box.key);
+    const answeredText = answered ? JSON.stringify(answered) : "";
+    const shareHas = (dir, needle) => {
+      let hit = false;
+      const walk = d => {
+        if (hit || !fs.existsSync(d)) return;
+        for (const name of fs.readdirSync(d)) {
+          const at = path.join(d, name);
+          if (fs.statSync(at).isDirectory()) walk(at);
+          else if (fs.readFileSync(at).includes(Buffer.from(needle))) hit = true;
+        }
+      };
+      walk(dir);
+      return hit;
+    };
+    check(folderPin && outsidePin && folderPin !== outsidePin && path.resolve(path.dirname(outsideFile)) !== path.resolve(box.share)
+        && named && named.catalog.source === "opened" && named.catalog.sha256 === outsidePin
+        && named.catalog.title === "Ferry lamps" && named.catalog.rev === 5
+        && JSON.stringify(named).indexOf(FERRY) < 0
+        && keptPin === outsidePin && path.dirname(kept) === box.D.ud && !outsideShare
+        && !shareHas(box.share, FERRY)
+        && answered && answered.kind === "etiuda-catalog-answer" && answered.sha256 === outsidePin
+        && answered.sha256 !== folderPin && answeredText.indexOf(FERRY) >= 0,
+      "895a a desk that restarts holding a catalog opened from outside the folder answers the lead's ask with that catalog, and the text stays beside the desk");
+
+    const strayBody = textOf(catalog(9, { id: "stray-lamps", name: "Stray lamps", date: "2026-02-02", card: STRAY }));
+    const strayPin = pinOf(box.D, strayBody);
+    fs.writeFileSync(kept, strayBody, "utf8");
+    if (fs.existsSync(ans)) fs.unlinkSync(ans);
+    const third = loadDesk(box.D.ud);
+    putAsk({ share: box.share, D: third, me: box.me }, "Askstray1", outsidePin);
+    third.api.tryCatalogAsk(third.win);
+    const strayAns = openSealedDoc(third, ans, box.key);
+    const still = openSealedDoc(third, useFile, box.key);
+    const strayInShare = shareHas(box.share, STRAY) || (strayAns && JSON.stringify(strayAns).indexOf(STRAY) >= 0);
+    check(strayPin && strayPin !== outsidePin && still && still.catalog.sha256 === outsidePin
+        && !fs.existsSync(ans) && !strayAns && !strayInShare,
+      "895b a kept text whose pin does not match in-use.ec answers nothing");
   }
 
   /* ---- what the person at the desk reads, and a catalog the page already holds --------------------- */
