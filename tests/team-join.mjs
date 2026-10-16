@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 76;
+const EXPECTED = 77;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1586,7 +1586,7 @@ try {
       + " this lead, in English and in Polish: " + JSON.stringify(f));
   });
 
-  const barBefore = { en: "", pl: "" };
+  const barBefore = { en: "", pl: "" }, leftWindow = { from: 0, to: 0 };
   await legTry("15br", async () => {
     await pageOn(Dl);
     /* The desk names its catalog to the team, as a desk that has taken it does, so Leave has a note of its own to take back. */
@@ -1612,7 +1612,9 @@ try {
     const hits = await writesUnder(leaveYard, async () => {
       SET.wireTeamRows({ querySelectorAll: sel => (sel === "[data-leave-team]" && drawn ? [btn] : []) });
       wired = typeof btn.onclick === "function";
+      leftWindow.from = Date.now();
       if (wired) await btn.onclick();
+      leftWindow.to = Date.now();
     });
     const env = Dl.envelope(), after = await Dl.join("state"), settingsAfter = SET.settingsBodyHtml();
     const f = { wired: wired && drawn[1] === TEAM, forgot: !(env.teamPins && env.teamPins[TEAM]) && !(env.teamKeys && env.teamKeys[TEAM])
@@ -1631,27 +1633,68 @@ try {
   });
 
   await legTry("15bw", async () => {
-    const BAR_EN = "Once it leaves, this desk takes no invitation to this team and rejoins only by asking from the team&#39;s sealed catalog.";
-    const BAR_PL = "Po opuszczeniu zespołu to stanowisko nie przyjmie już do niego zaproszenia; wrócić może tylko przez prośbę z zaszyfrowanego katalogu zespołu.";
-    const LEFT_EN = "This invitation names a team this desk left. It was not used, and nothing changed. To join again, ask from the team&#39;s catalog.";
+    const BACK_EN = "After leaving a team, this desk joins it again with a new invitation from its lead.";
+    const BACK_PL = "Po opuszczeniu zespołu to stanowisko może do niego wrócić dzięki nowemu zaproszeniu od lidera.";
+    /* A desk that trusts two leads draws two Leave rows, and the way back is said once, of any team. */
+    const hostWas = window.E_HOST, two = [{ team: TEAM, print: "abcdabcdabcdabcd", admitted: true, seen: true },
+      { team: "t-" + "1".repeat(16), print: "1234123412341234", admitted: true, seen: true, lead: "Quay lead" }];
+    window.E_HOST = { onTeamJoin: noop, teamJoin: () => Promise.resolve({ sealed: null, join: null, leads: two }) };
+    TJ.wireTeamJoin();
+    await new Promise(r => setTimeout(r, 30));
+    const twoRows = (await import(MOD("settings.js"))).settingsBodyHtml();
+    window.E_HOST = hostWas;
+    const times = (s, w) => s.split(w).length - 1;
+    const f = { before: barBefore.en.indexOf(BACK_EN) >= 0 && barBefore.en.indexOf(BACK_EN) < barBefore.en.indexOf("data-leave-team"),
+      polish: barBefore.pl.indexOf(BACK_PL) >= 0,
+      once: times(twoRows, "data-leave-team=") === 2 && times(twoRows, BACK_EN) === 1,
+      noBar: barBefore.en.indexOf("takes no invitation") < 0 && barBefore.en.indexOf("sealed catalog") < 0 };
+    check(Object.keys(f).every(k => f[k]),
+      "15bw before the press Settings says, once and of any team, that a desk which leaves a team joins it again with a new"
+      + " invitation from its lead, in English and in Polish, and promises no bar: " + JSON.stringify(f));
+  });
+
+  /* An invitation to a team this desk left asks, and joins on yes; on no, nothing changes. A lead forgotten as not matching
+     still refuses. */
+  await legTry("15bx", async () => {
+    const left = (Dl.envelope().teamLeft || {})[TEAM] || "";
+    const leftOk = !!left && Date.parse(left) >= leftWindow.from && Date.parse(left) <= leftWindow.to;
+    const day = lang => (left ? new Intl.DateTimeFormat(lang === "en" ? "en-GB" : lang, { day: "numeric", month: "long", year: "numeric" })
+      .format(new Date(left)) : "no day kept");
     const again = inviteBlob({ team: TEAM, folder: leaveYard, lead: lampLead, secret: newSecret() });
-    const readL = await Dl.join("read", again), takeL = await Dl.join("invite", again, "Nia", codeFor(again));
+    const trustBefore = trustOf(Dl) + JSON.stringify(Dl.envelope().teamLeft || null), folderBefore = snapshot(leaveYard);
+    const readL = await Dl.join("read", again);
     await pageOn(Dl);
     TJ.openJoinPaste();
     pasted = elOf({ "data-join-paste": "" }, again);
     await press("read");
     const page = TJ.teamJoinEmptyHtml();
+    ST.lsSet("eUiLang", "pl");
+    const pagePl = TJ.teamJoinEmptyHtml();
+    ST.lsSet("eUiLang", "en");
     await press("back");
+    const no = trustOf(Dl) + JSON.stringify(Dl.envelope().teamLeft || null) === trustBefore && snapshot(leaveYard) === folderBefore;
+    const takeL = await Dl.join("invite", again, "Nia", codeFor(again));
+    /* The lead never took this desk off the roster, so yes finds its key already wrapped there and joins at once. */
+    const env = Dl.envelope();
+    const K4 = crypto.randomBytes(32);
+    put(leaveYard, "etiuda-team.json", teamAt(4, [entry(me2, K4, 4), entry(meL, K4, 4)]));
+    put(leaveYard, "lamps.ec", P.sealCatalog(K4, TEAM, 4, A1));
+    const inAgain = await Dl.join("state");
     const readB2 = await Db.join("read", inviteBlob({ team: TEAM, folder: folder("bar-forgot-yard"), lead: lampLead, secret: newSecret() }));
-    const f = { before: barBefore.en.indexOf(BAR_EN) >= 0 && barBefore.en.indexOf(BAR_EN) < barBefore.en.indexOf("data-leave-team"),
-      polish: barBefore.pl.indexOf(BAR_PL) >= 0,
-      left: !!readL && readL.refused === "left" && !readL.offer && !!takeL && takeL.refused === "left" && (Dl.envelope().teamLeft || []).indexOf(TEAM) >= 0,
-      page: page.indexOf(LEFT_EN) >= 0 && page.indexOf("lead was forgotten") < 0,
-      forgot: !!readB2 && readB2.refused === "barred" };
+    const f = { left: leftOk, asks: !!readL && !!readL.offer && readL.offer.left === left && readL.refused === undefined,
+      page: page.indexOf("This desk left this team on " + day("en") + ". Join it again?") >= 0 && /data-join-check/.test(page),
+      polish: pagePl.indexOf("To stanowisko opuściło ten zespół " + day("pl") + ". Dołączyć do niego ponownie?") >= 0,
+      no: no,
+      yes: !!takeL && !takeL.refused && !!takeL.joined && takeL.joined.team === TEAM && (env.teamBarred || []).indexOf(TEAM) < 0
+        && !(env.teamLeft && env.teamLeft[TEAM]) && !!env.teamPins && !!env.teamPins[TEAM] && env.teamPins[TEAM].public === LEAD.public,
+      joined: inAgain.sealed === null && !!leadIn(inAgain) && leadIn(inAgain).admitted === true && leadIn(inAgain).removed === false,
+      forgot: !!readB2 && readB2.refused === "barred" && !readB2.offer };
     check(Object.keys(f).every(k => f[k]),
-      "15bw Leave's row says before the press that the desk then takes no invitation to the team and rejoins only by asking from"
-      + " its sealed catalog, in English and in Polish; after Leave the same lead's invitation is refused as a team this desk left,"
-      + " on the page too, while a lead forgotten as not matching keeps its own words: " + JSON.stringify(f));
+      "15bx after Leave the same lead's invitation is not refused: the confirm asks \"This desk left this team on <the day it"
+      + " left>. Join it again?\", in English and in Polish; no changes nothing and writes nothing; yes takes it, lifts the leave"
+      + " and joins, and the next epoch keeps the desk in; a lead forgotten as not matching is still refused as before: " + JSON.stringify(f)
+      + (f.yes ? "" : " (yes answered " + JSON.stringify(takeL && (takeL.refused || (takeL.joined && "joined") || (takeL.join && takeL.join.state) || null))
+        + ", bar " + JSON.stringify(env.teamBarred || null) + ", left " + JSON.stringify(env.teamLeft || null) + ")"));
   });
 
   await legTry("15bs", async () => {

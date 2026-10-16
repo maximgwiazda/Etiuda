@@ -4,7 +4,7 @@
    lead's key once, to compare with the lead's, and Settings lists every such team with a way to leave it. An
    invitation's wait names the lead and draws no code until the opening is read; the code then shows. */
 import { eHost, eOnCatalogCopy } from "./host.js";
-import { t, toast } from "./ui-lang.js";
+import { t, toast, uiLang } from "./ui-lang.js";
 import { esc } from "./esc.js";
 import { wholeThingEmpty } from "./app-state.js";
 import { agentName } from "./agent.js";
@@ -16,7 +16,7 @@ import { ICON_LOCK, ICON_KEY, ICON_DESK } from "./icons.js";
 let joinNow=null;                 // the shell's last answer: {sealed:{file,team}|null, join:{...}|null, leads:[{team,print,admitted,seen,lead,folder,removed,policy}]}
 let joinShut="";                  // the answer the agent last hid the bubble on
 let joinMode="";                  // "" | "paste" | "confirm" | "refused": the invitation, held on the page until it is answered
-let joinOffer=null;               // {folder, lead, code, host, cloud, local} the shell read from joinRead
+let joinOffer=null;               // {folder, lead, code, host, cloud, local, left} the shell read from joinRead
 let joinBlob="";                  // the paste box's text while it is open, so a repaint keeps it
 let joinRead="";                  // the text the shell read for the confirm on screen: yes sends this, never the box
 let joinTyped="";                 // the check code the agent typed on the confirm
@@ -95,7 +95,7 @@ function readTook(v,n,sent){
   const o=v&&typeof v==="object"?v.offer:null;
   if(o && typeof o.folder==="string"){
     joinOffer={folder:String(o.folder),lead:String(o.lead||""),code:String(o.code||""),
-      host:String(o.host||""),cloud:String(o.cloud||""),local:o.local===true};
+      host:String(o.host||""),cloud:String(o.cloud||""),local:o.local===true,left:String(o.left||"")};
     joinRead=sent; joinBlob=""; joinTyped=""; joinWhy=""; joinMode="confirm";
   }else refuseInvite(v);
   return true;
@@ -215,7 +215,8 @@ function joinInviteParts(){
   /* Neither the key nor the code is shown here: a code on the screen proves only that it was read off it. */
   if(joinMode==="confirm" && joinOffer){
     const o=joinOffer, ask=t("Ask the team's lead for this invitation's check code, and type its five digits here.");
-    return {title:t("Join this team?"), line:joinWhere(o),
+    const title=o.left?t("This desk left this team on {DATE}. Join it again?").split("{DATE}").join(leftDay(o.left)):t("Join this team?");
+    return {title:title, line:joinWhere(o),
       body:'<div class="e-join-meta">'+esc(t("Folder: {FOLDER}").split("{FOLDER}").join(o.folder))+'</div>'
         +'<div class="e-join-meta">'+esc(t("Lead: {NAME}").split("{NAME}").join(o.lead))+'</div>'
         +'<div class="e-join-ask">'+esc(ask)+'</div>'
@@ -231,7 +232,6 @@ function joinInviteParts(){
     line:joinWhy==="silent"?t("This folder could not be reached, so nothing was written.")
       :joinWhy==="pinned"?t("This invitation names a team this desk already knows, but with a different lead's key. It was not used, and nothing changed. Tell the team's lead about it.")
       :joinWhy==="barred"?t("This invitation names a team whose lead was forgotten on this desk. It was not used, and nothing changed. To join, ask from the team's catalog instead.")
-      :joinWhy==="left"?t("This invitation names a team this desk left. It was not used, and nothing changed. To join again, ask from the team's catalog.")
       :joinWhy==="foreign"?t("This folder holds another team, or the same team under a different lead's key, so nothing was written. Tell the team's lead about it.")
       :joinWhy==="unreadable"?t("The team file in this folder could not be read, so this desk did not join and nothing was written. Let the team's lead know, so they can check the folder.")
       :joinWhy==="check"?t("This code does not match this invitation. Ask the lead again before joining.")
@@ -239,6 +239,13 @@ function joinInviteParts(){
       :t("This invitation cannot be read, so nothing was changed."),
     body:"", acts:[["back",t("Cancel")]]};
   return null;
+}
+/* The day a desk left a team, in the interface's language, as About writes a day; the shell's ISO text where that fails. */
+function leftDay(iso){
+  const d=new Date(String(iso||"")), lang=uiLang();
+  if(isNaN(d.getTime())) return String(iso||"");
+  try{ return new Intl.DateTimeFormat(lang==="en"?"en-GB":lang,{day:"numeric",month:"long",year:"numeric"}).format(d); }
+  catch(e){ return String(iso).slice(0,10); }
 }
 /* The title, the line under it, and the acts, for whichever state the request is in. */
 function joinParts(){
@@ -364,7 +371,8 @@ function openJoinBubble(){
 }
 
 /* Leaves a team from Settings: the shell forgets its lead and every key kept under it, as "It does not match" does, and
-   remembers it as a leave; the catalog in use stays. `then()` runs once the shell has answered. */
+   remembers when it left, so a later invitation asks rather than refuses; the catalog in use stays. `then()` runs once the
+   shell has answered. */
 function forgetTeamLead(team,then){
   return joinAsk("leave",team).then(v=>{ if(typeof then==="function") then(); return v; });
 }

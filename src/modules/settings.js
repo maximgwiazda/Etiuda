@@ -134,11 +134,11 @@ function wireHotkeyRow(box){
   });
 }
 /* A team as Settings shows it: the lead's name and the folder, the key the agent compared, and Leave this team, which machine
-   policy would undo and so is not offered where it names the lead. `bar` says what leaving closes, before the press. */
+   policy would undo and so is not offered where it names the lead. `bar` says the way back, before the press. */
 function teamRowHtml(l,status,bar){
   const notes=[l.folder?t("Folder: {FOLDER}").split("{FOLDER}").join(l.folder):"",
     l.removed?t("This team no longer includes this desk."):status,
-    l.policy?t("The organisation's IT sets this desk's team."):bar?t("Once it leaves, this desk takes no invitation to this team and rejoins only by asking from the team's sealed catalog."):""].filter(Boolean);
+    l.policy?t("The organisation's IT sets this desk's team."):bar?t("After leaving a team, this desk joins it again with a new invitation from its lead."):""].filter(Boolean);
   return '<div class="set-row"><div class="set-label">'+esc(l.lead?t("{LEAD}'s team").split("{LEAD}").join(l.lead):t("Team"))
     +notes.map(n=>'<small>'+esc(n)+'</small>').join("")+'</div><div class="set-ctl">'
     +'<span class="e-lead-key">'+keySignHtml("studio",l.print)+'</span>'
@@ -180,7 +180,7 @@ function settingsBodyHtml(){
           t("The language of the buttons and menus, not of the macros: those follow EN|PL in the header"),
           langSel)+
       /* One row per team this desk trusts a lead for; what the lead sees is said once, on the first team that still lists it,
-         and what leaving closes once, on the first row that offers Leave. */
+         and the way back after leaving once, on the first row that offers Leave. */
       teamLeads().map((l,i,all)=>teamRowHtml(l, i===all.findIndex(x=>!x.removed)?t("The team's lead can see which catalog this desk uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own."):"", i===all.findIndex(x=>!x.policy))).join("")+
       (joinDoor?row(t("Team"), "", joinDoor):"")+
       /* Under a host only: a browser has no catalog folder to share. */

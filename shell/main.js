@@ -890,7 +890,7 @@ function deskEnvelopeBody(keysText) {
     + (teamOpened.size ? ',"teamOpened":' + JSON.stringify(Array.from(teamOpened)) : "")
     + (teamSeen.size ? ',"teamSeen":' + JSON.stringify(Array.from(teamSeen)) : "")
     + (teamBarred.size ? ',"teamBarred":' + JSON.stringify(Array.from(teamBarred)) : "")
-    + (teamLeft.size ? ',"teamLeft":' + JSON.stringify(Array.from(teamLeft)) : "")
+    + (Object.keys(teamLeft).length ? ',"teamLeft":' + JSON.stringify(teamLeft) : "")
     + (teamJoin ? ',"teamJoin":' + JSON.stringify(teamJoin) : "")
     + (inUseKept ? ',"inUse":' + JSON.stringify(inUseKept) : "")
     + (catalogAskIds.length ? ',"catalogAsks":' + JSON.stringify(catalogAskIds) : "")
@@ -2079,7 +2079,7 @@ let teamShown = {};                            // team id -> {lead?, folder?}: t
 const teamOpened = new Set();                  // catalog ids this desk has opened from an envelope, kept in the desk envelope
 const teamSeen = new Set();                    // teams whose pinned lead key the agent has been shown, kept in the desk envelope
 const teamBarred = new Set();                  // teams whose lead the agent forgot: no first admission but by an answered request
-const teamLeft = new Set();                    // of those, the teams the agent left with Leave this team, so a refusal says so
+let teamLeft = {};                             // of those, a team the agent left with Leave this team -> when, as an ISO date
 const editionTeam = new Map();                 // an opened edition's pin -> the team whose envelope held it, "" if two did; this run only
 let teamStamp = "";                            // what the team file, the ring and the box were when last heeded
 const teamSaid = new Set();
@@ -2440,7 +2440,7 @@ function heedTeam() {
     delete teamShown[r.team].lead;
   }
   if (r.pinned) teamPins[r.team] = r.state.pins[r.team];
-  if (r.unbar) { teamBarred.delete(r.team); teamLeft.delete(r.team); }
+  if (r.unbar) { teamBarred.delete(r.team); delete teamLeft[r.team]; }
   let changed = r.changed;
   if (r.team && teamPins[r.team] && (teamShown[r.team] || {}).folder !== root) {
     teamShown[r.team] = Object.assign({}, teamShown[r.team], { folder: root });
@@ -2745,10 +2745,11 @@ function inviteDoor() {
 function inviteParse(text) {
   return inviteRead(text, process.platform !== "win32");
 }
-/* Why an invitation for `team` under `lead` is not taken here, or "": the team's lead was forgotten, which only an
-   answered request undoes, or the team is pinned under another key, which only a signed handover moves. */
+/* Why an invitation for `team` under `lead` is not taken here, or "": the team's lead was forgotten as not matching, which
+   only an answered request undoes, or the team is pinned under another key, which only a signed handover moves. A team
+   this desk left is no refusal: the confirm asks whether to join it again, and yes lifts the leave. */
 function inviteSettled(team, lead) {
-  if (teamBarred.has(team)) return teamLeft.has(team) ? "left" : "barred";
+  if (teamBarred.has(team) && !teamLeft[team]) return "barred";
   const pin = teamPins[team];
   return pin && (pin.keyId !== lead.keyId || pin.public !== lead.public) ? "pinned" : "";
 }
@@ -2776,8 +2777,10 @@ function readInvite(text) {
   const settled = inviteSettled(parsed.team, parsed.lead);
   if (settled) return Object.assign({}, view, { refused: settled });
   const where = folderHost(parsed.folder, process.env);
-  return Object.assign({}, view, { offer: { folder: parsed.folder, lead: parsed.lead.name, code: inviteCode(parsed.secret, parsed.lead.public),
-    host: where.host, cloud: where.cloud, local: where.local } });
+  const offer = { folder: parsed.folder, lead: parsed.lead.name, code: inviteCode(parsed.secret, parsed.lead.public),
+    host: where.host, cloud: where.cloud, local: where.local };
+  if (teamBarred.has(parsed.team) && teamLeft[parsed.team]) offer.left = teamLeft[parsed.team];
+  return Object.assign({}, view, { offer: offer });
 }
 /* The person's yes, with the check code they typed. The folder is asked before anything is written, and one that
    does not answer, or whose team file is not the invited team's, is put back as it was. A pin the invitation sets is
@@ -2837,6 +2840,7 @@ async function takeInvite(text, name, check) {
     try { fs.unlinkSync(path.join(previous, "desks", branchIdOf(deskBranch.sign.pub), "join.json")); } catch (e) { /* already gone */ }
   }
   teamJoin = j;
+  if (teamLeft[parsed.team]) { delete teamLeft[parsed.team]; teamBarred.delete(parsed.team); }
   if (!teamPins[parsed.team]) {
     teamPins[parsed.team] = { keyId: parsed.lead.keyId, public: parsed.lead.public };
     teamSeen.delete(parsed.team);
@@ -2886,7 +2890,7 @@ function forgetLead(team, left) {
   delete teamShown[team];
   teamSeen.delete(team);
   teamBarred.add(team);
-  if (left === true) teamLeft.add(team); else teamLeft.delete(team);
+  if (left === true) teamLeft[team] = new Date().toISOString(); else delete teamLeft[team];
   for (const [pin, t] of Array.from(editionTeam)) if (t === team) editionTeam.delete(pin);
   ecFactsRead.clear();
   teamStamp = "";
@@ -3364,7 +3368,11 @@ function readDesk() {
       teamShown[t] = o;
     });
     if (doc && Array.isArray(doc.teamOpened)) doc.teamOpened.forEach(c => { if (typeof c === "string" && c) teamOpened.add(c); });
-    [["teamSeen", teamSeen], ["teamBarred", teamBarred], ["teamLeft", teamLeft]].forEach(([k, set]) => {
+    if (doc && table(doc.teamLeft)) Object.keys(doc.teamLeft).forEach(t => {
+      const at = doc.teamLeft[t];
+      if (SEALED_TEAM_RE.test(t) && typeof at === "string" && /^\d{4}-\d\d-\d\dT[0-9:.]+Z$/.test(at)) teamLeft[t] = at;
+    });
+    [["teamSeen", teamSeen], ["teamBarred", teamBarred]].forEach(([k, set]) => {
       if (doc && Array.isArray(doc[k])) doc[k].forEach(t => { if (SEALED_TEAM_RE.test(String(t))) set.add(String(t)); });
     });
     teamJoin = joinKept(doc && doc.teamJoin);
