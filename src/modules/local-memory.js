@@ -1,6 +1,6 @@
 import { E_CATALOG_KEY, E_CATALOG_STORE, eWatchClear, eWatchGet, eWatchPut, catalogStoreRefusal } from "./catalog.js";
 import { LOOSE_FIELDS } from "./catalog-file.js";
-import { eHasBranch } from "./host.js";
+import { eHasBranch, eCatalogEject } from "./host.js";
 import { flushStats } from "./pack.js";
 import { E_NS, eDeskFileShown, eLayers, lsDel, lsGet, lsKeys, lsSet, nsKey, ssDel, ssGet, ssSet } from "./storage.js";
 import { TAB_KEY, saveTabSession, tabSaveTimer } from "./tabs.js";
@@ -94,6 +94,9 @@ function ejectCatalog(){
   const was=keepKeys(keys);
   keys.forEach(k=>lsDel(k));
   ssDel(TAB_KEY);
+  /* Told before the restart, so the shell drops its copy first. A browser, and a run of this
+     function outside the module, has no binding and ejects as before. */
+  if(typeof eCatalogEject==="function") eCatalogEject();
   hooks.restartDesk();
   offerUndo("Catalog ejected", ()=>undoEject(was));
 }

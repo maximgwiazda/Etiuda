@@ -21,7 +21,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 42;
+const EXPECTED = 46;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -154,6 +154,24 @@ try {
   };
   const join = (box, epoch, roster, catalogs) => {
     put(box.share, "etiuda-team.json", teamFile(box.D, box.team, epoch, roster, catalogs));
+  };
+  const declOf = (src, marker) => {
+    const at = src.indexOf(marker);
+    if (at < 0) throw new Error("no " + marker);
+    let par = 0, brk = 0, brc = 0, saw = false;
+    for (let i = at; i < src.length; i++) {
+      const ch = src[i];
+      if (ch === "(") par++;
+      else if (ch === ")") par--;
+      else if (ch === "[") brk++;
+      else if (ch === "]") brk--;
+      else if (ch === "{") { brc++; saw = true; }
+      else if (ch === "}") {
+        brc--;
+        if (saw && !par && !brk && !brc) return src.slice(at, i + 1);
+      }
+    }
+    throw new Error("unterminated " + marker);
   };
 
   /* ---- boot of the folder's own file ---------------------------------------------------------- */
@@ -607,6 +625,54 @@ try {
       + ", in use " + (useNow && useNow.catalog ? useNow.catalog.sha256.slice(7, 15) : "none") + ")");
   }
 
+  /* ---- an eject reaches the shell, and only the catalog goes -------------------------------------- */
+  {
+    const box = await arm("eject-run");
+    put(box.share, "board.ec", textOf(catalog(2)));
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)]);
+    const booted = box.D.sync("etiuda:catalog");
+    const pin = pinOf(box.D, booted || "");
+    take(box.D, pin);
+    const useFile = inUsePath(box.share, box.me.id);
+    const kept = path.join(box.D.ud, "catalog-loaded.txt");
+    const ans = answerPath(box.share, box.me.id);
+    putAsk(box, "Ask906a", pin);
+    box.D.api.tryCatalogAsk(box.D.win);
+    const before = openSealedDoc(box.D, ans, box.key);
+    const envBefore = box.D.envelope();
+    const leadPub = envBefore.teamPins && envBefore.teamPins[box.team] && envBefore.teamPins[box.team].public;
+    const deskPub = envBefore.branch && envBefore.branch.sign && envBefore.branch.sign.pub;
+    box.D.sync("etiuda:catalog-eject");
+    putAsk(box, "Ask906b", pin);
+    box.D.api.tryCatalogAsk(box.D.win);
+    const after = fs.existsSync(ans) ? openSealedDoc(box.D, ans, box.key) : null;
+    const named = fs.existsSync(useFile) ? openSealedDoc(box.D, useFile, box.key) : null;
+    check(!!pin && before && before.kind === "etiuda-catalog-answer" && JSON.stringify(before).indexOf(CARD) >= 0
+        && !after && !fs.existsSync(ans) && !fs.existsSync(useFile) && !named && !fs.existsSync(kept),
+      "906a an eject, then an ask, answers no catalog, and the team folder no longer names it (answer "
+      + (after ? "still there" : "gone") + ", in use " + (named ? "still there" : "gone") + ", kept "
+      + (fs.existsSync(kept) ? "still there" : "gone") + ")");
+
+    const again = loadDesk(box.D.ud);
+    putAsk({ share: box.share, D: again, me: box.me }, "Ask906c", pin);
+    again.api.tryCatalogAsk(again.win);
+    const restarted = fs.existsSync(ans) ? openSealedDoc(again, ans, box.key) : null;
+    const keptAgain = fs.existsSync(path.join(again.ud, "catalog-loaded.txt"));
+    const namedAgain = fs.existsSync(useFile) ? openSealedDoc(again, useFile, box.key) : null;
+    check(!restarted && !fs.existsSync(ans) && !keptAgain && !namedAgain,
+      "906b an eject, then a restart, answers no catalog, and the kept copy is gone (answer "
+      + (restarted ? "still there" : "gone") + ", kept " + (keptAgain ? "still there" : "gone") + ")");
+
+    const envAfter = again.envelope();
+    const leadAfter = envAfter.teamPins && envAfter.teamPins[box.team] && envAfter.teamPins[box.team].public;
+    const deskAfter = envAfter.branch && envAfter.branch.sign && envAfter.branch.sign.pub;
+    check(!!leadPub && leadAfter === leadPub && !!deskPub && deskAfter === deskPub
+        && envAfter.keys && envAfter.keys.eAgent === "North desk" && envAfter.keys.eCatalogFolder === box.share
+        && !envAfter.inUse && !namedAgain,
+      "906c an eject keeps the lead, the team pin and the desk's key, and the envelope no longer names the catalog (lead "
+      + (leadAfter === leadPub ? "kept" : "gone") + ", key " + (deskAfter === deskPub ? "kept" : "gone") + ")");
+  }
+
   /* ---- what the person at the desk reads, and a catalog the page already holds --------------------- */
   {
     const boot = await arm("pageboot");
@@ -808,6 +874,55 @@ try {
     TJ.noteCatalogCopy();
     check(enToast === SENT_EN && toastEl.textContent === SENT_PL,
       "890aa the quiet note is shown, in the desk's language, when a copy was sent");
+
+    /* The page's eject, through the real preload, on a channel named as the preload's others are. */
+    const savedWindow = globalThis.window;
+    const savedDocument = globalThis.document;
+    const sentCh = [];
+    const ipcRenderer = {
+      sendSync: (ch) => {
+        sentCh.push(ch);
+        if (ch === "etiuda:catalog") return null;
+        if (ch === "etiuda:host") return { platform: "linux", backdrop: null };
+        return undefined;
+      },
+      send: (ch) => { sentCh.push(ch); },
+      invoke: () => Promise.resolve(null),
+      on: () => {},
+    };
+    const fakeWindow = { addEventListener() {}, removeEventListener() {} };
+    globalThis.window = fakeWindow;
+    globalThis.document = { addEventListener() {}, removeEventListener() {} };
+    const preloadSrc = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
+    new Function("require", preloadSrc)(n => (n === "electron" ? {
+      contextBridge: {
+        exposeInMainWorld: (k, v) => { fakeWindow[k] = v; },
+        executeInMainWorld: () => {},
+      },
+      ipcRenderer,
+      webUtils: {},
+    } : nodeRequire(n)));
+    globalThis.window = savedWindow;
+    globalThis.document = savedDocument;
+    const prevHost = savedWindow.E_HOST;
+    const hostFn = fakeWindow.E_HOST && fakeWindow.E_HOST.catalogEject;
+    savedWindow.E_HOST = Object.assign({}, prevHost, hostFn ? { catalogEject: hostFn } : {});
+    const pageSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "local-memory.js"), "utf8");
+    const ls = { eCatalog: "{\"cards\":[1]}", eTheme: "dark" };
+    let restarts = 0;
+    const H = await import(MOD("host.js"));
+    const tell = typeof H.eCatalogEject === "function" ? H.eCatalogEject : function () {};
+    const runEject = new Function("eCatalogEject", "ejectKeys", "keepKeys", "lsDel", "ssDel", "TAB_KEY", "hooks", "offerUndo", "undoEject",
+      declOf(pageSrc, "function ejectCatalog(") + "\nreturn ejectCatalog;")(
+      tell, () => ["eCatalog"], () => ({ keys: {}, tabs: null }),
+      (k) => { delete ls[k]; }, () => {}, "tabs",
+      { flushPillState() {}, restartDesk() { restarts++; } }, () => {}, () => {});
+    try { runEject(); }
+    finally { savedWindow.E_HOST = prevHost; }
+    const ejectSends = sentCh.filter(c => c === "etiuda:catalog-eject");
+    check(ejectSends.length === 1 && !("eCatalog" in ls) && ls.eTheme === "dark" && restarts === 1,
+      "906d the page's eject reaches the host through preload on etiuda:catalog-eject, and the page still drops its own catalog keys (sent "
+      + sentCh.filter(c => c.indexOf("eject") >= 0).join(",") + ", restarts " + restarts + ")");
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));

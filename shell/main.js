@@ -764,6 +764,11 @@ ipcMain.on("etiuda:catalog-taken", (e, pin, text) => {
   try { win = BrowserWindow.fromWebContents(e.sender); } catch { win = null; }
   writeInUse(key, win);
 });
+/* The page put the catalog down. The lead, the team pin and the desk's key stay. */
+ipcMain.on("etiuda:catalog-eject", (e) => {
+  if (!fromEngine(e)) return;
+  ejectLoadedCatalog();
+});
 /* THE ENGINE REFUSED THE FILE IT WAS HANDED, and names it. Answered with the next file this
    would read, in the shape the host answer gives the first, or null where there is none. */
 ipcMain.on("etiuda:catalog-refused", (e, name) => {
@@ -1904,6 +1909,23 @@ function dropLoadedCatalog() {
   try { fs.unlinkSync(loadedCatalogPath()); }
   catch (e) { if (e.code !== "ENOENT") console.error("etiuda: the loaded catalog could not be dropped - " + e.message); }
 }
+/* The catalog alone. releaseInUse keeps the file while this desk is still a member, which it is,
+   so the file is cleared here the way clearInUseFile clears it once a forget has left the team.
+   A share that is not answering is owed the same removal when it returns. */
+function ejectLoadedCatalog() {
+  loadedText = "";
+  dropLoadedCatalog();
+  if (!inUseFile() || !folderAnswers(catalogFolder())) {
+    heldInUse = inUseFile() ? { eject: true } : null;
+    inUseKept = null;
+    persistDeskEnvelope();
+    removeAnswer();
+    return;
+  }
+  heldInUse = null;
+  clearInUseFile();
+  removeAnswer();
+}
 /* At the start of a run, the text comes back only when its pin is the one the envelope recorded
    for in-use.ec. Anything else, including a missing file, leaves this run as it was. */
 function reloadLoadedCatalog() {
@@ -2103,7 +2125,19 @@ function tryHeldUse() {
   const use = heldInUse, ans = heldAnswer;
   heldInUse = null;
   heldAnswer = null;
-  if (use && use.remove) releaseInUse();
+  if (use && use.eject) {
+    const dest = inUseFile();
+    let failed = false;
+    if (dest) {
+      try { fs.unlinkSync(dest); }
+      catch (e) { if (e.code !== "ENOENT") { heldInUse = { eject: true }; failed = true; } }
+    }
+    if (!failed) {
+      dropLoadedCatalog();
+      inUseKept = null;
+      persistDeskEnvelope();
+    }
+  } else if (use && use.remove) releaseInUse();
   else if (use && use.text) {
     noteHanded(use.text, use.source || "opened");
     let pin = "";

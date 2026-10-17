@@ -89,6 +89,9 @@ if (!PICKER) contextBridge.exposeInMainWorld("E_HOST", {
     !!asked, !!offer),
   /* The pin of the catalog the agent just took, and the catalog text when the page sends it with the pin. */
   catalogTaken: (pin, text) => ipcRenderer.send("etiuda:catalog-taken", String(pin || ""), text == null ? "" : String(text)),
+  /* The page put the catalog down. Synchronous, because the page restarts as soon as this returns
+     and the shell has to have dropped the copy before that restart reads it back. */
+  catalogEject: () => ipcRenderer.sendSync("etiuda:catalog-eject"),
   /* The caption is the page's, because the shell has no t(). Async, unlike the desk: a modal
      the person is standing in front of must not hold the renderer's thread. */
   pickCatalogFolder: (title) => ipcRenderer.invoke("etiuda:pick-catalog-folder", String(title || "")),
