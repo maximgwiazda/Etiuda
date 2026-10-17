@@ -21,12 +21,15 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { createRequire } from "node:module";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
-const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 30;
+/* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
+const regOpts = { policy: null };
+const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
+const EXPECTED = 34;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -469,6 +472,25 @@ try {
   check(joinerSaid.slice(forgedFrom).some(l => l.indexOf(B.REASONS["bad-signature"]) >= 0) && read(joiner.mirror, C.TEAM_NAME) === teamBefore,
     "941c a copy in the invitation's place sealed under its key but not signed by the pinned lead is refused and said, the team file as it was");
 
+  /* An invited desk not yet on the roster: from it the lead opens its own request alone, at most 64 KB. Put in by a hostile
+     relay, since the relay itself takes one invitation upload of at most 64 KB. */
+  const joinNow = read(lead2.mirror, "desks/" + NEWD.keyId + "/join.json");
+  const askedFrom = lead2.said.length;
+  const asked = (p, body, counter) => {
+    const b = B.seal({ relayTeamId: RT, epoch: 1, teamKey: KI, writer: { keyId: NEWD.keyId, privateKey: NEWD.privateKey }, path: p, body,
+      counter, place: "desk:" + NEWD.keyId, kind: "file" });
+    inject({ id: b.id, supersedes: null, epoch: 1, writer: NEWD.keyId, counter: b.counter, del: false, sig: b.signature, nonce: b.nonce,
+      pub: NEWD.pub }, b.ciphertext);
+  };
+  asked("desks/" + NEWD.keyId + "/in-use.ec", "{\"inUse\":\"not yet on the roster\"}\n", Date.now() + 2000);
+  asked("desks/" + NEWD.keyId + "/join.json", "{\"pad\":\"" + "x".repeat(70 * 1024) + "\"}\n", Date.now() + 3000);
+  await settle(lead2);
+  const askedRefused = lead2.said.slice(askedFrom).filter(l => l.indexOf(B.REASONS["outside-place"]) >= 0).length;
+  check(askedRefused >= 2 && read(lead2.mirror, "desks/" + NEWD.keyId + "/in-use.ec") === null
+    && read(lead2.mirror, "desks/" + NEWD.keyId + "/join.json") === joinNow,
+    "941f a desk invited and not yet on the roster has only its own request, at most 64 KB, opened by the lead: another file of its"
+    + " place and a request over 64 KB, sealed under the invitation's key, are each dropped as outside-place: said " + askedRefused);
+
   /* Admitted: the lead adds the desk to the roster and enrols its key; the copy in the invitation's place follows. The desk,
      holding the team key once the roster names it, takes what waited for that key. */
   put(lead2.mirror, C.TEAM_NAME, teamText(3, [member(DESK), member(OTHER), member(NEWD)]));
@@ -596,8 +618,8 @@ try {
   await studio.idle();
   const inviteText = "etiuda-join:" + Buffer.from(JSON.stringify({ team: TEAM2, relay: { rt: RT2, url: URL2, token: TOKEN, inv: INV },
     lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret: SECRET }), "utf8").toString("base64url");
-  const codeOf = () => {
-    const mac = crypto.createHmac("sha256", Buffer.from(SECRET, "hex")).update(Buffer.from(LEAD.pub, "hex")).digest();
+  const codeOf = secret => {
+    const mac = crypto.createHmac("sha256", Buffer.from(secret || SECRET, "hex")).update(Buffer.from(LEAD.pub, "hex")).digest();
     return String(mac.readUIntBE(0, 6) % 100000).padStart(5, "0");
   };
   const offer = await D.ask("etiuda:team-join", "read", inviteText);
@@ -675,11 +697,66 @@ try {
     "942e board 907: a relay file's own ring pins nobody (900i inverted), and a lead pinned by a key it wrapped for this desk, as on a"
     + " folder, is never followed to the relay address it names: ring " + (ringPinned ? "pinned" : "no pin") + ", wrap " + (wrapPinned ? "pinned" : "no pin")
     + ", folder " + (E.api.catalogFolder() === share ? "the share" : E.api.catalogFolder()) + ", calls to the named address " + foreign.length);
+
+  /* The lead forgotten while a relay invitation waits: the request stays, and the desk goes back to its own folder. */
+  const shareF = path.join(LAB, "forget-share");
+  fs.mkdirSync(shareF, { recursive: true });
+  const F = newDesk("forget-desk", shareF);
+  const SECF = hex(16);
+  const textF = "etiuda-join:" + Buffer.from(JSON.stringify({ team: TEAM2, relay: { rt: RT2, url: URL2, token: hex(32), inv: hex(16) },
+    lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay" }, secret: SECF }), "utf8").toString("base64url");
+  const takenF = await F.ask("etiuda:team-join", "invite", textF, "Desk Ten", codeOf(SECF));
+  const onMirror = F.api.catalogFolder() === path.join(F.ud, "relay", RT2);
+  await F.ask("etiuda:team-join", "forget", TEAM2);
+  const leftFor = F.api.catalogFolder();
+  const runF = F.api.relayRun();
+  check(!takenF.refused && onMirror && leftFor === shareF && !runF && !!F.envelope().teamJoin,
+    "942g a lead forgotten while a relay invitation waits takes the desk off the mirror back to its folder, and no channel runs, the"
+    + " request kept: on the mirror " + onMirror + ", then " + (leftFor === shareF ? "its folder" : leftFor) + ", channel " + (runF ? "running" : "none"));
+
+  /* Machine policy names a folder while a followed relay exists: the folder wins and no channel starts. */
+  if (process.platform !== "win32") {
+    check(true, "942h not on this system: the desk reads machine policy from the Windows registry alone");
+  } else {
+    const shareP = path.join(LAB, "policy-share");
+    fs.mkdirSync(shareP, { recursive: true });
+    const udP = path.join(LAB, "policy-desk");
+    fs.mkdirSync(udP, { recursive: true });
+    fs.writeFileSync(path.join(udP, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
+      keys: { eCatalogFolder: path.join(LAB, "policy-own"), eUiLang: "en" },
+      teamPins: { [TEAM2]: { keyId: LEAD.keyId, public: LEAD.pub } }, teamPinFrom: { [TEAM2]: "invite" },
+      teamChannel: { [TEAM2]: { kind: "relay", rt: RT2, url: URL2 } } }), "utf8");
+    const BS = String.fromCharCode(92);
+    regOpts.policy = ["Windows Registry Editor Version 5.00", "", "[HKEY_LOCAL_MACHINE" + BS + "SOFTWARE" + BS + "Policies" + BS + "Etiuda]",
+      "\"TeamFolder\"=\"" + shareP.split(BS).join(BS + BS) + "\"", "", ""].join("\n");
+    const P = loadDesk(udP);
+    const folderP = P.api.catalogFolder();
+    regOpts.policy = null;
+    await P.ask("etiuda:branch-identity", true);
+    const runP = P.api.relayRun();
+    await wait(200);
+    if (runP) await runP.stop();
+    const relayLines = P.said.filter(l => l.indexOf("relay of team") >= 0).length;
+    check(folderP === shareP && !runP && relayLines === 0 && P.said.some(l => l.indexOf("machine policy names the team folder") >= 0),
+      "942h machine policy names a folder while a followed relay exists: the folder wins, no channel starts, and the desk says so:"
+      + " folder " + (folderP === shareP ? "the policy's" : folderP) + ", channel " + (runP ? "running" : "none") + ", the channel's lines " + relayLines);
+  }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
 }
 
 check(regStand.held(), "942f every reg call was answered by the stand-in (" + regStand.said() + ")");
+
+/* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */
+{
+  const r = spawnSync(process.execPath, [path.join("relay", "test", "attacks.mjs")], { cwd: ROOT, encoding: "utf8",
+    env: Object.assign({}, process.env, { RELAY_TARGET: path.join("relay", "test", "targets", "product.cjs") }), timeout: 300000 });
+  const m = /^#counts ok=(\d+) fail=(\d+)$/m.exec(r.stdout || "");
+  const ok = m ? Number(m[1]) : -1, bad = m ? Number(m[2]) : -1;
+  const fails = (r.stdout || "").split(/\r?\n/).filter(l => /^FAIL /.test(l)).slice(0, 5);
+  check(r.status === 0 && ok >= 77 && bad === 0, "943a the harness through the product, relay/test/attacks.mjs with relay/test/targets/product.cjs: "
+    + ok + " ok, " + bad + " failed, exit " + r.status + (fails.length ? ": " + fails.join(" | ") : ""));
+}
 console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);
 if (asserted < EXPECTED) {
   console.log("SUITE DID NOT COMPLETE: " + asserted + " of " + EXPECTED + " checks ran");
