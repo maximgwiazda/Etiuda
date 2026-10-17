@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 53;
+const EXPECTED = 55;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -114,23 +114,26 @@ function main() {
     b.writeUInt32BE(len === undefined ? bytes.length : len, 0); bytes.copy(b, 4); return b; };
   const good = '{"kind":"file","path":"a.ec","body":"x"}';
   const nonZero = padded(good); nonZero[4095] = 1;
-  const badFrames = [nonZero, padded(good, 5000), padded(good, undefined, 4096), padded(good.slice(0, -1)),
+  const firstPad = padded(good); firstPad[4 + Buffer.byteLength(good)] = 1;
+  const badFrames = [nonZero, firstPad, padded("null"), padded("5"), padded(good, 5000), padded(good, undefined, 4096), padded(good.slice(0, -1)),
     padded('{"kind":"file","path":"a.ec","body":"x","x":1}'), padded('{"kind":"move","path":"a.ec","body":"x"}'),
     padded('{"kind":"delete","path":"a.ec","body":"x"}'), padded('{"kind":"file","path":1,"body":""}'),
     padded(Buffer.concat([Buffer.from('{"kind":"file","path":"a'), Buffer.from([0xff]), Buffer.from('.ec","body":""}')])),
     padded(Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(good)])), Buffer.alloc(3)];
-  const unread = badFrames.filter(b => B.unframe(b) === null).length;
-  check(B.unframe(padded(good)) !== null && unread === badFrames.length, "1h a frame is read only whole: a non-zero pad byte, a length"
-    + " past the plaintext, a plaintext past its least step, a cut JSON, an extra key, another kind, a delete with a body, a path"
+  const unread = badFrames.filter(b => { try { return B.unframe(b) === null; } catch { return false; } }).length;
+  check(B.unframe(padded(good)) !== null && unread === badFrames.length, "1h a frame is read only whole, never throwing: a non-zero pad"
+    + " byte, the last or the first, a JSON of null or 5, a length past the plaintext, a plaintext past its least step, a cut JSON, an extra key, another kind, a delete with a body, a path"
     + " not text, bytes not UTF-8, a byte order mark, three bytes: " + unread + " of " + badFrames.length + " unread, and the good one read");
 
   const sealThrows = [{ teamKey: KEY1.subarray(0, 31) }, { kind: "move" }, { path: 7 }, { writer: { keyId: "Lead", privateKey: lead.privateKey } },
-    { epoch: 0 }, { place: "desk:" }, { body: Buffer.from("x") }, { writer: { keyId: lead.keyId, privateKey: "00" } }]
+    { epoch: 0 }, { place: "desk:" }, { body: Buffer.from("x") }, { writer: { keyId: lead.keyId, privateKey: "00" } },
+    { writer: { keyId: lead.keyId, privateKey: crypto.generateKeyPairSync("rsa", { modulusLength: 1024 }).privateKey } },
+    { writer: { keyId: lead.keyId, privateKey: crypto.generateKeyPairSync("ec", { namedCurve: "P-256" }).privateKey } }]
     .filter(x => throwsOf(() => sealAs(lead, "guide.ec", 1, x))).length;
   const pkcs8 = sealAs({ keyId: lead.keyId, privateKey: lead.privateKey.export({ type: "pkcs8", format: "der" }).toString("hex") }, "guide.ec", 1);
-  check(sealThrows === 8 && take(pkcs8).ok === true, "1i seal throws on its own caller's fault, a 31-byte key, kind move, a path not"
-    + " text, a capital in the key id, epoch 0, a bare desk place, a body as bytes, a key that is no key: " + sealThrows
-    + " of 8, and takes a PKCS8 key as hex");
+  check(sealThrows === 10 && take(pkcs8).ok === true, "1i seal throws on its own caller's fault, a 31-byte key, kind move, a path not"
+    + " text, a capital in the key id, epoch 0, a bare desk place, a body as bytes, a key that is no key, an RSA key, a P-256 key: "
+    + sealThrows + " of 10, and takes a PKCS8 key as hex");
 
   /* ---- 2: a blob moved does not open ---- */
   const kept = take(sealAs(lead, "guide.ec", 1, { body: "first edition" }));
@@ -169,9 +172,13 @@ function main() {
   const a3 = B.aadOf({ relayTeamId: RT, epoch: 1, id: ID, supersedes: null, writerKeyId: deskId, counter: 1 });
   const ct3 = crypto.randomBytes(4112);
   const sig3 = B.signUpload(desk.privateKey, a3, ct3);
+  const sly = new Proxy({}, { getPrototypeOf() { throw new Error("x"); } });
   check(B.verifyUpload(desk.public, a3, ct3, sig3) === true && B.verifyUpload(other.public, a3, ct3, sig3) === false
-    && B.verifyUpload(desk.public, flip(a3, 20), ct3, sig3) === false && B.verifyUpload(desk.public, a3, ct3, "") === false,
-    "3a an upload signature holds under its key and not under another, nor over a changed associated data, nor empty");
+    && B.verifyUpload(desk.public, flip(a3, 20), ct3, sig3) === false && B.verifyUpload(desk.public, a3, ct3, "") === false
+    && B.verifyUpload(desk.public, a3, ct3, sig3.toUpperCase()) === false && B.verifyUpload(desk.public, a3, ct3, sig3 + "z") === false
+    && B.verifyUpload(desk.public, sly, ct3, sig3) === false && B.verifyUpload(desk.public, a3, sly, sig3) === false,
+    "3a an upload signature holds under its key and not under another, nor over a changed associated data, nor empty, in"
+    + " capitals or with a trailing z, nor over associated data or a ciphertext whose prototype read throws");
 
   const SRC = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
   const branch = (SRC.match(/^const BRANCH_PREFIX = "([a-z-]+)\\n";/m) || [])[1];
@@ -198,11 +205,15 @@ function main() {
   strangerOwn.publicKey = stranger.public;
   const twice = { lead: trust.lead, desks: trust.desks.concat([{ deskId: "k-" + hex(8), keyId: deskId, public: desk.public }]) };
   const badLead = { lead: { keyId: lead.keyId, public: "zz" + lead.public.slice(2) }, desks: trust.desks };
+  const capsLead = { lead: { keyId: lead.keyId, public: lead.public.toUpperCase() }, desks: trust.desks };
+  const longLead = { lead: { keyId: lead.keyId, public: lead.public + "z" }, desks: trust.desks };
   check(refused(take(forged), "bad-signature") && refused(take(strangerOwn), "not-roster")
     && refused(take(sealAs(desk, own("join.json"), 1), { trust: twice }), "not-roster")
-    && refused(take(sealAs(lead, "guide.ec", 1), { trust: badLead }), "not-roster"),
+    && refused(take(sealAs(lead, "guide.ec", 1), { trust: badLead }), "not-roster")
+    && refused(take(sealAs(lead, "guide.ec", 1), { trust: capsLead }), "not-roster")
+    && refused(take(sealAs(lead, "guide.ec", 1), { trust: longLead }), "not-roster"),
     "3e trust is the caller's: a desk's id signed by a stranger carrying its own key is bad-signature, a stranger's own id is"
-    + " not-roster, and so is a key id the trust holds twice or under a public that is no key");
+    + " not-roster, and so is a key id the trust holds twice or under a public that is no key, in capitals or with a trailing z");
 
   /* ---- 4: the counter and rev floors ---- */
   let counters = {};
@@ -231,9 +242,23 @@ function main() {
   const corrupt = ["x", -1, 1.5, null, {}, NaN].filter(v => refused(take(sealAs(desk, own("in-use.ec"), 9), { counters: { [ck]: v } }), "replay-counter")).length;
   const proto = JSON.parse('{"__proto__":{"c\\n' + deskId + '\\n1":99},"c\\nk-zz\\n1":"x"}');
   const protoTake = take(sealAs(desk, own("in-use.ec"), 1), { counters: proto });
+  const t0 = { teamId: "t-" + hex(8), leadKeyId: lead.keyId, epoch: 1, rev: 1 };
+  const rk0 = "r\n" + t0.teamId + "\n" + t0.leadKeyId + "\n1";
+  const given = { [ck]: 5 };
+  const same = m => JSON.stringify(m) === JSON.stringify(given);
+  const floorEdges = [
+    take(sealAs(desk, own("in-use.ec"), 1), { counters: { [ck]: 0 } }).ok === true,
+    B.revLoad({ [rk0]: 0 }, t0).ok === true, B.revCurrent({ [rk0]: 0 }, t0).ok === true,
+    B.raiseCounter({ [ck]: 5 }, deskId, 1, 3)[ck] === 5, B.raiseCounter({ [ck]: "x" }, deskId, 1, 9)[ck] === "x",
+    same(B.raiseCounter(given, deskId, 1, 1.5)), same(B.raiseCounter(given, "K-A", 1, 9)), same(B.raiseCounter(given, deskId, 0, 9)),
+    ...[[deskId, 1, 1.5], [deskId, 1, "7"], [deskId, 1, Infinity], ["K-A", 1, 1], [deskId, 0, 1]]
+      .map(([w, e, c]) => refused(note(B.counterFresh({}, w, e, c)), "replay-counter"))];
+  const edgesHeld = floorEdges.filter(Boolean).length;
   check(corrupt === 6 && refused(take(sealAs(desk, own("in-use.ec"), 9), { counters: "x" }), "replay-counter")
-    && protoTake.ok === true && !Object.prototype.hasOwnProperty.call(protoTake.counters, "__proto__"),
-    "4e a floor that is not a count fails closed (" + corrupt + " of 6), a map that is not a map too, and a key named __proto__ is no floor");
+    && protoTake.ok === true && !Object.prototype.hasOwnProperty.call(protoTake.counters, "__proto__") && edgesHeld === floorEdges.length,
+    "4e a floor that is not a count fails closed (" + corrupt + " of 6), a map that is not a map too, and a key named __proto__ is no"
+    + " floor; at the edges a floor of 0 takes counter 1 and rev 1, a raise never lowers a floor nor overwrites a corrupt one, and a"
+    + " counter, writer or epoch that is no count or id raises nothing and is replay-counter: " + edgesHeld + " of " + floorEdges.length);
   const team = { teamId: "t-" + hex(8), leadKeyId: lead.keyId, epoch: 1 };
   let revs = {};
   const load = rev => { const r = note(B.revLoad(revs, Object.assign({}, team, rev))); if (r.ok) revs = r.revs; return r; };
@@ -245,6 +270,15 @@ function main() {
   check(B.revCurrent(revs, Object.assign({}, team, { rev: 3 })).ok === true && B.revCurrent(revs, Object.assign({}, team, { rev: 4 })).ok === true
     && refused(note(B.revCurrent(revs, Object.assign({}, team, { rev: 2 }))), "replay-rev"),
     "4g a blob is judged under the team file at its floor or above, and one below it is replay-rev");
+
+  const omitted = [refused(take(sealAs(desk, own("in-use.ec"), 1), { counters: undefined }), "replay-counter"),
+    refused(take(sealAs(desk, own("in-use.ec"), 1), { counters: null }), "replay-counter"),
+    ...[undefined, null].map(m => refused(note(B.counterFresh(m, deskId, 1, 1)), "replay-counter")),
+    ...[undefined, null].map(m => refused(note(B.revLoad(m, t0)), "replay-rev")),
+    ...[undefined, null].map(m => refused(note(B.revCurrent(m, t0)), "replay-rev"))].filter(Boolean).length;
+  check(omitted === 8 && B.counterFresh({}, deskId, 1, 1).ok === true && B.revLoad({}, t0).ok === true,
+    "4h an omitted floor map fails closed: a blob opened without its counters, or with null, is replay-counter, and counterFresh,"
+    + " revLoad and revCurrent without a map refuse; a first run passes {} and is taken: " + omitted + " of 8");
 
   /* ---- 5: every bad path, refused before anything is written ---- */
   /* Each rule's id opens its own line, so tests/leg-ids.js reads it. */
@@ -288,8 +322,11 @@ function main() {
     ["./desks/" + deskId.toUpperCase() + "/x.ec", own("x.ec")]].filter(([p, at]) => { const r = take(sealAs(desk, p, 1)); return r.ok && r.path === at; }).length;
   const deskOut = ["guide.ec", "desks/" + otherId + "/join.json", "desks/" + deskId + "x/join.json", "desks/" + deskId]
     .filter(p => refused(take(sealAs(desk, p, 1)), "outside-place")).length;
-  check(lands === 3 && deskOut === 4, "6b a desk writes under desks/<its id>/ alone, landing under its id as the roster spells it: "
-    + lands + " of 3 landed, and the root, another desk, a longer id and the bare folder " + deskOut + " of 4 outside-place");
+  const roleOut = [B.placeOf(own("a.ec"), { role: "guest", deskId }, "file"), B.placeOf("desks/bad id/a.ec", { role: "desk", deskId: "BAD ID" }, "file")]
+    .filter(r => refused(note(r), "outside-place")).length;
+  check(lands === 3 && deskOut === 4 && roleOut === 2, "6b a desk writes under desks/<its id>/ alone, landing under its id as the roster"
+    + " spells it: " + lands + " of 3 landed, and the root, another desk, a longer id and the bare folder " + deskOut + " of 4"
+    + " outside-place, as is a role of another kind and a desk id that is no id: " + roleOut + " of 2");
   check(refused(take(sealAs(other, own("join.json"), 1, { kind: "delete" })), "forged-delete")
     && refused(take(sealAs(lead, own("join.json"), 1, { kind: "delete" })), "forged-delete")
     && refused(take(sealAs(desk, "guide.ec", 1, { kind: "delete" })), "forged-delete"),
@@ -299,8 +336,10 @@ function main() {
   check(B.BLOB_MAX === 50 * 1024 * 1024 && B.TEAM_MAX === 1024 * 1024 * 1024 && B.RATE_MAX === 60 && B.RATE_WINDOW_MS === 60000,
     "7a the limits are the contract's: 50 MiB a blob, 1 GiB a team, 60 uploads in a sliding 60 000 ms");
   const sizesBad = [B.BLOB_MAX + 1, -1, 1.5, NaN, "1"].filter(v => refused(note(B.checkBlobSize(v)), "blob-size")).length;
-  check(B.checkBlobSize(B.BLOB_MAX).ok === true && sizesBad === 5, "7b a blob of 50 MiB passes and one byte more is blob-size, as is a size"
-    + " that is no size: " + sizesBad + " of 5");
+  const atCap = take(Object.assign({}, sealAs(desk, own("in-use.ec"), 1), { ciphertext: Buffer.alloc(B.BLOB_MAX) }));
+  check(B.checkBlobSize(B.BLOB_MAX).ok === true && B.checkBlobSize(0).ok === true && sizesBad === 5 && refused(atCap, "bad-signature"),
+    "7b a blob of 50 MiB passes, and so does 0, and one byte more is blob-size, as is a size that is no size: " + sizesBad + " of 5;"
+    + " a ciphertext of exactly 50 MiB is opened as far as its shape and is bad-signature, not blob-size");
   const teamOk = B.checkTeamSize(10, 5, 15), teamDefault = B.checkTeamSize(0, B.TEAM_MAX);
   const teamBad = [[10, 6, 15], [1, B.TEAM_MAX, undefined], [-1, 1, 15], [1, NaN, 15]].filter(a => refused(note(B.checkTeamSize(...a)), "team-size")).length;
   check(teamOk.ok && teamOk.used === 15 && teamDefault.ok && teamBad === 4, "7c the team cap is reached and not passed: at the cap passes,"
@@ -309,8 +348,10 @@ function main() {
   const sixty = Array.from({ length: 60 }, (_, i) => now - 59999 + i * 1000);
   const r61 = note(B.checkRate(sixty, now)), r60 = B.checkRate(sixty.slice(1), now);
   const edge = B.checkRate([now - 60000].concat(sixty.slice(1)), now), slid = B.checkRate(sixty, now + 60000);
-  check(refused(r61, "rate") && r60.ok && r60.stamps.length === 60 && r60.stamps[59] === now && edge.ok && slid.ok,
-    "7d the 61st upload in the window is rate, the 60th passes, and a stamp 60 000 ms old has left the window");
+  const noClock = [NaN, Infinity].flatMap(c => [sixty, []].map(s => refused(note(B.checkRate(s, c)), "rate"))).filter(Boolean).length;
+  check(refused(r61, "rate") && r60.ok && r60.stamps.length === 60 && r60.stamps[59] === now && edge.ok && slid.ok && noClock === 4,
+    "7d the 61st upload in the window is rate, the 60th passes, a stamp 60 000 ms old has left the window, and a clock of NaN or"
+    + " Infinity is rate with sixty stamps or none: " + noClock + " of 4");
 
   /* ---- 8: the reasons, word for word ---- */
   const contract = fs.readFileSync(path.join(ROOT, "relay", "test", "target-contract.md"), "utf8").replace(/\r\n/g, "\n");
@@ -378,6 +419,22 @@ function main() {
   }
   check(fuzzRefused === fuzzed && fuzzed >= 190, "9c a genuine blob with any one field made hostile, or one byte flipped at 64 places,"
     + " is refused without a throw: " + fuzzRefused + " of " + fuzzed);
+
+  /* Protocol section 3 checks the shape first: a malformed blob is bad-signature whatever later check it would also fail. */
+  const offTrust = () => sealAs(stranger, "desks/" + stranger.keyId + "/join.json", 1);
+  const replayed = { counters: { [ck]: 5 } };
+  const malformed = [
+    [Object.assign(offTrust(), { nonce: "zz" })],
+    [Object.assign(sealAs(desk, own("in-use.ec"), 1), { nonce: "zz" }), replayed],
+    [Object.assign(sealAs(desk, own("in-use.ec"), 1, { epoch: 2, teamKey: KEY2 }), { nonce: "zz" })],
+    [Object.assign(sealAs(desk, own("in-use.ec"), 1), { writerKeyId: "K-A" })],
+    [Object.assign(offTrust(), { ciphertext: crypto.randomBytes(5000) })],
+    [Object.assign(sealAs(desk, own("in-use.ec"), 1), { ciphertext: crypto.randomBytes(5000) }), replayed],
+    [Object.assign(offTrust(), { signature: "x" })]];
+  const shapeFirst = malformed.filter(([b, x]) => refused(take(b, x), "bad-signature")).length;
+  check(shapeFirst === malformed.length, "9d a malformed blob is bad-signature before any later check: nonce zz off the trust, on a"
+    + " replayed counter and under epoch 2, writer K-A, a 5000-byte ciphertext off the trust and on a replayed counter, signature x"
+    + " off the trust: " + shapeFirst + " of " + malformed.length);
 }
 
 try { main(); }
