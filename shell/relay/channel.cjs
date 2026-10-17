@@ -27,6 +27,12 @@
    nothing any program sends is sealed under an epoch older than the team file it holds, so the new team file never goes
    out under the old key. Each shell keeps its box's private key and lends only the agreement (`agree`).
 
+   A DESK ADMITTED WHILE OFFLINE (F6). A desk joining by invitation finds its own copy before it holds any team file: its
+   invitation names the lead's box beside the lead's key, so the place and key of its copy are known from the moment it
+   asks. The lead lets the invitation's copy go once the invitation is spent, and the desk, back however long after, opens
+   the newest team file from its own copy, under the pinned lead's signature, as any desk does after a move. The box the
+   signed team file names wins once the desk holds one; the invitation's serves only before that.
+
    Two halves. createProgram is synchronous and talks to nobody: it judges, writes the mirror and says what it owes; the
    harness's adapter drives it directly. createChannel talks to the relay (the hello, a session re-opened when it lapses,
    since and the blobs, the uploads, the socket's announcements) and watches the mirror. Nothing private leaves unsealed:
@@ -469,12 +475,14 @@ function createProgram(opts) {
     return out;
   }
 
-  /* On a desk's side: the place and key of its own copy, from the lead's box in the team file it holds and its own box. */
+  /* On a desk's side: the place and key of its own copy, from the lead's box in the team file it holds and its own box;
+     before it holds a team file naming one, from the lead's box its invitation names (F6). */
   function ownCopy(held, ctx) {
     const self = ctx && ctx.self;
-    if (!held || !self || typeof ctx.agree !== "function" || typeof self.place !== "string" || !self.place.startsWith("desk:")
-      || !table(held.doc.lead) || !HEX64.test(String(held.doc.lead.box))) return null;
-    return copyFor(ctx, held.doc.lead.box, held.doc.lead.box, self.place.slice(5), self.box);
+    if (!self || typeof ctx.agree !== "function" || typeof self.place !== "string" || !self.place.startsWith("desk:")) return null;
+    let box = held && table(held.doc.lead) && HEX64.test(String(held.doc.lead.box)) ? held.doc.lead.box : null;
+    if (!box && HEX64.test(String(ctx.inviteBox))) box = ctx.inviteBox; /* plant:invite-box */
+    return box ? copyFor(ctx, box, box, self.place.slice(5), self.box) : null;
   }
 
   /* The epoch of the team file this program holds, or 0: nothing it sends is sealed under an older one. */
@@ -802,7 +810,8 @@ function createProgram(opts) {
 
 /* `o`: rt, url (https, ending /relay/v1), mirror, stateFile; me() as {keyId, public, privateKey, place, box}, box a desk's
    X25519 public key as 64 hex; pin() as {teamId, rt, lead}; keyFor(epoch) a team key or null; sealEpoch() the epoch to seal
-   under; invite() on a desk joining by invitation as {inv, token, seal}; inviteKeys() on the lead's side, the live
+   under; invite() on a desk joining by invitation as {inv, token, seal, box}, box the lead's box as 64 hex where the
+   invitation names it; inviteKeys() on the lead's side, the live
    invitations as {id, key}; agree(box) the 32-byte X25519 agreement of this program's own box with another's, given as 64
    hex, or null: the lead's with a desk's, a desk's with the lead's, for a desk's own copy of the team file; request(method,
    url, headers, body) answering {status, header(name), bytes} and throwing where the relay does not answer; connect(url,
@@ -836,6 +845,7 @@ function createChannel(opts) {
       keyFor: e => (typeof o.keyFor === "function" ? o.keyFor(e) : null),
       inviteSeal: inv && toBytes(inv.seal) && inv.seal.length === 32 ? toBytes(inv.seal) : null,
       inviteId: inv && HEX32.test(String(inv.inv)) ? inv.inv : null,
+      inviteBox: inv && HEX64.test(String(inv.box)) ? inv.box : null,
       inviteKeys: typeof o.inviteKeys === "function" ? (o.inviteKeys() || [])
         .filter(k => table(k) && HEX32.test(String(k.id)) && toBytes(k.key) && toBytes(k.key).length === 32)
         .map(k => ({ id: k.id, key: toBytes(k.key) })) : null,

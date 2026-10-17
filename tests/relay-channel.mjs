@@ -31,7 +31,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 43;
+const EXPECTED = 47;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -786,6 +786,76 @@ try {
     "944f the relay keeps the copies and the moves in nothing it can read: none of " + markers.length + " markers in its store or bucket, "
     + places.length + " copy places, " + named.length + " naming a desk");
   await lead.ch.stop(); await d1.ch.stop(); await d2.ch.stop();
+
+  /* ---- a desk admitted while offline (F6 of the slice 1 review): the test architect's f6 reproduction is 945a, its control
+     945A. The desk asks by its invitation and goes offline; the lead admits it, lets the invitation go, and moves the team to
+     a new key while it is still away; 45 days on it comes back. ---- */
+  const DAY = 24 * 60 * 60 * 1000;
+  async function admitWhileAway(name, o) {
+    const tf = await makeTeam();
+    const inv = hex(16), token = hex(32), seal = C.inviteSealKey(hex(16)), at = R.clock.now;
+    const add = [{ id: inv, hash: sha(Buffer.from(token, "utf8")) }];
+    await admin("POST", "/relay/v1/t/" + tf.rt + "/invites", { add, drop: [], t: at, sig: signHex(LEAD, core.invitesBytes(tf.rt, at, add, [])) });
+    const live = [{ id: inv, key: seal }];
+    const OLD = desk(), J = { k: keyPair(true), box: boxPair() };
+    await tf.enrol(OLD.k);
+    const lf = leadOf(tf, name + "-lead", new Map([[1, KM1]]), { inviteKeys: () => live });
+    put(lf.mirror, "lane.ec", "{\"note\":\"Lane Board edition one\"}\n");
+    put(lf.mirror, C.TEAM_NAME, teamDoc(tf, 1, 1, [entry(tf, OLD, KM1, 1)]));
+    if (o.copyFirst) { lf.ch.start(); await settle(lf); }
+    const invited = () => Object.assign({ inv, token, seal }, o.box ? { box: LB.pub } : {});
+    const asking = deskOf(tf, name + "-desk", J, { invite: invited });
+    put(asking.mirror, "desks/" + J.k.keyId + "/join.json", "{\"kind\":\"etiuda-join\",\"note\":\"asked from afar\"}\n");
+    asking.ch.start();
+    await settle(asking);
+    const heldAtAsk = read(asking.mirror, C.TEAM_NAME) !== null;
+    asking.t.down = true;
+    await asking.ch.stop();
+    if (!o.copyFirst) lf.ch.start();
+    await settle(lf);
+    const asked = read(lf.mirror, "desks/" + J.k.keyId + "/join.json") !== null;
+    /* Admitted: on the roster with its wrap and its key enrolled; then the invitation spent, unless the control keeps it. */
+    await tf.enrol(OLD.k, J.k);
+    put(lf.mirror, C.TEAM_NAME, teamDoc(tf, 1, 2, [entry(tf, OLD, KM1, 1), entry(tf, J, KM1, 1)]));
+    await settle(lf);
+    if (!o.keepLive) live.length = 0;
+    await settle(lf);
+    /* Still away: the lead takes the other desk off with a new key and publishes under it. */
+    lf.held.set(2, KM2);
+    await tf.enrol(J.k);
+    put(lf.mirror, C.TEAM_NAME, teamDoc(tf, 2, 1, [entry(tf, J, KM2, 2)]));
+    put(lf.mirror, "lane.ec", "{\"note\":\"Lane Board edition two\"}\n");
+    await settle(lf);
+    const inviteCopy = R.stores.get(tf.rt).dump().map(([, v]) => JSON.parse(v)).some(v => v && v.place === "invite:" + inv && !v.del);
+    R.clock.now += 45 * DAY;
+    const back = deskOf(tf, name + "-desk", J, { invite: invited });
+    back.ch.start();
+    await settle(back);
+    let doc = null;
+    try { doc = JSON.parse(read(back.mirror, C.TEAM_NAME)); } catch { doc = null; }
+    const out = { heldAtAsk, asked, inviteCopy, epoch: doc ? doc.epoch : null, rev: doc ? doc.rev : null, wrap: !!wrapOf(doc, J),
+      key: !!back.held.get(2) && back.held.get(2).equals(KM2), edition: read(back.mirror, "lane.ec") === "{\"note\":\"Lane Board edition two\"}\n",
+      pending: back.prog.state().pending.length };
+    out.joined = out.epoch === 2 && out.wrap && out.key && out.edition;
+    out.line = "asked holding " + (heldAtAsk ? "a team file" : "no team file") + ", request " + (asked ? "at the lead" : "missing")
+      + ", the invitation's copy " + (inviteCopy ? "still served" : "let go") + "; back 45 days on: team file epoch " + out.epoch + " rev " + out.rev
+      + ", wrap " + (out.wrap ? "present" : "absent") + ", the new key " + (out.key ? "held" : "absent") + ", the new edition "
+      + (out.edition ? "loaded" : "missing") + ", pending " + out.pending;
+    await back.ch.stop(); await lf.ch.stop();
+    return out;
+  }
+  const f6 = await admitWhileAway("f6", { box: true });
+  check(!f6.heldAtAsk && f6.asked && !f6.inviteCopy && f6.joined && f6.pending === 0,
+    "945a f6: a desk admitted while offline, which asked before the lead put up any copy and so holds no team file, joins by itself when it"
+    + " comes back after its invitation was let go and the team moved to a new key: by its own copy, found from the lead's box its invitation"
+    + " names: " + f6.line);
+  const f6c = await admitWhileAway("f6-ctl", { box: false, keepLive: true });
+  check(!f6c.heldAtAsk && f6c.asked && f6c.inviteCopy && f6c.joined && f6c.pending === 0,
+    "945A f6-control: while the invitation stays live the same desk joins by the invitation's copy, kept current by the lead: " + f6c.line);
+  const f6b = await admitWhileAway("f6-held", { box: false, copyFirst: true });
+  check(f6b.heldAtAsk && f6b.asked && !f6b.inviteCopy && f6b.joined,
+    "945b a desk that read the invitation's copy before going offline joins the same way with an invitation naming no box, the lead's box"
+    + " taken from the team file it holds (F1's copy alone): " + f6b.line);
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
 }
@@ -979,6 +1049,68 @@ try {
   const stopped = D.api.relayRun();
   if (stopped) await stopped.stop();
   await studio.stop();
+
+  /* F6 through the desk's own shell: a relay invitation naming the lead's box. The desk asks before the lead's Studio has put
+     any copy up, goes offline, is admitted, its invitation let go meanwhile, and joins by itself when it is back. */
+  {
+    const RT4 = hex(16), TEAM4 = "t-" + hex(8), K4 = crypto.randomBytes(32);
+    const made4 = await admin("POST", "/relay/v1/teams", { rt: RT4, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
+      sig: signHex(LEAD, core.createBytes(RT4, LEAD.keyId, R.clock.now)) });
+    if (made4.status !== 200) throw new Error("the team for 945c was not made");
+    const SEC4 = hex(16), INV4 = hex(16), TOK4 = hex(32), KI4 = C.inviteSealKey(SEC4), t4 = R.clock.now;
+    const add4 = [{ id: INV4, hash: sha(Buffer.from(TOK4, "utf8")) }];
+    await admin("POST", "/relay/v1/t/" + RT4 + "/invites", { add: add4, drop: [], t: t4, sig: signHex(LEAD, core.invitesBytes(RT4, t4, add4, [])) });
+    const lbox4 = crypto.generateKeyPairSync("x25519");
+    const lbox4Pub = lbox4.publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
+    const agree4 = peer => { try { return crypto.diffieHellman({ privateKey: lbox4.privateKey, publicKey: crypto.createPublicKey({
+      key: Buffer.concat([Buffer.from("302a300506032b656e032100", "hex"), Buffer.from(String(peer), "hex")]), format: "der", type: "spki" }) }); } catch { return null; } };
+    const PIN4 = { teamId: TEAM4, rt: RT4, lead: { keyId: LEAD.keyId, public: LEAD.pub } };
+    const team4 = (rev, roster) => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TEAM4, catalogs: ["quay-board"],
+      lead: { keyId: LEAD.keyId, public: LEAD.pub, box: lbox4Pub }, sealed: true, exportsSealed: false, epoch: 1, rev,
+      channel: { kind: "relay", rt: RT4, url: URL2 }, ring: RING, roster }, LEAD), null, 1) + "\n";
+    const live4 = [{ id: INV4, key: KI4 }];
+    const studio4T = transport("studio4"), studio4Mirror = path.join(LAB, "studio4-mirror");
+    const studio4 = C.createChannel({ rt: RT4, url: URL2, mirror: studio4Mirror, stateFile: path.join(LAB, "studio4.json"), pin: () => PIN4,
+      me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }), keyFor: e => (e === 1 ? K4 : null),
+      sealEpoch: () => 1, inviteKeys: () => live4, agree: agree4, request: studio4T.request, connect: studio4T.connect, pollMs: 1e9 });
+    fs.mkdirSync(path.join(LAB, "f6-share"), { recursive: true });
+    const G = newDesk("f6-desk", path.join(LAB, "f6-share"));
+    put(studio4Mirror, "board.ec", JSON.stringify(G.api.sealCatalog(K4, TEAM4, 1, catalogText(1))));
+    put(studio4Mirror, C.TEAM_NAME, team4(1, []));
+    const text4 = "etiuda-join:" + Buffer.from(JSON.stringify({ team: TEAM4, relay: { rt: RT4, url: URL2, token: TOK4, inv: INV4 },
+      lead: { keyId: LEAD.keyId, public: LEAD.pub, name: "Ada Quay", box: lbox4Pub }, secret: SEC4 }), "utf8").toString("base64url");
+    const took = await G.ask("etiuda:team-join", "invite", text4, "Desk Eleven", codeOf(SEC4));
+    const boxKept = (((G.envelope().teamJoin || {}).invite || {}).relay || {}).box === lbox4Pub;
+    const gme = await G.ask("etiuda:branch-identity", false);
+    const gMirror = path.join(G.ud, "relay", RT4);
+    const byDesk = () => R.stores.get(RT4).dump().map(([, v]) => JSON.parse(v)).filter(v => v && v.writer === gme.id).length;
+    const asked = await until(async () => { const ch = G.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); } return byDesk() > 0; }, 6000);
+    const heldNone = read(gMirror, C.TEAM_NAME) === null;
+    deskTransport.down = true;
+    studio4.start();
+    await studio4.idle(); studio4.kick(); await studio4.idle();
+    const atLead = read(studio4Mirror, "desks/" + gme.id + "/join.json") !== null;
+    const entry4 = { desk: { id: gme.id, key: gme.key, box: gme.box }, wrap: G.api.wrapTeamKey(K4, gme.box, TEAM4, 1, gme.id) };
+    put(studio4Mirror, C.TEAM_NAME, team4(2, [entry4]));
+    const t5 = R.clock.now, keys4 = [{ id: gme.id, pub: gme.key, desk: gme.id }];
+    await admin("POST", "/relay/v1/t/" + RT4 + "/devices", { keys: keys4, rev: 1, t: t5, sig: signHex(LEAD, core.devicesBytes(RT4, 1, t5, keys4)) });
+    studio4.kick(); await studio4.idle();
+    live4.length = 0;
+    studio4.kick(); await studio4.idle();
+    const copyGone = !R.stores.get(RT4).dump().map(([, v]) => JSON.parse(v)).some(v => v && v.place === "invite:" + INV4 && !v.del);
+    deskTransport.down = false;
+    const joined = await until(async () => { const ch = G.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); }
+      return factsOf(G.api.readCatalog() || "") === 1; }, 8000);
+    check(!took.refused && boxKept && asked && heldNone && atLead && copyGone && joined,
+      "945c f6 in the desk's own shell: a relay invitation naming the lead's box, the request sent before the lead put up any copy, the desk"
+      + " offline while it is admitted and the invitation let go; back, it finds its own copy by that box and loads the edition: box "
+      + (boxKept ? "kept" : "not kept") + ", request " + (asked ? "sent" : "not sent") + " holding " + (heldNone ? "no team file" : "a team file")
+      + ", at the lead " + atLead + ", the invitation's copy " + (copyGone ? "let go" : "still served") + ", then "
+      + (joined ? "edition 1 loaded" : "nothing loaded: " + G.said.filter(l => l.indexOf("relay") >= 0).slice(-2).join(" / ")));
+    const g = G.api.relayRun();
+    if (g) await g.stop();
+    await studio4.stop();
+  }
 
   /* Board 907: a lead pinned by its own file's vouching is never followed to a relay address. */
   const EVIL = "https://evil.test/relay/v1";

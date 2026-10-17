@@ -2682,6 +2682,9 @@ function inviteRead(text, posix) {
   const pub = lead && typeof lead.public === "string" ? lead.public.toLowerCase() : "";
   const keyId = lead && typeof lead.keyId === "string" ? lead.keyId : "";
   const name = lead && typeof lead.name === "string" ? lead.name : null;
+  /* The lead's box, as its team file names it, where the invitation carries one: a desk joining through the relay finds its
+     own copy of the team file by it before it holds any team file (relay F6). */
+  const box = lead && lead.box !== undefined ? String(lead.box) : "";
   /* On the relay the invitation names the relay team id, the relay's https address, the token whose sha256 the lead
      registered and the relay's id for the invitation, in place of the folder (the protocol's section 7). */
   const relay = doc.relay === undefined ? null : inviteRelay(doc.relay);
@@ -2691,7 +2694,9 @@ function inviteRead(text, posix) {
   const nameOk = name !== null && name.length <= 120 && shown(name);
   const keyOk = keyId.length >= 1 && keyId.length <= 80 && shown(keyId);
   if (!SEALED_TEAM_RE.test(String(doc.team)) || !pathOk || !/^[0-9a-f]{32}$/.test(secret) || !/^[0-9a-f]{64}$/.test(pub) || !keyOk || !nameOk) return null;
+  if (box !== "" && !/^[0-9a-f]{64}$/.test(box)) return null; /* plant:f6-box-shape */
   const out = { team: String(doc.team), folder: folder, lead: { keyId: keyId, public: pub, name: name }, secret: secret };
+  if (box) out.lead.box = box; /* plant:f6-box-read */
   if (relay) out.relay = relay;
   return out;
 }
@@ -2851,7 +2856,7 @@ function joinKept(j) {
 function relayKept(r) {
   const c = r && typeof r === "object" && !Array.isArray(r) ? teamChannelOf({ channel: { kind: "relay", rt: r.rt, url: r.url } }) : null;
   return !!c && c.kind === "relay" && /^[0-9a-f]{32}$/.test(String(r.inv)) && typeof r.token === "string" && r.token !== ""
-    && typeof r.seal === "string" && r.seal !== "";
+    && typeof r.seal === "string" && r.seal !== "" && (r.box === undefined || /^[0-9a-f]{64}$/.test(String(r.box)));
 }
 /* Whether this desk takes invitations: "" where it does, else the refusal every invitation gets, at read and at yes.
    "policy" while machine policy names a team folder or a lead, an invitation naming those very ones included. */
@@ -2996,6 +3001,7 @@ function takeRelayInvite(parsed, name, me) {
     name: String(name || "").trim().slice(0, 120),
     invite: { id: incomingId, proof: proof, lead: { keyId: parsed.lead.keyId, public: parsed.lead.public, name: parsed.lead.name },
       pinned: pinned, relay: { rt: parsed.relay.rt, url: parsed.relay.url, inv: parsed.relay.inv, token: token, seal: seal } } };
+  if (parsed.lead.box) j.invite.relay.box = parsed.lead.box; /* plant:f6-box-kept */
   teamJoin = j;
   if (!teamPins[parsed.team]) { teamPins[parsed.team] = { keyId: parsed.lead.keyId, public: parsed.lead.public }; teamSeen.delete(parsed.team); }
   teamPinFrom[parsed.team] = "invite";
@@ -3179,7 +3185,11 @@ function relayRun() {
       const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
       if (!inv || inv.rt !== want.rt) return null;
       const token = relayOpened(inv.token), seal = relayOpened(inv.seal);
-      return token && seal ? { inv: inv.inv, token: token, seal: Buffer.from(seal, "base64") } : null;
+      if (!token || !seal) return null;
+      const out = { inv: inv.inv, token: token, seal: Buffer.from(seal, "base64") };
+      /* The lead's box the invitation named, so this desk finds its own copy of the team file before it holds one (F6). */
+      if (/^[0-9a-f]{64}$/.test(String(inv.box))) out.box = inv.box; /* plant:f6-box-lent */
+      return out;
     },
     onTeam: () => { teamStamp = ""; heedTeam(); },
     request: relayRequest, connect: relayConnect,

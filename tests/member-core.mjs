@@ -251,17 +251,21 @@ if (M && J) {
     blobOf({ team: "nope", folder: "C:/quay", lead: leadBlob, secret: secret }),
     blobOf({ team: TEAM, folder: "C:/quay", lead: { keyId: "a", public: "abcd", name: "Quay lead" }, secret: secret }),
     blobOf({ team: TEAM, folder: "C:/quay", lead: leadBlob, secret: "abcd" }),
+    blobOf({ team: TEAM, folder: "C:/quay", lead: Object.assign({}, leadBlob, { box: "abcd" }), secret: secret }),
     "etiuda-join:" + Buffer.from("{").toString("base64url")];
   const wholeBlob = blobOf({ team: TEAM, folder: "C:/quay/catalogs", lead: leadBlob, secret: secret });
+  /* The lead's box, where an invitation names it beside the lead's key (relay F6), is read as it is written. */
+  const boxed = M.inviteRead(blobOf({ team: TEAM, folder: "C:/quay/catalogs", lead: Object.assign({}, leadBlob, { box: "ab".repeat(32) }), secret: secret }));
   const tampered = wholeBlob.slice(0, 20) + (wholeBlob[20] === "A" ? "B" : "A") + wholeBlob.slice(21);
   const where = M.folderHost("\\\\quay-host\\catalogs", { SystemDrive: "C:" });
   const onDisk = M.folderHost("C:/quay/catalogs", { SystemDrive: "C:" });
   const otherDisk = M.folderHost("D:/quay/catalogs", { SystemDrive: "C:" });
-  check(!!goodBlob && goodBlob.team === TEAM && goodBlob.secret === secret && goodBlob.lead.name === "Quay lead"
+  check(!!goodBlob && goodBlob.team === TEAM && goodBlob.secret === secret && goodBlob.lead.name === "Quay lead" && goodBlob.lead.box === undefined
+      && !!boxed && boxed.lead.box === "ab".repeat(32)
       && goodBlob.folder === "C:\\quay\\catalogs" && badBlobs.every(b => M.inviteRead(b) === null) && M.inviteRead(tampered) === null
       && where.host === "quay-host" && where.local === false && onDisk.local === true && onDisk.host === ""
       && otherDisk.local === false && otherDisk.host === "" && otherDisk.cloud === "",
-    "16l a malformed or tampered invitation is refused, a well shaped one is read, and a path on another computer is named from its text: "
+    "16l a malformed or tampered invitation is refused, a well shaped one is read, the lead's box with it where it names one, and a path on another computer is named from its text: "
     + "refused " + badBlobs.filter(b => M.inviteRead(b) === null).length + " of " + badBlobs.length
     + ", host " + where.host);
 
