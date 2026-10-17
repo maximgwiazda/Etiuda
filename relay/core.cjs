@@ -316,10 +316,11 @@ function createCore(deps) {
     if (ct.length > a.max) return no("blob-size"); /* plant:put-size */
     const aad = B.aadOf({ relayTeamId: rt, epoch: m.epoch, id: m.id, supersedes: m.supersedes, writerKeyId: m.writer, counter: m.counter });
     if (!aad || !B.verifyUpload(a.pub, aad, ct, m.sig)) return no("bad-signature"); /* plant:put-sig */
-    if (!B.counterFresh(store.get("counters"), m.writer, m.epoch, m.counter).ok) return no("replay-counter"); /* plant:put-counter */
+    if (!B.counterFresh(store.get("counters") || {}, m.writer, m.epoch, m.counter).ok) return no("replay-counter"); /* plant:put-counter */
     if (store.get("blob:" + m.id) !== undefined || store.get("tomb:" + m.id) !== undefined) return no("replay-counter"); /* plant:put-id */
     const owner = m.supersedes === null ? null : chainOwner(m.supersedes);
     if (owner !== null && owner !== m.writer && !a.lead) return no("outside-place"); /* plant:put-chain */
+    if (m.supersedes !== null && store.get("tomb:" + m.supersedes) !== undefined) return no("superseded"); /* plant:put-tomb */
     if (m.epoch < a.team.epoch) return no("epoch"); /* plant:put-epoch */
     const old = m.supersedes === null ? undefined : store.get("blob:" + m.supersedes);
     if (!B.checkTeamSize((store.get("bytes") || 0) - (old ? old.size : 0), ct.length, teamMax).ok) return no("team-size"); /* plant:put-team */

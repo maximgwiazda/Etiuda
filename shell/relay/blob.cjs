@@ -239,9 +239,10 @@ function placeOf(path, role, kind) {
   return { ok: true, path: ["desks", role.deskId].concat(p.segments.slice(2)).join("/") };
 }
 
-/* A floor map is the caller's plain object, kept across restarts. A floor that is not a count fails closed. */
+/* A floor map is the caller's plain object, kept across restarts, `{}` on a first run. An omitted map, and a
+   floor that is not a count, fail closed: a caller that forgot its floors must not take a replay. */
 function floorIn(map, key) {
-  if (map == null) return 0;
+  if (map == null) return null;
   if (typeof map !== "object") return null;
   if (!own(map, key)) return 0;
   const v = map[key];
