@@ -315,6 +315,7 @@ function createCore(deps) {
     if (store.get("blob:" + m.id) !== undefined || store.get("tomb:" + m.id) !== undefined) return no("replay-counter"); /* plant:put-id */
     const owner = m.supersedes === null ? null : chainOwner(m.supersedes);
     if (owner !== null && owner !== m.writer && !a.lead) return no("outside-place"); /* plant:put-chain */
+    if (m.supersedes !== null && store.get("tomb:" + m.supersedes) !== undefined) return no("superseded"); /* plant:put-tomb */
     if (m.epoch < a.team.epoch) return no("epoch"); /* plant:put-epoch */
     const old = m.supersedes === null ? undefined : store.get("blob:" + m.supersedes);
     if (!B.checkTeamSize((store.get("bytes") || 0) - (old ? old.size : 0), ct.length, teamMax).ok) return no("team-size"); /* plant:put-team */

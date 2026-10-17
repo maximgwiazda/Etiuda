@@ -88,7 +88,7 @@ A program counter is kept per writer and epoch. A relay counter is kept the same
 
 `rev` is kept per team id, lead key and epoch. A lower or equal `rev` at that epoch is `replay-rev` on `loadTeamFile`. `acceptBlob` uses that same floor and refuses a team file whose `rev` is below it. The team file at the floor still opens a blob.
 
-`list`, `fetch` and `subscribe` require a live session for that team. An upload does not. It is authenticated by the upload signature, enrolment and place. Removing a desk refuses that desk's open session and its later uploads with `removed`.
+`list`, `fetch`, `subscribe` and an upload require a live session for that team. An upload's session is its writer's own key's, or an invitation's for its one upload, and the upload is also authenticated by the upload signature, enrolment and place. Removing a desk refuses that desk's open session and its later uploads with `removed`.
 
 Limits, and the reason when they trip:
 
@@ -147,7 +147,7 @@ These are the places the note lists a field and does not fix the bytes, or names
 2. The counter floor and the `rev` floor survive `restart`. Sessions do not. The floor is per writer and epoch, and `rev` is per team, lead key and epoch. A new epoch starts at counter 1 and `rev` 1. A deletion uses the same writer floor as a file, and a replayed deletion does not remove the later body.
 3. The path is not in the associated data. The note's list omits it, and the counter is on the list, so the counter is a line. The seal binds the path. A path stuck on the outside of the blob is ignored.
 4. The relay judges place from a cleartext `place` of `root` or `desk:<deskId>`, because the path is inside the ciphertext and the relay still has to refuse the wrong writer.
-5. An upload does not need a hello. A list, a fetch and a socket do.
+5. An upload needs a hello, as a list, a fetch and a socket do: a live session of its writer's own key, or an invitation's for its one upload. The relay departs here from the first draft, which took an upload on its signature alone.
 6. Accounted size is the ciphertext length, padded step plus the 16 byte tag. 50 MB is 50 * 1024 * 1024. 1 GB is 1024 cubed. `createTarget({ teamMax })` may set a smaller team cap. The rate window is a sliding 60 000 ms, not a clock minute. There is no declared size and no `charge()`.
 7. A token hello spends the token on the first success. Failures are counted apart from that, up to 20, and the 21st presentation fails even with the right token. Presenting the stored hash in place of the token does not succeed. The note's burn of the wrap is slice 3. The model applies both because the attacks name a spent token and a token past 20 tries.
 8. A deletion the relay can recognise without reading the path is the cleartext `deletion` flag. The record is kept 30 days. The plaintext kind is `delete`. The program checks the writer's counter before it removes the mirror file.

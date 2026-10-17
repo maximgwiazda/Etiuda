@@ -1,12 +1,13 @@
 /* The relay, relay/worker.mjs and its team object, driven in memory over relay/test/stand-ins.cjs with no Workers
  * runtime: each endpoint's success and each of its refusals, word for word as relay/test/target-contract.md writes
  * them; sessions expiring; a withdrawn key losing its session at once; a superseded blob dropped; a deletion record
- * kept 30 days and then refused; every limit; a commit judged again after the R2 write; and nothing kept that names a
- * path, a body or a team.
+ * kept 30 days and then refused; every limit; a commit judged again after the R2 write; a chain that keeps one blob;
+ * nothing kept that names a path, a body or a team; and the harness, relay/test/attacks.mjs, through relay-product.
  *
  *     node tests/relay-unit.mjs        exit code is the number of failed checks, capped at 63; 78 where it did not complete
  */
 import fs from "node:fs";
+import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import path from "node:path";
 import { createRequire } from "node:module";
@@ -15,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 86;
+const EXPECTED = 89;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -496,8 +497,9 @@ async function main() {
     const deskBlob = sealAs(w, w.other, "desks/" + w.otherId + "/b.ec", 2);
     await put(w, other, deskBlob);
     const leadOver = await put(w, lead, sealAs(w, w.lead, "y.ec", 3, { supersedes: deskBlob.id }));
-    check(refused(theirs, "outside-place") && ownNext.status === 200 && leadOver.status === 200,
-      "9j a desk may supersede only its own chain, and the lead any");
+    const theirsBuried = await put(w, desk, sealAs(w, w.desk, "desks/" + w.deskId + "/e.ec", 8, { supersedes: deskBlob.id }));
+    check(refused(theirs, "outside-place") && ownNext.status === 200 && leadOver.status === 200 && refused(theirsBuried, "outside-place"),
+      "9j a desk may supersede only its own chain, and the lead any; another writer's superseded id is still not the desk's");
     const e2 = await put(w, lead, sealAs(w, w.lead, "team.json", 1, { epoch: 2 }));
     const behind = await put(w, other, sealAs(w, w.other, "desks/" + w.otherId + "/c.ec", 3));
     const atTwo = await put(w, other, sealAs(w, w.other, "desks/" + w.otherId + "/c.ec", 1, { epoch: 2 }));
@@ -653,6 +655,38 @@ async function main() {
     const retry = await put(v, vl, b);
     check(fault.status === 500 && !!fault.json && fault.json.error === "fault" && retry.status === 200,
       "12c a bucket that refuses the write leaves nothing kept and no floor raised, so the same blob then goes up");
+
+    /* A supersedes naming an id already superseded would fork the chain: refused as superseded, in turn and in a race. */
+    const u = await world();
+    const ul = await sessionOf(u, u.lead), ud = await sessionOf(u, u.desk);
+    const live = ids => ids.filter(id => !!u.R.stores.get(u.rt).get("blob:" + id)).length;
+    const dp = "desks/" + u.deskId + "/in-use.ec";
+    const x1 = sealAs(u, u.desk, dp, 1);
+    await put(u, ud, x1);
+    const s2 = sealAs(u, u.desk, dp, 2, { supersedes: x1.id }), s3 = sealAs(u, u.desk, dp, 3, { supersedes: x1.id });
+    const a2 = await put(u, ud, s2), a3 = await put(u, ud, s3);
+    const x2 = sealAs(u, u.desk, dp, 4);
+    await put(u, ud, x2);
+    const d5 = sealAs(u, u.desk, dp, 5, { supersedes: x2.id }), l1 = sealAs(u, u.lead, "guide.ec", 1, { supersedes: x2.id });
+    const b5 = await put(u, ud, d5), b1 = await put(u, ul, l1);
+    check(a2.status === 200 && refused(a3, "superseded") && live([s2.id, s3.id]) === 1
+      && b5.status === 200 && refused(b1, "superseded") && live([d5.id, l1.id]) === 1,
+      "12d an upload superseding an id already superseded is refused as superseded, one writer's two in turn and a desk's then"
+      + " the lead's, so a chain keeps one blob");
+    const x3 = sealAs(u, u.desk, dp, 6);
+    await put(u, ud, x3);
+    const gate3 = u.R.bucket.hold();
+    const d7 = sealAs(u, u.desk, dp, 7, { supersedes: x3.id });
+    const d7P = put(u, ud, d7);
+    await gate3.parked;
+    const l2 = sealAs(u, u.lead, "guide.ec", 2, { supersedes: x3.id });
+    const c2 = await put(u, ul, l2);
+    gate3.release();
+    const c7 = await d7P;
+    const d7objs = [...u.R.bucket.objects.keys()].filter(k => k.indexOf("/" + d7.id + "/") > -1);
+    check(c2.status === 200 && refused(c7, "superseded") && d7objs.length === 0 && live([d7.id, l2.id]) === 1,
+      "12e a desk's upload parked at the bucket while the lead supersedes the same id is refused at the commit as superseded,"
+      + " and its object deleted");
   }
 
   /* ---- 13: what the relay keeps and says ---- */
@@ -706,6 +740,17 @@ async function main() {
     const spent = await tokenHello(w, id, token);
     check(refused(replay, "replay-counter") && next.status === 200 && refused(oldRev, "replay-rev") && refused(spent, "token-spent"),
       "15a after a restart the counter and rev floors and a spent invitation hold, and the session still serves until its time");
+  }
+
+  /* ---- 16: the harness through this relay, on the routine chain ---- */
+  {
+    const r = spawnSync(process.execPath, [path.join("relay", "test", "attacks.mjs")], { cwd: ROOT, encoding: "utf8",
+      env: Object.assign({}, process.env, { RELAY_TARGET: path.join("relay", "test", "targets", "relay-product.cjs") }), timeout: 300000 });
+    const m = /^#counts ok=(\d+) fail=(\d+)$/m.exec(r.stdout || "");
+    const ok = m ? Number(m[1]) : -1, bad = m ? Number(m[2]) : -1;
+    const fails = (r.stdout || "").split(/\r?\n/).filter(l => /^FAIL /.test(l)).slice(0, 5);
+    check(r.status === 0 && ok >= 77 && bad === 0, "16a the harness through relay-product, relay/test/attacks.mjs: " + ok + " ok, " + bad
+      + " failed, exit " + r.status + (fails.length ? ": " + fails.join(" | ") : ""));
   }
 }
 
