@@ -203,7 +203,7 @@ function directWrite(io){
     return Promise.resolve(io.write(JSON.stringify(doc,null,1)+"\n",r.sha||"",!F)).then(w=>{
       if(w && w.ok) return { route:route, state:m.state, fresh:m.fresh, pin:io.pinOf(doc), others:others, wrote:true };
       if(w && w.changed && n<1) return attempt(n+1);
-      return quit((w&&w.busy)?"busy":(w&&w.taken)?"taken":(w&&w.changed)?"beaten":"refused");
+      return quit((w&&w.busy)?"busy":(w&&w.taken)?"taken":(w&&w.changed)?"beaten":(w&&w.sealed)?"sealed":"refused");
     });
   });
   return attempt(0);

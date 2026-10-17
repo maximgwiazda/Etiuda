@@ -446,6 +446,10 @@ function writeShared(loose,origin,holds,layer){
         sharedSaid=false;
       }
       if(r.fresh && r.fresh.length) toast(t("A colleague changed the same text first, so the shared catalog keeps theirs and yours stays in this desk's own file."));
+      else if(r.why==="sealed" && !sharedSaid){
+        sharedSaid=true;
+        toast(t("This team's catalogs stay sealed, so this change stays in this desk's own file."));
+      }
       else if(r.why && r.why!=="signed" && !sharedSaid){
         sharedSaid=true;
         toast(t("The shared catalog could not be written this time; this change is safe in this desk's own file."));
