@@ -701,14 +701,20 @@ try {
   await settle(d2);
   const feed = feedOf(lead.sent, atMove);
   const own2 = deskCopyOf(agreeWith(D2.box)(LB.pub), { rt: tm.rt, teamId: tm.id, leadKeyId: LEAD.keyId, leadBox: LB.pub, deskId: D2.k.keyId, deskBox: D2.box.pub });
-  const opened = feed.filter(it => opensUnder(tm, it, KM1) || (own2 && opensUnder(tm, it, own2.key))).length;
+  /* Every key it can make: the old team key, and a copy key for each desk of the old roster it held, by its own agreement. */
+  let old2 = null;
+  try { old2 = JSON.parse(read(d2.mirror, C.TEAM_NAME)); } catch { old2 = null; }
+  const tries2 = [KM1].concat((old2 && Array.isArray(old2.roster) ? old2.roster : []).map(e => deskCopyOf(agreeWith(D2.box)(LB.pub),
+    { rt: tm.rt, teamId: tm.id, leadKeyId: LEAD.keyId, leadBox: LB.pub, deskId: e.desk.id, deskBox: e.desk.box })).filter(Boolean).map(c => c.key));
+  const opened = feed.filter(it => tries2.some(k => opensUnder(tm, it, k))).length;
   const before2 = d2.written.length;
   d2.prog.applyBatch(feed, { keyFor: e => d2.held.get(e) || null, agree: agreeWith(D2.box), self: { place: "desk:" + D2.k.keyId, box: D2.box.pub },
     onTeam: () => heed(d2.mirror, D2, d2.held, tm) });
-  check(feed.length >= 3 && opened === 0 && epochIn(d2.mirror) === 1 && !d2.held.get(2) && d2.written.length === before2 && read(d2.mirror, "after.ec") === null
+  check(feed.length >= 3 && tries2.length === 4 && opened === 0 && epochIn(d2.mirror) === 1 && !d2.held.get(2) && d2.written.length === before2 && read(d2.mirror, "after.ec") === null
     && read(d2.mirror, "lane.ec") === "{\"note\":\"Lane Board edition one\"}\n" && d2.said.slice(d2Said).some(l => l.indexOf(B.REASONS.removed) >= 0),
     "944c the desk taken off opens nothing of the new epoch: its catch-up refused as removed, and of the lead's " + feed.length + " uploads after the move,"
-    + " served to it whole, " + opened + " open under the old key or its own copy key; mirror epoch " + epochIn(d2.mirror) + ", the new key "
+    + " served to it whole, " + opened + " open under any of the " + tries2.length + " keys it can make (the old team key, a copy key for each desk"
+    + " of the old roster by its own agreement); mirror epoch " + epochIn(d2.mirror) + ", the new key "
     + (d2.held.get(2) ? "TAKEN" : "never held") + ", files written " + (d2.written.length - before2));
   const copy2 = copyOf(tm, D2);
   const live2 = copy2 ? R.stores.get(tm.rt).dump().map(([k, v]) => [k, JSON.parse(v)]).filter(([k, v]) => k.startsWith("blob:") && v.place === "invite:" + copy2.id) : [];
