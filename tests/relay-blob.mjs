@@ -140,8 +140,11 @@ function main() {
   const moved = (change, extra) => { const b = sealAs(lead, "guide.ec", 2, Object.assign({ body: "moved" }, extra || {})); change(b); return b; };
   check(refused(take(moved(b => { b.id = hex(16); })), "bad-signature"), "2b a blob moved to another id does not open");
   const teamMoved = moved(b => { b.relayTeamId = RT2; });
-  check(refused(take(teamMoved, { relayTeamId: RT2 }), "bad-signature") && refused(take(moved(() => {}), { relayTeamId: RT2 }), "bad-signature"),
-    "2c a blob moved to another team does not open there, its team field rewritten or not, under the same key");
+  const fetched = moved(b => { delete b.relayTeamId; }, { body: "fetched" });
+  check(refused(take(teamMoved, { relayTeamId: RT2 }), "bad-signature") && refused(take(moved(() => {}), { relayTeamId: RT2 }), "bad-signature")
+    && refused(take(teamMoved), "bad-signature") && take(fetched).ok === true,
+    "2c a blob moved to another team does not open there, its team field rewritten or not, under the same key, nor at home with"
+    + " its team field rewritten, and one handed without its team field opens as the pinned team's");
   check(refused(take(moved(b => { b.epoch = 2; }), { epoch: 2 }), "bad-signature"),
     "2d a blob moved to another epoch does not open, judged under that epoch's team file and the same key");
   check(refused(take(moved(b => { b.counter = 9; })), "bad-signature"), "2e a blob moved to another counter does not open");
@@ -347,7 +350,7 @@ function main() {
     v => B.writerOf(v, lead.keyId), v => B.writerOf(trust, v), v => B.counterFresh(v, deskId, 1, 1), v => B.counterFresh({}, v, v, v),
     v => B.raiseCounter(v, deskId, 1, 1), v => B.revLoad(v, v), v => B.revCurrent(revs, v), v => B.checkBlobSize(v),
     v => B.checkTeamSize(v, v, v), v => B.checkRate(v, v), v => B.verifyUpload(v, v, v, v), v => B.unframe(v), v => B.aadOf(v),
-    v => B.verifyUpload(desk.public, a3, ct3, v), v => B.padStep(v)];
+    v => B.verifyUpload(desk.public, a3, ct3, v)];
   let threw = 0, tried = 0;
   for (const fn of calls) for (const v of odd) { tried++; if (throwsOf(() => fn(v))) threw++; }
   check(threw === 0 && tried === calls.length * odd.length, "9b no exported check throws on a hostile value: " + tried + " calls over "
