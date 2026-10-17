@@ -67,6 +67,16 @@ const TMP_RE = /\.tmp$/i;
 const HEX32 = /^[0-9a-f]{32}$/, HEX64 = /^[0-9a-f]{64}$/;
 const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
+/* An upload refused (F4 of the slice 1 review). These refusals no later state of the team can lift: the path, the place, the
+   bytes or their signature are wrong in themselves, so the same bytes are refused again however long they wait. The file
+   stops until its bytes change, and the program says so. Any other refusal waits: the epoch, the team's space, an
+   enrolment, a counter, a chain, or an answer this layer does not know. The file stays owed and goes again at the next
+   cycle, and the program says once that it waits. */
+const STOPS = ["bad-path", "forged-delete", "outside-place", "blob-size", "bad-signature", "not-roster", "wrong-team", "tmp", "echo"];
+/* Waits about who sends or the epoch it seals under, which every other file of the cycle meets too: the cycle's uploads stop
+   at the first and go again at the next cycle. */
+const HALTS = ["epoch", "not-enrolled", "removed", "token-spent"];
+
 const R = B.refusal;
 const isCount = v => Number.isSafeInteger(v) && v >= 1;
 const has = (o, k) => !!o && typeof o === "object" && Object.prototype.hasOwnProperty.call(o, k);
@@ -280,7 +290,12 @@ function stateOf(x) {
   };
   s.sent = sentOf(x.sent);
   if (table(x.sentInv)) for (const h of Object.keys(x.sentInv)) if (HEX32.test(h)) s.sentInv[h] = sentOf(x.sentInv[h]);
-  if (table(x.refused)) for (const k of Object.keys(x.refused)) if (typeof x.refused[k] === "string") s.refused[k] = x.refused[k];
+  /* A file stopped is kept with the refusal that stopped it; a record of any other, one written before F4 included, is let
+     go, so a file a refusal that lifts once stopped goes again. */
+  if (table(x.refused)) for (const k of Object.keys(x.refused)) {
+    const r = x.refused[k];
+    if (table(r) && typeof r.sha === "string" && STOPS.concat(["not-text"]).indexOf(r.why) >= 0) s.refused[k] = { sha: r.sha, why: r.why }; /* plant:refused-kept */
+  }
   if (Array.isArray(x.pending)) s.pending = x.pending.filter(p => table(p) && count(p.seq) && HEX32.test(String(p.id))
     && isCount(p.epoch) && B.isId(p.writer) && count(p.floor)).slice(-PENDING_MAX)
     .map(p => ({ seq: p.seq, id: p.id, epoch: p.epoch, writer: p.writer, floor: p.floor }));
@@ -297,6 +312,8 @@ function createProgram(opts) {
   let st = stateOf(typeof o.load === "function" ? o.load() : null);
   let pin = pinOf(o.pin);
   const rates = new Map();
+  /* What waits on a refusal that lifts, by path or copy, with the reason last said for it, so a wait is said once. */
+  const waiting = new Map();
 
   const persist = () => { try { save(st); } catch (e) { say("the relay's record could not be kept - " + (e && e.message)); } };
   const revKey = t => ({ teamId: pin.teamId, leadKeyId: pin.lead.keyId, epoch: t.epoch, rev: t.rev });
@@ -673,10 +690,12 @@ function createProgram(opts) {
       const sha = sha256(bytes);
       const was = has(st.sent, p.path) ? st.sent[p.path] : null;
       if (was && !was.del && was.sha === sha) continue;
-      if (st.refused[p.path] === sha) continue;
+      const stopped = has(st.refused, p.path) ? st.refused[p.path] : null;
+      if (stopped && stopped.sha === sha) continue; /* plant:refused-skip */
       if (!considerOutgoing(p.path, bytes).send) continue;
       let text;
-      try { text = UTF8.decode(bytes); } catch { say(p.path + " is not text, so it stays on this computer"); st.refused[p.path] = sha; continue; }
+      try { text = UTF8.decode(bytes); }
+      catch { say(p.path + " is not text, so it stays on this computer"); st.refused[p.path] = { sha, why: "not-text" }; continue; }
       ops.push({ rel: p.path, kind: "file", body: text, sha });
     }
     for (const rel of Object.keys(st.sent)) {
@@ -738,16 +757,32 @@ function createProgram(opts) {
     } else {
       st.sent[op.rel] = rec;
       st.bytes = Math.max(0, st.bytes - (was ? was.size : 0)) + rec.size;
+      delete st.refused[op.rel];
     }
-    delete st.refused[op.rel];
+    waiting.delete(op.invite ? "invite:" + op.invite.id : op.rel);
     if (op.byInvite) st.invited = true;
     persist();
   }
 
+  /* An upload refused: one that cannot lift (STOPS) stops that file until its bytes change; any other waits, the file left
+     owed for the next cycle (F4). Each is said, a wait once while it lasts. A copy of the team file the lead owes a desk or
+     an invitation always waits, so its refusal never stops the lead's own team file of the same bytes. True where it waits. */
   function refusedOut(op, r) {
-    if (op.sha) st.refused[op.rel] = op.sha;
+    const key = op.invite ? "invite:" + op.invite.id : op.rel;
+    let waits = !!op.invite;
+    if (STOPS.indexOf(r.reason) < 0) waits = true; /* plant:refused-waits */
+    if (waits) {
+      if (waiting.get(key) !== r.reason) {
+        waiting.set(key, r.reason);
+        say((op.invite ? "a copy of " + op.rel + " for one desk or invitation" : op.rel) + " waits, and goes once this lifts: " + r.said);
+      }
+      return true;
+    }
+    waiting.delete(key);
+    if (op.sha) st.refused[op.rel] = { sha: op.sha, why: r.reason };
     persist();
     say(op.rel + " was not sent: " + r.said);
+    return false;
   }
 
   /* The contract's limits before an upload: the blob's size, the team's space as this program counts it, the rate. */
@@ -1033,7 +1068,7 @@ function createChannel(opts) {
       if (r.status === 200) { prog.sentOut(op, blob); continue; }
       const why = r.refused || refusalOf(r);
       if (r.status === 0 || r.status >= 500 || ["rate", "no-hello", "nonce-stale", "hello-replay"].indexOf(why.reason) >= 0) return why;
-      prog.refusedOut(op, why);
+      if (prog.refusedOut(op, why) && HALTS.indexOf(why.reason) >= 0) return { ok: true };
     }
     return { ok: true };
   }

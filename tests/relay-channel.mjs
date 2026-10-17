@@ -31,7 +31,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 47;
+const EXPECTED = 51;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -856,6 +856,91 @@ try {
   check(f6b.heldAtAsk && f6b.asked && !f6b.inviteCopy && f6b.joined,
     "945b a desk that read the invitation's copy before going offline joins the same way with an invitation naming no box, the lead's box"
     + " taken from the team file it holds (F1's copy alone): " + f6b.line);
+} catch (e) {
+  check(false, "harness: " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- a refusal that lifts never stops a file (F4 of the slice 1 review): the test architect's f4 reproduction is 946a and
+   946b, its control 946A. A desk's channel over a stand-in relay that answers each of its uploads as the leg says. ---- */
+try {
+  const FRT = hex(16), FPIN = { teamId: "t-" + hex(8), rt: FRT, lead: { keyId: LEAD.keyId, public: LEAD.pub } }, KF = crypto.randomBytes(32);
+  const FREL = "desks/" + DESK.keyId + "/in-use.ec";
+  const STATUS = { epoch: 409, "replay-counter": 409, superseded: 410, "blob-size": 413, "bad-path": 400 };
+  const refusal = reason => ({ status: STATUS[reason] || 403, body: { error: reason, said: B.REASONS[reason] } });
+  const TAKEN = { status: 200, body: { seq: 1, id: "0".repeat(32) } };
+  /* `answers` for the uploads in turn, the last repeated; `cycles` catch-ups and flushes; `before` run on the channel before
+     the first, `between` after it; a channel over the same record started again at the end where `restart` says so. */
+  async function cycles(name, answers, o) {
+    const x = o || {};
+    const puts = [], said = [];
+    const reply = (status, j) => ({ status, header: () => null, bytes: Buffer.from(JSON.stringify(j)) });
+    const request = async (method, url) => {
+      const u = String(url);
+      if (method === "POST" && u.endsWith("/hello")) return reply(200, { challenge: hex(16) });
+      if (method === "POST" && u.endsWith("/session")) return reply(200, { session: hex(32) });
+      if (method === "GET" && u.indexOf("/since/") >= 0) return reply(200, []);
+      if (method === "PUT") { const a = answers[Math.min(puts.length, answers.length - 1)]; puts.push(u); return reply(a.status, a.body); }
+      return reply(404, {});
+    };
+    const mirror = path.join(LAB, name), stateFile = path.join(LAB, name + ".json");
+    put(mirror, FREL, "{\"inUse\":\"an honest edit\"}\n");
+    const make = () => C.createChannel({ rt: FRT, url: URLV1, mirror, stateFile, watch: false, pollMs: 1e9, pin: () => FPIN,
+      me: () => ({ keyId: DESK.keyId, public: DESK.pub, privateKey: DESK.privateKey, place: "desk:" + DESK.keyId }),
+      keyFor: e => (e === 1 ? KF : null), sealEpoch: () => 1, request, connect: () => null, say: l => said.push(l) });
+    let ch = make();
+    if (x.before) x.before(ch);
+    const after = [];
+    for (let i = 0; i < (x.cycles || 2); i++) {
+      if (i === 0) ch.start(); else ch.kick();
+      await ch.idle();
+      after.push({ puts: puts.length, stopped: !!ch.program.state().refused[FREL] });
+      if (i === 0 && x.between) x.between(ch);
+    }
+    if (x.restart) { await ch.stop(); ch = make(); ch.start(); await ch.idle(); }
+    const out = { after, puts: puts.length, sent: !!ch.program.state().sent[FREL], said,
+      owed: ch.program.owed({ keyId: DESK.keyId, place: "desk:" + DESK.keyId }, { keyFor: e => (e === 1 ? KF : null) }).some(op => op.rel === FREL),
+      waits: said.filter(l => l.indexOf(FREL + " waits, and goes once this lifts: ") === 0).length };
+    await ch.stop();
+    return out;
+  }
+
+  /* Each refusal that a later state of the team, or of the relay, can lift: refused twice, then taken. */
+  const LIFTS = ["epoch", "team-size", "not-enrolled", "replay-counter", "removed", "token-spent", "superseded"];
+  const lifted = [];
+  for (const reason of LIFTS) {
+    const r = await cycles("f4-" + reason, [refusal(reason), refusal(reason), TAKEN], { cycles: 3 });
+    lifted.push({ reason, ok: r.after[0].puts === 1 && !r.after[0].stopped && !r.after[1].stopped && r.sent && !r.owed && r.waits === 1
+      && r.said.some(l => l.indexOf(B.REASONS[reason]) >= 0), puts: r.puts, waits: r.waits, sent: r.sent, stopped: r.after[0].stopped });
+  }
+  const odd = await cycles("f4-teapot", [{ status: 418, body: {} }, TAKEN]);
+  lifted.push({ reason: "an answer this layer does not know", ok: !odd.after[0].stopped && odd.sent && odd.waits === 1, puts: odd.puts, waits: odd.waits,
+    sent: odd.sent, stopped: odd.after[0].stopped });
+  check(lifted.every(l => l.ok),
+    "946a f4: a refusal the relay may lift never stops the file: refused, it waits, is said once while it waits, and goes once the relay takes"
+    + " it: " + lifted.map(l => l.reason + " " + (l.ok ? "sent" : "puts " + l.puts + ", said " + l.waits + ", stopped " + l.stopped + ", sent " + l.sent)).join("; "));
+
+  /* The team's space as this desk counts it full before any upload; then room again, as when its own earlier file goes. */
+  const full = await cycles("f4-space", [TAKEN], { before: ch => { ch.program.state().bytes = B.TEAM_MAX; }, between: ch => { ch.program.state().bytes = 0; } });
+  check(full.after[0].puts === 0 && !full.after[0].stopped && full.waits === 1 && full.sent && full.puts === 1,
+    "946b f4: the team's space found full before any upload stops nothing: the file waits, is said, and goes once there is room: puts before "
+    + full.after[0].puts + ", stopped " + full.after[0].stopped + ", said " + full.waits + ", then " + (full.sent ? "sent" : "not sent"));
+
+  const down = await cycles("f4-down", [{ status: 500, body: { error: "fault" } }, TAKEN]);
+  check(!down.after[0].stopped && down.sent && down.puts === 2,
+    "946A f4-control: HTTP 500 leaves the file owed and the next cycle sends it: stopped " + down.after[0].stopped + ", puts " + down.puts
+    + ", " + (down.sent ? "sent" : "not sent"));
+
+  /* A refusal that can never lift still stops the file, says so, and holds across a restart. */
+  const STOP = ["outside-place", "bad-path", "bad-signature", "blob-size"];
+  const stops = [];
+  for (const reason of STOP) {
+    const r = await cycles("f4-stop-" + reason, [refusal(reason), TAKEN], { cycles: 2, restart: true });
+    stops.push({ reason, ok: r.after[0].stopped && r.puts === 1 && !r.sent && !r.owed && r.waits === 0
+      && r.said.some(l => l === FREL + " was not sent: " + B.REASONS[reason]), puts: r.puts });
+  }
+  check(stops.every(s => s.ok),
+    "946c a refusal that can never lift still stops that file, says so, and holds across a restart, the same bytes never sent again: "
+    + stops.map(s => s.reason + " " + (s.ok ? "stopped" : "puts " + s.puts)).join("; "));
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
 }
