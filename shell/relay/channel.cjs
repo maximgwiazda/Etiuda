@@ -357,12 +357,10 @@ function createProgram(opts) {
   }
 
   /* The contract's accept: the team file passed is judged under the pin and its rev at or above the floor, and the blob is
-     judged under that file's roster and epoch. */
+     judged under that file's roster and epoch (blob.cjs refuses one over the size cap before anything else). */
   function acceptBlob(input) {
     const i = input || {};
     const b = i.blob;
-    const ct = b && toBytes(b.ciphertext);
-    if (ct && ct.length > B.BLOB_MAX) return R("blob-size"); /* plant:in-size */
     const t = teamJudged(i.teamDoc);
     if (!t.ok) return t;
     const cur = B.revCurrent(st.revs, revKey(t));
@@ -380,7 +378,7 @@ function createProgram(opts) {
      mirror's are nothing new; a lower or equal rev of other bytes is a replay. */
   function landTeam(r, ctx) {
     let doc = null;
-    try { doc = JSON.parse(r.body.replace(/^﻿/, "")); } catch { doc = null; }
+    try { doc = JSON.parse(r.body.replace(/^\uFEFF/, "")); } catch { doc = null; }
     const t = teamJudged(doc);
     if (!t.ok) return t;
     const sha = sha256(Buffer.from(r.body, "utf8"));
@@ -409,7 +407,7 @@ function createProgram(opts) {
     const b = io.read(TEAM_NAME);
     if (!b) return;
     let doc = null;
-    try { doc = JSON.parse(toBytes(b).toString("utf8").replace(/^﻿/, "")); } catch { return; }
+    try { doc = JSON.parse(toBytes(b).toString("utf8").replace(/^\uFEFF/, "")); } catch { return; }
     const t = teamJudged(doc);
     if (t.ok) keepTrust(t);
   }

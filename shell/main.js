@@ -24,7 +24,9 @@ const os = require("node:os");
 const crypto = require("node:crypto");
 const zlib = require("node:zlib");
 const { watchPage } = require(path.join(__dirname, "page-watch.cjs"));
-const RelayChannel = require(path.join(__dirname, "relay", "channel.cjs"));
+/* The relay's channel layer, required the first time a team on the relay needs it, so a desk on a folder loads nothing of it. */
+let relayLayer = null;
+function RelayChannel() { return relayLayer || (relayLayer = require(path.join(__dirname, "relay", "channel.cjs"))); }
 
 /* THE PROXY IS CHOSEN HERE, BEFORE READY: a setProxy after ready would not stop the first lookup.
    Windows' own setting is followed where it names a setup script or a server; automatic detection
@@ -2978,7 +2980,7 @@ function takeRelayInvite(parsed, name, me) {
   const commit = joinCommit(parsed.team, me.key, me.box, nonce);
   const proof = memberProof(parsed.secret, commit);
   const incomingId = inviteIdOf(parsed.secret);
-  const sealKey = RelayChannel.inviteSealKey(parsed.secret);
+  const sealKey = RelayChannel().inviteSealKey(parsed.secret);
   if (!proof || !incomingId || !sealKey) return Object.assign({}, joinView(), { refused: "unread" });
   let token = "", seal = "";
   try {
@@ -3155,7 +3157,7 @@ function relayRun() {
   const team = want.team, mirror = relayMirrorOf(want.rt);
   try { fs.mkdirSync(mirror, { recursive: true }); }
   catch (e) { teamSay("the relay's mirror " + mirror + " could not be made - " + e.message); relayAt = ""; return null; }
-  relayChannel = RelayChannel.createChannel({
+  relayChannel = RelayChannel().createChannel({
     rt: want.rt, url: want.url, mirror: mirror, stateFile: mirror + ".json", write: writeReplacing,
     pin: () => ({ teamId: team, rt: want.rt, lead: { keyId: pin.keyId, public: pin.public } }),
     me: () => {

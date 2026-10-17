@@ -26,7 +26,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 29;
+const EXPECTED = 30;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -221,6 +221,9 @@ try {
 
   /* ---- live: an announcement on the socket brings the next edition with no ask of the desk's own ---- */
   const socketUp = await until(() => desk.ch.socketOpen());
+  /* The desk's own watch, prompted by the files it just wrote, settles first, so nothing but the socket can bring the next. */
+  await wait(700);
+  await desk.ch.idle();
   put(lead.mirror, "guide.ec", EDITION.replace("one", "two"));
   await settle(lead);
   const live = await until(() => read(desk.mirror, "guide.ec") === EDITION.replace("one", "two"));
@@ -372,6 +375,20 @@ try {
     && read(desk2.mirror, "desks/" + OTHER.keyId + "/in-use.ec") !== "replacing the lead's edition",
     "940r a colleague's blob that names the lead's edition as the chain it replaces is refused as outside its place");
 
+  /* E7 through the relay: an older team file the lead's program sends again is refused by the rev floor, the newer kept. */
+  const rev1 = read(lead.mirror, C.TEAM_NAME);
+  put(lead.mirror, C.TEAM_NAME, teamText(2, [member(DESK), member(OTHER)]));
+  await settle(lead);
+  await settle(desk2);
+  const rev2 = read(desk2.mirror, C.TEAM_NAME);
+  const revFrom = desk2.said.length;
+  put(lead.mirror, C.TEAM_NAME, rev1);
+  await settle(lead);
+  await settle(desk2);
+  check(rev2 && JSON.parse(rev2).rev === 2 && desk2.said.slice(revFrom).some(l => l.indexOf(B.REASONS["replay-rev"]) >= 0)
+    && read(desk2.mirror, C.TEAM_NAME) === rev2,
+    "940s an older team file the lead's program sends again, at the same epoch, is refused by the rev floor and the newer stays (E7)");
+
   /* Deletions: the writer's signed record removes the file; a blob the relay stops serving deletes nothing. */
   put(lead.mirror, "notes.ec", "a note the lead keeps\n");
   await settle(lead);
@@ -454,7 +471,7 @@ try {
 
   /* Admitted: the lead adds the desk to the roster and enrols its key; the copy in the invitation's place follows. The desk,
      holding the team key once the roster names it, takes what waited for that key. */
-  put(lead2.mirror, C.TEAM_NAME, teamText(2, [member(DESK), member(OTHER), member(NEWD)]));
+  put(lead2.mirror, C.TEAM_NAME, teamText(3, [member(DESK), member(OTHER), member(NEWD)]));
   await enrol(NEWD);
   await settle(lead2);
   let admitted = false;
