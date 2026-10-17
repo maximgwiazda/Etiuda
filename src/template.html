@@ -759,11 +759,16 @@ body.e-backdrop .row::before{
 /* 25px on the compact band, a step above the 24px corner boxes so the mark still leads
    the row. No plate in the header - the band is the plate, and the mark whitens with
    the wordmark: the white-mark asset expressed by the inline geometry. */
-.brand-tile{flex:0 0 auto;width:25px;height:25px;
+.brand-tile{position:relative;flex:0 0 auto;width:25px;height:25px;
   color:var(--band-ink);display:inline-flex;align-items:center;justify-content:center}
 /* One filled path in currentColor, the geometry verbatim from the family's mark drawing: rescaled
    by hand it gets padded twice, by the drawing's margins and again by the box. */
 .brand-tile svg{width:100%;height:100%;display:block}
+/* Turning is a canvas over the tile. The path stays the standing outline: writing its d marks
+   the shape for layout, and the mark repaints for as long as the page is shown. */
+.brand-tile canvas.brand-fifth{position:absolute;inset:0;width:100%;height:100%;display:none;pointer-events:none}
+.brand-tile.brand-turning canvas.brand-fifth{display:block}
+.brand-tile.brand-turning svg{visibility:hidden}
 /* Search / agent / pax: relative wrap for clear x inside the field */
 .field-wrap{position:relative;display:flex;min-width:0;align-items:stretch}
 .field-wrap>input{width:100%;min-width:0}

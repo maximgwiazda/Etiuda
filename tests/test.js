@@ -2814,12 +2814,39 @@ function fifthLab(still) {
   const src = read("fifth.js").replace(/^import[^\n]*\n/gm, "").replace(/export\s*\{[^}]*\};?\s*$/, "");
   const tpl = fs.readFileSync(path.join(E.ROOT, "src", "template.html"), "utf8");
   const std = (/<span class="brand-tile"[^>]*><svg[^>]*><g[^>]*><path fill="currentColor" d="([^"]+)"/.exec(tpl) || [])[1] || "";
-  let seq = 0, frames = [], watch = null;
+  const group = (/<span class="brand-tile"[^>]*><svg[^>]*><g transform="([^"]+)"/.exec(tpl) || [])[1] || "";
+  const viewBox = (/<span class="brand-tile"[^>]*><svg[^>]*viewBox="([^"]+)"/.exec(tpl) || [])[1] || "0 0 256 256";
+  let seq = 0, frames = [], watch = null, draws = [];
+  const stroke = { cap: "", join: "", w: 0 };
+  const tile = {
+    classes: new Set(), clientWidth: 25, clientHeight: 25, kids: [],
+    classList: {
+      contains: c => tile.classes.has(c),
+      add: c => tile.classes.add(c),
+      remove: c => tile.classes.delete(c)
+    },
+    appendChild(n) { tile.kids.push(n); },
+    querySelector(s) { return s === "canvas.brand-fifth" ? tile.kids.find(k => k.className === "brand-fifth") || null : null; }
+  };
+  const svg = { getAttribute: n => n === "viewBox" ? viewBox : null };
+  const gEl = { getAttribute: n => n === "transform" ? group : null };
   const node = { d: std, sets: 0, attrs: {}, getAttribute: n => (n === "d" ? node.d : node.attrs[n]),
-    setAttribute(n, v) { if (n === "d") { node.d = v; node.sets++; } else node.attrs[n] = v; } };
-  const doc = { hidden: false, documentElement: {}, querySelector: () => node, addEventListener() {} };
+    setAttribute(n, v) { if (n === "d") { node.d = v; node.sets++; } else node.attrs[n] = v; },
+    closest: s => s === ".brand-tile" ? tile : s === "svg" ? svg : null,
+    ownerSVGElement: svg, parentElement: gEl };
+  const ctx = { lineWidth: 0, lineCap: "", lineJoin: "", strokeStyle: "" };
+  ctx.setTransform = () => {};
+  ctx.translate = () => {};
+  ctx.scale = () => {};
+  ctx.clearRect = () => {};
+  ctx.stroke = p => { draws.push({ d: p.d, phase: sb.__f.fifthPhase() }); stroke.cap = ctx.lineCap; stroke.join = ctx.lineJoin; stroke.w = ctx.lineWidth; };
+  const doc = { hidden: false, documentElement: { classList: { contains: () => false } },
+    createElement: () => ({ className: "", width: 0, height: 0, setAttribute() {}, getContext: () => ctx }),
+    querySelector: s => s === ".brand-tile svg path" ? node : null, addEventListener() {} };
   const sb = {
-    still: !!still, mgReduceMotion: () => sb.still, document: doc,
+    still: !!still, mgReduceMotion: () => sb.still, document: doc, devicePixelRatio: 1,
+    Path2D: class { constructor(d) { this.d = d; } },
+    getComputedStyle: () => ({ color: "rgb(255,255,255)" }),
     requestAnimationFrame: fn => { frames.push({ id: ++seq, fn }); return seq; },
     cancelAnimationFrame: id => { frames = frames.filter(f => f.id !== id); },
     MutationObserver: class { constructor(cb) { watch = cb; } observe() {} }
@@ -2828,7 +2855,8 @@ function fifthLab(still) {
   const f = sb.__f, wire = f.wireFifth;
   // with no options, as main.js wires the header on the desk's switch (the leg on the program's own band holds that call)
   f.wireFifth = o => wire(o || { still: sb.mgReduceMotion });
-  return { f, node, std, sb, queued: () => frames.length, flip: v => { sb.still = v; watch(); },
+  return { f, node, std, sb, stroke, queued: () => frames.length, draws: () => draws.slice(),
+    turning: () => tile.classes.has("brand-turning"), flip: v => { sb.still = v; watch(); },
     frame: ms => { const run = frames; frames = []; run.forEach(x => x.fn(ms)); } };
 }
 /* THE LINE, worked out again from the figure's definition and never from the code under test: the centreline
@@ -2899,25 +2927,26 @@ function fifthTests() {
   try {
     const a = fifthLab(false); a.f.wireFifth();
     for (let i = 0; i < 60; i++) a.frame(1000 + i * 1000 / 60);
-    const adv = a.f.fifthPhase() - PHI0, segs = d => (d.match(/C/g) || []).length, at = a.node.attrs;
-    got = [Math.abs(adv - W0) < 1e-9, a.node.d !== a.std, a.node.sets >= 15 && a.node.sets <= 21, a.queued(),
-      segs(a.node.d) > 1.8 * segs(a.f.fifthLinePath(PHI0)) && /Z$/.test(a.node.d),
-      [at.fill, at.stroke, at["stroke-linecap"], at["stroke-linejoin"], +at["stroke-width"] === Math.round(200 * a.f.fifthRadius()) / 100]];
+    const adv = a.f.fifthPhase() - PHI0, segs = d => (d.match(/C/g) || []).length, drawn = a.draws();
+    const last = drawn[drawn.length - 1];
+    got = [Math.abs(adv - W0) < 1e-9, a.node.d === a.std && a.node.sets === 0 && a.turning(), drawn.length >= 15 && drawn.length <= 21, a.queued(),
+      !!last && last.d === a.f.fifthLinePath(last.phase) && segs(last.d) > 1.8 * segs(a.f.fifthLinePath(PHI0)) && /Z$/.test(last.d),
+      [a.stroke.cap, a.stroke.join, Math.abs(a.stroke.w - 2 * a.f.fifthRadius()) < 0.02]];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("under motion the phase advances at 2 pi times 0.007 per second, the header's path turns, repaints stay at or under 20 a second, frames keep coming, and the turned path is the line stroked round both halves of the loop, at its width with round ends and joins",
-    got, [true, true, true, 1, true, ["none", "currentColor", "round", "round", true]]);
+  eq("under motion the phase advances at 2 pi times 0.007 per second, the header's mark turns on its canvas and the path is not rewritten, repaints stay at or under 20 a second, frames keep coming, and the turned line is both halves of the loop, at its width with round ends and joins",
+    got, [true, true, true, 1, true, ["round", "round", true]]);
 
   try {
     const a = fifthLab(true); a.f.wireFifth();
     for (let i = 0; i < 60; i++) a.frame(1000 + i * 1000 / 60);
-    const held = [a.queued(), a.f.fifthPhase() === PHI0, a.node.d === a.std, a.node.sets, a.node.attrs.stroke];
+    const held = [a.queued(), a.f.fifthPhase() === PHI0, a.node.d === a.std, a.node.sets, a.turning()];
     const b = fifthLab(false); b.f.wireFifth();
     for (let i = 0; i < 60; i++) b.frame(1000 + i * 1000 / 60);
     b.flip(true);
-    got = [held, [b.queued(), b.f.fifthPhase() === PHI0, b.node.d === b.std, b.node.attrs.fill, b.node.attrs.stroke]];
+    got = [held, [b.queued(), b.f.fifthPhase() === PHI0, b.node.d === b.std, b.turning()]];
   } catch (e) { got = "the lab threw: " + e.message; }
-  eq("under a quiet switch nothing is asked for, the phase and the path stay the standard figure, and switching on mid-turn puts the standard figure back, filled and unstroked",
-    got, [[0, true, true, 0, undefined], [0, true, true, "currentColor", "none"]]);
+  eq("under a quiet switch nothing is asked for, the phase and the path stay the standard figure, and switching on mid-turn puts the standard figure back and takes the canvas off",
+    got, [[0, true, true, 0, false], [0, true, true, false]]);
 
   try {
     // a second program's corner logo (Studio's band): its own path, its own quiet switch, which the system flips with no class

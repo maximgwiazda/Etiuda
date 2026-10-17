@@ -97,16 +97,10 @@ const VOLATILE = {
   eDeskSeen: "the moment of the last start",
   tabSaveTimer: "a timer's handle, a number the browser picks",
 };
-/* WHAT IN THE MARKUP IS VOLATILE AND WHY: one attribute of one node, and only while the condition
-   holds. Everything else on that node, and the node itself, is compared as it stands. */
-const VOLATILE_MARKUP = [{
-  sel: ".brand-tile svg path", attr: "d", while: { fill: "none", stroke: "currentColor" },
-  why: "the header's mark turns on the page's own clock from boot (fifth.js wireFifth, called once by main.js and"
-    + " never by restartDesk), so while it turns its centreline is the phase of the time since the page opened, and"
-    + " a fresh start reads an earlier phase than the desk it is held to. Turning is what fill none and stroke"
-    + " currentColor say, and those stay compared, so a mark standing on one side and turning on the other is a"
-    + " difference; standing, its d is the markup's own outline and is compared too",
-}];
+/* WHAT IN THE MARKUP IS VOLATILE AND WHY. The header mark's phase is painted on a canvas and is
+   not in the markup, so the path stays the standing outline and is compared, and a canvas bitmap
+   is not serialised. Nothing else is excused. */
+const VOLATILE_MARKUP = [];
 
 /* EVERY WINDOW OR QUESTION STANDING OVER THE DESK, read by what can put one up rather than by the
    name of one that once did: a window not hidden, a bubble that asks, an alert. The Undo bubble is
