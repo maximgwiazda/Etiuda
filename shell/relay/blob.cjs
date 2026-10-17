@@ -311,6 +311,8 @@ function opened(input) {
   const f = { relayTeamId: input.relayTeamId, epoch: b.epoch, id: b.id, supersedes: b.supersedes == null ? null : b.supersedes,
     writerKeyId: b.writerKeyId, counter: b.counter };
   const nonce = b.nonce, signature = b.signature;
+  /* A blob may come without its team, as a fetch hands it; one that names another team fails closed. */
+  if (b.relayTeamId != null && b.relayTeamId !== input.relayTeamId) return refusal("bad-signature");
   const aad = aadOf(f);
   if (!aad || !ct || ct.length < PAD_FLOOR + TAG_BYTES || padStep(ct.length - TAG_BYTES) !== ct.length - TAG_BYTES
     || typeof nonce !== "string" || !HEX24.test(nonce) || typeof signature !== "string" || !HEX128.test(signature))
