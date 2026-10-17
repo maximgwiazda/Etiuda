@@ -319,14 +319,15 @@ async function main() {
 
   /* ---- 7. THE RELEASE LEAVES ONE BESIDE THE INSTALLER --------------------------------------- */
   /* A throwaway repository with the real release script and its imports, stub npm scripts, and a
-     stub package step that writes a fourteen-byte installer and a real eight-file app.asar. Every
-     gate then runs and the last two are the ones after the document is written. */
+     stub package step that writes a fourteen-byte installer and a real ten-file app.asar, the
+     release's allowlist since relay step 4 (13aca64). Every gate then runs and the last two are the
+     ones after the document is written. */
   const STUB_PACKAGE = [
     "import fs from 'node:fs'; import path from 'node:path'; import { createRequire } from 'node:module';",
     "const asar = createRequire(import.meta.url)(process.env.ETIUDA_TEST_ASAR);",
     "const dist = process.env.ETIUDA_DIST; const src = path.join(dist, '..', 'stage');",
     "for (const f of ['engine/etiuda.csp.json', 'engine/etiuda.html', 'package.json', 'shell/main.js', 'shell/page-watch.cjs', 'shell/preload.js',"
-    + " 'shell/sample-catalog.ec', 'shell/win-proxy.cjs']) {",
+    + " 'shell/relay/blob.cjs', 'shell/relay/channel.cjs', 'shell/sample-catalog.ec', 'shell/win-proxy.cjs']) {",
     "  fs.mkdirSync(path.dirname(path.join(src, f)), { recursive: true }); fs.writeFileSync(path.join(src, f), 'x\\n'); }",
     "fs.mkdirSync(path.join(dist, 'win-unpacked', 'resources'), { recursive: true });",
     "await asar.createPackage(src, path.join(dist, 'win-unpacked', 'resources', 'app.asar'));",
@@ -417,7 +418,7 @@ async function main() {
     '7q and a scan that refuses the tree stops the release at gate 3, exit ' + stopped.status + ' (3 wanted), gate 4 not reached: '
     + !/\n\[4\] /.test(stopped.out));
 
-  /* The contradiction: alpha is a production dependency the eight-file app would not carry, so the
+  /* The contradiction: alpha is a production dependency the ten-file app would not carry, so the
      list is not what ships. The document a run left there earlier goes too, or it would read as
      this build's. */
   const L7b = releaseLab('refused', { alpha: '^1.0.0' });
