@@ -35,6 +35,8 @@ const sha256 = v => crypto.createHash("sha256").update(v).digest("hex");
 const pad = n => String(Math.max(0, Math.min(Math.floor(n), Number.MAX_SAFE_INTEGER))).padStart(16, "0");
 const expiryKey = (t, id) => "kx:" + pad(t) + ":" + id;
 const no = B.refusal;
+/* What the relay keeps of a spent invitation past its keep, under its id: that it was spent, and no hash, try or time. */
+const SPENT = Object.freeze({ spent: true });
 
 /* The canonical JSON shell/main.js signs with (canonJson): keys sorted, an undefined value left out. */
 function canon(v) {
@@ -125,7 +127,10 @@ function createCore(deps) {
     return { ok: true, rev: b.rev, withdrawn };
   }
 
-  /* Invitations by their token's sha256 alone. The same call twice is refused while its time still holds. */
+  /* Invitations by their token's sha256 alone. The same call twice is refused while its time still holds. A spent
+     invitation is never live again (F9 of the slice 1 review): once its keep is over, or the lead drops it, the relay keeps
+     of it its id and that it was spent, and nothing else, so its token is token-spent for as long as the team lives and the
+     lead sending its id again adds nothing. */
   function invites(rt, body) {
     const team = teamOf(rt);
     if (!team) return no("not-enrolled");
@@ -147,7 +152,11 @@ function createCore(deps) {
     store.atomic(() => {
       for (const [k, until] of store.list("seen:")) if (until < now) store.del(k);
       store.put(seen, b.t + CALL_SKEW_MS);
-      for (const id of drop) store.del("inv:" + id);
+      for (const id of drop) {
+        const was = held.get(id);
+        store.del("inv:" + id);
+        if (was && was.spent) store.put("inv:" + id, SPENT); /* plant:spent-drop */
+      }
       for (const [k, s] of store.list("ses:")) if (s.inv && drop.has(s.inv)) store.del(k); /* plant:drop-sessions */
       for (const [id, hash] of added) store.put("inv:" + id, { hash, fails: 0, spent: false, uploaded: false });
     });
@@ -364,7 +373,8 @@ function createCore(deps) {
     drop.push(m.obj);
   }
 
-  /* Deletion records past their keep, tombstones past theirs, spent invitations and objects a delete missed. */
+  /* Deletion records past their keep, tombstones past theirs, a spent invitation's hash and times past its keep (its id and
+     that it was spent stay), and objects a delete missed. */
   function prune() {
     const now = clock(), drop = [];
     store.atomic(() => {
@@ -376,7 +386,11 @@ function createCore(deps) {
         const m = store.get("blob:" + id);
         if (m && expired(m, now)) bury(m, "expired", now, drop);
       }
-      for (const [k, v] of store.list("inv:")) if (v.spent && now - v.spentAt > KEEP_MS) store.del(k);
+      for (const [k, v] of store.list("inv:")) {
+        if (!v.spent || v.spentAt === undefined || now - v.spentAt <= KEEP_MS) continue;
+        store.del(k);
+        store.put(k, SPENT); /* plant:spent-kept */
+      }
       for (const [k] of store.list("orphan:")) { drop.push(k.slice(7)); store.del(k); }
     });
     return drop;

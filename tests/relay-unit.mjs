@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 89;
+const EXPECTED = 92;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -298,8 +298,8 @@ async function main() {
     const dropped = await invites(w, [], [id2]);
     const after = await since(w, s2.json.session);
     const reopen = await tokenHello(w, id2, t2);
-    check(dropped.status === 200 && refused(after, "no-hello") && refused(reopen, "not-enrolled") && !!ws && !!ws.closed,
-      "4g a dropped invitation's session ends, its socket closes, and its token opens nothing");
+    check(dropped.status === 200 && refused(after, "no-hello") && refused(reopen, "token-spent") && !!ws && !!ws.closed,
+      "4g a dropped invitation's session ends, its socket closes, and its token opens nothing, refused as spent since it was used (F9)");
     const shapes = await Promise.all([invites(w, [{ id: hex(16), hash: "abc" }], []), invites(w, [{ id: "x", hash: sha("a") }], []),
       invites(w, [], ["nothex"])]);
     check(shapes.every(r => refused(r, "bad-signature")), "4h an invitation or a drop out of shape is refused");
@@ -392,6 +392,41 @@ async function main() {
       "7c after 20 wrong tokens the right one is refused as tried too many times, and the twentieth was still a wrong token");
     const stray = await tokenHello(w, hex(16), t3);
     check(refused(stray, "not-enrolled"), "7d an invitation the relay does not hold opens nothing");
+
+    /* F9 of the slice 1 review: a spent invitation stays spent past the 30-day keep, whether the lead sends its id again or
+       not, and the relay keeps of it only that it was spent. The test architect's f9 reproduction is 7e, its control 7E. */
+    const t5 = hex(32), id5 = hex(16);
+    await invites(w, [{ id: id5, hash: sha(t5) }], []);
+    const used = await tokenHello(w, id5, t5);
+    w.R.clock.now += 1000;
+    const again = await invites(w, [{ id: id5, hash: sha(t5) }], []);
+    const early = await tokenHello(w, id5, t5);
+    check(used.status === 200 && again.status === 200 && refused(early, "token-spent"),
+      "7E f9-control: before the keep is over a spent invitation's token is refused as spent, the lead sending its id again included");
+    w.R.clock.now += C.KEEP_MS + 1;
+    const pruned = await since(w, await sessionOf(w, w.lead));
+    const late = await tokenHello(w, id5, t5);
+    w.R.clock.now += 1000;
+    const revive = await invites(w, [{ id: id5, hash: sha(t5) }], []);
+    const after = await tokenHello(w, id5, t5);
+    const kept = w.R.stores.get(w.rt).get("inv:" + id5);
+    check(pruned.status === 200 && refused(late, "token-spent") && revive.status === 200 && refused(after, "token-spent")
+      && JSON.stringify(kept) === "{\"spent\":true}",
+      "7e f9: past the 30-day keep, its prune run, a spent invitation's token is still refused as spent, the lead sending its id again makes"
+      + " it live in no way, and the relay keeps of it only that it was spent: " + (late.json && late.json.error) + ", then "
+      + (after.json && after.json.error || "a session") + ", kept " + JSON.stringify(kept));
+    const t6 = hex(32), id6 = hex(16), t7 = hex(32), id7 = hex(16);
+    await invites(w, [{ id: id6, hash: sha(t6) }, { id: id7, hash: sha(t7) }], []);
+    const used6 = await tokenHello(w, id6, t6);
+    w.R.clock.now += 1000;
+    await invites(w, [], [id6, id7]);
+    w.R.clock.now += 1000;
+    const back = await invites(w, [{ id: id6, hash: sha(t6) }, { id: id7, hash: sha(t7) }], []);
+    const spent6 = await tokenHello(w, id6, t6), fresh7 = await tokenHello(w, id7, t7);
+    check(used6.status === 200 && back.status === 200 && refused(spent6, "token-spent") && fresh7.status === 200
+      && JSON.stringify(w.R.stores.get(w.rt).get("inv:" + id6)) === "{\"spent\":true}",
+      "7f a spent invitation the lead drops and then sends again stays spent, kept as only that it was spent, while one dropped unused may"
+      + " be sent again and opens: " + (spent6.json && spent6.json.error || "a session") + ", the unused " + fresh7.status);
   }
 
   /* ---- 8: reads are gated, and a session ends ---- */
