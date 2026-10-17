@@ -239,6 +239,10 @@ function catalogPlaces() {
    switches travel in the same array and a shortcut may carry any of them. Named first among the
    places above, so the file a person double-clicked is the one this load is offered. */
 let openedWith = "";
+/* The highest rev the lead had already signed in the folder, per catalog id, when the outside
+   file was opened. A later file has to be above that before it is offered. */
+let openedBaseline = null;
+let offeredLead = null;
 function ecFromArgv(argv) {
   for (const a of (argv || []).slice(1)) {
     const s = String(a);
@@ -424,6 +428,7 @@ function pickEdition(found) {
 }
 function readCatalog() {
   heedTeam();
+  if (openedWith && openedBaseline === null) rememberOpenedBaseline();
   const found = [];
   let seenOk = false;
   for (const file of catalogPlaces()) {
@@ -617,6 +622,7 @@ function catalogChanged(win) {
   tryHeldBranches();
   sendListing(win, false);
   sendJoin(win);
+  offerNewerLead(win);
   if (now === catalogJson) return;
   /* Below a rev already handed to the page: not offered, and it does not replace the one in memory. */
   if (belowCatalogRev(now)) return;
@@ -655,6 +661,8 @@ function offerFile(win, file) {
     handAsked(json, "");
     noteHanded(json, "opened");
     catalogFrom = file;
+    offeredLead = null;
+    rememberOpenedBaseline();
     historySoon(file, text);
     const cards = Array.isArray(data.cards) ? data.cards.length : 0;
     const note = rosterNoteOf(data);
@@ -672,6 +680,108 @@ function offerFile(win, file) {
   } catch (e) {
     console.error("etiuda: " + file + " did not parse as a catalog - " + e.message);
     refuse("parse");
+  }
+}
+
+/* The file the agent opened stays the one read until the agent takes a newer edition the lead
+   signed into the folder, or leaves this file. The offer is the watch's own send, so the page
+   asks with the words it already uses for a catalog that arrived unasked. */
+function releaseOpened() {
+  if (!openedWith) return;
+  openedWith = "";
+  openedBaseline = null;
+  offeredLead = null;
+  catalogJson = undefined;
+  catalogFrom = "";
+}
+function rememberOpenedBaseline() {
+  const base = new Map();
+  openedBaseline = base;
+  if (!openedWith) return;
+  const root = catalogFolder();
+  const asked = path.resolve(openedWith);
+  heedTeam();
+  for (const file of ecFilesIn(root)) {
+    if (path.resolve(file) === asked) continue;
+    let text;
+    try { text = fs.readFileSync(file, "utf8"); } catch { continue; }
+    let peeked;
+    try { peeked = catalogPeek(text); } catch { continue; }
+    if (!isV2(peeked.data) || !catalogLeadOk(peeked.data)) continue;
+    const id = String(peeked.data.id || "");
+    if (!id) continue;
+    const rev = editionRev(peeked.data);
+    const had = base.get(id);
+    if (had === undefined || rev > had) base.set(id, rev);
+  }
+}
+function openedCatalogId() {
+  const doc = catalogDocIn(catalogJson || "");
+  return doc && typeof doc.id === "string" ? doc.id : "";
+}
+function leadEditionBeside() {
+  if (!openedWith || !pinnedLeadPubs().length || openedBaseline === null) return null;
+  const root = catalogFolder();
+  const asked = path.resolve(openedWith);
+  const openedId = openedCatalogId();
+  const openedRev = editionRev(catalogDocIn(catalogJson || ""));
+  let best = null;
+  for (const file of ecFilesIn(root)) {
+    if (path.resolve(file) === asked) continue;
+    let text;
+    try { text = fs.readFileSync(file, "utf8"); } catch { continue; }
+    let peeked;
+    try { peeked = catalogPeek(text); } catch { continue; }
+    if (!isV2(peeked.data) || !catalogLeadOk(peeked.data)) continue;
+    const id = String(peeked.data.id || "");
+    if (!id) continue;
+    const same = !!openedId && id === openedId;
+    if (!same && !teamCovering(root, id)) continue;
+    const rev = editionRev(peeked.data);
+    const floor = openedBaseline.has(id) ? openedBaseline.get(id) : -1;
+    if (!(rev > floor)) continue;
+    if (same && !(rev > openedRev)) continue;
+    if (!best || rev > editionRev(best.data)) best = { file: file, text: text, data: peeked.data };
+  }
+  return best;
+}
+function offerNewerLead(win) {
+  if (!openedWith || !win || win.isDestroyed()) return;
+  if (openedBaseline === null) rememberOpenedBaseline();
+  const item = leadEditionBeside();
+  if (!item) return;
+  let opened;
+  try { opened = catalogRead(item.text); } catch { return; }
+  if (!isV2(opened.data) || !unsolicitedLeadText(opened.json)) return;
+  let pin = "";
+  try { pin = signedSha(opened.data); } catch { return; }
+  if (offeredLead && offeredLead.pin === pin) return;
+  offeredLead = { file: item.file, text: opened.json, pin: pin };
+  keepCatalogRev(opened.json);
+  handAsked(opened.json, "");
+  noteHanded(opened.json, sourceOfFile(item.file));
+  console.log("etiuda: a newer edition the lead signed is in the folder, and the window has been offered it");
+  win.webContents.send("etiuda:catalog-file", opened.json, path.basename(item.file), folderShown(item.file),
+    false, "", isBuiltIn(item.file));
+}
+function noteOpenedTaken(pin, text, win) {
+  if (!openedWith || !pin) return;
+  if (offeredLead && pin === offeredLead.pin) {
+    const file = offeredLead.file, body = offeredLead.text;
+    releaseOpened();
+    catalogFrom = file;
+    catalogJson = body;
+    return;
+  }
+  let mine = "";
+  try {
+    const doc = catalogDocIn(catalogJson || "");
+    mine = doc ? signedSha(doc) : "";
+  } catch { mine = ""; }
+  if (text && mine && pin !== mine) { releaseOpened(); return; }
+  if (mine && pin === mine && win && !win.isDestroyed()) {
+    offeredLead = null;
+    offerNewerLead(win);
   }
 }
 
@@ -758,6 +868,7 @@ ipcMain.on("etiuda:catalog-taken", (e, pin, text) => {
   let win = null;
   try { win = BrowserWindow.fromWebContents(e.sender); } catch { win = null; }
   writeInUse(key, win);
+  noteOpenedTaken(key, backed, win);
 });
 /* THE ENGINE REFUSED THE FILE IT WAS HANDED, and names it. Answered with the next file this
    would read, in the shape the host answer gives the first, or null where there is none. */
@@ -2952,7 +3063,8 @@ function leadSeen(team) {
   return joinView();
 }
 /* Forgetting a lead takes its pin and every key kept under it, and bars a first admission for its team until a request the
-   agent makes is answered: the file that pinned it is likely still on the share. What this desk opened stays held back.
+   agent makes is answered: the file that pinned it is likely still on the share. The file this desk opened from outside
+   the folder is let go with the lead: the shell stops holding it, and this call does not hand the page another catalog.
    `left` is Leave this team, which is the same act, remembered as a leave so a later invitation's refusal says so. */
 function forgetLead(team, left) {
   team = String(team || "");
@@ -2971,6 +3083,7 @@ function forgetLead(team, left) {
   teamStamp = "";
   persistDeskEnvelope();
   releaseInUse();
+  releaseOpened();
   console.error("etiuda: the lead of team " + team + " is forgotten, with the keys this desk kept for it");
   return joinView();
 }
@@ -3598,6 +3711,9 @@ function patchDesk(text) {
   const keys = Object.keys(patch);
   if (keys.some(k => patch[k] !== null && typeof patch[k] !== "string")) return false;
   if (deskKeys === undefined) deskKeys = readDesk();
+  /* Ejecting the catalog is the agent leaving the file this launch was opened with, even when
+     that key was never stored and the patch then changes nothing. */
+  if (Object.prototype.hasOwnProperty.call(patch, "eCatalog") && patch.eCatalog === null) releaseOpened();
   const has = (k) => Object.prototype.hasOwnProperty.call(deskKeys, k);
   if (deskWritten && keys.every(k => (patch[k] === null ? !has(k) : deskKeys[k] === patch[k]))) return true;
   const merged = Object.assign({}, deskKeys);

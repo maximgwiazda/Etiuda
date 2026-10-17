@@ -5,7 +5,9 @@
  * desk file in the same process keeps the higher number. A key added to the share's ring does
  * not raise the catalog mark. A desk with its lead pinned chooses only that lead's editions
  * unasked, and a file the agent opens is offered whatever its rev, signer or signature, and
- * raises a mark only once the page says the agent took it. A team file's rev is floored per team
+ * raises a mark only once the page says the agent took it. A file opened from outside the folder
+ * stays the one read, and a newer edition the lead signs after that is offered and becomes the
+ * one read once the agent takes it. A team file's rev is floored per team
  * and lead key at its epoch, absent reading as 0, the floor kept across a restart; its channel is
  * kept with the team, and on the relay the only ring believed is the one inside the signed file.
  * Throwaway keys and catalogs only.
@@ -29,7 +31,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 64;
+const EXPECTED = 68;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1369,6 +1371,137 @@ try {
     check(unasked.length === 0,
       "888az a file the agent opened, rewritten unsigned after the hand-over, is not offered unasked to a desk with its lead pinned: "
       + "boot " + booted + ", opened " + handed.join(",") + ", watch then sent " + (unasked.join(",") || "nothing") + ", lead slot " + slot);
+  }
+
+  /* ---- a file opened from outside stays the one read until the agent takes a newer lead edition, or leaves it ---- */
+  const OPEN_TEAM = "t-" + crypto.randomBytes(8).toString("hex");
+  const sideOf = (id, rev, name) => textOf(sign({
+    format: 2, kind: "etiuda-catalog", id, rev, name, date: "2026-03-01",
+    langs: [{ code: "en", label: "EN" }],
+    tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
+    cards: [{ id: "c-warm", shelf: "t-op", bodyShape: "plain", title: { en: "Warm opening" },
+      body: { en: "Good day, " + name + ", edition " + rev + "." } }],
+  }));
+  const outsideDesk = (name, share) => {
+    const ud = path.join(LAB, name);
+    fs.mkdirSync(ud, { recursive: true });
+    fs.writeFileSync(path.join(ud, "desk.json"), JSON.stringify({
+      kind: "etiuda-desk", schema: 1,
+      keys: { eCatalogFolder: share, eUiLang: "en" },
+      teamPins: { [OPEN_TEAM]: { keyId: LEAD.keyId, public: LEAD.public } },
+    }), "utf8");
+    return loadDesk(ud);
+  };
+  const hostOpened = D => !!(D.sync("etiuda:host") || {}).openedWith;
+  const SIDE = sideOf("quay-side", 1, "Quay Side");
+  const CAT5 = textOf(catalog(5, "2026-03-05"));
+  const armOutside = (name) => {
+    const share = folder(name + "-share"), away = folder(name + "-away");
+    put(share, "etiuda-ring.json", RING);
+    put(share, "etiuda-team.json", teamFile(OPEN_TEAM, 1, []));
+    put(share, "board.ec", CAT2);
+    put(away, "side.ec", SIDE);
+    const D = outsideDesk(name, share);
+    const booted = facts(D.sync("etiuda:catalog") || "");
+    D.sent.length = 0;
+    D.api.offerFile(D.win, path.join(away, "side.ec"));
+    return { D: D, share: share, booted: booted };
+  };
+  const folderRead = D => {
+    const read = facts(D.api.readCatalog() || "");
+    return !hostOpened(D) && read.rev === 2 && read.name === "Quay Board";
+  };
+  {
+    const other = armOutside("newer-other");
+    const held = facts(other.D.api.readCatalog() || "");
+    put(other.share, "five.ec", CAT5);
+    other.D.sent.length = 0;
+    other.D.api.catalogChanged(other.D.win);
+    const sent = fileSends(other.D);
+    const again = facts(other.D.api.readCatalog() || "");
+    const once = sent.length === 1 && facts(sent[0][1]).rev === 5 && !sent[0][4];
+    other.D.sent.length = 0;
+    other.D.api.catalogChanged(other.D.win);
+    const twice = fileSends(other.D).length;
+    const mark = markOf(other.D);
+    const sameShare = folder("newer-same"), sameAway = folder("newer-same-away");
+    put(sameShare, "etiuda-ring.json", RING);
+    put(sameShare, "etiuda-team.json", teamFile(OPEN_TEAM, 1, []));
+    put(sameShare, "board.ec", CAT2);
+    put(sameAway, "old.ec", CAT1);
+    const same = outsideDesk("newer-same", sameShare);
+    same.sync("etiuda:catalog");
+    same.sent.length = 0;
+    same.api.offerFile(same.win, path.join(sameAway, "old.ec"));
+    put(sameShare, "five.ec", CAT5);
+    same.sent.length = 0;
+    same.api.catalogChanged(same.win);
+    const sentSame = fileSends(same);
+    const heldSame = facts(same.api.readCatalog() || "");
+    const onceSame = sentSame.length === 1 && facts(sentSame[0][1]).rev === 5 && !sentSame[0][4];
+    check(other.booted.rev === 2 && held.rev === 1 && held.name === "Quay Side" && hostOpened(other.D)
+      && once && again.rev === 1 && again.name === "Quay Side" && hostOpened(other.D) && twice === 0 && mark === 5
+      && onceSame && heldSame.rev === 1 && heldSame.name === "Quay Board" && hostOpened(same),
+      "888bb a newer edition the lead signs after an outside file was opened is offered, and that file stays the one read: "
+      + "boot " + other.booted.rev
+      + ", team catalog offered " + (once ? "rev 5 unasked" : "no")
+      + ", still read " + again.rev + " " + (again.name || "-")
+      + (hostOpened(other.D) ? ", opened" : ", released")
+      + ", second watch " + twice + ", mark " + mark
+      + "; same catalog offered " + (onceSame ? "rev 5 unasked" : "no")
+      + ", still read " + heldSame.rev + " " + (heldSame.name || "-")
+      + (hostOpened(same) ? ", opened" : ", released"));
+  }
+  {
+    const taken = armOutside("newer-taken");
+    put(taken.share, "five.ec", CAT5);
+    taken.D.sent.length = 0;
+    taken.D.api.catalogChanged(taken.D.win);
+    taken.D.sync("etiuda:catalog-taken", pinOf(CAT5), CAT5);
+    const read = facts(taken.D.api.readCatalog() || "");
+    const open = hostOpened(taken.D);
+    const next = facts(loadDesk(taken.D.ud).sync("etiuda:catalog") || "");
+    check(read.rev === 5 && read.name === "Quay Board" && !open && next.rev === 5,
+      "888bc taking that offer reads the lead's edition, and the next boot does too: read "
+      + (read.rev == null ? "nothing" : read.rev) + " " + (read.name || "-")
+      + (open ? ", still opened" : ", released")
+      + ", next boot " + (next.rev == null ? "nothing" : next.rev));
+  }
+  {
+    const quiet = armOutside("newer-none");
+    quiet.D.sent.length = 0;
+    quiet.D.api.catalogChanged(quiet.D.win);
+    const none = fileSends(quiet.D).length;
+    put(quiet.share, "other.ec", sideOf("quay-other", 4, "Quay Other"));
+    put(quiet.share, "intr.ec", intruderCat(7, "2026-03-07"));
+    quiet.D.sent.length = 0;
+    quiet.D.api.catalogChanged(quiet.D.win);
+    const still = fileSends(quiet.D).length;
+    const held = facts(quiet.D.api.readCatalog() || "");
+    check(none === 0 && still === 0 && held.rev === 1 && held.name === "Quay Side" && hostOpened(quiet.D),
+      "888bd an outside file with no newer edition the lead signed is offered nothing, nor a catalog the team file does not list, nor a file another key signed: "
+      + "first watch " + none + ", then " + still
+      + ", read " + held.rev + " " + (held.name || "-")
+      + (hostOpened(quiet.D) ? ", opened" : ", released"));
+  }
+  {
+    const forgotten = armOutside("leave-forget");
+    await forgotten.D.ask("etiuda:team-join", "forget", OPEN_TEAM);
+    const forgetOk = folderRead(forgotten.D);
+    const left = armOutside("leave-leave");
+    await left.D.ask("etiuda:team-join", "leave", OPEN_TEAM);
+    const leaveOk = folderRead(left.D);
+    const ejected = armOutside("leave-eject");
+    ejected.D.sync("etiuda:desk-patch-save", JSON.stringify({ eCatalog: null }));
+    const ejectOk = folderRead(ejected.D);
+    const opened = armOutside("leave-open");
+    await opened.D.ask("etiuda:catalog-read", "board.ec", "", true);
+    opened.D.sync("etiuda:catalog-taken", pinOf(CAT2), CAT2);
+    const openOk = folderRead(opened.D);
+    check(forgetOk && leaveOk && ejectOk && openOk,
+      "888be leaving the outside file clears it, by forget, leave, eject and opening another: "
+      + (forgetOk ? "forget" : "FORGET") + " " + (leaveOk ? "leave" : "LEAVE") + " "
+      + (ejectOk ? "eject" : "EJECT") + " " + (openOk ? "open" : "OPEN"));
   }
 
   /* ---- a bare number where the catalog mark is a table of signing keys ----------------------------- */
