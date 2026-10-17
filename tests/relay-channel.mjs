@@ -5,8 +5,10 @@
  * is dropped and said and never written; a deletion lands only as its writer's signed record; the floors survive a
  * restart; a .tmp and an echo are never sent; nothing private reaches the relay in the clear; the joining bootstrap
  * (a request and a team file sealed under the invitation's own key, in a place of its own) serves the invited desk and
- * nobody else; and a relay address is followed only where an invitation pinned the lead (board 907), a relay file's own
- * ring pinning nobody (900i inverted). Throwaway keys and invented words only; nothing contacts a host.
+ * nobody else; a relay address is followed only where an invitation pinned the lead (board 907), a relay file's own
+ * ring pinning nobody (900i inverted); and an epoch move (F1): every remaining desk, live or offline, reaches the new epoch
+ * by its own copy of the team file, and the desk taken off opens nothing of it. Throwaway keys and invented words only;
+ * nothing contacts a host.
  *
  *     node tests/relay-channel.mjs     exit code is the number of failed checks, capped at 63; 78 where it did not complete
  *
@@ -29,7 +31,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 34;
+const EXPECTED = 43;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -522,6 +524,266 @@ try {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
 }
 
+/* ---- an epoch move (F1 of the slice 1 review): every remaining desk reaches the new epoch by itself, live or offline,
+   and the desk taken off opens nothing of it. The test architect's f1 reproduction is 944a, its control 944A. Each desk's
+   shell is stood in for: its box an X25519 pair, its wrap of a team key sealed to that box here, and what heedTeam does
+   (the key taken from its own wrap in the team file that landed) its onTeam. ---- */
+const X25519_SPKI = Buffer.from("302a300506032b656e032100", "hex");
+function boxPair() {
+  const p = crypto.generateKeyPairSync("x25519");
+  return { pub: p.publicKey.export({ type: "spki", format: "der" }).subarray(X25519_SPKI.length).toString("hex"), priv: p.privateKey };
+}
+const agreeWith = box => peer => {
+  try {
+    return crypto.diffieHellman({ privateKey: box.priv,
+      publicKey: crypto.createPublicKey({ key: Buffer.concat([X25519_SPKI, Buffer.from(String(peer), "hex")]), format: "der", type: "spki" }) });
+  } catch { return null; }
+};
+const wrapInfo = (team, epoch, deskId) => Buffer.from("lab-wrap\n" + team + "\n" + epoch + "\n" + deskId, "utf8");
+function wrapFor(key, boxPub, team, epoch, deskId) {
+  const e = boxPair();
+  const k = Buffer.from(crypto.hkdfSync("sha256", agreeWith(e)(boxPub), Buffer.alloc(0), wrapInfo(team, epoch, deskId), 32));
+  const n = crypto.randomBytes(12), c = crypto.createCipheriv("aes-256-gcm", k, n);
+  return { epoch, enc: e.pub, ct: n.toString("hex") + Buffer.concat([c.update(key), c.final(), c.getAuthTag()]).toString("hex") };
+}
+function unwrapWith(box, wrap, team, epoch, deskId) {
+  try {
+    if (!wrap || wrap.epoch !== epoch) return null;
+    const k = Buffer.from(crypto.hkdfSync("sha256", agreeWith(box)(wrap.enc), Buffer.alloc(0), wrapInfo(team, epoch, deskId), 32));
+    const raw = Buffer.from(wrap.ct, "hex"), d = crypto.createDecipheriv("aes-256-gcm", k, raw.subarray(0, 12));
+    d.setAuthTag(raw.subarray(raw.length - 16));
+    return Buffer.concat([d.update(raw.subarray(12, raw.length - 16)), d.final()]);
+  } catch { return null; }
+}
+try {
+  if (!W) throw new Error("no relay to drive");
+  const LB = boxPair();
+  const makeTeam = async () => {
+    const rt = hex(16);
+    const made = await admin("POST", "/relay/v1/teams", { rt, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
+      sig: signHex(LEAD, core.createBytes(rt, LEAD.keyId, R.clock.now)) });
+    if (made.status !== 200) throw new Error("a team for the epoch move was not made: " + JSON.stringify(made.json));
+    let rev = 0;
+    return { rt, id: "t-" + hex(8), enrol: async (...keys) => {
+      rev++;
+      const list = keys.map(k => ({ id: k.keyId, pub: k.pub, desk: k.keyId })), t = R.clock.now;
+      return admin("POST", "/relay/v1/t/" + rt + "/devices", { keys: list, rev, t, sig: signHex(LEAD, core.devicesBytes(rt, rev, t, list)) });
+    } };
+  };
+  const teamDoc = (tm, epoch, rev, roster) => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: tm.id, catalogs: ["lane-board"],
+    lead: { keyId: LEAD.keyId, public: LEAD.pub, box: LB.pub }, sealed: true, exportsSealed: false, epoch, rev,
+    channel: { kind: "relay", rt: tm.rt, url: URLV1 }, roster }, LEAD), null, 1) + "\n";
+  const entry = (tm, d, key, epoch) => ({ desk: { id: d.k.keyId, key: d.k.pub, box: d.box.pub }, wrap: wrapFor(key, d.box.pub, tm.id, epoch, d.k.keyId) });
+  const pinOf = tm => ({ teamId: tm.id, rt: tm.rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } });
+  /* The lead: its keys held by epoch, sealing under the newest, its box's agreement lent, and every upload it makes kept
+     here as a relay that kept everything would serve it. */
+  function leadOf(tm, name, held, o) {
+    const tl = transport(name), sent = [];
+    const request = async (m, u, h, b) => {
+      if (m === "PUT") sent.push({ meta: JSON.parse(Buffer.from(h["etiuda-blob"], "base64url").toString("utf8")), ct: Buffer.from(b) });
+      return tl.request(m, u, h, b);
+    };
+    const p = program(name, LEAD, "root", Object.assign({ rt: tm.rt, pin: () => pinOf(tm), keyFor: e => held.get(e) || null,
+      sealEpoch: () => Math.max(...held.keys()), agree: agreeWith(LB), request, connect: tl.connect }, o || {}));
+    return Object.assign(p, { sent, held });
+  }
+  /* A desk: its keys held by epoch, its box, and its onTeam taking the key from its own wrap as heedTeam does. */
+  function deskOf(tm, name, d, o) {
+    const held = new Map([[1, d.k1]]);
+    const p = program(name, d.k, "desk:" + d.k.keyId, Object.assign({ rt: tm.rt, pin: () => pinOf(tm), watch: false,
+      me: () => ({ keyId: d.k.keyId, public: d.k.pub, privateKey: d.k.privateKey, place: "desk:" + d.k.keyId, box: d.box.pub }),
+      keyFor: e => held.get(e) || null, sealEpoch: () => Math.max(...held.keys()), agree: agreeWith(d.box),
+      onTeam: () => heed(path.join(LAB, name), d, held, tm) }, o || {}));
+    return Object.assign(p, { held });
+  }
+  function heed(mirror, d, held, tm) {
+    let doc = null;
+    try { doc = JSON.parse(read(mirror, C.TEAM_NAME)); } catch { return; }
+    if (!doc || !Array.isArray(doc.roster)) return;
+    const mine = doc.roster.find(r => r && r.desk && r.desk.id === d.k.keyId);
+    const key = mine ? unwrapWith(d.box, mine.wrap, tm.id, doc.epoch, d.k.keyId) : null;
+    if (key) held.set(doc.epoch, key);
+  }
+  const epochIn = dir => { try { return JSON.parse(read(dir, C.TEAM_NAME)).epoch; } catch { return null; } };
+  const feedOf = (sent, from) => sent.slice(from).map((u, i) => ({ seq: 1e6 + i, meta: Object.assign({}, u.meta, { size: u.ct.length }), ct: u.ct }));
+  const envOf = it => ({ id: it.meta.id, epoch: it.meta.epoch, supersedes: it.meta.supersedes, writerKeyId: it.meta.writer, counter: it.meta.counter,
+    nonce: it.meta.nonce, signature: it.meta.sig, ciphertext: it.ct });
+  const opensUnder = (tm, it, key) => B.openBlob({ blob: envOf(it), relayTeamId: tm.rt, epoch: it.meta.epoch, teamKey: key,
+    trust: { lead: { keyId: LEAD.keyId, public: LEAD.pub }, desks: [] }, counters: {} }).ok;
+  /* A desk's copy as the lead makes it; null on a tree without copies, so each leg there says red for itself. */
+  const deskCopyOf = typeof C.deskCopyOf === "function" ? C.deskCopyOf : () => null;
+  const copyOf = (tm, d) => deskCopyOf(agreeWith(LB)(d.box.pub), { rt: tm.rt, teamId: tm.id, leadKeyId: LEAD.keyId, leadBox: LB.pub,
+    deskId: d.k.keyId, deskBox: d.box.pub });
+  const wrapOf = (doc, d) => { const e = (doc && Array.isArray(doc.roster) ? doc.roster : []).find(r => r && r.desk && r.desk.id === d.k.keyId); return e ? e.wrap : null; };
+
+  const KM1 = crypto.randomBytes(32), KM2 = crypto.randomBytes(32), KM3 = crypto.randomBytes(32);
+  const desk = () => ({ k: keyPair(true), box: boxPair(), k1: KM1 });
+  const D1 = desk(), D2 = desk(), D3 = desk();
+  const tm = await makeTeam();
+  await tm.enrol(D1.k, D2.k, D3.k);
+  const lead = leadOf(tm, "f1-lead", new Map([[1, KM1]]));
+  const d1 = deskOf(tm, "f1-d1", D1), d2 = deskOf(tm, "f1-d2", D2), d3 = deskOf(tm, "f1-d3", D3);
+  put(lead.mirror, "lane.ec", "{\"note\":\"Lane Board edition one\"}\n");
+  put(lead.mirror, C.TEAM_NAME, teamDoc(tm, 1, 1, [entry(tm, D1, KM1, 1), entry(tm, D2, KM1, 1), entry(tm, D3, KM1, 1)]));
+  lead.ch.start();
+  await settle(lead);
+  d1.ch.start(); d2.ch.start(); d3.ch.start();
+  await settle(d1, d2, d3);
+  const allOne = [d1, d2, d3].every(d => epochIn(d.mirror) === 1 && read(d.mirror, "lane.ec") === "{\"note\":\"Lane Board edition one\"}\n");
+
+  /* D3 goes offline; the lead takes D2 off: a new key, a roster without it, its device withdrawn, and new files under the new key. */
+  d3.t.down = true;
+  await d3.ch.stop();
+  const atMove = lead.sent.length;
+  lead.held.set(2, KM2);
+  await tm.enrol(D1.k, D3.k);
+  put(lead.mirror, C.TEAM_NAME, teamDoc(tm, 2, 1, [entry(tm, D1, KM2, 2), entry(tm, D3, KM2, 2)]));
+  put(lead.mirror, "lane.ec", "{\"note\":\"Lane Board edition two\"}\n");
+  put(lead.mirror, "after.ec", "{\"note\":\"written after the move\"}\n");
+  await settle(lead);
+  await settle(d1);
+  let d1Doc = null;
+  try { d1Doc = JSON.parse(read(d1.mirror, C.TEAM_NAME)); } catch { d1Doc = null; }
+  const d1Wrap = wrapOf(d1Doc, D1);
+  check(allOne && epochIn(d1.mirror) === 2 && !!d1Wrap && d1Wrap.epoch === 2 && d1.held.get(2) && d1.held.get(2).equals(KM2)
+    && read(d1.mirror, "lane.ec") === "{\"note\":\"Lane Board edition two\"}\n" && read(d1.mirror, "after.ec") !== null && d1.prog.state().pending.length === 0,
+    "944a f1: a live desk holding only the epoch-1 key opens the epoch-2 team file the lead sealed under the epoch-2 key, by its own copy, takes"
+    + " the new key from its own wrap and loads what waited for it: mirror epoch " + epochIn(d1.mirror) + ", its wrap " + (d1Wrap ? "of epoch " + d1Wrap.epoch : "absent")
+    + ", key " + (d1.held.get(2) ? "held" : "absent")
+    + ", the new edition " + (read(d1.mirror, "lane.ec") === "{\"note\":\"Lane Board edition two\"}\n" ? "loaded" : "missing") + ", pending "
+    + d1.prog.state().pending.length + " epochs [" + d1.prog.state().pending.map(p => p.epoch).join(",") + "]");
+
+  /* The control, on a team of its own: the same epoch-2 file sealed under the key the desk already holds lands. The lead's
+     channel no longer seals a team file under an epoch older than its own (944d), so the lead seals it here by hand. */
+  {
+    const tc = await makeTeam();
+    const DC = desk();
+    await tc.enrol(DC.k);
+    const lc = leadOf(tc, "f1-ctl-lead", new Map([[1, KM1]]));
+    const dc = deskOf(tc, "f1-ctl-desk", DC, { agree: undefined });
+    put(lc.mirror, C.TEAM_NAME, teamDoc(tc, 1, 1, [entry(tc, DC, KM1, 1)]));
+    lc.ch.start();
+    await settle(lc);
+    dc.ch.start();
+    await settle(dc);
+    const text2 = teamDoc(tc, 2, 1, [entry(tc, DC, KM2, 2)]);
+    const b = B.seal({ relayTeamId: tc.rt, epoch: 1, teamKey: KM1, writer: { keyId: LEAD.keyId, privateKey: LEAD.privateKey }, path: C.TEAM_NAME,
+      body: text2, counter: Date.now() + 5e6, kind: "file" });
+    const s = R.stores.get(tc.rt), seq = (s.get("seq") || 0) + 1, obj = tc.rt + "/" + b.id + "/" + hex(8);
+    R.bucket.objects.set(obj, Buffer.from(b.ciphertext));
+    s.put("blob:" + b.id, { id: b.id, supersedes: null, epoch: 1, writer: LEAD.keyId, counter: b.counter, del: false, size: b.ciphertext.length,
+      sig: b.signature, nonce: b.nonce, seq, at: R.clock.now, obj });
+    s.put("seq:" + String(seq).padStart(16, "0"), b.id);
+    s.put("seq", seq);
+    await settle(dc);
+    check(epochIn(dc.mirror) === 2 && read(dc.mirror, C.TEAM_NAME) === text2 && dc.held.get(2) && dc.prog.state().pending.length === 0,
+      "944A f1-control: the same epoch-2 team file sealed under the epoch-1 key the desk already holds lands: mirror epoch " + epochIn(dc.mirror)
+      + ", wrap " + (dc.held.get(2) ? "opened" : "not opened") + ", pending " + dc.prog.state().pending.length);
+    await lc.ch.stop(); await dc.ch.stop();
+  }
+
+  /* Offline through the move and a later rev: D3 comes back and reaches the new epoch by itself on its next catch-up. */
+  put(lead.mirror, C.TEAM_NAME, teamDoc(tm, 2, 2, [entry(tm, D1, KM2, 2), entry(tm, D3, KM2, 2)]));
+  await settle(lead);
+  d3.t.down = false;
+  const d3b = deskOf(tm, "f1-d3", D3);
+  d3b.ch.start();
+  await settle(d3b);
+  check(epochIn(d3b.mirror) === 2 && JSON.parse(read(d3b.mirror, C.TEAM_NAME)).rev === 2 && d3b.held.get(2) && d3b.held.get(2).equals(KM2)
+    && read(d3b.mirror, "lane.ec") === "{\"note\":\"Lane Board edition two\"}\n" && read(d3b.mirror, "after.ec") !== null && d3b.prog.state().pending.length === 0,
+    "944b a desk offline through the move and a later rev reaches the new epoch by itself on its next catch-up: mirror epoch " + epochIn(d3b.mirror)
+    + ", key " + (d3b.held.get(2) ? "held" : "absent") + ", the new edition " + (read(d3b.mirror, "lane.ec") === "{\"note\":\"Lane Board edition two\"}\n" ? "loaded" : "missing")
+    + ", pending " + d3b.prog.state().pending.length);
+
+  /* D2, taken off: its own catch-up is refused, and everything the lead sent after the move, served to it by a relay that
+     kept it all, opens nothing: not under the old key, not under its own copy's key. */
+  const d2Said = d2.said.length;
+  await settle(d2);
+  const feed = feedOf(lead.sent, atMove);
+  const own2 = deskCopyOf(agreeWith(D2.box)(LB.pub), { rt: tm.rt, teamId: tm.id, leadKeyId: LEAD.keyId, leadBox: LB.pub, deskId: D2.k.keyId, deskBox: D2.box.pub });
+  const opened = feed.filter(it => opensUnder(tm, it, KM1) || (own2 && opensUnder(tm, it, own2.key))).length;
+  const before2 = d2.written.length;
+  d2.prog.applyBatch(feed, { keyFor: e => d2.held.get(e) || null, agree: agreeWith(D2.box), self: { place: "desk:" + D2.k.keyId, box: D2.box.pub },
+    onTeam: () => heed(d2.mirror, D2, d2.held, tm) });
+  check(feed.length >= 3 && opened === 0 && epochIn(d2.mirror) === 1 && !d2.held.get(2) && d2.written.length === before2 && read(d2.mirror, "after.ec") === null
+    && read(d2.mirror, "lane.ec") === "{\"note\":\"Lane Board edition one\"}\n" && d2.said.slice(d2Said).some(l => l.indexOf(B.REASONS.removed) >= 0),
+    "944c the desk taken off opens nothing of the new epoch: its catch-up refused as removed, and of the lead's " + feed.length + " uploads after the move,"
+    + " served to it whole, " + opened + " open under the old key or its own copy key; mirror epoch " + epochIn(d2.mirror) + ", the new key "
+    + (d2.held.get(2) ? "TAKEN" : "never held") + ", files written " + (d2.written.length - before2));
+  const copy2 = copyOf(tm, D2);
+  const live2 = copy2 ? R.stores.get(tm.rt).dump().map(([k, v]) => [k, JSON.parse(v)]).filter(([k, v]) => k.startsWith("blob:") && v.place === "invite:" + copy2.id) : [];
+  check(!!copy2 && !!own2 && copy2.id === own2.id && live2.length === 1 && live2[0][1].del === true,
+    "944h the copy the desk taken off had of the old file is superseded by the lead's signed deletion, the relay serving nothing else in its place: records "
+    + live2.length + (live2.length ? ", deletion " + live2[0][1].del : ""));
+
+  /* A second move, the lead writing the new team file before it holds the new key: nothing of it goes out under the old
+     one, so the desk taken off at it, holding that old key, opens nothing; once the lead holds the key, the kept desk follows. */
+  await d3b.ch.stop();
+  await tm.enrol(D1.k);
+  const atSecond = lead.sent.length;
+  put(lead.mirror, C.TEAM_NAME, teamDoc(tm, 3, 1, [entry(tm, D1, KM3, 3)]));
+  put(lead.mirror, "third.ec", "{\"note\":\"written at the third key\"}\n");
+  await settle(lead);
+  const waited = lead.said.some(l => l.indexOf("waits for the team key of epoch 3") >= 0);
+  const early = feedOf(lead.sent, atSecond);
+  d3b.prog.applyBatch(early, { keyFor: e => d3b.held.get(e) || null, agree: agreeWith(D3.box), self: { place: "desk:" + D3.k.keyId, box: D3.box.pub },
+    onTeam: () => heed(d3b.mirror, D3, d3b.held, tm) });
+  const d3Early = epochIn(d3b.mirror);
+  lead.held.set(3, KM3);
+  await settle(lead);
+  await settle(d1);
+  const all3 = feedOf(lead.sent, atSecond);
+  d3b.prog.applyBatch(all3, { keyFor: e => d3b.held.get(e) || null, agree: agreeWith(D3.box), self: { place: "desk:" + D3.k.keyId, box: D3.box.pub },
+    onTeam: () => heed(d3b.mirror, D3, d3b.held, tm) });
+  check(waited && d3Early === 2 && epochIn(d3b.mirror) === 2 && !d3b.held.get(3) && read(d3b.mirror, "third.ec") === null
+    && epochIn(d1.mirror) === 3 && read(d1.mirror, "third.ec") !== null && d1.prog.state().pending.length === 0,
+    "944d a second move written before the lead holds its key: nothing of it goes out under the old key, the lead says it waits, and the desk taken"
+    + " off at it, served all the lead sent, stays at epoch " + epochIn(d3b.mirror) + " without the new key; the kept desk reaches epoch " + epochIn(d1.mirror)
+    + " and loads the new file " + (read(d1.mirror, "third.ec") !== null ? "whole" : "NOT"));
+
+  /* The checks that make a blob open only under its own team, epoch and id hold for a copy too: D1's own copy served again
+     under a new id, or under another epoch, is dropped and said; a copy not signed by the pinned lead is refused. */
+  const copy1 = copyOf(tm, D1);
+  const mine = copy1 ? lead.sent.slice(atSecond).filter(u => u.meta.place === "invite:" + copy1.id && !u.meta.del).pop() : null;
+  const d1Said = d1.said.length, d1Team = read(d1.mirror, C.TEAM_NAME);
+  const inj = (meta, ct) => {
+    const s = R.stores.get(tm.rt), seq = (s.get("seq") || 0) + 1, obj = tm.rt + "/" + meta.id + "/" + hex(8);
+    R.bucket.objects.set(obj, Buffer.from(ct));
+    s.put("blob:" + meta.id, Object.assign({ supersedes: null, del: false, at: R.clock.now }, meta, { seq, obj, size: ct.length }));
+    s.put("seq:" + String(seq).padStart(16, "0"), meta.id);
+    s.put("seq", seq);
+  };
+  if (mine) {
+    const base = { epoch: mine.meta.epoch, writer: LEAD.keyId, counter: mine.meta.counter, sig: mine.meta.sig, nonce: mine.meta.nonce, place: mine.meta.place };
+    inj(Object.assign({}, base, { id: hex(16) }), mine.ct);
+    inj(Object.assign({}, base, { id: hex(16), epoch: mine.meta.epoch + 1 }), mine.ct);
+    const forged = signDoc(JSON.parse(teamDoc(tm, 3, 9, [entry(tm, D1, KM3, 3)])), INTR);
+    const fake = B.seal({ relayTeamId: tm.rt, epoch: 3, teamKey: copy1.key, writer: { keyId: LEAD.keyId, privateKey: INTR.privateKey },
+      path: C.TEAM_NAME, body: JSON.stringify(forged), counter: Date.now() + 9e6, kind: "file" });
+    inj({ id: fake.id, epoch: 3, writer: LEAD.keyId, counter: fake.counter, sig: fake.signature, nonce: fake.nonce, place: mine.meta.place }, fake.ciphertext);
+  }
+  await settle(d1);
+  const copySaid = d1.said.slice(d1Said).filter(l => l.indexOf("own copy") >= 0 && l.indexOf(B.REASONS["bad-signature"]) >= 0).length;
+  check(!!mine && copySaid >= 3 && read(d1.mirror, C.TEAM_NAME) === d1Team,
+    "944e a desk's own copy served again under a new id or another epoch, and one in its place not signed by the pinned lead, are each dropped and"
+    + " said, the team file as it was: said " + copySaid);
+
+  /* What the relay sees: no team id, catalog, box, wrap or team file name in the clear, and no copy's place a desk's id. */
+  const seen = R.stores.get(tm.rt).dump().map(([k, v]) => k + "=" + v).join("\n") + [...R.bucket.objects.values()].map(b => b.toString("latin1")).join("\n");
+  let leadDoc = null;
+  try { leadDoc = JSON.parse(read(lead.mirror, C.TEAM_NAME)); } catch { leadDoc = null; }
+  const markers = [tm.id, "lane-board", "Lane Board", "etiuda-team", LB.pub, D1.box.pub, D2.box.pub, D3.box.pub,
+    (wrapOf(leadDoc, D1) || { enc: "no wrap read" }).enc];
+  const places = R.stores.get(tm.rt).dump().map(([, v]) => JSON.parse(v)).filter(v => v && typeof v.place === "string").map(v => v.place);
+  const named = places.filter(p => [D1, D2, D3].some(d => p.indexOf(d.k.keyId) >= 0 || p.indexOf(d.box.pub.slice(0, 32)) >= 0));
+  check(markers.every(w => seen.indexOf(w) < 0) && places.length >= 3 && named.length === 0,
+    "944f the relay keeps the copies and the moves in nothing it can read: none of " + markers.length + " markers in its store or bucket, "
+    + places.length + " copy places, " + named.length + " naming a desk");
+  await lead.ch.stop(); await d1.ch.stop(); await d2.ch.stop();
+} catch (e) {
+  check(false, "harness: " + (e && e.stack ? e.stack : e));
+}
+
 /* ---- the desk's half: shell/main.js loaded in bare node, its relay reached through the same in-memory relay ---- */
 try {
   if (!W) throw new Error("no relay to drive");
@@ -668,6 +930,46 @@ try {
     + whileDown + ", then " + (caught ? 2 : "not caught up: the mirror's edition " + (read(mirror, "board.ec") === read(studioMirror, "board.ec")
       ? "is the lead's" : "is not the lead's") + ", the desk read " + factsOf(D.api.readCatalog() || "") + "; "
       + D.said.filter(l => l.indexOf("relay") >= 0).slice(-3).join(" / ")));
+  /* F1 through the desk's own shell: the lead's Studio lends its box's agreement, takes a desk off with a new key, and this
+     desk, holding only the first key, reaches the new epoch by itself: its own copy of the team file, its wrap opened by
+     heedTeam, and the edition sealed under the new key loaded. */
+  {
+    await studio.stop();
+    const lbox = crypto.generateKeyPairSync("x25519");
+    const lboxPub = lbox.publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
+    const leadAgree = peer => { try { return crypto.diffieHellman({ privateKey: lbox.privateKey, publicKey: crypto.createPublicKey({
+      key: Buffer.concat([Buffer.from("302a300506032b656e032100", "hex"), Buffer.from(String(peer), "hex")]), format: "der", type: "spki" }) }); } catch { return null; } };
+    const leadKeys = new Map([[1, K2]]);
+    const studio2 = C.createChannel({ rt: RT2, url: URL2, mirror: studioMirror, stateFile: path.join(LAB, "studio.json"), pin: () => PIN2,
+      me: () => ({ keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" }), keyFor: e => leadKeys.get(e) || null,
+      sealEpoch: () => Math.max(...leadKeys.keys()), inviteKeys: () => liveInvites, agree: leadAgree, request: studioT.request, connect: studioT.connect, pollMs: 1e9 });
+    const team2at = (epoch, rev, roster) => JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: TEAM2, catalogs: ["quay-board"],
+      lead: { keyId: LEAD.keyId, public: LEAD.pub, box: lboxPub }, sealed: true, exportsSealed: false, epoch, rev,
+      channel: { kind: "relay", rt: RT2, url: URL2 }, ring: RING, roster }, LEAD), null, 1) + "\n";
+    const gone = keyPair(true), goneBox = crypto.generateKeyPairSync("x25519").publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
+    const meEntry = (key, epoch) => ({ desk: { id: me.id, key: me.key, box: me.box }, wrap: D.api.wrapTeamKey(key, me.box, TEAM2, epoch, me.id) });
+    put(studioMirror, C.TEAM_NAME, team2at(1, 3, [meEntry(K2, 1), { desk: { id: gone.keyId, key: gone.pub, box: goneBox },
+      wrap: D.api.wrapTeamKey(K2, goneBox, TEAM2, 1, gone.keyId) }]));
+    studio2.start();
+    await studio2.idle(); studio2.kick(); await studio2.idle();
+    const onRev3 = await until(async () => { const ch = D.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); }
+      try { return JSON.parse(read(mirror, C.TEAM_NAME)).rev === 3; } catch { return false; } }, 8000);
+    const KN2 = crypto.randomBytes(32);
+    leadKeys.set(2, KN2);
+    put(studioMirror, "board.ec", JSON.stringify(D.api.sealCatalog(KN2, TEAM2, 2, catalogText(3))));
+    put(studioMirror, C.TEAM_NAME, team2at(2, 1, [meEntry(KN2, 2)]));
+    studio2.kick(); await studio2.idle(); studio2.kick(); await studio2.idle();
+    const moved = await until(async () => { const ch = D.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); }
+      return factsOf(D.api.readCatalog() || "") === 3; }, 8000);
+    const seenEpoch = (D.envelope().teamEpochSeen || {})[TEAM2];
+    const chNow = D.api.relayRun();
+    const pendingNow = chNow ? chNow.program.state().pending.length : -1;
+    check(onRev3 && moved && seenEpoch === 2 && pendingNow === 0,
+      "944g f1 in the desk's own shell: the lead takes another desk off with a new key, and this desk, holding only the first, opens its own copy of"
+      + " the new team file, keeps the new key from its wrap and loads the edition sealed under it: " + (moved ? "edition 3 loaded" : "edition "
+      + factsOf(D.api.readCatalog() || "") + " still") + ", epoch heeded " + seenEpoch + ", pending " + pendingNow);
+    await studio2.stop();
+  }
   const stopped = D.api.relayRun();
   if (stopped) await stopped.stop();
   await studio.stop();

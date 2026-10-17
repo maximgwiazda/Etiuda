@@ -16,6 +16,17 @@
    so nothing is judged against a roster older than the batch. The floors (each writer's counter per epoch, the team file's
    rev per team, lead key and epoch) and the place in the relay's sequence survive a restart.
 
+   AN EPOCH MOVE (F1 of the slice 1 review). The team file of a new epoch carries each remaining desk's wrap of the new key,
+   and at the root it is sealed under that key, which a desk holding only the old one cannot open. So the lead also seals
+   the team file once for each desk its roster names, under a key only the lead and that desk can make: the X25519
+   agreement of the lead's box (the file's lead.box) and the desk's (its roster entry's box), through HKDF bound to this
+   relay, team, lead key, desk and both boxes. Each such copy sits in a place of its own named by that agreement too, so
+   the relay sees one more lead copy and cannot tell whose. A desk opens only its own, under the pinned lead's signature,
+   takes the team file from it and so its own wrap, and loads what waited for the new key, with no step by anyone. A desk
+   taken off the roster gets no copy of any later file, and its last one is superseded by the lead's signed deletion; and
+   nothing any program sends is sealed under an epoch older than the team file it holds, so the new team file never goes
+   out under the old key. Each shell keeps its box's private key and lends only the agreement (`agree`).
+
    Two halves. createProgram is synchronous and talks to nobody: it judges, writes the mirror and says what it owes; the
    harness's adapter drives it directly. createChannel talks to the relay (the hello, a session re-opened when it lapses,
    since and the blobs, the uploads, the socket's announcements) and watches the mirror. Nothing private leaves unsealed:
@@ -35,6 +46,8 @@ const HELLO_LABEL = "etiuda-relay-hello";
 /* The key a desk joining by invitation seals its one request under, and reads the lead's team file with, before it holds
    the team key: HKDF-SHA256 of the invitation's 128-bit secret, which only the lead and the invited hold. */
 const INVITE_SEAL_INFO = "etiuda-relay-invite-seal";
+/* The label of a desk's own copy of the team file: its key and its place from one agreement of two boxes (deskCopyOf). */
+const DESK_COPY_INFO = "etiuda-relay-desk-copy";
 const INVITE_UPLOAD_MAX = 64 * 1024;
 const SINCE_MAX = 1000;
 const PENDING_MAX = 1000;
@@ -88,6 +101,20 @@ function helloBytes(rt, nonce, keyId) {
 function inviteSealKey(secretHex) {
   if (typeof secretHex !== "string" || !HEX32.test(secretHex)) return null;
   return Buffer.from(crypto.hkdfSync("sha256", Buffer.from(secretHex, "hex"), Buffer.alloc(0), Buffer.from(INVITE_SEAL_INFO, "utf8"), 32));
+}
+
+/* A desk's own copy of the team file: {id, key}, the 32-hex id of its place (`invite:<id>`, the shape the relay takes
+   from a lead) and the 32-byte key it is sealed under, or null. `dh` is the X25519 agreement of the lead's box and the
+   desk's, which only the lead and that desk can make; an all-zero agreement, a low-order key's, makes nothing. The rest
+   binds it: the relay team, the team, the lead's key id, the lead's box, the desk's id and the desk's box, all public. */
+function deskCopyOf(dh, f) {
+  const d = toBytes(dh);
+  if (!d || d.length !== 32 || d.every(b => b === 0)) return null;
+  if (!table(f) || !HEX32.test(String(f.rt)) || !B.isId(f.teamId) || !B.isId(f.leadKeyId) || !HEX64.test(String(f.leadBox))
+    || !/^k-[0-9a-f]{16}$/.test(String(f.deskId)) || !HEX64.test(String(f.deskBox))) return null;
+  const info = Buffer.from([DESK_COPY_INFO, f.rt, f.teamId, f.leadKeyId, f.leadBox, f.deskId, f.deskBox].join("\n") + "\n", "utf8");
+  const okm = Buffer.from(crypto.hkdfSync("sha256", d, Buffer.alloc(0), info, 48));
+  return { id: okm.subarray(32).toString("hex"), key: okm.subarray(0, 32) };
 }
 
 /* The relay team id a team file's channel names: `rt`, as the engine writes it, or `relay`, as the harness's contract
@@ -404,12 +431,56 @@ function createProgram(opts) {
   /* The roster of the team file the mirror holds, where the pinned lead signed it for this team and relay: on the lead's
      side its own file, on a desk's the one landTeam wrote. A rev below one already kept for its epoch changes nothing. */
   function trustFromMirror() {
+    const t = heldTeam();
+    if (t) keepTrust(t);
+    return t;
+  }
+
+  /* The team file the mirror holds, judged under the pin, or null. */
+  function heldTeam() {
     const b = io.read(TEAM_NAME);
-    if (!b) return;
+    return b ? judgedBytes(b) : null;
+  }
+  function judgedBytes(b) {
     let doc = null;
-    try { doc = JSON.parse(toBytes(b).toString("utf8").replace(/^\uFEFF/, "")); } catch { return; }
+    try { doc = JSON.parse(toBytes(b).toString("utf8").replace(/^\uFEFF/, "")); } catch { return null; }
     const t = teamJudged(doc);
-    if (t.ok) keepTrust(t);
+    return t.ok ? t : null;
+  }
+
+  /* ---- a desk's own copy of the team file (the header's EPOCH MOVE) ---- */
+
+  function copyFor(ctx, peerBox, leadBox, deskId, deskBox) {
+    let dh = null;
+    try { dh = ctx.agree(peerBox); } catch { dh = null; }
+    return deskCopyOf(dh, { rt: pin.rt, teamId: pin.teamId, leadKeyId: pin.lead.keyId, leadBox, deskId, deskBox });
+  }
+
+  /* On the lead's side: one copy for each desk the roster of the team file being sent names, by that entry's own box, and
+     for nobody else, so a desk taken off the roster has none of this file or any later one. */
+  function deskCopies(doc, ctx) {
+    const out = [];
+    if (!ctx || typeof ctx.agree !== "function" || !table(doc.lead) || !HEX64.test(String(doc.lead.box))) return out;
+    for (const r of Array.isArray(doc.roster) ? doc.roster : []) {
+      if (!table(r) || !table(r.desk) || !HEX64.test(String(r.desk.box)) || !rosterOf({ roster: [r] }).length) continue;
+      const c = copyFor(ctx, r.desk.box, doc.lead.box, r.desk.id, r.desk.box);
+      if (c) out.push({ id: c.id, key: c.key, desk: r.desk.id }); /* plant:desk-copies */
+    }
+    return out;
+  }
+
+  /* On a desk's side: the place and key of its own copy, from the lead's box in the team file it holds and its own box. */
+  function ownCopy(held, ctx) {
+    const self = ctx && ctx.self;
+    if (!held || !self || typeof ctx.agree !== "function" || typeof self.place !== "string" || !self.place.startsWith("desk:")
+      || !table(held.doc.lead) || !HEX64.test(String(held.doc.lead.box))) return null;
+    return copyFor(ctx, held.doc.lead.box, held.doc.lead.box, self.place.slice(5), self.box);
+  }
+
+  /* The epoch of the team file this program holds, or 0: nothing it sends is sealed under an older one. */
+  function teamEpoch() {
+    const t = heldTeam();
+    return t ? t.epoch : 0;
   }
 
   /* The envelope a fetch hands over, or null where its metadata is not well formed or its size is not the ciphertext's. */
@@ -489,20 +560,27 @@ function createProgram(opts) {
     return null;
   }
 
-  /* AN INVITATION'S OWN PLACE (the joining bootstrap, slice 3's wrap in small): what the lead sealed under one invitation's
-     key alone, the team file for the desk that holds that invitation to read before it holds the team key. A program not
-     joining by that invitation passes over it and says nothing: it is not its file, and one it cannot open there is
+  /* AN INVITATION'S OWN PLACE (the joining bootstrap, slice 3's wrap in small), AND A DESK'S OWN COPY: what the lead sealed
+     under one invitation's key alone, or under one desk's copy key alone, the team file for the desk that holds that key to
+     read before it holds the team key of the file's epoch. The relay cannot tell the two apart. A program that holds
+     neither key for that place passes over it and says nothing: it is not its file, and one it cannot open there is
      expected. The desk that holds it opens it under that key and the pinned lead's signature alone, and takes from it the
      team file and nothing else; a deletion there is the relay's keep for the copy, never applied to the mirror. */
   function openInvited(it, blob, floors, ctx) {
     const m = it.meta;
-    const id = m.place.slice(7);
-    if (!ctx || !ctx.inviteSeal || ctx.inviteId !== id || m.del === true) return null; /* plant:invite-pass */
-    if (m.writer !== pin.lead.keyId) { dropSaid("a file in this desk's invitation", R("not-roster")); return null; }
-    const r = judge(blob, leadTrust([]), m.epoch, ctx.inviteSeal, floors);
-    if (!r.ok) { dropSaid("a file in this desk's invitation", r); return null; } /* plant:invite-judge */
-    if (r.kind !== "file" || r.path !== TEAM_NAME) { dropSaid("a file in this desk's invitation", R("outside-place")); return null; }
+    const seal = sealOf(m.place.slice(7), ctx);
+    if (!seal || m.del === true) return null; /* plant:invite-pass */
+    if (m.writer !== pin.lead.keyId) { dropSaid(seal.what, R("not-roster")); return null; }
+    const r = judge(blob, leadTrust([]), m.epoch, seal.key, floors);
+    if (!r.ok) { dropSaid(seal.what, r); return null; } /* plant:invite-judge */
+    if (r.kind !== "file" || r.path !== TEAM_NAME) { dropSaid(seal.what, R("outside-place")); return null; }
     return { it, r };
+  }
+  function sealOf(id, ctx) {
+    if (!ctx) return null;
+    if (ctx.inviteSeal && ctx.inviteId === id) return { key: ctx.inviteSeal, what: "a file in this desk's invitation" };
+    if (ctx.own && ctx.own.id === id) return { key: ctx.own.key, what: "this desk's own copy of the team file" }; /* plant:own-copy */
+    return null;
   }
 
   /* The newest of each path in `list` (by epoch, then counter), the rest of that path left: older copies in one batch. */
@@ -525,10 +603,12 @@ function createProgram(opts) {
      root files, then the desks' files judged under the roster that team file gave. Counters are judged against the floors
      as they stood when the batch began, so the order of application cannot refuse a blob the order of upload would take;
      a path takes only its newest blob of the batch. */
-  function applyBatch(items, ctx) {
+  function applyBatch(items, ctx0) {
     const out = { applied: [], team: false };
     if (!pin) return out;
-    trustFromMirror();
+    const held = trustFromMirror();
+    /* A desk's own copy is named once a batch, from the team file it holds as the batch begins. */
+    const ctx = ctx0 ? Object.assign({}, ctx0, { own: ownCopy(held, ctx0) }) : ctx0;
     const floors0 = Object.assign({}, st.counters);
     const lead = [], rest = [];
     for (const it of items || []) {
@@ -569,7 +649,8 @@ function createProgram(opts) {
   }
 
   /* What this program owes the relay from its own place: each whole file whose bytes differ from the last it sent, and a
-     deletion for each it sent that is gone. On the lead's side, the team file once more under each live invitation's key. */
+     deletion for each it sent that is gone. On the lead's side, the team file once more under each live invitation's key,
+     and once more for each desk its roster names, under that desk's copy key. */
   function owed(me, ctx) {
     const ops = [];
     if (!pin || !me) return ops;
@@ -594,10 +675,13 @@ function createProgram(opts) {
       const was = st.sent[rel];
       if (!was.del && !here.has(rel.toLowerCase()) && inPlace(me.place, rel)) ops.push({ rel, kind: "delete", body: "", sha: null }); /* plant:out-delete */
     }
-    if (me.place === "root" && ctx && Array.isArray(ctx.inviteKeys)) {
+    const agrees = !!ctx && typeof ctx.agree === "function";
+    if (me.place === "root" && ctx && (Array.isArray(ctx.inviteKeys) || agrees)) {
       const bytes = here.has(TEAM_NAME) ? io.read(TEAM_NAME) : null;
+      const held = bytes ? judgedBytes(bytes) : null;
+      const copies = (Array.isArray(ctx.inviteKeys) ? ctx.inviteKeys : []).concat(held ? deskCopies(held.doc, ctx) : []);
       const live = new Set();
-      for (const k of ctx.inviteKeys) {
+      for (const k of copies) {
         live.add(k.id);
         const was = has(st.sentInv, k.id) ? st.sentInv[k.id][TEAM_NAME] : null;
         if (!bytes) continue;
@@ -605,8 +689,10 @@ function createProgram(opts) {
         if (!was || was.del || was.sha !== sha)
           ops.push({ rel: TEAM_NAME, kind: "file", body: bytes.toString("utf8"), sha, invite: k, place: "invite:" + k.id });
       }
-      /* An invitation no longer live, its desk enrolled or the invitation dropped: its copy superseded by a deletion. */
-      for (const id of Object.keys(st.sentInv)) {
+      /* An invitation no longer live, its desk enrolled or the invitation dropped, or a desk the roster no longer names: its
+         copy superseded by a deletion. Where desks have copies, never while the lead's own team file does not read, so no
+         desk's copy is let go for want of it. */
+      if (!agrees || held) for (const id of Object.keys(st.sentInv)) {
         const was = st.sentInv[id][TEAM_NAME];
         if (!live.has(id) && was && !was.del)
           ops.push({ rel: TEAM_NAME, kind: "delete", body: "", sha: null, invite: { id, key: null }, place: "invite:" + id }); /* plant:invite-drop */
@@ -703,7 +789,7 @@ function createProgram(opts) {
 
   return {
     setPin, pinned: () => pin, loadTeamFile, holdTeam, acceptBlob, applyBatch, considerOutgoing, owed, sealOut, sentOut, refusedOut,
-    allowUpload, showFreshness, readRing, readMirror, nextCounter,
+    allowUpload, showFreshness, readRing, readMirror, nextCounter, teamEpoch,
     state: () => st,
     setSeq(n) { if (Number.isSafeInteger(n) && n > st.seq) { st.seq = n; persist(); } },
     markTokenUsed() { st.tokenUsed = true; persist(); },
@@ -714,10 +800,12 @@ function createProgram(opts) {
 
 /* ---- the channel: the relay and the mirror's watch ------------------------------------------------------------- */
 
-/* `o`: rt, url (https, ending /relay/v1), mirror, stateFile; me() as {keyId, public, privateKey, place}; pin() as {teamId,
-   rt, lead}; keyFor(epoch) a team key or null; sealEpoch() the epoch to seal under; invite() on a desk joining by
-   invitation as {inv, token, seal}; inviteKeys() on the lead's side, the live invitations as {id, key}; request(method, url,
-   headers, body) answering {status, header(name), bytes} and throwing where the relay does not answer; connect(url,
+/* `o`: rt, url (https, ending /relay/v1), mirror, stateFile; me() as {keyId, public, privateKey, place, box}, box a desk's
+   X25519 public key as 64 hex; pin() as {teamId, rt, lead}; keyFor(epoch) a team key or null; sealEpoch() the epoch to seal
+   under; invite() on a desk joining by invitation as {inv, token, seal}; inviteKeys() on the lead's side, the live
+   invitations as {id, key}; agree(box) the 32-byte X25519 agreement of this program's own box with another's, given as 64
+   hex, or null: the lead's with a desk's, a desk's with the lead's, for a desk's own copy of the team file; request(method,
+   url, headers, body) answering {status, header(name), bytes} and throwing where the relay does not answer; connect(url,
    headers, {message, close}) a socket or null; write(abs, text) the shell's atomic write; say(line); onTeam() after a team
    file lands; clock. */
 function createChannel(opts) {
@@ -741,7 +829,10 @@ function createChannel(opts) {
 
   function ctx() {
     const inv = typeof o.invite === "function" ? o.invite() : null;
+    const who = typeof o.agree === "function" ? me() : null;
     return {
+      agree: typeof o.agree === "function" ? peer => o.agree(peer) : null,
+      self: who && typeof who.place === "string" ? { place: who.place, box: typeof who.box === "string" ? who.box : "" } : null,
       keyFor: e => (typeof o.keyFor === "function" ? o.keyFor(e) : null),
       inviteSeal: inv && toBytes(inv.seal) && inv.seal.length === 32 ? toBytes(inv.seal) : null,
       inviteId: inv && HEX32.test(String(inv.inv)) ? inv.inv : null,
@@ -887,8 +978,12 @@ function createChannel(opts) {
   }
 
   /* What a file owed is sealed under: the team key of the newest epoch held; before that, on a desk joining by invitation,
-     its one request under the invitation's key at the lead's newest epoch the relay listed. Null: it waits. */
-  function sealingFor(op, who) {
+     its one request under the invitation's key at the lead's newest epoch the relay listed. Under a team key, never an
+     epoch older than the team file this program holds (`floor`), so a desk taken off at that file's move, holding the old
+     key, opens nothing sent after it, the new team file above all. A copy in an invitation's or a desk's own place goes as
+     it is: nobody else holds its key, and the deletion that lets one go names only the team file and carries no body.
+     Null: it waits. */
+  function sealingFor(op, who, floor) {
     if (op.invite) {
       const e = typeof o.sealEpoch === "function" ? o.sealEpoch() : null;
       const key = op.invite.key || (isCount(e) && typeof o.keyFor === "function" ? o.keyFor(e) : null);
@@ -902,15 +997,21 @@ function createChannel(opts) {
     }
     const e = typeof o.sealEpoch === "function" ? o.sealEpoch() : null;
     const key = isCount(e) && typeof o.keyFor === "function" ? o.keyFor(e) : null;
+    if (isCount(e) && e < floor) return null; /* plant:seal-floor */
     return key ? { epoch: e, key } : null;
   }
 
   async function flush() {
     const who = me();
     if (!who || !who.privateKey) return { ok: true };
+    const floor = prog.teamEpoch();
     for (const op of prog.owed(who, ctx())) {
-      const sealing = sealingFor(op, who);
-      if (!sealing) continue;
+      const sealing = sealingFor(op, who, floor);
+      if (!sealing) {
+        const e = typeof o.sealEpoch === "function" ? o.sealEpoch() : null;
+        if (isCount(e) && e < floor) sayOnce("what this computer sends waits for the team key of epoch " + floor + ", which its team file names");
+        continue;
+      }
       op.byInvite = !!sealing.byInvite;
       const blob = prog.sealOut(op, who, sealing);
       const lim = prog.allowUpload(blob, who.keyId);
@@ -1055,8 +1156,8 @@ function createChannel(opts) {
 }
 
 module.exports = {
-  TEAM_NAME, ECHO_MS, BRANCH_PREFIX, HEAD_PREFIX, INVITE_SEAL_INFO, INVITE_UPLOAD_MAX,
-  canon, signedBytes, helloBytes, inviteSealKey, relayOf, rosterOf, branchIdOf, inPlace, diskIO, writeWhole, stateOf,
+  TEAM_NAME, ECHO_MS, BRANCH_PREFIX, HEAD_PREFIX, INVITE_SEAL_INFO, DESK_COPY_INFO, INVITE_UPLOAD_MAX,
+  canon, signedBytes, helloBytes, inviteSealKey, deskCopyOf, relayOf, rosterOf, branchIdOf, inPlace, diskIO, writeWhole, stateOf,
   createProgram, createChannel,
   /* The two signature kinds, each under its own prefix, so neither verifies as the other (E5). */
   verifyUploadSignature: (publicKey, payload, signature) => B.verifyUpload(publicKey, Buffer.alloc(0), toBytes(payload), signature),

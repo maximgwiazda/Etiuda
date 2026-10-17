@@ -3163,7 +3163,15 @@ function relayRun() {
     me: () => {
       if (!deskBranch) return null;
       const id = branchIdOf(deskBranch.sign.pub);
-      return { keyId: id, public: deskBranch.sign.pub, privateKey: openPrivate(deskBranch.sign.priv), place: "desk:" + id };
+      return { keyId: id, public: deskBranch.sign.pub, privateKey: openPrivate(deskBranch.sign.priv), place: "desk:" + id,
+               box: deskBranch.box.pub };
+    },
+    /* The agreement of this desk's box with the lead's, for its own copy of the team file after an epoch move (F1); the
+       private key stays here. */
+    agree: peer => {
+      const sk = deskBranch && /^[0-9a-f]{64}$/.test(String(peer)) ? openPrivate(deskBranch.box.priv) : null;
+      if (!sk) return null;
+      try { return crypto.diffieHellman({ privateKey: sk, publicKey: hpkeX25519Public(Buffer.from(peer, "hex")) }); } catch { return null; }
     },
     keyFor: e => teamKeyAt(team, e),
     sealEpoch: () => newestEpoch(team) || null,
