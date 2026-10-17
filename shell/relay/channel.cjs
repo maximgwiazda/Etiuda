@@ -246,7 +246,7 @@ function stateOf(x) {
     return o;
   };
   s.sent = sentOf(x.sent);
-  if (table(x.sentInv)) for (const h of Object.keys(x.sentInv)) if (HEX64.test(h)) s.sentInv[h] = sentOf(x.sentInv[h]);
+  if (table(x.sentInv)) for (const h of Object.keys(x.sentInv)) if (HEX32.test(h)) s.sentInv[h] = sentOf(x.sentInv[h]);
   if (table(x.refused)) for (const k of Object.keys(x.refused)) if (typeof x.refused[k] === "string") s.refused[k] = x.refused[k];
   if (Array.isArray(x.pending)) s.pending = x.pending.filter(p => table(p) && count(p.seq) && HEX32.test(String(p.id))
     && isCount(p.epoch) && B.isId(p.writer) && count(p.floor)).slice(-PENDING_MAX)
@@ -456,11 +456,10 @@ function createProgram(opts) {
     const rostered = known && st.trust[m.epoch].desks.some(d => d.keyId === m.writer);
     if (!lead && !rostered && ctx && Array.isArray(ctx.inviteKeys) && typeof m.pub === "string" && HEX64.test(m.pub)
       && branchIdOf(m.pub) === m.writer) {
-      for (const k of ctx.inviteKeys) out.push({ key: k, trust: leadTrust([{ deskId: m.writer, keyId: m.writer, public: m.pub }]), asked: true });
+      for (const k of ctx.inviteKeys) out.push({ key: k.key, trust: leadTrust([{ deskId: m.writer, keyId: m.writer, public: m.pub }]), asked: true });
     }
     if (key && (lead || known)) out.push({ key, trust: leadTrust(known ? st.trust[m.epoch].desks : []) });
     else if (key) out.push({ key, refuse: "epoch" });
-    if (ctx && ctx.inviteSeal && lead) out.push({ key: ctx.inviteSeal, trust: leadTrust([]), invite: true });
     return { tries: out, missing: !key };
   }
 
@@ -470,6 +469,11 @@ function createProgram(opts) {
     const m = it.meta;
     if (!blob) { dropSaid("a file from the relay", R("bad-signature")); return null; }
     const floors = it.floor !== undefined ? floorsWith(floors0, m.writer, m.epoch, it.floor) : floors0;
+    if (typeof m.place === "string" && m.place.startsWith("invite:")) return openInvited(it, blob, floors, ctx);
+    /* A request a desk joining by invitation sent, its key carried beside it (the relay marks only an invitation's upload so):
+       the lead's to open; any other program passes over it and says nothing, as it passes over an invitation's place. */
+    if (typeof m.pub === "string" && m.writer !== pin.lead.keyId && !(ctx && Array.isArray(ctx.inviteKeys))
+      && !(has(st.trust, String(m.epoch)) && st.trust[m.epoch].desks.some(d => d.keyId === m.writer))) { unpend(m.id); return null; } /* plant:request-pass */
     const t = triesFor(m, ctx);
     let last = null;
     for (const x of t.tries) {
@@ -485,6 +489,22 @@ function createProgram(opts) {
     unpend(m.id);
     dropSaid("a file from " + m.writer, last || R("bad-signature"));
     return null;
+  }
+
+  /* AN INVITATION'S OWN PLACE (the joining bootstrap, slice 3's wrap in small): what the lead sealed under one invitation's
+     key alone, the team file for the desk that holds that invitation to read before it holds the team key. A program not
+     joining by that invitation passes over it and says nothing: it is not its file, and one it cannot open there is
+     expected. The desk that holds it opens it under that key and the pinned lead's signature alone, and takes from it the
+     team file and nothing else; a deletion there is the relay's keep for the copy, never applied to the mirror. */
+  function openInvited(it, blob, floors, ctx) {
+    const m = it.meta;
+    const id = m.place.slice(7);
+    if (!ctx || !ctx.inviteSeal || ctx.inviteId !== id || m.del === true) return null; /* plant:invite-pass */
+    if (m.writer !== pin.lead.keyId) { dropSaid("a file in this desk's invitation", R("not-roster")); return null; }
+    const r = judge(blob, leadTrust([]), m.epoch, ctx.inviteSeal, floors);
+    if (!r.ok) { dropSaid("a file in this desk's invitation", r); return null; } /* plant:invite-judge */
+    if (r.kind !== "file" || r.path !== TEAM_NAME) { dropSaid("a file in this desk's invitation", R("outside-place")); return null; }
+    return { it, r };
   }
 
   /* The newest of each path in `list` (by epoch, then counter), the rest of that path left: older copies in one batch. */
@@ -576,14 +596,22 @@ function createProgram(opts) {
       const was = st.sent[rel];
       if (!was.del && !here.has(rel.toLowerCase()) && inPlace(me.place, rel)) ops.push({ rel, kind: "delete", body: "", sha: null }); /* plant:out-delete */
     }
-    if (me.place === "root" && ctx && Array.isArray(ctx.inviteKeys) && here.has(TEAM_NAME)) {
-      const bytes = io.read(TEAM_NAME);
-      if (bytes) {
+    if (me.place === "root" && ctx && Array.isArray(ctx.inviteKeys)) {
+      const bytes = here.has(TEAM_NAME) ? io.read(TEAM_NAME) : null;
+      const live = new Set();
+      for (const k of ctx.inviteKeys) {
+        live.add(k.id);
+        const was = has(st.sentInv, k.id) ? st.sentInv[k.id][TEAM_NAME] : null;
+        if (!bytes) continue;
         const sha = sha256(bytes);
-        for (const k of ctx.inviteKeys) {
-          const h = sha256(k), was = has(st.sentInv, h) ? st.sentInv[h][TEAM_NAME] : null;
-          if (!was || was.sha !== sha) ops.push({ rel: TEAM_NAME, kind: "file", body: bytes.toString("utf8"), sha, invite: k });
-        }
+        if (!was || was.del || was.sha !== sha)
+          ops.push({ rel: TEAM_NAME, kind: "file", body: bytes.toString("utf8"), sha, invite: k, place: "invite:" + k.id });
+      }
+      /* An invitation no longer live, its desk enrolled or the invitation dropped: its copy superseded by a deletion. */
+      for (const id of Object.keys(st.sentInv)) {
+        const was = st.sentInv[id][TEAM_NAME];
+        if (!live.has(id) && was && !was.del)
+          ops.push({ rel: TEAM_NAME, kind: "delete", body: "", sha: null, invite: { id, key: null }, place: "invite:" + id }); /* plant:invite-drop */
       }
     }
     return ops;
@@ -596,22 +624,24 @@ function createProgram(opts) {
   }
 
   function lastSent(op) {
-    if (op.invite) { const h = sha256(op.invite); return has(st.sentInv, h) && has(st.sentInv[h], op.rel) ? st.sentInv[h][op.rel] : null; }
+    if (op.invite) { const h = op.invite.id; return has(st.sentInv, h) && has(st.sentInv[h], op.rel) ? st.sentInv[h][op.rel] : null; }
     return has(st.sent, op.rel) ? st.sent[op.rel] : null;
   }
 
   /* A file owed, sealed and signed: the next counter, the blob it replaces named so the relay keeps one per chain. */
   function sealOut(op, me, sealing) {
     const was = lastSent(op);
-    return B.seal({ relayTeamId: pin.rt, epoch: sealing.epoch, teamKey: sealing.key, writer: { keyId: me.keyId, privateKey: me.privateKey },
-      path: op.rel, body: op.body, counter: nextCounter(), place: me.place, kind: op.kind, supersedes: was ? was.id : null });
+    const blob = B.seal({ relayTeamId: pin.rt, epoch: sealing.epoch, teamKey: sealing.key, writer: { keyId: me.keyId, privateKey: me.privateKey },
+      path: op.rel, body: op.body, counter: nextCounter(), place: op.place ? null : me.place, kind: op.kind, supersedes: was ? was.id : null });
+    if (op.place) blob.place = op.place;
+    return blob;
   }
 
   function sentOut(op, blob) {
     const rec = { id: blob.id, epoch: blob.epoch, counter: blob.counter, sha: op.sha, size: blob.ciphertext.length, del: op.kind === "delete" };
     const was = lastSent(op);
     if (op.invite) {
-      const h = sha256(op.invite);
+      const h = op.invite.id;
       st.sentInv[h] = Object.assign({}, st.sentInv[h] || {}, { [op.rel]: rec });
     } else {
       st.sent[op.rel] = rec;
@@ -688,7 +718,7 @@ function createProgram(opts) {
 
 /* `o`: rt, url (https, ending /relay/v1), mirror, stateFile; me() as {keyId, public, privateKey, place}; pin() as {teamId,
    rt, lead}; keyFor(epoch) a team key or null; sealEpoch() the epoch to seal under; invite() on a desk joining by
-   invitation as {inv, token, seal}; inviteKeys() on the lead's side, the live invitations' seal keys; request(method, url,
+   invitation as {inv, token, seal}; inviteKeys() on the lead's side, the live invitations as {id, key}; request(method, url,
    headers, body) answering {status, header(name), bytes} and throwing where the relay does not answer; connect(url,
    headers, {message, close}) a socket or null; write(abs, text) the shell's atomic write; say(line); onTeam() after a team
    file lands; clock. */
@@ -716,7 +746,10 @@ function createChannel(opts) {
     return {
       keyFor: e => (typeof o.keyFor === "function" ? o.keyFor(e) : null),
       inviteSeal: inv && toBytes(inv.seal) && inv.seal.length === 32 ? toBytes(inv.seal) : null,
-      inviteKeys: typeof o.inviteKeys === "function" ? (o.inviteKeys() || []).map(toBytes).filter(k => k && k.length === 32) : null,
+      inviteId: inv && HEX32.test(String(inv.inv)) ? inv.inv : null,
+      inviteKeys: typeof o.inviteKeys === "function" ? (o.inviteKeys() || [])
+        .filter(k => table(k) && HEX32.test(String(k.id)) && toBytes(k.key) && toBytes(k.key).length === 32)
+        .map(k => ({ id: k.id, key: toBytes(k.key) })) : null,
       onTeam: () => { if (typeof o.onTeam === "function") o.onTeam(); },
     };
   }
@@ -776,7 +809,25 @@ function createChannel(opts) {
     return t;
   }
 
+  /* A session by this program's own key alone, the one held kept where the relay does not know that key yet. */
+  async function keySession() {
+    const who = me();
+    if (!who || !who.privateKey) return R("not-enrolled");
+    const ch = await call("POST", "hello", { json: {} });
+    if (ch.status !== 200 || !ch.json || !HEX32.test(String(ch.json.challenge))) return refusalOf(ch);
+    const sig = crypto.sign(null, helloBytes(o.rt, ch.json.challenge, who.keyId), who.privateKey).toString("hex");
+    const r = await call("POST", "session", { json: { challenge: ch.json.challenge, key: who.keyId, sig } });
+    if (r.status !== 200 || !r.json || !HEX64.test(String(r.json.session))) return refusalOf(r);
+    session = { token: r.json.session, at: clock(), by: "key" };
+    return { ok: true };
+  }
+
+  /* An invitation's session serves one upload; once that is made, each cycle asks whether the lead has enrolled this key. */
   async function ensureSession() {
+    if (session && session.by === "invite" && prog.state().invited) {
+      const k = await keySession();
+      if (k.ok || k.reason !== "not-enrolled") return k;
+    }
     if (session && clock() - session.at < SESSION_KEEP_MS) return { ok: true };
     return openSession();
   }
@@ -842,7 +893,8 @@ function createChannel(opts) {
   function sealingFor(op, who) {
     if (op.invite) {
       const e = typeof o.sealEpoch === "function" ? o.sealEpoch() : null;
-      return isCount(e) ? { epoch: e, key: op.invite } : null;
+      const key = op.invite.key || (isCount(e) && typeof o.keyFor === "function" ? o.keyFor(e) : null);
+      return isCount(e) && key ? { epoch: e, key } : null;
     }
     if (session && session.by === "invite") {
       const inv = ctx().inviteSeal, st = prog.state();

@@ -24,6 +24,9 @@ const HEX24 = /^[0-9a-f]{24}$/, HEX32 = /^[0-9a-f]{32}$/, HEX64 = /^[0-9a-f]{64}
 /* blob.cjs's id shape, the one its associated data carries, so no newline or separator rides in a key or desk id. */
 const ID_RE = /^[a-z0-9][a-z0-9-]{2,63}$/;
 const SPKI_ED25519 = Buffer.from("302a300506032b6570032100", "hex");
+/* The lead's place for what it seals under one invitation's key alone (step 4's joining bootstrap): served in the clear,
+   so a desk not joining by that invitation passes over it without trying to open it. */
+const INVITE_PLACE = /^invite:[0-9a-f]{32}$/;
 
 const is = (re, v) => typeof v === "string" && re.test(v);
 const isId = v => is(ID_RE, v);
@@ -65,7 +68,8 @@ function parseMeta(header) {
   if (!m || typeof m !== "object" || Array.isArray(m) || m.v !== 1) return null;
   const out = { id: m.id, supersedes: m.supersedes === undefined ? null : m.supersedes, epoch: m.epoch, writer: m.writer,
     counter: m.counter, del: m.del, sig: m.sig, nonce: m.nonce, place: m.place, pub: m.pub === undefined ? null : m.pub };
-  const placed = out.place === "root" || (typeof out.place === "string" && out.place.startsWith("desk:") && isId(out.place.slice(5)));
+  const placed = out.place === "root" || INVITE_PLACE.test(String(out.place))
+    || (typeof out.place === "string" && out.place.startsWith("desk:") && isId(out.place.slice(5)));
   if (!is(HEX32, out.id) || (out.supersedes !== null && (!is(HEX32, out.supersedes) || out.supersedes === out.id))
     || !isCount(out.epoch) || !isId(out.writer) || !isCount(out.counter) || typeof out.del !== "boolean"
     || !is(HEX128, out.sig) || !is(HEX24, out.nonce) || !placed || (out.pub !== null && !is(HEX64, out.pub))) return null;
@@ -238,6 +242,7 @@ function createCore(deps) {
     const out = { v: 1, id: m.id, supersedes: m.supersedes, epoch: m.epoch, writer: m.writer, counter: m.counter, del: m.del,
       size: m.size, sig: m.sig, nonce: m.nonce };
     if (m.pub) out.pub = m.pub;
+    if (m.place) out.place = m.place;
     return out;
   }
 
@@ -276,7 +281,7 @@ function createCore(deps) {
     const lead = m.writer === team.lead.keyId;
     const dev = lead ? null : store.get("dev:" + m.writer);
     if (!lead && !dev) return no("removed");
-    if (m.place !== (lead ? "root" : "desk:" + dev.desk)) return no("outside-place"); /* plant:put-place */
+    if (m.place !== (lead ? "root" : "desk:" + dev.desk) && !(lead && INVITE_PLACE.test(m.place))) return no("outside-place"); /* plant:put-place */
     return { ok: true, team, s, max: B.BLOB_MAX, pub: lead ? team.lead.pub : dev.pub, lead, invite: null };
   }
 
@@ -338,6 +343,7 @@ function createCore(deps) {
       const rec = { id: m.id, supersedes: m.supersedes, epoch: m.epoch, writer: m.writer, counter: m.counter, del: m.del,
         size: ct.length, sig: m.sig, nonce: m.nonce, seq, at: now, obj };
       if (j.a.invite) rec.pub = j.a.pub;
+      if (INVITE_PLACE.test(m.place)) rec.place = m.place;
       store.put("blob:" + m.id, rec);
       store.put("seq:" + pad(seq), m.id);
       if (m.del) store.put(expiryKey(now + KEEP_MS, m.id), "del");
