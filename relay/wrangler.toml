@@ -1,0 +1,27 @@
+# The relay on a staging name. Nothing deploys this file: a deploy, and every Cloudflare resource named here, waits for
+# Maxim's word. It holds no secret, only bindings.
+name = "etiuda-relay-staging"
+main = "worker.mjs"
+compatibility_date = "2026-09-01"
+# shell/relay/blob.cjs and the relay's own signatures use node:crypto.
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+
+# The relay logs nothing per request.
+[observability]
+enabled = false
+
+# One object per team, named by its relay team id. A binding takes no jurisdiction here, so worker.mjs asks every id
+# of TEAMS.jurisdiction("eu"), and the objects are made and kept in the EU.
+[[durable_objects.bindings]]
+name = "TEAMS"
+class_name = "RelayTeam"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RelayTeam"]
+
+[[r2_buckets]]
+binding = "BLOBS"
+bucket_name = "etiuda-relay-staging"
+jurisdiction = "eu"
