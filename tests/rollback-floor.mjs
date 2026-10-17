@@ -29,7 +29,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 62;
+const EXPECTED = 64;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1508,7 +1508,8 @@ try {
       + " no ring in the file is no ring, and a folder channel reads etiuda-ring.json as before (catalog signer and the page's ring): "
       + [g1, g2, g3].join(" | "));
 
-    heed(D, revTeam(TEAM, 1, [], { rev: 4, channel: RELAY, ring: RING }));
+    const current = revTeam(TEAM, 1, [], { rev: 4, channel: RELAY, ring: RING });
+    heed(D, current);
     const h1 = await believes(D);
     const D2 = loadDesk(D.ud);
     const fromH = D2.said.length;
@@ -1517,6 +1518,21 @@ try {
     check(h1 === "lead/-/" + LEAD.keyId && h2 === "-/-/none" && saidSince(D2, fromH, at, "older"),
       "900h after a restart on the relay, with only a refused older team file to read, no ring is believed, signed or not: "
       + h1 + ", then " + h2 + ", said " + saidSince(D2, fromH, at, "older"));
+
+    const D3 = loadDesk(D.ud);
+    const fromJ = D3.said.length;
+    heed(D3, current);
+    const j1 = await believes(D3), fj = floorNow(D3, TEAM), saidJ = saidSince(D3, fromJ, at, "older");
+    check(j1 === "lead/-/" + LEAD.keyId && fj === JSON.stringify({ epoch: 1, rev: 4 }) && !saidJ,
+      "900j after a restart on the relay, the same team file at a rev equal to the floor is heeded, its signed ring believed,"
+      + " and nothing is said to be older: " + j1 + ", floor " + fj + ", said older " + saidJ);
+
+    const kept = JSON.stringify((D3.envelope().teamChannel || {})[TEAM] || null);
+    await D3.ask("etiuda:team-join", "leave", TEAM);
+    const left = D3.envelope(), gone = !((left.teamChannel || {})[TEAM]) && !((left.teamPins || {})[TEAM]);
+    check(kept === JSON.stringify(RELAY) && gone && floorNow(D3, TEAM) === JSON.stringify({ epoch: 1, rev: 4 }),
+      "900k Leave this team keeps no channel for the team in desk.json, and its floor stays: channel before " + kept
+      + ", after " + JSON.stringify((left.teamChannel || {})[TEAM] || null) + ", floor " + floorNow(D3, TEAM));
   }
   {
     const pinOf = (name, ring, more) => {
@@ -1533,7 +1549,8 @@ try {
     const relaySigned = pinOf("first-signed", null, { channel: RELAY, ring: RING });
     check(relayFileRing === "not pinned" && folderFileRing === "pinned" && relaySigned === "pinned",
       "900i a first pin with no invitation: on the relay etiuda-ring.json vouches for nothing and the signed file's own ring is read,"
-      + " while on the folder the ring file vouches as before: " + [relayFileRing, folderFileRing, relaySigned].join(" | "));
+      + " while on the folder the ring file vouches as before; the third arm, a relay file's own ring pinning its signer, is this"
+      + " first step's allowance, which the relay's fourth step inverts: " + [relayFileRing, folderFileRing, relaySigned].join(" | "));
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));

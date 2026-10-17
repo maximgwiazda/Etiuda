@@ -2431,7 +2431,8 @@ function readRing() {
   const root = catalogFolder(), relay = relayRingAt(root);
   return relay === undefined ? readRingFile(root) : relay;
 }
-/* The ring a team file is heeded with: on the relay its own, and on the folder the ring file. */
+/* The ring a team file is heeded with: on the relay its own, and on the folder the ring file. A relay file's own ring
+   pinning its signer with no invitation is an allowance of the relay's first step; its fourth step inverts it. */
 function ringHeeded(doc, root) {
   const channel = teamChannelOf(doc);
   return !channel ? null : channel.kind === "relay" ? teamRingIn(doc) : readRingFile(root);
