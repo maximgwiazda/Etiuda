@@ -376,14 +376,38 @@ function pinnedLeadPubs() {
   pinnedLeadKeys().forEach(k => { if (out.indexOf(k.public) < 0) out.push(k.public); });
   return out;
 }
-/* The public a catalog may be chosen under without the agent asking: with no lead pinned, any key the ring verifies;
-   with one pinned, only a pinned lead's, verified against the pin itself, since the ring is the share's to write. */
+/* The team file in this folder where it is whole under the lead it names, else null. */
+function folderTeamDoc() {
+  heedTeam();
+  const root = catalogFolder();
+  if (!folderAnswers(root)) return null;
+  try {
+    const file = path.join(root, TEAM_NAME);
+    if (fs.statSync(file).size > TEAM_MAX) return null;
+    const doc = JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "").trim());
+    return teamWhole(doc) ? doc : null;
+  } catch { return null; }
+}
+/* null: no pin, so the ring decides. []: a whole team file whose lead this desk has not pinned.
+   Otherwise the publics that may sign a catalog chosen here. */
+function folderLeadPublics() {
+  const all = pinnedLeadPubs();
+  if (!all.length) return null;
+  const doc = folderTeamDoc();
+  if (!doc) return all;
+  const pin = teamPins[doc.id];
+  if (pin && doc.lead && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public) return [String(pin.public)];
+  return [];
+}
+/* The public a catalog may be chosen under without the agent asking. With no lead pinned, any key the ring verifies.
+   Where this folder's team file is whole, only the key pinned for that team: a key pinned for another team verifies
+   nothing here. With no whole team file, any pinned lead's key, verified against the pin, since the ring is the share's to write. */
 function catalogLeadOk(data) {
-  const pins = pinnedLeadPubs();
-  if (!pins.length) return catalogSigValid(data);
+  const bound = folderLeadPublics();
+  if (bound === null) return catalogSigValid(data);
   const sig = data && data.sig;
-  if (!data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-f]{128}$/.test(String(sig.value || ""))) return "";
-  for (const pub of pins) {
+  if (!bound.length || !data || !sig || sig.alg !== "Ed25519" || !/^[0-9a-f]{128}$/.test(String(sig.value || ""))) return "";
+  for (const pub of bound) {
     try {
       const key = crypto.createPublicKey({ key: Buffer.concat([SPKI_ED25519, Buffer.from(pub, "hex")]), format: "der", type: "spki" });
       if (crypto.verify(null, signedBytesOf(data), key, Buffer.from(String(sig.value), "hex"))) return pub;
@@ -391,13 +415,27 @@ function catalogLeadOk(data) {
   }
   return "";
 }
+/* The leads the page verifies against, the same publics catalogLeadOk uses. A whole team file narrows them to that
+   team's pin. Where that lead is not pinned, one key that verifies nothing, so another team's pin is not read and
+   the ring is not read in its place. */
+function leadsForPage() {
+  const bound = folderLeadPublics();
+  if (bound === null) return [];
+  if (!bound.length) return [{ keyId: "", public: "0".repeat(64) }];
+  const doc = folderTeamDoc();
+  if (doc) {
+    const pin = teamPins[doc.id];
+    if (pin && bound.indexOf(String(pin.public)) >= 0) return [{ keyId: pin.keyId, public: String(pin.public) }];
+  }
+  return pinnedLeadKeys();
+}
 function editionRev(data) {
   const n = data && +data.rev;
   return Number.isFinite(n) ? n : -1;
 }
 /* The file this launch was opened with, else the highest rev of each catalog id that may be chosen
    without the agent asking. With no lead pinned, that is a signature the ring verifies. With a lead
-   pinned, only a file that lead signed, and a file signed by any other key is dropped even when it
+   pinned, only a file catalogLeadOk accepts, and a file it refuses is dropped even when it
    is the only file of its id. A newer file time does not choose between those. An id with no
    verified signature keeps every file of it, in the order ecFilesIn gave, only while no lead is pinned. */
 function pickEdition(found) {
@@ -4105,13 +4143,13 @@ ipcMain.handle("etiuda:catalog-ring", (e) => {
   } catch { /* no ring, which is the ordinary case */ }
   return text;
 });
-/* THE LEADS THIS DESK HAS PINNED, as catalogLeadOk verifies a catalog against them, the team file heeded first as a read
-   heeds it. Where there is one, the page's key comes from these and the ring above is not read for it, since the ring is the
-   share's to write; [] for a desk outside any team, whose key the ring still decides. */
+/* THE LEADS THIS PAGE VERIFIES AGAINST: the keys catalogLeadOk uses, the team file heeded first. A whole
+   team file narrows them to that team's pin, or one key that verifies nothing where it is not pinned, so
+   another team's pin and the ring are not read for it. [] where no lead is pinned, and the ring decides. */
 ipcMain.handle("etiuda:catalog-leads", (e) => {
   if (!fromEngine(e)) return [];
   heedTeam();
-  return pinnedLeadKeys();
+  return leadsForPage();
 });
 ipcMain.handle("etiuda:stats-write", (e, text, askId) => {
   if (!fromEngine(e)) return { ok: false };

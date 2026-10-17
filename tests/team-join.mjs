@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 77;
+const EXPECTED = 86;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -46,7 +46,7 @@ const APP = path.join(LAB, "app");
 fs.cpSync(path.join(ROOT, "shell"), path.join(APP, "shell"), { recursive: true });
 const SRC = fs.readFileSync(path.join(APP, "shell", "main.js"), "utf8");
 const EXPOSE = ["sealCatalog", "wrapTeamKey", "joinCommit", "joinCode", "joinGenuine", "joinOpening", "joinSignedBytes",
-  "branchSignedBytes", "deskFileGenuine", "readCatalog", "catalogChanged", "isCatalogName", "JOINS_NAME",
+  "branchSignedBytes", "deskFileGenuine", "readCatalog", "catalogLeadOk", "catalogChanged", "isCatalogName", "JOINS_NAME",
   "memberProof", "inviteCode", "inviteIdOf", "inviteRead", "folderHost", "signedSha"];
 const noop = () => {};
 const inert = new Proxy(function () {}, { get: () => inert, set: () => true, apply: () => undefined });
@@ -74,7 +74,9 @@ function loadDesk(ud, src) {
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-    (src || SRC) + "\nreturn { " + EXPOSE.join(", ") + " };")(n => (n === "electron" ? electron : nodeRequire(n)),
+    (src || SRC) + "\nreturn { " + EXPOSE.join(", ")
+      + ", setFolder: v => { if (deskKeys === undefined) deskKeys = readDesk(); deskKeys[CATALOG_FOLDER_KEY] = v; teamStamp = ''; } };")(
+    n => (n === "electron" ? electron : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
   const envelope = () => JSON.parse(fs.readFileSync(path.join(ud, "desk.json"), "utf8"));
@@ -1776,6 +1778,92 @@ try {
   });
   document.body = bodyWas;
   if (langBefore == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langBefore);
+
+  /* A pin kept for one team does not make that lead's catalog lead-signed in another team's folder. */
+  {
+    const mainSrc = fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8");
+    const pol = mainSrc.slice(mainSrc.indexOf("function policyLetsInviteGo"), mainSrc.indexOf("function memberHeedUnderPolicy"));
+    const policyWrites = pol.indexOf('teamPins["policy"]') >= 0 || pol.indexOf("teamPins.policy") >= 0;
+    check(!policyWrites, "15by policyLetsInviteGo does not write a policy pin");
+    const trustSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "catalog-trust.js"), "utf8");
+    const deskFn = trustSrc.slice(trustSrc.indexOf("function deskSigState"), trustSrc.indexOf("function catalogTrust"));
+    const synthetic = deskFn.indexOf("{[id]:{[kid]:l.public}}") >= 0 || deskFn.indexOf("{[id]: {[kid]: l.public}}") >= 0;
+    check(synthetic, "15bz deskSigState builds a ring from the document id and its own keyId for every lead public");
+
+    const pairA = crypto.generateKeyPairSync("ed25519"), pairB = crypto.generateKeyPairSync("ed25519");
+    const pairC = crypto.generateKeyPairSync("ed25519");
+    const LA = { keyId: "lead-a", public: pubHex(pairA.publicKey) };
+    const LB = { keyId: "lead-b", public: pubHex(pairB.publicKey) };
+    const LC = { keyId: "lead-c", public: pubHex(pairC.publicKey) };
+    const quay = rev => ({
+      format: 2, kind: "etiuda-catalog", id: "quay-board", rev, date: "2026-10-01", name: "Quay board",
+      langs: [{ code: "en", label: "EN" }],
+      tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers" } }],
+      cards: [{ id: "c-warm", shelf: "t-op", title: { en: "Warm opening" }, body: { en: "marker-quay-board" }, bodyShape: "plain" }],
+    });
+    const teamDoc = (id, lead, key, roster) => sign({
+      format: 1, kind: "etiuda-team", id, epoch: 1, rev: 1, catalogs: ["quay-board"],
+      lead, sealed: true, exportsSealed: true, roster: roster,
+    }, key, lead.keyId);
+    const revOf = text => { try { return JSON.parse(text).rev; } catch { return null; } };
+    const shareQa = folder("quay-a"), shareQb = folder("quay-b");
+    const Dq = newDesk("quay", shareQa);
+    const meQ = await Dq.ask("etiuda:branch-identity", true);
+    const teamQa = "t-" + crypto.randomBytes(8).toString("hex");
+    const teamQb = "t-" + crypto.randomBytes(8).toString("hex");
+    const keyQa = crypto.randomBytes(32);
+    const onA = [{ desk: { id: meQ.id, key: meQ.key, box: meQ.box }, wrap: Dq.api.wrapTeamKey(keyQa, meQ.box, teamQa, 1, meQ.id) }];
+    put(shareQa, "etiuda-team.json", JSON.stringify(teamDoc(teamQa, LA, pairA.privateKey, onA)));
+    const byOwn = sign(quay(1), pairA.privateKey, LA.keyId);
+    put(shareQa, "own.ec", JSON.stringify(byOwn));
+    const ownRead = Dq.api.readCatalog();
+    const pinsJoined = Object.keys(Dq.envelope().teamPins || {}).length;
+    check(pinsJoined === 1 && revOf(ownRead) === 1 && !!Dq.api.catalogLeadOk(byOwn),
+      "15ca in team A's own folder, the catalog A's lead signed is chosen, and it counts as lead-signed: rev "
+      + revOf(ownRead) + ", pins " + pinsJoined);
+
+    Dq.api.setFolder(shareQb);
+    put(shareQb, "etiuda-team.json", JSON.stringify(teamDoc(teamQb, LB, pairB.privateKey, [])));
+    Dq.api.readCatalog();
+    const pinsAfter = Object.keys(Dq.envelope().teamPins || {}).length;
+    check(pinsJoined === 1 && pinsAfter === 1,
+      "15cb joining team A keeps one pin, and team B's file does not clear it: " + pinsAfter);
+
+    const onlyC = sign(quay(1), pairC.privateKey, LC.keyId);
+    put(shareQb, "stranger.ec", JSON.stringify(onlyC));
+    const refused = Dq.api.readCatalog();
+    check(refused == null && !Dq.api.catalogLeadOk(onlyC),
+      "15cc a catalog signed only by an unpinned key is not chosen");
+
+    const byA = sign(quay(2), pairA.privateKey, LA.keyId);
+    put(shareQb, "crossed.ec", JSON.stringify(byA));
+    const chosen = Dq.api.readCatalog();
+    const leadOk = !!Dq.api.catalogLeadOk(byA);
+    check(!(chosen && chosen.indexOf("quay-board") >= 0 && leadOk),
+      "15cd a catalog signed by team A's lead is not chosen in team B's folder: rev " + revOf(chosen) + ", lead-ok " + leadOk);
+
+    const edited = JSON.parse(JSON.stringify(byA));
+    edited.sig.keyId = LB.keyId;
+    check(!Dq.api.catalogLeadOk(edited),
+      "15ce changing keyId after the signature was made breaks it");
+
+    const resigned = sign(quay(3), pairA.privateKey, LB.keyId);
+    check(!Dq.api.catalogLeadOk(resigned),
+      "15cf a signature made with another lead's keyId is not accepted");
+
+    const keyQb = crypto.randomBytes(32);
+    const onB = [{ desk: { id: meQ.id, key: meQ.key, box: meQ.box }, wrap: Dq.api.wrapTeamKey(keyQb, meQ.box, teamQb, 1, meQ.id) }];
+    put(shareQb, "etiuda-team.json", JSON.stringify(teamDoc(teamQb, LB, pairB.privateKey, onB)));
+    const byB = sign(quay(1), pairB.privateKey, LB.keyId);
+    const byHigh = sign(quay(9), pairA.privateKey, LA.keyId);
+    put(shareQb, "folder-lead.ec", JSON.stringify(byB));
+    put(shareQb, "other-high.ec", JSON.stringify(byHigh));
+    const both = Dq.api.readCatalog();
+    const pinsBoth = Object.keys(Dq.envelope().teamPins || {}).length;
+    check(pinsBoth === 2 && !!Dq.api.catalogLeadOk(byB) && !Dq.api.catalogLeadOk(byHigh) && revOf(both) === 1,
+      "15cg with both leads pinned, team B's folder chooses the catalog B's lead signed and not A's higher rev: pins "
+      + pinsBoth + ", rev " + revOf(both) + ", B " + !!Dq.api.catalogLeadOk(byB) + ", A " + !!Dq.api.catalogLeadOk(byHigh));
+  }
 
   /* Last, over every desk above: the log of each holds none of the secrets any invitation carried. */
   const leaked = [];
