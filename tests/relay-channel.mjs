@@ -34,7 +34,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 85;
+const EXPECTED = 90;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2121,6 +2121,109 @@ check(regStand.held(), "942f every reg call was answered by the stand-in (" + re
   check(kept && forgedN === 0 && pending.length === 1,
     "951d f7 a forged epoch must not be pending and must not evict a real wait: pending " + pending.length
     + ", forged " + forgedN + ", real id kept " + kept);
+}
+
+/* ---- an older epoch's team file is a replay (F5): never loaded, and never written over a newer file the mirror
+   already holds, even where this program has no applied record for it. A lower rev at the same epoch, and a newer
+   epoch, stay as they are. Judging a blob under an older epoch's own floor stays as it is. ---- */
+try {
+  const K2 = crypto.randomBytes(32);
+  const roster = [member(DESK)];
+  const doc = (epoch, rev) => JSON.parse(teamText(rev, roster, { epoch }));
+  const writer = { keyId: LEAD.keyId, privateKey: LEAD.privateKey };
+  const teamBlob = (text, epoch, counter, key) => B.seal({ relayTeamId: RT, epoch, teamKey: key, writer,
+    path: C.TEAM_NAME, body: text, counter, place: "root" });
+  const item = (blob, seq) => ({ seq, ct: blob.ciphertext, meta: { v: 1, id: blob.id, writer: blob.writerKeyId,
+    epoch: blob.epoch, counter: blob.counter, size: blob.ciphertext.length, sig: blob.signature, nonce: blob.nonce,
+    supersedes: blob.supersedes, del: !!blob.deletion } });
+  const ctx = { keyFor: e => (e === 2 ? K2 : e === 1 ? K1 : null) };
+  const quiet = { read() { return null; }, write() {}, remove() {}, list() { return []; } };
+  const clock = () => 1700000000000;
+
+  const bare = C.createProgram({ io: quiet, pin: PIN, clock, save() {} });
+  const loaded1 = bare.loadTeamFile(doc(1, 1));
+  const loaded2 = bare.loadTeamFile(doc(2, 1));
+  const back = bare.loadTeamFile(doc(1, 2));
+  const same = bare.loadTeamFile(doc(2, 1));
+  check(loaded1.ok === true && loaded2.ok === true && back.reason === "replay-rev",
+    "952c a team file of an older epoch is replay-rev on load: "
+    + [loaded1.ok, loaded2.ok, back.reason || back.ok].join(" "));
+  check(same.reason === "replay-rev",
+    "952d a lower or equal rev at the same epoch is still replay-rev: " + (same.reason || same.ok));
+
+  const root = path.join(LAB, "f5-hold-" + hex(4));
+  fs.mkdirSync(root, { recursive: true });
+  const said = [];
+  const mirror = C.diskIO(root, C.writeWhole);
+  const held = C.createProgram({ io: mirror, pin: PIN, clock, save() {}, say: l => said.push(l) });
+  const text2 = teamText(1, roster, { epoch: 2 });
+  mirror.write(C.TEAM_NAME, text2);
+  const rolled = held.applyBatch([item(teamBlob(teamText(2, roster, { epoch: 1 }), 1, 1, K1), 1)], ctx);
+  let nowEpoch = null;
+  try { nowEpoch = JSON.parse(fs.readFileSync(path.join(root, C.TEAM_NAME), "utf8")).epoch; } catch { nowEpoch = null; }
+  const saidReplay = said.some(l => l.indexOf(B.REASONS["replay-rev"]) >= 0);
+  check(nowEpoch === 2 && rolled.applied.length === 0 && saidReplay,
+    "952a a team file already on disk at epoch 2, with no applied record, stays epoch 2 and the older blob is said as a replay: now "
+    + nowEpoch + ", applied " + JSON.stringify(rolled.applied) + ", said " + saidReplay);
+
+  const root2 = path.join(LAB, "f5-applied-" + hex(4));
+  fs.mkdirSync(root2, { recursive: true });
+  const set = C.createProgram({ io: C.diskIO(root2, C.writeWhole), pin: PIN, clock, save() {} });
+  const landed = set.applyBatch([item(teamBlob(text2, 2, 5, K2), 1)], ctx);
+  const again = set.applyBatch([item(teamBlob(teamText(2, roster, { epoch: 1 }), 1, 1, K1), 2)], ctx);
+  const stayed = JSON.parse(fs.readFileSync(path.join(root2, C.TEAM_NAME), "utf8")).epoch;
+  check(landed.applied.indexOf(C.TEAM_NAME) >= 0 && stayed === 2 && again.applied.length === 0,
+    "952b once the channel applied epoch 2, the older blob does not replace it: stayed epoch " + stayed
+    + ", first applied " + JSON.stringify(landed.applied) + ", again " + JSON.stringify(again.applied));
+} catch (e) {
+  check(false, "harness: " + (e && e.stack ? e.stack : e));
+}
+
+/* plant:epoch-hold. Deleting that line, leaving the file valid script, writes an older epoch over the newer file on disk. */
+{
+  const src = path.join(ROOT, "shell", "relay", "channel.cjs");
+  const before = fs.readFileSync(src);
+  const digest = sha(before);
+  let turned = false, detail = "plant line absent";
+  try {
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:epoch-hold") >= 0);
+    if (at >= 0) {
+      lines.splice(at, 1);
+      fs.writeFileSync(src, lines.join("\n"));
+      const resolved = nodeRequire.resolve(src);
+      delete nodeRequire.cache[resolved];
+      const lifted = nodeRequire(src);
+      const root = path.join(LAB, "f5-plant-" + hex(4));
+      fs.mkdirSync(root, { recursive: true });
+      const mirror = lifted.diskIO(root, lifted.writeWhole);
+      const prog = lifted.createProgram({ io: mirror, pin: PIN, clock: () => 1700000000000, save() {} });
+      const roster = [member(DESK)];
+      const text2 = teamText(1, roster, { epoch: 2 });
+      const older = teamText(2, roster, { epoch: 1 });
+      mirror.write(lifted.TEAM_NAME, text2);
+      const writer = { keyId: LEAD.keyId, privateKey: LEAD.privateKey };
+      const blob = B.seal({ relayTeamId: RT, epoch: 1, teamKey: K1, writer,
+        path: lifted.TEAM_NAME, body: older, counter: 1, place: "root" });
+      const one = { seq: 1, ct: blob.ciphertext, meta: { v: 1, id: blob.id, writer: blob.writerKeyId,
+        epoch: blob.epoch, counter: blob.counter, size: blob.ciphertext.length, sig: blob.signature, nonce: blob.nonce,
+        supersedes: blob.supersedes, del: !!blob.deletion } };
+      const ctx = { keyFor: e => (e === 1 ? K1 : null) };
+      prog.applyBatch([one], ctx);
+      let now = null;
+      try { now = JSON.parse(fs.readFileSync(path.join(root, lifted.TEAM_NAME), "utf8")).epoch; } catch { now = null; }
+      turned = now === 1;
+      detail = "disk epoch " + now;
+    }
+  } catch (e) {
+    detail = e && e.message ? e.message : String(e);
+  } finally {
+    fs.writeFileSync(src, before);
+    try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
+  }
+  const back = sha(fs.readFileSync(src)) === digest;
+  check(turned && back, "952e lifting plant:epoch-hold writes the older epoch over the newer file, and the file is put back: "
+    + detail + ", sha " + (back ? "restored" : "differs"));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */

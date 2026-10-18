@@ -498,7 +498,8 @@ function createProgram(opts) {
   }
 
   /* A team file arriving through the relay: the lead's, judged as a team file before it is written. The same bytes as the
-     mirror's are nothing new; a lower or equal rev of other bytes is a replay. */
+     mirror's are nothing new; a lower or equal rev of other bytes is a replay, and so is an older epoch than the file
+     the mirror already holds, whatever its rev. */
   function landTeam(r, ctx) {
     let doc = null;
     try { doc = JSON.parse(r.body.replace(/^\uFEFF/, "")); } catch { doc = null; }
@@ -511,6 +512,8 @@ function createProgram(opts) {
       persist();
       return { ok: true, path: TEAM_NAME, same: true };
     }
+    const held = heldTeam();
+    if (held && t.epoch < held.epoch) return R("replay-rev"); /* plant:epoch-hold */
     const lr = B.revLoad(st.revs, revKey(t));
     if (!lr.ok) return lr; /* plant:team-rev */
     const landed = land(r);

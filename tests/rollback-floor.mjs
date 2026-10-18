@@ -29,7 +29,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 64;
+const EXPECTED = 67;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1480,6 +1480,51 @@ try {
     check(f3 === ids(2) && f4 === ids(2) && f5 === ids(2) && saidF >= 1,
       "900f a rev that is not a whole number, a channel of another kind and a relay not on https are each refused and said: rosters "
       + [f3, f4, f5].join(" | ") + ", lines " + saidF);
+
+    const fromM = D2.said.length;
+    heed(D2, revTeam(TEAM, 1, [member(1)], { rev: 9 }));
+    const mRoster = rosterNow(D2, TEAM), mFloor = floorNow(D2, TEAM);
+    const saidM = saidSince(D2, fromM, at, "key number 1, below 2");
+    check(mRoster === ids(2) && mFloor === JSON.stringify({ epoch: 2, rev: 3 }) && saidM,
+      "900m a team file of an older epoch than the floor is refused, its roster unused, and the desk says the key number is below: roster "
+      + mRoster + ", floor " + mFloor + ", said " + saidM);
+
+    heed(D2, revTeam(TEAM, 3, [member(4)], { rev: 1 }));
+    const nRoster = rosterNow(D2, TEAM), nFloor = floorNow(D2, TEAM);
+    check(nRoster === ids(4) && nFloor === JSON.stringify({ epoch: 3, rev: 1 }),
+      "900n a newer epoch is still taken and raises the floor: roster " + nRoster + ", floor " + nFloor);
+  }
+  /* plant:epoch-rev. Deleting that line, leaving the file valid script, lets a lower epoch through the floor. A lower
+     rev at the same epoch is still refused. The desk this file already loaded keeps the copy it started with. */
+  {
+    const src = path.join(ROOT, "shell", "main.js");
+    const before = fs.readFileSync(src);
+    const digest = crypto.createHash("sha256").update(before).digest("hex");
+    let turned = false, detail = "plant line absent";
+    try {
+      const lines = before.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:epoch-rev") >= 0);
+      if (at >= 0) {
+        lines.splice(at, 1);
+        fs.writeFileSync(src, lines.join("\n"));
+        const text = fs.readFileSync(src, "utf8");
+        const start = text.indexOf("function teamRevRefused");
+        const end = text.indexOf("function rosterIdsOf");
+        const fn = new Function(text.slice(start, end) + "\nreturn teamRevRefused;")();
+        const lower = fn({ epoch: 2, rev: 3 }, 1, 9);
+        const sameEpoch = fn({ epoch: 2, rev: 3 }, 2, 1);
+        turned = lower === false && sameEpoch === true;
+        detail = "lower epoch refused " + lower + ", same epoch lower rev refused " + sameEpoch;
+      }
+    } catch (e) {
+      detail = e && e.message ? e.message : String(e);
+    } finally {
+      fs.writeFileSync(src, before);
+    }
+    const restored = crypto.createHash("sha256").update(fs.readFileSync(src)).digest("hex") === digest;
+    check(turned && restored,
+      "900p lifting plant:epoch-rev lets a lower epoch through, the same-epoch floor still refuses, and the file is put back: "
+      + detail + ", sha " + (restored ? "restored" : "differs"));
   }
   {
     const SHARE = folder("relay-ring");

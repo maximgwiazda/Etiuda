@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 55;
+const EXPECTED = 59;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -279,6 +279,77 @@ function main() {
   check(omitted === 8 && B.counterFresh({}, deskId, 1, 1).ok === true && B.revLoad({}, t0).ok === true,
     "4h an omitted floor map fails closed: a blob opened without its counters, or with null, is replay-counter, and counterFresh,"
     + " revLoad and revCurrent without a map refuse; a first run passes {} and is taken: " + omitted + " of 8");
+
+  /* An older epoch than one already kept for the same team and lead key is replay-rev, whatever its rev. The same-epoch
+     floor, a higher epoch starting at rev 1, and another lead's epoch 1 are unchanged. */
+  {
+    const base = { teamId: "t-" + hex(8), leadKeyId: lead.keyId };
+    let kept = {};
+    const first = note(B.revLoad(kept, Object.assign({ epoch: 1, rev: 1 }, base)));
+    kept = first.ok ? first.revs : kept;
+    const newer = note(B.revLoad(kept, Object.assign({ epoch: 2, rev: 1 }, base)));
+    kept = newer.ok ? newer.revs : kept;
+    const before = JSON.stringify(kept);
+    const back = note(B.revLoad(kept, Object.assign({ epoch: 1, rev: 2 }, base)));
+    check(first.ok === true && newer.ok === true && refused(back, "replay-rev") && !back.revs && JSON.stringify(kept) === before,
+      "4m a team file of an older epoch than one already loaded is replay-rev whatever its rev, and that load raises nothing: "
+      + [first.ok, newer.ok, back.reason || back.ok].join(" ") + ", map " + (JSON.stringify(kept) === before ? "unchanged" : "raised"));
+    const atFloor = B.revCurrent(kept, Object.assign({ epoch: 2, rev: 1 }, base));
+    const above = B.revCurrent(kept, Object.assign({ epoch: 2, rev: 4 }, base));
+    const higher = note(B.revLoad(kept, Object.assign({ epoch: 3, rev: 1 }, base)));
+    const highRevs = higher.ok ? higher.revs : kept;
+    const same = note(B.revLoad(highRevs, Object.assign({ epoch: 3, rev: 1 }, base)));
+    const otherLead = note(B.revLoad(highRevs, { teamId: base.teamId, leadKeyId: "lead-" + hex(4), epoch: 1, rev: 1 }));
+    check(higher.ok === true && refused(same, "replay-rev") && atFloor.ok === true && above.ok === true && otherLead.ok === true,
+      "4n the same-epoch floor stays, a higher epoch still starts at rev 1, the floor still judges a blob, and another lead's"
+      + " epoch 1 is its own: higher " + higher.ok + ", same " + (same.reason || same.ok) + ", at floor " + atFloor.ok
+      + ", above " + above.ok + ", other lead " + otherLead.ok);
+    const olderNow = note(B.revCurrent(highRevs, Object.assign({ epoch: 1, rev: 9 }, base)));
+    const olderLoad = note(B.revLoad(highRevs, Object.assign({ epoch: 1, rev: 9 }, base)));
+    check(olderNow.ok === true && refused(olderLoad, "replay-rev") && !olderLoad.revs,
+      "4p an older epoch is not loaded, and a blob is still judged under that epoch at its own floor: judged "
+      + (olderNow.reason || olderNow.ok) + ", load " + (olderLoad.reason || olderLoad.ok));
+  }
+
+  /* plant:epoch-above. Deleting that line, leaving the file valid script, lets an older epoch load again. The same-epoch
+     floor still refuses. */
+  {
+    const src = path.join(ROOT, "shell", "relay", "blob.cjs");
+    const before = fs.readFileSync(src);
+    const digest = crypto.createHash("sha256").update(before).digest("hex");
+    let turned = false, detail = "plant line absent";
+    try {
+      const lines = before.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf("plant:epoch-above") >= 0);
+      if (at >= 0) {
+        lines.splice(at, 1);
+        fs.writeFileSync(src, lines.join("\n"));
+        const resolved = require.resolve(src);
+        delete require.cache[resolved];
+        const lifted = require(src);
+        const base = { teamId: "t-" + hex(8), leadKeyId: lead.keyId };
+        const first = lifted.revLoad({}, Object.assign({ epoch: 2, rev: 1 }, base));
+        const back = first.ok ? lifted.revLoad(first.revs, Object.assign({ epoch: 1, rev: 4 }, base)) : first;
+        const same = first.ok ? lifted.revLoad(first.revs, Object.assign({ epoch: 2, rev: 1 }, base)) : first;
+        turned = first.ok === true && back.ok === true && same.ok === false && same.reason === "replay-rev";
+        detail = "epoch 2 " + first.ok + ", older epoch " + (back.ok === true ? "taken" : (back.reason || back.ok))
+          + ", same epoch " + (same.reason || same.ok);
+      }
+    } catch (e) {
+      detail = e && e.message ? e.message : String(e);
+    } finally {
+      fs.writeFileSync(src, before);
+      try {
+        const resolved = require.resolve(src);
+        delete require.cache[resolved];
+        require(src);
+      } catch { /* the copy this suite holds is untouched */ }
+    }
+    const restored = crypto.createHash("sha256").update(fs.readFileSync(src)).digest("hex") === digest;
+    check(turned && restored,
+      "4q lifting plant:epoch-above lets an older epoch load again, the same-epoch floor still refuses, and the file is put back: "
+      + detail + ", sha " + (restored ? "restored" : "differs"));
+  }
 
   /* ---- 5: every bad path, refused before anything is written ---- */
   /* Each rule's id opens its own line, so tests/leg-ids.js reads it. */
