@@ -14,6 +14,10 @@
 # to a runner. ETIUDA_WINDOWS is set inside tools/ci-legs.mjs, on the child of a
 # window leg only, on the Windows runner only, and only when windows_date equals the
 # date tests/engine.js's window wall computed for that process.
+#
+# Each OS uploads its own artifact, results-<os>; the verdict downloads them all. The
+# token is contents: read and is not left in the checkout, so the code under test
+# holds no credential.
 name: verify
 
 run-name: verify ${{ inputs.sha }} on ${{ inputs.os }}
@@ -43,7 +47,6 @@ on:
 
 permissions:
   contents: read
-  actions: write
 
 jobs:
   plan:
@@ -75,6 +78,7 @@ jobs:
         with:
           ref: ${{ inputs.sha }}
           fetch-depth: 1
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -137,15 +141,3 @@ jobs:
             echo "the leg runner broke (outcome ${{ steps.legs.outcome }})"
             exit 1
           fi
-
-  results:
-    needs: [plan, verify]
-    if: always() && needs.plan.result == 'success' && needs.verify.result != 'cancelled'
-    runs-on: ubuntu-latest
-    steps:
-      - name: one artifact named results
-        uses: actions/upload-artifact/merge@v4
-        with:
-          name: results
-          pattern: results-*
-          delete-merged: true
