@@ -28,7 +28,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = (n, q) => pathToFileURL(path.join(ROOT, "src", "modules", n)).href + "?" + q;
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 85;
+const EXPECTED = 86;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -916,6 +916,31 @@ try {
   }
   check(parity.length === 16 && parity.every(l => /:holds,differs$/.test(l)) && !holdsNow(),
     "78j parity: a change to each of the 16 fields the loose mark reads makes deskBranchHolds true and Export differ, and put back it is false again (" + parity.filter(l => !/:holds,differs$/.test(l)).join("; ") + (parity.every(l => /:holds,differs$/.test(l)) ? "all 16" : "") + ")");
+
+  /* 78f's twin. The catalog declares a third language, past the primary and not Polish, and the
+     rename is in that language alone. */
+  const third = {
+    format: 2, kind: "etiuda-catalog", id: "lamp-third", rev: 3,
+    langs: [{ code: "en", label: "EN" }, { code: "pl", label: "PL" }, { code: "uk", label: "UK" }],
+    tags: [{ id: "t-op", kind: "shelf", label: { en: "Openers", pl: "Otwieracze", uk: "Third shelf" } },
+      { id: "t-sp", kind: "shelf", label: { en: "Spare", pl: "Zapas", uk: "Spare shelf" } },
+      { id: "t-r1", kind: "request", clause: { en: "a refund", pl: "zwrot" }, action: { en: "raised it", pl: "zlozono" }, topic: { en: "the refund", pl: "zwrot" } }],
+    cards: ["a", "b", "c"].map(x => ({ id: "c-" + x, shelf: "t-op", bodyShape: "plain", requests: x === "a" ? ["t-r1"] : undefined,
+      title: { en: "Card " + x, pl: "Karta " + x }, body: { en: "Body " + x + ".", pl: "Tresc " + x + "." } }))
+  };
+  const hexT = sha(Buffer.from("lamp-third")).slice(0, 8);
+  const thirdFile = () => { const n = listing(newDir).filter(f => f.indexOf(hexT) >= 0)[0]; try { return JSON.parse(fs.readFileSync(path.join(newDir, n), "utf8")); } catch { return null; } };
+  CF.activateCatalog(CT.parseCatalogFile(JSON.stringify(third)), { file: "third.ec" });
+  CB.applyBootCatalog(); IID.snapshotBaseIntents(); PK.resetPack(); PK.pack.baseCards = null; RB.rebuildCards();
+  PK.pack["catLabels:uk"] = { [kCat]: "Third shelf renamed" };
+  await settle();
+  const fUk = thirdFile();
+  check(!CF.catalogEdited() && holdsNow() && !!fUk && labelOf(fUk, kCat).label.uk === "Third shelf renamed" && verifies(fUk)
+      && labelOf(await exportNow(), kCat).label.uk === "Third shelf renamed",
+    "78l a rename of a category in a third language alone gives a file, which Export agrees with, though the watermark's test (catalogEdited) reads false (file " + !!fUk + ", label "
+    + JSON.stringify(fUk && labelOf(fUk, kCat).label) + ")");
+  delete PK.pack["catLabels:uk"];
+  await settle();
 
   /* A catalog taken while the identity is asked: the write that began over the one before, its file already made. */
   await catRev("lamp-swap-one", 1);

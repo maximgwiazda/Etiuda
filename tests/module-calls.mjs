@@ -4892,6 +4892,42 @@ const CARD_B = {
         const focusEn = globalThis.document.activeElement && globalThis.document.activeElement.id;
         return eq([focusDe, focusEn].join(" || "), "ie_clause_de || ie_clause_en");
       });
+
+    check("cat-set.js", "908ce6 on a de-uk catalog, an empty category holding a uk name loses that key when the category is removed",
+      () => {
+        setupCat(["de", "uk"], "General de", { uk: { gen: "General uk" } });
+        PK.pack["catLabels:uk"] = { gen: "General uk renamed" };
+        const gone = CS.removeCategory("gen");
+        const holds = "gen" in (PK.pack["catLabels:uk"] || {});
+        return eq([gone, holds].join("|"), "true|false");
+      });
+
+    check("editors.js", "908ce7 on a de-uk catalog, a category whose only change is a uk name is overridden and its editor offers Reset",
+      () => {
+        setupCat(["de", "uk"], "General de", { uk: { gen: "General uk" } });
+        PK.pack["catLabels:uk"] = { gen: "General uk renamed" };
+        const over = CI.categoryIsOverridden("gen");
+        ED.openCategoryEditor("gen", true);
+        const reset = byId["#ceReset"];
+        return eq([over, !!reset, !!(reset && reset.disabled)].join("|"), "true|true|false");
+      });
+
+    check("cat-set.js", "908ce8 under an interface language the catalog declares after its first, the pills show that language, and under the primary they are unchanged",
+      () => {
+        const S = UILANG_STORE, had = S.lsGet("eUiLang");
+        try {
+          setupCat(["pl", "en"], "Primary pl", { en: { gen: "Secondary en" } });
+          S.lsSet("eUiLang", "en");
+          CS.applyCatsToGlobal();
+          const underEn = CM.CATS.gen;
+          S.lsSet("eUiLang", "pl");
+          CS.applyCatsToGlobal();
+          const underPl = CM.CATS.gen;
+          return eq([underEn, underPl].join("|"), "Secondary en|Primary pl");
+        } finally {
+          if (had == null) S.lsDel("eUiLang"); else S.lsSet("eUiLang", had);
+        }
+      });
   } finally {
     PK.packUndoFor(hadPack)();
     Object.keys(PK.BASE_CATS).forEach(k => delete PK.BASE_CATS[k]);
