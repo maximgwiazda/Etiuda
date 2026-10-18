@@ -17,11 +17,11 @@
    IN: each blob is fetched and judged through blob.cjs, the trust taken only from the signed team file this program holds
    (E1, E2): the lead's key is the pin, the desks' keys the signed roster of the blob's epoch, and the relay's own list is
    never read. Once a newer epoch is loaded, a key it leaves off its roster is removed at every older epoch, and at the
-   newer epoch where an older loaded roster named the key. A desk file is counted under the roster row for the key that
-   signed it, and a place the blob carries does not choose the folder or the row. A blob that passes is written into the
-   mirror whole, by the
-   atomic write the shell uses on a share; one that
-   fails is dropped and said, never written. A deletion is only a signed record from the path's writer (E3), and a blob the
+   newer epoch where an older loaded roster named the key. A later rev of an epoch that leaves off a key an earlier rev
+   named removes it too. A desk file is counted under the roster row for the key that signed it, and a place the blob
+   carries does not choose the folder or the row. A blob that passes is written into the mirror whole, by the atomic
+   write the shell uses on a share; one that fails is dropped and said, never written. A deletion is only a signed
+   record from the path's writer (E3), and a blob the
    relay stops serving deletes nothing. A blob it could not serve for a reason that can pass is fetched again, the catch-up
    resuming from it at the next cycle; only an answer that the blob is gone lets it go. A catch-up applies the team file
    first, then the other root files, then the desks', so nothing is judged against a roster older than the batch. The
@@ -295,9 +295,12 @@ function stateOf(x) {
   }
   if (table(x.trust)) for (const e of Object.keys(x.trust)) {
     const t = x.trust[e];
-    if (/^[1-9][0-9]*$/.test(e) && table(t) && count(t.rev) && Array.isArray(t.desks))
-      s.trust[e] = { rev: t.rev, desks: t.desks.filter(d => table(d) && B.isId(d.deskId) && B.isId(d.keyId) && HEX64.test(String(d.public)))
-        .map(d => ({ deskId: d.deskId, keyId: d.keyId, public: d.public })) };
+    if (/^[1-9][0-9]*$/.test(e) && table(t) && count(t.rev) && Array.isArray(t.desks)) {
+      const row = d => table(d) && B.isId(d.deskId) && B.isId(d.keyId) && HEX64.test(String(d.public));
+      const map = d => ({ deskId: d.deskId, keyId: d.keyId, public: d.public });
+      s.trust[e] = { rev: t.rev, desks: t.desks.filter(row).map(map),
+        prior: Array.isArray(t.prior) ? t.prior.filter(row).map(map) : [] };
+    }
   }
   if (table(x.applied)) for (const k of Object.keys(x.applied)) {
     const a = x.applied[k];
@@ -406,9 +409,14 @@ function createProgram(opts) {
     return { ok: true, t: doc.t, edition: edition.edition, published: edition.published, epoch: doc.epoch, rev: doc.rev };
   }
 
+  /* The roster of this epoch at this rev. A higher rev keeps the keys the rev it replaces named, so leaving one off is a removal. */
   function keepTrust(t) {
     const had = st.trust[t.epoch];
-    if (!had || had.rev <= t.rev) st.trust[t.epoch] = { rev: t.rev, desks: rosterOf(t.doc) };
+    if (had && had.rev > t.rev) return;
+    const desks = rosterOf(t.doc);
+    const prior = had && Array.isArray(had.prior) ? had.prior.slice() : [];
+    if (had && t.rev > had.rev) for (const d of had.desks || []) if (!prior.some(p => p.keyId === d.keyId)) prior.push(d);
+    st.trust[t.epoch] = { rev: t.rev, desks, prior };
   }
 
   /* The contract's load: a team file above the rev floor for its team, lead key and epoch, the floor then raised. */
@@ -438,14 +446,17 @@ function createProgram(opts) {
   function namedOnOlder(writerKeyId, topEpoch) {
     for (const k of Object.keys(st.trust)) {
       const e = Number(k);
-      if (Number.isSafeInteger(e) && e < topEpoch && (st.trust[k].desks || []).some(d => d.keyId === writerKeyId)) return true;
+      if (!Number.isSafeInteger(e) || e >= topEpoch) continue;
+      const row = st.trust[k];
+      if ((row.desks || []).some(d => d.keyId === writerKeyId)) return true;
+      if ((row.prior || []).some(d => d.keyId === writerKeyId)) return true;
     }
     return false;
   }
 
   /* Once a newer epoch is loaded, a key it does not name is removed at every older epoch, so a file that key seals
-     under the old team file is refused. At the newer epoch the same key is removed only where an older loaded roster
-     named it. A stranger, never named, stays not-roster. The lead's key is the pin. */
+     under the old team file is refused. At the newer epoch the same key is removed where an older loaded roster named
+     it, and a later rev of one epoch removes a key an earlier rev of that epoch named. A stranger stays not-roster. */
   function removedAfterMove(writerKeyId, epoch, opened) {
     if (!pin || writerKeyId === pin.lead.keyId || !isCount(epoch)) return null;
     const top = newestRoster();
@@ -454,7 +465,10 @@ function createProgram(opts) {
     const namedBefore = namedOnOlder(writerKeyId, top.epoch);
     if (epoch < top.epoch) return (opened || namedBefore) ? R("removed") : null; /* plant:fk1-removed */
     if (epoch !== top.epoch) return null;
-    if (namedBefore) return R("removed");
+    const row = st.trust[String(epoch)];
+    const droppedHere = !!row && (row.prior || []).some(d => d.keyId === writerKeyId)
+      && !(row.desks || []).some(d => d.keyId === writerKeyId);
+    if (namedBefore || droppedHere) return R("removed"); /* plant:s2-remove */
     return null;
   }
 
