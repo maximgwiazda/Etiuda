@@ -1,5 +1,5 @@
-import { E_CATALOG_KEY, E_CATALOG_STORE, eWatchClear, eWatchGet, eWatchPut, catalogStoreRefusal } from "./catalog.js";
-import { LOOSE_FIELDS } from "./catalog-file.js";
+import { E_CATALOG_KEY, E_CATALOG_STORE, eWatchClear, eWatchGet, eWatchPut, catalogStoreRefusal, storedCatalog } from "./catalog.js";
+import { LOOSE_FIELDS, tellTaken } from "./catalog-file.js";
 import { eHasBranch, eCatalogEject } from "./host.js";
 import { flushStats } from "./pack.js";
 import { E_NS, eDeskFileShown, eLayers, lsDel, lsGet, lsKeys, lsSet, nsKey, ssDel, ssGet, ssSet } from "./storage.js";
@@ -107,6 +107,9 @@ function undoEject(was){
     return false;
   }
   putBack(was);
+  /* Told after the keys are back, so the shell names this catalog again. A browser, and a run of
+     this function outside the module, has no binding and undoes as before. */
+  if(typeof tellTaken==="function" && typeof storedCatalog==="function") tellTaken(storedCatalog());
   return true;
 }
 

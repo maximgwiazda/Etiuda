@@ -21,7 +21,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 48;
+const EXPECTED = 49;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -969,7 +969,10 @@ try {
     globalThis.document = savedDocument;
     const prevHost = savedWindow.E_HOST;
     const hostFn = fakeWindow.E_HOST && fakeWindow.E_HOST.catalogEject;
-    savedWindow.E_HOST = Object.assign({}, prevHost, hostFn ? { catalogEject: hostFn } : {});
+    const takenFn = fakeWindow.E_HOST && fakeWindow.E_HOST.catalogTaken;
+    savedWindow.E_HOST = Object.assign({}, prevHost,
+      hostFn ? { catalogEject: hostFn } : {},
+      takenFn ? { catalogTaken: takenFn } : {});
     const pageSrc = fs.readFileSync(path.join(ROOT, "src", "modules", "local-memory.js"), "utf8");
     const ls = { eCatalog: "{\"cards\":[1]}", eTheme: "dark" };
     let restarts = 0;
@@ -980,12 +983,31 @@ try {
       tell, () => ["eCatalog"], () => ({ keys: {}, tabs: null }),
       (k) => { delete ls[k]; }, () => {}, "tabs",
       { flushPillState() {}, restartDesk() { restarts++; } }, () => {}, () => {});
-    try { runEject(); }
-    finally { savedWindow.E_HOST = prevHost; }
+    /* Undo of that eject, through the same preload. The shell is told only if undoEject names the catalog. */
+    let undoBack = false;
+    let undoThrew = "";
+    let takenSends = 0;
+    try {
+      runEject();
+      const beforeTaken = sentCh.filter(c => c === "etiuda:catalog-taken").length;
+      const runUndo = new Function("tellTaken", "storedCatalog", "E_CATALOG_STORE", "lsSet", "lsGet",
+        "toastRefusal", "catalogStoreRefusal", "eDeskFileShown", "putBack",
+        declOf(pageSrc, "function undoEject(") + "\nreturn undoEject;")(
+        File.tellTaken, Cat.storedCatalog, "eCatalog",
+        () => true, () => null,
+        () => {}, () => "", () => "",
+        () => {});
+      try { undoBack = runUndo({ keys: {}, tabs: null }) === true; }
+      catch (e) { undoThrew = e && e.message ? e.message : String(e); }
+      takenSends = sentCh.filter(c => c === "etiuda:catalog-taken").length - beforeTaken;
+    } finally { savedWindow.E_HOST = prevHost; }
     const ejectSends = sentCh.filter(c => c === "etiuda:catalog-eject");
     check(ejectSends.length === 1 && !("eCatalog" in ls) && ls.eTheme === "dark" && restarts === 1,
       "906d the page's eject reaches the host through preload on etiuda:catalog-eject, and the page still drops its own catalog keys (sent "
       + sentCh.filter(c => c.indexOf("eject") >= 0).join(",") + ", restarts " + restarts + ")");
+    check(undoBack && !undoThrew && takenSends === 1,
+      "906g an undo of the eject names the restored catalog to the shell on etiuda:catalog-taken (sent "
+      + takenSends + (undoThrew ? ", " + undoThrew : "") + ")");
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
