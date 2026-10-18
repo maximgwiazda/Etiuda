@@ -298,10 +298,7 @@ function catalogRead(text) {
   if (opened.data && opened.data.kind === SEALED_KIND) throw new Error("an envelope sealed inside another");
   const id = opened.data && typeof opened.data.id === "string" ? opened.data.id : "";
   if (id && !teamOpened.has(id)) { teamOpened.add(id); persistDeskEnvelope(); }
-  try {
-    const pin = signedSha(opened.data), team = String(got.data.team), was = editionTeam.get(pin);
-    editionTeam.set(pin, was === undefined || was === team ? team : "");
-  } catch { /* nothing to pin */ }
+  try { notePinTeam(signedSha(opened.data), String(got.data.team)); } catch { /* nothing to pin */ }
   return opened;
 }
 /* The text a route hands the page: the catalog inside an envelope this desk opens, else the file exactly as read. */
@@ -1817,6 +1814,31 @@ function teamCovering(root, catalogId) {
   return !!pin && pin.keyId === doc.lead.keyId && pin.public === doc.lead.public && Array.isArray(doc.catalogs)
     && doc.catalogs.map(String).indexOf(catalogId) >= 0 ? doc : null;
 }
+/* True where this folder holds the same pin in envelopes of two teams, so a seal would be guessing
+   which team the edition belongs to. A second team met only in another folder is not this. */
+function pinsTorn(root, pin) {
+  const held = editionTeams.get(pin);
+  if (!held || held.size < 2) return false;
+  let seen = "";
+  for (const f of ecFilesIn(root)) {
+    const t = envelopeTeam(f, pin);
+    if (!t) continue;
+    if (!seen) seen = t;
+    else if (t !== seen) return true;
+  }
+  return false;
+}
+function envelopeTeam(file, pin) {
+  let data;
+  try { data = JSON.parse(fs.readFileSync(file, "utf8")); } catch { return ""; }
+  if (!data || typeof data !== "object" || data.kind !== SEALED_KIND) return "";
+  const inner = teamOpen(data);
+  if (inner === null) return "";
+  try {
+    const opened = catalogPayload(inner);
+    return opened.data && signedSha(opened.data) === pin ? String(data.team) : "";
+  } catch { return ""; }
+}
 /* The newest key this desk keeps, as {team, epoch, key, plain}, for the one team whose envelope held the edition a file grew from
    (`pin`), where that team also covers the catalog at the folder written to; else null. An edition not opened in this run
    is looked for among the folder's catalogs first. A desk the covering file leaves off its roster is out, at any epoch.
@@ -1828,6 +1850,7 @@ function sealFor(catalogId, pin, root) {
   const asked = String(pin || "");
   if (asked && !editionTeam.has(asked)) ecFilesIn(root).forEach(f => ecFacts(f, ""));
   let team = asked ? (editionTeam.get(asked) || "") : "";
+  if (asked && (!team || pinsTorn(root, asked))) return null;
   let cover = team ? teamCovering(root, catalogId) : null;
   /* An empty pin asks for the folder's team, and only where that file lists the catalog and seals its exports. */
   if (!asked) {
@@ -2259,7 +2282,16 @@ const teamOpened = new Set();                  // catalog ids this desk has open
 const teamSeen = new Set();                    // teams whose pinned lead key the agent has been shown, kept in the desk envelope
 const teamBarred = new Set();                  // teams whose lead the agent forgot: no first admission but by an answered request
 let teamLeft = {};                             // of those, a team the agent left with Leave this team -> when, as an ISO date
-const editionTeam = new Map();                 // an opened edition's pin -> the team whose envelope held it, "" if two did; this run only
+const editionTeam = new Map();                 // an opened edition's pin -> the first team whose envelope held it; this run only
+const editionTeams = new Map();                // pin -> every team whose envelope held it; this run only
+/* A later envelope of the same pin joins editionTeams and leaves the first team in place. */
+function notePinTeam(pin, team) {
+  let held = editionTeams.get(pin);
+  if (!held) editionTeams.set(pin, held = new Set());
+  held.add(team);
+  const was = editionTeam.get(pin);
+  if (was === undefined || was === team) editionTeam.set(pin, team);
+}
 let teamStamp = "";                            // what the team file, the ring and the box were when last heeded
 const teamSaid = new Set();
 /* Whether a team file is whole under the lead key it names, which is what the engine's v2TeamSigState says. */
@@ -3266,6 +3298,10 @@ function forgetLead(team, left) {
   teamBarred.add(team);
   if (left === true) teamLeft[team] = new Date().toISOString(); else delete teamLeft[team];
   for (const [pin, t] of Array.from(editionTeam)) if (t === team) editionTeam.delete(pin);
+  for (const [pin, held] of Array.from(editionTeams)) {
+    held.delete(team);
+    if (held.size === 0) editionTeams.delete(pin);
+  }
   ecFactsRead.clear();
   teamStamp = "";
   persistDeskEnvelope();

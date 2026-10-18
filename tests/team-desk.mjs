@@ -31,7 +31,7 @@ const nodeRequire = createRequire(import.meta.url);
    this leg passed only because no machine policy and no proxy were set on the machine that ran it. Before the shell loads. */
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 49;
+const EXPECTED = 53;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -71,7 +71,7 @@ function loadDesk(ud, flaky) {
   };
   process.env.XDG_CURRENT_DESKTOP = "GNOME"; /* so the shell's Linux keyring switch (tests/shell-office.mjs 14) stays out, on any machine */
   const api = new Function("require", "__dirname", "__filename", "module", "exports", "console",
-    SRC + "\nreturn { " + EXPOSE.join(", ") + " };")(n => (n === "electron" ? electron : nodeRequire(n)),
+    SRC + "\nreturn { " + EXPOSE.join(", ") + ", teamOf: pin => { const v = editionTeam.get(String(pin || '')); return v === undefined ? null : String(v); } };")(n => (n === "electron" ? electron : nodeRequire(n)),
     path.join(APP, "shell"), path.join(APP, "shell", "main.js"), { exports: {} }, {}, quiet);
   const ask = (ch, ...args) => Promise.resolve(invoke[ch](eventFor(), ...args));
   const ipc = (ch, ...args) => { const e = eventFor(); on[ch](e, ...args); return e.returnValue; };
@@ -484,6 +484,76 @@ try {
       && said(viaPage) === said([{ name: "Page.ec", ok: true, sealed: true }, { name: "Page.ec", ok: true, sealed: false }]),
       "14aq the page's save hands the host the catalog an export was made from, as {id, sha} and nothing else, or null, and"
       + " reads back whether the host sealed it: " + said(got) + ", " + said(viaPage));
+
+    /* The same inner text, sealed for a second team, read in this run. The pin's team is the shell's own map. */
+    {
+      const QUAY = folder("quay"), BERTH = folder("berth");
+      const Q = newDesk("quaydesk", QUAY);
+      const meQ = await Q.ask("etiuda:branch-identity", true);
+      fs.writeFileSync(path.join(QUAY, "etiuda-ring.json"), JSON.stringify(ring), "utf8");
+      fs.writeFileSync(path.join(BERTH, "etiuda-ring.json"), JSON.stringify(ring), "utf8");
+      const TB = "t-" + crypto.randomBytes(8).toString("hex"), KB = crypto.randomBytes(32);
+      put(QUAY, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 1, roster: [entry(meQ, K1, 1)], exportsSealed: true })));
+      put(QUAY, "lamps.ec", seal(K1, 1, A2));
+      const openedQ = await read(Q, "lamps.ec");
+      const pinQ = (await row(Q, "lamps.ec") || {}).sha || "";
+      const SAVEQ = folder("quay-save");
+      const prevSave = process.env.ETIUDA_TEST_SAVE_AS;
+      process.env.ETIUDA_TEST_SAVE_AS = SAVEQ;
+      const body = "Good day, Quay board.";
+      const madeQ = text(catalog("lamp-export", 4, "Quay board", "2026-10-04"));
+      const exportQ = async (name, from) => {
+        await Q.ask("etiuda:choose-catalog-save", "Export", name, "Catalogs");
+        const r = await Q.ask("etiuda:write-catalog-save", madeQ, from);
+        const at = path.join(SAVEQ, name);
+        return { r: r, text: fs.existsSync(at) ? fs.readFileSync(at, "utf8") : null };
+      };
+      const fromQ = { id: "lamp-shop", sha: pinQ };
+      const beforeQ = await exportQ("Before.ec", fromQ);
+      let beforeEnv = {};
+      try { beforeEnv = JSON.parse(beforeQ.text) || {}; } catch { beforeEnv = {}; }
+      const beforeOpen = beforeEnv.kind === "etiuda-sealed" ? D1.api.openSealed(K1, beforeEnv) : null;
+      check(openedQ === A2.trim() && Q.api.teamOf(pinQ) === TEAM && beforeEnv.team === TEAM && beforeEnv.epoch === 1
+        && beforeOpen === madeQ && (beforeQ.text || "").indexOf(body) < 0,
+        "14as THE CONTROL: before a second team's envelope, the export is sealed for the first team and the pin's team is"
+        + " that team: " + said(beforeQ.r) + ", team " + beforeEnv.team + ", pin " + Q.api.teamOf(pinQ));
+      put(BERTH, "etiuda-team.json", JSON.stringify(teamFile({ team: TB, epoch: 1, roster: [entry(meQ, KB, 1, TB)], exportsSealed: true })));
+      put(BERTH, "lamps.ec", seal(KB, 1, A2, TB));
+      const pointQ = dir => {
+        const e = Q.envelope();
+        e.keys = Object.assign({}, e.keys, { eCatalogFolder: dir });
+        fs.writeFileSync(path.join(Q.ud, "desk.json"), JSON.stringify(e), "utf8");
+        Q.ipc("etiuda:desk");
+      };
+      pointQ(BERTH);
+      const readB = await read(Q, "lamps.ec");
+      const pinAfter = Q.api.teamOf(pinQ);
+      pointQ(QUAY);
+      const afterQ = await exportQ("After.ec", fromQ);
+      let afterEnv = {};
+      try { afterEnv = JSON.parse(afterQ.text) || {}; } catch { afterEnv = {}; }
+      const afterOpen = afterEnv.kind === "etiuda-sealed" ? D1.api.openSealed(K1, afterEnv) : null;
+      const byB = afterEnv.kind === "etiuda-sealed" ? D1.api.openSealed(KB, afterEnv) : null;
+      check(readB === A2.trim() && pinAfter === TEAM && afterEnv.team === TEAM && afterOpen === madeQ && byB === null,
+        "14at after a second team's envelope of the same inner text, the pin's team stays the first team and the export"
+        + " is still sealed for it: pin " + JSON.stringify(pinAfter) + ", " + said(afterQ.r) + ", team " + afterEnv.team
+        + ", the second team's key opens it " + (byB ? "yes" : "no"));
+      check(!!afterQ.text && afterQ.text !== madeQ && afterQ.text.indexOf(body) < 0 && afterEnv.kind === "etiuda-sealed",
+        "14au an export after that second envelope is not the catalog in the clear: the body "
+        + (afterQ.text && afterQ.text.indexOf(body) >= 0 ? "is in the file" : "is not in the file"));
+      put(QUAY, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 1, roster: [entry(meQ, K1, 1)], catalogs: ["tea-room"], exportsSealed: true })));
+      const refusedQ = await exportQ("Uncovered.ec", fromQ);
+      const refusedSaid = Q.said.some(s => s.indexOf("cannot seal") >= 0);
+      put(QUAY, "etiuda-team.json", JSON.stringify(teamFile({ epoch: 1, roster: [entry(meQ, K1, 1)], exportsSealed: true })));
+      const stillQ = await exportQ("Still.ec", fromQ);
+      let stillEnv = {};
+      try { stillEnv = JSON.parse(stillQ.text) || {}; } catch { stillEnv = {}; }
+      process.env.ETIUDA_TEST_SAVE_AS = prevSave;
+      check(said(refusedQ.r) === said({ name: "Uncovered.ec", ok: false, sealed: true }) && refusedQ.text === null && refusedSaid
+        && stillEnv.kind === "etiuda-sealed" && stillEnv.team === TEAM,
+        "14av a catalog the team file does not list is refused, and the catalog the first team covers still exports sealed:"
+        + " " + said(refusedQ.r) + ", then " + said(stillQ.r) + ", team " + stillEnv.team);
+    }
   }
 
   /* ---- the folder's team file no longer lists the catalog: no team covers it where the file is written ---------- */
