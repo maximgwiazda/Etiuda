@@ -298,6 +298,8 @@ function createTarget(limits) {
       return B.seal(opts);
     },
     acceptBlob(input) { return prog.acceptBlob(input); },
+    /* The channel's own receipt. Not model.cjs: a forward there would pass slice 2 without the channel doing it. */
+    acceptDeskFile(input) { return prog.acceptBlob(input); },
     loadTeamFile(doc) { return prog.loadTeamFile(doc); },
     showFreshness(input) { return prog.showFreshness(input); },
     /* The program's catch-up through the relay as built: the list under this session, each blob it does not hold fetched,
