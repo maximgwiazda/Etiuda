@@ -2,8 +2,10 @@
 #
 # Dispatch only. A push or a pull request does not run this, and a fork cannot start
 # it. The job checks out the named sha, so the workflow on main can run a commit
-# that does not contain this file. When that commit has no tools/ci-legs.mjs, the
-# runner file is taken from the workflow's own commit.
+# that does not contain this file. The runner's two files, tools/ci-legs.mjs and
+# tools/ci-legs-decide.cjs, always come from the workflow's own commit, over whatever
+# the commit under test carries: the instrument is main's, so a build never judges
+# itself with a runner it changed, and an older commit without them still runs.
 #
 # A red leg does not fail the run. The leg step continues on error, and the runner
 # exits 0 when every asked leg was recorded. The next step fails the job only when
@@ -11,7 +13,7 @@
 # job's colour is not the verdict. The summary's first line is, per OS.
 #
 # ETIUDA_FIXTURES is never set. A catalog, the name list and a secret are not handed
-# to a runner. ETIUDA_WINDOWS is set inside tools/ci-legs.mjs, on the child of a
+# to a runner. ETIUDA_WINDOWS is set inside tools/ci-legs-decide.cjs, on the child of a
 # window leg only, on the Windows runner only, and only when windows_date equals the
 # date tests/engine.js's window wall computed for that process.
 #
@@ -85,13 +87,13 @@ jobs:
           node-version: "22"
           cache: npm
 
-      - name: runner file, when the commit under test does not carry it
+      - name: the runner's files, always the workflow's own
         shell: bash
         run: |
-          if [ ! -f tools/ci-legs.mjs ]; then
-            git fetch --depth 1 origin "$GITHUB_SHA"
-            git show FETCH_HEAD:tools/ci-legs.mjs > tools/ci-legs.mjs
-          fi
+          git fetch --depth 1 origin "$GITHUB_SHA"
+          for f in tools/ci-legs.mjs tools/ci-legs-decide.cjs; do
+            git show "FETCH_HEAD:$f" > "$f"
+          done
 
       - name: electron binary, only when a window leg was asked
         id: elec
