@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 87;
+const EXPECTED = 89;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1927,6 +1927,62 @@ try {
         && after.folder === yard && html.indexOf("Lamp lead&#39;s team") < 0 && html.indexOf('<div class="set-label">Team<small>') >= 0,
       "15bv a handover moves the pin to another lead, and the name the invitation gave the former lead goes with it, so Settings"
       + " says Team: " + JSON.stringify([before && before.lead, after && after.lead, after && after.print]));
+  });
+
+  /* A later offer, and Escape, each end the leave the way the wait does. 15ch presses Undo or
+     lets the wait lapse, and 15br lets the wait lapse, so neither of these two endings is what they see. */
+  const offeredLeave = async (tag) => {
+    const yardR = folder("end-yard-" + tag);
+    const D = await deskWith("end-" + tag, folder("end-own-" + tag));
+    const meR = await D.ask("etiuda:branch-identity", true);
+    const blob = inviteBlob({ team: TEAM, folder: yardR, lead: lampLead, secret: newSecret() });
+    await D.join("invite", blob, "Nia", codeFor(blob));
+    const KR = crypto.randomBytes(32);
+    put(yardR, "etiuda-team.json", teamAt(1, [entry(me2, KR, 1), entry(meR, KR, 1)]));
+    put(yardR, "lamps.ec", P.sealCatalog(KR, TEAM, 1, A1));
+    await D.join("state");
+    await pageOn(D);
+    ST.lsSet("eUiLang", "en");
+    const SET = await import(MOD("settings.js"));
+    const drawn = /<button[^>]*data-leave-team="([^"]+)"[^>]*>Leave this team</.exec(SET.settingsBodyHtml());
+    return { D: D, SET: SET, drawn: drawn };
+  };
+  await legTry("15r3", async () => {
+    const R = await offeredLeave("later");
+    const UL = await import(MOD("ui-lang.js"));
+    const undoDoc = installUndoDoc(), clock = armUndoClock();
+    let held = false, left = false;
+    try {
+      const btn = pressLeave(R.SET, R.drawn);
+      if (btn.onclick) btn.onclick();
+      held = !!(R.D.envelope().teamPins || {})[TEAM];
+      UL.offerUndo("Settings reset", () => {});
+      await new Promise(r => setTimeout(r, 60));
+      left = leftShape(R.D.envelope());
+      const bub = document.querySelector("#eUndo");
+      const u = bub && bub.querySelector("#eUndoBtn");
+      if (u && u.onclick) u.onclick();
+    } finally { clock.restore(); undoDoc.restore(); }
+    check(held && left, "15r3 a later offer taking the bubble completes the leave, the pin and keys gone, the team barred and a leave date kept: "
+      + JSON.stringify({ held: held, left: left }));
+  });
+  await legTry("15r4", async () => {
+    const R = await offeredLeave("escape");
+    const undoDoc = installUndoDoc(), clock = armUndoClock();
+    let held = false, left = false, keyed = false;
+    try {
+      const btn = pressLeave(R.SET, R.drawn);
+      if (btn.onclick) btn.onclick();
+      held = !!(R.D.envelope().teamPins || {})[TEAM];
+      const bub = document.querySelector("#eUndo");
+      const fns = (bub && bub.listeners && bub.listeners.keydown) || [];
+      keyed = fns.length > 0;
+      fns.forEach(fn => fn({ key: "Escape", preventDefault() {}, stopPropagation() {} }));
+      await new Promise(r => setTimeout(r, 60));
+      left = leftShape(R.D.envelope());
+    } finally { clock.restore(); undoDoc.restore(); }
+    check(held && keyed && left, "15r4 Escape on the offer completes the leave, the pin and keys gone, the team barred and a leave date kept: "
+      + JSON.stringify({ held: held, keyed: keyed, left: left }));
   });
   document.body = bodyWas;
   if (langBefore == null) ST.lsDel("eUiLang"); else ST.lsSet("eUiLang", langBefore);
