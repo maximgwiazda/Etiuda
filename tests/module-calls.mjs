@@ -4679,6 +4679,240 @@ const CARD_B = {
   }
 }
 
+/* ------------------------------------------------------------------ editors.js (board 908, Desk 1)
+   The category editor and intent editor follow CONTENT_LANGS rather than assuming en and pl:
+   one language, two that are neither en nor pl, three or more, and the en-and-pl control. */
+{
+  const ED = await import(MOD("editors.js"));
+  const CM = await import(MOD("content-model.js"));
+  const IC = await import(MOD("icons.js"));
+  const PK = await import(MOD("pack.js"));
+  const CS = await import(MOD("cat-set.js"));
+  const CI = await import(MOD("cat-identity.js"));
+  const AS = await import(MOD("app-state.js"));
+  const H = await import(MOD("hooks.js"));
+  const Dom = await import(MOD("dom.js"));
+  const hadDoc = globalThis.document, hadRaf = globalThis.requestAnimationFrame, hadSt = globalThis.setTimeout, hadCs = globalThis.getComputedStyle, hadLoc = globalThis.location;
+  const hadLangs = CM.CONTENT_LANGS.slice(), hadBaseCats = Object.assign({}, PK.BASE_CATS), hadCats = Object.assign({}, CM.CATS);
+  const hadCatOrder = AS.catOrder.slice(), hadCounts = Object.assign({}, AS.cardCounts);
+  const hadByLang = Object.assign({}, IC.CAT_LABELS_BY_LANG);
+  const hadPack = PK.packSnapshot();
+  const STUBS = ["openManage", "rebuildCards", "drawPillsCore", "render", "drawIntentRail", "syncSampleMark", "updateIntentPlaceholder", "syncAddFab", "syncNextDock"];
+  const hadHooks = STUBS.map(k => [k, Object.prototype.hasOwnProperty.call(H.hooks, k), H.hooks[k]]);
+  const cls = s => ({ s, add: c => s.add(c), remove: c => s.delete(c), contains: c => s.has(c),
+    toggle: (c, f) => { const w = f === undefined ? !s.has(c) : !!f; if (w) s.add(c); else s.delete(c); return w; } });
+  const un = s => String(s || "").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  const mkNode = (extra = {}) => {
+    const s = new Set((extra.className || "").split(/\s+/).filter(Boolean));
+    return Object.assign({ tag: "DIV", id: "", value: "", placeholder: "", title: "", innerHTML: "", textContent: "",
+      disabled: false, hidden: false, attrs: {}, dataset: {}, style: { setProperty() {}, removeProperty() {} }, classList: cls(s),
+      getAttribute(k) { return k === "class" ? [...s].join(" ") : this.attrs[k]; },
+      setAttribute(k, v) { this.attrs[k] = String(v); if (k === "title") this.title = String(v); },
+      removeAttribute(k) { delete this.attrs[k]; },
+      addEventListener(k, fn) { (this.heard = this.heard || {})[k] = (this.heard[k] || []).concat(fn); },
+      removeEventListener() {}, querySelector: () => null, querySelectorAll: () => [], insertBefore() {}, appendChild() {},
+      closest(sel) { return sel === "[data-ic]" && this.attrs["data-ic"] != null ? this
+        : sel === "[data-col]" && this.attrs["data-col"] != null ? this : null; },
+      contains: () => false, focus() { globalThis.document.activeElement = this; }, select() {}, remove() { this.gone = true; },
+      getBoundingClientRect: () => ({ top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }) }, extra);
+  };
+  const byId = {}, nodes = [], made = [];
+  const toastEl = mkNode({ id: "toast" }), modalEl = mkNode({ id: "modal", hidden: true }), body = mkNode({ tag: "BODY" });
+  const listEl = mkNode({ id: "list" }), pillsEl = mkNode({ id: "pills" }), intentEl = mkNode({ id: "intent" });
+  body.appendChild = n => { made.push(n); return n; };
+  const modalCard = mkNode({ id: "modalCard" });
+  const keepIds = new Set(["#toast", "#modal", "#modalCard", "#list", "#pills", "#intent"]);
+  Object.defineProperty(modalCard, "innerHTML", {
+    get() { return this._h || ""; },
+    set(h) {
+      this._h = String(h || "");
+      Object.keys(byId).forEach(k => { if (!keepIds.has(k)) delete byId[k]; });
+      nodes.length = 0;
+      const re = /<(input|textarea|select|button|div|span|h2)\b([^>]*)>/gi;
+      for (const m of this._h.matchAll(re)) {
+        const tag = m[1].toUpperCase(), raw = m[2], attrs = {};
+        for (const a of raw.matchAll(/([a-zA-Z0-9_-]+)="([^"]*)"/g)) attrs[a[1]] = un(a[2]);
+        const n = mkNode({ tag, id: attrs.id || "", value: attrs.value || "", placeholder: attrs.placeholder || "",
+          title: attrs.title || "", className: attrs.class || "", disabled: /\bdisabled\b/.test(raw), attrs,
+          dataset: { l: attrs["data-l"], ic: attrs["data-ic"], col: attrs["data-col"], v: attrs["data-v"] } });
+        nodes.push(n);
+        if (n.id) byId["#" + n.id] = n;
+        if (n.classList.contains("lang-tabs")) byId[".lang-tabs"] = n;
+      }
+    }
+  });
+  modalCard.querySelector = sel => sel === "h2" ? nodes.find(x => x.tag === "H2") || null
+    : sel === ".mf-reset" ? nodes.find(x => x.classList.contains("mf-reset")) || null
+    : sel === "#cePrev .pill" ? byId["#cePrev"] || null : byId[sel] || null;
+  modalCard.querySelectorAll = sel => sel === "[data-ic]" ? nodes.filter(x => x.attrs["data-ic"] != null)
+    : sel === "[data-col]" ? nodes.filter(x => x.attrs["data-col"] != null)
+    : sel === "input,textarea,select" ? nodes.filter(x => ["INPUT", "TEXTAREA", "SELECT"].includes(x.tag))
+    : sel === ".on[data-v]" ? nodes.filter(x => x.classList.contains("on") && x.attrs["data-v"] != null)
+    : sel === "[data-v]" ? nodes.filter(x => x.attrs["data-v"] != null) : [];
+  byId["#toast"] = toastEl; byId["#modal"] = modalEl; byId["#modalCard"] = modalCard;
+  byId["#list"] = listEl; byId["#pills"] = pillsEl; byId["#intent"] = intentEl;
+  globalThis.document = {
+    body, activeElement: body,
+    querySelector: sel => sel === ".lang-tabs button.on"
+      ? nodes.find(x => x.tag === "BUTTON" && x.attrs["data-l"] != null && x.classList.contains("on")) || null
+      : sel === "#eUndo" ? made.filter(n => n.id === "eUndo" && !n.gone).pop() || null
+      : byId[sel] || null,
+    querySelectorAll: () => [],
+    getElementById: id => byId["#" + id] || made.filter(n => n.id === id && !n.gone).pop() || null,
+    createRange: () => ({}),
+    createElement: () => { const btn = mkNode(); return mkNode({ btn, getContext: () => ({}), querySelector: s => (s === "#eUndoBtn" ? btn : null), insertBefore() {}, appendChild() {} }); },
+    addEventListener() {}, contains: () => true,
+    documentElement: { style: { setProperty() {}, removeProperty() {} }, classList: cls(new Set()), addEventListener() {} }
+  };
+  globalThis.requestAnimationFrame = fn => { fn(); return 0; };
+  globalThis.setTimeout = (fn) => { fn(); return 0; };
+  globalThis.getComputedStyle = () => ({ borderLeftWidth: "0", paddingLeft: "0", borderRightWidth: "0", paddingRight: "0" });
+  globalThis.location = { protocol: "https:", href: "https://etiuda.local/" };
+  STUBS.forEach(k => { H.hooks[k] = () => {}; });
+  Dom.grabDom();
+
+  const setupCat = (langs, primaryLabel, byLang) => {
+    PK.resetPack();
+    Object.keys(PK.BASE_CATS).forEach(k => delete PK.BASE_CATS[k]);
+    Object.keys(CM.CATS).forEach(k => delete CM.CATS[k]);
+    PK.BASE_CATS.gen = primaryLabel;
+    CM.CATS.gen = primaryLabel;
+    IC.setCatalogCatLabels(byLang || {});
+    CM.setContentLangs(langs);
+    AS.setCatOrder(["gen"]);
+    Object.keys(AS.cardCounts).forEach(k => delete AS.cardCounts[k]);
+  };
+  const liveButtons = () => ["#ceAlways", "#ceIcons", "#ceCols", "#ceCancel", "#ceDelete", "#ceReset", "#ceSave"]
+    .every(id => byId[id] && typeof byId[id].onclick === "function");
+  const prevText = () => {
+    const m = /<span class="pill-lab">([^<]*)<\/span>/.exec((byId["#cePrev"] && byId["#cePrev"].innerHTML) || "");
+    return m ? un(m[1]) : "";
+  };
+  const switchTab = code => {
+    nodes.filter(x => x.tag === "BUTTON" && x.attrs["data-l"] != null)
+      .forEach(b => b.classList.toggle("on", b.attrs["data-l"] === code));
+  };
+
+  try {
+    check("editors.js", "908ce1 on a one-language catalog the category editor opens with every button live, focuses its input, previews edits, saves them, and resets to the catalog",
+      () => {
+        setupCat(["de"], "Allgemein", {});
+        ED.openCategoryEditor("gen", true);
+        const inp = byId["#ce_name_de"];
+        const opened = [liveButtons(), !!inp, !byId["#ce_name_en"], !byId["#ce_name_pl"],
+          inp && inp.value, inp && inp.placeholder, globalThis.document.activeElement === inp, prevText(), byId["#ceReset"].disabled].join("|");
+        inp.value = "Grundlagen";
+        inp.oninput();
+        const previewed = prevText();
+        byId["#ceSave"].onclick();
+        const saved = [PK.pack.catLabels.gen, CM.CATS.gen, CI.categoryIsOverridden("gen"), byId["#ceReset"].disabled].join("|");
+        byId["#ceReset"].onclick();
+        const reset = [PK.pack.catLabels.gen || "", CM.CATS.gen, byId["#ce_name_de"].value, byId["#ceReset"].disabled].join("|");
+        return eq([opened, previewed, saved, reset].join(" || "),
+          "true|true|true|true|Allgemein||true|Allgemein|true || Grundlagen || Grundlagen|Grundlagen|true|false || |Allgemein|Allgemein|true");
+      });
+
+    check("editors.js", "908ce2 on a two-language catalog that is neither en nor pl, each language's name is shown, previewed, edited, saved and reset as written",
+      () => {
+        setupCat(["de", "uk"], "Allgemein", { uk: { gen: "Загальне" } });
+        ED.openCategoryEditor("gen", true);
+        const de = byId["#ce_name_de"], uk = byId["#ce_name_uk"];
+        const opened = [liveButtons(), de && de.value, de && de.placeholder, uk && uk.value, uk && uk.placeholder,
+          typeof (de && de.oninput) === "function" && typeof (uk && uk.oninput) === "function", globalThis.document.activeElement === de].join("|");
+        switchTab("uk");
+        uk.oninput();
+        const prevUk = prevText();
+        uk.value = "";
+        uk.oninput();
+        const prevFallback = prevText();
+        de.value = "Grundlagen";
+        uk.value = "Основи";
+        uk.oninput();
+        const prevEdited = prevText();
+        byId["#ceSave"].onclick();
+        ED.openCategoryEditor("gen", true);
+        const reopened = [byId["#ce_name_de"].value, byId["#ce_name_uk"].value, CI.categoryIsOverridden("gen"),
+          PK.pack.catLabels.gen, (PK.pack["catLabels:uk"] || {}).gen].join("|");
+        byId["#ceReset"].onclick();
+        const reset = [byId["#ce_name_de"].value, byId["#ce_name_uk"].value, CI.categoryIsOverridden("gen")].join("|");
+        return eq([opened, prevUk, prevFallback, prevEdited, reopened, reset].join(" || "),
+          "true|Allgemein||Загальне|Allgemein|true|true || Загальне || Allgemein || Основи || Grundlagen|Основи|true|Grundlagen|Основи || Allgemein|Загальне|false");
+      });
+
+    check("editors.js", "908ce3 on a catalog of three languages, the third language shows its own name rather than Polish, previews, saves and resets alongside the first two",
+      () => {
+        setupCat(["en", "pl", "uk"], "General", { pl: { gen: "Ogólne" }, uk: { gen: "Загальне" } });
+        ED.openCategoryEditor("gen", true);
+        const en = byId["#ce_name_en"], pl = byId["#ce_name_pl"], uk = byId["#ce_name_uk"];
+        const opened = [liveButtons(), en && en.value, pl && pl.value, uk && uk.value, uk && uk.placeholder,
+          typeof (uk && uk.oninput) === "function"].join("|");
+        switchTab("uk");
+        uk.value = "Основи";
+        uk.oninput();
+        const prevUk = prevText();
+        en.value = "Core";
+        pl.value = "Podstawy";
+        byId["#ceSave"].onclick();
+        ED.openCategoryEditor("gen", true);
+        const reopened = [byId["#ce_name_en"].value, byId["#ce_name_pl"].value, byId["#ce_name_uk"].value,
+          PK.pack.catLabels.gen, PK.pack.catLabelsPl.gen, (PK.pack["catLabels:uk"] || {}).gen].join("|");
+        byId["#ceReset"].onclick();
+        const reset = [byId["#ce_name_en"].value, byId["#ce_name_pl"].value, byId["#ce_name_uk"].value, CI.categoryIsOverridden("gen")].join("|");
+        return eq([opened, prevUk, reopened, reset].join(" || "),
+          "true|General|Ogólne|Загальне|General|true || Основи || Core|Podstawy|Основи|Core|Podstawy|Основи || General|Ogólne|Загальне|false");
+      });
+
+    check("editors.js", "908ce4 CONTROL, green before and after: an en and pl catalog opens, previews, saves and reverts exactly as today, into catLabels and catLabelsPl alone",
+      () => {
+        setupCat(["en", "pl"], "General", { pl: { gen: "Ogólne" } });
+        ED.openCategoryEditor("gen", true);
+        const en = byId["#ce_name_en"], pl = byId["#ce_name_pl"];
+        const opened = [liveButtons(), en.value, en.placeholder, pl.value, pl.placeholder,
+          globalThis.document.activeElement === en, prevText()].join("|");
+        en.value = "Core"; pl.value = "Podstawy";
+        byId["#ceSave"].onclick();
+        const saved = [PK.pack.catLabels.gen, PK.pack.catLabelsPl.gen,
+          Object.keys(PK.pack).filter(k => /^catLabels/.test(k)).sort().join(",")].join("|");
+        pl.value = "Ogólne";
+        byId["#ceSave"].onclick();
+        const revertedPl = String(PK.pack.catLabelsPl.gen || "");
+        return eq([opened, saved, revertedPl].join(" || "),
+          "true|General||Ogólne|General|true|General || Core|Podstawy|catLabels,catLabelsPl || ");
+      });
+
+    check("editors.js", "908ce5 the intent editor focuses the first declared language's clause, on a catalog without en as on one with it",
+      () => {
+        setupCat(["de", "uk"], "Allgemein", { uk: { gen: "Загальне" } });
+        globalThis.document.activeElement = globalThis.document.body;
+        ED.openIntentEditor(null, false);
+        const focusDe = globalThis.document.activeElement && globalThis.document.activeElement.id;
+        setupCat(["en", "pl"], "General", { pl: { gen: "Ogólne" } });
+        globalThis.document.activeElement = globalThis.document.body;
+        ED.openIntentEditor(null, false);
+        const focusEn = globalThis.document.activeElement && globalThis.document.activeElement.id;
+        return eq([focusDe, focusEn].join(" || "), "ie_clause_de || ie_clause_en");
+      });
+  } finally {
+    PK.packUndoFor(hadPack)();
+    Object.keys(PK.BASE_CATS).forEach(k => delete PK.BASE_CATS[k]);
+    Object.assign(PK.BASE_CATS, hadBaseCats);
+    Object.keys(CM.CATS).forEach(k => delete CM.CATS[k]);
+    Object.assign(CM.CATS, hadCats);
+    IC.setCatalogCatLabels(hadByLang);
+    CM.setContentLangs(hadLangs);
+    AS.setCatOrder(hadCatOrder);
+    Object.keys(AS.cardCounts).forEach(k => delete AS.cardCounts[k]);
+    Object.assign(AS.cardCounts, hadCounts);
+    hadHooks.forEach(([k, own, v]) => { if (own) H.hooks[k] = v; else delete H.hooks[k]; });
+    globalThis.requestAnimationFrame = hadRaf;
+    globalThis.setTimeout = hadSt;
+    if (hadCs === undefined) delete globalThis.getComputedStyle; else globalThis.getComputedStyle = hadCs;
+    if (hadLoc === undefined) delete globalThis.location; else globalThis.location = hadLoc;
+    if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+    if (hadDoc !== undefined) Dom.grabDom();
+  }
+}
+
 /* ------------------------------------------------------------------ the count, and this
    gate's own liveness. A gate whose covered set silently fell to a handful would still print
    a green line, so the floor is frozen here and a drop reddens the file. */

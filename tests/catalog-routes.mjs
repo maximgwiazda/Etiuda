@@ -307,6 +307,29 @@ check("18 control: the plain payload carries none of the new keys through either
   check("24 and every card of it keeps the keys it always had, in the order it always had them",
     !!bare && bare.cards.every(c => Object.keys(c).join(",") === "id,shelf,title,body,bodyShape"),
     bare ? Object.keys(bare.cards[0]).join(",") : "nothing");
+  /* A shelf name the category editor saved in a language past the primary, and not Polish, leaves in
+     the export as written; one it was not given leaves as the catalog wrote it. */
+  const triLang = () => Object.assign(doc(), {
+    langs: [{ code: "de", label: "DE" }, { code: "uk", label: "UK" }, { code: "nl", label: "NL" }],
+    tags: [{ id: "t-op", kind: "shelf", label: { de: "Anfang", uk: "Початок", nl: "Opening" } },
+           { id: "t-cl", kind: "shelf", label: { de: "Ende", uk: "Кінець", nl: "Afsluiting" } }],
+    cards: doc().cards.map((c, i) => Object.assign({}, c, { shelf: i ? "t-cl" : "t-op",
+      title: { de: c.title.en, uk: c.title.en, nl: c.title.en }, body: { de: c.body.en, uk: c.body.en, nl: c.body.en } })) });
+  const renamed = await (async () => {
+    const cat = CT.parseCatalogFile(JSON.stringify(triLang()));
+    ST.lsSet(CT.E_CATALOG_STORE, JSON.stringify(cat), true);
+    CT.eApplyCatalog(cat);
+    PK.resetPack();
+    PK.pack.baseCards = JSON.parse(JSON.stringify(cat.cards));
+    PK.pack["catLabels:uk"] = { "t-op": "Вступ" };
+    AP.setCards(cat.cards.slice());
+    written = null;
+    await CF.exportCatalog();
+    return written === null ? null : JSON.parse(written);
+  })();
+  const labels = renamed ? renamed.tags.map(t => t.id + "=" + [t.label.de, t.label.uk, t.label.nl].join("/")).join(" ") : "nothing";
+  check("24a a shelf renamed at this desk in a third language leaves in the export as written, and the rest as the catalog wrote them",
+    labels === "t-op=Anfang/Вступ/Opening t-cl=Ende/Кінець/Afsluiting", labels);
   /* A RETIRED CARD CARRIED ASLEEP (C07, choice 4a). Three editions put down one after another over one
      layer, through the real carry and the real rebuild: the card starred, edited and copied five times,
      then retired, then back. What the list holds, what the layer keeps and what an export writes. */

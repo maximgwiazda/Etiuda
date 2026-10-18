@@ -139,9 +139,9 @@ function setCatalogCatLooks(icons, colors){ CAT_ICONS_CATALOG=icons; CAT_COLORS_
 /* Shelf names in each declared language past the primary, keyed by code and then by category
    id. THE ENGINE NEVER TRANSLATES A CATEGORY NAME - it picks between names the curator wrote;
    a dictionary would overwrite a Polish curator's wording with a guess. Absent, the primary's
-   label serves. Polish keeps a named view because the screen, the personal layer and the
-   category editor all read it; the rest are carried so an export gives back what it was
-   handed, and giving them those three is board 646's next leg. */
+   label serves. Polish keeps a named view, CAT_LABELS_PL, for the sites written for the
+   founding pair; the category editor, the screen and the export read every language by its
+   code (catPackKey in cat-set.js names the personal layer's bag). */
 let CAT_LABELS_BY_LANG={}, CAT_LABELS_PL={};
 /* Handed over rather than written from outside; see setCatalogCatLooks. */
 function setCatalogCatLabels(m){

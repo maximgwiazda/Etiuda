@@ -32,7 +32,7 @@ const nodeRequire = createRequire(import.meta.url);
 const REG = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), REG);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 86;
+const EXPECTED = 87;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1479,7 +1479,8 @@ try {
      under the new key, as Studio's removal does. The shell names each team it trusts by the lead's name the invitation
      gave and the folder its file was read in, and says where the roster of the epoch accepted no longer lists a desk that
      once held a key; the page says so in place of the sealed catalog's ask. Settings shows the team by that name and folder
-     with Leave this team, which forgets the team and its keys here, keeps the catalog in use and writes nothing to the
+     with Leave this team. The click offers Undo and keeps the pin, the keys and the bar until that offer lapses; once
+     it lapses the leave forgets the team and its keys here, keeps the catalog in use and writes nothing to the
      folder. A leg whose code is missing is a red leg, not a stopped file. */
   const legTry = async (id, fn) => {
     try { await fn(); }
@@ -1588,6 +1589,129 @@ try {
       + " this lead, in English and in Polish: " + JSON.stringify(f));
   });
 
+  /* The offer's wait, read from the page rather than copied here, so a change of that wait is the same change here. */
+  const UNDO_WAIT = +((/const UNDO_MS=(\d+)/.exec(fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8")) || [])[1] || 0);
+  const LEAVE_EN = "This desk will leave this team.";
+  const LEAVE_PL = "To stanowisko opuści ten zespół.";
+  /* Pin, sealed keys, bar, the leave's day and the name the row shows. One JSON, one sha256, so "exactly" is a hash
+     and not a glance. `armed` is a pin and keys present and the team not yet barred: a hash of two empty desks matches
+     and proves nothing. */
+  const snapOf = (env, team) => {
+    const body = {
+      pin: (env.teamPins || {})[team] || null,
+      keys: (env.teamKeys || {})[team] || null,
+      bar: env.teamBarred || null,
+      left: (env.teamLeft || {})[team] || null,
+      shown: (env.teamShown || {})[team] || null
+    };
+    const text = JSON.stringify(body);
+    return { text: text, sha: crypto.createHash("sha256").update(text, "utf8").digest("hex"),
+      armed: !!(body.pin && body.keys && (env.teamBarred || []).indexOf(team) < 0 && !body.left) };
+  };
+  const leftShape = env => !(env.teamPins && env.teamPins[TEAM]) && !(env.teamKeys && env.teamKeys[TEAM])
+    && !(env.teamShown && env.teamShown[TEAM]) && (env.teamBarred || []).indexOf(TEAM) >= 0 && !!(env.teamLeft && env.teamLeft[TEAM]);
+  /* The Undo bubble, drawn on the same stand-in the rest of this file uses, with a button the offer can wire. */
+  const installUndoDoc = () => {
+    const prev = { createElement: document.createElement, body: document.body,
+      querySelector: document.querySelector, getElementById: document.getElementById };
+    const bubbles = [];
+    document.createElement = () => {
+      const btn = {};
+      const node = stubNode();
+      node.querySelector = sel => (sel === "#eUndoBtn" ? btn : null);
+      return node;
+    };
+    document.body = { classList: { contains: () => false, toggle: noop, add: noop, remove: noop },
+      appendChild: el => { bubbles.push(el); return el; } };
+    const find = () => bubbles.filter(n => n.id === "eUndo" && !n.removed).pop() || null;
+    document.querySelector = sel => (sel === "#eUndo" ? find() : null);
+    document.getElementById = id => (id === "eUndo" ? find() : null);
+    return { restore() {
+      document.createElement = prev.createElement; document.body = prev.body;
+      document.querySelector = prev.querySelector; document.getElementById = prev.getElementById;
+    } };
+  };
+  /* Records the real timers and can run the offer's own wait at once. Every other timer still fires on its own. */
+  const armUndoClock = () => {
+    const realSTO = globalThis.setTimeout, realCTO = globalThis.clearTimeout, bag = [];
+    globalThis.setTimeout = (fn, ms, ...rest) => { const id = realSTO(fn, ms, ...rest); bag.push({ id: id, fn: fn, ms: ms, dead: false }); return id; };
+    globalThis.clearTimeout = id => { bag.forEach(t => { if (t.id === id) t.dead = true; }); return realCTO(id); };
+    return {
+      lapse() {
+        const row = bag.filter(t => !t.dead && t.ms === UNDO_WAIT).pop();
+        if (!row) return false;
+        row.dead = true; realCTO(row.id); row.fn(); return true;
+      },
+      restore() {
+        bag.forEach(t => { if (!t.dead && t.ms === UNDO_WAIT) { t.dead = true; realCTO(t.id); } });
+        globalThis.setTimeout = realSTO; globalThis.clearTimeout = realCTO;
+      }
+    };
+  };
+  const pressLeave = (SET, drawn) => {
+    const btn = { getAttribute: a => (a === "data-leave-team" && drawn ? drawn[1] : null) };
+    SET.wireTeamRows({ querySelectorAll: sel => (sel === "[data-leave-team]" && drawn ? [btn] : []) });
+    return btn;
+  };
+
+  /* A desk of its own, so taking the leave back here leaves Dl's leave for 15br. */
+  await legTry("15by", async () => {
+    const undoYard = folder("undo-yard");
+    const Du2 = await deskWith("undo-leave", folder("undo-own"));
+    const meU = await Du2.ask("etiuda:branch-identity", true);
+    const undoBlob = inviteBlob({ team: TEAM, folder: undoYard, lead: lampLead, secret: newSecret() });
+    await Du2.join("invite", undoBlob, "Nia", codeFor(undoBlob));
+    const KU = crypto.randomBytes(32);
+    put(undoYard, "etiuda-team.json", teamAt(1, [entry(me2, KU, 1), entry(meU, KU, 1)]));
+    put(undoYard, "lamps.ec", P.sealCatalog(KU, TEAM, 1, A1));
+    await Du2.join("state");
+    await pageOn(Du2);
+    ST.lsSet("eUiLang", "en");
+    const SET = await import(MOD("settings.js"));
+    const html = SET.settingsBodyHtml();
+    const drawn = /<button[^>]*data-leave-team="([^"]+)"[^>]*>Leave this team</.exec(html);
+    const before = snapOf(Du2.envelope(), TEAM);
+    const undoDoc = installUndoDoc();
+    const clock = armUndoClock();
+    const f = { danger: new RegExp('<button type="button" class="btn danger" data-leave-team="' + TEAM + '">').test(html),
+      had: before.armed, offered: false, held: false, restored: false, polish: false, restoredPl: false,
+      heldAgain: false, lapsed: false, left: false };
+    try {
+      const btn = pressLeave(SET, drawn);
+      if (btn.onclick) btn.onclick();
+      const bub = document.querySelector("#eUndo");
+      const undoBtn = bub && bub.querySelector("#eUndoBtn");
+      f.offered = !!(bub && bub.innerHTML.indexOf(LEAVE_EN) >= 0 && undoBtn && undoBtn.onclick);
+      f.held = before.armed && snapOf(Du2.envelope(), TEAM).sha === before.sha;
+      if (undoBtn && undoBtn.onclick) undoBtn.onclick();
+      await new Promise(r => setTimeout(r, 30));
+      const back = snapOf(Du2.envelope(), TEAM);
+      f.restored = before.armed && back.sha === before.sha && back.text === before.text;
+      ST.lsSet("eUiLang", "pl");
+      if (btn.onclick) btn.onclick();
+      const plBub = document.querySelector("#eUndo");
+      f.polish = !!(plBub && plBub.innerHTML.indexOf(LEAVE_PL) >= 0 && plBub.innerHTML.indexOf(LEAVE_EN) < 0);
+      const plUndo = plBub && plBub.querySelector("#eUndoBtn");
+      if (plUndo && plUndo.onclick) plUndo.onclick();
+      ST.lsSet("eUiLang", "en");
+      await new Promise(r => setTimeout(r, 30));
+      f.restoredPl = snapOf(Du2.envelope(), TEAM).sha === before.sha;
+      if (btn.onclick) btn.onclick();
+      f.heldAgain = before.armed && snapOf(Du2.envelope(), TEAM).sha === before.sha;
+      f.lapsed = clock.lapse();
+      await new Promise(r => setTimeout(r, 40));
+      f.left = f.lapsed && leftShape(Du2.envelope()) && snapOf(Du2.envelope(), TEAM).sha !== before.sha;
+    } finally {
+      ST.lsSet("eUiLang", "en");
+      clock.restore();
+      undoDoc.restore();
+    }
+    check(Object.keys(f).every(k => f[k]),
+      "15by Leave this team wears danger, and one click offers Undo while the pin, the keys and the bar stay (sha256 "
+      + before.sha.slice(0, 16) + "); Undo puts that snapshot back; the offer is Polish when the desk is; once Undo"
+      + " lapses the leave bars the team and the pin and keys are gone: " + JSON.stringify(f));
+  });
+
   const barBefore = { en: "", pl: "" }, leftWindow = { from: 0, to: 0 };
   await legTry("15br", async () => {
     await pageOn(Dl);
@@ -1605,33 +1729,42 @@ try {
     const stored = JSON.stringify({ cards: [{ id: "c-leave" }] });
     ST.lsSet(CAT.E_CATALOG_STORE, stored);
     AS.setCards([{ id: "c-leave" }]);
-    const createWas = document.createElement;
-    document.createElement = () => stubNode();
+    const undoDoc = installUndoDoc();
+    const clock = armUndoClock();
     /* The button Settings draws, pressed as its screen wires it. */
     const drawn = /<button[^>]*data-leave-team="([^"]+)"[^>]*>Leave this team</.exec(SET.settingsBodyHtml());
-    const btn = { getAttribute: a => (a === "data-leave-team" && drawn ? drawn[1] : null) };
-    let wired = false;
-    const hits = await writesUnder(leaveYard, async () => {
-      SET.wireTeamRows({ querySelectorAll: sel => (sel === "[data-leave-team]" && drawn ? [btn] : []) });
-      wired = typeof btn.onclick === "function";
-      leftWindow.from = Date.now();
-      if (wired) await btn.onclick();
-      leftWindow.to = Date.now();
-    });
+    const beforeLeave = snapOf(Dl.envelope(), TEAM);
+    let wired = false, held = false, lapsed = false, hits = [];
+    try {
+      hits = await writesUnder(leaveYard, async () => {
+        const btn = pressLeave(SET, drawn);
+        wired = typeof btn.onclick === "function";
+        leftWindow.from = Date.now();
+        if (wired) btn.onclick();
+        held = beforeLeave.armed && snapOf(Dl.envelope(), TEAM).sha === beforeLeave.sha;
+        lapsed = clock.lapse();
+        await new Promise(r => setTimeout(r, 30));
+        leftWindow.to = Date.now();
+      });
+    } finally {
+      clock.restore();
+      undoDoc.restore();
+    }
     const env = Dl.envelope(), after = await Dl.join("state"), settingsAfter = SET.settingsBodyHtml();
-    const f = { wired: wired && drawn[1] === TEAM, forgot: !(env.teamPins && env.teamPins[TEAM]) && !(env.teamKeys && env.teamKeys[TEAM])
+    const f = { wired: wired && drawn[1] === TEAM, held: held, lapsed: lapsed,
+      forgot: !(env.teamPins && env.teamPins[TEAM]) && !(env.teamKeys && env.teamKeys[TEAM])
         && !(env.teamShown && env.teamShown[TEAM]) && (env.teamBarred || []).indexOf(TEAM) >= 0 && leadIn(after) === null,
       page: !TJ.teamLeads().some(l => l.team === TEAM) && settingsAfter.indexOf("data-leave-team") < 0,
       catalog: AS.cards.length === 1 && AS.cards[0].id === "c-leave" && ST.lsGet(CAT.E_CATALOG_STORE) === stored
         && JSON.stringify(Dl.envelope().keys) === keysBefore,
       folder: noteKept && snapshot(leaveYard) === withoutNote && JSON.stringify(hits) === JSON.stringify(["unlinkSync " + note]) };
-    document.createElement = createWas;
     AS.setCards([]);
     ST.lsDel(CAT.E_CATALOG_STORE);
     check(Object.keys(f).every(k => f[k]),
-      "15br Leave this team, pressed in Settings, forgets the team here, its lead's pin, its keys, its name and folder, and bars a"
-      + " first admission as Forget did; Settings lists it no more; the catalog in use stays loaded and stored; and under the"
-      + " team's folder it removes only this desk's own in-use note and writes nothing else: " + JSON.stringify(f) + " " + hits.join(","));
+      "15br Leave this team, pressed in Settings, keeps the pin, the keys and the bar until Undo lapses, and once it"
+      + " lapses forgets the team here, its lead's pin, its keys, its name and folder, and bars a first admission as"
+      + " Forget did; Settings lists it no more; the catalog in use stays loaded and stored; and under the team's"
+      + " folder it removes only this desk's own in-use note and writes nothing else: " + JSON.stringify(f) + " " + hits.join(","));
   });
 
   await legTry("15bw", async () => {

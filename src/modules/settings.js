@@ -146,10 +146,11 @@ function teamHeadNote(h){
   return t("Newest edition {E}, published {WHEN}. The team's news: {AGE}.")
     .split("{E}").join(h.edition).split("{WHEN}").join(h.published).split("{AGE}").join(headAgeWords(h.t));
 }
-/* A team as Settings shows it: the lead's name and the folder, the key the agent compared, and Leave this team, which machine
-   policy would undo and so is not offered where it names the lead. `bar` says the way back, before the press.
-   The head, where the shell has one, is a note under the name: the newest edition, when it was published, and how old
-   the news is. It never disables a control. */
+/* A team as Settings shows it: the lead's name and the folder, the key the agent compared, and Leave this team.
+   Machine policy would undo a leave, so the button is not offered where it names the lead. `bar` says the way
+   back, before the press. The button wears danger, the same class as Delete: the leave destroys the pin, the
+   sealed keys and bars the team once its Undo has lapsed. The head, where the shell has one, is a note under the
+   name: the newest edition, when it was published, and how old the news is. It never disables a control. */
 function teamRowHtml(l,status,bar){
   const notes=[l.folder?t("Folder: {FOLDER}").split("{FOLDER}").join(l.folder):"",
     l.removed?t("This team no longer includes this desk."):status,
@@ -158,13 +159,29 @@ function teamRowHtml(l,status,bar){
   return '<div class="set-row"><div class="set-label">'+esc(l.lead?t("{LEAD}'s team").split("{LEAD}").join(l.lead):t("Team"))
     +notes.filter(Boolean).map(n=>'<small>'+esc(n)+'</small>').join("")+'</div><div class="set-ctl">'
     +'<span class="e-lead-key">'+keySignHtml("studio",l.print)+'</span>'
-    +(l.policy?'':'<button type="button" class="btn" data-leave-team="'+esc(l.team)+'">'+esc(t("Leave this team"))+'</button>')
+    +(l.policy?'':'<button type="button" class="btn danger" data-leave-team="'+esc(l.team)+'">'+esc(t("Leave this team"))+'</button>')
     +'</div></div>';
 }
-/* Leave this team: the shell forgets the team and its keys, and the screen is drawn again where it is open. */
+/* Leave this team is one click, the person's own. The pin, the sealed keys and the bar stay until the
+   offer lapses; Undo leaves the desk as it still is. The shell's leave, the one it is today, runs when
+   the offer ends without Undo, and the screen is drawn again where it is open. A second click while the
+   offer stands does not start another: the offer already on screen is the way back. */
+let leaveHold="";
+function leaveThisTeam(team){
+  team=String(team||"");
+  if(!team || leaveHold) return;
+  leaveHold=team;
+  const drop=()=>{ if(leaveHold===team) leaveHold=""; };
+  const repaint=()=>{ if(document.getElementById("setBody")) paintSettings(); };
+  offerUndo("This desk will leave this team.", ()=>{ drop(); repaint(); }, ()=>{
+    if(leaveHold!==team) return;
+    leaveHold="";
+    forgetTeamLead(team, repaint);
+  });
+}
 function wireTeamRows(box){
   box.querySelectorAll("[data-leave-team]").forEach(b=>{
-    b.onclick=()=>forgetTeamLead(b.getAttribute("data-leave-team"),()=>paintSettings());
+    b.onclick=()=>leaveThisTeam(b.getAttribute("data-leave-team"));
   });
 }
 function settingsBodyHtml(){

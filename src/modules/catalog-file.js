@@ -5,7 +5,7 @@ import { ALWAYS_CATS } from "./cat-roles.js";
 import { storedCatalog, storeCatalog, eWatchSupported, eWatchPut, eWatchClear, parseCatalogFile, catalogDocOf, eCatalogSignature, eCatalog } from "./catalog.js";
 import { catalogLoaded } from "./catalog-boot.js";
 import { agentName } from "./agent.js";
-import { catalogToV2, v2SignedBytes, v2Problems, v2ContentHash } from "./catalog-v2.js";
+import { catalogToV2, v2SignedBytes, v2Problems, v2ContentHash, v2CatKey } from "./catalog-v2.js";
 import { directWrite } from "./catalog-merge.js";
 import { CATS, intentArr, intentFieldKey, intentCount, catalogLangs, CONTENT_LANGS } from "./content-model.js";
 import { eHost, eCatalogTaken, eHasCatalogPicker, ePickCatalogFile, eHasCatalogSaver, eSaveCatalogFile, eLoadedCatalogFile, eHasBranch, eBranchIdentity, eWriteBranch, eHasShared, eSharedRead, eSharedWrite } from "./host.js";
@@ -21,6 +21,7 @@ import { TAB_KEY, tabSaveTimer } from "./tabs.js";
 import { t, catalogCountsLine, toast, toastRefusal } from "./ui-lang.js";
 import { BASE_CATS, BASE_M, pack, whoOptions, savePack, flushStats, retiredCards } from "./pack.js";
 import { catIconKey, catSlot } from "./cat-identity.js";
+import { catPackKey } from "./cat-set.js";
 import { normalizeCardIntents } from "./card-intent.js";
 import { intentIdAt, intentIdxFromId } from "./intent-id.js";
 import { rebuildCards } from "./rebuild.js";
@@ -56,13 +57,15 @@ function intentsExport(keep){
 /* `asIs` reads the cards as they stand, for a caller that must not redraw the list. */
 function currentCatalog(opts){
   if(!(opts&&opts.asIs)) rebuildCards();
-  const cats={}, catsPl={}, catsOther={};
-  /* Every declared language past the primary and past Polish, carried out exactly as it came
-     in: those have no personal layer and no editor yet, so an export must not lose them. */
+  const cats={}, catsPl={}, catsOther={}, primary=CONTENT_LANGS[0]||"en";
+  /* Every declared language past the primary and past Polish, with the personal layer overlaid
+     the same way as the primary and Polish below, so an export round-trips what the category
+     editor saved. */
   CONTENT_LANGS.slice(1).forEach(code=>{
     if(code==="pl") return;
-    const m=CAT_LABELS_BY_LANG[code];
-    if(m && Object.keys(m).length) catsOther["categories:"+code]=Object.assign({},m);
+    const m=Object.assign({},CAT_LABELS_BY_LANG[code]||{}), ov=pack[catPackKey(code,primary)]||{};
+    Object.keys(CATS).forEach(k=>{ if(ov[k]) m[k]=ov[k]; });
+    if(Object.keys(m).length) catsOther[v2CatKey(code,primary)]=m;
   });
   Object.keys(CATS).forEach(k=>{
     /* THE CANONICAL NAME, never what the screen currently shows: CATS holds whatever the
