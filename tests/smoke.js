@@ -971,7 +971,8 @@ const t0 = Date.now();
      which is the same treatment the theme button gets and costs the leg only the mark's own
      colour; the rest of the band, the tile it sits on included, is still compared. The strips
      are not cut around the mark's box instead because a box of the header that is exempt is a
-     box in which a half-faded header could hide, where a hidden path is one thin drawing. */
+     box in which a half-faded header could hide, where a hidden path is one thin drawing. The turn
+     is painted on a canvas over that path, and the canvas is held out with it. */
   if (WHICH === "chrome") {
     e = since();
     const isVt = a => a.effect && /^::view-transition/.test(a.effect.pseudoElement || "");
@@ -990,7 +991,7 @@ const t0 = Date.now();
     const pressTheme = () => p.evaluate(() => { document.getElementById("theme").click(); return document.documentElement.dataset.theme; });
     await p.mouse.move(4, 900);
     await p.evaluate(() => { const s = document.createElement("style"); s.id = "__markHold";
-      s.textContent = ".brand-tile svg path{visibility:hidden!important}"; document.head.appendChild(s); });
+      s.textContent = ".brand-tile svg path,.brand-tile canvas.brand-fifth{visibility:hidden!important}"; document.head.appendChild(s); });
     await p.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "reduce" }]);
     await sleep(300);
     const from = await shot();

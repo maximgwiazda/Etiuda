@@ -759,11 +759,16 @@ body.e-backdrop .row::before{
 /* 25px on the compact band, a step above the 24px corner boxes so the mark still leads
    the row. No plate in the header - the band is the plate, and the mark whitens with
    the wordmark: the white-mark asset expressed by the inline geometry. */
-.brand-tile{flex:0 0 auto;width:25px;height:25px;
+.brand-tile{position:relative;flex:0 0 auto;width:25px;height:25px;
   color:var(--band-ink);display:inline-flex;align-items:center;justify-content:center}
 /* One filled path in currentColor, the geometry verbatim from the family's mark drawing: rescaled
    by hand it gets padded twice, by the drawing's margins and again by the box. */
 .brand-tile svg{width:100%;height:100%;display:block}
+/* Turning is a canvas over the tile. The path stays the standing outline: writing its d marks
+   the shape for layout, and the mark repaints for as long as the page is shown. */
+.brand-tile canvas.brand-fifth{position:absolute;inset:0;width:100%;height:100%;display:none;pointer-events:none}
+.brand-tile.brand-turning canvas.brand-fifth{display:block}
+.brand-tile.brand-turning svg{visibility:hidden}
 /* Search / agent / pax: relative wrap for clear x inside the field */
 .field-wrap{position:relative;display:flex;min-width:0;align-items:stretch}
 .field-wrap>input{width:100%;min-width:0}
@@ -21162,14 +21167,84 @@ What you type stays in this browser only.`;
     fifthClock.phi = FIFTH_PHI0;
     fifthClock.last = null;
   }
+  function headerPaint(node) {
+    const tile = node.closest && node.closest(".brand-tile");
+    const svg = node.ownerSVGElement || node.closest && node.closest("svg");
+    const g = node.parentElement;
+    if (!tile || !svg || !tile.classList || typeof document.createElement !== "function") return null;
+    let cv = tile.querySelector && tile.querySelector("canvas.brand-fifth");
+    if (!cv) {
+      cv = document.createElement("canvas");
+      cv.className = "brand-fifth";
+      cv.setAttribute("aria-hidden", "true");
+      tile.appendChild(cv);
+    }
+    const ctx = cv.getContext && cv.getContext("2d");
+    if (!ctx || typeof Path2D !== "function") return null;
+    const vb = (svg.getAttribute("viewBox") || "0 0 256 256").trim().split(/[\s,]+/).map(Number);
+    const tr = g && g.getAttribute && g.getAttribute("transform") || "";
+    const tm = /translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)/.exec(tr);
+    const sm = /scale\(\s*([-\d.]+)\s*\)/.exec(tr);
+    const user = { vx: vb[2] || 256, vy: vb[3] || 256, tx: tm ? +tm[1] : 0, ty: tm ? +tm[2] : 0, sc: sm ? +sm[1] : 1 };
+    const box = { w: 25, h: 25, dpr: 1 };
+    let ink = "";
+    const readInk = () => {
+      if (typeof getComputedStyle !== "function") return;
+      const c = getComputedStyle(tile).color;
+      if (c) ink = c;
+    };
+    const fit = () => {
+      const dpr = globalThis.devicePixelRatio || 1;
+      const w0 = tile.clientWidth, h0 = tile.clientHeight;
+      const w = w0 > 0 ? w0 : box.w, h = h0 > 0 ? h0 : box.h;
+      if (w === box.w && h === box.h && dpr === box.dpr && cv.width) return;
+      box.w = w;
+      box.h = h;
+      box.dpr = dpr;
+      const bw = Math.max(1, Math.round(w * dpr)), bh = Math.max(1, Math.round(h * dpr));
+      if (cv.width !== bw) cv.width = bw;
+      if (cv.height !== bh) cv.height = bh;
+    };
+    fit();
+    if (typeof ResizeObserver === "function") {
+      new ResizeObserver(fit).observe(tile);
+      try {
+        new ResizeObserver(fit).observe(tile, { box: "device-pixel-content-box" });
+      } catch (e) {
+      }
+    }
+    return {
+      readInk,
+      show(d) {
+        if (!tile.classList.contains("brand-turning")) tile.classList.add("brand-turning");
+        const k = box.dpr, sx = box.w / user.vx, sy = box.h / user.vy;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, cv.width, cv.height);
+        ctx.setTransform(k * sx, 0, 0, k * sy, 0, 0);
+        ctx.translate(user.tx, user.ty);
+        ctx.scale(user.sc, user.sc);
+        ctx.lineWidth = 2 * fifthRadius();
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.strokeStyle = ink || "#000";
+        ctx.stroke(new Path2D(d));
+      },
+      hide() {
+        if (tile.classList.contains("brand-turning")) tile.classList.remove("brand-turning");
+      }
+    };
+  }
   function wireFifth(opts) {
     const o = opts || {}, quiet = o.still || (() => document.documentElement.classList.contains("e-still"));
+    const header = !o.node;
     const node = o.node || document.querySelector(".brand-tile svg path");
     if (!node) return;
+    const paint = header ? headerPaint(node) : null;
+    if (header && !paint) return;
     const std = node.getAttribute("d");
     let raf = 0, painted = -Infinity, stroked = false;
     const stroke = (on) => {
-      if (on === stroked) return;
+      if (paint || on === stroked) return;
       stroked = on;
       node.setAttribute("fill", on ? "none" : "currentColor");
       node.setAttribute("stroke", on ? "currentColor" : "none");
@@ -21188,8 +21263,12 @@ What you type stays in this browser only.`;
         sync();
         return;
       }
-      stroke(true);
-      node.setAttribute("d", fifthLinePath(fifthPhase()));
+      const d = fifthLinePath(fifthPhase());
+      if (paint) paint.show(d);
+      else {
+        stroke(true);
+        node.setAttribute("d", d);
+      }
     };
     const sync = () => {
       const still = quiet(), go = !still && !document.hidden;
@@ -21201,14 +21280,24 @@ What you type stays in this browser only.`;
         cancelAnimationFrame(raf);
         raf = 0;
       }
+      if (paint) paint.readInk();
       if (still) {
         fifthRest();
-        stroke(false);
-        if (node.getAttribute("d") !== std) node.setAttribute("d", std);
+        if (paint) paint.hide();
+        else {
+          stroke(false);
+          if (node.getAttribute("d") !== std) node.setAttribute("d", std);
+        }
       }
     };
     document.addEventListener("visibilitychange", sync);
-    new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    if (document.body) new MutationObserver(() => {
+      if (paint) paint.readInk();
+    }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+    new MutationObserver(() => {
+      if (paint) paint.readInk();
+      sync();
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
     sync();
   }
 

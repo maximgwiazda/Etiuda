@@ -109,19 +109,87 @@ function fifthTick(ms){
 function fifthPhase(){ return fifthClock.phi; }
 function fifthRest(){ fifthClock.phi=FIFTH_PHI0; fifthClock.last=null; }
 
+/* THE HEADER PAINTS ON A CANVAS. A path's d write marks the shape for layout, and this repaints
+   every FIFTH_PAINT_MS for as long as the page is shown. The canvas uses the same line and the
+   tile's transform. A node passed in still turns by d. */
+function headerPaint(node){
+  const tile=node.closest && node.closest(".brand-tile");
+  const svg=node.ownerSVGElement || (node.closest && node.closest("svg"));
+  const g=node.parentElement;
+  if(!tile || !svg || !tile.classList || typeof document.createElement!=="function") return null;
+  let cv=tile.querySelector && tile.querySelector("canvas.brand-fifth");
+  if(!cv){
+    cv=document.createElement("canvas");
+    cv.className="brand-fifth";
+    cv.setAttribute("aria-hidden","true");
+    tile.appendChild(cv);
+  }
+  const ctx=cv.getContext && cv.getContext("2d");
+  if(!ctx || typeof Path2D!=="function") return null;
+  const vb=(svg.getAttribute("viewBox")||"0 0 256 256").trim().split(/[\s,]+/).map(Number);
+  const tr=(g && g.getAttribute && g.getAttribute("transform"))||"";
+  const tm=/translate\(\s*([-\d.]+)[\s,]+([-\d.]+)\s*\)/.exec(tr);
+  const sm=/scale\(\s*([-\d.]+)\s*\)/.exec(tr);
+  const user={vx:vb[2]||256, vy:vb[3]||256, tx:tm?+tm[1]:0, ty:tm?+tm[2]:0, sc:sm?+sm[1]:1};
+  const box={w:25, h:25, dpr:1};
+  let ink="";
+  const readInk=()=>{
+    if(typeof getComputedStyle!=="function") return;
+    const c=getComputedStyle(tile).color;
+    if(c) ink=c;
+  };
+  // A size read in the repaint is a layout, so the box is taken once and again only when it changes.
+  const fit=()=>{
+    const dpr=globalThis.devicePixelRatio||1;
+    const w0=tile.clientWidth, h0=tile.clientHeight;
+    const w=w0>0?w0:box.w, h=h0>0?h0:box.h;
+    if(w===box.w && h===box.h && dpr===box.dpr && cv.width) return;
+    box.w=w; box.h=h; box.dpr=dpr;
+    const bw=Math.max(1, Math.round(w*dpr)), bh=Math.max(1, Math.round(h*dpr));
+    if(cv.width!==bw) cv.width=bw;
+    if(cv.height!==bh) cv.height=bh;
+  };
+  fit();
+  if(typeof ResizeObserver==="function"){
+    new ResizeObserver(fit).observe(tile);
+    // device-pixel-content-box changes when the ratio does and the CSS box does not. An unknown box throws.
+    try{ new ResizeObserver(fit).observe(tile,{box:"device-pixel-content-box"}); }catch(e){}
+  }
+  return {
+    readInk,
+    show(d){
+      if(!tile.classList.contains("brand-turning")) tile.classList.add("brand-turning");
+      const k=box.dpr, sx=box.w/user.vx, sy=box.h/user.vy;
+      ctx.setTransform(1,0,0,1,0,0);
+      ctx.clearRect(0,0,cv.width,cv.height);
+      ctx.setTransform(k*sx,0,0,k*sy,0,0);
+      ctx.translate(user.tx, user.ty);
+      ctx.scale(user.sc, user.sc);
+      ctx.lineWidth=2*fifthRadius();
+      ctx.lineCap="round";
+      ctx.lineJoin="round";
+      ctx.strokeStyle=ink || "#000";
+      ctx.stroke(new Path2D(d));
+    },
+    hide(){ if(tile.classList.contains("brand-turning")) tile.classList.remove("brand-turning"); }
+  };
+}
 /* THE HEADER'S MARK turns on the page's frames, repainted every FIFTH_PAINT_MS, only while the page
-   is shown and no quiet switch is on. The clock ticks on every frame, so the step cap only ever
-   bites on a late one. opts: node, the mark's path (the header's by default); still(), the quiet switch. */
+   is shown and no quiet switch is on. The clock ticks on every frame. opts: node, another program's
+   path (the header paints itself when none is passed); still(), the quiet switch. */
 function wireFifth(opts){
   const o=opts||{}, quiet=o.still||(()=>document.documentElement.classList.contains("e-still"));
+  const header=!o.node;
   const node=o.node||document.querySelector(".brand-tile svg path");
   if(!node) return;
+  const paint=header ? headerPaint(node) : null;
+  if(header && !paint) return;
   const std=node.getAttribute("d");
   let raf=0, painted=-Infinity, stroked=false;
-  // The markup's path is the mark's filled outline, which no frame could remake: turning, the node
-  // strokes the centreline instead, and standing it is the markup's again.
+  // A path handed in strokes the centreline while it turns and is the outline it was given when it
+  // stands. The header never writes its path.
   const stroke=on=>{
-    if(on===stroked) return;
+    if(paint || on===stroked) return;
     stroked=on;
     node.setAttribute("fill", on ? "none" : "currentColor");
     node.setAttribute("stroke", on ? "currentColor" : "none");
@@ -134,17 +202,25 @@ function wireFifth(opts){
     painted=ms;
     // asked at each repaint too: a switch that flips with no class on the root sends no word here
     if(quiet()){ sync(); return; }
-    stroke(true);
-    node.setAttribute("d", fifthLinePath(fifthPhase()));
+    const d=fifthLinePath(fifthPhase());
+    if(paint) paint.show(d);
+    else { stroke(true); node.setAttribute("d", d); }
   };
   const sync=()=>{
     const still=quiet(), go=!still && !document.hidden;
     if(go && !raf){ fifthClock.last=null; raf=requestAnimationFrame(frame); }
     if(!go && raf){ cancelAnimationFrame(raf); raf=0; }
-    if(still){ fifthRest(); stroke(false); if(node.getAttribute("d")!==std) node.setAttribute("d",std); }
+    if(paint) paint.readInk();
+    if(still){
+      fifthRest();
+      if(paint) paint.hide();
+      else { stroke(false); if(node.getAttribute("d")!==std) node.setAttribute("d", std); }
+    }
   };
-  document.addEventListener("visibilitychange",sync);
-  new MutationObserver(sync).observe(document.documentElement,{attributes:true, attributeFilter:["class"]});
+  document.addEventListener("visibilitychange", sync);
+  // Band classes land on body. A root watch never sees them, so the ink would stay.
+  if(document.body) new MutationObserver(()=>{ if(paint) paint.readInk(); }).observe(document.body,{attributes:true, attributeFilter:["class"]});
+  new MutationObserver(()=>{ if(paint) paint.readInk(); sync(); }).observe(document.documentElement,{attributes:true, attributeFilter:["class","data-theme"]});
   sync();
 }
 
