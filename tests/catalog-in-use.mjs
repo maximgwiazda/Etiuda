@@ -21,7 +21,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 46;
+const EXPECTED = 47;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -671,6 +671,35 @@ try {
         && !envAfter.inUse && !namedAgain,
       "906c an eject keeps the lead, the team pin and the desk's key, and the envelope no longer names the catalog (lead "
       + (leadAfter === leadPub ? "kept" : "gone") + ", key " + (deskAfter === deskPub ? "kept" : "gone") + ")");
+  }
+
+  /* An eject the share does not hear is still owed after the desk starts again. */
+  {
+    const box = await arm("eject-relaunch");
+    put(box.share, "board.ec", textOf(catalog(2)));
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)]);
+    const booted = box.D.sync("etiuda:catalog");
+    const pin = pinOf(box.D, booted || "");
+    take(box.D, pin);
+    const useFile = inUsePath(box.share, box.me.id);
+    const ans = answerPath(box.share, box.me.id);
+    putAsk(box, "Ask906e", pin);
+    box.D.api.tryCatalogAsk(box.D.win);
+    const hadUse = fs.existsSync(useFile);
+    const hadAns = fs.existsSync(ans) && !!openSealedDoc(box.D, ans, box.key);
+    box.D.api.setDown(box.share);
+    box.D.sync("etiuda:catalog-eject");
+    const owed = box.D.envelope().ejectOwed;
+    const again = loadDesk(box.D.ud);
+    again.api.catalogChanged(again.win);
+    const env = again.envelope();
+    const useLeft = fs.existsSync(useFile);
+    const ansLeft = fs.existsSync(ans);
+    check(hadUse && hadAns && owed && owed.team === box.team && owed.sha === pin
+        && !useLeft && !ansLeft && !env.ejectOwed && !env.inUse,
+      "906e an eject while the share is unreachable is still owed after a relaunch, and the next run removes in-use.ec and the answer (owed "
+      + (owed && owed.team === box.team && owed.sha === pin ? "kept" : "lost")
+      + ", in use " + (useLeft ? "still there" : "gone") + ", answer " + (ansLeft ? "still there" : "gone") + ")");
   }
 
   /* ---- what the person at the desk reads, and a catalog the page already holds --------------------- */
