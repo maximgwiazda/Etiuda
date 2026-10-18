@@ -17,7 +17,9 @@
    IN: each blob is fetched and judged through blob.cjs, the trust taken only from the signed team file this program holds
    (E1, E2): the lead's key is the pin, the desks' keys the signed roster of the blob's epoch, and the relay's own list is
    never read. Once a newer epoch is loaded, a key it leaves off its roster is removed at every older epoch, and at the
-   newer epoch where an older loaded roster named the key. A blob that passes is written into the mirror whole, by the
+   newer epoch where an older loaded roster named the key. A desk file is counted under the roster row for the key that
+   signed it, and a place the blob carries does not choose the folder or the row. A blob that passes is written into the
+   mirror whole, by the
    atomic write the shell uses on a share; one that
    fails is dropped and said, never written. A deletion is only a signed record from the path's writer (E3), and a blob the
    relay stops serving deletes nothing. A blob it could not serve for a reason that can pass is fetched again, the catch-up
@@ -538,7 +540,20 @@ function createProgram(opts) {
       const landed = landTeam(r, null);
       return landed.ok ? { ok: true, path: r.path } : landed;
     }
-    return land(r);
+    const landed = land(r);
+    if (!landed.ok || landed.stale || landed.deleted) return landed;
+    return receipt(r, t, b);
+  }
+
+  /* Who a taken file is counted under. The insecure reading is the place the blob carries, which a relay can set to
+     another desk's folder. The roster row for the key that signed it replaces that, and the lead has no row. */
+  function receipt(r, t, blob) {
+    let deskId = null;
+    if (blob && typeof blob.place === "string" && blob.place.startsWith("desk:")) deskId = blob.place.slice(5);
+    const row = rosterOf(t.doc).find(d => d.keyId === r.writerKeyId);
+    if (row) deskId = row.deskId; /* plant:s2-count */
+    else if (r.role === "lead") deskId = null;
+    return { ok: true, path: r.path, keyId: r.writerKeyId, deskId: deskId, rev: t.rev, epoch: t.epoch };
   }
 
   /* A team file arriving through the relay: the lead's, judged as a team file before it is written. The same bytes as the
