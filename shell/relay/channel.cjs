@@ -54,9 +54,9 @@
    verified lead blob has named. The relay's header names a writer and an epoch before any signature is checked, and that
    header moves nothing: leadEpoch rises only once the pinned lead's upload signature on the blob verifies.
 
-   PENDING (F7 of the slice 1 review). A blob is parked to wait for a key only once that same signature verifies under a
-   writer this program already trusts, the pinned lead or a desk a roster it holds names. A forged blob, or one from a
-   writer it does not trust, is dropped and said, and cannot fill the pending list or push an honest wait out.
+   PENDING (F7 of the slice 1 review, and the roster follow-up). A blob is parked to wait for a key only once that same
+   signature verifies. A desk key is parked only at an epoch a verified lead blob has named, and only while the newest
+   roster still names that key. Anything else is dropped and said, and cannot fill the pending list or push an honest wait out.
 
    Two halves. createProgram is synchronous and talks to nobody: it judges, writes the mirror and says what it owes; the
    harness's adapter drives it directly. createChannel talks to the relay (the hello, a session re-opened when it lapses,
@@ -726,6 +726,16 @@ function createProgram(opts) {
     return { tries: out, missing: !key };
   }
 
+  /* A desk blob waits for a key only at an epoch a verified lead blob has named, and only under a key the newest
+     roster still names. The lead's own blob may wait at the epoch it has just named. */
+  function mayPark(it) {
+    const m = it && it.meta;
+    if (!pin || !m || !isCount(m.epoch) || m.epoch > st.leadEpoch) return false;
+    if (m.writer === pin.lead.keyId) return true;
+    const top = newestRoster();
+    return !!top && top.desks.some(d => d.keyId === m.writer);
+  }
+
   /* One fetched blob opened, or pending where this program holds no key it could open under yet, or dropped and said. */
   function openOne(it, floors0, ctx) {
     const blob = envelopeOf(it);
@@ -748,7 +758,10 @@ function createProgram(opts) {
       last = r;
       if (r.reason !== "bad-signature") break;
     }
-    if (t.missing && signedUpload(it) && (!last || last.reason === "bad-signature")) { pend(it, floors0); return null; } /* plant:pending-sig */
+    if (t.missing && signedUpload(it) && (!last || last.reason === "bad-signature")) {
+      if (!mayPark(it)) { unpend(m.id); dropSaid("a file from " + m.writer, R("epoch")); return null; } /* plant:pending-roster */
+      pend(it, floors0); return null; /* plant:pending-sig */
+    }
     unpend(m.id);
     dropSaid("a file from " + m.writer, last || R("bad-signature"));
     return null;

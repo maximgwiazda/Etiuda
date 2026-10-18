@@ -13,7 +13,9 @@
  * file again (944s). A desk file is counted under the roster row for the key that signed it (944t); lifting that
  * check counts the place the blob carries (944u). A later rev of one epoch that leaves a desk off refuses its next
  * file removed, and a key never named stays not-roster (944v); lifting that check leaves the file not-roster (944w).
- * On a relay team the desk also reads the
+ * A desk blob waits for a key only at an epoch a verified lead blob has named, and only while the newest roster still
+ * names that key (951f, 951g); lifting that check lets a thousand blobs past that epoch fill pending (951h). On a
+ * relay team the desk also reads the
  * head the lead's Studio writes (etiuda-head.json): a genuine one is shown with its newest edition, when that edition
  * was published and how old the head itself is, an old one is shown as old and blocks nothing, and a forged, older or
  * other team's head is dropped and said. A folder team shows nothing new. Throwaway keys and invented words only;
@@ -40,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 92;
+const EXPECTED = 95;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2230,7 +2232,8 @@ check(regStand.held(), "942f every reg call was answered by the stand-in (" + re
     + ", forged " + forgedN + ", real id kept " + kept);
 }
 
-/* The writer's row, and a same-epoch removal: a later rev that leaves a desk off refuses its file removed. */
+/* The writer's row, a same-epoch removal, and board 910: a desk blob parks only at an epoch a verified lead blob
+   has named, and only under a key the newest roster still names. */
 {
   const memoryIo = { read() { return null; }, write() {}, remove() {}, list() { return []; } };
   const rowOf = k => ({ desk: { id: k.keyId, key: k.pub, box: "ab".repeat(32) } });
@@ -2301,6 +2304,51 @@ check(regStand.held(), "942f every reg call was answered by the stand-in (" + re
     + ", stranger " + (moved.stray.ok === true ? "ACCEPTED" : moved.stray.reason)
     + ", the other desk " + (moved.kept.ok === true ? "taken" : moved.kept.reason));
 
+  function itemOf(b, seq) {
+    return { seq, ct: b.ciphertext, meta: { v: 1, id: b.id, writer: b.writerKeyId, epoch: b.epoch, counter: b.counter,
+      size: b.ciphertext.length, sig: b.signature, nonce: b.nonce, supersedes: b.supersedes, del: !!b.deletion } };
+  }
+  function parkArm(mod, arm) {
+    const rt = hex(16), tm = "t-" + hex(8), desk = keyPair(true), other = keyPair(true);
+    const pin = { teamId: tm, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } };
+    const said = [];
+    const prog = mod.createProgram({ io: memoryIo, pin, clock: () => 1700000000000, save() {}, say: l => said.push(l) });
+    const l1 = prog.loadTeamFile(teamDoc(tm, rt, 1, 1, arm === "member" ? [rowOf(desk)] : [rowOf(desk), rowOf(other)]));
+    const l2 = arm === "removed" ? prog.loadTeamFile(teamDoc(tm, rt, 2, 1, [rowOf(other)])) : { ok: true };
+    const waitEpoch = arm === "removed" ? 3 : 2;
+    const leadW = { keyId: LEAD.keyId, privateKey: LEAD.privateKey };
+    const deskW = { keyId: desk.keyId, privateKey: desk.privateKey };
+    const waiting = B.seal({ relayTeamId: rt, epoch: waitEpoch, teamKey: crypto.randomBytes(32), writer: leadW,
+      path: "hold.ec", body: "wait", counter: 1, place: "root" });
+    const near = B.seal({ relayTeamId: rt, epoch: waitEpoch, teamKey: crypto.randomBytes(32), writer: deskW,
+      path: "desks/" + desk.keyId + "/in-use.ec", body: "near", counter: 1, place: "desk:" + desk.keyId });
+    const junk = [];
+    for (let i = 0; i < 1000; i++) {
+      const b = B.seal({ relayTeamId: rt, epoch: 999999, teamKey: crypto.randomBytes(32), writer: deskW,
+        path: "desks/" + desk.keyId + "/n" + i + ".ec", body: "x", counter: i + 1, place: "desk:" + desk.keyId });
+      junk.push(itemOf(b, 10 + i));
+    }
+    const keys = new Map([[1, crypto.randomBytes(32)]]);
+    if (arm === "removed") keys.set(2, crypto.randomBytes(32));
+    prog.applyBatch([itemOf(waiting, 2), itemOf(near, 3)].concat(junk), { keyFor: e => keys.get(e) || null });
+    const pending = prog.state().pending;
+    return { loaded: l1.ok === true && l2.ok === true, pending: pending.length,
+      junk: pending.filter(p => p.epoch === 999999).length, honest: pending.some(p => p.id === waiting.id),
+      near: pending.some(p => p.id === near.id), leadEpoch: prog.state().leadEpoch, said: said.length };
+  }
+  const memberPark = parkArm(C, "member");
+  const removedPark = parkArm(C, "removed");
+  const parkLine = p => "pending " + p.pending + ", junk " + p.junk + ", honest " + p.honest + ", in-epoch " + p.near
+    + ", leadEpoch " + p.leadEpoch + ", said " + p.said + (p.loaded ? "" : ", team file not loaded");
+  check(memberPark.loaded && memberPark.pending === 2 && memberPark.junk === 0 && memberPark.honest && memberPark.near
+    && memberPark.leadEpoch === 2 && memberPark.said === 1000,
+    "951f board 910 member: a desk the newest roster still names may wait at the epoch a verified lead blob named, and a"
+    + " thousand blobs past that epoch are dropped and said: " + parkLine(memberPark));
+  check(removedPark.loaded && removedPark.pending === 1 && removedPark.junk === 0 && removedPark.honest && !removedPark.near
+    && removedPark.leadEpoch === 3 && removedPark.said === 1001,
+    "951g board 910 removed: a desk the newest roster leaves off does not wait at that epoch, and the same thousand do not"
+    + " fill pending: " + parkLine(removedPark));
+
   function liftPlant(tag, fn) {
     const src = path.join(ROOT, "shell", "relay", "channel.cjs");
     const beforeBytes = fs.readFileSync(src);
@@ -2338,13 +2386,20 @@ check(regStand.held(), "942f every reg call was answered by the stand-in (" + re
   });
   check(removePlant.turned && removePlant.back, "944w lifting plant:s2-remove leaves the dropped desk's file not-roster, and the file is put back: "
     + removePlant.detail + ", sha " + (removePlant.back ? "restored" : "differs"));
+  const parkPlant = liftPlant("plant:pending-roster", mod => {
+    const x = parkArm(mod, "member");
+    return x.loaded && x.pending === 1000 && x.junk === 1000 && x.honest === false;
+  });
+  check(parkPlant.turned && parkPlant.back, "951h lifting plant:pending-roster lets a thousand blobs past the lead's epoch fill pending and push the"
+    + " honest wait out, and the file is put back: " + parkPlant.detail + ", sha " + (parkPlant.back ? "restored" : "differs"));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */
 {
   const r = spawnSync(process.execPath, [path.join("relay", "test", "attacks.mjs")], { cwd: ROOT, encoding: "utf8",
     env: Object.assign({}, process.env, { RELAY_TARGET: path.join("relay", "test", "targets", "product.cjs") }), timeout: 300000 });
-  /* Slice 2 still open on the real channel, the same list as relay-unit 16a: remove an id when that attack goes green. */
+  /* Slice 2 on the real channel, the same list as relay-unit 16a. Empty once each attack is green; a listed id that
+     passes, or a failure that is not listed, reddens this check. */
   const SLICE2_OPEN = [];
   const lines = (r.stdout || "").split(/\r?\n/);
   const m = /^#counts ok=(\d+) fail=(\d+)$/m.exec(r.stdout || "");
