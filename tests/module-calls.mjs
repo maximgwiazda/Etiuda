@@ -4901,6 +4901,16 @@ const CARD_B = {
         const holds = "gen" in (PK.pack["catLabels:uk"] || {});
         return eq([gone, holds].join("|"), "true|false");
       });
+
+    check("editors.js", "908ce7 on a de-uk catalog, a category whose only change is a uk name is overridden and its editor offers Reset",
+      () => {
+        setupCat(["de", "uk"], "General de", { uk: { gen: "General uk" } });
+        PK.pack["catLabels:uk"] = { gen: "General uk renamed" };
+        const over = CI.categoryIsOverridden("gen");
+        ED.openCategoryEditor("gen", true);
+        const reset = byId["#ceReset"];
+        return eq([over, !!reset, !!(reset && reset.disabled)].join("|"), "true|true|false");
+      });
   } finally {
     PK.packUndoFor(hadPack)();
     Object.keys(PK.BASE_CATS).forEach(k => delete PK.BASE_CATS[k]);
