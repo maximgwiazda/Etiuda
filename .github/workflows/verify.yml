@@ -96,8 +96,11 @@ jobs:
           CI_LEGS: ${{ inputs.legs }}
         run: node tools/ci-legs.mjs --electron-skip --from-env >> "$GITHUB_OUTPUT"
 
-      # A set value skips the download, and the string 0 is still set. Omit the
-      # variable when a window leg needs the binary.
+      # Electron 44.3.0 does not read ELECTRON_SKIP_BINARY_DOWNLOAD. install.js
+      # has no check, and index.js downloads the binary the first time the
+      # package is required. The variable is still exported when no window leg
+      # was asked, and left unset when one was: a set value, the string 0
+      # included, is what an older package treats as skip.
       - name: npm ci
         shell: bash
         env:
