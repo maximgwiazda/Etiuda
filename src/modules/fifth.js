@@ -214,6 +214,8 @@ function wireFifth(opts){
     }
   };
   document.addEventListener("visibilitychange", sync);
+  // Band classes land on body. A root watch never sees them, so the ink would stay.
+  if(document.body) new MutationObserver(()=>{ if(paint) paint.readInk(); }).observe(document.body,{attributes:true, attributeFilter:["class"]});
   new MutationObserver(()=>{ if(paint) paint.readInk(); sync(); }).observe(document.documentElement,{attributes:true, attributeFilter:["class","data-theme"]});
   sync();
 }

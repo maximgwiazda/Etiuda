@@ -22,6 +22,14 @@
  * that passes its own path still turns by writing d: that is the other program's mark, and the
  * same window on it has to count a layout a repaint, or this stand-in would be blind to the
  * write it exists to catch.
+ *
+ * THE INK FOLLOWS THE BAND. The sheet sets the band's ink from classes on body.
+ * The stand-in's computed colour is the deep band's white when body carries
+ * e-band-deep, and the light backdrop's ink otherwise. A leg toggles that class
+ * and fires the observer recorded on body. The next stroke has to be the new
+ * ink, and that stroke's frame reads no style and no size. Observers are
+ * recorded and stay quiet until a leg fires one, so the 1700ms window fires
+ * none: a read that lives in an observer is not a read in that window.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -29,7 +37,7 @@ import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const EXPECTED = 3;
+const EXPECTED = 4;
 const DT = 1000 / 60;
 const SETTLE = 400;
 const WINDOW = 1700;
@@ -98,7 +106,7 @@ function makeLab() {
     ctx.clearRect = () => {};
     ctx.stroke = p => {
       lab.draws.push({ d: p.d, phase: sb.__f.fifthPhase(), w: ctx.lineWidth, cap: ctx.lineCap, join: ctx.lineJoin,
-        tx: ctx.tx, ty: ctx.ty, sc: ctx.sc, a: ctx.a });
+        tx: ctx.tx, ty: ctx.ty, sc: ctx.sc, a: ctx.a, ink: ctx.strokeStyle });
     };
     const cv = { className: "", _w: 0, _h: 0, setAttribute() {}, getContext: () => ctx };
     // The bitmap size is a layout. A repaint that sets it again would put the layouts back.
@@ -106,8 +114,18 @@ function makeLab() {
     Object.defineProperty(cv, "height", { get() { return cv._h; }, set(v) { if (lab.arm && v !== cv._h) mark(); cv._h = v; } });
     return cv;
   }
+  const body = {
+    classes: new Set(["e-backdrop"]),
+    classList: {
+      contains: c => body.classes.has(c),
+      add: c => { body.classes.add(c); },
+      remove: c => { body.classes.delete(c); }
+    }
+  };
+  const mos = [];
   const doc = {
     hidden: false,
+    body,
     documentElement: { classList: { contains: () => false } },
     createElement: tag => tag === "canvas" ? canvas() : {},
     querySelector: s => s === ".brand-tile svg path" ? pathNode : s === ".brand-tile" ? tile : null,
@@ -117,16 +135,31 @@ function makeLab() {
     document: doc,
     devicePixelRatio: 1,
     Path2D: class { constructor(d) { this.d = d; } },
-    getComputedStyle: () => { if (lab.arm) lab.styleReads++; return { color: "rgb(255,255,255)" }; },
+    getComputedStyle: () => {
+      if (lab.arm) lab.styleReads++;
+      return { color: body.classes.has("e-band-deep") ? "rgb(255, 255, 255)" : "rgb(15, 23, 42)" };
+    },
     requestAnimationFrame: fn => { frames.push({ id: ++seq, fn }); return seq; },
     cancelAnimationFrame: id => { frames = frames.filter(f => f.id !== id); },
-    MutationObserver: class { observe() {} }
+    MutationObserver: class {
+      constructor(cb) { this.cb = cb; }
+      observe(target, options) {
+        mos.push({ cb: this.cb, target, filter: (options && options.attributeFilter) || null });
+      }
+      disconnect() {}
+    }
   };
   vm.runInNewContext(loadFifth() + "\nglobalThis.__f = { fifthLinePath, fifthRadius, fifthPhase, wireFifth };", sb);
   lab.f = sb.__f;
   lab.node = pathNode;
   lab.tile = tile;
   lab.std = std;
+  lab.body = body;
+  lab.fireAttr = (target, name) => {
+    mos.forEach(o => {
+      if (o.target === target && (!o.filter || o.filter.indexOf(name) !== -1)) o.cb();
+    });
+  };
   lab.wire = o => sb.__f.wireFifth(o);
   lab.play = ms => {
     const end = lab.t + ms;
@@ -172,6 +205,20 @@ passed.arm = true;
 passed.play(WINDOW);
 check(passed.layouts >= 30 && passed.dWrites >= 30 && own.d !== "M0 0",
   "898c a path handed in still turns by writing d, and the same window lays out " + passed.layouts + " time(s) for " + passed.dWrites + " writes");
+
+const band = makeLab();
+band.wire();
+band.play(SETTLE);
+band.zero();
+band.body.classList.add("e-band-deep");
+band.fireAttr(band.body, "class");
+band.arm = true;
+band.play(80);
+const bandInk = band.draws.length ? band.draws[band.draws.length - 1].ink : "";
+check(band.draws.length === 1 && bandInk === "rgb(255, 255, 255)" && band.styleReads === 0 && band.layouts === 0 && band.clientReads === 0,
+  "898d a deep band on body turns the stroke to " + (bandInk || "nothing")
+  + ", and that repaint lays out " + band.layouts + " time(s), reads style " + band.styleReads
+  + " time(s) and reads a size " + band.clientReads + " time(s)");
 
 if (asserted !== EXPECTED) {
   failed++;
