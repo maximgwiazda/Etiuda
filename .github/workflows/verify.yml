@@ -3,9 +3,10 @@
 # Dispatch only. A push or a pull request does not run this, and a fork cannot start
 # it. The job checks out the named sha, so the workflow on main can run a commit
 # that does not contain this file. The runner's two files, tools/ci-legs.mjs and
-# tools/ci-legs-decide.cjs, always come from the workflow's own commit, over whatever
-# the commit under test carries: the instrument is main's, so a build never judges
-# itself with a runner it changed, and an older commit without them still runs.
+# tools/ci-legs-decide.cjs, always come from the workflow's own commit and are written
+# outside the checkout, under RUNNER_TEMP. The tree under test stays the bytes that
+# were checked out. The instrument is main's, so a build never judges itself with a
+# runner it changed, and an older commit without them still runs.
 #
 # A red leg does not fail the run. The leg step continues on error, and the runner
 # exits 0 when every asked leg was recorded. The next step fails the job only when
@@ -90,9 +91,10 @@ jobs:
       - name: the runner's files, always the workflow's own
         shell: bash
         run: |
+          mkdir -p "$RUNNER_TEMP/ci-runner/tools"
           git fetch --depth 1 origin "$GITHUB_SHA"
           for f in tools/ci-legs.mjs tools/ci-legs-decide.cjs; do
-            git show "FETCH_HEAD:$f" > "$f"
+            git show "FETCH_HEAD:$f" > "$RUNNER_TEMP/ci-runner/tools/$(basename "$f")"
           done
 
       - name: electron binary, only when a window leg was asked
@@ -100,7 +102,8 @@ jobs:
         shell: bash
         env:
           CI_LEGS: ${{ inputs.legs }}
-        run: node tools/ci-legs.mjs --electron-skip --from-env >> "$GITHUB_OUTPUT"
+          CI_LEGS_ROOT: ${{ github.workspace }}
+        run: node "$RUNNER_TEMP/ci-runner/tools/ci-legs.mjs" --electron-skip --from-env >> "$GITHUB_OUTPUT"
 
       # Electron 44.3.0 does not read ELECTRON_SKIP_BINARY_DOWNLOAD. install.js
       # has no check, and index.js downloads the binary the first time the
@@ -125,14 +128,15 @@ jobs:
           CI_LEGS: ${{ inputs.legs }}
           CI_WINDOWS_DATE: ${{ inputs.windows_date }}
           CI_LEG_OS: ${{ matrix.os }}
-        run: node tools/ci-legs.mjs --from-env --out ci-out
+          CI_LEGS_ROOT: ${{ github.workspace }}
+        run: node "$RUNNER_TEMP/ci-runner/tools/ci-legs.mjs" --from-env --out "$RUNNER_TEMP/ci-out"
 
       - name: results for this os
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: results-${{ matrix.os }}
-          path: ci-out
+          path: ${{ runner.temp }}/ci-out
           if-no-files-found: error
 
       - name: the runner held
