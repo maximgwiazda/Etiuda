@@ -1,12 +1,20 @@
 import { refreshCatRoles } from "./cat-roles.js";
-import { CATS } from "./content-model.js";
-import { CAT_LABELS_PL } from "./icons.js";
+import { CATS, CONTENT_LANGS } from "./content-model.js";
+import { CAT_LABELS_PL, CAT_LABELS_BY_LANG } from "./icons.js";
+import { v2CatKey } from "./catalog-v2.js";
 import { BASE_CATS, pack, savePack, packSnapshot, packUndoFor } from "./pack.js";
 import { lyGet, lySet } from "./storage.js";
 import { uiLang, toast, offerUndo } from "./ui-lang.js";
 import { cardCounts, setCatOrder, catOrder, setCats, cats } from "./app-state.js";
 import { hooks } from "./hooks.js";
 
+function catPackKey(l,primary){
+  return v2CatKey(l,primary||CONTENT_LANGS[0]||"en").replace(/^categories/,"catLabels");
+}
+function catCatalogLabel(l,k){
+  const m=CAT_LABELS_BY_LANG[l] || (l==="pl"?CAT_LABELS_PL:null);
+  return (m && m[k]) || "";
+}
 /* The pills' stored order, read at every start: the retired Boarding pass key becomes Check-in's,
    and a key naming no category is dropped. */
 function loadCatOrder(){
@@ -26,15 +34,15 @@ function applyCatsToGlobal(){
      translates nothing. Polish: the user's Polish name, the catalog's, the user's English
      rename, the canonical. English: rename, then canonical. A name in the English box
      never appears as its own translation - only because nothing Polish was offered. */
-  const pl=uiLang()==="pl";
+  const primary=CONTENT_LANGS[0]||"en", u=uiLang(), bag=u!==primary?catPackKey(u,primary):"";
   Object.keys(BASE_CATS).forEach(k=>{
     if(gone.has(k)) return;
-    CATS[k]=(pl && (pack.catLabelsPl[k] || CAT_LABELS_PL[k]))
+    CATS[k]=(bag && ((pack[bag]&&pack[bag][k]) || catCatalogLabel(u,k)))
             || pack.catLabels[k] || BASE_CATS[k];
   });
   Object.keys(pack.customCats||{}).forEach(k=>{
     if(gone.has(k)) return;
-    CATS[k]=(pl && pack.catLabelsPl[k]) || pack.catLabels[k] || pack.customCats[k] || k;
+    CATS[k]=(bag && pack[bag] && pack[bag][k]) || pack.catLabels[k] || pack.customCats[k] || k;
   });
   // Roles name categories, so they are re-resolved whenever the category set changes
   refreshCatRoles();
@@ -54,6 +62,11 @@ function removeCategory(k){
   if(pack.catLabels) delete pack.catLabels[k];
   // ...and its Polish name, or re-creating the key would inherit a name nothing on screen explains
   if(pack.catLabelsPl) delete pack.catLabelsPl[k];
+  const primary=CONTENT_LANGS[0]||"en";
+  CONTENT_LANGS.slice(1).forEach(l=>{
+    const bag=catPackKey(l,primary);
+    if(pack[bag]) delete pack[bag][k];
+  });
   // Drop its role too, or re-creating a category with the same key would inherit it
   if(pack.catRoles) delete pack.catRoles[k];
   // ...and its icon and colour, the other two override bags resetCategory knows, for the same reason
@@ -78,6 +91,8 @@ function removeCategory(k){
 }
 
 export {
+  catPackKey,
+  catCatalogLabel,
   loadCatOrder,
   applyCatsToGlobal,
   removeCategory

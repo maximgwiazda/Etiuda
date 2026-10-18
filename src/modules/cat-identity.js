@@ -1,10 +1,10 @@
 import { CATALOG_ROLES } from "./cat-roles.js";
-import { CATS } from "./content-model.js";
+import { CATS, CONTENT_LANGS } from "./content-model.js";
 import { CAT_COLORS_CATALOG, CAT_ICONS, CAT_ICONS_CATALOG, CAT_ICON_HINTS, CAT_ICON_MUSIC,
   CAT_LABELS_PL, E_HUE_CYCLE, catIconInner } from "./icons.js";
 import { esc } from "./esc.js";
 import { BASE_CATS, pack, savePack } from "./pack.js";
-import { applyCatsToGlobal } from "./cat-set.js";
+import { applyCatsToGlobal, catPackKey, catCatalogLabel } from "./cat-set.js";
 
 /* A stable pseudorandom number from a string. Stable is the point: an icon or a colour picked
    by Math.random() would be a different one on every load, which is not an identity at all. */
@@ -47,10 +47,16 @@ function catSlot(id){
    otherwise offer to reset itself to what it already is. */
 function categoryIsOverridden(k){
   if(!k || !pack) return false;
+  const primary=CONTENT_LANGS[0]||"en";
   const lab=(pack.catLabels||{})[k];
   if(lab && lab!==BASE_CATS[k]) return true;
   const labPl=(pack.catLabelsPl||{})[k];
   if(labPl && labPl!==CAT_LABELS_PL[k]) return true;
+  for(let i=1;i<CONTENT_LANGS.length;i++){
+    const l=CONTENT_LANGS[i], bag=catPackKey(l,primary);
+    const v=(pack[bag]||{})[k];
+    if(v && v!==catCatalogLabel(l,k)) return true;
+  }
   const ic=(pack.catIcons||{})[k];
   if(ic!=null && ic!==CAT_ICONS_CATALOG[k]) return true;
   const col=(pack.catColors||{})[k];
@@ -66,9 +72,11 @@ function categoryIsOverridden(k){
    catalog version to fall back to, which is why its editor is never offered this. */
 function resetCategory(k){
   if(!k || !pack) return;
-  [ "catLabels","catLabelsPl","catIcons","catColors","catRoles" ].forEach(bag=>{
-    if(pack[bag]) delete pack[bag][k];
-  });
+  const primary=CONTENT_LANGS[0]||"en";
+  [ "catLabels","catLabelsPl","catIcons","catColors","catRoles" ]
+    .concat(CONTENT_LANGS.slice(1).map(l=>catPackKey(l,primary))).forEach(bag=>{
+      if(pack[bag]) delete pack[bag][k];
+    });
   savePack(); applyCatsToGlobal();
 }
 function catIconKey(id){

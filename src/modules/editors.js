@@ -1,7 +1,7 @@
 import { isAlwaysCat, setCatAlways } from "./cat-roles.js";
 import { intentStoreKeys, intentFieldKey, intentCount, CATS, CONTENT_LANGS, INTENT_TEXT_FIELDS, SW_STORE } from "./content-model.js";
 import { closeModal, edMarkClean, edNavHtml, edWireNav, openDialog, refreshDialogChrome } from "./dialog.js";
-import { ICON_ROLE_ALWAYS, catIconInner, CAT_LABELS_PL, E_HUE_CYCLE, E_HUE_NAMES, CAT_ICON_KEYS } from "./icons.js";
+import { ICON_ROLE_ALWAYS, catIconInner, E_HUE_CYCLE, E_HUE_NAMES, CAT_ICON_KEYS } from "./icons.js";
 import { intentNavName, commentTokensInUse } from "./intent-text.js";
 import { langTabs, langPane, langFieldId, langEndonym, markMissing, edReportMissing, langFocus } from "./lang-tabs.js";
 import { displayIntentRows, drawIntentRail } from "./rail-list.js";
@@ -11,7 +11,7 @@ import { BASE_CATS, pack, savePack, packSnapshot, packUndoFor } from "./pack.js"
 import { removeIntent } from "./favourites.js";
 import { catIconKey, catSlot, categoryIsOverridden, resetCategory } from "./cat-identity.js";
 import { intentIdAt, intentIdxOfId, intentIsCustom, intentIsOverridden } from "./intent-id.js";
-import { applyCatsToGlobal, removeCategory } from "./cat-set.js";
+import { applyCatsToGlobal, removeCategory, catPackKey, catCatalogLabel } from "./cat-set.js";
 import { esc } from "./esc.js";
 import { $, modalCard } from "./dom.js";
 import { rebuildCards, refreshAfterIntents } from "./rebuild.js";
@@ -34,11 +34,12 @@ function openCategoryEditor(k,fromPill){
   const canDelete=!(cardCounts[k]||0);
   /* A category the user made has no catalog version behind it, so there is nothing to reset TO. */
   const isCustomCat=!!(pack.customCats && pack.customCats[k]) && !BASE_CATS[k];
-  /* The two names as WRITTEN, never CATS[k] - that is whichever one the current interface
+  /* Each language's name as WRITTEN, never CATS[k] - that is whichever one the current interface
      language resolved to, and filling an editor from it is how a rename eats the other name. */
-  const origEn=pack.catLabels[k] || BASE_CATS[k] || (pack.customCats&&pack.customCats[k]) || k;
-  const origPl=pack.catLabelsPl[k] || CAT_LABELS_PL[k] || "";
-  const orig=origEn;
+  const primary=CONTENT_LANGS[0]||"en";
+  const orig=(pack.catLabels && pack.catLabels[k]) || BASE_CATS[k] || (pack.customCats&&pack.customCats[k]) || k;
+  const origFor=l=>l===primary ? orig
+    : ((pack[catPackKey(l,primary)] && pack[catPackKey(l,primary)][k]) || catCatalogLabel(l,k));
   let iconKey=catIconKey(k), slot=catSlot(k), always=isAlwaysCat(k);
   /* A key retired from the roster (pencil today) still shows HERE while this category wears
      it - the grid must reflect the state on screen, or the current icon would be invisibly
@@ -74,15 +75,15 @@ function openCategoryEditor(k,fromPill){
           : "Make this a supporting category, relevant regardless of the intent"))+'"'+
         ' aria-label="'+esc(t("Supporting category"))+'">'+ICON_ROLE_ALWAYS+'</button></div>'+
       '<div class="ce-preview" id="cePrev"></div>'+
-      /* TWO BOXES: a category can be named differently per interface language and the
-         format carries both. One box filled from the RESOLVED label meant editing under a
-         Polish interface wrote the Polish name into the English slot and lost the English
-         one. The Polish box is optional - empty means "no Polish name", falling back to
-         the English one: the engine does not translate category names. */
+      /* ONE BOX PER CONTENT LANGUAGE: a category can be named differently per language and the
+         format carries each. One box filled from the RESOLVED label meant editing under a
+         Polish interface wrote the Polish name into the primary slot and lost the primary
+         one. Every secondary box is optional - empty means "no separate name", falling back to
+         the primary one: the engine does not translate category names. */
       langTabs()+CONTENT_LANGS.map((l,i)=>langPane(l,i,
         '<div class="mf"><label>Name</label>'
-          +'<input id="'+langFieldId("ce","name",l)+'" value="'+esc(l==="pl"?origPl:origEn)+'"'
-          +' autocomplete="off" spellcheck="false" placeholder="'+esc(l==="pl"?origEn:"")+'"'
+          +'<input id="'+langFieldId("ce","name",l)+'" value="'+esc(origFor(l))+'"'
+          +' autocomplete="off" spellcheck="false" placeholder="'+esc(i?orig:"")+'"'
           +' aria-label="'+esc(t("Category name"))+' ('+esc(langEndonym(l))+')"></div>'
       )).join("")+
       '<div class="mf"><label>Icon</label><div class="ic-pick" id="ceIcons">'+iconGrid()+'</div></div>'+
@@ -113,15 +114,17 @@ function openCategoryEditor(k,fromPill){
       '<button type="button" class="btn" id="ceCancel">Cancel</button>'+
       '<button type="button" class="btn primary" id="ceSave">Save</button>'
   });
-  const nameEl=$("#"+langFieldId("ce","name","en")), namePlEl=$("#"+langFieldId("ce","name","pl"));
+  const nameEls={};
+  CONTENT_LANGS.forEach(l=>{ nameEls[l]=$("#"+langFieldId("ce","name",l)); });
+  const nameVal=l=>(nameEls[l] && typeof nameEls[l].value==="string") ? nameEls[l].value.trim() : "";
   const ceStrip=$(".lang-tabs"); if(ceStrip) ceStrip.addEventListener("click",()=>setTimeout(drawPrev,0));
   function drawPrev(){
     /* Previews the language of the OPEN TAB, not the interface. With a strip on screen the tab
        is the clearer statement of which name is being written, and an empty box falls back to
-       the English name exactly as the runtime does. */
+       the primary name exactly as the runtime does. */
     const onTab=$(".lang-tabs button.on");
-    const cur=onTab?onTab.getAttribute("data-l"):CONTENT_LANGS[0];
-    const nm=(cur==="pl" && namePlEl.value.trim()) || nameEl.value.trim() || orig;
+    const cur=(onTab && onTab.getAttribute("data-l")) || primary;
+    const nm=nameVal(cur) || nameVal(primary) || orig;
     const ic='<svg class="cat-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">'+catIconInner(iconKey)+'</svg>';
     $("#cePrev").innerHTML=
       '<span class="pill" data-ec="'+slot+'">'+ic+'<span class="pill-lab">'+esc(nm)+'</span></span>'+
@@ -134,8 +137,7 @@ function openCategoryEditor(k,fromPill){
       b.setAttribute("aria-pressed",on?"true":"false");
     });
   }
-  nameEl.oninput=drawPrev;
-  namePlEl.oninput=drawPrev;
+  CONTENT_LANGS.forEach(l=>{ if(nameEls[l]) nameEls[l].oninput=drawPrev; });
   $("#ceIcons").onclick=e=>{
     const b=e.target.closest("[data-ic]"); if(!b) return;
     iconKey=b.getAttribute("data-ic"); markOn("[data-ic]","data-ic",iconKey); drawPrev();
@@ -191,18 +193,20 @@ function openCategoryEditor(k,fromPill){
     openCategoryEditor(k, fromPill);   // redraws the fields, and the button goes with them
   };
   $("#ceSave").onclick=()=>{
-    const nm=nameEl.value.trim();
-    if(nm && nm!==origEn){
+    const nm=nameVal(primary);
+    if(nm && nm!==orig){
       pack.catLabels[k]=nm;
       if(pack.customCats && pack.customCats[k]) pack.customCats[k]=nm;
     }
-    /* Emptying the box REMOVES the Polish name rather than storing "", which is what makes the
-       field reversible: there is no other control for "actually, no Polish name". Stored only
+    /* Emptying a secondary box REMOVES its name rather than storing "", which is what makes the
+       field reversible: there is no other control for "actually, no separate name". Stored only
        when it differs from what the catalog already says, so a pack does not accumulate copies
        of the catalog's own words. */
-    const nmPl=namePlEl.value.trim();
-    if(!nmPl || nmPl===CAT_LABELS_PL[k]) delete pack.catLabelsPl[k];
-    else pack.catLabelsPl[k]=nmPl;
+    CONTENT_LANGS.slice(1).forEach(l=>{
+      const bag=catPackKey(l,primary), base=catCatalogLabel(l,k), v=nameVal(l);
+      if(!v || v===base){ if(pack[bag]) delete pack[bag][k]; }
+      else { if(!pack[bag] || typeof pack[bag]!=="object") pack[bag]={}; pack[bag][k]=v; }
+    });
     pack.catIcons[k]=iconKey;
     pack.catColors[k]=slot;
     const roleMoved=always!==isAlwaysCat(k);
@@ -219,7 +223,8 @@ function openCategoryEditor(k,fromPill){
   edWireNav((typeof catOrder!=="undefined"?catOrder:[]).filter(x=>CATS[x]), k,
             kk=>openCategoryEditor(kk,fromPill));
   drawPrev();
-  if(nameEl.focus) nameEl.focus();
+  const firstEl=nameEls[primary];
+  if(firstEl && firstEl.focus) firstEl.focus();
 }
 /* The example belongs in the PLACEHOLDER, not the label: it differs per language, and a shared
    label cannot say two things. The Polish pair names its CASE beside the example - the clause
@@ -364,7 +369,7 @@ function openIntentEditor(idx, fromManage){
   };
   edWireNav(displayIntentRows().map(r=>r.idx), idx, i=>openIntentEditor(i));
   setTimeout(()=>{
-    const el=$("#"+langFieldId("ie","clause","en")); if(el) el.focus();
+    const el=$("#"+langFieldId("ie","clause",CONTENT_LANGS[0])); if(el) el.focus();
   },30);
 }
 

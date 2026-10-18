@@ -8885,7 +8885,7 @@ What you type stays in this browser only.`;
     E_VERSION: () => E_VERSION
   });
   var E_VERSION = "2.0.0-dev";
-  var E_BUILT = "2026-10-16";
+  var E_BUILT = "2026-10-18";
 
   // src/modules/card-model.js
   var card_model_exports = {};
@@ -11565,9 +11565,18 @@ What you type stays in this browser only.`;
   var cat_set_exports = {};
   __export(cat_set_exports, {
     applyCatsToGlobal: () => applyCatsToGlobal,
+    catCatalogLabel: () => catCatalogLabel,
+    catPackKey: () => catPackKey,
     loadCatOrder: () => loadCatOrder,
     removeCategory: () => removeCategory
   });
+  function catPackKey(l, primary) {
+    return v2CatKey(l, primary || CONTENT_LANGS[0] || "en").replace(/^categories/, "catLabels");
+  }
+  function catCatalogLabel(l, k) {
+    const m = CAT_LABELS_BY_LANG[l] || (l === "pl" ? CAT_LABELS_PL : null);
+    return m && m[k] || "";
+  }
   function loadCatOrder() {
     try {
       setCatOrder(JSON.parse(lyGet("CatOrder") || "null") || []);
@@ -11583,14 +11592,14 @@ What you type stays in this browser only.`;
     Object.keys(CATS).forEach((k) => {
       if (gone.has(k) || !BASE_CATS[k] && !(pack.customCats && pack.customCats[k])) delete CATS[k];
     });
-    const pl = uiLang() === "pl";
+    const primary = CONTENT_LANGS[0] || "en", u = uiLang(), bag = u !== primary ? catPackKey(u, primary) : "";
     Object.keys(BASE_CATS).forEach((k) => {
       if (gone.has(k)) return;
-      CATS[k] = pl && (pack.catLabelsPl[k] || CAT_LABELS_PL[k]) || pack.catLabels[k] || BASE_CATS[k];
+      CATS[k] = bag && (pack[bag] && pack[bag][k] || catCatalogLabel(u, k)) || pack.catLabels[k] || BASE_CATS[k];
     });
     Object.keys(pack.customCats || {}).forEach((k) => {
       if (gone.has(k)) return;
-      CATS[k] = pl && pack.catLabelsPl[k] || pack.catLabels[k] || pack.customCats[k] || k;
+      CATS[k] = bag && pack[bag] && pack[bag][k] || pack.catLabels[k] || pack.customCats[k] || k;
     });
     refreshCatRoles();
   }
@@ -11608,6 +11617,11 @@ What you type stays in this browser only.`;
     }
     if (pack.catLabels) delete pack.catLabels[k];
     if (pack.catLabelsPl) delete pack.catLabelsPl[k];
+    const primary = CONTENT_LANGS[0] || "en";
+    CONTENT_LANGS.slice(1).forEach((l) => {
+      const bag = catPackKey(l, primary);
+      if (pack[bag]) delete pack[bag][k];
+    });
     if (pack.catRoles) delete pack.catRoles[k];
     if (pack.catIcons) delete pack.catIcons[k];
     if (pack.catColors) delete pack.catColors[k];
@@ -11655,10 +11669,16 @@ What you type stays in this browser only.`;
   }
   function categoryIsOverridden(k) {
     if (!k || !pack) return false;
+    const primary = CONTENT_LANGS[0] || "en";
     const lab = (pack.catLabels || {})[k];
     if (lab && lab !== BASE_CATS[k]) return true;
     const labPl = (pack.catLabelsPl || {})[k];
     if (labPl && labPl !== CAT_LABELS_PL[k]) return true;
+    for (let i = 1; i < CONTENT_LANGS.length; i++) {
+      const l = CONTENT_LANGS[i], bag = catPackKey(l, primary);
+      const v = (pack[bag] || {})[k];
+      if (v && v !== catCatalogLabel(l, k)) return true;
+    }
     const ic = (pack.catIcons || {})[k];
     if (ic != null && ic !== CAT_ICONS_CATALOG[k]) return true;
     const col = (pack.catColors || {})[k];
@@ -11669,7 +11689,8 @@ What you type stays in this browser only.`;
   }
   function resetCategory(k) {
     if (!k || !pack) return;
-    ["catLabels", "catLabelsPl", "catIcons", "catColors", "catRoles"].forEach((bag) => {
+    const primary = CONTENT_LANGS[0] || "en";
+    ["catLabels", "catLabelsPl", "catIcons", "catColors", "catRoles"].concat(CONTENT_LANGS.slice(1).map((l) => catPackKey(l, primary))).forEach((bag) => {
       if (pack[bag]) delete pack[bag][k];
     });
     savePack();
@@ -24466,11 +24487,15 @@ What you type stays in this browser only.`;
   }
   function currentCatalog(opts) {
     if (!(opts && opts.asIs)) rebuildCards();
-    const cats2 = {}, catsPl = {}, catsOther = {};
+    const cats2 = {}, catsPl = {}, catsOther = {}, primary = CONTENT_LANGS[0] || "en";
     CONTENT_LANGS.slice(1).forEach((code) => {
       if (code === "pl") return;
-      const m = CAT_LABELS_BY_LANG[code];
-      if (m && Object.keys(m).length) catsOther["categories:" + code] = Object.assign({}, m);
+      const bag = v2CatKey(code, primary).replace(/^categories/, "catLabels");
+      const m = Object.assign({}, CAT_LABELS_BY_LANG[code] || {}), ov = pack[bag] || {};
+      Object.keys(CATS).forEach((k) => {
+        if (ov[k]) m[k] = ov[k];
+      });
+      if (Object.keys(m).length) catsOther[v2CatKey(code, primary)] = m;
     });
     Object.keys(CATS).forEach((k) => {
       cats2[k] = pack.catLabels && pack.catLabels[k] || BASE_CATS[k] || pack.customCats && pack.customCats[k] || CATS[k];
@@ -25999,9 +26024,9 @@ What you type stays in this browser only.`;
     };
     const canDelete = !(cardCounts[k] || 0);
     const isCustomCat = !!(pack.customCats && pack.customCats[k]) && !BASE_CATS[k];
-    const origEn = pack.catLabels[k] || BASE_CATS[k] || pack.customCats && pack.customCats[k] || k;
-    const origPl = pack.catLabelsPl[k] || CAT_LABELS_PL[k] || "";
-    const orig = origEn;
+    const primary = CONTENT_LANGS[0] || "en";
+    const orig = pack.catLabels && pack.catLabels[k] || BASE_CATS[k] || pack.customCats && pack.customCats[k] || k;
+    const origFor = (l) => l === primary ? orig : pack[catPackKey(l, primary)] && pack[catPackKey(l, primary)][k] || catCatalogLabel(l, k);
     let iconKey = catIconKey(k), slot = catSlot(k), always = isAlwaysCat(k);
     const iconGridKeys = () => iconKey && CAT_ICON_KEYS.indexOf(iconKey) < 0 ? CAT_ICON_KEYS.concat(iconKey) : CAT_ICON_KEYS;
     const iconGrid = () => iconGridKeys().map((key) => '<button type="button" class="ic-opt' + (key === iconKey ? " on" : "") + '" data-ic="' + esc(key) + '" title="' + esc(key) + '" aria-label="' + esc(key) + '" aria-pressed="' + (key === iconKey ? "true" : "false") + '"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(key) + "</svg></button>").join("");
@@ -26018,15 +26043,15 @@ What you type stays in this browser only.`;
         /* Under the head's rule, the same distance below it as the window controls sit above, on
            the body's own right edge: the flag belongs to the category, not to one of its
            languages. Zero-height anchor, so nothing below it moves. */
-        '<div class="ce-topright"><button type="button" class="mg-role' + (always ? " on" : "") + '" id="ceAlways" aria-pressed="' + (always ? "true" : "false") + '" title="' + esc(t(always ? "Supporting category, relevant regardless of the intent" : "Make this a supporting category, relevant regardless of the intent")) + '" aria-label="' + esc(t("Supporting category")) + '">' + ICON_ROLE_ALWAYS + '</button></div><div class="ce-preview" id="cePrev"></div>' + /* TWO BOXES: a category can be named differently per interface language and the
-           format carries both. One box filled from the RESOLVED label meant editing under a
-           Polish interface wrote the Polish name into the English slot and lost the English
-           one. The Polish box is optional - empty means "no Polish name", falling back to
-           the English one: the engine does not translate category names. */
+        '<div class="ce-topright"><button type="button" class="mg-role' + (always ? " on" : "") + '" id="ceAlways" aria-pressed="' + (always ? "true" : "false") + '" title="' + esc(t(always ? "Supporting category, relevant regardless of the intent" : "Make this a supporting category, relevant regardless of the intent")) + '" aria-label="' + esc(t("Supporting category")) + '">' + ICON_ROLE_ALWAYS + '</button></div><div class="ce-preview" id="cePrev"></div>' + /* ONE BOX PER CONTENT LANGUAGE: a category can be named differently per language and the
+           format carries each. One box filled from the RESOLVED label meant editing under a
+           Polish interface wrote the Polish name into the primary slot and lost the primary
+           one. Every secondary box is optional - empty means "no separate name", falling back to
+           the primary one: the engine does not translate category names. */
         langTabs() + CONTENT_LANGS.map((l, i) => langPane(
           l,
           i,
-          '<div class="mf"><label>Name</label><input id="' + langFieldId("ce", "name", l) + '" value="' + esc(l === "pl" ? origPl : origEn) + '" autocomplete="off" spellcheck="false" placeholder="' + esc(l === "pl" ? origEn : "") + '" aria-label="' + esc(t("Category name")) + " (" + esc(langEndonym(l)) + ')"></div>'
+          '<div class="mf"><label>Name</label><input id="' + langFieldId("ce", "name", l) + '" value="' + esc(origFor(l)) + '" autocomplete="off" spellcheck="false" placeholder="' + esc(i ? orig : "") + '" aria-label="' + esc(t("Category name")) + " (" + esc(langEndonym(l)) + ')"></div>'
         )).join("") + '<div class="mf"><label>Icon</label><div class="ic-pick" id="ceIcons">' + iconGrid() + '</div></div><div class="mf"><label>Colour</label><div class="col-pick" id="ceCols">' + colGrid() + "</div></div>"
       ),
       /* DELETE LIVES HERE, not on the pill - there it could only appear on an empty
@@ -26038,13 +26063,17 @@ What you type stays in this browser only.`;
         return '<div class="mf-left"><span title="' + esc(why) + '"><button type="button" class="btn danger mf-del" id="ceDelete"' + (canDelete ? "" : ' disabled aria-disabled="true"') + ' title="' + esc(why) + '">Delete</button></span><button type="button" class="btn mf-reset" id="ceReset">Reset</button></div>';
       })() + '<button type="button" class="btn" id="ceCancel">Cancel</button><button type="button" class="btn primary" id="ceSave">Save</button>'
     });
-    const nameEl = $("#" + langFieldId("ce", "name", "en")), namePlEl = $("#" + langFieldId("ce", "name", "pl"));
+    const nameEls = {};
+    CONTENT_LANGS.forEach((l) => {
+      nameEls[l] = $("#" + langFieldId("ce", "name", l));
+    });
+    const nameVal = (l) => nameEls[l] && typeof nameEls[l].value === "string" ? nameEls[l].value.trim() : "";
     const ceStrip = $(".lang-tabs");
     if (ceStrip) ceStrip.addEventListener("click", () => setTimeout(drawPrev, 0));
     function drawPrev() {
       const onTab = $(".lang-tabs button.on");
-      const cur = onTab ? onTab.getAttribute("data-l") : CONTENT_LANGS[0];
-      const nm = cur === "pl" && namePlEl.value.trim() || nameEl.value.trim() || orig;
+      const cur = onTab && onTab.getAttribute("data-l") || primary;
+      const nm = nameVal(cur) || nameVal(primary) || orig;
       const ic = '<svg class="cat-ic" viewBox="0 0 20 20" aria-hidden="true" focusable="false">' + catIconInner(iconKey) + "</svg>";
       $("#cePrev").innerHTML = '<span class="pill" data-ec="' + slot + '">' + ic + '<span class="pill-lab">' + esc(nm) + '</span></span><span class="ccat" data-ec="' + slot + '">' + ic + esc(nm) + "</span>";
     }
@@ -26055,8 +26084,9 @@ What you type stays in this browser only.`;
         b.setAttribute("aria-pressed", on ? "true" : "false");
       });
     }
-    nameEl.oninput = drawPrev;
-    namePlEl.oninput = drawPrev;
+    CONTENT_LANGS.forEach((l) => {
+      if (nameEls[l]) nameEls[l].oninput = drawPrev;
+    });
     $("#ceIcons").onclick = (e) => {
       const b = e.target.closest("[data-ic]");
       if (!b) return;
@@ -26111,14 +26141,20 @@ What you type stays in this browser only.`;
       openCategoryEditor(k, fromPill);
     };
     $("#ceSave").onclick = () => {
-      const nm = nameEl.value.trim();
-      if (nm && nm !== origEn) {
+      const nm = nameVal(primary);
+      if (nm && nm !== orig) {
         pack.catLabels[k] = nm;
         if (pack.customCats && pack.customCats[k]) pack.customCats[k] = nm;
       }
-      const nmPl = namePlEl.value.trim();
-      if (!nmPl || nmPl === CAT_LABELS_PL[k]) delete pack.catLabelsPl[k];
-      else pack.catLabelsPl[k] = nmPl;
+      CONTENT_LANGS.slice(1).forEach((l) => {
+        const bag = catPackKey(l, primary), base = catCatalogLabel(l, k), v = nameVal(l);
+        if (!v || v === base) {
+          if (pack[bag]) delete pack[bag][k];
+        } else {
+          if (!pack[bag] || typeof pack[bag] !== "object") pack[bag] = {};
+          pack[bag][k] = v;
+        }
+      });
       pack.catIcons[k] = iconKey;
       pack.catColors[k] = slot;
       const roleMoved = always !== isAlwaysCat(k);
@@ -26139,7 +26175,8 @@ What you type stays in this browser only.`;
       (kk) => openCategoryEditor(kk, fromPill)
     );
     drawPrev();
-    if (nameEl.focus) nameEl.focus();
+    const firstEl = nameEls[primary];
+    if (firstEl && firstEl.focus) firstEl.focus();
   }
   var IE_HINT = {
     clause: { en: "e.g. changing your flight", pl: "np. zmianą lotu (narzędnik po z/ze)" },
@@ -26261,7 +26298,7 @@ What you type stays in this browser only.`;
     };
     edWireNav(displayIntentRows().map((r) => r.idx), idx, (i2) => openIntentEditor(i2));
     setTimeout(() => {
-      const el = $("#" + langFieldId("ie", "clause", "en"));
+      const el = $("#" + langFieldId("ie", "clause", CONTENT_LANGS[0]));
       if (el) el.focus();
     }, 30);
   }
