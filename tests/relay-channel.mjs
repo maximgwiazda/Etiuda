@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 104;
+const EXPECTED = 113;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2710,6 +2710,229 @@ try {
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "harness (the leg 955a): " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- an older epoch's team file is a replay (F5): never loaded, and never written over a newer file the mirror
+   already holds, even where this program has no applied record for it. A lower rev at the same epoch, and a newer
+   epoch, stay as they are. Judging a blob under an older epoch's own floor stays as it is. ---- */
+try {
+  const K2 = crypto.randomBytes(32);
+  const roster = [member(DESK)];
+  const doc = (epoch, rev) => JSON.parse(teamText(rev, roster, { epoch }));
+  const writer = { keyId: LEAD.keyId, privateKey: LEAD.privateKey };
+  const teamBlob = (text, epoch, counter, key) => B.seal({ relayTeamId: RT, epoch, teamKey: key, writer,
+    path: C.TEAM_NAME, body: text, counter, place: "root" });
+  const item = (blob, seq) => ({ seq, ct: blob.ciphertext, meta: { v: 1, id: blob.id, writer: blob.writerKeyId,
+    epoch: blob.epoch, counter: blob.counter, size: blob.ciphertext.length, sig: blob.signature, nonce: blob.nonce,
+    supersedes: blob.supersedes, del: !!blob.deletion } });
+  const ctx = { keyFor: e => (e === 2 ? K2 : e === 1 ? K1 : null) };
+  const quiet = { read() { return null; }, write() {}, remove() {}, list() { return []; } };
+  const clock = () => 1700000000000;
+
+  const bare = C.createProgram({ io: quiet, pin: PIN, clock, save() {} });
+  const loaded1 = bare.loadTeamFile(doc(1, 1));
+  const loaded2 = bare.loadTeamFile(doc(2, 1));
+  const back = bare.loadTeamFile(doc(1, 2));
+  const same = bare.loadTeamFile(doc(2, 1));
+  check(loaded1.ok === true && loaded2.ok === true && back.reason === "replay-rev",
+    "956c a team file of an older epoch is replay-rev on load: "
+    + [loaded1.ok, loaded2.ok, back.reason || back.ok].join(" "));
+  check(same.reason === "replay-rev",
+    "956d a lower or equal rev at the same epoch is still replay-rev: " + (same.reason || same.ok));
+
+  const root = path.join(LAB, "f5-hold-" + hex(4));
+  fs.mkdirSync(root, { recursive: true });
+  const said = [];
+  const mirror = C.diskIO(root, C.writeWhole);
+  const held = C.createProgram({ io: mirror, pin: PIN, clock, save() {}, say: l => said.push(l) });
+  const text2 = teamText(1, roster, { epoch: 2 });
+  mirror.write(C.TEAM_NAME, text2);
+  const rolled = held.applyBatch([item(teamBlob(teamText(2, roster, { epoch: 1 }), 1, 1, K1), 1)], ctx);
+  let nowEpoch = null;
+  try { nowEpoch = JSON.parse(fs.readFileSync(path.join(root, C.TEAM_NAME), "utf8")).epoch; } catch { nowEpoch = null; }
+  const saidReplay = said.some(l => l.indexOf(B.REASONS["replay-rev"]) >= 0);
+  check(nowEpoch === 2 && rolled.applied.length === 0 && saidReplay,
+    "956a a team file already on disk at epoch 2, with no applied record, stays epoch 2 and the older blob is said as a replay: now "
+    + nowEpoch + ", applied " + JSON.stringify(rolled.applied) + ", said " + saidReplay);
+
+  const root2 = path.join(LAB, "f5-applied-" + hex(4));
+  fs.mkdirSync(root2, { recursive: true });
+  const set = C.createProgram({ io: C.diskIO(root2, C.writeWhole), pin: PIN, clock, save() {} });
+  const landed = set.applyBatch([item(teamBlob(text2, 2, 5, K2), 1)], ctx);
+  const again = set.applyBatch([item(teamBlob(teamText(2, roster, { epoch: 1 }), 1, 1, K1), 2)], ctx);
+  const stayed = JSON.parse(fs.readFileSync(path.join(root2, C.TEAM_NAME), "utf8")).epoch;
+  check(landed.applied.indexOf(C.TEAM_NAME) >= 0 && stayed === 2 && again.applied.length === 0,
+    "956b once the channel applied epoch 2, the older blob does not replace it: stayed epoch " + stayed
+    + ", first applied " + JSON.stringify(landed.applied) + ", again " + JSON.stringify(again.applied));
+} catch (e) {
+  check(false, "harness: " + (e && e.stack ? e.stack : e));
+}
+
+/* plant:epoch-hold. Deleting that line, leaving the file valid script, writes an older epoch over the newer file on disk. */
+{
+  const src = path.join(ROOT, "shell", "relay", "channel.cjs");
+  const before = fs.readFileSync(src);
+  const digest = sha(before);
+  let turned = false, detail = "plant line absent";
+  try {
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:epoch-hold") >= 0);
+    if (at >= 0) {
+      lines.splice(at, 1);
+      fs.writeFileSync(src, lines.join("\n"));
+      const resolved = nodeRequire.resolve(src);
+      delete nodeRequire.cache[resolved];
+      const lifted = nodeRequire(src);
+      const root = path.join(LAB, "f5-plant-" + hex(4));
+      fs.mkdirSync(root, { recursive: true });
+      const mirror = lifted.diskIO(root, lifted.writeWhole);
+      const prog = lifted.createProgram({ io: mirror, pin: PIN, clock: () => 1700000000000, save() {} });
+      const roster = [member(DESK)];
+      const text2 = teamText(1, roster, { epoch: 2 });
+      const older = teamText(2, roster, { epoch: 1 });
+      mirror.write(lifted.TEAM_NAME, text2);
+      const writer = { keyId: LEAD.keyId, privateKey: LEAD.privateKey };
+      const blob = B.seal({ relayTeamId: RT, epoch: 1, teamKey: K1, writer,
+        path: lifted.TEAM_NAME, body: older, counter: 1, place: "root" });
+      const one = { seq: 1, ct: blob.ciphertext, meta: { v: 1, id: blob.id, writer: blob.writerKeyId,
+        epoch: blob.epoch, counter: blob.counter, size: blob.ciphertext.length, sig: blob.signature, nonce: blob.nonce,
+        supersedes: blob.supersedes, del: !!blob.deletion } };
+      const ctx = { keyFor: e => (e === 1 ? K1 : null) };
+      prog.applyBatch([one], ctx);
+      let now = null;
+      try { now = JSON.parse(fs.readFileSync(path.join(root, lifted.TEAM_NAME), "utf8")).epoch; } catch { now = null; }
+      turned = now === 1;
+      detail = "disk epoch " + now;
+    }
+  } catch (e) {
+    detail = e && e.message ? e.message : String(e);
+  } finally {
+    fs.writeFileSync(src, before);
+    try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
+  }
+  const back = sha(fs.readFileSync(src)) === digest;
+  check(turned && back, "956e lifting plant:epoch-hold writes the older epoch over the newer file, and the file is put back: "
+    + detail + ", sha " + (back ? "restored" : "differs"));
+}
+
+/* ---- a path that differs only in case is one file (F3). The same path in the same case is already stale. Pending
+   carries no path, so a pending row is not a fourth map of paths. ---- */
+try {
+  const root = path.join(LAB, "f3-case-" + hex(4));
+  fs.mkdirSync(root, { recursive: true });
+  const prog = C.createProgram({ io: C.diskIO(root, C.writeWhole), pin: PIN, clock: () => 1700000000000, save() {} });
+  const writer = { keyId: LEAD.keyId, privateKey: LEAD.privateKey };
+  const K2 = crypto.randomBytes(32);
+  const ctx = { keyFor: e => (e === 2 ? K2 : e === 1 ? K1 : null) };
+  const seal = (p, body, epoch, counter, key) => B.seal({ relayTeamId: RT, epoch, teamKey: key, writer,
+    path: p, body, counter, place: "root" });
+  const item = (blob, seq) => ({ seq, ct: blob.ciphertext, meta: { v: 1, id: blob.id, writer: blob.writerKeyId,
+    epoch: blob.epoch, counter: blob.counter, size: blob.ciphertext.length, sig: blob.signature, nonce: blob.nonce,
+    supersedes: blob.supersedes, del: !!blob.deletion } });
+  const first = prog.applyBatch([item(seal("guide.ec", "v2", 2, 10, K2), 1)], ctx);
+  const same = prog.applyBatch([item(seal("guide.ec", "v1", 1, 1, K1), 2)], ctx);
+  const afterSame = fs.readFileSync(path.join(root, "guide.ec"), "utf8");
+  check(afterSame === "v2" && same.applied.length === 0 && first.applied.indexOf("guide.ec") >= 0,
+    "957a the same path in the same case stays stale: disk " + JSON.stringify(afterSame) + ", applied " + same.applied.length);
+  const crossed = prog.applyBatch([item(seal("Guide.ec", "v1", 1, 1, K1), 3)], ctx);
+  let diskName = null, diskBody = null;
+  for (const n of fs.readdirSync(root)) {
+    if (n.toLowerCase() === "guide.ec") { diskName = n; diskBody = fs.readFileSync(path.join(root, n), "utf8"); }
+  }
+  check(diskBody === "v2" && diskName === "guide.ec" && crossed.applied.length === 0,
+    "957b an older blob under another case does not replace the newer file: name " + JSON.stringify(diskName)
+    + " body " + JSON.stringify(diskBody) + ", applied " + JSON.stringify(crossed.applied));
+
+  const sentId = hex(16), inv = hex(16), pend = hex(16);
+  const loaded = C.stateOf({
+    kind: "etiuda-relay-channel", v: 1,
+    applied: {
+      "guide.ec": { writer: LEAD.keyId, epoch: 1, counter: 1, id: "a", at: 1, sha: "aa", del: false },
+      "Guide.ec": { writer: LEAD.keyId, epoch: 2, counter: 4, id: "b", at: 2, sha: "bb", del: false },
+    },
+    sent: { "GUIDE.ec": { id: sentId, epoch: 2, counter: 4, sha: "bb", size: 2, del: false } },
+    refused: { "Guide.ec": { sha: "cc", why: "bad-path" } },
+    sentInv: { [inv]: { "Guide.ec": { id: hex(16), epoch: 1, counter: 2, sha: "dd", size: 2, del: false } } },
+    pending: [{ seq: 3, id: pend, epoch: 1, writer: LEAD.keyId, floor: 0 }],
+  });
+  const appliedKeys = Object.keys(loaded.applied);
+  const sentKeys = Object.keys(loaded.sent);
+  const refusedKeys = Object.keys(loaded.refused);
+  const invKeys = Object.keys((loaded.sentInv[inv]) || {});
+  const laterApplied = loaded.applied["guide.ec"];
+  const quiet = { read() { return null; }, write() {}, remove() {}, list() { return []; } };
+  const said = [];
+  const maps = C.createProgram({ io: quiet, pin: PIN, clock: () => 1, save() {}, say: l => said.push(l) });
+  const blobOf = id => ({ id, epoch: 1, counter: 1, ciphertext: Buffer.alloc(8) });
+  maps.sentOut({ rel: "Guide.ec", kind: "file", sha: "aa" }, blobOf(hex(16)));
+  maps.sentOut({ rel: "guide.ec", kind: "file", sha: "bb" }, blobOf(hex(16)));
+  maps.refusedOut({ rel: "GUIDE.ec", sha: "cc" }, { reason: "bad-path", said: B.REASONS["bad-path"] });
+  maps.refusedOut({ rel: "guide.ec", sha: "dd" }, { reason: "bad-path", said: B.REASONS["bad-path"] });
+  const sentLive = Object.keys(maps.state().sent).filter(k => k.toLowerCase() === "guide.ec");
+  const refusedLive = Object.keys(maps.state().refused).filter(k => k.toLowerCase() === "guide.ec");
+  const from = said.length;
+  maps.refusedOut({ rel: "guide.ec" }, { reason: "epoch", said: "held" });
+  maps.refusedOut({ rel: "Guide.ec" }, { reason: "epoch", said: "held" });
+  const waits = said.slice(from).filter(l => l.indexOf("waits") >= 0).length;
+  check(appliedKeys.length === 1 && appliedKeys[0] === "guide.ec" && laterApplied && laterApplied.epoch === 2
+    && sentKeys.length === 1 && sentKeys[0] === "guide.ec"
+    && refusedKeys.length === 1 && refusedKeys[0] === "guide.ec"
+    && invKeys.length === 1 && invKeys[0] === "guide.ec"
+    && loaded.pending.length === 1 && !("path" in loaded.pending[0])
+    && sentLive.length === 1 && refusedLive.length === 1 && waits === 1,
+    "957c case-distinct paths are one file in applied, sent, refused and a copy's sent map, and a wait is said once: applied "
+    + JSON.stringify(appliedKeys) + " epoch " + (laterApplied && laterApplied.epoch) + ", sent " + JSON.stringify(sentKeys)
+    + ", refused " + JSON.stringify(refusedKeys) + ", copy " + JSON.stringify(invKeys)
+    + ", pending " + loaded.pending.length + ", live sent " + sentLive.length + ", live refused " + refusedLive.length
+    + ", waits " + waits);
+} catch (e) {
+  check(false, "harness (the legs 957a to 957d): " + (e && e.stack ? e.stack : e));
+}
+
+/* plant:path-key. Deleting that line, leaving the file valid script, lets an older blob under another case replace the file. */
+{
+  const src = path.join(ROOT, "shell", "relay", "channel.cjs");
+  const before = fs.readFileSync(src);
+  const digest = sha(before);
+  let turned = false, detail = "plant line absent";
+  try {
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:path-key") >= 0);
+    if (at >= 0) {
+      lines.splice(at, 1);
+      fs.writeFileSync(src, lines.join("\n"));
+      const resolved = nodeRequire.resolve(src);
+      delete nodeRequire.cache[resolved];
+      const lifted = nodeRequire(src);
+      const root = path.join(LAB, "f3-plant-" + hex(4));
+      fs.mkdirSync(root, { recursive: true });
+      const prog = lifted.createProgram({ io: lifted.diskIO(root, lifted.writeWhole), pin: PIN, clock: () => 1700000000000, save() {} });
+      const writer = { keyId: LEAD.keyId, privateKey: LEAD.privateKey };
+      const K2 = crypto.randomBytes(32);
+      const ctx = { keyFor: e => (e === 2 ? K2 : e === 1 ? K1 : null) };
+      const seal = (p, body, epoch, counter, key) => B.seal({ relayTeamId: RT, epoch, teamKey: key, writer,
+        path: p, body, counter, place: "root" });
+      const item = (blob, seq) => ({ seq, ct: blob.ciphertext, meta: { v: 1, id: blob.id, writer: blob.writerKeyId,
+        epoch: blob.epoch, counter: blob.counter, size: blob.ciphertext.length, sig: blob.signature, nonce: blob.nonce,
+        supersedes: blob.supersedes, del: !!blob.deletion } });
+      prog.applyBatch([item(seal("guide.ec", "v2", 2, 10, K2), 1)], ctx);
+      prog.applyBatch([item(seal("Guide.ec", "v1", 1, 1, K1), 2)], ctx);
+      /* Any case variant on disk holding v1, or more than one variant, is the harm: one file on a case-folding disk,
+         two on a case-sensitive one (the test architect's condition 1 of 2026-10-19). */
+      const variants = fs.readdirSync(root).filter(n => n.toLowerCase() === "guide.ec");
+      const bodies = variants.map(n => fs.readFileSync(path.join(root, n), "utf8"));
+      turned = bodies.indexOf("v1") >= 0 || variants.length > 1;
+      detail = "case variants " + JSON.stringify(variants) + ", bodies " + JSON.stringify(bodies);
+    }
+  } catch (e) {
+    detail = e && e.message ? e.message : String(e);
+  } finally {
+    fs.writeFileSync(src, before);
+    try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
+  }
+  const back = sha(fs.readFileSync(src)) === digest;
+  check(turned && back, "957d lifting plant:path-key lets the older case replace the file, and the file is put back: "
+    + detail + ", sha " + (back ? "restored" : "differs"));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */
