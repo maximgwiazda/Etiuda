@@ -2517,7 +2517,7 @@ try {
   check(planted.turned && planted.back, "952b lifting plant:stale-epoch writes the withheld epoch-1 bytes over the epoch-2 edition, and the file is put back: "
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
-  check(false, "952a harness: " + (e && e.stack ? e.stack : e));
+  check(false, "harness (the leg 952a): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- an edit of this program's own file, one cycle (S2). The catch-up skips what this desk, or the lead, just sent,
@@ -2583,7 +2583,7 @@ try {
   check(planted.turned && planted.back, "953c lifting plant:own-skip writes the sent copy over the edit, on the desk and on the lead, and the file is put back: "
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
-  check(false, "953a harness: " + (e && e.stack ? e.stack : e));
+  check(false, "harness (the leg 953a): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- a joining desk that also owes another file. Only join.json may be sealed under the invitation, so the other
@@ -2640,7 +2640,7 @@ try {
   check(planted.turned && planted.back, "954b lifting plant:invite-join lets the other file spend the invitation's one upload, and the file is put back: "
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
-  check(false, "954a harness: " + (e && e.stack ? e.stack : e));
+  check(false, "harness (the leg 954a): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- a token hello the relay answers 500. The token stays unused, so the next cycle sends it and the request goes.
@@ -2709,7 +2709,7 @@ try {
   check(planted.turned && planted.back, "955b lifting plant:token-kept marks the token used on the 500, so the next try never sends it, and the file is put back: "
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
-  check(false, "955a harness: " + (e && e.stack ? e.stack : e));
+  check(false, "harness (the leg 955a): " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */
