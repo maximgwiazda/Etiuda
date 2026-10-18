@@ -46,6 +46,10 @@
    the newest team file from its own copy, under the pinned lead's signature, as any desk does after a move. The box the
    signed team file names wins once the desk holds one; the invitation's serves only before that.
 
+   THE LEAD'S EPOCH (F8 of the slice 1 review). A desk joining by invitation seals its one request at the newest epoch a
+   verified lead blob has named. The relay's header names a writer and an epoch before any signature is checked, and that
+   header moves nothing: leadEpoch rises only once the pinned lead's upload signature on the blob verifies.
+
    Two halves. createProgram is synchronous and talks to nobody: it judges, writes the mirror and says what it owes; the
    harness's adapter drives it directly. createChannel talks to the relay (the hello, a session re-opened when it lapses,
    since and the blobs, the uploads, the socket's announcements) and watches the mirror. Nothing private leaves unsealed:
@@ -603,6 +607,31 @@ function createProgram(opts) {
   }
   const unpend = id => { st.pending = st.pending.filter(p => p.id !== id); };
 
+  /* The public key of a writer this program trusts: the pinned lead, or a desk one roster it already holds names, and
+     only where that key id is a single public key. A public key the blob itself carries is not trust. */
+  function trustedPub(writer) {
+    if (!pin || !B.isId(writer)) return null;
+    if (writer === pin.lead.keyId) return pin.lead.public;
+    const pubs = [];
+    for (const e of Object.keys(st.trust)) {
+      for (const d of st.trust[e].desks) {
+        if (d.keyId === writer && pubs.indexOf(d.public) < 0) pubs.push(d.public);
+      }
+    }
+    return pubs.length === 1 ? pubs[0] : null;
+  }
+
+  /* The upload signature over this fetched blob's header and ciphertext, under a trusted writer. The team key is not
+     required: the signature is the writer's, and the ciphertext may still be waiting for a key (F8, F7). */
+  function signedUpload(it) {
+    const m = it && it.meta, ct = toBytes(it && it.ct);
+    const pub = m && trustedPub(m.writer);
+    if (!pub || !ct) return false;
+    const aad = B.aadOf({ relayTeamId: pin.rt, epoch: m.epoch, id: m.id, supersedes: m.supersedes == null ? null : m.supersedes,
+      writerKeyId: m.writer, counter: m.counter });
+    return !!aad && B.verifyUpload(pub, aad, ct, m.sig);
+  }
+
   /* The keys and trust one blob is tried under, in order: the team key of its own epoch under the roster of that epoch (a
      desk's file needs that roster; the lead's needs only the pin); then, before this program holds that key, the
      invitation's seal key under the pin alone; on the lead's side, a live invitation's key for a desk not on the roster,
@@ -704,7 +733,7 @@ function createProgram(opts) {
     const lead = [], rest = [];
     for (const it of items || []) {
       if (!it || !table(it.meta)) continue;
-      if (it.meta.writer === pin.lead.keyId && isCount(it.meta.epoch)) st.leadEpoch = Math.max(st.leadEpoch, it.meta.epoch);
+      if (it.meta.writer === pin.lead.keyId && signedUpload(it)) st.leadEpoch = Math.max(st.leadEpoch, it.meta.epoch); /* plant:lead-epoch */
       (it.meta.writer === pin.lead.keyId ? lead : rest).push(it);
     }
     const opened = [];
