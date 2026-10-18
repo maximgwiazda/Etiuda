@@ -21,6 +21,7 @@ import { TAB_KEY, tabSaveTimer } from "./tabs.js";
 import { t, catalogCountsLine, toast, toastRefusal } from "./ui-lang.js";
 import { BASE_CATS, BASE_M, pack, whoOptions, savePack, flushStats, retiredCards } from "./pack.js";
 import { catIconKey, catSlot } from "./cat-identity.js";
+import { catPackKey } from "./cat-set.js";
 import { normalizeCardIntents } from "./card-intent.js";
 import { intentIdAt, intentIdxFromId } from "./intent-id.js";
 import { rebuildCards } from "./rebuild.js";
@@ -62,8 +63,7 @@ function currentCatalog(opts){
      editor saved. */
   CONTENT_LANGS.slice(1).forEach(code=>{
     if(code==="pl") return;
-    const bag=v2CatKey(code,primary).replace(/^categories/,"catLabels");
-    const m=Object.assign({},CAT_LABELS_BY_LANG[code]||{}), ov=pack[bag]||{};
+    const m=Object.assign({},CAT_LABELS_BY_LANG[code]||{}), ov=pack[catPackKey(code,primary)]||{};
     Object.keys(CATS).forEach(k=>{ if(ov[k]) m[k]=ov[k]; });
     if(Object.keys(m).length) catsOther[v2CatKey(code,primary)]=m;
   });

@@ -1,6 +1,6 @@
 import { refreshCatRoles } from "./cat-roles.js";
 import { CATS, CONTENT_LANGS } from "./content-model.js";
-import { CAT_LABELS_PL, CAT_LABELS_BY_LANG } from "./icons.js";
+import { CAT_LABELS_BY_LANG } from "./icons.js";
 import { v2CatKey } from "./catalog-v2.js";
 import { BASE_CATS, pack, savePack, packSnapshot, packUndoFor } from "./pack.js";
 import { lyGet, lySet } from "./storage.js";
@@ -8,12 +8,13 @@ import { uiLang, toast, offerUndo } from "./ui-lang.js";
 import { cardCounts, setCatOrder, catOrder, setCats, cats } from "./app-state.js";
 import { hooks } from "./hooks.js";
 
+/* The personal layer's bag for one language's category names: the catalog's own key with
+   "categories" read as "catLabels", so en-then-pl keeps catLabels and catLabelsPl. */
 function catPackKey(l,primary){
   return v2CatKey(l,primary||CONTENT_LANGS[0]||"en").replace(/^categories/,"catLabels");
 }
 function catCatalogLabel(l,k){
-  const m=CAT_LABELS_BY_LANG[l] || (l==="pl"?CAT_LABELS_PL:null);
-  return (m && m[k]) || "";
+  return (CAT_LABELS_BY_LANG[l] || {})[k] || "";
 }
 /* The pills' stored order, read at every start: the retired Boarding pass key becomes Check-in's,
    and a key naming no category is dropped. */
@@ -31,9 +32,9 @@ function applyCatsToGlobal(){
     if(gone.has(k) || (!BASE_CATS[k] && !(pack.customCats&&pack.customCats[k]))) delete CATS[k];
   });
   /* Falling order of authority; every layer is something a PERSON wrote - the engine
-     translates nothing. Polish: the user's Polish name, the catalog's, the user's English
-     rename, the canonical. English: rename, then canonical. A name in the English box
-     never appears as its own translation - only because nothing Polish was offered. */
+     translates nothing. An interface language past the catalog's primary: the user's name in
+     it, the catalog's, the user's primary rename, the canonical. The primary: rename, then
+     canonical. A primary name stands in only because nothing in that language was offered. */
   const primary=CONTENT_LANGS[0]||"en", u=uiLang(), bag=u!==primary?catPackKey(u,primary):"";
   Object.keys(BASE_CATS).forEach(k=>{
     if(gone.has(k)) return;

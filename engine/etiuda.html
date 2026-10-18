@@ -11574,8 +11574,7 @@ What you type stays in this browser only.`;
     return v2CatKey(l, primary || CONTENT_LANGS[0] || "en").replace(/^categories/, "catLabels");
   }
   function catCatalogLabel(l, k) {
-    const m = CAT_LABELS_BY_LANG[l] || (l === "pl" ? CAT_LABELS_PL : null);
-    return m && m[k] || "";
+    return (CAT_LABELS_BY_LANG[l] || {})[k] || "";
   }
   function loadCatOrder() {
     try {
@@ -24490,8 +24489,7 @@ What you type stays in this browser only.`;
     const cats2 = {}, catsPl = {}, catsOther = {}, primary = CONTENT_LANGS[0] || "en";
     CONTENT_LANGS.slice(1).forEach((code) => {
       if (code === "pl") return;
-      const bag = v2CatKey(code, primary).replace(/^categories/, "catLabels");
-      const m = Object.assign({}, CAT_LABELS_BY_LANG[code] || {}), ov = pack[bag] || {};
+      const m = Object.assign({}, CAT_LABELS_BY_LANG[code] || {}), ov = pack[catPackKey(code, primary)] || {};
       Object.keys(CATS).forEach((k) => {
         if (ov[k]) m[k] = ov[k];
       });

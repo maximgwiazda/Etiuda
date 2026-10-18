@@ -4689,7 +4689,6 @@ const CARD_B = {
   const PK = await import(MOD("pack.js"));
   const CS = await import(MOD("cat-set.js"));
   const CI = await import(MOD("cat-identity.js"));
-  const CF = await import(MOD("catalog-file.js"));
   const AS = await import(MOD("app-state.js"));
   const H = await import(MOD("hooks.js"));
   const Dom = await import(MOD("dom.js"));
@@ -4813,7 +4812,7 @@ const CARD_B = {
           "true|true|true|true|Allgemein||true|Allgemein|true || Grundlagen || Grundlagen|Grundlagen|true|false || |Allgemein|Allgemein|true");
       });
 
-    check("editors.js", "908ce2 on a two-language catalog that is neither en nor pl, each language's name is shown, previewed, edited, saved, exported and reset as written",
+    check("editors.js", "908ce2 on a two-language catalog that is neither en nor pl, each language's name is shown, previewed, edited, saved and reset as written",
       () => {
         setupCat(["de", "uk"], "Allgemein", { uk: { gen: "Загальне" } });
         ED.openCategoryEditor("gen", true);
@@ -4831,17 +4830,16 @@ const CARD_B = {
         uk.oninput();
         const prevEdited = prevText();
         byId["#ceSave"].onclick();
-        const exp = CF.currentCatalog({ asIs: true });
         ED.openCategoryEditor("gen", true);
         const reopened = [byId["#ce_name_de"].value, byId["#ce_name_uk"].value, CI.categoryIsOverridden("gen"),
-          exp.categories.gen, (exp["categories:uk"] || {}).gen].join("|");
+          PK.pack.catLabels.gen, (PK.pack["catLabels:uk"] || {}).gen].join("|");
         byId["#ceReset"].onclick();
         const reset = [byId["#ce_name_de"].value, byId["#ce_name_uk"].value, CI.categoryIsOverridden("gen")].join("|");
         return eq([opened, prevUk, prevFallback, prevEdited, reopened, reset].join(" || "),
           "true|Allgemein||Загальне|Allgemein|true|true || Загальне || Allgemein || Основи || Grundlagen|Основи|true|Grundlagen|Основи || Allgemein|Загальне|false");
       });
 
-    check("editors.js", "908ce3 on a catalog of three languages, the third language shows its own name rather than Polish, previews, saves, exports and resets alongside the first two",
+    check("editors.js", "908ce3 on a catalog of three languages, the third language shows its own name rather than Polish, previews, saves and resets alongside the first two",
       () => {
         setupCat(["en", "pl", "uk"], "General", { pl: { gen: "Ogólne" }, uk: { gen: "Загальне" } });
         ED.openCategoryEditor("gen", true);
@@ -4855,34 +4853,44 @@ const CARD_B = {
         en.value = "Core";
         pl.value = "Podstawy";
         byId["#ceSave"].onclick();
-        const exp = CF.currentCatalog({ asIs: true });
         ED.openCategoryEditor("gen", true);
         const reopened = [byId["#ce_name_en"].value, byId["#ce_name_pl"].value, byId["#ce_name_uk"].value,
-          PK.pack.catLabels.gen, PK.pack.catLabelsPl.gen, exp.categories.gen, exp.categoriesPl.gen, (exp["categories:uk"] || {}).gen].join("|");
+          PK.pack.catLabels.gen, PK.pack.catLabelsPl.gen, (PK.pack["catLabels:uk"] || {}).gen].join("|");
         byId["#ceReset"].onclick();
         const reset = [byId["#ce_name_en"].value, byId["#ce_name_pl"].value, byId["#ce_name_uk"].value, CI.categoryIsOverridden("gen")].join("|");
         return eq([opened, prevUk, reopened, reset].join(" || "),
-          "true|General|Ogólne|Загальне|General|true || Основи || Core|Podstawy|Основи|Core|Podstawy|Core|Podstawy|Основи || General|Ogólne|Загальне|false");
+          "true|General|Ogólne|Загальне|General|true || Основи || Core|Podstawy|Основи|Core|Podstawy|Основи || General|Ogólne|Загальне|false");
       });
 
-    check("editors.js", "908ce4 CONTROL: an en and pl catalog behaves as today, and openIntentEditor focuses the first declared language's clause",
+    check("editors.js", "908ce4 CONTROL, green before and after: an en and pl catalog opens, previews, saves and reverts exactly as today, into catLabels and catLabelsPl alone",
       () => {
         setupCat(["en", "pl"], "General", { pl: { gen: "Ogólne" } });
         ED.openCategoryEditor("gen", true);
         const en = byId["#ce_name_en"], pl = byId["#ce_name_pl"];
+        const opened = [liveButtons(), en.value, en.placeholder, pl.value, pl.placeholder,
+          globalThis.document.activeElement === en, prevText()].join("|");
         en.value = "Core"; pl.value = "Podstawy";
         byId["#ceSave"].onclick();
-        const saved = [PK.pack.catLabels.gen, PK.pack.catLabelsPl.gen].join("|");
+        const saved = [PK.pack.catLabels.gen, PK.pack.catLabelsPl.gen,
+          Object.keys(PK.pack).filter(k => /^catLabels/.test(k)).sort().join(",")].join("|");
         pl.value = "Ogólne";
         byId["#ceSave"].onclick();
         const revertedPl = String(PK.pack.catLabelsPl.gen || "");
+        return eq([opened, saved, revertedPl].join(" || "),
+          "true|General||Ogólne|General|true|General || Core|Podstawy|catLabels,catLabelsPl || ");
+      });
+
+    check("editors.js", "908ce5 the intent editor focuses the first declared language's clause, on a catalog without en as on one with it",
+      () => {
         setupCat(["de", "uk"], "Allgemein", { uk: { gen: "Загальне" } });
-        ED.openIntentEditor(-1, false);
+        globalThis.document.activeElement = globalThis.document.body;
+        ED.openIntentEditor(null, false);
         const focusDe = globalThis.document.activeElement && globalThis.document.activeElement.id;
         setupCat(["en", "pl"], "General", { pl: { gen: "Ogólne" } });
-        ED.openIntentEditor(-1, false);
+        globalThis.document.activeElement = globalThis.document.body;
+        ED.openIntentEditor(null, false);
         const focusEn = globalThis.document.activeElement && globalThis.document.activeElement.id;
-        return eq([saved, revertedPl, focusDe, focusEn].join(" || "), "Core|Podstawy ||  || ie_clause_de || ie_clause_en");
+        return eq([focusDe, focusEn].join(" || "), "ie_clause_de || ie_clause_en");
       });
   } finally {
     PK.packUndoFor(hadPack)();
