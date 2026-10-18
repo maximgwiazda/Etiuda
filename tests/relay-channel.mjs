@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 97;
+const EXPECTED = 100;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2518,6 +2518,72 @@ try {
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "952a harness: " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- an edit of this program's own file, one cycle (S2). The catch-up skips what this desk, or the lead, just sent,
+   so the cycle that the edit starts does not write the older bytes back over it. Three cycles would hide the loss:
+   the second would consume the program's own blob before the edit. ---- */
+async function once(p) { p.ch.kick(); await p.ch.idle(); }
+async function keptEdit(mod) {
+  const k1 = crypto.randomBytes(32);
+  const deskKey = keyPair(true);
+  const tm = await freshTeam([deskKey]);
+  const keys = new Map([[1, k1]]);
+  const tag = tm.rt.slice(0, 8);
+  let leadSent = 0, deskSent = 0;
+  const leadT = transport("s2-lead-" + tag);
+  const lead = opened(mod, "s2-lead-" + tag, tm, LEAD, "root", {
+    keyFor: e => keys.get(e) || null, sealEpoch: () => 1,
+    request: async (m, u, h, b) => { if (m === "PUT") leadSent++; return leadT.request(m, u, h, b); }, connect: leadT.connect,
+  });
+  const E1 = "e1\n", E2 = "e2\n", V1 = "v1\n", V2 = "v2\n";
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, [member(deskKey)]));
+  lead.ch.start();
+  await lead.ch.idle();
+  put(lead.mirror, "guide.ec", E1);
+  await once(lead);
+  put(lead.mirror, "guide.ec", E2);
+  leadSent = 0;
+  await once(lead);
+  const leadOnEdit = leadSent;
+  const deskT = transport("s2-desk-" + tag);
+  const desk = opened(mod, "s2-desk-" + tag, tm, deskKey, "desk:" + deskKey.keyId, {
+    keyFor: e => keys.get(e) || null, sealEpoch: () => 1,
+    request: async (m, u, h, b) => { if (m === "PUT") deskSent++; return deskT.request(m, u, h, b); }, connect: deskT.connect,
+  });
+  desk.ch.start();
+  await desk.ch.idle();
+  const guideAtDesk = read(desk.mirror, "guide.ec");
+  const rel = "desks/" + deskKey.keyId + "/in-use.ec";
+  put(desk.mirror, rel, V1);
+  await once(desk);
+  put(desk.mirror, rel, V2);
+  deskSent = 0;
+  await once(desk);
+  await once(lead);
+  const out = { leadMirror: read(lead.mirror, "guide.ec"), guideAtDesk, deskOfLead: read(desk.mirror, "guide.ec"),
+    leadSent: leadOnEdit, deskMirror: read(desk.mirror, rel), leadOfDesk: read(lead.mirror, rel), deskSent };
+  await lead.ch.stop();
+  await desk.ch.stop();
+  return out;
+}
+try {
+  const edit = await keptEdit(C);
+  check(edit.deskMirror === "v2\n" && edit.leadOfDesk === "v2\n" && edit.deskSent === 1,
+    "953a a desk's own file is sent, edited, and one cycle run: the edit is kept and sent: mirror " + JSON.stringify(edit.deskMirror)
+    + ", at the lead " + JSON.stringify(edit.leadOfDesk) + ", uploads on that cycle " + edit.deskSent);
+  check(edit.leadMirror === "e2\n" && edit.deskOfLead === "e2\n" && edit.guideAtDesk === "e2\n" && edit.leadSent === 1,
+    "953b the lead's edition is sent, edited, and one cycle run: the edit is kept and sent: mirror " + JSON.stringify(edit.leadMirror)
+    + ", at the desk " + JSON.stringify(edit.deskOfLead) + ", uploads on that cycle " + edit.leadSent);
+  const planted = await liftChannel("plant:own-skip", async mod => {
+    const x = await keptEdit(mod);
+    return x.deskMirror === "v1\n" && x.leadOfDesk === "v1\n" && x.deskSent === 0
+      && x.leadMirror === "e1\n" && x.deskOfLead === "e1\n" && x.leadSent === 0;
+  });
+  check(planted.turned && planted.back, "953c lifting plant:own-skip writes the sent copy over the edit, on the desk and on the lead, and the file is put back: "
+    + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "953a harness: " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */

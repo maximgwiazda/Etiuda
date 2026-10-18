@@ -1220,7 +1220,7 @@ function createChannel(opts) {
         const before = top;
         top = e.seq;
         const m = e.meta;
-        if (who && m.writer === who.keyId) continue;
+        if (who && m.writer === who.keyId) continue; /* plant:own-skip */
         if (!Number.isSafeInteger(m.size) || m.size < 0 || !HEX32.test(String(m.id))) { sayOnce("a file the relay listed was left out: " + B.REASONS["bad-signature"]); continue; }
         if (m.size > B.BLOB_MAX) { say("a file from " + m.writer + " was left out: " + B.REASONS["blob-size"]); continue; } /* plant:in-size-listed */
         const got = await authed("GET", "b/" + m.id);
