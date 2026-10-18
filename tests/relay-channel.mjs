@@ -34,7 +34,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 75;
+const EXPECTED = 76;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1399,7 +1399,20 @@ try {
   check(loaded && JSON.stringify((D.envelope().teamPinFrom || {})[TEAM2]) === "\"invite\"",
     "942b admitted, the desk reads its team on the relay, keeps the team key from its wrap and loads the edition the lead put in Studio's"
     + " mirror: " + (loaded ? "edition 1 loaded" : "not loaded") + ", the pin from " + JSON.stringify((D.envelope().teamPinFrom || {})[TEAM2]));
-  await D.ask("etiuda:team-join", "view");
+  /* N1: the team key unwrapped is the end of the request, the Team cover never read: the request goes from both mirrors, the
+     record keeps no join, and the desk follows its team file's address and not the invitation's. The next view says joined once. */
+  {
+    const doneN1 = await until(async () => { const ch = D.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); } await studio.kick(); await studio.idle();
+      return read(mirror, joinRel) === null && read(studioMirror, joinRel) === null; }, 8000);
+    const keptJ = Object.prototype.hasOwnProperty.call(D.envelope(), "teamJoin"), hereN1 = D.api.relayHere();
+    const firstView = await D.ask("etiuda:team-join", "view"), secondView = await D.ask("etiuda:team-join", "view");
+    const saidJoined = !!(firstView && firstView.joined && firstView.joined.team === TEAM2) && !!secondView && secondView.joined === null;
+    check(doneN1 && !keptJ && hereN1 && hereN1.joining === false && hereN1.team === TEAM2 && saidJoined,
+      "949a once its team key is unwrapped the desk is done with its request, the Team cover unread: the request "
+      + (doneN1 ? "gone from both mirrors" : "desk " + (read(mirror, joinRel) === null ? "gone" : "there") + ", lead " + (read(studioMirror, joinRel) === null ? "gone" : "there"))
+      + ", the record's join " + (keptJ ? "kept" : "gone") + ", following " + (hereN1 ? (hereN1.joining ? "the invitation" : "the team file") : "nothing")
+      + ", the next view " + (saidJoined ? "said joined once" : "did not say joined once"));
+  }
   const gone = await until(async () => { const ch = D.api.relayRun(); if (ch) { ch.kick(); await ch.idle(); } await studio.kick(); await studio.idle();
     return read(studioMirror, joinRel) === null; }, 8000);
   check(gone, "942c the desk's request, removed once it is admitted, goes from the lead's mirror by its signed deletion: " + (gone ? "removed" : "still there"));

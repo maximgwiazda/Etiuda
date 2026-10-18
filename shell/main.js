@@ -2566,6 +2566,7 @@ function heedTeam() {
     } catch (e) { teamStamp = ""; teamSay("the team key for " + r.team + " could not be kept - " + e.message); }
   }
   if (changed) persistDeskEnvelope();
+  finishJoin(); /* plant:n1-heed */
 }
 /* The catalog's text inside a sealed envelope, where this desk holds its team's key for its epoch, else null. */
 function teamOpen(data) {
@@ -2585,6 +2586,20 @@ function teamOpen(data) {
    request waits or stands refused, no first admission is taken for its team. */
 let teamJoin = null;                            // {team, file, nonce, commit, asked, held, name, opened?, refused?, invite?}
 let joinSent = "";
+let joinDone = null;                            // {team, file}: a request admitted, for the next joinView to say once
+/* Admitted once this desk keeps a newer key for the team than when it asked, whether or not the Team cover is read: the
+   request goes, which the relay carries to the lead as its signed deletion, and the invitation's address is no longer
+   followed. The next joinView says so once, as it did when it was the one to find it. */
+function finishJoin() {
+  const j = teamJoin;
+  if (!j || !deskBranch || !(newestEpoch(j.team) > j.held)) return false;
+  try { fs.unlinkSync(joinFile()); } catch { /* gone already */ }
+  teamJoin = null;
+  joinDone = { team: j.team, file: j.file };
+  persistDeskEnvelope();
+  if (j.invite && j.invite.relay) relaySoon();
+  return true;
+}
 function newestEpoch(team) {
   return Object.keys(teamKeys[team] || {}).reduce((hi, n) => Math.max(hi, +n || 0), 0);
 }
@@ -2793,13 +2808,13 @@ function joinView() {
   const root = catalogFolder();
   if (!folderAnswers(root)) return view;
   heedTeam();
+  finishJoin();
   const j = teamJoin, me = branchIdentity(false);
-  if (j && me && newestEpoch(j.team) > j.held) {
-    try { fs.unlinkSync(joinFile()); } catch { /* gone already */ }
-    teamJoin = null;
-    persistDeskEnvelope();
-    view.joined = { team: j.team, file: j.file };
-  } else if (j && me) {
+  if (joinDone) {
+    view.joined = joinDone;
+    joinDone = null;
+  }
+  if (j && me) {
     if (!j.file) {
       const named = sealedOutside();
       if (named && named.team === j.team) { j.file = named.file; persistDeskEnvelope(); }
