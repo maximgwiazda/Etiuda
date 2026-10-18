@@ -260,7 +260,7 @@ function eWriteBranch(stem,text){
   }catch(e){ return Promise.resolve({ok:false}); }
 }
 /* The shared catalog edited directly, both halves through the host and neither in a browser: the read answers
-   {text,sha,free,base} or null, the write {ok} or why not, {changed}, {busy}, {taken} or {refused}. */
+   {text,sha,free,base} or null, the write {ok} or why not, {changed}, {busy}, {taken}, {refused} or {sealed}. */
 function eHasShared(){
   const h=eHost();
   return !!h && typeof h.sharedRead==="function" && typeof h.sharedWrite==="function";
@@ -277,7 +277,7 @@ function eSharedWrite(name,text,sha,create){
   if(!eHasShared()) return Promise.resolve({ok:false});
   try{
     return Promise.resolve(eHost().sharedWrite(String(name||""),String(text||""),String(sha||""),create===true))
-      .then(v=>(v&&typeof v==="object")?{ok:v.ok===true,changed:v.changed===true,busy:v.busy===true,taken:v.taken===true,refused:v.refused===true}:{ok:false})
+      .then(v=>(v&&typeof v==="object")?{ok:v.ok===true,changed:v.changed===true,busy:v.busy===true,taken:v.taken===true,refused:v.refused===true,sealed:v.sealed===true}:{ok:false})
       .catch(()=>({ok:false}));
   }catch(e){ return Promise.resolve({ok:false}); }
 }

@@ -7,7 +7,7 @@
  * a signed or sealed catalog, or one grown from a signed edition, never changes; a file beaten between the read and
  * the write is read again, and a lock another desk holds sends the change to the desk's own file; the bytes every
  * write replaces are kept first; nothing is written where nothing changed; a catalog made from nothing is created at
- * the top of the folder, unsigned; and the history lists the folder's versions under a folder setting spelled otherwise.
+ * the top of the folder, unsigned, and on a sealed team that write is sealed or refused; and the history lists the folder's versions under a folder setting spelled otherwise.
  * The page side, sliced from src/modules/catalog-file.js and catalog-offer.js: what the layer touches is named by the
  * file's own ids, and the edition a desk wrote itself is offered back to it only when it asks.
  *
@@ -25,7 +25,7 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nodeRequire = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 36;
+const EXPECTED = 40;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -66,6 +66,7 @@ function boot(name) {
   new Function("require", "__dirname", "__filename", "module", "exports", "console", "__test",
     fs.readFileSync(path.join(ROOT, "shell", "main.js"), "utf8")
     + "\n__test.teamKeys = teamKeys;"
+    + " __test.wrapTeamKey = wrapTeamKey; __test.heedTeam = heedTeam; __test.openSealed = openSealed;"
     + " __test.setFolder = v => { if (deskKeys === undefined) deskKeys = readDesk(); deskKeys[CATALOG_FOLDER_KEY] = v; };")(
     n => (n === "electron" ? electron : nodeRequire(n)), path.join(ROOT, "shell"), path.join(ROOT, "shell", "main.js"),
     { exports: {} }, {}, quiet, test);
@@ -403,6 +404,71 @@ try {
     check(other.offered && none.offered && P.sharedOwnWrite(held) === false,
       "10f THE CONTROL: found unasked, an edition this desk did not write is offered, with another pin kept as its own or none ("
       + JSON.stringify([other, none]) + ")");
+  }
+
+  /* ---- a sealed team: a shared write is sealed, or it is not written in the clear ---------------------- */
+  {
+    const lead = crypto.generateKeyPairSync("ed25519");
+    const pubHex = k => k.export({ type: "spki", format: "der" }).subarray(-32).toString("hex");
+    const LEAD = { keyId: "quay-lead", public: pubHex(lead.publicKey) };
+    const signTeam = doc => {
+      const o = copy(doc);
+      delete o.sig;
+      o.sig = { alg: "Ed25519", keyId: LEAD.keyId };
+      o.sig.value = crypto.sign(null, Buffer.from(V2.v2SignedBytes(o)), lead.privateKey).toString("hex");
+      return o;
+    };
+    const me = await A.ask("etiuda:branch-identity", true);
+    const team = "t-" + crypto.randomBytes(8).toString("hex");
+    const key = crypto.randomBytes(32);
+    const roster = [{ desk: { id: me.id, key: me.key, box: me.box },
+      wrap: A.test.wrapTeamKey(key, me.box, team, 1, me.id) }];
+    fs.writeFileSync(path.join(FOLDER, "etiuda-ring.json"), JSON.stringify({
+      format: 1, kind: "etiuda-ring",
+      keys: [{ catalog: "harbour-board", keyId: LEAD.keyId, alg: "Ed25519", public: LEAD.public }],
+    }));
+    fs.writeFileSync(path.join(FOLDER, "etiuda-team.json"), text(signTeam({
+      format: 1, kind: "etiuda-team", id: team, epoch: 1, rev: 1,
+      catalogs: ["harbour-board"], lead: LEAD, sealed: true, exportsSealed: true, roster,
+    })));
+    A.test.heedTeam();
+    const heldKey = Object.keys((A.test.teamKeys && A.test.teamKeys[team]) || {}).length === 1;
+    check(heldKey, "11a THE CONTROL: the desk heeded the sealed team and kept its key");
+
+    const MARK_LOOSE = "marker-loose-quay-7f3a";
+    const gwen = desk(A, null);
+    gwen.mine = catalog("loose-lamps");
+    gwen.mine.cards[0].body = { en: MARK_LOOSE };
+    const rLoose = await save(gwen, { cards: ["c-a"] }, "loose.ec");
+    const loosePath = path.join(FOLDER, "loose.ec");
+    const looseRaw = fs.existsSync(loosePath) ? fs.readFileSync(loosePath, "utf8") : "";
+    let looseKind = "";
+    try { looseKind = JSON.parse(looseRaw).kind || ""; } catch { looseKind = ""; }
+    const clear = looseRaw.indexOf(MARK_LOOSE) >= 0 && looseKind !== "etiuda-sealed";
+    check(!clear && rLoose.wrote !== true && rLoose.why === "sealed" && !fs.existsSync(loosePath),
+      "11b a catalog the team file does not name is not written in the clear, and the write is refused because the team seals ("
+      + (rLoose.why || "none") + ", " + (looseKind || "no file") + ")");
+
+    const MARK_HUB = "marker-harbour-quay-2b60";
+    const hugh = desk(A, null);
+    hugh.mine = catalog("harbour-board");
+    hugh.mine.cards[0].body = { en: MARK_HUB };
+    const rHub = await save(hugh, { cards: ["c-a"] }, "harbour.ec");
+    const hubPath = path.join(FOLDER, "harbour.ec");
+    const hubRaw = fs.existsSync(hubPath) ? fs.readFileSync(hubPath, "utf8") : "";
+    let hub = null;
+    try { hub = JSON.parse(hubRaw); } catch { hub = null; }
+    const inner = hub && hub.kind === "etiuda-sealed" ? A.test.openSealed(key, hub) : "";
+    check(rHub.wrote === true && !!inner && inner.indexOf(MARK_HUB) >= 0 && hubRaw.indexOf(MARK_HUB) < 0,
+      "11c THE CONTROL: a catalog the team file names lands sealed, and the share's bytes do not hold its text ("
+      + (hub && hub.kind || "none") + ")");
+
+    const EN = "This team's catalogs stay sealed, so this change stays in this desk's own file.";
+    const PL = "Katalogi tego zespołu pozostają zaszyfrowane, więc ta zmiana zostaje we własnym pliku stanowiska.";
+    const lang = fs.readFileSync(path.join(ROOT, "src", "modules", "ui-lang.js"), "utf8");
+    const page = fs.readFileSync(path.join(ROOT, "src", "modules", "catalog-file.js"), "utf8");
+    check(lang.indexOf('"' + EN + '":"' + PL + '"') >= 0 && page.indexOf('t("' + EN + '")') >= 0,
+      "11d the refusal says why, in both languages, and the shared write shows that sentence");
   }
 } catch (e) {
   failed++;

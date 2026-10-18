@@ -1672,11 +1672,22 @@ function teamCovering(root, catalogId) {
    (`pin`), where that team also covers the catalog at the folder written to; else null. An edition not opened in this run
    is looked for among the folder's catalogs first. A desk the covering file leaves off its roster is out, at any epoch.
    A covering file whose epoch is not the newest key this desk keeps, or a key older than an epoch already heeded, is out, so a move of the epoch cannot be sealed under the key it left behind.
-   A key already kept stays, and a seal made with it still opens. `plain` is the covering file's exportsSealed set false. */
+   A key already kept stays, and a seal made with it still opens. `plain` is the covering file's exportsSealed set false.
+   An empty pin is a shared write: the folder's team, where its file lists the catalog and seals what it exports. */
 function sealFor(catalogId, pin, root) {
   heedTeam();
-  if (!editionTeam.has(pin)) ecFilesIn(root).forEach(f => ecFacts(f, ""));
-  const team = editionTeam.get(pin) || "", cover = team ? teamCovering(root, catalogId) : null;
+  const asked = String(pin || "");
+  if (asked && !editionTeam.has(asked)) ecFilesIn(root).forEach(f => ecFacts(f, ""));
+  let team = asked ? (editionTeam.get(asked) || "") : "";
+  let cover = team ? teamCovering(root, catalogId) : null;
+  /* An empty pin asks for the folder's team, and only where that file lists the catalog and seals its exports. */
+  if (!asked) {
+    const folderTeam = teamCovering(root, catalogId);
+    if (folderTeam && folderTeam.sealed === true && folderTeam.exportsSealed !== false) {
+      cover = folderTeam;
+      team = String(folderTeam.id);
+    }
+  }
   if (!cover || cover.id !== team) return null;
   const kept = teamKeys[team] || {};
   const epoch = Object.keys(kept).map(Number).filter(n => Number.isInteger(n) && n >= 1).sort((a, b) => b - a)[0];
@@ -1718,7 +1729,8 @@ function writeBranch(stem, text) {
        team that sealed the edition it grew from; where that team, its cover at this folder or its key cannot be had, or the
        team has left this desk out, it is held, never written in the clear. */
     if (grewId) {
-      seal = sealFor(grewId, String(doc.grew.sha || ""), at.root);
+      const grewPin = String(doc.grew.sha || "");
+      seal = PIN_RE.test(grewPin) ? sealFor(grewId, grewPin, at.root) : null;
       if (!seal) return branchHold(stem, text);
     }
     const same = ownFilesWithId(at.dir, id);
@@ -1775,7 +1787,8 @@ function tryHeldBranches() {
 /* ---- the catalog this desk has loaded, named for the team, and a copy when the lead asks ------------------
    in-use.ec names the catalog (never a card) and is signed as a desk file, then sealed under the team key.
    A desk with no team key writes nothing. catalog-answer.ec is the catalog itself, sealed the same way, and
-   only for an ask that names this desk and verifies under the lead key it joined with. One answer per ask id. */
+   only for an ask that names this desk and verifies under the lead key it joined with. One answer per ask id.
+   The answer is the loaded catalog only where the ask names that edition, or the team file lists the catalog. */
 function sourceOfFile(file) {
   if (!file || isBuiltIn(file)) return "opened";
   try { if (path.resolve(path.dirname(file)) === path.resolve(catalogFolder())) return "folder"; } catch { /* opened */ }
@@ -1843,7 +1856,8 @@ function teamUse() {
   if (!key || key.length !== 32) return { member: false };
   const stale = doc.epoch !== epoch || epoch < (teamEpochSeen[team] || 0);
   const box = typeof doc.lead.box === "string" ? doc.lead.box : "";
-  return { member: true, stale: stale, seal: { team: team, epoch: epoch, key: key, lead: pin, box: box } };
+  const catalogs = Array.isArray(doc.catalogs) ? doc.catalogs.map(String) : [];
+  return { member: true, stale: stale, catalogs: catalogs, seal: { team: team, epoch: epoch, key: key, lead: pin, box: box } };
 }
 function inUseFile() {
   const me = branchIdentity(false);
@@ -1993,7 +2007,7 @@ function askFresh(doc, me, lead) {
       format: "der", type: "spki" });
     if (!crypto.verify(null, askSignedBytes(doc), pub, Buffer.from(String(sig.value), "hex"))) return null;
   } catch { return null; }
-  return { id: id };
+  return { id: id, sha256: String(doc.sha256) };
 }
 function removeAnswer() {
   const me = branchIdentity(false);
@@ -2036,6 +2050,8 @@ function tryCatalogAsk(win) {
     let pin = "";
     try { pin = signedSha(doc); } catch { return; }
     if (!PIN_RE.test(pin)) return;
+    const listed = Array.isArray(use.catalogs) && use.catalogs.indexOf(typeof doc.id === "string" ? doc.id : "") >= 0;
+    if (ask.sha256 !== pin && !listed) return;
     if (!writeAnswer(use.seal, pin, doc)) { heldAnswer = { id: ask.id }; return; }
     rememberAsk(ask.id);
     heldAnswer = null;
@@ -3458,8 +3474,9 @@ function historyPutBack(sha, file) {
 /* ---- editing the shared catalog directly: the host's half -----------------------------------------------------------
    The page merges (src/modules/catalog-merge.js) and this reads and writes, so a desk's write is a compare and swap: the
    file is read with the SHA-256 of its bytes and written only while it still holds those bytes, under a lock file beside
-   it taken by exclusive create. Only a catalog with no signature and no seal is read for this or written, and the bytes
-   a write replaces are kept in the history first. */
+   it taken by exclusive create. Only a catalog with no signature and no seal is read for this. A write into a sealed
+   team's share is sealed, or refused; any other write is unsigned and unsealed. The bytes a write replaces are kept
+   in the history first. */
 // A lock this old is a desk that stopped mid-write, and is taken over.
 const SHARED_LOCK_MS = 30 * 1000;
 function sharedFile(name) {
@@ -3521,9 +3538,23 @@ function sharedLock(file) {
 function sharedHolds(held) {
   try { return JSON.parse(fs.readFileSync(held.lock, "utf8")).token === held.token; } catch { return false; }
 }
+/* The folder's team file, whole under the lead this desk pinned, says its catalogs stay sealed. */
+function shareMustSeal(root) {
+  heedTeam();
+  let doc = null;
+  try {
+    const file = path.join(root, TEAM_NAME);
+    if (fs.statSync(file).size <= TEAM_MAX) doc = JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "").trim());
+  } catch { return false; }
+  if (!teamWhole(doc) || doc.sealed !== true || doc.exportsSealed === false) return false;
+  const policy = sayJoinPolicy().lead;
+  if (policy && doc.lead.public !== policy) return false;
+  const pinned = teamPins[doc.id];
+  return !!pinned && pinned.keyId === doc.lead.keyId && pinned.public === doc.lead.public;
+}
 /* Writes the page's merged catalog over the file it read, answered {ok, rev}, or {changed} where the file is no longer
    the one read, {busy} where another desk holds the lock, {taken} where a file to be created is already there, and
-   {refused} for a signed or sealed catalog on either side. */
+   {refused} for a signed or sealed catalog on either side. A sealed team's share is written sealed, or refused. */
 function sharedWrite(name, text, sha, create) {
   const file = sharedFile(name);
   text = String(text || "");
@@ -3531,6 +3562,12 @@ function sharedWrite(name, text, sha, create) {
   let data = null;
   try { data = catalogPayload(text).data; } catch { return { ok: false }; }
   if (!isV2(data) || !historyFree(historyFacts(text))) return { ok: false, refused: true };
+  const root = catalogFolder();
+  const seal = sealFor(String(data.id || ""), "", root);
+  if (seal && !seal.plain) {
+    try { text = JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, text), null, 1) + "\n"; }
+    catch { return { ok: false, refused: true, sealed: true }; }
+  } else if (!seal && shareMustSeal(root)) return { ok: false, refused: true, sealed: true };
   let held = null;
   try { held = sharedLock(file); }
   catch (e) { console.error("etiuda: the lock beside " + file + " could not be taken - " + e.message); }
@@ -4482,7 +4519,8 @@ ipcMain.handle("etiuda:choose-catalog-save", async (e, title, name, label) => {
 function exportText(text, from) {
   const id = from && typeof from === "object" ? String(from.id || "") : "";
   if (!id || !teamOpened.has(id)) return text;
-  const seal = sealFor(id, String(from.sha || ""), catalogFolder());
+  const pin = String(from.sha || "");
+  const seal = PIN_RE.test(pin) ? sealFor(id, pin, catalogFolder()) : null;
   if (!seal) return null;
   return seal.plain ? text : JSON.stringify(sealCatalog(seal.key, seal.team, seal.epoch, text), null, 1) + "\n";
 }

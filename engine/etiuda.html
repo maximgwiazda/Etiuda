@@ -7552,6 +7552,7 @@ What you type stays in this browser only.`;
     "From now on, changes stay in this desk's own file": "Od teraz zmiany zostają we własnym pliku tego stanowiska",
     "A colleague changed the same text first, so the shared catalog keeps theirs and yours stays in this desk's own file.": "Ktoś z zespołu zmienił ten sam tekst wcześniej, więc we wspólnym katalogu zostaje tamta wersja, a ta trafia do własnego pliku stanowiska.",
     "The shared catalog could not be written this time; this change is safe in this desk's own file.": "Wspólnego katalogu nie udało się teraz zapisać; ta zmiana jest bezpieczna we własnym pliku stanowiska.",
+    "This team's catalogs stay sealed, so this change stays in this desk's own file.": "Katalogi tego zespołu pozostają zaszyfrowane, więc ta zmiana zostaje we własnym pliku stanowiska.",
     "Current": "Aktualna",
     "Saved on this desk": "Zapisana na tym stanowisku",
     "Open this version": "Otwórz tę wersję",
@@ -14628,7 +14629,7 @@ What you type stays in this browser only.`;
   function eSharedWrite(name, text, sha, create) {
     if (!eHasShared()) return Promise.resolve({ ok: false });
     try {
-      return Promise.resolve(eHost().sharedWrite(String(name || ""), String(text || ""), String(sha || ""), create === true)).then((v) => v && typeof v === "object" ? { ok: v.ok === true, changed: v.changed === true, busy: v.busy === true, taken: v.taken === true, refused: v.refused === true } : { ok: false }).catch(() => ({ ok: false }));
+      return Promise.resolve(eHost().sharedWrite(String(name || ""), String(text || ""), String(sha || ""), create === true)).then((v) => v && typeof v === "object" ? { ok: v.ok === true, changed: v.changed === true, busy: v.busy === true, taken: v.taken === true, refused: v.refused === true, sealed: v.sealed === true } : { ok: false }).catch(() => ({ ok: false }));
     } catch (e) {
       return Promise.resolve({ ok: false });
     }
@@ -24056,7 +24057,7 @@ What you type stays in this browser only.`;
       return Promise.resolve(io.write(JSON.stringify(doc, null, 1) + "\n", r.sha || "", !F)).then((w) => {
         if (w && w.ok) return { route, state: m.state, fresh: m.fresh, pin: io.pinOf(doc), others, wrote: true };
         if (w && w.changed && n < 1) return attempt(n + 1);
-        return quit(w && w.busy ? "busy" : w && w.taken ? "taken" : w && w.changed ? "beaten" : "refused");
+        return quit(w && w.busy ? "busy" : w && w.taken ? "taken" : w && w.changed ? "beaten" : w && w.sealed ? "sealed" : "refused");
       });
     });
     return attempt(0);
@@ -24930,7 +24931,10 @@ What you type stays in this browser only.`;
           sharedSaid = false;
         }
         if (r.fresh && r.fresh.length) toast(t("A colleague changed the same text first, so the shared catalog keeps theirs and yours stays in this desk's own file."));
-        else if (r.why && r.why !== "signed" && !sharedSaid) {
+        else if (r.why === "sealed" && !sharedSaid) {
+          sharedSaid = true;
+          toast(t("This team's catalogs stay sealed, so this change stays in this desk's own file."));
+        } else if (r.why && r.why !== "signed" && !sharedSaid) {
           sharedSaid = true;
           toast(t("The shared catalog could not be written this time; this change is safe in this desk's own file."));
           if (r.why === "busy") setTimeout(scheduleDeskBranch, SHARED_RETRY_MS);

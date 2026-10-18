@@ -21,7 +21,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 36;
+const EXPECTED = 39;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -194,7 +194,7 @@ try {
       "890d a read nobody asked for is not a hand: its pin writes nothing");
 
     const key2 = crypto.randomBytes(32);
-    join(box, 2, [entry(box.D, box.me, key2, box.team, 2)]);
+    join(box, 2, [entry(box.D, box.me, key2, box.team, 2)], ["north-lamps"]);
     touch(path.join(box.share, "etiuda-team.json"), Date.now() + 1500);
     take(box.D, pin);
     const bumped = openSealedDoc(box.D, file, key2);
@@ -231,7 +231,7 @@ try {
     const answerText = answer ? JSON.stringify(answer) : "";
     check(answer && answer.kind === "etiuda-catalog-answer" && answer.format === 1 && answer.sha256 === pin
         && answer.sha256 !== askedSha && answerText.indexOf(CARD) >= 0 && box.D.api.catalogCopyNote() === "Askgood1",
-      "890g an ask signed by this desk's lead is answered once, with the catalog loaded now, cards included");
+      "890g an ask signed by this desk's lead is answered once with the loaded catalog, which the team file lists, cards included");
 
     const ansBytes = fs.readFileSync(ans);
     box.D.api.tryCatalogAsk(box.D.win);
@@ -671,6 +671,42 @@ try {
     TJ.noteCatalogCopy();
     check(enToast === SENT_EN && toastEl.textContent === SENT_PL,
       "890aa the quiet note is shown, in the desk's language, when a copy was sent");
+  }
+
+  /* ---- a catalog the team file does not name, and an ask that names another hash ------------------- */
+  {
+    const MARK = "marker-private-quay-3c91";
+    const box = await arm("private");
+    const priv = textOf(catalog(1, { id: "private-lamps", name: "Private lamps", card: MARK }));
+    const outside = path.join(folder("private-out"), "private.ec");
+    put(path.dirname(outside), "private.ec", priv);
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)], ["harbour-board"]);
+    const pin = pinOf(box.D, priv);
+    const asked = "sha256:" + "ab".repeat(32);
+    putAsk(box, "Askone", asked);
+    box.D.api.offerFile(box.D.win, outside);
+    box.D.sync("etiuda:catalog-taken", pin);
+    const ans = answerPath(box.share, box.me.id);
+    const inUse = openSealedDoc(box.D, inUsePath(box.share, box.me.id), box.key);
+    const inUseText = inUse ? JSON.stringify(inUse) : "";
+    const inUseMeta = !!(inUse && inUse.catalog && inUse.catalog.id === "private-lamps" && inUseText.indexOf(MARK) < 0);
+    check(pin !== asked && inUseMeta,
+      "890ak in-use for a catalog the team file does not name carries "
+      + (inUse && inUse.catalog ? Object.keys(inUse.catalog).sort().join(",") : "nothing")
+      + " and not the card");
+    const answer = openSealedDoc(box.D, ans, box.key);
+    const answerText = answer ? JSON.stringify(answer) : "";
+    const uploaded = !!(answer && answer.catalog && answer.catalog.id === "private-lamps" && answerText.indexOf(MARK) >= 0);
+    check(!uploaded && !fs.existsSync(ans),
+      "890al an ask for another hash writes no answer for a catalog the team file does not name");
+    putAsk(box, "Askmatch", pin);
+    box.D.api.tryCatalogAsk(box.D.win);
+    const matched = openSealedDoc(box.D, ans, box.key);
+    const matchedText = matched ? JSON.stringify(matched) : "";
+    const raw = fs.existsSync(ans) ? fs.readFileSync(ans, "utf8") : "";
+    check(!!matched && matched.kind === "etiuda-catalog-answer" && matched.sha256 === pin
+        && matchedText.indexOf(MARK) >= 0 && raw.indexOf(MARK) < 0,
+      "890am THE CONTROL: an ask naming the loaded catalog's hash is answered, sealed, and the share does not hold the card in the clear");
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));

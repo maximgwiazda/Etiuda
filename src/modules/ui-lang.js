@@ -1010,6 +1010,7 @@ UI_STRINGS.pl={
   "From now on, changes stay in this desk's own file":"Od teraz zmiany zostają we własnym pliku tego stanowiska",
   "A colleague changed the same text first, so the shared catalog keeps theirs and yours stays in this desk's own file.":"Ktoś z zespołu zmienił ten sam tekst wcześniej, więc we wspólnym katalogu zostaje tamta wersja, a ta trafia do własnego pliku stanowiska.",
   "The shared catalog could not be written this time; this change is safe in this desk's own file.":"Wspólnego katalogu nie udało się teraz zapisać; ta zmiana jest bezpieczna we własnym pliku stanowiska.",
+  "This team's catalogs stay sealed, so this change stays in this desk's own file.":"Katalogi tego zespołu pozostają zaszyfrowane, więc ta zmiana zostaje we własnym pliku stanowiska.",
   "Current":"Aktualna",
   "Saved on this desk":"Zapisana na tym stanowisku",
   "Open this version":"Otwórz tę wersję",
