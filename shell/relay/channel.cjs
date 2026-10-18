@@ -1165,7 +1165,8 @@ function createChannel(opts) {
       return { ok: true };
     }
     const t = refusalOf(r);
-    if (t.reason === "token-spent") prog.markTokenUsed();
+    if (t.reason !== "token-spent") return t; /* plant:token-kept */
+    prog.markTokenUsed();
     return t;
   }
 

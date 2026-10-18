@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 102;
+const EXPECTED = 104;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2641,6 +2641,75 @@ try {
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "954a harness: " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- a token hello the relay answers 500. The token stays unused, so the next cycle sends it and the request goes.
+   The answer is a status, not a throw, so the cycle does not retry by itself. ---- */
+async function tokenKept(mod) {
+  const k1 = crypto.randomBytes(32);
+  const deskKey = keyPair(true);
+  const tm = await freshTeam([]);
+  const secret = hex(16), inv = hex(16), token = hex(32), ki = C.inviteSealKey(secret);
+  const at = R.clock.now;
+  const add = [{ id: inv, hash: sha(Buffer.from(token, "utf8")) }];
+  const made = await admin("POST", "/relay/v1/t/" + tm.rt + "/invites", { add, drop: [], t: at,
+    sig: signHex(LEAD, core.invitesBytes(tm.rt, at, add, [])) });
+  if (made.status !== 200) throw new Error("an invitation was not made: " + JSON.stringify(made.json));
+  const tag = tm.rt.slice(0, 8);
+  const lead = opened(mod, "s4-lead-" + tag, tm, LEAD, "root", {
+    keyFor: e => (e === 1 ? k1 : null), sealEpoch: () => 1, inviteKeys: () => [{ id: inv, key: ki }],
+  });
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, []));
+  lead.ch.start();
+  await lead.ch.idle();
+  const deskT = transport("s4-desk-" + tag);
+  let tokenPosts = 0;
+  const desk = opened(mod, "s4-desk-" + tag, tm, deskKey, "desk:" + deskKey.keyId, {
+    keyFor: () => null, sealEpoch: () => null, invite: () => ({ inv, token, seal: ki }),
+    connect: deskT.connect,
+    request: async (m, u, h, b) => {
+      if (m === "POST" && /\/session$/.test(String(u))) {
+        let body = null;
+        try { body = JSON.parse(Buffer.from(b || "").toString("utf8")); } catch { body = null; }
+        if (body && body.invite !== undefined) {
+          tokenPosts++;
+          if (tokenPosts === 1) return { status: 500, header: () => null, bytes: Buffer.from("down") };
+        }
+      }
+      return deskT.request(m, u, h, b);
+    },
+  });
+  const relJoin = "desks/" + deskKey.keyId + "/join.json";
+  const JOIN = "{\"kind\":\"etiuda-join\",\"note\":\"after a refused hello\"}\n";
+  put(desk.mirror, relJoin, JOIN);
+  desk.ch.start();
+  await desk.ch.idle();
+  const afterFirst = { used: desk.prog.state().tokenUsed === true, posts: tokenPosts, join: read(lead.mirror, relJoin) };
+  await once(desk);
+  await once(lead);
+  const uploads = relayStore(tm.rt).dump().map(([k, v]) => [k, JSON.parse(v)])
+    .filter(([k, v]) => k.startsWith("blob:") && v.writer === deskKey.keyId).length;
+  const out = { afterFirst, posts: tokenPosts, joinAtLead: read(lead.mirror, relJoin), uploads,
+    used: desk.prog.state().tokenUsed === true, join: JOIN };
+  await lead.ch.stop();
+  await desk.ch.stop();
+  return out;
+}
+try {
+  const kept = await tokenKept(C);
+  check(!kept.afterFirst.used && kept.afterFirst.posts === 1 && kept.afterFirst.join === null
+    && kept.posts === 2 && kept.joinAtLead === kept.join && kept.uploads === 1 && kept.used,
+    "955a a first token hello answered 500 leaves the token unused, and the next try sends it: after the 500, token "
+    + (kept.afterFirst.used ? "used" : "unused") + ", hellos " + kept.afterFirst.posts + "; on the next try, hellos " + kept.posts
+    + ", the request " + (kept.joinAtLead === kept.join ? "at the lead" : "not at the lead") + ", uploads " + kept.uploads);
+  const planted = await liftChannel("plant:token-kept", async mod => {
+    const x = await tokenKept(mod);
+    return x.afterFirst.used && x.afterFirst.posts === 1 && x.posts === 1 && x.joinAtLead === null && x.uploads === 0;
+  });
+  check(planted.turned && planted.back, "955b lifting plant:token-kept marks the token used on the 500, so the next try never sends it, and the file is put back: "
+    + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "955a harness: " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */
