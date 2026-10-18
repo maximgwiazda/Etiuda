@@ -2328,8 +2328,9 @@ function teamRingIn(doc) {
   const g = doc.ring;
   return !!g && typeof g === "object" && !Array.isArray(g) ? g : null;
 }
-/* Whether the floor kept for a file's team and lead key refuses it: the same epoch and a lower rev. */
+/* Whether the floor kept for a file's team and lead key refuses it: an older epoch, or the same epoch and a lower rev. */
 function teamRevRefused(floor, epoch, rev) {
+  if (floor && epoch < floor.epoch) return true; /* plant:epoch-rev */
   return !!floor && floor.epoch === epoch && rev < floor.rev;
 }
 /* The desk ids a whole team file's roster lists, sorted and once each. */
@@ -2690,8 +2691,8 @@ function heedTeam() {
   r.said.forEach(teamSay);
   if (r.stampClear) teamStamp = "";
   if (r.stop || r.needKey || r.needRing) return;
-  /* A whole file is heeded only where its rev and channel read, and where its rev is not below the floor kept for its team
-     and lead key at its epoch. */
+  /* A whole file is heeded only where its rev and channel read, and where it is not an older epoch than the floor kept
+     for its team and lead key, nor a lower rev at that epoch. */
   const rev = teamRevOf(doc), channel = teamChannelOf(doc);
   if (rev === null || channel === null) {
     teamSay(file + " names a rev or a channel this desk does not read, so nothing in it is used");
@@ -2699,8 +2700,10 @@ function heedTeam() {
   }
   const floors = teamRevSeen[r.team] || {}, floor = floors[doc.lead.public];
   if (teamRevRefused(floor, r.epoch, rev)) {
-    teamSay(file + " is an older file of team " + r.team + " than one this desk has heeded (rev " + rev + ", below "
-      + floor.rev + " at key number " + r.epoch + "), so nothing in it is used");
+    const why = r.epoch < floor.epoch
+      ? "key number " + r.epoch + ", below " + floor.epoch
+      : "rev " + rev + ", below " + floor.rev + " at key number " + r.epoch;
+    teamSay(file + " is an older file of team " + r.team + " than one this desk has heeded (" + why + "), so nothing in it is used");
     return;
   }
   /* What pinned the lead, for board 907: an invitation, machine policy or an answered request, each naming this very key;

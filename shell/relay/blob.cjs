@@ -275,15 +275,41 @@ function raiseCounter(counters, writer, epoch, counter) {
   return raised(counters, counterKey(writer, epoch), counter);
 }
 
-/* A team file loaded: its rev above the floor for its team, lead key and epoch, the floor then raised to it. */
-function revLoad(revs, t) {
+/* True when a higher epoch is already kept for this team and lead key. A key that is present refuses even when its
+   floor value is not a count, so a damaged record fails closed. Keys that are not this pair's rev floors are ignored. */
+function epochAbove(revs, t) {
+  if (!revs || typeof revs !== "object") return false;
+  const prefix = "r\n" + t.teamId + "\n" + t.leadKeyId + "\n";
+  for (const k of Object.keys(revs)) {
+    if (!own(revs, k) || k.length <= prefix.length || k.slice(0, prefix.length) !== prefix) continue;
+    const rest = k.slice(prefix.length);
+    if (!/^[0-9]+$/.test(rest)) continue;
+    const ep = Number(rest);
+    if (Number.isSafeInteger(ep) && ep > t.epoch) return true;
+  }
+  return false;
+}
+
+/* replay-rev when the file is not shaped, or when an older epoch than one already kept is offered. Otherwise null,
+   and the caller applies the floor of this epoch. */
+function olderEpoch(revs, t) {
   if (!revShaped(t)) return refusal("replay-rev");
+  if (epochAbove(revs, t)) return refusal("replay-rev"); /* plant:epoch-above */
+  return null;
+}
+
+/* A team file loaded: an older epoch than one already kept is replay-rev whatever its rev, and so is a rev that is
+   not above the floor for its team, lead key and epoch. The floor is raised only when the file is taken. */
+function revLoad(revs, t) {
+  const blocked = olderEpoch(revs, t);
+  if (blocked) return blocked;
   const floor = floorIn(revs, revKey(t));
   if (floor === null || t.rev <= floor) return refusal("replay-rev");
   return { ok: true, revs: raised(revs, revKey(t), t.rev) };
 }
 
-/* A team file a blob is judged under: at its floor or above. */
+/* A team file a blob is judged under: at its own epoch's floor or above. A higher epoch kept beside it does not
+   change this floor. An older epoch is refused when the file is loaded, not here. */
 function revCurrent(revs, t) {
   if (!revShaped(t)) return refusal("replay-rev");
   const floor = floorIn(revs, revKey(t));
