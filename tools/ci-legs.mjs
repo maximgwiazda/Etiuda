@@ -15,6 +15,10 @@
  * child from this process's environment, and a window leg spawns only on the Windows
  * runner with the dispatch's date. tests/engine-selftest.js 22f drives every arm.
  *
+ * CI_LEGS_ROOT is the tree under test. Unset, this file's parent folder is the tree,
+ * which is where a desk run keeps it. The decision module is loaded from this file's
+ * own folder, so the runner can live outside the tree and the checkout stays as it was.
+ *
  * A FAIL line's first word is FAIL. An ERROR line's first word is ERROR or Error.
  * Both streams count. The result line is the last #counts or RESULT line.
  */
@@ -24,10 +28,11 @@ import { spawn, execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(process.env.CI_LEGS_ROOT || path.join(HERE, ".."));
 const require = createRequire(import.meta.url);
 const E = require(path.join(ROOT, "tests", "engine.js"));
-const { decide } = require(path.join(ROOT, "tools", "ci-legs-decide.cjs"));
+const { decide } = require(path.join(HERE, "ci-legs-decide.cjs"));
 
 const FAIL_LINE = /^\s*FAIL\b/;
 const ERROR_LINE = /^\s*(?:ERROR|Error)\b/;
