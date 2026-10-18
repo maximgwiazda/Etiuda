@@ -31,7 +31,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 57;
+const EXPECTED = 58;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1026,25 +1026,35 @@ try {
   const STATUS = { epoch: 409, "replay-counter": 409, superseded: 410, "blob-size": 413, "bad-path": 400 };
   const refusal = reason => ({ status: STATUS[reason] || 403, body: { error: reason, said: B.REASONS[reason] } });
   const TAKEN = { status: 200, body: { seq: 1, id: "0".repeat(32) } };
-  /* `answers` for the uploads in turn, the last repeated; `cycles` catch-ups and flushes; `before` run on the channel before
-     the first, `between` after it; a channel over the same record started again at the end where `restart` says so. */
+  /* `answers` for the uploads in turn, the last repeated, or a function of the upload's meta and the count before it;
+     `cycles` catch-ups and flushes; `before` run on the channel before the first, `between` after it; a channel over the
+     same record started again at the end where `restart` says so; `files` the mirror's, `who` and `place` the program's,
+     `inviteKeys` a lead's live invitations. */
   async function cycles(name, answers, o) {
     const x = o || {};
     const puts = [], said = [];
     const reply = (status, j) => ({ status, header: () => null, bytes: Buffer.from(JSON.stringify(j)) });
-    const request = async (method, url) => {
+    const request = async (method, url, headers) => {
       const u = String(url);
       if (method === "POST" && u.endsWith("/hello")) return reply(200, { challenge: hex(16) });
       if (method === "POST" && u.endsWith("/session")) return reply(200, { session: hex(32) });
       if (method === "GET" && u.indexOf("/since/") >= 0) return reply(200, []);
-      if (method === "PUT") { const a = answers[Math.min(puts.length, answers.length - 1)]; puts.push(u); return reply(a.status, a.body); }
+      if (method === "PUT") {
+        const meta = JSON.parse(Buffer.from(headers["etiuda-blob"], "base64url").toString("utf8"));
+        const a = typeof answers === "function" ? answers(meta, puts.length) : answers[Math.min(puts.length, answers.length - 1)];
+        puts.push(u);
+        return reply(a.status, a.body);
+      }
       return reply(404, {});
     };
     const mirror = path.join(LAB, name), stateFile = path.join(LAB, name + ".json");
-    put(mirror, FREL, "{\"inUse\":\"an honest edit\"}\n");
+    const files = x.files || { [FREL]: "{\"inUse\":\"an honest edit\"}\n" };
+    for (const rel of Object.keys(files)) put(mirror, rel, files[rel]);
+    const who = x.who || DESK, place = x.place || "desk:" + DESK.keyId;
     const make = () => C.createChannel({ rt: FRT, url: URLV1, mirror, stateFile, watch: false, pollMs: 1e9, pin: () => FPIN,
-      me: () => ({ keyId: DESK.keyId, public: DESK.pub, privateKey: DESK.privateKey, place: "desk:" + DESK.keyId }),
-      keyFor: e => (e === 1 ? KF : null), sealEpoch: () => 1, request, connect: () => null, say: l => said.push(l) });
+      me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place }),
+      keyFor: e => (e === 1 ? KF : null), sealEpoch: () => 1, request, connect: () => null, say: l => said.push(l),
+      inviteKeys: x.inviteKeys ? () => x.inviteKeys : undefined });
     let ch = make();
     if (x.before) x.before(ch);
     const after = [];
@@ -1055,7 +1065,7 @@ try {
       if (i === 0 && x.between) x.between(ch);
     }
     if (x.restart) { await ch.stop(); ch = make(); ch.start(); await ch.idle(); }
-    const out = { after, puts: puts.length, sent: !!ch.program.state().sent[FREL], said,
+    const out = { after, puts: puts.length, sent: !!ch.program.state().sent[FREL], said, st: ch.program.state(),
       owed: ch.program.owed({ keyId: DESK.keyId, place: "desk:" + DESK.keyId }, { keyFor: e => (e === 1 ? KF : null) }).some(op => op.rel === FREL),
       waits: said.filter(l => l.indexOf(FREL + " waits, and goes once this lifts: ") === 0).length };
     await ch.stop();
@@ -1099,6 +1109,22 @@ try {
   check(stops.every(s => s.ok),
     "946c a refusal that can never lift still stops that file, says so, and holds across a restart, the same bytes never sent again: "
     + stops.map(s => s.reason + " " + (s.ok ? "stopped" : "puts " + s.puts)).join("; "));
+
+  /* A refusal about the sender or the epoch sealed under ends the cycle's uploads at the first file it meets: five files
+     owed and the refusal lasting three cycles, one upload a cycle, nothing stopped, and all five go once it lifts. */
+  const FIVE = {};
+  for (const n of ["in-use.ec", "a.ec", "b.ec", "c.ec", "d.ec"]) FIVE["desks/" + DESK.keyId + "/" + n] = "{\"note\":\"" + n + " written here\"}\n";
+  const halted = [];
+  for (const reason of ["epoch", "not-enrolled"]) {
+    const r = await cycles("f4-halt-" + reason, [refusal(reason), refusal(reason), refusal(reason), TAKEN], { cycles: 4, files: FIVE });
+    const per = r.after.map((a, i) => a.puts - (i ? r.after[i - 1].puts : 0));
+    const sentNow = Object.keys(FIVE).filter(rel => r.st.sent[rel]).length;
+    halted.push({ reason, per, sentNow, ok: per.join(",") === "1,1,1,5" && sentNow === 5 && Object.keys(r.st.refused).length === 0
+      && r.said.filter(l => l.indexOf(" waits, and goes once this lifts: ") >= 0).length === 1 });
+  }
+  check(halted.every(h => h.ok),
+    "946d a lasting refusal about the sender or the epoch costs one upload a cycle however many files are owed, and each goes once it lifts:"
+    + " PUTs a cycle with five owed, " + halted.map(h => h.reason + " " + h.per.join(",") + ", then " + h.sentNow + " of 5 sent").join("; "));
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
 }
