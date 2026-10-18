@@ -111,6 +111,13 @@ const branchIdOf = pub => "k-" + sha256(Buffer.from(pub, "hex")).slice(0, 16);
 const toBytes = v => (Buffer.isBuffer(v) ? v : v instanceof Uint8Array ? Buffer.from(v.buffer, v.byteOffset, v.byteLength)
   : typeof v === "string" ? Buffer.from(v, "utf8") : null);
 const later = (a, b) => a.epoch > b.epoch || (a.epoch === b.epoch && a.counter > b.counter);
+/* The key every path map uses. The same fold as checkPath, so a path that differs only in case is one file.
+   A path checkPath refuses keeps the text it was given, and is not folded into another file. */
+function pathKey(rel) {
+  const p = B.checkPath(String(rel || ""));
+  if (p.ok) return p.folded.join("/"); /* plant:path-key */
+  return String(rel || "");
+}
 
 /* The canonical form the engine signs a document in, and the bytes its signature covers: `hash` left out, `sig` folded to
    its alg and keyId. The same as shell/main.js's signedBytesOf. */
@@ -297,9 +304,12 @@ function stateOf(x) {
   }
   if (table(x.applied)) for (const k of Object.keys(x.applied)) {
     const a = x.applied[k];
-    if (table(a) && B.isId(a.writer) && isCount(a.epoch) && isCount(a.counter) && typeof a.at === "number")
-      s.applied[k] = { writer: a.writer, epoch: a.epoch, counter: a.counter, id: String(a.id || ""), at: a.at,
+    if (table(a) && B.isId(a.writer) && isCount(a.epoch) && isCount(a.counter) && typeof a.at === "number") {
+      const key = pathKey(k);
+      const rec = { writer: a.writer, epoch: a.epoch, counter: a.counter, id: String(a.id || ""), at: a.at,
         sha: typeof a.sha === "string" ? a.sha : null, del: a.del === true };
+      if (!s.applied[key] || later(rec, s.applied[key])) s.applied[key] = rec;
+    }
   }
   if (table(x.taken)) for (const k of Object.keys(x.taken)) {
     const t = x.taken[k];
@@ -309,8 +319,11 @@ function stateOf(x) {
     const o = {};
     if (table(m)) for (const k of Object.keys(m)) {
       const v = m[k];
-      if (table(v) && HEX32.test(String(v.id)) && isCount(v.epoch) && isCount(v.counter) && count(v.size))
-        o[k] = { id: v.id, epoch: v.epoch, counter: v.counter, sha: typeof v.sha === "string" ? v.sha : null, size: v.size, del: v.del === true };
+      if (table(v) && HEX32.test(String(v.id)) && isCount(v.epoch) && isCount(v.counter) && count(v.size)) {
+        const key = pathKey(k);
+        const rec = { id: v.id, epoch: v.epoch, counter: v.counter, sha: typeof v.sha === "string" ? v.sha : null, size: v.size, del: v.del === true };
+        if (!o[key] || later(rec, o[key])) o[key] = rec;
+      }
     }
     return o;
   };
@@ -320,7 +333,10 @@ function stateOf(x) {
      go, so a file a refusal that lifts once stopped goes again. */
   if (table(x.refused)) for (const k of Object.keys(x.refused)) {
     const r = x.refused[k];
-    if (table(r) && typeof r.sha === "string" && STOPS.concat(["not-text"]).indexOf(r.why) >= 0) s.refused[k] = { sha: r.sha, why: r.why }; /* plant:refused-kept */
+    if (table(r) && typeof r.sha === "string" && STOPS.concat(["not-text"]).indexOf(r.why) >= 0) {
+      const key = pathKey(k);
+      if (!s.refused[key]) s.refused[key] = { sha: r.sha, why: r.why }; /* plant:refused-kept */
+    }
   }
   if (Array.isArray(x.pending)) s.pending = x.pending.filter(p => table(p) && count(p.seq) && HEX32.test(String(p.id))
     && isCount(p.epoch) && B.isId(p.writer) && count(p.floor)).slice(-PENDING_MAX)
@@ -440,7 +456,8 @@ function createProgram(opts) {
   /* A judged blob into the mirror, whole, by the host's atomic write; a deletion removes the file. The writer's floor rises
      only once the mirror holds it. */
   function land(r) {
-    const prev = has(st.applied, r.path) ? st.applied[r.path] : null;
+    const key = pathKey(r.path);
+    const prev = has(st.applied, key) ? st.applied[key] : null;
     if (prev && prev.writer === r.writerKeyId && !later(r, prev)) return { ok: true, path: r.path, stale: true };
     /* Judged before the write, and said here: the batch's landing of a root file does not say a refusal of its own.
        The counter stays where it was, so a later genuine head is not refused as a replay of one that was left out.
@@ -459,7 +476,7 @@ function createProgram(opts) {
     }
     if (head) st.headT = head.t;
     st.counters = B.raiseCounter(st.counters, r.writerKeyId, r.epoch, r.counter); /* plant:floor-raise */
-    st.applied[r.path] = { writer: r.writerKeyId, epoch: r.epoch, counter: r.counter, id: r.id, at: clock(),
+    st.applied[key] = { writer: r.writerKeyId, epoch: r.epoch, counter: r.counter, id: r.id, at: clock(),
       sha: r.kind === "delete" ? null : sha256(Buffer.from(r.body, "utf8")), del: r.kind === "delete" };
     remember(r.id, { path: r.path, writer: r.writerKeyId });
     if (r.path === TEAM_NAME && r.kind === "file") st.leadEpoch = Math.max(st.leadEpoch, r.epoch);
@@ -766,8 +783,7 @@ function createProgram(opts) {
   function considerOutgoing(rel, bytes) {
     const name = String(rel || "");
     if (TMP_RE.test(name)) return { send: false, reason: "tmp", said: B.REASONS.tmp }; /* plant:out-tmp */
-    const p = B.checkPath(name);
-    const key = p.ok ? p.path : name;
+    const key = pathKey(name);
     const a = has(st.applied, key) ? st.applied[key] : null;
     let echo = !!a && !a.del && clock() - a.at < ECHO_MS;
     if (echo && bytes != null) echo = sha256(toBytes(bytes)) === a.sha;
@@ -786,23 +802,24 @@ function createProgram(opts) {
       if (TMP_RE.test(rel) || !inPlace(me.place, rel)) continue;
       const p = B.checkPath(rel);
       if (!p.ok) continue;
-      here.set(p.path.toLowerCase(), p.path);
+      const relKey = pathKey(p.path);
+      here.set(relKey, p.path);
       const bytes = io.read(p.path);
       if (bytes == null) continue;
       const sha = sha256(bytes);
-      const was = has(st.sent, p.path) ? st.sent[p.path] : null;
+      const was = has(st.sent, relKey) ? st.sent[relKey] : null;
       if (was && !was.del && was.sha === sha) continue;
-      const stopped = has(st.refused, p.path) ? st.refused[p.path] : null;
+      const stopped = has(st.refused, relKey) ? st.refused[relKey] : null;
       if (stopped && stopped.sha === sha) continue; /* plant:refused-skip */
       if (!considerOutgoing(p.path, bytes).send) continue;
       let text;
       try { text = UTF8.decode(bytes); }
-      catch { say(p.path + " is not text, so it stays on this computer"); st.refused[p.path] = { sha, why: "not-text" }; continue; }
+      catch { say(p.path + " is not text, so it stays on this computer"); st.refused[relKey] = { sha, why: "not-text" }; continue; }
       ops.push({ rel: p.path, kind: "file", body: text, sha });
     }
     for (const rel of Object.keys(st.sent)) {
       const was = st.sent[rel];
-      if (!was.del && !here.has(rel.toLowerCase()) && inPlace(me.place, rel)) ops.push({ rel, kind: "delete", body: "", sha: null }); /* plant:out-delete */
+      if (!was.del && !here.has(pathKey(rel)) && inPlace(me.place, rel)) ops.push({ rel, kind: "delete", body: "", sha: null }); /* plant:out-delete */
     }
     const agrees = !!ctx && typeof ctx.agree === "function";
     if (me.place === "root" && ctx && (Array.isArray(ctx.inviteKeys) || agrees)) {
@@ -837,8 +854,9 @@ function createProgram(opts) {
   }
 
   function lastSent(op) {
-    if (op.invite) { const h = op.invite.id; return has(st.sentInv, h) && has(st.sentInv[h], op.rel) ? st.sentInv[h][op.rel] : null; }
-    return has(st.sent, op.rel) ? st.sent[op.rel] : null;
+    const k = pathKey(op.rel);
+    if (op.invite) { const h = op.invite.id; return has(st.sentInv, h) && has(st.sentInv[h], k) ? st.sentInv[h][k] : null; }
+    return has(st.sent, k) ? st.sent[k] : null;
   }
 
   /* A file owed, sealed and signed: the next counter, the blob it replaces named so the relay keeps one per chain. */
@@ -853,15 +871,16 @@ function createProgram(opts) {
   function sentOut(op, blob) {
     const rec = { id: blob.id, epoch: blob.epoch, counter: blob.counter, sha: op.sha, size: blob.ciphertext.length, del: op.kind === "delete" };
     const was = lastSent(op);
+    const k = pathKey(op.rel);
     if (op.invite) {
       const h = op.invite.id;
-      st.sentInv[h] = Object.assign({}, st.sentInv[h] || {}, { [op.rel]: rec });
+      st.sentInv[h] = Object.assign({}, st.sentInv[h] || {}, { [k]: rec });
     } else {
-      st.sent[op.rel] = rec;
+      st.sent[k] = rec;
       st.bytes = Math.max(0, st.bytes - (was ? was.size : 0)) + rec.size;
-      delete st.refused[op.rel];
+      delete st.refused[k];
     }
-    waiting.delete(op.invite ? "invite:" + op.invite.id : op.rel);
+    waiting.delete(op.invite ? "invite:" + op.invite.id : k);
     if (op.byInvite) st.invited = true;
     persist();
   }
@@ -877,11 +896,12 @@ function createProgram(opts) {
   function unchain(op, id) {
     const was = lastSent(op);
     if (op.kind !== "file" || !was || !was.del || was.id !== id) return false;
+    const k = pathKey(op.rel);
     if (op.invite) {
-      delete st.sentInv[op.invite.id][op.rel];
+      delete st.sentInv[op.invite.id][k];
       if (!Object.keys(st.sentInv[op.invite.id]).length) delete st.sentInv[op.invite.id];
     } else {
-      delete st.sent[op.rel];
+      delete st.sent[k];
       st.bytes = Math.max(0, st.bytes - was.size);
     }
     persist();
@@ -892,7 +912,7 @@ function createProgram(opts) {
      owed for the next cycle (F4). Each is said, a wait once while it lasts. A copy of the team file the lead owes a desk or
      an invitation always waits, so its refusal never stops the lead's own team file of the same bytes. True where it waits. */
   function refusedOut(op, r) {
-    const key = op.invite ? "invite:" + op.invite.id : op.rel;
+    const key = op.invite ? "invite:" + op.invite.id : pathKey(op.rel);
     let waits = !!op.invite;
     if (STOPS.indexOf(r.reason) < 0) waits = true; /* plant:refused-waits */
     if (waits) {
@@ -903,7 +923,7 @@ function createProgram(opts) {
       return true;
     }
     waiting.delete(key);
-    if (op.sha) st.refused[op.rel] = { sha: op.sha, why: r.reason };
+    if (op.sha) st.refused[pathKey(op.rel)] = { sha: op.sha, why: r.reason };
     persist();
     say(op.rel + " was not sent: " + r.said);
     return false;

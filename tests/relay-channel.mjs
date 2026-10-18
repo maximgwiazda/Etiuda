@@ -34,7 +34,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 90;
+const EXPECTED = 94;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2223,6 +2223,126 @@ try {
   }
   const back = sha(fs.readFileSync(src)) === digest;
   check(turned && back, "952e lifting plant:epoch-hold writes the older epoch over the newer file, and the file is put back: "
+    + detail + ", sha " + (back ? "restored" : "differs"));
+}
+
+/* ---- a path that differs only in case is one file (F3). The same path in the same case is already stale. Pending
+   carries no path, so a pending row is not a fourth map of paths. ---- */
+try {
+  const root = path.join(LAB, "f3-case-" + hex(4));
+  fs.mkdirSync(root, { recursive: true });
+  const prog = C.createProgram({ io: C.diskIO(root, C.writeWhole), pin: PIN, clock: () => 1700000000000, save() {} });
+  const writer = { keyId: LEAD.keyId, privateKey: LEAD.privateKey };
+  const K2 = crypto.randomBytes(32);
+  const ctx = { keyFor: e => (e === 2 ? K2 : e === 1 ? K1 : null) };
+  const seal = (p, body, epoch, counter, key) => B.seal({ relayTeamId: RT, epoch, teamKey: key, writer,
+    path: p, body, counter, place: "root" });
+  const item = (blob, seq) => ({ seq, ct: blob.ciphertext, meta: { v: 1, id: blob.id, writer: blob.writerKeyId,
+    epoch: blob.epoch, counter: blob.counter, size: blob.ciphertext.length, sig: blob.signature, nonce: blob.nonce,
+    supersedes: blob.supersedes, del: !!blob.deletion } });
+  const first = prog.applyBatch([item(seal("guide.ec", "v2", 2, 10, K2), 1)], ctx);
+  const same = prog.applyBatch([item(seal("guide.ec", "v1", 1, 1, K1), 2)], ctx);
+  const afterSame = fs.readFileSync(path.join(root, "guide.ec"), "utf8");
+  check(afterSame === "v2" && same.applied.length === 0 && first.applied.indexOf("guide.ec") >= 0,
+    "953a the same path in the same case stays stale: disk " + JSON.stringify(afterSame) + ", applied " + same.applied.length);
+  const crossed = prog.applyBatch([item(seal("Guide.ec", "v1", 1, 1, K1), 3)], ctx);
+  let diskName = null, diskBody = null;
+  for (const n of fs.readdirSync(root)) {
+    if (n.toLowerCase() === "guide.ec") { diskName = n; diskBody = fs.readFileSync(path.join(root, n), "utf8"); }
+  }
+  check(diskBody === "v2" && diskName === "guide.ec" && crossed.applied.length === 0,
+    "953b an older blob under another case does not replace the newer file: name " + JSON.stringify(diskName)
+    + " body " + JSON.stringify(diskBody) + ", applied " + JSON.stringify(crossed.applied));
+
+  const sentId = hex(16), inv = hex(16), pend = hex(16);
+  const loaded = C.stateOf({
+    kind: "etiuda-relay-channel", v: 1,
+    applied: {
+      "guide.ec": { writer: LEAD.keyId, epoch: 1, counter: 1, id: "a", at: 1, sha: "aa", del: false },
+      "Guide.ec": { writer: LEAD.keyId, epoch: 2, counter: 4, id: "b", at: 2, sha: "bb", del: false },
+    },
+    sent: { "GUIDE.ec": { id: sentId, epoch: 2, counter: 4, sha: "bb", size: 2, del: false } },
+    refused: { "Guide.ec": { sha: "cc", why: "bad-path" } },
+    sentInv: { [inv]: { "Guide.ec": { id: hex(16), epoch: 1, counter: 2, sha: "dd", size: 2, del: false } } },
+    pending: [{ seq: 3, id: pend, epoch: 1, writer: LEAD.keyId, floor: 0 }],
+  });
+  const appliedKeys = Object.keys(loaded.applied);
+  const sentKeys = Object.keys(loaded.sent);
+  const refusedKeys = Object.keys(loaded.refused);
+  const invKeys = Object.keys((loaded.sentInv[inv]) || {});
+  const laterApplied = loaded.applied["guide.ec"];
+  const quiet = { read() { return null; }, write() {}, remove() {}, list() { return []; } };
+  const said = [];
+  const maps = C.createProgram({ io: quiet, pin: PIN, clock: () => 1, save() {}, say: l => said.push(l) });
+  const blobOf = id => ({ id, epoch: 1, counter: 1, ciphertext: Buffer.alloc(8) });
+  maps.sentOut({ rel: "Guide.ec", kind: "file", sha: "aa" }, blobOf(hex(16)));
+  maps.sentOut({ rel: "guide.ec", kind: "file", sha: "bb" }, blobOf(hex(16)));
+  maps.refusedOut({ rel: "GUIDE.ec", sha: "cc" }, { reason: "bad-path", said: B.REASONS["bad-path"] });
+  maps.refusedOut({ rel: "guide.ec", sha: "dd" }, { reason: "bad-path", said: B.REASONS["bad-path"] });
+  const sentLive = Object.keys(maps.state().sent).filter(k => k.toLowerCase() === "guide.ec");
+  const refusedLive = Object.keys(maps.state().refused).filter(k => k.toLowerCase() === "guide.ec");
+  const from = said.length;
+  maps.refusedOut({ rel: "guide.ec" }, { reason: "epoch", said: "held" });
+  maps.refusedOut({ rel: "Guide.ec" }, { reason: "epoch", said: "held" });
+  const waits = said.slice(from).filter(l => l.indexOf("waits") >= 0).length;
+  check(appliedKeys.length === 1 && appliedKeys[0] === "guide.ec" && laterApplied && laterApplied.epoch === 2
+    && sentKeys.length === 1 && sentKeys[0] === "guide.ec"
+    && refusedKeys.length === 1 && refusedKeys[0] === "guide.ec"
+    && invKeys.length === 1 && invKeys[0] === "guide.ec"
+    && loaded.pending.length === 1 && !("path" in loaded.pending[0])
+    && sentLive.length === 1 && refusedLive.length === 1 && waits === 1,
+    "953c case-distinct paths are one file in applied, sent, refused and a copy's sent map, and a wait is said once: applied "
+    + JSON.stringify(appliedKeys) + " epoch " + (laterApplied && laterApplied.epoch) + ", sent " + JSON.stringify(sentKeys)
+    + ", refused " + JSON.stringify(refusedKeys) + ", copy " + JSON.stringify(invKeys)
+    + ", pending " + loaded.pending.length + ", live sent " + sentLive.length + ", live refused " + refusedLive.length
+    + ", waits " + waits);
+} catch (e) {
+  check(false, "953 harness: " + (e && e.stack ? e.stack : e));
+}
+
+/* plant:path-key. Deleting that line, leaving the file valid script, lets an older blob under another case replace the file. */
+{
+  const src = path.join(ROOT, "shell", "relay", "channel.cjs");
+  const before = fs.readFileSync(src);
+  const digest = sha(before);
+  let turned = false, detail = "plant line absent";
+  try {
+    const lines = before.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf("plant:path-key") >= 0);
+    if (at >= 0) {
+      lines.splice(at, 1);
+      fs.writeFileSync(src, lines.join("\n"));
+      const resolved = nodeRequire.resolve(src);
+      delete nodeRequire.cache[resolved];
+      const lifted = nodeRequire(src);
+      const root = path.join(LAB, "f3-plant-" + hex(4));
+      fs.mkdirSync(root, { recursive: true });
+      const prog = lifted.createProgram({ io: lifted.diskIO(root, lifted.writeWhole), pin: PIN, clock: () => 1700000000000, save() {} });
+      const writer = { keyId: LEAD.keyId, privateKey: LEAD.privateKey };
+      const K2 = crypto.randomBytes(32);
+      const ctx = { keyFor: e => (e === 2 ? K2 : e === 1 ? K1 : null) };
+      const seal = (p, body, epoch, counter, key) => B.seal({ relayTeamId: RT, epoch, teamKey: key, writer,
+        path: p, body, counter, place: "root" });
+      const item = (blob, seq) => ({ seq, ct: blob.ciphertext, meta: { v: 1, id: blob.id, writer: blob.writerKeyId,
+        epoch: blob.epoch, counter: blob.counter, size: blob.ciphertext.length, sig: blob.signature, nonce: blob.nonce,
+        supersedes: blob.supersedes, del: !!blob.deletion } });
+      prog.applyBatch([item(seal("guide.ec", "v2", 2, 10, K2), 1)], ctx);
+      prog.applyBatch([item(seal("Guide.ec", "v1", 1, 1, K1), 2)], ctx);
+      let diskBody = null;
+      for (const n of fs.readdirSync(root)) {
+        if (n.toLowerCase() === "guide.ec") diskBody = fs.readFileSync(path.join(root, n), "utf8");
+      }
+      turned = diskBody === "v1";
+      detail = "disk body " + JSON.stringify(diskBody);
+    }
+  } catch (e) {
+    detail = e && e.message ? e.message : String(e);
+  } finally {
+    fs.writeFileSync(src, before);
+    try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
+  }
+  const back = sha(fs.readFileSync(src)) === digest;
+  check(turned && back, "953d lifting plant:path-key lets the older case replace the file, and the file is put back: "
     + detail + ", sha " + (back ? "restored" : "differs"));
 }
 
