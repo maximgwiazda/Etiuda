@@ -126,6 +126,17 @@ function privateKeyOf(key) {
   } catch { return null; }
 }
 
+/* A general Ed25519 verify of `bytes` under a public key as 64 hex, for a signature as 128 hex; false for anything else.
+   Its prefix is the caller's: every signed message here starts with one of its own. Added at step 4 for the channel
+   layer, as step 3's builder asked. */
+function verifySig(publicHex, bytes, signatureHex) {
+  try {
+    const key = publicKeyOf(publicHex), b = bytesOf(bytes);
+    if (!key || !b || typeof signatureHex !== "string" || !HEX128.test(signatureHex)) return false;
+    return crypto.verify(null, b, key, Buffer.from(signatureHex, "hex"));
+  } catch { return false; }
+}
+
 function uploadBytes(aad, ciphertext) {
   return Buffer.concat([Buffer.from(UPLOAD_PREFIX, "utf8"), aad, ciphertext]);
 }
@@ -346,6 +357,6 @@ function opened(input) {
 
 module.exports = {
   BLOB_MAX, TEAM_MAX, RATE_MAX, RATE_WINDOW_MS, PAD_FLOOR, NONCE_BYTES, TAG_BYTES, KEY_BYTES, AAD_LABEL, UPLOAD_PREFIX,
-  REASONS, refusal, aadOf, padStep, frame, unframe, uploadBytes, signUpload, verifyUpload, seal, openBlob,
+  REASONS, refusal, isId, aadOf, padStep, frame, unframe, uploadBytes, signUpload, verifyUpload, verifySig, seal, openBlob,
   checkPath, writerOf, placeOf, counterFresh, raiseCounter, revLoad, revCurrent, checkBlobSize, checkTeamSize, checkRate,
 };

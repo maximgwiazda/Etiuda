@@ -82,7 +82,7 @@ function teamObject(deps) {
     let body = null;
     try { body = JSON.parse(bytes.toString("utf8")); } catch { body = null; }
     if (what === "teams") return answer(c.create(body && typeof body.rt === "string" ? body.rt : "", body), r => ({ rt: r.rt }));
-    if (what === "session") return answer(c.session(rt, body), r => ({ session: r.session, until: r.until }));
+    if (what === "session") return answer(c.session(rt, body), r => (r.invite ? { session: r.session, until: r.until, invite: true } : { session: r.session, until: r.until }));
     if (what === "devices") {
       const r = c.devices(rt, body);
       if (r.ok) closeWhere(a => r.withdrawn.indexOf(a.key) > -1, "removed"); /* plant:withdraw-sockets */

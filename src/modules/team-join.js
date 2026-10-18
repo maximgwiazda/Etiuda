@@ -127,14 +127,28 @@ function syncJoinDoor(){
     if(el) el.hidden=!teamCanJoin();
   }catch(e){}
 }
+/* The head the shell read, or nothing. A folder team sends no head, and a head that is not this shape is left off
+   so the row stays as it was. */
+function headKept(h){
+  if(!h || typeof h!=="object") return null;
+  const edition=typeof h.edition==="string"?h.edition:"", published=typeof h.published==="string"?h.published:"";
+  if(edition.length<1 || edition.length>120 || published.length<1 || published.length>80 || !Number.isFinite(h.t)) return null;
+  if(/[\u0000-\u001f\u007f]/.test(edition+published)) return null;
+  return {edition:edition, published:published, t:h.t};
+}
 function joinTook(v,changed){
   const s=v&&typeof v==="object"?v:{};
   const was=JSON.stringify(joinNow);
   joinNow={sealed:s.sealed&&s.sealed.file?{file:String(s.sealed.file),team:String(s.sealed.team||"")}:null,
            join:joinShown(s.join),
-           leads:Array.isArray(s.leads)?s.leads.filter(l=>l&&l.team).map(l=>({team:String(l.team),print:String(l.print||""),
-                                      admitted:l.admitted===true,seen:l.seen===true,lead:String(l.lead||""),folder:String(l.folder||""),
-                                      removed:l.removed===true,policy:l.policy===true})):[]};
+           leads:Array.isArray(s.leads)?s.leads.filter(l=>l&&l.team).map(l=>{
+             const row={team:String(l.team),print:String(l.print||""),
+               admitted:l.admitted===true,seen:l.seen===true,lead:String(l.lead||""),folder:String(l.folder||""),
+               removed:l.removed===true,policy:l.policy===true};
+             const head=headKept(l.head);
+             if(head) row.head=head;
+             return row;
+           }):[]};
   /* Admitted: an empty desk loads the catalog the invitation named. A desk that already has one keeps it. */
   if(s.joined && s.joined.file){
     closeJoinBubble();

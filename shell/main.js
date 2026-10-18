@@ -24,6 +24,9 @@ const os = require("node:os");
 const crypto = require("node:crypto");
 const zlib = require("node:zlib");
 const { watchPage } = require(path.join(__dirname, "page-watch.cjs"));
+/* The relay's channel layer, required the first time a team on the relay needs it, so a desk on a folder loads nothing of it. */
+let relayLayer = null;
+function RelayChannel() { return relayLayer || (relayLayer = require(path.join(__dirname, "relay", "channel.cjs"))); }
 
 /* THE PROXY IS CHOSEN HERE, BEFORE READY: a setProxy after ready would not stop the first lookup.
    Windows' own setting is followed where it names a setup script or a server; automatic detection
@@ -119,6 +122,9 @@ function catalogFolder() {
   if (deskKeys === undefined) deskKeys = readDesk();
   const named = sayJoinPolicy().folder;
   if (named) return named;
+  /* On the relay the team folder is the mirror the channel layer keeps, beside the desk's own file (shell/relay/channel.cjs). */
+  const relay = relayHere();
+  if (relay) return relayMirrorOf(relay.rt);
   const set = deskKeys[CATALOG_FOLDER_KEY];
   return (typeof set === "string" && set.trim()) ? set.trim() : defaultCatalogFolder();
 }
@@ -480,6 +486,7 @@ function readCatalog() {
 let catalogSettle = null, catalogWatchers = [], watchedFolder = "";
 const watchSaid = new Map();                   // folder -> the refusal last logged for it
 function watchCatalog(win) {
+  relayRun();
   catalogWatchers.forEach(w => { try { w.close(); } catch { /* already gone */ } });
   catalogWatchers = [];
   watchedFolder = catalogFolder();
@@ -888,6 +895,7 @@ function deskEnvelopeBody(keysText) {
     + (Object.keys(teamRoster).length ? ',"teamRoster":' + JSON.stringify(teamRoster) : "")
     + (Object.keys(teamRevSeen).length ? ',"teamRevSeen":' + JSON.stringify(teamRevSeen) : "")
     + (Object.keys(teamChannel).length ? ',"teamChannel":' + JSON.stringify(teamChannel) : "")
+    + (Object.keys(teamPinFrom).length ? ',"teamPinFrom":' + JSON.stringify(teamPinFrom) : "")
     + (Object.keys(teamShown).length ? ',"teamShown":' + JSON.stringify(teamShown) : "")
     + (teamOpened.size ? ',"teamOpened":' + JSON.stringify(Array.from(teamOpened)) : "")
     + (teamSeen.size ? ',"teamSeen":' + JSON.stringify(Array.from(teamSeen)) : "")
@@ -2079,6 +2087,7 @@ let teamEpochSeen = {};                        // team id -> the highest epoch h
 let teamRoster = {};                           // team id -> {epoch, desks}: the desk ids of the file heeded at that epoch
 let teamRevSeen = {};                          // team id -> {lead public -> {epoch, rev}}: the highest rev heeded at that key's highest epoch, above 0
 let teamChannel = {};                          // team id -> {kind: "relay", rt, url}: the channel of the file heeded; none is the folder
+let teamPinFrom = {};                          // team id -> "invite", "policy" or "answer": what pinned its lead; none is the file's own vouching
 let teamRingAt = null;                         // {root, relay, ring}: the channel and signed ring of the file last heeded at root; this run only
 let teamShown = {};                            // team id -> {lead?, folder?}: the lead's name an invitation gave, the folder its file was heeded in
 const teamOpened = new Set();                  // catalog ids this desk has opened from an envelope, kept in the desk envelope
@@ -2376,6 +2385,7 @@ function policyLetsInviteGo(named) {
   if (inv.pinned === true && pin && pin.keyId === inv.lead.keyId && pin.public === inv.lead.public) {
     delete teamPins[j.team];
     delete teamShown[j.team];
+    delete teamPinFrom[j.team];
     teamSeen.delete(j.team);
   }
   if (typeof inv.folder === "string" && deskKeys[CATALOG_FOLDER_KEY] === inv.folder)
@@ -2431,11 +2441,13 @@ function readRing() {
   const root = catalogFolder(), relay = relayRingAt(root);
   return relay === undefined ? readRingFile(root) : relay;
 }
-/* The ring a team file is heeded with: on the relay its own, and on the folder the ring file. A relay file's own ring
-   pinning its signer with no invitation is an allowance of the relay's first step; its fourth step inverts it. */
+/* The ring a team file's first pin is heeded with: on the folder the ring file, and on the relay none at all. The relay's
+   first step let a relay file's own signed ring vouch for the key that signed it; its fourth step inverts that (board 907):
+   on the relay a first pin comes from an invitation, machine policy or an answered request, never from a ring. The
+   signed ring is still the one a catalog's signature is read against (relayRingAt). */
 function ringHeeded(doc, root) {
   const channel = teamChannelOf(doc);
-  return !channel ? null : channel.kind === "relay" ? teamRingIn(doc) : readRingFile(root);
+  return !channel ? null : channel.kind === "relay" ? null : readRingFile(root); /* plant:ring-relay */
 }
 function teamSay(line) {
   if (teamSaid.has(line)) return;
@@ -2494,6 +2506,18 @@ function heedTeam() {
       + floor.rev + " at key number " + r.epoch + "), so nothing in it is used");
     return;
   }
+  /* What pinned the lead, for board 907: an invitation, machine policy or an answered request, each naming this very key;
+     a handover keeps what pinned the key it came from; anything else is the file vouching for itself. */
+  if (r.pinned) {
+    const lead = r.state.pins[r.team], j = teamJoin;
+    const same = k => !!k && k.keyId === lead.keyId && k.public === lead.public;
+    const handover = !!teamPins[r.team];
+    const from = policyLead && policyLead === lead.public ? "policy"
+      : j && j.team === r.team && j.invite && same(j.invite.lead) ? "invite"
+      : j && j.team === r.team && j.opened && same(j.opened.lead) ? "answer"
+      : handover ? teamPinFrom[r.team] : undefined;
+    if (from) teamPinFrom[r.team] = from; else delete teamPinFrom[r.team];
+  }
   // A pin moved by a handover is another lead's: the name an invitation gave for the one before is not theirs.
   if (r.pinned && teamPins[r.team] && teamShown[r.team] && teamShown[r.team].lead) {
     teamShown[r.team] = Object.assign({}, teamShown[r.team]);
@@ -2519,7 +2543,7 @@ function heedTeam() {
     }
     const was = JSON.stringify(teamChannel[r.team] || null);
     if (channel.kind === "relay") teamChannel[r.team] = channel; else delete teamChannel[r.team];
-    if (JSON.stringify(teamChannel[r.team] || null) !== was) changed = true;
+    if (JSON.stringify(teamChannel[r.team] || null) !== was) { changed = true; relaySoon(); }
     teamRingAt = { root: root, relay: channel.kind === "relay", ring: channel.kind === "relay" ? teamRingIn(doc) : null };
   }
   // The floor rises with a newer epoch or a higher rev at its own; a floor of 0 refuses nothing and is not kept.
@@ -2542,6 +2566,7 @@ function heedTeam() {
     } catch (e) { teamStamp = ""; teamSay("the team key for " + r.team + " could not be kept - " + e.message); }
   }
   if (changed) persistDeskEnvelope();
+  finishJoin(); /* plant:n1-heed */
 }
 /* The catalog's text inside a sealed envelope, where this desk holds its team's key for its epoch, else null. */
 function teamOpen(data) {
@@ -2561,6 +2586,20 @@ function teamOpen(data) {
    request waits or stands refused, no first admission is taken for its team. */
 let teamJoin = null;                            // {team, file, nonce, commit, asked, held, name, opened?, refused?, invite?}
 let joinSent = "";
+let joinDone = null;                            // {team, file}: a request admitted, for the next joinView to say once
+/* Admitted once this desk keeps a newer key for the team than when it asked, whether or not the Team cover is read: the
+   request goes, which the relay carries to the lead as its signed deletion, and the invitation's address is no longer
+   followed. The next joinView says so once, as it did when it was the one to find it. */
+function finishJoin() {
+  const j = teamJoin;
+  if (!j || !deskBranch || !(newestEpoch(j.team) > j.held)) return false;
+  try { fs.unlinkSync(joinFile()); } catch { /* gone already */ }
+  teamJoin = null;
+  joinDone = { team: j.team, file: j.file };
+  persistDeskEnvelope();
+  if (j.invite && j.invite.relay) relaySoon();
+  return true;
+}
 function newestEpoch(team) {
   return Object.keys(teamKeys[team] || {}).reduce((hi, n) => Math.max(hi, +n || 0), 0);
 }
@@ -2658,12 +2697,31 @@ function inviteRead(text, posix) {
   const pub = lead && typeof lead.public === "string" ? lead.public.toLowerCase() : "";
   const keyId = lead && typeof lead.keyId === "string" ? lead.keyId : "";
   const name = lead && typeof lead.name === "string" ? lead.name : null;
-  const pathOk = folder !== "";
+  /* The lead's box, as its team file names it, where the invitation carries one: a desk joining through the relay finds its
+     own copy of the team file by it before it holds any team file (relay F6). */
+  const box = lead && lead.box !== undefined ? String(lead.box) : "";
+  /* On the relay the invitation names the relay team id, the relay's https address, the token whose sha256 the lead
+     registered and the relay's id for the invitation, in place of the folder (the protocol's section 7). */
+  const relay = doc.relay === undefined ? null : inviteRelay(doc.relay);
+  if (doc.relay !== undefined && (!relay || doc.folder !== undefined)) return null;
+  const pathOk = relay ? true : folder !== "";
   const shown = s => !/[\u0000-\u001f\u007f]/.test(s) && !INVITE_HIDDEN_RE.test(s);
   const nameOk = name !== null && name.length <= 120 && shown(name);
   const keyOk = keyId.length >= 1 && keyId.length <= 80 && shown(keyId);
   if (!SEALED_TEAM_RE.test(String(doc.team)) || !pathOk || !/^[0-9a-f]{32}$/.test(secret) || !/^[0-9a-f]{64}$/.test(pub) || !keyOk || !nameOk) return null;
-  return { team: String(doc.team), folder: folder, lead: { keyId: keyId, public: pub, name: name }, secret: secret };
+  if (box !== "" && !/^[0-9a-f]{64}$/.test(box)) return null; /* plant:f6-box-shape */
+  const out = { team: String(doc.team), folder: folder, lead: { keyId: keyId, public: pub, name: name }, secret: secret };
+  if (box) out.lead.box = box; /* plant:f6-box-read */
+  if (relay) out.relay = relay;
+  return out;
+}
+/* An invitation's relay as {rt, url, token, inv}, or null where any field is not that shape: the address as a team file's
+   channel takes it (https, a host, a path), the token 32 bytes and the invitation's id 16, in lower-case hex. */
+function inviteRelay(r) {
+  if (!r || typeof r !== "object" || Array.isArray(r)) return null;
+  const c = teamChannelOf({ channel: { kind: "relay", rt: r.rt, url: r.url } });
+  if (!c || c.kind !== "relay" || !/^[0-9a-f]{64}$/.test(String(r.token)) || !/^[0-9a-f]{32}$/.test(String(r.inv))) return null;
+  return { rt: c.rt, url: c.url, token: String(r.token), inv: String(r.inv) };
 }
 /* Where a folder sits, from its text alone: a UNC host, a cloud client named by the path, or this
    computer's system drive. Another drive letter may be a mapped share, so it is none of those. */
@@ -2750,13 +2808,13 @@ function joinView() {
   const root = catalogFolder();
   if (!folderAnswers(root)) return view;
   heedTeam();
+  finishJoin();
   const j = teamJoin, me = branchIdentity(false);
-  if (j && me && newestEpoch(j.team) > j.held) {
-    try { fs.unlinkSync(joinFile()); } catch { /* gone already */ }
-    teamJoin = null;
-    persistDeskEnvelope();
-    view.joined = { team: j.team, file: j.file };
-  } else if (j && me) {
+  if (joinDone) {
+    view.joined = joinDone;
+    joinDone = null;
+  }
+  if (j && me) {
     if (!j.file) {
       const named = sealedOutside();
       if (named && named.team === j.team) { j.file = named.file; persistDeskEnvelope(); }
@@ -2805,8 +2863,15 @@ function joinKept(j) {
     && !!who && typeof who === "object" && typeof who.keyId === "string" && who.keyId.length > 0 && who.keyId.length <= 80
     && JOIN_HEX_RE.test(String(who.public)) && typeof who.name === "string" && who.name.length <= 120
     && (inv.folder === undefined || typeof inv.folder === "string") && (inv.was === undefined || typeof inv.was === "string")
-    && (inv.pinned === undefined || typeof inv.pinned === "boolean");
+    && (inv.pinned === undefined || typeof inv.pinned === "boolean") && (inv.relay === undefined || relayKept(inv.relay));
   return inviteOk ? j : null;
+}
+/* A relay invitation as the envelope keeps it: the relay team id, the address and the invitation's id in the open, the
+   token and the seal key sealed by safeStorage. */
+function relayKept(r) {
+  const c = r && typeof r === "object" && !Array.isArray(r) ? teamChannelOf({ channel: { kind: "relay", rt: r.rt, url: r.url } }) : null;
+  return !!c && c.kind === "relay" && /^[0-9a-f]{32}$/.test(String(r.inv)) && typeof r.token === "string" && r.token !== ""
+    && typeof r.seal === "string" && r.seal !== "" && (r.box === undefined || /^[0-9a-f]{64}$/.test(String(r.box)));
 }
 /* Whether this desk takes invitations: "" where it does, else the refusal every invitation gets, at read and at yes.
    "policy" while machine policy names a team folder or a lead, an invitation naming those very ones included. */
@@ -2849,9 +2914,10 @@ function readInvite(text) {
   if (!parsed) return Object.assign({}, view, { refused: "unread" });
   const settled = inviteSettled(parsed.team, parsed.lead);
   if (settled) return Object.assign({}, view, { refused: settled });
-  const where = folderHost(parsed.folder, process.env);
+  const where = parsed.relay ? { host: "", cloud: "", local: false } : folderHost(parsed.folder, process.env);
   const offer = { folder: parsed.folder, lead: parsed.lead.name, code: inviteCode(parsed.secret, parsed.lead.public),
     host: where.host, cloud: where.cloud, local: where.local };
+  if (parsed.relay) offer.relay = new URL(parsed.relay.url).host;
   if (teamBarred.has(parsed.team) && teamLeft[parsed.team]) offer.left = teamLeft[parsed.team];
   return Object.assign({}, view, { offer: offer });
 }
@@ -2870,6 +2936,7 @@ async function takeInvite(text, name, check) {
   if (!code || String(check || "").replace(/\s+/g, "") !== code) return Object.assign({}, joinView(), { refused: "check" });
   const me = branchIdentity();
   if (!me) return Object.assign({}, joinView(), { refused: "unread" });
+  if (parsed.relay) return takeRelayInvite(parsed, name, me);
   const previous = catalogFolder();
   const keptJoin = teamJoin;
   /* The desk's own folder setting before any invitation still kept here moved it, for policyLetsInviteGo. */
@@ -2924,6 +2991,55 @@ async function takeInvite(text, name, check) {
   catalogFolderChanged();
   return joinView();
 }
+/* Yes to a relay invitation: no folder is asked, since the team folder is the mirror the channel layer keeps. The token
+   and the key the request is sealed under are kept sealed by safeStorage until the lead admits this desk; the pin the
+   invitation sets is the one board 907 lets the desk follow a relay address under. */
+function takeRelayInvite(parsed, name, me) {
+  if (!branchSealable()) return Object.assign({}, joinView(), { refused: "unread" });
+  const nonce = crypto.randomBytes(32).toString("hex");
+  const commit = joinCommit(parsed.team, me.key, me.box, nonce);
+  const proof = memberProof(parsed.secret, commit);
+  const incomingId = inviteIdOf(parsed.secret);
+  const sealKey = RelayChannel().inviteSealKey(parsed.secret);
+  if (!proof || !incomingId || !sealKey) return Object.assign({}, joinView(), { refused: "unread" });
+  let token = "", seal = "";
+  try {
+    token = safeStorage.encryptString(parsed.relay.token).toString("base64");
+    seal = safeStorage.encryptString(sealKey.toString("base64")).toString("base64");
+  } catch { return Object.assign({}, joinView(), { refused: "unread" }); }
+  try { fs.mkdirSync(relayMirrorOf(parsed.relay.rt), { recursive: true }); }
+  catch (e) { console.error("etiuda: the relay's mirror could not be made - " + e.message); return Object.assign({}, joinView(), { refused: "silent" }); }
+  const keptJoin = teamJoin, previous = catalogFolder();
+  const was = { join: teamJoin, pin: teamPins[parsed.team], from: teamPinFrom[parsed.team], shown: teamShown[parsed.team] };
+  const pinned = !teamPins[parsed.team] || (!!(keptJoin && keptJoin.invite) && keptJoin.team === parsed.team && keptJoin.invite.pinned === true);
+  const j = { team: parsed.team, file: "", nonce: nonce, commit: commit, asked: Date.now(), held: newestEpoch(parsed.team),
+    name: String(name || "").trim().slice(0, 120),
+    invite: { id: incomingId, proof: proof, lead: { keyId: parsed.lead.keyId, public: parsed.lead.public, name: parsed.lead.name },
+      pinned: pinned, relay: { rt: parsed.relay.rt, url: parsed.relay.url, inv: parsed.relay.inv, token: token, seal: seal } } };
+  if (parsed.lead.box) j.invite.relay.box = parsed.lead.box; /* plant:f6-box-kept */
+  teamJoin = j;
+  if (!teamPins[parsed.team]) { teamPins[parsed.team] = { keyId: parsed.lead.keyId, public: parsed.lead.public }; teamSeen.delete(parsed.team); }
+  teamPinFrom[parsed.team] = "invite";
+  teamShown[parsed.team] = Object.assign({ folder: relayMirrorOf(parsed.relay.rt) }, shownName(parsed.lead.name) ? { lead: parsed.lead.name } : {});
+  try { writeJoin(memberRequestDoc(j, null, me, { id: incomingId, proof: proof })); }
+  catch (e) {
+    console.error("etiuda: the request to join could not be written - " + e.message);
+    teamJoin = was.join;
+    if (was.pin) teamPins[parsed.team] = was.pin; else delete teamPins[parsed.team];
+    if (was.from) teamPinFrom[parsed.team] = was.from; else delete teamPinFrom[parsed.team];
+    if (was.shown) teamShown[parsed.team] = was.shown; else delete teamShown[parsed.team];
+    return Object.assign({}, joinView(), { refused: "silent" });
+  }
+  if (keptJoin && previous !== catalogFolder() && deskBranch && folderAnswers(previous)) {
+    try { fs.unlinkSync(path.join(previous, "desks", branchIdOf(deskBranch.sign.pub), "join.json")); } catch (e) { /* already gone */ }
+  }
+  if (teamLeft[parsed.team]) { delete teamLeft[parsed.team]; teamBarred.delete(parsed.team); }
+  teamStamp = "";
+  persistDeskEnvelope();
+  relayRun();
+  catalogFolderChanged();
+  return joinView();
+}
 /* The lead key as Studio's Settings show it, the 16 hex after "studio-" (sign.mjs keyIdFor), made from the public half and
    never from the file's keyId, which any writer of the share chooses. */
 function leadPrint(publicHex) {
@@ -2932,14 +3048,30 @@ function leadPrint(publicHex) {
 /* Every lead this desk trusts, for the agent to compare once after admission and to leave at any time: the team by its lead's
    name and folder where known; `removed` where the roster of the epoch accepted leaves out this desk, which once held a key;
    `policy` where machine policy names this lead, which pins it again after any leave. */
+/* The head of the relay this desk follows, for the team row. Only that team, and only a head the channel is showing.
+   A folder team, and a relay whose head is missing or bad, gets no field at all. */
+function headShown(team) {
+  const here = relayHere();
+  if (!here || here.team !== team || !relayChannel || !relayChannel.program || typeof relayChannel.program.headNews !== "function") return null;
+  let n = null;
+  try { n = relayChannel.program.headNews(Date.now()); } catch (e) { return null; }
+  if (!n || n.shown !== true) return null;
+  const edition = typeof n.edition === "string" ? n.edition : "", published = typeof n.published === "string" ? n.published : "";
+  if (edition.length < 1 || edition.length > 120 || published.length < 1 || published.length > 80
+    || !Number.isFinite(n.time) || /[\u0000-\u001f\u007f]/.test(edition + published)) return null;
+  return { edition: edition, published: published, t: n.time };
+}
 function leadsView() {
   const teams = Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t));
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en").lead : "";
   return teams.map(t => {
     const shown = teamShown[t] || {}, admitted = newestEpoch(t) > 0, roster = teamRoster[t];
-    return { team: t, print: leadPrint(teamPins[t].public), admitted: admitted, seen: teamSeen.has(t),
+    const row = { team: t, print: leadPrint(teamPins[t].public), admitted: admitted, seen: teamSeen.has(t),
       lead: shown.lead || "", folder: shown.folder || "", removed: admitted && !!me && !!roster && roster.desks.indexOf(me) < 0,
       policy: !!named && named === teamPins[t].public };
+    const head = headShown(t);
+    if (head) row.head = head;
+    return row;
   });
 }
 /* A lead's name as an invitation carries it, as inviteRead takes one: text, at most 120 characters, nothing hidden. */
@@ -2962,6 +3094,7 @@ function forgetLead(team, left) {
   delete teamKeys[team];
   delete teamShown[team];
   delete teamChannel[team];
+  delete teamPinFrom[team];
   teamRingAt = null;
   teamSeen.delete(team);
   teamBarred.add(team);
@@ -2971,8 +3104,130 @@ function forgetLead(team, left) {
   teamStamp = "";
   persistDeskEnvelope();
   releaseInUse();
+  relaySoon();
+  catalogFolderChanged();
   console.error("etiuda: the lead of team " + team + " is forgotten, with the keys this desk kept for it");
   return joinView();
+}
+
+/* ---- the relay: the team folder as a mirror the channel layer keeps (board 900, relay slice 1, step 4) -----------------
+   The desk follows a relay address only for a team whose lead was pinned by an invitation, machine policy or an answered
+   request (board 907): a ring and a wrapped key both travel in a file anybody who can write the share may sign, so a first
+   pin by a file's own vouching is no wider than today's folder ring and its address is never followed. A folder named by
+   machine policy wins over any relay, and the desk says so. */
+const PIN_FROM = ["invite", "policy", "answer"];
+function relayFollowed(team) {
+  const pin = teamPins[team];
+  if (!pin) return false;
+  if (PIN_FROM.indexOf(teamPinFrom[team]) >= 0) return true; /* plant:907-from */
+  const policy = sayJoinPolicy().lead;
+  return !!policy && policy === pin.public;
+}
+/* The relay team this desk works through, or null: a join waiting on a relay invitation, else the one pinned team whose
+   heeded file names the relay and whose pin the rule above lets it follow. */
+function relayHere() {
+  const j = teamJoin, inv = j && j.invite && j.invite.relay;
+  if (inv && teamPins[j.team] && teamPinFrom[j.team] === "invite") return { team: j.team, rt: inv.rt, url: inv.url, joining: true };
+  const teams = Object.keys(teamChannel).filter(t => relayFollowed(t)).sort();
+  if (!teams.length) return null;
+  return { team: teams[0], rt: teamChannel[teams[0]].rt, url: teamChannel[teams[0]].url, joining: false };
+}
+function relayMirrorOf(rt) { return path.join(app.getPath("userData"), "relay", rt); }
+function relayOpened(sealed) {
+  try { return safeStorage.decryptString(Buffer.from(String(sealed), "base64")); } catch { return null; }
+}
+function teamKeyAt(team, epoch) {
+  const sealed = (teamKeys[team] || {})[epoch];
+  const text = sealed ? relayOpened(sealed) : null;
+  const key = text ? Buffer.from(text, "base64") : null;
+  return key && key.length === 32 ? key : null;
+}
+/* The relay's calls through Chromium's network stack where Electron has it, so the system's proxy and certificate store
+   apply, else node's; an address that is not https is refused before anything is sent. */
+async function relayRequest(method, url, headers, body) {
+  if (!/^https:\/\//.test(String(url))) throw new Error("the relay is reached over https only");
+  const init = { method: method, headers: headers, body: body || undefined, redirect: "error", cache: "no-store" };
+  const res = await (net && typeof net.fetch === "function" ? net.fetch(url, init) : fetch(url, init));
+  const bytes = Buffer.from(await res.arrayBuffer());
+  return { status: res.status, header: n => res.headers.get(n), bytes: bytes };
+}
+/* The socket the relay announces new blobs on, with the session in its header; null where this runtime has none, and the
+   layer then asks on a timer. */
+function relayConnect(url, headers, on) {
+  if (typeof WebSocket !== "function" || !/^wss:\/\//.test(String(url))) return null;
+  const ws = new WebSocket(url, { headers: headers });
+  ws.onmessage = e => on.message(typeof e.data === "string" ? e.data : Buffer.from(e.data).toString("utf8"));
+  ws.onclose = () => on.close();
+  ws.onerror = () => {};
+  return { send: t => { if (ws.readyState === 1) ws.send(t); }, close: () => { try { ws.close(); } catch { /* gone */ } } };
+}
+let relayChannel = null, relayAt = "", relaySaidFor = new Set(), relayTimer = null;
+function relaySoon() {
+  clearTimeout(relayTimer);
+  relayTimer = setTimeout(() => { relayTimer = null; relayRun(); }, 0);
+  if (relayTimer.unref) relayTimer.unref();
+}
+/* Starts, keeps or stops the channel layer to match relayHere, and says once for each team whose relay it will not follow. */
+function relayRun() {
+  if (deskKeys === undefined) deskKeys = readDesk();
+  for (const t of Object.keys(teamChannel)) {
+    if (!teamPins[t] || relayFollowed(t) || relaySaidFor.has(t)) continue;
+    relaySaidFor.add(t);
+    teamSay("team " + t + " names a relay at " + teamChannel[t].url + ", and its lead was pinned by no invitation, machine policy or"
+      + " answered request, so this desk does not follow that address and keeps its folder");
+  }
+  const named = sayJoinPolicy().folder;
+  const want = named ? null : relayHere();
+  if (named && Object.keys(teamChannel).some(t => relayFollowed(t))) teamSay("machine policy names the team folder " + named
+    + ", so this desk keeps that folder and not the relay its team file names");
+  const pin = want ? teamPins[want.team] : null;
+  const at = want && pin ? [want.team, want.rt, want.url, pin.public].join("|") : "";
+  if (at === relayAt && relayChannel) { relayChannel.kick(); return relayChannel; }
+  if (relayChannel) { const old = relayChannel; relayChannel = null; old.stop().catch(() => {}); }
+  relayAt = at;
+  if (!at) return null;
+  if (!deskBranch) {
+    teamSay("this desk keeps no key of its own, so it cannot reach the relay of team " + want.team);
+    relayAt = "";
+    return null;
+  }
+  const team = want.team, mirror = relayMirrorOf(want.rt);
+  try { fs.mkdirSync(mirror, { recursive: true }); }
+  catch (e) { teamSay("the relay's mirror " + mirror + " could not be made - " + e.message); relayAt = ""; return null; }
+  relayChannel = RelayChannel().createChannel({
+    rt: want.rt, url: want.url, mirror: mirror, stateFile: mirror + ".json", write: writeReplacing,
+    pin: () => ({ teamId: team, rt: want.rt, lead: { keyId: pin.keyId, public: pin.public } }),
+    me: () => {
+      if (!deskBranch) return null;
+      const id = branchIdOf(deskBranch.sign.pub);
+      return { keyId: id, public: deskBranch.sign.pub, privateKey: openPrivate(deskBranch.sign.priv), place: "desk:" + id,
+               box: deskBranch.box.pub };
+    },
+    /* The agreement of this desk's box with the lead's, for its own copy of the team file after an epoch move (F1); the
+       private key stays here. */
+    agree: peer => {
+      const sk = deskBranch && /^[0-9a-f]{64}$/.test(String(peer)) ? openPrivate(deskBranch.box.priv) : null;
+      if (!sk) return null;
+      try { return crypto.diffieHellman({ privateKey: sk, publicKey: hpkeX25519Public(Buffer.from(peer, "hex")) }); } catch { return null; }
+    },
+    keyFor: e => teamKeyAt(team, e),
+    sealEpoch: () => newestEpoch(team) || null,
+    invite: () => {
+      const j = teamJoin, inv = j && j.team === team && j.invite && j.invite.relay;
+      if (!inv || inv.rt !== want.rt) return null;
+      const token = relayOpened(inv.token), seal = relayOpened(inv.seal);
+      if (!token || !seal) return null;
+      const out = { inv: inv.inv, token: token, seal: Buffer.from(seal, "base64") };
+      /* The lead's box the invitation named, so this desk finds its own copy of the team file before it holds one (F6). */
+      if (/^[0-9a-f]{64}$/.test(String(inv.box))) out.box = inv.box; /* plant:f6-box-lent */
+      return out;
+    },
+    onTeam: () => { teamStamp = ""; heedTeam(); },
+    request: relayRequest, connect: relayConnect,
+    say: line => teamSay("relay of team " + team + ": " + line),
+  });
+  relayChannel.start();
+  return relayChannel;
 }
 
 /* ---- the desk's own history of the catalogs it reads and writes --------------------------------------------------
@@ -3448,6 +3703,10 @@ function readDesk() {
     if (doc && table(doc.teamChannel)) Object.keys(doc.teamChannel).forEach(t => {
       const c = SEALED_TEAM_RE.test(t) && table(doc.teamChannel[t]) ? teamChannelOf({ channel: doc.teamChannel[t] }) : null;
       if (c && c.kind === "relay") teamChannel[t] = c;
+    });
+    if (doc && table(doc.teamPinFrom)) Object.keys(doc.teamPinFrom).forEach(t => {
+      const v = doc.teamPinFrom[t];
+      if (SEALED_TEAM_RE.test(t) && teamPins[t] && PIN_FROM.indexOf(v) >= 0) teamPinFrom[t] = v;
     });
     if (doc && table(doc.teamShown)) Object.keys(doc.teamShown).forEach(t => {
       const v = doc.teamShown[t];

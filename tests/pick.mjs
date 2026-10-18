@@ -707,7 +707,13 @@ try {
   const blank = s => ESB.transformSync(s, { loader: "js", legalComments: "none", charset: "utf8", minifyWhitespace: true }).code;
   const PRE = fs.readFileSync(path.join(ROOT, "shell", "preload.js"), "utf8");
   /* The shell is main.js, the preload and every file main.js requires from beside itself, read as one text. */
-  const BESIDE = [...SRC.matchAll(/require\(path\.join\(__dirname, "([\w.-]+)"\)\)/g)].map(m => m[1]);
+  const BESIDE = [...SRC.matchAll(/require\(path\.join\(__dirname, ((?:"[\w.-]+", )*"[\w.-]+")\)\)/g)]
+    .map(m => m[1].replace(/"/g, "").split(", ").join("/"));
+  /* And what those require from beside themselves: the relay's channel layer takes its blob rules from shell/relay/. */
+  for (const n of BESIDE.slice()) for (const m of fs.readFileSync(path.join(ROOT, "shell", n), "utf8").matchAll(/require\("\.\/([\w.-]+)"\)/g)) {
+    const near = path.posix.join(path.posix.dirname(n), m[1]);
+    if (BESIDE.indexOf(near) < 0) BESIDE.push(near);
+  }
   const shellCode = [SRC, PRE].concat(BESIDE.map(n => fs.readFileSync(path.join(ROOT, "shell", n), "utf8"))).map(blank).join("\n");
   const shellBare = mask(shellCode);
   const modDir = path.join(ROOT, "src", "modules");
@@ -744,9 +750,9 @@ try {
     && (shellBare.match(/clipboard\.writeText\(/g) || []).length === 1,
     "5b the shell writes the clipboard at one place, the desk's own text: " + writes.length + " write site(s)");
   const MODS = ["electron", "node:child_process", "node:path", "node:fs", "node:os", "node:crypto", "node:zlib",
-    "./win-proxy.cjs", "./page-watch.cjs"];
+    "./win-proxy.cjs", "./page-watch.cjs", "./relay/channel.cjs", "./blob.cjs"];
   const reqs = (shellCode.match(/\brequire\s*\(\s*[^)]*\)/g) || []).map(r => r.replace(/^require\s*\(\s*|\s*\)$/g, "").replace(/^["']|["']$/g, ""))
-    .map(r => { const m = /^path\.join\(__dirname,"([\w.-]+)$/.exec(r); return m ? "./" + m[1] : r; });
+    .map(r => { const m = /^path\.join\(__dirname,((?:"[\w.-]+",)*"[\w.-]+)$/.exec(r); return m ? "./" + m[1].replace(/"/g, "").split(",").join("/") : r; });
   const strange = reqs.filter(r => MODS.indexOf(r) < 0);
   const cps = [...shellCode.matchAll(/\{([^}]*)\}\s*=\s*require\(\s*"node:child_process"\s*\)/g)];
   const cp = cps[0] || null;

@@ -4,7 +4,7 @@ import { loadShortcuts } from "./shortcuts.js";
 import { scStopCapture, wireShortcutsList } from "./shortcuts-list.js";
 import { lsGet, lsSet, lsDel, nsGet, nsSet, nsDel, nsKey } from "./storage.js";
 import { drawPills } from "./tabs.js";
-import { UI_LANGS, uiLang, offerUndo, t, toast } from "./ui-lang.js";
+import { UI_LANGS, uiLang, offerUndo, t, toast, fileStamp } from "./ui-lang.js";
 import { setUiLang } from "./repaint.js";
 import { applyDefaultRailWidth, applyStoredRailWidth, railLocked, rebuildRailMQ, syncRailLayout, toggleRailLock } from "./rail-panel.js";
 import { esc } from "./esc.js";
@@ -134,14 +134,29 @@ function wireHotkeyRow(box){
     hotkeyTry(box,accel,t("Saved {KEY}").replace("{KEY}",hotkeyLabel(accel)));
   });
 }
+/* How old the team's news is, in the words the rest of the page already uses for a short age, and as a date once it is
+   old enough that a stopped relay should be visible. */
+function headAgeWords(at){
+  const min=Math.floor(Math.max(0, Date.now()-at)/60000);
+  if(min<1) return t("just now");
+  if(min<60) return t("{N} min ago").split("{N}").join(String(min));
+  return fileStamp(at);
+}
+function teamHeadNote(h){
+  return t("Newest edition {E}, published {WHEN}. The team's news: {AGE}.")
+    .split("{E}").join(h.edition).split("{WHEN}").join(h.published).split("{AGE}").join(headAgeWords(h.t));
+}
 /* A team as Settings shows it: the lead's name and the folder, the key the agent compared, and Leave this team, which machine
-   policy would undo and so is not offered where it names the lead. `bar` says the way back, before the press. */
+   policy would undo and so is not offered where it names the lead. `bar` says the way back, before the press.
+   The head, where the shell has one, is a note under the name: the newest edition, when it was published, and how old
+   the news is. It never disables a control. */
 function teamRowHtml(l,status,bar){
   const notes=[l.folder?t("Folder: {FOLDER}").split("{FOLDER}").join(l.folder):"",
     l.removed?t("This team no longer includes this desk."):status,
-    l.policy?t("The organisation's IT sets this desk's team."):bar?t("After leaving a team, this desk can join it again with a new invitation from its lead."):""].filter(Boolean);
+    l.policy?t("The organisation's IT sets this desk's team."):bar?t("After leaving a team, this desk can join it again with a new invitation from its lead."):""];
+  if(l.head) notes.push(teamHeadNote(l.head)); /* plant:head-show */
   return '<div class="set-row"><div class="set-label">'+esc(l.lead?t("{LEAD}'s team").split("{LEAD}").join(l.lead):t("Team"))
-    +notes.map(n=>'<small>'+esc(n)+'</small>').join("")+'</div><div class="set-ctl">'
+    +notes.filter(Boolean).map(n=>'<small>'+esc(n)+'</small>').join("")+'</div><div class="set-ctl">'
     +'<span class="e-lead-key">'+keySignHtml("studio",l.print)+'</span>'
     +(l.policy?'':'<button type="button" class="btn" data-leave-team="'+esc(l.team)+'">'+esc(t("Leave this team"))+'</button>')
     +'</div></div>';

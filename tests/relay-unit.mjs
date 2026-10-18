@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 89;
+const EXPECTED = 97;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -298,8 +298,8 @@ async function main() {
     const dropped = await invites(w, [], [id2]);
     const after = await since(w, s2.json.session);
     const reopen = await tokenHello(w, id2, t2);
-    check(dropped.status === 200 && refused(after, "no-hello") && refused(reopen, "not-enrolled") && !!ws && !!ws.closed,
-      "4g a dropped invitation's session ends, its socket closes, and its token opens nothing");
+    check(dropped.status === 200 && refused(after, "no-hello") && refused(reopen, "token-spent") && !!ws && !!ws.closed,
+      "4g a dropped invitation's session ends, its socket closes, and its token opens nothing, refused as spent since it was used (F9)");
     const shapes = await Promise.all([invites(w, [{ id: hex(16), hash: "abc" }], []), invites(w, [{ id: "x", hash: sha("a") }], []),
       invites(w, [], ["nothex"])]);
     check(shapes.every(r => refused(r, "bad-signature")), "4h an invitation or a drop out of shape is refused");
@@ -392,6 +392,41 @@ async function main() {
       "7c after 20 wrong tokens the right one is refused as tried too many times, and the twentieth was still a wrong token");
     const stray = await tokenHello(w, hex(16), t3);
     check(refused(stray, "not-enrolled"), "7d an invitation the relay does not hold opens nothing");
+
+    /* F9 of the slice 1 review: a spent invitation stays spent past the 30-day keep, whether the lead sends its id again or
+       not, and the relay keeps of it only that it was spent. The test architect's f9 reproduction is 7e, its control 7E. */
+    const t5 = hex(32), id5 = hex(16);
+    await invites(w, [{ id: id5, hash: sha(t5) }], []);
+    const used = await tokenHello(w, id5, t5);
+    w.R.clock.now += 1000;
+    const again = await invites(w, [{ id: id5, hash: sha(t5) }], []);
+    const early = await tokenHello(w, id5, t5);
+    check(used.status === 200 && again.status === 200 && refused(early, "token-spent"),
+      "7E f9-control: before the keep is over a spent invitation's token is refused as spent, the lead sending its id again included");
+    w.R.clock.now += C.KEEP_MS + 1;
+    const pruned = await since(w, await sessionOf(w, w.lead));
+    const late = await tokenHello(w, id5, t5);
+    w.R.clock.now += 1000;
+    const revive = await invites(w, [{ id: id5, hash: sha(t5) }], []);
+    const after = await tokenHello(w, id5, t5);
+    const kept = w.R.stores.get(w.rt).get("inv:" + id5);
+    check(pruned.status === 200 && refused(late, "token-spent") && revive.status === 200 && refused(after, "token-spent")
+      && JSON.stringify(kept) === "{\"spent\":true}",
+      "7e f9: past the 30-day keep, its prune run, a spent invitation's token is still refused as spent, the lead sending its id again makes"
+      + " it live in no way, and the relay keeps of it only that it was spent: " + (late.json && late.json.error) + ", then "
+      + (after.json && after.json.error || "a session") + ", kept " + JSON.stringify(kept));
+    const t6 = hex(32), id6 = hex(16), t7 = hex(32), id7 = hex(16);
+    await invites(w, [{ id: id6, hash: sha(t6) }, { id: id7, hash: sha(t7) }], []);
+    const used6 = await tokenHello(w, id6, t6);
+    w.R.clock.now += 1000;
+    await invites(w, [], [id6, id7]);
+    w.R.clock.now += 1000;
+    const back = await invites(w, [{ id: id6, hash: sha(t6) }, { id: id7, hash: sha(t7) }], []);
+    const spent6 = await tokenHello(w, id6, t6), fresh7 = await tokenHello(w, id7, t7);
+    check(used6.status === 200 && back.status === 200 && refused(spent6, "token-spent") && fresh7.status === 200
+      && JSON.stringify(w.R.stores.get(w.rt).get("inv:" + id6)) === "{\"spent\":true}",
+      "7f a spent invitation the lead drops and then sends again stays spent, kept as only that it was spent, while one dropped unused may"
+      + " be sent again and opens: " + (spent6.json && spent6.json.error || "a session") + ", the unused " + fresh7.status);
   }
 
   /* ---- 8: reads are gated, and a session ends ---- */
@@ -576,6 +611,100 @@ async function main() {
       writer: { keyId: w.desk.keyId, privateKey: w.desk.privateKey }, path: "desks/k-new/x.json", body: "x", counter: 3,
       place: "desk:k-" + hex(8), kind: "file" }), { extra: { pub: w.desk.pub } });
     check(refused(removedVia, "removed"), "10e a withdrawn key cannot come back through an invitation's session");
+
+    /* N4: the token's one session binds the desk's key where the hello names it and is signed by it. Until the one upload, that
+       key's own hello opens the invitation's session again, the session before it let go; the token stays spent. */
+    const t3 = hex(32), id3 = hex(16), asker = keyPair(true), askDesk = "k-" + hex(8);
+    await invites(w, [{ id: id3, hash: sha(t3) }], []);
+    const n3 = await challenge(w);
+    const bound = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n3, invite: t3, inv: id3,
+      key: asker.keyId, pub: asker.pub, sig: signHex(asker, C.helloBytes(w.rt, n3, asker.keyId)) } });
+    const tokenAgain = await tokenHello(w, id3, t3);
+    const resumed = await helloAs(w, asker);
+    const strangerKey = await helloAs(w, keyPair(true));
+    const firstGone = await since(w, bound.json && bound.json.session);
+    check(bound.status === 200 && bound.json.invite === true && refused(tokenAgain, "token-spent") && resumed.status === 200
+      && resumed.json.invite === true && refused(strangerKey, "not-enrolled") && refused(firstGone, "no-hello"),
+      "10f a token hello signed by the desk's key binds it: that key's own hello opens the invitation's session again, marked as the"
+      + " invitation's, and lets the one before it go, while the token stays spent and another key opens nothing: "
+      + (resumed.json && resumed.json.error || "resumed") + ", the token " + (tokenAgain.json && tokenAgain.json.error));
+    const sealAsk = (who, counter) => B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32),
+      writer: { keyId: who.keyId, privateKey: who.privateKey }, path: "desks/" + askDesk + "/join.json", body: "ask", counter,
+      place: "desk:" + askDesk, kind: "file" });
+    const usurper = keyPair(true);
+    const rs = resumed.json && resumed.json.session;
+    const byUsurper = await put(w, rs, sealAsk(usurper, 1), { extra: { pub: usurper.pub } });
+    const askUp = await put(w, rs, sealAsk(asker, 1), { extra: { pub: asker.pub } });
+    const askSecond = await put(w, rs, sealAsk(asker, 2), { extra: { pub: asker.pub } });
+    const afterUp = await helloAs(w, asker);
+    check(refused(byUsurper, "no-hello") && askUp.status === 200 && refused(askSecond, "token-spent") && refused(afterUp, "not-enrolled"),
+      "10g the session a bound key opens again makes the invitation's one upload, by that key alone, and once it is made the key opens"
+      + " nothing until it is enrolled: another writer " + (byUsurper.json && byUsurper.json.error) + ", a second upload "
+      + (askSecond.json && askSecond.json.error) + ", the key's hello after " + (afterUp.json && afterUp.json.error));
+    const t4 = hex(32), id4 = hex(16), unsigned = keyPair(true);
+    await invites(w, [{ id: id4, hash: sha(t4) }], []);
+    const n4 = await challenge(w);
+    const loose = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n4, invite: t4, inv: id4,
+      key: unsigned.keyId, pub: unsigned.pub, sig: signHex(keyPair(true), C.helloBytes(w.rt, n4, unsigned.keyId)) } });
+    const looseKey = await helloAs(w, unsigned);
+    check(loose.status === 200 && refused(looseKey, "not-enrolled") && !("key" in (w.R.stores.get(w.rt).get("inv:" + id4) || {})),
+      "10h a token hello naming a key it is not signed by binds nothing: the session opens as before, and that key opens nothing");
+
+    /* The resume's own signature (C1 of the test architect's read of cf90c15): a hello naming a bound key, signed by another
+       key or by none, opens nothing and lets no session go, so the desk's resumed session still lists. Were the resume to stop
+       verifying its hello under the bound key, anyone who knew that key's id would open the invitation's session and knock the
+       desk's out, and 10i goes red. */
+    const t5 = hex(32), id5 = hex(16), binder = keyPair(true);
+    await invites(w, [{ id: id5, hash: sha(t5) }], []);
+    const n5 = await challenge(w);
+    const bind5 = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n5, invite: t5, inv: id5,
+      key: binder.keyId, pub: binder.pub, sig: signHex(binder, C.helloBytes(w.rt, n5, binder.keyId)) } });
+    const own = await helloAs(w, binder);
+    const forged = await helloAs(w, binder, { signer: keyPair(true) });
+    const bare = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: await challenge(w), key: binder.keyId } });
+    const stillLists = await since(w, own.json && own.json.session);
+    check(bind5.status === 200 && own.status === 200 && own.json.invite === true && refused(forged, "not-enrolled")
+      && refused(bare, "not-enrolled") && stillLists.status === 200,
+      "10i a hello naming a bound key, signed by another key or by none, opens nothing and lets no session go: the forged one "
+      + (forged.json && forged.json.error || "OPENED A SESSION") + ", the unsigned one " + (bare.json && bare.json.error || "OPENED A SESSION")
+      + ", the desk's resumed session then listing " + stillLists.status);
+  }
+
+  /* A bound key's resume ends when the invitation's 30-day keep does, whether or not a list has pruned the record by then (C2
+     of the test architect's read of cf90c15): two keys bound at the same moment; one resumes a minute inside the keep, the
+     other a minute past it with no list between; the session opened inside the keep then tries the one upload past the keep,
+     before a list prunes the record and after. */
+  {
+    const w = await world();
+    async function bindTo(who) {
+      const token = hex(32), id = hex(16);
+      await invites(w, [{ id, hash: sha(token) }], []);
+      const n = await challenge(w);
+      const r = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n, invite: token, inv: id,
+        key: who.keyId, pub: who.pub, sig: signHex(who, C.helloBytes(w.rt, n, who.keyId)) } });
+      return { id, ok: r.status === 200 && r.json.invite === true };
+    }
+    const early = keyPair(true), late = keyPair(true), earlyDesk = "k-" + hex(8);
+    const a = await bindTo(early), b = await bindTo(late);
+    w.R.clock.now += C.KEEP_MS - MIN;
+    const inside = await helloAs(w, early);
+    w.R.clock.now += 2 * MIN;
+    const past = await helloAs(w, late);
+    const ask = counter => B.seal({ relayTeamId: w.rt, epoch: 1, teamKey: crypto.randomBytes(32),
+      writer: { keyId: early.keyId, privateKey: early.privateKey }, path: "desks/" + earlyDesk + "/join.json", body: "ask", counter,
+      place: "desk:" + earlyDesk, kind: "file" });
+    const s = inside.json && inside.json.session;
+    const unpruned = await put(w, s, ask(1), { extra: { pub: early.pub } });
+    const listed = await since(w, await sessionOf(w, w.lead));
+    const kept = w.R.stores.get(w.rt).get("inv:" + a.id);
+    const pruned = await put(w, s, ask(2), { extra: { pub: early.pub } });
+    const said = r => (r.json && r.json.error) || String(r.status);
+    check(a.ok && b.ok && inside.status === 200 && inside.json.invite === true && refused(past, "not-enrolled")
+      && refused(unpruned, "token-spent") && listed.status === 200 && JSON.stringify(kept) === "{\"spent\":true}"
+      && refused(pruned, "token-spent"),
+      "10j a bound key's resume ends when the invitation's 30-day keep does, a list between or not: a minute inside the keep "
+      + said(inside) + ", a minute past it with no list between " + said(past) + "; the session opened inside the keep uploads past"
+      + " it " + said(unpruned) + " before a list and " + said(pruned) + " after the list kept " + JSON.stringify(kept));
   }
 
   /* ---- 11: chains and deletions ---- */
@@ -749,7 +878,7 @@ async function main() {
     const m = /^#counts ok=(\d+) fail=(\d+)$/m.exec(r.stdout || "");
     const ok = m ? Number(m[1]) : -1, bad = m ? Number(m[2]) : -1;
     const fails = (r.stdout || "").split(/\r?\n/).filter(l => /^FAIL /.test(l)).slice(0, 5);
-    check(r.status === 0 && ok >= 77 && bad === 0, "16a the harness through relay-product, relay/test/attacks.mjs: " + ok + " ok, " + bad
+    check(r.status === 0 && ok >= 79 && bad === 0, "16a the harness through relay-product, relay/test/attacks.mjs: " + ok + " ok, " + bad
       + " failed, exit " + r.status + (fails.length ? ": " + fails.join(" | ") : ""));
   }
 }

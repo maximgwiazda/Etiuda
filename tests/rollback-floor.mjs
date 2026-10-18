@@ -1547,10 +1547,10 @@ try {
     const relayFileRing = pinOf("first-relay", RING, { channel: RELAY });
     const folderFileRing = pinOf("first-folder", RING, { channel: { kind: "folder" } });
     const relaySigned = pinOf("first-signed", null, { channel: RELAY, ring: RING });
-    check(relayFileRing === "not pinned" && folderFileRing === "pinned" && relaySigned === "pinned",
-      "900i a first pin with no invitation: on the relay etiuda-ring.json vouches for nothing and the signed file's own ring is read,"
-      + " while on the folder the ring file vouches as before; the third arm, a relay file's own ring pinning its signer, is this"
-      + " first step's allowance, which the relay's fourth step inverts: " + [relayFileRing, folderFileRing, relaySigned].join(" | "));
+    check(relayFileRing === "not pinned" && folderFileRing === "pinned" && relaySigned === "not pinned",
+      "900i a first pin with no invitation: on the relay etiuda-ring.json vouches for nothing and neither does the signed file's own"
+      + " ring, while on the folder the ring file vouches as before; the third arm, the relay's first step's allowance, is"
+      + " inverted by its fourth (board 907): " + [relayFileRing, folderFileRing, relaySigned].join(" | "));
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
