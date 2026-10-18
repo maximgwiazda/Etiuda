@@ -1839,8 +1839,9 @@ function envelopeTeam(file, pin) {
     return opened.data && signedSha(opened.data) === pin ? String(data.team) : "";
   } catch { return ""; }
 }
-/* The newest key this desk keeps, as {team, epoch, key, plain}, for the one team whose envelope held the edition a file grew from
-   (`pin`), where that team also covers the catalog at the folder written to; else null. An edition not opened in this run
+/* The newest key this desk keeps, as {team, epoch, key, plain}, for the team covering the catalog at the folder written to,
+   where that team is among those whose envelopes held the edition a file grew from (`pin`) and this folder does not hold the
+   pin under two teams; else null. Which envelope was read first does not decide it. An edition not opened in this run
    is looked for among the folder's catalogs first. A desk the covering file leaves off its roster is out, at any epoch.
    A covering file whose epoch is not the newest key this desk keeps, or a key older than an epoch already heeded, is out, so a move of the epoch cannot be sealed under the key it left behind.
    A key already kept stays, and a seal made with it still opens. `plain` is the covering file's exportsSealed set false.
@@ -1852,6 +1853,11 @@ function sealFor(catalogId, pin, root) {
   let team = asked ? (editionTeam.get(asked) || "") : "";
   if (asked && (!team || pinsTorn(root, asked))) return null;
   let cover = team ? teamCovering(root, catalogId) : null;
+  /* Seal for the folder's own team where editionTeams holds that team and the folder is not torn, so the first read does not decide the export. */
+  if (asked && cover && !pinsTorn(root, asked)) {
+    const held = editionTeams.get(asked);
+    if (held && held.has(String(cover.id))) team = String(cover.id);
+  }
   /* An empty pin asks for the folder's team, and only where that file lists the catalog and seals its exports. */
   if (!asked) {
     const folderTeam = teamCovering(root, catalogId);
