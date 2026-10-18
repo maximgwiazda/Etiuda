@@ -4911,6 +4911,23 @@ const CARD_B = {
         const reset = byId["#ceReset"];
         return eq([over, !!reset, !!(reset && reset.disabled)].join("|"), "true|true|false");
       });
+
+    check("cat-set.js", "908ce8 under an interface language the catalog declares after its first, the pills show that language, and under the primary they are unchanged",
+      () => {
+        const S = UILANG_STORE, had = S.lsGet("eUiLang");
+        try {
+          setupCat(["pl", "en"], "Primary pl", { en: { gen: "Secondary en" } });
+          S.lsSet("eUiLang", "en");
+          CS.applyCatsToGlobal();
+          const underEn = CM.CATS.gen;
+          S.lsSet("eUiLang", "pl");
+          CS.applyCatsToGlobal();
+          const underPl = CM.CATS.gen;
+          return eq([underEn, underPl].join("|"), "Secondary en|Primary pl");
+        } finally {
+          if (had == null) S.lsDel("eUiLang"); else S.lsSet("eUiLang", had);
+        }
+      });
   } finally {
     PK.packUndoFor(hadPack)();
     Object.keys(PK.BASE_CATS).forEach(k => delete PK.BASE_CATS[k]);
