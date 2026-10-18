@@ -4892,6 +4892,15 @@ const CARD_B = {
         const focusEn = globalThis.document.activeElement && globalThis.document.activeElement.id;
         return eq([focusDe, focusEn].join(" || "), "ie_clause_de || ie_clause_en");
       });
+
+    check("cat-set.js", "908ce6 on a de-uk catalog, an empty category holding a uk name loses that key when the category is removed",
+      () => {
+        setupCat(["de", "uk"], "General de", { uk: { gen: "General uk" } });
+        PK.pack["catLabels:uk"] = { gen: "General uk renamed" };
+        const gone = CS.removeCategory("gen");
+        const holds = "gen" in (PK.pack["catLabels:uk"] || {});
+        return eq([gone, holds].join("|"), "true|false");
+      });
   } finally {
     PK.packUndoFor(hadPack)();
     Object.keys(PK.BASE_CATS).forEach(k => delete PK.BASE_CATS[k]);
