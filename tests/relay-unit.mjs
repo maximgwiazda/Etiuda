@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 95;
+const EXPECTED = 96;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -649,6 +649,25 @@ async function main() {
     const looseKey = await helloAs(w, unsigned);
     check(loose.status === 200 && refused(looseKey, "not-enrolled") && !("key" in (w.R.stores.get(w.rt).get("inv:" + id4) || {})),
       "10h a token hello naming a key it is not signed by binds nothing: the session opens as before, and that key opens nothing");
+
+    /* The resume's own signature (C1 of the test architect's read of cf90c15): a hello naming a bound key, signed by another
+       key or by none, opens nothing and lets no session go, so the desk's resumed session still lists. Were the resume to stop
+       verifying its hello under the bound key, anyone who knew that key's id would open the invitation's session and knock the
+       desk's out, and 10i goes red. */
+    const t5 = hex(32), id5 = hex(16), binder = keyPair(true);
+    await invites(w, [{ id: id5, hash: sha(t5) }], []);
+    const n5 = await challenge(w);
+    const bind5 = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: n5, invite: t5, inv: id5,
+      key: binder.keyId, pub: binder.pub, sig: signHex(binder, C.helloBytes(w.rt, n5, binder.keyId)) } });
+    const own = await helloAs(w, binder);
+    const forged = await helloAs(w, binder, { signer: keyPair(true) });
+    const bare = await call(w.R, "POST", "/relay/v1/t/" + w.rt + "/session", { json: { challenge: await challenge(w), key: binder.keyId } });
+    const stillLists = await since(w, own.json && own.json.session);
+    check(bind5.status === 200 && own.status === 200 && own.json.invite === true && refused(forged, "not-enrolled")
+      && refused(bare, "not-enrolled") && stillLists.status === 200,
+      "10i a hello naming a bound key, signed by another key or by none, opens nothing and lets no session go: the forged one "
+      + (forged.json && forged.json.error || "OPENED A SESSION") + ", the unsigned one " + (bare.json && bare.json.error || "OPENED A SESSION")
+      + ", the desk's resumed session then listing " + stillLists.status);
   }
 
   /* ---- 11: chains and deletions ---- */
