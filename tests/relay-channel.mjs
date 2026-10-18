@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 100;
+const EXPECTED = 102;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2584,6 +2584,63 @@ try {
     + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
 } catch (e) {
   check(false, "953a harness: " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- a joining desk that also owes another file. Only join.json may be sealed under the invitation, so the other
+   file cannot spend that one upload. in-use.ec is listed before join.json. ---- */
+async function joinFirst(mod) {
+  const k1 = crypto.randomBytes(32);
+  const deskKey = keyPair(true);
+  const tm = await freshTeam([]);
+  const secret = hex(16), inv = hex(16), token = hex(32), ki = C.inviteSealKey(secret);
+  const at = R.clock.now;
+  const add = [{ id: inv, hash: sha(Buffer.from(token, "utf8")) }];
+  const made = await admin("POST", "/relay/v1/t/" + tm.rt + "/invites", { add, drop: [], t: at,
+    sig: signHex(LEAD, core.invitesBytes(tm.rt, at, add, [])) });
+  if (made.status !== 200) throw new Error("an invitation was not made: " + JSON.stringify(made.json));
+  const tag = tm.rt.slice(0, 8);
+  const lead = opened(mod, "s3-lead-" + tag, tm, LEAD, "root", {
+    keyFor: e => (e === 1 ? k1 : null), sealEpoch: () => 1, inviteKeys: () => [{ id: inv, key: ki }],
+  });
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, []));
+  lead.ch.start();
+  await lead.ch.idle();
+  const desk = opened(mod, "s3-desk-" + tag, tm, deskKey, "desk:" + deskKey.keyId, {
+    keyFor: () => null, sealEpoch: () => null, invite: () => ({ inv, token, seal: ki }),
+  });
+  const relJoin = "desks/" + deskKey.keyId + "/join.json";
+  const relUse = "desks/" + deskKey.keyId + "/in-use.ec";
+  const JOIN = "{\"kind\":\"etiuda-join\",\"note\":\"asking\"}\n";
+  const USE = "{\"inUse\":\"a file owed beside the request\"}\n";
+  put(desk.mirror, relUse, USE);
+  put(desk.mirror, relJoin, JOIN);
+  desk.ch.start();
+  await desk.ch.idle();
+  await once(lead);
+  const uploads = relayStore(tm.rt).dump().map(([k, v]) => [k, JSON.parse(v)])
+    .filter(([k, v]) => k.startsWith("blob:") && v.writer === deskKey.keyId).length;
+  const rec = relayStore(tm.rt).get("inv:" + inv) || {};
+  const out = { joinAtLead: read(lead.mirror, relJoin), useAtLead: read(lead.mirror, relUse), uploads,
+    uploaded: rec.uploaded === true, invited: desk.prog.state().invited === true, join: JOIN };
+  await lead.ch.stop();
+  await desk.ch.stop();
+  return out;
+}
+try {
+  const joined = await joinFirst(C);
+  check(joined.joinAtLead === joined.join && joined.useAtLead === null && joined.uploads === 1 && joined.uploaded && joined.invited,
+    "954a a joining desk owing another file in its place still sends join.json as its invitation's one upload: the request "
+    + (joined.joinAtLead === joined.join ? "at the lead" : "not at the lead") + ", the other file "
+    + (joined.useAtLead === null ? "not taken" : "taken") + ", uploads " + joined.uploads
+    + ", the invitation " + (joined.uploaded ? "uploaded" : "not uploaded"));
+  const planted = await liftChannel("plant:invite-join", async mod => {
+    const x = await joinFirst(mod);
+    return x.joinAtLead === null && x.useAtLead === null && x.uploads === 1 && x.uploaded;
+  });
+  check(planted.turned && planted.back, "954b lifting plant:invite-join lets the other file spend the invitation's one upload, and the file is put back: "
+    + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "954a harness: " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */

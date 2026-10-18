@@ -1266,7 +1266,7 @@ function createChannel(opts) {
     if (session && session.by === "invite") {
       const inv = ctx().inviteSeal, st = prog.state();
       const mine = ("desks/" + who.place.slice(5) + "/join.json").toLowerCase();
-      if (!inv || st.invited || op.kind !== "file" || op.rel.toLowerCase() !== mine || Buffer.byteLength(op.body, "utf8") > INVITE_UPLOAD_MAX) return null;
+      if (!inv || st.invited || op.kind !== "file" || op.rel.toLowerCase() !== mine || Buffer.byteLength(op.body, "utf8") > INVITE_UPLOAD_MAX) return null; /* plant:invite-join */
       return { epoch: Math.max(1, st.leadEpoch), key: inv, byInvite: true };
     }
     const e = typeof o.sealEpoch === "function" ? o.sealEpoch() : null;
