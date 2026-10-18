@@ -21,7 +21,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MOD = n => pathToFileURL(path.join(ROOT, "src", "modules", n)).href;
 const nodeRequire = createRequire(import.meta.url);
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"));
-const EXPECTED = 47;
+const EXPECTED = 48;
 
 const JOIN_EN = "Once this desk joins, the team's lead can see which catalog it uses, by name and edition, and the lead's Studio can take a copy of it at any time, without asking here. The copy is sealed for the team, so anyone on the team can open it. The desk's use counts only in the team's totals, never on its own.";
 const JOIN_PL = "Po dołączeniu lider zespołu widzi, którego katalogu używa to stanowisko (nazwę i wydanie), a Studio lidera może w każdej chwili pobrać jego kopię, bez pytania tutaj. Kopia jest zapieczętowana dla zespołu, więc może ją otworzyć każdy w zespole. Wykorzystanie stanowiska wlicza się wyłącznie do sum zespołu i nigdy nie jest pokazywane osobno.";
@@ -700,6 +700,40 @@ try {
       "906e an eject while the share is unreachable is still owed after a relaunch, and the next run removes in-use.ec and the answer (owed "
       + (owed && owed.team === box.team && owed.sha === pin ? "kept" : "lost")
       + ", in use " + (useLeft ? "still there" : "gone") + ", answer " + (ansLeft ? "still there" : "gone") + ")");
+  }
+
+  /* A failed unlink of in-use.ec holds an eject, and the next change of the folder finishes it. */
+  {
+    const box = await arm("eject-busy");
+    put(box.share, "board.ec", textOf(catalog(2)));
+    join(box, 1, [entry(box.D, box.me, box.key, box.team, 1)]);
+    const booted = box.D.sync("etiuda:catalog");
+    const pin = pinOf(box.D, booted || "");
+    take(box.D, pin);
+    const useFile = inUsePath(box.share, box.me.id);
+    const had = fs.existsSync(useFile) && !!box.D.envelope().inUse;
+    const realUnlink = fs.unlinkSync;
+    let armed = true;
+    fs.unlinkSync = function (p) {
+      if (armed && String(p).endsWith("in-use.ec")) {
+        armed = false;
+        const err = new Error("busy");
+        err.code = "EBUSY";
+        throw err;
+      }
+      return realUnlink.apply(fs, arguments);
+    };
+    let threw = "";
+    try {
+      box.D.sync("etiuda:catalog-eject");
+      box.D.api.catalogChanged(box.D.win);
+    } catch (e) { threw = e && e.message ? e.message : String(e); }
+    finally { fs.unlinkSync = realUnlink; }
+    const env = box.D.envelope();
+    const left = fs.existsSync(useFile);
+    check(had && !threw && !left && !env.inUse,
+      "906f a failed unlink of in-use.ec holds an eject, and the next change removes the file and the envelope's pin (in use "
+      + (left ? "still there" : "gone") + ", envelope " + (env.inUse ? "still names it" : "clear") + ")");
   }
 
   /* ---- what the person at the desk reads, and a catalog the page already holds --------------------- */

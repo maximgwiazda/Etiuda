@@ -1926,9 +1926,8 @@ function rememberEjectOwed() {
   ejectOwed = next;
 }
 /* The catalog alone. releaseInUse keeps the file while this desk is still a member, which it is,
-   so the file is cleared here the way clearInUseFile clears it once a forget has left the team.
-   A share that is not answering is owed the same removal when it returns, and the debt stays in
-   the envelope so a later run still pays it. */
+   so an eject unlinks in-use.ec itself. A share that is not answering, or an unlink that does not
+   land, is owed that removal when the folder next answers, and the debt stays in the envelope. */
 function ejectLoadedCatalog() {
   loadedText = "";
   dropLoadedCatalog();
@@ -1941,9 +1940,19 @@ function ejectLoadedCatalog() {
     removeAnswer();
     return;
   }
-  heldInUse = null;
-  ejectOwed = null;
-  clearInUseFile();
+  let failed = false;
+  try { fs.unlinkSync(dest); }
+  catch (e) { if (e.code !== "ENOENT") failed = true; }
+  if (failed) {
+    rememberEjectOwed();
+    heldInUse = { eject: true };
+    inUseKept = null;
+  } else {
+    heldInUse = null;
+    inUseKept = null;
+    ejectOwed = null;
+  }
+  persistDeskEnvelope();
   removeAnswer();
 }
 /* At the start of a run, the text comes back only when its pin is the one the envelope recorded
