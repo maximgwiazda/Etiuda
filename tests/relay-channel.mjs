@@ -34,7 +34,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 78;
+const EXPECTED = 80;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -1093,9 +1093,10 @@ try {
   const refusal = reason => ({ status: STATUS[reason] || 403, body: { error: reason, said: B.REASONS[reason] } });
   const TAKEN = { status: 200, body: { seq: 1, id: "0".repeat(32) } };
   /* `answers` for the uploads in turn, the last repeated, or a function of the upload's meta and the count before it;
-     `cycles` catch-ups and flushes; `before` run on the channel before the first, `between` after it; a channel over the
-     same record started again at the end where `restart` says so; `files` the mirror's, `who` and `place` the program's,
-     `inviteKeys` a lead's live invitations. */
+     `cycles` catch-ups and flushes; `before` run on the channel before the first, `between` after it, `each` after every
+     one with its index; a channel over the same record started again at the end where `restart` says so; `files` the
+     mirror's, `who` and `place` the program's, `inviteKeys` a lead's live invitations; `blob` answering a fetch of one id,
+     or null for the 404 every other fetch gets. */
   async function cycles(name, answers, o) {
     const x = o || {};
     const puts = [], said = [];
@@ -1105,6 +1106,9 @@ try {
       if (method === "POST" && u.endsWith("/hello")) return reply(200, { challenge: hex(16) });
       if (method === "POST" && u.endsWith("/session")) return reply(200, { session: hex(32) });
       if (method === "GET" && u.indexOf("/since/") >= 0) return reply(200, []);
+      const got = method === "GET" && x.blob ? /\/b\/([0-9a-f]{32})$/.exec(u) : null;
+      const a = got ? x.blob(got[1]) : null;
+      if (a) return reply(a.status, a.body);
       if (method === "PUT") {
         const meta = JSON.parse(Buffer.from(headers["etiuda-blob"], "base64url").toString("utf8"));
         const a = typeof answers === "function" ? answers(meta, puts.length) : answers[Math.min(puts.length, answers.length - 1)];
@@ -1129,6 +1133,7 @@ try {
       await ch.idle();
       after.push({ puts: puts.length, stopped: !!ch.program.state().refused[FREL] });
       if (i === 0 && x.between) x.between(ch);
+      if (x.each) x.each(ch, i);
     }
     if (x.restart) { await ch.stop(); ch = make(); ch.start(); await ch.idle(); }
     const out = { after, puts: puts.length, sent: !!ch.program.state().sent[FREL], said, st: ch.program.state(),
@@ -1210,6 +1215,41 @@ try {
     "946e a copy of the team file refused for good never stops the lead's own team file of the same bytes: root uploads " + roots
     + ", the root file " + (rootSent ? "sent" : "NOT sent") + ", stopped " + (copyStop.st.refused[C.TEAM_NAME] ? "as " + copyStop.st.refused[C.TEAM_NAME].why : "never")
     + ", the copy's wait said " + copyWaits + " time(s)");
+
+  /* The header's clause on a deletion the relay says was superseded (E1 of the test architect's read of cf90c15): the desk's
+     file sent, deleted, and written again; the upload naming the deletion refused superseded, and the relay asked of that
+     deletion's own id answering as `why` says. Superseded means a newer blob of the chain is live, so the file waits on its
+     chain and no new chain starts (944p); were lapsed to drop its reason test, the file would go as a chain of its own and
+     fork it, and 944p goes red. Its control 944P: answered expired, the deletion is forgotten and the file starts a chain. */
+  const AGAIN = "{\"inUse\":\"written again after its deletion\"}\n";
+  async function rewritten(name, why) {
+    let del = null;
+    const metas = [], asked = [];
+    const r = await cycles(name, meta => {
+      metas.push(meta);
+      if (meta.del) { del = meta.id; return TAKEN; }
+      return del && meta.supersedes === del ? refusal("superseded") : TAKEN;
+    }, { cycles: 3, blob: id => (asked.push(id), id === del ? { status: 410, body: { error: why, said: B.REASONS[why] } } : null),
+      each: (ch, i) => {
+        if (i === 0) fs.unlinkSync(path.join(LAB, name, ...FREL.split("/")));
+        if (i === 1) put(path.join(LAB, name), FREL, AGAIN);
+      } });
+    const after = del ? metas.slice(metas.findIndex(m => m.id === del) + 1) : [];
+    const last = r.st.sent[FREL];
+    return { del: !!del, asked: asked.filter(id => id === del).length, onDel: after.filter(m => m.supersedes === del).length,
+      fresh: after.filter(m => !m.del && m.supersedes === null).length, lastDel: !!last && last.del === true && last.id === del,
+      owed: r.owed, waits: r.waits };
+  }
+  const tell = x => "deletion " + (x.del ? "sent" : "NOT SENT") + ", asked of its id " + x.asked + ", uploads on it " + x.onDel
+    + ", new chains " + x.fresh + ", the last sent " + (x.lastDel ? "still the deletion" : "not the deletion") + ", owed " + x.owed
+    + ", said waiting " + x.waits;
+  const sup = await rewritten("e1-superseded", "superseded");
+  check(sup.del && sup.asked === 1 && sup.onDel === 1 && sup.fresh === 0 && sup.lastDel && sup.owed && sup.waits === 1,
+    "944p a file written again after its deletion, the relay saying that deletion was superseded, waits on its chain and starts no new one: "
+    + tell(sup));
+  const exp = await rewritten("e1-expired", "expired");
+  check(exp.del && exp.asked === 1 && exp.onDel === 1 && exp.fresh === 1 && !exp.lastDel && !exp.owed,
+    "944P e1-control: the same answered expired forgets the deletion and the file goes as the first of a chain of its own: " + tell(exp));
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
 }
