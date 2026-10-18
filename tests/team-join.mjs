@@ -1707,7 +1707,7 @@ try {
       undoDoc.restore();
     }
     check(Object.keys(f).every(k => f[k]),
-      "15by Leave this team wears danger, and one click offers Undo while the pin, the keys and the bar stay (sha256 "
+      "15ch Leave this team wears danger, and one click offers Undo while the pin, the keys and the bar stay (sha256 "
       + before.sha.slice(0, 16) + "); Undo puts that snapshot back; the offer is Polish when the desk is; once Undo"
       + " lapses the leave bars the team and the pin and keys are gone: " + JSON.stringify(f));
   });
