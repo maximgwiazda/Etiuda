@@ -62,6 +62,12 @@ const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 const isId = v => typeof v === "string" && ID_RE.test(v);
+/* A desk id is an id the program can write: the same shape, and not a reserved device name such as con or nul. */
+function isDeskId(v) {
+  if (!isId(v)) return false;
+  if (RESERVED.test(v)) return false; /* plant:desk-id */
+  return true;
+}
 const isCount = v => Number.isSafeInteger(v) && v >= 1;
 const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 
@@ -126,15 +132,27 @@ function privateKeyOf(key) {
   } catch { return null; }
 }
 
-/* A general Ed25519 verify of `bytes` under a public key as 64 hex, for a signature as 128 hex; false for anything else.
-   Its prefix is the caller's: every signed message here starts with one of its own. Added at step 4 for the channel
-   layer, as step 3's builder asked. */
+/* The prefixes a document of this protocol is signed under. The team file's own scheme carries none. A prefix
+   outside this list is refused, so nothing but these can be verified. */
+const SIGNED_PREFIXES = Object.freeze(["", "etiuda-relay-head\n", "etiuda-desk-branch\n"]);
+
+/* A general Ed25519 verify of `bytes` under a public key as 64 hex, for a signature as 128 hex; false for anything else. */
 function verifySig(publicHex, bytes, signatureHex) {
   try {
     const key = publicKeyOf(publicHex), b = bytesOf(bytes);
     if (!key || !b || typeof signatureHex !== "string" || !HEX128.test(signatureHex)) return false;
     return crypto.verify(null, b, key, Buffer.from(signatureHex, "hex"));
   } catch { return false; }
+}
+
+/* Verify `bytes` under one prefix from the list above. The prefix is concatenated in front, except the empty prefix,
+   which is the team file's own scheme and adds nothing. Any other prefix is refused. */
+function verifySigned(publicHex, prefix, bytes, signatureHex) {
+  if (SIGNED_PREFIXES.indexOf(prefix) < 0) return false; /* plant:signed-prefix */
+  const body = bytesOf(bytes);
+  if (!body) return false;
+  const covered = prefix ? Buffer.concat([Buffer.from(prefix, "utf8"), body]) : body;
+  return verifySig(publicHex, covered, signatureHex);
 }
 
 function uploadBytes(aad, ciphertext) {
@@ -220,7 +238,7 @@ function writerOf(trust, keyId) {
   if (lead && typeof lead === "object" && lead.keyId === keyId && publicKeyOf(lead.public))
     hits.push({ role: "lead", keyId: keyId, public: lead.public });
   for (const d of Array.isArray(trust.desks) ? trust.desks : []) {
-    if (d && typeof d === "object" && d.keyId === keyId && isId(d.deskId) && !RESERVED.test(d.deskId) && publicKeyOf(d.public))
+    if (d && typeof d === "object" && d.keyId === keyId && isDeskId(d.deskId) && publicKeyOf(d.public))
       hits.push({ role: "desk", deskId: d.deskId, keyId: keyId, public: d.public });
   }
   return hits.length === 1 ? hits[0] : null;
@@ -357,6 +375,6 @@ function opened(input) {
 
 module.exports = {
   BLOB_MAX, TEAM_MAX, RATE_MAX, RATE_WINDOW_MS, PAD_FLOOR, NONCE_BYTES, TAG_BYTES, KEY_BYTES, AAD_LABEL, UPLOAD_PREFIX,
-  REASONS, refusal, isId, aadOf, padStep, frame, unframe, uploadBytes, signUpload, verifyUpload, verifySig, seal, openBlob,
+  REASONS, refusal, isId, isDeskId, aadOf, padStep, frame, unframe, uploadBytes, signUpload, verifyUpload, verifySigned, seal, openBlob,
   checkPath, writerOf, placeOf, counterFresh, raiseCounter, revLoad, revCurrent, checkBlobSize, checkTeamSize, checkRate,
 };

@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 99;
+const EXPECTED = 100;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -886,6 +886,24 @@ async function main() {
     const spent = await tokenHello(w, id, token);
     check(refused(replay, "replay-counter") && next.status === 200 && refused(oldRev, "replay-rev") && refused(spent, "token-spent"),
       "15a after a restart the counter and rev floors and a spent invitation hold, and the session still serves until its time");
+  }
+
+  /* ---- a reserved device name is not enrolled. writerOf would refuse it, so the relay refuses it too. ---- */
+  {
+    const w = await world();
+    const rev = w.rev;
+    const conKey = keyPair(true), nulKey = keyPair(true), ordinaryKey = keyPair(true);
+    const ordinaryId = "k-" + hex(8);
+    const con = await devices(w, [{ id: conKey.keyId, pub: conKey.pub, desk: "con" }]);
+    const nul = await devices(w, [{ id: nulKey.keyId, pub: nulKey.pub, desk: "nul" }]);
+    const ok = await devices(w, w.devs.concat([{ id: ordinaryKey.keyId, pub: ordinaryKey.pub, desk: ordinaryId }]));
+    const store = w.R.stores.get(w.rt);
+    const got = store.get("dev:" + ordinaryKey.keyId);
+    check(refused(con, "bad-signature") && refused(nul, "bad-signature") && store.get("dev:" + conKey.keyId) === undefined
+      && store.get("dev:" + nulKey.keyId) === undefined && ok.status === 200 && w.rev === rev + 1
+      && !!got && got.desk === ordinaryId,
+      "3k a desk id of con or nul is refused, the rev unchanged by either, and an ordinary desk id still enrols: con "
+      + (con.json && con.json.error) + ", nul " + (nul.json && nul.json.error) + ", rev " + w.rev);
   }
 
   /* ---- 16: the harness through this relay, on the routine chain ---- */

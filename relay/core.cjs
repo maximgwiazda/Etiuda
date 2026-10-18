@@ -21,15 +21,15 @@ const TOKEN_MAX = 256;
 const META_MAX = 4096;
 
 const HEX24 = /^[0-9a-f]{24}$/, HEX32 = /^[0-9a-f]{32}$/, HEX64 = /^[0-9a-f]{64}$/, HEX128 = /^[0-9a-f]{128}$/;
-/* blob.cjs's id shape, the one its associated data carries, so no newline or separator rides in a key or desk id. */
-const ID_RE = /^[a-z0-9][a-z0-9-]{2,63}$/;
+/* A key id takes blob.cjs's id shape, so no newline or separator rides in it. A desk id is isDeskId: that shape, and not a
+   reserved device name, so the relay does not enrol a desk the program's writerOf would refuse. */
+const isId = B.isId;
 const SPKI_ED25519 = Buffer.from("302a300506032b6570032100", "hex");
 /* The lead's place for what it seals under one invitation's key alone (step 4's joining bootstrap): served in the clear,
    so a desk not joining by that invitation passes over it without trying to open it. */
 const INVITE_PLACE = /^invite:[0-9a-f]{32}$/;
 
 const is = (re, v) => typeof v === "string" && re.test(v);
-const isId = v => is(ID_RE, v);
 const isCount = v => Number.isSafeInteger(v) && v >= 1;
 const sha256 = v => crypto.createHash("sha256").update(v).digest("hex");
 const pad = n => String(Math.max(0, Math.min(Math.floor(n), Number.MAX_SAFE_INTEGER))).padStart(16, "0");
@@ -113,7 +113,7 @@ function createCore(deps) {
     if (b.keys.length > KEYS_MAX) return no("team-size"); /* plant:devices-cap */
     const next = new Map();
     for (const k of b.keys) {
-      const shaped = !!k && typeof k === "object" && isId(k.id) && keyMatches(k.id, k.pub) && isId(k.desk) && k.id !== team.lead.keyId;
+      const shaped = !!k && typeof k === "object" && isId(k.id) && keyMatches(k.id, k.pub) && B.isDeskId(k.desk) && k.id !== team.lead.keyId;
       if (!shaped || next.has(k.id)) return no("bad-signature"); /* plant:devices-shape */
       next.set(k.id, { pub: k.pub, desk: k.desk });
     }

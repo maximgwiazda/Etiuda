@@ -42,7 +42,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 95;
+const EXPECTED = 104;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2392,6 +2392,324 @@ check(regStand.held(), "942f every reg call was answered by the stand-in (" + re
   });
   check(parkPlant.turned && parkPlant.back, "951h lifting plant:pending-roster lets a thousand blobs past the lead's epoch fill pending and push the"
     + " honest wait out, and the file is put back: " + parkPlant.detail + ", sha " + (parkPlant.back ? "restored" : "differs"));
+}
+
+/* ---- a withheld older epoch must not roll a file back (S1). A desk that holds both epochs' keys catches up the
+   epoch-2 edition; the relay then serves the epoch-1 blob of that path it had held back. The mirror keeps the epoch-2
+   bytes. Lifting the stale line writes the epoch-1 bytes over them. ---- */
+async function liftChannel(tag, fn) {
+  const src = path.join(ROOT, "shell", "relay", "channel.cjs");
+  const beforeBytes = fs.readFileSync(src);
+  const digest = sha(beforeBytes);
+  let turned = false, detail = "plant line absent";
+  try {
+    const lines = beforeBytes.toString("utf8").split(/\n/);
+    const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+    if (at >= 0) {
+      lines.splice(at, 1);
+      fs.writeFileSync(src, lines.join("\n"));
+      const resolved = nodeRequire.resolve(src);
+      delete nodeRequire.cache[resolved];
+      turned = await fn(nodeRequire(src));
+      detail = turned ? "the check lifted" : "the check still held";
+    }
+  } catch (e) {
+    detail = e && e.stack ? e.stack : String(e);
+  } finally {
+    fs.writeFileSync(src, beforeBytes);
+    try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
+  }
+  return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
+}
+function relayStore(rt) { return R.stores.get(rt); }
+function blobsOn(rt, writer) {
+  return relayStore(rt).dump().map(([k, v]) => [k, JSON.parse(v)]).filter(([k, v]) => k.startsWith("blob:") && v.writer === writer).map(([, v]) => v);
+}
+async function freshTeam(keys) {
+  const rt = hex(16), id = "t-" + hex(8);
+  const made = await admin("POST", "/relay/v1/teams", { rt, lead: { keyId: LEAD.keyId, pub: LEAD.pub }, t: R.clock.now,
+    sig: signHex(LEAD, core.createBytes(rt, LEAD.keyId, R.clock.now)) });
+  if (made.status !== 200) throw new Error("a team was not made: " + JSON.stringify(made.json));
+  const list = keys.map(k => ({ id: k.keyId, pub: k.pub, desk: k.keyId })), t = R.clock.now;
+  const enrolled = await admin("POST", "/relay/v1/t/" + rt + "/devices", { keys: list, rev: 1, t,
+    sig: signHex(LEAD, core.devicesBytes(rt, 1, t, list)) });
+  if (enrolled.status !== 200) throw new Error("a desk was not enrolled: " + JSON.stringify(enrolled.json));
+  return { rt, id };
+}
+function teamBody(tm, epoch, rev, roster) {
+  return JSON.stringify(signDoc({ format: 1, kind: "etiuda-team", id: tm.id, catalogs: ["quay-board"],
+    lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch, rev,
+    channel: { kind: "relay", rt: tm.rt, url: URLV1 }, ring: RING, roster }, LEAD), null, 1) + "\n";
+}
+/* A program on a team of its own. `mod` is the channel layer, so a plant can pass the copy it lifted. */
+function opened(mod, name, tm, who, place, o) {
+  const x = o || {};
+  const t = transport(name), said = [];
+  const mirror = path.join(LAB, name);
+  const ch = mod.createChannel(Object.assign({
+    rt: tm.rt, url: URLV1, mirror, stateFile: path.join(LAB, name + ".json"),
+    pin: () => ({ teamId: tm.id, rt: tm.rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } }),
+    me: () => ({ keyId: who.keyId, public: who.pub, privateKey: who.privateKey, place }),
+    request: t.request, connect: t.connect, pollMs: 1e9, watch: false,
+    say: l => said.push(l),
+  }, x));
+  return { name, ch, t, said, mirror, prog: ch.program };
+}
+/* The lead seals guide.ec at epoch 1, that blob is held back, the desk catches up the epoch-2 edition, and the held
+   blob is then served. True where the mirror still reads the epoch-2 bytes. */
+async function withheldEpoch(mod) {
+  const k1 = crypto.randomBytes(32), k2 = crypto.randomBytes(32);
+  const deskKey = keyPair(true);
+  const tm = await freshTeam([deskKey]);
+  const pinLead = { keyId: LEAD.keyId, public: LEAD.pub, privateKey: LEAD.privateKey, place: "root" };
+  let sealAt = 1;
+  const keys = new Map([[1, k1], [2, k2]]);
+  const sent = [];
+  const leadT = transport("s1-lead-" + tm.rt.slice(0, 8));
+  const leadReq = async (m, u, h, b) => {
+    if (m === "PUT" && h && h["etiuda-blob"]) sent.push({ meta: JSON.parse(Buffer.from(h["etiuda-blob"], "base64url").toString("utf8")), ct: Buffer.from(b) });
+    return leadT.request(m, u, h, b);
+  };
+  const lead = opened(mod, "s1-lead-" + tm.rt.slice(0, 8), tm, LEAD, "root", {
+    me: () => pinLead, keyFor: e => keys.get(e) || null, sealEpoch: () => sealAt, request: leadReq, connect: leadT.connect,
+  });
+  const OLD = "old-epoch-1\n", NEW = "new-epoch-2\n";
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, [member(deskKey)]));
+  put(lead.mirror, "guide.ec", OLD);
+  lead.ch.start();
+  await settle(lead);
+  const guide = sent.filter(u => u.meta && u.meta.writer === LEAD.keyId).pop();
+  const s = relayStore(tm.rt), rec = guide ? s.get("blob:" + guide.meta.id) : null;
+  const held = rec ? Buffer.from(R.bucket.objects.get(rec.obj)) : null;
+  if (rec) { s.del("blob:" + rec.id); s.del("seq:" + String(rec.seq).padStart(16, "0")); }
+  sealAt = 2;
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 2, 1, [member(deskKey)]));
+  put(lead.mirror, "guide.ec", NEW);
+  await settle(lead);
+  const desk = opened(mod, "s1-desk-" + tm.rt.slice(0, 8), tm, deskKey, "desk:" + deskKey.keyId, {
+    keyFor: e => keys.get(e) || null, sealEpoch: () => 2,
+  });
+  desk.ch.start();
+  await settle(desk);
+  const caught = read(desk.mirror, "guide.ec") === NEW;
+  if (rec && held) {
+    const seq = (s.get("seq") || 0) + 1, obj = tm.rt + "/" + rec.id + "/" + hex(8);
+    R.bucket.objects.set(obj, held);
+    s.put("blob:" + rec.id, Object.assign({}, rec, { seq, obj }));
+    s.put("seq:" + String(seq).padStart(16, "0"), rec.id);
+    s.put("seq", seq);
+  }
+  await settle(desk);
+  const kept = read(desk.mirror, "guide.ec");
+  await lead.ch.stop();
+  await desk.ch.stop();
+  return { caught, kept, withheld: !!rec && !!held };
+}
+try {
+  const up = await withheldEpoch(C);
+  check(up.caught && up.withheld && up.kept === "new-epoch-2\n",
+    "952a a desk holding both epochs' keys catches up an epoch-2 edition, and the relay then serves the withheld epoch-1 blob of the same path: the mirror keeps the epoch-2 bytes: "
+    + (up.caught ? "caught up" : "epoch 2 missing") + ", withheld " + (up.withheld ? "served after" : "not held") + ", mirror " + JSON.stringify(up.kept));
+  const planted = await liftChannel("plant:stale-epoch", async mod => {
+    const x = await withheldEpoch(mod);
+    return x.caught && x.withheld && x.kept === "old-epoch-1\n";
+  });
+  check(planted.turned && planted.back, "952b lifting plant:stale-epoch writes the withheld epoch-1 bytes over the epoch-2 edition, and the file is put back: "
+    + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "952a harness: " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- an edit of this program's own file, one cycle (S2). The catch-up skips what this desk, or the lead, just sent,
+   so the cycle that the edit starts does not write the older bytes back over it. Three cycles would hide the loss:
+   the second would consume the program's own blob before the edit. ---- */
+async function once(p) { p.ch.kick(); await p.ch.idle(); }
+async function keptEdit(mod) {
+  const k1 = crypto.randomBytes(32);
+  const deskKey = keyPair(true);
+  const tm = await freshTeam([deskKey]);
+  const keys = new Map([[1, k1]]);
+  const tag = tm.rt.slice(0, 8);
+  let leadSent = 0, deskSent = 0;
+  const leadT = transport("s2-lead-" + tag);
+  const lead = opened(mod, "s2-lead-" + tag, tm, LEAD, "root", {
+    keyFor: e => keys.get(e) || null, sealEpoch: () => 1,
+    request: async (m, u, h, b) => { if (m === "PUT") leadSent++; return leadT.request(m, u, h, b); }, connect: leadT.connect,
+  });
+  const E1 = "e1\n", E2 = "e2\n", V1 = "v1\n", V2 = "v2\n";
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, [member(deskKey)]));
+  lead.ch.start();
+  await lead.ch.idle();
+  put(lead.mirror, "guide.ec", E1);
+  await once(lead);
+  put(lead.mirror, "guide.ec", E2);
+  leadSent = 0;
+  await once(lead);
+  const leadOnEdit = leadSent;
+  const deskT = transport("s2-desk-" + tag);
+  const desk = opened(mod, "s2-desk-" + tag, tm, deskKey, "desk:" + deskKey.keyId, {
+    keyFor: e => keys.get(e) || null, sealEpoch: () => 1,
+    request: async (m, u, h, b) => { if (m === "PUT") deskSent++; return deskT.request(m, u, h, b); }, connect: deskT.connect,
+  });
+  desk.ch.start();
+  await desk.ch.idle();
+  const guideAtDesk = read(desk.mirror, "guide.ec");
+  const rel = "desks/" + deskKey.keyId + "/in-use.ec";
+  put(desk.mirror, rel, V1);
+  await once(desk);
+  put(desk.mirror, rel, V2);
+  deskSent = 0;
+  await once(desk);
+  await once(lead);
+  const out = { leadMirror: read(lead.mirror, "guide.ec"), guideAtDesk, deskOfLead: read(desk.mirror, "guide.ec"),
+    leadSent: leadOnEdit, deskMirror: read(desk.mirror, rel), leadOfDesk: read(lead.mirror, rel), deskSent };
+  await lead.ch.stop();
+  await desk.ch.stop();
+  return out;
+}
+try {
+  const edit = await keptEdit(C);
+  check(edit.deskMirror === "v2\n" && edit.leadOfDesk === "v2\n" && edit.deskSent === 1,
+    "953a a desk's own file is sent, edited, and one cycle run: the edit is kept and sent: mirror " + JSON.stringify(edit.deskMirror)
+    + ", at the lead " + JSON.stringify(edit.leadOfDesk) + ", uploads on that cycle " + edit.deskSent);
+  check(edit.leadMirror === "e2\n" && edit.deskOfLead === "e2\n" && edit.guideAtDesk === "e2\n" && edit.leadSent === 1,
+    "953b the lead's edition is sent, edited, and one cycle run: the edit is kept and sent: mirror " + JSON.stringify(edit.leadMirror)
+    + ", at the desk " + JSON.stringify(edit.deskOfLead) + ", uploads on that cycle " + edit.leadSent);
+  const planted = await liftChannel("plant:own-skip", async mod => {
+    const x = await keptEdit(mod);
+    return x.deskMirror === "v1\n" && x.leadOfDesk === "v1\n" && x.deskSent === 0
+      && x.leadMirror === "e1\n" && x.deskOfLead === "e1\n" && x.leadSent === 0;
+  });
+  check(planted.turned && planted.back, "953c lifting plant:own-skip writes the sent copy over the edit, on the desk and on the lead, and the file is put back: "
+    + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "953a harness: " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- a joining desk that also owes another file. Only join.json may be sealed under the invitation, so the other
+   file cannot spend that one upload. in-use.ec is listed before join.json. ---- */
+async function joinFirst(mod) {
+  const k1 = crypto.randomBytes(32);
+  const deskKey = keyPair(true);
+  const tm = await freshTeam([]);
+  const secret = hex(16), inv = hex(16), token = hex(32), ki = C.inviteSealKey(secret);
+  const at = R.clock.now;
+  const add = [{ id: inv, hash: sha(Buffer.from(token, "utf8")) }];
+  const made = await admin("POST", "/relay/v1/t/" + tm.rt + "/invites", { add, drop: [], t: at,
+    sig: signHex(LEAD, core.invitesBytes(tm.rt, at, add, [])) });
+  if (made.status !== 200) throw new Error("an invitation was not made: " + JSON.stringify(made.json));
+  const tag = tm.rt.slice(0, 8);
+  const lead = opened(mod, "s3-lead-" + tag, tm, LEAD, "root", {
+    keyFor: e => (e === 1 ? k1 : null), sealEpoch: () => 1, inviteKeys: () => [{ id: inv, key: ki }],
+  });
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, []));
+  lead.ch.start();
+  await lead.ch.idle();
+  const desk = opened(mod, "s3-desk-" + tag, tm, deskKey, "desk:" + deskKey.keyId, {
+    keyFor: () => null, sealEpoch: () => null, invite: () => ({ inv, token, seal: ki }),
+  });
+  const relJoin = "desks/" + deskKey.keyId + "/join.json";
+  const relUse = "desks/" + deskKey.keyId + "/in-use.ec";
+  const JOIN = "{\"kind\":\"etiuda-join\",\"note\":\"asking\"}\n";
+  const USE = "{\"inUse\":\"a file owed beside the request\"}\n";
+  put(desk.mirror, relUse, USE);
+  put(desk.mirror, relJoin, JOIN);
+  desk.ch.start();
+  await desk.ch.idle();
+  await once(lead);
+  const uploads = relayStore(tm.rt).dump().map(([k, v]) => [k, JSON.parse(v)])
+    .filter(([k, v]) => k.startsWith("blob:") && v.writer === deskKey.keyId).length;
+  const rec = relayStore(tm.rt).get("inv:" + inv) || {};
+  const out = { joinAtLead: read(lead.mirror, relJoin), useAtLead: read(lead.mirror, relUse), uploads,
+    uploaded: rec.uploaded === true, invited: desk.prog.state().invited === true, join: JOIN };
+  await lead.ch.stop();
+  await desk.ch.stop();
+  return out;
+}
+try {
+  const joined = await joinFirst(C);
+  check(joined.joinAtLead === joined.join && joined.useAtLead === null && joined.uploads === 1 && joined.uploaded && joined.invited,
+    "954a a joining desk owing another file in its place still sends join.json as its invitation's one upload: the request "
+    + (joined.joinAtLead === joined.join ? "at the lead" : "not at the lead") + ", the other file "
+    + (joined.useAtLead === null ? "not taken" : "taken") + ", uploads " + joined.uploads
+    + ", the invitation " + (joined.uploaded ? "uploaded" : "not uploaded"));
+  const planted = await liftChannel("plant:invite-join", async mod => {
+    const x = await joinFirst(mod);
+    return x.joinAtLead === null && x.useAtLead === null && x.uploads === 1 && x.uploaded;
+  });
+  check(planted.turned && planted.back, "954b lifting plant:invite-join lets the other file spend the invitation's one upload, and the file is put back: "
+    + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "954a harness: " + (e && e.stack ? e.stack : e));
+}
+
+/* ---- a token hello the relay answers 500. The token stays unused, so the next cycle sends it and the request goes.
+   The answer is a status, not a throw, so the cycle does not retry by itself. ---- */
+async function tokenKept(mod) {
+  const k1 = crypto.randomBytes(32);
+  const deskKey = keyPair(true);
+  const tm = await freshTeam([]);
+  const secret = hex(16), inv = hex(16), token = hex(32), ki = C.inviteSealKey(secret);
+  const at = R.clock.now;
+  const add = [{ id: inv, hash: sha(Buffer.from(token, "utf8")) }];
+  const made = await admin("POST", "/relay/v1/t/" + tm.rt + "/invites", { add, drop: [], t: at,
+    sig: signHex(LEAD, core.invitesBytes(tm.rt, at, add, [])) });
+  if (made.status !== 200) throw new Error("an invitation was not made: " + JSON.stringify(made.json));
+  const tag = tm.rt.slice(0, 8);
+  const lead = opened(mod, "s4-lead-" + tag, tm, LEAD, "root", {
+    keyFor: e => (e === 1 ? k1 : null), sealEpoch: () => 1, inviteKeys: () => [{ id: inv, key: ki }],
+  });
+  put(lead.mirror, C.TEAM_NAME, teamBody(tm, 1, 1, []));
+  lead.ch.start();
+  await lead.ch.idle();
+  const deskT = transport("s4-desk-" + tag);
+  let tokenPosts = 0;
+  const desk = opened(mod, "s4-desk-" + tag, tm, deskKey, "desk:" + deskKey.keyId, {
+    keyFor: () => null, sealEpoch: () => null, invite: () => ({ inv, token, seal: ki }),
+    connect: deskT.connect,
+    request: async (m, u, h, b) => {
+      if (m === "POST" && /\/session$/.test(String(u))) {
+        let body = null;
+        try { body = JSON.parse(Buffer.from(b || "").toString("utf8")); } catch { body = null; }
+        if (body && body.invite !== undefined) {
+          tokenPosts++;
+          if (tokenPosts === 1) return { status: 500, header: () => null, bytes: Buffer.from("down") };
+        }
+      }
+      return deskT.request(m, u, h, b);
+    },
+  });
+  const relJoin = "desks/" + deskKey.keyId + "/join.json";
+  const JOIN = "{\"kind\":\"etiuda-join\",\"note\":\"after a refused hello\"}\n";
+  put(desk.mirror, relJoin, JOIN);
+  desk.ch.start();
+  await desk.ch.idle();
+  const afterFirst = { used: desk.prog.state().tokenUsed === true, posts: tokenPosts, join: read(lead.mirror, relJoin) };
+  await once(desk);
+  await once(lead);
+  const uploads = relayStore(tm.rt).dump().map(([k, v]) => [k, JSON.parse(v)])
+    .filter(([k, v]) => k.startsWith("blob:") && v.writer === deskKey.keyId).length;
+  const out = { afterFirst, posts: tokenPosts, joinAtLead: read(lead.mirror, relJoin), uploads,
+    used: desk.prog.state().tokenUsed === true, join: JOIN };
+  await lead.ch.stop();
+  await desk.ch.stop();
+  return out;
+}
+try {
+  const kept = await tokenKept(C);
+  check(!kept.afterFirst.used && kept.afterFirst.posts === 1 && kept.afterFirst.join === null
+    && kept.posts === 2 && kept.joinAtLead === kept.join && kept.uploads === 1 && kept.used,
+    "955a a first token hello answered 500 leaves the token unused, and the next try sends it: after the 500, token "
+    + (kept.afterFirst.used ? "used" : "unused") + ", hellos " + kept.afterFirst.posts + "; on the next try, hellos " + kept.posts
+    + ", the request " + (kept.joinAtLead === kept.join ? "at the lead" : "not at the lead") + ", uploads " + kept.uploads);
+  const planted = await liftChannel("plant:token-kept", async mod => {
+    const x = await tokenKept(mod);
+    return x.afterFirst.used && x.afterFirst.posts === 1 && x.posts === 1 && x.joinAtLead === null && x.uploads === 0;
+  });
+  check(planted.turned && planted.back, "955b lifting plant:token-kept marks the token used on the 500, so the next try never sends it, and the file is put back: "
+    + planted.detail + ", sha " + (planted.back ? "restored" : "differs"));
+} catch (e) {
+  check(false, "955a harness: " + (e && e.stack ? e.stack : e));
 }
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */

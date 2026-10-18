@@ -384,7 +384,7 @@ function createProgram(opts) {
     if (!table(doc) || !table(doc.sig)) return R("bad-signature");
     let bytes;
     try { bytes = signedBytes(doc); } catch { return R("bad-signature"); }
-    if (!B.verifySig(pin.lead.public, bytes, doc.sig.value)) return R("bad-signature"); /* plant:team-sig */
+    if (!B.verifySigned(pin.lead.public, "", bytes, doc.sig.value)) return R("bad-signature"); /* plant:team-sig */
     if (doc.kind !== "etiuda-team" || doc.id !== pin.teamId || relayOf(doc) !== pin.rt) return R("wrong-team"); /* plant:team-own */
     if (!isCount(doc.epoch) || !isCount(doc.rev)) return R("replay-rev");
     return { ok: true, doc, epoch: doc.epoch, rev: doc.rev };
@@ -398,8 +398,8 @@ function createProgram(opts) {
     try { doc = JSON.parse(String(body).replace(/^\uFEFF/, "")); } catch { doc = null; }
     if (!table(doc) || !table(doc.sig)) return R("bad-signature");
     let bytes;
-    try { bytes = Buffer.concat([Buffer.from(HEAD_PREFIX, "utf8"), signedBytes(doc)]); } catch { return R("bad-signature"); }
-    if (!B.verifySig(pin.lead.public, bytes, doc.sig.value)) return R("bad-signature"); /* plant:head-sig */
+    try { bytes = signedBytes(doc); } catch { return R("bad-signature"); }
+    if (!B.verifySigned(pin.lead.public, HEAD_PREFIX, bytes, doc.sig.value)) return R("bad-signature"); /* plant:head-sig */
     if (doc.v !== 1) return R("bad-signature");
     if (doc.team !== pin.teamId) return R("wrong-team");
     if (!isCount(doc.epoch) || !isCount(doc.rev) || !Number.isFinite(doc.t)) return R("bad-signature");
@@ -501,7 +501,7 @@ function createProgram(opts) {
      only once the mirror holds it. */
   function land(r) {
     const prev = has(st.applied, r.path) ? st.applied[r.path] : null;
-    if (prev && prev.writer === r.writerKeyId && !later(r, prev)) return { ok: true, path: r.path, stale: true };
+    if (prev && prev.writer === r.writerKeyId && !later(r, prev)) return { ok: true, path: r.path, stale: true }; /* plant:stale-epoch */
     /* Judged before the write, and said here: the batch's landing of a root file does not say a refusal of its own.
        The counter stays where it was, so a later genuine head is not refused as a replay of one that was left out.
        A deletion keeps the t already taken, so the same older head does not come back after the file is gone. */
@@ -1029,8 +1029,8 @@ function createProgram(opts) {
     if (!pin || !table(head) || !table(head.sig)) return none;
     if (head.keyId !== pin.lead.keyId || head.relay !== pin.rt) return none;
     let bytes;
-    try { bytes = Buffer.concat([Buffer.from(HEAD_PREFIX, "utf8"), signedBytes(head)]); } catch { return none; }
-    if (!B.verifySig(pin.lead.public, bytes, head.sig.value) || !Number.isFinite(head.time)) return none;
+    try { bytes = signedBytes(head); } catch { return none; }
+    if (!B.verifySigned(pin.lead.public, HEAD_PREFIX, bytes, head.sig.value) || !Number.isFinite(head.time)) return none;
     const now = Number.isFinite(i.now) ? i.now : clock();
     return { shown: true, blocked: false, time: head.time, epoch: head.epoch, rev: head.rev, ageMs: now - head.time };
   }
@@ -1165,7 +1165,8 @@ function createChannel(opts) {
       return { ok: true };
     }
     const t = refusalOf(r);
-    if (t.reason === "token-spent") prog.markTokenUsed();
+    if (t.reason !== "token-spent") return t; /* plant:token-kept */
+    prog.markTokenUsed();
     return t;
   }
 
@@ -1220,7 +1221,7 @@ function createChannel(opts) {
         const before = top;
         top = e.seq;
         const m = e.meta;
-        if (who && m.writer === who.keyId) continue;
+        if (who && m.writer === who.keyId) continue; /* plant:own-skip */
         if (!Number.isSafeInteger(m.size) || m.size < 0 || !HEX32.test(String(m.id))) { sayOnce("a file the relay listed was left out: " + B.REASONS["bad-signature"]); continue; }
         if (m.size > B.BLOB_MAX) { say("a file from " + m.writer + " was left out: " + B.REASONS["blob-size"]); continue; } /* plant:in-size-listed */
         const got = await authed("GET", "b/" + m.id);
@@ -1266,7 +1267,7 @@ function createChannel(opts) {
     if (session && session.by === "invite") {
       const inv = ctx().inviteSeal, st = prog.state();
       const mine = ("desks/" + who.place.slice(5) + "/join.json").toLowerCase();
-      if (!inv || st.invited || op.kind !== "file" || op.rel.toLowerCase() !== mine || Buffer.byteLength(op.body, "utf8") > INVITE_UPLOAD_MAX) return null;
+      if (!inv || st.invited || op.kind !== "file" || op.rel.toLowerCase() !== mine || Buffer.byteLength(op.body, "utf8") > INVITE_UPLOAD_MAX) return null; /* plant:invite-join */
       return { epoch: Math.max(1, st.leadEpoch), key: inv, byInvite: true };
     }
     const e = typeof o.sealEpoch === "function" ? o.sealEpoch() : null;
@@ -1459,6 +1460,6 @@ module.exports = {
   verifyUploadSignature: (publicKey, payload, signature) => B.verifyUpload(publicKey, Buffer.alloc(0), toBytes(payload), signature),
   verifyDeskSignature: (publicKey, body, signature) => {
     const b = toBytes(body);
-    return !!b && B.verifySig(publicKey, Buffer.concat([Buffer.from(BRANCH_PREFIX, "utf8"), b]), signature);
+    return !!b && B.verifySigned(publicKey, BRANCH_PREFIX, b, signature);
   },
 };
