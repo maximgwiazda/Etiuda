@@ -784,7 +784,7 @@ async function main() {
     const m = /^#counts ok=(\d+) fail=(\d+)$/m.exec(r.stdout || "");
     const ok = m ? Number(m[1]) : -1, bad = m ? Number(m[2]) : -1;
     const fails = (r.stdout || "").split(/\r?\n/).filter(l => /^FAIL /.test(l)).slice(0, 5);
-    check(r.status === 0 && ok >= 77 && bad === 0, "16a the harness through relay-product, relay/test/attacks.mjs: " + ok + " ok, " + bad
+    check(r.status === 0 && ok >= 78 && bad === 0, "16a the harness through relay-product, relay/test/attacks.mjs: " + ok + " ok, " + bad
       + " failed, exit " + r.status + (fails.length ? ": " + fails.join(" | ") : ""));
   }
 }

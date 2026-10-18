@@ -249,6 +249,26 @@ function attacks() {
       });
       return first.ok === true && refused(second, "token-spent");
     }, true],
+    ["F1-spent-keep", "a spent invitation token is still refused after the 30-day keep, and the first use worked", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const inv = t.invite({ relayTeamId: w.relayTeamId });
+      if (!inv || !inv.token) return false;
+      const a = t.challenge({ relayTeamId: w.relayTeamId });
+      const first = t.hello({
+        relayTeamId: w.relayTeamId, nonce: a.nonce, invitationId: inv.invitationId, token: inv.token,
+      });
+      t.advance(31 * 24 * 60 * 60 * 1000);
+      const lead = helloAs(t, w.relayTeamId, w.lead);
+      if (!lead || lead.ok !== true) return false;
+      const listed = t.list({ relayTeamId: w.relayTeamId, session: lead.session });
+      const b = t.challenge({ relayTeamId: w.relayTeamId });
+      const later = t.hello({
+        relayTeamId: w.relayTeamId, nonce: b.nonce, invitationId: inv.invitationId, token: inv.token,
+      });
+      return first.ok === true && listed.ok === true && refused(later, "token-spent");
+    }, true],
     ["F1-tries", "the right token is refused after 20 failures, and a fresh invitation still works", function (create) {
       const t = create();
       const w = world(t);
