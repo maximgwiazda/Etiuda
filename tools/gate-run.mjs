@@ -98,6 +98,20 @@ function inside(parent, child) {
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
+/* One folder, whatever the spelling. Native resolution folds a short name, a junction
+   and, on Windows, a different case; a nested folder stays a different folder. */
+function sameFolder(a, b) {
+  try {
+    const norm = (p) => {
+      const r = fs.realpathSync.native(p);
+      return process.platform === "win32" ? r.toLowerCase() : r;
+    };
+    return path.relative(norm(a), norm(b)) === "";
+  } catch (e) {
+    return false;
+  }
+}
+
 /* THE DEFAULT RUNS FOLDER is `etiuda-runs` beside the MAIN working tree, not beside ROOT. Until
    2026-09-23 it was a literal absolute path on one machine, which this repository's rules forbid;
    on that desk it named the main tree's sibling, and every worktree of the repository wrote
@@ -110,7 +124,7 @@ function inside(parent, child) {
 function mainTree() {
   const top = git(["rev-parse", "--path-format=absolute", "--show-toplevel"]);
   const common = git(["rev-parse", "--path-format=absolute", "--git-common-dir"]);
-  if (!top || !common || path.relative(path.resolve(top), ROOT) !== "") return ROOT;
+  if (!top || !common || !sameFolder(top, ROOT)) return ROOT;
   return path.basename(common) === ".git" ? path.dirname(path.resolve(common)) : ROOT;
 }
 const RUNS = path.resolve(process.env.ETIUDA_RUNS || path.join(mainTree(), "..", "etiuda-runs"));
@@ -160,7 +174,7 @@ const DIRTY = git(["status", "--porcelain"]).length > 0;
    so its presence alone reads as uncommitted changes, erring towards a rerun. */
 function gitTree() {
   const top = git(["rev-parse", "--path-format=absolute", "--show-toplevel"]);
-  if (!top || path.relative(path.resolve(top), ROOT) !== "") return "no git";
+  if (!top || !sameFolder(top, ROOT)) return "no git";
   if (git(["--no-optional-locks", "status", "--porcelain", "--untracked-files=normal",
            "--ignore-submodules=none"]).length) return "uncommitted changes";
   if (git(["ls-files", "-v"]).split(/\r?\n/).some(l => /^(S|[a-z]) /.test(l))) return "uncommitted changes";

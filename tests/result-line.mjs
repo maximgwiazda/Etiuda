@@ -36,15 +36,19 @@ const ROOT = path.resolve(HERE, "..");
 const TOOL = path.join(ROOT, "tools", "gate-run.mjs");
 const KEEP = process.argv.indexOf("--keep") > -1;
 /* The floor: every leg below runs, or the suite says it did not complete rather than passing
-   with half of itself skipped by an early return. */
-const EXPECTED = 42;
+   with half of itself skipped by an early return. One leg is platform-bound: where a short
+   path cannot be made it prints SKIP, and the floor counts that skip so both runs still meet it. */
+const EXPECTED = 43;
 
-let asserted = 0, failed = 0;
+let asserted = 0, failed = 0, skipped = 0;
 function check(cond, line) {
   asserted++;
   if (cond) process.stdout.write("  ok   " + line + "\n");
   else { failed++; process.stderr.write("  FAIL " + line + "\n"); }
 }
+/* A skip is not a pass. Only the short-path leg uses it, and only where the platform
+   cannot make the spelling that leg exists to drive. */
+function skip(why) { skipped++; process.stdout.write("  SKIP  " + why + "\n"); }
 
 const labs = [];
 
@@ -96,9 +100,10 @@ function prints(okLines, failLines, extra) {
 /** Run the lab's copy of the tool over the named npm scripts, and return the lines it wrote,
  *  indexed by gate. The gate name is the tool's own mangling of the step's path, and the legs
  *  below pin it as a frozen literal rather than recomputing it here. */
-function run(l, names) {
-  const r = spawnSync(process.execPath, [path.join(l.lab, "tools", "gate-run.mjs")].concat(names), {
-    cwd: l.lab,
+function run(l, names, cwd) {
+  const at = cwd || l.lab;
+  const r = spawnSync(process.execPath, [path.join(at, "tools", "gate-run.mjs")].concat(names), {
+    cwd: at,
     encoding: "utf8",
     env: Object.assign({}, process.env, { ETIUDA_RUNS: l.runs }),
     timeout: 60000,
@@ -716,14 +721,88 @@ function main() {
     + "), and a lab with no git writes beside itself (" + dfPlainBeside + ", exit "
     + dfPlainRun.exit + ")");
 
+  /* 9o A SHORT SPELLING IS STILL THE LAB'S OWN TREE. git names the folder in long form;
+     a temp path may be its 8.3 short name. Through that short name the record must carry
+     HEAD^{tree} and a worktree's line must land beside the main tree. The planted arm
+     puts the string compare back and must say "no git". Where no short name can be made,
+     the leg skips and says why. */
+  if (process.platform !== "win32") {
+    skip("9o a short path is a Windows spelling of a folder, and this run is on " + process.platform);
+  } else {
+    const shortOf = (p) => {
+      const r = spawnSync("cmd.exe", ["/d", "/c", "for %I in (\"" + p + "\") do @echo %~sI"], {
+        encoding: "utf8", windowsHide: true, windowsVerbatimArguments: true, timeout: 15000,
+      });
+      const line = String(r.stdout || "").trim().split(/\r?\n/).filter(Boolean).pop() || "";
+      return r.status === 0 ? line : "";
+    };
+    const spell = (s) => String(s || "").replace(/\//g, "\\").replace(/\\+$/g, "").toLowerCase();
+    const own = makeLab("short-own", { quiet: prints(1, 0) },
+      { files: { "src/thing.js": "export const a = 1;\n" }, git: true });
+    const og = (args) => spawnSync("git", args, { cwd: own.lab, encoding: "utf8", timeout: 30000 });
+    const ogOk = (args) => og(args).status === 0;
+    const ownBuilt = ogOk(["config", "core.autocrlf", "false"]) && ogOk(["config", "user.name", "lab"])
+      && ogOk(["config", "user.email", "lab@example.invalid"]) && ogOk(["config", "commit.gpgsign", "false"])
+      && ogOk(["add", "-A"]) && ogOk(["commit", "-q", "-m", "base"]);
+    const ownHead = ownBuilt ? String(og(["rev-parse", "HEAD^{tree}"]).stdout || "").trim() : "";
+    const ownShort = ownBuilt ? shortOf(own.lab) : "";
+    if (!ownBuilt) {
+      check(false, "9o the lab was not committed, so the short path was not driven");
+    } else if (!ownShort || spell(ownShort) === spell(own.lab)) {
+      skip("9o this volume gave the lab no short name distinct from its long path"
+        + (ownShort ? ": " + ownShort : ", and the short name was not read"));
+    } else {
+      const ownRun = run(own, ["quiet"], ownShort);
+      const ownLine = ownRun.byGate["tests-quiet"];
+      const wt = makeLab("short-wt", { "default-runs-probe": prints(2, 0) }, { git: true });
+      const wtDir = path.join(wt.root, "away", "wt");
+      const wtAdd = spawnSync("git", ["worktree", "add", "-q", "--orphan", "-b", "lab-wt", wtDir],
+        { cwd: wt.lab, encoding: "utf8", timeout: 30000 });
+      if (wtAdd.status === 0) {
+        for (const rel of ["tools", "tests", "package.json"])
+          fs.cpSync(path.join(wt.lab, rel), path.join(wtDir, rel), { recursive: true });
+      }
+      const wtShort = wtAdd.status === 0 ? shortOf(wtDir) : "";
+      const wtDistinct = !!wtShort && spell(wtShort) !== spell(wtDir);
+      const wtRun = wtDistinct ? runBare(wtShort, ["default-runs-probe"]) : { exit: null, out: "" };
+      const wtBeside = jsonIn(path.join(wt.root, "etiuda-runs"));
+      const wtAway = jsonIn(path.join(wt.root, "away", "etiuda-runs"));
+      const toolAt = path.join(own.lab, "tools", "gate-run.mjs");
+      const toolSrc = fs.readFileSync(toolAt, "utf8");
+      const gitLine = "if (!top || !sameFolder(top, ROOT)) return \"no git\";";
+      const gitOld = "if (!top || path.relative(path.resolve(top), ROOT) !== \"\") return \"no git\";";
+      const mainLine = "if (!top || !common || !sameFolder(top, ROOT)) return ROOT;";
+      const mainOld = "if (!top || !common || path.relative(path.resolve(top), ROOT) !== \"\") return ROOT;";
+      const planted = toolSrc.includes(gitLine) && toolSrc.includes(mainLine)
+        ? toolSrc.replace(gitLine, gitOld).replace(mainLine, mainOld) : "";
+      if (planted) fs.writeFileSync(toolAt, planted);
+      for (const f of fs.readdirSync(own.runs)) {
+        if (f.endsWith(".json")) fs.renameSync(path.join(own.runs, f), path.join(own.root, "kept-" + f));
+      }
+      const plantRun = planted ? run(own, ["quiet"], ownShort) : { byGate: {} };
+      const plantLine = plantRun.byGate["tests-quiet"];
+      check(ownRun.exit === 0 && /^[0-9a-f]{40}$/.test(ownHead) && !!ownLine && ownLine.gitTree === ownHead
+        && wtAdd.status === 0 && wtDistinct && wtRun.exit === 0 && wtBeside === 1 && wtAway === 0
+        && !!planted && !!plantLine && plantLine.gitTree === "no git",
+        "9o a short spelling is the lab's own tree: git tree " + JSON.stringify(ownLine && ownLine.gitTree)
+        + " against HEAD^{tree} " + (ownHead || "(not read)")
+        + "; the worktree wrote " + wtBeside + " beside the main tree and " + wtAway + " beside itself (exit "
+        + wtRun.exit + (wtAdd.status === 0 ? "" : ", worktree not made")
+        + (wtDistinct ? "" : ", short name not distinct") + ")"
+        + "; the string compare put back says " + JSON.stringify(plantLine && plantLine.gitTree));
+    }
+  }
+
   if (!KEEP) for (const dir of labs) {
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch (e) { /* held */ }
   } else process.stdout.write("--keep: labs at " + labs.join(", ") + "\n");
 
-  check(asserted + 1 === EXPECTED,
-    "11 every leg ran: " + (asserted + 1) + " of " + EXPECTED + " assertion(s)");
+  check(asserted + skipped + 1 === EXPECTED,
+    "11 every leg ran: " + (asserted + skipped + 1) + " of " + EXPECTED + " assertion(s)"
+    + (skipped ? ", " + skipped + " skipped" : ""));
   process.stdout.write("#counts asserted=" + asserted + " failures=" + failed + "\n");
-  process.stdout.write("result-line: " + asserted + " assertion(s), " + failed + " failure(s)\n");
+  process.stdout.write("result-line: " + asserted + " assertion(s), " + failed + " failure(s)"
+    + (skipped ? ", " + skipped + " skipped" : "") + "\n");
   process.exit(failed ? 1 : 0);
 }
 
