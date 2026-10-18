@@ -1071,6 +1071,7 @@ UI_STRINGS.pl={
   "It does not match":"Nie zgadza się",
   "{LEAD}'s team":"Zespół osoby {LEAD}",
   "Leave this team":"Opuść ten zespół",
+  "This desk will leave this team.":"To stanowisko opuści ten zespół.",
   "After leaving a team, this desk can join it again with a new invitation from its lead.":"Po opuszczeniu zespołu to stanowisko może do niego wrócić z nowym zaproszeniem od lidera.",
   "This desk left this team on {DATE}. Join it again?":"To stanowisko opuściło ten zespół {DATE}. Dołączyć do niego ponownie?",
   "This team no longer includes this desk.":"To stanowisko nie należy już do tego zespołu.",
@@ -1195,16 +1196,22 @@ function t(en){
   return (tab && tab[en]!=null) ? tab[en] : en;
 }
 /* AN ACT THAT CAN BE UNDONE HAPPENS AT ONCE, and this bubble at the foot of the window offers the
-   way back: over any dialog, until another act replaces it or UNDO_MS passes. */
+   way back: over any dialog, until another act replaces it or UNDO_MS passes. A caller that has
+   not done the act yet passes `lapse`. It runs when this offer ends without Undo: the wait,
+   Escape, or a later act taking the bubble. `undo` is the way back, and it does not run `lapse`.
+   Every caller that already did the act passes no `lapse`, and nothing here changes for that caller. */
 const UNDO_MS=10000;
 /* The key the button names, the fixed "undo" row of SC_DEFS as formatActionChord spells it. */
 const UNDO_KEY="Ctrl+Z";
-let undoTimer=0, undoTake=null, undoTyped=false;
+let undoTimer=0, undoTake=null, undoLapse=null, undoTyped=false;
 /* A field typed in since the bubble came (keydown.js reports it): its Ctrl+Z is then its own typing's. */
 function noteUndoTyping(){ undoTyped=true; }
-function offerUndo(said, undo){
+function offerUndo(said, undo, lapse){
   const was=$("#eUndo"); if(was) was.remove();
   clearTimeout(undoTimer);
+  const prev=undoLapse;
+  undoLapse=null; undoTake=null;
+  if(typeof prev==="function") prev();
   const el=document.createElement("div");
   el.className="bub bub-ask e-undo";
   el.id="eUndo";
@@ -1215,15 +1222,23 @@ function offerUndo(said, undo){
     +'" aria-keyshortcuts="Control+Z">'+esc(t("Undo"))+'<kbd>'+esc(UNDO_KEY)+'</kbd></button></div>';
   cutLeaves();
   document.body.appendChild(el);
-  const close=()=>{ clearTimeout(undoTimer); if(undoTake===take) undoTake=null; dismissNode(el); };
-  const take=()=>{ close(); undo(); };
-  undoTake=take; undoTyped=false;
+  const onLapse=typeof lapse==="function"?lapse:null;
+  const close=kept=>{
+    clearTimeout(undoTimer);
+    if(undoTake===take) undoTake=null;
+    const end=undoLapse;
+    if(end===onLapse) undoLapse=null;
+    dismissNode(el);
+    if(!kept && end===onLapse && onLapse) onLapse();
+  };
+  const take=()=>{ close(true); undo(); };
+  undoTake=take; undoLapse=onLapse; undoTyped=false;
   el.querySelector("#eUndoBtn").onclick=take;
   el.addEventListener("keydown",e=>{
     if(e.key!=="Escape") return;
-    e.preventDefault(); e.stopPropagation(); close();
+    e.preventDefault(); e.stopPropagation(); close(false);
   });
-  undoTimer=setTimeout(close,UNDO_MS);
+  undoTimer=setTimeout(()=>close(false),UNDO_MS);
 }
 /* CTRL+Z TAKES THE STANDING UNDO: true where it did. Nothing where none stands or a question hides it, and nothing
    from a field typed in since the bubble came, whose key it then is. */

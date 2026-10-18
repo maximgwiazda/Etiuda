@@ -7613,6 +7613,7 @@ What you type stays in this browser only.`;
     "It does not match": "Nie zgadza się",
     "{LEAD}'s team": "Zespół osoby {LEAD}",
     "Leave this team": "Opuść ten zespół",
+    "This desk will leave this team.": "To stanowisko opuści ten zespół.",
     "After leaving a team, this desk can join it again with a new invitation from its lead.": "Po opuszczeniu zespołu to stanowisko może do niego wrócić z nowym zaproszeniem od lidera.",
     "This desk left this team on {DATE}. Join it again?": "To stanowisko opuściło ten zespół {DATE}. Dołączyć do niego ponownie?",
     "This team no longer includes this desk.": "To stanowisko nie należy już do tego zespołu.",
@@ -7734,14 +7735,19 @@ What you type stays in this browser only.`;
   var UNDO_KEY = "Ctrl+Z";
   var undoTimer = 0;
   var undoTake = null;
+  var undoLapse = null;
   var undoTyped = false;
   function noteUndoTyping() {
     undoTyped = true;
   }
-  function offerUndo(said, undo) {
+  function offerUndo(said, undo, lapse) {
     const was = $("#eUndo");
     if (was) was.remove();
     clearTimeout(undoTimer);
+    const prev = undoLapse;
+    undoLapse = null;
+    undoTake = null;
+    if (typeof prev === "function") prev();
     const el = document.createElement("div");
     el.className = "bub bub-ask e-undo";
     el.id = "eUndo";
@@ -7750,25 +7756,30 @@ What you type stays in this browser only.`;
     el.innerHTML = "<p>" + esc(t(said)) + '</p><div class="tour-actions"><button type="button" class="btn primary" id="eUndoBtn" aria-label="' + esc(t("Undo")) + '" aria-keyshortcuts="Control+Z">' + esc(t("Undo")) + "<kbd>" + esc(UNDO_KEY) + "</kbd></button></div>";
     cutLeaves();
     document.body.appendChild(el);
-    const close = () => {
+    const onLapse = typeof lapse === "function" ? lapse : null;
+    const close = (kept) => {
       clearTimeout(undoTimer);
       if (undoTake === take) undoTake = null;
+      const end = undoLapse;
+      if (end === onLapse) undoLapse = null;
       dismissNode(el);
+      if (!kept && end === onLapse && onLapse) onLapse();
     };
     const take = () => {
-      close();
+      close(true);
       undo();
     };
     undoTake = take;
+    undoLapse = onLapse;
     undoTyped = false;
     el.querySelector("#eUndoBtn").onclick = take;
     el.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       e.preventDefault();
       e.stopPropagation();
-      close();
+      close(false);
     });
-    undoTimer = setTimeout(close, UNDO_MS);
+    undoTimer = setTimeout(() => close(false), UNDO_MS);
   }
   function takeStandingUndo(inField) {
     const el = document.getElementById("eUndo");
@@ -29775,11 +29786,31 @@ What you type stays in this browser only.`;
       l.removed ? t("This team no longer includes this desk.") : status,
       l.policy ? t("The organisation's IT sets this desk's team.") : bar ? t("After leaving a team, this desk can join it again with a new invitation from its lead.") : ""
     ].filter(Boolean);
-    return '<div class="set-row"><div class="set-label">' + esc(l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team")) + notes.map((n) => "<small>" + esc(n) + "</small>").join("") + '</div><div class="set-ctl"><span class="e-lead-key">' + keySignHtml("studio", l.print) + "</span>" + (l.policy ? "" : '<button type="button" class="btn" data-leave-team="' + esc(l.team) + '">' + esc(t("Leave this team")) + "</button>") + "</div></div>";
+    return '<div class="set-row"><div class="set-label">' + esc(l.lead ? t("{LEAD}'s team").split("{LEAD}").join(l.lead) : t("Team")) + notes.map((n) => "<small>" + esc(n) + "</small>").join("") + '</div><div class="set-ctl"><span class="e-lead-key">' + keySignHtml("studio", l.print) + "</span>" + (l.policy ? "" : '<button type="button" class="btn danger" data-leave-team="' + esc(l.team) + '">' + esc(t("Leave this team")) + "</button>") + "</div></div>";
+  }
+  var leaveHold = "";
+  function leaveThisTeam(team) {
+    team = String(team || "");
+    if (!team || leaveHold) return;
+    leaveHold = team;
+    const drop = () => {
+      if (leaveHold === team) leaveHold = "";
+    };
+    const repaint = () => {
+      if (document.getElementById("setBody")) paintSettings();
+    };
+    offerUndo("This desk will leave this team.", () => {
+      drop();
+      repaint();
+    }, () => {
+      if (leaveHold !== team) return;
+      leaveHold = "";
+      forgetTeamLead(team, repaint);
+    });
   }
   function wireTeamRows(box) {
     box.querySelectorAll("[data-leave-team]").forEach((b) => {
-      b.onclick = () => forgetTeamLead(b.getAttribute("data-leave-team"), () => paintSettings());
+      b.onclick = () => leaveThisTeam(b.getAttribute("data-leave-team"));
     });
   }
   function settingsBodyHtml() {
