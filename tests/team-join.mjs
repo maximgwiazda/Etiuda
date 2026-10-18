@@ -1489,14 +1489,33 @@ try {
   const teamAt = (epoch, roster) => sign({ format: 1, kind: "etiuda-team", id: TEAM, catalogs: ["lamp-shop"], lead: LEAD,
     sealed: true, exportsSealed: false, epoch: epoch, roster: roster }, lead.privateKey, LEAD.keyId);
   const leadIn = v => ((v && v.leads) || []).filter(l => l.team === TEAM)[0] || null;
-  /* Every call that writes, renames or removes under `dir` while `run` runs, by name. */
+  /* Every call that writes, renames or removes under `dir` while `run` runs, by name.
+     The path is what counts, after resolve, and only where path.relative stays inside:
+     not an absolute result, not "..", and not a result that begins with ".." plus
+     path.sep. The bytes written are not a path. A desk file names the team's folder
+     in its JSON; on Linux those slashes are the folder's own, so a substring match
+     counted desk.json.tmp, written beside the folder, as a write inside it. */
+  const pathInside = (dir, file) => {
+    if (typeof file !== "string" || file === "") return false;
+    let rel;
+    try { rel = path.relative(dir, path.resolve(file)); }
+    catch { return false; }
+    if (rel === "") return true;
+    if (path.isAbsolute(rel)) return false;
+    if (rel === "..") return false;
+    return !rel.startsWith(".." + path.sep);
+  };
   const writesUnder = async (dir, run) => {
     const hits = [], untap = [];
     for (const n of ["writeFileSync", "appendFileSync", "renameSync", "unlinkSync", "rmSync", "rmdirSync", "mkdirSync", "copyFileSync", "openSync"]) {
       const real = fs[n];
       fs[n] = function (p, ...rest) {
         const flag = n === "openSync" ? String(rest[0] || "r") : "w";
-        if (/[wa+]/.test(flag) && [p, rest[0]].some(x => String(x).indexOf(dir) >= 0)) hits.push(n + " " + path.relative(dir, String(p)));
+        if (/[wa+]/.test(flag)) {
+          const paths = n === "renameSync" || n === "copyFileSync" ? [p, rest[0]] : [p];
+          const hit = paths.find(x => pathInside(dir, x));
+          if (hit != null) hits.push(n + " " + path.relative(dir, path.resolve(String(hit))));
+        }
         return real.call(this, p, ...rest);
       };
       untap.push(() => { fs[n] = real; });
