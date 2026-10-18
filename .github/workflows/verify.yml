@@ -1,0 +1,143 @@
+# A verdict's legs, on a runner, at a commit the verdict names.
+#
+# Dispatch only. A push or a pull request does not run this, and a fork cannot start
+# it. The job checks out the named sha, so the workflow on main can run a commit
+# that does not contain this file. When that commit has no tools/ci-legs.mjs, the
+# runner file is taken from the workflow's own commit.
+#
+# A red leg does not fail the run. The leg step continues on error, and the runner
+# exits 0 when every asked leg was recorded. The next step fails the job only when
+# that step's own outcome is a failure, which is the runner itself breaking. The
+# job's colour is not the verdict. The summary's first line is, per OS.
+#
+# ETIUDA_FIXTURES is never set. A catalog, the name list and a secret are not handed
+# to a runner. ETIUDA_WINDOWS is set inside tools/ci-legs.mjs, on the child of a
+# window leg only, on the Windows runner only, and only when windows_date equals the
+# date tests/engine.js's window wall computed for that process.
+#
+# Each OS uploads its own artifact, results-<os>; the verdict downloads them all. The
+# token is contents: read and is not left in the checkout, so the code under test
+# holds no credential.
+name: verify
+
+run-name: verify ${{ inputs.sha }} on ${{ inputs.os }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit to check out and run
+        required: true
+        type: string
+      legs:
+        description: Leg ids, separated by spaces. The default is the node-only set in tools/ci-legs.mjs.
+        required: false
+        type: string
+        default: relay-unit relay-channel relay-blob attacks-naive attacks-model attacks-refuse-all attacks-product attacks-relay-product module-calls catalog-routes team-join desk-ipc test gate-run
+      os:
+        description: ubuntu, windows or both
+        required: false
+        type: string
+        default: ubuntu
+      windows_date:
+        description: Local date for a window leg. Empty refuses the leg, as on the desk.
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      oses: ${{ steps.pick.outputs.oses }}
+    steps:
+      - id: pick
+        env:
+          ASKED_OS: ${{ inputs.os }}
+        run: |
+          case "$ASKED_OS" in
+            ubuntu) printf '%s\n' 'oses=["ubuntu-latest"]' >> "$GITHUB_OUTPUT" ;;
+            windows) printf '%s\n' 'oses=["windows-latest"]' >> "$GITHUB_OUTPUT" ;;
+            both) printf '%s\n' 'oses=["ubuntu-latest","windows-latest"]' >> "$GITHUB_OUTPUT" ;;
+            *) echo "os is '$ASKED_OS', want ubuntu, windows or both" >&2; exit 1 ;;
+          esac
+
+  verify:
+    needs: plan
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJson(needs.plan.outputs.oses) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: runner file, when the commit under test does not carry it
+        shell: bash
+        run: |
+          if [ ! -f tools/ci-legs.mjs ]; then
+            git fetch --depth 1 origin "$GITHUB_SHA"
+            git show FETCH_HEAD:tools/ci-legs.mjs > tools/ci-legs.mjs
+          fi
+
+      - name: electron binary, only when a window leg was asked
+        id: elec
+        shell: bash
+        env:
+          CI_LEGS: ${{ inputs.legs }}
+        run: node tools/ci-legs.mjs --electron-skip --from-env >> "$GITHUB_OUTPUT"
+
+      # Electron 44.3.0 does not read ELECTRON_SKIP_BINARY_DOWNLOAD. install.js
+      # has no check, and index.js downloads the binary the first time the
+      # package is required. The variable is still exported when no window leg
+      # was asked, and left unset when one was: a set value, the string 0
+      # included, is what an older package treats as skip.
+      - name: npm ci
+        shell: bash
+        env:
+          ELECTRON_SKIP: ${{ steps.elec.outputs.skip }}
+        run: |
+          if [ "$ELECTRON_SKIP" = "1" ]; then
+            export ELECTRON_SKIP_BINARY_DOWNLOAD=1
+          fi
+          npm ci
+
+      - name: legs
+        id: legs
+        continue-on-error: true
+        shell: bash
+        env:
+          CI_LEGS: ${{ inputs.legs }}
+          CI_WINDOWS_DATE: ${{ inputs.windows_date }}
+          CI_LEG_OS: ${{ matrix.os }}
+        run: node tools/ci-legs.mjs --from-env --out ci-out
+
+      - name: results for this os
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ matrix.os }}
+          path: ci-out
+          if-no-files-found: error
+
+      - name: the runner held
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ steps.legs.outcome }}" != "success" ]; then
+            echo "the leg runner broke (outcome ${{ steps.legs.outcome }})"
+            exit 1
+          fi
