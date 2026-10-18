@@ -2,6 +2,7 @@
    One ok or FAIL line per attack, then a #counts line. Exit code is the failure count.
    The fourth slot is true when the attack requires an honest success as well as a refusal. */
 
+import crypto from "node:crypto";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 
@@ -153,6 +154,49 @@ function bigBlob(w, writer, counter) {
 
 function deskFile(w, name) {
   return "desks/" + w.deskId + "/" + name;
+}
+
+/* M1's boxes, agreements, desk copies and wraps, in the contract's bytes (An epoch move). */
+const X25519_SPKI = Buffer.from("302a300506032b656e032100", "hex");
+function box() {
+  const p = crypto.generateKeyPairSync("x25519");
+  return { public: p.publicKey.export({ type: "spki", format: "der" }).subarray(X25519_SPKI.length).toString("hex"),
+    private: p.privateKey.export({ type: "pkcs8", format: "der" }).toString("hex") };
+}
+function agree(privateHex, peerHex) {
+  try {
+    return crypto.diffieHellman({
+      privateKey: crypto.createPrivateKey({ key: Buffer.from(privateHex, "hex"), format: "der", type: "pkcs8" }),
+      publicKey: crypto.createPublicKey({ key: Buffer.concat([X25519_SPKI, Buffer.from(String(peerHex), "hex")]), format: "der", type: "spki" }),
+    });
+  } catch (e) {
+    return null;
+  }
+}
+function copyOf(agreement, f) {
+  if (!agreement || agreement.every(function (b) { return b === 0; })) return null;
+  const info = Buffer.from(["etiuda-relay-desk-copy", f.relayTeamId, f.teamId, f.leadKeyId, f.leadBox, f.deskId, f.deskBox].join("\n") + "\n", "utf8");
+  const okm = Buffer.from(crypto.hkdfSync("sha256", agreement, Buffer.alloc(0), info, 48));
+  return { id: okm.subarray(32).toString("hex"), key: okm.subarray(0, 32) };
+}
+function wrapKey(key, boxPublic, teamId, epoch, deskId) {
+  const e = box();
+  const info = Buffer.from("etiuda-relay-wrap\n" + teamId + "\n" + epoch + "\n" + deskId + "\n", "utf8");
+  const k = Buffer.from(crypto.hkdfSync("sha256", agree(e.private, boxPublic), Buffer.alloc(0), info, 32));
+  const n = crypto.randomBytes(12);
+  const c = crypto.createCipheriv("aes-256-gcm", k, n);
+  return { epoch: epoch, enc: e.public, ct: Buffer.concat([n, c.update(key), c.final(), c.getAuthTag()]).toString("hex") };
+}
+function branchId(keyHex) {
+  return "k-" + crypto.createHash("sha256").update(Buffer.from(keyHex, "hex")).digest("hex").slice(0, 16);
+}
+function opensUnder(blob, key) {
+  try {
+    wire.open(key, wire.aadBytes(blob), blob.nonce, blob.ciphertext);
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 function attacks() {
@@ -1239,6 +1283,70 @@ function attacks() {
       return refused(unsigned, "bad-signature") && refused(forged, "bad-signature")
         && refused(zeros, "bad-signature") && refused(named, "bad-signature")
         && refused(genuine, "removed");
+    }, true],
+    ["M1", "an epoch move strands no remaining desk, and the desk taken off opens nothing after it", function (create) {
+      const t = create();
+      if (typeof t.sealTeam !== "function") return false;
+      const lead = wire.generateKey();
+      const gone = wire.generateKey();
+      const stays = wire.generateKey();
+      const teamId = "t-" + wire.randomId().slice(0, 16);
+      const created = t.createTeam({ teamId: teamId, epoch: 1, lead: lead });
+      if (!created || !created.relayTeamId) return false;
+      const rt = created.relayTeamId;
+      const w = { target: t, relayTeamId: rt };
+      const goneId = branchId(gone.keyId);
+      const staysId = branchId(stays.keyId);
+      t.enrol({ relayTeamId: rt, deskId: goneId, keyId: gone.keyId });
+      t.enrol({ relayTeamId: rt, deskId: staysId, keyId: stays.keyId });
+      t.pin({ leadKeyId: lead.keyId, relayTeamId: rt, teamId: teamId });
+      const lb = box();
+      const gb = box();
+      const sb = box();
+      const k1 = wire.teamKey();
+      const k2 = wire.teamKey();
+      const entry = function (k, id, b, key, epoch) {
+        return { desk: { id: id, key: k.keyId, box: b.public }, wrap: wrapKey(key, b.public, teamId, epoch, id) };
+      };
+      const doc = function (epoch, roster) {
+        return wire.signTeam({ format: 1, kind: "etiuda-team", id: teamId, epoch: epoch, rev: 1, channel: { kind: "relay", relay: rt },
+          lead: { keyId: lead.keyId, public: lead.publicKey, box: lb.public }, roster: roster }, lead.privateKey);
+      };
+      const send = function (epoch, key, d, files) {
+        const s = t.sealTeam({ relayTeamId: rt, teamId: teamId, epoch: epoch, teamKey: key, writer: lead, leadBox: lb, teamDoc: d, files: files });
+        if (!s || s.ok !== true || !Array.isArray(s.blobs)) return null;
+        return s.blobs.every(function (b) { return upload(w, b).ok === true; }) ? s.blobs : null;
+      };
+      const sync = function (d) {
+        const s = helloAs(t, rt, stays);
+        if (!s || s.ok !== true) return false;
+        t.syncMirror({ relayTeamId: rt, session: s.session, teamKey: k1, teamDoc: d, box: sb, deskId: staysId });
+        return true;
+      };
+      const doc1 = doc(1, [entry(gone, goneId, gb, k1, 1), entry(stays, staysId, sb, k1, 1)]);
+      const first = send(1, k1, doc1, { "lane.ec": "edition one" });
+      const before = sync(doc1) && t.readMirror("lane.ec") === "edition one";
+      t.removeDesk({ relayTeamId: rt, deskId: goneId });
+      t.addEpoch({ relayTeamId: rt, epoch: 2 });
+      const after = send(2, k2, doc(2, [entry(stays, staysId, sb, k2, 2)]), { "lane.ec": "edition two", "after.ec": "written after the move" });
+      sync(doc1);
+      let held = null;
+      try { held = JSON.parse(t.readMirror("etiuda-team.json")); } catch (e) { held = null; }
+      const reached = !!held && held.epoch === 2 && t.readMirror("lane.ec") === "edition two"
+        && t.readMirror("after.ec") === "written after the move";
+      const tries = [k1];
+      doc1.roster.forEach(function (e) {
+        const f = { relayTeamId: rt, teamId: teamId, leadKeyId: lead.keyId, leadBox: lb.public, deskId: e.desk.id, deskBox: e.desk.box };
+        [agree(gb.private, lb.public), agree(gb.private, e.desk.box)].forEach(function (a) {
+          const c = copyOf(a, f);
+          if (c) tries.push(c.key);
+        });
+      });
+      const opened = (after || []).filter(function (b) {
+        return tries.some(function (k) { return opensUnder(Object.assign({ relayTeamId: rt }, b), k); });
+      }).length;
+      return !!first && before && !!after && after.length >= 4 && reached && tries.length === 5 && opened === 0
+        && refused(helloAs(t, rt, gone), "removed");
     }, true],
   ];
 }

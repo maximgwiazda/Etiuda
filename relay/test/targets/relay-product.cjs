@@ -254,16 +254,29 @@ function createTarget(limits) {
     loadTeamFile(doc) { return prog.loadTeamFile(doc); },
     showFreshness(input) { return prog.showFreshness(input); },
     /* The program's catch-up through the relay as built: the list under this session, then each blob it does not hold. */
-    syncMirror({ relayTeamId, session, teamKey, teamDoc }) {
+    syncMirror({ relayTeamId, session, teamKey, teamDoc, box, deskId }) {
       const listed = target.list({ relayTeamId, session });
       if (!listed.ok) return { ok: true };
-      for (const id of listed.ids) {
-        if (ingested.has(relayTeamId + ":" + id)) continue;
-        const r = http("GET", teamPath(relayTeamId, "b/" + id), { token: session });
-        if (r.status !== 200) continue;
-        target.acceptBlob({ teamKey, teamDoc, blob: envelope(relayTeamId, r) });
-      }
+      const fetched = [];
+      const bring = (key, doc) => {
+        for (const id of listed.ids) {
+          if (ingested.has(relayTeamId + ":" + id)) continue;
+          const r = http("GET", teamPath(relayTeamId, "b/" + id), { token: session });
+          if (r.status !== 200) continue;
+          const blob = envelope(relayTeamId, r);
+          fetched.push(blob);
+          target.acceptBlob({ teamKey: key, teamDoc: doc, blob });
+        }
+      };
+      bring(teamKey, teamDoc);
+      /* A desk with a box (M1): its own copy among what was served, and what waited for the key it gives. */
+      const moved = box ? prog.takeCopy({ relayTeamId, blobs: fetched, teamDoc, box, deskId }) : null;
+      if (moved) bring(moved.teamKey, moved.teamDoc);
       return { ok: true };
+    },
+    sealTeam(opts) {
+      if (opts && opts.writer && opts.writer.keyId && opts.writer.privateKey) keys.set(opts.writer.keyId, opts.writer.privateKey);
+      return prog.sealTeam(opts);
     },
     considerOutgoing(input) { return prog.considerOutgoing(input); },
     readRing(input) { return prog.readRing(input); },

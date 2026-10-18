@@ -1582,7 +1582,7 @@ check(regStand.held(), "942f every reg call was answered by the stand-in (" + re
   const m = /^#counts ok=(\d+) fail=(\d+)$/m.exec(r.stdout || "");
   const ok = m ? Number(m[1]) : -1, bad = m ? Number(m[2]) : -1;
   const fails = (r.stdout || "").split(/\r?\n/).filter(l => /^FAIL /.test(l)).slice(0, 5);
-  check(r.status === 0 && ok >= 78 && bad === 0, "943a the harness through the product, relay/test/attacks.mjs with relay/test/targets/product.cjs: "
+  check(r.status === 0 && ok >= 79 && bad === 0, "943a the harness through the product, relay/test/attacks.mjs with relay/test/targets/product.cjs: "
     + ok + " ok, " + bad + " failed, exit " + r.status + (fails.length ? ": " + fails.join(" | ") : ""));
 }
 console.log("#counts checks=" + asserted + " failed=" + failed + " expected=" + EXPECTED);

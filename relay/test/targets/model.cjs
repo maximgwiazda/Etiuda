@@ -4,7 +4,47 @@
    Each line marked plant:<id> is the one check that attack lifts.
    Trust is the pinned lead key and the signed roster, never a key a message names. */
 
+const crypto = require("node:crypto");
 const wire = require("../wire.cjs");
+
+/* M1's bytes (the contract's An epoch move): an X25519 agreement, a desk's copy, and a wrap opened. */
+const X25519_SPKI = Buffer.from("302a300506032b656e032100", "hex");
+const TEAM_NAME = "etiuda-team.json";
+function agreement(privateHex, peerHex) {
+  try {
+    return crypto.diffieHellman({
+      privateKey: crypto.createPrivateKey({ key: Buffer.from(String(privateHex), "hex"), format: "der", type: "pkcs8" }),
+      publicKey: crypto.createPublicKey({ key: Buffer.concat([X25519_SPKI, Buffer.from(String(peerHex), "hex")]), format: "der", type: "spki" }),
+    });
+  } catch (e) {
+    return null;
+  }
+}
+function deskCopy(dh, f) {
+  if (!dh || dh.every(function (b) { return b === 0; })) return null;
+  const info = Buffer.from(["etiuda-relay-desk-copy", f.relayTeamId, f.teamId, f.leadKeyId, f.leadBox, f.deskId, f.deskBox].join("\n") + "\n", "utf8");
+  const okm = Buffer.from(crypto.hkdfSync("sha256", dh, Buffer.alloc(0), info, 48));
+  return { id: okm.subarray(32).toString("hex"), key: okm.subarray(0, 32) };
+}
+function unwrapKey(privateHex, wrap, teamId, epoch, deskId) {
+  try {
+    if (!wrap || wrap.epoch !== epoch) return null;
+    const info = Buffer.from("etiuda-relay-wrap\n" + teamId + "\n" + epoch + "\n" + deskId + "\n", "utf8");
+    const k = Buffer.from(crypto.hkdfSync("sha256", agreement(privateHex, wrap.enc), Buffer.alloc(0), info, 32));
+    const raw = Buffer.from(String(wrap.ct), "hex");
+    const d = crypto.createDecipheriv("aes-256-gcm", k, raw.subarray(0, 12));
+    d.setAuthTag(raw.subarray(raw.length - 16));
+    return Buffer.concat([d.update(raw.subarray(12, raw.length - 16)), d.final()]);
+  } catch (e) {
+    return null;
+  }
+}
+/* A roster entry's desk id and box, in either form a team file may give it. */
+function boxOf(r) {
+  if (r && r.desk && typeof r.desk.box === "string") return { deskId: r.desk.id, box: r.desk.box };
+  if (r && typeof r.box === "string") return { deskId: r.deskId, box: r.box };
+  return null;
+}
 
 const SAID = {
   "no-hello": "The relay serves a team only after a signed hello.",
@@ -64,6 +104,8 @@ function createTarget(limits) {
   const ingested = [];
   // Post-restart replays use their own comparison, so lifting the pre-restart plant leaves that attack green.
   let restarted = false;
+  const leadCounters = new Map();
+  const copiesMade = new Map();
 
   function enrolKey(relayTeamId, keyId) {
     return relayTeamId + ":" + keyId;
@@ -205,7 +247,7 @@ function createTarget(limits) {
   function relayPlaceOk(relayTeamId, blob) {
     const en = enrolled.get(enrolKey(relayTeamId, blob.writerKeyId));
     if (!en) return false;
-    if (en.role === "lead") return blob.place === "root";
+    if (en.role === "lead") return blob.place === "root" || /^invite:[0-9a-f]{32}$/.test(String(blob.place));
     return blob.place === "desk:" + en.deskId;
   }
 
@@ -543,6 +585,60 @@ function createTarget(limits) {
     return blob;
   }
 
+  /* The lead's side of a team file: the team file and the files at the root under the team key, and a copy of the team
+     file for each desk the roster names, under that desk's copy key, in its own place. */
+  function sealTeam({ relayTeamId, teamId, epoch, teamKey, writer, leadBox, teamDoc, files }) {
+    const text = JSON.stringify(teamDoc);
+    let counter = leadCounters.get(epoch) || 0;
+    const next = function (key, path, body, place) {
+      counter += 1;
+      return seal({ relayTeamId: relayTeamId, epoch: epoch, teamKey: key, writer: writer, path: path, body: body,
+        counter: counter, place: place, kind: "file" });
+    };
+    const blobs = [next(teamKey, TEAM_NAME, text, "root")];
+    Object.keys(files || {}).forEach(function (p) { blobs.push(next(teamKey, p, files[p], "root")); });
+    const roster = (Array.isArray(teamDoc.roster) ? teamDoc.roster : []).map(boxOf).filter(Boolean);
+    roster.forEach(function (d) { copiesMade.set(d.deskId, d); });
+    let desks = Array.from(copiesMade.values());
+    desks = roster; /* plant:M1 */
+    desks.forEach(function (d) {
+      const c = deskCopy(agreement(leadBox.private, d.box), { relayTeamId: relayTeamId, teamId: teamId, leadKeyId: writer.keyId,
+        leadBox: leadBox.public, deskId: d.deskId, deskBox: d.box });
+      if (c) blobs.push(next(c.key, TEAM_NAME, text, "invite:" + c.id));
+    });
+    leadCounters.set(epoch, counter);
+    return { ok: true, blobs: blobs };
+  }
+
+  /* A desk's own copy among `blobs`: opened under the key of its own agreement with the lead's box, signed by the pinned
+     lead; its team file taken where it is newer than `teamDoc`, and the key from this desk's wrap. Null otherwise. */
+  function takeCopy({ relayTeamId, blobs, teamDoc, box, deskId }) {
+    if (!pinned || !teamDoc || !teamDoc.lead || !box) return null;
+    const own = deskCopy(agreement(box.private, teamDoc.lead.box), { relayTeamId: relayTeamId, teamId: pinned.teamId,
+      leadKeyId: pinned.leadKeyId, leadBox: teamDoc.lead.box, deskId: deskId, deskBox: box.public });
+    if (!own) return null;
+    let best = null;
+    (blobs || []).forEach(function (b) {
+      if (!b || b.writerKeyId !== pinned.leadKeyId) return;
+      const aad = aadBytes(b);
+      if (!wire.verify(pinned.leadKeyId, wire.uploadMessage(aad, b.ciphertext), b.signature)) return;
+      let inner = null;
+      try { inner = wire.open(own.key, aad, b.nonce, b.ciphertext); } catch (e) { return; }
+      if (!inner || inner.kind !== "file" || inner.path !== TEAM_NAME) return;
+      let doc = null;
+      try { doc = JSON.parse(inner.body); } catch (e) { return; }
+      if (!teamSignedByPin(doc) || !sameTeam(doc) || Number(doc.epoch) !== Number(b.epoch)) return;
+      if (!best || doc.epoch > best.epoch || (doc.epoch === best.epoch && doc.rev > best.rev)) best = doc;
+    });
+    if (!best || Number(best.epoch) <= Number(teamDoc.epoch)) return null;
+    if (!loadTeamFile(best).ok) return null;
+    const entry = (Array.isArray(best.roster) ? best.roster : []).filter(function (r) { const d = boxOf(r); return d && d.deskId === deskId; })[0];
+    const key = entry ? unwrapKey(box.private, entry.wrap, best.id, best.epoch, deskId) : null;
+    if (!key) return null;
+    mirror.set(TEAM_NAME, JSON.stringify(best));
+    return { ok: true, teamKey: key, teamDoc: best };
+  }
+
   function acceptBlob({ teamKey, teamDoc, blob }) {
     const ct = blob && blob.ciphertext ? blob.ciphertext : Buffer.alloc(0);
     let tooBig = false;
@@ -675,7 +771,17 @@ function createTarget(limits) {
     });
   }
 
-  function syncMirror({ relayTeamId, session, teamKey, teamDoc }) {
+  function syncMirror({ relayTeamId, session, teamKey, teamDoc, box, deskId }) {
+    const done = syncWith({ relayTeamId: relayTeamId, session: session, teamKey: teamKey, teamDoc: teamDoc });
+    if (!box || !done.ids) return { ok: true };
+    const blobs = done.ids.map(function (id) { return fetch({ relayTeamId: relayTeamId, session: session, id: id }); })
+      .filter(function (b) { return b && b.ok === true; }).map(function (b) { return Object.assign({ relayTeamId: relayTeamId }, b); });
+    const moved = takeCopy({ relayTeamId: relayTeamId, blobs: blobs, teamDoc: teamDoc, box: box, deskId: deskId });
+    if (moved) syncWith({ relayTeamId: relayTeamId, session: session, teamKey: moved.teamKey, teamDoc: moved.teamDoc });
+    return { ok: true };
+  }
+
+  function syncWith({ relayTeamId, session, teamKey, teamDoc }) {
     const listed = list({ relayTeamId: relayTeamId, session: session });
     const ids = listed.ok && Array.isArray(listed.ids) ? listed.ids : null;
     let reconcile = false;
@@ -688,7 +794,7 @@ function createTarget(limits) {
     if (reconcile && teamKey && teamDoc && ids) {
       ids.forEach(function (id) { bringIn(relayTeamId, session, id, teamKey, teamDoc); });
     }
-    return { ok: true };
+    return { ok: true, ids: ids };
   }
 
   function considerOutgoing({ path }) {
@@ -782,7 +888,7 @@ function createTarget(limits) {
   return {
     start, pin, createTeam, addEpoch, enrol, removeDesk, invite, challenge, hello, helloMessage,
     list, fetch, subscribe, upload, fetchDeletion, epochMove, inspect, seal, acceptBlob,
-    loadTeamFile, showFreshness, syncMirror, considerOutgoing, readRing,
+    loadTeamFile, showFreshness, syncMirror, sealTeam, takeCopy, considerOutgoing, readRing,
     verifyDeskSignature, verifyUploadSignature, programAllowUpload, restart,
     readMirror, advance,
   };

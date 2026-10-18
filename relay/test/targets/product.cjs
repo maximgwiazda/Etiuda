@@ -43,6 +43,29 @@ function sign(privateHex, bytes) {
 
 const sha256 = s => crypto.createHash("sha256").update(String(s), "utf8").digest("hex");
 
+/* A box's agreement with another (X25519), lent to the channel layer as the shell lends it; and the shell's part on a
+   team file landing, stood in for: the key taken from this desk's own wrap, in the contract's bytes. */
+const X25519_SPKI = Buffer.from("302a300506032b656e032100", "hex");
+function agreeWith(privateHex) {
+  return peer => {
+    try {
+      return crypto.diffieHellman({ privateKey: crypto.createPrivateKey({ key: Buffer.from(privateHex, "hex"), format: "der", type: "pkcs8" }),
+        publicKey: crypto.createPublicKey({ key: Buffer.concat([X25519_SPKI, Buffer.from(String(peer), "hex")]), format: "der", type: "spki" }) });
+    } catch { return null; }
+  };
+}
+function unwrapKey(privateHex, wrap, teamId, epoch, deskId) {
+  try {
+    if (!wrap || wrap.epoch !== epoch) return null;
+    const info = Buffer.from("etiuda-relay-wrap\n" + teamId + "\n" + epoch + "\n" + deskId + "\n", "utf8");
+    const k = Buffer.from(crypto.hkdfSync("sha256", agreeWith(privateHex)(wrap.enc), Buffer.alloc(0), info, 32));
+    const raw = Buffer.from(String(wrap.ct), "hex");
+    const d = crypto.createDecipheriv("aes-256-gcm", k, raw.subarray(0, 12));
+    d.setAuthTag(raw.subarray(raw.length - 16));
+    return Buffer.concat([d.update(raw.subarray(12, raw.length - 16)), d.final()]);
+  } catch { return null; }
+}
+
 /* The program's mirror, in memory, under the same path rule as the disk's. */
 function memoryIO() {
   const files = new Map();
@@ -73,6 +96,8 @@ function createTarget(limits) {
       load: () => (saved ? JSON.parse(saved) : null), save: s => { saved = JSON.stringify(s); }, pin: pinned });
   }
   let prog = newProgram();
+  /* The lead's own program, for sealTeam: its mirror and record apart from the desk's. */
+  let leadSide = null;
 
   function http(method, p, o) {
     const opts = o || {};
@@ -277,12 +302,23 @@ function createTarget(limits) {
     showFreshness(input) { return prog.showFreshness(input); },
     /* The program's catch-up through the relay as built: the list under this session, each blob it does not hold fetched,
        and the batch judged and applied by the channel layer's own applyBatch, the team file passed held as its trust. */
-    syncMirror({ relayTeamId, session, teamKey, teamDoc }) {
+    syncMirror({ relayTeamId, session, teamKey, teamDoc, box, deskId }) {
       if (relayTeamId !== (pinned && pinned.rt)) return { ok: true };
       const got = listed(relayTeamId, session);
       if (got.refused) return { ok: true };
       const held = prog.holdTeam(teamDoc);
       if (!held.ok) return { ok: true };
+      const keysHeld = new Map([[held.epoch, teamKey]]);
+      const ctx = { keyFor: e => keysHeld.get(e) || null };
+      /* A desk with a box (M1): its own copy of the team file opened by the channel layer, and the key from its wrap. */
+      if (box && typeof deskId === "string") Object.assign(ctx, { agree: agreeWith(box.private), self: { place: "desk:" + deskId, box: box.public },
+        onTeam: () => {
+          let doc = null;
+          try { doc = JSON.parse(prog.readMirror(C.TEAM_NAME)); } catch { doc = null; }
+          const mine = doc && Array.isArray(doc.roster) ? doc.roster.find(r => r && r.desk && r.desk.id === deskId) : null;
+          const key = mine ? unwrapKey(box.private, mine.wrap, doc.id, doc.epoch, deskId) : null;
+          if (key) keysHeld.set(doc.epoch, key);
+        } });
       const taken = prog.state().taken;
       const items = [];
       for (const e of got.items) {
@@ -291,8 +327,35 @@ function createTarget(limits) {
         if (r.status !== 200) continue;
         items.push({ seq: e.seq, meta: r.meta, ct: r.bytes });
       }
-      prog.applyBatch(items, { keyFor: e => (e === held.epoch ? teamKey : null) });
+      prog.applyBatch(items, ctx);
+      /* What waited for a key the batch brought, fetched again as the channel's retryPending does. */
+      const again = [];
+      for (const p of prog.pending().filter(q => ctx.keyFor(q.epoch))) {
+        const r = http("GET", teamPath(relayTeamId, "b/" + p.id), { token: session });
+        if (r.status === 200) again.push({ seq: p.seq, meta: r.meta, ct: r.bytes, floor: p.floor });
+      }
+      if (again.length) prog.applyBatch(again, ctx);
       return { ok: true };
+    },
+    /* The lead's side of a team file (M1): its own channel program, the team file and files at the root under the team
+       key, and a copy of the team file for each desk its roster names, by the agreement of the lead's box with that desk's. */
+    sealTeam({ relayTeamId, epoch, teamKey, writer, leadBox, teamDoc, files }) {
+      if (!pinned || relayTeamId !== pinned.rt) return { ok: false, reason: "wrong-team", said: B.REASONS["wrong-team"], served: false };
+      keys.set(writer.keyId, writer.privateKey);
+      if (!leadSide) {
+        const io2 = memoryIO();
+        leadSide = { io: io2, prog: C.createProgram({ io: io2, clock: () => now, pin: pinned, teamMax }) };
+      }
+      leadSide.io.write(C.TEAM_NAME, JSON.stringify(teamDoc, null, 1) + "\n");
+      for (const p of Object.keys(files || {})) leadSide.io.write(p, files[p]);
+      const me = { keyId: writer.keyId, privateKey: writer.privateKey, place: "root" };
+      const blobs = [];
+      for (const op of leadSide.prog.owed(me, { agree: agreeWith(leadBox.private), keyFor: e => (e === epoch ? teamKey : null) })) {
+        const blob = leadSide.prog.sealOut(op, me, { epoch, key: op.invite && op.invite.key ? op.invite.key : teamKey });
+        leadSide.prog.sentOut(op, blob);
+        blobs.push(Object.assign(blob, { relayTeamId }));
+      }
+      return { ok: true, blobs };
     },
     considerOutgoing(input) { return prog.considerOutgoing(input && input.path); },
     readRing(input) { return prog.readRing(input); },
