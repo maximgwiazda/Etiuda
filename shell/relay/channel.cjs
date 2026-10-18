@@ -334,7 +334,7 @@ function newestEdition(list) {
     let published = e.published;
     if (typeof published === "number" && Number.isFinite(published)) published = String(published);
     if (!headTextOk(e.edition, 120) || !headTextOk(published, 80)) return null;
-    if (!best || e.rev >= best.rev) best = { edition: e.edition, published: published };
+    if (!best || e.rev >= best.rev) best = { rev: e.rev, edition: e.edition, published: published };
   }
   return best;
 }

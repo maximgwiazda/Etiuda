@@ -34,7 +34,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 71;
+const EXPECTED = 75;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -144,9 +144,11 @@ function signHead(doc, key) {
   o.sig.value = signHex(k, Buffer.concat([Buffer.from(C.HEAD_PREFIX, "utf8"), C.signedBytes(o)]));
   return JSON.stringify(o) + "\n";
 }
+function headWith(team, t, editions, v) {
+  return signHead({ v: v === undefined ? 1 : v, team: team, epoch: 1, rev: 1, editions: editions, t: t });
+}
 function headBody(team, t, edition, published) {
-  return signHead({ v: 1, team: team, epoch: 1, rev: 1,
-    editions: [{ catalog: "quay-board", rev: 1, edition: edition, published: published }], t: t });
+  return headWith(team, t, [{ catalog: "quay-board", rev: 1, edition: edition, published: published }]);
 }
 function dayStamp(ms) {
   const d = new Date(ms), p = v => String(v).padStart(2, "0");
@@ -1498,7 +1500,7 @@ try {
       && oldLead && oldLead.head && oldLead.head.edition === "Quay two"
       && oldPage.en.indexOf(oldSentence) >= 0 && oldPage.en.indexOf("just now") < 0
       && oldPage.pl.indexOf(oldPl) >= 0 && noteSent && factsOf(D.api.readCatalog() || "") === 2,
-      "945b an old head is shown as old, with its edition and publish time, and nothing is blocked: the catalog still reads and a desk file still goes up: "
+      "948b an old head is shown as old, with its edition and publish time, and nothing is blocked: the catalog still reads and a desk file still goes up: "
       + (oldLanded ? "landed" : "not in the mirror") + ", news " + (oldNews ? oldNews.edition + " blocked " + oldNews.blocked : "none")
       + ", note " + (noteSent ? "at the lead" : "not sent") + ", catalog " + factsOf(D.api.readCatalog() || "")
       + (pageErr ? " page " + pageErr.split("\n")[0] : ""));
@@ -1519,7 +1521,7 @@ try {
       && freshNews.ageMs >= 0 && freshNews.ageMs < 120000
       && freshLead && freshLead.head && freshLead.head.edition === "Quay three" && freshLead.head.published === "2 March 2026"
       && enFresh && plFresh,
-      "945a a genuine head is shown with its edition, when it was published, and how old the head is: "
+      "948a a genuine head is shown with its edition, when it was published, and how old the head is: "
       + (freshNews ? freshNews.edition + " / " + freshNews.published + " / " + freshNews.ageMs + "ms" : "no news")
       + ", english " + enFresh + ", polish " + plFresh + (pageErr ? " page " + pageErr.split("\n")[0] : ""));
     const kept = read(mirror, HEAD_FILE);
@@ -1532,7 +1534,7 @@ try {
       return D.said.slice(forgedFrom).some(l => l.indexOf(B.REASONS["bad-signature"]) >= 0);
     }, 8000);
     check(forgedSaid && read(mirror, HEAD_FILE) === kept,
-      "945c a forged head is dropped and said, and the mirror keeps the genuine one: "
+      "948c a forged head is dropped and said, and the mirror keeps the genuine one: "
       + (forgedSaid ? "said" : "not said") + ", mirror " + (read(mirror, HEAD_FILE) === kept ? "unchanged" : "changed"));
     const olderText = headBody(TEAM2, freshT - 60 * 1000, "Quay one", "1 March 2026");
     const olderFrom = D.said.length;
@@ -1541,7 +1543,7 @@ try {
       return D.said.slice(olderFrom).some(l => l.indexOf(B.REASONS["replay-counter"]) >= 0);
     }, 8000);
     check(olderSaid && read(mirror, HEAD_FILE) === kept,
-      "945d an older head is dropped and said, and the newer stays: "
+      "948d an older head is dropped and said, and the newer stays: "
       + (olderSaid ? "said" : "not said") + ", mirror " + (read(mirror, HEAD_FILE) === kept ? "unchanged" : "changed"));
     const otherText = headBody("t-" + hex(8), Date.now(), "Quay four", "3 March 2026");
     const otherFrom = D.said.length;
@@ -1550,8 +1552,71 @@ try {
       return D.said.slice(otherFrom).some(l => l.indexOf(B.REASONS["wrong-team"]) >= 0);
     }, 8000);
     check(otherSaid && read(mirror, HEAD_FILE) === kept,
-      "945e another team's head is dropped and said, and this team's stays: "
+      "948e another team's head is dropped and said, and this team's stays: "
       + (otherSaid ? "said" : "not said") + ", mirror " + (read(mirror, HEAD_FILE) === kept ? "unchanged" : "changed"));
+    /* A head of a version this desk does not read is dropped like a forged one, though the pinned lead signed it. On a program of
+       its own, since the desk says a line once and 948c has said this one; the same head at v 1 then lands, as the control. */
+    {
+      const dir = path.join(LAB, "head-v2-" + hex(4));
+      fs.mkdirSync(dir, { recursive: true });
+      const said = [];
+      const prog = C.createProgram({ io: C.diskIO(dir), pin: PIN2, say: l => said.push(l) });
+      const team = JSON.parse(team2(2, []));
+      const seal = (text, n) => B.seal({ relayTeamId: RT2, epoch: 1, teamKey: K2,
+        writer: { keyId: LEAD.keyId, privateKey: LEAD.privateKey }, path: HEAD_FILE, body: text, counter: n, place: "root" });
+      const tV = Date.now(), five = [{ catalog: "quay-board", rev: 1, edition: "Quay five", published: "4 March 2026" }];
+      const genuine = headBody(TEAM2, tV - 1000, "Quay three", "2 March 2026");
+      const v2Text = headWith(TEAM2, tV, five, 2), v1Text = headWith(TEAM2, tV, five, 1);
+      const first = prog.acceptBlob({ blob: seal(genuine, 1), teamDoc: team, teamKey: K2 });
+      const from = said.length;
+      const v2 = prog.acceptBlob({ blob: seal(v2Text, 2), teamDoc: team, teamKey: K2 });
+      const v2Said = said.slice(from).some(l => l.indexOf(B.REASONS["bad-signature"]) >= 0);
+      const keptV = read(dir, HEAD_FILE) === genuine;
+      const v1 = prog.acceptBlob({ blob: seal(v1Text, 3), teamDoc: team, teamKey: K2 });
+      check(first.ok === true && v2.ok !== true && v2Said && keptV && v1.ok === true && read(dir, HEAD_FILE) === v1Text,
+        "948i a head of a version this desk does not read, v 2, is dropped and said though the pinned lead signed it, and the mirror keeps"
+        + " the genuine one; the same head at v 1 lands: v 2 " + (v2.ok === true ? "accepted" : "refused " + v2.reason) + ", said " + v2Said
+        + ", mirror " + (keptV ? "unchanged" : "changed") + ", v 1 " + (v1.ok === true ? "landed" : "refused " + v1.reason));
+    }
+    /* Two editions in one head, in both orders: the greater rev's is the one shown, in the channel's news and the team row. */
+    const fiveSix = [{ catalog: "quay-board", rev: 1, edition: "Quay five", published: "4 March 2026" },
+      { catalog: "quay-board", rev: 2, edition: "Quay six", published: "5 March 2026" }];
+    const tTwo = Date.now();
+    const shownFor = async (text) => {
+      const landed = await until(async () => { put(studioMirror, HEAD_FILE, text); await pump(); return read(mirror, HEAD_FILE) === text; }, 8000);
+      const n = newsOf(), row = teamLead(await leadsOf());
+      return { landed, news: n ? n.edition + " / " + n.published : "none", row: row && row.head ? row.head.edition + " / " + row.head.published : "none" };
+    };
+    const upOrder = await shownFor(headWith(TEAM2, tTwo, fiveSix));
+    const downOrder = await shownFor(headWith(TEAM2, tTwo + 1, fiveSix.slice().reverse()));
+    const six = "Quay six / 5 March 2026";
+    check(upOrder.landed && downOrder.landed && upOrder.news === six && upOrder.row === six && downOrder.news === six && downOrder.row === six,
+      "948j a head naming two editions shows the greater rev's, whichever is listed first: rev 1 then 2, news " + upOrder.news + ", row "
+      + upOrder.row + "; rev 2 then 1, news " + downOrder.news + ", row " + downOrder.row
+      + (upOrder.landed && downOrder.landed ? "" : ", not landed"));
+    /* The t floor across a restart: the program's record is saved, a fresh program loads it, and an older head is still dropped. */
+    {
+      const dir = path.join(LAB, "head-restart-" + hex(4));
+      fs.mkdirSync(dir, { recursive: true });
+      const stateFile = dir + ".json", said = [];
+      const save = s => fs.writeFileSync(stateFile, JSON.stringify(s));
+      const load = () => { try { return JSON.parse(fs.readFileSync(stateFile, "utf8")); } catch { return null; } };
+      const team = JSON.parse(team2(2, []));
+      const seal = (text, n) => B.seal({ relayTeamId: RT2, epoch: 1, teamKey: K2,
+        writer: { keyId: LEAD.keyId, privateKey: LEAD.privateKey }, path: HEAD_FILE, body: text, counter: n, place: "root" });
+      const tNew = Date.now();
+      const newer = headBody(TEAM2, tNew, "Quay seven", "6 March 2026"), older = headBody(TEAM2, tNew - 60 * 1000, "Quay one", "1 March 2026");
+      const before = C.createProgram({ io: C.diskIO(dir), pin: PIN2, say: l => said.push(l), save, load });
+      const first = before.acceptBlob({ blob: seal(newer, 1), teamDoc: team, teamKey: K2 });
+      const after = C.createProgram({ io: C.diskIO(dir), pin: PIN2, say: l => said.push(l), save, load });
+      const second = after.acceptBlob({ blob: seal(older, 2), teamDoc: team, teamKey: K2 });
+      const news = after.headNews(Date.now());
+      const dropped = said.some(l => l.indexOf(B.REASONS["replay-counter"]) >= 0);
+      check(first.ok === true && second.ok !== true && dropped && read(dir, HEAD_FILE) === newer && news.shown === true && news.edition === "Quay seven",
+        "948k the newer head's t is kept with the program's record, so after a restart an older head is still dropped and said: newer "
+        + first.ok + ", older " + (second.ok === true ? "accepted" : "refused " + second.reason) + ", said " + dropped
+        + ", file " + (read(dir, HEAD_FILE) === newer ? "the newer" : "not the newer") + ", shown " + (news.shown ? news.edition : "nothing"));
+    }
     /* plant:head-sig. Deleting that line, leaving the file valid script, lets a forged head through. */
     {
       const src = path.join(ROOT, "shell", "relay", "channel.cjs");
@@ -1591,7 +1656,7 @@ try {
         try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
       }
       const back = sha(fs.readFileSync(src)) === digest;
-      check(turned && back, "945g lifting plant:head-sig lets a forged head through, and the file is put back: " + detail + ", sha " + (back ? "restored" : "differs"));
+      check(turned && back, "948g lifting plant:head-sig lets a forged head through, and the file is put back: " + detail + ", sha " + (back ? "restored" : "differs"));
     }
     /* plant:head-show. Deleting that line, leaving the file valid script, drops the sentence. */
     {
@@ -1618,7 +1683,7 @@ try {
         fs.writeFileSync(src, before);
       }
       const back = sha(fs.readFileSync(src)) === digest;
-      check(turned && back, "945h lifting plant:head-show drops the sentence, and the file is put back: " + detail + ", sha " + (back ? "restored" : "differs"));
+      check(turned && back, "948h lifting plant:head-show drops the sentence, and the file is put back: " + detail + ", sha " + (back ? "restored" : "differs"));
     }
     const shareH = path.join(LAB, "head-folder");
     fs.mkdirSync(shareH, { recursive: true });
@@ -1639,11 +1704,36 @@ try {
     const hpage = await pageHtml(hleads);
     const noKey = hleads.length > 0 && hleads.every(l => !Object.prototype.hasOwnProperty.call(l, "head"));
     check(relayHeadShown && noKey && hpage.en.indexOf("Newest edition") < 0 && H.api.catalogFolder() === shareH,
-      "945f a folder team shows nothing new, while the relay desk showed the head: leads " + hleads.length
+      "948f a folder team shows nothing new, while the relay desk showed the head: leads " + hleads.length
       + ", head " + (noKey ? "absent" : "present") + ", sentence " + (hpage.en.indexOf("Newest edition") < 0 ? "absent" : "shown")
       + ", relay sentence " + relayHeadShown + ", folder " + (H.api.catalogFolder() === shareH ? "the share" : H.api.catalogFolder()));
+    /* One desk that follows the relay team and also holds a folder team, as its record keeps them: the relay team's row carries
+       the head in its mirror, and the folder team's row none. */
+    {
+      const udBoth = path.join(LAB, "head-both-desk"), mirrorBoth = path.join(udBoth, "relay", RT2);
+      fs.mkdirSync(mirrorBoth, { recursive: true });
+      const headNow = read(mirror, HEAD_FILE);
+      fs.writeFileSync(path.join(mirrorBoth, HEAD_FILE), headNow);
+      fs.writeFileSync(path.join(udBoth, "desk.json"), JSON.stringify({ kind: "etiuda-desk", schema: 1,
+        keys: { eCatalogFolder: shareH, eUiLang: "en" },
+        teamPins: { [TEAM2]: { keyId: LEAD.keyId, public: LEAD.pub }, [TEAMH]: { keyId: INTR.keyId, public: INTR.pub } },
+        teamPinFrom: { [TEAM2]: "invite" }, teamChannel: { [TEAM2]: { kind: "relay", rt: RT2, url: URL2 } },
+        teamShown: { [TEAMH]: { folder: shareH } } }), "utf8");
+      const BD = loadDesk(udBoth);
+      await BD.ask("etiuda:branch-identity", true);
+      const runBD = BD.api.relayRun();
+      const bv = await BD.ask("etiuda:team-join", "leads");
+      const bleads = bv && Array.isArray(bv.leads) ? bv.leads : [];
+      const relayRow = bleads.filter(l => l && l.team === TEAM2)[0], folderRow = bleads.filter(l => l && l.team === TEAMH)[0];
+      const relayHead = relayRow && relayRow.head ? relayRow.head.edition : "none";
+      const folderHead = folderRow ? (Object.prototype.hasOwnProperty.call(folderRow, "head") ? "present" : "absent") : "no row";
+      if (runBD) await runBD.stop();
+      check(!!runBD && relayHead === "Quay six" && folderHead === "absent",
+        "948l one desk following the relay team and holding a folder team: the relay team's row shows the head, the folder team's row"
+        + " carries none: channel " + (runBD ? "running" : "none") + ", relay row " + relayHead + ", folder row's head " + folderHead);
+    }
   } catch (e) {
-    check(false, "945 the team's news: " + (e && e.stack ? e.stack : e));
+    check(false, "948 the team's news: " + (e && e.stack ? e.stack : e));
   }
   /* F1 through the desk's own shell: the lead's Studio lends its box's agreement, takes a desk off with a new key, and this
      desk, holding only the first key, reaches the new epoch by itself: its own copy of the team file, its wrap opened by
