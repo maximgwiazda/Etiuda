@@ -98,10 +98,52 @@ function seal(w, writer, path, counter, extra) {
   }, extra || {}));
 }
 
+/* The odd place is signed here, with the writer's key, over the same bytes a seal signs.
+   The target's own seal refuses any place but root or desk:<id> before the relay sees it. */
+function sealAt(w, writer, path, counter, place, extra) {
+  const body = extra && Object.prototype.hasOwnProperty.call(extra, "body") ? extra.body : "v" + counter;
+  const id = wire.randomId();
+  const blob = {
+    id: id,
+    relayTeamId: w.relayTeamId,
+    epoch: extra && extra.epoch ? extra.epoch : 1,
+    supersedes: null,
+    writerKeyId: writer.keyId,
+    counter: counter,
+    place: place,
+    deletion: false,
+    path: path,
+    body: body,
+  };
+  const aad = wire.aadBytes(blob);
+  const framed = wire.frame({ kind: "file", path: path, body: body });
+  const sealed = wire.encrypt(w.teamKey, aad, framed.buf);
+  blob.nonce = sealed.nonce;
+  blob.ciphertext = sealed.ciphertext;
+  blob.plainLength = framed.plainLength;
+  blob.signature = wire.sign(writer.privateKey, wire.uploadMessage(aad, sealed.ciphertext));
+  return blob;
+}
+
+function refusedOneOf(r, reasons) {
+  for (let i = 0; i < reasons.length; i++) if (refused(r, reasons[i])) return true;
+  return false;
+}
+
 function accept(w, blob, attack) {
   const handed = relayBlob(blob);
   if (attack && Object.prototype.hasOwnProperty.call(attack, "path")) handed.path = attack.path;
   return w.target.acceptBlob({
+    teamKey: w.teamKey,
+    teamDoc: attack && attack.teamDoc ? attack.teamDoc : w.teamDoc,
+    blob: handed,
+  });
+}
+
+function acceptDesk(w, blob, attack) {
+  const handed = relayBlob(blob);
+  if (attack && Object.prototype.hasOwnProperty.call(attack, "path")) handed.path = attack.path;
+  return w.target.acceptDeskFile({
     teamKey: w.teamKey,
     teamDoc: attack && attack.teamDoc ? attack.teamDoc : w.teamDoc,
     blob: handed,
@@ -154,6 +196,53 @@ function bigBlob(w, writer, counter) {
 
 function deskFile(w, name) {
   return "desks/" + w.deskId + "/" + name;
+}
+
+function e2eDesk(id, fileName) {
+  return [id, "a desk " + fileName + " is kept under its signer, and a lower copy, a replay, a misplaced copy and a removed desk's copy are dropped and said", function (create) {
+    const t = create();
+    const w = world(t);
+    if (!w) return false;
+    const path = deskFile(w, fileName);
+    const leadBad = acceptDesk(w, seal(w, w.lead, path, 1, { body: "lead" }));
+    const otherBad = acceptDesk(w, seal(w, w.other, path, 1, { body: "other" }));
+    if (!refused(leadBad, "outside-place") || !refused(otherBad, "outside-place")) return false;
+    const first = acceptDesk(w, seal(w, w.desk, path, 1, { body: "v1" }));
+    if (!first.ok || first.keyId !== w.desk.keyId || first.deskId !== w.deskId || t.readMirror(path) !== "v1") return false;
+    const second = acceptDesk(w, seal(w, w.desk, path, 2, { body: "v2" }));
+    if (!second.ok || second.keyId !== w.desk.keyId || second.deskId !== w.deskId || t.readMirror(path) !== "v2") return false;
+    const equal = acceptDesk(w, seal(w, w.desk, path, 2, { body: "same" }));
+    if (!refused(equal, "replay-counter") || t.readMirror(path) !== "v2") return false;
+    const lower = acceptDesk(w, seal(w, w.desk, path, 1, { body: "old" }));
+    if (!refused(lower, "replay-counter") || t.readMirror(path) !== "v2") return false;
+    const movedPath = "desks/" + w.otherId + "/" + fileName;
+    const moved = seal(w, w.desk, path, 3, { body: "stay" });
+    moved.place = "desk:" + w.otherId;
+    const placed = acceptDesk(w, moved);
+    if (!placed.ok || placed.keyId !== w.desk.keyId || placed.deskId !== w.deskId) return false;
+    if (t.readMirror(path) !== "stay" || t.readMirror(movedPath) != null) return false;
+    const viaBlob = accept(w, seal(w, w.desk, deskFile(w, "notes.ec"), 5, { body: "blob" }));
+    if (!viaBlob.ok || t.readMirror(deskFile(w, "notes.ec")) !== "blob") return false;
+    const below = acceptDesk(w, seal(w, w.desk, path, 4, { body: "below" }));
+    if (!refused(below, "replay-counter") || t.readMirror(path) !== "stay") return false;
+    t.restart();
+    const again = acceptDesk(w, seal(w, w.desk, path, 3, { body: "replay" }));
+    if (!refused(again, "replay-counter") || t.readMirror(path) !== "stay") return false;
+    const rev2 = teamRev(w, 2);
+    if (!t.loadTeamFile(w.teamDoc).ok || !t.loadTeamFile(rev2).ok) return false;
+    const stale = acceptDesk(w, seal(w, w.desk, path, 6, { body: "stale" }), { teamDoc: w.teamDoc });
+    if (!refused(stale, "replay-rev") || t.readMirror(path) !== "stay") return false;
+    const rev3 = teamRev(w, 3, {
+      roster: [{ deskId: w.otherId, keyId: w.other.keyId }],
+    });
+    if (!t.loadTeamFile(rev3).ok) return false;
+    const gone = acceptDesk(w, seal(w, w.desk, path, 6, { body: "after" }), { teamDoc: rev3 });
+    if (!refused(gone, "removed") || t.readMirror(path) !== "stay") return false;
+    const otherPath = "desks/" + w.otherId + "/" + fileName;
+    const kept = acceptDesk(w, seal(w, w.other, otherPath, 1, { body: "kept" }), { teamDoc: rev3 });
+    return kept.ok === true && kept.keyId === w.other.keyId && kept.deskId === w.otherId
+      && t.readMirror(otherPath) === "kept" && t.readMirror(path) === "stay";
+  }, true];
 }
 
 /* M1's boxes, agreements, desk copies and wraps, in the contract's bytes (An epoch move). */
@@ -707,8 +796,12 @@ function attacks() {
       const w = world(t);
       if (!w) return false;
       const bad = accept(w, seal(w, w.lead, "../outside.ec", 1));
+      const answer = accept(w, seal(w, w.desk, "desks/" + w.deskId + "/../catalog-answer.ec", 1));
+      const stats = accept(w, seal(w, w.desk, "desks/" + w.deskId + "/../stats.estat", 1));
+      const edit = accept(w, seal(w, w.desk, "desks/" + w.deskId + "/../edit.ec", 1));
       const good = accept(w, seal(w, w.lead, "notes.ec", 2, { body: "kept" }));
-      return refused(bad, "bad-path") && good.ok === true && t.readMirror("notes.ec") === "kept";
+      return refused(bad, "bad-path") && refused(answer, "bad-path") && refused(stats, "bad-path")
+        && refused(edit, "bad-path") && good.ok === true && t.readMirror("notes.ec") === "kept";
     }, true],
     ["E6-drive", "a drive path is refused, and an ordinary path is kept", function (create) {
       const t = create();
@@ -1056,8 +1149,19 @@ function attacks() {
       const bad = accept(w, seal(w, stranger, "desks/" + stray + "/join.json", 1, {
         place: "desk:" + stray,
       }), { teamDoc: doc });
+      const answer = accept(w, seal(w, stranger, "desks/" + stray + "/catalog-answer.ec", 1, {
+        place: "desk:" + stray,
+      }), { teamDoc: doc });
+      const stats = accept(w, seal(w, stranger, "desks/" + stray + "/stats.estat", 1, {
+        place: "desk:" + stray,
+      }), { teamDoc: doc });
+      const edit = accept(w, seal(w, stranger, "desks/" + stray + "/edit.ec", 1, {
+        place: "desk:" + stray,
+      }), { teamDoc: doc });
       const good = accept(w, seal(w, w.desk, deskFile(w, "join.json"), 1, { body: "own" }));
-      return refused(bad, "bad-signature") && good.ok === true && t.readMirror(deskFile(w, "join.json")) === "own";
+      return refused(bad, "bad-signature") && refused(answer, "bad-signature")
+        && refused(stats, "bad-signature") && refused(edit, "bad-signature")
+        && good.ok === true && t.readMirror(deskFile(w, "join.json")) === "own";
     }, true],
     ["P9", "a team file signed by someone other than the pinned lead is refused, and the lead's file is kept", function (create) {
       const t = create();
@@ -1219,6 +1323,14 @@ function attacks() {
           channel: { kind: "relay", relay: "other-relay" },
         }),
       });
+      const kinds = ["catalog-answer.ec", "stats.estat", "edit.ec"];
+      for (let i = 0; i < kinds.length; i++) {
+        const kindPath = deskFile(w, kinds[i]);
+        const kind = accept(w, seal(w, w.desk, kindPath, 1, { body: "kind" }), {
+          teamDoc: teamRev(w, 1, { id: "t-other-team" }),
+        });
+        if (!refused(kind, "wrong-team") || t.readMirror(kindPath) != null) return false;
+      }
       const good = accept(w, seal(w, w.desk, deskFile(w, "join.json"), 2, { body: "own" }));
       return refused(byId, "wrong-team") && refused(byRelay, "wrong-team") && refused(byBoth, "wrong-team")
         && good.ok === true && t.readMirror(deskFile(w, "join.json")) === "own"
@@ -1241,6 +1353,12 @@ function attacks() {
       const w = world(t);
       if (!w) return false;
       const bad = accept(w, seal(w, w.desk, deskFile(w, "in-use.ec"), 1, { epoch: 9, body: "foreign" }));
+      const kinds = ["catalog-answer.ec", "stats.estat", "edit.ec"];
+      for (let i = 0; i < kinds.length; i++) {
+        const kindPath = deskFile(w, kinds[i]);
+        const kind = accept(w, seal(w, w.desk, kindPath, 1, { epoch: 9, body: "foreign" }));
+        if (!refused(kind, "epoch") || t.readMirror(kindPath) != null) return false;
+      }
       const good = accept(w, seal(w, w.desk, deskFile(w, "join.json"), 1, { body: "kept" }));
       return refused(bad, "epoch") && good.ok === true
         && t.readMirror(deskFile(w, "join.json")) === "kept"
@@ -1348,6 +1466,320 @@ function attacks() {
       return !!first && before && !!after && after.length >= 4 && reached && tries.length === 5 && opened === 0
         && refused(helloAs(t, rt, gone), "removed");
     }, true],
+    ["S2-place-relay", "an upload into a desk's place is kept only for that enrolled key, and a refused blob is not listed", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const ownInUse = seal(w, w.desk, deskFile(w, "in-use.ec"), 1, { body: "own" });
+      const ownEdit = seal(w, w.desk, deskFile(w, "edit.ec"), 3, { body: "edit" });
+      const lead = seal(w, w.lead, deskFile(w, "in-use.ec"), 1, { place: "desk:" + w.deskId, body: "lead" });
+      const other = seal(w, w.other, deskFile(w, "catalog-answer.ec"), 1, { place: "desk:" + w.deskId, body: "other" });
+      const cross = seal(w, w.desk, "desks/" + w.otherId + "/stats.estat", 2, { place: "desk:" + w.otherId, body: "cross" });
+      const upOwn = upload(w, ownInUse);
+      const upEdit = upload(w, ownEdit);
+      const upLead = upload(w, lead);
+      const upOther = upload(w, other);
+      const upCross = upload(w, cross);
+      if (!(upOwn.ok === true && upEdit.ok === true && refused(upLead, "outside-place")
+        && refused(upOther, "outside-place") && refused(upCross, "outside-place"))) return false;
+      const session = helloAs(t, w.relayTeamId, w.other);
+      if (!session.ok) return false;
+      const listed = t.list({ relayTeamId: w.relayTeamId, session: session.session });
+      if (!listed.ok || !Array.isArray(listed.ids)) return false;
+      return listed.ids.indexOf(ownInUse.id) !== -1 && listed.ids.indexOf(ownEdit.id) !== -1
+        && listed.ids.indexOf(lead.id) === -1 && listed.ids.indexOf(other.id) === -1
+        && listed.ids.indexOf(cross.id) === -1;
+    }, true],
+    ["S2-place-program", "a desk file is kept only under that desk's key, and the lead's or another desk's copy is refused", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const names = ["catalog-answer.ec", "stats.estat", "edit.ec"];
+      for (let i = 0; i < names.length; i++) {
+        const path = deskFile(w, names[i]);
+        const leadBad = accept(w, seal(w, w.lead, path, i + 1, { place: "desk:" + w.deskId, body: "lead" }));
+        const otherBad = accept(w, seal(w, w.other, path, 1, { place: "desk:" + w.deskId, body: "other" }));
+        const own = accept(w, seal(w, w.desk, path, i + 1, { body: "own" + (i + 1) }));
+        const leadDesk = acceptDesk(w, seal(w, w.lead, path, i + 1, { place: "desk:" + w.deskId, body: "lead-desk" }));
+        if (!refused(leadBad, "outside-place") || !refused(otherBad, "outside-place") || !refused(leadDesk, "outside-place")) return false;
+        if (!own.ok || t.readMirror(path) !== "own" + (i + 1)) return false;
+      }
+      return true;
+    }, true],
+    ["S2-place-other", "the relay refuses a place that is neither root, nor that desk's place, nor the lead's invite, and those three are kept", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const invite = "invite:" + "ab".repeat(16);
+      /* The product records a desk key when its seal runs. The odd place is not that call. */
+      seal(w, w.desk, deskFile(w, "edit.ec"), 1, { body: "key" });
+      const weirdLead = upload(w, sealAt(w, w.lead, "guide.ec", 1, "sideways"));
+      const weirdDesk = upload(w, sealAt(w, w.desk, deskFile(w, "in-use.ec"), 1, "anywhere"));
+      const deskInvite = upload(w, sealAt(w, w.desk, deskFile(w, "edit.ec"), 1, invite));
+      /* A place the product header cannot carry is bad-signature before the place check.
+         A desk's invite reaches that check and is outside-place. */
+      if (!refusedOneOf(weirdLead, ["outside-place", "bad-signature"])) return false;
+      if (!refusedOneOf(weirdDesk, ["outside-place", "bad-signature"])) return false;
+      if (!refused(deskInvite, "outside-place")) return false;
+      const root = upload(w, seal(w, w.lead, "guide.ec", 1, { body: "root" }));
+      const own = upload(w, seal(w, w.desk, deskFile(w, "in-use.ec"), 1, { body: "own" }));
+      const copy = upload(w, sealAt(w, w.lead, "etiuda-team.json", 2, invite, { body: "copy" }));
+      return root.ok === true && own.ok === true && copy.ok === true;
+    }, true],
+    ["S2-chain", "the relay refuses a desk upload that supersedes the lead's blob, and still serves that blob", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const leadBlob = seal(w, w.lead, "guide.ec", 1, { body: "edition" });
+      const upLead = upload(w, leadBlob);
+      if (!upLead.ok) return false;
+      const stolen = seal(w, w.desk, deskFile(w, "edit.ec"), 1, { supersedes: leadBlob.id, body: "steal" });
+      const upStolen = upload(w, stolen);
+      if (!refused(upStolen, "outside-place")) return false;
+      const own = seal(w, w.desk, deskFile(w, "edit.ec"), 1, { body: "own" });
+      const upOwn = upload(w, own);
+      const next = upload(w, seal(w, w.desk, deskFile(w, "notes.ec"), 2, { supersedes: own.id, body: "next" }));
+      if (!upOwn.ok || !next.ok) return false;
+      const session = helloAs(t, w.relayTeamId, w.other);
+      if (!session.ok) return false;
+      const listed = t.list({ relayTeamId: w.relayTeamId, session: session.session });
+      const got = t.fetch({ relayTeamId: w.relayTeamId, session: session.session, id: leadBlob.id });
+      return !!listed.ok && listed.ids.indexOf(leadBlob.id) !== -1 && listed.ids.indexOf(stolen.id) === -1
+        && got.ok === true && got.served === true && sameBytes(got.ciphertext, leadBlob.ciphertext);
+    }, true],
+    ["S2-counter", "a same-epoch replay of an older or equal catalog answer, statistics file or desk edit is refused after a restart, and the next counter is kept", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const names = ["catalog-answer.ec", "stats.estat", "edit.ec"];
+      const older = [];
+      let n = 1;
+      for (let i = 0; i < names.length; i++) {
+        const path = deskFile(w, names[i]);
+        const first = accept(w, seal(w, w.desk, path, n, { body: "old" + n }));
+        if (!first.ok) return false;
+        older.push({ path: path, counter: n });
+        n += 1;
+        const newer = accept(w, seal(w, w.desk, path, n, { body: "new" + n }));
+        if (!newer.ok || t.readMirror(path) !== "new" + n) return false;
+        n += 1;
+      }
+      t.restart();
+      for (let i = 0; i < older.length; i++) {
+        const row = older[i];
+        const replay = accept(w, seal(w, w.desk, row.path, row.counter, { body: "replay" }));
+        if (!refused(replay, "replay-counter")) return false;
+        const equal = accept(w, seal(w, w.desk, row.path, row.counter + 1, { body: "equal" }));
+        if (!refused(equal, "replay-counter")) return false;
+        if (t.readMirror(row.path) !== "new" + (row.counter + 1)) return false;
+      }
+      const next = accept(w, seal(w, w.desk, deskFile(w, names[0]), n, { body: "next" }));
+      return next.ok === true && t.readMirror(deskFile(w, names[0])) === "next";
+    }, true],
+    ["S2-relay-counter", "the relay refuses a same-epoch replay of each older desk file after a restart, and the next counter is kept", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const names = ["in-use.ec", "catalog-answer.ec", "stats.estat", "edit.ec"];
+      const older = [];
+      for (let i = 0; i < names.length; i++) {
+        const counter = i + 1;
+        const path = deskFile(w, names[i]);
+        const up = upload(w, seal(w, w.desk, path, counter, { body: "v" + counter }));
+        if (!up.ok) return false;
+        older.push({ path: path, counter: counter });
+      }
+      t.restart();
+      for (let i = 0; i < older.length; i++) {
+        const row = older[i];
+        const replay = upload(w, seal(w, w.desk, row.path, row.counter, { body: "replay" }));
+        if (!refused(replay, "replay-counter")) return false;
+      }
+      const next = upload(w, seal(w, w.desk, deskFile(w, "edit.ec"), names.length + 1, { body: "next" }));
+      return next.ok === true;
+    }, true],
+    ["S2-remove", "a desk dropped by a later roster rev or epoch is refused, what it sent before stays, and the relay's withdrawal is not what the program believes", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      t.removeDesk({ relayTeamId: w.relayTeamId, deskId: w.deskId });
+      const despite = accept(w, seal(w, w.desk, deskFile(w, "join.json"), 1, { body: "despite" }));
+      if (!despite.ok || t.readMirror(deskFile(w, "join.json")) !== "despite") return false;
+      const back = t.enrol({ relayTeamId: w.relayTeamId, deskId: w.deskId, keyId: w.desk.keyId });
+      if (!back || back.ok === false) return false;
+      const stats = deskFile(w, "stats.estat");
+      const before = accept(w, seal(w, w.desk, stats, 2, { body: "before" }));
+      if (!before.ok || t.readMirror(stats) !== "before") return false;
+      const rev2 = teamRev(w, 2, {
+        roster: [{ deskId: w.otherId, keyId: w.other.keyId }],
+      });
+      if (!t.loadTeamFile(w.teamDoc).ok || !t.loadTeamFile(rev2).ok) return false;
+      const afterBlob = seal(w, w.desk, stats, 3, { body: "after" });
+      const after = accept(w, afterBlob, { teamDoc: rev2 });
+      if (!refused(after, "removed") || t.readMirror(stats) !== "before") return false;
+      const relayStill = upload(w, afterBlob);
+      if (!relayStill.ok) return false;
+      const epoch2Key = wire.teamKey();
+      const epoch2Doc = teamRev(w, 1, {
+        epoch: 2,
+        roster: [{ deskId: w.otherId, keyId: w.other.keyId }],
+      });
+      if (!t.loadTeamFile(epoch2Doc).ok) return false;
+      const epoch2Blob = t.seal({
+        relayTeamId: w.relayTeamId, epoch: 2, teamKey: epoch2Key, writer: w.desk,
+        path: stats, body: "epoch-after", counter: 1, place: "desk:" + w.deskId, kind: "file",
+      });
+      const epochAfter = t.acceptBlob({ teamKey: epoch2Key, teamDoc: epoch2Doc, blob: relayBlob(epoch2Blob) });
+      if (!refused(epochAfter, "removed") || t.readMirror(stats) !== "before") return false;
+      const otherPath = "desks/" + w.otherId + "/stats.estat";
+      const otherBlob = t.seal({
+        relayTeamId: w.relayTeamId, epoch: 2, teamKey: epoch2Key, writer: w.other,
+        path: otherPath, body: "epoch-kept", counter: 1, place: "desk:" + w.otherId, kind: "file",
+      });
+      const kept = t.acceptBlob({ teamKey: epoch2Key, teamDoc: epoch2Doc, blob: relayBlob(otherBlob) });
+      return kept.ok === true && t.readMirror(otherPath) === "epoch-kept" && t.readMirror(stats) === "before";
+    }, true],
+    ["S2-epoch-gone", "after an epoch move drops a desk, its new file at the old epoch under the old team file is removed, and the kept desk's epoch-2 file is accepted", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const epoch2Key = wire.teamKey();
+      const epoch2Doc = teamRev(w, 1, {
+        epoch: 2,
+        roster: [{ deskId: w.otherId, keyId: w.other.keyId }],
+      });
+      if (!t.loadTeamFile(w.teamDoc).ok || !t.loadTeamFile(epoch2Doc).ok) return false;
+      const oldPath = deskFile(w, "notes.ec");
+      const old = accept(w, seal(w, w.desk, oldPath, 1, { body: "old-epoch" }), { teamDoc: w.teamDoc });
+      const oldDesk = acceptDesk(w, seal(w, w.desk, deskFile(w, "in-use.ec"), 1, { body: "old-desk" }), { teamDoc: w.teamDoc });
+      if (!refused(old, "removed") || !refused(oldDesk, "removed")) return false;
+      if (t.readMirror(oldPath) != null || t.readMirror(deskFile(w, "in-use.ec")) != null) return false;
+      const keptPath = "desks/" + w.otherId + "/catalog-answer.ec";
+      const keptBlob = t.seal({
+        relayTeamId: w.relayTeamId, epoch: 2, teamKey: epoch2Key, writer: w.other,
+        path: keptPath, body: "epoch-2", counter: 1, place: "desk:" + w.otherId, kind: "file",
+      });
+      const kept = t.acceptBlob({ teamKey: epoch2Key, teamDoc: epoch2Doc, blob: relayBlob(keptBlob) });
+      return kept.ok === true && t.readMirror(keptPath) === "epoch-2";
+    }, true],
+    ["S2-count", "a desk file is counted under the roster key for its folder, not under a place the relay names", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const path = deskFile(w, "stats.estat");
+      const blob = seal(w, w.desk, path, 1, { body: "counted" });
+      blob.place = "desk:" + w.otherId;
+      const r = accept(w, blob);
+      return r.ok === true && r.keyId === w.desk.keyId && r.deskId === w.deskId
+        && r.rev === 1 && r.epoch === 1 && r.deskId !== w.otherId;
+    }, true],
+    ["S2-readdress", "a file the relay re-addresses into another desk's place stays in the signer's folder", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const path = deskFile(w, "catalog-answer.ec");
+      const blob = seal(w, w.desk, path, 1, { body: "stay" });
+      blob.place = "desk:" + w.otherId;
+      const r = accept(w, blob);
+      const moved = "desks/" + w.otherId + "/catalog-answer.ec";
+      return r.ok === true && t.readMirror(path) === "stay" && t.readMirror(moved) == null;
+    }, true],
+    ["S2-fold", "a case-folded or dotted catalog answer, statistics file or desk edit is that desk's place, and the lead's copy is refused", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const names = ["catalog-answer.ec", "stats.estat", "edit.ec"];
+      let n = 1;
+      for (let i = 0; i < names.length; i++) {
+        const cased = "Desks/" + w.deskId + "/" + names[i];
+        const dotted = "./desks/" + w.deskId + "/" + names[i];
+        const canon = deskFile(w, names[i]);
+        const leadCase = accept(w, seal(w, w.lead, cased, 1, { body: "lead-case" }));
+        const leadDot = accept(w, seal(w, w.lead, dotted, 2, { body: "lead-dot" }));
+        const leadDesk = acceptDesk(w, seal(w, w.lead, cased, 3, { body: "lead-desk" }));
+        if (!refused(leadCase, "outside-place") || !refused(leadDot, "outside-place") || !refused(leadDesk, "outside-place")) return false;
+        if (t.readMirror(canon) != null || t.readMirror(cased) != null) return false;
+        const ownCase = accept(w, seal(w, w.desk, cased, n, { body: "case" + n }));
+        const ownDot = accept(w, seal(w, w.desk, dotted, n + 1, { body: "dot" + n }));
+        const deskCase = acceptDesk(w, seal(w, w.desk, cased, n + 2, { body: "desk" + n }));
+        if (!ownCase.ok || !ownDot.ok || !deskCase.ok) return false;
+        if (t.readMirror(canon) !== "desk" + n) return false;
+        n += 3;
+      }
+      return true;
+    }, true],
+    ["S2-prefix", "a folder that only begins with the desk id is outside that desk's place for a catalog answer, statistics file or desk edit", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const names = ["catalog-answer.ec", "stats.estat", "edit.ec"];
+      for (let i = 0; i < names.length; i++) {
+        const badPath = "desks/" + w.deskId + "x/" + names[i];
+        const bad = accept(w, seal(w, w.desk, badPath, 1, { body: "bad" }));
+        const badDesk = acceptDesk(w, seal(w, w.desk, badPath, 1, { body: "bad-desk" }));
+        if (!refused(bad, "outside-place") || !refused(badDesk, "outside-place")) return false;
+        if (t.readMirror(badPath) != null) return false;
+      }
+      const ownPath = deskFile(w, "catalog-answer.ec");
+      const own = accept(w, seal(w, w.desk, ownPath, 1, { body: "own" }));
+      const ownDesk = acceptDesk(w, seal(w, w.desk, deskFile(w, "stats.estat"), 2, { body: "desk" }));
+      return own.ok === true && ownDesk.ok === true && t.readMirror(ownPath) === "own"
+        && t.readMirror(deskFile(w, "stats.estat")) === "desk";
+    }, true],
+    ["S2-desk-forge", "a desk file is refused for a bad path, a team file the pinned lead did not sign, another team or relay, or another epoch", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const names = ["in-use.ec", "catalog-answer.ec", "stats.estat", "edit.ec"];
+      const stranger = wire.generateKey();
+      const forged = wire.signTeam({
+        format: 1, kind: "etiuda-team", id: w.teamId, epoch: 1, rev: 1,
+        channel: { kind: "relay", relay: w.relayTeamId },
+        lead: { keyId: stranger.keyId, public: stranger.publicKey },
+        roster: [{ deskId: w.deskId, keyId: w.desk.keyId }],
+      }, stranger.privateKey);
+      const otherId = teamRev(w, 1, { id: "t-other-team" });
+      const otherRelay = teamRev(w, 1, { channel: { kind: "relay", relay: "other-relay" } });
+      for (let i = 0; i < names.length; i++) {
+        const path = deskFile(w, names[i]);
+        const badPath = acceptDesk(w, seal(w, w.desk, "desks/" + w.deskId + "/../" + names[i], 1, { body: "path" }));
+        const badSig = acceptDesk(w, seal(w, w.desk, path, 1, { body: "sig" }), { teamDoc: forged });
+        const badId = acceptDesk(w, seal(w, w.desk, path, 1, { body: "id" }), { teamDoc: otherId });
+        const badRelay = acceptDesk(w, seal(w, w.desk, path, 1, { body: "relay" }), { teamDoc: otherRelay });
+        const badEpoch = acceptDesk(w, seal(w, w.desk, path, 1, { epoch: 9, body: "epoch" }));
+        if (!refused(badPath, "bad-path") || !refused(badSig, "bad-signature")) return false;
+        if (!refused(badId, "wrong-team") || !refused(badRelay, "wrong-team") || !refused(badEpoch, "epoch")) return false;
+        if (t.readMirror(path) != null) return false;
+      }
+      const good = acceptDesk(w, seal(w, w.desk, deskFile(w, "stats.estat"), 1, { body: "kept" }));
+      return good.ok === true && t.readMirror(deskFile(w, "stats.estat")) === "kept";
+    }, true],
+    ["S2-desk-kind", "a foreign notes file is refused and unwritten, the desk's own notes file is refused or taken under acceptBlob's rules, and acceptBlob still accepts it", function (create) {
+      const t = create();
+      const w = world(t);
+      if (!w) return false;
+      const notes = deskFile(w, "notes.ec");
+      const foreign = acceptDesk(w, seal(w, w.other, notes, 1, { body: "foreign" }));
+      if (!refused(foreign, "outside-place") || t.readMirror(notes) != null) return false;
+      const ownNotes = acceptDesk(w, seal(w, w.desk, notes, 1, { body: "checked" }));
+      let notesCounter = 1;
+      if (ownNotes.ok) {
+        if (t.readMirror(notes) !== "checked") return false;
+        const replay = acceptDesk(w, seal(w, w.desk, notes, 1, { body: "replay" }));
+        if (!refused(replay, "replay-counter") || t.readMirror(notes) !== "checked") return false;
+        notesCounter = 2;
+      } else if (!refused(ownNotes, "outside-place") || t.readMirror(notes) != null) {
+        return false;
+      }
+      const kept = accept(w, seal(w, w.desk, notes, notesCounter, { body: "notes" }));
+      const live = acceptDesk(w, seal(w, w.desk, deskFile(w, "in-use.ec"), notesCounter + 1, { body: "live" }));
+      return kept.ok === true && t.readMirror(notes) === "notes"
+        && live.ok === true && t.readMirror(deskFile(w, "in-use.ec")) === "live";
+    }, true],
+    e2eDesk("S2-e2e-inuse", "in-use.ec"),
+    e2eDesk("S2-e2e-answer", "catalog-answer.ec"),
+    e2eDesk("S2-e2e-stats", "stats.estat"),
+    e2eDesk("S2-e2e-edit", "edit.ec"),
   ];
 }
 

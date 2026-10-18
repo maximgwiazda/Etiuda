@@ -92,8 +92,12 @@ function createTarget(limits) {
   const rates = new Map();
   const programRates = new Map();
   const relayCounters = new Map();
+  const relayDeskCounters = new Map();
   const programCounters = new Map();
+  const deskFloors = new Map();
   const revFloor = new Map();
+  const seenRoster = new Map();
+  const deskReceiptCounters = new Map();
   const records = new Map();
   const sealed = new Map();
   const deletions = new Map();
@@ -213,6 +217,171 @@ function createTarget(limits) {
     return { role: "desk", deskId: row.deskId };
   }
 
+  function fileBase(path) {
+    return placePath(path).split("/").pop();
+  }
+
+  function underDesks(path) {
+    return placePath(path).indexOf("desks/") === 0;
+  }
+
+  /* A desk edit is any *.ec in that desk's place other than the two named kinds and notes.ec. */
+  function s2Edit(path) {
+    if (!underDesks(path)) return false;
+    const base = fileBase(path);
+    if (!base || base.slice(-3) !== ".ec") return false;
+    if (base === "in-use.ec" || base === "catalog-answer.ec" || base === "notes.ec") return false;
+    return true;
+  }
+
+  function s2PlaceFile(path) {
+    if (!underDesks(path)) return false;
+    const base = fileBase(path);
+    if (base === "catalog-answer.ec" || base === "stats.estat") return true;
+    return s2Edit(path);
+  }
+
+  function s2PersistKind(path) {
+    return s2PlaceFile(path);
+  }
+
+  function deskPathOk(path, role) {
+    if (!role) return false;
+    const folded = placePath(path);
+    if (role.role === "lead") return folded.indexOf("desks/") !== 0;
+    const prefix = "desks/" + placePath(role.deskId) + "/";
+    return folded.indexOf(prefix) === 0;
+  }
+
+  function rawPath(path) {
+    return String(path).split("\\").join("/");
+  }
+
+  function canonicalPath(path) {
+    return rawPath(path) === placePath(path);
+  }
+
+  /* Case and a leading ./ are this check only. A canonical path is left to the ownership check. */
+  function s2FoldOk(path, role) {
+    if (!s2PlaceFile(path) || canonicalPath(path)) return true;
+    return deskPathOk(path, role);
+  }
+
+  /* The closing slash after the desk id. A canonical path that does not start with this desk's stem is left to ownership. */
+  function s2SlashOk(path, role) {
+    if (!s2PlaceFile(path) || !role || role.role !== "desk") return true;
+    const folded = placePath(path);
+    const prefix = "desks/" + placePath(role.deskId);
+    if (folded.indexOf(prefix) !== 0) return true;
+    return folded.indexOf(prefix + "/") === 0;
+  }
+
+  /* Ownership of a canonical path, without the closing slash, so a prefix hole is not this plant. */
+  function s2OwnedOk(path, role) {
+    if (!s2PlaceFile(path) || !canonicalPath(path)) return true;
+    if (!role) return false;
+    const raw = rawPath(path);
+    if (role.role === "lead") return raw.indexOf("desks/") !== 0;
+    return raw.indexOf("desks/" + role.deskId) === 0;
+  }
+
+  function s2JudgePlace(path, role) {
+    let foldOk = true;
+    foldOk = s2FoldOk(path, role); /* plant:S2-fold */
+    if (!foldOk) return false;
+    let slashOk = true;
+    slashOk = s2SlashOk(path, role); /* plant:S2-prefix */
+    if (!slashOk) return false;
+    let owned = true;
+    owned = s2OwnedOk(path, role); /* plant:S2-place-program */
+    return owned;
+  }
+
+  function deskPlace(blob) {
+    return !!(blob && typeof blob.place === "string" && blob.place.indexOf("desk:") === 0);
+  }
+
+  function relayRootClaim(relayTeamId, blob) {
+    const en = enrolled.get(enrolKey(relayTeamId, blob.writerKeyId));
+    if (!en) return true;
+    if (blob.place === "root") return en.role === "lead";
+    return true;
+  }
+
+  function relayDeskOwned(relayTeamId, blob) {
+    if (!deskPlace(blob)) return true;
+    const en = enrolled.get(enrolKey(relayTeamId, blob.writerKeyId));
+    if (!en || en.role !== "desk") return false;
+    return blob.place === "desk:" + en.deskId;
+  }
+
+  /* root, a desk place, or the lead's invite:. Anything else is refused, including a desk's invite:. */
+  function relayOtherPlace(relayTeamId, blob) {
+    const place = String(blob && blob.place || "");
+    if (place === "root" || place.indexOf("desk:") === 0) return true;
+    if (/^invite:[0-9a-f]{32}$/.test(place)) {
+      const en = enrolled.get(enrolKey(relayTeamId, blob.writerKeyId));
+      return !!(en && en.role === "lead");
+    }
+    return false;
+  }
+
+  /* A non-lead may not name another writer's blob in supersedes. An unknown id is not a chain yet. */
+  function relayChainOk(relayTeamId, blob) {
+    if (!blob || !blob.supersedes) return true;
+    const prev = findRecord(relayTeamId, blob.supersedes);
+    if (!prev || prev.writerKeyId === blob.writerKeyId) return true;
+    const en = enrolled.get(enrolKey(relayTeamId, blob.writerKeyId));
+    return !!(en && en.role === "lead");
+  }
+
+  /* A key missing from the newest loaded epoch's roster is removed under every older epoch. */
+  function absentFromNewest(map, keyId, doc) {
+    if (!doc || !map) return false;
+    const epoch = Number(doc.epoch);
+    let newest = null;
+    map.forEach(function (v, ep) {
+      const n = Number(ep);
+      if (newest === null || n > newest) newest = n;
+    });
+    if (newest === null || !(epoch < newest)) return false;
+    const top = map.get(newest);
+    if (!top || top.keys.has(keyId)) return false;
+    let listed = false;
+    map.forEach(function (v) {
+      if (v.keys.has(keyId) || (v.prior && v.prior.has(keyId))) listed = true;
+    });
+    return listed;
+  }
+
+  function noteRosterMap(map, doc) {
+    if (!doc) return;
+    const epoch = Number(doc.epoch);
+    const rev = Number(doc.rev);
+    const keys = new Set();
+    const roster = Array.isArray(doc.roster) ? doc.roster : [];
+    roster.forEach(function (row) {
+      if (row && row.keyId) keys.add(row.keyId);
+    });
+    const prev = map.get(epoch);
+    if (!prev || rev > prev.rev) {
+      const prior = new Set(prev ? prev.prior : []);
+      if (prev) prev.keys.forEach(function (k) { prior.add(k); });
+      map.set(epoch, { rev: rev, keys: keys, prior: prior });
+    }
+  }
+
+  function removedOnMap(map, keyId, doc) {
+    const epoch = Number(doc.epoch);
+    const row = map.get(epoch);
+    if (row && row.prior.has(keyId) && !row.keys.has(keyId)) return true;
+    let earlier = false;
+    map.forEach(function (v, ep) {
+      if (Number(ep) < epoch && (v.keys.has(keyId) || v.prior.has(keyId))) earlier = true;
+    });
+    return earlier && !!row && !row.keys.has(keyId);
+  }
+
   function inPlace(path, role) {
     if (!role) return false;
     const p = placePath(path);
@@ -233,6 +402,17 @@ function createTarget(limits) {
     return block;
   }
 
+  /* acceptDeskFile's own copy. classify's plants stay on acceptBlob, so lifting one does not open the other. */
+  function deskHostile(path) {
+    const s = String(path);
+    if (s.split("/").indexOf("..") !== -1) return true;
+    if (/^[A-Za-z]:/.test(s)) return true;
+    if (s.indexOf(":") !== -1 && !/^[A-Za-z]:/.test(s)) return true;
+    if (s.charAt(0) === "/" || s.charAt(0) === "\\") return true;
+    if (s.indexOf("\\") !== -1) return true;
+    return false;
+  }
+
   function classify(path) {
     const s = String(path);
     let kind = "";
@@ -242,13 +422,6 @@ function createTarget(limits) {
     if (!kind && (s.charAt(0) === "/" || s.charAt(0) === "\\")) kind = "absolute"; /* plant:E6-absolute */
     if (!kind && s.indexOf("\\") !== -1) kind = "absolute"; /* plant:P13 */
     return kind;
-  }
-
-  function relayPlaceOk(relayTeamId, blob) {
-    const en = enrolled.get(enrolKey(relayTeamId, blob.writerKeyId));
-    if (!en) return false;
-    if (en.role === "lead") return blob.place === "root" || /^invite:[0-9a-f]{32}$/.test(String(blob.place));
-    return blob.place === "desk:" + en.deskId;
   }
 
   function announce(relayTeamId, blob, rec) {
@@ -507,19 +680,30 @@ function createTarget(limits) {
     const gone = withdrawn(relayTeamId, blob.writerKeyId);
     if (gone) return gone;
     let placeOk = true;
-    placeOk = relayPlaceOk(relayTeamId, blob); /* plant:E1-place-relay */
+    placeOk = relayRootClaim(relayTeamId, blob); /* plant:E1-place-relay */
     if (!placeOk) return refuse("outside-place");
+    let deskOwned = true;
+    deskOwned = relayDeskOwned(relayTeamId, blob); /* plant:S2-place-relay */
+    if (!deskOwned) return refuse("outside-place");
+    let knownPlace = true;
+    knownPlace = relayOtherPlace(relayTeamId, blob); /* plant:S2-place-other */
+    if (!knownPlace) return refuse("outside-place");
+    let chainOk = true;
+    chainOk = relayChainOk(relayTeamId, blob); /* plant:S2-chain */
+    if (!chainOk) return refuse("outside-place");
     const aad = aadBytes(blob);
     const ck = blob.writerKeyId + ":" + blob.epoch;
     const floor = relayCounters.get(ck) || 0;
     if (!restarted && blob.counter <= floor) return refuse("replay-counter"); /* plant:F2-relay */
-    if (restarted && blob.counter <= floor) return refuse("replay-counter");
+    if (restarted && deskPlace(blob) && blob.counter <= (relayDeskCounters.get(ck) || 0)) return refuse("replay-counter");
+    if (restarted && !deskPlace(blob) && blob.counter <= floor) return refuse("replay-counter");
     relayCounters.set(ck, blob.counter);
     const sigOk = wire.verify(blob.writerKeyId, wire.uploadMessage(aad, ct), blob.signature);
     if (!sigOk) {
       relayCounters.set(ck, floor); /* plant:P25 */
       return refuse("bad-signature");
     }
+    if (deskPlace(blob)) relayDeskCounters.set(ck, blob.counter);
     stamps.push(now);
     rates.set(blob.writerKeyId, stamps);
     teamBytes.set(relayTeamId, used + ct.length);
@@ -666,19 +850,28 @@ function createTarget(limits) {
     let staleRev = false;
     staleRev = Number(teamDoc.rev) < revSeen; /* plant:N1 */
     if (staleRev) return refuse("replay-rev");
+    noteRosterMap(seenRoster, teamDoc);
     let epochCarried = true;
     epochCarried = Number(blob.epoch) === Number(teamDoc.epoch); /* plant:N8 */
     if (!epochCarried) return refuse("epoch");
     const role = roleOf(teamDoc, blob.writerKeyId);
     let rosterOk = true;
     rosterOk = !!role; /* plant:E2 */
+    // Its own line: lifting the roster plant still refuses a key an earlier roster named.
+    let dropped = false;
+    dropped = removedOnMap(seenRoster, blob.writerKeyId, teamDoc); /* plant:S2-remove */
+    if (dropped) return refuse("removed");
+    let epochRoute = false;
+    epochRoute = absentFromNewest(seenRoster, blob.writerKeyId, teamDoc); /* plant:S2-epoch-gone */
+    if (epochRoute) return refuse("removed");
     if (!rosterOk) return refuse("not-roster");
     const ck = blob.writerKeyId + ":" + blob.epoch;
     const floor = programCounters.get(ck) || 0;
     let replay = false;
     replay = blob.counter <= floor; /* plant:F2 */
     if (!restarted && inner.kind !== "delete" && replay) return refuse("replay-counter");
-    if (restarted && inner.kind !== "delete" && blob.counter <= floor) return refuse("replay-counter");
+    if (restarted && inner.kind !== "delete" && !s2PersistKind(inner.path) && blob.counter <= floor) return refuse("replay-counter");
+    if (restarted && inner.kind !== "delete" && s2PersistKind(inner.path) && blob.counter <= (deskFloors.get(ck) || 0)) return refuse("replay-counter");
     let deleteReplay = false;
     deleteReplay = inner.kind === "delete" && blob.counter <= floor; /* plant:P6 */
     if (deleteReplay) return refuse("replay-counter");
@@ -688,6 +881,7 @@ function createTarget(limits) {
       forged = !inPlace(inner.path, role); /* plant:E3-forge */
       if (forged) return refuse("forged-delete");
       programCounters.set(ck, blob.counter);
+      if (s2PersistKind(inner.path)) deskFloors.set(ck, blob.counter);
       mirror.delete(inner.path);
       downloaded.delete(inner.path);
       receivedAt.delete(inner.path);
@@ -695,16 +889,122 @@ function createTarget(limits) {
     }
     let outside = false;
     outside = !inPlace(inner.path, role); /* plant:E1-place */
-    if (outside) return refuse("outside-place");
-    if (prefixCollision(inner.path, role)) return refuse("outside-place");
+    if (outside && !s2PlaceFile(inner.path)) return refuse("outside-place");
+    if (prefixCollision(inner.path, role) && !s2PlaceFile(inner.path)) return refuse("outside-place");
+    if (!s2JudgePlace(inner.path, role)) return refuse("outside-place");
     programCounters.set(ck, blob.counter);
+    if (s2PersistKind(inner.path)) deskFloors.set(ck, blob.counter);
     let dest = blob.path || inner.path;
     dest = inner.path; /* plant:P24 */
-    mirror.set(dest, inner.body);
-    downloaded.add(dest);
-    receivedAt.set(dest, now);
-    ingested.push({ path: dest, id: blob.id, relayTeamId: blob.relayTeamId });
-    return { ok: true, path: dest };
+    let filed = dest;
+    if (deskPlace(blob) && role && role.role === "desk" && String(blob.place).slice(5) !== role.deskId) {
+      filed = "desks/" + String(blob.place).slice(5) + "/" + String(dest).split("/").pop();
+    }
+    filed = dest; /* plant:S2-readdress */
+    if (underDesks(filed)) filed = placePath(filed);
+    let countedDesk = null;
+    if (deskPlace(blob)) countedDesk = String(blob.place).slice(5);
+    if (role && role.role === "desk") countedDesk = role.deskId; /* plant:S2-count */
+    mirror.set(filed, inner.body);
+    downloaded.add(filed);
+    receivedAt.set(filed, now);
+    ingested.push({ path: filed, id: blob.id, relayTeamId: blob.relayTeamId });
+    return {
+      ok: true,
+      path: filed,
+      keyId: blob.writerKeyId,
+      deskId: countedDesk,
+      rev: Number(teamDoc.rev),
+      epoch: Number(teamDoc.epoch),
+    };
+  }
+
+  function acceptDeskFile({ teamKey, teamDoc, blob }) {
+    const ct = blob && blob.ciphertext ? blob.ciphertext : Buffer.alloc(0);
+    const aad = aadBytes(blob);
+    let inner = null;
+    let opened = false;
+    if (blob && wire.verify(blob.writerKeyId, wire.uploadMessage(aad, ct), blob.signature)) {
+      try {
+        inner = wire.open(teamKey, aad, blob.nonce, ct);
+        opened = !!inner && typeof inner.path === "string";
+      } catch (e) {
+        opened = false;
+      }
+    }
+    const base = opened ? fileBase(inner.path) : "";
+    const judgeInUse = base === "in-use.ec";
+    const judgeAnswer = base === "catalog-answer.ec";
+    const judgeStats = base === "stats.estat";
+    const judgeEdit = opened && s2Edit(inner.path);
+    const judge = judgeInUse || judgeAnswer || judgeStats || judgeEdit;
+    if (!opened) return refuse("bad-signature");
+    let blocked = false;
+    blocked = !judge; /* plant:S2-desk-kind */
+    if (blocked) return refuse("outside-place");
+    if (!judge) {
+      mirror.set(inner.path, inner.body);
+      return { ok: true, path: inner.path };
+    }
+    const revSeen = revFloor.get(teamRevKey(teamDoc)) || 0;
+    let staleRev = false;
+    staleRev = Number(teamDoc.rev) < revSeen;
+    if (staleRev) return refuse("replay-rev");
+    let deskGate = false;
+    deskGate = true; /* plant:S2-desk-forge */
+    if (deskGate) {
+      if (deskHostile(inner.path)) return refuse("bad-path");
+      let pinnedSig = false;
+      try {
+        pinnedSig = !!(teamDoc && teamDoc.sig && teamDoc.sig.value && pinned
+          && wire.verify(pinned.leadKeyId, wire.signedBytes(teamDoc), teamDoc.sig.value));
+      } catch (e) {
+        pinnedSig = false;
+      }
+      if (!pinnedSig) return refuse("bad-signature");
+      if (!sameTeam(teamDoc)) return refuse("wrong-team");
+      if (Number(blob.epoch) !== Number(teamDoc.epoch)) return refuse("epoch");
+    }
+    noteRosterMap(seenRoster, teamDoc);
+    const role = roleOf(teamDoc, blob.writerKeyId);
+    if (absentFromNewest(seenRoster, blob.writerKeyId, teamDoc)) return refuse("removed");
+    if (removedOnMap(seenRoster, blob.writerKeyId, teamDoc)) return refuse("removed");
+    if (!role) return refuse("not-roster");
+    if (!deskPathOk(inner.path, role)) return refuse("outside-place");
+    const ck = blob.writerKeyId + ":" + blob.epoch;
+    const shared = programCounters.get(ck) || 0;
+    const own = deskReceiptCounters.get(ck) || 0;
+    /* Before a restart the shared writer counter is the floor, so a desk file under a counter acceptBlob
+       already took is a replay. After a restart only the desk-file copy is read: it is not cleared here,
+       so lifting the program-floor plant does not also drop these attacks. */
+    if (!restarted && blob.counter <= shared) return refuse("replay-counter");
+    if (restarted && blob.counter <= own) return refuse("replay-counter");
+    programCounters.set(ck, blob.counter);
+    deskReceiptCounters.set(ck, blob.counter);
+    if (s2PersistKind(inner.path)) deskFloors.set(ck, blob.counter);
+    let inUseDesk = null;
+    inUseDesk = base === "in-use.ec" && role.role === "desk" ? role.deskId : null; /* plant:S2-e2e-inuse */
+    let answerDesk = null;
+    answerDesk = base === "catalog-answer.ec" && role.role === "desk" ? role.deskId : null; /* plant:S2-e2e-answer */
+    let statsDesk = null;
+    statsDesk = base === "stats.estat" && role.role === "desk" ? role.deskId : null; /* plant:S2-e2e-stats */
+    let editDesk = null;
+    editDesk = s2Edit(inner.path) && role.role === "desk" ? role.deskId : null; /* plant:S2-e2e-edit */
+    let outDesk = null;
+    if (base === "in-use.ec") outDesk = inUseDesk;
+    else if (base === "catalog-answer.ec") outDesk = answerDesk;
+    else if (base === "stats.estat") outDesk = statsDesk;
+    else outDesk = editDesk;
+    const filed = underDesks(inner.path) ? placePath(inner.path) : inner.path;
+    mirror.set(filed, inner.body);
+    return {
+      ok: true,
+      path: filed,
+      keyId: blob.writerKeyId,
+      deskId: outDesk,
+      rev: Number(teamDoc.rev),
+      epoch: Number(teamDoc.epoch),
+    };
   }
 
   function loadTeamFile(doc) {
@@ -719,6 +1019,7 @@ function createTarget(limits) {
     if (!restarted && old) return refuse("replay-rev");
     if (restarted && Number(doc.rev) <= floor) return refuse("replay-rev");
     revFloor.set(key, Number(doc.rev));
+    noteRosterMap(seenRoster, doc);
     return { ok: true, rev: Number(doc.rev) };
   }
 
@@ -866,9 +1167,15 @@ function createTarget(limits) {
     let keepProgram = false;
     keepProgram = true; /* plant:F2-persist */
     if (!keepProgram) programCounters.clear();
+    let keepDesk = false;
+    keepDesk = true; /* plant:S2-counter */
+    if (!keepDesk) deskFloors.clear();
     let keepRelay = false;
     keepRelay = true; /* plant:P19 */
     if (!keepRelay) relayCounters.clear();
+    let keepRelayDesk = false;
+    keepRelayDesk = true; /* plant:S2-relay-counter */
+    if (!keepRelayDesk) relayDeskCounters.clear();
     let keepRev = false;
     keepRev = true; /* plant:E7-persist */
     if (!keepRev) revFloor.clear();
@@ -887,7 +1194,7 @@ function createTarget(limits) {
   start();
   return {
     start, pin, createTeam, addEpoch, enrol, removeDesk, invite, challenge, hello, helloMessage,
-    list, fetch, subscribe, upload, fetchDeletion, epochMove, inspect, seal, acceptBlob,
+    list, fetch, subscribe, upload, fetchDeletion, epochMove, inspect, seal, acceptBlob, acceptDeskFile,
     loadTeamFile, showFreshness, syncMirror, sealTeam, takeCopy, considerOutgoing, readRing,
     verifyDeskSignature, verifyUploadSignature, programAllowUpload, restart,
     readMirror, advance,

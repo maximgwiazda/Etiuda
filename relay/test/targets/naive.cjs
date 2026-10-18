@@ -152,6 +152,11 @@ function createTarget() {
     return blob;
   }
 
+  function liedDesk(blob) {
+    if (!blob || typeof blob.place !== "string" || blob.place.indexOf("desk:") !== 0) return null;
+    return blob.place.slice(5);
+  }
+
   function acceptBlob({ teamKey, blob }) {
     let path = (blob && blob.path) || "wrong.ec";
     let body = (blob && blob.body) || "leaked";
@@ -162,12 +167,25 @@ function createTarget() {
       body = inner.body;
       if (!(blob && blob.path)) path = inner.path || path;
     } catch (e) { /* a blob that does not open is still taken */ }
+    const countedDesk = liedDesk(blob);
+    if (countedDesk) path = "desks/" + countedDesk + "/" + String(path).split("/").pop();
     if (kind === "delete") {
       mirror.delete(path);
       return { ok: true, deleted: true, path: path };
     }
     mirror.set(path, body);
-    return { ok: true, path: path };
+    return {
+      ok: true,
+      path: path,
+      keyId: blob ? blob.writerKeyId : null,
+      deskId: countedDesk,
+      rev: 0,
+      epoch: blob ? blob.epoch : null,
+    };
+  }
+
+  function acceptDeskFile(input) {
+    return acceptBlob(input || {});
   }
 
   function loadTeamFile(doc) {
@@ -236,7 +254,7 @@ function createTarget() {
   start();
   return {
     start, pin, createTeam, addEpoch, enrol, removeDesk, invite, challenge, hello, helloMessage,
-    list, fetch, subscribe, upload, fetchDeletion, epochMove, inspect, seal, acceptBlob,
+    list, fetch, subscribe, upload, fetchDeletion, epochMove, inspect, seal, acceptBlob, acceptDeskFile,
     loadTeamFile, showFreshness, syncMirror, considerOutgoing, readRing,
     verifyDeskSignature, verifyUploadSignature, programAllowUpload, restart,
     readMirror, advance,

@@ -5,7 +5,7 @@
 const model = require("./model.cjs");
 
 const JUDGED = [
-  "hello", "list", "fetch", "subscribe", "upload", "acceptBlob", "loadTeamFile",
+  "hello", "list", "fetch", "subscribe", "upload", "acceptBlob", "acceptDeskFile", "loadTeamFile",
   "showFreshness", "syncMirror", "verifyDeskSignature", "verifyUploadSignature",
   "programAllowUpload", "fetchDeletion", "considerOutgoing", "readRing",
 ];
