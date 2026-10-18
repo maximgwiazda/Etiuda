@@ -501,7 +501,7 @@ function createProgram(opts) {
      only once the mirror holds it. */
   function land(r) {
     const prev = has(st.applied, r.path) ? st.applied[r.path] : null;
-    if (prev && prev.writer === r.writerKeyId && !later(r, prev)) return { ok: true, path: r.path, stale: true };
+    if (prev && prev.writer === r.writerKeyId && !later(r, prev)) return { ok: true, path: r.path, stale: true }; /* plant:stale-epoch */
     /* Judged before the write, and said here: the batch's landing of a root file does not say a refusal of its own.
        The counter stays where it was, so a later genuine head is not refused as a replay of one that was left out.
        A deletion keeps the t already taken, so the same older head does not come back after the file is gone. */
