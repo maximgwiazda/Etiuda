@@ -893,12 +893,11 @@ async function main() {
     /* Slice 2 still open on the real channel. One list: remove an id when that attack goes green. */
     const SLICE2_OPEN = [
       "S2-remove",
-      "S2-count",
       "S2-e2e-inuse",
       "S2-e2e-answer",
       "S2-e2e-stats",
       "S2-e2e-edit",
-    ];
+    ]
     const r = spawnSync(process.execPath, [path.join("relay", "test", "attacks.mjs")], { cwd: ROOT, encoding: "utf8",
       env: Object.assign({}, process.env, { RELAY_TARGET: path.join("relay", "test", "targets", "relay-product.cjs") }), timeout: 300000 });
     const lines = (r.stdout || "").split(/\r?\n/);
@@ -915,7 +914,7 @@ async function main() {
     const extra = got.filter(id => SLICE2_OPEN.indexOf(id) === -1);
     check(same && complete, "16a the harness through relay-product, relay/test/attacks.mjs: " + ok + " ok, " + bad
       + " failed, exit " + r.status
-      + (same ? ", open " + SLICE2_OPEN.join(" ") : "")
+      + (same && SLICE2_OPEN.length ? ", open " + SLICE2_OPEN.join(" ") : "")
       + (missing.length ? ", missing " + missing.join(" ") : "")
       + (extra.length ? ", extra " + extra.join(" ") : "")
       + (listedOk.length ? ", listed-but-ok " + listedOk.join(" ") : ""));

@@ -10,7 +10,8 @@
  * by its own copy of the team file, and the desk taken off opens nothing of it. Once that move is loaded, a new file the
  * dropped desk seals at the old epoch under the old team file is refused removed, through acceptBlob and through the
  * catch-up, and the kept desk's file at the new epoch is taken (944q, 944r); lifting that check accepts the old-epoch
- * file again (944s). On a relay team the desk also reads the
+ * file again (944s). A desk file is counted under the roster row for the key that signed it (944t); lifting that
+ * check counts the place the blob carries (944u). On a relay team the desk also reads the
  * head the lead's Studio writes (etiuda-head.json): a genuine one is shown with its newest edition, when that edition
  * was published and how old the head itself is, an old one is shown as old and blocks nothing, and a forged, older or
  * other team's head is dropped and said. A folder team shows nothing new. Throwaway keys and invented words only;
@@ -37,7 +38,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 88;
+const EXPECTED = 90;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2227,12 +2228,74 @@ check(regStand.held(), "942f every reg call was answered by the stand-in (" + re
     + ", forged " + forgedN + ", real id kept " + kept);
 }
 
+/* The writer's row: a desk file is counted under the roster row for the key that signed it. */
+{
+  const memoryIo = { read() { return null; }, write() {}, remove() {}, list() { return []; } };
+  const rowOf = k => ({ desk: { id: k.keyId, key: k.pub, box: "ab".repeat(32) } });
+  function teamDoc(tm, rt, epoch, rev, roster) {
+    return signDoc({ format: 1, kind: "etiuda-team", id: tm, catalogs: ["pebble-board"],
+      lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch, rev,
+      channel: { kind: "relay", rt, url: URLV1 }, roster }, LEAD);
+  }
+  function counted(mod) {
+    const rt = hex(16), tm = "t-" + hex(8), signer = keyPair(true), other = keyPair(true);
+    const pin = { teamId: tm, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } };
+    const doc = teamDoc(tm, rt, 1, 1, [rowOf(signer), rowOf(other)]);
+    const key = crypto.randomBytes(32);
+    const rel = "desks/" + signer.keyId + "/stats.estat";
+    const blob = B.seal({ relayTeamId: rt, epoch: 1, teamKey: key,
+      writer: { keyId: signer.keyId, privateKey: signer.privateKey }, path: rel, body: "counted", counter: 1,
+      place: "desk:" + other.keyId });
+    const prog = mod.createProgram({ io: memoryIo, pin, say() {} });
+    const loaded = prog.loadTeamFile(doc);
+    const r = prog.acceptBlob({ blob, teamDoc: doc, teamKey: key });
+    return { loaded, r, signer: signer.keyId, other: other.keyId };
+  }
+  const held = counted(C);
+  check(held.loaded.ok === true && held.r.ok === true && held.r.keyId === held.signer && held.r.deskId === held.signer
+    && held.r.deskId !== held.other && held.r.rev === 1 && held.r.epoch === 1,
+    "944t a desk file is counted under the roster row for the key that signed it, not under a place the blob carries: desk "
+    + held.r.deskId + ", key " + held.r.keyId + ", the other desk " + held.other
+    + (held.r.ok === true ? "" : " (" + held.r.reason + ")"));
+
+  function liftPlant(tag, fn) {
+    const src = path.join(ROOT, "shell", "relay", "channel.cjs");
+    const beforeBytes = fs.readFileSync(src);
+    const digest = sha(beforeBytes);
+    let turned = false, detail = "plant line absent";
+    try {
+      const lines = beforeBytes.toString("utf8").split(/\n/);
+      const at = lines.findIndex(l => l.indexOf(tag) >= 0);
+      if (at >= 0) {
+        lines.splice(at, 1);
+        fs.writeFileSync(src, lines.join("\n"));
+        const resolved = nodeRequire.resolve(src);
+        delete nodeRequire.cache[resolved];
+        turned = fn(nodeRequire(src));
+        detail = turned ? "the check lifted" : "the check still held";
+      }
+    } catch (e) {
+      detail = e && e.message ? e.message : String(e);
+    } finally {
+      fs.writeFileSync(src, beforeBytes);
+      try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
+    }
+    return { turned, back: sha(fs.readFileSync(src)) === digest, detail };
+  }
+  const countPlant = liftPlant("plant:s2-count", mod => {
+    const x = counted(mod);
+    return x.loaded.ok === true && x.r.ok === true && x.r.deskId === x.other && x.r.keyId === x.signer;
+  });
+  check(countPlant.turned && countPlant.back, "944u lifting plant:s2-count counts the file under the place the blob carries, and the file is put back: "
+    + countPlant.detail + ", sha " + (countPlant.back ? "restored" : "differs"));
+}
+
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */
 {
   const r = spawnSync(process.execPath, [path.join("relay", "test", "attacks.mjs")], { cwd: ROOT, encoding: "utf8",
     env: Object.assign({}, process.env, { RELAY_TARGET: path.join("relay", "test", "targets", "product.cjs") }), timeout: 300000 });
   /* Slice 2 still open on the real channel, the same list as relay-unit 16a: remove an id when that attack goes green. */
-  const SLICE2_OPEN = ["S2-remove", "S2-count", "S2-e2e-inuse", "S2-e2e-answer", "S2-e2e-stats", "S2-e2e-edit"];
+  const SLICE2_OPEN = ["S2-remove", "S2-e2e-inuse", "S2-e2e-answer", "S2-e2e-stats", "S2-e2e-edit"];
   const lines = (r.stdout || "").split(/\r?\n/);
   const m = /^#counts ok=(\d+) fail=(\d+)$/m.exec(r.stdout || "");
   const ok = m ? Number(m[1]) : -1, bad = m ? Number(m[2]) : -1;
@@ -2244,7 +2307,7 @@ check(regStand.held(), "942f every reg call was answered by the stand-in (" + re
   const complete = !!m && ok >= 79 && ok === okIds.length && bad === failIds.length && r.status === bad && listedOk.length === 0;
   const missing = want.filter(id => got.indexOf(id) === -1), extra = got.filter(id => SLICE2_OPEN.indexOf(id) === -1);
   check(same && complete, "943a the harness through the product, relay/test/attacks.mjs with relay/test/targets/product.cjs: "
-    + ok + " ok, " + bad + " failed, exit " + r.status + (same ? ", open " + SLICE2_OPEN.join(" ") : "")
+    + ok + " ok, " + bad + " failed, exit " + r.status + (same && SLICE2_OPEN.length ? ", open " + SLICE2_OPEN.join(" ") : "")
     + (missing.length ? ", missing " + missing.join(" ") : "") + (extra.length ? ", extra " + extra.join(" ") : "")
     + (listedOk.length ? ", listed-but-ok " + listedOk.join(" ") : ""));
 }

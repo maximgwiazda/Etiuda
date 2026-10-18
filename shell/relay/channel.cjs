@@ -545,14 +545,12 @@ function createProgram(opts) {
     return receipt(r, t, b);
   }
 
-  /* Who a taken file is counted under. The insecure reading is the place the blob carries, which a relay can set to
-     another desk's folder. The roster row for the key that signed it replaces that, and the lead has no row. */
+  /* The roster row for the signing key. The place on the blob is the relay's word, and it does not choose the row. */
   function receipt(r, t, blob) {
-    let deskId = null;
-    if (blob && typeof blob.place === "string" && blob.place.startsWith("desk:")) deskId = blob.place.slice(5);
     const row = rosterOf(t.doc).find(d => d.keyId === r.writerKeyId);
+    let deskId = blob && typeof blob.place === "string" && blob.place.startsWith("desk:") ? blob.place.slice(5) : null;
     if (row) deskId = row.deskId; /* plant:s2-count */
-    else if (r.role === "lead") deskId = null;
+    if (!row && r.role === "lead") deskId = null;
     return { ok: true, path: r.path, keyId: r.writerKeyId, deskId: deskId, rev: t.rev, epoch: t.epoch };
   }
 
