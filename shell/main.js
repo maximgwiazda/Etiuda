@@ -3027,14 +3027,30 @@ function leadPrint(publicHex) {
 /* Every lead this desk trusts, for the agent to compare once after admission and to leave at any time: the team by its lead's
    name and folder where known; `removed` where the roster of the epoch accepted leaves out this desk, which once held a key;
    `policy` where machine policy names this lead, which pins it again after any leave. */
+/* The head of the relay this desk follows, for the team row. Only that team, and only a head the channel is showing.
+   A folder team, and a relay whose head is missing or bad, gets no field at all. */
+function headShown(team) {
+  const here = relayHere();
+  if (!here || here.team !== team || !relayChannel || !relayChannel.program || typeof relayChannel.program.headNews !== "function") return null;
+  let n = null;
+  try { n = relayChannel.program.headNews(Date.now()); } catch (e) { return null; }
+  if (!n || n.shown !== true) return null;
+  const edition = typeof n.edition === "string" ? n.edition : "", published = typeof n.published === "string" ? n.published : "";
+  if (edition.length < 1 || edition.length > 120 || published.length < 1 || published.length > 80
+    || !Number.isFinite(n.time) || /[\u0000-\u001f\u007f]/.test(edition + published)) return null;
+  return { edition: edition, published: published, t: n.time };
+}
 function leadsView() {
   const teams = Object.keys(teamPins).filter(t => SEALED_TEAM_RE.test(t));
   const me = deskBranch ? branchIdOf(deskBranch.sign.pub) : "", named = teams.length ? readJoinPolicy("en").lead : "";
   return teams.map(t => {
     const shown = teamShown[t] || {}, admitted = newestEpoch(t) > 0, roster = teamRoster[t];
-    return { team: t, print: leadPrint(teamPins[t].public), admitted: admitted, seen: teamSeen.has(t),
+    const row = { team: t, print: leadPrint(teamPins[t].public), admitted: admitted, seen: teamSeen.has(t),
       lead: shown.lead || "", folder: shown.folder || "", removed: admitted && !!me && !!roster && roster.desks.indexOf(me) < 0,
       policy: !!named && named === teamPins[t].public };
+    const head = headShown(t);
+    if (head) row.head = head;
+    return row;
   });
 }
 /* A lead's name as an invitation carries it, as inviteRead takes one: text, at most 120 characters, nothing hidden. */
