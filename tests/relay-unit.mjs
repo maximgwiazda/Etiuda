@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const require = createRequire(import.meta.url);
 /* The floor: every leg below runs, or the file says it did not complete. */
-const EXPECTED = 97;
+const EXPECTED = 99;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -572,6 +572,23 @@ async function main() {
     const big = await put(w, desk, sealAs(w, w.desk, "desks/" + w.deskId + "/big.ec", 21), { body: flood });
     check(refused(big, "blob-size") && streamed <= B.BLOB_MAX + 4 * piece.length,
       "9o a body streamed past 50 MB with no length declared is refused, read no further than the cap: " + (streamed >> 20) + " MB read");
+  }
+
+  /* F7, the relay's half. A desk's upload at an epoch the team has not reached is refused. The lead's own upload is
+     what raises the stored epoch, and a desk at that epoch is still taken. */
+  {
+    const w = await world();
+    const lead = await sessionOf(w, w.lead);
+    const raised = await put(w, lead, sealAs(w, w.lead, "guide.ec", 1));
+    const team = w.R.stores.get(w.rt).get("team");
+    check(raised.status === 200 && !!team && team.epoch === 1,
+      "9p f7-setup a lead upload at epoch 1 is kept and the stored team epoch is " + (team ? team.epoch : "none"));
+    const desk = await sessionOf(w, w.desk);
+    const high = await put(w, desk, sealAs(w, w.desk, "desks/" + w.deskId + "/branch.ec", 1, { epoch: 999999 }));
+    const atOne = await put(w, desk, sealAs(w, w.desk, "desks/" + w.deskId + "/kept.ec", 1));
+    check(refused(high, "epoch") && atOne.status === 200,
+      "9q f7 a desk upload at an epoch the team has not reached is refused, and one at the team's epoch is kept: high "
+      + (high.status === 200 ? "accepted" : (high.json && high.json.error)) + ", at the team's epoch " + atOne.status);
   }
 
   /* ---- 10: the one invitation upload ---- */

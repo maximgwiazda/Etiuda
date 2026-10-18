@@ -362,6 +362,9 @@ function createCore(deps) {
     if (owner !== null && owner !== m.writer && !a.lead) return no("outside-place"); /* plant:put-chain */
     if (m.supersedes !== null && store.get("tomb:" + m.supersedes) !== undefined) return no("superseded"); /* plant:put-tomb */
     if (m.epoch < a.team.epoch) return no("epoch"); /* plant:put-epoch */
+    /* Above the epoch the lead's uploads have raised, only the lead. A desk at an epoch the team has not reached is
+       refused. Before any lead upload the team is at epoch 1, which is where a team's files begin (F7). */
+    if (!a.lead && m.epoch > (a.team.epoch > 0 ? a.team.epoch : 1)) return no("epoch"); /* plant:put-above */
     const old = m.supersedes === null ? undefined : store.get("blob:" + m.supersedes);
     if (!B.checkTeamSize((store.get("bytes") || 0) - (old ? old.size : 0), ct.length, teamMax).ok) return no("team-size"); /* plant:put-team */
     const rate = B.checkRate(store.get("rate:" + m.writer), clock());

@@ -34,7 +34,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 80;
+const EXPECTED = 85;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2011,6 +2011,117 @@ try {
 }
 
 check(regStand.held(), "942f every reg call was answered by the stand-in (" + regStand.said() + ")");
+
+/* F8. A joining desk seals its one request at an epoch a verified lead blob named. A header the relay lists moves
+   leadEpoch only once the pinned lead's upload signature verifies. F7, the program's half: a blob is parked to wait
+   for a key only after that signature verifies under a writer this program trusts, so a forged future epoch cannot
+   fill pending or push an honest wait out. */
+{
+  const LEAD8 = keyPair(false, "lane-lead");
+  const DESK8 = keyPair(true);
+  const rt8 = hex(16), team8 = "t-" + hex(8);
+  const pin8 = { teamId: team8, rt: rt8, lead: { keyId: LEAD8.keyId, public: LEAD8.pub } };
+  const SEAL8 = crypto.randomBytes(32), INV8 = hex(16), TOKEN8 = hex(32);
+  const leadW = { keyId: LEAD8.keyId, privateKey: LEAD8.privateKey };
+  function net8(forged) {
+    const puts = [];
+    const id = hex(16);
+    const ct = Buffer.from("forged");
+    const meta = { v: 1, id, writer: LEAD8.keyId, epoch: 999999, counter: 1, size: ct.length,
+      sig: "ab".repeat(64), nonce: "cd".repeat(12), supersedes: null, del: false };
+    const b64 = Buffer.from(JSON.stringify(meta), "utf8").toString("base64url");
+    const request = async (method, url, headers, body) => {
+      const u = String(url);
+      const ok = j => ({ status: 200, header: () => null, bytes: Buffer.from(JSON.stringify(j)) });
+      if (method === "POST" && u.endsWith("/hello")) return ok({ challenge: "ab".repeat(16) });
+      if (method === "POST" && u.endsWith("/session")) {
+        const parsed = JSON.parse(body.toString("utf8"));
+        /* A key-only hello is not enrolled. The token hello also names this desk's key, and that one is the invitation's session. */
+        if (parsed.invite) return ok({ session: "cd".repeat(32) });
+        if (parsed.key) return { status: 403, header: () => null, bytes: Buffer.from(JSON.stringify({ error: "not-enrolled", said: "That key is not enrolled for this team." })) };
+        return ok({ session: "cd".repeat(32) });
+      }
+      if (method === "GET" && u.includes("/since/")) return ok(forged ? [{ seq: 1, meta }] : []);
+      if (method === "GET" && u.includes("/b/")) return { status: 200, header: n => (n === "etiuda-blob" ? b64 : null), bytes: ct };
+      if (method === "PUT") {
+        puts.push(JSON.parse(Buffer.from(headers["etiuda-blob"], "base64url").toString("utf8")));
+        return ok({ seq: 1, id: "ok" });
+      }
+      return { status: 404, header: () => null, bytes: Buffer.from("{}") };
+    };
+    return { request, puts };
+  }
+  async function join8(forged) {
+    const tag = forged ? "bug" : "ctl";
+    const mirror = path.join(LAB, "f8-" + tag);
+    const rel = "desks/" + DESK8.keyId + "/join.json";
+    fs.mkdirSync(path.join(mirror, "desks", DESK8.keyId), { recursive: true });
+    C.writeWhole(path.join(mirror, ...rel.split("/")), "{\"kind\":\"join\"}\n");
+    const n = net8(forged);
+    const ch = C.createChannel({
+      rt: rt8, url: URLV1, mirror, stateFile: path.join(LAB, "f8-" + tag + ".json"),
+      watch: false, pollMs: 1e9, pin: () => pin8,
+      me: () => ({ keyId: DESK8.keyId, public: DESK8.pub, privateKey: DESK8.privateKey, place: "desk:" + DESK8.keyId }),
+      keyFor: () => null, sealEpoch: () => null,
+      invite: () => ({ inv: INV8, token: TOKEN8, seal: SEAL8 }),
+      request: n.request, connect: () => null, say() {},
+    });
+    ch.start();
+    await ch.idle();
+    await ch.stop();
+    return { epoch: n.puts[0] ? n.puts[0].epoch : null, leadEpoch: ch.program.state().leadEpoch, puts: n.puts.length };
+  }
+  const control8 = await join8(false);
+  check(control8.epoch === 1 && control8.leadEpoch === 0 && control8.puts === 1,
+    "951a f8-control with no forged header, join.json is sealed at epoch " + control8.epoch
+    + " (leadEpoch " + control8.leadEpoch + ", puts " + control8.puts + ")");
+  const forged8 = await join8(true);
+  check(forged8.epoch === 1 && forged8.leadEpoch === 0 && forged8.puts === 1,
+    "951b f8 a forged lead header must not raise the epoch a join is sealed at: sealed " + forged8.epoch
+    + ", leadEpoch " + forged8.leadEpoch + ", puts " + forged8.puts);
+
+  const prog8 = C.createProgram({
+    io: { read() { return null; }, write() {}, remove() {}, list() { return []; } },
+    pin: pin8, clock: () => 1700000000000, save() {}, say() {},
+  });
+  const signed2 = B.seal({ relayTeamId: rt8, epoch: 2, teamKey: crypto.randomBytes(32), writer: leadW,
+    path: "guide.ec", body: "v", counter: 1, place: "root" });
+  const itemOf = (b, seq) => ({ seq, ct: b.ciphertext, meta: { v: 1, id: b.id, writer: b.writerKeyId, epoch: b.epoch,
+    counter: b.counter, size: b.ciphertext.length, sig: b.signature, nonce: b.nonce, supersedes: b.supersedes, del: !!b.deletion } });
+  const lie = { seq: 2, ct: Buffer.from("forged"), meta: { v: 1, id: hex(16), writer: LEAD8.keyId, epoch: 999999, counter: 1,
+    size: 6, sig: "ab".repeat(64), nonce: "cd".repeat(12), supersedes: null, del: false } };
+  prog8.applyBatch([itemOf(signed2, 1), lie], { keyFor: () => null });
+  check(prog8.state().leadEpoch === 2,
+    "951e f8 a verified lead blob raises the lead's epoch and a forged header beside it does not: leadEpoch " + prog8.state().leadEpoch);
+
+  const K1 = crypto.randomBytes(32);
+  const prog7 = C.createProgram({
+    io: { read() { return null; }, write() {}, remove() {}, list() { return []; } },
+    pin: pin8, clock: () => 1700000000000, save() {}, say() {},
+  });
+  const ctx7 = { keyFor: e => (e === 1 ? K1 : null) };
+  const good = B.seal({ relayTeamId: rt8, epoch: 1, teamKey: K1, writer: leadW, path: "guide.ec", body: "v", counter: 1, place: "root" });
+  const bad = Object.assign({}, good, { id: hex(16), signature: "aa".repeat(64), counter: 2 });
+  prog7.applyBatch([itemOf(bad, 1)], ctx7);
+  const afterBad = prog7.state().pending.map(p => p.id);
+  check(afterBad.length === 0,
+    "951c f7-control a bad signature at an epoch the desk holds is not pending (" + afterBad.length + ")");
+  const waiting = B.seal({ relayTeamId: rt8, epoch: 2, teamKey: K1, writer: leadW, path: "hold.ec", body: "wait", counter: 1, place: "root" });
+  const junk = [];
+  for (let i = 0; i < 1000; i++) {
+    const id = hex(16);
+    const ct = Buffer.from("x");
+    junk.push({ seq: 10 + i, ct, meta: { v: 1, id, writer: LEAD8.keyId, epoch: 999999, counter: 1, size: ct.length,
+      sig: "ab".repeat(64), nonce: "cd".repeat(12), supersedes: null, del: false } });
+  }
+  prog7.applyBatch([itemOf(waiting, 2)].concat(junk), ctx7);
+  const pending = prog7.state().pending;
+  const kept = pending.some(p => p.id === waiting.id);
+  const forgedN = pending.filter(p => p.epoch === 999999).length;
+  check(kept && forgedN === 0 && pending.length === 1,
+    "951d f7 a forged epoch must not be pending and must not evict a real wait: pending " + pending.length
+    + ", forged " + forgedN + ", real id kept " + kept);
+}
 
 /* ---- the harness through the product, relay step 3's relay and this channel layer, on the routine chain ---- */
 {
