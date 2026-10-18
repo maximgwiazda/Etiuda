@@ -16,7 +16,9 @@
 
    IN: each blob is fetched and judged through blob.cjs, the trust taken only from the signed team file this program holds
    (E1, E2): the lead's key is the pin, the desks' keys the signed roster of the blob's epoch, and the relay's own list is
-   never read. A blob that passes is written into the mirror whole, by the atomic write the shell uses on a share; one that
+   never read. Once a newer epoch is loaded, a key it leaves off its roster is removed at every older epoch, and at the
+   newer epoch where an older loaded roster named the key. A blob that passes is written into the mirror whole, by the
+   atomic write the shell uses on a share; one that
    fails is dropped and said, never written. A deletion is only a signed record from the path's writer (E3), and a blob the
    relay stops serving deletes nothing. A blob it could not serve for a reason that can pass is fetched again, the catch-up
    resuming from it at the next cycle; only an answer that the blob is gone lets it go. A catch-up applies the team file
@@ -411,10 +413,52 @@ function createProgram(opts) {
     return { ok: true, rev: t.rev };
   }
 
-  /* One blob judged: blob.cjs's first line under `trust` at `epoch` with `key`, against `floors`; then a supersedes that
-     names a blob this program took must name one of the same path and writer. */
+  /* The newest roster this program has loaded, or null before any team file is kept. */
+  function newestRoster() {
+    let best = 0, desks = null;
+    for (const k of Object.keys(st.trust)) {
+      const e = Number(k);
+      if (!Number.isSafeInteger(e) || e < best) continue;
+      best = e;
+      desks = st.trust[k].desks;
+    }
+    return best >= 1 ? { epoch: best, desks: desks || [] } : null;
+  }
+
+  function namedOnOlder(writerKeyId, topEpoch) {
+    for (const k of Object.keys(st.trust)) {
+      const e = Number(k);
+      if (Number.isSafeInteger(e) && e < topEpoch && (st.trust[k].desks || []).some(d => d.keyId === writerKeyId)) return true;
+    }
+    return false;
+  }
+
+  /* Once a newer epoch is loaded, a key it does not name is removed at every older epoch, so a file that key seals
+     under the old team file is refused. At the newer epoch the same key is removed only where an older loaded roster
+     named it. A stranger, never named, stays not-roster. The lead's key is the pin. */
+  function removedAfterMove(writerKeyId, epoch, opened) {
+    if (!pin || writerKeyId === pin.lead.keyId || !isCount(epoch)) return null;
+    const top = newestRoster();
+    if (!top || epoch > top.epoch) return null;
+    if (top.desks.some(d => d.keyId === writerKeyId)) return null;
+    const namedBefore = namedOnOlder(writerKeyId, top.epoch);
+    if (epoch < top.epoch) return (opened || namedBefore) ? R("removed") : null; /* plant:fk1-removed */
+    if (epoch !== top.epoch) return null;
+    if (namedBefore) return R("removed");
+    return null;
+  }
+
+  /* One blob judged: blob.cjs's first line under `trust` at `epoch` with `key`, against `floors`; a key the newest
+     loaded epoch leaves off its roster is then removed, at an older epoch and at the newest where an older roster named
+     it; then a supersedes that names a blob this program took must name one of the same path and writer. */
   function judge(blob, trust, epoch, key, floors) {
     const r = B.openBlob({ blob, relayTeamId: pin.rt, epoch, teamKey: key, trust, counters: floors });
+    if (r.ok || r.reason === "not-roster") {
+      const writer = r.ok ? r.writerKeyId : (blob && blob.writerKeyId);
+      const at = r.ok ? r.epoch : (isCount(blob && blob.epoch) ? blob.epoch : epoch);
+      const gone = removedAfterMove(writer, at, r.ok);
+      if (gone) return gone;
+    }
     if (!r.ok) return r;
     if (r.supersedes !== null && has(st.taken, r.supersedes)) {
       const was = st.taken[r.supersedes];

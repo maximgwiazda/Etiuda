@@ -7,7 +7,10 @@
  * (a request and a team file sealed under the invitation's own key, in a place of its own) serves the invited desk and
  * nobody else; a relay address is followed only where an invitation pinned the lead (board 907), a relay file's own
  * ring pinning nobody (900i inverted); and an epoch move (F1): every remaining desk, live or offline, reaches the new epoch
- * by its own copy of the team file, and the desk taken off opens nothing of it. On a relay team the desk also reads the
+ * by its own copy of the team file, and the desk taken off opens nothing of it. Once that move is loaded, a new file the
+ * dropped desk seals at the old epoch under the old team file is refused removed, through acceptBlob and through the
+ * catch-up, and the kept desk's file at the new epoch is taken (944q, 944r); lifting that check accepts the old-epoch
+ * file again (944s). On a relay team the desk also reads the
  * head the lead's Studio writes (etiuda-head.json): a genuine one is shown with its newest edition, when that edition
  * was published and how old the head itself is, an old one is shown as old and blocks nothing, and a forged, older or
  * other team's head is dropped and said. A folder team shows nothing new. Throwaway keys and invented words only;
@@ -34,7 +37,7 @@ const nodeRequire = createRequire(import.meta.url);
 /* Machine policy is none, but for 942h, which names a folder for the one desk it loads. */
 const regOpts = { policy: null };
 const regStand = nodeRequire("./reg-stand.cjs").regStand(nodeRequire("node:child_process"), regOpts);
-const EXPECTED = 80;
+const EXPECTED = 83;
 
 let asserted = 0, failed = 0;
 function check(ok, line) {
@@ -2005,6 +2008,107 @@ try {
     check(folderP === shareP && !runP && relayLines === 0 && P.said.some(l => l.indexOf("machine policy names the team folder") >= 0),
       "942h machine policy names a folder while a followed relay exists: the folder wins, no channel starts, and the desk says so:"
       + " folder " + (folderP === shareP ? "the policy's" : folderP) + ", channel " + (runP ? "running" : "none") + ", the channel's lines " + relayLines);
+  }
+
+  /* The epoch route: a program that has loaded an epoch move which leaves a desk off the roster. A new file that desk
+     seals at the old epoch, under the old team file, must be refused removed. The kept desk's file at the new epoch is
+     taken, and the file this program already took before the move stays. 944q is acceptBlob. 944r is the catch-up, which
+     is how a desk file reaches the program the desk and Studio run. */
+  {
+    const row = k => ({ desk: { id: k.keyId, key: k.pub, box: "ab".repeat(32) } });
+    const asFetch = b => ({ seq: b.counter, meta: { v: 1, id: b.id, supersedes: b.supersedes, epoch: b.epoch,
+      writer: b.writerKeyId, counter: b.counter, del: false, sig: b.signature, nonce: b.nonce, place: b.place,
+      size: b.ciphertext.length }, ct: b.ciphertext });
+    function epochRoute(mod, mode) {
+      const rt = hex(16), tm = "t-" + hex(8), gone = keyPair(true), stay = keyPair(true);
+      const k1 = crypto.randomBytes(32), k2 = crypto.randomBytes(32);
+      const pin = { teamId: tm, rt, lead: { keyId: LEAD.keyId, public: LEAD.pub } };
+      const doc = (epoch, roster) => signDoc({ format: 1, kind: "etiuda-team", id: tm, catalogs: ["pebble-board"],
+        lead: { keyId: LEAD.keyId, public: LEAD.pub }, sealed: true, exportsSealed: false, epoch, rev: 1,
+        channel: { kind: "relay", rt, url: URLV1 }, roster }, LEAD);
+      const seal = (epoch, key, writer, rel, counter, body) => B.seal({ relayTeamId: rt, epoch, teamKey: key,
+        writer: { keyId: writer.keyId, privateKey: writer.privateKey }, path: rel, body, counter, place: "desk:" + writer.keyId });
+      const gonePath = "desks/" + gone.keyId + "/stats.estat", stayPath = "desks/" + stay.keyId + "/stats.estat";
+      const oldDoc = doc(1, [row(gone), row(stay)]), newDoc = doc(2, [row(stay)]);
+      const dir = path.join(LAB, "fk1-" + mode + "-" + hex(4));
+      fs.mkdirSync(dir, { recursive: true });
+      const said = [];
+      const prog = mod.createProgram({ io: mod.diskIO(dir), pin, say: l => said.push(l) });
+      const keyFor = e => (e === 1 ? k1 : e === 2 ? k2 : null);
+      const loadedOld = prog.loadTeamFile(oldDoc);
+      const beforeBlob = seal(1, k1, gone, gonePath, 1, "before");
+      const stayBlob = seal(2, k2, stay, stayPath, 1, "kept-on");
+      const lateBlob = seal(1, k1, gone, gonePath, 2, "late-after");
+      const atNewBlob = seal(2, k2, gone, gonePath, 1, "late-new");
+      const took = (batch, rel) => batch.applied.indexOf(rel) >= 0;
+      const saidRemoved = from => said.slice(from).some(l => l.indexOf(B.REASONS.removed) >= 0);
+      if (mode === "blob") {
+        const before = prog.acceptBlob({ blob: beforeBlob, teamDoc: oldDoc, teamKey: k1 });
+        const loadedNew = prog.loadTeamFile(newDoc);
+        const stayR = prog.acceptBlob({ blob: stayBlob, teamDoc: newDoc, teamKey: k2 });
+        const late = prog.acceptBlob({ blob: lateBlob, teamDoc: oldDoc, teamKey: k1 });
+        const atNew = prog.acceptBlob({ blob: atNewBlob, teamDoc: newDoc, teamKey: k2 });
+        return { loadedOld, loadedNew, before, stayR, late, atNew, goneBody: read(dir, gonePath), stayBody: read(dir, stayPath) };
+      }
+      const beforeBatch = prog.applyBatch([asFetch(beforeBlob)], { keyFor });
+      const loadedNew = prog.loadTeamFile(newDoc);
+      const stayBatch = prog.applyBatch([asFetch(stayBlob)], { keyFor });
+      const lateFrom = said.length;
+      const lateBatch = prog.applyBatch([asFetch(lateBlob)], { keyFor });
+      const lateSaid = saidRemoved(lateFrom);
+      const newFrom = said.length;
+      const atNewBatch = prog.applyBatch([asFetch(atNewBlob)], { keyFor });
+      const atNewSaid = saidRemoved(newFrom);
+      const refused = (inBatch, rel, wasSaid) => ({ ok: took(inBatch, rel), reason: wasSaid ? "removed" : (took(inBatch, rel) ? "accepted" : "other"),
+        said: wasSaid ? B.REASONS.removed : "" });
+      return { loadedOld, loadedNew, before: { ok: took(beforeBatch, gonePath) }, stayR: { ok: took(stayBatch, stayPath) },
+        late: refused(lateBatch, gonePath, lateSaid), atNew: refused(atNewBatch, gonePath, atNewSaid),
+        goneBody: read(dir, gonePath), stayBody: read(dir, stayPath) };
+    }
+    const routeHolds = r => !!(r && r.loadedOld.ok === true && r.loadedNew.ok === true && r.before.ok === true
+      && r.stayR.ok === true && r.stayBody === "kept-on" && r.late.ok === false && r.late.reason === "removed"
+      && r.late.said === B.REASONS.removed && r.atNew.ok === false && r.atNew.reason === "removed" && r.goneBody === "before");
+    const routeLine = r => !r ? "no result" : "old team " + (r.loadedOld.ok === true ? "loaded" : r.loadedOld.reason)
+      + ", new team " + (r.loadedNew.ok === true ? "loaded" : r.loadedNew.reason)
+      + ", before " + r.before.ok + ", kept " + (r.stayR.ok === true ? "taken" : r.stayR.reason) + " body " + JSON.stringify(r.stayBody)
+      + ", late " + (r.late.ok === true ? "ACCEPTED" : r.late.reason) + ", at the new epoch " + (r.atNew.ok === true ? "ACCEPTED" : r.atNew.reason)
+      + ", the earlier file " + JSON.stringify(r.goneBody);
+    const blob = epochRoute(C, "blob"), desk = epochRoute(C, "desk");
+    check(routeHolds(blob), "944q Q-k1-blob: after an epoch move drops the desk, acceptBlob refuses removed its new file sealed at the old"
+      + " epoch under the old team file, and the same at the new epoch; the kept desk's epoch-2 file is taken; the file already taken stays: " + routeLine(blob));
+    check(routeHolds(desk), "944r Q-k1-desk: the catch-up, which is how a desk file reaches the program the desk and Studio run, refuses that"
+      + " same file removed, and the kept desk's epoch-2 file is taken: " + routeLine(desk));
+    /* plant:fk1-removed. Deleting that line, leaving the file valid script, accepts the old-epoch file again. */
+    {
+      const src = path.join(ROOT, "shell", "relay", "channel.cjs");
+      const beforeBytes = fs.readFileSync(src);
+      const digest = sha(beforeBytes);
+      let turned = false, detail = "plant line absent";
+      try {
+        const lines = beforeBytes.toString("utf8").split(/\n/);
+        const at = lines.findIndex(l => l.indexOf("plant:fk1-removed") >= 0);
+        if (at >= 0) {
+          lines.splice(at, 1);
+          fs.writeFileSync(src, lines.join("\n"));
+          const resolved = nodeRequire.resolve(src);
+          delete nodeRequire.cache[resolved];
+          const lifted = nodeRequire(src);
+          const lateTaken = x => !!(x && x.loadedOld.ok === true && x.loadedNew.ok === true && x.before.ok === true
+            && x.stayR.ok === true && x.stayBody === "kept-on" && x.late.ok === true && x.goneBody === "late-after");
+          const plantedBlob = epochRoute(lifted, "plant-blob"), plantedDesk = epochRoute(lifted, "plant-desk");
+          turned = lateTaken(plantedBlob) && lateTaken(plantedDesk);
+          detail = "acceptBlob " + routeLine(plantedBlob) + "; catch-up " + routeLine(plantedDesk);
+        }
+      } catch (e) {
+        detail = e && e.message ? e.message : String(e);
+      } finally {
+        fs.writeFileSync(src, beforeBytes);
+        try { delete nodeRequire.cache[nodeRequire.resolve(src)]; nodeRequire(src); } catch { /* the copy this suite holds is untouched */ }
+      }
+      const back = sha(fs.readFileSync(src)) === digest;
+      check(turned && back, "944s lifting plant:fk1-removed accepts the dropped desk's new file sealed at the old epoch, and the file is put back: "
+        + detail + ", sha " + (back ? "restored" : "differs"));
+    }
   }
 } catch (e) {
   check(false, "harness: " + (e && e.stack ? e.stack : e));
